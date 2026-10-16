@@ -84,44 +84,14 @@ test('no run is null, so the rail decides what absence looks like', () => {
 
 // ── The rail ────────────────────────────────────────────────────────────
 
-/** The Usage block of the rail, from source. */
-function usageBlock() {
+test('the receipt and the average left the rail (D698): /account/usage keeps them', () => {
+  // D698 decision 9 and 10: the Eadwyn AI rail draws the allowance ledger and
+  // no receipt, no "This page this month" and no per-task average. The line
+  // formatter above stays pinned for the Usage page that draws receipts.
   const src = codeOnly(read(RAIL));
-  const from = src.indexOf('<span>Usage</span>');
-  assert.ok(from > 0, 'the usage block was not found');
-  return src.slice(from, src.indexOf('</section>', from));
-}
-
-/** The per-page half of the Usage block, from source (D552 step 3 moved the receipt there). */
-function pageUsage() {
-  const src = codeOnly(read(RAIL));
-  const from = src.indexOf('export function RailPageUsage(');
-  assert.ok(from > 0, 'RailPageUsage was not found');
-  return src.slice(from, src.indexOf('\nexport function ', from + 1));
-}
-
-test('the Usage block mounts the per-page half, which draws the lasting receipt', () => {
-  assert.match(usageBlock(), /<RailPageUsage[\s\S]*?onRetry=\{reload\}/,
-    'the Usage block no longer draws the page usage, or its retry re-reads nothing');
-  const block = pageUsage();
-  // D552 step 3: on a page the router records, the receipt is THIS PAGE's,
-  // from the page read, and labelled so.
-  assert.match(block, /`Last run · \$\{lastRunReceipt\(page\.last_run, MODEL_COPY\[page\.last_run\.model\]\?\.name\)\}`/,
-    'the page receipt is not the canvas\'s "Last run · …" line');
-  // Elsewhere it is the account's, labelled as the account's. A label that
-  // read as "this page" there would state a fact the log lacks.
-  assert.match(block, /`Last run · your account, any page · \$\{lastRunReceipt\(spend\.last_run, MODEL_COPY\[spend\.last_run\.model\]\?\.name\)\}`/,
-    'the account receipt is not drawn from last_run, or is not labelled as the account\'s');
-});
-
-test('a failed last-run read is Unreadable with a retry, not "no runs"', () => {
-  const block = pageUsage();
-  assert.match(block,
-    /spend\.last_run_recorded === false\s*\?\s*\(\s*<div[^>]*>\s*<Unreadable[\s\S]{0,160}?onRetry=\{onRetry\}/,
-    'an unreadable account last run renders as if there were none');
-  assert.match(block,
-    /page\.last_run_recorded === false\s*\?\s*\(\s*<div[^>]*>\s*<Unreadable[\s\S]{0,160}?onRetry=\{onRetry\}/,
-    'an unreadable page last run renders as if there were none');
+  for (const gone of ['lastRunReceipt', 'RailPageUsage', 'Last run', 'observedRunCost', 'by_task_recorded']) {
+    assert.ok(!src.includes(gone), `the rail draws ${gone} again`);
+  }
 });
 
 test('the rail runs nothing of its own, so no receipt it draws can go stale behind a run', () => {
@@ -129,11 +99,4 @@ test('the rail runs nothing of its own, so no receipt it draws can go stale behi
   // used to re-read the report after its own run; it no longer runs one.
   const src = codeOnly(read(RAIL));
   assert.doesNotMatch(src, /const readBack|setRun\(|api\.aiWorkspaceExplain/, 'the rail runs a model again');
-});
-
-test('an unreadable task breakdown does not claim "no runs yet"', () => {
-  const src = codeOnly(read(RAIL));
-  const card = src.slice(src.indexOf('export function RailModelCard('), src.indexOf('export function RailAllowance('));
-  assert.match(card, /if \(spend\?\.by_task_recorded === false\) \{\s*return <span[^>]*>\{`\$\{label\}Your average could not be read\.`\}<\/span>;/,
-    'a failed by_task read renders the no-history sentence');
 });

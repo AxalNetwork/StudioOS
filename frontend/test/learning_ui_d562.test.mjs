@@ -523,9 +523,9 @@ test('an admin and the Super Admin see the full page: no card, All first, the st
 
 test('the Worker AI rail sits on every Learning page, with a literal accent, in Eadwyn’s own voice', () => {
   const home = flat(page('/learning', '/learning', { view: 'home', user: FOUNDER, activeRole: 'founder' }));
-  assert.match(home, /Worker AI · Learning/);
-  assert.match(flat(page('/learning/studio', '/learning/studio', { view: 'studio', user: SUPER, activeRole: 'admin' })), /Worker AI · Learning studio/);
-  assert.match(flat(page('/learning/programs/p1', '/learning/programs/:program', { view: 'program', user: ADMIN, activeRole: 'admin' })), /Worker AI · Learning programs/);
+  assert.match(home, /Eadwyn AI .{0,24}?Learning/);
+  assert.match(flat(page('/learning/studio', '/learning/studio', { view: 'studio', user: SUPER, activeRole: 'admin' })), /Eadwyn AI .{0,24}?Learning studio/);
+  assert.match(flat(page('/learning/programs/p1', '/learning/programs/:program', { view: 'program', user: ADMIN, activeRole: 'admin' })), /Eadwyn AI .{0,24}?Learning programs/);
   const dir = resolve(ROOT, 'frontend/src/pages/learning');
   const rails = readdirSync(dir).filter((f) => f.endsWith('.jsx')).map((f) => readFileSync(resolve(dir, f), 'utf8')).join('\n');
   const mounts = [...codeOnly(rails).matchAll(/<WorkerRail[\s\S]*?\/>/g)].map((m) => m[0]);

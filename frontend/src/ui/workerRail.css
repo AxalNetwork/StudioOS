@@ -1,6 +1,7 @@
 /*
- * The shared Worker AI rail — see ui/WorkerRail.jsx for what the four
- * blocks say and why.
+ * The shared Eadwyn AI rail — see ui/WorkerRail.jsx for what each block
+ * says and why, and design/canvases/integrated/AIRail.dc.html for the sizes
+ * and colours (D698).
  *
  * SCOPED TO `.fwr`, never to the host's class. The component keeps the page's
  * own rail class on the same element (`a5-rail`, `fr-pitch-rail`, `a7-rail`, …)
@@ -96,221 +97,233 @@ aside.fwr > .fwr-body { padding: 0; border-top: 0; }
    never rendered as a zero. */
 .fwr-absent { color: var(--fwr-faint); font-weight: 600; }
 
-/* H13 rule 1 — the scope the page read in, reported rather than offered. It
-   sits at the head of Coverage because it qualifies every line under it: the
-   same question has a different meaning per scope, which is what the rule is
-   about. Styled as a chip rather than a control, because it is not one. */
-.fwr-scope {
-  display: inline-block;
-  margin-top: 0;
-  padding: 2px 8px;
-  border: 1px solid var(--fwr-line);
-  border-radius: 999px;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-}
-
-.fwr-muted strong { margin-top: 10px; color: var(--fwr-muted); }
-.fwr-muted > div:first-of-type strong { margin-top: 8px; }
-
-.fwr-action { margin-top: 10px; }
-.fwr-action a {
-  display: inline-flex; align-items: center; gap: 4px;
-  color: var(--fwr-accent); font-size: 11px; font-weight: 800; text-decoration: none;
-}
-.fwr-action a:hover { text-decoration: underline; }
-
-/* The model id under its short name — long, monospaced and deliberately quiet:
-   it is there to be checked against the router's table, not read. */
-.fwr-model-id {
-  font-family:var(--font-mono);
-  font-size: 9.5px; word-break: break-all;
-  color: var(--fwr-faint);
-}
-
 /*
- * THE MODE CARDS. Two, and only on a workspace that has something to fill in.
- *
- * Buttons with `role="radio"` rather than real inputs, unlike the model menu
- * below: there are exactly two, the copy is the control, and a fieldset of two
- * would add a legend and a wrapper for no gain. Both carry `aria-checked`, so
- * the group still announces which is chosen.
+ * D698 — THE AIRAIL CANVAS'S BLOCKS (design/canvases/integrated/AIRail.dc.html,
+ * AIR:14-36), at the canvas's sizes. Its violet is the founder's accent, so a
+ * selection reads `--fwr-accent` and every licence keeps its own; its greys
+ * are the `--d698-*` properties below. Every rule that sets a colour has a
+ * `.dark` pair at the end of this block.
  */
-.fwr-modes { display: grid; gap: 6px; margin-top: 9px; }
-.fwr-mode {
-  font: inherit; text-align: left; cursor: pointer;
-  padding: 9px 11px; border-radius: 9px;
-  border: 1px solid var(--fwr-line); background: var(--fwr-paper); color: var(--fwr-ink);
+.fwr {
+  --d698-ink: #18181b;
+  --d698-text: #4a4553;
+  --d698-muted: #615c6e;
+  --d698-faint: #7d7889;
+  --d698-sep: #c9c6d2;
+  --d698-line: #ececf1;
+  --d698-ground: #f4f3f7;
+  --d698-paper: #fff;
+  --d698-dot: #d4d1dc;
 }
-.fwr-mode:hover { border-color: var(--fwr-accent); }
-.fwr-mode:focus-visible { outline: 2px solid var(--fwr-accent); outline-offset: 2px; }
-.fwr-mode[data-selected="true"] {
-  border-color: var(--fwr-accent);
-  background: var(--fwr-accent-soft);
-  box-shadow: 0 0 0 2px var(--fwr-accent-soft);
+.fwr-title .fwr-mark { width: 26px; height: 26px; object-fit: contain; image-rendering: pixelated; flex: none; }
+.fwr-title .fwr-title-text {
+  flex: 1; min-width: 0;
+  font-size: 15px; font-weight: 800; letter-spacing: -.015em; text-transform: none;
+  color: var(--d698-ink);
 }
-.fwr-mode b { display: block; font-size: 12px; font-weight: 700; }
-.fwr-mode[data-selected="true"] b { color: var(--fwr-accent); }
-.fwr-mode span {
-  display: block; margin-top: 3px;
-  color: var(--fwr-muted); font-size: 10.5px; line-height: 1.45;
-}
-.fwr-mode[data-selected="true"] span { color: var(--fwr-accent); }
-.dark .fwr-mode { background: transparent; }
-/* A page with nothing to fill draws the Manual card alone, as a statement and
-   not a control (D17): no pointer, no hover. */
-div.fwr-mode { cursor: default; }
-div.fwr-mode:hover { border-color: var(--fwr-line); }
-/* The AI card's head: its label, and the canvas's switch at the right. The
-   switch is drawn, not a second control: the whole card is the radio. */
-.fwr-mode .fwr-mode-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 0; }
-.fwr-switch {
-  display: inline-block; position: relative; flex: none; width: 24px; height: 14px; border-radius: 999px;
-  background: var(--fwr-line);
-}
-.fwr-switch::after {
-  content: ''; position: absolute; top: 2px; left: 2px;
-  width: 10px; height: 10px; border-radius: 50%; background: #fff;
-}
-.fwr-switch[data-on="true"] { background: var(--fwr-accent); }
-.fwr-switch[data-on="true"]::after { left: auto; right: 2px; }
+.fwr-title { justify-content: flex-start; gap: 9px; }
+.fwr-body { gap: 14px; margin-top: 14px; }
 
-/* THE USAGE CARD (AIRail canvas): the month's allowance spent, of the
-   allowance, a bar, then this page's month and its last run. */
+.fwr-who { display: flex; flex-direction: column; gap: 6px; }
+.fwr-pill {
+  align-self: flex-start;
+  font-size: 10.5px; font-weight: 700; border-radius: 99px; padding: 2px 8px;
+  color: var(--fwr-pill-ink-light); background: var(--fwr-pill-bg-light);
+  border: 1px solid var(--fwr-pill-line-light);
+}
+.fwr-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: 12.5px; line-height: 1.4; }
+.fwr-crumb { font-weight: 500; color: var(--d698-muted); }
+.fwr-crumb[data-last="true"] { font-weight: 700; color: var(--d698-ink); }
+.fwr-crumb-sep { color: var(--d698-sep); }
+
+.fwr-switch-row {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 4px;
+  background: var(--d698-ground); border-radius: 10px; padding: 3px;
+}
+.fwr-switch-opt {
+  font: inherit; font-size: 12px; font-weight: 700; text-align: center;
+  min-height: 30px; display: flex; align-items: center; justify-content: center;
+  border: 0; border-radius: 8px; cursor: pointer;
+  background: transparent; color: var(--d698-muted);
+}
+.fwr-switch-opt[data-selected="true"] {
+  background: var(--d698-paper); color: var(--fwr-accent);
+  box-shadow: 0 1px 2px rgba(24, 24, 27, .08);
+}
+.fwr-switch-opt:focus-visible { outline: 2px solid var(--fwr-accent); outline-offset: 1px; }
+p.fwr-mode-line { margin: 0; font-size: 12px; line-height: 1.5; color: var(--d698-muted); }
+
+.fwr-sug { display: flex; flex-direction: column; gap: 6px; }
+/* Manual dims the list and nothing in it can be picked (AIR:102). */
+.fwr-sug[data-dimmed="true"] { opacity: .5; pointer-events: none; }
+.fwr-eyebrow {
+  font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .1em;
+  color: var(--d698-faint);
+}
+.fwr-cards { display: flex; flex-direction: column; gap: 6px; }
+.fwr-card {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 11px; border-radius: 10px;
+  border: 1px solid var(--d698-line); background: var(--d698-paper); color: inherit;
+}
+button.fwr-card { font: inherit; text-align: left; width: 100%; cursor: pointer; }
+button.fwr-card:focus-visible { outline: 2px solid var(--fwr-accent); outline-offset: 2px; }
+.fwr-card[data-selected="true"] { border-color: var(--fwr-accent); background: var(--fwr-accent-soft); }
+.fwr-dot {
+  width: 16px; height: 16px; border-radius: 50%; flex: none; margin-top: 1px; box-sizing: border-box;
+  border: 2px solid var(--d698-dot); display: grid; place-items: center;
+}
+.fwr-dot > span { width: 7px; height: 7px; border-radius: 50%; background: transparent; }
+.fwr-card[data-selected="true"] .fwr-dot { border-color: var(--fwr-accent); }
+.fwr-card[data-selected="true"] .fwr-dot > span { background: var(--fwr-accent); }
+.fwr-card-text { flex: 1; min-width: 0; }
+.fwr-card-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.fwr-card-head b { font-size: 13px; font-weight: 700; color: var(--d698-ink); }
+.fwr-role {
+  font-style: normal; font-size: 10px; font-weight: 700; border-radius: 99px; padding: 1px 7px; white-space: nowrap;
+  color: #6b6577; background: var(--d698-ground); border: 1px solid var(--d698-line);
+}
+.fwr-role[data-default="true"] {
+  color: var(--fwr-accent); background: var(--fwr-accent-soft); border-color: var(--fwr-accent-soft);
+}
+.fwr-card-line { display: block; font-size: 11.5px; line-height: 1.4; margin-top: 2px; color: var(--d698-muted); }
+p.fwr-models-note { margin: 0; font-size: 11px; line-height: 1.45; color: var(--d698-faint); }
+p.fwr-using { margin: 0; font-size: 12px; color: var(--fwr-accent); }
+.fwr-all-toggle {
+  font: inherit; font-size: 12px; font-weight: 700; text-align: left;
+  min-height: 28px; display: flex; align-items: center;
+  border: 0; padding: 0; background: none; cursor: pointer; color: var(--fwr-accent);
+}
+.fwr-all-toggle:focus-visible { outline: 2px solid var(--fwr-accent); outline-offset: 2px; }
+.fwr-groups { display: flex; flex-direction: column; gap: 10px; }
+.fwr-group-title { font-size: 10.5px; font-weight: 700; margin-bottom: 5px; color: var(--d698-faint); }
+.fwr-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.fwr-chip {
+  font: inherit; font-size: 11.5px; font-weight: 600; border-radius: 99px; padding: 4px 9px;
+  border: 1px solid var(--d698-line); background: var(--d698-paper); color: var(--d698-text);
+}
+button.fwr-chip { cursor: pointer; }
+button.fwr-chip:focus-visible { outline: 2px solid var(--fwr-accent); outline-offset: 2px; }
+.fwr-chip[data-selected="true"] { border-color: var(--fwr-accent); background: var(--fwr-accent-soft); color: var(--fwr-accent); }
+p.fwr-safety { margin: 0; font-size: 11px; line-height: 1.45; color: var(--d698-faint); }
+
 .fwr-usage {
-  margin-top: 9px; padding: 11px; border: 1px solid var(--fwr-line); border-radius: 9px;
+  display: flex; flex-direction: column; gap: 9px;
+  border: 1px solid var(--d698-line); border-radius: 12px; padding: 12px;
 }
-.fwr-usage-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.fwr-block .fwr-usage-head strong {
-  margin: 0; font-size: 17px; font-weight: 800; letter-spacing: -.02em;
-  font-variant-numeric: tabular-nums;
+.fwr-usage-line { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; font-variant-numeric: tabular-nums; }
+.fwr-usage-line span { color: var(--d698-text); }
+.fwr-usage-line b { font-weight: 700; color: var(--d698-ink); }
+.fwr-usage .fwr-meter { height: 6px; margin-top: 5px; background: var(--d698-line); }
+.fwr-usage-reset { font-size: 10.5px; margin-top: 4px; color: var(--d698-faint); }
+p.fwr-usage-note { margin: 0; font-size: 11px; line-height: 1.45; color: var(--d698-faint); }
+.fwr-add-tokens {
+  display: flex; align-items: center; justify-content: center; min-height: 36px; border-radius: 9px;
+  font-size: 12.5px; font-weight: 700; text-decoration: none;
+  color: var(--fwr-accent); border: 1px solid var(--fwr-accent-soft); background: var(--fwr-accent-soft);
 }
-.fwr-usage-head em { font-size: 10.5px; color: var(--fwr-muted); font-weight: 400; }
-.fwr-usage .fwr-meter { height: 5px; }
-.fwr-usage .fwr-page-spend { margin-top: 9px; font-size: 10px; }
-.fwr-usage .fwr-last-run {
-  margin-top: 7px; padding-top: 7px; border-top: 1px solid var(--fwr-line);
-  font-size: 10px; color: var(--fwr-faint);
+.fwr-add-tokens:focus-visible { outline: 2px solid var(--fwr-accent); outline-offset: 2px; }
+/* Runs paused, as /account/usage draws it (AccountUsage.jsx, `danger`). */
+.fwr-paused {
+  display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 9px; font-size: 11.5px;
+  color: #b91c1c; background: #fef2f2; border: 1px solid #fecaca;
 }
-.fwr-block p.fwr-models-note { margin-top: 3px; font-size: 10px; color: var(--fwr-faint); }
 
 /*
- * THE MODEL MENU.
- *
- * A fieldset of real radios with the input clipped by `.fwr-sr`, so the card is
- * the label and keyboard users get arrow-key navigation, grouping and
- * announcement without a line of JavaScript. Everything below styles the label;
- * nothing styles the input, because the input is not on screen.
- *
- * Colour carries selection AND the border does, because colour alone would put
- * this behind WCAG 1.4.1 for a control whose whole job is showing which of
- * three things is chosen.
+ * D698 — THE EADWYN PANEL (ui/EadwynPanel.jsx), CO:30-36: a scrim and a 300px
+ * right panel, at z-index 60 (above the tab bar and the phone sheets, below
+ * the lightbox). And the page's own button (CO:26), 40px, radius 12.
  */
-/* `min-width: 0` is load-bearing and not tidying. A fieldset defaults to
-   `min-inline-size: min-content`, so it refuses to shrink below its widest
-   unbreakable content and pushes the rail 4px past its own track — the model
-   id is the widest thing in it. Every other reset here (border, margin,
-   padding) is cosmetic; this one is the bug. */
-.fwr-models {
-  border: 0; margin: 10px 0 0; padding: 0; min-width: 0;
-  display: grid; gap: 6px;
+.ead-panel-layer { position: fixed; inset: 0; z-index: 60; }
+.ead-panel-scrim {
+  position: absolute; inset: 0; width: 100%; height: 100%; border: 0; padding: 0; cursor: default;
+  background: rgba(24, 24, 27, .42);
 }
+.ead-panel {
+  position: absolute; top: 0; right: 0; bottom: 0; width: 300px; max-width: 88%;
+  display: flex; flex-direction: column;
+  background: #fff; box-shadow: -8px 0 30px rgba(24, 24, 27, .18);
+}
+.ead-panel-head {
+  display: flex; align-items: center; gap: 9px; flex: none;
+  padding: 12px 12px 10px 16px; border-bottom: 1px solid var(--d698-line);
+}
+.ead-panel-mark { width: 24px; height: 24px; object-fit: contain; image-rendering: pixelated; flex: none; }
+.ead-panel-titles { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.ead-panel-titles b { font-size: 15px; font-weight: 800; letter-spacing: -.015em; color: var(--d698-ink); }
+.ead-panel-titles span { font-size: 11.5px; color: var(--d698-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ead-panel-close {
+  width: 40px; height: 40px; flex: none; display: inline-flex; align-items: center; justify-content: center;
+  border: 0; border-radius: 10px; background: transparent; cursor: pointer; color: var(--d698-muted);
+}
+.ead-panel-close:focus-visible { outline: 2px solid var(--fwr-accent); outline-offset: 1px; }
+.ead-panel-scroll {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  padding: 0 16px calc(16px + env(safe-area-inset-bottom, 0px));
+}
+.ead-open {
+  width: 40px; height: 40px; flex: none; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 12px; cursor: pointer;
+  border: 1px solid #ececf1; background: #fff;
+}
+.ead-open img { width: 22px; height: 22px; object-fit: contain; image-rendering: pixelated; }
+.ead-open:focus-visible { outline: 2px solid #6d28d9; outline-offset: 2px; }
 
-.fwr-model {
-  display: block; padding: 9px 11px; cursor: pointer;
-  border: 1px solid var(--fwr-line); border-radius: 9px;
-  background: var(--fwr-paper);
+/* The dark pairs for everything above. */
+.dark .fwr {
+  --d698-ink: #f4f3f7;
+  --d698-text: #cfcbd9;
+  --d698-muted: #a9a4b8;
+  --d698-faint: #8b849c;
+  --d698-sep: #4a4655;
+  --d698-line: #2e2b38;
+  --d698-ground: #24212d;
+  --d698-paper: #1a1822;
+  --d698-dot: #4a4655;
 }
-.fwr-model:hover { border-color: var(--fwr-accent); }
-/* A card or row that is a choice is a real button; it keeps the card's look. */
-button.fwr-model { font: inherit; text-align: left; width: 100%; color: inherit; }
-div.fwr-model { cursor: default; }
-/* The canvas's compact rows: a model a job offers and none is using. */
-.fwr-model-alt .fwr-model-head b { font-size: 11.5px; }
-.fwr-model .fwr-estimate {
-  display: block; margin-top: 6px;
-  font-size: 11px; font-weight: 700; color: var(--fwr-ok);
-}
-.fwr-model .fwr-estimate.fwr-absent,
-.fwr-model .fwr-estimate[data-observed="false"] { font-weight: 600; color: var(--fwr-faint); }
-.fwr-model[data-selected="true"] {
-  border-color: var(--fwr-accent);
-  background: var(--fwr-accent-soft);
-  box-shadow: 0 0 0 2px var(--fwr-accent-soft);
-}
-/* The ring belongs on the card, not the clipped input nobody can see. */
-.fwr-model:focus-within { outline: 2px solid var(--fwr-accent); outline-offset: 2px; }
-
-.fwr-model-head {
-  display: flex; align-items: center; justify-content: space-between; gap: 7px;
-}
-.fwr-model-head b { font-size: 12px; font-weight: 700; }
-/* The canvas sets a model's name in ink; the card's border and ground carry
-   the selection, so the name stays readable as a name. */
-.fwr-model-head b { color: var(--fwr-ink); }
-
-.fwr-badge {
-  flex: none; font-style: normal;
-  font-size: 8.5px; font-weight: 800; letter-spacing: .07em;
-  color: var(--fwr-accent); background: var(--fwr-accent-soft);
-  border: 1px solid var(--fwr-accent); border-radius: 3px; padding: 2px 5px;
-}
-/* The inline rate a NON-default entry carries instead of the fuller
-   treatment — in / out, on one line, in the corner the badge would occupy. */
-.fwr-model-inline {
-  flex: none; font-style: normal; font-size: 10px;
-  color: var(--fwr-muted); font-variant-numeric: tabular-nums;
-}
-
-.fwr-model .fwr-model-id { display: block; margin-top: 4px; }
-.fwr-model-why {
-  display: block; margin-top: 5px;
-  color: var(--fwr-muted); font-size: 10.5px; line-height: 1.5;
-}
-.fwr-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 7px; }
-.fwr-tags i {
-  font-style: normal; font-size: 9.5px; font-weight: 700;
-  color: var(--fwr-muted); background: var(--fwr-accent-soft);
-  border: 1px solid var(--fwr-line); border-radius: 3px; padding: 2px 5px;
-}
-.fwr-model-rate {
-  display: block; margin-top: 8px; padding-top: 7px;
-  border-top: 1px solid var(--fwr-line);
-  color: var(--fwr-muted); font-size: 10.5px; font-variant-numeric: tabular-nums;
-}
-
-/* What the run does, from the surface's own config. Above the menu because it
-   describes the work every entry in the menu would do. */
-.fwr-mode-note { margin-top: 8px; }
-/* Measured, and set apart from the menu so it cannot read as one model's
-   number — it is the average across every model this caller has run the task
-   on, which is what the spend endpoint can answer. */
-.fwr-estimate { font-variant-numeric: tabular-nums; }
-/* The lasting "Last run" receipt in the Usage block (D401). The label sits on
-   its own line and says whose run it is: this page's since D552 step 3, the
-   account's on a page whose path the router does not record. */
-.fwr-last-run { font-variant-numeric: tabular-nums; }
-/* This page this month (D404, read directly since D552 step 3). */
-.fwr-page-spend { font-variant-numeric: tabular-nums; }
-/* The month split by page (D552 step 3). One row per page; this page's row is
-   marked so the reader can find it in the split. Long paths wrap rather than
-   widen the rail. */
-.fwr-by-page {
-  list-style: none; margin: 8px 0 0; padding: 0;
-  font-size: 10.5px; font-variant-numeric: tabular-nums; color: var(--fwr-muted);
-}
-.fwr-by-page li {
-  display: flex; justify-content: space-between; gap: 8px;
-  padding: 3px 0; border-top: 1px solid var(--fwr-line);
-}
-.fwr-by-page li span:first-child { min-width: 0; overflow-wrap: anywhere; }
-.fwr-by-page li span:last-child { flex: none; }
-.fwr-by-page-current { color: var(--fwr-ink); font-weight: 800; }
-.fwr-last-run b {
-  display: block; color: var(--fwr-ink);
-  font-size: 9.5px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase;
-}
+.dark .fwr-title .fwr-title-text { color: var(--d698-ink); }
+.dark .fwr-pill { color: var(--fwr-pill-ink-dark); background: var(--fwr-pill-bg-dark); border-color: var(--fwr-pill-line-dark); }
+.dark .fwr-crumb { color: var(--d698-muted); }
+.dark .fwr-crumb[data-last="true"] { color: var(--d698-ink); }
+.dark .fwr-crumb-sep { color: var(--d698-sep); }
+.dark .fwr-switch-row { background: var(--d698-ground); }
+.dark .fwr-switch-opt { color: var(--d698-muted); }
+.dark .fwr-switch-opt[data-selected="true"] { background: var(--d698-paper); color: var(--fwr-accent); box-shadow: none; }
+.dark p.fwr-mode-line { color: var(--d698-muted); }
+.dark .fwr-eyebrow { color: var(--d698-faint); }
+.dark .fwr-card { border-color: var(--d698-line); background: var(--d698-paper); }
+.dark .fwr-card[data-selected="true"] { border-color: var(--fwr-accent); background: var(--fwr-accent-soft); }
+.dark .fwr-dot { border-color: var(--d698-dot); }
+.dark .fwr-card[data-selected="true"] .fwr-dot { border-color: var(--fwr-accent); }
+.dark .fwr-card[data-selected="true"] .fwr-dot > span { background: var(--fwr-accent); }
+.dark .fwr-card-head b { color: var(--d698-ink); }
+.dark .fwr-role { color: #b8b3c6; background: var(--d698-ground); border-color: var(--d698-line); }
+.dark .fwr-role[data-default="true"] { color: var(--fwr-accent); background: var(--fwr-accent-soft); border-color: var(--fwr-accent-soft); }
+.dark .fwr-card-line { color: var(--d698-muted); }
+.dark p.fwr-models-note { color: var(--d698-faint); }
+.dark p.fwr-using { color: var(--fwr-accent); }
+.dark .fwr-all-toggle { color: var(--fwr-accent); }
+.dark .fwr-group-title { color: var(--d698-faint); }
+.dark .fwr-chip { border-color: var(--d698-line); background: var(--d698-paper); color: var(--d698-text); }
+.dark .fwr-chip[data-selected="true"] { border-color: var(--fwr-accent); background: var(--fwr-accent-soft); color: var(--fwr-accent); }
+.dark p.fwr-safety { color: var(--d698-faint); }
+.dark .fwr-usage { border-color: var(--d698-line); }
+.dark .fwr-usage-line span { color: var(--d698-text); }
+.dark .fwr-usage-line b { color: var(--d698-ink); }
+.dark .fwr-usage .fwr-meter { background: var(--d698-line); }
+.dark .fwr-usage-reset { color: var(--d698-faint); }
+.dark p.fwr-usage-note { color: var(--d698-faint); }
+.dark .fwr-add-tokens { color: var(--fwr-accent); border-color: var(--fwr-accent-soft); background: var(--fwr-accent-soft); }
+.dark .fwr-paused { color: #fca5a5; background: rgba(69, 10, 10, .45); border-color: #7f1d1d; }
+.dark .ead-panel-scrim { background: rgba(0, 0, 0, .55); }
+.dark .ead-panel { background: #1a1822; }
+.dark .ead-panel-head { border-bottom-color: var(--d698-line); }
+.dark .ead-panel-titles b { color: var(--d698-ink); }
+.dark .ead-panel-titles span { color: var(--d698-muted); }
+.dark .ead-panel-close { color: var(--d698-muted); }
+.dark .ead-open { border-color: #2e2b38; background: #1a1822; }
+.dark .ead-open:focus-visible { outline-color: #a78bfa; }
+/* end D698 */
 
 .fwr-run {
   font: inherit; font-size: 11px; font-weight: 800;
@@ -322,14 +335,6 @@ div.fwr-model { cursor: default; }
 .fwr-run:focus-visible { outline: 2px solid var(--fwr-accent); outline-offset: 2px; }
 .fwr-run:disabled { opacity: .55; cursor: not-allowed; }
 
-/* A draft, and it has to look like one. Dashed rather than solid so it does
-   not read as a stored record beside the counts above it, which are. */
-.fwr-draft {
-  margin-top: 10px; padding: 10px 11px;
-  border: 1px dashed var(--fwr-line); border-radius: 9px;
-}
-.fwr-draft p { margin: 0; color: var(--fwr-ink); font-size: 11px; line-height: 1.6; }
-.fwr-draft .fwr-foot-note { margin-top: 7px; font-size: 10px; }
 
 .fwr-meter {
   height: 4px; margin-top: 8px; border-radius: 999px;
@@ -338,23 +343,6 @@ div.fwr-model { cursor: default; }
 .fwr-meter i { display: block; height: 100%; background: var(--fwr-accent); }
 .fwr-meter i.fwr-over { background: #b91c1c; }
 
-/*
- * The Screened row. Teal rather than the licence accent, deliberately: it is a
- * statement about what happened to the text, not a piece of this profile's
- * chrome, and it reads the same on all four licences for that reason. Both
- * shades are checked against their own ground.
- */
-.fwr-screened {
-  display: flex; align-items: flex-start; gap: 8px;
-  margin-top: auto; padding-top: 13px; border-top: 1px solid var(--fwr-line);
-}
-.fwr-screened + .fwr-foot { margin-top: 0; padding-top: 13px; }
-.fwr-screened i {
-  flex: none; margin-top: 1px; font-style: normal;
-  font-size: 9px; font-weight: 700; padding: 2px 5px; border-radius: 3px;
-  color: var(--fwr-ok); background: var(--fwr-ok-soft); border: 1px solid var(--fwr-ok-line);
-}
-.fwr-screened p { margin: 0; color: var(--fwr-muted); font-size: 10px; line-height: 1.5; }
 
 .fwr-foot {
   display: flex; align-items: flex-start; gap: 7px;
@@ -400,6 +388,8 @@ div.fwr-model { cursor: default; }
      no word on it is a mystery button, and the rail's whole job is to say what
      it is. Bottom-to-top so it reads with the head at the top, matching the
      expanded title's position. */
+  aside.fwr[data-collapsed="true"] .fwr-mark { display: none; }
+  aside.fwr[data-collapsed="true"] .fwr-title-text { flex: none; font-size: 11px; }
   aside.fwr[data-collapsed="true"] .fwr-title-text {
     writing-mode: vertical-rl; transform: rotate(180deg);
     letter-spacing: .12em; white-space: nowrap; overflow: hidden;
@@ -421,8 +411,6 @@ div.fwr-model { cursor: default; }
   --fwr-ok-soft: #10221f;
   --fwr-ok-line: #164e46;
 }
-/* The menu cards sit on the rail's own paper, which is darker than the page. */
-.dark .fwr-model { background: transparent; }
 .dark .fwr-meter i.fwr-over { background: #f87171; }
 
 /*

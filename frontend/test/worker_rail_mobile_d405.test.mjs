@@ -1,6 +1,8 @@
 /**
- * D405 — the Worker AI rail on a phone (canvas M5): a floating button above
- * the tab bar, opening the rail's blocks in a bottom sheet.
+ * D405 — the Eadwyn AI rail on a phone (canvas M5): a floating button above
+ * the tab bar, opening the rail's blocks in a bottom sheet. Since D698 this is
+ * the phone form for every viewer the Eadwyn panel does not serve; a founder
+ * on a founder page gets the panel (`airail_d698.test.mjs`).
  *
  * This repository renders without a DOM, so the button and the sheet are
  * rendered with react-dom/server and read as markup, and every way the sheet
@@ -36,11 +38,11 @@ test('the button sits 16px above the tab bar, reading the bar\'s own height', ()
 
 test('the badge states the mode, and the label says it in words', () => {
   const manual = html(RailFab, { workspace: 'Build', aiOn: false, onOpen: () => {} });
-  assert.match(manual, /aria-label="Open Worker AI · Build · Manual"/);
+  assert.match(manual, /aria-label="Open Eadwyn AI · Build · Manual"/);
   assert.match(manual, /class="fwr-fab-badge" data-mode="manual"/);
   assert.match(manual, /aria-haspopup="dialog"/);
   const ai = html(RailFab, { workspace: 'Validate', aiOn: true, onOpen: () => {} });
-  assert.match(ai, /aria-label="Open Worker AI · Validate · AI on"/);
+  assert.match(ai, /aria-label="Open Eadwyn AI · Validate · Eadwyn"/);
   assert.match(ai, /class="fwr-fab-badge" data-mode="ai"/);
 });
 
@@ -52,7 +54,7 @@ test('the sheet is a labelled dialog with a close button and a backdrop, holding
   assert.match(h, /role="dialog"/);
   assert.match(h, /aria-modal="true"/);
   assert.match(h, /aria-labelledby="s-title"/);
-  assert.match(h, /<h2 id="s-title"[^>]*>Worker AI · Build<\/h2>/);
+  assert.match(h, /<h2 id="s-title"[^>]*>Eadwyn AI<\/h2>/);
   assert.match(h, /data-testid="button-worker-rail-sheet-close"/);
   assert.match(h, /data-testid="button-worker-rail-sheet-backdrop"/);
   assert.match(renderedText(h), /Usage this month/, 'the sheet does not carry the rail\'s content');
@@ -93,9 +95,10 @@ test('a closed sheet ignores closers, and no unknown event opens it', () => {
 test('a server render draws the panel and no floating button: the portal waits for the client', () => {
   const h = html(WorkerRail, { workspace: 'Build' });
   assert.match(h, /data-testid="worker-rail"/);
-  // The canvas's blocks: the Manual card, Usage and the safety row.
-  assert.match(renderedText(h), /ManualNo tokens\. Page works alone\.Usage/, 'the panel lost its blocks');
-  assert.match(h, /data-testid="text-worker-rail-screened"/, 'the panel lost its safety row');
+  // The canvas's blocks (D698): the line in place of a switch, the
+  // suggestions with the safety line, and Usage.
+  assert.match(renderedText(h), /Suggested for this page[\s\S]*Eadwyn drafts; you send\.[\s\S]*Usage/, 'the panel lost its blocks');
+  assert.match(h, /data-testid="text-worker-rail-safety"/, 'the panel lost its safety line');
   assert.doesNotMatch(h, /button-worker-rail-fab/, 'the button rendered on the server, where there is no document');
   assert.doesNotMatch(h, /worker-rail-sheet/);
 });

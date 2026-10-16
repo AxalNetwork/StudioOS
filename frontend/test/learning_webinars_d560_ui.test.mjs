@@ -501,7 +501,7 @@ test('the containers mount, read nothing on the server, and frame what they draw
   const pageMarkup = html(h(WebinarPage, { uid: 'w1' }), '/learning/webinars/w1');
   assert.match(tagOf(pageMarkup, 'link-learning-back'), /href="\/learning\?tab=webinars"/);
   assert.match(pageMarkup, /data-testid="webinar-panel"[^]*learning-loading/);
-  assert.match(flat(pageMarkup), /Worker AI · Learning/);
+  assert.match(flat(pageMarkup), /Eadwyn AI .{0,24}?Learning/);
   assert.match(html(h(WebinarsTab, {})), /data-testid="webinars-tab"[^]*learning-loading[^]*learning-loading/);
   assert.match(html(h(UpcomingWebinars, {})), /data-testid="section-webinars"[^]*learning-loading/);
   assert.match(html(h(WebinarStudio, { uid: 'w1' }), '/learning/studio?webinar=w1'), /learning-loading/);

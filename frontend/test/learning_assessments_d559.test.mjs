@@ -568,7 +568,7 @@ test('the exam page\'s states: loading, unreadable, no such exam', () => {
 test('the pages: a header from the read, the rail, and the course they were opened from', () => {
   const plain = routed('/learning/exercises/e1', '/learning/exercises/:slug', h(ExercisePage, { uid: 'e1' }));
   assert.match(plain, /data-testid="learning-exercise"/);
-  assert.match(flat(plain), /Worker AI · Learning/);
+  assert.match(flat(plain), /Eadwyn AI .{0,24}?Learning/);
   assert.match(tagOf(plain, 'link-learning-back'), /href="\/learning"/);
   assert.match(plain, /learning-loading/);
   const fromCourse = routed('/learning/exams/x1?course=seed-basics', '/learning/exams/:slug', h(ExamPage, { uid: 'x1' }));
