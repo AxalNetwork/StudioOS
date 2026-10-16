@@ -45,6 +45,7 @@ import adminPublications from './routes/admin_publications';
 import adminTeam from './routes/admin_team';
 import adminNetworkProfiles from './routes/admin_network_profiles';
 import profileHistoryRoutes from './routes/profile_history';
+import founderProfileRoutes from './routes/founder_profile';
 import adminProfilingRoutes from './routes/admin_profiling';
 import helpCenterRoutes, { adminHelpCenter } from './routes/help_center';
 import networkPublic from './routes/network_public';
@@ -1106,6 +1107,8 @@ app.route('/api/profiling', profiling);
 // D357 — Profiling v2 "me" routes: the caller's own snapshot history and
 // their archetype publish consent (routes/profile_history.ts).
 app.route('/api/profile', profileHistoryRoutes);
+// D702 — the founder's profile pages: /me, /venture, /preview (routes/founder_profile.ts).
+app.route('/api/profile', founderProfileRoutes);
 // D358 — admin aggregates of how profiles move over time (routes/admin_profiling.ts).
 app.route('/api/admin/profiling', adminProfilingRoutes);
 // D603 — the Help Center's guide views and yes/no answers (routes/help_center.ts).

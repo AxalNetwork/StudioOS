@@ -25,6 +25,7 @@
  * 403 confirms to a non-owner that the row exists.
  */
 import { Hono } from 'hono';
+import { findableBy } from '../services/investorFindable';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { icDecisionScope } from '../services/tenancyScope';
@@ -259,6 +260,9 @@ r.post('/', async (c) => {
     if (projectId != null && Number.isFinite(projectId)) {
       const proj = await c.env.DB.prepare('SELECT id FROM projects WHERE id = ? AND deleted_at IS NULL').bind(projectId).first<{ id: number }>();
       if (!proj) return c.json({ detail: 'Project not found' }, 404);
+      // D702 — the decision's response names the venture, so an investor may
+      // not point one at a venture its founder keeps to introductions.
+      if (!(await findableBy(c.env, user, projectId))) return c.json({ detail: 'Project not found' }, 404);
     }
     // `deal_id` was the one foreign key on this row that nothing checked, so a
     // create could point a decision at any integer — and that id is copied

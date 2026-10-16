@@ -134,7 +134,7 @@ export default {
         "You control who can see your profile, whether you appear in the Public Directory, and whether advisors can discover you. You can export everything we hold about you as a JSON file at any time and request account deletion.",
       howto: [
         'Open Settings → Privacy.',
-        'Pick visibility: Public (anyone with the link) / Network only / Private (admins only).',
+        'Pick visibility: Public (anyone with the address) / Members only (signed-in Axal VC members) / Hidden (only you). Until you choose, your profile is public.',
         'Toggle Public Directory and advisor discoverability independently.',
         'Open Settings → Account → Download my data to export.',
         'Request account deletion from the same tab — there’s a 30-day grace period before hard delete.',

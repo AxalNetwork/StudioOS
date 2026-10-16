@@ -25,6 +25,7 @@ import { decodeJwt } from 'jose';
 import { getSQL } from '../db';
 import { requireAuth, hashToken, generateToken, selectJwt, bumpJwtMinIat, jwtMinIatFloor } from '../auth';
 import { activeCompanyFor } from '../middleware/activeCompany';
+import { projectInActiveCompany } from '../services/tenancyScope';
 import { hasTotpConfigured, loadTotp, loadTotpPairedAt, persistNewTotpEnrolment, replaceRecoveryHashes } from '../services/authTotp';
 import { loadSms, getUserFactors, setUserFactor } from '../services/authSms';
 import { ensureAuthBlockersSchema } from '../services/authBlockersSchema';
@@ -36,9 +37,11 @@ import {
   getUserSettings,
   upsertUserSettings,
   SettingsValidationError,
+  effectiveVisibility,
   type UserSettingsPatch,
   type UserSettingsRow,
 } from '../services/userSettings';
+import { canWrite } from './_founder_validate_helpers';
 import {
   ensureProfileExpansionSchema,
   getPersonalProfile,
@@ -1213,7 +1216,10 @@ function pickProfile(row: UserSettingsRow) {
 }
 function pickPrivacy(row: UserSettingsRow) {
   return {
-    visibility: row.visibility,
+    // D702 — the visibility the profile is SERVED with, not the stored word:
+    // a member who never chose reads Public, as their profile is served.
+    visibility: effectiveVisibility(row.visibility, row.visibility_chosen_at ?? null),
+    visibility_chosen: !!row.visibility_chosen_at,
     show_in_directory: !!row.show_in_directory,
     discoverable: !!row.discoverable,
     matching_opt_in: !!row.matching_opt_in,
@@ -1773,16 +1779,67 @@ settings.post('/explainer-restore', async (c) => {
 });
 
 // --- Privacy sub-route ------------------------------------------------------
+//
+// D702 — `?project=N` adds that venture's "Let investors find my venture"
+// (`projects.investor_findable`, migration 467) to the read and the write. The
+// caller must be able to write the venture (`canWrite`: its founder or an
+// admin); a venture they cannot write answers 403 and NOTHING is written, a
+// missing or deleted one 404, and so does one outside the founder's active
+// company. NULL (never chosen) reads as true.
+type PrivacyProject = { id: number; founder_id: number | null; company_id: number | null; investor_findable: number | null };
+async function privacyProject(
+  c: Context<{ Bindings: Env }>, user: any,
+): Promise<{ project: PrivacyProject | null } | { refusal: Response }> {
+  const raw = c.req.query('project');
+  if (raw == null || raw === '') return { project: null };
+  const id = Number(raw);
+  if (!Number.isInteger(id) || id <= 0) {
+    return { refusal: c.json({ error: 'project is a venture id.', field: 'project' }, 400) };
+  }
+  const row = await c.env.DB.prepare(
+    'SELECT id, founder_id, company_id, investor_findable FROM projects WHERE id = ? AND deleted_at IS NULL',
+  ).bind(id).first<PrivacyProject>();
+  if (!row) return { refusal: c.json({ error: 'Project not found' }, 404) };
+  if (!canWrite({ id: row.id, founder_id: row.founder_id }, user)) {
+    return { refusal: c.json({ error: 'Only the venture\'s founder can change who finds it.' }, 403) };
+  }
+  // Outside the founder's active company the venture is not in this workspace
+  // (routes/founder_profile.ts `ventureFor` answers the same). Admins are exempt.
+  if (String(user?.role || '').toLowerCase() !== 'admin'
+      && !projectInActiveCompany(await activeCompanyFor(c, user), row)) {
+    return { refusal: c.json({ error: 'Project not found' }, 404) };
+  }
+  return { project: row };
+}
+function withFindable(body: Record<string, unknown>, project: PrivacyProject | null) {
+  if (!project) return body;
+  return { ...body, project_id: project.id, investor_findable: project.investor_findable !== 0 };
+}
+
 settings.get('/privacy', async (c) => {
   await ensureUserSettingsTable(c.env);
   const user = await requireAuth(c);
+  const p = await privacyProject(c, user);
+  if ('refusal' in p) return p.refusal;
   const row = await getUserSettings(c.env, user.id);
-  return c.json(await privacyResponse(c.env, user.id, row));
+  return c.json(withFindable(await privacyResponse(c.env, user.id, row), p.project));
 });
 settings.put('/privacy', async (c) => {
   await ensureUserSettingsTable(c.env);
   const user = await requireAuth(c);
   const body = await c.req.json().catch(() => ({} as any));
+  const p = await privacyProject(c, user);
+  if ('refusal' in p) return p.refusal;
+  let findable: boolean | undefined;
+  if ('investor_findable' in body) {
+    if (!p.project) {
+      return c.json({ error: 'investor_findable needs ?project= naming your venture.', field: 'investor_findable' }, 400);
+    }
+    if (typeof body.investor_findable !== 'boolean') {
+      return c.json({ error: 'investor_findable is true or false.', field: 'investor_findable' }, 400);
+    }
+    findable = body.investor_findable;
+  }
   const patch: UserSettingsPatch = {};
   if ('visibility' in body) patch.visibility = body.visibility;
   if ('show_in_directory' in body) patch.show_in_directory = body.show_in_directory;
@@ -1803,7 +1860,13 @@ settings.put('/privacy', async (c) => {
   }
   try {
     const row = await upsertUserSettings(c.env, user.id, patch);
-    return c.json(await privacyResponse(c.env, user.id, row));
+    let project = p.project;
+    if (project && findable !== undefined) {
+      await c.env.DB.prepare('UPDATE projects SET investor_findable = ? WHERE id = ?')
+        .bind(findable ? 1 : 0, project.id).run();
+      project = { ...project, investor_findable: findable ? 1 : 0 };
+    }
+    return c.json(withFindable(await privacyResponse(c.env, user.id, row), project));
   } catch (e) { return handleSettingsError(c, e); }
 });
 

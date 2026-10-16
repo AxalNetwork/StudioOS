@@ -4061,9 +4061,9 @@ function PrivacyCoreCard({ flash }) {
       <div className="space-y-3">
         <Field label="Profile visibility">
           <select value={row.visibility || 'network'} onChange={e => save({ visibility: e.target.value })} disabled={busy} className={inputCls}>
-            <option value="public">Public — anyone with the link</option>
-            <option value="network">Network only — Axal VC members</option>
-            <option value="private">Private — admins only</option>
+            <option value="public">Public — anyone with the address</option>
+            <option value="network">Members only — signed-in Axal VC members</option>
+            <option value="private">Hidden — only you</option>
           </select>
         </Field>
         <label className="flex items-center gap-3 text-sm text-gray-800 dark:text-gray-200">

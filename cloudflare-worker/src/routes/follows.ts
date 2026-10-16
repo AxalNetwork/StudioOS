@@ -13,6 +13,7 @@
  *   GET    /api/follows/mine                                   — { users:[], projects:[] }
  */
 import { Hono } from 'hono';
+import { findableBy } from '../services/investorFindable';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { bindingKey } from '../util/schemaBootstrap';
@@ -92,6 +93,11 @@ r.post('/', async (c) => {
     return c.json({ detail: 'Cannot follow yourself' }, 400);
   }
   if (!(await targetExists(c.env, tgt.type, tgt.id))) {
+    return c.json({ detail: 'Not found' }, 404);
+  }
+  // D702 — an investor cannot follow (and so name) a venture its founder keeps
+  // to introductions; the same answer as a missing one, and nothing is written.
+  if (tgt.type === 'project' && !(await findableBy(c.env, user, tgt.id))) {
     return c.json({ detail: 'Not found' }, 404);
   }
   await c.env.DB.prepare(

@@ -6,6 +6,7 @@ import { activeCompanyFor } from '../middleware/activeCompany';
 import { kvGetJSON, kvPutJSON, createL1 } from '../kv';
 import { clampDays } from '../util/pagination';
 import { maskFounderForInvestor } from '../services/trust';
+import { keepFindable } from '../services/investorFindable';
 
 const dashboard = new Hono<{ Bindings: Env }>();
 
@@ -219,8 +220,11 @@ dashboard.get('/', async (c) => {
   // founder_user_id couldn't be resolved are masked too.
   let dealsMasked: any[] = deals as any[];
   if (isInvestor) {
+    // D702 — this list names ventures, so one whose founder chose "through
+    // introductions only" is left out for an investor without an introduction.
+    const findable = await keepFindable(c.env, user, deals as any[], (row: any) => row.id);
     dealsMasked = await Promise.all(
-      (deals as any[]).map(row => maskFounderForInvestor(c.env, row, {
+      findable.map(row => maskFounderForInvestor(c.env, row, {
         viewerRole: 'investor',
         viewerUserId: user.id,
       })),

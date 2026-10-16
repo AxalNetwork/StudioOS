@@ -2951,7 +2951,7 @@ export function buildLifecycleSuggestions(
   return [];
 }
 
-async function buildLifecycleResponse(env: Env, projectId: number) {
+export async function buildLifecycleResponse(env: Env, projectId: number) {
   const row = await env.DB.prepare(
     'SELECT lifecycle_stage, lifecycle_manual_checks FROM projects WHERE id = ?',
   ).bind(projectId).first<{ lifecycle_stage: string | null; lifecycle_manual_checks: string | null }>();
