@@ -73,8 +73,24 @@ export const AXAL_ENTITIES: Record<AxalEntityKey, AxalEntity> = {
  * `slugOrType` is the template slug or doc_type; `category` is the store
  * category (gp/fund/portfolio/compliance) when known.
  */
+// D706 — the Fund I catalog entries (migration 468), routed by name: none of
+// these slugs matches the regex fallback below, because `_` is a word
+// character. Its unilateral filings and policies print no Axal party, so they
+// are not routed here.
+const FUND_PARTY_SLUGS_D706 = new Set([
+  'lp_side_letter', 'lp_interest_transfer', 'investment_management_agreement',
+  'clawback_guarantee', 'management_rights_letter', 'pro_rata_information_rights_side_letter',
+]);
+const GP_PARTY_SLUGS_D706 = new Set([
+  'lpa_amended_restated', 'lpa_initial', 'gp_closing_certificate', 'capital_call_notice',
+  'distribution_notice', 'default_notice', 'lpac_charter', 'gp_llc_agreement',
+  'gp_fund_formation_consent', 'carried_interest_award_letter',
+]);
+
 export function axalEntityKeyForDoc(slugOrType: string, category?: string | null): AxalEntityKey {
   const s = String(slugOrType || '').toLowerCase();
+  if (FUND_PARTY_SLUGS_D706.has(s)) return 'fund';
+  if (GP_PARTY_SLUGS_D706.has(s)) return 'gp';
   // Fund-level docs + portfolio investment instruments: the Axal party is the
   // Fund, signing through its general partner Axal VC GP LLC.
   const fundEntityDocs = new Set([
@@ -109,14 +125,30 @@ export function axalEntityKeyForDoc(slugOrType: string, category?: string | null
 //  - policy     : published instrument -> no signature block.
 export type DocumentKind = 'agreement' | 'corporate' | 'resolution' | 'unilateral' | 'policy';
 
-const POLICY_SLUGS = new Set(['tos_v1', 'privacy_v1', 'aml_kyc', 'form_adv']);
+const POLICY_SLUGS = new Set([
+  'tos_v1', 'privacy_v1', 'aml_kyc', 'form_adv',
+  // D706 (Fund I catalog)
+  'compliance_manual_code_of_ethics', 'investor_privacy_notice_reg_sp', 'valuation_policy',
+  'conflicts_allocation_policy',
+]);
 const UNILATERAL_SLUGS = new Set([
   'section_83b', 'accreditation_v1', 'ein_application_kit', 'sg_acra_form_45_kit',
   'uk_form_in01_kit', 'ee_e_residency_application_kit', 'data_access_acknowledgment_admin',
   'mentor_engagement_disclaimer',
+  // D706 (Fund I catalog)
+  'certificate_of_limited_partnership_de', 'mfn_election_form', 'lp_investor_questionnaire',
+  'lp_aml_kyc_certification', 'lp_tax_status_certification', 'lp_electronic_delivery_consent',
+  'form_d_filing_kit', 'bad_actor_questionnaire_506d',
 ]);
-// Axal-internal governance acts that Joseph Lauzier signs for the firm.
-const RESOLUTION_SLUGS = new Set(['ic_charter']);
+// Axal-internal governance acts that Joseph Lauzier signs for the firm. The
+// D706 capital call, distribution and default notices sit here until a
+// `notice` kind exists.
+const RESOLUTION_SLUGS = new Set([
+  'ic_charter',
+  // D706 (Fund I catalog)
+  'gp_closing_certificate', 'capital_call_notice', 'distribution_notice', 'default_notice',
+  'lpac_charter', 'gp_fund_formation_consent',
+]);
 // Portfolio-company / founder constitutional + intra-company instruments where
 // Axal is not a contracting party (the company's officer signs, not Axal).
 const CORPORATE_SLUGS = new Set([
