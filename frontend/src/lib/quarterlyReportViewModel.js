@@ -29,6 +29,7 @@
 // for the period, those sections render an explicit "not yet written" state and
 // `meta.draft` is true — the renderer stamps the document DRAFT. A report with
 // no GP letter is not a report anyone has stood behind.
+import { NOT_RECORDED } from './absence.js';
 import {
   fundModel, FUND, FUND_COSTS, FUND_PROGRESSION, COHORT_HISTORY,
   SECTOR_EXPOSURE, DEPLOYMENT_BY_QUARTER,
@@ -461,7 +462,6 @@ export function quarterlyReportModel({
   return statement || figures ? { ...base, ...frozenSections({ statement, figures, providers }), meta: { ...base.meta, marksNote: null } } : base;
 }
 
-const NOT_RECORDED = 'Not recorded';
 /** A frozen `{ cents }` line as dollars, or Not recorded. */
 const frozenValue = (line) => (line && Number.isFinite(line.cents) ? usd(line.cents / 100) : NOT_RECORDED);
 const frozenWhy = (line) => (line && line.cents == null && typeof line.reason === 'string' ? line.reason : null);

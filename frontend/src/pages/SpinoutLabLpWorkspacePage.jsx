@@ -39,7 +39,8 @@ import { WorkspaceHeader } from '../components/WorkspaceTabs';
 // requires this import wherever the name is called.
 import { reportError } from '../lib/log';
 import { useAuth } from '../hooks/useAuthSync';
-import { api, fundReportingApi, spinoutLab } from '../lib/api';
+import { api, spinoutLab } from '../lib/api';
+import { fundReportingApi } from '../lib/api/fundReporting.js';
 import {
   fundModel, money, lpAccessState, lpHasReports, lpAllocationOpen,
   ALLOC_THRESHOLD_K, LP_STATES, FUND, PROGRAM, THESIS, fundTerms,
