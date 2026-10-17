@@ -100,7 +100,12 @@ export type Store =
   | 'pain_groups' | 'discovery_interviews' | 'customer_segments'
   | 'competitor_candidates' | 'demand_signals' | 'revenue_entries'
   | 'waitlist_signups' | 'hypotheses' | 'hypothesis_pain_links'
-  | 'interview_sessions';
+  | 'interview_sessions'
+  // D690 (S18-B, #1694): Build's records, then the rows its sections name.
+  | 'mvp_features' | 'mvp_must_haves' | 'roadmap_okrs' | 'cap_table_founders'
+  | 'build_filings' | 'build_systems'
+  | 'mvp_test_sessions' | 'mvp_test_findings' | 'mvp_feature_links' | 'mvp_release_checks'
+  | 'venture_risks' | 'founder_contributions' | 'formation_step_checks';
 
 export type ModuleSpec = {
   read: Gate;

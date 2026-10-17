@@ -88,6 +88,7 @@ async function creatorFor(env: Env, store: CreatorStore, id: string, projectId: 
       return env.DB.prepare('SELECT u.name, s.created_at FROM demand_signals s LEFT JOIN users u ON u.id = s.created_by WHERE s.id = ? AND s.project_id = ?').bind(n, projectId).first<Creator>();
     case 'interview_sessions':
       return env.DB.prepare('SELECT u.name, s.created_at FROM interview_sessions s JOIN discovery_interviews i ON i.id = s.interview_id LEFT JOIN users u ON u.id = s.created_by_user_id WHERE s.id = ? AND i.project_id = ?').bind(n, projectId).first<Creator>();
+    case 'mvp_must_haves':
     case 'mvp_features':
       return env.DB.prepare('SELECT u.name, f.created_at FROM mvp_features f LEFT JOIN users u ON u.id = f.created_by WHERE f.id = ? AND f.project_id = ?').bind(n, projectId).first<Creator>();
     case 'roadmap_okrs':
@@ -98,6 +99,9 @@ async function creatorFor(env: Env, store: CreatorStore, id: string, projectId: 
       return env.DB.prepare('SELECT NULL AS name, w.created_at FROM waitlist_signups w WHERE w.id = ? AND w.project_id = ? AND (w.audience IS NULL OR w.audience = \'customer\')').bind(n, projectId).first<Creator>();
     case 'hypothesis_pain_links':
       return env.DB.prepare('SELECT NULL AS name, l.created_at FROM hypothesis_pain_links l JOIN hypotheses h ON h.id = l.hypothesis_id WHERE l.id = ? AND h.project_id = ?').bind(n, projectId).first<Creator>();
+    // D690 (#1694): Build's other records have no creator column to read.
+    default:
+      return null;
   }
 }
 
