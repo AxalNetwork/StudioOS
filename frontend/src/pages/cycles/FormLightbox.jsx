@@ -78,6 +78,13 @@ export function formErrors(form, fields, values) {
   return errors;
 }
 
+/** Search matches by their `group`, in the order each group first appears. */
+const groupsOf = (options) => {
+  const groups = new Map();
+  for (const option of options) { const g = option.group || ''; if (!groups.has(g)) groups.set(g, []); groups.get(g).push(option); }
+  return [...groups];
+};
+
 function Note({ note, values, id, name }) {
   const content = typeof note === 'function' ? note(values) : note;
   if (!content) return null;
@@ -127,29 +134,34 @@ function Field({ field, values, errors, setValue, prefix, busy, compact = false,
   return <div className="flex min-w-0 flex-col gap-1.5">
     {group ? <span id={id + '-label'} className={LABEL}>{field.label}</span> : <label htmlFor={id} className={compact ? 'sr-only' : LABEL}>{field.label}</label>}
     {input}
-    {field.search && search?.found[field.name]?.length > 0 && <div data-testid={'cycle-form-found-' + field.name} className="flex flex-wrap gap-1.5">
-      {search.found[field.name].map((option) => <button key={option.value} type="button" onClick={() => search.pick(field, option)} className={CHOICE + ' ' + UNSELECTED}>{cleanFormCopy(option.label)}</button>)}
+    {field.search && search?.found[field.name]?.length > 0 && <div data-testid={'cycle-form-found-' + field.name} className="space-y-1.5">
+      {groupsOf(search.found[field.name]).map(([group, options]) => <div key={group || 'found'} className="space-y-1">
+        {group && <p className="m-0 text-[11px] font-semibold text-axal-muted dark:text-gray-400">{cleanFormCopy(group)}</p>}
+        <div className="flex flex-wrap gap-1.5">{options.map((option) => <button key={(option.into || '') + option.value} type="button" onClick={() => search.pick(field, option)} className={CHOICE + ' ' + UNSELECTED}>{cleanFormCopy(option.label)}</button>)}</div>
+      </div>)}
     </div>}
     {error && <p id={id + '-error'} role="alert" className="m-0 text-[11.5px] text-red-700 dark:text-red-300">{error}</p>}
     <Note note={field.note ?? field.hint} values={values} id={id + '-note'} name={field.name} />
   </div>;
 }
 
-export default function FormLightbox({ form: base, current = null, cycle, slug, moduleName, onSubmit, onSaved, onClose, loadOptions = null, onSearch = null, searchDelay = 250, search = '', bar }) {
+export default function FormLightbox({ form: base, current = null, cycle, slug, moduleName, onSubmit, onSaved, onClose, loadOptions = null, onSearch = null, searchDelay = 250, search = '', bar, refused = '' }) {
   const id = useId();
   const initialFields = useMemo(() => formFields(base), [base]);
   const queryValues = useMemo(() => typeof base?.fromQuery === 'function' ? base.fromQuery(new URLSearchParams(search)) : {}, [base, search]);
   const [values, setValues] = useState(() => formValues(initialFields, current, queryValues));
   const [errors, setErrors] = useState({});
-  const [refusal, setRefusal] = useState('');
+  // `refused`: a sentence the form opens with and nothing to save (a record that refused its read).
+  const [refusal, setRefusal] = useState(refused);
   const [busy, setBusy] = useState(false);
   const saving = useRef(false);
-  const [loaded, setLoaded] = useState(loadOptions ? undefined : {});
+  const [loaded, setLoaded] = useState(refused ? null : loadOptions ? undefined : {});
   const [done, setDone] = useState(null);
   const [copied, setCopied] = useState(false);
   const fields = useMemo(() => formFields(base, loaded), [base, loaded]);
-  // A T box with `search` offers what `onSearch` finds for its text; a pick
-  // fills the box and is sent under `search.into` while the box still holds it.
+  // A T box with `search` offers what `onSearch` finds for its text, each
+  // match under its `group`'s label; a pick fills the box and is sent under
+  // its own `into` (else `search.into`) while the box still holds it.
   const [found, setFound] = useState({});
   const [picks, setPicks] = useState({});
   const searching = useRef({ timer: null, serial: 0 });
@@ -170,15 +182,15 @@ export default function FormLightbox({ form: base, current = null, cycle, slug, 
     },
     pick: (field, option) => {
       searching.current.serial += 1;
-      setPicks((old) => ({ ...old, [field.search.into]: { field: field.name, value: option.value, label: option.label } }));
+      setPicks((old) => ({ ...old, [field.name]: { into: option.into || field.search.into, value: option.value, label: option.label } }));
       setValues((old) => ({ ...old, [field.name]: option.label }));
       setFound((old) => ({ ...old, [field.name]: [] }));
     },
   };
-  const picked = () => Object.fromEntries(Object.entries(picks).filter(([, p]) => values[p.field] === p.label).map(([into, p]) => [into, p.value]));
+  const picked = () => Object.fromEntries(Object.entries(picks).filter(([name, p]) => values[name] === p.label).map(([, p]) => [p.into, p.value]));
   const blocked = typeof base?.blocked === 'function' && !!loaded && base.blocked(fields);
   useEffect(() => {
-    if (!loadOptions) return undefined;
+    if (!loadOptions || refused) return undefined;
     let live = true;
     Promise.resolve().then(loadOptions).then((read) => {
       if (!live) return;

@@ -20,7 +20,7 @@ import { renderedText } from './_renderedText.mjs';
 import { PLACEMENTS_ONE_RUN } from './_interview_review_fixtures.mjs';
 import { REVIEWABLE, citeTarget, pickSession, sessionLabel, statusWord, whoLine } from '../src/pages/founder/interviewReviewModel.js';
 import SessionSummary from '../src/pages/founder/SessionSummary.jsx';
-import InterviewReviewPage, { detailsPayload } from '../src/pages/founder/InterviewReviewPage.jsx';
+import InterviewReviewPage from '../src/pages/founder/InterviewReviewPage.jsx';
 import { StructureReceipt } from '../src/pages/founder/InterviewReview.jsx';
 import { RECORDS } from '../src/pages/cycles/adapters/validate.js';
 
@@ -124,10 +124,34 @@ function fakes({ items = [S(9, 'draft'), S(7, 'transcribed')], detail = {}, list
     updateInterview: async (id, body) => { calls.push(['updateInterview', id, body]); return {}; },
     deleteInterview: async (id) => { calls.push(['deleteInterview', id]); return {}; },
   };
-  return { calls, sessions, api };
+  // D697 (#1659): the record's own writes go through the route's recordAction.
+  const act = async (key, body) => { calls.push(['act', key, body]); return { ok: true }; };
+  return { calls, sessions, api, act };
 }
 
-async function mount(f, url = '/validate/interviews/41') {
+/** A writer's Customer research record read, shaped as #1692's (D690 decision 2): the writer-only sections and the three actions. */
+const WRITER_READ = {
+  cycle: 'validate', module: 'customer-research', id: '41', title: 'Dana Ruiz', sub: 'Ops lead at Acme · 7 Oct · 34 min',
+  pills: [{ text: 'Strong fit', tone: 'ok' }, 'Transcribed'],
+  facts: [{ label: 'Captured', value: 'Recorded in StudioOS' }, { label: 'Consent', value: 'Said yes out loud' }, { label: 'ICP fit', value: 'Strong · Segment A' }, { label: 'Need-to-have', value: null, reason: 'No pain is judged yet.' }],
+  main: [{ key: 'transcript', title: 'Transcript', gate: 'write', rows: [] }, { key: 'placements', title: 'Eadwyn’s placements', gate: 'write', rows: [] }],
+  side: [{ key: 'fed', title: 'What it fed', gate: 'read', rows: [{ a: 'Manual reconciliation', b: '1 supports · 0 contradicts' }] }, { key: 'cost', title: 'Cost', gate: 'write', rows: [] }],
+  actions: [
+    { key: 'edit-details', kind: 'form', label: 'Edit details', tone: 'default', form: { title: 'Edit details', fields: [{ key: 'interviewee_name', label: 'Name', kind: 'T', value: 'Dana Ruiz', required: true }, { key: 'interviewee_company', label: 'Company', kind: 'T', value: 'Acme' }] } },
+    { key: 'delete', kind: 'write', label: 'Delete', tone: 'danger' },
+    { key: 'open-recording', kind: 'write', label: 'Open recording', tone: 'primary' },
+  ],
+  activity: [], activity_total: 0,
+};
+
+function Host({ f, read }) {
+  const [dialog, setDialog] = React.useState(null);
+  return h(React.Fragment, null,
+    h(InterviewReviewPage, { sessions: f.sessions, api: f.api, act: f.act, read, id: '41', projectId: 3, openDialog: (el) => setDialog(el) }),
+    dialog);
+}
+
+async function mount(f, url = '/validate/customer-research/41?project_id=3', read = WRITER_READ) {
   const restore = installDocument();
   if (!document.documentElement?.classList) document.documentElement = { ...(document.documentElement || {}), classList: { contains: () => false } };
   let path = null;
@@ -138,7 +162,8 @@ async function mount(f, url = '/validate/interviews/41') {
   await act(async () => {
     root.render(h(MemoryRouter, { initialEntries: [url] }, h(Probe),
       h(Routes, null,
-        h(Route, { path: '/validate/interviews/:id', element: h(InterviewReviewPage, { sessions: f.sessions, api: f.api }) }),
+        // The record draws its dialogs through openDialog, which CycleRoute hosts; this host stands in for it.
+        h(Route, { path: '/validate/customer-research/:id', element: h(Host, { f, read }) }),
         h(Route, { path: '/validate/customer-research', element: h('p', null, 'log') }))));
   });
   await settle();
@@ -149,6 +174,8 @@ async function mount(f, url = '/validate/interviews/41') {
   return {
     by, pr, settle, path: () => path, text: () => text(container).replace(/\s+/g, ' '),
     async click(id) { const n = by(id); if (!n) throw new Error(`Missing ${id}`); await act(async () => { await pr(n).onClick?.({ preventDefault() {} }); }); await settle(); },
+    async press(label) { const n = walk(container).find((x) => x.tagName === 'BUTTON' && text(x).trim() === label); if (!n) throw new Error(`Missing ${label}`); await act(async () => { await pr(n).onClick?.({ preventDefault() {} }); }); await settle(); },
+    fiber(name) { for (const n of walk(container)) { const k = Object.keys(n).find((x) => x.startsWith('__reactFiber$')); let fb = k && n[k]; while (fb) { if (fb.type?.name === name) return fb; fb = fb.return; } } return null; },
     async type(id, value) { const n = by(id); if (!n) throw new Error(`Missing ${id}`); await act(async () => { pr(n).onChange({ target: { value } }); }); },
     async submit(id) { await act(async () => { await pr(by(id)).onSubmit({ preventDefault() {} }); }); await settle(); },
     async unmount() { await act(async () => root.unmount()); restore(); },
@@ -159,8 +186,9 @@ test('the page: the interview from the Worker, the newest reviewable session, it
   const f = fakes({ items: [S(9, 'draft'), S(7, 'transcribed'), S(6, 'reviewed')] });
   const m = await mount(f);
   try {
-    assert.ok(m.text().includes('Dana Ruiz · Acme'));
-    assert.ok(m.text().includes('Held · 3 sessions'));
+    // D697: the header is the cycle's (CycleRoute); the record draws the read's pills and facts.
+    assert.ok(m.text().includes('Strong fit'));
+    assert.ok(m.text().includes('Recorded in StudioOS'));
     assert.deepEqual(f.calls.filter((c) => c[0] === 'get'), [['get', 7]], 'opened on the transcribed one, not the draft');
     assert.ok(f.calls.some((c) => c[0] === 'placements' && c[1] === 7), 'the findings are D658\'s placements');
     assert.ok(m.by('placement-1'), 'a proposed finding is drawn');
@@ -169,7 +197,7 @@ test('the page: the interview from the Worker, the newest reviewable session, it
     assert.ok(m.by('button-summarise'), 'a transcript and no summary: Summarise');
     await act(async () => { m.pr(m.by('session-switcher')).onChange({ target: { value: '6' } }); });
     await m.settle();
-    assert.equal(m.path(), '/validate/interviews/41?session=6');
+    assert.equal(m.path(), '/validate/customer-research/41?project_id=3&session=6');
     assert.deepEqual(f.calls.filter((c) => c[0] === 'get').at(-1), ['get', 6]);
   } finally { await m.unmount(); }
 });
@@ -226,38 +254,29 @@ test('a session with nothing to review links to its own page; an interview with 
   try { assert.ok(m3.text().includes('Unreadable: this interview could not be read.')); } finally { await m3.unmount(); }
 });
 
-test('Edit details sends the whole row back with only the name and company changed; an unreadable row is never saved over', async () => {
-  assert.deepEqual(detailsPayload({ interviewee_role: 'Ops lead', interview_date: '2026-10-07', notes: 'n', hypotheses: [4], pains: ['p'] }, { name: ' Dana R ', company: '' }), {
-    interviewee_name: 'Dana R', interviewee_role: 'Ops lead', interview_date: '2026-10-07', notes: 'n', hypotheses: [4], pains: ['p'], interviewee_company: null,
-  });
+test('Edit details saves only the name and the company, through the record\'s edit-details (D697 decision 17)', async () => {
+  // #1692's updateInterviewDetails writes those two columns and nothing else
+  // (its Worker test 19 holds that role, notes, hypotheses and pains survive),
+  // so the record sends only them: no fresh row, no whole-row PUT.
   const f = fakes();
   const m = await mount(f);
   try {
-    await m.click('button-edit-details');
-    await m.type('edit-name', 'Dana Ruiz-Ortega');
-    await m.submit('edit-details');
-    const put = f.calls.find((c) => c[0] === 'updateInterview');
-    assert.deepEqual(f.calls.find((c) => c[0] === 'listInterviews'), ['listInterviews', 3], 'the row is read fresh first');
-    assert.equal(put[1], 41);
-    assert.deepEqual(put[2], { interviewee_name: 'Dana Ruiz-Ortega', interviewee_role: 'Ops lead', interview_date: '2026-10-07', notes: 'Kept notes', hypotheses: [4], pains: ['reconciling'], interviewee_company: 'Acme' },
-      'notes, hypotheses, pains and role are sent as they are, never blanked');
-    assert.equal(m.by('edit-details'), undefined, 'saved: the form closes');
+    await m.press('Edit details');
+    const form = m.fiber('FormLightbox');
+    assert.ok(form, 'the form is open');
+    assert.deepEqual(form.memoizedProps.current, { interviewee_name: 'Dana Ruiz', interviewee_company: 'Acme' }, 'the read\'s current values');
+    await act(async () => { await form.memoizedProps.onSubmit({ interviewee_name: 'Dana Ruiz-Ortega', interviewee_company: 'Acme' }); });
+    await m.settle();
+    assert.deepEqual(f.calls.filter((c) => c[0] === 'act'), [['act', 'edit-details', { interviewee_name: 'Dana Ruiz-Ortega', interviewee_company: 'Acme' }]]);
+    assert.equal(f.calls.some((c) => c[0] === 'updateInterview'), false, 'the whole-row PUT is never called');
   } finally { await m.unmount(); }
-  const f2 = fakes({ rows: { project_id: 3, interviews: [] } });
-  const m2 = await mount(f2);
-  try {
-    await m2.click('button-edit-details');
-    await m2.submit('edit-details');
-    assert.equal(f2.calls.some((c) => c[0] === 'updateInterview'), false);
-    assert.ok(m2.text().includes('This interview could not be read, so nothing was saved.'));
-  } finally { await m2.unmount(); }
 });
 
-test('Delete confirms what goes with it, Cancel keeps it, and Delete the interview removes it and returns to the log', async () => {
+test('Delete confirms what goes with it, Cancel keeps it, and Delete the interview removes it and returns to Customer research', async () => {
   const f = fakes();
   const m = await mount(f);
   try {
-    await m.click('button-delete-interview');
+    await m.press('Delete');
     const dlg = m.by('delete-interview-confirm');
     assert.equal(m.pr(dlg).role, 'alertdialog');
     assert.equal(m.pr(dlg)['aria-modal'], 'true');
@@ -265,20 +284,20 @@ test('Delete confirms what goes with it, Cancel keeps it, and Delete the intervi
     assert.ok(m.text().includes('Its recordings, transcripts and summaries go too, with any findings still waiting for review. Findings you already accepted stay in their Validate modules.'));
     await m.click('button-cancel-delete');
     assert.equal(m.by('delete-interview-confirm'), undefined);
-    assert.equal(f.calls.some((c) => c[0] === 'deleteInterview'), false);
-    await m.click('button-delete-interview');
+    assert.equal(f.calls.some((c) => c[0] === 'act'), false);
+    await m.press('Delete');
     await m.click('button-confirm-delete');
-    assert.deepEqual(f.calls.filter((c) => c[0] === 'deleteInterview'), [['deleteInterview', 41]]);
+    assert.deepEqual(f.calls.filter((c) => c[0] === 'act'), [['act', 'delete', {}]]);
     assert.equal(m.path(), '/validate/customer-research?project_id=3');
   } finally { await m.unmount(); }
   const f2 = fakes();
-  f2.api.deleteInterview = async () => { throw new Error('Project not found'); };
+  f2.act = async () => { throw new Error('Project not found'); };
   const m2 = await mount(f2);
   try {
-    await m2.click('button-delete-interview');
+    await m2.press('Delete');
     await m2.click('button-confirm-delete');
     assert.ok(m2.text().includes('Project not found'));
-    assert.equal(m2.path(), '/validate/interviews/41', 'a refusal keeps the page');
+    assert.equal(m2.path(), '/validate/customer-research/41?project_id=3', 'a refusal keeps the page');
   } finally { await m2.unmount(); }
 });
 
@@ -292,7 +311,8 @@ test('the route, and the rows that link to it: Customer research and the intervi
   assert.match(ws, /<Link to=\{`\/validate\/interviews\/\$\{encodeURIComponent\(r\.id\)\}`\}[^>]*data-testid=\{`interview-row-link-\$\{r\.id\}`\}>/);
   const app = readFileSync('frontend/src/App.jsx', 'utf8');
   // D696 (#1658): the review is Customer research's record; the old address redirects to it.
-  assert.match(app, /<Route path="\/validate\/customer-research\/:id" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <InterviewReviewPage \/>\)\} \/>/);
+  // D697 (#1659): CycleRoute draws it in record mode, so it sits inside Validate.
+  assert.match(app, /<Route path="\/validate\/customer-research\/:id" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <CycleRoute cycle="validate" slug="customer-research" record \/>\)\} \/>/);
   assert.match(app, /<Route path="\/validate\/interviews\/:id" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <ParamRedirect to="\/validate\/customer-research\/:id" \/>\)\} \/>/);
   assert.match(app, /<Route path="\/validate\/session\/:id" /, 'the per-session deep link stays');
   const page = readFileSync('frontend/src/pages/founder/InterviewReviewPage.jsx', 'utf8');

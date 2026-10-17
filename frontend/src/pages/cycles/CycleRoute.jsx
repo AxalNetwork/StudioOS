@@ -4,7 +4,7 @@ import { api } from '../../lib/api';
 import { cyclesApi, cyclesWrite } from '../../lib/api/cycles';
 import { WorkerRail, Unreadable } from '../../ui';
 import RailFrame from '../../ui/RailFrame';
-import { RailCrumbsProvider } from '../../ui/railCrumbs';
+import { RailCrumbsProvider, useSetRailCrumbs } from '../../ui/railCrumbs';
 import { ASSIST_SURFACES } from '../../ui/eadwynConfig';
 import FillProposals from '../../workspaces/FillProposals';
 import ZoneDraft from '../../workspaces/ZoneDraft';
@@ -24,9 +24,10 @@ import { useActiveRecording } from '../../contexts/ActiveRecordingContext';
 import CreateStartupForm from '../../components/CreateStartupForm';
 import CycleOverview, { CycleHeader } from './CycleOverview';
 import RecordView from './RecordView';
+import InterviewRecord from '../founder/InterviewReviewPage';
 import Lightbox, { LightboxBarProvider } from '../../ui/Lightbox';
 import { RECORD_ID } from './cyclePaths';
-import { availableRecord, CLIENT_ACTIONS, confirmView, declaredActions, finishRecordWrite, recordActionBody, recordFormFor, rowAction } from './recordModel';
+import { availableRecord, CLIENT_ACTIONS, confirmView, declaredActions, finishRecordWrite, recordActionBody, recordEditAction, recordFormFor, rowAction } from './recordModel';
 import PhoneCycleRoot from './PhoneCycleRoot';
 import CycleModulePage from './CycleModulePage';
 import PhoneModulePage, { CycleBar, PHONE_GUTTER } from './PhoneModulePage';
@@ -114,6 +115,11 @@ const CYCLE_DEFS = {
         // Only until #1656 registers New hypothesis as the table's Add (decision 20).
         onNewHypothesis={formFor('validate', 'experiments') ? undefined : (body) => api.createHypothesis(ctx.projectId, body).then(ctx.reload)} />,
     }),
+    // D697 (#1659): an interview is Customer research's record. The page draws
+    // what the read sends, with the session's working parts inside it.
+    recordPage: toFnMap({
+      'customer-research': (read, ctx) => <InterviewRecord read={read} {...ctx} />,
+    }),
   },
   /**
    * Raise's read (#1501, D663) is already in D661's shape: its cards carry
@@ -121,10 +127,11 @@ const CYCLE_DEFS = {
    * adapter. Its modules are in `modules.js`, held to `services/raiseCycle.ts`'s
    * list by `cycle_adapters_d661.test.ts`.
    *
-   * `/raise/data-room` IS THE DATA ROOM. The module's slug and the tool's
-   * route are the same path, and the tool's static route wins, so the Data
-   * room tab opens the working tool itself, which is D661's rule for a
-   * module that has one. The other six have module pages.
+   * Data room's module page is `/raise/data-room` with no mode: that static
+   * route draws this page with `slug="data-room"` (D696 decision 12), so all
+   * seven Raise modules have module pages. Its two tools are reached from it:
+   * the read-only access view through the tool link below, and the files tool
+   * through `founderToolNavigation.js`'s door.
    */
   raise: {
     modules: MODULES.raise,
@@ -144,15 +151,17 @@ const CYCLE_DEFS = {
       'cap-table': () => ({ label: 'Open the cap table', href: '/raise/capital/cap-table' }),
       'use-of-funds': () => ({ label: 'Open the financial model', href: '/raise/capital/model' }),
       'capital-relationships': () => ({ label: 'Open the investor pipeline', href: '/raise/capital/pipeline' }),
+      // D696 decision 12: the access view manages nothing, so the label says what it shows.
+      'data-room': (q) => ({ label: 'Open the access view: grants, NDA state and recent access', href: `/raise/data-room?mode=access${q ? `&${q.slice(1)}` : ''}` }),
     }),
     add: toFnMap({}),
     fills: {},
     // The Raise desk's four AI bands (ZoneDraft, D424), on the modules they
     // read: the round and its order of payment on Cap table, which holds the
     // scenario both read; the room and the clauses on Fundraising readiness,
-    // which scores the data room and the documents. Data room has no module
-    // page of its own (its tool's route wins), so its band sits here too. The
-    // narrative band sits on Investor narrative, whose check it phrases.
+    // which scores the data room and the documents, so the room's band sits
+    // there rather than on Data room's module page. The narrative band sits on
+    // Investor narrative, whose check it phrases.
     drafts: new Map([
       ['cap-table', [{
         surface: 'raise/capital', label: 'Proposal · plain-language read', run: 'Read the round back', accept: 'Attach to scenario',
@@ -530,6 +539,41 @@ export function useCycleRecord({ enabled, cycle, projectId, slug, id, reload, ed
  * founder was on (`location.state.under`), the overview on a deep link. Closing
  * goes back to it; the lightbox makes no server call.
  */
+/**
+ * D695 (#1656): a row's Edit that reads its record (Validate's rows carry no
+ * `edit`) opens once the record answers, through `recordFormFor`, as the
+ * record page opens it. `target` is null when no such Edit is open.
+ */
+function useRowRecordEdit(target) {
+  const [state, setState] = useState(null);
+  const key = target ? `${target.cycle}/${target.slug}/${target.projectId}/${target.row.id}` : null;
+  useEffect(() => {
+    if (!target) return undefined;
+    let live = true;
+    cyclesApi.record(target.cycle, target.projectId, target.slug, target.row.id)
+      .then((read) => { if (live) setState({ key, spec: recordFormFor(recordEditAction(read), read, target.edit), error: null }); },
+        (error) => { if (live) setState({ key, spec: null, error: error?.message || 'This record could not be read.' }); });
+    return () => { live = false; };
+    // `key` names the record; a new `target` object for it does not re-read.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  return state && state.key === key ? state : null;
+}
+
+/**
+ * D696 (#1658): a record's title as the rail's third crumb, "section › module
+ * › record", while the record is drawn; leaving the record drops it. It sits
+ * inside `RailCrumbsProvider`, whose setter it calls, and draws nothing.
+ */
+function RecordCrumb({ title }) {
+  const setCrumbs = useSetRailCrumbs();
+  useEffect(() => {
+    setCrumbs({ record: title || null });
+    return () => setCrumbs({ record: null });
+  }, [setCrumbs, title]);
+  return null;
+}
+
 export default function CycleRoute({ cycle, lightbox = false, adding = false, record = false, slug: suppliedSlug }) {
   const { slug: routeSlug, id: recordId } = useParams();
   const location = useLocation();
@@ -663,6 +707,9 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   }, [cycle, projectId]);
 
   const tabs = useMemo(() => (def?.modules || []).map((m) => ({ slug: m.slug, name: m.name })), [def]);
+  const editing = editingId ? (module?.records?.rows || []).find((row) => String(row?.id) === editingId) || null : null;
+  const rowEdit = useRowRecordEdit(!record && projectId && edit?.readsRecord && editing && edit.idOf(editing) != null
+    ? { cycle, slug, projectId, edit, row: editing } : null);
 
   if (toLive) return <Navigate to={toLive} replace />;
   if (!def) return null;
@@ -698,7 +745,6 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
     const rest = params.toString();
     return `/${cycle}/${slug}/new${rest ? `?${rest}` : ''}`;
   };
-  const editing = editingId ? (module?.records?.rows || []).find((row) => String(row?.id) === editingId) || null : null;
   // The one open form, Add or Edit. Below 1024px it is the page, drawn in the
   // body's gutter; at 1024px and up it is the dialog at the mount below.
   const saved = () => { dirty.current = true; };
@@ -711,6 +757,18 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
         onSubmit={(values) => formOpen.submit(cyclesWrite, projectId, values)}
         onSaved={saved}
         onClose={closeAdd} />
+    ) : editing && edit.idOf(editing) != null && edit.readsRecord ? (
+      // Drawn once the record answers: its values, or the refusal in the dialog.
+      rowEdit?.spec ? (
+        <FormLightbox key={`edit-${editing.id}`} form={rowEdit.spec.form} current={rowEdit.spec.current} cycle={cycle} slug={slug}
+          loadOptions={edit.loadOptions ? () => edit.loadOptions(cyclesWrite, projectId, rowEdit.spec.id) : null}
+          onSubmit={(values) => edit.submit(cyclesWrite, projectId, rowEdit.spec.id, values)}
+          onSaved={saved}
+          onClose={closeEdit} />
+      ) : rowEdit ? (
+        <FormLightbox key={`edit-${editing.id}-refused`} form={{ ...edit, fields: [] }} cycle={cycle} slug={slug}
+          refused={rowEdit.error || 'This record has no Edit.'} onSubmit={() => {}} onClose={closeEdit} />
+      ) : null
     ) : editing && edit.idOf(editing) != null ? (
       <FormLightbox key={`edit-${editing.id}`} form={edit} current={edit.valuesOf(editing)} cycle={cycle} slug={slug}
         loadOptions={edit.loadOptions ? () => edit.loadOptions(cyclesWrite, projectId, edit.idOf(editing)) : null}
@@ -771,9 +829,10 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
       {recordState.status === 'loading' ? <p className="text-sm text-axal-muted dark:text-gray-400" aria-busy="true">Loading record…</p>
         : recordState.status === 'refused' ? <p className="text-sm text-axal-ink dark:text-gray-100">{recordState.error}</p>
         : recordState.status === 'unreadable' ? <Unreadable what="This record" claim={recordState.error} onRetry={() => setReload(n => n + 1)} />
-        : recordState.data && <RecordView record={recordState.data} activity={recordState.activity}
+        : recordState.data && (fnOf(def.recordPage, slug)?.(recordState.data, { projectId, id: recordId, activity: recordState.activity, cycleName: name, moduleName, onLink: recordState.link, onForm: recordState.openForm, onWrite: recordState.write, onClient: recordState.client, onShowAll: recordState.showAll, act: (key, body) => cyclesApi.recordAction(cycle, projectId, slug, recordId, key, body), reload: () => setReload((n) => n + 1), openDialog })
+          ?? <RecordView record={recordState.data} activity={recordState.activity}
           cycleName={name} moduleName={moduleName} onLink={recordState.link} onForm={recordState.openForm}
-          onWrite={recordState.write} onClient={recordState.client} onShowAll={recordState.showAll} />}
+          onWrite={recordState.write} onClient={recordState.client} onShowAll={recordState.showAll} />)}
       {recordState.actionError && <p role="alert" className="text-sm text-red-700 dark:text-red-300">{recordState.actionError}</p>}
     </div>;
   } else if (!slug) {
@@ -840,8 +899,8 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   }
 
   // D698 — where the rail is: the cycle, and on a module route the module, so
-  // it reads "Validate › Customer research". A record view below adds its
-  // title through `useSetRailCrumbs` (#1658). The provider draws no element.
+  // it reads "Validate › Customer research". In record mode `RecordCrumb`
+  // adds the record's title (D696). The provider draws no element.
   // The rail sits in the one frame every rail host uses (D556), as the
   // Validate desk's own did; the frame is this page's outermost element so it
   // docks to the edge.
@@ -886,6 +945,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
           onChanged={() => { dirty.current = true; }} />
       )}
       {dialog && !(phone && dialog.page) && dialog.element}
+      <RecordCrumb title={record && recordState.status === 'ready' ? recordState.data?.title : null} />
     </RailFrame>
     </RailCrumbsProvider>
   );

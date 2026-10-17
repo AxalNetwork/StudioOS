@@ -12,7 +12,8 @@ The canvases are `design/canvases/integrated/Cycle Overview.dc.html` and its two
 | `RecordView.jsx` | D696's record body: pills/actions, four facts, main/side sections and real activity. Exports `RecordActions`, `RecordFacts`, `RecordSection` and `RecordActivity`; the caller supplies cycle/module names and callbacks, and owns reads and every dialog. |
 | `ParamRedirect.jsx` | D696 decision 13: `ParamRedirect({ to })`, which redirects an old or canvas-slug record address to the app's, filling `:name` params through `encodeURIComponent` and keeping the query and the hash. `App.jsx` re-exports it beside `HistoryRedirect`. |
 | `verdictForm.js` | D693: Record a decision (CO:335) in D695's field format: Decision (Proceed, Pivot, Stop; Proceed first), For and Evidence it rests on from Verdict's `form-options`, Reasoning, and If Pivot only while Pivot is chosen. No evidence starts checked, its note counts the checks, `fromQuery` presets For from `?for=h-<id>`, and it submits through `verdictApi.record`, with no Edit. Joins `forms.js` with the Verdict module (#1704's closing PR) |
-| `validateRedirects.js` | D704 decision 1: `validateZoneTarget(zone, search, hash)`, where the three retired Validate pages land (`interviews` → Customer research, `pain-map` → Problem discovery, `hypotheses` → Experiments and evidence), the query and the hash kept, and the Interviews page's `?new=` turned into `/validate/record` or `?log=`. Pure; PR 2 mounts it through `ValidateZoneRedirect` in `App.jsx` |
+| `validateRedirects.js` | D704 decision 1: `validateZoneTarget(zone, search, hash)`, where the three retired Validate pages land (`interviews` → Customer research, `pain-map` → Problem discovery, `hypotheses` → Experiments and evidence), the query and the hash kept, and the Interviews page's `?new=` turned into `/validate/record` or `?log=`. Pure; `ValidateZoneRedirect.jsx` renders it, and #1666's PR 2b and closing PR mount that on the three addresses |
+| `ValidateZoneRedirect.jsx` | D704 (#1666): `ValidateZoneRedirect({ zone })`, a `<Navigate replace>` to `validateZoneTarget(zone, search, hash)`. `App.jsx` re-exports it beside `HistoryRedirect`; it lives here so a test can mount it. Mounted on no route until #1666's PR 2b |
 | `cycleModel.js` | The pure rules: the four cycles, the five card states, which chart specs can be drawn, figure values and changes, the module query, the records count and pages, cells, and the in-app link check |
 | `CycleCharts.jsx` | One SVG component per chart kind in the canvas (`hbar`, `vbars`, `vstack`, `funnel`, `stack`, `line`, `timeline`, `tiles`, `dots`, `rows`, `progress`, `big`, `heat`, `bands`), the legend and the sparkline. No chart library, and no HTML strings |
 | `CycleOverview.jsx` | The overview: the header with its tabs and primary action, four figures, and one card per module in its five states |
@@ -49,8 +50,10 @@ On a module page, `?add=1` is its first Add's address: the URL becomes `/<cycle>
   opens `CreateStartupForm` on it, and every cycle with no venture yet
   offers "Create your startup".
   Raise's read is already in D661's shape and passes through with no adapter.
-  `/raise/data-room` is the data room tool's own route, so the Data room tab
-  opens the tool itself.
+  `/raise/data-room` answers by mode (D696): with no mode it is the Data room
+  module page, `?mode=access` the read-only access view (its tool link) and
+  `?mode=workspace` the files tool (a #1539 door in `founderToolNavigation.js`,
+  so no file here spells that mode).
 - **The page adapts; the Worker is not changed** (S1 on #1474). A read in
   D661's shape passes through. Validate's merged with its own, so
   `adapters/validate.js` maps it, and `cloudflare-worker/test/cycle_adapters_d661.test.ts`
@@ -73,6 +76,8 @@ On a module page, `?add=1` is its first Add's address: the URL becomes `/<cycle>
 - `frontend/test/cycle_pages_d661.test.mjs` holds these rules, against the
   fixtures in `frontend/test/_cycle_fixtures.mjs`.
 
+D697 (#1659): a cycle's def may name a `recordPage` per module, drawn in record mode in place of `RecordView` with the record read and a context (`projectId`, `id`, `activity`, the record handlers, `act` for `recordAction`, `reload` and `openDialog`). Validate's is Customer research's interview record, `../founder/InterviewReviewPage.jsx`, built from `RecordView`'s exported parts.
+
 D696 PR 2 mounts record mode on all four cycles. It calls only the record read,
 keeps every request scoped to the URL’s venture, and refuses malformed ids
 before a read. A 403/404 prints the Worker’s sentence; other failures offer Retry.
@@ -83,4 +88,5 @@ only through `/api/files/dl/` without rereading; successful mutations reread,
 and a deleted record returns to its module. Activity pages append on Show all.
 Rows link only with `records.linkable` and a genuine Worker id. Build and Raise
 pass their ids through, and Grow and Validate set `recordId` to the Worker's id
-or null (D696 decision 7). Data-room modes and record rail crumbs remain PR 3’s work.
+or null (D696 decision 7). In record mode the rail's crumbs carry the record's
+title (`RecordCrumb`, D696).
