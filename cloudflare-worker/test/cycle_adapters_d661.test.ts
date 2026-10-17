@@ -55,6 +55,8 @@ function fixture() {
   db.exec(sqlOf('438_interview_sessions.sql'));
   db.exec(sqlOf('447_assistant_interviews.sql').replace(/ALTER TABLE validate_proposals[^;]*;/, ''));
   db.exec(sqlOf('453_interview_processing.sql'));
+  // D690 (#1692): the tracked list and Experiments' links read 460's stores.
+  db.exec(sqlOf('460_validate_record_stores.sql'));
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id, spinout_lab_active) VALUES (?, ?, ?, ?, 1, ?, 0)');
   u.run(FOUNDER, 'founder', 'Fay Founder', 'fay@example.test', 1001);
   u.run(OTHER, 'founder', 'Bo Other', 'bo@example.test', 1002);

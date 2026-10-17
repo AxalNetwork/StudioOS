@@ -101,6 +101,8 @@ export type Store =
   | 'competitor_candidates' | 'demand_signals' | 'revenue_entries'
   | 'waitlist_signups' | 'hypotheses' | 'hypothesis_pain_links'
   | 'interview_sessions' | 'validation_decisions' | 'validation_decision_commitments'
+  // D690 (#1692): a demand record by its prefix, and a claim's experiments and evidence (migration 460).
+  | 'demand_records' | 'hypothesis_experiments' | 'hypothesis_evidence_links'
   // D690 (S18-B, #1694): Build's records, then the rows its sections name.
   | 'mvp_features' | 'mvp_must_haves' | 'roadmap_okrs' | 'cap_table_founders'
   | 'build_filings' | 'build_systems'

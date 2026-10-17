@@ -105,8 +105,8 @@ caller's analysed companies or a directory company; 201 when added),
 `PATCH /competitors/:id` (watch and positioning), `PATCH
 /demand-signals/:id` (a `signal-` record only), `POST /hypotheses` and
 `PATCH /hypotheses/:id`. The row actions' writers (merge, split, attach a
-quote, Stop, evidence, experiments, a signal's file) are built and reach the
-SPA through the records actions in #1692's closing PR.
+quote, Stop, evidence, experiments, a signal's file) are each record's
+actions, below.
 `founder_validate_sessions.ts` adds `GET /sessions/:id/audio`, one
 short-lived signed download per recorded chunk, and `DELETE
 /discovery/interview/:id` now calls `services/interviewWriters.ts`'s
@@ -131,6 +131,38 @@ customer research, problem discovery and experiments; problem discovery's
 `fit_gap` and `stats.history_since`. A part follows its store's gate, and a
 phrase said without consent reaches a non-writer as
 "Quote withheld (no consent to quote)". See `decisions/D690.md`.
+
+### Cycle records (D690, #1690 and #1692)
+
+`cycle_records.ts`, mounted at `/api/cycles`, serves one record of any cycle
+that registers a service in `services/records/index.ts`; Build and Validate
+do:
+
+- `GET /:cycle/modules/:slug/records/:id?project=`: the record, its sections,
+  actions and `next`, and its first activity page;
+- `GET …/records/:id/activity?project=&page=`: 20 rows a page, newest first;
+- `POST …/records/:id/actions/:key?project=`: a declared action only, JSON or,
+  for a file field, `multipart/form-data`; `PATCH` and `DELETE` on the record
+  run its `edit` and `delete`;
+- `GET /:cycle/modules/:slug/form-options?project=`: the Add forms' choices,
+  every other query parameter passed through.
+
+The refusals run in order:
+
+1. no session: 401;
+2. a missing or malformed `project`: 400;
+3. an unknown cycle, a cycle with no service, or an unknown module: 404;
+4. a malformed id: 404, before any read;
+5. a missing venture: 404;
+6. the module's read gate, or the write gate for actions and form-options: 403;
+7. an id not in the module's own store for this venture: 404, as is any id an
+   action's body names.
+
+A partner reads a record without its writer-only sections and gets
+`actions: []`. Validate's six (`services/records/validate.ts`, #1692) are a
+pain group, an interview, a segment, a competitor candidate, a demand record
+(`signal-`, `revenue-` or `waitlist-`) and a hypothesis. See
+`decisions/D690.md`.
 
 ### Raise cycle Worker read (D663, #1476)
 
