@@ -9,7 +9,7 @@ import { canReadBoard, canWrite } from './_founder_validate_helpers';
 import type { Card } from '../services/cycleCards';
 import { buildPhone } from '../services/cycleFocus';
 import { addHolder, updateHolder, HolderError } from '../services/capTableWrites';
-import { logCycleWriteStatement } from '../services/cycleActivity';
+import { logCycleWriteStatement, type BuildModuleSlug as ActivityBuildSlug } from '../services/cycleActivity';
 import { hasRecords } from '../services/records/index';
 import { ownedRow } from '../services/records/owned';
 import { MVP_VALUES, MVP_EFFORTS, MVP_STATUSES } from './progress';
@@ -1146,3 +1146,8 @@ app.put('/systems/:kind', async c => {
 });
 
 export default app;
+// Build's module slugs, so services/cycleActivity.ts refuses a module that does not exist (D690).
+// That file keeps its own copy of the six (D707: it may not import a route);
+// it is this list exactly, or this fails to compile.
+const SAME_BUILD_SLUGS: [Slug] extends [ActivityBuildSlug] ? ([ActivityBuildSlug] extends [Slug] ? true : never) : never = true;
+void SAME_BUILD_SLUGS;

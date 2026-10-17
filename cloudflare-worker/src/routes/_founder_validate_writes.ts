@@ -197,8 +197,10 @@ export async function setInterviewIcpFit(env: Env, interviewId: number, fit: str
 /**
  * A hypothesis ↔ pain-group link, the unit Validate's evidence is counted
  * from. Both ends must belong to `projectId`: without that a link could pull
- * another venture's interviews into this venture's count. Returns false when
- * either end is not this project's. A link that already exists is kept.
+ * another venture's interviews into this venture's count. Returns null when
+ * either end is not this project's. A link that already exists is kept, and
+ * `inserted` says whether this call wrote a row, so a repeated link logs no
+ * activity for a write that did not happen.
  */
 export async function insertHypothesisLink(
   env: Env,
@@ -206,16 +208,16 @@ export async function insertHypothesisLink(
   hypothesisId: number,
   painGroupId: number,
   direction: 'supports' | 'contradicts',
-): Promise<boolean> {
+): Promise<{ inserted: boolean } | null> {
   const ok = await env.DB.prepare(
     `SELECT 1 AS ok FROM hypotheses h, pain_groups g
       WHERE h.id = ? AND h.project_id = ? AND g.id = ? AND g.project_id = ?`,
   ).bind(hypothesisId, projectId, painGroupId, projectId).first<{ ok: number }>();
-  if (!ok) return false;
-  await env.DB.prepare(
+  if (!ok) return null;
+  const res = await env.DB.prepare(
     `INSERT INTO hypothesis_pain_links (hypothesis_id, pain_group_id, direction)
      VALUES (?, ?, ?)
      ON CONFLICT(hypothesis_id, pain_group_id, direction) DO NOTHING`,
   ).bind(hypothesisId, painGroupId, direction).run();
-  return true;
+  return { inserted: Number(res.meta?.changes ?? 0) > 0 };
 }
