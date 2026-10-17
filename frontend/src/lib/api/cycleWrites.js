@@ -4,8 +4,8 @@
  * yet. A factory over `request`, so `cycles.js` binds it to the app's helper
  * and `cycle_adapters_d661.test.ts` binds it to the real Worker routes.
  *
- * Grow's routes take the venture in the body (`project`), Build's and Raise's
- * in the query, as each route reads it. Each path and method is spelled out for the
+ * Grow's routes take the venture in the body (`project`), Validate's, Build's
+ * and Raise's in the query, as each route reads it. Each path and method is spelled out for the
  * drift check.
  */
 const seg = (v) => encodeURIComponent(String(v));
@@ -24,6 +24,20 @@ export function makeCycleWrites(request) {
       const params = new URLSearchParams({ project: String(projectId) });
       for (const [key, value] of Object.entries(query || {})) if (key !== 'project' && value != null) params.append(key, String(value));
       return request(`/cycles/${cycle}/modules/${slug}/form-options?${params}`);
+    },
+    // D695 (#1656, PR 2b): Validate's Adds and Edits, through #1692's routes
+    // (`routes/cycle_validate.ts`), the venture in the query.
+    validate: {
+      theme: (projectId, body) => request(`/cycles/validate/themes?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
+      themeUpdate: (projectId, id, body) => request(`/cycles/validate/themes/${seg(id)}?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+      segment: (projectId, body) => request(`/cycles/validate/segments?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
+      segmentUpdate: (projectId, id, body) => request(`/cycles/validate/segments/${seg(id)}?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+      competitor: (projectId, body) => request(`/cycles/validate/competitors?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
+      competitorUpdate: (projectId, id, body) => request(`/cycles/validate/competitors/${seg(id)}?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+      signal: (projectId, body) => request(`/cycles/validate/demand-signals?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
+      signalUpdate: (projectId, id, body) => request(`/cycles/validate/demand-signals/${seg(id)}?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+      hypothesis: (projectId, body) => request(`/cycles/validate/hypotheses?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
+      hypothesisUpdate: (projectId, id, body) => request(`/cycles/validate/hypotheses/${seg(id)}?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify(body) }),
     },
     // D695 (#1657, PR 2): Raise's Adds and Edits, through #1700's routes. The
     // venture goes in the query; the data room's routes take its uid in the

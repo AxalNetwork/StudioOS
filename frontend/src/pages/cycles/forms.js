@@ -1317,11 +1317,12 @@ export function editFor(cycle, slug) {
 //
 // D695 PR 2a (#1656): the five canvas forms (CO:306-310) and their Edits, as
 // specs in the canvas's T, CH and CK kinds. Each body is the one its route on
-// `main` takes, and each Edit sends only that route's PATCH fields. They are
-// registered nowhere (decision 15): PR 2b adds the `validate` write group they
-// call, the chip loaders, and `FORMS.validate` / `EDITS.validate`. A chip set
-// read from `form-options` names its key in `optionsFrom`; until a loader
-// fills it, it draws its own "None yet" chip, or its empty sentence.
+// `main` takes, and each Edit sends only that route's PATCH fields. PR 2b
+// registers them as `FORMS.validate` and `EDITS.validate`, with the
+// `validate` write group they call. A chip set read from `form-options` names
+// its key in `optionsFrom`, and the form's `loadOptions` fills it; before the
+// read answers, or with nothing recorded, it draws its "None yet" chip or its
+// empty sentence (decision 4).
 
 const NONE_YET = { value: '', label: 'None yet' };
 /** A whole-number id as typed or chosen; null when there is none. */
@@ -1343,6 +1344,25 @@ const quoteOf = (value) => {
   return at > 0 && id != null && s.slice(at + 1) ? { interview_id: id, phrase: s.slice(at + 1) } : null;
 };
 
+const chipList = (list) => (Array.isArray(list) ? list : []).filter((o) => o && o.value != null && o.value !== '')
+  .map((o) => ({ value: String(o.value), label: String(o.label ?? o.value) }));
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+/**
+ * New theme's choices (#1692's form-options): each quote as its interview and
+ * phrase (the Worker's own value is `<id>|<phrase>`), unthemed ones checked
+ * and a themed one's meta the Worker's "in <theme>",
+ * with the count of those waiting; then None yet and the hypotheses.
+ */
+export function themeOptions(read) {
+  const quotes = (Array.isArray(read?.quotes) ? read.quotes : []).filter((x) => idOrNull(x?.interview_id) != null && typeof x?.phrase === 'string' && x.phrase)
+    .map((x) => ({ value: quoteValue(x.interview_id, x.phrase), label: String(x.label ?? x.phrase), meta: x.theme ? String(x.theme) : 'unthemed', checked: !x.theme }));
+  const waiting = Number(read?.unthemed_total);
+  return {
+    quotes: { options: quotes, ...(waiting > 0 ? { note: `${plural(waiting, 'unthemed quote is', 'unthemed quotes are')} waiting.` } : {}) },
+    hypothesis_id: { options: [NONE_YET, ...chipList(read?.hypotheses)] },
+  };
+}
+
 const theme = {
   key: 'theme', cta: 'Create theme', button: 'Create theme',
   title: 'New theme',
@@ -1360,6 +1380,7 @@ const theme = {
     quotes: (Array.isArray(v.quotes) ? v.quotes : []).map(quoteOf).filter(Boolean),
     hypothesis_id: idOrNull(v.hypothesis_id),
   }),
+  loadOptions: (w, projectId) => w.formOptions('validate', projectId, 'problem-discovery').then(themeOptions),
   submit: (w, projectId, v) => w.validate.theme(projectId, theme.toBody(v)),
 };
 
@@ -1400,6 +1421,20 @@ const kindField = { kind: 'CH', name: 'kind', k: 'Kind', opts: COMPETITOR_KIND, 
 const watchField = { kind: 'CK', name: 'watch', k: 'Watch for', opts: WATCH };
 const whyField = { kind: 'T', name: 'why', k: 'Why it matters', ph: 'One line, optional', max: 1000 };
 const watchBody = (v) => Object.fromEntries(WATCH.map((o) => [o.value, checked(v.watch, o.value)]));
+/**
+ * Add competitor's search (decision 8): first the caller's own analyses'
+ * candidates whose name holds what is typed, sent as `company_ref`; then the
+ * Research › Companies matches the read gives for it, sent as `directory_uid`.
+ * Each group is drawn under a label naming its source.
+ */
+export function companyMatches(read, q) {
+  const typed = String(q ?? '').trim().toLowerCase();
+  const own = chipList(read?.candidates).filter((o) => o.label.toLowerCase().includes(typed))
+    .map((o) => ({ ...o, into: 'company_ref', group: 'Your competitor analyses' }));
+  const directory = chipList(read?.directory).map((o) => ({ ...o, into: 'directory_uid', group: 'Research › Companies' }));
+  return [...own, ...directory];
+}
+
 const competitor = {
   key: 'competitor', cta: 'Add competitor', button: 'Add competitor',
   title: 'Add competitor',
@@ -1409,7 +1444,7 @@ const competitor = {
     // A search box (decision 8): PR 2b's picker sets `company_ref` for one of
     // the caller's own candidates, or `directory_uid` for a Research match;
     // otherwise the typed name is sent.
-    { kind: 'T', name: 'company', k: 'Company', ph: 'Search Research › Companies, or type a name', required: true, max: 120, optionsFrom: 'companies', search: 'q' },
+    { kind: 'T', name: 'company', k: 'Company', ph: 'Search Research › Companies, or type a name', required: true, max: 120, search: { into: 'company_ref' } },
     kindField, watchField, whyField,
   ],
   // The route takes exactly one of the three keys.
@@ -1418,6 +1453,7 @@ const competitor = {
       : str(v.directory_uid) ? { directory_uid: str(v.directory_uid) } : { name: str(v.company) };
     return { ...picked, kind: v.kind || 'direct', watch: watchBody(v), why: str(v.why) };
   },
+  search: (w, projectId, q) => w.formOptions('validate', projectId, 'market-intelligence', { q }).then((read) => companyMatches(read, q)),
   submit: (w, projectId, v) => w.validate.competitor(projectId, competitor.toBody(v)),
 };
 
@@ -1463,6 +1499,9 @@ const ownerDeadline = {
     { kind: 'T', name: 'deadline', k: 'Deadline', input: 'date', ph: '31 Oct' },
   ],
 };
+/** New hypothesis's and Edit hypothesis's choices: the venture's pain themes and the members who can own it. */
+export const hypothesisOptions = (read) => ({ pain_group_id: { options: chipList(read?.themes) }, owner_user_id: { options: chipList(read?.owners) } });
+
 const hypothesis = {
   key: 'hypothesis', cta: 'Create hypothesis', button: 'Create hypothesis',
   title: 'New hypothesis',
@@ -1484,10 +1523,11 @@ const hypothesis = {
       ...(owner == null ? {} : { owner_user_id: owner }), deadline: str(v.deadline),
     };
   },
+  loadOptions: (w, projectId) => w.formOptions('validate', projectId, 'experiments').then(hypothesisOptions),
   submit: (w, projectId, v) => w.validate.hypothesis(projectId, hypothesis.toBody(v)),
 };
 
-/** Validate's Add forms, by module slug (PR 2b registers them as `FORMS.validate`). */
+/** Validate's Add forms, by module slug, registered as `FORMS.validate`. */
 export const VALIDATE_FORMS = {
   'problem-discovery': [theme],
   'ideal-customer-profile': [segment],
@@ -1529,8 +1569,16 @@ export function editFieldsFor(form, current) {
  */
 const onlyShown = (v, body, from = {}) => Object.fromEntries(Object.entries(body).filter(([k]) => Object.hasOwn(v, from[k] ?? k)));
 
+/**
+ * Validate's rows carry no `edit`, so each Edit opens from its record's own
+ * Edit action (#1658's `cyclesApi.record`), on a row or the record page: its
+ * values go through `valuesOf` as the row's `edit`, then `editFieldsFor`
+ * (`recordModel.js`'s `recordFormFor`).
+ */
+const FROM_RECORD = { readsRecord: true };
+
 const editTheme = {
-  ...EDIT,
+  ...EDIT, ...FROM_RECORD,
   key: 'edit-theme', title: 'Edit theme', sub: theme.sub,
   fields: [theme.fields[0], severityField],
   idOf: recordId(/^[1-9]\d*$/),
@@ -1540,7 +1588,7 @@ const editTheme = {
 };
 
 const editSegment = {
-  ...EDIT,
+  ...EDIT, ...FROM_RECORD,
   key: 'edit-segment', title: 'Edit segment', sub: segment.sub,
   fields: segmentFields,
   idOf: recordId(/^[1-9]\d*$/),
@@ -1555,7 +1603,7 @@ const editSegment = {
 };
 
 const editCompetitor = {
-  ...EDIT,
+  ...EDIT, ...FROM_RECORD,
   key: 'edit-competitor', title: 'Edit competitor', sub: competitor.sub,
   fields: [kindField, watchField, whyField],
   // A candidate id the record route takes (D690 decision 4).
@@ -1563,7 +1611,9 @@ const editCompetitor = {
   valuesOf: (row) => {
     const e = growEdit(row) || {};
     const v = carried(['kind', 'why'])(row);
-    if (e.watch && typeof e.watch === 'object') v.watch = WATCH.map((o) => o.value).filter((k) => e.watch[k] === true);
+    // The record's Edit gives the keys watched; a row gave the three switches.
+    if (Array.isArray(e.watch)) v.watch = WATCH.map((o) => o.value).filter((k) => e.watch.includes(k));
+    else if (e.watch && typeof e.watch === 'object') v.watch = WATCH.map((o) => o.value).filter((k) => e.watch[k] === true);
     return v;
   },
   toBody: (v) => onlyShown(v, { kind: v.kind || 'direct', watch: watchBody(v), why: str(v.why) }),
@@ -1571,7 +1621,7 @@ const editCompetitor = {
 };
 
 const editSignal = {
-  ...EDIT,
+  ...EDIT, ...FROM_RECORD,
   key: 'edit-signal', title: 'Edit signal', sub: signal.sub,
   fields: signalFields,
   // Only a `signal-` record is the founder's own (a `revenue-` or `waitlist-` one is not).
@@ -1580,7 +1630,8 @@ const editSignal = {
     const e = growEdit(row) || {};
     const v = carried(['kind', 'who', 'signal_date', 'status'])(row);
     if (v.signal_date) v.signal_date = dateText(v.signal_date);
-    if (Object.hasOwn(e, 'amount_cents')) v.amount = e.amount_cents == null ? '' : String(Number(e.amount_cents) / 100);
+    // The record's Edit gives no amount as '', which is no amount, not 0.
+    if (Object.hasOwn(e, 'amount_cents')) v.amount = e.amount_cents == null || e.amount_cents === '' ? '' : String(Number(e.amount_cents) / 100);
     return v;
   },
   // An amount is sent when its box was shown, and cleared when the kind takes none.
@@ -1593,7 +1644,7 @@ const editSignal = {
 };
 
 const editHypothesis = {
-  ...EDIT,
+  ...EDIT, ...FROM_RECORD,
   key: 'edit-hypothesis', title: 'Edit hypothesis', sub: hypothesis.sub,
   // Its pain links and direction are the record's own section (D690), not PATCH fields.
   fields: [...claimFields, ownerDeadline],
@@ -1607,10 +1658,11 @@ const editHypothesis = {
     const body = { claim: str(v.claim), success_bar: str(v.success_bar), disproof: str(v.disproof), deadline: str(v.deadline), owner_user_id: idOrNull(v.owner_user_id) };
     return onlyShown(v, body);
   },
+  loadOptions: (w, projectId) => w.formOptions('validate', projectId, 'experiments').then((read) => ({ owner_user_id: hypothesisOptions(read).owner_user_id })),
   submit: (w, projectId, id, v) => w.validate.hypothesisUpdate(projectId, id, editHypothesis.toBody(v)),
 };
 
-/** Validate's Edit forms, by module slug (PR 2b registers them as `EDITS.validate`). */
+/** Validate's Edit forms, by module slug, registered as `EDITS.validate`. */
 export const VALIDATE_EDITS = {
   'problem-discovery': editTheme,
   'ideal-customer-profile': editSegment,
@@ -1618,6 +1670,11 @@ export const VALIDATE_EDITS = {
   'demand-signals': editSignal,
   experiments: editHypothesis,
 };
+
+// Registered here, after the specs, since `FORMS` and `EDITS` are declared
+// above them. #1704 adds Verdict's `verdict` to `FORMS.validate`.
+FORMS.validate = { ...VALIDATE_FORMS };
+EDITS.validate = { ...VALIDATE_EDITS };
 
 // ---------- Build (routes/cycle_build.ts, D690 #1695) ------------------------
 //

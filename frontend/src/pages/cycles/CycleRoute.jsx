@@ -26,7 +26,7 @@ import CycleOverview, { CycleHeader } from './CycleOverview';
 import RecordView from './RecordView';
 import Lightbox from '../../ui/Lightbox';
 import { RECORD_ID } from './cyclePaths';
-import { availableRecord, CLIENT_ACTIONS, confirmView, declaredActions, finishRecordWrite, recordActionBody, recordFormFor, rowAction } from './recordModel';
+import { availableRecord, CLIENT_ACTIONS, confirmView, declaredActions, finishRecordWrite, recordActionBody, recordEditAction, recordFormFor, rowAction } from './recordModel';
 import ValidatePhoneFocus from './ValidatePhoneFocus';
 import CycleModulePage from './CycleModulePage';
 import DurabilityChecklist from './DurabilityChecklist';
@@ -528,6 +528,27 @@ export function useCycleRecord({ enabled, cycle, projectId, slug, id, reload, ed
  * founder was on (`location.state.under`), the overview on a deep link. Closing
  * goes back to it; the lightbox makes no server call.
  */
+/**
+ * D695 (#1656): a row's Edit that reads its record (Validate's rows carry no
+ * `edit`) opens once the record answers, through `recordFormFor`, as the
+ * record page opens it. `target` is null when no such Edit is open.
+ */
+function useRowRecordEdit(target) {
+  const [state, setState] = useState(null);
+  const key = target ? `${target.cycle}/${target.slug}/${target.projectId}/${target.row.id}` : null;
+  useEffect(() => {
+    if (!target) return undefined;
+    let live = true;
+    cyclesApi.record(target.cycle, target.projectId, target.slug, target.row.id)
+      .then((read) => { if (live) setState({ key, spec: recordFormFor(recordEditAction(read), read, target.edit), error: null }); },
+        (error) => { if (live) setState({ key, spec: null, error: error?.message || 'This record could not be read.' }); });
+    return () => { live = false; };
+    // `key` names the record; a new `target` object for it does not re-read.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  return state && state.key === key ? state : null;
+}
+
 export default function CycleRoute({ cycle, lightbox = false, adding = false, record = false, slug: suppliedSlug }) {
   const { slug: routeSlug, id: recordId } = useParams();
   const location = useLocation();
@@ -654,6 +675,9 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   }, [cycle, projectId]);
 
   const tabs = useMemo(() => (def?.modules || []).map((m) => ({ slug: m.slug, name: m.name })), [def]);
+  const editing = editingId ? (module?.records?.rows || []).find((row) => String(row?.id) === editingId) || null : null;
+  const rowEdit = useRowRecordEdit(!record && projectId && edit?.readsRecord && editing && edit.idOf(editing) != null
+    ? { cycle, slug, projectId, edit, row: editing } : null);
 
   if (toLive) return <Navigate to={toLive} replace />;
   if (!def) return null;
@@ -689,7 +713,6 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
     const rest = params.toString();
     return `/${cycle}/${slug}/new${rest ? `?${rest}` : ''}`;
   };
-  const editing = editingId ? (module?.records?.rows || []).find((row) => String(row?.id) === editingId) || null : null;
   // The one open form, Add or Edit. Below 1024px it is the page, drawn in the
   // body's gutter; at 1024px and up it is the dialog at the mount below.
   const saved = () => { dirty.current = true; };
@@ -702,6 +725,19 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
         onSubmit={(values) => formOpen.submit(cyclesWrite, projectId, values)}
         onSaved={saved}
         onClose={closeAdd} />
+    ) : editing && edit.idOf(editing) != null && edit.readsRecord ? (
+      // Drawn once the record answers: its values, or the refusal in the dialog.
+      rowEdit?.spec ? (
+        <FormLightbox key={`edit-${editing.id}`} form={rowEdit.spec.form} current={rowEdit.spec.current} cycle={cycle} slug={slug}
+          loadOptions={edit.loadOptions ? () => edit.loadOptions(cyclesWrite, projectId, rowEdit.spec.id) : null}
+          onSubmit={(values) => edit.submit(cyclesWrite, projectId, rowEdit.spec.id, values)}
+          onSaved={saved}
+          onClose={closeEdit} />
+      ) : rowEdit ? (
+        <FormLightbox key={`edit-${editing.id}-refused`} form={{ ...edit, fields: [] }} cycle={cycle} slug={slug}
+          loadOptions={() => Promise.reject(new Error(rowEdit.error || 'This record has no Edit.'))}
+          onSubmit={() => {}} onClose={closeEdit} />
+      ) : null
     ) : editing && edit.idOf(editing) != null ? (
       <FormLightbox key={`edit-${editing.id}`} form={edit} current={edit.valuesOf(editing)} cycle={cycle} slug={slug}
         loadOptions={edit.loadOptions ? () => edit.loadOptions(cyclesWrite, projectId, edit.idOf(editing)) : null}
