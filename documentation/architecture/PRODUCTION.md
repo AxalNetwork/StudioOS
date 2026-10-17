@@ -157,6 +157,12 @@ A grant older than a raised session floor is also refused on every tool call (`g
 ### Cloudflare Worker (required)
 - [ ] `JWT_SECRET` – 64+ random chars (`openssl rand -hex 48`); the worker
       refuses requests if it's missing or weak.
+- [ ] `KEK_PII` – 32+ bytes; the key `services/columnCipher.ts` derives the
+      column cipher from (`npx wrangler secret put KEK_PII --env=production`).
+      Without it, production refuses every encrypted write: an EIN (D579), a
+      bank account (D708, which answers 503 `cipher_key_missing`). Changing it
+      leaves every encrypted value unreadable; each bank account then reads
+      `account_unreadable` until it is retired and added again.
 
 ### Cloudflare Worker (optional, per feature)
 - [ ] `GITHUB_ACCESS_TOKEN` – ticket → GitHub-issue sync.

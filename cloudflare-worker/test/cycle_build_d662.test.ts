@@ -170,7 +170,8 @@ test('new fields reject cross-project links and disabled or foreign connector ma
     INSERT INTO integrations(id,user_id,provider_key,display_name,status,last_synced_at) VALUES (11,1,'hubspot','CRM','active',NULL);
     INSERT INTO integration_companies VALUES (11,10,0);`);
   let r = await call(env, '/api/cycles/build/features/1?project=101', 1, 'PATCH', { pain_group_id: 10 });
-  assert.equal(r.status, 400);
+  // D690 (#1695 decision 16): another venture's pain theme in a body is a 404.
+  assert.equal(r.status, 404);
   assert.equal(db.prepare('SELECT pain_group_id FROM mvp_features WHERE id = 1').get()?.pain_group_id, null);
   r = await call(env, '/api/cycles/build/systems/crm?project=101', 1, 'PUT', { integration_id: 11 });
   assert.equal(r.status, 403);
@@ -256,13 +257,14 @@ test('roadmap uses recorded done moves, owner, KPI and target date', async () =>
     INSERT INTO okr_column_moves(id,project_id,okr_id,to_status,moved_at) VALUES
       (1,101,2,'done','${month}-01 12:00:00'), (2,101,2,'done','${month}-01 13:00:00'),
       (3,101,3,'done','${today}T00:00:00Z');`);
-  const edited = await call(env, '/api/cycles/build/roadmap/1?project=101', 1, 'PATCH', { owner_user_id: 1, target_date: '2026-11-30', kpi_key: 'activation' });
+  const edited = await call(env, '/api/cycles/build/roadmap/1?project=101', 1, 'PATCH', { owner_user_id: 1, target_date: '2026-11-30', kpi_key: 'mrr' });
   assert.equal(edited.status, 200);
   const module = await call(env, '/api/cycles/build/modules/product-roadmap?project=101&filter=column:now');
   assert.equal(module.body.records.total, 1);
   assert.equal(module.body.records.rows[0].cells.owner, 'One');
   assert.equal(cardView(module.body.card).state, 'ok');
-  assert.equal(module.body.records.rows[0].cells.moves, 'activation');
+  // D690 (#1695 test 13): 'activation' is off the KPI list, so the item moves MRR.
+  assert.equal(module.body.records.rows[0].cells.moves, 'mrr');
   assert.equal(module.body.records.rows[0].cells.date, '2026-11-30');
   const overview = await call(env, '/api/cycles/build/overview?project=101');
   assert.equal(overview.body.figures[2].value, 2);

@@ -7,8 +7,8 @@
  *   key               a hand entry writes                the value read
  *   mrr               project_metrics.mrr               Stripe's row from the last 35 days, else the latest hand entry
  *   paying_accounts   project_metrics.paying_accounts   the latest row
- *   new_mrr           refused (the revenue ledger)      revenue_movements
- *   expansion_mrr     refused (the revenue ledger)      revenue_movements
+ *   new_mrr           refused (the revenue ledger)      movements computed from the ledger when read (D664)
+ *   expansion_mrr     refused (the revenue ledger)      movements computed from the ledger when read (D664)
  *   churn             project_metrics.monthly_churn_pct the ledger's churned MRR once it has two billings,
  *                                                       else the latest churn rate, Stripe first
  *   net_burn          project_metrics.net_burn          the latest row
@@ -22,7 +22,7 @@
  * money KPI is stored as whole cents.
  */
 import type { Env } from '../types';
-import { billingPeriods, readRecurring } from './revenueMovements';
+import { billingPeriods, computeMovements, movementGap, readRecurring } from './revenueMovements';
 import { runwayMonths } from './saasMetrics';
 
 export class KpiRefused extends Error {
@@ -151,13 +151,15 @@ export async function kpiRows(env: Env, projectId: number, now: number): Promise
   const metrics = await readMetrics(env, projectId);
   const ledger = await readRecurring(env, projectId);
   const twoBillings = billingPeriods(ledger) >= 2;
-  const mv = await env.DB.prepare(
-    'SELECT month, kind, amount_cents, source, as_of FROM revenue_movements WHERE project_id = ? ORDER BY month DESC',
-  ).bind(projectId).all<{ month: string; kind: string; amount_cents: number; source: string; as_of: string }>();
-  const latestMonth = (mv.results || [])[0]?.month ?? null;
-  const at = (kind: string) => (mv.results || []).find((m) => m.month === latestMonth && m.kind === kind) ?? null;
+  // D664 (#1753): movements are computed from the ledger when read, never read
+  // from revenue_movements, which is empty for a ledger older than 443.
+  const mv = computeMovements(ledger);
+  const latestMonth = mv.length ? mv[mv.length - 1].month : null;
+  const at = (kind: string) => mv.find((m) => m.month === latestMonth && m.kind === kind) ?? null;
+  const gap = movementGap(ledger);
   const movement = (key: 'new_mrr' | 'expansion_mrr' | 'churn', kind: 'new' | 'expansion' | 'churned'): KpiRow => {
     if (!twoBillings) return notRecorded(key, KPI_LABEL[key], 'Needs 2 billings');
+    if (gap) return notRecorded(key, KPI_LABEL[key], gap);
     const m = at(kind);
     if (!m) {
       return notRecorded(key, KPI_LABEL[key], at('unsplit') ? 'Not recorded: the ledger cannot tell new from expansion for this month' : 'Not recorded');

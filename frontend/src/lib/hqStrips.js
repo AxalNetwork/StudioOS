@@ -31,6 +31,7 @@ export const HQ_STRIPS = {
     ['Integration keys', '/admin?tab=integration-keys'],
     ['GitHub Sync', '/admin?tab=github'],
     ['Payments', '/admin?tab=payments'],
+    ['Bank accounts', '/admin?tab=bank-accounts'],
     ['Promo codes', '/admin?tab=promos'],
     ['Monitoring', '/monitoring'],
     ['Telegram', '/admin/telegram'],

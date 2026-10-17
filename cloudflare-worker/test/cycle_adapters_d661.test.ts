@@ -55,6 +55,8 @@ function fixture() {
   db.exec(sqlOf('438_interview_sessions.sql'));
   db.exec(sqlOf('447_assistant_interviews.sql').replace(/ALTER TABLE validate_proposals[^;]*;/, ''));
   db.exec(sqlOf('453_interview_processing.sql'));
+  // D690 (#1692): the tracked list and Experiments' links read 460's stores.
+  db.exec(sqlOf('460_validate_record_stores.sql'));
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id, spinout_lab_active) VALUES (?, ?, ?, ?, 1, ?, 0)');
   u.run(FOUNDER, 'founder', 'Fay Founder', 'fay@example.test', 1001);
   u.run(OTHER, 'founder', 'Bo Other', 'bo@example.test', 1002);
@@ -737,13 +739,16 @@ function routeRequest(grow: any, buildDb: any) {
   };
 }
 
-const SAMPLES: Record<string, Record<string, Record<string, string>>> = {
+// D695 (#1657): Grow's canvas forms. A form's values are text, or a list for a CK field.
+const SAMPLES: Record<string, Record<string, Record<string, unknown>>> = {
   grow: {
-    'product-improvement': { body: 'Needs single sign-on', source: 'customer', from_name: 'Ana', from_email: 'ana@x.example', theme: 'Security', roadmap_item_label: 'SSO', status: 'planned' },
-    distribution: { name: 'Podcasts', utm_source: 'Podcast', state: 'testing', spend: '1,250.50' },
-    'partner-network': { name: 'Initech', type: 'agency', stage: 'terms', terms: '10% of first-year revenue', revenue: '$300' },
-    'market-expansion': { name: 'Portugal', state: 'considering', demand_score: '7', demand_source: 'Waitlist by country' },
-    'durable-company-building': { title: 'Annual report', kind: 'compliance', due_at: dayFrom(20), owner_name: 'Fay', status: 'upcoming' },
+    'product-improvement': { body: 'Needs single sign-on', source: 'customer', from_name: 'Ana', from_company: 'Acme Test', theme_choice: 'new', theme: 'Security', from_email: 'ana@x.example' },
+    distribution: { kind: 'paid_social', name: 'Podcasts', state: 'testing', spend: '1,250.50', bar: '200' },
+    'revenue-and-traction': { kpi: 'mrr', value: '38,400', as_of: dayFrom(0), note: 'Typed from the bank statement' },
+    'team-expansion': { title: 'Founding engineer', team: 'Engineering', type: 'fractional', target_start: dayFrom(60), band: '90,000–120,000', equity: '0.5', post_to: [] },
+    'partner-network': { name: 'Initech', type: 'agency', stage: 'terms', terms_kind: 'rev_share', amount: '20%' },
+    'market-expansion': { name: 'Portugal', state: 'considering', parts: ['demand'], demand_score: '7', demand_source: 'Waitlist by country' },
+    'durable-company-building': { title: 'Annual report', kind: 'compliance', due_at: dayFrom(20), owner_name: 'Fay' },
   },
   build: {
     'solution-design': { title: 'Key-person dependency', severity: 'high', mitigation: 'Document the bank integration' },
@@ -769,12 +774,21 @@ test('D661: every Add form sends a body its Worker route accepts, and the row re
     const r = await growCall(grow, 'GET', `/modules/${slug}?project=${GP}`);
     return r.body.records.rows.find(pick);
   };
-  assert.deepEqual(Object.fromEntries(Object.entries(await growRow('product-improvement', (r) => r.body === 'Needs single sign-on')).filter(([k]) => ['source', 'theme', 'status', 'roadmap_item_label'].includes(k))),
-    { source: 'customer', theme: 'Security', status: 'planned', roadmap_item_label: 'SSO' });
+  assert.deepEqual(Object.fromEntries(Object.entries(await growRow('product-improvement', (r) => r.body === 'Needs single sign-on')).filter(([k]) => ['source', 'theme', 'status'].includes(k))),
+    { source: 'customer', theme: 'Security', status: 'open' });
+  assert.deepEqual({ ...grow.db.prepare('SELECT from_company, from_email, notify_on_ship FROM product_feedback WHERE body = ?').get('Needs single sign-on') as any },
+    { from_company: 'Acme Test', from_email: 'ana@x.example', notify_on_ship: 1 }, 'Tell them when it ships is checked, so their email is kept');
   const podcasts = await growRow('distribution', (r) => r.name === 'Podcasts');
-  assert.deepEqual([podcasts.utm_source, podcasts.state, podcasts.spend_cents, podcasts.spend_source], ['podcast', 'testing', 125050, 'manual'], 'dollars to cents, this month, typed');
+  assert.deepEqual([podcasts.utm_source, podcasts.state, podcasts.spend_cents, podcasts.spend_source], ['podcasts', 'testing', 125050, 'manual'], 'the UTM source from the name, and dollars to cents this month, in the one POST');
+  assert.deepEqual({ ...grow.db.prepare("SELECT kind, cac_bar_cents, bar_currency FROM growth_channels WHERE name = 'Podcasts'").get() as any }, { kind: 'paid_social', cac_bar_cents: 20000, bar_currency: 'usd' });
+  assert.deepEqual({ ...grow.db.prepare('SELECT mrr, source, notes FROM project_metrics WHERE project_id = ? AND snapshot_date = ?').get(GP, dayFrom(0)) as any },
+    { mrr: 38400, source: 'manual', notes: 'Typed from the bank statement' }, 'MRR in US dollars, as a hand entry');
+  assert.deepEqual({ ...grow.db.prepare("SELECT team, employment_type, comp_min_cents, comp_max_cents, comp_currency, equity_pct, status FROM job_postings WHERE title = 'Founding engineer'").get() as any },
+    { team: 'Engineering', employment_type: 'fractional', comp_min_cents: 9000000, comp_max_cents: 12000000, comp_currency: 'usd', equity_pct: 0.5, status: 'draft' });
   const initech = await growRow('partner-network', (r) => r.name === 'Initech');
-  assert.deepEqual([initech.type, initech.stage, initech.revenue_cents], ['agency', 'terms', 30000]);
+  assert.deepEqual([initech.type, initech.stage], ['agency', 'terms']);
+  assert.deepEqual({ ...grow.db.prepare("SELECT terms_kind, terms_pct, terms_amount_cents, terms_currency FROM growth_partners WHERE name = 'Initech'").get() as any },
+    { terms_kind: 'rev_share', terms_pct: 20, terms_amount_cents: null, terms_currency: null }, 'a percentage, and no currency without an amount');
   const portugal = await growRow('market-expansion', (r) => r.name === 'Portugal');
   assert.deepEqual([portugal.demand_score, portugal.demand_source, portugal.regulation_score, portugal.readiness], [7, 'Waitlist by country', null, null], 'an unscored part stays null, never 0');
   const annual = await growRow('durable-company-building', (r) => r.title === 'Annual report');
@@ -804,30 +818,33 @@ test('D661: every choice a form offers is one its Worker route accepts', async (
   for (const cycle of ['grow', 'build'] as const) {
     for (const slug of Object.keys(FORMS[cycle])) {
       const form = cycle === 'build' && slug === 'solution-design' ? formsFor(cycle, slug)[1] : formFor(cycle, slug)!;
-      for (const field of form.fields.filter((f: any) => f.type === 'select')) {
-        for (const option of field.options) {
+      // Today's selects and the canvas's CH chips (D695): a disabled chip is never sent.
+      for (const field of form.fields.filter((f: any) => f.type === 'select' || f.kind === 'CH')) {
+        for (const option of (field.options ?? field.opts).filter((o: any) => !o.disabled)) {
           n += 1;
-          // Unique names, so a channel's UTM source or a market's name never collides.
+          // Unique names, so a channel's derived UTM source, a market's name or an obligation's date never collides.
           const values = { ...initialValues(form), ...SAMPLES[cycle][slug], [field.name]: option.value,
-            ...(slug === 'distribution' ? { utm_source: `src${n}`, spend: '' } : {}), ...(slug === 'market-expansion' ? { name: `Market ${n}` } : {}),
-            ...(slug === 'partner-network' ? { revenue: '' } : {}),
+            ...(slug === 'distribution' ? { name: `Channel ${n}`, spend: '' } : {}), ...(slug === 'market-expansion' ? { name: `Market ${n}` } : {}),
+            ...(slug === 'revenue-and-traction' ? { label: `Custom ${n}`, value: '12' } : {}),
             ...(slug === 'durable-company-building' ? { due_at: new Date(Date.UTC(2099, 0, n)).toISOString().slice(0, 10) } : {}) };
           await assert.doesNotReject(form.submit(w, cycle === 'grow' ? GP : BP, values), `${cycle}/${slug}: ${field.name}=${option.value} was refused`);
         }
       }
     }
   }
-  assert.ok(n >= 20, `${n} choices checked`);
+  assert.ok(n >= 60, `${n} choices checked`);
 });
 
 test('D661: the forms refuse what the Worker would, and show the Worker\'s own sentence on its field', async () => {
   const market = formFor('grow', 'market-expansion');
-  assert.deepEqual(validate(market, { ...initialValues(market), name: 'Spain', regulation_score: '6' }),
+  assert.deepEqual(validate(market, { ...initialValues(market), name: 'Spain', parts: ['regulation'], regulation_score: '6' }),
     { regulation_source: 'The regulation score needs its source.' }, 'a score needs its source');
-  assert.match(validate(market, { ...initialValues(market), name: 'Spain', cost_score: '11', cost_source: 'x' }).cost_score, /0 to 10/);
+  assert.match(validate(market, { ...initialValues(market), name: 'Spain', parts: ['cost'], cost_score: '11', cost_source: 'x' }).cost_score, /0 to 10/);
   const channel = formFor('grow', 'distribution');
-  assert.deepEqual(Object.keys(validate(channel, initialValues(channel))).sort(), ['name', 'utm_source'], 'required fields');
-  assert.match(validate(channel, { ...initialValues(channel), name: 'X', utm_source: 'x', spend: 'lots' }).spend, /US dollars/);
+  assert.deepEqual(Object.keys(validate(channel, initialValues(channel))).sort(), ['name'], 'required fields: no UTM source is typed (#1697 derives it)');
+  assert.match(validate(channel, { ...initialValues(channel), name: 'X', spend: 'lots' }).spend, /US dollars/);
+  const obligation = formFor('grow', 'durable-company-building');
+  assert.equal(validate(obligation, { ...initialValues(obligation), title: 'Board meeting' }).due_at, 'Due is required.', 'the route refuses an obligation without a date');
   assert.deepEqual([toCents('1,250.50'), toCents(''), toCents('-3')], [125050, null, Number.NaN]);
   assert.deepEqual([toScore('7'), toScore(''), toScore('7.5'), toScore('11')], [7, null, Number.NaN, Number.NaN]);
   for (const slug of ['constructor', 'toString', '__proto__']) assert.equal(formFor('grow', slug), null, `${slug} reached an inherited value`);
@@ -835,9 +852,13 @@ test('D661: the forms refuse what the Worker would, and show the Worker\'s own s
   // A refusal the form cannot foresee: the Worker's sentence, on the field it names.
   const grow = await growFixture();
   const w = makeCycleWrites(routeRequest(grow, buildFixture()));
-  const values = { ...initialValues(channel), name: 'LinkedIn', utm_source: 'linkedin' };
-  await channel.submit(w, GP, values);
-  await assert.rejects(channel.submit(w, GP, { ...values, name: 'LinkedIn again' }), (e: any) => e.status === 409 && e.field === 'utm_source' && /already uses that UTM source/.test(e.message));
+  // A second channel of the same name gets a suffixed UTM source, never a clash (#1697).
+  const values = { ...initialValues(channel), name: 'LinkedIn' };
+  assert.equal((await channel.submit(w, GP, values)).utm_source, 'linkedin');
+  assert.equal((await channel.submit(w, GP, values)).utm_source, 'linkedin-2');
+  const due = { ...initialValues(obligation), title: 'Board meeting', kind: 'governance', due_at: dayFrom(9) };
+  await obligation.submit(w, GP, due);
+  await assert.rejects(obligation.submit(w, GP, due), (e: any) => e.status === 409 && e.field === 'due_at' && /already due on/.test(e.message));
 });
 
 // ── Edit a row (forms.js EDITS), through the real Worker routes ────────────
@@ -846,6 +867,9 @@ test('D661: the forms refuse what the Worker would, and show the Worker\'s own s
 const EDITED: Record<string, Record<string, string>> = {
   'product-improvement': { status: 'shipped', theme: 'Identity', roadmap_item_label: '' },
   distribution: { name: 'Podcasts (paused)', state: 'paused' },
+  // A KPI keeps its history: Enter by hand posts a new value for the row's KPI.
+  'revenue-and-traction': { value: '40,000', as_of: dayFrom(0) },
+  'team-expansion': { team: 'Product' },
   'partner-network': { stage: 'signed', type: 'reseller', terms: 'Net 30' },
   'market-expansion': { decision: 'enter', regulation_score: '5', regulation_source: 'Counsel memo' },
   'durable-company-building': { status: 'done', owner_name: 'Gus', due_at: dayFrom(5) },
@@ -867,7 +891,8 @@ test('D661: every Grow Edit form starts from its row, and the change reads back 
     const row = rows.find((r: any) => edit.idOf(r) != null);
     assert.ok(row, `${slug}: no row offers Edit`);
     const current = initialValues(edit, edit.valuesOf(row));
-    assert.deepEqual(validate(edit, current), {}, `${slug}: the row's own values do not pass its form`);
+    if (slug === 'revenue-and-traction') assert.deepEqual(Object.keys(validate(edit, current)).sort(), ['as_of', 'value'], 'a new value is typed');
+    else assert.deepEqual(validate(edit, current), {}, `${slug}: the row's own values do not pass its form`);
     await edit.submit(w, GP, edit.idOf(row), { ...current, ...change });
   }
   const raw = async (slug: string) => (await read(slug)).records.rows[0];
@@ -875,9 +900,15 @@ test('D661: every Grow Edit form starts from its row, and the change reads back 
   assert.deepEqual([fb.status, fb.theme, fb.roadmap_item_label, fb.body, fb.source], ['shipped', 'Identity', null, 'Needs single sign-on', 'customer'],
     'an emptied field is cleared, and what the form does not hold is left as logged');
   const ch = await raw('distribution');
-  assert.deepEqual([ch.name, ch.state, ch.utm_source, ch.spend_cents], ['Podcasts (paused)', 'paused', 'podcast', 125050]);
+  assert.deepEqual([ch.name, ch.state, ch.utm_source, ch.spend_cents], ['Podcasts (paused)', 'paused', 'podcasts', 125050], 'a spend not typed is not rewritten');
+  assert.deepEqual({ ...grow.db.prepare("SELECT kind, cac_bar_cents FROM growth_channels WHERE utm_source = 'podcasts'").get() as any }, { kind: 'paid_social', cac_bar_cents: 20000 }, 'a field the row does not carry is left as it was');
+  assert.equal((grow.db.prepare('SELECT mrr FROM project_metrics WHERE project_id = ? AND snapshot_date = ? AND source = ?').get(GP, dayFrom(0), 'manual') as any).mrr, 40000);
+  assert.deepEqual({ ...grow.db.prepare("SELECT title, team, employment_type, comp_min_cents FROM job_postings WHERE title = 'Founding engineer'").get() as any },
+    { title: 'Founding engineer', team: 'Product', employment_type: 'fractional', comp_min_cents: 9000000 }, 'only the team is sent');
   const pa = await raw('partner-network');
-  assert.deepEqual([pa.name, pa.type, pa.stage, pa.terms, pa.revenue_cents], ['Initech', 'reseller', 'signed', 'Net 30', 30000]);
+  assert.deepEqual([pa.name, pa.type, pa.stage], ['Initech', 'reseller', 'signed']);
+  assert.deepEqual({ ...grow.db.prepare("SELECT terms, terms_kind, terms_pct FROM growth_partners WHERE name = 'Initech'").get() as any },
+    { terms: 'Net 30', terms_kind: 'rev_share', terms_pct: 20 }, 'the notes change; the terms the Edit did not touch stay');
   const mk = await raw('market-expansion');
   assert.deepEqual([mk.decision, mk.demand_score, mk.demand_source, mk.regulation_score, mk.regulation_source, mk.partners_score],
     ['enter', 7, 'Waitlist by country', 5, 'Counsel memo', null], 'a scored part keeps its score; an unscored one stays null');

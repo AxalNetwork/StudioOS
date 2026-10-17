@@ -4,11 +4,16 @@ import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { CONNECTOR_METADATA, getDescriptor } from '../integrations/registry';
 import { MODULE_LABELS } from '../integrations/fed';
+import { validateConnectorSettings } from '../integrations/connectorRules';
 import { canReadBoard, canWrite } from './_founder_validate_helpers';
 import type { Card } from '../services/cycleCards';
 import { buildPhone } from '../services/cycleFocus';
-import { logCycleWriteStatement } from '../services/cycleActivity';
+import { addHolder, updateHolder, HolderError } from '../services/capTableWrites';
+import { logCycleWriteStatement, type BuildModuleSlug as ActivityBuildSlug } from '../services/cycleActivity';
 import { hasRecords } from '../services/records/index';
+import { ownedRow } from '../services/records/owned';
+import { MVP_VALUES, MVP_EFFORTS, MVP_STATUSES, moveRoadmapItem, roadmapCreateChecks } from './progress';
+import { isKpiKey, CUSTOM_PREFIX } from '../services/growKpis';
 import { pageBuildRows, unreadableBuildCard, type BuildFigure, type BuildRecords, type Cell, type ChartSpec, type RecordRow } from '../services/buildCycleRecords';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -383,7 +388,7 @@ type SystemKind = typeof SYSTEM_KINDS[number];
 const SYSTEM_LABEL: Record<SystemKind, string> = { bank: 'Bank', accounting: 'Accounting', payroll: 'Payroll', crm: 'CRM', workspace: 'Workspace' };
 const SYSTEM_STATE: Record<string, string> = { failing: 'Failing', connected: 'Connected', not_connected: 'Not connected' };
 type Viewer = Awaited<ReturnType<typeof requireAuth>>;
-function fitsKind(kind: SystemKind, providerKey: string): boolean {
+export function fitsKind(kind: SystemKind, providerKey: string): boolean {
   return kind === 'workspace' ? ['google_calendar', 'microsoft_365'].includes(providerKey)
     : kind === 'crm' && CONNECTOR_METADATA[providerKey]?.category === 'CRM';
 }
@@ -574,6 +579,24 @@ async function writeContext(c: any): Promise<{ project: Project; user: Awaited<R
   if (!canWrite(project, user)) return c.json({ detail: 'Forbidden' }, 403);
   return { project, user };
 }
+/**
+ * D690 (#1695 decision 13): a record action runs the same write as its route.
+ * A write reads its request through `WriteCall`, which the route's own context
+ * satisfies; `actionCall()` gives an action's record id and body the same
+ * shape and answers as the route would.
+ */
+export type WriteCall = { env: Env; req: { json(): Promise<unknown>; param(key: string): string | undefined }; json(body: unknown, status?: number): Response };
+export type WriteCtx = { project: Project; user: Viewer };
+export function actionCall(env: Env, params: Record<string, string>, body: unknown): WriteCall {
+  return { env, req: { json: async () => body, param: key => params[key] },
+    json: (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } }) };
+}
+/** The venture a record action writes to. The record route has already checked it and the write gate. */
+export async function writeProject(env: Env, projectId: number): Promise<Project | null> {
+  return await env.DB.prepare(
+    'SELECT id, founder_id, company_id, entity_id, mvp_target_date, incorporation_meta, cofounder_decision_meta, spinout_ip_meta FROM projects WHERE id = ? AND deleted_at IS NULL',
+  ).bind(projectId).first<Project>();
+}
 async function jsonBody(c: any): Promise<Record<string, unknown> | null> {
   const raw = await c.req.json().catch(() => null);
   return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : null;
@@ -643,45 +666,144 @@ app.post('/project/ip-copy', async c => {
   return c.json({ ip });
 });
 
+// D690 (#1695 decisions 2, 3, 7 and 16). Impact is `added_value`; Effort is
+// `effort` (Low, Medium and High write S, M and L); a state writes
+// `delivery_status`. Each is checked against MVP scope's own sets.
+const IMPACT_IN: Record<string, string> = { high: 'High', medium: 'Medium', low: 'Low' };
+const EFFORT_IN: Record<string, string> = { low: 'S', medium: 'M', high: 'L', s: 'S', m: 'M', l: 'L', xl: 'XL' };
+const STATE_IN: Record<string, string> = { not_started: 'Backlog', in_progress: 'In Progress', done: 'Done', blocked: 'Blocked' };
+/** A canvas word, or the stored value, mapped into its column's set: undefined when absent, false when invalid. */
+function mvpValue(body: Record<string, unknown>, key: string, map: Record<string, string>, set: Set<string>): string | undefined | false {
+  if (!Object.hasOwn(body, key)) return undefined;
+  const raw = typeof body[key] === 'string' ? (body[key] as string).trim() : '';
+  const v = set.has(raw) ? raw : known(map, raw.toLowerCase()) ?? known(map, raw.toLowerCase().replace(/[\s-]+/g, '_'));
+  return v && set.has(v) ? v : false;
+}
+function scopeValue(body: Record<string, unknown>): 'core' | 'out' | null | undefined | false {
+  if (!Object.hasOwn(body, 'scope')) return undefined;
+  if (body.scope == null) return null;
+  return body.scope === 'core' || body.scope === 'out' ? body.scope : false;
+}
+/** A pain theme or hypothesis a body names, checked by `ownedRow`: a foreign id answers 404 (decision 16). */
+async function linkedIds(c: any, p: Project, body: Record<string, unknown>, existing: { pain_group_id?: unknown; hypothesis_id?: unknown } = {}) {
+  const read = (key: 'pain_group_id' | 'hypothesis_id') => Object.hasOwn(body, key) ? (body[key] == null ? null : positiveId(body[key]) ?? false) : (existing[key] ?? null) as number | null;
+  const painId = read('pain_group_id'), hypothesisId = read('hypothesis_id');
+  if (painId === false || hypothesisId === false) return c.json({ detail: 'Invalid feature field' }, 400) as Response;
+  if (painId != null && Object.hasOwn(body, 'pain_group_id') && !await ownedRow(c.env, 'pain_groups', painId, p.id)) return c.json({ detail: 'Pain theme belongs to another project or does not exist' }, 404) as Response;
+  if (hypothesisId != null && Object.hasOwn(body, 'hypothesis_id') && !await ownedRow(c.env, 'hypotheses', hypothesisId, p.id)) return c.json({ detail: 'Hypothesis belongs to another project or does not exist' }, 404) as Response;
+  return { painId, hypothesisId };
+}
+async function ownerChecked(c: any, p: Project, raw: unknown): Promise<number | null | Response> {
+  if (raw == null) return null;
+  const ownerId = positiveId(raw);
+  if (!ownerId) return c.json({ detail: 'Invalid owner' }, 400);
+  const member = await c.env.DB.prepare('SELECT 1 FROM user_company_links WHERE company_id = ? AND user_id = ?').bind(p.company_id, ownerId).first();
+  return member ? ownerId : c.json({ detail: 'Owner is not a member of this company' }, 400);
+}
+/**
+ * A Linked URL (decision 7): https on figma.com, www.figma.com or github.com
+ * only. A GitHub issue or pull request also stores its ledger key.
+ */
+export function featureLink(raw: unknown): { kind: 'figma' | 'github'; url: string; external_ref: string | null } | null {
+  let u: URL;
+  try { u = new URL(String(raw ?? '')); } catch { return null; }
+  if (u.protocol !== 'https:' || u.username || u.password || u.port) return null;
+  if (u.hostname === 'figma.com' || u.hostname === 'www.figma.com') return { kind: 'figma', url: u.toString(), external_ref: null };
+  if (u.hostname !== 'github.com') return null;
+  const m = /^\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\/(issues|pull)\/([1-9][0-9]{0,9})\/?$/.exec(u.pathname);
+  return { kind: 'github', url: u.toString(), external_ref: m ? `${m[3] === 'issues' ? 'issue' : 'pull'}:${m[1]}/${m[2]}#${m[4]}` : null };
+}
+
+app.post('/features', async c => {
+  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  const body = await jsonBody(c); if (!body) return c.json({ detail: 'Body required' }, 400);
+  const title = text(body.title), description = text(body.description, 2000);
+  const impact = mvpValue(body, 'impact', IMPACT_IN, MVP_VALUES), effort = mvpValue(body, 'effort', EFFORT_IN, MVP_EFFORTS), scope = scopeValue(body);
+  if (!title || description === false || impact === false || effort === false || scope === false) return c.json({ detail: 'A feature needs a title; Impact is High, Medium or Low, Effort Low, Medium or High' }, 400);
+  const links = await linkedIds(c, ctx.project, body); if (links instanceof Response) return links;
+  await c.env.DB.batch([
+    c.env.DB.prepare(`INSERT INTO mvp_features (project_id, title, description, added_value, effort, scope, pain_group_id, hypothesis_id, is_must_have, delivery_status, sort_order, created_by, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 'Backlog', COALESCE((SELECT MAX(sort_order) + 1 FROM mvp_features WHERE project_id = ?), 0), ?, datetime('now'), datetime('now'))`)
+      .bind(ctx.project.id, title, description, impact ?? 'Medium', effort ?? 'M', scope ?? null, links.painId, links.hypothesisId, ctx.project.id, ctx.user.id),
+    logCycleWriteStatement(c.env, { projectId: ctx.project.id, userId: ctx.user.id, cycle: 'build', module: 'solution-design',
+      readback: { table: 'mvp_features', by: 'max' }, action: 'build_feature_created', summary: 'Feature added' }),
+  ]);
+  const row = await c.env.DB.prepare('SELECT MAX(id) AS id FROM mvp_features WHERE project_id = ?').bind(ctx.project.id).first<{ id: number }>();
+  return c.json({ id: Number(row?.id) }, 201);
+});
+
+app.post('/must-haves', async c => {
+  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  const body = await jsonBody(c); if (!body) return c.json({ detail: 'Body required' }, 400);
+  const title = text(body.title), due = dateValue(body.due_date);
+  const state = mvpValue(body, 'state', STATE_IN, MVP_STATUSES);
+  if (!title || due === false || state === false) return c.json({ detail: 'A must-have needs a title; State is Not started, In progress, Done or Blocked' }, 400);
+  const rawLinks = body.links == null ? [] : body.links;
+  if (!Array.isArray(rawLinks) || rawLinks.length > 2) return c.json({ detail: 'Up to two links' }, 400);
+  const links = rawLinks.map(featureLink);
+  if (links.some(l => l == null)) return c.json({ detail: 'A link is an https Figma or GitHub URL' }, 400);
+  const ids = await linkedIds(c, ctx.project, { hypothesis_id: body.hypothesis_id ?? null }); if (ids instanceof Response) return ids;
+  const owner = await ownerChecked(c, ctx.project, body.owner_user_id); if (owner instanceof Response) return owner;
+  const status = state ?? 'Backlog';
+  await c.env.DB.batch([
+    // Migration 441's triggers date a must-have that starts, or moves to, Done.
+    c.env.DB.prepare(`INSERT INTO mvp_features (project_id, title, hypothesis_id, is_must_have, delivery_status, owner_user_id, due_date, added_value, effort, sort_order, created_by, created_at, updated_at)
+      VALUES (?, ?, ?, 1, ?, ?, ?, 'High', 'M', COALESCE((SELECT MAX(sort_order) + 1 FROM mvp_features WHERE project_id = ?), 0), ?, datetime('now'), datetime('now'))`)
+      .bind(ctx.project.id, title, ids.hypothesisId, status, owner, due, ctx.project.id, ctx.user.id),
+    ...[...new Map(links.map(l => [l!.url, l!])).values()].map(l => c.env.DB.prepare(
+      `INSERT INTO mvp_feature_links (feature_id, kind, url, external_ref, created_by) VALUES ((SELECT MAX(id) FROM mvp_features WHERE project_id = ?), ?, ?, ?, ?)`,
+    ).bind(ctx.project.id, l.kind, l.url, l.external_ref, ctx.user.id)),
+    logCycleWriteStatement(c.env, { projectId: ctx.project.id, userId: ctx.user.id, cycle: 'build', module: 'solution-design',
+      readback: { table: 'mvp_features', by: 'max' }, action: 'build_must_have_created', summary: 'Must-have added' }),
+  ]);
+  const row = await c.env.DB.prepare('SELECT MAX(id) AS id FROM mvp_features WHERE project_id = ?').bind(ctx.project.id).first<{ id: number }>();
+  return c.json({ id: Number(row?.id) }, 201);
+});
+
 app.patch('/features/:id', async c => {
   const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  return patchFeature(c, ctx);
+});
+async function patchFeature(c: WriteCall, ctx: WriteCtx): Promise<Response> {
   const id = positiveId(c.req.param('id'));
   if (!id) return c.json({ detail: 'Invalid feature id' }, 400);
   const existing = await c.env.DB.prepare(
-    'SELECT pain_group_id, hypothesis_id, is_must_have, owner_user_id, due_date FROM mvp_features WHERE id = ? AND project_id = ?',
+    'SELECT title, description, added_value, effort, scope, delivery_status, pain_group_id, hypothesis_id, is_must_have, owner_user_id, due_date FROM mvp_features WHERE id = ? AND project_id = ?',
   ).bind(id, ctx.project.id).first<any>();
   if (!existing) return c.json({ detail: 'Feature not found' }, 404);
   const body = await jsonBody(c);
   if (!body) return c.json({ detail: 'Body required' }, 400);
-  const painId = Object.hasOwn(body, 'pain_group_id') ? (body.pain_group_id == null ? null : positiveId(body.pain_group_id)) : existing.pain_group_id;
-  const hypothesisId = Object.hasOwn(body, 'hypothesis_id') ? (body.hypothesis_id == null ? null : positiveId(body.hypothesis_id)) : existing.hypothesis_id;
+  const title = Object.hasOwn(body, 'title') ? text(body.title) : existing.title;
+  const description = Object.hasOwn(body, 'description') ? text(body.description, 2000) : existing.description;
+  const impact = mvpValue(body, 'impact', IMPACT_IN, MVP_VALUES), effort = mvpValue(body, 'effort', EFFORT_IN, MVP_EFFORTS);
+  const state = mvpValue(body, 'state', STATE_IN, MVP_STATUSES), scope = scopeValue(body);
   const ownerId = Object.hasOwn(body, 'owner_user_id') ? (body.owner_user_id == null ? null : positiveId(body.owner_user_id)) : existing.owner_user_id;
   const due = Object.hasOwn(body, 'due_date') ? dateValue(body.due_date) : existing.due_date;
   const must = Object.hasOwn(body, 'is_must_have') ? body.is_must_have : existing.is_must_have;
-  if (painId === false || hypothesisId === false || ownerId === false || due === false || ![true, false, 0, 1, null].includes(must as never)) return c.json({ detail: 'Invalid feature field' }, 400);
-  if (Object.hasOwn(body, 'pain_group_id') && body.pain_group_id != null && painId == null) return c.json({ detail: 'Invalid pain theme' }, 400);
-  if (Object.hasOwn(body, 'hypothesis_id') && body.hypothesis_id != null && hypothesisId == null) return c.json({ detail: 'Invalid hypothesis' }, 400);
+  if (!title || description === false || impact === false || effort === false || state === false || scope === false
+    || ownerId === false || due === false || ![true, false, 0, 1, null].includes(must as never)) return c.json({ detail: 'Invalid feature field' }, 400);
   if (Object.hasOwn(body, 'owner_user_id') && body.owner_user_id != null && ownerId == null) return c.json({ detail: 'Invalid owner' }, 400);
-  if (painId != null && !(await c.env.DB.prepare('SELECT id FROM pain_groups WHERE id = ? AND project_id = ?').bind(painId, ctx.project.id).first())) {
-    return c.json({ detail: 'Pain theme belongs to another project or does not exist' }, 400);
-  }
-  if (hypothesisId != null && !(await c.env.DB.prepare('SELECT id FROM hypotheses WHERE id = ? AND project_id = ?').bind(hypothesisId, ctx.project.id).first())) {
-    return c.json({ detail: 'Hypothesis belongs to another project or does not exist' }, 400);
-  }
+  const links = await linkedIds(c, ctx.project, body, existing); if (links instanceof Response) return links;
   if (ownerId != null) {
     const member = await c.env.DB.prepare('SELECT 1 FROM user_company_links WHERE company_id = ? AND user_id = ?').bind(ctx.project.company_id, ownerId).first();
     if (!member) return c.json({ detail: 'Owner is not a member of this company' }, 400);
   }
+  // `done_at` is migration 441's triggers': dated on the move to Done, cleared on a reopen.
   await c.env.DB.batch([
-    c.env.DB.prepare('UPDATE mvp_features SET pain_group_id = ?, hypothesis_id = ?, is_must_have = ?, owner_user_id = ?, due_date = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?')
-      .bind(painId, hypothesisId, must == null ? null : Number(must), ownerId, due, id, ctx.project.id),
-    logged(c.env, ctx.project.id, ctx.user.id, 'solution-design', id, 'build_feature_details_changed', 'Links, must-have mark, owner or due date changed'),
+    c.env.DB.prepare(`UPDATE mvp_features SET title = ?, description = ?, added_value = ?, effort = ?, scope = ?, delivery_status = ?,
+        pain_group_id = ?, hypothesis_id = ?, is_must_have = ?, owner_user_id = ?, due_date = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?`)
+      .bind(title, description, impact ?? existing.added_value, effort ?? existing.effort, scope === undefined ? existing.scope : scope, state ?? existing.delivery_status,
+        links.painId, links.hypothesisId, must == null ? null : Number(must), ownerId, due, id, ctx.project.id),
+    logged(c.env, ctx.project.id, ctx.user.id, 'solution-design', id, 'build_feature_details_changed', 'Feature details changed'),
   ]);
   return c.json({ ok: true, id });
-});
+}
 
 app.post('/risks', async c => {
   const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  return postRisk(c, ctx);
+});
+async function postRisk(c: WriteCall, ctx: WriteCtx): Promise<Response> {
   const body = await jsonBody(c);
   const title = text(body?.title); const mitigation = text(body?.mitigation, 2000);
   const severity = body?.severity;
@@ -692,15 +814,18 @@ app.post('/risks', async c => {
     const member = await c.env.DB.prepare('SELECT 1 FROM user_company_links WHERE company_id = ? AND user_id = ?').bind(ctx.project.company_id, ownerId).first();
     if (!member) return c.json({ detail: 'Owner is not a member of this company' }, 400);
   }
+  // D690 (#1695 decision 1): a feature's Add a risk ties the risk to it.
+  const featureId = body ? await ownedId(c, ctx.project, body, 'feature_id', 'mvp_features', 'feature') : undefined;
+  if (featureId instanceof Response) return featureId;
   const [result] = await c.env.DB.batch([
-    c.env.DB.prepare('INSERT INTO venture_risks (project_id, title, severity, owner_user_id, mitigation, created_by) VALUES (?, ?, ?, ?, ?, ?)')
-      .bind(ctx.project.id, title, severity, ownerId, mitigation, ctx.user.id),
-    // A risk tied to no feature changes no record.
-    logged(c.env, ctx.project.id, ctx.user.id, 'solution-design', 'project', 'build_risk_created', `Risk added, ${severity} severity`),
+    c.env.DB.prepare('INSERT INTO venture_risks (project_id, title, severity, owner_user_id, mitigation, created_by, feature_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .bind(ctx.project.id, title, severity, ownerId, mitigation, ctx.user.id, featureId ?? null),
+    // A risk tied to no feature changes no record; one tied to a feature logs on it.
+    logged(c.env, ctx.project.id, ctx.user.id, 'solution-design', featureId ?? 'project', 'build_risk_created', `Risk added, ${severity} severity`),
   ]);
   const id = Number(result.meta.last_row_id);
   return c.json({ id }, 201);
-});
+}
 
 app.patch('/risks/:id', async c => {
   const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
@@ -719,73 +844,310 @@ app.patch('/risks/:id', async c => {
   return c.json({ ok: true, id });
 });
 
+// D690 (#1695 decision 4). An item's KPI is one of the venture's, read
+// through `growKpis.ts`: another venture's `custom-<uid>` is a 404 (decision
+// 16), any other key off the list a 400. Old rows keep the key they hold.
+const ROADMAP_COLUMNS = ['now', 'next', 'later', 'done'] as const;
+async function kpiChecked(c: WriteCall, p: Project, body: Record<string, unknown>): Promise<string | null | undefined | Response> {
+  if (!Object.hasOwn(body, 'kpi_key')) return undefined;
+  if (body.kpi_key == null || body.kpi_key === '') return null;
+  const key = typeof body.kpi_key === 'string' ? body.kpi_key.trim() : '';
+  if (await isKpiKey(c.env, p.id, key)) return key;
+  return key.startsWith(CUSTOM_PREFIX) ? c.json({ detail: 'KPI belongs to another project or does not exist' }, 404) : c.json({ detail: 'Choose a KPI from the list' }, 400);
+}
+/** An id a body names in `store`, checked by `ownedRow`: undefined when absent, null when cleared. */
+async function ownedId(c: WriteCall, p: Project, body: Record<string, unknown>, key: string, store: 'mvp_features' | 'roadmap_okrs', noun: string): Promise<number | null | undefined | Response> {
+  if (!Object.hasOwn(body, key)) return undefined;
+  if (body[key] == null) return null;
+  const id = positiveId(body[key]);
+  if (!id) return c.json({ detail: `Invalid ${noun}` }, 400);
+  return await ownedRow(c.env, store, id, p.id) ? id : c.json({ detail: `${noun.charAt(0).toUpperCase()}${noun.slice(1)} belongs to another project or does not exist` }, 404);
+}
+/** The end of a column, where an added or moved item lands. */
+async function columnEnd(env: Env, projectId: number, column: string): Promise<number> {
+  const row = await env.DB.prepare('SELECT COALESCE(MAX(sort_order) + 1, 0) AS n FROM roadmap_okrs WHERE project_id = ? AND kanban_status = ?')
+    .bind(projectId, column).first<{ n: number }>();
+  return Number(row?.n ?? 0);
+}
+/**
+ * A feedback theme links this venture's open rows of that theme with no item;
+ * nothing is unlinked. A new item is named by its readback, an edited one by its id.
+ */
+function feedbackLink(env: Env, projectId: number, item: number | 'new', label: string, theme: string) {
+  return item === 'new'
+    ? env.DB.prepare(`UPDATE product_feedback SET roadmap_item_ref = (SELECT CAST(MAX(id) AS TEXT) FROM roadmap_okrs WHERE project_id = ?), roadmap_item_label = ?
+        WHERE project_id = ? AND theme = ? AND status = 'open' AND roadmap_item_ref IS NULL`).bind(projectId, label, projectId, theme)
+    : env.DB.prepare(`UPDATE product_feedback SET roadmap_item_ref = ?, roadmap_item_label = ?
+        WHERE project_id = ? AND theme = ? AND status = 'open' AND roadmap_item_ref IS NULL`).bind(String(item), label, projectId, theme);
+}
+
+app.post('/roadmap', async c => {
+  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  return postRoadmap(c, ctx);
+});
+async function postRoadmap(c: WriteCall, ctx: WriteCtx): Promise<Response> {
+  const body = await jsonBody(c); if (!body) return c.json({ detail: 'Body required' }, 400);
+  const column = body.column == null ? 'next' : body.column;
+  if (typeof column !== 'string' || !['now', 'next', 'later'].includes(column)) return c.json({ detail: 'Column is Now, Next or Later' }, 400);
+  let checked: Awaited<ReturnType<typeof roadmapCreateChecks>>;
+  // The free-tier cap is the roadmap's own, thrown as `ensureTier` throws it.
+  try { checked = await roadmapCreateChecks(c.env, ctx.user, ctx.project.id, { objective: body.title, kanban_status: column }); }
+  catch (e) { if (e instanceof Response) return e; throw e; }
+  if ('error' in checked) return c.json({ detail: 'An item needs a title' }, 400);
+  const title = text(body.title), theme = text(body.feedback_theme), due = dateValue(body.target_date);
+  if (!title || theme === false || due === false) return c.json({ detail: 'Invalid roadmap field' }, 400);
+  const kpi = await kpiChecked(c, ctx.project, body); if (kpi instanceof Response) return kpi;
+  const featureId = await ownedId(c, ctx.project, body, 'feature_id', 'mvp_features', 'feature'); if (featureId instanceof Response) return featureId;
+  const waitsOn = await ownedId(c, ctx.project, body, 'waits_on_id', 'roadmap_okrs', 'item'); if (waitsOn instanceof Response) return waitsOn;
+  const owner = await ownerChecked(c, ctx.project, body.owner_user_id); if (owner instanceof Response) return owner;
+  await c.env.DB.batch([
+    c.env.DB.prepare(`INSERT INTO roadmap_okrs (project_id, objective, key_results_json, kanban_status, sort_order, owner_user_id, target_date, kpi_key, feedback_theme, feature_id, created_by, created_at, updated_at)
+      VALUES (?, ?, '[]', ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`)
+      .bind(ctx.project.id, title, column, await columnEnd(c.env, ctx.project.id, column), owner, due, kpi ?? null, theme, featureId ?? null, ctx.user.id),
+    // A new item has no edge yet, so "Waits on" can be neither a duplicate nor
+    // a cycle, and the item it names is this venture's: the edge goes in the
+    // insert's batch rather than through `addOkrDependency()`'s own write.
+    ...(waitsOn ? [c.env.DB.prepare('INSERT INTO okr_dependencies (project_id, okr_id, blocks_okr_id, note, created_by) VALUES (?, ?, (SELECT MAX(id) FROM roadmap_okrs WHERE project_id = ?), NULL, ?)')
+      .bind(ctx.project.id, waitsOn, ctx.project.id, ctx.user.id)] : []),
+    ...(theme ? [feedbackLink(c.env, ctx.project.id, 'new', title, theme)] : []),
+    logCycleWriteStatement(c.env, { projectId: ctx.project.id, userId: ctx.user.id, cycle: 'build', module: 'product-roadmap',
+      readback: { table: 'roadmap_okrs', by: 'max' }, action: 'build_roadmap_item_created', summary: `Item added to ${column[0].toUpperCase()}${column.slice(1)}` }),
+  ]);
+  const row = await c.env.DB.prepare('SELECT MAX(id) AS id FROM roadmap_okrs WHERE project_id = ?').bind(ctx.project.id).first<{ id: number }>();
+  return c.json({ id: Number(row?.id) }, 201);
+}
+
 app.patch('/roadmap/:id', async c => {
   const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  return patchRoadmap(c, ctx);
+});
+async function patchRoadmap(c: WriteCall, ctx: WriteCtx): Promise<Response> {
   const id = positiveId(c.req.param('id'));
-  const existing = id && await c.env.DB.prepare('SELECT owner_user_id, target_date, kpi_key FROM roadmap_okrs WHERE id = ? AND project_id = ?').bind(id, ctx.project.id).first<any>();
+  const existing = id && await c.env.DB.prepare(
+    'SELECT objective, kanban_status, owner_user_id, target_date, kpi_key, feedback_theme, feature_id FROM roadmap_okrs WHERE id = ? AND project_id = ?',
+  ).bind(id, ctx.project.id).first<any>();
   if (!existing) return c.json({ detail: 'Roadmap item not found' }, 404);
   const body = await jsonBody(c); if (!body) return c.json({ detail: 'Body required' }, 400);
-  const ownerId = Object.hasOwn(body, 'owner_user_id') ? (body.owner_user_id == null ? null : positiveId(body.owner_user_id)) : existing.owner_user_id;
-  const due = Object.hasOwn(body, 'target_date') ? dateValue(body.target_date) : existing.target_date;
-  const kpi = Object.hasOwn(body, 'kpi_key') ? text(body.kpi_key) : existing.kpi_key;
-  if (due === false || kpi === false || (body.owner_user_id != null && !ownerId)) return c.json({ detail: 'Invalid roadmap field' }, 400);
+  const has = (key: string) => Object.hasOwn(body, key);
+  const title = has('title') ? text(body.title) : existing.objective;
+  const column = has('column') ? body.column : undefined;
+  const ownerId = has('owner_user_id') ? (body.owner_user_id == null ? null : positiveId(body.owner_user_id)) : existing.owner_user_id;
+  const due = has('target_date') ? dateValue(body.target_date) : existing.target_date;
+  const theme = has('feedback_theme') ? text(body.feedback_theme) : existing.feedback_theme;
+  if (!title || due === false || theme === false || (body.owner_user_id != null && !ownerId)
+    || (column !== undefined && !(ROADMAP_COLUMNS as readonly unknown[]).includes(column))) return c.json({ detail: 'Invalid roadmap field' }, 400);
+  const kpi = await kpiChecked(c, ctx.project, body); if (kpi instanceof Response) return kpi;
+  const featureId = await ownedId(c, ctx.project, body, 'feature_id', 'mvp_features', 'feature'); if (featureId instanceof Response) return featureId;
   if (ownerId) {
     const member = await c.env.DB.prepare('SELECT 1 FROM user_company_links WHERE company_id = ? AND user_id = ?').bind(ctx.project.company_id, ownerId).first();
     if (!member) return c.json({ detail: 'Owner is not a member of this company' }, 400);
   }
-  await c.env.DB.batch([
-    c.env.DB.prepare('UPDATE roadmap_okrs SET owner_user_id = ?, target_date = ?, kpi_key = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?').bind(ownerId, due, kpi, id, ctx.project.id),
-    logged(c.env, ctx.project.id, ctx.user.id, 'product-roadmap', id!, 'build_roadmap_details_changed', 'Owner, date or KPI changed'),
-  ]);
+  // A body that only moves the item is the move, which logs itself.
+  if (column === undefined || ['title', 'owner_user_id', 'target_date', 'kpi_key', 'feedback_theme', 'feature_id'].some(has)) {
+    const newTheme = theme && theme !== existing.feedback_theme ? theme : null;
+    await c.env.DB.batch([
+      c.env.DB.prepare('UPDATE roadmap_okrs SET objective = ?, owner_user_id = ?, target_date = ?, kpi_key = ?, feedback_theme = ?, feature_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?')
+        .bind(title, ownerId, due, kpi === undefined ? existing.kpi_key : kpi, theme, featureId === undefined ? existing.feature_id : featureId, id, ctx.project.id),
+      ...(newTheme ? [feedbackLink(c.env, ctx.project.id, id!, title, newTheme)] : []),
+      logged(c.env, ctx.project.id, ctx.user.id, 'product-roadmap', id!, 'build_roadmap_details_changed',
+        ['title', 'feedback_theme', 'feature_id'].some(has) ? 'Item details changed' : 'Owner, date or KPI changed'),
+    ]);
+  }
+  // The column goes through the roadmap's own move, so `okr_column_moves` still feeds "shipped this month".
+  if (typeof column === 'string' && column !== existing.kanban_status) {
+    await moveRoadmapItem(c.env, { existing: { id: id!, project_id: ctx.project.id, kanban_status: existing.kanban_status },
+      userId: ctx.user.id, kanbanStatus: column, sortOrder: await columnEnd(c.env, ctx.project.id, column) });
+  }
   return c.json({ ok: true, id });
+}
+
+// D690 (#1695 decision 6): a founder is a holder the cap-table code writes.
+// `addHolder()` and `updateHolder()` run their own batch, keep the cap
+// table's plan gate (a 402 Response) and log nothing, so the route logs its
+// `build.founding-team` row right after they return.
+const VESTING_PRESETS: Record<string, { total_months: number; cliff_months: number }> = {
+  '4y_1y_cliff': { total_months: 48, cliff_months: 12 }, '4y_no_cliff': { total_months: 48, cliff_months: 0 },
+};
+const AGREEMENT_NEXT = { label: 'Draft the co-founder agreement', href: '/raise/legal-engine/founders' };
+function holderFailed(c: any, e: unknown) {
+  if (e instanceof HolderError) return c.json({ detail: e.sentence }, e.status as any);
+  if (e instanceof Response) return e; // the plan gate's 402, with its upgrade body
+  throw e;
+}
+/** The vesting a founder body asks for: undefined when it names none, false when it is invalid. */
+function vestingOf(body: Record<string, unknown>): { start_date: string; total_months: number; cliff_months: number } | null | undefined | false {
+  if (!Object.hasOwn(body, 'vesting')) return undefined;
+  if (body.vesting == null) return null;
+  const start = typeof body.vesting_start === 'string' && dateOnly(body.vesting_start) ? body.vesting_start : null;
+  const preset = typeof body.vesting === 'string' && Object.hasOwn(VESTING_PRESETS, body.vesting) ? VESTING_PRESETS[body.vesting] : null;
+  const custom = body.vesting === 'custom' ? { total_months: Number(body.total_months), cliff_months: Number(body.cliff_months) } : null;
+  const months = preset ?? custom;
+  if (!start || !months || !Number.isInteger(months.total_months) || months.total_months < 1
+    || !Number.isInteger(months.cliff_months) || months.cliff_months < 0 || months.cliff_months > months.total_months) return false;
+  return { start_date: start, ...months };
+}
+/** 100 less every other holder's recorded percentage and the base scenario's pool. */
+export async function unallocated(env: Env, p: Project, exceptHolder: number | null): Promise<number> {
+  const held = await env.DB.prepare('SELECT COALESCE(SUM(ownership_pct), 0) AS n FROM cap_table_holders WHERE project_id = ? AND id IS NOT ?')
+    .bind(p.id, exceptHolder).first<{ n: number }>();
+  return Math.round((100 - Number(held?.n ?? 0) - (await optionPool(env, p) ?? 0)) * 100) / 100;
+}
+async function equityChecked(c: any, p: Project, pct: unknown, exceptHolder: number | null): Promise<number | null | undefined | Response> {
+  if (pct === undefined) return undefined;
+  if (pct === null) return null;
+  const n = Number(pct);
+  if (typeof pct !== 'number' || !Number.isFinite(n) || n <= 0 || n >= 100) return c.json({ detail: 'Equity must be between 0 and 100' }, 400);
+  const left = await unallocated(c.env, p, exceptHolder);
+  if (n > left) return c.json({ detail: `That takes the cap table over 100%. The unallocated share is ${left}%.` }, 400);
+  return n;
+}
+
+app.post('/founders', async c => {
+  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  const body = await jsonBody(c); if (!body) return c.json({ detail: 'Body required' }, 400);
+  const role = text(body.role, 100), email = text(body.email, 320);
+  if (role === false || email === false) return c.json({ detail: 'Invalid founder field' }, 400);
+  const vesting = vestingOf(body);
+  if (vesting === false) return c.json({ detail: 'Vesting needs a start date and a preset or its months' }, 400);
+  const pct = await equityChecked(c, ctx.project, body.equity_pct, null);
+  if (pct instanceof Response) return pct;
+  let out: { id: string };
+  try {
+    out = await addHolder(c.env, { projectId: ctx.project.id, actor: ctx.user as any, name: String(body.name ?? ''), email, group: 'founders', instrument: 'common',
+      ownership_pct: pct ?? null, founder_role: role, vesting: vesting ?? null });
+  } catch (e) { return holderFailed(c, e); }
+  await logCycleWriteStatement(c.env, { projectId: ctx.project.id, userId: ctx.user.id, cycle: 'build', module: 'founding-team', entityId: out.id,
+    action: 'build_founder_created', summary: role ? `Founder added as ${role}` : 'Founder added' }).run();
+  return c.json({ id: out.id, next: AGREEMENT_NEXT }, 201);
 });
 
 app.patch('/founders/:id', async c => {
   const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
-  const id = positiveId(c.req.param('id'));
+  return patchFounder(c, ctx);
+});
+async function patchFounder(c: WriteCall, ctx: WriteCtx): Promise<Response> {
+  const id = positiveId(String(c.req.param('id')).replace(/^h-/, ''));
   if (!id || !(await c.env.DB.prepare('SELECT 1 FROM cap_table_holders WHERE id = ? AND project_id = ?').bind(id, ctx.project.id).first())) return c.json({ detail: 'Holder not found' }, 404);
   const body = await jsonBody(c);
-  if (!body || !Object.hasOwn(body, 'role')) return c.json({ detail: 'role required' }, 400);
-  const role = text(body.role, 100);
+  if (!body) return c.json({ detail: 'Body required' }, 400);
+  const role = Object.hasOwn(body, 'role') ? text(body.role, 100) : undefined;
   if (role === false) return c.json({ detail: 'Invalid role' }, 400);
-  await c.env.DB.batch([
+  const holderFields = ['name', 'email', 'equity_pct', 'vesting'].filter(k => Object.hasOwn(body, k));
+  if (role === undefined && !holderFields.length) return c.json({ detail: 'Nothing to change' }, 400);
+  // The cap table's own fields go through `updateHolder()` and its gate; a role alone keeps today's.
+  if (holderFields.length) {
+    const vesting = vestingOf(body);
+    if (vesting === false) return c.json({ detail: 'Vesting needs a start date and a preset or its months' }, 400);
+    const email = Object.hasOwn(body, 'email') ? text(body.email, 320) : undefined;
+    if (email === false) return c.json({ detail: 'Invalid founder field' }, 400);
+    const pct = await equityChecked(c, ctx.project, body.equity_pct, id);
+    if (pct instanceof Response) return pct;
+    try {
+      await updateHolder(c.env, { projectId: ctx.project.id, actor: ctx.user as any, id: `h-${id}`,
+        ...(Object.hasOwn(body, 'name') ? { name: String(body.name ?? '') } : {}), ...(email !== undefined ? { email } : {}),
+        ...(pct !== undefined ? { ownership_pct: pct } : {}), ...(vesting !== undefined ? { vesting } : {}) });
+    } catch (e) { return holderFailed(c, e); }
+  }
+  const log = logged(c.env, ctx.project.id, ctx.user.id, 'founding-team', `h-${id}`, 'build_founder_role_changed',
+    role === undefined ? 'Split or vesting changed' : role ? `Role set to ${role}` : 'Role cleared');
+  await c.env.DB.batch(role === undefined ? [log] : [
     c.env.DB.prepare('UPDATE cap_table_holders SET founder_role = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?').bind(role, id, ctx.project.id),
-    logged(c.env, ctx.project.id, ctx.user.id, 'founding-team', `h-${id}`, 'build_founder_role_changed', role ? `Role set to ${role}` : 'Role cleared'),
+    log,
   ]);
-  return c.json({ ok: true, id });
-});
+  return c.json({ ok: true, id: `h-${id}` });
+}
+
+// D690 (#1695 decision 8). A filing keeps `formation_steps.state`: Filed is
+// `done`, Upcoming and Due soon are `todo` (Due soon needs a date), and the
+// stored `todo`, `doing` and `done` still pass. Add filing has no title
+// field, so the title is the kind's label, and an 83(b) for a founder is
+// "83(b) election · <name>". The Filing cell stays the stored title.
+const FILING_KINDS: Record<string, string> = {
+  formation: 'Formation', ein: 'EIN', '83b': '83(b) election', annual_report: 'Annual report', franchise_tax: 'Franchise tax', other: 'Other',
+};
+const FILING_STATE_IN: Record<string, string> = { upcoming: 'todo', due_soon: 'todo', filed: 'done', todo: 'todo', doing: 'doing', done: 'done' };
+type FilingFields = { kind?: string | null; jurisdiction?: string | null; holderId?: number | null; holderName?: string | null; state?: string };
+/** The new filing fields a body carries, each undefined when absent. */
+async function filingFields(c: WriteCall, p: Project, body: Record<string, unknown>, due: string | null): Promise<FilingFields | Response> {
+  const out: FilingFields = {};
+  if (Object.hasOwn(body, 'kind')) {
+    if (body.kind != null && (typeof body.kind !== 'string' || !Object.hasOwn(FILING_KINDS, body.kind))) return c.json({ detail: 'Kind is Formation, EIN, 83(b) election, Annual report, Franchise tax or Other' }, 400);
+    out.kind = (body.kind as string | null) ?? null;
+  }
+  if (Object.hasOwn(body, 'jurisdiction')) {
+    const j = text(body.jurisdiction, 100);
+    if (j === false) return c.json({ detail: 'Invalid jurisdiction' }, 400);
+    out.jurisdiction = j;
+  }
+  if (Object.hasOwn(body, 'for_holder_id')) {
+    if (body.for_holder_id == null) out.holderId = null;
+    else {
+      const holderId = positiveId(String(body.for_holder_id).replace(/^h-/, ''));
+      const holder = holderId && await ownedRow(c.env, 'cap_table_founders', `h-${holderId}`, p.id)
+        ? await c.env.DB.prepare('SELECT name FROM cap_table_holders WHERE id = ? AND project_id = ?').bind(holderId, p.id).first<{ name: string }>() : null;
+      if (!holder) return c.json({ detail: 'Founder belongs to another project or does not exist' }, 404);
+      out.holderId = holderId; out.holderName = holder.name;
+    }
+  }
+  if (Object.hasOwn(body, 'state')) {
+    const state = typeof body.state === 'string' && Object.hasOwn(FILING_STATE_IN, body.state) ? FILING_STATE_IN[body.state] : null;
+    if (!state) return c.json({ detail: 'State is Upcoming, Filed or Due soon' }, 400);
+    if (body.state === 'due_soon' && !due) return c.json({ detail: 'Due soon needs a due date' }, 400);
+    out.state = state;
+  }
+  return out;
+}
 
 app.post('/formation-steps', async c => {
   const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  return postFormationStep(c, ctx);
+});
+async function postFormationStep(c: WriteCall, ctx: WriteCtx): Promise<Response> {
   const body = await jsonBody(c);
-  const title = text(body?.title); const due = dateValue(body?.due_date);
-  if (!title || due === false) return c.json({ detail: 'Valid title and due date required' }, 400);
+  if (!body) return c.json({ detail: 'Body required' }, 400);
+  const due = dateValue(body.due_date);
+  if (due === false) return c.json({ detail: 'Valid title and due date required' }, 400);
+  const fields = await filingFields(c, ctx.project, body, due); if (fields instanceof Response) return fields;
+  const kindLabel = fields.kind ? FILING_KINDS[fields.kind] : null;
+  const named = Object.hasOwn(body, 'title') && body.title != null && body.title !== '' ? text(body.title) : null;
+  const title = named ?? (fields.kind === '83b' && fields.holderName ? `${kindLabel} · ${fields.holderName}` : kindLabel);
+  if (!title || named === false) return c.json({ detail: 'Valid title and due date required' }, 400);
   const [result] = await c.env.DB.batch([
-    c.env.DB.prepare('INSERT INTO formation_steps (project_id, title, due_date, created_by) VALUES (?, ?, ?, ?)')
-      .bind(ctx.project.id, title, due, ctx.user.id),
-    loggedInserted(c.env, ctx.project.id, ctx.user.id, 'company-creation', 'formation_steps', 'step-', 'build_formation_step_created', 'Filing added'),
+    c.env.DB.prepare('INSERT INTO formation_steps (project_id, title, due_date, state, kind, jurisdiction, for_holder_id, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .bind(ctx.project.id, title, due, fields.state ?? 'todo', fields.kind ?? null, fields.jurisdiction ?? null, fields.holderId ?? null, ctx.user.id),
+    // An 83(b) row reads "83(b) election", never the founder's name (decision 15).
+    loggedInserted(c.env, ctx.project.id, ctx.user.id, 'company-creation', 'formation_steps', 'step-', 'build_formation_step_created', kindLabel ? `Filing added: ${kindLabel}` : 'Filing added'),
   ]);
   const id = Number(result.meta.last_row_id);
   return c.json({ id }, 201);
-});
+}
 
 app.patch('/formation-steps/:id', async c => {
   const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  return patchFormationStep(c, ctx);
+});
+async function patchFormationStep(c: WriteCall, ctx: WriteCtx): Promise<Response> {
   const id = positiveId(c.req.param('id'));
-  const existing = id && await c.env.DB.prepare('SELECT title, due_date, state, proof_file_key FROM formation_steps WHERE id = ? AND project_id = ?').bind(id, ctx.project.id).first<any>();
+  const existing = id && await c.env.DB.prepare(
+    'SELECT title, due_date, state, proof_file_key, kind, jurisdiction, for_holder_id FROM formation_steps WHERE id = ? AND project_id = ?',
+  ).bind(id, ctx.project.id).first<any>();
   if (!existing) return c.json({ detail: 'Formation step not found' }, 404);
   const body = await jsonBody(c); if (!body) return c.json({ detail: 'Body required' }, 400);
   const title = Object.hasOwn(body, 'title') ? text(body.title) : existing.title;
   const due = Object.hasOwn(body, 'due_date') ? dateValue(body.due_date) : existing.due_date;
   const proof = Object.hasOwn(body, 'proof_file_key') ? text(body.proof_file_key, 500) : existing.proof_file_key;
-  const state = body.state ?? existing.state;
-  if (!title || due === false || proof === false || !['todo', 'doing', 'done'].includes(String(state))) return c.json({ detail: 'Invalid formation field' }, 400);
+  if (!title || due === false || proof === false) return c.json({ detail: 'Invalid formation field' }, 400);
+  const fields = await filingFields(c, ctx.project, body, due); if (fields instanceof Response) return fields;
+  const state = fields.state ?? existing.state;
   await c.env.DB.batch([
-    c.env.DB.prepare('UPDATE formation_steps SET title = ?, due_date = ?, state = ?, proof_file_key = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?').bind(title, due, state, proof, id, ctx.project.id),
+    c.env.DB.prepare(`UPDATE formation_steps SET title = ?, due_date = ?, state = ?, proof_file_key = ?, kind = ?, jurisdiction = ?, for_holder_id = ?,
+        updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?`)
+      .bind(title, due, state, proof, fields.kind === undefined ? existing.kind : fields.kind, fields.jurisdiction === undefined ? existing.jurisdiction : fields.jurisdiction,
+        fields.holderId === undefined ? existing.for_holder_id : fields.holderId, id, ctx.project.id),
     logged(c.env, ctx.project.id, ctx.user.id, 'company-creation', `step-${id}`, 'build_formation_step_changed', `Filing changed, ${STEP_STATE[String(state)]}`),
   ]);
   return c.json({ ok: true, id });
-});
+}
 
 app.patch('/obligations/:id/proof', async c => {
   const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
@@ -807,38 +1169,68 @@ app.patch('/obligations/:id/proof', async c => {
 });
 
 
-app.get('/systems/choices', async c => {
-  const project = await context(c); if (project instanceof Response) return project;
-  const user = await requireAuth(c);
-  if (!project.company_id) return c.json({ detail: 'Project has no company' }, 409);
-  const member = await c.env.DB.prepare('SELECT 1 FROM user_company_links WHERE user_id = ? AND company_id = ?').bind(user.id, project.company_id).first();
-  if (!member) return c.json({ error: 'not_in_company', detail: 'You are not in this project’s company.' }, 403);
-  const own = rows(await c.env.DB.prepare(
+/**
+ * Per kind, the caller's own enabled connections a kind can name, whether it
+ * already names one, and its Used by (D686 §5.4). `GET /systems/choices`
+ * answers it, and Operating systems' form-options read the same function
+ * (D690, #1695). Kinds and booleans only: no other member's connector names.
+ */
+export async function systemChoices(env: Env, project: Project, user: Viewer) {
+  const own = rows(await env.DB.prepare(
     `SELECT i.uid, i.provider_key FROM integrations i
        JOIN integration_companies ic ON ic.integration_id = i.id AND ic.company_id = ? AND ic.enabled = 1
        JOIN user_company_links ucl ON ucl.company_id = ic.company_id AND ucl.user_id = i.user_id
       WHERE i.user_id = ? ORDER BY i.id`,
   ).bind(project.company_id, user.id).all<{ uid: string; provider_key: string }>());
   const workspace: string[] = [];
-  for (const provider of ['google_calendar', 'microsoft_365']) if (await workspaceConnected(c.env, user.id, provider)) workspace.push(provider);
+  for (const provider of ['google_calendar', 'microsoft_365']) if (await workspaceConnected(env, user.id, provider)) workspace.push(provider);
   // Which kinds already name a connector, and their Used by, so Connect a
   // tool's "Use as your <kind>" offers only an unmapped kind and keeps what
   // the row says (D686 §5.4). Kinds and booleans only: no connector names.
-  const current = new Map(rows(await c.env.DB.prepare(
+  const current = new Map(rows(await env.DB.prepare(
     'SELECT kind, integration_id, provider_key, used_by FROM project_core_systems WHERE project_id = ?',
   ).bind(project.id).all<{ kind: string; integration_id: number | null; provider_key: string | null; used_by: string | null }>()).map(r => [r.kind, r]));
-  return c.json({ kinds: SYSTEM_KINDS.map(kind => ({
+  return SYSTEM_KINDS.map(kind => ({
     kind, label: SYSTEM_LABEL[kind],
     mapped: current.get(kind)?.integration_id != null || current.get(kind)?.provider_key != null,
     used_by: current.get(kind)?.used_by ?? null,
     choices: kind === 'workspace' ? workspace.map(provider_key => ({ uid: null, provider_key, display_name: getDescriptor(provider_key)?.display_name ?? provider_key, category: 'Calendar and workspace' }))
       : own.filter(i => fitsKind(kind, i.provider_key)).map(i => ({ ...i, display_name: getDescriptor(i.provider_key)?.display_name ?? i.provider_key, category: CONNECTOR_METADATA[i.provider_key]?.category })),
-  })) });
+  }));
+}
+
+app.get('/systems/choices', async c => {
+  const project = await context(c); if (project instanceof Response) return project;
+  const user = await requireAuth(c);
+  if (!project.company_id) return c.json({ detail: 'Project has no company' }, 409);
+  const member = await c.env.DB.prepare('SELECT 1 FROM user_company_links WHERE user_id = ? AND company_id = ?').bind(user.id, project.company_id).first();
+  if (!member) return c.json({ error: 'not_in_company', detail: 'You are not in this project’s company.' }, 403);
+  return c.json({ kinds: await systemChoices(c.env, project, user) });
 });
 
+const SYNC_CHOICES = ['live', 'hourly', 'daily', 'manual'] as const;
+/** A connection's sync, merged into its own `config_json` as `PATCH /api/connectors/:uid/config` merges it. */
+function syncWrite(env: Env, integrationId: number, ownerId: number, sync: string) {
+  return env.DB.prepare(
+    `UPDATE integrations SET config_json = json_set(CASE WHEN json_valid(config_json) THEN config_json ELSE '{}' END, '$.sync_frequency', ?),
+            updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?`,
+  ).bind(sync, integrationId, ownerId);
+}
+
+/**
+ * D690 (#1695 decisions 10 and 5). A connector key maps that connector; sent
+ * as null it unmaps (a Workspace row is deleted); absent, the mapping stays.
+ * `used_by`, `feeds` and `sync` change only when the body carries them. A
+ * sync goes to the mapped connection's own setting, and only its owner may
+ * set it; with no connection it waits in `sync_request` for one, and a
+ * mapping the caller makes takes the caller's own waiting choice.
+ */
 app.put('/systems/:kind', async c => {
   const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
-  const rawKind = c.req.param('kind');
+  return putSystem(c, ctx);
+});
+async function putSystem(c: WriteCall, ctx: WriteCtx): Promise<Response> {
+  const rawKind = c.req.param('kind') ?? '';
   if (!(SYSTEM_KINDS as readonly string[]).includes(rawKind)) return c.json({ error: 'invalid_kind', detail: 'Unknown system kind' }, 400);
   const kind = rawKind as SystemKind;
   if (!ctx.project.company_id) return c.json({ detail: 'Project has no company' }, 409);
@@ -847,7 +1239,24 @@ app.put('/systems/:kind', async c => {
   if (!member) return c.json({ error: 'not_in_company', detail: 'You are not in this project’s company.' }, 403);
   const body = await jsonBody(c), usedBy = text(body?.used_by, 200);
   if (!body || usedBy === false) return c.json({ detail: 'Invalid mapping' }, 400);
+  const has = (key: string) => Object.hasOwn(body, key);
+  let feeds: string[] | null | undefined;
+  if (has('feeds')) {
+    if (body.feeds != null && (!Array.isArray(body.feeds) || body.feeds.some(f => typeof f !== 'string' || !Object.hasOwn(FEEDS_LABEL, f)))) return c.json({ detail: 'Feeds are use_of_funds, kpis or team' }, 400);
+    feeds = body.feeds == null ? null : [...new Set(body.feeds as string[])];
+  }
+  const sync = has('sync') ? body.sync : undefined;
+  if (sync !== undefined && (typeof sync !== 'string' || !(SYNC_CHOICES as readonly string[]).includes(sync))) return c.json({ detail: 'Sync is live, hourly, daily or manual' }, 400);
+  const stored = await c.env.DB.prepare(
+    `SELECT s.integration_id, s.provider_key, s.used_by, s.feeds_json, s.sync_request, s.sync_request_by, i.user_id AS owner_id, i.provider_key AS integration_provider
+       FROM project_core_systems s LEFT JOIN integrations i ON i.id = s.integration_id
+      WHERE s.project_id = ? AND s.kind = ?`,
+  ).bind(ctx.project.id, kind).first<any>();
+  const keepUsedBy = has('used_by') ? usedBy : stored?.used_by ?? null;
+  const keepFeeds = feeds === undefined ? stored?.feeds_json ?? null : feeds == null ? null : JSON.stringify(feeds);
   let integrationId: number | null = null, providerKey: string | null = null;
+  const keyed = kind === 'workspace' ? has('provider_key') : has('integration_uid') || has('integration_id');
+  let mappedNow: { id: number; provider_key: string } | null = null;
   if (kind === 'workspace') {
     if (body.integration_uid != null || body.integration_id != null) return c.json({ error: 'kind_mismatch', detail: 'That connector is not a workspace tool.' }, 400);
     if (body.provider_key != null) {
@@ -871,18 +1280,68 @@ app.put('/systems/:kind', async c => {
       if (!enabled) return c.json({ detail: 'Connector not enabled for this company or not owned by you' }, 403);
       if (!fitsKind(kind, enabled.provider_key)) return c.json({ error: 'kind_mismatch', detail: `That connector is not a ${kind} tool.` }, 400);
       integrationId = enabled.id;
-    }
+      mappedNow = enabled;
+    } else if (!keyed) integrationId = stored?.integration_id ?? null; // no connector key: the mapping stays
   }
-  const change = kind === 'workspace' && providerKey == null
-    ? c.env.DB.prepare('DELETE FROM project_core_systems WHERE project_id = ? AND kind = ?').bind(ctx.project.id, kind)
-    : c.env.DB.prepare(
-      `INSERT INTO project_core_systems (project_id, kind, integration_id, provider_key, used_by, updated_by)
-       VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(project_id, kind) DO UPDATE SET
-         integration_id = excluded.integration_id, provider_key = excluded.provider_key, used_by = excluded.used_by,
+  const log = logged(c.env, ctx.project.id, ctx.user.id, 'operating-systems', kind, 'build_system_mapping_changed', `${SYSTEM_LABEL[kind]} mapping changed`);
+  if (kind === 'workspace') {
+    // Workspace has no connection row, so a `sync` for it is ignored.
+    if (kind === 'workspace' && providerKey == null && keyed) {
+      await c.env.DB.batch([c.env.DB.prepare('DELETE FROM project_core_systems WHERE project_id = ? AND kind = ?').bind(ctx.project.id, kind), log]);
+      return c.json({ ok: true, kind });
+    }
+    if (!keyed) {
+      // Its row needs its provider: with none stored there is nothing to keep the Feeds on.
+      if (!stored) return c.json({ ok: true, kind, stored: false });
+      await c.env.DB.batch([c.env.DB.prepare('UPDATE project_core_systems SET used_by = ?, feeds_json = ?, updated_at = CURRENT_TIMESTAMP WHERE project_id = ? AND kind = ?')
+        .bind(keepUsedBy, keepFeeds, ctx.project.id, kind), log]);
+      return c.json({ ok: true, kind });
+    }
+    await c.env.DB.batch([c.env.DB.prepare(
+      `INSERT INTO project_core_systems (project_id, kind, integration_id, provider_key, used_by, feeds_json, updated_by)
+       VALUES (?, ?, NULL, ?, ?, ?, ?) ON CONFLICT(project_id, kind) DO UPDATE SET
+         integration_id = NULL, provider_key = excluded.provider_key, used_by = excluded.used_by, feeds_json = excluded.feeds_json,
          updated_by = excluded.updated_by, updated_at = CURRENT_TIMESTAMP`,
-    ).bind(ctx.project.id, kind, integrationId, providerKey, usedBy, ctx.user.id);
-  await c.env.DB.batch([change, logged(c.env, ctx.project.id, ctx.user.id, 'operating-systems', kind, 'build_system_mapping_changed', `${SYSTEM_LABEL[kind]} mapping changed`)]);
+    ).bind(ctx.project.id, kind, providerKey, keepUsedBy, keepFeeds, ctx.user.id), log]);
+    return c.json({ ok: true, kind });
+  }
+  // The sync (decision 5). A body without `sync` is never refused here.
+  const writes: ReturnType<Env['DB']['prepare']>[] = [];
+  let request: string | null = stored?.sync_request ?? null, requestBy: number | null = stored?.sync_request_by ?? null;
+  if (mappedNow) {
+    // A choice waiting for a connection reaches it only when its owner made it; it clears either way.
+    const waiting = request && requestBy === ctx.user.id ? request : null;
+    const chosen = typeof sync === 'string' ? sync : waiting;
+    if (chosen) {
+      if (!validateConnectorSettings(mappedNow.provider_key, { sync_frequency: chosen }).ok) return c.json({ detail: 'Invalid sync' }, 400);
+      writes.push(syncWrite(c.env, mappedNow.id, Number(ctx.user.id), chosen));
+    }
+    request = null; requestBy = null;
+  } else if (typeof sync === 'string') {
+    if (integrationId != null) {
+      if (Number(stored?.owner_id) !== Number(ctx.user.id)) return c.json({ error: 'not_your_connection', detail: 'Only the connection’s owner changes its sync.' }, 403);
+      if (!validateConnectorSettings(String(stored?.integration_provider ?? ''), { sync_frequency: sync }).ok) return c.json({ detail: 'Invalid sync' }, 400);
+      writes.push(syncWrite(c.env, integrationId, Number(ctx.user.id), sync));
+    } else { request = sync; requestBy = Number(ctx.user.id); }
+  }
+  const change = c.env.DB.prepare(
+    `INSERT INTO project_core_systems (project_id, kind, integration_id, provider_key, used_by, feeds_json, sync_request, sync_request_by, updated_by)
+     VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?) ON CONFLICT(project_id, kind) DO UPDATE SET
+       integration_id = excluded.integration_id, provider_key = excluded.provider_key, used_by = excluded.used_by,
+       feeds_json = excluded.feeds_json, sync_request = excluded.sync_request, sync_request_by = excluded.sync_request_by,
+       updated_by = excluded.updated_by, updated_at = CURRENT_TIMESTAMP`,
+  ).bind(ctx.project.id, kind, integrationId, keepUsedBy, keepFeeds, request, requestBy, ctx.user.id);
+  await c.env.DB.batch([change, ...writes, log]);
   return c.json({ ok: true, kind });
-});
+}
+
+// D690 (#1695 decision 13): the writes a record action runs. Declared as plain
+// functions so each route and its helpers read as one handler.
+export { patchFeature, postRisk, postRoadmap, patchRoadmap, patchFounder, postFormationStep, patchFormationStep, putSystem };
 
 export default app;
+// Build's module slugs, so services/cycleActivity.ts refuses a module that does not exist (D690).
+// That file keeps its own copy of the six (D707: it may not import a route);
+// it is this list exactly, or this fails to compile.
+const SAME_BUILD_SLUGS: [Slug] extends [ActivityBuildSlug] ? ([ActivityBuildSlug] extends [Slug] ? true : never) : never = true;
+void SAME_BUILD_SLUGS;

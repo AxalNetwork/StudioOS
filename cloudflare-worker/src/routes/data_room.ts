@@ -57,6 +57,7 @@ import { mintDownloadToken } from '../services/signedDownload';
 import { tierAdmits, investorCommitted, admittedCounts, isAccessTier, expiryMs } from '../services/dataRoomAccess';
 import { CHECKLIST_KEYS } from '../services/raiseCycle';
 import { logCycleWrite } from '../services/cycleActivity';
+import { WriterError } from '../services/validateWriters';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -580,6 +581,51 @@ r.post('/:projectUid/files', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+/**
+ * D691 (#1700) — Replace: the Raise file record's `replace` action. The
+ * current object becomes the file's next `data_room_file_versions` row and
+ * stays in storage; the new bytes take its place under a key derived the way
+ * the upload derives it, inside `data-room/<project uid>/`, so the delete's
+ * prefix check still holds. `MAX_FILE_BYTES` applies. The closing PR's
+ * multipart action passes the file.
+ */
+export async function replaceDataRoomFile(
+  env: Env,
+  a: { project: { id: number; uid: string }; userId: number; fileId: number; bytes: Uint8Array; contentType: string | null },
+): Promise<{ id: number; version: number; size_bytes: number }> {
+  const { project } = a;
+  if (!env.FILES) throw new WriterError(503, 'storage_not_configured');
+  if (!(a.bytes instanceof Uint8Array) || a.bytes.byteLength === 0) throw new WriterError(400, 'The file is empty');
+  if (a.bytes.byteLength > MAX_FILE_BYTES) throw new WriterError(413, 'too_large');
+  const file = await env.DB.prepare(
+    'SELECT id, r2_key, content_type, size_bytes, uploaded_by_user_id FROM data_room_files WHERE id = ? AND project_id = ?',
+  ).bind(a.fileId, project.id).first<{ id: number; r2_key: string; content_type: string | null; size_bytes: number | null; uploaded_by_user_id: number | null }>();
+  if (!file) throw new WriterError(404, 'File not found');
+  const last = await env.DB.prepare('SELECT COALESCE(MAX(version), 0) AS v FROM data_room_file_versions WHERE file_id = ?')
+    .bind(file.id).first<{ v: number }>();
+  const version = Number(last?.v ?? 0) + 1;
+  const contentType = typeof a.contentType === 'string' && /^[\w.+-]+\/[\w.+-]+$/.test(a.contentType) ? a.contentType : 'application/octet-stream';
+
+  // The key is derived, never taken from the request.
+  const uid = newUid();
+  const key = `data-room/${project.uid}/${uid}`;
+  await env.FILES.put(key, a.bytes, {
+    httpMetadata: { contentType },
+    customMetadata: { project_uid: project.uid, uploaded_by: String(a.userId) },
+  });
+  await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO data_room_file_versions (file_id, version, r2_key, content_type, size_bytes, uploaded_by) VALUES (?, ?, ?, ?, ?, ?)`,
+    ).bind(file.id, version, file.r2_key, file.content_type, file.size_bytes, file.uploaded_by_user_id),
+    env.DB.prepare(
+      `UPDATE data_room_files SET r2_key = ?, content_type = ?, size_bytes = ?, uploaded_by_user_id = ?, updated_at = ? WHERE id = ? AND project_id = ?`,
+    ).bind(key, contentType, a.bytes.byteLength, a.userId, nowIso(), file.id, project.id),
+  ]);
+  await logCycleWrite(env, { projectId: project.id, userId: a.userId, cycle: 'raise', module: 'data-room',
+    entityId: file.id, action: 'file_replaced', summary: `File replaced; version ${version} kept` });
+  return { id: file.id, version, size_bytes: a.bytes.byteLength };
+}
+
 r.patch('/:projectUid/files/:uid', async (c) => {
   try {
     const user = await requireAuth(c);
@@ -627,21 +673,51 @@ r.delete('/:projectUid/files/:uid', async (c) => {
     const user = await requireAuth(c);
     const project = await ownedProject(c.env, user, c.req.param('projectUid'), await activeCompany(c, user));
     if (!project) return c.json({ detail: 'Project not found' }, 404);
-    const file = await c.env.DB.prepare(
-      'SELECT id, r2_key FROM data_room_files WHERE uid = ? AND project_id = ?',
-    ).bind(c.req.param('uid'), project.id).first<{ id: number; r2_key: string }>();
-    if (!file) return c.json({ detail: 'File not found' }, 404);
-
-    // Row first. A deleted object with a surviving row is a broken download;
-    // a surviving object with no row is unreachable, which is merely waste.
-    await c.env.DB.prepare('DELETE FROM data_room_files WHERE id = ?').bind(file.id).run();
-    if (c.env.FILES && file.r2_key.startsWith(`data-room/${project.uid}/`)) {
-      try { await c.env.FILES.delete(file.r2_key); }
-      catch (e) { console.error('[data_room] R2 delete failed', e); }
-    }
+    const removed = await removeDataRoomFile(c.env, { project, userId: Number(user.id), uid: c.req.param('uid') });
+    if (!removed) return c.json({ detail: 'File not found' }, 404);
     return c.json({ ok: true });
   } catch (e) { return mapError(c, e); }
 });
+
+/**
+ * D691 (#1700) — Remove: the delete above and the Raise file record's
+ * `remove` action, one writer. The file is named by its uid (this route) or
+ * its id (the record), always with its venture. Its earlier versions go with
+ * it. Null when it is not this venture's file.
+ */
+export async function removeDataRoomFile(
+  env: Env, a: { project: { id: number; uid: string }; userId: number | null; uid?: string; fileId?: number },
+): Promise<{ id: number } | null> {
+  const { project } = a;
+  const file = await env.DB.prepare(
+    'SELECT id, r2_key FROM data_room_files WHERE (uid = ? OR id = ?) AND project_id = ?',
+  ).bind(a.uid ?? null, a.fileId ?? null, project.id).first<{ id: number; r2_key: string }>();
+  if (!file) return null;
+  const versions = await env.DB.prepare('SELECT r2_key FROM data_room_file_versions WHERE file_id = ?')
+    .bind(file.id).all<{ r2_key: string }>();
+
+  // Row first. A deleted object with a surviving row is a broken download;
+  // a surviving object with no row is unreachable, which is merely waste.
+  // D1 may run with foreign keys off, so the versions' rows go by hand.
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM data_room_file_versions WHERE file_id = ?').bind(file.id),
+    env.DB.prepare('DELETE FROM data_room_files WHERE id = ?').bind(file.id),
+  ]);
+  // Only an object inside this project's prefix is ever deleted.
+  if (env.FILES && file.r2_key.startsWith(`data-room/${project.uid}/`)) {
+    try { await env.FILES.delete(file.r2_key); }
+    catch (e) { console.error('[data_room] R2 delete failed', e); }
+  }
+  for (const version of versions.results || []) {
+    if (env.FILES && version.r2_key.startsWith(`data-room/${project.uid}/`)) {
+      try { await env.FILES.delete(version.r2_key); }
+      catch (e) { console.error('[data_room] R2 delete failed', e); }
+    }
+  }
+  await logCycleWrite(env, { projectId: project.id, userId: a.userId, cycle: 'raise', module: 'data-room',
+    entityId: file.id, action: 'file_removed', summary: `File removed with ${(versions.results || []).length} earlier versions` });
+  return { id: file.id };
+}
 
 /**
  * #1524 (D663 follow-up) — the accounts this project's scoring report was
