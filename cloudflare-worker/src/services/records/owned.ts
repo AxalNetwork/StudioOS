@@ -66,5 +66,76 @@ export async function ownedRow(env: Env, store: Store, id: string | number, proj
     // D693 (#1703): Verdict's two stores, read only here and in services/verdict.ts.
     case 'validation_decisions': { const n = numeric(value); return n !== null && !!await db.prepare('SELECT 1 FROM validation_decisions WHERE id = ? AND project_id = ?').bind(n, projectId).first(); }
     case 'validation_decision_commitments': { const n = numeric(value); return n !== null && !!await db.prepare('SELECT 1 FROM validation_decision_commitments c JOIN validation_decisions d ON d.id = c.decision_id WHERE c.id = ? AND c.project_id = ? AND d.project_id = ?').bind(n, projectId, projectId).first(); }
+    // D690 (S18-B, #1694): Build. Each id resolves through its store and the venture.
+    case 'mvp_features': {
+      const n = numeric(value);
+      return n !== null && !!await db.prepare('SELECT 1 FROM mvp_features WHERE id = ? AND project_id = ?').bind(n, projectId).first();
+    }
+    case 'mvp_must_haves': {
+      const n = numeric(value);
+      return n !== null && !!await db.prepare('SELECT 1 FROM mvp_features WHERE id = ? AND project_id = ? AND is_must_have = 1').bind(n, projectId).first();
+    }
+    case 'roadmap_okrs': {
+      const n = numeric(value);
+      return n !== null && !!await db.prepare('SELECT 1 FROM roadmap_okrs WHERE id = ? AND project_id = ?').bind(n, projectId).first();
+    }
+    case 'cap_table_founders': {
+      // project_id is nullable on the register, so it is always bound.
+      const n = numeric(value, 'h-');
+      return n !== null && !!await db.prepare(
+        'SELECT 1 FROM cap_table_holders WHERE id = ? AND project_id = ? AND founder_role IS NOT NULL',
+      ).bind(n, projectId).first();
+    }
+    case 'build_filings': {
+      const step = numeric(value, 'step-');
+      if (step !== null) return !!await db.prepare('SELECT 1 FROM formation_steps WHERE id = ? AND project_id = ?').bind(step, projectId).first();
+      const obligation = numeric(value, 'obligation-');
+      if (obligation !== null) return !!await db.prepare(
+        'SELECT 1 FROM entity_obligations o JOIN projects p ON p.entity_id = o.entity_id WHERE o.id = ? AND p.id = ?',
+      ).bind(obligation, projectId).first();
+      const lab = /^lab-([1-9][0-9]{0,9})-([0-2])$/.exec(value);
+      return !!lab && !!await db.prepare('SELECT 1 FROM incorporations WHERE id = ? AND project_id = ?').bind(Number(lab[1]), projectId).first();
+    }
+    case 'build_systems':
+      return ['bank', 'accounting', 'payroll', 'crm', 'workspace'].includes(value)
+        && !!await db.prepare('SELECT 1 FROM projects WHERE id = ?').bind(projectId).first();
+    case 'mvp_test_sessions': {
+      const n = numeric(value);
+      return n !== null && !!await db.prepare('SELECT 1 FROM mvp_test_sessions WHERE id = ? AND project_id = ?').bind(n, projectId).first();
+    }
+    case 'founder_contributions': {
+      const n = numeric(value);
+      return n !== null && !!await db.prepare('SELECT 1 FROM founder_contributions WHERE id = ? AND project_id = ?').bind(n, projectId).first();
+    }
+    case 'mvp_test_findings': {
+      const n = numeric(value);
+      return n !== null && !!await db.prepare(
+        'SELECT 1 FROM mvp_test_findings t JOIN mvp_test_sessions s ON s.id = t.session_id WHERE t.id = ? AND s.project_id = ?',
+      ).bind(n, projectId).first();
+    }
+    case 'mvp_feature_links': {
+      const n = numeric(value);
+      return n !== null && !!await db.prepare(
+        'SELECT 1 FROM mvp_feature_links l JOIN mvp_features f ON f.id = l.feature_id WHERE l.id = ? AND f.project_id = ?',
+      ).bind(n, projectId).first();
+    }
+    case 'mvp_release_checks': {
+      const n = numeric(value);
+      return n !== null && !!await db.prepare(
+        'SELECT 1 FROM mvp_release_checks k JOIN mvp_features f ON f.id = k.feature_id WHERE k.id = ? AND f.project_id = ?',
+      ).bind(n, projectId).first();
+    }
+    case 'venture_risks': {
+      const n = numeric(value);
+      return n !== null && !!await db.prepare(
+        'SELECT 1 FROM venture_risks r JOIN mvp_features f ON f.id = r.feature_id WHERE r.id = ? AND r.project_id = ? AND f.project_id = ?',
+      ).bind(n, projectId, projectId).first();
+    }
+    case 'formation_step_checks': {
+      const n = numeric(value);
+      return n !== null && !!await db.prepare(
+        'SELECT 1 FROM formation_step_checks k JOIN formation_steps s ON s.id = k.step_id WHERE k.id = ? AND s.project_id = ?',
+      ).bind(n, projectId).first();
+    }
   }
 }
