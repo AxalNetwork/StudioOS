@@ -116,7 +116,11 @@ function writesAs(db: DatabaseSync, who = FOUNDER, files = bucket()) {
       }, { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db), FILES: files } as any));
       const raw = await res.text();
       const body = raw ? JSON.parse(raw) : null;
-      if (!res.ok) throw Object.assign(new Error(String(body?.detail ?? body?.error ?? res.status)), { status: res.status });
+      if (!res.ok) {
+        const refused: Error & { status?: number } = new Error(String(body?.detail ?? body?.error ?? res.status));
+        refused.status = res.status;
+        throw refused;
+      }
       return body;
     } finally { [console.warn, console.error] = saved; }
   };
