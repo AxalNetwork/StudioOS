@@ -19,14 +19,15 @@ permissions:
 # though FastAPI is not deployed — Python supply-chain issues still hit
 # Replit dev sessions.
 #
-# NO UPLOAD TO CODE SCANNING (D672). The repository is private, and code
-# scanning on a private repository needs GitHub Code Security, which is not
-# on: since 2026-10-10 every upload was refused ("Code Security must be
-# enabled for this repository to use code scanning") and this job went red
-# on every PR. The analysis still runs; its SARIF stays in the workspace and
-# scripts/sarif-summary.py lists the findings in the job summary. Findings
-# never fail the job, as before. To go back to the Security tab, turn Code
-# Security on and delete `upload: never` and the report step.
+# UPLOADS TO CODE SCANNING AGAIN (D718, reversing D672's upload half). D672
+# stopped the upload while the repository was private and code scanning
+# needed GitHub Code Security, which was off. The repository is public now,
+# where code scanning is free, so the alerts go back to the Security tab.
+# That is also the only place Copilot Autofix can propose a fix for them.
+# The SARIF is still written to codeql-results/, and the report step still
+# lists the findings in the job summary, because the agents that fix them
+# cannot read the code-scanning API (it answers 403 to their token).
+# Findings never fail the job.
 jobs:
   analyze:
     name: analyze (${{ matrix.language }})
@@ -53,7 +54,6 @@ jobs:
         uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d # v4
         with:
           category: '/language:${{ matrix.language }}'
-          upload: never
           output: codeql-results
       - name: Report findings
         run: python3 scripts/sarif-summary.py "CodeQL (${{ matrix.language }})" codeql-results
