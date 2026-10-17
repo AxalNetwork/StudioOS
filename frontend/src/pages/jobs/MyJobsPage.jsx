@@ -19,7 +19,7 @@ const JOB_STATUS_LABELS = {
   draft: 'Draft', pending_review: 'In review', published: 'Published', rejected: 'Needs changes', closed: 'Closed',
 };
 const EMPLOYMENT_LABELS = {
-  full_time: 'Full-time', part_time: 'Part-time', intern: 'Internship', contract: 'Contract',
+  full_time: 'Full-time', part_time: 'Part-time', intern: 'Internship', contract: 'Contract', fractional: 'Fractional',
 };
 
 export default function MyJobsPage({ embedded = false }) {

@@ -5,13 +5,20 @@
  *   GET  /overview?project=:pid                 the question, four figures, seven cards, and the
  *                                               phone's focus, meter and index (D692; services/cycleFocus.ts)
  *   GET  /modules/:slug?project=&q=&filter=&sort=&page=&page_size=
- *                                               the module's card and its records
+ *                                               { module: { slug, name, records_title }, card,
+ *                                                 records: { cols, rows, total, page, page_size, filters, sorts } }
+ *     D691 (#1697): every row carries `id`, its record id (a uid, a posting
+ *     or obligation id, or a KPI key); `filter` is `key:value` pairs joined
+ *     with commas, all applied; `sorts[0]` is the default sort.
  *
- * WRITES (the owner or a co-founder; an advisor reads only). Each row records
- * who wrote it, and the write is logged to `activity_logs`.
+ * WRITES (whoever `canAccessProject` lets write: the owner, a co-founder, a
+ * partner, an admin; an advisor reads only). The writers are
+ * `services/growWriters.ts` and `services/growKpis.ts`; each records who wrote
+ * the row and logs it as `grow.<module>` with its record id (D690).
  *   POST  /feedback                PATCH /feedback/:uid
  *   POST  /channels                PATCH /channels/:uid      PUT /channels/:uid/spend/:month
- *   PATCH /roles/:id               PATCH /applications/:id/stage
+ *   POST  /kpis                    (Enter a KPI, decision 4)
+ *   POST  /roles                   PATCH /roles/:id          PATCH /applications/:id/stage
  *   POST  /partners                PATCH /partners/:uid      PUT /partners/:uid/revenue/:month
  *   POST  /markets                 PATCH /markets/:uid
  *   POST  /obligations             PATCH /obligations/:id    PUT /checklist/:key
@@ -25,26 +32,23 @@ import { requireAuth } from '../auth';
 import { canAccessProject } from '../services/projectAccess';
 import { pageOf, settleCard, type Card } from '../services/cycleCards';
 import {
-  APPLICATION_STAGES, CARD_FNS, DURABILITY_ITEMS, GROW_MODULES, GROW_QUESTION, MARKET_PARTS,
-  channelRows, checklist, growFigures, marketRows, movementGap, readiness, readSnapshots, type Ctx, type GrowSlug,
+  CARD_FNS, DURABILITY_ITEMS, GROW_MODULES, GROW_QUESTION,
+  channelRows, checklist, growFigures, marketRows, readiness, type Ctx, type GrowSlug,
 } from '../services/growCycle';
-import { billingPeriods, computeMovements, readRecurring } from '../services/revenueMovements';
+import { ensureProjectMetricsSchema } from './progress';
+import { KpiRefused, enterKpi, kpiRows } from '../services/growKpis';
+import {
+  CHANNEL_STATES, FEEDBACK_SOURCES, FEEDBACK_STATUS, MARKET_STATES, OBLIGATION_KINDS, PARTNER_STAGES, PARTNER_TYPES,
+  REPEATS_OF, Refused, addChannel, addFeedback, addMarket, addObligation, addPartner, obligationKind, obligationState, openRole,
+  logGrowWrite, setApplicationStage, setChannelSpend, setChecklistItem, setPartnerRevenue, updateChannel, updateFeedback, updateMarket, updateObligation,
+  updatePartner, updateRole,
+} from '../services/growWriters';
 import { canAskAgain } from '../services/updateShare';
 import { isAdmin } from './_t13t14t15_helpers';
 import { growPhone } from '../services/cycleFocus';
 
 const r = new Hono<{ Bindings: Env }>();
 type C = Context<{ Bindings: Env }>;
-
-const nowIso = () => new Date().toISOString();
-const uid = () => crypto.randomUUID().replace(/-/g, '');
-const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
-const DATE = /^\d{4}-\d{2}-\d{2}$/;
-
-class Refused extends Error {
-  status: number; sentence: string; field: string | null;
-  constructor(status: number, sentence: string, field: string | null = null) { super(sentence); this.status = status; this.sentence = sentence; this.field = field; }
-}
 
 async function project(c: C, user: User, raw: unknown, write: boolean) {
   const id = Number(raw);
@@ -56,16 +60,16 @@ async function project(c: C, user: User, raw: unknown, write: boolean) {
   return p.id;
 }
 
-function fail(c: C, e: unknown) {
-  if (e instanceof Refused) return c.json({ detail: e.sentence, ...(e.field ? { field: e.field } : {}) }, e.status as 400);
-  throw e;
+/** Whether the viewer may write this venture: third parties' names are for writers (decision 9). */
+async function writes(c: C, user: User, pid: number): Promise<boolean> {
+  const p = await c.env.DB.prepare('SELECT id, founder_id FROM projects WHERE id = ?').bind(pid).first<{ id: number; founder_id: number | null }>();
+  return !!p && canAccessProject(c.env, user, p, { write: true });
 }
 
-async function logWrite(env: Env, userId: number, action: string, entity: string, entityId: string | number) {
-  try {
-    await env.DB.prepare('INSERT INTO activity_logs (action, details, user_id, entity_type, entity_id) VALUES (?, ?, ?, ?, ?)')
-      .bind(action, `grow:${entity}`, userId, entity, String(entityId)).run();
-  } catch (e) { console.warn('[cycle_grow] activity log not written', (e as Error).message); }
+function fail(c: C, e: unknown) {
+  if (e instanceof Refused) return c.json({ detail: e.sentence, ...(e.field ? { field: e.field } : {}) }, e.status as 400);
+  if (e instanceof KpiRefused) return c.json({ detail: e.sentence, ...(e.field ? { field: e.field } : {}) }, e.status as 400);
+  throw e;
 }
 
 const ctxFor = (env: Env, projectId: number): Ctx => ({
@@ -92,90 +96,144 @@ r.get('/overview', async (c) => {
 // ── Records ─────────────────────────────────────────────────────────────────
 
 type Row = Record<string, unknown>;
-type RecordSet = { cols: string[]; rows: Row[]; parts?: Row };
+type Option = { value: string; label: string };
+type Filter = { key: string; label: string; options: Option[] };
+type Sort = { key: string; label: string };
+type RecordSet = { cols: string[]; rows: Row[]; parts?: Row; filters: Filter[]; sorts: Sort[] };
 
 const lower = (v: unknown) => String(v ?? '').toLowerCase();
+const today = (x: Ctx) => new Date(x.now).toISOString().slice(0, 10);
 
-async function recordsFor(x: Ctx, slug: GrowSlug, viewer: User): Promise<RecordSet> {
+/** The canvas's list titles (CO:630-636). */
+export const RECORDS_TITLE: Record<GrowSlug, string> = {
+  'product-improvement': 'Feedback', distribution: 'Channels', 'revenue-and-traction': 'KPIs', 'team-expansion': 'Open roles',
+  'partner-network': 'Partners', 'market-expansion': 'Markets', 'durable-company-building': 'Obligations',
+};
+
+const LABEL: Record<string, string> = {
+  customer: 'Customer', investor: 'Investor', team: 'Team', open: 'Open', planned: 'Planned', shipped: 'Shipped',
+  active: 'Active', testing: 'Testing', paused: 'Paused',
+  draft: 'Draft', pending_review: 'Pending review', published: 'Live', rejected: 'Needs changes',
+  reseller: 'Reseller', integration: 'Integration', agency: 'Agency', referral: 'Referral', co_marketing: 'Co-marketing', other: 'Other',
+  talking: 'Talking', terms: 'Terms', signed: 'Signed', ended: 'Ended',
+  considering: 'Considering', entering: 'Entering', served: 'Served', not_now: 'Not now',
+  governance: 'Governance', compliance: 'Compliance', risk: 'Risk', culture: 'Culture', tax: 'Tax',
+  overdue: 'Overdue', next_30: 'Next 30 days', next_90: 'Next 90 days', later: 'Later',
+  rev_share: 'Rev-share', services_fee: 'Services fee', referral_fee: 'Referral fee', none: 'None yet',
+};
+const fixed = (values: readonly string[]): Option[] => values.map((v) => ({ value: v, label: LABEL[v] ?? v }));
+/** Options from the values the rows hold, for a free-text field. */
+const present = (rows: Row[], key: string): Option[] =>
+  [...new Set(rows.map((r) => r[key]).filter((v): v is string => typeof v === 'string' && v.trim() !== ''))]
+    .sort((a, b) => a.localeCompare(b)).map((v) => ({ value: v, label: LABEL[v] ?? v }));
+
+export const ROLE_STATUSES = ['draft', 'pending_review', 'published', 'rejected'] as const;
+export const DUE_WINDOWS = ['overdue', 'next_30', 'next_90', 'later'] as const;
+
+/** An obligation's Due filter: overdue, the next 30 or 90 days, or later; a past one already done is in none. */
+export function dueWindow(due: string, status: string, on: string): string | null {
+  if (due < on) return status === 'overdue' ? 'overdue' : null;
+  const days = (Date.parse(`${due}T00:00:00Z`) - Date.parse(`${on}T00:00:00Z`)) / 86_400_000;
+  return days <= 30 ? 'next_30' : days <= 90 ? 'next_90' : 'later';
+}
+
+/** A partner's terms as the row reads them: the typed terms, or the old free text when none are typed. */
+export function termsLine(p: Row): string | null {
+  if (p.terms_kind == null) return (p.terms as string | null) ?? null;
+  const amount = p.terms_pct != null ? `${p.terms_pct}%`
+    : p.terms_amount_cents != null ? `${String(p.terms_currency ?? 'usd').toUpperCase()} ${(Number(p.terms_amount_cents) / 100).toLocaleString('en-US')}` : null;
+  return [LABEL[String(p.terms_kind)] ?? String(p.terms_kind), amount].filter(Boolean).join(' · ');
+}
+
+async function recordsFor(x: Ctx, slug: GrowSlug, viewer: User, writer: boolean): Promise<RecordSet> {
   const { env, projectId } = x;
   if (slug === 'product-improvement') {
     const q = await env.DB.prepare(
       `SELECT uid, body, source, theme, roadmap_item_label, status, from_name, created_at FROM product_feedback
         WHERE project_id = ? ORDER BY created_at DESC, id DESC`,
     ).bind(projectId).all<Row>();
-    return { cols: ['Feedback', 'Source', 'Theme', 'Roadmap item', 'Status'],
-      rows: (q.results || []).map((f) => ({ ...f, theme: f.theme ?? null, roadmap_item_label: f.roadmap_item_label ?? null })) };
+    const rows = (q.results || []).map((f) => {
+      const { from_name, ...rest } = f;
+      // A customer's name is for the venture's writers; every reader sees the feedback (decision 9).
+      return { id: f.uid, ...rest, ...(writer ? { from_name } : {}), theme: f.theme ?? null, roadmap_item_label: f.roadmap_item_label ?? null };
+    });
+    return { cols: ['Feedback', 'Source', 'Theme', 'Roadmap item', 'Status'], rows,
+      filters: [{ key: 'source', label: 'Source', options: fixed(FEEDBACK_SOURCES) }, { key: 'theme', label: 'Theme', options: present(rows, 'theme') },
+        { key: 'status', label: 'Status', options: fixed(FEEDBACK_STATUS) }],
+      sorts: [{ key: '-created_at', label: 'Newest' }, { key: 'created_at', label: 'Oldest' }, { key: 'theme', label: 'Theme' }] };
   }
   if (slug === 'distribution') {
+    const extra = new Map(((await env.DB.prepare('SELECT uid, kind, cac_bar_cents, bar_currency FROM growth_channels WHERE project_id = ?')
+      .bind(projectId).all<Row>()).results || []).map((ch) => [String(ch.uid), ch]));
     return { cols: ['Channel', 'State', 'Spend · 30 d', 'Customers', 'CAC'],
-      rows: (await channelRows(x)).map((ch) => ({ ...ch, spend_source: ch.spend_cents == null ? null : 'manual' })),
-      parts: { from_update_asks: await updateAskReplies(env, projectId, 'customer') } };
+      rows: (await channelRows(x)).map((ch) => {
+        const more = extra.get(ch.uid) ?? {};
+        return { id: ch.uid, ...ch, kind: more.kind ?? null, cac_bar_cents: more.cac_bar_cents ?? null, bar_currency: more.bar_currency ?? null,
+          spend_source: ch.spend_cents == null ? null : 'manual' };
+      }),
+      parts: { from_update_asks: await updateAskReplies(env, projectId, 'customer') },
+      filters: [{ key: 'state', label: 'State', options: fixed(CHANNEL_STATES) }],
+      sorts: [{ key: 'cac_cents', label: 'CAC' }, { key: '-cac_cents', label: 'Highest CAC' }, { key: 'name', label: 'Name' }] };
   }
   if (slug === 'revenue-and-traction') {
-    const snaps = await readSnapshots(env, projectId);
-    const kpi = (label: string, col: 'mrr' | 'paying_accounts') => {
-      const have = snaps.filter((s) => s[col] != null);
-      const last = have[have.length - 1];
-      if (!last) return { kpi: label, value: null, change_30d: null, source: null, as_of: null, reason: 'Not recorded' };
-      const cutoff = new Date(Date.parse(last.snapshot_date) - 30 * 86_400_000).toISOString().slice(0, 10);
-      const before = [...have].reverse().find((s) => s.snapshot_date <= cutoff);
-      return { kpi: label, value: last[col], change_30d: before ? (last[col] as number) - (before[col] as number) : null,
-        source: last.source && last.source.trim() ? last.source : 'manual', as_of: last.snapshot_date, reason: null };
-    };
-    // Movements are computed from the ledger when read (D664), never read
-    // from revenue_movements, which is empty for a ledger older than 443.
-    const ledger = await readRecurring(env, projectId);
-    const mv = computeMovements(ledger);
-    const latest = mv.length ? mv[mv.length - 1].month : null;
-    const at = (kind: string) => mv.find((m) => m.month === latest && m.kind === kind) ?? null;
-    const gap = movementGap(ledger);
-    const movementRow = (label: string, kind: 'churned' | 'expansion' | 'new') => {
-      if (billingPeriods(ledger) < 2) return { kpi: label, value: null, change_30d: null, source: null, as_of: null, reason: 'Needs 2 billings' };
-      if (gap) return { kpi: label, value: null, change_30d: null, source: null, as_of: null, reason: gap };
-      const m = at(kind);
-      if (!m) {
-        return { kpi: label, value: null, change_30d: null, source: null, as_of: null,
-          reason: at('unsplit') ? 'Not recorded: the ledger cannot tell new from expansion for this month' : 'Not recorded' };
-      }
-      return { kpi: label, value: m.amount_cents, unit: 'usd_cents', change_30d: null, source: `Revenue ledger · ${m.source}`, as_of: m.as_of, reason: null };
-    };
-    return { cols: ['KPI', 'Value', 'Change · 30 d', 'Source', 'As of'],
-      rows: [kpi('MRR', 'mrr'), kpi('Customers', 'paying_accounts'), movementRow('New MRR', 'new'), movementRow('Expansion MRR', 'expansion'), movementRow('Churn', 'churned')] };
+    const rows = await kpiRows(env, projectId, x.now);
+    return { cols: ['KPI', 'Value', 'Change · 30 d', 'Source', 'As of'], rows,
+      filters: [{ key: 'source', label: 'Source', options: present(rows, 'source') }, { key: 'period', label: 'Period', options: present(rows, 'period').reverse() }],
+      sorts: [{ key: '-period', label: 'Period' }, { key: 'kpi', label: 'KPI' }] };
   }
   if (slug === 'team-expansion') {
     const q = await env.DB.prepare(
       `SELECT p.id, p.title, p.team, p.target_start, p.status,
               (SELECT COUNT(*) FROM job_applications a WHERE a.posting_id = p.id) AS applicants,
               (SELECT COUNT(*) FROM job_applications a WHERE a.posting_id = p.id AND a.stage = 'interview') AS in_interview
-         FROM job_postings p WHERE p.project_id = ? AND p.status IN ('open', 'published', 'draft') ORDER BY p.id DESC`,
+         FROM job_postings p WHERE p.project_id = ? AND p.status IN ('draft', 'pending_review', 'published', 'rejected') ORDER BY p.id DESC`,
     ).bind(projectId).all<Row>();
-    return { cols: ['Role', 'Team', 'Applicants', 'In interview', 'Target start'], rows: q.results || [] };
+    const rows = (q.results || []).map((p) => ({ ...p, state: LABEL[String(p.status)] ?? p.status }));
+    return { cols: ['Role', 'Team', 'Applicants', 'In interview', 'Target start'], rows,
+      filters: [{ key: 'status', label: 'Stage', options: fixed(ROLE_STATUSES) }, { key: 'team', label: 'Team', options: present(rows, 'team') }],
+      sorts: [{ key: '-applicants', label: 'Applicants' }, { key: 'title', label: 'Role' }, { key: 'target_start', label: 'Target start' }] };
   }
   if (slug === 'partner-network') {
     const q = await env.DB.prepare(
-      `SELECT g.uid, g.name, g.type, g.stage, g.terms, (SELECT SUM(amount_cents) FROM partner_revenue r WHERE r.partner_id = g.id) AS revenue_cents
+      `SELECT g.uid, g.name, g.type, g.stage, g.terms, g.terms_kind, g.terms_pct, g.terms_amount_cents, g.terms_currency, g.renewal_on,
+              (SELECT SUM(amount_cents) FROM partner_revenue r WHERE r.partner_id = g.id) AS revenue_cents
          FROM growth_partners g WHERE g.project_id = ? ORDER BY g.name COLLATE NOCASE`,
     ).bind(projectId).all<Row>();
     return { cols: ['Partner', 'Type', 'Stage', 'Terms', 'Revenue sourced'],
-      rows: (q.results || []).map((p) => ({ ...p, revenue_cents: p.revenue_cents ?? null, revenue_source: p.revenue_cents == null ? null : 'manual' })),
-      parts: { from_update_asks: await updateAskReplies(env, projectId, 'partner') } };
+      rows: (q.results || []).map((p) => ({ id: p.uid, ...p, terms: termsLine(p), revenue_cents: p.revenue_cents ?? null,
+        revenue_source: p.revenue_cents == null ? null : 'manual' })),
+      parts: { from_update_asks: await updateAskReplies(env, projectId, 'partner') },
+      filters: [{ key: 'type', label: 'Type', options: fixed(PARTNER_TYPES) }, { key: 'stage', label: 'Stage', options: fixed(PARTNER_STAGES) }],
+      sorts: [{ key: '-revenue_cents', label: 'Revenue' }, { key: 'name', label: 'Name' }] };
   }
   if (slug === 'market-expansion') {
     const rows = await marketRows(env, projectId);
     const replies = await marketReplies(env, projectId);
+    const extra = new Map(((await env.DB.prepare('SELECT uid, geography_ref, size_cents, size_currency, size_source FROM markets WHERE project_id = ?')
+      .bind(projectId).all<Row>()).results || []).map((m) => [String(m.uid), m]));
     return { cols: ['Market', 'State', 'Readiness', 'Weakest part', 'Decision'],
-      rows: rows.map((m) => { const rd = readiness(m); return { ...m, readiness: rd.score, readiness_reason: rd.score == null ? `Not recorded: ${rd.missing.join(', ')} not scored` : null, weakest_part: rd.weakest, replies: replies.get(m.uid) ?? [] }; }) };
+      rows: rows.map((m) => {
+        const rd = readiness(m); const more = extra.get(m.uid) ?? {};
+        return { id: m.uid, ...m, geography_ref: more.geography_ref ?? null, size_cents: more.size_cents ?? null, size_currency: more.size_currency ?? null,
+          size_source: more.size_source ?? null, readiness: rd.score,
+          readiness_reason: rd.score == null ? `Not recorded: ${rd.missing.join(', ')} not scored` : null, weakest_part: rd.weakest, replies: replies.get(m.uid) ?? [] };
+      }),
+      filters: [{ key: 'state', label: 'State', options: fixed(MARKET_STATES) }],
+      sorts: [{ key: '-readiness', label: 'Readiness' }, { key: 'name', label: 'Name' }] };
   }
   // durable-company-building
   const ev = await env.DB.prepare(
-    `SELECT id, title, kind, event_type, due_date, owner_name, completion_status FROM compliance_events WHERE project_id = ? ORDER BY due_date`,
+    `SELECT id, title, kind, event_type, due_date, owner_name, completion_status, recurrence FROM compliance_events WHERE project_id = ? ORDER BY due_date`,
   ).bind(projectId).all<Row>();
   return { cols: ['Obligation', 'Kind', 'Due', 'Owner', 'State'], rows: (ev.results || []).map((event) => {
       const kind = obligationKind(event);
-      return { id: event.id, title: event.title, kind, due_at: event.due_date, owner_name: event.owner_name,
-        status: obligationState(event.completion_status, kind, String(event.due_date), new Date(x.now).toISOString().slice(0, 10)) };
+      const status = obligationState(event.completion_status, kind, String(event.due_date), today(x));
+      return { id: event.id, title: event.title, kind, due_at: event.due_date, owner_name: event.owner_name, status,
+        repeats: REPEATS_OF[String(event.recurrence)] ?? null, due_window: dueWindow(String(event.due_date), status, today(x)) };
     }),
-    parts: { checklist: await checklist(env, projectId), ...(await updatesHistory(x, viewer)) } };
+    parts: { checklist: await checklist(env, projectId), ...(await updatesHistory(x, viewer)) },
+    filters: [{ key: 'kind', label: 'Kind', options: fixed(OBLIGATION_KINDS) }, { key: 'due_window', label: 'Due', options: fixed(DUE_WINDOWS) }],
+    sorts: [{ key: 'due_at', label: 'Due' }, { key: '-due_at', label: 'Due latest' }] };
 }
 
 /** Customer and partner asks have no linked record; expose their replies beside the module's rows. */
@@ -256,12 +314,17 @@ export async function marketReplies(env: Env, projectId: number): Promise<Map<st
   return out;
 }
 
-/** Search on every text field; `filter` is `field:value`; sort a field, `-` for descending. */
+/**
+ * Search on every text field; `filter` is `key:value` pairs joined with commas
+ * (as the page joins them), every one applied; sort a field, `-` for descending.
+ */
 export function shapeRecords(rows: Row[], q: string, filter: string, sort: string): Row[] {
   let out = rows;
   if (q) out = out.filter((row) => Object.values(row).some((v) => typeof v === 'string' && lower(v).includes(lower(q))));
-  if (filter.includes(':')) {
-    const [k, v] = [filter.slice(0, filter.indexOf(':')), filter.slice(filter.indexOf(':') + 1)];
+  for (const pair of filter.split(',')) {
+    const at = pair.indexOf(':');
+    if (at <= 0) continue;
+    const [k, v] = [pair.slice(0, at).trim(), pair.slice(at + 1).trim()];
     out = out.filter((row) => lower(row[k]) === lower(v));
   }
   if (sort) {
@@ -286,365 +349,62 @@ r.get('/modules/:slug', async (c) => {
     const pid = await project(c, user, c.req.query('project'), false);
     const meta = GROW_MODULES.find((m) => m.slug === c.req.param('slug'));
     if (!meta) return c.json({ detail: 'Not a Grow module' }, 404);
+    const mod = { slug: meta.slug, name: meta.name, records_title: RECORDS_TITLE[meta.slug] };
     const x = ctxFor(c.env, pid);
     const card = await cardFor(x, meta.slug);
     let recs: RecordSet;
-    try { recs = await recordsFor(x, meta.slug, user); } catch (e) {
+    try { recs = await recordsFor(x, meta.slug, user, await writes(c, user, pid)); } catch (e) {
       console.error('[cycle_grow] records unreadable:', meta.slug, (e as Error).message);
-      return c.json({ module: meta.slug, card, records: null, records_state: 'unreadable', reason: `Unreadable: ${meta.source} could not be read` });
+      return c.json({ module: mod, card, records: null, records_state: 'unreadable', reason: `Unreadable: ${meta.source} could not be read` });
     }
-    const shaped = shapeRecords(recs.rows, String(c.req.query('q') || '').slice(0, 120), String(c.req.query('filter') || '').slice(0, 120), String(c.req.query('sort') || '').slice(0, 60));
+    const sort = String(c.req.query('sort') || '').slice(0, 60) || recs.sorts[0]?.key || '';
+    const shaped = shapeRecords(recs.rows, String(c.req.query('q') || '').slice(0, 120), String(c.req.query('filter') || '').slice(0, 300), sort);
     const pg = pageOf(shaped, c.req.query('page'), c.req.query('page_size'));
-    return c.json({ module: meta.slug, card, records: { cols: recs.cols, ...pg }, ...(recs.parts ? { parts: recs.parts } : {}) });
+    return c.json({ module: mod, card, records: { cols: recs.cols, ...pg, filters: recs.filters, sorts: recs.sorts }, ...(recs.parts ? { parts: recs.parts } : {}) });
   } catch (e) { return fail(c, e); }
 });
 
 // ── Writes ──────────────────────────────────────────────────────────────────
+// Each route gates the venture for writing, then hands the body to its writer.
 
-const str = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
-function oneOf<T extends string>(v: unknown, allowed: readonly T[], field: string, required = false): T | null {
-  if (v == null || v === '') { if (required) throw new Refused(400, `${field} is required`, field); return null; }
-  if (!(allowed as readonly string[]).includes(String(v))) throw new Refused(400, `${field} must be one of ${allowed.join(', ')}`, field);
-  return String(v) as T;
-}
-function cents(v: unknown, field: string): number {
-  const n = Number(v);
-  if (!Number.isInteger(n) || n < 0 || n > 10_000_000_000) throw new Refused(400, `${field} must be whole cents, 0 or more`, field);
-  return n;
-}
-function score(v: unknown, field: string): number | null {
-  if (v == null || v === '') return null;
-  const n = Number(v);
-  if (!Number.isInteger(n) || n < 0 || n > 10) throw new Refused(400, `${field} must be a whole number from 0 to 10`, field);
-  return n;
-}
 async function body(c: C): Promise<Record<string, unknown>> { return c.req.json().catch(() => ({})); }
-async function owned<T>(c: C, sql: string, key: unknown, pid: number): Promise<T> {
-  const row = await c.env.DB.prepare(sql).bind(key, pid).first<T>();
-  if (!row) throw new Refused(404, 'Not found');
-  return row;
-}
-
-const FEEDBACK_SOURCES = ['customer', 'investor', 'team'] as const;
-const FEEDBACK_STATUS = ['open', 'planned', 'shipped'] as const;
-const CHANNEL_STATES = ['active', 'testing', 'paused'] as const;
-const PARTNER_TYPES = ['reseller', 'integration', 'agency', 'referral', 'other'] as const;
-const PARTNER_STAGES = ['talking', 'terms', 'signed', 'ended'] as const;
-const MARKET_STATES = ['considering', 'entering', 'served', 'not_now'] as const;
-const DECISIONS = ['enter', 'not_yet', 'exit'] as const;
-const OBLIGATION_KINDS = ['governance', 'compliance', 'risk', 'culture', 'tax', 'other'] as const;
-const OBLIGATION_STATES = ['scheduled', 'upcoming', 'draft', 'done', 'not_set_up', 'overdue', 'snoozed'] as const;
-const OBLIGATION_EVENTS = { governance: 'board_meeting', compliance: 'other', risk: 'risk', culture: 'culture', tax: 'franchise_tax', other: 'other' } as const;
-
-function obligationKind(event: Row): string {
-  if (event.kind) return String(event.kind);
-  if (event.event_type === 'board_meeting') return 'governance';
-  if (event.event_type === 'risk' || event.event_type === 'culture') return String(event.event_type);
-  return 'compliance';
-}
-
-function obligationState(completion: unknown, kind: string, due: string, today: string): string {
-  if (completion === 'completed') return 'done';
-  if (completion === 'snoozed') return 'snoozed';
-  if (due < today) return 'overdue';
-  return kind === 'governance' ? 'scheduled' : 'upcoming';
-}
-
-function obligationCompletion(state: unknown): string {
-  return state === 'done' ? 'completed' : state === 'snoozed' ? 'snoozed' : 'pending';
-}
-
-function obligationDue(value: unknown): string {
-  const due = str(value, 10);
-  if (!due) throw new Refused(400, 'An obligation has a due date.', 'due_at');
-  if (!DATE.test(due)) throw new Refused(400, 'due_at is YYYY-MM-DD', 'due_at');
-  return due;
-}
-
-function obligationClash(error: unknown, kind: string, due: string): never {
-  if (String((error as Error).message).toLowerCase().includes('unique')) {
-    throw new Refused(409, `Another ${kind} obligation is already due on ${due}. Pick another date.`, 'due_at');
-  }
-  throw error;
-}
-
-r.post('/feedback', async (c) => {
+type Writer = (c: C, user: User, pid: number, b: Record<string, unknown>) => Promise<unknown>;
+const write = (fn: Writer, created = false) => async (c: C) => {
   try {
     const user = await requireAuth(c); const b = await body(c);
     const pid = await project(c, user, b.project, true);
-    const text = str(b.body, 4000);
-    if (!text) throw new Refused(400, 'Feedback says something', 'body');
-    const source = oneOf(b.source, FEEDBACK_SOURCES, 'source', true);
-    const id = uid();
-    await c.env.DB.prepare(
-      `INSERT INTO product_feedback (uid, project_id, body, source, from_name, from_email, theme, roadmap_item_ref, roadmap_item_label, status, shipped_on, created_by, updated_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).bind(id, pid, text, source, str(b.from_name, 200), str(b.from_email, 200)?.toLowerCase() ?? null, str(b.theme, 80),
-      str(b.roadmap_item_ref, 80), str(b.roadmap_item_label, 200), oneOf(b.status, FEEDBACK_STATUS, 'status') ?? 'open',
-      b.status === 'shipped' ? nowIso().slice(0, 10) : null, user.id, user.id).run();
-    await logWrite(c.env, user.id, 'grow_feedback_logged', 'product_feedback', id);
-    return c.json({ uid: id }, 201);
+    return c.json(await fn(c, user, pid, b) as object, created ? 201 : 200);
   } catch (e) { return fail(c, e); }
-});
+};
+const param = (c: C, k: string): string => c.req.param(k) ?? '';
+const intId = (v: string) => Number(v);
 
-r.patch('/feedback/:uid', async (c) => {
-  try {
-    const user = await requireAuth(c); const b = await body(c);
-    const pid = await project(c, user, b.project, true);
-    const row = await owned<{ id: number; status: string; theme: string | null; roadmap_item_ref: string | null; roadmap_item_label: string | null }>(c,
-      'SELECT id, status, theme, roadmap_item_ref, roadmap_item_label FROM product_feedback WHERE uid = ? AND project_id = ?', c.req.param('uid'), pid);
-    const status = b.status === undefined ? row.status : oneOf(b.status, FEEDBACK_STATUS, 'status', true)!;
-    await c.env.DB.prepare(
-      `UPDATE product_feedback SET status = ?, theme = ?, roadmap_item_ref = ?, roadmap_item_label = ?,
-         shipped_on = CASE WHEN ? = 'shipped' AND status <> 'shipped' THEN ? ELSE shipped_on END, updated_by = ?, updated_at = ? WHERE id = ?`,
-    ).bind(status, b.theme === undefined ? row.theme : str(b.theme, 80), b.roadmap_item_ref === undefined ? row.roadmap_item_ref : str(b.roadmap_item_ref, 80),
-      b.roadmap_item_label === undefined ? row.roadmap_item_label : str(b.roadmap_item_label, 200), status, nowIso().slice(0, 10), user.id, nowIso(), row.id).run();
-    await logWrite(c.env, user.id, 'grow_feedback_updated', 'product_feedback', c.req.param('uid'));
-    return c.json({ uid: c.req.param('uid'), status });
-  } catch (e) { return fail(c, e); }
-});
-
-r.post('/channels', async (c) => {
-  try {
-    const user = await requireAuth(c); const b = await body(c);
-    const pid = await project(c, user, b.project, true);
-    const name = str(b.name, 120);
-    const utm = str(b.utm_source, 80)?.toLowerCase() ?? null;
-    if (!name || !utm) throw new Refused(400, 'A channel has a name and the UTM source its links carry', 'utm_source');
-    const id = uid();
-    try {
-      await c.env.DB.prepare('INSERT INTO growth_channels (uid, project_id, name, utm_source, state, created_by) VALUES (?, ?, ?, ?, ?, ?)')
-        .bind(id, pid, name, utm, oneOf(b.state, CHANNEL_STATES, 'state') ?? 'active', user.id).run();
-    } catch (e) {
-      if (String((e as Error).message).toLowerCase().includes('unique')) throw new Refused(409, 'A channel already uses that UTM source', 'utm_source');
-      throw e;
-    }
-    await logWrite(c.env, user.id, 'grow_channel_added', 'growth_channels', id);
-    return c.json({ uid: id }, 201);
-  } catch (e) { return fail(c, e); }
-});
-
-r.patch('/channels/:uid', async (c) => {
-  try {
-    const user = await requireAuth(c); const b = await body(c);
-    const pid = await project(c, user, b.project, true);
-    const row = await owned<{ id: number; state: string; name: string }>(c, 'SELECT id, state, name FROM growth_channels WHERE uid = ? AND project_id = ?', c.req.param('uid'), pid);
-    await c.env.DB.prepare('UPDATE growth_channels SET state = ?, name = ?, updated_at = ? WHERE id = ?')
-      .bind(b.state === undefined ? row.state : oneOf(b.state, CHANNEL_STATES, 'state', true), str(b.name, 120) ?? row.name, nowIso(), row.id).run();
-    await logWrite(c.env, user.id, 'grow_channel_updated', 'growth_channels', c.req.param('uid'));
-    return c.json({ uid: c.req.param('uid') });
-  } catch (e) { return fail(c, e); }
-});
-
-r.put('/channels/:uid/spend/:month', async (c) => {
-  try {
-    const user = await requireAuth(c); const b = await body(c);
-    const pid = await project(c, user, b.project, true);
-    const month = c.req.param('month');
-    if (!MONTH.test(month)) throw new Refused(400, 'month is YYYY-MM', 'month');
-    const row = await owned<{ id: number }>(c, 'SELECT id FROM growth_channels WHERE uid = ? AND project_id = ?', c.req.param('uid'), pid);
-    const spend = cents(b.spend_cents, 'spend_cents');
-    await c.env.DB.prepare(
-      `INSERT INTO channel_spend (channel_id, month, spend_cents, source, recorded_by) VALUES (?, ?, ?, 'manual', ?)
-       ON CONFLICT(channel_id, month) DO UPDATE SET spend_cents = excluded.spend_cents, recorded_by = excluded.recorded_by`,
-    ).bind(row.id, month, spend, user.id).run();
-    await logWrite(c.env, user.id, 'grow_channel_spend', 'channel_spend', `${c.req.param('uid')}:${month}`);
-    return c.json({ uid: c.req.param('uid'), month, spend_cents: spend, source: 'manual' });
-  } catch (e) { return fail(c, e); }
-});
-
-r.patch('/roles/:id', async (c) => {
-  try {
-    const user = await requireAuth(c); const b = await body(c);
-    const pid = await project(c, user, b.project, true);
-    const row = await owned<{ id: number; team: string | null; target_start: string | null }>(c, 'SELECT id, team, target_start FROM job_postings WHERE id = ? AND project_id = ?', Number(c.req.param('id')), pid);
-    const target = b.target_start === undefined ? row.target_start : str(b.target_start, 10);
-    if (target && !DATE.test(target) && !MONTH.test(target)) throw new Refused(400, 'target_start is YYYY-MM or YYYY-MM-DD', 'target_start');
-    await c.env.DB.prepare('UPDATE job_postings SET team = ?, target_start = ?, updated_at = ? WHERE id = ?')
-      .bind(b.team === undefined ? row.team : str(b.team, 80), target, nowIso(), row.id).run();
-    await logWrite(c.env, user.id, 'grow_role_updated', 'job_postings', row.id);
-    return c.json({ id: row.id });
-  } catch (e) { return fail(c, e); }
-});
-
-r.patch('/applications/:id/stage', async (c) => {
-  try {
-    const user = await requireAuth(c); const b = await body(c);
-    const pid = await project(c, user, b.project, true);
-    const row = await owned<{ id: number }>(c,
-      'SELECT a.id FROM job_applications a JOIN job_postings p ON p.id = a.posting_id WHERE a.id = ? AND p.project_id = ?', Number(c.req.param('id')), pid);
-    const stage = oneOf(b.stage, APPLICATION_STAGES, 'stage', true);
-    await c.env.DB.prepare('UPDATE job_applications SET stage = ?, stage_changed_at = ?, stage_changed_by = ?, updated_at = ? WHERE id = ?')
-      .bind(stage, nowIso(), user.id, nowIso(), row.id).run();
-    await logWrite(c.env, user.id, 'grow_application_stage', 'job_applications', row.id);
-    return c.json({ id: row.id, stage });
-  } catch (e) { return fail(c, e); }
-});
-
-r.post('/partners', async (c) => {
-  try {
-    const user = await requireAuth(c); const b = await body(c);
-    const pid = await project(c, user, b.project, true);
-    const name = str(b.name, 200);
-    if (!name) throw new Refused(400, 'A partner has a name', 'name');
-    const id = uid();
-    await c.env.DB.prepare('INSERT INTO growth_partners (uid, project_id, name, type, stage, terms, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .bind(id, pid, name, oneOf(b.type, PARTNER_TYPES, 'type', true), oneOf(b.stage, PARTNER_STAGES, 'stage') ?? 'talking', str(b.terms, 400), user.id).run();
-    await logWrite(c.env, user.id, 'grow_partner_added', 'growth_partners', id);
-    return c.json({ uid: id }, 201);
-  } catch (e) { return fail(c, e); }
-});
-
-r.patch('/partners/:uid', async (c) => {
-  try {
-    const user = await requireAuth(c); const b = await body(c);
-    const pid = await project(c, user, b.project, true);
-    const row = await owned<{ id: number; stage: string; terms: string | null; type: string }>(c, 'SELECT id, stage, terms, type FROM growth_partners WHERE uid = ? AND project_id = ?', c.req.param('uid'), pid);
-    await c.env.DB.prepare('UPDATE growth_partners SET stage = ?, terms = ?, type = ?, updated_at = ? WHERE id = ?')
-      .bind(b.stage === undefined ? row.stage : oneOf(b.stage, PARTNER_STAGES, 'stage', true), b.terms === undefined ? row.terms : str(b.terms, 400),
-        b.type === undefined ? row.type : oneOf(b.type, PARTNER_TYPES, 'type', true), nowIso(), row.id).run();
-    await logWrite(c.env, user.id, 'grow_partner_updated', 'growth_partners', c.req.param('uid'));
-    return c.json({ uid: c.req.param('uid') });
-  } catch (e) { return fail(c, e); }
-});
-
-r.put('/partners/:uid/revenue/:month', async (c) => {
-  try {
-    const user = await requireAuth(c); const b = await body(c);
-    const pid = await project(c, user, b.project, true);
-    const month = c.req.param('month');
-    if (!MONTH.test(month)) throw new Refused(400, 'month is YYYY-MM', 'month');
-    const row = await owned<{ id: number }>(c, 'SELECT id FROM growth_partners WHERE uid = ? AND project_id = ?', c.req.param('uid'), pid);
-    const amount = cents(b.amount_cents, 'amount_cents');
-    await c.env.DB.prepare(
-      `INSERT INTO partner_revenue (partner_id, month, amount_cents, source, recorded_by) VALUES (?, ?, ?, 'manual', ?)
-       ON CONFLICT(partner_id, month) DO UPDATE SET amount_cents = excluded.amount_cents, recorded_by = excluded.recorded_by`,
-    ).bind(row.id, month, amount, user.id).run();
-    await logWrite(c.env, user.id, 'grow_partner_revenue', 'partner_revenue', `${c.req.param('uid')}:${month}`);
-    return c.json({ uid: c.req.param('uid'), month, amount_cents: amount, source: 'manual' });
-  } catch (e) { return fail(c, e); }
-});
-
-/** The four parts from a body: a score needs its source. */
-function marketParts(b: Record<string, unknown>, prev: Record<string, unknown> = {}) {
-  const out: Record<string, unknown> = {};
-  for (const [k, label] of MARKET_PARTS) {
-    const s = b[`${k}_score`] === undefined ? (prev[`${k}_score`] as number | null ?? null) : score(b[`${k}_score`], `${k}_score`);
-    const src = b[`${k}_source`] === undefined ? (prev[`${k}_source`] as string | null ?? null) : str(b[`${k}_source`], 200);
-    if (s != null && !src) throw new Refused(400, `The ${label.toLowerCase()} score needs its source`, `${k}_source`);
-    out[`${k}_score`] = s; out[`${k}_source`] = s == null ? null : src;
-  }
+r.post('/feedback', write((c, u, pid, b) => addFeedback(c.env, pid, u, b), true));
+r.patch('/feedback/:uid', write((c, u, pid, b) => updateFeedback(c.env, pid, u, param(c, 'uid'), b)));
+r.post('/channels', write((c, u, pid, b) => addChannel(c.env, pid, u, b), true));
+r.patch('/channels/:uid', write((c, u, pid, b) => updateChannel(c.env, pid, u, param(c, 'uid'), b)));
+r.put('/channels/:uid/spend/:month', write((c, u, pid, b) => setChannelSpend(c.env, pid, u, param(c, 'uid'), param(c, 'month'), b)));
+r.post('/kpis', write(async (c, u, pid, b) => {
+  await ensureProjectMetricsSchema(c.env);
+  const out = await enterKpi(c.env, pid, u.id, b);
+  await logGrowWrite(c.env, pid, u.id, { module: 'revenue-and-traction', entityId: out.id, action: 'grow_kpi_entered',
+    summary: `KPI entered for ${out.as_of}` });
   return out;
-}
-
-r.post('/markets', async (c) => {
-  try {
-    const user = await requireAuth(c); const b = await body(c);
-    const pid = await project(c, user, b.project, true);
-    const name = str(b.name, 120);
-    if (!name) throw new Refused(400, 'A market has a name', 'name');
-    const p = marketParts(b);
-    const id = uid();
-    try {
-      await c.env.DB.prepare(
-        `INSERT INTO markets (uid, project_id, name, state, demand_score, demand_source, regulation_score, regulation_source,
-           partners_score, partners_source, cost_score, cost_source, created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).bind(id, pid, name, oneOf(b.state, MARKET_STATES, 'state') ?? 'considering', p.demand_score, p.demand_source, p.regulation_score, p.regulation_source,
-        p.partners_score, p.partners_source, p.cost_score, p.cost_source, user.id, user.id).run();
-    } catch (e) {
-      if (String((e as Error).message).toLowerCase().includes('unique')) throw new Refused(409, 'That market is already on the list', 'name');
-      throw e;
-    }
-    await logWrite(c.env, user.id, 'grow_market_added', 'markets', id);
-    return c.json({ uid: id }, 201);
-  } catch (e) { return fail(c, e); }
-});
-
-r.patch('/markets/:uid', async (c) => {
-  try {
-    const user = await requireAuth(c); const b = await body(c);
-    const pid = await project(c, user, b.project, true);
-    const row = await owned<Record<string, unknown> & { id: number; state: string; decision: string | null }>(c, 'SELECT * FROM markets WHERE uid = ? AND project_id = ?', c.req.param('uid'), pid);
-    const p = marketParts(b, row);
-    const decision = b.decision === undefined ? row.decision : oneOf(b.decision, DECISIONS, 'decision');
-    await c.env.DB.prepare(
-      `UPDATE markets SET state = ?, decision = ?, decided_on = CASE WHEN ? IS NOT ? THEN ? ELSE decided_on END,
-         demand_score = ?, demand_source = ?, regulation_score = ?, regulation_source = ?, partners_score = ?, partners_source = ?,
-         cost_score = ?, cost_source = ?, updated_by = ?, updated_at = ? WHERE id = ?`,
-    ).bind(b.state === undefined ? row.state : oneOf(b.state, MARKET_STATES, 'state', true), decision, decision, row.decision, nowIso().slice(0, 10),
-      p.demand_score, p.demand_source, p.regulation_score, p.regulation_source, p.partners_score, p.partners_source,
-      p.cost_score, p.cost_source, user.id, nowIso(), row.id).run();
-    await logWrite(c.env, user.id, 'grow_market_updated', 'markets', c.req.param('uid'));
-    return c.json({ uid: c.req.param('uid') });
-  } catch (e) { return fail(c, e); }
-});
-
-r.post('/obligations', async (c) => {
-  try {
-    const user = await requireAuth(c); const b = await body(c);
-    const pid = await project(c, user, b.project, true);
-    const title = str(b.title, 200);
-    if (!title) throw new Refused(400, 'An obligation has a title', 'title');
-    const due = obligationDue(b.due_at);
-    const kind = oneOf(b.kind, OBLIGATION_KINDS, 'kind', true)!;
-    const completion = obligationCompletion(oneOf(b.status, OBLIGATION_STATES, 'status'));
-    const entity = await c.env.DB.prepare(
-      'SELECT e.id, e.jurisdiction FROM projects p JOIN entities e ON e.id = p.entity_id WHERE p.id = ?',
-    ).bind(pid).first<{ id: number; jurisdiction: string | null }>();
-    let id: number;
-    try {
-      const ins = await c.env.DB.prepare(
-        `INSERT INTO compliance_events (project_id, entity_id, jurisdiction, event_type, title, due_date,
-          completion_status, recurrence, source, kind, owner_name, owner_user_id, created_by_user_id, created_by,
-          completed_at, completed_by_user_id) VALUES (?, ?, ?, ?, ?, ?, ?, 'one_time', 'manual', ?, ?, ?, ?, ?, ?, ?)`,
-      ).bind(pid, entity?.id ?? null, entity?.jurisdiction || 'Unspecified', OBLIGATION_EVENTS[kind], title, due,
-        completion, kind, str(b.owner_name, 120), null, user.id, user.id,
-        completion === 'completed' ? nowIso() : null, completion === 'completed' ? user.id : null).run();
-      id = ins.meta.last_row_id;
-    } catch (error) { obligationClash(error, kind, due); }
-    await logWrite(c.env, user.id, 'grow_obligation_added', 'compliance_events', id);
-    return c.json({ id }, 201);
-  } catch (e) { return fail(c, e); }
-});
-
-r.patch('/obligations/:id', async (c) => {
-  try {
-    const user = await requireAuth(c); const b = await body(c);
-    const pid = await project(c, user, b.project, true);
-    const row = await owned<Row & { id: number; completion_status: string; owner_name: string | null; due_date: string;
-      completed_at: string | null; completed_by_user_id: number | null; reminders_sent_json: string }>(c,
-      'SELECT id, kind, event_type, completion_status, owner_name, due_date, completed_at, completed_by_user_id, reminders_sent_json FROM compliance_events WHERE id = ? AND project_id = ?',
-      Number(c.req.param('id')), pid);
-    const due = b.due_at === undefined ? row.due_date : obligationDue(b.due_at);
-    const completion = b.status === undefined ? row.completion_status : obligationCompletion(oneOf(b.status, OBLIGATION_STATES, 'status', true));
-    const completedAt = b.status === undefined ? row.completed_at : completion === 'completed' ? nowIso() : null;
-    const completedBy = b.status === undefined ? row.completed_by_user_id : completion === 'completed' ? user.id : null;
-    try {
-      await c.env.DB.prepare(
-        `UPDATE compliance_events SET completion_status = ?, owner_name = ?, due_date = ?, completed_at = ?,
-          completed_by_user_id = ?, reminders_sent_json = ?, updated_at = ? WHERE id = ?`,
-      ).bind(completion, b.owner_name === undefined ? row.owner_name : str(b.owner_name, 120), due, completedAt, completedBy,
-        due !== row.due_date ? '[]' : row.reminders_sent_json, nowIso(), row.id).run();
-    } catch (error) { obligationClash(error, obligationKind(row), due); }
-    await logWrite(c.env, user.id, 'grow_obligation_updated', 'compliance_events', row.id);
-    return c.json({ id: row.id });
-  } catch (e) { return fail(c, e); }
-});
-
-r.put('/checklist/:key', async (c) => {
-  try {
-    const user = await requireAuth(c); const b = await body(c);
-    const pid = await project(c, user, b.project, true);
-    const key = c.req.param('key');
-    if (!DURABILITY_ITEMS.some((i) => i.key === key)) throw new Refused(404, 'Not a checklist item');
-    const done = b.done === true;
-    await c.env.DB.prepare(
-      `INSERT INTO durability_checklist (project_id, item_key, done_at, done_by, updated_at) VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT(project_id, item_key) DO UPDATE SET done_at = excluded.done_at, done_by = excluded.done_by, updated_at = excluded.updated_at`,
-    ).bind(pid, key, done ? nowIso() : null, done ? user.id : null, nowIso()).run();
-    await logWrite(c.env, user.id, done ? 'grow_checklist_done' : 'grow_checklist_undone', 'durability_checklist', key);
-    return c.json({ key, done });
-  } catch (e) { return fail(c, e); }
-});
+}, true));
+r.post('/roles', write((c, u, pid, b) => openRole(c.env, pid, u, b), true));
+r.patch('/roles/:id', write((c, u, pid, b) => updateRole(c.env, pid, u, intId(param(c, 'id')), b)));
+r.patch('/applications/:id/stage', write((c, u, pid, b) => setApplicationStage(c.env, pid, u, intId(param(c, 'id')), b)));
+r.post('/partners', write((c, u, pid, b) => addPartner(c.env, pid, u, b), true));
+r.patch('/partners/:uid', write((c, u, pid, b) => updatePartner(c.env, pid, u, param(c, 'uid'), b)));
+r.put('/partners/:uid/revenue/:month', write((c, u, pid, b) => setPartnerRevenue(c.env, pid, u, param(c, 'uid'), param(c, 'month'), b)));
+r.post('/markets', write((c, u, pid, b) => addMarket(c.env, pid, u, b), true));
+r.patch('/markets/:uid', write((c, u, pid, b) => updateMarket(c.env, pid, u, param(c, 'uid'), b)));
+r.post('/obligations', write((c, u, pid, b) => addObligation(c.env, pid, u, b), true));
+r.patch('/obligations/:id', write((c, u, pid, b) => updateObligation(c.env, pid, u, intId(param(c, 'id')), b)));
+r.put('/checklist/:key', write(async (c, u, pid, b) => {
+  const key = param(c, 'key');
+  if (!DURABILITY_ITEMS.some((i) => i.key === key)) throw new Refused(404, 'Not a checklist item');
+  return setChecklistItem(c.env, pid, u, key, b.done === true);
+}));
 
 export default r;

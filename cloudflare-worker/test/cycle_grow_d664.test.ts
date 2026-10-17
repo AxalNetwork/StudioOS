@@ -2,7 +2,7 @@
  * D664 (#1477) — the Grow stores (migration 443) and /api/cycles/grow, on real
  * SQLite over the production baseline (compliance_events) and migrations
  * 119, 127 + 166 (contacts), 132 (job board), 311 (revenue ledger), 326 (team
- * roster), 437 (Share an update) and 443.
+ * roster), 437 (Share an update), 443 and 462 (D691, #1697).
  *
  * Run with:
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/cycle_grow_d664.test.ts
@@ -20,8 +20,8 @@ import cycleGrow, { shapeRecords } from '../src/routes/cycle_grow.ts';
 import revenue from '../src/routes/revenue.ts';
 import { ensureProjectMetricsSchema } from '../src/routes/progress.ts';
 import { CARD_STATES, MIN_POINTS, figure, pageOf, seriesState, settleCard } from '../src/services/cycleCards.ts';
-import { billingPeriods, cohortRetention, computeMovements, recomputeRevenueMovements, type LedgerRecurring } from '../src/services/revenueMovements.ts';
-import { movementGap, nrrFromLedger, planMonth, readiness, utmSource, DURABILITY_ITEMS } from '../src/services/growCycle.ts';
+import { billingPeriods, cohortRetention, computeMovements, movementGap, recomputeRevenueMovements, type LedgerRecurring } from '../src/services/revenueMovements.ts';
+import { nrrFromLedger, planMonth, readiness, utmSource, DURABILITY_ITEMS } from '../src/services/growCycle.ts';
 import { landReply } from '../src/services/updateShare.ts';
 import { STRIPE_NO_CUSTOMER } from '../src/services/revenueLedger.ts';
 import { d1Over } from './_d1_sqlite.mjs';
@@ -132,7 +132,7 @@ async function fixture() {
            CREATE TABLE projects (id INTEGER PRIMARY KEY, uid TEXT, name TEXT, founder_id INTEGER, company_id INTEGER, entity_id INTEGER, deleted_at TEXT);
            CREATE TABLE user_company_links (id INTEGER PRIMARY KEY, company_id INTEGER, user_id INTEGER);
            CREATE TABLE documents (id INTEGER PRIMARY KEY, project_id INTEGER);
-           CREATE TABLE activity_logs (id INTEGER PRIMARY KEY, action TEXT, details TEXT, user_id INTEGER, entity_type TEXT, entity_id TEXT);
+           CREATE TABLE activity_logs (id INTEGER PRIMARY KEY, project_id INTEGER, action TEXT, details TEXT, user_id INTEGER, entity_type TEXT, entity_id TEXT, actor TEXT);
            CREATE TABLE waitlist_signups (id INTEGER PRIMARY KEY, project_id INTEGER, email TEXT, audience TEXT, created_at TEXT DEFAULT (datetime('now')));
            CREATE TABLE spinout_lab_milestones (id INTEGER PRIMARY KEY, user_id INTEGER, week INTEGER, milestone_key TEXT, completed_at TEXT);`);
   const baseline = readFileSync(resolve(here, '../sql/schema_baseline.sql'), 'utf8');
@@ -143,6 +143,7 @@ async function fixture() {
   db.exec('ALTER TABLE contacts ADD COLUMN utm_json TEXT');
   db.exec(ddl('125')); db.exec(file('437'));
   db.exec(file('443'));
+  db.exec(file('462'));
   const u = db.prepare('INSERT INTO users (id, role, founder_id, name, email) VALUES (?, ?, ?, ?, ?)');
   u.run(FOUNDER, 'founder', 10, 'Fay', 'fay@co.example');
   u.run(ADVISOR, 'founder', 20, 'Ada', 'ada@co.example');
@@ -377,7 +378,7 @@ test('a market score needs its source; replies to a market ask are read under th
 
 test('team expansion: an application\'s stage moves; the card counts new applicants by stage', async () => {
   const f = await fixture();
-  f.db.exec(`INSERT INTO job_postings (id, slug, host_user_id, project_id, title, status) VALUES (5, 'eng', ${FOUNDER}, ${PID}, 'Engineer', 'open')`);
+  f.db.exec(`INSERT INTO job_postings (id, slug, host_user_id, project_id, title, status) VALUES (5, 'eng', ${FOUNDER}, ${PID}, 'Engineer', 'published')`);
   f.db.exec(`INSERT INTO job_applications (id, posting_id, email) VALUES (1, 5, 'a@x.example'), (2, 5, 'b@x.example')`);
   assert.equal((f.db.prepare('SELECT stage FROM job_applications WHERE id = 1').get() as any).stage, 'applied');
   const moved = await call(f, FOUNDER, 'PATCH', '/api/cycles/grow/applications/1/stage', { project: PID, stage: 'interview' });
@@ -419,7 +420,7 @@ test('durable company-building: the checklist starts from the Lab\'s gates; obli
   const mod = await module_(f, 'durable-company-building');
   assert.equal(mod.status, 200);
   assert.deepEqual(mod.body.records.rows.find((r: any) => r.id === ob.body.id),
-    { id: ob.body.id, title: 'Board meeting', kind: 'governance', due_at: due, owner_name: null, status: 'scheduled' });
+    { id: ob.body.id, title: 'Board meeting', kind: 'governance', due_at: due, owner_name: null, status: 'scheduled', repeats: 'once', due_window: 'next_30' });
   const list = Object.fromEntries(mod.body.parts.checklist.map((i: any) => [i.key, i]));
   assert.deepEqual([list.section83b_filed.done, list.section83b_filed.source], [true, 'Spin-Out Lab']);
   assert.deepEqual([list.key_person_cover.done, list.key_person_cover.source], [true, 'manual']);

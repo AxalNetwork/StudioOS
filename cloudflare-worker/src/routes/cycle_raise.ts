@@ -48,6 +48,7 @@ import {
   WriterError, scoreReadinessItem, rescoreReadiness, saveNarrativeVersion, updateNarrativeVersion, createDeckLink, updateDeckLink,
   addCapHolder, updateCapHolder, saveUseOfFunds, addProspect, updateProspect, setFileChecklistItem, setProspectNextStep,
 } from '../services/raiseWriters';
+import { hasRecords } from '../services/records';
 import { raisePhone } from '../services/cycleFocus';
 
 const cycleRaise = new Hono<{ Bindings: Env }>();
@@ -114,7 +115,8 @@ cycleRaise.get('/modules/:slug', async (c) => {
   // beside a card that could.
   let records: unknown;
   try {
-    records = await RECORDS_FOR[slug](ctx, rq);
+    // D691 (#1699): each row links to its record once Raise's record service is registered (D696).
+    records = { ...(await RECORDS_FOR[slug](ctx, rq)), linkable: hasRecords('raise') };
   } catch (e) {
     console.warn('[cycle_raise] records unreadable:', slug, (e as Error)?.message);
     records = { state: 'unreadable', reason: `${mod.name} records could not be read`, cols: [], rows: [], total: null, page: rq.page, page_size: null };

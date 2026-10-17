@@ -92,6 +92,18 @@ export function computeMovements(rows: LedgerRecurring[]): Movement[] {
   return out;
 }
 
+/**
+ * Why a movement cannot be read yet, or null when it can: churn needs two
+ * billing periods, and two that are consecutive months (a gap month is not
+ * recorded, so it is never compared).
+ */
+export function movementGap(rows: LedgerRecurring[]): string | null {
+  const months = byMonth(rows);
+  if (months.size < 2) return 'Not recorded: needs 2 billings';
+  for (const m of months.keys()) if (months.has(prevMonth(m))) return null;
+  return 'Not recorded: no two billing months in a row';
+}
+
 /** Billing periods recorded: months with at least one recurring row. */
 export const billingPeriods = (rows: LedgerRecurring[]) => byMonth(rows).size;
 

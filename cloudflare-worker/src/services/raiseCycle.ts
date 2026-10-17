@@ -97,7 +97,7 @@ const EVIDENCE_TONE: Record<string, string> = { measured: 'v1', pattern: 'v2', a
 export type ScoreRow = { item_id: number; item_key: string; score: number; evidence: string; missing: string | null; source: string; scored_at: string };
 export type ItemRow = { id: number; item_key: string; label: string; position: number };
 
-async function loadReadiness(ctx: Ctx): Promise<{ items: ItemRow[]; scores: ScoreRow[] }> {
+export async function loadReadiness(ctx: Ctx): Promise<{ items: ItemRow[]; scores: ScoreRow[] }> {
   const items = await ctx.env.DB.prepare(
     `SELECT id, item_key, label, position FROM readiness_items WHERE project_id = ? ORDER BY position, id`,
   ).bind(ctx.projectId).all<ItemRow>();
@@ -137,7 +137,10 @@ export function readinessHistory(scores: ScoreRow[]): Array<{ day: string; score
   return out;
 }
 
-export type ComputedScore = { key: ReadinessKey; score: number; evidence: 'measured'; missing: string | null };
+/** One input a computed check read: what it counted, and whether that input is met (D691 decision 8). */
+export type ReadRow = { a: string; b: string; c: 'Counted' | 'Partial' | 'Missing'; tone: 'ok' | 'amb' | 'bad' };
+export type ComputedScore = { key: ReadinessKey; score: number; evidence: 'measured'; missing: string | null; reads: ReadRow[] };
+const met = (ok: boolean, partial = false): Pick<ReadRow, 'c' | 'tone'> => (ok ? { c: 'Counted', tone: 'ok' } : partial ? { c: 'Partial', tone: 'amb' } : { c: 'Missing', tone: 'bad' });
 
 /**
  * The computed readiness checks — the Lab capital page's data-room readiness
@@ -158,34 +161,66 @@ export async function computeReadiness(env: Env, projectId: number): Promise<Com
   const latestVersion = await env.DB.prepare(
     `SELECT MAX(version) AS v FROM spinout_deck_overrides WHERE project_id = ? AND version > 0`,
   ).bind(projectId).first<{ v: number | null }>();
+  const staged = await env.DB.prepare(
+    'SELECT COUNT(*) AS files, COUNT(DISTINCT folder_id) AS folders FROM data_room_files WHERE project_id = ?',
+  ).bind(projectId).first<{ files: number; folders: number }>();
 
+  // Each check says what it read beside its score (decision 8); no score changes.
   const out: ComputedScore[] = [];
-  const hasDeck = Number(decks?.n ?? 0) > 0;
-  out.push({ key: 'deck', score: hasDeck ? 10 : 0, evidence: 'measured', missing: hasDeck ? null : 'Build the pitch deck.' });
+  const deckCount = Number(decks?.n ?? 0);
+  const hasDeck = deckCount > 0;
+  out.push({
+    key: 'deck', score: hasDeck ? 10 : 0, evidence: 'measured', missing: hasDeck ? null : 'Build the pitch deck.',
+    reads: [{ a: 'Pitch decks', b: hasDeck ? plural(deckCount, 'deck saved', 'decks saved') : 'none saved', ...met(hasDeck) }],
+  });
 
   const hasAlloc = String(p?.use_of_funds ?? '').trim().startsWith('[');
   const hasTarget = (num(p?.funding_needed) ?? 0) > 0;
   out.push({
     key: 'use_of_funds', score: hasAlloc && hasTarget ? 10 : hasAlloc || hasTarget ? 5 : 0, evidence: 'measured',
     missing: hasAlloc && hasTarget ? null : 'Set a raise target and a 100% allocation.',
+    reads: [
+      { a: 'Raise target', b: hasTarget ? usd(Number(p!.funding_needed)) : 'not set', ...met(hasTarget) },
+      { a: 'Allocation', b: hasAlloc ? 'split stored' : 'no split stored', ...met(hasAlloc) },
+    ],
   });
 
-  const hasCap = Number(scen?.n ?? 0) > 0;
-  out.push({ key: 'cap_table', score: hasCap ? 10 : 0, evidence: 'measured', missing: hasCap ? null : 'Set up the cap table.' });
+  const scenarios = Number(scen?.n ?? 0);
+  const hasCap = scenarios > 0;
+  out.push({
+    key: 'cap_table', score: hasCap ? 10 : 0, evidence: 'measured', missing: hasCap ? null : 'Set up the cap table.',
+    reads: [{ a: 'Cap table', b: hasCap ? 'a base scenario is saved' : 'no scenario saved', ...met(hasCap) }],
+  });
 
-  const traction = (num(p?.revenue) ?? 0) > 0 || (num(p?.mrr) ?? 0) > 0 || (num(p?.paying_customers) ?? 0) > 0;
-  out.push({ key: 'traction', score: traction ? 10 : 0, evidence: 'measured', missing: traction ? null : 'Log revenue or update your proof fields.' });
+  const fieldOf = (v: unknown) => (num(v) ?? 0) > 0;
+  const traction = fieldOf(p?.revenue) || fieldOf(p?.mrr) || fieldOf(p?.paying_customers);
+  out.push({
+    key: 'traction', score: traction ? 10 : 0, evidence: 'measured', missing: traction ? null : 'Log revenue or update your proof fields.',
+    reads: [
+      { a: 'Revenue', b: fieldOf(p?.revenue) ? usd(Number(p!.revenue)) : 'not recorded', ...met(fieldOf(p?.revenue), traction) },
+      { a: 'MRR', b: fieldOf(p?.mrr) ? usd(Number(p!.mrr)) : 'not recorded', ...met(fieldOf(p?.mrr), traction) },
+      { a: 'Paying customers', b: fieldOf(p?.paying_customers) ? String(Math.round(Number(p!.paying_customers))) : 'not recorded', ...met(fieldOf(p?.paying_customers), traction) },
+    ],
+  });
 
   const known = new Set((mapped.results || []).map((r) => r.checklist_item).filter((k) => CHECKLIST_KEYS.has(k)));
   const open = DILIGENCE_CHECKLIST.length - known.size;
+  const files = Number(staged?.files ?? 0);
   out.push({
     key: 'data_room', score: Math.round((known.size / DILIGENCE_CHECKLIST.length) * 10), evidence: 'measured',
     missing: open === 0 ? null : `${plural(open, 'checklist item has', 'checklist items have')} no file.`,
+    reads: [
+      { a: 'Files staged', b: files ? `${files} in ${plural(Number(staged?.folders ?? 0), 'folder', 'folders')}` : 'none uploaded', ...met(files > 0) },
+      { a: 'Diligence checklist covered', b: `${known.size} of ${DILIGENCE_CHECKLIST.length} items`, ...met(open === 0, known.size > 0) },
+    ],
   });
 
   const v = num(latestVersion?.v);
   if (v == null) {
-    out.push({ key: 'narrative', score: 0, evidence: 'measured', missing: 'Save an investor narrative version.' });
+    out.push({
+      key: 'narrative', score: 0, evidence: 'measured', missing: 'Save an investor narrative version.',
+      reads: [{ a: 'Narrative versions', b: 'none saved', ...met(false) }],
+    });
   } else {
     const m = await env.DB.prepare('SELECT COUNT(*) AS n FROM narrative_checks WHERE project_id = ? AND version = ?')
       .bind(projectId, v).first<{ n: number }>();
@@ -193,6 +228,10 @@ export async function computeReadiness(env: Env, projectId: number): Promise<Com
     out.push({
       key: 'narrative', score: Math.max(0, 10 - 2 * mismatches), evidence: 'measured',
       missing: mismatches === 0 ? null : `${plural(mismatches, 'figure differs', 'figures differ')} from the stored metrics.`,
+      reads: [
+        { a: 'Newest version', b: `v${v}`, ...met(true) },
+        { a: 'Consistency check', b: mismatches ? plural(mismatches, 'mismatch', 'mismatches') : 'no mismatch', ...met(mismatches === 0, true) },
+      ],
     });
   }
   return out;
@@ -389,9 +428,9 @@ export async function checkInputs(env: Env, projectId: number, version: number) 
   return { stated, metrics };
 }
 
-type VersionRow = { version: number; investor_type: string | null; deck_version: number | null; saved_at: string; mismatches: number };
+export type VersionRow = { version: number; investor_type: string | null; deck_version: number | null; saved_at: string; mismatches: number };
 
-async function loadVersions(ctx: Ctx): Promise<VersionRow[]> {
+export async function loadVersions(ctx: Ctx): Promise<VersionRow[]> {
   const res = await ctx.env.DB.prepare(
     `SELECT o.version, MAX(o.investor_type) AS investor_type, MAX(o.deck_version) AS deck_version, MAX(o.updated_at) AS saved_at,
             (SELECT COUNT(*) FROM narrative_checks c WHERE c.project_id = o.project_id AND c.version = o.version) AS mismatches
@@ -589,7 +628,7 @@ export const DILIGENCE_CHECKLIST = [
 ] as const;
 export const CHECKLIST_KEYS: Set<string> = new Set(DILIGENCE_CHECKLIST.map((c) => c.key));
 export const CHECKLIST_AREAS: string[] = [...new Set(DILIGENCE_CHECKLIST.map((c) => c.area))];
-const checklistLabel = (k: string | null) => DILIGENCE_CHECKLIST.find((c) => c.key === k)?.label ?? null;
+export const checklistLabel = (k: string | null) => DILIGENCE_CHECKLIST.find((c) => c.key === k)?.label ?? null;
 
 /** Each area's share of its checklist items that at least one file answers. */
 export function checklistCoverage(mapped: Iterable<string>): Array<{ area: string; pct: number }> {
@@ -639,7 +678,7 @@ export const ACCESS_TIERS = [
   { value: 'committed', label: 'Committed investors only' },
   { value: 'nobody', label: 'Nobody yet' },
 ] as const;
-const TIER_LABEL: Record<string, string> = Object.fromEntries(ACCESS_TIERS.map((t) => [t.value, t.label]));
+export const TIER_LABEL: Record<string, string> = Object.fromEntries(ACCESS_TIERS.map((t) => [t.value, t.label]));
 
 /**
  * A file's Access cell: its stored tier, whether an NDA gates it, and the day
@@ -656,7 +695,7 @@ export function accessText(f: { access_tier?: string | null; visibility?: string
  * The diligence requests the files name, by id: only a request of a case
  * about this venture (`subject_type 'project'`), so a foreign id names nothing.
  */
-async function requestTitles(ctx: Ctx, ids: number[]): Promise<Map<number, string>> {
+export async function requestTitles(ctx: Ctx, ids: number[]): Promise<Map<number, string>> {
   const out = new Map<number, string>();
   if (ids.length === 0) return out;
   const res = await ctx.env.DB.prepare(
@@ -746,27 +785,34 @@ export function groupShares(rows: CapRow[], side: 'before' | 'after'): number[] 
   return HOLDER_GROUPS.map((g) => Math.round(rows.filter((r) => r.group === g).reduce((a, r) => a + (r[side] ?? 0), 0) * 100) / 100);
 }
 
-async function loadCap(ctx: Ctx): Promise<{ exists: boolean; computed: boolean; roundName: string | null; rows: CapRow[]; inputs: any }> {
+/** The planned round as `simulate` stored it: its pre-money and the lines saying how each instrument converted. */
+export type PlannedRound = { name: string; preMoney: number | null; events: string[] };
+
+export async function loadCap(ctx: Ctx): Promise<{ exists: boolean; computed: boolean; roundName: string | null; rows: CapRow[]; inputs: any; round: PlannedRound | null }> {
   const s = await ctx.env.DB.prepare(
     'SELECT inputs_json, result_json FROM cap_table_scenarios WHERE project_id = ? AND COALESCE(is_variant, 0) = 0 ORDER BY updated_at DESC LIMIT 1',
   ).bind(ctx.projectId).first<{ inputs_json: string | null; result_json: string | null }>();
-  if (!s) return { exists: false, computed: false, roundName: null, rows: [], inputs: null };
+  if (!s) return { exists: false, computed: false, roundName: null, rows: [], inputs: null, round: null };
   let r: any = null;
   try { r = s.result_json ? JSON.parse(s.result_json) : null; } catch { r = null; }
   let inputs: any = null;
   try { inputs = s.inputs_json ? JSON.parse(s.inputs_json) : null; } catch { inputs = null; }
   const founding: Holder[] | null = Array.isArray(r?.founding) ? r.founding : null;
-  if (!founding) return { exists: true, computed: false, roundName: null, rows: [], inputs };
+  if (!founding) return { exists: true, computed: false, roundName: null, rows: [], inputs, round: null };
   const round = Array.isArray(r?.rounds) && r.rounds.length ? r.rounds[0] : null;
   const after: Holder[] | null = round && Array.isArray(round.ledger) ? round.ledger : null;
-  return { exists: true, computed: true, roundName: round ? String(round.name ?? 'the round') : null, rows: capRows(founding, after), inputs };
+  const planned = round ? {
+    name: String(round.name ?? 'the round'), preMoney: num(round.pre_money),
+    events: Array.isArray(round.events) ? round.events.map(String) : [],
+  } : null;
+  return { exists: true, computed: true, roundName: planned ? planned.name : null, rows: capRows(founding, after), inputs, round: planned };
 }
 
 const ENTRY_KEY = /^e-[1-9][0-9]{0,8}$/;
 const entryName = (e: any) => String(e?.name ?? '').trim();
 
 /** The `inputs_json` entry a ledger row comes from, matched the way `simulate` names the ledger. */
-function capEntryOf(row: { holder: string; type: string }, inputs: any): any | null {
+export function capEntryOf(row: { holder: string; type: string }, inputs: any): any | null {
   const holder = String(row.holder ?? '').trim();
   const list = row.type === 'founder' ? inputs?.founders : row.type === 'safe' ? inputs?.safes : row.type === 'preferred' ? inputs?.rounds : null;
   if (!Array.isArray(list)) return null;
@@ -798,7 +844,7 @@ const INSTRUMENTS = [
 ] as const;
 
 /** A row's instrument key and its cell: a SAFE or a note says its cap when the entry has one. */
-function instrumentOf(row: CapRow, inputs: any): { key: string; text: string } {
+export function instrumentOf(row: CapRow, inputs: any): { key: string; text: string } {
   if (row.type === 'founder') return { key: 'common', text: 'Common' };
   if (row.type === 'option_pool') return { key: 'options', text: 'Options' };
   if (row.type === 'preferred') return { key: 'preferred', text: 'Preferred' };
@@ -896,7 +942,7 @@ export function cashPath(cash: number | null, burn: number | null, months = 18, 
   return Array.from({ length: months + 1 }, (_, m) => Math.max(0, Math.round(cash + extra - burn * m)));
 }
 
-async function loadFunds(ctx: Ctx) {
+export async function loadFunds(ctx: Ctx) {
   const p = await ctx.env.DB.prepare('SELECT use_of_funds, funding_needed, use_of_funds_meta FROM projects WHERE id = ?')
     .bind(ctx.projectId).first<{ use_of_funds: string | null; funding_needed: number | null; use_of_funds_meta: string | null }>();
   const m = await ctx.env.DB.prepare(
@@ -941,33 +987,35 @@ export async function useOfFundsCard(ctx: Ctx): Promise<Card> {
 }
 
 /** "<label> by <date>" when the section's milestone is recorded (decision 9). */
-function milestoneText(m: { label?: unknown; by?: unknown } | undefined): string | null {
+export function milestoneText(m: { label?: unknown; by?: unknown } | undefined): string | null {
   const label = String(m?.label ?? '').trim();
   if (!label) return null;
   const by = String(m?.by ?? '').trim();
   return by ? `${label} by ${by}` : label;
 }
 
+/** One use-of-funds section's cells, read the same way by its list row and its record (decision 9). */
+export function fundCells(f: Awaited<ReturnType<typeof loadFunds>>, i: number) {
+  const s = FUND_SECTIONS[i];
+  const pct = f.alloc ? f.alloc[i] : 0;
+  const priced = s.bucket
+    ? Object.values(f.costs).filter((c) => c?.bucket === s.bucket && c.cost != null && c.cost !== '' && Number.isFinite(Number(c.cost)))
+    : [];
+  const cost = priced.reduce((a, c) => a + Number(c.cost), 0);
+  const amount = f.target != null ? Math.round((pct / 100) * f.target) : null;
+  return {
+    category: s.label, share: pct, amount,
+    // The amount over the runway it buys; with no runway set, Not recorded.
+    monthly: amount != null && f.runway != null ? Math.round(amount / f.runway) : null,
+    milestone: milestoneText(f.milestones[s.key])
+      ?? (priced.length ? `${plural(priced.length, 'milestone', 'milestones')} · ${usd(cost)}` : null),
+  };
+}
+
 async function fundsRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   const f = await loadFunds(ctx);
-  let rows = (f.alloc ?? []).map((pct, i) => {
-    const s = FUND_SECTIONS[i];
-    const priced = s.bucket
-      ? Object.values(f.costs).filter((c) => c?.bucket === s.bucket && c.cost != null && c.cost !== '' && Number.isFinite(Number(c.cost)))
-      : [];
-    const cost = priced.reduce((a, c) => a + Number(c.cost), 0);
-    const amount = f.target != null ? Math.round((pct / 100) * f.target) : null;
-    return {
-      id: s.key,
-      cells: {
-        category: s.label, share: pct, amount,
-        // The amount over the runway it buys; with no runway set, Not recorded.
-        monthly: amount != null && f.runway != null ? Math.round(amount / f.runway) : null,
-        milestone: milestoneText(f.milestones[s.key])
-          ?? (priced.length ? `${plural(priced.length, 'milestone', 'milestones')} · ${usd(cost)}` : null),
-      },
-    };
-  }).filter((r) => r.cells.share > 0 && has(rq.q, r.cells.category));
+  let rows = (f.alloc ?? []).map((_pct, i) => ({ id: FUND_SECTIONS[i].key, cells: fundCells(f, i) }))
+    .filter((r) => r.cells.share > 0 && has(rq.q, r.cells.category));
   if (rq.filter.category) rows = rows.filter((r) => r.id === rq.filter.category);
   // Share, largest first, is the default.
   if (rq.sort !== 'order') rows.sort((a, b) => b.cells.share - a.cells.share);
@@ -989,7 +1037,7 @@ async function fundsRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
 export const STAGES = ['to_contact', 'contacted', 'meeting', 'diligence', 'committed'] as const;
 const STAGE_LABEL: Record<string, string> = { to_contact: 'To contact', contacted: 'Contacted', meeting: 'Meeting', diligence: 'Diligence', committed: 'Committed', passed: 'Passed' };
 /** The list names the first stage as the canvas does (D691 decision 10); the stored value stays `to_contact`. */
-const LIST_STAGE_LABEL: Record<string, string> = { ...STAGE_LABEL, to_contact: 'Identified' };
+export const LIST_STAGE_LABEL: Record<string, string> = { ...STAGE_LABEL, to_contact: 'Identified' };
 export const IN_CONVERSATION = ['contacted', 'meeting', 'diligence'];
 
 export type ProspectRow = {
@@ -1111,32 +1159,37 @@ export function fundFit(focus: string | null | undefined, sector: string | null 
   return fund.some((m) => venture.includes(m)) ? 'fits' : 'outside';
 }
 
+/** A prospect's linked fund, as the directory serves it, and its Fit against the venture. */
+export type ProspectFund = { fit: Fit; focus: string | null; fundSizeCents: number | null; sector: string | null };
+
 /**
- * Each prospect's Fit, by prospect id. Only a prospect linked to a fund the
- * directory still serves has one: the funds are read `FROM SERVED_FUNDS`, so a
- * list whose terms say 'not allowed' is never read. No link, no Fit.
+ * Each prospect's fund and Fit, by prospect id. Only a prospect linked to a
+ * fund the directory still serves has one: the funds are read `FROM
+ * SERVED_FUNDS`, so a list whose terms say 'not allowed' is never read. No
+ * link, no Fit.
  */
-async function prospectFits(ctx: Ctx): Promise<Map<number, Fit>> {
-  const out = new Map<number, Fit>();
+export async function prospectFunds(ctx: Ctx): Promise<Map<number, ProspectFund>> {
+  const out = new Map<number, ProspectFund>();
   const linked = await ctx.env.DB.prepare(
     'SELECT id, research_fund_uid FROM raise_prospects WHERE project_id = ? AND research_fund_uid IS NOT NULL',
   ).bind(ctx.projectId).all<{ id: number; research_fund_uid: string }>();
   const rows = linked.results || [];
   if (rows.length === 0) return out;
   const funds = await ctx.env.DB.prepare(
-    `SELECT f.uid, f.sector_focus FROM ${SERVED_FUNDS} AS f WHERE f.uid IN (SELECT value FROM json_each(?))`,
-  ).bind(JSON.stringify([...new Set(rows.map((r) => r.research_fund_uid))])).all<{ uid: string; sector_focus: string | null }>();
-  const focus = new Map((funds.results || []).map((f) => [String(f.uid), f.sector_focus]));
+    `SELECT f.uid, f.sector_focus, f.fund_size_cents FROM ${SERVED_FUNDS} AS f WHERE f.uid IN (SELECT value FROM json_each(?))`,
+  ).bind(JSON.stringify([...new Set(rows.map((r) => r.research_fund_uid))])).all<{ uid: string; sector_focus: string | null; fund_size_cents: number | null }>();
+  const served = new Map((funds.results || []).map((f) => [String(f.uid), f]));
   const p = await ctx.env.DB.prepare('SELECT sector FROM projects WHERE id = ?').bind(ctx.projectId).first<{ sector: string | null }>();
   for (const r of rows) {
-    if (focus.has(r.research_fund_uid)) out.set(Number(r.id), fundFit(focus.get(r.research_fund_uid), p?.sector));
+    const f = served.get(r.research_fund_uid);
+    if (f) out.set(Number(r.id), { fit: fundFit(f.sector_focus, p?.sector), focus: f.sector_focus, fundSizeCents: num(f.fund_size_cents), sector: p?.sector ?? null });
   }
   return out;
 }
 
 async function capitalRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
-  const fits = await prospectFits(ctx);
-  const fitOf = (p: ProspectRow): Fit | 'not_recorded' => fits.get(Number(p.id)) ?? 'not_recorded';
+  const funds = await prospectFunds(ctx);
+  const fitOf = (p: ProspectRow): Fit | 'not_recorded' => funds.get(Number(p.id))?.fit ?? 'not_recorded';
   let rows = (await loadProspects(ctx.env, ctx.projectId)).filter((p) => has(rq.q, p.name, p.firm, p.warm_path));
   if (rq.filter.stage) rows = rows.filter((p) => p.stage === rq.filter.stage);
   if (rq.filter.fit) rows = rows.filter((p) => fitOf(p) === rq.filter.fit);

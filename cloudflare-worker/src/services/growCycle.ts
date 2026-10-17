@@ -26,7 +26,7 @@ import type { Env } from '../types';
 import {
   type Card, type Figure, figure, notRecordedFigure, seriesState,
 } from './cycleCards';
-import { billingPeriods, byMonth, cohortRetention, computeMovements, prevMonth, readRecurring, type LedgerRecurring, type Movement } from './revenueMovements';
+import { billingPeriods, byMonth, cohortRetention, computeMovements, movementGap, prevMonth, readRecurring, type LedgerRecurring, type Movement } from './revenueMovements';
 
 export const GROW_QUESTION = 'How does this venture become larger and more enduring?';
 
@@ -111,18 +111,6 @@ export async function readSnapshots(env: Env, projectId: number): Promise<Snap[]
     `SELECT snapshot_date, source, mrr, paying_accounts FROM project_metrics WHERE project_id = ? ORDER BY snapshot_date`,
   ).bind(projectId).all<Snap>();
   return r.results || [];
-}
-
-/**
- * Why a movement cannot be read yet, or null when it can: churn needs two
- * billing periods, and two that are consecutive months (a gap month is not
- * recorded, so it is never compared).
- */
-export function movementGap(rows: LedgerRecurring[]): string | null {
-  const months = byMonth(rows);
-  if (months.size < 2) return 'Not recorded: needs 2 billings';
-  for (const m of months.keys()) if (months.has(prevMonth(m))) return null;
-  return 'Not recorded: no two billing months in a row';
 }
 
 /** Net revenue retention for the latest split month: (start + expansion - churned) / start. */
