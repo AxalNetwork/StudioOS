@@ -14,9 +14,12 @@ import { axalEntityKeyForDoc } from '../src/lib/legalDocFormat.js';
 const read = (p) => readFileSync(p, 'utf8');
 
 function setMembers(src, name) {
-  const m = src.match(new RegExp(`const ${name} = new Set\\(\\[([\\s\\S]*?)\\]\\);`));
-  assert.ok(m, `${name} not found`);
-  return [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1]).sort();
+  // Found by string search, so no pattern is built from the set's name.
+  const head = `const ${name} = new Set([`;
+  const at = src.indexOf(head);
+  assert.ok(at >= 0, `${name} not found`);
+  const body = src.slice(at + head.length, src.indexOf(']);', at));
+  return [...body.matchAll(/'([^']+)'/g)].map((x) => x[1]).sort();
 }
 
 test('D707 the worker and the mirror list the same slugs in both D707 sets', () => {

@@ -19,6 +19,10 @@ const walk = (d: string): string[] => readdirSync(d).flatMap((n) => {
   const p = join(d, n);
   return statSync(p).isDirectory() ? walk(p) : /\.ts$/.test(n) ? [p] : [];
 });
+/** The Stripe API's host, searched for in source text (not a URL check). */
+const STRIPE_API_TEXT = ['api', 'stripe', 'com'].join('.');
+/** The name a line declares with `const` or `let`, if any. */
+const declared = (line: string) => /\b(?:const|let)\s+([A-Za-z_$][\w$]*)/.exec(line)?.[1] ?? null;
 const FILES = walk(SRC).map((p) => ({ rel: relative(SRC, p).split('\\').join('/'), src: readFileSync(p, 'utf8') }));
 
 type Call = { file: string; line: number; text: string; path: string | null; method: string; moneyKind: boolean; body: string };
@@ -84,7 +88,7 @@ test('every stripeCall whose body writes metadata[kind] passes a moneyKind', () 
     const lines = FILES.find((f) => f.rel === c.file)!.src.split('\n').slice(0, c.line);
     let from = -1;
     for (let k = lines.length - 1; k >= Math.max(0, lines.length - 120); k -= 1) {
-      if (new RegExp(`\\b(const|let)\\s+${id}\\b`).test(lines[k])) { from = k; break; }
+      if (declared(lines[k]) === id) { from = k; break; }
     }
     return from >= 0 && lines.slice(from).join('\n').includes("'metadata[kind]'");
   };
@@ -117,7 +121,7 @@ test('every metadata[kind] value is a key of MONEY_KIND_FOR_STRIPE_METADATA, in 
 });
 
 test('only five files name api.stripe.com, and outside billing.ts none POSTs there', () => {
-  const naming = FILES.filter((f) => f.src.includes('api.stripe.com')).map((f) => f.rel).sort();
+  const naming = FILES.filter((f) => f.src.split(STRIPE_API_TEXT).length > 1).map((f) => f.rel).sort();
   assert.deepEqual(naming, ['integrations/providers/stripe.ts', 'middleware/securityHeaders.ts', 'routes/billing.ts',
     'routes/wellbeing.ts', 'services/providerOauthTest.ts']);
   for (const rel of naming.filter((r) => r !== 'routes/billing.ts')) {

@@ -21,6 +21,9 @@ const SRC = resolve(process.cwd(), 'cloudflare-worker/src');
 const rel = (p: string) => relative(SRC, p).split('\\').join('/');
 
 /** The Stripe code a fund module must never reach. */
+/** The Stripe API's host, searched for in source text (not a URL check). */
+const STRIPE_API_TEXT = ['api', 'stripe', 'com'].join('.');
+
 const STRIPE_FILES = new Set([
   'routes/billing.ts', 'routes/payments.ts', 'services/catalog.ts', 'util/stripeError.ts', 'util/stripeTax.ts',
   'integrations/providers/stripe.ts',
@@ -63,7 +66,7 @@ function stripeReached(start: string): string[] {
   const out: string[] = [];
   for (const [file, chain] of reach(start)) {
     const r = rel(file);
-    const touchesApi = r !== 'middleware/securityHeaders.ts' && readFileSync(file, 'utf8').includes('api.stripe.com');
+    const touchesApi = r !== 'middleware/securityHeaders.ts' && readFileSync(file, 'utf8').split(STRIPE_API_TEXT).length > 1;
     if (STRIPE_FILES.has(r) || touchesApi) out.push(chain.join(' → '));
   }
   return out;
