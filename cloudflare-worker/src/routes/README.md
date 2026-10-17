@@ -53,6 +53,8 @@ widened guard on this very sentence, which is the rule working.)
                                          (D655: GET /:uid/sync-status, GET /:uid/fed, GET|PUT /:uid/repositories for GitHub)
 /api/infra         → infra.ts
 /api/funds         → funds.ts
+/api/fund-admin    → fund_admin.ts      (D714: GET /access, which fund acts this admin may take, from FUND_ACTS)
+/api/fund-reporting → fund_reporting.ts
 /api/liquidity     → liquidity.ts
 /api/email         → email.ts
 /api/pipeline      → pipeline.ts
@@ -72,11 +74,13 @@ widened guard on this very sentence, which is the rule working.)
 /api/admin/learning → admin_learning.ts (authoring the Learning center; Super Admin only; D557)
 /api/learning      → learning_assessment.ts (exercises and exams, graded on the server; D559)
 /api/admin/learning → admin_learning_assessment.ts (authoring exercises and exams, reviewing submissions; D559)
+/api/admin/money-rails → admin_money_rails.ts (each Axal entity's role and each money kind's rail; admin only; D707)
 /api/ai           → ai.ts              (the caller's own AI spend, by task, page, model and day; the rate card at /rates, D641)
 /api/founder/validate → founder_validate_structure.ts (structure a session's transcript, compare two runs, ask it; accept, edit then accept or discard each placement; D658)
 /api/founder/validate → founder_validate_meetings.ts (D684: schedule, list, cancel and import a Zoom or Google Meet call on an interview)
 /api/channels         → founder_validate_meetings.ts `zoomWebhook` (the public Zoom webhook, mounted first), then channels.ts (D684: Telegram and WhatsApp connections, the conversation inbox, replies, and their public webhooks)
 /api/admin/channels   → channels.ts `channelsAdmin` (D684: the channels bot's setWebhook; super admin)
+/api/admin/bank-accounts → admin_bank_accounts.ts (D708: each Axal entity's bank accounts, masked, with add, relabel, purposes, retire and a recorded reveal; Super Admin, HQ only; mounted beside /api/admin/stripe, before the /api/admin catch-all)
 /api/admin/mercury    → admin_mercury.ts (D710: each Axal entity's read-only Mercury connection, its accounts, transactions and reconciliation matches; connect is the Super Admin's behind the write bar, the rest an Admin's on HQ)
 /api/eadwyn       → eadwyn.ts          (the Worker AI rail's conversations, their connector switches, and Send/Cancel for a write Eadwyn proposed; D652)
 /api/wellbeing     → wellbeing.ts       (check-ins, the expert directory and bookings; sample experts are seeded outside production only and never shown to members, D643)

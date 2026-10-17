@@ -257,13 +257,14 @@ test('roadmap uses recorded done moves, owner, KPI and target date', async () =>
     INSERT INTO okr_column_moves(id,project_id,okr_id,to_status,moved_at) VALUES
       (1,101,2,'done','${month}-01 12:00:00'), (2,101,2,'done','${month}-01 13:00:00'),
       (3,101,3,'done','${today}T00:00:00Z');`);
-  const edited = await call(env, '/api/cycles/build/roadmap/1?project=101', 1, 'PATCH', { owner_user_id: 1, target_date: '2026-11-30', kpi_key: 'activation' });
+  const edited = await call(env, '/api/cycles/build/roadmap/1?project=101', 1, 'PATCH', { owner_user_id: 1, target_date: '2026-11-30', kpi_key: 'mrr' });
   assert.equal(edited.status, 200);
   const module = await call(env, '/api/cycles/build/modules/product-roadmap?project=101&filter=column:now');
   assert.equal(module.body.records.total, 1);
   assert.equal(module.body.records.rows[0].cells.owner, 'One');
   assert.equal(cardView(module.body.card).state, 'ok');
-  assert.equal(module.body.records.rows[0].cells.moves, 'activation');
+  // D690 (#1695 test 13): 'activation' is off the KPI list, so the item moves MRR.
+  assert.equal(module.body.records.rows[0].cells.moves, 'mrr');
   assert.equal(module.body.records.rows[0].cells.date, '2026-11-30');
   const overview = await call(env, '/api/cycles/build/overview?project=101');
   assert.equal(overview.body.figures[2].value, 2);

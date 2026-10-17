@@ -124,7 +124,7 @@ test('the registry check: a mismatch or another entity\'s account is 409 and sto
   withRegistry(taken.db, [['holdings', 'checking', '1111']]);
   taken.db.exec("INSERT INTO mercury_entity_connections (uid, entity_key, status, credentials_enc, connected_by) VALUES ('c-h', 'holdings', 'active', 'v1.x', 901)");
   taken.db.exec("INSERT INTO mercury_accounts (uid, mercury_account_id, connection_id, entity_key, kind, last_four) VALUES ('a-h', 'acc-gp-chk', 1, 'holdings', 'checking', '1111')");
-  taken.db.exec("DELETE FROM entity_bank_accounts WHERE entity_key = 'holdings' AND account_last4 = '1111'");
+  taken.db.exec("UPDATE entity_bank_accounts SET status = 'retired', retired_at = datetime('now'), retired_reason = 'Fixture retirement' WHERE entity_key = 'holdings' AND account_last4 = '1111'");
   const r3 = await connect(taken);
   assert.deepEqual([r3.status, r3.body.code], [409, 'mercury_account_taken']);
   // A different organization name: 200, flagged.
@@ -138,12 +138,12 @@ test('the registry check: a mismatch or another entity\'s account is 409 and sto
     [['acc-gp-chk', 1], ['acc-gp-new', 0], ['acc-gp-sav', 1]]);
 });
 
-test('with #1773\'s registry absent, a connect answers 503 and stores nothing; an unknown entity is 404', async () => {
+test('with no account in #1773\'s registry, a connect answers 409 and stores nothing; an unknown entity is 404', async () => {
   const s = setup({ registry: false });
   const r = await connect(s);
-  assert.deepEqual([r.status, r.body.code], [503, 'bank_registry_unavailable']);
+  assert.deepEqual([r.status, r.body.code], [409, 'mercury_entity_mismatch']);
   assert.equal(rows(s.db, 'SELECT * FROM mercury_entity_connections').length, 0);
-  assert.equal(s.stub.calls.length, 0);
+  assert.equal(rows(s.db, 'SELECT * FROM mercury_accounts').length, 0);
   const t = setup();
   assert.equal((await connect(t, TOKEN, JTI.superFresh, 'treasury')).status, 404);
 });

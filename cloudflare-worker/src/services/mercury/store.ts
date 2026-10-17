@@ -14,8 +14,7 @@
  *
  * THE REGISTRY CHECK reads only the entity key and the clear last four of
  * #1773's `entity_bank_accounts`. It never decrypts a number and never calls
- * `payInstructionsFor`. Until that table exists, a connect answers 503
- * `bank_registry_unavailable` and stores nothing.
+ * `payInstructionsFor`.
  *
  * Only `routes/admin_mercury.ts`, `services/mercury/*` and `index.ts`'s cron
  * block import this file (decision 11; `mercury_read_only_d710.test.mjs`).
@@ -90,15 +89,8 @@ export function orgNameDiffers(entityKey: AxalEntityKey, orgName: string | null)
   return norm(orgName) !== norm(AXAL_ENTITIES[entityKey].name);
 }
 
-/**
- * #1773's registry, by entity and clear last four only. Null when the table
- * does not exist yet (`bank_registry_unavailable`).
- */
-export async function registryRows(env: Env): Promise<Array<{ entity_key: string; last_four: string }> | null> {
-  const exists = await env.DB.prepare(
-    "SELECT 1 AS ok FROM sqlite_master WHERE type = 'table' AND name = 'entity_bank_accounts'",
-  ).first<{ ok: number }>();
-  if (!exists) return null;
+/** #1773's registry (migration 472), active rows by entity and clear last four only. */
+export async function registryRows(env: Env): Promise<Array<{ entity_key: string; last_four: string }>> {
   const r = await env.DB.prepare(
     "SELECT entity_key, account_last4 AS last_four FROM entity_bank_accounts WHERE status = 'active'",
   ).all<{ entity_key: string; last_four: string }>();

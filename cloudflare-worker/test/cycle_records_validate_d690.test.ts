@@ -18,7 +18,7 @@ const BASE = readFileSync(resolve('cloudflare-worker/sql/schema_baseline.sql'), 
 const migration = (name: string) => readFileSync(resolve('cloudflare-worker/sql/migrations', name), 'utf8');
 const KEY = ['fixture', 'key', 'for', 'd690', 'tests'].join('-');
 const P = 1, OTHER_P = 2;
-const roles: Record<number, string> = { 10: 'founder', 20: 'founder', 30: 'admin', 40: 'partner', 50: 'investor', 60: 'exploring' };
+const roles: Record<number, string> = { 10: 'founder', 20: 'founder', 30: 'admin', 40: 'partner', 50: 'investor', 60: 'exploring', 70: 'advisor' };
 
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
@@ -42,12 +42,24 @@ function fixture() {
   db.exec(migration('249_project_metrics.sql'));
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id, spinout_lab_active) VALUES (?, ?, ?, ?, 1, ?, ?)');
   for (const [id, role, founder] of [[10, 'founder', 1001], [20, 'founder', 1002], [30, 'admin', null],
-    [40, 'partner', null], [50, 'investor', null], [60, 'exploring', 1001]] as const) {
+    [40, 'partner', null], [50, 'investor', null], [60, 'exploring', 1001], [70, 'advisor', null]] as const) {
     u.run(id, role, `User ${id}`, `user${id}@example.test`, founder, id === 60 ? 1 : 0);
   }
   db.exec("INSERT INTO projects (id, name, founder_id) VALUES (1, 'Project One', 1001), (2, 'Project Two', 1002)");
   db.exec("INSERT INTO pain_groups (id, project_id, title) VALUES (11, 1, 'Theme One'), (22, 2, 'Theme Two')");
+  db.exec("INSERT INTO discovery_interviews (id, project_id, interviewee_name) VALUES (31, 1, 'Fixture Person')");
   return db;
+}
+
+/** Every SQL text the route prepares, so a test can say which tables were never read. */
+const prepared: string[] = [];
+function recording(db: DatabaseSync) {
+  const d1 = d1Over(db) as any;
+  return new Proxy(d1, { get(target, key) {
+    if (key === 'prepare') return (sql: string) => { prepared.push(sql); return target.prepare(sql); };
+    const value = target[key];
+    return typeof value === 'function' ? value.bind(target) : value;
+  } });
 }
 
 const spec = {
@@ -68,8 +80,9 @@ const spec = {
     async execute() { return { ok: true }; } }]; },
   async formOptions(_ctx: unknown, query: Record<string, string>) { return query; },
 };
+// Customer research's fixture reads its real store, so its record ids are interviews.
 const registry: RecordRegistry = { validate: { 'problem-discovery': spec,
-  'customer-research': { ...spec, formOptions: undefined } } };
+  'customer-research': { ...spec, store: 'discovery_interviews', formOptions: undefined } } };
 
 async function call(db: DatabaseSync, who: number, method: string, path: string, body?: unknown,
   activeRegistry: RecordRegistry = registry) {
@@ -83,7 +96,7 @@ async function call(db: DatabaseSync, who: number, method: string, path: string,
     Authorization: `Bearer ${token}`,
     ...(body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
   }, body: body instanceof FormData ? body : body === undefined ? undefined : JSON.stringify(body) },
-  { DB: d1Over(db), JWT_SECRET: KEY, ENVIRONMENT: 'development' } as any);
+  { DB: recording(db), JWT_SECRET: KEY, ENVIRONMENT: 'development' } as any);
   return { status: res.status, body: await res.json().catch(() => null) as any };
 }
 
@@ -95,10 +108,92 @@ test('D690 record contract refuses unknown cycles and foreign or malformed IDs b
   for (const suffix of ['22?project=1', 'Acme%20Corp?project=1']) {
     assert.equal((await call(db, 10, 'GET', base + suffix)).status, 404);
   }
-  assert.equal((await call(db, 10, 'GET', base + '22/activity?project=1')).status, 404);
-  assert.equal((await call(db, 10, 'POST', base + '22/actions/edit?project=1')).status, 404);
-  assert.equal((await call(db, 10, 'PATCH', base + '22?project=1')).status, 404);
-  assert.equal((await call(db, 10, 'DELETE', base + '22?project=1')).status, 404);
+  // A malformed id answers 404 before the project or the store is read.
+  prepared.length = 0;
+  const acme = await call(db, 10, 'GET', base + 'Acme%20Corp?project=1');
+  assert.deepEqual([acme.status, acme.body.detail], [404, 'Record not found.']);
+  assert.deepEqual(prepared.filter((sql) => /FROM projects|FROM pain_groups/.test(sql)), [],
+    'a malformed id reached a project or store query');
+  // Admin, founder and partner alike: a venture-B id under ?project=1 is "Record
+  // not found.", the ownership refusal, never another route's 404.
+  for (const who of [10, 30, 40]) {
+    for (const suffix of ['22?project=1', '22/activity?project=1']) {
+      const res = await call(db, who, 'GET', base + suffix);
+      assert.deepEqual([res.status, res.body.detail], [404, 'Record not found.'], `${who} GET ${suffix}`);
+    }
+  }
+  for (const [method, suffix] of [['POST', '22/actions/edit?project=1'], ['PATCH', '22?project=1'], ['DELETE', '22?project=1']] as const) {
+    for (const who of [10, 30]) {
+      const res = await call(db, who, method, base + suffix);
+      assert.deepEqual([res.status, res.body.detail], [404, 'Record not found.'], `${who} ${method} ${suffix}`);
+    }
+    // A partner is below the write gate, which answers before ownership.
+    assert.equal((await call(db, 40, method, base + suffix)).status, 403, `partner ${method}`);
+  }
+});
+
+test('D690 every role gets decision 2\'s answer on a Customer research and a Problem discovery record', async () => {
+  const db = fixture();
+  for (const [slug, id] of [['problem-discovery', '11'], ['customer-research', '31']] as const) {
+    const base = `/validate/modules/${slug}/records/${id}`;
+    for (const who of [10, 60, 30]) {
+      const read = await call(db, who, 'GET', `${base}?project=1`);
+      assert.equal(read.status, 200, `${who} reads ${slug}`);
+      assert.deepEqual(read.body.main.map((s: any) => s.key), ['public', 'writer'], `${who} ${slug}`);
+      assert.deepEqual(read.body.actions.map((a: any) => a.key), ['edit'], `${who} ${slug}`);
+      assert.equal((await call(db, who, 'GET', `${base}/activity?project=1`)).status, 200, `${who} activity ${slug}`);
+      assert.equal((await call(db, who, 'GET', `/validate/modules/${slug}/form-options?project=1`)).status, 200, `${who} form-options ${slug}`);
+    }
+    const partner = await call(db, 40, 'GET', `${base}?project=1`);
+    assert.equal(partner.status, 200);
+    assert.deepEqual(partner.body.main.map((s: any) => s.key), ['public']);
+    assert.deepEqual(partner.body.actions, []);
+    assert.equal((await call(db, 40, 'GET', `${base}/activity?project=1`)).status, 200);
+    assert.equal((await call(db, 40, 'GET', `/validate/modules/${slug}/form-options?project=1`)).status, 403);
+    // An advisor, an investor and another venture's founder are refused all three.
+    for (const who of [70, 50, 20]) {
+      assert.equal((await call(db, who, 'GET', `${base}?project=1`)).status, 403, `${who} reads ${slug}`);
+      assert.equal((await call(db, who, 'GET', `${base}/activity?project=1`)).status, 403, `${who} activity ${slug}`);
+      assert.equal((await call(db, who, 'GET', `/validate/modules/${slug}/form-options?project=1`)).status, 403, `${who} form-options ${slug}`);
+    }
+  }
+});
+
+test('D690 Next for this record follows the canvas rule', async () => {
+  const db = fixture();
+  const record = spec.record;
+  const at = (rows: any[], actions: any[], sectionAction?: string) => ({ validate: { 'problem-discovery': {
+    ...spec, record,
+    sections: [{ key: 'main', title: 'Section title', async read() { return { rows, action: sectionAction }; } }],
+    async actions() { return actions.map((a) => ({ kind: 'write' as const, async execute() { return { ok: true }; }, ...a })); },
+  } } }) as RecordRegistry;
+  const next = async (registry: RecordRegistry, who = 10) =>
+    (await call(db, who, 'GET', '/validate/modules/problem-discovery/records/11?project=1', undefined, registry)).body.next;
+  const edit = { key: 'edit', label: 'Edit' };
+  const primary = { key: 'log', label: 'Log interview', tone: 'primary' };
+  const last = { key: 'archive', label: 'Archive' };
+  // The status word may sit anywhere in the cell, and its row's second line follows a middle dot.
+  assert.deepEqual(await next(at([{ a: 'Done row', c: 'Closed' }, { a: 'Call the buyer', b: 'Tuesday', c: 'Awaiting Pending reply', action: 'edit' }], [edit])),
+    { text: 'Call the buyer · Tuesday', action: 'edit' });
+  // Case-sensitive, as the canvas tests it: a lower-case "open" is not a status.
+  assert.deepEqual(await next(at([{ a: 'Quiet row', c: 'open' }], [edit, primary, last])), { text: 'Log interview', action: 'log' });
+  // The section fallback names the declared action's label, not the section.
+  assert.deepEqual(await next(at([], [edit, primary], 'edit')), { text: 'Edit', action: 'edit' });
+  // With no primary tone, the primary is the last declared action.
+  assert.deepEqual(await next(at([], [edit, last])), { text: 'Archive', action: 'archive' });
+  // Nothing applies: no next, rather than a sentence standing in for one.
+  assert.equal(await next(at([], []), 40), null);
+});
+
+test('D690 an investor sign-up has no Demand record address on the record or activity route', async () => {
+  const db = fixture();
+  db.exec("INSERT INTO waitlist_signups (id, project_id, audience, email) VALUES (23, 1, 'investor', 'investor@example.test'), (24, 1, 'customer', 'customer@example.test')");
+  const demand: RecordRegistry = { validate: { 'demand-signals': { ...spec, store: 'waitlist_signups' } } };
+  for (const suffix of ['', '/activity']) {
+    const investor = await call(db, 10, 'GET', `/validate/modules/demand-signals/records/waitlist-23${suffix}?project=1`, undefined, demand);
+    assert.deepEqual([investor.status, investor.body.detail], [404, 'Record not found.'], `investor ${suffix}`);
+    assert.equal((await call(db, 10, 'GET', `/validate/modules/demand-signals/records/waitlist-24${suffix}?project=1`, undefined, demand)).status, 200);
+  }
 });
 
 test('D690 section, role, action and form-options gates share the module contract', async () => {
@@ -188,7 +283,9 @@ test('D690 ownedRow binds every existing Validate store to one venture', async (
     const base = `/validate/modules/problem-discovery/records/${id}`;
     for (const [method, suffix] of [['GET', ''], ['GET', '/activity'], ['POST', '/actions/edit'],
       ['PATCH', ''], ['DELETE', '']] as const) {
-      assert.equal((await call(db, 10, method, `${base}${suffix}?project=1`, undefined, testRegistry)).status, 404,
+      // The ownership refusal itself: an undeclared DELETE would also be a 404, as "No such action".
+      const res = await call(db, 10, method, `${base}${suffix}?project=1`, undefined, testRegistry);
+      assert.deepEqual([res.status, res.body.detail], [404, 'Record not found.'],
         `${store} ${method} ${suffix} must refuse B's id`);
     }
   }
@@ -234,6 +331,9 @@ test('D690 Validate rows use group, prefixed demand and validated candidate IDs'
 /** Venture A (project 1) with one record of each kind, and venture B's (project 2) beside it. */
 function seeded() {
   const db = fixture();
+  // These tests count project 1's interviews; they seed their own, so the
+  // fixture's generic interview (31, for the record-contract tests) goes first.
+  db.exec('DELETE FROM discovery_interviews WHERE id = 31');
   db.exec(`
     INSERT INTO customer_segments (id, project_id, name, name_norm, source, who_they_are, urgency, value_promised)
       VALUES (3, 1, 'Fleet ops leads', 'fleet ops leads', 'manual', 'Ops lead at a delivery fleet', 'high', 'Fewer missed jobs'),
@@ -370,7 +470,8 @@ test('#1692 test 5: each record has its title, four facts, its sections in the c
   assert.deepEqual(iv.facts.map((f: any) => f.value), ['Recorded in StudioOS', 'Said yes out loud', 'Strong · Fleet ops leads', 'Yes']);
   const seg = (await real(db, 10, 'GET', rec('ideal-customer-profile', '3'))).body;
   assert.deepEqual(seg.main[0].rows.map((r: any) => r.c), ['Done', 'Missing', 'Missing', 'Done', 'Needs a source']);
-  assert.deepEqual(seg.next, { text: 'Context', action: null });
+  // The next step is the row and its status (nextFor, CO:263-269).
+  assert.deepEqual(seg.next, { text: 'Context · Not written yet', action: null });
   const comp = (await real(db, 10, 'GET', rec('market-intelligence', 'candidate1'))).body;
   assert.deepEqual(comp.facts.map((f: any) => f.value ?? f.reason), ['Raised a seed round · 1 Oct', '1,200,000 USD', 'No public figure found', 'No source recorded']);
   assert.deepEqual(comp.main[0].rows.map((r: any) => r.c), ['Funding'], 'Hires is off by default, so its signal is not drawn');
@@ -450,7 +551,7 @@ test('#1692: form-options for each module, scoped to the venture and the caller'
   const ds = (await real(db, 10, 'GET', '/validate/modules/demand-signals/form-options?project=1')).body;
   assert.deepEqual(ds.interviews.map((i: any) => i.value).sort(), ['1', '2']);
   // Someone who shares the founder group but does not own the venture is no owner (decision 12).
-  db.exec("INSERT INTO users (id, role, name, email, is_active, founder_id, spinout_lab_active) VALUES (70, 'investor', 'User 70', 'user70@example.test', 1, 1001, 0)");
+  db.exec("INSERT INTO users (id, role, name, email, is_active, founder_id, spinout_lab_active) VALUES (71, 'investor', 'User 71', 'user71@example.test', 1, 1001, 0)");
   const ex = (await real(db, 10, 'GET', '/validate/modules/experiments/form-options?project=1')).body;
   assert.deepEqual(ex.themes.map((t: any) => t.value), ['11']);
   assert.deepEqual(ex.owners.map((o: any) => o.value), ['10', '60']);

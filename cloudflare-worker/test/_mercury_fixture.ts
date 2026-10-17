@@ -2,12 +2,9 @@
  * D710 (#1775) — the shared fixture for the Mercury tests.
  *
  * A real `node:sqlite` database: the users, sessions and audit tables and the
- * fund tables cut from schema_baseline.sql, then migration 312 (the call
- * ledger) and 474 (Mercury). #1773's migration 472 is not on `main` yet, so
- * `withRegistry()` adds a stand-in `entity_bank_accounts` holding only the
- * columns the connect check reads (`entity_key`, `account_kind`,
- * `account_last4`, `status`); once 472 lands, the stand-in is replaced by the
- * migration.
+ * fund tables cut from schema_baseline.sql, then migrations 312 (the call
+ * ledger), 472 (#1773's bank-account registry) and 474 (Mercury).
+ * `withRegistry()` inserts registry rows that satisfy 472's checks.
  *
  * Every Mercury call goes to `mercuryStub`, which records each request. Every
  * account number, digit run and token here is invented; the last fours are
@@ -16,6 +13,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import { tableFromBaseline } from './_baseline.mjs';
@@ -46,6 +44,7 @@ export function freshDb(): DatabaseSync {
     db.exec(noFks(tableFromBaseline(BASELINE, t)));
   }
   db.exec(migration('312_fund_call_ledger.sql'));
+  db.exec(migration('472_entity_bank_accounts.sql'));
   db.exec(migration('474_mercury_entity_connections.sql'));
   const u = db.prepare('INSERT INTO users (id, role, name, email) VALUES (?, ?, ?, ?)');
   for (const [id, role] of Object.entries(ROLES)) u.run(Number(id), role, `User ${id}`, `user${id}@example.test`);
@@ -60,11 +59,10 @@ export function freshDb(): DatabaseSync {
 
 /** #1773's registry, as the stand-in described above. */
 export function withRegistry(db: DatabaseSync, rows: Array<[entity: string, kind: string, last4: string]>): void {
-  db.exec(`CREATE TABLE IF NOT EXISTS entity_bank_accounts (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT, entity_key TEXT NOT NULL, account_kind TEXT NOT NULL,
-    account_last4 TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active')`);
-  const ins = db.prepare('INSERT INTO entity_bank_accounts (uid, entity_key, account_kind, account_last4) VALUES (?, ?, ?, ?)');
-  rows.forEach(([e, k, l], i) => ins.run(`reg-${i}`, e, k, l));
+  const ins = db.prepare(`INSERT INTO entity_bank_accounts (uid, entity_key, label, bank_name, bank_address, beneficiary_name,
+    beneficiary_address, account_kind, account_number_enc, account_last4, routing_number, recorded_by)
+    VALUES (?, ?, ?, 'Fixture Bank', '1 Fixture Way', 'Fixture Beneficiary', '2 Fixture Way', ?, 'v1.fixture-not-ciphertext', ?, '000000000', ?)`);
+  rows.forEach(([e, k, l], i) => ins.run(`reg-${randomUUID()}`, e, `Fixture ${i}`, k, l, SUPER));
 }
 
 /* ── the Mercury stub ─────────────────────────────────────────────────────── */

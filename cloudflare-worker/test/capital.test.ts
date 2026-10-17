@@ -40,9 +40,10 @@ const ADMIN_ID = 1;
 const OWNER_ID = 10; // investor whose LP owns call #1
 const OTHER_ID = 20; // a different investor (owns call #2)
 
-async function mintToken(userId: number, role: string): Promise<string> {
-  // No `jti` so getCurrentUser skips the user_sessions revocation lookup.
-  return new SignJWT({ user_id: userId, role })
+async function mintToken(userId: number, role: string, jti?: string): Promise<string> {
+  // No `jti` so getCurrentUser skips the user_sessions revocation lookup —
+  // except the Super Admin's, whose write bar reads its TOTP session (D714).
+  return new SignJWT({ user_id: userId, role, ...(jti ? { jti } : {}) })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
     .setExpirationTime('1h')
@@ -74,6 +75,9 @@ const GP_ID = 40;
 /** An institutional-tier investor who is GP of nothing. */
 const STRANGER_GP_ID = 50;
 const LEGACY_EMAIL = 'legacy@lp.example';
+/** D714: issuing is a Super Admin act. The Super Admin, in a fresh TOTP session. */
+const SUPER_ID = 2;
+const SUPER_JTI = 'totp-super';
 
 const SCHEMA = `
 CREATE TABLE users (
@@ -82,7 +86,7 @@ CREATE TABLE users (
 CREATE TABLE vc_funds (
   id INTEGER PRIMARY KEY, name TEXT, status TEXT DEFAULT 'active',
   total_commitment REAL DEFAULT 0, deployed_capital REAL DEFAULT 0, lp_count INTEGER DEFAULT 0,
-  gp_user_id INTEGER, company_id INTEGER,
+  gp_user_id INTEGER, company_id INTEGER, slug TEXT,
   created_at TEXT, updated_at TEXT);
 CREATE TABLE partners (id INTEGER PRIMARY KEY, name TEXT, status TEXT DEFAULT 'active');
 CREATE TABLE limited_partners (
@@ -94,6 +98,10 @@ CREATE TABLE capital_calls (
   amount REAL, status TEXT DEFAULT 'pending', due_date TEXT, paid_date TEXT,
   created_at TEXT DEFAULT '2026-01-01');
 CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT, sector TEXT);
+CREATE TABLE super_admins (user_id INTEGER PRIMARY KEY);
+CREATE TABLE user_sessions (
+  id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, jti TEXT NOT NULL UNIQUE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, revoked_at TIMESTAMP, factor TEXT, last_step_up_at TIMESTAMP);
 CREATE TABLE notifications (
   id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, type TEXT, title TEXT,
   body TEXT, link TEXT, created_at TEXT);
@@ -110,6 +118,7 @@ ${MIGRATION_312}
 function seedFor(user: any): string {
   const rows = [
     { id: ADMIN_ID, email: 'admin@axal.vc', role: 'admin' },
+    { id: SUPER_ID, email: 'super@axal.vc', role: 'admin' },
     { id: OWNER_ID, email: 'owner@lp.example', role: 'investor' },
     { id: OTHER_ID, email: 'other@lp.example', role: 'investor' },
     { id: LEGACY_ID, email: LEGACY_EMAIL, role: 'investor' },
@@ -137,6 +146,8 @@ INSERT INTO capital_calls (id, limited_partner_id, amount, status, created_at)
          (2, 200, 700, 'pending', '2026-01-01'),
          (3, 300, 900, 'pending', '2026-01-03');
 INSERT INTO projects (id, name, sector) VALUES (1, 'Test Project', 'ai');
+INSERT INTO super_admins (user_id) VALUES (${SUPER_ID});
+INSERT INTO user_sessions (user_id, jti, factor) VALUES (${SUPER_ID}, '${SUPER_JTI}', 'totp');
 `;
 }
 
@@ -380,19 +391,19 @@ function addInvestor(env: any, token: string, body: any): Promise<Response> {
 }
 
 function createCall(env: any, token: string, body: any): Promise<Response> {
-  return capital.request('/calls', {
+  return (capital.request('/calls', {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'content-type': 'application/json' },
     body: JSON.stringify(body),
-  }, env);
+  }, env) as Promise<Response>).catch((e: unknown) => { if (e instanceof Response) return e; throw e; });
 }
 
 function issueToAllInvestors(env: any, token: string, body: any): Promise<Response> {
-  return capital.request('/capitalCall', {
+  return (capital.request('/capitalCall', {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'content-type': 'application/json' },
     body: JSON.stringify(body),
-  }, env);
+  }, env) as Promise<Response>).catch((e: unknown) => { if (e instanceof Response) return e; throw e; });
 }
 
 test('add investor: a non-admin investor is forbidden (403)', async () => {
@@ -423,9 +434,18 @@ test('create call: a non-admin investor is forbidden (403)', async () => {
   assert.equal(res.status, 403);
 });
 
-test('create call: an admin is allowed (201)', async () => {
+test('create call: a plain admin is refused as not the Super Admin (403), and nothing is written (D714)', async () => {
   const token = await mintToken(ADMIN_ID, 'admin');
   const env = makeEnv({ id: ADMIN_ID, role: 'admin', is_active: 1 });
+  const res = await createCall(env, token, { limited_partner_id: 100, amount: 500, due_date: '2026-03-01' });
+  assert.equal(res.status, 403);
+  assert.equal(((await res.json()) as any).code, 'super_admin_required');
+  assert.equal(env.__db.prepare('SELECT COUNT(*) AS n FROM capital_calls').get().n, 3);
+});
+
+test('create call: the Super Admin with a fresh step-up is allowed (201)', async () => {
+  const token = await mintToken(SUPER_ID, 'admin', SUPER_JTI);
+  const env = makeEnv({ id: SUPER_ID, role: 'admin', is_active: 1 });
   const res = await createCall(env, token, { limited_partner_id: 100, amount: 500, due_date: '2026-03-01' });
   assert.equal(res.status, 201);
   const body = (await res.json()) as any;
@@ -440,9 +460,18 @@ test('issue-to-all: a non-admin investor is forbidden (403)', async () => {
   assert.equal(res.status, 403);
 });
 
-test('issue-to-all: an admin is allowed and fans out to active investors (200)', async () => {
+test('issue-to-all: a plain admin is refused as not the Super Admin (403), and nothing is written (D714)', async () => {
   const token = await mintToken(ADMIN_ID, 'admin');
   const env = makeEnv({ id: ADMIN_ID, role: 'admin', is_active: 1 });
+  const res = await issueToAllInvestors(env, token, { startup_id: 1, amount: 1000 });
+  assert.equal(res.status, 403);
+  assert.equal(((await res.json()) as any).code, 'super_admin_required');
+  assert.equal(env.__db.prepare('SELECT COUNT(*) AS n FROM capital_calls').get().n, 3);
+});
+
+test('issue-to-all: the Super Admin with a fresh step-up is allowed and fans out to active investors (200)', async () => {
+  const token = await mintToken(SUPER_ID, 'admin', SUPER_JTI);
+  const env = makeEnv({ id: SUPER_ID, role: 'admin', is_active: 1 });
   const res = await issueToAllInvestors(env, token, { startup_id: 1, amount: 1000 });
   assert.equal(res.status, 200);
   const body = (await res.json()) as any;

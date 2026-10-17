@@ -52,12 +52,17 @@ function credit(db: any, account: number, cents: number, posted: string | null, 
 }
 const matches = (db: any) => rows(db, 'SELECT target_kind, target_id, state, origin FROM mercury_matches ORDER BY id').map((r) => ({ ...r }));
 
-test('today: with Fund I and fee periods not on main, nothing is proposed', async () => {
+test('the default dependencies: Fund I is found by #1773\'s slug and resolver; with no Fund I nothing is proposed', async () => {
   const db = seed();
   credit(db, 1, 100000, '2026-09-20');
   credit(db, 2, 250000, '2026-10-05');
-  assert.deepEqual(await proposeMatches(envFor(db)), { proposed: 0 });
-  assert.equal(matches(db).length, 0);
+  assert.deepEqual(await proposeMatches(envFor(db)), { proposed: 1 });
+  assert.deepEqual(matches(db), [{ target_kind: 'capital_call_line', target_id: 1, state: 'proposed', origin: 'matcher' }]);
+  const none = seed();
+  none.exec("UPDATE vc_funds SET slug = 'renamed-fund' WHERE slug = 'spinout-fund-i'");
+  credit(none, 1, 100000, '2026-09-20');
+  assert.deepEqual(await proposeMatches(envFor(none)), { proposed: 0 });
+  assert.equal(matches(none).length, 0);
 });
 
 test('the matcher: one open line\'s outstanding on the Fund\'s account is proposed; two equal lines propose nothing; the windows hold', async () => {
@@ -108,6 +113,7 @@ test('manual pairs: the wrong entity, an unregistered account or a rejected pair
   const again = await post({ transaction_uid: fundLine.uid, target_kind: 'capital_call_line', target_id: 1 });
   assert.deepEqual([again.status, again.body.code], [409, 'pair_rejected']);
   // Without Fund I, no capital-call pair at all.
+  db.exec("UPDATE vc_funds SET slug = 'renamed-fund' WHERE slug = 'spinout-fund-i'");
   const off = await call(appFor(), env, 'POST', '/matches', ADMIN, { jti: JTI.adminTotp, body: { transaction_uid: credit(db, 1, 1000, '2026-09-22').uid, target_kind: 'capital_call_line', target_id: 1 } });
   assert.deepEqual([off.status, off.body.code], [409, 'fund_account_unavailable']);
 });

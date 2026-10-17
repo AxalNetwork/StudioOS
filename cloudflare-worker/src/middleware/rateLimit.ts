@@ -67,6 +67,14 @@ export const DECK_SHARE_SIGNUP = /^\/api\/decks\/share\/[^/]+\/signup$/;
  */
 export const ADVISOR_SESSION_CHARGE = /^\/api\/(advisors|mentors)\/bookings\/[^/]+\/pay$/;
 
+/**
+ * D708 — the writes and the reveal of `/api/admin/bank-accounts` (the bare
+ * path too), and an LP's reveal of their own capital-call line's payment
+ * instructions. Anchored at both ends, the id with `[^/]+`.
+ */
+export const BANK_ACCOUNT_WRITES = /^\/api\/admin\/bank-accounts(\/[^/]+(\/(retire|reveal))?)?$/;
+export const LP_PAY_INSTRUCTIONS = /^\/api\/funds\/[^/]+\/capital-calls\/lines\/[^/]+\/pay-instructions$/;
+
 const BUCKETS: Bucket[] = [
   // D573: public link resolution records one accepted open request.
   {
@@ -176,6 +184,18 @@ const BUCKETS: Bucket[] = [
     test: (p, m) =>
       (m === 'POST' || m === 'PATCH' || m === 'PUT') &&
       (p.startsWith('/api/admin/catalog/') || p.startsWith('/api/admin/stripe/')),
+    scope: 'user',
+    failClosed: true,
+  },
+  // D708 — payment instructions: every non-GET under /api/admin/bank-accounts
+  // and the LP's GET of their own line's instructions. 10/min per user, and
+  // failClosed: a limit on the one place a full account number is shown that
+  // goes away when KV does is not a limit.
+  {
+    name: 'bank_accounts',
+    limit: 10,
+    windowSec: 60,
+    test: (p, m) => (m !== 'GET' && BANK_ACCOUNT_WRITES.test(p)) || (m === 'GET' && LP_PAY_INSTRUCTIONS.test(p)),
     scope: 'user',
     failClosed: true,
   },

@@ -580,7 +580,8 @@ test('test 4: a founder record gates Documents, needs a founder role, and vests 
   assert.deepEqual(section(ana, 'timeline').rows.map((r: any) => [r.a, r.b, r.c]), [['Cliff', '12 Mar 2027', 'Upcoming'], ['Fully vested', '12 Mar 2030', 'Upcoming']]);
   assert.deepEqual(section(ana, 'contributions').rows, [{ a: 'Closed the first pilot', b: '9 Oct 2026' }]);
   assert.deepEqual(section(ana, 'cap_table').rows, [{ a: 'Shares', b: '600 shares' }]);
-  assert.deepEqual(ana.actions.map((a: any) => [a.key, a.kind, a.href]), [['edit-split', 'link', '/raise/capital/cap-table']]);
+  // #1695 adds the writes after it (Log, Edit); Edit split stays the cap table's link.
+  assert.deepEqual(ana.actions.map((a: any) => [a.key, a.kind, a.href])[0], ['edit-split', 'link', '/raise/capital/cap-table']);
   assert.equal(factOf((await one(db, 'founding-team', 'h-2')).body, 'Vested today').value, '25%', 'stored vested shares over shares');
   db.close();
 });
@@ -592,7 +593,8 @@ test('test 5: the role table, for the read and its writer-only sections, and a f
     const r = await one(db, 'operating-systems', 'crm', user);
     assert.equal(r.status, 200, `user ${user}`);
     assert.deepEqual(writerOnly(r.body), [true, true], `user ${user}`);
-    assert.deepEqual(r.body.actions.map((a: any) => [a.key, a.href]), [['reconnect', `/build/connect?tool=hubspot&project_id=${P}`]]);
+    // #1695 adds Choose connector and Disconnect after it; Reconnect stays the tool's link.
+    assert.deepEqual(r.body.actions.map((a: any) => [a.key, a.href])[0], ['reconnect', `/build/connect?tool=hubspot&project_id=${P}`]);
   }
   const partner = await one(db, 'operating-systems', 'crm', PARTNER);
   assert.equal(partner.status, 200);

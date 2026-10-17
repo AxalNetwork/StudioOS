@@ -15,13 +15,11 @@
  *    issued or paid period's net total, dated from its window's start to 90
  *    days after its end.
  *
- * WHAT IS NOT ON `main` YET, and so off. Fund I is found through #1773's
- * `fundPayeeOf`, and fee periods are #1774's. Until each lands, its
- * dependency below answers "none": no capital-call match and no fee match is
- * proposed, a manual pair of that kind answers 409, and `collectedFor` reads
- * only confirmed matches. The dependencies are parameters so the matcher's
- * rules are tested now against a fixture fund and fixture periods; the
- * defaults are the production answer today.
+ * FUND I is the fund #1773's `fundPayeeOf` answers `'fund'` for (the
+ * `spinout-fund-i` row). FEE PERIODS are #1774's, not on `main` yet: until
+ * they land, `feePeriods` answers none, so no fee match is proposed, a manual
+ * fee pair answers 409, and `collectedFor` reads only confirmed matches. Both
+ * are parameters so the rules are tested against fixture periods.
  *
  * Confirming a capital-call match writes one receipt through `recordReceipt`,
  * `reference: 'mercury:<transaction id>'`. The unique index on `mercury:`
@@ -30,6 +28,8 @@
  */
 import type { Env, User } from '../../types';
 import { readLine, recordReceipt } from '../fundCallLedger';
+import { Funds } from '../../models/funds';
+import { FUND_I_SLUG, fundPayeeOf } from '../payInstructions';
 import { newUid } from './store';
 
 export const WINDOW_DAYS_AFTER = 90;
@@ -41,14 +41,18 @@ export const INTERNAL_KINDS = ['internalTransfer'];
 export interface FeePeriod { id: number; fund_id: number; status: string; net_total_cents: number; window_start: string; window_end: string }
 
 export interface MatchDeps {
-  /** Fund I's `vc_funds.id`, the fund `fundPayeeOf` answers `'fund'` for. Null until #1773. */
+  /** Fund I's `vc_funds.id`, the fund `fundPayeeOf` answers `'fund'` for, or null when none carries the slug. */
   fundOneId: (env: Env) => Promise<number | null>;
   /** #1774's issued or paid periods on Fund I. Empty until #1774. */
   feePeriods: (env: Env) => Promise<FeePeriod[]>;
 }
 
 export const DEFAULT_MATCH_DEPS: MatchDeps = {
-  fundOneId: async () => null,
+  fundOneId: async (env) => {
+    const fund = await Funds.bySlug(env, FUND_I_SLUG);
+    const id = fund ? Number(fund.id) : NaN;
+    return Number.isInteger(id) && await fundPayeeOf(env, id) === 'fund' ? id : null;
+  },
   feePeriods: async () => [],
 };
 

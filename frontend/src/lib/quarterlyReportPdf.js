@@ -104,6 +104,16 @@ const COVER_FLOOR = 962;
 const COVER_DISCLOSURE =
   'Record lines are your own; allocated lines are your pro-rata share of GP-maintained fund figures.';
 
+/**
+ * D712 — a section the report's figures do not carry (a period issued through
+ * the reporting queue prints nothing from the fund model) draws as Not
+ * recorded, never as an empty table or a zero.
+ */
+const NOT_FROZEN = 'Not recorded: this report was issued from the fund records, which hold no figures for this section.';
+function emptyNote(b, x, w, y) {
+  return b.text(NOT_FROZEN, x, y, { size: 12.7, color: C.faint, lineHeight: 1.55, maxW: w }) + 8;
+}
+
 function drawCover(b, vm) {
   const m = vm.meta;
   // Measure the masthead before painting the band, so it stops where the block
@@ -239,6 +249,7 @@ function drawPortfolio(b, vm) {
     { label: 'Status', x: PAD + 545, w: INNER - 545 },
   ];
   y = tableHead(b, y, cols);
+  if (!vm.portfolio.length) y = emptyNote(b, PAD, INNER, y + 6);
   for (const p of vm.portfolio) {
     b.hline(PAD, RIGHT, y, C.ruleFaint);
     const ty = y + 4;
@@ -251,13 +262,16 @@ function drawPortfolio(b, vm) {
     pill(b, RIGHT, ty + 1, p.status, p.pill);
     y += 34;
   }
-  b.hline(PAD, RIGHT, y, C.ink, 1.5);
-  b.rect(PAD, y, INNER, 24, C.wash);
-  b.text(`Total · ${vm.portfolioTotals.count} positions`, PAD, y + 5, { size: 12.7, style: 'bold', color: C.ink });
-  b.text(vm.portfolioTotals.invested, cols[2].x + cols[2].w, y + 5, { size: 12.7, style: 'bold', mono: true, color: C.ink, align: 'right' });
-  b.text(vm.portfolioTotals.held, cols[3].x + cols[3].w, y + 5, { size: 12.7, style: 'bold', mono: true, color: C.ink, align: 'right' });
-  b.text(vm.portfolioTotals.moic, cols[4].x + cols[4].w, y + 5, { size: 12.7, style: 'bold', mono: true, color: C.green, align: 'right' });
-  y += 24 + 20;
+  if (vm.portfolioTotals) {
+    b.hline(PAD, RIGHT, y, C.ink, 1.5);
+    b.rect(PAD, y, INNER, 24, C.wash);
+    b.text(`Total · ${vm.portfolioTotals.count} positions`, PAD, y + 5, { size: 12.7, style: 'bold', color: C.ink });
+    b.text(vm.portfolioTotals.invested, cols[2].x + cols[2].w, y + 5, { size: 12.7, style: 'bold', mono: true, color: C.ink, align: 'right' });
+    b.text(vm.portfolioTotals.held, cols[3].x + cols[3].w, y + 5, { size: 12.7, style: 'bold', mono: true, color: C.ink, align: 'right' });
+    b.text(vm.portfolioTotals.moic, cols[4].x + cols[4].w, y + 5, { size: 12.7, style: 'bold', mono: true, color: C.green, align: 'right' });
+    y += 24;
+  }
+  y += 20;
 
   /* ---- developments + exposure ---- */
   const devW = (INNER - 22) * 0.55;
@@ -281,6 +295,7 @@ function drawPortfolio(b, vm) {
   }
 
   let ry = label(b, expX, expW, y, 'Sector exposure');
+  if (!vm.exposure.length) ry = emptyNote(b, expX, expW, ry);
   for (const e of vm.exposure) {
     b.text(e.label, expX, ry, { size: 12.7, color: C.body, maxW: expW - 50 });
     b.text(e.pct, expX + expW, ry, { size: 12.7, style: 'bold', mono: true, color: C.ink, align: 'right' });
@@ -293,6 +308,7 @@ function drawPortfolio(b, vm) {
 
   /* ---- deployment by quarter (see the cover's note on why it lives here) ---- */
   let dy = label(b, PAD, INNER, y, 'Deployment by quarter', 'Cumulative, from the position list');
+  if (!vm.deployBars.length) return emptyNote(b, PAD, INNER, dy);
   const barsTop = dy + 4;
   const barMax = 72;
   const slot = INNER / vm.deployBars.length;
@@ -325,6 +341,7 @@ function drawProgram(b, vm) {
     { label: 'Follow-on', x: PAD + 560, w: INNER - 560, align: 'right' },
   ];
   y = tableHead(b, y, cols);
+  if (!vm.cohorts.length) y = emptyNote(b, PAD, INNER, y + 6);
   for (const c of vm.cohorts) {
     b.hline(PAD, RIGHT, y, C.ruleFaint);
     if (c.current) b.rect(PAD, y, INNER, 24, C.wash);
@@ -376,6 +393,7 @@ function drawProgram(b, vm) {
   y = noteBottom + 16;
 
   /* ---- key dates ---- */
+  if (!vm.keyDates.length) return y;
   const kdH = 62;
   b.rrect(PAD, y, INNER, kdH, 10, { fill: C.wash, stroke: C.rule });
   b.text('KEY DATES', PAD + 18, y + 11, { size: 12.1, style: 'bold', color: C.violet, ls: 1.33 });
@@ -397,6 +415,7 @@ function drawStatements(b, vm) {
     label: l, x: PAD + i * w, w, align: i === 0 ? 'left' : 'right',
   }));
   y = tableHead(b, y, cols);
+  if (!vm.progression.length) y = emptyNote(b, PAD, INNER, y + 6);
   for (const r of vm.progression) {
     b.hline(PAD, RIGHT, y, C.ruleFaint);
     const ty = y + 6;
@@ -433,7 +452,7 @@ function drawStatements(b, vm) {
   /* ---- concentration ---- */
   let cy = label(b, PAD, INNER, y, 'Concentration & risk disclosure');
   const cw = (INNER - 48) / 4;
-  let cBottom = cy;
+  let cBottom = vm.concentration.length ? cy : emptyNote(b, PAD, INNER, cy);
   vm.concentration.forEach((cn, i) => {
     const x = PAD + i * (cw + 16);
     b.text(cn.v, x, cy, { size: 15.4, style: 'bold', mono: true, color: cn.tone });

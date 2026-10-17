@@ -109,10 +109,7 @@ export function createAdminMercury(opts: AdminMercuryOptions = {}) {
     if (body.confirm_read_only !== true) {
       return c.json({ code: 'confirm_read_only_required', detail: 'Confirm that this token is read-only. A read-write token is never accepted.' }, 400);
     }
-    const registry = await registryRows(c.env).catch(() => null);
-    if (registry == null) {
-      return c.json({ code: 'bank_registry_unavailable', detail: 'The bank-account registry (#1773) is not on this deployment yet, so no organization can be checked or connected.' }, 503);
-    }
+    const registry = await registryRows(c.env);
     let accounts; let orgName: string | null;
     try {
       const parsed = parseAccounts(await listAccounts(token, opts.fetcher));

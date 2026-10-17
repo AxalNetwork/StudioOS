@@ -101,10 +101,19 @@ const FUND_PARTY_SLUGS_D706 = new Set([
   'clawback_guarantee', 'management_rights_letter', 'pro_rata_information_rights_side_letter',
 ]);
 const GP_PARTY_SLUGS_D706 = new Set([
-  'lpa_amended_restated', 'lpa_initial', 'gp_closing_certificate', 'capital_call_notice',
-  'distribution_notice', 'default_notice', 'lpac_charter', 'gp_llc_agreement',
+  'lpa_amended_restated', 'lpa_initial', 'gp_closing_certificate', 'lpac_charter', 'gp_llc_agreement',
   'gp_fund_formation_consent', 'carried_interest_award_letter',
 ]);
+
+// D716 — the notices and the Subscription Booklet, routed by the entity the
+// money goes to: the Fund sends what is paid into the Fund, through its GP.
+// The payment instructions letter takes its sender from its purpose, so it is
+// in no set here.
+const FUND_PARTY_SLUGS_D716 = new Set([
+  'capital_call_notice', 'distribution_notice', 'default_notice', 'management_fee_statement', 'subscription_booklet',
+]);
+const GP_PARTY_SLUGS_D716 = new Set(['management_fee_invoice']);
+const HOLDINGS_PARTY_SLUGS_D716 = new Set(['platform_licence_fee_invoice']);
 
 // D705 — the LP's subscription, its side letter, and the instruments the Fund
 // invests through. Counsel confirms this before any of them goes to an LP.
@@ -114,12 +123,24 @@ const FUND_SIGNS_D705 = new Set([
   'safe', 'term_sheet', 'spa', 'voting_rights',
 ]);
 
+// D707 — the two platform IP licences (migration 471), Holdings as licensor,
+// and the operating-partner agreements, Management's, routed by name.
+// `partner_capital` stays out: a capital partnership is an investor relationship.
+const HOLDINGS_PARTY_SLUGS_D707 = new Set(['platform_ip_licence_management_admin', 'platform_ip_licence_fund_admin']);
+const MANAGEMENT_PARTY_SLUGS_D707 = new Set(['partner_msa_v1', 'partner_services', 'partner_equity', 'partner_revshare', 'partner_custom', 'partner_nda_nonsolicit']);
+
 export function axalEntityKeyForDoc(slugOrType: string, category?: string | null): AxalEntityKey {
   const s = String(slugOrType || '').toLowerCase();
   if (FUND_PARTY_SLUGS_D706.has(s)) return 'fund';
   if (GP_PARTY_SLUGS_D706.has(s)) return 'gp';
+  if (FUND_PARTY_SLUGS_D716.has(s)) return 'fund';
+  if (GP_PARTY_SLUGS_D716.has(s)) return 'gp';
+  if (HOLDINGS_PARTY_SLUGS_D716.has(s)) return 'holdings';
   // D705 — the Fund is the party, signing through its general partner.
   if (FUND_SIGNS_D705.has(s)) return 'fund';
+  // D707 — by name, so a name always wins over the regex fallback below.
+  if (HOLDINGS_PARTY_SLUGS_D707.has(s)) return 'holdings';
+  if (MANAGEMENT_PARTY_SLUGS_D707.has(s)) return 'management';
   // Other fund-level docs: the GP, as general partner of the Fund.
   const gpEntityDocs = new Set([
     'spv joinder agreement', 'strategic side letter / focused spv', 'lpa', 'ppm',
@@ -149,13 +170,26 @@ export function axalEntityKeyForDoc(slugOrType: string, category?: string | null
 //  - resolution : Axal-internal governance act -> single Axal signatory.
 //  - unilateral : a filing/attestation -> single filer (Counterparty) signatory.
 //  - policy     : published instrument -> no signature block.
-export type DocumentKind = 'agreement' | 'corporate' | 'resolution' | 'unilateral' | 'policy';
+//  - notice     : D716 — the sender asks or tells one addressee; issued, not
+//                 signed -> the sender's block alone, with no By line or recital.
+//  - booklet    : D716 — the Subscription Booklet; each part carries its own
+//                 block (SUBSCRIPTION_BOOKLET_PARTS), so the packet has none.
+export type DocumentKind = 'agreement' | 'corporate' | 'resolution' | 'unilateral' | 'policy' | 'notice' | 'booklet';
+
+// D716 — the seven notice types (services/fundNotices.ts builds them) and the packet.
+const NOTICE_SLUGS = new Set([
+  'capital_call_notice', 'distribution_notice', 'default_notice', 'management_fee_statement',
+  'management_fee_invoice', 'platform_licence_fee_invoice', 'payment_instructions_letter',
+]);
+const BOOKLET_SLUGS = new Set(['subscription_booklet']);
 
 const POLICY_SLUGS = new Set([
   'tos_v1', 'privacy_v1', 'aml_kyc', 'form_adv',
   // D706 (Fund I catalog)
   'compliance_manual_code_of_ethics', 'investor_privacy_notice_reg_sp', 'valuation_policy',
   'conflicts_allocation_policy',
+  // D716 — the booklet cover's legend (migration 478)
+  'securities_legend',
 ]);
 const UNILATERAL_SLUGS = new Set([
   'section_83b', 'accreditation_v1', 'ein_application_kit', 'sg_acra_form_45_kit',
@@ -166,14 +200,11 @@ const UNILATERAL_SLUGS = new Set([
   'lp_aml_kyc_certification', 'lp_tax_status_certification', 'lp_electronic_delivery_consent',
   'form_d_filing_kit', 'bad_actor_questionnaire_506d',
 ]);
-// Axal-internal governance acts that Joseph Lauzier signs for the firm. The
-// D706 capital call, distribution and default notices sit here until a
-// `notice` kind exists.
+// Axal-internal governance acts that Joseph Lauzier signs for the firm.
 const RESOLUTION_SLUGS = new Set([
   'ic_charter',
   // D706 (Fund I catalog)
-  'gp_closing_certificate', 'capital_call_notice', 'distribution_notice', 'default_notice',
-  'lpac_charter', 'gp_fund_formation_consent',
+  'gp_closing_certificate', 'lpac_charter', 'gp_fund_formation_consent',
 ]);
 // Portfolio-company / founder constitutional + intra-company instruments where
 // Axal is not a contracting party (the company's officer signs, not Axal).
@@ -187,6 +218,8 @@ const CORPORATE_SLUGS = new Set([
 
 export function classifyDocument(slugOrType: string): DocumentKind {
   const s = String(slugOrType || '').toLowerCase();
+  if (NOTICE_SLUGS.has(s)) return 'notice';
+  if (BOOKLET_SLUGS.has(s)) return 'booklet';
   if (POLICY_SLUGS.has(s)) return 'policy';
   if (UNILATERAL_SLUGS.has(s)) return 'unilateral';
   if (RESOLUTION_SLUGS.has(s)) return 'resolution';
@@ -343,6 +376,28 @@ export function buildPreamble(opts: PreambleOptions): string {
   );
 }
 
+export interface AddresseeOptions {
+  /** The addressee's name: the LP, or the Axal entity a notice is sent to. */
+  to: string | null;
+  /** The LP's `limited_partners.id`, for a notice to one LP. */
+  lpNumber?: number | string | null;
+  /** The sending Axal entity, for a notice between Axal entities. */
+  from?: AxalEntityKey | null;
+}
+
+/**
+ * D716 — a notice's addressee lines. To one LP: its name and LP number (the
+ * platform holds no LP notice address, so none prints). Between Axal
+ * entities: the sender with its legal address, then the addressee.
+ */
+export function buildAddresseeBlock(opts: AddresseeOptions): string[] {
+  const to = (opts.to || '').trim() || '[Addressee]';
+  const lp = opts.lpNumber == null ? '' : String(opts.lpNumber).trim();
+  if (lp) return [`To: ${to}`, `Limited partner no. L${lp}`];
+  if (opts.from && AXAL_ENTITIES[opts.from]) return [`From: ${AXAL_ENTITIES[opts.from].name}, ${AXAL_LEGAL_ADDRESS}`, `To: ${to}`];
+  return [`To: ${to}`];
+}
+
 export type SignatureRole = 'axal' | 'counterparty';
 
 export interface SignatureParty {
@@ -382,6 +437,8 @@ const BLANK_SIG = 'By: ___________________________';
  *   - agreement  -> [Axal, Counterparty]   (Counterparty is the signer)
  *   - resolution -> [Axal]                  (Axal/authorized signatory signs)
  *   - unilateral -> [Counterparty]          (the investor/taxpayer/applicant signs)
+ *   - notice     -> [Axal sender]           (issued, not signed: no By line, no recital)
+ *   - booklet    -> []                      (each part carries its own block)
  *   - policy     -> (no block; caller skips)
  */
 export function buildExecutionBlock(opts: ExecutionOptions): ExecutionBlock {
@@ -419,6 +476,12 @@ export function buildExecutionBlock(opts: ExecutionOptions): ExecutionBlock {
       parties: [axalParty],
     };
   }
+  if (kind === 'notice') {
+    // D716 — a notice is issued, not signed, and its record names who issued
+    // it. The two invoices print no block at all; their builder skips this.
+    return { recital: '', parties: [{ ...axalParty, by: '', isSigner: false }] };
+  }
+  if (kind === 'booklet') return { recital: '', parties: [] };
   if (kind === 'unilateral') {
     return {
       recital: 'IN WITNESS WHEREOF, the undersigned has executed this instrument as of the date written below.',
@@ -483,3 +546,33 @@ export function winAnsiSafe(s: string): string {
   }
   return out;
 }
+
+// --- D716: the Subscription Booklet ----------------------------------------
+
+export interface BookletPart {
+  part: number;
+  title: string;
+  /** The catalog slug the part prints, or null for a part generated here. */
+  slug: string | null;
+  /** The part's own signature page, or null for none. */
+  block: { kind: DocumentKind; axalEntityKey?: AxalEntityKey } | null;
+}
+
+/**
+ * The booklet's nine parts, in order. Each part's block is built for its own
+ * kind with the applicant as the counterparty, except Part 8 (the applicant's
+ * counterpart page to the LPA, so unilateral) and Part 9 (the GP's acceptance,
+ * signed by the Fund through its general partner, last). The booklet prints no
+ * LPA body: Part 8 is its signature page only.
+ */
+export const SUBSCRIPTION_BOOKLET_PARTS: readonly BookletPart[] = [
+  { part: 1, title: 'Cover', slug: 'securities_legend', block: null },
+  { part: 2, title: 'Instructions and Checklist', slug: null, block: null },
+  { part: 3, title: 'Subscription Agreement', slug: 'subscription', block: { kind: 'agreement', axalEntityKey: 'fund' } },
+  { part: 4, title: 'Investor Questionnaire', slug: 'lp_investor_questionnaire', block: { kind: 'unilateral' } },
+  { part: 5, title: 'AML/KYC and Beneficial Ownership Certification', slug: 'lp_aml_kyc_certification', block: { kind: 'unilateral' } },
+  { part: 6, title: 'Tax Status Certification', slug: 'lp_tax_status_certification', block: { kind: 'unilateral' } },
+  { part: 7, title: 'Electronic Delivery Consent', slug: 'lp_electronic_delivery_consent', block: { kind: 'unilateral' } },
+  { part: 8, title: 'Signature Pages', slug: 'lpa_amended_restated', block: { kind: 'unilateral' } },
+  { part: 9, title: 'Acceptance by the General Partner', slug: 'gp_closing_certificate', block: { kind: 'resolution', axalEntityKey: 'fund' } },
+];
