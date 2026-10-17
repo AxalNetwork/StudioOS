@@ -40,3 +40,12 @@ write a bordered white box with a title, it already exists here.
   `dark:` classes (`ActionSheet` and `Lightbox` do).
 
 `Lightbox.jsx` (D685) is the one lightbox shell: a centred dialog, a full-screen sheet on a phone, with a focus trap, Escape and backdrop close, focus returned to what opened it, an inert background and no scroll bleed. `lightboxFocus.js` holds its rules as pure functions. Record a session is its first user; Build's, Raise's and Grow's cycle CTAs reuse it. D686 (#1596) gives it `size="tall"` (a fixed height whose child owns the scroll) and `onEscape`; one Escape closes one layer, because `../components/useEscapeClose.js` shares its stack. D695 (#1656) adds opt-in `pageBelow="lg"`: below 1024px it is a normal-flow page with a back bar (or supplied `bar`), without a backdrop, focus trap, inert background or scroll lock; header/footer padding follows the canvas at 18px/14px vertically. `ActionSheet.jsx` (D686) is the body every cycle lightbox draws inside a tall `Lightbox`: Cycle Action's header (eyebrow, an h2 title, sub, a round ×), step pills with `aria-current`, a banner, a body that scrolls on its own, and a footer with a note and actions, plus the shared `primary`, `ghost` and `danger` button classes.
+
+## Connector artwork follow-up (#1682)
+
+`BrandIcon.jsx` now also records seven vendor SVG artworks, including the
+Google gradients and the Microsoft identity symbol. Source view boxes and
+multi-colour palettes are preserved, with a white backing in dark mode.
+React `useId` scopes gradient, filter and clip-path references per icon.
+The remaining Carta, Affinity CRM, Docusign and Teams initials each carry a
+specific reason; see the 2026-10-16 follow-up in D687 for the current inventory.

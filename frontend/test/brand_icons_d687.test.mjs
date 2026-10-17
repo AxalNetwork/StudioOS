@@ -17,7 +17,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import BrandIcon, {
-  BRAND_ALIAS, BRAND_GENERIC, BRAND_MARKS, BRAND_MONOGRAM, MULTI_TILE_CLASS, SIMPLE_ICONS, TILE_CLASS, TILE_HEX, resolveBrand,
+  BRAND_ALIAS, BRAND_GENERIC, BRAND_MARKS, BRAND_MONOGRAM, MULTI_TILE_CLASS, SIMPLE_ICONS, TILE_CLASS, TILE_HEX, VENDOR_MARKS, resolveBrand,
 } from '../src/ui/BrandIcon.jsx';
 import * as uiBarrel from '../src/ui/index.js';
 import { FIRST_PARTY } from '../src/pages/account/connectorsModel.js';
@@ -92,7 +92,7 @@ test('1. every key the app draws is classified, exactly once', () => {
   assert.equal(classified.length, 35);
   assert.deepEqual(classified, [...SIMPLE_ICONS_KEYS, ...VENDOR_OR_MONOGRAM, ...Object.keys(GENERIC)].sort());
   assert.deepEqual(BRAND_ALIAS, { google_calendar: 'google', microsoft_365: 'microsoft', twitter: 'x', gcip: 'google' });
-  assert.deepEqual(Object.keys(BRAND_MARKS).sort(), [...SIMPLE_ICONS_KEYS].sort(), 'the 18 Simple Icons marks');
+  assert.deepEqual(Object.keys(BRAND_MARKS).sort(), [...SIMPLE_ICONS_KEYS, ...Object.keys(VENDOR_MARKS)].sort(), 'Simple Icons and the recorded vendor artwork');
   for (const k of VENDOR_OR_MONOGRAM) assert.ok(Object.hasOwn(BRAND_MARKS, k) || Object.hasOwn(BRAND_MONOGRAM, k), `${k}: the vendor's mark or a monogram`);
   for (const [k, icon] of Object.entries(GENERIC)) assert.equal(BRAND_GENERIC[k].Icon.displayName, icon, `${k} draws lucide ${icon}`);
 });
@@ -131,8 +131,14 @@ test('3. constructor, __proto__, toString and an unknown key draw the monogram, 
 test('4. every mark records its path, colour, source and licence; every monogram its reason', () => {
   assert.deepEqual(SIMPLE_ICONS, { version: '16.35.0', licence: 'CC0-1.0', source: 'https://www.npmjs.com/package/simple-icons/v/16.35.0' });
   for (const [k, m] of Object.entries(BRAND_MARKS)) {
-    assert.match(m.path, /^[MmZzLlHhVvCcSsQqTtAa0-9.,\s-]+$/, `${k}: SVG path characters only`);
-    assert.ok(m.path.length > 40, `${k}: a real path`);
+    if (m.artwork) {
+      assert.ok(m.artwork.length > 0, `${k}: recorded SVG elements`);
+      assert.match(m.sourceBlob, /^[a-f0-9]{40}$/, `${k}: immutable source blob`);
+      assert.match(m.viewBox, /^[.0-9 -]+$/, `${k}: original coordinate system`);
+    } else {
+      assert.match(m.path, /^[MmZzLlHhVvCcSsQqTtAa0-9.,\s-]+$/, `${k}: SVG path characters only`);
+      assert.ok(m.path.length > 40, `${k}: a real path`);
+    }
     for (const c of ['hex', 'dark']) assert.match(m[c], /^#[0-9A-Fa-f]{6}$/, `${k}.${c}`);
     assert.ok(m.source && m.licence, `${k}: source and licence`);
     if (SIMPLE_ICONS_KEYS.includes(k)) {
@@ -145,7 +151,7 @@ test('4. every mark records its path, colour, source and licence; every monogram
   assert.equal(BRAND_MARKS.gemini.slug, 'googlegemini');
   assert.match(BRAND_MARKS.x.path, /^M14\.234 10\.162/, 'X is 16.35.0\'s path, not an older release\'s');
   for (const [k, m] of Object.entries(BRAND_MONOGRAM)) assert.ok(typeof m.reason === 'string' && m.reason.length > 40, `${k}: a monogram says why`);
-  assert.match(BRAND_MONOGRAM.microsoft.reason, /never be used without an express license/);
+  assert.match(BRAND_MONOGRAM.teams.reason, /never be used without an express license/);
   assert.match(read('frontend/src/ui/BrandIcon.jsx'), /CC0-1\.0[\s\S]*4\(a\) waives no trademark[\s\S]*nominative use/, 'the module\'s header is the notice');
 });
 
@@ -158,13 +164,13 @@ test('5. each mark reads on its tile in light and in dark', () => {
   assert.deepEqual(TILE_HEX, { light: '#ffffff', dark: '#1e2939' });
   const white = [];
   for (const [k, m] of Object.entries(BRAND_MARKS)) {
-    if (m.paths) { assert.match(MULTI_TILE_CLASS, /dark:bg-white/, `${k}: a multi-colour mark sits on white`); continue; }
+    if (m.multicolour || m.paths) { assert.match(MULTI_TILE_CLASS, /dark:bg-white/, `${k}: a multi-colour mark sits on white`); continue; }
     assert.ok(contrast(m.hex, TILE_HEX.light) >= 1.5, `${k}: light ${contrast(m.hex, TILE_HEX.light).toFixed(2)}:1`);
     assert.ok(contrast(m.dark, TILE_HEX.dark) >= 3, `${k}: dark ${contrast(m.dark, TILE_HEX.dark).toFixed(2)}:1`);
     if (m.dark.toLowerCase() === '#ffffff') white.push(k);
     else assert.equal(m.dark, m.hex, `${k} keeps its brand colour in dark mode`);
   }
-  assert.deepEqual(white.sort(), ['github', 'signal', 'tiktok', 'x', 'zoom']);
+  assert.deepEqual(white.sort(), ['chatgpt', 'github', 'grok', 'linkedin', 'signal', 'tiktok', 'x', 'zoom']);
 });
 
 // ── 6. Rendering ────────────────────────────────────────────────────────────
@@ -179,7 +185,9 @@ test('6. a mark is decoration: aria-hidden, unfocusable, no title, with its key;
       assert.match(svg, new RegExp(`data-provider="${k}"`), k);
       assert.doesNotMatch(out, /<title/, k);
       if (props.tone === 'current') assert.doesNotMatch(svg, /--brand/, `${k}: currentColor, no brand colour`);
-      else assert.match(svg, /text-\[color:var\(--brand\)\] dark:text-\[color:var\(--brand-dark\)\]/, k);
+      else if (BRAND_MARKS[k].multicolour) {
+        assert.match(out, /dark:bg-white/, `${k}: retain the brand palette on white`);
+      } else assert.match(svg, /text-\[color:var\(--brand\)\] dark:text-\[color:var\(--brand-dark\)\]/, k);
     }
   }
   const tile = html(h(BrandIcon, { provider: 'stripe', name: 'Stripe' }));
@@ -278,8 +286,49 @@ test('9. only AdminPage.jsx still imports lucide\'s GitBranch as a GitHub icon',
 test('10. the LinkedIn CSV import draws LinkedIn\'s recorded treatment, through BrandIcon', () => {
   const src = read('frontend/src/pages/account/connectorTools.jsx');
   assert.match(src, /<BrandIcon provider="linkedin" name="LinkedIn" size=\{16\} variant="bare" \/>/);
-  // LinkedIn is a recorded monogram (no permission to use its mark is recorded yet), so the modal draws its initials, not a recoloured copy.
+  // The follow-up records LinkedIn's blue mark, so the import keeps its brand colour.
   const out = html(h(BrandIcon, { provider: 'linkedin', name: 'LinkedIn', size: 16, variant: 'bare' }));
   if (Object.hasOwn(BRAND_MARKS, 'linkedin')) assert.match(out, /--brand:#0A66C2/i);
   else assert.match(out, /data-brand="monogram"[^>]*data-provider="linkedin"[^>]*>L</);
+});
+
+test('vendor follow-up: all seven recovered brands draw artwork, including catalogue aliases', () => {
+  assert.deepEqual(Object.keys(VENDOR_MARKS).sort(), ['chatgpt', 'google', 'grok', 'linkedin', 'microsoft', 'salesforce', 'slack']);
+  for (const provider of [...Object.keys(VENDOR_MARKS), 'google_calendar', 'microsoft_365']) {
+    const resolved = resolveBrand(provider);
+    const out = html(h(BrandIcon, { provider, name: provider }));
+    assert.equal(resolved.kind, 'mark', provider);
+    assert.match(out, /data-brand="mark"/, provider);
+    assert.doesNotMatch(out, /data-brand="monogram"/, provider);
+    assert.match(out, /<(path|rect)\b/, provider);
+    assert.doesNotMatch(out, /<script|<image|<foreignObject|<img|https?:\/\//i, provider);
+    assert.ok(out.includes(`viewBox="${resolved.mark.viewBox}"`), provider);
+  }
+});
+
+test('vendor gradients: repeated icons have unique IDs and every reference stays inside its own SVG', () => {
+  const out = html(h(React.Fragment, null,
+    h(BrandIcon, { provider: 'google' }), h(BrandIcon, { provider: 'google' })));
+  const svgs = [...out.matchAll(/<svg\b[\s\S]*?<\/svg>/g)].map((m) => m[0]);
+  assert.equal(svgs.length, 2);
+  const all = [];
+  for (const svg of svgs) {
+    const ids = [...svg.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]);
+    const refs = [...svg.matchAll(/(?:url\(#([^)]*)\)|href="#([^"]+)")/g)].map((m) => m[1] || m[2]);
+    assert.ok(ids.length > 10 && refs.length > 10, 'exercise the original gradient and clip paths');
+    assert.ok(refs.every((id) => ids.includes(id)), 'no reference borrows another icon’s definitions');
+    all.push(...ids);
+  }
+  assert.equal(new Set(all).size, all.length, 'no duplicate IDs across instances');
+});
+
+test('vendor palettes: Microsoft and Slack keep their supplied colours in dark tiles', () => {
+  for (const [provider, colours] of [
+    ['microsoft', ['#f25022', '#00a4ef', '#7fba00', '#ffb900']],
+    ['slack', ['#36c5f0', '#2eb67d', '#ecb22e', '#e01e5a']],
+  ]) {
+    const out = html(h(BrandIcon, { provider }));
+    assert.match(out, /dark:bg-white/);
+    for (const colour of colours) assert.ok(out.toLowerCase().includes(`fill="${colour}"`), `${provider}: ${colour}`);
+  }
 });
