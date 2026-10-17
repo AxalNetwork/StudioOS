@@ -1,9 +1,17 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, CheckCircle2, Loader2, ArrowRight, FileSignature, MessageSquare } from 'lucide-react';
 import { useEscapeClose } from './useEscapeClose';
 import { api } from '../lib/api';
 import { asksForFeedback, offersDealPack } from '../lib/shareDeckAudience';
+import { loadTurnstile } from '../lib/turnstile';
+
+// D691 — the share signup requires a Turnstile token, as /register does: the
+// Worker refuses a missing or failed one with 403, so the widget is drawn here
+// and its token sent with the form. Same site key and loader as RegisterPage.
+// Guarded as PublicJobDetailPage's is: under `node --test` import.meta.env is
+// undefined, and share_deck_cta_audience.test.mjs imports this module.
+const TURNSTILE_SITE_KEY = (import.meta.env && import.meta.env.VITE_TURNSTILE_SITE_KEY) || '';
 
 const STEPS = { SIGNUP: 'signup', NDA: 'nda', POST_NDA: 'post_nda', DONE: 'done' };
 
@@ -44,12 +52,72 @@ export default function ShareViewerSignupModal({
     check_size: '$25,000', valuation_cap: '$8M', discount: '20%',
   });
 
+  const [turnstileToken, setTurnstileToken] = useState('');
+  // Fail-visible, as RegisterPage: true once the bounded poll (~10s) gives up,
+  // so the viewer is told why Continue stays disabled instead of waiting.
+  const [turnstileFailed, setTurnstileFailed] = useState(false);
+  const turnstileRef = useRef(null);
+  const turnstileWidgetId = useRef(null);
+
+  useEffect(() => {
+    if (!TURNSTILE_SITE_KEY || !turnstileRef.current || step !== STEPS.SIGNUP) return undefined;
+    loadTurnstile().catch(() => {});
+    let interval = null;
+    function renderTurnstile() {
+      if (turnstileWidgetId.current !== null) {
+        try { window.turnstile.remove(turnstileWidgetId.current); } catch { /* already gone */ }
+      }
+      turnstileWidgetId.current = window.turnstile.render(turnstileRef.current, {
+        sitekey: TURNSTILE_SITE_KEY,
+        callback: (token) => { setTurnstileToken(token); setTurnstileFailed(false); },
+        'expired-callback': () => setTurnstileToken(''),
+        theme: 'auto',
+      });
+    }
+    if (typeof window.turnstile === 'undefined') {
+      let attempts = 0;
+      interval = setInterval(() => {
+        attempts += 1;
+        if (typeof window.turnstile !== 'undefined' && turnstileRef.current) {
+          clearInterval(interval);
+          renderTurnstile();
+        } else if (attempts >= 50) {
+          clearInterval(interval);
+          setTurnstileFailed(true);
+        }
+      }, 200);
+    } else {
+      renderTurnstile();
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+      if (turnstileWidgetId.current !== null) {
+        try { window.turnstile.remove(turnstileWidgetId.current); } catch { /* already gone */ }
+        turnstileWidgetId.current = null;
+      }
+    };
+  }, [step]);
+
+  // A Turnstile token is single-use, so a refused submit needs a fresh one.
+  function resetTurnstileWidget() {
+    if (TURNSTILE_SITE_KEY && turnstileWidgetId.current !== null) {
+      try { window.turnstile.reset(turnstileWidgetId.current); } catch { /* widget gone */ }
+      setTurnstileToken('');
+    }
+  }
+
   async function submitSignup(e) {
     e.preventDefault();
+    if (TURNSTILE_SITE_KEY && !turnstileToken) {
+      setError(turnstileFailed
+        ? 'Human verification could not load, so the account cannot be created here. Allow challenges.cloudflare.com or try another network, then reload.'
+        : 'Please complete the verification challenge');
+      return;
+    }
     setError(null); setRequiresLogin(false); setBusy(true);
     try {
       const res = await api.deckShareSignup(shareToken, {
-        email: form.email, name: form.name, role: form.role, view_id: viewId,
+        email: form.email, name: form.name, role: form.role, view_id: viewId, turnstileToken,
       });
       setUser(res);
       setStep(STEPS.NDA);
@@ -64,6 +132,7 @@ export default function ShareViewerSignupModal({
       } else {
         setError(err?.message || 'Signup failed');
       }
+      resetTurnstileWidget();
     } finally { setBusy(false); }
   }
 
@@ -195,8 +264,17 @@ export default function ShareViewerSignupModal({
                   <option value="founder">Founder</option>
                 </select>
               </div>
+              {TURNSTILE_SITE_KEY && (
+                <div ref={turnstileRef} className="flex justify-center" data-testid="share-signup-turnstile" />
+              )}
+              {TURNSTILE_SITE_KEY && turnstileFailed && (
+                <div className="text-xs text-amber-800 bg-amber-50 border border-amber-300 rounded-lg px-3 py-2 dark:text-amber-200 dark:bg-amber-900/20 dark:border-amber-700">
+                  Human verification couldn't load — usually an ad blocker or strict network.
+                  Allow challenges.cloudflare.com or try another network, then reload to create your account.
+                </div>
+              )}
               <button
-                type="submit" disabled={busy}
+                type="submit" disabled={busy || (TURNSTILE_SITE_KEY && !turnstileToken)}
                 className="w-full mt-2 inline-flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg disabled:opacity-50"
               >
                 {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight size={14} />}
