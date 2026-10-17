@@ -8,12 +8,14 @@
  *
  * The tables come from schema_baseline.sql through `_baseline.mjs`, with
  * migrations 129 (the one base cap table per venture), 410, 442 and 463
- * applied over them, and the routes run through `_d1_sqlite.mjs`. Migration
- * 459 (D690 S18-A's PR 1) is not on main yet; #1700 applies it here once it is.
+ * applied over them, and the routes run through `_d1_sqlite.mjs`. The cycle
+ * routes' fixture also applies 459 (D690's activity index) and builds the
+ * fund directory from 365's CREATE statements and 406 whole, with made-up funds.
  *
  * #1700's first PR adds tests 10 (holders), 6 (links), 7 (data room) and the
- * founder read of 17. The cycle routes that call them, and their logging
- * (decision 12), come with the closing PR, after D690 S18-A's `logCycleWrite`.
+ * founder read of 17. Its second adds step 5's cycle routes and their logging
+ * (decision 12): the cases of tests 2, 4 and 8-13 for those routes. The record
+ * actions, form-options and `since: 'last'` come with the closing PR.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/raise_writes_d691.test.ts
@@ -582,7 +584,7 @@ function roomFixture() {
     CREATE TABLE users (id INTEGER PRIMARY KEY, role TEXT NOT NULL, founder_id INTEGER, is_active INTEGER NOT NULL DEFAULT 1, jwt_min_iat INTEGER, name TEXT, email TEXT);
     CREATE TABLE projects (id INTEGER PRIMARY KEY, uid TEXT UNIQUE NOT NULL, name TEXT, founder_id INTEGER, company_id INTEGER, deleted_at TEXT);
   `);
-  for (const t of ['data_room_grants', 'data_room_files', 'data_room_folders', 'data_room_access_log', 'pairwise_ndas', 'raise_prospects', 'dd_cases', 'dd_requests']) {
+  for (const t of ['data_room_grants', 'data_room_files', 'data_room_folders', 'data_room_access_log', 'pairwise_ndas', 'raise_prospects', 'dd_cases', 'dd_requests', 'activity_logs']) {
     db.exec(stripForeignKeys(tableFromBaseline(BASELINE, t)));
   }
   addColumnsFrom(db, stripForeignKeys(sqlOf('463_raise_record_stores.sql')), 'data_room_files');
@@ -731,4 +733,450 @@ test('7 (writes): upload and PATCH take the tier fields; a bad tier, date or che
   assert.equal(p.status, 200, p.raw);
   const after = db.prepare('SELECT access_tier, access_expires_at, dd_request_id FROM data_room_files WHERE uid = ?').get(up.body.uid) as any;
   assert.deepEqual({ ...after }, { access_tier: 'nobody', access_expires_at: null, dd_request_id: null });
+});
+
+// ---------------------------------------------------------------------------
+// #1700's second PR — step 5's cycle routes and decision 12's log rows.
+// Tests 2, 4 and 8-13 for these routes; the record actions, form-options and
+// `since: 'last'` come with the closing PR, after #1699's.
+// ---------------------------------------------------------------------------
+
+import cycleRaise from '../src/routes/cycle_raise.ts';
+
+const C_FOUNDER = 110, C_FREE = 111, C_OTHER = 120, C_PARTNER = 140, C_INVESTOR = 150, C_ADVISOR = 160;
+const C_P = 1, C_PB = 2;
+const C_ROLE: Record<number, string> = {
+  [C_FOUNDER]: 'founder', [C_FREE]: 'founder', [C_OTHER]: 'founder', [C_PARTNER]: 'partner', [C_INVESTOR]: 'investor', [C_ADVISOR]: 'advisor', [ADMIN]: 'admin',
+};
+const B_DECK = 9, B_LINK = 90, B_PROSPECT = 92;
+// Every made-up person and fund name a write below sends: no log summary may hold one.
+const NAMES = /Ines|Duarte|Northwind|Alder|Harbour|Kite Partner|Juno|Osprey Angel/i;
+
+function ddlOnly(file: string): string {
+  return sqlOf(file).split(/;\s*\n/).map((s) => s.replace(/^\s*--.*$/gm, '').trim())
+    .filter((s) => /^CREATE\s+(TABLE|INDEX)/i.test(s)).map((s) => `${s};`).join('\n');
+}
+
+function cycleFixture() {
+  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
+  for (const t of [
+    'users', 'projects', 'activity_logs', 'cap_table_scenarios', 'cap_table_holders', 'cap_table_vesting', 'raise_prospects', 'raise_rounds',
+    'spinout_deck_overrides', 'pitch_decks', 'pitch_deck_share_tokens', 'deck_share_views', 'data_room_folders', 'data_room_files',
+    'dd_cases', 'dd_requests', 'contacts', 'pain_groups', 'hypotheses', 'mvp_features', 'roadmap_okrs',
+  ]) db.exec(tableFromBaseline(BASELINE, t));
+  const cols = (t: string) => new Set((db.prepare(`SELECT name FROM pragma_table_info('${t}')`).all() as any[]).map((r) => r.name));
+  if (!cols('pitch_deck_share_tokens').has('revoked_at')) db.exec(sqlOf('248_deck_share_revoked_at.sql'));
+  for (const [c, d] of [['amount', 'REAL'], ['close_id', 'INTEGER'], ['commit_status', 'TEXT'], ['instrument', 'TEXT']]) {
+    if (!cols('raise_prospects').has(c)) db.exec(`ALTER TABLE raise_prospects ADD COLUMN ${c} ${d}`);
+  }
+  db.exec(sqlOf('129_captable_one_canonical_per_project.sql'));
+  db.exec(sqlOf('249_project_metrics.sql'));
+  db.exec(sqlOf('410_safe_issuances.sql'));
+  db.exec(sqlOf('442_raise_cycle_stores.sql'));
+  db.exec(sqlOf('459_cycle_activity_convention.sql'));
+  db.exec(sqlOf('463_raise_record_stores.sql'));
+  addColumnsFrom(db, sqlOf('441_build_cycle_stores.sql'), 'cap_table_holders');
+  // The fund directory: the CREATE statements only, and 406 whole, with made-up funds.
+  db.exec(ddlOnly('365_research_eurotech_fund_directory.sql'));
+  db.exec(sqlOf('406_research_fund_sources.sql'));
+  db.prepare(`INSERT INTO research_fund_sources (source_name, title, terms_status, evidence, verdict, verdict_reason, reviewed_on)
+              VALUES (?, 't', 'not found', 'e', ?, 'r', '2026-10-06')`).run('A served list', 'cite only');
+  db.prepare(`INSERT INTO research_fund_sources (source_name, title, terms_status, evidence, verdict, verdict_reason, reviewed_on)
+              VALUES (?, 't', 'not found', 'e', ?, 'r', '2026-10-06')`).run('A withdrawn list', 'not allowed');
+  const f = db.prepare(`INSERT INTO research_fund_directory (uid, name, sector_focus, source_name, source_url, as_of) VALUES (?, ?, 'Generalist', ?, 'https://example.test/list', '2026-10-04')`);
+  f.run('alder-ventures', 'Alder Ventures', 'A served list');
+  f.run('withdrawn-fund', 'Withdrawn Fund', 'A withdrawn list');
+
+  const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id, subscription_tier) VALUES (?, ?, ?, ?, 1, ?, ?)');
+  u.run(C_FOUNDER, 'founder', 'Fay Founder', 'fay@example.test', 1001, 'studio');
+  u.run(C_FREE, 'founder', 'Fred Free', 'fred@example.test', 1001, 'free');
+  u.run(C_OTHER, 'founder', 'Bo Other', 'bo@example.test', 1002, 'studio');
+  u.run(C_PARTNER, 'partner', 'Pat Partner', 'pat@example.test', null, 'free');
+  u.run(C_INVESTOR, 'investor', 'Ivy Investor', 'ivy@example.test', null, 'free');
+  u.run(C_ADVISOR, 'advisor', 'Ari Advisor', 'ari@example.test', null, 'free');
+  u.run(ADMIN, 'admin', 'Ada Admin', 'ada@example.test', null, 'free');
+  db.exec(`INSERT INTO projects (id, name, founder_id) VALUES (${C_P}, 'Kestrel Labs', 1001), (${C_PB}, 'Osprey Works', 1002)`);
+  db.exec(`INSERT INTO pitch_decks (id, project_id, version, slides) VALUES (5, ${C_P}, 1, '[]'), (${B_DECK}, ${C_PB}, 1, '[]')`);
+  db.exec(`INSERT INTO pitch_deck_share_tokens (id, deck_id, token_hash, expires_at, view_limit, view_count) VALUES (${B_LINK}, ${B_DECK}, 'h', '2999-01-01 00:00:00', 1, 0)`);
+  db.exec(`INSERT INTO raise_prospects (id, uid, project_id, name, email, stage) VALUES (${B_PROSPECT}, 'rp-b', ${C_PB}, 'Osprey Angel', 'angel@osprey.example.test', 'meeting')`);
+  // Venture B has narrative version 3; Kestrel has none.
+  db.exec(`INSERT INTO spinout_deck_overrides (project_id, field_key, value, version, investor_type) VALUES (${C_PB}, '_version', 'angel', 3, 'angel')`);
+  return db;
+}
+
+const cycleApp = new Hono<any>();
+cycleApp.route('/api/cycles/raise', cycleRaise);
+cycleApp.route('/api/decks', decks);
+cycleApp.onError((err: any, c) => c.json({ detail: String(err?.message || '') }, 500));
+
+async function cyc(db: DatabaseSync, who: number, method: string, path: string, body?: unknown) {
+  const token = await new SignJWT({ user_id: who, role: C_ROLE[who] }).setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+  const saved = [console.warn, console.error]; console.warn = () => {}; console.error = () => {};
+  try {
+    const res = await cycleApp.request(path.startsWith('/api/') ? path : `/api/cycles/raise${path}`, {
+      method, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    }, envOf(db));
+    const raw = await res.text();
+    return { status: res.status, body: raw ? JSON.parse(raw) : null, raw };
+  } finally { [console.warn, console.error] = saved; }
+}
+const q = (path: string, pid = C_P) => `${path}${path.includes('?') ? '&' : '?'}project=${pid}`;
+const logs = (db: DatabaseSync, where = '1 = 1', ...args: any[]) =>
+  db.prepare(`SELECT project_id, user_id, entity_type, entity_id, action, details FROM activity_logs WHERE ${where} ORDER BY id`).all(...args) as any[];
+const n = (db: DatabaseSync, sql: string, ...args: any[]) => Number((db.prepare(sql).get(...args) as any).n);
+
+test('4 (who): a partner, an advisor member, an investor and another venture\'s founder get 403 on every write', async () => {
+  const db = cycleFixture();
+  const writes: Array<[string, string, unknown]> = [
+    ['PUT', '/readiness/team', { score: 5, evidence: 'pattern' }],
+    ['POST', '/readiness/rescore', {}],
+    ['POST', '/narrative-versions', { investor_type: 'angel' }],
+    ['PATCH', '/narrative-versions/1', { why_now: 'x' }],
+    ['POST', '/deck-links', { deck_id: 5, investor_label: 'Kite Partner', expires_days: 7 }],
+    ['PATCH', '/deck-links/1', { allow_download: false }],
+    ['POST', '/holders', { name: 'Juno', group: 'founders', instrument: 'common', shares: 10 }],
+    ['PATCH', '/holders/h-1', { shares: 10 }],
+    ['PUT', '/use-of-funds', { sections: [{ key: 'product', pct: 100 }] }],
+    ['POST', '/prospects', { name: 'Northwind Angels', stage: 'identified' }],
+    ['PATCH', '/prospects/1', { stage: 'meeting' }],
+    ['PUT', '/prospects/1/next-step', { next_step: 'x' }],
+    ['PUT', '/data-room/files/1/checklist', { item: null }],
+  ];
+  for (const who of [C_PARTNER, C_ADVISOR, C_INVESTOR, C_OTHER]) {
+    for (const [m, path, b] of writes) {
+      const r = await cyc(db, who, m, q(path), b);
+      assert.equal(r.status, 403, `${C_ROLE[who]} ${who} ${m} ${path}`);
+    }
+  }
+  assert.equal(n(db, 'SELECT COUNT(*) AS n FROM activity_logs'), 0, 'a refused write logs nothing');
+});
+
+test('4 (ids): a venture-B id with ?project=A answers 404 on every PATCH, and so does a B id a body names', async () => {
+  const db = cycleFixture();
+  const bHolder = db.prepare(`INSERT INTO cap_table_holders (user_id, project_id, name, security_type, shares, kind) VALUES (${C_OTHER}, ${C_PB}, 'B founder', 'common', 10, 'founder') RETURNING id`).get() as any;
+  const cases: Array<[string, string, unknown]> = [
+    ['PATCH', '/narrative-versions/3', { why_now: 'Taken over' }],
+    ['PATCH', `/deck-links/${B_LINK}`, { allow_download: false }],
+    ['PATCH', `/holders/h-${bHolder.id}`, { name: 'Taken over' }],
+    ['PATCH', `/prospects/${B_PROSPECT}`, { stage: 'passed' }],
+    ['POST', '/deck-links', { deck_id: B_DECK, investor_label: 'Kite Partner', expires_days: 7 }],
+    ['POST', '/deck-links', { deck_id: 5, prospect_id: B_PROSPECT, expires_days: 7 }],
+    ['POST', '/narrative-versions', { investor_type: 'angel', start_from: 'version', based_on_version: 3 }],
+    ['POST', '/holders', { name: 'Juno', group: 'investors', instrument: 'safe', amount_cents: 100_00, prospect_id: B_PROSPECT }],
+  ];
+  for (const [m, path, b] of cases) {
+    const r = await cyc(db, C_FOUNDER, m, q(path), b);
+    assert.equal(r.status, 404, `${m} ${path} ${JSON.stringify(b)}: ${r.raw}`);
+  }
+  assert.equal((db.prepare('SELECT allow_download FROM pitch_deck_share_tokens WHERE id = ?').get(B_LINK) as any).allow_download, 1);
+  assert.equal((db.prepare('SELECT stage FROM raise_prospects WHERE id = ?').get(B_PROSPECT) as any).stage, 'meeting');
+  assert.equal((db.prepare('SELECT name FROM cap_table_holders WHERE id = ?').get(bHolder.id) as any).name, 'B founder');
+  assert.equal(n(db, 'SELECT COUNT(*) AS n FROM pitch_deck_share_tokens'), 1, 'no link was made');
+  assert.equal(n(db, `SELECT COUNT(*) AS n FROM spinout_deck_overrides WHERE project_id = ${C_P}`), 0, 'no version was made');
+  assert.equal(n(db, 'SELECT COUNT(*) AS n FROM activity_logs'), 0);
+});
+
+test('8: re-score takes a subset and keeps earlier scores; an empty body scores the six; team is 400', async () => {
+  const db = cycleFixture();
+  const computed = () => n(db, "SELECT COUNT(*) AS n FROM readiness_scores WHERE source = 'computed'");
+  const r1 = await cyc(db, C_FOUNDER, 'POST', q('/readiness/rescore'), { items: ['deck', 'cap_table'] });
+  assert.equal(r1.status, 200, r1.raw);
+  assert.deepEqual(r1.body, { scored: 2, items: ['deck', 'cap_table'] });
+  assert.deepEqual((db.prepare(`SELECT i.item_key FROM readiness_scores s JOIN readiness_items i ON i.id = s.item_id ORDER BY i.item_key`).all() as any[]).map((r) => r.item_key), ['cap_table', 'deck']);
+  const r2 = await cyc(db, C_FOUNDER, 'POST', q('/readiness/rescore'));
+  assert.equal(r2.status, 200);
+  assert.equal(r2.body.scored, 6, '#1652\'s caller: no body, the six computed items');
+  assert.equal(computed(), 8, 'earlier scores are kept');
+  assert.equal(n(db, "SELECT COUNT(*) AS n FROM readiness_scores s JOIN readiness_items i ON i.id = s.item_id WHERE i.item_key = 'team'"), 0, 'team is left alone');
+  const team = await cyc(db, C_FOUNDER, 'POST', q('/readiness/rescore'), { items: ['deck', 'team'] });
+  assert.deepEqual([team.status, team.body.detail], [400, 'Team is scored by a person, not by a check']);
+  assert.equal((await cyc(db, C_FOUNDER, 'POST', q('/readiness/rescore'), { items: ['nope'] })).status, 400);
+  assert.equal((await cyc(db, C_FOUNDER, 'POST', q('/readiness/rescore'), { since: 'yesterday' })).status, 400);
+  // `since: 'last'` reads #1699's exposed inputs and comes with the closing PR; until then it is refused, never run as 'all'.
+  assert.equal((await cyc(db, C_FOUNDER, 'POST', q('/readiness/rescore'), { since: 'last' })).status, 501);
+  assert.equal(computed(), 8, 'a refused re-score writes nothing');
+  assert.equal(logs(db, "action = 'readiness_rescored'").length, 8, 'one row per item scored');
+});
+
+test('9: New version stores its fields, starts from live, a version or blank, and Edit runs the check again', async () => {
+  const db = cycleFixture();
+  db.exec(`INSERT INTO spinout_deck_overrides (project_id, field_key, value, version) VALUES (${C_P}, 'cover.thesis', 'Live thesis', 0), (${C_P}, 'ask.title', 'Live ask', 0)`);
+  const words = (v: number) => Object.fromEntries((db.prepare(`SELECT field_key, value FROM spinout_deck_overrides WHERE project_id = ${C_P} AND version = ? AND field_key != '_version'`).all(v) as any[]).map((r) => [r.field_key, r.value]));
+  const meta = (v: number) => ({ ...(db.prepare(`SELECT start_from, based_on_version, why_now, check_against_json, created_by FROM narrative_version_meta WHERE project_id = ${C_P} AND version = ?`).get(v) as any) });
+
+  const v1 = await cyc(db, C_FOUNDER, 'POST', q('/narrative-versions'), {
+    investor_type: 'seed_fund', one_liner: 'Grid batteries for cold towns', why_now: 'Tariffs changed this year', ask: 'Raising $2,000,000', check_against: ['metrics', 'deck'],
+  });
+  assert.equal(v1.status, 201, v1.raw);
+  assert.equal(v1.body.version, 1);
+  assert.deepEqual(words(1), { 'cover.thesis': 'Grid batteries for cold towns', 'ask.title': 'Raising $2,000,000' });
+  assert.deepEqual(meta(1), { start_from: 'live', based_on_version: null, why_now: 'Tariffs changed this year', check_against_json: '["deck","metrics"]', created_by: C_FOUNDER });
+
+  const v2 = await cyc(db, C_FOUNDER, 'POST', q('/narrative-versions'), { investor_type: 'angel', start_from: 'version', based_on_version: 1 });
+  assert.equal(v2.body.version, 2);
+  assert.deepEqual(words(2), words(1), 'start from a version copies that version\'s words');
+  assert.equal(meta(2).based_on_version, 1);
+
+  const v3 = await cyc(db, C_FOUNDER, 'POST', q('/narrative-versions'), { investor_type: 'angel', start_from: 'blank' });
+  assert.deepEqual(words(v3.body.version), {}, 'blank copies nothing');
+  // #1652's caller: only the type, and the live wording, as before.
+  const v4 = await cyc(db, C_FOUNDER, 'POST', q('/narrative-versions'), { investor_type: 'angel' });
+  assert.equal(v4.status, 201);
+  assert.deepEqual(words(v4.body.version), { 'cover.thesis': 'Live thesis', 'ask.title': 'Live ask' });
+  assert.equal(meta(v4.body.version).start_from, 'live');
+
+  for (const [b, status] of [
+    [{ investor_type: 'angel', start_from: 'version' }, 404], [{ investor_type: 'angel', start_from: 'someday' }, 400],
+    [{ investor_type: 'angel', based_on_version: 1 }, 400], [{ investor_type: 'angel', check_against: ['data_room'] }, 400], [{ investor_type: 'vc' }, 400],
+  ] as const) assert.equal((await cyc(db, C_FOUNDER, 'POST', q('/narrative-versions'), b)).status, status, JSON.stringify(b));
+
+  // Edit: the deck states $2M; once an active round records $5M, the check finds it.
+  db.exec(`UPDATE projects SET funding_needed = 2000000 WHERE id = ${C_P}`);
+  db.exec(`INSERT INTO raise_rounds (uid, project_id, name, status, target_amount) VALUES ('rr-k', ${C_P}, 'Seed', 'active', 5000000)`);
+  const e = await cyc(db, C_FOUNDER, 'PATCH', q('/narrative-versions/1'), { ask: 'Raising $2,500,000', why_now: 'Prices fell' });
+  assert.equal(e.status, 200, e.raw);
+  assert.ok(e.body.mismatches.length >= 1, 'the check ran again');
+  assert.equal(n(db, `SELECT COUNT(*) AS n FROM narrative_checks WHERE project_id = ${C_P} AND version = 1`), e.body.mismatches.length);
+  assert.equal(words(1)['ask.title'], 'Raising $2,500,000');
+  assert.equal(meta(1).why_now, 'Prices fell');
+  const sf = await cyc(db, C_FOUNDER, 'PATCH', q('/narrative-versions/1'), { start_from: 'blank', why_now: 'Changed' });
+  assert.deepEqual([sf.status, sf.body.detail], [400, 'Start from is set when the version is made']);
+  assert.equal(meta(1).why_now, 'Prices fell', 'a refused edit changes nothing');
+  assert.equal((await cyc(db, C_FOUNDER, 'PATCH', q('/narrative-versions/1'), { based_on_version: 2 })).status, 400, 'based on a later version');
+  assert.equal((await cyc(db, C_FOUNDER, 'PATCH', q('/narrative-versions/9'), { why_now: 'x' })).status, 404);
+  assert.deepEqual(logs(db, "entity_type = 'raise.investor-narrative'").map((r) => [r.entity_id, r.action]),
+    [['1', 'narrative_version_created'], ['2', 'narrative_version_created'], ['3', 'narrative_version_created'], ['4', 'narrative_version_created'], ['1', 'narrative_version_updated']]);
+});
+
+test('6 (route): New link through the cycle stores its investor and settings, returns the link once, and logs it', async () => {
+  const db = cycleFixture();
+  db.exec(`INSERT INTO raise_prospects (id, uid, project_id, name, stage) VALUES (7, 'rp-k', ${C_P}, 'Harbour Angels', 'meeting')`);
+  const r = await cyc(db, C_FOUNDER, 'POST', q('/deck-links'), { deck_id: 5, investor_label: 'Kite Partner', expires_days: null, allow_download: false, allow_forwarding: false });
+  assert.equal(r.status, 201, r.raw);
+  assert.match(r.body.share_path, /^\/share\/deck\/.{20,}$/);
+  const token = r.body.share_path.slice('/share/deck/'.length);
+  const row = db.prepare('SELECT * FROM pitch_deck_share_tokens WHERE id = ?').get(r.body.id) as any;
+  assert.deepEqual([row.investor_label, row.prospect_id, row.expires_at, row.allow_download, row.allow_forwarding, row.created_by],
+    ['Kite Partner', null, SHARE_NEVER_EXPIRES, 0, 0, C_FOUNDER]);
+  assert.equal(row.token_hash, createHash('sha256').update(token).digest('hex'));
+  const list = await cyc(db, C_FOUNDER, 'GET', q('/modules/pitch-deck'));
+  assert.ok(!list.raw.includes(token), 'no read returns the raw link again');
+  const byProspect = await cyc(db, C_FOUNDER, 'POST', q('/deck-links'), { deck_id: 5, prospect_id: 7, expires_days: 7 });
+  assert.equal(byProspect.status, 201);
+  assert.equal((db.prepare('SELECT prospect_id FROM pitch_deck_share_tokens WHERE id = ?').get(byProspect.body.id) as any).prospect_id, 7);
+  for (const b of [
+    { deck_id: 5, expires_days: 7 }, { deck_id: 5, prospect_id: 7, investor_label: 'Kite Partner', expires_days: 7 },
+    { deck_id: 5, investor_label: 'Kite Partner', expires_days: 5 }, { deck_id: 5, investor_label: 'Kite Partner' },
+    { deck_id: 5, investor_label: 'Kite Partner', expires_days: 7, allow_download: 'no' },
+  ]) assert.equal((await cyc(db, C_FOUNDER, 'POST', q('/deck-links'), b)).status, 400, JSON.stringify(b));
+  // The share route's plan gate (decision 13): a free account on the same venture is refused, and nothing is written.
+  const free = await cyc(db, C_FREE, 'POST', q('/deck-links'), { deck_id: 5, investor_label: 'Kite Partner', expires_days: 7 });
+  assert.equal(free.status, 402);
+  assert.deepEqual(free.body, tierUpsell('studio'));
+  assert.equal(n(db, `SELECT COUNT(*) AS n FROM pitch_deck_share_tokens WHERE deck_id = 5`), 2);
+  assert.deepEqual(logs(db, "entity_type = 'raise.pitch-deck'").map((x) => [x.entity_id, x.action, x.details]), [
+    [String(r.body.id), 'deck_link_created', 'Link created; never expires'],
+    [String(byProspect.body.id), 'deck_link_created', `Link created; expires ${String((db.prepare('SELECT expires_at FROM pitch_deck_share_tokens WHERE id = ?').get(byProspect.body.id) as any).expires_at).slice(0, 10)}`],
+  ]);
+});
+
+test('6 (route): a link made through /api/decks/:id/share logs the same row', async () => {
+  const db = cycleFixture();
+  const r = await cyc(db, C_FOUNDER, 'POST', '/api/decks/5/share', { expires_in_hours: 24 });
+  assert.equal(r.status, 200, r.raw);
+  assert.deepEqual(logs(db, "entity_type = 'raise.pitch-deck'").map((x) => [x.project_id, x.entity_id, x.action]), [[C_P, String(r.body.id), 'deck_link_created']]);
+});
+
+test('6 (route): an edit can bring the expiry forward, never extend it; it changes the investor and the settings', async () => {
+  const db = cycleFixture();
+  const mk = async (expires_days: number | null) => (await cyc(db, C_FOUNDER, 'POST', q('/deck-links'), { deck_id: 5, investor_label: 'Kite Partner', expires_days })).body.id;
+  const week = await mk(7), never = await mk(null);
+  assert.equal((await cyc(db, C_FOUNDER, 'PATCH', q(`/deck-links/${week}`), { expires_days: 30 })).status, 400, 'extending a 7-day link');
+  assert.equal((await cyc(db, C_FOUNDER, 'PATCH', q(`/deck-links/${week}`), { expires_days: null })).status, 400, 'Never on a finite link extends it');
+  const before = (db.prepare('SELECT expires_at FROM pitch_deck_share_tokens WHERE id = ?').get(week) as any).expires_at;
+  const ok = await cyc(db, C_FOUNDER, 'PATCH', q(`/deck-links/${never}`), { expires_days: 14, allow_forwarding: false, investor_label: 'Juno Capital' });
+  assert.equal(ok.status, 200, ok.raw);
+  const row = db.prepare('SELECT expires_at, allow_forwarding, investor_label FROM pitch_deck_share_tokens WHERE id = ?').get(never) as any;
+  assert.notEqual(row.expires_at, SHARE_NEVER_EXPIRES);
+  assert.deepEqual([row.allow_forwarding, row.investor_label], [0, 'Juno Capital']);
+  assert.equal((db.prepare('SELECT expires_at FROM pitch_deck_share_tokens WHERE id = ?').get(week) as any).expires_at, before, 'a refused edit changes nothing');
+  assert.equal((await cyc(db, C_FOUNDER, 'PATCH', q(`/deck-links/${never}`), {})).status, 400);
+  assert.deepEqual(logs(db, "action = 'deck_link_updated'").map((x) => [x.entity_id, x.details]), [[String(never), 'Link edited: investor, forwarding off, expiry']]);
+});
+
+test('10 (route): Add holder and Edit holder go through addHolder() and updateHolder(), and each logs one row', async () => {
+  const db = cycleFixture();
+  db.exec(`INSERT INTO raise_prospects (id, uid, project_id, name, stage) VALUES (7, 'rp-k', ${C_P}, 'Harbour Angels', 'committed')`);
+  const f = await cyc(db, C_FOUNDER, 'POST', q('/holders'), {
+    name: 'Ines Duarte', group: 'Founders', instrument: 'Common', ownership_pct: 40,
+    vesting: { start_date: '2026-01-01', total_months: 48, cliff_months: 12 },
+  });
+  assert.equal(f.status, 201, f.raw);
+  assert.match(f.body.id, /^h-[1-9][0-9]*$/);
+  const holderId = Number(f.body.id.slice(2));
+  assert.equal((db.prepare('SELECT project_id FROM cap_table_holders WHERE id = ?').get(holderId) as any).project_id, C_P);
+  assert.equal(n(db, 'SELECT COUNT(*) AS n FROM cap_table_vesting WHERE holder_id = ?', holderId), 1);
+  const s = await cyc(db, C_FOUNDER, 'POST', q('/holders'), { name: 'Harbour Angels', group: 'investors', instrument: 'Convertible note', amount_cents: 250_000_00, cap_cents: 8_000_000_00, prospect_id: 7 });
+  assert.equal(s.status, 201, s.raw);
+  assert.match(s.body.id, /^e-[1-9][0-9]*$/);
+  const safe = stored(db).safes.find((x: any) => x.key === s.body.id);
+  assert.deepEqual([safe.instrument, safe.amount, safe.prospect_id], ['note', 250_000, 7]);
+
+  // 2 (ids): the founder reads as h-<register id> in the Raise list, and no id holds a name.
+  const list = await cyc(db, C_FOUNDER, 'GET', q('/modules/cap-table'));
+  const ids = list.body.records.rows.map((r: any) => r.id);
+  assert.ok(ids.includes(f.body.id), JSON.stringify(ids));
+  for (const id of ids.filter(Boolean)) { assert.match(id, /^[a-z0-9][a-z0-9_-]*$/); assert.doesNotMatch(id, NAMES); }
+
+  const e = await cyc(db, C_FOUNDER, 'PATCH', q(`/holders/${f.body.id}`), { shares: 3_000_000 });
+  assert.equal(e.status, 200, e.raw);
+  assert.equal((db.prepare('SELECT shares FROM cap_table_holders WHERE id = ?').get(holderId) as any).shares, 3_000_000);
+  for (const [group, instrument] of [['option_pool', 'options'], ['advisors', 'common'], ['founders', 'options'], ['investors', 'preferred']]) {
+    assert.equal((await cyc(db, C_FOUNDER, 'POST', q('/holders'), { name: 'Juno', group, instrument, shares: 5 })).status, 400, `${group} · ${instrument}`);
+  }
+  assert.equal((await cyc(db, C_FOUNDER, 'PATCH', q(`/holders/${f.body.id}`), { group: 'investors' })).status, 400);
+  assert.equal((await cyc(db, C_FOUNDER, 'PATCH', q('/holders/pool'), { shares: 5 })).status, 404);
+  const was = { h: n(db, 'SELECT COUNT(*) AS n FROM cap_table_holders'), l: n(db, 'SELECT COUNT(*) AS n FROM activity_logs') };
+  const free = await cyc(db, C_FREE, 'POST', q('/holders'), { name: 'Juno', group: 'founders', instrument: 'common', shares: 5 });
+  assert.equal(free.status, 402, 'the tool\'s plan gate, through addHolder() itself');
+  assert.equal((await cyc(db, C_FREE, 'PATCH', q(`/holders/${f.body.id}`), { shares: 5 })).status, 402);
+  assert.deepEqual({ h: n(db, 'SELECT COUNT(*) AS n FROM cap_table_holders'), l: n(db, 'SELECT COUNT(*) AS n FROM activity_logs') }, was, 'no holder and no log row');
+  assert.deepEqual(logs(db, "entity_type = 'raise.cap-table'").map((x) => [x.entity_id, x.action, x.details]), [
+    [f.body.id, 'holder_created', 'Holder added: Founders · Common'],
+    [s.body.id, 'holder_created', 'Holder added: Investors · Convertible note'],
+    [f.body.id, 'holder_updated', 'Holder edited: shares'],
+  ]);
+});
+
+test('11: Edit split round-trips the five sections, the milestones and the runway, keeps milestone_costs, and refuses a split off 100', async () => {
+  const db = cycleFixture();
+  db.prepare('UPDATE projects SET use_of_funds_meta = ? WHERE id = ?').run(JSON.stringify({ milestone_costs: { m1: { bucket: 'eng', cost: 5000 } }, deck_synced_at: '2026-10-01T00:00:00Z' }), C_P);
+  const body = {
+    amount_to_raise_cents: 2_000_000_00, runway_months: 20,
+    sections: [
+      { key: 'product', pct: 40, milestone_label: 'Ship the pilot', milestone_by: '2027-06' }, { key: 'go-to-market', pct: 30 },
+      { key: 'infrastructure', pct: 10 }, { key: 'operations', pct: 10 }, { key: 'reserve', pct: 10 },
+    ],
+  };
+  const r = await cyc(db, C_FOUNDER, 'PUT', q('/use-of-funds'), body);
+  assert.equal(r.status, 200, r.raw);
+  const p = db.prepare('SELECT use_of_funds, funding_needed, use_of_funds_meta FROM projects WHERE id = ?').get(C_P) as any;
+  assert.deepEqual(JSON.parse(p.use_of_funds), [
+    { label: 'Product & engineering', pct: 40 }, { label: 'GTM: sales and marketing', pct: 30 }, { label: 'Infrastructure & data', pct: 10 },
+    { label: 'Operations, legal & compliance', pct: 10 }, { label: 'Hiring / runway reserve', pct: 10 },
+  ], 'the stored labels, in the page\'s order');
+  assert.equal(p.funding_needed, 2_000_000, 'the column\'s dollars');
+  const meta = JSON.parse(p.use_of_funds_meta);
+  assert.deepEqual(meta.milestone_costs, { m1: { bucket: 'eng', cost: 5000 } }, 'other keys are kept');
+  assert.equal(meta.runway_months, 20);
+  assert.deepEqual(meta.milestones, { product: { label: 'Ship the pilot', by: '2027-06' } });
+  assert.equal(meta.deck_synced_at, null, 'a change marks the deck out of sync');
+  const rows = Object.fromEntries((await cyc(db, C_FOUNDER, 'GET', q('/modules/use-of-funds'))).body.records.rows.map((x: any) => [x.id, x.cells]));
+  assert.equal(rows.product.amount, 800_000);
+  assert.equal(rows.product.monthly, 40_000, 'monthly is amount ÷ runway');
+  assert.equal(rows.product.milestone, 'Ship the pilot by 2027-06');
+
+  const off = { ...body, sections: body.sections.map((s) => (s.key === 'reserve' ? { ...s, pct: 5 } : s)) };
+  const bad = await cyc(db, C_FOUNDER, 'PUT', q('/use-of-funds'), off);
+  assert.deepEqual([bad.status, bad.body.detail], [400, 'Use of Funds must total exactly 100%.']);
+  for (const b of [
+    { sections: [{ key: 'marketing', pct: 100 }] }, { sections: [{ key: 'product', pct: 50 }, { key: 'product', pct: 50 }] },
+    { ...body, runway_months: 0 }, { ...body, amount_to_raise_cents: 12.5 },
+    { sections: [{ key: 'product', pct: 100, milestone_label: 'x', milestone_by: 'soon' }] },
+  ]) assert.equal((await cyc(db, C_FOUNDER, 'PUT', q('/use-of-funds'), b)).status, 400, JSON.stringify(b));
+  assert.equal((db.prepare('SELECT use_of_funds_meta FROM projects WHERE id = ?').get(C_P) as any).use_of_funds_meta, p.use_of_funds_meta, 'a refused split writes nothing');
+  assert.deepEqual(logs(db, "entity_type = 'raise.use-of-funds'").map((x) => x.entity_id), ['product', 'go-to-market', 'infrastructure', 'operations', 'reserve']);
+});
+
+test('12: Add investor stores Identified as to_contact, a fund by its name, answers a duplicate with 409, and never takes a withdrawn fund', async () => {
+  const db = cycleFixture();
+  const a = await cyc(db, C_FOUNDER, 'POST', q('/prospects'), { name: 'Northwind Angels', stage: 'Identified', warm_path: 'Via a cofounder', next_step: 'Intro', next_step_due: '2026-11-02' });
+  assert.equal(a.status, 201, a.raw);
+  const row = db.prepare('SELECT * FROM raise_prospects WHERE id = ?').get(a.body.id) as any;
+  assert.deepEqual([row.project_id, row.name, row.stage, row.warm_path, row.next_step, row.next_step_due], [C_P, 'Northwind Angels', 'to_contact', 'Via a cofounder', 'Intro', '2026-11-02']);
+  const fund = await cyc(db, C_FOUNDER, 'POST', q('/prospects'), { research_fund_uid: 'alder-ventures', stage: 'contacted' });
+  assert.equal(fund.status, 201, fund.raw);
+  const fr = db.prepare('SELECT name, firm, research_fund_uid, stage FROM raise_prospects WHERE id = ?').get(fund.body.id) as any;
+  assert.deepEqual({ ...fr }, { name: 'Alder Ventures', firm: 'Alder Ventures', research_fund_uid: 'alder-ventures', stage: 'contacted' });
+  const was = n(db, 'SELECT COUNT(*) AS n FROM raise_prospects');
+  assert.equal((await cyc(db, C_FOUNDER, 'POST', q('/prospects'), { research_fund_uid: 'withdrawn-fund' })).status, 404, 'a fund from a not-allowed list');
+  assert.equal((await cyc(db, C_FOUNDER, 'POST', q('/prospects'), { research_fund_uid: 'no-such-fund' })).status, 404);
+  db.exec(`INSERT INTO raise_prospects (uid, project_id, name, email, stage) VALUES ('rp-dup', ${C_P}, 'Harbour Angels', 'deals@harbour.example.test', 'meeting')`);
+  const dup = await cyc(db, C_FOUNDER, 'POST', q('/prospects'), { name: 'Harbour Again', email: 'Deals@Harbour.example.test' });
+  assert.equal(dup.status, 409, 'createProspect\'s own duplicate answer');
+  for (const b of [{ name: 'Juno', stage: 'hot' }, { stage: 'meeting' }, { name: 'Juno', next_step_due: 'Friday' }]) {
+    assert.equal((await cyc(db, C_FOUNDER, 'POST', q('/prospects'), b)).status, 400, JSON.stringify(b));
+  }
+  assert.equal(n(db, 'SELECT COUNT(*) AS n FROM raise_prospects'), was + 1, 'only the fixture\'s duplicate row was added');
+
+  const e = await cyc(db, C_FOUNDER, 'PATCH', q(`/prospects/${a.body.id}`), { stage: 'passed', notes: 'Not this fund', next_step: '' });
+  assert.equal(e.status, 200, e.raw);
+  assert.deepEqual({ ...(db.prepare('SELECT stage, notes, next_step FROM raise_prospects WHERE id = ?').get(a.body.id) as any) }, { stage: 'passed', notes: 'Not this fund', next_step: null });
+  assert.equal((await cyc(db, C_FOUNDER, 'PATCH', q(`/prospects/${a.body.id}`), { email: 'deals@harbour.example.test' })).status, 409);
+  assert.equal((await cyc(db, C_FOUNDER, 'PATCH', q(`/prospects/${a.body.id}`), { research_fund_uid: 'withdrawn-fund' })).status, 404);
+  assert.equal((await cyc(db, C_FOUNDER, 'PATCH', q(`/prospects/${a.body.id}`), {})).status, 400);
+  assert.deepEqual(logs(db, "entity_type = 'raise.capital-relationships'").map((x) => [x.entity_id, x.action, x.details]), [
+    [String(a.body.id), 'prospect_created', 'Investor added at Identified'],
+    [String(fund.body.id), 'prospect_created', 'Investor added at Contacted'],
+    [String(a.body.id), 'prospect_updated', 'Investor edited: next step, stage, notes'],
+  ]);
+});
+
+test('13: every write logs its record\'s row — project, raise.<slug>, the record id — with no person\'s name; old rows are unchanged', async () => {
+  const db = cycleFixture();
+  db.exec(`INSERT INTO activity_logs (id, action, details, actor, user_id, project_id) VALUES (1, 'raise.readiness.rescored', '6 computed checks', 'user:${C_FOUNDER}', ${C_FOUNDER}, ${C_P})`);
+  const old = { ...(db.prepare('SELECT * FROM activity_logs WHERE id = 1').get() as any) };
+  db.exec(`INSERT INTO data_room_files (id, uid, project_id, name, r2_key) VALUES (4, 'x4', ${C_P}, 'Harbour side letter.pdf', 'k4')`);
+  const writes: Array<[string, string, unknown]> = [
+    ['PUT', '/readiness/team', { score: 6, evidence: 'pattern', missing: 'Ines Duarte as CTO' }],
+    ['POST', '/readiness/rescore', { items: ['deck'] }],
+    ['POST', '/narrative-versions', { investor_type: 'angel', one_liner: 'Pitched to Harbour' }],
+    ['PATCH', '/narrative-versions/1', { why_now: 'Northwind asked' }],
+    ['POST', '/deck-links', { deck_id: 5, investor_label: 'Kite Partner', expires_days: 7 }],
+    ['POST', '/holders', { name: 'Ines Duarte', group: 'founders', instrument: 'common', shares: 1_000_000 }],
+    ['PUT', '/use-of-funds', { sections: [{ key: 'product', pct: 100 }] }],
+    ['POST', '/prospects', { name: 'Northwind Angels' }],
+    ['PUT', '/data-room/files/4/checklist', { item: 'incorporation' }],
+  ];
+  for (const [m, path, b] of writes) {
+    const before = n(db, 'SELECT COUNT(*) AS n FROM activity_logs');
+    const r = await cyc(db, C_FOUNDER, m, q(path), b);
+    assert.ok(r.status >= 200 && r.status < 300, `${m} ${path}: ${r.raw}`);
+    assert.equal(n(db, 'SELECT COUNT(*) AS n FROM activity_logs') - before, 1, `${m} ${path} logs one row`);
+  }
+  const rows = logs(db, 'id > 1');
+  for (const r of rows) {
+    assert.equal(r.project_id, C_P);
+    assert.equal(r.user_id, C_FOUNDER);
+    assert.match(r.entity_type, /^raise\.(fundraising-readiness|investor-narrative|pitch-deck|data-room|cap-table|use-of-funds|capital-relationships)$/);
+    assert.match(r.entity_id, /^[a-z0-9][a-z0-9_-]*$/);
+    assert.doesNotMatch(r.details, NAMES, `${r.action}: ${r.details}`);
+  }
+  assert.deepEqual(rows.map((r) => `${r.entity_type}/${r.entity_id}`), [
+    'raise.fundraising-readiness/team', 'raise.fundraising-readiness/deck', 'raise.investor-narrative/1', 'raise.investor-narrative/1',
+    `raise.pitch-deck/${(db.prepare('SELECT MAX(id) AS id FROM pitch_deck_share_tokens').get() as any).id}`,
+    `raise.cap-table/h-${(db.prepare(`SELECT MAX(id) AS id FROM cap_table_holders`).get() as any).id}`,
+    'raise.use-of-funds/product', `raise.capital-relationships/${(db.prepare('SELECT MAX(id) AS id FROM raise_prospects').get() as any).id}`,
+    'raise.data-room/4',
+  ]);
+  assert.deepEqual({ ...(db.prepare('SELECT * FROM activity_logs WHERE id = 1').get() as any) }, old, 'an old row is read as it is, never rewritten');
+});
+
+test('13 (data room): the upload and the file edit each log one row on the file\'s record, naming no file', async () => {
+  const db = roomFixture();
+  const data = `data:application/pdf;base64,${Buffer.from('%PDF-1.4 x').toString('base64')}`;
+  const up = await roomCall(dataRoom, db, R_FOUNDER, 'POST', '/p-room/files', { name: 'Harbour term sheet.pdf', data, access_tier: 'committed' });
+  assert.equal(up.status, 201, up.raw);
+  const id = (db.prepare('SELECT id FROM data_room_files WHERE uid = ?').get(up.body.uid) as any).id;
+  const p = await roomCall(dataRoom, db, R_FOUNDER, 'PATCH', `/p-room/files/${up.body.uid}`, { name: 'Northwind term sheet.pdf', access_tier: 'nobody' });
+  assert.equal(p.status, 200, p.raw);
+  const rows = db.prepare('SELECT project_id, user_id, entity_type, entity_id, action, details FROM activity_logs ORDER BY id').all() as any[];
+  assert.deepEqual(rows.map((r) => ({ ...r })), [
+    { project_id: ROOM, user_id: R_FOUNDER, entity_type: 'raise.data-room', entity_id: String(id), action: 'file_uploaded', details: 'File uploaded; access committed' },
+    { project_id: ROOM, user_id: R_FOUNDER, entity_type: 'raise.data-room', entity_id: String(id), action: 'file_updated', details: 'File edited: name, access tier' },
+  ]);
+  assert.equal((await roomCall(dataRoom, db, R_FOUNDER, 'PATCH', '/p-room/files/no-such', { name: 'x' })).status, 404);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM activity_logs').get().n, 2, 'a refused edit logs nothing');
 });

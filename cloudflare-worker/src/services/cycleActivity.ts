@@ -98,6 +98,7 @@ async function creatorFor(env: Env, store: CreatorStore, id: string, projectId: 
       return env.DB.prepare('SELECT u.name, s.created_at FROM demand_signals s LEFT JOIN users u ON u.id = s.created_by WHERE s.id = ? AND s.project_id = ?').bind(n, projectId).first<Creator>();
     case 'interview_sessions':
       return env.DB.prepare('SELECT u.name, s.created_at FROM interview_sessions s JOIN discovery_interviews i ON i.id = s.interview_id LEFT JOIN users u ON u.id = s.created_by_user_id WHERE s.id = ? AND i.project_id = ?').bind(n, projectId).first<Creator>();
+    case 'mvp_must_haves':
     case 'mvp_features':
       return env.DB.prepare('SELECT u.name, f.created_at FROM mvp_features f LEFT JOIN users u ON u.id = f.created_by WHERE f.id = ? AND f.project_id = ?').bind(n, projectId).first<Creator>();
     case 'roadmap_okrs':

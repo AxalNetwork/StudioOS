@@ -169,11 +169,14 @@ follows the founder board's `canReadBoard` rule and writing follows
 D663 (#1476): `cycle_raise.ts` is mounted at `/api/cycles/raise` in
 `index.ts`. `GET /overview` returns the four Raise figures and seven cards,
 and `GET /modules/:slug` returns one card plus its records. The reads are
-`../services/raiseCycle.ts`; the five writes (a readiness score, the computed
-rescore, a narrative version, a data-room file's checklist item, a prospect's
-next step and warm path) are `../services/raiseWriters.ts`, each recording its
-actor. Reading and writing both follow `canWrite`: the cards carry the cap
-table, the investor pipeline and who opened the data room. `decks.ts`'s share
+`../services/raiseCycle.ts`; the writes are `../services/raiseWriters.ts`:
+D663's five (a readiness score, the computed rescore, a narrative version, a
+data-room file's checklist item, a prospect's next step and warm path) and,
+since D691 (#1700), one behind each Add and Edit form (a version's edit, a
+deck link, a cap-table holder, the use-of-funds split, an investor), each
+logging its record's row through `logCycleWrite`. Reading and writing both
+follow `canWrite`: the cards carry the cap table, the investor pipeline and
+who opened the data room. `decks.ts`'s share
 heartbeat also takes `slides`, the viewer's seconds per slide, stored through
 `../services/deckSlideDwell.ts`. See
 `documentation/architecture/decisions/D663.md`.

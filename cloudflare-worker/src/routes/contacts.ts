@@ -454,7 +454,7 @@ function resolveProjectId(scope: 'all' | number[], pidRaw: string | undefined | 
  * duplicating the prospect. Returns 'duplicate' when the project already
  * tracks a prospect with this email, 'invalid' on bad input.
  */
-async function createProspect(
+export async function createProspect(
   env: Env,
   projectId: number,
   input: { name?: unknown; email?: unknown; firm?: unknown; amount?: unknown; stage?: unknown; notes?: unknown },

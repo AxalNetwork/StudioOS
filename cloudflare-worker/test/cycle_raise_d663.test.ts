@@ -162,7 +162,9 @@ test('readiness with no items returns empty, with the action that starts it', as
   assert.equal(bars.items.find((i: any) => i.label === 'Team').value, null, 'no check measures the team: Not recorded, never 0');
   // Mean of the six computed scores (use of funds 10, the rest 0) out of 100.
   assert.equal(fig((await overview(db)).body, 'readiness_score').value, Math.round((10 / 6) * 10));
-  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM activity_logs WHERE action = 'raise.readiness.rescored' AND user_id = ?").get(FOUNDER).n, 1);
+  // D691 decision 12: one row on each re-scored item's record.
+  assert.deepEqual(db.prepare("SELECT entity_id FROM activity_logs WHERE entity_type = 'raise.fundraising-readiness' AND action = 'readiness_rescored' AND user_id = ? ORDER BY entity_id").all(FOUNDER).map((r: any) => r.entity_id),
+    ['cap_table', 'data_room', 'deck', 'narrative', 'traction', 'use_of_funds']);
 });
 
 test('a person scores an item; a bad score or evidence is refused', async () => {
@@ -343,7 +345,7 @@ test('a prospect\'s last contact comes from its stored contact, never from a gue
   // The writer: a next step and warm path, recorded with its actor.
   assert.equal((await call(db, FOUNDER, 'PUT', `/prospects/2/next-step?project=${P}`, { next_step: 'Intro call', next_step_due: '2026-10-20', warm_path: 'Via Lee' })).status, 200);
   assert.deepEqual({ ...db.prepare('SELECT next_step, next_step_due, warm_path FROM raise_prospects WHERE id = 2').get() }, { next_step: 'Intro call', next_step_due: '2026-10-20', warm_path: 'Via Lee' });
-  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM activity_logs WHERE action = 'raise.prospect.next_step' AND user_id = ?").get(FOUNDER).n, 1);
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM activity_logs WHERE entity_type = 'raise.capital-relationships' AND entity_id = '2' AND action = 'next_step_set' AND user_id = ? AND project_id = ?").get(FOUNDER, P).n, 1);
   assert.equal((await call(db, FOUNDER, 'PUT', `/prospects/2/next-step?project=${P}`, { next_step_due: '20 Oct' })).status, 400);
   db.exec(`INSERT INTO raise_prospects (id, uid, project_id, name, stage) VALUES (9, 'z', ${P_OTHER}, 'Zed', 'meeting')`);
   assert.equal((await call(db, FOUNDER, 'PUT', `/prospects/9/next-step?project=${P}`, { next_step: 'x' })).status, 404, 'another project\'s prospect');
@@ -368,7 +370,7 @@ test('data room: checklist coverage by area, a file matched through the writer, 
   db.exec(`INSERT INTO data_room_files (id, uid, project_id, name, r2_key) VALUES (3, 'x3', ${P_OTHER}, 'Theirs.pdf', 'k3')`);
   assert.equal((await call(db, FOUNDER, 'PUT', `/data-room/files/3/checklist?project=${P}`, { item: 'incorporation' })).status, 404, 'another project\'s file');
   assert.equal(db.prepare('SELECT checklist_item FROM data_room_files WHERE id = 3').get().checklist_item, null);
-  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM activity_logs WHERE action = 'raise.data_room.checklist' AND user_id = ?").get(FOUNDER).n, 1);
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM activity_logs WHERE entity_type = 'raise.data-room' AND entity_id = '1' AND action = 'checklist_set' AND user_id = ? AND project_id = ?").get(FOUNDER, P).n, 1);
   const c = card((await overview(db)).body, 'data-room');
   const prog = c.series.find((s: any) => s.kind === 'progress').items;
   assert.equal(prog.find((i: any) => i.label === 'Company').pct, 50);
