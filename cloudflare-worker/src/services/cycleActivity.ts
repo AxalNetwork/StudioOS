@@ -5,7 +5,18 @@ import { isRaiseStore, type Cycle, type OldRowsMatcher, type RaiseStore, type St
 import type { ModuleSlug as ValidateModule } from './cycleValidate';
 import type { ModuleSlug as RaiseModule } from './raiseCycle';
 import type { GrowSlug as GrowModule } from './growCycle';
-import type { BuildModuleSlug as BuildModule } from '../routes/cycle_build';
+
+/**
+ * Build's six module slugs, written here rather than imported from
+ * routes/cycle_build.ts: a fund module reaches this file, and D707's walk
+ * (fund_modules_no_stripe_d707) follows type imports too, so a route import
+ * here would reach Stripe. cycle_build.ts checks at compile time that its
+ * MODULES and this list are the same six.
+ */
+export type BuildModuleSlug =
+  | 'solution-design' | 'prototype-mvp' | 'product-roadmap'
+  | 'founding-team' | 'company-creation' | 'operating-systems';
+type BuildModule = BuildModuleSlug;
 
 /**
  * Each cycle's module slugs: a write logged under a module that does not
