@@ -6,8 +6,10 @@
  *
  * Part 1 adds tests 1, 2, 3, 5, 7 and 10, and the parts of 6, 8, 9 and 11 its
  * routes answer. Part 2's first PR adds 13 and 14, the record's parts of 6 and
- * 8, and runs 1 and 7 again over the record and `logCycleWrite`. Every venture
- * and person below is made up.
+ * 8, and runs 1 and 7 again over the record and `logCycleWrite`. Part 3's
+ * Worker PR adds test 12's card and table, read through `verdictCard` and
+ * `decisionRecords` before they join the module lists. Every venture and
+ * person below is made up.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -21,8 +23,10 @@ import cycleVerdict from '../src/routes/cycle_verdict.ts';
 import founderValidate from '../src/routes/founder_validate.ts';
 import {
   recordDecision, currentDecision, decisionsFor, decisionById, DECISION_EVIDENCE_BAR, NO_EVIDENCE_REASON,
-  VerdictError, adaptEvidenceReader, type EvidenceItem, type EvidenceSource, type PivotStatements,
+  VerdictError, adaptEvidenceReader, verdictCard, decisionRecords, TIMELINE_CAP,
+  type EvidenceItem, type EvidenceSource, type PivotStatements,
 } from '../src/services/verdict.ts';
+import { recordQuery } from '../src/services/cycleValidate.ts';
 import { hardDeleteProject } from '../src/services/projectTrash.ts';
 import { ensurePainGroupsSchema } from '../src/services/painGroups.ts';
 import { createCycleRecords } from '../src/routes/cycle_records.ts';
@@ -881,4 +885,169 @@ test('14: form-options lists The venture then the open hypotheses, and each evid
   assert.equal(empty.status, 403);
   const lab = await rec(db, LAB, 'GET', `/form-options?project=${P_LAB}`, undefined, []);
   assert.deepEqual(lab.body, { for: { options: [{ value: 'venture', label: 'The venture' }] }, evidence: { bar: 5, options: [] } });
+});
+
+// ---------------------------------------------------------------------------
+// 12. The card and the Decisions table (#1704's Worker part)
+// ---------------------------------------------------------------------------
+
+const ctxOf = (db: any, pid = P) => ({ env: envOf(db), projectId: pid, today: '2026-10-17' }) as any;
+const table = (db: any, q: Record<string, unknown> = {}, pid = P) => decisionRecords(ctxOf(db, pid), recordQuery(q));
+
+/** One decision through the writer, dated `on` and written by `who`: given at the bar, withheld below it. */
+async function decide(db: any, o: { decision?: string; for?: 'venture' | number; n?: number; reasoning?: string; on?: string; who?: number; pid?: number } = {}) {
+  const list = items(o.n ?? DECISION_EVIDENCE_BAR, { prefix: `e${Math.random().toString(36).slice(2, 8)}` });
+  const r = await recordDecision(envOf(db), userOf(o.who ?? FOUNDER), { id: o.pid ?? P },
+    { decision: o.decision ?? 'proceed', for: o.for ?? 'venture', reasoning: o.reasoning, evidence: keys(list) },
+    { evidenceSource: fixed(list) });
+  if (o.on) db.prepare('UPDATE validation_decisions SET decided_at = ? WHERE id = ?').run(`${o.on} 09:00:00`, r.id);
+  return r;
+}
+
+test('12: the card is empty with no decision, too little without a venture verdict, and keeps the eight keys', async () => {
+  const db = fixture();
+  let c = await verdictCard(ctxOf(db));
+  assert.deepEqual(Object.keys(c).sort(), ['caption', 'name', 'next', 'range', 'reason', 'series', 'slug', 'state']);
+  assert.deepEqual(c, {
+    slug: 'verdict', name: 'Verdict', range: 'All time', caption: 'Every decision, oldest to newest, never overwritten.',
+    state: 'empty', series: null, reason: 'No decision yet. Decisions appear here once evidence is in.',
+    next: { text: 'Record a decision', href: `/validate/verdict/new?project=${P}` },
+  });
+  // A withheld venture decision and a given decision on one hypothesis: no verdict for the venture.
+  const h1 = hypothesis(db, P, 'H1');
+  await decide(db, { n: 2 });
+  await decide(db, { for: h1 });
+  c = await verdictCard(ctxOf(db));
+  assert.equal(c.state, 'too_little');
+  assert.equal(c.reason, 'No verdict for the venture yet. Withheld decisions and decisions on one hypothesis are in the table.');
+  assert.deepEqual(c.next, { text: 'Record a decision', href: `/validate/verdict/new?project=${P}` });
+  assert.equal(c.series, null);
+  // Another venture's decisions never count here.
+  assert.equal((await verdictCard(ctxOf(db, P_OTHER))).state, 'empty');
+});
+
+test('12: an ok card draws the venture\'s six newest decisions oldest first, withheld ones kept, then the current verdict', async () => {
+  const db = fixture();
+  const h1 = hypothesis(db, P, 'H1');
+  const plan = [
+    ['proceed', 5, '2026-06-01'], ['pivot', 5, '2026-07-14'], ['stop', 2, '2026-08-01'], ['proceed', 5, '2026-08-20'],
+    ['pivot', 5, '2026-09-03'], ['stop', 3, '2026-09-20'], ['proceed', 6, '2026-10-12'],
+  ] as const;
+  for (const [decision, n, on] of plan) await decide(db, { decision, n, on });
+  await decide(db, { decision: 'stop', for: h1, on: '2026-10-15' });
+  const c = await verdictCard(ctxOf(db));
+  assert.equal(c.state, 'ok');
+  assert.equal(c.next, null, 'Next waits on the deadline store (#1692)');
+  assert.equal(c.reason, null);
+  const s = c.series as any;
+  assert.equal(TIMELINE_CAP, 6);
+  assert.deepEqual(s.decisions, [
+    { decision: 'pivot', state: 'given', date: '2026-07-14' },
+    { decision: 'stop', state: 'withheld', date: '2026-08-01' },
+    { decision: 'proceed', state: 'given', date: '2026-08-20' },
+    { decision: 'pivot', state: 'given', date: '2026-09-03' },
+    { decision: 'stop', state: 'withheld', date: '2026-09-20' },
+    { decision: 'proceed', state: 'given', date: '2026-10-12' },
+  ], 'six steps at most, the hypothesis\'s decision left out');
+  assert.ok(s.decisions.length + 1 <= 7, 'with Next, at most seven steps');
+  assert.deepEqual(s.current, { decision: 'proceed', date: '2026-10-12', evidence: 6 });
+  assert.equal(s.next, null);
+});
+
+test('12: an old-route decision is the current verdict with no evidence count', async () => {
+  const db = fixture();
+  db.prepare("INSERT INTO validation_decisions (project_id, decision, reasoning, decided_by, decided_at) VALUES (?, 'stop', 'Old page', ?, '2026-05-02 10:00:00')").run(P, FOUNDER);
+  const c = await verdictCard(ctxOf(db));
+  assert.equal(c.state, 'ok');
+  assert.deepEqual((c.series as any).current, { decision: 'stop', date: '2026-05-02', evidence: null });
+});
+
+test('12: a failed decisions read makes the card unreadable, never an empty history', async () => {
+  const db = fixture();
+  await decide(db);
+  db.exec('DROP TABLE validation_decisions');
+  const saved = console.warn; console.warn = () => {};
+  try {
+    const c = await verdictCard(ctxOf(db));
+    assert.equal(c.state, 'unreadable');
+    assert.equal(c.series, null);
+    assert.equal(c.reason, 'Decisions could not be read');
+  } finally { console.warn = saved; }
+  await assert.rejects(() => table(db), 'the table throws too, for the route to say so');
+});
+
+test('12: the Decisions table has CO:610\'s columns, the Decision and For filters, and Newest then Oldest', async () => {
+  const db = fixture();
+  const h1 = hypothesis(db, P, 'H1', 'Dispatchers lose an hour a day');
+  hypothesis(db, P, 'H2', 'No decision on this one');
+  const h9 = hypothesis(db, P_OTHER, 'H1', 'Another venture');
+  await decide(db, { for: h1 });
+  await decide(db, { for: h9, pid: P_OTHER, who: OTHER });
+  const r = await table(db);
+  assert.deepEqual(r.cols, ['Decision', 'For', 'Reasoning', 'Evidence', 'Date · by']);
+  assert.deepEqual(r.filters, [
+    { key: 'decision', label: 'Decision', options: [
+      { value: 'proceed', label: 'Proceed' }, { value: 'pivot', label: 'Pivot' }, { value: 'stop', label: 'Stop' }, { value: 'withheld', label: 'Withheld' },
+    ] },
+    { key: 'for', label: 'For', options: [
+      { value: 'venture', label: 'The venture' }, { value: `h-${h1}`, label: 'H1 · Dispatchers lose an hour a day' },
+    ] },
+  ], 'For lists only the hypotheses that have a decision, this venture\'s');
+  assert.deepEqual(r.sorts, [{ key: 'newest', label: 'Newest' }, { key: 'oldest', label: 'Oldest' }]);
+});
+
+test('12: Withheld, Pivot and other rows read as specified, each id is the decision\'s, and the row says who and when', async () => {
+  const db = fixture();
+  const h1 = hypothesis(db, P, 'H1', 'Dispatchers lose an hour a day');
+  const h3 = hypothesis(db, P, 'H3', 'Fleet managers buy it');
+  const w = await decide(db, { decision: 'proceed', n: 3, reasoning: 'Not enough yet', on: '2026-09-01' });
+  const g = await decide(db, { decision: 'stop', for: h1, reasoning: '\n  Churn is too high\nSecond line', on: '2026-09-10', who: ADMIN });
+  const pv = await decide(db, { decision: 'pivot', n: 6, reasoning: 'Change the buyer', on: '2026-10-12' });
+  db.prepare('UPDATE validation_decisions SET pivot_hypothesis_id = ? WHERE id = ?').run(h3, pv.id);
+  const blank = await decide(db, { decision: 'proceed', on: '2026-10-14' });
+  db.prepare("INSERT INTO validation_decisions (project_id, decision, reasoning, decided_at) VALUES (?, 'proceed', 'From the old page', '2026-04-01 08:00:00')").run(P);
+  const r = await table(db);
+  assert.equal(r.total, 5);
+  const by = Object.fromEntries(r.rows.map((x: any) => [x.id, x]));
+  assert.deepEqual(r.rows.map((x: any) => x.id).slice(0, 4), [blank.id, pv.id, g.id, w.id], 'newest first, each id the decision\'s');
+  assert.deepEqual(by[w.id], {
+    id: w.id, decision: 'proceed', state: 'withheld', hypothesis_id: null, for: 'The venture',
+    reasoning: '3 of 5 pieces of evidence', evidence: 3, date: '2026-09-01', by: 'Fay Founder',
+  });
+  assert.deepEqual(by[pv.id].reasoning, 'Starts H3 · Fleet managers buy it');
+  assert.equal(by[pv.id].evidence, 6);
+  assert.deepEqual({ for: by[g.id].for, reasoning: by[g.id].reasoning, by: by[g.id].by, hypothesis_id: by[g.id].hypothesis_id },
+    { for: 'H1 · Dispatchers lose an hour a day', reasoning: 'Churn is too high', by: 'Ada Admin', hypothesis_id: h1 });
+  assert.equal(by[blank.id].reasoning, null, 'no reasoning is null, not an empty string');
+  const old = r.rows[4] as any;
+  assert.deepEqual({ reasoning: old.reasoning, evidence: old.evidence, by: old.by, date: old.date },
+    { reasoning: 'From the old page', evidence: null, by: null, date: '2026-04-01' });
+  assert.deepEqual((await table(db, { sort: 'oldest' })).rows.map((x: any) => x.id)[0], old.id);
+});
+
+test('12: the filters, the search and the pages run in SQL, bound, before paging', async () => {
+  const db = fixture();
+  const h1 = hypothesis(db, P, 'H1', 'Dispatchers lose an hour a day');
+  for (let i = 0; i < 27; i += 1) await decide(db, { decision: i % 3 === 0 ? 'stop' : 'proceed', reasoning: `Week ${i}`, on: `2026-08-${String(i + 1).padStart(2, '0')}` });
+  const w = await decide(db, { decision: 'proceed', n: 1, reasoning: '50% of drivers said so', on: '2026-09-02' });
+  const hd = await decide(db, { decision: 'pivot', for: h1, reasoning: 'Buyer moved', on: '2026-09-03' });
+  let r = await table(db);
+  assert.equal(r.total, 29);
+  assert.equal(r.rows.length, 25);
+  assert.equal((await table(db, { page: 2 })).rows.length, 4);
+  r = await table(db, { filter: 'decision:withheld' });
+  assert.deepEqual(r.rows.map((x: any) => x.id), [w.id]);
+  r = await table(db, { filter: 'decision:proceed' });
+  assert.equal(r.total, 18, 'a withheld Proceed is under Withheld, not Proceed');
+  assert.ok(r.rows.every((x: any) => x.decision === 'proceed' && x.state === 'given'));
+  assert.equal((await table(db, { filter: 'decision:stop' })).total, 9);
+  assert.deepEqual((await table(db, { filter: `for:h-${h1}` })).rows.map((x: any) => x.id), [hd.id]);
+  assert.equal((await table(db, { filter: 'for:venture' })).total, 28);
+  assert.equal((await table(db, { filter: 'for:h-999' })).total, 0, 'a hypothesis with no decision is no row');
+  assert.equal((await table(db, { filter: 'decision:maybe' })).total, 29, 'an unknown value is no filter');
+  assert.deepEqual((await table(db, { q: 'hour a day' })).rows.map((x: any) => x.id), [hd.id], 'the claim is searched');
+  assert.deepEqual((await table(db, { q: 'WEEK 26' })).rows.map((x: any) => x.reasoning), ['Week 26'], 'the reasoning is searched, case-blind');
+  assert.deepEqual((await table(db, { q: '50%' })).rows.map((x: any) => x.id), [w.id], 'a % is a character, not a wildcard');
+  assert.equal((await table(db, { q: '%' })).total, 1);
+  assert.equal((await table(db, {}, P_OTHER)).total, 0, 'another venture reads none of these');
 });

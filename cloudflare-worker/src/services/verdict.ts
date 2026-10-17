@@ -29,6 +29,8 @@
 import type { EvidenceCtx, EvidenceItemFull } from './validateEvidence';
 import type { Env, User } from '../types';
 import { logCycleWriteStatement } from './cycleActivity';
+import { safeCard, PAGE_SIZE, type Card } from './cycleCards';
+import type { Ctx, FilterSpec, RecordQuery, Records, SortSpec } from './cycleValidate';
 import { ownsVenture, type ProjectRef } from '../routes/_founder_validate_helpers';
 
 /**
@@ -345,14 +347,17 @@ export const DECISIONS_PAGE_SIZE = 20;
 
 /**
  * The venture's decisions, newest first unless asked otherwise. `scope`
- * narrows to the venture or one hypothesis; `filter` to one kind or to the
- * withheld ones.
+ * narrows to the venture or one hypothesis; `filter` to one kind of given
+ * decision or to the withheld ones, so a withheld Proceed is under Withheld
+ * and not under Proceed (#1704: the table reads it as "Withheld"). `q`
+ * searches the reasoning and the claim the decision is For, bound, with `%`
+ * and `_` matched as themselves.
  */
 export async function decisionsFor(
   env: Env,
   projectId: number,
-  { scope, filter, sort = 'newest', page = 1, pageSize = DECISIONS_PAGE_SIZE }:
-    { scope?: Scope; filter?: DecisionFilter | null; sort?: 'newest' | 'oldest'; page?: number; pageSize?: number } = {},
+  { scope, filter, q = '', sort = 'newest', page = 1, pageSize = DECISIONS_PAGE_SIZE }:
+    { scope?: Scope; filter?: DecisionFilter | null; q?: string; sort?: 'newest' | 'oldest'; page?: number; pageSize?: number } = {},
 ): Promise<{ rows: DecisionRow[]; total: number; page: number; page_size: number }> {
   const size = Math.max(1, Math.min(200, Math.floor(pageSize)));
   const p = Math.max(1, Math.floor(page) || 1);
@@ -360,12 +365,16 @@ export async function decisionsFor(
   const hyp = scope === undefined ? null : scopeBind(scope);
   const kind = filter && filter !== 'withheld' ? filter : null;
   const withheld = filter === 'withheld' ? 1 : 0;
-  const where = [projectId, scoped, hyp, kind, kind, withheld] as const;
+  const term = String(q || '').trim().toLowerCase().slice(0, 120);
+  const like = term ? `%${term.replace(/[\\%_]/g, (m) => `\\${m}`)}%` : '';
+  const where = [projectId, scoped, hyp, kind, kind, withheld, like, like, like] as const;
 
   const total = await env.DB.prepare(
     `SELECT COUNT(*) AS n FROM validation_decisions d
-      WHERE d.project_id = ? AND (? = 0 OR d.hypothesis_id IS ?) AND (? IS NULL OR d.decision = ?)
-        AND (? = 0 OR d.state = 'withheld')`,
+       LEFT JOIN hypotheses h ON h.id = d.hypothesis_id
+      WHERE d.project_id = ? AND (? = 0 OR d.hypothesis_id IS ?) AND (? IS NULL OR (d.decision = ? AND d.state = 'given'))
+        AND (? = 0 OR d.state = 'withheld')
+        AND (? = '' OR lower(COALESCE(d.reasoning, '')) LIKE ? ESCAPE '\\' OR lower(COALESCE(h.claim, '')) LIKE ? ESCAPE '\\')`,
   ).bind(...where).first<{ n: number }>();
   const list = sort === 'oldest'
     ? env.DB.prepare(
@@ -376,8 +385,9 @@ export async function decisionsFor(
          FROM validation_decisions d
          LEFT JOIN hypotheses h ON h.id = d.hypothesis_id
          LEFT JOIN users u ON u.id = d.decided_by
-        WHERE d.project_id = ? AND (? = 0 OR d.hypothesis_id IS ?) AND (? IS NULL OR d.decision = ?)
+        WHERE d.project_id = ? AND (? = 0 OR d.hypothesis_id IS ?) AND (? IS NULL OR (d.decision = ? AND d.state = 'given'))
           AND (? = 0 OR d.state = 'withheld')
+          AND (? = '' OR lower(COALESCE(d.reasoning, '')) LIKE ? ESCAPE '\\' OR lower(COALESCE(h.claim, '')) LIKE ? ESCAPE '\\')
         ORDER BY d.decided_at ASC, d.id ASC LIMIT ? OFFSET ?`,
     )
     : env.DB.prepare(
@@ -388,8 +398,9 @@ export async function decisionsFor(
          FROM validation_decisions d
          LEFT JOIN hypotheses h ON h.id = d.hypothesis_id
          LEFT JOIN users u ON u.id = d.decided_by
-        WHERE d.project_id = ? AND (? = 0 OR d.hypothesis_id IS ?) AND (? IS NULL OR d.decision = ?)
+        WHERE d.project_id = ? AND (? = 0 OR d.hypothesis_id IS ?) AND (? IS NULL OR (d.decision = ? AND d.state = 'given'))
           AND (? = 0 OR d.state = 'withheld')
+          AND (? = '' OR lower(COALESCE(d.reasoning, '')) LIKE ? ESCAPE '\\' OR lower(COALESCE(h.claim, '')) LIKE ? ESCAPE '\\')
         ORDER BY d.decided_at DESC, d.id DESC LIMIT ? OFFSET ?`,
     );
   const res = await list.bind(...where, size, (p - 1) * size).all<DecisionRow>();
@@ -536,4 +547,144 @@ export async function completeCommitment(
     ).bind(id, decisionId, project.id),
     logCycleWriteStatement(env, { ...verdictWrite(user, project.id, 'validation_commitment_done', 'Marked a commitment done'), entityId: decisionId }),
   ]);
+}
+
+// ---------------------------------------------------------------------------
+// The Verdict module (#1704): its card and its Decisions table. Not yet in
+// `cycleValidate.ts`'s `MODULES`, `CARD_FOR` or `RECORDS_FOR`: the Worker's
+// list and the page's land together with `/validate/verdict`'s swap.
+// ---------------------------------------------------------------------------
+
+/** The card's timeline holds the venture's six newest decisions, then Next. */
+export const TIMELINE_CAP = 6;
+
+const day = (raw: string | null | undefined) => {
+  const d = String(raw ?? '').slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null;
+};
+
+/**
+ * Whether a given decision rests on no evidence row, which only the old
+ * verdict page ever wrote (D693 decision 5). Its count is not shown.
+ */
+const isOldRoute = (d: Pick<DecisionRow, 'state' | 'evidence_count'>) => d.state === 'given' && Number(d.evidence_count) === 0;
+
+/**
+ * D693 decision 9 — the card is the venture's verdict (CO:542, CO:584).
+ *
+ * - `empty`: the venture has no decision in any scope.
+ * - `too_little`: decisions exist, but none is a current given decision for
+ *   the venture.
+ * - `ok`: the timeline (the venture's own decisions, the six newest, oldest
+ *   first; Withheld ones carried with their state) and the current verdict.
+ * - `unreadable`: `safeCard`'s, when a read throws.
+ *
+ * `series.next` and the card's `next` stay null until the deadline store
+ * (#1692's migration 460) gives the sprint a date.
+ */
+export async function verdictCard(ctx: Ctx): Promise<Card> {
+  return safeCard({ slug: 'verdict', name: 'Verdict', range: 'All time', caption: 'Every decision, oldest to newest, never overwritten.', source: 'Decisions' }, async () => {
+    const add = { text: 'Record a decision', href: `/validate/verdict/new?project=${ctx.projectId}` };
+    const [any, current] = await Promise.all([
+      decisionsFor(ctx.env, ctx.projectId, { pageSize: 1 }),
+      currentDecision(ctx.env, ctx.projectId, 'venture'),
+    ]);
+    if (any.total === 0) {
+      return { state: 'empty', series: null, next: add, reason: 'No decision yet. Decisions appear here once evidence is in.' };
+    }
+    if (!current) {
+      return {
+        state: 'too_little', series: null, next: add,
+        reason: 'No verdict for the venture yet. Withheld decisions and decisions on one hypothesis are in the table.',
+      };
+    }
+    const recent = await decisionsFor(ctx.env, ctx.projectId, { scope: 'venture', sort: 'newest', pageSize: TIMELINE_CAP });
+    return {
+      state: 'ok',
+      series: {
+        decisions: [...recent.rows].reverse().map((d) => ({ decision: d.decision, state: d.state, date: day(d.decided_at) })),
+        current: {
+          decision: current.decision, date: day(current.decided_at),
+          evidence: isOldRoute(current) ? null : Number(current.evidence_count),
+        },
+        next: null,
+      },
+      next: null,
+      reason: null,
+    };
+  });
+}
+
+const DECISION_WORD: Record<DecisionFilter, string> = { proceed: 'Proceed', pivot: 'Pivot', stop: 'Stop', withheld: 'Withheld' };
+
+/** The Decisions table's columns and sorts (CO:610), default sort first. */
+export const DECISION_COLUMNS = ['Decision', 'For', 'Reasoning', 'Evidence', 'Date · by'];
+export const DECISION_SORTS: SortSpec[] = [{ key: 'newest', label: 'Newest' }, { key: 'oldest', label: 'Oldest' }];
+
+type ClaimRow = { id: number; code: string; claim: string };
+const claimWord = (h: ClaimRow | undefined, id: number) => (h ? `${h.code} · ${h.claim}` : `H${id}`);
+
+/**
+ * The Decisions table (CO:610): Decision / For / Reasoning / Evidence /
+ * Date · by, filtered by Decision and For, newest first or oldest, searched
+ * over the reasoning and the claim, paged in SQL. Each row's id is the
+ * decision's.
+ *
+ * - A Withheld row's Reasoning is "<n> of 5 pieces of evidence".
+ * - A Pivot that started a hypothesis reads "Starts <code> · <claim>".
+ * - Any other row reads the first line of its reasoning, or null.
+ * - Evidence is the count of items it rests on, null for an old-route row.
+ */
+export async function decisionRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
+  const f = rq.filter;
+  const filter = (DECISION_FILTERS as readonly string[]).includes(f.decision) ? (f.decision as DecisionFilter) : null;
+  const forId = /^h-([1-9][0-9]{0,9})$/.exec(String(f.for ?? ''));
+  const scope: Scope | undefined = f.for === 'venture' ? 'venture' : forId ? Number(forId[1]) : undefined;
+  const page = await decisionsFor(ctx.env, ctx.projectId, {
+    scope, filter, q: rq.q, sort: rq.sort === 'oldest' ? 'oldest' : 'newest', page: rq.page, pageSize: PAGE_SIZE,
+  });
+  // The claims the page names, the scope's and the Pivot's, in one bound read.
+  const ids = [...new Set(page.rows.flatMap((d) => [d.hypothesis_id, d.pivot_hypothesis_id]).filter((x): x is number => x != null))];
+  const claims = new Map<number, ClaimRow>();
+  if (ids.length) {
+    const res = await ctx.env.DB.prepare(
+      'SELECT id, code, claim FROM hypotheses WHERE project_id = ? AND id IN (SELECT value FROM json_each(?))',
+    ).bind(ctx.projectId, JSON.stringify(ids)).all<ClaimRow>();
+    for (const h of res.results || []) claims.set(Number(h.id), h);
+  }
+  // For lists the venture and each hypothesis that has a decision.
+  const scoped = await ctx.env.DB.prepare(
+    `SELECT DISTINCT h.id, h.code, h.claim, h.sort_order
+       FROM validation_decisions d JOIN hypotheses h ON h.id = d.hypothesis_id AND h.project_id = d.project_id
+      WHERE d.project_id = ? ORDER BY h.sort_order, h.id`,
+  ).bind(ctx.projectId).all<ClaimRow & { sort_order: number }>();
+  const filters: FilterSpec[] = [
+    { key: 'decision', label: 'Decision', options: DECISION_FILTERS.map((k) => ({ value: k, label: DECISION_WORD[k] })) },
+    { key: 'for', label: 'For', options: [
+      { value: 'venture', label: 'The venture' },
+      ...(scoped.results || []).map((h) => ({ value: `h-${Number(h.id)}`, label: `${h.code} · ${h.claim}` })),
+    ] },
+  ];
+  const reasoningOf = (d: DecisionRow): string | null => {
+    if (d.state === 'withheld') return `${Number(d.evidence_count)} of ${DECISION_EVIDENCE_BAR} pieces of evidence`;
+    if (d.decision === 'pivot' && d.pivot_hypothesis_id != null) return `Starts ${claimWord(claims.get(Number(d.pivot_hypothesis_id)), Number(d.pivot_hypothesis_id))}`;
+    const first = String(d.reasoning ?? '').split(/\r?\n/).map((l) => l.trim()).find(Boolean);
+    return first ?? null;
+  };
+  return {
+    cols: DECISION_COLUMNS,
+    rows: page.rows.map((d) => ({
+      id: Number(d.id),
+      decision: d.decision,
+      state: d.state,
+      hypothesis_id: d.hypothesis_id == null ? null : Number(d.hypothesis_id),
+      for: d.hypothesis_id == null ? 'The venture' : claimWord(claims.get(Number(d.hypothesis_id)), Number(d.hypothesis_id)),
+      reasoning: reasoningOf(d),
+      evidence: isOldRoute(d) ? null : Number(d.evidence_count),
+      date: day(d.decided_at),
+      by: d.decided_by_name ?? null,
+    })),
+    total: page.total, page: page.page, page_size: page.page_size,
+    filters, sorts: DECISION_SORTS,
+  };
 }

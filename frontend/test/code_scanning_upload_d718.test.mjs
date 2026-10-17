@@ -62,7 +62,7 @@ function run(args, env = {}) {
   const summary = join(dir, 'summary.md');
   writeFileSync(summary, '');
   const r = spawnSync('python3', [SCRIPT, ...args(dir)], { env: { ...process.env, GITHUB_STEP_SUMMARY: summary, ...env }, encoding: 'utf8' });
-  return { status: r.status, summary: readFileSync(summary, 'utf8'), stderr: r.stderr };
+  return { status: r.status, summary: readFileSync(summary, 'utf8'), stdout: r.stdout, stderr: r.stderr };
 }
 
 const result = (ruleId, uri, line, extra = {}) => ({
@@ -89,6 +89,24 @@ test('the report counts unsuppressed results and lists where they are', () => {
   assert.match(r.summary, /\| `py\/eval` \| 1 \|/, 'an EMPTY suppressions array means not suppressed');
   assert.doesNotMatch(r.summary, /py\/sql/);
   assert.match(r.summary, /`frontend\/src\/a\.js:12`/);
+});
+
+test('the job log lists every unsuppressed finding with its message, past the summary cap', () => {
+  // The summary is not readable through the REST API; the log is. So the log
+  // carries the whole list, one tab-separated line each.
+  const r = run((dir) => {
+    const f = join(dir, 'many.sarif');
+    const many = Array.from({ length: 60 }, (_, i) => result('js/xss', `frontend/src/f${i}.js`, i + 1, { message: { text: `Finding ${i}\nsecond line` } }));
+    many.push(result('py/sql', 'backend/c.py', 7, { suppressions: [{ kind: 'inSource' }] }));
+    writeFileSync(f, JSON.stringify({ runs: [{ results: many }] }));
+    return ['Semgrep', f];
+  });
+  assert.equal(r.status, 0, r.stderr);
+  const lines = r.stdout.split('\n').filter((l) => l.startsWith('finding\t'));
+  assert.equal(lines.length, 60, 'every unsuppressed finding is in the log, not only the first 50');
+  assert.equal(lines[59], 'finding\twarning\tjs/xss\tfrontend/src/f59.js:60\tFinding 59');
+  assert.doesNotMatch(r.stdout, /py\/sql/, 'a suppressed result stays out of the log');
+  assert.match(r.summary, /10 more not listed/, 'the summary keeps its cap');
 });
 
 test('a clean scan reports zero, and no SARIF at all fails', () => {
