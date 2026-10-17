@@ -5,7 +5,9 @@
  * test's number means the same in all three parts.
  *
  * Part 1 adds tests 1, 2, 3, 5, 7 and 10, and the parts of 6, 8, 9 and 11 its
- * routes answer. Every venture and person below is made up.
+ * routes answer. Part 2's first PR adds 13 and 14, the record's parts of 6 and
+ * 8, and runs 1 and 7 again over the record and `logCycleWrite`. Every venture
+ * and person below is made up.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -23,6 +25,10 @@ import {
 } from '../src/services/verdict.ts';
 import { hardDeleteProject } from '../src/services/projectTrash.ts';
 import { ensurePainGroupsSchema } from '../src/services/painGroups.ts';
+import { createCycleRecords } from '../src/routes/cycle_records.ts';
+import { verdictSpec } from '../src/services/records/verdict.ts';
+import { activityFor } from '../src/services/cycleActivity.ts';
+import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { tableFromBaseline } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 
@@ -45,6 +51,7 @@ const TABLES = [
   'users', 'projects', 'activity_logs', 'discovery_interviews', 'interview_pain_severities', 'pain_groups',
   'pain_group_aliases', 'hypotheses', 'hypothesis_pain_links', 'waitlist_signups', 'metric_targets',
   'competitor_analyses', 'competitor_candidates', 'competitor_sources', 'competitor_signals', 'validation_decisions',
+  'mvp_features', 'roadmap_okrs',
 ];
 
 function fixture({ fk = false }: { fk?: boolean } = {}) {
@@ -55,6 +62,8 @@ function fixture({ fk = false }: { fk?: boolean } = {}) {
   db.exec(sqlOf('311_revenue_entries.sql').replace(/REFERENCES documents\(id\)/, ''));
   db.exec(sqlOf('440_validate_cycle_stores.sql'));
   db.exec(MIG464);
+  // #1703: #1690's convention (`created_by` and the activity index).
+  db.exec(sqlOf('459_cycle_activity_convention.sql'));
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id, spinout_lab_active) VALUES (?, ?, ?, ?, 1, ?, ?)');
   u.run(FOUNDER, 'founder', 'Fay Founder', 'fay@example.test', 1001, 0);
   u.run(OTHER, 'founder', 'Bo Other', 'bo@example.test', 1002, 0);
@@ -484,10 +493,14 @@ test('10: no file under cloudflare-worker/src but services/verdict.ts names vali
     const lines = readFileSync(f, 'utf8').split('\n').filter((l) => l.includes('validation_decision'));
     if (!lines.length) continue;
     // services/records/owned.ts may name the tables in its two verdict
-    // entries only (D-u), and services/cycleActivity.ts in `logCycleWrite`'s
-    // read-back list entry only, once #1690 adds those files.
+    // entries only (D-u), and types.ts in their `Store` names. #1703:
+    // services/cycleActivity.ts in `logCycleWrite`'s read-back entry (its
+    // type, the superseded row's statement and the newest decision's), and
+    // services/records/verdict.ts in its two `store` keys only.
     if (rel === 'services/records/owned.ts' && lines.length <= 2) continue;
-    if (rel === 'services/cycleActivity.ts' && lines.length <= 1) continue;
+    if (rel === 'services/records/types.ts' && lines.length <= 1) continue;
+    if (rel === 'services/cycleActivity.ts' && lines.length <= 4) continue;
+    if (rel === 'services/records/verdict.ts' && lines.every((l) => /\bstore: 'validation_decision(s|_commitments)'/.test(l))) continue;
     offenders.push(rel);
   }
   assert.deepEqual(offenders, []);
@@ -510,4 +523,288 @@ test('11: the old POST records a given venture decision that supersedes only the
   assert.equal((await currentDecision(env, P, h2))?.id, hd.id, 'H2\'s decision is still current');
   assert.equal((await currentDecision(env, P, 'venture'))?.id, b.body.id);
   assert.equal((await oldPost(db, FOUNDER, { decision: 'maybe' })).status, 400);
+});
+
+// ---------------------------------------------------------------------------
+// #1703, part 2's first PR: the record, its commitments and form-options,
+// through #1690's route with a test registry (Verdict is not in RECORD_SPECS
+// until the closing PR). The production entry point lets a thrown Response
+// answer (`util/thrownResponse.ts`), so these calls do the same.
+// ---------------------------------------------------------------------------
+
+const EVIDENCE = items(5, { contradicting: 1 }).map((e, i) => ({ ...e, strength: i === 4 ? null : e.strength }));
+function recordsApp(list: EvidenceItem[] = EVIDENCE) {
+  const r = new Hono<any>();
+  r.route('/api/cycles', createCycleRecords({ validate: { verdict: verdictSpec({ evidenceSource: fixed(list) }) } }));
+  r.onError((err: any, c) => c.json({ detail: String(err?.message || '') }, 500));
+  return r;
+}
+async function rec(db: any, who: number, method: string, path: string, body?: unknown, list?: EvidenceItem[]) {
+  const token = await new SignJWT({ user_id: who, role: roleOf[who] }).setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+  const r = recordsApp(list);
+  const res = await withThrownResponses(() => r.request(`/api/cycles/validate/modules/verdict${path}`, {
+    method, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  }, envOf(db)));
+  const text = await res.text();
+  let parsed: any = null;
+  try { parsed = JSON.parse(text); } catch { parsed = text; }
+  return { status: res.status, body: parsed, text };
+}
+const recordOf = (db: any, who: number, id: number, pid = P) => rec(db, who, 'GET', `/records/${id}?project=${pid}`);
+const actOn = (db: any, who: number, id: number, key: string, body: unknown = {}, pid = P) =>
+  rec(db, who, 'POST', `/records/${id}/actions/${key}?project=${pid}`, body);
+const given = (db: any, who: number, input: any, pid = P) =>
+  recordDecision(envOf(db), userOf(who), { id: pid }, { evidence: keys(EVIDENCE), ...input }, { evidenceSource: fixed(EVIDENCE) });
+const commitments = (db: any) => db.prepare('SELECT * FROM validation_decision_commitments ORDER BY id').all() as any[];
+
+test('1: on the record, a pre-464 row is a given venture decision whose Evidence is Not recorded, with the reason', async () => {
+  const db = fixture();
+  db.prepare(`INSERT INTO validation_decisions (project_id, decision, reasoning, decided_at, decided_by)
+              VALUES (?, 'stop', 'Too few carriers', '2026-09-03 10:00:00', ?)`).run(P, FOUNDER);
+  const id = rows(db)[0].id;
+  const r = await recordOf(db, FOUNDER, id);
+  assert.equal(r.status, 200, r.text);
+  assert.equal(r.body.title, 'Stop · the venture');
+  assert.equal(r.body.sub, 'Recorded 3 Sep by Fay Founder', 'no evidence clause on an old-route decision');
+  assert.deepEqual(r.body.facts[2], { label: 'Evidence', value: null, reason: NO_EVIDENCE_REASON });
+  assert.deepEqual(r.body.facts[3], { label: 'Supersedes', value: 'Nothing, the first for the venture' });
+  assert.equal(r.body.main[1].empty, NO_EVIDENCE_REASON);
+});
+
+test('6: a partner, an advisor, an investor and another venture\'s founder get 403 from the record, activity, form-options and both actions', async () => {
+  const db = fixture();
+  const d = await given(db, FOUNDER, { decision: 'proceed', for: 'venture', reasoning: 'Carriers pay for it' });
+  const c = await actOn(db, FOUNDER, d.id, 'add-commitment', { text: 'Sign three carriers' });
+  assert.equal(c.status, 200, c.text);
+  const cid = commitments(db)[0].id;
+  for (const who of [PARTNER, ADVISOR, INVESTOR, OTHER]) {
+    const calls = [
+      await recordOf(db, who, d.id),
+      await rec(db, who, 'GET', `/records/${d.id}/activity?project=${P}`),
+      await rec(db, who, 'GET', `/form-options?project=${P}`),
+      await actOn(db, who, d.id, 'add-commitment', { text: 'Nope' }),
+      await actOn(db, who, d.id, 'commitment-done', { commitment_id: cid }),
+    ];
+    assert.deepEqual(calls.map((x) => x.status), [403, 403, 403, 403, 403], roleOf[who]);
+    for (const x of calls) assert.equal(x.text.includes('Carriers pay for it') || x.text.includes('Sign three carriers'), false);
+  }
+  assert.equal(commitments(db).length, 1);
+  assert.equal(commitments(db)[0].done_at, null);
+});
+
+test('6: the founder, an admitted Lab member on their own venture and an admin read the record, activity and form-options and use both actions', async () => {
+  const db = fixture();
+  for (const [who, pid] of [[FOUNDER, P], [ADMIN, P], [LAB, P_LAB]] as const) {
+    const d = await given(db, who, { decision: 'proceed', for: 'venture' }, pid);
+    assert.equal((await recordOf(db, who, d.id, pid)).status, 200, roleOf[who]);
+    assert.equal((await rec(db, who, 'GET', `/records/${d.id}/activity?project=${pid}`)).status, 200);
+    assert.equal((await rec(db, who, 'GET', `/form-options?project=${pid}`)).status, 200);
+    assert.equal((await actOn(db, who, d.id, 'add-commitment', { text: `Ship ${who}` }, pid)).status, 200);
+    const mine = commitments(db).find((m) => m.text === `Ship ${who}`);
+    const done = await actOn(db, who, d.id, 'commitment-done', { commitment_id: mine.id }, pid);
+    assert.equal(done.status, 200, done.text);
+  }
+});
+
+test('7: through logCycleWrite, the hypothesis a decision was For shows no decision row, and no summary holds a commitment\'s text', async () => {
+  const db = fixture();
+  const h2 = hypothesis(db, P, 'H2');
+  const first = await given(db, FOUNDER, { decision: 'pivot', for: h2 });
+  await given(db, FOUNDER, { decision: 'proceed', for: h2 });
+  const SECRET = 'Call every carrier in Lyon';
+  assert.equal((await actOn(db, FOUNDER, first.id, 'add-commitment', { text: SECRET })).status, 200);
+  const page = await activityFor(envOf(db), { projectId: P, entityType: 'validate.experiments', entityId: String(h2), store: 'hypotheses' });
+  assert.equal(page.items.some((i) => /validation_|decision/i.test(i.action)), false);
+  const log = db.prepare('SELECT entity_type, entity_id, action, details FROM activity_logs ORDER BY id').all() as any[];
+  assert.deepEqual(log.map((r) => [r.entity_type, r.entity_id, r.action]).at(-1), ['validate.verdict', String(first.id), 'validation_commitment_added']);
+  assert.equal(log.some((r) => String(r.details).includes(SECRET)), false);
+  const act = await rec(db, FOUNDER, 'GET', `/records/${first.id}/activity?project=${P}`);
+  assert.deepEqual(act.body.items.map((i: any) => i.action),
+    ['validation_commitment_added', 'validation_decision_superseded', 'validation_decision_recorded']);
+});
+
+test('8: a venture-B decision with ?project=A answers 404 on the record, activity and every action; another decision\'s commitment answers 404', async () => {
+  const db = fixture();
+  const theirs = await given(db, OTHER, { decision: 'stop', for: 'venture' }, P_OTHER);
+  assert.equal((await actOn(db, OTHER, theirs.id, 'add-commitment', { text: 'Theirs' }, P_OTHER)).status, 200);
+  const theirCommitment = commitments(db)[0].id;
+  for (const r of [
+    await recordOf(db, FOUNDER, theirs.id),
+    await rec(db, FOUNDER, 'GET', `/records/${theirs.id}/activity?project=${P}`),
+    await actOn(db, FOUNDER, theirs.id, 'add-commitment', { text: 'Mine' }),
+    await actOn(db, FOUNDER, theirs.id, 'commitment-done', { commitment_id: theirCommitment }),
+    await actOn(db, FOUNDER, theirs.id, 'record-new-decision'),
+  ]) {
+    assert.equal(r.status, 404);
+    assert.equal(r.body.detail, 'Record not found.');
+  }
+  const a = await given(db, FOUNDER, { decision: 'proceed', for: 'venture' });
+  const b = await given(db, FOUNDER, { decision: 'pivot', for: 'venture' });
+  assert.equal((await actOn(db, FOUNDER, a.id, 'add-commitment', { text: 'On A' })).status, 200);
+  assert.equal((await actOn(db, FOUNDER, b.id, 'add-commitment', { text: 'On B' })).status, 200);
+  const onA = commitments(db).find((m) => m.text === 'On A').id;
+  const wrong = await actOn(db, FOUNDER, b.id, 'commitment-done', { commitment_id: onA });
+  assert.equal(wrong.status, 404);
+  assert.equal(wrong.body.detail, 'Commitment not found.');
+  const foreign = await actOn(db, FOUNDER, b.id, 'commitment-done', { commitment_id: theirCommitment });
+  assert.equal(foreign.status, 404);
+  assert.equal(commitments(db).every((m) => m.done_at === null), true, 'nothing was closed');
+  assert.equal(commitments(db).filter((m) => m.project_id === P_OTHER).length, 1, 'nothing was added to venture B');
+});
+
+test('13: the record follows CO:368', async () => {
+  const db = fixture();
+  const h2 = hypothesis(db, P, 'H2', 'Carriers pay per load');
+  const earlier = await given(db, FOUNDER, { decision: 'pivot', for: 'venture' });
+  db.prepare("UPDATE validation_decisions SET decided_at = '2026-09-03 09:00:00' WHERE id = ?").run(earlier.id);
+  const d = await given(db, FOUNDER, { decision: 'proceed', for: 'venture', reasoning: 'Margins hold at forty carriers' });
+  db.prepare("UPDATE validation_decisions SET decided_at = '2026-10-12 09:00:00' WHERE id = ?").run(d.id);
+  const r = await recordOf(db, FOUNDER, d.id);
+  assert.equal(r.status, 200, r.text);
+  assert.equal(r.body.title, 'Proceed · the venture');
+  assert.equal(r.body.sub, 'Recorded 12 Oct by Fay Founder · rests on 5 pieces of evidence');
+  assert.deepEqual(r.body.pills, [{ text: 'Proceed', tone: 'ok' }, { text: 'Current', tone: 'v1' }]);
+  assert.deepEqual(r.body.facts, [
+    { label: 'Decision', value: 'Proceed' },
+    { label: 'For', value: 'The venture' },
+    { label: 'Evidence', value: '5 items' },
+    { label: 'Supersedes', value: 'Pivot · 3 Sep' },
+  ]);
+  assert.deepEqual(r.body.main.map((s: any) => [s.key, s.title]), [['reasoning', 'Reasoning'], ['evidence', 'Evidence it rests on']]);
+  assert.deepEqual(r.body.main[0].rows, [{ a: 'Margins hold at forty carriers' }]);
+  assert.deepEqual(r.body.main[1].rows.slice(0, 2), [
+    { a: 'Item 1 · H1', b: 'Measured · 12 Oct', c: 'Contradicts', tone: 'bad' },
+    { a: 'Item 2 · H1', b: 'Measured · 12 Oct', c: 'Supports', tone: 'ok' },
+  ]);
+  assert.equal(r.body.main[1].rows[4].b, 'Strength not recorded · 12 Oct');
+  assert.deepEqual(r.body.side.map((s: any) => [s.key, s.title, s.action ?? null]),
+    [['commitments', 'Commitments it created', 'add-commitment'], ['memo', 'Memo', null]]);
+  assert.deepEqual(r.body.side[1].rows, [{ a: 'Decision memo', b: 'Export PDF', action: 'export-memo' }]);
+  assert.deepEqual(r.body.actions.map((a: any) => [a.key, a.label, a.kind, a.tone]), [
+    ['record-new-decision', 'Record a new decision', 'link', 'primary'],
+    ['export-memo', 'Export memo', 'write', 'default'],
+    ['add-commitment', 'Add a commitment', 'form', 'default'],
+  ], 'commitment-done is declared only while a commitment is open');
+  assert.equal(r.body.actions[0].href, `/validate/verdict/new?project=${P}&for=venture`);
+  assert.deepEqual(r.body.next, { text: 'Record a new decision', action: 'record-new-decision' });
+
+  // The earlier one reads Superseded; a first decision reads Nothing, the first.
+  const e = await recordOf(db, FOUNDER, earlier.id);
+  assert.deepEqual(e.body.pills[1], { text: 'Superseded', tone: 'grey' });
+  assert.deepEqual(e.body.facts[3], { label: 'Supersedes', value: 'Nothing, the first for the venture' });
+
+  // A hypothesis's decision; a withheld one; one piece of evidence.
+  const hd = await given(db, ADMIN, { decision: 'stop', for: h2, evidence: keys(EVIDENCE) });
+  const h = await recordOf(db, FOUNDER, hd.id);
+  assert.equal(h.body.title, 'Stop · Carriers pay per load');
+  assert.equal(h.body.sub.endsWith('by Ada Admin · rests on 5 pieces of evidence'), true, h.body.sub);
+  assert.deepEqual(h.body.pills[0], { text: 'Stop', tone: 'bad' });
+  assert.deepEqual(h.body.facts[1], { label: 'For', value: 'H2 · Carriers pay per load' });
+  assert.deepEqual(h.body.facts[3], { label: 'Supersedes', value: 'Nothing, the first for H2' });
+  assert.equal(h.body.actions[0].href, `/validate/verdict/new?project=${P}&for=h-${h2}`);
+  const w = await given(db, FOUNDER, { decision: 'pivot', for: 'venture', evidence: keys(EVIDENCE).slice(0, 1) });
+  const wr = await recordOf(db, FOUNDER, w.id);
+  assert.deepEqual(wr.body.pills, [{ text: 'Pivot', tone: 'warn' }, { text: 'Withheld', tone: 'grey' }]);
+  assert.equal(wr.body.sub.endsWith('rests on 1 piece of evidence'), true, wr.body.sub);
+  assert.deepEqual(wr.body.facts.slice(2), [{ label: 'Evidence', value: '1 item' }, { label: 'Supersedes', value: 'Nothing, withheld' }]);
+  assert.equal(wr.body.main[0].empty, 'No reasoning recorded.');
+  assert.deepEqual(wr.body.main[0].rows, []);
+});
+
+test('13: a legacy row seeded after an earlier decision reads Not recorded, with decision 10\'s reason; no name without decided_by', async () => {
+  const db = fixture();
+  db.prepare(`INSERT INTO validation_decisions (project_id, decision, decided_at, superseded_at) VALUES
+    (?, 'pivot', '2026-08-01 10:00:00', '2026-09-01 10:00:00'), (?, 'proceed', '2026-09-01 10:00:00', NULL)`).run(P, P);
+  const [first, second] = rows(db);
+  const r = await recordOf(db, FOUNDER, second.id);
+  assert.deepEqual(r.body.facts[3], { label: 'Supersedes', value: null, reason: 'Recorded before decisions named what they replaced.' });
+  assert.equal(r.body.sub, 'Recorded 1 Sep');
+  assert.deepEqual((await recordOf(db, FOUNDER, first.id)).body.facts[3], { label: 'Supersedes', value: 'Nothing, the first for the venture' });
+});
+
+test('13: commitments are added and marked done through the action route, by an owner who owns the venture', async () => {
+  const db = fixture();
+  db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id, spinout_lab_active) VALUES (?, ?, ?, ?, 1, ?, 0)')
+    .run(11, 'founder', 'Cy Cofounder', 'cy@example.test', 1001);
+  // Same founder_id, but not an admitted Lab member: not an owner.
+  db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id, spinout_lab_active) VALUES (?, ?, ?, ?, 1, ?, 0)')
+    .run(12, 'exploring', 'Eve Explorer', 'eve@example.test', 1001);
+  const d = await given(db, FOUNDER, { decision: 'proceed', for: 'venture' });
+
+  const form = (await recordOf(db, FOUNDER, d.id)).body.actions.find((a: any) => a.key === 'add-commitment').form;
+  assert.deepEqual(form.fields.map((f: any) => [f.key, f.kind, f.input ?? null, f.required ?? false]),
+    [['text', 'T', null, true], ['owner_user_id', 'CH', null, false], ['due_date', 'T', 'date', false]]);
+  assert.deepEqual(form.fields[1].options, [{ value: '11', label: 'Cy Cofounder' }, { value: String(FOUNDER), label: 'Fay Founder' }]);
+  assert.equal(form.fields[1].value, String(FOUNDER), 'the owner defaults to the caller');
+
+  assert.equal((await actOn(db, FOUNDER, d.id, 'add-commitment', { text: '  Sign  three carriers ', due_date: '2026-10-31' })).status, 200);
+  assert.equal((await actOn(db, FOUNDER, d.id, 'add-commitment', { text: 'Price the pilot', owner_user_id: '11' })).status, 200);
+  assert.equal((await actOn(db, ADMIN, d.id, 'add-commitment', { text: 'Admin note' })).status, 200);
+  for (const owner of [OTHER, 12, 999]) {
+    const bad = await actOn(db, FOUNDER, d.id, 'add-commitment', { text: 'Theirs', owner_user_id: owner });
+    assert.equal(bad.status, 400);
+    assert.equal(bad.body.detail, 'The owner must own this venture.');
+  }
+  assert.equal((await actOn(db, FOUNDER, d.id, 'add-commitment', { text: '' })).status, 400);
+  assert.equal((await actOn(db, FOUNDER, d.id, 'add-commitment', { text: 'x', due_date: 'soon' })).status, 400);
+  assert.deepEqual(commitments(db).map((m) => [m.text, m.owner_user_id, m.created_by, m.due_date, m.project_id]), [
+    ['Sign three carriers', FOUNDER, FOUNDER, '2026-10-31', P],
+    ['Price the pilot', 11, FOUNDER, null, P],
+    ['Admin note', null, ADMIN, null, P],
+  ]);
+
+  let r = await recordOf(db, FOUNDER, d.id);
+  assert.deepEqual(r.body.side[0].rows, [
+    { a: 'Sign three carriers', b: 'Fay Founder · 31 Oct' },
+    { a: 'Price the pilot', b: 'Cy Cofounder' },
+    { a: 'Admin note', b: 'No owner' },
+  ]);
+  const done = r.body.actions.find((a: any) => a.key === 'commitment-done');
+  assert.deepEqual(done.form.fields[0].options.map((o: any) => o.label), ['Sign three carriers', 'Price the pilot', 'Admin note']);
+
+  const first = commitments(db)[0].id;
+  assert.equal((await actOn(db, FOUNDER, d.id, 'commitment-done', { commitment_id: String(first) })).status, 200);
+  assert.equal((await actOn(db, FOUNDER, d.id, 'commitment-done', { commitment_id: first })).status, 404, 'a closed one is not open');
+  r = await recordOf(db, FOUNDER, d.id);
+  assert.match(r.body.side[0].rows[0].b, /^Done \d{1,2} [A-Z][a-z]{2}$/);
+  for (const m of commitments(db).slice(1)) assert.equal((await actOn(db, FOUNDER, d.id, 'commitment-done', { commitment_id: m.id })).status, 200);
+
+  const none = await actOn(db, FOUNDER, d.id, 'commitment-done', { commitment_id: first });
+  assert.equal(none.status, 404);
+  assert.equal(none.body.detail, 'No such action on this record.', 'nothing open: the action is not declared');
+  assert.equal((await actOn(db, FOUNDER, d.id, 'edit-decision')).body.detail, 'No such action on this record.');
+  assert.equal((await rec(db, FOUNDER, 'PATCH', `/records/${d.id}?project=${P}`, { decision: 'stop' })).status, 404, 'a decision is never edited');
+  assert.equal((await rec(db, FOUNDER, 'DELETE', `/records/${d.id}?project=${P}`)).status, 404, 'nor deleted');
+  assert.equal(rows(db).length, 1);
+  const log = db.prepare(`SELECT action, details FROM activity_logs WHERE action LIKE 'validation_commitment%' ORDER BY id`).all() as any[];
+  assert.deepEqual(log.map((l) => l.action), [...Array(3).fill('validation_commitment_added'), ...Array(3).fill('validation_commitment_done')]);
+});
+
+test('14: form-options lists The venture then the open hypotheses, and each evidence item with its strength, date and the bar', async () => {
+  const db = fixture();
+  const h1 = hypothesis(db, P, 'H1', 'Dispatchers lose an hour a day');
+  const h2 = hypothesis(db, P, 'H2', 'Retired claim');
+  db.prepare("UPDATE hypotheses SET retired_at = '2026-10-01' WHERE id = ?").run(h2);
+  hypothesis(db, P_OTHER, 'H1', 'Not this venture');
+  const list = [
+    { id: 'evidence-7', kind: 'hypothesis_evidence', label: 'Pilot invoice · H1', strength: 'measured', direction: 'supports', date: '2026-10-12', hypothesis_id: h1 },
+    { id: 'pain-3-9', kind: 'interview', label: 'Interview · H1', strength: null, direction: 'contradicts', date: null },
+  ] as EvidenceItem[];
+  const r = await rec(db, FOUNDER, 'GET', `/form-options?project=${P}&x=1`, undefined, list);
+  assert.equal(r.status, 200, r.text);
+  assert.deepEqual(r.body.for.options, [
+    { value: 'venture', label: 'The venture' },
+    { value: `h-${h1}`, label: 'H1 · Dispatchers lose an hour a day' },
+  ]);
+  assert.equal(r.body.evidence.bar, DECISION_EVIDENCE_BAR);
+  assert.deepEqual(r.body.evidence.options, [
+    { value: 'evidence-7', label: 'Pilot invoice · H1 · Measured', meta: '12 Oct', hypothesis_id: h1 },
+    { value: 'pain-3-9', label: 'Interview · H1 · Strength not recorded', meta: null, hypothesis_id: null },
+  ]);
+  const empty = await rec(db, OTHER, 'GET', `/form-options?project=${P_LAB}`, undefined, []);
+  assert.equal(empty.status, 403);
+  const lab = await rec(db, LAB, 'GET', `/form-options?project=${P_LAB}`, undefined, []);
+  assert.deepEqual(lab.body, { for: { options: [{ value: 'venture', label: 'The venture' }] }, evidence: { bar: 5, options: [] } });
 });

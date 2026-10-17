@@ -100,7 +100,7 @@ export type Store =
   | 'pain_groups' | 'discovery_interviews' | 'customer_segments'
   | 'competitor_candidates' | 'demand_signals' | 'revenue_entries'
   | 'waitlist_signups' | 'hypotheses' | 'hypothesis_pain_links'
-  | 'interview_sessions';
+  | 'interview_sessions' | 'validation_decisions' | 'validation_decision_commitments';
 
 export type ModuleSpec = {
   read: Gate;
