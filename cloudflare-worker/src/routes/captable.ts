@@ -36,7 +36,9 @@ import {
 } from '../services/valuation409a';
 import { bindingKey } from '../util/schemaBootstrap';
 import { refuse } from '../util/refusal';
-import { hashEmail } from '../util/hashEmail';
+import {
+  saveScenario, logScenarioAct, loadScenarioByUid as loadByUid, type ScenarioRow,
+} from '../services/capTableWrites';
 
 /**
  * Build queue #120 — lazy bootstrap for the share tables. Canonical
@@ -93,14 +95,6 @@ captable.use('*', async (c, next) => {
   return next();
 });
 
-type ScenarioRow = {
-  id: number; uid: string; owner_user_id: number; project_id: number | null;
-  name: string; inputs_json: string; result_json: string | null;
-  computed_at: string | null; created_at: string; updated_at: string;
-  // Task #29 — 0 = canonical (project cap table), 1 = draft variant.
-  is_variant: number | null;
-};
-
 function isAdmin(role: string): boolean { return (role || '').toLowerCase() === 'admin'; }
 
 function safeJson<T>(s: string | null | undefined, fallback: T): T {
@@ -122,31 +116,6 @@ function serialize(s: ScenarioRow, withResult = true): any {
   };
   if (withResult) out.result = s.result_json ? safeJson<SimulateResult>(s.result_json, null as any) : null;
   return out;
-}
-
-/**
- * D632 — a cap-table write records its actor in `activity_logs`, with the
- * project it belongs to. Best effort: the write has already happened, so a
- * failed log line only warns.
- */
-async function logScenarioAct(
-  env: Env, user: { id: number; email?: string | null }, action: string,
-  row: { uid: string; project_id: number | null; is_variant?: number | null }, extra: Record<string, unknown> = {},
-): Promise<void> {
-  try {
-    const actor = await hashEmail(String(user.email || ''));
-    await env.DB.prepare(
-      'INSERT INTO activity_logs (project_id, user_id, action, details, actor) VALUES (?, ?, ?, ?, ?)',
-    ).bind(row.project_id ?? null, user.id, action,
-      JSON.stringify({ scenario_uid: row.uid, is_variant: row.is_variant ? 1 : 0, ...extra }), actor).run();
-  } catch (e) {
-    console.warn('[captable] activity log failed', action, (e as Error).message);
-  }
-}
-
-async function loadByUid(env: Env, uid: string): Promise<ScenarioRow | null> {
-  return env.DB.prepare('SELECT * FROM cap_table_scenarios WHERE uid = ?')
-    .bind(uid).first<ScenarioRow>();
 }
 
 type AuthUser = AccessUser & { id: number; role: string };
@@ -272,11 +241,6 @@ function asJsonError(c: any, err: unknown) {
     return c.json(body, err.status);
   }
   throw err;
-}
-
-/** D1/SQLite surfaces a unique-index violation as "UNIQUE constraint failed". */
-function isUniqueViolation(err: unknown): boolean {
-  return /unique constraint failed/i.test(String((err as any)?.message ?? err ?? ''));
 }
 
 /**
@@ -409,62 +373,11 @@ captable.post('/scenarios', async (c) => {
   const projectId = body?.project_id ?? null;
   try { await ensureProjectWriteAccess(c, projectId, user); }
   catch (e) { return asJsonError(c, e); }
-  const result = simulate(inputs);
-  const now = new Date().toISOString();
-
-  // Task #28 — one cap table per project. When a project is provided and a
-  // scenario already exists for it, UPDATE that row instead of inserting a
-  // duplicate (guards against stale frontend state). Access to the existing
-  // project's scenario is already gated by ensureProjectAccess above.
-  if (projectId != null) {
-    const existing = await c.env.DB.prepare(
-      'SELECT * FROM cap_table_scenarios WHERE project_id = ? AND COALESCE(is_variant,0) = 0 ORDER BY updated_at DESC LIMIT 1',
-    ).bind(projectId).first<ScenarioRow>();
-    if (existing) {
-      await c.env.DB.prepare(
-        `UPDATE cap_table_scenarios
-            SET name = ?, inputs_json = ?, result_json = ?, computed_at = ?, updated_at = ?
-          WHERE id = ?`,
-      ).bind(name, JSON.stringify(inputs), JSON.stringify(result), now, now, existing.id).run();
-      const updated = await loadByUid(c.env, existing.uid);
-      if (!updated) return c.json({ detail: 'Update failed' }, 500);
-      return c.json(serialize(updated));
-    }
-  }
-
-  const uid = crypto.randomUUID();
-  try {
-    await c.env.DB.prepare(
-      `INSERT INTO cap_table_scenarios
-         (uid, owner_user_id, project_id, name, inputs_json, result_json, computed_at, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).bind(uid, user.id, projectId, name, JSON.stringify(inputs), JSON.stringify(result), now, now, now).run();
-  } catch (e) {
-    // Task #32 — DB-level "one canonical cap table per project" guard (partial
-    // unique index). Two saves for the same project can race between the SELECT
-    // above and this INSERT (double-click / two tabs / a retry); the index
-    // rejects the second INSERT. Recover exactly like the upsert branch — load
-    // the row the winner created and UPDATE it — so a lost race is a silent edit,
-    // not a 500.
-    if (projectId != null && isUniqueViolation(e)) {
-      const winner = await c.env.DB.prepare(
-        'SELECT * FROM cap_table_scenarios WHERE project_id = ? AND COALESCE(is_variant,0) = 0 ORDER BY updated_at DESC LIMIT 1',
-      ).bind(projectId).first<ScenarioRow>();
-      if (winner) {
-        await c.env.DB.prepare(
-          `UPDATE cap_table_scenarios
-              SET name = ?, inputs_json = ?, result_json = ?, computed_at = ?, updated_at = ?
-            WHERE id = ?`,
-        ).bind(name, JSON.stringify(inputs), JSON.stringify(result), now, now, winner.id).run();
-        const merged = await loadByUid(c.env, winner.uid);
-        if (merged) return c.json(serialize(merged));
-      }
-    }
-    throw e;
-  }
-  const row = await loadByUid(c.env, uid);
-  if (!row) return c.json({ detail: 'Insert failed' }, 500);
-  return c.json(serialize(row));
+  // D691 — the save, the one-per-project upsert (Task #28), its unique-index
+  // recovery (Task #32) and the entry keys live in saveScenario().
+  const saved = await saveScenario(c.env, { actor: user, name, inputs, projectId });
+  if (!saved.ok) return c.json({ detail: saved.reason === 'update_failed' ? 'Update failed' : 'Insert failed' }, 500);
+  return c.json(serialize(saved.row));
 });
 
 // Task #28 — load a project's single cap table (project-scoped, NOT owner-
@@ -574,30 +487,13 @@ captable.put('/scenarios/:uid', async (c) => {
       }
     }
   }
-  const result = simulate(inputs);
-  const now = new Date().toISOString();
   const projectId = body?.project_id !== undefined ? body.project_id : row.project_id;
-  try {
-    await c.env.DB.prepare(
-      `UPDATE cap_table_scenarios
-          SET name = ?, inputs_json = ?, result_json = ?, computed_at = ?,
-              updated_at = ?, project_id = ?
-        WHERE uid = ?`,
-    ).bind(name, JSON.stringify(inputs), JSON.stringify(result), now, now, projectId, row.uid).run();
-  } catch (e) {
-    // Task #32 — the DB partial unique index backstops the app-level clash check
-    // above: if a concurrent save bound this project between that SELECT and
-    // here, surface the same 409 instead of a 500.
-    if (isUniqueViolation(e)) {
-      return c.json({ detail: { code: 'project_has_cap_table', message: 'This project already has a cap table. Edit that one instead.' } }, 409);
-    }
-    throw e;
+  // D691 — the save, the entry keys and D632's activity row live in saveScenario().
+  const saved = await saveScenario(c.env, { actor: user, name, inputs, projectId, row });
+  if (!saved.ok) {
+    return c.json({ detail: { code: 'project_has_cap_table', message: 'This project already has a cap table. Edit that one instead.' } }, 409);
   }
-  const fresh = await loadByUid(c.env, row.uid);
-  // D632 — a variant renamed or edited in place says so, with the old name.
-  await logScenarioAct(c.env, user as any, 'captable_scenario_updated', fresh as ScenarioRow,
-    row.name !== name ? { renamed_from: row.name } : {});
-  return c.json(serialize(fresh as ScenarioRow));
+  return c.json(serialize(saved.row));
 });
 
 captable.delete('/scenarios/:uid', async (c) => {
