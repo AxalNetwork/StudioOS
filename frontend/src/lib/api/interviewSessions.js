@@ -22,6 +22,8 @@
 //   setSpeaker       PATCH  /sessions/:id/segments/:segId
 //   sessionReceipt   GET    /sessions/:id/receipt
 //   deleteSession    DELETE /sessions/:id
+// D690 (#1692), for D697's record (#1659):
+//   audio            GET    /sessions/:id/audio         { parts: [{ seq, url, mime, start_ms, expires_at }] }, one single-use signed URL per chunk
 // D658 (#1494), the review step:
 //   placements       GET    /sessions/:id/placements    every run's placements, and compare
 //   structure        POST   /sessions/:id/structure     { model? } → a new run
@@ -87,6 +89,8 @@ export const interviewSessionsApi = {
     method: 'PATCH', body: JSON.stringify({ speaker_label: speakerLabel }),
   }),
   receipt: (id) => request(`${P}/sessions/${enc(id)}/receipt`),
+  /** One signed, single-use download per recorded chunk (D690): fetch each once, and ask again for fresh URLs. */
+  audio: (id) => request(`${P}/sessions/${enc(id)}/audio`),
   remove: (id) => request(`${P}/sessions/${enc(id)}`, { method: 'DELETE' }),
   placements: (id) => request(`${P}/sessions/${enc(id)}/placements`),
   structure: (id, model) => request(`${P}/sessions/${enc(id)}/structure`, {

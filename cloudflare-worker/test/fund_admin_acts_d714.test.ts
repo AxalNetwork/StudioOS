@@ -61,6 +61,8 @@ const SCHEMA = [
   stripForeignKeys(read('../sql/migrations/264_admin_notices.sql')),
   read('../sql/migrations/312_fund_call_ledger.sql'),
   read('../sql/migrations/418_fund_ledger.sql'),
+  // D709 (#1774): a receipt also settles a fee line linked to its call line.
+  read('../sql/migrations/473_fund_management_fees.sql'),
 ].join('\n');
 
 const SEED = `
