@@ -105,6 +105,7 @@ import funds from './routes/funds';
 import fundLedger from './routes/fund_ledger';
 import fundFees from './routes/fund_fees';
 import fundAdmin from './routes/fund_admin';
+import fundReporting from './routes/fund_reporting';
 import fundPerformance from './routes/fund_performance';
 import liquidity from './routes/liquidity';
 import email from './routes/email';
@@ -317,6 +318,7 @@ import catalog, { adminCatalog } from './routes/catalog';
 // Task #16 — Admin Stripe management (webhook endpoints + publishable key).
 import adminStripe from './routes/admin_stripe';
 import adminMoneyRails from './routes/admin_money_rails';
+import adminBankAccounts from './routes/admin_bank_accounts';
 // PaymentIntent + SetupIntent surface for the Axal-branded embedded card UI.
 import payments from './routes/payments';
 // One-time CART ORDER surface (combined PaymentIntent for one_time SKUs).
@@ -616,6 +618,9 @@ const COOL_OFF_PREFIXES = [
   // exclusive grant over whole countries. Same class as promos: pause it for a
   // freshly-recovered admin.
   '/api/admin/licences',
+  // D708 — each Axal entity's bank accounts: the payment instructions every
+  // notice prints. Pause them for a freshly-recovered admin.
+  '/api/admin/bank-accounts',
 ];
 for (const p of COOL_OFF_PREFIXES) {
   app.use(p, recoveryCoolOff);
@@ -904,6 +909,9 @@ app.route('/api/admin/catalog', adminCatalog);
 app.route('/api/admin/stripe', adminStripe);
 // D707 (#1772) — the entities' roles and the money rails. Before the catch-all.
 app.route('/api/admin/money-rails', adminMoneyRails);
+// D708 — each Axal entity's bank accounts, Super Admin only. Before the
+// catch-all /api/admin so /api/admin/bank-accounts/* resolves here.
+app.route('/api/admin/bank-accounts', adminBankAccounts);
 // Task #9 — promo-code admin CRUD; mount before the `/api/admin` catch-all.
 app.route('/api/admin/promos', adminPromos);
 // Task #39 — Event engine admin (§8.3). Mount BEFORE the catch-all /api/admin
@@ -1035,6 +1043,7 @@ app.route('/api/fund-ledger', fundLedger);
 app.route('/api/fund-fees', fundFees); // D709 (#1774): the management fee; records amounts, moves no money
 // D714 — the fund administration console: which fund acts this admin may take.
 app.route('/api/fund-admin', fundAdmin);
+app.route('/api/fund-reporting', fundReporting);
 app.route('/api/fund-performance', fundPerformance);
 app.route('/api/liquidity', liquidity);
 app.route('/api/email', email);
@@ -1780,6 +1789,19 @@ export default {
         // D572 part 3b — the partner leaderboard's daily standings, so the
         // board's "change" has an earlier standing to compare with. Every
         // tier: a branch's partners are its own. Idempotent per day.
+        // D691 (#1698) — Grow's daily step: obligation reminders and KPI
+        // alerts, in the app only. Each is claimed before it is sent, so a
+        // second run the same day sends nothing.
+        if (now.getUTCHours() === 5 && now.getUTCMinutes() === 35) {
+          try {
+            const { runGrowDaily } = await import('./services/growDaily');
+            const r = await runGrowDaily(env, now.getTime());
+            if (r.reminders || r.alerts) console.info(`[cron] grow daily reminders=${r.reminders} alerts=${r.alerts}`);
+            cronSummary.push(`grow daily reminders=${r.reminders} alerts=${r.alerts}`);
+          } catch (e) {
+            console.error('[cron] grow daily failed', e instanceof Error ? e.message : 'error');
+          }
+        }
         if (now.getUTCHours() === 5 && now.getUTCMinutes() === 25) {
           try {
             const { writeLeaderboardSnapshots } = await import('./services/partnerLeaderboard');
@@ -1850,6 +1872,21 @@ export default {
             console.info(`[cron] signals ingested promoted=${r.promoted} held=${r.held} evidence=${r.evidence_written}`);
           } catch (e) {
             console.error('[cron] signals ingestion failed', e);
+          }
+        }
+        // D712 (#1777) — the fund reporting queue at 05:20 UTC, HQ only: it
+        // builds each administered fund's quarterly pack once it is due (the
+        // 5th day after the quarter ends) and missing in every status, as
+        // drafts that only a Super Admin issues. A second tick builds nothing.
+        // It logs ids and counts only, never a figure.
+        if (hqCadences && now.getUTCHours() === 5 && now.getUTCMinutes() === 20) {
+          try {
+            const { runReportingSchedule } = await import('./services/fundReportDrafts');
+            const r = await runReportingSchedule(env, now);
+            const built = r.results.filter((x) => x.result === 'built').map((x) => x.fund_id);
+            console.info('[cron] fund reporting', r.quarter, 'due', r.due, 'built funds', JSON.stringify(built));
+          } catch (e) {
+            console.error('[cron] fund reporting failed', (e as Error)?.message);
           }
         }
         // Task #3 (Y-1) — nightly Trust Center housekeeping at 04:35 UTC:

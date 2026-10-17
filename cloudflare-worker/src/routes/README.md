@@ -55,6 +55,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/funds         → funds.ts
 /api/fund-fees     → fund_fees.ts       (D709: the management fee's terms, admissions, net invested capital, offsets, and fee periods the GP previews and issues; moves no money)
 /api/fund-admin    → fund_admin.ts      (D714: GET /access, which fund acts this admin may take, from FUND_ACTS)
+/api/fund-reporting → fund_reporting.ts
 /api/liquidity     → liquidity.ts
 /api/email         → email.ts
 /api/pipeline      → pipeline.ts
@@ -80,6 +81,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/founder/validate → founder_validate_meetings.ts (D684: schedule, list, cancel and import a Zoom or Google Meet call on an interview)
 /api/channels         → founder_validate_meetings.ts `zoomWebhook` (the public Zoom webhook, mounted first), then channels.ts (D684: Telegram and WhatsApp connections, the conversation inbox, replies, and their public webhooks)
 /api/admin/channels   → channels.ts `channelsAdmin` (D684: the channels bot's setWebhook; super admin)
+/api/admin/bank-accounts → admin_bank_accounts.ts (D708: each Axal entity's bank accounts, masked, with add, relabel, purposes, retire and a recorded reveal; Super Admin, HQ only; mounted beside /api/admin/stripe, before the /api/admin catch-all)
 /api/eadwyn       → eadwyn.ts          (the Worker AI rail's conversations, their connector switches, and Send/Cancel for a write Eadwyn proposed; D652)
 /api/wellbeing     → wellbeing.ts       (check-ins, the expert directory and bookings; sample experts are seeded outside production only and never shown to members, D643)
 /api               → realtime.ts (WebSocket fan-out, Durable Objects)

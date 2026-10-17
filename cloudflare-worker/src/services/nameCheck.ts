@@ -228,10 +228,12 @@ function extractAnchors(html: string, hrefRe: RegExp): string[] {
   let m: RegExpExecArray | null;
   while ((m = re.exec(html)) !== null) {
     if (!hrefRe.test(m[1])) continue;
+    // Entities are decoded in ONE pass. Decoding `&amp;` first and the
+    // apostrophe second decoded twice: `&amp;#39;` (a register's literal
+    // text "&#39;") came out as `'` instead of "&#39;" (CodeQL js/double-escaping).
     const text = m[2]
       .replace(/<[^>]*>/g, ' ')
-      .replace(/&amp;/g, '&') // codeql[js/double-escaping] -- intentional entity normalization of scraped register HTML, not a security-sensitive escape
-      .replace(/&#0?39;|&apos;/g, "'")
+      .replace(/&(?:amp|apos|#0?39);/g, (ent) => (ent === '&amp;' ? '&' : "'"))
       .replace(/\s+/g, ' ')
       .trim();
     if (text) out.push(text);

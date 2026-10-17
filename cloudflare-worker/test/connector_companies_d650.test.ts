@@ -2,20 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
+// The shared reader throws on a table the baseline lacks, and ends each DDL at its own `);` —
+// the regex it replaces looked for `\n);` and so ran past `users` (closed mid-line) into the next table.
+import { tableFromBaseline } from './_baseline.mjs';
 
 const migration = readFileSync('cloudflare-worker/sql/migrations/435_connector_companies.sql', 'utf8');
 const baseline = readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8');
 
-function tableFromBaseline(name: string): string {
-  const match = baseline.match(new RegExp(`CREATE TABLE ${name} \\([\\s\\S]*?\\n\\);`));
-  assert.ok(match, `${name} exists in the deployed schema copy`);
-  return match[0];
-}
-
 test('migration 435 backfills only companies already linked to each connection owner', () => {
   const db = new DatabaseSync(':memory:');
   db.exec('CREATE TABLE founders(id INTEGER PRIMARY KEY); CREATE TABLE partners(id INTEGER PRIMARY KEY)');
-  for (const name of ['users', 'company_profiles', 'user_company_links', 'integrations']) db.exec(tableFromBaseline(name));
+  for (const name of ['users', 'company_profiles', 'user_company_links', 'integrations']) db.exec(tableFromBaseline(baseline, name));
   db.exec(`INSERT INTO users(id, email, name) VALUES (1, 'one@example.test', 'One'), (2, 'two@example.test', 'Two');
     INSERT INTO company_profiles(id, uid, company_name) VALUES (10, 'c10', 'One'), (20, 'c20', 'Two'), (30, 'c30', 'Three');
     INSERT INTO user_company_links(uid, user_id, company_id) VALUES ('l1', 1, 10), ('l2', 1, 20), ('l3', 2, 30);

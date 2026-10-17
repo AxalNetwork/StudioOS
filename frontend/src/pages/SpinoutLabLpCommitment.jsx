@@ -11,6 +11,7 @@ import { Link } from 'react-router-dom';
 import { MessageSquare } from 'lucide-react';
 import { Unreadable, Unrecorded } from '../ui';
 import { api } from '../lib/api';
+import { bankAccountsApi } from '../lib/api/bankAccounts';
 import { commitmentsByFund, commitmentBar } from '../lib/lpCommitmentModel';
 import { formatCents } from './investor/fundCallsModel';
 import { LPADrawer } from './FundsPage';
@@ -27,6 +28,61 @@ const STATE = {
   pending: ['Due', 'text-amber-700 dark:text-amber-400'],
 };
 const multiple = (x) => (typeof x === 'number' ? `${x.toFixed(2)}×` : null);
+
+/**
+ * D708 (#1773) — where to wire one open Fund I line: the Fund's bank, the
+ * masked account, the reference to quote and the warning, or the sentence
+ * saying why there are no details yet. The full number is fetched only when
+ * the LP asks, is recorded by the Worker first, and is held in this
+ * component's state alone, never stored.
+ */
+export function WireDetails({ fundId, line }) {
+  const p = line.pay_instructions;
+  const [full, setFull] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  if (!p) return null;
+  if (!p.available) {
+    return (
+      <div className="px-3 pb-2 text-[11px] text-amber-700 dark:text-amber-400" data-testid={`wire-details-${line.id}`}>
+        <span className="font-semibold">Wire details</span> · {p.message || 'No payment instructions can be given for this call yet. Do not send money until Axal gives them.'}
+      </div>
+    );
+  }
+  const show = async () => {
+    setBusy(true); setErr('');
+    try { setFull(await bankAccountsApi.linePayInstructions(fundId, line.id)); }
+    catch (e) { setErr(e?.data?.message || e?.message || 'The account number could not be shown.'); }
+    finally { setBusy(false); }
+  };
+  const i = full?.instructions;
+  return (
+    <div className="mx-3 mb-2 rounded-lg bg-gray-50 dark:bg-gray-800/60 px-3 py-2 text-[11px] text-gray-600 dark:text-gray-300" data-testid={`wire-details-${line.id}`}>
+      <div className={LBL}>Wire details</div>
+      <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
+        <dt>Bank</dt><dd>{p.bank_name}</dd>
+        {p.beneficiary_name && <><dt>Beneficiary</dt><dd>{p.beneficiary_name}</dd></>}
+        <dt>Account</dt><dd className={MONO}>{i?.account_number || p.account_masked}</dd>
+        {i && <><dt>ABA routing</dt><dd className={MONO}>{i.routing_number}</dd></>}
+        {i?.swift_code && <><dt>SWIFT</dt><dd className={MONO}>{i.swift_code}{i.intermediary_swift_code ? ` · intermediary ${i.intermediary_swift_code}` : ''}</dd></>}
+        {i && <><dt>Bank address</dt><dd>{i.bank_address}</dd></>}
+        {i && <><dt>Beneficiary address</dt><dd>{i.beneficiary_address}</dd></>}
+        <dt>Reference</dt><dd className={MONO}>{full?.reference || p.reference}</dd>
+      </dl>
+      <p className="mt-1.5 font-semibold text-amber-700 dark:text-amber-400">{full?.warning || p.warning}</p>
+      {err && <p className="mt-1 text-red-700 dark:text-red-400" role="alert">{err}</p>}
+      <div className="mt-1.5">
+        {full ? (
+          <button type="button" onClick={() => setFull(null)} className="font-semibold underline">Hide the full details</button>
+        ) : (
+          <button type="button" onClick={show} disabled={busy} className="font-semibold underline disabled:opacity-50" data-testid={`wire-details-show-${line.id}`}>
+            {busy ? 'Opening…' : 'Show the full account number'}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 /** The whole section: an anchor `/lp-portal` redirects to, and one card per fund. */
 export function MyCommitment({ portal, failed, onReload }) {
@@ -152,7 +208,8 @@ function FundCommitment({ row, onViewLpa, onSign, signing, onRetry }) {
             ) : row.calls.map((c) => {
               const [label, tone] = STATE[c.state] || STATE.pending;
               return (
-                <div key={c.id} className="grid grid-cols-[1fr_auto_auto] items-center gap-3 border-b border-gray-100 dark:border-gray-800 px-3 py-2 last:border-b-0 text-[11.5px]" data-testid={`commitment-call-${c.id}`}>
+                <div key={c.id} className="border-b border-gray-100 dark:border-gray-800 last:border-b-0">
+                <div className="grid grid-cols-[1fr_auto_auto] items-center gap-3 px-3 py-2 text-[11.5px]" data-testid={`commitment-call-${c.id}`}>
                   <span className="text-gray-700 dark:text-gray-300">
                     {c.call_number != null ? `Call ${c.call_number}` : 'Capital call'}
                     <span className="text-gray-400 dark:text-gray-500"> · {c.state === 'paid'
@@ -161,6 +218,8 @@ function FundCommitment({ row, onViewLpa, onSign, signing, onRetry }) {
                   </span>
                   <span className={`${MONO} text-gray-900 dark:text-gray-100`}>{money(c.owed_cents) ?? 'Not recorded'}</span>
                   <span className={`font-semibold ${tone}`}>{label}</span>
+                </div>
+                {c.state !== 'paid' && c.pay_instructions && <WireDetails fundId={row.fund_id} line={c} />}
                 </div>
               );
             })}

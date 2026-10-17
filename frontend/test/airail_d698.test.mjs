@@ -68,8 +68,8 @@ function routerPricing() {
     [...src.matchAll(/const (SMALL_LLAMA|MID_LLAMA)\s*=\s*'(@cf\/[^']+)'/g)].map((m) => [m[1], m[2]]),
   );
   const resolveId = (t) => { const x = t.trim(); return consts.has(x) ? consts.get(x) : x.replace(/^'|'$/g, ''); };
-  const list = (chunk, key) => {
-    const m = new RegExp(`${key}:\\s*\\[([^\\]]*)\\]`).exec(chunk);
+  const list = (chunk, field) => {
+    const m = field.exec(chunk);
     return m ? m[1].split(',').map((x) => x.trim()).filter(Boolean).map(resolveId) : [];
   };
   const body = src.slice(src.indexOf('export const ROUTE'));
@@ -79,7 +79,7 @@ function routerPricing() {
   for (let i = 0; i < entries.length; i += 1) {
     const chunk = table.slice(entries[i].index, i + 1 < entries.length ? entries[i + 1].index : table.length);
     const model = /model:\s*([A-Z_]+|'[^']+')/.exec(chunk);
-    routes[entries[i][1]] = { model: resolveId(model[1]), fallback_chain: list(chunk, 'fallbackChain'), alternates: list(chunk, 'alternates') };
+    routes[entries[i][1]] = { model: resolveId(model[1]), fallback_chain: list(chunk, /fallbackChain:\s*\[([^\]]*)\]/), alternates: list(chunk, /alternates:\s*\[([^\]]*)\]/) };
   }
   return { ok: true, prices: {}, audio_prices: {}, routes };
 }
@@ -393,9 +393,13 @@ test('13 · the fallback: one card, the router\'s primary, "Default", with the j
   const build = sug('Build', 'Solution design');
   assert.deepEqual(cardsOf(build), [['Llama 3.3 70B Fast', 'Default', false]]);
   assert.match(build.cards[0].line, /^Drafts the reading on a zone band/);
-  // Product improvement, against today's pricing: the router has no task for
-  // its band yet, so it draws the zone drafts' plain row.
-  assert.deepEqual(sug('Grow', 'Product improvement').cards, build.cards);
+  // Product improvement, against today's pricing: the router carries its
+  // band's task since D691 (#1698), so it draws that task's card, not the
+  // zone drafts' plain row.
+  const today = sug('Grow', 'Product improvement');
+  assert.deepEqual(cardsOf(today), [['Llama 3.3 70B Fast', 'Default', true]]);
+  assert.deepEqual(today.cards[0].tasks, ['grow_theme_feedback']);
+  assert.notDeepEqual(today.cards, build.cards);
   const grow = sug('Grow', 'Product improvement', { pricing: withGrow() });
   assert.deepEqual(cardsOf(grow), [['Llama 3.3 70B Fast', 'Default', true]]);
   assert.deepEqual(grow.cards[0].tasks, ['grow_theme_feedback']);

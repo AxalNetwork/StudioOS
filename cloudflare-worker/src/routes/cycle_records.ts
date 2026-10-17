@@ -6,13 +6,14 @@ import { canReadBoard, canWrite, type ProjectRef } from './_founder_validate_hel
 import { activityFor } from '../services/cycleActivity';
 import { hasRecords, RECORD_SPECS, specFor } from '../services/records';
 import { ownedRow, RECORD_ID } from '../services/records/owned';
-import type { Gate, ModuleSpec, RecordAction, RecordContext, RecordRegistry, RecordSection } from '../services/records/types';
+import type { Gate, ModuleSpec, Next, RecordAction, RecordContext, RecordRegistry, RecordSection } from '../services/records/types';
 
 const CYCLES = new Set(['validate', 'build', 'raise', 'grow']);
-const STATUS_NEXT = /^(open|pending|missing|due|failed|next|planned|to confirm|needs)\b/i;
+// The canvas's pattern exactly: unanchored and case-sensitive (CO:265).
+const STATUS_NEXT = /Open|Pending|Missing|Due|Failed|Next|Planned|To confirm|Needs/;
 
-function allowed(gate: Gate, project: ProjectRef, user: User): boolean {
-  if (typeof gate === 'function') return gate(project, user);
+async function allowed(gate: Gate, project: ProjectRef, user: User, env: Env): Promise<boolean> {
+  if (typeof gate === 'function') return gate(project, user, env);
   return gate === 'write' ? canWrite(project, user) : canReadBoard(project, user);
 }
 
@@ -22,20 +23,26 @@ function declaration(action: RecordAction) {
     multipart: action.multipart || action.form?.fields.some((field) => field.input === 'file') || false };
 }
 
-function nextFor(main: RecordSection[], actions: ReturnType<typeof declaration>[]) {
+/**
+ * The canvas's rule (CO:263-269): the first main-section row whose status
+ * matches, else the first section action, else the primary action, else none.
+ */
+export function nextFor(main: RecordSection[], actions: Array<Pick<RecordAction, 'key' | 'label' | 'tone'>>): Next | null {
   for (const section of main) {
     for (const row of section.rows) {
       if (STATUS_NEXT.test(String(row.c ?? ''))) {
         const key = typeof row.action === 'string' ? row.action : row.action?.key ?? null;
-        return { text: row.a, action: key };
+        return { text: row.a + (row.b ? ' · ' + row.b : ''), action: key };
       }
     }
   }
   for (const section of main) {
     const key = typeof section.action === 'string' ? section.action : section.action?.key;
-    if (key) return { text: section.title, action: key };
+    const declared = key ? actions.find((a) => a.key === key) : undefined;
+    if (declared) return { text: declared.label, action: declared.key };
   }
-  return actions[0] ? { text: actions[0].label, action: actions[0].key } : { text: 'Not recorded', action: null };
+  const primary = actions.find((a) => a.tone === 'primary') ?? actions.at(-1);
+  return primary ? { text: primary.label, action: primary.key } : null;
 }
 
 function scoped(c: any, registry: RecordRegistry, withId: boolean): Promise<
@@ -62,20 +69,20 @@ function scoped(c: any, registry: RecordRegistry, withId: boolean): Promise<
       .bind(projectId).first() as ProjectRef | null;
     if (!project) return c.json({ detail: 'Project not found' }, 404);
     const gate = c.req.method === 'GET' && !c.req.path.endsWith('/form-options') ? spec.read : spec.write;
-    if (!allowed(gate, project, user)) return c.json({ detail: 'Forbidden' }, 403);
+    if (!await allowed(gate, project, user, c.env)) return c.json({ detail: 'Forbidden' }, 403);
     if (withId && !await ownedRow(c.env, spec.store, id, projectId)) return c.json({ detail: 'Record not found.' }, 404);
     return { ctx: { env: c.env, projectId, project, user }, spec, cycle, slug, id };
   })();
 }
 
-function writerAllowed(c: any, ctx: RecordContext, spec: ModuleSpec): Response | null {
-  return allowed(spec.write, ctx.project, ctx.user) ? null : c.json({ detail: 'Forbidden' }, 403);
+async function writerAllowed(c: any, ctx: RecordContext, spec: ModuleSpec): Promise<Response | null> {
+  return await allowed(spec.write, ctx.project, ctx.user, ctx.env) ? null : c.json({ detail: 'Forbidden' }, 403);
 }
 
 async function perform(c: any, registry: RecordRegistry, key: string) {
   const s = await scoped(c, registry, true);
   if (s instanceof Response) return s;
-  const refusal = writerAllowed(c, s.ctx, s.spec);
+  const refusal = await writerAllowed(c, s.ctx, s.spec);
   if (refusal) return refusal;
   const record = await s.spec.record(s.ctx, s.id);
   const actions = await s.spec.actions(s.ctx, s.id, record);
@@ -117,10 +124,10 @@ export function createCycleRecords(registry: RecordRegistry = RECORD_SPECS) {
     const s = await scoped(c, registry, true);
     if (s instanceof Response) return s;
     const record = await s.spec.record(s.ctx, s.id);
-    const canWrite = allowed(s.spec.write, s.ctx.project, s.ctx.user);
+    const canWrite = await allowed(s.spec.write, s.ctx.project, s.ctx.user, s.ctx.env);
     const sections: RecordSection[] = [];
     for (const section of s.spec.sections) {
-      if (section.gate && !allowed(section.gate, s.ctx.project, s.ctx.user)) continue;
+      if (section.gate && !await allowed(section.gate, s.ctx.project, s.ctx.user, s.ctx.env)) continue;
       if (section.when && !section.when(s.id, record)) continue;
       const data = await section.read(s.ctx, s.id, record);
       const rows = canWrite ? data.rows : data.rows.map(({ action: _action, ...row }) => row);
@@ -147,7 +154,7 @@ export function createCycleRecords(registry: RecordRegistry = RECORD_SPECS) {
   route.get('/:cycle/modules/:slug/form-options', async (c) => {
     const s = await scoped(c, registry, false);
     if (s instanceof Response) return s;
-    const refusal = writerAllowed(c, s.ctx, s.spec);
+    const refusal = await writerAllowed(c, s.ctx, s.spec);
     if (refusal) return refusal;
     if (!s.spec.formOptions) return c.json({});
     const query = Object.fromEntries(new URL(c.req.url).searchParams.entries());

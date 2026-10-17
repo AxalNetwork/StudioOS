@@ -3,7 +3,11 @@ import type { Env, User } from '../../types';
 import type { ProjectRef } from '../../routes/_founder_validate_helpers';
 
 export type Cycle = 'validate' | 'build' | 'raise' | 'grow';
-export type Gate = 'read' | 'write' | ((project: ProjectRef, user: User) => boolean);
+/**
+ * A custom gate may be async (D691 #1698): Grow's is `canAccessProject`, which
+ * reads the venture's membership roster to tell a co-founder from an advisor.
+ */
+export type Gate = 'read' | 'write' | ((project: ProjectRef, user: User, env: Env) => boolean | Promise<boolean>);
 
 export type Row = {
   a: string;
@@ -68,6 +72,8 @@ export type RecordContent = {
 };
 
 export type RecordFact = { label: string; value: string | number | null; reason?: string };
+/** "Next for this record" (CO:263-269): what to do next, and the declared action that does it. */
+export type Next = { text: string; action: string | null };
 export type RecordForm = {
   title: string;
   sub?: string;
@@ -130,6 +136,8 @@ export type Store =
   // D691 (#1698): Grow's stores.
   | 'product_feedback' | 'growth_channels' | 'job_postings'
   | 'growth_partners' | 'markets' | 'compliance_events'
+  // A KPI key (`mrr`, … or `custom-<uid>`), and a held meeting through its obligation (migration 462).
+  | 'grow_kpis' | 'obligation_occurrences'
   // D690 (S18-B, #1694): Build's records, then the rows its sections name.
   | 'mvp_features' | 'mvp_must_haves' | 'roadmap_okrs' | 'cap_table_founders'
   | 'build_filings' | 'build_systems'

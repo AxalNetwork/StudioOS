@@ -70,10 +70,20 @@ test('D690 exported pains obey quote consent while every note remains', async ()
   assert.equal(body.includes('Private pain three'), false);
 });
 
-test('D690 pain-map export remains byte-for-byte its existing serializer for a writer', async () => {
+// The pain-map file origin/main wrote for this seed before D690's gate, captured
+// once from that code: a curated theme whose alias matches an interview's phrase,
+// and the phrases no theme holds. The gate is the only change (decision 17).
+const PAIN_MAP_BEFORE_D690 = 'theme,interviews,share_of_interviews,phrases\r\n'
+  + 'Manual work,1,25%,Consent pain\r\n'
+  + '(ungrouped) Private pain three,1,25%,Private pain three\r\n'
+  + '(ungrouped) Private pain two,1,25%,Private pain two';
+
+test('D690 pain-map export remains byte-for-byte what it was for a writer', async () => {
   const db = fixture();
+  db.exec("INSERT INTO pain_groups (id, project_id, title, sort_order) VALUES (5, 1, 'Manual work', 1)");
+  db.exec("INSERT INTO pain_group_aliases (project_id, group_id, phrase_norm, display_phrase) VALUES (1, 5, 'consent pain', 'Consent pain')");
   const result = await call(db, 10, '/pain-map/1/export.csv');
   assert.equal(result.status, 200);
-  const expected = serializePainMapCsv(await getPainGroupsView({ DB: d1Over(db) } as any, 1));
-  assert.equal(result.body, expected);
+  assert.equal(result.body, PAIN_MAP_BEFORE_D690);
+  assert.equal(result.body, serializePainMapCsv(await getPainGroupsView({ DB: d1Over(db) } as any, 1)));
 });

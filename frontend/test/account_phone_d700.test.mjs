@@ -40,6 +40,7 @@ import { PhoneRows } from '../src/ui/phone/PhoneRows.jsx';
 import { existsSync } from 'node:fs';
 import React, { act } from 'react';
 import { mountContracts } from './_contracts_dom.mjs';
+import { escapeRe } from './_escapeRe.mjs';
 import { __resetEadwynPanelForTest, useEadwynPanel, useEadwynRailServes } from '../src/ui/eadwynPanel.js';
 import TrustCenterPage, { TrustPhoneView } from '../src/pages/TrustCenterPage.jsx';
 import PerksPage, { PerksPhoneView } from '../src/pages/PerksPage.jsx';
@@ -645,7 +646,7 @@ test('8. Help: Popular this week first, no For you now, and Email support says w
   assert.equal(sectionTitles(markup)[0], 'Popular this week');
   assert.doesNotMatch(markup, /For you now/);
   assert.equal(EMAIL_SUPPORT_LINE, 'Opens your mail app. Write from the address on your account.');
-  assert.match(markup, new RegExp(`<a href="mailto:support@axal\\.vc"[^>]*>[\\s\\S]*?Email support[\\s\\S]*?${EMAIL_SUPPORT_LINE.replace(/\./g, '\\.')}`));
+  assert.match(markup, new RegExp(`<a href="mailto:support@axal\\.vc"[^>]*>[\\s\\S]*?Email support[\\s\\S]*?${escapeRe(EMAIL_SUPPORT_LINE)}`));
   assert.doesNotMatch(markup, /From the address on your account/);
   assert.ok(CANVAS_PAGES.help.chunk.includes("'From the address on your account'"));
   // A failed popular read says so; a row opens its area in place.

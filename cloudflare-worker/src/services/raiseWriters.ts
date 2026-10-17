@@ -20,7 +20,7 @@
 import type { Env, User } from '../types';
 import { WriterError, isoDateOrNull } from './validateWriters';
 import { ensureSpinoutDeckOverridesSchema } from './decks/spinoutDeckOverrides';
-import { logCycleWrite } from './cycleActivity';
+import { logCycleWrite, type CycleModules } from './cycleActivity';
 import { ownedRow } from './records/owned';
 import { addHolder, updateHolder, HolderError, type AddHolderArgs } from './capTableWrites';
 import { SERVED_FUNDS } from './researchFundDirectory';
@@ -44,7 +44,7 @@ const has = (b: Record<string, unknown>, k: string) => Object.prototype.hasOwnPr
 const posInt = (v: unknown): number | null => (typeof v === 'number' && Number.isSafeInteger(v) && v > 0 ? v : null);
 
 /** One row for one Raise record (decision 12). */
-async function logRaise(env: Env, userId: number, projectId: number, module: string, entityId: string | number, action: string, summary: string) {
+async function logRaise(env: Env, userId: number, projectId: number, module: CycleModules['raise'], entityId: string | number, action: string, summary: string) {
   await logCycleWrite(env, { projectId, userId, cycle: 'raise', module, entityId, action, summary });
 }
 

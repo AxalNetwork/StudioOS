@@ -2,16 +2,49 @@
 import type { Env } from '../types';
 import { RECORD_ID } from './records/owned';
 import { isRaiseStore, type Cycle, type OldRowsMatcher, type RaiseStore, type Store } from './records/types';
+import type { ModuleSlug as ValidateModule } from './cycleValidate';
+import type { ModuleSlug as RaiseModule } from './raiseCycle';
+import type { GrowSlug as GrowModule } from './growCycle';
 
-export type CycleWrite = {
+/**
+ * Build's six module slugs, written here rather than imported from
+ * routes/cycle_build.ts: a fund module reaches this file, and D707's walk
+ * (fund_modules_no_stripe_d707) follows type imports too, so a route import
+ * here would reach Stripe. cycle_build.ts checks at compile time that its
+ * MODULES and this list are the same six.
+ */
+export type BuildModuleSlug =
+  | 'solution-design' | 'prototype-mvp' | 'product-roadmap'
+  | 'founding-team' | 'company-creation' | 'operating-systems';
+type BuildModule = BuildModuleSlug;
+
+/**
+ * Each cycle's module slugs: a write logged under a module that does not
+ * exist fails to compile. Validate also logs `verdict` (D693): Verdict's
+ * decisions are Validate rows (`validate.verdict`) although Verdict is not one
+ * of the six modules in cycleValidate's MODULES.
+ */
+export type CycleModules = { validate: ValidateModule | 'verdict'; build: BuildModule; raise: RaiseModule; grow: GrowModule };
+
+/**
+ * `entityId` is the record id the module read sends. `null` is the explicit
+ * module-level form (S1's ruling on #1736): a write that belongs to a module
+ * and not to one of its records, such as a target, a readiness mark or a
+ * source, logs `entity_id` NULL. `entity_id = ?` never matches NULL, so no
+ * record's history can return the row.
+ */
+export type CycleWrite = { [C in Cycle]: {
   projectId: number;
   userId: number | null;
-  cycle: Cycle;
-  module: string;
-  entityId: string | number;
+  cycle: C;
+  module: CycleModules[C];
+  entityId: string | number | null;
   action: string;
   summary: string;
-};
+} }[Cycle];
+
+/** `Omit` per cycle, so a batched write keeps its cycle and module paired. */
+type WithoutEntity = CycleWrite extends infer W ? W extends CycleWrite ? Omit<W, 'entityId'> : never : never;
 
 export type Readback =
   | { table: 'pain_groups' | 'hypotheses' | 'mvp_features' | 'roadmap_okrs' | 'formation_steps'; by: 'max'; prefix?: string }
@@ -21,11 +54,11 @@ export type Readback =
   // when it replaced none.
   | { table: 'validation_decisions'; by: 'max' | 'supersedes'; prefix?: string };
 
-export type BatchedCycleWrite = Omit<CycleWrite, 'entityId'> & { readback: Readback };
+export type BatchedCycleWrite = WithoutEntity & { readback: Readback };
 
 type Prepared = ReturnType<Env['DB']['prepare']>;
 
-function checked(input: Omit<CycleWrite, 'entityId'>): { entityType: string; summary: string; actor: string } {
+function checked(input: WithoutEntity): { entityType: string; summary: string; actor: string } {
   if (!Number.isSafeInteger(input.projectId) || input.projectId < 1
     || !/^[a-z][a-z0-9_-]*$/.test(input.module)
     || !/^[a-z][a-z0-9_-]*$/.test(input.action)) throw new Error('Invalid cycle activity key');
@@ -39,8 +72,8 @@ export function logCycleWriteStatement(env: Env, input: CycleWrite | BatchedCycl
   const { entityType, summary, actor } = checked(input);
   const common = [input.projectId, input.userId, entityType];
   if ('entityId' in input) {
-    const entityId = String(input.entityId);
-    if (!RECORD_ID.test(entityId)) throw new Error('Invalid cycle activity record id');
+    const entityId = input.entityId === null ? null : String(input.entityId);
+    if (entityId !== null && !RECORD_ID.test(entityId)) throw new Error('Invalid cycle activity record id');
     return env.DB.prepare(
       'INSERT INTO activity_logs (project_id, user_id, entity_type, entity_id, action, details, actor) VALUES (?, ?, ?, ?, ?, ?, ?)',
     ).bind(...common, entityId, input.action, summary, actor);
@@ -139,6 +172,11 @@ async function creatorFor(env: Env, store: CreatorStore, id: string, projectId: 
       return env.DB.prepare('SELECT u.name, g.created_at FROM growth_partners g LEFT JOIN users u ON u.id = g.created_by WHERE g.uid = ? AND g.project_id = ?').bind(id, projectId).first<Creator>();
     case 'markets':
       return env.DB.prepare('SELECT u.name, m.created_at FROM markets m LEFT JOIN users u ON u.id = m.created_by WHERE m.uid = ? AND m.project_id = ?').bind(id, projectId).first<Creator>();
+    // A custom KPI's creator; a fixed KPI is the platform's and has none.
+    case 'grow_kpis':
+      return id.startsWith('custom-')
+        ? env.DB.prepare('SELECT u.name, k.created_at FROM custom_kpis k LEFT JOIN users u ON u.id = k.created_by WHERE k.uid = ? AND k.project_id = ?').bind(id.slice('custom-'.length), projectId).first<Creator>()
+        : null;
   }
   const n = Number(id.replace(/^(signal|revenue|waitlist)-/, ''));
   if (!Number.isSafeInteger(n) || n < 1) return null;
@@ -171,10 +209,28 @@ async function creatorFor(env: Env, store: CreatorStore, id: string, projectId: 
       return env.DB.prepare('SELECT u.name, p.created_at FROM job_postings p LEFT JOIN users u ON u.id = p.host_user_id WHERE p.id = ? AND p.project_id = ?').bind(n, projectId).first<Creator>();
     case 'compliance_events':
       return env.DB.prepare('SELECT u.name, e.created_at FROM compliance_events e LEFT JOIN users u ON u.id = e.created_by_user_id WHERE e.id = ? AND e.project_id = ?').bind(n, projectId).first<Creator>();
+    case 'obligation_occurrences':
+      return env.DB.prepare('SELECT u.name, o.created_at FROM obligation_occurrences o JOIN compliance_events e ON e.id = o.event_id LEFT JOIN users u ON u.id = o.created_by WHERE o.id = ? AND e.project_id = ?').bind(n, projectId).first<Creator>();
     default:
       // Verdict logs every decision it records, so it has no creator to fall back on.
       return null;
   }
+}
+
+/**
+ * The rows that record a create, read by both the count and the renderer
+ * (S1's ruling on #1736). Writers keep their action names (decision 5), so a
+ * suffix alone misses some creates: a create is every action ending
+ * `_created`, each name in `CREATE_ACTIONS`, and `COMPETITOR_ADDED`'s action
+ * only on the row whose write added the candidate (a signal on a candidate
+ * already listed is not its create).
+ */
+export const CREATE_ACTIONS: readonly string[] = ['interview_logged', 'segment_written', 'demand_signal_written', 'waitlist_promoted'];
+export const COMPETITOR_ADDED = { action: 'competitor_mention_written', summary: 'Competitor added' } as const;
+
+export function isCreateRow(action: string, details: string | null): boolean {
+  return action.endsWith('_created') || CREATE_ACTIONS.includes(action)
+    || (action === COMPETITOR_ADDED.action && details === COMPETITOR_ADDED.summary);
 }
 
 export type ActivityItem = { a: string; b: string; action: string; created_at: string };
@@ -199,7 +255,8 @@ const matchOf = (older: string) => `(a.project_id = ? AND ((a.entity_type = ? AN
      OR (a.project_id IS NULL AND a.action IN (SELECT value FROM json_each(?)) AND (${older}))`;
 const statementsOf = (match: string) => ({
   count: `SELECT COUNT(*) AS n,
-       SUM(CASE WHEN a.action LIKE '%created' OR a.action = 'interview_logged' THEN 1 ELSE 0 END) AS creates
+       SUM(CASE WHEN substr(a.action, -8) = '_created' OR a.action IN (SELECT value FROM json_each(?))
+         OR (a.action = ? AND a.details = ?) THEN 1 ELSE 0 END) AS creates
        FROM activity_logs a WHERE ${match}`,
   rows: `SELECT a.action, a.details, a.created_at, u.name AS actor_name
        FROM activity_logs a LEFT JOIN users u ON u.id = a.user_id
@@ -238,11 +295,14 @@ export async function activityFor(env: Env, input: {
 }): Promise<ActivityPage> {
   const page = Number.isSafeInteger(input.page) && Number(input.page) > 0 ? Number(input.page) : 1;
   const { sql, args } = matchFor(input);
-  const count = await env.DB.prepare(sql.count).bind(...args).first<{ n: number; creates: number }>();
+  // The count's create rule binds first: it sits in the SELECT, before the match.
+  const count = await env.DB.prepare(sql.count)
+    .bind(JSON.stringify(CREATE_ACTIONS), COMPETITOR_ADDED.action, COMPETITOR_ADDED.summary, ...args)
+    .first<{ n: number; creates: number }>();
   const totalLogs = Number(count?.n ?? 0);
   const rows = await env.DB.prepare(sql.rows).bind(...args, (page - 1) * 20).all<{ action: string; details: string | null; created_at: string; actor_name: string | null }>();
   const items = (rows.results ?? []).map((r) => ({
-    a: r.action.endsWith('_created') || r.action === 'interview_logged'
+    a: isCreateRow(r.action, r.details)
       ? (r.actor_name ? `Created by ${r.actor_name}` : `Created ${r.created_at.slice(0, 10)}`)
       : `${String(r.details ?? r.action).replace(/\s+/g, ' ').trim()}${r.actor_name ? ` by ${r.actor_name}` : ''}`,
     b: r.created_at,

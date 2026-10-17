@@ -18,7 +18,8 @@ import { act } from 'react';
 import FormLightbox from '../src/pages/cycles/FormLightbox.jsx';
 import { extractClientCalls, normalizePath } from '../../scripts/lib/apiModules.mjs';
 import { cycleFills, cycleRouteSource } from './_cycleBands.mjs';
-import { h, mountForm, mutationCheck, propsOf } from './_form_d695.mjs';
+import { FORMS } from '../src/pages/cycles/forms.js';
+import { h, mountForm, mutationCheck, propsOf, textOf } from './_form_d695.mjs';
 
 const path = 'pages/cycles/forms.js';
 const source = readFileSync(new URL('../src/' + path, import.meta.url), 'utf8');
@@ -58,7 +59,9 @@ const form = (m, slug) => m.FORMS.grow[slug][0];
 /** CO:324-330, brackets removed and money in dollars (#1656's decision 3), with D691.md's KPI note. */
 const COPY = {
   'product-improvement': {
-    title: 'Log feedback', cta: 'Log feedback', sub: 'Feedback from a customer, an investor or the team, grouped by theme.', foot: null,
+    title: 'Log feedback', cta: 'Log feedback', sub: 'Feedback from a customer, an investor or the team, grouped by theme.',
+    // #1698's band proposes themes, so the canvas foot (CO:324) is true and drawn; test 8 holds the pair.
+    foot: 'Themes are proposed by Eadwyn; you accept.',
     labels: ['Feedback', 'Source', 'From', 'Theme', 'Links to roadmap item', 'Then'],
     chips: { source: [['Customer', 'Investor', 'Team'], 'customer'], theme_choice: [['New theme'], 'new'], roadmap_item_ref: [['None yet'], ''] },
     checks: { then: [['Tell them when it ships', true]] },
@@ -149,7 +152,7 @@ async function assertCopy(m) {
   assert.deepEqual(SLUGS.map((s) => form(m, s).button), ['Log feedback', 'Add channel', 'Enter a KPI', 'Open a role', 'Add partner', 'Add market', 'Add obligation']);
 }
 
-test('1: each Grow form draws the canvas copy, with D691.md\'s KPI note and no foot Log feedback cannot keep yet', async () => {
+test('1: each Grow form draws the canvas copy, with D691.md\'s KPI note and Log feedback\'s foot once its band proposes themes', async () => {
   await mutationCheck(source, path, assertCopy, [
     ["note: 'Stripe shows here once connected.'", "note: 'Stripe and Accounting show here once connected.'"],
     ["{ kind: 'CH', name: 'repeats', k: 'Repeats', opts: REPEATS, def: 2 }", "{ kind: 'CH', name: 'repeats', k: 'Repeats', opts: REPEATS, def: 0 }"],
@@ -406,4 +409,517 @@ test('10: Enter a KPI and Open a role call #1697\'s spelled-out routes, with the
   const calls = extractClientCalls(writesSource).map((c) => `${c.method} ${normalizePath(c.path)}`);
   for (const want of ['POST /cycles/grow/kpis', 'POST /cycles/grow/roles', 'PATCH /cycles/grow/roles/:p']) assert.ok(calls.some((c) => c.endsWith(want)), want);
   assert.ok(!calls.some((c) => /\/cycles\/(raise|grow)\/modules\/[^:]+\/form-options/.test(c)), 'no form-options path with a literal cycle');
+});
+
+// =============================================================================
+// PR 2: Raise's seven canvas forms (CO:317-323), their Edits and client writes
+// =============================================================================
+
+const RAISE_SLUGS = ['fundraising-readiness', 'investor-narrative', 'pitch-deck', 'data-room', 'cap-table', 'use-of-funds', 'capital-relationships'];
+const SECTION_LABELS = ['Product & engineering', 'GTM: sales and marketing', 'Infrastructure & data', 'Operations, legal & compliance', 'Hiring / runway reserve'];
+/** What each module's `form-options` answers (D691.md "The closing PR"), with made-up names. */
+const REPLIES = {
+  'fundraising-readiness': { items: [
+    { value: 'narrative', last_scored: '2026-10-12' }, { value: 'deck', last_scored: '2026-10-12' }, { value: 'data_room', last_scored: '2026-10-09' },
+    { value: 'cap_table', last_scored: '2026-10-01' }, { value: 'use_of_funds', last_scored: '2026-10-03' }, { value: 'traction', last_scored: null },
+    { value: 'team', last_scored: '2026-10-01', by_hand: true },
+  ] },
+  'investor-narrative': { versions: [{ value: '2', label: 'v2 · angel' }, { value: '3', label: 'v3 · seed fund' }] },
+  'pitch-deck': { decks: [{ value: '41', label: 'v4 · current' }, { value: '40', label: 'v3' }], prospects: [{ value: '5', label: 'Northwind Capital' }] },
+  'data-room': {
+    project_uid: 'p-kestrel',
+    folders: [{ value: 'fo3', label: 'Financials' }, ...['Legal', 'Team', 'Product', 'Customers'].map((n) => ({ folder_name: n, label: n }))],
+    requests: [{ value: '7', label: 'Customer contracts' }], checklist: [{ value: 'cap_table', label: 'Cap table' }],
+  },
+  'cap-table': { prospects: [{ value: '5', label: 'Northwind Capital' }] },
+  'use-of-funds': {
+    sections: ['product', 'go-to-market', 'infrastructure', 'operations', 'reserve'].map((value, i) => ({ value, pct: [40, 30, 10, 10, 10][i], milestone_label: i ? null : 'Launch v2', milestone_by: i ? null : '2027-03' })),
+    amount_to_raise: 1500000, runway_months: 24,
+  },
+  'capital-relationships': { warm_paths: [{ value: 'Lin Park · Harbour Labs' }, { value: 'Sam Lee' }] },
+};
+
+/** Raise's write table: each call recorded; `formOptions` answers each module's reply, or its refusal. */
+function raiseTable(replies, answer) {
+  const calls = [];
+  const raise = new Proxy({}, { get: (_t, name) => async (...args) => { calls.push([name, ...args]); return answer ? answer(name, ...args) : { id: 1 }; } });
+  const formOptions = async (cycle, projectId, slug, query = {}) => {
+    calls.push(['formOptions', cycle, projectId, slug, query]);
+    const r = replies[slug];
+    if (r instanceof Error) throw r;
+    return query.q ? { funds: [{ value: 'alder-ventures', label: 'Alder Ventures' }] } : r ?? {};
+  };
+  return { calls, w: { raise, formOptions } };
+}
+async function mountRaise(f, slug, { replies = REPLIES, answer, id = null, current = null } = {}) {
+  const { calls, w } = raiseTable(replies, answer);
+  const onSubmit = (v) => (id == null ? f.submit(w, P, v) : f.submit(w, P, id, v));
+  const ui = await mountForm(h(FormLightbox, {
+    form: f, current, cycle: 'raise', slug, onSubmit, onClose() {}, searchDelay: 0,
+    loadOptions: f.loadOptions ? () => f.loadOptions(w, P, id) : null,
+    onSearch: f.search ? (_field, q) => f.search(w, P, q) : null,
+  }));
+  await ui.flush();
+  const inputs = () => ui.nodes().filter((n) => ['INPUT', 'TEXTAREA'].includes(n.tagName));
+  const radios = (name) => inputs().filter((n) => propsOf(n).name === name && propsOf(n).type === 'radio');
+  const checks = (name) => inputs().filter((n) => propsOf(n).name === name && propsOf(n).type === 'checkbox');
+  const pick = async (name, files) => {
+    const node = inputs().find((n) => propsOf(n).name === name && propsOf(n).type === 'file');
+    assert.ok(node, name);
+    await act(async () => propsOf(node).onChange({ target: { files } }));
+  };
+  const typeIn = async (name, value) => {
+    const node = inputs().find((n) => propsOf(n).name === name);
+    assert.ok(node, name);
+    await act(async () => propsOf(node).onChange({ target: { value } }));
+    await ui.flush();
+  };
+  const sends = (name) => calls.filter((c) => c[0] === name);
+  return { ...ui, calls, sends, w, inputs, radios, checks, pick, typeIn, tick: (name, value) => ui.choose(name, value) };
+}
+const raiseForm = (m, slug) => m.FORMS.raise[slug][0];
+const RAISE_NAMES = { 'fundraising-readiness': 'Fundraising readiness', 'investor-narrative': 'Investor narrative', 'pitch-deck': 'Pitch deck', 'data-room': 'Data room',
+  'cap-table': 'Cap table', 'use-of-funds': 'Use of funds', 'capital-relationships': 'Capital relationships' };
+const file = (name, size = 4) => new File([new Uint8Array(size).fill(37)], name, { type: 'application/pdf' });
+
+// ---------- Test 1: Raise's copy ---------------------------------------------
+
+/** CO:317-323, brackets removed and money in dollars, with D691.md decision 11's words where it rewords one. */
+const RAISE_COPY = {
+  'fundraising-readiness': {
+    title: 'Re-score', cta: 'Re-score now', button: 'Re-score',
+    sub: 'Re-reads the evidence of each item you tick and rescores it.', foot: 'Scores now, from what is recorded. Earlier scores are kept.',
+    labels: ['Items to re-score', 'Evidence read'],
+    chips: { since: [['Everything', 'Since the last score'], 'last'] },
+    checks: { items: [['Narrative', true], ['Deck', true], ['Data room', true], ['Cap table', true], ['Use of funds', true], ['Traction', true], ['Team', false]] },
+    metas: ['last 12 Oct', 'last 9 Oct', 'last 1 Oct', 'last 3 Oct', 'never scored', 'last 1 Oct · scored on its record'], placeholders: [],
+  },
+  'investor-narrative': {
+    title: 'New version', cta: 'Create version', button: 'New version',
+    sub: 'One narrative per investor type. Each is checked for consistency.', foot: 'Start from a version or blank; you edit.',
+    labels: ['Investor type', 'Start from', 'One-liner', 'Why now', 'The ask', 'Check against'],
+    chips: {
+      investor_type: [['Angel', 'Pre-seed fund', 'Seed fund', 'Series A fund', 'Strategic', 'Grant', 'Other'], 'seed_fund'],
+      start_from: [['v3 · seed fund', 'v2 · angel', 'The live deck', 'Blank'], 'version-3'],
+    },
+    checks: { check_against: [['Pitch deck', true], ['Metrics', true]] },
+    metas: [], placeholders: ['One line', 'Line', '$1.5M for n months'],
+  },
+  'pitch-deck': {
+    title: 'New link', cta: 'Create link', button: 'New link',
+    sub: 'A link per investor, with an expiry. Views are tracked per slide.', foot: 'Expired links stop opening; their views stay.',
+    labels: ['Investor', 'Deck version', 'Expires', 'Allow'],
+    chips: { prospect_id: [['Northwind Capital', 'Type a name'], '5'], deck_id: [['v4 · current', 'v3'], '41'], expires_days: [['7 days', '14 days', '30 days', 'Never'], '30'] },
+    checks: { allow: [['Download as PDF', false], ['Forwarding', false]] },
+    metas: ['views by others are tracked too'], placeholders: [],
+  },
+  'data-room': {
+    title: 'Upload', cta: 'Upload', button: 'Upload',
+    sub: 'Files land in a folder, behind the NDA gate.', foot: 'Access is per investor, per file.',
+    labels: ['Files', 'Folder', 'Answers request', 'Access', 'Protect', 'Drop files here, or browse'],
+    chips: {
+      folder: [['Financials', 'Legal', 'Team', 'Product', 'Customers'], 'fo3'], answers: [['Customer contracts', 'Cap table', 'None'], 'request-7'],
+      access_tier: [['Invited investors', 'Committed investors only', 'Nobody yet'], 'invited'],
+    },
+    checks: { protect: [['Expire access on', false]] },
+    metas: [], placeholders: [],
+  },
+  'cap-table': {
+    title: 'Add holder', cta: 'Add holder', button: 'Add holder',
+    sub: 'A holder with their group and instrument.', foot: 'Ownership recomputes before and after the planned round.',
+    labels: ['Holder', 'Group', 'Instrument', 'Amount or shares', 'Investor in Capital relationships'],
+    chips: { group: [['Founders', 'Investors'], 'investors'], instrument: [['SAFE', 'Convertible note'], 'safe'], prospect_id: [['None', 'Northwind Capital'], ''] },
+    checks: {}, metas: [], placeholders: ['Name or fund', '$500k', '$8M cap'],
+  },
+  'use-of-funds': {
+    title: 'Edit split', cta: 'Save split', button: 'Edit split',
+    sub: 'How the round is spent, by category. Each buys a milestone.', foot: 'The pitch deck fills its use-of-funds slide from this split.',
+    labels: ['Amount to raise', ...SECTION_LABELS, 'Milestone · by', 'Runway it buys'],
+    chips: { runway: [['18 months', '24 months', 'Custom'], '24'] },
+    checks: {}, metas: [], placeholders: ['$1.5M', '%', 'Milestone', 'YYYY-MM'],
+  },
+  'capital-relationships': {
+    title: 'Add investor', cta: 'Add investor', button: 'Add investor',
+    sub: 'An investor in the pipeline, with how you reach them.', foot: 'Fit is read from their sector focus and fund size.',
+    labels: ['Investor', 'Stage', 'Warm path', 'Next step · due', 'Notes'],
+    chips: {
+      stage: [['Identified', 'Contacted', 'Meeting', 'Diligence', 'Committed', 'Passed'], 'to_contact'],
+      warm_path: [['Lin Park can introduce', 'Sam Lee can introduce', 'No path yet'], 'Lin Park · Harbour Labs'],
+    },
+    checks: {}, metas: [], placeholders: ['Search funds and angels, or type a name', 'Send deck', 'Fri', 'One line'],
+  },
+};
+
+async function assertRaiseCopy(m) {
+  assert.deepEqual(Object.keys(m.FORMS.raise), RAISE_SLUGS, 'every Raise module has its form');
+  for (const slug of RAISE_SLUGS) {
+    const want = RAISE_COPY[slug];
+    const f = raiseForm(m, slug);
+    assert.equal(m.FORMS.raise[slug].length, 1, `${slug}: one Add`);
+    assert.deepEqual([f.title, f.cta, f.button, f.sub, f.foot], [want.title, want.cta, want.button, want.sub, want.foot], `${slug}: title, CTA, button, sub, foot`);
+    // A venture with no split yet, so Runway it buys shows the canvas's default.
+    const ui = await mountRaise(f, slug, { replies: { ...REPLIES, 'use-of-funds': { sections: [] } } });
+    try {
+      const text = ui.text();
+      assert.ok(text.includes(`Raise · ${RAISE_NAMES[slug]}`), `${slug}: the eyebrow`);
+      for (const s of [want.title, want.sub, want.cta, want.foot, ...want.labels, ...want.metas]) assert.ok(text.includes(s), `${slug}: "${s}"`);
+      for (const [name, [labels, def]] of Object.entries(want.chips)) {
+        assert.deepEqual(ui.radios(name).map((n) => textOf(n.parentNode).trim()), labels, `${slug} ${name}: chips`);
+        assert.deepEqual(ui.radios(name).filter((n) => propsOf(n).checked).map((n) => propsOf(n).value), [def], `${slug} ${name}: default`);
+      }
+      for (const [name, rows] of Object.entries(want.checks)) {
+        assert.deepEqual(ui.checks(name).map((n) => propsOf(n).checked), rows.map((r) => r[1]), `${slug} ${name}: defaults`);
+        for (const [l] of rows) assert.ok(text.includes(l), `${slug} ${name}: "${l}"`);
+      }
+      const ph = ui.inputs().map((n) => propsOf(n).placeholder).filter(Boolean);
+      for (const p of want.placeholders) assert.ok(ph.includes(p), `${slug}: placeholder "${p}"`);
+    } finally { await ui.unmount(); }
+  }
+  for (const f of [...Object.values(m.FORMS.raise).flat(), ...Object.values(m.EDITS.raise)]) {
+    for (const s of strings(f)) assert.ok(!/[[\]€]/.test(s), `${f.key}: "${s}"`);
+  }
+  assert.ok(!strings(raiseForm(m, 'data-room')).some((s) => /watermark/i.test(s)), 'no Watermark row (D-q)');
+  assert.ok(!strings(raiseForm(m, 'investor-narrative')).includes('Data room'), 'Data room is not a Check against source');
+  assert.ok(!strings(raiseForm(m, 'cap-table')).some((s) => /Option pool|Advisors|Options|Preferred/.test(s)), 'only the pairs #1700 takes');
+}
+
+test('1 (Raise): each Raise form draws the canvas copy, with D691.md decision 11\'s words', async () => {
+  await mutationCheck(source, path, assertRaiseCopy, [
+    ["foot: 'Scores now, from what is recorded. Earlier scores are kept.',", "foot: 'Takes about a minute. Earlier scores are kept.',"],
+    ["foot: 'Access is per investor, per file.',", "foot: 'Access is per investor, per folder.',"],
+    ["foot: 'Fit is read from their sector focus and fund size.',", "foot: 'Fit is read from their thesis and cheque size.',"],
+    ["{ kind: 'CH', name: 'expires_days', k: 'Expires', opts: EXPIRES, def: 2 },", "{ kind: 'CH', name: 'expires_days', k: 'Expires', opts: EXPIRES, def: 0 },"],
+    ["{ kind: 'CH', name: 'group', k: 'Group', opts: GROUP, def: 1, required: true },", "{ kind: 'CH', name: 'group', k: 'Group', opts: GROUP, def: 0, required: true },"],
+    ["{ kind: 'CH', name: 'runway', k: 'Runway it buys', opts: RUNWAY, def: 1 },", "{ kind: 'CH', name: 'runway', k: 'Runway it buys', opts: RUNWAY, def: 0 },"],
+    ["def: 'seed_fund', required: true },", "def: 0, required: true },"],
+    ["return [...saved.map((o) => ({ value: VERSION + o.value, label: o.label })), { value: LIVE, label: 'The live deck' }, { value: BLANK, label: 'Blank' }];",
+      "return [{ value: LIVE, label: 'The live deck' }, ...saved.map((o) => ({ value: VERSION + o.value, label: o.label })), { value: BLANK, label: 'Blank' }];"],
+    ["const CHECK_AGAINST = [{ value: 'deck', label: 'Pitch deck', checked: true }, { value: 'metrics', label: 'Metrics', checked: true }];",
+      "const CHECK_AGAINST = [{ value: 'deck', label: 'Pitch deck', checked: true }, { value: 'data_room', label: 'Data room', checked: true }, { value: 'metrics', label: 'Metrics', checked: true }];"],
+    ["const CANVAS_FOLDERS = ['Financials', 'Legal', 'Team', 'Product', 'Customers'];", "const CANVAS_FOLDERS = ['Financials', 'Legal', 'Team', 'Product', 'Customers', 'Watermark downloads'];"],
+  ]);
+});
+
+// ---------- Tests 2-6: Re-score, New version, New link, Upload, split and holder ----------
+
+async function assertRescore(m) {
+  const ui = await mountRaise(raiseForm(m, 'fundraising-readiness'), 'fundraising-readiness');
+  try {
+    const team = ui.checks('items').find((n) => propsOf(n).value === 'team');
+    assert.ok(propsOf(team).disabled, 'Team is drawn disabled');
+    await ui.tick('items', 'deck');
+    await ui.submit();
+    assert.deepEqual(ui.sends('rescore'), [['rescore', P, { items: ['narrative', 'data_room', 'cap_table', 'use_of_funds', 'traction'], since: 'last' }]]);
+    await ui.choose('since', 'all');
+    await ui.submit();
+    assert.equal(ui.sends('rescore')[1][2].since, 'all');
+  } finally { await ui.unmount(); }
+  assert.deepEqual(raiseForm(m, 'fundraising-readiness').toBody({ items: ['team', 'deck'], since: 'last' }).items, ['deck'], 'Team is never sent');
+  assert.equal(m.rescoreRows([]).find((r) => r.value === 'narrative').meta, 'never scored');
+}
+
+async function assertNarrative(m) {
+  let ui = await mountRaise(raiseForm(m, 'investor-narrative'), 'investor-narrative', { replies: { ...REPLIES, 'investor-narrative': { versions: [] } } });
+  try {
+    assert.deepEqual(ui.radios('start_from').filter((n) => propsOf(n).checked).map((n) => propsOf(n).value), ['live'], 'no saved version: the live deck');
+    await ui.input('one_liner', 'Kestrel finds the leak'); await ui.input('why_now', 'Rules changed'); await ui.input('ask', '$1.5M for 18 months');
+    await ui.submit();
+    assert.deepEqual(ui.sends('narrativeVersion'), [['narrativeVersion', P, {
+      investor_type: 'seed_fund', start_from: 'live', one_liner: 'Kestrel finds the leak', why_now: 'Rules changed', ask: '$1.5M for 18 months', check_against: ['deck', 'metrics'],
+    }]]);
+  } finally { await ui.unmount(); }
+  ui = await mountRaise(raiseForm(m, 'investor-narrative'), 'investor-narrative');
+  try {
+    await ui.choose('start_from', 'version-2');
+    await ui.choose('investor_type', 'angel');
+    await ui.tick('check_against', 'deck');
+    await ui.submit();
+    assert.deepEqual(ui.sends('narrativeVersion')[0][2], { investor_type: 'angel', start_from: 'version', based_on_version: 2, one_liner: null, why_now: null, ask: null, check_against: ['metrics'] });
+    await ui.choose('start_from', 'blank');
+    await ui.submit();
+    assert.equal(ui.sends('narrativeVersion')[1][2].start_from, 'blank');
+    assert.ok(!Object.hasOwn(ui.sends('narrativeVersion')[1][2], 'based_on_version'));
+  } finally { await ui.unmount(); }
+}
+
+async function assertLink(m) {
+  const answer = (name) => (name === 'deckLink' ? { id: 41, share_path: '/share/deck/tok.abc-1' } : { ok: true });
+  let ui = await mountRaise(raiseForm(m, 'pitch-deck'), 'pitch-deck', { answer });
+  try {
+    await ui.choose('prospect_id', 'typed');
+    await ui.submit();
+    assert.equal(ui.sends('deckLink').length, 0, 'an empty Investor is refused');
+    assert.ok(ui.text().includes('Fund or name is required.'));
+    await ui.input('investor_label', 'Juno Angels');
+    await ui.choose('expires_days', 'never'); await ui.choose('deck_id', '40'); await ui.tick('allow', 'forwarding');
+    await ui.submit();
+    assert.deepEqual(ui.sends('deckLink'), [['deckLink', P, { deck_id: 40, investor_label: 'Juno Angels', expires_days: null, allow_download: false, allow_forwarding: true }]]);
+    assert.ok(ui.by('cycle-form-done'), 'the done view');
+    assert.ok(ui.text().includes('Copy the link now. It is shown only once.'));
+    assert.ok(ui.text().includes('/share/deck/tok.abc-1'));
+    assert.ok(ui.nodes().some((n) => n.tagName === 'BUTTON' && textOf(n).trim() === 'Copy link'));
+  } finally { await ui.unmount(); }
+  ui = await mountRaise(raiseForm(m, 'pitch-deck'), 'pitch-deck', { answer });
+  try { assert.ok(!ui.text().includes('/share/deck/'), 'reopened, no link is shown'); } finally { await ui.unmount(); }
+  // With no deck: "No deck yet.", a link to build one, and a CTA that cannot be pressed.
+  ui = await mountRaise(raiseForm(m, 'pitch-deck'), 'pitch-deck', { replies: { ...REPLIES, 'pitch-deck': { decks: [], prospects: [] } } });
+  try {
+    assert.ok(ui.text().includes('No deck yet.'));
+    const build = ui.nodes().find((n) => n.tagName === 'A' && textOf(n).trim() === 'Build your deck');
+    assert.equal(propsOf(build).href, '/raise/pitch');
+    assert.ok(propsOf(ui.by('cycle-form-save')).disabled, 'the CTA is disabled');
+    await ui.submit();
+    assert.equal(ui.sends('deckLink').length, 0);
+  } finally { await ui.unmount(); }
+  const edit = m.EDITS.raise['pitch-deck'];
+  assert.ok(!edit.fields.some((f) => f.name === 'deck_id'), 'Edit link has no Deck version');
+  assert.deepEqual(edit.fields.find((f) => f.name === 'expires_days').opts.map((o) => o.value), ['7', '14', '30'], 'no Never: an edit never extends the expiry');
+  assert.equal(edit.fields.find((f) => f.name === 'expires_days').note, 'A later expiry needs a new link.');
+  assert.equal(m.shareLinkUrl('/share/deck/x', 'https://axal.vc'), 'https://axal.vc/share/deck/x');
+  assert.equal(m.shareLinkUrl('https://evil.example/share/deck/x', ''), null);
+}
+
+async function assertUpload(m) {
+  const refuseSecond = (name, uid, body) => { if (body.name === 'b.pdf') throw new Error('Folder not found'); return { uid: 'f1' }; };
+  let ui = await mountRaise(raiseForm(m, 'data-room'), 'data-room');
+  try {
+    await ui.submit();
+    assert.ok(ui.text().includes('Pick a file to upload.'));
+    assert.ok(!ui.by('cycle-form-access_expires_at'), 'no date until Expire access is ticked');
+    await ui.tick('protect', 'expire');
+    assert.ok(ui.by('cycle-form-access_expires_at'));
+    await ui.input('access_expires_at', '2026-11-30');
+    await ui.choose('access_tier', 'committed');
+    await ui.choose('folder', 'name:Legal');
+    await ui.pick('files', [file('a.pdf'), file('b.pdf')]);
+    await ui.submit();
+    const posts = ui.sends('upload');
+    assert.equal(posts.length, 2, 'two files, two POSTs');
+    for (const [, uid, body] of posts) {
+      assert.equal(uid, 'p-kestrel', 'the uid form-options gave');
+      assert.deepEqual({ ...body, data: body.data.slice(0, 28) }, { name: body.name, data: 'data:application/pdf;base64,', visibility: 'nda', folder_name: 'Legal', dd_request_id: 7, access_tier: 'committed', access_expires_at: '2026-11-30' });
+    }
+    assert.ok(!ui.calls.some((c) => /folder/i.test(String(c[0])) && c[0] !== 'formOptions'), 'no folders call');
+  } finally { await ui.unmount(); }
+  ui = await mountRaise(raiseForm(m, 'data-room'), 'data-room', { answer: refuseSecond });
+  try {
+    await ui.choose('folder', 'fo3'); await ui.choose('answers', '');
+    const big = { name: 'huge.pdf', size: 21 * 1024 * 1024, type: 'application/pdf', arrayBuffer: async () => assert.fail('never read') };
+    await ui.pick('files', [file('a.pdf'), big, file('b.pdf')]);
+    await ui.submit();
+    assert.deepEqual(ui.sends('upload').map((c) => [c[2].name, c[2].folder_uid, c[2].dd_request_id]), [['a.pdf', 'fo3', undefined], ['b.pdf', 'fo3', undefined]], 'the oversize file is never sent');
+    assert.equal(textOf(ui.by('cycle-form-refusal')), 'Uploaded a.pdf. huge.pdf: Larger than 20 MB. b.pdf: Folder not found');
+  } finally { await ui.unmount(); }
+  assert.equal(raiseForm(m, 'data-room').toBody({ protect: [], access_expires_at: '2026-11-30' }, 'a.pdf', 'data:,').access_expires_at, null, 'an expiry only while Expire access is ticked');
+}
+
+async function assertSplitAndHolder(m) {
+  let ui = await mountRaise(raiseForm(m, 'use-of-funds'), 'use-of-funds');
+  try {
+    assert.equal(propsOf(ui.by('cycle-form-pct.product')).value, '40', 'it opens with the stored split');
+    assert.equal(propsOf(ui.by('cycle-form-milestone_label.product')).value, 'Launch v2');
+    assert.equal(propsOf(ui.by('cycle-form-amount_to_raise')).value, '1,500,000');
+    assert.ok(ui.text().includes('$600,000 of the raise'), 'each amount worked out from Amount to raise');
+    await ui.input('pct.reserve', '5');
+    await ui.submit();
+    assert.equal(ui.sends('useOfFunds').length, 0);
+    assert.ok(ui.text().includes('The split adds up to 95%. It must add up to 100%.'));
+    await ui.input('pct.reserve', '10'); await ui.input('milestone_by.reserve', '2027-09'); await ui.choose('runway', 'custom'); await ui.input('runway_months', '30');
+    await ui.submit();
+    const body = ui.sends('useOfFunds')[0][2];
+    assert.equal(body.amount_to_raise_cents, 150000000);
+    assert.deepEqual(body.sections.map((s) => [s.key, s.pct, s.milestone_by]), [['product', 40, '2027-03'], ['go-to-market', 30, null], ['infrastructure', 10, null], ['operations', 10, null], ['reserve', 10, '2027-09']]);
+    assert.equal(body.runway_months, 30);
+  } finally { await ui.unmount(); }
+  ui = await mountRaise(raiseForm(m, 'cap-table'), 'cap-table');
+  try {
+    assert.ok(ui.by('cycle-form-cap'), 'a SAFE has its cap box');
+    await ui.input('name', 'Northwind Capital'); await ui.input('amount', '$500k'); await ui.input('cap', '$8M cap'); await ui.choose('prospect_id', '5');
+    await ui.submit();
+    assert.deepEqual(ui.sends('holder'), [['holder', P, { name: 'Northwind Capital', group: 'investors', instrument: 'safe', amount_cents: 50000000, cap_cents: 800000000, prospect_id: 5 }]]);
+    await ui.choose('group', 'founders');
+    assert.ok(!ui.by('cycle-form-cap'), 'Common has no cap');
+    assert.deepEqual(ui.radios('instrument_founders').map((n) => propsOf(n).value), ['common']);
+    assert.ok(ui.by('cycle-form-shares'), 'its box takes shares');
+    await ui.input('shares', '4000000'); await ui.choose('vesting', '4y-1y'); await ui.input('vesting_start', '2026-01-01');
+    await ui.submit();
+    assert.deepEqual(ui.sends('holder')[1][2], { name: 'Northwind Capital', group: 'founders', instrument: 'common', shares: 4000000, vesting: { start_date: '2026-01-01', total_months: 48, cliff_months: 12 } });
+  } finally { await ui.unmount(); }
+  assert.equal(m.validate(raiseForm(m, 'cap-table'), { ...m.initialValues(raiseForm(m, 'cap-table')), name: 'X', amount: '100' }).cap, 'A SAFE or a note needs its cap.');
+}
+
+async function assertInvestor(m) {
+  const ui = await mountRaise(raiseForm(m, 'capital-relationships'), 'capital-relationships');
+  try {
+    assert.ok(ui.text().includes('Lin Park can introduce') && ui.text().includes('Sam Lee can introduce'), 'each person in the founder\'s network, by name');
+    await ui.typeIn('name', 'ald');
+    const found = ui.by('cycle-form-found-name');
+    assert.ok(found, 'the funds whose name matches');
+    assert.deepEqual(ui.calls.filter((c) => c[0] === 'formOptions' && c[4].q), [['formOptions', 'raise', P, 'capital-relationships', { q: 'ald' }]]);
+    await ui.click('Alder Ventures');
+    assert.equal(propsOf(ui.by('cycle-form-name')).value, 'Alder Ventures');
+    await ui.input('next_step', 'Send deck'); await ui.input('next_step_due', '2026-11-06');
+    await ui.submit();
+    assert.deepEqual(ui.sends('prospect'), [['prospect', P, { research_fund_uid: 'alder-ventures', stage: 'to_contact', warm_path: 'Lin Park · Harbour Labs', next_step: 'Send deck', next_step_due: '2026-11-06', notes: null }]]);
+    await ui.typeIn('name', 'Quinn Ventures');
+    await ui.choose('warm_path', '');
+    await ui.submit();
+    assert.deepEqual(ui.sends('prospect')[1][2], { name: 'Quinn Ventures', stage: 'to_contact', warm_path: null, next_step: 'Send deck', next_step_due: '2026-11-06', notes: null }, 'a typed name, once the pick is gone');
+  } finally { await ui.unmount(); }
+}
+
+test('2-6 (Raise): Re-score, New version, New link, Upload, Edit split, Add holder and Add investor send #1700\'s bodies', async () => {
+  const all = async (m) => { await assertRescore(m); await assertNarrative(m); await assertLink(m); await assertUpload(m); await assertSplitAndHolder(m); await assertInvestor(m); };
+  await mutationCheck(source, path, all, [
+    ['.filter((k) => k !== BY_HAND)', ''],
+    ["since: v.since === 'all' ? 'all' : 'last'", "since: 'all'"],
+    ["? { value, label, meta: `${when} · scored on its record`, checked: false, disabled: true }", "? { value, label, meta: `${when} · scored on its record`, checked: true }"],
+    ["start_from: based ? 'version' : from === BLANK ? BLANK : LIVE,", "start_from: based ? 'version' : LIVE,"],
+    ["expires_days: v.expires_days === NEVER ? null : Number(v.expires_days || 30),", "expires_days: Number(v.expires_days || 30),"],
+    ["blocked: (fields) => !fields.find((f) => f.name === 'deck_id')?.options?.length,", ''],
+    ["name, data, visibility: 'nda',", 'name, data,'],
+    ['if (why) { refused.push(`${file.name}: ${why}.`); continue; }', ''],
+    ["...(folder.startsWith(NEW_FOLDER) ? { folder_name: folder.slice(NEW_FOLDER.length) } : folder ? { folder_uid: folder } : {}),", '...(folder ? { folder_uid: folder } : {}),'],
+    ["access_expires_at: checkedOf(v.protect, EXPIRE) ? str(v.access_expires_at) : null,", 'access_expires_at: str(v.access_expires_at),'],
+    ['if (!Object.keys(e).length && sum !== 100)', 'if (false)'],
+    ["{ name: 'investment', k: 'Amount or shares', parts: holderMoney, when: inGroup(INVESTORS) },", "{ name: 'investment', k: 'Amount or shares', parts: holderMoney },"],
+    ["const [total, cliff] = v.vesting === '4y-1y' ? [48, 12] :", "const [total, cliff] = v.vesting === '4y-1y' ? [48, 0] :"],
+    ["out[`pct.${key}`] = { value: s?.pct != null ? String(s.pct) : '' };", "out[`pct.${key}`] = {};"],
+    ["...(str(v.research_fund_uid) ? { research_fund_uid: str(v.research_fund_uid) } : { name: str(v.name) }),", 'name: str(v.name),'],
+    ["return [...chipsOf(people).map((o) => ({ value: o.value, label: `${o.value.split(' · ')[0]} can introduce` })), NO_PATH];", "return [...chipsOf(people), NO_PATH];"],
+  ]);
+});
+
+// ---------- Test 9 (Raise): the Edits -----------------------------------------
+
+async function assertRaiseEdits(m) {
+  const E = m.EDITS.raise;
+  assert.deepEqual(Object.keys(E), ['investor-narrative', 'pitch-deck', 'data-room', 'cap-table', 'use-of-funds', 'capital-relationships']);
+  assert.equal(m.editFor('raise', 'fundraising-readiness'), null, 'a score is never edited');
+  for (const [slug, title] of [['investor-narrative', 'Edit version'], ['pitch-deck', 'Edit link'], ['data-room', 'Edit file'], ['cap-table', 'Edit holder'], ['capital-relationships', 'Edit investor']]) {
+    assert.deepEqual([E[slug].title, E[slug].cta], [title, 'Save'], slug);
+  }
+  assert.equal(E['use-of-funds'].key, raiseForm(m, 'use-of-funds').key, 'Use of funds\' Edit is its Add');
+  assert.deepEqual([E['use-of-funds'].title, E['use-of-funds'].cta], ['Edit split', 'Save split']);
+  // Only a record resolves an id (#1658's `{ id, edit: { id, uid } }`); a module row draws none.
+  assert.equal(E['data-room'].idOf({ id: 12, edit: { id: 12, uid: 'f12' } }), 'f12', 'the file\'s uid, never its integer id');
+  assert.equal(E['cap-table'].idOf({ id: 'h-7', edit: { id: 'h-7', uid: 'h-7' } }), 'h-7');
+  assert.equal(E['cap-table'].idOf({ id: 'pool', edit: { id: 'pool' } }), null, 'the pool has no Edit');
+  for (const [slug, row] of [['investor-narrative', { id: 3 }], ['pitch-deck', { id: 41 }], ['data-room', { id: 12 }], ['cap-table', { id: 'h-7' }], ['use-of-funds', { id: 'product' }], ['capital-relationships', { id: 5 }]]) {
+    assert.equal(E[slug].idOf(row), null, `${slug}: a module row draws no Edit`);
+  }
+
+  // Edit version: what the record carries is sent; Start from is not a field.
+  let ui = await mountRaise(E['investor-narrative'], 'investor-narrative', { id: 3, current: { investor_type: 'angel', one_liner: 'One', why_now: 'Now', ask: 'Ask', check_against: ['deck'] } });
+  try {
+    assert.ok(!ui.by('cycle-form-start_from'));
+    await ui.input('why_now', 'Later');
+    await ui.submit();
+    assert.deepEqual(ui.sends('narrativeVersionUpdate'), [['narrativeVersionUpdate', P, 3, { investor_type: 'angel', one_liner: 'One', why_now: 'Later', ask: 'Ask', check_against: ['deck'] }]]);
+  } finally { await ui.unmount(); }
+  // Edit link and Edit holder: a field left untouched sends no key.
+  ui = await mountRaise(E['pitch-deck'], 'pitch-deck', { id: 41 });
+  try {
+    await ui.choose('allow_download', 'no');
+    await ui.submit();
+    assert.deepEqual(ui.sends('deckLinkUpdate'), [['deckLinkUpdate', P, 41, { allow_download: false }]]);
+  } finally { await ui.unmount(); }
+  ui = await mountRaise(E['cap-table'], 'cap-table', { id: 'e-3', current: { name: 'Harbour Angels' } });
+  try {
+    await ui.input('cap', '$6M');
+    await ui.submit();
+    assert.deepEqual(ui.sends('holderUpdate'), [['holderUpdate', P, 'e-3', { name: 'Harbour Angels', cap_cents: 600000000 }]]);
+  } finally { await ui.unmount(); }
+  // Edit file: the uid in the path, the room's uid from form-options, only existing folders.
+  ui = await mountRaise(E['data-room'], 'data-room', { id: 'f12' });
+  try {
+    assert.deepEqual(ui.radios('folder').map((n) => propsOf(n).value), ['fo3'], 'a name not made is not offered: the PATCH moves into a folder that exists');
+    await ui.choose('access_tier', 'nobody');
+    await ui.submit();
+    assert.deepEqual(ui.sends('fileUpdate'), [['fileUpdate', 'p-kestrel', 'f12', { access_tier: 'nobody' }]]);
+  } finally { await ui.unmount(); }
+  ui = await mountRaise(E['capital-relationships'], 'capital-relationships', { id: 5, current: { name: 'Northwind Capital', stage: 'meeting', warm_path: 'via Lin Park' } });
+  try {
+    await ui.choose('stage', 'diligence');
+    await ui.submit();
+    assert.deepEqual(ui.sends('prospectUpdate'), [['prospectUpdate', P, 5, { name: 'Northwind Capital', stage: 'diligence', warm_path: 'via Lin Park' }]]);
+  } finally { await ui.unmount(); }
+}
+
+test('9 (Raise): each Raise Edit is titled for its noun, PATCHes its own path with the record\'s id, and sends only what it carried or the founder filled', async () => {
+  await mutationCheck(source, path, assertRaiseEdits, [
+    ["const recordNumber = (row) => posId(recordEdit(row)?.id);", 'const recordNumber = (row) => posId(row?.id);'],
+    ["idOf: (row) => { const uid = String(recordEdit(row)?.uid ?? ''); return PROJECT_UID.test(uid) ? uid : null; },", "idOf: (row) => recordEdit(row)?.id ?? null,"],
+    ["  key: 'edit-version',\n  title: 'Edit version',", "  key: 'edit-version',\n  title: 'Edit narrative',"],
+    ["folder: { opts: r.folder.opts.filter((o) => !o.value.startsWith(NEW_FOLDER)) },", 'folder: { opts: r.folder.opts },'],
+    ["  }, [], { amount_cents: 'amount', cap_cents: 'cap' }),", "  }, ['amount', 'cap'], { amount_cents: 'amount', cap_cents: 'cap' }),"],
+    ["    'investor-narrative': editNarrative,\n    'pitch-deck': editLink,", "    'investor-narrative': editNarrative,\n    'fundraising-readiness': editNarrative,\n    'pitch-deck': editLink,"],
+  ]);
+});
+
+// ---------- Test 10 (Raise): the client writes --------------------------------
+
+async function assertRaiseWrites(m) {
+  const sent = [];
+  const w = m.makeCycleWrites(async (url, opts = {}) => { sent.push([url, opts.method ?? 'GET', opts.body ? JSON.parse(opts.body) : null]); return {}; });
+  await w.raise.rescore(P);
+  await w.raise.rescore(P, { items: ['deck'], since: 'last' });
+  await w.raise.narrativeVersion(P, { investor_type: 'angel' });
+  await w.raise.narrativeVersionUpdate(P, 3, { why_now: 'x' });
+  await w.raise.deckLink(P, { deck_id: 5 });
+  await w.raise.deckLinkUpdate(P, 41, { allow_download: true });
+  await w.raise.holder(P, { name: 'x' });
+  await w.raise.holderUpdate(P, 'h-7', { shares: 1 });
+  await w.raise.useOfFunds(P, { sections: [] });
+  await w.raise.prospect(P, { name: 'x' });
+  await w.raise.prospectUpdate(P, 5, { stage: 'meeting' });
+  await w.raise.upload('p-kestrel', { name: 'a.pdf' });
+  await w.raise.fileUpdate('p-kestrel', 'f12', { access_tier: 'nobody' });
+  await w.formOptions('raise', P, 'capital-relationships', { q: 'ald' });
+  assert.deepEqual(sent, [
+    ['/cycles/raise/readiness/rescore?project=7', 'POST', null],
+    ['/cycles/raise/readiness/rescore?project=7', 'POST', { items: ['deck'], since: 'last' }],
+    ['/cycles/raise/narrative-versions?project=7', 'POST', { investor_type: 'angel' }],
+    ['/cycles/raise/narrative-versions/3?project=7', 'PATCH', { why_now: 'x' }],
+    ['/cycles/raise/deck-links?project=7', 'POST', { deck_id: 5 }],
+    ['/cycles/raise/deck-links/41?project=7', 'PATCH', { allow_download: true }],
+    ['/cycles/raise/holders?project=7', 'POST', { name: 'x' }],
+    ['/cycles/raise/holders/h-7?project=7', 'PATCH', { shares: 1 }],
+    ['/cycles/raise/use-of-funds?project=7', 'PUT', { sections: [] }],
+    ['/cycles/raise/prospects?project=7', 'POST', { name: 'x' }],
+    ['/cycles/raise/prospects/5?project=7', 'PATCH', { stage: 'meeting' }],
+    ['/data-room/p-kestrel/files', 'POST', { name: 'a.pdf' }],
+    ['/data-room/p-kestrel/files/f12', 'PATCH', { access_tier: 'nobody' }],
+    ['/cycles/raise/modules/capital-relationships/form-options?project=7&q=ald', 'GET', null],
+  ], 'Raise takes the venture in the query, the data room its uid in the path; #1652\'s rescore sends no body');
+}
+
+test('10 (Raise): each Raise write calls its spelled-out route, and the fund search uses the one form-options path', async () => {
+  await mutationCheck(writesSource, writesPath, assertRaiseWrites, [
+    ["{ method: 'POST', ...(body ? { body: JSON.stringify(body) } : {}) }", "{ method: 'POST', body: JSON.stringify(body ?? {}) }"],
+    ["useOfFunds: (projectId, body) => request(`/cycles/raise/use-of-funds?${q(projectId)}`, { method: 'PUT',", "useOfFunds: (projectId, body) => request(`/cycles/raise/use-of-funds?${q(projectId)}`, { method: 'POST',"],
+    ["upload: (projectUid, body) => request(`/data-room/${seg(projectUid)}/files`,", "upload: (projectUid, body) => request(`/data-room/files?project=${seg(projectUid)}`,"],
+    ["holderUpdate: (projectId, id, body) => request(`/cycles/raise/holders/${seg(id)}?${q(projectId)}`,", "holderUpdate: (projectId, id, body) => request(`/cycles/raise/holders?id=${seg(id)}&${q(projectId)}`,"],
+  ]);
+  const calls = extractClientCalls(writesSource).map((c) => `${c.method} ${normalizePath(c.path)}`);
+  for (const want of ['POST /cycles/raise/deck-links', 'PATCH /cycles/raise/deck-links/:p', 'POST /cycles/raise/holders', 'PATCH /cycles/raise/holders/:p',
+    'PUT /cycles/raise/use-of-funds', 'POST /cycles/raise/prospects', 'PATCH /cycles/raise/prospects/:p', 'PATCH /cycles/raise/narrative-versions/:p',
+    'POST /data-room/:p/files', 'PATCH /data-room/:p/files/:p']) assert.ok(calls.some((c) => c.endsWith(want)), want);
+  assert.ok(!calls.some((c) => /\/cycles\/(raise|grow)\/modules\/[^:]+\/form-options/.test(c)), 'no form-options path with a literal cycle');
+});
+
+// ---------- Test 14: the Data room module page's Add is Upload -----------------
+
+test('14: with Upload registered, the Data room module\'s Add is Upload, and its records.add and empty card open the same address', () => {
+  // #1658's "Open the files tool" (S1's ruling) is not on main yet, so this pins the Add only (the issue's test 14).
+  const [upload] = FORMS.raise['data-room'];
+  assert.equal(upload.button, 'Upload');
+  const route = readFileSync(new URL('../src/pages/cycles/CycleRoute.jsx', import.meta.url), 'utf8');
+  assert.match(route, /forms\.map\(\(entry, i\) => \(\{ text: entry\.button, href: addHref\(entry, i\)/, 'a module with a form draws its Add from the form');
+  assert.match(route, /loadOptions=\{formOpen\.loadOptions \? \(\) => formOpen\.loadOptions\(cyclesWrite, projectId\) : null\}/, 'an Add reads its choices');
+  assert.match(route, /onSearch=\{formOpen\.search \? \(_field, q\) => formOpen\.search\(cyclesWrite, projectId, q\) : null\}/, 'and searches through its form');
+  const worker = readFileSync(new URL('../../cloudflare-worker/src/services/raiseCycle.ts', import.meta.url), 'utf8');
+  assert.match(worker, /add: \{ text: 'Upload', href: addHref\(ctx, 'data-room'\) \}/);
+  assert.match(worker, /next: \{ text: 'Upload', href: addHref\(ctx, 'data-room'\) \}/);
+  assert.match(worker, /const addHref = \(ctx: Ctx, slug: string\) => `\/raise\/\$\{slug\}\/new\?project=\$\{ctx\.projectId\}`;/);
 });

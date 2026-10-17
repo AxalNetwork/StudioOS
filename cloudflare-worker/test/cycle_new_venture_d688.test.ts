@@ -221,11 +221,18 @@ test('D688: new Raise cards pin the seven lines and actions; figures stay null',
     ['empty', 'No readiness score yet. Readiness by evidence appears here.', 'Score readiness', '/raise/fundraising-readiness?project=1&add=1'],
     ['empty', 'No narrative saved yet. Each version appears here.', 'New version', '/raise/investor-narrative?project=1&add=1'],
     ['empty', 'No deck yet. Views per week appear here.', 'Build your deck', '/raise/pitch'],
-    ['empty', 'No files yet. Coverage of the diligence checklist appears here.', 'Upload', '/raise/data-room?mode=workspace'],
-    ['empty', 'No holders yet. Ownership before and after the round appears here.', 'Add holder', '/raise/capital/cap-table'],
-    ['empty', 'No split yet. The planned split and runway appear here.', 'Edit split', '/raise/capital/model'],
-    ['empty', 'No investors yet. The pipeline by stage appears here.', 'Add investor', '/raise/capital/pipeline'],
+    // D695 (#1657): each module with a form opens its address; a link needs a deck, so Pitch deck builds one first.
+    ['empty', 'No files yet. Coverage of the diligence checklist appears here.', 'Upload', '/raise/data-room/new?project=1'],
+    ['empty', 'No holders yet. Ownership before and after the round appears here.', 'Add holder', '/raise/cap-table/new?project=1'],
+    ['empty', 'No split yet. The planned split and runway appear here.', 'Edit split', '/raise/use-of-funds/new?project=1'],
+    ['empty', 'No investors yet. The pipeline by stage appears here.', 'Add investor', '/raise/capital-relationships/new?project=1'],
   ]);
+  // D695 test 13 (#1657): a card that opens an Add opens a module that has a form.
+  const adds = body.cards.filter((x: any) => /\/new\?|[?&]add=1/.test(String(x.next?.href ?? '')));
+  assert.equal(adds.length, 6, 'every empty card but Pitch deck before a deck opens an Add');
+  for (const c of adds) assert.notEqual(formFor('raise', c.slug), null, `${c.slug}: ${c.next.href}`);
+  const pitch = await raiseCall(db, '/modules/pitch-deck?project=1');
+  assert.deepEqual(pitch.body.records.add, { text: 'Build your deck', href: '/raise/pitch' }, 'no deck: the Add builds one');
   assert.ok(body.figures.every((f: any) => f.value === null && f.state !== 'ok'));
   db.close();
 });
@@ -256,7 +263,8 @@ test('D688: Raise deck with no views keeps its Share action, and tool actions ag
   const db = raiseFixture();
   db.exec("INSERT INTO pitch_decks(id, project_id, version, slides) VALUES (5, 1, 1, '[]')");
   const { body } = await raiseCall(db, '/overview?project=1');
-  assert.deepEqual([body.cards[2].reason, body.cards[2].next?.text], ['No one has opened a deck link yet.', 'Share the deck with an investor']);
+  assert.deepEqual([body.cards[2].reason, body.cards[2].next?.text, body.cards[2].next?.href],
+    ['No one has opened a deck link yet.', 'Share the deck with an investor', '/raise/pitch-deck/new?project=1']);
   for (const slug of ['pitch-deck', 'data-room', 'cap-table', 'use-of-funds', 'capital-relationships']) {
     const card = body.cards.find((entry: any) => entry.slug === slug);
     const module = await raiseCall(db, `/modules/${slug}?project=1`);

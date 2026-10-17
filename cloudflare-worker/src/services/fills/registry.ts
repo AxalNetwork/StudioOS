@@ -41,6 +41,7 @@ import { MAX_PAIN_PHRASE, insertHypothesis, upsertPainAlias } from '../../routes
 import { ASSUMPTION_COLUMNS, loadAssumptions, saveOneAssumption } from '../marketAssumptions';
 import { analysisForProject, insertManualCandidate } from '../../routes/_competitor_writes';
 import { citeFor } from './citations';
+import { setFeedbackTheme } from '../growWriters';
 import type { FillKind, Gathered, Proposed } from './types';
 
 /**
@@ -118,8 +119,6 @@ const painTag: FillKind = {
     const groupId = Number(payload.pain_group_id);
     const ok = await upsertPainAlias(ctx.env, ctx.projectId, groupId, String(payload.phrase));
     if (!ok) throw new Error('That theme no longer exists');
-    await logCycleWrite(ctx.env, { projectId: ctx.projectId, userId: Number(ctx.user.id), cycle: 'validate',
-      module: 'problem-discovery', entityId: groupId, action: 'pain_tag_applied', summary: `Theme ${groupId} linked to a phrase` });
 
     // READ BACK WHAT WAS STORED rather than echo the payload. `upsertPainAlias`
     // trims and caps the phrase at `MAX_PAIN_PHRASE` and normalises it, so the
@@ -132,6 +131,10 @@ const painTag: FillKind = {
         WHERE a.project_id = ? AND a.group_id = ? AND a.phrase_norm = ?`,
     ).bind(ctx.projectId, groupId, normPhrase(String(payload.phrase || '').trim().slice(0, MAX_PAIN_PHRASE)))
       .first<{ id: number; display_phrase: string; title: string }>();
+    // The theme is named by its title; the phrase is an interviewee's words and stays out.
+    await logCycleWrite(ctx.env, { projectId: ctx.projectId, userId: Number(ctx.user.id), cycle: 'validate',
+      module: 'problem-discovery', entityId: groupId, action: 'pain_tag_applied',
+      summary: stored ? `Phrase linked to ${stored.title}` : 'Phrase linked to this theme' });
 
     return {
       written: stored ? `${stored.display_phrase} → ${stored.title}` : String(payload.phrase),
@@ -579,7 +582,7 @@ const competitorScan: FillKind = {
       },
     );
     await logCycleWrite(ctx.env, { projectId: ctx.projectId, userId: Number(ctx.user.id), cycle: 'validate',
-      module: 'market-intelligence', entityId: RECORD_ID.test(String(written.id)) ? String(written.id) : ctx.projectId,
+      module: 'market-intelligence', entityId: RECORD_ID.test(String(written.id)) ? String(written.id) : null,
       action: 'competitor_created', summary: 'Competitor added' });
     return {
       written: String(payload.note || '').trim() ? `${written.name} — ${String(payload.note).trim()}` : written.name,
@@ -600,12 +603,135 @@ const competitorScan: FillKind = {
   },
 };
 
+/**
+ * `grow/feedback-themes` — place unthemed feedback into themes the founder named.
+ *
+ * A RESTATEMENT, on the pain tagger's pattern (D691 decision 8, #1698). It
+ * proposes one of the venture's OWN themes for one of its own unthemed
+ * feedback rows, and never names a theme: `parse` refuses any uid that is not
+ * an unthemed row of this venture and any theme that is not already on one of
+ * its rows. That is what makes Log feedback's foot, "Themes are proposed by
+ * Eadwyn; you accept.", true. `apply` calls `setFeedbackTheme`, the writer
+ * `growWriters.ts` extracted for this fill and Change theme, and writes the
+ * same row `PATCH /feedback/:uid` writes for a theme.
+ */
+const FEEDBACK_THEME_PROMPT = [
+  'You sort a venture\'s product feedback into themes the founder has already named. You never name a new theme.',
+  'Reply with ONE JSON array and nothing else. Each item:',
+  '{"uid": "the feedback id, exactly as given", "theme": "one theme, exactly as written in the list"}',
+  'Propose at most one theme per feedback item, and only where a theme clearly fits. Leave out an item that fits none.',
+  'Never invent an id or a theme. An empty array is a valid answer.',
+].join('\n');
+const MAX_FEEDBACK_ITEMS = 50;
+const shortBody = (v: unknown) => { const b = String(v ?? '').replace(/\s+/g, ' ').trim(); return b.length > 80 ? `${b.slice(0, 79)}…` : b; };
+
+async function venturesThemes(env: Env, projectId: number): Promise<string[]> {
+  const res = await env.DB.prepare(
+    "SELECT DISTINCT theme FROM product_feedback WHERE project_id = ? AND theme IS NOT NULL AND trim(theme) <> '' ORDER BY theme",
+  ).bind(projectId).all<{ theme: string }>();
+  return (res.results || []).map((t) => String(t.theme));
+}
+
+type FeedbackGathered = Gathered & { themes: string[]; bodies: Record<string, string> };
+
+const feedbackTheme: FillKind = {
+  kind: 'feedback_theme',
+  surface: 'grow/feedback-themes',
+  assistSurface: 'workspace',
+  fillClass: 'restatement',
+  task: 'grow_theme_feedback',
+  copy: {
+    run: 'Propose themes',
+    heading: 'Proposal · feedback placed in your themes',
+    empty: 'Nothing proposed yet. Eadwyn will place unthemed feedback into themes you have already named — it never names one.',
+    accept: 'Use this theme',
+  },
+  prompt: FEEDBACK_THEME_PROMPT,
+  // The theme is one the founder wrote, and the feedback is the customer's
+  // words; neither is Eadwyn's to retype.
+  editableField: null,
+  readable: (p) => `${shortBody(p.body)} → ${String(p.theme)}`,
+
+  async gather(ctx): Promise<Gathered> {
+    const themes = await venturesThemes(ctx.env, ctx.projectId);
+    // Two empties, said differently, as the pain tagger says them.
+    if (!themes.length) {
+      return { facts: '', empty: true, emptyReason: 'No feedback has a theme yet. Give one item a theme by hand first.' };
+    }
+    const res = await ctx.env.DB.prepare(
+      `SELECT uid, body FROM product_feedback WHERE project_id = ? AND (theme IS NULL OR trim(theme) = '')
+        ORDER BY created_at DESC, id DESC LIMIT ?`,
+    ).bind(ctx.projectId, MAX_FEEDBACK_ITEMS).all<{ uid: string; body: string }>();
+    const rows = res.results || [];
+    if (!rows.length) return { facts: '', empty: true, emptyReason: 'Every piece of feedback already has a theme.' };
+    return {
+      facts: [
+        'Themes:',
+        ...themes.slice(0, MAX_PROMPT_ITEMS).map((t) => `  - ${t}`),
+        '',
+        'Unthemed feedback:',
+        ...rows.map((r) => `  ${r.uid}: ${shortBody(r.body)}`),
+      ].join('\n'),
+      // The match-back set is this venture's unthemed rows; its themes travel beside it.
+      known: rows.map((r) => r.uid),
+      themes,
+      bodies: Object.fromEntries(rows.map((r) => [r.uid, String(r.body)])),
+    } as FeedbackGathered;
+  },
+
+  parse(text, gathered): Proposed[] {
+    const g = gathered as FeedbackGathered;
+    const rows = new Set(g.known || []);
+    // A theme is matched to the venture's own spelling, so a near-miss cannot become a second theme.
+    const themes = new Map((g.themes || []).map((t) => [t.toLowerCase(), t]));
+    const out: Proposed[] = [];
+    const seen = new Set<string>();
+    for (const raw of extractJsonArray(text).slice(0, MAX_FEEDBACK_ITEMS)) {
+      if (!raw || typeof raw !== 'object') continue;
+      const uid = String((raw as any).uid ?? '').trim();
+      const theme = themes.get(String((raw as any).theme ?? '').trim().toLowerCase());
+      if (!rows.has(uid) || !theme || seen.has(uid)) continue;
+      seen.add(uid);
+      const body = g.bodies?.[uid] ?? '';
+      const readable = `${shortBody(body)} → ${theme}`;
+      // `readable` travels in the payload too: the band draws a kind it has no shape for from it.
+      out.push({ payload: { uid, theme, body, readable }, targetRef: `product_feedback:${uid}`, readable });
+    }
+    return out;
+  },
+
+  async apply(ctx, payload) {
+    const uid = String(payload.uid || '');
+    const theme = String(payload.theme || '');
+    // Re-checked on accept: the theme must still be one of the venture's, and the
+    // row still unthemed, or the proposal no longer restates anything on file.
+    if (!(await venturesThemes(ctx.env, ctx.projectId)).includes(theme)) throw new Error('That theme no longer exists');
+    const row = await ctx.env.DB.prepare('SELECT id, theme FROM product_feedback WHERE uid = ? AND project_id = ?')
+      .bind(uid, ctx.projectId).first<{ id: number; theme: string | null }>();
+    if (!row) throw new Error('That feedback no longer exists');
+    if (row.theme && row.theme.trim()) throw new Error('That feedback already has a theme');
+    // `setFeedbackTheme` — the writer Change theme calls, writing what `PATCH /feedback/:uid` writes for a theme.
+    const written = await setFeedbackTheme(ctx.env, ctx.projectId, uid, theme, Number(ctx.user.id));
+    return {
+      written: `${shortBody(payload.body)} → ${String(written.theme)}`,
+      target: { table: 'product_feedback', rowId: Number(row.id), column: 'theme' },
+      result: { kind: 'feedback_theme', uid, theme: written.theme },
+    };
+  },
+
+  target() {
+    // The fallback; `apply` always returns the row it wrote. Row 0 cannot exist.
+    return { table: 'product_feedback', rowId: 0, column: 'theme' };
+  },
+};
+
 /** Every kind, by its stable id. The one list a new surface is added to. */
 export const FILL_KINDS: Record<string, FillKind> = {
   [painTag.kind]: painTag,
   [hypothesis.kind]: hypothesis,
   [marketSizing.kind]: marketSizing,
   [competitorScan.kind]: competitorScan,
+  [feedbackTheme.kind]: feedbackTheme,
 };
 
 export const fillKind = (kind: string): FillKind | null => FILL_KINDS[kind] || null;
