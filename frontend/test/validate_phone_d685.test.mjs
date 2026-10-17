@@ -1,8 +1,9 @@
 /**
- * D685 §5.12 (#1589) — Validate's phone focus, below md, from the reads that
- * exist: the focus card's rules, the interviews meter with and without a
- * target, and the six index rows, each from the raw overview, a missing
- * value "Not recorded", never 0.
+ * D685 §5.12 (#1589) — Validate's phone focus, from the reads that exist: the
+ * focus card's rules, the interviews meter with and without a target, and the
+ * index rows, a missing value "Not recorded", never 0. Since D703 (#1665's
+ * PR 1b) it is `PhoneCycleRoot` with `cycle: 'validate'`, drawn by
+ * `CycleRoute` below 1024px, and the index is the Worker's rows.
  *
  * Run with:
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/validate_phone_d685.test.mjs
@@ -15,12 +16,12 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { renderedText } from './_renderedText.mjs';
 import { FIRST_FOCUS, phoneFocus, phoneIndex, phoneMeter, targetValue } from '../src/pages/cycles/validatePhone.js';
-import ValidatePhoneFocus from '../src/pages/cycles/ValidatePhoneFocus.jsx';
+import PhoneCycleRoot from '../src/pages/cycles/PhoneCycleRoot.jsx';
 import { createRoot } from 'react-dom/client';
 import { installDocument } from './_contracts_dom.mjs';
 
 const h = React.createElement;
-const html = (raw, search = '?project_id=3') => renderToStaticMarkup(h(MemoryRouter, null, h(ValidatePhoneFocus, { raw, search })));
+const html = (raw, search = '?project_id=3') => renderToStaticMarkup(h(MemoryRouter, null, h(PhoneCycleRoot, { cycle: 'validate', raw, search })));
 const tag = (out, id) => {
   const at = out.indexOf(`data-testid="${id}"`);
   return at < 0 ? '' : out.slice(out.lastIndexOf('<', at), out.indexOf('>', at) + 1);
@@ -81,44 +82,42 @@ test('the meter: the count held this month, "No target set" until one is stored,
   assert.match(html({ figures: [{ key: 'interviews_this_month', state: 'unreadable' }], cards: RAW.cards }), />Unreadable</);
 });
 
-test('the index: the canvas\'s six module rows, each linking to its page, each from the overview, a missing value "Not recorded"', () => {
-  const rows = phoneIndex(RAW, '?project_id=3');
-  assert.deepEqual(rows.map((r) => r.title), ['Problem discovery', 'Customer research', 'Ideal customer profile', 'Market intelligence', 'Demand and urgency signals', 'Experiments and evidence']);
-  assert.deepEqual(rows.map((r) => r.href), ['/validate/problem-discovery?project_id=3', '/validate/customer-research?project_id=3', '/validate/ideal-customer-profile?project_id=3', '/validate/market-intelligence?project_id=3', '/validate/demand-signals?project_id=3', '/validate/experiments?project_id=3']);
-  const by = Object.fromEntries(rows.map((r) => [r.key, r]));
-  assert.equal(by['problem-discovery'].detail, '9 pain themes · 2 new');
-  assert.equal(by['customer-research'].detail, 'Recruiting · 3 booked', 'booked only: booked − done, not the cumulative funnel');
-  assert.equal(by['ideal-customer-profile'].detail, '3 segments');
-  assert.equal(by['market-intelligence'].value, '$610M');
-  assert.equal(by['demand-signals'].detail, 'Waitlist against the bar of 40');
-  assert.equal(by.experiments.value, '3 of 7');
-  const empty = Object.fromEntries(phoneIndex({ figures: [], cards: [] }).map((r) => [r.key, r]));
-  for (const r of Object.values(empty)) assert.equal(r.value, null, `${r.key}: Not recorded`);
-  assert.equal(empty['problem-discovery'].detail, 'Pain themes');
-  assert.equal(empty['customer-research'].detail, 'Recruiting');
-  assert.equal(phoneIndex({ ...RAW, figures: [{ key: 'pain_themes', value: 4, delta_30d: -1 }] })[0].detail, '4 pain themes', 'a drop is not "new"');
-  // #1609's booked count wins over the derived one.
-  const counted = phoneIndex({ ...RAW, index: { interviews_total: 22, booked: 4 } });
-  assert.equal(counted[1].detail, 'Recruiting · 4 booked');
-  assert.equal(phoneIndex({ ...RAW, index: { interviews_total: 0, booked: 0 } })[1].detail, 'Recruiting · 0 booked', 'a counted zero is shown');
-  const out = html({ figures: [], cards: [] });
-  assert.equal((out.match(/>Not recorded</g) || []).length >= 6, true);
+test('the index: the Worker\'s rows as sent, each linking to its page; with none sent, one "Unreadable" row per card, never a row the browser builds', () => {
+  const sent = [
+    { key: 'problem-discovery', title: 'Problem discovery', detail: '9 pain themes · 2 new', value: '', href: '/validate/problem-discovery?project_id=3' },
+    { key: 'customer-research', title: 'Customer research', detail: 'Recruiting · 3 booked', value: '', href: '/validate/customer-research?project_id=3' },
+    { key: 'market-intelligence', title: 'Market intelligence', detail: 'Total, serviceable, obtainable', value: null, href: '/validate/market-intelligence?project_id=3' },
+    { key: 'experiments', title: 'Experiments and evidence', detail: 'Hypotheses supported', value: '3 of 7', href: '/validate/experiments?project_id=3' },
+  ];
+  const rows = phoneIndex({ ...RAW, index: sent }, '?project_id=3');
+  assert.deepEqual(rows.map((r) => [r.key, r.detail, r.value, r.href]), sent.map((r) => [r.key, r.detail, r.value, r.href]));
+  // None sent (null), or #1609's retired `{ interviews_total, booked }` object: the cards, each "Unreadable".
+  for (const index of [null, undefined, { interviews_total: 22, booked: 4 }]) {
+    const fallback = phoneIndex({ ...RAW, index }, '?project_id=3');
+    assert.deepEqual(fallback.map((r) => r.key), RAW.cards.map((c) => c.slug), String(index));
+    assert.ok(fallback.every((r) => r.value === 'Unreadable'), 'no figure is built in the browser');
+    assert.deepEqual(fallback.map((r) => r.href), RAW.cards.map((c) => `/validate/${c.slug}?project_id=3`));
+  }
+  const out = html({ ...RAW, index: sent });
+  assert.equal((out.match(/>Not recorded</g) || []).length, 1, 'the one null value');
   assert.doesNotMatch(renderedText(out), /\b0 (pain themes|segments|booked)\b/, 'never a zero for a missing value');
 });
 
-test('phone only, a full-width CTA, dark pairs; mounted above the Validate overview from the raw read', () => {
+test('a full-width CTA, dark pairs; CycleRoute draws the root below 1024px from the raw read', () => {
   const out = html(RAW);
-  assert.match(tag(out, 'validate-phone'), /md:hidden/);
+  assert.doesNotMatch(tag(out, 'phone-root'), /md:hidden/, 'no breakpoint of its own: the route picks the page');
   assert.match(tag(out, 'phone-focus-cta'), /w-full/);
   assert.match(tag(out, 'phone-focus-cta'), /href="\/validate\/customer-research\?project_id=3"/);
-  assert.match(out, /dark:bg-gray-900/);
+  assert.match(tag(out, 'phone-focus-cta'), /bg-violet-700[^"]*dark:bg-violet-600/);
   assert.ok(renderedText(out).includes('Everything else in Validate'));
   const first = html({ cards: [{ slug: 'customer-research', state: 'empty' }] });
-  assert.ok(renderedText(first).includes('Then: Write the claim you most need to be true.'));
+  assert.match(first, />Then<\/p><p[^>]*>Write the claim you most need to be true\.<\/p>/, '"Then" once, as a label');
+  assert.doesNotMatch(renderedText(first), /Then:/);
   assert.match(tag(first, 'phone-focus-cta'), /href="\/validate\/record\?project_id=3"/);
   assert.doesNotMatch(first, /data-testid="phone-meter"/, 'no meter on the first-conversation card, as drawn');
   const route = readFileSync('frontend/src/pages/cycles/CycleRoute.jsx', 'utf8');
-  assert.match(route, /<ValidatePhoneFocus cycle=\{cycle\} raw=\{rawOverview\} search=\{q\} projectId=\{projectId\} onChanged=\{\(\) => setReload\(\(n\) => n \+ 1\)\} \/>/, 'a saved target re-reads the overview');
+  assert.ok(route.includes('<PhoneCycleRoot cycle={cycle} raw={rawOverview} status={overviewState} search={q} projectId={projectId}\n        openAction={openAction} onChanged={() => setReload((n) => n + 1)} onRetry={() => setReload((n) => n + 1)} />'),
+    'a saved target re-reads the overview');
   assert.match(route, /setRawOverview\(data\); setOverview\(adaptOverview\(cycle, data\)\)/, 'the raw read, before adapting');
 });
 
@@ -138,7 +137,7 @@ test('Set a target: a whole number above zero, empty clears it; saved through #1
   const restore = installDocument();
   const container = document.createElement('div'); document.body.appendChild(container);
   const root = createRoot(container);
-  const render = () => act(async () => { root.render(h(MemoryRouter, null, h(ValidatePhoneFocus, { raw: RAW, search: '?project_id=3', projectId: 3, api, onChanged: () => { changed += 1; } }))); });
+  const render = () => act(async () => { root.render(h(MemoryRouter, null, h(PhoneCycleRoot, { cycle: 'validate', raw: RAW, search: '?project_id=3', projectId: 3, api, onChanged: () => { changed += 1; } }))); });
   const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
   const pr = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
   const by = (id) => walk(container).find((n) => pr(n)['data-testid'] === id);

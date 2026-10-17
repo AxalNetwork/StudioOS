@@ -43,6 +43,7 @@ runs these directly against an in-process SQLite, with no request at all.
 | `email/` | Transactional mail. |
 | `fills/` | "AI fills the blanks" — the fill-kind registry and the provenance of an accepted fill. A `sourced` fill carries a citation or it is dropped. |
 | `market_intel/` | Sourcing, extraction and scoring for market intelligence. |
+| `mercury/` | D710: Mercury for fund administration, read-only. A GET-only client, the boundary parser that drops account numbers, the gates and read audit, the entity connections' store, the hourly sync and the reconciliation matches. Its README has the rules. |
 | `referrals/` | Referral submissions. |
 | `records/` | D690's scoped cycle record contract, registry and ownership checks. |
 | `signals/` | Signal ingestion and evidence. |

@@ -71,7 +71,7 @@ export const RETURNS = [
 ];
 export const checks = {
   doors(m=actual) {
-    const groups = [['grow','distribution'],['raise','cap-table'],['build','company-creation'],['raise','capital-relationships']];
+    const groups = [['grow','distribution'],['raise','cap-table'],['build','company-creation'],['raise','capital-relationships'],['raise','data-room']];
     const out = groups.map(([cycle,slug])=>{
       const tools=m.navigation.moduleToolLinks(cycle,slug,founder,'?project_id=41');
       return links(render(m.CycleModulePage,{cycle,slug,tools,data:{module:{name:slug},records:{cols:[],rows:[],total:0}}}), 'cycle-module-tool');
@@ -81,6 +81,8 @@ export const checks = {
       [{href:'/raise/liquidity?project_id=41',label:'Open liquidity',quiet:true}],
       [{href:'/legal?project_id=41',label:'Open legal documents',quiet:true},{href:'/legal/send?project_id=41',label:'Open e-signature',quiet:true}],
       [{href:'/raise/capital-match?project_id=41',label:'Open investor match',quiet:true}],
+      // D696: the files door's own query comes first; static markup escapes its `&`.
+      [{href:'/raise/data-room?mode=workspace&amp;project_id=41',label:'Open the files tool',quiet:true}],
     ]);
   },
   gates(m=actual) {
@@ -141,6 +143,6 @@ export const checks = {
       const block=routeBlock(app,t.path)||'';
       const roles=block.match(/guard\(\[([^\]]*)\]/)?.[1]||'';
       return [t.path,t.roles.every(r=>roles.includes("'"+r+"'"))];
-    }),[['/grow/brand',true],['/grow/launch',true],['/raise/liquidity',true],['/legal',true],['/legal/send',true],['/raise/capital-match',true]]);
+    }),[['/grow/brand',true],['/grow/launch',true],['/raise/liquidity',true],['/legal',true],['/legal/send',true],['/raise/capital-match',true],['/raise/data-room',true]]);
   },
 };
