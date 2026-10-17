@@ -586,7 +586,8 @@ function buildFixture() {
     CREATE TABLE entity_obligations(id INTEGER PRIMARY KEY, entity_id INTEGER, title TEXT, due_date TEXT, status TEXT, kind TEXT, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE entities(id INTEGER PRIMARY KEY, jurisdiction TEXT);
     CREATE TABLE incorporations(id INTEGER PRIMARY KEY, project_id INTEGER, status TEXT, paid_at TEXT, packet_ready_at TEXT, filed_on TEXT, jurisdiction_id TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
-    CREATE TABLE integrations(id INTEGER PRIMARY KEY, uid TEXT, user_id INTEGER, provider_key TEXT, display_name TEXT, status TEXT, last_synced_at TEXT, last_error_at TEXT);
+    CREATE TABLE integrations(id INTEGER PRIMARY KEY, uid TEXT, user_id INTEGER, provider_key TEXT, display_name TEXT, status TEXT, last_synced_at TEXT, last_error_at TEXT, config_json TEXT);
+    CREATE TABLE cap_table_scenarios(id INTEGER PRIMARY KEY, project_id INTEGER, is_variant INTEGER DEFAULT 0, inputs_json TEXT, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE integration_companies(integration_id INTEGER, company_id INTEGER, enabled INTEGER);
     CREATE TABLE ritual_runs(id INTEGER PRIMARY KEY, project_id INTEGER, run_date TEXT, state TEXT);
     CREATE TABLE spinout_applications(id INTEGER PRIMARY KEY, user_id INTEGER, status TEXT, answers_json TEXT);
@@ -598,6 +599,7 @@ function buildFixture() {
   `);
   db.exec(sqlOf('441_build_cycle_stores.sql'));
   db.exec(sqlOf('455_core_systems_workspace.sql'));
+  db.exec(sqlOf('461_build_record_stores.sql'));
   db.exec('CREATE TABLE google_oauth_tokens(user_id INTEGER PRIMARY KEY); CREATE TABLE microsoft_oauth_tokens(user_id INTEGER PRIMARY KEY)');
   return db;
 }
@@ -774,7 +776,7 @@ test('D661: every Add form sends a body its Worker route accepts, and the row re
   assert.ok(steps.some((r: any) => r.cells.filing === 'Register for payroll' && r.cells.due === dayFrom(45)));
   // A must-have: MVP scope adds the feature, D662's route marks it and dates it.
   const musts = (await buildCall(buildDb, `/modules/prototype-mvp?project=${BP}`)).body.records.rows;
-  assert.deepEqual(musts.map((r: any) => [r.cells.must_have, r.cells.state, r.cells.due]), [['Reconciliation report', 'In Progress', dayFrom(30)]]);
+  assert.deepEqual(musts.map((r: any) => [r.cells.must_have, r.cells.state, r.cells.due]), [['Reconciliation report', 'In progress', dayFrom(30)]]);
   // The checklist tick, and its undo.
   await w.grow.checklist(GP, 'board_cadence', true);
   let parts = (await growCall(grow, 'GET', `/modules/durable-company-building?project=${GP}`)).body.parts.checklist;
@@ -888,7 +890,7 @@ test('D661: Build\'s Edit forms change formation steps and the must-have mark, a
   const current = initialValues(step, step.valuesOf(ein));
   assert.deepEqual(current, { title: 'Get EIN', due_date: '', state: 'todo' });
   await step.submit(w, BP, step.idOf(ein), { ...current, state: 'done', due_date: dayFrom(10) });
-  assert.deepEqual((await rows('company-creation')).filter((r: any) => r.cells.filing === 'Get EIN').map((r: any) => [r.cells.state, r.cells.due]), [['done', dayFrom(10)]]);
+  assert.deepEqual((await rows('company-creation')).filter((r: any) => r.cells.filing === 'Get EIN').map((r: any) => [r.cells.state, r.edit.state, r.cells.due]), [['Filed', 'done', dayFrom(10)]]);
 
   // A must-have's date, and taking one off the list; the feature stays in scope.
   const must = editFor('build', 'prototype-mvp');

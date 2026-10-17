@@ -30,7 +30,7 @@ import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { canReadBoard, canWrite, type ProjectRef } from './_founder_validate_helpers';
-import { statesFor, wouldCycle, scenarioDiff, STATE_LABELS, type OkrEdge } from '../services/okrGraph';
+import { statesFor, scenarioDiff, STATE_LABELS, addOkrDependency, type OkrEdge } from '../services/okrGraph';
 
 const founderRoadmap = new Hono<{ Bindings: Env }>();
 
@@ -271,31 +271,10 @@ founderRoadmap.post('/:projectId/dependencies', async (c) => {
   const okrId = idOrNull(body.okr_id);
   const blocksId = idOrNull(body.blocks_okr_id);
   if (!okrId || !blocksId) return json({ detail: 'Both okr_id and blocks_okr_id are required' }, 400);
-  if (okrId === blocksId) return json({ detail: 'An objective cannot block itself' }, 400);
-
-  const okrs = await loadOkrs(c.env, projectId);
-  const here = new Set(okrs.map((o) => Number(o.id)));
-  if (!here.has(okrId) || !here.has(blocksId)) {
-    return json({ detail: 'Both objectives must be on this roadmap' }, 400);
-  }
-
-  const deps = await loadDeps(c.env, projectId);
-  if (deps.some((d) => Number(d.okr_id) === okrId && Number(d.blocks_okr_id) === blocksId)) {
-    return json({ detail: 'That link is already recorded' }, 409);
-  }
-  if (wouldCycle(deps as OkrEdge[], okrId, blocksId)) {
-    return json({
-      detail: 'That link would make two objectives block each other',
-      cycle: true,
-    }, 409);
-  }
-
-  const res = await c.env.DB.prepare(
-    'INSERT INTO okr_dependencies (project_id, okr_id, blocks_okr_id, note, created_by)'
-    + ' VALUES (?,?,?,?,?)',
-  ).bind(projectId, okrId, blocksId, trimOrNull(body.note), user.id ?? null).run();
-
-  return json({ id: res.meta?.last_row_id ?? null, okr_id: okrId, blocks_okr_id: blocksId }, 201);
+  // The four refusals live in the one edge write, which Build calls too.
+  const out = await addOkrDependency(c.env, { projectId, okrId, blocksOkrId: blocksId, note: trimOrNull(body.note), userId: user.id ?? null });
+  if (!out.ok) return json({ detail: out.detail, ...(out.cycle ? { cycle: true } : {}) }, out.status);
+  return json({ id: out.id, okr_id: okrId, blocks_okr_id: blocksId }, 201);
 });
 
 /** DELETE /api/founder/roadmap/dependencies/:id — remove one link. */

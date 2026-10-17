@@ -39,6 +39,7 @@
  * age the blockage's age would be a specific, confident, wrong number, so the
  * route reports the link's age as the link's age and the page labels it that way.
  */
+import type { Env } from '../types';
 
 export type OkrNode = {
   id: number;
@@ -183,4 +184,38 @@ export function scenarioDiff(
     out.push({ okr_id: id, from, to });
   }
   return out;
+}
+
+export type EdgeWrite =
+  | { ok: true; id: number | null; okr_id: number; blocks_okr_id: number }
+  | { ok: false; status: 400 | 409; detail: string; cycle?: true };
+
+/**
+ * Record that `okrId` blocks `blocksOkrId` on one roadmap (D690, #1693
+ * decision 4: "Waits on X" is an edge from X). The one edge write, so the
+ * founder roadmap and Build refuse the same four states the graph cannot hold:
+ * an item blocking itself, an end on another roadmap, the same edge twice, and
+ * a cycle through `wouldCycle`. The only function here that reads the store;
+ * the caller has checked access and that the store exists.
+ */
+export async function addOkrDependency(env: Env, input: { projectId: number; okrId: number; blocksOkrId: number; note: string | null; userId: number | null }): Promise<EdgeWrite> {
+  const { projectId, okrId, blocksOkrId } = input;
+  if (okrId === blocksOkrId) return { ok: false, status: 400, detail: 'An objective cannot block itself' };
+  const okrs = await env.DB.prepare('SELECT id FROM roadmap_okrs WHERE project_id = ?').bind(projectId).all<{ id: number }>();
+  const here = new Set((okrs.results || []).map((o) => Number(o.id)));
+  if (!here.has(okrId) || !here.has(blocksOkrId)) return { ok: false, status: 400, detail: 'Both objectives must be on this roadmap' };
+  const deps = await env.DB.prepare('SELECT okr_id, blocks_okr_id FROM okr_dependencies WHERE project_id = ? ORDER BY id ASC')
+    .bind(projectId).all<OkrEdge>();
+  const edges = deps.results || [];
+  if (edges.some((d) => Number(d.okr_id) === okrId && Number(d.blocks_okr_id) === blocksOkrId)) {
+    return { ok: false, status: 409, detail: 'That link is already recorded' };
+  }
+  if (wouldCycle(edges, okrId, blocksOkrId)) {
+    return { ok: false, status: 409, detail: 'That link would make two objectives block each other', cycle: true };
+  }
+  const res = await env.DB.prepare(
+    'INSERT INTO okr_dependencies (project_id, okr_id, blocks_okr_id, note, created_by)'
+    + ' VALUES (?,?,?,?,?)',
+  ).bind(projectId, okrId, blocksOkrId, input.note, input.userId).run();
+  return { ok: true, id: res.meta?.last_row_id ?? null, okr_id: okrId, blocks_okr_id: blocksOkrId };
 }

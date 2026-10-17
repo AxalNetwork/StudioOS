@@ -277,8 +277,9 @@ export function formFor(cycle, slug) {
 // An Edit form is an Add form's shape plus two readers: `idOf(row)`, the
 // store's own id for the row (null when the row is not one the route can
 // change, which draws no Edit), and `valuesOf(row)`, the row's current values.
-// Grow's rows carry them as `edit` (`adapters/grow.js`); Build's rows are the
-// read's own cells. `submit` takes the id.
+// Grow's rows carry them as `edit` (`adapters/grow.js`); Build's rows carry
+// `edit` too, their stored values (D690, #1693), and a row without it is read
+// from its cells. `submit` takes the id.
 
 const asText = (v) => (v == null ? '' : String(v));
 const dateText = (v) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v) ? v.slice(0, 10) : '');
@@ -390,7 +391,7 @@ const editFormationStep = {
   ],
   // Only `step-<id>` rows are formation steps; Lab steps and obligations share the table.
   idOf: buildId('step-'),
-  valuesOf: (row) => ({ title: asText(row?.cells?.filing), due_date: dateText(row?.cells?.due), state: asText(row?.cells?.state) }),
+  valuesOf: (row) => { const e = growEdit(row); return e ? { ...e, title: asText(e.title), due_date: dateText(e.due_date), state: asText(e.state) } : { title: asText(row?.cells?.filing), due_date: dateText(row?.cells?.due), state: asText(row?.cells?.state) }; },
   toBody: (v) => ({ title: str(v.title), due_date: str(v.due_date), state: v.state }),
   submit: (w, projectId, id, v) => w.build.formationStepUpdate(projectId, id, editFormationStep.toBody(v)),
 };
@@ -405,7 +406,7 @@ const editMustHave = {
     { name: 'due_date', label: 'Due', type: 'date' },
   ],
   idOf: buildId(''),
-  valuesOf: (row) => ({ is_must_have: 'yes', due_date: dateText(row?.cells?.due) }),
+  valuesOf: (row) => { const e = growEdit(row); return e ? { ...e, is_must_have: 'yes', due_date: dateText(e.due_date) } : { is_must_have: 'yes', due_date: dateText(row?.cells?.due) }; },
   toBody: (v) => ({ is_must_have: v.is_must_have === 'yes', due_date: str(v.due_date) }),
   submit: (w, projectId, id, v) => w.build.feature(projectId, id, editMustHave.toBody(v)),
 };
@@ -464,7 +465,7 @@ const editSystem = {
     { name: 'used_by', label: 'Used by', type: 'text', max: 200 },
   ],
   idOf: (row) => (SYSTEM_KINDS.includes(String(row?.id)) ? String(row.id) : null),
-  valuesOf: (row) => { const u = row?.cells?.used_by; return { choice: '', used_by: typeof u === 'string' ? u : asText(u?.text) }; },
+  valuesOf: (row) => { const e = growEdit(row); if (e) return { ...e, choice: '', used_by: asText(e.used_by) }; const u = row?.cells?.used_by; return { choice: '', used_by: typeof u === 'string' ? u : asText(u?.text) }; },
   // Loaded before the form draws: the choices for this row's kind.
   loadOptions: async (w, projectId, kind) => ({ choice: systemOptions(await w.build.systemChoices(projectId), kind, projectId) }),
   toBody: (v, kind) => {

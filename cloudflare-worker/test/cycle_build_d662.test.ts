@@ -32,7 +32,8 @@ function fixture() {
     CREATE TABLE entity_obligations(id INTEGER PRIMARY KEY, entity_id INTEGER, title TEXT, due_date TEXT, status TEXT, kind TEXT, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE entities(id INTEGER PRIMARY KEY, jurisdiction TEXT);
     CREATE TABLE incorporations(id INTEGER PRIMARY KEY, project_id INTEGER, status TEXT, paid_at TEXT, packet_ready_at TEXT, filed_on TEXT, jurisdiction_id TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
-    CREATE TABLE integrations(id INTEGER PRIMARY KEY, uid TEXT, user_id INTEGER, provider_key TEXT, display_name TEXT, status TEXT, last_synced_at TEXT, last_error_at TEXT);
+    CREATE TABLE integrations(id INTEGER PRIMARY KEY, uid TEXT, user_id INTEGER, provider_key TEXT, display_name TEXT, status TEXT, last_synced_at TEXT, last_error_at TEXT, config_json TEXT);
+    CREATE TABLE cap_table_scenarios(id INTEGER PRIMARY KEY, project_id INTEGER, is_variant INTEGER DEFAULT 0, inputs_json TEXT, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE integration_companies(integration_id INTEGER, company_id INTEGER, enabled INTEGER);
     CREATE TABLE ritual_runs(id INTEGER PRIMARY KEY, project_id INTEGER, run_date TEXT, state TEXT);
     CREATE TABLE spinout_applications(id INTEGER PRIMARY KEY, user_id INTEGER, status TEXT, answers_json TEXT);
@@ -44,6 +45,7 @@ function fixture() {
   `);
   db.exec(migration);
   db.exec(readFileSync('cloudflare-worker/sql/migrations/455_core_systems_workspace.sql', 'utf8'));
+  db.exec(readFileSync('cloudflare-worker/sql/migrations/461_build_record_stores.sql', 'utf8'));
   db.exec('CREATE TABLE google_oauth_tokens(user_id INTEGER PRIMARY KEY); CREATE TABLE microsoft_oauth_tokens(user_id INTEGER PRIMARY KEY)');
   const env = { DB: d1Over(db), JWT_SECRET, ENVIRONMENT: 'development' } as any;
   return { db, env };
@@ -129,19 +131,19 @@ test('founder vesting follows both holder and user and never mixes projects', as
   assert.equal(one.status, 200);
   assert.equal(one.body.records.rows.length, 1);
   assert.equal(cardView(one.body.card).state, 'ok');
-  assert.match(one.body.records.rows[0].cells.vesting, /2026-01-01/);
+  assert.equal(one.body.records.rows[0].cells.vesting, '4y · cliff 1 Jan 2027');
   assert.match(one.body.card.series[1].items[0].label, /12m cliff/);
-  assert.equal(one.body.records.rows[0].cells.agreement, 'generated');
-  assert.doesNotMatch(one.body.records.rows[0].cells.vesting, /2020-01-01/);
-  assert.doesNotMatch(one.body.records.rows[0].cells.vesting, /2024-01-01/);
+  assert.equal(one.body.records.rows[0].cells.agreement, 'Awaiting');
+  assert.doesNotMatch(one.body.records.rows[0].cells.vesting, /1 Feb 2020/);
+  assert.doesNotMatch(one.body.records.rows[0].cells.vesting, /1 Jul 2024/);
   const other = await call(env, '/api/cycles/build/modules/founding-team?project=202');
   assert.equal(other.status, 403);
   const two = await call(env, '/api/cycles/build/modules/founding-team?project=202', 2);
   assert.equal(two.body.records.rows[0].cells.founder, 'Founder B');
-  assert.match(two.body.records.rows[0].cells.vesting, /2025-01-01/);
+  assert.equal(two.body.records.rows[0].cells.vesting, '2y · cliff 1 Jul 2025');
   const secondCompanyFounder = two.body.records.rows.find((row: any) => row.cells.founder === 'Founder A on another project');
-  assert.match(secondCompanyFounder.cells.vesting, /2024-01-01/);
-  assert.equal(secondCompanyFounder.cells.agreement, 'signed');
+  assert.equal(secondCompanyFounder.cells.vesting, '2y · cliff 1 Jul 2024');
+  assert.equal(secondCompanyFounder.cells.agreement, 'Signed');
   db.close();
 });
 
