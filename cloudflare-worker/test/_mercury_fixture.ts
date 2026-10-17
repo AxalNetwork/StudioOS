@@ -44,6 +44,7 @@ export function freshDb(): DatabaseSync {
     db.exec(noFks(tableFromBaseline(BASELINE, t)));
   }
   db.exec(migration('312_fund_call_ledger.sql'));
+  db.exec(migration('473_fund_management_fees.sql'));
   db.exec(migration('472_entity_bank_accounts.sql'));
   db.exec(migration('474_mercury_entity_connections.sql'));
   const u = db.prepare('INSERT INTO users (id, role, name, email) VALUES (?, ?, ?, ?)');
