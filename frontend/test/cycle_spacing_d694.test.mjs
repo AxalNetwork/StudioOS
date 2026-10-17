@@ -46,7 +46,7 @@ test('legacy, static, unknown and malformed child routes keep their own shell', 
 test('literal cycle routes mount a cycle page or a redirect', () => {
   const app = read('frontend/src/App.jsx');
   const routes = [...app.matchAll(/<Route path="([^":]+)" element=\{/g)];
-  const exceptions = new Set(['/validate/record/live', '/raise/data-room']);
+  const exceptions = new Set(['/validate/record/live']);
   for (const [index, route] of routes.entries()) {
     if (!isCyclePath(route[1]) || exceptions.has(route[1])) continue;
     const section = app.slice(route.index, routes[index + 1]?.index ?? app.length);

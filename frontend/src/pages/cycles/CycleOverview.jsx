@@ -2,6 +2,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Unrecorded, Unreadable } from '../../ui';
 import { Chart, Spark } from './CycleCharts';
 import { cardView, cycleOf, cycleTabs, figureDelta, figureValue, isPlainClick, linkSearch, nextHref, safeHref, sparkDrawable } from './cycleModel';
+import { MODULES } from './modules';
 
 /**
  * D661 (#1474) — one overview for all four cycles, drawn to
@@ -45,7 +46,7 @@ export function CycleHeader({ cycle, cards, active = null, action, title, sub, r
           : !record && href ? <Link className={btn} to={href} data-testid="cycle-action" aria-haspopup={action?.onOpen ? 'dialog' : undefined} onClick={action?.onOpen ? (e) => { if (isPlainClick(e)) { e.preventDefault(); action.onOpen(); } } : undefined}>{label}</Link> : null}
       </div>
       <p className="m-0 text-[13px] leading-relaxed text-axal-ink/80 dark:text-gray-300">{sub ?? `${meta.outcome}. The cycle’s data at a glance; the tabs above move between modules.`}</p>
-      <nav aria-label={`${meta.name} modules`} className="mt-1 hidden flex-wrap gap-1.5 md:flex" data-testid="cycle-tabs">
+      <nav aria-label={`${meta.name} modules`} className="mt-1 hidden flex-wrap gap-1.5 lg:flex" data-testid="cycle-tabs">
         {tabs.map((t) => (
           <Link key={t.key || 'overview'} to={t.href} aria-current={t.active && !t.back ? 'page' : undefined}
             className={`whitespace-nowrap rounded-full border px-[11px] py-[5px] text-[11px] ${t.active ? 'border-axal-lavender-edge bg-axal-lavender font-bold text-axal-violet-deep dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300' : 'border-axal-hairline bg-white font-semibold text-axal-muted hover:text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:text-gray-100'}`}>
@@ -53,7 +54,7 @@ export function CycleHeader({ cycle, cards, active = null, action, title, sub, r
           </Link>
         ))}
       </nav>
-      <label className="mt-1 flex min-h-[44px] items-center gap-2 rounded-xl border border-axal-hairline bg-white px-3.5 md:hidden dark:border-gray-700 dark:bg-gray-900">
+      <label className="mt-1 flex min-h-[44px] items-center gap-2 rounded-xl border border-axal-hairline bg-white px-3.5 lg:hidden dark:border-gray-700 dark:bg-gray-900">
         <span className={`${SECTION} text-axal-muted dark:text-gray-400`}>{record ? 'Record' : 'Module'}</span>
         {/* Keyed by tab, not href (D686): a history tab and its module tab can share one path. */}
         <select className="min-w-0 flex-1 bg-transparent text-sm font-bold text-axal-ink outline-none dark:text-gray-100" value={record ? 'record' : current.key || 'overview'}
@@ -155,7 +156,8 @@ export function CycleCard({ cycle, card, slug, onRetry, search = '' }) {
   );
 }
 
-export default function CycleOverview({ cycle, data, status = data ? 'ready' : 'loading', message = '', onRetry, onRetryCard, action, placeholders = 6, search = '' }) {
+// D693 decision 14: a loading overview draws one placeholder per module of its cycle.
+export default function CycleOverview({ cycle, data, status = data ? 'ready' : 'loading', message = '', onRetry, onRetryCard, action, placeholders = MODULES[cycle]?.length ?? 6, search = '' }) {
   const meta = cycleOf(cycle);
   if (!meta) return null;
   const cards = Array.isArray(data?.cards) ? data.cards : [];

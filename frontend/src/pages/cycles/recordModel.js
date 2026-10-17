@@ -4,8 +4,10 @@
  */
 import { CYCLES, TONES, safeHref } from './cycleModel.js';
 import { exportPersonaPdf } from '../../lib/personaPdf.js';
+import { exportDecisionMemoPdf } from '../../lib/decisionMemoPdf.js';
 
 import { RECORD_ID } from './cyclePaths.js';
+import { editFieldsFor } from './forms.js';
 export { RECORD_ID };
 const slug = (value) => String(value ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 export const sectionId = (cycleName, moduleName, title) => 'rec-' + slug(cycleName + ' ' + moduleName + ' ' + title);
@@ -39,6 +41,8 @@ export function recordLink(href) {
 
 export const CLIENT_ACTIONS = new Map([
   ['export-persona', (record) => exportPersonaPdf(record)],
+  // D693 decision 11: the decision memo, a one-page PDF drawn in the browser.
+  ['export-memo', (record) => exportDecisionMemoPdf(record)],
 ]);
 
 export function dispatchOf(action) {
@@ -105,7 +109,15 @@ export function recordFormFor(action, record, edit) {
   if (action.key === 'edit') {
     const row = { id: record.id, edit: { id: record.id, uid: record.uid ?? record.id } };
     const id = edit?.idOf(row);
-    return id == null ? null : { form: edit, current, id };
+    if (id == null) return null;
+    // D695 (#1656): an Edit that reads its record (Validate's) takes the values
+    // through its own `valuesOf`, as a row's `edit`, and draws only the fields
+    // those values carry, so a save never blanks a value it did not show.
+    if (edit.readsRecord) {
+      const values = edit.valuesOf({ ...row, edit: { ...current, ...row.edit } });
+      return { form: editFieldsFor(edit, values), current: values, id };
+    }
+    return { form: edit, current, id };
   }
   return action.form ? { form: { ...action.form, fields }, current, id: record.id } : null;
 }
@@ -128,6 +140,9 @@ export function recordActionBody(action, values = {}) {
   }
   return form;
 }
+
+/** The record's own Edit action, from a record read, or null. */
+export const recordEditAction = (record) => (record?.actions ?? []).find((action) => action?.key === 'edit' && action.kind === 'form') ?? null;
 
 /** Hide forms with no saving path, including an Edit with no registered store id. */
 export function availableRecord(record, edit) {
