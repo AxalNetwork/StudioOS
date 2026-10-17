@@ -14,6 +14,8 @@ import { requireAuth, requireApprovedKyc } from '../auth';
 import { FundReportRefusal,reportId,readFundPage,readFundPeriod,saveFundPeriod } from '../services/fundReports';
 import { AUTH_ERROR_STATUSES } from '../util/authErrors';
 import { requireFundGp, requireFundCreator } from '../services/fundGpAccess';
+import { assertFundAct, auditFundAct, type FundActKey } from '../services/fundAdminAccess';
+import { DISTRIBUTION_LPS_SQL, splitDistribution } from '../services/fundDistributionSplit';
 import { Funds, LPs } from '../models/funds';
 import { Jobs } from '../models/jobs';
 import { enqueueJob } from '../services/queue';
@@ -624,17 +626,70 @@ funds.post('/', async (c) => {
   return c.json({ ok: true, fund: f, lpa_status: 'enqueued' }, 201);
 });
 
+/**
+ * D714 — an activity row, written directly. `logActivity` leaves
+ * `activity_logs.action` (NOT NULL) unset and swallows the failure, so on a
+ * database built from the migrations it records nothing — the LP-type route
+ * below says the same. The act has already happened, so this never throws.
+ */
+async function recordFundActivity(
+  env: Env, userId: number, action: string, entityType: string, entityId: number, metadata: Record<string, unknown>,
+): Promise<void> {
+  try {
+    await env.DB.prepare(
+      `INSERT INTO activity_logs (user_id, action, action_type, entity_type, entity_id, metadata)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).bind(userId, action, action, entityType, String(entityId), JSON.stringify(metadata)).run();
+  } catch (e) {
+    console.warn('[funds] activity row failed', action, (e as Error).message);
+  }
+}
+
+/** A stored value and a requested one, compared as the column holds them (null included). */
+const sameValue = (stored: unknown, next: unknown) => {
+  const norm = (v: unknown) => (v === null || v === undefined || v === '' ? null : Number(v));
+  return norm(stored) === norm(next);
+};
+
+/**
+ * D714 — which act a PATCH is. Changing the GP of record hands every GP gate
+ * to another account, and the distribution job withholds carry at
+ * `carried_interest`; both are Super Admin acts. Anything else is `fund.write`.
+ */
+function fundPatchAct(fund: any, body: any): FundActKey {
+  const has = (k: string) => body && typeof body === 'object' && Object.prototype.hasOwnProperty.call(body, k);
+  if (has('gp_user_id') && !sameValue(fund?.gp_user_id, body.gp_user_id)) return 'fund.gp_of_record';
+  if (['carried_interest', 'management_fee'].some((k) => has(k) && !sameValue(fund?.[k], body[k]))) return 'fund.economics';
+  return 'fund.write';
+}
+
+/** The fields that record who controls a fund or what it withholds: their old and new values are kept. */
+const FUND_CONTROL_FIELDS = ['gp_user_id', 'carried_interest', 'management_fee'];
+
 funds.patch('/:id', async (c) => {
   const id = parseInt(c.req.param('id'), 10);
-  await requireFundGp(c, id);
+  const gp = await requireFundGp(c, id);
   const body = await c.req.json();
+  const act = fundPatchAct(gp.fund, body);
+  await assertFundAct(c, gp, act);
   const f = await Funds.update(c.env, id, body);
+  // D714 decision 4: the edit wrote no audit row. The changed field names, and
+  // for the control fields their old and new values.
+  const before: any = gp.fund || {};
+  const after: any = f || {};
+  const fields = Object.keys(after).filter((k) => k !== 'updated_at' && k in before && before[k] !== after[k]);
+  const changes: Record<string, { from: unknown; to: unknown }> = {};
+  for (const k of FUND_CONTROL_FIELDS) if (fields.includes(k)) changes[k] = { from: before[k] ?? null, to: after[k] ?? null };
+  await recordFundActivity(c.env, Number(gp.user.id), 'fund_updated', 'fund', id, { fields, changes });
+  await auditFundAct(c.env, gp.user, act, { fund_id: id, fields, changes });
   return c.json({ ok: true, fund: f });
 });
 
 funds.post('/:id/regenerate-lpa', async (c) => {
   const id = parseInt(c.req.param('id'), 10);
-  const { fund } = await requireFundGp(c, id);
+  const gp = await requireFundGp(c, id);
+  await assertFundAct(c, gp, 'fund.write');
+  const { fund } = gp;
   if (!fund?.gp_user_id) {
     return refuse(c, 409, {
       code: 'no_gp_of_record',
@@ -644,6 +699,7 @@ funds.post('/:id/regenerate-lpa', async (c) => {
   // Clear any prior LPA doc reference so the worker re-generates.
   await c.env.DB.prepare(`UPDATE vc_funds SET lpa_doc_id = NULL WHERE id = ?`).bind(id).run();
   const job = await Jobs.enqueue(c.env, 'lpa_generation', { fund_id: id });
+  await auditFundAct(c.env, gp.user, 'fund.write', { fund_id: id, write: 'regenerate_lpa' });
   return c.json({ ok: true, enqueued_job: job });
 });
 
@@ -684,8 +740,13 @@ funds.post('/:id/report-periods', async (c) => {
  try{
   const fundId=reportId(c.req.param('id'));
   if(!fundId)throw new FundReportRefusal('not_found',404);
-  const {user:issuer}=await requireFundGp(c,fundId);
-  const result=await saveFundPeriod(c.env,fundId,issuer.id,await c.req.json().catch(()=>null));
+  const gp=await requireFundGp(c,fundId);
+  // D714: the body is read once, the draft act asserted, and the same body
+  // saved. #1777 owns the `issue: true` path inside saveFundPeriod.
+  const body=await c.req.json().catch(()=>null);
+  await assertFundAct(c,gp,'fund_report.draft');
+  const result=await saveFundPeriod(c.env,fundId,gp.user.id,body);
+  await auditFundAct(c.env,gp.user,'fund_report.draft',{fund_id:fundId,period_id:result.period?.id??null});
   return c.json({ok:true,period:result.period},result.created?201:200);
  }catch(error){return fundReportError(c,error);}
 });
@@ -771,8 +832,14 @@ funds.get('/:id/lp-report/:lpId', async (c) => {
 
 funds.post('/:id/lps', async (c) => {
   const fundId = parseInt(c.req.param('id'), 10);
-  const { user } = await requireFundGp(c, fundId);
+  const gp = await requireFundGp(c, fundId);
+  const { user } = gp;
   const body = await c.req.json();
+  // D714: an LP with a first call issues a call — a Super Admin act — so a
+  // plain Admin's request is refused whole, and nothing is written.
+  const firstCall = !!(body?.first_call_cents && body.first_call_cents > 0);
+  const act: FundActKey = firstCall ? 'capital_call.issue' : 'fund.write';
+  await assertFundAct(c, gp, act);
   const lp = await LPs.create(c.env, { ...body, fund_id: fundId });
   if (!lp) return c.json({ error: 'create failed' }, 500);
   // First-call automation: enqueue a notice immediately if amount provided.
@@ -789,6 +856,9 @@ funds.post('/:id/lps', async (c) => {
       issued_by: Number(user.id),
     });
   }
+  await auditFundAct(c.env, user, act, {
+    fund_id: fundId, lp_id: (lp as any)?.id ?? null, ...(firstCall ? { amount_cents: body.first_call_cents } : {}),
+  });
   return c.json({ ok: true, lp }, 201);
 });
 
@@ -801,7 +871,9 @@ funds.post('/:id/lps', async (c) => {
 funds.put('/:id/lps/:lpId/type', async (c) => {
   const fundId = parseInt(c.req.param('id'), 10);
   const lpId = parseInt(c.req.param('lpId'), 10);
-  const { user } = await requireFundGp(c, fundId);
+  const gp = await requireFundGp(c, fundId);
+  const { user } = gp;
+  await assertFundAct(c, gp, 'fund.write');
   const body = await c.req.json().catch(() => ({} as any));
   let lpType;
   try { lpType = parseLpType(body?.lp_type); } catch (e) {
@@ -819,6 +891,7 @@ funds.put('/:id/lps/:lpId/type', async (c) => {
     `INSERT INTO activity_logs (user_id, action, action_type, entity_type, entity_id, metadata)
      VALUES (?, 'lp_type_set', 'lp_type_set', 'limited_partner', ?, ?)`,
   ).bind(Number(user.id), String(lpId), JSON.stringify({ fund_id: fundId, lp_type: lpType })).run();
+  await auditFundAct(c.env, user, 'fund.write', { fund_id: fundId, lp_id: lpId, write: 'lp_type' });
   return c.json({ ok: true, id: lpId, lp_type: lpType });
 });
 
@@ -843,7 +916,9 @@ funds.get('/:id/comms', async (c) => {
 
 funds.post('/:id/comms', async (c) => {
   const fundId = parseInt(c.req.param('id'), 10);
-  const { user } = await requireFundGp(c, fundId);
+  const gp = await requireFundGp(c, fundId);
+  const { user } = gp;
+  await assertFundAct(c, gp, 'fund.write');
   const body = await c.req.json().catch(() => ({} as any));
   let input;
   try { input = parseCommInput(body); } catch (e) {
@@ -852,6 +927,7 @@ funds.post('/:id/comms', async (c) => {
   }
   const id = await addCommunication(c.env, fundId, Number(user.id), input);
   if (id === null) return c.json({ error: 'LP or call line not found on this fund' }, 404);
+  await auditFundAct(c.env, user, 'fund.write', { fund_id: fundId, write: 'comms', comm_id: id });
   return c.json({ ok: true, id, logged_by: Number(user.id) }, 201);
 });
 
@@ -910,7 +986,9 @@ const BAD_AMOUNT = {
  */
 funds.post('/:id/capital-call', async (c) => {
   const fundId = parseInt(c.req.param('id'), 10);
-  const { user } = await requireFundGp(c, fundId);
+  const gp = await requireFundGp(c, fundId);
+  const { user } = gp;
+  await assertFundAct(c, gp, 'capital_call.issue');
   const body = await c.req.json<{
     amount_cents?: number; amount?: number; note?: string; purpose?: string; due_date?: string;
   }>().catch(() => ({} as any));
@@ -937,6 +1015,9 @@ funds.post('/:id/capital-call', async (c) => {
     entityType: 'fund', entityId: fundId,
     metadata: { call_number: issued.call.call_number, amount_cents: amountCents, lines: issued.written.length },
   }).catch(() => {});
+  await auditFundAct(c.env, user, 'capital_call.issue', {
+    fund_id: fundId, call_number: issued.call.call_number, amount_cents: amountCents, lines: issued.written.length,
+  });
   return c.json({ ok: true, call: issued.call, lines_written: issued.written.length, due_date: dueDate }, 201);
 });
 
@@ -947,7 +1028,8 @@ funds.post('/:id/capital-call', async (c) => {
  */
 funds.post('/:id/capital-calls/preview', async (c) => {
   const fundId = parseInt(c.req.param('id'), 10);
-  await requireFundGp(c, fundId);
+  const gp = await requireFundGp(c, fundId);
+  await assertFundAct(c, gp, 'capital_call.preview');
   const body = await c.req.json<{ amount_cents?: number; amount?: number }>().catch(() => ({} as any));
   const amountCents = requestCents(body);
   if (amountCents === null) return refuse(c, 400, BAD_AMOUNT);
@@ -972,6 +1054,7 @@ funds.post('/:id/capital-calls/preview', async (c) => {
       kyc_status: lp.user_id != null ? (lp.kyc_status ?? null) : null,
     };
   };
+  await auditFundAct(c.env, gp.user, 'capital_call.preview', { fund_id: fundId, amount_cents: amountCents });
   return c.json({
     ok: true,
     amount_cents: amountCents,
@@ -1040,7 +1123,9 @@ funds.get('/:id/ledger', async (c) => {
 funds.post('/:id/capital-calls/lines/:lineId/receipts', async (c) => {
   const fundId = parseInt(c.req.param('id'), 10);
   const lineId = parseInt(c.req.param('lineId'), 10);
-  const { user } = await requireFundGp(c, fundId);
+  const gp = await requireFundGp(c, fundId);
+  const { user } = gp;
+  await assertFundAct(c, gp, 'capital_call.receipt');
   const notFound = () => refuse(c, 404, { code: 'call_line_not_found', message: 'That call line is not on this fund.' });
   if (!Number.isSafeInteger(lineId) || lineId <= 0) return notFound();
   const line = await readLine(c.env, lineId);
@@ -1080,6 +1165,10 @@ funds.post('/:id/capital-calls/lines/:lineId/receipts', async (c) => {
     entityType: 'capital_call', entityId: lineId,
     metadata: { fund_id: fundId, amount_cents: cents, received_on: receivedOn, paid: outcome.paid },
   }).catch(() => {});
+  // No reference: bank text never enters the audit row.
+  await auditFundAct(c.env, user, 'capital_call.receipt', {
+    fund_id: fundId, line_id: lineId, amount_cents: cents, received_on: receivedOn, paid: outcome.paid,
+  });
   return c.json({ ok: true, receipt: outcome.receipt, line: outcome.line, paid: outcome.paid }, 201);
 });
 
@@ -1107,7 +1196,10 @@ funds.post('/distributions/execute', async (c) => {
   if (!body?.fund_id) {
     return c.json({ error: 'fund_id required (target a specific fund)' }, 400);
   }
-  const { user } = await requireFundGp(c, Number(body.fund_id));
+  const gp = await requireFundGp(c, Number(body.fund_id));
+  const { user } = gp;
+  // D714: a Super Admin act, still asserted after the body read for the reason above.
+  await assertFundAct(c, gp, 'distribution.execute');
   // For manual runs without a real liquidity event, create a placeholder one
   // so source_liquidity_event_id is always non-null and distributions are auditable.
   let evtId = body.liquidity_event_id;
@@ -1128,7 +1220,33 @@ funds.post('/distributions/execute', async (c) => {
     entityType: 'fund', entityId: body.fund_id ?? 0,
     metadata: { proceeds_cents: body.proceeds_cents, liquidity_event_id: evtId },
   }).catch(() => {});
+  await auditFundAct(c.env, user, 'distribution.execute', {
+    fund_id: Number(body.fund_id), proceeds_cents: body.proceeds_cents, liquidity_event_id: evtId ?? null,
+  });
   return c.json({ ok: true, enqueued_job: job, liquidity_event_id: evtId });
+});
+
+/**
+ * D714 decision 3 — what Execute would write, before anyone presses it: the
+ * basis returned, the profit, the carry withheld and the rate it used (and
+ * whether that rate is the job's 0.20 default), each LP's line, and the cents
+ * no line received. The same `splitDistribution` the `returns_distribution`
+ * job runs, over the same LPs, so the two cannot disagree. Nothing is written.
+ */
+funds.post('/:id/distributions/preview', async (c) => {
+  const fundId = parseInt(c.req.param('id'), 10);
+  const gp = await requireFundGp(c, fundId);
+  await assertFundAct(c, gp, 'distribution.preview');
+  const body = await c.req.json<{ proceeds_cents?: number }>().catch(() => ({} as any));
+  const proceeds = Number(body?.proceeds_cents);
+  if (!Number.isSafeInteger(proceeds) || proceeds <= 0) {
+    return refuse(c, 400, { code: 'invalid_amount', message: 'A distribution needs proceeds above zero, in whole cents.' });
+  }
+  const lps = (await c.env.DB.prepare(DISTRIBUTION_LPS_SQL).bind(fundId)
+    .all<{ id: number; commitment_amount: number; invested_amount: number }>()).results || [];
+  const split = splitDistribution(proceeds, gp.fund?.carried_interest, lps);
+  await auditFundAct(c.env, gp.user, 'distribution.preview', { fund_id: fundId, proceeds_cents: proceeds });
+  return c.json({ ok: true, fund_id: fundId, ...split });
 });
 
 funds.post('/distributions/:id/mark-paid', async (c) => {
@@ -1146,7 +1264,8 @@ funds.post('/distributions/:id/mark-paid', async (c) => {
   if (!row) return c.json({ error: 'not found' }, 404);
   // Gate BEFORE the status check, so 'already settled' cannot confirm the
   // existence of another GP's distribution.
-  await requireFundGp(c, Number((row as any).fund_id));
+  const gp = await requireFundGp(c, Number((row as any).fund_id));
+  await assertFundAct(c, gp, 'distribution.mark_paid');
   if (row.status !== 'pending') return c.json({ error: 'already settled' }, 409);
 
   const dollars = row.amount_cents / 100;
@@ -1167,6 +1286,13 @@ funds.post('/distributions/:id/mark-paid', async (c) => {
   // @ts-ignore — D1 result shape: meta.changes
   const changed = (updRes as any)?.meta?.changes ?? 0;
   if (!changed) return c.json({ error: 'lost race; already settled' }, 409);
+  // D714 decision 4: mark-paid had no activity row, for any caller.
+  const fundOfRow = Number((row as any).fund_id);
+  await recordFundActivity(c.env, Number(gp.user.id), 'distribution_marked_paid', 'fund_distribution', id,
+    { fund_id: fundOfRow, lp_id: row.lp_id, amount_cents: row.amount_cents });
+  await auditFundAct(c.env, gp.user, 'distribution.mark_paid', {
+    fund_id: fundOfRow, distribution_id: id, lp_id: row.lp_id, amount_cents: row.amount_cents,
+  });
   return c.json({
     ok: true,
     distribution: { ...row, status: 'paid' },

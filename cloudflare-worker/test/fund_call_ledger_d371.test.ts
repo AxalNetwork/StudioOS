@@ -46,9 +46,13 @@ const LAPSED_GP_ID = 42;
 const LP_A = 10;
 const LP_B = 20;
 const FOUNDER_ID = 60;
+/** D714: issuing is a Super Admin act. The Super Admin, in a fresh TOTP session. */
+const SUPER_ID = 2;
+const SESSION = new Map<number, string>([[SUPER_ID, 'totp-super']]);
 
 const USERS: Array<[number, string, string | null, string]> = [
   [ADMIN_ID, 'admin', null, 'approved'],
+  [SUPER_ID, 'admin', null, 'approved'],
   [GP_ID, 'investor', 'institutional', 'approved'],
   [OTHER_GP_ID, 'investor', 'institutional', 'approved'],
   [LAPSED_GP_ID, 'investor', null, 'approved'],
@@ -94,6 +98,10 @@ CREATE TABLE activity_stats (
   UNIQUE (user_id, stat_date));
 CREATE TABLE notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, type TEXT, title TEXT, body TEXT, link TEXT, created_at TEXT);
 CREATE TABLE job_idempotency (idempotency_key TEXT PRIMARY KEY, created_at TEXT);
+CREATE TABLE super_admins (user_id INTEGER PRIMARY KEY);
+CREATE TABLE user_sessions (
+  id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, jti TEXT NOT NULL UNIQUE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, revoked_at TIMESTAMP, factor TEXT, last_step_up_at TIMESTAMP);
 ${MIGRATION_312}
 ${readFileSync(resolve(HERE, '../sql/migrations/473_fund_management_fees.sql'), 'utf8')}
 `;
@@ -110,6 +118,8 @@ function seed(): string {
     `(${id}, 'u${id}@example.test', 'U${id}', '${role}', 1, ${tier ? `'${tier}'` : 'NULL'}, '${kyc}')`).join(', ');
   return `
 INSERT INTO users (id, email, name, role, is_active, investor_tier, kyc_status) VALUES ${users};
+INSERT INTO super_admins (user_id) VALUES (${SUPER_ID});
+INSERT INTO user_sessions (user_id, jti, factor) VALUES (${SUPER_ID}, 'totp-super', 'totp');
 INSERT INTO vc_funds (id, name, gp_user_id) VALUES
   (1, 'Fund I', ${GP_ID}), (2, 'Fund II', ${OTHER_GP_ID}), (3, 'Fund III', ${LAPSED_GP_ID}), (4, 'Fund IV', ${GP_ID});
 INSERT INTO limited_partners (id, fund_id, user_id, name, email, commitment_amount, status) VALUES
@@ -131,7 +141,8 @@ function makeEnv(): any {
 }
 
 async function token(userId: number): Promise<string> {
-  return new SignJWT({ user_id: userId, role: ROLE.get(userId) })
+  const jti = SESSION.get(userId);
+  return new SignJWT({ user_id: userId, role: ROLE.get(userId), ...(jti ? { jti } : {}) })
     .setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
     .sign(new TextEncoder().encode(JWT_SECRET));
 }
@@ -268,9 +279,13 @@ test('issue: refused for an LP, another fund\'s GP, a lapsed GP and a founder â€
   }
 });
 
-test('issue: an admin may issue on any fund', async () => {
+test('issue: the Super Admin may issue on any fund; a plain admin is refused and writes nothing (D714)', async () => {
   const env = makeEnv();
-  const r = await issue(env, { amount_cents: 1_000 }, ADMIN_ID, 2);
+  const plain = await issue(env, { amount_cents: 1_000 }, ADMIN_ID, 2);
+  assert.equal(plain.status, 403);
+  assert.equal(plain.body.code, 'super_admin_required');
+  assert.equal(headers(env).length, 0);
+  const r = await issue(env, { amount_cents: 1_000 }, SUPER_ID, 2);
   assert.equal(r.status, 201);
   assert.equal(headers(env)[0].fund_id, 2);
 });
