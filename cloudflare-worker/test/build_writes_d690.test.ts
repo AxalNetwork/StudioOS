@@ -29,6 +29,8 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 
 import build from '../src/routes/cycle_build.ts';
+import cycleRecords from '../src/routes/cycle_records.ts';
+import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 
@@ -37,10 +39,10 @@ const ROOT = process.cwd();
 const MIGRATIONS = resolve(ROOT, 'cloudflare-worker/sql/migrations');
 const BASELINE = readFileSync(resolve(ROOT, 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
 const FILES = readdirSync(MIGRATIONS).filter((f) => /^\d+_.*\.sql$/.test(f)).sort(compareMigrations);
-const FOUNDER = 10, TEAMMATE = 11;
+const FOUNDER = 10, TEAMMATE = 11, PARTNER = 12, ADMIN = 13, OUTSIDER = 14;
 const P = 1, P_OTHER = 2, COMPANY = 5, ENTITY = 7;
 /** Every person-shaped string seeded below: no summary may hold one. */
-const PRIVATE = ['ana', 'wren', 'tomas', 'reyes', 'example.test'];
+const PRIVATE = ['ana', 'wren', 'tomas', 'reyes', 'example.test', 'okafor', 'imani', 'quinn'];
 
 function freshBuild(): DatabaseSync {
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
@@ -55,7 +57,9 @@ function seeded() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   for (const s of BUILT_DDL) { try { db.exec(s); } catch { /* a view or trigger naming an object replayed later */ } }
   db.exec(`INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES
-    (${FOUNDER}, 'founder', 'Ana Wren', 'ana@example.test', 1, 1001), (${TEAMMATE}, 'founder', 'Tomas Reyes', 'tomas@example.test', 1, NULL)`);
+    (${FOUNDER}, 'founder', 'Ana Wren', 'ana@example.test', 1, 1001), (${TEAMMATE}, 'founder', 'Tomas Reyes', 'tomas@example.test', 1, NULL),
+    (${PARTNER}, 'partner', 'Imani Okafor', 'imani@example.test', 1, NULL), (${ADMIN}, 'admin', 'Quinn Admin', 'quinn@example.test', 1, NULL),
+    (${OUTSIDER}, 'founder', 'Okafor Founder', 'okafor@example.test', 1, 1002)`);
   db.exec(`INSERT INTO projects (id, name, founder_id, company_id, entity_id) VALUES (${P}, 'Kestrel Works', 1001, ${COMPANY}, ${ENTITY}), (${P_OTHER}, 'Harbour Labs', 1002, 6, NULL)`);
   db.exec(`INSERT INTO user_company_links (uid, user_id, company_id) VALUES ('l1', ${FOUNDER}, ${COMPANY}), ('l2', ${TEAMMATE}, ${COMPANY})`);
   db.exec(`INSERT INTO pain_groups (id, project_id, title) VALUES (1, ${P}, 'Manual reconciliation')`);
@@ -72,18 +76,35 @@ function seeded() {
 }
 
 const app = new Hono<any>();
+// #1695: the record route serves Build's actions and form-options beside the module routes.
+app.route('/api/cycles', cycleRecords);
 app.route('/api/cycles/build', build);
 app.onError((e, c) => c.json({ error: e.message }, 500));
+/** An R2 stand-in per database, so an uploaded proof can be looked up. */
+const BUCKETS = new WeakMap<DatabaseSync, Map<string, { bytes: Uint8Array; type?: string }>>();
+function bucket(db: DatabaseSync) {
+  if (!BUCKETS.has(db)) BUCKETS.set(db, new Map());
+  const store = BUCKETS.get(db)!;
+  return { store, binding: {
+    async put(key: string, bytes: Uint8Array, opts?: any) { store.set(key, { bytes, type: opts?.httpMetadata?.contentType }); },
+    async get(key: string) { return store.get(key) ?? null; },
+    async delete(key: string) { store.delete(key); },
+  } };
+}
+const envFor = (db: DatabaseSync) => ({ DB: d1Over(db), JWT_SECRET, ENVIRONMENT: 'development', FILES: bucket(db).binding }) as any;
 async function call(db: DatabaseSync, method: string, path: string, body?: unknown) {
   return callAs(db, FOUNDER, method, path, body);
 }
-async function callAs(db: DatabaseSync, userId: number, method: string, path: string, body?: unknown) {
+async function callAs(db: DatabaseSync, userId: number, method: string, path: string, body?: unknown, project = P) {
   const token = await new SignJWT({ user_id: userId, role: 'founder' })
     .setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
-  const r = await app.request(`/api/cycles/build${path}${path.includes('?') ? '&' : '?'}project=${P}`, {
-    method, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  }, { DB: d1Over(db), JWT_SECRET, ENVIRONMENT: 'development' } as any);
-  return { status: r.status, body: await r.json() as any };
+  const multipart = body instanceof FormData;
+  // A thrown Response is the response, as the Worker's entry point answers it (util/thrownResponse.ts).
+  const r = await withThrownResponses(() => app.request(`/api/cycles/build${path}${path.includes('?') ? '&' : '?'}project=${project}`, {
+    method, headers: { Authorization: `Bearer ${token}`, ...(multipart ? {} : { 'Content-Type': 'application/json' }) },
+    ...(body === undefined ? {} : { body: multipart ? body : JSON.stringify(body) }),
+  }, envFor(db)));
+  return { status: r.status, body: await r.json().catch(() => null) as any };
 }
 const one = (db: DatabaseSync, sql: string) => JSON.stringify(db.prepare(sql).all());
 
@@ -421,6 +442,509 @@ test('test 10: a feature or must-have whose log fails is not written', async () 
     const before = one(db, w.state);
     assert.equal((await call(db, 'POST', w.path, w.body)).status, 500, w.name);
     assert.equal(one(db, w.state), before, w.name);
+    db.close();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// #1695, closing PR: the roadmap and filing routes, every record action and
+// Build's form-options, through the one record route (D-n(6)).
+// ---------------------------------------------------------------------------
+
+const rec = (db: DatabaseSync, slug: string, id: string, user = FOUNDER, project = P) =>
+  callAs(db, user, 'GET', `/modules/${slug}/records/${id}`, undefined, project);
+const act = (db: DatabaseSync, slug: string, id: string, key: string, body: unknown = {}, user = FOUNDER, project = P) =>
+  callAs(db, user, 'POST', `/modules/${slug}/records/${id}/actions/${key}`, body, project);
+const formOptions = (db: DatabaseSync, slug: string, user = FOUNDER) => callAs(db, user, 'GET', `/modules/${slug}/form-options`);
+const keysOf = (r: any) => r.body.actions.map((a: any) => a.key);
+const actionOf = (r: any, key: string) => r.body.actions.find((a: any) => a.key === key);
+const valuesOf = (r: any, key = 'edit') => Object.fromEntries(actionOf(r, key).form.fields.map((f: any) => [f.key, f.value]));
+const logCount = (db: DatabaseSync) => count(db, 'SELECT COUNT(*) AS n FROM activity_logs');
+const PDF = () => new TextEncoder().encode('%PDF-1.4\n% a made-up receipt\n');
+function proofForm(bytes: Uint8Array, name: string, type = 'application/pdf') {
+  const form = new FormData();
+  form.append('file', new Blob([bytes], { type }), name);
+  return form;
+}
+/** Venture A's records beyond the seed: a must-have with a session and a check, a second item, and a lab order. */
+function recordsA(db: DatabaseSync) {
+  withLinks(db);
+  db.exec(`UPDATE mvp_features SET is_must_have = 1, delivery_status = 'Backlog' WHERE id = 3`);
+  db.exec(`INSERT INTO mvp_test_sessions (id, project_id, feature_id, title) VALUES (50, ${P}, 3, 'Usability pass')`);
+  db.exec(`INSERT INTO mvp_release_checks (id, feature_id, label) VALUES (51, 3, 'Error states reviewed')`);
+  db.exec(`INSERT INTO roadmap_okrs (id, project_id, objective, kanban_status, sort_order) VALUES (7, ${P}, 'Pilot bank feeds', 'next', 1)`);
+  db.exec(`INSERT INTO incorporations (id, user_id, project_id, jurisdiction_id, company_name, amount_cents, status, paid_at) VALUES (8, ${FOUNDER}, ${P}, 'DE', 'Kestrel Works Inc', 50000, 'paid', '2026-09-01')`);
+  db.exec(`INSERT INTO custom_kpis (uid, project_id, label) VALUES ('ownkpi', ${P}, 'Activation rate'), ('otherkpi', ${P_OTHER}, 'Another venture')`);
+  return db;
+}
+/** Venture B's rows, one per store an action can name. */
+function recordsB(db: DatabaseSync) {
+  db.exec(`INSERT INTO mvp_features (id, project_id, title, is_must_have) VALUES (40, ${P_OTHER}, 'Another feature', 1)`);
+  db.exec(`INSERT INTO roadmap_okrs (id, project_id, objective, kanban_status) VALUES (41, ${P_OTHER}, 'Another item', 'now')`);
+  db.exec(`INSERT INTO cap_table_holders (id, user_id, project_id, name, ownership_pct, founder_role) VALUES (42, ${OUTSIDER}, ${P_OTHER}, 'Okafor Founder', 50, 'CEO')`);
+  db.exec(`INSERT INTO formation_steps (id, project_id, title, state, proof_file_key, created_by) VALUES (43, ${P_OTHER}, 'Another filing', 'todo', 'build-proof/${P_OTHER}/abc.pdf', ${OUTSIDER})`);
+  db.exec(`INSERT INTO mvp_test_sessions (id, project_id, feature_id, title) VALUES (46, ${P_OTHER}, 40, 'Another session')`);
+  db.exec(`INSERT INTO mvp_release_checks (id, feature_id, label) VALUES (47, 40, 'Another check')`);
+  return db;
+}
+const A: Record<string, string> = { 'solution-design': '3', 'prototype-mvp': '3', 'product-roadmap': '6', 'founding-team': 'h-8', 'company-creation': 'step-9', 'operating-systems': 'crm' };
+const B: Record<string, string> = { 'solution-design': '40', 'prototype-mvp': '40', 'product-roadmap': '41', 'founding-team': 'h-42', 'company-creation': 'step-43' };
+
+test('test 2: an obligation- row declares Upload proof and no Mark filed; a lab- row declares no action', async () => {
+  const db = recordsA(seeded());
+  const obligation = await rec(db, 'company-creation', 'obligation-12');
+  assert.equal(obligation.status, 200, JSON.stringify(obligation.body));
+  assert.deepEqual(keysOf(obligation), ['upload-proof']);
+  const step = await rec(db, 'company-creation', 'step-9');
+  assert.deepEqual(keysOf(step), ['mark-filed', 'step-check', 'edit', 'upload-proof']);
+  const lab = await rec(db, 'company-creation', 'lab-8-0');
+  assert.equal(lab.status, 200);
+  assert.deepEqual(lab.body.actions, []);
+  assert.equal((await act(db, 'company-creation', 'obligation-12', 'mark-filed')).status, 404);
+  assert.equal((await act(db, 'company-creation', 'lab-8-0', 'upload-proof', proofForm(PDF(), 'x.pdf'))).status, 404);
+  db.close();
+});
+
+test('test 5: the role table for actions, writes and form-options', async () => {
+  const db = recordsA(seeded());
+  for (const user of [FOUNDER, ADMIN]) {
+    const r = await rec(db, 'solution-design', '3', user);
+    assert.equal(r.status, 200, `user ${user}`);
+    assert.ok(keysOf(r).includes('edit'), `user ${user} is offered the writes`);
+    assert.equal((await formOptions(db, 'solution-design', user)).status, 200, `user ${user}`);
+  }
+  assert.equal((await act(db, 'solution-design', '3', 'scope-out', {}, ADMIN)).status, 200, 'an admin writes');
+  const partner = await rec(db, 'solution-design', '3', PARTNER);
+  assert.equal(partner.status, 200, 'a partner reads');
+  assert.deepEqual(partner.body.actions, [], 'and is offered nothing');
+  const before = logCount(db);
+  assert.equal((await act(db, 'solution-design', '3', 'mark-must-have', {}, PARTNER)).status, 403);
+  assert.equal((await callAs(db, PARTNER, 'PATCH', '/modules/solution-design/records/3', { title: 'Renamed' })).status, 403);
+  assert.equal((await formOptions(db, 'solution-design', PARTNER)).status, 403);
+  // Another venture's founder: 403 under this venture, 404 for this venture's id under their own.
+  assert.equal((await rec(db, 'solution-design', '3', OUTSIDER)).status, 403);
+  assert.equal((await act(db, 'solution-design', '3', 'mark-must-have', {}, OUTSIDER)).status, 403);
+  assert.equal((await formOptions(db, 'solution-design', OUTSIDER)).status, 403);
+  assert.equal((await act(db, 'solution-design', '3', 'mark-must-have', {}, OUTSIDER, P_OTHER)).status, 404);
+  assert.equal(logCount(db), before, 'no refused call logged anything');
+  db.close();
+});
+
+test('test 5: a venture-B id under ?project=A is a 404 on every action, PATCH, upload and open-proof', async () => {
+  const db = recordsB(recordsA(seeded()));
+  db.exec(`UPDATE formation_steps SET proof_file_key = 'build-proof/${P}/0123456789abcdef0123456789abcdef.pdf' WHERE id = 9`);
+  for (const slug of Object.keys(B)) {
+    const own = await rec(db, slug, A[slug]);
+    assert.equal(own.status, 200, slug);
+    for (const key of keysOf(own)) {
+      const r = await act(db, slug, B[slug], key, key === 'upload-proof' ? proofForm(PDF(), 'x.pdf') : {});
+      assert.equal(r.status, 404, `${slug} ${key} on venture B's id`);
+    }
+    assert.equal((await callAs(db, FOUNDER, 'PATCH', `/modules/${slug}/records/${B[slug]}`, {})).status, 404, `${slug} PATCH`);
+  }
+  assert.equal(logCount(db), 0);
+  assert.equal(bucket(db).store.size, 0, 'no proof was stored');
+  // Venture A's own: each module's Edit sent back unchanged answers 200.
+  for (const slug of Object.keys(A)) {
+    const own = await rec(db, slug, A[slug]);
+    const r = await act(db, slug, A[slug], 'edit', valuesOf(own));
+    assert.equal(r.status, 200, `${slug}: ${JSON.stringify(r.body)}`);
+  }
+  assert.equal((await act(db, 'company-creation', 'step-9', 'open-proof')).status, 200);
+  db.close();
+});
+
+test('test 5: a venture-B id inside a body is a 404 and writes nothing; venture A\'s own is 200', async () => {
+  const db = recordsB(recordsA(seeded()));
+  const cases: Array<[string, string, string, unknown, unknown]> = [
+    ['solution-design', '3', 'edit', { pain_group_id: String(PAIN_OTHER) }, { pain_group_id: '1' }],
+    ['solution-design', '3', 'edit', { hypothesis_id: String(HYP_OTHER) }, { hypothesis_id: String(HYP) }],
+    ['prototype-mvp', '3', 'edit', { hypothesis_id: String(HYP_OTHER) }, { hypothesis_id: String(HYP) }],
+    ['prototype-mvp', '3', 'add-finding', { session_id: '46', text: 'Found it' }, { session_id: '50', text: 'Found it' }],
+    ['prototype-mvp', '3', 'add-finding', { session_id: '50', text: 'Found it', hypothesis_id: String(HYP_OTHER) }, { session_id: '50', text: 'Found it', hypothesis_id: String(HYP) }],
+    ['prototype-mvp', '3', 'check', { check_id: '47' }, { check_id: '51' }],
+    ['product-roadmap', '6', 'add-dependency', { waits_on_id: '41' }, { waits_on_id: '7' }],
+    ['product-roadmap', '6', 'edit', { feature_id: '40' }, { feature_id: '3' }],
+    ['product-roadmap', '6', 'edit', { kpi_key: 'custom-otherkpi' }, { kpi_key: 'custom-ownkpi' }],
+    ['company-creation', 'step-9', 'edit', { for_holder_id: 'h-42' }, { for_holder_id: 'h-8' }],
+  ];
+  for (const [slug, id, key, foreign, own] of cases) {
+    const before = logCount(db);
+    const refused = await act(db, slug, id, key, foreign);
+    assert.equal(refused.status, 404, `${slug} ${key} ${JSON.stringify(foreign)}: ${JSON.stringify(refused.body)}`);
+    assert.equal(logCount(db), before, `${slug} ${key}: nothing written`);
+    const allowed = await act(db, slug, id, key, own);
+    assert.equal(allowed.status, 200, `${slug} ${key} ${JSON.stringify(own)}: ${JSON.stringify(allowed.body)}`);
+  }
+  // The routes refuse the same ids.
+  const items = count(db, 'SELECT COUNT(*) AS n FROM roadmap_okrs'), steps = count(db, 'SELECT COUNT(*) AS n FROM formation_steps');
+  assert.equal((await call(db, 'POST', '/roadmap', { title: 'Leak', feature_id: 40 })).status, 404);
+  assert.equal((await call(db, 'POST', '/roadmap', { title: 'Leak', waits_on_id: 41 })).status, 404);
+  assert.equal((await call(db, 'POST', '/roadmap', { title: 'Leak', kpi_key: 'custom-otherkpi' })).status, 404);
+  assert.equal((await call(db, 'POST', '/formation-steps', { kind: '83b', for_holder_id: 'h-42' })).status, 404);
+  assert.equal((await call(db, 'POST', '/risks', { title: 'Leak', severity: 'low', feature_id: 40 })).status, 404);
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM roadmap_okrs'), items);
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM formation_steps'), steps);
+  db.close();
+});
+
+test('test 5: an undeclared action is refused, and open-proof answers only for this venture\'s own key', async () => {
+  const db = recordsA(seeded());
+  assert.equal((await act(db, 'solution-design', '3', 'fly')).status, 404);
+  assert.equal((await act(db, 'solution-design', '3', 'mark-must-have')).status, 404, 'a must-have is not offered Mark as must-have again');
+  db.exec(`UPDATE mvp_features SET is_must_have = 0 WHERE id = 3`);
+  assert.equal((await act(db, 'solution-design', '3', 'mark-must-have')).status, 200);
+  assert.equal(count(db, 'SELECT is_must_have AS n FROM mvp_features WHERE id = 3'), 1);
+  for (const key of ['typed-key-1', `build-proof/${P_OTHER}/0123456789abcdef0123456789abcdef.pdf`, `xbuild-proof/${P}/a.pdf`]) {
+    db.exec(`UPDATE formation_steps SET proof_file_key = '${key}' WHERE id = 9`);
+    assert.ok(!keysOf(await rec(db, 'company-creation', 'step-9')).includes('open-proof'), key);
+    assert.equal((await act(db, 'company-creation', 'step-9', 'open-proof')).status, 404, key);
+  }
+  db.exec(`UPDATE formation_steps SET proof_file_key = 'build-proof/${P}/0123456789abcdef0123456789abcdef.pdf' WHERE id = 9`);
+  const open = await act(db, 'company-creation', 'step-9', 'open-proof');
+  assert.equal(open.status, 200);
+  assert.match(open.body.open.url, /^\/api\/files\/dl\/[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+  db.close();
+});
+
+test('test 6: a GitHub link reads synced only when this venture\'s ledger holds it', async () => {
+  const db = seeded();
+  const r = await call(db, 'POST', '/must-haves', { title: 'Bank sync', links: ['https://github.com/kestrel/app/issues/42'] });
+  assert.equal(r.status, 201);
+  const linked = async () => (await rec(db, 'prototype-mvp', String(r.body.id))).body.side.find((x: any) => x.key === 'linked').rows.map((x: any) => x.b);
+  assert.deepEqual(await linked(), ['issue #42 · Not synced']);
+  db.exec(`INSERT INTO connector_fed_items (integration_id, project_id, module, kind, external_id, last_seen_at) VALUES (1, ${P_OTHER}, 'build', 'issue', 'issue:kestrel/app#42', '2026-10-12 08:00:00')`);
+  assert.deepEqual(await linked(), ['issue #42 · Not synced'], 'another venture\'s ledger row does not count');
+  db.exec(`INSERT INTO connector_fed_items (integration_id, project_id, module, kind, external_id, last_seen_at) VALUES (2, ${P}, 'build', 'issue', 'issue:kestrel/app#42', '2026-10-12 08:00:00')`);
+  assert.deepEqual(await linked(), ['issue #42 · synced 12 Oct 2026']);
+  db.close();
+});
+
+test('test 6: the feature and must-have actions write their stores', async () => {
+  const db = recordsA(seeded());
+  assert.equal((await act(db, 'solution-design', '3', 'add-risk', { title: 'Bank rate limits', severity: 'high' })).status, 200);
+  assert.deepEqual({ ...db.prepare('SELECT title, severity, feature_id FROM venture_risks ORDER BY id DESC LIMIT 1').get() }, { title: 'Bank rate limits', severity: 'high', feature_id: 3 });
+  assert.equal((await act(db, 'solution-design', '3', 'edit-description', { description: 'Daily import from the bank' })).status, 200);
+  assert.equal((await act(db, 'solution-design', '3', 'scope-out')).status, 200);
+  assert.deepEqual({ ...db.prepare('SELECT description, scope FROM mvp_features WHERE id = 3').get() }, { description: 'Daily import from the bank', scope: 'out' });
+  assert.ok(keysOf(await rec(db, 'solution-design', '3')).includes('scope-in'), 'an out-of-scope feature offers Move into scope');
+  assert.equal((await act(db, 'solution-design', '3', 'add-to-roadmap', { title: 'Bank feeds GA', column: 'later' })).status, 200);
+  assert.deepEqual({ ...db.prepare('SELECT objective, kanban_status, feature_id FROM roadmap_okrs ORDER BY id DESC LIMIT 1').get() }, { objective: 'Bank feeds GA', kanban_status: 'later', feature_id: 3 });
+  // Prototype / MVP.
+  assert.equal((await act(db, 'prototype-mvp', '3', 'add-session', { title: 'Second pass', held_on: '2026-10-20', status: 'done', owner_user_id: String(TEAMMATE) })).status, 200);
+  assert.equal((await act(db, 'prototype-mvp', '3', 'add-session', { title: 'X', owner_user_id: '99' })).status, 400, 'an owner outside the company');
+  assert.equal((await act(db, 'prototype-mvp', '3', 'add-finding', { session_id: '50', text: 'Users skip the import', hypothesis_id: String(HYP), direction: 'contradicts', kept: false })).status, 200);
+  assert.deepEqual({ ...db.prepare('SELECT session_id, text, hypothesis_id, direction, kept FROM mvp_test_findings').get() }, { session_id: 50, text: 'Users skip the import', hypothesis_id: HYP, direction: 'contradicts', kept: 0 });
+  // A session or check of this venture's other feature is not this record's.
+  db.exec(`INSERT INTO mvp_features (id, project_id, title, is_must_have) VALUES (60, ${P}, 'Audit export', 1)`);
+  db.exec(`INSERT INTO mvp_test_sessions (id, project_id, feature_id, title) VALUES (61, ${P}, 60, 'Export pass')`);
+  db.exec(`INSERT INTO mvp_release_checks (id, feature_id, label) VALUES (62, 60, 'Export reviewed')`);
+  assert.equal((await act(db, 'prototype-mvp', '3', 'add-finding', { session_id: '61', text: 'Elsewhere' })).status, 404);
+  assert.equal((await act(db, 'prototype-mvp', '3', 'check', { check_id: '62' })).status, 404);
+  assert.equal(db.prepare('SELECT done_at FROM mvp_release_checks WHERE id = 62').get()!.done_at, null);
+  assert.equal((await act(db, 'prototype-mvp', '3', 'link', { url: 'https://www.figma.com/file/abc' })).status, 200);
+  assert.equal((await act(db, 'prototype-mvp', '3', 'link', { url: 'https://www.figma.com/file/abc' })).status, 409, 'the same link twice');
+  assert.equal((await act(db, 'prototype-mvp', '3', 'link', { url: 'https://evil.example/file' })).status, 400);
+  assert.equal((await act(db, 'prototype-mvp', '3', 'add-check', { label: 'Copy reviewed' })).status, 200);
+  assert.equal((await act(db, 'prototype-mvp', '3', 'check', { check_id: '51', done: true })).status, 200);
+  assert.ok(db.prepare('SELECT done_at FROM mvp_release_checks WHERE id = 51').get()!.done_at);
+  assert.equal((await act(db, 'prototype-mvp', '3', 'check', { check_id: '51', done: false })).status, 200);
+  assert.equal(db.prepare('SELECT done_at FROM mvp_release_checks WHERE id = 51').get()!.done_at, null);
+  assert.equal((await act(db, 'prototype-mvp', '3', 'mark-blocked')).status, 200);
+  assert.equal(db.prepare('SELECT delivery_status FROM mvp_features WHERE id = 3').get()!.delivery_status, 'Blocked');
+  assert.ok(!keysOf(await rec(db, 'prototype-mvp', '3')).includes('mark-blocked'), 'a blocked must-have is not offered Mark blocked');
+  assert.equal((await act(db, 'prototype-mvp', '3', 'mark-done')).status, 200);
+  const done = db.prepare('SELECT delivery_status, done_at FROM mvp_features WHERE id = 3').get() as any;
+  assert.deepEqual([done.delivery_status, !!done.done_at], ['Done', true], 'migration 441 dates the move to Done');
+  const after = await rec(db, 'prototype-mvp', '3');
+  assert.ok(!keysOf(after).includes('mark-done'));
+  assert.deepEqual(after.body.facts.find((f: any) => f.label === 'Tests run').value, 1);
+  db.close();
+});
+
+test('test 7: Add item writes its edge, links its theme\'s open rows, and keeps the free-tier cap', async () => {
+  const db = withLinks(seeded());
+  db.exec(`INSERT INTO product_feedback (uid, project_id, body, source, theme, status, roadmap_item_ref) VALUES
+    ('f1', ${P}, 'Import is slow', 'customer', 'Onboarding', 'open', NULL),
+    ('f2', ${P}, 'Already planned', 'customer', 'Onboarding', 'planned', NULL),
+    ('f3', ${P}, 'Answered elsewhere', 'customer', 'Onboarding', 'open', '99'),
+    ('f4', ${P_OTHER}, 'Another venture', 'customer', 'Onboarding', 'open', NULL),
+    ('f5', ${P}, 'Too pricey', 'customer', 'Pricing', 'open', NULL)`);
+  db.exec(`UPDATE users SET subscription_tier = 'growth' WHERE id = ${FOUNDER}`);
+  const r = await call(db, 'POST', '/roadmap', { title: 'Faster import', column: 'now', waits_on_id: 6, kpi_key: 'mrr', feedback_theme: 'Onboarding',
+    owner_user_id: TEAMMATE, target_date: '2027-01-31', feature_id: 3 });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  assert.deepEqual({ ...db.prepare('SELECT objective, kanban_status, kpi_key, feedback_theme, owner_user_id, target_date, feature_id, created_by FROM roadmap_okrs WHERE id = ?').get(r.body.id) },
+    { objective: 'Faster import', kanban_status: 'now', kpi_key: 'mrr', feedback_theme: 'Onboarding', owner_user_id: TEAMMATE, target_date: '2027-01-31', feature_id: 3, created_by: FOUNDER });
+  assert.deepEqual((db.prepare('SELECT okr_id, blocks_okr_id FROM okr_dependencies').all() as any[]).map((x) => ({ ...x })), [{ okr_id: 6, blocks_okr_id: r.body.id }]);
+  assert.deepEqual((db.prepare('SELECT uid, roadmap_item_ref, roadmap_item_label FROM product_feedback ORDER BY uid').all() as any[]).map((x) => ({ ...x })), [
+    { uid: 'f1', roadmap_item_ref: String(r.body.id), roadmap_item_label: 'Faster import' },
+    { uid: 'f2', roadmap_item_ref: null, roadmap_item_label: null },
+    { uid: 'f3', roadmap_item_ref: '99', roadmap_item_label: null },
+    { uid: 'f4', roadmap_item_ref: null, roadmap_item_label: null },
+    { uid: 'f5', roadmap_item_ref: null, roadmap_item_label: null },
+  ]);
+  // A cycle is refused, and leaves neither an edge nor a log row.
+  const logs = logCount(db);
+  const cycle = await act(db, 'product-roadmap', '6', 'add-dependency', { waits_on_id: String(r.body.id) });
+  assert.equal(cycle.status, 409);
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM okr_dependencies'), 1);
+  assert.equal(logCount(db), logs);
+  assert.equal((await act(db, 'product-roadmap', '6', 'add-dependency', { waits_on_id: String(r.body.id), blocks_id: '6' })).status, 400, 'exactly one end');
+  // The column defaults to Next; a KPI off the list is refused.
+  const plain = await call(db, 'POST', '/roadmap', { title: 'Audit log' });
+  assert.equal(db.prepare('SELECT kanban_status FROM roadmap_okrs WHERE id = ?').get(plain.body.id)!.kanban_status, 'next');
+  assert.equal((await call(db, 'POST', '/roadmap', { title: 'X', kpi_key: 'activation' })).status, 400);
+  assert.equal((await call(db, 'PATCH', '/roadmap/6', { kpi_key: 'activation' })).status, 400);
+  assert.equal((await call(db, 'PATCH', '/roadmap/6', { kpi_key: 'paying_accounts' })).status, 200);
+  assert.equal((await call(db, 'POST', '/roadmap', { title: 'X', column: 'done' })).status, 400, 'an item is added to Now, Next or Later');
+  db.close();
+});
+
+test('test 7: the free-tier cap still applies to Add item', async () => {
+  const db = seeded();
+  db.exec(`INSERT INTO roadmap_okrs (id, project_id, objective, kanban_status) VALUES (20, ${P}, 'Two', 'next'), (21, ${P}, 'Three', 'later')`);
+  const capped = await call(db, 'POST', '/roadmap', { title: 'Four' });
+  assert.equal(capped.status, 402);
+  assert.equal(capped.body.error, 'tier_required');
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM roadmap_okrs'), 3);
+  db.exec(`UPDATE users SET subscription_tier = 'growth' WHERE id = ${FOUNDER}`);
+  assert.equal((await call(db, 'POST', '/roadmap', { title: 'Four' })).status, 201);
+  db.close();
+});
+
+test('test 7: move writes okr_column_moves, and is offered as "Move to <the next column>"', async () => {
+  const db = recordsA(seeded());
+  const item = await rec(db, 'product-roadmap', '6');
+  const move = actionOf(item, 'move');
+  assert.equal(move.label, 'Move to Next');
+  assert.equal(move.form.fields[0].value, 'next');
+  assert.deepEqual(move.form.fields[0].options.map((o: any) => o.value), ['next', 'later', 'done']);
+  assert.equal((await act(db, 'product-roadmap', '6', 'move', { to: 'now' })).status, 400, 'its own column');
+  assert.equal((await act(db, 'product-roadmap', '6', 'move', { to: 'done' })).status, 200);
+  assert.deepEqual({ ...db.prepare('SELECT okr_id, from_status, to_status FROM okr_column_moves').get() }, { okr_id: 6, from_status: 'now', to_status: 'done' });
+  assert.equal(db.prepare('SELECT kanban_status FROM roadmap_okrs WHERE id = 6').get()!.kanban_status, 'done');
+  assert.ok(!keysOf(await rec(db, 'product-roadmap', '6')).includes('move'), 'a Done item offers none');
+  // Edit reopens it, through the same move.
+  assert.equal((await act(db, 'product-roadmap', '6', 'edit', { column: 'later' })).status, 200);
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM okr_column_moves'), 2);
+  assert.equal(actionOf(await rec(db, 'product-roadmap', '7'), 'move').label, 'Move to Later');
+  db.close();
+});
+
+test('test 9: Add filing stores kind, jurisdiction and founder; an 83(b) is titled for its founder', async () => {
+  const db = seeded();
+  const r = await call(db, 'POST', '/formation-steps', { kind: '83b', for_holder_id: 'h-8', jurisdiction: 'DE', due_date: '2026-12-20', state: 'due_soon' });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  assert.deepEqual({ ...db.prepare('SELECT title, kind, jurisdiction, for_holder_id, due_date, state FROM formation_steps WHERE id = ?').get(r.body.id) },
+    { title: '83(b) election · Ana Wren', kind: '83b', jurisdiction: 'DE', for_holder_id: 8, due_date: '2026-12-20', state: 'todo' });
+  const ein = await call(db, 'POST', '/formation-steps', { kind: 'ein', state: 'filed' });
+  assert.deepEqual({ ...db.prepare('SELECT title, state FROM formation_steps WHERE id = ?').get(ein.body.id) }, { title: 'EIN', state: 'done' });
+  const before = count(db, 'SELECT COUNT(*) AS n FROM formation_steps');
+  assert.equal((await call(db, 'POST', '/formation-steps', { kind: 'formation', state: 'due_soon' })).status, 400, 'Due soon needs a date');
+  assert.equal((await call(db, 'POST', '/formation-steps', {})).status, 400, 'neither a title nor a kind');
+  assert.equal((await call(db, 'POST', '/formation-steps', { kind: 'llc' })).status, 400);
+  assert.equal((await call(db, 'POST', '/formation-steps', { kind: 'formation', state: 'sent' })).status, 400);
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM formation_steps'), before);
+  // Today's Edit still sends todo, doing and done.
+  assert.equal((await call(db, 'PATCH', '/formation-steps/9', { state: 'doing' })).status, 200);
+  assert.equal((await call(db, 'PATCH', '/formation-steps/9', { kind: 'franchise_tax', jurisdiction: 'DE' })).status, 200);
+  assert.deepEqual({ ...db.prepare('SELECT title, kind, jurisdiction, state FROM formation_steps WHERE id = 9').get() },
+    { title: '83(b) election · Ana Wren', kind: 'franchise_tax', jurisdiction: 'DE', state: 'doing' }, 'the Filing cell stays the stored title');
+  db.close();
+});
+
+test('test 9: Mark filed, the step checks and Upload proof, which stores a key without the file name', async () => {
+  const db = recordsA(seeded());
+  const step = await rec(db, 'company-creation', 'step-9');
+  assert.deepEqual(valuesOf(step), { title: '83(b) election · Ana Wren', kind: '', jurisdiction: '', for_holder_id: '', due_date: '2026-12-01', state: 'upcoming' });
+  assert.equal((await act(db, 'company-creation', 'step-9', 'edit', { kind: '83b', for_holder_id: 'h-8', jurisdiction: 'DE' })).status, 200);
+  assert.deepEqual(valuesOf(await rec(db, 'company-creation', 'step-9')),
+    { title: '83(b) election · Ana Wren', kind: '83b', jurisdiction: 'DE', for_holder_id: 'h-8', due_date: '2026-12-01', state: 'upcoming' });
+  assert.equal((await act(db, 'company-creation', 'step-9', 'step-check', { key: 'fill' })).status, 200);
+  assert.equal((await act(db, 'company-creation', 'step-9', 'step-check', { key: 'proof' })).status, 400, 'the last step is the proof');
+  // A renamed text file is refused, and stores nothing.
+  const fake = await act(db, 'company-creation', 'step-9', 'upload-proof', proofForm(new TextEncoder().encode('not a pdf'), 'receipt.pdf'));
+  assert.equal(fake.status, 400);
+  assert.equal(db.prepare('SELECT proof_file_key FROM formation_steps WHERE id = 9').get()!.proof_file_key, null);
+  assert.equal(bucket(db).store.size, 0);
+  assert.equal((await act(db, 'company-creation', 'step-9', 'upload-proof', proofForm(new Uint8Array(10 * 1024 * 1024 + 1), 'big.pdf'))).status, 413);
+  assert.equal((await act(db, 'company-creation', 'step-9', 'upload-proof', { file: 'x' })).status, 400, 'a JSON body is not an upload');
+  const up = await act(db, 'company-creation', 'step-9', 'upload-proof', proofForm(PDF(), 'Ana Wren 83b receipt.pdf', 'text/plain'));
+  assert.equal(up.status, 200, JSON.stringify(up.body));
+  const key = db.prepare('SELECT proof_file_key FROM formation_steps WHERE id = 9').get()!.proof_file_key as string;
+  assert.match(key, new RegExp(`^build-proof/${P}/[0-9a-f]{32}\\.pdf$`));
+  assert.deepEqual([...bucket(db).store.keys()], [key]);
+  assert.equal(bucket(db).store.get(key)!.type, 'application/pdf', 'the sniffed type, not the declared one');
+  const after = await rec(db, 'company-creation', 'step-9');
+  assert.deepEqual(after.body.main.find((x: any) => x.key === 'steps').rows.map((x: any) => [x.a, x.c]),
+    [['Fill the election', 'Done'], ['Mail by certified post', 'Open'], ['Upload proof of mailing', 'Done']]);
+  assert.equal(db.prepare('SELECT state FROM formation_steps WHERE id = 9').get()!.state, 'todo', 'the upload does not mark it filed');
+  // A second upload replaces the object.
+  assert.equal((await act(db, 'company-creation', 'step-9', 'upload-proof', proofForm(PDF(), 'again.pdf'))).status, 200);
+  assert.equal(bucket(db).store.size, 1);
+  assert.equal((await act(db, 'company-creation', 'step-9', 'mark-filed')).status, 200);
+  assert.equal(db.prepare('SELECT state FROM formation_steps WHERE id = 9').get()!.state, 'done');
+  assert.ok(!keysOf(await rec(db, 'company-creation', 'step-9')).includes('mark-filed'));
+  // An obligation's proof goes on its own row.
+  assert.equal((await act(db, 'company-creation', 'obligation-12', 'upload-proof', proofForm(PDF(), 'tax.pdf'))).status, 200);
+  assert.match(db.prepare('SELECT proof_file_key FROM entity_obligations WHERE id = 12').get()!.proof_file_key as string, new RegExp(`^build-proof/${P}/`));
+  db.close();
+});
+
+test('test 9: sync_editable and the form-options providers', async () => {
+  const db = withConnections(seeded());
+  const kinds = async (user = FOUNDER) => Object.fromEntries((await formOptions(db, 'operating-systems', user)).body.kinds.map((k: any) => [k.kind, k]));
+  const fresh = await kinds();
+  assert.deepEqual(Object.values(fresh).map((k: any) => [k.kind, k.providers.map((p: any) => p.provider_key), k.connections.map((x: any) => x.uid ?? x.provider_key), k.sync_editable]), [
+    ['bank', [], [], true], ['accounting', [], [], true], ['payroll', [], [], true],
+    ['crm', ['hubspot'], ['own-crm'], true],
+    ['workspace', ['google_calendar', 'microsoft_365'], [], false],
+  ]);
+  const all = JSON.stringify(fresh);
+  for (const hidden of ['salesforce', 'affinity', 'mate-crm', 'CRM two']) assert.ok(!all.includes(hidden), hidden);
+  const opts = (await formOptions(db, 'operating-systems')).body;
+  assert.deepEqual(opts.sync.options.map((o: any) => o.value), ['live', 'hourly', 'daily', 'manual']);
+  assert.deepEqual(opts.feeds.options.map((o: any) => o.value), ['use_of_funds', 'kpis', 'team']);
+  // Mapped to the caller's own connection, true; to another member's, false for the caller.
+  db.exec(`INSERT INTO project_core_systems (project_id, kind, integration_id, used_by, feeds_json, updated_by) VALUES (${P}, 'crm', 22, 'Sales', '["kpis"]', ${TEAMMATE})`);
+  assert.equal((await kinds()).crm.sync_editable, false);
+  assert.equal((await kinds(TEAMMATE)).crm.sync_editable, true);
+  assert.equal((await formOptions(db, 'operating-systems', PARTNER)).status, 403);
+  db.close();
+});
+
+test('test 9: a system record declares Choose connector with its values, and Sync only while it may be set', async () => {
+  const db = withConnections(seeded());
+  db.exec(`INSERT INTO project_core_systems (project_id, kind, integration_id, used_by, feeds_json, updated_by) VALUES (${P}, 'crm', 22, 'Sales', '["kpis"]', ${TEAMMATE})`);
+  const mine = await rec(db, 'operating-systems', 'crm');
+  assert.deepEqual(valuesOf(mine), { connector: '', used_by: 'Sales', feeds: ['kpis'] }, 'no Sync on another member\'s connection');
+  assert.deepEqual(actionOf(mine, 'edit').form.fields[0].options.map((o: any) => o.value), ['uid:own-crm']);
+  assert.deepEqual(valuesOf(await rec(db, 'operating-systems', 'crm', TEAMMATE)), { connector: '', used_by: 'Sales', feeds: ['kpis'], sync: 'daily' });
+  // The co-founder's Edit sent back unchanged keeps the mapping and the connection's setting.
+  assert.equal((await act(db, 'operating-systems', 'crm', 'edit', valuesOf(mine))).status, 200);
+  assert.deepEqual([crm(db).integration_id, crm(db).used_by, crm(db).feeds_json], [22, 'Sales', '["kpis"]']);
+  assert.equal(config(db, 22), '{"sync_frequency":"daily"}');
+  assert.equal((await act(db, 'operating-systems', 'crm', 'edit', { connector: 'uid:own-crm', used_by: 'Revenue' })).status, 200);
+  assert.deepEqual([crm(db).integration_id, crm(db).used_by], [21, 'Revenue']);
+  assert.equal((await act(db, 'operating-systems', 'crm', 'edit', { connector: 'uid:mate-crm' })).status, 403, 'never another member\'s connection');
+  assert.equal((await act(db, 'operating-systems', 'crm', 'edit', { connector: 'own-crm' })).status, 400, 'a connector off the list');
+  // Disconnect keeps Used by and Feeds and clears the connector.
+  const disconnect = actionOf(await rec(db, 'operating-systems', 'crm'), 'disconnect');
+  assert.deepEqual([disconnect.tone, disconnect.confirm], ['danger', 'Disconnect CRM from this venture? The connection stays in Connect a tool.']);
+  assert.equal((await act(db, 'operating-systems', 'crm', 'disconnect')).status, 200);
+  assert.deepEqual([crm(db).integration_id, crm(db).used_by, crm(db).feeds_json], [null, 'Revenue', '["kpis"]']);
+  assert.ok(!keysOf(await rec(db, 'operating-systems', 'crm')).includes('disconnect'), 'declared only while the kind names a connector');
+  // It deletes a Workspace row.
+  db.exec(`INSERT INTO google_oauth_tokens (user_id, refresh_token) VALUES (${FOUNDER}, 'enc-placeholder')`);
+  assert.equal((await call(db, 'PUT', '/systems/workspace', { provider_key: 'google_calendar' })).status, 200);
+  assert.ok(!('sync' in valuesOf(await rec(db, 'operating-systems', 'workspace'))), 'Workspace has no Sync');
+  assert.equal((await act(db, 'operating-systems', 'workspace', 'disconnect')).status, 200);
+  assert.equal(count(db, `SELECT COUNT(*) AS n FROM project_core_systems WHERE kind = 'workspace'`), 0);
+  db.close();
+});
+
+test('test 8: the founder Edit carries the Add fields; a role-only change keeps the role write\'s gate', async () => {
+  const db = seeded();
+  db.exec(`INSERT INTO cap_table_vesting (user_id, holder_id, start_date, cliff_months, total_months, total_shares, source) VALUES (${FOUNDER}, 8, '2026-01-15', 12, 48, 600, 'manual')`);
+  const r = await rec(db, 'founding-team', 'h-8');
+  assert.deepEqual(valuesOf(r), { name: 'Ana Wren', email: '', role: 'CEO', equity_pct: 60, vesting: '4y_1y_cliff', vesting_start: '2026-01-15', total_months: 48, cliff_months: 12 });
+  // Free plan: the unchanged Edit writes nothing, and one that changes only the role saves.
+  assert.equal((await act(db, 'founding-team', 'h-8', 'edit', valuesOf(r))).status, 200);
+  assert.equal(logCount(db), 0, 'an unchanged Edit writes nothing');
+  assert.equal((await act(db, 'founding-team', 'h-8', 'edit', { ...valuesOf(r), role: 'CTO' })).status, 200);
+  assert.equal(db.prepare('SELECT founder_role FROM cap_table_holders WHERE id = 8').get()!.founder_role, 'CTO');
+  assert.equal((await act(db, 'founding-team', 'h-8', 'edit', { ...valuesOf(r), equity_pct: '55' })).status, 402, 'the split goes through the cap table\'s gate');
+  assert.equal((await act(db, 'founding-team', 'h-8', 'log-contribution', { text: 'Signed the first pilot', on_date: '2026-10-09' })).status, 200);
+  assert.deepEqual({ ...db.prepare('SELECT holder_id, text, on_date FROM founder_contributions').get() }, { holder_id: 8, text: 'Signed the first pilot', on_date: '2026-10-09' });
+  const opts = (await formOptions(db, 'founding-team')).body;
+  assert.deepEqual(opts.unallocated, { value: 40 });
+  assert.deepEqual(opts.vesting.options.map((o: any) => o.value), ['4y_1y_cliff', '4y_no_cliff', 'custom']);
+  db.exec('UPDATE cap_table_holders SET ownership_pct = NULL');
+  assert.equal((await formOptions(db, 'founding-team')).body.unallocated.value, null, 'Not recorded with no percentage');
+  db.close();
+});
+
+test('form-options: themes, hypotheses, owners, KPIs, feedback themes, items, kinds, jurisdictions and founders', async () => {
+  const db = recordsA(seeded());
+  db.exec(`INSERT INTO product_feedback (uid, project_id, body, source, theme, status) VALUES ('f1', ${P}, 'Slow', 'customer', 'Onboarding', 'open'), ('f2', ${P}, 'Fine', 'customer', 'Onboarding', 'shipped'), ('f3', ${P_OTHER}, 'Other', 'customer', 'Leak', 'open')`);
+  const sd = (await formOptions(db, 'solution-design')).body;
+  assert.deepEqual(sd.pain_group_id.options, [{ value: '1', label: 'Manual reconciliation' }]);
+  assert.deepEqual(sd.hypothesis_id.options.map((o: any) => o.value), [String(HYP)]);
+  const mvp = (await formOptions(db, 'prototype-mvp')).body;
+  assert.deepEqual(mvp.owner_user_id.options.map((o: any) => o.value).sort(), [String(FOUNDER), String(TEAMMATE)].sort());
+  const road = (await formOptions(db, 'product-roadmap')).body;
+  assert.deepEqual(road.kpi_key.options.map((o: any) => o.value), ['mrr', 'paying_accounts', 'new_mrr', 'expansion_mrr', 'churn', 'net_burn', 'runway', 'custom-ownkpi']);
+  assert.deepEqual(road.feedback_theme.options, [{ value: 'Onboarding', label: 'Onboarding', open_unlinked: 1 }]);
+  assert.deepEqual(road.waits_on_id.options.map((o: any) => o.value), ['6', '7']);
+  const cc = (await formOptions(db, 'company-creation')).body;
+  assert.deepEqual(cc.kind.options.map((o: any) => o.value), ['formation', 'ein', '83b', 'annual_report', 'franchise_tax', 'other']);
+  assert.deepEqual(cc.jurisdiction.options.map((o: any) => o.value), ['DE', 'Federal']);
+  assert.deepEqual(cc.for_holder_id.options, [{ value: 'h-8', label: 'Ana Wren' }]);
+  db.exec(`DELETE FROM pain_groups`);
+  assert.deepEqual((await formOptions(db, 'solution-design')).body.pain_group_id, { options: [], empty: 'None yet' }, 'an empty set offers None yet');
+  db.close();
+});
+
+/** #1695's closing writes: each logs one row with its record's id, in its own batch. */
+const CLOSING: Array<{ name: string; run: (db: DatabaseSync) => Promise<{ status: number; body: any }>; action: string; entityType: string; entityId: (r: any) => string; state: string }> = [
+  { name: 'Add item', run: (db) => call(db, 'POST', '/roadmap', { title: 'Faster import', waits_on_id: 6, feedback_theme: 'Onboarding' }), action: 'build_roadmap_item_created',
+    entityType: 'build.product-roadmap', entityId: (r) => String(r.id), state: 'SELECT (SELECT COUNT(*) FROM roadmap_okrs) || \'/\' || (SELECT COUNT(*) FROM okr_dependencies) AS n' },
+  { name: 'item edit', run: (db) => call(db, 'PATCH', '/roadmap/6', { title: 'Ship it', feature_id: 3 }), action: 'build_roadmap_details_changed',
+    entityType: 'build.product-roadmap', entityId: () => '6', state: 'SELECT objective, feature_id FROM roadmap_okrs WHERE id = 6' },
+  { name: 'Add filing (83(b))', run: (db) => call(db, 'POST', '/formation-steps', { kind: '83b', for_holder_id: 'h-8' }), action: 'build_formation_step_created',
+    entityType: 'build.company-creation', entityId: (r) => `step-${r.id}`, state: 'SELECT COUNT(*) AS n FROM formation_steps' },
+  { name: 'a feature\'s risk', run: (db) => act(db, 'solution-design', '3', 'add-risk', { title: 'Rate limits', severity: 'low' }), action: 'build_risk_created',
+    entityType: 'build.solution-design', entityId: () => '3', state: 'SELECT COUNT(*) AS n FROM venture_risks' },
+  { name: 'test session', run: (db) => act(db, 'prototype-mvp', '3', 'add-session', { title: 'Third pass' }), action: 'build_test_session_added',
+    entityType: 'build.solution-design', entityId: () => '3', state: 'SELECT COUNT(*) AS n FROM mvp_test_sessions' },
+  { name: 'finding', run: (db) => act(db, 'prototype-mvp', '3', 'add-finding', { session_id: '50', text: 'Users hesitate' }), action: 'build_test_finding_added',
+    entityType: 'build.solution-design', entityId: () => '3', state: 'SELECT COUNT(*) AS n FROM mvp_test_findings' },
+  { name: 'link', run: (db) => act(db, 'prototype-mvp', '3', 'link', { url: 'https://github.com/kestrel/app/pull/9' }), action: 'build_feature_link_added',
+    entityType: 'build.solution-design', entityId: () => '3', state: 'SELECT COUNT(*) AS n FROM mvp_feature_links' },
+  { name: 'release check', run: (db) => act(db, 'prototype-mvp', '3', 'add-check', { label: 'Docs' }), action: 'build_release_check_added',
+    entityType: 'build.solution-design', entityId: () => '3', state: 'SELECT COUNT(*) AS n FROM mvp_release_checks' },
+  { name: 'check', run: (db) => act(db, 'prototype-mvp', '3', 'check', { check_id: '51' }), action: 'build_release_check_changed',
+    entityType: 'build.solution-design', entityId: () => '3', state: 'SELECT done_at IS NOT NULL AS n FROM mvp_release_checks WHERE id = 51' },
+  { name: 'dependency', run: (db) => act(db, 'product-roadmap', '6', 'add-dependency', { waits_on_id: '7' }), action: 'build_roadmap_dependency_added',
+    entityType: 'build.product-roadmap', entityId: () => '6', state: 'SELECT COUNT(*) AS n FROM okr_dependencies' },
+  { name: 'contribution', run: (db) => act(db, 'founding-team', 'h-8', 'log-contribution', { text: 'Closed a pilot' }), action: 'build_contribution_logged',
+    entityType: 'build.founding-team', entityId: () => 'h-8', state: 'SELECT COUNT(*) AS n FROM founder_contributions' },
+  { name: 'filing step', run: (db) => act(db, 'company-creation', 'step-9', 'step-check', { key: 'submit' }), action: 'build_filing_step_checked',
+    entityType: 'build.company-creation', entityId: () => 'step-9', state: 'SELECT COUNT(*) AS n FROM formation_step_checks' },
+  { name: 'proof', run: (db) => act(db, 'company-creation', 'step-9', 'upload-proof', proofForm(PDF(), 'Ana Wren receipt.pdf')), action: 'build_proof_uploaded',
+    entityType: 'build.company-creation', entityId: () => 'step-9', state: 'SELECT proof_file_key AS n FROM formation_steps WHERE id = 9' },
+];
+
+test('test 10: each closing write logs one row with its project, entity type and record id, and no name', async () => {
+  for (const w of CLOSING) {
+    const db = recordsA(seeded());
+    db.exec(`UPDATE users SET subscription_tier = 'growth' WHERE id = ${FOUNDER}`);
+    db.exec(`INSERT INTO product_feedback (uid, project_id, body, source, theme) VALUES ('f1', ${P}, 'Slow', 'customer', 'Onboarding')`);
+    const before = one(db, w.state);
+    const r = await w.run(db);
+    assert.ok([200, 201].includes(r.status), `${w.name}: ${r.status} ${JSON.stringify(r.body)}`);
+    assert.notEqual(one(db, w.state), before, `${w.name} changed its store`);
+    const rows = (db.prepare('SELECT project_id, user_id, entity_type, entity_id, action, details FROM activity_logs').all() as any[]).map((x) => ({ ...x }));
+    assert.equal(rows.length, 1, `${w.name}: ${JSON.stringify(rows)}`);
+    const { details, ...row } = rows[0];
+    assert.deepEqual(row, { project_id: P, user_id: FOUNDER, entity_type: w.entityType, entity_id: w.entityId(r.body?.record ?? r.body), action: w.action }, w.name);
+    assert.ok(details && details.trim(), `${w.name} has a summary`);
+    for (const p of [...PRIVATE, 'http', 'github.com', '.pdf', 'receipt']) assert.ok(!details.toLowerCase().includes(p), `${w.name}: "${details}" holds "${p}"`);
+    db.close();
+  }
+});
+
+test('test 10: a closing write whose log fails is not written, and an upload leaves no object', async () => {
+  for (const w of CLOSING) {
+    const db = recordsA(seeded());
+    db.exec(`UPDATE users SET subscription_tier = 'growth' WHERE id = ${FOUNDER}`);
+    db.exec(`CREATE TRIGGER reject_log BEFORE INSERT ON activity_logs WHEN NEW.action = '${w.action}' BEGIN SELECT RAISE(ABORT, 'log failure'); END`);
+    const before = one(db, w.state);
+    const r = await w.run(db);
+    assert.equal(r.status, 500, `${w.name}: ${JSON.stringify(r.body)}`);
+    assert.equal(one(db, w.state), before, `${w.name}: the write did not land without its log`);
+    assert.equal(bucket(db).store.size, 0, `${w.name}: no stored object is left behind`);
     db.close();
   }
 });
