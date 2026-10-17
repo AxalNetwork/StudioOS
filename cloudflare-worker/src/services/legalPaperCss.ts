@@ -200,7 +200,7 @@ export function paperCss(o: PaperCssOptions): string {
     content: "AXAL VC";
     font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: ${T.size.lockup};
     color: ${C.violet}; letter-spacing: 0.04em;
-    background: url(${markDataUri()}) no-repeat left center / ${T.size.mark} ${T.size.mark};
+    background: url(${markDataUri()}) no-repeat left 0 bottom 5pt / ${T.size.mark} ${T.size.mark};
     padding-left: calc(${T.size.mark} + 5pt);
     vertical-align: bottom; padding-bottom: 6pt;
     border-bottom: ${T.rule.header} solid ${C.rule};
@@ -234,6 +234,9 @@ export function paperCss(o: PaperCssOptions): string {
 }
 .cover { page: cover; width: ${dim.w}; height: ${dim.h}; box-sizing: border-box; padding: ${T.space.pageMargin}; break-after: page; }
 .screen-only { display: none; }
+/* A face used only in a margin box is never loaded, so the lockup's wordmark
+   would print blank: this invisible run in the page loads it. */
+.font-warm { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; font-family: 'Space Grotesk', sans-serif; font-weight: 700; }
 ` : `
 body { max-width: 7in; margin: 0 auto; padding: 24px 20px; background: ${C.white}; }
 .cover { min-height: 9in; padding: ${T.space.pageMargin}; margin-bottom: 24px; }
@@ -256,9 +259,9 @@ em { font-style: italic; }
 .confidential { font-size: ${T.size.confidential}; }
 .screen-foot { margin-top: 24pt; padding-top: 8pt; border-top: ${T.rule.header} solid ${C.rule}; font-size: ${T.size.footer}; color: ${C.muted}; }
 .audit { font-family: 'Roboto Mono', monospace; font-size: ${T.size.audit}; color: ${C.faint}; }
-.state-banner { font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; font-size: ${T.size.eyebrow}; color: ${C.muted}; margin: -6pt 0 12pt; }
-.stamp { display: inline-block; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; font-size: ${T.size.eyebrow}; color: ${C.stampInk}; background: ${C.stampGround}; border: ${T.rule.legend} solid ${C.stampInk}; padding: 2pt 6pt; margin: -6pt 0 12pt; }
-.restricted { font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; font-size: ${T.size.eyebrow}; color: ${C.violet}; margin: -6pt 0 12pt; }
+.state-banner { font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; font-size: ${T.size.eyebrow}; color: ${C.muted}; margin: 0 0 12pt; }
+.stamp { display: inline-block; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; font-size: ${T.size.eyebrow}; color: ${C.stampInk}; background: ${C.stampGround}; border: ${T.rule.legend} solid ${C.stampInk}; padding: 2pt 6pt; margin: 0 0 12pt; }
+.restricted { font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; font-size: ${T.size.eyebrow}; color: ${C.violet}; margin: 0 0 12pt; }
 .diagonal { position: fixed; top: 46%; left: 0; right: 0; text-align: center; transform: rotate(-45deg); font-family: 'Public Sans', sans-serif; font-weight: 700; font-size: ${T.size.diagonal}; opacity: ${T.opacity.diagonal}; pointer-events: none; z-index: 0; }
 .diagonal.draft { color: ${C.diagonalDraft}; }
 .diagonal.specimen { color: ${C.diagonalSpecimen}; }
@@ -304,6 +307,7 @@ section.execution .recital { font-style: italic; color: ${C.muted}; font-size: 9
 .party .heading { font-weight: 700; color: ${C.inkStrong}; margin-bottom: 2pt; }
 .party .through { margin-bottom: 4pt; }
 .party .line { margin: 0 0 3pt; font-size: 9.5pt; }
+.party .line .fill { min-width: 0; width: 70%; }
 .party .through-block { padding-left: 12pt; }
 .party .sigimg { display: block; max-width: 180pt; max-height: 48pt; margin: 4pt 0 2pt; }
 .party .signed { font-family: 'Roboto Mono', monospace; font-size: ${T.size.audit}; color: ${C.muted}; margin: 0 0 3pt; }
