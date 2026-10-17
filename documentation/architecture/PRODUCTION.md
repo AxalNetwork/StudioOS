@@ -157,6 +157,10 @@ A grant older than a raised session floor is also refused on every tool call (`g
 ### Cloudflare Worker (required)
 - [ ] `JWT_SECRET` – 64+ random chars (`openssl rand -hex 48`); the worker
       refuses requests if it's missing or weak.
+- [ ] `KEK_PII` – 32+ random bytes; the column cipher (`services/columnCipher.ts`)
+      throws without it in production. D710's Mercury entity tokens are stored
+      under it, and changing it leaves every stored token unreadable until it
+      is entered again.
 
 ### Cloudflare Worker (optional, per feature)
 - [ ] `GITHUB_ACCESS_TOKEN` – ticket → GitHub-issue sync.
