@@ -213,12 +213,15 @@ export async function upsertAccounts(env: Env, conn: ConnectionRow, accounts: Pa
     ).bind(newUid(), a.mercury_account_id, conn.id, conn.entity_key, a.kind, a.last_four, a.nickname, a.status, reg,
       a.current_cents, a.available_cents, reg).run();
     // One snapshot per account per UTC day; the day's latest read replaces it.
+    // Only for an account this connection holds (another entity's is untouched above).
+    const held = await env.DB.prepare('SELECT id FROM mercury_accounts WHERE mercury_account_id = ? AND connection_id = ?')
+      .bind(a.mercury_account_id, conn.id).first<{ id: number }>();
+    if (!held) continue;
     await env.DB.prepare(
-      `INSERT INTO mercury_balance_snapshots (account_id, as_of_date, current_cents, available_cents)
-       SELECT id, ?, ?, ? FROM mercury_accounts WHERE mercury_account_id = ? AND connection_id = ?
+      `INSERT INTO mercury_balance_snapshots (account_id, as_of_date, current_cents, available_cents) VALUES (?, ?, ?, ?)
        ON CONFLICT(account_id, as_of_date) DO UPDATE SET
          current_cents = excluded.current_cents, available_cents = excluded.available_cents, read_at = datetime('now')`,
-    ).bind(today, a.current_cents, a.available_cents, a.mercury_account_id, conn.id).run();
+    ).bind(held.id, today, a.current_cents, a.available_cents).run();
   }
   const r = await env.DB.prepare('SELECT * FROM mercury_accounts WHERE connection_id = ? ORDER BY id').bind(conn.id).all<AccountRow>();
   return r.results || [];
