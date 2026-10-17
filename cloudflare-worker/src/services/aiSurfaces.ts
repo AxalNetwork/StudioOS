@@ -63,3 +63,34 @@ export const AI_SURFACES: readonly AiSurface[] = Object.freeze(Object.values(AI_
 export function isAiSurface(value: unknown): value is AiSurface {
   return typeof value === 'string' && (AI_SURFACES as readonly string[]).includes(value);
 }
+
+/**
+ * D704 (#1666) — PAGES THAT BECAME MODULES. `/validate/interviews`,
+ * `/validate/pain-map` and `/validate/hypotheses` stop being pages; each
+ * feature moved into a Validate module (D689 D-b). Runs already recorded on an
+ * old path stay as they were (no row is rewritten), and the spend reads count
+ * them under the module that holds the feature now: the per-page figure of
+ * `GET /api/ai/me/spend?surface=` and `/account/usage`'s By page breakdown.
+ * The caller's own rows only, as every spend read is scoped.
+ *
+ * Read by those two spend reads only, never by the router, which records the
+ * path it is given.
+ */
+export const AI_SURFACE_ALIASES: Readonly<Record<string, string>> = Object.freeze({
+  '/validate/interviews': '/validate/customer-research',
+  '/validate/pain-map': '/validate/problem-discovery',
+  '/validate/hypotheses': '/validate/experiments',
+});
+
+/** The module an old page path now counts under, or the path itself. */
+export function surfaceCountsAs(surface: string): string {
+  return Object.hasOwn(AI_SURFACE_ALIASES, surface) ? AI_SURFACE_ALIASES[surface] : surface;
+}
+
+/**
+ * The old page path whose rows a read of `surface` also counts, or `surface`
+ * itself when none aliases to it. A read of an old path counts only that path.
+ */
+export function surfaceAlsoCounts(surface: string): string {
+  return Object.keys(AI_SURFACE_ALIASES).find((old) => AI_SURFACE_ALIASES[old] === surface) ?? surface;
+}
