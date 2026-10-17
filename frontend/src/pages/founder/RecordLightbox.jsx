@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Lightbox from '../../ui/Lightbox.jsx';
+import BrandIcon from '../../ui/BrandIcon.jsx';
 import { api as defaultApi } from '../../lib/api.js';
 import { interviewSessionsApi } from '../../lib/api/interviewSessions.js';
 import { channelsApi } from '../../lib/api/channels.js';
@@ -46,7 +47,11 @@ const tile = (on) => `${TILE} ${on ? 'border-axal-violet bg-axal-lavender text-a
 const LABEL = 'text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint';
 const FIELD = 'w-full rounded-[9px] border border-axal-hairline bg-white px-3 py-2 text-[13px] text-axal-ink placeholder:text-axal-faint focus:outline-none focus:ring-2 focus:ring-axal-violet/40 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
 
-/** A radio group of buttons: one tab stop, arrow keys move and choose. */
+/**
+ * A radio group of buttons: one tab stop, arrow keys move and choose. An
+ * option may carry an `icon`, drawn before its label (D687 step 10: only the
+ * Provider group passes one). A disabled chip dims its icon with it.
+ */
 export function Radios({ label, options, value, onChange, className = 'flex flex-wrap gap-1.5', style = chip, testId }) {
   const enabled = options.filter((o) => !o.disabled);
   const stop = enabled.find((o) => o.value === value) || enabled[0];
@@ -66,8 +71,8 @@ export function Radios({ label, options, value, onChange, className = 'flex flex
         <button key={o.value} type="button" role="radio" aria-checked={o.value === value} aria-disabled={o.disabled || undefined}
           disabled={o.disabled} data-value={o.value} data-testid={testId ? `${testId}-${o.value}` : undefined}
           tabIndex={stop && stop.value === o.value ? 0 : -1} onKeyDown={onKey}
-          onClick={() => !o.disabled && onChange(o.value)} className={style(o.value === value)} title={o.title}>
-          {o.label}
+          onClick={() => !o.disabled && onChange(o.value)} className={`${style(o.value === value)}${o.icon ? ' inline-flex items-center gap-1.5' : ''}`} title={o.title}>
+          {o.icon}{o.label}
         </button>
       ))}
     </div>
@@ -370,7 +375,9 @@ export default function RecordLightbox({
           <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400" data-testid="record-mode-note">{modeNote(mode, recorder ? recorder.canShareTab !== false : true)}</p>
           {chips.length > 0 && (
             <Radios label="Provider" testId="record-provider" value={provider} onChange={setProvider}
-              options={chips.map((c) => { const st = chipStatus(mode, c, channels); return { value: c.value, label: `${c.label} · ${st.word}`, disabled: st.disabled, title: st.disabled ? 'Not available yet' : undefined }; })} />
+              options={chips.map((c) => { const st = chipStatus(mode, c, channels); return { value: c.value, label: `${c.label} · ${st.word}`, disabled: st.disabled, title: st.disabled ? 'Not available yet' : undefined,
+                // D687 step 10: the bare 16px mark, real marks only (fallback none), as Schedule a call's chips draw it.
+                icon: <BrandIcon provider={c.value} size={16} variant="bare" fallback="none" /> }; })} />
           )}
           {status?.connectHref && (
             <Link to={status.connectHref} className="w-fit text-[12px] font-semibold text-axal-violet underline dark:text-violet-300" data-testid="record-connect-link">Connect {chosen.label} in Connectors</Link>
