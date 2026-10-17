@@ -110,37 +110,243 @@ function slugify(name: string): string {
   return `${base}-${tail}`;
 }
 
-// Stored-XSS guard for the user-supplied logo_svg. We render it with
-// dangerouslySetInnerHTML on the public landing page, so strip script
-// tags, on*= event handlers, and javascript: hrefs before saving.
-// Exported so the sanitizer contract is locked by brand_svg_sanitize.test.ts.
+// Stored-XSS guard for the user-supplied logo_svg. It is written RAW into the
+// public landing page (`row.logo_svg` in services/landingTemplates.ts) and is
+// what an uploaded image/svg+xml mark is stored as, so it is cleaned here, at
+// the write boundary. Exported so the sanitizer contract is locked by
+// brand_svg_sanitize.test.ts.
+//
+// AN ALLOWLIST THAT REBUILDS THE MARKUP, NOT A BLOCKLIST THAT STRIPS IT. The
+// previous version deleted known-bad substrings with `replace` passes looped to
+// a fixed point (CodeQL js/incomplete-multi-character-sanitization), and a list
+// of bad substrings was never complete: its handler pattern wanted whitespace
+// before `on…=`, but an HTML tag accepts a solidus there too, so
+// `<rect/onmouseover=alert(1)>` was stored intact. Now the input is read tag by
+// tag the way an HTML tokenizer reads it and the output is built from nothing:
+// only the elements in SVG_ELEMENTS, only attributes that are not handlers,
+// links or legacy script-bearing CSS, every value re-quoted, every stray `<`
+// escaped, every open element closed, nothing after the root `</svg>`. No
+// character of the input reaches the output except through those builders, so
+// how a browser re-parses the result cannot turn text back into markup.
 export function sanitizeSvg(svg: string | null | undefined): string | null {
   if (!svg) return null;
-  let s = String(svg).trim();
+  const s = String(svg).trim();
   if (!s.toLowerCase().startsWith('<svg')) return null;
-  // CodeQL js/incomplete-multi-character-sanitization: a single replace pass
-  // can leave a fresh forbidden token in the result (e.g. `<scr<script>ipt>`
-  // → `<script>` after one pass). Loop to a fixed point.
-  const STRIP_TAG_PAIR = /<\s*(script|foreignObject|iframe|object|embed|link|meta|style|use|image)\b[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi;
-  const STRIP_TAG_OPEN = /<\s*(script|foreignObject|iframe|object|embed|link|meta|style|use|image)\b[^>]*\/?>/gi;
-  const STRIP_ON_ATTR  = /\s+on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi;
-  // Strip ALL href/xlink:href (quoted or unquoted, any scheme) — the
-  // generated/uploaded logo SVGs have no need for hrefs and stripping
-  // them blanket-blocks javascript:/data:text/html bypasses.
-  const STRIP_HREF     = /\s+(href|xlink:href)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi;
-  for (let prev = ''; prev !== s; ) {
-    prev = s;
-    s = s.replace(STRIP_TAG_PAIR, '')
-         .replace(STRIP_TAG_OPEN, '')
-         .replace(STRIP_ON_ATTR, '')
-         .replace(STRIP_HREF, '');
+  const out: string[] = [];
+  const open: string[] = []; // allowlisted elements written and not yet closed
+  const openCount = new Map<string, number>(); // how many of each name `open` holds
+  let size = 0;
+  let owed = 0; // length of the end tags `open` still needs
+  // The cap used to be `slice(0, 8000)` on the finished string, which could cut
+  // a tag or a quoted value in half. Now a piece is written only if it fits
+  // together with every end tag still owed (`opens` is the element the piece
+  // itself opens), so a truncated logo is still well-formed.
+  const emit = (piece: string, opens?: string): boolean => {
+    const extra = opens ? opens.length + 3 : 0;
+    if (size + piece.length + owed + extra > LOGO_SVG_MAX_CHARS) return false;
+    out.push(piece);
+    size += piece.length;
+    if (opens) { open.push(opens); openCount.set(opens, (openCount.get(opens) ?? 0) + 1); owed += extra; }
+    return true;
+  };
+  const closeTop = (): void => {
+    const name = open.pop()!;
+    openCount.set(name, openCount.get(name)! - 1);
+    out.push('</' + name + '>');
+    size += name.length + 3;
+    owed -= name.length + 3;
+  };
+  let i = 0;
+  while (i < s.length) {
+    if (s[i] !== '<') {
+      const lt = s.indexOf('<', i);
+      const end = lt === -1 ? s.length : lt;
+      if (open.length && !emit(escapeSvgText(s.slice(i, end)))) break;
+      i = end;
+      continue;
+    }
+    // Comments, doctypes and processing instructions are dropped; a CDATA
+    // section is kept as the plain text it stands for.
+    if (s.startsWith('<!--', i)) { i = indexAfter(s, '-->', i + 4); continue; }
+    if (s.startsWith('<![CDATA[', i)) {
+      const end = s.indexOf(']]>', i + 9);
+      if (open.length && !emit(escapeSvgText(s.slice(i + 9, end === -1 ? s.length : end)))) break;
+      i = end === -1 ? s.length : end + 3;
+      continue;
+    }
+    if (s[i + 1] === '!' || s[i + 1] === '?') { i = indexAfter(s, '>', i + 2); continue; }
+    const tag = readSvgTag(s, i);
+    if (tag === 'eof') break; // a tag that never closes is dropped, like a parser does
+    if (tag === null) { // a `<` that starts no tag is text
+      if (open.length && !emit('&lt;')) break;
+      i += 1;
+      continue;
+    }
+    i = tag.end;
+    const lname = tag.name.toLowerCase();
+    const canon = SVG_ELEMENTS.get(lname);
+    if (!out.length && (tag.closing || lname !== 'svg')) return null; // `<svgx>` passed startsWith
+    if (tag.closing) {
+      // An end tag closes the innermost open element of its name and whatever
+      // is still open inside it; an end tag for nothing open is dropped, and
+      // without a scan of `open`, so a run of stray end tags stays linear.
+      if (!canon || !openCount.get(canon)) continue;
+      const at = open.lastIndexOf(canon);
+      while (open.length > at) closeTop();
+      if (!open.length) break; // the root closed: nothing after it is kept
+      continue;
+    }
+    if (!canon) {
+      // Not allowlisted: the tag goes, its children are read on their own
+      // merits, except where the content itself is the payload.
+      if (!tag.selfClosing && SVG_DROP_WITH_CONTENT.has(lname)) i = indexAfterEndTag(s, lname, i);
+      continue;
+    }
+    if (!emit(svgStartTag(canon, tag.attrs, tag.selfClosing), tag.selfClosing ? undefined : canon)) break;
+    if (!open.length) break; // a self-closed root: `<svg/>`
   }
-  // Belt-and-suspenders: drop the whole SVG if obfuscated payloads remain.
-  const lower = s.toLowerCase();
+  if (!out.length) return null;
+  while (open.length) closeTop();
+  const clean = out.join('');
+  // Belt-and-suspenders, kept from the blocklist era: drop the whole SVG if a
+  // payload's name survives anywhere, even as inert text.
+  const lower = clean.toLowerCase();
   if (lower.includes('javascript:') || lower.includes('<script') || lower.includes('onload') || lower.includes('onerror')) {
     return null;
   }
-  return s.slice(0, 8000);
+  return clean;
+}
+
+const LOGO_SVG_MAX_CHARS = 8000;
+
+// The elements a logo is drawn with: shapes, text, paint servers, clipping,
+// masking, filters and transform/motion animation. Everything else is dropped,
+// notably script, style (its CSS would apply to the whole landing page),
+// foreignObject, a, use, image and feImage (they exist to reference something
+// else) and animate/set (they can animate an href). Keyed lowercase because an
+// HTML parser lowercases tag names; the value is the spelling written back.
+const SVG_ELEMENTS = new Map<string, string>([
+  'svg', 'g', 'defs', 'symbol', 'switch', 'title', 'desc',
+  'path', 'rect', 'circle', 'ellipse', 'line', 'polyline', 'polygon',
+  'text', 'tspan', 'textPath',
+  'linearGradient', 'radialGradient', 'stop', 'pattern', 'clipPath', 'mask', 'marker',
+  'animateTransform', 'animateMotion',
+  'filter', 'feBlend', 'feColorMatrix', 'feComponentTransfer', 'feComposite',
+  'feConvolveMatrix', 'feDiffuseLighting', 'feDisplacementMap', 'feDistantLight',
+  'feDropShadow', 'feFlood', 'feFuncA', 'feFuncB', 'feFuncG', 'feFuncR',
+  'feGaussianBlur', 'feMerge', 'feMergeNode', 'feMorphology', 'feOffset',
+  'fePointLight', 'feSpecularLighting', 'feSpotLight', 'feTile', 'feTurbulence',
+].map((name): [string, string] => [name.toLowerCase(), name]));
+
+// Dropped together with everything inside them, not just their tags.
+const SVG_DROP_WITH_CONTENT = new Set([
+  'script', 'style', 'foreignobject', 'metadata', 'iframe', 'object', 'embed',
+  'noscript', 'template', 'textarea', 'xmp', 'noembed', 'noframes', 'math',
+]);
+
+const SVG_ATTR_NAME = /^[a-zA-Z_][\w.:-]*$/;
+// CSS cannot run script in a current browser; these are the engines where it
+// could (IE expression()/behavior, Firefox XBL bindings, javascript: urls), and
+// a CSS escape or a character reference could spell any of them past the
+// check, so a backslash or an `&` drops the style attribute too. Except for
+// `&quot;`, `&lt;` and `&gt;`: they stand for `"`, `<` and `>`, which spell
+// none of those words, and they are what a browser writes when it serialises a
+// style (`font-family: &quot;Inter&quot;`) and what svgStartTag writes for a
+// `"`, `<` or `>` in a value, so a logo saved again comes back unchanged.
+const UNSAFE_INLINE_CSS = /\\|&(?!(?:quot|lt|gt);)|expression\s*\(|javascript:|vbscript:|-moz-binding|behavior\s*:|@import/i;
+// A `&` that does not already start a character reference.
+const BARE_AMP = /&(?!#\d+;|#[xX][\da-fA-F]+;|[a-zA-Z][a-zA-Z\d]*;)/g;
+
+// Text and attribute values keep the character references they were written
+// with (escaping those again would turn `&quot;` into the literal `&quot;`), so
+// `&` is escaped first and only where it is bare.
+function escapeSvgText(t: string): string {
+  return t.replace(BARE_AMP, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function svgStartTag(canon: string, attrs: Array<[string, string]>, selfClosing: boolean): string {
+  let tag = '<' + canon;
+  const seen = new Set<string>();
+  for (const [name, value] of attrs) {
+    const lname = name.toLowerCase();
+    if (seen.has(lname)) continue; // a parser keeps the first of a repeated attribute
+    seen.add(lname);
+    if (!SVG_ATTR_NAME.test(name)) continue;
+    // `local` is the name past any prefix, so xlink:href and ns:onclick count.
+    // Every href goes, quoted or not and whatever the scheme (as before): a
+    // logo needs none, and that blanket-blocks javascript: and data:text/html.
+    const local = lname.slice(lname.lastIndexOf(':') + 1);
+    if (local.startsWith('on') || local === 'href' || local === 'src') continue;
+    if (local === 'style' && UNSAFE_INLINE_CSS.test(value)) continue;
+    tag += ' ' + name + '="' + escapeSvgText(value).replace(/"/g, '&quot;') + '"';
+  }
+  return tag + (selfClosing ? '/>' : '>');
+}
+
+type SvgTag = { name: string; closing: boolean; selfClosing: boolean; attrs: Array<[string, string]>; end: number };
+
+const isHtmlSpace = (c: string | undefined): boolean =>
+  c === ' ' || c === '\t' || c === '\n' || c === '\r' || c === '\f';
+
+// Read the tag that starts at s[i] === '<' as an HTML tokenizer does: the name
+// runs to whitespace, `/` or `>`; attributes are separated by whitespace OR a
+// solidus; a value is double-quoted, single-quoted, or runs to whitespace or
+// `>`; a `/` right before `>` self-closes. Returns null when this `<` starts no
+// tag (it is text) and 'eof' when the tag is never finished.
+function readSvgTag(s: string, i: number): SvgTag | null | 'eof' {
+  let j = i + 1;
+  const closing = s[j] === '/';
+  if (closing) j++;
+  if (!/^[a-zA-Z]$/.test(s[j] ?? '')) return null;
+  const nameAt = j;
+  while (j < s.length && !isHtmlSpace(s[j]) && s[j] !== '/' && s[j] !== '>') j++;
+  const name = s.slice(nameAt, j);
+  const attrs: Array<[string, string]> = [];
+  for (;;) {
+    let selfClosing = false;
+    while (isHtmlSpace(s[j]) || s[j] === '/') selfClosing = s[j++] === '/';
+    if (j >= s.length) return 'eof';
+    if (s[j] === '>') return { name, closing, selfClosing, attrs, end: j + 1 };
+    const attrAt = j++; // a first character of `=` belongs to the name
+    while (j < s.length && !isHtmlSpace(s[j]) && s[j] !== '/' && s[j] !== '>' && s[j] !== '=') j++;
+    const attrName = s.slice(attrAt, j);
+    while (isHtmlSpace(s[j])) j++;
+    let value = '';
+    if (s[j] === '=') {
+      j++;
+      while (isHtmlSpace(s[j])) j++;
+      const q = s[j];
+      if (q === '"' || q === "'") {
+        const close = s.indexOf(q, j + 1);
+        if (close === -1) return 'eof';
+        value = s.slice(j + 1, close);
+        j = close + 1;
+      } else {
+        const valueAt = j;
+        while (j < s.length && !isHtmlSpace(s[j]) && s[j] !== '>') j++;
+        value = s.slice(valueAt, j);
+      }
+    }
+    attrs.push([attrName, value]);
+  }
+}
+
+function indexAfter(s: string, marker: string, from: number): number {
+  const at = s.indexOf(marker, from);
+  return at === -1 ? s.length : at + marker.length;
+}
+
+// Past the end tag that closes `lname` (any case), or the end of the input
+// when there is none.
+function indexAfterEndTag(s: string, lname: string, from: number): number {
+  for (let at = s.indexOf('</', from); at !== -1; at = s.indexOf('</', at + 2)) {
+    const after = at + 2 + lname.length;
+    const next = s[after];
+    if (s.slice(at + 2, after).toLowerCase() === lname && (next === '>' || next === '/' || isHtmlSpace(next))) {
+      return indexAfter(s, '>', after);
+    }
+  }
+  return s.length;
 }
 
 // Allow only same-origin paths (/...) or https:// for externally-hosted images.

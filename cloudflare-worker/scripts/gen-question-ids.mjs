@@ -103,6 +103,18 @@ function unquote(s) {
   return m ? m[1] : undefined;
 }
 
+// One literal pattern per row field read: `<key>:` then a quoted value or
+// `undefined`. Written out rather than built from the key at run time.
+const ROW_FIELD = {
+  page_target:     /\bpage_target:\s*(['"][^'"]+['"]|undefined)/,
+  doc_anchor:      /\bdoc_anchor:\s*(['"][^'"]+['"]|undefined)/,
+  section:         /\bsection:\s*(['"][^'"]+['"]|undefined)/,
+  persona:         /\bpersona:\s*(['"][^'"]+['"]|undefined)/,
+  mi_section:      /\bmi_section:\s*(['"][^'"]+['"]|undefined)/,
+  mi:              /\bmi:\s*(['"][^'"]+['"]|undefined)/,
+  partner_subtype: /\bpartner_subtype:\s*(['"][^'"]+['"]|undefined)/,
+};
+
 // Extract per-row object literal fields we care about.
 function parseRowObject(rowSrc, defaults) {
   const out = { ...defaults };
@@ -110,8 +122,7 @@ function parseRowObject(rowSrc, defaults) {
   if (!idM) return null;
   out.id = idM[1];
   const get = (key) => {
-    const re = new RegExp(`\\b${key}:\\s*(['"][^'"]+['"]|undefined)`);
-    const m = re.exec(rowSrc);
+    const m = ROW_FIELD[key].exec(rowSrc);
     return m ? unquote(m[1]) : undefined;
   };
   const ptOverride = get('page_target');

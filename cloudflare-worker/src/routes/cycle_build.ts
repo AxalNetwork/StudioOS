@@ -502,8 +502,8 @@ const READS: Record<Slug, (env: Env, p: Project, viewer: Viewer) => Promise<Modu
 async function safeRead(slug: Slug, env: Env, project: Project, viewer: Viewer): Promise<ModuleRead> {
   try { return await READS[slug](env, project, viewer); }
   catch (error) {
-    console.error(`[cycle_build] ${MODULES.find(m => m[0] === slug)![2]} read failed`, error);
     const spec = MODULES.find(m => m[0] === slug)!;
+    console.error('[cycle_build] %s read failed', spec[2], error);
     return { card: unreadableBuildCard(slug, spec[1], spec[2], spec[3]), cols: [], rows: [] };
   }
 }

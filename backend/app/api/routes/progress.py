@@ -539,7 +539,10 @@ def delete_interview(
 # waitlist_signups has no SQLModel entity, so reads/writes use raw text() SQL
 # scoped by id + project_id + audience after the project auth check (IDOR-safe).
 # ---------------------------------------------------------------------------
-_WAITLIST_CRM_READY = False
+# A dict entry, not a `global` flag, as in settings.py (D476): CodeQL's
+# unused-global check does not follow a flag written on one call and read
+# on the next. Same run-once behaviour.
+_schema_once = {"waitlist_crm": False}
 
 # Monotonic CRM precedence — an invite never demotes a 'promoted' signup. The
 # *_at timestamps are independent activity marks.
@@ -553,8 +556,7 @@ _WAITLIST_SELECT = (
 
 
 def _ensure_waitlist_crm_schema(session: Session) -> None:
-    global _WAITLIST_CRM_READY
-    if _WAITLIST_CRM_READY:
+    if _schema_once["waitlist_crm"]:
         return
     for s in [
         # The base table is normally created lazily by brand.py; on a fresh DB
@@ -584,13 +586,7 @@ def _ensure_waitlist_crm_schema(session: Session) -> None:
             session.commit()
         except Exception:
             session.rollback()
-    # codeql[py/unused-global-variable] -- _WAITLIST_CRM_READY is read via the `global _WAITLIST_CRM_READY` guard at the top of this
-    # same function (`if _WAITLIST_CRM_READY: return`); the write here is what a LATER, separate
-    # call's read observes. CodeQL's dead-store analysis does not model a global's value persisting
-    # across separate invocations of the function that sets it, so it sees this write as never
-    # consumed. It is: this flag exists specifically to make the schema-migration idempotent-but-
-    # skippable after the first successful request in this process.
-    _WAITLIST_CRM_READY = True
+    _schema_once["waitlist_crm"] = True
 
 
 def _normalize_crm_status(raw: Optional[str]) -> str:

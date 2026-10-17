@@ -87,8 +87,9 @@ for (const key of TEMPLATE_KEYS) {
     assert.ok(!html.includes('${'), 'no unresolved template tokens');
 
     // ── CSP: every inline <script> carries the provided nonce ─────────
+    // Case-insensitive, as HTML tag names are: a `<SCRIPT>` runs just the same.
     assert.ok(html.includes(`nonce="${NONCE}"`), 'page carries the provided nonce');
-    for (const m of html.matchAll(/<script\b([^>]*)>/g)) {
+    for (const m of html.matchAll(/<script\b([^>]*)>/gi)) {
       assert.ok(
         m[1].includes(`nonce="${NONCE}"`),
         `every <script> must carry the nonce (offending: <script${m[1]}>)`,
