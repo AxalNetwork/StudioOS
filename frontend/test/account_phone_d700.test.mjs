@@ -3,10 +3,13 @@
  * tappable index of its sections, drawn to `Account Menu · Mobile.dc.html` (AM)
  * and `Account Mobile Page.dc.html` (AMP), boards A1m–A10m.
  *
- * This file holds PR 1: the A1m index and its two reads' lines, the `/account`
- * address rules, the end of D607's phone select, the founder plan's one name,
- * the A1m–A3m bars against the canvas, Usage's Not recorded storage line, and
- * that no phone read gains a company. `usePhoneWidth()` answers false in a
+ * PR 1 held the A1m index and its two reads' lines, the `/account` address
+ * rules, the end of D607's phone select, the founder plan's one name, the
+ * A1m–A3m bars against the canvas, Usage's Not recorded storage line, and that
+ * no phone read gains a company. PR 2 adds A4m–A10m: the seven bars against
+ * the canvas (now read from `design/canvases/integrated/`), the member routes,
+ * the calendar's Not recorded duration, decision 10's departures and the bar's
+ * Eadwyn button. `usePhoneWidth()` answers false in a
  * server render (D699), so each page's phone view is rendered directly with
  * its reads handed in, and the default export stands for the desktop.
  *
@@ -34,6 +37,21 @@ import { ConnectorsPhoneView, ConnectorsView } from '../src/pages/account/Accoun
 import { buildCatalogue } from '../src/pages/account/connectorsModel.js';
 import { planSummary } from '../src/pages/account/accountCenterModel.js';
 import { PhoneRows } from '../src/ui/phone/PhoneRows.jsx';
+import { existsSync } from 'node:fs';
+import React, { act } from 'react';
+import { mountContracts } from './_contracts_dom.mjs';
+import { __resetEadwynPanelForTest, useEadwynPanel, useEadwynRailServes } from '../src/ui/eadwynPanel.js';
+import TrustCenterPage, { TrustPhoneView } from '../src/pages/TrustCenterPage.jsx';
+import PerksPage, { PerksPhoneView } from '../src/pages/PerksPage.jsx';
+import CalendarPage, { CalendarPhoneView, NO_END_REASON } from '../src/pages/CalendarPage.jsx';
+import MyEventsPage, { EventsPhoneView } from '../src/pages/events/MyEventsPage.jsx';
+import LearningHome, { LearningPhoneView } from '../src/pages/learning/LearningHome.jsx';
+import { COMING_SOON_LINE } from '../src/pages/learning/learningAccess.js';
+import { TAB_NOT_LIVE } from '../src/pages/learning/learningModel.js';
+import { HelpPhoneView, EMAIL_SUPPORT_LINE } from '../src/pages/docs/DocsLayout.jsx';
+import { helpAreas } from '../src/pages/docs/guidePlacement.js';
+import { SECTIONS as HELP_SECTIONS, filterSectionsForRole } from '../src/pages/docs/sections/index.js';
+import { PricingPhoneView, TOKENS_LINE } from '../src/pages/account/PricingPhone.jsx';
 
 const read = (f) => readFileSync(resolve(process.cwd(), f), 'utf8');
 const html = (el, entry = '/account') => renderToStaticMarkup(h(MemoryRouter, { initialEntries: [entry] }, el));
@@ -46,7 +64,7 @@ const UNREADABLE = { status: 'unreadable', data: null, message: 'The store is do
 
 // --- The canvas, parsed rather than retyped --------------------------------
 
-const CANVAS = read('design/incoming/Account Mobile Page.dc.html');
+const CANVAS = read('design/canvases/integrated/Account Mobile Page.dc.html');
 const PAGES_BLOCK = (() => {
   const a = CANVAS.indexOf('const PAGES = {');
   const b = CANVAS.indexOf('const d = PAGES[page]', a);
@@ -414,4 +432,349 @@ test('11. no phone view passes a company or venture to a read', () => {
   assert.match(reads, /api\.followsMine\(\)/);
   assert.match(reads, /useBillingStatus\(role\)/);
   assert.match(reads, /const data = useConnectors\(\);/, 'the connectors read is the member\'s, as on desktop');
+});
+
+// =============================================================================
+// PR 2 — A4m–A10m
+// =============================================================================
+
+const OBLIGATIONS = [
+  { obligation_key: 'tos_v1', required: true, status: 'satisfied' },
+  { obligation_key: 'founder_nda_v1', required: true, status: 'satisfied', expires_at: '2099-05-01T00:00:00Z' },
+  { obligation_key: 'kyc_v1', required: true, status: 'in_review' },
+  { obligation_key: 'kyb_v1', required: true, status: 'pending' },
+];
+const PERK = (uid, partner_name, offer, extra) => ({ uid, partner_name, offer, category: 'Cloud', kind: 'credits', credits: 500, claimable: true, claimed: false, rating: null, ...extra });
+const CATALOG = {
+  balance: 1200, allowance_configured: true, claimant: true, categories: ['Cloud', 'Legal'],
+  items: [PERK('p1', 'Nimbus', '$5,000 cloud credits'), PERK('p2', 'Lexa', '20% off formation legal', { category: 'Legal', kind: 'tier', required_tier: null, claimable: true })],
+};
+const MINE = { items: [{ uid: 'c1', perk_uid: 'p9', offer: 'Free banking', partner_name: 'Bankr', code: 'NCL-4471', state: 'issued', expires_at: '2026-12-30T00:00:00Z' }], ledger: [], balance: 1200, stats: { claimed: 1, credits_spent: 0, expiring: 0, expiring_within_days: 30 } };
+const CAL_NOW = new Date(2026, 9, 17, 9, 0);
+const at = (d, h, m = 0) => new Date(2026, 9, d, h, m).toISOString();
+const CAL_EVENTS = [
+  { id: 1, kind: 'founder_checkin', title: 'Interview with Ana', start_at: at(17, 14), end_at: at(17, 14, 45) },
+  { id: 2, kind: 'partner_office_hour', title: 'Demo Day rehearsal', start_at: at(19, 10), end_at: null },
+  { id: 3, kind: 'ic_meeting', title: 'Next month', start_at: at(30, 10), end_at: at(30, 11) },
+];
+const PROVIDERS = [
+  { name: 'Google Calendar', state: 'connected', status: { connected: true, last_synced_at: '2026-10-17T08:57:00Z' } },
+  { name: 'Microsoft 365', state: 'failed', status: { connected: true } },
+];
+const EV_NOW = new Date(Date.UTC(2026, 9, 17, 12));
+const TICKETS = [
+  { id: 't1', title: 'Pricing pressure-test workshop', starts_at: '2026-10-24T15:00:00Z', status: 'confirmed', location_kind: 'Online' },
+  { id: 't2', title: 'Demo Day', starts_at: '2026-11-18T15:00:00Z', status: 'waitlisted' },
+  { id: 't3', title: 'Fundraising basics', starts_at: '2026-10-03T15:00:00Z', status: 'attended' },
+];
+const HOSTING = [{ id: 41, title: 'Founder dinner', starts_at: '2026-11-02T18:00:00Z', status: 'published', visibility: 'members' }];
+const SUGGESTED = [{ id: 51, slug: 'office-hours-block', title: 'Office hours block', starts_at: '2026-12-02T15:00:00Z' }];
+const LEARN = {
+  me: { status: 'ready', in_progress: [{ subject_kind: 'course', subject_uid: 'c1', title: 'Customer discovery', percent: 68, href: '/learning/courses/discovery' }] },
+  programs: { enrolled: { status: 'ready', rows: [] }, open: { status: 'ready', programs: [] } },
+  upcoming: { status: 'ready', rows: [{ uid: 'w1', title: 'Pricing teardown', starts_at: '2026-10-28T16:00:00Z', href: '/learning/webinars/w1', status: 'scheduled' }] },
+};
+const HELP_AREAS = helpAreas(filterSectionsForRole(HELP_SECTIONS, 'founder'));
+const POPULAR = { status: 'ok', cards: [{ anchor: 'getting-started/first-steps', title: 'First steps', views: 42, area: 'Getting started' }] };
+
+const PHONE_VIEWS = {
+  trust: () => h(TrustPhoneView, { status: 'ready', obligations: OBLIGATIONS }),
+  perks: () => h(PerksPhoneView, { catalog: ready(CATALOG), mine: ready(MINE) }),
+  calendar: () => h(CalendarPhoneView, { events: { status: 'ready', items: CAL_EVENTS }, providers: PROVIDERS, now: CAL_NOW }),
+  events: () => h(EventsPhoneView, { events: { status: 'ready', hosting: HOSTING, attending: TICKETS }, suggested: SUGGESTED, now: EV_NOW }),
+  learning: () => h(LearningPhoneView, { gated: false, ...LEARN, now: Date.parse('2026-10-17T12:00:00Z') }),
+  help: () => h(HelpPhoneView, { popular: POPULAR, areas: HELP_AREAS }),
+  pricing: () => h(PricingPhoneView, { role: 'founder', billing: ready(GROWTH), budget: ready(BUDGET), product: ready(PRODUCT) }),
+};
+// Decision 10's departures in a section list, named rather than matched loosely.
+const DEPARTED_SECTIONS = {
+  events: (c) => [...c, 'Hosting'],
+  help: (c) => ['Popular this week', ...c.slice(1)],
+};
+
+test('5. A4m–A10m: each phone view draws ‹ Back, the canvas\'s title and sub, then its sections in order', () => {
+  for (const [key, view] of Object.entries(PHONE_VIEWS)) {
+    const c = CANVAS_PAGES[key];
+    const markup = html(view());
+    assert.equal(barOf(markup).trim().startsWith(`‹ Back ${c.title} ${c.sub}`), true, `${key}: ${barOf(markup)}`);
+    const want = DEPARTED_SECTIONS[key] ? DEPARTED_SECTIONS[key](c.sections) : c.sections;
+    assert.deepEqual(sectionTitles(markup), want, key);
+    assert.match(markup, /class="-m-4 md:-m-6 lg:m-0 |class="min-h-screen bg-white dark:bg-gray-950"/, `${key}: no phone gutter`);
+  }
+  // A gated profile's Learning is Browse alone.
+  const gated = html(h(LearningPhoneView, { gated: true }));
+  assert.deepEqual(sectionTitles(gated), ['Browse']);
+});
+
+test('5. the two account canvases are in integrated/ and no longer in incoming/', () => {
+  for (const f of ['Account Menu · Mobile.dc.html', 'Account Mobile Page.dc.html']) {
+    assert.ok(existsSync(resolve(process.cwd(), 'design/canvases/integrated', f)), `${f} is not in integrated/`);
+    assert.ok(!existsSync(resolve(process.cwd(), 'design/incoming', f)), `${f} is still in incoming/`);
+  }
+  // AM imports AMP by name, so they moved together and the import resolves.
+  assert.match(read('design/canvases/integrated/Account Menu · Mobile.dc.html'), /Account Mobile Page/);
+});
+
+test('5. at desktop width the pages draw no bar and keep their own heading', () => {
+  const perks = html(h(PerksPage, { user: { role: 'founder' } }), '/perks');
+  assert.doesNotMatch(perks, /‹ Back/);
+  assert.match(perks, /<h1 [^>]*>.*Perks &amp; Products<\/h1>/);
+  const cal = html(h(CalendarPage), '/calendar');
+  assert.doesNotMatch(cal, /‹ Back/);
+  assert.match(cal, /<h1>Calendar<\/h1>/);
+  const events = html(h(MyEventsPage), '/my/events');
+  assert.doesNotMatch(events, /‹ Back/);
+  assert.match(events, /<h1 [^>]*>Events<\/h1>/);
+  const learning = html(h(LearningHome, { gated: true }), '/learning');
+  assert.doesNotMatch(learning, /‹ Back/);
+  assert.match(learning, /<h1 [^>]*>Learning<\/h1>/);
+  assert.doesNotMatch(html(h(TrustCenterPage), '/trust'), /‹ Back/);
+  // Trust, Help and Products are read as source: each branches on the phone
+  // before its desktop return, which keeps its heading.
+  const trust = read('frontend/src/pages/TrustCenterPage.jsx');
+  assert.match(trust, /const phone = usePhoneWidth\(\) && !chromeless;/, 'the investor workspace keeps its chromeless frame');
+  assert.match(trust, /if \(phone\) \{\s*return \(\s*<TrustPhoneView[\s\S]*?\n  return \(\s*<div className="p-6 max-w-5xl mx-auto">[\s\S]*?<ShieldCheck className="w-7 h-7 text-emerald-600" \/> Trust Center/);
+  const docs = read('frontend/src/pages/docs/DocsLayout.jsx');
+  assert.match(docs, /\) : phone \? \(\s*<HelpPhoneHome[\s\S]*?\) : \(\s*<HelpHome/, 'only the home has a phone view; a guide page is unchanged');
+  const products = read('frontend/src/pages/ProductsPage.jsx');
+  assert.match(products, /\{!phone && \(\s*<>\s*<h1 [^>]*>\s*<Package size=\{26\}[^>]*\/> Products/);
+  assert.match(products, /return phone \? <PricingPhone role=\{user\?\.role\}>\{page\}<\/PricingPhone> : page;/);
+});
+
+test('5. A4m–A10m: each section reads its values from the page\'s sources', () => {
+  const trust = text(html(PHONE_VIEWS.trust()));
+  assert.match(trust, /Trust score 50 of 100 You have 2 open requirements Not compliant/, 'needs plus in progress, with verdictFor\'s word');
+  assert.match(trust, /Identity verification \(KYC\) Required in review/);
+  const trustRows = html(PHONE_VIEWS.trust());
+  assert.match(trustRows, /style="width:50%"/, 'the score\'s bar');
+  assert.match(text(html(h(TrustPhoneView, { status: 'ready', obligations: OBLIGATIONS.slice(0, 2) }))), /100 of 100 Every required obligation is satisfied\. Compliant/);
+
+  const perks = text(html(PHONE_VIEWS.perks()));
+  assert.match(perks, /Credits Balance US\$1 of perk value each 1,200 credits/);
+  assert.match(perks, /Nimbus · \$5,000 cloud credits Cloud 500 credits/);
+  assert.match(perks, /Lexa · 20% off formation legal Legal · your plan Claim/);
+  assert.match(perks, /My perks Free banking · code NCL-4471 Expires 2026-12-30/);
+  const noAllowance = text(html(h(PerksPhoneView, { catalog: ready({ ...CATALOG, allowance_configured: false }), mine: ready(MINE) })));
+  assert.match(noAllowance, /Credits No perk-credit allowance is set up on this platform yet, so every balance is zero\./);
+  assert.doesNotMatch(noAllowance, /Balance US\$1/);
+  assert.match(text(html(h(PerksPhoneView, { catalog: UNREADABLE, mine: LOADING }))), /Your balance could not be read\./);
+
+  const cal = text(html(PHONE_VIEWS.calendar()));
+  assert.match(cal, /Today 2:00 PM · Interview with Ana Check-in 45m/);
+  assert.match(cal, /This week Mon 10:00 AM · Demo Day rehearsal Office hour Not recorded/);
+  assert.doesNotMatch(cal, /Next month/, 'This week is the next seven days only');
+  assert.match(cal, /Google Calendar Synced [^·]+ Connected Microsoft 365 Last sync not recorded Sync failed/, 'providerState\'s own words');
+
+  const events = text(html(PHONE_VIEWS.events()));
+  // Dates are the runtime's locale (en-US under node).
+  assert.match(events, /Upcoming Oct 24 · Pricing pressure-test workshop [^›]*Going Nov 18 · Demo Day [^›]*Waitlist Dec 2 · Office hours block [^›]*RSVP/);
+  assert.match(events, /Past Oct 3 · Fundraising basics [^›]*Attended/);
+  assert.match(html(PHONE_VIEWS.events()), /href="\/events\/office-hours-block"/);
+
+  const learning = text(html(PHONE_VIEWS.learning()));
+  assert.match(learning, /Continue learning Customer discovery Course 68%/);
+  assert.match(learning, /Upcoming webinars Pricing teardown [^›]*Register/);
+  assert.match(learning, /Browse Courses › Articles and publications › Exercises and exams/);
+  for (const tab of ['courses', 'articles', 'exercises']) assert.match(html(PHONE_VIEWS.learning()), new RegExp(`href="/learning\\?tab=${tab}"`));
+  assert.ok(learning.includes(`Exercises and exams ${TAB_NOT_LIVE.exercises}`), 'Exercises carries its TAB_NOT_LIVE line for every profile');
+
+  const help = text(html(PHONE_VIEWS.help()));
+  assert.match(help, /Popular this week First steps 42 views · Getting started/);
+  const area = HELP_AREAS[0];
+  assert.ok(help.includes(`${area.title} ${area.guides.length} guides`), 'each area with its count');
+  assert.match(html(PHONE_VIEWS.help()), /href="\/help\/tickets\?new=1"[^>]*>[\s\S]*?Open a ticket[\s\S]*?Replies appear in My tickets/);
+
+  const pricing = text(html(PHONE_VIEWS.pricing()));
+  assert.match(pricing, /Plans Free Start validating one idea\. \$0 Validate \+ Build [^$]*· AI \$1\.00 a day, \$5\.00 a month \$20 \/ month Raise \+ Grow [^$]*\$100 \/ month Manage plan/);
+  assert.match(html(PHONE_VIEWS.pricing()), /href="\/account\/billing"[^>]*>Manage plan</);
+  assert.ok(pricing.includes(`Tokens Past your allowance ${TOKENS_LINE} Add tokens`));
+  assert.ok(CANVAS_PAGES.pricing.chunk.includes(TOKENS_LINE), 'the Tokens line is AMP\'s');
+  assert.match(html(PHONE_VIEWS.pricing()), /<a href="\/checkout\?ai_topup=1"[^>]*>[\s\S]*?Past your allowance/);
+  // No other role has a tier ladder, so it gets no Plans section.
+  assert.deepEqual(sectionTitles(html(h(PricingPhoneView, { role: 'advisor', billing: ready({}), budget: ready(BUDGET), product: ready(PRODUCT) }))), ['Tokens']);
+  assert.match(text(html(h(PricingPhoneView, { role: 'founder', billing: ready(GROWTH), budget: ready(BUDGET), product: ready({ configured: false }) }))), /Top-ups are not available yet\./);
+});
+
+// --- 6. Member routes --------------------------------------------------------------
+
+test('6. the member routes mount the pages that draw A7m and A10m; the public pages draw no account bar', () => {
+  const app = read('frontend/src/App.jsx');
+  assert.match(app, /<Route path="\/my\/events" element=\{guard\(\[[^\]]+\], <MyEventsPage \/>\)\} \/>/);
+  assert.match(app, /<Route path="\/plans-and-pricing" element=\{guard\(\[[^\]]+\], <ProductsPage \/>\)\} \/>/);
+  assert.match(read('frontend/src/pages/events/MyEventsPage.jsx'), /<EventsPhoneView /);
+  assert.match(read('frontend/src/pages/account/PricingPhone.jsx'), /<AccountPhonePage pageKey="pricing"/);
+  for (const f of ['frontend/src/pages/events/PublicEventsPage.jsx', 'frontend/src/pages/PricingPage.jsx']) {
+    const src = read(f);
+    assert.doesNotMatch(src, /ui\/phone|accountPhone|AccountPhonePage|PricingPhone/, `${f} draws an account phone bar`);
+  }
+});
+
+// --- 7. Not recorded, never 0 ----------------------------------------------------
+
+test('7. a calendar event with no end reads Not recorded for its duration, with its reason', () => {
+  const markup = html(PHONE_VIEWS.calendar());
+  const row = markup.slice(markup.indexOf('Demo Day rehearsal'), markup.indexOf('calendar-phone-sources'));
+  assert.match(row, new RegExp(`title="${NO_END_REASON}"[^>]*>Not recorded<`));
+  assert.doesNotMatch(text(row), /\b0m\b|\b0 min\b|NaN/);
+  // An end at or before the start is no duration either.
+  const odd = text(html(h(CalendarPhoneView, { events: { status: 'ready', items: [{ ...CAL_EVENTS[0], end_at: CAL_EVENTS[0].start_at }] }, providers: [], now: CAL_NOW })));
+  assert.match(odd, /Interview with Ana Check-in Not recorded/);
+  // A failed read says so, and is not an empty day.
+  const failed = text(html(h(CalendarPhoneView, { events: { status: 'unreadable', items: [] }, providers: PROVIDERS, now: CAL_NOW })));
+  assert.match(failed, /Today The calendar could not be read\. This is not a claim that nothing is scheduled\./);
+  assert.doesNotMatch(failed, /Nothing scheduled today/);
+});
+
+// --- 8. The departures hold ----------------------------------------------------
+
+test('8. Trust lists only what /trust/me returns: no 83(b) row, and the pill is verdictFor\'s word', () => {
+  const markup = html(PHONE_VIEWS.trust());
+  assert.equal([...markup.matchAll(/data-testid="trust-phone-obligation"/g)].length, OBLIGATIONS.length);
+  assert.doesNotMatch(markup, /83\(b\)/);
+  assert.ok(CANVAS_PAGES.trust.chunk.includes('83(b) election'), 'the canvas draws the row this departs from');
+  assert.doesNotMatch(text(markup), /\bPartial\b/);
+  // A failed matrix is Unreadable, never an empty list.
+  const failed = text(html(h(TrustPhoneView, { status: 'unreadable' })));
+  assert.match(failed, /Your obligations could not be read\./);
+  assert.doesNotMatch(failed, /No obligations outstanding/);
+  assert.match(read('frontend/src/pages/TrustCenterPage.jsx'), /setMatrix\(\{ obligations: \[\], role, failed: true \}\)/);
+});
+
+test('8. Help: Popular this week first, no For you now, and Email support says what the link does', () => {
+  const markup = html(PHONE_VIEWS.help());
+  assert.equal(sectionTitles(markup)[0], 'Popular this week');
+  assert.doesNotMatch(markup, /For you now/);
+  assert.equal(EMAIL_SUPPORT_LINE, 'Opens your mail app. Write from the address on your account.');
+  assert.match(markup, new RegExp(`<a href="mailto:support@axal\\.vc"[^>]*>[\\s\\S]*?Email support[\\s\\S]*?${EMAIL_SUPPORT_LINE.replace(/\./g, '\\.')}`));
+  assert.doesNotMatch(markup, /From the address on your account/);
+  assert.ok(CANVAS_PAGES.help.chunk.includes("'From the address on your account'"));
+  // A failed popular read says so; a row opens its area in place.
+  assert.match(text(html(h(HelpPhoneView, { popular: { status: 'error', cards: [] }, areas: HELP_AREAS }))), /The most-read guides could not be read\./);
+  const opened = [];
+  const groups = html(h(HelpPhoneView, { popular: POPULAR, areas: HELP_AREAS, openArea: HELP_AREAS[0].id, onArea: (id) => opened.push(id) }));
+  assert.match(text(groups), new RegExp(`${HELP_AREAS[0].title} ${HELP_AREAS[0].guides.length} guides Open`));
+  assert.match(read('frontend/src/pages/docs/DocsLayout.jsx'), /\{!trimmedQuery && area && <AreaGuides area=\{area\} \/>\}/);
+});
+
+test('8. Plans: only the current plan\'s row carries the AI allowance', () => {
+  const markup = html(PHONE_VIEWS.pricing());
+  assert.equal([...text(markup).matchAll(/ a day/g)].length, 1);
+  assert.match(markup, /data-testid="pricing-phone-current"/);
+  assert.equal([...markup.matchAll(/data-testid="pricing-phone-current"/g)].length, 1);
+  // While the plan is out, no row is current and none carries the line.
+  const loading = html(h(PricingPhoneView, { role: 'founder', billing: LOADING, budget: ready(BUDGET), product: ready(PRODUCT) }));
+  assert.doesNotMatch(text(loading), / a day/);
+  assert.doesNotMatch(loading, /pricing-phone-current/);
+  // An investor's current tier comes from their own status route.
+  const inv = text(html(h(PricingPhoneView, { role: 'investor', billing: ready({ tier: 'professional' }), budget: ready(BUDGET), product: ready(PRODUCT) })));
+  assert.match(inv, /Professional [^$]*· AI \$1\.00 a day/);
+});
+
+test('8. a gated Learning draws the coming-soon line and Browse, Articles open, and reads none of the others', () => {
+  const markup = html(h(LearningPhoneView, { gated: true }));
+  const t = text(markup);
+  assert.ok(t.includes(COMING_SOON_LINE));
+  assert.match(t, /Courses Coming soon › Articles and publications › Exercises and exams/);
+  assert.doesNotMatch(t, /Continue learning|My programs|Upcoming webinars/);
+  // The container makes no Learning read but Articles for a gated profile, as today.
+  const home = read('frontend/src/pages/learning/LearningHome.jsx');
+  assert.match(home, /useLearningRead\(readMe, \[\], \{ enabled: !gated, scope: 'me' \}\)/);
+  assert.match(home, /useMyPrograms\(!gated\)/);
+  assert.match(home, /\{!gated && <OpenPrograms \{\.\.\.programs\} \/>\}/);
+});
+
+test('8. Events: no Replay, and Hosting when the caller hosts an event', () => {
+  const t = text(html(PHONE_VIEWS.events()));
+  assert.doesNotMatch(t, /Replay/);
+  assert.match(t, /Hosting Nov 2 · Founder dinner published · members Manage › New event/);
+  assert.match(html(PHONE_VIEWS.events()), /href="\/events\/41\/manage"/);
+  assert.ok(CANVAS_PAGES.events.chunk.includes("'Replay'"), 'the canvas draws the pill this departs from');
+});
+
+// --- 10. The Eadwyn button ---------------------------------------------------------
+
+const PR2_FILES = [
+  'frontend/src/pages/account/AccountPhonePage.jsx', 'frontend/src/pages/TrustCenterPage.jsx', 'frontend/src/pages/PerksPage.jsx',
+  'frontend/src/pages/CalendarPage.jsx', 'frontend/src/pages/events/MyEventsPage.jsx', 'frontend/src/pages/learning/LearningHome.jsx',
+  'frontend/src/pages/docs/DocsLayout.jsx', 'frontend/src/pages/account/PricingPhone.jsx', 'frontend/src/pages/ProductsPage.jsx',
+];
+
+test('10. A4m–A10m share one bar, which names itself to Eadwyn by its title; no page draws a button of its own', () => {
+  const frame = read('frontend/src/pages/account/AccountPhonePage.jsx');
+  assert.match(frame, /<PhoneBar back=\{\{ label: 'Back' \}\} title=\{page\.title\} sub=\{page\.sub\} eadwynLabel=\{page\.title\} \/>/);
+  for (const f of PR2_FILES) {
+    const src = read(f);
+    assert.doesNotMatch(src, /Open Eadwyn for this page/, `${f} draws an Eadwyn button of its own`);
+    for (const bar of src.matchAll(/<PhoneBar [^>]*\/>/g)) assert.match(bar[0], /eadwynLabel=\{page\.title\}/, `${f}: ${bar[0]}`);
+  }
+  // The rail stays mounted on a phone: the phone view is inside the frame, beside it.
+  const perks = read('frontend/src/pages/PerksPage.jsx');
+  assert.match(perks, /\{phone \? \(\s*<PerksPhoneView[\s\S]*?\n      <\/div>\n      <WorkerRail\s+workspace="Perks & Products"/);
+  const learning = read('frontend/src/pages/learning/LearningHome.jsx');
+  assert.match(learning, /<RailFrame\s+rail=\{\(\s*<WorkerRail\s+workspace="Learning"[\s\S]*?>\s*\{phone \? \(\s*<LearningPhoneView/);
+  // The five pages that mount no rail still mount none (decision 12).
+  for (const f of ['TrustCenterPage.jsx', 'CalendarPage.jsx', 'events/MyEventsPage.jsx', 'docs/DocsLayout.jsx', 'ProductsPage.jsx']) {
+    assert.doesNotMatch(read(`frontend/src/pages/${f}`), /<WorkerRail\b/, `${f} gained a rail`);
+  }
+});
+
+async function phoneButtons(element, { served, url }) {
+  __resetEadwynPanelForTest();
+  const out = {};
+  // Stands in for a founder `WorkerRail`, which is what makes the panel available.
+  const Rail = () => { useEadwynRailServes(served); return null; };
+  const Probe = () => { out.panel = useEadwynPanel(); return null; };
+  const mounted = await mountContracts(h(React.Fragment, null, h(Rail), h(Probe), element), url);
+  try {
+    await mounted.flush();
+    const open = mounted.nodes().filter((n) => n.tagName === 'BUTTON' && mounted.props(n)['aria-label'] === 'Open Eadwyn for this page');
+    if (open[0]) await act(async () => mounted.props(open[0]).onClick());
+    return { count: open.length, label: out.panel?.label };
+  } finally {
+    await mounted.unmount();
+    __resetEadwynPanelForTest();
+  }
+}
+
+test('10. with the panel serving the viewer, the bar on /account, a section, /perks and /learning holds the button; otherwise none does', async () => {
+  const cases = [
+    ['/account', 'Account', h(AccountPhoneFrame, { view: 'index', sections: SECTIONS, renderPane: noop, index: h('div') })],
+    ['/account/billing', 'Billing and orders', h(AccountPhoneFrame, { view: 'billing', sections: SECTIONS, renderPane: () => h('div') })],
+    ['/perks', 'Perks', PHONE_VIEWS.perks()],
+    ['/learning', 'Learning', PHONE_VIEWS.learning()],
+  ];
+  for (const [url, label, element] of cases) {
+    const on = await phoneButtons(element, { served: true, url });
+    assert.equal(on.count, 1, `${url}: no Eadwyn button for a served founder`);
+    assert.equal(on.label, label, `${url}: the panel opened without the bar's title`);
+    const off = await phoneButtons(element, { served: false, url });
+    assert.equal(off.count, 0, `${url}: a viewer the panel does not serve got a button`);
+  }
+});
+
+// --- 11 (PR 2). No read gains a scope ------------------------------------------------
+
+test('11. the A4m–A10m phone views pass no company or venture to a read', () => {
+  const block = (f, from, to) => {
+    const src = read(f);
+    const a = src.indexOf(from);
+    const b = to ? src.indexOf(to, a) : src.length;
+    assert.ok(a >= 0 && b > a, `${f}: the phone block moved`);
+    return src.slice(a, b);
+  };
+  const blocks = [
+    block('frontend/src/pages/TrustCenterPage.jsx', '// D700 (#1662) — A4m', 'export default function TrustCenterPage('),
+    block('frontend/src/pages/PerksPage.jsx', ' * D700 (#1662) — A5m', ' * The standalone `/perks` page'),
+    block('frontend/src/pages/CalendarPage.jsx', '// D700 (#1662) — A6m', 'export default function CalendarPage('),
+    block('frontend/src/pages/events/MyEventsPage.jsx', '// D700 (#1662) — A7m', 'export default function MyEventsPage('),
+    block('frontend/src/pages/learning/LearningHome.jsx', '// D700 (#1662) — A8m', '/** What the rail says'),
+    block('frontend/src/pages/docs/DocsLayout.jsx', '// D700 (#1662) — A9m', 'export default function DocsLayout('),
+    read('frontend/src/pages/account/PricingPhone.jsx'),
+    read('frontend/src/pages/account/AccountPhonePage.jsx'),
+  ];
+  for (const b of blocks) assert.doesNotMatch(b, /ompany(Id|_id)|venture|useActiveCompany|getActiveCompanyId|X-Company-Id/);
+  const pricing = read('frontend/src/pages/account/PricingPhone.jsx');
+  assert.match(pricing, /useBillingStatus\(role\)/);
+  assert.match(pricing, /aiBudgetApi\.mine\(\)/);
+  assert.match(pricing, /aiBudgetApi\.topUp\(\)/);
 });

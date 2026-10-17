@@ -89,7 +89,8 @@ export function PopularGuidesView({ read, onRetry }) {
   );
 }
 
-export function PopularGuides({ sections }) {
+/** The "Popular this week" read: `[read, retry]`. A phone's Help home (D700) draws it as rows. */
+export function usePopularGuides(sections) {
   const [read, setRead] = useState({ status: 'loading', cards: [] });
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
@@ -107,7 +108,12 @@ export function PopularGuides({ sections }) {
       });
     return () => { alive = false; };
   }, [attempt, sections]);
-  return <PopularGuidesView read={read} onRetry={() => setAttempt((n) => n + 1)} />;
+  return [read, () => setAttempt((n) => n + 1)];
+}
+
+export function PopularGuides({ sections }) {
+  const [read, retry] = usePopularGuides(sections);
+  return <PopularGuidesView read={read} onRetry={retry} />;
 }
 
 // ── Did this answer it? ──────────────────────────────────────────────────────

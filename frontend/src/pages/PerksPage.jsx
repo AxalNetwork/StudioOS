@@ -6,7 +6,9 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { reportError } from '../lib/log';
-import { Card, Pill, SectionLabel, Unrecorded, Unreadable, WorkerRail } from '../ui';
+import { Card, Pill, SectionLabel, Unrecorded, Unreadable, WorkerRail, usePhoneWidth } from '../ui';
+import { AccountPhonePage, phonePending } from './account/AccountPhonePage';
+import { ACCOUNT_PHONE_PAGES } from './account/accountPhone';
 import './perksDesk.css';
 import ZoneToolbar from '../workspaces/ZoneToolbar';
 import ZoneDraft from '../workspaces/ZoneDraft';
@@ -1589,6 +1591,66 @@ export default function PerksPage({ user, embedded = false, zoneActions, zoneFil
   return <PerksMarket user={user} />;
 }
 
+/* ------------------------------------------------------------------ *
+ * D700 (#1662) — A5m, the page on a phone                             *
+ * ------------------------------------------------------------------ */
+
+const ALLOWANCE_LINE = 'No perk-credit allowance is set up on this platform yet, so every balance is zero. Credit-priced perks cannot be claimed until an allowance is decided or an admin grants credits directly. Perks included with a plan, and paid engagements, work today.';
+
+/**
+ * A5m's three sections from the page's two reads. `catalog` and `mine` are
+ * `{ status, data, reload }`. A row opens what the desktop opens: a listing
+ * its sheet (`onOpen`), a claim the My perks tab (`onMine`).
+ */
+export function perksPhoneGroups({ catalog, mine, onOpen, onMine }) {
+  const [creditsTitle, liveTitle, mineTitle] = ACCOUNT_PHONE_PAGES.perks.sections;
+  const credits = { label: creditsTitle, rows: [], testid: 'perks-phone-credits' };
+  const live = { label: liveTitle, rows: [], testid: 'perks-phone-live' };
+  if (catalog.status !== 'ready') {
+    credits.note = phonePending(catalog.status, 'Your balance', 'It is not a sign you have no credits.', catalog.reload);
+    live.note = phonePending(catalog.status, 'The marketplace', 'It is not a sign nothing is listed.', catalog.reload);
+  } else {
+    const c = catalog.data;
+    // With no allowance decided, the honest line replaces the balance (:1667).
+    if (!c.allowance_configured) credits.note = <span data-testid="perks-phone-no-allowance">{ALLOWANCE_LINE}</span>;
+    else if (c.balance != null) credits.rows.push({ title: 'Balance', description: 'US$1 of perk value each', value: `${n0(c.balance)} credits`, testid: 'perks-phone-balance' });
+    live.rows = c.items.map((p) => ({
+      key: p.uid,
+      title: `${p.partner_name} · ${p.offer}`,
+      description: [p.category, costNote(p)].filter(Boolean).join(' · '),
+      pill: p.claimed ? { label: 'Claimed', tone: 'ok' }
+        : p.kind === 'tier' && p.claimable ? { label: 'Claim', tone: 'ok' }
+          : { label: priceLabel(p), tone: 'info' },
+      onClick: onOpen ? () => onOpen(p) : undefined,
+      testid: 'perks-phone-perk',
+    }));
+    if (!live.rows.length) live.note = 'No perks are listed yet. Nothing is listed until a real partner has agreed to honour it.';
+  }
+  const claims = { label: mineTitle, rows: [], testid: 'perks-phone-mine' };
+  if (mine.status !== 'ready') claims.note = phonePending(mine.status, 'Your perks', 'It is not a sign you have claimed nothing.', mine.reload);
+  else {
+    claims.rows = mine.data.items.map((cl) => ({
+      key: cl.uid,
+      title: cl.code ? `${cl.offer} · code ${cl.code}` : cl.offer,
+      description: cl.state === 'redeemed' ? `Redeemed ${day(cl.redeemed_at)}` : cl.expires_at ? `Expires ${day(cl.expires_at)}` : 'No end date',
+      onClick: onMine,
+      chevron: true,
+      testid: 'perks-phone-claim',
+    }));
+    if (!claims.rows.length) claims.note = 'Nothing claimed yet.';
+  }
+  return [credits, live, claims];
+}
+
+/** A5m — the bar and the three sections, then `children`: the tabs, the ledger and Review. */
+export function PerksPhoneView({ catalog, mine, onOpen, onMine, children = null }) {
+  return (
+    <AccountPhonePage pageKey="perks" bleed testid="perks-phone" groups={perksPhoneGroups({ catalog, mine, onOpen, onMine })}>
+      {children}
+    </AccountPhonePage>
+  );
+}
+
 /**
  * The standalone `/perks` page: the canvas's founder side. A partner never
  * reaches it (App.jsx sends them to /offers/perk-deals); an investor, advisor
@@ -1634,72 +1696,102 @@ function PerksMarket({ user }) {
     setOpen(p);
   };
 
+  // D700 — a phone draws A5m inside the frame, so the rail stays mounted.
+  const phone = usePhoneWidth();
+  const readOf = (data, err, reload) => ({ status: err ? 'unreadable' : data ? 'ready' : 'loading', data, reload });
+  const goMine = () => {
+    setTab('mine');
+    document.getElementById('perks-tabs')?.scrollIntoView?.({ block: 'start' });
+  };
+
   const coverage = [
     catalog ? `${catalog.items.length} listing${catalog.items.length === 1 ? '' : 's'} live, each reviewed by Axal` : 'Marketplace loading',
     mine ? `${mine.stats.claimed} claim${mine.stats.claimed === 1 ? '' : 's'} and ${mine.ledger.length} ledger line${mine.ledger.length === 1 ? '' : 's'} on this account` : 'Your claims loading',
   ];
 
+  const panels = (
+    <>
+      <div id="perks-tabs" className="mt-5 flex gap-5 border-b border-gray-200 dark:border-gray-800" role="tablist">
+        {tabs.map(({ k, label, icon: Icon, flag }) => (
+          <button
+            key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
+            className={`-mb-px inline-flex items-center gap-1.5 border-b-2 pb-2.5 text-[13px] ${
+              tab === k ? 'border-violet-600 font-bold text-violet-700 dark:text-violet-300' : 'border-transparent font-semibold text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <Icon size={14} />{label}
+            {flag ? <span className={`min-w-4 rounded-full px-1 text-[9px] font-extrabold ${tab === k ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-500 dark:bg-gray-800'}`}>{flag}</span> : null}
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-5">
+        {tab === 'market' && (catalogErr
+          ? <Unreadable what="The marketplace" claim="It is not a sign nothing is listed." onRetry={loadCatalog} />
+          : !catalog ? <p className="text-sm text-gray-500">Loading…</p>
+            : <Marketplace data={catalog} onOpen={openPerk} />)}
+        {tab === 'mine' && (mineErr
+          ? <Unreadable what="Your perks" claim="It is not a sign you have claimed nothing." onRetry={loadMine} />
+          : !mine ? <p className="text-sm text-gray-500">Loading…</p>
+            : <MyPerks data={mine} onRated={() => { loadMine(); loadCatalog(); }} />)}
+        {tab === 'review' && isAdmin && <ReviewQueue />}
+      </div>
+    </>
+  );
+
   return (
     <main className="perks-desk" data-testid="perks-desk">
       <section className="perks-canvas">
-      <div className="perks-main">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900 dark:text-white">
-              <ShoppingBag className="h-6 w-6 text-violet-600" /> Perks &amp; Products
-            </h1>
-            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-              Offers partners have agreed to honour, each reviewed by Axal before it is listed.
-              Distinct from the services marketplace and from plan pricing.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <CreditBalance catalog={catalog} failed={!!catalogErr} onRetry={loadCatalog} />
-            {userTier && <Pill tone="info">{tierName(userTier)} plan</Pill>}
-          </div>
-        </div>
-        {catalog && (
-          <p className="mt-2 text-[11px] text-gray-500">
-            Perk credits are separate from introduction credits under Network — a different unit and a different balance.
-          </p>
-        )}
+      <div className={phone ? 'min-w-0' : 'perks-main'}>
+        {phone ? (
+          <PerksPhoneView catalog={readOf(catalog, catalogErr, loadCatalog)} mine={readOf(mine, mineErr, loadMine)} onOpen={openPerk} onMine={goMine}>
+            {catalog && (
+              <p className="text-[11px] text-gray-500">
+                Perk credits are separate from introduction credits under Network — a different unit and a different balance.
+              </p>
+            )}
+            {catalog && !catalog.claimant && catalog.claimant_reason && (
+              <p className="text-sm text-amber-800 dark:text-amber-300" role="status">{catalog.claimant_reason}</p>
+            )}
+            <div>{panels}</div>
+          </PerksPhoneView>
+        ) : (
+          <>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900 dark:text-white">
+                  <ShoppingBag className="h-6 w-6 text-violet-600" /> Perks &amp; Products
+                </h1>
+                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                  Offers partners have agreed to honour, each reviewed by Axal before it is listed.
+                  Distinct from the services marketplace and from plan pricing.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <CreditBalance catalog={catalog} failed={!!catalogErr} onRetry={loadCatalog} />
+                {userTier && <Pill tone="info">{tierName(userTier)} plan</Pill>}
+              </div>
+            </div>
+            {catalog && (
+              <p className="mt-2 text-[11px] text-gray-500">
+                Perk credits are separate from introduction credits under Network — a different unit and a different balance.
+              </p>
+            )}
 
-        {catalog && !catalog.allowance_configured && (
-          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-900/20 dark:text-amber-200">
-            No perk-credit allowance is set up on this platform yet, so every balance is zero.
-            Credit-priced perks cannot be claimed until an allowance is decided or an admin grants
-            credits directly. Perks included with a plan, and paid engagements, work today.
-          </div>
-        )}
-        {catalog && !catalog.claimant && catalog.claimant_reason && (
-          <p className="mt-3 text-sm text-amber-800 dark:text-amber-300" role="status">{catalog.claimant_reason}</p>
-        )}
+            {catalog && !catalog.allowance_configured && (
+              <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-900/20 dark:text-amber-200">
+                No perk-credit allowance is set up on this platform yet, so every balance is zero.
+                Credit-priced perks cannot be claimed until an allowance is decided or an admin grants
+                credits directly. Perks included with a plan, and paid engagements, work today.
+              </div>
+            )}
+            {catalog && !catalog.claimant && catalog.claimant_reason && (
+              <p className="mt-3 text-sm text-amber-800 dark:text-amber-300" role="status">{catalog.claimant_reason}</p>
+            )}
 
-        <div className="mt-5 flex gap-5 border-b border-gray-200 dark:border-gray-800" role="tablist">
-          {tabs.map(({ k, label, icon: Icon, flag }) => (
-            <button
-              key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
-              className={`-mb-px inline-flex items-center gap-1.5 border-b-2 pb-2.5 text-[13px] ${
-                tab === k ? 'border-violet-600 font-bold text-violet-700 dark:text-violet-300' : 'border-transparent font-semibold text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              <Icon size={14} />{label}
-              {flag ? <span className={`min-w-4 rounded-full px-1 text-[9px] font-extrabold ${tab === k ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-500 dark:bg-gray-800'}`}>{flag}</span> : null}
-            </button>
-          ))}
-        </div>
-
-        <div className="mt-5">
-          {tab === 'market' && (catalogErr
-            ? <Unreadable what="The marketplace" claim="It is not a sign nothing is listed." onRetry={loadCatalog} />
-            : !catalog ? <p className="text-sm text-gray-500">Loading…</p>
-              : <Marketplace data={catalog} onOpen={openPerk} />)}
-          {tab === 'mine' && (mineErr
-            ? <Unreadable what="Your perks" claim="It is not a sign you have claimed nothing." onRetry={loadMine} />
-            : !mine ? <p className="text-sm text-gray-500">Loading…</p>
-              : <MyPerks data={mine} onRated={() => { loadMine(); loadCatalog(); }} />)}
-          {tab === 'review' && isAdmin && <ReviewQueue />}
-        </div>
+            {panels}
+          </>
+        )}
 
         {open && (
           <ClaimModal

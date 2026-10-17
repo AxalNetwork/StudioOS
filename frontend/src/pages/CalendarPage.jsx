@@ -76,6 +76,9 @@ import { AlertTriangle, Download, Plus, RefreshCw, X } from 'lucide-react';
 import { api } from '../lib/api';
 import PageExplainer from '../components/PageExplainer';
 import BrandIcon from '../ui/BrandIcon.jsx';
+import { usePhoneWidth } from '../ui';
+import { AccountPhonePage, phonePending } from './account/AccountPhonePage';
+import { ACCOUNT_PHONE_PAGES } from './account/accountPhone';
 import './calendarPage.css';
 
 /**
@@ -260,6 +263,77 @@ function humanizeOAuthReason(reason) {
   return `(${reason})`;
 }
 
+// ---------------------------------------------------------------------------
+// D700 (#1662) — A6m, the page on a phone.
+// ---------------------------------------------------------------------------
+
+/** The pill each provider state reads, shared with `ProviderCard`. */
+const PROVIDER_PILL = {
+  reading: 'Checking', unreadable: 'Unreadable', unconfigured: 'Not configured',
+  off: 'Not connected', connected: 'Connected', failed: 'Sync failed',
+};
+const PROVIDER_TONE = { connected: 'ok', failed: 'warn', unreadable: 'warn' };
+export const NO_END_REASON = 'This event has no end time recorded, so its length is not known.';
+
+/**
+ * A6m's three sections. `events` is the page's own `listCalendarEvents` read
+ * ({ status, items, reload }); Today and This week are the next seven days
+ * of it. A duration the record cannot give reads Not recorded with its
+ * reason, never 0. Sources carry each provider's own state word
+ * (`providerState`), not only Connected or Reconnect (decision 10).
+ */
+export function calendarPhoneGroups({ events, providers, now = new Date() }) {
+  const [todayTitle, weekTitle, sourcesTitle] = ACCOUNT_PHONE_PAGES.calendar.sections;
+  const today = { label: todayTitle, rows: [], testid: 'calendar-phone-today' };
+  const week = { label: weekTitle, rows: [], testid: 'calendar-phone-week' };
+  if (events.status !== 'ready') {
+    today.note = phonePending(events.status, 'The calendar', 'This is not a claim that nothing is scheduled.', events.reload);
+    week.note = phonePending(events.status, 'The calendar', 'This is not a claim that nothing is scheduled.', events.reload);
+  } else {
+    const start = new Date(now); start.setHours(0, 0, 0, 0);
+    const tomorrow = start.getTime() + DAY_MS;
+    const end = start.getTime() + 7 * DAY_MS;
+    const sorted = [...events.items].sort((a, b) => String(a.start_at).localeCompare(String(b.start_at)));
+    for (const ev of sorted) {
+      const at = new Date(ev.start_at).getTime();
+      if (!Number.isFinite(at) || at < start.getTime() || at >= end) continue;
+      const isToday = at < tomorrow;
+      const when = isToday
+        ? fmtTime(ev.start_at)
+        : `${new Date(ev.start_at).toLocaleDateString(undefined, { weekday: 'short' })} ${fmtTime(ev.start_at)}`;
+      const duration = fmtDuration(ev.start_at, ev.end_at);
+      (isToday ? today : week).rows.push({
+        key: `${ev.kind}-${ev.id}`,
+        title: `${when} · ${ev.title}`,
+        description: KIND_LABEL[ev.kind] || ev.kind,
+        ...(duration ? { value: duration } : { notRecorded: true, notRecordedReason: NO_END_REASON }),
+        testid: 'calendar-phone-event',
+      });
+    }
+    if (!today.rows.length) today.note = 'Nothing scheduled today.';
+    if (!week.rows.length) week.note = 'Nothing else scheduled in the next seven days.';
+  }
+  const sources = {
+    label: sourcesTitle,
+    testid: 'calendar-phone-sources',
+    rows: providers.map(({ name, state, status }) => {
+      const last = status?.last_synced_at ? new Date(status.last_synced_at) : null;
+      const lastText = last && !Number.isNaN(last.getTime()) ? `Synced ${last.toLocaleString()}` : 'Last sync not recorded';
+      return { key: name, title: name, description: lastText, pill: { label: PROVIDER_PILL[state] || PROVIDER_PILL.reading, tone: PROVIDER_TONE[state] || 'neutral' }, testid: 'calendar-phone-source' };
+    }),
+  };
+  return [today, week, sources];
+}
+
+/** A6m — the bar and the three sections, then `children`: the controls, the agenda and the provider cards. */
+export function CalendarPhoneView({ events, providers, now, children = null }) {
+  return (
+    <AccountPhonePage pageKey="calendar" testid="calendar-phone" groups={calendarPhoneGroups({ events, providers, now })}>
+      {children}
+    </AccountPhonePage>
+  );
+}
+
 export default function CalendarPage() {
   const [items, setItems] = useState(null);        // null = not read yet
   const [sources, setSources] = useState([]);       // per-source answer, from the worker
@@ -417,6 +491,8 @@ export default function CalendarPage() {
           ? 'source coverage not reported'
           : `${sources.length} sources · all answered${Array.isArray(inRange) && inRange.length === 0 ? ' · 0 events' : ''}`;
 
+  const phone = usePhoneWidth();
+
   async function connectGoogle() {
     try {
       const r = await api.googleCalConnect();
@@ -478,17 +554,20 @@ export default function CalendarPage() {
     setMsSyncBusy(false);
   }
 
-  return (
+  const page = (
     <div className="cal" data-testid="calendar-page">
       <header className="cal-head">
-        <div style={{ minWidth: 0 }}>
-          <h1>Calendar</h1>
-          <p>
-            Investment-committee meetings, founder check-ins, advisor sessions, partner office
-            hours, expert sessions booked through wellbeing, and anything synced in from Calendly.
-            Nothing else is aggregated here.
-          </p>
-        </div>
+        {/* On a phone A6m's bar is the heading (D700). */}
+        {!phone && (
+          <div style={{ minWidth: 0 }}>
+            <h1>Calendar</h1>
+            <p>
+              Investment-committee meetings, founder check-ins, advisor sessions, partner office
+              hours, expert sessions booked through wellbeing, and anything synced in from Calendly.
+              Nothing else is aggregated here.
+            </p>
+          </div>
+        )}
         <div className="cal-head-actions">
           {canIC && (
             <button type="button" className="cal-btn cal-btn-p" onClick={() => setShowIc(true)}>
@@ -704,6 +783,18 @@ export default function CalendarPage() {
       {showCk && <CheckinModal me={me} onClose={() => setShowCk(false)} onSaved={() => { setShowCk(false); load(); }} />}
     </div>
   );
+
+  if (!phone) return page;
+  const events = { status: Array.isArray(inRange) ? 'ready' : loading ? 'loading' : 'unreadable', items: inRange || [], reload: load };
+  const providers = [
+    { name: 'Google Calendar', state: gState, status: google },
+    { name: 'Microsoft 365', state: mState, status: microsoft },
+  ];
+  return (
+    <CalendarPhoneView events={events} providers={providers}>
+      <div className="-mx-[22px]">{page}</div>
+    </CalendarPhoneView>
+  );
 }
 
 /**
@@ -881,37 +972,37 @@ function ProviderCard({ provider, name, state, status, result, busy, envVars, on
   // dash, and never a plausible "never" that could be read as a failure.
   const SPEC = {
     reading: {
-      pill: 'Checking', tone: '',
+      pill: PROVIDER_PILL.reading, tone: '',
       whyNoSync: 'The connection has not been read back yet.',
       why: 'This card fills in as soon as the server answers.',
       actions: [],
     },
     unreadable: {
-      pill: 'Unreadable', tone: 'cal-nr-warn',
+      pill: PROVIDER_PILL.unreadable, tone: 'cal-nr-warn',
       whyNoSync: 'The connection status could not be read, so there is no last-sync time to show.',
       why: `${name}'s connection status could not be read. This says nothing about whether it is configured — try again.`,
       actions: [['Retry', 'cal-btn-o', onRetry]],
     },
     unconfigured: {
-      pill: 'Not configured', tone: '',
+      pill: PROVIDER_PILL.unconfigured, tone: '',
       whyNoSync: 'Nothing can have synced, because the connection cannot be offered.',
       why: `This server has no ${name} OAuth credentials, so the connection is not available to anyone. An admin sets ${envVars}.`,
       actions: [],
     },
     off: {
-      pill: 'Not connected', tone: '',
+      pill: PROVIDER_PILL.off, tone: '',
       whyNoSync: 'Nothing has synced, so there is no last-sync time to show.',
       why: 'Connect to push events automatically. Nothing is written to this calendar until you do.',
       actions: [['Connect', 'cal-btn-o', onConnect]],
     },
     connected: {
-      pill: 'Connected', tone: 'cal-nr-ok',
+      pill: PROVIDER_PILL.connected, tone: 'cal-nr-ok',
       whyNoSync: 'Connected, but no sync has run yet — the first one writes this time.',
       why: `Every StudioOS event appears in this calendar and stays up to date${account ? `, as ${account}` : ''}.`,
       actions: [['Sync now', 'cal-btn-o', onSync], ['Disconnect', 'cal-btn-q', onDisconnect]],
     },
     failed: {
-      pill: 'Sync failed', tone: 'cal-nr-warn',
+      pill: PROVIDER_PILL.failed, tone: 'cal-nr-warn',
       whyNoSync: 'No sync has completed, so there is no time to show.',
       why: 'The last attempt was refused. Events already pushed remain on this calendar; nothing new has been written since.',
       actions: [['Reconnect', 'cal-btn-p', onConnect], ['Disconnect', 'cal-btn-q', onDisconnect]],

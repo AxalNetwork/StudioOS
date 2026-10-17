@@ -22,6 +22,8 @@ live here, one file each:
 | `AccountDeveloper.jsx` | Developer, for the one role its routes answer |
 | `accountCenterModel.js` | The pure helpers the D568 sections share |
 | `accountPhone.js` | D700: the phone's pure rules. `ACCOUNT_PHONE_PAGES` (each board's title, sub and section titles, from `Account Mobile Page.dc.html`), the A1m rows with their plan and Following lines, `PATH_TO_SECTION`, and the address rules `accountViewFor` and `accountPathFor` |
+| `AccountPhonePage.jsx` | D700: the frame A4m–A10m share: `PHONE_PAGE`, the gutter that takes back the shell's padding; `AccountPhonePage`, a board's bar from `ACCOUNT_PHONE_PAGES` with its rows; and `phonePending`, a section's loading or Unreadable line. The seven pages outside this folder import it |
+| `PricingPhone.jsx` | D700: A10m, `/plans-and-pricing` on a phone, with its three reads (the billing status, `/ai-budget/me` and `/ai-budget/top-up`). Apart from `ProductsPage.jsx`, which loads Stripe's key at import |
 | `usageModel.js` | The Usage section's pure arithmetic and words: amounts, token counts, bytes, and every "Not recorded" rule |
 | `connectorsModel.js` | The Connectors rules: categories, status words, search and pages, Discover's sections, the redirect, a sign-in's return, the connect flow's states and Build's groups |
 | `AssistantsGroup.jsx` | D668: Connectors' "AI assistants" group, with a setup card per assistant around the one StudioOS server URL, and the grants list with Revoke. `AssistantsSection` mounts it on Connectors over `../../lib/api/assistants.js` |
