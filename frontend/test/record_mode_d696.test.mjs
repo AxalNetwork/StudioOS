@@ -286,3 +286,30 @@ test('6. the record dropdown navigates Back with its venture', async () => {
     assert.equal(view.out.location.pathname + view.out.location.search, '/build/solution-design?project_id=3');
   } finally { await view.close(); }
 });
+
+async function assertRowForm(View = CycleRoute) {
+  const data = record();
+  const proof = data.actions.find(action => action.key === 'proof');
+  data.actions = data.actions.filter(action => action.key !== 'proof');
+  data.main = [{ title: 'Meeting proof', action: proof, rows: [
+    { a: 'First meeting', action: { key: 'proof', body: { occurrence: 'meeting-3' } } },
+    { a: 'Second meeting', action: { key: 'proof', body: { occurrence: 'meeting-4' } } },
+  ] }];
+  const view = await mounted((url, opts) => opts.method === 'POST' ? response({ ok: true }) : response(data), { View });
+  try {
+    const buttons = view.nodes().filter(n => n.tagName === 'BUTTON' && view.props(n)?.children === 'Attach proof');
+    assert.equal(buttons.length, 3);
+    await view.run(() => view.props(buttons.at(-1)).onClick());
+    const form = view.fiber('FormLightbox'); assert.ok(form);
+    await view.run(() => form.memoizedProps.onSubmit({ proof: new File(['row proof'], 'proof.txt') }));
+    const post = view.requests.find(r => r.url.includes('/actions/proof?project=3'));
+    assert.equal(post.options.body.get('occurrence'), 'meeting-4');
+    assert.equal(await post.options.body.get('proof').text(), 'row proof');
+  } finally { await view.close(); }
+}
+test('6. a row form preserves its own target through history and submission; mutation checked', async () => {
+  await assertRowForm();
+  await mutationCheck(read('frontend/src/pages/cycles/CycleRoute.jsx'), 'pages/cycles/CycleRoute.jsx', module => assertRowForm(module.default), [
+    ['editingPayload: { record: key, body: action.body }', 'editingPayload: null'],
+  ], true);
+});

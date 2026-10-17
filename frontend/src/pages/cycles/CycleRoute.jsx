@@ -26,7 +26,7 @@ import CycleOverview, { CycleHeader } from './CycleOverview';
 import RecordView from './RecordView';
 import Lightbox from '../../ui/Lightbox';
 import { RECORD_ID } from './cyclePaths';
-import { availableRecord, CLIENT_ACTIONS, confirmView, declaredActions, finishRecordWrite, recordActionBody, recordFormFor } from './recordModel';
+import { availableRecord, CLIENT_ACTIONS, confirmView, declaredActions, finishRecordWrite, recordActionBody, recordFormFor, rowAction } from './recordModel';
 import ValidatePhoneFocus from './ValidatePhoneFocus';
 import CycleModulePage from './CycleModulePage';
 import DurabilityChecklist from './DurabilityChecklist';
@@ -284,7 +284,7 @@ const CYCLE_DEFS = {
 
 const filterString = (filter) => Object.entries(filter || {}).filter(([, v]) => v != null && v !== '').map(([k, v]) => `${k}:${v}`).join(',');
 
-export function useProject(reloadKey = 0, { kept = null, drop = [] } = {}) {
+export function useProject(reloadKey = 0, { kept = null, drop = [], immediate = false } = {}) {
   const [searchParams, setSearchParams] = useSearchParams();
   // Writes build on the latest query, never on a render's (react-router hands a
   // functional update the search params of the render that made the setter), and
@@ -325,7 +325,7 @@ export function useProject(reloadKey = 0, { kept = null, drop = [] } = {}) {
     }).catch(() => { if (alive) setStatus('unreadable'); });
     return () => { alive = false; };
   }, [requested, writeProject, reloadKey]);
-  return { projectId: requested || projectId, status: requested ? 'ready' : status, writeProject };
+  return { projectId: immediate && requested ? requested : projectId, status: immediate && requested ? 'ready' : status, writeProject };
 }
 
 /** The module page under the lightbox: the founder's, when it is one of this cycle's modules; else the overview (null). */
@@ -430,7 +430,8 @@ export function useCycleRecord({ enabled, cycle, projectId, slug, id, reload, ed
   const declarations = declaredActions(raw);
   const data = raw ? availableRecord(raw, edit) : null;
   const selected = raw && typeof location.state?.editing === 'string'
-    ? declarations.get(location.state.editing) : null;
+    ? rowAction(location.state.editingPayload?.record === key
+      ? { key: location.state.editing, body: location.state.editingPayload.body } : location.state.editing, declarations) : null;
   const formSpec = selected ? recordFormFor(selected, raw, edit) : null;
   const closeForm = () => {
     if (currentKey.current !== key) return;
@@ -464,7 +465,7 @@ export function useCycleRecord({ enabled, cycle, projectId, slug, id, reload, ed
   return {
     status: state?.status ?? 'loading', data, error: state?.error, activity: state?.activity, actionError,
     link: action => { if (action.href?.startsWith('mailto:')) window.location.href = action.href; else navigate(action.href); },
-    openForm: action => navigate(`${location.pathname}${location.search}${location.hash}`, { state: { ...location.state, editing: action.key } }),
+    openForm: action => navigate(`${location.pathname}${location.search}${location.hash}`, { state: { ...location.state, editing: action.key, editingPayload: { record: key, body: action.body } } }),
     write,
     client: action => { Promise.resolve().then(() => CLIENT_ACTIONS.get(action.key)?.(raw)).catch(error => {
       if (currentKey.current === key) setActionError(error?.message || 'The export could not be created.');
@@ -521,7 +522,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   const [projectsKey, setProjectsKey] = useState(0);
   // Build's lightbox reads a sign-in's return or `?tool=` once; the venture's write drops those keys too (#1597).
   const [connectDrop] = useState(() => (lightbox && cycle === 'build' ? toolDeepLink(location.search, [])?.strip || [] : []));
-  const { projectId, status: projectStatus, writeProject } = useProject(projectsKey, { kept: lightbox && cycle === 'build' ? takeBuildProject : null, drop: connectDrop });
+  const { projectId, status: projectStatus, writeProject } = useProject(projectsKey, { kept: lightbox && cycle === 'build' ? takeBuildProject : null, drop: connectDrop, immediate: record });
   const creates = Boolean(def?.creates);
   const [creating, setCreating] = useState(() => creates && searchParams.get('new') === '1');
   // Followed, not only seeded: the Command Palette can address `?new=1` from
