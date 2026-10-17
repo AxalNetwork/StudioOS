@@ -463,7 +463,7 @@ export async function sweepMeet(env: Env, now: Date): Promise<SweepResult[]> {
     try {
       results.push(await sweepOne(env, ref, now));
     } catch (e) {
-      console.error(`[meet] sweep failed ref=${ref.uid}`, e instanceof Error ? e.name : 'error');
+      console.error('[meet] sweep failed ref=%s', ref.uid, e instanceof Error ? e.name : 'error');
       results.push('skipped');
     }
   }

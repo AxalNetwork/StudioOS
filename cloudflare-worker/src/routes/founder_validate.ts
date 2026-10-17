@@ -294,8 +294,8 @@ founderValidate.post('/board/:projectId/hypotheses', async (c) => {
 founderValidate.patch('/hypotheses/:id', async (c) => {
   const id = Number(c.req.param('id'));
   const owner = await c.env.DB.prepare(
-    'SELECT project_id FROM hypotheses WHERE id = ?',
-  ).bind(id).first<{ project_id: number }>();
+    'SELECT project_id, code FROM hypotheses WHERE id = ?',
+  ).bind(id).first<{ project_id: number; code: string }>();
   if (!owner) return notFound('Hypothesis');
   const s = await scope(c, Number(owner.project_id), canWrite);
   if (s instanceof Response) return s;
@@ -319,15 +319,15 @@ founderValidate.patch('/hypotheses/:id', async (c) => {
     ).bind(retire, id).run();
   }
   await logCycleWrite(c.env, { projectId: s.project.id, userId: s.user.id, cycle: 'validate', module: 'experiments',
-    entityId: id, action: 'hypothesis_updated', summary: `Hypothesis ${id} updated` });
+    entityId: id, action: 'hypothesis_updated', summary: `${owner.code} updated` });
   return json({ ok: true });
 });
 
 founderValidate.post('/hypotheses/:id/links', async (c) => {
   const id = Number(c.req.param('id'));
   const owner = await c.env.DB.prepare(
-    'SELECT project_id FROM hypotheses WHERE id = ?',
-  ).bind(id).first<{ project_id: number }>();
+    'SELECT project_id, code FROM hypotheses WHERE id = ?',
+  ).bind(id).first<{ project_id: number; code: string }>();
   if (!owner) return notFound('Hypothesis');
   const s = await scope(c, Number(owner.project_id), canWrite);
   if (s instanceof Response) return s;
@@ -341,30 +341,36 @@ founderValidate.post('/hypotheses/:id/links', async (c) => {
   // pull another venture's interviews into this venture's evidence count.
   // `insertHypothesisLink` checks both ends; an accepted D658 placement
   // writes through the same function.
-  if (!await insertHypothesisLink(c.env, Number(owner.project_id), id, groupId, direction as 'supports' | 'contradicts')) {
-    return notFound('Pain group');
+  const linked = await insertHypothesisLink(c.env, Number(owner.project_id), id, groupId, direction as 'supports' | 'contradicts');
+  if (!linked) return notFound('Pain group');
+  // A link that already existed wrote nothing, so it logs nothing. Each side
+  // names the other by code or title: "Linked to H3" on the theme.
+  if (linked.inserted) {
+    const theme = await c.env.DB.prepare('SELECT title FROM pain_groups WHERE id = ? AND project_id = ?')
+      .bind(groupId, s.project.id).first<{ title: string }>();
+    await logCycleWrite(c.env, { projectId: s.project.id, userId: s.user.id, cycle: 'validate', module: 'experiments',
+      entityId: id, action: 'hypothesis_pain_linked', summary: `Linked to ${theme?.title ?? 'a theme'}` });
+    await logCycleWrite(c.env, { projectId: s.project.id, userId: s.user.id, cycle: 'validate', module: 'problem-discovery',
+      entityId: groupId, action: 'hypothesis_pain_linked', summary: `Linked to ${owner.code}` });
   }
-  await logCycleWrite(c.env, { projectId: s.project.id, userId: s.user.id, cycle: 'validate', module: 'experiments',
-    entityId: id, action: 'hypothesis_pain_linked', summary: `Linked to theme ${groupId}` });
-  await logCycleWrite(c.env, { projectId: s.project.id, userId: s.user.id, cycle: 'validate', module: 'problem-discovery',
-    entityId: groupId, action: 'hypothesis_pain_linked', summary: `Linked to hypothesis ${id}` });
   return json({ ok: true }, 201);
 });
 
 founderValidate.delete('/links/:id', async (c) => {
   const id = Number(c.req.param('id'));
   const owner = await c.env.DB.prepare(
-    `SELECT h.project_id, l.hypothesis_id, l.pain_group_id FROM hypothesis_pain_links l
-       JOIN hypotheses h ON h.id = l.hypothesis_id WHERE l.id = ?`,
-  ).bind(id).first<{ project_id: number; hypothesis_id: number; pain_group_id: number }>();
+    `SELECT h.project_id, l.hypothesis_id, l.pain_group_id, h.code, g.title FROM hypothesis_pain_links l
+       JOIN hypotheses h ON h.id = l.hypothesis_id
+       LEFT JOIN pain_groups g ON g.id = l.pain_group_id WHERE l.id = ?`,
+  ).bind(id).first<{ project_id: number; hypothesis_id: number; pain_group_id: number; code: string; title: string | null }>();
   if (!owner) return notFound('Link');
   const s = await scope(c, Number(owner.project_id), canWrite);
   if (s instanceof Response) return s;
   await c.env.DB.prepare('DELETE FROM hypothesis_pain_links WHERE id = ?').bind(id).run();
   await logCycleWrite(c.env, { projectId: s.project.id, userId: s.user.id, cycle: 'validate', module: 'experiments',
-    entityId: owner.hypothesis_id, action: 'hypothesis_pain_unlinked', summary: `Unlinked theme ${owner.pain_group_id}` });
+    entityId: owner.hypothesis_id, action: 'hypothesis_pain_unlinked', summary: `Unlinked from ${owner.title ?? 'a theme'}` });
   await logCycleWrite(c.env, { projectId: s.project.id, userId: s.user.id, cycle: 'validate', module: 'problem-discovery',
-    entityId: owner.pain_group_id, action: 'hypothesis_pain_unlinked', summary: `Unlinked hypothesis ${owner.hypothesis_id}` });
+    entityId: owner.pain_group_id, action: 'hypothesis_pain_unlinked', summary: `Unlinked from ${owner.code}` });
   return json({ ok: true });
 });
 

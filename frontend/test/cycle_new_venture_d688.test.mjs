@@ -17,6 +17,8 @@ import { installDocument, mountContracts } from './_contracts_dom.mjs';
 
 const html = (element, path = '/build?project_id=7') => renderToStaticMarkup(h(MemoryRouter, { initialEntries: [path] }, element));
 const source = (path) => readFileSync(path, 'utf8');
+/** An href as React writes it into an attribute, so its `&` is escaped by React's own encoder, not a hand-built one. */
+const inAttr = (href) => /^<a href="([^"]*)">/.exec(renderToStaticMarkup(h('a', { href })))[1];
 const reasons = [
   ['solution-design', 'Solution design', 'No features yet. Linked and unlinked features appear here.', 'Add feature', '/build/solution-design?project=7&add=1'],
   ['prototype-mvp', 'Prototype / MVP', 'No must-haves yet. The burn-up toward the ship date appears here.', 'Add must-have', '/build/prototype-mvp?project=7&add=1'],
@@ -39,7 +41,7 @@ test('D688: the six Build cards render empty links and four figures say Not reco
     assert.match(card, /data-state="empty"/);
     assert.ok(card.includes(reason), slug);
     assert.ok(card.includes(text), slug);
-    assert.ok(card.includes(href.replaceAll('&', '&amp;')), slug);
+    assert.ok(card.includes(inAttr(href)), slug);
   }
   assert.equal((out.match(/nothing recorded yet/g) || []).length, 4);
   assert.doesNotMatch(out, /Hidden chart caption|Next:|>0</);

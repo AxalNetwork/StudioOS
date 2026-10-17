@@ -161,6 +161,7 @@ const setIn = <T,>(obj: T, path: (string | number)[], value: unknown): T => {
   let cur: Record<string, unknown> = next as Record<string, unknown>;
   for (let i = 0; i < path.length - 1; i++) {
     const k = path[i] as string;
+    // nosemgrep: javascript.lang.security.audit.prototype-pollution.prototype-pollution-loop.prototype-pollution-loop -- the path is rejected above if any segment is __proto__/constructor/prototype, and the walk is on a structuredClone
     cur = cur[k] as Record<string, unknown>;
   }
   cur[path[path.length - 1] as string] = value;

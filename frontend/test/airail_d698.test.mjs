@@ -68,8 +68,8 @@ function routerPricing() {
     [...src.matchAll(/const (SMALL_LLAMA|MID_LLAMA)\s*=\s*'(@cf\/[^']+)'/g)].map((m) => [m[1], m[2]]),
   );
   const resolveId = (t) => { const x = t.trim(); return consts.has(x) ? consts.get(x) : x.replace(/^'|'$/g, ''); };
-  const list = (chunk, key) => {
-    const m = new RegExp(`${key}:\\s*\\[([^\\]]*)\\]`).exec(chunk);
+  const list = (chunk, field) => {
+    const m = field.exec(chunk);
     return m ? m[1].split(',').map((x) => x.trim()).filter(Boolean).map(resolveId) : [];
   };
   const body = src.slice(src.indexOf('export const ROUTE'));
@@ -79,7 +79,7 @@ function routerPricing() {
   for (let i = 0; i < entries.length; i += 1) {
     const chunk = table.slice(entries[i].index, i + 1 < entries.length ? entries[i + 1].index : table.length);
     const model = /model:\s*([A-Z_]+|'[^']+')/.exec(chunk);
-    routes[entries[i][1]] = { model: resolveId(model[1]), fallback_chain: list(chunk, 'fallbackChain'), alternates: list(chunk, 'alternates') };
+    routes[entries[i][1]] = { model: resolveId(model[1]), fallback_chain: list(chunk, /fallbackChain:\s*\[([^\]]*)\]/), alternates: list(chunk, /alternates:\s*\[([^\]]*)\]/) };
   }
   return { ok: true, prices: {}, audio_prices: {}, routes };
 }

@@ -26,7 +26,10 @@ import { RECORDS } from '../src/pages/cycles/adapters/validate.js';
 
 const h = React.createElement;
 const html = (el) => renderToStaticMarkup(h(MemoryRouter, null, el));
-const tag = (out, id) => new RegExp(`<[a-z]+[^>]*data-testid="${id}"[^>]*>`).exec(out)?.[0] ?? '';
+const tag = (out, id) => {
+  const at = out.indexOf(`data-testid="${id}"`);
+  return at < 0 ? '' : out.slice(out.lastIndexOf('<', at), out.indexOf('>', at) + 1);
+};
 
 const S = (id, status, extra = {}) => ({ id, status, channel: 'in_person', created_at: `2026-10-0${id} 10:00:00`, interview_id: 41, ...extra });
 const SEGMENTS = [
