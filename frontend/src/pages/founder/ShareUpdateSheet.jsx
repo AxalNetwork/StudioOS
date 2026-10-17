@@ -285,6 +285,7 @@ export function ShareUpdateView({ s, on }) {
               <div className="text-[11.5px] text-axal-muted">{kind === 'capital' && ctx?.open_call
                 ? `Links to the open Call for Capital · ${ctx.open_call.name} (closes ${shortDay(ctx.open_call.target_close)}). Replies from investors it was sent to land on the call; others become investor contacts.`
                 : kind === 'capital' && ctx?.open_call_reason ? `${ctx.open_call_reason}. Replies become investor contacts in Capital relationships.`
+                : kind === 'market' && !a?.link_ref ? 'Linked to no market, so a reply stays on the ask.'
                 : meta?.lands === false ? meta.reason : `Replies land in ${moduleName(meta?.module) || 'the module that asked'}.`}</div>
             </div>
             <span className={`${PILL} border-violet-200 bg-violet-50 text-violet-800 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-200`}>{kind[0].toUpperCase() + kind.slice(1)}</span>
