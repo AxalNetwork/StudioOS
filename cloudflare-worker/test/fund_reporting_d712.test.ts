@@ -18,7 +18,7 @@ import { tableFromBaseline, stripForeignKeys } from './_baseline.mjs';
 import reporting, { draftCsv } from '../src/routes/fund_reporting.ts';
 import funds from '../src/routes/funds.ts';
 import { runReportingSchedule, sha256Hex } from '../src/services/fundReportDrafts.ts';
-import { allocate, quarterPeriod } from '../src/services/fundReportBuild.ts';
+import { allocate } from '../src/services/fundReportBuild.ts';
 
 const baseline = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const mig = (f: string) => readFileSync(new URL(`../sql/migrations/${f}`, import.meta.url), 'utf8');
@@ -30,7 +30,6 @@ const SCHEMA = TABLES.map((t) => stripForeignKeys(tableFromBaseline(baseline, t)
 const SECRET = ['d712', 'fixture', 'signing', 'secret', 'only'].join('-');
 
 const ADMIN = 1, SUPER = 2, SUPER2 = 3, OUTSIDE_GP = 4, LP = 5, FOUNDER = 6, PARTNER = 7, PLAIN_TOTP = 8;
-const Q = quarterPeriod('Q3 2026')!;
 
 function fixture() {
   const { DB, db } = makeD1(SCHEMA);
