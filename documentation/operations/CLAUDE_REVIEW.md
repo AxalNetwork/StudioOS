@@ -103,16 +103,15 @@ Set these under *Settings → Secrets and variables → Actions*.
 
 ### 4a. Workload identity federation
 
-Configure it in the Console, under the organization's federation settings.
+Configure it in the Console's [Workload identity](https://platform.claude.com/settings/workload-identity-federation) page (`platform.claude.com/settings/workload-identity-federation`): **Connect workload**, then the **GitHub Actions** tile.
 
-1. **Issuer:** GitHub Actions, `https://token.actions.githubusercontent.com`.
+1. **Issuer:** GitHub Actions, `https://token.actions.githubusercontent.com`, discovery mode.
 2. **Service account:** a new, dedicated one (for example `github-claude-review`). Give it the lowest organization role and membership of the review workspace only, with the developer role. Never use an admin account: the rule's tokens can do whatever the account can.
-3. **Rule** (for example `studioos-claude-review`):
-   - GitHub organization `AxalNetwork`;
-   - organization numeric ID `124802540`, which pins trust to the org if the name is ever released;
-   - repository `StudioOS`;
-   - **branch/ref blank**: a pull-request run's ref is `refs/pull/<n>/merge`, so `refs/heads/main` would refuse every review;
-   - allowed events `pull_request` only;
+3. **Rule** (for example `studioos-claude-review`). Its match is what a pull-request run's token carries:
+   - **subject prefix `repo:AxalNetwork/StudioOS:pull_request`**. The wizard's example, `repo:…:ref:refs/heads/main`, matches only pushes to `main` and refuses every review with reason `match_subject_prefix`;
+   - audience `https://api.anthropic.com`;
+   - **no `ref` claim**: a pull-request run's ref is `refs/pull/<n>/merge`, so `refs/heads/main` refuses every review;
+   - claims, if any, copied exactly from a real token's claims on the history tab. A value that differs in any character (case, a space, quote marks) refuses every exchange with reason `match_claim_value_mismatch`. The subject prefix alone already limits the rule to this repository's pull-request runs;
    - enabled in the review workspace only;
    - scope `workspace:developer`;
    - token lifetime 10 minutes.
@@ -125,7 +124,7 @@ The review job already has `id-token: write`. Its reviewer fetches a fresh GitHu
 - a warning annotation on the job, titled `Claude review: api_error`;
 - the job summary, and `error_kind`, `http_status` and `error_detail` in the run's `record.json`.
 
-A refused exchange reads `Token exchange failed with status 401 …`, and the Console's Workload identity page logs the attempt. Other outcomes keep their reason in the summary only, because it can quote the pull request or the model's answer.
+A refused exchange reads `Token exchange failed with status 401 …`: the API answers every refusal with the same `Authentication failed`. The reason is only on the Console's [authentication history](https://platform.claude.com/settings/workload-identity-federation?tab=history), one entry per attempt, with the token's claims beside it. Other outcomes keep their reason in the summary only, because it can quote the pull request or the model's answer.
 
 **What the rule allows.** Any workflow in this repository that runs on `pull_request` with `id-token: write` matches it. That includes one added on a branch of this repository, the same exposure a repository secret has. A fork's pull request never matches: GitHub gives it no OIDC token.
 
