@@ -83,13 +83,19 @@ export function resolveWithBrackets(body: string): string {
   });
 }
 
+// A read-only walk, and OWN keys only: a token resolves against what the caller
+// put in the merge context, never against what every object inherits. An
+// inherited lookup turned `{{toString}}` or `{{counterparty.valueOf}}` into a
+// function's source text in a legal document; now such a token stays as
+// written, like any other missing key. `__proto__`, `constructor` and
+// `prototype` are still refused outright.
 function resolveDotted(scope: Record<string, unknown>, path: string): unknown {
   const parts = path.split('.');
   let cur: unknown = scope;
   for (const p of parts) {
     if (cur == null || typeof cur !== 'object') return undefined;
     if (p === '__proto__' || p === 'constructor' || p === 'prototype') return undefined;
-    cur = (cur as Record<string, unknown>)[p]; // codeql[js/prototype-polluting-function] -- read-only walk; __proto__/constructor/prototype rejected above, result is stringified and never assigned
+    cur = Object.prototype.hasOwnProperty.call(cur, p) ? (cur as Record<string, unknown>)[p] : undefined;
   }
   return cur;
 }
