@@ -129,6 +129,11 @@ function freshDb() {
   db.exec(ddlFromBaseline('pitch_deck_share_tokens'));
   db.exec(ddlFromBaseline('deck_share_views'));
   for (const stmt of migrationStatements()) db.exec(stmt);
+  // D691 (#1700) — migration 463's link columns, which the claim now reads,
+  // and the table its `prospect_id` references.
+  db.exec(ddlFromBaseline('raise_prospects'));
+  for (const stmt of read('sql/migrations/463_raise_record_stores.sql').replace(/^\s*--[^\n]*$/gm, '')
+    .split(';').map((x) => x.trim()).filter((x) => x.startsWith('ALTER TABLE pitch_deck_share_tokens'))) db.exec(stmt);
   return db;
 }
 
@@ -161,7 +166,9 @@ function seed(db: InstanceType<typeof DatabaseSync>, rows: Seed[]): Record<strin
 
 /** Run the route's own claim statement. Returns rows changed — 1 means it opened. */
 function claim(db: InstanceType<typeof DatabaseSync>, hash: string): number {
-  return Number(db.prepare(CLAIM).run(hash).changes);
+  // D691 (#1700) — the claim's second bind is the browser's viewer hash; these
+  // links all have forwarding on (463's default), so none is needed.
+  return Number(db.prepare(CLAIM).run(hash, null).changes);
 }
 
 // ---------------------------------------------------------------- the claim
@@ -267,14 +274,19 @@ test('a link on another deck cannot be withdrawn by guessing its id', () => {
 
   // And the route returns 404 on that null rather than falling through to the
   // UPDATE, so the link stays live.
-  const at = ROUTE.indexOf("decks.delete('/:id/shares/:shareId'");
-  assert.ok(at > 0, 'the withdraw route is gone');
-  const body = ROUTE.slice(at, ROUTE.indexOf('\n});', at));
+  // D691 (#1700) moved the withdrawal into `revokeShareLink()`, which the
+  // route and the Raise link record's Revoke share; the order is checked there,
+  // and the route still answers its null with 404.
+  const at = ROUTE.indexOf('export async function revokeShareLink(');
+  assert.ok(at > 0, 'the withdrawal is gone');
+  const body = ROUTE.slice(at, ROUTE.indexOf('\n}', at));
   const scopeAt = body.indexOf('WHERE id = ? AND deck_id = ?');
-  const guardAt = body.indexOf("if (!tok) return c.json({ error: 'not found' }, 404);");
+  const guardAt = body.indexOf('if (!tok) return null;');
   const writeAt = body.indexOf("SET revoked_at = datetime('now')");
   assert.ok(scopeAt > 0 && guardAt > scopeAt && writeAt > guardAt,
     'the withdraw writes before it has checked the token belongs to this deck');
+  const route = ROUTE.slice(ROUTE.indexOf("decks.delete('/:id/shares/:shareId'"));
+  assert.match(route.slice(0, route.indexOf('\n});')), /const out = await revokeShareLink\(c\.env, id, shareId\);\s*if \(!out\) return c\.json\(\{ error: 'not found' \}, 404\);/);
 });
 
 test('withdrawing keeps the view history, because it is not a delete', () => {
