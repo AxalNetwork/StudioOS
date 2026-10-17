@@ -11,6 +11,7 @@
 // self-heal on a D1 that has not had the migration applied yet.
 import type { Env } from '../types';
 import { bindingKey } from '../util/schemaBootstrap';
+import { formatFixed, validateFormat, FormatError } from './templateFormat';
 
 export const LEGAL_TEMPLATE_CATEGORIES = ['gp', 'fund', 'portfolio', 'compliance'] as const;
 export type LegalTemplateCategory = (typeof LEGAL_TEMPLATE_CATEGORIES)[number];
@@ -26,6 +27,9 @@ export interface LegalTemplate {
   version: number;
   is_active: number;
   is_stub: number;
+  /** D717: the stored kind and Axal party; NULL means "from the slug". */
+  doc_kind: string | null;
+  axal_party: string | null;
   created_at: string | null;
   updated_at: string | null;
   created_by: number | null;
@@ -38,6 +42,8 @@ export interface LegalTemplateVersion {
   category: string;
   body_md: string;
   merge_fields: string[];
+  doc_kind: string | null;
+  axal_party: string | null;
   created_at: string | null;
   created_by: number | null;
 }
@@ -52,6 +58,8 @@ interface RawRow {
   version: number;
   is_active: number;
   is_stub: number;
+  doc_kind: string | null;
+  axal_party: string | null;
   created_at: string | null;
   updated_at: string | null;
   created_by: number | null;
@@ -93,6 +101,11 @@ export async function ensureLegalTemplatesSchema(env: Env): Promise<void> {
       UNIQUE(template_id, version)
     )`,
     `CREATE INDEX IF NOT EXISTS idx_legal_template_versions_tpl ON legal_template_versions(template_id)`,
+    // D717 (#1782), as migration 479: the stored kind and Axal party.
+    `ALTER TABLE legal_templates ADD COLUMN doc_kind TEXT CHECK (doc_kind IS NULL OR doc_kind IN ('agreement','corporate','resolution','unilateral','policy','notice','booklet'))`,
+    `ALTER TABLE legal_templates ADD COLUMN axal_party TEXT CHECK (axal_party IS NULL OR axal_party IN ('management','holdings','gp','fund','none'))`,
+    `ALTER TABLE legal_template_versions ADD COLUMN doc_kind TEXT CHECK (doc_kind IS NULL OR doc_kind IN ('agreement','corporate','resolution','unilateral','policy','notice','booklet'))`,
+    `ALTER TABLE legal_template_versions ADD COLUMN axal_party TEXT CHECK (axal_party IS NULL OR axal_party IN ('management','holdings','gp','fund','none'))`,
   ];
   for (const s of stmts) {
     try {
@@ -189,11 +202,11 @@ export async function listVersions(
   const current = await getTemplate(env, slug);
   if (!current) return null;
   const res = await env.DB.prepare(
-    `SELECT version, title, category, body_md, merge_fields, created_at, created_by
+    `SELECT version, title, category, body_md, merge_fields, doc_kind, axal_party, created_at, created_by
        FROM legal_template_versions WHERE template_id = ? ORDER BY version DESC`,
   )
     .bind(current.id)
-    .all<{ version: number; title: string; category: string; body_md: string; merge_fields: string | null; created_at: string | null; created_by: number | null }>();
+    .all<{ version: number; title: string; category: string; body_md: string; merge_fields: string | null; doc_kind: string | null; axal_party: string | null; created_at: string | null; created_by: number | null }>();
   const versions = (res.results ?? []).map((v) => ({ ...v, merge_fields: parseMergeFields(v.merge_fields) }));
   return { current, versions };
 }
@@ -210,9 +223,37 @@ export class TemplateError extends Error {
   }
 }
 
+type FormatPatch = { doc_kind?: unknown; axal_party?: unknown };
+
+/**
+ * D717: the pair a write stores. An absent key keeps `current`'s value, `null`
+ * returns it to the slug, anything else is checked on the effective pair. A
+ * notice or booklet slug (#1781) takes no stored value: 409 `format_fixed`.
+ */
+function resolveFormat(
+  slug: string,
+  category: string,
+  input: FormatPatch,
+  current: { doc_kind: string | null; axal_party: string | null },
+): { doc_kind: string | null; axal_party: string | null } {
+  const has = (k: keyof FormatPatch) => Object.prototype.hasOwnProperty.call(input, k) && input[k] !== undefined;
+  const doc_kind = has('doc_kind') ? (input.doc_kind as string | null) : current.doc_kind ?? null;
+  const axal_party = has('axal_party') ? (input.axal_party as string | null) : current.axal_party ?? null;
+  if ((has('doc_kind') && input.doc_kind !== null) || (has('axal_party') && input.axal_party !== null)) {
+    if (formatFixed(slug)) throw new TemplateError('format_fixed', 409, 'Set by the notice type: this template takes no stored kind or Axal party.');
+  }
+  try {
+    validateFormat(doc_kind, axal_party, slug, category);
+  } catch (e) {
+    if (e instanceof FormatError) throw new TemplateError(e.code, 400, e.message);
+    throw e;
+  }
+  return { doc_kind, axal_party };
+}
+
 export async function createTemplate(
   env: Env,
-  input: { slug: string; title: string; category: string; body_md?: string },
+  input: { slug: string; title: string; category: string; body_md?: string } & FormatPatch,
   userId: number,
 ): Promise<LegalTemplate> {
   await ensureLegalTemplatesSchema(env);
@@ -227,13 +268,14 @@ export async function createTemplate(
   const exists = await env.DB.prepare(`SELECT id FROM legal_templates WHERE slug = ?`).bind(slug).first();
   if (exists) throw new TemplateError('slug_exists', 409, `A template with slug '${slug}' already exists`);
 
+  const fmt = resolveFormat(slug, cat, input, { doc_kind: null, axal_party: null });
   const mf = JSON.stringify(extractMergeFields(body));
   const isStub = body.trim().length === 0 ? 1 : 0;
   await env.DB.prepare(
-    `INSERT INTO legal_templates (slug, title, category, body_md, merge_fields, version, is_active, is_stub, created_by, updated_by)
-     VALUES (?, ?, ?, ?, ?, 1, 1, ?, ?, ?)`,
+    `INSERT INTO legal_templates (slug, title, category, body_md, merge_fields, version, is_active, is_stub, doc_kind, axal_party, created_by, updated_by)
+     VALUES (?, ?, ?, ?, ?, 1, 1, ?, ?, ?, ?, ?)`,
   )
-    .bind(slug, title, cat, body, mf, isStub, userId, userId)
+    .bind(slug, title, cat, body, mf, isStub, fmt.doc_kind, fmt.axal_party, userId, userId)
     .run();
   const created = await getTemplate(env, slug);
   if (!created) throw new TemplateError('create_failed', 400, 'Template creation failed');
@@ -243,7 +285,7 @@ export async function createTemplate(
 export async function updateTemplate(
   env: Env,
   slug: string,
-  patch: { title: string; category: string; body_md: string },
+  patch: { title: string; category: string; body_md: string } & FormatPatch,
   userId: number,
 ): Promise<LegalTemplate> {
   await ensureLegalTemplatesSchema(env);
@@ -255,21 +297,22 @@ export async function updateTemplate(
   if (!title) throw new TemplateError('title_required', 400, 'title is required');
   if (!cat) throw new TemplateError('invalid_category', 400, `category must be one of ${LEGAL_TEMPLATE_CATEGORIES.join(', ')}`);
 
+  const fmt = resolveFormat(slug, cat, patch, current);
   const mf = JSON.stringify(extractMergeFields(body));
   const isStub = body.trim().length === 0 ? 1 : 0;
 
   // Atomic: snapshot the PRE-update row into history, then bump the live row.
   await env.DB.batch([
     env.DB.prepare(
-      `INSERT OR IGNORE INTO legal_template_versions (template_id, slug, version, title, category, body_md, merge_fields, created_by)
-       SELECT id, slug, version, title, category, body_md, merge_fields, ? FROM legal_templates WHERE id = ?`,
+      `INSERT OR IGNORE INTO legal_template_versions (template_id, slug, version, title, category, body_md, merge_fields, doc_kind, axal_party, created_by)
+       SELECT id, slug, version, title, category, body_md, merge_fields, doc_kind, axal_party, ? FROM legal_templates WHERE id = ?`,
     ).bind(userId, current.id),
     env.DB.prepare(
       `UPDATE legal_templates
-          SET title = ?, category = ?, body_md = ?, merge_fields = ?,
+          SET title = ?, category = ?, body_md = ?, merge_fields = ?, doc_kind = ?, axal_party = ?,
               version = version + 1, is_stub = ?, updated_at = CURRENT_TIMESTAMP, updated_by = ?
         WHERE id = ?`,
-    ).bind(title, cat, body, mf, isStub, userId, current.id),
+    ).bind(title, cat, body, mf, fmt.doc_kind, fmt.axal_party, isStub, userId, current.id),
   ]);
   const updated = await getTemplate(env, slug);
   if (!updated) throw new TemplateError('update_failed', 400, 'Template update failed');
