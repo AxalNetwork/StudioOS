@@ -14,7 +14,7 @@ exists for each — not by how far each has been built. Counts as of 2026-10-17:
 
 | Folder | Meaning |
 | --- | --- |
-| `canvases/integrated/` | 93 — a live route exists for this canvas. **Not "it is finished"** — most are `UPGRADE`, meaning the route runs and the canvas asks for more than it does. `design/canvases/README.md` has a section on exactly this misreading; the gloss here read "the canvas is built" until 2026-09-07, which is what caused it. |
+| `canvases/integrated/` | 95 — a live route exists for this canvas. **Not "it is finished"** — most are `UPGRADE`, meaning the route runs and the canvas asks for more than it does. `design/canvases/README.md` has a section on exactly this misreading; the gloss here read "the canvas is built" until 2026-09-07, which is what caused it. |
 | `canvases/backlog/` | 28 — graded `NEW` or `DEFERRED`: no route yet. |
 | `canvases/out-of-scope/` | 26 — deliberately not being built. |
 
@@ -46,7 +46,9 @@ on to `integrated/` with `/intelligence` on 2026-10-12 (D678). It read
 90 / 28 / 26 until `AIRail` moved from this folder to `integrated/` on
 2026-10-15, when every rail was built to it (D698), and 91 / 28 / 26 until
 `Account Menu · Mobile` and `Account Mobile Page` moved there together on
-2026-10-17, with all ten account pages built on a phone (D700).
+2026-10-17, with all ten account pages built on a phone (D700), and 93 / 28 / 26
+until `Studio · Mobile` and `Studio Mobile Page` followed the same day, with
+the four profile pages and the archetype card's phone layout built (D702).
 **If you move a file, move the number.**)
 
 **A canvas whose bodies are built does not belong in this folder.** Move it to
@@ -830,7 +832,7 @@ Each top-level board was normalised with `scripts/read-canvas.mjs`. Each nested 
 | `Cycle Modules · Boards.dc.html` | Replaced in `canvases/integrated/` | MV1–MV7 (MV7 is Verdict, new), MB1–MB6, MR1–MR7, MG1–MG7, each with "one record" beneath it | — |
 | `Cycle Overviews · Mobile.dc.html` | New | O1m–O4m, O1nm, O6m (switch company), O7m (account), O8m (Eadwyn), O9m (recording), each beside the page its button opens. On a phone every button opens a page, never a lightbox. | the four cycle roots |
 | `Cycle Modules · Mobile.dc.html` | New | MV1m–MG7m: the module page, one record, and the page its button opens | `/:cycle/:module` |
-| `Studio · Mobile.dc.html` + `Studio Mobile Page.dc.html` | New | S1m–S10m: Conversations, Tasks, My tickets, Open a ticket, the Eadwyn menu, You, Your venture, the archetype card, What others see, Visibility | `/studio`, `/profile`, `/profile/venture`, `/studio/archetype`, `/profile/preview`, `/profile/visibility` |
+| `Studio · Mobile.dc.html` + `Studio Mobile Page.dc.html` | New; both moved to `canvases/integrated/` on 2026-10-17 with D702's pages (#1664), after D701 (#1663) built S1m–S5m | S1m–S10m: Conversations, Tasks, My tickets, Open a ticket, the Eadwyn menu, You, Your venture, the archetype card, What others see, Visibility | `/studio`, `/profile`, `/profile/venture`, `/studio/archetype`, `/profile/preview`, `/profile/visibility` |
 | `Account Menu · Mobile.dc.html` + `Account Mobile Page.dc.html` | New; both moved to `canvases/integrated/` on 2026-10-17 with their build (D700, #1662) | A1m–A10m: Account, Usage, Connectors, Trust Center, Perks, Calendar, Events, Learning, Help Center, Plans & Pricing | `/account`, `/account/usage`, `/account/connectors`, `/trust`, `/perks`, `/calendar`, `/my/events`, `/learning`, `/help`, `/plans-and-pricing` (the member routes; `/events` and `/pricing` are the public pages) |
 | `AIRail.dc.html` | Replaced here, in place; moved to `canvases/integrated/` on 2026-10-15 with its build (D698) | The rail as "Eadwyn AI": a profile pill and crumbs, an "Eadwyn \| Manual" switch, suggested models for the page, "All models" and a Usage box | every page that mounts `WorkerRail` |
 | `Record a Session · Boards.dc.html`, `Recording View Canvas.dc.html`, `Recording View.dc.html`, `Cycle Action.dc.html` | Nothing | Byte-identical to the committed copies once normalised | — |
