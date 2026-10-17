@@ -37,6 +37,7 @@ const COOL = 5;
 const LP = 10;
 const GP = 40;
 const OTHER_GP = 41;
+const FUND_I = 'spinout-fund-i';
 
 /** jti per (user, session kind). */
 const JTI: Record<string, string> = {
@@ -154,6 +155,7 @@ const SUPER_ACTS: Array<[string, string, string, unknown]> = [
   ['execute a distribution', 'POST', '/api/funds/distributions/execute', { fund_id: 1, proceeds_cents: 100_000 }],
   ['change the GP of record', 'PATCH', '/api/funds/1', { gp_user_id: OTHER_GP }],
   ['change the carry', 'PATCH', '/api/funds/1', { carried_interest: 0.3 }],
+  ['move the Fund I slug onto a fund', 'PATCH', '/api/funds/1', { slug: FUND_I }],
   ['assign the ledger administrator', 'PUT', '/api/fund-ledger/1/administrator', { user_id: LP }],
 ];
 
@@ -248,6 +250,7 @@ const EVERY_ACT: Array<[string, string, string, unknown]> = [
   ['distribution.mark_paid', 'POST', '/api/funds/distributions/700/mark-paid', undefined],
   ['fund_report.draft', 'POST', '/api/funds/1/report-periods', { period: 'Q2 2026', period_start: '2026-04-01', period_end: '2026-06-30', narrative: {} }],
   ['fund.gp_of_record', 'PATCH', '/api/funds/1', { gp_user_id: OTHER_GP }],
+  ['fund.slug_fund_i', 'PATCH', '/api/funds/1', { slug: FUND_I }],
   ['fund.economics', 'PATCH', '/api/funds/1', { management_fee: 0.03 }],
   ['fund.write', 'PATCH', '/api/funds/1', { name: 'Renamed' }],
   ['fund_ledger.administrator', 'PUT', '/api/fund-ledger/1/administrator', { user_id: LP }],
@@ -313,6 +316,43 @@ test('an account in its recovery cool-off gets 423 on a first call and a GP chan
   assert.equal((await call(env, COOL, 'GET', '/api/funds/1')).status, 200);
   // An Admin act on the same route is not paused.
   assert.equal((await call(env, COOL, 'PATCH', '/api/funds/1', { name: 'Renamed in cool-off' })).status, 200);
+});
+
+test('moving the Fund I slug: the GP of record is refused, and on a branch Worker every caller is, even with a GP change in the same body', async () => {
+  const slugOf = (env: any, id: number) => one(env, 'SELECT slug FROM vc_funds WHERE id = ?', id).slug;
+  const env = makeEnv();
+  for (const body of [{ slug: FUND_I }, { slug: FUND_I, name: 'Fund 1' }]) {
+    const r = await call(env, GP, 'PATCH', '/api/funds/1', body);
+    assert.equal(r.status, 403, JSON.stringify(r.body));
+    assert.equal(r.body?.code, 'super_admin_required');
+  }
+  assert.equal(slugOf(env, 1), null);
+  // A slug that is not Fund I's stays the GP's, as before.
+  assert.equal((await call(env, GP, 'PATCH', '/api/funds/1', { slug: 'fund-one' })).status, 200);
+  assert.equal(slugOf(env, 1), 'fund-one');
+
+  const branch = makeEnv({ BRANCH_CODE: 'fr' });
+  for (const [who, body] of [
+    [SUPER, { slug: FUND_I }], [ADMIN, { slug: FUND_I }], [GP, { slug: FUND_I }],
+    [SUPER, { slug: FUND_I, gp_user_id: OTHER_GP }],
+  ] as Array<[number, Record<string, unknown>]>) {
+    const before = snapshot(branch);
+    const r = await call(branch, who, 'PATCH', '/api/funds/1', body);
+    assert.equal(r.status, 403, `${who} ${JSON.stringify(body)}: ${JSON.stringify(r.body)}`);
+    assert.equal(r.body?.code, 'super_admin_required', `${who} ${JSON.stringify(body)}`);
+    assert.equal(snapshot(branch), before);
+  }
+  // The branch's own GP change still stands as today.
+  assert.equal((await call(branch, ADMIN, 'PATCH', '/api/funds/1', { gp_user_id: OTHER_GP })).status, 200);
+});
+
+test('the Super Admin moves the Fund I slug off a fund too, and the act is audited under its own key', async () => {
+  const env = makeEnv();
+  env.__db.prepare("UPDATE vc_funds SET slug = ? WHERE id = 1").run(FUND_I);
+  const r = await call(env, SUPER, 'PATCH', '/api/funds/1', { slug: null });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(one(env, 'SELECT slug FROM vc_funds WHERE id = 1').slug, null);
+  assert.deepEqual(auditRows(env).map((a: any) => a.action), ['fund_admin.fund.slug_fund_i']);
 });
 
 // ── The audit ───────────────────────────────────────────────────────────
