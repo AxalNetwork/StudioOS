@@ -1180,3 +1180,160 @@ test('13 (data room): the upload and the file edit each log one row on the file\
   assert.equal((await roomCall(dataRoom, db, R_FOUNDER, 'PATCH', '/p-room/files/no-such', { name: 'x' })).status, 404);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM activity_logs').get().n, 2, 'a refused edit logs nothing');
 });
+
+// ---------------------------------------------------------------------------
+// #1700's third PR — step 6's action writers, called directly. The closing PR
+// declares them on services/records/raise.ts's records and drives them
+// through the action route.
+// ---------------------------------------------------------------------------
+
+import {
+  duplicateNarrativeVersion, revokeDeckLink, addSectionHire, logProspectEvent, addProspectFeedback, markProspectPassed,
+  saveNarrativeVersion, WriterError as RaiseWriterError,
+} from '../src/services/raiseWriters.ts';
+import { replaceDataRoomFile, removeDataRoomFile } from '../src/routes/data_room.ts';
+
+async function refused2(p: Promise<unknown>): Promise<{ status: number; sentence: string }> {
+  try { await p; } catch (e: any) {
+    if (e instanceof RaiseWriterError) return { status: e.status, sentence: e.sentence };
+    throw e;
+  }
+  return assert.fail('the write was not refused');
+}
+const rows = (db: DatabaseSync, sql: string, ...args: any[]) => db.prepare(sql).all(...args) as any[];
+
+test('9 (duplicate): the next version, based on this one, for its investor type, with its words; a venture-B version answers 404', async () => {
+  const db = cycleFixture();
+  const env = envOf(db);
+  const v1 = await saveNarrativeVersion(env, { projectId: C_P, userId: C_FOUNDER, investorType: 'seed_fund', startFrom: 'blank', oneLiner: 'Grid batteries for cold towns' });
+  const before = n(db, 'SELECT COUNT(*) AS n FROM activity_logs');
+  const v2 = await duplicateNarrativeVersion(env, { projectId: C_P, userId: C_FOUNDER, version: v1.version });
+  assert.equal(v2.version, 2);
+  const meta = db.prepare('SELECT start_from, based_on_version FROM narrative_version_meta WHERE project_id = ? AND version = 2').get(C_P) as any;
+  assert.deepEqual({ ...meta }, { start_from: 'version', based_on_version: 1 });
+  assert.equal((db.prepare("SELECT value FROM spinout_deck_overrides WHERE project_id = ? AND version = 2 AND field_key = 'cover.thesis'").get(C_P) as any).value, 'Grid batteries for cold towns');
+  assert.equal((db.prepare('SELECT investor_type FROM spinout_deck_overrides WHERE project_id = ? AND version = 2 LIMIT 1').get(C_P) as any).investor_type, 'seed_fund');
+  assert.equal(n(db, 'SELECT COUNT(*) AS n FROM activity_logs') - before, 1, 'one row');
+  assert.match(logs(db, "action = 'narrative_version_created' AND entity_id = '2'")[0].details, /based on version 1/);
+  const was = n(db, 'SELECT COUNT(*) AS n FROM spinout_deck_overrides');
+  assert.equal((await refused2(duplicateNarrativeVersion(env, { projectId: C_P, userId: C_FOUNDER, version: 3 }))).status, 404, 'venture B\'s version 3');
+  assert.equal(n(db, 'SELECT COUNT(*) AS n FROM spinout_deck_overrides'), was, 'nothing written');
+});
+
+test('6 (revoke): the link is withdrawn and its views kept; a venture-B link answers 404; one row is logged', async () => {
+  const db = cycleFixture();
+  const env = envOf(db);
+  const made = await cyc(db, C_FOUNDER, 'POST', q('/deck-links'), { deck_id: 5, investor_label: 'Kite Partner', expires_days: null });
+  db.prepare('INSERT INTO deck_share_views (share_token_id, deck_id) VALUES (?, 5), (?, 5)').run(made.body.id, made.body.id);
+  const out = await revokeDeckLink(env, { projectId: C_P, userId: C_FOUNDER, linkId: made.body.id });
+  assert.equal(out.newly_revoked, true);
+  const row = db.prepare('SELECT revoked_at, expires_at FROM pitch_deck_share_tokens WHERE id = ?').get(made.body.id) as any;
+  assert.ok(row.revoked_at, 'revoked');
+  assert.notEqual(row.expires_at, SHARE_NEVER_EXPIRES, 'a Never link expires on revoke');
+  assert.equal(n(db, 'SELECT COUNT(*) AS n FROM deck_share_views WHERE share_token_id = ?', made.body.id), 2, 'the views stay');
+  assert.equal((await revokeDeckLink(env, { projectId: C_P, userId: C_FOUNDER, linkId: made.body.id })).newly_revoked, false, 'idempotent');
+  assert.deepEqual(logs(db, "action = 'deck_link_revoked'").map((r) => [r.entity_id, r.details]), [[String(made.body.id), 'Link revoked'], [String(made.body.id), 'Link already revoked']]);
+  assert.equal((await refused2(revokeDeckLink(env, { projectId: C_P, userId: C_FOUNDER, linkId: B_LINK }))).status, 404);
+  assert.equal((db.prepare('SELECT revoked_at FROM pitch_deck_share_tokens WHERE id = ?').get(B_LINK) as any).revoked_at, null, 'B\'s link untouched');
+});
+
+test('11 (add hire): a hire on a section; a bad section, month, amount or currency is refused and writes nothing', async () => {
+  const db = cycleFixture();
+  const env = envOf(db);
+  await addSectionHire(env, { projectId: C_P, userId: C_FOUNDER, sectionKey: 'product', body: { role: 'Firmware engineer', start_month: '2027-02', annual_cents: 120_000_00, currency: 'EUR' } });
+  assert.deepEqual(rows(db, 'SELECT project_id, category_key, role, start_month, annual_cents, currency, created_by FROM use_of_funds_hires').map((r) => ({ ...r })),
+    [{ project_id: C_P, category_key: 'product', role: 'Firmware engineer', start_month: '2027-02', annual_cents: 120_000_00, currency: 'eur', created_by: C_FOUNDER }]);
+  assert.deepEqual(logs(db, "entity_type = 'raise.use-of-funds'").map((r) => [r.entity_id, r.action, r.details]), [['product', 'hire_added', 'Hire added: Firmware engineer from 2027-02']]);
+  for (const [key, body, status] of [
+    ['marketing', { role: 'x' }, 404], ['product', { role: '' }, 400], ['product', { role: 'x', start_month: '2027-13' }, 400],
+    ['product', { role: 'x', annual_cents: 12.5 }, 400], ['product', { role: 'x', currency: 'euro' }, 400],
+  ] as const) {
+    assert.equal((await refused2(addSectionHire(env, { projectId: C_P, userId: C_FOUNDER, sectionKey: key, body }))).status, status, JSON.stringify([key, body]));
+  }
+  assert.equal(n(db, 'SELECT COUNT(*) AS n FROM use_of_funds_hires'), 1);
+});
+
+test('12 (log, add feedback, mark passed): each writes its row and logs one; a venture-B prospect answers 404 and nothing is written', async () => {
+  const db = cycleFixture();
+  const env = envOf(db);
+  db.exec(`INSERT INTO raise_prospects (id, uid, project_id, name, stage) VALUES (7, 'rp-k', ${C_P}, 'Harbour Angels', 'meeting')`);
+  await logProspectEvent(env, { projectId: C_P, userId: C_FOUNDER, prospectId: 7, body: { kind: 'meeting', note: 'Partner meeting', on: '2026-10-01' } });
+  await logProspectEvent(env, { projectId: C_P, userId: C_FOUNDER, prospectId: 7, body: { kind: 'call', on: '2999-01-05' } });
+  assert.deepEqual(rows(db, 'SELECT kind, note, due_on, done_at FROM raise_prospect_events ORDER BY id').map((r) => ({ ...r })), [
+    { kind: 'meeting', note: 'Partner meeting', due_on: null, done_at: '2026-10-01' },
+    { kind: 'call', note: null, due_on: '2999-01-05', done_at: null },
+  ], 'a past date is done; a later one is due');
+  await addProspectFeedback(env, { projectId: C_P, userId: C_FOUNDER, prospectId: 7, body: { objection: 'Too early for our fund', answer: 'Pilots start in Q1' } });
+  assert.deepEqual({ ...(db.prepare('SELECT prospect_id, objection, answer FROM raise_prospect_feedback').get() as any) }, { prospect_id: 7, objection: 'Too early for our fund', answer: 'Pilots start in Q1' });
+  await markProspectPassed(env, { projectId: C_P, userId: C_FOUNDER, prospectId: 7 });
+  assert.equal((db.prepare('SELECT stage FROM raise_prospects WHERE id = 7').get() as any).stage, 'passed');
+  assert.deepEqual(logs(db, "entity_type = 'raise.capital-relationships'").map((r) => [r.entity_id, r.action, r.details]), [
+    ['7', 'prospect_event_logged', 'Meeting logged for 2026-10-01'],
+    ['7', 'prospect_event_logged', 'Call logged for 2999-01-05'],
+    ['7', 'prospect_feedback_added', 'Feedback added'],
+    ['7', 'prospect_updated', 'Investor edited: stage'],
+  ]);
+  for (const [run, status] of [
+    [() => logProspectEvent(env, { projectId: C_P, userId: C_FOUNDER, prospectId: 7, body: { kind: 'lunch' } }), 400],
+    [() => logProspectEvent(env, { projectId: C_P, userId: C_FOUNDER, prospectId: 7, body: { kind: 'note', on: 'Friday' } }), 400],
+    [() => addProspectFeedback(env, { projectId: C_P, userId: C_FOUNDER, prospectId: 7, body: { objection: '  ' } }), 400],
+    [() => logProspectEvent(env, { projectId: C_P, userId: C_FOUNDER, prospectId: B_PROSPECT, body: { kind: 'note' } }), 404],
+    [() => addProspectFeedback(env, { projectId: C_P, userId: C_FOUNDER, prospectId: B_PROSPECT, body: { objection: 'x' } }), 404],
+    [() => markProspectPassed(env, { projectId: C_P, userId: C_FOUNDER, prospectId: B_PROSPECT }), 404],
+  ] as const) assert.equal((await refused2(run())).status, status);
+  assert.equal(n(db, 'SELECT COUNT(*) AS n FROM raise_prospect_events'), 2);
+  assert.equal(n(db, 'SELECT COUNT(*) AS n FROM raise_prospect_feedback'), 1);
+  assert.equal((db.prepare('SELECT stage FROM raise_prospects WHERE id = ?').get(B_PROSPECT) as any).stage, 'meeting');
+});
+
+/** The room fixture with migration 463's versions table, and a store that records puts and deletes. */
+function versionedRoom() {
+  const db = roomFixture();
+  const ddl = /CREATE TABLE IF NOT EXISTS data_room_file_versions \([\s\S]*?\n\);/.exec(sqlOf('463_raise_record_stores.sql'))![0];
+  db.exec(stripForeignKeys(ddl));
+  const store = { puts: [] as string[], deletes: [] as string[] };
+  const env = { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db),
+    FILES: { put: async (k: string) => { store.puts.push(k); }, delete: async (k: string) => { store.deletes.push(k); } } } as any;
+  return { db, env, store, project: { id: ROOM, uid: 'p-room' } };
+}
+
+test('replace: the current object becomes the next version and the new one takes its place under the room\'s prefix; nothing is deleted', async () => {
+  const { db, env, store, project } = versionedRoom();
+  const bytes = new TextEncoder().encode('%PDF-1.4 new');
+  const out = await replaceDataRoomFile(env, { project, userId: R_FOUNDER, fileId: 31, bytes, contentType: 'application/pdf' });
+  assert.deepEqual(out, { id: 31, version: 1, size_bytes: bytes.byteLength });
+  const file = db.prepare('SELECT r2_key, size_bytes, uploaded_by_user_id FROM data_room_files WHERE id = 31').get() as any;
+  assert.match(file.r2_key, /^data-room\/p-room\/[0-9a-f-]+$/, 'derived, inside the prefix');
+  assert.deepEqual(store.puts, [file.r2_key]);
+  assert.deepEqual(rows(db, 'SELECT file_id, version, r2_key FROM data_room_file_versions').map((r) => ({ ...r })), [{ file_id: 31, version: 1, r2_key: 'k/open' }], 'the old object is kept as version 1');
+  await replaceDataRoomFile(env, { project, userId: R_FOUNDER, fileId: 31, bytes, contentType: 'not a type' });
+  assert.deepEqual(rows(db, 'SELECT version FROM data_room_file_versions ORDER BY version').map((r) => r.version), [1, 2]);
+  assert.equal((db.prepare('SELECT content_type FROM data_room_files WHERE id = 31').get() as any).content_type, 'application/octet-stream');
+  assert.deepEqual(store.deletes, [], 'replace deletes no object');
+  assert.deepEqual(rows(db, "SELECT entity_type, entity_id, action, details FROM activity_logs").map((r) => [r.entity_type, r.entity_id, r.action, r.details]), [
+    ['raise.data-room', '31', 'file_replaced', 'File replaced; version 1 kept'], ['raise.data-room', '31', 'file_replaced', 'File replaced; version 2 kept'],
+  ]);
+  const big = new Uint8Array(20 * 1024 * 1024 + 1);
+  assert.equal((await refused2(replaceDataRoomFile(env, { project, userId: R_FOUNDER, fileId: 31, bytes: big, contentType: null }))).status, 413);
+  assert.equal((await refused2(replaceDataRoomFile(env, { project: { id: 8, uid: 'p-else' }, userId: R_FOUNDER, fileId: 31, bytes, contentType: null }))).status, 404, 'another venture');
+  assert.equal(n(db, 'SELECT COUNT(*) AS n FROM data_room_file_versions'), 2, 'a refused replace writes nothing');
+});
+
+test('remove: the file, its versions and every object inside the room\'s prefix go; an object outside it is never deleted; another venture\'s file is null', async () => {
+  const { db, env, store, project } = versionedRoom();
+  db.exec(`INSERT INTO data_room_file_versions (file_id, version, r2_key) VALUES (31, 1, 'data-room/p-room/v1'), (31, 2, 'elsewhere/v2')`);
+  db.exec(`UPDATE data_room_files SET r2_key = 'data-room/p-room/current' WHERE id = 31`);
+  assert.equal(await removeDataRoomFile(env, { project: { id: 8, uid: 'p-else' }, userId: R_FOUNDER, fileId: 31 }), null, 'not this venture\'s');
+  assert.equal(n(db, 'SELECT COUNT(*) AS n FROM data_room_files WHERE id = 31'), 1);
+  assert.deepEqual(await removeDataRoomFile(env, { project, userId: R_FOUNDER, fileId: 31 }), { id: 31 });
+  assert.equal(n(db, 'SELECT COUNT(*) AS n FROM data_room_files WHERE id = 31'), 0);
+  assert.equal(n(db, 'SELECT COUNT(*) AS n FROM data_room_file_versions'), 0, 'the versions go with it');
+  assert.deepEqual(store.deletes, ['data-room/p-room/current', 'data-room/p-room/v1'], 'every object inside the prefix, none outside');
+  assert.deepEqual(rows(db, 'SELECT entity_id, action, details FROM activity_logs').map((r) => [r.entity_id, r.action, r.details]), [['31', 'file_removed', 'File removed with 2 earlier versions']]);
+  // The founder's DELETE route goes through the same writer.
+  const del = await roomCall(dataRoom, db, R_FOUNDER, 'DELETE', '/p-room/files/f-nda');
+  assert.equal(del.status, 200, del.raw);
+  assert.equal(n(db, "SELECT COUNT(*) AS n FROM data_room_files WHERE uid = 'f-nda'"), 0);
+  assert.deepEqual(rows(db, "SELECT entity_id, action FROM activity_logs WHERE action = 'file_removed'").map((r) => r.entity_id), ['31', '32']);
+  assert.equal((await roomCall(dataRoom, db, R_FOUNDER, 'DELETE', '/p-room/files/no-such')).status, 404);
+});
