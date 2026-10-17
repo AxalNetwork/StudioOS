@@ -62,4 +62,7 @@ against source mutations of `CycleRoute.jsx` too.
 `form_options_d695.test.mjs` is test 11's client half: `formOptions`'s path and
 query for every cycle module against a stubbed `request`, the refused cycles
 and slugs, and the drift parser's `GET /cycles/:p/modules/:p/form-options`.
+`add_forms_raise_grow_d695.test.mjs` mounts Grow's seven canvas forms and
+their Edits (#1657) against a stubbed write table, and checks the two new
+client writes.
 Registry and routing integration cases follow when their dependencies merge.

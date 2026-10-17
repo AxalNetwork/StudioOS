@@ -323,7 +323,7 @@ export async function teamCard(x: Ctx): Promise<CardBody> {
   return {
     state: company == null ? 'not_recorded' : seriesState(recorded), range: 'Last 6 months',
     series: { months, headcount: actual, plan, roles_by_stage: funnel },
-    next: company != null && recorded === 0 && !roles ? { text: 'Open a role', href: '/jobs/new' }
+    next: company != null && recorded === 0 && !roles ? { text: 'Open a role', href: `/grow/team-expansion/new?project=${x.projectId}` }
       : newApplicants ? { text: `Review the ${newApplicants} new applicant${newApplicants === 1 ? '' : 's'}.`, href: x.href('team-expansion') } : null,
     reason: company == null ? 'Not recorded: this venture has no company roster yet' : recorded === 0 && !roles ? 'No open roles yet. Headcount against the plan appears here.' : recorded === 0 ? 'No one is on the team roster yet.' : null, source: 'Team roster and open roles', as_of: iso(x.now),
   };

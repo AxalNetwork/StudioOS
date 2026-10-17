@@ -169,10 +169,10 @@ const CYCLE_DEFS = {
    * (`adapters/grow.js`), as Validate does. The primary action is D654's
    * Share an update, the sheet the Grow desk opened.
    *
-   * Grow's new stores (feedback, channels, partners, markets, obligations)
-   * have no page of their own: their Add and Edit forms are `forms.js`'s, on
-   * the module page. Revenue, roles and the compliance calendar link the
-   * pages that edit them today.
+   * Every Grow store has its Add and Edit form in `forms.js`, on the module
+   * page (D695, #1657): Open a role writes through `POST /cycles/grow/roles`,
+   * and the jobs board keeps its own editor. The metric log, Talent and the
+   * compliance calendar stay one tool link away.
    */
   grow: {
     modules: MODULES.grow,
@@ -184,9 +184,7 @@ const CYCLE_DEFS = {
       'team-expansion': (q) => ({ label: 'Open Talent: roles and applicants', href: `/grow/talent${q}` }),
       'durable-company-building': () => ({ label: 'Open the compliance calendar', href: '/compliance' }),
     }),
-    add: toFnMap({
-      'team-expansion': () => ({ text: 'Post a role', href: '/jobs/new' }),
-    }),
+    add: toFnMap({}),
     fills: {},
     // The Grow desk's two AI bands (ZoneDraft, D424), on the modules they
     // read: the applicant ranking on Team expansion, the outreach sequence
