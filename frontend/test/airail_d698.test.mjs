@@ -393,9 +393,13 @@ test('13 · the fallback: one card, the router\'s primary, "Default", with the j
   const build = sug('Build', 'Solution design');
   assert.deepEqual(cardsOf(build), [['Llama 3.3 70B Fast', 'Default', false]]);
   assert.match(build.cards[0].line, /^Drafts the reading on a zone band/);
-  // Product improvement, against today's pricing: the router has no task for
-  // its band yet, so it draws the zone drafts' plain row.
-  assert.deepEqual(sug('Grow', 'Product improvement').cards, build.cards);
+  // Product improvement, against today's pricing: the router carries its
+  // band's task since D691 (#1698), so it draws that task's card, not the
+  // zone drafts' plain row.
+  const today = sug('Grow', 'Product improvement');
+  assert.deepEqual(cardsOf(today), [['Llama 3.3 70B Fast', 'Default', true]]);
+  assert.deepEqual(today.cards[0].tasks, ['grow_theme_feedback']);
+  assert.notDeepEqual(today.cards, build.cards);
   const grow = sug('Grow', 'Product improvement', { pricing: withGrow() });
   assert.deepEqual(cardsOf(grow), [['Llama 3.3 70B Fast', 'Default', true]]);
   assert.deepEqual(grow.cards[0].tasks, ['grow_theme_feedback']);

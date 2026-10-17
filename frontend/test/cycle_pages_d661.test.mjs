@@ -344,7 +344,8 @@ test('the five card states (variant=states and variant=new), each with its sente
 
 test('the overview while loading and when the whole read fails', () => {
   const loading = html(h(CycleOverview, { cycle: 'grow', data: null }), '/grow');
-  assert.equal((loading.match(/data-testid="card-loading"/g) || []).length, 6);
+  // D693 decision 14: one placeholder per module of the cycle; Grow has seven.
+  assert.equal((loading.match(/data-testid="card-loading"/g) || []).length, 7);
   const failed = text(html(h(CycleOverview, { cycle: 'grow', data: null, status: 'unreadable', onRetry() {} }), '/grow'));
   assert.match(failed, /The Grow overview could not be read\. This is not a claim that nothing is recorded\. Retry/);
 });
