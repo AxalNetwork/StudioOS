@@ -66,6 +66,19 @@ test('every Add and Edit on main renders in the dialog, named, with its eyebrow 
 // ---------- the harness: CycleRoute in a router, the Worker stubbed ----------
 
 const BUILD_READS = {
+  // A filing's record (#1792), whose Edit gives its stored values; listed first, as the stub matches the first path it holds.
+  '/cycles/build/modules/company-creation/records/step-5': {
+    id: 'step-5', title: 'Certificate of incorporation',
+    actions: [{ key: 'edit', kind: 'form', form: { title: 'Edit filing', cta: 'Save', fields: [
+      { key: 'title', kind: 'T', value: 'Certificate of incorporation' }, { key: 'kind', kind: 'CH', value: 'formation' },
+      { key: 'jurisdiction', kind: 'CH', value: 'Federal' }, { key: 'for_holder_id', kind: 'CH', value: '' },
+      { key: 'due_date', kind: 'T', value: '2026-11-02' }, { key: 'state', kind: 'CH', value: 'upcoming' },
+    ] } }],
+  },
+  '/cycles/build/modules/operating-systems': {
+    module: { slug: 'operating-systems', name: 'Operating systems' }, card: card('build', 'Operating systems', 5),
+    records: { cols: [{ key: 'system', label: 'System' }, { key: 'used_by', label: 'Used by' }], rows: [{ id: 'crm', cells: { system: 'CRM', used_by: 'Sales' } }], total: 1, page: 1, page_size: 25 },
+  },
   '/cycles/build/modules/solution-design': {
     module: { slug: 'solution-design', name: 'Solution design' }, card: card('build', 'Solution design', 0),
     records: { cols: [{ key: 'feature', label: 'Feature' }], rows: [{ id: 7, cells: { feature: 'Bank feed import' } }], total: 1, page: 1, page_size: 25 },
@@ -116,7 +129,7 @@ async function mountCycle(Route_, entry, { phone = false } = {}) {
     while (stack.length) { const n = stack.pop(); if (!n) continue; if (n.type === FormLightbox) out.push(n.memoizedProps); stack.push(n.sibling, n.child); }
     return out;
   };
-  const reads = (slug) => calls.filter((c) => c.method === 'GET' && c.path.includes(`/cycles/build/modules/${slug}`)).length;
+  const reads = (slug) => calls.filter((c) => c.method === 'GET' && c.path.includes(`/cycles/build/modules/${slug}`) && !c.path.includes('/records/')).length;
   return {
     at, calls, by, all, nodes, forms, reads, form: () => forms()[0] || null,
     /** The open form's own <form>, not the records table's search. */
@@ -143,7 +156,7 @@ async function assertAddRoutes(Route_) {
     await m.act(() => propsOf(m.by('cycle-form-title')).onChange({ target: { value: 'Bank feed import' } }));
     await m.act(() => propsOf(m.formNode()).onSubmit({ preventDefault() {} }));
     const post = m.calls.find((c) => c.method === 'POST');
-    assert.equal(post?.path, '/api/progress/mvp-scope/3');
+    assert.equal(post?.path, '/api/cycles/build/features?project=3', 'Add feature, through #1695\'s route');
     assert.equal(post.body.title, 'Bank feed import');
     assert.equal(m.form(), null, 'a save closes the dialog');
     assert.deepEqual([m.at.path, m.at.search, m.at.type], ['/build/solution-design', '?project_id=3', 'REPLACE'], 'from a deep link, closing replaces /new with the module page');
@@ -193,7 +206,25 @@ async function assertAddRoutes(Route_) {
   } finally { await m.unmount(); }
 }
 
-test('each Add opens from its /new address: over the page on a desktop, as the page on a phone; it closes back or replaces', async () => {
+/**
+ * Every module has one Add since #1656 PR 3b, and every Build module a form.
+ * The routing of a second Add (`?form=`) and of a module with no form run on
+ * the registry as a fixture changes it: Solution design gains a second Add,
+ * and Operating systems loses its own, for the length of the test.
+ */
+const SECOND = { key: 'risk', cta: 'Add risk', button: 'Add risk', title: 'Add a risk', fields: [{ kind: 'T', name: 'title', k: 'Risk', required: true }],
+  submit: (w, projectId, v) => w.build.risk(projectId, { title: v.title }) };
+async function withFixtureRegistry(work) {
+  const systems = FORMS.build['operating-systems'];
+  FORMS.build['solution-design'].push(SECOND);
+  delete FORMS.build['operating-systems'];
+  try { await work(); } finally {
+    FORMS.build['solution-design'].splice(FORMS.build['solution-design'].indexOf(SECOND), 1);
+    FORMS.build['operating-systems'] = systems;
+  }
+}
+
+test('each Add opens from its /new address: over the page on a desktop, as the page on a phone; it closes back or replaces', async () => withFixtureRegistry(async () => {
   await assertAddRoutes(CycleRoute);
   await mutationCheck(routeSource, routePath, (mod) => assertAddRoutes(mod.default), [
     ["forms.find((f) => f.key === searchParams.get('form')) || forms[0]", 'forms[0]'],
@@ -207,7 +238,7 @@ test('each Add opens from its /new address: over the page on a desktop, as the p
     ['        onSaved={saved}\n        onClose={closeAdd} />', '        onClose={closeAdd} />'],
     ['  }, [adding, editingId]);', '  }, []);'],
   ]);
-});
+}));
 
 // ---------- test 6: Edit -------------------------------------------------------
 
@@ -220,17 +251,19 @@ async function assertEdit(Route_) {
     await m.act(() => propsOf(actions[0]).onClick());
     assert.deepEqual([m.at.path, m.at.search, m.at.type], ['/build/company-creation', '?project_id=3', 'PUSH'], 'Edit pushes the same URL');
     assert.deepEqual(m.at.state, { editing: 'step-5' });
+    // D695 (#1656): the filing's Edit reads its record first, then opens with the record's values.
+    assert.ok(m.calls.some((c) => c.path === '/api/cycles/build/modules/company-creation/records/step-5?project=3'), 'the record is read');
     const open = m.form();
-    assert.equal(open?.form, edit);
-    assert.deepEqual(open.current, { title: 'Certificate of incorporation', due_date: '2026-11-02', state: 'todo' }, 'it starts from valuesOf(row)');
+    assert.equal(open?.form.key, edit.key);
+    assert.deepEqual(open.current, { kind: 'formation', jurisdiction: 'Federal', for_holder_id: '', due_date: '2026-11-02', state: 'upcoming' }, 'it starts from the record, through valuesOf');
     assert.equal(textOf(m.by('cycle-form-save')), 'Save');
-    assert.ok(textOf(m.by('cycle-form')).includes('Edit formation step'));
+    assert.ok(textOf(m.by('cycle-form')).includes('Edit filing'));
     const before = m.reads('company-creation');
-    await m.act(() => propsOf(m.by('cycle-form-title')).onChange({ target: { value: 'Certificate filed' } }));
+    await m.act(() => propsOf(m.by('cycle-form-due_date')).onChange({ target: { value: '2026-11-09' } }));
     await m.act(() => propsOf(m.formNode()).onSubmit({ preventDefault() {} }));
     const patch = m.calls.find((c) => c.method === 'PATCH');
     assert.equal(patch?.path, '/api/cycles/build/formation-steps/5?project=3');
-    assert.deepEqual(patch.body, { title: 'Certificate filed', due_date: '2026-11-02', state: 'todo' });
+    assert.deepEqual(patch.body, { kind: 'formation', jurisdiction: 'Federal', due_date: '2026-11-09', state: 'upcoming' }, 'For is hidden for a formation, so not sent');
     assert.equal(m.form(), null, 'a save closes it');
     assert.deepEqual([m.at.path, m.at.type, m.at.state], ['/build/company-creation', 'POP', null], 'a save goes back');
     assert.ok(m.reads('company-creation') > before, 'and the module is read again');
@@ -239,6 +272,21 @@ async function assertEdit(Route_) {
     assert.ok(m.form());
     await m.act(() => m.at.navigate(-1));
     assert.equal(m.form(), null, 'Back closes it');
+  } finally { await m.unmount(); }
+
+  // An Edit that does not read its record (Choose connector) starts from valuesOf(row).
+  m = await mountCycle(Route_, '/build/operating-systems?project_id=3');
+  try {
+    await m.act(() => propsOf(m.all('records-row-action')[0]).onClick());
+    const open = m.form();
+    assert.equal(open?.form, EDITS.build['operating-systems']);
+    assert.deepEqual(open.current, { choice: '', used_by: 'Sales' }, 'it starts from valuesOf(row)');
+    assert.ok(!m.calls.some((c) => c.path.includes('/records/')), 'no record read for it');
+    const before = m.reads('operating-systems');
+    await m.act(() => propsOf(m.nodes().find((n) => n.tagName === 'INPUT' && propsOf(n).value === 'none')).onChange({ target: { value: 'none' } }));
+    await m.act(() => propsOf(m.formNode()).onSubmit({ preventDefault() {} }));
+    assert.equal(m.calls.find((c) => c.method === 'PUT')?.path, '/api/cycles/build/systems/crm?project=3');
+    assert.ok(m.reads('operating-systems') > before, 'its save reads the module again');
   } finally { await m.unmount(); }
 
   m = await mountCycle(Route_, '/build/company-creation?project_id=3', { phone: true });
@@ -259,10 +307,12 @@ test('Edit opens with the row\'s values over the same URL (state.editing), saves
     ['current={edit.valuesOf(editing)}', 'current={null}'],
     ["    if (location.key !== 'default') navigate(-1);\n    else navigate", '    navigate'],
     ['        onSaved={saved}\n        onClose={closeEdit} />', '        onClose={closeEdit} />'],
+    ['          onSaved={saved}\n          onClose={closeEdit} />', '          onClose={closeEdit} />'],
+    ['edit.readsRecord ? (', 'false ? ('],
   ]);
   // #1658's record page passes `{ id, edit: { id, uid } }`; every Edit resolves it.
   const ids = { 'company-creation': 'step-7', 'prototype-mvp': '7', 'solution-design': '7', 'operating-systems': 'crm', 'revenue-and-traction': 'mrr',
-    'cap-table': 'h-7', 'use-of-funds': 'product', 'demand-signals': 'signal-7', 'market-intelligence': 'cand-7' };
+    'cap-table': 'h-7', 'use-of-funds': 'product', 'demand-signals': 'signal-7', 'market-intelligence': 'cand-7', 'founding-team': 'h-7' };
   for (const [cycle, bySlug] of Object.entries(EDITS)) {
     for (const [slug, form] of Object.entries(bySlug)) {
       // As `recordFormFor` builds it: the record's own id in `edit` too.
