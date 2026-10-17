@@ -34,7 +34,12 @@ r.onError((error: any, c) => {
   if (error instanceof DraftRefusal) return refuse(c, error.status, { code: error.code, message: error.publicMessage });
   if (error?.message === STEP_UP_REQUIRED) return c.json(stepUpRefusalBody(error), 403);
   const status = AUTH_ERROR_STATUSES[error?.message];
-  if (status) return refuse(c, status, { code: 'fund_reporting_refused', message: error.message });
+  if (status) {
+    const sentence = error?.message === HQ_ONLY
+      ? 'HQ only: the reporting queue runs on HQ, not on a branch.'
+      : 'This account cannot use the fund reporting queue.';
+    return refuse(c, status, { code: 'fund_reporting_refused', message: sentence });
+  }
   return refuse(c, 503, { code: 'fund_reporting_unreadable', message: 'Unreadable: the reporting queue could not be read or saved. Try again.', raw: error });
 });
 

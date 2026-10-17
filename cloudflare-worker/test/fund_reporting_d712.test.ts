@@ -201,7 +201,7 @@ test('a Super Admin without a fresh step-up gets step_up_required; the preparer 
   assert.equal((await f.call(SUPER, 'POST', `/fund-reporting/drafts/${rep.uid}/prepare`, { figures_sha256: rep.figures_sha256 }, { jti: 'totp-super' })).status, 200);
   const stale = await f.call(SUPER2, 'POST', `/fund-reporting/drafts/${rep.uid}/issue`, { figures_sha256: rep.figures_sha256 });
   assert.equal(stale.status, 403);
-  assert.match(JSON.stringify(stale.body), /TOTP required|step_up_required/);
+  assert.equal(stale.body.error, 'fund_reporting_refused', 'a session with no TOTP is refused, with a fixed sentence');
   const staleSuper = await f.call(SUPER, 'POST', `/fund-reporting/drafts/${rep.uid}/issue`, { figures_sha256: rep.figures_sha256 }, { jti: 'totp-stale' });
   assert.deepEqual([staleSuper.status, staleSuper.body.code], [403, 'step_up_required']);
   const self = await f.call(SUPER, 'POST', `/fund-reporting/drafts/${rep.uid}/issue`, { figures_sha256: rep.figures_sha256 }, { jti: 'totp-super' });
