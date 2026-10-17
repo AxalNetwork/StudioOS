@@ -118,8 +118,6 @@ const painTag: FillKind = {
     const groupId = Number(payload.pain_group_id);
     const ok = await upsertPainAlias(ctx.env, ctx.projectId, groupId, String(payload.phrase));
     if (!ok) throw new Error('That theme no longer exists');
-    await logCycleWrite(ctx.env, { projectId: ctx.projectId, userId: Number(ctx.user.id), cycle: 'validate',
-      module: 'problem-discovery', entityId: groupId, action: 'pain_tag_applied', summary: `Theme ${groupId} linked to a phrase` });
 
     // READ BACK WHAT WAS STORED rather than echo the payload. `upsertPainAlias`
     // trims and caps the phrase at `MAX_PAIN_PHRASE` and normalises it, so the
@@ -132,6 +130,10 @@ const painTag: FillKind = {
         WHERE a.project_id = ? AND a.group_id = ? AND a.phrase_norm = ?`,
     ).bind(ctx.projectId, groupId, normPhrase(String(payload.phrase || '').trim().slice(0, MAX_PAIN_PHRASE)))
       .first<{ id: number; display_phrase: string; title: string }>();
+    // The theme is named by its title; the phrase is an interviewee's words and stays out.
+    await logCycleWrite(ctx.env, { projectId: ctx.projectId, userId: Number(ctx.user.id), cycle: 'validate',
+      module: 'problem-discovery', entityId: groupId, action: 'pain_tag_applied',
+      summary: stored ? `Phrase linked to ${stored.title}` : 'Phrase linked to this theme' });
 
     return {
       written: stored ? `${stored.display_phrase} → ${stored.title}` : String(payload.phrase),
@@ -579,7 +581,7 @@ const competitorScan: FillKind = {
       },
     );
     await logCycleWrite(ctx.env, { projectId: ctx.projectId, userId: Number(ctx.user.id), cycle: 'validate',
-      module: 'market-intelligence', entityId: RECORD_ID.test(String(written.id)) ? String(written.id) : ctx.projectId,
+      module: 'market-intelligence', entityId: RECORD_ID.test(String(written.id)) ? String(written.id) : null,
       action: 'competitor_created', summary: 'Competitor added' });
     return {
       written: String(payload.note || '').trim() ? `${written.name} — ${String(payload.note).trim()}` : written.name,
