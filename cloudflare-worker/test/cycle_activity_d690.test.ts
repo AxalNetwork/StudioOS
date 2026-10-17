@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { SignJWT } from 'jose';
@@ -33,9 +33,18 @@ function fixture() {
 
 test('D690 migration 459 adds only creator columns and a scoped activity index', () => {
   const { db } = fixture();
+  const migrations = resolve('cloudflare-worker/sql/migrations');
+  const earlier = readdirSync(migrations).filter((name) => Number(name.split('_')[0]) < 459 && name.endsWith('.sql'));
   for (const table of ['pain_groups', 'hypotheses', 'mvp_features', 'roadmap_okrs']) {
     assert.equal((db.prepare(`PRAGMA table_info(${table})`).all() as any[]).filter((r) => r.name === 'created_by').length, 1);
     assert.doesNotMatch(tableFromBaseline(BASE, table), /created_by/);
+    for (const name of earlier) {
+      const sql = migration(name).replace(/--[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+      const alter = new RegExp(`\\bALTER\\s+TABLE\\s+${table}\\s+ADD\\s+(?:COLUMN\\s+)?created_by\\b`, 'i');
+      const create = new RegExp(`\\bCREATE\\s+TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?${table}\\s*\\([^;]*\\bcreated_by\\b`, 'i');
+      assert.doesNotMatch(sql, alter, `${name} added ${table}.created_by before 459`);
+      assert.doesNotMatch(sql, create, `${name} created ${table}.created_by before 459`);
+    }
   }
   const index = db.prepare("SELECT sql FROM sqlite_master WHERE name = 'idx_activity_logs_project_entity'").get() as any;
   assert.match(index.sql, /project_id, entity_type, entity_id, created_at DESC/);
