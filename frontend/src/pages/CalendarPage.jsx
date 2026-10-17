@@ -402,8 +402,10 @@ export default function CalendarPage() {
     // Map key (not a branch condition) and the resulting payload is a fixed
     // server-side display string. Nothing user-controlled ever gates a side effect.
     const qs = new URLSearchParams(window.location.search);
-    const reason = qs.get('reason');
-    const reasonSuffix = reason ? ` — ${humanizeOAuthReason(reason)}` : '';
+    // `humanizeOAuthReason` answers '' when there is no reason, so it runs
+    // unconditionally and only its own sentence decides the suffix.
+    const reasonText = humanizeOAuthReason(qs.get('reason'));
+    const reasonSuffix = reasonText ? ` — ${reasonText}` : '';
     const GOOGLE_OUTCOMES = Object.freeze({
       connected: { kind: 'success', text: 'Google Calendar connected.' },
       error: { kind: 'error', text: `Google connection failed${reasonSuffix}.` },

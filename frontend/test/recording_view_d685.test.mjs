@@ -27,7 +27,10 @@ import InterviewSessionPage from '../src/pages/founder/InterviewSessionPage.jsx'
 
 const h = React.createElement;
 const html = (el, url = '/') => renderToStaticMarkup(h(MemoryRouter, { initialEntries: [url] }, el));
-const tag = (out, id) => new RegExp(`<[a-z]+[^>]*data-testid="${id}"[^>]*>`).exec(out)?.[0] ?? '';
+const tag = (out, id) => {
+  const at = out.indexOf(`data-testid="${id}"`);
+  return at < 0 ? '' : out.slice(out.lastIndexOf('<', at), out.indexOf('>', at) + 1);
+};
 const SESSION = { id: 7, status: 'recording', active_ms: 3723000, recording_since: null, live_model: 'nova', language: 'fr', channel: 'in_person' };
 const ST = (patch = {}) => ({ phase: 'recording', session: SESSION, interview: { interviewee_name: 'Dana Ruiz', interviewee_company: 'Acme' }, callLabel: 'Audio call · WhatsApp call', cap: { live: true, caption: 'we lose a day' }, online: true, points: [], ...patch });
 const view = (patch = {}, props = {}) => html(h(RecordingView, { st: ST(patch), now: 0, ...props }));

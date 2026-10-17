@@ -313,7 +313,7 @@ export async function importMeetingRef(
     if (e instanceof MeetingProviderError) got = { kind: 'error', code: e.code, retryable: e.retryable };
     else {
       // Names only: a fetch error can carry a URL, and a transcript is never logged.
-      console.error(`[meetings] fetch threw provider=${ref.provider} ref=${ref.uid}`, e instanceof Error ? e.name : 'error');
+      console.error('[meetings] fetch threw provider=%s ref=%s', ref.provider, ref.uid, e instanceof Error ? e.name : 'error');
       got = { kind: 'error', code: unreachable(ref.provider), retryable: true };
     }
   }
@@ -349,7 +349,7 @@ export async function importMeetingRef(
     if (e instanceof IntakeError && e.status === 422) { code = 'transcript_empty'; status = 'no_transcript'; }
     else if (e instanceof IntakeError && e.status === 404) code = 'interview_gone';
     else if (e instanceof IntakeError && e.status === 403) code = 'member_inactive';
-    else console.error(`[meetings] import failed ref=${ref.uid}`, e instanceof Error ? e.name : 'error');
+    else console.error('[meetings] import failed ref=%s', ref.uid, e instanceof Error ? e.name : 'error');
     await setRefStatus(env, ref.id, status, code);
     return { status, code, retryable: code === 'import_failed', segments: 0 };
   }

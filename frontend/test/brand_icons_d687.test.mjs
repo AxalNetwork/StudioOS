@@ -215,7 +215,11 @@ import { ConsentView } from '../src/pages/connect/ConnectAssistantPage.jsx';
 import { Sheet, Row } from '../src/pages/account/ConnectorSheet.jsx';
 const routed = (el) => html(h(MemoryRouter, null, el));
 /** The provider's mark (or monogram) with the visible name after it. */
-const markThenName = (out, key, name) => assert.match(out, new RegExp(`data-provider="${key}"[\\s\\S]*?${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`), `${key} → ${name}`);
+const markThenName = (out, key, name) => {
+  const mark = `data-provider="${key}"`;
+  const at = out.indexOf(mark);
+  assert.ok(at >= 0 && out.includes(name, at + mark.length), `${key} → ${name}`);
+};
 
 test('7. Connectors, Build\'s rows, channel cards, setup cards, provider tags and origin badges draw the mark beside the name', () => {
   const p = { key: 'stripe', display_name: 'Stripe', by: 'Stripe', description: 'Payments.', available: true, has_implementation: true, status: 'live' };

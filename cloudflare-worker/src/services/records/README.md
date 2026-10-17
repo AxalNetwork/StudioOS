@@ -23,9 +23,15 @@ Sync log and Permissions to writers. Old rows read through each spec's
 `oldRows` matcher, one id prefix per spec.
 
 `../cycleActivity.ts` writes scoped activity and reads one record's timeline.
-Older activity is only included when a spec declares an `oldRows` matcher.
-Nothing rewrites historical activity. Grow (D691, #1698) lists its six stores
-in `owned.ts`, and its matchers admit today's Grow rows, which carry no
+A write that belongs to a module rather than a record logs `entityId: null`, so
+no record's history returns it. Its `CREATE_ACTIONS` set is what both the count
+and the renderer treat as a record's create row. Older activity is only
+included when a spec declares an `oldRows` matcher. Nothing in the Worker
+rewrites historical activity; migration 470 is the one-off correction S1 ruled
+for the rows #1736 misfiled before its review fixes shipped.
+
+Grow (D691, #1698) lists its six stores in `owned.ts`, and its matchers admit
+today's Grow rows, which carry no
 `project_id`, only under `grow_*` actions (`unscopedActions`), plus a month's
 figure logged as `<id>:<month>` (`idPrefixTypes`) and an application's stage
 row through its posting (`children`).

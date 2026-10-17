@@ -115,8 +115,9 @@ def _resolve_referral_for(user: User, session: Session) -> tuple[str, str]:
             code = p.referral_code.upper()
     if not code:
         # Fallback deterministic code so non-partner users can still invite.
+        # Only a stable tag, not a secret; SHA-256 (not SHA-1) all the same.
         import hashlib
-        h = hashlib.sha1(f"user:{user.id}:{user.email}".encode(), usedforsecurity=False).hexdigest().upper()
+        h = hashlib.sha256(f"user:{user.id}:{user.email}".encode()).hexdigest().upper()
         code = f"AXAL-{h[:8]}"
     import os
     base = os.environ.get("APP_URL", "https://axal.vc").rstrip("/")

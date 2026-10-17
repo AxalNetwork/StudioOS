@@ -207,6 +207,25 @@ pain group, an interview, a segment, a competitor candidate, a demand record
 (`signal-`, `revenue-` or `waitlist-`) and a hypothesis. See
 `decisions/D690.md`.
 
+Build's six (`services/records/build.ts`, D690 S18-B, #1694 and #1695) are
+gated `read` and `write`, as their module read is (`canReadBoard`, `canWrite`):
+
+| Module | Id | Actions (`POST …/actions/:key`) |
+| --- | --- | --- |
+| `solution-design` | the feature's id | `add-risk`, `edit-description`, `scope-out` or `scope-in`, `add-to-roadmap`, `mark-must-have`, `edit` |
+| `prototype-mvp` | the must-have's feature id | `add-session`, `add-finding`, `link`, `add-check`, `check`, `mark-blocked`, `mark-done`, `edit` |
+| `product-roadmap` | the item's id | `add-dependency`, `move`, `edit` |
+| `founding-team` | `h-<holder id>` | `edit-split` (a link), `log-contribution`, `edit` |
+| `company-creation` | `step-<n>`, `obligation-<n>` or `lab-<order>-<n>` | `step-`: `mark-filed`, `step-check`, `edit`; `step-` and `obligation-`: `upload-proof` (multipart), `open-proof`; `lab-`: none |
+| `operating-systems` | the kind (`crm`) | `reconnect` (a link), `edit` (Choose connector), `disconnect` |
+
+Each edit-style action runs the same function as its route in `cycle_build.ts`
+(`POST /features`, `POST /must-haves`, `PATCH /features/:id`, `POST /risks`,
+`POST /roadmap`, `PATCH /roadmap/:id`, `POST /founders`, `PATCH /founders/:id`,
+`POST` and `PATCH /formation-steps`, `PUT /systems/:kind`), and every write logs
+one `build.<module>` row. Build's form-options serve each module's choices, and
+Operating systems' per kind add the catalogue providers and `sync_editable`.
+
 Raise's seven (`services/records/raise.ts`, D691 #1699 and #1700) are gated
 `write` throughout, so only the venture's owner, an admitted Lab member on
 their own venture or an admin reaches them (403 for anyone else, partners
