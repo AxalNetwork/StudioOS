@@ -1,4 +1,4 @@
-/** D694 PR 1: recording outcomes and Validate navigation meet at Customer research. */
+/** D694: recording outcomes and Validate navigation meet at Customer research (PR 1; test 9, `finishPath`, is PR 2's). */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -9,6 +9,8 @@ import { liveRedirect } from '../src/pages/founder/RecordLivePage.jsx';
 import { ProcessingStages } from '../src/pages/founder/RecordingView.jsx';
 import { cycleTabs } from '../src/pages/cycles/cycleModel.js';
 import { phoneIndex } from '../src/pages/cycles/validatePhone.js';
+import { finishPath } from '../src/pages/cycles/CycleRoute.jsx';
+import { openingStep } from '../src/pages/founder/assistantSession.js';
 
 const read = (path) => readFileSync(path, 'utf8');
 
@@ -51,4 +53,56 @@ test('the three breadcrumbs and review delete return to Customer research', () =
     assert.doesNotMatch(page, /<Link to="\/validate\/interviews"/);
   }
   assert.match(review, /navigate\(`\/validate\/customer-research\?project_id=\$\{interview\.project_id\}`/);
+});
+
+// ---------- PR 2: every Record a session finish (test 9) ----------------------
+
+function assertFinishes(finish) {
+  const research = '/validate/customer-research?project_id=3';
+  assert.equal(finish({ id: 5, project_id: 3, status: 'transcribed' }, 'session', 3), research, 'a pasted chat');
+  assert.equal(finish({ id: 6 }, 'session', 3), research, "an imported thread takes the page's venture");
+  assert.equal(finish({ id: 5, project_id: 3 }, 'session', 9), research, "the session's venture wins over the page's");
+  assert.equal(finish({ id: 7, project_id: 3, status: 'draft', submitted_via: 'whatsapp' }, 'session', 3), '/validate/session/7', 'a text chat still waiting keeps its page');
+  assert.equal(finish({ id: 8, project_id: 3, status: 'draft', submitted_via: 'zoom' }, 'session', 3), '/validate/session/8', 'a call still waiting keeps its page');
+  assert.equal(finish({ id: 7, project_id: 3, status: 'transcribed', submitted_via: 'whatsapp' }, 'session', 3), research, 'a channel session no longer draft lands on Customer research');
+  assert.equal(finish({ id: 9, project_id: 3 }, 'live', 3), '/validate/record/live?session=9');
+  assert.equal(finish({ id: 6 }, 'session', null), '/validate/customer-research', 'no venture, no query');
+  assert.equal(finish({ id: 6, project_id: 'x' }, 'session', 3), '/validate/customer-research', 'only a positive integer reaches the address');
+}
+
+test('finishPath: every finish lands on Customer research in the session\'s venture, a waiting channel session keeps its page', () => {
+  assertFinishes(finishPath);
+  // The same rules from the source, each mutation run against them.
+  const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
+  const fn = /export function finishPath\(session, where, projectId\) \{\n[\s\S]*?\n\}\n/.exec(route)?.[0];
+  assert.ok(fn, 'finishPath is found');
+  const build = (text) => new Function('openingStep', 'reviewPath', `${text.replace('export function', 'function')}\nreturn finishPath;`)(openingStep, reviewPath);
+  assertFinishes(build(fn));
+  for (const [before, after] of [
+    ["where === 'live'", "where === 'record'"],
+    ["openingStep(session) === 'channel'", "openingStep(session) === 'transcript'"],
+    ['project_id: session?.project_id ?? projectId', 'project_id: projectId ?? session?.project_id'],
+    ['project_id: session?.project_id ?? projectId', 'project_id: session?.project_id'],
+  ]) {
+    assert.ok(fn.includes(before), 'mutation target: ' + before);
+    assert.throws(() => assertFinishes(build(fn.replace(before, after))), { name: 'AssertionError' }, 'mutation must fail: ' + after);
+  }
+  assertFinishes(build(fn));
+
+  // onDone navigates to it, replacing /record, and hands the interview only to the session page.
+  const onDone = (text) => {
+    const branch = /const onDone = cycle === 'validate'\n\s*\? \(session, interview, where\) => \{([\s\S]*?)\n\s*\}\n/.exec(text)?.[1];
+    assert.ok(branch, "onDone's Validate branch");
+    assert.match(branch, /const to = finishPath\(session, where, projectId\);/);
+    assert.match(branch, /navigate\(to, to\.startsWith\('\/validate\/session\/'\) \? \{ state: \{ interview \}, replace: true \} : \{ replace: true \}\);/);
+  };
+  onDone(route);
+  for (const [before, after] of [
+    ['finishPath(session, where, projectId);', 'finishPath(session, where);'],
+    [': { replace: true });', ': {});'],
+    ["{ state: { interview }, replace: true } :", '{ state: { interview } } :'],
+  ]) {
+    assert.ok(route.includes(before), 'mutation target: ' + before);
+    assert.throws(() => onDone(route.replace(before, after)), { name: 'AssertionError' }, 'mutation must fail: ' + after);
+  }
 });
