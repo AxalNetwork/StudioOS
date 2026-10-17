@@ -245,9 +245,11 @@ export interface Env {
   LINKEDIN_CLIENT_ID?: string;
   LINKEDIN_CLIENT_SECRET?: string;
   LINKEDIN_REDIRECT_URI?: string;
-  // Stripe — used by routes/billing.ts and routes/funds.ts. Set via
-  // `wrangler secret put STRIPE_SECRET_KEY` etc. When unset, billing
-  // falls back to a dev /dev-upgrade flow and Atlas calls are stubbed.
+  // Stripe — Axal VC Management LLC's account, called through `stripeCall`
+  // (routes/billing.ts) and its callers; fund code never calls Stripe (D707,
+  // services/moneyRails.ts). Set via `wrangler secret put STRIPE_SECRET_KEY`.
+  // util/paymentMode.ts allows the dev fallback only outside production and
+  // only with no key set.
   STRIPE_SECRET_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;
   // Task #16 — Stripe publishable key as a Worker env var (optional — the

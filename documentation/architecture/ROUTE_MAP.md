@@ -38,6 +38,15 @@ and pages activity. Every company ID supplied by a request is checked against
 
 The `github` provider is a GitHub App's read-only user authorization. `GET /:uid/repositories` lists what its installations reach and what is chosen; `PUT /:uid/repositories` saves a choice and a project, after re-reading the grant and refusing any permission beyond the registry's four read scopes (`write_scope_refused`). Both need the active company enabled for the connection, and the project must be in it. `POST /:uid/sync` lands issues on `roadmap_okrs` and pull requests on `mvp_features`, linked through `connector_fed_items` (migration 445) so a re-sync updates; releases are recorded with no store. `GET /:uid/sync-status` returns the running sync's percentage and what it is reading. `GET /:uid/fed` returns, for every connector, a count per module it feeds; a connector that does not record deliveries says Not recorded, never 0.
 
+### Money rails Worker contract (D707, #1772)
+
+`GET /api/admin/money-rails` (`admin_money_rails.ts`, admin only) answers `{ entities, kinds, stripe }`:
+- `entities`: each Axal entity's key, name and role (`services/moneyRails.ts`'s `ENTITY_ROLES`);
+- `kinds`: the eleven `MONEY_KINDS` rows, each with its payer, payee, rail and group;
+- `stripe`: `{ account_holder: 'management', mode }`, where `mode` is `stripeMode`'s `test`, `live` or `unconfigured`.
+
+It answers no key and no account number. `stripeCall` refuses a Stripe create with no money kind, or with a fund or intercompany kind, before any request leaves the Worker. `POST /api/payments/intent` refuses a body with no `price_id` (`money_kind_required`). Neither has a frontend method.
+
 ### AI allowance Worker contract (D640, #1433)
 
 The Usage page work in #1430 uses the mounted `ai_budget.ts` routes. `GET /api/ai-budget/me` returns the caller's allowance and paid balance with `held_for_review` (UID, time, held micro-USD and recorded cost); a review hold blocks new runs without hiding that read. Super Admin routes `GET /api/ai-budget/reviews` and `POST /api/ai-budget/reviews/:uid/charge|refund` list and settle those holds with a recorded reason and actor. `GET /api/ai-budget/caps` lists all ten plan keys, their effective daily/monthly allowances and whether each value is recorded or from the environment; `PUT /api/ai-budget/caps/:licence` remains the audited write. These are Worker routes for #1435's screens (moved from S09), not frontend API methods added by this issue.
@@ -105,8 +114,8 @@ caller's analysed companies or a directory company; 201 when added),
 `PATCH /competitors/:id` (watch and positioning), `PATCH
 /demand-signals/:id` (a `signal-` record only), `POST /hypotheses` and
 `PATCH /hypotheses/:id`. The row actions' writers (merge, split, attach a
-quote, Stop, evidence, experiments, a signal's file) are built and reach the
-SPA through the records actions in #1692's closing PR.
+quote, Stop, evidence, experiments, a signal's file) are each record's
+actions, below.
 `founder_validate_sessions.ts` adds `GET /sessions/:id/audio`, one
 short-lived signed download per recorded chunk, and `DELETE
 /discovery/interview/:id` now calls `services/interviewWriters.ts`'s
@@ -131,6 +140,38 @@ customer research, problem discovery and experiments; problem discovery's
 `fit_gap` and `stats.history_since`. A part follows its store's gate, and a
 phrase said without consent reaches a non-writer as
 "Quote withheld (no consent to quote)". See `decisions/D690.md`.
+
+### Cycle records (D690, #1690 and #1692)
+
+`cycle_records.ts`, mounted at `/api/cycles`, serves one record of any cycle
+that registers a service in `services/records/index.ts`; Validate, Build and
+Raise do:
+
+- `GET /:cycle/modules/:slug/records/:id?project=`: the record, its sections,
+  actions and `next`, and its first activity page;
+- `GET …/records/:id/activity?project=&page=`: 20 rows a page, newest first;
+- `POST …/records/:id/actions/:key?project=`: a declared action only, JSON or,
+  for a file field, `multipart/form-data`; `PATCH` and `DELETE` on the record
+  run its `edit` and `delete`;
+- `GET /:cycle/modules/:slug/form-options?project=`: the Add forms' choices,
+  every other query parameter passed through.
+
+The refusals run in order:
+
+1. no session: 401;
+2. a missing or malformed `project`: 400;
+3. an unknown cycle, a cycle with no service, or an unknown module: 404;
+4. a malformed id: 404, before any read;
+5. a missing venture: 404;
+6. the module's read gate, or the write gate for actions and form-options: 403;
+7. an id not in the module's own store for this venture: 404, as is any id an
+   action's body names.
+
+A partner reads a record without its writer-only sections and gets
+`actions: []`. Validate's six (`services/records/validate.ts`, #1692) are a
+pain group, an interview, a segment, a competitor candidate, a demand record
+(`signal-`, `revenue-` or `waitlist-`) and a hypothesis. See
+`decisions/D690.md`.
 
 ### Raise cycle Worker read (D663, #1476)
 

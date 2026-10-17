@@ -203,7 +203,7 @@ orders.post('/intent', async (c) => {
       c.env,
       '/payment_intents',
       piParams,
-      { idempotencyKey },
+      { idempotencyKey, moneyKind: 'marketplace' },
     );
   } catch (e) {
     return refuse(c, 502, { code: 'intent_failed', message: 'The payment could not be started. Nothing was charged; try again in a moment.', raw: e, audience: 'member' });

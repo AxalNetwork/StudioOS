@@ -120,7 +120,8 @@ export async function createBookingPaymentIntent(
 
   const intent = await stripeCall<{ id: string; client_secret: string }>(
     env, '/payment_intents', params,
-    { idempotencyKey: `pi:booking:${booking.uid}` },
+    // D707: a Connect destination charge; Management stays merchant of record.
+    { idempotencyKey: `pi:booking:${booking.uid}`, moneyKind: 'marketplace' },
   );
   return {
     client_secret: intent.client_secret,
