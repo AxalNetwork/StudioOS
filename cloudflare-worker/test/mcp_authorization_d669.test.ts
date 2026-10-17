@@ -187,7 +187,8 @@ const checks:any = {
     const codes=[];
     for(const [path,bucket,limit] of [['register','register',10],['authorize','authorize',30]] as const) {
       const {env}=fixture();
-      env.RATE_LIMITS.get=async()=>String(limit);
+      // Full only in this path's own bucket, so the 429 shows the gate counted the right one.
+      env.RATE_LIMITS.get=async(key:string)=>key.startsWith('mcp_public:'+bucket+':')?String(limit):null;
       const request=new Request('https://axal.vc/api/oauth/'+path,{method:path==='register'?'POST':'GET',headers:{'CF-Connecting-IP':'192.0.2.1','Content-Type':'application/json'},
         ...(path==='register'?{body:JSON.stringify({redirect_uris:['https://client.example/callback'],token_endpoint_auth_method:'none'})}:{})});
       const response=await m.oauth.routeMcp(request,env,{waitUntil(){},passThroughOnException(){}} as any);

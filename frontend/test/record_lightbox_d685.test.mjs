@@ -36,7 +36,10 @@ const CHANNELS = {
 const render = (props = {}) => renderToStaticMarkup(h(MemoryRouter, null, h(RecordLightbox, { projectId: 3, initialModels: MODELS, initialBoard: BOARD, onClose() {}, onStarted() {}, ...props })));
 const startTag = (out) => /<button[^>]*data-testid="record-start"[^>]*>/.exec(out)[0];
 /** The opening tag that carries a test id, so attributes are checked whatever order React wrote them in. */
-const tag = (out, id) => new RegExp(`<[a-z]+[^>]*data-testid="${id}"[^>]*>`).exec(out)?.[0] ?? '';
+const tag = (out, id) => {
+  const at = out.indexOf(`data-testid="${id}"`);
+  return at < 0 ? '' : out.slice(out.lastIndexOf('<', at), out.indexOf('>', at) + 1);
+};
 
 test('the dialog: named, modal, 560px, and the five sections in the canvas\'s order', () => {
   const out = render();
