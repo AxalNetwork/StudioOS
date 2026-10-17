@@ -16,11 +16,14 @@ import {
 import { captureAndResolveAttribution, readRefCookie } from '../services/referralAttribution';
 import { automaticTaxParams, stripeTaxEnabled } from '../util/stripeTax';
 import { refuse } from '../util/refusal';
+import { moneyKindForCatalogPrice, type StripeMoneyKind } from '../services/moneyRails';
 
 // PaymentIntent + SetupIntent surface for the Axal-branded embedded card UI.
 //
-//   POST   /api/payments/intent        { price_id? , amount? , currency? , quantity? , nonce? }
+//   POST   /api/payments/intent        { price_id , quantity? , nonce? , promo_code? }
 //                                       → { client_secret, kind, ... }
+//                                       A charge needs a priced product (D707): a
+//                                       body with no price_id is refused.
 //   POST   /api/payments/setup-intent  → { client_secret, customer }
 //   GET    /api/payments/methods       → { methods: [...] }
 //   DELETE /api/payments/methods/:id   → { detached: true }
@@ -31,11 +34,6 @@ import { refuse } from '../util/refusal';
 // ever hands back a `client_secret`.
 
 const payments = new Hono<{ Bindings: Env }>();
-
-// Stripe minimum charge is 50 cents (or local equivalent). We don't enforce the
-// per-currency table here — Stripe rejects sub-minimum amounts itself — but we
-// reject obviously-invalid (non-positive / non-integer) amounts up front.
-const MAX_RAW_AMOUNT = 100_000_00; // $100k in cents — sanity cap on raw amounts.
 
 /**
  * Resolve (creating if necessary) the Stripe customer for the authenticated
@@ -67,8 +65,6 @@ function safeNonce(raw: unknown): string {
 
 interface IntentBody {
   price_id?: string;
-  amount?: number;
-  currency?: string;
   quantity?: number;
   nonce?: string;
   description?: string;
@@ -90,6 +86,12 @@ payments.post('/intent', async (c) => {
   if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
 
   const body = (await c.req.json().catch(() => ({}))) as IntentBody;
+  // D707: a charge needs a priced product, whose catalog entry says what kind
+  // of money it is. Refused before `ensurePaymentsCustomer` can create a Stripe
+  // customer, so a refused body never reaches Stripe.
+  if (!body.price_id) {
+    return refuse(c, 400, { code: 'money_kind_required', message: 'A charge needs a priced product. Choose one from the catalog.', audience: 'member' });
+  }
   const quantity = Number.isFinite(body.quantity) && (body.quantity as number) > 0
     ? Math.floor(body.quantity as number)
     : 1;
@@ -100,6 +102,10 @@ payments.post('/intent', async (c) => {
   if (body.price_id) {
     const price = await findCatalogPriceById(c.env, body.price_id);
     if (!price || !price.active) return c.json({ error: 'invalid_price' }, 400);
+    // D707: the product says the money kind; with no product there is no kind, never a guessed one.
+    const found = await findCatalogProductByPriceId(c.env, price.id);
+    if (!found) return c.json({ error: 'invalid_price' }, 400);
+    const moneyKind = moneyKindForCatalogPrice(found.product, price);
 
     // Optional promo code — validated server-side against the product
     // allow-list (NEVER trust a client-supplied amount). On failure we return
@@ -107,8 +113,6 @@ payments.post('/intent', async (c) => {
     const promoCode = typeof body.promo_code === 'string' ? body.promo_code.trim() : '';
     let promo: PromoRow | undefined;
     if (promoCode) {
-      const found = await findCatalogProductByPriceId(c.env, price.id);
-      if (!found) return c.json({ error: 'invalid_price' }, 400);
       const v = await validatePromoForProduct(
         c.env,
         promoCode,
@@ -151,7 +155,7 @@ payments.post('/intent', async (c) => {
           id: string;
           status: string;
           latest_invoice?: { id?: string; payment_intent?: { client_secret?: string; id?: string } };
-        }>(c.env, '/subscriptions', subParams, { idempotencyKey });
+        }>(c.env, '/subscriptions', subParams, { idempotencyKey, moneyKind });
         const clientSecret = sub.latest_invoice?.payment_intent?.client_secret;
         if (!clientSecret) {
           // A 100%-off (or otherwise zero-due) first invoice has NO
@@ -206,34 +210,9 @@ payments.post('/intent', async (c) => {
       user,
       metadata,
       description: body.description,
+      moneyKind,
     });
   }
-
-  // ---- Raw amount path: ad-hoc one-time charge (always a PaymentIntent). ----
-  // Raw amounts have no catalog product to scope a promo's allow-list against,
-  // so reject any promo here rather than silently ignoring it.
-  if (typeof body.promo_code === 'string' && body.promo_code.trim()) {
-    return c.json({ error: 'promo_not_supported_for_raw_amount', reason: 'raw_amount' }, 400);
-  }
-  const rawAmount = body.amount;
-  if (!Number.isInteger(rawAmount) || (rawAmount as number) <= 0) {
-    return c.json({ error: 'invalid_amount' }, 400);
-  }
-  if ((rawAmount as number) > MAX_RAW_AMOUNT) return c.json({ error: 'amount_too_large' }, 400);
-  const currency = (typeof body.currency === 'string' && body.currency.trim())
-    ? body.currency.trim().toLowerCase()
-    : 'usd';
-  const amount = (rawAmount as number) * quantity;
-  const idempotencyKey = `pi:${user.id}:raw_${amount}_${currency}:${nonce}`;
-  return createPaymentIntent(c, {
-    customer,
-    amount,
-    currency,
-    idempotencyKey,
-    user,
-    metadata: {},
-    description: body.description,
-  });
 });
 
 /** Shared one-time PaymentIntent creation. */
@@ -247,6 +226,8 @@ async function createPaymentIntent(
     user: TierUser;
     metadata: Record<string, string>;
     description?: string;
+    /** D707: the money kind Stripe stamps; every caller names one. */
+    moneyKind: StripeMoneyKind;
   },
 ) {
   const params: Record<string, string> = {
@@ -280,7 +261,7 @@ async function createPaymentIntent(
       c.env,
       '/payment_intents',
       params,
-      { idempotencyKey: args.idempotencyKey },
+      { idempotencyKey: args.idempotencyKey, moneyKind: args.moneyKind },
     );
     return c.json({
       kind: 'payment',
@@ -501,6 +482,7 @@ payments.post('/alacarte/intent', async (c) => {
     user,
     metadata,
     description: `À la carte: ${found.product.name}`.slice(0, 500),
+    moneyKind: 'marketplace',
   });
 });
 
@@ -546,6 +528,7 @@ payments.post('/intro-credits/intent', async (c) => {
       credits: String(pack.credits),
     },
     description: `Introduction credits: ${pack.label}`,
+    moneyKind: 'marketplace',
   });
 });
 
