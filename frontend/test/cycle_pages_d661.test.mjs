@@ -224,7 +224,9 @@ test('ADD FORMS: one dialog draws each form, the module offers it, and the check
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   // D695: each Add is a link to its `/new` address, pushed with `state.under`.
   assert.match(route, /add=\{forms\.length && projectId\s*\? forms\.map\(\(entry, i\) => \(\{ text: entry\.button, href: addHref\(entry, i\), state: \{ under: `\$\{location\.pathname\}\$\{location\.search\}` \} \}\)\)\s*: fnOf\(def\.add, slug\)\?\.\(q, openAction\)\}/);
-  assert.match(route, /onSubmit=\{\(values\) => formOpen\.submit\(cyclesWrite, projectId, values\)\}/);
+  // D693 (#1704): the Add submits through the cycles' writes plus Verdict's `record` (`formWrites`).
+  assert.match(route, /onSubmit=\{\(values\) => formOpen\.submit\(formWrites, projectId, values\)\}/);
+  assert.match(route, /const formWrites = \{ \.\.\.cyclesWrite, verdict: verdictApi \};/);
   assert.match(route, /const saved = \(\) => \{ dirty\.current = true; \};/);
   assert.equal((route.match(/onSaved=\{saved\}/g) || []).length, 2, 'a save, Add or Edit, reads the module again once the form closes');
   // The checklist: tick an open item, undo your own tick, never undo the Lab's.
