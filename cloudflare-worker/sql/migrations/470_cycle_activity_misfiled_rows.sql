@@ -7,6 +7,15 @@
 -- touches nothing else: every statement is bounded to rows created on or
 -- after 2026-10-17 16:00:00, before the deploy.
 --
+-- THE WINDOW IT DOES NOT COVER. The deploy applies migrations before it ships
+-- the Worker, so the #1736 Worker keeps serving after this file has run (and
+-- until the next successful deploy if the deploy step fails after the
+-- migration step), and rows it writes then keep the #1736 shape. This file
+-- runs once. After the fixed Worker is confirmed live, S1 counts the rows
+-- matching the two WHERE clauses below (read-only) and, if any are left,
+-- ships the same two statements as the next migration. Both are idempotent,
+-- and nothing writes either shape any more.
+--
 -- 1. MODULE-LEVEL WRITES LOGGED UNDER A RECORD. The monthly interviews target,
 --    the waitlist target, the market readiness marks and the market sources
 --    belong to a module, not to a record, and logged the project's id as their
@@ -18,9 +27,10 @@
 --    setMarketMark, addMarketSource and removeMarketSource. Only a row whose
 --    `entity_id` is exactly its own project's id is changed. A competitor
 --    row (`competitor_mention_written`, `competitor_created`) whose candidate
---    id failed the pattern also logged the project's id, but it is left as it
---    is: a candidate whose own valid id is that number logs the same row, and
---    the two cannot be told apart.
+--    id failed the pattern also logged the project's id. It is left as it is
+--    because S1's ruling names only the seven actions below, not because it
+--    cannot be found: such a row is a fallback row whenever no candidate of
+--    the project has that id.
 UPDATE activity_logs
    SET entity_id = NULL
  WHERE entity_type IN ('validate.customer-research', 'validate.demand-signals', 'validate.market-intelligence')

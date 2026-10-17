@@ -7,6 +7,7 @@ import { SignJWT } from 'jose';
 import progress from '../src/routes/progress.ts';
 import founderValidate from '../src/routes/founder_validate.ts';
 import cycleValidate from '../src/routes/cycle_validate.ts';
+import { hashEmail } from '../src/util/hashEmail.ts';
 import { activityFor, COMPETITOR_ADDED, CREATE_ACTIONS, logCycleWrite, logCycleWriteStatement } from '../src/services/cycleActivity.ts';
 import { fillKind } from '../src/services/fills/registry.ts';
 import {
@@ -448,9 +449,10 @@ test('D690 outreach reads as it did before D690: only an unconfigured mailer say
   const { db, call } = wideFixture();
   db.exec("INSERT INTO waitlist_signups (id, project_id, audience, email) VALUES (102, 1, 'customer', 'other@example.test')");
   assert.equal((await call(progress, 'POST', '/discovery/1/waitlist/102/invite')).status, 200);
-  const row = db.prepare("SELECT action, details, entity_type, entity_id FROM activity_logs WHERE action = 'waitlist_invited'").get() as any;
+  const row = db.prepare("SELECT action, details, entity_type, entity_id, actor, user_id, project_id FROM activity_logs WHERE action = 'waitlist_invited'").get() as any;
   assert.deepEqual({ ...row }, { action: 'waitlist_invited', entity_type: null, entity_id: null,
-    details: 'Project Fixture Venture: sent product invitation to other@example.test (email not delivered: not configured)' });
+    details: 'Project Fixture Venture: sent product invitation to other@example.test (email not delivered: not configured)',
+    actor: await hashEmail('founder@example.test'), user_id: 10, project_id: 1 });
 });
 
 test('D690 migration 470 re-files only the rows #1736 misfiled after its deploy', () => {
