@@ -120,6 +120,13 @@ Configure it in the Console, under the organization's federation settings.
 
 The review job already has `id-token: write`. Its reviewer fetches a fresh GitHub token for each exchange and never logs it or writes it to disk.
 
+**When a call fails.** An `api_error` or `configuration_error` names its cause in three places, with anything credential-shaped (keys, bearer values, JWTs) removed:
+- the last log line of the Review step, `claude-review: api_error — <reason>. The API said: <what the API or the exchange returned>`;
+- a warning annotation on the job, titled `Claude review: api_error`;
+- the job summary, and `error_kind`, `http_status` and `error_detail` in the run's `record.json`.
+
+A refused exchange reads `Token exchange failed with status 401 …`, and the Console's Workload identity page logs the attempt. Other outcomes keep their reason in the summary only, because it can quote the pull request or the model's answer.
+
 **What the rule allows.** Any workflow in this repository that runs on `pull_request` with `id-token: write` matches it. That includes one added on a branch of this repository, the same exposure a repository secret has. A fork's pull request never matches: GitHub gives it no OIDC token.
 
 **`claude-code.yml`.** The `@claude` workflow runs on comments, not pull requests, so this rule does not cover it. It keeps `ANTHROPIC_API_KEY` until it is migrated separately.

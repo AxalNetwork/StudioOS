@@ -65,6 +65,7 @@ function finish(state, outcome, reason, extra = {}) {
   return {
     outcome,
     exitCode,
+    reason,
     summary: renderSummary(result),
     annotations: extra.annotations || [],
     record: extra.record || null,
@@ -180,8 +181,11 @@ export async function runReview(deps) {
     const seconds = ((deps.now() - started) / 1000).toFixed(1);
     state.facts.duration = `${seconds} s`;
     if (e?.requestId) state.facts['request id'] = e.requestId;
-    return finish(state, 'api_error', `${API_ERROR_TEXT[kind] || API_ERROR_TEXT.unknown}${e?.status ? ` (HTTP ${e.status})` : ''}`, {
-      record: record('err', 0, { outcome: 'api_error', error_kind: kind, duration_seconds: Number(seconds) }),
+    // What the API or the token exchange said, already stripped of anything
+    // credential-shaped by the client: the cause, where the kind alone is a guess.
+    const detail = typeof e?.detail === 'string' && e.detail ? e.detail : null;
+    return finish(state, 'api_error', `${API_ERROR_TEXT[kind] || API_ERROR_TEXT.unknown}${e?.status ? ` (HTTP ${e.status})` : ''}${detail ? ` The API said: ${detail}` : ''}`, {
+      record: record('err', 0, { outcome: 'api_error', error_kind: kind, http_status: e?.status ?? null, error_detail: detail, duration_seconds: Number(seconds) }),
     });
   }
 
