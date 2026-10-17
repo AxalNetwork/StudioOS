@@ -11,9 +11,9 @@ counterparty before counsel sign-off.
 
 | Entity | Role | Signs |
 | --- | --- | --- |
-| Axal VC Holdings LLC (owner: Joseph Gabriel Guillaume Lauzier) | IP holding company; member of the other two | Intercompany agreements only — never customer-facing |
-| Axal VC Management LLC (Managing Partner: J.G.G. Lauzier) | Operating company; runs the platform | ToS, subscriptions, partner/advisor/customer agreements, DPA |
-| Axal VC GP LLC (GP: J.G.G. Lauzier) | General partner of fund vehicles | LPA, subscription booklets, side letters, capital docs |
+| Axal VC Holdings LLC (owner: Joseph Gabriel Guillaume Lauzier) | IP holding company; member of the other two (to confirm, §F). Axal VC Holdings LLC licenses the software IP platform to Axal VC Management LLC for management administration, and to Axal VC GP LLC for fund administration. | Intercompany agreements only — never customer-facing |
+| Axal VC Management LLC (Managing Partner: J.G.G. Lauzier) | Operating company; runs the platform. Axal VC Management LLC operates between the different partners as Managing Partner under the Spin-Out Lab, and manages the other operating partners across the platform. | ToS, subscriptions, partner/advisor/customer agreements, DPA |
+| Axal VC GP LLC (GP: J.G.G. Lauzier) | General partner of fund vehicles. Axal VC GP LLC is the General Partner that manages the Fund's investors, and the founders getting funding through Axal VC Spin-Out Lab Fund I LP. | LPA, subscription booklets, side letters, capital docs |
 
 ## A. Platform ↔ every user (click-accept)
 
@@ -58,7 +58,10 @@ joinder, strategic side letters, carried-interest allocation,
 secondary purchase agreement, spin-out subsidiary SPA — **all
 existing**. Newly added: **Investment Management Agreement**
 (`investment_management_agreement_v1.md`, **NEW DRAFT**) between each
-fund and Axal VC Management LLC. Deliberately absent: a PPM — always
+fund and Axal VC Management LLC. **It contradicts the owner's model
+(D707 decision 5):** the 2% management fee is paid by the Fund to Axal VC
+GP LLC, not to Management, and the live `mgmt_company` body says the same
+as the IMA. The IMA stays a stub until counsel conforms both. Deliberately absent: a PPM — always
 counsel-drafted per offering, never templated.
 
 ## D. Platform ↔ service partners
@@ -79,9 +82,13 @@ until Stripe Connect rails ship (build queue #124).
 ## F. Internal / corporate
 
 Operating agreement template, IC charter, data-access acknowledgment,
-resolutions — **existing**. Newly added: **Intercompany IP License &
-Services Agreement** (`intercompany_ip_services_v1.md`, **NEW
-DRAFT**) — Holdings ↔ Management; execute before material revenue.
+resolutions — **existing**. The two **Platform IP Licence Agreements**
+(D707), catalog stubs for counsel to draft, replace the one Holdings ↔
+Management licence: `platform_ip_licence_management_admin` (Holdings →
+Management, management administration) and
+`platform_ip_licence_fund_admin` (Holdings → GP, fund administration).
+`intercompany_ip_services_v1.md` (**NEW DRAFT**) is not issued: its §3.1
+grants Management an exclusive licence, which leaves no room for the GP's.
 Each of the three LLCs also needs its own **executed** operating
 agreement (the template is generic); still to confirm: whether
 Management and GP are wholly owned by Holdings.
@@ -96,15 +103,18 @@ Management and GP are wholly owned by Holdings.
    transactions is the classic unregistered broker-dealer fact
    pattern. Needs a securities-law review of the entire intro/referral
    economics before scale.
-2. **Adviser status.** Confirm Axal VC Management LLC's exemption
-   under Advisers Act §203(l) (venture capital fund adviser) and make
-   any exempt-reporting-adviser Form ADV filings before a fund admits
+2. **Adviser status.** The owner's model (D707) has the Fund pay the
+   management fee to Axal VC GP LLC, so counsel must say which entity
+   is the fund's adviser, confirm its exemption under Advisers Act
+   §203(l) (venture capital fund adviser), and make any
+   exempt-reporting-adviser Form ADV filings before a fund admits
    outside capital.
 3. **Fund docs.** `subscription_booklet_lpa_v1` and the new IMA must
    be conformed to each other and reviewed before ANY capital is
    accepted; add a PPM per offering.
 4. **DMCA agent registration** (see section A) — cheap, do first.
-5. **Transfer pricing** on the intercompany license fee — tax counsel.
+5. **Transfer pricing** on the intercompany licence fees (two platform
+   IP licences, D707) — tax counsel.
 6. **Single-member formality.** One person signs both sides of every
    intercompany document; keep resolutions and separate books to
    protect the liability walls between the three LLCs.

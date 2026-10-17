@@ -173,7 +173,7 @@ wrangler secret put STRIPE_PRICE_INCORP_EE_OY --env production
 These are read by `routes/legal.ts::JURISDICTION_PRICE_ENV` — they do NOT come from the catalog mirror like subscription prices do.
 
 **Step 5: Register the live webhook via Admin Console → Payments**
-- Admin Console → Payments → Webhook panel → Register endpoint: `https://axal.vc/api/billing/webhook`.
+- Admin Console → Payments → Webhook panel → Register endpoint: `https://axal.vc/api/billing/stripe/webhook` (the route `routes/billing.ts` mounts; D707 corrected the path).
 - The signing secret (`whsec_live_…`) is pushed to `STRIPE_WEBHOOK_SECRET` automatically. If the auto-push fails, the secret is shown in the response — copy it and run: `wrangler secret put STRIPE_WEBHOOK_SECRET --env production`.
 - Required webhook events (the panel shows drift if any are missing): `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`, `invoice.finalized`, `charge.succeeded`, `payment_intent.succeeded`.
 
