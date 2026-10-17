@@ -25,6 +25,7 @@ import { resolve } from 'node:path';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
+import { escapeRe } from './_escapeRe.mjs';
 
 const ROOT = process.cwd();
 const read = (p) => readFileSync(resolve(ROOT, p), 'utf8');
@@ -45,7 +46,10 @@ const worker = await import('../../cloudflare-worker/src/services/licenceDomain.
 
 const render = (Page) => renderToStaticMarkup(React.createElement(MemoryRouter, null, React.createElement(Page)));
 const text = (html) => html.replace(/<[^>]+>/g, ' ').replace(/&#x27;|&apos;/g, '\'').replace(/&amp;/g, '&').replace(/\s+/g, ' ');
-const routed = (p) => new RegExp(`<Route\\s+path="${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`).test(APP);
+// Whether App.jsx has a `<Route path="p"`: the text after each route's opening
+// quote starts with the path, read by string search rather than a RegExp
+// built from `p`.
+const routed = (p) => APP.split(/<Route\s+path="/).slice(1).some((rest) => rest.startsWith(`${p}"`));
 
 function assertOrder(html, ids, page) {
   let at = -1;
@@ -173,7 +177,7 @@ test('the DNS table is the records the Worker asks for and checks', () => {
       assert.equal(`${row.value}TOKEN`, rec.value, 'the TXT value is the Worker\'s prefix with the licence\'s token');
       assert.ok(row.token, 'the token is named, not invented');
     }
-    const cells = new RegExp(`<td>${rec.type}</td><td>${row.host.replace(/\./g, '\\.')}</td><td>${row.value.replace(/\./g, '\\.')}`);
+    const cells = new RegExp(`<td>${rec.type}</td><td>${escapeRe(row.host)}</td><td>${escapeRe(row.value)}`);
     assert.match(html, cells, `the ${rec.type} row is drawn`);
   }
   assert.match(html, /Two records\. Your nameservers stay where they are\./);
