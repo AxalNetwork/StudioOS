@@ -16,7 +16,7 @@ export default {
         'Privacy — visibility (public / network / private), Public Directory opt-in, advisor discoverability.',
         'Integrations — connected accounts (LinkedIn, Google, Microsoft, Slack, HubSpot, Salesforce, DocuSign) with disconnect controls.',
         'Billing — current plan, payment method, and invoices.',
-        'Appearance — theme (light / dark / system), density, and sidebar default state.',
+        'Appearance — choose a light or dark theme.',
         'Developer — feature flags, search index re-sync, raw user object (admins only).',
       ],
       tips: [
@@ -202,21 +202,17 @@ export default {
     },
     {
       id: 'appearance',
-      title: 'Appearance (theme & density)',
+      title: 'Appearance (theme)',
       overview:
-        "Appearance lets you switch between light, dark, and system themes, set the table/list density (compact, comfortable, cosy), and choose whether the sidebar starts collapsed.",
+        'Appearance lets you switch between a light and a dark theme.',
       howto: [
         'Open Settings → Appearance.',
-        'Pick a theme: Light, Dark, or System (follows your OS).',
-        'Pick a density: Compact (more rows visible), Comfortable (default), or Cosy (extra padding).',
-        'Toggle "Start sidebar collapsed" if you prefer the icon-only rail.',
+        'Pick a theme: Light or Dark.',
       ],
       tips: [
-        'System theme follows your OS automatically — useful if you switch ambient lighting throughout the day.',
-        'Density affects tables and cards; typography stays at a comfortable reading size.',
+        'The sidebar starts open on a desktop and closed on a phone. Use its toggle to collapse it to the icon rail.',
       ],
       pitfalls: [
-        'Compact density can hide hover-only controls on small screens — use Comfortable on a phone.',
         'Theme changes apply across all your sessions on the next page load.',
       ],
       related: [

@@ -47,6 +47,10 @@ export const ESIGN_FORWARD = /^\/api\/(legal\/)?esign\/\d+\/forward$/;
 // join origination and forwarding in `esign_send`. Same anchoring as above.
 export const ESIGN_SENDER_ACTION = /^\/api\/(legal\/)?esign\/\d+\/(remind|void)$/;
 
+// D691 — the deck share link's signup (routes/deck_share_actions.ts), mounted
+// under /api/decks. Exported so the test executes the pattern itself.
+export const DECK_SHARE_SIGNUP = /^\/api\/decks\/share\/[^/]+\/signup$/;
+
 /**
  * The founder's advisory-session charge — `POST /bookings/:id/pay`, D81.
  *
@@ -228,6 +232,23 @@ const BUCKETS: Bucket[] = [
     limit: 10,
     windowSec: 60,
     test: (p, m) => m === 'POST' && p === '/api/auth/register',
+    scope: 'ip',
+    failClosed: true,
+  },
+  // D691 — a deck share link's signup. Unauthenticated, and every accepted
+  // POST creates a user (plus an activity_logs and an onboarding_progress
+  // row) for whoever holds a live share token, and a link with no expiry and
+  // no view cap is usable by anyone it is forwarded to. Under the generic
+  // 200/min/IP bucket alone, one IP could mint about 200 accounts a minute
+  // from a leaked link. 6/min/IP, as the landing waitlist: room for a typo
+  // retry, nothing for a script. Anchored so no sibling share route
+  // (view, nda, feedback, deal pack) is capped by it. failClosed: if KV is
+  // down the account-creating write waits rather than running uncapped.
+  {
+    name: 'deck_share_signup',
+    limit: 6,
+    windowSec: 60,
+    test: (p, m) => m === 'POST' && DECK_SHARE_SIGNUP.test(p),
     scope: 'ip',
     failClosed: true,
   },

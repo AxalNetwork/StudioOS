@@ -257,6 +257,7 @@ import partnerOffers from './routes/partner_offers';
 import partnerDelivery from './routes/partner_delivery';
 import founderValidate from './routes/founder_validate';
 import cycleValidate from './routes/cycle_validate';
+import cycleVerdict from './routes/cycle_verdict';
 import cycleRaise from './routes/cycle_raise';
 import founderValidateStructure from './routes/founder_validate_structure';
 import founderValidateSessions from './routes/founder_validate_sessions';
@@ -1288,6 +1289,9 @@ app.route('/api/channels', channels);
 // D659 (#1472) — the Validate cycle's shared read (#1469's contract: four
 // figures, six cards, a records table per module) and the manual writes for
 // migration 440's records. Same two predicates as the founder board.
+// D693 (#1702) — Verdict's decisions, through the one writer in
+// `services/verdict.ts`. Mounted before the cycle's own router.
+app.route('/api/cycles/validate/decisions', cycleVerdict);
 app.route('/api/cycles/validate', cycleValidate);
 app.route('/api/cycles/raise', cycleRaise);
 // D658 (#1471) — a structured interview's placements, decided one at a time.
