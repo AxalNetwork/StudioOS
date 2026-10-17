@@ -125,6 +125,8 @@ export type Store =
   | 'competitor_candidates' | 'demand_signals' | 'revenue_entries'
   | 'waitlist_signups' | 'hypotheses' | 'hypothesis_pain_links'
   | 'interview_sessions' | 'validation_decisions' | 'validation_decision_commitments'
+  // D690 (#1692): a demand record by its prefix, and a claim's experiments and evidence (migration 460).
+  | 'demand_records' | 'hypothesis_experiments' | 'hypothesis_evidence_links'
   // D691 (#1698): Grow's stores.
   | 'product_feedback' | 'growth_channels' | 'job_postings'
   | 'growth_partners' | 'markets' | 'compliance_events'
