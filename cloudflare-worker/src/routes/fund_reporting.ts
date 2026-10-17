@@ -12,17 +12,19 @@
  *   POST /drafts/:uid/issue       {figures_sha256, acknowledgement?}: a Super Admin only
  *
  * Every route is an Admin's (any `role = 'admin'` account on HQ), and HQ's
- * only: a branch answers `HQ only`. Only a Super Admin issues, behind
- * `requireSuperAdminWriteBar`; an Admin without the elevation is refused with
- * `super_admin_required` first, before any TOTP or step-up demand, and nothing
- * is written. A support session neither prepares nor issues (decision 2).
+ * only: a branch answers `HQ only`. Only a Super Admin issues: the route asserts
+ * D714's `fund_report.issue` act, so a support session is refused, an Admin
+ * without the elevation gets `super_admin_required` before any TOTP or step-up
+ * demand, and the Super Admin then passes `requireSuperAdminWriteBar`. Nothing
+ * is written on a refusal. A support session does not prepare either (decision 2).
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { isSuperAdmin, requireAdmin, requireSuperAdminWriteBar, selectJwt } from '../auth';
+import { requireAdmin } from '../auth';
 import { AUTH_ERROR_STATUSES, STEP_UP_REQUIRED, stepUpRefusalBody } from '../util/authErrors';
 import { HQ_ONLY, branchOf } from '../util/branch';
 import { refuse } from '../util/refusal';
+import { SUPPORT_SESSION_REFUSED_CODE, assertAdminAct, auditFundAct, isSupportSession } from '../services/fundAdminAccess';
 import {
   DraftRefusal, buildPeriod, correctDraft, issueDraft, listDrafts, prepareDraft, readDraft, rebuildDraft, returnDraft,
 } from '../services/fundReportDrafts';
@@ -50,10 +52,10 @@ async function admin(c: any) {
   return user;
 }
 
-/** A support session (a token carrying `impersonated_by`) cannot prepare or issue. */
+/** A support session (a token carrying `impersonated_by`) cannot prepare; the issue act refuses it too. */
 async function refuseSupportSession(c: any) {
-  if ((await selectJwt(c))?.payload?.impersonated_by) {
-    throw new DraftRefusal(403, 'support_session', 'A support session cannot prepare or issue a report.');
+  if (await isSupportSession(c)) {
+    throw new DraftRefusal(403, SUPPORT_SESSION_REFUSED_CODE, 'A support session cannot prepare or issue a report.');
   }
 }
 
@@ -149,11 +151,11 @@ r.post('/drafts/:uid/correct', async (c) => {
 
 r.post('/drafts/:uid/issue', async (c) => {
   const user = await admin(c);
-  // The elevation first: an Admin without it is never asked for a code it cannot use.
-  if (!isSuperAdmin(user as any)) return c.json({ code: 'super_admin_required', detail: 'Super admin required' }, 403);
-  await refuseSupportSession(c);
-  const issuer = await requireSuperAdminWriteBar(c);
-  return c.json(await issueDraft(c.env, c.req.param('uid'), Number(issuer.id), await body(c)));
+  // D714's gate: the support session, then the elevation before any code demand, then the write bar.
+  await assertAdminAct(c, user, 'fund_report.issue');
+  const issued = await issueDraft(c.env, c.req.param('uid'), Number(user.id), await body(c));
+  await auditFundAct(c.env, user, 'fund_report.issue', { fund_id: issued.fund_id, draft_uid: c.req.param('uid') });
+  return c.json(issued);
 });
 
 export default r;

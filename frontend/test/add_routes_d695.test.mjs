@@ -48,7 +48,7 @@ test('every Add and Edit on main renders in the dialog, named, with its eyebrow 
     assert.doesNotMatch(plain(html), /· required/, `${label}: no required marker`);
   }
   const market = renderToStaticMarkup(h(MemoryRouter, null, h(FormLightbox, { form: FORMS.grow['market-expansion'][0], cycle: 'grow', slug: 'market-expansion', onSubmit() {}, onClose() {} })));
-  assert.ok(plain(market).includes('Grow · Market expansion Add a market'));
+  assert.ok(plain(market).includes('Grow · Market expansion Add market'), 'the canvas title (CO:329, D695 #1657)');
   assert.match(market, /data-testid="cycle-form-save"[^>]*>Add market</);
   const readiness = renderToStaticMarkup(h(MemoryRouter, null, h(FormLightbox, { form: FORMS.raise['fundraising-readiness'][0], cycle: 'raise', slug: 'fundraising-readiness', onSubmit() {}, onClose() {} })));
   assert.doesNotMatch(readiness, /<input|<textarea/, 'Score readiness has no fields');
@@ -257,7 +257,7 @@ test('Edit opens with the row\'s values over the same URL (state.editing), saves
     ['        onSaved={saved}\n        onClose={closeEdit} />', '        onClose={closeEdit} />'],
   ]);
   // #1658's record page passes `{ id, edit: { id, uid } }`; every Edit resolves it.
-  const ids = { 'company-creation': 'step-7', 'prototype-mvp': '7', 'solution-design': '7', 'operating-systems': 'crm' };
+  const ids = { 'company-creation': 'step-7', 'prototype-mvp': '7', 'solution-design': '7', 'operating-systems': 'crm', 'revenue-and-traction': 'mrr' };
   for (const [cycle, bySlug] of Object.entries(EDITS)) {
     for (const [slug, form] of Object.entries(bySlug)) {
       const record = { id: ids[slug] ?? `row-${slug}`, edit: { id: 7, uid: 'u-7' } };

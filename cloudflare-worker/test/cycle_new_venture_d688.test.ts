@@ -8,6 +8,7 @@ import { SignJWT } from 'jose';
 import build from '../src/routes/cycle_build.ts';
 import cycleRaise from '../src/routes/cycle_raise.ts';
 import cycleGrow from '../src/routes/cycle_grow.ts';
+import { formFor } from '../../frontend/src/pages/cycles/forms.js';
 import { ensureProjectMetricsSchema } from '../src/routes/progress.ts';
 import { tableFromBaseline } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
@@ -237,11 +238,16 @@ test('D688: new Grow cards pin the seven lines and actions; figures stay null', 
     ['empty', 'No feedback yet. Themes by volume appear here.', 'Log feedback', '/grow/product-improvement?project=7&add=1'],
     ['empty', 'No channels yet. Cost per customer by channel appears here.', 'Add channel', '/grow/distribution?project=7&add=1'],
     ['empty', 'No KPIs yet. MRR and retention appear here.', 'Enter a KPI', '/grow/focus?project_id=7'],
-    ['empty', 'No open roles yet. Headcount against the plan appears here.', 'Open a role', '/jobs/new'],
+    // D695 (#1657): Open a role is Team expansion's form, so the card opens its address.
+    ['empty', 'No open roles yet. Headcount against the plan appears here.', 'Open a role', '/grow/team-expansion/new?project=7'],
     ['empty', 'No partners yet. Partners by stage appear here.', 'Add partner', '/grow/partner-network?project=7&add=1'],
     ['empty', 'No markets yet. Readiness by market appears here.', 'Add market', '/grow/market-expansion?project=7&add=1'],
     ['empty', 'No obligations yet. The compliance calendar appears here.', 'Add obligation', '/grow/durable-company-building?project=7&add=1'],
   ]);
+  // D695 test 13 (#1657): a card that opens an Add opens a module that has a form.
+  const adds = body.cards.filter((x: any) => /\/new\?|[?&]add=1/.test(String(x.next?.href ?? '')));
+  assert.equal(adds.length, 6, 'every empty card but Revenue and traction opens an Add');
+  for (const c of adds) assert.notEqual(formFor('grow', c.slug), null, `${c.slug}: ${c.next.href}`);
   assert.ok(body.figures.every((f: any) => f.value === null && f.state !== 'ok'));
   db.close();
 });

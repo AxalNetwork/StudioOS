@@ -103,6 +103,7 @@ import monitoring from './routes/monitoring';
 import infra from './routes/infra';
 import funds from './routes/funds';
 import fundLedger from './routes/fund_ledger';
+import fundAdmin from './routes/fund_admin';
 import fundReporting from './routes/fund_reporting';
 import fundPerformance from './routes/fund_performance';
 import liquidity from './routes/liquidity';
@@ -671,6 +672,15 @@ const COOL_OFF_ROUTES = [
   '/api/admin/branches/:code/accounts/:userId/move',
   '/api/admin/branches/:code/admins/:userId/unbind',
   '/api/admin/users/:userId/demote-admin',
+  // D714 — the three fund routes that are wholly Super Admin acts: issuing a
+  // capital call, executing a distribution, and assigning a fund's ledger
+  // administrator. The acts that share a route with reads (a first call
+  // through POST /api/funds/:id/lps, a change of GP of record or carry) take
+  // the same 423 inside `services/fundAdminAccess.ts` instead, so the reads
+  // on those routes stay open.
+  '/api/funds/:id/capital-call',
+  '/api/funds/distributions/execute',
+  '/api/fund-ledger/:id/administrator',
 ];
 for (const p of COOL_OFF_ROUTES) app.use(p, recoveryCoolOff);
 // Task #6 — Stripe billing surface (tier checkout/portal/webhook + MI Pro).
@@ -1020,6 +1030,8 @@ app.route('/api/contacts', contacts);
 app.route('/api/round-calls', roundCalls);
 app.route('/api/funds', funds);
 app.route('/api/fund-ledger', fundLedger);
+// D714 — the fund administration console: which fund acts this admin may take.
+app.route('/api/fund-admin', fundAdmin);
 app.route('/api/fund-reporting', fundReporting);
 app.route('/api/fund-performance', fundPerformance);
 app.route('/api/liquidity', liquidity);

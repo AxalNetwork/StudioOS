@@ -19,11 +19,12 @@ import reporting, { draftCsv } from '../src/routes/fund_reporting.ts';
 import funds from '../src/routes/funds.ts';
 import { runReportingSchedule, sha256Hex } from '../src/services/fundReportDrafts.ts';
 import { allocate } from '../src/services/fundReportBuild.ts';
+import { withThrownResponses } from '../src/util/thrownResponse.ts';
 
 const baseline = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const mig = (f: string) => readFileSync(new URL(`../sql/migrations/${f}`, import.meta.url), 'utf8');
 const TABLES = ['users', 'super_admins', 'user_sessions', 'activity_logs', 'vc_funds', 'limited_partners', 'fund_report_periods',
-  'capital_calls', 'fund_distributions', 'portfolio_positions', 'user_company_links'];
+  'capital_calls', 'fund_distributions', 'portfolio_positions', 'user_company_links', 'admin_audit_log'];
 const SCHEMA = TABLES.map((t) => stripForeignKeys(tableFromBaseline(baseline, t))).join('\n')
   + '\nCREATE UNIQUE INDEX idx_fund_report_periods_fund_period ON fund_report_periods(fund_id, period);\n'
   + ['312_fund_call_ledger.sql', '417_fund_position_valuations.sql', '418_fund_ledger.sql', '476_fund_report_drafts.sql'].map(mig).join('\n');
@@ -69,10 +70,11 @@ function fixture() {
   async function call(who: number, method: string, path: string, body?: unknown, opts: { jti?: string; envExtra?: Record<string, unknown>; impersonatedBy?: number } = {}) {
     const claims: Record<string, unknown> = { user_id: who, ...(opts.jti ? { jti: opts.jti } : {}), ...(opts.impersonatedBy ? { impersonated_by: opts.impersonatedBy } : {}) };
     const token = await new SignJWT(claims).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(SECRET));
-    const res = await app.request(`/api${path}`, {
+    // index.ts lets a thrown Response be the response (util/thrownResponse.ts); D714's gate refuses that way.
+    const res = await withThrownResponses(() => app.request(`/api${path}`, {
       method, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    }, { ...env, ...(opts.envExtra || {}) });
+    }, { ...env, ...(opts.envExtra || {}) }));
     const text = await res.text();
     let json: any = null; try { json = JSON.parse(text); } catch { json = text; }
     return { status: res.status, body: json, headers: res.headers };
@@ -188,6 +190,7 @@ test('a plain Admin issuing gets super_admin_required, never a TOTP or step-up d
     assert.deepEqual([r.status, r.body.code, r.body.detail], [403, 'super_admin_required', 'Super admin required']);
   }
   assert.deepEqual([f.all('SELECT status FROM fund_report_drafts'), f.one('SELECT COUNT(*) AS n FROM fund_report_draft_events').n, f.one('SELECT status FROM fund_report_periods').status], before);
+  assert.equal(f.one("SELECT COUNT(*) AS n FROM admin_audit_log WHERE action = 'fund_admin.fund_report.issue'").n, 0);
 });
 
 test('a Super Admin without a fresh step-up gets step_up_required; the preparer cannot issue; a support session neither prepares nor issues', async () => {
@@ -196,17 +199,16 @@ test('a Super Admin without a fresh step-up gets step_up_required; the preparer 
   writeLetter(f);
   const rep = reportOf(f);
   const support = await f.call(SUPER, 'POST', `/fund-reporting/drafts/${rep.uid}/prepare`, { figures_sha256: rep.figures_sha256 }, { jti: 'totp-super', impersonatedBy: ADMIN });
-  assert.deepEqual([support.status, support.body.error], [403, 'support_session']);
+  assert.deepEqual([support.status, support.body.error], [403, 'support_session_refused']);
   assert.equal((await f.call(SUPER, 'POST', `/fund-reporting/drafts/${rep.uid}/prepare`, { figures_sha256: rep.figures_sha256 }, { jti: 'totp-super' })).status, 200);
   const stale = await f.call(SUPER2, 'POST', `/fund-reporting/drafts/${rep.uid}/issue`, { figures_sha256: rep.figures_sha256 });
-  assert.equal(stale.status, 403);
-  assert.equal(stale.body.error, 'fund_reporting_refused', 'a session with no TOTP is refused, with a fixed sentence');
+  assert.deepEqual([stale.status, stale.body.detail], [403, 'TOTP required'], 'a session with no TOTP is refused before the step-up');
   const staleSuper = await f.call(SUPER, 'POST', `/fund-reporting/drafts/${rep.uid}/issue`, { figures_sha256: rep.figures_sha256 }, { jti: 'totp-stale' });
   assert.deepEqual([staleSuper.status, staleSuper.body.code], [403, 'step_up_required']);
   const self = await f.call(SUPER, 'POST', `/fund-reporting/drafts/${rep.uid}/issue`, { figures_sha256: rep.figures_sha256 }, { jti: 'totp-super' });
   assert.deepEqual([self.status, self.body.error], [409, 'same_preparer']);
   const supported = await f.call(SUPER2, 'POST', `/fund-reporting/drafts/${rep.uid}/issue`, { figures_sha256: rep.figures_sha256 }, { jti: 'totp-super2', impersonatedBy: ADMIN });
-  assert.deepEqual([supported.status, supported.body.error], [403, 'support_session']);
+  assert.deepEqual([supported.status, supported.body.code], [403, 'support_session_refused']);
   assert.equal(f.one("SELECT COUNT(*) AS n FROM fund_report_drafts WHERE status = 'issued'").n, 0);
 });
 
@@ -223,6 +225,9 @@ test('issuing a pack issues the report, every statement and the period together,
   assert.equal(period.snapshot_json, rep.figures_json);
   assert.equal(f.one("SELECT COUNT(*) AS n FROM fund_report_draft_events WHERE action = 'issued'").n, 3);
   assert.equal(f.one("SELECT COUNT(*) AS n FROM activity_logs WHERE action = 'fund_report_period_issued'").n, 1);
+  const audit = f.all("SELECT admin_user_id, filters_json FROM admin_audit_log WHERE action = 'fund_admin.fund_report.issue'");
+  assert.equal(audit.length, 1, 'the D714 act row is written once, after the issue');
+  assert.deepEqual([audit[0].admin_user_id, JSON.parse(audit[0].filters_json).fund_id], [SUPER2, 10]);
 });
 
 test('with one statement not prepared, or no GP letter, an issue changes no row', async () => {

@@ -384,7 +384,7 @@ export async function issueDraft(env: Env, uid: string, actor: number, body: { f
       ).bind(actor, note, count, uid, actor, at),
     ]);
     if (Number(results[0].meta?.changes ?? 0) !== 1) throw await whyNotIssued(env, uid, body.figures_sha256);
-    return { issued: [uid], issued_at: at };
+    return { issued: [uid], issued_at: at, fund_id: row.fund_id ?? null };
   }
   const results = await env.DB.batch([
     env.DB.prepare(
@@ -422,7 +422,7 @@ export async function issueDraft(env: Env, uid: string, actor: number, body: { f
   const members = await env.DB.prepare(
     "SELECT uid FROM fund_report_drafts WHERE fund_id = ? AND period_label = ? AND status = 'issued' AND issued_at = ? AND issued_by = ?",
   ).bind(row.fund_id, row.period_label, at, actor).all<{ uid: string }>();
-  return { issued: (members.results || []).map((m) => m.uid), issued_at: at };
+  return { issued: (members.results || []).map((m) => m.uid), issued_at: at, fund_id: row.fund_id ?? null };
 }
 
 /** The first precondition an issue failed, read after the batch changed nothing. */

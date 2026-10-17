@@ -3,11 +3,10 @@
  * (#1700) — the writes behind each Add and Edit form (migration 463's stores).
  *
  * Each writer validates its values against a fixed list and binds every one
- * of them. None decides who may write: `routes/cycle_raise.ts` checks
- * `canWrite` on the project first. Every id a write takes, in its path or its
- * body, is checked here against its own table and this venture (404
- * otherwise) until #1699 adds Raise's `ownedRow` entries, which replace these
- * checks in #1700's closing PR.
+ * of them. None decides who may write: `routes/cycle_raise.ts` and the
+ * record route check `canWrite` on the project first. Every id a write takes,
+ * in its path or its body, is checked here with `ownedRow` (D690), the same
+ * check the record route makes, and answers 404 when it is not this venture's.
  *
  * LOGGING (D691 decision 12). Every write logs one row per record it writes
  * through `logCycleWrite` (D690): `entity_type` is `raise.<module slug>`,
@@ -22,15 +21,16 @@ import type { Env, User } from '../types';
 import { WriterError, isoDateOrNull } from './validateWriters';
 import { ensureSpinoutDeckOverridesSchema } from './decks/spinoutDeckOverrides';
 import { logCycleWrite } from './cycleActivity';
+import { ownedRow } from './records/owned';
 import { addHolder, updateHolder, HolderError, type AddHolderArgs } from './capTableWrites';
 import { SERVED_FUNDS } from './researchFundDirectory';
 import { normalizeUseOfFunds } from '../util/useOfFunds';
 import { ensureTier } from '../middleware/requireTier';
-import { createShareLink, SHARE_NEVER_EXPIRES } from '../routes/decks';
+import { createShareLink, revokeShareLink, SHARE_NEVER_EXPIRES } from '../routes/decks';
 import { createProspect, RAISE_STAGES } from '../routes/contacts';
 import {
   READINESS_ITEMS, READINESS_KEYS, EVIDENCE, INVESTOR_TYPES, INVESTOR_TYPE_LABEL, VERSION_MARKER_KEY, CHECKLIST_KEYS, FUND_SECTIONS,
-  computeReadiness, checkInputs, consistencyCheck, type Mismatch,
+  changedSinceScored, computeReadiness, checkInputs, consistencyCheck, type Mismatch,
 } from './raiseCycle';
 
 export { WriterError };
@@ -78,16 +78,25 @@ export async function scoreReadinessItem(env: Env, a: {
   return { ok: true };
 }
 
+/** Each item's newest score, by item key. */
+async function newestScores(env: Env, projectId: number) {
+  const res = await env.DB.prepare(
+    `SELECT i.item_key, s.score, s.missing, s.scored_at FROM readiness_scores s JOIN readiness_items i ON i.id = s.item_id
+      WHERE s.project_id = ? ORDER BY s.scored_at, s.id`,
+  ).bind(projectId).all<{ item_key: string; score: number; missing: string | null; scored_at: string }>();
+  const out = new Map<string, { score: number; missing: string | null; scored_at: string }>();
+  for (const r of res.results || []) out.set(r.item_key, r);
+  return out;
+}
+
 /** The six items a check scores; `team` is scored by a person. */
 export const COMPUTED_KEYS: readonly string[] = READINESS_KEYS.filter((k) => k !== 'team');
 
 /**
  * Run the computed readiness checks and store what each found (decision 8).
  * `items` is a subset of the six computed keys; with none, all six. `since`
- * is `'all'` (the default). `'last'`, which skips an item whose stores have
- * not changed since its newest score, reads the inputs #1699 exposes and
- * comes with #1700's closing PR; until then it is refused rather than
- * quietly treated as `'all'`.
+ * is `'all'` (the default) or `'last'`, which skips an item whose stores have
+ * not changed since its newest score (`changedSinceScored`).
  */
 export async function rescoreReadiness(env: Env, a: { projectId: number; userId: number; items?: unknown; since?: unknown }): Promise<{ scored: number; items: string[] }> {
   let wanted: string[] = [...COMPUTED_KEYS];
@@ -99,9 +108,14 @@ export async function rescoreReadiness(env: Env, a: { projectId: number; userId:
   }
   const since = a.since === undefined || a.since === null ? 'all' : a.since;
   if (since !== 'all' && since !== 'last') throw new WriterError(400, "since is 'last' or 'all'");
-  if (since === 'last') throw new WriterError(501, 'Re-scoring only what changed since the last score is not built yet; send since: all');
   const ids = await ensureReadinessItems(env, a.projectId);
-  const computed = (await computeReadiness(env, a.projectId)).filter((c) => wanted.includes(c.key));
+  let computed = (await computeReadiness(env, a.projectId)).filter((c) => wanted.includes(c.key));
+  if (since === 'last') {
+    const newest = await newestScores(env, a.projectId);
+    const changed: typeof computed = [];
+    for (const c of computed) if (await changedSinceScored(env, a.projectId, c, newest.get(c.key))) changed.push(c);
+    computed = changed;
+  }
   for (const c of computed) {
     await env.DB.prepare(
       `INSERT INTO readiness_scores (item_id, project_id, score, evidence, missing, source, scored_by) VALUES (?, ?, ?, ?, ?, 'computed', ?)`,
@@ -128,11 +142,8 @@ type NarrativeFields = {
 /** A version number of this venture's, or a 404. */
 async function ownVersion(env: Env, projectId: number, v: unknown, what: string): Promise<number> {
   const n = posInt(typeof v === 'string' && /^[1-9][0-9]{0,8}$/.test(v) ? Number(v) : v);
-  const row = n == null ? null : await env.DB.prepare(
-    'SELECT version FROM spinout_deck_overrides WHERE project_id = ? AND version = ? LIMIT 1',
-  ).bind(projectId, n).first<{ version: number }>();
-  if (!row) throw new WriterError(404, `${what} not found`);
-  return Number(row.version);
+  if (n == null || !await ownedRow(env, 'spinout_deck_overrides', n, projectId)) throw new WriterError(404, `${what} not found`);
+  return n;
 }
 
 function checkSources(v: unknown): string | null | undefined {
@@ -220,7 +231,7 @@ export async function saveNarrativeVersion(env: Env, a: { projectId: number; use
   const mismatches = await runCheck(env, a.projectId, version);
   const label = INVESTOR_TYPE_LABEL[investorType] ?? investorType;
   await logRaise(env, a.userId, a.projectId, 'investor-narrative', version, 'narrative_version_created',
-    `Version ${version} saved for ${label}; ${mismatches.length} ${mismatches.length === 1 ? 'mismatch' : 'mismatches'}`);
+    `Version ${version} saved for ${label}${basedOn != null ? `, based on version ${basedOn}` : ''}; ${mismatches.length} ${mismatches.length === 1 ? 'mismatch' : 'mismatches'}`);
   return { version, mismatches };
 }
 
@@ -306,13 +317,11 @@ function flag(v: unknown, name: string): boolean | undefined {
   return v;
 }
 
-/** A prospect of this venture's, or a 404 (until `ownedRow` lands, S1's ruling). */
+/** A prospect of this venture's, or a 404. */
 async function ownProspect(env: Env, projectId: number, v: unknown): Promise<number> {
   const id = posInt(v);
-  const row = id == null ? null : await env.DB.prepare('SELECT id FROM raise_prospects WHERE id = ? AND project_id = ?')
-    .bind(id, projectId).first<{ id: number }>();
-  if (!row) throw new WriterError(404, 'Prospect not found');
-  return Number(row.id);
+  if (id == null || !await ownedRow(env, 'raise_prospects', id, projectId)) throw new WriterError(404, 'Prospect not found');
+  return id;
 }
 
 /** The investor a link is for: a prospect of this venture, or a name typed in. Never both. */
@@ -625,6 +634,105 @@ export async function updateProspect(env: Env, a: { projectId: number; userId: n
     .bind(...params, id, a.projectId).run();
   await logRaise(env, a.userId, a.projectId, 'capital-relationships', id, 'prospect_updated', `Investor edited: ${changed.join(', ')}`);
   return { ok: true as const, id };
+}
+
+// ---------------------------------------------------------------------------
+// Record actions (step 6), each one writer, each id checked and one row logged.
+// The closing PR declares them on `services/records/raise.ts`'s records.
+// ---------------------------------------------------------------------------
+
+/**
+ * Duplicate a narrative version: the next version, started from this one
+ * (`start_from: 'version'`) for the same investor type, through
+ * `saveNarrativeVersion`, which logs it on the new version's record.
+ */
+export async function duplicateNarrativeVersion(env: Env, a: { projectId: number; userId: number; version: unknown }) {
+  await ensureSpinoutDeckOverridesSchema(env);
+  const version = await ownVersion(env, a.projectId, a.version, 'Version');
+  const marker = await env.DB.prepare(
+    'SELECT investor_type FROM spinout_deck_overrides WHERE project_id = ? AND version = ? AND investor_type IS NOT NULL LIMIT 1',
+  ).bind(a.projectId, version).first<{ investor_type: string }>();
+  if (!marker) throw new WriterError(409, 'This version records no investor type, so it cannot be duplicated');
+  return saveNarrativeVersion(env, { projectId: a.projectId, userId: a.userId, startFrom: 'version', basedOnVersion: version, investorType: marker.investor_type });
+}
+
+/**
+ * Revoke a link: the same withdrawal as `DELETE /api/decks/:id/shares/:shareId`
+ * (`revokeShareLink()`), on a link of this venture's deck. Revoking expires it
+ * and keeps every view. Not a paid capability: a lapsed plan may still
+ * withdraw a link it issued.
+ */
+export async function revokeDeckLink(env: Env, a: { projectId: number; userId: number; linkId: unknown }) {
+  const id = posInt(typeof a.linkId === 'string' && /^[1-9][0-9]{0,9}$/.test(a.linkId) ? Number(a.linkId) : a.linkId);
+  const row = id == null ? null : await env.DB.prepare(
+    'SELECT t.id, t.deck_id FROM pitch_deck_share_tokens t JOIN pitch_decks d ON d.id = t.deck_id WHERE t.id = ? AND d.project_id = ?',
+  ).bind(id, a.projectId).first<{ id: number; deck_id: number }>();
+  if (!row) throw new WriterError(404, 'Link not found');
+  const out = await revokeShareLink(env, Number(row.deck_id), Number(row.id));
+  if (!out) throw new WriterError(404, 'Link not found');
+  await logRaise(env, a.userId, a.projectId, 'pitch-deck', row.id, 'deck_link_revoked', out.newly_revoked ? 'Link revoked' : 'Link already revoked');
+  return { ok: true as const, ...out };
+}
+
+const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+/** Add a hire to a use-of-funds section: `{ role, start_month (YYYY-MM), annual_cents, currency }`. */
+export async function addSectionHire(env: Env, a: { projectId: number; userId: number; sectionKey: unknown; body: Record<string, unknown> }) {
+  const section = FUND_SECTIONS.find((f) => f.key === a.sectionKey);
+  if (!section) throw new WriterError(404, 'Section not found');
+  const b = a.body;
+  const role = trimOrNull(b.role, 200);
+  if (!role) throw new WriterError(400, 'Name the role');
+  const month = b.start_month == null || b.start_month === '' ? null : String(b.start_month).trim();
+  if (month != null && !MONTH.test(month)) throw new WriterError(400, 'start_month is YYYY-MM');
+  const annual = b.annual_cents == null ? null : posInt(b.annual_cents);
+  if (b.annual_cents != null && annual == null) throw new WriterError(400, 'annual_cents is a positive whole number of cents');
+  const currency = b.currency == null || b.currency === '' ? 'usd' : String(b.currency).trim().toLowerCase();
+  if (!/^[a-z]{3}$/.test(currency)) throw new WriterError(400, 'currency is a three-letter code');
+  const ins = await env.DB.prepare(
+    `INSERT INTO use_of_funds_hires (project_id, category_key, role, start_month, annual_cents, currency, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(a.projectId, section.key, role, month, annual, currency, a.userId).run();
+  await logRaise(env, a.userId, a.projectId, 'use-of-funds', section.key, 'hire_added', `Hire added: ${role}${month ? ` from ${month}` : ''}`);
+  return { ok: true as const, id: Number(ins?.meta?.last_row_id) || null };
+}
+
+export const EVENT_KINDS = ['meeting', 'intro', 'email', 'call', 'note'] as const;
+
+/**
+ * Log a step on a prospect's timeline: `{ kind, note, on }`. A date on or
+ * before today is when it happened (`done_at`); a later one is when it is
+ * due (`due_on`), and the timeline reads it as open.
+ */
+export async function logProspectEvent(env: Env, a: { projectId: number; userId: number; prospectId: unknown; body: Record<string, unknown> }) {
+  const id = await ownProspect(env, a.projectId, a.prospectId);
+  const b = a.body;
+  const kind = String(b.kind ?? '');
+  if (!(EVENT_KINDS as readonly string[]).includes(kind)) throw new WriterError(400, 'kind is meeting, intro, email, call or note');
+  const on = b.on == null || b.on === '' ? new Date().toISOString().slice(0, 10) : isoDateOrNull(b.on);
+  if (on == null) throw new WriterError(400, 'on is YYYY-MM-DD');
+  const today = new Date().toISOString().slice(0, 10);
+  await env.DB.prepare(
+    `INSERT INTO raise_prospect_events (prospect_id, kind, note, due_on, done_at, created_by) VALUES (?, ?, ?, ?, ?, ?)`,
+  ).bind(id, kind, trimOrNull(b.note, 2000), on > today ? on : null, on > today ? null : on, a.userId).run();
+  await logRaise(env, a.userId, a.projectId, 'capital-relationships', id, 'prospect_event_logged', `${kind[0].toUpperCase()}${kind.slice(1)} logged for ${on}`);
+  return { ok: true as const };
+}
+
+/** Add feedback a prospect gave: `{ objection, answer? }`. */
+export async function addProspectFeedback(env: Env, a: { projectId: number; userId: number; prospectId: unknown; body: Record<string, unknown> }) {
+  const id = await ownProspect(env, a.projectId, a.prospectId);
+  const objection = trimOrNull(a.body.objection, 1000);
+  if (!objection) throw new WriterError(400, 'Write the objection');
+  await env.DB.prepare(
+    `INSERT INTO raise_prospect_feedback (prospect_id, objection, answer, created_by) VALUES (?, ?, ?, ?)`,
+  ).bind(id, objection, trimOrNull(a.body.answer, 2000), a.userId).run();
+  await logRaise(env, a.userId, a.projectId, 'capital-relationships', id, 'prospect_feedback_added', 'Feedback added');
+  return { ok: true as const };
+}
+
+/** Mark passed: the stage `passed`, through Edit investor's own path. */
+export function markProspectPassed(env: Env, a: { projectId: number; userId: number; prospectId: number }) {
+  return updateProspect(env, { ...a, body: { stage: 'passed' } });
 }
 
 // ---------------------------------------------------------------------------
