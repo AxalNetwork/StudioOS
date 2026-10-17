@@ -29,7 +29,14 @@ What this means:
 - **The deterministic quality coverage survives that.** `codeql.yml` already runs the `security-and-quality` suite on every pull request, independently of Code Quality.
 - **Only a GitHub administrator can change these settings.** A workflow cannot change billing or Code Quality settings.
 
-**Claude Max subscriptions.** The two Max 20x subscriptions cover interactive Claude Code. They are **not** API credits, and nothing here may use a subscription login: the organization has subscription access to Claude Code disabled (`claude-code.yml`'s header says so). This review bills only to the API key's Console organization. To check what credit that organization has, see §6.
+**Claude Max subscriptions.** The two Max 20x subscriptions cover interactive Claude Code. Nothing here may use a subscription login: the organization has subscription access to Claude Code disabled (`claude-code.yml`'s header says so). This review bills only to the Console organization that its federation rule or API key belongs to. To check what credit that organization has, see §6.
+
+**Each Max plan also comes with monthly API credit** (corrected 2026-10-17; this paragraph used to say a Max plan includes none). Anthropic's [API credits for Max and Team plans](https://platform.claude.com/docs/en/about-claude/api-credits-for-subscribers) gives each subscription **$200 a month on Max 20x** ($100 on Max 5x). The credit reaches the review only when the owner claims it into the right organization:
+
+- **How it is claimed.** The subscriber opens claude.ai → *Settings → Billing → API credits* and links a Console organization. They need the Owner, Admin or Billing role in that organization. Link the organization the review bills to: one plan feeds one organization, and only Anthropic support can change the link afterwards.
+- **What it pays for.** It covers the Claude API, which is what this review calls (the Messages API through the pinned SDK). It does **not** cover Claude Code, so `claude-code.yml`, which runs Claude Code through `claude-code-action`, still needs purchased credit.
+- **How long it lasts.** It is spent before any purchased credit, expires at the end of each billing cycle, and does not roll over. An organization receives credit from one plan only, so the second subscription can feed a second organization but cannot add to the first.
+- **What the error means.** "Your credit balance is too low to access the Anthropic API" means the billed organization has no credit left. Either the plan's credit was never claimed, or it was linked to a different organization.
 
 ## 2. Architecture
 
@@ -149,7 +156,7 @@ Volume drives the total. Every push to an open PR starts a review of the new hea
 
 ## 6. Anthropic credits and spend
 
-- **Credit balance:** Console → *Settings → Billing*. This shows prepaid API credits and any auto-reload setting; leave auto-reload off unless the owner decides otherwise. Max subscriptions do not appear here as API credit.
+- **Credit balance:** Console → *Settings → Billing*. This shows prepaid API credits and any auto-reload setting; leave auto-reload off unless the owner decides otherwise. A Max plan's claimed monthly credit (§1) shows under *Promotional credits*, with its expiry date.
 - **Usage and cost:** Console → *Usage* and *Cost*, filterable by workspace and API key. The Admin API's usage and cost reports give the same figures programmatically, with an Admin key.
 - **Hard cap:** a workspace spend limit in the Console on the review workspace, the one holding the key or named by the federation rule. The Console stops requests past it, whatever this repository does.
 - **Per run:** each review's summary shows its input, output and cache tokens, the model, the duration, the request id and the estimated cost. The `claude-review_v1_<month>_pr<N>_<key>_<status>_<micro-USD>` artifact keeps the same figures for 90 days in `record.json`. After a successful review it also holds `review.json`, the validated findings: the machine-readable copy for whoever fixes them (§8).
