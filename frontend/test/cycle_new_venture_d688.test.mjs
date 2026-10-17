@@ -9,7 +9,7 @@ import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-rou
 import CycleOverview from '../src/pages/cycles/CycleOverview.jsx';
 import { RecordsTable } from '../src/pages/cycles/CycleModulePage.jsx';
 import FormLightbox from '../src/pages/cycles/FormLightbox.jsx';
-import ValidatePhoneFocus from '../src/pages/cycles/ValidatePhoneFocus.jsx';
+import PhoneCycleRoot from '../src/pages/cycles/PhoneCycleRoot.jsx';
 import { formFor, formsFor, validate } from '../src/pages/cycles/forms.js';
 import { makeCycleWrites } from '../src/lib/api/cycleWrites.js';
 import CycleRoute, { useProject } from '../src/pages/cycles/CycleRoute.jsx';
@@ -46,12 +46,12 @@ test('D688: the six Build cards render empty links and four figures say Not reco
 });
 
 test('D688: Build phone focus has the Add feature link and no Validate meter or index', () => {
-  const out = html(h(ValidatePhoneFocus, { cycle: 'build', raw: board, search: '?project_id=7' }));
+  const out = html(h(PhoneCycleRoot, { cycle: 'build', raw: board, search: '?project_id=7' }));
   assert.match(out, /Add the first feature\./);
   assert.match(out, /Add feature/);
   assert.match(out, /href="\/build\/solution-design\?project=7&amp;add=1"/);
   assert.doesNotMatch(out, /phone-meter|phone-target|Everything else in Validate|Then:/);
-  const absent = html(h(ValidatePhoneFocus, { cycle: 'build', raw: { ...board, focus: null, cards: [] } }));
+  const absent = html(h(PhoneCycleRoot, { cycle: 'build', raw: { ...board, focus: null, cards: [] } }));
   assert.doesNotMatch(absent, /data-testid="phone-focus"/);
 });
 

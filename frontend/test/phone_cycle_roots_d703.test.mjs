@@ -1,8 +1,8 @@
 /**
- * D703 (#1665), PR 1a — each cycle's phone root, One Next Thing: tests 1-5's
- * cases that render `PhoneCycleRoot` directly, and its part of test 14. The
- * root is not mounted in `CycleRoute` until PR 1b, so the cases that read the
- * route (the desktop overview not drawn below 1024px) come with it.
+ * D703 (#1665), PR 1a and PR 1b — each cycle's phone root, One Next Thing:
+ * tests 1-5's cases that render `PhoneCycleRoot` directly (PR 1a), the cases
+ * of tests 1 and 4 that mount `CycleRoute` below and at 1024px (PR 1b), and
+ * PR 1's part of test 14.
  *
  * Fixtures are in #1701's decision 1 shapes: `focus { rule, eyebrow, headline,
  * why, cta: { label, href } | null, then }`, `meter { key, label, count,
@@ -18,10 +18,12 @@ import { readFileSync } from 'node:fs';
 import React, { act } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createRoot } from 'react-dom/client';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { renderedText } from './_renderedText.mjs';
 import { installDocument } from './_contracts_dom.mjs';
 import PhoneCycleRoot from '../src/pages/cycles/PhoneCycleRoot.jsx';
+import CycleRoute from '../src/pages/cycles/CycleRoute.jsx';
+import { PHONE_QUERY } from '../src/workspaces/lens.jsx';
 import { phoneFocus, phoneIndex, phoneMeter, thenText } from '../src/pages/cycles/validatePhone.js';
 import WorkerRail from '../src/ui/WorkerRail.jsx';
 import { __resetEadwynPanelForTest, useEadwynPanel } from '../src/ui/eadwynPanel.js';
@@ -368,4 +370,92 @@ test('14: the root has no md: rule and reads no width of its own; every light cl
       assert.match(line, /dark:/, `${light} without a dark: pair: ${line.trim().slice(0, 80)}`);
     }
   }
+});
+
+// ── PR 1b: CycleRoute picks the page (tests 1 and 4 on the route) ─────────
+
+/** `CycleRoute` at `/<cycle>?project_id=3`, the overview read stubbed with `READS[cycle]`, at phone width or not. */
+async function mountRoute(cycle, { phone, shellRole = null, read = READS[cycle] } = {}) {
+  resetStores();
+  const restore = installDocument();
+  const unstub = stubReads();
+  const media = globalThis.matchMedia;
+  globalThis.matchMedia = (query) => ({ matches: phone && query === PHONE_QUERY, media: query, addEventListener() {}, removeEventListener() {} });
+  const fetchBefore = globalThis.fetch;
+  const reads = [];
+  globalThis.fetch = async (url) => {
+    const path = String(url);
+    reads.push(path);
+    const body = path.includes(`/cycles/${cycle}/overview`) ? read : {};
+    return { ok: true, status: 200, headers: { get: () => 'application/json' }, json: async () => body, text: async () => JSON.stringify(body) };
+  };
+  const container = document.createElement('div'); document.body.appendChild(container);
+  const root = createRoot(container);
+  const page = h(MemoryRouter, { initialEntries: [`/${cycle}${Q}`] }, h(Routes, null, h(Route, { path: `/${cycle}`, element: h(CycleRoute, { cycle }) })));
+  await act(async () => { root.render(shellRole ? h(ViewModeContext.Provider, { value: { shellRole } }, page) : page); });
+  await act(async () => { for (let i = 0; i < 6; i += 1) await new Promise((r) => setTimeout(r, 0)); });
+  const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
+  const pr = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
+  const ids = () => walk(container).map((n) => pr(n)['data-testid']).filter(Boolean);
+  return {
+    reads, ids, all: (id) => ids().filter((x) => x === id),
+    async unmount() { await act(async () => root.unmount()); globalThis.fetch = fetchBefore; globalThis.matchMedia = media; unstub(); restore(); resetStores(); },
+  };
+}
+const ALSO_IN_ID = { validate: 'also-in-validate', build: 'also-in-build', raise: 'also-in-raise', grow: 'also-in-grow' };
+
+for (const cycle of Object.keys(READS)) {
+  test(`1 (route): below 1024px /${cycle} draws the ${NAMES[cycle]} root alone; at 1024px the overview and "Also in", and no root`, async () => {
+    const phone = await mountRoute(cycle, { phone: true });
+    try {
+      const ids = phone.ids();
+      assert.equal(phone.all('phone-root').length, 1, 'the root, once');
+      assert.ok(ids.includes('phone-focus-cta') && ids.includes('phone-index'), 'drawn from the overview read');
+      for (const desktop of ['cycle-overview', 'cycle-figures', 'cycle-cards', ALSO_IN_ID[cycle]]) {
+        assert.ok(!ids.includes(desktop), `${desktop} is not drawn below 1024px`);
+      }
+      assert.equal(phone.reads.filter((r) => r.includes(`/cycles/${cycle}/overview`)).length, 1, 'one overview read');
+    } finally { await phone.unmount(); }
+    const desk = await mountRoute(cycle, { phone: false });
+    try {
+      const ids = desk.ids();
+      assert.ok(ids.includes('cycle-overview'), 'the desktop overview');
+      assert.equal(ids.includes(ALSO_IN_ID[cycle]), ALSO[cycle].length > 0, '"Also in", where the map lists pages');
+      assert.ok(!ids.includes('phone-root') && !ids.includes('phone-focus'), 'no root at 1024px');
+    } finally { await desk.unmount(); }
+  });
+}
+
+test('4 (route): through CycleRoute a founder gets exactly one "Open Eadwyn for this page" button on the root; an admin shell gets none', async () => {
+  for (const cycle of ['validate', 'grow']) {
+    const founder = await mountRoute(cycle, { phone: true, shellRole: 'founder' });
+    try { assert.equal(founder.all('button-eadwyn-open').length, 1, `${cycle}: one`); } finally { await founder.unmount(); }
+    const admin = await mountRoute(cycle, { phone: true, shellRole: 'admin' });
+    try { assert.equal(admin.all('button-eadwyn-open').length, 0, `${cycle}: none`); } finally { await admin.unmount(); }
+  }
+  // A partner-shaped Validate read: the route draws the Worker's six rows, and adds no Verdict.
+  const partner = await mountRoute('validate', { phone: true, read: { ...READS.validate, index: READS.validate.index.filter((r) => r.key !== 'verdict') } });
+  try {
+    assert.equal(partner.ids().filter((x) => x.startsWith('phone-index-')).length, 6);
+    assert.ok(!partner.ids().includes('phone-index-verdict'));
+  } finally { await partner.unmount(); }
+});
+
+test('14 (PR 1): ValidatePhoneFocus is gone; the route\'s phone branch reads usePhoneWidth(); the overview header and pages/cycles read no width of their own', () => {
+  assert.throws(() => readFileSync('frontend/src/pages/cycles/ValidatePhoneFocus.jsx', 'utf8'), /ENOENT/);
+  const route = readFileSync('frontend/src/pages/cycles/CycleRoute.jsx', 'utf8');
+  assert.doesNotMatch(route, /ValidatePhoneFocus/);
+  assert.match(route, /const phone = usePhoneWidth\(\);/);
+  assert.match(route, /body = phone \? \(\n\s+<PhoneCycleRoot /, 'the root replaces the overview below 1024px');
+  const overview = readFileSync('frontend/src/pages/cycles/CycleOverview.jsx', 'utf8');
+  const header = overview.slice(overview.indexOf('export function CycleHeader'), overview.indexOf('export default function'));
+  assert.ok(header.length > 0);
+  assert.doesNotMatch(header, /\bmd:/, 'the header switches at lg, with the route');
+  assert.match(header, /hidden flex-wrap gap-1\.5 lg:flex/);
+  assert.match(header, /px-3\.5 lg:hidden/);
+  for (const f of ['CycleRoute.jsx', 'CycleOverview.jsx', 'PhoneCycleRoot.jsx', 'validatePhone.js']) {
+    assert.doesNotMatch(readFileSync(`frontend/src/pages/cycles/${f}`, 'utf8'), /matchMedia|innerWidth/, f);
+  }
+  // Validate's client-built rows are gone with the object they read.
+  assert.doesNotMatch(readFileSync('frontend/src/pages/cycles/validatePhone.js', 'utf8'), /validateRows|index\.booked|usdShort/);
 });
