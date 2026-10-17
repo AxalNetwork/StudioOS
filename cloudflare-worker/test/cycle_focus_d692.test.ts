@@ -92,6 +92,7 @@ function validateDb() {
   db.exec(sqlOf('255_hypothesis_verdict_history.sql'));
   db.exec(sqlOf('311_revenue_entries.sql').replace(/REFERENCES documents\(id\)/, ''));
   db.exec(sqlOf('440_validate_cycle_stores.sql'));
+  db.exec(sqlOf('464_verdict_decisions.sql'));
   db.exec(`CREATE TABLE IF NOT EXISTS interview_sessions (id INTEGER PRIMARY KEY, project_id INTEGER, interview_id INTEGER, status TEXT,
              stopped_at TEXT, updated_at TEXT, created_at TEXT DEFAULT (datetime('now')))`);
   db.exec(`CREATE TABLE IF NOT EXISTS validate_proposals (id INTEGER PRIMARY KEY, project_id INTEGER, session_id INTEGER, kind TEXT,
@@ -213,6 +214,10 @@ test('4: a founder\'s index is the canvas\'s seven rows with Verdict last; a par
   db.prepare("INSERT INTO validation_decisions (project_id, decision, reasoning, decided_at, decided_by, superseded_at) VALUES (?, 'stop', 'old', ?, ?, ?)").run(P, `${ago(10)} 09:00:00`, FOUNDER, `${ago(9)} 09:30:00`);
   db.prepare("INSERT INTO validation_decisions (project_id, decision, reasoning, decided_at, decided_by) VALUES (?, 'proceed', 'Carriers pay', ?, ?)").run(P, decided, FOUNDER);
   db.prepare("INSERT INTO validation_decisions (project_id, decision, reasoning, decided_at, decided_by) VALUES (?, 'pivot', 'theirs', ?, ?)").run(P_OTHER, `${ago(2)} 09:30:00`, OTHER);
+  // Newer than the current decision, but withheld, or for one hypothesis: never the venture's verdict.
+  const h = db.prepare("INSERT INTO hypotheses (project_id, code, claim) VALUES (?, 'H1', 'Carriers pay') RETURNING id").get(P) as any;
+  db.prepare("INSERT INTO validation_decisions (project_id, decision, decided_at, decided_by, state) VALUES (?, 'pivot', ?, ?, 'withheld')").run(P, `${ago(5)} 09:30:00`, FOUNDER);
+  db.prepare("INSERT INTO validation_decisions (project_id, hypothesis_id, decision, decided_at, decided_by) VALUES (?, ?, 'stop', ?, ?)").run(P, h.id, `${ago(4)} 09:30:00`, FOUNDER);
   const f = await vRead(db);
   assert.deepEqual(f.body.index.map((r: any) => r.key), [
     'problem-discovery', 'customer-research', 'ideal-customer-profile', 'market-intelligence', 'demand-signals', 'experiments', 'verdict',

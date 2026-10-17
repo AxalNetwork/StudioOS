@@ -28,6 +28,7 @@ import type { Card, Figure } from './cycleCards';
 import { loadPainGroupModel, normPhrase, resolvePhrase } from './painGroups';
 import { INTERVIEWS_TARGET_KEY } from './validateWriters';
 import { canReadDecision, type ProjectRef } from '../routes/_founder_validate_helpers';
+import { currentDecision } from './verdict';
 import {
   cardFocus, dayMonth, plural, sentence, usdShort, UNREADABLE,
   type Focus, type IndexRow, type Meter,
@@ -141,19 +142,6 @@ export async function indexCountsOf(env: Env, projectId: number) {
   return { interviews_total: Number(row?.total ?? 0), booked: Number(row?.booked ?? 0) };
 }
 
-/**
- * The venture's current decision, for the Verdict row. The file's only
- * decision query. D693 (#1702) replaces it with `services/verdict.ts`'s
- * `currentDecision(env, projectId, 'venture')` and keeps the gate.
- */
-async function decisionOf(env: Env, projectId: number) {
-  return env.DB.prepare(
-    `SELECT decision, decided_at FROM validation_decisions
-      WHERE project_id = ? AND superseded_at IS NULL
-      ORDER BY decided_at DESC, id DESC LIMIT 1`,
-  ).bind(projectId).first<{ decision: string; decided_at: string | null }>();
-}
-
 const DECISION_WORD: Record<string, string> = { proceed: 'Proceed', pivot: 'Pivot', stop: 'Stop' };
 
 /**
@@ -212,7 +200,8 @@ export async function indexOf(env: Env, project: ProjectRef, user: User, figures
     let value: string | null = null;
     let detail = 'Proceed, pivot or stop';
     try {
-      const d = await decisionOf(env, pid);
+      // The venture's current given decision, through D693's one reader.
+      const d = await currentDecision(env, pid, 'venture');
       if (d && DECISION_WORD[d.decision]) {
         const when = dayMonth(d.decided_at);
         detail = when ? `${DECISION_WORD[d.decision]} · ${when}` : DECISION_WORD[d.decision];
