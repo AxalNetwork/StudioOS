@@ -97,6 +97,11 @@ D663: `raiseCycle.ts` computes the Raise figures, seven cards and records, plus 
 `../routes/cycle_raise.ts`, including the computed readiness checks, the
 diligence checklist and the narrative consistency check (fixed patterns, no
 model). `raiseWriters.ts` has one writer per migration 442 record.
+`capTableWrites.ts` (D691, #1699) is the cap table's one save, `saveScenario()`,
+which `POST` and `PUT /api/captable/scenarios` call: the one-per-venture upsert,
+its unique-index recovery and D632's activity row, plus an `e-<n>` key on every
+founder, SAFE and round entry, matched by name and never reused, which the Raise
+list reads as the holder's id.
 `deckSlideDwell.ts` stores a share-link view's seconds per slide, bounded so
 they never add up to more than the view's read time.
 `peerBenchmark.ts` (#1524) is the peer-group benchmark for every founder:
