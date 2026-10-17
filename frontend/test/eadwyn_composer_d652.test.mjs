@@ -77,8 +77,9 @@ test('the connector list: switches follow the conversation, a connector needing 
 });
 
 test('/account/connectors is the Connectors section D651 built', () => {
-  const settings = codeOnly(read('frontend/src/pages/SettingsPage.jsx'));
-  assert.match(settings, /\n\s*connectors: 'connectors',/);
+  // D700 — the deep-link map moved, unchanged, to account/accountPhone.js.
+  const paths = codeOnly(read('frontend/src/pages/account/accountPhone.js'));
+  assert.match(paths, /\n\s*connectors: 'connectors',/);
 });
 
 test('the connector list says when it could not be read, and when there is nothing yet', () => {
@@ -174,7 +175,7 @@ test('the Worker AI rail carries no chat: the composer is not mounted, and the A
   const rail = codeOnly(read('frontend/src/ui/WorkerRail.jsx'));
   assert.doesNotMatch(rail, /EadwynComposer/, 'the rail imports or mounts the composer again');
   assert.doesNotMatch(rail, /Ask Eadwyn/);
-  const canvas = read('design/incoming/AIRail.dc.html');
+  const canvas = read('design/canvases/integrated/AIRail.dc.html');
   assert.doesNotMatch(canvas, /Ask Eadwyn|EadwynComposer/, 'the AIRail canvas now draws a chat; revisit this guard');
   const research = codeOnly(read('frontend/src/workspaces/ResearchWorkspace.jsx'));
   assert.doesNotMatch(research, /composer answers/, 'a rail note promises a composer the rail does not have');

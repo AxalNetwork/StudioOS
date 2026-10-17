@@ -2,7 +2,7 @@ import React, { createContext, useContext, useLayoutEffect } from 'react';
 import './workerRail.css';
 
 /**
- * D556 — THE ONE FRAME THE WORKER AI RAIL SITS IN.
+ * D556 — THE ONE FRAME THE EADWYN AI RAIL SITS IN.
  *
  * The owner, on the admin Approvals and Accounts pages: "The AIRail doesn't
  * appear properly, on the right … For reference check the Founder pages."
@@ -27,8 +27,10 @@ import './workerRail.css';
  *     has no scroll of its own: it flows with the page, so the page's one
  *     scrollbar reaches every card.
  *   · Below 1024px: the body alone. The rail column is `display: none`, which
- *     keeps `WorkerRail` mounted, so its floating button and bottom sheet
- *     (D405), portalled to <body>, keep working exactly as before.
+ *     keeps `WorkerRail` mounted, and the rail opens from <body>: a founder on
+ *     a founder page gets the Eadwyn panel (D698), from the page's own Eadwyn
+ *     button or, until the page has one, the floating button; every other
+ *     viewer keeps D405's floating button and bottom sheet.
  *   · Docked to the edge. Where the app's page container pads its content
  *     (`[data-app-main]` without `edge-to-edge-surface`), a frame that is a
  *     direct child of it cancels that padding on the right and the bottom,

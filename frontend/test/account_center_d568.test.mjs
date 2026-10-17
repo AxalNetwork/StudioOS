@@ -227,7 +227,7 @@ test('the plan line reads each role\'s own status route and portal', () => {
   assert.deepEqual(billingSourceFor('investor'), { status: 'investorBillingStatus', portal: 'investorPortal', pricing: '/pricing/investor' });
   assert.deepEqual(billingSourceFor('partner'), { status: 'planStatus', portal: 'tierPortal', pricing: '/pricing' });
   const f = planSummary('founder', { tier: 'growth', status: 'active', renews_at: '2026-11-01T12:00:00Z', trial_ends_at: null, has_customer: true, spinout_lab: null });
-  assert.equal(f.plan, 'Founder workspace'); assert.equal(f.tier, 'Growth'); assert.equal(f.paid, true); assert.equal(f.hasCustomer, true);
+  assert.equal(f.plan, 'Founder workspace'); assert.equal(f.tier, 'Validate + Build'); assert.equal(f.paid, true); assert.equal(f.hasCustomer, true);
   const i = planSummary('investor', { tier: 'free', raw_tier: 'professional', status: 'canceled', renews_at: null, has_customer: true, quotas: { seats: 1, seat_count: 1 } });
   assert.equal(i.tier, 'Free'); assert.equal(i.subscribedTier, 'Professional'); assert.deepEqual(i.seats, { used: 1, cap: 1 });
   const none = planSummary('admin', { plan_group: null, status: 'free', has_customer: false });
@@ -254,45 +254,24 @@ test('the section list draws the canvas sections first, the kept ones under More
   assert.match(markup, /aria-current="page"[^>]*data-testid="account-nav-billing"/);
   assert.equal((markup.match(/aria-current="page"/g) || []).length, 1);
   assert.match(text(h(AccountSectionNav, { sections: SECTIONS, active: 'account', onSelect: noop })), /Following More Onboarding/);
-  // The column is the lg shape; below lg the Section menu stands in for it.
+  // The column is the lg shape; below lg the phone's /account is the A1m index (D700).
   assert.match(markup, /<nav [^>]*data-testid="account-section-nav"[^>]*>\s*<div class="[^"]*\bhidden\b[^"]*\blg:block\b/);
 });
 
-// D607 (#1165) — the 2026-10-06 export's phone rule: `.op-secnav` is hidden and
-// `.op-secdrop` draws one row, "Section", the open section's name and ▾. It is a
-// native select under that drawing, so the phone opens its own picker.
-const findEl = (el, pred) => {
-  if (!el || typeof el !== 'object') return null;
-  if (Array.isArray(el)) { for (const c of el) { const f = findEl(c, pred); if (f) return f; } return null; }
-  return pred(el) ? el : findEl(el.props?.children, pred);
-};
-
-test('below lg the section list is one Section menu that names the open section', () => {
+// D700 (#1662) — D607's phone rule (`.op-secdrop`, one "Section ▾" row over a
+// native select) gave way to the A1m index: below lg a phone's /account lists
+// the sections as rows, and each opens its section as its own page. The nav
+// is the lg column alone.
+test('below lg the section list draws no Section menu: the A1m index stands in for it', () => {
   const markup = html(h(AccountSectionNav, { sections: SECTIONS, active: 'billing', onSelect: noop }));
-  const menu = markup.match(/<div data-testid="account-section-menu" class="([^"]*)">([\s\S]*?)<\/select><\/div>/);
-  assert.ok(menu, 'no Section menu');
-  assert.match(menu[1], /\blg:hidden\b/, 'the menu shows from lg too');
-  assert.match(menu[1], /min-h-\[44px\]/, 'the canvas draws the row 44px tall, a touch target');
-  const face = menu[2].replace(/<select[\s\S]*$/, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-  assert.equal(face, 'Section Billing and orders ▾');
-  // The same sections in the same order, the kept ones under More, the open one picked.
-  const opts = [...menu[2].matchAll(/<option value="([a-z-]+)"( selected="")?>/g)].map((m) => m[1] + (m[2] ? '*' : ''));
-  assert.deepEqual(opts, ['account', 'notifications', 'security-privacy', 'billing*', 'following', 'onboarding']);
-  assert.match(menu[2], /<optgroup label="More"><option value="onboarding">Onboarding<\/option><\/optgroup>/);
-  assert.match(menu[2], /<select aria-label="Account section"/);
-  // D568's sideways row of chips is gone.
+  assert.doesNotMatch(markup, /<select/);
+  assert.doesNotMatch(markup, /account-section-menu|account-section-select/);
+  assert.doesNotMatch(markup, /lg:hidden/);
+  // The column keeps its shape, and the open section stays marked.
+  assert.match(markup, /<nav [^>]*data-testid="account-section-nav"[^>]*>\s*<div class="[^"]*\bhidden\b[^"]*\blg:block\b/);
+  assert.match(markup, /aria-current="page"[^>]*data-testid="account-nav-billing"/);
+  // D568's sideways row of chips is still gone.
   assert.doesNotMatch(markup, /overflow-x-auto/);
-
-  // A pick opens that section, the way a click on the column does.
-  const picked = [];
-  const tree = AccountSectionNav({ sections: SECTIONS, active: 'billing', onSelect: (id) => picked.push(id) });
-  findEl(tree, (el) => el.type === 'select').props.onChange({ target: { value: 'onboarding' } });
-  assert.deepEqual(picked, ['onboarding']);
-
-  // A section id the list does not hold names the first section, never a blank row.
-  const stray = html(h(AccountSectionNav, { sections: SECTIONS, active: 'nope', onSelect: noop }));
-  assert.match(stray, /Section<\/span><span class="[^"]*">Profile and identity<\/span>/);
-  assert.match(stray, /<option value="account" selected="">/);
 });
 
 test('the rail is given counts and states, never the email address', () => {
@@ -456,7 +435,7 @@ test('sessions: the count the route serves, the two settings no route stores, an
 
 test('the plan line: tier, seats, renewal; Not recorded for a paid plan with no renewal date', () => {
   const founder = text(h(PlanHeader, { role: 'founder', billing: ready({ tier: 'growth', status: 'active', renews_at: '2026-11-01T12:00:00Z', trial_ends_at: null, has_customer: true, spinout_lab: null }) }));
-  assert.match(founder, /Founder workspace Growth renews 1 Nov 2026/);
+  assert.match(founder, /Founder workspace Validate \+ Build renews 1 Nov 2026/);
   assert.match(founder, /Plans & Pricing Manage billing ↗/);
   const inst = text(h(PlanHeader, { role: 'investor', billing: ready({ tier: 'institutional', raw_tier: 'institutional', status: 'active', renews_at: null, trial_ends_at: null, has_customer: true, quotas: { seats: 4, seat_count: 2 } }) }));
   assert.match(inst, /Investor Institutional 2 of 4 seats · renewal not recorded/);
@@ -574,8 +553,10 @@ test('SettingsPage lists the canvas sections in its order, and mounts each secti
   for (const id of ['onboarding', 'appearance', 'activity']) {
     assert.match(block, new RegExp(`\\{ id: '${id}', label: '[^']+', group: 'more' \\}`), `${id} is kept, under More`);
   }
+  // D700 — the deep-link map moved, unchanged, to account/accountPhone.js.
+  const paths = read('frontend/src/pages/account/accountPhone.js');
   for (const [path, id] of [['following', 'following'], ['developer', 'developer'], ["'sign-in'", 'security-privacy'], ['orders', 'billing'], ['activity', 'activity'], ['usage', 'usage'], ['connectors', 'connectors'], ['integrations', 'connectors']]) {
-    assert.match(page, new RegExp(`\\n  ${path.replace(/[-']/g, (c) => (c === '-' ? '\\-' : "'"))}: '${id}',`), `${path} resolves to ${id}`);
+    assert.match(paths, new RegExp(`\\n  ${path.replace(/[-']/g, (c) => (c === '-' ? '\\-' : "'"))}: '${id}',`), `${path} resolves to ${id}`);
   }
   for (const mount of ['<AccountSectionNav ', '<ProfileIdentityCanvas', '<PushDevices />', '<SessionsCard security={security} />', '<PlanHeader role={role} billing={billing} />', '<Orders />', '<FollowingSection />', '<UsageSection role={role} />', '<ConnectorsTab />', '<DeveloperSection role={data.role} />']) {
     assert.ok(page.includes(mount), `${mount} is mounted`);

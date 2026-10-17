@@ -325,30 +325,36 @@ test('the Worker AI rail is one component, and every founder workspace has it', 
   }
   assert.deepEqual(own, [], 'these pages hand-build a rail again instead of using the shared one');
 
-  // What the shared rail says: the AIRail canvas's four blocks and nothing
-  // else (owner, 2026-10-10) — the mode cards, "Model · this page", the Usage
-  // card and the safety row. Coverage and the guardrail footer are gone.
+  // What the shared rail says: the AIRail canvas's blocks and nothing else
+  // (owner, 2026-10-10; D698) — the switch and its Manual line, "Suggested
+  // for this page", the safety line and the Usage box. Coverage and the
+  // guardrail footer are gone.
   const rail = codeOnly(read('frontend/src/ui/WorkerRail.jsx'));
-  for (const block of ['MANUAL_NOTE', '>Model · this page<', '>Usage<', 'fwr-screened']) {
+  for (const block of ['MANUAL_LINE', '>Suggested for this page<', '>Usage<', 'SAFETY_LINE']) {
     assert.ok(rail.includes(block), `the rail lost its ${block} block`);
   }
   for (const gone of ['>Coverage<', '>Usage this month<', 'EADWYN_GUARDRAIL', '>Unavailable here<']) {
     assert.ok(!rail.includes(gone), `the rail draws ${gone} again, which the AIRail canvas does not`);
   }
   assert.match(rail, /useAiSpend/, 'the usage card must read the live spend endpoint');
-  // THE MODEL CARDS NAME ONLY WHAT RUNS, at the router's rate. Each section's
-  // jobs are router tasks (`railModels.js`), every one a real ROUTE entry, and
-  // the cards are built by `railCards` from `/api/ai/pricing`, never typed.
+  // THE MODEL CARDS NAME ONLY WHAT RUNS. Each page's jobs are router tasks
+  // (`railModels.js`), every one a real ROUTE entry, and the cards are built
+  // by `railSuggestions` from `/api/ai/pricing`, never typed. D698 adds one
+  // job before its task: Grow's Product improvement runs D691's
+  // `grow_theme_feedback`, which `railSuggestions` skips until the pricing
+  // read lists it (`airail_d698.test.mjs`, test 13), so no card can name it
+  // first. That one task is the only exception, and it is named.
   const router = read('cloudflare-worker/src/services/aiRouter.ts');
   const jobs = codeOnly(read('frontend/src/ui/railModels.js'));
   const tasks = [...new Set([...jobs.matchAll(/task: '([a-z_]+)'/g)].map((m) => m[1]))];
   assert.ok(tasks.length >= 4, `the section jobs did not parse — got ${tasks.join(', ')}`);
   for (const task of tasks) {
+    if (task === 'grow_theme_feedback' && !/^\s*grow_theme_feedback:\s*\{/m.test(router)) continue;
     assert.ok(new RegExp(`^\\s*${task}:\\s*\\{`, 'm').test(router),
       `${task} must be a real entry in the router's ROUTE table, or the card names a model nothing runs`);
   }
-  assert.match(rail, /railCards\(pricing, jobsFor\(workspace\)/,
-    'the models and their rates come from the router\'s own tables');
+  assert.match(rail, /railSuggestions\(\{ section, module, pricing, picks \}\)/,
+    'the models come from the router\'s own tables');
   assert.doesNotMatch(rail, /\$0\.293|\$2\.253|Llama 3\.3 70B Fast/,
     'the canvas figures are not the router figures');
 });

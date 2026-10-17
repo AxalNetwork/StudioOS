@@ -37,3 +37,17 @@ number on screen traces back to a column.
   are exercised against (`fixtures/routes_modules/`, a wired and an unwired
   module; `fixtures/routes_lazy_conflict/`, two sources declaring one lazy
   name for different pages), never real pages.
+
+D696's record contracts live in `record_page_d696.test.mjs` (real rendering,
+parent callbacks, safe links and declared actions) and `persona_pdf_d696.test.mjs`
+(allowlisted content, dated download and one-page measured bounds).
+`_record_d696.mjs` supplies synthetic records and isolated mutation imports.
+Each behavioral assertion group runs against the original source, against
+changes it must reject, and again against the restored source; no checkout
+file is changed by a mutation. No live API or personal data is used.
+
+D695's independent form UI is exercised by `add_lightbox_d695.test.mjs`.
+`_form_d695.mjs` supplies a small React DOM/effect harness and isolated source
+mutations. The tests drive real inputs, payloads, loaded choices, refusals,
+done views, responsive page transitions and modal focus/Escape behavior.
+Registry and routing integration cases follow when their dependencies merge.

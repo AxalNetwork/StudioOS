@@ -267,8 +267,16 @@ test('the org rollup stays admin-gated — this endpoint did not open it up', ()
 test('the self endpoint requires auth and never takes a user id from the request', () => {
   // A `?user_id=` on a spend endpoint is the whole IDOR class in one query
   // param. The route reads the authenticated caller and nothing else.
-  const routeSrc = readFileSync(
+  const fileSrc = readFileSync(
     resolve(process.cwd(), 'cloudflare-worker/src/routes/ai.ts'), 'utf8');
+  // Just the `/me/spend` handler. The whole file used to be read, which was
+  // right while every route in it took no path parameter; D698's
+  // `/rail-preferences/:section/:task` routes read a rail section and a router
+  // task from the path, never a user id (rail_prefs_d698.test.ts proves that
+  // behaviourally), so the ban is held where its subject is.
+  const from = fileSrc.indexOf("ai.get('/me/spend'");
+  assert.ok(from >= 0, 'the /me/spend route is gone');
+  const routeSrc = fileSrc.slice(from, fileSrc.indexOf('\n});\n', from) + 4);
   assert.match(routeSrc, /requireAuth\s*\(/);
   assert.doesNotMatch(routeSrc, /req\.param\(|req\.queries\(|req\.query\(\s*\)/,
     'the caller must not be able to name whose spend they read');

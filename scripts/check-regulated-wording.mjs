@@ -55,6 +55,8 @@ export const SURFACES = [
   // callers means scanning two dozen page files for four prop values, which is
   // a scanner change rather than a list entry.
   ['copy', 'frontend/src/ui/WorkerRail.jsx', 'the workspace AI rail — headings, guardrail, usage meter'],
+  // D698 — the rail's phone panel and the page's own Eadwyn button.
+  ['copy', 'frontend/src/ui/EadwynPanel.jsx', 'the Eadwyn AI panel on a phone, and the button that opens it'],
   ['copy', 'frontend/src/components/advisor/PersonalAdvisor.jsx', 'the chatbot UI — header, placeholder, empty states'],
   ['copy', 'frontend/src/components/advisor/AdvisorFilledBanner.jsx', 'tells the user the model filled their fields'],
   ['copy', 'frontend/src/components/advisor/AdvisorProgressWidget.jsx', 'the chatbot progress rail'],
@@ -77,6 +79,12 @@ export const SURFACES = [
   // the collapsed "interview complete" row with its proposals and ticket action.
   ['copy', 'frontend/src/components/advisor/StudioInterview.jsx', 'the Studio chat wrapper'],
   ['copy', 'frontend/src/components/advisor/interviewCompleteRow.jsx', 'the collapsed interview row: completion, proposals, ticket, Resume'],
+  // D701 (#1663) — Studio on a phone: the chat's phone pieces and the page's
+  // URL model (tab, ticket type, project_id).
+  ['copy', 'frontend/src/components/advisor/eadwynPhone.jsx', 'the Eadwyn chat\'s phone pieces (D701)'],
+  ['copy', 'frontend/src/pages/founder/studioPhoneModel.js', 'the founder Studio\'s tab, ticket route and venture in the URL (D701)'],
+  ['copy', 'frontend/src/pages/founder/StudioPhone.jsx', 'the founder Studio on a phone: the Eadwyn bar and the Conversations list (D701)'],
+  ['copy', 'frontend/src/pages/founder/EadwynMenu.jsx', 'the Eadwyn menu drawer (D701)'],
   ['prompt', 'cloudflare-worker/src/services/advisor/guardrails.ts', 'ADVISOR_SYSTEM_PROMPT — the model being told who it is'],
   ['prompt', 'cloudflare-worker/src/services/decks/autofill.ts', 'the deck autofill system message'],
   ['prompt', 'cloudflare-worker/src/services/publications.ts', 'buildSystemPrompt for drafted publications'],

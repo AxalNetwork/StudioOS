@@ -57,6 +57,12 @@ export { default as WorkerRail } from './WorkerRail';
 // D556 — the one frame every host that does not draw the founder desks' own
 // panel puts its rail in. See RailFrame.jsx.
 export { default as RailFrame, RailStripSlot } from './RailFrame';
+// D698 — the rail's phone panel and the page's own button that opens it
+// (EadwynPanel.jsx, over the eadwynPanel.js store), and the crumbs a page
+// passes the rail (railCrumbs.js).
+export { EadwynPanel, EadwynButton } from './EadwynPanel.jsx';
+export { openEadwynPanel, closeEadwynPanel, useEadwynPanel, useEadwynTrigger } from './eadwynPanel.js';
+export { RailCrumbsProvider, useRailCrumbs, useSetRailCrumbs } from './railCrumbs.js';
 export { formatCost, formatSpend, runCost, batchCost, spendMeter } from './assistCost';
 export { eadwynConfig, observedRunCost, ASSIST_SURFACES, EADWYN_GUARDRAIL } from './eadwynConfig';
 
@@ -65,6 +71,13 @@ export { eadwynConfig, observedRunCost, ASSIST_SURFACES, EADWYN_GUARDRAIL } from
 // switcher that rides above it — the single writer of active-company context.
 export { default as SidebarNav } from './SidebarNav';
 export { default as CompanySwitcher } from './CompanySwitcher';
+export { PhoneSheet, SheetRow } from './phone/PhoneSheet';
+export { PhoneRows } from './phone/PhoneRows';
+export { PhoneBar, backFallback } from './phone/PhoneBar';
+export { CompanySheet, CompanyVisits, visitToRecord } from './phone/CompanySheet';
+export { AccountSheet } from './phone/AccountSheet';
+export { usePhoneWidth } from './phone/usePhoneWidth';
+export { PhoneHeader, HeaderForWidth } from './phone/PhoneHeader';
 
 // The two ways a page says it does not know something. One pair, because
 // four copies had already drifted apart in their wording — see Honesty.jsx.

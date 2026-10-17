@@ -26,8 +26,11 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { codeOnly } from './_codeOnly.mjs';
 import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
-import { FOUNDER_MORE_DOORS, FOUNDER_TAB_PATHS, mobilePlan, rowActive } from '../src/lib/mobileTabs.js';
-import MobileTabBar, { MoreSheet } from '../src/components/MobileTabBar.jsx';
+import { Briefcase, Check, DollarSign, TrendingUp } from 'lucide-react';
+import { FOUNDER_BAND_PATHS, FOUNDER_MORE_DOORS, FOUNDER_TAB_PATHS, mobilePlan, rowActive } from '../src/lib/mobileTabs.js';
+import * as TabBarModule from '../src/components/MobileTabBar.jsx';
+
+const MobileTabBar = TabBarModule.default;
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const founderRows = () => SIDEBAR_GROUPS.founder.flatMap((g) => g.items);
@@ -43,25 +46,33 @@ const renderAt = (path) => renderAs('founder', path);
 
 test('the founder tabs are the canvas\'s four, in its order, under their sidebar names', () => {
   const plan = mobilePlan('founder');
-  // M1: Home, Build, Raise, Grow. Home is the founder's first sidebar row,
-  // which the sidebar calls Studio — and the tab says what the sidebar says.
-  assert.deepEqual(plan.tabs.map((r) => r.to), ['/studio', '/build', '/raise', '/grow']);
+  // D699 (CO:219): Validate, Build, Raise, Grow. Studio moved to the band's
+  // glyph. Each tab says what its sidebar row says and lights where it lights;
+  // only the icon is the canvas's own.
+  assert.deepEqual(plan.tabs.map((r) => r.to), ['/validate', '/build', '/raise', '/grow']);
   assert.deepEqual(plan.tabs.map((r) => r.to), FOUNDER_TAB_PATHS);
+  const icons = { '/validate': Check, '/build': Briefcase, '/raise': DollarSign, '/grow': TrendingUp };
   for (const tab of plan.tabs) {
     const row = founderRows().find((r) => r.to === tab.to);
-    assert.equal(tab, row, `${tab.to} is a retyped copy of its sidebar row, free to drift from it`);
+    assert.equal(tab.label, row.label, `${tab.to} renames its sidebar row`);
+    assert.equal(tab.match, row.match, `${tab.to} lights for other pages than its sidebar row`);
+    assert.equal(tab.icon, icons[tab.to], `${tab.to} does not draw the canvas's icon`);
   }
 });
 
-test('every founder sidebar row lands exactly once, tab or More, in the sidebar\'s order', () => {
+test('every founder sidebar row lands exactly once, tab, band or More, in the sidebar\'s order', () => {
   const plan = mobilePlan('founder');
-  const placed = [...plan.tabs, ...plan.more].map((r) => r.to);
+  // The band (D699) carries Studio; it is in neither the tabs nor More.
+  assert.deepEqual(FOUNDER_BAND_PATHS, ['/studio']);
+  const placed = [...plan.tabs, ...plan.more].map((r) => r.to).concat(FOUNDER_BAND_PATHS);
   for (const row of founderRows()) {
     assert.equal(placed.filter((to) => to === row.to).length, 1, `${row.to} (${row.label}) is dropped or doubled`);
   }
   // More keeps the sidebar's order for its rows, then the phone-only doors.
-  const sidebarMore = founderRows().filter((r) => !FOUNDER_TAB_PATHS.includes(r.to)).map((r) => r.to);
+  const sidebarMore = founderRows()
+    .filter((r) => !FOUNDER_TAB_PATHS.includes(r.to) && !FOUNDER_BAND_PATHS.includes(r.to)).map((r) => r.to);
   assert.deepEqual(plan.more.map((r) => r.to), [...sidebarMore, ...FOUNDER_MORE_DOORS.map((d) => d.to)]);
+  assert.deepEqual(FOUNDER_MORE_DOORS.map((d) => d.to), ['/messages'], 'Trust and Company Settings moved to the band\'s sheets');
   // The gap map's two: Spin-Out Lab is a live sidebar row the canvas's plan
   // left out, and Messages had no door on a phone.
   assert.ok(plan.more.some((r) => r.to === '/spinout-lab'), 'Spin-Out Lab is not reachable from More');
@@ -113,11 +124,16 @@ test('the bar marks the current tab, and More when the page is one of its rows',
   const onBoard = renderAt('/build/board');
   assert.match(onBoard, /aria-current="page"[^>]*data-testid="link-mobile-tab-build"/);
   assert.equal((onBoard.match(/aria-current="page"/g) || []).length, 1, 'more than one tab claims the page');
-  assert.match(onBoard, /data-active="false" data-testid="button-mobile-tab-more"/);
+  assert.match(onBoard, /data-active="false" data-testid="link-mobile-tab-more"/);
 
   const onNetwork = renderAt('/network/relationships');
   assert.doesNotMatch(onNetwork, /aria-current="page"/, 'a tab claims a page that belongs to More');
-  assert.match(onNetwork, /data-active="true" data-testid="button-mobile-tab-more"/);
+  assert.match(onNetwork, /data-active="true" data-testid="link-mobile-tab-more"/);
+
+  // D699: nothing is lit on /studio, which the band's glyph carries (CO:218).
+  const onStudio = renderAt('/studio');
+  assert.doesNotMatch(onStudio, /aria-current="page"/);
+  assert.match(onStudio, /data-active="false" data-testid="link-mobile-tab-more"/);
 });
 
 // ── Targets, the sheet, safe areas ───────────────────────────────────────────
@@ -126,33 +142,28 @@ test('five targets, each at least 44pt, and the bar only below 1024px', () => {
   const html = renderAt('/studio');
   const targets = [...html.matchAll(/<(a|button)\b[^>]*class="([^"]*)"/g)];
   assert.equal(targets.length, 5, 'the bar is four tabs and More');
-  for (const [, , cls] of targets) assert.match(cls, /min-h-\[56px\]/, 'a tab is shorter than the canvas allows');
+  for (const [, , cls] of targets) {
+    assert.match(cls, /min-h-\[56px\]/, 'a tab is shorter than the canvas allows');
+    assert.match(cls, /text-\[9\.5px\] font-bold/, 'a tab label is not the canvas\'s 9.5px/700');
+  }
   assert.match(html, /<nav aria-label="Primary" class="mtb [^"]*lg:hidden/, 'the bar shows on desktop, or lost its safe-area class');
-  assert.match(html, /aria-haspopup="dialog"/, 'More does not say it opens a dialog');
+  // D699: More is a page, so nothing in the bar opens a dialog.
+  assert.doesNotMatch(html, /aria-haspopup="dialog"/, 'More still opens a sheet');
 });
 
-test('More is a dialog sheet: labelled, 52px rows, and dismissible', () => {
-  const plan = mobilePlan('founder');
-  const html = renderToStaticMarkup(React.createElement(MemoryRouter, null,
-    React.createElement(MoreSheet, { id: 'm', rows: plan.more, pathname: '/raise', onClose: () => {} })));
-  assert.match(html, /role="dialog" aria-modal="true" aria-labelledby="m-title"/);
-  assert.match(html, /<h2 id="m-title"[^>]*>More<\/h2>/);
-  const rows = [...html.matchAll(/data-testid="link-mobile-more-[^"]+"/g)];
-  assert.equal(rows.length, plan.more.length, 'a More row is missing from the sheet');
-  for (const [cls] of html.matchAll(/class="flex min-h-\[(\d+)px\] items-center gap-3/g)) {
-    assert.ok(Number(/\[(\d+)px\]/.exec(cls)[1]) >= 52, 'a More row is shorter than the canvas\'s 52pt');
-  }
-  assert.equal((html.match(/min-h-\[52px\]/g) || []).length, plan.more.length);
-  assert.match(html, /data-testid="button-mobile-more-backdrop"/, 'the backdrop does not dismiss');
-  assert.match(html, /class="-mr-2 inline-flex h-11 w-11[^"]*" data-testid="button-mobile-more-close"/, 'the close button is under 44pt');
-
-  // The two dismissals a render cannot show: Escape, and a swipe down past
-  // the threshold. Both call the same close.
+test('More is a link to the /more page, current there, and the sheet is gone (D699)', () => {
+  const onMore = renderAt('/more');
+  assert.match(onMore, /<a aria-current="page"[^>]*data-testid="link-mobile-tab-more" href="\/more"/);
+  assert.equal((onMore.match(/aria-current="page"/g) || []).length, 1, 'a tab claims /more too');
+  assert.match(onMore, /data-active="true" data-testid="link-mobile-tab-more"/);
+  assert.doesNotMatch(onMore, /<button/, 'More is still a button');
+  assert.equal(TabBarModule.MoreSheet, undefined, 'the More sheet is still exported');
   const src = codeOnly(read('frontend/src/components/MobileTabBar.jsx'));
-  assert.match(src, /if \(e\.key === 'Escape'\) onClose\(\);/);
-  assert.match(src, /end - start > SWIPE_DISMISS_PX\) onClose\(\);/);
-  assert.match(src, /first\.current\?\.focus\(\);/, 'focus does not move into the sheet');
-  assert.match(src, /moreButton\.current\?\.focus\(\);/, 'focus does not return to More');
+  assert.doesNotMatch(src, /role="dialog"|aria-modal/, 'the bar still draws a dialog');
+  // The sheet's frame now lives in `ui/phone/PhoneSheet.jsx` (phone_shell_d699, test 9).
+  assert.doesNotMatch(read('frontend/src/components/mobileTabBar.css'), /\.mtb-sheet/);
+  // /more is a route the founder guard admits.
+  assert.match(read('frontend/src/App.jsx'), /<Route path="\/more" element=\{guard\(\['admin', 'founder'\]/);
 });
 
 test('the bar clears the home indicator and the notch, and never covers the page', () => {

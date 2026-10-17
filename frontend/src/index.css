@@ -8,7 +8,7 @@
 
 /* Tailwind 4 — opt the .dark class on <html> in as the activator for the
    `dark:` variant. SettingsContext flips this class based on the user's
-   theme preference (or live OS in `system` mode). Without this declaration
+   Light/Dark theme preference. Without this declaration
    every `dark:` utility silently no-ops. */
 @custom-variant dark (&:where(.dark, .dark *));
 
@@ -277,28 +277,6 @@ select::-ms-expand { display: none; }
   display: none;            /* Chrome / Safari / Edge */
 }
 
-/* ---------------------------------------------------------------------------
-   Density (Compact vs Comfy).
-
-   `<html data-density="compact">` is set by SettingsContext when the user
-   picks "Compact" in Settings → Appearance. We tighten common spacing on
-   the Settings page card primitive and on dashboards/list pages that opt
-   in via `data-density-target` on a wrapper (see App.jsx main wrapper).
-
-   Comfy is the default and uses the existing Tailwind padding values, so
-   no override is needed there.
-   ------------------------------------------------------------------------ */
-[data-density="compact"] [data-density-target] { gap: 0.75rem; }
-[data-density="compact"] [data-density-target] > * + * { margin-top: 0.5rem; }
-
-/* Settings page Card primitive — the most-touched surface. */
-[data-density="compact"] [data-card] > [data-card-header] { padding: 0.625rem 1rem; }
-[data-density="compact"] [data-card] > [data-card-body]   { padding: 0.875rem 1rem; }
-[data-density="compact"] [data-card] > [data-card-footer] { padding: 0.5rem 1rem; }
-
-/* Dashboards / list pages that opt in via the main content wrapper get
-   tighter top/bottom padding too. */
-[data-density="compact"] [data-app-main] { padding-top: 0.75rem; padding-bottom: 0.75rem; }
 [data-app-main].edge-to-edge-surface { padding: 0; }
 
 /* The role wizards (`/onboarding/founder|investor|partner`) are the body
@@ -315,28 +293,6 @@ main[data-onboarding-canvas] {
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-}
-
-/* Compact density also tightens the most common Tailwind vertical-rhythm
-   helpers when used inside the page wrapper. This is intentionally
-   tag-agnostic so dashboards and list pages benefit without per-component
-   refactors. Tailwind's defaults: space-y-6 = 1.5rem, space-y-4 = 1rem,
-   space-y-3 = 0.75rem, gap-6 = 1.5rem, gap-4 = 1rem. We shave ~33%. */
-[data-density="compact"] [data-density-target] .space-y-6 > * + * { margin-top: 1rem; }
-[data-density="compact"] [data-density-target] .space-y-4 > * + * { margin-top: 0.625rem; }
-[data-density="compact"] [data-density-target] .space-y-3 > * + * { margin-top: 0.5rem; }
-[data-density="compact"] [data-density-target] .gap-6 { gap: 1rem; }
-[data-density="compact"] [data-density-target] .gap-4 { gap: 0.625rem; }
-[data-density="compact"] [data-density-target] .gap-3 { gap: 0.5rem; }
-/* Card-like containers without explicit header/body sub-regions (e.g. the
-   plain Dashboard cards) get a touch less padding. Settings cards declare
-   [data-card-header]/[data-card-body]/[data-card-footer] and use the rules
-   above instead, so we exclude them here to avoid doubling the trim.
-   Note: relies on CSS `:has()` (Chrome/Edge 105+, Safari 15.4+, Firefox 121+).
-   On unsupported engines the rule simply no-ops and Dashboard cards keep
-   their default Tailwind padding — comfy/compact still flips elsewhere. */
-[data-density="compact"] [data-card]:not(:has(> [data-card-body])) {
-  padding: 0.875rem;
 }
 
 /* ---------------------------------------------------------------------------

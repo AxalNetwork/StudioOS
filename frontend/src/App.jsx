@@ -7,7 +7,7 @@ import { consumePendingNextOnce, markPendingNextRedirected, pendingNextRedirecte
 import { Routes, Route, Navigate, Link, useNavigate, useLocation, useParams } from 'react-router-dom';
 import SidebarNav from './ui/SidebarNav';
 import { AuthProvider, useAuth } from './hooks/useAuthSync';
-import { SettingsProvider, useSettings } from './contexts/SettingsContext';
+import { SettingsProvider } from './contexts/SettingsContext';
 import { ActiveCompanyContext } from './contexts/ActiveCompanyContext';
 // ViewModeContext lives in its own module so App.jsx exports only React
 // components — mixing component + hook exports breaks Vite Fast Refresh.
@@ -42,6 +42,7 @@ import {
   Gift, Mail, Globe
 } from 'lucide-react';
 import { SIDEBAR_GROUPS, filterItemsByTier, hasInvestorTier, FOUNDER_FULL_BLEED, INVESTOR_FULL_BLEED, ADVISOR_FULL_BLEED, PARTNER_FULL_BLEED, SHARED_FULL_BLEED, SHARED_FULL_BLEED_PREFIXES, ONBOARDING_CANVAS_PATHS } from './sidebarConfig';
+import { isCyclePath } from './pages/cycles/cyclePaths';
 import PaywallModal from './components/PaywallModal';
 import AdminFrozenBar from './components/AdminFrozenBar';
 import BranchSuspendedBar from './components/BranchSuspendedBar';
@@ -52,6 +53,8 @@ import BranchNotDeployedBar from './components/BranchNotDeployedBar';
 // backdrop. It takes the shell role AS RESOLVED, never the sidebar's
 // `|| 'founder'` default: a viewer with no role gets no bar.
 import MobileTabBar from './components/MobileTabBar';
+import { HeaderForWidth } from './ui/phone/PhoneHeader';
+import { CompanyVisits } from './ui/phone/CompanySheet';
 import ImpersonationBar from './components/ImpersonationBar';
 import useBranchDeployment from './hooks/useBranchDeployment';
 import { LensProvider, useLensLocation } from './workspaces/lens';
@@ -385,6 +388,7 @@ const CapTablePage = lazy(() => import('./pages/CapTablePage'));
 const CapTableVariantsPage = lazy(() => import('./pages/CapTableVariantsPage'));
 const DataRoomPage = lazy(() => import('./pages/raise/DataRoomPage'));
 const MessagesPage = lazy(() => import('./pages/MessagesPage'));
+const MorePage = lazy(() => import('./pages/MorePage'));
 const PerksPage = lazy(() => import('./pages/PerksPage'));
 const FounderMarketplacePage = lazy(() => import('./pages/FounderMarketplacePage'));
 const NeedsBoardPage = lazy(() => import('./pages/NeedsBoardPage'));
@@ -945,18 +949,10 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   const [viewAsBranch, setViewAsBranch] = useState(null);
   const [companyList, setCompanyList] = useState([]);
 
-  // Task #31 — Honor the user's "Sidebar default" appearance preference on
-  // first paint AND when the async appearance load completes (so the
-  // server-side preference wins over the cached default on a fresh device).
-  // Applied on desktop too: when 'collapsed' the sidebar slides off-screen
-  // and a hamburger reveals it.
-  const { appearance, loading: settingsLoading } = useSettings();
-  // Mobile defaults to closed regardless of preference (the drawer covers the
-  // whole viewport so opening it on every load would block the page). On
-  // desktop we honor the user's saved sidebar_default.
+  // Start with the desktop sidebar visible and the mobile drawer closed.
+  // Manual sidebar controls continue to manage it after the first render.
   const [sidebarOpen, setSidebarOpen] = useState(() => {
-    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches) return false;
-    return appearance?.sidebar_default !== 'collapsed';
+    return typeof window === 'undefined' || !window.matchMedia('(max-width: 1023px)').matches;
   });
   // Desktop-only collapsed rail state. When true, the sidebar stays
   // visible at a narrow width showing only icons + 1-3 letter
@@ -990,21 +986,8 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
       return next;
     });
   }, []);
-  const initialSyncRef = React.useRef(false);
-  useEffect(() => {
-    // One-shot sync the moment the SettingsProvider's first /appearance
-    // round-trip resolves; subsequent toggles by the user are NOT
-    // overridden because we flip the ref on the first run.
-    if (initialSyncRef.current) return;
-    if (settingsLoading) return;
-    const isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches;
-    setSidebarOpen(!isMobile && appearance?.sidebar_default !== 'collapsed');
-    initialSyncRef.current = true;
-  }, [settingsLoading, appearance?.sidebar_default]);
-  // On desktop the sidebar should stay open during normal navigation —
-  // only the user's explicit close button (or selecting "collapsed" in
-  // Settings → Appearance) should hide it. On mobile, tapping any nav link
-  // collapses the drawer so the page is visible.
+  // Keep the desktop sidebar open during navigation; on mobile, selecting
+  // a destination closes the drawer so the page is visible.
   const closeOnMobileNav = useCallback(() => {
     if (typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches) {
       setSidebarOpen(false);
@@ -1043,7 +1026,9 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
     // This is where `/spinout-lab/` is tested, and the only place: it used to
     // be typed on the width flag below AND on the padding flag under it, which
     // is two tests of one fact that could be changed apart.
-    || SHARED_FULL_BLEED_PREFIXES.some((prefix) => location.pathname.startsWith(prefix));
+    || SHARED_FULL_BLEED_PREFIXES.some((prefix) => location.pathname.startsWith(prefix))
+    // Every licence uses the cycle's own gutter for its module and action pages.
+    || isCyclePath(location.pathname);
   const fullWidthSurface = fullBleedSurface
     // Advisor's blanket clause stays, and only this clause is still blanket:
     // it also covers the advisor pages OUTSIDE any workspace, which have been
@@ -1205,7 +1190,11 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
             everyone else, and nothing once the branch is live. */}
         <SafeMount name="BranchNotDeployedBar"><BranchNotDeployedBar strip={notDeployed} /></SafeMount>
 
+        {/* D699 — below 1024px a founder gets the phone band instead
+            (ui/phone/PhoneHeader.jsx); everyone else, and a founder at 1024px
+            and up, gets the header below unchanged. One is mounted, never both. */}
         {/* ── Carta-style global top header ─────────────────────────────── */}
+        <HeaderForWidth founder={shellRole === 'founder'} user={user} onLogout={onLogout} branchFact={branchFact}>
         <header className="z-40 h-14 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex items-center px-4 gap-3 shrink-0">
           <div className="flex items-center gap-2.5">
             <button
@@ -1338,6 +1327,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
             <UserDropdown user={user} onLogout={onLogout} />
           </div>
         </header>
+        </HeaderForWidth>
 
         <div className="flex flex-1 overflow-hidden">
           <aside className={`
@@ -1359,6 +1349,9 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
               viewer with no role gets no bar. The bar renders nothing for a
               licence whose plan is not built yet (`mobilePlan` returns null). */}
           <MobileTabBar role={shellRole} />
+          {/* D699 — the founder's last opened cycle per company, for the
+              company sheet. Never while an operator acts as someone else. */}
+          <CompanyVisits role={shellRole} record={!isImpersonating && !(isAdmin && activeRole !== 'admin')} />
           {/* D685 §5.6: the recording outlives every route; its pill sits in the corner. */}
           <ActiveRecordingProvider userId={user?.id ?? null} />
           <SafeMount name="RecordingPill"><RecordingPill /></SafeMount>
@@ -1385,7 +1378,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
                 first render, so a reload that lands on the same company does
                 not remount once the switcher confirms it. */}
             <RailStripSlot.Provider value={railStrip}>
-              <div key={activeCompany?.id ?? savedCompanyId ?? 'none'} data-app-main data-density-target className={`${flushSurface ? 'p-0 edge-to-edge-surface' : 'p-4 md:p-6'} ${fullWidthSurface ? '' : 'max-w-7xl mx-auto w-full'}${onboardingCanvas ? ' flex w-full min-h-full flex-1 flex-col' : ''}`}>
+              <div key={activeCompany?.id ?? savedCompanyId ?? 'none'} data-app-main className={`${flushSurface ? 'p-0 edge-to-edge-surface' : 'p-4 md:p-6'} ${fullWidthSurface ? '' : 'max-w-7xl mx-auto w-full'}${onboardingCanvas ? ' flex w-full min-h-full flex-1 flex-col' : ''}`}>
                 {children}
               </div>
             </RailStripSlot.Provider>
@@ -2473,6 +2466,7 @@ function AppInner() {
       {/* Spin-Out Lab members (role `exploring`, lab-active) build their skills +
           values profile in Studio too — the lab Profiling page reads from it. */}
       <Route path="/studio" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <Dashboard activeRole={effectiveRole} authUser={user} />)} />
+      <Route path="/studio/tickets/new" element={guard(['founder'], <Dashboard activeRole={effectiveRole} authUser={user} />)} />
       <Route path="/studio/archetype" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ArchetypeCardPage activeRole={effectiveRole} />)} />
       {/* Task #9 — holding-state dashboard for chat-onboarded users awaiting admin role review. */}
       <Route path="/exploring" element={guard(['admin', 'exploring'], <ExploringDashboard />)} />
@@ -2877,6 +2871,7 @@ function AppInner() {
           always false on an empty array, so the route would exist and be
           unreachable. */}
       <Route path="/messages" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <MessagesPage user={user} />)} />
+      <Route path="/more" element={guard(['admin', 'founder'], <MorePage />)} />
       {/* Same explicit list. The partner and admin tabs inside the page are
           gated on the role again there — a role that cannot submit a listing
           simply does not see the tab. */}

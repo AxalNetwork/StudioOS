@@ -14,12 +14,14 @@ import { useAuth } from '../hooks/useAuthSync';
 import { startRegistration, browserSupportsWebAuthn } from '@simplewebauthn/browser';
 import TrustScoreBadge, { computeTrustScore } from '../components/TrustScoreBadge';
 import { verdictFor, outstandingCounts, scoreLine } from '../lib/trustCenter';
-import { RailFrame, SectionLabel, Skeleton, Unreadable, Unrecorded, WorkerRail } from '../ui';
+import { RailFrame, SectionLabel, Skeleton, Unreadable, Unrecorded, WorkerRail, usePhoneWidth } from '../ui';
 import { NOTIFICATION_EVENTS, PARTNER_NOTIFICATION_EVENTS } from '../lib/notificationTypes';
 // D568 — the Account center canvas (`ac-*`): its section list, the five
 // profile cards, the push devices and sessions cards, the plan line and
 // orders, and the two sections the page did not have (Following, Developer).
-import { AccountSectionNav, Outcome, Switch, accountRailCoverage, useAccountRead } from './account/AccountCenter';
+import { AccountPhoneFrame, AccountPhoneIndex, AccountSectionNav, Outcome, Switch, accountRailCoverage, useAccountRead } from './account/AccountCenter';
+// D700 — the phone's `/account`: A1m's bar copy and the address rules.
+import { accountPathFor, accountViewFor } from './account/accountPhone';
 import ProfileIdentityCanvas from './account/AccountProfile';
 import { PushDevices, SessionsCard } from './account/AccountDevices';
 import { Orders, PlanHeader, useBillingStatus } from './account/AccountBilling';
@@ -237,97 +239,67 @@ const SECTIONS = [
 
 // ---------- Page ------------------------------------------------------------
 
-// Map a deep-link URL path → preselected section id. The page is mounted
-// at both `/account` (top-level) and `/account/:section` so the bell can
-// land users directly on the notification matrix.
-const PATH_TO_SECTION = {
-  notifications: 'notifications',
-  onboarding: 'onboarding',
-  profile: 'account',
-  account: 'account',
-  security: 'security-privacy',
-  privacy: 'security-privacy',
-  'security-privacy': 'security-privacy',
-  // D651 — the old name still resolves; App.jsx redirects it first, with
-  // the once-only "Integrations are now Connectors" notice.
-  integrations: 'connectors',
-  connectors: 'connectors',
-  billing: 'billing',
-  appearance: 'appearance',
-  // D568 — the two new sections, the canvas's own anchors for the renamed
-  // ones (`/account#sign-in`, `#billing` in ops-data.js), and Activity Log,
-  // which the nav could open but a reload of its URL could not.
-  following: 'following',
-  developer: 'developer',
-  usage: 'usage',
-  'sign-in': 'security-privacy',
-  orders: 'billing',
-  activity: 'activity',
-  // Back-compat: old deep links still resolve to a sensible new tab.
-  jurisdictions: 'account',
-  email: 'account',
-  auth: 'security-privacy',
-  role: 'account',
-};
+// D700 (#1662) — the deep-link map (`PATH_TO_SECTION`) and the two address
+// rules (`accountViewFor`, `accountPathFor`) moved to `account/accountPhone.js`,
+// so the map and the rules are tested together.
 
 export default function SettingsPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const initialSection = (() => {
-    // Both prefixes: /settings/:section still renders this page for one
-    // hop via App.jsx's redirect, and a deep link must resolve its section
-    // on that render rather than falling through to the default.
-    const m = location.pathname.match(/^\/(?:account|settings)\/([^/]+)/);
-    if (m && PATH_TO_SECTION[m[1]]) return PATH_TO_SECTION[m[1]];
-    // D568 — account recovery sends the reader to
-    // `/account#security-recovery-codes` (auth_recover.ts). That card is on
-    // the sign-in pane, so the anchor opens it rather than the profile.
-    if (location.hash === '#security-recovery-codes') return 'security-privacy';
-    return 'profile';
-  })();
+  // D700 — below 1024px `/account` is the A1m index and each section is its
+  // own page. One hook over `PHONE_QUERY` decides it (D699).
+  const phone = usePhoneWidth();
+  // The open section, or the phone's index, read from the address on every
+  // path or hash change. It used to be read once, at mount: `/account` and
+  // `/account/:section` render this same component, so React kept the page
+  // when the path moved between them and the pane did not follow.
+  const active = accountViewFor({ pathname: location.pathname, hash: location.hash, phone });
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [active, setActive] = useState(initialSection);
 
-  // Keep the URL in lockstep with the active section so deep links work
-  // both ways (bell → /account/notifications, sidebar click → URL update).
+  // A click in the section column, or a row on the phone's index, opens the
+  // section through its address. On a phone each section is a page of its own,
+  // so it is pushed and Back returns to the index; on desktop it replaces, as
+  // the column always has.
+  const setActive = (id) => navigate({ pathname: accountPathFor({ section: id, phone }) }, { replace: !phone });
+
+  // Keep the URL in lockstep with the open section so deep links work both
+  // ways (bell → /account/notifications, sidebar click → URL update).
   //
   // This effect CANONICALISES: it rewrites whatever alias you arrived on to
-  // the section's own id, so /account/security becomes /account/security-privacy
-  // and the four legacy aliases in PATH_TO_SECTION resolve to their real tab.
-  // That is deliberate and predates the rename. Two things about it are not.
+  // the section's own path (`accountPathFor`), so /account/security becomes
+  // /account/security-privacy and the four legacy aliases in PATH_TO_SECTION
+  // resolve to their real tab. That is deliberate and predates the rename.
   //
-  // `account` joins `profile` as a bare-URL section. Before the rename the
-  // landing pane's id produced `/settings/account`, which read fine; after it
-  // that is `/account/account`, which reads like a mistake. The landing pane
-  // has no segment of its own — it IS the page.
+  // The landing pane has no segment of its own on desktop — it IS the page,
+  // so `/account/profile` and `/account/account` rewrite to `/account`. On a
+  // phone bare `/account` is the index, so the pane keeps `/account/profile`
+  // (D700), and `/account#security-recovery-codes` becomes
+  // `/account/security-privacy#security-recovery-codes`.
   //
-  // And the rewrite has always dropped the query and the hash, because it
-  // navigated to a bare pathname. That was survivable while nothing sent one;
-  // it is not now, when /settings?tab=… arrives from the Google OAuth link
-  // callback and /settings#security-recovery-codes from account recovery. A
-  // canonicalising hop must not eat the part of the link that said why it was
-  // sent.
+  // And the rewrite keeps the query and the hash: /settings?tab=… arrives from
+  // the Google OAuth link callback and /settings#security-recovery-codes from
+  // account recovery. A canonicalising hop must not eat the part of the link
+  // that said why it was sent.
   useEffect(() => {
-    const bare = active === 'profile' || active === 'account';
-    const want = bare ? '/account' : `/account/${active}`;
+    const want = accountPathFor({ section: active, phone });
     if (location.pathname !== want && /^\/(?:account|settings)\b/.test(location.pathname)) {
       navigate({ pathname: want, search: location.search, hash: location.hash }, { replace: true });
     }
-  }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [active, phone, location.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
   // T19 — useToast handles cleanup on unmount; replaces inline `window.setTimeout(setToast, 4500)`.
   const { toast, showToast: setToastSafe } = useToast(4500);
 
-  // After settings load, if `active` was deep-linked to a tab the user's
-  // role isn't allowed to see, bounce them back to Profile (which also
-  // rewrites the URL via the URL-sync effect above).
+  // After settings load, if the address names a section the user's role
+  // isn't allowed to see, send them back to bare /account: the profile pane
+  // on desktop, the index on a phone.
   useEffect(() => {
-    if (!data) return;
+    if (!data || active === 'index') return;
     const r = (data.role || '').toLowerCase();
     const allowed = new Set(SECTIONS.filter(s => !s.roles || s.roles.includes(r)).map(s => s.id));
-    if (!allowed.has(active)) setActive('profile');
-  }, [data, active]);
+    if (!allowed.has(active)) navigate({ pathname: '/account', search: location.search }, { replace: true });
+  }, [data, active]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // D568 — an anchor in the address names a card that only exists once the
   // page has read the account and drawn the pane, which is after the browser
@@ -418,11 +390,31 @@ export default function SettingsPage() {
   // before role was known. Mirror the nav filter on the content side.
   const allowedIds = new Set(sections.map(s => s.id));
   const safeActive = allowedIds.has(active) ? active : 'account';
-  const activeLabel = sections.find((s) => s.id === safeActive)?.label;
+  const activeLabel = active === 'index' ? null : sections.find((s) => s.id === safeActive)?.label;
   const reloadAccount = () => api.getSettings().then(setData);
+  const paneProps = { data, setData, flash, patch, reloadAccount, profileRev, setProfileRev, onSelect: setActive, role, allowedIds };
+
+  const toastNote = toast && (
+    <div className={`mb-4 rounded-lg px-4 py-2.5 text-sm flex items-center gap-2 ${
+      toast.kind === 'error' ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+    }`}>
+      {toast.kind === 'error' ? <AlertTriangle size={14} /> : <CheckCircle2 size={14} />}
+      {toast.message}
+    </div>
+  );
+  // D433 — the trust strip and the completeness banner sit above every pane
+  // on desktop, and above the sections on a phone's index (D700).
+  const top = (
+    <>
+      <ComplianceBridge />
+      <ProfileCompletionBanner onJump={() => setActive('account')} />
+    </>
+  );
 
   // D568 — the page sits beside the Worker AI rail, in the one frame every
-  // rail host uses (D556's `RailFrame`).
+  // rail host uses (D556's `RailFrame`). D700 — on a phone the frame and its
+  // rail stay mounted, and the phone view replaces the heading and the body
+  // inside it.
   return (
     <RailFrame
       rail={(
@@ -440,82 +432,95 @@ export default function SettingsPage() {
         />
       )}
     >
+    {phone ? (
+      <AccountPhoneFrame
+        view={active} sections={sections} top={top} toast={toastNote}
+        index={<AccountPhoneIndexReads role={role} />}
+        renderPane={(id) => <AccountPanes safeActive={id} {...paneProps} />}
+      />
+    ) : (
     <div className="min-w-0" data-testid="settings-page" data-active-section={safeActive}>
       <h1 className="mb-1 text-2xl font-extrabold tracking-axal-heading text-axal-ink dark:text-gray-100">Account</h1>
       <p className="mb-6 text-[13.5px] leading-relaxed text-axal-muted dark:text-gray-400">Who you are on the platform, how it reaches you, how you sign in, what you pay for and who you follow.</p>
 
-      {toast && (
-        <div className={`mb-4 rounded-lg px-4 py-2.5 text-sm flex items-center gap-2 ${
-          toast.kind === 'error' ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-        }`}>
-          {toast.kind === 'error' ? <AlertTriangle size={14} /> : <CheckCircle2 size={14} />}
-          {toast.message}
-        </div>
-      )}
+      {toastNote}
 
-      <ComplianceBridge />
-      <ProfileCompletionBanner onJump={() => setActive('profile')} />
+      {top}
 
       <div className="grid lg:grid-cols-[200px_1fr] gap-6">
         <AccountSectionNav sections={sections} active={safeActive} onSelect={setActive} />
-
-        <div className="min-w-0 space-y-6">
-          {safeActive === 'account' && (
-            <>
-              <ProfileIdentityCanvas
-                data={data}
-                onAccountChange={(delta) => setData((prev) => ({ ...prev, ...delta }))}
-                onSaved={() => setProfileRev((n) => n + 1)}
-              />
-              <SectionLabel as="h2" className="pt-2">Full profile and account</SectionLabel>
-              <ProfileTabs key={profileRev} data={data} onSaved={(d) => setData(prev => ({ ...prev, ...d }))} flash={flash} patch={patch} />
-              <EmailSection data={data} flash={flash} reload={reloadAccount} />
-              <YourCompaniesSection flash={flash} />
-              <RolesAccessCard data={data} onJump={() => setActive('billing')} />
-              <DocumentsAgreementsSection />
-              <AccountDeletionCard data={data} flash={flash} reload={reloadAccount} />
-            </>
-          )}
-          {safeActive === 'security-privacy' && (
-            <>
-              <AuthSection data={data} flash={flash} reload={reloadAccount} />
-              {/* The canvas draws no privacy section. These cards stay on this
-                  pane, under their own label: the worker's cohort-access
-                  notice links `/account/security-privacy` to one of them. */}
-              <SectionLabel as="h2" className="pt-2">Privacy</SectionLabel>
-              <PrivacyCoreCard flash={flash} />
-              <CohortAdvisorAccessCard flash={flash} />
-              <InvestorSignalsContributionCard flash={flash} role={data?.role} />
-              <InvestorMyThesisCard flash={flash} role={data?.role} />
-              <InvestorThesisEditorCard flash={flash} role={data?.role} />
-              <MarketIntelContributionCard flash={flash} />
-              <PrivacySection data={data} patch={patch} flash={flash} />
-            </>
-          )}
-          {safeActive === 'notifications' && (
-            <>
-              <NotificationsSection data={data} flash={flash} />
-              <PushDevices />
-              <DigestQuietHoursCard flash={flash} />
-            </>
-          )}
-          {safeActive === 'following' && <FollowingSection />}
-          {safeActive === 'usage' && <UsageSection role={role} />}
-          {safeActive === 'developer' && allowedIds.has('developer') && <DeveloperSection role={data.role} />}
-          {safeActive === 'onboarding' && <OnboardingSettingsTab />}
-          {safeActive === 'connectors' && <ConnectorsTab />}
-          {safeActive === 'billing' && allowedIds.has('billing') && <BillingTab data={data} flash={flash} />}
-          {safeActive === 'appearance' && <AppearanceTab flash={flash} />}
-          {safeActive === 'activity' && (
-            <Suspense fallback={<div className="py-8 text-center text-gray-500 dark:text-gray-400 text-sm">Loading…</div>}>
-              <ActivityPage />
-            </Suspense>
-          )}
-        </div>
+        <AccountPanes safeActive={safeActive} {...paneProps} />
       </div>
     </div>
+    )}
     </RailFrame>
   );
+}
+
+/** One section's pane: the same cards at every width. */
+function AccountPanes({ safeActive, data, setData, flash, patch, reloadAccount, profileRev, setProfileRev, onSelect, role, allowedIds }) {
+  return (
+    <div className="min-w-0 space-y-6">
+      {safeActive === 'account' && (
+        <>
+          <ProfileIdentityCanvas
+            data={data}
+            onAccountChange={(delta) => setData((prev) => ({ ...prev, ...delta }))}
+            onSaved={() => setProfileRev((n) => n + 1)}
+          />
+          <SectionLabel as="h2" className="pt-2">Full profile and account</SectionLabel>
+          <ProfileTabs key={profileRev} data={data} onSaved={(d) => setData(prev => ({ ...prev, ...d }))} flash={flash} patch={patch} />
+          <EmailSection data={data} flash={flash} reload={reloadAccount} />
+          <YourCompaniesSection flash={flash} />
+          <RolesAccessCard data={data} onJump={() => onSelect('billing')} />
+          <DocumentsAgreementsSection />
+          <AccountDeletionCard data={data} flash={flash} reload={reloadAccount} />
+        </>
+      )}
+      {safeActive === 'security-privacy' && (
+        <>
+          <AuthSection data={data} flash={flash} reload={reloadAccount} />
+          {/* The canvas draws no privacy section. These cards stay on this
+              pane, under their own label: the worker's cohort-access
+              notice links `/account/security-privacy` to one of them. */}
+          <SectionLabel as="h2" className="pt-2">Privacy</SectionLabel>
+          <PrivacyCoreCard flash={flash} />
+          <CohortAdvisorAccessCard flash={flash} />
+          <InvestorSignalsContributionCard flash={flash} role={data?.role} />
+          <InvestorMyThesisCard flash={flash} role={data?.role} />
+          <InvestorThesisEditorCard flash={flash} role={data?.role} />
+          <MarketIntelContributionCard flash={flash} />
+          <PrivacySection data={data} patch={patch} flash={flash} />
+        </>
+      )}
+      {safeActive === 'notifications' && (
+        <>
+          <NotificationsSection data={data} flash={flash} />
+          <PushDevices />
+          <DigestQuietHoursCard flash={flash} />
+        </>
+      )}
+      {safeActive === 'following' && <FollowingSection />}
+      {safeActive === 'usage' && <UsageSection role={role} />}
+      {safeActive === 'developer' && allowedIds.has('developer') && <DeveloperSection role={data.role} />}
+      {safeActive === 'onboarding' && <OnboardingSettingsTab />}
+      {safeActive === 'connectors' && <ConnectorsTab />}
+      {safeActive === 'billing' && allowedIds.has('billing') && <BillingTab data={data} flash={flash} />}
+      {safeActive === 'appearance' && <AppearanceTab flash={flash} />}
+      {safeActive === 'activity' && (
+        <Suspense fallback={<div className="py-8 text-center text-gray-500 dark:text-gray-400 text-sm">Loading…</div>}>
+          <ActivityPage />
+        </Suspense>
+      )}
+    </div>
+  );
+}
+
+/** D700 — the A1m index's two reads, the Following list and the role's plan status. */
+function AccountPhoneIndexReads({ role }) {
+  const follows = useAccountRead(() => api.followsMine());
+  const billing = useBillingStatus(role);
+  return <AccountPhoneIndex role={role} follows={follows} billing={billing} />;
 }
 
 // ---------- Sections --------------------------------------------------------
@@ -4056,9 +4061,9 @@ function PrivacyCoreCard({ flash }) {
       <div className="space-y-3">
         <Field label="Profile visibility">
           <select value={row.visibility || 'network'} onChange={e => save({ visibility: e.target.value })} disabled={busy} className={inputCls}>
-            <option value="public">Public — anyone with the link</option>
-            <option value="network">Network only — Axal VC members</option>
-            <option value="private">Private — admins only</option>
+            <option value="public">Public — anyone with the address</option>
+            <option value="network">Members only — signed-in Axal VC members</option>
+            <option value="private">Hidden — only you</option>
           </select>
         </Field>
         <label className="flex items-center gap-3 text-sm text-gray-800 dark:text-gray-200">
@@ -5311,34 +5316,6 @@ function AppearanceTab({ flash }) {
                 <Icon size={20} />
                 {t.label}
               </button>
-            );
-          })}
-        </div>
-      </Card>
-
-      <Card title="Density" description="Tighter spacing reclaims vertical real-estate on dashboards.">
-        <div className="grid grid-cols-2 gap-2">
-          {['comfy', 'compact'].map(d => {
-            const active = appearance.density === d;
-            return (
-              <button key={d} disabled={busy} onClick={() => set({ density: d })}
-                className={`px-4 py-3 rounded-lg border text-sm capitalize transition-colors ${
-                  active ? 'border-violet-600 bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-900'
-                }`}>{d}</button>
-            );
-          })}
-        </div>
-      </Card>
-
-      <Card title="Sidebar default" description="Whether the sidebar starts expanded or collapsed on each visit.">
-        <div className="grid grid-cols-2 gap-2">
-          {['expanded', 'collapsed'].map(s => {
-            const active = appearance.sidebar_default === s;
-            return (
-              <button key={s} disabled={busy} onClick={() => set({ sidebar_default: s })}
-                className={`px-4 py-3 rounded-lg border text-sm capitalize transition-colors ${
-                  active ? 'border-violet-600 bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-900'
-                }`}>{s}</button>
             );
           })}
         </div>

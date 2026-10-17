@@ -9,6 +9,7 @@
  *
  *   GET    /connectors                 the member's connections, for the "+" menu
  *   GET    /conversations?workspace=   the member's conversations on that workspace
+ *   GET    /conversations/mine         every conversation the member has, for Studio's phone list (D701)
  *   POST   /conversations              start one (every switch off)
  *   GET    /conversations/:uid         its messages and actions
  *   DELETE /conversations/:uid         delete it, with its messages and actions
@@ -185,6 +186,121 @@ eadwyn.get('/conversations', async (c) => {
     'SELECT * FROM eadwyn_conversations WHERE user_id = ? AND workspace = ? ORDER BY updated_at DESC, id DESC LIMIT 20',
   ).bind(user.id, workspace).all<ConversationRow>();
   return c.json({ conversations: (rows.results ?? []).map(publicConversation) });
+});
+
+/**
+ * D701 — the caller's conversations across both stores, for the Conversations
+ * list on Studio's phone page (#1663). It is registered BEFORE
+ * `/conversations/:uid`: after it, "mine" would reach `loadConversation`,
+ * fail `UID_RE` and answer 404.
+ *
+ * - The rail's: the caller's 20 newest `eadwyn_conversations`, each with its
+ *   message count. An empty title reads "<workspace> conversation".
+ * - Profiling: ONE `advisor_conversations` row, the one `/api/advisor/start`
+ *   resumes (the newest active row) or, with none active, the newest of any
+ *   state, which `/progress` reads. Listing every row would repeat "Profiling
+ *   questions" once per restart. Its count is its user and assistant messages.
+ *
+ * Every query is `WHERE user_id = ?` with the caller from `requireAuth`; the
+ * read takes no id and no parameter, and writes nothing (`releaseStranded` is
+ * not called). Each half is read on its own: one that throws is left out and
+ * named in `unreadable`, so the page says that half could not be read rather
+ * than "no conversations".
+ */
+interface MineRow {
+  id: string;
+  kind: 'eadwyn' | 'profiling';
+  title: string;
+  workspace: string | null;
+  updated_at: string;
+  messages: number;
+  answered: number | null;
+  total: number | null;
+  active: boolean;
+}
+
+/** A stored time as milliseconds; SQLite's 'YYYY-MM-DD HH:MM:SS' is UTC. */
+function storedMs(at: string): number {
+  const s = String(at ?? '').trim();
+  const iso = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(s) ? `${s.replace(' ', 'T')}Z` : s;
+  const ms = Date.parse(iso);
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+eadwyn.get('/conversations/mine', async (c) => {
+  const user = await requireAuth(c);
+  const unreadable: Array<'eadwyn' | 'profiling'> = [];
+  const rows: Array<MineRow & { _id: number }> = [];
+
+  try {
+    const rail = await c.env.DB.prepare(
+      `SELECT c.id, c.uid, c.workspace, c.title, c.updated_at,
+              (SELECT COUNT(*) FROM eadwyn_messages m WHERE m.conversation_id = c.id) AS messages
+         FROM eadwyn_conversations c
+        WHERE c.user_id = ?
+        ORDER BY c.updated_at DESC, c.id DESC
+        LIMIT 20`,
+    ).bind(user.id).all<{ id: number; uid: string; workspace: string; title: string; updated_at: string; messages: number }>();
+    for (const r of rail.results ?? []) {
+      const title = String(r.title ?? '').trim();
+      rows.push({
+        _id: Number(r.id),
+        id: r.uid,
+        kind: 'eadwyn',
+        title: title || `${r.workspace} conversation`,
+        workspace: r.workspace,
+        updated_at: r.updated_at,
+        messages: Number(r.messages),
+        answered: null,
+        total: null,
+        active: false,
+      });
+    }
+  } catch {
+    unreadable.push('eadwyn');
+  }
+
+  try {
+    type P = { id: number; uid: string; state: string; answered_count: number; total_questions: number; updated_at: string; messages: number };
+    const active = await c.env.DB.prepare(
+      `SELECT a.id, a.uid, a.state, a.answered_count, a.total_questions, a.updated_at,
+              (SELECT COUNT(*) FROM advisor_messages m WHERE m.conversation_id = a.id AND m.role IN ('user', 'assistant')) AS messages
+         FROM advisor_conversations a
+        WHERE a.user_id = ? AND a.state = 'active'
+        ORDER BY a.id DESC
+        LIMIT 1`,
+    ).bind(user.id).first<P>();
+    const row = active ?? await c.env.DB.prepare(
+      `SELECT a.id, a.uid, a.state, a.answered_count, a.total_questions, a.updated_at,
+              (SELECT COUNT(*) FROM advisor_messages m WHERE m.conversation_id = a.id AND m.role IN ('user', 'assistant')) AS messages
+         FROM advisor_conversations a
+        WHERE a.user_id = ?
+        ORDER BY a.id DESC
+        LIMIT 1`,
+    ).bind(user.id).first<P>();
+    if (row) {
+      rows.push({
+        _id: Number(row.id),
+        id: row.uid,
+        kind: 'profiling',
+        title: 'Profiling questions',
+        workspace: null,
+        updated_at: row.updated_at,
+        messages: Number(row.messages),
+        answered: Number(row.answered_count),
+        total: Number(row.total_questions),
+        active: row.state === 'active',
+      });
+    }
+  } catch {
+    unreadable.push('profiling');
+  }
+
+  // Newest first; on a tie the rail row first, then the higher id.
+  rows.sort((a, b) => storedMs(b.updated_at) - storedMs(a.updated_at)
+    || (a.kind === b.kind ? 0 : a.kind === 'eadwyn' ? -1 : 1)
+    || b._id - a._id);
+  return c.json({ conversations: rows.map(({ _id, ...r }) => r), unreadable });
 });
 
 eadwyn.post('/conversations', async (c) => {

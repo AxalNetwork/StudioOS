@@ -401,6 +401,16 @@ export async function maskFounderForInvestor<T extends FounderLikeRow>(
     unlocked = await hasActivePairwiseNda(env, founderUserId, ctx.viewerUserId);
   }
   if (unlocked) return row;
+  return maskForInvestorRow(row, founderUserId ?? null);
+}
+
+/**
+ * D702 — the mask step of `maskFounderForInvestor`, pure: every key outside
+ * `FOUNDER_PUBLIC_KEYS` becomes null, and the row says why. The preview on
+ * `/profile/preview` calls this through the investor read rather than keeping
+ * a masking rule of its own, so widening the public keys changes both at once.
+ */
+export function maskForInvestorRow<T extends Record<string, unknown>>(row: T, founderUserId: number | null): T {
   const masked: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(row)) {
     masked[k] = FOUNDER_PUBLIC_KEYS.has(k) ? v : null;

@@ -82,7 +82,7 @@ test('every view is wired: programs, exercises, exams and webinars render their 
   const viewAs = page('/learning/studio/programs/p1', '/learning/studio/programs/:program', { view: 'studioProgram', user: SUPER, activeRole: 'founder' });
   assert.match(viewAs, /data-testid="learning-coming-soon"/);
   assert.doesNotMatch(viewAs, /learning-loading|learning-studio-program"/);
-  assert.match(flat(viewAs), /Worker AI · Learning studio/, 'the card keeps the tier’s rail');
+  assert.match(flat(viewAs), /Eadwyn AI .{0,24}?Learning studio/, 'the card keeps the tier’s rail');
   // Each wired page is keyed by the uid it reads, so another one starts from loading.
   const src = codeOnly(read('frontend/src/pages/learning/LearningPage.jsx'));
   for (const line of [

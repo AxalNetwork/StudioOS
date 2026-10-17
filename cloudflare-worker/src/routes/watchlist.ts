@@ -11,6 +11,7 @@
  * `passed_on` watchlist items, graded against where each project is today.
  */
 import { Hono } from 'hono';
+import { findableBy } from '../services/investorFindable';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import {
@@ -136,6 +137,9 @@ r.post('/watchlist', async (c) => {
       const proj = await c.env.DB.prepare('SELECT id FROM projects WHERE id = ? AND deleted_at IS NULL')
         .bind(projectId).first<{ id: number }>();
       if (!proj) return c.json({ detail: 'Project not found' }, 404);
+      // D702 — by id or by uid alike: a venture its founder keeps to
+      // introductions answers as a missing one, and nothing is written.
+      if (!(await findableBy(c.env, user, projectId))) return c.json({ detail: 'Project not found' }, 404);
     }
 
     const conviction = String(body.conviction || 'medium').toLowerCase();

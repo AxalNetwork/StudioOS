@@ -11,6 +11,15 @@
  * The wrapper carries the page's one `#studio-chat` anchor. The admin
  * posture's "Continue in the chat" links and the assessment band's "Begin with
  * the chat" both point at it.
+ *
+ * D701 (#1663) — the founder's Studio passes `tab`, `onTab`, `ticket`,
+ * `onTicketOpen` and `onTicketClose`, which carry Eadwyn's panel tab in
+ * `?tab=` and the ticket form at `/studio/tickets/new`. The collapsed row
+ * stands for the conversation, so it is drawn only on Conversation with no
+ * ticket form open; Tasks, My tickets and the form are the chat's. The other
+ * four homes pass none of them and keep the row as it was. On a phone it also
+ * passes `phone`, `venture` and `belowThread` (the Conversations list), which
+ * stays under the collapsed row too, so the list follows the interview.
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import PersonalAdvisor from './PersonalAdvisor';
@@ -19,7 +28,7 @@ import { reportError } from '../../lib/log';
 import { pageLabel, predictTarget } from '../../lib/advisor/router';
 import { InterviewCompleteRow, STUDIO_CHAT_ANCHOR, interviewSummary, topProposals } from './interviewCompleteRow';
 
-export default function StudioInterview({ persona, disablePersistedFullscreen = false, onAvailabilityChange }) {
+export default function StudioInterview({ persona, disablePersistedFullscreen = false, onAvailabilityChange, tab, onTab, ticket, onTicketOpen, onTicketClose, phone = false, venture = null, belowThread = null }) {
   const [summary, setSummary] = useState(null);
   const [proposals, setProposals] = useState({ state: 'loading', items: [] });
   // null = the chat is collapsed if complete; 'chat' or 'ticket' = reopened.
@@ -48,23 +57,38 @@ export default function StudioInterview({ persona, disablePersistedFullscreen = 
 
   const collapsed = summary?.complete === true && !reopened;
   useEffect(() => { if (collapsed) readProposals(); }, [collapsed, readProposals]);
+  const rowShown = collapsed && (tab === undefined || tab === 'conversation') && !ticket;
+  // The founder's row opens the ticket route and reopens the chat under it,
+  // so the "has been filed" message stays in view once the form closes.
+  const openTicketRoute = () => { setReopened('chat'); onTicketOpen(); };
 
   return (
     <div id={STUDIO_CHAT_ANCHOR} data-testid="studio-interview">
-      {collapsed ? (
-        <InterviewCompleteRow
-          persona={persona}
-          summary={summary}
-          proposals={proposals}
-          onResume={() => setReopened('chat')}
-          onOpenTicket={() => setReopened('ticket')}
-          onRetryProposals={readProposals}
-        />
+      {rowShown ? (
+        <>
+          <InterviewCompleteRow
+            persona={persona}
+            summary={summary}
+            proposals={proposals}
+            onResume={() => setReopened('chat')}
+            onOpenTicket={onTicketOpen ? openTicketRoute : () => setReopened('ticket')}
+            onRetryProposals={readProposals}
+          />
+          {belowThread}
+        </>
       ) : (
         <PersonalAdvisor
           disablePersistedFullscreen={disablePersistedFullscreen}
           onAvailabilityChange={onAvailabilityChange}
           initialTicketOpen={reopened === 'ticket'}
+          tab={tab}
+          onTab={onTab}
+          ticket={ticket}
+          onTicketOpen={onTicketOpen}
+          onTicketClose={onTicketClose}
+          phone={phone}
+          venture={venture}
+          belowThread={belowThread}
         />
       )}
     </div>

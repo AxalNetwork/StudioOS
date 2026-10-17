@@ -163,7 +163,7 @@ export default function InterviewReviewPage({ sessions = interviewSessionsApi, a
     setDeleting((x) => ({ ...x, busy: true, error: null }));
     try {
       await api.deleteInterview(interview.id ?? id);
-      navigate('/validate/interviews', { replace: true });
+      navigate(`/validate/customer-research?project_id=${interview.project_id}`, { replace: true });
     } catch (e) {
       setDeleting({ busy: false, error: e?.message || 'The interview could not be deleted.' });
     }
@@ -176,7 +176,7 @@ export default function InterviewReviewPage({ sessions = interviewSessionsApi, a
 
   return (
     <div className="mx-auto max-w-5xl space-y-4 p-4 md:p-6" data-testid="interview-review-page">
-      <nav className="text-[12px]"><Link to="/validate/interviews" className="text-axal-muted underline dark:text-gray-400">Interviews</Link></nav>
+      <nav className="text-[12px]"><Link to={`/validate/customer-research?project_id=${interview.project_id}`} className="text-axal-muted underline dark:text-gray-400">Customer research</Link></nav>
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h1 className="m-0 text-[20px] font-bold text-axal-ink dark:text-gray-100" data-testid="interview-review-who">

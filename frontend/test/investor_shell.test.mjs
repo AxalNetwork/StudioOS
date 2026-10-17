@@ -401,9 +401,9 @@ test('the Worker AI rail is one component, and every investor workspace has it',
   assert.match(read('cloudflare-worker/src/routes/ai.ts'), new RegExp(`task: '${task}'`),
     `a worker route must actually run ${task}, or the card names a model nothing calls`);
   // Derived from the router, never typed here: the cards are built by
-  // `railCards` from `/api/ai/pricing` (owner, 2026-10-10).
-  assert.match(rail, /railCards\(pricing, jobsFor\(workspace\)/,
-    'the model and its rate come from the router\'s own table');
+  // `railSuggestions` from `/api/ai/pricing` (owner, 2026-10-10; D698).
+  assert.match(rail, /railSuggestions\(\{ section, module, pricing, picks \}\)/,
+    'the model comes from the router\'s own table');
   assert.doesNotMatch(rail, /\$0\.293|\$2\.253|Llama 3\.3 70B Fast/,
     'the canvas figures are not the router figures');
 });

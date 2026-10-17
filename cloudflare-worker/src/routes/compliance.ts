@@ -10,6 +10,7 @@
  * the same jurisdiction is a safe no-op.
  */
 import { Hono } from 'hono';
+import { findableBy } from '../services/investorFindable';
 import type { Context } from 'hono';
 import { projectInActiveCompany } from '../services/tenancyScope';
 import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activeCompany';
@@ -238,6 +239,9 @@ async function loadProject(
     'SELECT id, founder_id, entity_id, company_id FROM projects WHERE id = ?',
   ).bind(id).first<Project>();
   if (!row) return null;
+  // D702 — a venture its founder keeps to introductions is missing to an
+  // investor without one, as the other venture reads answer.
+  if (role(user) === 'investor' && !(await findableBy(c.env, user as any, row.id))) return null;
   if (isPrivilegedReader(role(user))) return row;
   return projectInActiveCompany(await activeCompanyFor(c, user), row) ? row : null;
 }

@@ -6,6 +6,7 @@
  * ONE-TIME signed share URLs (HMAC + DB-tracked single-use).
  */
 import { Hono } from 'hono';
+import { findableBy } from '../services/investorFindable';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { activeCompanyFor } from '../middleware/activeCompany';
@@ -492,6 +493,9 @@ async function projectOwned(
   ).bind(projectId).first<any>();
   if (!row) throw new Error('NotFound');
   const role = String(user?.role || '').toLowerCase();
+  // D702 — an investor opening a venture its founder keeps to introductions,
+  // without one, finds nothing, exactly as for a venture that does not exist.
+  if (role === 'investor' && !(await findableBy(c.env, user, row.id))) throw new Error('NotFound');
   if (role === 'admin' || role === 'partner' || role === 'investor') return row;
   if (role === 'founder' && user.founder_id && row.founder_id === user.founder_id) {
     if (!projectInActiveCompany(await activeCompanyFor(c, user), row)) throw new Error('NotFound');

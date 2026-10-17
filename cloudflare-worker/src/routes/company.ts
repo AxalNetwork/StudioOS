@@ -9,7 +9,8 @@
  */
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
-import { requireAuth, generateToken } from '../auth';
+import { requireAuth, generateToken, selectJwt } from '../auth';
+import { cyclesActive, visitsFor, recordVisit } from '../services/companySheet';
 import {
   isTitle, isAuthority, normalizeCarryBps, teamVocabulary,
 } from '../services/teamAuthority';
@@ -183,6 +184,7 @@ r.get('/company/memberships', async (c) => {
        ORDER BY is_primary_admin DESC, created_at ASC`
     ).bind(user.id).all<Link>();
     const out: any[] = [];
+    const visits = await visitsFor(c.env, user.id);
     // One entry per COMPANY, not per link. This loop returned a row per link,
     // and nothing stopped two links naming the same pair: `user_company_links`
     // shipped with only `idx_uclink_user` (a plain index on user_id), so the
@@ -204,9 +206,31 @@ r.get('/company/memberships', async (c) => {
         ...(await detailDto(c.env, company, user)),
         my_role: link.role_in_company,
         is_primary_admin: !!link.is_primary_admin,
+        cycles_active: await cyclesActive(c.env, user, company.id),
+        last_opened: visits?.get(company.id) ?? null,
       });
     }
     return c.json(out);
+  } catch (e) { return mapError(c, e); }
+});
+
+r.put('/company/visits', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    if ((await selectJwt(c))?.payload.impersonated_by) {
+      return c.json({ detail: 'A support session cannot record a company visit.' }, 403);
+    }
+    const body = await c.req.json().catch(() => null);
+    const companyId = body?.company_id;
+    const cycle = body?.cycle;
+    if (!Number.isSafeInteger(companyId) || companyId <= 0 || !['validate', 'build', 'raise', 'grow'].includes(cycle)) {
+      return c.json({ detail: 'A valid company_id and cycle are required.' }, 400);
+    }
+    const link = await c.env.DB.prepare('SELECT 1 FROM user_company_links WHERE company_id = ? AND user_id = ?')
+      .bind(companyId, user.id).first();
+    if (!link) return c.json({ detail: 'Company not found.' }, 404);
+    const opened_at = await recordVisit(c.env, user.id, companyId, cycle);
+    return c.json({ company_id: companyId, cycle, opened_at });
   } catch (e) { return mapError(c, e); }
 });
 

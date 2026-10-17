@@ -33,12 +33,12 @@ const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const RAIL = 'frontend/src/ui/WorkerRail.jsx';
 const HOOK = 'frontend/src/hooks/useAiSpend.js';
 
-/** The rendered `Usage` block of WorkerRail (AIRail canvas), from source. */
+/** The Usage box of WorkerRail (AIRail canvas, D698), from source. */
 function usageBlock() {
   const src = codeOnly(read(RAIL));
-  const from = src.indexOf('<span>Usage</span>');
+  const from = src.indexOf('export function RailUsage(');
   assert.ok(from > 0, 'the usage block was not found');
-  return src.slice(from, src.indexOf('</section>', from));
+  return src.slice(from, src.indexOf('export const RETIRED_RAIL_PROPS', from));
 }
 
 // ── The hook ────────────────────────────────────────────────────────────
@@ -69,31 +69,27 @@ test('reload re-runs the reads', () => {
 // ── WorkerRail ──────────────────────────────────────────────────────────
 
 test('WorkerRail: a failed usage read is Unreadable with a retry, never "Not recorded"', () => {
+  // D698: the Usage box reads the allowance ledger (`/api/ai-budget/me`). A
+  // failed read, or one without its `held_for_review` list, is Unreadable.
   const block = usageBlock();
   assert.doesNotMatch(block, /Not recorded/,
     'the usage block says "Not recorded" — that claims the log was read');
-  assert.match(block, /<Unreadable[\s\S]{0,200}?onRetry=\{reload\}/,
+  assert.match(block, /if \(reading\.budgetError \|\| !budgetReadable\(b\)\) \{[\s\S]{0,200}?<Unreadable[\s\S]{0,200}?onRetry=\{reading\.reload\}/,
     'the usage block has no Unreadable with a retry');
-  // Both failures reach it: the request failing, and `recorded: false`. The
-  // `known` gate is what routes `recorded: false` there.
-  assert.match(codeOnly(read(RAIL)), /const known = !!spend\?\.recorded && typeof spend\?\.month\?\.spend_usd === 'number';/);
 });
 
-test('WorkerRail: a failed pricing read draws the model block, saying so', () => {
+test('WorkerRail: a failed pricing read draws the suggestions block, saying so', () => {
   const src = codeOnly(read(RAIL));
-  const gate = /\{!view\.cards\.length && pricingError && \(\s*<section[^>]*>\s*<span>Model · this page<\/span>\s*<Unreadable[\s\S]{0,200}?onRetry=\{reload\}/;
+  const gate = /\{sug\.unreadable \? \(\s*pricingError \? \(\s*<div[^>]*>\s*<Unreadable[\s\S]{0,200}?onRetry=\{reload\}/;
   assert.match(src, gate,
     'a failed pricing read renders nothing — the model block vanishes and reads as "no model here"');
 });
 
 test('WorkerRail: a failed allowance read is Unreadable with a retry, never a $0.00 bar', () => {
-  const src = codeOnly(read(RAIL));
-  const fn = src.slice(src.indexOf('export function RailAllowance('), src.indexOf('export function RailPageUsage('));
-  assert.ok(fn.length > 100, 'RailAllowance could not be located');
-  assert.match(fn, /const month = allowanceMonth\(reading\.budget, reading\.budgetError\);\s*if \(!month\) \{[\s\S]{0,200}?<Unreadable[\s\S]{0,200}?onRetry=\{reading\.reload\}/,
-    'an unread allowance draws something other than Unreadable');
-  // No cap draws no "of $…" and no bar.
-  assert.match(fn, /month\.cap > 0 \? spendMeter\(month\.spent, month\.cap\) : null/);
+  const fn = usageBlock();
+  assert.ok(fn.length > 100, 'RailUsage could not be located');
+  // No cap draws no bar.
+  assert.match(fn, /r\.cap > 0 \? spendMeter\(r\.spent, r\.cap\) : null/);
 });
 
 test('WorkerRail: no zero stands in for the cap', () => {

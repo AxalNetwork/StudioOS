@@ -132,8 +132,8 @@ test('A CHOSEN VENTURE RIDES ON EVERY LINK: tabs, card titles and the module pag
     ...[...navOf(over).matchAll(/href="([^"]+)"/g)].map((m) => m[1]),
     ...[...over.matchAll(/href="([^"]+)"[^>]*>[^<]* ›</g)].map((m) => m[1]),
   ];
-  // Overview, the Interviews tab (D685 §3.1), then each module, and each card's title.
-  assert.equal(own.length, 2 + MODULES.validate.length * 2, 'the tabs and every card title');
+  // Overview, then each module and each card's title (D694).
+  assert.equal(own.length, 1 + MODULES.validate.length * 2, 'the tabs and every card title');
   for (const l of own) assert.match(l, /\?project_id=7$/, l);
   const mod = html(h(CycleModulePage, { cycle: 'validate', slug: slugOf(MODULES.validate[0]), cards: OVERVIEWS.validate.cards, data: { card: OVERVIEWS.validate.cards[0] }, search: '?project_id=7' }));
   for (const m of navOf(mod).matchAll(/href="([^"]+)"/g)) assert.match(m[1], /\?project_id=7$/, m[1]);

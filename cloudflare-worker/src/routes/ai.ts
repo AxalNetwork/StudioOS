@@ -163,6 +163,158 @@ ai.get('/rates', async (c) => {
 });
 
 /**
+ * D698 (#1660) — the Eadwyn AI rail's preferences: the assist mode per rail
+ * section, and the model picked per section and router task. Before this they
+ * lived in one browser's localStorage, so a founder who turned Eadwyn on at a
+ * desk found it off on a phone. Migration 465's `ai_rail_preferences` holds
+ * them now; localStorage stays the cache.
+ *
+ * Caller only. Every route calls `requireAuth` first, reads and writes the
+ * caller's own rows, and takes no user id from the body or the query. A
+ * display preference, like `worker_rail_collapsed`, not a venture write, so no
+ * `activity_logs` row is written.
+ */
+export const RAIL_PREFERENCE_CAP = 200;
+const RAIL_SECTION_RE = /^[\p{L}\p{N} &·_-]+$/u;
+const RAIL_MODES = new Set(['eadwyn', 'manual']);
+
+/**
+ * The rail's `workspace`, decoded, trimmed and lower-cased as the browser keys
+ * already are (`railModelChoice.js`, `useAssistMode.js`). Null when it is not
+ * 1 to 60 characters of letters, digits, spaces, `&`, `·`, `_` or `-`, so a
+ * path segment such as `../x` never becomes a key.
+ */
+export function railSection(raw: string | undefined): string | null {
+  let value = String(raw ?? '');
+  try { value = decodeURIComponent(value); } catch { return null; }
+  value = value.trim().toLowerCase();
+  if (value.length < 1 || value.length > 60) return null;
+  return RAIL_SECTION_RE.test(value) ? value : null;
+}
+
+/** A task the rail may store a pick for: a ROUTE key with a non-empty `alternates`. */
+export function pickableTask(task: string): string[] | null {
+  if (!Object.prototype.hasOwnProperty.call(ROUTE, task)) return null;
+  const alternates = (ROUTE as Record<string, { alternates?: string[] }>)[task].alternates ?? [];
+  return alternates.length ? alternates : null;
+}
+
+async function readBody(c: any): Promise<Record<string, unknown>> {
+  try {
+    const body = await c.req.json();
+    return body && typeof body === 'object' && !Array.isArray(body) ? body : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Write one preference row, or clear it when `clear` is set. The cap and the
+ * write are one statement: the insert happens only while the member holds
+ * fewer than RAIL_PREFERENCE_CAP rows or already holds this key, so two PUTs
+ * at once cannot pass the cap, and an update to an existing key always lands.
+ * Returns false when the cap refused it.
+ */
+async function writeRailPreference(
+  env: Env,
+  userId: number,
+  section: string,
+  task: string,
+  value: { model: string | null; mode: string | null },
+  clear: boolean,
+): Promise<boolean> {
+  if (clear) {
+    await env.DB.prepare(
+      'DELETE FROM ai_rail_preferences WHERE user_id = ?1 AND section = ?2 AND task = ?3',
+    ).bind(userId, section, task).run();
+    return true;
+  }
+  const res = await env.DB.prepare(
+    `INSERT INTO ai_rail_preferences (uid, user_id, section, task, model, mode)
+     SELECT ?1, ?2, ?3, ?4, ?5, ?6
+     WHERE (SELECT COUNT(*) FROM ai_rail_preferences WHERE user_id = ?2) < ?7
+        OR EXISTS (SELECT 1 FROM ai_rail_preferences WHERE user_id = ?2 AND section = ?3 AND task = ?4)
+     ON CONFLICT (user_id, section, task) DO UPDATE SET
+       model = excluded.model, mode = excluded.mode, updated_at = datetime('now')`,
+  ).bind(crypto.randomUUID(), userId, section, task, value.model, value.mode, RAIL_PREFERENCE_CAP).run();
+  return Number(res?.meta?.changes ?? 0) > 0;
+}
+
+function refuseCap(c: any) {
+  return refuse(c, 409, {
+    code: 'too_many_preferences',
+    message: `You can keep up to ${RAIL_PREFERENCE_CAP} rail preferences. Clear one to save another.`,
+  });
+}
+
+function refuseSection(c: any) {
+  return refuse(c, 400, {
+    code: 'invalid_section',
+    message: 'That is not a rail section: use 1 to 60 letters, digits, spaces, &, ·, _ or -.',
+  });
+}
+
+/** GET /api/ai/rail-preferences — the caller's modes and picks, by section. */
+ai.get('/rail-preferences', async (c) => {
+  const user = await requireAuth(c);
+  const rows = await c.env.DB.prepare(
+    'SELECT section, task, model, mode FROM ai_rail_preferences WHERE user_id = ?1 ORDER BY section, task',
+  ).bind(user.id).all<{ section: string; task: string; model: string | null; mode: string | null }>();
+  const modes: Record<string, string> = {};
+  const models: Record<string, Record<string, string>> = {};
+  for (const row of rows.results ?? []) {
+    if (row.task === '') {
+      if (row.mode) modes[row.section] = row.mode;
+    } else if (row.model) {
+      (models[row.section] ??= {})[row.task] = row.model;
+    }
+  }
+  return c.json({ ok: true, modes, models });
+});
+
+/** PUT /api/ai/rail-preferences/:section — `{ mode: 'eadwyn' | 'manual' | null }`. */
+ai.put('/rail-preferences/:section', async (c) => {
+  const user = await requireAuth(c);
+  const section = railSection(c.req.param('section'));
+  if (!section) return refuseSection(c);
+  const body = await readBody(c);
+  const mode = body.mode;
+  if (mode !== null && !(typeof mode === 'string' && RAIL_MODES.has(mode))) {
+    return refuse(c, 400, { code: 'invalid_mode', message: 'The mode is "eadwyn", "manual" or null.' });
+  }
+  const ok = await writeRailPreference(c.env, Number(user.id), section, '', { model: null, mode: mode as string | null }, mode === null);
+  if (!ok) return refuseCap(c);
+  return c.json({ ok: true, section, mode });
+});
+
+/** PUT /api/ai/rail-preferences/:section/:task — `{ model: string | null }`. */
+ai.put('/rail-preferences/:section/:task', async (c) => {
+  const user = await requireAuth(c);
+  const section = railSection(c.req.param('section'));
+  if (!section) return refuseSection(c);
+  const task = c.req.param('task');
+  const alternates = pickableTask(task);
+  if (!alternates) {
+    return refuse(c, 400, {
+      code: 'task_not_pickable',
+      message: 'That work has no model to choose, so no pick is stored for it.',
+    });
+  }
+  const body = await readBody(c);
+  const model = body.model;
+  if (model !== null && !(typeof model === 'string' && alternates.includes(model))) {
+    return refuse(c, 400, {
+      code: 'model_not_offered',
+      message: 'That model is not offered for this work.',
+      extra: { alternates },
+    });
+  }
+  const ok = await writeRailPreference(c.env, Number(user.id), section, task, { model: model as string | null, mode: null }, model === null);
+  if (!ok) return refuseCap(c);
+  return c.json({ ok: true, section, task, model });
+});
+
+/**
  * What the model is told it is for. Written as a boundary rather than a
  * persona, because everything it is stopped from doing is something the
  * product has been caught doing before.

@@ -5,7 +5,7 @@ The corpus the first integration pass worked from. Sorted by one question:
 
 | Folder | Count | Meaning |
 | --- | --- | --- |
-| `integrated/` | 90 | A route is running on main. Graded `CURRENT`, `UPGRADE` or `RESKIN` — the surface exists, and for `UPGRADE`/`RESKIN` the canvas is a *diff against* something already live. |
+| `integrated/` | 91 | A route is running on main. Graded `CURRENT`, `UPGRADE` or `RESKIN` — the surface exists, and for `UPGRADE`/`RESKIN` the canvas is a *diff against* something already live. |
 | `backlog/` | 28 | Graded `NEW` or `DEFERRED`. No route yet. |
 | `out-of-scope/` | 26 | Deliberately not being built. The `ROUTE_MAP.md` row says why. |
 | `shared/` | 6 | The dc-runtime bundle every canvas loads, plus two standalone pitch-deck exports. Generated — both code scanners ignore this tree. Every canvas asks for it as `src="./support.js"`, which resolves next to the canvas and **not** to this folder, so opening one straight from `integrated/` in a browser gets a blank page: copy `shared/support.js` beside it first. Nothing runs these at runtime, so the reference is nominal — it is a convention marking "the shared runtime, not an inlined 69KB copy", and `scripts/read-canvas.mjs` reproduces it when it decodes a new export. |
@@ -381,3 +381,13 @@ Every file was replaced or renamed where it sat, so none moves a number:
 - What the design asks for, what is built, and who builds the rest:
   `documentation/architecture/decisions/D685.md`.
 
+**2026-10-15 (D698, #1660), one canvas graduated.** `AIRail` moved from
+`design/incoming/` to `integrated/`, unedited, with its build: every
+`WorkerRail` now draws it as "Eadwyn AI". **`integrated/` went 90 → 91.** It
+now sits beside `Cycle Overview`, so CO's two `dc-import`s of it (the phone
+panel at CO:34 and the desktop rail at CO:125) resolve. The older
+`backlog/AIRail.dc.html` stays, because the backlog's Founder Workspaces
+Canvas imports it. The incoming Founder Workspaces Canvas also imports
+AIRail, and that import no longer resolves inside `incoming/`
+(`design/incoming/README.md` says so). Every departure from the canvas is
+listed in `documentation/architecture/decisions/D698.md`.
