@@ -145,16 +145,17 @@ function Field({ field, values, errors, setValue, prefix, busy, compact = false,
   </div>;
 }
 
-export default function FormLightbox({ form: base, current = null, cycle, slug, moduleName, onSubmit, onSaved, onClose, loadOptions = null, onSearch = null, searchDelay = 250, search = '', bar }) {
+export default function FormLightbox({ form: base, current = null, cycle, slug, moduleName, onSubmit, onSaved, onClose, loadOptions = null, onSearch = null, searchDelay = 250, search = '', bar, refused = '' }) {
   const id = useId();
   const initialFields = useMemo(() => formFields(base), [base]);
   const queryValues = useMemo(() => typeof base?.fromQuery === 'function' ? base.fromQuery(new URLSearchParams(search)) : {}, [base, search]);
   const [values, setValues] = useState(() => formValues(initialFields, current, queryValues));
   const [errors, setErrors] = useState({});
-  const [refusal, setRefusal] = useState('');
+  // `refused`: a sentence the form opens with and nothing to save (a record that refused its read).
+  const [refusal, setRefusal] = useState(refused);
   const [busy, setBusy] = useState(false);
   const saving = useRef(false);
-  const [loaded, setLoaded] = useState(loadOptions ? undefined : {});
+  const [loaded, setLoaded] = useState(refused ? null : loadOptions ? undefined : {});
   const [done, setDone] = useState(null);
   const [copied, setCopied] = useState(false);
   const fields = useMemo(() => formFields(base, loaded), [base, loaded]);
@@ -189,7 +190,7 @@ export default function FormLightbox({ form: base, current = null, cycle, slug, 
   const picked = () => Object.fromEntries(Object.entries(picks).filter(([name, p]) => values[name] === p.label).map(([, p]) => [p.into, p.value]));
   const blocked = typeof base?.blocked === 'function' && !!loaded && base.blocked(fields);
   useEffect(() => {
-    if (!loadOptions) return undefined;
+    if (!loadOptions || refused) return undefined;
     let live = true;
     Promise.resolve().then(loadOptions).then((read) => {
       if (!live) return;

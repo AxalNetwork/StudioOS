@@ -418,6 +418,8 @@ const writesPath = 'lib/api/cycleWrites.js';
 const recordModelPath = 'pages/cycles/recordModel.js';
 const recordModelSource = readFileSync(new URL('../src/' + recordModelPath, import.meta.url), 'utf8');
 
+/** A 403 as `request()` throws it. */
+const forbidden = () => { const e = new Error('Forbidden'); e.status = 403; return e; };
 /** A write table whose `formOptions` answers `reply` for the module (or refuses), as #1692's read does. */
 function readingTable(replies, answer) {
   const calls = [];
@@ -493,7 +495,7 @@ async function assertLoaders(m) {
     await ui.submit();
     assert.equal(ui.sends('hypothesis')[0][2].owner_user_id, 12);
   } finally { await ui.unmount(); }
-  const refused = await mountRead(hyp, 'experiments', { experiments: Object.assign(new Error('Forbidden'), { status: 403 }) });
+  const refused = await mountRead(hyp, 'experiments', { experiments: forbidden() });
   try {
     assert.equal(textOf(refused.by('cycle-form-refusal')), 'Forbidden', 'a refused read shows the Worker\'s sentence');
     await refused.submit();
@@ -650,4 +652,14 @@ test('11 (PR 2b): each Validate write calls its spelled-out route with ?project=
   const calls = extractClientCalls(writesSourceText).map((c) => `${c.method} ${normalizePath(c.path)}`);
   for (const want of ['POST /cycles/validate/themes', 'PATCH /cycles/validate/themes/:p', 'POST /cycles/validate/competitors', 'PATCH /cycles/validate/demand-signals/:p',
     'PATCH /cycles/validate/hypotheses/:p', 'GET /cycles/:p/modules/:p/form-options']) assert.ok(calls.some((c) => c.endsWith(want)), want);
+});
+
+test('13 (PR 2b): an Edit whose record refused opens with the Worker\'s sentence and nothing to save', async () => {
+  const edit = m0.EDITS.validate.experiments;
+  const ui = await mountForm(h(FormLightbox, { form: { ...edit, fields: [] }, cycle: 'validate', slug: 'experiments', refused: 'Hypothesis not found', onSubmit() { assert.fail('nothing is sent'); }, onClose() {} }));
+  try {
+    assert.equal(textOf(ui.by('cycle-form-refusal')), 'Hypothesis not found');
+    assert.ok(propsOf(ui.by('cycle-form-save')).disabled, 'nothing to save');
+    await ui.submit();
+  } finally { await ui.unmount(); }
 });

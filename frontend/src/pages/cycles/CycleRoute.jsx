@@ -735,8 +735,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
           onClose={closeEdit} />
       ) : rowEdit ? (
         <FormLightbox key={`edit-${editing.id}-refused`} form={{ ...edit, fields: [] }} cycle={cycle} slug={slug}
-          loadOptions={() => Promise.reject(new Error(rowEdit.error || 'This record has no Edit.'))}
-          onSubmit={() => {}} onClose={closeEdit} />
+          refused={rowEdit.error || 'This record has no Edit.'} onSubmit={() => {}} onClose={closeEdit} />
       ) : null
     ) : editing && edit.idOf(editing) != null ? (
       <FormLightbox key={`edit-${editing.id}`} form={edit} current={edit.valuesOf(editing)} cycle={cycle} slug={slug}
