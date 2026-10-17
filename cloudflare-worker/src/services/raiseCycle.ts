@@ -237,6 +237,42 @@ export async function computeReadiness(env: Env, projectId: number): Promise<Com
   return out;
 }
 
+/**
+ * The newest write to the stores each computed check reads (D691 decision 8),
+ * one fixed statement per item. `null` marks a check that reads `projects`
+ * fields, which keep no write time, so it always re-scores.
+ */
+const LATEST_WRITE: Record<Exclude<ReadinessKey, 'team'>, string | null> = {
+  deck: 'SELECT MAX(created_at) AS at FROM pitch_decks WHERE project_id = ?',
+  use_of_funds: null,
+  cap_table: 'SELECT MAX(updated_at) AS at FROM cap_table_scenarios WHERE project_id = ? AND COALESCE(is_variant, 0) = 0',
+  traction: null,
+  data_room: 'SELECT MAX(updated_at) AS at FROM data_room_files WHERE project_id = ?',
+  narrative: `SELECT MAX(at) AS at FROM (
+      SELECT MAX(updated_at) AS at FROM spinout_deck_overrides WHERE project_id = ? AND version > 0
+      UNION ALL SELECT MAX(checked_at) FROM narrative_checks WHERE project_id = ?
+      UNION ALL SELECT MAX(updated_at) FROM narrative_version_meta WHERE project_id = ?)`,
+};
+
+/**
+ * `since: 'last'`: whether a computed item needs a new score. It does when it
+ * has none, when a store its check reads has a row written after its newest
+ * score, when its check reads `projects` fields, or when the check now finds
+ * something other than that score (a deleted row leaves no newer write).
+ */
+export async function changedSinceScored(
+  env: Env, projectId: number, c: ComputedScore, newest: { score: number; missing: string | null; scored_at: string } | undefined,
+): Promise<boolean> {
+  if (!newest) return true;
+  if (Number(newest.score) !== c.score || (newest.missing ?? null) !== c.missing) return true;
+  const sql = LATEST_WRITE[c.key as Exclude<ReadinessKey, 'team'>];
+  if (sql == null) return true;
+  // Each statement names the venture once per store it reads.
+  const binds = Array.from({ length: (sql.match(/\?/g) ?? []).length }, () => projectId);
+  const row = await env.DB.prepare(sql).bind(...binds).first<{ at: string | null }>();
+  return !!row?.at && String(row.at) > String(newest.scored_at);
+}
+
 export async function readinessCard(ctx: Ctx): Promise<Card> {
   return safeCard(meta('fundraising-readiness', 'All time', 'Each readiness item by its score out of 10, shaded by evidence; the overall score over time.', 'Readiness scores'), async (): Promise<CardBody> => {
     const { items, scores } = await loadReadiness(ctx);
@@ -411,6 +447,10 @@ export async function checkInputs(env: Env, projectId: number, version: number) 
     'SELECT field_key, value FROM spinout_deck_overrides WHERE project_id = ? AND version = ? AND field_key != ? ORDER BY field_key',
   ).bind(projectId, version, VERSION_MARKER_KEY).all<{ field_key: string; value: string }>();
   for (const w of words.results || []) stated.push(...parseStatedFigures(w.field_key, w.value));
+  // Why now has no deck key: it lives in the version's meta (D691 decision 7).
+  const meta = await env.DB.prepare('SELECT why_now FROM narrative_version_meta WHERE project_id = ? AND version = ?')
+    .bind(projectId, version).first<{ why_now: string | null }>();
+  if (meta?.why_now) stated.push(...parseStatedFigures('why_now', meta.why_now));
 
   const metrics: Partial<Record<FigureKey, { value: number; source: string }>> = {};
   const mrr = await env.DB.prepare(

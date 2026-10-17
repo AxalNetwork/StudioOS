@@ -30,6 +30,8 @@ import { MODULES, TOOL_HREF, fundFit, capIdOf, NEVER_EXPIRES } from '../src/serv
 import { saveScenario } from '../src/services/capTableWrites.ts';
 import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
+import { withThrownResponses } from '../src/util/thrownResponse.ts';
+import { RAISE_RECORDS } from '../src/services/records/raise.ts';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const BASELINE = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
@@ -153,6 +155,40 @@ async function rec(db: DatabaseSync, slug: string, id: string | number, { who = 
     return { status: res.status, body: await res.json().catch(() => null) as any };
   } finally { [console.warn, console.error] = saved; }
 }
+/** A stand-in for the R2 bucket: the keys put and deleted. */
+function bucket() {
+  const objects = new Map<string, Uint8Array>();
+  const deleted: string[] = [];
+  return {
+    objects, deleted,
+    put: async (key: string, bytes: Uint8Array) => { objects.set(key, bytes); },
+    get: async (key: string) => (objects.has(key) ? { body: objects.get(key) } : null),
+    delete: async (key: string) => { deleted.push(key); objects.delete(key); },
+  };
+}
+
+/** One record action (or form-options) through the registered route, as `who`. */
+async function act(db: DatabaseSync, slug: string, id: string | number | null, key: string, body?: unknown,
+  { who = FOUNDER, project = P, files = bucket() as any, query = '' } = {}) {
+  people(db);
+  const token = await new SignJWT({ user_id: who, role: PEOPLE[who]?.role ?? 'founder' }).setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+  const path = id == null
+    ? `/api/cycles/raise/modules/${slug}/form-options?project=${project}${query}`
+    : `/api/cycles/raise/modules/${slug}/records/${encodeURIComponent(String(id))}/actions/${key}?project=${project}`;
+  const init: any = id == null ? { headers: { Authorization: `Bearer ${token}` } } : body instanceof FormData
+    ? { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body }
+    : { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body ?? {}) };
+  const saved = [console.warn, console.error]; console.warn = () => {}; console.error = () => {};
+  try {
+    // A writer's refusal is a thrown Response, which the worker's entry answers with (util/thrownResponse.ts).
+    const res = await withThrownResponses(() => records.request(path, init, { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db), FILES: files } as any));
+    const raw = await res.text();
+    return { status: res.status, body: raw ? JSON.parse(raw) : null, raw };
+  } finally { [console.warn, console.error] = saved; }
+}
+const count = (db: DatabaseSync, sql: string) => Number((db.prepare(sql).get() as any).n);
+
 const overview = async (db: DatabaseSync) => {
   const token = await new SignJWT({ user_id: FOUNDER, role: 'founder' }).setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
@@ -367,11 +403,10 @@ test('14: the data-room links open the file tool, and every list links its rows 
     assert.equal((await rec(db, m.slug, first.id)).status, 200, `${m.slug} ${first.id} opens`);
   }
   // Manage access opens the file tool on this venture; Model a round opens the variants.
-  const file = (await rec(db, 'data-room', 12)).body;
-  assert.deepEqual(file.actions.map((a: any) => [a.key, a.kind, a.href]),
-    [['manage-access', 'link', `${TOOL_HREF.dataRoom}&project_id=${P}`]]);
-  assert.deepEqual((await rec(db, 'cap-table', 'e-3')).body.actions.map((a: any) => [a.key, a.kind, a.href]),
-    [['model-a-round', 'link', '/raise/cap-table/variants']]);
+  const links = async (slug: string, id: string | number) => (await rec(db, slug, id)).body.actions
+    .filter((a: any) => a.kind === 'link').map((a: any) => [a.key, a.kind, a.href]);
+  assert.deepEqual(await links('data-room', 12), [['manage-access', 'link', `${TOOL_HREF.dataRoom}&project_id=${P}`]]);
+  assert.deepEqual(await links('cap-table', 'e-3'), [['model-a-round', 'link', '/raise/cap-table/variants']]);
 });
 
 
@@ -389,10 +424,26 @@ const SECTIONS: Record<string, { id: string | number; main: string[]; side: stri
   'use-of-funds': { id: 'product', main: ['hires', 'actual'], side: ['feeds'] },
   'capital-relationships': { id: 5, main: ['timeline', 'fit'], side: ['feedback', 'materials'] },
 };
-/** Only actions whose handlers exist are declared, and both are links (#1700 declares the rest). */
-const ACTIONS: Record<string, string[]> = { 'data-room': ['manage-access'], 'cap-table': ['model-a-round'] };
+/** Every action and section action #1699's step 4 lists (#1700 step 6), for the record in SECTIONS. */
+const ACTIONS: Record<string, string[]> = {
+  'fundraising-readiness': ['rescore'],
+  'investor-narrative': ['duplicate', 'edit'],
+  'pitch-deck': ['revoke'],
+  'data-room': ['manage-access', 'replace', 'remove'],
+  'cap-table': ['model-a-round', 'edit'],
+  'use-of-funds': ['add-hire', 'edit-split'],
+  'capital-relationships': ['log', 'add-feedback', 'mark-passed', 'edit'],
+};
+/** The section that carries an action, and the action it names. */
+const SECTION_ACTIONS: Record<string, Record<string, string>> = {
+  'fundraising-readiness': { 'mock-diligence': 'rescore' },
+  'investor-narrative': { narrative: 'edit' },
+  'data-room': { versions: 'replace' },
+  'use-of-funds': { hires: 'add-hire' },
+  'capital-relationships': { timeline: 'log', feedback: 'add-feedback' },
+};
 
-test('1: each record has a title, four facts with a value or a reason, its sections and only the linked actions', async () => {
+test('1: each record has a title, four facts with a value or a reason, its sections and every action it lists', async () => {
   const db = await seeded();
   for (const m of MODULES) {
     const want = SECTIONS[m.slug];
@@ -405,12 +456,22 @@ test('1: each record has a title, four facts with a value or a reason, its secti
     for (const f of body.facts) assert.ok(f.value != null || String(f.reason ?? '').trim(), `${m.slug} ${f.label} says why it is empty`);
     assert.deepEqual(body.main.map((x: any) => x.key), want.main, `${m.slug} main`);
     assert.deepEqual(body.side.map((x: any) => x.key), want.side, `${m.slug} side`);
-    assert.deepEqual(body.actions.map((a: any) => a.key), ACTIONS[m.slug] ?? [], `${m.slug} actions`);
-    for (const a of body.actions) assert.equal(a.kind, 'link', `${m.slug} ${a.key} is a link`);
+    assert.deepEqual(body.actions.map((a: any) => a.key), ACTIONS[m.slug], `${m.slug} actions`);
+    for (const a of body.actions) {
+      assert.ok(!('execute' in a) && !('references' in a), `${m.slug} ${a.key}: the handler stays on the server`);
+      if (a.kind === 'link') assert.ok(a.href, `${m.slug} ${a.key} links somewhere`);
+      if (a.kind === 'form') assert.ok(a.form.fields.length > 0, `${m.slug} ${a.key} has fields`);
+    }
+    const carried = Object.fromEntries([...body.main, ...body.side].filter((x: any) => x.action).map((x: any) => [x.key, x.action]));
+    assert.deepEqual(carried, SECTION_ACTIONS[m.slug] ?? {}, `${m.slug} section actions`);
+    for (const key of Object.values(carried)) assert.ok(body.actions.some((a: any) => a.key === key), `${m.slug}: ${key} is declared`);
     assert.ok(!('createdBy' in body) && !('createdAt' in body), 'the creator stays on the server');
   }
   // Mock diligence is the Data room item's alone (decision 8).
   assert.ok(!(await rec(db, 'fundraising-readiness', 'deck')).body.main.some((x: any) => x.key === 'mock-diligence'));
+  // Team is scored by a person (a form); the pool is set in the tool, so it has no Edit.
+  assert.deepEqual((await rec(db, 'fundraising-readiness', 'team')).body.actions.map((a: any) => [a.key, a.kind]), [['score', 'form']]);
+  assert.deepEqual((await rec(db, 'cap-table', 'pool')).body.actions.map((a: any) => a.key), ['model-a-round']);
   // An unscored item is a record with every fact Not recorded, and Team reads no check.
   const team = (await rec(db, 'fundraising-readiness', 'team')).body;
   assert.deepEqual(team.facts.map((f: any) => [f.value, f.reason]), Array(4).fill([null, 'Not scored yet']));
@@ -547,4 +608,196 @@ test('5: a record never claims what no store holds', async () => {
   db.exec(`INSERT INTO deck_share_views (deck_id, share_token_id, read_seconds, created_at) VALUES (5, 41, 125, '2026-10-12 10:00:00')`);
   const views = (await rec(db, 'pitch-deck', 41)).body.main.find((x: any) => x.key === 'views').rows;
   assert.deepEqual(views, [{ a: '2026-10-12 · 10:00', b: '2 min' }]);
+});
+
+
+// ---------------------------------------------------------------------------
+// #1700 step 6: every declared action runs its writer, through D690's route
+// ---------------------------------------------------------------------------
+
+test('1: each declared action runs its handler, writes its store and logs one row on its record', async () => {
+  const db = await seeded();
+  db.exec(`UPDATE users SET subscription_tier = 'studio' WHERE id = ${FOUNDER}`);
+  const ok = async (slug: string, id: string | number, key: string, body?: unknown, files?: any) => {
+    const r = await act(db, slug, id, key, body, files ? { files } : {});
+    assert.equal(r.status, 200, `${slug} ${id} ${key}: ${r.raw}`);
+    assert.equal(r.body.ok, true);
+    return r.body;
+  };
+  const logged = (slug: string, id: string | number) => db.prepare(
+    'SELECT project_id, entity_type, entity_id, action, details FROM activity_logs WHERE entity_type = ? AND entity_id = ? ORDER BY id DESC LIMIT 1',
+  ).get(`raise.${slug}`, String(id)) as any;
+
+  // Readiness: Re-score this item; Team's Score form.
+  const scores = count(db, 'SELECT COUNT(*) AS n FROM readiness_scores');
+  await ok('fundraising-readiness', 'deck', 'rescore');
+  assert.equal(count(db, "SELECT COUNT(*) AS n FROM readiness_scores s JOIN readiness_items i ON i.id = s.item_id WHERE i.item_key = 'deck'"), 2, 'appended, the earlier kept');
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM readiness_scores'), scores + 1, 'this item only');
+  assert.equal(logged('fundraising-readiness', 'deck').action, 'readiness_rescored');
+  await ok('fundraising-readiness', 'team', 'score', { score: '7', evidence: 'pattern', missing: 'A CFO' });
+  assert.deepEqual({ ...(db.prepare("SELECT s.score, s.evidence, s.source FROM readiness_scores s JOIN readiness_items i ON i.id = s.item_id WHERE i.item_key = 'team'").get() as any) },
+    { score: 7, evidence: 'pattern', source: 'manual' });
+  assert.equal((await act(db, 'fundraising-readiness', 'team', 'rescore')).status, 404, 'Team has no check to re-run');
+
+  // Narrative: Duplicate makes the next version, based on this one; Edit is PATCH's writer.
+  const dup = await ok('investor-narrative', 2, 'duplicate');
+  assert.equal(dup.record.version, 3);
+  assert.equal((db.prepare(`SELECT based_on_version FROM narrative_version_meta WHERE project_id = ${P} AND version = 3`).get() as any).based_on_version, 2);
+  await ok('investor-narrative', 2, 'edit', { why_now: 'Grid tariffs changed', one_liner: 'Batteries for cold towns' });
+  assert.equal((db.prepare(`SELECT why_now FROM narrative_version_meta WHERE project_id = ${P} AND version = 2`).get() as any).why_now, 'Grid tariffs changed');
+  assert.equal(logged('investor-narrative', 2).action, 'narrative_version_updated');
+  const sf = await act(db, 'investor-narrative', 2, 'edit', { start_from: 'blank' });
+  assert.deepEqual([sf.status, sf.body.detail], [400, 'Start from is set when the version is made']);
+
+  // Pitch deck: Revoke; a revoked link offers it no more.
+  await ok('pitch-deck', 41, 'revoke');
+  assert.ok((db.prepare('SELECT revoked_at FROM pitch_deck_share_tokens WHERE id = 41').get() as any).revoked_at);
+  assert.equal(logged('pitch-deck', 41).action, 'deck_link_revoked');
+  assert.deepEqual((await rec(db, 'pitch-deck', 41)).body.actions, []);
+  assert.equal((await act(db, 'pitch-deck', 41, 'revoke')).status, 404);
+
+  // Data room: Replace (multipart) keeps the old object as a version; Remove deletes the file and its versions.
+  const room = bucket();
+  const form = new FormData();
+  form.set('file', new File([new Uint8Array([1, 2, 3])], 'contracts-v2.pdf', { type: 'application/pdf' }));
+  const replaced = await ok('data-room', 12, 'replace', form, room);
+  assert.equal(replaced.record.version, 1);
+  const uid = (db.prepare(`SELECT uid FROM projects WHERE id = ${P}`).get() as any).uid;
+  const now = db.prepare('SELECT r2_key, size_bytes FROM data_room_files WHERE id = 12').get() as any;
+  assert.ok(now.r2_key.startsWith(`data-room/${uid}/`) && room.objects.has(now.r2_key), 'the new object, inside the room\'s prefix');
+  assert.equal(now.size_bytes, 3);
+  assert.equal((db.prepare('SELECT r2_key FROM data_room_file_versions WHERE file_id = 12').get() as any).r2_key, 'k12');
+  assert.equal(logged('data-room', 12).action, 'file_replaced');
+  assert.equal((await act(db, 'data-room', 12, 'replace', {}, { files: room })).status, 400, 'no file');
+  await ok('data-room', 12, 'remove', undefined, room);
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM data_room_files WHERE id = 12'), 0);
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM data_room_file_versions WHERE file_id = 12'), 0);
+  assert.deepEqual(room.deleted, [now.r2_key], 'k12 lies outside the prefix and is never deleted');
+  assert.equal(logged('data-room', 12).action, 'file_removed');
+  // A file removed between the route's ownedRow and the writer (a race) is 404, never ok with no record.
+  const ctx = { env: { DB: d1Over(db), FILES: room }, projectId: P, project: { id: P, founder_id: 1001 }, user: { id: FOUNDER, role: 'founder' } } as any;
+  const remove = (await RAISE_RECORDS['data-room'].actions(ctx, '12', {} as any)).find((a) => a.key === 'remove')!;
+  const raced = await remove.execute!(ctx, '12', {}).then(() => null, (e) => e);
+  assert.ok(raced instanceof Response && raced.status === 404, 'the race answers 404');
+
+  // Cap table: Edit is updateHolder()'s, on the SAFE's e- key; its prospect is checked.
+  // A form sends text; the handler passes numbers on.
+  await ok('cap-table', 'e-3', 'edit', { amount_cents: '30000000', prospect_id: '5' });
+  const safe = JSON.parse((db.prepare(`SELECT inputs_json FROM cap_table_scenarios WHERE project_id = ${P}`).get() as any).inputs_json).safes[0];
+  assert.deepEqual([safe.key, safe.amount, safe.prospect_id], ['e-3', 300_000, 5]);
+  assert.equal(logged('cap-table', 'e-3').action, 'holder_updated');
+  assert.equal((await act(db, 'cap-table', 'e-3', 'edit', { instrument: 'common' })).status, 400);
+
+  // Use of funds: Add a hire on the section; Edit split is the whole PUT.
+  await ok('use-of-funds', 'product', 'add-hire', { role: 'Senior engineer', start_month: '2027-01', annual_cents: '15000000' });
+  assert.deepEqual({ ...(db.prepare(`SELECT category_key, role, start_month FROM use_of_funds_hires WHERE project_id = ${P}`).get() as any) },
+    { category_key: 'product', role: 'Senior engineer', start_month: '2027-01' });
+  assert.equal(count(db, `SELECT annual_cents AS n FROM use_of_funds_hires WHERE project_id = ${P}`), 15_000_000);
+  await ok('use-of-funds', 'product', 'edit-split', {
+    amount_to_raise_cents: '150000000', runway_months: '18',
+    'pct.product': '40', 'pct.go-to-market': '40', 'pct.reserve': '20', 'milestone_label.product': 'Launch v3', 'milestone_by.product': '2027-06',
+  });
+  const p = db.prepare(`SELECT funding_needed, use_of_funds, use_of_funds_meta FROM projects WHERE id = ${P}`).get() as any;
+  assert.equal(p.funding_needed, 1_500_000);
+  assert.deepEqual(JSON.parse(p.use_of_funds).map((x: any) => x.pct), [40, 40, 20]);
+  assert.deepEqual(JSON.parse(p.use_of_funds_meta).milestones.product, { label: 'Launch v3', by: '2027-06' });
+  assert.equal(JSON.parse(p.use_of_funds_meta).runway_months, 18);
+  const off = await act(db, 'use-of-funds', 'product', 'edit-split', { 'pct.product': '40', 'pct.reserve': '20' });
+  assert.equal(off.status, 400, 'a split off 100');
+
+  // Capital relationships: Log, Add feedback, Mark passed and Edit.
+  await ok('capital-relationships', 5, 'log', { kind: 'call', note: 'Partner call', on: '2026-10-01' });
+  assert.deepEqual({ ...(db.prepare('SELECT kind, note, done_at FROM raise_prospect_events WHERE prospect_id = 5').get() as any) }, { kind: 'call', note: 'Partner call', done_at: '2026-10-01' });
+  await ok('capital-relationships', 5, 'add-feedback', { objection: 'Too early for us' });
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM raise_prospect_feedback WHERE prospect_id = 5'), 1);
+  await ok('capital-relationships', 5, 'edit', { next_step: 'Send the deck', next_step_due: '2026-11-02' });
+  assert.deepEqual({ ...(db.prepare('SELECT next_step, next_step_due FROM raise_prospects WHERE id = 5').get() as any) }, { next_step: 'Send the deck', next_step_due: '2026-11-02' });
+  await ok('capital-relationships', 5, 'mark-passed');
+  assert.equal((db.prepare('SELECT stage FROM raise_prospects WHERE id = 5').get() as any).stage, 'passed');
+  assert.ok(!(await rec(db, 'capital-relationships', 5)).body.actions.some((a: any) => a.key === 'mark-passed'), 'passed already');
+
+  // Every row: this venture, raise.<slug>, an id that is an address, and no person's name.
+  const rows = db.prepare("SELECT project_id, entity_type, entity_id, details FROM activity_logs WHERE entity_type LIKE 'raise.%'").all() as any[];
+  assert.ok(rows.length >= 15);
+  for (const r of rows) {
+    assert.equal(r.project_id, P);
+    assert.match(String(r.entity_id), RECORD_ID);
+    for (const name of [...NAMES, 'fay founder']) assert.ok(!String(r.details ?? '').toLowerCase().includes(name), `${r.entity_type}: ${r.details}`);
+  }
+  const undeclared = await act(db, 'capital-relationships', 6, 'copy-link');
+  assert.deepEqual([undeclared.status, undeclared.body.detail], [404, 'No such action on this record.']);
+});
+
+test('4: form-options and every action take the module\'s write gate, and an id a body names must be the venture\'s', async () => {
+  const db = await seeded();
+  db.exec(`UPDATE users SET subscription_tier = 'studio' WHERE id = ${FOUNDER}`);
+  const before = count(db, 'SELECT COUNT(*) AS n FROM activity_logs');
+  for (const m of MODULES) {
+    const id = SECTIONS[m.slug].id;
+    for (const who of [40, 41, 50, 20]) {
+      assert.equal((await act(db, m.slug, null, '', undefined, { who })).status, 403, `${m.slug} form-options as ${who}`);
+      for (const key of ACTIONS[m.slug]) assert.equal((await act(db, m.slug, id, key, {}, { who })).status, 403, `${m.slug} ${key} as ${who}`);
+    }
+    for (const who of [FOUNDER, ADMIN, 60]) assert.equal((await act(db, m.slug, null, '', undefined, { who })).status, 200, `${m.slug} form-options as ${who}`);
+  }
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM activity_logs'), before, 'a refused action writes nothing');
+  // Venture B's prospect (9) named in a holder's body, and its version (7) as Based on.
+  db.exec(`INSERT INTO spinout_deck_overrides (project_id, field_key, value, version) VALUES (${P_OTHER}, '_version', '', 7)`);
+  const holder = await act(db, 'cap-table', 'e-3', 'edit', { prospect_id: 9 });
+  assert.deepEqual([holder.status, holder.body.detail], [404, 'Record not found.']);
+  assert.equal(JSON.parse((db.prepare(`SELECT inputs_json FROM cap_table_scenarios WHERE project_id = ${P}`).get() as any).inputs_json).safes[0].prospect_id, undefined);
+  const based = await act(db, 'investor-narrative', 2, 'edit', { based_on_version: 7 });
+  assert.deepEqual([based.status, based.body.detail], [404, 'Record not found.'], 'the route checks the version before the writer runs');
+  // A record of venture B, addressed on venture A.
+  assert.equal((await act(db, 'capital-relationships', 9, 'mark-passed')).status, 404);
+  assert.equal((db.prepare('SELECT stage FROM raise_prospects WHERE id = 9').get() as any).stage, 'meeting');
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM activity_logs'), before);
+});
+
+test('9 (form-options): each module serves its Add form; funds only by name from a served list, warm paths from the caller\'s own network', async () => {
+  const db = await seeded();
+  const fo = async (slug: string, query = '') => {
+    const r = await act(db, slug, null, '', undefined, { query });
+    assert.equal(r.status, 200, `${slug}: ${r.raw}`);
+    return r.body;
+  };
+  const ready = await fo('fundraising-readiness');
+  assert.equal(ready.items.length, 7);
+  assert.deepEqual(ready.items.find((i: any) => i.value === 'team'), { value: 'team', label: 'Team', by_hand: true, last_scored: null, score: null });
+  assert.equal(ready.items.find((i: any) => i.value === 'deck').score, 9);
+  const narrative = await fo('investor-narrative');
+  assert.deepEqual(narrative.versions.map((v: any) => v.value), ['2', '1']);
+  assert.deepEqual(narrative.check_against.map((c: any) => c.value), ['deck', 'metrics'], 'the data room is not a check source');
+  const deck = await fo('pitch-deck');
+  assert.deepEqual(deck.decks.map((d: any) => d.value), ['5'], 'this venture\'s decks only');
+  assert.deepEqual(deck.prospects.map((x: any) => x.value), ['5', '6']);
+  assert.deepEqual(deck.expires.map((x: any) => x.value), ['7', '14', '30', 'never']);
+  const room = await fo('data-room');
+  assert.equal(room.project_uid, (db.prepare(`SELECT uid FROM projects WHERE id = ${P}`).get() as any).uid);
+  assert.deepEqual(room.folders.map((f: any) => f.label), ['Financials', 'Legal', 'Team', 'Product', 'Customers'], 'Financials exists; the other four are offered by name');
+  assert.equal(room.folders[0].value, 'fo3');
+  assert.deepEqual(room.requests.map((r: any) => r.value), ['7'], 'only this venture\'s requests');
+  assert.deepEqual(room.tiers.map((t: any) => t.value), ['invited', 'committed', 'nobody']);
+  const cap = await fo('cap-table');
+  assert.deepEqual(cap.pairs.map((x: any) => `${x.group}/${x.instrument}`), ['founders/common', 'investors/safe', 'investors/note']);
+  const uof = await fo('use-of-funds');
+  assert.deepEqual(uof.sections.map((x: any) => [x.value, x.pct]), [['product', 30], ['go-to-market', 50], ['infrastructure', 0], ['operations', 0], ['reserve', 20]]);
+  assert.equal(uof.runway_months, 12);
+
+  db.exec(`INSERT INTO research_fund_sources (source_name, title, terms_status, evidence, verdict, verdict_reason, reviewed_on) VALUES
+           ('Made-up open list', 'Open list', 'not found', 'e', 'cite only', 'r', '2026-10-01'),
+           ('Made-up closed list', 'Closed list', 'not found', 'e', 'not allowed', 'r', '2026-10-01')`);
+  db.exec(`INSERT INTO research_fund_directory (uid, name, sector_focus, source_name, source_url, as_of) VALUES
+           ('fund-ai', 'Gridline AI Fund', 'AI', 'Made-up open list', 'https://example.test/a', '2026-10-01'),
+           ('fund-pct', 'Gridline 100% Fund', 'AI', 'Made-up open list', 'https://example.test/p', '2026-10-01'),
+           ('fund-hid', 'Gridline Hidden', 'AI', 'Made-up closed list', 'https://example.test/c', '2026-10-01')`);
+  db.exec(`INSERT INTO network_connections (user_id, name, email, company) VALUES (${FOUNDER}, 'Lin Park', 'lin@example.test', 'Harbour'), (${ADMIN}, 'Not Mine', NULL, NULL)`);
+  const capital = await fo('capital-relationships');
+  assert.ok(!('funds' in capital), 'no fund without q');
+  assert.equal(capital.stages[0].label, 'Identified');
+  assert.deepEqual(capital.warm_paths.map((w: any) => w.label), ['Lin Park · Harbour'], 'the caller\'s own, name and company only');
+  assert.deepEqual((await fo('capital-relationships', '&q=gridline')).funds.map((f: any) => f.value), ['fund-pct', 'fund-ai'], 'never a fund from a list not allowed');
+  assert.deepEqual((await fo('capital-relationships', '&q=100%25')).funds.map((f: any) => f.value), ['fund-pct'], '% matches itself');
+  assert.deepEqual((await fo('capital-relationships', '&q=Gridline_AI')).funds, [], '_ matches itself, not any character');
+  assert.deepEqual((await fo('capital-relationships', `&q=${'g'.repeat(500)}`)).funds, []);
 });

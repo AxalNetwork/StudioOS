@@ -164,6 +164,26 @@ pain group, an interview, a segment, a competitor candidate, a demand record
 (`signal-`, `revenue-` or `waitlist-`) and a hypothesis. See
 `decisions/D690.md`.
 
+Raise's seven (`services/records/raise.ts`, D691 #1699 and #1700) are gated
+`write` throughout, so only the venture's owner, an admitted Lab member on
+their own venture or an admin reaches them (403 for anyone else, partners
+included). Their ids and actions:
+
+| Module | Id | Actions (`POST …/actions/:key`) |
+| --- | --- | --- |
+| `fundraising-readiness` | the item key (`data_room`) | `rescore`, or `score` (a form) for `team` |
+| `investor-narrative` | the version (`3`) | `duplicate`, `edit` (`PATCH` the record) |
+| `pitch-deck` | the share token's id | `revoke` |
+| `data-room` | the file's id (its `uid` rides on the record) | `manage-access` (a link), `replace` (multipart), `remove` |
+| `cap-table` | `h-<n>`, `e-<n>` or `pool` | `model-a-round` (a link), `edit` for a founder or a SAFE/note |
+| `use-of-funds` | the section key (`go-to-market`) | `add-hire`, `edit-split` |
+| `capital-relationships` | the prospect's id | `log`, `add-feedback`, `mark-passed`, `edit` |
+
+Each action calls the writer its `cycle_raise.ts` or `data_room.ts` route
+calls, and logs one `raise.<module>` row. Raise's form-options serve each
+module's Add form; Capital relationships takes `q` for the fund search, read
+only from the funds the directory serves. See `decisions/D691.md`.
+
 ### Raise cycle Worker read (D663, #1476)
 
 `cycle_raise.ts`, mounted at `/api/cycles/raise`, is the Worker half of the
@@ -183,10 +203,10 @@ route is), `POST /holders` and `PATCH /holders/:id` (through `addHolder()` and
 `PATCH /prospects/:id` (through `createProspect`),
 `PUT /data-room/files/:id/checklist` and `PUT /prospects/:id/next-step`. Each
 checks every id it takes against this venture (404 otherwise) and logs one
-`raise.<module>` activity row per record it writes. The record actions'
-writers (#1700's third PR: duplicate, revoke, add-hire, log, add-feedback,
-mark-passed, and the data room's `replaceDataRoomFile()` and
-`removeDataRoomFile()`) are declared on the records by #1700's closing PR.
+`raise.<module>` activity row per record it writes. The record actions
+(duplicate, revoke, add-hire, log, add-feedback, mark-passed, edit, edit-split,
+re-score, score, and the data room's replace and remove) are declared on the
+records in "Cycle records" above, each through the same writer.
 Only the venture and admins reach it. The
 pipeline, cap table, data room and pitch tools keep their own pages; the
 module pages summarise them and link there. The deck share viewer's heartbeat

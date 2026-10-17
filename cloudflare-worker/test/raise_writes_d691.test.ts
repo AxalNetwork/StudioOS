@@ -894,10 +894,28 @@ test('8: re-score takes a subset and keeps earlier scores; an empty body scores 
   assert.deepEqual([team.status, team.body.detail], [400, 'Team is scored by a person, not by a check']);
   assert.equal((await cyc(db, C_FOUNDER, 'POST', q('/readiness/rescore'), { items: ['nope'] })).status, 400);
   assert.equal((await cyc(db, C_FOUNDER, 'POST', q('/readiness/rescore'), { since: 'yesterday' })).status, 400);
-  // `since: 'last'` reads #1699's exposed inputs and comes with the closing PR; until then it is refused, never run as 'all'.
-  assert.equal((await cyc(db, C_FOUNDER, 'POST', q('/readiness/rescore'), { since: 'last' })).status, 501);
   assert.equal(computed(), 8, 'a refused re-score writes nothing');
   assert.equal(logs(db, "action = 'readiness_rescored'").length, 8, 'one row per item scored');
+});
+
+test('8: since: last skips an item whose stores did not change, and re-scores one whose store has a newer row or a different finding', async () => {
+  const db = cycleFixture();
+  const last = async () => (await cyc(db, C_FOUNDER, 'POST', q('/readiness/rescore'), { since: 'last' })).body;
+  assert.deepEqual((await last()).items, ['deck', 'use_of_funds', 'cap_table', 'traction', 'data_room', 'narrative'], 'an unscored item is scored');
+  // Nothing changed: only the two checks that read projects fields, which keep no write time, run again.
+  assert.deepEqual((await last()).items, ['use_of_funds', 'traction']);
+  // A deck saved after the newest score re-scores the deck (its score is still 10); the data room did not change.
+  db.exec(`UPDATE readiness_scores SET scored_at = '2026-01-01 00:00:00'`);
+  db.exec(`UPDATE pitch_decks SET created_at = '2025-12-01 00:00:00'`);
+  db.exec(`INSERT INTO pitch_decks (project_id, version, slides, created_at) VALUES (${C_P}, 2, '[]', '2026-02-01 00:00:00')`);
+  assert.deepEqual((await last()).items, ['deck', 'use_of_funds', 'traction']);
+  // A deleted deck leaves no newer row, but the check now finds something else, so it is re-scored.
+  db.exec(`UPDATE readiness_scores SET scored_at = '2026-03-01 00:00:00'`);
+  db.exec(`DELETE FROM pitch_decks WHERE project_id = ${C_P}`);
+  const r = await last();
+  assert.deepEqual(r.items, ['deck', 'use_of_funds', 'traction']);
+  // A subset is still a subset.
+  assert.deepEqual((await cyc(db, C_FOUNDER, 'POST', q('/readiness/rescore'), { items: ['data_room', 'traction'], since: 'last' })).body.items, ['traction']);
 });
 
 test('9: New version stores its fields, starts from live, a version or blank, and Edit runs the check again', async () => {
@@ -948,6 +966,18 @@ test('9: New version stores its fields, starts from live, a version or blank, an
   assert.equal((await cyc(db, C_FOUNDER, 'PATCH', q('/narrative-versions/9'), { why_now: 'x' })).status, 404);
   assert.deepEqual(logs(db, "entity_type = 'raise.investor-narrative'").map((r) => [r.entity_id, r.action]),
     [['1', 'narrative_version_created'], ['2', 'narrative_version_created'], ['3', 'narrative_version_created'], ['4', 'narrative_version_created'], ['1', 'narrative_version_updated']]);
+});
+
+test('9: the consistency check reads Why now: a figure stated only there is checked against the metrics', async () => {
+  const db = cycleFixture();
+  db.exec(`INSERT INTO raise_rounds (uid, project_id, name, status, target_amount) VALUES ('rr-k', ${C_P}, 'Seed', 'active', 5000000)`);
+  const v = await cyc(db, C_FOUNDER, 'POST', q('/narrative-versions'), { investor_type: 'angel', start_from: 'blank', why_now: 'We are raising $2M before the tariff change' });
+  assert.equal(v.status, 201, v.raw);
+  assert.deepEqual(v.body.mismatches.map((m: any) => [m.figure, m.stated_value, m.stated_source, m.metric_value]),
+    [['raise', 2_000_000, 'Narrative · why_now', 5_000_000]]);
+  // The same words anywhere else in the version would be checked too; with Why now cleared there is nothing left to compare.
+  const e = await cyc(db, C_FOUNDER, 'PATCH', q(`/narrative-versions/${v.body.version}`), { why_now: 'Tariffs change in March' });
+  assert.deepEqual(e.body.mismatches, []);
 });
 
 test('6 (route): New link through the cycle stores its investor and settings, returns the link once, and logs it', async () => {

@@ -3,11 +3,10 @@
  * (#1700) — the writes behind each Add and Edit form (migration 463's stores).
  *
  * Each writer validates its values against a fixed list and binds every one
- * of them. None decides who may write: `routes/cycle_raise.ts` checks
- * `canWrite` on the project first. Every id a write takes, in its path or its
- * body, is checked here against its own table and this venture (404
- * otherwise) until #1699 adds Raise's `ownedRow` entries, which replace these
- * checks in #1700's closing PR.
+ * of them. None decides who may write: `routes/cycle_raise.ts` and the
+ * record route check `canWrite` on the project first. Every id a write takes,
+ * in its path or its body, is checked here with `ownedRow` (D690), the same
+ * check the record route makes, and answers 404 when it is not this venture's.
  *
  * LOGGING (D691 decision 12). Every write logs one row per record it writes
  * through `logCycleWrite` (D690): `entity_type` is `raise.<module slug>`,
@@ -22,6 +21,7 @@ import type { Env, User } from '../types';
 import { WriterError, isoDateOrNull } from './validateWriters';
 import { ensureSpinoutDeckOverridesSchema } from './decks/spinoutDeckOverrides';
 import { logCycleWrite } from './cycleActivity';
+import { ownedRow } from './records/owned';
 import { addHolder, updateHolder, HolderError, type AddHolderArgs } from './capTableWrites';
 import { SERVED_FUNDS } from './researchFundDirectory';
 import { normalizeUseOfFunds } from '../util/useOfFunds';
@@ -30,7 +30,7 @@ import { createShareLink, revokeShareLink, SHARE_NEVER_EXPIRES } from '../routes
 import { createProspect, RAISE_STAGES } from '../routes/contacts';
 import {
   READINESS_ITEMS, READINESS_KEYS, EVIDENCE, INVESTOR_TYPES, INVESTOR_TYPE_LABEL, VERSION_MARKER_KEY, CHECKLIST_KEYS, FUND_SECTIONS,
-  computeReadiness, checkInputs, consistencyCheck, type Mismatch,
+  changedSinceScored, computeReadiness, checkInputs, consistencyCheck, type Mismatch,
 } from './raiseCycle';
 
 export { WriterError };
@@ -78,16 +78,25 @@ export async function scoreReadinessItem(env: Env, a: {
   return { ok: true };
 }
 
+/** Each item's newest score, by item key. */
+async function newestScores(env: Env, projectId: number) {
+  const res = await env.DB.prepare(
+    `SELECT i.item_key, s.score, s.missing, s.scored_at FROM readiness_scores s JOIN readiness_items i ON i.id = s.item_id
+      WHERE s.project_id = ? ORDER BY s.scored_at, s.id`,
+  ).bind(projectId).all<{ item_key: string; score: number; missing: string | null; scored_at: string }>();
+  const out = new Map<string, { score: number; missing: string | null; scored_at: string }>();
+  for (const r of res.results || []) out.set(r.item_key, r);
+  return out;
+}
+
 /** The six items a check scores; `team` is scored by a person. */
 export const COMPUTED_KEYS: readonly string[] = READINESS_KEYS.filter((k) => k !== 'team');
 
 /**
  * Run the computed readiness checks and store what each found (decision 8).
  * `items` is a subset of the six computed keys; with none, all six. `since`
- * is `'all'` (the default). `'last'`, which skips an item whose stores have
- * not changed since its newest score, reads the inputs #1699 exposes and
- * comes with #1700's closing PR; until then it is refused rather than
- * quietly treated as `'all'`.
+ * is `'all'` (the default) or `'last'`, which skips an item whose stores have
+ * not changed since its newest score (`changedSinceScored`).
  */
 export async function rescoreReadiness(env: Env, a: { projectId: number; userId: number; items?: unknown; since?: unknown }): Promise<{ scored: number; items: string[] }> {
   let wanted: string[] = [...COMPUTED_KEYS];
@@ -99,9 +108,14 @@ export async function rescoreReadiness(env: Env, a: { projectId: number; userId:
   }
   const since = a.since === undefined || a.since === null ? 'all' : a.since;
   if (since !== 'all' && since !== 'last') throw new WriterError(400, "since is 'last' or 'all'");
-  if (since === 'last') throw new WriterError(501, 'Re-scoring only what changed since the last score is not built yet; send since: all');
   const ids = await ensureReadinessItems(env, a.projectId);
-  const computed = (await computeReadiness(env, a.projectId)).filter((c) => wanted.includes(c.key));
+  let computed = (await computeReadiness(env, a.projectId)).filter((c) => wanted.includes(c.key));
+  if (since === 'last') {
+    const newest = await newestScores(env, a.projectId);
+    const changed: typeof computed = [];
+    for (const c of computed) if (await changedSinceScored(env, a.projectId, c, newest.get(c.key))) changed.push(c);
+    computed = changed;
+  }
   for (const c of computed) {
     await env.DB.prepare(
       `INSERT INTO readiness_scores (item_id, project_id, score, evidence, missing, source, scored_by) VALUES (?, ?, ?, ?, ?, 'computed', ?)`,
@@ -128,11 +142,8 @@ type NarrativeFields = {
 /** A version number of this venture's, or a 404. */
 async function ownVersion(env: Env, projectId: number, v: unknown, what: string): Promise<number> {
   const n = posInt(typeof v === 'string' && /^[1-9][0-9]{0,8}$/.test(v) ? Number(v) : v);
-  const row = n == null ? null : await env.DB.prepare(
-    'SELECT version FROM spinout_deck_overrides WHERE project_id = ? AND version = ? LIMIT 1',
-  ).bind(projectId, n).first<{ version: number }>();
-  if (!row) throw new WriterError(404, `${what} not found`);
-  return Number(row.version);
+  if (n == null || !await ownedRow(env, 'spinout_deck_overrides', n, projectId)) throw new WriterError(404, `${what} not found`);
+  return n;
 }
 
 function checkSources(v: unknown): string | null | undefined {
@@ -306,13 +317,11 @@ function flag(v: unknown, name: string): boolean | undefined {
   return v;
 }
 
-/** A prospect of this venture's, or a 404 (until `ownedRow` lands, S1's ruling). */
+/** A prospect of this venture's, or a 404. */
 async function ownProspect(env: Env, projectId: number, v: unknown): Promise<number> {
   const id = posInt(v);
-  const row = id == null ? null : await env.DB.prepare('SELECT id FROM raise_prospects WHERE id = ? AND project_id = ?')
-    .bind(id, projectId).first<{ id: number }>();
-  if (!row) throw new WriterError(404, 'Prospect not found');
-  return Number(row.id);
+  if (id == null || !await ownedRow(env, 'raise_prospects', id, projectId)) throw new WriterError(404, 'Prospect not found');
+  return id;
 }
 
 /** The investor a link is for: a prospect of this venture, or a name typed in. Never both. */
