@@ -73,8 +73,8 @@ const CHECK_CHARS: Record<string, boolean> = { '☐': false, '☑': true, '✓':
  */
 export function paperText(s: string): string {
   return String(s ?? '')
-    .replace(/↔/g, '–')
-    .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{260F}\u{2612}-\u{27BF}️‍]/gu, (ch) => (ch in CHECK_CHARS ? ch : ''))
+    .replace(/\u2194/g, '\u2013')
+    .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{260F}\u{2612}-\u{27BF}\uFE0F\u200D]/gu, (ch) => (ch in CHECK_CHARS ? ch : ''))
     .replace(/\p{Emoji_Presentation}/gu, '');
 }
 

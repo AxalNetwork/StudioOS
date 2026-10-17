@@ -15,6 +15,7 @@ import { fixture, call as adminCall, M475 } from './_legal_paper_harness.ts';
 import { createAndSendEnvelope } from '../src/routes/esign.ts';
 import { recordDocusignSignedFile } from '../src/integrations/providers/docusign.ts';
 import { sha256HexBytes } from '../src/services/pdf.ts';
+import { fileRowStatement } from '../src/services/legalDocumentFiles.ts';
 
 const baseline = readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8');
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
@@ -101,6 +102,20 @@ test('D711 a three-recipient envelope keeps three copies and three rows, none ov
   assert.ok(legacy.changes);
   const old = await esignApp.request(`/sign/${'old-'.padEnd(48, 'o')}/document`, {}, e);
   assert.equal(new TextDecoder().decode(await old.arrayBuffer()), '%PDF-1.4 placeholder');
+});
+
+test('D711 a signed copy\'s row lands only while its recipient reads signed', async () => {
+  const db = freshDb();
+  const e: any = envFor(db);
+  db.exec(`CREATE TABLE IF NOT EXISTS esign_recipients (id INTEGER PRIMARY KEY, status TEXT)`);
+  db.exec(`INSERT INTO esign_recipients (id, status) VALUES (41, 'signing'), (42, 'signed')`);
+  const row = (recipientId: number) => fileRowStatement(e, {
+    uid: crypto.randomUUID(), kind: 'signed_copy', envelopeId: 1, recipientId, fileSha256: 'f'.repeat(64), fileBytes: 9,
+    contentType: 'application/pdf', renderer: 'pdf_lib', paperSha256: 'p',
+  }, { whenRecipientSigned: recipientId });
+  await row(41).run();
+  await row(42).run();
+  assert.deepEqual((db.prepare('SELECT recipient_id FROM legal_document_files').all() as any[]).map((r) => r.recipient_id), [42]);
 });
 
 test('D711 a failed registry write puts the signature back to pending', async () => {

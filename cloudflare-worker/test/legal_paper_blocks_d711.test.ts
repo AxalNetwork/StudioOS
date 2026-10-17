@@ -17,8 +17,8 @@ test('D711 headings: # is a title unless it repeats the document title, ## an ar
 });
 
 test('D711 a Recitals heading and its WHEREAS paragraphs are recitals; a schedule title takes its "As of" dateline', () => {
-  const bs = paperBlocks('## Recitals\nWHEREAS the parties met.\nWHEREAS they agree.\n## Schedule A — Fees\nAs of January 1, 2026\nThe fees.');
-  assert.deepEqual(kinds(bs), ['recitals', 'recital', 'recital', 'schedule', 'para']);
+  const bs = paperBlocks('## Recitals\nWHEREAS the parties met.\nThe Fund was formed in 2026.\n## Schedule A — Fees\nAs of January 1, 2026\nThe fees.');
+  assert.deepEqual(kinds(bs), ['recitals', 'recital', 'recital', 'schedule', 'para'], 'every paragraph under Recitals is a recital');
   assert.equal(runsText(one(bs, 'schedule').dateline!), 'As of January 1, 2026');
   assert.deepEqual(kinds(paperBlocks('## Exhibit B\nAs of today')), ['schedule']);
 });
