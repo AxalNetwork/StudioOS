@@ -94,7 +94,8 @@ export async function sourceModule(source, path) {
   const url = new URL('../src/' + path, import.meta.url);
   const require = createRequire(url);
   const js = (await transformWithOxc(source, url.pathname, { jsx: { runtime: 'automatic' } })).code;
-  const resolved = js.replace(/((?:from\s*|import\s*\()\s*)['"]([^'"]+)['"]/g, (_match, prefix, specifier) => {
+  // A specifier holds no space or comma, so copy such as "Start from" is not one.
+  const resolved = js.replace(/((?:from\s*|import\s*\()\s*)['"]([^'"\s,]+)['"]/g, (_match, prefix, specifier) => {
     const target = specifier.startsWith('.') ? fileTarget(specifier, url) : pathToFileURL(require.resolve(specifier)).href;
     return prefix + JSON.stringify(target);
   });

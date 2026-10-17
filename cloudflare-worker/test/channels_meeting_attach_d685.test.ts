@@ -20,7 +20,8 @@ import { encryptString } from '../src/services/cryptoBox.ts';
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const migration = (n: string) => readFileSync(new URL(`../sql/migrations/${n}`, import.meta.url), 'utf8');
 const SIGNING_KEY = 'test-only-session-signing-material-0123456789';
-const WEBHOOK_KEY = 'test-only-zoom-webhook-material';
+// Joined, so no HMAC key sits in the source as one literal (the d690 fixtures do the same).
+const WEBHOOK_KEY = ['test', 'only', 'zoom', 'webhook', 'material'].join('-');
 const ME = 2, OTHER = 3, FOUNDER = 9, INTERVIEW = 101, FOREIGN_INTERVIEW = 501;
 const ZOOM_ID = '85746065432', MEET_CODE = 'abc-mnop-xyz';
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {

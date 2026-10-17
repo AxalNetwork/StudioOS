@@ -494,7 +494,9 @@ def confirm_verify_email(req: ConfirmVerifyRequest, session: Session = Depends(g
     # (and adopt the matching admin-created investor profile) now that the
     # account owner has proven control of the address.
     try:
-        from backend.app.api.routes.network_introductions import (
+        # From the service, not the network_introductions router: that router
+        # imports this module, so importing it here closed an import cycle.
+        from backend.app.services.network_intro_claim import (
             claim_offplatform_introductions,
         )
         claim_offplatform_introductions(session, user)
@@ -592,7 +594,7 @@ def login(req: LoginRequest, request: Request, session: Session = Depends(get_se
     # otherwise only created on first /settings hit, so cold-start logins
     # would silently lose their session row and the auth check would 401
     # them on subsequent requests.
-    from backend.app.api.routes.settings import _ensure_schema as _ensure_settings_schema
+    from backend.app.services.settings_schema import ensure_settings_schema as _ensure_settings_schema
     try:
         _ensure_settings_schema(session)
     except Exception:
@@ -723,7 +725,7 @@ def dev_quick_login(
 
     # Mirror the real /login session-row + JWT-mint dance so revocation
     # and the Settings → Active Sessions list keep working.
-    from backend.app.api.routes.settings import _ensure_schema as _ensure_settings_schema
+    from backend.app.services.settings_schema import ensure_settings_schema as _ensure_settings_schema
     try:
         _ensure_settings_schema(session)
     except Exception:

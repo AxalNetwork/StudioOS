@@ -50,10 +50,14 @@ test('every Add and Edit on main renders in the dialog, named, with its eyebrow 
   const market = renderToStaticMarkup(h(MemoryRouter, null, h(FormLightbox, { form: FORMS.grow['market-expansion'][0], cycle: 'grow', slug: 'market-expansion', onSubmit() {}, onClose() {} })));
   assert.ok(plain(market).includes('Grow · Market expansion Add market'), 'the canvas title (CO:329, D695 #1657)');
   assert.match(market, /data-testid="cycle-form-save"[^>]*>Add market</);
-  const readiness = renderToStaticMarkup(h(MemoryRouter, null, h(FormLightbox, { form: FORMS.raise['fundraising-readiness'][0], cycle: 'raise', slug: 'fundraising-readiness', onSubmit() {}, onClose() {} })));
-  assert.doesNotMatch(readiness, /<input|<textarea/, 'Score readiness has no fields');
-  assert.ok(plain(readiness).includes(FORMS.raise['fundraising-readiness'][0].lead), 'its sub still draws');
+  // A form with no fields still draws its sub and its CTA (#1652's Score readiness had none; #1657's Re-score has two).
+  const bare = { key: 'fixture', title: 'Score readiness', lead: 'Checks what is recorded.', cta: 'Score readiness', fields: [] };
+  const readiness = renderToStaticMarkup(h(MemoryRouter, null, h(FormLightbox, { form: bare, cycle: 'raise', slug: 'fundraising-readiness', onSubmit() {}, onClose() {} })));
+  assert.doesNotMatch(readiness, /<input|<textarea/, 'a form with no fields draws none');
+  assert.ok(plain(readiness).includes(bare.lead), 'its sub still draws');
   assert.match(readiness, /data-testid="cycle-form-save"[^>]*>Score readiness</);
+  const rescore = renderToStaticMarkup(h(MemoryRouter, null, h(FormLightbox, { form: FORMS.raise['fundraising-readiness'][0], cycle: 'raise', slug: 'fundraising-readiness', onSubmit() {}, onClose() {} })));
+  assert.match(rescore, /data-testid="cycle-form-save"[^>]*>Re-score now</, 'Re-score is the canvas form (CO:317, #1657)');
   // The side sheet is gone (step 8); Choose connector's loading and Bank note are connect_tool_d686's.
   assert.deepEqual(srcFilesWith(/RecordFormSheet/), []);
   assert.deepEqual(srcFilesWith('cycle-form-sheet'), []);
@@ -263,7 +267,8 @@ test('Edit opens with the row\'s values over the same URL (state.editing), saves
     ['        onSaved={saved}\n        onClose={closeEdit} />', '        onClose={closeEdit} />'],
   ]);
   // #1658's record page passes `{ id, edit: { id, uid } }`; every Edit resolves it.
-  const ids = { 'company-creation': 'step-7', 'prototype-mvp': '7', 'solution-design': '7', 'operating-systems': 'crm', 'revenue-and-traction': 'mrr' };
+  const ids = { 'company-creation': 'step-7', 'prototype-mvp': '7', 'solution-design': '7', 'operating-systems': 'crm', 'revenue-and-traction': 'mrr',
+    'cap-table': 'h-7', 'use-of-funds': 'product' };
   for (const [cycle, bySlug] of Object.entries(EDITS)) {
     for (const [slug, form] of Object.entries(bySlug)) {
       const record = { id: ids[slug] ?? `row-${slug}`, edit: { id: 7, uid: 'u-7' } };
