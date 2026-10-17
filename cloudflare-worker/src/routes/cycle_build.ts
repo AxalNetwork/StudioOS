@@ -6,6 +6,7 @@ import { CONNECTOR_METADATA, getDescriptor } from '../integrations/registry';
 import { MODULE_LABELS } from '../integrations/fed';
 import { canReadBoard, canWrite } from './_founder_validate_helpers';
 import type { Card } from '../services/cycleCards';
+import { buildPhone } from '../services/cycleFocus';
 import { logCycleWriteStatement } from '../services/cycleActivity';
 import { pageBuildRows, unreadableBuildCard, type BuildFigure, type BuildRecords, type Cell, type ChartSpec, type RecordRow } from '../services/buildCycleRecords';
 
@@ -539,10 +540,9 @@ app.get('/overview', async c => {
       : number(sFacts?.mapped) === 0 ? figure('systems_connected', 'Systems connected', null, 'of', 'integration_companies', 'not_recorded', 'No systems mapped yet.')
         : figure('systems_connected', 'Systems connected', [number(sFacts?.connected), 5], 'of', 'integration_companies', 'ok');
   const cards = results.map(r => r.card);
-  const focus = cards.every((entry, index) => entry.state === 'empty' || (index === 5 && project.company_id == null && entry.state === 'not_recorded' && number(sFacts?.reviews) === 0))
-    ? { rule: 'first_feature', eyebrow: 'Build · Next', headline: 'Add the first feature.', why: 'Nothing in Build is recorded yet. Each chart fills as you add to its module.', cta: { label: 'Add feature', href: cards[0].next?.href }, then: null }
-    : null;
-  return c.json({ cycle: 'build', question: 'Can this become a real company?', figures: [must, mvp, shipped, connected], cards, focus });
+  // D692 (#1701): the phone's focus, meter and index, each failing on its own.
+  return c.json({ cycle: 'build', question: 'Can this become a real company?', figures: [must, mvp, shipped, connected], cards,
+    ...(await buildPhone(c.env, project, viewer, results, [must, mvp, shipped, connected])) });
 });
 
 app.get('/modules/:slug', async c => {
