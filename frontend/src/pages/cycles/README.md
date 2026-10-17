@@ -31,8 +31,6 @@ The canvases are `design/canvases/integrated/Cycle Overview.dc.html` and its two
 
 On a module page, `?add=1` opens its first Add form. Closing or saving the form removes the parameter with a replace. Modules without a form and cycle overviews ignore it (D688).
 
-Every Add has an address (D695): `App.jsx` routes `/<cycle>/:slug/new` to `CycleRoute` with `adding`, and `/validate/customer-research/new` redirects to Record a session, the query kept. `RecordsTable`'s Add link passes its entry's `state`, for `state.under`. Until #1655's PR 2 lands, `CycleRoute` draws `/new` as its module page.
-
 - **The components read nothing themselves.** `CycleRoute.jsx` is the one
   file that reads: it calls `frontend/src/lib/api/cycles.js`, whose table gains a cycle in
   the PR that wires it, because the drift test refuses a client method with
@@ -55,6 +53,11 @@ Every Add has an address (D695): `App.jsx` routes `/<cycle>/:slug/new` to `Cycle
   forms, a record's edit view, or Validate's curation, so a module page links
   to the zone page that edits it (`/validate/interviews`, `/pain-map`,
   `/hypotheses`, `/build/competitors`). Add is drawn only where it opens a form.
+  Every Add has an address (D695): `App.jsx` routes `/<cycle>/:slug/new` to
+  `CycleRoute` with `adding`, and `/validate/customer-research/new` redirects
+  to Record a session, the query kept. `RecordsTable`'s Add link passes its
+  entry's `state`, for `state.under`. Until #1655's PR 2 lands, `CycleRoute`
+  draws `/new` as its module page.
 - **The overview draws no module list, no status pill and no Pro strip.** The
   cards are the modules.
 - **A card fails alone.** An `unreadable` card names its source and offers its
