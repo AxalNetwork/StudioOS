@@ -262,10 +262,11 @@ test('Edit opens with the row\'s values over the same URL (state.editing), saves
   ]);
   // #1658's record page passes `{ id, edit: { id, uid } }`; every Edit resolves it.
   const ids = { 'company-creation': 'step-7', 'prototype-mvp': '7', 'solution-design': '7', 'operating-systems': 'crm', 'revenue-and-traction': 'mrr',
-    'cap-table': 'h-7', 'use-of-funds': 'product' };
+    'cap-table': 'h-7', 'use-of-funds': 'product', 'demand-signals': 'signal-7', 'market-intelligence': 'cand-7' };
   for (const [cycle, bySlug] of Object.entries(EDITS)) {
     for (const [slug, form] of Object.entries(bySlug)) {
-      const record = { id: ids[slug] ?? `row-${slug}`, edit: { id: 7, uid: 'u-7' } };
+      // As `recordFormFor` builds it: the record's own id in `edit` too.
+      const record = { id: ids[slug] ?? 7, edit: { id: ids[slug] ?? 7, uid: 'u-7' } };
       assert.notEqual(form.idOf(record), null, `${cycle}/${slug}`);
     }
   }

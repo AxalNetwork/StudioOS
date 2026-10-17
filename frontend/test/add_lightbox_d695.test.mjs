@@ -140,7 +140,7 @@ async function assertOptions(m) {
 test('options load before fields, supply defaults/notes, and a refusal prevents saving', async () => {
   await assertOptions({ default: FormLightbox });
   await mutationCheck(source, path, assertOptions, [
-    ["useState(loadOptions ? undefined : {})", 'useState({})'],
+    ["useState(refused ? null : loadOptions ? undefined : {})", 'useState(refused ? null : {})'],
     ['busy || !loaded || blocked} data-testid="cycle-form-save"', 'busy || blocked} data-testid="cycle-form-save"'],
     ['setValues(formValues(formFields(base, result), current, queryValues));', ''],
     ['setRefusal(error?.message ||', "setRefusal('Wrong sentence' ||"],
