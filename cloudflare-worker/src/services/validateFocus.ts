@@ -89,7 +89,8 @@ export async function focusOf(env: Env, projectId: number, canWriteVenture: bool
           headline: `Review the interview with ${who}${when ? ` from ${when}` : ''}.`,
           why: s.status === 'transcribed' ? 'It is transcribed but not yet placed.'
             : parts.length ? `Its findings would move ${parts.join(' and ')}.` : 'Its findings are waiting for you to accept or discard them.',
-          cta: { label: 'Review the interview', href: `/validate/interviews/${s.interview_id}` },
+          // D704 decision 9: the interview's record, opened on this session.
+          cta: { label: 'Review the interview', href: `/validate/customer-research/${s.interview_id}?session=${s.id}` },
           then: null,
         };
       }
