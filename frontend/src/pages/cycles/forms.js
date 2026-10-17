@@ -2,7 +2,7 @@
  * D661 (#1474) — the Add and Edit forms for the cycle stores that have their
  * Worker writes but no page of their own: Grow's feedback, channels, partners,
  * markets and obligations (D664); Build's risks, formation steps and MVP
- * must-haves (D662).
+ * must-haves (D662); Raise's seven modules (D695, #1657).
  *
  * WHAT A FORM IS. Its `key` (unique in its module: `/new?form=<key>` opens
  * it, D695), its `cta`, its fields, the body its Worker route takes
@@ -12,13 +12,15 @@
  * refuses. `cycle_adapters_d661.test.ts` sends every form's body through the
  * real route and reads the row back on the module's table.
  *
- * Nothing here fetches: `submit` is handed the write table from
- * `frontend/src/lib/api/cycles.js`.
+ * Nothing here fetches: `submit`, `loadOptions` and `search` are handed the
+ * write table from `frontend/src/lib/api/cycles.js`.
  *
  * Money is typed in US dollars and sent in cents. A score is a whole number
  * from 0 to 10 and needs its source (D664). An empty field is sent as null,
  * never as 0 or "".
  */
+
+import { queueRefusal } from '../raise/dataRoomRead.js';
 
 const str = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
 
@@ -389,30 +391,441 @@ const feature = {
   submit: (w, projectId, v) => w.build.mvpFeature(projectId, feature.toBody(v)),
 };
 
-const readiness = {
-  key: 'readiness', cta: 'Score readiness',
-  button: 'Score readiness', title: 'Score readiness',
-  lead: 'Check the deck, use of funds, cap table, traction, data room and narrative against their recorded evidence.',
-  fields: [], submit: (w, projectId) => w.raise.rescore(projectId),
+// ---------- Raise (routes/cycle_raise.ts, services/raiseWriters.ts) ---------
+//
+// D695 (#1657, PR 2): Raise's seven canvas forms (CO:317-323) in the canvas's
+// T, CH and CK kinds, each body the one #1700's writer reads (D691.md "Part 2").
+// The venture goes in the query (`?project=N`); the data room's routes take its
+// uid in the path, which Data room's `form-options` returns as `project_uid`.
+// Each form's chips come from its module's `form-options` through
+// `loadOptions`, which answers the fields it fills; the dialog reads "Reading
+// the choices…" until then. Where the canvas's sub or foot is not true, the
+// words are D691.md decision 11's.
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** A stored day as the canvas writes it: "2026-10-12" is "12 Oct"; '' when it is not a day. */
+export function shortDay(v) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(v ?? ''));
+  return m && Number(m[2]) >= 1 && Number(m[2]) <= 12 ? `${Number(m[3])} ${MONTHS[Number(m[2]) - 1]}` : '';
+}
+/** Dollars as typed, with an optional k or M ("$500k", "1.5M", "8,000,000"), to whole cents; null when empty; NaN when not a sum. */
+export function scaledCents(v) {
+  const s = String(v ?? '').trim().replace(/\s*cap$/i, '');
+  if (!s) return null;
+  const unit = { k: 1000, m: 1000000 }[s.slice(-1).toLowerCase()] ?? 1;
+  const cents = toCents(unit === 1 ? s : s.slice(0, -1));
+  return cents == null || Number.isNaN(cents) ? (cents == null ? Number.NaN : cents) : Math.round(cents * unit);
+}
+const wholeOf = (v) => { const n = toNumber(v); return Number.isInteger(n) ? n : Number.NaN; };
+const posId = (v) => { const n = Number(v); return Number.isSafeInteger(n) && n > 0 ? n : null; };
+/** A list from `form-options` as chips: `{ value, label }` with text values. */
+const chipsOf = (list) => (Array.isArray(list) ? list : []).filter((o) => o && o.value != null && o.value !== '')
+  .map((o) => ({ value: String(o.value), label: String(o.label ?? o.value) }));
+const raiseOptions = (w, projectId, slug) => w.formOptions('raise', projectId, slug);
+
+const BY_HAND = 'team';
+/** Re-score's seven rows, labelled as the canvas draws them (CO:317), in its order. */
+const RESCORE_ITEMS = opts([['narrative', 'Narrative'], ['deck', 'Deck'], ['data_room', 'Data room'], ['cap_table', 'Cap table'],
+  ['use_of_funds', 'Use of funds'], ['traction', 'Traction'], ['team', 'Team']]);
+/** Each item with when it was last scored; Team is scored by a person on its record, so it is never sent (#1700 refuses it). */
+export function rescoreRows(items) {
+  const read = new Map((Array.isArray(items) ? items : []).map((i) => [String(i?.value), i]));
+  return RESCORE_ITEMS.map(({ value, label }) => {
+    const last = shortDay(read.get(value)?.last_scored);
+    const when = last ? `last ${last}` : 'never scored';
+    return value === BY_HAND
+      ? { value, label, meta: `${when} · scored on its record`, checked: false, disabled: true }
+      : { value, label, meta: when, checked: true };
+  });
+}
+const rescore = {
+  key: 'rescore', cta: 'Re-score now', button: 'Re-score',
+  title: 'Re-score',
+  sub: 'Re-reads the evidence of each item you tick and rescores it.',
+  foot: 'Scores now, from what is recorded. Earlier scores are kept.',
+  fields: [
+    { kind: 'CK', name: 'items', k: 'Items to re-score', opts: rescoreRows([]), required: true },
+    { kind: 'CH', name: 'since', k: 'Evidence read', opts: opts([['all', 'Everything'], ['last', 'Since the last score']]), def: 1 },
+  ],
+  loadOptions: (w, projectId) => raiseOptions(w, projectId, 'fundraising-readiness').then((r) => ({ items: { opts: rescoreRows(r?.items) } })),
+  toBody: (v) => ({ items: (Array.isArray(v.items) ? v.items : []).filter((k) => k !== BY_HAND), since: v.since === 'all' ? 'all' : 'last' }),
+  submit: (w, projectId, v) => w.raise.rescore(projectId, rescore.toBody(v)),
 };
 
+/** The seven investor types the Worker accepts (`raiseCycle.ts` INVESTOR_TYPES). */
+const INVESTOR_TYPE = opts([['angel', 'Angel'], ['pre_seed_fund', 'Pre-seed fund'], ['seed_fund', 'Seed fund'],
+  ['series_a_fund', 'Series A fund'], ['strategic', 'Strategic'], ['grant', 'Grant'], ['other', 'Other']]);
+const LIVE = 'live';
+const BLANK = 'blank';
+const VERSION = 'version-';
+/** Start from: each saved version, newest first, then the live deck, then blank. */
+export function startFromChips(versions) {
+  const saved = chipsOf(versions).filter((o) => /^[1-9][0-9]{0,8}$/.test(o.value)).sort((a, b) => Number(b.value) - Number(a.value));
+  return [...saved.map((o) => ({ value: VERSION + o.value, label: o.label })), { value: LIVE, label: 'The live deck' }, { value: BLANK, label: 'Blank' }];
+}
+/** Check against: the deck and the metrics, not the data room (D691 decision 7). */
+const CHECK_AGAINST = [{ value: 'deck', label: 'Pitch deck', checked: true }, { value: 'metrics', label: 'Metrics', checked: true }];
+const narrativeWords = [
+  { kind: 'T', name: 'one_liner', k: 'One-liner', ph: 'One line', max: 500 },
+  { kind: 'T', name: 'why_now', k: 'Why now', ph: 'Line', max: 1000 },
+  { kind: 'T', name: 'ask', k: 'The ask', ph: '$1.5M for n months', max: 500 },
+  { kind: 'CK', name: 'check_against', k: 'Check against', opts: CHECK_AGAINST },
+];
+const listOf = (v) => (Array.isArray(v) && v.length ? v.map(String) : null);
+const narrativeWordsBody = (v) => ({ one_liner: str(v.one_liner), why_now: str(v.why_now), ask: str(v.ask), check_against: listOf(v.check_against) });
 const narrative = {
-  key: 'narrative-version', cta: 'New version',
-  button: 'New version', title: 'New narrative version',
-  lead: 'Save the current narrative for an investor type and check it against recorded metrics.',
-  fields: [{ name: 'investor_type', label: 'Investor type', type: 'select', required: true, options: opts([
-    ['angel', 'Angel'], ['pre_seed_fund', 'Pre-seed fund'], ['seed_fund', 'Seed fund'],
-    ['series_a_fund', 'Series A fund'], ['strategic', 'Strategic'], ['grant', 'Grant'], ['other', 'Other'],
-  ]) }],
-  toBody: (v) => ({ investor_type: v.investor_type || null }),
+  key: 'narrative-version', cta: 'Create version', button: 'New version',
+  title: 'New version',
+  sub: 'One narrative per investor type. Each is checked for consistency.',
+  foot: 'Start from a version or blank; you edit.',
+  fields: [
+    { kind: 'CH', name: 'investor_type', k: 'Investor type', opts: INVESTOR_TYPE, def: 'seed_fund', required: true },
+    { kind: 'CH', name: 'start_from', k: 'Start from', opts: startFromChips([]), def: 0 },
+    ...narrativeWords,
+  ],
+  // The newest saved version is chosen; with none, the live deck.
+  loadOptions: (w, projectId) => raiseOptions(w, projectId, 'investor-narrative').then((r) => ({ start_from: { opts: startFromChips(r?.versions), def: 0 } })),
+  toBody: (v) => {
+    const from = String(v.start_from || LIVE);
+    const based = from.startsWith(VERSION) ? posId(from.slice(VERSION.length)) : null;
+    return {
+      investor_type: v.investor_type || null,
+      start_from: based ? 'version' : from === BLANK ? BLANK : LIVE,
+      ...(based ? { based_on_version: based } : {}),
+      ...narrativeWordsBody(v),
+    };
+  },
   submit: (w, projectId, v) => w.raise.narrativeVersion(projectId, narrative.toBody(v)),
+};
+
+const TYPED = 'typed';
+const NEVER = 'never';
+const EXPIRES = [...opts([['7', '7 days'], ['14', '14 days'], ['30', '30 days']]), { value: NEVER, label: 'Never' }];
+const linkInvestor = [
+  // A Capital relationships investor, or a name typed in (#1700 takes one, never both).
+  { kind: 'CH', name: 'prospect_id', k: 'Investor', opts: [{ value: TYPED, label: 'Type a name' }], def: 0, required: true },
+  { kind: 'T', name: 'investor_label', k: 'Fund or name', ph: 'Fund or name', max: 200, required: true, when: { name: 'prospect_id', value: TYPED } },
+];
+const ALLOW = [{ value: 'download', label: 'Download as PDF' }, { value: 'forwarding', label: 'Forwarding', meta: 'views by others are tracked too' }];
+const investorBody = (v) => (v.prospect_id === TYPED ? { investor_label: str(v.investor_label) } : posId(v.prospect_id) ? { prospect_id: posId(v.prospect_id) } : {});
+/** Its prospects first, then "Type a name"; the first is chosen. */
+const prospectChips = (r) => [...chipsOf(r?.prospects), { value: TYPED, label: 'Type a name' }];
+/** The raw link, once (D695 decision 3): only its hash is stored, so it is never shown again. */
+export function shareLinkUrl(path, origin = globalThis.location?.origin ?? '') {
+  return typeof path === 'string' && /^\/share\/deck\/[A-Za-z0-9._~-]+$/.test(path) ? `${origin}${path}` : null;
+}
+const BUILD_DECK = '/raise/pitch';
+const deckLink = {
+  key: 'deck-link', cta: 'Create link', button: 'New link',
+  title: 'New link',
+  sub: 'A link per investor, with an expiry. Views are tracked per slide.',
+  foot: 'Expired links stop opening; their views stay.',
+  fields: [
+    ...linkInvestor,
+    { kind: 'CH', name: 'deck_id', k: 'Deck version', opts: [], def: 0, required: true, empty: 'No deck yet.' },
+    { kind: 'CH', name: 'expires_days', k: 'Expires', opts: EXPIRES, def: 2 },
+    { kind: 'CK', name: 'allow', k: 'Allow', opts: ALLOW },
+  ],
+  loadOptions: (w, projectId) => raiseOptions(w, projectId, 'pitch-deck').then((r) => {
+    const decks = chipsOf(r?.decks);
+    return {
+      prospect_id: { opts: prospectChips(r), def: 0 },
+      deck_id: decks.length ? { opts: decks, def: 0 } : { opts: [], note: { text: '', href: BUILD_DECK, link: 'Build your deck' } },
+    };
+  }),
+  // A link needs a deck: with none the CTA cannot be pressed.
+  blocked: (fields) => !fields.find((f) => f.name === 'deck_id')?.options?.length,
+  toBody: (v) => ({
+    deck_id: posId(v.deck_id), ...investorBody(v),
+    expires_days: v.expires_days === NEVER ? null : Number(v.expires_days || 30),
+    allow_download: checkedOf(v.allow, 'download'), allow_forwarding: checkedOf(v.allow, 'forwarding'),
+  }),
+  submit: (w, projectId, v) => w.raise.deckLink(projectId, deckLink.toBody(v)),
+  done: (result) => {
+    const copy = shareLinkUrl(result?.share_path);
+    return copy ? { text: 'Copy the link now. It is shown only once.', copy } : null;
+  },
+};
+
+/** The size the file tool's queue refuses before sending (`DataRoomPage.jsx`). */
+export const MAX_UPLOAD_MB = 20;
+const PROJECT_UID = /^[A-Za-z0-9_-]{1,80}$/;
+const NEW_FOLDER = 'name:';
+const CANVAS_FOLDERS = ['Financials', 'Legal', 'Team', 'Product', 'Customers'];
+/** Folder: the room's own top-level folders by uid, then the canvas's names not made yet, which the upload creates. */
+export function folderChips(list) {
+  return (Array.isArray(list) ? list : []).flatMap((f) => {
+    if (f?.value != null && f.value !== '') return [{ value: String(f.value), label: String(f.label ?? f.value) }];
+    return typeof f?.folder_name === 'string' && f.folder_name.trim() ? [{ value: NEW_FOLDER + f.folder_name.trim(), label: String(f.label ?? f.folder_name) }] : [];
+  });
+}
+const REQUEST = 'request-';
+const ITEM = 'item-';
+const NONE_ANSWER = { value: NONE, label: 'None' };
+/** Answers request: the venture's open diligence requests, then the checklist's items, then None. */
+export function answerChips(r) {
+  return [
+    ...chipsOf(r?.requests).map((o) => ({ value: REQUEST + o.value, label: o.label })),
+    ...chipsOf(r?.checklist).map((o) => ({ value: ITEM + o.value, label: o.label })),
+    NONE_ANSWER,
+  ];
+}
+const answerBody = (v) => {
+  const a = String(v.answers ?? '');
+  if (a.startsWith(REQUEST)) return { dd_request_id: posId(a.slice(REQUEST.length)) };
+  if (a.startsWith(ITEM)) return { checklist_item: a.slice(ITEM.length) };
+  return {};
+};
+const TIER = opts([['invited', 'Invited investors'], ['committed', 'Committed investors only'], ['nobody', 'Nobody yet']]);
+const EXPIRE = 'expire';
+const filesOf = (v) => (Array.isArray(v) ? v : v ? [v] : []).filter((f) => f && typeof f.name === 'string');
+/** A picked file as the data URI the upload route takes. */
+async function dataUri(file) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return `data:${file.type || 'application/octet-stream'};base64,${btoa(bin)}`;
+}
+/** The venture's uid, which every data-room path carries, from Data room's `form-options`. */
+async function roomUid(w, projectId) {
+  const uid = String((await raiseOptions(w, projectId, 'data-room'))?.project_uid ?? '');
+  if (!PROJECT_UID.test(uid)) throw new Error('This venture’s data room could not be found.');
+  return uid;
+}
+const roomOptions = (w, projectId) => raiseOptions(w, projectId, 'data-room').then((r) => {
+  const requests = chipsOf(r?.requests);
+  return {
+    folder: { opts: folderChips(r?.folders), def: 0 },
+    // The first open request is chosen, as the canvas draws it; with none, None.
+    answers: { opts: answerChips(r), def: requests.length ? REQUEST + requests[0].value : NONE },
+  };
+});
+const upload = {
+  key: 'upload', cta: 'Upload', button: 'Upload',
+  title: 'Upload',
+  // Every file goes behind the NDA gate (decision 5), which makes the sub true.
+  sub: 'Files land in a folder, behind the NDA gate.',
+  foot: 'Access is per investor, per file.',
+  fields: [
+    // A file box draws no placeholder, so the canvas's is its note.
+    { kind: 'T', name: 'files', k: 'Files', input: 'file', multiple: true, note: 'Drop files here, or browse' },
+    { kind: 'CH', name: 'folder', k: 'Folder', opts: CANVAS_FOLDERS.map((n) => ({ value: NEW_FOLDER + n, label: n })), def: 0 },
+    { kind: 'CH', name: 'answers', k: 'Answers request', opts: [NONE_ANSWER], def: 0 },
+    { kind: 'CH', name: 'access_tier', k: 'Access', opts: TIER, def: 0 },
+    // No watermark row: the room does not watermark (D-q).
+    { kind: 'CK', name: 'protect', k: 'Protect', opts: [{ value: EXPIRE, label: 'Expire access on' }] },
+    { kind: 'T', name: 'access_expires_at', k: 'Expire access on', input: 'date', required: true, when: { name: 'protect', value: EXPIRE } },
+  ],
+  check: (v) => (filesOf(v.files).length ? {} : { files: 'Pick a file to upload.' }),
+  loadOptions: roomOptions,
+  toBody: (v, name, data) => {
+    const folder = String(v.folder ?? '');
+    return {
+      name, data, visibility: 'nda',
+      ...(folder.startsWith(NEW_FOLDER) ? { folder_name: folder.slice(NEW_FOLDER.length) } : folder ? { folder_uid: folder } : {}),
+      ...answerBody(v), access_tier: v.access_tier || 'invited',
+      access_expires_at: checkedOf(v.protect, EXPIRE) ? str(v.access_expires_at) : null,
+    };
+  },
+  // One POST per file. A file over the limit is refused by name before sending,
+  // and one the Worker refuses is named with its sentence; the others still go.
+  submit: async (w, projectId, v) => {
+    const uid = await roomUid(w, projectId);
+    const sent = [];
+    const refused = [];
+    for (const file of filesOf(v.files)) {
+      const why = queueRefusal(file, MAX_UPLOAD_MB);
+      if (why) { refused.push(`${file.name}: ${why}.`); continue; }
+      try {
+        await w.raise.upload(uid, upload.toBody(v, file.name, await dataUri(file)));
+        sent.push(file.name);
+      } catch (error) { refused.push(`${file.name}: ${error?.message || 'The upload did not go through.'}`); }
+    }
+    if (refused.length) throw new Error([sent.length ? `Uploaded ${sent.join(', ')}.` : '', ...refused].filter(Boolean).join(' '));
+    return { uploaded: sent.length };
+  },
+};
+
+const FOUNDERS = 'founders';
+const INVESTORS = 'investors';
+const GROUP = opts([[FOUNDERS, 'Founders'], [INVESTORS, 'Investors']]);
+const HOLDER_VESTING = opts([['none', 'None'], ['4y-1y', '4 years, 1-year cliff'], ['custom', 'Custom']]);
+const inGroup = (group) => ({ name: 'group', value: group });
+const vests = (v) => v.group === FOUNDERS && Boolean(v.vesting) && v.vesting !== 'none';
+const holderMoney = [
+  { kind: 'T', name: 'amount', k: 'Amount', ph: '$500k' },
+  { kind: 'T', name: 'cap', k: 'Cap', ph: '$8M cap' },
+];
+const NO_PROSPECT = { value: NONE, label: 'None' };
+const holderCheck = (v) => {
+  const e = {};
+  for (const k of ['amount', 'cap']) if (Number.isNaN(scaledCents(v[k]))) e[k] = 'Type an amount in US dollars, such as 500,000 or $500k.';
+  if (v.group === INVESTORS && scaledCents(v.amount) == null) e.amount = 'Amount is required.';
+  // #1700's writer refuses a SAFE or a note with neither a cap nor a discount, and Add holder takes no discount.
+  if (v.group === INVESTORS && scaledCents(v.cap) == null && !e.cap) e.cap = 'A SAFE or a note needs its cap.';
+  const shares = wholeOf(v.shares);
+  if (v.group === FOUNDERS && str(v.shares) && !(shares > 0)) e.shares = 'Shares are a whole number above 0.';
+  if (v.vesting === 'custom' && v.group === FOUNDERS) {
+    const total = wholeOf(v.total_months);
+    const cliff = wholeOf(v.cliff_months);
+    if (!(total > 0)) e.total_months = 'Months are a whole number above 0.';
+    else if (!(cliff >= 0) || cliff > total) e.cliff_months = 'The cliff is a whole number of months, no longer than the vesting.';
+  }
+  return e;
+};
+const vestingBody = (v) => {
+  if (!vests(v)) return {};
+  const [total, cliff] = v.vesting === '4y-1y' ? [48, 12] : [wholeOf(v.total_months), wholeOf(v.cliff_months)];
+  return { vesting: { start_date: str(v.vesting_start), total_months: total, cliff_months: cliff } };
+};
+const holder = {
+  key: 'holder', cta: 'Add holder', button: 'Add holder',
+  title: 'Add holder',
+  sub: 'A holder with their group and instrument.',
+  foot: 'Ownership recomputes before and after the planned round.',
+  // Only the pairs #1700's writer takes; the pool and priced rounds stay in the cap-table tool.
+  fields: [
+    { kind: 'T', name: 'name', k: 'Holder', ph: 'Name or fund', required: true, max: 200 },
+    { kind: 'CH', name: 'group', k: 'Group', opts: GROUP, def: 1, required: true },
+    { kind: 'CH', name: 'instrument_founders', k: 'Instrument', opts: opts([['common', 'Common']]), def: 0, when: inGroup(FOUNDERS) },
+    { kind: 'CH', name: 'instrument', k: 'Instrument', opts: opts([['safe', 'SAFE'], ['note', 'Convertible note']]), def: 0, when: inGroup(INVESTORS) },
+    { name: 'investment', k: 'Amount or shares', parts: holderMoney, when: inGroup(INVESTORS) },
+    { kind: 'T', name: 'shares', k: 'Amount or shares', ph: 'Shares', required: true, when: inGroup(FOUNDERS) },
+    { kind: 'CH', name: 'prospect_id', k: 'Investor in Capital relationships', opts: [NO_PROSPECT], def: 0, when: inGroup(INVESTORS) },
+    { kind: 'CH', name: 'vesting', k: 'Vesting', opts: HOLDER_VESTING, def: 0, when: inGroup(FOUNDERS) },
+    { kind: 'T', name: 'vesting_start', k: 'Vesting starts', input: 'date', required: true, when: vests },
+    { name: 'vesting_terms', k: 'Vesting · months', when: (v) => vests(v) && v.vesting === 'custom', parts: [
+      { kind: 'T', name: 'total_months', k: 'Months in all', ph: '48 months' },
+      { kind: 'T', name: 'cliff_months', k: 'Cliff', ph: '12 months' },
+    ] },
+  ],
+  check: holderCheck,
+  loadOptions: (w, projectId) => raiseOptions(w, projectId, 'cap-table').then((r) => ({ prospect_id: { opts: [NO_PROSPECT, ...chipsOf(r?.prospects)], def: 0 } })),
+  toBody: (v) => (v.group === FOUNDERS
+    ? { name: str(v.name), group: FOUNDERS, instrument: 'common', shares: wholeOf(v.shares), ...vestingBody(v) }
+    : { name: str(v.name), group: INVESTORS, instrument: v.instrument === 'note' ? 'note' : 'safe',
+      amount_cents: scaledCents(v.amount), cap_cents: scaledCents(v.cap), ...(posId(v.prospect_id) ? { prospect_id: posId(v.prospect_id) } : {}) }),
+  submit: (w, projectId, v) => w.raise.holder(projectId, holder.toBody(v)),
+};
+
+/** The five stored sections, by their stored labels (`components/FundAllocator.jsx`), not renamed (D691 decision 9). */
+export const FUND_SECTIONS = [['product', 'Product & engineering'], ['go-to-market', 'GTM: sales and marketing'],
+  ['infrastructure', 'Infrastructure & data'], ['operations', 'Operations, legal & compliance'], ['reserve', 'Hiring / runway reserve']];
+const RUNWAY = opts([['18', '18 months'], ['24', '24 months'], ['custom', 'Custom']]);
+const MONTH_BY = /^\d{4}-(0[1-9]|1[0-2])(-\d{2})?$/;
+const usdText = (cents) => `$${Math.round(cents / 100).toLocaleString('en-US')}`;
+/** A section's amount, worked out from its share of Amount to raise, so the two cannot disagree. */
+export function sectionAmount(v, key) {
+  const total = scaledCents(v?.amount_to_raise);
+  const pct = toNumber(v?.[`pct.${key}`]);
+  return total > 0 && pct >= 0 && pct <= 100 ? `${usdText((total * pct) / 100)} of the raise` : '';
+}
+const splitFields = [
+  { kind: 'T', name: 'amount_to_raise', k: 'Amount to raise', ph: '$1.5M' },
+  ...FUND_SECTIONS.flatMap(([key, label]) => [
+    { kind: 'T', name: `pct.${key}`, k: label, ph: '%', required: true, note: (v) => sectionAmount(v, key) },
+    { name: `milestone.${key}`, k: 'Milestone · by', parts: [
+      { kind: 'T', name: `milestone_label.${key}`, k: 'Milestone', ph: 'Milestone', max: 200 },
+      { kind: 'T', name: `milestone_by.${key}`, k: 'By', ph: 'YYYY-MM' },
+    ] },
+  ]),
+  { kind: 'CH', name: 'runway', k: 'Runway it buys', opts: RUNWAY, def: 1 },
+  { kind: 'T', name: 'runway_months', k: 'Months', ph: 'months', required: true, when: { name: 'runway', value: 'custom' } },
+];
+const splitCheck = (v) => {
+  const e = {};
+  if (Number.isNaN(scaledCents(v.amount_to_raise))) e.amount_to_raise = 'Type an amount in US dollars, such as 1,500,000 or $1.5M.';
+  let sum = 0;
+  for (const [key] of FUND_SECTIONS) {
+    const pct = wholeOf(v[`pct.${key}`]);
+    if (!(pct >= 0 && pct <= 100)) e[`pct.${key}`] = 'A share is a whole number from 0 to 100.';
+    else sum += pct;
+    if (str(v[`milestone_by.${key}`]) && !MONTH_BY.test(str(v[`milestone_by.${key}`]))) e[`milestone_by.${key}`] = 'Type the month as YYYY-MM.';
+  }
+  if (!Object.keys(e).length && sum !== 100) e[`pct.${FUND_SECTIONS[0][0]}`] = `The split adds up to ${sum}%. It must add up to 100%.`;
+  if (v.runway === 'custom' && !(wholeOf(v.runway_months) >= 1 && wholeOf(v.runway_months) <= 120)) e.runway_months = 'Runway is a whole number of months from 1 to 120.';
+  return e;
+};
+/** The stored split, so the form opens with it every time (decision 9). */
+const splitOptions = (w, projectId) => raiseOptions(w, projectId, 'use-of-funds').then((r) => {
+  const out = {};
+  const stored = new Map((Array.isArray(r?.sections) ? r.sections : []).map((s) => [String(s?.value), s]));
+  for (const [key] of FUND_SECTIONS) {
+    const s = stored.get(key);
+    out[`pct.${key}`] = { value: s?.pct != null ? String(s.pct) : '' };
+    out[`milestone_label.${key}`] = { value: s?.milestone_label ?? '' };
+    out[`milestone_by.${key}`] = { value: s?.milestone_by ?? '' };
+  }
+  if (Number(r?.amount_to_raise) > 0) out.amount_to_raise = { value: Math.round(Number(r.amount_to_raise)).toLocaleString('en-US') };
+  const runway = Number(r?.runway_months);
+  if (Number.isInteger(runway) && runway > 0) {
+    out.runway = { def: runway === 18 || runway === 24 ? String(runway) : 'custom' };
+    out.runway_months = { value: String(runway) };
+  }
+  return out;
+});
+const useOfFunds = {
+  key: 'split', cta: 'Save split', button: 'Edit split',
+  title: 'Edit split',
+  sub: 'How the round is spent, by category. Each buys a milestone.',
+  foot: 'The pitch deck fills its use-of-funds slide from this split.',
+  fields: splitFields,
+  check: splitCheck,
+  loadOptions: splitOptions,
+  toBody: (v) => ({
+    amount_to_raise_cents: scaledCents(v.amount_to_raise),
+    sections: FUND_SECTIONS.map(([key]) => ({
+      key, pct: wholeOf(v[`pct.${key}`]), milestone_label: str(v[`milestone_label.${key}`]), milestone_by: str(v[`milestone_by.${key}`]),
+    })),
+    runway_months: v.runway === 'custom' ? wholeOf(v.runway_months) : Number(v.runway || 24),
+  }),
+  submit: (w, projectId, v) => w.raise.useOfFunds(projectId, useOfFunds.toBody(v)),
+};
+
+/** The stages, stored as #1700 stores them: Identified is `to_contact`. */
+const STAGE = opts([['to_contact', 'Identified'], ['contacted', 'Contacted'], ['meeting', 'Meeting'], ['diligence', 'Diligence'], ['committed', 'Committed'], ['passed', 'Passed']]);
+const NO_PATH = { value: NONE, label: 'No path yet' };
+/** Warm path: "<Name> can introduce" for each person in the founder's own network, then No path yet. */
+export function warmPathChips(people) {
+  return [...chipsOf(people).map((o) => ({ value: o.value, label: `${o.value.split(' · ')[0]} can introduce` })), NO_PATH];
+}
+const nextStep = { name: 'next', k: 'Next step · due', parts: [
+  { kind: 'T', name: 'next_step', k: 'Next step', ph: 'Send deck', max: 300 },
+  { kind: 'T', name: 'next_step_due', k: 'Due', input: 'date', ph: 'Fri' },
+] };
+const prospect = {
+  key: 'investor', cta: 'Add investor', button: 'Add investor',
+  title: 'Add investor',
+  sub: 'An investor in the pipeline, with how you reach them.',
+  foot: 'Fit is read from their sector focus and fund size.',
+  fields: [
+    // Typing searches the fund directory; a fund picked is sent as `research_fund_uid`, else the name typed.
+    { kind: 'T', name: 'name', k: 'Investor', ph: 'Search funds and angels, or type a name', required: true, max: 200, search: { into: 'research_fund_uid' } },
+    { kind: 'CH', name: 'stage', k: 'Stage', opts: STAGE, def: 0 },
+    { kind: 'CH', name: 'warm_path', k: 'Warm path', opts: [NO_PATH], def: 0 },
+    nextStep,
+    { kind: 'T', name: 'notes', k: 'Notes', ph: 'One line', max: 4000 },
+  ],
+  loadOptions: (w, projectId) => raiseOptions(w, projectId, 'capital-relationships').then((r) => ({ warm_path: { opts: warmPathChips(r?.warm_paths), def: 0 } })),
+  /** The funds whose name matches what is typed, through #1656's `formOptions` query (decision 16). */
+  search: (w, projectId, q) => w.formOptions('raise', projectId, 'capital-relationships', { q }).then((r) => chipsOf(r?.funds)),
+  toBody: (v) => ({
+    ...(str(v.research_fund_uid) ? { research_fund_uid: str(v.research_fund_uid) } : { name: str(v.name) }),
+    stage: v.stage || 'to_contact', warm_path: str(v.warm_path), next_step: str(v.next_step), next_step_due: str(v.next_step_due), notes: str(v.notes),
+  }),
+  submit: (w, projectId, v) => w.raise.prospect(projectId, prospect.toBody(v)),
 };
 
 /** The forms, by cycle and module slug. A slug not here has no Add form. */
 export const FORMS = {
   raise: {
-    'fundraising-readiness': [readiness],
+    'fundraising-readiness': [rescore],
     'investor-narrative': [narrative],
+    'pitch-deck': [deckLink],
+    'data-room': [upload],
+    'cap-table': [holder],
+    'use-of-funds': [useOfFunds],
+    'capital-relationships': [prospect],
   },
   grow: {
     'product-improvement': [feedback],
@@ -626,6 +1039,146 @@ const editObligation = {
   submit: (w, projectId, id, v) => w.grow.obligationUpdate(projectId, id, editObligation.toBody(v)),
 };
 
+// Raise's Edits (D695 decision 9, #1657): the fields each PATCH takes. A
+// record's Edit opens with the values its read declares (#1658's
+// `recordFormFor`); a field it carries is sent, and one it does not carry is
+// sent only once filled. Fundraising readiness has none: a re-score adds a
+// score and keeps the rest. Only a record resolves an id (`{ id, edit: { id,
+// uid } }`): a module row carries no `edit`, so no row draws these Edits.
+const recordEdit = (row) => (row && typeof row.edit === 'object' && row.edit ? row.edit : null);
+const recordNumber = (row) => posId(recordEdit(row)?.id);
+const EDIT_LINK_EXPIRES = opts([['7', '7 days'], ['14', '14 days'], ['30', '30 days']]);
+const YES_NO_CHIPS = opts([['yes', 'Yes'], ['no', 'No']]);
+const yesNo = (v) => (v === 'yes' ? true : v === 'no' ? false : null);
+
+const NARRATIVE_CARRIED = ['investor_type', 'one_liner', 'why_now', 'ask', 'check_against'];
+const editNarrative = {
+  ...EDIT,
+  key: 'edit-version',
+  title: 'Edit version',
+  sub: 'Its investor type, its words and what it is checked against. Start from is set when a version is made.',
+  fields: [{ ...bare(narrative.fields[0]), required: true }, ...narrativeWords.slice(0, 3), { ...narrativeWords[3], opts: CHECK_AGAINST.map((o) => ({ ...o, checked: false })) }],
+  idOf: recordNumber,
+  valuesOf: () => ({}),
+  toBody: (v) => sentOnly(v, { investor_type: v.investor_type || null, ...narrativeWordsBody(v) }, NARRATIVE_CARRIED),
+  submit: (w, projectId, id, v) => w.raise.narrativeVersionUpdate(projectId, id, editNarrative.toBody(v)),
+};
+
+// The deck version is fixed: the token's scope carries it. An edit can bring
+// the expiry forward, never extend it (#1700), so Never is not offered.
+const editLink = {
+  ...EDIT,
+  key: 'edit-link',
+  title: 'Edit link',
+  sub: 'Who it is for, its expiry, and what it allows.',
+  fields: [
+    bare(linkInvestor[0]), linkInvestor[1],
+    { kind: 'CH', name: 'expires_days', k: 'Expires', opts: EDIT_LINK_EXPIRES, note: 'A later expiry needs a new link.' },
+    { kind: 'CH', name: 'allow_download', k: 'Download as PDF', opts: YES_NO_CHIPS },
+    { kind: 'CH', name: 'allow_forwarding', k: 'Forwarding', opts: YES_NO_CHIPS },
+  ],
+  idOf: recordNumber,
+  valuesOf: () => ({}),
+  loadOptions: (w, projectId) => raiseOptions(w, projectId, 'pitch-deck').then((r) => ({ prospect_id: { opts: prospectChips(r) } })),
+  toBody: (v) => sentOnly(v, {
+    ...investorBody(v), expires_days: posId(v.expires_days),
+    allow_download: yesNo(v.allow_download), allow_forwarding: yesNo(v.allow_forwarding),
+  }, [], { investor_label: 'prospect_id', expires_days: 'expires_days' }),
+  submit: (w, projectId, id, v) => w.raise.deckLinkUpdate(projectId, id, editLink.toBody(v)),
+};
+
+// A file's path takes its uid, which #1699's record carries beside its integer
+// id: `{ id, edit: { id, uid } }`. The PATCH moves a file only into a folder
+// that exists, so the names not made yet are not offered.
+const editFile = {
+  ...EDIT,
+  key: 'edit-file',
+  title: 'Edit file',
+  sub: 'Its folder, the request it answers, and who can open it.',
+  fields: [
+    { ...bare(upload.fields[1]), opts: [] , empty: 'No folder made yet.' },
+    bare(upload.fields[2]),
+    bare(upload.fields[3]),
+    { kind: 'T', name: 'access_expires_at', k: 'Expire access on', input: 'date' },
+  ],
+  idOf: (row) => { const uid = String(recordEdit(row)?.uid ?? ''); return PROJECT_UID.test(uid) ? uid : null; },
+  valuesOf: () => ({}),
+  loadOptions: (w, projectId) => roomOptions(w, projectId).then((r) => ({
+    folder: { opts: r.folder.opts.filter((o) => !o.value.startsWith(NEW_FOLDER)) },
+    answers: { opts: r.answers.opts.filter((o) => o.value !== NONE) },
+  })),
+  toBody: (v) => sentOnly(v, {
+    folder_uid: str(v.folder), ...answerBody(v), access_tier: v.access_tier || null, access_expires_at: str(v.access_expires_at),
+  }, [], { folder_uid: 'folder', dd_request_id: 'answers', checklist_item: 'answers' }),
+  submit: async (w, projectId, uid, v) => w.raise.fileUpdate(await roomUid(w, projectId), uid, editFile.toBody(v)),
+};
+
+// A holder keeps its group and instrument (#1700 refuses a change). A founder
+// is edited by shares, a SAFE or a note by its amount, cap and discount.
+const editHolder = {
+  ...EDIT,
+  key: 'edit-holder',
+  title: 'Edit holder',
+  sub: 'Shares for a founder; the amount, cap and discount for a SAFE or a note.',
+  fields: [
+    { ...holder.fields[0], required: false },
+    { kind: 'T', name: 'shares', k: 'Shares', ph: 'Shares' },
+    { name: 'investment', k: 'Amount or shares', parts: holderMoney },
+    { kind: 'T', name: 'discount_pct', k: 'Discount', ph: '20%' },
+    { kind: 'CH', name: 'prospect_id', k: 'Investor in Capital relationships', opts: [NO_PROSPECT] },
+  ],
+  check: (v) => {
+    const e = holderCheck({ ...v, group: 'edit' });
+    delete e.amount;
+    const d = toNumber(v.discount_pct);
+    if (Number.isNaN(d) || (d != null && (d < 0 || d > 90))) e.discount_pct = 'A discount is a percentage from 0 to 90.';
+    if (str(v.shares) && !(wholeOf(v.shares) > 0)) e.shares = 'Shares are a whole number above 0.';
+    return e;
+  },
+  // A cap-table record id is `h-<n>` or `e-<n>` (D691 decision 3); `pool` has no Edit.
+  idOf: (row) => (recordEdit(row) ? [row.id, row.edit.id].map((x) => String(x ?? '')).find((id) => /^(h|e)-[1-9][0-9]{0,9}$/.test(id)) ?? null : null),
+  valuesOf: () => ({}),
+  loadOptions: (w, projectId) => raiseOptions(w, projectId, 'cap-table').then((r) => ({ prospect_id: { opts: [NO_PROSPECT, ...chipsOf(r?.prospects)] } })),
+  toBody: (v) => sentOnly(v, {
+    name: str(v.name), shares: str(v.shares) ? wholeOf(v.shares) : null, amount_cents: scaledCents(v.amount), cap_cents: scaledCents(v.cap),
+    discount_pct: toNumber(v.discount_pct), prospect_id: posId(v.prospect_id),
+  }, [], { amount_cents: 'amount', cap_cents: 'cap' }),
+  submit: (w, projectId, id, v) => w.raise.holderUpdate(projectId, id, editHolder.toBody(v)),
+};
+
+// Use of funds' Edit is its Add: the PUT replaces the split, and the form opens
+// with the stored one every time, so it keeps "Edit split" and "Save split".
+const editSplit = {
+  ...useOfFunds,
+  idOf: (row) => { const key = String(recordEdit(row) ? row.id : ''); return FUND_SECTIONS.some(([k]) => k === key) ? key : null; },
+  valuesOf: () => ({}),
+  loadOptions: (w, projectId) => splitOptions(w, projectId),
+  submit: (w, projectId, _id, v) => useOfFunds.submit(w, projectId, v),
+};
+
+const PROSPECT_CARRIED = ['name', 'stage'];
+const editProspect = {
+  ...EDIT,
+  key: 'edit-investor',
+  title: 'Edit investor',
+  sub: 'Its stage, how you reach them, the next step and your notes.',
+  fields: [
+    { kind: 'T', name: 'name', k: 'Investor', max: 200 },
+    { kind: 'T', name: 'email', k: 'Email', input: 'email', max: 200 },
+    { ...bare(prospect.fields[1]), required: true },
+    { kind: 'T', name: 'warm_path', k: 'Warm path', ph: 'Who can introduce you', max: 300 },
+    nextStep,
+    prospect.fields[4],
+  ],
+  idOf: recordNumber,
+  valuesOf: () => ({}),
+  toBody: (v) => sentOnly(v, {
+    name: str(v.name), email: str(v.email), stage: v.stage || null, warm_path: str(v.warm_path),
+    next_step: str(v.next_step), next_step_due: str(v.next_step_due), notes: str(v.notes),
+  }, PROSPECT_CARRIED),
+  submit: (w, projectId, id, v) => w.raise.prospectUpdate(projectId, id, editProspect.toBody(v)),
+};
+
 const editFormationStep = {
   ...EDIT,
   key: 'edit-formation-step',
@@ -730,6 +1283,14 @@ const editSystem = {
 };
 
 export const EDITS = {
+  raise: {
+    'investor-narrative': editNarrative,
+    'pitch-deck': editLink,
+    'data-room': editFile,
+    'cap-table': editHolder,
+    'use-of-funds': editSplit,
+    'capital-relationships': editProspect,
+  },
   grow: {
     'product-improvement': editFeedback,
     distribution: editChannel,
