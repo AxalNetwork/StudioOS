@@ -92,7 +92,7 @@ def _sumsub_request(method: str, path: str, body: Optional[dict] = None) -> dict
         },
     )
     try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
+        with urllib.request.urlopen(req, timeout=15) as resp:  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected -- URL is the constant https://api.sumsub.com base plus a fixed /resources/... path from start_kyb, so no input chooses the scheme or host
             return json.loads(resp.read().decode() or "{}")
     except Exception as exc:  # noqa: BLE001
         logger.warning("Sumsub request %s %s failed: %s", method, path, exc)

@@ -26,7 +26,10 @@ import { RECORDS } from '../src/pages/cycles/adapters/validate.js';
 
 const h = React.createElement;
 const html = (el) => renderToStaticMarkup(h(MemoryRouter, null, el));
-const tag = (out, id) => new RegExp(`<[a-z]+[^>]*data-testid="${id}"[^>]*>`).exec(out)?.[0] ?? '';
+const tag = (out, id) => {
+  const at = out.indexOf(`data-testid="${id}"`);
+  return at < 0 ? '' : out.slice(out.lastIndexOf('<', at), out.indexOf('>', at) + 1);
+};
 
 const S = (id, status, extra = {}) => ({ id, status, channel: 'in_person', created_at: `2026-10-0${id} 10:00:00`, interview_id: 41, ...extra });
 const SEGMENTS = [
@@ -281,7 +284,8 @@ test('Delete confirms what goes with it, Cancel keeps it, and Delete the intervi
 
 test('the route, and the rows that link to it: Customer research and the interview log', () => {
   const row = RECORDS['customer-research'].row({ id: 41, interviewee: 'Dana Ruiz', company: 'Acme' });
-  assert.deepEqual(row.cells.interviewee, { text: 'Dana Ruiz', href: '/validate/interviews/41' });
+  // D696 (#1658) decision 6: the cell points at Customer research's record, the review's address now.
+  assert.deepEqual(row.cells.interviewee, { text: 'Dana Ruiz', href: '/validate/customer-research/41' });
   assert.equal(RECORDS['customer-research'].row({ id: 41, interviewee: null }).cells.interviewee, null, 'no name: "Not recorded", not a link');
   assert.equal(RECORDS['customer-research'].row({ id: 'x', interviewee: 'Dana' }).cells.interviewee, 'Dana', 'no numeric id: plain text');
   const ws = readFileSync('frontend/src/workspaces/founder/FounderValidateWorkspace.jsx', 'utf8');

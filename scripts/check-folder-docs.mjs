@@ -103,6 +103,7 @@ const DOCUMENTED = new Map([
   ['cloudflare-worker/src/services/market_intel/extractors', 'what is pulled out of a source'],
   ['cloudflare-worker/src/services/market_intel/sources',    'where signals come from'],
   ['cloudflare-worker/src/services/channels', 'D684 interview channels — the shared intake contract and one adapter per provider'],
+  ['cloudflare-worker/src/services/records', 'D690 cycle record services — one ModuleSpec per module, the owned-row check and the contract'],
   ['cloudflare-worker/src/templates/legal',   'the legal document templates'],
 ]);
 

@@ -67,9 +67,10 @@ function extractIds(src) {
   return out;
 }
 
+// Non-overlapping literal matches, left to right: what a global regex of the
+// escaped needle counted, without compiling one. The needle is never empty.
 function countOccurrences(src, needle) {
-  const re = new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
-  return (src.match(re) || []).length;
+  return src.split(needle).length - 1;
 }
 
 // 1. Per-bank size targets ----------------------------------------------

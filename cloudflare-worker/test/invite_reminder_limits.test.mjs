@@ -42,8 +42,16 @@ function formatDBTimestamp(date) {
   return date.toISOString().replace('T', ' ').replace(/\.\d+Z$/, '');
 }
 
+// One literal pattern per constant read, not a RegExp built from the name
+// (a metacharacter in it would silently change what the pattern matches).
+const CONST_PATTERNS = {
+  REMINDER_COOLDOWN_HOURS: /const\s+REMINDER_COOLDOWN_HOURS\s*=\s*([^;]+);/,
+  DAILY_REMINDER_LIMIT: /const\s+DAILY_REMINDER_LIMIT\s*=\s*([^;]+);/,
+};
+
 function extractConst(src, name) {
-  const m = src.match(new RegExp(`const\\s+${name}\\s*=\\s*([^;]+);`));
+  assert.ok(Object.hasOwn(CONST_PATTERNS, name), `${name} has no pattern in CONST_PATTERNS`);
+  const m = src.match(CONST_PATTERNS[name]);
   assert.ok(m, `${name} const not found`);
   // Evaluate the RHS in a sandbox — the real file uses simple arithmetic
   // (e.g. `24 * 7`) so this is safe.

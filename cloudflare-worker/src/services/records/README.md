@@ -3,8 +3,8 @@
 `types.ts` defines the plain-data `ModuleSpec`, record sections, actions, fields,
 and gates. `index.ts` holds the cycle/slug registry and reports whether a cycle
 has records. Validate registers `validate.ts` (D690, #1692), Build `build.ts` (D690,
-#1694) and Raise `raise.ts` (D691, #1699, #1700); every other cycle has none until it
-registers its own service. `owned.ts`
+#1694), Raise `raise.ts` (D691, #1699, #1700) and Grow `grow.ts` (D691, #1698), so every
+cycle now has one. `owned.ts`
 checks a record id against its actual store and project before a route reads or
 writes it. Validate's existing stores are listed there; later cycles add their
 stores with fixed, bound SQL statements.
@@ -23,12 +23,27 @@ Sync log and Permissions to writers. Old rows read through each spec's
 `oldRows` matcher, one id prefix per spec.
 
 `../cycleActivity.ts` writes scoped activity and reads one record's timeline.
-Older activity is only included when a spec declares an `oldRows` matcher.
-Nothing rewrites historical activity. Grow (D691, #1698) lists its six stores
-in `owned.ts`, and its matchers admit today's Grow rows, which carry no
+A write that belongs to a module rather than a record logs `entityId: null`, so
+no record's history returns it. Its `CREATE_ACTIONS` set is what both the count
+and the renderer treat as a record's create row. Older activity is only
+included when a spec declares an `oldRows` matcher. Nothing in the Worker
+rewrites historical activity; migration 470 is the one-off correction S1 ruled
+for the rows #1736 misfiled before its review fixes shipped.
+
+Grow (D691, #1698) lists its six stores in `owned.ts`, and its matchers admit
+today's Grow rows, which carry no
 `project_id`, only under `grow_*` actions (`unscopedActions`), plus a month's
 figure logged as `<id>:<month>` (`idPrefixTypes`) and an application's stage
 row through its posting (`children`).
+
+`grow.ts` holds Grow's seven module specs (D691, #1698), as CO:382-388 draws
+them: a feedback, a channel, a KPI (a key, or a custom KPI's `custom-<uid>`,
+`owned.ts`'s `grow_kpis`), a role, a partner, a market and an obligation. Its
+gates are `canAccessProject`, the module read's own, through an async `Gate`.
+Third parties' names reach writers only, applicant names the posting's host or
+an admin. Each action runs the writer its PATCH route runs
+(`../growWriters.ts`, `../growKpis.ts`); Mark held stores minutes under
+`grow-minutes/<project>/` and Open minutes answers one signed download.
 
 `validate.ts` holds Validate's six module specs (D690, #1692), as CO:362-367
 draws them: a pain group, an interview, a segment, a competitor, a demand record

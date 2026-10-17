@@ -17,6 +17,8 @@ import { installDocument, mountContracts } from './_contracts_dom.mjs';
 
 const html = (element, path = '/build?project_id=7') => renderToStaticMarkup(h(MemoryRouter, { initialEntries: [path] }, element));
 const source = (path) => readFileSync(path, 'utf8');
+/** An href as React writes it into an attribute, so its `&` is escaped by React's own encoder, not a hand-built one. */
+const inAttr = (href) => /^<a href="([^"]*)">/.exec(renderToStaticMarkup(h('a', { href })))[1];
 const reasons = [
   ['solution-design', 'Solution design', 'No features yet. Linked and unlinked features appear here.', 'Add feature', '/build/solution-design?project=7&add=1'],
   ['prototype-mvp', 'Prototype / MVP', 'No must-haves yet. The burn-up toward the ship date appears here.', 'Add must-have', '/build/prototype-mvp?project=7&add=1'],
@@ -39,7 +41,7 @@ test('D688: the six Build cards render empty links and four figures say Not reco
     assert.match(card, /data-state="empty"/);
     assert.ok(card.includes(reason), slug);
     assert.ok(card.includes(text), slug);
-    assert.ok(card.includes(href.replaceAll('&', '&amp;')), slug);
+    assert.ok(card.includes(inAttr(href)), slug);
   }
   assert.equal((out.match(/nothing recorded yet/g) || []).length, 4);
   assert.doesNotMatch(out, /Hidden chart caption|Next:|>0</);
@@ -55,7 +57,7 @@ test('D688: Build phone focus has the Add feature link and no Validate meter or 
   assert.doesNotMatch(absent, /data-testid="phone-focus"/);
 });
 
-test('D688: Solution design has two distinct Add forms; Score readiness has no fields; narrative requires type', () => {
+test('D688: Solution design has two distinct Add forms; Score readiness opens Re-score; narrative requires type', () => {
   const forms = formsFor('build', 'solution-design');
   assert.deepEqual(forms.map((form) => form.button), ['Add feature', 'Add risk']);
   assert.equal(formFor('build', 'solution-design'), forms[0]);
@@ -69,9 +71,10 @@ test('D688: Solution design has two distinct Add forms; Score readiness has no f
   const record = html(h(RecordsTable, { title: 'Features', records: { cols: [], rows: [], total: 0 }, add: forms.map((form) => ({ text: form.button, onClick() {} })) }));
   assert.match(record, /Add feature/);
   assert.match(record, /Add risk/);
+  // D695 (#1657): the card's "Score readiness" opens Re-score, the canvas form (CO:317).
   const rescore = formFor('raise', 'fundraising-readiness');
-  assert.deepEqual(rescore.fields, []);
-  assert.match(html(h(FormLightbox, { form: rescore, cycle: 'raise', slug: 'fundraising-readiness', onSubmit() {}, onClose() {} })), /Score readiness/);
+  assert.deepEqual(rescore.fields.map((field) => field.name), ['items', 'since']);
+  assert.match(html(h(FormLightbox, { form: rescore, cycle: 'raise', slug: 'fundraising-readiness', onSubmit() {}, onClose() {} })), /Re-score now/);
   const narrative = formFor('raise', 'investor-narrative');
   assert.ok(validate(narrative, {}).investor_type);
   assert.deepEqual(validate(narrative, { investor_type: 'angel' }), {});

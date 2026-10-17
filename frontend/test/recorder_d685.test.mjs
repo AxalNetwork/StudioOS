@@ -501,7 +501,6 @@ test('the capture: 30 s of silence is "no sound", read every 250 ms; a lost mic 
   c.start();
   assert.deepEqual(b.timers, [250], 'a level check every 250 ms, not at chunk boundaries');
   now += 31000;
-  c.flush && null;
   b.mic.fire('ended');
   assert.equal(states.at(-1).mic, 'ended');
   assert.ok(states.at(-1).silentMs >= 30000);
