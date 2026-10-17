@@ -114,14 +114,15 @@ async function fixture() {
   db.exec(`CREATE TABLE users (id INTEGER PRIMARY KEY, role TEXT NOT NULL, founder_id INTEGER, is_active INTEGER NOT NULL DEFAULT 1,
                                jwt_min_iat INTEGER, name TEXT, email TEXT, spinout_lab_active INTEGER);
            CREATE TABLE projects (id INTEGER PRIMARY KEY, uid TEXT, name TEXT, founder_id INTEGER, company_id INTEGER, entity_id INTEGER, deleted_at TEXT);
-           CREATE TABLE entities (id INTEGER PRIMARY KEY, jurisdiction TEXT);
            CREATE TABLE user_company_links (id INTEGER PRIMARY KEY, company_id INTEGER, user_id INTEGER);
            CREATE TABLE documents (id INTEGER PRIMARY KEY, project_id INTEGER);
            CREATE TABLE activity_logs (id INTEGER PRIMARY KEY, action TEXT, details TEXT, user_id INTEGER, entity_type TEXT, entity_id TEXT);
            CREATE TABLE waitlist_signups (id INTEGER PRIMARY KEY, project_id INTEGER, email TEXT, audience TEXT, created_at TEXT DEFAULT (datetime('now')));
            CREATE TABLE spinout_lab_milestones (id INTEGER PRIMARY KEY, user_id INTEGER, week INTEGER, milestone_key TEXT, completed_at TEXT);`);
-  db.exec(tableFromBaseline(readFileSync(resolve(here, '../sql/schema_baseline.sql'), 'utf8'), 'compliance_events'));
-  for (const p of ['119', '127', '132', '326']) db.exec(ddl(p));
+  const baseline = readFileSync(resolve(here, '../sql/schema_baseline.sql'), 'utf8');
+  db.exec(tableFromBaseline(baseline, 'entities'));
+  db.exec(tableFromBaseline(baseline, 'compliance_events'));
+  for (const p of ['034', '119', '127', '132', '326']) db.exec(ddl(p));
   db.exec(file('311'));
   db.exec('ALTER TABLE contacts ADD COLUMN utm_json TEXT');
   db.exec(ddl('125')); db.exec(file('437'));
@@ -393,7 +394,7 @@ test('durable company-building: the checklist starts from the Lab\'s gates; obli
     [409, `Another governance obligation is already due on ${due}. Pick another date.`]);
   const missing = await call(f, FOUNDER, 'POST', '/api/cycles/grow/obligations', { project: PID, title: 'No date', kind: 'compliance' });
   assert.deepEqual([missing.status, missing.body.detail], [400, 'An obligation has a due date.']);
-  f.db.exec(`INSERT INTO entities (id, jurisdiction) VALUES (9, 'Example jurisdiction'); UPDATE projects SET entity_id = 9 WHERE id = ${PID}`);
+  f.db.exec(`INSERT INTO entities (id, name, entity_type, jurisdiction) VALUES (9, 'Example entity', 'project', 'Example jurisdiction'); UPDATE projects SET entity_id = 9 WHERE id = ${PID}`);
   const entityOb = await call(f, FOUNDER, 'POST', '/api/cycles/grow/obligations',
     { project: PID, title: 'Culture gathering', kind: 'culture', due_at: due });
   assert.equal(entityOb.status, 201);
