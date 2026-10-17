@@ -18,6 +18,8 @@ import { takeBuildProject, toolDeepLink } from '../account/connectorsModel';
 import RoundCallSheet from '../founder/RoundCallSheet';
 import RecordLightbox from '../founder/RecordLightbox';
 import { recordingHref } from '../founder/recordSetup';
+import { openingStep } from '../founder/assistantSession.js';
+import { reviewPath } from '../../lib/activeRecording';
 import { useActiveRecording } from '../../contexts/ActiveRecordingContext';
 import CreateStartupForm from '../../components/CreateStartupForm';
 import CycleOverview from './CycleOverview';
@@ -352,6 +354,18 @@ export function underSlug(path, cycle = 'validate', action = 'record') {
   return m && m[1] !== action ? m[1] : null;
 }
 
+/**
+ * Where a Record a session finish lands (D694): the live view while it
+ * records here; a channel session still waiting for its messages or its
+ * transcript keeps its session page, the one page that draws that wait; every
+ * other finish is Customer research, in the session's venture, else the page's.
+ */
+export function finishPath(session, where, projectId) {
+  if (where === 'live') return `/validate/record/live?session=${encodeURIComponent(session?.id)}`;
+  if (openingStep(session) === 'channel') return `/validate/session/${encodeURIComponent(session?.id)}`;
+  return reviewPath({ ...session, project_id: session?.project_id ?? projectId });
+}
+
 /*
  * Each cycle's open lightbox (D686 §5.1). Build, Raise and Grow each mount a
  * sheet that draws its own `<Lightbox size="tall">` with an `ActionSheet`
@@ -499,12 +513,14 @@ export default function CycleRoute({ cycle, lightbox = false }) {
     if (location.state?.under) navigate(-1);
     else navigate(`/${cycle}${q}`, { replace: true });
   };
-  // What finishing does: the recording view or the session replaces the action
-  // route, and a sent update opens its page, so Back never reopens the lightbox.
+  // What finishing does: `finishPath`'s page replaces the action route, and a
+  // sent update opens its page, so Back never reopens the lightbox. Only the
+  // session page reads the interview it was opened for.
   const onDone = cycle === 'validate'
-    ? (session, interview, where) => (where === 'live'
-      ? navigate(`/validate/record/live?session=${encodeURIComponent(session.id)}`, { replace: true })
-      : navigate(`/validate/session/${session.id}`, { state: { interview }, replace: true }))
+    ? (session, interview, where) => {
+      const to = finishPath(session, where, projectId);
+      navigate(to, to.startsWith('/validate/session/') ? { state: { interview }, replace: true } : { replace: true });
+    }
     : cycle === 'grow' ? (uid) => navigate(`/updates/${encodeURIComponent(uid)}`, { replace: true }) : undefined;
   const action = def.action(q, openAction);
   const Mount = def.Mount || null;
@@ -596,9 +612,14 @@ export default function CycleRoute({ cycle, lightbox = false }) {
   return (
     <RailCrumbsProvider section={name} module={moduleName}>
     <RailFrame rail={rail} data-testid={`cycle-route-${cycle}`}>
-      {/* The route is full-bleed (`p-0`), so the inset is this page's own,
-          the same `p-5` WorkspaceShell gives every other workspace page. */}
-      <div className="min-w-0 p-5" data-testid="cycle-route-body">
+      {/* Every cycle path is full-bleed (`cyclePaths.js`, D694), so this is the
+          one gutter: the canvas's 22/24/30px (CO:54), 14/14/40px in a cycle
+          column under 760px (CO:18), and 14/22/18px on a phone (CO:25-26).
+          The column is the size container. The form sheets and the action
+          Mount draw `fixed` layers, so they sit after it: an older browser
+          would place them against the column (decision 13). */}
+      <div className="@container/cycle min-w-0">
+      <div className="min-w-0 px-[22px] pt-[14px] pb-[18px] lg:px-6 lg:pt-[22px] lg:pb-[30px] lg:@max-[760px]/cycle:px-[14px] lg:@max-[760px]/cycle:pt-[14px] lg:@max-[760px]/cycle:pb-[40px]" data-testid="cycle-route-body">
         {body}
         {creates && (
           <CreateStartupForm
@@ -613,24 +634,25 @@ export default function CycleRoute({ cycle, lightbox = false }) {
             onCreated={(created) => { if (created?.id) writeProject(created.id, ['new']); setProjectsKey((n) => n + 1); }}
           />
         )}
-        {formOpen && projectId && (
-          <RecordFormSheet key={formOpen.title} form={formOpen} cycle={name}
-            onSubmit={(values) => formOpen.submit(cyclesWrite, projectId, values)}
-            onSaved={() => setReload((n) => n + 1)}
-            onClose={closeForm} />
-        )}
-        {edit && editing && projectId && edit.idOf(editing) != null && (
-          <RecordFormSheet key={String(editing.id)} form={edit} current={edit.valuesOf(editing)} cycle={name}
-            loadOptions={edit.loadOptions ? () => edit.loadOptions(cyclesWrite, projectId, edit.idOf(editing)) : null}
-            onSubmit={(values) => edit.submit(cyclesWrite, projectId, edit.idOf(editing), values)}
-            onSaved={() => setReload((n) => n + 1)}
-            onClose={() => setEditing(null)} />
-        )}
-        {lightbox && Mount && projectId && (
-          <Mount projectId={projectId} q={q} searchParams={searchParams} onClose={closeAction} onDone={onDone}
-            onChanged={() => { dirty.current = true; }} />
-        )}
       </div>
+      </div>
+      {formOpen && projectId && (
+        <RecordFormSheet key={formOpen.title} form={formOpen} cycle={name}
+          onSubmit={(values) => formOpen.submit(cyclesWrite, projectId, values)}
+          onSaved={() => setReload((n) => n + 1)}
+          onClose={closeForm} />
+      )}
+      {edit && editing && projectId && edit.idOf(editing) != null && (
+        <RecordFormSheet key={String(editing.id)} form={edit} current={edit.valuesOf(editing)} cycle={name}
+          loadOptions={edit.loadOptions ? () => edit.loadOptions(cyclesWrite, projectId, edit.idOf(editing)) : null}
+          onSubmit={(values) => edit.submit(cyclesWrite, projectId, edit.idOf(editing), values)}
+          onSaved={() => setReload((n) => n + 1)}
+          onClose={() => setEditing(null)} />
+      )}
+      {lightbox && Mount && projectId && (
+        <Mount projectId={projectId} q={q} searchParams={searchParams} onClose={closeAction} onDone={onDone}
+          onChanged={() => { dirty.current = true; }} />
+      )}
     </RailFrame>
     </RailCrumbsProvider>
   );

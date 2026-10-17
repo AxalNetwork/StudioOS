@@ -375,9 +375,14 @@ export function Chart({ spec, label }) {
   const Draw = DRAW[spec.kind];
   if (!Draw) return null;
   return (
-    <div data-chart={spec.kind}>
-      <Draw spec={spec} label={label} />
-      <Legend items={spec.legend} />
+    // In a cycle column under 760px the chart keeps 480px and scrolls sideways,
+    // so its labels never shrink (CO:16, D694). Wider, nothing changes: the
+    // scroll is under the query because a label may draw past the SVG's box.
+    <div data-chart={spec.kind} className="min-w-0 @max-[760px]/cycle:overflow-x-auto">
+      <div className="@max-[760px]/cycle:min-w-[480px]">
+        <Draw spec={spec} label={label} />
+        <Legend items={spec.legend} />
+      </div>
     </div>
   );
 }

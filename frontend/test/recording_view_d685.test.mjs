@@ -498,7 +498,9 @@ test('the lightbox hands its draft over: the mic is opened in the Start click, t
     assert.deepEqual(order.find((x) => Array.isArray(x)).slice(2, 3), [true]);
   } finally { await act(async () => root.unmount()); restore(); }
   const route = readFileSync('frontend/src/pages/cycles/CycleRoute.jsx', 'utf8');
-  assert.match(route, /navigate\(`\/validate\/record\/live\?session=\$\{encodeURIComponent\(session\.id\)\}`, \{ replace: true \}\)/, 'Back does not reopen the setup');
+  // D694: the live view is `finishPath`'s first answer, and `onDone` replaces /record with it.
+  assert.match(route, /if \(where === 'live'\) return `\/validate\/record\/live\?session=\$\{encodeURIComponent\(session\?\.id\)\}`;/);
+  assert.match(route, /const to = finishPath\(session, where, projectId\);\s*navigate\(to, [^;]*: \{ replace: true \}\);/, 'Back does not reopen the setup');
 });
 
 test('the session page hands its recording to the recorder and no longer owns a capture', () => {
