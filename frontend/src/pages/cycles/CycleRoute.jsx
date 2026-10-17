@@ -24,6 +24,7 @@ import { useActiveRecording } from '../../contexts/ActiveRecordingContext';
 import CreateStartupForm from '../../components/CreateStartupForm';
 import CycleOverview, { CycleHeader } from './CycleOverview';
 import RecordView from './RecordView';
+import InterviewRecord from '../founder/InterviewReviewPage';
 import Lightbox from '../../ui/Lightbox';
 import { RECORD_ID } from './cyclePaths';
 import { availableRecord, CLIENT_ACTIONS, confirmView, declaredActions, finishRecordWrite, recordActionBody, recordEditAction, recordFormFor, rowAction } from './recordModel';
@@ -112,6 +113,11 @@ const CYCLE_DEFS = {
         onLink={(painGroupId, body) => cyclesApi.recordAction('validate', ctx.projectId, 'problem-discovery', painGroupId, 'link', body).then(ctx.reload)}
         // Only until #1656 registers New hypothesis as the table's Add (decision 20).
         onNewHypothesis={formFor('validate', 'experiments') ? undefined : (body) => api.createHypothesis(ctx.projectId, body).then(ctx.reload)} />,
+    }),
+    // D697 (#1659): an interview is Customer research's record. The page draws
+    // what the read sends, with the session's working parts inside it.
+    recordPage: toFnMap({
+      'customer-research': (read, ctx) => <InterviewRecord read={read} {...ctx} />,
     }),
   },
   /**
@@ -811,9 +817,10 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
       {recordState.status === 'loading' ? <p className="text-sm text-axal-muted dark:text-gray-400" aria-busy="true">Loading record…</p>
         : recordState.status === 'refused' ? <p className="text-sm text-axal-ink dark:text-gray-100">{recordState.error}</p>
         : recordState.status === 'unreadable' ? <Unreadable what="This record" claim={recordState.error} onRetry={() => setReload(n => n + 1)} />
-        : recordState.data && <RecordView record={recordState.data} activity={recordState.activity}
+        : recordState.data && (fnOf(def.recordPage, slug)?.(recordState.data, { projectId, id: recordId, activity: recordState.activity, cycleName: name, moduleName, onLink: recordState.link, onForm: recordState.openForm, onWrite: recordState.write, onClient: recordState.client, onShowAll: recordState.showAll, act: (key, body) => cyclesApi.recordAction(cycle, projectId, slug, recordId, key, body), reload: () => setReload((n) => n + 1), openDialog })
+          ?? <RecordView record={recordState.data} activity={recordState.activity}
           cycleName={name} moduleName={moduleName} onLink={recordState.link} onForm={recordState.openForm}
-          onWrite={recordState.write} onClient={recordState.client} onShowAll={recordState.showAll} />}
+          onWrite={recordState.write} onClient={recordState.client} onShowAll={recordState.showAll} />)}
       {recordState.actionError && <p role="alert" className="text-sm text-red-700 dark:text-red-300">{recordState.actionError}</p>}
     </div>;
   } else if (!slug) {
