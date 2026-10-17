@@ -42,12 +42,11 @@
 -- hardDeleteProject deletes the tables it lists and then the project
 -- (services/projectTrash.ts), so a plain reference would leave a deleted
 -- venture's rows behind or stop the delete. uid is set by the writer with
--- crypto.randomUUID(). The three new tables have no runtime CREATE. The one
--- runtime CREATE of a table altered here, competitor_signals in
--- services/competitorSchema.ts, declares amount_cents and currency too, as it
--- declares 440's columns (scripts/check-schema-pair-drift.mjs). It runs only
--- where the table is missing, and in production the table exists before this
--- file, so these ALTERs meet no column a runtime created first.
+-- crypto.randomUUID(). The three new tables have no runtime CREATE.
+-- competitor_signals has one (services/competitorSchema.ts), and it keeps its
+-- older shape on purpose: declaring amount_cents and currency there too would
+-- make this file's ALTERs fail on a database the runtime created first. The
+-- pair is on record in scripts/schema-pair-drift-baseline.json.
 --
 -- No BEGIN/COMMIT.
 
