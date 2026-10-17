@@ -14,7 +14,7 @@ export type CycleWrite = {
 };
 
 export type Readback =
-  | { table: 'pain_groups' | 'hypotheses' | 'mvp_features' | 'roadmap_okrs'; by: 'max'; prefix?: string }
+  | { table: 'pain_groups' | 'hypotheses' | 'mvp_features' | 'roadmap_okrs' | 'formation_steps'; by: 'max'; prefix?: string }
   | { table: 'interview_sessions'; by: 'uid'; uid: string; prefix?: string };
 
 export type BatchedCycleWrite = Omit<CycleWrite, 'entityId'> & { readback: Readback };
@@ -55,6 +55,8 @@ export function logCycleWriteStatement(env: Env, input: CycleWrite | BatchedCycl
     hypotheses: "INSERT INTO activity_logs (project_id, user_id, entity_type, entity_id, action, details, actor) VALUES (?, ?, ?, ? || (SELECT CAST(MAX(id) AS TEXT) FROM hypotheses WHERE project_id = ?), ?, ?, ?)",
     mvp_features: "INSERT INTO activity_logs (project_id, user_id, entity_type, entity_id, action, details, actor) VALUES (?, ?, ?, ? || (SELECT CAST(MAX(id) AS TEXT) FROM mvp_features WHERE project_id = ?), ?, ?, ?)",
     roadmap_okrs: "INSERT INTO activity_logs (project_id, user_id, entity_type, entity_id, action, details, actor) VALUES (?, ?, ?, ? || (SELECT CAST(MAX(id) AS TEXT) FROM roadmap_okrs WHERE project_id = ?), ?, ?, ?)",
+    // D690 (#1693): Build's filings, read back as `step-<id>`.
+    formation_steps: "INSERT INTO activity_logs (project_id, user_id, entity_type, entity_id, action, details, actor) VALUES (?, ?, ?, ? || (SELECT CAST(MAX(id) AS TEXT) FROM formation_steps WHERE project_id = ?), ?, ?, ?)",
   }[readback.table];
   return env.DB.prepare(sql).bind(...common, prefix, input.projectId, ...tail);
 }
