@@ -138,7 +138,8 @@ function assertBody(source) {
 test('the cycle body takes the canvas gutter in a cycle size container, and no overlay sits inside it', () => {
   const source = read(routePath);
   assertBody(source);
-  const close = '      </div>\n      </div>\n';
+  // D703 (#1665's PR 2c): the container and body sit in the one `!actionPage` condition, which closes with them.
+  const close = '      </div>\n      </div>\n      )}\n';
   const mount = '          onChanged={() => { dirty.current = true; }} />\n      )}\n';
   for (const [label, mutate] of [
     ['the closing tags back below the Mount', (src) => src.replace(close, '').replace(mount, mount + close)],
