@@ -40,6 +40,7 @@ import { AI_CAP_DEFAULTS, AI_CAP_VARS, environmentAiCaps, resolveAiCaps } from '
 import { aiUsageSelfScope } from './tenancyScope';
 import type { Actor } from './tenancyScope';
 import { taskLabel } from './aiCatalog';
+import { surfaceAlsoCounts, surfaceCountsAs } from './aiSurfaces';
 
 export interface AiSpendPeriod {
   /** 'YYYY-MM' for the month, 'YYYY-MM-DD' for the day. */
@@ -338,11 +339,18 @@ export async function loadMyAiSpend(env: Env, actor: Actor, now: Date): Promise<
           GROUP BY u.surface
           ORDER BY spend DESC`,
       ).bind(...scope.binds, mKey).all<{ surface: string | null; calls: number; spend: number }>();
-      by_surface = (rows.results || []).map((t) => ({
-        surface: t.surface == null ? null : String(t.surface),
-        calls: Number(t.calls) || 0,
-        spend_usd: Number(t.spend) || 0,
-      }));
+      // D704: a retired page's runs fold into the module that holds the
+      // feature now (`AI_SURFACE_ALIASES`), so the breakdown names live pages;
+      // the month's total is unchanged. Folded in JS: the query keeps its shape.
+      const folded = new Map<string | null, AiSpendReport['by_surface'][number]>();
+      for (const t of rows.results || []) {
+        const key = t.surface == null ? null : surfaceCountsAs(String(t.surface));
+        const entry = folded.get(key) || { surface: key, calls: 0, spend_usd: 0 };
+        entry.calls += Number(t.calls) || 0;
+        entry.spend_usd += Number(t.spend) || 0;
+        folded.set(key, entry);
+      }
+      by_surface = [...folded.values()].sort((a, b) => b.spend_usd - a.spend_usd);
       by_surface_recorded = true;
     } catch { /* unrecorded, not empty */ }
 
@@ -468,6 +476,9 @@ export async function loadMyAiSpendForSurface(
   const scope = aiUsageSelfScope(actor);
   const mKey = monthKey(now);
   const asAt = now.toISOString().slice(0, 19).replace('T', ' ');
+  // D704: a module's figure also counts the runs recorded on the page it
+  // replaced. Bound twice to the asked surface when no old page aliases to it.
+  const also = surfaceAlsoCounts(surface);
 
   const report: AiSurfaceSpendReport = {
     surface,
@@ -481,14 +492,14 @@ export async function loadMyAiSpendForSurface(
   };
 
   try {
-    // Bound on `surface = ?`, never interpolated. Selecting the column is
+    // Bound on `surface IN (?, ?)`, never interpolated. Selecting the column is
     // also what makes a table without it (before migration 319) throw here
     // and report "unreadable" rather than a page total of zero.
     const row = await env.DB.prepare(
       `SELECT COUNT(*) AS calls, COALESCE(SUM(u.est_cost_usd), 0) AS spend
          FROM ai_usage_logs u
-        WHERE ${scope.sql} AND u.surface = ? AND substr(u.created_at, 1, 7) = ?`,
-    ).bind(...scope.binds, surface, mKey).first<{ calls: number; spend: number }>();
+        WHERE ${scope.sql} AND u.surface IN (?, ?) AND substr(u.created_at, 1, 7) = ?`,
+    ).bind(...scope.binds, surface, also, mKey).first<{ calls: number; spend: number }>();
     if (!row) return report;
     report.recorded = true;
     report.reason = null;
@@ -514,9 +525,9 @@ export async function loadMyAiSpendForSurface(
       `SELECT u.task, u.model, u.est_cost_usd, u.prompt_tokens, u.completion_tokens,
               u.cached, u.fallback_used, u.refusal, u.created_at
          FROM ai_usage_logs u
-        WHERE ${scope.sql} AND u.surface = ? AND u.created_at <= ?
+        WHERE ${scope.sql} AND u.surface IN (?, ?) AND u.created_at <= ?
         ORDER BY u.created_at DESC, u.id DESC LIMIT 1`,
-    ).bind(...scope.binds, surface, asAt).first<any>();
+    ).bind(...scope.binds, surface, also, asAt).first<any>();
     report.last_run = r ? lastRunFromRow(r) : null;
     report.last_run_recorded = true;
     report.last_run_reason = r ? null : SURFACE_REASONS.noRun;
