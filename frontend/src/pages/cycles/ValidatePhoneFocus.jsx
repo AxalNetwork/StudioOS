@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { cycleValidateApi } from '../../lib/api/cycleValidate';
-import { FIRST_FOCUS, phoneFocus, phoneIndex, phoneMeter } from './validatePhone';
+import { FIRST_FOCUS, phoneFocus, phoneIndex, phoneMeter, targetValue } from './validatePhone';
 
 /**
  * Validate's phone focus (D685 §5.12, #1589), below md only: the focus card
@@ -13,15 +13,6 @@ import { FIRST_FOCUS, phoneFocus, phoneIndex, phoneMeter } from './validatePhone
  * (#1609): a whole number above zero, or empty to clear it. The Worker's
  * refusal is printed in its words; a saved target re-reads the overview.
  */
-
-/** The target form's value as the Worker takes it: a positive whole number, null to clear, or a sentence. */
-export function targetValue(text) {
-  const t = String(text ?? '').trim();
-  if (!t) return { value: null };
-  const n = Number(t);
-  if (!Number.isInteger(n) || n <= 0) return { error: 'Enter a whole number of interviews a month, above zero.' };
-  return { value: n };
-}
 
 function TargetForm({ projectId, current, api, onSaved, onCancel }) {
   const [text, setText] = useState(current == null ? '' : String(current));
