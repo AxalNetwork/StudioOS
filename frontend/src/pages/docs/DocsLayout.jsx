@@ -17,9 +17,12 @@ import CustomerChatWidget from '../../components/CustomerChatWidget';
 import BountyBadge from '../../components/tickets/BountyBadge';
 import ReviewBadge from '../../components/tickets/ReviewBadge';
 import { statusChip } from '../../lib/ticketScreens';
-import { parseGuidePath, guideHref, hashTarget, readingMinutes, openTicketsByActivity, guideFor } from './helpCenter';
+import { parseGuidePath, guideHref, hashTarget, readingMinutes, openTicketsByActivity, guideFor, viewsLine } from './helpCenter';
 import { canOpenSurface, guidePlacement, helpAreas } from './guidePlacement';
-import { GuideAnswersAdmin, GuideFeedback, PopularGuides } from './HelpSignals';
+import { GuideAnswersAdmin, GuideFeedback, PopularGuides, usePopularGuides } from './HelpSignals';
+import { usePhoneWidth } from '../../ui';
+import { AccountPhonePage, phonePending } from '../account/AccountPhonePage';
+import { ACCOUNT_PHONE_PAGES } from '../account/accountPhone';
 
 // ---------------------------------------------------------------------------
 // D599 (#1280) — the Help Center, built to its canvas.
@@ -702,6 +705,111 @@ function HelpHome({ visibleSections, role, user, query, setQuery, searchInputRef
   );
 }
 
+// ---------------------------------------------------------------------------
+// D700 (#1662) — A9m, the Help home on a phone. A guide page is unchanged.
+// ---------------------------------------------------------------------------
+
+export const EMAIL_SUPPORT_LINE = 'Opens your mail app. Write from the address on your account.';
+
+/**
+ * A9m's three sections. The first is "Popular this week" (D621) where the
+ * canvas draws "For you now", which has no store; and Email support's line
+ * says what the link does (decision 10). `popular` is `usePopularGuides`'
+ * read; `areas` is `helpAreas`, each row opening its guide list in place,
+ * because no area has a route of its own.
+ */
+export function helpPhoneGroups({ popular, onRetry, areas, openArea = null, onArea = () => {} }) {
+  const [, guidesTitle, contactTitle] = ACCOUNT_PHONE_PAGES.help.sections;
+  const top = { label: 'Popular this week', rows: [], testid: 'help-phone-popular' };
+  if (popular.status === 'loading') top.note = phonePending('loading');
+  else if (popular.status !== 'ok') top.note = phonePending('unreadable', 'The most-read guides', 'This is not a sign nobody reads them.', onRetry);
+  else {
+    top.rows = popular.cards.map((c) => ({ key: c.anchor, title: c.title, description: `${viewsLine(c.views)} · ${c.area}`, to: guideHref(c.anchor), testid: 'help-phone-popular-row' }));
+    if (!top.rows.length) top.note = 'No views are recorded for these guides this week.';
+  }
+  const guides = {
+    label: guidesTitle,
+    testid: 'help-phone-guides',
+    rows: areas.map((a) => ({
+      key: a.id,
+      title: a.title,
+      description: `${a.guides.length} guide${a.guides.length === 1 ? '' : 's'}`,
+      value: openArea === a.id ? 'Open' : '',
+      onClick: () => onArea(openArea === a.id ? null : a.id),
+      chevron: true,
+      testid: 'help-phone-area',
+    })),
+  };
+  const contact = {
+    label: contactTitle,
+    testid: 'help-phone-contact',
+    rows: [
+      { title: 'Open a ticket', description: 'Replies appear in My tickets', to: '/help/tickets?new=1', testid: 'help-phone-ticket' },
+      { title: 'Email support', description: EMAIL_SUPPORT_LINE, href: 'mailto:support@axal.vc', testid: 'help-phone-email' },
+    ],
+  };
+  return [top, guides, contact];
+}
+
+/** One area's guides, opened from its Guides row. */
+function AreaGuides({ area }) {
+  return (
+    <section aria-labelledby="help-phone-area-title" data-testid="help-phone-area-guides">
+      <h2 id="help-phone-area-title" className={LABEL}>{area.title}</h2>
+      <ul className="mt-2 grid gap-2">
+        {area.guides.map((sub) => (
+          <li key={sub.anchor}>
+            <Link to={guideHref(sub.anchor)} className="text-[13px] font-semibold text-gray-800 hover:text-violet-700 dark:text-gray-200 dark:hover:text-violet-300">
+              {sub.title}
+              <span className="block font-mono text-[10px] font-normal text-gray-500 dark:text-gray-400">{sub.surfaceInfo?.label || 'No single screen'}</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/** A9m — the bar and the three sections, then `children`: search, the open area, tickets and Still stuck. */
+export function HelpPhoneView({ popular, onRetry, areas, openArea, onArea, children = null }) {
+  return (
+    <AccountPhonePage pageKey="help" bleed testid="help-phone" groups={helpPhoneGroups({ popular, onRetry, areas, openArea, onArea })}>
+      {children}
+    </AccountPhonePage>
+  );
+}
+
+function HelpPhoneHome({ visibleSections, role, user, query, setQuery, searchInputRef, onOpenChat }) {
+  const [popular, retry] = usePopularGuides(visibleSections);
+  const [openArea, setOpenArea] = useState(null);
+  const areas = useMemo(() => helpAreas(visibleSections), [visibleSections]);
+  const fuse = useMemo(() => createDocsFuse(role), [role]);
+  const trimmedQuery = query.trim();
+  const results = useMemo(() => (trimmedQuery ? fuse.search(trimmedQuery, { limit: 25 }).map((r) => r.item) : []), [fuse, trimmedQuery]);
+  const area = areas.find((a) => a.id === openArea);
+  return (
+    <HelpPhoneView popular={popular} onRetry={retry} areas={areas} openArea={openArea} onArea={setOpenArea}>
+      <div>
+        <label htmlFor="help-phone-search" className="sr-only">Search the Help Center</label>
+        <input
+          id="help-phone-search"
+          ref={searchInputRef}
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search the guides"
+          className="w-full rounded-[11px] border border-gray-200 bg-white px-3 py-2.5 text-[14px] text-gray-900 placeholder:text-gray-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:placeholder:text-gray-400"
+        />
+      </div>
+      {trimmedQuery && <SearchResults results={results} query={trimmedQuery} sections={visibleSections} />}
+      {!trimmedQuery && area && <AreaGuides area={area} />}
+      <YourTicketsCard isAdmin={role === 'admin'} />
+      {role === 'admin' && <GuideAnswersAdmin sections={visibleSections} />}
+      <StillStuck user={user} onOpenChat={onOpenChat} />
+    </HelpPhoneView>
+  );
+}
+
 export default function DocsLayout() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -715,6 +823,7 @@ export default function DocsLayout() {
   );
   const [chatOpen, setChatOpen] = useState(false);
   const { user, role } = useAuth() || {};
+  const phone = usePhoneWidth();
 
   // Task #2 (DD) — the manifest filtered to what this viewer's role may read.
   // Admin sections and subsections are absent for everyone else: from the
@@ -766,6 +875,16 @@ export default function DocsLayout() {
     <div className="-mx-4 -my-4 min-h-[calc(100vh-64px)] bg-gray-50 md:-mx-6 md:-my-6 dark:bg-gray-950">
       {route ? (
         <HelpArticle sections={visibleSections} area={route.area} guide={route.guide} user={user} />
+      ) : phone ? (
+        <HelpPhoneHome
+          visibleSections={visibleSections}
+          role={role}
+          user={user}
+          query={query}
+          setQuery={setQuery}
+          searchInputRef={searchInputRef}
+          onOpenChat={() => setChatOpen(true)}
+        />
       ) : (
         <HelpHome
           visibleSections={visibleSections}
