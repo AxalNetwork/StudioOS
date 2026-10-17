@@ -32,6 +32,7 @@ import { stripTrailingSlashes } from '../util/url';
 import { bindingKey } from '../util/schemaBootstrap';
 import { refuse } from '../util/refusal';
 import { slideTotals, recordSlideSeconds } from '../services/deckSlideDwell';
+import { logCycleWrite } from '../services/cycleActivity';
 
 const decks = new Hono<{ Bindings: Env }>();
 
@@ -1228,7 +1229,7 @@ decks.post('/:id/share', async (c) => {
   // D691 — the one link writer; this route keeps its caps and its tier line.
   const { id: shareId, token, expiresAt } = await createShareLink(c.env, {
     deckId: id, deckVersion: Number(row.version), userId: Number(user.id) || null, actorEmail: user.email || null,
-    ttlSeconds, viewLimit,
+    ttlSeconds, viewLimit, projectId: Number(row.project_id) || null,
   });
   return c.json({
     id: shareId,
@@ -1349,13 +1350,16 @@ export type CreateShareLinkArgs = {
   investorLabel?: string | null;
   allowDownload?: boolean;
   allowForwarding?: boolean;
+  /** The deck's venture: the link's `raise.pitch-deck` row is logged under it (D691 decision 12). */
+  projectId?: number | null;
 };
 
 /**
  * The one link writer: `POST /api/decks/:id/share` and the Raise cycle's
  * `POST /deck-links` (#1700) both call it. The caller checks ownership, the
  * plan and every id it takes. The raw token is returned once and never read
- * back: only its hash is stored.
+ * back: only its hash is stored. Given the deck's `projectId`, it logs the
+ * link's one activity row itself, so both routes log alike.
  */
 export async function createShareLink(env: Env, a: CreateShareLinkArgs): Promise<{ id: number | null; token: string; expiresAt: string; ttlSeconds: number }> {
   const now = Math.floor(Date.now() / 1000);
@@ -1377,7 +1381,16 @@ export async function createShareLink(env: Env, a: CreateShareLinkArgs): Promise
   // D367 — the link's row id, so the sheet that minted it can withdraw it
   // (DELETE /:id/shares/:shareId) when the founder replaces it. Null if the
   // driver did not report one; the sheet then says it could not withdraw.
-  return { id: Number(ins?.meta?.last_row_id) || null, token, expiresAt, ttlSeconds };
+  const id = Number(ins?.meta?.last_row_id) || null;
+  // D691 decision 12 — every link logs one row on the link's record, whichever
+  // route made it. The summary names no investor.
+  if (id != null && a.projectId) {
+    await logCycleWrite(env, {
+      projectId: a.projectId, userId: a.userId, cycle: 'raise', module: 'pitch-deck', entityId: id, action: 'deck_link_created',
+      summary: never ? 'Link created; never expires' : `Link created; expires ${expiresAt.slice(0, 10)}`,
+    });
+  }
+  return { id, token, expiresAt, ttlSeconds };
 }
 
 function cookieValue(c: any, name: string): string | null {
