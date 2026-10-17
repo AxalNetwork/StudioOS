@@ -124,6 +124,12 @@ async function ensureSchema(env: Env): Promise<void> {
     // reason for DocuSign; null for in-house). Surfaced in the admin
     // contracts UI so reviewers don't have to dig into audit events.
     `ALTER TABLE esign_envelopes ADD COLUMN last_error TEXT`,
+    // D711 — the paper the sender chose and the template version they sent
+    // (migration 475). A fresh build carries them; this covers a database the
+    // migration has not reached yet.
+    `ALTER TABLE esign_envelopes ADD COLUMN page_size TEXT NOT NULL DEFAULT 'letter'`,
+    `ALTER TABLE esign_envelopes ADD COLUMN cover TEXT NOT NULL DEFAULT 'dark'`,
+    `ALTER TABLE esign_envelopes ADD COLUMN template_version INTEGER`,
     `CREATE INDEX IF NOT EXISTS idx_esign_provider          ON esign_envelopes(provider)`,
     `CREATE INDEX IF NOT EXISTS idx_esign_docusign_envelope ON esign_envelopes(docusign_envelope_id)`,
     `CREATE INDEX IF NOT EXISTS idx_esign_docusign_account  ON esign_envelopes(docusign_account_id)`,
