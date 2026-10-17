@@ -760,6 +760,10 @@ app.post('/must-haves', async c => {
   return c.json({ id: Number(row?.id) }, 201);
 });
 
+app.patch('/features/:id', async c => {
+  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  return patchFeature(c, ctx);
+});
 async function patchFeature(c: WriteCall, ctx: WriteCtx): Promise<Response> {
   const id = positiveId(c.req.param('id'));
   if (!id) return c.json({ detail: 'Invalid feature id' }, 400);
@@ -794,11 +798,11 @@ async function patchFeature(c: WriteCall, ctx: WriteCtx): Promise<Response> {
   ]);
   return c.json({ ok: true, id });
 }
-app.patch('/features/:id', async c => {
-  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
-  return patchFeature(c, ctx);
-});
 
+app.post('/risks', async c => {
+  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  return postRisk(c, ctx);
+});
 async function postRisk(c: WriteCall, ctx: WriteCtx): Promise<Response> {
   const body = await jsonBody(c);
   const title = text(body?.title); const mitigation = text(body?.mitigation, 2000);
@@ -822,10 +826,6 @@ async function postRisk(c: WriteCall, ctx: WriteCtx): Promise<Response> {
   const id = Number(result.meta.last_row_id);
   return c.json({ id }, 201);
 }
-app.post('/risks', async c => {
-  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
-  return postRisk(c, ctx);
-});
 
 app.patch('/risks/:id', async c => {
   const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
@@ -881,6 +881,10 @@ function feedbackLink(env: Env, projectId: number, item: number | 'new', label: 
         WHERE project_id = ? AND theme = ? AND status = 'open' AND roadmap_item_ref IS NULL`).bind(String(item), label, projectId, theme);
 }
 
+app.post('/roadmap', async c => {
+  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  return postRoadmap(c, ctx);
+});
 async function postRoadmap(c: WriteCall, ctx: WriteCtx): Promise<Response> {
   const body = await jsonBody(c); if (!body) return c.json({ detail: 'Body required' }, 400);
   const column = body.column == null ? 'next' : body.column;
@@ -912,11 +916,11 @@ async function postRoadmap(c: WriteCall, ctx: WriteCtx): Promise<Response> {
   const row = await c.env.DB.prepare('SELECT MAX(id) AS id FROM roadmap_okrs WHERE project_id = ?').bind(ctx.project.id).first<{ id: number }>();
   return c.json({ id: Number(row?.id) }, 201);
 }
-app.post('/roadmap', async c => {
-  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
-  return postRoadmap(c, ctx);
-});
 
+app.patch('/roadmap/:id', async c => {
+  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  return patchRoadmap(c, ctx);
+});
 async function patchRoadmap(c: WriteCall, ctx: WriteCtx): Promise<Response> {
   const id = positiveId(c.req.param('id'));
   const existing = id && await c.env.DB.prepare(
@@ -956,10 +960,6 @@ async function patchRoadmap(c: WriteCall, ctx: WriteCtx): Promise<Response> {
   }
   return c.json({ ok: true, id });
 }
-app.patch('/roadmap/:id', async c => {
-  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
-  return patchRoadmap(c, ctx);
-});
 
 // D690 (#1695 decision 6): a founder is a holder the cap-table code writes.
 // `addHolder()` and `updateHolder()` run their own batch, keep the cap
@@ -1021,6 +1021,10 @@ app.post('/founders', async c => {
   return c.json({ id: out.id, next: AGREEMENT_NEXT }, 201);
 });
 
+app.patch('/founders/:id', async c => {
+  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  return patchFounder(c, ctx);
+});
 async function patchFounder(c: WriteCall, ctx: WriteCtx): Promise<Response> {
   const id = positiveId(String(c.req.param('id')).replace(/^h-/, ''));
   if (!id || !(await c.env.DB.prepare('SELECT 1 FROM cap_table_holders WHERE id = ? AND project_id = ?').bind(id, ctx.project.id).first())) return c.json({ detail: 'Holder not found' }, 404);
@@ -1052,10 +1056,6 @@ async function patchFounder(c: WriteCall, ctx: WriteCtx): Promise<Response> {
   ]);
   return c.json({ ok: true, id: `h-${id}` });
 }
-app.patch('/founders/:id', async c => {
-  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
-  return patchFounder(c, ctx);
-});
 
 // D690 (#1695 decision 8). A filing keeps `formation_steps.state`: Filed is
 // `done`, Upcoming and Due soon are `todo` (Due soon needs a date), and the
@@ -1098,6 +1098,10 @@ async function filingFields(c: WriteCall, p: Project, body: Record<string, unkno
   return out;
 }
 
+app.post('/formation-steps', async c => {
+  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  return postFormationStep(c, ctx);
+});
 async function postFormationStep(c: WriteCall, ctx: WriteCtx): Promise<Response> {
   const body = await jsonBody(c);
   if (!body) return c.json({ detail: 'Body required' }, 400);
@@ -1117,11 +1121,11 @@ async function postFormationStep(c: WriteCall, ctx: WriteCtx): Promise<Response>
   const id = Number(result.meta.last_row_id);
   return c.json({ id }, 201);
 }
-app.post('/formation-steps', async c => {
-  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
-  return postFormationStep(c, ctx);
-});
 
+app.patch('/formation-steps/:id', async c => {
+  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  return patchFormationStep(c, ctx);
+});
 async function patchFormationStep(c: WriteCall, ctx: WriteCtx): Promise<Response> {
   const id = positiveId(c.req.param('id'));
   const existing = id && await c.env.DB.prepare(
@@ -1144,10 +1148,6 @@ async function patchFormationStep(c: WriteCall, ctx: WriteCtx): Promise<Response
   ]);
   return c.json({ ok: true, id });
 }
-app.patch('/formation-steps/:id', async c => {
-  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
-  return patchFormationStep(c, ctx);
-});
 
 app.patch('/obligations/:id/proof', async c => {
   const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
@@ -1225,6 +1225,10 @@ function syncWrite(env: Env, integrationId: number, ownerId: number, sync: strin
  * set it; with no connection it waits in `sync_request` for one, and a
  * mapping the caller makes takes the caller's own waiting choice.
  */
+app.put('/systems/:kind', async c => {
+  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  return putSystem(c, ctx);
+});
 async function putSystem(c: WriteCall, ctx: WriteCtx): Promise<Response> {
   const rawKind = c.req.param('kind') ?? '';
   if (!(SYSTEM_KINDS as readonly string[]).includes(rawKind)) return c.json({ error: 'invalid_kind', detail: 'Unknown system kind' }, 400);
@@ -1330,10 +1334,6 @@ async function putSystem(c: WriteCall, ctx: WriteCtx): Promise<Response> {
   await c.env.DB.batch([change, ...writes, log]);
   return c.json({ ok: true, kind });
 }
-app.put('/systems/:kind', async c => {
-  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
-  return putSystem(c, ctx);
-});
 
 // D690 (#1695 decision 13): the writes a record action runs. Declared as plain
 // functions so each route and its helpers read as one handler.
