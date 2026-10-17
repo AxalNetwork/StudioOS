@@ -10,9 +10,21 @@
  */
 const seg = (v) => encodeURIComponent(String(v));
 const q = (projectId) => new URLSearchParams({ project: String(projectId) }).toString();
+// D695 decision 16: a cycle and a module slug reach the URL only in their own charset.
+const CYCLE_KEY = /^(validate|build|raise|grow)$/;
+const MODULE_SLUG = /^[a-z0-9][a-z0-9-]*$/;
 
 export function makeCycleWrites(request) {
   return {
+    // D695 decision 16: one read of a module's form choices for every cycle
+    // (`routes/cycle_records.ts`). `query` follows `project`, so a search box
+    // sends `{ q }` on the same path; the route hands it to the module's spec.
+    formOptions: (cycle, projectId, slug, query = {}) => {
+      if (!CYCLE_KEY.test(String(cycle)) || !MODULE_SLUG.test(String(slug))) return Promise.reject(new Error('That module has no form choices.'));
+      const params = new URLSearchParams({ project: String(projectId) });
+      for (const [key, value] of Object.entries(query || {})) if (key !== 'project' && value != null) params.append(key, String(value));
+      return request(`/cycles/${cycle}/modules/${slug}/form-options?${params}`);
+    },
     raise: {
       rescore: (projectId) => request(`/cycles/raise/readiness/rescore?${q(projectId)}`, { method: 'POST' }),
       narrativeVersion: (projectId, body) => request(`/cycles/raise/narrative-versions?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),

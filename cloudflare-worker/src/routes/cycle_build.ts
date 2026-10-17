@@ -7,6 +7,7 @@ import { MODULE_LABELS } from '../integrations/fed';
 import { canReadBoard, canWrite } from './_founder_validate_helpers';
 import type { Card } from '../services/cycleCards';
 import { buildPhone } from '../services/cycleFocus';
+import { logCycleWriteStatement } from '../services/cycleActivity';
 import { pageBuildRows, unreadableBuildCard, type BuildFigure, type BuildRecords, type Cell, type ChartSpec, type RecordRow } from '../services/buildCycleRecords';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -590,14 +591,19 @@ function dateValue(v: unknown): string | null | false {
   if (v == null || v === '') return null;
   return dateOnly(v) ? v as string : false;
 }
-function audit(env: Env, projectId: number, userId: number, action: string, rowId: number | string) {
-  return env.DB.prepare('INSERT INTO activity_logs (project_id, user_id, action, details, actor) VALUES (?, ?, ?, ?, ?)')
-    .bind(projectId, userId, action, JSON.stringify({ id: rowId }), `user:${userId}`);
+/**
+ * D690 (#1693 decision 15): every write logs one entity row through
+ * logCycleWrite's statement form, in the write's own batch, under today's
+ * action names. A write that changes no record logs `project`, which no Build
+ * record id equals. No summary names a person, an email, a URL or a file.
+ */
+function logged(env: Env, projectId: number, userId: number, module: Slug, entityId: string | number, action: string, summary: string) {
+  return logCycleWriteStatement(env, { projectId, userId, cycle: 'build', module, entityId, action, summary });
 }
-function auditInserted(env: Env, projectId: number, userId: number, action: string) {
-  return env.DB.prepare("INSERT INTO activity_logs (project_id, user_id, action, details, actor) VALUES (?, ?, ?, json_object('id', last_insert_rowid()), ?)")
-    .bind(projectId, userId, action, `user:${userId}`);
+function loggedInserted(env: Env, projectId: number, userId: number, module: Slug, table: 'formation_steps', prefix: string, action: string, summary: string) {
+  return logCycleWriteStatement(env, { projectId, userId, cycle: 'build', module, readback: { table, by: 'max', prefix }, action, summary });
 }
+const STEP_STATE: Record<string, string> = { todo: 'to do', doing: 'doing', done: 'done' };
 
 app.patch('/project/target', async c => {
   const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
@@ -607,7 +613,7 @@ app.patch('/project/target', async c => {
   if (target === false) return c.json({ detail: 'Use a valid YYYY-MM-DD date' }, 400);
   await c.env.DB.batch([
     c.env.DB.prepare('UPDATE projects SET mvp_target_date = ? WHERE id = ?').bind(target, ctx.project.id),
-    audit(c.env, ctx.project.id, ctx.user.id, 'build_mvp_target_changed', ctx.project.id),
+    logged(c.env, ctx.project.id, ctx.user.id, 'solution-design', 'project', 'build_mvp_target_changed', target ? `MVP target date set to ${target}` : 'MVP target date cleared'),
   ]);
   return c.json({ mvp_target_date: target });
 });
@@ -631,7 +637,7 @@ app.post('/project/ip-copy', async c => {
     ip: Array.isArray(answer.ip) ? answer.ip : [] };
   await c.env.DB.batch([
     c.env.DB.prepare('UPDATE projects SET spinout_ip_meta = ? WHERE id = ?').bind(JSON.stringify(ip), ctx.project.id),
-    audit(c.env, ctx.project.id, ctx.user.id, 'build_ip_copied', applicationId),
+    logged(c.env, ctx.project.id, ctx.user.id, 'company-creation', 'project', 'build_ip_copied', 'IP details copied from an accepted application'),
   ]);
   return c.json({ ip });
 });
@@ -668,7 +674,7 @@ app.patch('/features/:id', async c => {
   await c.env.DB.batch([
     c.env.DB.prepare('UPDATE mvp_features SET pain_group_id = ?, hypothesis_id = ?, is_must_have = ?, owner_user_id = ?, due_date = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?')
       .bind(painId, hypothesisId, must == null ? null : Number(must), ownerId, due, id, ctx.project.id),
-    audit(c.env, ctx.project.id, ctx.user.id, 'build_feature_details_changed', id),
+    logged(c.env, ctx.project.id, ctx.user.id, 'solution-design', id, 'build_feature_details_changed', 'Links, must-have mark, owner or due date changed'),
   ]);
   return c.json({ ok: true, id });
 });
@@ -688,7 +694,8 @@ app.post('/risks', async c => {
   const [result] = await c.env.DB.batch([
     c.env.DB.prepare('INSERT INTO venture_risks (project_id, title, severity, owner_user_id, mitigation, created_by) VALUES (?, ?, ?, ?, ?, ?)')
       .bind(ctx.project.id, title, severity, ownerId, mitigation, ctx.user.id),
-    auditInserted(c.env, ctx.project.id, ctx.user.id, 'build_risk_created'),
+    // A risk tied to no feature changes no record.
+    logged(c.env, ctx.project.id, ctx.user.id, 'solution-design', 'project', 'build_risk_created', `Risk added, ${severity} severity`),
   ]);
   const id = Number(result.meta.last_row_id);
   return c.json({ id }, 201);
@@ -697,7 +704,7 @@ app.post('/risks', async c => {
 app.patch('/risks/:id', async c => {
   const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
   const id = positiveId(c.req.param('id'));
-  const existing = id && await c.env.DB.prepare('SELECT title, severity, mitigation, state FROM venture_risks WHERE id = ? AND project_id = ?').bind(id, ctx.project.id).first<any>();
+  const existing = id && await c.env.DB.prepare('SELECT title, severity, mitigation, state, feature_id FROM venture_risks WHERE id = ? AND project_id = ?').bind(id, ctx.project.id).first<any>();
   if (!existing) return c.json({ detail: 'Risk not found' }, 404);
   const body = await jsonBody(c); if (!body) return c.json({ detail: 'Body required' }, 400);
   const title = Object.hasOwn(body, 'title') ? text(body.title) : existing.title;
@@ -706,7 +713,7 @@ app.patch('/risks/:id', async c => {
   if (!title || mitigation === false || !['high', 'medium', 'low'].includes(String(severity)) || !['open', 'mitigating', 'closed'].includes(String(state))) return c.json({ detail: 'Invalid risk field' }, 400);
   await c.env.DB.batch([
     c.env.DB.prepare('UPDATE venture_risks SET title = ?, mitigation = ?, severity = ?, state = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?').bind(title, mitigation, severity, state, id, ctx.project.id),
-    audit(c.env, ctx.project.id, ctx.user.id, 'build_risk_changed', id!),
+    logged(c.env, ctx.project.id, ctx.user.id, 'solution-design', existing.feature_id ?? 'project', 'build_risk_changed', `Risk changed: ${severity} severity, ${state}`),
   ]);
   return c.json({ ok: true, id });
 });
@@ -727,7 +734,7 @@ app.patch('/roadmap/:id', async c => {
   }
   await c.env.DB.batch([
     c.env.DB.prepare('UPDATE roadmap_okrs SET owner_user_id = ?, target_date = ?, kpi_key = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?').bind(ownerId, due, kpi, id, ctx.project.id),
-    audit(c.env, ctx.project.id, ctx.user.id, 'build_roadmap_details_changed', id!),
+    logged(c.env, ctx.project.id, ctx.user.id, 'product-roadmap', id!, 'build_roadmap_details_changed', 'Owner, date or KPI changed'),
   ]);
   return c.json({ ok: true, id });
 });
@@ -742,7 +749,7 @@ app.patch('/founders/:id', async c => {
   if (role === false) return c.json({ detail: 'Invalid role' }, 400);
   await c.env.DB.batch([
     c.env.DB.prepare('UPDATE cap_table_holders SET founder_role = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?').bind(role, id, ctx.project.id),
-    audit(c.env, ctx.project.id, ctx.user.id, 'build_founder_role_changed', id),
+    logged(c.env, ctx.project.id, ctx.user.id, 'founding-team', `h-${id}`, 'build_founder_role_changed', role ? `Role set to ${role}` : 'Role cleared'),
   ]);
   return c.json({ ok: true, id });
 });
@@ -755,7 +762,7 @@ app.post('/formation-steps', async c => {
   const [result] = await c.env.DB.batch([
     c.env.DB.prepare('INSERT INTO formation_steps (project_id, title, due_date, created_by) VALUES (?, ?, ?, ?)')
       .bind(ctx.project.id, title, due, ctx.user.id),
-    auditInserted(c.env, ctx.project.id, ctx.user.id, 'build_formation_step_created'),
+    loggedInserted(c.env, ctx.project.id, ctx.user.id, 'company-creation', 'formation_steps', 'step-', 'build_formation_step_created', 'Filing added'),
   ]);
   const id = Number(result.meta.last_row_id);
   return c.json({ id }, 201);
@@ -774,7 +781,7 @@ app.patch('/formation-steps/:id', async c => {
   if (!title || due === false || proof === false || !['todo', 'doing', 'done'].includes(String(state))) return c.json({ detail: 'Invalid formation field' }, 400);
   await c.env.DB.batch([
     c.env.DB.prepare('UPDATE formation_steps SET title = ?, due_date = ?, state = ?, proof_file_key = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?').bind(title, due, state, proof, id, ctx.project.id),
-    audit(c.env, ctx.project.id, ctx.user.id, 'build_formation_step_changed', id!),
+    logged(c.env, ctx.project.id, ctx.user.id, 'company-creation', `step-${id}`, 'build_formation_step_changed', `Filing changed, ${STEP_STATE[String(state)]}`),
   ]);
   return c.json({ ok: true, id });
 });
@@ -793,7 +800,7 @@ app.patch('/obligations/:id/proof', async c => {
   await c.env.DB.batch([
     c.env.DB.prepare('UPDATE entity_obligations SET proof_file_key = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND entity_id = ?')
       .bind(key, id, ctx.project.entity_id),
-    audit(c.env, ctx.project.id, ctx.user.id, 'build_obligation_proof_changed', id),
+    logged(c.env, ctx.project.id, ctx.user.id, 'company-creation', `obligation-${id}`, 'build_obligation_proof_changed', key ? 'Proof key recorded' : 'Proof key cleared'),
   ]);
   return c.json({ ok: true, id });
 });
@@ -873,7 +880,7 @@ app.put('/systems/:kind', async c => {
          integration_id = excluded.integration_id, provider_key = excluded.provider_key, used_by = excluded.used_by,
          updated_by = excluded.updated_by, updated_at = CURRENT_TIMESTAMP`,
     ).bind(ctx.project.id, kind, integrationId, providerKey, usedBy, ctx.user.id);
-  await c.env.DB.batch([change, audit(c.env, ctx.project.id, ctx.user.id, 'build_system_mapping_changed', kind)]);
+  await c.env.DB.batch([change, logged(c.env, ctx.project.id, ctx.user.id, 'operating-systems', kind, 'build_system_mapping_changed', `${SYSTEM_LABEL[kind]} mapping changed`)]);
   return c.json({ ok: true, kind });
 });
 
