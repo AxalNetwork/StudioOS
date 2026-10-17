@@ -7,7 +7,9 @@
  *       (D685 §5.12: the phone's focus, the interviews meter, the index counts;
  *       PUT /interviews-target sets the meter's monthly target)
  *   GET /modules/:slug?project=:pid&q=&filter=&sort=&page=
- *     → { module, card: Card, records: { cols, rows, total, page, page_size } }
+ *     → { module, card: Card, records: { cols, rows, total, page, page_size, filters, sorts, linkable }, parts }
+ *       (D690 decisions 10 and 16: the canvas's filters and sorts, and `parts`,
+ *       what the bottom sections draw, each part under its own store's gate)
  *
  * The reads are `services/cycleValidate.ts`; the shapes and the five states
  * are `services/cycleCards.ts`. Every write below calls the one writer in
@@ -97,20 +99,26 @@ cycleValidate.get('/modules/:slug', async (c) => {
   if (!mod) return c.json({ detail: 'No such module', modules: MODULES.map((m) => m.slug) }, 404);
   const s = await scope(c, canReadBoard);
   if (s instanceof Response) return s;
-  const ctx = ctxOf(c, s.projectId);
+  // D690 decision 16: the viewer's write gate, which `parts.can_write`,
+  // `parts.themes` and the Quotes rule read.
+  const writer = canWrite(s.project, s.user);
+  const ctx: Ctx = { ...ctxOf(c, s.projectId), canWrite: writer };
   const rq = recordQuery({ q: c.req.query('q'), filter: c.req.query('filter'), sort: c.req.query('sort'), page: c.req.query('page') });
   const card = await CARD_FOR[slug](ctx);
   // The records fail on their own too: a table that cannot be read says so
-  // beside a card that could.
-  let records: unknown;
+  // beside a card that could, and its parts go with it.
+  let records: Record<string, unknown>;
+  let parts: Record<string, unknown> = {};
   try {
-    records = await RECORDS_FOR[slug](ctx, rq);
+    const { parts: p, ...rest } = await RECORDS_FOR[slug](ctx, rq);
+    records = rest;
+    parts = p ?? {};
   } catch (e) {
     console.warn('[cycle_validate] records unreadable:', slug, (e as Error)?.message);
     records = { state: 'unreadable', reason: `${mod.name} records could not be read`, cols: [], rows: [], total: null, page: rq.page, page_size: null };
   }
   return c.json({ module: { slug: mod.slug, name: mod.name, records_title: (mod as { records_title?: string }).records_title ?? null }, card,
-    records: { ...(records as object), linkable: hasRecords('validate') } });
+    records: { ...records, linkable: hasRecords('validate') }, parts: { can_write: writer, ...parts } });
 });
 
 /** The Lab market page's three stored checks. */
