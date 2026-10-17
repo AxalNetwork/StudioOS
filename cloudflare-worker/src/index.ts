@@ -89,6 +89,7 @@ import adminContractDocRegistry from './routes/admin_contract_doc_registry';
 // Task #9 — Hardcoded IRS-style forms (SS-4, 8821, Faxed-EIN, Confirmation).
 import adminForms from './routes/admin_forms';
 import adminIntegrationKeys from './routes/admin_integration_keys';
+import adminMercury from './routes/admin_mercury';
 import adminGithub from './routes/admin_github';
 import githubWebhook from './routes/github';
 // Task #4 (AW) — Admin reader for advisor_turn_audit (L6) + lock/shadow controls (L7).
@@ -103,6 +104,7 @@ import monitoring from './routes/monitoring';
 import infra from './routes/infra';
 import funds from './routes/funds';
 import fundLedger from './routes/fund_ledger';
+import fundFees from './routes/fund_fees';
 import fundAdmin from './routes/fund_admin';
 import fundReporting from './routes/fund_reporting';
 import fundPerformance from './routes/fund_performance';
@@ -603,6 +605,8 @@ const COOL_OFF_PREFIXES = [
   '/api/admin/contracts',
   '/api/kyc',
   '/api/capital',
+  // D709 (#1774) — management-fee terms and issued periods, the class of /api/capital.
+  '/api/fund-fees',
   '/api/dd',
   '/api/admin/impersonate',
   // Task #11 (II) — admin refunds are money-movement; pause them too so a
@@ -840,6 +844,8 @@ app.route('/api/admin/contracts', adminContracts);
 // Task #9 — IRS-style forms catalog + PDF preview/download (admin-only).
 app.route('/api/admin/forms', adminForms);
 app.route('/api/admin/integration-keys', adminIntegrationKeys);
+// D710 (#1775): Mercury, read-only, for fund administration.
+app.route('/api/admin/mercury', adminMercury);
 app.route('/api/admin/github', adminGithub);
 app.route('/api/github', githubWebhook);
 app.route('/api/admin/advisor-audit', adminAdvisorAudit);
@@ -1037,6 +1043,7 @@ app.route('/api/contacts', contacts);
 app.route('/api/round-calls', roundCalls);
 app.route('/api/funds', funds);
 app.route('/api/fund-ledger', fundLedger);
+app.route('/api/fund-fees', fundFees); // D709 (#1774): the management fee; records amounts, moves no money
 // D714 — the fund administration console: which fund acts this admin may take.
 app.route('/api/fund-admin', fundAdmin);
 app.route('/api/fund-reporting', fundReporting);
@@ -2034,6 +2041,18 @@ export default {
               if (p.errors.length) console.warn('[cron] scheduled posts errors', p.errors.slice(0, 5));
             }
           } catch (e) { console.error('[cron] scheduled posts sweep failed', e); }
+        }
+        // D710 (#1775) — Mercury's read-only sync of each Axal entity's
+        // accounts and transactions, then the matchers. Hourly at minute 17, a
+        // minute no other block uses. GATED ON `hqCadences`: these are HQ's
+        // entities in HQ's database, and the function itself does nothing on
+        // a branch. Reports, never throws.
+        if (hqCadences && now.getUTCMinutes() === 17) {
+          try {
+            const { syncAllMercuryEntityConnections } = await import('./services/mercury/sync');
+            const r = await syncAllMercuryEntityConnections(env);
+            if (r.scanned > 0) console.info(`[cron] mercury sync scanned=${r.scanned} ok=${r.ok} failed=${r.failed}`);
+          } catch (e) { console.error('[cron] mercury sync failed', e); }
         }
         // D272 — licence pushes that did not land are re-sent, each at most
         // once per hour (LICENCE_PUSH_RETRY_WINDOW_MINUTES, per row), so a

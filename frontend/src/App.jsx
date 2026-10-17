@@ -72,6 +72,7 @@ import { api, initActiveCompanyId, setActiveCompanyId } from './lib/api';
 // returns, racing the flag and still bouncing logged-out visitors to /login.
 import NotFoundPage from './pages/NotFoundPage';
 import { ParamRedirect } from './pages/cycles/ParamRedirect.jsx';
+import { ValidateZoneRedirect } from './pages/cycles/ValidateZoneRedirect.jsx';
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const ArchetypeCardPage = lazy(() => import('./pages/ArchetypeCardPage'));
 const ScoringPage = lazy(() => import('./pages/ScoringPage'));
@@ -83,7 +84,6 @@ const ScoringPage = lazy(() => import('./pages/ScoringPage'));
 const FounderValidateWorkspace = lazy(() => import('./workspaces/founder/FounderValidateWorkspace'));
 // D660 (#1473) — one interview session: record, live transcript, review.
 const InterviewSessionPage = lazy(() => import('./pages/founder/InterviewSessionPage'));
-const InterviewReviewPage = lazy(() => import('./pages/founder/InterviewReviewPage'));
 // D684 (#1578) — customer chats from business Telegram and WhatsApp, waiting for an interview.
 const ChannelsInboxPage = lazy(() => import('./pages/founder/ChannelsInbox'));
 const ResearchWorkspace = lazy(() => import('./workspaces/ResearchWorkspace'));
@@ -533,6 +533,11 @@ export function HistoryRedirect({ to, hash }) {
 // D696 (#1658, decision 13): an old or canvas-slug address that names a
 // record, redirected with its params encoded and the query and hash kept.
 export { ParamRedirect };
+
+// D704 (#1666, decision 1): a retired Validate page lands on the module that
+// holds its work now, the query and the hash kept. Mounted by PR 2b and the
+// closing PR on the three addresses.
+export { ValidateZoneRedirect };
 
 function DashboardRedirect() {
   const loc = useLocation();
@@ -2289,13 +2294,9 @@ function AppInner() {
     && new URLSearchParams(location.search).get('mode') !== 'workspace';
   const founderGrowLanding = effectiveRole === 'founder'
     && new URLSearchParams(location.search).get('mode') !== 'workspace';
-  // Validate and Build are the last two workspaces whose ROOT did not own its
-  // overview: /validate redirected straight past A2 to Interviews, and /build
-  // was not a route at all, so the sidebar had to point at a section page. The
-  // test is the one Raise, Grow and Network already use — founder, and not
-  // asking for the editor — so all six roots now branch identically.
-  const founderValidateLanding = effectiveRole === 'founder'
-    && new URLSearchParams(location.search).get('mode') !== 'workspace';
+  // Build's root owns its overview, as Raise, Grow and Network do: founder,
+  // and not asking for the editor. Validate's root no longer branches at all
+  // (D704, decision 2): every role its guard admits gets the cycle page.
   const founderBuildLanding = effectiveRole === 'founder'
     && new URLSearchParams(location.search).get('mode') !== 'workspace';
   const networkParams = new URLSearchParams(location.search);
@@ -2528,19 +2529,14 @@ function AppInner() {
           ? founderWorkspace('validate', founderEditor(<DiscoveryPage initialTab="interviews" workspaceMode />))
           : <Navigate to={`/validate${location.search}`} replace />)} />
 
-      {/* ── Validate · the four evidence stages ──────────────────────────────
-          Interviews and Pain map read the SAME records Discovery writes; the
-          two routes are doors onto one log, not a fork of it. Hypotheses and
-          Verdict have no store yet and say so rather than 404-ing behind a
-          sidebar row that promises a page. */}
-      {/* D661 (#1474): a founder's /validate is the cycle overview from
-          #1487's read, and /validate/<module> its six module pages. The four
-          zone pages below stay as the modules' working tools: each module
-          page links to the one that edits it, until canvases for Add and a
-          record's edit view exist. `?mode=workspace` still opens the editor. */}
-      <Route path="/validate" element={founderValidateLanding
-        ? guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" />)
-        : <Navigate to="/validate/interviews" replace />} />
+      {/* ── Validate ─────────────────────────────────────────────────────────
+          D661 (#1474): /validate is the cycle overview from #1487's read, and
+          /validate/<module> its module pages. D704 (#1666, decision 2): the
+          root no longer branches, so every role the guard admits, with or
+          without `?mode=workspace`, gets the cycle page. Interviews, Pain map
+          and Hypotheses still render below until #1666's PR 2b and closing PR
+          redirect them to their modules (`ValidateZoneRedirect`). */}
+      <Route path="/validate" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" />)} />
       {/* D685 §5.4: Record a session is the Validate page with the setup lightbox open over it, deep-linkable; closing goes back. */}
       <Route path="/validate/record" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" lightbox />)} />
       {/* D685 §5.6.2 (#1588): the Recording View full screen, bound to the app's one recording. */}
@@ -2554,8 +2550,9 @@ function AppInner() {
       {/* D685 §5.11 (#1589): one interview's review: its sessions, the summary and the proposed findings.
           D696 (#1658): it is Customer research's record, so its address is
           /validate/customer-research/:id, and the old one redirects there with
-          the query and the hash. Until #1659 reframes it, the page is drawn as it is. */}
-      <Route path="/validate/customer-research/:id" element={guard(labRoles(['admin', 'founder']), <InterviewReviewPage />)} />
+          the query and the hash. D697 (#1659): CycleRoute draws it in record
+          mode, through Validate's `recordPage`; the static path passes its slug. */}
+      <Route path="/validate/customer-research/:id" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" slug="customer-research" record />)} />
       <Route path="/validate/interviews/:id" element={guard(labRoles(['admin', 'founder']), <ParamRedirect to="/validate/customer-research/:id" />)} />
       {/* D696 decision 13: the canvas's module slugs, redirected to the app's. */}
       <Route path="/validate/experiments-and-evidence" element={<ParamRedirect to="/validate/experiments" />} />
@@ -2888,15 +2885,20 @@ function AppInner() {
           cap table stays one per company at /raise/capital/cap-table. */}
       <Route path="/raise/cap-table/variants" element={guard(['admin', 'founder'], founderWorkspace('raise', <CapTableVariantsPage />))} />
       <Route path="/raise/cap-table/variants/:variant" element={guard(['admin', 'founder'], founderWorkspace('raise', <CapTableVariantsPage />))} />
-      {/* Founders manage their room here. An investor's rooms are read by grant under Research ·
-          Diligence (D311): the investor branch is a redirect there, so a bookmark still lands, and the
-          guard keeps admitting investor so the redirect can run. */}
+      {/* D696 decision 12: /raise/data-room answers by mode, in this order. An investor's rooms are
+          read by grant under Research · Diligence (D311): the investor branch is a redirect there, so a
+          bookmark still lands, and the guard keeps admitting investor so the redirect can run. A founder's
+          ?mode=workspace is the files tool (uploads, Share and Revoke, the NDA switches, advisor grants);
+          ?mode=access is the read-only access view; the bare address is the Data room module page,
+          whose records open at /raise/data-room/:id. Both tools return to the module page. */}
       <Route path="/raise/data-room" element={guard(['admin', 'founder', 'investor'],
         effectiveRole === 'investor'
           ? <Navigate to="/research/diligence" replace />
           : new URLSearchParams(location.search).get('mode') === 'workspace'
             ? founderWorkspace('raise', founderEditor(<DataRoomPage user={user} />))
-            : <FounderRaiseDataRoom />)} />
+            : new URLSearchParams(location.search).get('mode') === 'access'
+              ? founderEditor(<FounderRaiseDataRoom />)
+              : <CycleRoute cycle="raise" slug="data-room" />)} />
        <Route path="/raise/liquidity" element={guard(['admin', 'founder'],
          new URLSearchParams(location.search).get('mode') === 'workspace'
            ? founderWorkspace('raise', founderEditor(<LiquidityPage currentUser={user} />))
@@ -3408,7 +3410,8 @@ function AppInner() {
           and only for a founder in landing mode. */}
       {/* D661 (#1474): a founder's /raise is the cycle overview from #1501's
           read, and /raise/<module> its module pages. Every Raise tool route
-          above is static and wins, so /raise/data-room stays the data room. */}
+          above is static and wins; /raise/data-room's own route draws the Data
+          room module page itself when no mode is asked for (D696). */}
       <Route path="/raise" element={founderRaiseLanding
         ? guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" />)
         : <Navigate to="/raise/capital/pipeline" replace />} />

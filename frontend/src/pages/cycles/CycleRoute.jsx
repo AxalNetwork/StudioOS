@@ -5,7 +5,7 @@ import { cyclesApi, cyclesWrite } from '../../lib/api/cycles';
 import { verdictApi } from '../../lib/api/verdict';
 import { WorkerRail, Unreadable } from '../../ui';
 import RailFrame from '../../ui/RailFrame';
-import { RailCrumbsProvider } from '../../ui/railCrumbs';
+import { RailCrumbsProvider, useSetRailCrumbs } from '../../ui/railCrumbs';
 import { ASSIST_SURFACES } from '../../ui/eadwynConfig';
 import FillProposals from '../../workspaces/FillProposals';
 import ZoneDraft from '../../workspaces/ZoneDraft';
@@ -25,10 +25,11 @@ import { useActiveRecording } from '../../contexts/ActiveRecordingContext';
 import CreateStartupForm from '../../components/CreateStartupForm';
 import CycleOverview, { CycleHeader } from './CycleOverview';
 import RecordView from './RecordView';
+import InterviewRecord from '../founder/InterviewReviewPage';
 import Lightbox from '../../ui/Lightbox';
 import { RECORD_ID } from './cyclePaths';
 import { availableRecord, CLIENT_ACTIONS, confirmView, declaredActions, finishRecordWrite, recordActionBody, recordFormFor, rowAction } from './recordModel';
-import ValidatePhoneFocus from './ValidatePhoneFocus';
+import PhoneCycleRoot from './PhoneCycleRoot';
 import CycleModulePage from './CycleModulePage';
 import DurabilityChecklist from './DurabilityChecklist';
 import ToolsHistory from './ToolsHistory';
@@ -116,6 +117,11 @@ const CYCLE_DEFS = {
       // D693 decision 13 (#1704): the verdict zone's Export summary, under the Decisions table.
       verdict: (_data, ctx) => <ExportSummary projectId={ctx.projectId} />,
     }),
+    // D697 (#1659): an interview is Customer research's record. The page draws
+    // what the read sends, with the session's working parts inside it.
+    recordPage: toFnMap({
+      'customer-research': (read, ctx) => <InterviewRecord read={read} {...ctx} />,
+    }),
   },
   /**
    * Raise's read (#1501, D663) is already in D661's shape: its cards carry
@@ -123,10 +129,11 @@ const CYCLE_DEFS = {
    * adapter. Its modules are in `modules.js`, held to `services/raiseCycle.ts`'s
    * list by `cycle_adapters_d661.test.ts`.
    *
-   * `/raise/data-room` IS THE DATA ROOM. The module's slug and the tool's
-   * route are the same path, and the tool's static route wins, so the Data
-   * room tab opens the working tool itself, which is D661's rule for a
-   * module that has one. The other six have module pages.
+   * Data room's module page is `/raise/data-room` with no mode: that static
+   * route draws this page with `slug="data-room"` (D696 decision 12), so all
+   * seven Raise modules have module pages. Its two tools are reached from it:
+   * the read-only access view through the tool link below, and the files tool
+   * through `founderToolNavigation.js`'s door.
    */
   raise: {
     modules: MODULES.raise,
@@ -146,15 +153,17 @@ const CYCLE_DEFS = {
       'cap-table': () => ({ label: 'Open the cap table', href: '/raise/capital/cap-table' }),
       'use-of-funds': () => ({ label: 'Open the financial model', href: '/raise/capital/model' }),
       'capital-relationships': () => ({ label: 'Open the investor pipeline', href: '/raise/capital/pipeline' }),
+      // D696 decision 12: the access view manages nothing, so the label says what it shows.
+      'data-room': (q) => ({ label: 'Open the access view: grants, NDA state and recent access', href: `/raise/data-room?mode=access${q ? `&${q.slice(1)}` : ''}` }),
     }),
     add: toFnMap({}),
     fills: {},
     // The Raise desk's four AI bands (ZoneDraft, D424), on the modules they
     // read: the round and its order of payment on Cap table, which holds the
     // scenario both read; the room and the clauses on Fundraising readiness,
-    // which scores the data room and the documents. Data room has no module
-    // page of its own (its tool's route wins), so its band sits here too. The
-    // narrative band sits on Investor narrative, whose check it phrases.
+    // which scores the data room and the documents, so the room's band sits
+    // there rather than on Data room's module page. The narrative band sits on
+    // Investor narrative, whose check it phrases.
     drafts: new Map([
       ['cap-table', [{
         surface: 'raise/capital', label: 'Proposal · plain-language read', run: 'Read the round back', accept: 'Attach to scenario',
@@ -564,6 +573,20 @@ export function useCycleRecord({ enabled, cycle, projectId, slug, id, reload, ed
  * founder was on (`location.state.under`), the overview on a deep link. Closing
  * goes back to it; the lightbox makes no server call.
  */
+/**
+ * D696 (#1658): a record's title as the rail's third crumb, "section › module
+ * › record", while the record is drawn; leaving the record drops it. It sits
+ * inside `RailCrumbsProvider`, whose setter it calls, and draws nothing.
+ */
+function RecordCrumb({ title }) {
+  const setCrumbs = useSetRailCrumbs();
+  useEffect(() => {
+    setCrumbs({ record: title || null });
+    return () => setCrumbs({ record: null });
+  }, [setCrumbs, title]);
+  return null;
+}
+
 export default function CycleRoute({ cycle, lightbox = false, adding = false, record = false, slug: suppliedSlug }) {
   const { slug: routeSlug, id: recordId } = useParams();
   const location = useLocation();
@@ -811,19 +834,25 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
       {recordState.status === 'loading' ? <p className="text-sm text-axal-muted dark:text-gray-400" aria-busy="true">Loading record…</p>
         : recordState.status === 'refused' ? <p className="text-sm text-axal-ink dark:text-gray-100">{recordState.error}</p>
         : recordState.status === 'unreadable' ? <Unreadable what="This record" claim={recordState.error} onRetry={() => setReload(n => n + 1)} />
-        : recordState.data && <RecordView record={recordState.data} activity={recordState.activity}
+        : recordState.data && (fnOf(def.recordPage, slug)?.(recordState.data, { projectId, id: recordId, activity: recordState.activity, cycleName: name, moduleName, onLink: recordState.link, onForm: recordState.openForm, onWrite: recordState.write, onClient: recordState.client, onShowAll: recordState.showAll, act: (key, body) => cyclesApi.recordAction(cycle, projectId, slug, recordId, key, body), reload: () => setReload((n) => n + 1), openDialog })
+          ?? <RecordView record={recordState.data} activity={recordState.activity}
           cycleName={name} moduleName={moduleName} onLink={recordState.link} onForm={recordState.openForm}
-          onWrite={recordState.write} onClient={recordState.client} onShowAll={recordState.showAll} />}
+          onWrite={recordState.write} onClient={recordState.client} onShowAll={recordState.showAll} />)}
       {recordState.actionError && <p role="alert" className="text-sm text-red-700 dark:text-red-300">{recordState.actionError}</p>}
     </div>;
   } else if (!slug) {
-    body = (
+    // D703 decision 1: below 1024px the root is the phone page, in place of
+    // the overview and `AlsoIn`, never beside them. Both read the same overview.
+    const overviewState = projectStatus === 'unreadable' ? 'unreadable' : overviewStatus;
+    body = phone ? (
+      <PhoneCycleRoot cycle={cycle} raw={rawOverview} status={overviewState} search={q} projectId={projectId}
+        openAction={openAction} onChanged={() => setReload((n) => n + 1)} onRetry={() => setReload((n) => n + 1)} />
+    ) : (
       <>
-        {(cycle === 'validate' || rawOverview?.focus) && overviewStatus === 'ready' && rawOverview && projectStatus !== 'unreadable' && <ValidatePhoneFocus cycle={cycle} raw={rawOverview} search={q} projectId={projectId} onChanged={() => setReload((n) => n + 1)} />}
         <CycleOverview
           cycle={cycle}
           data={overview}
-          status={projectStatus === 'unreadable' ? 'unreadable' : overviewStatus}
+          status={overviewState}
           onRetry={() => setReload((n) => n + 1)}
           onRetryCard={retryCard}
           action={action}
@@ -873,8 +902,8 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   }
 
   // D698 — where the rail is: the cycle, and on a module route the module, so
-  // it reads "Validate › Customer research". A record view below adds its
-  // title through `useSetRailCrumbs` (#1658). The provider draws no element.
+  // it reads "Validate › Customer research". In record mode `RecordCrumb`
+  // adds the record's title (D696). The provider draws no element.
   // The rail sits in the one frame every rail host uses (D556), as the
   // Validate desk's own did; the frame is this page's outermost element so it
   // docks to the edge.
@@ -912,6 +941,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
           onChanged={() => { dirty.current = true; }} />
       )}
       {dialog && !(phone && dialog.page) && dialog.element}
+      <RecordCrumb title={record && recordState.status === 'ready' ? recordState.data?.title : null} />
     </RailFrame>
     </RailCrumbsProvider>
   );

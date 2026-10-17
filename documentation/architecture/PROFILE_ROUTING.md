@@ -46,7 +46,7 @@ it, where in their nav, and how do they get there.*
 | Customer Audience Landing Page | `/spinout-lab/brand` · `/build/brand` · `/p/:site/:page` · `/landing/:slug` | Headerless | Full page | Sidebar → Headerless → Grow | CURRENT | High |
 | Customer Discovery | `/spinout-lab/discovery` · `/build/discovery` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Validate | OUT OF SCOPE | High |
 | Customer Templates | `/spinout-lab/brand` · `/build/brand` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Grow | OUT OF SCOPE | High |
-| Data Room | `/raise/data-room?mode=workspace` · `/research/diligence` · `/research/diligence/:grantUid` · `/files/:fileUid` | Headerless | Full page | Sidebar → Headerless → Raise | CURRENT | High |
+| Data Room | `/raise/data-room?mode=workspace` · `/raise/data-room?mode=access` · `/raise/data-room/:id` · `/research/diligence` · `/research/diligence/:grantUid` · `/files/:fileUid` | Headerless | Full page | Sidebar → Headerless → Raise | CURRENT | High |
 | Detail Layer Canvas | — | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Due Diligence | `/admin/due-diligence*` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Founder Studio | `/studio` | Headerless | Full page | Sidebar → Headerless → Studio | UPGRADE | High |
@@ -126,7 +126,7 @@ it, where in their nav, and how do they get there.*
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| Data Room | `/raise/data-room?mode=workspace` · `/research/diligence` · `/research/diligence/:grantUid` · `/files/:fileUid` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
+| Data Room | `/raise/data-room?mode=workspace` · `/raise/data-room?mode=access` · `/raise/data-room/:id` · `/research/diligence` · `/research/diligence/:grantUid` · `/files/:fileUid` | Headerless | Full page | Sidebar → Headerless → Deals | CURRENT | High |
 | Deal Flow | `/pipeline` · `/deals` · `/deals/:dealId` · `/pipeline/screening\|commit\|transactions` · `/deals/screening\|commit\|closing` | Headerless | Full page | Sidebar → Headerless → Deals | UPGRADE | High |
 | Detail Layer Canvas | — | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Due Diligence | `/admin/due-diligence*` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |

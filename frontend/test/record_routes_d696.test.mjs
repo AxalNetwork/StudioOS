@@ -44,7 +44,8 @@ const APP = codeOnly(read('frontend/src/App.jsx'));
 
 test('8. the interview review is Customer research\'s record; the old address and the canvas slugs redirect', () => {
   const guard = "guard\\(labRoles\\(\\['admin', 'founder'\\]\\), ";
-  assert.match(routeBlock(APP, '/validate/customer-research/:id'), new RegExp(`element=\\{${guard}<InterviewReviewPage />\\)\\}`));
+  // D697 (#1659): CycleRoute draws the interview in record mode; the static path passes its slug.
+  assert.match(routeBlock(APP, '/validate/customer-research/:id'), new RegExp(`element=\\{${guard}<CycleRoute cycle="validate" slug="customer-research" record />\\)\\}`));
   assert.match(routeBlock(APP, '/validate/interviews/:id'), new RegExp(`element=\\{${guard}<ParamRedirect to="/validate/customer-research/:id" />\\)\\}`));
   assert.doesNotMatch(routeBlock(APP, '/validate/interviews/:id'), /<InterviewReviewPage/, 'the old address renders the page no more');
   for (const [from, to] of [
