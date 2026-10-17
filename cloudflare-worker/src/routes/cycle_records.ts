@@ -128,6 +128,7 @@ export function createCycleRecords(registry: RecordRegistry = RECORD_SPECS) {
     const sections: RecordSection[] = [];
     for (const section of s.spec.sections) {
       if (section.gate && !allowed(section.gate, s.ctx.project, s.ctx.user)) continue;
+      if (section.when && !section.when(s.id, record)) continue;
       const data = await section.read(s.ctx, s.id, record);
       const rows = canWrite ? data.rows : data.rows.map(({ action: _action, ...row }) => row);
       sections.push({ key: section.key, title: section.title,

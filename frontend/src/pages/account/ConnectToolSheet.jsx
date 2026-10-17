@@ -41,7 +41,8 @@ import {
  * is sent as the header the Worker scopes it by.
  */
 
-export default function ConnectToolSheet({ projectId = null, onClose, onChanged }) {
+// D703 (#1665): `asPage` is the cycle route's page mode below 1024px. Share an update's nested Connect a tool passes none, so it stays a dialog.
+export default function ConnectToolSheet({ projectId = null, onClose, onChanged, asPage }) {
   // The project's company: undefined while read, null when it could not be.
   const [project, setProject] = useState(projectId ? undefined : null);
   useEffect(() => {
@@ -63,7 +64,7 @@ export default function ConnectToolSheet({ projectId = null, onClose, onChanged 
     if (!link?.strip?.length) return;
     setSearchParams((old) => { const next = new URLSearchParams(old); for (const k of link.strip) next.delete(k); return next; }, { replace: true });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  return <ConnectToolView data={{ ...data, reload }} project={projectId ? project : false} projectId={projectId} onClose={onClose} deepLink={`?${deepSearch}`} />;
+  return <ConnectToolView data={{ ...data, reload }} project={projectId ? project : false} projectId={projectId} onClose={onClose} deepLink={`?${deepSearch}`} asPage={asPage} />;
 }
 
 /**
@@ -71,7 +72,7 @@ export default function ConnectToolSheet({ projectId = null, onClose, onChanged 
  * hand it each state. `project` is `GET /projects/:id` (undefined while read,
  * null when unreadable, false when the sheet has no project).
  */
-export function ConnectToolView({ data, onClose, project = false, projectId = null, deepLink = '' }) {
+export function ConnectToolView({ data, onClose, project = false, projectId = null, deepLink = '', asPage }) {
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState('All');
   const [panel, setPanel] = useState(null); // { key, view }
@@ -98,7 +99,7 @@ export function ConnectToolView({ data, onClose, project = false, projectId = nu
 
   const back = () => setPanel(null);
   const frame = (body) => (
-    <Lightbox label="Connect a tool" size="tall" width={600} onClose={onClose} onEscape={panelP ? back : onClose} testId="connect-tool-lightbox" focusKey={panelP ? `${panel.key}:${panel.view}` : 'list'}>
+    <Lightbox label="Connect a tool" size="tall" width={600} onClose={onClose} onEscape={panelP ? back : onClose} testId="connect-tool-lightbox" focusKey={panelP ? `${panel.key}:${panel.view}` : 'list'} {...asPage}>
       <SheetFrame.Provider value={{ onDismiss: onClose }}>{body}</SheetFrame.Provider>
     </Lightbox>
   );

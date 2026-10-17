@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { cyclesApi, cyclesWrite } from '../../lib/api/cycles';
-import { WorkerRail } from '../../ui';
+import { WorkerRail, Unreadable } from '../../ui';
 import RailFrame from '../../ui/RailFrame';
 import { RailCrumbsProvider } from '../../ui/railCrumbs';
 import { ASSIST_SURFACES } from '../../ui/eadwynConfig';
@@ -22,7 +22,11 @@ import { openingStep } from '../founder/assistantSession.js';
 import { reviewPath } from '../../lib/activeRecording';
 import { useActiveRecording } from '../../contexts/ActiveRecordingContext';
 import CreateStartupForm from '../../components/CreateStartupForm';
-import CycleOverview from './CycleOverview';
+import CycleOverview, { CycleHeader } from './CycleOverview';
+import RecordView from './RecordView';
+import Lightbox from '../../ui/Lightbox';
+import { RECORD_ID } from './cyclePaths';
+import { availableRecord, CLIENT_ACTIONS, confirmView, declaredActions, finishRecordWrite, recordActionBody, recordFormFor, rowAction } from './recordModel';
 import ValidatePhoneFocus from './ValidatePhoneFocus';
 import CycleModulePage from './CycleModulePage';
 import DurabilityChecklist from './DurabilityChecklist';
@@ -30,9 +34,10 @@ import ToolsHistory from './ToolsHistory';
 import UpdatesHistory from './UpdatesHistory';
 import UpdateAskReplies from './UpdateAskReplies';
 import CallsHistory from './CallsHistory';
+import { InterviewsSection, PainThemesSection, HypothesesSection } from './ValidateSections';
 import FormLightbox from './FormLightbox';
 import { usePhoneWidth } from '../../ui/phone/usePhoneWidth';
-import { editFor, formsFor } from './forms';
+import { editFor, formFor, formsFor } from './forms';
 import { adaptCard, adaptModule, adaptOverview, fnOf, toFnMap } from './adapters';
 import { cellView, cycleOf } from './cycleModel';
 import { MODULES } from './modules';
@@ -53,9 +58,9 @@ import { moduleToolLinks } from './founderToolNavigation.js';
  * it, and `validate_fills_the_blanks.test.mjs` holds each cycle's rail
  * sentence to the bands in its own entry.
  *
- * THE MODULES' WORKING TOOLS STAY WHERE THEY ARE. No canvas yet draws a
- * record's edit view, or Validate's curation (merging pain themes, linking
- * evidence, the Verdict): S02 found the gap on #1474. D661 already gives a
+ * THE MODULES' WORKING TOOLS STAY WHERE THEY ARE. D696 draws records with
+ * D695's Add/Edit forms. Validate's curation stays in its existing tools until
+ * its own replacement lands (#1659, #1666). D661 already gives a
  * module page a link to "the module's own tool where it has one, rather than
  * a second copy of it", so each module links to the zone page that edits it
  * today. Each Add has an address, `/<cycle>/<slug>/new` (`?form=<key>` for a
@@ -85,6 +90,29 @@ const CYCLE_DEFS = {
     }),
     // The AI fill bands the Validate desk carried, on the module they fill.
     fills: { 'problem-discovery': 'pain_tag', experiments: 'hypothesis' },
+    // D697 (#1659): the three bottom sections, what the Interviews, Pain map
+    // and Hypotheses pages drew. They read nothing: counts are the module
+    // read's `parts`, writes are these callbacks, and the venture is always
+    // the page's, never a row's. Each dialog goes through `ctx.openDialog`.
+    parts: toFnMap({
+      'customer-research': (data, ctx) => <InterviewsSection parts={data?.parts} projectId={ctx.projectId} query={ctx.query} openDialog={ctx.openDialog}
+        onLog={(payload) => api.createInterview(ctx.projectId, payload).then(ctx.reload)}
+        onExport={() => api.exportValidateInterviews(ctx.projectId)} />,
+      'problem-discovery': (data, ctx) => <PainThemesSection parts={data?.parts} projectId={ctx.projectId} query={ctx.query} openDialog={ctx.openDialog}
+        onExport={() => api.exportValidatePainMap(ctx.projectId)}
+        // #1692's `attach` on the theme record, so the theme's activity logs it.
+        onAssign={(themeId, body) => cyclesApi.recordAction('validate', ctx.projectId, 'problem-discovery', themeId, 'attach', body).then(ctx.reload)}
+        newThemeHref={formFor('validate', 'problem-discovery') ? `/validate/problem-discovery/new?project_id=${encodeURIComponent(ctx.projectId)}` : null} />,
+      experiments: (data, ctx) => <HypothesesSection parts={data?.parts} projectId={ctx.projectId} query={ctx.query} openDialog={ctx.openDialog}
+        // Link to a pain's lists, as FVW handed them: the board's unretired claims and its themes.
+        onLoadLinkLists={() => api.getValidationBoard(ctx.projectId).then((board) => ({
+          hypotheses: (board?.hypotheses || []).filter((h) => !h.retired_at), painGroups: board?.pain_groups || [],
+        }))}
+        // #1692's `link` on the theme record, so both sides log it.
+        onLink={(painGroupId, body) => cyclesApi.recordAction('validate', ctx.projectId, 'problem-discovery', painGroupId, 'link', body).then(ctx.reload)}
+        // Only until #1656 registers New hypothesis as the table's Add (decision 20).
+        onNewHypothesis={formFor('validate', 'experiments') ? undefined : (body) => api.createHypothesis(ctx.projectId, body).then(ctx.reload)} />,
+    }),
   },
   /**
    * Raise's read (#1501, D663) is already in D661's shape: its cards carry
@@ -280,7 +308,7 @@ const CYCLE_DEFS = {
 
 const filterString = (filter) => Object.entries(filter || {}).filter(([, v]) => v != null && v !== '').map(([k, v]) => `${k}:${v}`).join(',');
 
-export function useProject(reloadKey = 0, { kept = null, drop = [] } = {}) {
+export function useProject(reloadKey = 0, { kept = null, drop = [], immediate = false } = {}) {
   const [searchParams, setSearchParams] = useSearchParams();
   // Writes build on the latest query, never on a render's (react-router hands a
   // functional update the search params of the render that made the setter), and
@@ -321,7 +349,7 @@ export function useProject(reloadKey = 0, { kept = null, drop = [] } = {}) {
     }).catch(() => { if (alive) setStatus('unreadable'); });
     return () => { alive = false; };
   }, [requested, writeProject, reloadKey]);
-  return { projectId, status, writeProject };
+  return { projectId: immediate && requested ? requested : projectId, status: immediate && requested ? 'ready' : status, writeProject };
 }
 
 /** The module page under the lightbox: the founder's, when it is one of this cycle's modules; else the overview (null). */
@@ -392,6 +420,109 @@ function GrowMount({ projectId, onClose, onDone }) {
   return <ShareUpdateLightbox projectId={projectId} onClose={onClose} onSent={onDone} />;
 }
 
+/** D696: a scoped record read and its declared actions; the route owns every mount. */
+export function useCycleRecord({ enabled, cycle, projectId, slug, id, reload, edit, navigate, back }) {
+  const location = useLocation();
+  const key = `${cycle}/${projectId}/${slug}/${id}`;
+  const currentKey = useRef(key); currentKey.current = key;
+  const sequence = useRef(0);
+  const [read, setRead] = useState(null);
+  const [actionError, setActionError] = useState('');
+  const [pending, setPending] = useState(null);
+  const writing = useRef(false);
+  const activityBusy = useRef(false);
+  const page = useRef(1);
+  const load = useCallback(async (afterWrite = false) => {
+    const serial = ++sequence.current;
+    const fresh = () => currentKey.current === key && serial === sequence.current;
+    try {
+      const data = await cyclesApi.record(cycle, projectId, slug, id);
+      if (fresh()) { page.current = 1; setRead({ key, status: 'ready', data, activity: data.activity ?? [] }); }
+    } catch (error) {
+      if (!fresh()) return;
+      if (afterWrite && error?.status === 404) { navigate(back, { replace: true }); return; }
+      setRead({ key, status: [403, 404].includes(error?.status) ? 'refused' : 'unreadable', error: error?.message || 'This record could not be read.' });
+    }
+  }, [cycle, projectId, slug, id, key, navigate, back]);
+  useEffect(() => {
+    setRead(null); setActionError(''); setPending(null);
+    if (enabled) void load();
+    return () => { sequence.current += 1; };
+  }, [enabled, load, reload]);
+  const state = read?.key === key ? read : null;
+  const raw = state?.data;
+  const declarations = declaredActions(raw);
+  const data = raw ? availableRecord(raw, edit) : null;
+  const selected = raw && typeof location.state?.editing === 'string'
+    ? rowAction(location.state.editingPayload?.record === key
+      ? { key: location.state.editing, body: location.state.editingPayload.body } : location.state.editing, declarations) : null;
+  const formSpec = selected ? recordFormFor(selected, raw, edit) : null;
+  const closeForm = () => {
+    if (currentKey.current !== key) return;
+    if (location.key === 'default') {
+      navigate(`${location.pathname}${location.search}${location.hash}`, { replace: true, state: { ...location.state, editing: null } });
+      return;
+    }
+    navigate(-1);
+  };
+  const perform = async (action, values) => {
+    if (writing.current) throw new Error('A change is already being saved.');
+    writing.current = true; setActionError('');
+    try {
+      const result = action.key === 'edit'
+        ? await edit.submit(cyclesWrite, projectId, formSpec.id, values)
+        : await cyclesApi.recordAction(cycle, projectId, slug, id, action.key, recordActionBody(action, values));
+      if (currentKey.current !== key) return result;
+      await finishRecordWrite(result, {
+        open: (...args) => window.open(...args),
+        onError: sentence => { throw new Error(sentence); },
+        reread: () => load(true),
+      });
+      return result;
+    } finally { writing.current = false; }
+  };
+  const send = action => { void perform(action).catch(error => {
+    if (currentKey.current === key) setActionError(error?.message || 'This change could not be saved.');
+  }); };
+  const write = action => { if (action.confirm) setPending({ key, action }); else send(action); };
+  const confirmation = pending?.key === key ? confirmView(pending.action) : null;
+  return {
+    status: state?.status ?? 'loading', data, error: state?.error, activity: state?.activity, actionError,
+    link: action => { if (action.href?.startsWith('mailto:')) window.location.href = action.href; else navigate(action.href); },
+    openForm: action => navigate(`${location.pathname}${location.search}${location.hash}`, { state: { ...location.state, editing: action.key, editingPayload: { record: key, body: action.body } } }),
+    write,
+    client: action => { Promise.resolve().then(() => CLIENT_ACTIONS.get(action.key)?.(raw)).catch(error => {
+      if (currentKey.current === key) setActionError(error?.message || 'The export could not be created.');
+    }); },
+    showAll: async () => {
+      if (activityBusy.current) return;
+      activityBusy.current = true;
+      const serial = sequence.current;
+      try {
+        const result = await cyclesApi.recordActivity(cycle, projectId, slug, id, page.current + 1);
+        if (currentKey.current !== key || sequence.current !== serial) return;
+        page.current += 1;
+        setRead(previous => ({ ...previous, activity: [...previous.activity, ...(result.items ?? [])],
+          data: { ...previous.data, activity_total: result.total ?? previous.data.activity_total } }));
+      } catch (error) { if (currentKey.current === key) setActionError(error?.message || 'Activity could not be read.'); }
+      finally { activityBusy.current = false; }
+    },
+    form: formSpec ? <FormLightbox key={`${key}/${selected.key}`} form={formSpec.form} current={formSpec.current}
+      cycle={cycle} slug={slug}
+      loadOptions={selected.key === 'edit' && edit.loadOptions ? () => edit.loadOptions(cyclesWrite, projectId, formSpec.id) : null}
+      onSubmit={values => perform(selected, values)} onClose={closeForm} /> : null,
+    confirm: confirmation ? <Lightbox size="fit" width={420} label={confirmation.title} title={confirmation.title}
+      onClose={() => setPending(null)} footer={<div className="flex justify-end gap-2 p-4">
+        <button type="button" className="rounded-lg border border-axal-hairline px-3 py-2 text-axal-ink dark:border-gray-700 dark:text-gray-100" onClick={() => setPending(null)}>Cancel</button>
+        <button type="button" className={`rounded-lg border px-3 py-2 ${pending.action.tone === 'danger'
+          ? 'border-red-300 text-red-700 dark:border-red-800 dark:text-red-300'
+          : pending.action.tone === 'primary' ? 'border-axal-violet bg-axal-violet text-white dark:border-violet-500 dark:bg-violet-600'
+          : 'border-axal-hairline text-axal-ink dark:border-gray-700 dark:text-gray-100'}`}
+          onClick={() => { const action = pending.action; setPending(null); send(action); }}>{confirmation.cta}</button>
+      </div>}><p className="p-4 text-sm text-axal-ink dark:text-gray-100">{confirmation.body}</p></Lightbox> : null,
+  };
+}
+
 /**
  * `lightbox` is the cycle's action route (D685 §5.4, D686 §5.1):
  * `/validate/record`, `/build/connect`, `/raise/call`, `/grow/update`, the
@@ -399,8 +530,8 @@ function GrowMount({ projectId, onClose, onDone }) {
  * founder was on (`location.state.under`), the overview on a deep link. Closing
  * goes back to it; the lightbox makes no server call.
  */
-export default function CycleRoute({ cycle, lightbox = false, adding = false }) {
-  const { slug: routeSlug } = useParams();
+export default function CycleRoute({ cycle, lightbox = false, adding = false, record = false, slug: suppliedSlug }) {
+  const { slug: routeSlug, id: recordId } = useParams();
   const location = useLocation();
   const { user } = useAuth() || {};
   const def = Object.prototype.hasOwnProperty.call(CYCLE_DEFS, cycle) ? CYCLE_DEFS[cycle] : null;
@@ -410,12 +541,12 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false }) 
   const toLive = lightbox && cycle === 'validate' ? recordingHref(recording) : null;
   // Under the lightbox is the module page the founder was on, when it is one of
   // this cycle's modules; otherwise (a deep link, or the interview log) the overview.
-  const slug = lightbox ? underModule(def?.modules, location.state?.under, cycle, def?.path) : routeSlug;
+  const slug = lightbox ? underModule(def?.modules, location.state?.under, cycle, def?.path) : suppliedSlug ?? routeSlug;
   const [searchParams, setSearchParams] = useSearchParams();
   const [projectsKey, setProjectsKey] = useState(0);
   // Build's lightbox reads a sign-in's return or `?tool=` once; the venture's write drops those keys too (#1597).
   const [connectDrop] = useState(() => (lightbox && cycle === 'build' ? toolDeepLink(location.search, [])?.strip || [] : []));
-  const { projectId, status: projectStatus, writeProject } = useProject(projectsKey, { kept: lightbox && cycle === 'build' ? takeBuildProject : null, drop: connectDrop });
+  const { projectId, status: projectStatus, writeProject } = useProject(projectsKey, { kept: lightbox && cycle === 'build' ? takeBuildProject : null, drop: connectDrop, immediate: record });
   const creates = Boolean(def?.creates);
   const [creating, setCreating] = useState(() => creates && searchParams.get('new') === '1');
   // Followed, not only seeded: the Command Palette can address `?new=1` from
@@ -424,6 +555,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false }) 
     if (creates && searchParams.get('new') === '1') setCreating(true);
   }, [creates, searchParams]);
   const name = cycleOf(cycle)?.name || 'Validate';
+  const moduleName = slug ? (def?.modules || []).find((m) => m.slug === slug)?.name || null : null;
   const [fillsOn] = useAssistMode(name);
   const q = projectId ? `?project_id=${projectId}` : '';
   const navigate = useNavigate();
@@ -443,14 +575,15 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false }) 
   // URL becomes `/new`, the rest of the query kept. A module with no form, and
   // the overview, ignore it (D688).
   useEffect(() => {
+    if (record) return;
     if (adding || lightbox || !slug || !forms.length || searchParams.get('add') !== '1') return;
     const params = new URLSearchParams(searchParams);
     params.delete('add');
     const rest = params.toString();
     navigate(`/${cycle}/${slug}/new${rest ? `?${rest}` : ''}`, { replace: true });
-  }, [adding, lightbox, slug, forms, searchParams, cycle, navigate]);
-  const drafts = slug && def?.drafts instanceof Map && Array.isArray(def.drafts.get(slug)) ? def.drafts.get(slug) : [];
-  const fillKind = slug && def?.fills && Object.prototype.hasOwnProperty.call(def.fills, slug) ? def.fills[slug] : null;
+  }, [record, adding, lightbox, slug, forms, searchParams, cycle, navigate]);
+  const drafts = !record && slug && def?.drafts instanceof Map && Array.isArray(def.drafts.get(slug)) ? def.drafts.get(slug) : [];
+  const fillKind = !record && slug && def?.fills && Object.prototype.hasOwnProperty.call(def.fills, slug) ? def.fills[slug] : null;
   // The cost before a run (D424), read only while a band is drawn: a draft
   // band or a fill band, which quotes its own kind's task from the same read.
   const ai = useAiSpend({ enabled: Boolean(fillsOn && projectId && (drafts.length || fillKind)) });
@@ -462,10 +595,21 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false }) 
   const [module, setModule] = useState(null);
   const [moduleStatus, setModuleStatus] = useState('loading');
   // D686: a history address (`#tools`, `#calls`, `#updates`) scrolls once its section is drawn.
-  useScrollToHash(moduleStatus !== 'ready');
+
   const [query, setQuery] = useState({ q: '', filter: {}, sort: '', page: 1 });
   const [reload, setReload] = useState(0);
+  // D697 decision 21: the one dialog a module's further parts opened. It is
+  // drawn after the size container (a `fixed` layer inside it would sit against
+  // the column), or as the body below 1024px when it is a page; a new module
+  // or record closes it.
+  const [dialog, setDialog] = useState(null);
+  const openDialog = useCallback((element, { page = false } = {}) => setDialog(element ? { element, page } : null), []);
+  useEffect(() => { setDialog(null); }, [cycle, slug, recordId]);
   const known = !slug || (def?.modules || []).some((m) => m.slug === slug);
+  const validRecord = RECORD_ID.test(recordId ?? '') && recordId !== 'new';
+  const recordState = useCycleRecord({ enabled: record && known && validRecord && !!projectId && !!def,
+    cycle, projectId, slug, id: recordId, reload, edit, navigate, back: `/${cycle}/${slug}${q}` });
+  useScrollToHash(record ? recordState.status !== 'ready' : moduleStatus !== 'ready');
   // The page re-reads once the lightbox is gone, however it went: ×, Escape and
   // a finish navigate away from the action route, and so does the browser's
   // Back, which never calls `closeAction`. The route keeps this component
@@ -483,24 +627,24 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false }) 
   useEffect(() => { setQuery({ q: '', filter: {}, sort: '', page: 1 }); }, [slug]);
 
   useEffect(() => {
-    if (slug || !projectId || !def) return undefined;
+    if (record || slug || !projectId || !def) return undefined;
     let alive = true;
     setOverviewStatus('loading');
     cyclesApi.overview(cycle, projectId)
       .then((data) => { if (alive) { setRawOverview(data); setOverview(adaptOverview(cycle, data)); setOverviewStatus('ready'); } })
       .catch(() => { if (alive) setOverviewStatus('unreadable'); });
     return () => { alive = false; };
-  }, [cycle, slug, projectId, reload, def]);
+  }, [record, cycle, slug, projectId, reload, def]);
 
   useEffect(() => {
-    if (!slug || !known || !projectId || !def) return undefined;
+    if (record || !slug || !known || !projectId || !def) return undefined;
     let alive = true;
     setModuleStatus('loading');
     cyclesApi.module(cycle, projectId, slug, { q: query.q, filter: filterString(query.filter), sort: query.sort, page: query.page })
       .then((data) => { if (alive) { setModule(adaptModule(cycle, slug, data)); setModuleStatus('ready'); } })
       .catch(() => { if (alive) setModuleStatus('unreadable'); });
     return () => { alive = false; };
-  }, [cycle, slug, known, projectId, query, reload, def]);
+  }, [record, cycle, slug, known, projectId, query, reload, def]);
 
   // One card re-read: the module read returns that card on its own, so the
   // others stay drawn (D656: a failing source leaves the others alone).
@@ -516,6 +660,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false }) 
   if (toLive) return <Navigate to={toLive} replace />;
   if (!def) return null;
   if (!known) return <Navigate to={`/${cycle}${q}`} replace />;
+  if (record && !validRecord) return <Navigate to={`/${cycle}/${slug}${q}`} replace />;
   // A known module with no Add form has no `/new`: its page instead.
   if (adding && slug && !forms.length) return <Navigate to={`/${cycle}/${slug}${location.search}`} replace />;
 
@@ -550,7 +695,8 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false }) 
   // The one open form, Add or Edit. Below 1024px it is the page, drawn in the
   // body's gutter; at 1024px and up it is the dialog at the mount below.
   const saved = () => { dirty.current = true; };
-  const openForm = !projectId ? null
+  const openForm = record ? recordState.form
+    : !projectId ? null
     : formOpen ? (
       <FormLightbox key={`add-${formOpen.key}`} form={formOpen} cycle={cycle} slug={slug} search={location.search}
         onSubmit={(values) => formOpen.submit(cyclesWrite, projectId, values)}
@@ -598,6 +744,18 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false }) 
           : <Link className={createBtn} to="/build?new=1" data-testid="cycle-create-venture">Create your startup</Link>}
       </div>
     );
+  } else if (record) {
+    body = <div className="space-y-4" data-testid="cycle-record-page">
+      <CycleHeader cycle={cycle} cards={tabs} active={slug} record moduleName={moduleName}
+        title={recordState.data?.title || moduleName} sub={recordState.data?.sub || ''} search={q} />
+      {recordState.status === 'loading' ? <p className="text-sm text-axal-muted dark:text-gray-400" aria-busy="true">Loading record…</p>
+        : recordState.status === 'refused' ? <p className="text-sm text-axal-ink dark:text-gray-100">{recordState.error}</p>
+        : recordState.status === 'unreadable' ? <Unreadable what="This record" claim={recordState.error} onRetry={() => setReload(n => n + 1)} />
+        : recordState.data && <RecordView record={recordState.data} activity={recordState.activity}
+          cycleName={name} moduleName={moduleName} onLink={recordState.link} onForm={recordState.openForm}
+          onWrite={recordState.write} onClient={recordState.client} onShowAll={recordState.showAll} />}
+      {recordState.actionError && <p role="alert" className="text-sm text-red-700 dark:text-red-300">{recordState.actionError}</p>}
+    </div>;
   } else if (!slug) {
     body = (
       <>
@@ -648,7 +806,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false }) 
         {fillsOn && projectId ? drafts.map((draft) => (
           <ZoneDraft key={`${slug}-${draft.surface}`} {...draft} scopeKey={String(projectId)} ai={ai} accent="violet" />
         )) : null}
-        {moduleStatus === 'ready' && fnOf(def.parts, slug)?.(module, { projectId, reload: () => setReload((n) => n + 1), openAction })}
+        {moduleStatus === 'ready' && fnOf(def.parts, slug)?.(module, { projectId, reload: () => setReload((n) => n + 1), openAction, query, openDialog })}
       </CycleModulePage>
     );
   }
@@ -656,8 +814,6 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false }) 
   // D698 — where the rail is: the cycle, and on a module route the module, so
   // it reads "Validate › Customer research". A record view below adds its
   // title through `useSetRailCrumbs` (#1658). The provider draws no element.
-  const moduleName = slug ? (def?.modules || []).find((m) => m.slug === slug)?.name || null : null;
-
   // The rail sits in the one frame every rail host uses (D556), as the
   // Validate desk's own did; the frame is this page's outermost element so it
   // docks to the edge.
@@ -672,8 +828,8 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false }) 
           would place them against the column (decision 13). */}
       <div className="@container/cycle min-w-0">
       <div className="min-w-0 px-[22px] pt-[14px] pb-[18px] lg:px-6 lg:pt-[22px] lg:pb-[30px] lg:@max-[760px]/cycle:px-[14px] lg:@max-[760px]/cycle:pt-[14px] lg:@max-[760px]/cycle:pb-[40px]" data-testid="cycle-route-body">
-        {phone && openForm ? openForm : body}
-        {creates && (
+        {phone && openForm ? openForm : phone && dialog?.page ? dialog.element : body}
+        {creates && !record && (
           <CreateStartupForm
             open={creating}
             onOpenChange={(next) => {
@@ -689,10 +845,12 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false }) 
       </div>
       </div>
       {!phone && openForm}
+      {record && recordState.confirm}
       {lightbox && Mount && projectId && (
         <Mount projectId={projectId} q={q} searchParams={searchParams} onClose={closeAction} onDone={onDone}
           onChanged={() => { dirty.current = true; }} />
       )}
+      {dialog && !(phone && dialog.page) && dialog.element}
     </RailFrame>
     </RailCrumbsProvider>
   );

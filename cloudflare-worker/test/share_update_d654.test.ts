@@ -57,6 +57,14 @@ test('a metric no snapshot records is null ("Not recorded"), never 0; a recorded
   assert.equal(noMetrics(m), false);
 });
 
+test('a typed figure with no source reads manual, the one label Grow uses for typed values', () => {
+  const m = buildMetrics([snap('2026-10-12', { mrr: 500, source: null }), snap('2026-10-13', { net_burn: 10, cash_balance: 120, source: '  ' })], [], '2026-10-01');
+  const by = Object.fromEntries(m.map((x) => [x.key, x]));
+  assert.equal(by.mrr.source, 'manual');
+  assert.equal(by.runway.source, 'manual');
+  assert.ok(!m.some((x) => x.source === 'Entered by hand'));
+});
+
 test('growth and runway are derived only from recorded figures', () => {
   const m = buildMetrics(
     [snap('2026-10-01', { mrr: 100, source: 'manual' }), snap('2026-10-20', { mrr: 106, net_burn: 50, cash_balance: 600, source: 'bank' })],

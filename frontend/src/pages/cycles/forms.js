@@ -504,6 +504,312 @@ export function editFor(cycle, slug) {
   return byCycle && Object.prototype.hasOwnProperty.call(byCycle, slug) ? byCycle[slug] : null;
 }
 
+// ---------- Validate (routes/cycle_validate.ts, D690 #1692) ------------------
+//
+// D695 PR 2a (#1656): the five canvas forms (CO:306-310) and their Edits, as
+// specs in the canvas's T, CH and CK kinds. Each body is the one its route on
+// `main` takes, and each Edit sends only that route's PATCH fields. They are
+// registered nowhere (decision 15): PR 2b adds the `validate` write group they
+// call, the chip loaders, and `FORMS.validate` / `EDITS.validate`. A chip set
+// read from `form-options` names its key in `optionsFrom`; until a loader
+// fills it, it draws its own "None yet" chip, or its empty sentence.
+
+const NONE_YET = { value: '', label: 'None yet' };
+/** A whole-number id as typed or chosen; null when there is none. */
+const idOrNull = (v) => (/^[1-9]\d*$/.test(String(v ?? '')) ? Number(v) : null);
+const checked = (v, value) => Array.isArray(v) && v.includes(value);
+
+const SEVERITY = [{ value: 'mild', label: 'Mild' }, { value: 'real', label: 'Real' }, { value: 'severe', label: 'Severe' }];
+const severityField = {
+  kind: 'CH', name: 'severity', k: 'How severe', opts: SEVERITY, def: 1,
+  // Decision 8: the writer sets the level on quotes no one has judged yet.
+  note: 'Mild: a nuisance. Real: costs time or money. Severe: blocks the job. Applies to quotes not judged yet.',
+};
+/** A quote chip's value: the interview's id and the phrase it recorded. */
+export const quoteValue = (interviewId, phrase) => `${interviewId}:${phrase}`;
+const quoteOf = (value) => {
+  const s = String(value ?? '');
+  const at = s.indexOf(':');
+  const id = idOrNull(s.slice(0, at));
+  return at > 0 && id != null && s.slice(at + 1) ? { interview_id: id, phrase: s.slice(at + 1) } : null;
+};
+
+const theme = {
+  key: 'theme', cta: 'Create theme', button: 'Create theme',
+  title: 'New theme',
+  sub: 'A pain theme groups quotes that describe the same problem.',
+  foot: 'Quotes keep their interview and consent.',
+  fields: [
+    { kind: 'T', name: 'title', k: 'Theme', ph: 'Name the pain in the customer’s words', required: true, max: 120 },
+    severityField,
+    // The note counts the waiting quotes only once a read says how many (decision 3).
+    { kind: 'CK', name: 'quotes', k: 'Quotes to attach', opts: [], optionsFrom: 'quotes', empty: 'No unthemed quotes recorded yet.' },
+    { kind: 'CH', name: 'hypothesis_id', k: 'Feeds hypothesis', opts: [NONE_YET], def: 0, optionsFrom: 'hypotheses' },
+  ],
+  toBody: (v) => ({
+    title: str(v.title), severity: v.severity || null,
+    quotes: (Array.isArray(v.quotes) ? v.quotes : []).map(quoteOf).filter(Boolean),
+    hypothesis_id: idOrNull(v.hypothesis_id),
+  }),
+  submit: (w, projectId, v) => w.validate.theme(projectId, theme.toBody(v)),
+};
+
+const URGENCY = [{ value: 'low', label: 'Low' }, { value: 'medium', label: 'Medium' }, { value: 'high', label: 'High' }];
+const SINCE = 'since';
+const segmentFields = [
+  { kind: 'T', name: 'name', k: 'Segment', ph: 'Segment name', required: true, max: 120 },
+  { kind: 'T', name: 'who_they_are', k: 'Who they are', ph: 'Role at company type, size, where', max: 1000 },
+  { kind: 'T', name: 'job_to_be_done', k: 'Job to be done', ph: 'What they are trying to get done', max: 1000 },
+  { kind: 'CH', name: 'urgency', k: 'Urgency', opts: URGENCY, def: 2 },
+  { kind: 'T', name: 'value_promised', k: 'Value promised', ph: 'What changes for them', max: 1000 },
+  { kind: 'CH', name: 'score_against', k: 'Score against', opts: [{ value: 'all', label: 'All interviews' }, { value: SINCE, label: 'Interviews since a date' }], def: 0 },
+  // The second chip reveals its date (decision 2).
+  { kind: 'T', name: 'score_since', k: 'Interviews since', input: 'date', required: true, when: { name: 'score_against', value: SINCE } },
+];
+const segmentBody = (v) => ({
+  name: str(v.name), who_they_are: str(v.who_they_are), job_to_be_done: str(v.job_to_be_done),
+  urgency: v.urgency || null, value_promised: str(v.value_promised),
+  score_since: v.score_against === SINCE ? str(v.score_since) : null,
+});
+const segment = {
+  key: 'segment', cta: 'Create segment', button: 'Create segment',
+  title: 'New segment',
+  sub: 'A segment is one answer to who the customer is. Compare several.',
+  foot: 'Interviews are listed against it with their ICP fit.',
+  fields: segmentFields,
+  toBody: segmentBody,
+  submit: (w, projectId, v) => w.validate.segment(projectId, segment.toBody(v)),
+};
+
+const COMPETITOR_KIND = [{ value: 'direct', label: 'Direct' }, { value: 'adjacent', label: 'Adjacent' }];
+const WATCH = [
+  { value: 'funding', label: 'Funding', meta: 'rounds and amounts', checked: true },
+  { value: 'launch', label: 'Launches', meta: 'products and features', checked: true },
+  { value: 'hiring', label: 'Hires', meta: 'roles and team size', checked: false },
+];
+const kindField = { kind: 'CH', name: 'kind', k: 'Kind', opts: COMPETITOR_KIND, def: 0, note: 'Direct: solves the same problem for the same customer. Adjacent: one of the two.' };
+const watchField = { kind: 'CK', name: 'watch', k: 'Watch for', opts: WATCH };
+const whyField = { kind: 'T', name: 'why', k: 'Why it matters', ph: 'One line, optional', max: 1000 };
+const watchBody = (v) => Object.fromEntries(WATCH.map((o) => [o.value, checked(v.watch, o.value)]));
+const competitor = {
+  key: 'competitor', cta: 'Add competitor', button: 'Add competitor',
+  title: 'Add competitor',
+  sub: 'Tracked from Research › Companies, or added by name.',
+  foot: 'Signals appear as you record them or re-run the analysis.',
+  fields: [
+    // A search box (decision 8): PR 2b's picker sets `company_ref` for one of
+    // the caller's own candidates, or `directory_uid` for a Research match;
+    // otherwise the typed name is sent.
+    { kind: 'T', name: 'company', k: 'Company', ph: 'Search Research › Companies, or type a name', required: true, max: 120, optionsFrom: 'companies', search: 'q' },
+    kindField, watchField, whyField,
+  ],
+  // The route takes exactly one of the three keys.
+  toBody: (v) => {
+    const picked = str(v.company_ref) ? { company_ref: str(v.company_ref) }
+      : str(v.directory_uid) ? { directory_uid: str(v.directory_uid) } : { name: str(v.company) };
+    return { ...picked, kind: v.kind || 'direct', watch: watchBody(v), why: str(v.why) };
+  },
+  submit: (w, projectId, v) => w.validate.competitor(projectId, competitor.toBody(v)),
+};
+
+const SIGNAL_KIND = [
+  { value: 'need_to_have', label: 'Need-to-have mention' }, { value: 'waitlist', label: 'Waitlist sign-up' },
+  { value: 'pre_sale', label: 'Pre-sale' }, { value: 'loi', label: 'Letter of intent' },
+];
+/** The kinds the route takes an amount for (`writeDemandSignal`). */
+export const AMOUNT_KINDS = ['pre_sale', 'loi'];
+const SIGNAL_STATUS = [{ value: 'confirmed', label: 'Confirmed' }, { value: 'to_confirm', label: 'To confirm' }];
+const signalFields = [
+  { kind: 'CH', name: 'kind', k: 'Kind', opts: SIGNAL_KIND, def: 2, required: true },
+  { kind: 'T', name: 'who', k: 'Who', ph: 'Customer, lead or interviewee', max: 200 },
+  { kind: 'T', name: 'amount', k: 'Amount', input: 'money', ph: '$1,200 · pre-sales and letters of intent only', when: (v) => AMOUNT_KINDS.includes(v.kind) },
+  { kind: 'T', name: 'signal_date', k: 'Date', input: 'date', ph: '12 Oct' },
+  { kind: 'CH', name: 'status', k: 'Status', opts: SIGNAL_STATUS, def: 0, note: 'To confirm: said, not yet in writing.' },
+];
+// A hidden Amount is not submitted, so a kind that takes none sends null.
+const signalBody = (v) => {
+  const amount = AMOUNT_KINDS.includes(v.kind) ? toCents(v.amount) : null;
+  return { kind: v.kind || null, who: str(v.who), amount_cents: amount, currency: amount == null ? null : 'usd', signal_date: str(v.signal_date), status: v.status || null };
+};
+const signal = {
+  key: 'signal', cta: 'Record signal', button: 'Record signal',
+  title: 'Record a signal',
+  sub: 'Evidence that someone wants this, with its date.',
+  foot: 'Waitlist sign-ups count toward the bar you set.',
+  fields: signalFields,
+  toBody: signalBody,
+  submit: (w, projectId, v) => w.validate.signal(projectId, signal.toBody(v)),
+};
+
+const DIRECTION = [{ value: 'supports', label: 'Supporting' }, { value: 'contradicts', label: 'Contradicting' }];
+const claimFields = [
+  { kind: 'T', name: 'claim', k: 'Claim', ph: 'We believe that …', h: '56px', required: true, max: 500 },
+  { kind: 'T', name: 'success_bar', k: 'What would prove it', ph: 'Success bar · e.g. 5 of 8 interviewees …', max: 500 },
+  { kind: 'T', name: 'disproof', k: 'What would disprove it', ph: 'Condition', max: 500 },
+];
+// Two boxes on one row (decision 2): the owner is a member the route accepts.
+const ownerDeadline = {
+  name: 'owner_deadline', k: 'Owner · deadline', parts: [
+    { kind: 'CH', name: 'owner_user_id', k: 'Owner', opts: [], optionsFrom: 'owners', empty: 'No owner to choose yet.' },
+    { kind: 'T', name: 'deadline', k: 'Deadline', input: 'date', ph: '31 Oct' },
+  ],
+};
+const hypothesis = {
+  key: 'hypothesis', cta: 'Create hypothesis', button: 'Create hypothesis',
+  title: 'New hypothesis',
+  sub: 'A claim you most need to be true, and how you would know.',
+  foot: 'Its status comes from the evidence linked to it.',
+  fields: [
+    ...claimFields,
+    // Optional, and empty until themes are recorded (decision 4).
+    { kind: 'CH', name: 'pain_group_id', k: 'Pain themes it links to', opts: [], optionsFrom: 'themes', empty: 'No pain themes recorded yet.' },
+    { kind: 'CH', name: 'direction', k: 'Direction', opts: DIRECTION, def: 0 },
+    ownerDeadline,
+  ],
+  toBody: (v) => {
+    const linked = idOrNull(v.pain_group_id);
+    const owner = idOrNull(v.owner_user_id);
+    return {
+      claim: str(v.claim), success_bar: str(v.success_bar), disproof: str(v.disproof),
+      pain_group_ids: linked == null ? [] : [linked], direction: v.direction || 'supports',
+      ...(owner == null ? {} : { owner_user_id: owner }), deadline: str(v.deadline),
+    };
+  },
+  submit: (w, projectId, v) => w.validate.hypothesis(projectId, hypothesis.toBody(v)),
+};
+
+/** Validate's Add forms, by module slug (PR 2b registers them as `FORMS.validate`). */
+export const VALIDATE_FORMS = {
+  'problem-discovery': [theme],
+  'ideal-customer-profile': [segment],
+  'market-intelligence': [competitor],
+  'demand-signals': [signal],
+  experiments: [hypothesis],
+};
+
+// The Edits (decision 7): the Add form's fields its PATCH takes, titled
+// "Edit <noun>", with "Save". A record's id is its own `id`, or the `edit`'s.
+const recordId = (pattern) => (row) => {
+  const id = String(growEdit(row)?.id ?? row?.id ?? '');
+  return pattern.test(id) ? id : null;
+};
+/** The current values a row's `edit` carries for these fields, and no others. */
+const carried = (names) => (row) => {
+  const e = growEdit(row) || {};
+  return Object.fromEntries(names.filter((n) => Object.hasOwn(e, n) && e[n] != null).map((n) => [n, e[n]]));
+};
+
+/**
+ * An Edit form with only the fields its current values carry (decision 7), so
+ * a save never blanks a stored value it did not show. A paired field keeps
+ * the parts that are carried; one with none left goes.
+ */
+export function editFieldsFor(form, current) {
+  const has = (f) => current != null && Object.hasOwn(current, f.name);
+  const keep = (fields) => (fields || []).flatMap((f) => {
+    if (Array.isArray(f.parts)) { const parts = keep(f.parts); return parts.length ? [{ ...f, parts }] : []; }
+    // A revealed box stays with the field that reveals it (Interviews since with Score against).
+    return has(f) || (f.when && typeof f.when === 'object' && has({ name: f.when.name })) ? [f] : [];
+  });
+  return form ? { ...form, fields: keep(form.fields) } : form;
+}
+/**
+ * Only the keys of a body whose field was submitted (a shown field, after
+ * `editFieldsFor`): an Edit sends nothing else. `from` names a key's field
+ * where they differ.
+ */
+const onlyShown = (v, body, from = {}) => Object.fromEntries(Object.entries(body).filter(([k]) => Object.hasOwn(v, from[k] ?? k)));
+
+const editTheme = {
+  ...EDIT,
+  key: 'edit-theme', title: 'Edit theme', sub: theme.sub,
+  fields: [theme.fields[0], severityField],
+  idOf: recordId(/^[1-9]\d*$/),
+  valuesOf: carried(['title', 'severity']),
+  toBody: (v) => onlyShown(v, { title: str(v.title), severity: v.severity || null }),
+  submit: (w, projectId, id, v) => w.validate.themeUpdate(projectId, id, editTheme.toBody(v)),
+};
+
+const editSegment = {
+  ...EDIT,
+  key: 'edit-segment', title: 'Edit segment', sub: segment.sub,
+  fields: segmentFields,
+  idOf: recordId(/^[1-9]\d*$/),
+  valuesOf: (row) => {
+    const v = carried(['name', 'who_they_are', 'job_to_be_done', 'urgency', 'value_promised', 'score_since'])(row);
+    if (Object.hasOwn(growEdit(row) || {}, 'score_since')) v.score_against = v.score_since ? SINCE : 'all';
+    if (v.score_since) v.score_since = dateText(v.score_since);
+    return v;
+  },
+  toBody: (v) => onlyShown(v, segmentBody(v), { score_since: 'score_against' }),
+  submit: (w, projectId, id, v) => w.validate.segmentUpdate(projectId, id, editSegment.toBody(v)),
+};
+
+const editCompetitor = {
+  ...EDIT,
+  key: 'edit-competitor', title: 'Edit competitor', sub: competitor.sub,
+  fields: [kindField, watchField, whyField],
+  // A candidate id the record route takes (D690 decision 4).
+  idOf: recordId(/^[a-z0-9][a-z0-9_-]*$/),
+  valuesOf: (row) => {
+    const e = growEdit(row) || {};
+    const v = carried(['kind', 'why'])(row);
+    if (e.watch && typeof e.watch === 'object') v.watch = WATCH.map((o) => o.value).filter((k) => e.watch[k] === true);
+    return v;
+  },
+  toBody: (v) => onlyShown(v, { kind: v.kind || 'direct', watch: watchBody(v), why: str(v.why) }),
+  submit: (w, projectId, id, v) => w.validate.competitorUpdate(projectId, id, editCompetitor.toBody(v)),
+};
+
+const editSignal = {
+  ...EDIT,
+  key: 'edit-signal', title: 'Edit signal', sub: signal.sub,
+  fields: signalFields,
+  // Only a `signal-` record is the founder's own (a `revenue-` or `waitlist-` one is not).
+  idOf: recordId(/^signal-[1-9]\d*$/),
+  valuesOf: (row) => {
+    const e = growEdit(row) || {};
+    const v = carried(['kind', 'who', 'signal_date', 'status'])(row);
+    if (v.signal_date) v.signal_date = dateText(v.signal_date);
+    if (Object.hasOwn(e, 'amount_cents')) v.amount = e.amount_cents == null ? '' : String(Number(e.amount_cents) / 100);
+    return v;
+  },
+  // An amount is sent when its box was shown, and cleared when the kind takes none.
+  toBody: (v) => {
+    const body = onlyShown(v, signalBody(v), { amount_cents: 'amount', currency: 'amount' });
+    if (Object.hasOwn(v, 'kind') && !AMOUNT_KINDS.includes(v.kind)) Object.assign(body, { amount_cents: null, currency: null });
+    return body;
+  },
+  submit: (w, projectId, id, v) => w.validate.signalUpdate(projectId, id, editSignal.toBody(v)),
+};
+
+const editHypothesis = {
+  ...EDIT,
+  key: 'edit-hypothesis', title: 'Edit hypothesis', sub: hypothesis.sub,
+  // Its pain links and direction are the record's own section (D690), not PATCH fields.
+  fields: [...claimFields, ownerDeadline],
+  idOf: recordId(/^[1-9]\d*$/),
+  valuesOf: (row) => {
+    const v = carried(['claim', 'success_bar', 'disproof', 'owner_user_id', 'deadline'])(row);
+    if (v.deadline) v.deadline = dateText(v.deadline);
+    return v;
+  },
+  toBody: (v) => {
+    const body = { claim: str(v.claim), success_bar: str(v.success_bar), disproof: str(v.disproof), deadline: str(v.deadline), owner_user_id: idOrNull(v.owner_user_id) };
+    return onlyShown(v, body);
+  },
+  submit: (w, projectId, id, v) => w.validate.hypothesisUpdate(projectId, id, editHypothesis.toBody(v)),
+};
+
+/** Validate's Edit forms, by module slug (PR 2b registers them as `EDITS.validate`). */
+export const VALIDATE_EDITS = {
+  'problem-discovery': editTheme,
+  'ideal-customer-profile': editSegment,
+  'market-intelligence': editCompetitor,
+  'demand-signals': editSignal,
+  experiments: editHypothesis,
+};
+
 // ---------- Fields: today's types and the canvas's kinds ---------------------
 //
 // D695 decision 2: a field is today's `{ name, label, type }`, or the

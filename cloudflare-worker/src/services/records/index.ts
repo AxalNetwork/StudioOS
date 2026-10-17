@@ -1,9 +1,11 @@
 /** D690 — later cycle PRs register their own module specs here. */
 import type { Cycle, ModuleSpec, RecordRegistry } from './types';
 import { BUILD_SPECS } from './build';
+import { RAISE_RECORDS } from './raise';
 
 export const RECORD_SPECS: RecordRegistry = {
   build: BUILD_SPECS,
+  raise: RAISE_RECORDS, // D691 (#1699)
 };
 
 export function hasRecords(cycle: string, registry: RecordRegistry = RECORD_SPECS): boolean {

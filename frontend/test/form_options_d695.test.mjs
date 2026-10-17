@@ -85,8 +85,8 @@ test('the drift guard reads the router D690\'s factory builds, so formOptions\'s
   assertGuardSees(GUARD);
   const src = readFileSync(GUARD, 'utf8');
   for (const [before, after] of [
-    ['const declaredOn = (name, at) => name === ident || (built && name === built.name && at > built.from && at < built.to);', 'const declaredOn = (name) => name === ident;'],
-    ['return local ? { name: local[1], from, to } : null;', 'return null;'],
+    ['const router = mounted && factoryRouter(src, mounted);', 'const router = { ident: mounted, source: src };'],
+    ['return returned && honos.some(match => match[1] === returned)', 'return false'],
   ]) {
     assert.ok(src.includes(before), 'mutation target: ' + before);
     // The guard resolves its root from its own path, so the copy sits beside it, for one run.

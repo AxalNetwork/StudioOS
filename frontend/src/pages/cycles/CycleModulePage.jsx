@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Unreadable } from '../../ui';
 import { CardBody, CycleHeader } from './CycleOverview';
+import { recordHref, recordId, rowLinks } from './recordModel.js';
 import { MODULE_LINK_CLASS } from './founderToolNavigation.js';
-import { cardView, cellView, cycleOf, isPlainClick, nextHref, pageButtons, recordsCount, safeHref } from './cycleModel';
+import { cardView, cellView, cycleOf, isPlainClick, pageButtons, recordsCount, safeHref } from './cycleModel';
 
 /**
  * D661 (#1474) — one module page for all 26 modules, drawn to
@@ -24,6 +25,10 @@ import { cardView, cellView, cycleOf, isPlainClick, nextHref, pageButtons, recor
  * A module that already has a full working tool (the cap table, the data
  * room, the pitch deck, the capital pipeline, the roadmap) is linked through
  * `tool`, not redrawn here.
+ *
+ * A read refused on purpose (`status: 'refused'`, D693 #1704: a partner on
+ * Verdict) draws the Worker's sentence in a neutral box, with no chart, no
+ * table and no Retry: nothing broke, so there is nothing to try again.
  */
 
 const PILL = {
@@ -36,13 +41,13 @@ const PILL = {
   grey: 'border-axal-hairline bg-axal-ground text-axal-muted dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400',
   muted: 'border-axal-hairline bg-axal-ground text-axal-muted dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400',
 };
-const NR = 'rounded-full border border-dashed border-gray-300 bg-axal-ground px-2 py-0.5 text-[10.5px] font-semibold text-axal-muted dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400';
+export const NR = 'rounded-full border border-dashed border-gray-300 bg-axal-ground px-2 py-0.5 text-[10.5px] font-semibold text-axal-muted dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400';
 const CONTROL = 'rounded-full border border-axal-hairline bg-white px-[11px] py-[5px] text-[12px] font-semibold text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
 
-export function Cell({ cell, first = false, linkState = undefined }) {
+export function Cell({ cell, first = false, linkState = undefined, plain = false }) {
   const v = cellView(cell);
   if (v.nr) return <span className={NR}>Not recorded</span>;
-  const text = v.href ? <Link to={v.href} state={linkState} className="hover:underline">{v.text}</Link> : v.text;
+  const text = !plain && v.href ? <Link to={v.href} state={linkState} className="hover:underline">{v.text}</Link> : v.text;
   if (v.tone) return <span className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-[10.5px] font-bold ${PILL[v.tone]}`}>{text}</span>;
   return <span className={first ? 'font-semibold text-axal-ink dark:text-gray-100' : 'text-axal-ink/80 dark:text-gray-300'}>{text}</span>;
 }
@@ -56,7 +61,7 @@ export function Cell({ cell, first = false, linkState = undefined }) {
  * passes its `state` on, so an Add's `/new` address carries `state.under`
  * and closing it can go back to the page that opened it (D695).
  */
-export function RecordsTable({ title, records, status = 'ready', message = '', query = {}, onQuery, onRetry, add, rowAction }) {
+export function RecordsTable({ title, records, status = 'ready', message = '', query = {}, onQuery, onRetry, add, rowAction, rowHref }) {
   const [text, setText] = useState(query.q || '');
   const cols = Array.isArray(records?.cols) ? records.cols : [];
   const rows = Array.isArray(records?.rows) ? records.rows : [];
@@ -120,17 +125,21 @@ export function RecordsTable({ title, records, status = 'ready', message = '', q
               {searching ? 'Nothing matches this search.' : 'No records yet.'}
             </p>
           )}
-          {rows.map((r, ri) => (
-            <div key={r.id ?? ri} role="row" className="grid grid-cols-2 items-center gap-x-2.5 gap-y-1 border-b border-axal-ground px-4 py-2.5 text-[12.5px] last:border-b-0 md:[grid-template-columns:var(--cols)] dark:border-gray-800" style={{ '--cols': grid.gridTemplateColumns }}>
+          {rows.map((r, ri) => {
+            const href = rowHref?.(r);
+            return (
+            <div key={r.id ?? ri} role="row" className="relative grid grid-cols-2 items-center gap-x-2.5 gap-y-1 border-b border-axal-ground px-4 py-2.5 text-[12.5px] last:border-b-0 md:[grid-template-columns:var(--cols)] dark:border-gray-800" style={{ '--cols': grid.gridTemplateColumns }}>
               {cols.map((c, ci) => (
                 <span key={c.key} role="cell" className={ci === 0 ? 'col-span-2 md:col-span-1' : ''}>
                   {ci > 0 && <span className="mr-1.5 text-[10.5px] uppercase tracking-[.06em] text-axal-faint md:hidden">{c.label}</span>}
-                  <Cell cell={r.cells?.[c.key]} first={ci === 0} />
+                  {ci === 0 && href ? <Link to={href} className="after:absolute after:inset-0 focus-visible:underline">
+                    <Cell cell={r.cells?.[c.key]} first plain />
+                  </Link> : <Cell cell={r.cells?.[c.key]} first={ci === 0} plain={!!href} />}
                 </span>
               ))}
               {acts && <RowAction action={rowAction(r)} />}
             </div>
-          ))}
+          ); })}
           <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5" data-testid="records-count">
             <span className="text-[12px] text-axal-muted dark:text-gray-400">{count.label}</span>
             {count.pages > 1 && (
@@ -155,7 +164,7 @@ function RowAction({ action }) {
     <span role="cell" className="col-span-2 md:col-span-1 md:justify-self-end">
       {action?.text && typeof action.onClick === 'function' && (
         <button type="button" onClick={action.onClick} aria-label={action.label || action.text} data-testid="records-row-action"
-          className="rounded-[9px] border border-axal-hairline px-2.5 py-1 text-[11.5px] font-semibold text-axal-violet-deep hover:bg-axal-lavender dark:border-gray-700 dark:text-violet-300 dark:hover:bg-violet-900/30">
+          className="relative z-10 rounded-[9px] border border-axal-hairline px-2.5 py-1 text-[11.5px] font-semibold text-axal-violet-deep hover:bg-axal-lavender dark:border-gray-700 dark:text-violet-300 dark:hover:bg-violet-900/30">
           {action.text}
         </button>
       )}
@@ -172,14 +181,16 @@ export default function CycleModulePage({
   const card = data?.card || null;
   const view = cardView(card);
   const name = card?.name || data?.module?.name || slug;
-  const next = card?.next;
-  const nextLink = nextHref(next?.href, search);
   const toolLinks = [tool, ...tools].filter((item) => safeHref(item?.href));
   const recs = records ?? data?.records;
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="cycle-module" data-cycle={meta.key} data-module={slug}>
-      <CycleHeader cycle={meta.key} cards={cards || (card ? [card] : [])} active={slug} action={action} title={name} search={search} />
-      {status === 'unreadable' ? (
+      <CycleHeader cycle={meta.key} cards={cards || (card ? [card] : [])} active={slug} action={action} title={name} sub={[card?.caption, 'Records below; the tabs above move between modules.'].filter(Boolean).join(' ')} search={search} />
+      {status === 'refused' ? (
+        <p role="status" className="m-0 rounded-xl border border-axal-hairline bg-axal-ground px-4 py-3.5 text-[13px] leading-relaxed text-axal-ink dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200" data-testid="cycle-module-refused">
+          {message || 'You do not have access to this module.'}
+        </p>
+      ) : status === 'unreadable' ? (
         <div className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/30" data-testid="cycle-module-unreadable">
           <Unreadable what={name} claim={message || 'This is not a claim that nothing is recorded.'} onRetry={onRetry} />
         </div>
@@ -187,16 +198,12 @@ export default function CycleModulePage({
         <>
           <section className="flex min-w-0 flex-col gap-3 rounded-xl border border-axal-hairline bg-white px-[18px] py-4 dark:border-gray-800 dark:bg-gray-900" data-testid="cycle-module-chart" data-state={view.state}>
             <div className="flex flex-wrap items-baseline justify-between gap-2.5">
-              <h2 className="m-0 text-[15px] font-extrabold tracking-[-.015em] text-axal-ink dark:text-gray-100">{name}</h2>
+              <h2 className="m-0 text-[15px] font-extrabold tracking-[-.015em] text-axal-ink dark:text-gray-100">{name} · at a glance</h2>
               {card?.range && <span className="text-[11px] text-axal-faint dark:text-gray-500">{card.range}</span>}
             </div>
             <CardBody card={card} onRetry={onRetry} search={search} />
             {view.state === 'ok' && card.caption && <span className="text-[12.5px] leading-relaxed text-axal-ink/80 dark:text-gray-300">{card.caption}</span>}
-            {view.state === 'ok' && next?.text && (
-              <span className="text-[12px] text-axal-muted dark:text-gray-400">
-                Next: {nextLink ? <Link to={nextLink} className="font-semibold text-axal-violet-deep hover:underline dark:text-violet-300">{next.text}</Link> : next.text}
-              </span>
-            )}
+
           </section>
           {toolLinks.map((item) => (
             <Link key={item.href} to={item.href} className={MODULE_LINK_CLASS} data-testid="cycle-module-tool">
@@ -214,6 +221,7 @@ export default function CycleModulePage({
             onRetry={onRetryRecords || onRetry}
             add={add}
             rowAction={rowAction}
+            rowHref={(row) => rowLinks(recs, row) ? recordHref(meta.key, slug, recordId(row), search) : null}
           />
           {children}
         </>

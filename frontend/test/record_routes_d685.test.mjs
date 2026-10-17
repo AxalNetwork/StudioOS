@@ -138,7 +138,7 @@ test('App.jsx serves /validate/record behind the founder guard, as the page and 
   assert.doesNotMatch(line, /<Navigate/);
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   // D695 (#1656): `adding` is the module's `/new` address; `lightbox` is unchanged.
-  assert.match(route, /export default function CycleRoute\(\{ cycle, lightbox = false, adding = false \}\)/);
+  assert.match(route, /export default function CycleRoute\(\{ cycle, lightbox = false, adding = false, record = false, slug: suppliedSlug \}\)/);
 });
 
 test('closing goes back to the page underneath, makes no server call, and a plain click records where it came from', () => {
@@ -172,19 +172,22 @@ const ROW = { id: 4, interviewee: 'Dana Ruiz', company: 'Acme', date: '2026-10-0
 const labelsOf = (cols) => cols.map((c) => c.label);
 
 test('the Interviews list: titled Interviews, with a Channel filter, and the channel in words', () => {
-  assert.deepEqual(TITLES, { 'customer-research': 'Interviews' });
+  // D697: the three bottom sections' tables carry the canvas's titles (CO:611, :612, :616).
+  assert.deepEqual(TITLES, { 'customer-research': 'Interviews', 'problem-discovery': 'Pain themes', experiments: 'Hypotheses' });
   const mod = adaptModule('validate', 'customer-research', { module: { name: 'Customer research' }, records: { cols: ['Interviewee', 'Company', 'Date', 'ICP fit', 'Consent', 'State'], rows: [], total: 0, page: 1, page_size: 25 } });
   assert.equal(mod.module.records_title, 'Interviews');
   assert.equal(mod.module.name, 'Customer research', 'the module keeps its name');
   assert.equal(adaptModule('validate', 'customer-research', { records: { cols: [], rows: [] } }).module.records_title, 'Interviews', 'even when the read carried no module');
   assert.equal(adaptModule('validate', 'customer-research', { module: { records_title: 'The Worker\'s own' } }).module.records_title, 'The Worker\'s own', 'a title the Worker sends wins');
-  assert.equal('records_title' in adaptModule('validate', 'problem-discovery', { module: { name: 'Problem discovery' } }).module, false, 'only the interview log is retitled');
+  assert.equal(adaptModule('validate', 'problem-discovery', { module: { name: 'Problem discovery' } }).module.records_title, 'Pain themes');
+  assert.equal(adaptModule('validate', 'experiments', { module: { name: 'Experiments and evidence' } }).module.records_title, 'Hypotheses');
+  assert.equal('records_title' in adaptModule('validate', 'ideal-customer-profile', { module: { name: 'Ideal customer profile' } }).module, false, 'only the three bottom sections are retitled');
   assert.equal('records_title' in adaptModule('grow', 'customer-research', { module: {} }).module, false);
   const recs = adaptRecords('validate', 'customer-research', { cols: ['Interviewee', 'Company', 'Date', 'ICP fit', 'Consent', 'State'], rows: [{ ...ROW, channel: 'phone' }], total: 1, page: 1, page_size: 25 });
   const f = recs.filters.find((x) => x.key === 'channel');
   assert.equal(f.label, 'Channel');
   assert.deepEqual(f.options, [{ value: 'in_person', label: 'In person' }, { value: 'video', label: 'Video call' }, { value: 'phone', label: 'Audio call' }, { value: 'text', label: 'Text chat' }]);
-  assert.deepEqual(recs.filters.map((x) => x.key), ['icp', 'consent', 'stage', 'channel'], 'Stage stays: the list holds leads and invites too');
+  assert.deepEqual(recs.filters.map((x) => x.key), ['icp', 'consent', 'channel'], 'D697 decision 4: State replaced Stage; the Worker keeps stage:pipeline for the picker');
   assert.deepEqual(labelsOf(recs.cols).slice(5), ['State'], 'D690: State ends the list; Channel is a filter');
   assert.equal(cellView(recs.rows[0].cells.channel).text, 'Audio call');
 });

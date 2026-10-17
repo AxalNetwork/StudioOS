@@ -76,6 +76,17 @@ D690's `GET /api/cycles/:cycle/modules/:slug/form-options?project=N` for every
 cycle, `query` (a search's `{ q }`) after `project` (D695 decision 16); it sends
 only a known cycle and a module slug's charset.
 
+D696 (#1658): `cyclesApi.record`, `recordActivity` and `recordAction` call
+D690’s mounted `/api/cycles/:cycle/modules/:slug/records/:id`, its `/activity`
+read and `/actions/:key` POST. All carry `?project=`, activity carries `page`,
+path segments are encoded, and an unwired cycle is refused before a request.
+JSON action bodies are serialized; multipart `FormData` is passed unchanged.
+
+D693 (#1704): `verdict.js` holds `verdictApi.record`, Record a decision's
+`POST /api/cycles/validate/decisions?project=N`. The Decisions table is the
+module read and commitments go through the record's action route, so it holds
+nothing else.
+
 D653: `roundCalls.js` calls the mounted `/api/round-calls` domain for availability, real planner context, draft/audience, counsel review, send, responses and management. It uses the shared authenticated request client and has no public-token transport.
 
 D684 (#1578): `channels.js` calls `/api/channels` (a member's business

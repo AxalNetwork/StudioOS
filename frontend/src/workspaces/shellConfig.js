@@ -472,11 +472,15 @@ export const bucketTitle = (bucket) => bucket?.tagline || bucket?.label;
  * Callers already treat null as "no zone" — five of the eight resolve the root
  * themselves (`isRoot ? null : zoneForPath(...)`), so for them the old fallback
  * was already unreachable.
+ *
+ * A bucket with no zones answers its root with null, not `undefined` (D704
+ * decision 3): Validate keeps its bucket for full bleed and `bucketForPath`
+ * once its zone pages are retired, and null is the "no zone" every caller reads.
  */
 export function zoneForPath(bucket, pathname) {
   if (!bucket) return null;
   const rest = String(pathname || '').slice(bucket.prefix.length).replace(/^\//, '');
-  if (!rest) return bucket.zones[0];
+  if (!rest) return bucket.zones[0] ?? null;
   return bucket.zones.find((z) => z.slug === rest) || null;
 }
 

@@ -97,6 +97,20 @@ writes (`/segments`, `/interviews/:id/segment|stage`, `/demand-signals`,
 `/waitlist-target`, `/interviews-target` (D685 §5.12), `/competitor-mentions`, `/hypotheses/:id/plan`,
 `/evidence-links/:id/strength`) call the same writers as #1471's interview
 accept path. See `decisions/D659.md`.
+D690 (#1692, migration 460) adds the form writes for the six records, each a
+writer in `services/validateWriters.ts` that logs its record and refuses a
+path id of another venture with a 404: `POST /themes`, `PATCH|DELETE
+/themes/:id`, `PATCH /segments/:id`, `POST /competitors` (a name, one of the
+caller's analysed companies or a directory company; 201 when added),
+`PATCH /competitors/:id` (watch and positioning), `PATCH
+/demand-signals/:id` (a `signal-` record only), `POST /hypotheses` and
+`PATCH /hypotheses/:id`. The row actions' writers (merge, split, attach a
+quote, Stop, evidence, experiments, a signal's file) are built and reach the
+SPA through the records actions in #1692's closing PR.
+`founder_validate_sessions.ts` adds `GET /sessions/:id/audio`, one
+short-lived signed download per recorded chunk, and `DELETE
+/discovery/interview/:id` now calls `services/interviewWriters.ts`'s
+`deleteInterview`.
 The `experiments` records carry Eadwyn's mark (D424) on each hypothesis as
 `provenance`, read by the board's `claimFills`. A failed read sets
 `fills_recorded: false` and marks every row `unreadable` (#1523, `D661.md`).
@@ -141,22 +155,24 @@ commitments; it reads `round_call_recipients` and writes nothing. See
 
 ### Cycle overviews and module pages (D661, #1474)
 
-The components are built in `frontend/src/pages/cycles/` and are not mounted yet: each cycle keeps its current page until its read from #1469 (D656) is on `main`. D661 gives the shape D656 left open for `Card.series` and the records.
+The four cycles are mounted through `frontend/src/pages/cycles/CycleRoute.jsx`. D661 gives the chart and table shape; D696 adds each module’s record routes after D690’s record API landed. Rows link only when the module read declares them linkable with a real store id.
 
 D662 (#1475) adds the authenticated Worker Build read at `/api/cycles/build`:
 `/overview` returns four figures and six independently computed cards;
 `/modules/:slug` returns a chart and searched, filtered, sorted, paged records.
 Migration 441 supplies the missing Build fields, the founder risk register,
 formation steps, and company-enabled core-system mappings. The D661 SPA
-components remain unmounted until the cycle route integration is scheduled.
+components are mounted through CycleRoute after #1652.
 
 | Canvas | Live route | Component and Worker | Status |
 | --- | --- | --- | --- |
 | `Cycle Overview.dc.html` · `variant=full`, `new`, `states` (O1–O5) | `/validate`, `/build`, `/raise` and `/grow` (D661, #1474: wired to #1487's, #1475's, #1501's and #1488's reads) | `pages/cycles/CycleRoute.jsx` → `CycleOverview.jsx`, through `pages/cycles/adapters/`; `GET /api/cycles/:cycle/overview` (#1472, #1475, #1476, #1477) | NEW: all four cycles mounted. D686 (#1596): each header CTA is a real address opening its cycle's lightbox over the page (`/validate/record`, `/build/connect`, `/raise/call`, `/grow/update`, through `CycleRoute`'s `lightbox` prop and each cycle's `path` and `Mount`); a plain click opens it in place, a new tab or deep link opens it over the overview, Back closes it. Build, Raise and Grow draw their history second once live; Validate has none since D694 |
-| `Cycle Overview.dc.html` · `module=0…6`; `Cycle Modules · Boards.dc.html` (MV1–MG7, 26 pages) | `/:cycle/:slug` once mounted; old module URLs redirect then | `pages/cycles/CycleModulePage.jsx`; `GET /api/cycles/:cycle/modules/:slug` | NEW: built, waiting on the reads |
+| `Cycle Overview.dc.html` · `module=0…6`; `Cycle Modules · Boards.dc.html` (MV1–MG7, 26 pages) | `/:cycle/:slug` | `pages/cycles/CycleModulePage.jsx`; `GET /api/cycles/:cycle/modules/:slug` | CURRENT: mounted; module charts are “<Module> · at a glance”, with the canvas caption and no Next line |
+| `Cycle Overview.dc.html` · one record (D696 PR 2) | `/validate/:slug/:id`, `/build/:slug/:id`, `/raise/:slug/:id`, `/grow/:slug/:id`, each with its module guard | `CycleRoute` record mode → `RecordView`; `GET /api/cycles/:cycle/modules/:slug/records/:id`, paged `/activity`, declared POST `/actions/:key` | Records use the URL venture, Back returns to the module, and 403/404 preserve the Worker’s sentence. Forms/confirmations mount outside the size container; phone forms replace the body. Customer research keeps the static route below. Data-room modes and record rail crumbs wait for PR 3 |
 | `Cycle Overview.dc.html` · Customer research's record (CO:350-401) | `/validate/customer-research/:id` · founder, admin (`labRoles`), the guard `/validate/interviews/:id` had (D696, #1658, 2026-10-17) | `pages/founder/InterviewReviewPage.jsx`, as it is until #1659 reframes it as the record; its reads are unchanged | UPGRADE |
 | Redirects (D696 decision 13) | `/validate/interviews/:id` → `/validate/customer-research/:id` (same guard); `/validate/experiments-and-evidence` and `/:id` → `/validate/experiments` and `/:id`; `/validate/demand-and-urgency-signals` and `/:id` → `/validate/demand-signals` and `/:id` | `pages/cycles/ParamRedirect.jsx`, re-exported by `App.jsx` beside `HistoryRedirect`: each `:name` filled through `encodeURIComponent`, the query and the hash kept | CURRENT |
 | `Cycle Overview.dc.html` · Add (CO:130-151, the A table CO:306-323); `Cycle Modules · Mobile.dc.html` (each board's third phone, "The page its button opens") | `/:cycle/:slug/new` for Validate, Build, Raise and Grow, `?form=<key>` for a later Add; `/validate/customer-research/new` → `/validate/record` (query kept) | `App.jsx` → `pages/cycles/CycleRoute.jsx` with `adding`; `pages/cycles/FormLightbox.jsx` | NEW (D695, #1656): `CycleRoute`'s `adding` opens the form `?form=` names, else the first, as the dialog over the module page at 1024px and up and as the page in the cycle's gutter below; `RecordsTable`'s Add pushes it with `state.under`, and closing goes back (a deep link replaces itself with the module page). `?add=1` replaces the URL with `/new`. A row's Edit is the same URL with `state.editing`. A module with no form replaces `/new` with its page |
+| `Cycle Overview.dc.html` · the bottom sections (CO:611, :612, :616) | Validate bottom sections: `/validate/customer-research`, `/validate/problem-discovery` and `/validate/experiments` under their tables; `/validate/customer-research?log=notes\|upload` opens Log an interview, then drops `log` · founder, admin (writers draw the write tools; everyone the strips) | `pages/cycles/ValidateSections.jsx`, mounted by `pages/cycles/CycleRoute.jsx` as Validate's `parts` | NEW (D697, #1659, PR 1): the module read's `parts` (#1691, #1749); Log an interview `POST /progress/discovery/:pid`; the exports `GET /founder/validate/{interviews,pain-map}/:pid/export.csv`; Assign and Link to a pain #1692's `attach` and `link` on the theme record (`POST /cycles/validate/modules/problem-discovery/records/:id/actions/{attach,link}`); New hypothesis `POST /founder/validate/board/:pid/hypotheses` until #1656 registers its form. Every dialog is drawn after the size container |
 
 D631 (#1389), Ops area 6:
 

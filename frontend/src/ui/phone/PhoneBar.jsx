@@ -24,6 +24,10 @@ export function backFallback({ shellRole, role, labActive, pathname = '', lastCy
  * the rail hides its floating button. It draws nothing while the panel serves
  * no one (any viewer but a founder on a page with a founder rail), so the bar
  * then has no button and no stand-in. `action` replaces it (#1664's menu).
+ *
+ * `back.onClick` (D703, #1665) makes Back a button that calls it, for a page
+ * whose Back closes something (an Add form, a cycle action) rather than
+ * pushing an address; it never reaches the no-history fallback.
  */
 export function PhoneBar({ back = { label: 'Studio' }, title, sub, eadwynLabel, action }) {
   const location = useLocation();
@@ -36,7 +40,9 @@ export function PhoneBar({ back = { label: 'Studio' }, title, sub, eadwynLabel, 
   const target = back.to || fallback;
   const backClass = 'flex min-h-11 items-center text-[13px] font-bold text-violet-700 dark:text-violet-300';
   return <div className="border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 px-[22px] pb-3 pt-1">
-    {back.to || location.key === 'default'
+    {back.onClick
+      ? <button type="button" className={backClass} onClick={back.onClick}>‹ {back.label}</button>
+      : back.to || location.key === 'default'
       ? <Link to={target} className={backClass}>‹ {back.label}</Link>
       : <button type="button" className={backClass} onClick={() => navigate(-1)}>‹ {back.label}</button>}
     <div className="flex items-center justify-between gap-2">
