@@ -186,3 +186,47 @@ export async function loadVerdictHistory(
   }
   return { byClaim, since };
 }
+
+// ---------------------------------------------------------------------------
+// D690 decision 16 — the three rules FVW's views read, ported from
+// `frontend/src/lib/verdictHistory.js` with their rules, so the module read
+// answers `Recently moved`, `As of last week` and `Changed this month` itself.
+// ---------------------------------------------------------------------------
+
+/** "Recently moved", in days: FVW's window (`frontend/src/lib/verdictHistory.js`). */
+export const RECENTLY_MOVED_DAYS = 14;
+
+/** SQLite's `datetime('now')` is UTC with a space. Parse, never compare raw. */
+export function parseObserved(value: unknown): Date | null {
+  if (!value) return null;
+  const s = String(value);
+  const iso = s.includes('T') ? s : `${s.replace(' ', 'T')}Z`;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** The observation in force at `at`, or null when the record starts later. */
+export function observationAt<T extends { observed_at: string }>(history: T[] | null | undefined, at: Date): T | null {
+  let found: T | null = null;
+  for (const o of history || []) {
+    const when = parseObserved(o.observed_at);
+    if (!when || when.getTime() > at.getTime()) continue;
+    found = o; // oldest first, so the last match wins
+  }
+  return found;
+}
+
+/**
+ * True when `field` changed between two adjacent observations and the later
+ * one is on or after `since`. The first observation is the claim appearing
+ * on the record, never a change.
+ */
+export function changedWithin(history: VerdictObservation[] | null | undefined, since: Date, field: 'verdict' | 'lane'): boolean {
+  const h = history || [];
+  for (let i = 1; i < h.length; i += 1) {
+    if ((h[i][field] ?? null) === (h[i - 1][field] ?? null)) continue;
+    const when = parseObserved(h[i].observed_at);
+    if (when && when.getTime() >= since.getTime()) return true;
+  }
+  return false;
+}

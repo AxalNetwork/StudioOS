@@ -100,6 +100,23 @@ accept path. See `decisions/D659.md`.
 The `experiments` records carry Eadwyn's mark (D424) on each hypothesis as
 `provenance`, read by the board's `claimFills`. A failed read sets
 `fills_recorded: false` and marks every row `unreadable` (#1523, `D661.md`).
+Each module read also carries its list's title (`module.records_title`), the
+canvas's columns, and `records.filters` and `records.sorts`, default sort
+first (D690 decision 10). Filters are `filter=key:value` pairs:
+problem discovery adds `icp:yes`, `need:yes` and `sort=recent`; customer
+research filters `icp`, `consent` and `channel` (and still `stage:pipeline`
+with `sort=booked` for the recruiting picker); the profile adds `fit:strong|none`
+and sorts by evidence; experiments adds `status:retired` (retired claims, only
+then), `sprint`, `moved:recent`, `history:last_week` and `history:this_month`,
+each applied before paging. Interview rows carry `role`, `pains`,
+`duration_min`, `state` (D690 decision 9) and, for a writer, `session_id`.
+Beside `records`, `parts` holds what the bottom sections draw, each count over
+the whole venture (decision 16): `can_write` on every module; `stats` on
+customer research, problem discovery and experiments; problem discovery's
+`themes` (writers only) and `unthemed` with `unthemed_total`; experiments'
+`fit_gap` and `stats.history_since`. A part follows its store's gate, and a
+phrase said without consent reaches a non-writer as
+"Quote withheld (no consent to quote)". See `decisions/D690.md`.
 
 ### Raise cycle Worker read (D663, #1476)
 
