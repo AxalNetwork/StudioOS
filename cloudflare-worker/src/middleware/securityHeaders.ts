@@ -85,11 +85,12 @@ export function securityHeadersMiddleware() {
     // Task #33 — broaden Permissions-Policy to deny every powerful sensor
     // by default. Add features only when an actual route needs them.
     // #1587: the microphone, to this origin only — the interview recorder
-    // (D685) and the advisor's voice input need it. Kept equal to
+    // (D685) and the advisor's voice input need it. The camera, likewise to
+    // this origin only — the event check-in scanner reads QR codes. Kept equal to
     // frontend/public/_headers (apex_truth_doc.test.mjs).
     h.set(
       'Permissions-Policy',
-      'geolocation=(), camera=(), microphone=(self), payment=(), usb=(), bluetooth=(), accelerometer=(), gyroscope=(), magnetometer=(), midi=(), serial=(), hid=(), interest-cohort=()',
+      'geolocation=(), camera=(self), microphone=(self), payment=(), usb=(), bluetooth=(), accelerometer=(), gyroscope=(), magnetometer=(), midi=(), serial=(), hid=(), interest-cohort=()',
     );
     h.set('Cross-Origin-Resource-Policy', 'same-site');
     // Task #33 — Cross-Origin-Opener-Policy isolates the API browsing context
