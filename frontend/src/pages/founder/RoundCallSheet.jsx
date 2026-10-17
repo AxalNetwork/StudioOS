@@ -138,8 +138,8 @@ export const CALL_SHEET=Object.freeze({eyebrow:'Raise',title:'Call for Capital',
   sub:'Only investors verified on Axal can see a call. It is never public.',testId:'round-call-sheet'});
 
 /** The cycle lightbox the sheet is drawn in. */
-export function CallLightbox({onClose,children}) {
-  return <Lightbox label={CALL_SHEET.title} size="tall" width={640} onClose={onClose} testId="round-call-lightbox">{children}</Lightbox>;
+export function CallLightbox({onClose,children,asPage}) {
+  return <Lightbox label={CALL_SHEET.title} size="tall" width={640} onClose={onClose} testId="round-call-lightbox" {...asPage}>{children}</Lightbox>;
 }
 
 /** Availability's answer: `on`, `off` (not enabled, or the flag's 503), or the read's own state. */
@@ -149,10 +149,11 @@ export function availabilityOf(read) {
   return read.data?.enabled===true?'on':'off';
 }
 
-export default function RoundCallSheet({projectId,onClose,initialCall=null}) {
+// D703 (#1665): `asPage` is the cycle route's page mode below 1024px; every other caller keeps the dialog.
+export default function RoundCallSheet({projectId,onClose,initialCall=null,asPage}) {
   const availability=useCallRead(()=>roundCallsApi.availability(),[]);
   const state=availabilityOf(availability);
-  return <CallLightbox onClose={onClose}>{state==='on'
+  return <CallLightbox onClose={onClose} asPage={asPage}>{state==='on'
     ?<RoundCallFlow projectId={projectId} onClose={onClose} initialCall={initialCall}/>
     :<ActionSheet {...CALL_SHEET} onClose={onClose}>{state==='off'?<p role="status">Coming soon. Round calls are not enabled.</p>:<CallReadState read={availability}>{null}</CallReadState>}</ActionSheet>}</CallLightbox>;
 }
