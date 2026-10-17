@@ -42,7 +42,7 @@ function fixture() {
     CREATE TABLE integration_companies(integration_id INTEGER, company_id INTEGER, enabled INTEGER);
     CREATE TABLE ritual_runs(id INTEGER PRIMARY KEY, project_id INTEGER, run_date TEXT, state TEXT);
     CREATE TABLE spinout_applications(id INTEGER PRIMARY KEY, user_id INTEGER, status TEXT, answers_json TEXT);
-    CREATE TABLE activity_logs(id INTEGER PRIMARY KEY, project_id INTEGER, user_id INTEGER, action TEXT, details TEXT, actor TEXT);
+    CREATE TABLE activity_logs(id INTEGER PRIMARY KEY, project_id INTEGER, user_id INTEGER, action TEXT, details TEXT, actor TEXT, entity_type TEXT, entity_id TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
     INSERT INTO users(id, role, founder_id, name) VALUES (1, 'founder', 11, 'One'), (2, 'founder', 22, 'Two'), (3, 'admin', NULL, 'Admin');
     INSERT INTO projects(id, founder_id, company_id, entity_id) VALUES (101, 11, 10, 501), (202, 22, 20, 502);
     INSERT INTO user_company_links VALUES (1, 10), (2, 20);
@@ -50,6 +50,7 @@ function fixture() {
   `);
   db.exec(migration);
   db.exec(readFileSync('cloudflare-worker/sql/migrations/455_core_systems_workspace.sql', 'utf8'));
+  db.exec(readFileSync('cloudflare-worker/sql/migrations/459_cycle_activity_convention.sql', 'utf8'));
   db.exec(readFileSync('cloudflare-worker/sql/migrations/461_build_record_stores.sql', 'utf8'));
   db.exec('CREATE TABLE google_oauth_tokens(user_id INTEGER PRIMARY KEY); CREATE TABLE microsoft_oauth_tokens(user_id INTEGER PRIMARY KEY)');
   const env = { DB: d1Over(db), JWT_SECRET, ENVIRONMENT: 'development' } as any;
@@ -106,17 +107,20 @@ test('D688: one feature changes only Solution design; an unvalued founder or unr
   let { body } = await call(env, '/api/cycles/build/overview?project=101');
   assert.equal(body.cards[0].state, 'ok');
   assert.deepEqual(body.cards.slice(1).map((c: any) => c.state), Array(5).fill('empty'));
-  assert.equal(body.focus, null);
+  // D692 (#1701): once anything is recorded, Build leads with its own rules, never #1652's first-feature prompt.
+  assert.notEqual(body.focus?.rule, 'first_feature');
   db.exec('DELETE FROM mvp_features');
   db.exec("INSERT INTO cap_table_holders(id, user_id, project_id, name, founder_role) VALUES (1, 1, 101, 'Founder', 'CEO')");
   ({ body } = await call(env, '/api/cycles/build/overview?project=101'));
   assert.equal(body.cards[3].state, 'not_recorded');
-  assert.equal(body.focus, null);
+  // D692 (#1701): once anything is recorded, Build leads with its own rules, never #1652's first-feature prompt.
+  assert.notEqual(body.focus?.rule, 'first_feature');
   db.exec('DELETE FROM cap_table_holders');
   db.exec('DROP TABLE venture_risks');
   ({ body } = await call(env, '/api/cycles/build/overview?project=101'));
   assert.equal(body.cards[0].state, 'unreadable');
-  assert.equal(body.focus, null);
+  // D692 (#1701): once anything is recorded, Build leads with its own rules, never #1652's first-feature prompt.
+  assert.notEqual(body.focus?.rule, 'first_feature');
   db.close();
 });
 
@@ -137,7 +141,8 @@ test('D688: an existing unmapped tool keeps its reconnect action, not the new-ve
   const { body } = await call(env, '/api/cycles/build/overview?project=101');
   assert.equal(body.cards[5].state, 'ok');
   assert.match(body.cards[5].next?.text, /^Reconnect HubSpot/);
-  assert.equal(body.focus, null);
+  // D692 (#1701): once anything is recorded, Build leads with its own rules, never #1652's first-feature prompt.
+  assert.notEqual(body.focus?.rule, 'first_feature');
   assert.equal(body.figures[3].value, null, 'no core mapping makes Systems connected Not recorded');
   db.close();
 });

@@ -245,6 +245,20 @@ const CLAIM_WORD = { supported: 'Supported', refuted: 'Refuted', testing: 'Testi
 const FIT = { strong: ['Strong', 'ok'], partial: ['Partial', 'v2'], none: ['None', 'grey'] };
 const CONSENT = { agreed: ['Agreed', 'ok'], declined: ['Declined', 'bad'] };
 const STAGE = { lead: 'Lead', invited: 'Invited', booked: 'Booked', done: 'Done' };
+/** D690 decision 9: an interview's state, by the key the Worker sends. */
+export const STATE = {
+  failed: 'Failed',
+  recording: 'Recording',
+  waiting_messages: 'Waiting for messages',
+  waiting_transcript: 'Waiting for the call transcript',
+  processing: 'Processing',
+  ready: 'Ready to review',
+  reviewed: 'Reviewed',
+  lead: 'Lead',
+  invited: 'Invited',
+  booked: 'Booked',
+  logged: 'Logged',
+};
 /**
  * The channel as words (D685 §5.4.5), over the four the Worker stores
  * (`in_person | video | phone | text`). `manual` is the old "Entered by hand"
@@ -296,7 +310,9 @@ export const RECORDS = {
     sorts: [{ key: 'mentions', label: 'Mentions' }, { key: 'trend', label: 'Trend' }, { key: 'theme', label: 'Theme' }],
   },
   'customer-research': {
-    keys: ['interviewee', 'company', 'date', 'icp_fit', 'consent', 'channel', 'stage'],
+    // D690 decision 10: the canvas's five columns plus State. Channel stays a
+    // filter and a cell (its words are pinned), but no column names it.
+    keys: ['interviewee', 'company', 'date', 'icp_fit', 'consent', 'state'],
     row: (r) => ({ id: r.id, cells: {
       // D685 §5.11: the interviewee opens the interview's review. The scoped
       // read carries the project, so no ?project_id= is threaded.
@@ -307,7 +323,7 @@ export const RECORDS = {
       icp_fit: pill(FIT, r.icp_fit),
       consent: r.consent ? pill(CONSENT, r.consent) : { text: 'Not asked', tone: 'grey' },
       channel: word(CHANNEL, r.channel),
-      stage: word(STAGE, r.stage),
+      state: word(STATE, r.state),
     } }),
     filters: [
       { key: 'icp', label: 'ICP fit', options: [{ value: 'strong', label: 'Strong' }, { value: 'partial', label: 'Partial' }, { value: 'none', label: 'None' }, { value: 'not_recorded', label: 'Not recorded' }] },

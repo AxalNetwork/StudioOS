@@ -160,6 +160,23 @@ function importMap(src, fromDir) {
 
 const defaultExportIdent = (src) => (src.match(/export\s+default\s+(\w+)/) || [])[1] || null;
 
+// A router a factory builds: `const cycleRecords = createCycleRecords();`,
+// whose body declares `const route = new Hono()` and its verbs on `route`
+// (D690's `routes/cycle_records.ts`, so a test can pass its own registry).
+// Without this, every route of such a file was invisible, and the SPA's
+// first call to one read as drift. Returns the local name and the factory's
+// span, so only verbs inside that function are attributed to it.
+function factoryRouter(src, ident) {
+  const call = new RegExp(`(?:const|let|var)\\s+${ident}\\s*=\\s*(\\w+)\\(`).exec(src);
+  if (!call) return null;
+  const from = src.search(new RegExp(`function\\s+${call[1]}\\s*\\(`));
+  if (from < 0) return null;
+  const close = src.indexOf('\n}\n', from);
+  const to = close < 0 ? src.length : close;
+  const local = /(?:const|let)\s+(\w+)\s*=\s*new\s+Hono\b/.exec(src.slice(from, to));
+  return local ? { name: local[1], from, to } : null;
+}
+
 function buildRouteTable() {
   const routes = [];
   const visited = new Set();
@@ -184,18 +201,20 @@ function buildRouteTable() {
     const declaresMounted = mountedIdent && declaresIdent(src, mountedIdent);
     const ident = declaresMounted ? mountedIdent : defaultExportIdent(src);
     if (!ident) return;
+    const built = factoryRouter(src, ident);
+    const declaredOn = (name, at) => name === ident || (built && name === built.name && at > built.from && at < built.to);
 
     const verbRe = /(\w+)\s*\.\s*(get|post|put|patch|delete|all)\(\s*['"`]([^'"`]*)['"`]/g;
     let m;
     while ((m = verbRe.exec(src)) !== null) {
-      if (m[1] !== ident) continue;
+      if (!declaredOn(m[1], m.index)) continue;
       const sub = m[3] === '/' ? '' : m[3];
       routes.push([m[2].toUpperCase(), (prefix + sub).replace(/\/+$/, '') || prefix]);
     }
 
     const mountRe = /(\w+)\s*\.\s*route\(\s*['"`]([^'"`]*)['"`]\s*,\s*(\w+)/g;
     while ((m = mountRe.exec(src)) !== null) {
-      if (m[1] !== ident) continue;
+      if (!declaredOn(m[1], m.index)) continue;
       const target = imports.get(m[3]);
       if (target) crawl(target, prefix + (m[2] === '/' ? '' : m[2]), depth + 1, m[3]);
     }

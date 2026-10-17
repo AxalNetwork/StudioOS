@@ -59,6 +59,14 @@ function fixture() {
   return db;
 }
 
+/** D690 decision 9: the interview log reads each interview's latest session, so its tests carry the real store. */
+function withSessionStore(db: any) {
+  db.exec(sqlOf('438_interview_sessions.sql'));
+  db.exec(sqlOf('447_assistant_interviews.sql').replace(/ALTER TABLE validate_proposals[^;]*;/, ''));
+  db.exec(sqlOf('453_interview_processing.sql'));
+  return db;
+}
+
 const app = new Hono<any>();
 app.route('/api/cycles/validate', cycleValidate);
 app.onError((err: any, c) => c.json({ detail: String(err?.message || '') }, 500));
@@ -476,7 +484,7 @@ test('D659: the market page\'s three checks are stored and read back', async () 
 // ---------------------------------------------------------------------------
 
 test('D659: customer research records search, filter, sort and page in SQL', async () => {
-  const db = fixture();
+  const db = withSessionStore(fixture());
   for (let i = 0; i < 30; i += 1) interview(db, P, { name: `Lead ${String(i).padStart(2, '0')}`, date: ago(i), fit: i % 2 ? 'strong' : null, consent: i % 3 === 0 ? 1 : null });
   interview(db, P, { name: 'Zed % Quote', company: 'Acme_Co', date: ago(40) });
   let m = await call(db, FOUNDER, 'GET', `/modules/customer-research?project=${P}`);
@@ -513,8 +521,10 @@ test('D659: problem discovery records filter by severity and say what links to a
   let m = await call(db, FOUNDER, 'GET', `/modules/problem-discovery?project=${P}`);
   assert.deepEqual(m.body.records.rows, [
     // One mention in the last 30 days, one in the 30 before: no change.
-    { id: 1, theme: 'Dispatch', mentions: 2, severity: 'severe', trend: 0, supports: ['H1'] },
-    { id: null, theme: 'Paper forms', mentions: 1, severity: null, trend: 1, supports: null },
+    { id: 1, theme: 'Dispatch', mentions: 2, severity: 'severe', trend: 0, supports: ['H1'],
+      icp_count: 0, need_count: 1, fit_unrecorded_count: 2, last_mention_at: ago(2), wordings: ['Slow dispatch'] },
+    { id: null, theme: 'Paper forms', mentions: 1, severity: null, trend: 1, supports: null,
+      icp_count: 0, need_count: 0, fit_unrecorded_count: 1, last_mention_at: ago(2), wordings: ['Paper forms'] },
   ]);
   m = await call(db, FOUNDER, 'GET', `/modules/problem-discovery?project=${P}&filter=severity:not_recorded`);
   assert.deepEqual(m.body.records.rows.map((x: any) => x.theme), ['Paper forms']);
@@ -572,7 +582,7 @@ test('D659: a pain-group store that cannot be read makes the pain card unreadabl
 // ---------------------------------------------------------------------------
 
 test('D685: the recruiting picker\'s pipeline filter and booked-first order; the Channel filter; the list says Interviews', async () => {
-  const db = fixture();
+  const db = withSessionStore(fixture());
   interview(db, P, { name: 'Held', stage: 'done', channel: 'video', date: ago(1) });
   interview(db, P, { name: 'Old held', stage: null, channel: 'phone', date: ago(2) });
   // Inserted out of stage order, so neither id nor date gives the booked-first order.

@@ -70,7 +70,11 @@ with `?project=`.
 D661 (#1474): `cycles.js` reads the four cycle pages (`/api/cycles/:cycle/overview`
 and `/modules/:slug`). `cycleWrites.js` is the write table behind their Add and Edit forms,
 a factory over `request` so the contract test can run it against the real Worker
-routes; `cycles.js` binds it to the app's client as `cyclesWrite`.
+routes; `cycles.js` binds it to the app's client as `cyclesWrite`. Its one
+`formOptions(cycle, projectId, slug, query?)` reads a module's form choices from
+D690's `GET /api/cycles/:cycle/modules/:slug/form-options?project=N` for every
+cycle, `query` (a search's `{ q }`) after `project` (D695 decision 16); it sends
+only a known cycle and a module slug's charset.
 
 D653: `roundCalls.js` calls the mounted `/api/round-calls` domain for availability, real planner context, draft/audience, counsel review, send, responses and management. It uses the shared authenticated request client and has no public-token transport.
 
