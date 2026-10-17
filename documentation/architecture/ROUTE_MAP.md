@@ -47,6 +47,24 @@ The `github` provider is a GitHub App's read-only user authorization. `GET /:uid
 
 It answers no key and no account number. `stripeCall` refuses a Stripe create with no money kind, or with a fund or intercompany kind, before any request leaves the Worker. `POST /api/payments/intent` refuses a body with no `price_id` (`money_kind_required`). Neither has a frontend method.
 
+### Legal paper Worker contract (D711, #1776)
+
+Every legal document draws one HTML paper (`services/legalPaper.ts`), printed to PDF by Browser Run through `BROWSER.quickAction('pdf', …)`, with pdf-lib (`services/pdf.ts`) as the fallback. Every kept or handed-out file gets an append-only `legal_document_files` row (migration 475). See `decisions/D711.md`.
+
+New routes:
+- `POST /api/admin/contracts/templates/render` · admin: `{ title, body, slug, category, version, page_size, cover, resolve, fonts }` → `{ html, body_sha256, page_size, paper_sha256, state }`, `no-store`. A body over 256 KB is 413 `body_too_large`.
+- `GET /api/admin/contracts/templates/paper-fonts` · admin: `{ css, paper_sha256 }`, `private, max-age=86400`.
+- `GET /api/admin/contracts/templates/store/:slug/export.docx?resolve=&page=` · admin: a Word file, after its `docx_export` row is written; 503 `export_unrecorded` and no file when the row cannot be written. Binary, outside the typed drift surface.
+- `GET /api/admin/contracts/:uid/files` · the envelope's creator or a Super Admin: per file, its kind, renderer, page size, hash, size, `created_at`, whether a stored copy exists, and `signer`. Never a storage key, name or email.
+- `GET /api/legal/esign/sign/:token/paper` · the signing token: `{ html, body_sha256, page_size }`, `no-store`; the token, expiry and void checks of `GET /sign/:token`, with no audit event.
+
+Changed routes:
+- `POST /api/legal/esign/sign/:token` writes `esign/signed/<uuid>/<file uid>.pdf` and its `signed_copy` row in the batch that signs.
+- `GET /api/legal/esign/sign/:token/document` serves the recipient's own newest copy (else `signed_r2_key`).
+- `POST /api/admin/contracts/envelopes/preview` and `/send`, and `POST /api/legal/esign/send`, take `page_size` (`letter`|`a4`) and `cover` (`dark`|`light`), else 400 `page_size_invalid` / `cover_invalid`. The preview answers `renderer` and `page_size`.
+- `GET /api/admin/contracts/templates/store/:slug/preview.pdf` takes `?page=` and `?cover=` and sends `X-Axal-Renderer`.
+- The DocuSign send writes a `docusign_source` row, and each reconcile a `docusign_signed` row (one per file).
+
 ### AI allowance Worker contract (D640, #1433)
 
 The Usage page work in #1430 uses the mounted `ai_budget.ts` routes. `GET /api/ai-budget/me` returns the caller's allowance and paid balance with `held_for_review` (UID, time, held micro-USD and recorded cost); a review hold blocks new runs without hiding that read. Super Admin routes `GET /api/ai-budget/reviews` and `POST /api/ai-budget/reviews/:uid/charge|refund` list and settle those holds with a recorded reason and actor. `GET /api/ai-budget/caps` lists all ten plan keys, their effective daily/monthly allowances and whether each value is recorded or from the environment; `PUT /api/ai-budget/caps/:licence` remains the audited write. These are Worker routes for #1435's screens (moved from S09), not frontend API methods added by this issue.
