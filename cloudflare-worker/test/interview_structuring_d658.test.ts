@@ -73,6 +73,8 @@ function world(reply: (model: string, input: any) => any = () => ({ response: '{
     INSERT INTO discovery_interviews (id, project_id, interviewee_name) VALUES
       (101, ${PROJECT}, 'A'), (102, ${PROJECT}, 'B'), (201, ${LAB_PROJECT}, 'Lab interviewee');
     ALTER TABLE activity_logs ADD COLUMN project_id INTEGER;
+    ALTER TABLE activity_logs ADD COLUMN entity_type TEXT;
+    ALTER TABLE activity_logs ADD COLUMN entity_id TEXT;
   `);
   // The tables #1472's writers reach that this fixture does not hand-build,
   // from the baseline as D659's own test takes them, then 440 over them.

@@ -32,13 +32,13 @@
  * Gotchas for the rationale.
  */
 import { logAdminAction } from '../services/adminAudit';
+import { logCycleWrite } from '../services/cycleActivity';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { projectInActiveCompany } from '../services/tenancyScope';
 import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activeCompany';
 import type { Env, User } from '../types';
 import { requireAuth, canAccessFounderResource } from '../auth';
-import { hashEmail } from '../util/hashEmail';
 import { ensureTier, ensureTierSchema, FREE_TIER_LIMITS, userMeetsTier } from '../middleware/requireTier';
 import {
   ensureDiscoveryInterviewFeaturedColumn,
@@ -438,20 +438,8 @@ progress.post('/discovery/:projectId', async (c) => {
   const row = await c.env.DB.prepare(`${INTERVIEW_SELECT} WHERE id = ?`)
     .bind(newId).first<InterviewRow>();
 
-  // Activity log — hashed actor per T22.1 convention.
-  try {
-    const actorHash = await hashEmail(user.email);
-    await c.env.DB.prepare(
-      `INSERT INTO activity_logs (action, details, actor, user_id, project_id)
-       VALUES (?, ?, ?, ?, ?)`,
-    ).bind(
-      'interview_logged',
-      `Project ${project.name}: ${intervieweeName}`,
-      actorHash, user.id, projectId,
-    ).run();
-  } catch {
-    // Activity logging must never block the write.
-  }
+  await logCycleWrite(c.env, { projectId, userId: user.id, cycle: 'validate', module: 'customer-research',
+    entityId: newId, action: 'interview_logged', summary: `Interview ${newId} created` });
 
   return c.json(serializeInterview(row as InterviewRow));
 });
@@ -543,6 +531,8 @@ progress.put('/discovery/interview/:id', async (c) => {
 
   const row = await c.env.DB.prepare(`${INTERVIEW_SELECT} WHERE id = ?`)
     .bind(id).first<InterviewRow>();
+  await logCycleWrite(c.env, { projectId: existing.project_id, userId: user.id, cycle: 'validate', module: 'customer-research',
+    entityId: id, action: 'interview_updated', summary: `Interview ${id} updated` });
   return c.json(serializeInterview(row as InterviewRow));
 });
 
@@ -568,6 +558,8 @@ progress.delete('/discovery/interview/:id', async (c) => {
     .bind(id).all<SessionRow>().catch(() => ({ results: [] as SessionRow[] }));
   for (const session of owned.results || []) await deleteSession(c.env, session, user.id);
   await c.env.DB.prepare('DELETE FROM discovery_interviews WHERE id = ?').bind(id).run();
+  await logCycleWrite(c.env, { projectId: existing.project_id, userId: user.id, cycle: 'validate', module: 'customer-research',
+    entityId: id, action: 'interview_deleted', summary: `Interview ${id} deleted` });
   return c.json({ deleted: id, sessions_deleted: (owned.results || []).length });
 });
 
@@ -807,17 +799,10 @@ progress.post('/discovery/:projectId/waitlist/:signupId/promote', async (c) => {
     });
   }
 
-  try {
-    const actorHash = await hashEmail(user.email);
-    await c.env.DB.prepare(
-      `INSERT INTO activity_logs (action, details, actor, user_id, project_id)
-       VALUES (?, ?, ?, ?, ?)`,
-    ).bind(
-      'waitlist_promoted',
-      `Project ${project.name}: promoted ${signup.email} to interview`,
-      actorHash, user.id, projectId,
-    ).run();
-  } catch { /* activity logging must never block the write */ }
+  await logCycleWrite(c.env, { projectId, userId: user.id, cycle: 'validate', module: 'customer-research',
+    entityId: newId, action: 'waitlist_promoted', summary: `Interview ${newId} created from waitlist` });
+  await logCycleWrite(c.env, { projectId, userId: user.id, cycle: 'validate', module: 'demand-signals',
+    entityId: `waitlist-${signupId}`, action: 'waitlist_promoted', summary: `Waitlist entry promoted to interview ${newId}` });
 
   const updatedSignup = await loadCustomerSignup(c.env, projectId, signupId);
   const interviewRow = await c.env.DB.prepare(`${INTERVIEW_SELECT} WHERE id = ?`)
@@ -874,20 +859,9 @@ async function handleWaitlistOutreach(c: any, kind: 'invite' | 'follow_up') {
     ).bind(nowIso, nextStatus, signupId, projectId).run();
   }
 
-  try {
-    const actorHash = await hashEmail(user.email);
-    const action = kind === 'invite' ? 'waitlist_invited' : 'waitlist_followed_up';
-    const verb = kind === 'invite' ? 'sent product invitation to' : 'sent follow-up to';
-    const suffix = outcome.kind === 'not_configured' ? ' (email not delivered: not configured)' : '';
-    await c.env.DB.prepare(
-      `INSERT INTO activity_logs (action, details, actor, user_id, project_id)
-       VALUES (?, ?, ?, ?, ?)`,
-    ).bind(
-      action,
-      `Project ${project.name}: ${verb} ${signup.email}${suffix}`,
-      actorHash, user.id, projectId,
-    ).run();
-  } catch { /* activity logging must never block the write */ }
+  await logCycleWrite(c.env, { projectId, userId: user.id, cycle: 'validate', module: 'demand-signals',
+    entityId: `waitlist-${signupId}`, action: kind === 'invite' ? 'waitlist_invited' : 'waitlist_followed_up',
+    summary: `${kind === 'invite' ? 'Invitation' : 'Follow-up'} ${outcome.kind === 'sent' ? 'sent' : 'not delivered'}` });
 
   const updated = await loadCustomerSignup(c.env, projectId, signupId);
   return c.json({
@@ -976,9 +950,14 @@ progress.post('/pain-groups/:projectId/assign', async (c) => {
   if (!newTitle && !hasGroupId) {
     // Un-assign: drop any explicit alias so the phrase reverts to its own
     // implicit theme.
+    const previous = await c.env.DB.prepare(
+      'SELECT group_id FROM pain_group_aliases WHERE project_id = ? AND phrase_norm = ?',
+    ).bind(projectId, norm).first<{ group_id: number }>();
     await c.env.DB.prepare(
       'DELETE FROM pain_group_aliases WHERE project_id = ? AND phrase_norm = ?',
     ).bind(projectId, norm).run();
+    if (previous) await logCycleWrite(c.env, { projectId, userId: user.id, cycle: 'validate', module: 'problem-discovery',
+      entityId: previous.group_id, action: 'pain_group_unassigned', summary: `Phrase removed from theme ${previous.group_id}` });
     return c.json(await getPainGroupsView(c.env, projectId));
   }
 
@@ -986,9 +965,9 @@ progress.post('/pain-groups/:projectId/assign', async (c) => {
   if (newTitle) {
     const sort = await nextPainSort(c.env, projectId);
     const res = await c.env.DB.prepare(
-      `INSERT INTO pain_groups (project_id, title, sort_order, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?)`,
-    ).bind(projectId, newTitle, sort, nowIso, nowIso).run();
+      `INSERT INTO pain_groups (project_id, title, sort_order, created_at, updated_at, created_by)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).bind(projectId, newTitle, sort, nowIso, nowIso, user.id).run();
     groupId = lastInsertId(res);
   } else {
     groupId = Number(body.group_id);
@@ -1005,6 +984,9 @@ progress.post('/pain-groups/:projectId/assign', async (c) => {
   // grouped by hand, which an insert would fail on.
   const assigned = await upsertPainAlias(c.env, projectId, groupId, display);
   if (!assigned) return c.json({ detail: 'Group not found' }, 404);
+  await logCycleWrite(c.env, { projectId, userId: user.id, cycle: 'validate', module: 'problem-discovery',
+    entityId: groupId, action: newTitle ? 'pain_group_created' : 'pain_group_assigned',
+    summary: newTitle ? `Theme ${groupId} created` : `Phrase assigned to theme ${groupId}` });
 
   return c.json(await getPainGroupsView(c.env, projectId));
 });
@@ -1037,6 +1019,8 @@ progress.patch('/pain-groups/:groupId', async (c) => {
   await c.env.DB.prepare(
     'UPDATE pain_groups SET title = ?, updated_at = ? WHERE id = ?',
   ).bind(title, new Date().toISOString(), groupId).run();
+  await logCycleWrite(c.env, { projectId: g.project_id, userId: user.id, cycle: 'validate', module: 'problem-discovery',
+    entityId: groupId, action: 'pain_group_renamed', summary: `Theme ${groupId} renamed` });
 
   return c.json(await getPainGroupsView(c.env, g.project_id));
 });
@@ -1059,6 +1043,8 @@ progress.delete('/pain-groups/:groupId', async (c) => {
   // can't rely on ON DELETE CASCADE to clear the alias rows.
   await c.env.DB.prepare('DELETE FROM pain_group_aliases WHERE group_id = ?').bind(groupId).run();
   await c.env.DB.prepare('DELETE FROM pain_groups WHERE id = ?').bind(groupId).run();
+  await logCycleWrite(c.env, { projectId: g.project_id, userId: user.id, cycle: 'validate', module: 'problem-discovery',
+    entityId: groupId, action: 'pain_group_deleted', summary: `Theme ${groupId} deleted` });
 
   return c.json(await getPainGroupsView(c.env, g.project_id));
 });
@@ -1200,14 +1186,16 @@ progress.post('/roadmap/:projectId', async (c) => {
   const res = await c.env.DB.prepare(
     `INSERT INTO roadmap_okrs
        (project_id, objective, key_results_json, kanban_status,
-        quarter, sort_order, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        quarter, sort_order, created_at, updated_at, created_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).bind(
     projectId, objective, JSON.stringify(keyResults),
-    kanbanStatus, quarter, sortOrder, nowIso, nowIso,
+    kanbanStatus, quarter, sortOrder, nowIso, nowIso, user.id,
   ).run();
 
   const newId = lastInsertId(res);
+  await logCycleWrite(c.env, { projectId, userId: user.id, cycle: 'build', module: 'product-roadmap',
+    entityId: newId, action: 'roadmap_created', summary: `Roadmap item ${newId} created` });
   const row = await c.env.DB.prepare(`${OKR_SELECT} WHERE id = ?`)
     .bind(newId).first<OkrRow>();
   return c.json(serializeOkr(row as OkrRow));
@@ -1260,6 +1248,8 @@ progress.put('/roadmap/okr/:id', async (c) => {
 
   const row = await c.env.DB.prepare(`${OKR_SELECT} WHERE id = ?`)
     .bind(id).first<OkrRow>();
+  await logCycleWrite(c.env, { projectId: existing.project_id, userId: user.id, cycle: 'build', module: 'product-roadmap',
+    entityId: id, action: 'roadmap_updated', summary: `Roadmap item ${id} updated` });
   return c.json(serializeOkr(row as OkrRow));
 });
 
@@ -1282,6 +1272,8 @@ progress.delete('/roadmap/okr/:id', async (c) => {
   ensureCanEdit(project, user);
 
   await c.env.DB.prepare('DELETE FROM roadmap_okrs WHERE id = ?').bind(id).run();
+  await logCycleWrite(c.env, { projectId: existing.project_id, userId: user.id, cycle: 'build', module: 'product-roadmap',
+    entityId: id, action: 'roadmap_deleted', summary: `Roadmap item ${id} deleted` });
   return c.json({ deleted: id });
 });
 
@@ -1360,6 +1352,12 @@ progress.post('/roadmap/okr/:id/move', async (c) => {
         SET kanban_status = ?, sort_order = ?, updated_at = ?
       WHERE id = ?`,
   ).bind(kanbanStatus, sortOrder, new Date().toISOString(), id).run();
+  // A failed history write must not turn an already-landed card move into a
+  // failed request. The existing column-move ledger follows the same rule.
+  try {
+    await logCycleWrite(c.env, { projectId: existing.project_id, userId: user.id, cycle: 'build', module: 'product-roadmap',
+      entityId: id, action: 'roadmap_moved', summary: `Roadmap item ${id} moved to ${kanbanStatus}` });
+  } catch (e) { console.error('[progress] cycle roadmap activity:', (e as Error).message); }
 
   // MIGRATION 252 — log the transition, and only when the column actually changed.
   //
@@ -1592,14 +1590,16 @@ progress.post('/mvp-scope/:projectId', async (c) => {
   const res = await c.env.DB.prepare(
     `INSERT INTO mvp_features
        (project_id, title, added_value, effort, priority_reason,
-        delivery_status, sort_order, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        delivery_status, sort_order, created_at, updated_at, created_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).bind(
     projectId, parsed.title, parsed.addedValue, parsed.effort, parsed.priorityReason,
-    parsed.deliveryStatus, parsed.sortOrder, nowIso, nowIso,
+    parsed.deliveryStatus, parsed.sortOrder, nowIso, nowIso, user.id,
   ).run();
 
   const newId = lastInsertId(res);
+  await logCycleWrite(c.env, { projectId, userId: user.id, cycle: 'build', module: 'solution-design',
+    entityId: newId, action: 'mvp_feature_created', summary: `Feature ${newId} created` });
   const row = await c.env.DB.prepare(`${MVP_SELECT} WHERE id = ?`)
     .bind(newId).first<MvpRow>();
   return c.json(serializeMvp(row as MvpRow));
@@ -1636,6 +1636,8 @@ progress.put('/mvp-scope/feature/:id', async (c) => {
 
   const row = await c.env.DB.prepare(`${MVP_SELECT} WHERE id = ?`)
     .bind(id).first<MvpRow>();
+  await logCycleWrite(c.env, { projectId: existing.project_id, userId: user.id, cycle: 'build', module: 'solution-design',
+    entityId: id, action: 'mvp_feature_updated', summary: `Feature ${id} updated` });
   return c.json(serializeMvp(row as MvpRow));
 });
 
@@ -1655,6 +1657,8 @@ progress.delete('/mvp-scope/feature/:id', async (c) => {
   ensureCanEdit(project, user);
 
   await c.env.DB.prepare('DELETE FROM mvp_features WHERE id = ?').bind(id).run();
+  await logCycleWrite(c.env, { projectId: existing.project_id, userId: user.id, cycle: 'build', module: 'solution-design',
+    entityId: id, action: 'mvp_feature_deleted', summary: `Feature ${id} deleted` });
   return c.json({ deleted: id });
 });
 

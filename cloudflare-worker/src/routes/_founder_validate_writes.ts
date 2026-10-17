@@ -38,7 +38,7 @@ export type InsertedHypothesis = { id: number; code: string; claim: string };
  * are never reused. `GLOB 'H*'` keeps a hand-edited code out of the maximum.
  */
 export async function insertHypothesis(
-  env: Env, projectId: number, claim: string,
+  env: Env, projectId: number, claim: string, userId: number | null = null,
 ): Promise<InsertedHypothesis> {
   const max = await env.DB.prepare(
     "SELECT COALESCE(MAX(CAST(substr(code, 2) AS INTEGER)), 0) AS n FROM hypotheses WHERE project_id = ? AND code GLOB 'H*'",
@@ -46,9 +46,9 @@ export async function insertHypothesis(
   const code = `H${Number(max?.n || 0) + 1}`;
 
   const r = await env.DB.prepare(
-    `INSERT INTO hypotheses (project_id, code, claim, sort_order)
-     VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM hypotheses WHERE project_id = ?))`,
-  ).bind(projectId, code, claim, projectId).run();
+    `INSERT INTO hypotheses (project_id, code, claim, sort_order, created_by)
+     VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM hypotheses WHERE project_id = ?), ?)`,
+  ).bind(projectId, code, claim, projectId, userId).run();
 
   return { id: Number(r.meta?.last_row_id || 0), code, claim };
 }

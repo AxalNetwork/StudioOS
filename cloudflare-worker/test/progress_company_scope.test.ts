@@ -74,6 +74,11 @@ function freshDb() {
     CREATE TABLE projects (
       id INTEGER PRIMARY KEY, name TEXT NOT NULL, founder_id INTEGER, company_id INTEGER
     );
+    CREATE TABLE activity_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, user_id INTEGER,
+      entity_type TEXT, entity_id TEXT, action TEXT NOT NULL, details TEXT, actor TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
     -- The membership table resolveActiveCompany verifies the header against.
     CREATE TABLE user_company_links (
       id INTEGER PRIMARY KEY AUTOINCREMENT, company_id INTEGER NOT NULL, user_id INTEGER NOT NULL

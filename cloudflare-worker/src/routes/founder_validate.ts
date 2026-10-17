@@ -23,6 +23,7 @@
  * `_founder_validate_helpers.ts` with the tests that hold them apart.
  */
 import { Hono } from 'hono';
+import { logCycleWrite } from '../services/cycleActivity';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import {
@@ -81,13 +82,6 @@ const trimOrNull = (v: unknown): string | null => {
 const ICP_VALUES = new Set(['strong', 'partial', 'none']);
 const DIRECTIONS = new Set(['supports', 'contradicts']);
 const DECISIONS = new Set(['proceed', 'pivot', 'stop']);
-
-/** The actor on a Validate write. The row's own column is not the audit log. */
-async function recordActor(env: Env, user: User, projectId: number, action: string, details: string) {
-  await env.DB.prepare(
-    `INSERT INTO activity_logs (action, details, actor, user_id, project_id) VALUES (?, ?, ?, ?, ?)`,
-  ).bind(action, details, `user:${user.id}`, user.id ?? null, projectId).run();
-}
 
 type ProjectRow = ProjectRef & { name: string };
 
@@ -291,7 +285,9 @@ founderValidate.post('/board/:projectId/hypotheses', async (c) => {
   // current count — retiring H2 must not hand "H2" to a different claim later
   // — and a second insert with its own idea of that rule is exactly how the
   // allocation would quietly start handing out duplicates.
-  const row = await insertHypothesis(c.env, s.project.id, claim);
+  const row = await insertHypothesis(c.env, s.project.id, claim, s.user.id);
+  await logCycleWrite(c.env, { projectId: s.project.id, userId: s.user.id, cycle: 'validate', module: 'experiments',
+    entityId: row.id, action: 'hypothesis_created', summary: `Hypothesis ${row.code} created` });
   return json(row, 201);
 });
 
@@ -322,6 +318,8 @@ founderValidate.patch('/hypotheses/:id', async (c) => {
       "UPDATE hypotheses SET retired_at = ?, updated_at = datetime('now') WHERE id = ?",
     ).bind(retire, id).run();
   }
+  await logCycleWrite(c.env, { projectId: s.project.id, userId: s.user.id, cycle: 'validate', module: 'experiments',
+    entityId: id, action: 'hypothesis_updated', summary: `Hypothesis ${id} updated` });
   return json({ ok: true });
 });
 
@@ -346,20 +344,27 @@ founderValidate.post('/hypotheses/:id/links', async (c) => {
   if (!await insertHypothesisLink(c.env, Number(owner.project_id), id, groupId, direction as 'supports' | 'contradicts')) {
     return notFound('Pain group');
   }
+  await logCycleWrite(c.env, { projectId: s.project.id, userId: s.user.id, cycle: 'validate', module: 'experiments',
+    entityId: id, action: 'hypothesis_pain_linked', summary: `Linked to theme ${groupId}` });
+  await logCycleWrite(c.env, { projectId: s.project.id, userId: s.user.id, cycle: 'validate', module: 'problem-discovery',
+    entityId: groupId, action: 'hypothesis_pain_linked', summary: `Linked to hypothesis ${id}` });
   return json({ ok: true }, 201);
 });
 
 founderValidate.delete('/links/:id', async (c) => {
   const id = Number(c.req.param('id'));
   const owner = await c.env.DB.prepare(
-    `SELECT h.project_id FROM hypothesis_pain_links l
+    `SELECT h.project_id, l.hypothesis_id, l.pain_group_id FROM hypothesis_pain_links l
        JOIN hypotheses h ON h.id = l.hypothesis_id WHERE l.id = ?`,
-  ).bind(id).first<{ project_id: number }>();
+  ).bind(id).first<{ project_id: number; hypothesis_id: number; pain_group_id: number }>();
   if (!owner) return notFound('Link');
   const s = await scope(c, Number(owner.project_id), canWrite);
   if (s instanceof Response) return s;
   await c.env.DB.prepare('DELETE FROM hypothesis_pain_links WHERE id = ?').bind(id).run();
-  await recordActor(c.env, s.user, s.project.id, 'hypothesis_pain_unlinked', `link ${id}`);
+  await logCycleWrite(c.env, { projectId: s.project.id, userId: s.user.id, cycle: 'validate', module: 'experiments',
+    entityId: owner.hypothesis_id, action: 'hypothesis_pain_unlinked', summary: `Unlinked theme ${owner.pain_group_id}` });
+  await logCycleWrite(c.env, { projectId: s.project.id, userId: s.user.id, cycle: 'validate', module: 'problem-discovery',
+    entityId: owner.pain_group_id, action: 'hypothesis_pain_unlinked', summary: `Unlinked hypothesis ${owner.hypothesis_id}` });
   return json({ ok: true });
 });
 
@@ -397,7 +402,8 @@ const exportName = (projectName: string, what: string) =>
   `${String(projectName || 'venture').replace(/[^A-Za-z0-9._-]/g, '_')}-${what}-${stamp()}.csv`;
 
 founderValidate.get('/interviews/:projectId/export.csv', async (c) => {
-  const s = await scope(c, Number(c.req.param('projectId')), canReadBoard);
+  // Interview notes and pain phrases leave the app in this file; partners cannot export them.
+  const s = await scope(c, Number(c.req.param('projectId')), canWrite);
   if (s instanceof Response) return s;
 
   // 211's columns are ensured before they are named, the same way the board
@@ -421,7 +427,8 @@ founderValidate.get('/interviews/:projectId/export.csv', async (c) => {
 });
 
 founderValidate.get('/pain-map/:projectId/export.csv', async (c) => {
-  const s = await scope(c, Number(c.req.param('projectId')), canReadBoard);
+  // Theme wordings and ungrouped phrases are restricted to venture writers.
+  const s = await scope(c, Number(c.req.param('projectId')), canWrite);
   if (s instanceof Response) return s;
   const view = await getPainGroupsView(c.env, s.project.id);
   return csvResponse(
@@ -532,7 +539,8 @@ founderValidate.patch('/interviews/:id/evidence', async (c) => {
       "UPDATE discovery_interviews SET interviewee_company = ?, updated_at = datetime('now') WHERE id = ?",
     ).bind(trimOrNull(b.interviewee_company), id).run();
   }
-  await recordActor(c.env, s.user, s.project.id, 'interview_evidence_updated', `interview ${id}`);
+  await logCycleWrite(c.env, { projectId: s.project.id, userId: s.user.id, cycle: 'validate', module: 'customer-research',
+    entityId: id, action: 'interview_evidence_updated', summary: `Interview ${id} evidence updated` });
   return json({ ok: true });
 });
 
@@ -582,6 +590,8 @@ founderValidate.put('/interviews/:id/pain-severity', async (c) => {
     await c.env.DB.prepare(
       'DELETE FROM interview_pain_severities WHERE interview_id = ? AND phrase_norm = ?',
     ).bind(id, norm).run();
+    await logCycleWrite(c.env, { projectId: s.project.id, userId: s.user.id, cycle: 'validate', module: 'customer-research',
+      entityId: id, action: 'pain_severity_cleared', summary: `Interview ${id} pain severity cleared` });
     return json({ ok: true, severity: null });
   }
 
@@ -595,6 +605,8 @@ founderValidate.put('/interviews/:id/pain-severity', async (c) => {
   // not leave two rows — the view would then count one interview twice, and the
   // `need_count` it reports is a count of interviews.
   await upsertPainSeverity(c.env, id, norm, b.severity);
+  await logCycleWrite(c.env, { projectId: s.project.id, userId: s.user.id, cycle: 'validate', module: 'customer-research',
+    entityId: id, action: 'pain_severity_set', summary: `Interview ${id} pain severity set` });
   return json({ ok: true, severity: b.severity });
 });
 

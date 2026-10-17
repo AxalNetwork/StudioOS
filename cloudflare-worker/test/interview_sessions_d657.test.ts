@@ -37,6 +37,8 @@ function fixture({ dayMicro = 50_000_000, monthMicro = 500_000_000 } = {}) {
     ALTER TABLE users ADD COLUMN spinout_lab_active INTEGER DEFAULT 0;
     ALTER TABLE users ADD COLUMN jwt_min_iat INTEGER;
     ALTER TABLE activity_logs ADD COLUMN project_id INTEGER;
+    ALTER TABLE activity_logs ADD COLUMN entity_type TEXT;
+    ALTER TABLE activity_logs ADD COLUMN entity_id TEXT;
     CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT, founder_id INTEGER);
     CREATE TABLE discovery_interviews (
       id INTEGER PRIMARY KEY, project_id INTEGER NOT NULL, interviewee_name TEXT NOT NULL,

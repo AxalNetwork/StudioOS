@@ -73,7 +73,8 @@ export function serializeInterviewsCsv(rows: readonly ExportInterviewRow[]): str
     Number(r.quote_consent) === 1 ? 'yes' : consentCell(r.quote_consent) === 'no' ? 'no' : '',
     r.validation_rating == null ? '' : r.validation_rating,
     r.validation_comment,
-    jsonList(r.pains_json).join('; '),
+    jsonList(r.pains_json).length === 0 ? '' : Number(r.quote_consent) === 1
+      ? jsonList(r.pains_json).join('; ') : 'Withheld (no consent to quote)',
     r.notes,
   ]));
 }

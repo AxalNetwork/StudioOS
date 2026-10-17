@@ -257,6 +257,7 @@ import partnerOffers from './routes/partner_offers';
 import partnerDelivery from './routes/partner_delivery';
 import founderValidate from './routes/founder_validate';
 import cycleValidate from './routes/cycle_validate';
+import cycleRecords from './routes/cycle_records';
 import cycleVerdict from './routes/cycle_verdict';
 import cycleRaise from './routes/cycle_raise';
 import founderValidateStructure from './routes/founder_validate_structure';
@@ -1293,6 +1294,7 @@ app.route('/api/channels', channels);
 // `services/verdict.ts`. Mounted before the cycle's own router.
 app.route('/api/cycles/validate/decisions', cycleVerdict);
 app.route('/api/cycles/validate', cycleValidate);
+app.route('/api/cycles', cycleRecords);
 app.route('/api/cycles/raise', cycleRaise);
 // D658 (#1471) — a structured interview's placements, decided one at a time.
 app.route('/api/founder/validate', founderValidateStructure);

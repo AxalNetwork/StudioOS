@@ -952,7 +952,7 @@ async function problemRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   if (rq.sort === 'trend') rows.sort((a, b) => (b.last_30d - b.prior_30d) - (a.last_30d - a.prior_30d));
   else if (rq.sort === 'theme') rows.sort((a, b) => a.title.localeCompare(b.title));
   return paged(['Theme', 'Mentions', 'Severity', 'Trend', 'Supports'], rows.map((t) => ({
-    theme: t.title, mentions: t.mentions, severity: t.severity,
+    id: t.group_id, theme: t.title, mentions: t.mentions, severity: t.severity,
     trend: t.last_30d - t.prior_30d, supports: t.supports.length ? t.supports : null,
   })), rq.page);
 }
@@ -1029,7 +1029,8 @@ async function marketRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   if (rq.sort === 'name') rows.sort((a, b) => a.name.localeCompare(b.name));
   else rows.sort((a, b) => String(b.latest_on ?? '').localeCompare(String(a.latest_on ?? '')));
   return paged(['Company', 'Kind', 'Latest signal', 'Date', 'Source'], rows.map((c) => ({
-    id: c.id, company: c.name, kind: c.kind, latest_signal: c.latest_signal, date: c.latest_on,
+    id: /^[a-z0-9][a-z0-9_-]*$/.test(String(c.id)) ? c.id : null,
+    company: c.name, kind: c.kind, latest_signal: c.latest_signal, date: c.latest_on,
     source: c.source_url ?? c.source_kind ?? null,
   })), rq.page);
 }
@@ -1044,10 +1045,10 @@ async function demandRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   ]);
   type Row = { key: string; signal: string; who: string | null; amount_cents: number | null; currency: string | null; period: string | null; date: string | null; counts: string };
   let rows: Row[] = [
-    ...demand.signals.map((s) => ({ key: `signal:${s.id}`, signal: s.kind, who: s.who, amount_cents: s.amount_cents, currency: s.currency, period: s.period, date: s.signal_date, counts: s.status })),
-    ...demand.paid.map((p) => ({ key: `revenue:${p.id}`, signal: 'pre_sale', who: p.customer, amount_cents: p.amount_cents, currency: p.currency, period: 'once', date: p.received_on, counts: 'confirmed' })),
+    ...demand.signals.map((s) => ({ key: `signal-${s.id}`, signal: s.kind, who: s.who, amount_cents: s.amount_cents, currency: s.currency, period: s.period, date: s.signal_date, counts: s.status })),
+    ...demand.paid.map((p) => ({ key: `revenue-${p.id}`, signal: 'pre_sale', who: p.customer, amount_cents: p.amount_cents, currency: p.currency, period: 'once', date: p.received_on, counts: 'confirmed' })),
     // A sign-up's name is shown when they gave one; an address is not a name.
-    ...(signups.results || []).map((w) => ({ key: `waitlist:${w.id}`, signal: 'waitlist', who: w.name ?? null, amount_cents: null, currency: null, period: null, date: (w.created_at || '').slice(0, 10) || null, counts: 'counted' })),
+    ...(signups.results || []).map((w) => ({ key: `waitlist-${w.id}`, signal: 'waitlist', who: w.name ?? null, amount_cents: null, currency: null, period: null, date: (w.created_at || '').slice(0, 10) || null, counts: 'counted' })),
   ];
   rows = rows.filter((r) => has(rq.q, r.signal, r.who));
   if (rq.filter.kind) rows = rows.filter((r) => r.signal === rq.filter.kind);
