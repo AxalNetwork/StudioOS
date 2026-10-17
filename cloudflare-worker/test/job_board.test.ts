@@ -40,7 +40,7 @@ import {
 } from '../src/services/jobBoardCommon.ts';
 
 test('taxonomy constants stay in the documented shape', () => {
-  assert.deepEqual([...EMPLOYMENT_TYPES], ['full_time', 'part_time', 'intern', 'contract']);
+  assert.deepEqual([...EMPLOYMENT_TYPES], ['full_time', 'part_time', 'intern', 'contract', 'fractional']);
   assert.deepEqual([...SENIORITIES], ['intern', 'junior', 'mid', 'senior', 'lead', 'executive']);
   assert.deepEqual([...JOB_STATUSES], ['draft', 'pending_review', 'published', 'rejected', 'closed']);
 });

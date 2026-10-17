@@ -1,6 +1,7 @@
 /** D690 — prove a record belongs to the selected venture before reading it. */
 import type { Env } from '../../types';
 import type { Store } from './types';
+import { FUND_SECTIONS, READINESS_KEYS } from '../raiseCycle';
 
 export const RECORD_ID = /^[a-z0-9][a-z0-9_-]*$/;
 
@@ -9,6 +10,26 @@ function numeric(id: string, prefix = ''): number | null {
   if (!/^[1-9][0-9]{0,9}$/.test(raw)) return null;
   const value = Number(raw);
   return Number.isSafeInteger(value) ? value : null;
+}
+
+/**
+ * A cap-table id in the venture's base scenario (D691 decision 4): `pool`,
+ * an entry's `e-<n>` key, or `h-<n>` for an entry carrying register row n,
+ * which must itself be this venture's.
+ */
+async function capEntryOwned(env: Env, id: string, projectId: number): Promise<boolean> {
+  const base = await env.DB.prepare(
+    'SELECT inputs_json FROM cap_table_scenarios WHERE project_id = ? AND COALESCE(is_variant, 0) = 0 ORDER BY updated_at DESC LIMIT 1',
+  ).bind(projectId).first<{ inputs_json: string | null }>();
+  if (!base) return false;
+  if (id === 'pool') return true;
+  let inputs: any = null;
+  try { inputs = JSON.parse(String(base.inputs_json ?? '')); } catch { return false; }
+  const entries: any[] = ['founders', 'safes', 'rounds'].flatMap((k) => (Array.isArray(inputs?.[k]) ? inputs[k] : []));
+  if (/^e-[1-9][0-9]{0,8}$/.test(id)) return entries.some((e) => e?.key === id);
+  const holder = numeric(id, 'h-');
+  if (holder === null || !entries.some((e) => Number(e?.holder_id) === holder)) return false;
+  return !!await env.DB.prepare('SELECT 1 FROM cap_table_holders WHERE id = ? AND project_id = ?').bind(holder, projectId).first();
 }
 
 /** Fixed statements only: a request never supplies a table or SQL fragment. */
@@ -136,6 +157,33 @@ export async function ownedRow(env: Env, store: Store, id: string | number, proj
       return n !== null && !!await db.prepare(
         'SELECT 1 FROM formation_step_checks k JOIN formation_steps s ON s.id = k.step_id WHERE k.id = ? AND s.project_id = ?',
       ).bind(n, projectId).first();
+    }
+    // D691 (#1699): Raise. A readiness item key and a use-of-funds section key
+    // always resolve, scored or split or not (decision 3); every other id
+    // resolves through its own row of this venture.
+    case 'readiness_items':
+      return READINESS_KEYS.includes(value);
+    case 'use_of_funds':
+      return FUND_SECTIONS.some((s) => s.key === value);
+    case 'spinout_deck_overrides': {
+      const n = numeric(value);
+      return n !== null && !!await db.prepare('SELECT 1 FROM spinout_deck_overrides WHERE project_id = ? AND version = ? LIMIT 1').bind(projectId, n).first();
+    }
+    case 'pitch_deck_share_tokens': {
+      const n = numeric(value);
+      return n !== null && !!await db.prepare(
+        'SELECT 1 FROM pitch_deck_share_tokens t JOIN pitch_decks d ON d.id = t.deck_id WHERE t.id = ? AND d.project_id = ?',
+      ).bind(n, projectId).first();
+    }
+    case 'data_room_files': {
+      const n = numeric(value);
+      return n !== null && !!await db.prepare('SELECT 1 FROM data_room_files WHERE id = ? AND project_id = ?').bind(n, projectId).first();
+    }
+    case 'cap_table_scenarios':
+      return capEntryOwned(env, value, projectId);
+    case 'raise_prospects': {
+      const n = numeric(value);
+      return n !== null && !!await db.prepare('SELECT 1 FROM raise_prospects WHERE id = ? AND project_id = ?').bind(n, projectId).first();
     }
   }
 }

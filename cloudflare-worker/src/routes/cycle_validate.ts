@@ -36,7 +36,11 @@ import {
   WriterError, writeSegment, assignInterviewSegment, setInterviewStage, writeDemandSignal,
   setDemandSignalStatus, setWaitlistTarget, setInterviewsTarget, writeCompetitorMention, setMarketMark, addMarketSource,
   removeMarketSource, setHypothesisPlan, setEvidenceStrength,
+  writeTheme, updateTheme, deleteTheme, updateSegment, addCompetitor, updateCompetitor, updateDemandSignal,
+  createHypothesis, updateHypothesis,
 } from '../services/validateWriters';
+import { ownedRow } from '../services/records/owned';
+import type { Store } from '../services/records/types';
 
 const cycleValidate = new Hono<{ Bindings: Env }>();
 
@@ -147,7 +151,12 @@ cycleValidate.post('/segments', async (c) => {
   if (s instanceof Response) return s;
   const b = await body(c);
   try {
-    const out = await writeSegment(c.env, { projectId: s.projectId, userId: Number(s.user.id), name: b.name, description: b.description, source: 'manual' });
+    // D690 (#1692) — New segment's five steps, its value source and Score against.
+    const out = await writeSegment(c.env, {
+      projectId: s.projectId, userId: Number(s.user.id), name: b.name, description: b.description, source: 'manual',
+      who_they_are: b.who_they_are, context: b.context, job_to_be_done: b.job_to_be_done, urgency: b.urgency,
+      value_promised: b.value_promised, value_source: b.value_source, score_since: b.score_since,
+    });
     return c.json(out, out.created ? 201 : 200);
   } catch (e) { return writeFailed(c, e); }
 });
@@ -183,7 +192,9 @@ cycleValidate.post('/demand-signals', async (c) => {
   if (s instanceof Response) return s;
   const b = await body(c);
   try {
-    // A signal typed into the form is the founder's own: `manual`, confirmed.
+    // A signal typed into the form is the founder's own: `manual`, confirmed
+    // unless they say "To confirm". D690 (#1692): the writer refuses an amount
+    // on a need-to-have mention or a waitlist sign-up.
     const out = await writeDemandSignal(c.env, { ...b, kind: b.kind, projectId: s.projectId, userId: Number(s.user.id), source_kind: 'manual' });
     return c.json(out, 201);
   } catch (e) { return writeFailed(c, e); }
@@ -287,6 +298,139 @@ cycleValidate.put('/evidence-links/:id/strength', async (c) => {
   try {
     await setEvidenceStrength(c.env, { projectId: s.projectId, userId: Number(s.user.id), linkId: id, strength: b.strength === undefined ? '' : b.strength });
     return c.json({ ok: true });
+  } catch (e) { return writeFailed(c, e); }
+});
+
+// ---------------------------------------------------------------------------
+// D690 (#1692) — the Add, Edit and Delete writes behind Validate's records
+//
+// Each takes `?project=`, answers the write gate, and runs `ownedRow` on its
+// path id before the writer runs (decision 3): a record of another venture is
+// a 404, never a 403 that confirms it exists. The writer checks every id the
+// body names against this venture too.
+// ---------------------------------------------------------------------------
+
+/** The path id, proved to be this venture's record, or the 404 that refuses it. */
+async function ownedParam(c: any, store: Store, raw: string | undefined, projectId: number, what: string): Promise<string | Response> {
+  const id = String(raw ?? '');
+  if (!await ownedRow(c.env, store, id, projectId)) return c.json({ detail: `${what} not found on this project` }, 404);
+  return id;
+}
+
+cycleValidate.post('/themes', async (c) => {
+  const s = await scope(c, canWrite);
+  if (s instanceof Response) return s;
+  const b = await body(c);
+  try {
+    return c.json(await writeTheme(c.env, { projectId: s.projectId, userId: Number(s.user.id), title: b.title, severity: b.severity, quotes: b.quotes, hypothesis_id: b.hypothesis_id }), 201);
+  } catch (e) { return writeFailed(c, e); }
+});
+
+cycleValidate.patch('/themes/:id', async (c) => {
+  const s = await scope(c, canWrite);
+  if (s instanceof Response) return s;
+  const id = await ownedParam(c, 'pain_groups', c.req.param('id'), s.projectId, 'Theme');
+  if (id instanceof Response) return id;
+  const b = await body(c);
+  try {
+    return c.json(await updateTheme(c.env, { projectId: s.projectId, userId: Number(s.user.id), themeId: Number(id), title: b.title, severity: b.severity }));
+  } catch (e) { return writeFailed(c, e); }
+});
+
+cycleValidate.delete('/themes/:id', async (c) => {
+  const s = await scope(c, canWrite);
+  if (s instanceof Response) return s;
+  const id = await ownedParam(c, 'pain_groups', c.req.param('id'), s.projectId, 'Theme');
+  if (id instanceof Response) return id;
+  try {
+    await deleteTheme(c.env, { projectId: s.projectId, userId: Number(s.user.id), themeId: Number(id) });
+    return c.json({ ok: true });
+  } catch (e) { return writeFailed(c, e); }
+});
+
+cycleValidate.patch('/segments/:id', async (c) => {
+  const s = await scope(c, canWrite);
+  if (s instanceof Response) return s;
+  const id = await ownedParam(c, 'customer_segments', c.req.param('id'), s.projectId, 'Segment');
+  if (id instanceof Response) return id;
+  const b = await body(c);
+  try {
+    return c.json(await updateSegment(c.env, {
+      projectId: s.projectId, userId: Number(s.user.id), segmentId: Number(id), name: b.name, description: b.description,
+      who_they_are: b.who_they_are, context: b.context, job_to_be_done: b.job_to_be_done, urgency: b.urgency,
+      value_promised: b.value_promised, value_source: b.value_source, score_since: b.score_since,
+    }));
+  } catch (e) { return writeFailed(c, e); }
+});
+
+cycleValidate.post('/competitors', async (c) => {
+  const s = await scope(c, canWrite);
+  if (s instanceof Response) return s;
+  const b = await body(c);
+  try {
+    const out = await addCompetitor(c.env, {
+      projectId: s.projectId, userId: Number(s.user.id), name: b.name, company_ref: b.company_ref, directory_uid: b.directory_uid,
+      kind: b.kind, watch: b.watch, why: b.why,
+    });
+    return c.json(out, out.added ? 201 : 200);
+  } catch (e) { return writeFailed(c, e); }
+});
+
+cycleValidate.patch('/competitors/:id', async (c) => {
+  const s = await scope(c, canWrite);
+  if (s instanceof Response) return s;
+  const id = await ownedParam(c, 'competitor_candidates', c.req.param('id'), s.projectId, 'Competitor');
+  if (id instanceof Response) return id;
+  const b = await body(c);
+  try {
+    await updateCompetitor(c.env, {
+      projectId: s.projectId, userId: Number(s.user.id), candidateId: id, kind: b.kind, watch: b.watch, why: b.why,
+      price_position: b.price_position, depth_position: b.depth_position,
+    });
+    return c.json({ ok: true });
+  } catch (e) { return writeFailed(c, e); }
+});
+
+// A `signal-` record only: a `revenue-` record is the ledger's, a `waitlist-` record the person's own.
+cycleValidate.patch('/demand-signals/:id', async (c) => {
+  const s = await scope(c, canWrite);
+  if (s instanceof Response) return s;
+  const id = await ownedParam(c, 'demand_signals', c.req.param('id'), s.projectId, 'Signal');
+  if (id instanceof Response) return id;
+  const b = await body(c);
+  try {
+    return c.json(await updateDemandSignal(c.env, {
+      projectId: s.projectId, userId: Number(s.user.id), signalId: Number(String(id).replace(/^signal-/, '')),
+      kind: b.kind, who: b.who, amount_cents: b.amount_cents, currency: b.currency, period: b.period,
+      signal_date: b.signal_date, status: b.status, note: b.note,
+    }));
+  } catch (e) { return writeFailed(c, e); }
+});
+
+cycleValidate.post('/hypotheses', async (c) => {
+  const s = await scope(c, canWrite);
+  if (s instanceof Response) return s;
+  const b = await body(c);
+  try {
+    return c.json(await createHypothesis(c.env, {
+      projectId: s.projectId, userId: Number(s.user.id), claim: b.claim, success_bar: b.success_bar, disproof: b.disproof,
+      pain_group_ids: b.pain_group_ids, direction: b.direction, owner_user_id: b.owner_user_id, deadline: b.deadline,
+    }), 201);
+  } catch (e) { return writeFailed(c, e); }
+});
+
+cycleValidate.patch('/hypotheses/:id', async (c) => {
+  const s = await scope(c, canWrite);
+  if (s instanceof Response) return s;
+  const id = await ownedParam(c, 'hypotheses', c.req.param('id'), s.projectId, 'Hypothesis');
+  if (id instanceof Response) return id;
+  const b = await body(c);
+  try {
+    return c.json(await updateHypothesis(c.env, {
+      projectId: s.projectId, userId: Number(s.user.id), hypothesisId: Number(id), claim: b.claim, success_bar: b.success_bar,
+      disproof: b.disproof, deadline: b.deadline, sprint: b.sprint, owner_user_id: b.owner_user_id,
+      inconclusive: b.inconclusive, retired: b.retired,
+    }));
   } catch (e) { return writeFailed(c, e); }
 });
 

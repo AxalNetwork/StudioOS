@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useId, useRef } from 'react';
 import { usePhoneWidth } from './phone/usePhoneWidth.js';
 import { FOCUSABLE, inertOutside, lockScroll, pushDialog, tabbable, tabTarget, topmost } from './lightboxFocus.js';
 
@@ -39,9 +39,35 @@ import { FOCUSABLE, inertOutside, lockScroll, pushDialog, tabbable, tabTarget, t
  *     shares this stack, so one Escape closes one layer.
  *   · No transform, filter or animation class on the box: a nested
  *     `fixed inset-0` dialog inside it would be clipped to the box.
+ *
+ * D703 (#1665), page mode's bar and frame:
+ *   · `bar` may be a function, called in page mode with `{ title, sub,
+ *     onBack }`: the title is `title || label`, and `onBack` is `onEscape`
+ *     when set, else `onClose`, so a panel steps back before the page closes.
+ *   · With no `bar`, a page takes its bar from `LightboxBarProvider`, which a
+ *     caller may put around the content (the cycle route below 1024px), and
+ *     draws its own only when there is none.
+ *   · `pageClass` is a class for the page's root, such as the cycle gutter.
+ *   · `useLightboxPage()` is true inside a lightbox drawn as a page and false
+ *     inside one drawn as a dialog, so a dialog opened inside a page keeps its
+ *     header (`ActionSheet`'s page mode reads it).
  */
+
+const LightboxBar = createContext(null);
+const LightboxPage = createContext(false);
+
+/** A page-mode bar for every `Lightbox` inside it that is not handed its own: a function of `{ title, sub, onBack }`. */
+export function LightboxBarProvider({ bar, children }) {
+  return <LightboxBar.Provider value={typeof bar === 'function' ? bar : null}>{children}</LightboxBar.Provider>;
+}
+
+/** True inside a `Lightbox` drawn as a page, false inside one drawn as a dialog (and outside any). */
+export function useLightboxPage() {
+  return useContext(LightboxPage);
+}
+
 export default function Lightbox({
-  label, onClose, onEscape, children, eyebrow, title, sub, footer, initialFocus, returnFocusTo, width = 560, size = 'fit', testId = 'lightbox', focusKey, pageBelow, bar,
+  label, onClose, onEscape, children, eyebrow, title, sub, footer, initialFocus, returnFocusTo, width = 560, size = 'fit', testId = 'lightbox', focusKey, pageBelow, bar: barProp, pageClass = '',
 }) {
   const id = useId();
   const dialog = useRef(null);
@@ -52,6 +78,7 @@ export default function Lightbox({
   const tall = size === 'tall';
   const phone = usePhoneWidth();
   const page = pageBelow === 'lg' && phone;
+  const providedBar = useContext(LightboxBar);
 
   useEffect(() => {
     if (page) return undefined;
@@ -102,13 +129,18 @@ export default function Lightbox({
   // D695: an opt-in page has no modal effects or fixed/scrolling frame.
   if (page) {
     const back = typeof eyebrow === 'string' ? eyebrow.split(' · ').at(-1) : title || label;
-    return <section data-testid={testId + '-page'} className="min-w-0 bg-white text-axal-ink dark:bg-gray-950 dark:text-gray-100">
+    // A bar function (passed, or provided by the caller) is drawn with this page's title, sub and Back.
+    const barFor = typeof barProp === 'function' ? barProp : barProp ? null : providedBar;
+    const bar = barFor
+      ? barFor({ title: title || label, sub, onBack: () => (escape.current || close.current)?.() })
+      : barProp;
+    return <section data-testid={testId + '-page'} className={`min-w-0 bg-white text-axal-ink dark:bg-gray-950 dark:text-gray-100 ${pageClass}`.trim()}>
       {bar || <header className="px-5 pb-4">
         <button type="button" onClick={() => close.current?.()} data-testid={testId + '-back'} className="flex h-11 items-center text-[13px] font-bold text-axal-violet dark:text-violet-300">‹ {back}</button>
         {title && <h1 className="m-0 text-[19px] font-extrabold text-axal-ink dark:text-gray-100">{title}</h1>}
         {sub && <p className="m-0 mt-1 text-[11.5px] text-axal-muted dark:text-gray-400">{sub}</p>}
       </header>}
-      <div data-testid={testId + '-body'}>{children}</div>
+      <div data-testid={testId + '-body'}><LightboxPage.Provider value>{children}</LightboxPage.Provider></div>
       {footer && <footer className="border-t border-axal-hairline px-5 py-3.5 dark:border-gray-800">{footer}</footer>}
     </section>;
   }
@@ -143,7 +175,7 @@ export default function Lightbox({
               className="-mr-1 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[20px] leading-none text-axal-muted hover:bg-gray-100 hover:text-axal-ink dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100">×</button>
           </header>
         )}
-        <div className={tall ? 'min-h-0 flex-1 overflow-hidden' : 'min-h-0 flex-1 overflow-y-auto overscroll-contain'} data-testid={`${testId}-body`}>{children}</div>
+        <div className={tall ? 'min-h-0 flex-1 overflow-hidden' : 'min-h-0 flex-1 overflow-y-auto overscroll-contain'} data-testid={`${testId}-body`}><LightboxPage.Provider value={false}>{children}</LightboxPage.Provider></div>
         {footer && <footer className="border-t border-axal-hairline px-5 py-3.5 dark:border-gray-800">{footer}</footer>}
       </div>
     </div>

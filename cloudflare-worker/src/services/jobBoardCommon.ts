@@ -5,9 +5,10 @@
  * resume) is only ever returned by the founder/admin-gated applicants
  * endpoints via shapeJobApplication. Keep this invariant.
  */
-import type { Env } from '../types';
+import type { Env, User } from '../types';
 
-export const EMPLOYMENT_TYPES = ['full_time', 'part_time', 'intern', 'contract'] as const;
+// D691 (#1697): Fractional is last, so every list the board draws keeps its order.
+export const EMPLOYMENT_TYPES = ['full_time', 'part_time', 'intern', 'contract', 'fractional'] as const;
 export const SENIORITIES = ['intern', 'junior', 'mid', 'senior', 'lead', 'executive'] as const;
 
 // Lifecycle: draft → pending_review → published (admin_published=1) | rejected;
@@ -43,6 +44,68 @@ export async function ensureUniqueJobSlug(
     candidate = `${base}-${i}`;
   }
   return `${base}-${crypto.randomUUID().slice(0, 6)}`;
+}
+
+/** A posting is managed by its host or an admin: publishing and closing never widen past that. */
+export function canManagePosting(posting: { host_user_id?: unknown } | null | undefined, user: User): boolean {
+  return !!posting && (user.role === 'admin' || Number(posting.host_user_id) === Number(user.id));
+}
+
+export type PostingFields = {
+  title: string;
+  employment_type?: unknown;
+  location_text?: string | null;
+  remote?: boolean;
+  seniority?: unknown;
+  summary?: string | null;
+  description?: string | null;
+  team?: string | null;
+  target_start?: string | null;
+  comp_min_cents?: number | null;
+  comp_max_cents?: number | null;
+  comp_currency?: string | null;
+  equity_pct?: number | null;
+};
+
+/**
+ * D691 (#1697) — the one insert of a posting, a draft hosted by `hostUserId`.
+ * `/api/jobs` and Grow's Open a role both call it; each checks its own project
+ * gate first.
+ */
+export async function createPosting(env: Env, hostUserId: number, projectId: number | null, f: PostingFields): Promise<any> {
+  const slug = await ensureUniqueJobSlug(env, f.title);
+  const ins: any = await env.DB.prepare(
+    `INSERT INTO job_postings
+       (slug, host_user_id, project_id, title, employment_type, location_text, remote, seniority, summary, description, status,
+        team, target_start, comp_min_cents, comp_max_cents, comp_currency, equity_pct)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?)`,
+  ).bind(
+    slug, hostUserId, projectId, f.title, normalizeEmploymentType(f.employment_type), f.location_text ?? null, f.remote ? 1 : 0,
+    normalizeSeniority(f.seniority), f.summary ?? null, f.description ?? null,
+    f.team ?? null, f.target_start ?? null, f.comp_min_cents ?? null, f.comp_max_cents ?? null, f.comp_currency ?? null, f.equity_pct ?? null,
+  ).run();
+  return env.DB.prepare('SELECT * FROM job_postings WHERE id = ?').bind(Number(ins?.meta?.last_row_id)).first();
+}
+
+export type PostingOutcome = { ok: true; posting: any } | { ok: false; status: 400 | 403; error: 'forbidden' | 'title_required' };
+
+/** Send a posting to the admin publish queue: every posting is public, so it always enters review. */
+export async function submitForReview(env: Env, posting: any, user: User): Promise<PostingOutcome> {
+  if (!canManagePosting(posting, user)) return { ok: false, status: 403, error: 'forbidden' };
+  if (!String(posting.title || '').trim()) return { ok: false, status: 400, error: 'title_required' };
+  await env.DB.prepare(
+    `UPDATE job_postings SET status = 'pending_review', review_notes = NULL, updated_at = datetime('now') WHERE id = ?`,
+  ).bind(posting.id).run();
+  return { ok: true, posting: await env.DB.prepare('SELECT * FROM job_postings WHERE id = ?').bind(posting.id).first() };
+}
+
+/** The host or an admin closes a posting. */
+export async function closePosting(env: Env, posting: any, user: User): Promise<PostingOutcome> {
+  if (!canManagePosting(posting, user)) return { ok: false, status: 403, error: 'forbidden' };
+  await env.DB.prepare(
+    `UPDATE job_postings SET status = 'closed', admin_published = 0, updated_at = datetime('now') WHERE id = ?`,
+  ).bind(posting.id).run();
+  return { ok: true, posting: await env.DB.prepare('SELECT * FROM job_postings WHERE id = ?').bind(posting.id).first() };
 }
 
 const TRUTHY = (v: unknown): boolean => v === 1 || v === true || v === '1';

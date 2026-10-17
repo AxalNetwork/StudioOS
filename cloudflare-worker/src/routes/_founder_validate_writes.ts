@@ -36,21 +36,93 @@ export type InsertedHypothesis = { id: number; code: string; claim: string };
  * The `MAX(CAST(substr(code, 2) AS INTEGER))` is the whole point: it reads the
  * highest number ever used on this project, including retired rows, so codes
  * are never reused. `GLOB 'H*'` keeps a hand-edited code out of the maximum.
+ *
+ * ONE STATEMENT (D690 decision 12, #1692). The code is allocated in the same
+ * `INSERT … SELECT` that writes the row, so two creates at once can never both
+ * read "H2" and both write "H3": the second used to fail on the unique index
+ * `idx_hypotheses_project_code` as a 500. Every caller gets this, the fill
+ * accept included.
  */
 export async function insertHypothesis(
   env: Env, projectId: number, claim: string, userId: number | null = null,
 ): Promise<InsertedHypothesis> {
-  const max = await env.DB.prepare(
-    "SELECT COALESCE(MAX(CAST(substr(code, 2) AS INTEGER)), 0) AS n FROM hypotheses WHERE project_id = ? AND code GLOB 'H*'",
-  ).bind(projectId).first<{ n: number }>();
-  const code = `H${Number(max?.n || 0) + 1}`;
+  const row = await insertHypothesisStatement(env, { projectId, claim, userId })
+    .first<{ id: number; code: string }>();
+  return { id: Number(row?.id || 0), code: String(row?.code || ''), claim };
+}
 
-  const r = await env.DB.prepare(
-    `INSERT INTO hypotheses (project_id, code, claim, sort_order, created_by)
-     VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM hypotheses WHERE project_id = ?), ?)`,
-  ).bind(projectId, code, claim, projectId, userId).run();
+export type NewHypothesis = {
+  projectId: number;
+  claim: string;
+  userId: number | null;
+  successBar?: string | null;
+  disproof?: string | null;
+  deadline?: string | null;
+  ownerUserId?: number | null;
+};
 
-  return { id: Number(r.meta?.last_row_id || 0), code, claim };
+/**
+ * The one `INSERT … SELECT`, as a statement, so a batch can carry it.
+ * `RETURNING id, code`. A claim with none of migration 460's fields writes
+ * only the columns every caller has always written, so the fill accept and the
+ * proposals keep working on a store 460 has not reached.
+ */
+export function insertHypothesisStatement(env: Env, h: NewHypothesis) {
+  const plain = h.successBar == null && h.disproof == null && h.deadline == null && h.ownerUserId == null;
+  if (plain) {
+    return env.DB.prepare(
+      `INSERT INTO hypotheses (project_id, code, claim, sort_order, created_by)
+       SELECT ?, 'H' || (COALESCE(MAX(CAST(substr(code, 2) AS INTEGER)), 0) + 1), ?,
+              (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM hypotheses WHERE project_id = ?), ?
+         FROM hypotheses WHERE project_id = ? AND code GLOB 'H*'
+       RETURNING id, code`,
+    ).bind(h.projectId, h.claim, h.projectId, h.userId, h.projectId);
+  }
+  return env.DB.prepare(
+    `INSERT INTO hypotheses (project_id, code, claim, sort_order, created_by, success_bar, disproof, deadline, owner_user_id)
+     SELECT ?, 'H' || (COALESCE(MAX(CAST(substr(code, 2) AS INTEGER)), 0) + 1), ?,
+            (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM hypotheses WHERE project_id = ?), ?, ?, ?, ?, ?
+       FROM hypotheses WHERE project_id = ? AND code GLOB 'H*'
+     RETURNING id, code`,
+  ).bind(
+    h.projectId, h.claim, h.projectId, h.userId, h.successBar ?? null, h.disproof ?? null, h.deadline ?? null,
+    h.ownerUserId ?? null, h.projectId,
+  );
+}
+
+export type HypothesisLinks = { painGroupIds: number[]; direction: 'supports' | 'contradicts' };
+
+/**
+ * D690 decision 12 (#1692) — a claim and its pain links, as statements for one
+ * batch. The links name the new row as the venture's newest hypothesis, which
+ * it is inside the batch (D1 runs a batch as one transaction), and each joins
+ * its pain group to this venture, so a foreign group writes no link. D693's
+ * Pivot (#1703) puts these in its decision's batch.
+ *
+ * The caller checks the groups are the venture's first, so a foreign id is a
+ * 404 rather than a silently missing link.
+ */
+export function insertHypothesisWithLinksStatements(env: Env, h: NewHypothesis, links: HypothesisLinks) {
+  const out = [insertHypothesisStatement(env, h)];
+  for (const gid of [...new Set(links.painGroupIds)]) {
+    out.push(env.DB.prepare(
+      `INSERT INTO hypothesis_pain_links (hypothesis_id, pain_group_id, direction)
+       SELECT (SELECT MAX(id) FROM hypotheses WHERE project_id = ?), g.id, ?
+         FROM pain_groups g WHERE g.id = ? AND g.project_id = ?
+       ON CONFLICT(hypothesis_id, pain_group_id, direction) DO NOTHING`,
+    ).bind(h.projectId, links.direction, gid, h.projectId));
+  }
+  return out;
+}
+
+/** The claim and its links written in one batch; the new row's id and code. */
+export async function insertHypothesisWithLinks(
+  env: Env, h: NewHypothesis, links: HypothesisLinks, extra: ReturnType<Env['DB']['prepare']>[] = [],
+): Promise<InsertedHypothesis> {
+  const results = await env.DB.batch([...insertHypothesisWithLinksStatements(env, h, links), ...extra]);
+  const row = (results[0] as { results?: Array<{ id: number; code: string }> })?.results?.[0];
+  if (!row) throw new Error('The hypothesis was not written');
+  return { id: Number(row.id), code: String(row.code), claim: h.claim };
 }
 
 /**
