@@ -106,17 +106,20 @@ test('D688: one feature changes only Solution design; an unvalued founder or unr
   let { body } = await call(env, '/api/cycles/build/overview?project=101');
   assert.equal(body.cards[0].state, 'ok');
   assert.deepEqual(body.cards.slice(1).map((c: any) => c.state), Array(5).fill('empty'));
-  assert.equal(body.focus, null);
+  // D692 (#1701): once anything is recorded, Build leads with its own rules, never #1652's first-feature prompt.
+  assert.notEqual(body.focus?.rule, 'first_feature');
   db.exec('DELETE FROM mvp_features');
   db.exec("INSERT INTO cap_table_holders(id, user_id, project_id, name, founder_role) VALUES (1, 1, 101, 'Founder', 'CEO')");
   ({ body } = await call(env, '/api/cycles/build/overview?project=101'));
   assert.equal(body.cards[3].state, 'not_recorded');
-  assert.equal(body.focus, null);
+  // D692 (#1701): once anything is recorded, Build leads with its own rules, never #1652's first-feature prompt.
+  assert.notEqual(body.focus?.rule, 'first_feature');
   db.exec('DELETE FROM cap_table_holders');
   db.exec('DROP TABLE venture_risks');
   ({ body } = await call(env, '/api/cycles/build/overview?project=101'));
   assert.equal(body.cards[0].state, 'unreadable');
-  assert.equal(body.focus, null);
+  // D692 (#1701): once anything is recorded, Build leads with its own rules, never #1652's first-feature prompt.
+  assert.notEqual(body.focus?.rule, 'first_feature');
   db.close();
 });
 
@@ -137,7 +140,8 @@ test('D688: an existing unmapped tool keeps its reconnect action, not the new-ve
   const { body } = await call(env, '/api/cycles/build/overview?project=101');
   assert.equal(body.cards[5].state, 'ok');
   assert.match(body.cards[5].next?.text, /^Reconnect HubSpot/);
-  assert.equal(body.focus, null);
+  // D692 (#1701): once anything is recorded, Build leads with its own rules, never #1652's first-feature prompt.
+  assert.notEqual(body.focus?.rule, 'first_feature');
   assert.equal(body.figures[3].value, null, 'no core mapping makes Systems connected Not recorded');
   db.close();
 });
