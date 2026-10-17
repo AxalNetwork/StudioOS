@@ -59,7 +59,9 @@ const form = (m, slug) => m.FORMS.grow[slug][0];
 /** CO:324-330, brackets removed and money in dollars (#1656's decision 3), with D691.md's KPI note. */
 const COPY = {
   'product-improvement': {
-    title: 'Log feedback', cta: 'Log feedback', sub: 'Feedback from a customer, an investor or the team, grouped by theme.', foot: null,
+    title: 'Log feedback', cta: 'Log feedback', sub: 'Feedback from a customer, an investor or the team, grouped by theme.',
+    // #1698's band proposes themes, so the canvas foot (CO:324) is true and drawn; test 8 holds the pair.
+    foot: 'Themes are proposed by Eadwyn; you accept.',
     labels: ['Feedback', 'Source', 'From', 'Theme', 'Links to roadmap item', 'Then'],
     chips: { source: [['Customer', 'Investor', 'Team'], 'customer'], theme_choice: [['New theme'], 'new'], roadmap_item_ref: [['None yet'], ''] },
     checks: { then: [['Tell them when it ships', true]] },
@@ -150,7 +152,7 @@ async function assertCopy(m) {
   assert.deepEqual(SLUGS.map((s) => form(m, s).button), ['Log feedback', 'Add channel', 'Enter a KPI', 'Open a role', 'Add partner', 'Add market', 'Add obligation']);
 }
 
-test('1: each Grow form draws the canvas copy, with D691.md\'s KPI note and no foot Log feedback cannot keep yet', async () => {
+test('1: each Grow form draws the canvas copy, with D691.md\'s KPI note and Log feedback\'s foot once its band proposes themes', async () => {
   await mutationCheck(source, path, assertCopy, [
     ["note: 'Stripe shows here once connected.'", "note: 'Stripe and Accounting show here once connected.'"],
     ["{ kind: 'CH', name: 'repeats', k: 'Repeats', opts: REPEATS, def: 2 }", "{ kind: 'CH', name: 'repeats', k: 'Repeats', opts: REPEATS, def: 0 }"],

@@ -46,6 +46,7 @@ import {
 import { canAskAgain } from '../services/updateShare';
 import { isAdmin } from './_t13t14t15_helpers';
 import { growPhone } from '../services/cycleFocus';
+import { hasRecords } from '../services/records';
 
 const r = new Hono<{ Bindings: Env }>();
 type C = Context<{ Bindings: Env }>;
@@ -360,7 +361,7 @@ r.get('/modules/:slug', async (c) => {
     const sort = String(c.req.query('sort') || '').slice(0, 60) || recs.sorts[0]?.key || '';
     const shaped = shapeRecords(recs.rows, String(c.req.query('q') || '').slice(0, 120), String(c.req.query('filter') || '').slice(0, 300), sort);
     const pg = pageOf(shaped, c.req.query('page'), c.req.query('page_size'));
-    return c.json({ module: mod, card, records: { cols: recs.cols, ...pg, filters: recs.filters, sorts: recs.sorts }, ...(recs.parts ? { parts: recs.parts } : {}) });
+    return c.json({ module: mod, card, records: { cols: recs.cols, ...pg, filters: recs.filters, sorts: recs.sorts, linkable: hasRecords('grow') }, ...(recs.parts ? { parts: recs.parts } : {}) });
   } catch (e) { return fail(c, e); }
 });
 

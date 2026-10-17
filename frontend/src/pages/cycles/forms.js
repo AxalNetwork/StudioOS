@@ -107,7 +107,8 @@ const feedback = {
   key: 'feedback', cta: 'Log feedback', button: 'Log feedback',
   title: 'Log feedback',
   sub: 'Feedback from a customer, an investor or the team, grouped by theme.',
-  // No foot until #1698's band proposes themes (decision 7): "Themes are proposed by Eadwyn; you accept."
+  // True since #1698 mounted the feedback-theme band on Product improvement (D695 decision 7).
+  foot: 'Themes are proposed by Eadwyn; you accept.',
   fields: [
     { kind: 'T', name: 'body', k: 'Feedback', ph: 'What they said', h: '56px', required: true, max: 4000 },
     { kind: 'CH', name: 'source', k: 'Source', opts: FEEDBACK_SOURCE, def: 0, required: true },

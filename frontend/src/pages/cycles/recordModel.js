@@ -4,6 +4,7 @@
  */
 import { CYCLES, TONES, safeHref } from './cycleModel.js';
 import { exportPersonaPdf } from '../../lib/personaPdf.js';
+import { exportDecisionMemoPdf } from '../../lib/decisionMemoPdf.js';
 
 import { RECORD_ID } from './cyclePaths.js';
 import { editFieldsFor } from './forms.js';
@@ -40,6 +41,8 @@ export function recordLink(href) {
 
 export const CLIENT_ACTIONS = new Map([
   ['export-persona', (record) => exportPersonaPdf(record)],
+  // D693 decision 11: the decision memo, a one-page PDF drawn in the browser.
+  ['export-memo', (record) => exportDecisionMemoPdf(record)],
 ]);
 
 export function dispatchOf(action) {

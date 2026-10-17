@@ -82,5 +82,5 @@ store PATCH; other declared actions use `recordAction`. A signed file opens
 only through `/api/files/dl/` without rereading; successful mutations reread,
 and a deleted record returns to its module. Activity pages append on Show all.
 Rows link only with `records.linkable` and a genuine Worker id. Build and Raise
-pass their ids through, Grow has `recordId`, and Validate’s adapter changes wait
-for #1691. Data-room modes and record rail crumbs remain PR 3’s work.
+pass their ids through, and Grow and Validate set `recordId` to the Worker's id
+or null (D696 decision 7). Data-room modes and record rail crumbs remain PR 3’s work.
