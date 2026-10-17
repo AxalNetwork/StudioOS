@@ -161,6 +161,14 @@ Volume drives the total. Every push to an open PR starts a review of the new hea
 - **Hard cap:** a workspace spend limit in the Console on the review workspace, the one holding the key or named by the federation rule. The Console stops requests past it, whatever this repository does.
 - **Per run:** each review's summary shows its input, output and cache tokens, the model, the duration, the request id and the estimated cost. The `claude-review_v1_<month>_pr<N>_<key>_<status>_<micro-USD>` artifact keeps the same figures for 90 days in `record.json`. After a successful review it also holds `review.json`, the validated findings: the machine-readable copy for whoever fixes them (§8).
 
+**Spending a Max plan's whole monthly credit on reviews** (the owner's choice, 2026-10-17). The plan credit expires each cycle unused, so the $25 pilot cap leaves most of it idle. To spend it on reviews:
+- set a spend limit equal to the credit on the review workspace;
+- set `CLAUDE_REVIEW_MONTHLY_BUDGET_USD` to the same amount;
+- set `ANTHROPIC_MODEL=claude-opus-5-5` and `CLAUDE_REVIEW_EFFORT=high`;
+- set `CLAUDE_REVIEW_MAX_OUTPUT_TOKENS=32000` and `CLAUDE_REVIEW_MAX_COST_USD=2.00`. At the default bounds, the worst case at these settings is about $0.95 (`rates.json`), so the $1.00 default cap would refuse the largest reviews.
+
+When the credit runs out, requests stop until the next one arrives, and nothing is charged unless the organization also holds purchased credit or has auto-reload on.
+
 ## 7. Limitations
 
 - The monthly ledger is the list of this repository's review-record artifacts. Reviews from another repository on the same key are not in it, nor is any record a person deletes. The Console spend limit is the authoritative cap.
