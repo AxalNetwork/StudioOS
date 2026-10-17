@@ -102,6 +102,8 @@ function world() {
       (${WA_INT}, 'wa-me', ${ME}, 'whatsapp', 'oauth2', 'PNID-1'),
       (${GONE_INT}, 'tg-gone', ${GONE}, 'whatsapp', 'oauth2', 'PNID-GONE');
     ALTER TABLE activity_logs ADD COLUMN project_id INTEGER;
+    ALTER TABLE activity_logs ADD COLUMN entity_type TEXT;
+    ALTER TABLE activity_logs ADD COLUMN entity_id TEXT;
   `);
   for (const t of ['waitlist_signups', 'metric_targets', 'competitor_analyses', 'competitor_candidates',
     'competitor_sources', 'competitor_signals', 'queue_jobs']) db.exec(tableFromBaseline(BASELINE, t));

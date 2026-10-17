@@ -44,6 +44,7 @@ runs these directly against an in-process SQLite, with no request at all.
 | `fills/` | "AI fills the blanks" — the fill-kind registry and the provenance of an accepted fill. A `sourced` fill carries a citation or it is dropped. |
 | `market_intel/` | Sourcing, extraction and scoring for market intelligence. |
 | `referrals/` | Referral submissions. |
+| `records/` | D690's scoped cycle record contract, registry and ownership checks. |
 | `signals/` | Signal ingestion and evidence. |
 | `wellbeing/` | Wellbeing check-ins. |
 

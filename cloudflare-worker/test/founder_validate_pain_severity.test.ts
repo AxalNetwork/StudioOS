@@ -103,6 +103,11 @@ function freshDb() {
                         is_active INTEGER NOT NULL DEFAULT 1, jwt_min_iat INTEGER,
                         name TEXT, email TEXT, spinout_lab_active INTEGER);
     CREATE TABLE projects (id INTEGER PRIMARY KEY, founder_id INTEGER NOT NULL, name TEXT);
+    CREATE TABLE activity_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, user_id INTEGER,
+      entity_type TEXT, entity_id TEXT, action TEXT NOT NULL, details TEXT, actor TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
     CREATE TABLE discovery_interviews (
       id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL,
       interviewee_name TEXT, interviewee_role TEXT, interviewee_company TEXT,

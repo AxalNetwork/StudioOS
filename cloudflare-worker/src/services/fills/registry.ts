@@ -30,6 +30,8 @@
  * be reviewed, because nothing tells you which half broke.
  */
 import type { Env } from '../../types';
+import { logCycleWrite } from '../cycleActivity';
+import { RECORD_ID } from '../records/owned';
 import { getPainGroupsView, normPhrase } from '../painGroups';
 import {
   MAX_PROMPT_ITEMS, TAG_PROMPT, DRAFT_PROMPT,
@@ -116,6 +118,8 @@ const painTag: FillKind = {
     const groupId = Number(payload.pain_group_id);
     const ok = await upsertPainAlias(ctx.env, ctx.projectId, groupId, String(payload.phrase));
     if (!ok) throw new Error('That theme no longer exists');
+    await logCycleWrite(ctx.env, { projectId: ctx.projectId, userId: Number(ctx.user.id), cycle: 'validate',
+      module: 'problem-discovery', entityId: groupId, action: 'pain_tag_applied', summary: `Theme ${groupId} linked to a phrase` });
 
     // READ BACK WHAT WAS STORED rather than echo the payload. `upsertPainAlias`
     // trims and caps the phrase at `MAX_PAIN_PHRASE` and normalises it, so the
@@ -207,7 +211,9 @@ const hypothesis: FillKind = {
   async apply(ctx, payload) {
     // `insertHypothesis` — the same function `POST /hypotheses` calls, and the
     // only place the `H1, H2 …` allocation lives. See this file's header.
-    const written = await insertHypothesis(ctx.env, ctx.projectId, String(payload.claim || '').trim());
+    const written = await insertHypothesis(ctx.env, ctx.projectId, String(payload.claim || '').trim(), Number(ctx.user.id));
+    await logCycleWrite(ctx.env, { projectId: ctx.projectId, userId: Number(ctx.user.id), cycle: 'validate',
+      module: 'experiments', entityId: written.id, action: 'hypothesis_created', summary: `Hypothesis ${written.code} created` });
     return {
       written: written.claim,
       // The row the insert allocated, which is knowable only here. `target()`
@@ -572,6 +578,9 @@ const competitorScan: FillKind = {
         crawl: false,
       },
     );
+    await logCycleWrite(ctx.env, { projectId: ctx.projectId, userId: Number(ctx.user.id), cycle: 'validate',
+      module: 'market-intelligence', entityId: RECORD_ID.test(String(written.id)) ? String(written.id) : ctx.projectId,
+      action: 'competitor_created', summary: 'Competitor added' });
     return {
       written: String(payload.note || '').trim() ? `${written.name} — ${String(payload.note).trim()}` : written.name,
       target: { table: 'competitor_candidates', rowId: 0, column: 'name' },

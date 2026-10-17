@@ -513,8 +513,8 @@ test('D659: problem discovery records filter by severity and say what links to a
   let m = await call(db, FOUNDER, 'GET', `/modules/problem-discovery?project=${P}`);
   assert.deepEqual(m.body.records.rows, [
     // One mention in the last 30 days, one in the 30 before: no change.
-    { theme: 'Dispatch', mentions: 2, severity: 'severe', trend: 0, supports: ['H1'] },
-    { theme: 'Paper forms', mentions: 1, severity: null, trend: 1, supports: null },
+    { id: 1, theme: 'Dispatch', mentions: 2, severity: 'severe', trend: 0, supports: ['H1'] },
+    { id: null, theme: 'Paper forms', mentions: 1, severity: null, trend: 1, supports: null },
   ]);
   m = await call(db, FOUNDER, 'GET', `/modules/problem-discovery?project=${P}&filter=severity:not_recorded`);
   assert.deepEqual(m.body.records.rows.map((x: any) => x.theme), ['Paper forms']);

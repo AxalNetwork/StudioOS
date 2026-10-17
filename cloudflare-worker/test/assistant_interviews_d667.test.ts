@@ -79,6 +79,8 @@ function world(reply: (model: string, input: any) => any = () => ({ response: '{
     );
     INSERT INTO discovery_interviews (id, project_id, interviewee_name) VALUES (501, ${OTHER_PROJECT}, 'Theirs'), (102, ${PROJECT}, 'Typed by hand');
     ALTER TABLE activity_logs ADD COLUMN project_id INTEGER;
+    ALTER TABLE activity_logs ADD COLUMN entity_type TEXT;
+    ALTER TABLE activity_logs ADD COLUMN entity_id TEXT;
   `);
   for (const t of ['waitlist_signups', 'metric_targets', 'competitor_analyses', 'competitor_candidates',
     'competitor_sources', 'competitor_signals']) db.exec(tableFromBaseline(BASELINE, t));

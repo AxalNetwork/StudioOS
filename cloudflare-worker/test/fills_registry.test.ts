@@ -122,11 +122,17 @@ function freshDb() {
     ${indexFromMigration('211_founder_validate_evidence', 'idx_hypotheses_project_code')}
     ${tableFromMigration('106_pain_groups', 'pain_groups')}
     ${tableFromMigration('106_pain_groups', 'pain_group_aliases')}
+    CREATE TABLE activity_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, user_id INTEGER,
+      entity_type TEXT, entity_id TEXT, action TEXT NOT NULL, details TEXT, actor TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
     -- THE UNIQUE INDEX IS PART OF THE SHAPE, not decoration: upsertPainAlias
     -- is an ON CONFLICT upsert against exactly this index, and without it the
     -- upsert is a plain insert that would let one phrase sit in two themes.
     ${indexFromMigration('106_pain_groups', 'idx_pain_group_aliases_project_phrase')}
   `);
+  db.exec('ALTER TABLE hypotheses ADD COLUMN created_by INTEGER');
   db.prepare('INSERT INTO pain_groups (id, project_id, title) VALUES (?,?,?)').run(11, P, 'Onboarding drags');
   db.prepare('INSERT INTO pain_groups (id, project_id, title) VALUES (?,?,?)').run(12, OTHER_P, 'Theirs');
   seedCodeHistory(db);
@@ -281,7 +287,7 @@ test('a restatement writes the same row the manual form writes', async () => {
   const claim = 'Buyers delay because onboarding takes three weeks';
 
   await fillKind('hypothesis')!.apply(ctx(viaFill), { claim }, 'hypotheses');
-  await insertHypothesis(env(viaForm), P, claim);
+  await insertHypothesis(env(viaForm), P, claim, 3);
 
   // `id` and the two timestamps are the only columns allowed to differ: the id
   // because they are separate databases, the timestamps because the two writes
@@ -293,6 +299,7 @@ test('a restatement writes the same row the manual form writes', async () => {
   const a = last(viaFill);
   const b = last(viaForm);
   assert.deepEqual(strip(a), strip(b), 'accepting and typing produce different rows');
+  assert.equal(a.created_by, 3, 'the accepted hypothesis records its actor');
 
   // AND IT IS THE SAME ALLOCATION, not merely the same as itself. Two writers
   // that are both wrong the same way would satisfy the comparison above, so the
@@ -313,7 +320,7 @@ test('a restatement writes the same row the manual form writes', async () => {
 
   // A SECOND ACCEPT ADVANCES, on both sides.
   await fillKind('hypothesis')!.apply(ctx(viaFill), { claim: 'A second distinct claim here' }, 'hypotheses');
-  await insertHypothesis(env(viaForm), P, 'A second distinct claim here');
+  await insertHypothesis(env(viaForm), P, 'A second distinct claim here', 3);
   assert.equal(last(viaFill).code, 'H8');
   assert.equal(last(viaFill).code, last(viaForm).code);
 });

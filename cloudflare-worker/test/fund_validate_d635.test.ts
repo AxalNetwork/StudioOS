@@ -39,7 +39,7 @@ function fresh() {
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE activity_logs (
       id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT NOT NULL, details TEXT, actor TEXT,
-      user_id INTEGER, project_id INTEGER);
+      user_id INTEGER, project_id INTEGER, entity_type TEXT, entity_id TEXT);
   `);
   db.exec(table('211_founder_validate_evidence', 'validation_decisions'));
   db.exec(table('211_founder_validate_evidence', 'hypotheses'));

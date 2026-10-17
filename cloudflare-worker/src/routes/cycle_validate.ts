@@ -21,6 +21,7 @@
  * (`canWrite`). An investor reaches nothing here.
  */
 import { Hono } from 'hono';
+import { hasRecords } from '../services/records';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { canReadBoard, canWrite, type ProjectRef } from './_founder_validate_helpers';
@@ -108,7 +109,8 @@ cycleValidate.get('/modules/:slug', async (c) => {
     console.warn('[cycle_validate] records unreadable:', slug, (e as Error)?.message);
     records = { state: 'unreadable', reason: `${mod.name} records could not be read`, cols: [], rows: [], total: null, page: rq.page, page_size: null };
   }
-  return c.json({ module: { slug: mod.slug, name: mod.name, records_title: (mod as { records_title?: string }).records_title ?? null }, card, records });
+  return c.json({ module: { slug: mod.slug, name: mod.name, records_title: (mod as { records_title?: string }).records_title ?? null }, card,
+    records: { ...(records as object), linkable: hasRecords('validate') } });
 });
 
 /** The Lab market page's three stored checks. */
