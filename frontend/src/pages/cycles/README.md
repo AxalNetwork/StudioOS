@@ -29,6 +29,8 @@ The canvases are `design/canvases/integrated/Cycle Overview.dc.html` and its two
 
 ## Rules
 
+On a module page, `?add=1` opens its first Add form. Closing or saving the form removes the parameter with a replace. Modules without a form and cycle overviews ignore it (D688).
+
 - **The components read nothing themselves.** `CycleRoute.jsx` is the one
   file that reads: it calls `frontend/src/lib/api/cycles.js`, whose table gains a cycle in
   the PR that wires it, because the drift test refuses a client method with

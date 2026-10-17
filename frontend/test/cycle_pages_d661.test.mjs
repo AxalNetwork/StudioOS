@@ -184,7 +184,7 @@ test('BUILD: the one way to create a startup survives, next links keep the ventu
   assert.match(route, /useEffect\(\(\) => \{\s*if \(creates && searchParams\.get\('new'\) === '1'\) setCreating\(true\);\s*\}, \[creates, searchParams\]\)/,
     'and followed when ?new=1 arrives on an already-mounted page');
   assert.match(route, /<CreateStartupForm\s+open=\{creating\}/);
-  assert.match(route, /onCreated=\{\(\) => setProjectsKey\(\(n\) => n \+ 1\)\}/, 'a new startup is read back');
+  assert.match(route, /onCreated=\{\(created\) => \{ if \(created\?\.id\) writeProject\(created\.id, \['new'\]\); setProjectsKey\(\(n\) => n \+ 1\); \}\}/, 'a new startup is selected and read back');
   assert.match(route, /to="\/build\?new=1" data-testid="cycle-create-venture"/, 'every other cycle with no venture points at the form');
   assert.match(route, /path: 'connect',\s*Mount: BuildMount,\s*action: \(q, open\) => \(\{ label: 'Connect a tool', href: `\/build\/connect\$\{q\}`, onOpen: open \}\)/);
   for (const surface of ['build/roadmap', 'build/this-week', 'build/retro', 'build/kpi']) assert.ok(route.includes(`surface: '${surface}'`), `the Build desk's ${surface} band was dropped`);
@@ -217,10 +217,10 @@ test('ADD FORMS: one side sheet draws each form, the module offers it, and the c
   assert.match(channel, /inputMode="decimal"/, 'money is typed as an amount');
   // Every module with a form, and no other, offers Add from it.
   assert.deepEqual(Object.entries(FORMS).flatMap(([c, f]) => Object.keys(f).map((s) => `${c}/${s}`)).sort(),
-    ['build/company-creation', 'build/prototype-mvp', 'build/solution-design', 'grow/distribution', 'grow/durable-company-building', 'grow/market-expansion', 'grow/partner-network', 'grow/product-improvement']);
+    ['build/company-creation', 'build/prototype-mvp', 'build/solution-design', 'grow/distribution', 'grow/durable-company-building', 'grow/market-expansion', 'grow/partner-network', 'grow/product-improvement', 'raise/fundraising-readiness', 'raise/investor-narrative']);
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
-  assert.match(route, /add=\{fnOf\(def\.add, slug\)\?\.\(q, openAction\) \|\| \(form && projectId \? \{ text: form\.button, onClick: \(\) => setFormOpen\(true\) \} : undefined\)\}/);
-  assert.match(route, /onSubmit=\{\(values\) => form\.submit\(cyclesWrite, projectId, values\)\}/);
+  assert.match(route, /add=\{forms\.length && projectId \? forms\.map\(\(entry\) => \(\{ text: entry\.button, onClick: \(\) => setFormOpen\(entry\) \}\)\) : fnOf\(def\.add, slug\)\?\.\(q, openAction\)\}/);
+  assert.match(route, /onSubmit=\{\(values\) => formOpen\.submit\(cyclesWrite, projectId, values\)\}/);
   assert.match(route, /onSaved=\{\(\) => setReload\(\(n\) => n \+ 1\)\}/, 'a save reads the module again');
   // The checklist: tick an open item, undo your own tick, never undo the Lab's.
   const items = [
@@ -263,7 +263,7 @@ test('ROW EDITS: a row the route can change draws Edit, the sheet starts from th
   assert.match(route, /rowAction=\{edit && projectId && !edit\.hiddenFor\?\.\(module\) \? \(row\) => \(edit\.idOf\(row\) == null \? null : \{/, 'Edit is drawn only on a row its route can change, and not on a card the module hides it for');
   assert.match(route, /<RecordFormSheet key=\{String\(editing\.id\)\} form=\{edit\} current=\{edit\.valuesOf\(editing\)\}/);
   assert.match(route, /onSubmit=\{\(values\) => edit\.submit\(cyclesWrite, projectId, edit\.idOf\(editing\), values\)\}/);
-  assert.match(route, /useEffect\(\(\) => \{ setFormOpen\(false\); setEditing\(null\); \}, \[slug\]\);/, 'a sheet does not follow the founder to another module');
+  assert.match(route, /useEffect\(\(\) => \{ setFormOpen\(null\); setEditing\(null\); \}, \[slug\]\);/, 'a sheet does not follow the founder to another module');
 });
 
 // ------------------------------------------------------------------ the screens

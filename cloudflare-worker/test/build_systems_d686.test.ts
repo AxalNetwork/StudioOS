@@ -82,7 +82,7 @@ const checks: MutationCheck[]=[
  [2,1,3,'Reconnect Salesforce · failing since 9 Oct','/build/connect?tool=salesforce&project_id=101',{text:'Open',href:'/build/connect?tool=salesforce&project_id=101'},'Capital relationships · Network']);db.close();}},
 
  {name:'The five tiles and rows name Workspace',before:"workspace: 'Workspace'",after:"workspace: 'Analytics'",run:async(route:any)=>{
- const {db,env}=fixture();const r=await request(route,env,'/modules/operating-systems?project=101');
+ const {db,env}=fixture();db.exec("INSERT INTO project_core_systems(project_id,kind,integration_id,updated_by) VALUES(101,'crm',NULL,1)");const r=await request(route,env,'/modules/operating-systems?project=101');
  snap([r.status,r.body.records.rows.map((r:any)=>r.cells.system),r.body.card.series[0].items.map((r:any)=>r.label)],
  [200,['Bank','Accounting','Payroll','CRM','Workspace'],['Bank','Accounting','Payroll','CRM','Workspace']]);db.close();}},
  {name:'Workspace requires both its mapper token and company membership',before:"SELECT 1 FROM google_oauth_tokens WHERE user_id = ?",after:"SELECT 1 WHERE ? > 0",run:async(route:any)=>{

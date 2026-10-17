@@ -13,6 +13,10 @@ const q = (projectId) => new URLSearchParams({ project: String(projectId) }).toS
 
 export function makeCycleWrites(request) {
   return {
+    raise: {
+      rescore: (projectId) => request(`/cycles/raise/readiness/rescore?${q(projectId)}`, { method: 'POST' }),
+      narrativeVersion: (projectId, body) => request(`/cycles/raise/narrative-versions?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
+    },
     grow: {
       feedback: (projectId, body) => request('/cycles/grow/feedback', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
       channel: (projectId, body) => request('/cycles/grow/channels', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),

@@ -690,7 +690,7 @@ test('D661: every Build module page\'s records are {key,label} columns and {id,c
 
 // ── The Add forms (forms.js), through the real Worker routes ───────────────
 
-import { EDITS, FORMS, editFor, formFor, initialValues, validate, toCents, toScore, thisMonth } from '../../frontend/src/pages/cycles/forms.js';
+import { EDITS, FORMS, editFor, formFor, formsFor, initialValues, validate, toCents, toScore, thisMonth } from '../../frontend/src/pages/cycles/forms.js';
 import { makeCycleWrites } from '../../frontend/src/lib/api/cycleWrites.js';
 import progress from '../src/routes/progress.ts';
 
@@ -743,8 +743,9 @@ test('D661: every Add form sends a body its Worker route accepts, and the row re
   const buildDb = buildFixture();
   const w = makeCycleWrites(routeRequest(grow, buildDb));
   const now = new Date();
-  for (const [cycle, forms] of Object.entries(FORMS)) {
-    for (const [slug, form] of Object.entries(forms as Record<string, any>)) {
+  for (const cycle of ['grow', 'build'] as const) {
+    for (const slug of Object.keys(FORMS[cycle])) {
+      const form = cycle === 'build' && slug === 'solution-design' ? formsFor(cycle, slug)[1] : formFor(cycle, slug)!;
       const values = { ...initialValues(form), ...SAMPLES[cycle][slug] };
       assert.deepEqual(validate(form, values), {}, `${cycle}/${slug}: the sample is valid`);
       await form.submit(w, cycle === 'grow' ? GP : BP, values, now);
@@ -786,8 +787,9 @@ test('D661: every choice a form offers is one its Worker route accepts', async (
   const buildDb = buildFixture();
   const w = makeCycleWrites(routeRequest(grow, buildDb));
   let n = 0;
-  for (const [cycle, forms] of Object.entries(FORMS)) {
-    for (const [slug, form] of Object.entries(forms as Record<string, any>)) {
+  for (const cycle of ['grow', 'build'] as const) {
+    for (const slug of Object.keys(FORMS[cycle])) {
+      const form = cycle === 'build' && slug === 'solution-design' ? formsFor(cycle, slug)[1] : formFor(cycle, slug)!;
       for (const field of form.fields.filter((f: any) => f.type === 'select')) {
         for (const option of field.options) {
           n += 1;
@@ -838,7 +840,8 @@ test('D661: every Grow Edit form starts from its row, and the change reads back 
   const grow = await growFixture();
   const w = makeCycleWrites(routeRequest(grow, buildFixture()));
   const now = new Date();
-  for (const [slug, form] of Object.entries(FORMS.grow as Record<string, any>)) {
+  for (const slug of Object.keys(FORMS.grow)) {
+    const form = formFor('grow', slug)!;
     await form.submit(w, GP, { ...initialValues(form), ...SAMPLES.grow[slug] }, now);
   }
   const read = async (slug: string) => (await growCall(grow, 'GET', `/modules/${slug}?project=${GP}`)).body;

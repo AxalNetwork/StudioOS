@@ -143,7 +143,7 @@ test('readiness with no items returns empty, with the action that starts it', as
   const c = card(r.body, 'fundraising-readiness');
   assert.equal(c.state, 'empty');
   assert.equal(c.series, null);
-  assert.deepEqual(c.next, { text: 'Score fundraising readiness', href: `/raise/fundraising-readiness?project=${P}` });
+  assert.deepEqual(c.next, { text: 'Score readiness', href: `/raise/fundraising-readiness?project=${P}&add=1` });
   assert.equal(fig(r.body, 'readiness_score').state, 'empty');
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM readiness_items').get().n, 0, 'reading creates no item');
 

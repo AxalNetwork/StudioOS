@@ -109,13 +109,13 @@ export default function CreateStartupForm({ open, onOpenChange, onCreated }) {
     }
     setSubmitting(true);
     try {
-      await api.createProject({ ...form, name: form.name.trim() });
+      const created = await api.createProject({ ...form, name: form.name.trim() });
       onOpenChange(false);
       setForm(EMPTY);
       // See docblock (1): the worker may have just back-filled users.founder_id,
       // and the 5-minute /auth/me throttle would hide it until the next reload.
       try { if (typeof refresh === 'function') await refresh({ force: true }); } catch {}
-      if (typeof onCreated === 'function') onCreated();
+      if (typeof onCreated === 'function') onCreated(created);
       showToast({ kind: 'success', msg: 'Startup created' });
       await markMilestone(currentUser, 'project_created');
     } catch (e) {
