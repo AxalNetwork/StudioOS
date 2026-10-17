@@ -12,12 +12,13 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
 import { WorkloadIdentityError } from '@anthropic-ai/sdk/lib/credentials/types';
-import { GithubIdentityError, OIDC_AUDIENCE, anthropicClient, classifyError, clientFor, githubClient, githubIdentityToken, main, safePath } from './review.mjs';
+import { GithubIdentityError, OIDC_AUDIENCE, anthropicClient, classifyError, clientFor, errorDetail, githubClient, githubIdentityToken, main, safePath } from './review.mjs';
 
 const headers = new Headers({ 'request-id': 'req_test' });
 const gen = (status) => Anthropic.APIError.generate(status, { type: 'error', error: { type: 'x', message: 'm' } }, 'm', headers);
@@ -231,3 +232,96 @@ test('the run\'s client follows the repository variables: federation when its ru
   assert.equal(made[1].credentials, undefined);
 });
 
+
+test('an API error carries what the API said, with anything credential-shaped removed', () => {
+  const e = classifyError(Anthropic.APIError.generate(404, { type: 'error', error: { type: 'not_found_error', message: 'model: claude-x' } }, 'm', headers));
+  assert.equal(e.detail, 'not_found_error: model: claude-x');
+  const leaky = new Error('key sk-ant-api03-abcDEF_12 and Bearer tok.en.value and eyJhbGciOi.eyJzdWIiOi.c2ln\nend');
+  assert.equal(errorDetail(leaky, null), 'key [redacted] and Bearer [redacted] and [redacted] end');
+  assert.equal(errorDetail(new Error('x'.repeat(900)), null).length, 400);
+  const fed = new WorkloadIdentityError('Token exchange failed with status 401: no rule matched', 401, '{}', 'req_x');
+  const c = classifyError(new Anthropic.APIConnectionError({ message: 'wrapped', cause: fed }));
+  assert.deepEqual([c.kind, c.status, c.requestId], ['federation', 401, 'req_x']);
+  assert.equal(c.detail, 'Token exchange failed with status 401: no rule matched');
+});
+
+// A pull request checkout with a base and a head commit, so `main` gets as far
+// as the API call with nothing faked but the network.
+function checkout(dir) {
+  const run = (...args) => execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  run('init', '-q');
+  run('config', 'user.email', 't@example.test');
+  run('config', 'user.name', 't');
+  writeFileSync(join(dir, 'a.js'), 'export const a = 1;\n');
+  run('add', 'a.js');
+  run('commit', '-q', '-m', 'base');
+  const base = run('rev-parse', 'HEAD');
+  writeFileSync(join(dir, 'a.js'), 'export const a = 2;\n');
+  run('commit', '-q', '-am', 'head');
+  return { base, head: run('rev-parse', 'HEAD') };
+}
+
+test('main: a refused token exchange is named in the log, a warning and the summary, and spends nothing', async () => {
+  const s = sandbox({});
+  const dir = s.env.CLAUDE_REVIEW_PR_DIR;
+  const { base, head } = checkout(dir);
+  writeFileSync(s.env.GITHUB_EVENT_PATH, JSON.stringify({ pull_request: { number: 7, state: 'open', title: 't', body: '', base: { sha: base, ref: 'main', repo: { full_name: 'o/r' } }, head: { sha: head, repo: { full_name: 'o/r' } }, user: { login: 'u' } } }));
+  // A JWT-shaped test value, joined at runtime so no secret scanner reads one in this file.
+  const jwt = ['eyJhbGciOiJSUzI1NiJ9', 'eyJzdWIiOiJyZXBvIn0', 'c2lnbmF0dXJl'].join('.');
+  const savedFetch = globalThis.fetch;
+  const savedWrite = process.stdout.write;
+  const out = [];
+  globalThis.fetch = async (url) => {
+    const u = String(url instanceof Request ? url.url : url);
+    if (u.includes('/compare/')) return new Response(JSON.stringify({ merge_base_commit: { sha: base } }), { status: 200 });
+    if (u.includes('/actions/artifacts')) return new Response(JSON.stringify({ artifacts: [] }), { status: 200 });
+    if (u.includes('oidc')) return new Response(JSON.stringify({ value: jwt }), { status: 200 });
+    if (u.endsWith('/v1/oauth/token')) {
+      return new Response(JSON.stringify({ type: 'error', error: { type: 'authentication_error', message: `no federation rule matches subject repo:o/r:pull_request (assertion ${jwt})` } }), { status: 401, headers: { 'Request-Id': 'req_fed' } });
+    }
+    throw new Error(`unexpected request ${u}`);
+  };
+  process.stdout.write = (chunk) => { out.push(String(chunk)); return true; };
+  let code;
+  try {
+    code = await main({
+      ...s.env, GITHUB_API_URL: 'https://api.example', GITHUB_TOKEN: 'gh',
+      CLAUDE_REVIEW_ENABLED: 'true', ANTHROPIC_MODEL: 'claude-sonnet-5-5', ANTHROPIC_API_KEY: '', CLAUDE_REVIEW_MAX_RETRIES: '0',
+      ANTHROPIC_FEDERATION_RULE_ID: 'fdrl_01BkFJFKoPa1oFPY5ioQaCYp', ANTHROPIC_ORGANIZATION_ID: 'a984f1f6-6fd8-48ed-80d0-5d6d62f99ae4',
+      ANTHROPIC_SERVICE_ACCOUNT_ID: 'svac_015m8nLD3vLGGRKzXxDZ3NTg', ANTHROPIC_WORKSPACE_ID: 'wrkspc_016CY9bjf724orWVvJzkJzde',
+      ACTIONS_ID_TOKEN_REQUEST_URL: 'https://pipelines.example/oidc?x=1', ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'rt',
+    });
+  } finally {
+    globalThis.fetch = savedFetch;
+    process.stdout.write = savedWrite;
+  }
+  assert.equal(code, 0, 'advisory: an API error does not fail the step');
+  const log = out.join('');
+  const last = log.trim().split('\n').pop();
+  assert.match(last, /^claude-review: api_error — GitHub's identity token could not be exchanged/);
+  assert.match(last, /The API said: Token exchange failed with status 401 \(request-id req_fed\): .*no federation rule matches subject repo:o\/r:pull_request/);
+  assert.match(log, /^::warning title=Claude review%3A api_error::.*Token exchange failed with status 401/m);
+  assert.doesNotMatch(log, /eyJ/, 'the identity token never reaches the log');
+  assert.match(s.read().summary, /The API said: Token exchange failed with status 401/);
+  const record = JSON.parse(readFileSync(join(s.env.CLAUDE_REVIEW_OUT_DIR, 'record.json'), 'utf8'));
+  assert.deepEqual([record.status, record.usd, record.error_kind, record.http_status], ['err', 0, 'federation', 401]);
+  assert.match(record.error_detail, /no federation rule matches/);
+  assert.doesNotMatch(JSON.stringify(record), /eyJ/);
+});
+
+test('main: an outcome whose reason can quote the pull request or the model keeps it out of the log', async () => {
+  const s = sandbox({ CLAUDE_REVIEW_ENABLED: 'true', ANTHROPIC_MODEL: 'claude-sonnet-5-5', ANTHROPIC_API_KEY: 'k', GITHUB_API_URL: 'https://api.example' });
+  const savedFetch = globalThis.fetch;
+  const savedWrite = process.stdout.write;
+  const out = [];
+  globalThis.fetch = async () => new Response('{}', { status: 500 });
+  process.stdout.write = (chunk) => { out.push(String(chunk)); return true; };
+  try {
+    await main(s.env);
+  } finally {
+    globalThis.fetch = savedFetch;
+    process.stdout.write = savedWrite;
+  }
+  assert.equal(out.join(''), 'claude-review: diff_error\n');
+  assert.match(s.read().summary, /diff could not be computed/);
+});

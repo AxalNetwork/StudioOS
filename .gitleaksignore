@@ -32,3 +32,9 @@ e68e99682469eac1afc768ef22f41e99614845be:cloudflare-worker/src/services/intervie
 # Scoped to the two findings, as D334's entry is.
 49cac9ac61158b88ff6d8e143a4d374b9c26e1d8:cloudflare-worker/test/channels_meetings_d684.test.ts:generic-api-key:233
 49cac9ac61158b88ff6d8e143a4d374b9c26e1d8:cloudflare-worker/test/channels_meetings_d684.test.ts:generic-api-key:236
+# Claude review error detail (#1729): not a credential. The test's first commit
+# held a JWT-shaped literal standing in for GitHub's identity token, to prove
+# the reviewer removes it from the log; it decodes to {"sub":"repo"} with a
+# fake signature. The next commit joins the value at runtime, so no later
+# commit carries the literal. Scoped to the one finding, as D334's entry is.
+7cdc301644060182d0d2435dd6906a5b9e76d9aa:scripts/claude-review/review.test.mjs:jwt:269

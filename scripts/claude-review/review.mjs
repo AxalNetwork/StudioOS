@@ -29,13 +29,14 @@ import { fileURLToPath } from 'node:url';
 import Anthropic from '@anthropic-ai/sdk';
 import { oidcFederationProvider } from '@anthropic-ai/sdk/lib/credentials/oidc-federation';
 import { WorkloadIdentityError } from '@anthropic-ai/sdk/lib/credentials/types';
-import { parseRates, readConfig } from '../lib/claudeReview.mjs';
+import { escapeCommandData, escapeCommandProperty, parseRates, readConfig } from '../lib/claudeReview.mjs';
 import { runReview } from '../lib/claudeReviewRun.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SHA = /^[0-9a-f]{40}$/;
 const RECORD_PREFIX = 'claude-review_v1_';
 const MAX_FILE_BYTES = 2_000_000;
+const LOGGED_REASONS = new Set(['api_error', 'configuration_error']);
 
 /** The audience Anthropic's token exchange expects on GitHub's identity token. */
 export const OIDC_AUDIENCE = 'https://api.anthropic.com';
@@ -70,6 +71,26 @@ const isFederationError = (e) => {
   return null;
 };
 
+// What the API or the token exchange said, cut to one short line with anything
+// credential-shaped removed. The SDK redacts the exchange response's known
+// token fields only; a key, a bearer value or a JWT quoted anywhere else in
+// the text (an echoed assertion, say) is removed here.
+const DETAIL_MAX = 400;
+export function errorDetail(e, fed) {
+  let text;
+  if (fed) text = fed.message;
+  else if (e?.error?.error?.message) text = `${e.error.error.type || e.type || 'error'}: ${e.error.error.message}`;
+  else if (typeof e?.message === 'string') text = e.message;
+  else text = String(e?.name || 'Error');
+  return String(text)
+    .replace(/sk-ant-[A-Za-z0-9_-]+/g, '[redacted]')
+    .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*/g, '[redacted]')
+    .replace(/\b(Bearer|bearer)\s+\S+/g, '$1 [redacted]')
+    .replace(/[\u0000-\u001f\u007f]+/g, ' ')
+    .trim()
+    .slice(0, DETAIL_MAX);
+}
+
 /** Map an SDK error to the runner's kinds, most specific class first. */
 export function classifyError(e, sdk = Anthropic) {
   const requestId = e?.requestID || e?.request_id || undefined;
@@ -89,7 +110,7 @@ export function classifyError(e, sdk = Anthropic) {
   else if (e instanceof sdk.InternalServerError) kind = status === 529 ? 'overloaded' : 'server';
   else if (e instanceof sdk.APIError) kind = status === 402 ? 'billing' : status === 529 ? 'overloaded' : 'unknown';
   const out = new Error(`Anthropic API error: ${kind}`);
-  Object.assign(out, { kind, status, requestId: requestId || fed?.requestId || undefined });
+  Object.assign(out, { kind, status, requestId: requestId || fed?.requestId || undefined, detail: errorDetail(e, fed) });
   return out;
 }
 
@@ -264,7 +285,17 @@ export async function main(env = process.env) {
   if (env.GITHUB_OUTPUT) {
     appendFileSync(env.GITHUB_OUTPUT, `outcome=${result.outcome}\nrecord_name=${result.record ? result.record.name : ''}\n`);
   }
-  process.stdout.write(`claude-review: ${result.outcome}\n`);
+  // A failed call's reason goes to the log as well as the summary: a job
+  // summary cannot be read through the API, and an error the log does not name
+  // has to be guessed. A warning annotation carries it to the check run; it
+  // never fails the step. Only these outcomes, whose reason is the API's, the
+  // exchange's or the configuration check's own text; the others can quote the
+  // model's answer or the pull request, which stay out of the log.
+  const logged = LOGGED_REASONS.has(result.outcome) ? String(result.reason || '').replace(/[\r\n]+/g, ' ') : '';
+  if (logged) {
+    process.stdout.write(`::warning title=${escapeCommandProperty(`Claude review: ${result.outcome}`)}::${escapeCommandData(logged)}\n`);
+  }
+  process.stdout.write(`claude-review: ${result.outcome}${logged ? ` — ${logged}` : ''}\n`);
   return result.exitCode;
 }
 
