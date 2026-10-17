@@ -26,7 +26,8 @@
  * empty history: "no decision yet" and "the decision could not be read" are
  * different facts.
  */
-import type { EvidenceCtx, EvidenceItemFull } from './validateEvidence';
+import { evidenceFor as validateEvidenceFor, type EvidenceCtx, type EvidenceItemFull } from './validateEvidence';
+import { insertHypothesisWithLinksStatements } from '../routes/_founder_validate_writes';
 import type { Env, User } from '../types';
 import { logCycleWriteStatement } from './cycleActivity';
 import { safeCard, PAGE_SIZE, type Card } from './cycleCards';
@@ -83,13 +84,35 @@ export function adaptEvidenceReader(
   return (env, projectId) => reader({ env, projectId }, {});
 }
 
-/** Defaults are wired with #1692's record registration in the closing part. */
-export const evidenceFor: EvidenceSource = async () => [];
+const readEvidence = adaptEvidenceReader(validateEvidenceFor);
+
+/** The real linked evidence, with its claim named in every choice and snapshot. */
+export const evidenceFor: EvidenceSource = async (env, projectId) => {
+  const items = await readEvidence(env, projectId);
+  if (!items.length) return items;
+  const claims = (await env.DB.prepare('SELECT id, code, claim FROM hypotheses WHERE project_id = ?')
+    .bind(projectId).all<{ id: number; code: string; claim: string }>()).results || [];
+  const byId = new Map(claims.map((h) => [Number(h.id), h]));
+  return items.map((item) => {
+    const h = byId.get(Number(item.hypothesis_id));
+    if (!h) throw new Error('The evidence hypothesis could not be read');
+    return { ...item, label: `${item.label} · ${h.code} · ${h.claim}` };
+  });
+};
 
 /** Hypothesis statements run inside the decision's transaction, before its INSERT. */
 export type PivotStatements = (
   env: Env, input: { projectId: number; claim: string; userId: number | null },
 ) => D1PreparedStatement[];
+
+/** A Pivot uses the same atomic hypothesis writer and activity words as New hypothesis. */
+const pivotHypothesisStatements: PivotStatements = (env, input) => [
+  ...insertHypothesisWithLinksStatements(env, input, { painGroupIds: [], direction: 'supports' }),
+  logCycleWriteStatement(env, {
+    projectId: input.projectId, userId: input.userId, cycle: 'validate', module: 'experiments',
+    readback: { table: 'hypotheses', by: 'max' }, action: 'hypothesis_created', summary: 'Hypothesis created',
+  }),
+];
 
 /** A refusal with its own status and the sentence the caller shows. */
 export class VerdictError extends Error {
@@ -172,7 +195,7 @@ export async function recordDecision(
   user: User,
   project: { id: number },
   input: RecordInput,
-  { bar = DECISION_EVIDENCE_BAR, evidenceSource = evidenceFor, pivotStatements }: {
+  { bar = DECISION_EVIDENCE_BAR, evidenceSource = evidenceFor, pivotStatements = pivotHypothesisStatements }: {
     bar?: number; evidenceSource?: EvidenceSource; pivotStatements?: PivotStatements;
   } = {},
 ): Promise<Recorded> {
@@ -217,10 +240,6 @@ export async function recordDecision(
       items.push(it);
     }
   }
-
-  // Keep the refusal until a builder is wired; never write a decision that
-  // silently discards the founder's new claim.
-  if (pivotClaim && !pivotStatements) throw new VerdictError(400, 'A Pivot cannot start a hypothesis yet.');
 
   const state: DecisionState = items.length >= bar ? 'given' : 'withheld';
   const word = KIND_WORD[decision];
