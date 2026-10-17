@@ -105,8 +105,8 @@ caller's analysed companies or a directory company; 201 when added),
 `PATCH /competitors/:id` (watch and positioning), `PATCH
 /demand-signals/:id` (a `signal-` record only), `POST /hypotheses` and
 `PATCH /hypotheses/:id`. The row actions' writers (merge, split, attach a
-quote, Stop, evidence, experiments, a signal's file) are built and reach the
-SPA through the records actions in #1692's closing PR.
+quote, Stop, evidence, experiments, a signal's file) are each record's
+actions, below.
 `founder_validate_sessions.ts` adds `GET /sessions/:id/audio`, one
 short-lived signed download per recorded chunk, and `DELETE
 /discovery/interview/:id` now calls `services/interviewWriters.ts`'s
@@ -131,6 +131,38 @@ customer research, problem discovery and experiments; problem discovery's
 `fit_gap` and `stats.history_since`. A part follows its store's gate, and a
 phrase said without consent reaches a non-writer as
 "Quote withheld (no consent to quote)". See `decisions/D690.md`.
+
+### Cycle records (D690, #1690 and #1692)
+
+`cycle_records.ts`, mounted at `/api/cycles`, serves one record of any cycle
+that registers a service in `services/records/index.ts`; Validate, Build and
+Raise do:
+
+- `GET /:cycle/modules/:slug/records/:id?project=`: the record, its sections,
+  actions and `next`, and its first activity page;
+- `GET …/records/:id/activity?project=&page=`: 20 rows a page, newest first;
+- `POST …/records/:id/actions/:key?project=`: a declared action only, JSON or,
+  for a file field, `multipart/form-data`; `PATCH` and `DELETE` on the record
+  run its `edit` and `delete`;
+- `GET /:cycle/modules/:slug/form-options?project=`: the Add forms' choices,
+  every other query parameter passed through.
+
+The refusals run in order:
+
+1. no session: 401;
+2. a missing or malformed `project`: 400;
+3. an unknown cycle, a cycle with no service, or an unknown module: 404;
+4. a malformed id: 404, before any read;
+5. a missing venture: 404;
+6. the module's read gate, or the write gate for actions and form-options: 403;
+7. an id not in the module's own store for this venture: 404, as is any id an
+   action's body names.
+
+A partner reads a record without its writer-only sections and gets
+`actions: []`. Validate's six (`services/records/validate.ts`, #1692) are a
+pain group, an interview, a segment, a competitor candidate, a demand record
+(`signal-`, `revenue-` or `waitlist-`) and a hypothesis. See
+`decisions/D690.md`.
 
 ### Raise cycle Worker read (D663, #1476)
 
@@ -172,6 +204,7 @@ components are mounted through CycleRoute after #1652.
 | `Cycle Overview.dc.html` · Customer research's record (CO:350-401) | `/validate/customer-research/:id` · founder, admin (`labRoles`), the guard `/validate/interviews/:id` had (D696, #1658, 2026-10-17) | `pages/founder/InterviewReviewPage.jsx`, as it is until #1659 reframes it as the record; its reads are unchanged | UPGRADE |
 | Redirects (D696 decision 13) | `/validate/interviews/:id` → `/validate/customer-research/:id` (same guard); `/validate/experiments-and-evidence` and `/:id` → `/validate/experiments` and `/:id`; `/validate/demand-and-urgency-signals` and `/:id` → `/validate/demand-signals` and `/:id` | `pages/cycles/ParamRedirect.jsx`, re-exported by `App.jsx` beside `HistoryRedirect`: each `:name` filled through `encodeURIComponent`, the query and the hash kept | CURRENT |
 | `Cycle Overview.dc.html` · Add (CO:130-151, the A table CO:306-323); `Cycle Modules · Mobile.dc.html` (each board's third phone, "The page its button opens") | `/:cycle/:slug/new` for Validate, Build, Raise and Grow, `?form=<key>` for a later Add; `/validate/customer-research/new` → `/validate/record` (query kept) | `App.jsx` → `pages/cycles/CycleRoute.jsx` with `adding`; `pages/cycles/FormLightbox.jsx` | NEW (D695, #1656): `CycleRoute`'s `adding` opens the form `?form=` names, else the first, as the dialog over the module page at 1024px and up and as the page in the cycle's gutter below; `RecordsTable`'s Add pushes it with `state.under`, and closing goes back (a deep link replaces itself with the module page). `?add=1` replaces the URL with `/new`. A row's Edit is the same URL with `state.editing`. A module with no form replaces `/new` with its page |
+| `Cycle Overview.dc.html` · the bottom sections (CO:611, :612, :616) | Validate bottom sections: `/validate/customer-research`, `/validate/problem-discovery` and `/validate/experiments` under their tables; `/validate/customer-research?log=notes\|upload` opens Log an interview, then drops `log` · founder, admin (writers draw the write tools; everyone the strips) | `pages/cycles/ValidateSections.jsx`, mounted by `pages/cycles/CycleRoute.jsx` as Validate's `parts` | NEW (D697, #1659, PR 1): the module read's `parts` (#1691, #1749); Log an interview `POST /progress/discovery/:pid`; the exports `GET /founder/validate/{interviews,pain-map}/:pid/export.csv`; Assign and Link to a pain #1692's `attach` and `link` on the theme record (`POST /cycles/validate/modules/problem-discovery/records/:id/actions/{attach,link}`); New hypothesis `POST /founder/validate/board/:pid/hypotheses` until #1656 registers its form. Every dialog is drawn after the size container |
 
 D631 (#1389), Ops area 6:
 

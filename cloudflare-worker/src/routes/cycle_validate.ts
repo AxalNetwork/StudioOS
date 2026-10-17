@@ -3,8 +3,9 @@
  * contract) and the manual writes for the records migration 440 added.
  *
  *   GET /overview?project=:pid
- *     → { cycle, question, figures: [Figure ×4], cards: [Card ×6], focus, meter, index }
- *       (D685 §5.12: the phone's focus, the interviews meter, the index counts;
+ *     → { cycle, question, figures: [Figure ×4], cards: [Card ×6, ×7 with Verdict], focus, meter, index }
+ *       (D685 §5.12, D692: the phone's focus, the interviews meter and the
+ *       index rows, in the shape all four cycles share (services/cycleFocus.ts);
  *       PUT /interviews-target sets the meter's monthly target)
  *   GET /modules/:slug?project=:pid&q=&filter=&sort=&page=
  *     → { module, card: Card, records: { cols, rows, total, page, page_size, filters, sorts, linkable }, parts }
@@ -27,7 +28,8 @@ import { hasRecords } from '../services/records';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { canReadBoard, canWrite, type ProjectRef } from './_founder_validate_helpers';
-import { focusOf, indexCountsOf, meterOf } from '../services/validateFocus';
+import { focusOf, indexOf, meterOf } from '../services/validateFocus';
+import { part } from '../services/cycleFocus';
 import {
   CYCLE, QUESTION, MODULES, CARD_FOR, RECORDS_FOR, figures, cards, recordQuery, loadMarketReadiness,
   type Ctx, type ModuleSlug,
@@ -84,15 +86,13 @@ cycleValidate.get('/overview', async (c) => {
   if (s instanceof Response) return s;
   const ctx = ctxOf(c, s.projectId);
   const [figs, cs] = await Promise.all([figures(ctx), cards(ctx)]);
-  // D685 §5.12 — the phone's focus, meter and index counts. Each fails on its
-  // own: an unreadable part is null, never a figure it did not read.
-  const part = async <T>(name: string, f: () => Promise<T>): Promise<T | null> => {
-    try { return await f(); } catch (e) { console.warn('[cycle_validate] overview part unreadable:', name, (e as Error)?.message); return null; }
-  };
-  const [focus, meter, index] = await Promise.all([
-    part('focus', () => focusOf(c.env, s.projectId, canWrite(s.project, s.user), cs)),
-    part('meter', () => meterOf(c.env, s.projectId, figs)),
-    part('index', () => indexCountsOf(c.env, s.projectId)),
+  // D685 §5.12, D692 — the phone's focus, meter and index rows. Each fails on
+  // its own: an unreadable part is null, never a figure it did not read. The
+  // focus reads the meter's count, so the two never disagree.
+  const meter = await part('meter', () => meterOf(c.env, s.projectId, figs));
+  const [focus, index] = await Promise.all([
+    part('focus', () => focusOf(c.env, s.projectId, canWrite(s.project, s.user), cs, figs, meter)),
+    part('index', () => indexOf(c.env, s.project, s.user, figs, cs)),
   ]);
   return c.json({ cycle: CYCLE, question: QUESTION, figures: figs, cards: cs, focus, meter, index });
 });

@@ -48,7 +48,7 @@ export type EvidenceCtx = { env: Env; projectId: number };
 const STRENGTHS = new Set(['anecdote', 'pattern', 'measured']);
 const strengthOf = (v: unknown) => (STRENGTHS.has(String(v)) ? String(v) as EvidenceItemFull['strength'] : null);
 const dirOf = (v: unknown): EvidenceItemFull['direction'] => (v === 'contradicts' ? 'contradicts' : 'supports');
-const KPI_LABEL: Record<KpiKey, string> = {
+export const KPI_LABEL: Record<KpiKey, string> = {
   mrr: 'MRR', arr: 'ARR', cac: 'CAC', ltv: 'LTV', monthly_churn_pct: 'Monthly churn', active_users: 'Active users',
   new_users: 'New users', net_burn: 'Net burn', cash_balance: 'Cash balance', headcount: 'Headcount',
   nrr_pct: 'NRR', paying_accounts: 'Paying accounts',
