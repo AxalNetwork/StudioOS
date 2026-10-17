@@ -114,12 +114,21 @@ const FUND_SIGNS_D705 = new Set([
   'safe', 'term_sheet', 'spa', 'voting_rights',
 ]);
 
+// D707 — the two platform IP licences (migration 471), Holdings as licensor,
+// and the operating-partner agreements, Management's, routed by name.
+// `partner_capital` stays out: a capital partnership is an investor relationship.
+const HOLDINGS_PARTY_SLUGS_D707 = new Set(['platform_ip_licence_management_admin', 'platform_ip_licence_fund_admin']);
+const MANAGEMENT_PARTY_SLUGS_D707 = new Set(['partner_msa_v1', 'partner_services', 'partner_equity', 'partner_revshare', 'partner_custom', 'partner_nda_nonsolicit']);
+
 export function axalEntityKeyForDoc(slugOrType: string, category?: string | null): AxalEntityKey {
   const s = String(slugOrType || '').toLowerCase();
   if (FUND_PARTY_SLUGS_D706.has(s)) return 'fund';
   if (GP_PARTY_SLUGS_D706.has(s)) return 'gp';
   // D705 — the Fund is the party, signing through its general partner.
   if (FUND_SIGNS_D705.has(s)) return 'fund';
+  // D707 — by name, so a name always wins over the regex fallback below.
+  if (HOLDINGS_PARTY_SLUGS_D707.has(s)) return 'holdings';
+  if (MANAGEMENT_PARTY_SLUGS_D707.has(s)) return 'management';
   // Other fund-level docs: the GP, as general partner of the Fund.
   const gpEntityDocs = new Set([
     'spv joinder agreement', 'strategic side letter / focused spv', 'lpa', 'ppm',

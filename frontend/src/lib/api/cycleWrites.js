@@ -33,6 +33,9 @@ export function makeCycleWrites(request) {
       feedback: (projectId, body) => request('/cycles/grow/feedback', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
       channel: (projectId, body) => request('/cycles/grow/channels', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
       channelSpend: (projectId, uid, month, body) => request(`/cycles/grow/channels/${seg(uid)}/spend/${seg(month)}`, { method: 'PUT', body: JSON.stringify({ ...body, project: projectId }) }),
+      // D695 (#1657): Enter a KPI and Open a role, through #1697's routes.
+      kpi: (projectId, body) => request('/cycles/grow/kpis', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
+      role: (projectId, body) => request('/cycles/grow/roles', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
       partner: (projectId, body) => request('/cycles/grow/partners', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
       partnerRevenue: (projectId, uid, month, body) => request(`/cycles/grow/partners/${seg(uid)}/revenue/${seg(month)}`, { method: 'PUT', body: JSON.stringify({ ...body, project: projectId }) }),
       market: (projectId, body) => request('/cycles/grow/markets', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
@@ -43,6 +46,7 @@ export function makeCycleWrites(request) {
       channelUpdate: (projectId, uid, body) => request(`/cycles/grow/channels/${seg(uid)}`, { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
       partnerUpdate: (projectId, uid, body) => request(`/cycles/grow/partners/${seg(uid)}`, { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
       marketUpdate: (projectId, uid, body) => request(`/cycles/grow/markets/${seg(uid)}`, { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
+      roleUpdate: (projectId, id, body) => request(`/cycles/grow/roles/${seg(id)}`, { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
       obligationUpdate: (projectId, id, body) => request(`/cycles/grow/obligations/${seg(id)}`, { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
     },
     build: {
