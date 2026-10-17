@@ -2,15 +2,24 @@
 
 `types.ts` defines the plain-data `ModuleSpec`, record sections, actions, fields,
 and gates. `index.ts` holds the cycle/slug registry and reports whether a cycle
-has records. It is empty until a cycle registers its own service. `owned.ts`
+has records. Build registers `build.ts` (D690, #1694) and Raise `raise.ts` (D691,
+#1699); every other cycle has none until it registers its own service. `owned.ts`
 checks a record id against its actual store and project before a route reads or
 writes it. Validate's existing stores are listed there; later cycles add their
 stores with fixed, bound SQL statements.
 
-A record supplies four facts. Each returned section names its `read` or `write`
-gate. A declared action exposes its `form` (with T, CH or CK fields) and optional
+A record supplies four facts, and may carry its row's `uid`. Each returned
+section names its `read` or `write` gate; a section with `when` is drawn only
+for the ids it accepts. A declared action exposes its `form` (with T, CH or CK fields) and optional
 `confirm` prompt; a file field makes its POST multipart. The route supplies the
 default action tone when a spec omits one.
+
+`build.ts` holds Build's six module specs (D690 S18-B, #1694): one record per
+module, as CO:369-374 draws it, read from the venture's own rows. It writes
+nothing and declares only link actions (Edit split, Reconnect); the writes come
+with #1695. Its sections gate Founding team's Documents and Operating systems'
+Sync log and Permissions to writers. Old rows read through each spec's
+`oldRows` matcher, one id prefix per spec.
 
 `../cycleActivity.ts` writes scoped activity and reads one record's timeline.
 Older activity is only included when a spec declares an `oldRows` matcher.

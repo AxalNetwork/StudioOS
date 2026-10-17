@@ -14,8 +14,8 @@ import React, { act } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { renderedText } from './_renderedText.mjs';
-import { FIRST_FOCUS, phoneFocus, phoneIndex, phoneMeter } from '../src/pages/cycles/validatePhone.js';
-import ValidatePhoneFocus, { targetValue } from '../src/pages/cycles/ValidatePhoneFocus.jsx';
+import { FIRST_FOCUS, phoneFocus, phoneIndex, phoneMeter, targetValue } from '../src/pages/cycles/validatePhone.js';
+import ValidatePhoneFocus from '../src/pages/cycles/ValidatePhoneFocus.jsx';
 import { createRoot } from 'react-dom/client';
 import { installDocument } from './_contracts_dom.mjs';
 
@@ -59,13 +59,13 @@ test('the focus: no interview gives the canvas\'s first-conversation card; other
 });
 
 test('the meter: the count held this month, "No target set" until one is stored, a bar only against a target', () => {
-  assert.deepEqual(phoneMeter(RAW), { label: 'Interviews this month', count: 14, target: null, pct: null, unreadable: false });
-  assert.deepEqual(phoneMeter({ ...RAW, meter: { target: 20 } }), { label: 'Interviews this month', count: 14, target: 20, pct: 70, unreadable: false });
+  assert.deepEqual(phoneMeter(RAW), { label: 'Interviews this month', count: 14, target: null, pct: null, unreadable: false, display: '14', target_reason: 'No target set' });
+  assert.deepEqual(phoneMeter({ ...RAW, meter: { target: 20 } }), { label: 'Interviews this month', count: 14, target: 20, pct: 70, unreadable: false, display: '14 of 20', target_reason: null });
   assert.equal(phoneMeter({ ...RAW, meter: { target: 0 } }).target, null, 'a zero target is no target');
   assert.equal(phoneMeter({ figures: [{ key: 'interviews_this_month', value: null, state: 'empty' }] }).count, null, 'none recorded: null, never 0');
   assert.equal(phoneMeter({ figures: [{ key: 'interviews_this_month', state: 'unreadable' }] }).unreadable, true);
   // #1609's meter: its count wins (none logged is a counted 0), and its target.
-  assert.deepEqual(phoneMeter({ ...RAW, meter: { key: 'interviews_this_month', count: 0, target: 12, target_reason: null } }), { label: 'Interviews this month', count: 0, target: 12, pct: 0, unreadable: false });
+  assert.deepEqual(phoneMeter({ ...RAW, meter: { key: 'interviews_this_month', count: 0, target: 12, target_reason: null } }), { label: 'Interviews this month', count: 0, target: 12, pct: 0, unreadable: false, display: '0 of 12', target_reason: null });
   assert.equal(phoneMeter({ figures: [{ key: 'interviews_this_month', state: 'unreadable' }], meter: { count: null, target: null } }).unreadable, true, 'a null Worker count falls back to the figure');
   assert.equal(phoneMeter({ figures: [{ key: 'interviews_this_month', state: 'unreadable' }], meter: { count: 3, target: null } }).unreadable, false, 'the Worker counted: not unreadable');
   const out = html(RAW);

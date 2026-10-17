@@ -44,6 +44,7 @@ const APP = raw('frontend/src/App.jsx');
 const API = raw('frontend/src/lib/api.js');
 const PROGRESS = raw('cloudflare-worker/src/routes/progress.ts');
 const JOBS_ROUTE = raw('cloudflare-worker/src/routes/jobs.ts');
+const JOB_BOARD = raw('cloudflare-worker/src/services/jobBoardCommon.ts');
 
 function zoneBlock(src, zone) {
   const at = src.indexOf(`'${zone}'`);
@@ -62,7 +63,9 @@ test('Post a role links to the editor the job board already has', () => {
   // The three facts that made the refusal false, each checked at its source.
   assert.match(API, /create: \(payload\) => request\('\/jobs'/, 'jobs.create() is gone');
   assert.match(APP, /path="\/jobs\/new"/, 'the job editor route is gone');
-  assert.match(JOBS_ROUTE, /INSERT INTO job_postings/, 'nothing writes a posting any more');
+  // D691 (#1697): the one insert is `createPosting`, which `/api/jobs` and Grow's Open a role both call.
+  assert.match(JOB_BOARD, /INSERT INTO job_postings/, 'nothing writes a posting any more');
+  assert.match(JOBS_ROUTE, /await createPosting\(/, '/api/jobs no longer creates postings');
 });
 
 test('Bulk reject names the writer it lacks, not records that exist', () => {

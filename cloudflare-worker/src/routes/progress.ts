@@ -70,7 +70,7 @@ import { summarise as summariseSaasMetrics, sparkline as saasSparkline, type Sna
 import { bindingKey } from '../util/schemaBootstrap';
 import { refuse, refusalBody } from '../util/refusal';
 import { INTERVIEWS_TARGET_KEY, WAITLIST_TARGET_KEY } from '../services/validateWriters';
-import { deleteSession, type SessionRow } from '../services/interviewSessions';
+import { deleteInterview } from '../services/interviewWriters';
 
 const progress = new Hono<{ Bindings: Env }>();
 
@@ -550,17 +550,10 @@ progress.delete('/discovery/interview/:id', async (c) => {
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanEdit(project, user);
 
-  // D685 §5.11 — each session goes the way DELETE /sessions/:id sends it: its
-  // R2 audio, its rows, and its pending proposals with their quotes. Deleting
-  // the row alone left the audio in R2 and the proposals behind (the CASCADE
-  // reaches the session rows, not R2, and validate_proposals has no FK).
-  const owned = await c.env.DB.prepare('SELECT * FROM interview_sessions WHERE interview_id = ?')
-    .bind(id).all<SessionRow>().catch(() => ({ results: [] as SessionRow[] }));
-  for (const session of owned.results || []) await deleteSession(c.env, session, user.id);
-  await c.env.DB.prepare('DELETE FROM discovery_interviews WHERE id = ?').bind(id).run();
-  await logCycleWrite(c.env, { projectId: existing.project_id, userId: user.id, cycle: 'validate', module: 'customer-research',
-    entityId: id, action: 'interview_deleted', summary: `Interview ${id} deleted` });
-  return c.json({ deleted: id, sessions_deleted: (owned.results || []).length });
+  // D690 (#1692) — the body is `deleteInterview`, which Customer research's
+  // record `delete` action calls too: one writer, the sessions' audio,
+  // rows and proposals with it.
+  return c.json(await deleteInterview(c.env, { projectId: existing.project_id, userId: user.id, interviewId: id }));
 });
 
 // ---------------------------------------------------------------------------

@@ -2,64 +2,56 @@
  * D691 (S19-B, #1699) — Raise's seven lists as the canvas draws them
  * (CO:623-629), with ids that are addresses (decision 3), and the links out.
  *
- * #1699 ships these lines of its tests here: test 1's list line (each module's
- * `records_title`, columns, filters and default sort), test 2's list ids, and
- * test 14's links out. The one-record reads (the rest of tests 1, 2, 4 and 5)
- * follow once D690 (S18-A, #1690) registers the record contract.
+ * Test 1's list line (each module's `records_title`, columns, filters and
+ * default sort), test 2's list ids and test 14's links out read the module
+ * route. The one-record reads (the rest of tests 1 and 2, and tests 4 and 5)
+ * go through D690's record route with Raise's specs registered
+ * (`services/records/raise.ts`).
  *
- * The tables come from schema_baseline.sql through `_baseline.mjs`, with
- * migrations 249, 410, 442 and 463 applied, and the Research fund directory
- * built from 365's CREATE statements with 406 applied whole, so no real fund
- * row is loaded. Migration 459 is D690's and is not on main yet.
+ * The database is the baseline plus every numbered migration above the
+ * cutoff, schema only, as cycle_records_build_d690.test.ts builds one, so no
+ * real fund row is loaded and no table is hand-written. Every person, venture
+ * and fund is made up.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/cycle_records_raise_d691.test.ts
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 
 import cycleRaise from '../src/routes/cycle_raise.ts';
+import { createCycleRecords } from '../src/routes/cycle_records.ts';
 import { MODULES, TOOL_HREF, fundFit, capIdOf, NEVER_EXPIRES } from '../src/services/raiseCycle.ts';
 import { saveScenario } from '../src/services/capTableWrites.ts';
-import { tableFromBaseline } from './_baseline.mjs';
+import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const BASELINE = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
-const sqlOf = (file: string) => readFileSync(resolve(process.cwd(), `cloudflare-worker/sql/migrations/${file}`), 'utf8');
-/** A migration's CREATE TABLE and CREATE INDEX statements only, as research_fund_terms_d597.test.ts reads 365. */
-const ddl = (file: string) => sqlOf(file).split(/;\s*\n/)
-  .map((s) => s.replace(/^\s*--.*$/gm, '').trim())
-  .filter((s) => /^CREATE\s+(TABLE|INDEX)/i.test(s))
-  .map((s) => `${s};`).join('\n');
+const MIGRATIONS = resolve(process.cwd(), 'cloudflare-worker/sql/migrations');
 
 const RECORD_ID = /^[a-z0-9][a-z0-9_-]*$/;
 const FOUNDER = 10, ADMIN = 30;
 const P = 1, P_OTHER = 2;
 
+/** The baseline, then every post-cutoff migration in order, as cycle_records_build_d690.test.ts builds one. */
+const FILES = readdirSync(MIGRATIONS).filter((f) => /^\d+_.*\.sql$/.test(f)).sort(compareMigrations);
+const BUILT_DDL = (() => {
+  const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
+  db.exec(BASELINE);
+  for (const f of FILES.filter((n) => migrationNumber(n) > BASELINE_CUTOFF)) db.exec(readFileSync(resolve(MIGRATIONS, f), 'utf8'));
+  return (db.prepare(`SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'
+    ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END`).all() as any[]).map((r) => r.sql as string);
+})();
+
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  for (const t of [
-    'users', 'projects', 'activity_logs', 'spinout_deck_overrides', 'pitch_decks', 'pitch_deck_share_tokens',
-    'deck_share_views', 'data_room_folders', 'data_room_files', 'data_room_access_log', 'cap_table_scenarios',
-    'raise_prospects', 'raise_rounds', 'contacts', 'dd_cases', 'dd_requests',
-  ]) db.exec(tableFromBaseline(BASELINE, t));
-  const cols = (t: string) => new Set((db.prepare(`SELECT name FROM pragma_table_info('${t}')`).all() as any[]).map((r) => r.name));
-  if (!cols('pitch_deck_share_tokens').has('revoked_at')) db.exec('ALTER TABLE pitch_deck_share_tokens ADD COLUMN revoked_at TEXT');
-  for (const [c, d] of [['amount', 'REAL'], ['close_id', 'INTEGER'], ['commit_status', 'TEXT'], ['instrument', 'TEXT']]) {
-    if (!cols('raise_prospects').has(c)) db.exec(`ALTER TABLE raise_prospects ADD COLUMN ${c} ${d}`);
-  }
-  db.exec(sqlOf('249_project_metrics.sql'));
-  db.exec(sqlOf('410_safe_issuances.sql'));
-  db.exec(sqlOf('442_raise_cycle_stores.sql'));
-  db.exec(sqlOf('463_raise_record_stores.sql'));
-  db.exec(ddl('365_research_eurotech_fund_directory.sql'));
-  db.exec(sqlOf('406_research_fund_sources.sql'));
+  for (const s of BUILT_DDL) { try { db.exec(s); } catch { /* a view or trigger naming an object replayed later */ } }
   db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (?, ?, ?, ?, 1, ?)').run(FOUNDER, 'founder', 'Fay Founder', 'fay@example.test', 1001);
   db.prepare('INSERT INTO users (id, role, name, email, is_active) VALUES (?, ?, ?, ?, 1)').run(ADMIN, 'admin', 'Ada Admin', 'ada@example.test');
   db.exec(`INSERT INTO projects (id, name, founder_id, sector) VALUES (${P}, 'Kestrel Labs', 1001, 'artificial intelligence'), (${P_OTHER}, 'Beta Works', 1002, NULL)`);
@@ -135,6 +127,32 @@ async function read(db: DatabaseSync, slug: string, qs = '', flags: Record<strin
     return { status: res.status, body: await res.json().catch(() => null) as any };
   } finally { [console.warn, console.error] = saved; }
 }
+/** A users row per role the record gate must weigh; `founder_id` 1001 owns venture 1, 1002 venture 2. */
+const PEOPLE: Record<number, { role: string; founder?: number; lab?: number }> = {
+  [FOUNDER]: { role: 'founder', founder: 1001 }, [ADMIN]: { role: 'admin' }, 40: { role: 'partner' }, 41: { role: 'advisor' },
+  50: { role: 'investor' }, 51: { role: 'investor' }, 20: { role: 'founder', founder: 1002 }, 60: { role: 'exploring', founder: 1001, lab: 1 },
+};
+function people(db: DatabaseSync) {
+  const add = db.prepare('INSERT OR IGNORE INTO users (id, role, name, email, is_active, founder_id, spinout_lab_active) VALUES (?, ?, ?, ?, 1, ?, ?)');
+  for (const [id, p] of Object.entries(PEOPLE)) add.run(Number(id), p.role, `Person ${id}`, `person${id}@example.test`, p.founder ?? null, p.lab ?? 0);
+}
+
+const records = new Hono<any>();
+records.route('/api/cycles', createCycleRecords());
+records.onError((err: any, c) => c.json({ detail: String(err?.message || '') }, 500));
+
+/** One record read (or its activity) through the registered route, as `who`. */
+async function rec(db: DatabaseSync, slug: string, id: string | number, { who = FOUNDER, project = P, tail = '' } = {}) {
+  people(db);
+  const token = await new SignJWT({ user_id: who, role: PEOPLE[who]?.role ?? 'founder' }).setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+  const saved = [console.warn, console.error]; console.warn = () => {}; console.error = () => {};
+  try {
+    const res = await records.request(`/api/cycles/raise/modules/${slug}/records/${encodeURIComponent(String(id))}${tail}?project=${project}`,
+      { headers: { Authorization: `Bearer ${token}` } }, { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) } as any);
+    return { status: res.status, body: await res.json().catch(() => null) as any };
+  } finally { [console.warn, console.error] = saved; }
+}
 const overview = async (db: DatabaseSync) => {
   const token = await new SignJWT({ user_id: FOUNDER, role: 'founder' }).setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
@@ -177,7 +195,6 @@ test('1: every Raise list has the canvas\'s title, columns, filters and default 
     }
   }
   // Capital relationships keeps "Responded to a call" while round calls are on.
-  db.exec(sqlOf('436_round_calls.sql'));
   const on = await read(db, 'capital-relationships', '', { ROUND_CALLS_ENABLED: 'true' });
   assert.deepEqual(on.body.records.filters.map((f: any) => f.label), ['Stage', 'Fit', 'Path', 'Source']);
 });
@@ -336,7 +353,7 @@ test('2: a scenario saved before keys reads with id null, and the read writes no
 // Test 14 (links out)
 // ---------------------------------------------------------------------------
 
-test('14: the data-room links open the file tool, and no row links before the record service registers', async () => {
+test('14: the data-room links open the file tool, and every list links its rows to the record route', async () => {
   assert.equal(TOOL_HREF.dataRoom, '/raise/data-room?mode=workspace');
   const empty = fixture();
   const card = (await overview(empty)).cards.find((c: any) => c.slug === 'data-room');
@@ -344,7 +361,190 @@ test('14: the data-room links open the file tool, and no row links before the re
   assert.equal((await read(empty, 'data-room')).body.records.add.href, TOOL_HREF.dataRoom, 'the records add');
   const db = await seeded();
   for (const m of MODULES) {
-    // D-e: until #1690's hasRecords('raise') is true, a linked row would open a 404.
-    assert.notEqual((await read(db, m.slug)).body.records.linkable, true, m.slug);
+    // D-e: a row links only while Raise's specs are registered, so it never opens a 404.
+    assert.equal((await read(db, m.slug)).body.records.linkable, true, m.slug);
+    const first = (await read(db, m.slug)).body.records.rows.find((r: any) => r.id != null);
+    assert.equal((await rec(db, m.slug, first.id)).status, 200, `${m.slug} ${first.id} opens`);
   }
+  // Manage access opens the file tool on this venture; Model a round opens the variants.
+  const file = (await rec(db, 'data-room', 12)).body;
+  assert.deepEqual(file.actions.map((a: any) => [a.key, a.kind, a.href]),
+    [['manage-access', 'link', `${TOOL_HREF.dataRoom}&project_id=${P}`]]);
+  assert.deepEqual((await rec(db, 'cap-table', 'e-3')).body.actions.map((a: any) => [a.key, a.kind, a.href]),
+    [['model-a-round', 'link', '/raise/cap-table/variants']]);
+});
+
+
+// ---------------------------------------------------------------------------
+// The one-record reads (D690's contract): tests 1, 2, 4 and 5
+// ---------------------------------------------------------------------------
+
+/** A record of every module, with the sections each one draws. */
+const SECTIONS: Record<string, { id: string | number; main: string[]; side: string[] }> = {
+  'fundraising-readiness': { id: 'data_room', main: ['reads', 'mock-diligence'], side: ['history', 'opens'] },
+  'investor-narrative': { id: 2, main: ['narrative', 'consistency'], side: ['feedback', 'versions'] },
+  'pitch-deck': { id: 41, main: ['views', 'slides'], side: ['settings', 'investor'] },
+  'data-room': { id: 12, main: ['opened', 'versions'], side: ['access', 'diligence'] },
+  'cap-table': { id: 'e-3', main: ['conversion', 'documents'], side: ['holder'] },
+  'use-of-funds': { id: 'product', main: ['hires', 'actual'], side: ['feeds'] },
+  'capital-relationships': { id: 5, main: ['timeline', 'fit'], side: ['feedback', 'materials'] },
+};
+/** Only actions whose handlers exist are declared, and both are links (#1700 declares the rest). */
+const ACTIONS: Record<string, string[]> = { 'data-room': ['manage-access'], 'cap-table': ['model-a-round'] };
+
+test('1: each record has a title, four facts with a value or a reason, its sections and only the linked actions', async () => {
+  const db = await seeded();
+  for (const m of MODULES) {
+    const want = SECTIONS[m.slug];
+    const { status, body } = await rec(db, m.slug, want.id);
+    assert.equal(status, 200, m.slug);
+    assert.equal(body.cycle, 'raise');
+    assert.equal(body.id, String(want.id));
+    assert.ok(String(body.title).trim(), `${m.slug} title`);
+    assert.equal(body.facts.length, 4, `${m.slug} facts`);
+    for (const f of body.facts) assert.ok(f.value != null || String(f.reason ?? '').trim(), `${m.slug} ${f.label} says why it is empty`);
+    assert.deepEqual(body.main.map((x: any) => x.key), want.main, `${m.slug} main`);
+    assert.deepEqual(body.side.map((x: any) => x.key), want.side, `${m.slug} side`);
+    assert.deepEqual(body.actions.map((a: any) => a.key), ACTIONS[m.slug] ?? [], `${m.slug} actions`);
+    for (const a of body.actions) assert.equal(a.kind, 'link', `${m.slug} ${a.key} is a link`);
+    assert.ok(!('createdBy' in body) && !('createdAt' in body), 'the creator stays on the server');
+  }
+  // Mock diligence is the Data room item's alone (decision 8).
+  assert.ok(!(await rec(db, 'fundraising-readiness', 'deck')).body.main.some((x: any) => x.key === 'mock-diligence'));
+  // An unscored item is a record with every fact Not recorded, and Team reads no check.
+  const team = (await rec(db, 'fundraising-readiness', 'team')).body;
+  assert.deepEqual(team.facts.map((f: any) => [f.value, f.reason]), Array(4).fill([null, 'Not scored yet']));
+  assert.equal(team.main[0].empty, 'Team is scored by a person, not by a check.');
+  const reads = (await rec(db, 'fundraising-readiness', 'data_room')).body.main[0].rows;
+  assert.deepEqual(reads.map((r: any) => r.c), ['Counted', 'Partial'], 'the check\'s own reads');
+});
+
+test('1: Fit, Expires, Monthly and the data-room access read their stores', async () => {
+  const db = await seeded();
+  // Fit: a fund the directory serves draws its verdict; no fund is Not recorded with its reason.
+  db.exec(`INSERT INTO research_fund_sources (source_name, title, terms_status, evidence, verdict, verdict_reason, reviewed_on) VALUES
+           ('Made-up open list', 'Open list', 'not found', 'e', 'cite only', 'r', '2026-10-01')`);
+  db.exec(`INSERT INTO research_fund_directory (uid, name, sector_focus, source_name, source_url, as_of) VALUES
+           ('fund-ai', 'Gridline AI Fund', 'AI', 'Made-up open list', 'https://example.test/a', '2026-10-01'),
+           ('fund-fin', 'Ledger Seed', 'Fintech', 'Made-up open list', 'https://example.test/b', '2026-10-01')`);
+  db.exec(`INSERT INTO raise_prospects (id, uid, project_id, name, stage, research_fund_uid) VALUES
+           (20, 'p20', ${P}, 'Gridline AI Fund', 'contacted', 'fund-ai'), (21, 'p21', ${P}, 'Ledger Seed', 'contacted', 'fund-fin')`);
+  const fit = async (id: number) => (await rec(db, 'capital-relationships', id)).body.main.find((x: any) => x.key === 'fit');
+  assert.equal((await fit(20)).rows[0].c, 'Fits');
+  assert.equal((await fit(21)).rows[0].c, 'Outside its focus');
+  assert.deepEqual([(await fit(5)).rows, (await fit(5)).empty], [[], 'Not recorded: no fund from the directory is linked.']);
+  // Expires: a "Never" link says Never, not a far date.
+  const expires = async (id: number) => (await rec(db, 'pitch-deck', id)).body.facts.find((f: any) => f.label === 'Expires').value;
+  assert.equal(await expires(44), 'Never');
+  assert.equal(await expires(41), '2999-01-01');
+  // Monthly: without a runway it says why.
+  const monthly = async () => (await rec(db, 'use-of-funds', 'product')).body.facts.find((f: any) => f.label === 'Monthly');
+  assert.deepEqual(await monthly(), { label: 'Monthly', value: '$30,000' });
+  db.exec(`UPDATE projects SET use_of_funds_meta = '{}' WHERE id = ${P}`);
+  assert.deepEqual(await monthly(), { label: 'Monthly', value: null, reason: 'No runway set' });
+
+  // Access (decision 6): an active grant the file's tier admits, and an nda file only once the NDA is live.
+  people(db);
+  db.exec(`INSERT INTO data_room_grants (uid, project_id, investor_user_id, granted_by_user_id, status, expires_at) VALUES
+           ('g50', ${P}, 50, ${FOUNDER}, 'active', NULL), ('g51', ${P}, 51, ${FOUNDER}, 'active', '2020-01-01 00:00:00'),
+           ('g40', ${P}, 40, ${FOUNDER}, 'revoked', NULL)`);
+  db.exec(`INSERT INTO raise_prospects (id, uid, project_id, name, stage, email) VALUES (30, 'p30', ${P}, 'Person 50', 'committed', 'person50@example.test')`);
+  const access = async (id: number) => (await rec(db, 'data-room', id)).body.side.find((x: any) => x.key === 'access').rows.map((r: any) => r.a);
+  assert.deepEqual(await access(13), ['Person 50'], 'an open, invited file: the live grant only, never an expired or revoked one');
+  assert.deepEqual(await access(14), [], 'a file for nobody');
+  assert.deepEqual(await access(12), [], 'an nda file before the NDA is live');
+  db.exec(`INSERT INTO pairwise_ndas (party_a_user_id, party_b_user_id, status) VALUES (${FOUNDER}, 50, 'active')`);
+  assert.deepEqual(await access(12), ['Person 50', 'Expires'], 'once it is live, until the file\'s expiry');
+  db.exec(`UPDATE raise_prospects SET stage = 'meeting' WHERE id = 30`);
+  assert.deepEqual(await access(12), [], 'a committed-only file, once the investor is not committed');
+  // Who opened it: an admitted investor who never downloaded reads Not opened.
+  const opened = (await rec(db, 'data-room', 13)).body.main.find((x: any) => x.key === 'opened').rows;
+  assert.deepEqual(opened.map((r: any) => [r.a, r.c]), [['Person 50', 'Not opened']]);
+});
+
+test('1: an older record\'s activity reads its store\'s creator, by name or by date', async () => {
+  const db = await seeded();
+  people(db);
+  db.exec(`UPDATE data_room_files SET uploaded_by_user_id = ${FOUNDER} WHERE id = 12`);
+  const first = async (slug: string, id: string | number) => (await rec(db, slug, id, { tail: '/activity' })).body.items[0].a;
+  assert.equal(await first('data-room', 12), 'Created by Fay Founder');
+  assert.match(await first('data-room', 13), /^Created \d{4}-\d{2}-\d{2}$/, 'no uploader recorded: the date');
+  assert.match(await first('capital-relationships', 5), /^Created \d{4}-\d{2}-\d{2}$/, 'a prospect keeps no creator');
+  assert.equal(await first('cap-table', 'pool'), 'Created by Fay Founder', 'the base scenario\'s owner');
+  // A logged write is the record's own line, under raise.<slug>.
+  db.exec(`INSERT INTO activity_logs (user_id, action, entity_type, entity_id, details, project_id) VALUES
+           (${FOUNDER}, 'updated', 'raise.data-room', '12', '{}', ${P})`);
+  const items = (await rec(db, 'data-room', 12, { tail: '/activity' })).body.items;
+  assert.ok(items.length >= 1 && items.some((i: any) => i.action === 'updated'), 'raise.data-room is read');
+});
+
+test('2: a record id is the list\'s, and an id the venture does not hold is 404', async () => {
+  const db = await seeded();
+  for (const m of MODULES) {
+    for (const r of (await read(db, m.slug)).body.records.rows) {
+      if (r.id == null) continue;
+      const got = await rec(db, m.slug, r.id);
+      assert.equal(got.status, 200, `${m.slug} ${r.id}`);
+      assert.equal(got.body.id, String(r.id));
+    }
+  }
+  for (const [slug, id] of [['fundraising-readiness', 'pricing'], ['investor-narrative', 9], ['use-of-funds', 'travel'],
+    ['cap-table', 'e-99'], ['cap-table', 'h-1'], ['data-room', 99], ['pitch-deck', 99], ['capital-relationships', 99]] as const) {
+    assert.equal((await rec(db, slug, id)).status, 404, `${slug} ${id}`);
+  }
+  for (const id of ['Data_Room', 'h-', '../1', 'e-1 ']) assert.equal((await rec(db, 'cap-table', id)).status, 404, `bad id ${JSON.stringify(id)}`);
+});
+
+test('4: only the venture\'s own writer reads a record, and another venture\'s id is 404 on this one', async () => {
+  const db = await seeded();
+  for (const m of MODULES) {
+    const id = SECTIONS[m.slug].id;
+    for (const who of [40, 41, 50, 20]) assert.equal((await rec(db, m.slug, id, { who })).status, 403, `${m.slug} as ${PEOPLE[who].role} ${who}`);
+    for (const who of [FOUNDER, ADMIN, 60]) assert.equal((await rec(db, m.slug, id, { who })).status, 200, `${m.slug} as ${who}`);
+  }
+  // Venture B's rows, read with ?project= the founder's own venture.
+  db.exec(`INSERT INTO pitch_deck_share_tokens (id, deck_id, token_hash, expires_at, created_at) VALUES (45, 6, 'h45', '2999-01-01 00:00:00', '2026-10-01 10:00:00')`);
+  db.exec(`INSERT INTO data_room_files (id, uid, project_id, name, r2_key) VALUES (15, 'f15', ${P_OTHER}, 'theirs.pdf', 'k15')`);
+  db.exec(`INSERT INTO spinout_deck_overrides (project_id, field_key, value, version) VALUES (${P_OTHER}, '_version', '', 7)`);
+  for (const [slug, id] of [['capital-relationships', 9], ['pitch-deck', 45], ['data-room', 15], ['investor-narrative', 7]] as const) {
+    assert.equal((await rec(db, slug, id)).status, 404, `${slug} ${id}`);
+    assert.equal((await rec(db, slug, id, { who: ADMIN })).status, 404, `${slug} ${id}, even as an admin`);
+  }
+  // An h- id names a register row: one of venture B's, carried in A's scenario, is still 404.
+  db.exec(`INSERT INTO cap_table_holders (id, user_id, project_id, name, shares) VALUES (77, 20, ${P_OTHER}, 'Their founder', 100), (78, ${FOUNDER}, ${P}, 'Mira Okafor', 100)`);
+  const row = db.prepare(`SELECT id, inputs_json FROM cap_table_scenarios WHERE project_id = ${P}`).get() as any;
+  const inputs = JSON.parse(row.inputs_json);
+  inputs.founders[0].holder_id = 77; inputs.founders[1].holder_id = 78;
+  db.prepare('UPDATE cap_table_scenarios SET inputs_json = ? WHERE id = ?').run(JSON.stringify(inputs), row.id);
+  assert.equal((await rec(db, 'cap-table', 'h-77')).status, 404, 'B\'s register row');
+  assert.equal((await rec(db, 'cap-table', 'h-78')).status, 200, 'A\'s register row');
+  // Venture B's own founder reads B's prospect on B.
+  assert.equal((await rec(db, 'capital-relationships', 9, { who: 20, project: P_OTHER })).status, 200);
+});
+
+test('5: a record never claims what no store holds', async () => {
+  const db = await seeded();
+  const file = (await rec(db, 'data-room', 12)).body;
+  assert.deepEqual(file.facts.find((f: any) => f.label === 'Watermark'), { label: 'Watermark', value: null, reason: 'The room does not watermark' });
+  assert.equal(file.uid, 'f12', 'the file\'s uid rides on its record');
+  const text = (b: any) => JSON.stringify(b);
+  for (const m of MODULES) {
+    const body = (await rec(db, m.slug, SECTIONS[m.slug].id)).body;
+    assert.ok(!/copy link/i.test(text(body)), `${m.slug}: no Copy link`);
+    assert.ok(!/\bViewed\b/.test(text(body.main)), `${m.slug}: no per-file view is logged`);
+  }
+  // Downloads and blocked tries are what the room logs.
+  people(db);
+  db.exec(`INSERT INTO data_room_access_log (project_id, file_id, user_id, action, created_at) VALUES
+           (${P}, 12, 50, 'download', '2026-10-14 10:00:00'), (${P}, 12, 51, 'blocked', '2026-10-15 10:00:00'), (${P}, 12, 50, 'view', '2026-10-16 10:00:00')`);
+  const opened = (await rec(db, 'data-room', 12)).body.main.find((x: any) => x.key === 'opened').rows;
+  assert.deepEqual(opened.map((r: any) => [r.a, r.c]), [['Person 51', 'Blocked'], ['Person 50', 'Downloaded']]);
+  const funds = (await rec(db, 'use-of-funds', 'product')).body.main.find((x: any) => x.key === 'actual');
+  assert.deepEqual([funds.rows, funds.empty], [[], 'Not recorded: no store splits spend by category.']);
+  const docs = (await rec(db, 'cap-table', 'e-3')).body.main.find((x: any) => x.key === 'documents').rows;
+  assert.deepEqual(docs.at(-1), { a: 'Side letter', b: '', c: 'Not recorded', tone: 'grey' });
+  // A pitch link's views have no city: only a hashed IP is stored.
+  db.exec(`INSERT INTO deck_share_views (deck_id, share_token_id, read_seconds, created_at) VALUES (5, 41, 125, '2026-10-12 10:00:00')`);
+  const views = (await rec(db, 'pitch-deck', 41)).body.main.find((x: any) => x.key === 'views').rows;
+  assert.deepEqual(views, [{ a: '2026-10-12 · 10:00', b: '2 min' }]);
 });

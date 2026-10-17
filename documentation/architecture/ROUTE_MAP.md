@@ -97,6 +97,20 @@ writes (`/segments`, `/interviews/:id/segment|stage`, `/demand-signals`,
 `/waitlist-target`, `/interviews-target` (D685 §5.12), `/competitor-mentions`, `/hypotheses/:id/plan`,
 `/evidence-links/:id/strength`) call the same writers as #1471's interview
 accept path. See `decisions/D659.md`.
+D690 (#1692, migration 460) adds the form writes for the six records, each a
+writer in `services/validateWriters.ts` that logs its record and refuses a
+path id of another venture with a 404: `POST /themes`, `PATCH|DELETE
+/themes/:id`, `PATCH /segments/:id`, `POST /competitors` (a name, one of the
+caller's analysed companies or a directory company; 201 when added),
+`PATCH /competitors/:id` (watch and positioning), `PATCH
+/demand-signals/:id` (a `signal-` record only), `POST /hypotheses` and
+`PATCH /hypotheses/:id`. The row actions' writers (merge, split, attach a
+quote, Stop, evidence, experiments, a signal's file) are built and reach the
+SPA through the records actions in #1692's closing PR.
+`founder_validate_sessions.ts` adds `GET /sessions/:id/audio`, one
+short-lived signed download per recorded chunk, and `DELETE
+/discovery/interview/:id` now calls `services/interviewWriters.ts`'s
+`deleteInterview`.
 The `experiments` records carry Eadwyn's mark (D424) on each hypothesis as
 `provenance`, read by the board's `claimFills`. A failed read sets
 `fills_recorded: false` and marks every row `unreadable` (#1523, `D661.md`).
