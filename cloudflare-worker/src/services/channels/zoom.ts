@@ -593,7 +593,7 @@ export async function handleZoomWebhook(env: Env, rawBody: string, headers: Head
     return { status: 200, body: { ok: true } };
   } catch (e) {
     await releaseEvent(env, claim).catch(() => undefined);
-    console.error(`[zoom] webhook not stored ref=${ref.uid}`, e instanceof Error ? e.name : 'error');
+    console.error('[zoom] webhook not stored ref=%s', ref.uid, e instanceof Error ? e.name : 'error');
     return { status: 500, body: { error: 'not_stored', message: 'The event could not be stored. Zoom will send it again.' } };
   }
 }
@@ -609,7 +609,26 @@ function vttMs(t: string): number | null {
 }
 
 const ENTITIES: Record<string, string> = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&nbsp;': ' ', '&quot;': '"', '&#39;': '\'', '&lrm;': '', '&rlm;': '' };
-const cleanText = (s: string) => s.replace(/<[^>]*>/g, '').replace(/&(?:amp|lt|gt|nbsp|quot|#39|lrm|rlm);/g, (m) => ENTITIES[m] ?? m)
+/**
+ * Cue text without its tags. A `<` opens a tag that ends at the next `>`; a
+ * `<` with no `>` after it is dropped as a stray, so no `<` from the file
+ * survives (a single `/<[^>]*>/` pass kept an unterminated `<script…` whole).
+ * One scan, linear in the cue. Entities are decoded after this, into the plain
+ * text a speaker said: the transcript is stored and shown as text, not HTML.
+ */
+function stripTags(s: string): string {
+  let out = '';
+  let at = 0;
+  for (let lt = s.indexOf('<'); lt >= 0; lt = s.indexOf('<', at)) {
+    const gt = s.indexOf('>', lt + 1);
+    // No `>` after this `<` means none after any later one: the rest is text, its strays dropped.
+    if (gt < 0) return out + s.slice(at, lt) + s.slice(lt + 1).split('<').join('');
+    out += s.slice(at, lt);
+    at = gt + 1;
+  }
+  return out + s.slice(at);
+}
+const cleanText = (s: string) => stripTags(s).replace(/&(?:amp|lt|gt|nbsp|quot|#39|lrm|rlm);/g, (m) => ENTITIES[m] ?? m)
   .replace(/\s+/g, ' ').trim();
 
 /** `Name: words` as Zoom writes a known speaker. Not a time (`10:30`), not a URL (`https://`). */

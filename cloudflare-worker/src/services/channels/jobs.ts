@@ -66,7 +66,7 @@ export async function runChannelSweeps(env: Env, now: Date): Promise<string[]> {
       await sweep(env, now);
     } catch (e) {
       failed.push(provider);
-      console.error(`[cron] channel sweep failed provider=${provider}`, e instanceof Error ? e.message : 'error');
+      console.error('[cron] channel sweep failed provider=%s', provider, e instanceof Error ? e.message : 'error');
     }
   }
   return failed;

@@ -13,15 +13,17 @@ logger = logging.getLogger("studioos.tickets")
 
 router = APIRouter(prefix="/tickets", tags=["Support"])
 
-_type_column_ensured = False
+# A dict entry, not a `global` flag, as in settings.py (D476): CodeQL's
+# unused-global check does not follow a flag written on one call and read
+# on the next. Same run-once behaviour.
+_schema_once = {"ticket_type": False}
 
 
 def _ensure_type_column(session: Session):
     """Task #9 dev parity — the prod Worker adds tickets.type at runtime;
     mirror that here so create_all-provisioned dev DBs pick it up without a
     migration (same in-route ensure pattern as brand.py)."""
-    global _type_column_ensured
-    if _type_column_ensured:
+    if _schema_once["ticket_type"]:
         return
     from sqlalchemy import text
     # Postgres path first; SQLite (no IF NOT EXISTS) falls back to a plain
@@ -36,13 +38,7 @@ def _ensure_type_column(session: Session):
             break
         except Exception:
             session.rollback()
-    # codeql[py/unused-global-variable] -- _type_column_ensured is read via the `global _type_column_ensured` guard at the top of this
-    # same function (`if _type_column_ensured: return`); the write here is what a LATER, separate
-    # call's read observes. CodeQL's dead-store analysis does not model a global's value persisting
-    # across separate invocations of the function that sets it, so it sees this write as never
-    # consumed. It is: this flag exists specifically to make the schema-migration idempotent-but-
-    # skippable after the first successful request in this process.
-    _type_column_ensured = True
+    _schema_once["ticket_type"] = True
 
 
 @router.get("")
