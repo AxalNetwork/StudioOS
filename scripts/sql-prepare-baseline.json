@@ -158,6 +158,7 @@
     "SERVED_FUNDS @ routes/research_markets.ts": 1,
     "SERVED_FUNDS @ routes/research_overview.ts": 7,
     "SERVED_FUNDS @ routes/research_sectors.ts": 1,
+    "SERVED_FUNDS @ services/raiseCycle.ts": 1,
     "SERVED_FUNDS @ services/researchFundDirectory.ts": 10,
     "set @ services/onboardingProjection.ts": 1,
     "set.join(', ') @ routes/admin_learning_programs.ts": 1,

@@ -202,6 +202,7 @@ function raiseFixture() {
   }
   db.exec(sqlOf('249_project_metrics.sql'));
   db.exec(sqlOf('442_raise_cycle_stores.sql'));
+  db.exec(sqlOf('463_raise_record_stores.sql'));
   db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (?, ?, ?, ?, 1, ?)').run(FOUNDER, 'founder', 'Fay Founder', 'fay@example.test', 1001);
   db.exec(`INSERT INTO projects (id, name, founder_id) VALUES (${P}, 'Acme', 1001)`);
   return db;
@@ -227,8 +228,10 @@ function raiseSeeded() {
   const db = raiseFixture();
   const before = [{ holder: 'Fay', type: 'founder', shares: 8000 }, { holder: 'Option Pool', type: 'option_pool', shares: 2000 }];
   const after = [...before, { holder: 'Seed investors', type: 'preferred', shares: 2500 }];
+  // Saved with the entry keys every save now gives (D691, #1699); a scenario without them reads id: null.
+  const inputs = { founders: [{ name: 'Fay', shares: 8000, key: 'e-1' }], option_pool_pct: 20, rounds: [{ name: 'Seed', pre_money: 8000, investment: 2500, key: 'e-2' }], entry_key_seq: 2 };
   db.exec(`INSERT INTO cap_table_scenarios (owner_user_id, project_id, name, inputs_json, result_json) VALUES
-           (${FOUNDER}, ${P}, 'Main', '{}', '${JSON.stringify({ founding: before, rounds: [{ name: 'Seed', ledger: after }] })}')`);
+           (${FOUNDER}, ${P}, 'Main', '${JSON.stringify(inputs)}', '${JSON.stringify({ founding: before, rounds: [{ name: 'Seed', ledger: after }] })}')`);
   db.exec(`UPDATE projects SET funding_needed = 1000000,
              use_of_funds = '[{"label":"Product & engineering","pct":60},{"label":"GTM: sales and marketing","pct":40}]'
            WHERE id = ${P}`);

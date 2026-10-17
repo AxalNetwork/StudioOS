@@ -25,6 +25,8 @@ import { safeCard, safeFigure, countState, PAGE_SIZE, type Card, type Figure } f
 import { daysBefore, recordQuery, type RecordQuery } from './cycleValidate';
 import { roundCallsEnabled } from './roundCallPolicy';
 import { peerBenchmark, type PeerBenchmark } from './peerBenchmark';
+import { SERVED_FUNDS } from './researchFundDirectory';
+import { focusTokens, mapCompanySector, mapFundFocus, normalizeLabel } from './researchTaxonomy';
 
 export { recordQuery };
 export type { RecordQuery };
@@ -32,24 +34,29 @@ export type { RecordQuery };
 export const CYCLE = 'raise';
 export const QUESTION = 'What resources does this venture need?';
 
+/** D691 (#1699): each module's list is titled as the canvas titles it (CO:623-629). */
 export const MODULES = [
-  { slug: 'fundraising-readiness', name: 'Fundraising readiness' },
-  { slug: 'investor-narrative', name: 'Investor narrative' },
-  { slug: 'pitch-deck', name: 'Pitch deck' },
-  { slug: 'data-room', name: 'Data room' },
-  { slug: 'cap-table', name: 'Cap table' },
-  { slug: 'use-of-funds', name: 'Use of funds' },
-  { slug: 'capital-relationships', name: 'Capital relationships' },
+  { slug: 'fundraising-readiness', name: 'Fundraising readiness', records_title: 'Readiness items' },
+  { slug: 'investor-narrative', name: 'Investor narrative', records_title: 'Versions' },
+  { slug: 'pitch-deck', name: 'Pitch deck', records_title: 'Investor links' },
+  { slug: 'data-room', name: 'Data room', records_title: 'Files' },
+  { slug: 'cap-table', name: 'Cap table', records_title: 'Holders' },
+  { slug: 'use-of-funds', name: 'Use of funds', records_title: 'Categories' },
+  { slug: 'capital-relationships', name: 'Capital relationships', records_title: 'Investors' },
 ] as const;
 export type ModuleSlug = (typeof MODULES)[number]['slug'];
 
 export type Ctx = { env: Env; projectId: number; today: string };
 
 const href = (ctx: Ctx, slug: string) => `/raise/${slug}?project=${ctx.projectId}`;
-/** The full tools the module pages summarise; the pages link to them. */
+/**
+ * The full tools the module pages summarise; the pages link to them.
+ * `dataRoom` is the file tool (`DataRoomPage`), which holds upload, grants and
+ * the NDA switch; the bare `/raise/data-room` becomes D696's module page.
+ */
 export const TOOL_HREF = {
   pitch: '/raise/pitch',
-  dataRoom: '/raise/data-room',
+  dataRoom: '/raise/data-room?mode=workspace',
   capTable: '/raise/capital/cap-table',
   pipeline: '/raise/capital/pipeline',
   model: '/raise/capital/model',
@@ -256,16 +263,23 @@ async function benchmarkSpec(ctx: Ctx): Promise<unknown> {
   }
 }
 
+const READINESS_STATES = [{ value: 'scored', label: 'Scored' }, { value: 'gap', label: 'Has a gap' }, { value: 'not_scored', label: 'Not scored' }];
+
 async function readinessRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   const { items, scores } = await loadReadiness(ctx);
   const latest = latestScores(scores);
   let rows = items.map((i) => ({ i, s: latest.get(Number(i.id)) ?? null })).filter(({ i }) => has(rq.q, i.label));
-  if (rq.filter.evidence) rows = rows.filter(({ s }) => (rq.filter.evidence === 'not_recorded' ? s == null : s?.evidence === rq.filter.evidence));
-  if (rq.sort === 'score') rows.sort((a, b) => (a.s?.score ?? -1) - (b.s?.score ?? -1));
+  const state = rq.filter.state;
+  if (state === 'scored') rows = rows.filter(({ s }) => s != null);
+  else if (state === 'gap') rows = rows.filter(({ s }) => s != null && String(s.missing ?? '').trim() !== '');
+  else if (state === 'not_scored') rows = rows.filter(({ s }) => s == null);
+  // Score, highest first, is the default; an item no one scored comes last.
+  if (rq.sort !== 'order') rows.sort((a, b) => (b.s?.score ?? -1) - (a.s?.score ?? -1));
   return paged(
-    [col('item', 'Item'), col('score', 'Score /10'), col('evidence', 'Evidence'), col('missing', 'Missing'), col('updated', 'Updated')],
+    [col('item', 'Item'), col('score', 'Score'), col('evidence', 'Evidence'), col('missing', 'Missing'), col('updated', 'Updated')],
     rows.map(({ i, s }) => ({
-      id: i.id,
+      // D691 decision 3: the item's key, the same in every list, record and write.
+      id: READINESS_KEYS.includes(i.item_key) ? i.item_key : null,
       cells: {
         item: i.label, score: s ? Number(s.score) : null, evidence: s?.evidence ?? null,
         missing: s ? s.missing ?? '' : null, updated: s ? day(s.scored_at) : null,
@@ -273,8 +287,8 @@ async function readinessRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
     })),
     rq.page,
     {
-      filters: [{ key: 'evidence', label: 'Evidence', options: [...EVIDENCE.map((e) => ({ value: e, label: e[0].toUpperCase() + e.slice(1) })), { value: 'not_recorded', label: 'Not scored' }] }],
-      sorts: [{ key: 'order', label: 'Order' }, { key: 'score', label: 'Lowest score' }],
+      filters: [{ key: 'state', label: 'State', options: READINESS_STATES }],
+      sorts: [{ key: 'score', label: 'Score' }, { key: 'order', label: 'Order' }],
     },
   );
 }
@@ -439,7 +453,7 @@ async function narrativeRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
       id: v.version,
       cells: {
         version: `v${v.version}`, investor_type: INVESTOR_TYPE_LABEL[v.investor_type ?? 'other'] ?? null,
-        deck: v.deck_version != null ? `Deck v${v.deck_version}` : null,
+        deck: v.deck_version != null ? `v${v.deck_version}` : null,
         mismatches: { text: String(Number(v.mismatches)), tone: Number(v.mismatches) ? 'warn' : 'ok' },
         date: day(v.saved_at),
       },
@@ -500,29 +514,46 @@ export async function pitchDeckCard(ctx: Ctx): Promise<Card> {
   });
 }
 
+/** A link made with "Never" stores this expiry: the column is NOT NULL (D691 decision 5). */
+export const NEVER_EXPIRES = '9999-12-31 23:59:59';
+
 async function pitchRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   const res = await ctx.env.DB.prepare(
-    `SELECT t.id, t.created_at, t.expires_at, t.revoked_at, t.view_count,
+    `SELECT t.id, t.created_at, t.expires_at, t.revoked_at, t.view_count, t.last_viewed_at, t.investor_label,
+            p.name AS prospect_name, p.firm AS prospect_firm,
             (SELECT COALESCE(SUM(v.read_seconds), 0) FROM deck_share_views v WHERE v.share_token_id = t.id) AS seconds,
             (SELECT s.slide_index FROM deck_view_slides s JOIN deck_share_views v ON v.id = s.view_id
               WHERE v.share_token_id = t.id GROUP BY s.slide_index HAVING SUM(s.seconds) > 0
               ORDER BY SUM(s.seconds) DESC, s.slide_index LIMIT 1) AS top_slide
        FROM pitch_deck_share_tokens t JOIN pitch_decks d ON d.id = t.deck_id
+       LEFT JOIN raise_prospects p ON p.id = t.prospect_id AND p.project_id = d.project_id
       WHERE d.project_id = ? ORDER BY t.created_at DESC, t.id DESC`,
   ).bind(ctx.projectId).all<any>();
   const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
   const status = (t: any) => (t.revoked_at ? 'revoked' : String(t.expires_at) < now ? 'expired' : 'active');
-  let rows = (res.results || []).filter((t) => has(rq.q, `link ${t.id}`, day(t.created_at)));
+  // The investor a link was made for: a prospect still of this venture, else the
+  // name typed in. A link made before 463 recorded neither, so it is named by its day.
+  const investor = (t: any) => [t.prospect_name, t.prospect_firm].filter(Boolean).join(' · ')
+    || String(t.investor_label ?? '').trim() || `Link created ${day(t.created_at) ?? 'on an unrecorded day'}`;
+  const expires = (t: any): Cell => {
+    const st = status(t);
+    if (st !== 'active') return { text: st === 'revoked' ? 'Revoked' : 'Expired', tone: 'muted' };
+    return { text: String(t.expires_at).startsWith(NEVER_EXPIRES.slice(0, 10)) ? 'Never' : day(t.expires_at) ?? '', tone: 'ok' };
+  };
+  let rows = (res.results || []).filter((t) => has(rq.q, investor(t), day(t.created_at)));
   if (rq.filter.status) rows = rows.filter((t) => status(t) === rq.filter.status);
   if (rq.sort === 'views') rows.sort((a, b) => Number(b.view_count) - Number(a.view_count));
+  else if (rq.sort !== 'newest') {
+    // Last viewed, the default: the most recent open first, a link never opened last.
+    rows.sort((a, b) => String(b.last_viewed_at ?? '').localeCompare(String(a.last_viewed_at ?? '')));
+  }
   return paged(
-    [col('link', 'Investor link'), col('expires', 'Expires'), col('views', 'Views'), col('time', 'Time on deck'), col('most_read', 'Most read')],
+    [col('link', 'Investor'), col('expires', 'Expires'), col('views', 'Views'), col('time', 'Time on deck'), col('most_read', 'Most read')],
     rows.map((t) => ({
       id: t.id,
       cells: {
-        // A share link records no investor name, so the link is named by its creation day.
-        link: `Link created ${day(t.created_at) ?? 'on an unrecorded day'}`,
-        expires: { text: day(t.expires_at) ?? '', tone: status(t) === 'active' ? 'ok' : 'muted' },
+        link: investor(t),
+        expires: expires(t),
         views: Number(t.view_count) || 0,
         time: `${Math.round((Number(t.seconds) || 0) / 60)} min`,
         most_read: t.top_slide == null ? null : `Slide ${Number(t.top_slide) + 1}`,
@@ -530,8 +561,8 @@ async function pitchRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
     })),
     rq.page,
     {
-      filters: [{ key: 'status', label: 'Status', options: [{ value: 'active', label: 'Active' }, { value: 'expired', label: 'Expired' }, { value: 'revoked', label: 'Revoked' }] }],
-      sorts: [{ key: 'newest', label: 'Newest' }, { key: 'views', label: 'Most views' }],
+      filters: [{ key: 'status', label: 'State', options: [{ value: 'active', label: 'Active' }, { value: 'expired', label: 'Expired' }, { value: 'revoked', label: 'Revoked' }] }],
+      sorts: [{ key: 'last_viewed', label: 'Last viewed' }, { key: 'newest', label: 'Newest' }, { key: 'views', label: 'Most views' }],
       add: { text: 'Create a share link', href: TOOL_HREF.pitch },
     },
   );
@@ -602,33 +633,80 @@ export async function dataRoomCard(ctx: Ctx): Promise<Card> {
   });
 }
 
+/** Who outside the founder sees a file (migration 463, D691 decision 6). */
+export const ACCESS_TIERS = [
+  { value: 'invited', label: 'Invited investors' },
+  { value: 'committed', label: 'Committed investors only' },
+  { value: 'nobody', label: 'Nobody yet' },
+] as const;
+const TIER_LABEL: Record<string, string> = Object.fromEntries(ACCESS_TIERS.map((t) => [t.value, t.label]));
+
+/**
+ * A file's Access cell: its stored tier, whether an NDA gates it, and the day
+ * access ends. It says who may open the file, not how many do: counting them
+ * is decision 6's shared predicate, which #1700 builds.
+ */
+export function accessText(f: { access_tier?: string | null; visibility?: string | null; access_expires_at?: string | null }): string {
+  const tier = TIER_LABEL[String(f.access_tier ?? 'invited')] ?? TIER_LABEL.invited;
+  const until = day(f.access_expires_at);
+  return [tier, f.visibility === 'nda' ? 'NDA' : null, until ? `until ${until}` : null].filter(Boolean).join(' · ');
+}
+
+/**
+ * The diligence requests the files name, by id: only a request of a case
+ * about this venture (`subject_type 'project'`), so a foreign id names nothing.
+ */
+async function requestTitles(ctx: Ctx, ids: number[]): Promise<Map<number, string>> {
+  const out = new Map<number, string>();
+  if (ids.length === 0) return out;
+  const res = await ctx.env.DB.prepare(
+    `SELECT r.id, r.title FROM dd_requests r JOIN dd_cases c ON c.id = r.case_id
+      WHERE c.subject_type = 'project' AND c.subject_id = ? AND r.id IN (SELECT value FROM json_each(?))`,
+  ).bind(ctx.projectId, JSON.stringify(ids)).all<{ id: number; title: string }>();
+  for (const r of res.results || []) out.set(Number(r.id), String(r.title));
+  return out;
+}
+
 async function dataRoomRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   const res = await ctx.env.DB.prepare(
-    `SELECT f.id, f.name, f.visibility, f.checklist_item, f.updated_at, d.name AS folder
+    `SELECT f.id, f.name, f.visibility, f.checklist_item, f.updated_at, f.folder_id, d.name AS folder,
+            f.access_tier, f.access_expires_at, f.dd_request_id
        FROM data_room_files f LEFT JOIN data_room_folders d ON d.id = f.folder_id
       WHERE f.project_id = ? ORDER BY f.updated_at DESC, f.id DESC`,
   ).bind(ctx.projectId).all<any>();
-  let rows = (res.results || []).filter((f) => has(rq.q, f.name, f.folder));
-  if (rq.filter.mapped === 'yes') rows = rows.filter((f) => f.checklist_item != null);
-  if (rq.filter.mapped === 'no') rows = rows.filter((f) => f.checklist_item == null);
-  if (rq.filter.area) rows = rows.filter((f) => DILIGENCE_CHECKLIST.find((c) => c.key === f.checklist_item)?.area === rq.filter.area);
+  const all = res.results || [];
+  const requested = [...new Set(all.map((f) => Number(f.dd_request_id)).filter((n) => Number.isInteger(n) && n > 0))];
+  const titles = await requestTitles(ctx, requested);
+  const answers = (f: any) => titles.get(Number(f.dd_request_id)) ?? checklistLabel(f.checklist_item);
+  const answerKind = (f: any) => (titles.has(Number(f.dd_request_id)) ? 'request' : checklistLabel(f.checklist_item) ? 'checklist' : 'none');
+  let rows = all.filter((f) => has(rq.q, f.name, f.folder));
+  const fl = rq.filter;
+  if (fl.folder) rows = rows.filter((f) => (fl.folder === 'top' ? f.folder_id == null : String(f.folder_id) === fl.folder));
+  if (fl.access === 'nda') rows = rows.filter((f) => f.visibility === 'nda');
+  else if (fl.access) rows = rows.filter((f) => String(f.access_tier ?? 'invited') === fl.access);
+  if (fl.answers) rows = rows.filter((f) => answerKind(f) === fl.answers);
+  if (fl.area) rows = rows.filter((f) => DILIGENCE_CHECKLIST.find((c) => c.key === f.checklist_item)?.area === fl.area);
   if (rq.sort === 'name') rows.sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  const folders = new Map<string, string>();
+  for (const f of all) if (f.folder_id != null) folders.set(String(f.folder_id), String(f.folder ?? 'Folder'));
   return paged(
     [col('file', 'File'), col('folder', 'Folder'), col('answers', 'Answers request'), col('access', 'Access'), col('updated', 'Updated')],
     rows.map((f) => ({
       id: f.id,
       cells: {
-        file: f.name, folder: f.folder ?? 'Top level', answers: checklistLabel(f.checklist_item),
-        access: f.visibility === 'nda' ? 'NDA' : 'Open', updated: day(f.updated_at),
+        file: f.name, folder: f.folder ?? 'Top level', answers: answers(f),
+        access: accessText(f), updated: day(f.updated_at),
       },
     })),
     rq.page,
     {
       filters: [
-        { key: 'mapped', label: 'Checklist', options: [{ value: 'yes', label: 'Matched' }, { value: 'no', label: 'Not matched' }] },
+        { key: 'folder', label: 'Folder', options: [{ value: 'top', label: 'Top level' }, ...[...folders].map(([value, label]) => ({ value, label }))] },
+        { key: 'access', label: 'Access', options: [...ACCESS_TIERS, { value: 'nda', label: 'NDA required' }] },
+        { key: 'answers', label: 'Answers', options: [{ value: 'request', label: 'A diligence request' }, { value: 'checklist', label: 'A checklist item' }, { value: 'none', label: 'Nothing yet' }] },
         { key: 'area', label: 'Area', options: CHECKLIST_AREAS.map((a) => ({ value: a, label: a })) },
       ],
-      sorts: [{ key: 'updated', label: 'Recently updated' }, { key: 'name', label: 'Name' }],
+      sorts: [{ key: 'updated', label: 'Updated' }, { key: 'name', label: 'Name' }],
       add: { text: 'Upload a file', href: TOOL_HREF.dataRoom },
     },
   );
@@ -643,7 +721,8 @@ export const groupOf = (type: string) => (type === 'founder' ? 'Founders' : type
 const INSTRUMENT: Record<string, string> = { founder: 'Common', option_pool: 'Options', safe: 'SAFE', preferred: 'Preferred' };
 
 type Holder = { holder: string; type: string; shares: number };
-export type CapRow = { holder: string; group: string; instrument: string; before: number | null; after: number | null };
+/** `type` is the simulator's ledger type, which `capIdOf` pairs with an `inputs_json` list. */
+export type CapRow = { holder: string; type: string; group: string; instrument: string; before: number | null; after: number | null };
 
 /** One row per holder with their percentage before and after the first planned round. */
 export function capRows(before: Holder[], after: Holder[] | null): CapRow[] {
@@ -652,10 +731,10 @@ export function capRows(before: Holder[], after: Holder[] | null): CapRow[] {
   const ta = after ? sum(after) : 0;
   const pct = (n: number, t: number) => (t > 0 ? Math.round((n / t) * 10000) / 100 : null);
   const keys = new Map<string, CapRow>();
-  for (const h of before) keys.set(`${h.type}\u0000${h.holder}`, { holder: h.holder, group: groupOf(h.type), instrument: INSTRUMENT[h.type] ?? h.type, before: pct(Number(h.shares) || 0, tb), after: after ? 0 : null });
+  for (const h of before) keys.set(`${h.type}\u0000${h.holder}`, { holder: h.holder, type: h.type, group: groupOf(h.type), instrument: INSTRUMENT[h.type] ?? h.type, before: pct(Number(h.shares) || 0, tb), after: after ? 0 : null });
   for (const h of after || []) {
     const k = `${h.type}\u0000${h.holder}`;
-    const row = keys.get(k) ?? { holder: h.holder, group: groupOf(h.type), instrument: INSTRUMENT[h.type] ?? h.type, before: 0, after: 0 };
+    const row = keys.get(k) ?? { holder: h.holder, type: h.type, group: groupOf(h.type), instrument: INSTRUMENT[h.type] ?? h.type, before: 0, after: 0 };
     row.after = pct(Number(h.shares) || 0, ta);
     keys.set(k, row);
   }
@@ -667,18 +746,68 @@ export function groupShares(rows: CapRow[], side: 'before' | 'after'): number[] 
   return HOLDER_GROUPS.map((g) => Math.round(rows.filter((r) => r.group === g).reduce((a, r) => a + (r[side] ?? 0), 0) * 100) / 100);
 }
 
-async function loadCap(ctx: Ctx): Promise<{ exists: boolean; computed: boolean; roundName: string | null; rows: CapRow[] }> {
+async function loadCap(ctx: Ctx): Promise<{ exists: boolean; computed: boolean; roundName: string | null; rows: CapRow[]; inputs: any }> {
   const s = await ctx.env.DB.prepare(
-    'SELECT result_json FROM cap_table_scenarios WHERE project_id = ? AND COALESCE(is_variant, 0) = 0 ORDER BY updated_at DESC LIMIT 1',
-  ).bind(ctx.projectId).first<{ result_json: string | null }>();
-  if (!s) return { exists: false, computed: false, roundName: null, rows: [] };
+    'SELECT inputs_json, result_json FROM cap_table_scenarios WHERE project_id = ? AND COALESCE(is_variant, 0) = 0 ORDER BY updated_at DESC LIMIT 1',
+  ).bind(ctx.projectId).first<{ inputs_json: string | null; result_json: string | null }>();
+  if (!s) return { exists: false, computed: false, roundName: null, rows: [], inputs: null };
   let r: any = null;
   try { r = s.result_json ? JSON.parse(s.result_json) : null; } catch { r = null; }
+  let inputs: any = null;
+  try { inputs = s.inputs_json ? JSON.parse(s.inputs_json) : null; } catch { inputs = null; }
   const founding: Holder[] | null = Array.isArray(r?.founding) ? r.founding : null;
-  if (!founding) return { exists: true, computed: false, roundName: null, rows: [] };
+  if (!founding) return { exists: true, computed: false, roundName: null, rows: [], inputs };
   const round = Array.isArray(r?.rounds) && r.rounds.length ? r.rounds[0] : null;
   const after: Holder[] | null = round && Array.isArray(round.ledger) ? round.ledger : null;
-  return { exists: true, computed: true, roundName: round ? String(round.name ?? 'the round') : null, rows: capRows(founding, after) };
+  return { exists: true, computed: true, roundName: round ? String(round.name ?? 'the round') : null, rows: capRows(founding, after), inputs };
+}
+
+const ENTRY_KEY = /^e-[1-9][0-9]{0,8}$/;
+const entryName = (e: any) => String(e?.name ?? '').trim();
+
+/** The `inputs_json` entry a ledger row comes from, matched the way `simulate` names the ledger. */
+function capEntryOf(row: { holder: string; type: string }, inputs: any): any | null {
+  const holder = String(row.holder ?? '').trim();
+  const list = row.type === 'founder' ? inputs?.founders : row.type === 'safe' ? inputs?.safes : row.type === 'preferred' ? inputs?.rounds : null;
+  if (!Array.isArray(list)) return null;
+  // A round's new investors are "<round> Investors" (`services/captable.ts`), matched in any case.
+  return list.find((e: any) => (row.type === 'preferred'
+    ? `${entryName(e)} investors`.toLowerCase() === holder.toLowerCase()
+    : entryName(e) === holder)) ?? null;
+}
+
+/**
+ * A cap-table row's id (D691 decision 4): `h-<holder_id>` for an entry that
+ * carries a register row, its `e-<n>` key otherwise, and `pool` for the option
+ * pool. A row of a scenario saved before keys has none: null, drawn plain, and
+ * the read never writes one.
+ */
+export function capIdOf(row: { holder: string; type: string }, inputs: any): string | null {
+  if (row.type === 'option_pool') return 'pool';
+  const entry = capEntryOf(row, inputs);
+  if (!entry) return null;
+  const holderId = Number(entry.holder_id);
+  if (Number.isInteger(holderId) && holderId > 0) return `h-${holderId}`;
+  return typeof entry.key === 'string' && ENTRY_KEY.test(entry.key) ? entry.key : null;
+}
+
+/** The instrument filter's values, as Add holder's form names them (CO:321). */
+const INSTRUMENTS = [
+  { value: 'common', label: 'Common' }, { value: 'safe', label: 'SAFE' }, { value: 'note', label: 'Convertible note' },
+  { value: 'options', label: 'Options' }, { value: 'preferred', label: 'Preferred' },
+] as const;
+
+/** A row's instrument key and its cell: a SAFE or a note says its cap when the entry has one. */
+function instrumentOf(row: CapRow, inputs: any): { key: string; text: string } {
+  if (row.type === 'founder') return { key: 'common', text: 'Common' };
+  if (row.type === 'option_pool') return { key: 'options', text: 'Options' };
+  if (row.type === 'preferred') return { key: 'preferred', text: 'Preferred' };
+  if (row.type !== 'safe') return { key: String(row.type), text: row.instrument };
+  const entry = capEntryOf(row, inputs);
+  const note = entry?.instrument === 'note';
+  const cap = num(entry?.cap);
+  const label = note ? 'Convertible note' : 'SAFE';
+  return { key: note ? 'note' : 'safe', text: cap != null && cap > 0 ? `${label} · ${usd(cap)} cap` : label };
 }
 
 export async function capTableCard(ctx: Ctx): Promise<Card> {
@@ -704,17 +833,25 @@ export async function capTableCard(ctx: Ctx): Promise<Card> {
 
 async function capRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   const cap = await loadCap(ctx);
-  let rows = cap.rows.filter((r) => has(rq.q, r.holder));
-  if (rq.filter.group) rows = rows.filter((r) => r.group === rq.filter.group);
-  if (rq.sort === 'after') rows.sort((a, b) => (b.after ?? -1) - (a.after ?? -1));
-  else rows.sort((a, b) => (b.before ?? -1) - (a.before ?? -1));
+  let rows = cap.rows.map((r) => ({ r, inst: instrumentOf(r, cap.inputs) })).filter(({ r }) => has(rq.q, r.holder));
+  if (rq.filter.group) rows = rows.filter(({ r }) => r.group === rq.filter.group);
+  if (rq.filter.instrument) rows = rows.filter(({ inst }) => inst.key === rq.filter.instrument);
+  // Ownership, the default: largest before the round, then largest after it.
+  if (rq.sort === 'after') rows.sort((a, b) => (b.r.after ?? -1) - (a.r.after ?? -1));
+  else rows.sort((a, b) => (b.r.before ?? -1) - (a.r.before ?? -1) || (b.r.after ?? -1) - (a.r.after ?? -1));
   return paged(
-    [col('holder', 'Holder'), col('group', 'Group'), col('instrument', 'Instrument'), col('before', 'Before %'), col('after', 'After %')],
-    rows.map((r, i) => ({ id: `${r.group}:${r.holder}:${i}`, cells: { holder: r.holder, group: r.group, instrument: r.instrument, before: r.before, after: r.after } })),
+    [col('holder', 'Holder'), col('group', 'Group'), col('instrument', 'Instrument'), col('before', 'Before'), col('after', 'After round')],
+    rows.map(({ r, inst }) => ({
+      id: capIdOf(r, cap.inputs),
+      cells: { holder: r.holder, group: r.group, instrument: inst.text, before: r.before, after: r.after },
+    })),
     rq.page,
     {
-      filters: [{ key: 'group', label: 'Group', options: HOLDER_GROUPS.map((g) => ({ value: g, label: g })) }],
-      sorts: [{ key: 'before', label: 'Largest before' }, { key: 'after', label: 'Largest after' }],
+      filters: [
+        { key: 'group', label: 'Group', options: HOLDER_GROUPS.map((g) => ({ value: g, label: g })) },
+        { key: 'instrument', label: 'Instrument', options: [...INSTRUMENTS] },
+      ],
+      sorts: [{ key: 'ownership', label: 'Ownership' }, { key: 'after', label: 'Largest after the round' }],
       add: { text: 'Open the cap table', href: TOOL_HREF.capTable },
     },
   );
@@ -724,13 +861,17 @@ async function capRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
 // Use of funds
 // ---------------------------------------------------------------------------
 
-/** The Use of Funds page's five sections and the milestone bucket three of them carry. */
+/**
+ * The Use of Funds page's five sections, the milestone bucket three of them
+ * carry, and each one's key (D691 decision 9), the id every list, record and
+ * write names. The deck maps the sections by label, so the labels stay.
+ */
 export const FUND_SECTIONS = [
-  { label: 'Product & engineering', bucket: 'eng' },
-  { label: 'GTM: sales and marketing', bucket: 'gtm' },
-  { label: 'Infrastructure & data', bucket: null },
-  { label: 'Operations, legal & compliance', bucket: 'ops' },
-  { label: 'Hiring / runway reserve', bucket: null },
+  { key: 'product', label: 'Product & engineering', bucket: 'eng' },
+  { key: 'go-to-market', label: 'GTM: sales and marketing', bucket: 'gtm' },
+  { key: 'infrastructure', label: 'Infrastructure & data', bucket: null },
+  { key: 'operations', label: 'Operations, legal & compliance', bucket: 'ops' },
+  { key: 'reserve', label: 'Hiring / runway reserve', bucket: null },
 ] as const;
 const FUND_TONES = ['v1', 'v2', 'v3', 'grey', 'muted'];
 
@@ -765,7 +906,13 @@ async function loadFunds(ctx: Ctx) {
   let metaObj: any = {};
   try { metaObj = p?.use_of_funds_meta ? JSON.parse(p.use_of_funds_meta) : {}; } catch { metaObj = {}; }
   const costs: Record<string, { bucket?: string; cost?: unknown }> = metaObj && typeof metaObj.milestone_costs === 'object' && metaObj.milestone_costs ? metaObj.milestone_costs : {};
-  return { alloc: parseAllocation(p?.use_of_funds), target: num(p?.funding_needed), costs, metrics: m ?? null };
+  // D691 decision 9: the runway the raise buys and each section's milestone, kept in the same meta.
+  const runway = num(metaObj?.runway_months);
+  const milestones: Record<string, { label?: unknown; by?: unknown }> = metaObj && typeof metaObj.milestones === 'object' && metaObj.milestones ? metaObj.milestones : {};
+  return {
+    alloc: parseAllocation(p?.use_of_funds), target: num(p?.funding_needed), costs, metrics: m ?? null,
+    runway: runway != null && runway > 0 ? runway : null, milestones,
+  };
 }
 
 export async function useOfFundsCard(ctx: Ctx): Promise<Card> {
@@ -793,30 +940,45 @@ export async function useOfFundsCard(ctx: Ctx): Promise<Card> {
   });
 }
 
+/** "<label> by <date>" when the section's milestone is recorded (decision 9). */
+function milestoneText(m: { label?: unknown; by?: unknown } | undefined): string | null {
+  const label = String(m?.label ?? '').trim();
+  if (!label) return null;
+  const by = String(m?.by ?? '').trim();
+  return by ? `${label} by ${by}` : label;
+}
+
 async function fundsRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   const f = await loadFunds(ctx);
-  const rows = (f.alloc ?? []).map((pct, i) => {
+  let rows = (f.alloc ?? []).map((pct, i) => {
     const s = FUND_SECTIONS[i];
     const priced = s.bucket
       ? Object.values(f.costs).filter((c) => c?.bucket === s.bucket && c.cost != null && c.cost !== '' && Number.isFinite(Number(c.cost)))
       : [];
     const cost = priced.reduce((a, c) => a + Number(c.cost), 0);
+    const amount = f.target != null ? Math.round((pct / 100) * f.target) : null;
     return {
-      id: s.label,
+      id: s.key,
       cells: {
-        category: s.label, share: pct,
-        amount: f.target != null ? Math.round((pct / 100) * f.target) : null,
-        // No store splits monthly burn by category.
-        monthly: null,
-        milestone: priced.length ? `${plural(priced.length, 'milestone', 'milestones')} · ${usd(cost)}` : null,
+        category: s.label, share: pct, amount,
+        // The amount over the runway it buys; with no runway set, Not recorded.
+        monthly: amount != null && f.runway != null ? Math.round(amount / f.runway) : null,
+        milestone: milestoneText(f.milestones[s.key])
+          ?? (priced.length ? `${plural(priced.length, 'milestone', 'milestones')} · ${usd(cost)}` : null),
       },
     };
   }).filter((r) => r.cells.share > 0 && has(rq.q, r.cells.category));
-  if (rq.sort === 'share') rows.sort((a, b) => b.cells.share - a.cells.share);
+  if (rq.filter.category) rows = rows.filter((r) => r.id === rq.filter.category);
+  // Share, largest first, is the default.
+  if (rq.sort !== 'order') rows.sort((a, b) => b.cells.share - a.cells.share);
   return paged(
-    [col('category', 'Category'), col('share', 'Share %'), col('amount', 'Amount'), col('monthly', 'Monthly'), col('milestone', 'Milestone')],
+    [col('category', 'Category'), col('share', 'Share'), col('amount', 'Amount'), col('monthly', 'Monthly'), col('milestone', 'Milestone')],
     rows, rq.page,
-    { sorts: [{ key: 'order', label: 'Order' }, { key: 'share', label: 'Largest share' }], add: { text: 'Edit the allocation', href: TOOL_HREF.model } },
+    {
+      filters: [{ key: 'category', label: 'Category', options: FUND_SECTIONS.map((s) => ({ value: s.key, label: s.label })) }],
+      sorts: [{ key: 'share', label: 'Share' }, { key: 'order', label: 'Order' }],
+      add: { text: 'Edit the allocation', href: TOOL_HREF.model },
+    },
   );
 }
 
@@ -826,6 +988,8 @@ async function fundsRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
 
 export const STAGES = ['to_contact', 'contacted', 'meeting', 'diligence', 'committed'] as const;
 const STAGE_LABEL: Record<string, string> = { to_contact: 'To contact', contacted: 'Contacted', meeting: 'Meeting', diligence: 'Diligence', committed: 'Committed', passed: 'Passed' };
+/** The list names the first stage as the canvas does (D691 decision 10); the stored value stays `to_contact`. */
+const LIST_STAGE_LABEL: Record<string, string> = { ...STAGE_LABEL, to_contact: 'Identified' };
 export const IN_CONVERSATION = ['contacted', 'meeting', 'diligence'];
 
 export type ProspectRow = {
@@ -922,20 +1086,72 @@ export async function capitalCard(ctx: Ctx): Promise<Card> {
  * "· via call" for any responder.
  */
 export function stageCell(p: ProspectRow): Cell {
-  const label = STAGE_LABEL[p.stage] ?? p.stage;
+  const label = LIST_STAGE_LABEL[p.stage] ?? p.stage;
   const soft = p.stage === 'committed' && p.commit_status === 'soft';
   const text = `${label}${soft ? ' · soft' : ''}${p.via_call ? ' · via call' : ''}`;
   return soft || p.via_call ? { text, tone: soft ? 'warn' : undefined } : label;
 }
 
+export type Fit = 'fits' | 'outside' | 'unclear';
+export const FIT_LABEL: Record<Fit | 'not_recorded', string> = {
+  fits: 'Fits', outside: 'Outside its focus', unclear: 'Unclear', not_recorded: 'Not recorded',
+};
+
+/**
+ * A fund's thesis against the venture's sector (D691 decision 10), through the
+ * Research crosswalk and never by substring: "Fits" when the two map to a
+ * shared market or the fund is Generalist, "Outside its focus" when both map
+ * and share none, "Unclear" when either maps to nothing.
+ */
+export function fundFit(focus: string | null | undefined, sector: string | null | undefined): Fit {
+  if (focusTokens(focus).some((t) => normalizeLabel(t) === 'generalist')) return 'fits';
+  const fund = mapFundFocus(focus).targets;
+  const venture = mapCompanySector(sector).targets;
+  if (fund.length === 0 || venture.length === 0) return 'unclear';
+  return fund.some((m) => venture.includes(m)) ? 'fits' : 'outside';
+}
+
+/**
+ * Each prospect's Fit, by prospect id. Only a prospect linked to a fund the
+ * directory still serves has one: the funds are read `FROM SERVED_FUNDS`, so a
+ * list whose terms say 'not allowed' is never read. No link, no Fit.
+ */
+async function prospectFits(ctx: Ctx): Promise<Map<number, Fit>> {
+  const out = new Map<number, Fit>();
+  const linked = await ctx.env.DB.prepare(
+    'SELECT id, research_fund_uid FROM raise_prospects WHERE project_id = ? AND research_fund_uid IS NOT NULL',
+  ).bind(ctx.projectId).all<{ id: number; research_fund_uid: string }>();
+  const rows = linked.results || [];
+  if (rows.length === 0) return out;
+  const funds = await ctx.env.DB.prepare(
+    `SELECT f.uid, f.sector_focus FROM ${SERVED_FUNDS} AS f WHERE f.uid IN (SELECT value FROM json_each(?))`,
+  ).bind(JSON.stringify([...new Set(rows.map((r) => r.research_fund_uid))])).all<{ uid: string; sector_focus: string | null }>();
+  const focus = new Map((funds.results || []).map((f) => [String(f.uid), f.sector_focus]));
+  const p = await ctx.env.DB.prepare('SELECT sector FROM projects WHERE id = ?').bind(ctx.projectId).first<{ sector: string | null }>();
+  for (const r of rows) {
+    if (focus.has(r.research_fund_uid)) out.set(Number(r.id), fundFit(focus.get(r.research_fund_uid), p?.sector));
+  }
+  return out;
+}
+
 async function capitalRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
+  const fits = await prospectFits(ctx);
+  const fitOf = (p: ProspectRow): Fit | 'not_recorded' => fits.get(Number(p.id)) ?? 'not_recorded';
   let rows = (await loadProspects(ctx.env, ctx.projectId)).filter((p) => has(rq.q, p.name, p.firm, p.warm_path));
   if (rq.filter.stage) rows = rows.filter((p) => p.stage === rq.filter.stage);
+  if (rq.filter.fit) rows = rows.filter((p) => fitOf(p) === rq.filter.fit);
+  if (rq.filter.path === 'has') rows = rows.filter((p) => String(p.warm_path ?? '').trim() !== '');
+  if (rq.filter.path === 'none') rows = rows.filter((p) => String(p.warm_path ?? '').trim() === '');
   const calls = roundCallsEnabled(ctx.env);
   if (calls && rq.filter.source === 'call') rows = rows.filter((p) => p.via_call);
   if (rq.sort === 'due') rows.sort((a, b) => String(a.next_step_due ?? '9999').localeCompare(String(b.next_step_due ?? '9999')));
   else if (rq.sort === 'name') rows.sort((a, b) => String(a.name ?? '').localeCompare(String(b.name ?? '')));
-  else rows.sort((a, b) => String(b.updated_at ?? '').localeCompare(String(a.updated_at ?? '')));
+  else if (rq.sort === 'recent') rows.sort((a, b) => String(b.updated_at ?? '').localeCompare(String(a.updated_at ?? '')));
+  else {
+    // Last contact, the default: the most recent first, a prospect with none last.
+    rows.sort((a, b) => String(b.last_contact ?? '').localeCompare(String(a.last_contact ?? ''))
+      || String(b.updated_at ?? '').localeCompare(String(a.updated_at ?? '')));
+  }
   return paged(
     [col('investor', 'Investor'), col('stage', 'Stage'), col('last_contact', 'Last contact'), col('next_step', 'Next step'), col('warm_path', 'Warm path')],
     rows.map((p) => ({
@@ -953,10 +1169,12 @@ async function capitalRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
     rq.page,
     {
       filters: [
-        { key: 'stage', label: 'Stage', options: [...STAGES, 'passed'].map((s) => ({ value: s, label: STAGE_LABEL[s] })) },
+        { key: 'stage', label: 'Stage', options: [...STAGES, 'passed'].map((s) => ({ value: s, label: LIST_STAGE_LABEL[s] })) },
+        { key: 'fit', label: 'Fit', options: (['fits', 'outside', 'unclear', 'not_recorded'] as const).map((f) => ({ value: f, label: FIT_LABEL[f] })) },
+        { key: 'path', label: 'Path', options: [{ value: 'has', label: 'Has a warm path' }, { value: 'none', label: 'No path' }] },
         ...(calls ? [{ key: 'source', label: 'Source', options: [{ value: 'call', label: 'Responded to a call' }] }] : []),
       ],
-      sorts: [{ key: 'recent', label: 'Recently updated' }, { key: 'due', label: 'Next step due' }, { key: 'name', label: 'Name' }],
+      sorts: [{ key: 'last_contact', label: 'Last contact' }, { key: 'recent', label: 'Recently updated' }, { key: 'due', label: 'Next step due' }, { key: 'name', label: 'Name' }],
       add: { text: 'Add an investor', href: TOOL_HREF.pipeline },
     },
   );
@@ -1063,7 +1281,8 @@ export const CARD_FOR: Record<ModuleSlug, (ctx: Ctx) => Promise<Card>> = {
 export type Cell = string | number | null | { text: string; tone?: string; href?: string };
 export type Records = {
   cols: Array<{ key: string; label: string }>;
-  rows: Array<{ id: number | string; cells: Record<string, Cell> }>;
+  /** Null only where decision 4 says so: a cap-table row of a scenario saved before keys. */
+  rows: Array<{ id: number | string | null; cells: Record<string, Cell> }>;
   total: number; page: number; page_size: number;
   filters?: Array<{ key: string; label: string; options: Array<{ value: string; label: string }> }>;
   sorts?: Array<{ key: string; label: string }>;

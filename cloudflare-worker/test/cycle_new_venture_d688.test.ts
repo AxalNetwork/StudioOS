@@ -159,6 +159,7 @@ function raiseFixture() {
   }
   db.exec(mig('249_project_metrics.sql'));
   db.exec(mig('442_raise_cycle_stores.sql'));
+  db.exec(mig('463_raise_record_stores.sql'));
   db.exec("INSERT INTO users(id, role, name, email, is_active, founder_id) VALUES (10, 'founder', 'Test Founder', 'founder@example.test', 1, 1001)");
   db.exec("INSERT INTO projects(id, name, founder_id) VALUES (1, 'Sample Venture', 1001)");
   return db;
@@ -210,7 +211,7 @@ test('D688: new Raise cards pin the seven lines and actions; figures stay null',
     ['empty', 'No readiness score yet. Readiness by evidence appears here.', 'Score readiness', '/raise/fundraising-readiness?project=1&add=1'],
     ['empty', 'No narrative saved yet. Each version appears here.', 'New version', '/raise/investor-narrative?project=1&add=1'],
     ['empty', 'No deck yet. Views per week appear here.', 'Build your deck', '/raise/pitch'],
-    ['empty', 'No files yet. Coverage of the diligence checklist appears here.', 'Upload', '/raise/data-room'],
+    ['empty', 'No files yet. Coverage of the diligence checklist appears here.', 'Upload', '/raise/data-room?mode=workspace'],
     ['empty', 'No holders yet. Ownership before and after the round appears here.', 'Add holder', '/raise/capital/cap-table'],
     ['empty', 'No split yet. The planned split and runway appear here.', 'Edit split', '/raise/capital/model'],
     ['empty', 'No investors yet. The pipeline by stage appears here.', 'Add investor', '/raise/capital/pipeline'],

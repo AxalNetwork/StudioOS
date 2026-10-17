@@ -96,7 +96,11 @@ be told apart; churn needs two billings) and rewrites `revenue_movements`.
 D663: `raiseCycle.ts` computes the Raise figures, seven cards and records, plus D686's independently readable, project-scoped Calls history, for
 `../routes/cycle_raise.ts`, including the computed readiness checks, the
 diligence checklist and the narrative consistency check (fixed patterns, no
-model). `raiseWriters.ts` has one writer per migration 442 record.
+model). Since D691 (#1699) each list carries the canvas's title, columns,
+filters and default sort (the first in `sorts`), and its row ids are addresses
+that never hold a name: an item key, a version, a link, file or prospect id, a
+cap-table `h-<n>`, `e-<n>` or `pool`, and a use-of-funds section key.
+`raiseWriters.ts` has one writer per migration 442 record.
 `capTableWrites.ts` (D691, #1699) is the cap table's one save, `saveScenario()`,
 which `POST` and `PUT /api/captable/scenarios` call: the one-per-venture upsert,
 its unique-index recovery and D632's activity row, plus an `e-<n>` key on every

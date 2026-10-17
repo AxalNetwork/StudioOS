@@ -32,6 +32,8 @@ const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const BASELINE = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
 const sqlOf = (file: string) => readFileSync(resolve(process.cwd(), `cloudflare-worker/sql/migrations/${file}`), 'utf8');
 const MIG442 = sqlOf('442_raise_cycle_stores.sql');
+// D691 (#1699): the lists read migration 463's columns (a link's investor, a file's access, a prospect's fund).
+const MIG463 = sqlOf('463_raise_record_stores.sql');
 
 const FOUNDER = 10, OTHER = 20, ADMIN = 30, PARTNER = 40, INVESTOR = 50;
 const P = 1, P_OTHER = 2;
@@ -50,6 +52,7 @@ function fixture() {
   }
   db.exec(sqlOf('249_project_metrics.sql'));
   db.exec(MIG442);
+  db.exec(MIG463);
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (?, ?, ?, ?, 1, ?)');
   u.run(FOUNDER, 'founder', 'Fay Founder', 'fay@example.test', 1001);
   u.run(OTHER, 'founder', 'Bo Other', 'bo@example.test', 1002);
@@ -369,8 +372,9 @@ test('data room: checklist coverage by area, a file matched through the writer, 
   assert.equal(c.series[1].items[0].label, 'Ivy Investor');
   assert.equal(c.next.text, 'Match 1 file to the diligence checklist');
   const rec = await moduleRead(db, 'data-room', '&sort=name');
+  // D691: Access is the file's tier (463's default, invited) with its NDA gate.
   assert.deepEqual(rec.body.records.rows.map((r: any) => [r.cells.file, r.cells.folder, r.cells.answers, r.cells.access]),
-    [['COI.pdf', 'Legal', 'Certificate of incorporation', 'NDA'], ['Model.xlsx', 'Top level', null, 'Open']]);
+    [['COI.pdf', 'Legal', 'Certificate of incorporation', 'Invited investors · NDA'], ['Model.xlsx', 'Top level', null, 'Invited investors']]);
 });
 
 test('cap table: ownership by group before and after the first planned round', async () => {
