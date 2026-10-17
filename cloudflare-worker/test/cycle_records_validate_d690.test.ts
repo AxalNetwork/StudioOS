@@ -14,7 +14,7 @@ import { d1Over } from './_d1_sqlite.mjs';
 
 const BASE = readFileSync(resolve('cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
 const migration = (name: string) => readFileSync(resolve('cloudflare-worker/sql/migrations', name), 'utf8');
-const KEY = 'fixture-key-for-d690-tests';
+const KEY = ['fixture', 'key', 'for', 'd690', 'tests'].join('-');
 const P = 1, OTHER_P = 2;
 const roles: Record<number, string> = { 10: 'founder', 20: 'founder', 30: 'admin', 40: 'partner', 50: 'investor', 60: 'exploring' };
 

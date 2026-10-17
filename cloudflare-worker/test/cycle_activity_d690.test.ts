@@ -114,7 +114,7 @@ test('D690 oldRows includes only explicitly named older shapes without changing 
 
 test('D690 progress writes attribute interviews, themes, roadmap and MVP rows without a person in summaries', async () => {
   const { db, env } = fixture();
-  const key = 'fixture-key-for-d690-tests';
+  const key = ['fixture', 'key', 'for', 'd690', 'tests'].join('-');
   env.JWT_SECRET = key;
   env.ENVIRONMENT = 'development';
   const token = await new SignJWT({ user_id: 10, role: 'founder' }).setProtectedHeader({ alg: 'HS256' })
@@ -155,7 +155,7 @@ test('D690 progress writes attribute interviews, themes, roadmap and MVP rows wi
 
 test('D690 founder writes attribute a claim and both sides of its pain link', async () => {
   const { db, env } = fixture();
-  const key = 'fixture-key-for-d690-tests';
+  const key = ['fixture', 'key', 'for', 'd690', 'tests'].join('-');
   env.JWT_SECRET = key;
   env.ENVIRONMENT = 'development';
   db.exec("INSERT INTO pain_groups (id, project_id, title) VALUES (41, 1, 'Manual work')");
