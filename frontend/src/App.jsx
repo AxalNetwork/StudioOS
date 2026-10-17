@@ -2545,6 +2545,7 @@ function AppInner() {
       {/* D685 §5.6.2 (#1588): the Recording View full screen, bound to the app's one recording. */}
       <Route path="/validate/record/live" element={guard(labRoles(['admin', 'founder']), <RecordLivePage />)} />
       <Route path="/validate/:slug" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" />)} />
+      <Route path="/validate/:slug/:id" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" record />)} />
       {/* D695: every Add has an address. Customer research's Add stays Record a session, the query kept. */}
       <Route path="/validate/customer-research/new" element={guard(labRoles(['admin', 'founder']), <HistoryRedirect to="/validate/record" />)} />
       <Route path="/validate/:slug/new" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" adding />)} />
@@ -2854,6 +2855,7 @@ function AppInner() {
       <Route path="/build/connect" element={guard(['admin', 'founder'], <CycleRoute cycle="build" lightbox />)} />
       <Route path="/build/tools" element={guard(['admin', 'founder'], <HistoryRedirect to="/build/operating-systems" hash="#tools" />)} />
       <Route path="/build/:slug" element={guard(['admin', 'founder'], <CycleRoute cycle="build" />)} />
+      <Route path="/build/:slug/:id" element={guard(['admin', 'founder'], <CycleRoute cycle="build" record />)} />
       <Route path="/build/:slug/new" element={guard(['admin', 'founder'], <CycleRoute cycle="build" adding />)} />
       <Route path="/execution" element={guard(['admin', 'founder'], effectiveRole === 'founder' && !founderExecutionEditor
         ? <Navigate to={`/build${location.search}`} replace />
@@ -3078,6 +3080,7 @@ function AppInner() {
       <Route path="/grow/update" element={guard(['admin', 'founder'], <CycleRoute cycle="grow" lightbox />)} />
       <Route path="/grow/updates" element={guard(['admin', 'founder'], <HistoryRedirect to="/grow/durable-company-building" hash="#updates" />)} />
       <Route path="/grow/:slug" element={guard(['admin', 'founder'], <CycleRoute cycle="grow" />)} />
+      <Route path="/grow/:slug/:id" element={guard(['admin', 'founder'], <CycleRoute cycle="grow" record />)} />
       <Route path="/grow/:slug/new" element={guard(['admin', 'founder'], <CycleRoute cycle="grow" adding />)} />
       <Route path="/grow/focus" element={guard(['admin', 'founder'], <FounderGrowFocus />)} />
       <Route path="/grow/talent" element={guard(['admin', 'founder'], <FounderGrowTalent />)} />
@@ -3413,6 +3416,7 @@ function AppInner() {
       <Route path="/raise/call" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" lightbox />)} />
       <Route path="/raise/calls" element={guard(labRoles(['admin', 'founder']), <HistoryRedirect to="/raise/capital-relationships" hash="#calls" />)} />
       <Route path="/raise/:slug" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" />)} />
+      <Route path="/raise/:slug/:id" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" record />)} />
       <Route path="/raise/:slug/new" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" adding />)} />
       {/* Standalone Referrals page (Refer & Earn + Payouts). Legacy /refer also redirects here. */}
       {/* Advisors were the one signed-in licence this guard omitted, and the
