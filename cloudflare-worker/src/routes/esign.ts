@@ -45,7 +45,11 @@ import { requireAuth } from '../auth';
 import { templatesFor, mayOriginate, notOfferedFor, originatorName, SEND_ABSENCES, ENVELOPE_ABSENCES } from '../services/esignOriginators';
 import { esignEnvelopeScope } from '../services/tenancyScope';
 import { sendAgreementAssignedEmail } from '../services/email';
-import { renderAgreementPdf, sha256Hex } from '../services/pdf';
+import { sha256Hex, sha256HexBytes } from '../services/pdf';
+import { paperModel, paperHtml, paperSha256, type PaperRecipient } from '../services/legalPaper';
+import { renderLegalPdf } from '../services/legalPaperRender';
+import { readPaperChoice, PAPER_CHOICE_MESSAGES } from '../services/legalPaperCss';
+import { fileRowStatement, newFileUid } from '../services/legalDocumentFiles';
 import { PDFDocument } from 'pdf-lib';
 import { bindingKey } from '../util/schemaBootstrap';
 import { clientIp } from '../util/clientIp';
@@ -359,6 +363,11 @@ export async function createAndSendEnvelope(
      * refused (RenderedBodyError) rather than silently ignored.
      */
     renderedBody?: { title: string; body: string };
+    /** D711 — the paper every copy of this envelope prints on (decision 4). */
+    pageSize?: 'letter' | 'a4';
+    cover?: 'dark' | 'light';
+    /** D711 — the template version sent, when the sender knows it (decision 8). */
+    templateVersion?: number | null;
   }
 ): Promise<{ envelope_id: number; envelope_uuid: string; signing_url: string; email_sent: boolean; provider?: string; already_pending?: boolean } | null> {
   await ensureSchema(env);
@@ -524,6 +533,9 @@ export async function createAndSendEnvelope(
   // the in-house path writes the recipients row in the SAME batch (one D1
   // transaction), so the row the predicate reads exists the instant the
   // envelope does. Two concurrent identical sends cannot both land.
+  const pageSize = opts.pageSize === 'a4' ? 'a4' : 'letter';
+  const cover = opts.cover === 'light' ? 'light' : 'dark';
+  const templateVersion = Number.isInteger(opts.templateVersion) && (opts.templateVersion as number) >= 1 ? opts.templateVersion as number : null;
   const recipientKey = (opts.recipientUserId ?? -1);
   const dealKey = opts.dealId ?? null;
   const SAME_PENDING_SEND = `
@@ -540,12 +552,14 @@ export async function createAndSendEnvelope(
     )`;
   const sameSendBinds = [opts.documentType, opts.adminUserId, recipientKey, dealKey, opts.recipientEmail];
   const insertEnvelope = env.DB.prepare(
-    `INSERT INTO esign_envelopes (envelope_uuid, user_id, deal_id, document_type, document_title, document_body, body_sha256, status, created_by, audit_log)
-     SELECT ?, ?, ?, ?, ?, ?, ?, 'sent', ?, '[]'
+    `INSERT INTO esign_envelopes (envelope_uuid, user_id, deal_id, document_type, document_title, document_body, body_sha256, status, created_by, audit_log,
+                                  page_size, cover, template_version)
+     SELECT ?, ?, ?, ?, ?, ?, ?, 'sent', ?, '[]', ?, ?, ?
       WHERE NOT EXISTS (SELECT 1 FROM esign_envelopes x WHERE ${SAME_PENDING_SEND})
      RETURNING id`
   ).bind(
     envelopeUuid, opts.recipientUserId, opts.dealId || null, opts.documentType, tpl.title, tpl.body, bodySha, opts.adminUserId,
+    pageSize, cover, templateVersion,
     ...sameSendBinds,
   );
   // The in-house signing token is minted before the insert so its recipients
@@ -615,6 +629,11 @@ export async function createAndSendEnvelope(
         const ds = await sendDocusignEnvelope(env, dsRow, {
           documentTitle: tpl.title,
           documentBody: tpl.body,
+          documentType: opts.documentType,
+          templateVersion,
+          envelopeUuid,
+          pageSize,
+          cover,
           recipientEmail: opts.recipientEmail,
           recipientName: opts.recipientName,
           emailSubject: `Please sign: ${tpl.title}`,
@@ -622,9 +641,28 @@ export async function createAndSendEnvelope(
           webhookSecret,
           integrationUid: dsRow.uid,
         });
-        await env.DB.prepare(
-          `UPDATE esign_envelopes SET provider = 'docusign', docusign_envelope_id = ?, docusign_account_id = ? WHERE id = ?`,
-        ).bind(ds.docusign_envelope_id, dsRow.external_account_id || null, envelopeId).run();
+        // D711 — the provider UPDATE and the source file's registry row land
+        // together.
+        await env.DB.batch([
+          env.DB.prepare(
+            `UPDATE esign_envelopes SET provider = 'docusign', docusign_envelope_id = ?, docusign_account_id = ? WHERE id = ?`,
+          ).bind(ds.docusign_envelope_id, dsRow.external_account_id || null, envelopeId),
+          fileRowStatement(env, {
+            uid: newFileUid(),
+            kind: 'docusign_source',
+            envelopeId,
+            templateSlug: opts.documentType,
+            templateVersion,
+            bodySha256: bodySha,
+            fileSha256: ds.source.sha256,
+            fileBytes: ds.source.bytes,
+            contentType: 'application/pdf',
+            pageSize: ds.source.pageSize,
+            renderer: ds.source.renderer,
+            paperSha256: ds.source.paperSha256,
+            actorUserId: opts.adminUserId,
+          }),
+        ]);
         await appendAudit(env, envelopeId, {
           ts: new Date().toISOString(),
           signer_id: opts.adminUserId,
@@ -763,6 +801,9 @@ esign.post('/send', async (c) => {
   const providerRaw = String(body?.provider ?? body?.via_provider ?? 'native').toLowerCase();
   const viaProvider: 'native' | 'docusign' = providerRaw === 'docusign' ? 'docusign' : 'native';
   if (!documentType) return c.json({ error: 'document_type is required' }, 400);
+  // D711 — the paper every copy prints on.
+  const paper = readPaperChoice(body?.page_size, body?.cover);
+  if (!paper.ok) return refuse(c, 400, { code: paper.code, message: PAPER_CHOICE_MESSAGES[paper.code] });
   // The picker is not the gate. A caller may only originate a document their
   // role may originate — otherwise the de-admin would have turned a hidden
   // admin wizard into an open one. Admins keep the full catalogue through
@@ -831,6 +872,8 @@ esign.post('/send', async (c) => {
       mergeFields,
       actorIp: clientIp(c.req.raw),
       refuseUnfilled: true,
+      pageSize: paper.pageSize,
+      cover: paper.cover,
     });
   } catch (e) {
     // D411 — a blank field is the sender's to fill, never a literal
@@ -1026,12 +1069,17 @@ esign.get('/sign/:token/document', async (c) => {
   if (new Date(rec.token_expires_at).getTime() < Date.now()) {
     return c.json({ error: 'This link has expired.' }, 410);
   }
-  if (rec.status !== 'signed' || !rec.signed_r2_key) {
+  // D711 — each signer downloads their own copy; a recipient who signed
+  // before migration 475 has no row and keeps getting `signed_r2_key`.
+  const key: string | null = rec.status === 'signed'
+    ? (await newestSignedCopyKey(c.env, rec.id)) || rec.signed_r2_key
+    : null;
+  if (!key) {
     return c.json({ error: 'Document not yet signed' }, 409);
   }
   if (!c.env.FILES) return c.json({ error: 'Storage not configured' }, 500);
-  if (!rec.signed_r2_key.startsWith('esign/signed/')) return c.json({ error: 'Invalid document key' }, 400);
-  const obj = await c.env.FILES.get(rec.signed_r2_key);
+  if (!key.startsWith('esign/signed/')) return c.json({ error: 'Invalid document key' }, 400);
+  const obj = await c.env.FILES.get(key);
   if (!obj) return c.json({ error: 'Document not found in storage' }, 404);
   await appendAudit(c.env, rec.envelope_id, {
     ts: new Date().toISOString(),
@@ -1041,7 +1089,7 @@ esign.get('/sign/:token/document', async (c) => {
     ip: clientIp(c.req.raw),
     ua: c.req.header('user-agent') || undefined,
   });
-  const body = await materializeSignedPdf(c.env, rec.signed_r2_key, obj);
+  const body = await materializeSignedPdf(c.env, key, obj);
   return new Response(body, {
     headers: {
       'Content-Type': 'application/pdf',
@@ -1095,6 +1143,31 @@ esign.get('/:id{[0-9]+}/document', async (c) => {
 // at `esign/signed/<uuid>.pdf.enc`; in-house envelopes are stored
 // plaintext at `esign/signed/<uuid>.pdf`. We pick the decode path off
 // the suffix so a single download route handles both providers.
+/**
+ * D711 — an envelope's recipients in `ORDER BY id`, for the paper. The email
+ * only finds the counter-signer; the paper never prints it.
+ */
+async function envelopeRecipients(env: Env, envelopeId: number): Promise<(PaperRecipient & { id: number })[]> {
+  const rows = await env.DB.prepare(
+    `SELECT id, recipient_name, recipient_email, status, signed_at FROM esign_recipients WHERE envelope_id = ? ORDER BY id`
+  ).bind(envelopeId).all<{ id: number; recipient_name: string | null; recipient_email: string; status: string; signed_at: string | null }>();
+  return (rows.results || []).map((r) => ({
+    id: r.id, name: r.recipient_name, email: r.recipient_email, status: r.status, signedAt: r.signed_at,
+  }));
+}
+
+/** D711 — the recipient's newest signed copy, or null before migration 475. */
+async function newestSignedCopyKey(env: Env, recipientId: number): Promise<string | null> {
+  try {
+    const row = await env.DB.prepare(
+      `SELECT r2_key FROM legal_document_files WHERE recipient_id = ? AND kind = 'signed_copy' ORDER BY id DESC LIMIT 1`
+    ).bind(recipientId).first<{ r2_key: string | null }>();
+    return row?.r2_key || null;
+  } catch {
+    return null;
+  }
+}
+
 async function materializeSignedPdf(env: Env, key: string, obj: R2ObjectBody): Promise<Uint8Array | null> {
   if (key.endsWith('.enc')) {
     const { decryptBytes } = await import('../services/cryptoBox');
@@ -1159,6 +1232,41 @@ esign.get('/sign/:token', async (c) => {
   });
 });
 
+// GET /api/legal/esign/sign/:token/paper — D711: the paper the signer signs,
+// with their name in the preamble (decision 9). Exactly the token, expiry and
+// void checks of GET /sign/:token, and no audit event: that route records the
+// view. Faces inline; never cached.
+esign.get('/sign/:token/paper', async (c) => {
+  await ensureSchema(c.env);
+  const token = c.req.param('token');
+  if (!token || token.length < 32) return c.json({ error: 'Invalid token' }, 400);
+  const rec: any = await c.env.DB.prepare(
+    `SELECT r.id, r.envelope_id, r.token_expires_at, e.envelope_uuid, e.document_type, e.document_title, e.document_body,
+            e.status AS envelope_status, e.body_sha256, e.page_size, e.cover, e.template_version
+       FROM esign_recipients r JOIN esign_envelopes e ON e.id = r.envelope_id
+      WHERE r.signing_token = ?`
+  ).bind(token).first();
+  if (!rec) return c.json({ error: 'Invalid or expired link' }, 404);
+  if (isVoided(rec.envelope_status)) return voidedRefusal(c);
+  if (new Date(rec.token_expires_at).getTime() < Date.now()) {
+    return c.json({ error: 'This signing link has expired. Please request a new one from the Axal admin who sent it.' }, 410);
+  }
+  const pageSize = rec.page_size === 'a4' ? 'a4' : 'letter';
+  const model = paperModel({
+    title: rec.document_title,
+    body: rec.document_body,
+    slug: rec.document_type,
+    version: rec.template_version ?? null,
+    bodySha256: rec.body_sha256,
+    envelopeUuid: rec.envelope_uuid,
+    state: { kind: 'issued' },
+    recipients: await envelopeRecipients(c.env, rec.envelope_id),
+    counterSignerEmail: c.env.AXAL_COUNTERSIGNER_EMAIL || null,
+  });
+  const html = paperHtml(model, { pageSize, cover: rec.cover === 'light' ? 'light' : 'dark', medium: 'screen', fonts: 'inline' });
+  return c.json({ html, body_sha256: rec.body_sha256, page_size: pageSize }, 200, { 'Cache-Control': 'no-store' });
+});
+
 // POST /api/legal/esign/sign/:token — submit signature.
 esign.post('/sign/:token', async (c) => {
   await ensureSchema(c.env);
@@ -1180,7 +1288,7 @@ esign.post('/sign/:token', async (c) => {
 
   const rec: any = await c.env.DB.prepare(
     `SELECT r.*, e.envelope_uuid, e.document_type, e.document_title, e.document_body, e.body_sha256, e.user_id AS envelope_user_id,
-            e.status AS envelope_status
+            e.status AS envelope_status, e.page_size, e.cover, e.template_version
        FROM esign_recipients r JOIN esign_envelopes e ON e.id = r.envelope_id
       WHERE r.signing_token = ?`
   ).bind(token).first();
@@ -1245,7 +1353,8 @@ esign.post('/sign/:token', async (c) => {
   const ip = clientIp(c.req.raw);
   const ua = c.req.header('user-agent') || '';
   const signedAt = new Date().toISOString();
-  const signerName = typedName || rec.recipient_name || rec.recipient_email;
+  // D711 — the paper names the signer, never their email (decision 13).
+  const signerName = typedName || rec.recipient_name || '';
 
   // Atomic claim: only one concurrent POST can transition pending → signing.
   // If two requests race, exactly one sees `meta.changes === 1`; the other
@@ -1264,21 +1373,36 @@ esign.post('/sign/:token', async (c) => {
     await c.env.DB.prepare(`UPDATE esign_recipients SET status = 'pending', signer_ip = NULL, signer_ua = NULL WHERE id = ? AND status = 'signing'`).bind(rec.id).run().catch(() => {});
     return c.json({ error: 'Storage not configured' }, 500);
   }
+  // D711 — each signature keeps its own copy, never overwritten (decision 7):
+  // `esign/signed/<uuid>/<file uid>.pdf`, drawn with every recipient's block,
+  // and recorded in legal_document_files in the same batch that signs.
   let signedKey: string;
+  let fileRow: Parameters<typeof fileRowStatement>[1];
   try {
-    const pdfBytes = await renderAgreementPdf({
-      envelopeUuid: rec.envelope_uuid,
-      documentTitle: rec.document_title,
-      documentBody: rec.document_body,
-      documentType: rec.document_type,
-      signerName,
-      signerEmail: rec.recipient_email,
-      signerIp: ip,
-      signedAt,
-      signatureDataUrl: sigDataUrl,
+    const recipients = await envelopeRecipients(c.env, rec.envelope_id);
+    const idx = recipients.findIndex((r) => r.id === rec.id);
+    const signed = { signatureDataUrl: sigDataUrl, signedAt };
+    if (idx >= 0) recipients[idx] = { ...recipients[idx], name: signerName || recipients[idx].name, status: 'signed', signedAt };
+    const model = paperModel({
+      title: rec.document_title,
+      body: rec.document_body,
+      slug: rec.document_type,
+      version: rec.template_version ?? null,
       bodySha256: rec.body_sha256,
+      envelopeUuid: rec.envelope_uuid,
+      effectiveDate: signedAt.slice(0, 10),
+      state: { kind: 'issued' },
+      recipients: idx >= 0 ? recipients : [{ id: rec.id, name: signerName || null, status: 'signed', signedAt }],
+      counterSignerEmail: c.env.AXAL_COUNTERSIGNER_EMAIL || null,
+      signature: { recipientIndex: idx >= 0 ? idx : 0, imageDataUrl: signed.signatureDataUrl, signedAt: signed.signedAt },
+      certificate: true,
     });
-    signedKey = `esign/signed/${rec.envelope_uuid}.pdf`;
+    const pageSize = rec.page_size === 'a4' ? 'a4' : 'letter';
+    const rendered = await renderLegalPdf(c.env, model, { pageSize, cover: rec.cover === 'light' ? 'light' : 'dark', createdAt: new Date(signedAt) });
+    if (!rendered.ok) throw new Error(rendered.code);
+    const pdfBytes = rendered.bytes;
+    const fileUid = newFileUid();
+    signedKey = `esign/signed/${rec.envelope_uuid}/${fileUid}.pdf`;
     await c.env.FILES.put(signedKey, pdfBytes, {
       httpMetadata: { contentType: 'application/pdf' },
       customMetadata: {
@@ -1288,6 +1412,23 @@ esign.post('/sign/:token', async (c) => {
         body_sha256: rec.body_sha256,
       },
     });
+    fileRow = {
+      uid: fileUid,
+      kind: 'signed_copy',
+      envelopeId: rec.envelope_id,
+      recipientId: rec.id,
+      templateSlug: rec.document_type,
+      templateVersion: rec.template_version ?? null,
+      bodySha256: rec.body_sha256,
+      fileSha256: await sha256HexBytes(pdfBytes),
+      fileBytes: pdfBytes.length,
+      contentType: 'application/pdf',
+      pageSize,
+      renderer: rendered.renderer,
+      paperSha256: await paperSha256(),
+      r2Key: signedKey,
+      actorUserId: rec.user_id ?? null,
+    };
   } catch (e: any) {
     console.error('[esign] PDF render/upload failed', e);
     // Roll the claim back so the recipient can retry.
@@ -1295,10 +1436,20 @@ esign.post('/sign/:token', async (c) => {
     return refuse(c, 500, { code: 'signed_pdf_failed', message: 'The signed PDF could not be produced. Your signature was not recorded; open the link again and sign once more.', raw: e });
   }
 
-  // Finalize the claim → 'signed'.
-  await c.env.DB.prepare(
-    `UPDATE esign_recipients SET status = 'signed', signed_at = ? WHERE id = ? AND status = 'signing'`
-  ).bind(signedAt, rec.id).run();
+  // Finalize the claim → 'signed', and record the copy, together: the row is
+  // inserted only once the recipient reads `signed`.
+  try {
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        `UPDATE esign_recipients SET status = 'signed', signed_at = ? WHERE id = ? AND status = 'signing'`
+      ).bind(signedAt, rec.id),
+      fileRowStatement(c.env, fileRow, { whenRecipientSigned: rec.id }),
+    ]);
+  } catch (e: any) {
+    console.error('[esign] signature finalize failed', e);
+    await c.env.DB.prepare(`UPDATE esign_recipients SET status = 'pending', signer_ip = NULL, signer_ua = NULL WHERE id = ? AND status = 'signing'`).bind(rec.id).run().catch(() => {});
+    return refuse(c, 500, { code: 'signed_pdf_failed', message: 'The signed PDF could not be produced. Your signature was not recorded; open the link again and sign once more.', raw: e });
+  }
 
   const remaining: any = await c.env.DB.prepare(
     `SELECT COUNT(*) AS n FROM esign_recipients WHERE envelope_id = ? AND status NOT IN ('signed','rejected')`

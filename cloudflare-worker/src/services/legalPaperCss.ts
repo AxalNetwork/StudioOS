@@ -36,6 +36,24 @@ export function assertCover(v: unknown): PaperCover {
   throw new Error('cover_invalid');
 }
 
+/**
+ * A request's page size and cover: absent takes the default (Letter, dark);
+ * anything else is refused with `page_size_invalid` or `cover_invalid`.
+ */
+export function readPaperChoice(pageSize: unknown, cover: unknown):
+  { ok: true; pageSize: PaperPageSize; cover: PaperCover } | { ok: false; code: 'page_size_invalid' | 'cover_invalid' } {
+  const p = pageSize == null || pageSize === '' ? 'letter' : pageSize;
+  const c = cover == null || cover === '' ? 'dark' : cover;
+  if (p !== 'letter' && p !== 'a4') return { ok: false, code: 'page_size_invalid' };
+  if (c !== 'dark' && c !== 'light') return { ok: false, code: 'cover_invalid' };
+  return { ok: true, pageSize: p, cover: c };
+}
+
+export const PAPER_CHOICE_MESSAGES: Record<'page_size_invalid' | 'cover_invalid', string> = {
+  page_size_invalid: 'page_size must be letter or a4.',
+  cover_invalid: 'cover must be dark or light.',
+};
+
 // --- the faces ---------------------------------------------------------------
 
 export interface LegalFace {
