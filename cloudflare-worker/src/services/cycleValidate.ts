@@ -404,21 +404,34 @@ async function weeklyHeld(ctx: Ctx, n: number): Promise<number[]> {
   return out;
 }
 
-/** Customer-waitlist sign-ups per week, oldest first, the last `n` weeks — in SQL. */
+/**
+ * Waitlist sign-ups per week, oldest first, the last `n` weeks — in SQL.
+ *
+ * D690 decision 7 (#1692) — TWO STORES, EACH ROW ONCE. A customer who signed
+ * up themselves is a `waitlist_signups` row (customer audience); a sign-up
+ * the founder recorded by hand is a `demand_signals` row of kind `waitlist`,
+ * counted once it is confirmed or counted. The bar and the "Waitlist sign-ups"
+ * figure read both.
+ */
 async function weeklySignups(ctx: Ctx, n: number): Promise<{ weeks: number[]; total: number; last30: number }> {
   const res = await ctx.env.DB.prepare(
-    `SELECT CAST((julianday(?) - julianday(substr(created_at, 1, 10))) / 7 AS INTEGER) AS wk, COUNT(*) AS n
-       FROM waitlist_signups
-      WHERE project_id = ? AND (audience IS NULL OR audience = 'customer')
-        AND julianday(substr(created_at, 1, 10)) <= julianday(?)
-        AND julianday(?) - julianday(substr(created_at, 1, 10)) < ? * 7
+    `SELECT CAST((julianday(?) - julianday(d)) / 7 AS INTEGER) AS wk, COUNT(*) AS n
+       FROM (SELECT substr(created_at, 1, 10) AS d FROM waitlist_signups
+              WHERE project_id = ? AND (audience IS NULL OR audience = 'customer')
+             UNION ALL
+             SELECT substr(signal_date, 1, 10) AS d FROM demand_signals
+              WHERE project_id = ? AND kind = 'waitlist' AND status IN ('confirmed', 'counted'))
+      WHERE julianday(d) <= julianday(?) AND julianday(?) - julianday(d) < ? * 7
       GROUP BY wk`,
-  ).bind(ctx.today, ctx.projectId, ctx.today, ctx.today, n).all<{ wk: number; n: number }>();
+  ).bind(ctx.today, ctx.projectId, ctx.projectId, ctx.today, ctx.today, n).all<{ wk: number; n: number }>();
   const tot = await ctx.env.DB.prepare(
-    `SELECT COUNT(*) AS total,
-            SUM(CASE WHEN substr(created_at, 1, 10) > date(?, '-30 days') THEN 1 ELSE 0 END) AS last30
-       FROM waitlist_signups WHERE project_id = ? AND (audience IS NULL OR audience = 'customer')`,
-  ).bind(ctx.today, ctx.projectId).first<{ total: number; last30: number | null }>();
+    `SELECT COUNT(*) AS total, SUM(CASE WHEN d > date(?, '-30 days') THEN 1 ELSE 0 END) AS last30
+       FROM (SELECT substr(created_at, 1, 10) AS d FROM waitlist_signups
+              WHERE project_id = ? AND (audience IS NULL OR audience = 'customer')
+             UNION ALL
+             SELECT substr(signal_date, 1, 10) AS d FROM demand_signals
+              WHERE project_id = ? AND kind = 'waitlist' AND status IN ('confirmed', 'counted'))`,
+  ).bind(ctx.today, ctx.projectId, ctx.projectId).first<{ total: number; last30: number | null }>();
   const weeks = new Array(n).fill(0);
   for (const r of res.results || []) {
     const wk = Number(r.wk);

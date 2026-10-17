@@ -62,27 +62,113 @@ function inputsFromProject(project: Record<string, unknown>): AnalysisInputs {
   };
 }
 
-async function persistResult(env: Env, analysisId: string, result: AnalysisResult): Promise<void> {
-  const sql = getSQL(env);
-  // Replace candidates / sources / signals for this analysis.
-  await sql`DELETE FROM competitor_candidates WHERE analysis_id = ${analysisId}`;
-  await sql`DELETE FROM competitor_sources WHERE analysis_id = ${analysisId}`;
-  await sql`DELETE FROM competitor_signals WHERE analysis_id = ${analysisId}`;
-  for (const c of result.candidates) {
-    await sql`INSERT INTO competitor_candidates (id, analysis_id, name, domain, url, category, relevance_score, scores_json, summary, details_json, origin, position)
-      VALUES (${c.id}, ${analysisId}, ${c.name}, ${c.domain}, ${c.url}, ${c.category}, ${c.relevance_score}, ${JSON.stringify(c.scores)}, ${c.summary}, ${JSON.stringify(c.details)}, ${c.origin}, ${c.position})`;
+/**
+ * Write a run's result over the analysis (D690 decision 8, #1692).
+ *
+ * WHAT A RE-RUN OR REFRESH KEEPS. It used to delete every candidate and
+ * signal and write back only what the pipeline found, so a record link broke
+ * on every re-run and a signal recorded by hand or from an interview was lost.
+ * Now:
+ *   - a candidate whose name is already stored keeps its stored id, so the
+ *     record and its signals survive;
+ *   - a stored candidate the run did not find again stays when the venture
+ *     tracks its name (`competitor_tracking`, not stopped) or a kept signal
+ *     points at it, with or without `keep_manual`;
+ *   - every signal with a `project_id` (written by hand or from an interview
+ *     since migration 440) stays as it was;
+ *   - a pipeline signal of a type the venture switched off for that
+ *     competitor (`watch_json`) is not written.
+ * Sources are the pipeline's own and are replaced. Every value is bound.
+ */
+export async function persistResult(env: Env, analysisId: string, result: AnalysisResult): Promise<void> {
+  const db = env.DB;
+  const norm = (n: unknown) => String(n ?? '').trim().toLowerCase().slice(0, 120);
+  const analysis = await db.prepare('SELECT project_id FROM competitor_analyses WHERE id = ?')
+    .bind(analysisId).first<{ project_id: number | null }>();
+  const projectId = analysis?.project_id ?? null;
+  const stored = (await db.prepare('SELECT id, name FROM competitor_candidates WHERE analysis_id = ?')
+    .bind(analysisId).all<{ id: string; name: string }>()).results || [];
+  const storedByName = new Map<string, string>();
+  for (const c of stored) if (!storedByName.has(norm(c.name))) storedByName.set(norm(c.name), c.id);
+
+  // The venture's tracking rows and the signals it wrote. A store migration 460
+  // (or 440) has not reached has none of either.
+  const tracking = new Map<string, { stopped: boolean; watch: Record<string, unknown> }>();
+  if (projectId != null) {
+    try {
+      const rows = (await db.prepare('SELECT name_norm, watch_json, stopped_at FROM competitor_tracking WHERE project_id = ?')
+        .bind(projectId).all<{ name_norm: string; watch_json: string | null; stopped_at: string | null }>()).results || [];
+      for (const r of rows) {
+        let watch: Record<string, unknown> = {};
+        try { watch = JSON.parse(String(r.watch_json || '{}')) || {}; } catch { watch = {}; }
+        tracking.set(r.name_norm, { stopped: !!r.stopped_at, watch });
+      }
+    } catch { /* no competitor_tracking table: nothing is tracked */ }
   }
-  for (const s of result.sources) {
-    await sql`INSERT INTO competitor_sources (id, analysis_id, candidate_id, url, kind, title, status, fetched_at)
-      VALUES (${s.id}, ${analysisId}, ${s.candidate_id}, ${s.url}, ${s.kind}, ${s.title}, ${s.status}, ${s.fetched_at})`;
+  let keptSignals: Array<{ candidate_id: string | null }> = [];
+  let signalsHaveProject = true;
+  try {
+    keptSignals = (await db.prepare('SELECT candidate_id FROM competitor_signals WHERE analysis_id = ? AND project_id IS NOT NULL')
+      .bind(analysisId).all<{ candidate_id: string | null }>()).results || [];
+  } catch { signalsHaveProject = false; }
+
+  // The run's candidates, under their stored ids where the name is stored.
+  const idOf = new Map<string, string>();
+  for (const c of result.candidates) idOf.set(c.id, storedByName.get(norm(c.name)) ?? c.id);
+  const found = new Set(result.candidates.map((c) => norm(c.name)));
+  const pointed = new Set(keptSignals.map((g) => g.candidate_id).filter(Boolean) as string[]);
+  const keep = new Set<string>(result.candidates.map((c) => idOf.get(c.id) as string));
+  for (const c of stored) {
+    if (found.has(norm(c.name))) continue;
+    const t = tracking.get(norm(c.name));
+    if ((t && !t.stopped) || pointed.has(c.id)) keep.add(c.id);
+  }
+  const nameOfId = new Map<string, string>();
+  for (const c of stored) nameOfId.set(c.id, norm(c.name));
+  for (const c of result.candidates) nameOfId.set(idOf.get(c.id) as string, norm(c.name));
+  const switchedOff = (candidateId: string | null, type: string) => {
+    if (!candidateId || !['funding', 'launch', 'hiring'].includes(type)) return false;
+    const t = tracking.get(nameOfId.get(candidateId) ?? '');
+    return !!t && t.watch[type] === false;
+  };
+
+  const stmts = [
+    db.prepare('DELETE FROM competitor_candidates WHERE analysis_id = ? AND id NOT IN (SELECT value FROM json_each(?))')
+      .bind(analysisId, JSON.stringify([...keep])),
+    db.prepare('DELETE FROM competitor_sources WHERE analysis_id = ?').bind(analysisId),
+    signalsHaveProject
+      ? db.prepare('DELETE FROM competitor_signals WHERE analysis_id = ? AND project_id IS NULL').bind(analysisId)
+      : db.prepare('DELETE FROM competitor_signals WHERE analysis_id = ?').bind(analysisId),
+  ];
+  for (const c of result.candidates) {
+    stmts.push(db.prepare(
+      `INSERT INTO competitor_candidates (id, analysis_id, name, domain, url, category, relevance_score, scores_json, summary, details_json, origin, position)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET name = excluded.name, domain = excluded.domain, url = excluded.url, category = excluded.category,
+         relevance_score = excluded.relevance_score, scores_json = excluded.scores_json, summary = excluded.summary,
+         details_json = excluded.details_json, origin = excluded.origin, position = excluded.position`,
+    ).bind(
+      idOf.get(c.id), analysisId, c.name, c.domain ?? null, c.url ?? null, c.category, c.relevance_score,
+      JSON.stringify(c.scores), c.summary ?? null, JSON.stringify(c.details), c.origin, c.position,
+    ));
+  }
+  for (const src of result.sources) {
+    stmts.push(db.prepare(
+      'INSERT INTO competitor_sources (id, analysis_id, candidate_id, url, kind, title, status, fetched_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    ).bind(src.id, analysisId, src.candidate_id ? (idOf.get(src.candidate_id) ?? src.candidate_id) : null, src.url, src.kind, src.title ?? null, src.status, src.fetched_at ?? null));
   }
   for (const g of result.signals) {
-    await sql`INSERT INTO competitor_signals (id, analysis_id, candidate_id, signal_type, label, detail)
-      VALUES (${g.id}, ${analysisId}, ${g.candidate_id}, ${g.signal_type}, ${g.label}, ${g.detail})`;
+    const cid = g.candidate_id ? (idOf.get(g.candidate_id) ?? g.candidate_id) : null;
+    if (switchedOff(cid, g.signal_type)) continue;
+    stmts.push(db.prepare(
+      'INSERT INTO competitor_signals (id, analysis_id, candidate_id, signal_type, label, detail) VALUES (?, ?, ?, ?, ?, ?)',
+    ).bind(g.id, analysisId, cid, g.signal_type, g.label ?? null, g.detail ?? null));
   }
-  await sql`INSERT INTO competitor_analysis_outputs (analysis_id, output_json, edited, updated_at)
-    VALUES (${analysisId}, ${JSON.stringify(result.output)}, 0, ${nowIso()})
-    ON CONFLICT(analysis_id) DO UPDATE SET output_json = excluded.output_json, edited = 0, updated_at = excluded.updated_at`;
+  stmts.push(db.prepare(
+    `INSERT INTO competitor_analysis_outputs (analysis_id, output_json, edited, updated_at) VALUES (?, ?, 0, ?)
+     ON CONFLICT(analysis_id) DO UPDATE SET output_json = excluded.output_json, edited = 0, updated_at = excluded.updated_at`,
+  ).bind(analysisId, JSON.stringify(result.output), nowIso()));
+  await db.batch(stmts);
 }
 
 async function loadAnalysis(env: Env, userId: number, id: string): Promise<Record<string, unknown> | null> {
