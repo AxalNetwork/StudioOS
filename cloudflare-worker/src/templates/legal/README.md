@@ -22,3 +22,10 @@ from D1 at render time. `LEGAL_REVIEW.md` in this folder records review status.
   schema. MFN is the clearest example: it exists in these templates as
   `MFN Provision: [Yes/No]` and as no column anywhere. That is why the cap-table
   surface says SAFE conversion detail is not shown rather than computing it.
+
+## Subfolders
+
+- `paper/` — the faces and the mark the legal paper prints in (D711): seven
+  subset woff2 files, their licences, and a copy of the Axal mark.
+  `services/legalPaperCss.ts` inlines them as `data:` URIs, so no render
+  fetches a font. `paper/README.md` gives each file's source and subset command.
