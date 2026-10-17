@@ -1145,6 +1145,38 @@ progress.get('/roadmap/:projectId', async (c) => {
   });
 });
 
+/**
+ * A roadmap item create's checks, before its insert: the free-tier OKR cap,
+ * which throws as `ensureTier` does, then the body. Exported for Build's Add
+ * item (D690, #1693 decision 4), so both keep one cap and one validation.
+ */
+export async function roadmapCreateChecks(env: Env, user: User, projectId: number, body: Record<string, unknown> | null): Promise<
+  | { error: { detail: string } }
+  | { objective: string; kanbanStatus: string; keyResults: KeyResult[]; quarter: string | null; sortOrder: number }> {
+  // Task #6 — free-tier OKR cap.
+  if (user.role === 'founder' && !userMeetsTier(user, 'growth')) {
+    await ensureTierSchema(env);
+    const existing = await env.DB.prepare(
+      'SELECT COUNT(*) AS n FROM roadmap_okrs WHERE project_id = ?',
+    ).bind(projectId).first<{ n: number }>();
+    if (Number(existing?.n ?? 0) >= FREE_TIER_LIMITS.roadmapOkrs) {
+      ensureTier(user, 'growth');
+    }
+  }
+
+  if (!body || typeof body !== 'object') return { error: { detail: 'Body required' } };
+  const objective = asStringOrNull(body.objective);
+  if (!objective || !objective.trim()) return { error: { detail: 'objective is required' } };
+  const kanbanStatus = (asStringOrNull(body.kanban_status) || 'now').toLowerCase();
+  if (!KANBAN_STATUSES.has(kanbanStatus)) {
+    return { error: { detail: `kanban_status must be one of ${[...KANBAN_STATUSES].sort().join(', ')}` } };
+  }
+  return {
+    objective, kanbanStatus, keyResults: normalizeKeyResults(body.key_results),
+    quarter: asStringOrNull(body.quarter), sortOrder: toNumberOr(body.sort_order, 0),
+  };
+}
+
 progress.post('/roadmap/:projectId', async (c) => {
   const user = await requireAuth(c);
   const projectId = Number(c.req.param('projectId'));
@@ -1154,33 +1186,10 @@ progress.post('/roadmap/:projectId', async (c) => {
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   ensureCanEdit(project, user);
 
-  // Task #6 — free-tier OKR cap.
-  if (user.role === 'founder' && !userMeetsTier(user, 'growth')) {
-    await ensureTierSchema(c.env);
-    const existing = await c.env.DB.prepare(
-      'SELECT COUNT(*) AS n FROM roadmap_okrs WHERE project_id = ?',
-    ).bind(projectId).first<{ n: number }>();
-    if (Number(existing?.n ?? 0) >= FREE_TIER_LIMITS.roadmapOkrs) {
-      ensureTier(user, 'growth');
-    }
-  }
-
   const body = await c.req.json().catch(() => null) as Record<string, unknown> | null;
-  if (!body || typeof body !== 'object') return c.json({ detail: 'Body required' }, 400);
-
-  const objective = asStringOrNull(body.objective);
-  if (!objective || !objective.trim()) {
-    return c.json({ detail: 'objective is required' }, 400);
-  }
-  const kanbanStatus = (asStringOrNull(body.kanban_status) || 'now').toLowerCase();
-  if (!KANBAN_STATUSES.has(kanbanStatus)) {
-    return c.json({
-      detail: `kanban_status must be one of ${[...KANBAN_STATUSES].sort().join(', ')}`,
-    }, 400);
-  }
-  const keyResults = normalizeKeyResults(body.key_results);
-  const quarter = asStringOrNull(body.quarter);
-  const sortOrder = toNumberOr(body.sort_order, 0);
+  const checked = await roadmapCreateChecks(c.env, user, projectId, body);
+  if ('error' in checked) return c.json(checked.error, 400);
+  const { objective, kanbanStatus, keyResults, quarter, sortOrder } = checked;
   const nowIso = new Date().toISOString();
 
   const res = await c.env.DB.prepare(
@@ -1318,6 +1327,58 @@ async function ensureOkrMovesSchema(env: Env): Promise<boolean> {
 /** Today in UTC, as `YYYY-MM-DD`. The week the log is written against. */
 const utcToday = () => new Date().toISOString().slice(0, 10);
 
+/**
+ * A roadmap item's move: the column and order, its activity row, and its
+ * `okr_column_moves` row when the column changed, which "shipped this month"
+ * reads. Exported for Build's Move action (D690, #1693 decision 4). The caller
+ * has loaded the item, checked access and validated the column.
+ */
+export async function moveRoadmapItem(env: Env, input: {
+  existing: { id: number; project_id: number; kanban_status: string | null };
+  userId: number | null; kanbanStatus: string; sortOrder: number;
+}): Promise<void> {
+  const { existing, userId, kanbanStatus, sortOrder } = input;
+  await env.DB.prepare(
+    `UPDATE roadmap_okrs
+        SET kanban_status = ?, sort_order = ?, updated_at = ?
+      WHERE id = ?`,
+  ).bind(kanbanStatus, sortOrder, new Date().toISOString(), existing.id).run();
+  // A failed history write must not turn an already-landed card move into a
+  // failed request. The existing column-move ledger follows the same rule.
+  try {
+    await logCycleWrite(env, { projectId: existing.project_id, userId, cycle: 'build', module: 'product-roadmap',
+      entityId: existing.id, action: 'roadmap_moved', summary: `Roadmap item ${existing.id} moved to ${kanbanStatus}` });
+  } catch (e) { console.error('[progress] cycle roadmap activity:', (e as Error).message); }
+
+  // MIGRATION 252 — log the transition, and only when the column actually changed.
+  //
+  // A re-order inside one column arrives here with the same `kanban_status`, and
+  // logging it would put a "moved to Now" row in every week a founder tidied their
+  // board — so `Carried only` would show nothing as carried, because every card
+  // would have a commitment in the current week. The reorder is not a commitment.
+  //
+  // THE LOG NEVER FAILS THE MOVE. A card that moved on the board and then reported
+  // an error is a card the founder will drag again; the history is worth less than
+  // the move it describes.
+  if (kanbanStatus !== (existing.kanban_status || '')) {
+    try {
+      if (await ensureOkrMovesSchema(env)) {
+        const today = utcToday();
+        await env.DB.prepare(
+          'INSERT INTO okr_column_moves'
+          + ' (project_id, okr_id, from_status, to_status, week_start, moved_by)'
+          + ' VALUES (?, ?, ?, ?, ?, ?)',
+        ).bind(
+          existing.project_id, existing.id, existing.kanban_status || null, kanbanStatus,
+          weekStartOf(today) || today, userId ?? null,
+        ).run();
+      }
+    } catch (e) {
+      console.error('[progress] okr move log:', (e as Error).message);
+    }
+  }
+}
+
 progress.post('/roadmap/okr/:id/move', async (c) => {
   const user = await requireAuth(c);
   const id = Number(c.req.param('id'));
@@ -1347,45 +1408,7 @@ progress.post('/roadmap/okr/:id/move', async (c) => {
   }
   const sortOrder = toNumberOr(body.sort_order, 0);
 
-  await c.env.DB.prepare(
-    `UPDATE roadmap_okrs
-        SET kanban_status = ?, sort_order = ?, updated_at = ?
-      WHERE id = ?`,
-  ).bind(kanbanStatus, sortOrder, new Date().toISOString(), id).run();
-  // A failed history write must not turn an already-landed card move into a
-  // failed request. The existing column-move ledger follows the same rule.
-  try {
-    await logCycleWrite(c.env, { projectId: existing.project_id, userId: user.id, cycle: 'build', module: 'product-roadmap',
-      entityId: id, action: 'roadmap_moved', summary: `Roadmap item ${id} moved to ${kanbanStatus}` });
-  } catch (e) { console.error('[progress] cycle roadmap activity:', (e as Error).message); }
-
-  // MIGRATION 252 — log the transition, and only when the column actually changed.
-  //
-  // A re-order inside one column arrives here with the same `kanban_status`, and
-  // logging it would put a "moved to Now" row in every week a founder tidied their
-  // board — so `Carried only` would show nothing as carried, because every card
-  // would have a commitment in the current week. The reorder is not a commitment.
-  //
-  // THE LOG NEVER FAILS THE MOVE. A card that moved on the board and then reported
-  // an error is a card the founder will drag again; the history is worth less than
-  // the move it describes.
-  if (kanbanStatus !== (existing.kanban_status || '')) {
-    try {
-      if (await ensureOkrMovesSchema(c.env)) {
-        const today = utcToday();
-        await c.env.DB.prepare(
-          'INSERT INTO okr_column_moves'
-          + ' (project_id, okr_id, from_status, to_status, week_start, moved_by)'
-          + ' VALUES (?, ?, ?, ?, ?, ?)',
-        ).bind(
-          existing.project_id, id, existing.kanban_status || null, kanbanStatus,
-          weekStartOf(today) || today, user.id ?? null,
-        ).run();
-      }
-    } catch (e) {
-      console.error('[progress] okr move log:', (e as Error).message);
-    }
-  }
+  await moveRoadmapItem(c.env, { existing, userId: user.id, kanbanStatus, sortOrder });
 
   const row = await c.env.DB.prepare(`${OKR_SELECT} WHERE id = ?`)
     .bind(id).first<OkrRow>();
@@ -1456,9 +1479,10 @@ progress.get('/roadmap/:projectId/weeks', async (c) => {
 // Medium → v2 / next-cycle candidate, Low → out of scope / deferred.
 // Mirrors backend/app/api/routes/progress.py mvp-scope routes.
 // ---------------------------------------------------------------------------
-const MVP_VALUES = new Set(['High', 'Medium', 'Low']);
-const MVP_EFFORTS = new Set(['S', 'M', 'L', 'XL']);
-const MVP_STATUSES = new Set(['Backlog', 'In Progress', 'Review', 'Done', 'Blocked']);
+// Exported for Build's cycle routes, which write these columns too (D690, #1693 decision 3).
+export const MVP_VALUES = new Set(['High', 'Medium', 'Low']);
+export const MVP_EFFORTS = new Set(['S', 'M', 'L', 'XL']);
+export const MVP_STATUSES = new Set(['Backlog', 'In Progress', 'Review', 'Done', 'Blocked']);
 
 interface MvpRow {
   id: number;
