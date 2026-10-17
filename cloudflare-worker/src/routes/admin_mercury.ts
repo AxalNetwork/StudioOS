@@ -125,10 +125,10 @@ export function createAdminMercury(opts: AdminMercuryOptions = {}) {
     }
     const check = await checkAgainstRegistry(c.env, entity, accounts.accounts, registry);
     if (!check.ok) {
-      const detail = check.code === 'mercury_account_taken'
+      const message = check.code === 'mercury_account_taken'
         ? 'An account this token reads is already stored for another entity.'
         : 'This token’s accounts are not the ones the registry holds for this entity.';
-      return c.json({ code: check.code, detail }, 409);
+      return c.json({ code: check.code, detail: message }, 409);
     }
     const { row, replaced } = await saveConnection(c.env, user, entity, token, orgName);
     await upsertAccounts(c.env, row, accounts.accounts, check.registered);
@@ -205,19 +205,21 @@ export function createAdminMercury(opts: AdminMercuryOptions = {}) {
     if (match && match !== 'none' && !(MATCH_STATES as readonly string[]).includes(match)) return c.json({ code: 'invalid_match_filter', detail: 'Unknown match filter.' }, 400);
     if (account && !/^[a-f0-9]{32}$/.test(account)) return c.json({ code: 'invalid_account', detail: 'Unknown account.' }, 400);
     const page = Math.max(1, Math.min(10_000, Number.parseInt(q('page') || '1', 10) || 1));
-    const where = `WHERE (? IS NULL OR a.entity_key = ?) AND (? IS NULL OR a.uid = ?)
-        AND (? IS NULL OR t.created_on >= ?) AND (? IS NULL OR t.created_on <= ?)
-        AND (? IS NULL OR (? = 'none' AND m.id IS NULL) OR m.state = ?)`;
     const binds = [entity, entity, account, account, from, from, to, to, match, match, match];
-    const live = `LEFT JOIN mercury_matches m ON m.transaction_id = t.id AND m.state <> 'rejected'`;
     const total = await c.env.DB.prepare(
-      `SELECT COUNT(*) AS n FROM mercury_transactions t JOIN mercury_accounts a ON a.id = t.account_id ${live} ${where}`,
+      `SELECT COUNT(*) AS n FROM mercury_transactions t JOIN mercury_accounts a ON a.id = t.account_id LEFT JOIN mercury_matches m ON m.transaction_id = t.id AND m.state <> 'rejected'
+       WHERE (? IS NULL OR a.entity_key = ?) AND (? IS NULL OR a.uid = ?)
+        AND (? IS NULL OR t.created_on >= ?) AND (? IS NULL OR t.created_on <= ?)
+        AND (? IS NULL OR (? = 'none' AND m.id IS NULL) OR m.state = ?)`,
     ).bind(...binds).first<{ n: number }>();
     const rows = (await c.env.DB.prepare(
       `SELECT t.uid, t.amount_cents, t.created_on, t.posted_on, t.counterparty_name, t.memo, t.status, t.kind,
               a.uid AS account_uid, a.entity_key, a.last_four,
               m.uid AS match_uid, m.state AS match_state, m.target_kind, m.target_id
-         FROM mercury_transactions t JOIN mercury_accounts a ON a.id = t.account_id ${live} ${where}
+         FROM mercury_transactions t JOIN mercury_accounts a ON a.id = t.account_id LEFT JOIN mercury_matches m ON m.transaction_id = t.id AND m.state <> 'rejected'
+       WHERE (? IS NULL OR a.entity_key = ?) AND (? IS NULL OR a.uid = ?)
+        AND (? IS NULL OR t.created_on >= ?) AND (? IS NULL OR t.created_on <= ?)
+        AND (? IS NULL OR (? = 'none' AND m.id IS NULL) OR m.state = ?)
         ORDER BY t.created_on DESC, t.id DESC LIMIT ? OFFSET ?`,
     ).bind(...binds, TRANSACTIONS_PAGE, (page - 1) * TRANSACTIONS_PAGE).all<any>()).results || [];
     if (!await auditRead(c.env, user, 'mercury_transactions_read', { entity, account, from, to, match, page, rows: rows.length })) return c.json(AUDIT_UNAVAILABLE, 503);

@@ -60,10 +60,7 @@ const plusDays = (d: string, n: number) => {
   return t.toISOString().slice(0, 10);
 };
 
-/** A credit that may be matched at all. */
-const ELIGIBLE = `t.amount_cents > 0 AND t.posted_on IS NOT NULL
-  AND t.status IN (SELECT value FROM json_each(?)) AND COALESCE(t.kind, '') NOT IN (SELECT value FROM json_each(?))
-  AND a.registered = 1`;
+/** A credit that may be matched at all, the same four conditions in both statements below: posted, a credit, not internal, on a registered account. */
 const eligibleBinds = () => [JSON.stringify(POSTED_STATUSES), JSON.stringify(INTERNAL_KINDS)];
 
 interface Credit { id: number; uid: string; mercury_transaction_id: string; amount_cents: number; posted_on: string; entity_key: string; last_four: string }
@@ -103,7 +100,9 @@ export async function proposeMatches(env: Env, d?: Partial<MatchDeps>): Promise<
   const credits = (await env.DB.prepare(
     `SELECT t.id, t.uid, t.mercury_transaction_id, t.amount_cents, t.posted_on, a.entity_key, a.last_four
        FROM mercury_transactions t JOIN mercury_accounts a ON a.id = t.account_id
-      WHERE ${ELIGIBLE}
+      WHERE t.amount_cents > 0 AND t.posted_on IS NOT NULL
+  AND t.status IN (SELECT value FROM json_each(?)) AND COALESCE(t.kind, '') NOT IN (SELECT value FROM json_each(?))
+  AND a.registered = 1
         AND NOT EXISTS (SELECT 1 FROM mercury_matches x WHERE x.transaction_id = t.id AND x.state <> 'rejected')
       ORDER BY t.posted_on, t.id`,
   ).bind(...eligibleBinds()).all<Credit>()).results || [];
@@ -129,7 +128,9 @@ const refusal = (status: 400 | 404 | 409, code: string, detail: string): MatchRe
 async function creditByUid(env: Env, uid: string): Promise<(Credit & { eligible: number }) | null> {
   return await env.DB.prepare(
     `SELECT t.id, t.uid, t.mercury_transaction_id, t.amount_cents, t.posted_on, a.entity_key, a.last_four,
-            CASE WHEN ${ELIGIBLE} THEN 1 ELSE 0 END AS eligible
+            CASE WHEN t.amount_cents > 0 AND t.posted_on IS NOT NULL
+  AND t.status IN (SELECT value FROM json_each(?)) AND COALESCE(t.kind, '') NOT IN (SELECT value FROM json_each(?))
+  AND a.registered = 1 THEN 1 ELSE 0 END AS eligible
        FROM mercury_transactions t JOIN mercury_accounts a ON a.id = t.account_id WHERE t.uid = ?`,
   ).bind(...eligibleBinds(), uid).first<Credit & { eligible: number }>() ?? null;
 }
