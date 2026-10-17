@@ -389,12 +389,14 @@ test('2: a scenario saved before keys reads with id null, and the read writes no
 // Test 14 (links out)
 // ---------------------------------------------------------------------------
 
-test('14: the data-room links open the file tool, and every list links its rows to the record route', async () => {
+test('14: the data-room Add opens Upload, Manage access opens the file tool, and every list links its rows to the record route', async () => {
   assert.equal(TOOL_HREF.dataRoom, '/raise/data-room?mode=workspace');
   const empty = fixture();
   const card = (await overview(empty)).cards.find((c: any) => c.slug === 'data-room');
-  assert.equal(card.next.href, TOOL_HREF.dataRoom, 'the empty card\'s next');
-  assert.equal((await read(empty, 'data-room')).body.records.add.href, TOOL_HREF.dataRoom, 'the records add');
+  // D695 (#1657) decision 11: Upload is Data room's form, so both open its address; #1658's
+  // "Open the files tool" and Manage access keep the file tool one link away.
+  assert.deepEqual([card.next.text, card.next.href], ['Upload', `/raise/data-room/new?project=${P}`], 'the empty card\'s next');
+  assert.deepEqual((await read(empty, 'data-room')).body.records.add, { text: 'Upload', href: `/raise/data-room/new?project=${P}` }, 'the records add');
   const db = await seeded();
   for (const m of MODULES) {
     // D-e: a row links only while Raise's specs are registered, so it never opens a 404.

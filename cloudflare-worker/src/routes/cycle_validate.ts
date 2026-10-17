@@ -27,7 +27,7 @@ import { Hono } from 'hono';
 import { hasRecords } from '../services/records';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
-import { canReadBoard, canWrite, type ProjectRef } from './_founder_validate_helpers';
+import { canReadBoard, canReadDecision, canWrite, type ProjectRef } from './_founder_validate_helpers';
 import { focusOf, indexOf, meterOf } from '../services/validateFocus';
 import { part } from '../services/cycleFocus';
 import {
@@ -94,7 +94,12 @@ cycleValidate.get('/overview', async (c) => {
     part('focus', () => focusOf(c.env, s.projectId, canWrite(s.project, s.user), cs, figs, meter)),
     part('index', () => indexOf(c.env, s.project, s.user, figs, cs)),
   ]);
-  return c.json({ cycle: CYCLE, question: QUESTION, figures: figs, cards: cs, focus, meter, index });
+  // D693 decision 7: whether this viewer may see decisions, so the page can
+  // drop the Verdict tab for a partner instead of drawing a read that fails.
+  return c.json({
+    cycle: CYCLE, question: QUESTION, figures: figs, cards: cs, focus, meter, index,
+    can_read_decisions: canReadDecision(s.project, s.user),
+  });
 });
 
 cycleValidate.get('/modules/:slug', async (c) => {
@@ -122,7 +127,9 @@ cycleValidate.get('/modules/:slug', async (c) => {
     records = { state: 'unreadable', reason: `${mod.name} records could not be read`, cols: [], rows: [], total: null, page: rq.page, page_size: null };
   }
   return c.json({ module: { slug: mod.slug, name: mod.name, records_title: (mod as { records_title?: string }).records_title ?? null }, card,
-    records: { ...records, linkable: hasRecords('validate') }, parts: { can_write: writer, ...parts } });
+    records: { ...records, linkable: hasRecords('validate') }, parts: { can_write: writer, ...parts },
+    // D693 decision 7: every Validate module read says so too.
+    can_read_decisions: canReadDecision(s.project, s.user) });
 });
 
 /** The Lab market page's three stored checks. */
