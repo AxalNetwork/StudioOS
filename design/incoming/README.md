@@ -829,7 +829,7 @@ Each top-level board was normalised with `scripts/read-canvas.mjs`. Each nested 
 | `Cycle Overviews · Mobile.dc.html` | New | O1m–O4m, O1nm, O6m (switch company), O7m (account), O8m (Eadwyn), O9m (recording), each beside the page its button opens. On a phone every button opens a page, never a lightbox. | the four cycle roots |
 | `Cycle Modules · Mobile.dc.html` | New | MV1m–MG7m: the module page, one record, and the page its button opens | `/:cycle/:module` |
 | `Studio · Mobile.dc.html` + `Studio Mobile Page.dc.html` | New | S1m–S10m: Conversations, Tasks, My tickets, Open a ticket, the Eadwyn menu, You, Your venture, the archetype card, What others see, Visibility | `/studio`, `/profile`, `/profile/venture`, `/studio/archetype`, `/profile/preview`, `/profile/visibility` |
-| `Account Menu · Mobile.dc.html` + `Account Mobile Page.dc.html` | New | A1m–A10m: Account, Usage, Connectors, Trust Center, Perks, Calendar, Events, Learning, Help Center, Plans & Pricing | `/account`, `/account/usage`, `/account/connectors`, `/trust`, `/perks`, `/calendar`, `/events`, `/learning`, `/help`, `/pricing` |
+| `Account Menu · Mobile.dc.html` + `Account Mobile Page.dc.html` | New | A1m–A10m: Account, Usage, Connectors, Trust Center, Perks, Calendar, Events, Learning, Help Center, Plans & Pricing | `/account`, `/account/usage`, `/account/connectors`, `/trust`, `/perks`, `/calendar`, `/my/events`, `/learning`, `/help`, `/plans-and-pricing` (the member routes; `/events` and `/pricing` are the public pages) |
 | `AIRail.dc.html` | Replaced here, in place; moved to `canvases/integrated/` on 2026-10-15 with its build (D698) | The rail as "Eadwyn AI": a profile pill and crumbs, an "Eadwyn \| Manual" switch, suggested models for the page, "All models" and a Usage box | every page that mounts `WorkerRail` |
 | `Record a Session · Boards.dc.html`, `Recording View Canvas.dc.html`, `Recording View.dc.html`, `Cycle Action.dc.html` | Nothing | Byte-identical to the committed copies once normalised | — |
 
@@ -838,8 +838,41 @@ Each top-level board was normalised with `scripts/read-canvas.mjs`. Each nested 
 - `/validate/interviews`, `/validate/pain-map` and `/validate/hypotheses` stop being pages. Their content becomes the bottom section of Customer research, Problem discovery, and Experiments and evidence.
 - Verdict gets its own module page.
 - The end of Record a session goes to Customer research, to see Interviews.
-- Every module in Validate, Build, Raise and Grow gets the new record and add lightboxes, and every screen gets its phone version.
+- Every module in Validate, Build, Raise and Grow gets the new UIs, and every screen gets its phone version. The owner called them lightboxes; the canvas draws a row's record as a **page** inside the cycle, and only the **Add** form as a centred lightbox (D689 D-c).
 
-**Grade: UPGRADE** for the cycle canvases and the Studio and account phone canvases: every route they govern is live. `Account Mobile Page.dc.html` and `Studio Mobile Page.dc.html` name `axal-logo.png`, `eadwyn-ai.png` and two `uploads/` images that the bundles carry only as unnamed assets, so the images are not committed. Every figure in these canvases is a bracketed placeholder. The epic and its slot tasks name the build. **Counts unchanged: 90 / 28 / 26.**
+**Grade: UPGRADE** for the cycle canvases and the Studio and account phone canvases. Every route they govern is live except four: `/profile`, `/profile/venture`, `/profile/preview` and `/profile/visibility` do not exist yet (`/profile` redirects to settings today), and D702 (#1664) builds them. `Account Mobile Page.dc.html` and `Studio Mobile Page.dc.html` name `axal-logo.png`, `eadwyn-ai.png` and two `uploads/` images that the bundles carry only as unnamed assets, so the images are not committed. The phone header's band, `uploads/spin-out-lab-04622b47.png`, is the illustration already served as `frontend/public/site/lab-band.webp`, so D699 (#1661) uses that file. Every figure in these canvases is a bracketed placeholder. **Counts unchanged: 90 / 28 / 26.**
+
+**The build is epic #1654 (D689),** one issue per PR. A task too long for one issue is filed as numbered parts of one decision.
+
+| Decision | Slot | Issue | What it builds |
+| --- | --- | --- | --- |
+| D690 | S18 | #1690 | one gated record contract all four cycles share, an activity row for every Validate write, stable row ids, and the interviews and pain-map exports closed to partners |
+| D690 | S18 | #1691 | Validate's module reads carry the canvas's columns, filters and sorts, each interview's state, the bottom sections' fields and FVW's views |
+| D690 | S18 | #1692 | every Validate record has a one-record read and a store behind each canvas field, with its writes, evidence, form-options and recorded audio |
+| D690 | S08 | #1693 | Build's six lists match the canvas, with stable ids and stored values, every Build write logs its record, and migration 461 adds the stores |
+| D690 | S08 | #1694 | every Build record has a one-record read, with its facts, sections, writer-only gates and activity |
+| D690 | S08 | #1695 | every Build record has a write behind each canvas field: the six Add forms and their Edits, the record actions, proof uploads and form-options |
+| D691 | S19 | #1696 | Grow's obligation writes stop failing against production's compliance_events, and the Durable company-building card reads them |
+| D691 | S19 | #1697 | every Grow Add form gets a store behind each field, a POST and an Edit, with Enter a KPI, Open a role, the canvas's lists and stable ids |
+| D691 | S19 | #1698 | every Grow record has a one-record read, its actions, its activity and form-options, with the feedback-theme band and in-app reminders and alerts |
+| D691 | S11 | #1699 | every Raise record has a one-record read, a stable id and its activity, on migration 463's stores and keyed cap-table entries |
+| D691 | S11 | #1700 | every Raise record gets a write behind each canvas field: its Add and Edit routes, record actions, deck-link settings, per-file data-room access and form-options |
+| D692 | S19 | #1701 | each cycle's phone root has its One Next Thing: Build, Raise and Grow return a focus, a meter and an index, and Validate's reads the new canvas |
+| D693 | S12 | #1702 | decisions are kept for the venture or one hypothesis, withheld below the evidence bar and never overwritten, and the old verdict routes read and write through one module |
+| D693 | S12 | #1703 | a decision rests on the venture's own evidence, a Pivot starts its hypothesis, and each decision gets its record, with commitments, that partners never read |
+| D693 | S12 | #1704 | Verdict is Validate's seventh module, with its card, Decisions table, Record a decision and memo, and /validate/verdict renders it instead of FounderValidateWorkspace |
+| D694 | S09 | #1655 | every cycle page shares the overview's gutter, Record a session ends on Customer research, and Validate's Interviews tab and phone row go |
+| D695 | S11 | #1656 | every Add and Edit opens the canvas's centred lightbox, each Add is a page on a phone, and Validate and Build get their canvas forms |
+| D695 | S11 | #1657 | Raise's and Grow's fourteen modules get the canvas's Add forms and their Edits, and the overview cards that linked to old tools open those forms |
+| D696 | S20 | #1658 | every row in a cycle module opens its one record as a page inside the cycle, with its facts, sections, actions and activity |
+| D697 | S02 | #1659 | Customer research, Problem discovery and Experiments and evidence carry everything the Interviews, Pain map and Hypotheses pages did, and an interview opens as Customer research's record |
+| D698 | S12 | #1660 | the rail becomes "Eadwyn AI" on desktop and in a phone right panel, and its mode and model pick follow the founder across devices |
+| D699 | S09 | #1661 | founders get the phone shell: the photo header with the company pill, Studio, bell and avatar, the Validate/Build/Raise/Grow/More tabs, the company and account sheets, and the More page |
+| D700 | S08 | #1662 | the account menu's ten pages get their phone layouts, and /account becomes a tappable index of its sections |
+| D701 | S11 | #1663 | on a phone, Studio is Eadwyn: Conversations, Tasks, My tickets and Open a ticket, one menu away, with the founder's conversations listed |
+| D702 | S10 | #1664 | founders get You, Your venture, What others see and Visibility pages, including "Let investors find my venture", with the archetype card on a phone |
+| D703 | S20 | #1665 | on a phone, each cycle opens on its One Next Thing, and every module, record, add form and cycle action is its own page |
+| D704 | S09 | #1666 | /validate/interviews, /validate/pain-map and /validate/hypotheses stop being pages and redirect to their modules, with every link, zone, test and doc that named them |
+| D691 | S10 | #1705 | the deck share link's signup gets Turnstile and a rate limit |
 
 Move each new file to `canvases/integrated/` once its bodies are built.
