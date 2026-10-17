@@ -261,12 +261,17 @@ export function safeHref(href) {
  * its path. `search` (`?project_id=7`) rides on every path, so moving between
  * tabs keeps the venture a founder chose; anything not starting `?` is dropped.
  */
-export function cycleTabs(cycle, cards, active = null, search = '') {
+export function cycleTabs(cycle, cards, active = null, search = '', { back = null } = {}) {
   const base = `/${cycle}`;
   const s = linkSearch(search);
   // D694: Build, Raise and Grow draw their live histories after Overview when
   // there are modules. Validate uses Customer research's own interviews table.
-  const cardTabs = (cards || []).filter((c) => c?.slug).map((c) => ({ key: c.slug, name: c.name || c.slug, href: `${base}/${c.slug}${s}`, active: active === c.slug }));
+  // D696: on a record, `back` relabels the active module's tab ("‹ Back to
+  // <Module>") and marks it `back: true`; it still links the module page.
+  const cardTabs = (cards || []).filter((c) => c?.slug).map((c) => {
+    const tab = { key: c.slug, name: c.name || c.slug, href: `${base}/${c.slug}${s}`, active: active === c.slug };
+    return back && tab.active ? { ...tab, name: back, back: true } : tab;
+  });
   const hist = CYCLES[cycle]?.history;
   const history = hist?.live && cardTabs.length && !cardTabs.some((t) => t.name === hist.name)
     ? [{ key: hist.key, name: hist.name, href: `${hist.path}${s}${hist.hash}`, active: false }]

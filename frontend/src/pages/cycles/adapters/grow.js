@@ -319,6 +319,14 @@ const editOf = (id, r, keys) => (id == null ? null : { ...Object.fromEntries(key
 const MARKET_FIELDS = ['state', 'decision', 'demand_score', 'demand_source', 'regulation_score', 'regulation_source', 'partners_score', 'partners_source', 'cost_score', 'cost_source'];
 
 /**
+ * D696 (decision 7): the record a row opens, as the Worker's own id, or null
+ * when the read sent none. A row keeps its `id` (fallback included) as its
+ * key, but a fallback is never a record: a row with a null `recordId` is
+ * never linked (`recordModel.js`).
+ */
+const workerId = (v) => (v == null || v === '' ? null : String(v));
+
+/**
  * Column keys in the order the read lists its labels; each row builder fills
  * them. D664's records take ONE `field:value` filter and sort on a row field
  * (`-` for descending), so each table offers one filter and sorts by field.
@@ -326,7 +334,7 @@ const MARKET_FIELDS = ['state', 'decision', 'demand_score', 'demand_source', 're
 export const RECORDS = {
   'product-improvement': {
     keys: ['feedback', 'source', 'theme', 'roadmap_item', 'status'],
-    row: (r, i) => ({ id: r.uid ?? `feedback-${i}`, cells: {
+    row: (r, i) => ({ id: r.uid ?? `feedback-${i}`, recordId: workerId(r.uid), cells: {
       feedback: r.body ?? null,
       source: r.source == null ? null : `${word(FEEDBACK_SOURCE, r.source)}${r.from_name ? ` · ${r.from_name}` : ''}`,
       theme: r.theme ?? null,
@@ -338,7 +346,7 @@ export const RECORDS = {
   },
   distribution: {
     keys: ['channel', 'state', 'spend', 'customers', 'cac'],
-    row: (r, i) => ({ id: r.uid ?? `channel-${i}`, cells: {
+    row: (r, i) => ({ id: r.uid ?? `channel-${i}`, recordId: workerId(r.uid), cells: {
       channel: r.name ?? null,
       state: pill(CHANNEL_STATE, r.state),
       spend: typed(usd(r.spend_cents), r.spend_source),
@@ -350,7 +358,7 @@ export const RECORDS = {
   },
   'revenue-and-traction': {
     keys: ['kpi', 'value', 'change', 'source', 'as_of'],
-    row: (r, i) => ({ id: `kpi-${i}-${r.kpi}`, cells: {
+    row: (r, i) => ({ id: `kpi-${i}-${r.kpi}`, recordId: workerId(r.id), cells: {
       kpi: r.kpi ?? null,
       value: kpiValue(r),
       change: kpiChange(r),
@@ -362,7 +370,7 @@ export const RECORDS = {
   },
   'team-expansion': {
     keys: ['role', 'team', 'applicants', 'in_interview', 'target_start'],
-    row: (r, i) => ({ id: r.id ?? `role-${i}`, cells: {
+    row: (r, i) => ({ id: r.id ?? `role-${i}`, recordId: workerId(r.id), cells: {
       // The role's applicants are reviewed on the job board's own page.
       role: r.title == null ? null : num(r.id) ? { text: String(r.title), href: `/jobs/${r.id}/manage` } : String(r.title),
       team: r.team ?? null,
@@ -375,7 +383,7 @@ export const RECORDS = {
   },
   'partner-network': {
     keys: ['partner', 'type', 'stage', 'terms', 'revenue'],
-    row: (r, i) => ({ id: r.uid ?? `partner-${i}`, cells: {
+    row: (r, i) => ({ id: r.uid ?? `partner-${i}`, recordId: workerId(r.uid), cells: {
       partner: r.name ?? null,
       type: word(PARTNER_TYPE, r.type),
       stage: pill(PARTNER_PILL, r.stage),
@@ -387,7 +395,7 @@ export const RECORDS = {
   },
   'market-expansion': {
     keys: ['market', 'state', 'readiness', 'weakest_part', 'decision'],
-    row: (r, i) => ({ id: r.uid ?? `market-${i}`, cells: {
+    row: (r, i) => ({ id: r.uid ?? `market-${i}`, recordId: workerId(r.uid), cells: {
       // D686 §5.8: the replies an update's market ask brought in, read under their market.
       market: r.name == null ? null : marketWithReplies(r.name, r.replies),
       state: word(MARKET_STATE, r.state),
@@ -400,7 +408,7 @@ export const RECORDS = {
   },
   'durable-company-building': {
     keys: ['obligation', 'kind', 'due', 'owner', 'state'],
-    row: (r, i) => ({ id: r.id ?? `obligation-${i}`, cells: {
+    row: (r, i) => ({ id: r.id ?? `obligation-${i}`, recordId: workerId(r.id), cells: {
       obligation: r.title ?? null,
       kind: word(OBLIGATION_KIND, r.kind),
       due: typeof r.due_at === 'string' ? r.due_at.slice(0, 10) : null,
