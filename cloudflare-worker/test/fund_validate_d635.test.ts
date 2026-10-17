@@ -12,8 +12,11 @@ import { fileURLToPath } from 'node:url';
 
 import founderValidate from '../src/routes/founder_validate.ts';
 import { ensurePainGroupsSchema } from '../src/services/painGroups.ts';
+import { tableFromBaseline } from './_baseline.mjs';
+import { d1Over } from './_d1_sqlite.mjs';
 
 const SQL = resolve(dirname(fileURLToPath(import.meta.url)), '../sql');
+const BASELINE = readFileSync(`${SQL}/schema_baseline.sql`, 'utf8');
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const FOUNDER = 501;
 const FOUNDER_ID = 77;
@@ -37,13 +40,14 @@ function fresh() {
       id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, interviewee_name TEXT,
       interviewee_company TEXT, icp_fit TEXT, quote_consent INTEGER,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
-    CREATE TABLE activity_logs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT NOT NULL, details TEXT, actor TEXT,
-      user_id INTEGER, project_id INTEGER);
   `);
+  // D693: decisions are written in one batch with their activity row, which
+  // carries `entity_type`, so activity_logs is the baseline's and 464 is on.
+  db.exec(tableFromBaseline(BASELINE, 'activity_logs'));
   db.exec(table('211_founder_validate_evidence', 'validation_decisions'));
   db.exec(table('211_founder_validate_evidence', 'hypotheses'));
   db.exec(table('211_founder_validate_evidence', 'hypothesis_pain_links'));
+  db.exec(readFileSync(`${SQL}/migrations/464_verdict_decisions.sql`, 'utf8'));
   db.prepare('INSERT INTO users (id, role, founder_id, email, name) VALUES (?,?,?,?,?)')
     .run(FOUNDER, 'founder', FOUNDER_ID, 'f@example.com', 'Founder');
   db.prepare('INSERT INTO users (id, role, email, name) VALUES (?,?,?,?)')
@@ -52,23 +56,8 @@ function fresh() {
   return db;
 }
 
-function d1(db: InstanceType<typeof DatabaseSync>) {
-  return {
-    prepare(sql: string) {
-      let b: any[] = [];
-      const api: any = {
-        bind: (...x: any[]) => { b = x.map((v) => (v === undefined ? null : v)); return api; },
-        async first() { return db.prepare(sql).get(...b) ?? null; },
-        async all() { return { results: db.prepare(sql).all(...b) }; },
-        async run() {
-          const r = db.prepare(sql).run(...b);
-          return { meta: { last_row_id: Number(r.lastInsertRowid), changes: Number(r.changes) } };
-        },
-      };
-      return api;
-    },
-  };
-}
+// `d1Over` runs a batch as one transaction, as D1 does (D693's writer batches).
+const d1 = (db: InstanceType<typeof DatabaseSync>) => d1Over(db);
 
 async function token(userId: number, role: string) {
   return new SignJWT({ user_id: userId, role }).setProtectedHeader({ alg: 'HS256' })
