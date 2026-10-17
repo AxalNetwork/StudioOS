@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useActiveCompany } from '../contexts/ActiveCompanyContext';
+import { useActiveCompany, useUpdateCompanyDetails } from '../contexts/ActiveCompanyContext';
 import { useAuth } from '../hooks/useAuthSync';
 import PartnerFirmProfileCard from './partner/PartnerFirmProfileCard';
 import { api, setActiveCompanyId } from '../lib/api';
@@ -437,7 +437,7 @@ function Toast({ toast }) {
 // ---------- Company profile card ---------------------------------------------
 
 function CompanyProfileCard({ uid, flash }) {
-  const { setCompany } = useActiveCompany();
+  const updateCompanyDetails = useUpdateCompanyDetails();
   const [row, setRow] = useState(null);
   const [err, setErr] = useState(null);
   // One entry per field key: { state: 'saving'|'saved'|'error', message? }.
@@ -472,8 +472,9 @@ function CompanyProfileCard({ uid, flash }) {
       try {
         const updated = await api.updateCompany(uid, { [key]: value });
         setRow(updated);
-        // Keep the switcher display name in sync
-        setCompany(prev => (prev ? { ...prev, [key]: value } : prev));
+        // Refresh the selected header AND the dropdown entry from the saved DTO.
+        // A late save for another company must not change the selection.
+        updateCompanyDetails(updated);
         mark(key, { state: 'saved' });
       } catch (e) {
         // The server's own sentence, not a generic one — it is the only thing
@@ -481,7 +482,7 @@ function CompanyProfileCard({ uid, flash }) {
         mark(key, { state: 'error', message: e?.message || 'Not saved' });
       }
     },
-    [uid, mark, setCompany],
+    [uid, mark, updateCompanyDetails],
   );
 
   if (err) {
