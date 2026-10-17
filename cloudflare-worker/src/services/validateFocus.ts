@@ -1,7 +1,8 @@
 /**
- * D685 §5.12 (#1584) — what Validate's overview leads with on a phone: one
- * focus, the interviews meter, and the index counts. Read with the overview
- * (`routes/cycle_validate.ts`); nothing here is stored but the target.
+ * D685 §5.12 (#1584), D692 (#1701) — what Validate's overview leads with on a
+ * phone: one focus, the interviews meter, and the index rows. Read with the
+ * overview (`routes/cycle_validate.ts`); nothing here is stored but the
+ * target. The shapes and the shared helpers are `services/cycleFocus.ts`.
  *
  * THE FOCUS is the first rule that holds:
  *   1. the venture has no interview: record the first conversation;
@@ -10,31 +11,31 @@
  *      counts what its placements would move, in pain themes (phrases resolved
  *      through the pain-group model, so two wordings of one theme count once)
  *      and hypotheses, never in placements;
- *   3. otherwise the first card's own `next`.
+ *   3. the caller can write: record the next customer conversation, with the
+ *      meter's count in the why and the first other card's `next` as Then;
+ *   4. anyone else: the first card's own `next`, or no focus. A reader who
+ *      cannot write is never sent to a write.
  *
  * THE METER is interviews this month against `metric_targets` key
  * `interviews_month_target`; with no target it carries the count and no bar.
+ *
+ * THE INDEX is the canvas's seven rows, each a stored value or Not recorded.
+ * The Verdict row is added only for a decision reader (`canReadDecision`),
+ * and its query runs only then: partners read the board, never the decision.
  */
-import type { Env } from '../types';
+import type { Env, User } from '../types';
 import type { Card, Figure } from './cycleCards';
 import { loadPainGroupModel, normPhrase, resolvePhrase } from './painGroups';
 import { INTERVIEWS_TARGET_KEY } from './validateWriters';
+import { canReadDecision, type ProjectRef } from '../routes/_founder_validate_helpers';
+import {
+  cardFocus, dayMonth, plural, sentence, usdShort, UNREADABLE,
+  type Focus, type IndexRow, type Meter,
+} from './cycleFocus';
 
-export interface Focus {
-  rule: 'first_interview' | 'review' | 'card';
-  eyebrow: string;
-  headline: string;
-  why: string | null;
-  cta: { label: string; href: string } | null;
-  then: string | null;
-}
+export type { Focus };
 
 const recordHref = (projectId: number) => `/validate/record?project=${projectId}`;
-const dayMonth = (v: string | null) => {
-  const d = v ? new Date(String(v).replace(' ', 'T') + (String(v).length > 10 && !/[zZ]|[+-]\d\d:?\d\d$/.test(v) ? 'Z' : '')) : null;
-  return d && !Number.isNaN(d.valueOf()) ? d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }) : null;
-};
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 /** What a session's pending placements would move: distinct themes and hypotheses. */
 export async function pendingMoves(env: Env, projectId: number, sessionId: number) {
@@ -61,7 +62,9 @@ export async function pendingMoves(env: Env, projectId: number, sessionId: numbe
   return { placements: list.length, themes: themes.size, hypotheses: hypotheses.size };
 }
 
-export async function focusOf(env: Env, projectId: number, canWriteVenture: boolean, cards: Card[]): Promise<Focus> {
+export async function focusOf(
+  env: Env, projectId: number, canWriteVenture: boolean, cards: Card[], figures: Figure[] = [], meter?: Meter | null,
+): Promise<Focus | null> {
   const any = await env.DB.prepare('SELECT COUNT(*) AS n FROM discovery_interviews WHERE project_id = ?')
     .bind(projectId).first<{ n: number }>();
   if (Number(any?.n ?? 0) === 0) {
@@ -95,27 +98,41 @@ export async function focusOf(env: Env, projectId: number, canWriteVenture: bool
       }
     }
   }
-  const first = cards.find((c) => c.next?.text) ?? null;
+  if (!canWriteVenture) return cardFocus('validate', cards);
+
+  // Rule 3: a writer records the next conversation. The why's count and
+  // target are the meter's, read once, so the two never disagree.
+  const m = meter === undefined ? await meterOf(env, projectId, figures) : meter;
+  const count = m?.count;
+  const tail = count == null ? ''
+    : m!.target != null ? ` You are at ${count} of ${m!.target} this month.`
+      : ` Interviews this month: ${count}.`;
+  // Then: the first other card's next. Customer research's ("Log <n> more
+  // interviews") would only repeat the CTA.
+  const other = cards.find((c) => c.slug !== 'customer-research' && c.next?.text);
   return {
-    rule: 'card', eyebrow: 'Validate · Next',
-    headline: first ? `${first.next!.text}.`.replace(/\.\.$/, '.') : 'Record a session.',
-    why: first?.caption || first?.reason || null,
-    cta: first ? { label: first.next!.text, href: first.next!.href } : { label: 'Record a session', href: recordHref(projectId) },
-    then: null,
+    rule: 'next_interview', eyebrow: 'Validate · Next', headline: 'Record your next customer conversation.',
+    why: `Every interview feeds the pain themes, the hypotheses and the verdict.${tail}`,
+    cta: { label: 'Record a session', href: recordHref(projectId) },
+    then: other ? sentence(other.next!.text) || null : null,
   };
 }
 
 /** Interviews this month against the stored target. Null count when the figure is unreadable. */
-export async function meterOf(env: Env, projectId: number, figures: Figure[]) {
+export async function meterOf(env: Env, projectId: number, figures: Figure[]): Promise<Meter> {
   const fig = figures.find((f) => f.key === 'interviews_this_month');
   const count = fig?.state === 'ok' ? Number(fig.value) : fig?.state === 'empty' ? 0 : null;
   const t = await env.DB.prepare('SELECT target_value FROM metric_targets WHERE project_id = ? AND metric_key = ?')
     .bind(projectId, INTERVIEWS_TARGET_KEY).first<{ target_value: number }>();
   const target = t?.target_value != null ? Number(t.target_value) : null;
-  return { key: 'interviews_this_month', label: 'Interviews this month', count, target, target_reason: target == null ? 'No target set' : null };
+  return {
+    key: 'interviews_this_month', label: 'Interviews this month', count, target,
+    target_reason: target == null ? 'No target set' : null,
+    display: count == null ? null : target != null ? `${count} of ${target}` : String(count),
+  };
 }
 
-/** The index's two Worker counts: every interview, and those booked now. */
+/** Customer research's two counts: every interview, and those booked now. */
 export async function indexCountsOf(env: Env, projectId: number) {
   const row = await env.DB.prepare(
     `SELECT COUNT(*) AS total, SUM(CASE WHEN stage = 'booked' THEN 1 ELSE 0 END) AS booked
@@ -123,3 +140,90 @@ export async function indexCountsOf(env: Env, projectId: number) {
   ).bind(projectId).first<{ total: number; booked: number | null }>();
   return { interviews_total: Number(row?.total ?? 0), booked: Number(row?.booked ?? 0) };
 }
+
+/**
+ * The venture's current decision, for the Verdict row. The file's only
+ * decision query. D693 (#1702) replaces it with `services/verdict.ts`'s
+ * `currentDecision(env, projectId, 'venture')` and keeps the gate.
+ */
+async function decisionOf(env: Env, projectId: number) {
+  return env.DB.prepare(
+    `SELECT decision, decided_at FROM validation_decisions
+      WHERE project_id = ? AND superseded_at IS NULL
+      ORDER BY decided_at DESC, id DESC LIMIT 1`,
+  ).bind(projectId).first<{ decision: string; decided_at: string | null }>();
+}
+
+const DECISION_WORD: Record<string, string> = { proceed: 'Proceed', pivot: 'Pivot', stop: 'Stop' };
+
+/**
+ * The index: the canvas's rows in its order, each with a stored value or Not
+ * recorded (value null) and a neutral detail. No Interviews row.
+ */
+export async function indexOf(env: Env, project: ProjectRef, user: User, figures: Figure[], cards: Card[]): Promise<IndexRow[]> {
+  const pid = Number(project.id);
+  const href = (slug: string) => `/validate/${slug}?project=${pid}`;
+  const fig = (key: string) => figures.find((f) => f.key === key);
+  const card = (slug: string) => cards.find((c) => c.slug === slug);
+  const rows: IndexRow[] = [];
+
+  const themes = fig('pain_themes');
+  if (themes?.state === 'ok' && themes.value != null) {
+    const k = Number(themes.delta_30d ?? 0);
+    rows.push({ key: 'problem-discovery', title: 'Problem discovery', detail: `${plural(Number(themes.value), 'pain theme', 'pain themes')}${k > 0 ? ` · ${k} new` : ''}`, value: '', href: href('problem-discovery') });
+  } else {
+    rows.push({ key: 'problem-discovery', title: 'Problem discovery', detail: 'Pain themes', value: themes?.state === 'unreadable' ? UNREADABLE : null, href: href('problem-discovery') });
+  }
+
+  let counts: { interviews_total: number; booked: number } | null = null;
+  let countsFailed = false;
+  try { counts = await indexCountsOf(env, pid); } catch { countsFailed = true; }
+  rows.push(counts && counts.interviews_total > 0
+    ? { key: 'customer-research', title: 'Customer research', detail: `Recruiting · ${counts.booked} booked`, value: '', href: href('customer-research') }
+    : { key: 'customer-research', title: 'Customer research', detail: 'Recruiting', value: countsFailed ? UNREADABLE : null, href: href('customer-research') });
+
+  const icp = card('ideal-customer-profile');
+  const segs = (icp?.state === 'ok' || icp?.state === 'too_little') && Array.isArray((icp.series as any)?.segments) ? (icp.series as any).segments.length : null;
+  rows.push(segs != null && segs > 0
+    ? { key: 'ideal-customer-profile', title: 'Ideal customer profile', detail: plural(segs, 'segment', 'segments'), value: '', href: href('ideal-customer-profile') }
+    : { key: 'ideal-customer-profile', title: 'Ideal customer profile', detail: 'Segments', value: icp?.state === 'unreadable' ? UNREADABLE : null, href: href('ideal-customer-profile') });
+
+  const market = card('market-intelligence');
+  const sam = market?.state === 'ok' ? usdShort((market.series as any)?.sam?.value) : null;
+  rows.push({ key: 'market-intelligence', title: 'Market intelligence', detail: 'Total, serviceable, obtainable', value: market?.state === 'unreadable' ? UNREADABLE : sam, href: href('market-intelligence') });
+
+  const demand = card('demand-signals');
+  const bar = (demand?.state === 'ok' || demand?.state === 'too_little') ? (demand.series as any)?.bar : null;
+  rows.push(typeof bar === 'number' && Number.isFinite(bar)
+    ? { key: 'demand-signals', title: 'Demand and urgency signals', detail: `Waitlist against the bar of ${bar}`, value: '', href: href('demand-signals') }
+    : { key: 'demand-signals', title: 'Demand and urgency signals', detail: 'Waitlist against the bar', value: demand?.state === 'unreadable' ? UNREADABLE : null, href: href('demand-signals') });
+
+  const hyp = fig('hypotheses_supported');
+  rows.push({
+    key: 'experiments', title: 'Experiments and evidence', detail: 'Hypotheses supported',
+    value: hyp?.state === 'unreadable' ? UNREADABLE
+      : hyp?.state === 'ok' && hyp.value != null && /^of \d+$/.test(String(hyp.unit)) ? `${hyp.value} ${hyp.unit}` : null,
+    href: href('experiments'),
+  });
+
+  // Partners read the board, never the decision: the row, and its query, exist
+  // only for a decision reader.
+  if (canReadDecision(project, user)) {
+    let value: string | null = null;
+    let detail = 'Proceed, pivot or stop';
+    try {
+      const d = await decisionOf(env, pid);
+      if (d && DECISION_WORD[d.decision]) {
+        const when = dayMonth(d.decided_at);
+        detail = when ? `${DECISION_WORD[d.decision]} · ${when}` : DECISION_WORD[d.decision];
+        value = '';
+      }
+    } catch (e) {
+      console.warn('[validateFocus] decision unreadable:', (e as Error)?.message);
+      value = UNREADABLE;
+    }
+    rows.push({ key: 'verdict', title: 'Verdict', detail, value, href: `/validate/verdict?project=${pid}` });
+  }
+  return rows;
+}
+

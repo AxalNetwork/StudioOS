@@ -80,7 +80,8 @@ relationships; stored link keys remain unchanged.
 D659 (#1472): `cycleCards.ts` is the shape every cycle read returns: `Figure`,
 `Card`, the five states, and `safeCard` / `safeFigure`, which turn a thrown
 source into that one card's `unreadable`. Build, Raise and Grow import it.
-`validateFocus.ts` (D685 §5.12, #1584) is what Validate's overview leads with on a phone: the focus (record the first conversation; review the newest session, counting the pain themes and hypotheses its pending placements would move; else the first card's next), the interviews meter against `interviews_month_target`, and the index's two counts.
+`validateFocus.ts` (D685 §5.12, #1584; D692, #1701) is what Validate's overview leads with on a phone: the focus (record the first conversation; review the newest session, counting the pain themes and hypotheses its pending placements would move; for a writer, record the next conversation; else the first card's next), the interviews meter against `interviews_month_target`, and the index rows, with Verdict for a decision reader only.
+`cycleFocus.ts` (D692, #1701) is the phone root's shape every overview read returns (`focus`, `meter`, `index`), its helpers (`part`, `sentence`, `cardFocus`, `cardValue`, `usdShort`), and Raise's and Grow's parts (`raisePhone`, `growPhone`).
 `cycleValidate.ts` computes Validate's figures, cards and records from records
 at read time and stores nothing. `validateWriters.ts` has one writer per
 migration 440 record. The manual routes and #1471's interview accept path both
