@@ -9,22 +9,125 @@ import type { Card } from '../services/cycleCards';
 import { pageBuildRows, unreadableBuildCard, type BuildFigure, type BuildRecords, type Cell, type ChartSpec, type RecordRow } from '../services/buildCycleRecords';
 
 const app = new Hono<{ Bindings: Env }>();
+// D690 (#1693): the fifth entry is the list's title, as the canvas titles it (CO:617-622).
 const MODULES = [
-  ['solution-design', 'Solution design', 'mvp_features and venture_risks', 'Features linked to a pain theme, and risks by severity.'],
-  ['prototype-mvp', 'Prototype / MVP', 'mvp_features', 'Must-haves done over time against the total.'],
-  ['product-roadmap', 'Product roadmap', 'roadmap_okrs and okr_column_moves', 'Items in Now, Next and Later; items shipped per month.'],
-  ['founding-team', 'Founding team', 'cap_table_holders and cap_table_vesting', 'The equity split and each founder’s vesting.'],
-  ['company-creation', 'Company creation', 'formation_steps and entity_obligations', 'Formation steps and the next three filings.'],
-  ['operating-systems', 'Operating systems', 'integration_companies and ritual_runs', 'Core systems by state; weekly reviews held.'],
+  ['solution-design', 'Solution design', 'mvp_features and venture_risks', 'Features linked to a pain theme, and risks by severity.', 'Features'],
+  ['prototype-mvp', 'Prototype / MVP', 'mvp_features', 'Must-haves done over time against the total.', 'Must-haves'],
+  ['product-roadmap', 'Product roadmap', 'roadmap_okrs and okr_column_moves', 'Items in Now, Next and Later; items shipped per month.', 'Roadmap items'],
+  ['founding-team', 'Founding team', 'cap_table_holders and cap_table_vesting', 'The equity split and each founder’s vesting.', 'Founders'],
+  ['company-creation', 'Company creation', 'formation_steps and entity_obligations', 'Formation steps and the next three filings.', 'Filings'],
+  ['operating-systems', 'Operating systems', 'integration_companies and ritual_runs', 'Core systems by state; weekly reviews held.', 'Systems'],
 ] as const;
 type Slug = typeof MODULES[number][0];
 type Project = { id: number; founder_id: number | null; company_id: number | null; entity_id: number | null; mvp_target_date: string | null; incorporation_meta: string | null; cofounder_decision_meta: string | null; spinout_ip_meta: string | null };
-type ModuleRead = { card: Card; cols: BuildRecords['cols']; rows: RecordRow[]; facts?: Record<string, unknown>; add?: BuildRecords['add']; parts?: Record<string, unknown> };
+type Filter = NonNullable<BuildRecords['filters']>[number];
+type Sort = NonNullable<BuildRecords['sorts']>[number];
+/**
+ * A module's list (D690, #1693): its filters, its default sort (the canvas's,
+ * sent first and applied when no sort is sent) and its ordinal keys, which
+ * sort by their list and never by the alphabet.
+ */
+type ListSpec = { filters: Filter[]; sort: Sort; orders?: Record<string, readonly string[]> };
+type ModuleRead = { card: Card; cols: BuildRecords['cols']; rows: RecordRow[]; list?: ListSpec; facts?: Record<string, unknown>; add?: BuildRecords['add']; parts?: Record<string, unknown> };
 type Query = { q?: string; filter?: string; sort?: string; page?: string };
 
 function number(v: unknown): number { return Number(v ?? 0); }
 function rows<T>(r: { results?: T[] | null }): T[] { return r.results ?? []; }
-function record(id: number | string, cells: Record<string, Cell>): RecordRow { return { id, cells }; }
+function record(id: number | string, cells: Record<string, Cell>, keys?: RecordRow['keys'], edit?: RecordRow['edit']): RecordRow {
+  return { id, cells, ...(keys ? { keys } : {}), ...(edit ? { edit } : {}) };
+}
+function options(pairs: Array<[string, string]>): Filter['options'] { return pairs.map(([value, label]) => ({ value, label })); }
+/** A free-text key's filter options: the values the rows hold, as today's one filter offered them. */
+function optionsOf(list: RecordRow[], key: string, label: (value: string) => string = value => value): Filter['options'] {
+  return [...new Set(list.map(row => row.keys?.[key]).filter((value): value is string => typeof value === 'string' && value !== '' && !/[:,]/.test(value)))].sort()
+    .slice(0, 100).map(value => ({ value, label: label(value) }));
+}
+
+// The canvas's words for stored values (#1693 decision 2). Impact is
+// added_value; Effort is effort, whose S, M and L read Low, Medium and High,
+// and an old XL High. Review is an old must-have state and reads In progress.
+const LEVEL: Record<string, string> = { high: 'High', medium: 'Medium', low: 'Low' };
+const IMPACT_KEY: Record<string, string> = { High: 'high', Medium: 'medium', Low: 'low' };
+const EFFORT_KEY: Record<string, string> = { S: 'low', M: 'medium', L: 'high', XL: 'high' };
+const MUST_KEY: Record<string, string> = { Backlog: 'not_started', 'In Progress': 'in_progress', Review: 'in_progress', Done: 'done', Blocked: 'blocked' };
+const MUST_LABEL: Record<string, string> = { blocked: 'Blocked', in_progress: 'In progress', not_started: 'Not started', done: 'Done' };
+const COLUMN_LABEL: Record<string, string> = { now: 'Now', next: 'Next', later: 'Later', done: 'Done' };
+const FILING_LABEL: Record<string, string> = { overdue: 'Overdue', due_soon: 'Due soon', upcoming: 'Upcoming', filed: 'Filed' };
+const FEEDS_LABEL: Record<string, string> = { use_of_funds: 'Use of funds', kpis: 'KPIs', team: 'Team' };
+const known = <T,>(map: Record<string, T>, key: unknown): T | null => typeof key === 'string' && Object.hasOwn(map, key) ? map[key] : null;
+const longDate = (date: Date) => new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(date);
+const percent = (n: number) => `${Math.round(n * 100) / 100}%`;
+function addMonths(date: Date, months: number): Date {
+  const out = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + months, 1));
+  const last = new Date(Date.UTC(out.getUTCFullYear(), out.getUTCMonth() + 1, 0)).getUTCDate();
+  out.setUTCDate(Math.min(date.getUTCDate(), last));
+  return out;
+}
+/** "4y · cliff 1 Jan 2027", or "no cliff" when the cliff is 0. Null without a start date. */
+function vestingText(start: unknown, cliff: unknown, total: unknown): string | null {
+  const from = typeof start === 'string' ? dateOnly(start.slice(0, 10)) : null;
+  if (!from) return null;
+  const months = total == null ? null : Number(total), cliffMonths = cliff == null ? null : Number(cliff);
+  const length = months != null && Number.isFinite(months) && months > 0 ? `${Math.round(months / 12 * 100) / 100}y` : 'length not recorded';
+  const cliffText = cliffMonths == null || !Number.isFinite(cliffMonths) ? 'cliff not recorded'
+    : cliffMonths === 0 ? 'no cliff' : `cliff ${longDate(addMonths(from, cliffMonths))}`;
+  return `${length} · ${cliffText}`;
+}
+/** Whole days from today (UTC) to a date, or null with no date. */
+function daysUntil(raw: unknown): number | null {
+  const date = typeof raw === 'string' ? dateOnly(raw.slice(0, 10)) : null;
+  if (!date) return null;
+  const now = new Date();
+  return Math.round((date.getTime() - Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())) / 86400000);
+}
+/**
+ * A filing's state (#1693 decision 8): filed when done, overdue when past due,
+ * due soon within 30 days, else upcoming.
+ */
+function filingState(done: boolean, due: unknown): 'filed' | 'upcoming' | 'due_soon' | 'overdue' {
+  if (done) return 'filed';
+  const days = daysUntil(due);
+  return days == null ? 'upcoming' : days < 0 ? 'overdue' : days <= 30 ? 'due_soon' : 'upcoming';
+}
+function filingText(state: string, due: unknown, kind: unknown = null): string {
+  if (state === 'filed') return kind === 'ein' ? 'Issued' : 'Filed';
+  if (state !== 'due_soon') return FILING_LABEL[state];
+  const days = daysUntil(due)!;
+  return days === 0 ? 'Due today' : `Due in ${days} ${days === 1 ? 'day' : 'days'}`;
+}
+/**
+ * The Due filter's window. A filed filing with a past date is in none of the
+ * four, since it is neither overdue nor ahead.
+ */
+function dueWindow(state: string, due: unknown): string {
+  const days = daysUntil(due);
+  return state === 'overdue' ? 'overdue' : days == null ? 'none' : days < 0 ? 'past' : days <= 30 ? 'next_30' : 'later';
+}
+/**
+ * Stored is a proof uploaded under `build-proof/`; Key recorded is a key typed
+ * before 461, which opens nothing. A filing that is filed, overdue or due
+ * within 30 days with no proof reads Missing.
+ */
+function proofText(key: unknown, state: string): string {
+  if (typeof key === 'string' && key) return key.startsWith('build-proof/') ? 'Stored' : 'Key recorded';
+  return state === 'upcoming' ? '—' : 'Missing';
+}
+function filingKeys(state: string, due: unknown): RecordRow['keys'] {
+  const day = typeof due === 'string' && dateOnly(due.slice(0, 10)) ? due.slice(0, 10) : null;
+  return { state, due: day, due_window: dueWindow(state, due) };
+}
+function feedsOf(raw: unknown): string[] {
+  try {
+    const list = typeof raw === 'string' ? JSON.parse(raw) : null;
+    return Array.isArray(list) ? [...new Set(list.filter((key): key is string => typeof key === 'string' && Object.hasOwn(FEEDS_LABEL, key)))] : [];
+  } catch { return []; }
+}
+function syncOf(configJson: unknown): string {
+  try {
+    const config = typeof configJson === 'string' ? JSON.parse(configJson) : null;
+    return ['live', 'hourly', 'daily', 'manual'].includes(config?.sync_frequency) ? config.sync_frequency : 'live';
+  } catch { return 'live'; }
+}
 function card(slug: Slug, state: Card['state'], series: ChartSpec[], range = 'Now', reason: string | null = null, next: Card['next'] = null): Card {
   const spec = MODULES.find(m => m[0] === slug)!;
   return { slug, name: spec[1], caption: spec[3], state, series, range, reason, next };
@@ -61,7 +164,7 @@ function reconnect(providerKey: string, failedAt: unknown, projectId: number, fa
 
 async function solution(env: Env, p: Project): Promise<ModuleRead> {
   const features = rows(await env.DB.prepare(
-    `SELECT f.id, f.title, f.added_value, f.effort, f.pain_group_id, f.hypothesis_id,
+    `SELECT f.id, f.title, f.added_value, f.effort, f.pain_group_id, f.hypothesis_id, f.description, f.scope,
             pg.title AS pain_theme, h.claim AS hypothesis
        FROM mvp_features f
        LEFT JOIN pain_groups pg ON pg.id = f.pain_group_id AND pg.project_id = f.project_id
@@ -77,9 +180,23 @@ async function solution(env: Env, p: Project): Promise<ModuleRead> {
   const series: ChartSpec[] = [];
   if (features.length) series.push({ kind: 'stack', rows: [{ label: 'Features', parts: [linked, unlinked] }], tones: ['v1', 'grey'], legend: [{ label: 'Linked', tone: 'v1' }, { label: 'Unlinked', tone: 'grey' }] });
   if (risks.length) series.push({ kind: 'stack', rows: [{ label: 'Risks', parts: severity }], tones: ['bad', 'warn', 'grey'], legend: ['High', 'Medium', 'Low'].map((label, i) => ({ label, tone: ['bad', 'warn', 'grey'][i] })) });
-  const featureRows = features.map(f => record(f.id, { feature: f.title, pain_theme: f.pain_theme, hypothesis: f.hypothesis, impact: f.added_value, effort: f.effort }));
+  // A feature with neither a pain theme nor a hypothesis links to nothing.
+  // keys.linked is the chart's linked count: a stored pain theme.
+  const featureRows = features.map(f => {
+    const impact = known(IMPACT_KEY, f.added_value), effort = known(EFFORT_KEY, f.effort);
+    return record(f.id, {
+      feature: f.title, pain_theme: f.pain_theme ?? (f.hypothesis == null ? { text: 'Links to nothing', tone: 'bad' } : null), hypothesis: f.hypothesis,
+      impact: impact ? LEVEL[impact] : f.added_value ?? null, effort: effort ? LEVEL[effort] : f.effort ?? null,
+    }, { linked: f.pain_theme != null ? 'yes' : 'no', impact, effort },
+    { title: f.title, description: f.description ?? null, pain_group_id: f.pain_group_id ?? null, hypothesis_id: f.hypothesis_id ?? null,
+      added_value: f.added_value ?? null, effort: f.effort ?? null, scope: f.scope ?? null });
+  });
+  const levels = options([['high', 'High'], ['medium', 'Medium'], ['low', 'Low']]);
   return { card: card('solution-design', features.length || risks.length ? 'ok' : 'empty', series, 'Now', features.length || risks.length ? null : 'No features yet. Linked and unlinked features appear here.', features.length || risks.length ? next(p, 'solution-design', unlinked ? `Link ${unlinked} features to a pain theme` : null) : next(p, 'solution-design', 'Add feature', true)),
-    cols: [['feature', 'Feature'], ['pain_theme', 'Pain theme'], ['hypothesis', 'Hypothesis'], ['impact', 'Impact'], ['effort', 'Effort']].map(([key, label]) => ({ key, label })), rows: featureRows, facts: { features: features.length, risks } };
+    cols: [['feature', 'Feature'], ['pain_theme', 'Pain theme'], ['hypothesis', 'Hypothesis'], ['impact', 'Impact'], ['effort', 'Effort']].map(([key, label]) => ({ key, label })), rows: featureRows,
+    list: { filters: [{ key: 'linked', label: 'Linked', options: options([['yes', 'Linked'], ['no', 'Unlinked']]) }, { key: 'impact', label: 'Impact', options: levels }, { key: 'effort', label: 'Effort', options: levels }],
+      sort: { key: 'impact', label: 'Impact' }, orders: { impact: ['high', 'medium', 'low'], effort: ['low', 'medium', 'high'] } },
+    facts: { features: features.length, risks } };
 }
 
 async function prototype(env: Env, p: Project): Promise<ModuleRead> {
@@ -106,15 +223,24 @@ async function prototype(env: Env, p: Project): Promise<ModuleRead> {
     ...(mark >= 0 ? { mark, mark_label: `Ship ${p.mvp_target_date}` } : {}) }] : [];
   const state = must.length === 0 ? 'empty' : points.length < 3 ? 'too_little' : 'ok';
   const missing = must.find(f => f.delivery_status !== 'Done');
+  const tests = new Map(must.filter(f => f.test_hypothesis != null).map(f => [String(f.hypothesis_id), String(f.test_hypothesis)]));
+  const mustRows = must.map(f => {
+    const state = known(MUST_KEY, f.delivery_status);
+    return record(f.id, { must_have: f.title, tests: f.test_hypothesis, state: state ? MUST_LABEL[state] : f.delivery_status ?? null, owner: f.owner, due: f.due_date },
+      { state, hypothesis: f.test_hypothesis != null ? String(f.hypothesis_id) : 'none' }, { due_date: f.due_date ?? null });
+  });
   return { card: card('prototype-mvp', state, series, 'Since first completion', state === 'too_little' ? 'Fewer than three completion dates are recorded.' : state === 'empty' ? 'No must-haves yet. The burn-up toward the ship date appears here.' : null, state === 'empty' ? next(p, 'prototype-mvp', 'Add must-have', true) : next(p, 'prototype-mvp', missing ? `Complete ${missing.title}` : null)),
     cols: [['must_have', 'Must-have'], ['tests', 'Tests'], ['state', 'State'], ['owner', 'Owner'], ['due', 'Due']].map(([key, label]) => ({ key, label })),
-    rows: must.map(f => record(f.id, { must_have: f.title, tests: f.test_hypothesis, state: f.delivery_status, owner: f.owner, due: f.due_date })),
+    rows: mustRows,
+    list: { filters: [{ key: 'state', label: 'State', options: options(Object.entries(MUST_LABEL)) },
+      { key: 'hypothesis', label: 'Hypothesis', options: optionsOf(mustRows, 'hypothesis', id => id === 'none' ? 'No hypothesis' : tests.get(id) ?? id) }],
+    sort: { key: 'state', label: 'State' }, orders: { state: ['blocked', 'in_progress', 'not_started', 'done'] } },
     facts: { done: done.length, total: must.length, target_date: p.mvp_target_date } };
 }
 
 async function roadmap(env: Env, p: Project): Promise<ModuleRead> {
   const items = rows(await env.DB.prepare(
-    `SELECT o.id, o.objective, o.kanban_status, o.owner_user_id, o.target_date, o.kpi_key,
+    `SELECT o.id, o.objective, o.kanban_status, o.owner_user_id, o.target_date, o.kpi_key, o.feedback_theme, o.feature_id,
             u.name AS owner
        FROM roadmap_okrs o LEFT JOIN users u ON u.id = o.owner_user_id
       WHERE o.project_id = ? ORDER BY o.sort_order, o.id`,
@@ -135,10 +261,33 @@ async function roadmap(env: Env, p: Project): Promise<ModuleRead> {
   const series: ChartSpec[] = items.length ? [{ kind: 'stack', rows: ['Now', 'Next', 'Later', 'Done'].map((label, n) => ({ label, parts: [buckets[n]] })), tones: ['v1'] }] : [];
   if (trend.length) series.push({ kind: 'vbars', values: trend.map(([, ids]) => ids.size), labels: trend.map(([month], at) => ({ at, label: month })) });
   const thisMonth = new Date().toISOString().slice(0, 7);
+  // Moves reads the feedback theme an item answers and the KPI it moves.
+  const itemRows = items.map(i => record(i.id,
+    { item: i.objective, column: i.kanban_status, moves: [i.feedback_theme, i.kpi_key].filter(v => typeof v === 'string' && v.trim()).join(' · ') || null, owner: i.owner, date: i.target_date },
+    { column: i.kanban_status ?? null, theme: i.feedback_theme ?? null, kpi: i.kpi_key ?? null },
+    { objective: i.objective, kanban_status: i.kanban_status ?? null, owner_user_id: i.owner_user_id ?? null, target_date: i.target_date ?? null,
+      kpi_key: i.kpi_key ?? null, feedback_theme: i.feedback_theme ?? null, feature_id: i.feature_id ?? null }));
   return { card: card('product-roadmap', items.length ? 'ok' : 'empty', series, 'All time', items.length ? null : 'No roadmap items yet. Now, Next and Later appear here.', items.length ? next(p, 'product-roadmap', items.find(i => i.kanban_status === 'next') ? 'Move the next planned item into Now' : null) : { text: 'Add item', href: `/build/roadmap?project_id=${p.id}` }),
-    cols: [['item', 'Item'], ['column', 'Column'], ['moves', 'Moves (KPI)'], ['owner', 'Owner'], ['date', 'Date']].map(([key, label]) => ({ key, label })),
-    rows: items.map(i => record(i.id, { item: i.objective, column: i.kanban_status, moves: i.kpi_key, owner: i.owner, date: i.target_date })),
+    cols: [['item', 'Item'], ['column', 'Column'], ['moves', 'Moves'], ['owner', 'Owner'], ['date', 'Date']].map(([key, label]) => ({ key, label })),
+    rows: itemRows,
+    list: { filters: [{ key: 'column', label: 'Column', options: options(Object.entries(COLUMN_LABEL)) }, { key: 'theme', label: 'Theme', options: optionsOf(itemRows, 'theme') }, { key: 'kpi', label: 'KPI', options: optionsOf(itemRows, 'kpi') }],
+      sort: { key: 'column', label: 'Column' }, orders: { column: ['now', 'next', 'later', 'done'] } },
     facts: { items: items.length, shipped_this_month: months.get(thisMonth)?.size ?? 0 } };
+}
+
+/**
+ * The option pool is not a founder (#1693 decision 14): it is the base
+ * scenario's `inputs_json.option_pool_pct`, the newest scenario that is not a
+ * variant, as Raise's cap table reads it. Null with no such row or no value.
+ */
+async function optionPool(env: Env, p: Project): Promise<number | null> {
+  const base = await env.DB.prepare(
+    'SELECT inputs_json FROM cap_table_scenarios WHERE project_id = ? AND COALESCE(is_variant, 0) = 0 ORDER BY updated_at DESC LIMIT 1',
+  ).bind(p.id).first<{ inputs_json: string | null }>();
+  let inputs: any = null;
+  try { inputs = base?.inputs_json ? JSON.parse(base.inputs_json) : null; } catch { inputs = null; }
+  const pool = inputs?.option_pool_pct;
+  return pool == null || pool === '' || !Number.isFinite(Number(pool)) ? null : Number(pool);
 }
 
 async function founding(env: Env, p: Project): Promise<ModuleRead> {
@@ -163,17 +312,26 @@ async function founding(env: Env, p: Project): Promise<ModuleRead> {
   const withVesting = founderRows.filter(h => h.start_date && h.total_months);
   if (withVesting.length) series.push({ kind: 'progress', items: withVesting.map(h => ({ label: `${h.name} · ${h.cliff_months ?? 'unknown'}m cliff`, pct: h.shares && h.vested_shares != null ? Math.min(100, Math.round(100 * number(h.vested_shares) / number(h.shares))) : null })) });
   const equityTotal = equityKnown ? founderRows.reduce((sum, h) => sum + number(h.ownership_pct), 0) : 0;
+  // A founder's id is `h-<holder id>` (D-c). Agreement is Signed for a
+  // signed document, Awaiting for any other status, else not recorded.
+  const holderRows = founderRows.map(h => record(`h-${h.id}`, {
+    founder: h.name, role: h.founder_role, equity: h.ownership_pct == null ? null : percent(number(h.ownership_pct)),
+    vesting: vestingText(h.start_date, h.cliff_months, h.total_months),
+    agreement: h.agreement_status == null ? null : h.agreement_status === 'signed' ? 'Signed' : 'Awaiting',
+  }, { role: h.founder_role ?? null, equity: h.ownership_pct == null ? null : number(h.ownership_pct) },
+  { role: h.founder_role ?? null, ownership_pct: h.ownership_pct ?? null }));
   const state = !founderRows.length ? 'empty' : !equityKnown ? 'not_recorded' : equityTotal > 0 || withVesting.length ? 'ok' : 'too_little';
   return { card: card('founding-team', state, series, 'Today', state === 'not_recorded' ? 'One or more founder ownership percentages are not recorded.' : state === 'empty' ? 'No founders yet. The equity split and vesting appear here.' : state === 'too_little' ? 'Ownership percentages sum to zero; no split can be drawn.' : null, state === 'empty' ? { text: 'Add founder', href: '/raise/capital/cap-table' } : next(p, 'founding-team', founderRows.find(h => !h.start_date) ? 'Record founder vesting' : null)),
     cols: [['founder', 'Founder'], ['role', 'Role'], ['equity', 'Equity'], ['vesting', 'Vesting'], ['agreement', 'Agreement']].map(([key, label]) => ({ key, label })),
-    rows: founderRows.map(h => record(h.id, { founder: h.name, role: h.founder_role, equity: h.ownership_pct, vesting: h.start_date ? `${h.start_date} · ${h.total_months} months · ${h.cliff_months ?? 'unknown'} month cliff` : null, agreement: h.agreement_status })),
-    facts: { cofounder_decision: p.cofounder_decision_meta ? JSON.parse(p.cofounder_decision_meta) : null,
+    rows: holderRows,
+    list: { filters: [{ key: 'role', label: 'Role', options: optionsOf(holderRows, 'role') }], sort: { key: '-equity', label: 'Equity' } },
+    facts: { cofounder_decision: p.cofounder_decision_meta ? JSON.parse(p.cofounder_decision_meta) : null, option_pool_pct: await optionPool(env, p),
       agreement_reason: 'The latest document status for a founder is recorded; individual signing status is not.' } };
 }
 
 async function company(env: Env, p: Project): Promise<ModuleRead> {
   const steps = rows(await env.DB.prepare(
-    'SELECT id, title, due_date, state, proof_file_key FROM formation_steps WHERE project_id = ? ORDER BY sort_order, id',
+    'SELECT id, title, due_date, state, proof_file_key, kind, jurisdiction, for_holder_id FROM formation_steps WHERE project_id = ? ORDER BY sort_order, id',
   ).bind(p.id).all<any>());
   const order = await env.DB.prepare(
     `SELECT id, status, paid_at, packet_ready_at, filed_on, jurisdiction_id
@@ -196,19 +354,31 @@ async function company(env: Env, p: Project): Promise<ModuleRead> {
   if (timelineSteps.length >= 2) series.push({ kind: 'timeline', steps: timelineSteps });
   else if (timelineSteps.length === 1) series.push({ kind: 'rows', items: [{ label: timelineSteps[0].label, value: timelineSteps[0].date ?? 'Date not recorded' }] });
   if (obligations.length) series.push({ kind: 'rows', items: obligations.map(o => ({ label: o.title, value: o.due_date ?? 'Not recorded' })) });
+  // State and Proof in the canvas's words (#1693 decision 8). A Lab step is
+  // filed once its date is recorded and holds no proof; an obligation is open.
   const combined = [
-    ...labSteps.map((s, n) => record(`lab-${order.id}-${n}`, { filing: s.label, jurisdiction: order.jurisdiction_id, due: s.date, state: s.done ? 'done' : 'not recorded', proof: null })),
-    ...steps.map(s => record(`step-${s.id}`, { filing: s.title, jurisdiction: null, due: s.due_date, state: s.state, proof: s.proof_file_key ? 'Key recorded' : null })),
-    ...obligations.map(o => record(`obligation-${o.id}`, { filing: o.title, jurisdiction: o.jurisdiction, due: o.due_date, state: o.status, proof: o.proof_file_key ? 'Key recorded' : null })),
+    ...labSteps.map((s, n) => { const state = s.done ? 'filed' : 'upcoming';
+      return record(`lab-${order.id}-${n}`, { filing: s.label, jurisdiction: order.jurisdiction_id, due: s.date, state: filingText(state, s.date), proof: null },
+        filingKeys(state, s.date), { date: s.date ?? null }); }),
+    ...steps.map(s => { const state = filingState(s.state === 'done', s.due_date);
+      return record(`step-${s.id}`, { filing: s.title, jurisdiction: s.jurisdiction ?? null, due: s.due_date, state: filingText(state, s.due_date, s.kind), proof: proofText(s.proof_file_key, state) },
+        filingKeys(state, s.due_date), { title: s.title, due_date: s.due_date ?? null, state: s.state, kind: s.kind ?? null, jurisdiction: s.jurisdiction ?? null, for_holder_id: s.for_holder_id ?? null }); }),
+    ...obligations.map(o => { const state = filingState(false, o.due_date);
+      return record(`obligation-${o.id}`, { filing: o.title, jurisdiction: o.jurisdiction, due: o.due_date, state: filingText(state, o.due_date), proof: proofText(o.proof_file_key, state) },
+        filingKeys(state, o.due_date), { title: o.title, due_date: o.due_date ?? null, status: o.status }); }),
   ];
   return { card: card('company-creation', combined.length ? 'ok' : 'empty', series, 'Next filings', combined.length ? null : 'No filings yet. Formation steps and their dates appear here.', combined.length ? next(p, 'company-creation', steps.find(s => s.state !== 'done')?.title ? `Complete ${steps.find(s => s.state !== 'done')!.title}` : null) : next(p, 'company-creation', 'Add filing', true)),
     cols: [['filing', 'Filing'], ['jurisdiction', 'Jurisdiction'], ['due', 'Due'], ['state', 'State'], ['proof', 'Proof']].map(([key, label]) => ({ key, label })), rows: combined,
+    list: { filters: [{ key: 'state', label: 'State', options: options(Object.entries(FILING_LABEL)) },
+      { key: 'due_window', label: 'Due', options: options([['overdue', 'Overdue'], ['next_30', 'Next 30 days'], ['later', 'Later'], ['none', 'No date']]) }],
+    sort: { key: 'due', label: 'Due' }, orders: { state: ['overdue', 'due_soon', 'upcoming', 'filed'] } },
     facts: { ip: p.spinout_ip_meta ? JSON.parse(p.spinout_ip_meta) : null, incorporation: p.incorporation_meta ? JSON.parse(p.incorporation_meta) : null } };
 }
 
 const SYSTEM_KINDS = ['bank', 'accounting', 'payroll', 'crm', 'workspace'] as const;
 type SystemKind = typeof SYSTEM_KINDS[number];
 const SYSTEM_LABEL: Record<SystemKind, string> = { bank: 'Bank', accounting: 'Accounting', payroll: 'Payroll', crm: 'CRM', workspace: 'Workspace' };
+const SYSTEM_STATE: Record<string, string> = { failing: 'Failing', connected: 'Connected', not_connected: 'Not connected' };
 type Viewer = Awaited<ReturnType<typeof requireAuth>>;
 function fitsKind(kind: SystemKind, providerKey: string): boolean {
   return kind === 'workspace' ? ['google_calendar', 'microsoft_365'].includes(providerKey)
@@ -244,6 +414,19 @@ async function operating(env: Env, p: Project, viewer: Viewer): Promise<ModuleRe
     status: 'active', last_synced_at: null, last_error_at: null,
   });
   const byKind = new Map(connectors.map(c => [c.kind, c]));
+  // Each kind's stored row, connected or not: Used by, Feeds, and the Sync
+  // the caller may set (#1693 decision 5). Sync is the caller's own mapped
+  // connection's setting, or, with none mapped, the choice waiting for one.
+  const stored = new Map(p.company_id == null ? [] : rows(await env.DB.prepare(
+    `SELECT s.kind, s.used_by, s.feeds_json, s.sync_request, s.integration_id, i.user_id AS integration_user_id, i.config_json
+       FROM project_core_systems s LEFT JOIN integrations i ON i.id = s.integration_id
+      WHERE s.project_id = ?`,
+  ).bind(p.id).all<any>()).map(r => [r.kind, r]));
+  const systemEdit = (k: SystemKind): RecordRow['edit'] => {
+    const row = stored.get(k), feeds = feedsOf(row?.feeds_json);
+    const editable = k !== 'workspace' && (row?.integration_id == null || row.integration_user_id === viewer.id);
+    return { used_by: row?.used_by ?? null, feeds, ...(editable ? { sync: row?.integration_id == null ? row?.sync_request ?? null : syncOf(row.config_json) } : {}) };
+  };
   const viewerMember = p.company_id != null && !!await env.DB.prepare(
     'SELECT 1 FROM user_company_links WHERE user_id = ? AND company_id = ?',
   ).bind(viewer.id, p.company_id).first();
@@ -286,7 +469,12 @@ async function operating(env: Env, p: Project, viewer: Viewer): Promise<ModuleRe
   const empty = p.company_id != null && mapped === 0 && rituals.length === 0 && tools.length === 0;
   return { card: card('operating-systems', p.company_id == null ? 'not_recorded' : empty ? 'empty' : 'ok', p.company_id == null || empty ? [] : series, 'Last 12 weeks', p.company_id == null ? 'This project has no company scope for connectors.' : empty ? 'No systems connected yet. Each system and its state appear here.' : null, empty ? { text: 'Connect a system', href: `/build/connect?project_id=${p.id}` } : failedSystem ? reconnect(failedSystem.provider_key, failedSystem.last_error_at, p.id, SYSTEM_LABEL[failing!]) : toolNext),
     cols: [['system', 'System'], ['provider', 'Provider'], ['state', 'State'], ['last_sync', 'Last sync'], ['used_by', 'Used by']].map(([key, label]) => ({ key, label })),
-    rows: SYSTEM_KINDS.map(k => { const c = byKind.get(k); return record(k, { system: SYSTEM_LABEL[k], provider: c ? (c.user_id === viewer.id ? c.display_name : getDescriptor(c.provider_key)?.display_name) ?? c.provider_key : null, state: !c ? 'Not connected' : c.status === 'error' ? 'Failing' : c.status === 'active' ? 'Connected' : 'Not connected', last_sync: c?.last_synced_at ?? null, used_by: c?.used_by ?? null }); }),
+    // Used by shows the recorded Used by, else what the system feeds.
+    rows: SYSTEM_KINDS.map(k => { const c = byKind.get(k), edit = systemEdit(k)!; const state = !c ? 'not_connected' : c.status === 'error' ? 'failing' : c.status === 'active' ? 'connected' : 'not_connected';
+      return record(k, { system: SYSTEM_LABEL[k], provider: c ? (c.user_id === viewer.id ? c.display_name : getDescriptor(c.provider_key)?.display_name) ?? c.provider_key : null, state: SYSTEM_STATE[state], last_sync: c?.last_synced_at ?? null,
+        used_by: (edit.used_by as string | null) ?? ((edit.feeds as string[]).map(key => FEEDS_LABEL[key]).join(' · ') || null) }, { state }, edit); }),
+    list: { filters: [{ key: 'state', label: 'State', options: options(Object.entries(SYSTEM_STATE)) }], sort: { key: 'state', label: 'State' },
+      orders: { state: ['failing', 'connected', 'not_connected'] } },
     facts: { connected, mapped, reviews: rituals.length, total: SYSTEM_KINDS.length, tools_connected: p.company_id == null ? null : tools.filter(tool => tool.status === 'active').length,
       tools_failing: p.company_id == null ? null : tools.filter(tool => tool.status === 'error').length, tools_total: p.company_id == null ? null : tools.length },
     parts: { tools: {
@@ -301,10 +489,6 @@ async function operating(env: Env, p: Project, viewer: Viewer): Promise<ModuleRe
 const READS: Record<Slug, (env: Env, p: Project, viewer: Viewer) => Promise<ModuleRead>> = {
   'solution-design': solution, 'prototype-mvp': prototype, 'product-roadmap': roadmap,
   'founding-team': founding, 'company-creation': company, 'operating-systems': operating,
-};
-const FILTER_FIELD: Record<Slug, string> = {
-  'solution-design': 'impact', 'prototype-mvp': 'state', 'product-roadmap': 'column',
-  'founding-team': 'role', 'company-creation': 'state', 'operating-systems': 'state',
 };
 
 async function safeRead(slug: Slug, env: Env, project: Project, viewer: Viewer): Promise<ModuleRead> {
@@ -366,14 +550,16 @@ app.get('/modules/:slug', async c => {
   const project = await context(c);
   if (project instanceof Response) return project;
   const result = await safeRead(slug, c.env, project, await requireAuth(c));
+  const spec = MODULES.find(m => m[0] === slug)!;
   const query: Query = { q: c.req.query('q'), filter: c.req.query('filter'), sort: c.req.query('sort'), page: c.req.query('page') };
-  const filterKey = FILTER_FIELD[slug];
-  const filterLabel = result.cols.find(col => col.key === filterKey)?.label ?? filterKey;
-  const options = [...new Set(result.rows.map(row => row.cells[filterKey]).filter((value): value is string => typeof value === 'string' && !/[:,]/.test(value)))].sort()
-    .slice(0, 100).map(value => ({ value, label: value }));
-  const filters = result.cols.length ? [{ key: filterKey, label: filterLabel, options }] : [];
-  const sorts = result.cols.flatMap(col => [{ key: col.key, label: col.label }, { key: `-${col.key}`, label: `${col.label} descending` }]);
-  return c.json({ module: slug, card: result.card, records: { cols: result.cols, ...pageBuildRows(result.rows, query), filters, sorts,
+  // The canvas's filters, then its default sort first (the page shows
+  // sorts[0] as the current one), then each column both ways.
+  const list = result.cols.length ? result.list : undefined;
+  const filters = list?.filters ?? [];
+  const bySort = result.cols.flatMap(col => [{ key: col.key, label: col.label }, { key: `-${col.key}`, label: `${col.label} descending` }]);
+  const sorts = list ? [list.sort, ...bySort.filter(s => s.key !== list.sort.key).map(s => s.label === list.sort.label ? { ...s, label: `${s.label} ascending` } : s)] : bySort;
+  return c.json({ module: { slug, name: spec[1], records_title: spec[4] }, card: result.card, records: { cols: result.cols,
+    ...pageBuildRows(result.rows, query, 25, { orders: list?.orders, defaultSort: list?.sort.key }), filters, sorts,
     ...(result.add ? { add: result.add } : {}) }, ...(result.facts ? { facts: result.facts } : {}), ...(result.parts ? { parts: result.parts } : {}) });
 });
 
