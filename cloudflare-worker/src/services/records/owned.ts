@@ -84,9 +84,53 @@ export async function ownedRow(env: Env, store: Store, id: string | number, proj
         'SELECT 1 FROM interview_sessions s JOIN discovery_interviews i ON i.id = s.interview_id WHERE s.id = ? AND i.project_id = ?',
       ).bind(n, projectId).first();
     }
+    // D690 (#1692): Demand and urgency signals' one id space, `signal-`,
+    // `revenue-` (a deposit or pilot in the ledger) or `waitlist-` (a customer
+    // sign-up, never an investor's), each proved in its own store.
+    case 'demand_records': {
+      const signal = numeric(value, 'signal-');
+      if (signal !== null) return !!await db.prepare('SELECT 1 FROM demand_signals WHERE id = ? AND project_id = ?').bind(signal, projectId).first();
+      const revenue = numeric(value, 'revenue-');
+      if (revenue !== null) return !!await db.prepare(
+        "SELECT 1 FROM revenue_entries WHERE id = ? AND project_id = ? AND revenue_type IN ('deposit', 'pilot')",
+      ).bind(revenue, projectId).first();
+      const signup = numeric(value, 'waitlist-');
+      return signup !== null && !!await db.prepare(
+        "SELECT 1 FROM waitlist_signups WHERE id = ? AND project_id = ? AND (audience IS NULL OR audience = 'customer')",
+      ).bind(signup, projectId).first();
+    }
+    case 'hypothesis_experiments': {
+      const n = numeric(value);
+      return n !== null && !!await db.prepare(
+        'SELECT 1 FROM hypothesis_experiments x JOIN hypotheses h ON h.id = x.hypothesis_id WHERE x.id = ? AND x.project_id = ? AND h.project_id = ?',
+      ).bind(n, projectId, projectId).first();
+    }
+    case 'hypothesis_evidence_links': {
+      const n = numeric(value);
+      return n !== null && !!await db.prepare(
+        'SELECT 1 FROM hypothesis_evidence_links l JOIN hypotheses h ON h.id = l.hypothesis_id WHERE l.id = ? AND l.project_id = ? AND h.project_id = ?',
+      ).bind(n, projectId, projectId).first();
+    }
     // D693 (#1703): Verdict's two stores, read only here and in services/verdict.ts.
     case 'validation_decisions': { const n = numeric(value); return n !== null && !!await db.prepare('SELECT 1 FROM validation_decisions WHERE id = ? AND project_id = ?').bind(n, projectId).first(); }
     case 'validation_decision_commitments': { const n = numeric(value); return n !== null && !!await db.prepare('SELECT 1 FROM validation_decision_commitments c JOIN validation_decisions d ON d.id = c.decision_id WHERE c.id = ? AND c.project_id = ? AND d.project_id = ?').bind(n, projectId, projectId).first(); }
+    // D691 (#1698): Grow's stores, by uid or id within the venture.
+    case 'product_feedback':
+      return !!await db.prepare('SELECT 1 FROM product_feedback WHERE uid = ? AND project_id = ?').bind(value, projectId).first();
+    case 'growth_channels':
+      return !!await db.prepare('SELECT 1 FROM growth_channels WHERE uid = ? AND project_id = ?').bind(value, projectId).first();
+    case 'growth_partners':
+      return !!await db.prepare('SELECT 1 FROM growth_partners WHERE uid = ? AND project_id = ?').bind(value, projectId).first();
+    case 'markets':
+      return !!await db.prepare('SELECT 1 FROM markets WHERE uid = ? AND project_id = ?').bind(value, projectId).first();
+    case 'job_postings': {
+      const n = numeric(value);
+      return n !== null && !!await db.prepare('SELECT 1 FROM job_postings WHERE id = ? AND project_id = ?').bind(n, projectId).first();
+    }
+    case 'compliance_events': {
+      const n = numeric(value);
+      return n !== null && !!await db.prepare('SELECT 1 FROM compliance_events WHERE id = ? AND project_id = ?').bind(n, projectId).first();
+    }
     // D690 (S18-B, #1694): Build. Each id resolves through its store and the venture.
     case 'mvp_features': {
       const n = numeric(value);

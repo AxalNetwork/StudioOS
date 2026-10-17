@@ -30,7 +30,7 @@ import {
   type PainGroupModel, type PainGroupsView, type PainSeverityLevel,
 } from './painGroups';
 import { evidenceFor, verdictFor, laneFor, VALIDATION_BAR } from '../routes/_founder_validate_helpers';
-import { loadVerdictHistory, observationAt, changedWithin, parseObserved, RECENTLY_MOVED_DAYS } from './verdictHistory';
+import { loadVerdictHistory, recordVerdictChanges, observationAt, changedWithin, parseObserved, RECENTLY_MOVED_DAYS } from './verdictHistory';
 import { seedSegmentFromIcp, WAITLIST_TARGET_KEY } from './validateWriters';
 import { claimFills } from './fills/provenance';
 
@@ -94,7 +94,7 @@ export type InterviewRow = {
   created_at: string | null;
 };
 
-async function loadInterviews(ctx: Ctx): Promise<InterviewRow[]> {
+export async function loadInterviews(ctx: Ctx): Promise<InterviewRow[]> {
   const res = await ctx.env.DB.prepare(
     `SELECT id, interviewee_name, interviewee_role, interviewee_company, interview_date,
             icp_fit, quote_consent, pains_json, hypotheses_json, notes,
@@ -118,7 +118,7 @@ export function heldDate(iv: { done_at: string | null; interview_date: string | 
   return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null;
 }
 
-async function loadSeverities(ctx: Ctx) {
+export async function loadSeverities(ctx: Ctx) {
   const res = await ctx.env.DB.prepare(
     `SELECT s.interview_id, s.phrase_norm, s.severity
        FROM interview_pain_severities s
@@ -128,12 +128,12 @@ async function loadSeverities(ctx: Ctx) {
   return res.results || [];
 }
 
-type HypRow = {
+export type HypRow = {
   id: number; code: string; claim: string; sort_order: number; retired_at: string | null;
   sprint: string | null; owner_user_id: number | null; owner_name: string | null;
   inconclusive_at: string | null; updated_at: string | null;
 };
-type LinkRow = { id: number; hypothesis_id: number; pain_group_id: number; direction: string; strength: string | null; created_at: string | null };
+export type LinkRow = { id: number; hypothesis_id: number; pain_group_id: number; direction: string; strength: string | null; created_at: string | null };
 
 /**
  * The venture's open claims, or (D690 decision 10) its retired ones, which
@@ -247,6 +247,9 @@ export type Claim = {
   /** The founder's Inconclusive mark, which `history:last_week` dates. */
   inconclusive_at: string | null;
   links: LinkRow[];
+  /** The board's verdict and lane, which the verdict history records (D704 decision 7). */
+  verdict: string | null;
+  lane: string;
 };
 
 const STRENGTH_RANK: Record<string, number> = { anecdote: 1, pattern: 2, measured: 3 };
@@ -287,7 +290,7 @@ export function claimsOf(hyps: HypRow[], links: LinkRow[], interviews: Interview
       evidence: e.supporting + e.contradicting, strength, sprint: h.sprint,
       owner: h.owner_name ?? null, updated_at: h.updated_at,
       supporting: e.supporting, contradicting: e.contradicting, fit_unrecorded: e.fitUnrecorded,
-      inconclusive_at: h.inconclusive_at, links: ls,
+      inconclusive_at: h.inconclusive_at, links: ls, verdict, lane,
     };
   });
 }
@@ -581,7 +584,7 @@ export async function problemDiscoveryCard(ctx: Ctx): Promise<Card> {
   });
 }
 
-function supportsByGroup(hyps: HypRow[], links: LinkRow[]): Map<number, string[]> {
+export function supportsByGroup(hyps: HypRow[], links: LinkRow[]): Map<number, string[]> {
   const code = new Map(hyps.map((h) => [Number(h.id), h.code]));
   const out = new Map<number, string[]>();
   for (const l of links) {
@@ -654,7 +657,7 @@ export async function customerResearchCard(ctx: Ctx): Promise<Card> {
 
 type SegmentRow = { id: number; name: string; source: string; updated_at: string | null };
 
-async function loadSegments(ctx: Ctx): Promise<SegmentRow[]> {
+export async function loadSegments(ctx: Ctx): Promise<SegmentRow[]> {
   const res = await ctx.env.DB.prepare(
     `SELECT id, name, source, updated_at FROM customer_segments
       WHERE project_id = ? AND archived_at IS NULL ORDER BY id`,
@@ -758,12 +761,20 @@ export { loadMarketReadiness };
 
 type TrackedCompetitor = { id: string; name: string; kind: string; latest_signal: string | null; latest_on: string | null; source_url: string | null; source_kind: string | null };
 
-/** The project's tracked list: every analysis's candidates, one per name. */
+/**
+ * The project's tracked list: every analysis's candidates, one per name.
+ * D690 decision 8: a name the venture stopped tracking (`competitor_tracking`,
+ * migration 460) leaves the list and the card's count; its rows stay.
+ */
 async function loadTracked(ctx: Ctx): Promise<TrackedCompetitor[]> {
   const cands = await ctx.env.DB.prepare(
     `SELECT c.id, c.name, c.category, c.created_at
        FROM competitor_candidates c JOIN competitor_analyses a ON a.id = c.analysis_id
-      WHERE a.project_id = ? ORDER BY c.created_at, c.id`,
+      WHERE a.project_id = ?
+        AND NOT EXISTS (SELECT 1 FROM competitor_tracking t
+                         WHERE t.project_id = a.project_id AND t.name_norm = substr(lower(trim(c.name)), 1, 120)
+                           AND t.stopped_at IS NOT NULL)
+      ORDER BY c.created_at, c.id`,
   ).bind(ctx.projectId).all<{ id: string; name: string; category: string; created_at: string }>();
   const sigs = await ctx.env.DB.prepare(
     `SELECT s.candidate_id, s.label, s.signal_type, COALESCE(s.observed_on, substr(s.created_at, 1, 10)) AS on_day,
@@ -1339,16 +1350,26 @@ export type ClaimProvenance = 'eadwyn' | 'eadwyn_edited' | 'unreadable' | null;
 async function experimentRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   // Retired claims are read only for `status:retired`; the counts are always the open ones.
   const retired = rq.filter.status === 'retired';
-  const [open, gone, interviews, model, history, sprints] = await Promise.all([
+  const [open, gone, interviews, model, sprints, evidence] = await Promise.all([
     loadHypotheses(ctx, 'open'), retired ? loadHypotheses(ctx, 'retired') : null,
     loadInterviews(ctx), loadPainGroupModel(ctx.env, ctx.projectId, { strict: true }),
-    loadVerdictHistory(ctx.env, ctx.projectId),
     ctx.env.DB.prepare(
       `SELECT DISTINCT sprint FROM hypotheses
         WHERE project_id = ? AND retired_at IS NULL AND sprint IS NOT NULL AND trim(sprint) != '' ORDER BY sprint`,
     ).bind(ctx.projectId).all<{ sprint: string }>(),
+    // D690 (#1692) step 3: a claim's evidence other than a pain link.
+    ctx.env.DB.prepare(
+      `SELECT id, hypothesis_id, kind, ref_id, direction, strength FROM hypothesis_evidence_links
+        WHERE project_id = ? ORDER BY id`,
+    ).bind(ctx.projectId).all<{ id: number; hypothesis_id: number; kind: string; ref_id: string; direction: string; strength: string | null }>(),
   ]);
   const { hyps } = gone ?? open;
+  const evidenceBy = new Map<number, Array<{ id: number; kind: string; ref_id: string; direction: string; strength: string | null }>>();
+  for (const e of evidence.results || []) {
+    const list = evidenceBy.get(Number(e.hypothesis_id)) ?? [];
+    list.push(e);
+    evidenceBy.set(Number(e.hypothesis_id), list);
+  }
   // One read for every claim, never allowed to cost the table.
   let fillsRecorded = true;
   const fills = await claimFills(ctx.env, ctx.projectId, hyps).catch(() => {
@@ -1362,6 +1383,14 @@ async function experimentRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   };
   const openClaims = claimsOf(open.hyps, open.links, interviews, model);
   const claims = gone ? claimsOf(gone.hyps, gone.links, interviews, model) : openClaims;
+  // D704 decision 7: with the board page gone, this read keeps the verdict
+  // history growing, as `buildBoard` did. Every live claim, before search,
+  // filters and paging, and before the history is loaded; the writer writes
+  // only on a change, logs no activity row, and never fails the read.
+  await recordVerdictChanges(ctx.env, ctx.projectId, openClaims.map((c) => ({
+    hypothesis_id: c.id, verdict: c.verdict, lane: c.lane,
+  }))).catch(() => 0);
+  const history = await loadVerdictHistory(ctx.env, ctx.projectId);
 
   // FVW's views over the verdict history (decision 16), before paging.
   const now = new Date();
@@ -1407,11 +1436,17 @@ async function experimentRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
       provenance: provenanceOf(c.id),
       moved,
       ...(retired ? { retired: true } : {}),
-      // Each pain link with its direction and strength (#1692 adds the evidence links).
-      links: c.links.map((l) => ({
-        id: Number(l.id), kind: 'pain', pain_group_id: Number(l.pain_group_id),
-        theme: themeTitle.get(Number(l.pain_group_id)) ?? null, direction: l.direction, strength: l.strength ?? null,
-      })),
+      // Each pain link with its direction and strength, then each evidence link
+      // (D690, #1692): `kind` is the record behind it and `ref_id` its id.
+      links: [
+        ...c.links.map((l) => ({
+          id: Number(l.id), kind: 'pain', pain_group_id: Number(l.pain_group_id),
+          theme: themeTitle.get(Number(l.pain_group_id)) ?? null, direction: l.direction, strength: l.strength ?? null,
+        })),
+        ...(evidenceBy.get(c.id) || []).map((e) => ({
+          id: Number(e.id), kind: e.kind, ref_id: e.ref_id, direction: e.direction, strength: e.strength ?? null,
+        })),
+      ],
     })), rq.page, {
       filters, sorts: LISTS.experiments.sorts,
       parts: {

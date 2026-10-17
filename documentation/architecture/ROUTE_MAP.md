@@ -34,9 +34,41 @@ request, and Super Admin `GET /requests` lists them. `GET /:uid/logs` searches
 and pages activity. Every company ID supplied by a request is checked against
 `user_company_links` before use.
 
+### Fund administration Worker contract (D714, #1779)
+
+`services/fundAdminAccess.ts`'s `FUND_ACTS` names every fund act, its routes and its tier. After its own `requireFundGp`, each fund write in `funds.ts` runs `assertFundAct`; the two legacy `/api/capital` issue routes and the ledger writes in `fund_ledger.ts` run `assertAdminAct`. A support session is refused every act (`403 support_session_refused`). On HQ:
+
+- an Admin act passes `requireAdmin`, so a frozen admin gets `423 admin_frozen`;
+- a Super Admin act refuses an admin without the elevation at once (`403 super_admin_required`, no step-up demand), then takes `requireSuperAdminWriteBar`, whose `step_up_required` reaches the SPA on every route.
+
+The Super Admin acts are:
+
+- issuing a capital call, which includes an LP's first call through `POST /api/funds/:id/lps`;
+- executing a distribution;
+- a `PATCH /api/funds/:id` that changes `gp_user_id`, `carried_interest` or `management_fee`;
+- assigning a fund's ledger administrator.
+
+A GP of record who is not an admin keeps today's power over their own fund, except changing its GP of record. On a branch, only the support-session refusal applies.
+
+New routes:
+
+- `POST /api/funds/:id/distributions/preview` returns what the distribution job would write. It uses `splitDistribution`, the same function the job runs.
+- `GET /api/fund-admin/access` (`requireAdmin`, HQ only, no support session) answers `{ super_admin, acts }`.
+
+Every admin act leaves one `fund_admin.<act>` row in `admin_audit_log`. `COOL_OFF_ROUTES` gains the three routes that are wholly Super Admin acts. See `decisions/D714.md`.
+
 ### GitHub connector and "now fed by" (D655, #1467)
 
 The `github` provider is a GitHub App's read-only user authorization. `GET /:uid/repositories` lists what its installations reach and what is chosen; `PUT /:uid/repositories` saves a choice and a project, after re-reading the grant and refusing any permission beyond the registry's four read scopes (`write_scope_refused`). Both need the active company enabled for the connection, and the project must be in it. `POST /:uid/sync` lands issues on `roadmap_okrs` and pull requests on `mvp_features`, linked through `connector_fed_items` (migration 445) so a re-sync updates; releases are recorded with no store. `GET /:uid/sync-status` returns the running sync's percentage and what it is reading. `GET /:uid/fed` returns, for every connector, a count per module it feeds; a connector that does not record deliveries says Not recorded, never 0.
+
+### Money rails Worker contract (D707, #1772)
+
+`GET /api/admin/money-rails` (`admin_money_rails.ts`, admin only) answers `{ entities, kinds, stripe }`:
+- `entities`: each Axal entity's key, name and role (`services/moneyRails.ts`'s `ENTITY_ROLES`);
+- `kinds`: the eleven `MONEY_KINDS` rows, each with its payer, payee, rail and group;
+- `stripe`: `{ account_holder: 'management', mode }`, where `mode` is `stripeMode`'s `test`, `live` or `unconfigured`.
+
+It answers no key and no account number. `stripeCall` refuses a Stripe create with no money kind, or with a fund or intercompany kind, before any request leaves the Worker. `POST /api/payments/intent` refuses a body with no `price_id` (`money_kind_required`). Neither has a frontend method.
 
 ### AI allowance Worker contract (D640, #1433)
 
@@ -105,8 +137,8 @@ caller's analysed companies or a directory company; 201 when added),
 `PATCH /competitors/:id` (watch and positioning), `PATCH
 /demand-signals/:id` (a `signal-` record only), `POST /hypotheses` and
 `PATCH /hypotheses/:id`. The row actions' writers (merge, split, attach a
-quote, Stop, evidence, experiments, a signal's file) are built and reach the
-SPA through the records actions in #1692's closing PR.
+quote, Stop, evidence, experiments, a signal's file) are each record's
+actions, below.
 `founder_validate_sessions.ts` adds `GET /sessions/:id/audio`, one
 short-lived signed download per recorded chunk, and `DELETE
 /discovery/interview/:id` now calls `services/interviewWriters.ts`'s
@@ -132,6 +164,58 @@ customer research, problem discovery and experiments; problem discovery's
 phrase said without consent reaches a non-writer as
 "Quote withheld (no consent to quote)". See `decisions/D690.md`.
 
+### Cycle records (D690, #1690 and #1692)
+
+`cycle_records.ts`, mounted at `/api/cycles`, serves one record of any cycle
+that registers a service in `services/records/index.ts`; Validate, Build and
+Raise do:
+
+- `GET /:cycle/modules/:slug/records/:id?project=`: the record, its sections,
+  actions and `next`, and its first activity page;
+- `GET …/records/:id/activity?project=&page=`: 20 rows a page, newest first;
+- `POST …/records/:id/actions/:key?project=`: a declared action only, JSON or,
+  for a file field, `multipart/form-data`; `PATCH` and `DELETE` on the record
+  run its `edit` and `delete`;
+- `GET /:cycle/modules/:slug/form-options?project=`: the Add forms' choices,
+  every other query parameter passed through.
+
+The refusals run in order:
+
+1. no session: 401;
+2. a missing or malformed `project`: 400;
+3. an unknown cycle, a cycle with no service, or an unknown module: 404;
+4. a malformed id: 404, before any read;
+5. a missing venture: 404;
+6. the module's read gate, or the write gate for actions and form-options: 403;
+7. an id not in the module's own store for this venture: 404, as is any id an
+   action's body names.
+
+A partner reads a record without its writer-only sections and gets
+`actions: []`. Validate's six (`services/records/validate.ts`, #1692) are a
+pain group, an interview, a segment, a competitor candidate, a demand record
+(`signal-`, `revenue-` or `waitlist-`) and a hypothesis. See
+`decisions/D690.md`.
+
+Raise's seven (`services/records/raise.ts`, D691 #1699 and #1700) are gated
+`write` throughout, so only the venture's owner, an admitted Lab member on
+their own venture or an admin reaches them (403 for anyone else, partners
+included). Their ids and actions:
+
+| Module | Id | Actions (`POST …/actions/:key`) |
+| --- | --- | --- |
+| `fundraising-readiness` | the item key (`data_room`) | `rescore`, or `score` (a form) for `team` |
+| `investor-narrative` | the version (`3`) | `duplicate`, `edit` (`PATCH` the record) |
+| `pitch-deck` | the share token's id | `revoke` |
+| `data-room` | the file's id (its `uid` rides on the record) | `manage-access` (a link), `replace` (multipart), `remove` |
+| `cap-table` | `h-<n>`, `e-<n>` or `pool` | `model-a-round` (a link), `edit` for a founder or a SAFE/note |
+| `use-of-funds` | the section key (`go-to-market`) | `add-hire`, `edit-split` |
+| `capital-relationships` | the prospect's id | `log`, `add-feedback`, `mark-passed`, `edit` |
+
+Each action calls the writer its `cycle_raise.ts` or `data_room.ts` route
+calls, and logs one `raise.<module>` row. Raise's form-options serve each
+module's Add form; Capital relationships takes `q` for the fund search, read
+only from the funds the directory serves. See `decisions/D691.md`.
+
 ### Raise cycle Worker read (D663, #1476)
 
 `cycle_raise.ts`, mounted at `/api/cycles/raise`, is the Worker half of the
@@ -151,10 +235,13 @@ route is), `POST /holders` and `PATCH /holders/:id` (through `addHolder()` and
 `PATCH /prospects/:id` (through `createProspect`),
 `PUT /data-room/files/:id/checklist` and `PUT /prospects/:id/next-step`. Each
 checks every id it takes against this venture (404 otherwise) and logs one
-`raise.<module>` activity row per record it writes. The record actions'
-writers (#1700's third PR: duplicate, revoke, add-hire, log, add-feedback,
+`raise.<module>` activity row per record it writes. The record actions
+(duplicate, revoke, add-hire, log, add-feedback, mark-passed, edit, edit-split,
+re-score, score, and the data room's replace and remove) are declared on the
+records in "Cycle records" above, each through the same writer. #1700's third
+PR wrote the writers for duplicate, revoke, add-hire, log, add-feedback and
 mark-passed, and the data room's `replaceDataRoomFile()` and
-`removeDataRoomFile()`) are declared on the records by #1700's closing PR.
+`removeDataRoomFile()`.
 Only the venture and admins reach it. The
 pipeline, cap table, data room and pitch tools keep their own pages; the
 module pages summarise them and link there. The deck share viewer's heartbeat
@@ -294,7 +381,7 @@ The founder's `/studio` carries Eadwyn's panel tab in `?tab=` (`tasks`, `tickets
 | Founder Studio | founder | `/studio` | `/studio` (Dashboard → `FounderStudioHome`) | `spinout_lab.ts`, `advisor.ts`, `progress.ts`, `scoring.ts`, `activity.ts`, `best_fit.ts`, `projects.ts` | UPGRADE | **2026-10-06 (D564, #1168): built.** The owner on #974: no separate home, so `/studio` is the founder's one front door, and its body is this canvas. The 69dc42f3 card body is retired; Eadwyn (`StudioInterview`, D324) stays. Each zone reads its own store and fails on its own (`founderStudioModel.js`): header, summary strip, Do these next (lifecycle checklist order), Company progress (Lab weeks, deliverables and gate), Advisor questions, Activity (last 7 days), Module map (Active or Locked), founder profile (profiling completion, archetype under D594's lock, per-section confidence). Holding progress and What this adds up to have no store and say so; each action's unlocks, each activity's feeds and each module's percent are not drawn. The canvas is in `integrated/`. The sidebar's Home group label is gone for founder, investor and advisor. |
 | Founder Wellbeing | founder | `/wellbeing` | `/wellbeing` (guard `['admin','founder']`), `/wellbeing/expert-dashboard`, `/wellbeing/expert/:uid` | `wellbeing.ts`, `founder_risk.ts` | UPGRADE | Live (966 lines) ships the 6-dimension encrypted check-in, tags, history, matched experts with `match_breakdown`, booking, resource directory. New: a **30-day trend** panel over the existing `/aggregate`; a **"What the pattern shows"** zone reading observations against company context; a **pinned crisis card + full-screen overlay** carrying the promise "Axal VC does not see that you opened this"; a reminder-cadence picker; **"Export my data"**. Grep confirms none of these strings exist live. |
 | Founder Workspaces Canvas | founder | — (IA spec, 6 workspaces) | `/validate`, `/build`, `/raise`, `/grow`, `/network`, `/research` — six roots, each rendering its workspace overview | `progress.ts`, `decks.ts`, `capital.ts`, `captable.ts`, `network.ts`, `market_intel.ts`, `ai.ts`, `aiRouter.ts` | UPGRADE | 7 artboards: the shared Worker-AI rail spec (mode/model/meter/safety, 44–52px collapsed spine, dark variant, and the proposal-anatomy rule — cost shown before the run and receipted after, a proposal never writes to the record, amber strike-through + second confirm for overwrites, provenance mark on accepted output) plus six consolidated workspaces: Validate, Build, Raise, Grow, Network, Research. Parent spec for the three Rails and for Detail Layer Canvas. **UPDATE 2026-09-02: the six overviews are reachable, and the rail is one component.** The overviews had all been built and contract-tested, then displaced — a rebuild took a desk's route slot, the desk was re-mounted on whatever path was free (`/build/discovery`, `/execution`, `/build/team`, `/signals`) and the sidebar row was never pointed back, so five of six workspaces landed on a section page. Each workspace now has a ROOT that renders its overview for a founder and keeps today's behaviour for everyone else; `?mode=workspace` still opens the detailed editor. The legacy mounts are unchanged and still live. Section pills are `<Link>`s to real routes — three desks had shipped them as in-page anchors, two of which named sections that did not exist. Layout: `fullWidthSurface` and `flushSurface` were two hand-typed path arrays matched exactly, and `/grow/focus` was missing from both (the whole of "Grow doesn't fit"); they are one `FOUNDER_FULL_BLEED` list now, and the Build section pages no longer sit inside `FounderWorkspacePage`'s 1440px frame. **The rail:** twenty-seven hand-built copies under seventeen names collapse into `ui/WorkerRail` — mode, coverage, usage, safety. Usage is real (`GET /api/ai/me/spend`); there is deliberately no model or per-run cost, because `ASSIST_SURFACES` keys a surface to an aiRouter task class and no founder workspace runs one, so a model named here would be a model on a page that never calls one. Still open from A1: the mode switch, the model card, the 44px collapsed spine (every host is a grid item in a fixed 270/286px track), and the proposal anatomy — cost before the run and a receipt after, accept/edit/discard, amber strike-through with a second confirm, provenance mark on accepted output. **UPDATE 2026-09-27 (D420–D422):** the desks read the stores their zones already had (D420, D421), and three of the legacy mounts that were a second address for a desk now redirect with the query kept — bare `/execution` → `/build`, `/build/discovery` → `/validate`, `/signals` → `/research`. The editors behind them (ExecutionPage, DiscoveryPage, SignalsPage, NetworkPage, the Raise `?mode=workspace` editors) stay mounted: no canvas zone yet carries their writes (D422 lists them). **UPDATE 2026-09-27 (D424):** the A1 anatomy the four desks with proposal bands were missing. Validate, Build, Raise and Grow pass `fills`, so their rails draw the mode switch their bands were gated on (Build, Raise and Grow had no switch anywhere, so no band on them could run); each prints its own sentence from `ASSIST_SURFACES.workspace.desks`, and Network and Research draw no switch and say why. Every desk band quotes the founder's own average for its task before a run (`workspaces/RunEstimate.jsx`), and the Validate board marks the claims Eadwyn supplied from `fill_provenance`. Still open: the spine's dot and vertical spend (the rail's own files), and the amber overwrite confirm, which no fill needs yet. **UPDATE (D510):** the Friday retro draft is the `build/retro` surface on the Build cadence card, and every zone-draft run records the page it was asked from, so a band's runs count on that page. The pre-run estimate stays the caller's average for the task (`RunEstimate`); it is not a per-page figure. **UPDATE 2026-10-05 (D551, #1144):** the Network desk (A6) reads a contact's `strength` (strong, warm or cool) and `organization` (migration 386, set by `PUT /api/contacts/:uid` for the owner only) and the contact list's follow-up rollup (`next_task_due`, `open_tasks`, `last_reply_at`, one statement). `/network/relationships` edits both per row and shows the follow-up and last note; `/network/organizations` groups the set field and names each group's strongest tie. Network now passes `fills`: its two bands draft over `network/re-engagement` (the founder's cold contacts, coldest first, on that contact's project) and `network/intro-email` (the founder's accepted introductions). "Who should meet whom" stays Not recorded: no store pairs two of a founder's contacts. |
-| Fund Administration | admin (GP) | `/funds`, `/funds/calls` (`/funds/capital-calls` redirects there, D371), `/funds/accounting` | those + `/funds/performance`, `/funds/lp-workspace` (redirects to `/spinout-lab/investor-workspace`, D372), `/lp-reports`, `/portfolio/waterfall` | `funds.ts`, `legalcap.ts`, `lp_reports.ts`, `fund_simulator.ts` | UPGRADE | Live: fund create (vintage/carry/mgmt fee only), capital-call list, distributions, LP reporting with TVPI/DPI, exit waterfall. New: a deliberately slow **fund-setup wizard** (fee step-down, preferred return, waterfall type, term + extensions, GP commitment, hard cap at 125% of target, fee-load projection); a **capital-call builder** with editable per-LP pro-rata and notice preview; a **collection tracker** with aging and per-LP reminders; a printable **LP capital-account statement**; **GP economics** (fee ledger accrued vs collected, carry unrealised until the pref clears, GP commitment funded). `/funds/accounting` is static demo data. |
+| Fund Administration | admin (GP) | `/funds`, `/funds/calls` (`/funds/capital-calls` redirects there, D371), `/funds/accounting` | those + `/funds/performance`, `/funds/lp-workspace` (redirects to `/spinout-lab/investor-workspace`, D372), `/lp-reports`, `/portfolio/waterfall` | `funds.ts`, `legalcap.ts`, `lp_reports.ts`, `fund_simulator.ts` | UPGRADE | Live: fund create (vintage/carry/mgmt fee only), capital-call list, distributions, LP reporting with TVPI/DPI, exit waterfall. New: a deliberately slow **fund-setup wizard** (fee step-down, preferred return, waterfall type, term + extensions, GP commitment, hard cap at 125% of target, fee-load projection); a **capital-call builder** with editable per-LP pro-rata and notice preview; a **collection tracker** with aging and per-LP reminders; a printable **LP capital-account statement**; **GP economics** (fee ledger accrued vs collected, carry unrealised until the pref clears, GP commitment funded). `/funds/accounting` is static demo data. 2026-10-17 (D714): every fund write is gated by the act table — a plain Admin previews, records receipts, marks paid, drafts report periods and writes the ledger; issuing a call, executing a distribution, changing the GP of record or the carry/fee, and assigning the ledger administrator are the Super Admin's, behind the write bar. `POST /api/funds/:id/distributions/preview`, `GET /api/fund-admin/access`; the console at `/admin/fund-admin` is PR 3. |
 | Fund Brief One-Pager | investor-LP | download action on `/spinout-lab` + `/spinout-lab/investor-workspace` | same | — (none; client-side vector PDF) | CURRENT | Fully implemented as `lib/fundBriefPdf.js` (jsPDF vector, geometry shared with the quarterly report via `lib/pdfBoard.js`) reading `lib/fundBriefViewModel.js`. That view model is a port of this canvas with the design's private `F = {…}` literals deliberately removed so figures cannot diverge from the LP workspace; `fund_brief_model.test.mjs` fails if a literal creeps back. Only the masthead photo and logo bitmap are intentionally not reproduced. |
 | Funds · Fabric | super-admin | `/admin/fabric` (new); fund console reuses `/funds` | — | `legal.ts` (entities CRUD: `entity_type IN (holding_company, project, subsidiary, vc_fund)`, `parent_id`, `jurisdiction`), `funds.ts`, `compliance.ts` | NEW | 10 artboards defining a multi-tenant HQ/subsidiary fund fabric: entity graph with tinted tenancy hulls (explicitly "not a permission check over a shared graph: a different query"), entity dossier with filings calendar, fund console in two modes (HQ working-GP vs read-only cross-tenant Oversight with FX normalisation and the brand-licence share), subsidiary variant showing the HQ share as its own waterfall tier, LP record with payment-reliability history, launch-a-fund, capital-call flow, jurisdiction packs, honesty states. Today `/legal` renders a flat entity list. |
 | GP Application Review | admin | `/admin/lp-applications` | `/admin/lp-applications` | `admin_lp_applications.ts` | UPGRADE | The live page names this handoff and ports the split queue/detail layout. Not built: **bulk approve/decline**, **side-by-side comparison** of 2 applications, **Export CSV**, **median-decision-time**, and the "Qualification signals (derived, not a score)" panel. Keep one deliberate correction: the canvas asserts "Approvals grant reporting access immediately" — the page must not, because approval only unblocks LPA issuance and access follows the countersigned LPA. |
