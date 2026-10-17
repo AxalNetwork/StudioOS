@@ -389,6 +389,11 @@ const CapTableVariantsPage = lazy(() => import('./pages/CapTableVariantsPage'));
 const DataRoomPage = lazy(() => import('./pages/raise/DataRoomPage'));
 const MessagesPage = lazy(() => import('./pages/MessagesPage'));
 const MorePage = lazy(() => import('./pages/MorePage'));
+// D702 (#1664) — the founder's profile pages (Studio · Mobile S6m, S7m, S9m, S10m).
+const YouPage = lazy(() => import('./pages/profile/YouPage'));
+const VenturePage = lazy(() => import('./pages/profile/VenturePage'));
+const ProfilePreviewPage = lazy(() => import('./pages/profile/PreviewPage'));
+const VisibilityPage = lazy(() => import('./pages/profile/VisibilityPage'));
 const PerksPage = lazy(() => import('./pages/PerksPage'));
 const FounderMarketplacePage = lazy(() => import('./pages/FounderMarketplacePage'));
 const NeedsBoardPage = lazy(() => import('./pages/NeedsBoardPage'));
@@ -731,6 +736,14 @@ function UserDropdown({ user, onLogout }) {
           className="absolute right-0 top-full mt-1.5 w-52 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl py-1.5 z-50"
           role="menu"
         >
+          {/* D702 (#1664) — the founder's profile pages, above Account. A
+              phone reaches them from the Eadwyn menu and the account sheet. */}
+          {user?.role === 'founder' && (
+            <Link to="/profile" onClick={() => setOpen(false)}
+              className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
+              Your profile
+            </Link>
+          )}
           <Link to="/account" onClick={() => setOpen(false)}
             className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
             Account
@@ -3464,8 +3477,13 @@ function AppInner() {
           "Profile" nav row could highlight independently of Settings. That row
           is gone; the exploring sidebar's "My Profile" now points at /account
           itself. D433 retires the duplicate on D304's shape: a redirect, never
-          a 404, with the query and hash carried through. */}
-      <Route path="/profile" element={<SettingsRedirect />} />
+          a 404, with the query and hash carried through. D702 (#1664) narrows
+          that: a founder gets You here, and every other role keeps the
+          redirect. The three pages under it are a founder's alone. */}
+      <Route path="/profile" element={effectiveRole === 'founder' ? guard(['founder'], <YouPage />) : <SettingsRedirect />} />
+      <Route path="/profile/venture" element={guard(['founder'], <VenturePage />)} />
+      <Route path="/profile/preview" element={guard(['founder'], <ProfilePreviewPage />)} />
+      <Route path="/profile/visibility" element={guard(['founder'], <VisibilityPage />)} />
       <Route path="/account" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
       <Route path="/settings" element={<SettingsRedirect />} />
 
