@@ -52,6 +52,15 @@ export interface ProviderDescriptor {
    * caller supplies. Used by Calendly (PAT or OAuth).
    */
   supports_pat?: boolean;
+  /**
+   * D710 (#1775): the roles that see this provider as an HQ entity connection
+   * (an `admin` on HQ for Mercury), read through its own store rather than an
+   * `integrations` row. With `personal_roles`, it narrows who sees the
+   * provider at all. A provider with neither field is unchanged.
+   */
+  entity_roles?: string[];
+  /** D710: the roles that may hold their own connection (#1778 adds founders and partners for Mercury). */
+  personal_roles?: string[];
 }
 
 /**
@@ -412,6 +421,17 @@ export const REGISTRY: ProviderDescriptor[] = [
       'openid', 'profile', 'email', 'offline_access', 'Calendars.ReadWrite', 'User.Read',
     ],
   },
+  // D710 (#1775): the bank provider D686 left open. Read-only: an HQ entity
+  // connection a Super Admin adds per Axal organization, in its own store
+  // (`services/mercury/`), so no per-user `ProviderImpl` is registered and
+  // `has_implementation` is false. Only an admin on HQ sees it.
+  {
+    key: 'mercury', display_name: 'Mercury', integration_type: 'data_feed',
+    description: 'Read balances and transactions of the Axal entity accounts for fund administration. Read-only: nothing here can move money.',
+    status: 'beta', tier: 'growth', auth_type: 'api_key', capabilities: ['Balances', 'Transactions', 'Reconciliation'],
+    docs_url: 'https://docs.mercury.com', icon: 'Landmark',
+    entity_roles: ['admin'], personal_roles: [],
+  },
 ];
 
 // A catalogue entry describes only behaviour that the shipping provider has.
@@ -431,6 +451,7 @@ export const CONNECTOR_METADATA: Record<string, ConnectorMetadata> = {
   github: { category: 'Code', verified: false, pulls: [{ what: 'Issues', module: 'product_roadmap' }, { what: 'Pull requests', module: 'prototype_mvp' }, { what: 'Releases', module: 'product_roadmap' }], sends: [], feeds: ['product_roadmap', 'prototype_mvp'], permissions: ['Read issues in the repositories you choose.', 'Read pull requests in the repositories you choose.', 'Read releases in the repositories you choose.', 'Read repository names and visibility.'] },
   zoom: { category: 'Messaging', verified: false, pulls: [{ what: 'Call transcripts', module: 'customer_research' }], sends: [{ what: 'Interview calls you schedule', target: 'Zoom meeting', default_mode: 'ask' }], feeds: ['customer_research'], permissions: ['Create Zoom meetings for the interview calls you schedule.', 'Delete a Zoom meeting when you cancel its interview call.', 'Read your meetings’ cloud recording files, to download their transcripts.', 'Read a pasted meeting to confirm you host it.', 'List your past meeting instances to recover restarted calls.', 'Read your Zoom user id to identify the connection when you disconnect it.'] },
   google_calendar: { category: 'Calendar and workspace', verified: true, pulls: [{ what: 'Events', module: 'customer_research' }], sends: [{ what: 'Calendar events', target: 'Google Calendar', default_mode: 'ask' }], feeds: ['customer_research', 'operating_systems'], permissions: ['Create and update your calendar events.', 'Read your calendar events.', 'Read Gmail messages linked to invitations.', 'Read your account email address.', 'Read your public account profile.', 'Confirm your Google sign-in identity.'] },
+  mercury: { category: 'Accounting and banking', verified: false, pulls: [], sends: [], feeds: [], permissions: ['Read balances and transactions of the Axal entity accounts a Super Admin connects.'] },
   microsoft_365: { category: 'Calendar and workspace', verified: true, pulls: [{ what: 'Events', module: 'customer_research' }], sends: [{ what: 'Calendar events', target: 'Microsoft 365', default_mode: 'ask' }], feeds: ['customer_research', 'operating_systems'], permissions: ['Confirm your Microsoft sign-in identity.', 'Read your public Microsoft profile.', 'Read your account email address.', 'Keep the connection active.', 'Read and update calendar events.', 'Read your basic account profile.'] },
 };
 
@@ -515,7 +536,24 @@ export async function ensureIntegrationsSchema(env: Env): Promise<void> {
 }
 
 /** Public-safe view of a registry entry (no secrets, no impl ref). */
-export function publicDescriptor(p: ProviderDescriptor) {
+/** Who is asking, for a provider whose audience depends on it (D710). */
+export interface DescriptorViewer { role: string; hq: boolean }
+
+/**
+ * D710: how a viewer may see a provider. `open` for a provider with no
+ * audience fields (today's behaviour); `entity` for an HQ entity connection;
+ * `personal` for the viewer's own; `none` when it is not theirs to see. On a
+ * branch, only `personal_roles` count, never `entity_roles`.
+ */
+export function audienceFor(p: ProviderDescriptor, viewer: DescriptorViewer): 'open' | 'entity' | 'personal' | 'none' {
+  if (!p.entity_roles && !p.personal_roles) return 'open';
+  const role = String(viewer.role || '').toLowerCase();
+  if (viewer.hq && (p.entity_roles ?? []).includes(role)) return 'entity';
+  if ((p.personal_roles ?? []).includes(role)) return 'personal';
+  return 'none';
+}
+
+export function publicDescriptor(p: ProviderDescriptor, viewer?: DescriptorViewer) {
   return {
     key: p.key,
     display_name: p.display_name,
@@ -531,6 +569,7 @@ export function publicDescriptor(p: ProviderDescriptor) {
     has_implementation: PROVIDER_IMPLS.has(p.key),
     ...CONNECTOR_METADATA[p.key],
     feed_modules: (CONNECTOR_METADATA[p.key]?.feeds ?? []).map(key => ({ key, label: MODULE_LABELS[key] ?? key, href: moduleHref(key) })),
-    connection_source: p.key === 'google_calendar' ? 'google_oauth_tokens' : p.key === 'microsoft_365' ? 'microsoft_oauth_tokens' : 'integrations',
+    connection_source: p.key === 'google_calendar' ? 'google_oauth_tokens' : p.key === 'microsoft_365' ? 'microsoft_oauth_tokens'
+      : p.key === 'mercury' && viewer && audienceFor(p, viewer) === 'entity' ? 'mercury_entity_connections' : 'integrations',
   };
 }

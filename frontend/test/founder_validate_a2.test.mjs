@@ -16,9 +16,10 @@ test('founder active role owns the A2 Validate landing page', () => {
   assert.match(route, /: <Navigate to=\{`\/validate\$\{location\.search\}`\} replace \/>/,
     'a founder on the bare path is not redirected to /validate with the query kept');
   assert.ok(!route.includes('<FounderValidatePage />'), '/build/discovery is a second address for the desk again');
-  // D661 (#1474): a founder's /validate is the cycle overview now, drawn from
-  // #1487's read, and the A2 desk is retired: its file is gone.
-  assert.match(app, /<Route path="\/validate" element=\{founderValidateLanding\s*\? guard\([^)]*\), <CycleRoute cycle="validate" \/>\)/);
+  // D661 (#1474): /validate is the cycle overview, drawn from #1487's read,
+  // and the A2 desk is retired: its file is gone. D704 (#1666): the root no
+  // longer branches on the role or `?mode=workspace`.
+  assert.ok(app.includes(`<Route path="/validate" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" />)} />`));
   assert.ok(!app.includes('<FounderValidatePage />'), 'the A2 desk is mounted again beside the cycle overview');
   assert.ok(!existsSync('frontend/src/pages/founder/FounderValidatePage.jsx'), 'the retired A2 desk is back');
 });

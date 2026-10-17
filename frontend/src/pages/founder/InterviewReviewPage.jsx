@@ -1,53 +1,76 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { api as mainApi } from '../../lib/api';
 import { interviewSessionsApi } from '../../lib/api/interviewSessions.js';
 import { ReviewStep, TranscriptReview } from './InterviewSessionPage';
 import SessionSummary from './SessionSummary';
-import { REVIEWABLE, pickSession, sessionLabel, statusWord, whoLine } from './interviewReviewModel';
+import { REVIEWABLE, afterDelete, findPassages, pickSession, recordParts, sessionLabel, statusWord } from './interviewReviewModel';
 import { FOCUSABLE, tabTarget } from '../../ui/lightboxFocus.js';
+import { RecordActions, RecordActivity, RecordFacts, RecordSection } from '../cycles/RecordView';
+import { declaredActions, pillView, recordActionBody, recordFormFor, toneOf } from '../cycles/recordModel';
+import FormLightbox from '../cycles/FormLightbox';
+import { InterviewEvidenceFields, PainSeverity } from './validatePieces';
+import InterviewRecording from '../../workspaces/founder/InterviewRecording';
+import useAssistMode from '../../hooks/useAssistMode';
 
 /**
- * Validate › an interview (D685 §5.11, #1589), at `/validate/interviews/:id`:
- * the interview, its sessions, and the findings proposed from them, with the
- * summary on top (§5.10). `/validate/session/:id` stays as the per-session
- * deep link; this is where the processing view lands and where the Customer
- * research rows and the interview log link.
+ * Validate › Customer research › an interview (D697, #1659): Customer
+ * research's record (CO:363), at `/validate/customer-research/:id`, drawn by
+ * `CycleRoute` in its record mode (D696) inside the cycle, so the cycle header
+ * and its "‹ Back to Customer research" tab replace the old inset and
+ * breadcrumb.
  *
- * WHICH SESSION. `?session=` when it names one of this interview's; else the
- * newest with a transcript (`interviewReviewModel.pickSession`), because the
- * Worker lists drafts and recordings too. A switcher appears when there are
- * several.
+ * THE READ DECIDES WHAT IS DRAWN (decision 14). The header, the four facts,
+ * What it fed, Session and Activity are the record read's (#1692). Transcript,
+ * Eadwyn's placements, Cost and Session are writer-only sections there, so a
+ * partner's read has none of them and an empty `actions`: the page then makes
+ * no call to the session routes, which answer only the venture's own, and none
+ * to `listInterviews`.
  *
- * PLACEMENTS STAY BUTTONS. Accept, Edit and Discard call D658's POSTs through
- * `ReviewStep`; none of them is a link, because a link must not change state.
+ * INSIDE THE READ'S SECTIONS, TODAY'S WORKING PARTS.
+ *   - Transcript: the session switcher (`?session=`, `pickSession`, checked to
+ *     be this interview's), `SessionSummary`, the processing note,
+ *     `TranscriptReview` with each passage's start, Search (a text find over the
+ *     loaded passages; it calls nothing) and the player.
+ *   - Eadwyn's placements: `ReviewStep`, with the receipt's items.
+ *   - Cost: the read's frame, with the chosen session's receipt lines, so Cost
+ *     follows the switcher.
+ *   The read's "→ <target>" marks are not drawn on the passages: the rows
+ *   cannot carry the switcher and the speaker chips, and the placements list
+ *   each target.
  *
- * EDIT DETAILS sends the whole interview row back. `PUT
- * /progress/discovery/interview/:id` writes every field it is not given as
- * empty (role, notes, hypotheses, pains), so the row is read fresh from the
- * project's list first, and a row that cannot be read is never saved over.
+ * THE ACTIONS. Edit details is #1656's `FormLightbox` over the read's two
+ * fields, saved through `recordAction`, which writes the name and the company
+ * and nothing else (#1692's decision 18). Delete keeps `DeleteConfirm`'s words
+ * and lands on Customer research. Open recording plays the chosen session's
+ * audio. Every dialog goes through `openDialog`, which `CycleRoute` draws
+ * after its size container (decision 21).
  *
- * DELETE removes the interview with its sessions' audio, transcripts and
- * pending placements: the Worker deletes each session first (`progress.ts`,
- * #1591). The confirm says so.
+ * THE PLAYER. #1692's audio route answers one signed URL per chunk, valid 120
+ * seconds, single-use, served as an attachment. So each part is fetched once,
+ * as a blob, and the parts play in `seq` order in one `<audio>` from object
+ * URLs; an expired or refused URL asks the route again and goes on from that
+ * part; a replay plays the blobs already held; the object URLs are revoked
+ * when the session changes or the page leaves.
  */
 
-const STAGES = { lead: 'Lead', invited: 'Invited', booked: 'Booked', done: 'Held', held: 'Held' };
 // While the job runs, it writes the summary itself: Summarise is not offered then.
 const RUNNING = new Set(['uploading', 'transcribing', 'summarising', 'placing']);
 
-/** The PUT body for Edit details: the fresh row, with only the name and company changed. */
-export function detailsPayload(row, { name, company }) {
-  return {
-    interviewee_name: String(name || '').trim(),
-    interviewee_role: row.interviewee_role || '',
-    interview_date: row.interview_date,
-    notes: row.notes || '',
-    hypotheses: Array.isArray(row.hypotheses) ? row.hypotheses : [],
-    pains: Array.isArray(row.pains) ? row.pains : [],
-    interviewee_company: String(company || '').trim() || null,
-  };
-}
+const CARD = 'scroll-mt-4 overflow-hidden rounded-xl border border-axal-hairline bg-white dark:border-gray-700 dark:bg-gray-900';
+const HEAD = 'flex flex-wrap items-center justify-between gap-3 border-b border-axal-hairline px-4 py-3 dark:border-gray-700';
+const H2 = 'm-0 text-sm font-bold text-axal-ink dark:text-gray-100';
+const MUTED = 'm-0 text-[12.5px] text-axal-muted dark:text-gray-400';
+const PILL = {
+  ok: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300',
+  warn: 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300',
+  bad: 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300',
+  v1: 'border-axal-lavender-edge bg-axal-lavender text-axal-violet-deep dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300',
+  v2: 'border-axal-lavender-edge bg-axal-lavender text-axal-violet-deep dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300',
+};
+const PILL_DEFAULT = 'border-axal-hairline bg-axal-ground text-axal-muted dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400';
+const usd = (micro) => `$${(Number(micro || 0) / 1e6).toFixed(4)}`;
+const bySeq = (parts) => [...(Array.isArray(parts) ? parts : [])].sort((a, b) => Number(a.seq) - Number(b.seq));
 
 function useDarkTheme() {
   const read = () => typeof document !== 'undefined' && !!document.documentElement?.classList?.contains('dark');
@@ -95,42 +118,110 @@ export function DeleteConfirm({ name, busy, error, onCancel, onDelete }) {
   );
 }
 
-export default function InterviewReviewPage({ sessions = interviewSessionsApi, api = mainApi }) {
-  const { id } = useParams();
+/** Delete's confirm with its own busy and error state; the record hands it to `openDialog` once. */
+function DeleteDialog({ name, onCancel, onDelete }) {
+  const [state, setState] = useState({ busy: false, error: null });
+  const run = async () => {
+    setState({ busy: true, error: null });
+    try { await onDelete(); } catch (e) { setState({ busy: false, error: e?.message || 'The interview could not be deleted.' }); }
+  };
+  return <DeleteConfirm name={name} busy={state.busy} error={state.error} onCancel={onCancel} onDelete={run} />;
+}
+
+/** A section's frame from the read: its title, then what the record draws inside it. */
+function Frame({ section, testid, extra = null, children }) {
+  return (
+    <section className={CARD} data-testid={testid}>
+      <header className={HEAD}>
+        <h2 className={H2}>{section.title}</h2>
+        {extra}
+      </header>
+      <div className="space-y-3 px-4 py-3">{children}</div>
+    </section>
+  );
+}
+
+/**
+ * The interview's tools (step 8), writers only: its evidence, how badly each
+ * pain was needed, the recording, and Record a session. The row they edit is
+ * read fresh from the venture's interviews and found by id; an id that is not
+ * there draws no control.
+ */
+function InterviewTools({ projectId, interviewId, api, onChanged }) {
+  const location = useLocation();
+  const [fillsOn] = useAssistMode('Validate');
+  const [row, setRow] = useState(undefined);
+  const load = useCallback(() => api.listInterviews(projectId)
+    .then((res) => setRow((Array.isArray(res?.interviews) ? res.interviews : []).find((r) => String(r.id) === String(interviewId)) || null))
+    .catch(() => setRow(null)), [api, projectId, interviewId]);
+  useEffect(() => { void load(); }, [load]);
+  const changed = () => { void load(); onChanged?.(); };
+  const pains = row ? (row.pain_points || row.pains || []) : [];
+  return (
+    <section className={CARD} data-testid="interview-tools">
+      <header className={HEAD}><h2 className={H2}>This interview</h2></header>
+      <div className="space-y-3 px-4 py-3">
+        {row === undefined ? <p className={MUTED} aria-busy="true">Reading the interview…</p>
+          : row === null ? <p role="alert" className="m-0 text-[12.5px] text-red-700 dark:text-red-400" data-testid="interview-tools-unreadable">This interview could not be read.</p>
+            : (
+              <>
+                <Link to={`/validate/record?interview=${encodeURIComponent(row.id)}&project_id=${encodeURIComponent(projectId)}`}
+                  state={{ under: `${location.pathname}${location.search}` }} data-testid="link-record-session"
+                  className="inline-flex w-fit rounded-[7px] border border-violet-200 px-[9px] py-1 text-[11.5px] font-bold text-violet-800 hover:border-violet-300 dark:border-violet-800 dark:text-violet-200">
+                  Record a session
+                </Link>
+                <InterviewEvidenceFields fit={row.icp_fit} consent={row.quote_consent} company={row.interviewee_company}
+                  onSave={(patch) => api.updateInterviewEvidence(row.id, patch).then(changed)} />
+                {pains.length > 0 && <PainSeverity interviewId={row.id} pains={pains} onChanged={changed} />}
+                <InterviewRecording interview={row} fillsOn={fillsOn} onChanged={changed} />
+              </>
+            )}
+      </div>
+    </section>
+  );
+}
+
+export default function InterviewRecord({
+  read, projectId, id, sessions = interviewSessionsApi, api = mainApi, openDialog = () => {}, act, reload,
+  activity, onShowAll, onLink, onForm, onWrite, onClient, cycleName = 'Validate', moduleName = 'Customer research',
+}) {
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const theme = useDarkTheme();
+  const parts = recordParts(read);
+  const declarations = declaredActions(read);
   const [list, setList] = useState(undefined);
   const [detail, setDetail] = useState(undefined);
   const [receipt, setReceipt] = useState(undefined);
   const [summarising, setSummarising] = useState({ busy: false, error: null });
-  const [editing, setEditing] = useState(null);
-  const [deleting, setDeleting] = useState(null);
+  const [search, setSearch] = useState('');
+  const [audioError, setAudioError] = useState('');
+  const player = useRef(null);
+  const held = useRef({ session: null, urls: [] });
 
-  const loadList = useCallback(() => sessions.list(id).then(setList).catch(() => setList(null)), [sessions, id]);
-  useEffect(() => { loadList(); }, [loadList]);
+  // The session routes answer only the venture's own: read them only when the read sends Transcript.
+  const loadList = useCallback(() => (parts.sessions ? sessions.list(id).then(setList).catch(() => setList(null)) : undefined), [parts.sessions, sessions, id]);
+  useEffect(() => { void loadList(); }, [loadList]);
   const chosen = pickSession(list?.items, params.get('session'));
   const chosenId = chosen?.id ?? null;
-  const loadDetail = useCallback(() => {
-    if (chosenId == null) return undefined;
-    return sessions.get(chosenId).then(setDetail).catch(() => setDetail(null));
-  }, [sessions, chosenId]);
-  const loadReceipt = useCallback(() => {
-    if (chosenId == null) return undefined;
-    return sessions.receipt(chosenId).then(setReceipt).catch(() => setReceipt(null));
-  }, [sessions, chosenId]);
-  useEffect(() => { setDetail(undefined); setReceipt(undefined); setSummarising({ busy: false, error: null }); loadDetail(); loadReceipt(); }, [loadDetail, loadReceipt]);
+  const loadDetail = useCallback(() => (chosenId == null ? undefined : sessions.get(chosenId).then(setDetail).catch(() => setDetail(null))), [sessions, chosenId]);
+  const loadReceipt = useCallback(() => (chosenId == null ? undefined : sessions.receipt(chosenId).then(setReceipt).catch(() => setReceipt(null))), [sessions, chosenId]);
+  useEffect(() => {
+    setDetail(undefined); setReceipt(undefined); setSummarising({ busy: false, error: null }); setAudioError('');
+    void loadDetail(); void loadReceipt();
+  }, [loadDetail, loadReceipt]);
+  // The blobs belong to one session: a new session, or leaving the page, frees them.
+  useEffect(() => () => {
+    for (const url of held.current.urls) URL.revokeObjectURL?.(url);
+    held.current = { session: null, urls: [] };
+  }, [chosenId]);
 
-  if (list === undefined) return <div className="p-6 text-[13px] text-axal-faint">Reading the interview…</div>;
-  if (list === null) return <div role="alert" className="p-6 text-[13px] text-red-700 dark:text-red-400" data-testid="interview-review-unreadable">Unreadable: this interview could not be read.</div>;
-
-  const interview = list.interview || {};
-  const items = Array.isArray(list.items) ? list.items : [];
-  const { name, company } = whoLine(interview);
+  const items = Array.isArray(list?.items) ? list.items : [];
   const session = detail?.session || chosen;
   const reviewable = !!session && REVIEWABLE.has(session.status);
   const segments = Array.isArray(detail?.segments) ? detail.segments : [];
   const hasFinal = segments.some((s) => s.source === 'final');
+  const shown = findPassages(segments, search);
 
   const summarise = async () => {
     setSummarising({ busy: true, error: null });
@@ -142,118 +233,174 @@ export default function InterviewReviewPage({ sessions = interviewSessionsApi, a
       setSummarising({ busy: false, error: e?.message || 'The summary could not be written.' });
     }
   };
-
-  const saveDetails = async () => {
-    setEditing((x) => ({ ...x, busy: true, error: null }));
-    try {
-      const rows = await api.listInterviews(interview.project_id);
-      // `GET /progress/discovery/:projectId` answers `{ project_id, interviews }`.
-      const row = (Array.isArray(rows?.interviews) ? rows.interviews : []).find((r) => String(r.id) === String(interview.id));
-      if (!row) throw new Error('This interview could not be read, so nothing was saved.');
-      if (!String(editing.name || '').trim()) throw new Error('Name the person you talked to.');
-      await api.updateInterview(interview.id, detailsPayload(row, editing));
-      setEditing(null);
-      loadList();
-    } catch (e) {
-      setEditing((x) => ({ ...x, busy: false, error: e?.message || 'The details could not be saved.' }));
-    }
-  };
-
-  const remove = async () => {
-    setDeleting((x) => ({ ...x, busy: true, error: null }));
-    try {
-      await api.deleteInterview(interview.id ?? id);
-      navigate(`/validate/customer-research?project_id=${interview.project_id}`, { replace: true });
-    } catch (e) {
-      setDeleting({ busy: false, error: e?.message || 'The interview could not be deleted.' });
-    }
-  };
-
   const assign = async (segId, label) => {
     await sessions.setSpeaker(session.id, segId, label);
     setDetail((d) => ({ ...d, segments: d.segments.map((s) => (s.id === segId ? { ...s, speaker_label: label } : s)) }));
   };
 
+  // ---- Open recording ----------------------------------------------------
+  const playFrom = (index) => {
+    const el = player.current;
+    const urls = held.current.urls;
+    if (!el || index >= urls.length) return;
+    el.src = urls[index];
+    el.onended = () => playFrom(index + 1);
+    void el.play?.()?.catch?.(() => {});
+  };
+  const fetchPart = async (part) => {
+    if (!part?.url || (part.expires_at && Date.parse(part.expires_at) <= Date.now())) throw new Error('expired');
+    const res = await fetch(part.url);
+    if (!res.ok) throw new Error('refused');
+    return URL.createObjectURL(await res.blob());
+  };
+  const openRecording = async () => {
+    setAudioError('');
+    if (chosenId == null) { setAudioError('No session is chosen.'); return; }
+    player.current?.scrollIntoView?.({ block: 'center' });
+    // A replay plays what is held and fetches nothing.
+    if (held.current.session === chosenId && held.current.urls.length) { playFrom(0); return; }
+    try {
+      let partsList = bySeq((await sessions.audio(chosenId))?.parts);
+      const urls = [];
+      for (let i = 0; i < partsList.length; i += 1) {
+        let url;
+        try { url = await fetchPart(partsList[i]); } catch {
+          // Expired or refused: fresh URLs, then go on from this part.
+          partsList = bySeq((await sessions.audio(chosenId))?.parts);
+          url = await fetchPart(partsList.find((p) => Number(p.seq) === Number(partsList[i]?.seq)) || partsList[i]);
+        }
+        urls.push(url);
+      }
+      held.current = { session: chosenId, urls };
+      playFrom(0);
+    } catch (e) {
+      setAudioError(e?.message && !['expired', 'refused'].includes(e.message) ? e.message : 'The recording could not be played.');
+    }
+  };
+
+  // ---- The record's own actions -------------------------------------------
+  const done = () => { reload?.(); };
+  const openEdit = (action) => {
+    const spec = recordFormFor(action, read, null);
+    if (!spec) return;
+    openDialog(
+      <FormLightbox key={`edit-details-${id}`} form={spec.form} current={spec.current} cycle="validate" slug="customer-research" moduleName={moduleName}
+        onSubmit={(values) => act(action.key, recordActionBody(action, values))} onSaved={done} onClose={() => openDialog(null)} />,
+      { page: true },
+    );
+  };
+  const openDelete = (action) => openDialog(
+    <DeleteDialog name={read?.title || 'this person'} onCancel={() => openDialog(null)}
+      onDelete={async () => { await act(action.key, {}); openDialog(null); navigate(afterDelete(projectId), { replace: true }); }} />,
+  );
+  const handlers = {
+    onLink,
+    onForm: (action) => (action.key === 'edit-details' ? openEdit(action) : onForm?.(action)),
+    onWrite: (action) => (action.key === 'delete' ? openDelete(action)
+      : action.key === 'open-recording' ? openRecording() : onWrite?.(action)),
+    onClient,
+  };
+  const context = { cycleName, moduleName, declarations, ...handlers };
+
+  const transcriptCard = (section) => (
+    <Frame key={section.key || 'transcript'} section={section} testid="record-transcript"
+      extra={hasFinal ? (
+        <label className="flex items-center gap-2 text-[11.5px] font-semibold text-axal-muted dark:text-gray-400">Search
+          <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} data-testid="transcript-search" placeholder="Find in the transcript"
+            className="rounded-md border border-axal-hairline px-2 py-1 text-[12.5px] font-normal text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100" />
+        </label>
+      ) : null}>
+      {list === undefined ? <p className={MUTED} aria-busy="true">Reading the sessions…</p>
+        : list === null ? <p role="alert" className="m-0 text-[13px] text-red-700 dark:text-red-400" data-testid="interview-review-unreadable">Unreadable: this interview could not be read.</p>
+          : items.length === 0 ? (
+            <div data-testid="interview-no-sessions">
+              <p className={MUTED}>No session recorded for this interview yet.</p>
+              <Link to={`/validate/record?interview=${encodeURIComponent(id)}&project_id=${encodeURIComponent(projectId)}`} className="mt-2 inline-block text-[12.5px] font-semibold text-violet-700 underline dark:text-violet-300">Record a session</Link>
+            </div>
+          ) : (
+            <>
+              {items.length > 1 && (
+                <label className="flex flex-wrap items-center gap-2 text-[12.5px] font-semibold text-axal-ink dark:text-gray-200">Session
+                  <select value={String(chosenId)} onChange={(e) => setParams((p) => { const n = new URLSearchParams(p); n.set('session', e.target.value); return n; }, { replace: true })} data-testid="session-switcher"
+                    className="rounded-md border border-axal-hairline px-2 py-1 text-[12.5px] font-normal dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">
+                    {items.map((s) => <option key={s.id} value={String(s.id)}>{sessionLabel(s)}</option>)}
+                  </select>
+                </label>
+              )}
+              {detail === null && <p role="alert" className="m-0 text-[13px] text-red-700 dark:text-red-400">Unreadable: this session could not be read.</p>}
+              {detail !== undefined && detail !== null && (
+                <SessionSummary summary={detail.summary || null} segments={segments} canSummarise={reviewable && hasFinal && !RUNNING.has(detail.processing?.stage)}
+                  busy={summarising.busy} error={summarising.error} onSummarise={summarise} />
+              )}
+              {detail?.processing?.stage === 'done' && detail.processing.error && <p role="status" className="m-0 text-[13px] font-semibold text-amber-800 dark:text-amber-300" data-testid="processing-note">{detail.processing.error}</p>}
+              {detail && hasFinal && (shown.length
+                ? <TranscriptReview segments={shown} intervieweeName={read?.title} onAssign={assign} time />
+                : <p className={MUTED} data-testid="transcript-no-match">No passage holds “{search.trim()}”.</p>)}
+              {session && !reviewable && (
+                <div data-testid="interview-session-not-reviewable">
+                  <p className={MUTED}>{`This session is ${statusWord(session.status).toLowerCase()}: nothing to review yet.`}</p>
+                  <Link to={`/validate/session/${encodeURIComponent(session.id)}`} className="mt-2 inline-block text-[12.5px] font-semibold text-violet-700 underline dark:text-violet-300" data-testid="link-open-session">Open the session</Link>
+                </div>
+              )}
+            </>
+          )}
+      <audio ref={player} controls className={held.current.urls.length ? 'w-full' : 'hidden'} data-testid="record-player" />
+      {audioError && <p role="alert" className="m-0 text-[12.5px] font-semibold text-red-700 dark:text-red-400" data-testid="record-audio-error">{audioError}</p>}
+    </Frame>
+  );
+  const placementsCard = (section) => (
+    <Frame key={section.key || 'placements'} section={section} testid="interview-review-findings">
+      {reviewable
+        ? <ReviewStep api={sessions} sessionId={session.id} theme={theme} receiptItems={receipt === null ? null : receipt?.items} onSpent={loadReceipt} />
+        : <p className={MUTED}>{session ? 'Nothing is proposed until the session has a transcript.' : 'No session recorded for this interview yet.'}</p>}
+    </Frame>
+  );
+  const costCard = (section) => (
+    <Frame key={section.key || 'cost'} section={section} testid="record-cost">
+      {chosenId == null ? <p className={MUTED}>No session recorded for this interview yet.</p>
+        : receipt === undefined ? <p className={MUTED} aria-busy="true">Reading…</p>
+          : receipt === null ? <p className={MUTED}>Unreadable: the receipt could not be read.</p>
+            : !receipt.items?.length ? <p className={MUTED}>Not recorded</p>
+              : (
+                <ul className="m-0 list-none space-y-1 p-0 text-[12.5px] text-axal-ink dark:text-gray-200">
+                  {receipt.items.map((r, i) => (
+                    <li key={i} className="flex justify-between gap-2" data-testid="record-cost-line">
+                      <span>{r.kind} · {r.model}{r.fallback_used ? ' (fallback)' : ''}{r.outcome !== 'ok' && r.outcome ? ` · ${r.outcome}` : ''}</span>
+                      <span className="tabular-nums">{usd(r.cost_microusd)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+    </Frame>
+  );
+  const sectionOf = (section, side) => {
+    const kind = parts.kind(section);
+    if (kind === 'transcript') return transcriptCard(section);
+    if (kind === 'placements') return placementsCard(section);
+    if (kind === 'cost') return costCard(section);
+    return <RecordSection key={section.key || section.title} section={section} side={side} {...context} />;
+  };
+
   return (
-    <div className="mx-auto max-w-5xl space-y-4 p-4 md:p-6" data-testid="interview-review-page">
-      <nav className="text-[12px]"><Link to={`/validate/customer-research?project_id=${interview.project_id}`} className="text-axal-muted underline dark:text-gray-400">Customer research</Link></nav>
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="m-0 text-[20px] font-bold text-axal-ink dark:text-gray-100" data-testid="interview-review-who">
-            {name} · <span className={company === 'Not recorded' ? 'font-semibold text-axal-muted dark:text-gray-400' : ''}>{company}</span>
-          </h1>
-          <p className="m-0 mt-1 text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="interview-review-meta">
-            {STAGES[interview.stage] || 'Stage not recorded'} · {items.length === 1 ? '1 session' : `${items.length} sessions`}
-          </p>
+    <div className="space-y-3" data-testid="interview-record">
+      <div className="flex flex-wrap items-center justify-between gap-3.5">
+        <div className="flex flex-wrap items-center gap-2">{(read?.pills ?? []).map((pill, index) => {
+          const view = pillView(pill);
+          return <span key={index} className={`inline-flex rounded-full border px-2 py-0.5 text-[10.5px] font-semibold ${PILL[toneOf(view.tone)] || PILL_DEFAULT}`}>{view.text}</span>;
+        })}</div>
+        <RecordActions actions={read?.actions} {...handlers} />
+      </div>
+      <RecordFacts facts={read?.facts} />
+      <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+        <div className="min-w-0 space-y-3">
+          {(read?.main ?? []).map((section) => sectionOf(section, false))}
+          {parts.tools && <InterviewTools projectId={projectId} interviewId={id} api={api} onChanged={reload} />}
         </div>
-        <div className="flex gap-2">
-          <button type="button" onClick={() => setEditing({ name: interview.interviewee_name || '', company: interview.interviewee_company || '', busy: false, error: null })} data-testid="button-edit-details"
-            className="rounded-md border border-axal-hairline px-3 py-1.5 text-[12.5px] font-semibold text-axal-ink dark:border-gray-700 dark:text-gray-100">Edit details</button>
-          <button type="button" onClick={() => setDeleting({ busy: false, error: null })} data-testid="button-delete-interview"
-            className="rounded-md border border-red-200 px-3 py-1.5 text-[12.5px] font-semibold text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950">Delete</button>
+        <div className="min-w-0 space-y-3">
+          {(read?.side ?? []).map((section) => sectionOf(section, true))}
+          <RecordActivity rows={activity ?? read?.activity} total={read?.activity_total} cycleName={cycleName} moduleName={moduleName} onShowAll={onShowAll} />
         </div>
-      </header>
-
-      {editing && (
-        <form className="space-y-2 rounded-2xl border border-axal-hairline p-4 dark:border-gray-800" data-testid="edit-details" onSubmit={(e) => { e.preventDefault(); saveDetails(); }}>
-          <label className="block text-[12.5px] font-semibold text-axal-ink dark:text-gray-200">Name
-            <input value={editing.name} onChange={(e) => setEditing((x) => ({ ...x, name: e.target.value }))} data-testid="edit-name" maxLength={120}
-              className="mt-1 block w-full rounded-md border border-axal-hairline px-2 py-1.5 text-[13px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" />
-          </label>
-          <label className="block text-[12.5px] font-semibold text-axal-ink dark:text-gray-200">Company
-            <input value={editing.company} onChange={(e) => setEditing((x) => ({ ...x, company: e.target.value }))} data-testid="edit-company" maxLength={160}
-              className="mt-1 block w-full rounded-md border border-axal-hairline px-2 py-1.5 text-[13px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" />
-          </label>
-          {editing.error && <p role="alert" className="text-[12.5px] font-semibold text-red-700 dark:text-red-400" data-testid="edit-error">{editing.error}</p>}
-          <div className="flex gap-2">
-            <button type="submit" disabled={editing.busy} data-testid="button-save-details" className="rounded-md bg-violet-700 px-3 py-1.5 text-[12.5px] font-bold text-white disabled:opacity-50">{editing.busy ? 'Saving…' : 'Save'}</button>
-            <button type="button" onClick={() => setEditing(null)} className="rounded-md px-3 py-1.5 text-[12.5px] font-semibold text-axal-muted dark:text-gray-300">Cancel</button>
-          </div>
-        </form>
-      )}
-
-      {items.length === 0 ? (
-        <section className="rounded-2xl border border-axal-hairline p-5 text-[13px] dark:border-gray-800" data-testid="interview-no-sessions">
-          <p className="m-0 text-axal-muted dark:text-gray-400">No session recorded for this interview yet.</p>
-          <Link to="/validate/record" className="mt-2 inline-block font-semibold text-violet-700 underline dark:text-violet-300">Record a session</Link>
-        </section>
-      ) : (
-        <>
-          {items.length > 1 && (
-            <label className="flex flex-wrap items-center gap-2 text-[12.5px] font-semibold text-axal-ink dark:text-gray-200">Session
-              <select value={String(chosenId)} onChange={(e) => setParams((p) => { const n = new URLSearchParams(p); n.set('session', e.target.value); return n; }, { replace: true })} data-testid="session-switcher"
-                className="rounded-md border border-axal-hairline px-2 py-1 text-[12.5px] font-normal dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">
-                {items.map((s) => <option key={s.id} value={String(s.id)}>{sessionLabel(s)}</option>)}
-              </select>
-            </label>
-          )}
-          {detail === null && <p role="alert" className="text-[13px] text-red-700 dark:text-red-400">Unreadable: this session could not be read.</p>}
-          {detail !== undefined && detail !== null && (
-            <SessionSummary summary={detail.summary || null} segments={segments} canSummarise={reviewable && hasFinal && !RUNNING.has(detail.processing?.stage)}
-              busy={summarising.busy} error={summarising.error} onSummarise={summarise} />
-          )}
-          {detail?.processing?.stage === 'done' && detail.processing.error && <p role="status" className="text-[13px] font-semibold text-amber-800 dark:text-amber-300" data-testid="processing-note">{detail.processing.error}</p>}
-          {reviewable ? (
-            <section className="space-y-2" data-testid="interview-review-findings">
-              <h2 className="text-[16px] font-bold text-axal-ink dark:text-gray-100">Findings</h2>
-              <ReviewStep api={sessions} sessionId={session.id} theme={theme} receiptItems={receipt === null ? null : receipt?.items} onSpent={loadReceipt} />
-            </section>
-          ) : session && (
-            <section className="rounded-2xl border border-axal-hairline p-5 text-[13px] dark:border-gray-800" data-testid="interview-session-not-reviewable">
-              <p className="m-0 text-axal-muted dark:text-gray-400">{`This session is ${statusWord(session.status).toLowerCase()}: nothing to review yet.`}</p>
-              <Link to={`/validate/session/${encodeURIComponent(session.id)}`} className="mt-2 inline-block font-semibold text-violet-700 underline dark:text-violet-300" data-testid="link-open-session">Open the session</Link>
-            </section>
-          )}
-          {detail && hasFinal && (
-            <section className="space-y-2">
-              <h2 className="text-[16px] font-bold text-axal-ink dark:text-gray-100">Transcript</h2>
-              <TranscriptReview segments={segments} intervieweeName={interview.interviewee_name} onAssign={assign} />
-            </section>
-          )}
-        </>
-      )}
-
-      {deleting && <DeleteConfirm name={name} busy={deleting.busy} error={deleting.error} onCancel={() => setDeleting(null)} onDelete={remove} />}
+      </div>
     </div>
   );
 }
