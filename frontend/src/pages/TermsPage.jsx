@@ -19,7 +19,7 @@ const INTRO = (
     <br />
     <strong>Platform & IP owned by</strong> Axal VC Holdings LLC.
     <br />
-    <strong>Fund managed by</strong> Axal VC GP LLC, the general partner of Axal VC Fund I, LP.
+    <strong>Fund managed by</strong> Axal VC GP LLC, the general partner of Axal VC Spin-Out Lab Fund I LP.
   </p>
 );
 
@@ -66,7 +66,7 @@ const SECTIONS = [
           <li><strong>Multi-Stakeholder Network:</strong> The Platform connects founders, investors (LPs and co-investors), advisors, service partners, fund managers, and ecosystem participants in a curated professional network.</li>
           <li><strong>Administrative & Informational:</strong> The Platform provides deal rooms, pipeline management, cap table collaboration, legal document templates, compliance tooling, event hosting, job board functionality, content publishing, research and insights, and advisory matching — all for administrative, due diligence, and informational purposes only.</li>
           <li><strong>No Investment Advice:</strong> No content, data, analysis, or materials on the Platform constitute investment advice, a recommendation to buy or sell securities, or an offer to invest. Axal VC Management LLC is not a registered investment adviser or broker-dealer.</li>
-          <li><strong>Fund Offerings:</strong> Investment opportunities in Axal VC Fund I, LP are offered exclusively through Axal VC GP LLC's separate, definitive subscription documents (the Fund Agreement). The Platform does not constitute an offering document for the Fund.</li>
+          <li><strong>Fund Offerings:</strong> Investment opportunities in Axal VC Spin-Out Lab Fund I LP are offered exclusively through Axal VC GP LLC's separate, definitive subscription documents (the Fund Agreement). The Platform does not constitute an offering document for the Fund.</li>
         </ul>
       </>
     ),
@@ -196,7 +196,7 @@ const SECTIONS = [
           <li><strong>Subscription Tiers:</strong> Access to premium features may require payment of subscription fees, performance fees, or transaction-based fees depending on your tier (Growth, Professional, Institutional, or custom arrangements).</li>
           <li><strong>Billing:</strong> Fees are billed in advance and are non-refundable except as required by law. Your subscription automatically renews unless cancelled in writing before the renewal date.</li>
           <li><strong>Late Payment:</strong> If you fail to pay fees when due, Axal VC Management LLC may suspend your access and pursue collection remedies, including interest and attorney fees.</li>
-          <li><strong>Fund Investor Fees:</strong> If you are an LP in Axal VC Fund I, LP, you are subject to the Fund's management fees, carried interest, and expenses as defined in the Fund Agreement. Such fees are separate from and in addition to any Platform subscription fees.</li>
+          <li><strong>Fund Investor Fees:</strong> If you are an LP in Axal VC Spin-Out Lab Fund I LP, you are subject to the Fund's management fees, carried interest, and expenses as defined in the Fund Agreement. Such fees are separate from and in addition to any Platform subscription fees.</li>
         </ul>
       </>
     ),
@@ -257,7 +257,7 @@ const SECTIONS = [
         <ul>
           <li><strong>Axal VC Holdings LLC</strong> (Delaware LLC) — Passive holding company and intellectual property owner. Holds ownership of the "Axal VC" brand, "StudioOS" trademark, domain names (<code>axal.vc</code>), software copyrights, and all platform IP. Licenses these assets to Axal VC Management LLC. Holds equity interests in subsidiaries, SPVs, and portfolio companies, and maintains treasury reserves. Not a party to these Terms and does not operate the Platform. Not liable for Platform disputes.</li>
           <li><strong>Axal VC Management LLC</strong> (Delaware LLC) — Operating company and your contractual counterparty. Operates the Platform, employs team members and contractors, executes customer and vendor agreements, collects subscription fees, manages user data, and performs all day-to-day platform functions. Designated data controller under applicable privacy laws. This entity is the party bound by and responsible for these Terms.</li>
-          <li><strong>Axal VC GP LLC</strong> (Delaware LLC) — General partner of Axal VC Fund I, LP, a private venture capital fund. Manages the Fund's operations, makes investment decisions, oversees portfolio companies, approves exits, and owes fiduciary duties to Fund limited partners. Not a party to these Terms. Does not operate the Platform and bears no liability for Platform disputes. Fund offerings are governed by separate Fund documents, not these Terms.</li>
+          <li><strong>Axal VC GP LLC</strong> (Delaware LLC) — General partner of Axal VC Spin-Out Lab Fund I LP, a private venture capital fund. Manages the Fund's operations, makes investment decisions, oversees portfolio companies, approves exits, and owes fiduciary duties to Fund limited partners. Not a party to these Terms. Does not operate the Platform and bears no liability for Platform disputes. Fund offerings are governed by separate Fund documents, not these Terms.</li>
         </ul>
       </>
     ),
@@ -325,7 +325,7 @@ const SECTIONS = [
       <>
         <ul>
           <li><strong>No Broker-Dealer Status:</strong> Axal VC Management LLC is not a registered broker-dealer, investment adviser, or financial institution. It does not provide brokerage services, execute trades, or hold user funds.</li>
-          <li><strong>Emerging Manager Status:</strong> Axal VC GP LLC, as general partner of Axal VC Fund I, LP, may be a private, emerging venture capital manager and may not be registered with the SEC. LPs should conduct independent due diligence on the Fund and its general partner.</li>
+          <li><strong>Emerging Manager Status:</strong> Axal VC GP LLC, as general partner of Axal VC Spin-Out Lab Fund I LP, may be a private, emerging venture capital manager and may not be registered with the SEC. LPs should conduct independent due diligence on the Fund and its general partner.</li>
           <li><strong>Risk Acknowledgment:</strong> Venture capital investments are highly illiquid, speculative, and carry a substantial risk of total loss of principal. No investor should allocate capital to venture investments beyond their ability to sustain complete loss without financial hardship.</li>
           <li><strong>No Audit:</strong> Axal VC Management LLC does not audit, verify, or guarantee the financial or operational accuracy of any company, fund, or investment opportunity presented on the Platform. All due diligence is your sole responsibility.</li>
           <li><strong>Tax Implications:</strong> You acknowledge that investments in venture funds and startups have complex tax implications, including carried interest tax consequences for investors and employees. Consult your tax advisor.</li>

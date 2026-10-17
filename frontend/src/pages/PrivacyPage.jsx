@@ -33,7 +33,7 @@ const SECTIONS = [
         <ul>
           <li><strong>Axal VC Management LLC</strong> — data controller. Operates the Platform and is responsible for the lawful processing of your personal information.</li>
           <li><strong>Axal VC Holdings LLC</strong> — holding company. Owns brand and platform IP (including the <code>axal.vc</code> domain) but does not directly collect or process user personal data.</li>
-          <li><strong>Axal VC GP LLC</strong> — general partner of Axal VC Fund I, LP. Receives investor data only where necessary for fund administration (capital calls, distributions, K-1s).</li>
+          <li><strong>Axal VC GP LLC</strong> — general partner of Axal VC Spin-Out Lab Fund I LP. Receives investor data only where necessary for fund administration (capital calls, distributions, K-1s).</li>
         </ul>
       </>
     ),
@@ -75,7 +75,7 @@ const SECTIONS = [
       <>
         <p>We only share your information with affiliates and non-affiliated third parties as permitted by law:</p>
         <ul>
-          <li><strong>Affiliates:</strong> With <strong>Axal VC Holdings LLC</strong> only as necessary to administer brand/IP rights, and with <strong>Axal VC GP LLC</strong> only as necessary to operate Axal VC Fund I, LP (subscription processing, capital calls, distributions, regulatory filings).</li>
+          <li><strong>Affiliates:</strong> With <strong>Axal VC Holdings LLC</strong> only as necessary to administer brand/IP rights, and with <strong>Axal VC GP LLC</strong> only as necessary to operate Axal VC Spin-Out Lab Fund I LP (subscription processing, capital calls, distributions, regulatory filings).</li>
           <li><strong>Service Providers:</strong> Fund administrators, legal counsel, and KYC/AML verification vendors. These providers are contractually bound to maintain 2026 SEC-level data security standards.</li>
           <li><strong>Regulatory Bodies:</strong> When required by the SEC, FINRA, or other governmental authorities.</li>
           <li><strong>Target Companies:</strong> Basic identity info may be shared with companies in which you are actively seeking to invest (for their cap table management).</li>
