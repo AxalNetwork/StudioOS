@@ -17,6 +17,7 @@ import AdminSpinoutCertificates from './AdminSpinoutCertificates';
 import AdminLabHosts from './AdminLabHosts';
 import AdminFormationOrders from './AdminFormationOrders';
 import AdminSection83bReview from './AdminSection83bReview';
+import { ConsoleUnreadable } from './consoles/shared';
 
 // ---------------------------------------------------------------------------
 // Deliverables shown in the admin milestones panel (all 4 weeks).
@@ -151,7 +152,7 @@ function Pill({ className, children }) {
 // ---------------------------------------------------------------------------
 // Applications inbox
 // ---------------------------------------------------------------------------
-function ApplicationsSection({ apps, loading, onDecided }) {
+function ApplicationsSection({ apps, loading, unreadable = false, onDecided, onRetry }) {
   const [statusFilter, setStatusFilter] = useState('pending');
   const [cohortFilter, setCohortFilter] = useState('all');
   const [q, setQ] = useState('');
@@ -252,6 +253,9 @@ function ApplicationsSection({ apps, loading, onDecided }) {
 
       {loading ? (
         <div className="text-gray-500 text-center py-16">Loading applications…</div>
+      ) : unreadable ? (
+        // A failed read is not an empty queue (D648, #1742).
+        <ConsoleUnreadable what="The applications" onRetry={onRetry} />
       ) : filtered.length === 0 ? (
         <div className="text-gray-500 text-center py-16 border border-dashed border-gray-200 dark:border-gray-800 rounded-xl">
           {apps.length === 0 ? 'No applications yet.' : 'No applications match these filters.'}
@@ -355,7 +359,7 @@ function ApplicationsSection({ apps, loading, onDecided }) {
 // ---------------------------------------------------------------------------
 // Cohort participants
 // ---------------------------------------------------------------------------
-function ParticipantsSection({ participants, catalog, loading, onOpenWorkspace, openingId }) {
+function ParticipantsSection({ participants, catalog, loading, unreadable = false, onRetry, onOpenWorkspace, openingId }) {
   const [statusFilter, setStatusFilter] = useState('all');
   const [cohortFilter, setCohortFilter] = useState('all');
   const [q, setQ] = useState('');
@@ -428,6 +432,8 @@ function ParticipantsSection({ participants, catalog, loading, onOpenWorkspace, 
 
       {loading ? (
         <div className="text-gray-500 text-center py-16">Loading participants…</div>
+      ) : unreadable ? (
+        <ConsoleUnreadable what="The participants" onRetry={onRetry} />
       ) : filtered.length === 0 ? (
         <div className="text-gray-500 text-center py-16 border border-dashed border-gray-200 dark:border-gray-800 rounded-xl">
           {participants.length === 0 ? 'No admitted founders yet — accept an application to get started.' : 'No participants match these filters.'}
@@ -626,6 +632,8 @@ export default function AdminSpinoutLab({ onImpersonate, standalone = false }) {
   const [participants, setParticipants] = useState([]);
   const [catalog, setCatalog] = useState([]);
   const [loading, setLoading] = useState(true);
+  // Which read failed, so its section says Unreadable rather than "none yet".
+  const [unreadable, setUnreadable] = useState({ applications: false, participants: false });
   const [openingId, setOpeningId] = useState(null);
 
   const load = useCallback(async () => {
@@ -638,6 +646,7 @@ export default function AdminSpinoutLab({ onImpersonate, standalone = false }) {
       setApps(appsRes?.applications || []);
       setParticipants(partsRes?.participants || []);
       setCatalog(partsRes?.catalog || []);
+      setUnreadable({ applications: appsRes == null, participants: partsRes == null });
     } finally { setLoading(false); }
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -782,7 +791,7 @@ export default function AdminSpinoutLab({ onImpersonate, standalone = false }) {
       </div>
 
       {section === 'applications' ? (
-        <ApplicationsSection apps={apps} loading={loading} onDecided={load} />
+        <ApplicationsSection apps={apps} loading={loading} unreadable={unreadable.applications} onDecided={load} onRetry={load} />
       ) : section === 'timing' ? (
         <AdminCohortTiming />
       ) : section === 'cycles' ? (
@@ -806,6 +815,8 @@ export default function AdminSpinoutLab({ onImpersonate, standalone = false }) {
             participants={participants}
             catalog={catalog}
             loading={loading}
+            unreadable={unreadable.participants}
+            onRetry={load}
             onOpenWorkspace={openWorkspace}
             openingId={openingId}
           />

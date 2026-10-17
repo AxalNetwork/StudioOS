@@ -13,8 +13,9 @@ import { Field, fmtDate, ConsoleUnreadable } from './shared';
 
 /**
  * D648 (#1448) — the Legal console, as it was in `pages/AdminPage.jsx`.
- * `pages/hq/ContractsPage.jsx` imports `LegalPanel` directly; it does not
- * load the Admin Console shell. #1441 is rebuilding that page.
+ * Since D647 (#1441), Contracts (`pages/hq/ContractsPage.jsx`) renders its own
+ * desk, `pages/admin/contracts/ContractsDesk.jsx`, and does not mount
+ * `LegalPanel`; `/admin?tab=legal` redirects to `/admin/contracts?moved=legal`.
  */
 
 // ===== Admin Contracts Management ======================================
