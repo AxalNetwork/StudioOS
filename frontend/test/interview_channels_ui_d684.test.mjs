@@ -16,6 +16,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import { renderedText } from './_renderedText.mjs';
+import { escapeRe } from './_escapeRe.mjs';
 
 import { ChannelsGroup, TelegramChannelCard, TelegramLinkSteps, WhatsAppChannelCard, ConnectedActions } from '../src/pages/account/ChannelsGroup.jsx';
 import { callsLine, channelCard, readOverview } from '../src/pages/account/channelsModel.js';
@@ -120,7 +121,7 @@ test('Link Telegram shows the t.me button, the expiry and the Telegram Business 
   const url = 'https://t.me/AxalStudioBot?start=Kp7mQ9xZ2bC4dF6gH8jK3mN5';
   const now = Date.parse('2026-10-13T10:00:00Z');
   const out = html(h(TelegramLinkSteps, { link: { url, expires_at: '2026-10-13T10:10:00Z' }, now, onCheck() {} }));
-  assert.match(out, new RegExp(`href="${url.replace(/[?]/g, '\\?')}"[^>]*target="_blank"[^>]*rel="noopener noreferrer"`));
+  assert.match(out, new RegExp(`href="${escapeRe(url)}"[^>]*target="_blank"[^>]*rel="noopener noreferrer"`));
   const t = renderedText(out);
   assert.match(t, /Open Telegram/);
   assert.match(t, /Works once, until /);
@@ -721,8 +722,10 @@ test('mounted: the inbox route, the Connectors group, the sheet’s two ways in;
   assert.match(lightbox, /<SchedulePanel interview=\{who\} \/>/);
   assert.doesNotMatch(readFileSync('frontend/public/_headers', 'utf8').replace(/^#.*$/gm, ''), /Content-Security-Policy/i, 'the SDK is blocked by nothing on the shell');
   assert.doesNotMatch(readFileSync('frontend/index.html', 'utf8'), /http-equiv="Content-Security-Policy"/i);
-  // The SDK is never a static script on the page: only the click adds it.
-  assert.doesNotMatch(readFileSync('frontend/index.html', 'utf8'), /connect\.facebook\.net/);
+  // The SDK is never a static script on the page: only the click adds it. The
+  // page holds no `connect.facebook.` at all, a ban on the text rather than a
+  // URL check, so every string that holds the SDK host still fails.
+  assert.doesNotMatch(readFileSync('frontend/index.html', 'utf8'), /connect\.facebook\./);
 });
 
 test('#1586 the WhatsApp card says the number\'s own "Calls: not yet, because …" from the read', () => {

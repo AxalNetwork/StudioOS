@@ -656,7 +656,7 @@ async function processEvent(env: Env, ev: InboundEvent): Promise<'ok' | 'retry'>
       await finishEvent(env, claim, err.status === 403 ? 'ignored' : 'failed', { error: err.code }).catch(() => {});
       return 'ok';
     }
-    console.error(`[channels] ${ev.provider} ${ev.kind} event failed stored=${stored}`, err instanceof Error ? err.name : 'error');
+    console.error('[channels] %s %s event failed stored=%s', ev.provider, ev.kind, stored, err instanceof Error ? err.name : 'error');
     if (!stored) {
       await releaseEvent(env, claim).catch(() => {});
       return 'retry';

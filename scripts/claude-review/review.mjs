@@ -23,7 +23,7 @@
  */
 import { execFileSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { appendFileSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
+import { appendFileSync, closeSync, fstatSync, mkdirSync, openSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Anthropic from '@anthropic-ai/sdk';
@@ -251,8 +251,15 @@ export async function main(env = process.env) {
         const real = realpathSync(full);
         const rel = relative(realRoot, real);
         if (rel.startsWith('..') || isAbsolute(rel)) return null;
-        if (statSync(real).size > MAX_FILE_BYTES) return null;
-        return readFileSync(real, 'utf8').split('\n');
+        // One descriptor for the size check and the read, so the file
+        // measured is the file read.
+        const fd = openSync(real, 'r');
+        try {
+          if (fstatSync(fd).size > MAX_FILE_BYTES) return null;
+          return readFileSync(fd, 'utf8').split('\n');
+        } finally {
+          closeSync(fd);
+        }
       } catch {
         return null;
       }
