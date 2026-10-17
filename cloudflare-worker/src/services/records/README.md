@@ -24,7 +24,11 @@ Sync log and Permissions to writers. Old rows read through each spec's
 
 `../cycleActivity.ts` writes scoped activity and reads one record's timeline.
 Older activity is only included when a spec declares an `oldRows` matcher.
-Nothing rewrites historical activity.
+Nothing rewrites historical activity. Grow (D691, #1698) lists its six stores
+in `owned.ts`, and its matchers admit today's Grow rows, which carry no
+`project_id`, only under `grow_*` actions (`unscopedActions`), plus a month's
+figure logged as `<id>:<month>` (`idPrefixTypes`) and an application's stage
+row through its posting (`children`).
 
 `validate.ts` holds Validate's six module specs (D690, #1692), as CO:362-367
 draws them: a pain group, an interview, a segment, a competitor, a demand record

@@ -1,7 +1,8 @@
 /**
- * D692 (#1701, PR 1a) — each cycle's phone root: Build's, Raise's and Grow's
- * overview reads return `focus`, `meter` and `index` in one shape, on real
- * SQLite. Validate's arrive with PR 1b, and Grow's `tell_customers` with PR 2.
+ * D692 (#1701, PR 1a and PR 1b) — each cycle's phone root: Validate's,
+ * Build's, Raise's and Grow's overview reads return `focus`, `meter` and
+ * `index` in one shape, on real SQLite. Grow's `tell_customers` arrives with
+ * PR 2.
  *
  * THE DATABASE IS THE BASELINE PLUS EVERY NUMBERED MIGRATION ABOVE THE CUTOFF,
  * IN ORDER, as migrations_fresh_build.test.ts builds one, so no table is
@@ -20,10 +21,12 @@ import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 
+import cycleValidate from '../src/routes/cycle_validate.ts';
 import cycleBuild from '../src/routes/cycle_build.ts';
 import cycleRaise from '../src/routes/cycle_raise.ts';
 import cycleGrow from '../src/routes/cycle_grow.ts';
 import { sentence, usdShort, dayMonth, cardFocus, cardValue } from '../src/services/cycleFocus.ts';
+import { focusOf } from '../src/services/validateFocus.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 
@@ -94,6 +97,169 @@ async function request(app: Hono<any>, db: any, who: number, path: string) {
   } finally { [console.warn, console.error] = saved; }
 }
 const row = (body: any, key: string) => (body.index || []).find((r: any) => r.key === key);
+
+// ---------------------------------------------------------------------------
+// Validate (PR 1b)
+// ---------------------------------------------------------------------------
+
+const vApp = new Hono<any>();
+vApp.route('/api/cycles/validate', cycleValidate);
+const vRead = (db: any, who = FOUNDER, pid = P) => request(vApp, db, who, `/api/cycles/validate/overview?project=${pid}`);
+
+let ivSeq = 0;
+function interview(db: any, pid: number, o: Record<string, unknown> = {}) {
+  ivSeq += 1;
+  const r = db.prepare(
+    `INSERT INTO discovery_interviews (project_id, interviewee_name, interview_date, pains_json, hypotheses_json, stage)
+     VALUES (?, ?, ?, ?, '[]', ?) RETURNING id`,
+  ).get(pid, `Person ${ivSeq}`, o.date ?? TODAY, JSON.stringify(o.pains ?? []), o.stage === undefined ? 'done' : o.stage) as any;
+  return Number(r.id);
+}
+const target = (db: any, n: number) => db.prepare(
+  `INSERT INTO metric_targets (project_id, metric_key, target_value, direction) VALUES (?, 'interviews_month_target', ?, 'up')`,
+).run(P, n);
+const session = (db: any, iv: number, status: string, stoppedAt: string) => db.prepare(
+  `INSERT INTO interview_sessions (id, uid, project_id, interview_id, created_by_user_id, channel, status, stopped_at)
+   VALUES (1, 's1', ?, ?, ?, 'video', ?, ?)`,
+).run(P, iv, FOUNDER, status, stoppedAt);
+
+test('1: a founder with interviews and nothing to review records the next conversation, with the meter in the why', async () => {
+  const db = fixture(null);
+  for (let i = 0; i < 14; i += 1) interview(db, P, { pains: ['slow dispatch'] });
+  target(db, 20);
+  const r = await vRead(db);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const f = r.body.focus;
+  assert.equal(f.rule, 'next_interview');
+  assert.equal(f.eyebrow, 'Validate · Next');
+  assert.equal(f.headline, 'Record your next customer conversation.');
+  assert.equal(f.why, 'Every interview feeds the pain themes, the hypotheses and the verdict. You are at 14 of 20 this month.');
+  assert.deepEqual(f.cta, { label: 'Record a session', href: `/validate/record?project=${P}` });
+  // Then: the first card's next that is not Customer research's.
+  const other = r.body.cards.find((c: any) => c.slug !== 'customer-research' && c.next?.text);
+  assert.ok(other, 'the fixture has another card with a next');
+  assert.equal(f.then, sentence(other.next.text));
+  assert.doesNotMatch(f.then, /^Then /);
+  assert.doesNotMatch(f.then, /^Log \d+ more interview/);
+  assert.deepEqual([r.body.meter.count, r.body.meter.target, r.body.meter.display], [14, 20, '14 of 20']);
+
+  db.exec('DELETE FROM metric_targets');
+  const n = await vRead(db);
+  assert.equal(n.body.focus.why, 'Every interview feeds the pain themes, the hypotheses and the verdict. Interviews this month: 14.');
+  assert.equal(n.body.meter.display, '14');
+
+  // An unreadable count: the why is its first sentence alone.
+  NEEDLE = 'SELECT target_value FROM metric_targets';
+  try {
+    const u = await vRead(db);
+    assert.equal(u.body.meter, null);
+    assert.equal(u.body.focus.why, 'Every interview feeds the pain themes, the hypotheses and the verdict.');
+  } finally { NEEDLE = null; }
+});
+
+test('1: Then never repeats Customer research\'s "Log <n> more interviews"; with no other next, no Then', async () => {
+  const db = fixture(null);
+  interview(db, P);
+  const env = { DB: d1Over(db) } as any;
+  const card = (slug: string, text: string | null) => ({ slug, name: slug, state: 'ok', range: '', caption: '', series: null, reason: null,
+    next: text ? { text, href: `/validate/${slug}?project=${P}` } : null }) as any;
+  const meter = { key: 'interviews_this_month', label: 'Interviews this month', count: 1, target: null, target_reason: 'No target set', display: '1' };
+  const a = await focusOf(env, P, true, [card('problem-discovery', null), card('customer-research', 'Log 2 more interviews'), card('ideal-customer-profile', 'then add your first segment')], [], meter);
+  assert.equal(a!.then, 'Add your first segment.');
+  const b = await focusOf(env, P, true, [card('customer-research', 'Log 2 more interviews')], [], meter);
+  assert.equal(b!.then, null);
+});
+
+test('2: rule order — no interview, then a session to review, then the next conversation', async () => {
+  const db = fixture(null);
+  const first = (await vRead(db)).body.focus;
+  assert.deepEqual(first, {
+    rule: 'first_interview', eyebrow: 'Validate · Next', headline: 'Record your first conversation.',
+    why: 'Validate starts with one interview. Everything else in the venture builds on what it finds.',
+    cta: { label: 'Record a session', href: `/validate/record?project=${P}` },
+    then: 'Write the claim you most need to be true.',
+  });
+  const iv = interview(db, P);
+  session(db, iv, 'transcribed', `${day(-1)} 10:00:00`);
+  const review = (await vRead(db)).body.focus;
+  assert.equal(review.rule, 'review');
+  // D704 (#1783) moved rule 2's href to the interview's record (D-b).
+  assert.equal(review.cta.href, `/validate/customer-research/${iv}?session=1`);
+  assert.ok(routed(review.cta.href, routesOf()), 'the review href is a route');
+  db.exec("UPDATE interview_sessions SET status = 'reviewed'");
+  assert.equal((await vRead(db)).body.focus.rule, 'next_interview');
+});
+
+test('3: a partner on Validate gets the card rule, never a write; with no card next, no focus', async () => {
+  const db = fixture(null);
+  interview(db, P);
+  const iv = interview(db, P);
+  session(db, iv, 'transcribed', `${day(-1)} 10:00:00`);
+  const p = await vRead(db, PARTNER);
+  assert.equal(p.status, 200);
+  assert.ok(['card', null].includes(p.body.focus?.rule ?? null));
+  assert.notEqual(p.body.focus?.rule, 'review');
+  assert.notEqual(p.body.focus?.rule, 'next_interview');
+  // cardFocus itself: no in-app next → null, never "Record a session.".
+  assert.equal(cardFocus('validate', [{ slug: 'x', name: 'X', state: 'ok', range: '', caption: '', series: null, next: { text: 'Open the guide', href: 'https://example.test' }, reason: null } as any]), null);
+  assert.equal(cardFocus('validate', []), null);
+});
+
+test('4: a founder\'s index is the canvas\'s seven rows with Verdict last; a partner\'s has no decision anywhere', async () => {
+  const db = fixture(null);
+  interview(db, P, { pains: ['slow dispatch'] });
+  const decided = `${day(-77)} 09:30:00`;
+  // A superseded decision dated after the current one: the filter, not the order, keeps it out.
+  db.prepare("INSERT INTO validation_decisions (project_id, decision, reasoning, decided_at, decided_by, superseded_at) VALUES (?, 'stop', 'old', ?, ?, ?)").run(P, `${day(-10)} 09:00:00`, FOUNDER, `${day(-9)} 09:30:00`);
+  db.prepare("INSERT INTO validation_decisions (project_id, decision, reasoning, decided_at, decided_by) VALUES (?, 'proceed', 'Carriers pay', ?, ?)").run(P, decided, FOUNDER);
+  db.prepare("INSERT INTO validation_decisions (project_id, decision, reasoning, decided_at, decided_by) VALUES (?, 'pivot', 'theirs', ?, ?)").run(P_OTHER, `${day(-2)} 09:30:00`, OTHER);
+  // Newer than the current decision, but withheld, or for one hypothesis: never the venture's verdict.
+  const h = db.prepare("INSERT INTO hypotheses (project_id, code, claim) VALUES (?, 'H1', 'Carriers pay') RETURNING id").get(P) as any;
+  db.prepare("INSERT INTO validation_decisions (project_id, decision, decided_at, decided_by, state) VALUES (?, 'pivot', ?, ?, 'withheld')").run(P, `${day(-5)} 09:30:00`, FOUNDER);
+  db.prepare("INSERT INTO validation_decisions (project_id, hypothesis_id, decision, decided_at, decided_by) VALUES (?, ?, 'stop', ?, ?)").run(P, h.id, `${day(-4)} 09:30:00`, FOUNDER);
+  const f = await vRead(db);
+  assert.deepEqual(f.body.index.map((r: any) => r.key), [
+    'problem-discovery', 'customer-research', 'ideal-customer-profile', 'market-intelligence', 'demand-signals', 'experiments', 'verdict',
+  ]);
+  const v = row(f.body, 'verdict');
+  assert.deepEqual([v.title, v.detail, v.value, v.href], ['Verdict', `Proceed · ${dayMonth(decided)}`, '', `/validate/verdict?project=${P}`]);
+  for (const r of f.body.index.slice(0, 6)) assert.equal(r.href, `/validate/${r.key}?project=${P}`);
+  assert.equal(row(f.body, 'interviews'), undefined);
+  assert.equal(JSON.stringify(f.body.index).includes('Pivot'), false, 'another venture\'s decision is never ours');
+  assert.equal(JSON.stringify(f.body.index).includes('Stop'), false, 'a superseded decision is never the value');
+
+  const p = await vRead(db, PARTNER);
+  assert.equal(p.status, 200);
+  assert.equal(p.body.index.length, 6);
+  assert.equal(row(p.body, 'verdict'), undefined);
+  const text = JSON.stringify(p.body);
+  assert.equal(text.includes('Proceed'), false);
+  for (const form of [decided.slice(0, 10), dayMonth(decided)!, decided]) assert.equal(text.includes(form), false, form);
+
+  for (const who of [OTHER, INVESTOR]) {
+    const r = await vRead(db, who);
+    assert.equal(r.status, 403);
+    for (const k of ['focus', 'meter', 'index']) assert.equal(k in (r.body || {}), false);
+  }
+});
+
+test('5: an empty venture\'s rows are Not recorded with a neutral detail; none booked is a counted 0', async () => {
+  const db = fixture(null);
+  const e = await vRead(db);
+  for (const r of e.body.index) {
+    assert.equal(r.value, null, r.key);
+    assert.doesNotMatch(r.detail, /\d/, `${r.key}: a neutral detail, never a number`);
+  }
+  assert.equal(row(e.body, 'verdict').detail, 'Proceed, pivot or stop');
+  interview(db, P, { stage: 'done' });
+  const one = await vRead(db);
+  assert.deepEqual([row(one.body, 'customer-research').detail, row(one.body, 'customer-research').value], ['Recruiting · 0 booked', '']);
+  // An unreadable card gives "Unreadable".
+  NEEDLE = 'FROM customer_segments';
+  try {
+    assert.equal(row((await vRead(db)).body, 'ideal-customer-profile').value, 'Unreadable');
+  } finally { NEEDLE = null; }
+});
 
 // ---------------------------------------------------------------------------
 // Build
@@ -364,6 +530,7 @@ function routesOf() {
   return [...app.matchAll(/<Route path="([^"]+)"/g)].map((m) => m[1]);
 }
 const SLUGS: Record<string, string[]> = {
+  validate: ['problem-discovery', 'customer-research', 'ideal-customer-profile', 'market-intelligence', 'demand-signals', 'experiments'],
   build: ['solution-design', 'prototype-mvp', 'product-roadmap', 'founding-team', 'company-creation', 'operating-systems'],
   raise: ['fundraising-readiness', 'investor-narrative', 'pitch-deck', 'data-room', 'cap-table', 'use-of-funds', 'capital-relationships'],
   grow: ['product-improvement', 'distribution', 'revenue-and-traction', 'team-expansion', 'partner-network', 'market-expansion', 'durable-company-building'],
@@ -393,6 +560,16 @@ function strings(v: unknown, out: string[] = []): string[] {
 test('10: every read carries the three parts; no bracket, undefined, NaN or leading Then; every href is a route', async () => {
   const routes = routesOf();
   const reads: any[] = [];
+  const v = fixture(null);
+  reads.push((await vRead(v)).body);
+  for (let i = 0; i < 3; i += 1) interview(v, P, { pains: ['slow dispatch'] });
+  target(v, 20);
+  v.prepare("INSERT INTO validation_decisions (project_id, decision, decided_at) VALUES (?, 'proceed', ?)").run(P, `${day(-3)} 09:00:00`);
+  reads.push((await vRead(v)).body, (await vRead(v, PARTNER)).body);
+  const iv = interview(v, P);
+  session(v, iv, 'transcribed', `${day(-1)} 10:00:00`);
+  reads.push((await vRead(v)).body);
+  assert.equal(reads[reads.length - 1].focus.rule, 'review', 'the review href is checked as a route too');
   const b = fixture();
   reads.push((await bRead(b)).body);
   mustHaves(b);
@@ -418,6 +595,26 @@ test('10: every read carries the three parts; no bracket, undefined, NaN or lead
 });
 
 test('11: a throwing query in one part leaves that part null and the rest of the read as it was', async () => {
+  const v = fixture(null);
+  interview(v, P);
+  const whole = (await vRead(v)).body;
+  for (const [needle, nulled] of [
+    ['SELECT target_value FROM metric_targets', 'meter'],
+    ['FROM interview_sessions s JOIN discovery_interviews', 'focus'],
+  ] as const) {
+    NEEDLE = needle;
+    try {
+      const x = (await vRead(v)).body;
+      assert.equal(x[nulled], null, `validate ${nulled}`);
+      for (const k of ['focus', 'meter', 'index'].filter((y) => y !== nulled)) assert.notEqual(x[k], null, `validate ${k}`);
+      assert.deepEqual(x.figures, whole.figures);
+      // The demand card reads its bar with the meter's own statement text, so
+      // it shares that failure; every other card reads as it did.
+      const states = (body: any) => body.cards.filter((c: any) => nulled !== 'meter' || c.slug !== 'demand-signals').map((c: any) => c.state);
+      assert.deepEqual(states(x), states(whole));
+    } finally { NEEDLE = null; }
+  }
+
   // Build's parts read only what the overview already holds; an unreadable
   // module read reaches them as "Unreadable", never as a failed read.
   const b = fixture();
