@@ -108,3 +108,41 @@ export function afterDelete(projectId) {
     ? `/validate/customer-research?project_id=${id}`
     : '/validate/customer-research';
 }
+
+// The record's sections, as #1692's Customer research read names them. A
+// section is found by its key, else by its title, so a key the read spells
+// differently still finds it; one the read does not send is not drawn.
+const SECTIONS = {
+  transcript: { keys: ['transcript'], titles: ['transcript'] },
+  placements: { keys: ['placements'], titles: ['eadwyn’s placements', "eadwyn's placements", 'placements'] },
+  fed: { keys: ['fed', 'what-it-fed', 'what_it_fed'], titles: ['what it fed'] },
+  cost: { keys: ['cost'], titles: ['cost'] },
+  session: { keys: ['session'], titles: ['session'] },
+};
+const norm = (v) => String(v ?? '').trim().toLowerCase();
+const isSection = (section, name) => SECTIONS[name].keys.includes(norm(section?.key)) || SECTIONS[name].titles.includes(norm(section?.title));
+
+/**
+ * What the record draws (D697 decision 14): the sections the read sends, and
+ * the record's own parts inside them. The Transcript, Eadwyn's placements,
+ * Cost and Session sections are the writer's (D690 decision 2), so a partner's
+ * read has none of them, and `sessions` is false: the page then calls no
+ * session route. The interview's tools are drawn when the read declares any
+ * action, which only a writer's does.
+ */
+export function recordParts(read) {
+  const main = Array.isArray(read?.main) ? read.main : [];
+  const side = Array.isArray(read?.side) ? read.side : [];
+  const all = [...main, ...side];
+  const find = (name) => all.find((s) => isSection(s, name)) || null;
+  const actions = Array.isArray(read?.actions) ? read.actions : [];
+  const action = (key) => actions.find((a) => a?.key === key) || null;
+  const transcript = find('transcript');
+  return {
+    transcript, placements: find('placements'), fed: find('fed'), cost: find('cost'), session: find('session'),
+    kind: (section) => Object.keys(SECTIONS).find((name) => isSection(section, name)) || null,
+    sessions: !!transcript,
+    tools: actions.length > 0,
+    edit: action('edit-details'), remove: action('delete'), recording: action('open-recording'),
+  };
+}

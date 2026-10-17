@@ -70,6 +70,8 @@ On a module page, `?add=1` is its first Add's address: the URL becomes `/<cycle>
 - `frontend/test/cycle_pages_d661.test.mjs` holds these rules, against the
   fixtures in `frontend/test/_cycle_fixtures.mjs`.
 
+D697 (#1659): a cycle's def may name a `recordPage` per module, drawn in record mode in place of `RecordView` with the record read and a context (`projectId`, `id`, `activity`, the record handlers, `act` for `recordAction`, `reload` and `openDialog`). Validate's is Customer research's interview record, `../founder/InterviewReviewPage.jsx`, built from `RecordView`'s exported parts.
+
 D696 PR 2 mounts record mode on all four cycles. It calls only the record read,
 keeps every request scoped to the URL’s venture, and refuses malformed ids
 before a read. A 403/404 prints the Worker’s sentence; other failures offer Retry.

@@ -48,11 +48,15 @@ test('the three breadcrumbs and review delete return to Customer research', () =
   const review = read('frontend/src/pages/founder/InterviewReviewPage.jsx');
   const session = read('frontend/src/pages/founder/InterviewSessionPage.jsx');
   const inbox = read('frontend/src/pages/founder/ChannelsInbox.jsx');
-  for (const page of [review, session, inbox]) {
+  for (const page of [session, inbox]) {
     assert.match(page, />Customer research<\/Link>/);
     assert.doesNotMatch(page, /<Link to="\/validate\/interviews"/);
   }
-  assert.match(review, /navigate\(`\/validate\/customer-research\?project_id=\$\{interview\.project_id\}`/);
+  // D697 (#1659): the review is Customer research's record inside the cycle, so the
+  // cycle's "‹ Back to Customer research" tab replaces its breadcrumb, and Delete
+  // lands through afterDelete, on Customer research for the same venture.
+  assert.doesNotMatch(review, /\/validate\/interviews/);
+  assert.match(review, /navigate\(afterDelete\(projectId\), \{ replace: true \}\)/);
 });
 
 // ---------- PR 2: every Record a session finish (test 9) ----------------------
