@@ -164,9 +164,13 @@ async function recordsFor(x: Ctx, slug: GrowSlug, viewer: User): Promise<RecordS
   }
   // durable-company-building
   const ev = await env.DB.prepare(
-    `SELECT id, title, kind, due_at, owner_name, status FROM compliance_events WHERE project_id = ? ORDER BY due_at IS NULL, due_at`,
+    `SELECT id, title, kind, event_type, due_date, owner_name, completion_status FROM compliance_events WHERE project_id = ? ORDER BY due_date`,
   ).bind(projectId).all<Row>();
-  return { cols: ['Obligation', 'Kind', 'Due', 'Owner', 'State'], rows: ev.results || [],
+  return { cols: ['Obligation', 'Kind', 'Due', 'Owner', 'State'], rows: (ev.results || []).map((event) => {
+      const kind = obligationKind(event);
+      return { id: event.id, title: event.title, kind, due_at: event.due_date, owner_name: event.owner_name,
+        status: obligationState(event.completion_status, kind, String(event.due_date), new Date(x.now).toISOString().slice(0, 10)) };
+    }),
     parts: { checklist: await checklist(env, projectId), ...(await updatesHistory(x, viewer)) } };
 }
 
@@ -324,8 +328,41 @@ const PARTNER_TYPES = ['reseller', 'integration', 'agency', 'referral', 'other']
 const PARTNER_STAGES = ['talking', 'terms', 'signed', 'ended'] as const;
 const MARKET_STATES = ['considering', 'entering', 'served', 'not_now'] as const;
 const DECISIONS = ['enter', 'not_yet', 'exit'] as const;
-const OBLIGATION_KINDS = ['governance', 'compliance', 'risk', 'tax', 'other'] as const;
-const OBLIGATION_STATES = ['scheduled', 'upcoming', 'draft', 'done', 'not_set_up'] as const;
+const OBLIGATION_KINDS = ['governance', 'compliance', 'risk', 'culture', 'tax', 'other'] as const;
+const OBLIGATION_STATES = ['scheduled', 'upcoming', 'draft', 'done', 'not_set_up', 'overdue', 'snoozed'] as const;
+const OBLIGATION_EVENTS = { governance: 'board_meeting', compliance: 'other', risk: 'risk', culture: 'culture', tax: 'franchise_tax', other: 'other' } as const;
+
+function obligationKind(event: Row): string {
+  if (event.kind) return String(event.kind);
+  if (event.event_type === 'board_meeting') return 'governance';
+  if (event.event_type === 'risk' || event.event_type === 'culture') return String(event.event_type);
+  return 'compliance';
+}
+
+function obligationState(completion: unknown, kind: string, due: string, today: string): string {
+  if (completion === 'completed') return 'done';
+  if (completion === 'snoozed') return 'snoozed';
+  if (due < today) return 'overdue';
+  return kind === 'governance' ? 'scheduled' : 'upcoming';
+}
+
+function obligationCompletion(state: unknown): string {
+  return state === 'done' ? 'completed' : state === 'snoozed' ? 'snoozed' : 'pending';
+}
+
+function obligationDue(value: unknown): string {
+  const due = str(value, 10);
+  if (!due) throw new Refused(400, 'An obligation has a due date.', 'due_at');
+  if (!DATE.test(due)) throw new Refused(400, 'due_at is YYYY-MM-DD', 'due_at');
+  return due;
+}
+
+function obligationClash(error: unknown, kind: string, due: string): never {
+  if (String((error as Error).message).toLowerCase().includes('unique')) {
+    throw new Refused(409, `Another ${kind} obligation is already due on ${due}. Pick another date.`, 'due_at');
+  }
+  throw error;
+}
 
 r.post('/feedback', async (c) => {
   try {
@@ -544,13 +581,23 @@ r.post('/obligations', async (c) => {
     const pid = await project(c, user, b.project, true);
     const title = str(b.title, 200);
     if (!title) throw new Refused(400, 'An obligation has a title', 'title');
-    const due = str(b.due_at, 10);
-    if (due && !DATE.test(due)) throw new Refused(400, 'due_at is YYYY-MM-DD', 'due_at');
-    const ins = await c.env.DB.prepare(
-      'INSERT INTO compliance_events (project_id, title, due_at, status, kind, owner_name, owner_user_id, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    ).bind(pid, title, due, oneOf(b.status, OBLIGATION_STATES, 'status') ?? 'upcoming', oneOf(b.kind, OBLIGATION_KINDS, 'kind', true),
-      str(b.owner_name, 120), null, user.id).run();
-    const id = (ins as any).meta?.last_row_id;
+    const due = obligationDue(b.due_at);
+    const kind = oneOf(b.kind, OBLIGATION_KINDS, 'kind', true)!;
+    const completion = obligationCompletion(oneOf(b.status, OBLIGATION_STATES, 'status'));
+    const entity = await c.env.DB.prepare(
+      'SELECT e.id, e.jurisdiction FROM projects p JOIN entities e ON e.id = p.entity_id WHERE p.id = ?',
+    ).bind(pid).first<{ id: number; jurisdiction: string | null }>();
+    let id: number;
+    try {
+      const ins = await c.env.DB.prepare(
+        `INSERT INTO compliance_events (project_id, entity_id, jurisdiction, event_type, title, due_date,
+          completion_status, recurrence, source, kind, owner_name, owner_user_id, created_by_user_id, created_by,
+          completed_at, completed_by_user_id) VALUES (?, ?, ?, ?, ?, ?, ?, 'one_time', 'manual', ?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(pid, entity?.id ?? null, entity?.jurisdiction || 'Unspecified', OBLIGATION_EVENTS[kind], title, due,
+        completion, kind, str(b.owner_name, 120), null, user.id, user.id,
+        completion === 'completed' ? nowIso() : null, completion === 'completed' ? user.id : null).run();
+      id = ins.meta.last_row_id;
+    } catch (error) { obligationClash(error, kind, due); }
     await logWrite(c.env, user.id, 'grow_obligation_added', 'compliance_events', id);
     return c.json({ id }, 201);
   } catch (e) { return fail(c, e); }
@@ -560,12 +607,21 @@ r.patch('/obligations/:id', async (c) => {
   try {
     const user = await requireAuth(c); const b = await body(c);
     const pid = await project(c, user, b.project, true);
-    const row = await owned<{ id: number; status: string; owner_name: string | null; due_at: string | null }>(c,
-      'SELECT id, status, owner_name, due_at FROM compliance_events WHERE id = ? AND project_id = ?', Number(c.req.param('id')), pid);
-    const due = b.due_at === undefined ? row.due_at : str(b.due_at, 10);
-    if (due && !DATE.test(due.slice(0, 10))) throw new Refused(400, 'due_at is YYYY-MM-DD', 'due_at');
-    await c.env.DB.prepare('UPDATE compliance_events SET status = ?, owner_name = ?, due_at = ? WHERE id = ?')
-      .bind(b.status === undefined ? row.status : oneOf(b.status, OBLIGATION_STATES, 'status', true), b.owner_name === undefined ? row.owner_name : str(b.owner_name, 120), due, row.id).run();
+    const row = await owned<Row & { id: number; completion_status: string; owner_name: string | null; due_date: string;
+      completed_at: string | null; completed_by_user_id: number | null; reminders_sent_json: string }>(c,
+      'SELECT id, kind, event_type, completion_status, owner_name, due_date, completed_at, completed_by_user_id, reminders_sent_json FROM compliance_events WHERE id = ? AND project_id = ?',
+      Number(c.req.param('id')), pid);
+    const due = b.due_at === undefined ? row.due_date : obligationDue(b.due_at);
+    const completion = b.status === undefined ? row.completion_status : obligationCompletion(oneOf(b.status, OBLIGATION_STATES, 'status', true));
+    const completedAt = b.status === undefined ? row.completed_at : completion === 'completed' ? nowIso() : null;
+    const completedBy = b.status === undefined ? row.completed_by_user_id : completion === 'completed' ? user.id : null;
+    try {
+      await c.env.DB.prepare(
+        `UPDATE compliance_events SET completion_status = ?, owner_name = ?, due_date = ?, completed_at = ?,
+          completed_by_user_id = ?, reminders_sent_json = ?, updated_at = ? WHERE id = ?`,
+      ).bind(completion, b.owner_name === undefined ? row.owner_name : str(b.owner_name, 120), due, completedAt, completedBy,
+        due !== row.due_date ? '[]' : row.reminders_sent_json, nowIso(), row.id).run();
+    } catch (error) { obligationClash(error, obligationKind(row), due); }
     await logWrite(c.env, user.id, 'grow_obligation_updated', 'compliance_events', row.id);
     return c.json({ id: row.id });
   } catch (e) { return fail(c, e); }
