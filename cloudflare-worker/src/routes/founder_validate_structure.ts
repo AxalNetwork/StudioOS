@@ -414,14 +414,23 @@ structure.post('/sessions/:id/structure', async (c) => {
   }, 201);
 });
 
+/**
+ * One session's placements, every run's, in id order. `*` rather than a column
+ * list: `source` arrives with migration 447 (D667), and a row written before
+ * it reads as StudioOS's own. The placements route and the Customer research
+ * record (D690, #1692) both read it.
+ */
+export async function sessionPlacementRows(env: Env, sessionId: number): Promise<any[]> {
+  const rows = await env.DB.prepare(
+    `SELECT * FROM validate_proposals WHERE session_id = ? AND run_id IS NOT NULL ORDER BY id`,
+  ).bind(sessionId).all<any>();
+  return rows.results ?? [];
+}
+
 structure.get('/sessions/:id/placements', async (c) => {
   const s = await scopeSession(c);
   if (s instanceof Response) return s;
-  // `*` rather than a column list: `source` arrives with migration 447 (D667),
-  // and a row written before it reads as StudioOS's own.
-  const rows = await c.env.DB.prepare(
-    `SELECT * FROM validate_proposals WHERE session_id = ? AND run_id IS NOT NULL ORDER BY id`,
-  ).bind(s.session.id).all<any>();
+  const rows = { results: await sessionPlacementRows(c.env, s.session.id) };
   // D667 — who proposed each run. An assistant's name is the one its OAuth
   // client registered, self-declared, so the page shows it as the client's
   // own label; StudioOS's runs say StudioOS.
