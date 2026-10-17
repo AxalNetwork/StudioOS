@@ -25,6 +25,10 @@ import { cardView, cellView, cycleOf, isPlainClick, pageButtons, recordsCount, s
  * A module that already has a full working tool (the cap table, the data
  * room, the pitch deck, the capital pipeline, the roadmap) is linked through
  * `tool`, not redrawn here.
+ *
+ * A read refused on purpose (`status: 'refused'`, D693 #1704: a partner on
+ * Verdict) draws the Worker's sentence in a neutral box, with no chart, no
+ * table and no Retry: nothing broke, so there is nothing to try again.
  */
 
 const PILL = {
@@ -182,7 +186,11 @@ export default function CycleModulePage({
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="cycle-module" data-cycle={meta.key} data-module={slug}>
       <CycleHeader cycle={meta.key} cards={cards || (card ? [card] : [])} active={slug} action={action} title={name} sub={[card?.caption, 'Records below; the tabs above move between modules.'].filter(Boolean).join(' ')} search={search} />
-      {status === 'unreadable' ? (
+      {status === 'refused' ? (
+        <p role="status" className="m-0 rounded-xl border border-axal-hairline bg-axal-ground px-4 py-3.5 text-[13px] leading-relaxed text-axal-ink dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200" data-testid="cycle-module-refused">
+          {message || 'You do not have access to this module.'}
+        </p>
+      ) : status === 'unreadable' ? (
         <div className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/30" data-testid="cycle-module-unreadable">
           <Unreadable what={name} claim={message || 'This is not a claim that nothing is recorded.'} onRetry={onRetry} />
         </div>
