@@ -82,6 +82,7 @@ test('the table: unique keys, the decision\'s tiers, and a sentence on every Sup
     'distribution.preview': 'admin', 'distribution.execute': 'super_admin', 'distribution.mark_paid': 'admin',
     'fund_report.draft': 'admin', 'fund_report.issue': 'super_admin', 'fund.gp_of_record': 'super_admin', 'fund.economics': 'super_admin', 'fund.write': 'admin',
     'fund_ledger.administrator': 'super_admin', 'fund_ledger.write': 'admin',
+    'fee_terms.confirm': 'super_admin', 'fee_period.issue': 'super_admin', 'fee.write': 'admin',
   });
   for (const a of FUND_ACTS) assert.equal(a.sentence !== null, a.tier === 'super_admin', a.act);
 });
@@ -93,6 +94,7 @@ const ROUTERS: Record<string, { file: string; name: string }> = {
   '/api/capital': { file: 'routes/capital.ts', name: 'capital' },
   '/api/fund-ledger': { file: 'routes/fund_ledger.ts', name: 'r' },
   '/api/fund-reporting': { file: 'routes/fund_reporting.ts', name: 'r' },
+  '/api/fund-fees': { file: 'routes/fund_fees.ts', name: 'app' },
 };
 
 /** The source of one handler: from its registration to the next one on the same router. */
@@ -115,6 +117,10 @@ test('every route FUND_ACTS names is mounted, and its handler asserts that act',
   const accessFn = ledger.slice(ledger.indexOf('async function access('), ledger.indexOf('const body=(c:any)'));
   assert.ok(accessFn.includes("write===true ? 'fund_ledger.write' : write") && accessFn.includes('await assertAdminAct(c,user,act)'),
     "the ledger's access() no longer asserts its act");
+  const fees = src('routes/fund_fees.ts');
+  const writeGate = fees.slice(fees.indexOf('async function writeGate('), fees.indexOf("app.use('*'"));
+  assert.ok(writeGate.includes('await requireFundGp(c, fundId)') && writeGate.includes('await assertFundAct(c, g, act)'),
+    "the fee router's writeGate no longer asserts its act");
   const funds = src('routes/funds.ts');
   const patchAct = funds.slice(funds.indexOf('function fundPatchAct('), funds.indexOf('const FUND_CONTROL_FIELDS'));
 
@@ -126,7 +132,9 @@ test('every route FUND_ACTS names is mounted, and its handler asserts that act',
       const { file, name } = ROUTERS[prefix!];
       const body = handler(file, name, method, full.slice(prefix!.length));
       assert.ok(body, `${route} (${row.act}) is not a route in ${file}`);
-      if (file === 'routes/fund_ledger.ts') {
+      if (file === 'routes/fund_fees.ts') {
+        assert.ok(body!.includes(`await writeGate(c, '${row.act}')`), `${route} does not assert ${row.act}`);
+      } else if (file === 'routes/fund_ledger.ts') {
         const expected = row.act === 'fund_ledger.administrator' ? "access(c,'fund_ledger.administrator')" : 'access(c,true)';
         assert.ok(body!.includes(expected), `${route} does not assert ${row.act}`);
       } else if (method === 'PATCH') {
@@ -157,6 +165,22 @@ test('every fund write that runs requireFundGp also runs assertFundAct, before i
     }
   }
   assert.ok(seen >= 12, `only ${seen} gated writes found`);
+});
+
+test('every fee write is a row of the table, under the act its writeGate asserts', () => {
+  const text = src('routes/fund_fees.ts');
+  const re = /\napp\.(post|put|patch|delete)\('([^']+)', async \(c\) => \{\n  const g = await writeGate\(c, '([^']+)'\)/g;
+  const named = new Map<string, string>();
+  for (const row of FUND_ACTS) for (const route of row.routes) named.set(route, row.act);
+  let m: RegExpExecArray | null;
+  let seen = 0;
+  while ((m = re.exec(text))) {
+    seen += 1;
+    const route = `${m[1].toUpperCase()} /api/fund-fees${m[2]}`;
+    assert.equal(named.get(route), m[3], `${route} is not in FUND_ACTS under ${m[3]}`);
+  }
+  assert.equal(seen, (text.match(/\napp\.(post|put|patch|delete)\(/g) || []).length, 'a fee write does not open with writeGate');
+  assert.equal(seen, 8);
 });
 
 test('COOL_OFF_ROUTES holds decision 5\'s three routes', () => {

@@ -25,6 +25,7 @@ import capital from '../src/routes/capital.ts';
 import fundLedger from '../src/routes/fund_ledger.ts';
 import { makeD1 } from './_d1_sqlite.mjs';
 import { tableFromBaseline, stripForeignKeys } from './_baseline.mjs';
+import * as fees from './_fund_fees_d709_harness.ts';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const read = (p: string) => readFileSync(new URL(p, import.meta.url), 'utf8');
@@ -358,4 +359,90 @@ test('a GP of record\'s own act leaves no admin audit row; the mark-paid activit
   assert.equal((await call(env, GP, 'POST', '/api/funds/distributions/700/mark-paid')).status, 200);
   assert.equal(auditRows(env).length, 0);
   assert.equal(q(env, "SELECT 1 FROM activity_logs WHERE action_type = 'distribution_marked_paid' AND user_id = ?", GP).length, 1);
+});
+
+// ── #1774's fee acts (PR 2), through D709's own harness ──────────────────
+
+const FEE_TERMS = { fee_start_date: fees.FEE_START, investment_period_end: '2099-12-31', lpa_reference: 'LPA §8.1 (synthetic)' };
+const FEE_FROZEN = 3;
+
+/** D709's fixture, plus a plain Admin holding an overdue notice (D135). */
+function feeEnv(): any {
+  const env = fees.makeEnv();
+  env.__db.exec(stripForeignKeys(read('../sql/migrations/264_admin_notices.sql')));
+  env.__db.exec(`
+INSERT INTO users (id, email, name, role, is_active, kyc_status) VALUES (${FEE_FROZEN}, 'frozen@example.test', 'Frozen Admin', 'admin', 1, 'approved');
+INSERT INTO user_sessions (user_id, jti, factor, assurance_level) VALUES (${FEE_FROZEN}, 'totp-${FEE_FROZEN}', 'totp', 'totp');
+INSERT INTO admin_notices (uid, user_id, kind, subject, body, respond_by, status)
+  VALUES ('notice-fee', ${FEE_FROZEN}, 'fees', 'Fees overdue', 'Answer this notice.', datetime('now', '-1 day'), 'overdue');`);
+  return env;
+}
+const feeRows = (env: any) => JSON.stringify(['fund_mgmt_fee_terms', 'fund_lp_admissions', 'fund_fee_periods']
+  .map((t) => q(env, `SELECT * FROM ${t} ORDER BY rowid`)));
+const totp = (user: number) => ({ jti: `totp-${user}` });
+
+test('a support session\'s fee write gets support_session_refused, as an admin and as the GP of record, and writes nothing', async () => {
+  const env = feeEnv();
+  const draft = await fees.call(env, fees.GP, '/api/fund-fees/1/terms', { method: 'POST', body: FEE_TERMS });
+  assert.equal(draft.status, 201);
+  const before = feeRows(env);
+  for (const user of [fees.GP, fees.ADMIN, fees.SUPER]) {
+    for (const [path, body] of [
+      ['/api/fund-fees/1/terms', FEE_TERMS],
+      [`/api/fund-fees/1/terms/${draft.body.uid}/confirm`, undefined],
+      ['/api/fund-fees/1/lps/100/admission', { admitted_on: fees.FEE_START, source: 'memo' }],
+    ] as Array<[string, unknown]>) {
+      const method = path.endsWith('/admission') ? 'PUT' : 'POST';
+      const r = await fees.call(env, user, path, { method, body, claims: { impersonated_by: fees.SUPER } });
+      assert.equal(r.status, 403, `${user} ${path}: ${JSON.stringify(r.body)}`);
+      assert.equal(r.body?.code, 'support_session_refused', `${user} ${path}`);
+    }
+  }
+  assert.equal(feeRows(env), before);
+});
+
+test('a frozen plain Admin\'s fee write gets 423 admin_frozen and writes nothing', async () => {
+  const env = feeEnv();
+  const before = feeRows(env);
+  for (const [method, path, body] of [
+    ['POST', '/api/fund-fees/1/terms', FEE_TERMS],
+    ['PUT', '/api/fund-fees/1/lps/100/admission', { admitted_on: fees.FEE_START, source: 'memo' }],
+  ] as Array<[string, string, unknown]>) {
+    const r = await fees.call(env, FEE_FROZEN, path, { method, body, claims: totp(FEE_FROZEN) });
+    assert.equal(r.status, 423, `${path}: ${JSON.stringify(r.body)}`);
+    assert.equal(r.body?.code, 'admin_frozen', path);
+  }
+  assert.equal(feeRows(env), before);
+});
+
+test('fee acts: a plain Admin prepares and is refused confirm with no code demand; the Super Admin confirms; each admin act is audited once', async () => {
+  const env = feeEnv();
+  const draft = await fees.call(env, fees.ADMIN, '/api/fund-fees/1/terms', { method: 'POST', body: FEE_TERMS, claims: totp(fees.ADMIN) });
+  assert.equal(draft.status, 201, JSON.stringify(draft.body));
+  // A write the fee service refuses passes the gate and leaves no audit row.
+  const invalid = await fees.call(env, fees.ADMIN, '/api/fund-fees/1/net-invested', { method: 'POST', body: {}, claims: totp(fees.ADMIN) });
+  assert.ok(invalid.status >= 400 && invalid.status < 500 && invalid.status !== 403, JSON.stringify(invalid));
+  const refused = await fees.call(env, fees.ADMIN, `/api/fund-fees/1/terms/${draft.body.uid}/confirm`, { method: 'POST', claims: totp(fees.ADMIN) });
+  assert.deepEqual([refused.status, refused.body?.code], [403, 'super_admin_required']);
+  const ok = await fees.call(env, fees.SUPER, `/api/fund-fees/1/terms/${draft.body.uid}/confirm`, { method: 'POST', claims: totp(fees.SUPER) });
+  assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  // The GP of record's own write leaves no admin row.
+  assert.equal((await fees.call(env, fees.GP, '/api/fund-fees/1/lps/100/admission',
+    { method: 'PUT', body: { admitted_on: fees.FEE_START, source: 'memo' } })).status, 200);
+  assert.deepEqual(auditRows(env).map((a: any) => [a.admin_user_id, a.action]),
+    [[fees.ADMIN, 'fund_admin.fee.write'], [fees.SUPER, 'fund_admin.fee_terms.confirm']]);
+  assert.equal(JSON.parse(auditRows(env)[1].filters_json).fund_id, 1);
+});
+
+test('on a branch Worker an admin is still refused the fee\'s Super Admin acts, as before the table; the GP of record confirms', async () => {
+  const env = feeEnv();
+  env.BRANCH_CODE = 'fr';
+  const draft = await fees.call(env, fees.GP, '/api/fund-fees/1/terms', { method: 'POST', body: FEE_TERMS });
+  assert.equal(draft.status, 201);
+  for (const user of [fees.ADMIN, fees.SUPER]) {
+    const r = await fees.call(env, user, `/api/fund-fees/1/terms/${draft.body.uid}/confirm`, { method: 'POST', claims: totp(user) });
+    assert.deepEqual([r.status, r.body?.code], [403, 'super_admin_required'], `${user}: ${JSON.stringify(r.body)}`);
+  }
+  assert.equal(one(env, 'SELECT status FROM fund_mgmt_fee_terms').status, 'draft');
+  assert.equal((await fees.call(env, fees.GP, `/api/fund-fees/1/terms/${draft.body.uid}/confirm`, { method: 'POST' })).status, 200);
 });
