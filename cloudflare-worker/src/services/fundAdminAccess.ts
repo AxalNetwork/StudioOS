@@ -61,6 +61,7 @@ export type FundActKey =
   | 'capital_call.preview' | 'capital_call.issue' | 'capital_call.receipt'
   | 'distribution.preview' | 'distribution.execute' | 'distribution.mark_paid'
   | 'fund_report.draft' | 'fund_report.issue'
+  | 'fund_booklet.read' | 'fund_booklet.withdraw'
   | 'fund.gp_of_record' | 'fund.economics' | 'fund.write'
   | 'fund_ledger.administrator' | 'fund_ledger.write';
 
@@ -100,6 +101,10 @@ export const FUND_ACTS: readonly FundAct[] = Object.freeze([
   act({ act: 'fund_report.issue', label: 'Issue a fund report pack', tier: 'super_admin', owner: '#1777',
     sentence: 'A Super Admin issues fund reports.',
     routes: ['POST /api/fund-reporting/drafts/:uid/issue'] }),
+  act({ act: 'fund_booklet.read', label: 'Read subscription booklets and their ticks', tier: 'admin', owner: '#1781', sentence: null,
+    routes: ['GET /api/fund-booklets/', 'GET /api/fund-booklets/:uid'] }),
+  act({ act: 'fund_booklet.withdraw', label: 'Withdraw a subscription booklet', tier: 'admin', owner: '#1781', sentence: null,
+    routes: ['POST /api/fund-booklets/:uid/withdraw'] }),
   act({ act: 'fund.gp_of_record', label: "Change a fund's general partner of record", tier: 'super_admin', owner: '#1779',
     sentence: "A Super Admin changes a fund's general partner of record.",
     routes: ['PATCH /api/funds/:id (gp_user_id)'] }),
