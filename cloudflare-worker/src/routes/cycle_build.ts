@@ -955,7 +955,7 @@ async function patchRoadmap(c: WriteCall, ctx: WriteCtx): Promise<Response> {
   }
   // The column goes through the roadmap's own move, so `okr_column_moves` still feeds "shipped this month".
   if (typeof column === 'string' && column !== existing.kanban_status) {
-    await moveRoadmapItem(c.env, { existing: { id: id!, project_id: ctx.project.id, kanban_status: existing.kanban_status },
+    await moveRoadmapItem(c.env, { existing: { id: id!, project_id: ctx.project.id, kanban_status: existing.kanban_status, objective: title },
       userId: ctx.user.id, kanbanStatus: column, sortOrder: await columnEnd(c.env, ctx.project.id, column) });
   }
   return c.json({ ok: true, id });
