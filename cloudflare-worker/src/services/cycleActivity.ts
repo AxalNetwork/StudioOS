@@ -7,8 +7,13 @@ import type { ModuleSlug as RaiseModule } from './raiseCycle';
 import type { GrowSlug as GrowModule } from './growCycle';
 import type { BuildModuleSlug as BuildModule } from '../routes/cycle_build';
 
-/** Each cycle's module slugs: a write logged under a module that does not exist fails to compile. */
-export type CycleModules = { validate: ValidateModule; build: BuildModule; raise: RaiseModule; grow: GrowModule };
+/**
+ * Each cycle's module slugs: a write logged under a module that does not
+ * exist fails to compile. Validate also logs `verdict` (D693): Verdict's
+ * decisions are Validate rows (`validate.verdict`) although Verdict is not one
+ * of the six modules in cycleValidate's MODULES.
+ */
+export type CycleModules = { validate: ValidateModule | 'verdict'; build: BuildModule; raise: RaiseModule; grow: GrowModule };
 
 /**
  * `entityId` is the record id the module read sends. `null` is the explicit

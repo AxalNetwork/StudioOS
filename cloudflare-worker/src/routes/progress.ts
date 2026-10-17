@@ -1363,7 +1363,7 @@ const utcToday = () => new Date().toISOString().slice(0, 10);
  * has loaded the item, checked access and validated the column.
  */
 export async function moveRoadmapItem(env: Env, input: {
-  existing: { id: number; project_id: number; kanban_status: string | null };
+  existing: { id: number; project_id: number; kanban_status: string | null; objective: string };
   userId: number | null; kanbanStatus: string; sortOrder: number;
 }): Promise<void> {
   const { existing, userId, kanbanStatus, sortOrder } = input;
@@ -1376,7 +1376,7 @@ export async function moveRoadmapItem(env: Env, input: {
   // failed request. The existing column-move ledger follows the same rule.
   try {
     await logCycleWrite(env, { projectId: existing.project_id, userId, cycle: 'build', module: 'product-roadmap',
-      entityId: existing.id, action: 'roadmap_moved', summary: `Roadmap item ${existing.id} moved to ${kanbanStatus}` });
+      entityId: existing.id, action: 'roadmap_moved', summary: `${existing.objective} moved to ${kanbanStatus}` });
   } catch (e) { console.error('[progress] cycle roadmap activity:', (e as Error).message); }
 
   // MIGRATION 252 — log the transition, and only when the column actually changed.

@@ -149,7 +149,7 @@ function evidenceKeys(raw: unknown): string[] {
  * is set, so a Withheld decision logs no superseded row.
  */
 const verdictWrite = (user: User, projectId: number, action: string, summary: string) =>
-  ({ projectId, userId: user.id ?? null, cycle: 'validate' as const, module: 'verdict', action, summary });
+  ({ projectId, userId: user.id ?? null, cycle: 'validate' as const, module: 'verdict' as const, action, summary });
 
 /**
  * Record a decision. Never edits or deletes one (D693 decision 4).
