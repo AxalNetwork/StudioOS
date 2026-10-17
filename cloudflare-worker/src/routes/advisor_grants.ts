@@ -33,6 +33,7 @@ import { requireAuth } from '../auth';
 import { companyScope } from '../services/tenancyScope';
 import { ACTIVE_COMPANY_HEADER, resolveActiveCompany } from '../middleware/activeCompany';
 import { hasActivePairwiseNda } from '../services/trust';
+import { admittedCounts } from '../services/dataRoomAccess';
 
 const grants = new Hono<{ Bindings: Env }>();
 
@@ -428,13 +429,9 @@ grants.get('/shared/:projectUid/brief', async (c) => {
   let room: { open: number; withheld_behind_nda: number } | null = null;
   if (grant.scope_data_room) {
     const nda = await hasActivePairwiseNda(c.env, grant.granted_by_user_id, user.id);
-    const counts = await c.env.DB.prepare(
-      `SELECT COUNT(*) AS total,
-              SUM(CASE WHEN visibility = 'open' THEN 1 ELSE 0 END) AS open_count
-         FROM data_room_files WHERE project_id = ?`,
-    ).bind(project.id).first<any>();
-    const total = Number(counts?.total || 0);
-    const open = Number(counts?.open_count || 0);
+    // D691 decision 6 — counted as an invited investor who has not committed:
+    // a committed-only, private or expired file is not counted at all.
+    const { total, open } = await admittedCounts(c.env, project.id, false, false);
     // A count, never the names — the data room's own rule, and it does not
     // relax because the reader is an advisor rather than an investor.
     room = { open: nda ? total : open, withheld_behind_nda: nda ? 0 : total - open };

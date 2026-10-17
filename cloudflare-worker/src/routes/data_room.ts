@@ -54,6 +54,8 @@ import { mapError, newUid, nowIso } from './_t13t14t15_helpers';
 import { companyScope } from '../services/tenancyScope';
 import { ACTIVE_COMPANY_HEADER, resolveActiveCompany } from '../middleware/activeCompany';
 import { mintDownloadToken } from '../services/signedDownload';
+import { tierAdmits, investorCommitted, admittedCounts, isAccessTier, expiryMs } from '../services/dataRoomAccess';
+import { CHECKLIST_KEYS } from '../services/raiseCycle';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -134,6 +136,60 @@ export async function logAccess(env: Env, projectId: number, userId: number, act
   }
 }
 
+/**
+ * D691 decision 6 — the access fields a file write may carry, checked:
+ * a tier from the three, an expiry date, a `dd_request_id` that is a request
+ * of this venture's own `dd_cases` (else 404), and a checklist item the room
+ * knows. Only the fields the body names are returned.
+ */
+type AccessValues = Partial<Record<'access_tier' | 'access_expires_at' | 'dd_request_id' | 'checklist_item', string | number | null>>;
+async function accessFields(env: Env, projectId: number, body: any): Promise<{ values: AccessValues } | { refusal: string; status: number }> {
+  const values: AccessValues = {};
+  if (body.access_tier !== undefined) {
+    if (!isAccessTier(body.access_tier)) return { refusal: 'access_tier must be invited, committed or nobody', status: 400 };
+    values.access_tier = body.access_tier;
+  }
+  if (body.access_expires_at !== undefined) {
+    if (body.access_expires_at === null || body.access_expires_at === '') values.access_expires_at = null;
+    else if (typeof body.access_expires_at !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(body.access_expires_at) || expiryMs(body.access_expires_at) == null) {
+      return { refusal: 'access_expires_at must be a date (YYYY-MM-DD)', status: 400 };
+    } else values.access_expires_at = body.access_expires_at;
+  }
+  if (body.dd_request_id !== undefined) {
+    if (body.dd_request_id === null) values.dd_request_id = null;
+    else {
+      const id = Number(body.dd_request_id);
+      const row = Number.isInteger(id) && id > 0 ? await env.DB.prepare(
+        `SELECT r.id FROM dd_requests r JOIN dd_cases k ON k.id = r.case_id
+          WHERE r.id = ? AND k.subject_type = 'project' AND k.subject_id = ?`,
+      ).bind(id, projectId).first<{ id: number }>() : null;
+      if (!row) return { refusal: 'Request not found', status: 404 };
+      values.dd_request_id = Number(row.id);
+    }
+  }
+  if (body.checklist_item !== undefined) {
+    if (body.checklist_item === null) values.checklist_item = null;
+    else if (typeof body.checklist_item !== 'string' || !CHECKLIST_KEYS.has(body.checklist_item)) return { refusal: 'Unknown checklist item', status: 400 };
+    else values.checklist_item = body.checklist_item;
+  }
+  return { values };
+}
+
+/** The top-level folder of this name, created on first use. */
+async function topFolder(env: Env, projectId: number, name: string): Promise<number> {
+  const found = await env.DB.prepare(
+    'SELECT id FROM data_room_folders WHERE project_id = ? AND parent_id IS NULL AND name = ? ORDER BY id LIMIT 1',
+  ).bind(projectId, name).first<{ id: number }>();
+  if (found) return Number(found.id);
+  const uid = newUid();
+  await env.DB.prepare(
+    `INSERT INTO data_room_folders (uid, project_id, parent_id, name, visibility, display_order, created_at, updated_at)
+     VALUES (?, ?, NULL, ?, 'open', 0, ?, ?)`,
+  ).bind(uid, projectId, name, nowIso(), nowIso()).run();
+  const made = await env.DB.prepare('SELECT id FROM data_room_folders WHERE uid = ?').bind(uid).first<{ id: number }>();
+  return Number(made?.id);
+}
+
 function badVisibility(v: unknown): boolean {
   return v !== undefined && !VISIBILITY.has(String(v));
 }
@@ -147,16 +203,22 @@ r.get('/shared', async (c) => {
   try {
     const user = await requireAuth(c);
     const rows = await c.env.DB.prepare(
-      `SELECT g.uid AS grant_uid, g.created_at, g.expires_at,
-              p.uid AS project_uid, p.name AS project_name,
-              (SELECT COUNT(*) FROM data_room_files f WHERE f.project_id = g.project_id) AS file_count
+      `SELECT g.uid AS grant_uid, g.created_at, g.expires_at, g.project_id,
+              p.uid AS project_uid, p.name AS project_name
          FROM data_room_grants g
          JOIN projects p ON p.id = g.project_id
         WHERE g.investor_user_id = ? AND g.status = 'active'
           AND (g.expires_at IS NULL OR datetime(g.expires_at) > datetime('now'))
         ORDER BY g.created_at DESC`,
     ).bind(user.id).all<any>();
-    return c.json({ items: rows.results || [] });
+    // D691 decision 6 — the count is what this investor's tier admits, so a
+    // committed-only, private or expired file is never counted.
+    const items = [];
+    for (const { project_id, ...r } of rows.results || []) {
+      const committed = await investorCommitted(c.env, Number(project_id), user.id);
+      items.push({ ...r, file_count: (await admittedCounts(c.env, Number(project_id), committed, true)).total });
+    }
+    return c.json({ items });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -177,15 +239,21 @@ r.get('/shared/:projectUid', async (c) => {
          FROM data_room_folders WHERE project_id = ? ORDER BY display_order, name`,
     ).bind(project.id).all<any>();
     const files = await c.env.DB.prepare(
-      `SELECT uid, name, folder_id, content_type, size_bytes, visibility, created_at
+      `SELECT uid, name, folder_id, content_type, size_bytes, visibility, created_at, access_tier, access_expires_at
          FROM data_room_files WHERE project_id = ? ORDER BY name`,
     ).bind(project.id).all<any>();
 
+    // D691 decision 6 — the tier and expiry first: a file they hide is neither
+    // listed nor counted. The NDA gate then applies to what is left.
+    const committed = await investorCommitted(c.env, project.id, user.id);
+    const now = Date.now();
+    const admitted = (files.results || []).filter((f) => tierAdmits(f, committed, now))
+      .map(({ access_tier, access_expires_at, ...rest }) => rest);
     const visible = (v: string) => v === 'open' || nda;
     // Filenames are withheld, not greyed out — see the header note.
-    const openFiles = (files.results || []).filter((f) => visible(f.visibility));
+    const openFiles = admitted.filter((f) => visible(f.visibility));
     const openFolders = (folders.results || []).filter((f) => visible(f.visibility));
-    const withheld = (files.results || []).length - openFiles.length;
+    const withheld = admitted.length - openFiles.length;
 
     await logAccess(c.env, project.id, user.id, 'open_room', null);
     return c.json({
@@ -216,9 +284,13 @@ r.post('/shared/:projectUid/files/:uid/download', async (c) => {
     if (!project || !grant) return c.json({ detail: 'Data room not found' }, 404);
 
     const file = await c.env.DB.prepare(
-      'SELECT id, uid, name, r2_key, visibility FROM data_room_files WHERE uid = ? AND project_id = ?',
+      'SELECT id, uid, name, r2_key, visibility, access_tier, access_expires_at FROM data_room_files WHERE uid = ? AND project_id = ?',
     ).bind(c.req.param('uid'), project.id).first<any>();
-    if (!file) return c.json({ detail: 'File not found' }, 404);
+    // D691 decision 6 — a file the tier or its expiry hides answers as one that
+    // is not there: its existence is not confirmed.
+    if (!file || !tierAdmits(file, await investorCommitted(c.env, project.id, user.id))) {
+      return c.json({ detail: 'File not found' }, 404);
+    }
 
     // The gate is re-checked HERE, not inherited from the listing. A uid
     // captured while an NDA was live must stop working when it lapses.
@@ -258,6 +330,7 @@ r.get('/:projectUid', async (c) => {
     // and never a view count — no per-file view is logged (header note).
     const files = await c.env.DB.prepare(
       `SELECT f.id, f.uid, f.name, f.folder_id, f.content_type, f.size_bytes, f.visibility, f.created_at,
+              f.access_tier, f.access_expires_at,
               (SELECT COUNT(*) FROM data_room_access_log l
                 WHERE l.file_id = f.id AND l.project_id = f.project_id AND l.action = 'download') AS downloads
          FROM data_room_files f WHERE f.project_id = ? ORDER BY f.name`,
@@ -271,7 +344,15 @@ r.get('/:projectUid', async (c) => {
                    AND n.party_b_user_id = g.investor_user_id
                    AND n.status = 'active'
                    AND (n.valid_until IS NULL OR datetime(n.valid_until) > datetime('now'))
-              ) AS nda_signed
+              ) AS nda_signed,
+              -- D691 decision 6: the investor is a committed prospect of this
+              -- venture, the match a committed-only file is opened by.
+              EXISTS (
+                SELECT 1 FROM raise_prospects rp
+                 WHERE rp.project_id = g.project_id AND rp.stage = 'committed'
+                   AND rp.email IS NOT NULL AND u.email IS NOT NULL
+                   AND LOWER(rp.email) = LOWER(u.email)
+              ) AS committed
          FROM data_room_grants g
          JOIN users u ON u.id = g.investor_user_id
         WHERE g.project_id = ? ORDER BY g.created_at DESC`,
@@ -452,6 +533,9 @@ r.post('/:projectUid/files', async (c) => {
       return c.json({ detail: 'too_large', max_bytes: MAX_FILE_BYTES }, 413);
     }
 
+    const access = await accessFields(c.env, project.id, body);
+    if ('refusal' in access) return c.json({ detail: access.refusal }, access.status as any);
+
     let folderId: number | null = null;
     if (body.folder_uid) {
       const folder = await c.env.DB.prepare(
@@ -459,6 +543,9 @@ r.post('/:projectUid/files', async (c) => {
       ).bind(String(body.folder_uid), project.id).first<{ id: number }>();
       if (!folder) return c.json({ detail: 'Folder not found' }, 404);
       folderId = folder.id;
+    } else if (typeof body.folder_name === 'string' && body.folder_name.trim()) {
+      // D691 — Upload names a top-level folder, created on first use.
+      folderId = await topFolder(c.env, project.id, body.folder_name.trim().slice(0, NAME_MAX));
     }
 
     // The key is derived, never taken from the request: a caller-supplied key
@@ -473,11 +560,14 @@ r.post('/:projectUid/files', async (c) => {
     await c.env.DB.prepare(
       `INSERT INTO data_room_files
          (uid, project_id, folder_id, name, r2_key, content_type, size_bytes,
-          visibility, uploaded_by_user_id, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          visibility, uploaded_by_user_id, created_at, updated_at,
+          access_tier, access_expires_at, dd_request_id, checklist_item)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(uid, project.id, folderId, name.slice(0, NAME_MAX), key, declaredMime,
            bytes.byteLength, body.visibility ? String(body.visibility) : 'open',
-           user.id, nowIso(), nowIso()).run();
+           user.id, nowIso(), nowIso(),
+           access.values.access_tier ?? 'invited', access.values.access_expires_at ?? null,
+           access.values.dd_request_id ?? null, access.values.checklist_item ?? null).run();
     return c.json({ uid, size_bytes: bytes.byteLength }, 201);
   } catch (e) { return mapError(c, e); }
 });
@@ -489,9 +579,15 @@ r.patch('/:projectUid/files/:uid', async (c) => {
     if (!project) return c.json({ detail: 'Project not found' }, 404);
     const body = await c.req.json().catch(() => ({} as any));
     if (badVisibility(body.visibility)) return c.json({ detail: 'invalid visibility' }, 400);
+    const access = await accessFields(c.env, project.id, body);
+    if ('refusal' in access) return c.json({ detail: access.refusal }, access.status as any);
 
     const sets: string[] = []; const params: any[] = [];
     if (body.name !== undefined) { sets.push('name = ?'); params.push(String(body.name).slice(0, NAME_MAX)); }
+    // D691 decision 6 — the file's tier, its expiry, and the request or checklist item it answers.
+    for (const col of ['access_tier', 'access_expires_at', 'dd_request_id', 'checklist_item'] as const) {
+      if (col in access.values) { sets.push(`${col} = ?`); params.push(access.values[col]); }
+    }
     if (body.visibility !== undefined) { sets.push('visibility = ?'); params.push(String(body.visibility)); }
     if (body.folder_uid !== undefined) {
       if (body.folder_uid === null) { sets.push('folder_id = ?'); params.push(null); }

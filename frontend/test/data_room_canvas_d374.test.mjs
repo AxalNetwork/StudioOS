@@ -54,10 +54,15 @@ test('what the canvas draws and the room cannot do is said, never drawn as worki
   // a count, and its "Views this week" tile is not claimed.
   assert.ok(CANVAS.includes('{{ fi.views }}'));
   assert.doesNotMatch(both, /\} views?\b|views this week|\.views\b/i);
-  // Two tiers are drawn as not built, each with its reason.
-  const unbuilt = ACCESS_TIERS.filter((t) => !t.built).map((t) => t.label);
-  assert.deepEqual(unbuilt, ['Committed only', 'Private to you']);
-  for (const t of ACCESS_TIERS.filter((x) => !x.built)) assert.match(t.note, /^Not built/);
+  // D691 decision 6 (#1700) — the three tiers are stored and every investor
+  // read applies them, so none is drawn as not built; each note says where
+  // the tier is set.
+  assert.deepEqual(ACCESS_TIERS.map((t) => [t.key, t.label]),
+    [['invited', 'Everyone invited'], ['committed', 'Committed only'], ['nobody', 'Private to you']]);
+  for (const t of ACCESS_TIERS) {
+    assert.doesNotMatch(t.note, /Not built/);
+    assert.match(t.note, /Set per file from Raise › Data room’s Upload and Edit file, not on this page\./);
+  }
   // NDA terms have no store.
   assert.match(page, /<Unrecorded reason="The mutual NDA is signed through the e-sign rail; its terms are not stored with this room\." \/>/);
   // The upload bar does not invent a percentage.

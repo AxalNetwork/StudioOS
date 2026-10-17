@@ -46,8 +46,8 @@ test('cap-table vesting readers remain scoped to their intended audience', () =>
   // and writes nothing — pinned below so the list can grow only that way.
   assert.deepEqual(
     readers.sort(),
-    ['integrations/providers/carta.ts', 'routes/captable.ts', 'routes/company.ts', 'routes/cycle_build.ts'],
-    'only the Carta importer and the three reviewed readers should touch these tables',
+    ['integrations/providers/carta.ts', 'routes/captable.ts', 'routes/company.ts', 'routes/cycle_build.ts', 'services/capTableWrites.ts'],
+    'only the Carta importer, the three reviewed readers and the one reviewed writer should touch these tables',
   );
   const company = read('cloudflare-worker/src/routes/company.ts');
   assert.doesNotMatch(company, /cap_table_vesting/, 'the Team page reads pools, not vesting rows');
@@ -58,6 +58,22 @@ test('cap-table vesting readers remain scoped to their intended audience', () =>
   assert.match(build, /v\.holder_id = h\.id AND v\.user_id = h\.user_id[\s\S]*WHERE h\.project_id = \?/,
     'the Build cycle can read vesting only through a holder of the requested project and owner');
   assert.doesNotMatch(build, /(INSERT INTO|UPDATE|DELETE FROM)\s+cap_table_vesting/, 'the Build cycle cannot write personal vesting');
+  // D691 decision 4 (#1700): `addHolder()` and `updateHolder()` write a founder's
+  // vesting, only ever for a holder of the requested venture, on that holder's
+  // own user_id. It names no pool.
+  const writes = read('cloudflare-worker/src/services/capTableWrites.ts');
+  assert.doesNotMatch(writes, /cap_table_option_pools/, 'the holder writer touches no pool');
+  // addHolder: the vesting row's holder is the register row it just inserted for args.projectId, on the same user.
+  assert.match(writes, /INSERT INTO cap_table_holders \(user_id, project_id,[\s\S]*?RETURNING id`,\s*\)\.bind\(owner\.id, args\.projectId,/);
+  assert.match(writes, /INSERT INTO cap_table_vesting \(user_id, holder_id,[\s\S]*?\)\.bind\(owner\.id, holderId,/,
+    'the vesting row carries the user_id and holder_id of the register row just written');
+  // updateHolder: the holder is read back for args.projectId first, and its own user_id keys the vesting.
+  assert.match(writes, /FROM cap_table_holders WHERE id = \? AND project_id = \?'\)\s*\.bind\(holderId, args\.projectId\)/);
+  assert.match(writes, /WHERE holder_id = \? AND user_id = \?`,\s*\)\.bind\([^)]*holderId, reg\.user_id\)/);
+  assert.match(writes, /INSERT INTO cap_table_vesting \(user_id, holder_id,[\s\S]*?\)\.bind\(reg\.user_id, holderId,/);
+  // The only delete is the compensating one, scoped to the same pair.
+  assert.deepEqual([...writes.matchAll(/DELETE FROM cap_table_vesting[^']*/g)].map((m) => m[0]),
+    ['DELETE FROM cap_table_vesting WHERE holder_id = ? AND user_id = ?']);
 });
 
 test('the endpoint is scoped to the caller', () => {

@@ -86,11 +86,17 @@ test('the data room stays behind its NDA for an advisor too', () => {
   // investor: a count, never the names.
   assert.match(routes, /hasActivePairwiseNda\(c\.env, grant\.granted_by_user_id, user\.id\)/);
   assert.match(routes, /withheld_behind_nda/);
-  const at = routes.indexOf('data_room_files');
+  // D691 decision 6 (#1700) — the count comes from `admittedCounts`, the one
+  // predicate every room read shares, so a committed-only, private or expired
+  // file is not counted either. Its statement reads no name.
+  assert.match(routes, /admittedCounts\(c\.env, project\.id, false, false\)/);
+  assert.doesNotMatch(routes, /FROM data_room_files/, 'the brief counts through admittedCounts, not its own SELECT');
+  const access = read('cloudflare-worker/src/services/dataRoomAccess.ts');
+  const at = access.indexOf('FROM data_room_files');
   assert.ok(at > -1);
-  const stmt = routes.slice(at - 300, at + 200);
-  assert.match(stmt, /COUNT\(\*\)/);
-  assert.doesNotMatch(stmt, /f\.name|SELECT name/);
+  const stmt = access.slice(access.lastIndexOf('prepare(', at), access.indexOf(')', at) + 1);
+  assert.match(stmt, /SELECT visibility, access_tier, access_expires_at FROM data_room_files WHERE project_id = \?/);
+  assert.doesNotMatch(stmt, /name|uid|r2_key/);
 });
 
 test('revoking is a state, never a delete', () => {

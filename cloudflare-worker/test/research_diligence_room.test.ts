@@ -20,7 +20,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { SignJWT } from 'jose';
-import { tableFromBaseline, stripForeignKeys } from './_baseline.mjs';
+import { tableFromBaseline, stripForeignKeys, addColumnsFrom } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 
 import research from '../src/routes/research.ts';
@@ -28,6 +28,7 @@ import research from '../src/routes/research.ts';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const MIGRATION_221 = readdirSync(resolve(ROOT, 'cloudflare-worker/sql/migrations')).find((f) => f.startsWith('221_')) as string;
 const BASELINE = readFileSync(resolve(ROOT, 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
+const MIG463 = readFileSync(resolve(ROOT, 'cloudflare-worker/sql/migrations/463_raise_record_stores.sql'), 'utf8');
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 
 const FOUNDER = 1;
@@ -50,6 +51,10 @@ function freshDb() {
   for (const t of ['data_room_grants', 'data_room_files', 'data_room_folders', 'data_room_access_log', 'pairwise_ndas']) {
     db.exec(stripForeignKeys(tableFromBaseline(BASELINE, t)));
   }
+  // D691 (#1700) — migration 463's file access columns, which every room read now filters on.
+  addColumnsFrom(db, stripForeignKeys(MIG463), 'data_room_files');
+  // The pipeline a committed-only file is opened by.
+  db.exec(stripForeignKeys(tableFromBaseline(BASELINE, 'raise_prospects')));
   // The drafts table as migration 221 declares it, cut from the file itself.
   const m221 = readFileSync(resolve(ROOT, 'cloudflare-worker/sql/migrations', MIGRATION_221), 'utf8');
   const start = m221.indexOf('CREATE TABLE IF NOT EXISTS research_zone_drafts');

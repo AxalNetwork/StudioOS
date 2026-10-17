@@ -10,7 +10,7 @@ import { reportError } from '../../lib/log';
 import AdvisorGrantSection from './AdvisorGrantSection';
 import {
   ACCESS_TIERS, AUDIT_FILTERS, accessNow, auditLine, auditMatches, downloadsLabel,
-  filesUnder, folderTree, noAccessReason, queueRefusal, roomStats,
+  filesUnder, folderTree, noAccessReason, queueRefusal, roomStats, tierOf,
 } from './dataRoomRead';
 
 /**
@@ -317,18 +317,28 @@ function Settings({ item, kind, node, grants, busy, onGate, onDelete }) {
 
       <div className={`${eyebrow} mt-4`}>Who can see this</div>
       <ul className="mt-1.5 space-y-1.5">
-        {ACCESS_TIERS.map((t) => (
-          <li key={t.label} className={`rounded-lg border p-2.5 ${
-            t.built ? 'border-violet-300 bg-violet-50 dark:border-violet-800 dark:bg-violet-950/30' : 'border-gray-200 dark:border-gray-800'}`}
-          >
-            <div className="flex items-center justify-between gap-2">
-              <span className={`text-sm font-semibold ${t.built ? 'text-axal-ink dark:text-gray-100' : 'text-gray-500'}`}>{t.label}</span>
-              {t.built ? <Pill tone="info">This room</Pill> : <Pill>Not built</Pill>}
-            </div>
-            <p className="mt-0.5 text-[11.5px] leading-relaxed text-axal-muted">{t.note}</p>
-          </li>
-        ))}
+        {ACCESS_TIERS.map((t) => {
+          // D691 decision 6 — a file's own tier is marked; a folder has none.
+          const marked = kind === 'file' && tierOf(item) === t.key;
+          return (
+            <li key={t.label} className={`rounded-lg border p-2.5 ${
+              marked ? 'border-violet-300 bg-violet-50 dark:border-violet-800 dark:bg-violet-950/30' : 'border-gray-200 dark:border-gray-800'}`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className={`text-sm font-semibold ${marked ? 'text-axal-ink dark:text-gray-100' : 'text-gray-500 dark:text-gray-400'}`}>{t.label}</span>
+                {marked && <Pill tone="info">This file</Pill>}
+              </div>
+              <p className="mt-0.5 text-[11.5px] leading-relaxed text-axal-muted">{t.note}</p>
+            </li>
+          );
+        })}
       </ul>
+      {kind === 'folder' && (
+        <p className="mt-1.5 text-[11.5px] text-axal-muted">A folder has no tier: access is set per file.</p>
+      )}
+      {kind === 'file' && item.access_expires_at && (
+        <p className="mt-1.5 text-[11.5px] text-axal-muted">Access ends {String(item.access_expires_at).slice(0, 10)}.</p>
+      )}
 
       <div className="mt-4 flex items-start justify-between gap-3">
         <div>
@@ -520,7 +530,6 @@ function FounderRoom({ projects, initialProjectUid }) {
           ]}
           coverageNote="The activity list is the last fifty events; the weekly figures count the whole log."
           unavailable={[
-            ['Committed-only and private tiers', 'The investor reads show a file to anyone with a grant and a signed NDA, so a third mark would leak.'],
             ['Watermark and preview', 'There is no PDF pipeline in the worker; a download is single-use, expires in two minutes, and is logged.'],
             ['Per-file views', 'Only downloads are logged per file.'],
           ]}
