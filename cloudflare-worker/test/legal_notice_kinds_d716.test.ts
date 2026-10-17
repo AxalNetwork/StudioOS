@@ -261,3 +261,13 @@ test('a booklet moves open -> submitted -> withdrawn only, freezes at submit, an
   assert.throws(() => db.exec('DELETE FROM fund_subscription_booklets'), /never deleted/);
   assert.throws(() => db.exec("INSERT INTO fund_subscription_booklets (uid, application_id, fund_slug) VALUES ('b3', 1, 'other-fund')"), /CHECK/);
 });
+
+test('D716 #1776\'s paper for a capital call notice prints no signature line and no counterparty block', async () => {
+  const { paperModel, paperHtml } = await import('../src/services/legalPaper.ts');
+  const html = paperHtml(paperModel({
+    title: 'Capital Call Notice', body: 'The Fund calls capital.', slug: 'capital_call_notice', bodySha256: 'a'.repeat(64), state: { kind: 'draft' },
+  }), { pageSize: 'letter', cover: 'light', medium: 'screen', fonts: 'omit' });
+  assert.ok(!html.includes('By: ___'), 'no signature line');
+  assert.ok(!html.includes('[Counterparty Legal Name]'), 'no counterparty block');
+  assert.ok(html.includes('Axal VC Spin-Out Lab Fund I LP') && html.includes('By: Axal VC GP LLC, its general partner'), 'the sender, through its GP');
+});

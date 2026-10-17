@@ -66,6 +66,23 @@ Every admin act leaves one `fund_admin.<act>` row in `admin_audit_log`. `COOL_OF
 
 The `github` provider is a GitHub App's read-only user authorization. `GET /:uid/repositories` lists what its installations reach and what is chosen; `PUT /:uid/repositories` saves a choice and a project, after re-reading the grant and refusing any permission beyond the registry's four read scopes (`write_scope_refused`). Both need the active company enabled for the connection, and the project must be in it. `POST /:uid/sync` lands issues on `roadmap_okrs` and pull requests on `mvp_features`, linked through `connector_fed_items` (migration 445) so a re-sync updates; releases are recorded with no store. `GET /:uid/sync-status` returns the running sync's percentage and what it is reading. `GET /:uid/fed` returns, for every connector, a count per module it feeds; a connector that does not record deliveries says Not recorded, never 0.
 
+### Fund notices and booklets Worker contract (D716, #1781)
+
+Fund notices are mounted at `/api/fund-notices` (`routes/fund_notices.ts`, `services/fundNotices.ts`, `services/fundNoticeStore.ts`, migration 478). The Subscription Booklet's store is `/api/fund-booklets` (#1817). See `decisions/D716.md`.
+- **An Admin on HQ** (`hq_only` on a branch; support session refused):
+  - `GET /types`.
+  - `POST /preview { type, source, inputs, page_size }` answers `{ html, paper_sha256, figures, figures_sha256, refusal }`, with fonts omitted, Draft and `no-store` (`fund_notice.preview`).
+  - `POST /calls/:callUid/preview` gives each line's figures and one digest (`fund_notice.preview`).
+  - `GET /` and `GET /:uid` read the notices; `GET /:uid/pdf` serves the kept PDF.
+- **The Super Admin** (`fund_notice.issue`, `super_admin_required` before any TOTP or step-up):
+  - `POST /issue { type, source, inputs, page_size, figures_sha256, reason? }`;
+  - `POST /calls/:callUid/issue { page_size, digest }`.
+- **The LP** (only notices addressed to their own LP row; anyone else gets 404):
+  - `GET /mine` (with `superseded` and `instructions_changed`);
+  - `GET /mine/:uid`;
+  - `GET /mine/:uid/pdf`.
+- **A PDF** is drawn once per stamp through Browser Run (never pdf-lib), kept in R2, and answered `private, no-store`.
+
 ### Money rails Worker contract (D707, #1772)
 
 `GET /api/admin/money-rails` (`admin_money_rails.ts`, admin only) answers `{ entities, kinds, stripe }`:
