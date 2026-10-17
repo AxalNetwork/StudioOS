@@ -18,6 +18,7 @@ import {
   computePeriod, parseQuarter, previousQuarter, quarterOf, FEE_CALC_SENTENCES,
   type FeeTerms, type PeriodInputs, type PeriodResult,
 } from './fundFeeCalc';
+import { fundPayeeOf, payInstructionsFor } from './payInstructions';
 
 /** Every refusal this store gives, as fixed sentences (as D628's `LEDGER_SENTENCES`). */
 export const FEE_SENTENCES = [
@@ -392,15 +393,32 @@ export async function readPeriod(env: Env, fundId: number, quarter: string) {
        FROM fund_fee_lines l LEFT JOIN capital_calls cc ON cc.id = l.capital_call_line_id WHERE l.period_id = ? ORDER BY l.limited_partner_id`,
   ).bind(period.id).all<any>());
   const { id: _id, terms_id: _t, net_invested_id: _n, issued_by: _b, ...out } = period;
-  return { period: out, lines };
+  return { period: out, lines, remittance: await remittanceFor(env, fundId, period.remittance_reference) };
+}
+
+/**
+ * Decision 9: where the Fund remits the period's fee. Only Fund I is an Axal
+ * entity (#1773's `fundPayeeOf`), so only its remittance reads #1773's
+ * resolver, and only its masked output and warning are printed. Any other
+ * fund never reads the registry and names no Axal payee. Issuing needs none
+ * of this.
+ */
+export async function remittanceFor(env: Env, fundId: number, reference: string) {
+  if (await fundPayeeOf(env, fundId) !== 'fund') {
+    return { available: false as const, code: 'not_an_axal_fund', message: 'Axal holds no payment instructions for this fund.' };
+  }
+  const pay = await payInstructionsFor(env, 'gp', 'management_fee');
+  if (!pay.ok) return { available: false as const, code: pay.code, message: pay.message };
+  return { available: true as const, payee: pay.payee, purpose: pay.purpose, reference, instructions: pay.instructions, warning: pay.warning };
 }
 
 /**
  * Decision 9: one LP's statement. The LP funds its share by a capital
- * contribution, so a statement carries no payment instructions.
+ * contribution, so `pay_to` is never due; `remittance` is the Fund's to the
+ * GP, as the period read gives it.
  */
 export async function statementFor(env: Env, fundId: number, quarter: string, lpId: number) {
-  const { period, lines } = await readPeriod(env, fundId, quarter);
+  const { period, lines, remittance } = await readPeriod(env, fundId, quarter);
   const line = lines.find(l => l.limited_partner_id === lpId);
   if (!line) throw new FeeRefusal('LP not found.', 404);
   const terms = await env.DB.prepare('SELECT annual_bps, lpa_reference, investment_period_end FROM fund_mgmt_fee_terms WHERE fund_id = ? AND id = (SELECT terms_id FROM fund_fee_periods WHERE fund_id = ? AND quarter = ?)')
@@ -416,5 +434,6 @@ export async function statementFor(env: Env, fundId: number, quarter: string, lp
     offset_cents: line.offset_cents, net_fee_cents: line.net_fee_cents, reference_code: line.reference_code,
     funding_call_line: line.capital_call_line_uid ?? null, status: line.status,
     pay_to: { due: false, sentence: 'Nothing is due from you against this statement.' },
+    remittance,
   };
 }

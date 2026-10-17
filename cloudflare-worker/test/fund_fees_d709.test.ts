@@ -2,9 +2,8 @@
  * D709 (#1774) — the management-fee routes over real node:sqlite: access, terms,
  * preview, issue, the seals and statements. Every figure is synthetic.
  *
- * The remittance block (decision 9, #1773's `fundPayeeOf` and
- * `payInstructionsFor`) and its account-number sweep join this file once #1773
- * merges; until then a statement's `pay_to` is asserted here.
+ * The remittance block (decision 9) reads #1773's `fundPayeeOf` and
+ * `payInstructionsFor`; its tests sweep for the synthetic account number.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/fund_fees_d709.test.ts
@@ -13,9 +12,19 @@ import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   ADMIN, SUPER, GP, OTHER_GP, PRO_LP, LP_USER, Q0, Q1, Q2, FEE_START,
-  makeEnv, call, q, one, count, readyFund, preview, issue,
+  makeEnv, call, q, one, count, readyFund, preview, issue, gpAccount, GP_NUMBER,
 } from './_fund_fees_d709_harness.ts';
 import { parseQuarter } from '../src/services/fundFeeCalc.ts';
+import { PAY_WARNING } from '../src/services/payInstructions.ts';
+
+/** Every console line written while `fn` runs. */
+async function consoleOf(fn: () => Promise<void>): Promise<string> {
+  const lines: string[] = [];
+  const saved = { log: console.log, warn: console.warn, error: console.error, info: console.info };
+  for (const k of Object.keys(saved) as (keyof typeof saved)[]) console[k] = (...a: unknown[]) => { lines.push(a.map(String).join(' ')); };
+  try { await fn(); } finally { Object.assign(console, saved); }
+  return lines.join('\n');
+}
 
 // No module here may reach the network: fetch is a counter that throws.
 let fetches = 0;
@@ -235,4 +244,70 @@ test('statements: one LP\'s figures and reference; nothing is due from the LP', 
   assert.equal((await call(env, GP, `/api/fund-fees/1/periods/${Q0}/statements/500`)).status, 404, 'another fund\'s LP');
   assert.equal((await call(env, GP, '/api/fund-fees/1/periods/2026Q9')).status, 404);
   assert.equal((await call(env, OTHER_GP, `/api/fund-fees/1/periods/${Q0}/statements/100`)).status, 404);
+});
+
+test('remittance: on Fund I, the GP\'s masked account and the warning, or #1773\'s reason; the full number nowhere', async () => {
+  const env = makeEnv();
+  await readyFund(env);
+  const p = await preview(env);
+  await issue(env, p.body.digest);
+  const none = await call(env, GP, `/api/fund-fees/1/periods/${Q0}`);
+  assert.equal(none.body.remittance.available, false);
+  assert.equal(none.body.remittance.code, 'no_active_account');
+  assert.match(none.body.remittance.message, /Axal VC GP LLC has no active account for management fee/);
+  assert.equal(none.body.remittance.instructions, undefined);
+
+  await gpAccount(env);
+  const bodies: any[] = [];
+  const logged = await consoleOf(async () => {
+    for (const path of [`/api/fund-fees/1/periods/${Q0}`, `/api/fund-fees/1/periods/${Q0}/statements/100`, `/api/fund-fees/1/periods/${Q0}/statements/200`, '/api/fund-fees/1']) {
+      const r = await call(env, GP, path);
+      assert.equal(r.status, 200, path);
+      bodies.push(r.body);
+    }
+  });
+  const [period, s100] = bodies;
+  for (const r of [period.remittance, s100.remittance]) {
+    assert.equal(r.available, true);
+    assert.deepEqual([r.payee, r.purpose, r.reference], ['gp', 'management_fee', `AXAL-MF-${Q0}-F1`]);
+    assert.equal(r.instructions.account_masked, `••••${GP_NUMBER.slice(-4)}`);
+    assert.equal(r.instructions.beneficiary_name, 'Axal VC GP LLC');
+    assert.equal(r.warning, PAY_WARNING);
+  }
+  // The LP still owes nothing against the statement.
+  assert.deepEqual(s100.pay_to, { due: false, sentence: 'Nothing is due from you against this statement.' });
+  // The sweep: the full number is in no response, no plaintext row and no console line.
+  for (const b of bodies) assert.ok(!JSON.stringify(b).includes(GP_NUMBER), 'a response carries the number');
+  assert.ok(!logged.includes(GP_NUMBER), 'a console line carries the number');
+  const tables = q(env, "SELECT name FROM sqlite_master WHERE type = 'table'").map((t: any) => t.name);
+  for (const t of tables) assert.ok(!JSON.stringify(q(env, `SELECT * FROM "${t}"`)).includes(GP_NUMBER), `${t} holds the number in plaintext`);
+});
+
+test('remittance: another fund\'s statements name no Axal payee and never read the registry', async () => {
+  const env = makeEnv();
+  await gpAccount(env);
+  const t = await call(env, OTHER_GP, '/api/fund-fees/2/terms', { method: 'POST', body: { fee_start_date: FEE_START, investment_period_end: '2099-12-31', lpa_reference: 'LPA §8 (synthetic)' } });
+  assert.equal(t.status, 201, JSON.stringify(t.body));
+  assert.equal((await call(env, OTHER_GP, `/api/fund-fees/2/terms/${t.body.uid}/confirm`, { method: 'POST' })).status, 200);
+  assert.equal((await call(env, OTHER_GP, '/api/fund-fees/2/lps/500/admission', { method: 'PUT', body: { admitted_on: FEE_START, closing_label: 'First closing', source: 'Memo (synthetic)' } })).status, 200);
+  const p = await call(env, OTHER_GP, `/api/fund-fees/2/periods/${Q0}/preview`, { method: 'POST' });
+  assert.equal(p.status, 200, JSON.stringify(p.body));
+  assert.equal((await call(env, OTHER_GP, `/api/fund-fees/2/periods/${Q0}/issue`, { method: 'POST', body: { digest: p.body.digest } })).status, 200);
+
+  const read: string[] = [];
+  const prepare = env.DB.prepare.bind(env.DB);
+  env.DB.prepare = (sql: string) => { read.push(sql); return prepare(sql); };
+  const period = await call(env, OTHER_GP, `/api/fund-fees/2/periods/${Q0}`);
+  const s = await call(env, OTHER_GP, `/api/fund-fees/2/periods/${Q0}/statements/500`);
+  env.DB.prepare = prepare;
+  assert.equal(s.status, 200, JSON.stringify(s.body));
+  const block = { available: false, code: 'not_an_axal_fund', message: 'Axal holds no payment instructions for this fund.' };
+  assert.deepEqual(period.body.remittance, block);
+  assert.deepEqual(s.body.remittance, block);
+  assert.ok(read.length > 0);
+  assert.deepEqual(read.filter((sql) => /entity_bank_account/.test(sql)), [], 'the registry was read');
+  for (const b of [period.body, s.body]) {
+    const text = JSON.stringify(b);
+    for (const no of ['Axal VC GP LLC', GP_NUMBER.slice(-4), '121145433', 'CLNOUS66MER', 'Column N.A.']) assert.ok(!text.includes(no), no);
+  }
 });
