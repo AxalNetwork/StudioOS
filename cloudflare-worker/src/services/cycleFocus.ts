@@ -392,8 +392,9 @@ export async function raisePhone(ctx: RaiseCtx, figures: Figure[], cards: Card[]
  * Nothing in Grow is recorded (D692 decision 5, #1652's rule): no feedback at
  * any date, no channel, no recurring ledger row, no metrics snapshot, with a
  * company no roster row, no open role, no partner, no market, no compliance
- * obligation of any source (seeded ones included), and nothing done on the
- * checklist. Every store is bound to the venture.
+ * obligation of any source (seeded ones included), no custom KPI (#1697's
+ * migration 462), and nothing done on the checklist. Every store is bound to
+ * the venture.
  */
 async function growNothingRecorded(x: GrowCtx): Promise<boolean> {
   const pid = x.projectId;
@@ -406,10 +407,11 @@ async function growNothingRecorded(x: GrowCtx): Promise<boolean> {
        EXISTS(SELECT 1 FROM job_postings WHERE project_id = ? AND status IN ('open', 'published')) AS roles,
        EXISTS(SELECT 1 FROM growth_partners WHERE project_id = ?) AS partners,
        EXISTS(SELECT 1 FROM markets WHERE project_id = ?) AS markets,
+       EXISTS(SELECT 1 FROM custom_kpis WHERE project_id = ?) AS custom_kpis,
        (SELECT company_id FROM projects WHERE id = ?) AS company_id`,
-  ).bind(pid, pid, pid, pid, pid, pid, pid, pid).first<Record<string, number | null>>();
+  ).bind(pid, pid, pid, pid, pid, pid, pid, pid, pid).first<Record<string, number | null>>();
   if (!r) return false;
-  if (['feedback', 'channels', 'recurring', 'snapshots', 'roles', 'partners', 'markets'].some((k) => Number(r[k]) === 1)) return false;
+  if (['feedback', 'channels', 'recurring', 'snapshots', 'roles', 'partners', 'markets', 'custom_kpis'].some((k) => Number(r[k]) === 1)) return false;
   // By project_id alone, which the baseline and 034 shapes both carry; a seeded obligation counts.
   if (await x.env.DB.prepare('SELECT 1 FROM compliance_events WHERE project_id = ? LIMIT 1').bind(pid).first()) return false;
   if (r.company_id != null) {
@@ -420,6 +422,31 @@ async function growNothingRecorded(x: GrowCtx): Promise<boolean> {
   return !(await checklist(x.env, pid)).some((i) => i.done);
 }
 
+/**
+ * The roadmap item with the most shipped customer feedback whose customer
+ * asked to be told and has not been (migration 462's `notify_on_ship` and
+ * `told_at`); ties go to the newest feedback. Null when there is none.
+ */
+async function customersToTell(x: GrowCtx): Promise<{ item: string; n: number } | null> {
+  const r = await x.env.DB.prepare(
+    `SELECT trim(roadmap_item_label) AS item, COUNT(*) AS n FROM product_feedback
+      WHERE project_id = ? AND source = 'customer' AND status = 'shipped' AND notify_on_ship = 1 AND told_at IS NULL
+        AND roadmap_item_label IS NOT NULL AND trim(roadmap_item_label) <> ''
+      GROUP BY trim(roadmap_item_label) ORDER BY n DESC, MAX(created_at) DESC, MAX(id) DESC LIMIT 1`,
+  ).bind(x.projectId).first<{ item: string; n: number }>();
+  return r && Number(r.n) > 0 ? { item: String(r.item), n: Number(r.n) } : null;
+}
+
+/** "Run the <channel> experiment.": the soonest experiment planned today or later, on one of the venture's channels. */
+async function nextExperiment(x: GrowCtx): Promise<string | null> {
+  const r = await x.env.DB.prepare(
+    `SELECT c.name FROM channel_experiments e JOIN growth_channels c ON c.id = e.channel_id
+      WHERE c.project_id = ? AND e.run_on IS NOT NULL AND e.run_on >= ? ORDER BY e.run_on, e.id LIMIT 1`,
+  ).bind(x.projectId, new Date(x.now).toISOString().slice(0, 10)).first<{ name: string }>();
+  const name = r?.name?.trim();
+  return name ? `Run the ${name} experiment.` : null;
+}
+
 async function growFocus(x: GrowCtx, writer: boolean, cards: Card[]): Promise<Focus | null> {
   if (writer && (await growNothingRecorded(x))) {
     return {
@@ -427,6 +454,18 @@ async function growFocus(x: GrowCtx, writer: boolean, cards: Card[]): Promise<Fo
       why: 'Nothing in Grow is recorded yet.',
       cta: { label: 'Enter a KPI', href: `/grow/focus?project_id=${x.projectId}` },
       then: null,
+    };
+  }
+  // Closing the loop opens Product improvement, where Mark told lives: an
+  // update reaches investors, the team and the network, never a customer (decision 7).
+  const tell = writer ? await customersToTell(x) : null;
+  if (tell) {
+    return {
+      rule: 'tell_customers', eyebrow: 'Grow · Next',
+      headline: `Tell the ${plural(tell.n, 'customer', 'customers')} who asked that ${tell.item} shipped.`,
+      why: 'Closing the loop on shipped feedback is the open item in Product improvement.',
+      cta: { label: 'Open Product improvement', href: `/grow/product-improvement?project=${x.projectId}` },
+      then: await nextExperiment(x),
     };
   }
   return cardFocus('grow', cards);

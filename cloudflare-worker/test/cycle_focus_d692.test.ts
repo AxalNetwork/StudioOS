@@ -1,8 +1,8 @@
 /**
- * D692 (#1701, PR 1a and PR 1b) — each cycle's phone root: Validate's,
+ * D692 (#1701: PR 1a, PR 1b and PR 2) — each cycle's phone root: Validate's,
  * Build's, Raise's and Grow's overview reads return `focus`, `meter` and
- * `index` in one shape, on real SQLite. Grow's `tell_customers` arrives with
- * PR 2.
+ * `index` in one shape, on real SQLite. Grow's `tell_customers`, its Then and
+ * `first_kpi`'s custom-KPI check read migration 462.
  *
  * THE DATABASE IS THE BASELINE PLUS EVERY NUMBERED MIGRATION ABOVE THE CUTOFF,
  * IN ORDER, as migrations_fresh_build.test.ts builds one, so no table is
@@ -183,7 +183,8 @@ test('2: rule order — no interview, then a session to review, then the next co
   session(db, iv, 'transcribed', `${day(-1)} 10:00:00`);
   const review = (await vRead(db)).body.focus;
   assert.equal(review.rule, 'review');
-  assert.equal(review.cta.href, `/validate/interviews/${iv}`);
+  // D704 (#1783) moved rule 2's href to the interview's record (D-b).
+  assert.equal(review.cta.href, `/validate/customer-research/${iv}?session=1`);
   assert.ok(routed(review.cta.href, routesOf()), 'the review href is a route');
   db.exec("UPDATE interview_sessions SET status = 'reviewed'");
   assert.equal((await vRead(db)).body.focus.rule, 'next_interview');
@@ -498,6 +499,70 @@ test('9: a new venture enters the first KPI; old feedback and a seeded obligatio
   assert.notEqual((await gRead(db)).body.focus?.rule, 'first_kpi', 'a seeded obligation counts');
 });
 
+test('9: a custom KPI is a Grow record; another venture\'s does not stop the first step', async () => {
+  const db = growFixture();
+  db.prepare(`INSERT INTO custom_kpis (uid, project_id, label, unit) VALUES ('k2', ?, 'Their seats', 'count')`).run(P_OTHER);
+  assert.equal((await gRead(db)).body.focus.rule, 'first_kpi', 'another venture\'s custom KPI');
+  db.prepare(`INSERT INTO custom_kpis (uid, project_id, label, unit) VALUES ('k1', ?, 'Pilot seats', 'count')`).run(P);
+  const r = await gRead(db);
+  assert.notEqual(r.body.focus?.rule, 'first_kpi', 'a venture with only a custom KPI never reads "Nothing in Grow is recorded yet."');
+  assert.doesNotMatch(JSON.stringify(r.body.focus), /Nothing in Grow is recorded yet/);
+});
+
+/** Shipped customer feedback on `item`, flagged to be told; `o` overrides any column. */
+function shipped(db: any, uid: string, item: string, o: Record<string, unknown> = {}) {
+  const v = { project_id: P, source: 'customer', status: 'shipped', notify_on_ship: 1, told_at: null, created_at: `${day(-3)} 10:00:00`, ...o };
+  db.prepare(`INSERT INTO product_feedback (uid, project_id, body, source, from_name, roadmap_item_label, status, notify_on_ship, told_at, created_at)
+    VALUES (?, ?, 'Please add it', ?, 'Example Customer', ?, ?, ?, ?, ?)`)
+    .run(uid, v.project_id, v.source, item, v.status, v.notify_on_ship, v.told_at, v.created_at);
+}
+
+test('9: shipped, flagged, untold customer feedback leads with Tell the customers, opening Product improvement', async () => {
+  const db = growFixture();
+  shipped(db, 'f1', 'Bulk export');
+  const r = await gRead(db);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.deepEqual(r.body.focus, {
+    rule: 'tell_customers', eyebrow: 'Grow · Next', headline: 'Tell the 1 customer who asked that Bulk export shipped.',
+    why: 'Closing the loop on shipped feedback is the open item in Product improvement.',
+    cta: { label: 'Open Product improvement', href: `/grow/product-improvement?project=${P}` }, then: null,
+  });
+  // The item with the most such rows leads, though its feedback is older; the count is plural.
+  shipped(db, 'f2', 'Dark mode', { created_at: `${day(-10)} 10:00:00` });
+  shipped(db, 'f3', 'Dark mode', { created_at: `${day(-9)} 10:00:00` });
+  assert.equal((await gRead(db)).body.focus.headline, 'Tell the 2 customers who asked that Dark mode shipped.');
+  // A tie goes to the newest feedback.
+  shipped(db, 'f4', 'Bulk export', { created_at: TODAY + ' 09:00:00' });
+  assert.equal((await gRead(db)).body.focus.headline, 'Tell the 2 customers who asked that Bulk export shipped.');
+  // Another venture's flagged feedback never counts.
+  shipped(db, 'fo', 'Bulk export', { project_id: P_OTHER });
+  assert.equal((await gRead(db)).body.focus.headline, 'Tell the 2 customers who asked that Bulk export shipped.');
+
+  // Told, not flagged, or not a customer's: each falls through to the card rule.
+  for (const [col, val] of [['told_at', `${TODAY} 08:00:00`], ['notify_on_ship', 0], ['source', 'team']] as const) {
+    const d = growFixture();
+    shipped(d, 'f1', 'Bulk export', { [col]: val });
+    const x = (await gRead(d)).body.focus;
+    assert.ok(x === null || x.rule === 'card', `${col}=${val}: ${JSON.stringify(x)}`);
+  }
+  // A reader who cannot write never gets it.
+  assert.notEqual((await gRead(db, ADVISOR)).body.focus?.rule, 'tell_customers');
+});
+
+test('9: the Then is the soonest experiment planned today or later on one of the venture\'s channels', async () => {
+  const db = growFixture();
+  shipped(db, 'f1', 'Bulk export');
+  db.exec(`INSERT INTO growth_channels (id, uid, project_id, name, utm_source) VALUES (1, 'c1', ${P}, 'Podcast ads', 'podcast-ads'),
+    (2, 'c2', ${P}, 'Webinars', 'webinars'), (3, 'c3', ${P_OTHER}, 'Their channel', 'theirs')`);
+  const exp = db.prepare(`INSERT INTO channel_experiments (uid, channel_id, title, run_on) VALUES (?, ?, 'Try it', ?)`);
+  exp.run('e0', 1, day(-4));
+  exp.run('eo', 3, day(1));
+  assert.equal((await gRead(db)).body.focus.then, null, 'a past experiment, or another venture\'s, gives none');
+  exp.run('e1', 1, day(12));
+  exp.run('e2', 2, day(30));
+  assert.equal((await gRead(db)).body.focus.then, 'Run the Podcast ads experiment.');
+});
+
 test('3 and 9: an advisor member never gets a Grow write focus', async () => {
   const db = growFixture();
   const r = await gRead(db, ADVISOR);
@@ -582,6 +647,11 @@ test('10: every read carries the three parts; no bracket, undefined, NaN or lead
   try { reads.push((await rRead(r)).body); } finally { FLAGS = {}; }
   const g = growFixture();
   reads.push((await gRead(g)).body, (await gRead(g, ADVISOR)).body);
+  shipped(g, 'f1', 'Bulk export');
+  g.exec(`INSERT INTO growth_channels (id, uid, project_id, name, utm_source) VALUES (1, 'c1', ${P}, 'Podcast ads', 'podcast-ads')`);
+  g.prepare(`INSERT INTO channel_experiments (uid, channel_id, title, run_on) VALUES ('e1', 1, 'Try it', ?)`).run(day(5));
+  reads.push((await gRead(g)).body);
+  assert.equal(reads[reads.length - 1].focus.rule, 'tell_customers');
   for (const body of reads) {
     for (const k of ['focus', 'meter', 'index']) assert.ok(k in body, `${body.cycle}: ${k}`);
     for (const s of strings({ focus: body.focus, meter: body.meter, index: body.index })) {
