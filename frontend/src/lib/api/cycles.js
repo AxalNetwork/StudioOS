@@ -42,4 +42,18 @@ export const cyclesWrite = makeCycleWrites(request);
 export const cyclesApi = {
   overview: (cycle, projectId) => READS[cycle].overview(projectId),
   module: (cycle, projectId, slug, q) => READS[cycle].module(projectId, slug, q),
+  record: (cycle, projectId, slug, id) => {
+    if (!WIRED_CYCLES.includes(cycle)) return Promise.reject(new Error('No such cycle'));
+    return request(`/cycles/${cycle}/modules/${encodeURIComponent(slug)}/records/${encodeURIComponent(id)}?project=${encodeURIComponent(projectId)}`);
+  },
+  recordActivity: (cycle, projectId, slug, id, page = 1) => {
+    if (!WIRED_CYCLES.includes(cycle)) return Promise.reject(new Error('No such cycle'));
+    return request(`/cycles/${cycle}/modules/${encodeURIComponent(slug)}/records/${encodeURIComponent(id)}/activity?project=${encodeURIComponent(projectId)}&page=${encodeURIComponent(page)}`);
+  },
+  recordAction: (cycle, projectId, slug, id, key, body = {}) => {
+    if (!WIRED_CYCLES.includes(cycle)) return Promise.reject(new Error('No such cycle'));
+    return request(`/cycles/${cycle}/modules/${encodeURIComponent(slug)}/records/${encodeURIComponent(id)}/actions/${encodeURIComponent(key)}?project=${encodeURIComponent(projectId)}`, {
+      method: 'POST', body: body instanceof FormData ? body : JSON.stringify(body),
+    });
+  },
 };

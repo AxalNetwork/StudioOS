@@ -1,11 +1,12 @@
 /**
- * D696 PR 1: pure record rules. No reads, route registration or dialogs.
- * PR 2 replaces the local id pattern with cyclePaths.RECORD_ID.
+ * D696: pure record rules. No reads, route registration or dialogs.
+ * Record routes use the same id rule as the cycle shell.
  */
 import { CYCLES, TONES, safeHref } from './cycleModel.js';
 import { exportPersonaPdf } from '../../lib/personaPdf.js';
 
-export const RECORD_ID = /^[a-z0-9][a-z0-9_-]*$/;
+import { RECORD_ID } from './cyclePaths.js';
+export { RECORD_ID };
 const slug = (value) => String(value ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 export const sectionId = (cycleName, moduleName, title) => 'rec-' + slug(cycleName + ' ' + moduleName + ' ' + title);
 
@@ -94,4 +95,49 @@ export async function finishRecordWrite(result, { open, onError, reread }) {
   if (result?.open) return 'parts';
   await reread();
   return 'saved';
+}
+
+/** Map the Worker's form fields to the existing Add/Edit renderer once. */
+export function recordFormFor(action, record, edit) {
+  if (action?.kind !== 'form') return null;
+  const fields = (action.form?.fields ?? []).map(field => ({ ...field, name: field.key ?? field.name }));
+  const current = Object.fromEntries(fields.filter(field => Object.hasOwn(field, 'value')).map(field => [field.name, field.value]));
+  if (action.key === 'edit') {
+    const row = { id: record.id, edit: { id: record.id, uid: record.uid ?? record.id } };
+    const id = edit?.idOf(row);
+    return id == null ? null : { form: edit, current, id };
+  }
+  return action.form ? { form: { ...action.form, fields }, current, id: record.id } : null;
+}
+
+export function confirmView(action) {
+  if (!action?.confirm) return null;
+  return typeof action.confirm === 'string'
+    ? { title: action.label, body: action.confirm, cta: action.label }
+    : { title: action.confirm.title, body: action.confirm.body, cta: action.confirm.cta || action.label };
+}
+
+/** Retain the declared row body when adding form values, including real File bytes. */
+export function recordActionBody(action, values = {}) {
+  const body = { ...(action.body ?? {}), ...values };
+  if (!action.multipart && !action.form?.fields?.some(field => field.input === 'file')) return body;
+  const form = new FormData();
+  for (const [key, value] of Object.entries(body)) {
+    if (value == null) continue;
+    form.append(key, value instanceof Blob ? value : Array.isArray(value) ? JSON.stringify(value) : String(value));
+  }
+  return form;
+}
+
+/** Hide forms with no saving path, including an Edit with no registered store id. */
+export function availableRecord(record, edit) {
+  const declarations = declaredActions(record);
+  const canRun = action => dispatchOf(action) && (action.kind !== 'form' || recordFormFor(action, record, edit));
+  const sections = list => (list ?? []).map(section => ({ ...section,
+    action: canRun(rowAction(section.action, declarations)) ? section.action : undefined,
+    rows: (section.rows ?? []).map(row => ({ ...row,
+      action: canRun(rowAction(row.action, declarations)) ? row.action : undefined,
+    })),
+  }));
+  return { ...record, actions: (record.actions ?? []).filter(canRun), main: sections(record.main), side: sections(record.side) };
 }

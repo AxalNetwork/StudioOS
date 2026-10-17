@@ -139,7 +139,7 @@ test('A CHOSEN VENTURE RIDES ON EVERY LINK: tabs, card titles and the module pag
   for (const m of navOf(mod).matchAll(/href="([^"]+)"/g)) assert.match(m[1], /\?project_id=7$/, m[1]);
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   assert.match(route, /searchParams\.get\('project_id'\) \|\| searchParams\.get\('project'\)/, "the read's own `?project=` links pick the venture too");
-  assert.equal((route.match(/search=\{q\}/g) || []).length, 3, 'the overview, the module page and Validate\'s phone focus (D685 §5.12) are handed the venture');
+  assert.equal((route.match(/search=\{q\}/g) || []).length, 4, 'the overview, module, record header and Validate\'s phone focus keep the venture');
 });
 
 test('GROW: money in a chart reads in dollars, the checklist says what ticked it, and Share an update opens the sheet', () => {
@@ -356,7 +356,7 @@ test('EVERY MODULE RENDERS FROM THE SHARED READ: all 26 module pages, with their
       assert.match(out, new RegExp(`data-module="${c.slug}"`));
       assert.match(out, /data-testid="cycle-module-chart" data-state="ok"/, name);
       assert.deepEqual(kinds(out), c.series.map((s) => s.kind), `${name} draws its series in order`);
-      assert.ok(t.includes(`What ${name} shows.`) && t.includes(`Next: Next step for ${name}.`), name);
+      assert.ok(t.includes(`What ${name} shows.`) && t.includes(`${name} · at a glance`) && !t.includes(`Next: Next step for ${name}.`), name);
       assert.ok(t.includes(`${name} one`) && t.includes(`${name} two`), `${name} lists its records`);
       assert.match(out, new RegExp(`aria-current="page"[^>]*>${name.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}<`), `${name} is the current tab`);
       n += 1;

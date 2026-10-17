@@ -160,6 +160,18 @@ function importMap(src, fromDir) {
 
 const defaultExportIdent = (src) => (src.match(/export\s+default\s+(\w+)/) || [])[1] || null;
 
+// A mounted instance may be returned by a local factory (D690's injectable
+// createCycleRecords). Follow only that factory's returned Hono, never every
+// router in the file, which would also count unmounted test/alternate routes.
+function factoryRouter(src, ident) {
+  const factory = src.match(new RegExp(`\\b(?:const|let)\\s+${ident}\\s*=\\s*(\\w+)\\(\\s*\\)`))?.[1];
+  if (!factory) return { ident, source: src };
+  const body = src.match(new RegExp(`(?:export\\s+)?function\\s+${factory}\\([^\\n]*\\)\\s*\\{([\\s\\S]*?)^\\}`, 'm'))?.[1];
+  const returned = body?.match(/\breturn\s+(\w+)\s*;\s*$/)?.[1];
+  return returned && new RegExp(`\\bconst\\s+${returned}\\s*=\\s*new\\s+Hono\\b`).test(body)
+    ? { ident: returned, source: body } : { ident, source: src };
+}
+
 function buildRouteTable() {
   const routes = [];
   const visited = new Set();
@@ -182,19 +194,21 @@ function buildRouteTable() {
     const src = readFileSync(file, 'utf8');
     const imports = importMap(src, dirname(file));
     const declaresMounted = mountedIdent && declaresIdent(src, mountedIdent);
-    const ident = declaresMounted ? mountedIdent : defaultExportIdent(src);
-    if (!ident) return;
+    const mounted = declaresMounted ? mountedIdent : defaultExportIdent(src);
+    const router = mounted && factoryRouter(src, mounted);
+    if (!router) return;
+    const { ident, source } = router;
 
     const verbRe = /(\w+)\s*\.\s*(get|post|put|patch|delete|all)\(\s*['"`]([^'"`]*)['"`]/g;
     let m;
-    while ((m = verbRe.exec(src)) !== null) {
+    while ((m = verbRe.exec(source)) !== null) {
       if (m[1] !== ident) continue;
       const sub = m[3] === '/' ? '' : m[3];
       routes.push([m[2].toUpperCase(), (prefix + sub).replace(/\/+$/, '') || prefix]);
     }
 
     const mountRe = /(\w+)\s*\.\s*route\(\s*['"`]([^'"`]*)['"`]\s*,\s*(\w+)/g;
-    while ((m = mountRe.exec(src)) !== null) {
+    while ((m = mountRe.exec(source)) !== null) {
       if (m[1] !== ident) continue;
       const target = imports.get(m[3]);
       if (target) crawl(target, prefix + (m[2] === '/' ? '' : m[2]), depth + 1, m[3]);
