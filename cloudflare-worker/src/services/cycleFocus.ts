@@ -22,8 +22,8 @@
  * A FOCUS THAT ASKS FOR A WRITE GOES ONLY TO A WRITER. Anyone else gets the
  * card rule, which repeats a `next` their own cards already carry.
  *
- * Build's, Raise's and Grow's parts are here (D692 PR 1a). Validate's stay in
- * `services/validateFocus.ts`, which moves onto these helpers in PR 1b.
+ * Build's, Raise's and Grow's parts are here (D692 PR 1a). Validate's are in
+ * `services/validateFocus.ts`, on these shapes and helpers (PR 1b).
  */
 import type { Env, User } from '../types';
 import type { Card, Figure } from './cycleCards';
