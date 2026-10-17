@@ -56,6 +56,7 @@ import { ACTIVE_COMPANY_HEADER, resolveActiveCompany } from '../middleware/activ
 import { mintDownloadToken } from '../services/signedDownload';
 import { tierAdmits, investorCommitted, admittedCounts, isAccessTier, expiryMs } from '../services/dataRoomAccess';
 import { CHECKLIST_KEYS } from '../services/raiseCycle';
+import { logCycleWrite } from '../services/cycleActivity';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -557,7 +558,7 @@ r.post('/:projectUid/files', async (c) => {
       customMetadata: { project_uid: project.uid, uploaded_by: String(user.id) },
     });
 
-    await c.env.DB.prepare(
+    const ins = await c.env.DB.prepare(
       `INSERT INTO data_room_files
          (uid, project_id, folder_id, name, r2_key, content_type, size_bytes,
           visibility, uploaded_by_user_id, created_at, updated_at,
@@ -568,6 +569,13 @@ r.post('/:projectUid/files', async (c) => {
            user.id, nowIso(), nowIso(),
            access.values.access_tier ?? 'invited', access.values.access_expires_at ?? null,
            access.values.dd_request_id ?? null, access.values.checklist_item ?? null).run();
+    // D691 decision 12 — the file's record logs its upload. No file name: a
+    // filename is itself information.
+    const fileId = Number((ins as any)?.meta?.last_row_id) || null;
+    if (fileId != null) {
+      await logCycleWrite(c.env, { projectId: project.id, userId: Number(user.id), cycle: 'raise', module: 'data-room',
+        entityId: fileId, action: 'file_uploaded', summary: `File uploaded; access ${access.values.access_tier ?? 'invited'}` });
+    }
     return c.json({ uid, size_bytes: bytes.byteLength }, 201);
   } catch (e) { return mapError(c, e); }
 });
@@ -603,9 +611,13 @@ r.patch('/:projectUid/files/:uid', async (c) => {
     sets.push('updated_at = ?'); params.push(nowIso());
 
     const res = await c.env.DB.prepare(
-      `UPDATE data_room_files SET ${sets.join(', ')} WHERE uid = ? AND project_id = ?`,
-    ).bind(...params, c.req.param('uid'), project.id).run();
-    if (!(res as any).meta?.changes) return c.json({ detail: 'File not found' }, 404);
+      `UPDATE data_room_files SET ${sets.join(', ')} WHERE uid = ? AND project_id = ? RETURNING id`,
+    ).bind(...params, c.req.param('uid'), project.id).first<{ id: number }>();
+    if (!res) return c.json({ detail: 'File not found' }, 404);
+    // D691 decision 12 — one row on the file's record, naming the fields changed.
+    const fields = sets.slice(0, -1).map((x) => x.split(' ')[0].replace(/_id$/, '').replace(/_/g, ' '));
+    await logCycleWrite(c.env, { projectId: project.id, userId: Number(user.id), cycle: 'raise', module: 'data-room',
+      entityId: Number(res.id), action: 'file_updated', summary: `File edited: ${fields.join(', ')}` });
     return c.json({ ok: true });
   } catch (e) { return mapError(c, e); }
 });

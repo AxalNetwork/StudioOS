@@ -101,7 +101,10 @@ model). Since D691 (#1699) each list carries the canvas's title, columns,
 filters and default sort (the first in `sorts`), and its row ids are addresses
 that never hold a name: an item key, a version, a link, file or prospect id, a
 cap-table `h-<n>`, `e-<n>` or `pool`, and a use-of-funds section key.
-`raiseWriters.ts` has one writer per migration 442 record.
+`raiseWriters.ts` has one writer per migration 442 record and, since D691
+(#1700), one behind each Raise Add and Edit form (migration 463's stores);
+each logs one row per record it writes through `cycleActivity.ts`'s
+`logCycleWrite`.
 `capTableWrites.ts` (D691, #1699) is the cap table's one save, `saveScenario()`,
 which `POST` and `PUT /api/captable/scenarios` call: the one-per-venture upsert,
 its unique-index recovery and D632's activity row, plus an `e-<n>` key on every

@@ -40,6 +40,9 @@ function freshDb() {
     CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT, founder_id INTEGER, company_id INTEGER, deleted_at TEXT);
     CREATE TABLE mi_pro_subscriptions (user_id INTEGER PRIMARY KEY, status TEXT, subscription_id TEXT,
       plan TEXT, period_end TEXT, stripe_customer_id TEXT);
+    -- D691 (#1700): a new link logs its raise.pitch-deck row.
+    CREATE TABLE activity_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, user_id INTEGER, action TEXT NOT NULL,
+      details TEXT, actor TEXT, entity_type TEXT, entity_id TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')));
     INSERT INTO users (id, role, email, founder_id, subscription_tier, subscription_status)
       VALUES (10, 'founder', 'f@example.com', 1001, 'studio', 'active'); -- D683: deck share is on Raise + Grow
     INSERT INTO projects (id, name, founder_id) VALUES (1, 'Acme', 1001);
