@@ -27,7 +27,7 @@ import RecordView from './RecordView';
 import Lightbox from '../../ui/Lightbox';
 import { RECORD_ID } from './cyclePaths';
 import { availableRecord, CLIENT_ACTIONS, confirmView, declaredActions, finishRecordWrite, recordActionBody, recordFormFor, rowAction } from './recordModel';
-import ValidatePhoneFocus from './ValidatePhoneFocus';
+import PhoneCycleRoot from './PhoneCycleRoot';
 import CycleModulePage from './CycleModulePage';
 import DurabilityChecklist from './DurabilityChecklist';
 import ToolsHistory from './ToolsHistory';
@@ -765,13 +765,18 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
       {recordState.actionError && <p role="alert" className="text-sm text-red-700 dark:text-red-300">{recordState.actionError}</p>}
     </div>;
   } else if (!slug) {
-    body = (
+    // D703 decision 1: below 1024px the root is the phone page, in place of
+    // the overview and `AlsoIn`, never beside them. Both read the same overview.
+    const overviewState = projectStatus === 'unreadable' ? 'unreadable' : overviewStatus;
+    body = phone ? (
+      <PhoneCycleRoot cycle={cycle} raw={rawOverview} status={overviewState} search={q} projectId={projectId}
+        openAction={openAction} onChanged={() => setReload((n) => n + 1)} onRetry={() => setReload((n) => n + 1)} />
+    ) : (
       <>
-        {(cycle === 'validate' || rawOverview?.focus) && overviewStatus === 'ready' && rawOverview && projectStatus !== 'unreadable' && <ValidatePhoneFocus cycle={cycle} raw={rawOverview} search={q} projectId={projectId} onChanged={() => setReload((n) => n + 1)} />}
         <CycleOverview
           cycle={cycle}
           data={overview}
-          status={projectStatus === 'unreadable' ? 'unreadable' : overviewStatus}
+          status={overviewState}
           onRetry={() => setReload((n) => n + 1)}
           onRetryCard={retryCard}
           action={action}
