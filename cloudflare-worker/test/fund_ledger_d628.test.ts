@@ -10,20 +10,30 @@ const schema=`PRAGMA foreign_keys=ON;
 CREATE TABLE users(id INTEGER PRIMARY KEY,email TEXT,name TEXT,role TEXT,is_active INTEGER);
 INSERT INTO users VALUES(1,'admin@example.test','Admin','admin',1),(2,'operator@example.test','Operator','investor',1),
  (3,'lp@example.test','LP','investor',1),(4,'other@example.test','Other','investor',1),(5,'founder@example.test','Founder','founder',1),
- (6,'gp@example.test','GP','investor',1),(7,'legacy@example.test','Legacy','investor',1),(8,'inactive@example.test','Inactive','investor',0);
+ (6,'gp@example.test','GP','investor',1),(7,'legacy@example.test','Legacy','investor',1),(8,'inactive@example.test','Inactive','investor',0),
+ (9,'super@example.test','Super','admin',1);
+CREATE TABLE super_admins(user_id INTEGER PRIMARY KEY);
+INSERT INTO super_admins VALUES(9);
+CREATE TABLE user_sessions(id INTEGER PRIMARY KEY,user_id INTEGER NOT NULL,jti TEXT NOT NULL UNIQUE,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+ revoked_at TIMESTAMP,factor TEXT,last_step_up_at TIMESTAMP);
+INSERT INTO user_sessions(user_id,jti,factor) VALUES(9,'totp-super','totp'),(1,'totp-admin','totp');
 CREATE TABLE vc_funds(id INTEGER PRIMARY KEY,name TEXT,fund_admin TEXT,gp_user_id INTEGER,management_fee REAL DEFAULT .02);
 INSERT INTO vc_funds(id,name,fund_admin,gp_user_id) VALUES(10,'Fund A','GP',6),(20,'Fund B','Other',4);
 CREATE TABLE limited_partners(id INTEGER PRIMARY KEY,fund_id INTEGER,user_id INTEGER,email TEXT);
 INSERT INTO limited_partners VALUES(101,10,3,'lp@example.test'),(102,20,4,'other@example.test'),(103,10,NULL,'LEGACY@example.test'),(104,20,4,'legacy@example.test');
 CREATE TABLE activity_logs(id INTEGER PRIMARY KEY,action TEXT,details TEXT,actor TEXT,user_id INTEGER);`;
 const secret='d628-fixture-only-signing-secret';
+/** D714: assigning the administrator is a Super Admin act; 9 is the Super Admin, in a fresh TOTP session. */
+const SUPER=9;
+const SESSION:Record<number,string>={9:'totp-super',1:'totp-admin'};
 async function fixture(terms=true) {
   const {DB,db}=makeD1(schema+migration);
   db.exec('UPDATE vc_funds SET fund_admin_user_id=2 WHERE id=10; UPDATE vc_funds SET fund_admin_user_id=4 WHERE id=20;');
   const env={DB,JWT_SECRET:secret,ENVIRONMENT:'development'} as any;
   async function request(path:string,user=2,method='GET',data?:any) {
-    const jwt=await new SignJWT({user_id:user}).setProtectedHeader({alg:'HS256'}).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(secret));
-    return route.request(path,{method,headers:{Authorization:`Bearer ${jwt}`,'Content-Type':'application/json'},...(data===undefined?{}:{body:JSON.stringify(data)})},env);
+    const jwt=await new SignJWT({user_id:user,...(SESSION[user]?{jti:SESSION[user]}:{})}).setProtectedHeader({alg:'HS256'}).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(secret));
+    return (route.request(path,{method,headers:{Authorization:`Bearer ${jwt}`,'Content-Type':'application/json'},...(data===undefined?{}:{body:JSON.stringify(data)})},env) as Promise<Response>)
+      .catch((e:unknown)=>{if(e instanceof Response)return e;throw e;});
   }
   for (const [code,name,category] of [['FEE','Management fee','expense'],['PAY','Fee payable','liability'],['CASH','Cash','asset'],['EXP','Legal expense','expense']]) {
     const response=await request('/10/accounts',2,'POST',{code,name,category});
@@ -93,7 +103,9 @@ test('worked fee and expense post balanced entries; journal and trial balance pr
 });
 test('every write records its actor and complete provenance; close/reopen and reconcile retain statement facts',async()=>{
   const f=await fixture();try {
-    assert.equal((await f.request('/10/administrator',1,'PUT',{user_id:2})).status,200);
+    const plain=await f.request('/10/administrator',1,'PUT',{user_id:2});
+    assert.equal(plain.status,403); assert.equal((await plain.json() as any).code,'super_admin_required');
+    assert.equal((await f.request('/10/administrator',SUPER,'PUT',{user_id:2})).status,200);
     assert.equal((await f.request('/10/periods/1/entries',2,'POST',entry)).status,201);
     assert.equal((await f.request('/10/periods/1/fee-accrual',2,'POST',fee)).status,201);
     assert.equal((await f.request('/10/periods/1/expenses',2,'POST',expense)).status,201);
@@ -105,10 +117,13 @@ test('every write records its actor and complete provenance; close/reopen and re
     assert.deepEqual({...f.db.prepare('SELECT closed,closed_by,version FROM fund_accounting_periods WHERE id=1').get()},{closed:1,closed_by:2,version:1});
     assert.equal((await f.request('/10/periods/1/state',2,'POST',{closed:false,reason:' Statement correction '})).status,200);
     assert.deepEqual({...f.db.prepare('SELECT closed,closed_by,closed_at,version FROM fund_accounting_periods WHERE id=1').get()},{closed:0,closed_by:null,closed_at:null,version:2});
-    const logs=f.db.prepare('SELECT action,actor,user_id,details FROM activity_logs ORDER BY id').all();
+    // D714's own audit rows are asserted on their own below; these are D628's.
+    const logs=f.db.prepare("SELECT action,actor,user_id,details FROM activity_logs WHERE action NOT LIKE 'fund_admin.%' ORDER BY id").all();
+    assert.deepEqual(f.db.prepare("SELECT action,user_id FROM activity_logs WHERE action LIKE 'fund_admin.%'").all().map((l:any)=>[l.action,l.user_id]),
+      [['fund_admin.fund_ledger.administrator',SUPER]]);
     assert.deepEqual(logs.map((l:any)=>[l.action,l.actor,l.user_id]),[
       ...Array(4).fill(['fund_ledger_account_recorded','2',2]),['fund_ledger_period_recorded','2',2],['fund_ledger_fee_terms_recorded','2',2],
-      ['fund_ledger_administrator_assigned','1',1],...Array(3).fill(['fund_ledger_entry_posted','2',2]),['fund_ledger_line_reconciled','2',2],['fund_ledger_period_closed','2',2],['fund_ledger_period_reopened','2',2]]);
+      ['fund_ledger_administrator_assigned','9',9],...Array(3).fill(['fund_ledger_entry_posted','2',2]),['fund_ledger_line_reconciled','2',2],['fund_ledger_period_closed','2',2],['fund_ledger_period_reopened','2',2]]);
     assert.deepEqual(JSON.parse(logs[5].details),{fund_id:10,uid:JSON.parse(logs[5].details).uid,effective_date:'2024-01-01',annual_bps:200,basis_cents:100000000,source:'LPA § 8'});
     assert.deepEqual(JSON.parse(logs[6].details),{fund_id:10,before_user_id:2,user_id:2});
     assert.deepEqual(JSON.parse(logs[7].details),{fund_id:10,period_id:1,entry_uid:JSON.parse(logs[7].details).entry_uid,kind:'journal',fee_terms_id:null,entry_date:'2024-02-01',description:'Opening cash',lines:entry.lines});
@@ -136,9 +151,11 @@ test('LP summaries disclose no journal, chart or other fund; named GP is not the
     for(const [path,method,data] of [['accounts','POST',{code:'Z',name:'No',category:'asset'}],['periods','POST',{label:'X',start_date:'2025-01-01',end_date:'2025-02-01'}],['fee-terms','POST',{effective_date:'2024-01-01',annual_bps:100,basis_cents:100,source:'No'}],['periods/1/entries','POST',entry],['periods/1/fee-accrual','POST',fee],['periods/1/expenses','POST',expense],['lines/1/reconcile','POST',reconcile],['periods/1/state','POST',{closed:true}],['administrator','PUT',{user_id:3}]] as any[])
       assert.equal((await f.request('/10/'+path,3,method,data)).status,404);
     assert.equal((await f.request('/10/administrator',2,'PUT',{user_id:3})).status,404);
-    assert.equal((await f.request('/10/administrator',1,'PUT',{user_id:8})).status,409);
-    assert.equal((await f.request('/10/administrator',1,'PUT',{user_id:5})).status,409);
-    assert.equal((await f.request('/10/administrator',1,'PUT',{user_id:null})).status,200);
+    assert.equal((await f.request('/10/administrator',1,'PUT',{user_id:null})).status,403);
+    assert.equal(f.db.prepare('SELECT fund_admin_user_id FROM vc_funds WHERE id=10').get().fund_admin_user_id,2);
+    assert.equal((await f.request('/10/administrator',SUPER,'PUT',{user_id:8})).status,409);
+    assert.equal((await f.request('/10/administrator',SUPER,'PUT',{user_id:5})).status,409);
+    assert.equal((await f.request('/10/administrator',SUPER,'PUT',{user_id:null})).status,200);
     assert.equal((await f.request('/10',2)).status,404);
   }finally{f.db.close();}
 });
@@ -238,13 +255,13 @@ test('audit failure rolls back each write; failed reads are sanitized Unreadable
       await f.request('/10/periods/1/entries',2,'POST',entry);
       const before=['fund_ledger_accounts','fund_accounting_periods','fund_fee_terms','fund_ledger_entries','fund_ledger_lines'].map(t=>count(f.db,t));
       f.db.exec('DROP TABLE activity_logs');
-      const response=await f.request('/10/'+path,path==='administrator'?1:2,method,data);
+      const response=await f.request('/10/'+path,path==='administrator'?SUPER:2,method,data);
       assert.equal(response.status,503); assert.match((await response.json() as any).message,/Unreadable/);
       assert.deepEqual(['fund_ledger_accounts','fund_accounting_periods','fund_fee_terms','fund_ledger_entries','fund_ledger_lines'].map(t=>count(f.db,t)),before);
       assert.equal(f.db.prepare('SELECT fund_admin_user_id FROM vc_funds WHERE id=10').get().fund_admin_user_id,2);
       assert.equal(f.db.prepare('SELECT closed FROM fund_accounting_periods WHERE id=1').get().closed,0);
       assert.equal(f.db.prepare('SELECT reconciled_by FROM fund_ledger_lines WHERE id=1').get().reconciled_by,null);
-      assert.doesNotMatch(JSON.stringify(await (await f.request('/10/'+path,path==='administrator'?1:2,method,data)).json()),/activity_logs|SQLITE|no such table/);
+      assert.doesNotMatch(JSON.stringify(await (await f.request('/10/'+path,path==='administrator'?SUPER:2,method,data)).json()),/activity_logs|SQLITE|no such table/);
     }finally{f.db.close();}
   }
   const f=await fixture();try{
