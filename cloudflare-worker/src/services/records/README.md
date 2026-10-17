@@ -7,6 +7,11 @@ checks a record id against its actual store and project before a route reads or
 writes it. Validate's existing stores are listed there; later cycles add their
 stores with fixed, bound SQL statements.
 
+A record supplies four facts. Each returned section names its `read` or `write`
+gate. A declared action exposes its `form` (with T, CH or CK fields) and optional
+`confirm` prompt; a file field makes its POST multipart. The route supplies the
+default action tone when a spec omits one.
+
 `../cycleActivity.ts` writes scoped activity and reads one record's timeline.
 Older activity is only included when a spec declares an `oldRows` matcher.
 Nothing rewrites historical activity.

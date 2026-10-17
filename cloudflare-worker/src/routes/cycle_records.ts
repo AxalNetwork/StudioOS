@@ -18,7 +18,8 @@ function allowed(gate: Gate, project: ProjectRef, user: User): boolean {
 
 function declaration(action: RecordAction) {
   const { execute: _execute, references: _references, ...publicAction } = action;
-  return { ...publicAction, multipart: action.multipart || action.fields?.some((field) => field.input === 'file') || false };
+  return { ...publicAction, tone: action.tone ?? 'default',
+    multipart: action.multipart || action.form?.fields.some((field) => field.input === 'file') || false };
 }
 
 function nextFor(main: RecordSection[], actions: ReturnType<typeof declaration>[]) {
@@ -81,7 +82,7 @@ async function perform(c: any, registry: RecordRegistry, key: string) {
   const action = actions.find((entry) => entry.key === key);
   if (!action) return c.json({ detail: 'No such action on this record.' }, 404);
   let body: Record<string, unknown> | FormData;
-  if ((action.multipart || action.fields?.some((field) => field.input === 'file'))
+  if ((action.multipart || action.form?.fields.some((field) => field.input === 'file'))
     && c.req.header('content-type')?.toLowerCase().startsWith('multipart/form-data')) {
     body = await c.req.formData();
   } else {
@@ -122,7 +123,8 @@ export function createCycleRecords(registry: RecordRegistry = RECORD_SPECS) {
       if (section.gate && !allowed(section.gate, s.ctx.project, s.ctx.user)) continue;
       const data = await section.read(s.ctx, s.id, record);
       const rows = canWrite ? data.rows : data.rows.map(({ action: _action, ...row }) => row);
-      sections.push({ key: section.key, title: section.title, side: section.side, rows,
+      sections.push({ key: section.key, title: section.title,
+        gate: section.publicGate ?? (section.gate === 'write' ? 'write' : 'read'), side: section.side, rows,
         empty: data.empty, action: canWrite ? data.action : undefined });
     }
     const actions = canWrite ? (await s.spec.actions(s.ctx, s.id, record)).map(declaration) : [];

@@ -17,6 +17,7 @@ export type Row = {
 export type RecordSection = {
   key: string;
   title: string;
+  gate: 'read' | 'write';
   rows: Row[];
   empty?: string;
   action?: string | { key: string; body: Record<string, unknown> };
@@ -29,6 +30,8 @@ export type SectionSpec = {
   title: string;
   side?: boolean;
   gate?: Gate;
+  /** Required when a custom gate represents a writer-only section. */
+  publicGate?: 'read' | 'write';
   read: (ctx: RecordContext, id: string, record: RecordContent) => Promise<Pick<RecordSection, 'rows' | 'empty' | 'action'>>;
 };
 
@@ -53,21 +56,31 @@ export type RecordContext = {
 
 export type RecordContent = {
   title: string;
-  sub?: string;
-  pills?: Array<string | { text: string; tone?: string }>;
-  facts?: Array<{ label: string; value: string | number | null; reason?: string }>;
+  sub: string;
+  pills: Array<string | { text: string; tone?: string }>;
+  facts: [RecordFact, RecordFact, RecordFact, RecordFact];
   createdBy?: number | null;
   createdAt?: string | null;
+};
+
+export type RecordFact = { label: string; value: string | number | null; reason?: string };
+export type RecordForm = {
+  title: string;
+  sub?: string;
+  cta?: string;
+  foot?: string;
+  fields: RecordField[];
 };
 
 export type ActionResult = { ok: boolean; record?: unknown; open?: unknown };
 export type RecordAction = {
   key: string;
   label: string;
-  kind: 'form' | 'write' | 'link' | 'client';
+  kind: 'form' | 'write' | 'link';
   tone?: 'default' | 'primary' | 'danger';
   href?: string;
-  fields?: RecordField[];
+  form?: RecordForm;
+  confirm?: string | { title: string; body?: string; cta?: string };
   multipart?: boolean;
   /** Server-only callback. It is removed from the read response. */
   execute?: (ctx: RecordContext, id: string, body: Record<string, unknown> | FormData) => Promise<ActionResult>;

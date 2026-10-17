@@ -8,7 +8,7 @@ import { SignJWT } from 'jose';
 import { createCycleRecords } from '../src/routes/cycle_records.ts';
 import cycleValidate from '../src/routes/cycle_validate.ts';
 import { ownedRow } from '../src/services/records/owned.ts';
-import type { RecordRegistry } from '../src/services/records/types.ts';
+import type { RecordContent, RecordRegistry } from '../src/services/records/types.ts';
 import { tableFromBaseline } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 
@@ -44,7 +44,14 @@ function fixture() {
 
 const spec = {
   read: 'read' as const, write: 'write' as const, store: 'pain_groups' as const,
-  async record(_ctx: unknown, id: string) { return { title: `Theme ${id}`, facts: [{ label: 'Severity', value: null, reason: 'Not recorded' }] }; },
+  async record(_ctx: unknown, id: string): Promise<RecordContent> { return {
+    title: `Theme ${id}`, sub: 'A discovered problem', pills: [], facts: [
+      { label: 'Severity', value: null, reason: 'No severity recorded' },
+      { label: 'Mentions', value: 0 },
+      { label: 'Trend', value: null, reason: 'No timeline recorded' },
+      { label: 'First heard', value: null, reason: 'No date recorded' },
+    ],
+  }; },
   sections: [
     { key: 'public', title: 'Public', async read() { return { rows: [{ a: 'Public fact' }] }; } },
     { key: 'writer', title: 'Writer', gate: 'write' as const, async read() { return { rows: [{ a: 'Private fact' }] }; } },
@@ -94,10 +101,14 @@ test('D690 section, role, action and form-options gates share the module contrac
     assert.equal(read.status, 200);
     assert.equal(read.body.main.length, 2);
     assert.equal(read.body.actions[0].key, 'edit');
+    assert.equal(read.body.actions[0].tone, 'default');
+    assert.equal(read.body.facts.length, 4);
+    assert.deepEqual(read.body.main.map((s: any) => s.gate), ['read', 'write']);
   }
   const partner = await call(db, 40, 'GET', base);
   assert.equal(partner.status, 200);
   assert.deepEqual(partner.body.main.map((s: any) => s.key), ['public']);
+  assert.equal(partner.body.main[0].gate, 'read');
   assert.deepEqual(partner.body.actions, []);
   assert.equal((await call(db, 40, 'POST', base.replace('?project=', '/actions/edit?project='))).status, 403);
   for (const who of [20, 50]) assert.equal((await call(db, who, 'GET', base)).status, 403);
@@ -112,7 +123,8 @@ test('D690 section, role, action and form-options gates share the module contrac
 test('D690 a file field declares multipart and the action receives the form body', async () => {
   const db = fixture();
   const fileSpec = { ...spec, async actions() { return [{ key: 'attach', label: 'Attach', kind: 'form' as const,
-    fields: [{ key: 'proof', label: 'Proof', kind: 'T' as const, input: 'file' as const }],
+    form: { title: 'Attach evidence', fields: [{ key: 'proof', label: 'Proof', kind: 'T' as const, input: 'file' as const }] },
+    confirm: 'Attach this evidence?',
     async execute(_ctx: unknown, _id: string, body: Record<string, unknown> | FormData) {
       return { ok: body instanceof FormData && body.get('proof') === 'fixture' };
     } }]; } };
@@ -120,6 +132,9 @@ test('D690 a file field declares multipart and the action receives the form body
   const path = '/validate/modules/problem-discovery/records/11?project=1';
   const read = await call(db, 10, 'GET', path, undefined, activeRegistry);
   assert.equal(read.body.actions[0].multipart, true);
+  assert.equal(read.body.actions[0].form.title, 'Attach evidence');
+  assert.equal(read.body.actions[0].form.fields[0].input, 'file');
+  assert.equal(read.body.actions[0].confirm, 'Attach this evidence?');
   const form = new FormData();
   form.set('proof', 'fixture');
   const result = await call(db, 10, 'POST', path.replace('?project=', '/actions/attach?project='), form, activeRegistry);
