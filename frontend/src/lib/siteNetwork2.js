@@ -105,7 +105,7 @@ export function eventTypeTone(type) {
 
 /** The Worker's `EMPLOYMENT_TYPES` and `SENIORITIES` (services/jobBoardCommon.ts), labelled. */
 export const EMPLOYMENT_LABELS = {
-  full_time: 'Full-time', part_time: 'Part-time', intern: 'Internship', contract: 'Contract',
+  full_time: 'Full-time', part_time: 'Part-time', intern: 'Internship', contract: 'Contract', fractional: 'Fractional',
 };
 export const SENIORITY_LABELS = {
   intern: 'Intern', junior: 'Junior', mid: 'Mid-level', senior: 'Senior', lead: 'Lead', executive: 'Executive',

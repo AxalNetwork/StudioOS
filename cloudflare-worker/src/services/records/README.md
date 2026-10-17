@@ -2,13 +2,16 @@
 
 `types.ts` defines the plain-data `ModuleSpec`, record sections, actions, fields,
 and gates. `index.ts` holds the cycle/slug registry and reports whether a cycle
-has records; a cycle has none until it registers its own service. `owned.ts`
+has records. Validate registers `validate.ts` (D690, #1692), Build `build.ts` (D690,
+#1694) and Raise `raise.ts` (D691, #1699); every other cycle has none until it
+registers its own service. `owned.ts`
 checks a record id against its actual store and project before a route reads or
 writes it. Validate's existing stores are listed there; later cycles add their
 stores with fixed, bound SQL statements.
 
-A record supplies four facts. Each returned section names its `read` or `write`
-gate. A declared action exposes its `form` (with T, CH or CK fields) and optional
+A record supplies four facts, and may carry its row's `uid`. Each returned
+section names its `read` or `write` gate; a section with `when` is drawn only
+for the ids it accepts. A declared action exposes its `form` (with T, CH or CK fields) and optional
 `confirm` prompt; a file field makes its POST multipart. The route supplies the
 default action tone when a spec omits one.
 

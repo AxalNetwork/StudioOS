@@ -1,7 +1,8 @@
 // Synthetic record and isolated source mutations for D696. Never live user data.
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { pathToFileURL } from 'node:url';
+import { existsSync } from 'node:fs';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { transformWithOxc } from 'vite';
 
 export function fixture() {
@@ -57,7 +58,13 @@ export async function sourceModule(source, path, jsx = false) {
   const require = createRequire(url);
   const js = jsx ? (await transformWithOxc(source, url.pathname, { jsx: { runtime: 'automatic' } })).code : source;
   const resolved = js.replace(/((?:from\s*|import\s*\()\s*)['"]([^'"]+)['"]/g, (_match, prefix, specifier) => {
-    const target = specifier.startsWith('.') ? new URL(specifier, url).href : specifier.startsWith('node:') ? specifier : pathToFileURL(require.resolve(specifier)).href;
+    let target;
+    if (specifier.startsWith('.')) {
+      const relative = new URL(specifier, url);
+      const file = fileURLToPath(relative);
+      const extension = ['.jsx', '.js', '.tsx', '.ts', '/index.js'].find(ext => existsSync(file + ext));
+      target = extension ? pathToFileURL(file + extension).href : relative.href;
+    } else target = specifier.startsWith('node:') ? specifier : pathToFileURL(require.resolve(specifier)).href;
     return prefix + JSON.stringify(target);
   });
   return import('data:text/javascript;base64,' + Buffer.from(resolved).toString('base64') + '#d696-' + serial++);

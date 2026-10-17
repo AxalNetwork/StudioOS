@@ -14,7 +14,7 @@ represents a bug that reached production once:
 
 | Guard | What it catches |
 | --- | --- |
-| `check-api-drift.mjs` | The SPA calling an endpoint the worker does not serve — resolved against the real mount table, not a regex. |
+| `check-api-drift.mjs` | The SPA calling an endpoint the worker does not serve — resolved against the mounted routers, including a local factory’s returned Hono instance (D696). Unmounted alternate factories do not count. |
 | `check-sqlite-columns.mjs` | SQL naming a column that does not exist. D1 rejects the whole statement, so this renders as an empty screen rather than an error. |
 | `check-sqlite-tables.mjs` | SQL against a table nothing creates. |
 | `check-sqlite-table-collisions.mjs` | A table with two definitions that cannot describe one table — each demanding a NOT NULL column the other has no place for, so whichever `IF NOT EXISTS` runs first wins and the code written against the loser cannot insert. The complement to `check-sqlite-columns`, which unions definitions rather than comparing them. Like that guard it excludes `sql/historical/`: harvesting an archive produced findings nobody could answer — the first to return without the filter is `advisor_bookings`, reported between two archived files disagreeing with **each other**, while its one live definition conflicts with nothing. Exceptions live in `sqlite-table-collisions-baseline.json` and the gate fails on an entry that no longer collides. |
