@@ -175,7 +175,7 @@ function venture() {
   db.exec(sqlOf('255_hypothesis_verdict_history.sql'));
   db.exec(sqlOf('311_revenue_entries.sql').replace(/REFERENCES documents\(id\)/, ''));
   for (const m of ['440_validate_cycle_stores.sql', '438_interview_sessions.sql', '447_assistant_interviews.sql',
-    '453_interview_processing.sql', '459_cycle_activity_convention.sql']) db.exec(sqlOf(m));
+    '453_interview_processing.sql', '459_cycle_activity_convention.sql', '460_validate_record_stores.sql']) db.exec(sqlOf(m));
   db.prepare("INSERT INTO users (id, role, name, email, is_active, founder_id, spinout_lab_active) VALUES (?, 'founder', 'Juniper Lane', 'juniper@example.test', 1, 1001, 0)").run(V_FOUNDER);
   db.exec(`INSERT INTO projects (id, name, founder_id) VALUES (${V_A}, 'Orchard Ops', 1001), (${V_B}, 'Quill Freight', 1001)`);
   return db;

@@ -1058,6 +1058,311 @@ export const VALIDATE_EDITS = {
   experiments: editHypothesis,
 };
 
+// ---------- Build (routes/cycle_build.ts, D690 #1695) ------------------------
+//
+// D695 PR 3a (#1656): Build's six canvas forms (CO:311-316) and their Edits,
+// as specs in the canvas's T, CH and CK kinds, each body the one #1695's write
+// table gives. They are registered nowhere (decision 15), and today's Build
+// forms stay as they are: PR 3b adds the client methods each `submit` names,
+// the chip loaders and the registration, after #1695's closing PR brings the
+// roadmap and formation-step routes and Build's `form-options`.
+
+/** A number as typed ("40", "40%"); null when empty; NaN when not a number. */
+const numberOf = (v) => {
+  if (v == null || String(v).trim() === '') return null;
+  const n = Number(String(v).replace(/[%,\s]/g, ''));
+  return Number.isFinite(n) ? n : Number.NaN;
+};
+const NOTHING = { value: '', label: 'Nothing' };
+const NONE_CHIP = { value: '', label: 'None' };
+const LEVEL = [{ value: 'low', label: 'Low' }, { value: 'medium', label: 'Medium' }, { value: 'high', label: 'High' }];
+// A two-part owner box (decision 2): a member the route accepts, then a date.
+const ownerPart = { kind: 'CH', name: 'owner_user_id', k: 'Owner', opts: [], optionsFrom: 'owners', empty: 'No member to choose yet.' };
+const buildHypothesis = { kind: 'CH', name: 'hypothesis_id', k: 'Tests hypothesis', opts: [NONE_YET], def: 0, optionsFrom: 'hypotheses' };
+
+const featureFields = [
+  { kind: 'T', name: 'title', k: 'Feature', ph: 'What it lets the customer do', required: true, max: 200 },
+  // "None yet" sits last, as the canvas draws it; a loader puts the themes before it.
+  { kind: 'CH', name: 'pain_group_id', k: 'Answers pain theme', opts: [NONE_YET], def: 0, optionsFrom: 'pain_themes',
+    note: 'Pick None yet and the feature is flagged until you link it.' },
+  buildHypothesis,
+  { kind: 'CH', name: 'impact', k: 'Impact', opts: LEVEL, def: 2 },
+  { kind: 'CH', name: 'effort', k: 'Effort', opts: LEVEL, def: 0 },
+  { kind: 'CH', name: 'scope', k: 'Scope', opts: [{ value: 'core', label: 'Core' }, { value: 'out', label: 'Out of scope' }], def: 0 },
+];
+const featureBody = (v) => ({
+  title: str(v.title), pain_group_id: idOrNull(v.pain_group_id), hypothesis_id: idOrNull(v.hypothesis_id),
+  impact: v.impact || null, effort: v.effort || null, scope: v.scope || null,
+});
+const buildFeature = {
+  key: 'feature', cta: 'Add feature', button: 'Add feature',
+  title: 'Add feature',
+  sub: 'A feature answers a pain theme and tests a hypothesis. One that links to nothing is flagged.',
+  foot: 'Counted on Solution design’s chart as linked or unlinked.',
+  fields: featureFields,
+  toBody: featureBody,
+  submit: (w, projectId, v) => w.build.addFeature(projectId, buildFeature.toBody(v)),
+};
+
+const MVP_STATE = [{ value: 'not_started', label: 'Not started' }, { value: 'in_progress', label: 'In progress' }, { value: 'done', label: 'Done' }, { value: 'blocked', label: 'Blocked' }];
+const LINKS = [{ value: 'figma', label: 'Figma file', meta: 'design' }, { value: 'github', label: 'GitHub issue', meta: 'code' }];
+const ownerDue = { name: 'owner_due', k: 'Owner · due', parts: [ownerPart, { kind: 'T', name: 'due_date', k: 'Due', input: 'date', ph: '8 Nov' }] };
+const mustHaveFields = [
+  { kind: 'T', name: 'title', k: 'Must-have', ph: 'What must work', required: true, max: 200 },
+  buildHypothesis,
+  { kind: 'CH', name: 'state', k: 'State', opts: MVP_STATE, def: 0 },
+  ownerDue,
+];
+const mustHaveBody = (v) => {
+  const owner = idOrNull(v.owner_user_id);
+  return { title: str(v.title), hypothesis_id: idOrNull(v.hypothesis_id), state: v.state || null, ...(owner == null ? {} : { owner_user_id: owner }), due_date: str(v.due_date) };
+};
+const buildMustHave = {
+  key: 'must-have', cta: 'Add must-have', button: 'Add must-have',
+  title: 'Add must-have',
+  sub: 'What has to work before the MVP ships.',
+  foot: 'Counts toward the burn-up to the ship date.',
+  fields: [
+    ...mustHaveFields,
+    // Each "Linked" check reveals its URL box (decision 2): an attached https link, not a sync.
+    { kind: 'CK', name: 'linked', k: 'Linked', opts: LINKS },
+    { kind: 'T', name: 'figma_url', k: 'Figma file URL', ph: 'https://www.figma.com/…', max: 1000, when: { name: 'linked', value: 'figma' } },
+    { kind: 'T', name: 'github_url', k: 'GitHub issue URL', ph: 'https://github.com/…/issues/…', max: 1000, when: { name: 'linked', value: 'github' } },
+  ],
+  toBody: (v) => ({ ...mustHaveBody(v), links: LINKS.filter((l) => checked(v.linked, l.value)).map((l) => str(v[`${l.value}_url`])).filter(Boolean) }),
+  submit: (w, projectId, v) => w.build.addMustHave(projectId, buildMustHave.toBody(v)),
+};
+
+const COLUMN = [{ value: 'now', label: 'Now' }, { value: 'next', label: 'Next' }, { value: 'later', label: 'Later' }];
+const itemFields = [
+  { kind: 'T', name: 'title', k: 'Item', ph: 'What ships', required: true, max: 200 },
+  { kind: 'CH', name: 'column', k: 'Column', opts: COLUMN, def: 1 },
+  { kind: 'CH', name: 'kpi_key', k: 'Moves KPI', opts: [NONE_CHIP], def: 0, optionsFrom: 'kpis' },
+  { kind: 'CH', name: 'feedback_theme', k: 'Answers feedback theme', opts: [NONE_CHIP], def: 0, optionsFrom: 'feedback_themes' },
+  { name: 'owner_date', k: 'Owner · date', parts: [ownerPart, { kind: 'T', name: 'target_date', k: 'Date', input: 'date', ph: 'Dec' }] },
+];
+const itemBody = (v) => {
+  const owner = idOrNull(v.owner_user_id);
+  return { title: str(v.title), column: v.column || null, kpi_key: str(v.kpi_key), feedback_theme: str(v.feedback_theme), ...(owner == null ? {} : { owner_user_id: owner }), target_date: str(v.target_date) };
+};
+const buildItem = {
+  key: 'item', cta: 'Add item', button: 'Add item',
+  title: 'Add item',
+  sub: 'A roadmap item moves a KPI or answers a feedback theme.',
+  foot: 'Issues from a connected GitHub repository land here too.',
+  fields: [...itemFields, { kind: 'CH', name: 'waits_on_id', k: 'Waits on', opts: [NOTHING], def: 0, optionsFrom: 'roadmap_items' }],
+  toBody: (v) => ({ ...itemBody(v), waits_on_id: idOrNull(v.waits_on_id) }),
+  submit: (w, projectId, v) => w.build.roadmapItem(projectId, buildItem.toBody(v)),
+};
+
+const VESTING = [{ value: '4y_1y_cliff', label: '4 years, 1-year cliff' }, { value: '4y_no_cliff', label: '4 years, no cliff' }, { value: 'custom', label: 'Custom' }];
+const founderFields = [
+  { name: 'founder', k: 'Founder', parts: [
+    { kind: 'T', name: 'name', k: 'Name', ph: 'Name', required: true, max: 200 },
+    { kind: 'T', name: 'email', k: 'Email', input: 'email', ph: 'email', max: 320 },
+  ] },
+  { kind: 'T', name: 'role', k: 'Role', ph: 'CEO, CTO, …', max: 100 },
+  // "unallocated now" is drawn only once `form-options` reads it (decision 3).
+  { kind: 'T', name: 'equity_pct', k: 'Equity', ph: '40%' },
+  { kind: 'CH', name: 'vesting', k: 'Vesting', opts: VESTING, def: 0 },
+  { kind: 'T', name: 'total_months', k: 'Vesting months', input: 'number', required: true, when: { name: 'vesting', value: 'custom' } },
+  { kind: 'T', name: 'cliff_months', k: 'Cliff months', input: 'number', required: true, when: { name: 'vesting', value: 'custom' } },
+  { kind: 'T', name: 'vesting_start', k: 'Vesting starts', input: 'date', ph: '12 Mar 2026', required: true },
+];
+const founderCheck = (v) => {
+  const e = numberOf(v.equity_pct);
+  return Number.isNaN(e) || (e != null && (e <= 0 || e >= 100)) ? { equity_pct: 'Equity is a percentage between 0 and 100.' } : {};
+};
+const founderBody = (v) => ({
+  name: str(v.name), email: str(v.email), role: str(v.role), equity_pct: numberOf(v.equity_pct),
+  vesting: v.vesting || null, vesting_start: str(v.vesting_start),
+  ...(v.vesting === 'custom' ? { total_months: numberOf(v.total_months), cliff_months: numberOf(v.cliff_months) } : {}),
+});
+const buildFounder = {
+  key: 'founder', cta: 'Add founder', button: 'Add founder',
+  title: 'Add founder',
+  // Decision 8: nothing is drafted or sent for signature from here.
+  sub: 'Role, equity and vesting. Then draft the agreement in the legal engine.',
+  foot: 'Changes the unallocated share.',
+  fields: [
+    ...founderFields,
+    // Founding team lists its founders from the cap table, so that check is locked (decision 11).
+    { kind: 'CK', name: 'then', k: 'Then', opts: [
+      { value: 'agreement', label: 'Draft the co-founder agreement', meta: 'in the legal engine', checked: true },
+      { value: 'cap_table', label: 'Add to the cap table', meta: 'founder stock', checked: true, disabled: true },
+    ] },
+  ],
+  check: founderCheck,
+  toBody: founderBody,
+  // The route returns the legal engine's link as `next`; the dialog shows it once saved.
+  done: (result) => (result?.next?.href ? { text: 'Founder added to the cap table.', href: result.next.href } : null),
+  submit: (w, projectId, v) => w.build.founder(projectId, buildFounder.toBody(v)),
+};
+
+const FILING = [
+  { value: 'formation', label: 'Formation' }, { value: 'ein', label: 'EIN' }, { value: '83b', label: '83(b) election' },
+  { value: 'annual_report', label: 'Annual report' }, { value: 'franchise_tax', label: 'Franchise tax' }, { value: 'other', label: 'Other' },
+];
+const FILING_STATE = [{ value: 'upcoming', label: 'Upcoming' }, { value: 'filed', label: 'Filed' }, { value: 'due_soon', label: 'Due soon' }];
+const filingFields = [
+  { kind: 'CH', name: 'kind', k: 'Filing', opts: FILING, def: 2 },
+  // The entity's jurisdiction joins Federal once `form-options` reads it.
+  { kind: 'CH', name: 'jurisdiction', k: 'Jurisdiction', opts: [{ value: 'Federal', label: 'Federal' }, { value: '', label: 'Other' }], def: 0, optionsFrom: 'jurisdictions' },
+  { kind: 'T', name: 'due_date', k: 'Due', input: 'date', ph: '11 Nov' },
+  { kind: 'CH', name: 'for_holder_id', k: 'For', opts: [], optionsFrom: 'founders', empty: 'No founder recorded yet.', when: { name: 'kind', value: '83b' } },
+  { kind: 'CH', name: 'state', k: 'State', opts: FILING_STATE, def: 0 },
+];
+const filingBody = (v) => ({
+  kind: v.kind || null, jurisdiction: str(v.jurisdiction), due_date: str(v.due_date),
+  for_holder_id: v.kind === '83b' ? str(v.for_holder_id) : null, state: v.state || null,
+});
+const buildFiling = {
+  key: 'filing', cta: 'Add filing', button: 'Add filing',
+  title: 'Add filing',
+  sub: 'A filing with its jurisdiction, due date and proof.',
+  // No foot: no job sends filing reminders (decision 8). Proof is the record's
+  // Upload proof once #1658's record page is on main.
+  fields: filingFields,
+  toBody: filingBody,
+  submit: (w, projectId, v) => w.build.formationStep(projectId, buildFiling.toBody(v)),
+};
+
+const SYSTEM = [{ value: 'bank', label: 'Bank' }, { value: 'accounting', label: 'Accounting' }, { value: 'payroll', label: 'Payroll' }, { value: 'crm', label: 'CRM' }, { value: 'workspace', label: 'Workspace' }];
+const SYNC = [{ value: 'live', label: 'Live' }, { value: 'hourly', label: 'Hourly' }, { value: 'daily', label: 'Daily' }, { value: 'manual', label: 'Manual' }];
+const FEEDS = [
+  { value: 'use_of_funds', label: 'Use of funds', meta: 'bank and accounting', checked: true },
+  { value: 'kpis', label: 'KPIs', meta: 'accounting', checked: true },
+  { value: 'team', label: 'Team', meta: 'payroll', checked: false },
+];
+const systemLabel = (kind) => SYSTEM.find((s) => s.value === kind)?.label ?? 'system';
+/** The hand-off to Connect a tool (decision 10), for this venture and the chosen catalogue key. */
+export function connectToolHref(projectId, tool) {
+  const id = Number(projectId);
+  const q = new URLSearchParams(Number.isSafeInteger(id) && id > 0 ? { project_id: String(id) } : {});
+  if (/^[a-z0-9_-]{1,64}$/.test(String(tool ?? ''))) q.set('tool', String(tool));
+  const s = q.toString();
+  return `/build/connect${s ? `?${s}` : ''}`;
+}
+const buildSystem = {
+  key: 'system', cta: 'Continue to sign-in', button: 'Connect a system',
+  title: 'Connect a system',
+  sub: 'Each system shows its state and last sync once connected.',
+  foot: 'Opens the provider’s own sign-in.',
+  fields: [
+    // No Calendar (D-k): Calendar is the Workspace store.
+    { kind: 'CH', name: 'system', k: 'System', opts: SYSTEM, def: 1 },
+    // The catalogue providers `form-options` lists for the kind, never filtered here.
+    { kind: 'CH', name: 'provider', k: 'Provider', opts: [], optionsFrom: 'providers', required: true, empty: 'No provider can be connected yet.',
+      note: (v) => ({ text: `No ${systemLabel(v.system)} provider can be connected yet.`, href: '/build/connect' }) },
+    // Workspace has no connection row, so it draws no Sync (decision 10).
+    { kind: 'CH', name: 'sync', k: 'Sync', opts: SYNC, def: 2, when: (v) => v.system !== 'workspace' },
+    { kind: 'CK', name: 'feeds', k: 'Feeds', opts: FEEDS },
+  ],
+  // Never a connector key: an absent key keeps a mapping (decision 10).
+  toBody: (v) => ({ feeds: Array.isArray(v.feeds) ? v.feeds : [], ...(v.system !== 'workspace' && v.sync ? { sync: v.sync } : {}) }),
+  // An unmapped Workspace has no row for Feeds, so it goes straight to the hand-off.
+  async submit(w, projectId, v) {
+    if (v.system !== 'workspace') await w.build.system(projectId, v.system, buildSystem.toBody(v));
+    return { next: connectToolHref(projectId, v.provider) };
+  },
+  done: (result) => (result?.next ? { text: 'Continue to the provider’s sign-in.', href: result.next } : null),
+};
+
+/** Build's Add forms, by module slug (PR 3b registers them as `FORMS.build`). */
+export const BUILD_FORMS = {
+  'solution-design': [buildFeature],
+  'prototype-mvp': [buildMustHave],
+  'product-roadmap': [buildItem],
+  'founding-team': [buildFounder],
+  'company-creation': [buildFiling],
+  'operating-systems': [buildSystem],
+};
+
+// The Edits (decision 7): the Add's fields each PATCH takes. A record's or a
+// row's `edit` carries the current values (#1695, decision 13).
+const editBuildFeature = {
+  ...EDIT,
+  key: 'edit-feature', title: 'Edit feature', sub: buildFeature.sub,
+  fields: [...featureFields, { kind: 'CH', name: 'is_must_have', k: 'Must-have for the MVP', opts: YES_NO }],
+  idOf: recordId(/^[1-9]\d*$/),
+  valuesOf: (row) => {
+    const v = carried(['title', 'pain_group_id', 'hypothesis_id', 'impact', 'effort', 'scope', 'is_must_have'])(row);
+    if (Object.hasOwn(v, 'is_must_have')) v.is_must_have = v.is_must_have === true || Number(v.is_must_have) === 1 ? 'yes' : 'no';
+    return v;
+  },
+  toBody: (v) => onlyShown(v, { ...featureBody(v), is_must_have: v.is_must_have === 'yes' }),
+  submit: (w, projectId, id, v) => w.build.feature(projectId, id, editBuildFeature.toBody(v)),
+};
+
+// Linked, Waits on and Proof are the record's own sections (#1695), so no Edit carries them.
+const editBuildMustHave = {
+  ...EDIT,
+  key: 'edit-must-have', title: 'Edit must-have', sub: buildMustHave.sub,
+  fields: mustHaveFields,
+  idOf: recordId(/^[1-9]\d*$/),
+  valuesOf: (row) => {
+    const v = carried(['title', 'hypothesis_id', 'state', 'owner_user_id', 'due_date'])(row);
+    if (v.due_date) v.due_date = dateText(v.due_date);
+    return v;
+  },
+  toBody: (v) => onlyShown(v, { ...mustHaveBody(v), owner_user_id: idOrNull(v.owner_user_id) }),
+  submit: (w, projectId, id, v) => w.build.feature(projectId, id, editBuildMustHave.toBody(v)),
+};
+
+const editBuildItem = {
+  ...EDIT,
+  key: 'edit-item', title: 'Edit item', sub: buildItem.sub,
+  fields: itemFields,
+  idOf: recordId(/^[1-9]\d*$/),
+  valuesOf: (row) => {
+    const v = carried(['title', 'column', 'kpi_key', 'feedback_theme', 'owner_user_id', 'target_date'])(row);
+    if (v.target_date) v.target_date = dateText(v.target_date);
+    return v;
+  },
+  toBody: (v) => onlyShown(v, { ...itemBody(v), owner_user_id: idOrNull(v.owner_user_id) }),
+  submit: (w, projectId, id, v) => w.build.roadmapItemUpdate(projectId, id, editBuildItem.toBody(v)),
+};
+
+const editBuildFounder = {
+  ...EDIT,
+  key: 'edit-founder', title: 'Edit founder', sub: buildFounder.sub,
+  fields: founderFields,
+  check: founderCheck,
+  // A cap-table register row, as the record route addresses it.
+  idOf: recordId(/^h-[1-9]\d*$/),
+  valuesOf: (row) => {
+    const v = carried(['name', 'email', 'role', 'equity_pct', 'vesting', 'total_months', 'cliff_months', 'vesting_start'])(row);
+    if (v.vesting_start) v.vesting_start = dateText(v.vesting_start);
+    return v;
+  },
+  toBody: (v) => onlyShown(v, founderBody(v)),
+  submit: (w, projectId, id, v) => w.build.founderUpdate(projectId, id, editBuildFounder.toBody(v)),
+};
+
+const editBuildFiling = {
+  ...EDIT,
+  key: 'edit-filing', title: 'Edit filing', sub: buildFiling.sub,
+  fields: filingFields,
+  // Only `step-<id>` rows are the venture's own filings; Lab steps and obligations are changed where they live.
+  idOf: buildId('step-'),
+  valuesOf: (row) => {
+    const v = carried(['kind', 'jurisdiction', 'due_date', 'for_holder_id', 'state'])(row);
+    if (v.due_date) v.due_date = dateText(v.due_date);
+    return v;
+  },
+  toBody: (v) => onlyShown(v, filingBody(v)),
+  submit: (w, projectId, id, v) => w.build.formationStepUpdate(projectId, id, editBuildFiling.toBody(v)),
+};
+
+/** Build's Edit forms, by module slug. Operating systems keeps today's Choose connector (decision 10). */
+export const BUILD_EDITS = {
+  'solution-design': editBuildFeature,
+  'prototype-mvp': editBuildMustHave,
+  'product-roadmap': editBuildItem,
+  'founding-team': editBuildFounder,
+  'company-creation': editBuildFiling,
+};
+
 // ---------- Fields: today's types and the canvas's kinds ---------------------
 //
 // D695 decision 2: a field is today's `{ name, label, type }`, or the
