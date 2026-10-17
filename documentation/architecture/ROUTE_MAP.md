@@ -33,6 +33,11 @@ their connecting user; company links control writes into project-backed data.
 request, and Super Admin `GET /requests` lists them. `GET /:uid/logs` searches
 and pages activity. Every company ID supplied by a request is checked against
 `user_company_links` before use.
+Mercury (D710, #1775) is listed only to an admin on HQ, as an entity
+connection read from `/api/admin/mercury`; to every other caller, and on a
+branch, `GET /available` omits it and `POST /connect`, `GET /:key` and the
+waitlist and notify-me routes answer 404 as if the key did not exist, while an
+HQ admin's `POST /connect` gets 409 `entity_connection_only`.
 
 ### Fund administration Worker contract (D714, #1779)
 
