@@ -95,6 +95,7 @@ CREATE TABLE activity_stats (
 CREATE TABLE notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, type TEXT, title TEXT, body TEXT, link TEXT, created_at TEXT);
 CREATE TABLE job_idempotency (idempotency_key TEXT PRIMARY KEY, created_at TEXT);
 ${MIGRATION_312}
+${readFileSync(resolve(HERE, '../sql/migrations/473_fund_management_fees.sql'), 'utf8')}
 `;
 
 /**

@@ -103,6 +103,7 @@ import monitoring from './routes/monitoring';
 import infra from './routes/infra';
 import funds from './routes/funds';
 import fundLedger from './routes/fund_ledger';
+import fundFees from './routes/fund_fees';
 import fundPerformance from './routes/fund_performance';
 import liquidity from './routes/liquidity';
 import email from './routes/email';
@@ -600,6 +601,8 @@ const COOL_OFF_PREFIXES = [
   '/api/admin/contracts',
   '/api/kyc',
   '/api/capital',
+  // D709 (#1774) — management-fee terms and issued periods, the class of /api/capital.
+  '/api/fund-fees',
   '/api/dd',
   '/api/admin/impersonate',
   // Task #11 (II) — admin refunds are money-movement; pause them too so a
@@ -1019,6 +1022,7 @@ app.route('/api/contacts', contacts);
 app.route('/api/round-calls', roundCalls);
 app.route('/api/funds', funds);
 app.route('/api/fund-ledger', fundLedger);
+app.route('/api/fund-fees', fundFees); // D709 (#1774): the management fee; records amounts, moves no money
 app.route('/api/fund-performance', fundPerformance);
 app.route('/api/liquidity', liquidity);
 app.route('/api/email', email);
