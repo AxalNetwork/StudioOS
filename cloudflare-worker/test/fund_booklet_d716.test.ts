@@ -33,7 +33,8 @@ const BODIES: Record<string, string> = {
   lp_aml_kyc_certification: '- [ ] The funds are not the proceeds of crime.',
   lp_tax_status_certification: '- [ ] I am a U.S. person.',
   lp_electronic_delivery_consent: '- [ ] I consent to electronic delivery.',
-  gp_closing_certificate: 'The General Partner accepts the subscription.',
+  // A task item here is the GP's, not the applicant's: Part 9 carries no field.
+  gp_closing_certificate: 'The General Partner accepts the subscription.\n- [ ] The General Partner has reviewed the booklet.',
 };
 
 function fixture() {
@@ -91,7 +92,7 @@ test('D716 only an approved applicant opens a booklet; anyone else gets 404', as
   assert.equal(opened.status, 201, JSON.stringify(opened.body));
   assert.deepEqual(opened.body.parts.map((p: any) => p.part), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
   const fields = opened.body.parts.flatMap((p: any) => p.fields);
-  assert.equal(fields.length, 7, 'the task items of Parts 3 to 7');
+  assert.equal(fields.length, 7, 'the task items of Parts 3 to 7, none from Part 9');
   assert.ok(fields.every((x: any) => x.checked === false));
   assert.deepEqual(opened.body.missing_parts, [1], 'the cover legend is still a stub');
   const reopened = await f.call(APPLICANT, 'POST', '/mine');
