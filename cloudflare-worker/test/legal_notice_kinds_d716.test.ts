@@ -208,7 +208,7 @@ test('478 applies over a fresh build, creates nothing that existed, stores no ac
   const db = build();
   const cols = (db.prepare("SELECT name FROM pragma_table_info('legal_notices')").all() as any[]).map((c) => c.name);
   assert.ok(cols.includes('account_last4') && cols.includes('bank_account_uid'));
-  assert.equal(cols.some((c) => /account_number|_enc$/.test(c)), false, 'no account number column');
+  assert.equal(cols.some((c) => c.includes('account_number') || c.endsWith('_enc')), false, 'no account number column');
   const stub = one(db, "SELECT title, category, body_md, version, is_active, is_stub FROM legal_templates WHERE slug = 'securities_legend'");
   assert.deepEqual(stub, { title: 'Securities Legend — Fund I Offering Documents', category: 'fund', body_md: '', version: 1, is_active: 1, is_stub: 1 });
   db.exec(readFileSync(resolve(MIG, M478), 'utf8'));
