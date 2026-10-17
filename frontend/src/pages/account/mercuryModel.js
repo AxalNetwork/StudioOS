@@ -22,11 +22,11 @@
  * they are not here: keys are never guessed (S1, #1780).
  */
 import { AXAL_ENTITIES } from '../../lib/legalDocFormat.js';
+import { NOT_RECORDED } from '../../lib/absence.js';
 
 /** Decision 4's order: Holdings, Management, GP, Fund. */
 export const ENTITY_KEYS = ['holdings', 'management', 'gp', 'fund'];
 
-const NOT_RECORDED = 'Not recorded';
 const WORD = /^[a-z0-9_]+$/;
 
 /** A Worker code safe to print, else ''. `connectorsModel.js`'s `codeWord`, copied. */
