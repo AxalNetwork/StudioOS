@@ -72,6 +72,7 @@ import { api, initActiveCompanyId, setActiveCompanyId } from './lib/api';
 // returns, racing the flag and still bouncing logged-out visitors to /login.
 import NotFoundPage from './pages/NotFoundPage';
 import { ParamRedirect } from './pages/cycles/ParamRedirect.jsx';
+import { ValidateZoneRedirect } from './pages/cycles/ValidateZoneRedirect.jsx';
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const ArchetypeCardPage = lazy(() => import('./pages/ArchetypeCardPage'));
 const ScoringPage = lazy(() => import('./pages/ScoringPage'));
@@ -533,6 +534,11 @@ export function HistoryRedirect({ to, hash }) {
 // D696 (#1658, decision 13): an old or canvas-slug address that names a
 // record, redirected with its params encoded and the query and hash kept.
 export { ParamRedirect };
+
+// D704 (#1666, decision 1): a retired Validate page lands on the module that
+// holds its work now, the query and the hash kept. Mounted by PR 2b and the
+// closing PR on the three addresses.
+export { ValidateZoneRedirect };
 
 function DashboardRedirect() {
   const loc = useLocation();
@@ -2289,13 +2295,9 @@ function AppInner() {
     && new URLSearchParams(location.search).get('mode') !== 'workspace';
   const founderGrowLanding = effectiveRole === 'founder'
     && new URLSearchParams(location.search).get('mode') !== 'workspace';
-  // Validate and Build are the last two workspaces whose ROOT did not own its
-  // overview: /validate redirected straight past A2 to Interviews, and /build
-  // was not a route at all, so the sidebar had to point at a section page. The
-  // test is the one Raise, Grow and Network already use — founder, and not
-  // asking for the editor — so all six roots now branch identically.
-  const founderValidateLanding = effectiveRole === 'founder'
-    && new URLSearchParams(location.search).get('mode') !== 'workspace';
+  // Build's root owns its overview, as Raise, Grow and Network do: founder,
+  // and not asking for the editor. Validate's root no longer branches at all
+  // (D704, decision 2): every role its guard admits gets the cycle page.
   const founderBuildLanding = effectiveRole === 'founder'
     && new URLSearchParams(location.search).get('mode') !== 'workspace';
   const networkParams = new URLSearchParams(location.search);
@@ -2528,19 +2530,14 @@ function AppInner() {
           ? founderWorkspace('validate', founderEditor(<DiscoveryPage initialTab="interviews" workspaceMode />))
           : <Navigate to={`/validate${location.search}`} replace />)} />
 
-      {/* ── Validate · the four evidence stages ──────────────────────────────
-          Interviews and Pain map read the SAME records Discovery writes; the
-          two routes are doors onto one log, not a fork of it. Hypotheses and
-          Verdict have no store yet and say so rather than 404-ing behind a
-          sidebar row that promises a page. */}
-      {/* D661 (#1474): a founder's /validate is the cycle overview from
-          #1487's read, and /validate/<module> its six module pages. The four
-          zone pages below stay as the modules' working tools: each module
-          page links to the one that edits it, until canvases for Add and a
-          record's edit view exist. `?mode=workspace` still opens the editor. */}
-      <Route path="/validate" element={founderValidateLanding
-        ? guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" />)
-        : <Navigate to="/validate/interviews" replace />} />
+      {/* ── Validate ─────────────────────────────────────────────────────────
+          D661 (#1474): /validate is the cycle overview from #1487's read, and
+          /validate/<module> its module pages. D704 (#1666, decision 2): the
+          root no longer branches, so every role the guard admits, with or
+          without `?mode=workspace`, gets the cycle page. Interviews, Pain map
+          and Hypotheses still render below until #1666's PR 2b and closing PR
+          redirect them to their modules (`ValidateZoneRedirect`). */}
+      <Route path="/validate" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" />)} />
       {/* D685 §5.4: Record a session is the Validate page with the setup lightbox open over it, deep-linkable; closing goes back. */}
       <Route path="/validate/record" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" lightbox />)} />
       {/* D685 §5.6.2 (#1588): the Recording View full screen, bound to the app's one recording. */}
