@@ -151,6 +151,17 @@ async function creatorFor(env: Env, store: CreatorStore, id: string, projectId: 
   if (store === 'competitor_candidates') {
     return env.DB.prepare('SELECT NULL AS name, c.created_at FROM competitor_candidates c JOIN competitor_analyses a ON a.id = c.analysis_id WHERE c.id = ? AND a.project_id = ?').bind(id, projectId).first<Creator>();
   }
+  // D691 (#1698): Grow's uid stores.
+  switch (store) {
+    case 'product_feedback':
+      return env.DB.prepare('SELECT u.name, f.created_at FROM product_feedback f LEFT JOIN users u ON u.id = f.created_by WHERE f.uid = ? AND f.project_id = ?').bind(id, projectId).first<Creator>();
+    case 'growth_channels':
+      return env.DB.prepare('SELECT u.name, g.created_at FROM growth_channels g LEFT JOIN users u ON u.id = g.created_by WHERE g.uid = ? AND g.project_id = ?').bind(id, projectId).first<Creator>();
+    case 'growth_partners':
+      return env.DB.prepare('SELECT u.name, g.created_at FROM growth_partners g LEFT JOIN users u ON u.id = g.created_by WHERE g.uid = ? AND g.project_id = ?').bind(id, projectId).first<Creator>();
+    case 'markets':
+      return env.DB.prepare('SELECT u.name, m.created_at FROM markets m LEFT JOIN users u ON u.id = m.created_by WHERE m.uid = ? AND m.project_id = ?').bind(id, projectId).first<Creator>();
+  }
   const n = Number(id.replace(/^(signal|revenue|waitlist)-/, ''));
   if (!Number.isSafeInteger(n) || n < 1) return null;
   switch (store) {
@@ -177,6 +188,11 @@ async function creatorFor(env: Env, store: CreatorStore, id: string, projectId: 
       return env.DB.prepare('SELECT NULL AS name, w.created_at FROM waitlist_signups w WHERE w.id = ? AND w.project_id = ? AND (w.audience IS NULL OR w.audience = \'customer\')').bind(n, projectId).first<Creator>();
     case 'hypothesis_pain_links':
       return env.DB.prepare('SELECT NULL AS name, l.created_at FROM hypothesis_pain_links l JOIN hypotheses h ON h.id = l.hypothesis_id WHERE l.id = ? AND h.project_id = ?').bind(n, projectId).first<Creator>();
+    // A posting's host created it; an obligation keeps the baseline creator column.
+    case 'job_postings':
+      return env.DB.prepare('SELECT u.name, p.created_at FROM job_postings p LEFT JOIN users u ON u.id = p.host_user_id WHERE p.id = ? AND p.project_id = ?').bind(n, projectId).first<Creator>();
+    case 'compliance_events':
+      return env.DB.prepare('SELECT u.name, e.created_at FROM compliance_events e LEFT JOIN users u ON u.id = e.created_by_user_id WHERE e.id = ? AND e.project_id = ?').bind(n, projectId).first<Creator>();
     default:
       // Verdict logs every decision it records, so it has no creator to fall back on.
       return null;
@@ -202,6 +218,54 @@ export function isCreateRow(action: string, details: string | null): boolean {
 export type ActivityItem = { a: string; b: string; action: string; created_at: string };
 export type ActivityPage = { items: ActivityItem[]; total: number; page: number; page_size: 20 };
 
+/**
+ * The older shapes a record admits (D690, D691 #1698), each off unless its
+ * matcher names it: an empty bound list matches nothing. An application's
+ * stage row is read through its posting, a fixed join used only by a matcher
+ * that names `job_applications`.
+ */
+const OLDER = `(a.entity_type IN (SELECT value FROM json_each(?)) AND a.entity_id = ?)
+       OR (a.entity_type IN (SELECT value FROM json_each(?)) AND substr(a.entity_id, 1, length(?) + 1) = ? || ':')`;
+const APPLICATIONS = `(a.entity_type = 'job_applications' AND EXISTS (SELECT 1 FROM job_applications j
+           WHERE CAST(j.id AS TEXT) = a.entity_id AND CAST(j.posting_id AS TEXT) = ?))`;
+// Today's grow writes log no project_id. Each such row names its own table and
+// id, and the route has proven this id belongs to the venture with ownedRow.
+const matchOf = (older: string) => `(a.project_id = ? AND ((a.entity_type = ? AND a.entity_id = ?)
+       OR ${older}
+       OR (a.entity_type IS NULL AND a.action IN (SELECT value FROM json_each(?))
+           AND CASE WHEN json_valid(a.details) THEN CAST(json_extract(a.details, '$.id') AS TEXT) ELSE NULL END = ?)))
+     OR (a.project_id IS NULL AND a.action IN (SELECT value FROM json_each(?)) AND (${older}))`;
+const statementsOf = (match: string) => ({
+  count: `SELECT COUNT(*) AS n,
+       SUM(CASE WHEN substr(a.action, -8) = '_created' OR a.action IN (SELECT value FROM json_each(?))
+         OR (a.action = ? AND a.details = ?) THEN 1 ELSE 0 END) AS creates
+       FROM activity_logs a WHERE ${match}`,
+  rows: `SELECT a.action, a.details, a.created_at, u.name AS actor_name
+       FROM activity_logs a LEFT JOIN users u ON u.id = a.user_id
+      WHERE ${match}
+      ORDER BY a.created_at DESC, a.id DESC LIMIT 20 OFFSET ?`,
+});
+const STATEMENTS = statementsOf(matchOf(OLDER));
+const WITH_APPLICATIONS = statementsOf(matchOf(`${OLDER}\n       OR ${APPLICATIONS}`));
+const UNSCOPED_ACTION = /^grow_[a-z_]+$/;
+
+/** The fixed statements for this matcher, and their values in order. */
+function matchFor(input: { projectId: number; entityType: string; entityId: string; oldRows?: OldRowsMatcher }) {
+  const id = input.entityId;
+  const oldRows = input.oldRows ?? {};
+  const oldId = oldRows.idWithoutPrefix && id.startsWith(oldRows.idWithoutPrefix) ? id.slice(oldRows.idWithoutPrefix.length) : id;
+  const unscoped = oldRows.unscopedActions ?? [];
+  if (!unscoped.every((action) => UNSCOPED_ACTION.test(action))) throw new Error('Only grow_* activity is read without a project');
+  const applications = !!oldRows.children?.includes('job_applications');
+  const older = [JSON.stringify(oldRows.entityTypes ?? []), id, JSON.stringify(oldRows.idPrefixTypes ?? []), id, id,
+    ...(applications ? [id] : [])];
+  return {
+    sql: applications ? WITH_APPLICATIONS : STATEMENTS,
+    args: [input.projectId, input.entityType, id, ...older, JSON.stringify(oldRows.actions ?? []), oldId,
+      JSON.stringify(unscoped), ...older] as unknown[],
+  };
+}
+
 /** New rows match the entity exactly. An explicit matcher admits older shapes. */
 export async function activityFor(env: Env, input: {
   projectId: number;
@@ -212,33 +276,13 @@ export async function activityFor(env: Env, input: {
   store?: CreatorStore;
 }): Promise<ActivityPage> {
   const page = Number.isSafeInteger(input.page) && Number(input.page) > 0 ? Number(input.page) : 1;
-  const oldTypes = JSON.stringify(input.oldRows?.entityTypes ?? []);
-  const oldActions = JSON.stringify(input.oldRows?.actions ?? []);
-  const oldId = input.oldRows?.idWithoutPrefix && input.entityId.startsWith(input.oldRows.idWithoutPrefix)
-    ? input.entityId.slice(input.oldRows.idWithoutPrefix.length) : input.entityId;
-  const args = [input.projectId, input.entityType, input.entityId, oldTypes, input.entityId, oldActions, oldId];
-  const count = await env.DB.prepare(
-    `SELECT COUNT(*) AS n,
-       SUM(CASE WHEN substr(action, -8) = '_created' OR action IN (SELECT value FROM json_each(?))
-         OR (action = ? AND details = ?) THEN 1 ELSE 0 END) AS creates
-       FROM activity_logs WHERE project_id = ? AND (
-       (entity_type = ? AND entity_id = ?)
-       OR (entity_type IN (SELECT value FROM json_each(?)) AND entity_id = ?)
-       OR (entity_type IS NULL AND action IN (SELECT value FROM json_each(?))
-           AND CASE WHEN json_valid(details) THEN CAST(json_extract(details, '$.id') AS TEXT) ELSE NULL END = ?))`,
-  ).bind(JSON.stringify(CREATE_ACTIONS), COMPETITOR_ADDED.action, COMPETITOR_ADDED.summary, ...args)
+  const { sql, args } = matchFor(input);
+  // The count's create rule binds first: it sits in the SELECT, before the match.
+  const count = await env.DB.prepare(sql.count)
+    .bind(JSON.stringify(CREATE_ACTIONS), COMPETITOR_ADDED.action, COMPETITOR_ADDED.summary, ...args)
     .first<{ n: number; creates: number }>();
   const totalLogs = Number(count?.n ?? 0);
-  const rows = await env.DB.prepare(
-    `SELECT a.action, a.details, a.created_at, u.name AS actor_name
-       FROM activity_logs a LEFT JOIN users u ON u.id = a.user_id
-      WHERE a.project_id = ? AND (
-       (a.entity_type = ? AND a.entity_id = ?)
-       OR (a.entity_type IN (SELECT value FROM json_each(?)) AND a.entity_id = ?)
-       OR (a.entity_type IS NULL AND a.action IN (SELECT value FROM json_each(?))
-           AND CASE WHEN json_valid(a.details) THEN CAST(json_extract(a.details, '$.id') AS TEXT) ELSE NULL END = ?))
-      ORDER BY a.created_at DESC, a.id DESC LIMIT 20 OFFSET ?`,
-  ).bind(...args, (page - 1) * 20).all<{ action: string; details: string | null; created_at: string; actor_name: string | null }>();
+  const rows = await env.DB.prepare(sql.rows).bind(...args, (page - 1) * 20).all<{ action: string; details: string | null; created_at: string; actor_name: string | null }>();
   const items = (rows.results ?? []).map((r) => ({
     a: isCreateRow(r.action, r.details)
       ? (r.actor_name ? `Created by ${r.actor_name}` : `Created ${r.created_at.slice(0, 10)}`)

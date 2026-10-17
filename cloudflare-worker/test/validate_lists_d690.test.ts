@@ -39,7 +39,7 @@ function fixture() {
   db.exec(sqlOf('255_hypothesis_verdict_history.sql'));
   db.exec(sqlOf('311_revenue_entries.sql').replace(/REFERENCES documents\(id\)/, ''));
   for (const m of ['440_validate_cycle_stores.sql', '438_interview_sessions.sql', '447_assistant_interviews.sql',
-    '453_interview_processing.sql', '459_cycle_activity_convention.sql']) db.exec(sqlOf(m));
+    '453_interview_processing.sql', '459_cycle_activity_convention.sql', '460_validate_record_stores.sql']) db.exec(sqlOf(m));
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id, spinout_lab_active) VALUES (?, ?, ?, ?, 1, ?, 0)');
   u.run(FOUNDER, 'founder', 'Fern Founder', 'fern@example.test', 1001);
   u.run(ADMIN, 'admin', 'Ash Admin', 'ash@example.test', null);
@@ -370,9 +370,12 @@ test('D690 decision 16: experiments\' stats count the whole venture, with more t
   claim(db, 99, 'H99', { retired_at: '2026-09-01 10:00:00' });
   for (const q of ['', '&page=2', '&filter=status:untested']) {
     const r = await mod(db, 'experiments', q);
-    assert.deepEqual(r.body.parts.stats, {
-      hypotheses: 27, supported: 3, refuted: 0, awaiting: 20, withheld: 4, fit_not_recorded: 2, bar: 5, history_since: null,
+    // D704 decision 7: the read records each live claim, so the venture's history starts with its first read.
+    const { history_since: since, ...stats } = r.body.parts.stats;
+    assert.deepEqual(stats, {
+      hypotheses: 27, supported: 3, refuted: 0, awaiting: 20, withheld: 4, fit_not_recorded: 2, bar: 5,
     }, q || 'page 1');
+    assert.match(String(since), /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/, 'the first read wrote the first observations');
     assert.equal(r.body.parts.fit_gap.length, 24, 'every open claim, not the page');
   }
 });
@@ -380,10 +383,12 @@ test('D690 decision 16: experiments\' stats count the whole venture, with more t
 test('D690 decision 16: Recently moved is a lane change within 14 days; the first observation never is', async () => {
   const db = fixture();
   claim(db, 1, 'H1'); claim(db, 2, 'H2'); claim(db, 3, 'H3');
+  // Each claim's last observation is what the read computes today (no evidence: unproven, lane none), so
+  // the read's own write (D704 decision 7) adds no row.
   const first = daysAgoAt(20);
-  observe(db, 1, first, 'none'); observe(db, 1, daysAgoAt(13), 'testing');
-  observe(db, 2, daysAgoAt(20), 'none'); observe(db, 2, daysAgoAt(15), 'testing');
-  observe(db, 3, daysAgoAt(1), 'testing');
+  observe(db, 1, first, 'testing'); observe(db, 1, daysAgoAt(13), 'none');
+  observe(db, 2, daysAgoAt(20), 'testing'); observe(db, 2, daysAgoAt(15), 'none');
+  observe(db, 3, daysAgoAt(1), 'none');
   const r = await mod(db, 'experiments', '&sort=code');
   assert.deepEqual(r.body.records.rows.map((x: any) => [x.id, x.moved]), [[1, 'recent'], [2, null], [3, null]], 'every row says, whatever the filter');
   const m = await mod(db, 'experiments', '&filter=moved:recent');
@@ -417,12 +422,14 @@ test('D690 decision 16: Changed this month keeps a verdict change on the first o
   const now = new Date();
   const first = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
   claim(db, 1, 'H1'); claim(db, 2, 'H2'); claim(db, 3, 'H3'); claim(db, 4, 'H4');
-  observe(db, 1, at(first - 5 * 86_400_000), 'testing'); observe(db, 1, at(first), 'validated', 'validated');
-  observe(db, 2, at(first - 5 * 86_400_000), 'testing'); observe(db, 2, at(first - 1000), 'validated', 'validated');
+  // Each claim ends on what the read computes today (no evidence: unproven, lane none), so the read's
+  // own write (D704 decision 7) adds no row.
+  observe(db, 1, at(first - 5 * 86_400_000), 'validated', 'validated'); observe(db, 1, at(first), 'none');
+  observe(db, 2, at(first - 5 * 86_400_000), 'validated', 'validated'); observe(db, 2, at(first - 1000), 'none');
   // A lane change with no verdict change is not a verdict change.
-  observe(db, 3, at(first - 5 * 86_400_000), 'none'); observe(db, 3, at(first + 1000), 'testing');
+  observe(db, 3, at(first - 5 * 86_400_000), 'testing'); observe(db, 3, at(first + 1000), 'none');
   // A first observation this month is the claim appearing, not changing.
-  observe(db, 4, at(first + 1000), 'validated', 'validated');
+  observe(db, 4, at(first + 1000), 'none');
   const r = await mod(db, 'experiments', '&filter=history:this_month');
   assert.deepEqual(r.body.records.rows.map((x: any) => x.id), [1]);
   assert.equal(r.body.records.rows[0].status, 'untested', 'rows show today\'s status');

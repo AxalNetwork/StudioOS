@@ -47,6 +47,8 @@ function fixture() {
   db.exec(sqlOf('255_hypothesis_verdict_history.sql'));
   db.exec(sqlOf('311_revenue_entries.sql').replace(/REFERENCES documents\(id\)/, ''));
   db.exec(MIG440);
+  // D690 (#1692): the tracked list and Experiments' links read 460's stores.
+  db.exec(sqlOf('460_validate_record_stores.sql'));
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id, spinout_lab_active) VALUES (?, ?, ?, ?, 1, ?, ?)');
   u.run(FOUNDER, 'founder', 'Fay Founder', 'fay@example.test', 1001, 0);
   u.run(OTHER, 'founder', 'Bo Other', 'bo@example.test', 1002, 0);
@@ -653,7 +655,7 @@ test('D685 §5.12: the newest session needing review leads, counting themes and 
   proposal(db, 1, 'pain_severity', { phrase: 'Assistant' }, { run: null });
   const f = (await overview(db)).body.focus;
   assert.deepEqual([f.rule, f.headline, f.why, f.cta, f.then], ['review', 'Review the interview with Robin Reyes from 14 Oct.',
-    'Its findings would move 3 pain themes and 2 hypotheses.', { label: 'Review the interview', href: `/validate/interviews/${iv}` }, null]);
+    'Its findings would move 3 pain themes and 2 hypotheses.', { label: 'Review the interview', href: `/validate/customer-research/${iv}?session=1` }, null]);
   // A transcribed session that is not placed says so.
   db.prepare("INSERT INTO interview_sessions (id, project_id, interview_id, status, stopped_at) VALUES (2, ?, ?, 'transcribed', '2026-10-15 10:00:00')").run(P, iv);
   assert.equal((await overview(db)).body.focus.why, 'It is transcribed but not yet placed.');
@@ -663,10 +665,10 @@ test('D685 §5.12: the newest session needing review leads, counting themes and 
   // A structured session with nothing pending falls through too.
   db.prepare('DELETE FROM interview_sessions WHERE id = 2').run();
   db.prepare("UPDATE validate_proposals SET status = 'accepted'").run();
+  // D692: a writer with nothing to review records the next conversation.
   const done = (await overview(db)).body.focus;
-  assert.equal(done.rule, 'card');
-  const first = (await overview(db)).body.cards.find((c: any) => c.next?.text);
-  assert.deepEqual(done.cta, { label: first.next.text, href: first.next.href });
+  assert.equal(done.rule, 'next_interview');
+  assert.deepEqual(done.cta, { label: 'Record a session', href: `/validate/record?project=${P}` });
 });
 
 test('D685 §5.12: the meter reads the stored target; none reads "No target set"; the writer refuses 0 and clears with null', async () => {
@@ -684,8 +686,9 @@ test('D685 §5.12: the meter reads the stored target; none reads "No target set"
   assert.deepEqual([m.count, m.target, m.target_reason], [2, 8, null]);
   assert.equal((await call(db, FOUNDER, 'PUT', `/interviews-target?project=${P}`, { value: null })).status, 200);
   assert.equal((await overview(db)).body.meter.target, null);
-  // The index: every interview, and booked now (not the cumulative funnel).
-  assert.deepEqual((await overview(db)).body.index, { interviews_total: 3, booked: 1 });
+  // D692: the index is the row list; Customer research counts booked now (not the cumulative funnel).
+  const research = (await overview(db)).body.index.find((r: any) => r.key === 'customer-research');
+  assert.deepEqual([research.detail, research.value], ['Recruiting · 1 booked', '']);
 });
 
 test('D685 §5.12: the interviews target shares metric_targets but never reaches the snapshot targets list', async () => {
