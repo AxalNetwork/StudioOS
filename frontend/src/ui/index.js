@@ -32,7 +32,7 @@ export { default as Card } from './Card';
 export { default as Pill, PILL_TONES } from './Pill';
 export { default as Stat, Stat as StatTile, StatGrid } from './Stat';
 // D685 — the one lightbox shell: a centred dialog, a full-screen sheet on a phone. See Lightbox.jsx.
-export { default as Lightbox } from './Lightbox';
+export { default as Lightbox, LightboxBarProvider, useLightboxPage } from './Lightbox';
 // D686 — Cycle Action's lightbox body: header, step pills, banner, scrolling body, footer; shared button classes. See ActionSheet.jsx.
 // D687 — every service's mark, coded once (Simple Icons 16.35.0, CC0), with initials where no mark is cleared. See BrandIcon.jsx.
 export { default as BrandIcon, BRAND_MARKS, BRAND_GENERIC, BRAND_MONOGRAM, BRAND_ALIAS, resolveBrand, TILE_HEX } from './BrandIcon';
