@@ -209,7 +209,7 @@ const CYCLE_DEFS = {
       'durable-company-building': () => ({ label: 'Open the compliance calendar', href: '/compliance' }),
     }),
     add: toFnMap({}),
-    fills: {},
+    fills: { 'product-improvement': 'feedback_theme' },
     // The Grow desk's two AI bands (ZoneDraft, D424), on the modules they
     // read: the applicant ranking on Team expansion, the outreach sequence
     // for sign-ups who have not converted on Distribution.
@@ -593,6 +593,8 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   const [overviewStatus, setOverviewStatus] = useState('loading');
   const [module, setModule] = useState(null);
   const [moduleStatus, setModuleStatus] = useState('loading');
+  // D693 decision 7: a read refused on purpose keeps the Worker's sentence.
+  const [moduleMessage, setModuleMessage] = useState('');
   // D686: a history address (`#tools`, `#calls`, `#updates`) scrolls once its section is drawn.
 
   const [query, setQuery] = useState({ q: '', filter: {}, sort: '', page: 1 });
@@ -640,8 +642,13 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
     let alive = true;
     setModuleStatus('loading');
     cyclesApi.module(cycle, projectId, slug, { q: query.q, filter: filterString(query.filter), sort: query.sort, page: query.page })
-      .then((data) => { if (alive) { setModule(adaptModule(cycle, slug, data)); setModuleStatus('ready'); } })
-      .catch(() => { if (alive) setModuleStatus('unreadable'); });
+      .then((data) => { if (alive) { setModule(adaptModule(cycle, slug, data)); setModuleMessage(''); setModuleStatus('ready'); } })
+      // A 403 is a refusal, not a failure (D693 decision 7: "Partners do not
+      // see decisions."), so it is drawn as the Worker's sentence, with no Retry.
+      .catch((error) => {
+        if (!alive) return;
+        if (error?.status === 403) { setModuleMessage(error?.message || ''); setModuleStatus('refused'); } else setModuleStatus('unreadable');
+      });
     return () => { alive = false; };
   }, [record, cycle, slug, known, projectId, query, reload, def]);
 
@@ -698,6 +705,8 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
     : !projectId ? null
     : formOpen ? (
       <FormLightbox key={`add-${formOpen.key}`} form={formOpen} cycle={cycle} slug={slug} search={location.search}
+        loadOptions={formOpen.loadOptions ? () => formOpen.loadOptions(cyclesWrite, projectId) : null}
+        onSearch={formOpen.search ? (_field, q) => formOpen.search(cyclesWrite, projectId, q) : null}
         onSubmit={(values) => formOpen.submit(cyclesWrite, projectId, values)}
         onSaved={saved}
         onClose={closeAdd} />
@@ -780,6 +789,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
         cards={tabs}
         data={module}
         status={projectStatus === 'unreadable' ? 'unreadable' : moduleStatus}
+        message={moduleStatus === 'refused' ? moduleMessage : undefined}
         onRetry={() => setReload((n) => n + 1)}
         records={recs}
         recordsStatus={moduleStatus === 'ready' ? (recs?.state === 'unreadable' ? 'unreadable' : 'ready') : undefined}

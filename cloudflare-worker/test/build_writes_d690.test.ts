@@ -726,14 +726,12 @@ test('test 7: move writes okr_column_moves, and is offered as "Move to <the next
   assert.equal(db.prepare('SELECT kanban_status FROM roadmap_okrs WHERE id = 6').get()!.kanban_status, 'done');
   assert.ok(!keysOf(await rec(db, 'product-roadmap', '6')).includes('move'), 'a Done item offers none');
   // Edit reopens it, through the same move.
-  assert.equal((await act(db, 'product-roadmap', '6', 'edit', { column: 'later', title: 'Renamed item' })).status, 200);
+  assert.equal((await act(db, 'product-roadmap', '6', 'edit', { column: 'later' })).status, 200);
   assert.equal(count(db, 'SELECT COUNT(*) AS n FROM okr_column_moves'), 2);
-  // The move's log row names the item by its title, the new one when the same edit renames it.
-  const moved = (db.prepare("SELECT details FROM activity_logs WHERE action = 'roadmap_moved' ORDER BY id").all() as any[]).map((r) => r.details);
-  assert.equal(moved.length, 2);
-  assert.match(moved[0], / moved to done$/);
-  assert.doesNotMatch(moved[0], /undefined/);
-  assert.equal(moved[1], 'Renamed item moved to later');
+  // An Edit that renames and moves logs the move under the item's new name.
+  assert.equal((await act(db, 'product-roadmap', '6', 'edit', { title: 'Ship reconciliation v2', column: 'next' })).status, 200);
+  assert.equal(db.prepare(`SELECT details FROM activity_logs WHERE action = 'roadmap_moved' ORDER BY id DESC LIMIT 1`).get()!.details,
+    'Ship reconciliation v2 moved to next');
   assert.equal(actionOf(await rec(db, 'product-roadmap', '7'), 'move').label, 'Move to Later');
   db.close();
 });

@@ -24,6 +24,7 @@
 import type { Env } from '../types';
 import { billingPeriods, computeMovements, movementGap, readRecurring } from './revenueMovements';
 import { runwayMonths } from './saasMetrics';
+import { notify } from './notify';
 
 export class KpiRefused extends Error {
   status: number; sentence: string; field: string | null;
@@ -258,6 +259,9 @@ export async function enterKpi(env: Env, projectId: number, userId: number, b: K
     if (k === 'mrr' && value < 0) throw new KpiRefused(400, 'MRR is 0 or more', 'value');
     if (k === 'paying_accounts') value = Math.trunc(value);
     await env.DB.prepare(TYPED_UPSERT[k]).bind(projectId, asOf, value, note, userId).run();
+    // Runway is worked out from burn, so a burn entry can cross a Runway alert too.
+    await alertsAfterWrite(env, projectId, k);
+    if (k === 'net_burn') await alertsAfterWrite(env, projectId, 'runway');
     return { id: k, as_of: asOf, value, unit, source: 'manual', created_kpi: false };
   }
 
@@ -293,5 +297,89 @@ export async function enterKpi(env: Env, projectId: number, userId: number, b: K
      ON CONFLICT(kpi_id, as_of, source) DO UPDATE SET value = excluded.value, value_cents = excluded.value_cents,
        note = COALESCE(excluded.note, note), updated_at = datetime('now')`,
   ).bind(crypto.randomUUID().replace(/-/g, ''), kpi!.id, asOf, money ? null : value, money ? Math.round(value * 100) : null, note, userId).run();
+  await alertsAfterWrite(env, projectId, `${CUSTOM_PREFIX}${kpi!.uid}`);
   return { id: `${CUSTOM_PREFIX}${kpi!.uid}`, as_of: asOf, value, unit: kpi!.unit, source: 'manual', created_kpi: created };
+}
+
+// ── Alerts (#1698, decision 3) ──────────────────────────────────────────────
+//
+// An alert is crossed when its KPI's value (or its change over 30 days, in
+// percent) is past the threshold. A crossing notifies the alert's creator once,
+// in the app, and stamps `last_crossed_at`; crossing back clears the stamp,
+// which re-arms the alert. A KPI write checks at once; the daily step
+// (`growDaily.ts`) catches Stripe and CSV imports within a day.
+
+export type KpiAlert = {
+  id: number; uid: string; kpi_key: string; measure: string; op: string;
+  threshold: number | null; threshold_cents: number | null; created_by: number | null; last_crossed_at: string | null;
+};
+
+/** What an alert compares, in its own unit; null when the KPI has nothing to compare. */
+export function alertValue(row: KpiRow, a: Pick<KpiAlert, 'measure' | 'threshold_cents'>): number | null {
+  if (row.value == null) return null;
+  if (a.measure === 'change_30d_pct') {
+    if (row.change_30d == null) return null;
+    const before = row.value - row.change_30d;
+    return before === 0 ? null : (row.change_30d / Math.abs(before)) * 100;
+  }
+  if (a.threshold_cents != null) {
+    // MRR and Burn are kept in dollars; the ledger's movements and a custom money KPI in cents.
+    return row.unit === 'usd' ? Math.round(row.value * 100) : row.unit === 'usd_cents' ? row.value : null;
+  }
+  return row.value;
+}
+
+export const alertThreshold = (a: Pick<KpiAlert, 'threshold' | 'threshold_cents'>): number => Number(a.threshold_cents ?? a.threshold);
+export const alertCrossed = (value: number, a: Pick<KpiAlert, 'op' | 'threshold' | 'threshold_cents'>): boolean =>
+  a.op === 'below' ? value < alertThreshold(a) : value > alertThreshold(a);
+
+/** "Growth below 4%", "MRR below $5,000", as the record and the notification say it. */
+export function alertText(kpi: string, a: Pick<KpiAlert, 'measure' | 'op' | 'threshold' | 'threshold_cents'>): string {
+  const t = a.threshold_cents != null
+    ? `$${(Number(a.threshold_cents) / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })}`
+    : a.measure === 'change_30d_pct' ? `${Number(a.threshold)}%` : String(Number(a.threshold));
+  return `${a.measure === 'change_30d_pct' ? `${kpi} growth` : kpi} ${a.op} ${t}`;
+}
+
+/** Check the venture's alerts (or those on `only`), notify each new crossing once and re-arm the cleared. */
+export async function checkKpiAlerts(env: Env, projectId: number, now: number, only?: string[]): Promise<{ notified: number; cleared: number }> {
+  const res = await env.DB.prepare(
+    `SELECT id, uid, kpi_key, measure, op, threshold, threshold_cents, created_by, last_crossed_at
+       FROM kpi_alerts WHERE project_id = ? ORDER BY id`,
+  ).bind(projectId).all<KpiAlert>();
+  const alerts = (res.results || []).filter((a) => !only || only.includes(a.kpi_key));
+  if (!alerts.length) return { notified: 0, cleared: 0 };
+  const rows = new Map((await kpiRows(env, projectId, now)).map((r) => [r.id, r]));
+  let notified = 0; let cleared = 0;
+  const at = new Date(now).toISOString();
+  for (const a of alerts) {
+    const row = rows.get(a.kpi_key);
+    const value = row ? alertValue(row, a) : null;
+    if (row == null || value == null) continue;
+    if (alertCrossed(value, a)) {
+      if (a.last_crossed_at) continue;
+      // Claim the crossing first, so two runs never notify it twice.
+      const claim = await env.DB.prepare('UPDATE kpi_alerts SET last_crossed_at = ?, updated_at = ? WHERE id = ? AND last_crossed_at IS NULL')
+        .bind(at, at, a.id).run();
+      if (!claim.meta?.changes || a.created_by == null) continue;
+      await notify(env, {
+        userId: Number(a.created_by), type: 'grow_kpi_alert', title: `Alert: ${alertText(row.kpi, a)}`,
+        body: `${row.kpi} crossed the alert you set${row.as_of ? `, as of ${row.as_of}` : ''}.`,
+        link: `/grow/revenue-and-traction/${a.kpi_key}?project_id=${projectId}`,
+        payload: { project_id: projectId, kpi: a.kpi_key, alert: a.uid }, channels: ['in_app'], category: 'proactive_nudges',
+      });
+      notified += 1;
+    } else if (a.last_crossed_at) {
+      await env.DB.prepare('UPDATE kpi_alerts SET last_crossed_at = NULL, updated_at = ? WHERE id = ?').bind(at, a.id).run();
+      cleared += 1;
+    }
+  }
+  return { notified, cleared };
+}
+
+/** Best effort: an alert that cannot be checked never fails the write that triggered it. */
+async function alertsAfterWrite(env: Env, projectId: number, key: string): Promise<void> {
+  try { await checkKpiAlerts(env, projectId, Date.now(), [key]); } catch (e) {
+    console.warn('[growKpis] alert check failed', (e as Error).message);
+  }
 }

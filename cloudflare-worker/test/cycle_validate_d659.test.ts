@@ -10,6 +10,7 @@
  *   · old two-level severities read correctly under three levels;
  *   · a Lab venture's read gives the Lab page's own figures.
  */
+import { MODULES as VALIDATE_MODULES } from '../src/services/cycleValidate.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -350,6 +351,22 @@ test('D659: the founder board\'s audience reads; an investor or another founder 
   assert.equal((await call(db, PARTNER, 'POST', `/segments?project=${P}`, { name: 'Ops leads' })).status, 403);
   assert.equal((await call(db, FOUNDER, 'GET', '/overview?project=1%20OR%201=1')).status, 400);
   assert.equal((await call(db, FOUNDER, 'GET', '/overview?project=999')).status, 404);
+});
+
+test('D693 decision 7: the overview and every module read say whether the viewer may see decisions', async () => {
+  const db = fixture();
+  const slugs = VALIDATE_MODULES.map((m) => m.slug);
+  assert.ok(slugs.length >= 6);
+  for (const [who, pid, can] of [[FOUNDER, P, true], [ADMIN, P, true], [LAB, P_LAB, true], [PARTNER, P, false]] as const) {
+    const o = await overview(db, who, pid);
+    assert.equal(o.status, 200);
+    assert.equal(o.body.can_read_decisions, can, `overview, user ${who}`);
+    for (const slug of slugs) {
+      const m = await call(db, who, 'GET', `/modules/${slug}?project=${pid}`);
+      assert.equal(m.status, 200, `${slug}, user ${who}`);
+      assert.equal(m.body.can_read_decisions, can, `${slug}, user ${who}`);
+    }
+  }
 });
 
 // ---------------------------------------------------------------------------

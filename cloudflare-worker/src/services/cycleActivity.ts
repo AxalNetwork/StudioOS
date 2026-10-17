@@ -172,6 +172,11 @@ async function creatorFor(env: Env, store: CreatorStore, id: string, projectId: 
       return env.DB.prepare('SELECT u.name, g.created_at FROM growth_partners g LEFT JOIN users u ON u.id = g.created_by WHERE g.uid = ? AND g.project_id = ?').bind(id, projectId).first<Creator>();
     case 'markets':
       return env.DB.prepare('SELECT u.name, m.created_at FROM markets m LEFT JOIN users u ON u.id = m.created_by WHERE m.uid = ? AND m.project_id = ?').bind(id, projectId).first<Creator>();
+    // A custom KPI's creator; a fixed KPI is the platform's and has none.
+    case 'grow_kpis':
+      return id.startsWith('custom-')
+        ? env.DB.prepare('SELECT u.name, k.created_at FROM custom_kpis k LEFT JOIN users u ON u.id = k.created_by WHERE k.uid = ? AND k.project_id = ?').bind(id.slice('custom-'.length), projectId).first<Creator>()
+        : null;
   }
   const n = Number(id.replace(/^(signal|revenue|waitlist)-/, ''));
   if (!Number.isSafeInteger(n) || n < 1) return null;
@@ -204,6 +209,8 @@ async function creatorFor(env: Env, store: CreatorStore, id: string, projectId: 
       return env.DB.prepare('SELECT u.name, p.created_at FROM job_postings p LEFT JOIN users u ON u.id = p.host_user_id WHERE p.id = ? AND p.project_id = ?').bind(n, projectId).first<Creator>();
     case 'compliance_events':
       return env.DB.prepare('SELECT u.name, e.created_at FROM compliance_events e LEFT JOIN users u ON u.id = e.created_by_user_id WHERE e.id = ? AND e.project_id = ?').bind(n, projectId).first<Creator>();
+    case 'obligation_occurrences':
+      return env.DB.prepare('SELECT u.name, o.created_at FROM obligation_occurrences o JOIN compliance_events e ON e.id = o.event_id LEFT JOIN users u ON u.id = o.created_by WHERE o.id = ? AND e.project_id = ?').bind(n, projectId).first<Creator>();
     default:
       // Verdict logs every decision it records, so it has no creator to fall back on.
       return null;
