@@ -10,7 +10,8 @@
  *                            source from contacts.utm_json (migration 166);
  *                            sign-ups from waitlist_signups
  *   Revenue and traction     project_metrics (Stripe import or typed);
- *                            revenue_movements and cohorts from the ledger
+ *                            movements and cohorts computed from the ledger
+ *                            when the card is read
  *   Team expansion           company_people, company_headcount_plan (326),
  *                            job_postings, job_applications (132, 443)
  *   Partner network          growth_partners, partner_revenue
@@ -25,7 +26,7 @@ import type { Env } from '../types';
 import {
   type Card, type Figure, figure, notRecordedFigure, seriesState,
 } from './cycleCards';
-import { billingPeriods, byMonth, cohortRetention, prevMonth, readRecurring } from './revenueMovements';
+import { billingPeriods, byMonth, cohortRetention, computeMovements, prevMonth, readRecurring, type LedgerRecurring, type Movement } from './revenueMovements';
 
 export const GROW_QUESTION = 'How does this venture become larger and more enduring?';
 
@@ -33,10 +34,10 @@ export const GROW_QUESTION = 'How does this venture become larger and more endur
 export const GROW_MODULES = [
   { slug: 'product-improvement', name: 'Product improvement', range: 'Last 90 days', source: 'Product feedback',
     caption: 'Feedback themes by volume, shaded by status.' },
-  { slug: 'distribution', name: 'Distribution', range: 'Last 30 days', source: 'Channels, spend and attributed contacts',
-    caption: 'Cost per acquired customer by channel; visit to paying customer.' },
+  { slug: 'distribution', name: 'Distribution', range: 'This month', source: 'Channels, spend and attributed contacts',
+    caption: 'Cost per acquired customer by channel this calendar month; visit to paying customer.' },
   { slug: 'revenue-and-traction', name: 'Revenue and traction', range: 'Last 12 months', source: 'Revenue ledger and metric snapshots',
-    caption: 'MRR per month as new and expansion above the line, churned below; cohort retention by signup month.' },
+    caption: 'MRR per month as new and expansion above the line, churned below; cohort retention by signup month. MRR is cash by the month it was received, so an annual invoice or a late payment reads as churn and then new revenue.' },
   { slug: 'team-expansion', name: 'Team expansion', range: 'Last 6 months', source: 'Team roster, hiring plan and open roles',
     caption: 'Headcount against the hiring plan (dashed); open roles by stage.' },
   { slug: 'partner-network', name: 'Partner network', range: 'Last 6 months', source: 'Partners and partner-sourced revenue',
@@ -112,9 +113,22 @@ export async function readSnapshots(env: Env, projectId: number): Promise<Snap[]
   return r.results || [];
 }
 
+/**
+ * Why a movement cannot be read yet, or null when it can: churn needs two
+ * billing periods, and two that are consecutive months (a gap month is not
+ * recorded, so it is never compared).
+ */
+export function movementGap(rows: LedgerRecurring[]): string | null {
+  const months = byMonth(rows);
+  if (months.size < 2) return 'Not recorded: needs 2 billings';
+  for (const m of months.keys()) if (months.has(prevMonth(m))) return null;
+  return 'Not recorded: no two billing months in a row';
+}
+
 /** Net revenue retention for the latest split month: (start + expansion - churned) / start. */
-export function nrrFromLedger(rows: Awaited<ReturnType<typeof readRecurring>>): { value: number | null; reason: string | null; source: string | null; as_of: string | null; spark: number[] } {
-  if (billingPeriods(rows) < 2) return { value: null, reason: 'Not recorded: needs 2 billings', source: null, as_of: null, spark: [] };
+export function nrrFromLedger(rows: LedgerRecurring[]): { value: number | null; reason: string | null; source: string | null; as_of: string | null; spark: number[] } {
+  const gap = movementGap(rows);
+  if (gap) return { value: null, reason: gap, source: null, as_of: null, spark: [] };
   const months = byMonth(rows);
   const sorted = [...months.keys()].sort();
   const values: Array<{ m: string; v: number; source: string; as_of: string }> = [];
@@ -219,17 +233,21 @@ export function utmSource(utmJson: string | null): string | null {
 
 export interface ChannelRow { uid: string; name: string; utm_source: string; state: string; spend_cents: number | null; customers: number; cac_cents: number | null; cac_reason: string | null }
 
+/**
+ * Each channel's spend and attributed customers for ONE window, the current
+ * calendar month: spend is typed per month, so customers are counted by the
+ * same month, never a rolling 30 days.
+ */
 export async function channelRows(x: Ctx): Promise<ChannelRow[]> {
   const month = new Date(x.now).toISOString().slice(0, 7);
-  const since = iso(x.now - 30 * DAY);
   const ch = await x.env.DB.prepare(
     `SELECT g.uid, g.name, g.utm_source, g.state, s.spend_cents FROM growth_channels g
        LEFT JOIN channel_spend s ON s.channel_id = g.id AND s.month = ?
       WHERE g.project_id = ? ORDER BY g.name COLLATE NOCASE`,
   ).bind(month, x.projectId).all<{ uid: string; name: string; utm_source: string; state: string; spend_cents: number | null }>();
   const contacts = await x.env.DB.prepare(
-    `SELECT utm_json FROM contacts WHERE project_id = ? AND audience = 'customer' AND utm_json IS NOT NULL AND substr(created_at, 1, 10) >= ?`,
-  ).bind(x.projectId, since).all<{ utm_json: string }>();
+    `SELECT utm_json FROM contacts WHERE project_id = ? AND audience = 'customer' AND utm_json IS NOT NULL AND substr(created_at, 1, 7) = ?`,
+  ).bind(x.projectId, month).all<{ utm_json: string }>();
   const counts = new Map<string, number>();
   for (const c of contacts.results || []) { const s = utmSource(c.utm_json); if (s) counts.set(s, (counts.get(s) ?? 0) + 1); }
   return (ch.results || []).map((c) => {
@@ -237,16 +255,16 @@ export async function channelRows(x: Ctx): Promise<ChannelRow[]> {
     const spend = c.spend_cents;
     const cac = spend == null ? null : customers > 0 ? Math.round(spend / customers) : null;
     return { ...c, spend_cents: spend, customers, cac_cents: cac,
-      cac_reason: spend == null ? 'Not recorded: no spend entered this month' : customers === 0 ? 'Not recorded: no customer attributed to this channel' : null };
+      cac_reason: spend == null ? 'Not recorded: no spend entered this month' : customers === 0 ? 'Not recorded: no customer attributed to this channel this month' : null };
   });
 }
 
 export async function distributionCard(x: Ctx): Promise<CardBody> {
   const rows = await channelRows(x);
-  const since = iso(x.now - 30 * DAY);
+  const month = new Date(x.now).toISOString().slice(0, 7);
   const signups = await x.env.DB.prepare(
-    `SELECT COUNT(*) AS n FROM waitlist_signups WHERE project_id = ? AND substr(created_at, 1, 10) >= ?`,
-  ).bind(x.projectId, since).first<{ n: number }>();
+    `SELECT COUNT(*) AS n FROM waitlist_signups WHERE project_id = ? AND substr(created_at, 1, 7) = ?`,
+  ).bind(x.projectId, month).first<{ n: number }>();
   const paying = (await readSnapshots(x.env, x.projectId)).filter((s) => s.paying_accounts != null).pop();
   const funnel = [
     { stage: 'Visit', value: null, reason: 'Not recorded: no page-visit store yet' },
@@ -254,32 +272,38 @@ export async function distributionCard(x: Ctx): Promise<CardBody> {
     { stage: 'Paying', value: paying ? paying.paying_accounts : null, source: paying ? snapSource(paying.source) : null,
       reason: paying ? null : 'Not recorded: no snapshot records paying customers' },
   ];
-  if (!rows.length) return { state: 'empty', range: 'Last 30 days', series: { channels: [], funnel }, next: { text: 'Add channel', href: `${x.href('distribution')}&add=1` }, reason: 'No channels yet. Cost per customer by channel appears here.' };
+  if (!rows.length) return { state: 'empty', range: 'This month', series: { channels: [], funnel }, next: { text: 'Add channel', href: `${x.href('distribution')}&add=1` }, reason: 'No channels yet. Cost per customer by channel appears here.' };
   const priced = rows.filter((r) => r.cac_cents != null && r.state !== 'paused').sort((a, b) => (b.cac_cents as number) - (a.cac_cents as number));
   const worst = priced.length >= 2 ? priced[0] : null;
   return {
-    state: priced.length ? 'ok' : 'not_recorded', range: 'Last 30 days',
+    state: priced.length ? 'ok' : 'not_recorded', range: 'This month',
     series: { channels: rows.map((r) => ({ name: r.name, cac_cents: r.cac_cents, reason: r.cac_reason })), funnel },
     next: worst ? { text: `Pause ${worst.name}: CAC ${usd(worst.cac_cents as number)}.`, href: x.href('distribution') } : null,
-    reason: priced.length ? null : 'Not recorded: no channel has both spend and an attributed customer', source: 'Channels (spend typed: manual)', as_of: iso(x.now),
+    reason: priced.length ? null : 'Not recorded: no channel has both spend and an attributed customer this month', source: 'Channels (spend typed: manual)', as_of: iso(x.now),
   };
+}
+
+/**
+ * The movements of the last 12 months, computed from the ledger when the card
+ * is read. `revenue_movements` is not read: it is empty for a ledger that
+ * predates migration 443, and this needs no backfill.
+ */
+export function recentMovements(ledger: LedgerRecurring[], now: number): Movement[] {
+  const months = new Set(monthsBack(now, 12));
+  return computeMovements(ledger).filter((m) => months.has(m.month));
 }
 
 export async function revenueCard(x: Ctx): Promise<CardBody> {
   const ledger = await readRecurring(x.env, x.projectId);
-  const mv = await x.env.DB.prepare(
-    `SELECT month, kind, amount_cents, source, as_of FROM revenue_movements WHERE project_id = ? ORDER BY month`,
-  ).bind(x.projectId).all<{ month: string; kind: string; amount_cents: number; source: string; as_of: string }>();
-  const rows = mv.results || [];
+  const rows = recentMovements(ledger, x.now);
   const months = monthsBack(x.now, 12);
   const by = new Map<string, Record<string, number>>();
   for (const r of rows) by.set(r.month, { ...(by.get(r.month) || {}), [r.kind]: r.amount_cents });
   const series = months.filter((m) => by.has(m)).map((m) => ({ month: m, ...by.get(m) }));
   const periods = billingPeriods(ledger);
   const snapshots = await readSnapshots(x.env, x.projectId);
-  const churn = periods < 2
-    ? { value: null, state: 'not_recorded', reason: 'Needs 2 billings' }
-    : null;
+  const gap = movementGap(ledger);
+  const churn = gap ? { value: null, state: 'not_recorded', reason: gap === 'Not recorded: needs 2 billings' ? 'Needs 2 billings' : gap } : null;
   const unsplit = rows.filter((r) => r.kind === 'unsplit').length;
   const state = series.length === 0 ? (periods === 0 ? 'empty' : 'not_recorded') : seriesState(series.length);
   return {
@@ -287,13 +311,32 @@ export async function revenueCard(x: Ctx): Promise<CardBody> {
     series: { movements: series, cohorts: cohortRetention(ledger), churn },
     next: ledger.length === 0 && !snapshots.length ? { text: 'Enter a KPI', href: `/grow/focus?project_id=${x.projectId}` }
       : unsplit ? { text: `Name the customer on the Stripe charges of ${unsplit} month${unsplit === 1 ? '' : 's'} to split expansion from new.`, href: x.href('revenue-and-traction') } : null,
-    reason: ledger.length === 0 && !snapshots.length ? 'No KPIs yet. MRR and retention appear here.' : periods === 0 ? 'No recurring revenue on the ledger yet' : series.length === 0 ? 'Not recorded: needs 2 billings' : null,
+    reason: ledger.length === 0 && !snapshots.length ? 'No KPIs yet. MRR and retention appear here.' : periods === 0 ? 'No recurring revenue on the ledger yet'
+      : series.length === 0 ? gap ?? 'Not recorded: no two billing months in a row in the last 12 months' : null,
     source: rows.length ? `Revenue ledger · ${rows[rows.length - 1].source}` : 'Revenue ledger',
     as_of: rows.length ? rows[rows.length - 1].as_of : null,
   };
 }
 
 export const APPLICATION_STAGES = ['applied', 'screen', 'interview', 'offer', 'hired', 'declined'] as const;
+
+/**
+ * The month a hiring-plan label points at: `2027-03` or `2027-03-31` as is;
+ * `Q1 2027` (or `2027 Q1`) at the quarter's last month; `H1 2027` at June.
+ * Anything else names no month and is not drawn.
+ */
+export function planMonth(label: string): string | null {
+  const s = String(label || '').trim();
+  const ym = s.match(/^(\d{4})-(0[1-9]|1[0-2])/);
+  if (ym) return `${ym[1]}-${ym[2]}`;
+  const q = s.match(/^Q([1-4])\s*(\d{4})$/i);
+  if (q) return `${q[2]}-${String(Number(q[1]) * 3).padStart(2, '0')}`;
+  const q2 = s.match(/^(\d{4})\s*Q([1-4])$/i);
+  if (q2) return `${q2[1]}-${String(Number(q2[2]) * 3).padStart(2, '0')}`;
+  const h = s.match(/^H([12])\s*(\d{4})$/i);
+  if (h) return `${h[2]}-${h[1] === '1' ? '06' : '12'}`;
+  return null;
+}
 
 export async function teamCard(x: Ctx): Promise<CardBody> {
   const company = await companyOf(x.env, x.projectId);
@@ -307,7 +350,8 @@ export async function teamCard(x: Ctx): Promise<CardBody> {
     actual = months.map((m) => (ps.length ? ps.filter((p) => !p.start_date || p.start_date.slice(0, 7) <= m).length : null));
     const pl = await x.env.DB.prepare('SELECT period_label, target_headcount FROM company_headcount_plan WHERE company_id = ?')
       .bind(company).all<{ period_label: string; target_headcount: number }>();
-    const pm = new Map((pl.results || []).map((p) => [p.period_label.slice(0, 7), p.target_headcount]));
+    const pm = new Map<string, number>();
+    for (const p of pl.results || []) { const m = planMonth(p.period_label); if (m) pm.set(m, p.target_headcount); }
     plan = months.map((m) => pm.get(m) ?? null);
   }
   const apps = await x.env.DB.prepare(
@@ -396,9 +440,14 @@ export async function checklist(env: Env, projectId: number) {
   const mine = new Map((marks.results || []).map((m) => [m.item_key, m.done_at]));
   let lab = new Map<string, string | null>();
   try {
+    // The Lab records milestones per founder account, not per venture, so
+    // they tick items only while that founder holds exactly one venture: with
+    // two, nothing says which venture a milestone was for.
     const r = await env.DB.prepare(
       `SELECT m.milestone_key AS k, m.completed_at AS at FROM spinout_lab_milestones m
-         JOIN users u ON u.id = m.user_id JOIN projects p ON p.founder_id = u.founder_id WHERE p.id = ?`,
+         JOIN users u ON u.id = m.user_id JOIN projects p ON p.founder_id = u.founder_id
+        WHERE p.id = ?
+          AND (SELECT COUNT(*) FROM projects o WHERE o.founder_id = p.founder_id AND o.deleted_at IS NULL) = 1`,
     ).bind(projectId).all<{ k: string; at: string | null }>();
     lab = new Map((r.results || []).map((x) => [x.k, x.at]));
   } catch { /* not a Lab venture's database: the Lab ticks nothing */ }

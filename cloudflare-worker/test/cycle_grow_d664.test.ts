@@ -21,7 +21,7 @@ import revenue from '../src/routes/revenue.ts';
 import { ensureProjectMetricsSchema } from '../src/routes/progress.ts';
 import { CARD_STATES, MIN_POINTS, figure, pageOf, seriesState, settleCard } from '../src/services/cycleCards.ts';
 import { billingPeriods, cohortRetention, computeMovements, recomputeRevenueMovements, type LedgerRecurring } from '../src/services/revenueMovements.ts';
-import { readiness, utmSource, DURABILITY_ITEMS } from '../src/services/growCycle.ts';
+import { movementGap, nrrFromLedger, planMonth, readiness, utmSource, DURABILITY_ITEMS } from '../src/services/growCycle.ts';
 import { landReply } from '../src/services/updateShare.ts';
 import { STRIPE_NO_CUSTOMER } from '../src/services/revenueLedger.ts';
 import { d1Over } from './_d1_sqlite.mjs';
@@ -60,7 +60,7 @@ test('new, expansion and churned split by customer when the rows can tell them a
   const by = Object.fromEntries(computeMovements(rows).map((m) => [m.kind, m]));
   assert.deepEqual([by.new.amount_cents, by.new.customers], [200, 1]);
   assert.deepEqual([by.expansion.amount_cents, by.expansion.customers], [400, 1]);
-  assert.deepEqual([by.churned.amount_cents, by.churned.customers], [400, 2], 'Gone lost 300, Beta shrank by 100');
+  assert.deepEqual([by.churned.amount_cents, by.churned.customers], [400, 1], 'Gone lost 300 and is the one churned customer; Beta shrank by 100, which is not');
   assert.equal(by.new.source, 'manual', 'the weakest proof level of the rows behind it');
   assert.equal(by.new.as_of, '2026-09-09');
   assert.equal(by.unsplit, undefined);
@@ -76,6 +76,22 @@ test('expansion is not split from new when a month holds a Stripe charge with no
 test('cohort retention follows identified customers; a month with no rows is null, not 0%', () => {
   const rows = [row('Acme', 1, '2026-07-01'), row('Beta', 1, '2026-07-02'), row('Acme', 1, '2026-08-01'), row('Acme', 1, '2026-10-01')];
   assert.deepEqual(cohortRetention(rows), [{ cohort: '2026-07', size: 2, retention: [100, 50, null, 50] }]);
+  // A month whose only charge names no customer is not recorded either, not 0%.
+  const anon = [row('Acme', 1, '2026-07-01'), row(STRIPE_NO_CUSTOMER, 1, '2026-08-01'), row('Acme', 1, '2026-09-01')];
+  assert.deepEqual(cohortRetention(anon), [{ cohort: '2026-07', size: 1, retention: [100, null, 100] }]);
+});
+
+test('churn needs two billings, and two in a row: a gap month is not a second period', () => {
+  assert.equal(movementGap([row('Acme', 1, '2026-07-01')]), 'Not recorded: needs 2 billings');
+  assert.equal(movementGap([row('Acme', 1, '2026-07-01'), row('Acme', 1, '2026-09-01')]), 'Not recorded: no two billing months in a row');
+  assert.equal(movementGap([row('Acme', 1, '2026-08-01'), row('Acme', 1, '2026-09-01')]), null);
+  assert.equal(nrrFromLedger([row('Acme', 1, '2026-07-01'), row('Acme', 1, '2026-09-01')]).reason, 'Not recorded: no two billing months in a row');
+  assert.equal(nrrFromLedger([row('Acme', 100, '2026-08-01'), row('Acme', 120, '2026-09-01')]).value, 120);
+});
+
+test('a hiring plan names its month: a date, a month, a quarter or a half', () => {
+  assert.deepEqual(['2027-03', '2027-03-31', 'Q1 2027', '2027 Q4', 'q2 2027', 'H2 2027', 'H1 2027', 'next year', ''].map(planMonth),
+    ['2027-03', '2027-03', '2027-03', '2027-12', '2027-06', '2027-12', '2027-06', null, null]);
 });
 
 // ── The shared read ─────────────────────────────────────────────────────────
@@ -430,4 +446,87 @@ test('durable company-building: the checklist starts from the Lab\'s gates; obli
   assert.deepEqual(seeded.filter((r: any) => r.title.startsWith('Seeded')).sort((a: any, b: any) => a.title.localeCompare(b.title)).map((r: any) => [r.title, r.kind, r.status]),
     [['Seeded board', 'governance', 'scheduled'], ['Seeded tax', 'compliance', 'upcoming']]);
   assert.equal((await call(f, FOUNDER, 'PUT', '/api/cycles/grow/checklist/made_up', { project: PID, done: true })).status, 404);
+});
+
+// ── #1753: the fixes from S1's review of #1488 ──────────────────────────────
+
+const cardOf = async (f: any, slug: string) => (await overview(f)).body.cards.find((c: any) => c.slug === slug);
+const monthAgo = (back: number, day: number) => {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - back, day)).toISOString().slice(0, 10);
+};
+
+test('CAC counts customers in the same calendar month as the spend, not a rolling 30 days', async () => {
+  const f = await fixture();
+  const ch = await call(f, FOUNDER, 'POST', '/api/cycles/grow/channels', { project: PID, name: 'Ads', utm_source: 'ads' });
+  const month = new Date().toISOString().slice(0, 7);
+  await call(f, FOUNDER, 'PUT', `/api/cycles/grow/channels/${ch.body.uid}/spend/${month}`, { project: PID, spend_cents: 50000 });
+  // Last month's 28th can fall inside a rolling 30 days; it is not this month.
+  const c = f.db.prepare(`INSERT INTO contacts (uid, project_id, email, audience, utm_json, created_at) VALUES (?, ?, ?, 'customer', '{"utm_source":"ads"}', ?)`);
+  c.run('c1', PID, 'old@x.example', `${monthAgo(1, 28)} 10:00:00`);
+  c.run('c2', PID, 'new@x.example', `${month}-01 10:00:00`);
+  const rows = (await module_(f, 'distribution')).body.records.rows;
+  assert.deepEqual([rows[0].customers, rows[0].cac_cents], [1, 50000]);
+  const w = f.db.prepare(`INSERT INTO waitlist_signups (project_id, email, created_at) VALUES (?, ?, ?)`);
+  w.run(PID, 'a@x.example', `${monthAgo(1, 28)} 10:00:00`);
+  w.run(PID, 'b@x.example', `${month}-01 10:00:00`);
+  const card = await cardOf(f, 'distribution');
+  assert.equal(card.range, 'This month');
+  assert.equal(card.series.funnel.find((s: any) => s.stage === 'Sign-up').value, 1, 'sign-ups by the same month');
+  assert.equal(card.series.channels[0].cac_cents, 50000);
+});
+
+test('revenue movements are computed from the ledger when read, and a gap month says so', async () => {
+  const f = await fixture();
+  const add = (customer: string, cents: number, on: string) => f.db.prepare(
+    `INSERT INTO revenue_entries (uid, project_id, customer, amount_cents, revenue_type, received_on, source, verification)
+     VALUES (?, ?, ?, ?, 'recurring', ?, 'manual', 'manual')`).run(crypto.randomUUID(), PID, customer, cents, on);
+  // Two billing months with a gap between them: no movement can be read.
+  add('Acme', 100000, monthAgo(3, 3)); add('Acme', 100000, monthAgo(1, 3));
+  const gapRows = Object.fromEntries((await module_(f, 'revenue-and-traction')).body.records.rows.map((k: any) => [k.kpi, k]));
+  assert.deepEqual([gapRows['Churn'].value, gapRows['Churn'].reason], [null, 'Not recorded: no two billing months in a row']);
+  const gapCard = await cardOf(f, 'revenue-and-traction');
+  assert.deepEqual([gapCard.state, gapCard.reason, gapCard.series.churn.reason],
+    ['not_recorded', 'Not recorded: no two billing months in a row', 'Not recorded: no two billing months in a row']);
+  const nrr = (await overview(f)).body.figures.find((x: any) => x.key === 'nrr');
+  assert.equal(nrr.reason, 'Not recorded: no two billing months in a row');
+  // A ledger that predates 443: nothing ever wrote revenue_movements, and the read still splits.
+  add('Acme', 140000, monthAgo(0, 3));
+  assert.equal((f.db.prepare('SELECT COUNT(*) AS n FROM revenue_movements').get() as any).n, 0);
+  const rows = Object.fromEntries((await module_(f, 'revenue-and-traction')).body.records.rows.map((k: any) => [k.kpi, k]));
+  assert.deepEqual([rows['Expansion MRR'].value, rows['Churn'].value, rows['New MRR'].value], [40000, 0, 0]);
+  const card = await cardOf(f, 'revenue-and-traction');
+  assert.deepEqual(card.series.movements.map((m: any) => [m.month, m.expansion]), [[monthAgo(0, 3).slice(0, 7), 40000]]);
+  assert.equal(card.series.churn, null);
+  assert.equal(card.source, 'Revenue ledger · manual');
+});
+
+test('the revenue caption says MRR is cash by the month it was received', async () => {
+  const f = await fixture();
+  assert.match((await cardOf(f, 'revenue-and-traction')).caption, /MRR is cash by the month it was received, so an annual invoice or a late payment reads as churn and then new revenue/);
+});
+
+test('the Lab ticks the checklist only when its founder holds this one venture', async () => {
+  const f = await fixture();
+  f.db.exec(`INSERT INTO spinout_lab_milestones (user_id, week, milestone_key, completed_at) VALUES (${FOUNDER}, 4, 'ein_received', '2026-09-01')`);
+  const item = async () => (await module_(f, 'durable-company-building')).body.parts.checklist.find((i: any) => i.key === 'ein_received');
+  assert.deepEqual([(await item()).done, (await item()).source], [true, 'Spin-Out Lab']);
+  f.db.exec(`INSERT INTO projects (id, uid, name, founder_id) VALUES (8, 'p8', 'Second venture', 10)`);
+  assert.equal((await item()).done, false, 'two ventures: nothing says which one the milestone was for');
+  f.db.exec(`UPDATE projects SET deleted_at = '2026-10-01' WHERE id = 8`);
+  assert.equal((await item()).done, true, 'a deleted venture is not a second one');
+});
+
+test('a hiring plan labelled by quarter or half is drawn at its month', async () => {
+  const f = await fixture();
+  f.db.exec(`INSERT INTO company_people (uid, company_id, name, person_type, status, start_date, created_by) VALUES
+    ('pa', 70, 'Ann', 'employee', 'active', '2025-01-01', ${FOUNDER}), ('pb', 70, 'Bob', 'employee', 'active', '2025-02-01', ${FOUNDER})`);
+  // Last quarter's last month falls inside the card's six months.
+  const ref = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() - 3, 1));
+  const q = Math.floor(ref.getUTCMonth() / 3) + 1;
+  const quarterEnd = `${ref.getUTCFullYear()}-${String(q * 3).padStart(2, '0')}`;
+  f.db.exec(`INSERT INTO company_headcount_plan (uid, company_id, period_label, target_headcount, updated_by) VALUES ('hp', 70, 'Q${q} ${ref.getUTCFullYear()}', 4, ${FOUNDER})`);
+  const card = await cardOf(f, 'team-expansion');
+  assert.equal(card.series.plan[card.series.months.indexOf(quarterEnd)], 4, 'the quarter\'s target is drawn at its last month');
+  assert.equal(card.series.plan.filter((v: any) => v != null).length, 1);
 });

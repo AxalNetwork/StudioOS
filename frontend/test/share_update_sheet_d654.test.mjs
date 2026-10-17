@@ -21,7 +21,7 @@ const RUNWAY = { key: 'runway', label: 'Runway', unit: 'months', value: null, so
 const on = new Proxy({}, { get: () => () => {} });
 const base = {
   step: 0, period: null, context: { metrics: [MRR, RUNWAY], no_metrics: false, open_roles: [{ id: 3, title: 'Engineer' }], audience: { investors: 2, team: 1, network: 4 },
-    ask_kinds: [{ kind: 'hire', module: 'Talent', lands: true }, { kind: 'customer', module: 'Customers', lands: true }, { kind: 'partner', module: 'Partnerships', lands: true }, { kind: 'market', module: 'Market expansion', lands: false, reason: 'Not recorded: there is no Market expansion store yet, so the reply stays on the ask' }] },
+    ask_kinds: [{ kind: 'hire', module: 'Talent', lands: true }, { kind: 'customer', module: 'Customers', lands: true }, { kind: 'partner', module: 'Partnerships', lands: true }, { kind: 'market', module: 'Market expansion', lands: true, reason: null }] },
   metrics: [MRR, RUNWAY], highlights: [], lowlights: [], asks: [], audience: { investors: true, team: true, network: true },
   includeMetrics: false, draftStatus: null, handWritten: false, busy: false, error: '', title: 'This month update', now: new Date('2026-10-09T00:00:00Z'),
 };
@@ -77,7 +77,11 @@ test('asks: a hire links to an open role; a market ask says its reply stays on t
   assert.match(text, /Replies land in Distribution/);
   assert.match(text, /Replies land in Partner network/);
   assert.doesNotMatch(text, /Talent|Partnerships|land in Customers/);
-  assert.match(text, /no Market expansion store yet/);
+  // D664 (#1753): a market ask linked to no market keeps its reply on the ask.
+  assert.match(text, /Linked to no market, so a reply stays on the ask\./);
+  assert.doesNotMatch(text, /Replies land in Market expansion/);
+  assert.match(withMarkets.text, /Replies land in Market expansion/, 'a linked market ask lands in its market');
+  assert.doesNotMatch(withMarkets.text, /Linked to no market/);
   for (const k of ['A hire', 'A customer introduction', 'A partner', 'A market contact', 'Capital']) assert.ok(text.includes(k), k);
 });
 

@@ -26,9 +26,9 @@ import { canAccessProject } from '../services/projectAccess';
 import { pageOf, settleCard, type Card } from '../services/cycleCards';
 import {
   APPLICATION_STAGES, CARD_FNS, DURABILITY_ITEMS, GROW_MODULES, GROW_QUESTION, MARKET_PARTS,
-  channelRows, checklist, growFigures, marketRows, readiness, readSnapshots, type Ctx, type GrowSlug,
+  channelRows, checklist, growFigures, marketRows, movementGap, readiness, readSnapshots, type Ctx, type GrowSlug,
 } from '../services/growCycle';
-import { billingPeriods, readRecurring } from '../services/revenueMovements';
+import { billingPeriods, computeMovements, readRecurring } from '../services/revenueMovements';
 import { canAskAgain } from '../services/updateShare';
 import { isAdmin } from './_t13t14t15_helpers';
 import { growPhone } from '../services/cycleFocus';
@@ -122,14 +122,16 @@ async function recordsFor(x: Ctx, slug: GrowSlug, viewer: User): Promise<RecordS
       return { kpi: label, value: last[col], change_30d: before ? (last[col] as number) - (before[col] as number) : null,
         source: last.source && last.source.trim() ? last.source : 'manual', as_of: last.snapshot_date, reason: null };
     };
+    // Movements are computed from the ledger when read (D664), never read
+    // from revenue_movements, which is empty for a ledger older than 443.
     const ledger = await readRecurring(env, projectId);
-    const mv = await env.DB.prepare(
-      `SELECT month, kind, amount_cents, source, as_of FROM revenue_movements WHERE project_id = ? ORDER BY month DESC`,
-    ).bind(projectId).all<{ month: string; kind: string; amount_cents: number; source: string; as_of: string }>();
-    const latest = (mv.results || [])[0]?.month ?? null;
-    const at = (kind: string) => (mv.results || []).find((m) => m.month === latest && m.kind === kind) ?? null;
+    const mv = computeMovements(ledger);
+    const latest = mv.length ? mv[mv.length - 1].month : null;
+    const at = (kind: string) => mv.find((m) => m.month === latest && m.kind === kind) ?? null;
+    const gap = movementGap(ledger);
     const movementRow = (label: string, kind: 'churned' | 'expansion' | 'new') => {
       if (billingPeriods(ledger) < 2) return { kpi: label, value: null, change_30d: null, source: null, as_of: null, reason: 'Needs 2 billings' };
+      if (gap) return { kpi: label, value: null, change_30d: null, source: null, as_of: null, reason: gap };
       const m = at(kind);
       if (!m) {
         return { kpi: label, value: null, change_30d: null, source: null, as_of: null,
