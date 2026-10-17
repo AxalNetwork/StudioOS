@@ -206,6 +206,8 @@ funds.get('/lp-portal', async (c) => {
     // archive lists these; a draft period is the GP's working copy and is not an
     // LP-facing document until it is issued.
     report_periods: await issuedPeriods(c.env, lpRows.map((r: any) => r.fund_id)),
+    // D712: the caller's own issued capital statements, matched on the LP rows above.
+    ...statementsPart(await issuedStatements(c.env, lpRows.map((r: any) => Number(r.id)))),
   });
 });
 
@@ -225,11 +227,46 @@ async function issuedPeriods(env: Env, fundIds: number[]) {
       WHERE fund_id IN (${marks}) AND status = 'issued'
       ORDER BY period_end DESC LIMIT 40`
   ).bind(...ids).all().catch(() => ({ results: [] }));
+  // D712: a period issued through the reporting queue carries its report's
+  // frozen fund-level figures, without the list of statements. A period issued
+  // here before the queue has none, and the renderer says Not recorded.
+  const periodIds = (r.results || []).map((row: any) => Number(row.id));
+  const frozen = new Map<number, any>();
+  if (periodIds.length) {
+    const reports = await env.DB.prepare(
+      `SELECT report_period_id, figures_json FROM fund_report_drafts
+        WHERE kind = 'lp_quarterly_report' AND status = 'issued' AND report_period_id IN (SELECT value FROM json_each(?))`,
+    ).bind(JSON.stringify(periodIds)).all<{ report_period_id: number; figures_json: string }>().catch(() => ({ results: [] as any[] }));
+    for (const rep of reports.results || []) {
+      const { statements: _statements, ...figures } = parseJson<Record<string, unknown>>(rep.figures_json, {});
+      frozen.set(Number(rep.report_period_id), figures);
+    }
+  }
   return (r.results || []).map((row: any) => ({
     ...row,
     notes: undefined,
     narrative: parseJson<PeriodNarrative>(row?.notes, {}),
+    figures: frozen.get(Number(row.id)) ?? null,
   }));
+}
+
+/**
+ * D712: issued capital statements for the given LP rows, newest first. Only an
+ * issued statement leaves the queue; a draft never does. A failed read is
+ * `null`, never an empty list: "no statement" is a claim about the LP.
+ */
+async function issuedStatements(env: Env, lpIds: number[]): Promise<any[] | null> {
+  const ids = [...new Set(lpIds.filter((n) => Number.isSafeInteger(n) && n > 0))];
+  if (!ids.length) return [];
+  const r = await env.DB.prepare(
+    `SELECT uid, fund_id, limited_partner_id, report_period_id, period_label, period_start, period_end, revision,
+            corrects_draft_id, issued_at, figures_json
+       FROM fund_report_drafts
+      WHERE kind = 'lp_capital_statement' AND status = 'issued' AND limited_partner_id IN (SELECT value FROM json_each(?))
+      ORDER BY period_end DESC, id DESC LIMIT 80`,
+  ).bind(JSON.stringify(ids)).all<any>().catch((e) => { console.error('[funds] capital statements unreadable', (e as Error)?.message); return null; });
+  if (!r) return null;
+  return (r.results || []).map(({ figures_json, ...row }: any) => ({ ...row, figures: parseJson(figures_json, null) }));
 }
 
 /**
@@ -742,9 +779,12 @@ funds.post('/:id/report-periods', async (c) => {
   if(!fundId)throw new FundReportRefusal('not_found',404);
   const gp=await requireFundGp(c,fundId);
   // D714: the body is read once, the draft act asserted, and the same body
-  // saved. #1777 owns the `issue: true` path inside saveFundPeriod.
+  // saved. D712 decision 6: an admin issues only through the reporting queue;
+  // saving a draft stays open to admins, and a non-admin GP of record still
+  // issues here.
   const body=await c.req.json().catch(()=>null);
   await assertFundAct(c,gp,'fund_report.draft');
+  if(gp.viaAdmin&&body?.issue===true)return refuse(c,409,{code:'issue_from_reporting_queue',message:'Admins issue a reporting period from the reporting queue.'});
   const result=await saveFundPeriod(c.env,fundId,gp.user.id,body);
   await auditFundAct(c.env,gp.user,'fund_report.draft',{fund_id:fundId,period_id:result.period?.id??null});
   return c.json({ok:true,period:result.period},result.created?201:200);
@@ -765,7 +805,7 @@ funds.get('/:id/lp-report/:lpId', async (c) => {
   await ensureFundGpColumns(c.env);
   const fundId = parseInt(c.req.param('id'), 10);
   const lpId = parseInt(c.req.param('lpId'), 10);
-  await requireFundGp(c, fundId);
+  const { viaAdmin } = await requireFundGp(c, fundId);
   if (!Number.isFinite(fundId) || !Number.isFinite(lpId)) {
     return c.json({ error: 'bad id' }, 400);
   }
@@ -827,8 +867,23 @@ funds.get('/:id/lp-report/:lpId', async (c) => {
     }],
     funds: fundFacts([lp]),
     recipient: { name: lp.lp_display_name ?? null, email: lp.lp_display_email ?? null },
+    // D712: the LP's issued statements; for an admin, the live drafts by uid,
+    // status and period only. Their figures come through the audited read.
+    ...statementsPart(await issuedStatements(c.env, [lpId])),
+    ...(viaAdmin ? { statement_drafts: await liveStatementDrafts(c.env, fundId, lpId) } : {}),
   });
 });
+
+const statementsPart = (rows: any[] | null) => ({ capital_statements: rows ?? [], capital_statements_recorded: rows !== null });
+
+async function liveStatementDrafts(env: Env, fundId: number, lpId: number) {
+  const r = await env.DB.prepare(
+    `SELECT uid, status, period_label, period_start, period_end, revision FROM fund_report_drafts
+      WHERE kind = 'lp_capital_statement' AND fund_id = ? AND limited_partner_id = ? AND status IN ('draft', 'prepared')
+      ORDER BY period_end DESC, id DESC`,
+  ).bind(fundId, lpId).all().catch(() => null);
+  return r ? r.results || [] : null;
+}
 
 funds.post('/:id/lps', async (c) => {
   const fundId = parseInt(c.req.param('id'), 10);

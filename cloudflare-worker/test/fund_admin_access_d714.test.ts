@@ -80,7 +80,7 @@ test('the table: unique keys, the decision\'s tiers, and a sentence on every Sup
   assert.deepEqual(tiers, {
     'capital_call.preview': 'admin', 'capital_call.issue': 'super_admin', 'capital_call.receipt': 'admin',
     'distribution.preview': 'admin', 'distribution.execute': 'super_admin', 'distribution.mark_paid': 'admin',
-    'fund_report.draft': 'admin', 'fund.gp_of_record': 'super_admin', 'fund.economics': 'super_admin', 'fund.write': 'admin',
+    'fund_report.draft': 'admin', 'fund_report.issue': 'super_admin', 'fund.gp_of_record': 'super_admin', 'fund.economics': 'super_admin', 'fund.write': 'admin',
     'fund_ledger.administrator': 'super_admin', 'fund_ledger.write': 'admin',
   });
   for (const a of FUND_ACTS) assert.equal(a.sentence !== null, a.tier === 'super_admin', a.act);
@@ -92,6 +92,7 @@ const ROUTERS: Record<string, { file: string; name: string }> = {
   '/api/funds': { file: 'routes/funds.ts', name: 'funds' },
   '/api/capital': { file: 'routes/capital.ts', name: 'capital' },
   '/api/fund-ledger': { file: 'routes/fund_ledger.ts', name: 'r' },
+  '/api/fund-reporting': { file: 'routes/fund_reporting.ts', name: 'r' },
 };
 
 /** The source of one handler: from its registration to the next one on the same router. */

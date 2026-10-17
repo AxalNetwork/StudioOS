@@ -60,7 +60,7 @@ export type FundActTier = 'admin' | 'super_admin';
 export type FundActKey =
   | 'capital_call.preview' | 'capital_call.issue' | 'capital_call.receipt'
   | 'distribution.preview' | 'distribution.execute' | 'distribution.mark_paid'
-  | 'fund_report.draft'
+  | 'fund_report.draft' | 'fund_report.issue'
   | 'fund.gp_of_record' | 'fund.economics' | 'fund.write'
   | 'fund_ledger.administrator' | 'fund_ledger.write';
 
@@ -78,7 +78,7 @@ export type FundAct = Readonly<{
 
 const act = (row: FundAct): FundAct => Object.freeze({ ...row, routes: Object.freeze([...row.routes]) });
 
-/** Decision 1: one act table. Rows of #1773, #1774, #1775 and #1777 join from `main` (decision 6). */
+/** Decision 1: one act table. Rows of #1773, #1774 and #1775 join from `main` (decision 6); #1777's issue row has joined (D712). */
 export const FUND_ACTS: readonly FundAct[] = Object.freeze([
   act({ act: 'capital_call.preview', label: 'Preview a capital call', tier: 'admin', owner: '#1779', sentence: null,
     routes: ['POST /api/funds/:id/capital-calls/preview'] }),
@@ -97,6 +97,9 @@ export const FUND_ACTS: readonly FundAct[] = Object.freeze([
     routes: ['POST /api/funds/distributions/:id/mark-paid'] }),
   act({ act: 'fund_report.draft', label: 'Save a report period draft', tier: 'admin', owner: '#1779', sentence: null,
     routes: ['POST /api/funds/:id/report-periods'] }),
+  act({ act: 'fund_report.issue', label: 'Issue a fund report pack', tier: 'super_admin', owner: '#1777',
+    sentence: 'A Super Admin issues fund reports.',
+    routes: ['POST /api/fund-reporting/drafts/:uid/issue'] }),
   act({ act: 'fund.gp_of_record', label: "Change a fund's general partner of record", tier: 'super_admin', owner: '#1779',
     sentence: "A Super Admin changes a fund's general partner of record.",
     routes: ['PATCH /api/funds/:id (gp_user_id)'] }),

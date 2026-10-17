@@ -104,6 +104,7 @@ import infra from './routes/infra';
 import funds from './routes/funds';
 import fundLedger from './routes/fund_ledger';
 import fundAdmin from './routes/fund_admin';
+import fundReporting from './routes/fund_reporting';
 import fundPerformance from './routes/fund_performance';
 import liquidity from './routes/liquidity';
 import email from './routes/email';
@@ -1031,6 +1032,7 @@ app.route('/api/funds', funds);
 app.route('/api/fund-ledger', fundLedger);
 // D714 — the fund administration console: which fund acts this admin may take.
 app.route('/api/fund-admin', fundAdmin);
+app.route('/api/fund-reporting', fundReporting);
 app.route('/api/fund-performance', fundPerformance);
 app.route('/api/liquidity', liquidity);
 app.route('/api/email', email);
@@ -1846,6 +1848,21 @@ export default {
             console.info(`[cron] signals ingested promoted=${r.promoted} held=${r.held} evidence=${r.evidence_written}`);
           } catch (e) {
             console.error('[cron] signals ingestion failed', e);
+          }
+        }
+        // D712 (#1777) — the fund reporting queue at 05:20 UTC, HQ only: it
+        // builds each administered fund's quarterly pack once it is due (the
+        // 5th day after the quarter ends) and missing in every status, as
+        // drafts that only a Super Admin issues. A second tick builds nothing.
+        // It logs ids and counts only, never a figure.
+        if (hqCadences && now.getUTCHours() === 5 && now.getUTCMinutes() === 20) {
+          try {
+            const { runReportingSchedule } = await import('./services/fundReportDrafts');
+            const r = await runReportingSchedule(env, now);
+            const built = r.results.filter((x) => x.result === 'built').map((x) => x.fund_id);
+            console.info('[cron] fund reporting', r.quarter, 'due', r.due, 'built funds', JSON.stringify(built));
+          } catch (e) {
+            console.error('[cron] fund reporting failed', (e as Error)?.message);
           }
         }
         // Task #3 (Y-1) — nightly Trust Center housekeeping at 04:35 UTC:
