@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { FileBarChart, Plus, RefreshCw, X, Send } from 'lucide-react';
+import { FileBarChart, Plus, RefreshCw, X } from 'lucide-react';
 import { useAuth } from '../hooks/useAuthSync';
 import { api } from '../lib/api';
 
@@ -56,12 +56,6 @@ export default function LPReportingPage({ embedded = false }) {
       load();
     } catch (e2) { setErr(e2.message || 'Failed to create'); }
     finally { setBusy(false); }
-  };
-
-  const publish = async (uid) => {
-    setBusy(true); setErr(null);
-    try { await api.lpReportPublish(uid); load(); }
-    catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
 
   const field = (key, placeholder, extra = {}) => (
@@ -143,11 +137,9 @@ export default function LPReportingPage({ embedded = false }) {
                   <span className={`px-2 py-0.5 rounded-full text-xs ${x.status === 'published' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'}`}>
                     {x.status}
                   </span>
+                  {/* D712 decision 6: admins issue LP reports from the reporting queue, so they get no Publish here. */}
                   {isAdmin && x.status !== 'published' && (
-                    <button onClick={() => publish(x.uid)} disabled={busy}
-                      className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-xs">
-                      <Send size={12} /> Publish
-                    </button>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">Admins issue LP reports from the reporting queue.</span>
                   )}
                 </div>
               </div>

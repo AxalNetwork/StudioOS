@@ -22,6 +22,7 @@ import { Listings, Matches } from '../models/liquidity';
 import { Funds } from '../models/funds';
 import { Distributions } from '../models/distributions';
 import { issueFundCall } from './fundCallLedger';
+import { DISTRIBUTION_LPS_SQL, splitDistribution } from './fundDistributionSplit';
 import {
   recentSnapshots, metricPointsFrom, recordReview, latestMomentum,
 } from './tractionSnapshots';
@@ -342,7 +343,7 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
       // line this run wrote — `issueFundCall`, the same function `POST
       // /api/funds/:id/capital-call` runs. Every write is keyed on `callUid`,
       // so a re-run writes nothing it already has.
-      await issueFundCall(env, {
+      const issued = await issueFundCall(env, {
         fundId: Number(fundId),
         amountCents,
         callUid,
@@ -351,6 +352,24 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
         issuedBy: Number.isSafeInteger(Number(payload.issued_by)) && Number(payload.issued_by) > 0
           ? Number(payload.issued_by) : null,
       });
+
+      // D708 decision 9: a call on Fund I while the Fund has no payable
+      // account wrote nothing. The issuer is told why, once per run, and the
+      // job ends: retrying cannot add the account, and the GP issues the call
+      // again once it exists.
+      if (issued.held) {
+        const issuer = Number.isSafeInteger(Number(payload.issued_by)) && Number(payload.issued_by) > 0
+          ? Number(payload.issued_by) : null;
+        await env.DB.prepare(
+          `INSERT INTO activity_logs (action, details, actor, user_id)
+           VALUES ('capital_call_held', ?, 'system', ?)`,
+        ).bind(
+          `Capital call on fund #${fundId} was not issued (${issued.held.code}): ${issued.held.message} `
+            + "Issue the call again once the Fund's account is added.",
+          issuer,
+        ).run();
+        return;
+      }
 
       // AND THIS HANDLER NO LONGER TOUCHES `vc_funds.deployed_capital`. It used
       // to bump it by the call amount here, and removing that is a deliberate,
@@ -397,35 +416,23 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
       for (const fundId of fundIds) {
         const fund = await Funds.getById(env, fundId);
         if (!fund) continue;
-        const lps = await env.DB.prepare(
-          `SELECT id, commitment_amount, invested_amount FROM limited_partners
-           WHERE fund_id = ? AND status IN ('committed','active')`
-        ).bind(fundId).all<{ id: number; commitment_amount: number; invested_amount: number }>();
-        const rows = lps.results || [];
-        const totalCommit = rows.reduce((s, r) => s + Number(r.commitment_amount || 0), 0);
-        if (!rows.length || totalCommit <= 0) continue;
+        const lps = await env.DB.prepare(DISTRIBUTION_LPS_SQL)
+          .bind(fundId).all<{ id: number; commitment_amount: number; invested_amount: number }>();
+        // D714 — the split is `splitDistribution`, which the preview route
+        // also calls, so what a Super Admin reads before Execute is what this
+        // writes. Its arithmetic is this job's, unchanged.
+        const split = splitDistribution(proceedsCents, fund.carried_interest, lps.results || []);
+        if (!split.distributable) continue;
 
-        // Apply carry on profit portion only. Without per-LP basis tracking we
-        // approximate basis as the sum of invested_amount; the rest is profit.
-        const totalInvested = rows.reduce((s, r) => s + Number(r.invested_amount || 0), 0) * 100; // -> cents
-        const grossCents = proceedsCents;        // single targeted fund
-        const basisReturnCents = Math.min(grossCents, Math.round(totalInvested));
-        const profitCents = Math.max(0, grossCents - basisReturnCents);
-        const carryCents = Math.round(profitCents * (fund.carried_interest ?? 0.20));
-        const distributableCents = grossCents - carryCents;
-
-        const items = rows.map(lp => {
-          const share = Number(lp.commitment_amount || 0) / totalCommit;
-          return {
-            fund_id: fundId,
-            lp_id: lp.id,
-            amount_cents: Math.round(distributableCents * share),
-            distribution_type: profitCents > 0 ? 'exit_proceeds' as const : 'return_of_capital' as const,
-            source_liquidity_event_id: eventId,
-            status: 'pending' as const,
-            notes: subId ? `From subsidiary #${subId}` : null,
-          };
-        }).filter(d => d.amount_cents > 0);
+        const items = split.lines.map(line => ({
+          fund_id: fundId,
+          lp_id: line.lp_id,
+          amount_cents: line.amount_cents,
+          distribution_type: split.distribution_type,
+          source_liquidity_event_id: eventId,
+          status: 'pending' as const,
+          notes: subId ? `From subsidiary #${subId}` : null,
+        }));
 
         await Distributions.insertMany(env, items);
       }

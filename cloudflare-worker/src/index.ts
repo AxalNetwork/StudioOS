@@ -103,6 +103,8 @@ import monitoring from './routes/monitoring';
 import infra from './routes/infra';
 import funds from './routes/funds';
 import fundLedger from './routes/fund_ledger';
+import fundAdmin from './routes/fund_admin';
+import fundReporting from './routes/fund_reporting';
 import fundPerformance from './routes/fund_performance';
 import liquidity from './routes/liquidity';
 import email from './routes/email';
@@ -315,6 +317,7 @@ import catalog, { adminCatalog } from './routes/catalog';
 // Task #16 — Admin Stripe management (webhook endpoints + publishable key).
 import adminStripe from './routes/admin_stripe';
 import adminMoneyRails from './routes/admin_money_rails';
+import adminBankAccounts from './routes/admin_bank_accounts';
 // PaymentIntent + SetupIntent surface for the Axal-branded embedded card UI.
 import payments from './routes/payments';
 // One-time CART ORDER surface (combined PaymentIntent for one_time SKUs).
@@ -612,6 +615,9 @@ const COOL_OFF_PREFIXES = [
   // exclusive grant over whole countries. Same class as promos: pause it for a
   // freshly-recovered admin.
   '/api/admin/licences',
+  // D708 — each Axal entity's bank accounts: the payment instructions every
+  // notice prints. Pause them for a freshly-recovered admin.
+  '/api/admin/bank-accounts',
 ];
 for (const p of COOL_OFF_PREFIXES) {
   app.use(p, recoveryCoolOff);
@@ -670,6 +676,15 @@ const COOL_OFF_ROUTES = [
   '/api/admin/branches/:code/accounts/:userId/move',
   '/api/admin/branches/:code/admins/:userId/unbind',
   '/api/admin/users/:userId/demote-admin',
+  // D714 — the three fund routes that are wholly Super Admin acts: issuing a
+  // capital call, executing a distribution, and assigning a fund's ledger
+  // administrator. The acts that share a route with reads (a first call
+  // through POST /api/funds/:id/lps, a change of GP of record or carry) take
+  // the same 423 inside `services/fundAdminAccess.ts` instead, so the reads
+  // on those routes stay open.
+  '/api/funds/:id/capital-call',
+  '/api/funds/distributions/execute',
+  '/api/fund-ledger/:id/administrator',
 ];
 for (const p of COOL_OFF_ROUTES) app.use(p, recoveryCoolOff);
 // Task #6 — Stripe billing surface (tier checkout/portal/webhook + MI Pro).
@@ -891,6 +906,9 @@ app.route('/api/admin/catalog', adminCatalog);
 app.route('/api/admin/stripe', adminStripe);
 // D707 (#1772) — the entities' roles and the money rails. Before the catch-all.
 app.route('/api/admin/money-rails', adminMoneyRails);
+// D708 — each Axal entity's bank accounts, Super Admin only. Before the
+// catch-all /api/admin so /api/admin/bank-accounts/* resolves here.
+app.route('/api/admin/bank-accounts', adminBankAccounts);
 // Task #9 — promo-code admin CRUD; mount before the `/api/admin` catch-all.
 app.route('/api/admin/promos', adminPromos);
 // Task #39 — Event engine admin (§8.3). Mount BEFORE the catch-all /api/admin
@@ -1019,6 +1037,9 @@ app.route('/api/contacts', contacts);
 app.route('/api/round-calls', roundCalls);
 app.route('/api/funds', funds);
 app.route('/api/fund-ledger', fundLedger);
+// D714 — the fund administration console: which fund acts this admin may take.
+app.route('/api/fund-admin', fundAdmin);
+app.route('/api/fund-reporting', fundReporting);
 app.route('/api/fund-performance', fundPerformance);
 app.route('/api/liquidity', liquidity);
 app.route('/api/email', email);
@@ -1834,6 +1855,21 @@ export default {
             console.info(`[cron] signals ingested promoted=${r.promoted} held=${r.held} evidence=${r.evidence_written}`);
           } catch (e) {
             console.error('[cron] signals ingestion failed', e);
+          }
+        }
+        // D712 (#1777) — the fund reporting queue at 05:20 UTC, HQ only: it
+        // builds each administered fund's quarterly pack once it is due (the
+        // 5th day after the quarter ends) and missing in every status, as
+        // drafts that only a Super Admin issues. A second tick builds nothing.
+        // It logs ids and counts only, never a figure.
+        if (hqCadences && now.getUTCHours() === 5 && now.getUTCMinutes() === 20) {
+          try {
+            const { runReportingSchedule } = await import('./services/fundReportDrafts');
+            const r = await runReportingSchedule(env, now);
+            const built = r.results.filter((x) => x.result === 'built').map((x) => x.fund_id);
+            console.info('[cron] fund reporting', r.quarter, 'due', r.due, 'built funds', JSON.stringify(built));
+          } catch (e) {
+            console.error('[cron] fund reporting failed', (e as Error)?.message);
           }
         }
         // Task #3 (Y-1) — nightly Trust Center housekeeping at 04:35 UTC:

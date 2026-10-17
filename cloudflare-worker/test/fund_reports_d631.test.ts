@@ -75,13 +75,19 @@ test('save/issue audit actors, exact narrative and server snapshot; issued perio
  assert.deepEqual([(await f.request(`/10/report-periods/${id}`,3)).status,(await f.request(`/20/report-periods/${id}`,4)).status],[404,404]);
  assert.equal((await f.request('/10/report-periods',3,'POST',draft)).status,402);
  assert.equal((await f.request('/10/report-periods',4,'POST',draft)).status,404);
- const issued=await f.request('/10/report-periods',1,'POST',{...draft,id,revision:saved.body.period.revision,issue:true,snapshot:{invented:999999}});
- assert.deepEqual([issued.status,issued.body.period.status,issued.body.period.issued_by],[200,'issued',1]);assert.ok(issued.body.period.issued_at);
+ // D712 decision 6: an admin issues only through the reporting queue, and its refusal writes nothing; an admin's draft save still succeeds.
+ const before=receipts(f.db);
+ const byAdmin=await f.request('/10/report-periods',1,'POST',{...draft,id,revision:saved.body.period.revision,issue:true});
+ assert.deepEqual([byAdmin.status,byAdmin.body.error],[409,'issue_from_reporting_queue']);
+ assert.deepEqual([f.db.prepare('SELECT status FROM fund_report_periods WHERE id=?').get(id).status,receipts(f.db)],['draft',before]);
+ const adminSave=await f.request('/10/report-periods',1,'POST',{...draft,id,revision:saved.body.period.revision});assert.equal(adminSave.status,200);
+ const issued=await f.request('/10/report-periods',2,'POST',{...draft,id,revision:adminSave.body.period.revision,issue:true,snapshot:{invented:999999}});
+ assert.deepEqual([issued.status,issued.body.period.status,issued.body.period.issued_by],[200,'issued',2]);assert.ok(issued.body.period.issued_at);
  const snapshot=JSON.parse(f.db.prepare('SELECT snapshot_json FROM fund_report_periods WHERE id=?').get(id).snapshot_json);assert.equal(snapshot.totals?.invested_cents,22222);assert.equal(snapshot.invented,undefined);
  assert.deepEqual((await f.request(`/10/report-periods/${id}`,3)).body.period.narrative,draft.narrative);
  assert.deepEqual((await f.request('/10/page',3)).body.periods.map((p:any)=>[p.id,p.status]),[[id,'issued']]);
  const refused=await f.request('/10/report-periods',2,'POST',{...draft,issue:false,narrative:{letter:['Changed']}});assert.equal(refused.status,409);assert.match(refused.body.message,/cannot be edited/);
- assert.deepEqual(receipts(f.db),[{action:'fund_report_draft_saved',actor:'2',user_id:2},{action:'fund_report_period_issued',actor:'1',user_id:1}]);
+ assert.deepEqual(receipts(f.db),[{action:'fund_report_draft_saved',actor:'2',user_id:2},{action:'fund_report_draft_saved',actor:'1',user_id:1},{action:'fund_report_period_issued',actor:'2',user_id:2}]);
 });
 test('correction lineage only points to this fund issued report and cannot be erased',async()=>{
  const f=await fixture();const original=await f.request('/10/report-periods',2,'POST',{...draft,issue:true});const id=original.body.period.id;

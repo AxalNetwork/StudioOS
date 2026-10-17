@@ -302,7 +302,8 @@ export const SERVICE_PROVIDERS = [
   { k: 'Fund administrator', v: 'Carta Fund Admin' },
   { k: 'Legal counsel', v: 'Ashurst Perkins Coie' },
   { k: 'Auditor', v: 'Deloitte LLP' },
-  { k: 'Custody / banking', v: 'Mercury · First Republic' },
+  // D708 decision 12: the bank the Fund will use. The suffix goes once the Fund's account is open.
+  { k: 'Custody / banking', v: 'Mercury (Column N.A.) · account not yet opened' },
   { k: 'Governance', v: 'LPAC · 3 seats at first close' },
   { k: 'Tax documents', v: `K-1 issued by ${FUND.k1Date}` },
 ];
