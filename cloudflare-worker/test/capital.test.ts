@@ -113,6 +113,7 @@ CREATE TABLE activity_stats (
   user_id INTEGER, stat_date TEXT, action_count INTEGER DEFAULT 0, updated_at TEXT,
   UNIQUE (user_id, stat_date));
 ${MIGRATION_312}
+${readFileSync(resolve(HERE, '../sql/migrations/473_fund_management_fees.sql'), 'utf8')}
 `;
 
 function seedFor(user: any): string {

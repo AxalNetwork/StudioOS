@@ -333,23 +333,15 @@ test('3: a failed board read prints its sentence and opens nothing', async () =>
   } finally { await m.close(); }
 });
 
-test('3: New hypothesis is drawn while no form is registered, and saves through createHypothesis; with it registered the section draws none', async () => {
-  const m = await mounted('/validate/experiments?project_id=7', handlerFor('experiments',
-    (url, opts) => (opts.method === 'POST' ? response({ id: 9 }) : null)));
+test('3: with New hypothesis registered (#1656 PR 2b) the section draws no interim button and the table\'s Add opens the form; without it the button is drawn', async () => {
+  const m = await mounted('/validate/experiments?project_id=7', handlerFor('experiments', () => null));
   try {
-    await m.press('validate-new-hypothesis');
-    const dialog = m.nodes().find((n) => /hypothesis/i.test(m.props(n)?.['data-testid'] || '') && m.props(n)?.['data-testid'] !== 'validate-new-hypothesis');
-    assert.ok(dialog, 'the dialog opened');
-    const fiberKey = Object.keys(dialog).find((k) => k.startsWith('__reactFiber$'));
-    let f = dialog[fiberKey];
-    while (f && f.type?.name !== 'NewHypothesisDialog') f = f.return;
-    assert.ok(f, 'NewHypothesisDialog found');
-    await m.run(() => f.memoizedProps.onSave({ claim: 'Finance leads pay to skip month-end' }));
-    await m.flush();
-    const post = m.requests.find((r) => r.options.method === 'POST');
-    assert.ok(post.url.endsWith('/api/founder/validate/board/7/hypotheses'), post.url);
-    assert.deepEqual(JSON.parse(post.options.body), { claim: 'Finance leads pay to skip month-end' });
+    assert.equal(m.nodes().find((n) => m.props(n)?.['data-testid'] === 'validate-new-hypothesis'), undefined, 'no interim button beside the registered Add');
+    assert.ok(m.nodes().some((n) => n.tagName === 'A' && m.props(n)?.href === '/validate/experiments/new?project_id=7'), 'the Add opens New hypothesis');
   } finally { await m.close(); }
+  // The section's interim branch, drawn only while CycleRoute hands it `onNewHypothesis`.
+  const interim = ssr(h(HypothesesSection, { parts: HYP_PARTS, query: { filter: {} }, openDialog: noop, onLoadLinkLists: noop, onLink: noop, onNewHypothesis: noop }));
+  assert.match(interim, /New hypothesis/);
   const registered = ssr(h(HypothesesSection, { parts: HYP_PARTS, query: { filter: {} }, openDialog: noop, onLoadLinkLists: noop, onLink: noop }));
   assert.doesNotMatch(registered, /New hypothesis/);
   assert.match(read('pages/cycles/CycleRoute.jsx'), /onNewHypothesis=\{formFor\('validate', 'experiments'\) \? undefined : /);
