@@ -760,7 +760,7 @@ app.post('/must-haves', async c => {
   return c.json({ id: Number(row?.id) }, 201);
 });
 
-export async function patchFeature(c: WriteCall, ctx: WriteCtx): Promise<Response> {
+async function patchFeature(c: WriteCall, ctx: WriteCtx): Promise<Response> {
   const id = positiveId(c.req.param('id'));
   if (!id) return c.json({ detail: 'Invalid feature id' }, 400);
   const existing = await c.env.DB.prepare(
@@ -799,7 +799,7 @@ app.patch('/features/:id', async c => {
   return patchFeature(c, ctx);
 });
 
-export async function postRisk(c: WriteCall, ctx: WriteCtx): Promise<Response> {
+async function postRisk(c: WriteCall, ctx: WriteCtx): Promise<Response> {
   const body = await jsonBody(c);
   const title = text(body?.title); const mitigation = text(body?.mitigation, 2000);
   const severity = body?.severity;
@@ -881,7 +881,7 @@ function feedbackLink(env: Env, projectId: number, item: number | 'new', label: 
         WHERE project_id = ? AND theme = ? AND status = 'open' AND roadmap_item_ref IS NULL`).bind(String(item), label, projectId, theme);
 }
 
-export async function postRoadmap(c: WriteCall, ctx: WriteCtx): Promise<Response> {
+async function postRoadmap(c: WriteCall, ctx: WriteCtx): Promise<Response> {
   const body = await jsonBody(c); if (!body) return c.json({ detail: 'Body required' }, 400);
   const column = body.column == null ? 'next' : body.column;
   if (typeof column !== 'string' || !['now', 'next', 'later'].includes(column)) return c.json({ detail: 'Column is Now, Next or Later' }, 400);
@@ -917,7 +917,7 @@ app.post('/roadmap', async c => {
   return postRoadmap(c, ctx);
 });
 
-export async function patchRoadmap(c: WriteCall, ctx: WriteCtx): Promise<Response> {
+async function patchRoadmap(c: WriteCall, ctx: WriteCtx): Promise<Response> {
   const id = positiveId(c.req.param('id'));
   const existing = id && await c.env.DB.prepare(
     'SELECT objective, kanban_status, owner_user_id, target_date, kpi_key, feedback_theme, feature_id FROM roadmap_okrs WHERE id = ? AND project_id = ?',
@@ -1021,7 +1021,7 @@ app.post('/founders', async c => {
   return c.json({ id: out.id, next: AGREEMENT_NEXT }, 201);
 });
 
-export async function patchFounder(c: WriteCall, ctx: WriteCtx): Promise<Response> {
+async function patchFounder(c: WriteCall, ctx: WriteCtx): Promise<Response> {
   const id = positiveId(String(c.req.param('id')).replace(/^h-/, ''));
   if (!id || !(await c.env.DB.prepare('SELECT 1 FROM cap_table_holders WHERE id = ? AND project_id = ?').bind(id, ctx.project.id).first())) return c.json({ detail: 'Holder not found' }, 404);
   const body = await jsonBody(c);
@@ -1098,7 +1098,7 @@ async function filingFields(c: WriteCall, p: Project, body: Record<string, unkno
   return out;
 }
 
-export async function postFormationStep(c: WriteCall, ctx: WriteCtx): Promise<Response> {
+async function postFormationStep(c: WriteCall, ctx: WriteCtx): Promise<Response> {
   const body = await jsonBody(c);
   if (!body) return c.json({ detail: 'Body required' }, 400);
   const due = dateValue(body.due_date);
@@ -1122,7 +1122,7 @@ app.post('/formation-steps', async c => {
   return postFormationStep(c, ctx);
 });
 
-export async function patchFormationStep(c: WriteCall, ctx: WriteCtx): Promise<Response> {
+async function patchFormationStep(c: WriteCall, ctx: WriteCtx): Promise<Response> {
   const id = positiveId(c.req.param('id'));
   const existing = id && await c.env.DB.prepare(
     'SELECT title, due_date, state, proof_file_key, kind, jurisdiction, for_holder_id FROM formation_steps WHERE id = ? AND project_id = ?',
@@ -1225,7 +1225,7 @@ function syncWrite(env: Env, integrationId: number, ownerId: number, sync: strin
  * set it; with no connection it waits in `sync_request` for one, and a
  * mapping the caller makes takes the caller's own waiting choice.
  */
-export async function putSystem(c: WriteCall, ctx: WriteCtx): Promise<Response> {
+async function putSystem(c: WriteCall, ctx: WriteCtx): Promise<Response> {
   const rawKind = c.req.param('kind') ?? '';
   if (!(SYSTEM_KINDS as readonly string[]).includes(rawKind)) return c.json({ error: 'invalid_kind', detail: 'Unknown system kind' }, 400);
   const kind = rawKind as SystemKind;
@@ -1334,5 +1334,9 @@ app.put('/systems/:kind', async c => {
   const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
   return putSystem(c, ctx);
 });
+
+// D690 (#1695 decision 13): the writes a record action runs. Declared as plain
+// functions so each route and its helpers read as one handler.
+export { patchFeature, postRisk, postRoadmap, patchRoadmap, patchFounder, postFormationStep, patchFormationStep, putSystem };
 
 export default app;
