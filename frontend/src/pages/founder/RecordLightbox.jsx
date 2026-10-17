@@ -96,6 +96,8 @@ export default function RecordLightbox({
   cycle = cycleValidateApi,
   // D685 §5.6 (#1588): the app's recorder, which takes the draft. Without one, Start opens the session page as before.
   recorder = null,
+  // D703 (#1665): the cycle route's page mode below 1024px ({ pageBelow, bar, pageClass }), spread on the Lightbox.
+  asPage,
 }) {
   // The chips' statuses (#1586): `GET /api/channels` once, unless the caller
   // passed the read. A failed read is null, and the chips then say "Not
@@ -314,7 +316,7 @@ export default function RecordLightbox({
 
   return (
     <Lightbox label="Record a session" eyebrow="Validate · Customer research" title="Record a session" sub="It lands in Interviews when you stop."
-      onClose={onClose} initialFocus={nameRef} returnFocusTo={returnFocusTo} testId="record-lightbox"
+      onClose={onClose} initialFocus={nameRef} returnFocusTo={returnFocusTo} testId="record-lightbox" {...asPage}
       footer={(
         <div className="flex flex-wrap items-center justify-between gap-3">
           <span className="text-[11.5px] text-axal-faint">Runs on Cloudflare Workers AI</span>
