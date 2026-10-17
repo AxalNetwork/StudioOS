@@ -35,7 +35,11 @@ import { railPrefsApi } from '../src/lib/api/railPrefs.js';
 const h = React.createElement;
 const Q = '?project_id=3';
 const html = (props) => renderToStaticMarkup(h(MemoryRouter, null, h(PhoneCycleRoot, { search: Q, ...props })));
-const tag = (out, id) => new RegExp(`<[a-z]+[^>]*data-testid="${id}"[^>]*>`).exec(out)?.[0] ?? '';
+/** The opening tag that carries `data-testid="<id>"`, found by string search (no pattern is built from data). */
+const tag = (out, id) => {
+  const at = out.indexOf(`data-testid="${id}"`);
+  return at < 0 ? '' : out.slice(out.lastIndexOf('<', at), out.indexOf('>', at) + 1);
+};
 /** From the opening tag that carries `from` up to the one that carries `to`. */
 const between = (out, from, to) => {
   const at = out.indexOf(from);
@@ -142,15 +146,15 @@ for (const cycle of Object.keys(READS)) {
     const raw = READS[cycle];
     const out = html({ cycle, raw });
     const text = renderedText(out);
-    assert.match(tag(out, 'phone-root'), new RegExp(`data-cycle="${cycle}"`));
+    assert.ok(tag(out, 'phone-root').includes(`data-cycle="${cycle}"`));
     assert.ok(text.includes(`${NAMES[cycle]} · Next`), 'the eyebrow');
     assert.match(out, /<h2 id="phone-focus-title" class="[^"]*text-\[29px\][^"]*font-black[^"]*leading-\[1\.15\][^"]*tracking-\[-\.032em\][^"]*\[text-wrap:balance\]/);
     assert.ok(text.includes(raw.focus.headline) && text.includes(raw.focus.why));
     // The meter where the read sends one, and none where it does not.
     if (raw.meter) {
-      assert.match(out, new RegExp(`data-testid="phone-meter-value">${raw.meter.display.replace(/[$.]/g, '\\$&')}<`));
+      assert.ok(out.includes(`data-testid="phone-meter-value">${raw.meter.display}<`), 'the display, exactly');
       const pct = Math.round((100 * raw.meter.count) / raw.meter.target);
-      assert.match(out, new RegExp(`role="progressbar"[^>]*aria-valuenow="${pct}"`));
+      assert.ok(out.includes(`aria-valuenow="${pct}"`) && out.includes('role="progressbar"'));
       assert.match(out, /<div class="[^"]*\bh-\[7px\][^"]*"[^>]*role="progressbar"/, 'a 7px bar');
     } else {
       assert.doesNotMatch(out, /data-testid="phone-meter"/);
@@ -158,14 +162,14 @@ for (const cycle of Object.keys(READS)) {
     const cta = tag(out, 'phone-focus-cta');
     assert.match(cta, /min-h-\[52px\]/);
     assert.match(cta, /rounded-\[14px\]/);
-    assert.match(cta, new RegExp(`href="${raw.focus.cta.href.replace(/[?]/g, '\\?')}"`));
+    assert.ok(cta.includes(`href="${raw.focus.cta.href}"`), 'the focus href');
     // The Worker's rows, in the order sent, a null value as the chip.
     const index = between(out, 'data-testid="phone-index"', 'data-testid="phone-also-in"');
     assert.ok(renderedText(index).startsWith(`Everything else in ${NAMES[cycle]}`));
     const keys = [...index.matchAll(/data-testid="phone-index-([a-z-]+)"/g)].map((m) => m[1]);
     assert.deepEqual(keys, raw.index.map((r) => r.key));
     assert.equal((renderedText(index).match(/Not recorded/g) || []).length, raw.index.filter((r) => r.value == null).length);
-    for (const r of raw.index) assert.match(tag(out, `phone-index-${r.key}`), new RegExp(`href="${r.href.replace(/[?]/g, '\\?')}"`));
+    for (const r of raw.index) assert.ok(tag(out, `phone-index-${r.key}`).includes(`href="${r.href}"`), r.key);
     // "Also in <Cycle>", only where the map lists pages.
     const also = between(out, 'data-testid="phone-also-in"');
     if (ALSO[cycle].length) {
