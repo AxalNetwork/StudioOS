@@ -410,7 +410,7 @@ async def security_and_observability(request: Request, call_next):
     # dev surface matches prod — this FastAPI process is dev-only but serves the
     # same authenticated app/API shape, where IDs/query-params must never leak.
     response.headers.setdefault("Referrer-Policy", "no-referrer")
-    response.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(self), camera=()")
+    response.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(self), camera=(self)")
     # T0 — Architecture truth. This FastAPI process is Replit-dev-only and is
     # NEVER deployed to production. Production lives on the Cloudflare Worker
     # at axal.vc (see CLAUDE.md). The header below makes that visible to any

@@ -3,7 +3,8 @@
  * contract) and the writes for the records migration 442 added.
  *
  *   GET /overview?project=:pid
- *     → { cycle, question, figures: [Figure ×4], cards: [Card ×7] }
+ *     → { cycle, question, figures: [Figure ×4], cards: [Card ×7], focus, meter, index }
+ *       (D692: the phone's parts, in the shape all four cycles share; services/cycleFocus.ts)
  *   GET /modules/:slug?project=:pid&q=&filter=&sort=&page=
  *     → { module: { slug, name, records_title }, card: Card,
  *         records: { cols, rows, total, page, page_size, filters?, sorts?, add? } }
@@ -11,14 +12,26 @@
  *     a version, a link, file or prospect id, a cap-table `h-`/`e-` key or
  *     `pool`, or a use-of-funds section key.
  *
- *   PUT  /readiness/:key            { score, evidence, missing? }
- *   POST /readiness/rescore
- *   POST /narrative-versions        { investor_type }
- *   PUT  /data-room/files/:id/checklist  { item | null }
- *   PUT  /prospects/:id/next-step   { next_step, next_step_due, warm_path }
+ *   PUT   /readiness/:key            { score, evidence, missing? }
+ *   POST  /readiness/rescore         { items?, since? }
+ *   POST  /narrative-versions        { investor_type, start_from?, based_on_version?, one_liner?, why_now?, ask?, check_against? }
+ *   PATCH /narrative-versions/:version   the same fields but start_from
+ *   POST  /deck-links                { deck_id, prospect_id | investor_label, expires_days: 7|14|30|null, allow_download?, allow_forwarding? }
+ *   PATCH /deck-links/:id            investor, the two settings, an earlier expiry
+ *   POST  /holders                   { name, group, instrument, shares | ownership_pct | amount_cents, cap_cents?, discount_pct?, vesting?, prospect_id? }
+ *   PATCH /holders/:id               the same fields but group and instrument; :id is h-<n> or e-<n>
+ *   PUT   /use-of-funds              { amount_to_raise_cents, sections: [{ key, pct, milestone_label?, milestone_by? }], runway_months }
+ *   POST  /prospects                 { name | research_fund_uid, email?, stage, warm_path, next_step, next_step_due, notes }
+ *   PATCH /prospects/:id             the same fields
+ *   PUT   /data-room/files/:id/checklist  { item | null }
+ *   PUT   /prospects/:id/next-step   { next_step, next_step_due, warm_path }
  *
  * The reads are `services/raiseCycle.ts`; the writes are
- * `services/raiseWriters.ts`, each recording its actor.
+ * `services/raiseWriters.ts` (D691, #1700), each logging one row per record
+ * it writes through `logCycleWrite` (decision 12). Every id a route takes,
+ * in its path or its body, is this venture's or the write answers 404.
+ * Share links and holders keep their tool's plan gate (`ensureTier` 'studio',
+ * decision 13), whose 402 the writer throws as a Response.
  *
  * WHO. Reading and writing are both the venture's own or an admin's
  * (`canWrite`). Unlike Validate's board, the Raise cards carry the cap table,
@@ -32,8 +45,10 @@ import { requireAuth } from '../auth';
 import { canWrite, type ProjectRef } from './_founder_validate_helpers';
 import { CYCLE, QUESTION, MODULES, CARD_FOR, RECORDS_FOR, figures, cards, callsHistory, recordQuery, type Ctx, type ModuleSlug } from '../services/raiseCycle';
 import {
-  WriterError, scoreReadinessItem, rescoreReadiness, saveNarrativeVersion, setFileChecklistItem, setProspectNextStep,
+  WriterError, scoreReadinessItem, rescoreReadiness, saveNarrativeVersion, updateNarrativeVersion, createDeckLink, updateDeckLink,
+  addCapHolder, updateCapHolder, saveUseOfFunds, addProspect, updateProspect, setFileChecklistItem, setProspectNextStep,
 } from '../services/raiseWriters';
+import { raisePhone } from '../services/cycleFocus';
 
 const cycleRaise = new Hono<{ Bindings: Env }>();
 
@@ -61,6 +76,8 @@ const ctxOf = (c: any, projectId: number): Ctx => ({ env: c.env, projectId, toda
 
 function writeFailed(c: any, e: unknown) {
   if (e instanceof WriterError) return c.json({ detail: e.sentence }, e.status as any);
+  // The plan gate's refusal (`ensureTier`), with its upgrade body.
+  if (e instanceof Response) return e;
   console.error('[cycle_raise] write failed:', (e as Error)?.message);
   return c.json({ detail: 'The write failed' }, 500);
 }
@@ -81,7 +98,7 @@ cycleRaise.get('/overview', async (c) => {
   if (s instanceof Response) return s;
   const ctx = ctxOf(c, s.projectId);
   const [figs, cs] = await Promise.all([figures(ctx), cards(ctx)]);
-  return c.json({ cycle: CYCLE, question: QUESTION, figures: figs, cards: cs });
+  return c.json({ cycle: CYCLE, question: QUESTION, figures: figs, cards: cs, ...(await raisePhone(ctx, figs, cs)) });
 });
 
 cycleRaise.get('/modules/:slug', async (c) => {
@@ -122,9 +139,15 @@ cycleRaise.put('/readiness/:key', async (c) => {
 cycleRaise.post('/readiness/rescore', async (c) => {
   const s = await scope(c);
   if (s instanceof Response) return s;
+  // #1652's caller sends no body: every computed item.
+  const b = await body(c);
   try {
-    return c.json(await rescoreReadiness(c.env, { projectId: s.projectId, userId: Number(s.user.id) }));
+    return c.json(await rescoreReadiness(c.env, { projectId: s.projectId, userId: Number(s.user.id), items: b.items, since: b.since }));
   } catch (e) { return writeFailed(c, e); }
+});
+
+const narrativeFields = (b: Record<string, unknown>) => ({
+  investorType: b.investor_type, basedOnVersion: b.based_on_version, oneLiner: b.one_liner, whyNow: b.why_now, ask: b.ask, checkAgainst: b.check_against,
 });
 
 cycleRaise.post('/narrative-versions', async (c) => {
@@ -132,7 +155,90 @@ cycleRaise.post('/narrative-versions', async (c) => {
   if (s instanceof Response) return s;
   const b = await body(c);
   try {
-    return c.json(await saveNarrativeVersion(c.env, { projectId: s.projectId, userId: Number(s.user.id), investorType: b.investor_type }), 201);
+    // #1652's caller sends only investor_type, and still saves.
+    return c.json(await saveNarrativeVersion(c.env, { projectId: s.projectId, userId: Number(s.user.id), startFrom: b.start_from, ...narrativeFields(b) }), 201);
+  } catch (e) { return writeFailed(c, e); }
+});
+
+cycleRaise.patch('/narrative-versions/:version', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  const version = idParam(c.req.param('version'));
+  if (version == null) return c.json({ detail: 'Version not found' }, 404);
+  const b = await body(c);
+  if ('start_from' in b) return c.json({ detail: 'Start from is set when the version is made' }, 400);
+  try {
+    return c.json(await updateNarrativeVersion(c.env, { projectId: s.projectId, userId: Number(s.user.id), version, ...narrativeFields(b) }));
+  } catch (e) { return writeFailed(c, e); }
+});
+
+cycleRaise.post('/deck-links', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  const b = await body(c);
+  try {
+    return c.json(await createDeckLink(c.env, { projectId: s.projectId, user: s.user, body: b }), 201);
+  } catch (e) { return writeFailed(c, e); }
+});
+
+cycleRaise.patch('/deck-links/:id', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  const id = idParam(c.req.param('id'));
+  if (id == null) return c.json({ detail: 'Link not found' }, 404);
+  const b = await body(c);
+  try {
+    return c.json(await updateDeckLink(c.env, { projectId: s.projectId, user: s.user, linkId: id, body: b }));
+  } catch (e) { return writeFailed(c, e); }
+});
+
+cycleRaise.post('/holders', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  const b = await body(c);
+  try {
+    return c.json(await addCapHolder(c.env, { projectId: s.projectId, user: s.user, body: b }), 201);
+  } catch (e) { return writeFailed(c, e); }
+});
+
+cycleRaise.patch('/holders/:id', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  const id = String(c.req.param('id') ?? '');
+  if (!/^(h|e)-[1-9][0-9]{0,9}$/.test(id)) return c.json({ detail: 'Holder not found' }, 404);
+  const b = await body(c);
+  if ('group' in b || 'instrument' in b) return c.json({ detail: 'A holder keeps its group and instrument; add a new holder instead' }, 400);
+  try {
+    return c.json(await updateCapHolder(c.env, { projectId: s.projectId, user: s.user, id, body: b }));
+  } catch (e) { return writeFailed(c, e); }
+});
+
+cycleRaise.put('/use-of-funds', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  const b = await body(c);
+  try {
+    return c.json(await saveUseOfFunds(c.env, { projectId: s.projectId, userId: Number(s.user.id), body: b }));
+  } catch (e) { return writeFailed(c, e); }
+});
+
+cycleRaise.post('/prospects', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  const b = await body(c);
+  try {
+    return c.json(await addProspect(c.env, { projectId: s.projectId, userId: Number(s.user.id), body: b }), 201);
+  } catch (e) { return writeFailed(c, e); }
+});
+
+cycleRaise.patch('/prospects/:id', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  const id = idParam(c.req.param('id'));
+  if (id == null) return c.json({ detail: 'Prospect not found' }, 404);
+  const b = await body(c);
+  try {
+    return c.json(await updateProspect(c.env, { projectId: s.projectId, userId: Number(s.user.id), prospectId: id, body: b }));
   } catch (e) { return writeFailed(c, e); }
 });
 

@@ -2,7 +2,8 @@
  * D664 (#1477) — the Grow cycle's reads and the writes behind its new stores,
  * mounted at /api/cycles/grow (#1469's shared read, D656).
  *
- *   GET  /overview?project=:pid                 the question, four figures, seven cards
+ *   GET  /overview?project=:pid                 the question, four figures, seven cards, and the
+ *                                               phone's focus, meter and index (D692; services/cycleFocus.ts)
  *   GET  /modules/:slug?project=&q=&filter=&sort=&page=&page_size=
  *                                               the module's card and its records
  *
@@ -30,6 +31,7 @@ import {
 import { billingPeriods, readRecurring } from '../services/revenueMovements';
 import { canAskAgain } from '../services/updateShare';
 import { isAdmin } from './_t13t14t15_helpers';
+import { growPhone } from '../services/cycleFocus';
 
 const r = new Hono<{ Bindings: Env }>();
 type C = Context<{ Bindings: Env }>;
@@ -83,7 +85,7 @@ r.get('/overview', async (c) => {
     const pid = await project(c, user, c.req.query('project'), false);
     const x = ctxFor(c.env, pid);
     const [figures, cards] = await Promise.all([growFigures(x), Promise.all(GROW_MODULES.map((m) => cardFor(x, m.slug)))]);
-    return c.json({ cycle: 'grow', question: GROW_QUESTION, figures, cards });
+    return c.json({ cycle: 'grow', question: GROW_QUESTION, figures, cards, ...(await growPhone(x, user, figures, cards)) });
   } catch (e) { return fail(c, e); }
 });
 
