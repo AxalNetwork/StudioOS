@@ -106,6 +106,7 @@ import funds from './routes/funds';
 import fundLedger from './routes/fund_ledger';
 import fundAdmin from './routes/fund_admin';
 import fundReporting from './routes/fund_reporting';
+import fundNotices from './routes/fund_notices';
 import fundPerformance from './routes/fund_performance';
 import liquidity from './routes/liquidity';
 import email from './routes/email';
@@ -619,6 +620,9 @@ const COOL_OFF_PREFIXES = [
   // D708 — each Axal entity's bank accounts: the payment instructions every
   // notice prints. Pause them for a freshly-recovered admin.
   '/api/admin/bank-accounts',
+  // D716 — fund notices ask an LP or an entity for money. Pause them for a
+  // freshly-recovered account.
+  '/api/fund-notices',
 ];
 for (const p of COOL_OFF_PREFIXES) {
   app.use(p, recoveryCoolOff);
@@ -1043,6 +1047,8 @@ app.route('/api/fund-ledger', fundLedger);
 // D714 — the fund administration console: which fund acts this admin may take.
 app.route('/api/fund-admin', fundAdmin);
 app.route('/api/fund-reporting', fundReporting);
+// D716 — fund notices: an Admin previews, the Super Admin issues, the LP reads their own.
+app.route('/api/fund-notices', fundNotices);
 app.route('/api/fund-performance', fundPerformance);
 app.route('/api/liquidity', liquidity);
 app.route('/api/email', email);

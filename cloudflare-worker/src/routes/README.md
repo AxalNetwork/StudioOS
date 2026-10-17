@@ -55,6 +55,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/funds         → funds.ts
 /api/fund-admin    → fund_admin.ts      (D714: GET /access, which fund acts this admin may take, from FUND_ACTS)
 /api/fund-reporting → fund_reporting.ts
+/api/fund-notices  → fund_notices.ts    (D716: an Admin previews, the Super Admin issues, the LP reads their own; kept PDFs through Browser Run)
 /api/liquidity     → liquidity.ts
 /api/email         → email.ts
 /api/pipeline      → pipeline.ts
