@@ -20,8 +20,12 @@ Sync log and Permissions to writers. Old rows read through each spec's
 `oldRows` matcher, one id prefix per spec.
 
 `../cycleActivity.ts` writes scoped activity and reads one record's timeline.
-Older activity is only included when a spec declares an `oldRows` matcher.
-Nothing rewrites historical activity.
+A write that belongs to a module rather than a record logs `entityId: null`, so
+no record's history returns it. Its `CREATE_ACTIONS` set is what both the count
+and the renderer treat as a record's create row. Older activity is only
+included when a spec declares an `oldRows` matcher. Nothing in the Worker
+rewrites historical activity; migration 470 is the one-off correction S1 ruled
+for the rows #1736 misfiled before its review fixes shipped.
 
 `verdict.ts` is Validate's Verdict record (D693, #1703). It is tested through a
 registry of its own and joins `RECORD_SPECS` with Validate's service.

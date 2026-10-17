@@ -2,16 +2,33 @@
 import type { Env } from '../types';
 import { RECORD_ID } from './records/owned';
 import type { Cycle, OldRowsMatcher, Store } from './records/types';
+import type { ModuleSlug as ValidateModule } from './cycleValidate';
+import type { ModuleSlug as RaiseModule } from './raiseCycle';
+import type { GrowSlug as GrowModule } from './growCycle';
+import type { BuildModuleSlug as BuildModule } from '../routes/cycle_build';
 
-export type CycleWrite = {
+/** Each cycle's module slugs: a write logged under a module that does not exist fails to compile. */
+export type CycleModules = { validate: ValidateModule; build: BuildModule; raise: RaiseModule; grow: GrowModule };
+
+/**
+ * `entityId` is the record id the module read sends. `null` is the explicit
+ * module-level form (S1's ruling on #1736): a write that belongs to a module
+ * and not to one of its records, such as a target, a readiness mark or a
+ * source, logs `entity_id` NULL. `entity_id = ?` never matches NULL, so no
+ * record's history can return the row.
+ */
+export type CycleWrite = { [C in Cycle]: {
   projectId: number;
   userId: number | null;
-  cycle: Cycle;
-  module: string;
-  entityId: string | number;
+  cycle: C;
+  module: CycleModules[C];
+  entityId: string | number | null;
   action: string;
   summary: string;
-};
+} }[Cycle];
+
+/** `Omit` per cycle, so a batched write keeps its cycle and module paired. */
+type WithoutEntity = CycleWrite extends infer W ? W extends CycleWrite ? Omit<W, 'entityId'> : never : never;
 
 export type Readback =
   | { table: 'pain_groups' | 'hypotheses' | 'mvp_features' | 'roadmap_okrs' | 'formation_steps'; by: 'max'; prefix?: string }
@@ -21,11 +38,11 @@ export type Readback =
   // when it replaced none.
   | { table: 'validation_decisions'; by: 'max' | 'supersedes'; prefix?: string };
 
-export type BatchedCycleWrite = Omit<CycleWrite, 'entityId'> & { readback: Readback };
+export type BatchedCycleWrite = WithoutEntity & { readback: Readback };
 
 type Prepared = ReturnType<Env['DB']['prepare']>;
 
-function checked(input: Omit<CycleWrite, 'entityId'>): { entityType: string; summary: string; actor: string } {
+function checked(input: WithoutEntity): { entityType: string; summary: string; actor: string } {
   if (!Number.isSafeInteger(input.projectId) || input.projectId < 1
     || !/^[a-z][a-z0-9_-]*$/.test(input.module)
     || !/^[a-z][a-z0-9_-]*$/.test(input.action)) throw new Error('Invalid cycle activity key');
@@ -39,8 +56,8 @@ export function logCycleWriteStatement(env: Env, input: CycleWrite | BatchedCycl
   const { entityType, summary, actor } = checked(input);
   const common = [input.projectId, input.userId, entityType];
   if ('entityId' in input) {
-    const entityId = String(input.entityId);
-    if (!RECORD_ID.test(entityId)) throw new Error('Invalid cycle activity record id');
+    const entityId = input.entityId === null ? null : String(input.entityId);
+    if (entityId !== null && !RECORD_ID.test(entityId)) throw new Error('Invalid cycle activity record id');
     return env.DB.prepare(
       'INSERT INTO activity_logs (project_id, user_id, entity_type, entity_id, action, details, actor) VALUES (?, ?, ?, ?, ?, ?, ?)',
     ).bind(...common, entityId, input.action, summary, actor);
@@ -115,6 +132,22 @@ async function creatorFor(env: Env, store: CreatorStore, id: string, projectId: 
   }
 }
 
+/**
+ * The rows that record a create, read by both the count and the renderer
+ * (S1's ruling on #1736). Writers keep their action names (decision 5), so a
+ * suffix alone misses some creates: a create is every action ending
+ * `_created`, each name in `CREATE_ACTIONS`, and `COMPETITOR_ADDED`'s action
+ * only on the row whose write added the candidate (a signal on a candidate
+ * already listed is not its create).
+ */
+export const CREATE_ACTIONS: readonly string[] = ['interview_logged', 'segment_written', 'demand_signal_written', 'waitlist_promoted'];
+export const COMPETITOR_ADDED = { action: 'competitor_mention_written', summary: 'Competitor added' } as const;
+
+export function isCreateRow(action: string, details: string | null): boolean {
+  return action.endsWith('_created') || CREATE_ACTIONS.includes(action)
+    || (action === COMPETITOR_ADDED.action && details === COMPETITOR_ADDED.summary);
+}
+
 export type ActivityItem = { a: string; b: string; action: string; created_at: string };
 export type ActivityPage = { items: ActivityItem[]; total: number; page: number; page_size: 20 };
 
@@ -135,13 +168,15 @@ export async function activityFor(env: Env, input: {
   const args = [input.projectId, input.entityType, input.entityId, oldTypes, input.entityId, oldActions, oldId];
   const count = await env.DB.prepare(
     `SELECT COUNT(*) AS n,
-       SUM(CASE WHEN action LIKE '%created' OR action = 'interview_logged' THEN 1 ELSE 0 END) AS creates
+       SUM(CASE WHEN substr(action, -8) = '_created' OR action IN (SELECT value FROM json_each(?))
+         OR (action = ? AND details = ?) THEN 1 ELSE 0 END) AS creates
        FROM activity_logs WHERE project_id = ? AND (
        (entity_type = ? AND entity_id = ?)
        OR (entity_type IN (SELECT value FROM json_each(?)) AND entity_id = ?)
        OR (entity_type IS NULL AND action IN (SELECT value FROM json_each(?))
            AND CASE WHEN json_valid(details) THEN CAST(json_extract(details, '$.id') AS TEXT) ELSE NULL END = ?))`,
-  ).bind(...args).first<{ n: number; creates: number }>();
+  ).bind(JSON.stringify(CREATE_ACTIONS), COMPETITOR_ADDED.action, COMPETITOR_ADDED.summary, ...args)
+    .first<{ n: number; creates: number }>();
   const totalLogs = Number(count?.n ?? 0);
   const rows = await env.DB.prepare(
     `SELECT a.action, a.details, a.created_at, u.name AS actor_name
@@ -154,7 +189,7 @@ export async function activityFor(env: Env, input: {
       ORDER BY a.created_at DESC, a.id DESC LIMIT 20 OFFSET ?`,
   ).bind(...args, (page - 1) * 20).all<{ action: string; details: string | null; created_at: string; actor_name: string | null }>();
   const items = (rows.results ?? []).map((r) => ({
-    a: r.action.endsWith('_created') || r.action === 'interview_logged'
+    a: isCreateRow(r.action, r.details)
       ? (r.actor_name ? `Created by ${r.actor_name}` : `Created ${r.created_at.slice(0, 10)}`)
       : `${String(r.details ?? r.action).replace(/\s+/g, ' ').trim()}${r.actor_name ? ` by ${r.actor_name}` : ''}`,
     b: r.created_at,

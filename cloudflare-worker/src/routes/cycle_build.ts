@@ -886,3 +886,5 @@ app.put('/systems/:kind', async c => {
 });
 
 export default app;
+// Build's module slugs, so services/cycleActivity.ts refuses a module that does not exist (D690).
+export type { Slug as BuildModuleSlug };

@@ -22,7 +22,8 @@
  * definition and nothing else.
  */
 import type { Env } from '../types';
-import { logCycleWrite } from './cycleActivity';
+import { COMPETITOR_ADDED, logCycleWrite } from './cycleActivity';
+import type { ModuleSlug } from './cycleValidate';
 import { RECORD_ID } from './records/owned';
 import { insertManualCandidate } from '../routes/_competitor_writes';
 import { ensureCompetitorSchema } from './competitorSchema';
@@ -68,8 +69,13 @@ export function httpUrlOrNull(v: unknown): string | null {
   }
 }
 
+/**
+ * `entityId` null is a module-level write (a target, a mark, a source): it has
+ * no record in today's lists, so it logs `entity_id` NULL rather than borrow
+ * an id some record could own (S1's ruling on #1736).
+ */
 async function recordActor(env: Env, userId: number | null, projectId: number,
-  module: string, entityId: string | number, action: string, summary: string) {
+  module: ModuleSlug, entityId: string | number | null, action: string, summary: string) {
   await logCycleWrite(env, { projectId, userId, cycle: 'validate', module, entityId, action, summary });
 }
 
@@ -113,7 +119,7 @@ export async function writeSegment(env: Env, input: SegmentInput): Promise<{ id:
   ).bind(input.projectId, name, norm, trimOrNull(input.description, 1000), source, trimOrNull(input.sourceRef, 200), input.userId)
     .first<{ id: number }>();
   if (!row) throw new WriterError(500, 'The segment was not written');
-  await recordActor(env, input.userId, input.projectId, 'customer-segments', row.id, 'segment_written', `Segment ${row.id} created`);
+  await recordActor(env, input.userId, input.projectId, 'ideal-customer-profile', row.id, 'segment_written', `${name} created`);
   return { id: Number(row.id), name, created: true };
 }
 
@@ -124,17 +130,19 @@ export async function assignInterviewSegment(
 ): Promise<void> {
   const previous = await env.DB.prepare('SELECT segment_id FROM discovery_interviews WHERE id = ? AND project_id = ?')
     .bind(input.interviewId, input.projectId).first<{ segment_id: number | null }>();
+  let segmentName: string | null = null;
   if (input.segmentId != null) {
     const seg = await env.DB.prepare(
-      'SELECT id FROM customer_segments WHERE id = ? AND project_id = ?',
-    ).bind(input.segmentId, input.projectId).first();
+      'SELECT id, name FROM customer_segments WHERE id = ? AND project_id = ?',
+    ).bind(input.segmentId, input.projectId).first<{ id: number; name: string }>();
     if (!seg) throw new WriterError(404, 'Segment not found on this project');
+    segmentName = seg.name;
   }
   const res = await env.DB.prepare(
     'UPDATE discovery_interviews SET segment_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?',
   ).bind(input.segmentId, input.interviewId, input.projectId).run();
   if (!res.meta?.changes) throw new WriterError(404, 'Interview not found on this project');
-  await recordActor(env, input.userId, input.projectId, 'customer-research', input.interviewId, 'interview_segment_set', `Interview segment ${input.segmentId ?? 'cleared'}`);
+  await recordActor(env, input.userId, input.projectId, 'customer-research', input.interviewId, 'interview_segment_set', segmentName ? `Segment ${segmentName}` : 'Segment cleared');
   if (previous?.segment_id != null && previous.segment_id !== input.segmentId) {
     await recordActor(env, input.userId, input.projectId, 'ideal-customer-profile', previous.segment_id,
       'interview_segment_unlinked', `Interview ${input.interviewId} unlinked`);
@@ -321,7 +329,7 @@ export async function setInterviewsTarget(
   if (input.value === null) {
     await env.DB.prepare('DELETE FROM metric_targets WHERE project_id = ? AND metric_key = ?')
       .bind(input.projectId, INTERVIEWS_TARGET_KEY).run();
-    await recordActor(env, input.userId, input.projectId, 'customer-research', input.projectId, 'interviews_target_cleared', 'Monthly interviews target cleared');
+    await recordActor(env, input.userId, input.projectId, 'customer-research', null, 'interviews_target_cleared', 'Monthly interviews target cleared');
     return;
   }
   const n = Number(input.value);
@@ -332,7 +340,7 @@ export async function setInterviewsTarget(
      ON CONFLICT(project_id, metric_key)
      DO UPDATE SET target_value = excluded.target_value, updated_at = datetime('now')`,
   ).bind(input.projectId, INTERVIEWS_TARGET_KEY, n, input.userId).run();
-  await recordActor(env, input.userId, input.projectId, 'customer-research', input.projectId, 'interviews_target_set', `Monthly interviews target ${n}`);
+  await recordActor(env, input.userId, input.projectId, 'customer-research', null, 'interviews_target_set', `Monthly interviews target ${n}`);
 }
 
 /** The `metric_targets` key the waitlist bar lives under. */
@@ -346,7 +354,7 @@ export async function setWaitlistTarget(
   if (input.value === null) {
     await env.DB.prepare('DELETE FROM metric_targets WHERE project_id = ? AND metric_key = ?')
       .bind(input.projectId, WAITLIST_TARGET_KEY).run();
-    await recordActor(env, input.userId, input.projectId, 'demand-signals', input.projectId, 'waitlist_target_cleared', 'Waitlist target cleared');
+    await recordActor(env, input.userId, input.projectId, 'demand-signals', null, 'waitlist_target_cleared', 'Waitlist target cleared');
     return;
   }
   const n = Number(input.value);
@@ -357,7 +365,7 @@ export async function setWaitlistTarget(
      ON CONFLICT(project_id, metric_key)
      DO UPDATE SET target_value = excluded.target_value, updated_at = datetime('now')`,
   ).bind(input.projectId, WAITLIST_TARGET_KEY, n, input.userId).run();
-  await recordActor(env, input.userId, input.projectId, 'demand-signals', input.projectId, 'waitlist_target_set', `Waitlist target ${n}`);
+  await recordActor(env, input.userId, input.projectId, 'demand-signals', null, 'waitlist_target_set', `Waitlist target ${n}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -437,7 +445,7 @@ export async function writeCompetitorMention(
     signalId, String(analysis.id), candidateId, signalType, trimOrNull(input.label, 200) ?? signalType,
     trimOrNull(input.detail, 1000), input.projectId, sourceUrl, sourceKind, observed,
   ).run();
-  await recordActor(env, input.userId, input.projectId, 'market-intelligence', RECORD_ID.test(candidateId) ? candidateId : input.projectId, 'competitor_mention_written', added ? 'Competitor added' : 'Competitor signal added');
+  await recordActor(env, input.userId, input.projectId, 'market-intelligence', RECORD_ID.test(candidateId) ? candidateId : null, COMPETITOR_ADDED.action, added ? COMPETITOR_ADDED.summary : 'Competitor signal added');
   return { candidate_id: candidateId, signal_id: signalId, added };
 }
 
@@ -462,7 +470,7 @@ export async function setMarketMark(
     await env.DB.prepare('DELETE FROM market_readiness_marks WHERE project_id = ? AND item = ?')
       .bind(input.projectId, item).run();
   }
-  await recordActor(env, input.userId, input.projectId, 'market-intelligence', input.projectId, 'market_mark_set', `${item} ${input.done ? 'done' : 'not done'}`);
+  await recordActor(env, input.userId, input.projectId, 'market-intelligence', null, 'market_mark_set', `${item} ${input.done ? 'done' : 'not done'}`);
 }
 
 export async function addMarketSource(
@@ -478,7 +486,7 @@ export async function addMarketSource(
     'INSERT INTO market_sources (project_id, title, url, kind, added_by) VALUES (?, ?, ?, ?, ?) RETURNING id',
   ).bind(input.projectId, title, url, kind, input.userId).first<{ id: number }>();
   if (!row) throw new WriterError(500, 'The source was not written');
-  await recordActor(env, input.userId, input.projectId, 'market-intelligence', input.projectId, 'market_source_added', `Market source ${row.id} added`);
+  await recordActor(env, input.userId, input.projectId, 'market-intelligence', null, 'market_source_added', `Market source ${row.id} added`);
   return { id: Number(row.id) };
 }
 
@@ -489,7 +497,7 @@ export async function removeMarketSource(
   const res = await env.DB.prepare('DELETE FROM market_sources WHERE id = ? AND project_id = ?')
     .bind(input.sourceId, input.projectId).run();
   if (!res.meta?.changes) throw new WriterError(404, 'Source not found on this project');
-  await recordActor(env, input.userId, input.projectId, 'market-intelligence', input.projectId, 'market_source_removed', `Market source ${input.sourceId} removed`);
+  await recordActor(env, input.userId, input.projectId, 'market-intelligence', null, 'market_source_removed', `Market source ${input.sourceId} removed`);
 }
 
 // ---------------------------------------------------------------------------
@@ -503,8 +511,8 @@ export async function setHypothesisPlan(
   env: Env,
   input: { projectId: number; userId: number | null; hypothesisId: number; sprint?: unknown; owner_user_id?: unknown; inconclusive?: unknown },
 ): Promise<void> {
-  const h = await env.DB.prepare('SELECT id, sprint, owner_user_id, inconclusive_at FROM hypotheses WHERE id = ? AND project_id = ?')
-    .bind(input.hypothesisId, input.projectId).first<{ sprint: string | null; owner_user_id: number | null; inconclusive_at: string | null }>();
+  const h = await env.DB.prepare('SELECT id, code, sprint, owner_user_id, inconclusive_at FROM hypotheses WHERE id = ? AND project_id = ?')
+    .bind(input.hypothesisId, input.projectId).first<{ code: string; sprint: string | null; owner_user_id: number | null; inconclusive_at: string | null }>();
   if (!h) throw new WriterError(404, 'Hypothesis not found on this project');
   const sprint = input.sprint === undefined ? h.sprint : trimOrNull(input.sprint, 80);
   let owner = h.owner_user_id;
@@ -523,7 +531,7 @@ export async function setHypothesisPlan(
   await env.DB.prepare(
     'UPDATE hypotheses SET sprint = ?, owner_user_id = ?, inconclusive_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?',
   ).bind(sprint, owner, inconclusive, input.hypothesisId, input.projectId).run();
-  await recordActor(env, input.userId, input.projectId, 'experiments', input.hypothesisId, 'hypothesis_plan_set', `Hypothesis ${input.hypothesisId} plan updated`);
+  await recordActor(env, input.userId, input.projectId, 'experiments', input.hypothesisId, 'hypothesis_plan_set', `${h.code} plan updated`);
 }
 
 /** The strength of one evidence link, or `null` to clear it. */
@@ -536,10 +544,10 @@ export async function setEvidenceStrength(
     throw new WriterError(400, `strength must be one of ${EVIDENCE_STRENGTHS.join(', ')}, or null`);
   }
   const linked = await env.DB.prepare(
-    `SELECT l.hypothesis_id, l.pain_group_id FROM hypothesis_pain_links l
+    `SELECT l.hypothesis_id, l.pain_group_id, h.code FROM hypothesis_pain_links l
        JOIN hypotheses h ON h.id = l.hypothesis_id
       WHERE l.id = ? AND h.project_id = ?`,
-  ).bind(input.linkId, input.projectId).first<{ hypothesis_id: number; pain_group_id: number }>();
+  ).bind(input.linkId, input.projectId).first<{ hypothesis_id: number; pain_group_id: number; code: string }>();
   const res = await env.DB.prepare(
     `UPDATE hypothesis_pain_links SET strength = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND hypothesis_id IN (SELECT id FROM hypotheses WHERE project_id = ?)
@@ -550,5 +558,5 @@ export async function setEvidenceStrength(
   await recordActor(env, input.userId, input.projectId, 'experiments', linked.hypothesis_id,
     'evidence_strength_set', `Evidence strength ${strength ?? 'cleared'}`);
   await recordActor(env, input.userId, input.projectId, 'problem-discovery', linked.pain_group_id,
-    'evidence_strength_set', `Hypothesis ${linked.hypothesis_id} evidence strength ${strength ?? 'cleared'}`);
+    'evidence_strength_set', `${linked.code} evidence strength ${strength ?? 'cleared'}`);
 }
