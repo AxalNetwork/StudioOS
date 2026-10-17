@@ -51,3 +51,9 @@ Naming follows the surface, not the persona: `PortfolioHealthPage`,
   recorded" copy instead of a number.
 - Prefer `ui/` primitives over new one-off styling.
 - Dark mode is not optional: `npm run test:drift` runs `check-dark-mode`.
+
+## Account appearance
+
+`SettingsPage.jsx` offers Light/Dark theme selection and explainer restoration.
+Density and sidebar-start preferences are retired. The sidebar still has its
+normal manual controls; the mobile drawer starts closed.

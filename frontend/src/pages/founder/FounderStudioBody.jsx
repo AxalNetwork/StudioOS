@@ -49,7 +49,6 @@ export default function FounderStudioBody({ user, reads, onRetry, advisorAvailab
       <div className="mb-4" data-testid="section-founder-advisor">
         {children}
         {advisorAvailable === false && <AdvisorUnavailable />}
-        <p className="mt-2 text-right text-[11.5px]"><Link to="/help/tickets" className="font-semibold text-violet-700 dark:text-violet-300" data-testid="link-founder-open-ticket">Open a ticket</Link></p>
       </div>
 
       <ul className="mb-5 grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-6" data-testid="founder-studio-summary">

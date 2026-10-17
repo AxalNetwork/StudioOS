@@ -1,0 +1,192 @@
+name: Claude review
+
+# An ADVISORY pull-request review through the Anthropic Messages API, meant to
+# replace the AI part of GitHub Code Quality (its AI findings and Copilot
+# Autofix "Potential fix for 1 code quality finding" PRs) with a review whose
+# cost is measured, capped and visible in each run. Runbook:
+# documentation/operations/CLAUDE_REVIEW.md.
+#
+# It complements, never replaces, the deterministic checks: CodeQL, Semgrep,
+# gitleaks, the npm and pip audits, the typechecks, the migration gate and
+# `npm run test:drift` all run in their own workflows, unchanged. It is not a
+# required check, it never approves, merges, pushes or fixes anything, and a
+# finding never fails it.
+#
+# OFF until an administrator sets the repository variables
+# CLAUDE_REVIEW_ENABLED=true and ANTHROPIC_MODEL, and a credential:
+# preferably workload identity federation (the variables
+# ANTHROPIC_FEDERATION_RULE_ID, ANTHROPIC_ORGANIZATION_ID,
+# ANTHROPIC_SERVICE_ACCOUNT_ID, ANTHROPIC_WORKSPACE_ID), else the secret
+# ANTHROPIC_API_KEY. Either bills the Anthropic Console organization's API
+# credits; a Claude Max subscription login is never used here. While it is
+# off, the `review` job shows as skipped and nothing is spent.
+#
+# Security:
+#   - `pull_request`, never `pull_request_target`: a fork's pull request runs
+#     with no secrets, and the `review` job is also skipped for forks and
+#     Dependabot outright.
+#   - The reviewer's code is checked out from the BASE commit, so a pull
+#     request cannot change the code that holds the key; the pull request's
+#     head is checked out separately as data and nothing in it runs. The
+#     `selftest` job tests a pull request's own changes to the reviewer, with
+#     no secrets.
+#   - Read-only token: contents, pull-requests and actions (the last to list
+#     this month's review records), plus id-token for federation. No job can
+#     write to the repository, the pull request or a check.
+#   - Third-party code is the pinned Anthropic SDK, installed with
+#     --ignore-scripts from a committed lockfile.
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, synchronize, ready_for_review]
+
+# One review per pull request at a time; a newer push cancels a review of a
+# superseded commit.
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  # The reviewer's own tests, against the pull request's version of it. No
+  # secrets, no API call. The pure half is also in the full suite (`npm run
+  # test:drift` runs scripts/lib/*.test.mjs); this adds the CLI's tests, which
+  # need the pinned SDK.
+  selftest:
+    name: claude review (self-test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          lfs: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Install the pinned SDK
+        run: npm ci --prefix scripts/claude-review --ignore-scripts --no-audit --no-fund
+      - name: Test the reviewer
+        run: node --test scripts/lib/claudeReview.test.mjs scripts/claude-review/review.test.mjs
+
+  review:
+    name: claude review (advisory)
+    # vars.* is the switch. The fork and Dependabot conditions are repeated in
+    # the reviewer's own code, so a widened trigger still cannot expose the key.
+    if: >-
+      vars.CLAUDE_REVIEW_ENABLED == 'true' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: read
+      # Workload identity federation: GitHub's OIDC token (audience
+      # https://api.anthropic.com) is exchanged for a short-lived Anthropic
+      # token, so no long-lived key has to sit in the repository. Harmless
+      # when only the API key is configured.
+      id-token: write
+    steps:
+      - name: Check out the reviewer (base commit)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: reviewer
+          persist-credentials: false
+          lfs: false
+          sparse-checkout: |
+            scripts/claude-review
+            scripts/lib
+          sparse-checkout-cone-mode: true
+
+      - name: Check out the pull request (head commit, data only)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: pr
+          fetch-depth: 1
+          lfs: false
+          # Kept so the reviewer can fetch the merge base (depth 1) with this
+          # job's read-only token.
+          persist-credentials: true
+
+      # The reviewer runs from the base commit, so the pull request that first
+      # adds it (or a base from before it) has nothing to run: say so and stop
+      # cleanly rather than fail.
+      - name: Is the reviewer on the base commit?
+        id: present
+        run: |
+          if [ -f reviewer/scripts/claude-review/review.mjs ] && [ -f reviewer/scripts/lib/claudeReviewRun.mjs ]; then
+            echo "yes=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "yes=false" >> "$GITHUB_OUTPUT"
+            printf '## Claude review (advisory)\n\n**Outcome:** skipped — the base commit has no reviewer yet. Reviews start once it is on `main`. Nothing was spent.\n' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        if: steps.present.outputs.yes == 'true'
+        with:
+          node-version: '22'
+
+      - name: Install the pinned SDK
+        if: steps.present.outputs.yes == 'true'
+        run: npm ci --prefix reviewer/scripts/claude-review --ignore-scripts --no-audit --no-fund
+
+      - name: Review
+        id: review
+        if: steps.present.outputs.yes == 'true'
+        env:
+          # Federation (preferred): identifiers, not secrets, so variables.
+          ANTHROPIC_FEDERATION_RULE_ID: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
+          ANTHROPIC_ORGANIZATION_ID: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
+          ANTHROPIC_SERVICE_ACCOUNT_ID: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
+          ANTHROPIC_WORKSPACE_ID: ${{ vars.ANTHROPIC_WORKSPACE_ID }}
+          # Fallback when no federation rule is set.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL }}
+          ANTHROPIC_MODEL_HIGH_RISK: ${{ vars.ANTHROPIC_MODEL_HIGH_RISK }}
+          CLAUDE_REVIEW_ENABLED: ${{ vars.CLAUDE_REVIEW_ENABLED }}
+          CLAUDE_REVIEW_EFFORT: ${{ vars.CLAUDE_REVIEW_EFFORT }}
+          CLAUDE_REVIEW_MAX_OUTPUT_TOKENS: ${{ vars.CLAUDE_REVIEW_MAX_OUTPUT_TOKENS }}
+          CLAUDE_REVIEW_MAX_DIFF_BYTES: ${{ vars.CLAUDE_REVIEW_MAX_DIFF_BYTES }}
+          CLAUDE_REVIEW_MAX_CONTEXT_BYTES: ${{ vars.CLAUDE_REVIEW_MAX_CONTEXT_BYTES }}
+          CLAUDE_REVIEW_MAX_FILES: ${{ vars.CLAUDE_REVIEW_MAX_FILES }}
+          CLAUDE_REVIEW_CONTEXT_LINES: ${{ vars.CLAUDE_REVIEW_CONTEXT_LINES }}
+          CLAUDE_REVIEW_MAX_RETRIES: ${{ vars.CLAUDE_REVIEW_MAX_RETRIES }}
+          CLAUDE_REVIEW_TIMEOUT_SECONDS: ${{ vars.CLAUDE_REVIEW_TIMEOUT_SECONDS }}
+          CLAUDE_REVIEW_MAX_COST_USD: ${{ vars.CLAUDE_REVIEW_MAX_COST_USD }}
+          CLAUDE_REVIEW_MONTHLY_BUDGET_USD: ${{ vars.CLAUDE_REVIEW_MONTHLY_BUDGET_USD }}
+          CLAUDE_REVIEW_MIN_CONFIDENCE: ${{ vars.CLAUDE_REVIEW_MIN_CONFIDENCE }}
+          CLAUDE_REVIEW_ANNOTATIONS: ${{ vars.CLAUDE_REVIEW_ANNOTATIONS }}
+          CLAUDE_REVIEW_DRAFTS: ${{ vars.CLAUDE_REVIEW_DRAFTS }}
+          CLAUDE_REVIEW_REFUSAL_FALLBACK: ${{ vars.CLAUDE_REVIEW_REFUSAL_FALLBACK }}
+          CLAUDE_REVIEW_RATES: ${{ vars.CLAUDE_REVIEW_RATES }}
+          CLAUDE_REVIEW_FAIL_ON_ERROR: ${{ vars.CLAUDE_REVIEW_FAIL_ON_ERROR }}
+          CLAUDE_REVIEW_PR_DIR: ${{ github.workspace }}/pr
+          CLAUDE_REVIEW_OUT_DIR: ${{ runner.temp }}/claude-review
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node reviewer/scripts/claude-review/review.mjs
+
+      # One artifact per review that spent tokens or succeeded. Its NAME holds
+      # the month, the pull request, the input key, the outcome and the cost,
+      # so the next review reads this month's spend and spots a repeat from
+      # the artifact list alone. Kept 90 days, longer than any month.
+      - name: Record usage
+        if: always() && steps.review.outputs.record_name != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.review.outputs.record_name }}
+          # record.json: tokens, cost, outcome. review.json (after a successful
+          # review only): the validated findings, for a person or an agent
+          # fixing them, since a job summary cannot be read through the API.
+          path: |
+            ${{ runner.temp }}/claude-review/record.json
+            ${{ runner.temp }}/claude-review/review.json
+          retention-days: 90
+          if-no-files-found: ignore

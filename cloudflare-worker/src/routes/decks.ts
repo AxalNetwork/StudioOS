@@ -104,6 +104,20 @@ async function ensureSchema(env: Env): Promise<void> {
     if (!have.has('revoked_at')) {
       try { await env.DB.prepare(`ALTER TABLE pitch_deck_share_tokens ADD COLUMN revoked_at TEXT`).run(); } catch {}
     }
+    // Migration 463 — D691: the investor a link was made for and its two
+    // settings. Both settings default to 1, so an older link behaves as before.
+    const add463: Array<[string, string]> = [
+      ['prospect_id', `ALTER TABLE pitch_deck_share_tokens ADD COLUMN prospect_id INTEGER REFERENCES raise_prospects(id) ON DELETE SET NULL`],
+      ['investor_label', `ALTER TABLE pitch_deck_share_tokens ADD COLUMN investor_label TEXT`],
+      ['allow_download', `ALTER TABLE pitch_deck_share_tokens ADD COLUMN allow_download INTEGER NOT NULL DEFAULT 1 CHECK (allow_download IN (0, 1))`],
+      ['allow_forwarding', `ALTER TABLE pitch_deck_share_tokens ADD COLUMN allow_forwarding INTEGER NOT NULL DEFAULT 1 CHECK (allow_forwarding IN (0, 1))`],
+      ['bound_viewer_hash', `ALTER TABLE pitch_deck_share_tokens ADD COLUMN bound_viewer_hash TEXT`],
+    ];
+    for (const [col, ddl] of add463) {
+      if (!have.has(col)) {
+        try { await env.DB.prepare(ddl).run(); } catch {}
+      }
+    }
   } catch {}
   MIGRATED.set(bindingKey(env), true);
 }

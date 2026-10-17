@@ -5,6 +5,7 @@ version: 2
 #  - npm (frontend) — React/Vite/Tailwind SPA
 #  - npm (cloudflare-worker) — Hono + Workers types (PRODUCTION dep tree)
 #  - npm (cloudflare-worker-tail) — wrangler tail consumer (dev/deploy tooling)
+#  - npm (scripts/claude-review) — the Anthropic SDK the advisory PR review pins
 #  - pip (root) — FastAPI dev backend
 #  - github-actions — keep CI actions current
 #
@@ -42,6 +43,18 @@ updates:
       root-npm:
         patterns: ['*']
         update-types: ['minor', 'patch']
+    labels: ['deps']
+
+  # The advisory PR review's one dependency, pinned exactly. 14 days, not 7:
+  # its README asks for an SDK release at least two weeks old.
+  - package-ecosystem: npm
+    directory: /scripts/claude-review
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 14
+    open-pull-requests-limit: 2
     labels: ['deps']
 
   - package-ecosystem: npm
