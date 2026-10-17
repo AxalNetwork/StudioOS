@@ -55,7 +55,7 @@ export const MAX_REASONING = 4000;
 /**
  * One piece of the venture's evidence, as the evidence reader gives it.
  *
- * `id` names the link the item came through (#1690's `evidenceFor`:
+ * `id` names the link the item came through (#1692's `evidenceFor`:
  * `pain-<link id>-<interview id>` or `evidence-<link id>`), so it is unique
  * across the venture and an interview behind two claims is two items.
  */
@@ -72,7 +72,7 @@ export type EvidenceItem = {
 export type EvidenceSource = (env: Env, projectId: number) => Promise<EvidenceItem[]>;
 
 /**
- * THE SEAM, STUBBED. `services/validateEvidence.ts`'s `evidenceFor` (#1690)
+ * THE SEAM, STUBBED. `services/validateEvidence.ts`'s `evidenceFor` (#1692)
  * is not on `main` yet, so the venture has no evidence items here and every
  * decision recorded through the new route is withheld. #1703 points this at
  * the real reader. Tests pass their own source through `recordDecision`'s

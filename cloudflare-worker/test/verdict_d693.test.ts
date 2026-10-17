@@ -117,7 +117,7 @@ function hypothesis(db: any, pid: number, code: string, claim = `${code} claim`)
   return Number(r.id);
 }
 
-/** Made-up evidence items, keyed the way #1690 names them. */
+/** Made-up evidence items, keyed the way #1692 names them. */
 function items(n: number, { contradicting = 0, prefix = 'evidence' } = {}): EvidenceItem[] {
   return Array.from({ length: n }, (_, i) => ({
     id: `${prefix}-${i + 1}`, kind: 'hypothesis_evidence', label: `Item ${i + 1} · H1`,
@@ -271,7 +271,7 @@ test('3: a venture seeded with two current legacy rows has one current after the
 // ---------------------------------------------------------------------------
 
 /**
- * A stand-in for #1690's `evidenceFor`, over this fixture: one item per
+ * A stand-in for #1692's `evidenceFor`, over this fixture: one item per
  * interview behind a pain link, keyed by the link, labelled by its claim.
  */
 const fromLinks: EvidenceSource = async (env, projectId) => {
@@ -484,8 +484,10 @@ test('10: no file under cloudflare-worker/src but services/verdict.ts names vali
     const lines = readFileSync(f, 'utf8').split('\n').filter((l) => l.includes('validation_decision'));
     if (!lines.length) continue;
     // services/records/owned.ts may name the tables in its two verdict
-    // entries only (D-u), once #1690 adds that file.
+    // entries only (D-u), and services/cycleActivity.ts in `logCycleWrite`'s
+    // read-back list entry only, once #1690 adds those files.
     if (rel === 'services/records/owned.ts' && lines.length <= 2) continue;
+    if (rel === 'services/cycleActivity.ts' && lines.length <= 1) continue;
     offenders.push(rel);
   }
   assert.deepEqual(offenders, []);
