@@ -16,6 +16,9 @@ default action tone when a spec omits one.
 Older activity is only included when a spec declares an `oldRows` matcher.
 Nothing rewrites historical activity.
 
+`verdict.ts` is Validate's Verdict record (D693, #1703). It is tested through a
+registry of its own and joins `RECORD_SPECS` with Validate's service.
+
 To register a module, add its `ModuleSpec` under its cycle and slug in
 `index.ts`; add its store to `owned.ts`; set its read and write gates; declare
 each section's own gate; and return only the actions the viewer can use. The
