@@ -16,7 +16,14 @@ What it does:
     `suppressions` array; an EMPTY array means "known not suppressed", the
     same rule scripts/strip-suppressed-sarif.py encodes);
   - writes a count by rule and level, then the first locations, as markdown
-    to $GITHUB_STEP_SUMMARY (stdout when that is unset).
+    to $GITHUB_STEP_SUMMARY (stdout when that is unset);
+  - prints EVERY finding to the job log, one line each, with its message.
+
+WHY THE LOG TOO (2026-10-17). The job summary is not readable through the
+REST API, and neither is the code-scanning API for the agents that fix
+findings (it answers 403 to their token). The job log is readable, so the log
+is the one place an agent can read the whole list. It is uncapped, unlike the
+summary's table.
 
 Findings never fail it: a red check still means the scanner could not run.
 It exits 1 only when a SARIF file is missing or unreadable, because a report
@@ -52,6 +59,12 @@ def location(result):
     return '?'
 
 
+def message(result):
+    text = ((result.get('message') or {}).get('text') or '').strip()
+    first = text.splitlines()[0] if text else ''
+    return first[:200]
+
+
 def main(argv):
     if len(argv) < 3:
         print('usage: sarif-summary.py <title> <file-or-directory> [...]', file=sys.stderr)
@@ -82,7 +95,7 @@ def main(argv):
                 level = result.get('level') or 'warning'
                 by_rule[rule] += 1
                 by_level[level] += 1
-                rows.append((level, rule, location(result)))
+                rows.append((level, rule, location(result), message(result)))
 
     total = sum(by_rule.values())
     out = [f'### {title}: {total} finding{"" if total == 1 else "s"}', '']
@@ -94,7 +107,7 @@ def main(argv):
         out += ['', '| Rule | Count |', '| --- | --- |']
         out += [f'| `{rule}` | {n} |' for rule, n in by_rule.most_common()]
         out += ['', '| Level | Rule | Where |', '| --- | --- | --- |']
-        out += [f'| {lvl} | `{rule}` | `{where}` |' for lvl, rule, where in rows[:MAX_LOCATIONS]]
+        out += [f'| {lvl} | `{rule}` | `{where}` |' for lvl, rule, where, _ in rows[:MAX_LOCATIONS]]
         if len(rows) > MAX_LOCATIONS:
             out += ['', f'{len(rows) - MAX_LOCATIONS} more not listed.']
     text = '\n'.join(out) + '\n'
@@ -106,6 +119,8 @@ def main(argv):
     else:
         sys.stdout.write(text)
     print(f'{title}: {total} finding(s), {suppressed} suppressed')
+    for lvl, rule, where, msg in rows:
+        print(f'finding\t{lvl}\t{rule}\t{where}\t{msg}')
     return 0
 
 

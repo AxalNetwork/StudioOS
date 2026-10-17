@@ -118,12 +118,16 @@ function assertBody(source) {
   const code = (node) => source.slice(node.range[0], node.range[1]);
   const dialogMount = slots.filter(({ node }) => code(node) === '{!phone && openForm}').map(({ node }) => node);
   assert.equal(dialogMount.length, 1, 'the form dialog has one mount');
-  const pageSlot = slots.filter(({ node }) => code(node) === '{phone && openForm ? openForm : body}').map(({ node }) => node);
+  // D697 decision 21: a further part's dialog that is a page is the body below 1024px too.
+  const pageSlot = slots.filter(({ node }) => code(node) === '{phone && openForm ? openForm : phone && dialog?.page ? dialog.element : body}').map(({ node }) => node);
   assert.equal(pageSlot.length, 1, 'below 1024px the form is the body');
   assert.ok(within(body.node, pageSlot[0]), 'the form page sits in the body, in its gutter');
   for (const sheet of named('FormLightbox')) assert.ok(!within(container, sheet), 'no form dialog is drawn inside the container');
-  const overlays = [...dialogMount, ...named('Mount').filter((m) => attr(m, 'projectId'))];
-  assert.equal(overlays.length, 2, 'the form mount and the action Mount are found');
+  // D697 decision 21: the one dialog a module's further parts open has one mount, after the container.
+  const partsDialog = slots.filter(({ node }) => code(node) === '{dialog && !(phone && dialog.page) && dialog.element}').map(({ node }) => node);
+  assert.equal(partsDialog.length, 1, 'the parts dialog has one mount');
+  const overlays = [...dialogMount, ...partsDialog, ...named('Mount').filter((m) => attr(m, 'projectId'))];
+  assert.equal(overlays.length, 3, 'the form mount, the parts dialog and the action Mount are found');
   for (const overlay of overlays) {
     const label = overlay.type === 'JSXElement' ? jsxName(overlay) : code(overlay);
     assert.ok(overlay.range[0] > container.range[1], `${label} comes after the size container closes`);
@@ -142,8 +146,9 @@ test('the cycle body takes the canvas gutter in a cycle size container, and no o
     ['the narrow bottom', (src) => src.replace('lg:@max-[760px]/cycle:pb-[40px]', 'lg:pb-[40px]')],
     ['the phone sides', (src) => src.replace('px-[22px] ', 'px-5 ')],
     ['p-5 kept', (src) => src.replace('min-w-0 px-[22px]', 'min-w-0 p-5 px-[22px]')],
-    ['the form dialog mounted inside the body', (src) => src.replace('      {!phone && openForm}\n', '').replace('        {phone && openForm ? openForm : body}\n', '        {phone && openForm ? openForm : body}\n        {!phone && openForm}\n')],
-    ['the form page drawn outside the body', (src) => src.replace('{phone && openForm ? openForm : body}', '{body}').replace('      {!phone && openForm}\n', '      {!phone && openForm}\n      {phone && openForm ? openForm : body}\n')],
+    ['the form dialog mounted inside the body', (src) => src.replace('      {!phone && openForm}\n', '').replace('        {phone && openForm ? openForm : phone && dialog?.page ? dialog.element : body}\n', '        {phone && openForm ? openForm : phone && dialog?.page ? dialog.element : body}\n        {!phone && openForm}\n')],
+    ['the form page drawn outside the body', (src) => src.replace('{phone && openForm ? openForm : phone && dialog?.page ? dialog.element : body}', '{body}').replace('      {!phone && openForm}\n', '      {!phone && openForm}\n      {phone && openForm ? openForm : phone && dialog?.page ? dialog.element : body}\n')],
+    ['the parts dialog drawn inside the body', (src) => src.replace('      {dialog && !(phone && dialog.page) && dialog.element}\n', '').replace('        {phone && openForm ? openForm : phone && dialog?.page ? dialog.element : body}\n', '        {phone && openForm ? openForm : phone && dialog?.page ? dialog.element : body}\n        {dialog && !(phone && dialog.page) && dialog.element}\n')],
   ]) {
     const mutated = mutate(source);
     assert.notEqual(mutated, source, `mutation applies: ${label}`);
