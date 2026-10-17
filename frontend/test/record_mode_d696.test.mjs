@@ -12,7 +12,6 @@ import CycleRoute from '../src/pages/cycles/CycleRoute.jsx';
 import CycleModulePage from '../src/pages/cycles/CycleModulePage.jsx';
 import { CycleHeader } from '../src/pages/cycles/CycleOverview.jsx';
 import { cyclesApi } from '../src/lib/api/cycles.js';
-import * as rules from '../src/pages/cycles/recordModel.js';
 import { routeBlock } from './_routes.mjs';
 import { codeOnly } from './_codeOnly.mjs';
 const h = React.createElement;

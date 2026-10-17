@@ -164,11 +164,13 @@ const defaultExportIdent = (src) => (src.match(/export\s+default\s+(\w+)/) || []
 // createCycleRecords). Follow only that factory's returned Hono, never every
 // router in the file, which would also count unmounted test/alternate routes.
 function factoryRouter(src, ident) {
-  const factory = src.match(new RegExp(`\\b(?:const|let)\\s+${ident}\\s*=\\s*(\\w+)\\(\\s*\\)`))?.[1];
-  if (!factory) return { ident, source: src };
-  const body = src.match(new RegExp(`(?:export\\s+)?function\\s+${factory}\\([^\\n]*\\)\\s*\\{([\\s\\S]*?)^\\}`, 'm'))?.[1];
+  const instance = [...src.matchAll(/\b(?:const|let)\s+(\w+)\s*=\s*(\w+)\(\s*\)/g)].find(match => match[1] === ident);
+  if (!instance) return { ident, source: src };
+  const declaration = [...src.matchAll(/(?:export\s+)?function\s+(\w+)\([^\n]*\)\s*\{([\s\S]*?)^\}/gm)].find(match => match[1] === instance[2]);
+  const body = declaration?.[2];
   const returned = body?.match(/\breturn\s+(\w+)\s*;\s*$/)?.[1];
-  return returned && new RegExp(`\\bconst\\s+${returned}\\s*=\\s*new\\s+Hono\\b`).test(body)
+  const honos = body ? [...body.matchAll(/\bconst\s+(\w+)\s*=\s*new\s+Hono\b/g)] : [];
+  return returned && honos.some(match => match[1] === returned)
     ? { ident: returned, source: body } : { ident, source: src };
 }
 
