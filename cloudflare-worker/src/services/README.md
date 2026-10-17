@@ -105,7 +105,18 @@ cap-table `h-<n>`, `e-<n>` or `pool`, and a use-of-funds section key.
 which `POST` and `PUT /api/captable/scenarios` call: the one-per-venture upsert,
 its unique-index recovery and D632's activity row, plus an `e-<n>` key on every
 founder, SAFE and round entry, matched by name and never reused, which the Raise
-list reads as the holder's id.
+list reads as the holder's id. It also holds `addHolder()` and `updateHolder()`
+(D691, #1700): Founders · Common writes a `cap_table_holders` row (and its
+vesting row, on the same `user_id` and `holder_id`) and returns `h-<id>`;
+Investors · SAFE or note adds a `safes[]` entry and returns its `e-<n>`. Both
+refuse a caller below `studio` with `ensureTier`'s 402, recompute through
+`saveScenario()`, and log nothing themselves.
+`dataRoomAccess.ts` (D691 decision 6, #1700) is the data room's one access
+predicate, `tierAdmits()`: a file's `access_tier` (`invited`, `committed`,
+`nobody`) and `access_expires_at`, with `investorCommitted()` (a committed
+prospect of the venture, by email) and `admittedCounts()`. Every read outside
+the founder's (the investor room, `research.ts`, the advisor brief) decides
+with it, so a hidden file is never listed, counted or downloaded.
 `deckSlideDwell.ts` stores a share-link view's seconds per slide, bounded so
 they never add up to more than the view's read time.
 `peerBenchmark.ts` (#1524) is the peer-group benchmark for every founder:

@@ -26,8 +26,6 @@ import { ReviewDealSlotContext } from '../decks/templates/reviewDealSlot';
 const INNER_W = 1920;
 const INNER_H = 1080;
 
-// Pull the method_id out of the persisted slide blob the same way the
-// editor does — /apply-method stamps every slide with method_id.
 /**
  * D691 decision 5 — whether the viewer offers Save as PDF. Outside share mode,
  * always. In share mode, unless the link was made with download off; an older
@@ -37,6 +35,8 @@ export function canSavePdf(shareMode, deck) {
   return !shareMode || deck?.allow_download !== false;
 }
 
+// Pull the method_id out of the persisted slide blob the same way the
+// editor does — /apply-method stamps every slide with method_id.
 function detectMethodId(deck) {
   if (!deck) return null;
   // Prefer the explicit method_id set by /apply-method, but fall back

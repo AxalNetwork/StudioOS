@@ -57,41 +57,82 @@ export function filesUnder(node) {
 }
 
 /**
- * Who can open this file or see this folder right now: an active grant for an
- * open item, an active grant with a live NDA for an NDA-marked one. The same
- * rule the worker's gate applies — this restates it, it does not decide it.
+ * A stored `access_expires_at` (`YYYY-MM-DD`, or a full timestamp) in
+ * milliseconds, read as UTC; null when it cannot be read. The worker's
+ * `expiryMs` (`services/dataRoomAccess.ts`), restated.
  */
-export function accessNow(item, grants = []) {
-  if (!item) return [];
-  const active = grants.filter((g) => g.status === 'active');
-  return item.visibility === 'nda' ? active.filter((g) => g.nda_signed) : active;
+function expiryMs(v) {
+  const s = typeof v === 'string' ? v.trim() : '';
+  if (!s) return null;
+  const iso = /^\d{4}-\d{2}-\d{2}$/.test(s) ? `${s}T00:00:00Z` : s.replace(' ', 'T') + (/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? '' : 'Z');
+  const ms = Date.parse(iso);
+  return Number.isNaN(ms) ? null : ms;
 }
 
-/** Why nobody can open it, when nobody can. */
-export function noAccessReason(item, grants = []) {
+/**
+ * Why a file's own tier or expiry shuts everyone out, or null when it does
+ * not. A file with no `access_tier` reads as `invited`; a folder carries no
+ * tier (access is set per file), so it reads the same. An expiry nobody can
+ * read hides the file, as the worker's predicate does.
+ */
+function tierRefusal(item, now) {
+  const tier = item.access_tier == null || item.access_tier === '' ? 'invited' : item.access_tier;
+  if (tier === 'nobody') return 'No investor can open this — it is private to you.';
+  if (tier !== 'invited' && tier !== 'committed') return 'No investor can open this — its access mark is not one this page knows.';
+  if (item.access_expires_at != null && String(item.access_expires_at).trim() !== '') {
+    const at = expiryMs(item.access_expires_at);
+    if (at == null) return 'No investor can open this — its access end date cannot be read.';
+    if (at <= now) return `No investor can open this — its access ended on ${String(item.access_expires_at).slice(0, 10)}.`;
+  }
+  return null;
+}
+
+/**
+ * Who can open this file or see this folder right now. The worker's one
+ * predicate (D691 decision 6, `services/dataRoomAccess.ts`) restated — this
+ * does not decide it:
+ *   - the file's tier: everyone with an active grant (`invited`), only the
+ *     grants whose investor is a committed prospect (`committed`), or no one
+ *     (`nobody`); and no one once `access_expires_at` has passed;
+ *   - then the NDA gate: an NDA-marked item needs a live NDA.
+ */
+export function accessNow(item, grants = [], now = Date.now()) {
+  if (!item) return [];
+  if (tierRefusal(item, now)) return [];
+  const active = grants.filter((g) => g.status === 'active');
+  const tiered = item.access_tier === 'committed' ? active.filter((g) => g.committed) : active;
+  return item.visibility === 'nda' ? tiered.filter((g) => g.nda_signed) : tiered;
+}
+
+/** Why nobody can open it, when nobody can — the first rule that shuts them out. */
+export function noAccessReason(item, grants = [], now = Date.now()) {
+  const refused = item ? tierRefusal(item, now) : null;
+  if (refused) return refused;
   const active = grants.filter((g) => g.status === 'active');
   if (!active.length) return 'No investor can open this — the room is not shared with anyone yet.';
+  if (item?.access_tier === 'committed' && !active.some((g) => g.committed)) {
+    return 'No investor can open this — it is for committed investors, and nobody with access has committed on this raise.';
+  }
   return 'No investor can open this — it needs a signed NDA, and nobody with access has one on file.';
 }
 
 /**
- * The canvas's three tiers, and which of them this room stores. It stores two
- * gates (`open`, `nda`); the NDA is a toggle below, not a tier. The other two
- * are drawn, and each says why it is not built.
+ * The canvas's three tiers, each the `access_tier` it stores (migration 463).
+ * Every investor read applies them (D691 decision 6). They are set per file
+ * from Raise › Data room's Upload and Edit file (D695), not on this page; the
+ * NDA is the toggle below, not a tier.
  */
+const SET_WHERE = 'Set per file from Raise › Data room’s Upload and Edit file, not on this page.';
 export const ACCESS_TIERS = [
-  { label: 'Everyone invited', built: true, note: 'Every investor you have shared the room with.' },
-  {
-    label: 'Committed only',
-    built: false,
-    note: 'Not built. The room has no link to who has committed on this raise, and the investor reads show a file to anyone with a grant and a signed NDA whatever else it is marked — so a third mark would be listed to every NDA holder.',
-  },
-  {
-    label: 'Private to you',
-    built: false,
-    note: 'Not built, for the same reason: a mark the investor reads do not know would not hide the file from an investor with a signed NDA. Until then, keep a private file out of the room.',
-  },
+  { key: 'invited', label: 'Everyone invited', note: `Every investor you have shared the room with. ${SET_WHERE}` },
+  { key: 'committed', label: 'Committed only', note: `Only investors whose email is a committed prospect on this raise. ${SET_WHERE}` },
+  { key: 'nobody', label: 'Private to you', note: `No investor, whatever their grant or NDA. ${SET_WHERE}` },
 ];
+
+/** The tier a file is marked with; a file with none reads as `invited`. */
+export function tierOf(file) {
+  return file?.access_tier == null || file.access_tier === '' ? 'invited' : file.access_tier;
+}
 
 export const AUDIT_FILTERS = ['All', 'View', 'Download', 'NDA', 'Blocked'];
 

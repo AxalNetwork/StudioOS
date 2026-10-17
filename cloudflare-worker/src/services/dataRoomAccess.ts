@@ -44,9 +44,9 @@ export function expiryMs(v: string | null | undefined): number | null {
  */
 export function tierAdmits(f: TieredFile, committed: boolean, now: number = Date.now()): boolean {
   const tier = f.access_tier == null || f.access_tier === '' ? 'invited' : f.access_tier;
-  if (tier === 'nobody') return false;
-  if (tier === 'committed' && !committed) return false;
+  // `nobody`, and any value this code does not know, admits no one.
   if (tier !== 'invited' && tier !== 'committed') return false;
+  if (tier === 'committed' && !committed) return false;
   if (f.access_expires_at != null && String(f.access_expires_at).trim() !== '') {
     const at = expiryMs(f.access_expires_at);
     if (at == null || at <= now) return false;
