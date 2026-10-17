@@ -19,6 +19,7 @@
  * from 0 to 10 and needs its source (D664). An empty field is sent as null,
  * never as 0 or "".
  */
+import { verdictForm } from './verdictForm.js';
 
 const str = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
 
@@ -409,6 +410,11 @@ const narrative = {
 
 /** The forms, by cycle and module slug. A slug not here has no Add form. */
 export const FORMS = {
+  // D693 (#1704): Record a decision. #1656's PR 2b adds Validate's other five
+  // beside it (`VALIDATE_FORMS`); whichever merges second re-reads.
+  validate: {
+    verdict: [verdictForm],
+  },
   raise: {
     'fundraising-readiness': [readiness],
     'investor-narrative': [narrative],

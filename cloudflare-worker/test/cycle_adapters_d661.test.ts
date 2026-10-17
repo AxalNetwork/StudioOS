@@ -43,7 +43,7 @@ function fixture() {
   for (const t of [
     'users', 'projects', 'activity_logs', 'discovery_interviews', 'interview_pain_severities', 'pain_groups',
     'pain_group_aliases', 'hypotheses', 'hypothesis_pain_links', 'waitlist_signups', 'metric_targets',
-    'competitor_analyses', 'competitor_candidates', 'competitor_sources', 'competitor_signals',
+    'competitor_analyses', 'competitor_candidates', 'competitor_sources', 'competitor_signals', 'validation_decisions',
   ]) db.exec(tableFromBaseline(BASELINE, t));
   db.exec('ALTER TABLE projects ADD COLUMN icp_definition_meta TEXT');
   db.exec(sqlOf('255_hypothesis_verdict_history.sql'));
@@ -57,6 +57,8 @@ function fixture() {
   db.exec(sqlOf('453_interview_processing.sql'));
   // D690 (#1692): the tracked list and Experiments' links read 460's stores.
   db.exec(sqlOf('460_validate_record_stores.sql'));
+  // D693 (#1704): Verdict, the seventh module, over migration 464's decisions.
+  db.exec(sqlOf('464_verdict_decisions.sql'));
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id, spinout_lab_active) VALUES (?, ?, ?, ?, 1, ?, 0)');
   u.run(FOUNDER, 'founder', 'Fay Founder', 'fay@example.test', 1001);
   u.run(OTHER, 'founder', 'Bo Other', 'bo@example.test', 1002);
@@ -123,10 +125,21 @@ async function seeded() {
   assert.equal((await call(db, 'POST', `/demand-signals?project=${P}`, { kind: 'loi', who: 'Fleetco', amount_cents: 1800000, currency: 'usd', period: 'year', signal_date: ago(2) })).status, 201);
   db.prepare("INSERT INTO competitor_analyses (id, user_id, project_id) VALUES ('an1', ?, ?)").run(OTHER, P);
   assert.equal((await call(db, 'POST', `/competitor-mentions?project=${P}`, { name: 'Haulr', category: 'adjacent', signal_type: 'funding', label: 'raised $12M', source_url: 'https://news.example/haulr', observed_on: ago(3) })).status, 201);
+  // D693 (#1704): one given decision for the venture, with its reasoning and
+  // the five pieces of evidence it rests on.
+  const d = db.prepare(
+    "INSERT INTO validation_decisions (project_id, decision, reasoning, decided_by, decided_at, state) VALUES (?, 'proceed', ?, ?, ?, 'given') RETURNING id",
+  ).get(P, 'Three fleets paid for the pilot.\nThe rest follows.', FOUNDER, `${ago(2)} 10:00:00`) as any;
+  const ev = db.prepare(
+    "INSERT INTO validation_decision_evidence (uid, decision_id, kind, ref_id, label, strength, direction, on_date) VALUES (?, ?, 'hypothesis_evidence', ?, ?, 'measured', 'supports', ?)",
+  );
+  for (let i = 1; i <= 5; i += 1) ev.run(`ev-${i}`, Number(d.id), `evidence-${i}`, `Pilot invoice ${i} · H1`, ago(3));
   return db;
 }
 
-test('D661: the adapter lists the Worker\'s own six modules, and has a card and a table for each', () => {
+test('D661: the adapter lists the Worker\'s own seven modules, and has a card and a table for each', () => {
+  assert.equal(WORKER_MODULES.length, 7);
+  assert.equal(WORKER_MODULES[6].slug, 'verdict');
   assert.deepEqual(PAGE_MODULES.map((m) => [m.slug, m.name]), WORKER_MODULES.map((m) => [m.slug, m.name]));
   for (const m of WORKER_MODULES) {
     assert.equal(typeof CARDS[m.slug], 'function', `${m.slug} has no card adapter`);

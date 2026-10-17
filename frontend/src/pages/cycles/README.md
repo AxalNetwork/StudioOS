@@ -1,7 +1,7 @@
 # pages/cycles — the four cycle overviews and their module pages (D661)
 
 One overview and one module page draw all four founder cycles (Validate,
-Build, Raise, Grow) and their 26 modules from #1469's shared read (D656):
+Build, Raise, Grow) and their 27 modules from #1469's shared read (D656):
 `GET /api/cycles/:cycle/overview` and `GET /api/cycles/:cycle/modules/:slug`.
 The canvases are `design/canvases/integrated/Cycle Overview.dc.html` and its two boards.
 

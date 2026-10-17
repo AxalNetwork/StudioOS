@@ -394,9 +394,11 @@ test('6: each Validate Edit is titled Edit <noun>, saves with Save, and sends on
 // ---------- Registered nowhere (decision 15) ---------------------------------
 
 test('15: no Validate form is registered, and no Validate write method is added, before PR 2b', () => {
-  assert.equal(Object.hasOwn(m0.FORMS, 'validate'), false);
+  // D693 (#1704) registers Verdict's Record a decision first, by its issue's
+  // rule; PR 2b adds these five beside it.
+  assert.deepEqual(Object.keys(m0.FORMS.validate ?? {}), ['verdict']);
   assert.equal(Object.hasOwn(m0.EDITS, 'validate'), false);
-  for (const { slug } of MODULES.validate) {
+  for (const { slug } of MODULES.validate.filter((m) => m.slug !== 'verdict')) {
     assert.equal(m0.formFor('validate', slug), null, `${slug}: no Add opens yet`);
     assert.equal(m0.editFor('validate', slug), null, `${slug}: no Edit draws yet`);
   }

@@ -30,7 +30,6 @@ import type { EvidenceCtx, EvidenceItemFull } from './validateEvidence';
 import type { Env, User } from '../types';
 import { logCycleWriteStatement } from './cycleActivity';
 import { safeCard, PAGE_SIZE, type Card } from './cycleCards';
-import { dayMonth } from './cycleFocus';
 import type { Ctx, FilterSpec, RecordQuery, Records, SortSpec } from './cycleValidate';
 import { ownsVenture, type ProjectRef } from '../routes/_founder_validate_helpers';
 
@@ -558,6 +557,14 @@ export async function completeCommitment(
 
 /** The card's timeline holds the venture's six newest decisions, then Next. */
 export const TIMELINE_CAP = 6;
+
+const MONTH = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/**
+ * "24 Oct" from a `YYYY-MM-DD` date, as the canvas writes it ("3 Sep", where
+ * newer `en-GB` locale data says "Sept"). Kept here, not `cycleFocus.ts`'s:
+ * that module reaches `cycleValidate.ts`, which imports this one.
+ */
+const dayMonth = (d: string) => `${Number(d.slice(8, 10))} ${MONTH[Number(d.slice(5, 7)) - 1]}`;
 
 const day = (raw: string | null | undefined) => {
   const d = String(raw ?? '').slice(0, 10);

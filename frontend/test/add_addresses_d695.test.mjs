@@ -26,6 +26,8 @@ const app = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
 
 const KEY = /^[a-z0-9][a-z0-9-]*$/;
 const ADD_KEYS = {
+  // D693 (#1704): Record a decision, Verdict's one Add.
+  validate: { verdict: ['decision'] },
   raise: { 'fundraising-readiness': ['readiness'], 'investor-narrative': ['narrative-version'] },
   grow: {
     'product-improvement': ['feedback'], distribution: ['channel'], 'revenue-and-traction': ['kpi'], 'team-expansion': ['role'],
@@ -41,7 +43,11 @@ const EDIT_KEYS = {
   },
   build: { 'solution-design': 'edit-feature', 'prototype-mvp': 'edit-must-have', 'company-creation': 'edit-formation-step', 'operating-systems': 'edit-system' },
 };
-const CTA_APART = { 'grow/revenue-and-traction': ['Enter a KPI', 'Save KPI'], 'grow/team-expansion': ['Open a role', 'Open role'] };
+const CTA_APART = {
+  'grow/revenue-and-traction': ['Enter a KPI', 'Save KPI'], 'grow/team-expansion': ['Open a role', 'Open role'],
+  // CO:335's CTA is "Record", its button CO:342's "Record a decision".
+  'validate/verdict': ['Record a decision', 'Record'],
+};
 const mapTable = (table, fn) => Object.fromEntries(Object.entries(table).map(([cycle, bySlug]) => [cycle, Object.fromEntries(Object.entries(bySlug).map(([slug, v]) => [slug, fn(v)]))]));
 const allForms = (m) => [
   ...Object.values(m.FORMS).flatMap((bySlug) => Object.values(bySlug).flat()),

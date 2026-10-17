@@ -19,7 +19,7 @@
  */
 
 /**
- * The six modules, as `services/cycleValidate.ts` lists them. The module page
+ * The seven modules, as `services/cycleValidate.ts` lists them. The module page
  * builds its tabs from this rather than reading the whole overview again;
  * `cycle_adapters_d661.test.mjs` holds it to the Worker's own list.
  */
@@ -30,6 +30,8 @@ export const MODULES = [
   { slug: 'market-intelligence', name: 'Market intelligence' },
   { slug: 'demand-signals', name: 'Demand and urgency signals' },
   { slug: 'experiments', name: 'Experiments and evidence' },
+  // D693 (#1704): Verdict is the seventh (board MV7).
+  { slug: 'verdict', name: 'Verdict' },
 ];
 
 const num = (v) => typeof v === 'number' && Number.isFinite(v);
@@ -214,6 +216,40 @@ function experiments(s) {
   return out;
 }
 
+// ---------- Verdict (D693 decision 9) ---------------------------------------
+
+const DECISION_WORD = { proceed: 'Proceed', pivot: 'Pivot', stop: 'Stop' };
+const DECISION_TONE = { proceed: 'ok', pivot: 'v2', stop: 'bad' };
+const MONTH = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** "12 Oct" from a YYYY-MM-DD, as the canvas writes it ("3 Sep", whatever the runtime's locale data); null for anything else. */
+const dayMonth = (d) => (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) && MONTH[Number(d.slice(5, 7)) - 1]
+  ? `${Number(d.slice(8, 10))} ${MONTH[Number(d.slice(5, 7)) - 1]}`
+  : null);
+
+/**
+ * The venture's verdict (CO:542): its decisions as a timeline, oldest first,
+ * Withheld ones hollow and named so, then a hollow Next at the nearest sprint;
+ * and the current verdict, big, with what it rests on. A decision from the old
+ * page rests on no recorded evidence, so its clause is dropped (decision 5).
+ */
+function verdict(s) {
+  if (!s || typeof s !== 'object') return [];
+  const out = [];
+  const steps = list(s.decisions).map((d) => ({
+    label: d?.state === 'withheld' ? 'Withheld' : DECISION_WORD[d?.decision] ?? null,
+    date: dayMonth(d?.date),
+    done: d?.state === 'given',
+  })).filter((st) => st.label);
+  if (s.next && dayMonth(s.next.date)) steps.push({ label: 'Next', date: dayMonth(s.next.date), done: false });
+  if (steps.length >= 2) out.push({ kind: 'timeline', steps });
+  const c = s.current;
+  if (c && DECISION_WORD[c.decision]) {
+    const rests = num(c.evidence) ? ` · rests on ${c.evidence} ${c.evidence === 1 ? 'piece' : 'pieces'} of evidence` : '';
+    out.push({ kind: 'big', value: DECISION_WORD[c.decision], label: `the venture’s current verdict${dayMonth(c.date) ? ` · ${dayMonth(c.date)}` : ''}${rests}` });
+  }
+  return out;
+}
+
 export const CARDS = {
   'problem-discovery': problemDiscovery,
   'customer-research': customerResearch,
@@ -221,6 +257,7 @@ export const CARDS = {
   'market-intelligence': marketIntelligence,
   'demand-signals': demandSignals,
   experiments,
+  verdict,
 };
 
 // ---------- Figures ----------------------------------------------------------
@@ -409,5 +446,25 @@ export const RECORDS = {
       { key: 'history', label: 'History', options: [{ value: 'last_week', label: 'As of last week' }, { value: 'this_month', label: 'Changed this month' }] },
     ],
     sorts: [{ key: 'updated', label: 'Updated' }, { key: 'status', label: 'Status' }, { key: 'code', label: 'Code' }],
+  },
+  // D693 (#1704): the Decisions table (CO:610). A Withheld row's Decision is
+  // "Withheld" and its Reasoning the Worker's "<n> of 5 pieces of evidence";
+  // every row reads "<d Mon> · <Name>" (decision 10).
+  verdict: {
+    keys: ['decision', 'for', 'reasoning', 'evidence', 'date'],
+    row: (r) => ({ id: r.id, cells: {
+      decision: r.state === 'withheld' ? { text: 'Withheld', tone: 'grey' }
+        : DECISION_WORD[r.decision] ? { text: DECISION_WORD[r.decision], tone: DECISION_TONE[r.decision] } : null,
+      for: r.for ?? null,
+      reasoning: r.reasoning ?? null,
+      evidence: num(r.evidence) ? r.evidence : null,
+      date: dayMonth(r.date) ? [dayMonth(r.date), r.by].filter(Boolean).join(' · ') : null,
+    } }),
+    filters: [
+      { key: 'decision', label: 'Decision', options: [{ value: 'proceed', label: 'Proceed' }, { value: 'pivot', label: 'Pivot' }, { value: 'stop', label: 'Stop' }, { value: 'withheld', label: 'Withheld' }] },
+      // For's hypotheses are the venture's own, so the read lists them.
+      { key: 'for', label: 'For', options: [{ value: 'venture', label: 'The venture' }] },
+    ],
+    sorts: [{ key: 'newest', label: 'Newest' }, { key: 'oldest', label: 'Oldest' }],
   },
 };

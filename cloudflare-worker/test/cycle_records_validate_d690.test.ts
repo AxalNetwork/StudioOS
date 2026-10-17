@@ -493,14 +493,17 @@ test('#1692 test 5: each record has its title, four facts, its sections in the c
 test('#1692 test 6: Record a decision is declared only while MODULES holds Verdict', async () => {
   const db = seeded();
   const keys = async () => (await real(db, 10, 'GET', rec('experiments', '5'))).body.actions.map((a: any) => a.key);
-  assert.equal((await keys()).includes('record-decision'), false);
-  (MODULES as any).push({ slug: 'verdict', name: 'Verdict', records_title: 'Decisions' });
+  // D693 (#1704) put Verdict in MODULES, so the action is declared...
+  const { body } = await real(db, 10, 'GET', rec('experiments', '5'));
+  const a = body.actions.find((x: any) => x.key === 'record-decision');
+  assert.equal(a.href, '/validate/verdict/new?project=1&for=h-5');
+  // ...and only while it is there.
+  const at = (MODULES as any).findIndex((m: any) => m.slug === 'verdict');
+  const [verdict] = (MODULES as any).splice(at, 1);
   try {
-    const { body } = await real(db, 10, 'GET', rec('experiments', '5'));
-    const a = body.actions.find((x: any) => x.key === 'record-decision');
-    assert.equal(a.href, '/validate/verdict/new?project=1&for=h-5');
+    assert.equal((await keys()).includes('record-decision'), false);
   } finally {
-    (MODULES as any).pop();
+    (MODULES as any).splice(at, 0, verdict);
   }
 });
 

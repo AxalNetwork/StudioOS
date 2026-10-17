@@ -87,6 +87,7 @@ source into that one card's `unreadable`. Build, Raise and Grow import it.
 at read time and stores nothing. `validateWriters.ts` has one writer per
 migration 440 record. The manual routes and #1471's interview accept path both
 call it, and each writer records its actor.
+`verdict.ts` (D693, #1702–#1704) is the one module that reads and writes Validate's decisions (`validation_decisions`, migration 464's evidence and commitments): the writer `recordDecision`, the readers `currentDecision` and `decisionsFor`, the Verdict card (`verdictCard`, with its Next on `hypotheses.deadline`) and the Decisions table (`decisionRecords`). `cycleValidate.ts` registers both as the seventh module.
 
 D664: `cycleCards.ts` holds the read every cycle shares (D656, #1469): the card
 states, the `Figure`/`Card`/`Records` types, `settleCard` (a failing source makes
