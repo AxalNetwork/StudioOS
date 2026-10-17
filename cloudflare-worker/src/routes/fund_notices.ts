@@ -150,7 +150,7 @@ r.post('/calls/:callUid/issue', async (c) => {
 
 r.get('/mine', async (c) => {
   const user = await requireAuth(c);
-  const rows = await myNotices(c.env, Number(user.id));
+  const rows = await myNotices(c.env, { id: Number(user.id), email: user.email });
   const notices = [];
   for (const n of rows) notices.push({ ...noticeSummary(n), instructions_changed: await instructionsChanged(c, n) });
   c.header('Cache-Control', 'no-store');
@@ -159,7 +159,7 @@ r.get('/mine', async (c) => {
 
 r.get('/mine/:uid', async (c) => {
   const user = await requireAuth(c);
-  const n = await myNotice(c.env, Number(user.id), c.req.param('uid'));
+  const n = await myNotice(c.env, { id: Number(user.id), email: user.email }, c.req.param('uid'));
   if (!n) throw notFound();
   c.header('Cache-Control', 'no-store');
   return c.json({ ...noticeSummary(n), instructions_changed: await instructionsChanged(c, n), figures: figuresOf(n) });
@@ -167,7 +167,7 @@ r.get('/mine/:uid', async (c) => {
 
 r.get('/mine/:uid/pdf', async (c) => {
   const user = await requireAuth(c);
-  const n = await myNotice(c.env, Number(user.id), c.req.param('uid'));
+  const n = await myNotice(c.env, { id: Number(user.id), email: user.email }, c.req.param('uid'));
   if (!n) throw notFound();
   return pdfResponse(await noticeFile(c.env, n));
 });

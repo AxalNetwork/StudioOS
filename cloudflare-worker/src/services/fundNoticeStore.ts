@@ -26,6 +26,8 @@ import {
 import { paperModel, paperSha256 } from './legalPaper';
 import { renderLegalPdf } from './legalPaperRender';
 import { readPaperChoice } from './legalPaperCss';
+import { LPs } from '../models/funds';
+import { claimLpRowsByEmail } from './lpClaim';
 
 export interface NoticeRow {
   id: number;
@@ -237,22 +239,34 @@ export async function readNotice(env: Env, uid: string): Promise<(NoticeRow & { 
   ).bind(uid).first<NoticeRow & { superseded: number }>();
 }
 
-/** The LP's own notices: addressed to a `limited_partners` row whose user is the caller. */
-export async function myNotices(env: Env, userId: number) {
+/**
+ * The caller's own LP rows, asked once through `lpSelfScope` (`LPs.listByUser`),
+ * the self-view `/lp-portal` uses: no unscoped escape, an admin included.
+ */
+async function myLpIds(env: Env, actor: { id: number; email?: string | null }): Promise<string> {
+  // Reaching a row by email links it to the account first, as /lp-portal does,
+  // so the email arm never stands as a grant.
+  await claimLpRowsByEmail(env, Number(actor.id), actor.email);
+  const rows = ((await LPs.listByUser(env, actor as any)).results || []) as Array<{ id: number }>;
+  return JSON.stringify(rows.map((r) => Number(r.id)));
+}
+
+/** The LP's own notices: addressed to one of the caller's `limited_partners` rows. */
+export async function myNotices(env: Env, actor: { id: number; email?: string | null }) {
   const rows = await env.DB.prepare(
     `SELECT n.*, EXISTS (SELECT 1 FROM legal_notices s WHERE s.supersedes_id = n.id) AS superseded
-       FROM legal_notices n JOIN limited_partners lp ON lp.id = n.limited_partner_id
-      WHERE lp.user_id = ? ORDER BY n.id DESC LIMIT 500`,
-  ).bind(userId).all<NoticeRow & { superseded: number }>();
+       FROM legal_notices n
+      WHERE n.limited_partner_id IN (SELECT value FROM json_each(?)) ORDER BY n.id DESC LIMIT 500`,
+  ).bind(await myLpIds(env, actor)).all<NoticeRow & { superseded: number }>();
   return rows.results || [];
 }
 
-export async function myNotice(env: Env, userId: number, uid: string) {
+export async function myNotice(env: Env, actor: { id: number; email?: string | null }, uid: string) {
   return env.DB.prepare(
     `SELECT n.*, EXISTS (SELECT 1 FROM legal_notices s WHERE s.supersedes_id = n.id) AS superseded
-       FROM legal_notices n JOIN limited_partners lp ON lp.id = n.limited_partner_id
-      WHERE lp.user_id = ? AND n.uid = ?`,
-  ).bind(userId, uid).first<NoticeRow & { superseded: number }>();
+       FROM legal_notices n
+      WHERE n.uid = ? AND n.limited_partner_id IN (SELECT value FROM json_each(?))`,
+  ).bind(uid, await myLpIds(env, actor)).first<NoticeRow & { superseded: number }>();
 }
 
 // ---------------------------------------------------------------- the file
