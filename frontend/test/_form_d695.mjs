@@ -4,7 +4,8 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { createRequire } from 'node:module';
-import { pathToFileURL } from 'node:url';
+import { existsSync, statSync } from 'node:fs';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { transformWithOxc } from 'vite';
 import { installDocument } from './_contracts_dom.mjs';
 
@@ -79,12 +80,22 @@ export async function mountForm(element, { phone = false, modal = false } = {}) 
 }
 
 let serial = 0;
+// A data: module's imports skip the loader hook's lookup, so a relative one
+// is resolved here as the hook does: the file, else it plus an extension, else
+// its directory's index.
+const EXTS = ['.tsx', '.ts', '.jsx', '.js', '.mjs', '.json'];
+function fileTarget(specifier, url) {
+  const file = fileURLToPath(new URL(specifier, url));
+  const isFile = (p) => existsSync(p) && statSync(p).isFile();
+  const found = [file, ...EXTS.map((ext) => file + ext), ...EXTS.map((ext) => file + '/index' + ext)].find(isFile);
+  return pathToFileURL(found || file).href;
+}
 export async function sourceModule(source, path) {
   const url = new URL('../src/' + path, import.meta.url);
   const require = createRequire(url);
   const js = (await transformWithOxc(source, url.pathname, { jsx: { runtime: 'automatic' } })).code;
   const resolved = js.replace(/((?:from\s*|import\s*\()\s*)['"]([^'"]+)['"]/g, (_match, prefix, specifier) => {
-    const target = specifier.startsWith('.') ? new URL(specifier, url).href : pathToFileURL(require.resolve(specifier)).href;
+    const target = specifier.startsWith('.') ? fileTarget(specifier, url) : pathToFileURL(require.resolve(specifier)).href;
     return prefix + JSON.stringify(target);
   });
   return import('data:text/javascript;base64,' + Buffer.from(resolved).toString('base64') + '#d695-' + serial++);

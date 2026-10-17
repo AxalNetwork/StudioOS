@@ -32,7 +32,7 @@ import { inertOutside, lockScroll, tabbable, tabTarget } from '../../ui/lightbox
 import { withProjectId } from './studioPhoneModel';
 
 /** #1664 sets this in the PR that adds `/profile`, `/profile/venture`, `/profile/preview` and `/profile/visibility`. */
-export const PROFILE_ROWS_LIVE = false;
+export const PROFILE_ROWS_LIVE = true;
 
 /**
  * The drawer's rows and their routes (SMP:170-181). `venture` rows carry the

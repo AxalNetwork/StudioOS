@@ -39432,6 +39432,10 @@ shipped, and its flag is off for this account." `/profile?x=1#y` lands on
 field added to two existing payloads; no route or `api.js` method added or
 removed (`companyKybStart` gains an optional second argument).
 
+**Later:** D702 (#1664) narrows the `/profile` redirect: a founder gets the You
+page there, and every other role still lands on `/account` with the query and
+hash. See `decisions/D702.md`.
+
 ## D434
 
 **Company Settings: the header chrome, removal with its consequence, the

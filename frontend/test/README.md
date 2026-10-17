@@ -50,4 +50,9 @@ D695's independent form UI is exercised by `add_lightbox_d695.test.mjs`.
 `_form_d695.mjs` supplies a small React DOM/effect harness and isolated source
 mutations. The tests drive real inputs, payloads, loaded choices, refusals,
 done views, responsive page transitions and modal focus/Escape behavior.
+`add_addresses_d695.test.mjs` pins every form's `key` and `cta`, the T, CH
+and CK kinds in `initialValues` and `validate` (each legacy form checked
+against the rules it had before), the four `/:slug/new` routes and Customer
+research's redirect, and the Add link's `state`. The helper resolves an
+extensionless or directory import in a mutated source as the loader hook does.
 Registry and routing integration cases follow when their dependencies merge.
