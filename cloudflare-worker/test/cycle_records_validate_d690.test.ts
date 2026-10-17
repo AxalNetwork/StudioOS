@@ -331,6 +331,9 @@ test('D690 Validate rows use group, prefixed demand and validated candidate IDs'
 /** Venture A (project 1) with one record of each kind, and venture B's (project 2) beside it. */
 function seeded() {
   const db = fixture();
+  // These tests count project 1's interviews; they seed their own, so the
+  // fixture's generic interview (31, for the record-contract tests) goes first.
+  db.exec('DELETE FROM discovery_interviews WHERE id = 31');
   db.exec(`
     INSERT INTO customer_segments (id, project_id, name, name_norm, source, who_they_are, urgency, value_promised)
       VALUES (3, 1, 'Fleet ops leads', 'fleet ops leads', 'manual', 'Ops lead at a delivery fleet', 'high', 'Fewer missed jobs'),
@@ -467,7 +470,8 @@ test('#1692 test 5: each record has its title, four facts, its sections in the c
   assert.deepEqual(iv.facts.map((f: any) => f.value), ['Recorded in StudioOS', 'Said yes out loud', 'Strong · Fleet ops leads', 'Yes']);
   const seg = (await real(db, 10, 'GET', rec('ideal-customer-profile', '3'))).body;
   assert.deepEqual(seg.main[0].rows.map((r: any) => r.c), ['Done', 'Missing', 'Missing', 'Done', 'Needs a source']);
-  assert.deepEqual(seg.next, { text: 'Context', action: null });
+  // The next step is the row and its status (nextFor, CO:263-269).
+  assert.deepEqual(seg.next, { text: 'Context · Not written yet', action: null });
   const comp = (await real(db, 10, 'GET', rec('market-intelligence', 'candidate1'))).body;
   assert.deepEqual(comp.facts.map((f: any) => f.value ?? f.reason), ['Raised a seed round · 1 Oct', '1,200,000 USD', 'No public figure found', 'No source recorded']);
   assert.deepEqual(comp.main[0].rows.map((r: any) => r.c), ['Funding'], 'Hires is off by default, so its signal is not drawn');
@@ -547,7 +551,7 @@ test('#1692: form-options for each module, scoped to the venture and the caller'
   const ds = (await real(db, 10, 'GET', '/validate/modules/demand-signals/form-options?project=1')).body;
   assert.deepEqual(ds.interviews.map((i: any) => i.value).sort(), ['1', '2']);
   // Someone who shares the founder group but does not own the venture is no owner (decision 12).
-  db.exec("INSERT INTO users (id, role, name, email, is_active, founder_id, spinout_lab_active) VALUES (70, 'investor', 'User 70', 'user70@example.test', 1, 1001, 0)");
+  db.exec("INSERT INTO users (id, role, name, email, is_active, founder_id, spinout_lab_active) VALUES (71, 'investor', 'User 71', 'user71@example.test', 1, 1001, 0)");
   const ex = (await real(db, 10, 'GET', '/validate/modules/experiments/form-options?project=1')).body;
   assert.deepEqual(ex.themes.map((t: any) => t.value), ['11']);
   assert.deepEqual(ex.owners.map((o: any) => o.value), ['10', '60']);
