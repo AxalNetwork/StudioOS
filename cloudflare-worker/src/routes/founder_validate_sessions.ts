@@ -730,15 +730,16 @@ sessions.patch('/sessions/:id/segments/:segmentId', async (c) => {
   return json({ ok: true, speaker_label: label });
 });
 
-sessions.get('/sessions/:id/receipt', async (c) => {
-  const s = await scopeSession(c);
-  if (s instanceof Response) return s;
-  // D658 — the language-model lines (Structured, Re-structured, Asked) live in
-  // `interview_structure_receipts` (446), because this table's CHECK admits
-  // only speech-to-text kinds; D685's summary lines (Summarised,
-  // Re-summarised) in `interview_summary_receipts` (453). One list, in time
-  // order: `kind` is the step.
-  const rows = await c.env.DB.prepare(
+/**
+ * One session's cost lines, in time order: `kind` is the step. D658 — the
+ * language-model lines (Structured, Re-structured, Asked) live in
+ * `interview_structure_receipts` (446), because this table's CHECK admits
+ * only speech-to-text kinds; D685's summary lines (Summarised, Re-summarised)
+ * in `interview_summary_receipts` (453). The receipt route and the Customer
+ * research record's Cost section (D690, #1692) both read it.
+ */
+export async function sessionReceiptLines(env: Env, sessionId: number): Promise<any[]> {
+  const rows = await env.DB.prepare(
     `SELECT kind, model, requested_model, fallback_used, audio_minutes, cost_microusd, outcome, refusal, created_at
        FROM (
          SELECT kind, model, requested_model, fallback_used, audio_minutes, cost_microusd, outcome, refusal, created_at, id, 0 AS src
@@ -750,7 +751,14 @@ sessions.get('/sessions/:id/receipt', async (c) => {
          SELECT step, model, requested_model, fallback_used, 0, cost_microusd, outcome, refusal, created_at, id, 2
            FROM interview_summary_receipts WHERE session_id = ?
        ) ORDER BY created_at, src, id`,
-  ).bind(s.session.id, s.session.id, s.session.id).all();
+  ).bind(sessionId, sessionId, sessionId).all();
+  return rows.results || [];
+}
+
+sessions.get('/sessions/:id/receipt', async (c) => {
+  const s = await scopeSession(c);
+  if (s instanceof Response) return s;
+  const items = await sessionReceiptLines(c.env, s.session.id);
   let budget: Record<string, unknown> | null = null;
   let budgetError: string | null = null;
   try {
@@ -763,7 +771,6 @@ sessions.get('/sessions/:id/receipt', async (c) => {
   } catch {
     budgetError = 'Unreadable: your AI allowance and top-up balance could not be read.';
   }
-  const items = rows.results || [];
   return json({
     items,
     total_cost_microusd: items.reduce((a: number, r: any) => a + Number(r.cost_microusd || 0), 0),

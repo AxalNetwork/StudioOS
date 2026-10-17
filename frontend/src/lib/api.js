@@ -3771,8 +3771,8 @@ export const api = {
   // Server creates a PaymentIntent / incomplete Subscription and hands back a
   // `client_secret`; the SPA confirms the card in-app via Stripe Elements so
   // the user never leaves for checkout.stripe.com. Shapes:
-  //   { price_id, quantity?, nonce?, description? }  → price-driven (sub or one-time)
-  //   { amount, currency?, quantity?, nonce?, description? } → ad-hoc one-time charge
+  //   { price_id, quantity?, nonce?, description?, promo_code? } → price-driven (sub or one-time)
+  // A body with no price_id is refused (D707): a charge needs a priced product.
   // Response: { kind:'subscription'|'payment', client_secret, ... }
   paymentIntent: (body) =>
     request('/payments/intent', { method: 'POST', body: JSON.stringify(body || {}) }),
