@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
+import { useActiveCompany } from '../../contexts/ActiveCompanyContext';
+import { useCompanyReadState } from '../../ui/CompanySwitcher';
 import { EmptyState, Pill, Skeleton, Unrecorded, Unreadable } from '../../ui';
 import { BTN, INPUT, FieldRow, LoadingRows, Outcome, PanelCard, Switch, useAccountRead } from './AccountCenter';
 import {
@@ -11,11 +13,12 @@ import {
 /**
  * D568 — Profile and identity: the canvas's `ac_profile` block.
  *
- * Five cards over five stores, each read on its own so one failure costs one
+ * Account cards over five stores, each read on its own so one failure costs one
  * card: Personal details (the account name, the identity route's username and
  * language, the details route's phone and location), Identity (legal name,
  * date of birth and nationality from the identity route, tax residence from
- * the details route), Company profile (the per-account corporate profile),
+ * the details route), Company profile (the sidebar's active company),
+ * Signing entity (the per-account corporate profile),
  * Public archetype (the newest profile snapshot and its publish consent), and
  * Change history (the profile snapshots, with "Ask me again").
  *
@@ -246,13 +249,38 @@ export function IdentityCard({ identity, details, onSave }) {
 
 const COMPANY_KEYS = ['entity_name', 'signing_authority_title', 'registration_number', 'registered_country'];
 
+/** The sidebar and this card share the selected company, with one editor. */
+export function CompanyProfileCard() {
+  const { company } = useActiveCompany();
+  const { loading, failed } = useCompanyReadState();
+  return (
+    <PanelCard title="Company profile" aside="Selected in the sidebar" data-testid="card-company-profile"
+      action={company && <Link className={BTN.link} to="/company-settings">Company Settings</Link>}>
+      {loading ? <LoadingRows lines={3} /> : failed ? (
+        <Unreadable what="Your company profile" claim="Your company memberships could not be read." />
+      ) : !company ? (
+        <EmptyState size="sm" data-testid="company-profile-empty" title="No company selected."
+          body="Create or select a company in Company Settings."
+          cta={{ label: 'Company Settings', to: '/company-settings' }} />
+      ) : (
+        <div>
+          <FieldRow label="Company"><Value value={company.company_name} missing="no company name is saved" testid="value-company" /></FieldRow>
+          <FieldRow label="Role"><Value value={company.my_role} missing="no role is recorded for your membership" testid="value-company-role" /></FieldRow>
+          <FieldRow label="Stage"><Value value={company.stage} missing="no company stage is saved" testid="value-company-stage" /></FieldRow>
+          <FieldRow label="Website"><Value value={company.website} missing="no company website is saved" testid="value-company-website" /></FieldRow>
+        </div>
+      )}
+    </PanelCard>
+  );
+}
+
 /**
- * Company profile: the account's own corporate profile — one row per account
+ * Signing entity: the account's own corporate profile — one row per account
  * (`corporate_profiles.user_id` is its key), the entity that signs for you.
  * The full record (type, address, owners, directors) is edited in the
  * Corporate tab below; these are the four lines the canvas draws.
  */
-export function CompanyProfileCard({ corporate, onSave }) {
+export function SigningEntityCard({ corporate, onSave }) {
   const ed = useEditor();
   const corp = corporate.data || {};
   const current = {
@@ -264,16 +292,16 @@ export function CompanyProfileCard({ corporate, onSave }) {
   const empty = corporate.status === 'ready' && corporateIsEmpty(corp);
   return (
     <PanelCard
-      title="Company profile"
-      aside="If you represent a company"
-      data-testid="card-company-profile"
+      title="Signing entity"
+      aside="Used for contracts · account details"
+      data-testid="card-signing-entity"
       action={!ed.editing && corporate.status === 'ready' && !empty && (
-        <EditButton onClick={() => ed.begin(current)} testid="button-edit-company" />
+        <EditButton onClick={() => ed.begin(current)} testid="button-edit-signing-entity" />
       )}
     >
       {corporate.status === 'loading' ? <LoadingRows lines={3} />
         : corporate.status === 'unreadable' ? (
-          <Unreadable what="Your company profile" claim={corporate.message || 'This is not a claim that you have none.'} onRetry={corporate.reload} />
+          <Unreadable what="Your signing entity" claim={corporate.message || 'This is not a claim that you have none.'} onRetry={corporate.reload} />
         ) : ed.editing ? (
           <div>
             <FieldRow label="Company" htmlFor="ac-entity" control error={ed.errors.entity_name}>
@@ -294,17 +322,17 @@ export function CompanyProfileCard({ corporate, onSave }) {
         ) : empty ? (
           <EmptyState
             size="sm"
-            data-testid="company-profile-empty"
-            title="No company profile yet."
-            body="Add one if you represent a company."
-            cta={{ label: 'Add company profile', onClick: () => ed.begin(current) }}
+            data-testid="signing-entity-empty"
+            title="No signing entity recorded."
+            body="Add the legal entity you sign for."
+            cta={{ label: 'Add signing entity', onClick: () => ed.begin(current) }}
           />
         ) : (
           <div>
-            <FieldRow label="Company"><Value value={corp.entity_name} missing="no company name is saved" testid="value-company" /></FieldRow>
-            <FieldRow label="Role"><Value value={corp.signing_authority_title} missing="no title is saved" testid="value-company-role" /></FieldRow>
-            <FieldRow label="Registration"><Value value={corp.registration_number} missing="no registration number is saved" testid="value-registration" /></FieldRow>
-            <FieldRow label="Country"><Value value={countryLabel(corp.registered_country)} missing="no country of incorporation is saved" testid="value-company-country" /></FieldRow>
+            <FieldRow label="Company"><Value value={corp.entity_name} missing="no company name is saved" testid="value-signing-entity" /></FieldRow>
+            <FieldRow label="Role"><Value value={corp.signing_authority_title} missing="no title is saved" testid="value-signing-role" /></FieldRow>
+            <FieldRow label="Registration"><Value value={corp.registration_number} missing="no registration number is saved" testid="value-signing-registration" /></FieldRow>
+            <FieldRow label="Country"><Value value={countryLabel(corp.registered_country)} missing="no country of incorporation is saved" testid="value-signing-country" /></FieldRow>
             <Outcome outcome={ed.outcome} />
           </div>
         )}
@@ -515,7 +543,8 @@ export default function ProfileIdentityCanvas({ data, onAccountChange, onSaved }
         <PersonalDetailsCard account={data} identity={identity} details={details} onSave={savePersonal} />
         <div className="space-y-3">
           <IdentityCard identity={identity} details={details} onSave={saveIdentity} />
-          <CompanyProfileCard corporate={corporate} onSave={saveCompany} />
+          <CompanyProfileCard />
+          <SigningEntityCard corporate={corporate} onSave={saveCompany} />
         </div>
       </div>
       <div className="grid items-start gap-3 @2xl:grid-cols-2">

@@ -63,7 +63,13 @@ async function ensureSchema(env: Env): Promise<void> {
        last_viewed_at TEXT,
        revoked_at TEXT,
        created_by INTEGER,
-       created_at TEXT DEFAULT (datetime('now'))
+       created_at TEXT DEFAULT (datetime('now')),
+       -- Migration 463 (D691): a fresh table matches an upgraded one.
+       prospect_id INTEGER REFERENCES raise_prospects(id) ON DELETE SET NULL,
+       investor_label TEXT,
+       allow_download INTEGER NOT NULL DEFAULT 1 CHECK (allow_download IN (0, 1)),
+       allow_forwarding INTEGER NOT NULL DEFAULT 1 CHECK (allow_forwarding IN (0, 1)),
+       bound_viewer_hash TEXT
      )`,
     `CREATE INDEX IF NOT EXISTS idx_deck_share_hash ON pitch_deck_share_tokens(token_hash)`,
     // Task #53 — per-impression telemetry surfaced in the Engagement panel.
@@ -103,6 +109,20 @@ async function ensureSchema(env: Env): Promise<void> {
     // owner to end it.
     if (!have.has('revoked_at')) {
       try { await env.DB.prepare(`ALTER TABLE pitch_deck_share_tokens ADD COLUMN revoked_at TEXT`).run(); } catch {}
+    }
+    // Migration 463 — D691: the investor a link was made for and its two
+    // settings. Both settings default to 1, so an older link behaves as before.
+    const add463: Array<[string, string]> = [
+      ['prospect_id', `ALTER TABLE pitch_deck_share_tokens ADD COLUMN prospect_id INTEGER REFERENCES raise_prospects(id) ON DELETE SET NULL`],
+      ['investor_label', `ALTER TABLE pitch_deck_share_tokens ADD COLUMN investor_label TEXT`],
+      ['allow_download', `ALTER TABLE pitch_deck_share_tokens ADD COLUMN allow_download INTEGER NOT NULL DEFAULT 1 CHECK (allow_download IN (0, 1))`],
+      ['allow_forwarding', `ALTER TABLE pitch_deck_share_tokens ADD COLUMN allow_forwarding INTEGER NOT NULL DEFAULT 1 CHECK (allow_forwarding IN (0, 1))`],
+      ['bound_viewer_hash', `ALTER TABLE pitch_deck_share_tokens ADD COLUMN bound_viewer_hash TEXT`],
+    ];
+    for (const [col, ddl] of add463) {
+      if (!have.has(col)) {
+        try { await env.DB.prepare(ddl).run(); } catch {}
+      }
     }
   } catch {}
   MIGRATED.set(bindingKey(env), true);
@@ -831,6 +851,10 @@ decks.get('/share/:token', async (c) => {
   const m = /^deck:(\d+):v(\d+)$/.exec(String(payload?.k || ''));
   if (!m) return c.json({ error: 'bad token scope' }, 400);
   await ensureSchema(c.env);
+  // D691 decision 5 — forwarding off binds the first browser. Checked before
+  // the claim, so a refused browser uses no view.
+  const bind = await bindShareViewer(c, await sha256Hex(token));
+  if (bind.refused) return refuse(c, 403, { code: 'forwarding_off', message: SHARE_SENT_TO_SOMEONE_ELSE });
   // Task #53 — atomic claim against view_limit. Increment view_count
   // only when there is capacity left and the token hasn't expired.
   // D1's meta.changes tells us if THIS request consumed a view slot.
@@ -848,8 +872,11 @@ decks.get('/share/:token', async (c) => {
         -- two writes both landing, and a revoke that set revoked_at and failed to
         -- set expires_at would leave the link live while the panel reported it
         -- dead. It costs nothing on a row already fetched by unique index.
-        AND revoked_at IS NULL`
-  ).bind(h).run();
+        AND revoked_at IS NULL
+        -- D691 decision 5 — the live-link predicate's browser clause, so a claim
+        -- can never use a view for a browser the link is not bound to.
+        AND (allow_forwarding = 1 OR bound_viewer_hash = ?)`
+  ).bind(h, bind.viewerHash).run();
   const changes = Number((claim as any)?.meta?.changes || 0);
   if (changes !== 1) {
     // Distinguish expired/exhausted (410 Gone) from never-existed (403).
@@ -897,6 +924,7 @@ decks.get('/share/:token', async (c) => {
     const pr = await c.env.DB.prepare('SELECT name FROM projects WHERE id = ?').bind(Number(row.project_id)).first<any>();
     if (pr?.name) projectName = String(pr.name).slice(0, 200);
   } catch {}
+  if (bind.setCookie) c.header('Set-Cookie', bind.setCookie);
   return c.json({
     ...rowToDeck(row),
     view_id: viewId,
@@ -904,6 +932,9 @@ decks.get('/share/:token', async (c) => {
     project_id: Number(row.project_id) || null,
     project_name: projectName,
     spinout_fields: await bakeSpinoutFields(c.env, row),
+    // D691 decision 5 — the viewer hides Save as PDF when this is false. It
+    // does not stop a screenshot or the browser's own print.
+    allow_download: bind.allowDownload,
   });
 });
 
@@ -923,6 +954,8 @@ decks.post('/share/:token/heartbeat', async (c) => {
   const seconds = Math.min(7200, Math.max(0, Number(body?.seconds) || 0));
   if (!viewId || !seconds) return c.json({ ok: true });
   await ensureSchema(c.env);
+  // D691 decision 5 — the same live-link predicate as the share read.
+  if (!(await shareLinkLive(c.env, await sha256Hex(token), await viewerHashOf(c)))) return c.json({ ok: false }, 200);
   try {
     await c.env.DB.prepare(
       `UPDATE deck_share_views
@@ -1192,16 +1225,11 @@ decks.post('/:id/share', async (c) => {
   // links work "exactly once OR up to view_limit"; default stays 1 so
   // pre-Task-53 callers keep their one-time semantics.
   const viewLimit = Math.min(100, Math.max(1, Number(body?.view_limit) || 1));
-  const token = await mintSignedToken(c.env, `deck:${id}:v${row.version}`, ttlSeconds, user.email || null);
-  const expiresAt = new Date(Date.now() + ttlSeconds * 1000).toISOString().replace('T', ' ').slice(0, 19);
-  const ins = await c.env.DB.prepare(
-    `INSERT INTO pitch_deck_share_tokens (deck_id, token_hash, expires_at, view_limit, view_count, created_by)
-     VALUES (?, ?, ?, ?, 0, ?)`
-  ).bind(id, await sha256Hex(token), expiresAt, viewLimit, Number(user.id) || null).run();
-  // D367 — the link's row id, so the sheet that minted it can withdraw it
-  // (DELETE /:id/shares/:shareId) when the founder replaces it. Null if the
-  // driver did not report one; the sheet then says it could not withdraw.
-  const shareId = Number(ins?.meta?.last_row_id) || null;
+  // D691 — the one link writer; this route keeps its caps and its tier line.
+  const { id: shareId, token, expiresAt } = await createShareLink(c.env, {
+    deckId: id, deckVersion: Number(row.version), userId: Number(user.id) || null, actorEmail: user.email || null,
+    ttlSeconds, viewLimit,
+  });
   return c.json({
     id: shareId,
     token, expires_in_seconds: ttlSeconds, expires_at: expiresAt,
@@ -1258,33 +1286,171 @@ decks.delete('/:id/shares/:shareId', async (c) => {
   try { await projectOwned(c, user, Number(row.project_id)); }
   catch { return c.json({ error: 'forbidden' }, 403); }
 
+  const out = await revokeShareLink(c.env, id, shareId);
+  if (!out) return c.json({ error: 'not found' }, 404);
+  return c.json({ ok: true, ...out });
+});
+
+/**
+ * D691 — the withdrawal, shared by this route and the Raise link record's
+ * Revoke (#1700). Null when the link is not this deck's.
+ */
+export async function revokeShareLink(env: Env, deckId: number, shareId: number) {
   // SCOPED TO THIS DECK, not just to the token id. Without `AND deck_id = ?` a
   // founder who owns deck A could revoke a link on deck B by id — the deck is the
   // thing they were authorised for, and the token id alone carries no ownership.
-  const tok = await c.env.DB.prepare(
+  const tok = await env.DB.prepare(
     'SELECT id, revoked_at FROM pitch_deck_share_tokens WHERE id = ? AND deck_id = ?',
-  ).bind(shareId, id).first<{ id: number; revoked_at: string | null }>();
-  if (!tok) return c.json({ error: 'not found' }, 404);
+  ).bind(shareId, deckId).first<{ id: number; revoked_at: string | null }>();
+  if (!tok) return null;
 
   // `revoked_at IS NULL` keeps the FIRST revocation's timestamp — see the header.
-  await c.env.DB.prepare(
+  await env.DB.prepare(
     `UPDATE pitch_deck_share_tokens
         SET revoked_at = datetime('now'), expires_at = datetime('now')
       WHERE id = ? AND revoked_at IS NULL`,
   ).bind(shareId).run();
-  const fresh = await c.env.DB.prepare(
+  const fresh = await env.DB.prepare(
     'SELECT id, revoked_at, expires_at FROM pitch_deck_share_tokens WHERE id = ?',
   ).bind(shareId).first<any>();
-  return c.json({
-    ok: true,
+  return {
     id: shareId,
     revoked_at: fresh?.revoked_at ?? null,
     expires_at: fresh?.expires_at ?? null,
     // True when this request is what withdrew it, false when it already was.
     // The panel can say "withdrawn" either way and does not need to care.
     newly_revoked: !tok.revoked_at,
-  });
-});
+  };
+}
+
+// ---------------------------------------------------------------------------
+// D691 decision 5 (#1700) — a share link names its investor, and its
+// settings are enforced.
+// ---------------------------------------------------------------------------
+
+/** "Never": the column is NOT NULL and the viewer compares it, so a sentinel. */
+export const SHARE_NEVER_EXPIRES = '9999-12-31 23:59:59';
+const SHARE_NEVER_EPOCH = Math.floor(Date.parse('9999-12-31T23:59:59Z') / 1000);
+/** No view cap on a new link; old links keep theirs. */
+export const SHARE_NO_VIEW_LIMIT = 2147483647;
+export const SHARE_SENT_TO_SOMEONE_ELSE = 'This link was sent to someone else.';
+/** The browser's id for bound links: random, HttpOnly, never readable by the page. */
+export const SHARE_VIEWER_COOKIE = 'axal_deck_viewer';
+
+export type CreateShareLinkArgs = {
+  deckId: number;
+  deckVersion: number;
+  userId: number | null;
+  actorEmail: string | null;
+  /** Seconds the link lives; null is "Never". */
+  ttlSeconds: number | null;
+  viewLimit?: number;
+  prospectId?: number | null;
+  investorLabel?: string | null;
+  allowDownload?: boolean;
+  allowForwarding?: boolean;
+};
+
+/**
+ * The one link writer: `POST /api/decks/:id/share` and the Raise cycle's
+ * `POST /deck-links` (#1700) both call it. The caller checks ownership, the
+ * plan and every id it takes. The raw token is returned once and never read
+ * back: only its hash is stored.
+ */
+export async function createShareLink(env: Env, a: CreateShareLinkArgs): Promise<{ id: number | null; token: string; expiresAt: string; ttlSeconds: number }> {
+  const now = Math.floor(Date.now() / 1000);
+  const never = a.ttlSeconds == null;
+  // The signed token carries the same expiry the row stores.
+  const ttlSeconds = never ? SHARE_NEVER_EPOCH - now : Math.max(1, Math.floor(a.ttlSeconds as number));
+  const token = await mintSignedToken(env, `deck:${a.deckId}:v${a.deckVersion}`, ttlSeconds, a.actorEmail);
+  const expiresAt = never ? SHARE_NEVER_EXPIRES : new Date((now + ttlSeconds) * 1000).toISOString().replace('T', ' ').slice(0, 19);
+  const label = typeof a.investorLabel === 'string' && a.investorLabel.trim() ? a.investorLabel.trim().slice(0, 200) : null;
+  const ins = await env.DB.prepare(
+    `INSERT INTO pitch_deck_share_tokens
+       (deck_id, token_hash, expires_at, view_limit, view_count, created_by, prospect_id, investor_label, allow_download, allow_forwarding)
+     VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?)`
+  ).bind(
+    a.deckId, await sha256Hex(token), expiresAt, a.viewLimit ?? SHARE_NO_VIEW_LIMIT, a.userId,
+    a.prospectId ?? null, a.prospectId ? null : label,
+    a.allowDownload === false ? 0 : 1, a.allowForwarding === false ? 0 : 1,
+  ).run();
+  // D367 — the link's row id, so the sheet that minted it can withdraw it
+  // (DELETE /:id/shares/:shareId) when the founder replaces it. Null if the
+  // driver did not report one; the sheet then says it could not withdraw.
+  return { id: Number(ins?.meta?.last_row_id) || null, token, expiresAt, ttlSeconds };
+}
+
+function cookieValue(c: any, name: string): string | null {
+  const raw = String(c.req.header('cookie') || '');
+  for (const part of raw.split(';')) {
+    const at = part.indexOf('=');
+    if (at > 0 && part.slice(0, at).trim() === name) {
+      const v = part.slice(at + 1).trim();
+      return /^[A-Za-z0-9_-]{16,128}$/.test(v) ? v : null;
+    }
+  }
+  return null;
+}
+
+/** The hash of this browser's viewer cookie, or null when it has none. */
+export async function viewerHashOf(c: any): Promise<string | null> {
+  const v = cookieValue(c, SHARE_VIEWER_COOKIE);
+  return v ? sha256Hex(`deck-viewer:${v}`) : null;
+}
+
+/**
+ * The live-link predicate (decision 5): not revoked, not past `expires_at`,
+ * and, with forwarding off, opened from the browser the link is bound to.
+ * The share read, the heartbeat and the share actions' `verifyShareToken` all
+ * ask it, so a revoked link stops everywhere at once.
+ */
+export async function shareLinkLive(env: Env, tokenHash: string, viewerHash: string | null): Promise<{ id: number; deck_id: number } | null> {
+  const row = await env.DB.prepare(
+    `SELECT id, deck_id FROM pitch_deck_share_tokens
+      WHERE token_hash = ?
+        AND revoked_at IS NULL
+        AND datetime(expires_at) > datetime('now')
+        AND (allow_forwarding = 1 OR (bound_viewer_hash IS NOT NULL AND bound_viewer_hash = ?))`,
+  ).bind(tokenHash, viewerHash).first<{ id: number; deck_id: number }>();
+  return row ? { id: Number(row.id), deck_id: Number(row.deck_id) } : null;
+}
+
+/**
+ * Forwarding off binds the first browser to open the link: one
+ * `UPDATE … WHERE bound_viewer_hash IS NULL`, so two first opens cannot both
+ * win. Another browser is refused before any view is used.
+ */
+async function bindShareViewer(c: any, tokenHash: string): Promise<{ refused: boolean; viewerHash: string | null; setCookie: string | null; allowDownload: boolean }> {
+  const env: Env = c.env;
+  const tok = await env.DB.prepare(
+    `SELECT id, allow_download, allow_forwarding, bound_viewer_hash,
+            (revoked_at IS NULL AND datetime(expires_at) > datetime('now')) AS live
+       FROM pitch_deck_share_tokens WHERE token_hash = ?`,
+  ).bind(tokenHash).first<{ id: number; allow_download: number | null; allow_forwarding: number | null; bound_viewer_hash: string | null; live: number }>();
+  const allowDownload = tok ? Number(tok.allow_download ?? 1) === 1 : true;
+  // A link that is not live binds no one: the claim below answers it, as today.
+  if (!tok || !Number(tok.live) || Number(tok.allow_forwarding ?? 1) === 1) return { refused: false, viewerHash: null, setCookie: null, allowDownload };
+  let value = cookieValue(c, SHARE_VIEWER_COOKIE);
+  let setCookie: string | null = null;
+  if (!value) {
+    const bytes = crypto.getRandomValues(new Uint8Array(24));
+    value = b64url(bytes);
+    // The cookie lives as long as the link can, up to the 400 days browsers keep one.
+    setCookie = `${SHARE_VIEWER_COOKIE}=${value}; Path=/api/decks/share; HttpOnly; Secure; SameSite=Lax; Max-Age=${400 * 24 * 3600}`;
+  }
+  const viewerHash = await sha256Hex(`deck-viewer:${value}`);
+  if (!tok.bound_viewer_hash) {
+    await env.DB.prepare(
+      'UPDATE pitch_deck_share_tokens SET bound_viewer_hash = ? WHERE id = ? AND bound_viewer_hash IS NULL',
+    ).bind(viewerHash, tok.id).run();
+    const after = await env.DB.prepare('SELECT bound_viewer_hash FROM pitch_deck_share_tokens WHERE id = ?')
+      .bind(tok.id).first<{ bound_viewer_hash: string | null }>();
+    if (after?.bound_viewer_hash !== viewerHash) return { refused: true, viewerHash, setCookie: null, allowDownload };
+    return { refused: false, viewerHash, setCookie, allowDownload };
+  }
+  if (tok.bound_viewer_hash !== viewerHash) return { refused: true, viewerHash, setCookie: null, allowDownload };
+  return { refused: false, viewerHash, setCookie, allowDownload };
+}
 
 // --- HMAC token + sha helpers (mirror of backend) -----------------------
 

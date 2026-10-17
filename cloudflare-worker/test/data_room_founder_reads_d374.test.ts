@@ -19,13 +19,14 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { SignJWT } from 'jose';
-import { tableFromBaseline, stripForeignKeys } from './_baseline.mjs';
+import { tableFromBaseline, stripForeignKeys, addColumnsFrom } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 
 import dataRoom from '../src/routes/data_room.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const BASELINE = readFileSync(resolve(ROOT, 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
+const MIG463 = readFileSync(resolve(ROOT, 'cloudflare-worker/sql/migrations/463_raise_record_stores.sql'), 'utf8');
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 
 const FOUNDER = 1;     // founders row 100, owns p-room and p-other
@@ -50,6 +51,10 @@ function freshDb() {
   for (const t of ['data_room_grants', 'data_room_files', 'data_room_folders', 'data_room_access_log', 'pairwise_ndas']) {
     db.exec(stripForeignKeys(tableFromBaseline(BASELINE, t)));
   }
+  // D691 (#1700) — migration 463's file access columns, which every room read now filters on.
+  addColumnsFrom(db, stripForeignKeys(MIG463), 'data_room_files');
+  // The pipeline a committed-only file is opened by.
+  db.exec(stripForeignKeys(tableFromBaseline(BASELINE, 'raise_prospects')));
   const u = db.prepare('INSERT INTO users (id, role, founder_id, name, email) VALUES (?,?,?,?,?)');
   u.run(FOUNDER, 'founder', 100, 'Fran', 'fran@example.com');
   u.run(SIGNED, 'investor', null, 'Sig', 'sig@example.com');

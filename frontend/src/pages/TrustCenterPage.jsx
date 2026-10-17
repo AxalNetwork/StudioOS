@@ -22,6 +22,9 @@ import {
 import { api, getActiveCompanyId } from '../lib/api';
 import { safeReadJSON } from '../lib/storage';
 import { Unreadable } from '../ui';
+import { usePhoneWidth } from '../ui/phone/usePhoneWidth';
+import { AccountPhonePage, phonePending } from './account/AccountPhonePage';
+import { ACCOUNT_PHONE_PAGES } from './account/accountPhone';
 import TrustScoreBadge, { computeTrustScore } from '../components/TrustScoreBadge';
 import {
   SCORE_BANDS, bandOf, verdictFor, scoreLine, obligationSummary,
@@ -1180,6 +1183,65 @@ function tabsForRole(role, obligations) {
  * The trust SCORE stays in both cases. The badge is content — it is the answer
  * the page exists to give — not furniture.
  */
+// ---------------------------------------------------------------------------
+// D700 (#1662) — A4m, the page on a phone.
+// ---------------------------------------------------------------------------
+
+// The desktop's four tones, in `ui/Pill`'s words.
+const PILL_TONE = { ok: 'ok', prog: 'warn', bad: 'danger', neutral: 'neutral' };
+
+/**
+ * A4m's two sections from the one `/trust/me` read. The score row's pill is
+ * `verdictFor`'s word, as the desktop's, not the canvas's "Partial"; and the
+ * list is only what the read returns, so no 83(b) row (D700 decision 10).
+ * A row selects its obligation's tab, which the page keeps below.
+ */
+export function trustPhoneGroups({ status, obligations = [], reload, onSelect }) {
+  const [scoreTitle, listTitle] = ACCOUNT_PHONE_PAGES.trust.sections;
+  if (status !== 'ready') {
+    const note = phonePending(status, 'Your obligations', 'This is not a claim that nothing is required of you.', reload);
+    return [{ label: scoreTitle, rows: [], note, testid: 'trust-phone-score' }, { label: listTitle, rows: [], testid: 'trust-phone-obligations' }];
+  }
+  const score = computeTrustScore(obligations);
+  const counts = outstandingCounts(obligations);
+  const open = counts.needs + counts.inProgress;
+  const scoreRow = {
+    title: `${score} of 100`,
+    description: open ? `You have ${open} open ${open === 1 ? 'requirement' : 'requirements'}` : scoreLine(counts),
+    pill: { label: verdictFor(score), tone: PILL_TONE[bandOf(score)] },
+    bar: score,
+    testid: 'trust-phone-score-row',
+  };
+  const rows = obligations.map((o) => {
+    const meta = OBLIGATION_META[o.obligation_key] || { label: o.obligation_key, tab: 'overview' };
+    const exp = expiryNote(o.expires_at);
+    return {
+      key: o.obligation_key,
+      title: meta.label,
+      description: `${o.required ? 'Required' : 'Optional'}${exp ? ` · ${exp.text}` : ''}`,
+      pill: { label: String(o.status || 'pending').replace(/_/g, ' '), tone: PILL_TONE[toneOf(o.status)] },
+      onClick: onSelect ? () => onSelect(meta.tab || 'overview') : undefined,
+      testid: 'trust-phone-obligation',
+    };
+  });
+  return [
+    { label: scoreTitle, rows: [scoreRow], testid: 'trust-phone-score' },
+    {
+      label: listTitle, rows, testid: 'trust-phone-obligations',
+      note: rows.length ? null : 'No obligations outstanding for this role. Nothing is required of you right now.',
+    },
+  ];
+}
+
+/** A4m — the bar and the two sections, then `children`: the tab bar and its panels. */
+export function TrustPhoneView({ status, obligations, reload, onSelect, children = null }) {
+  return (
+    <AccountPhonePage pageKey="trust" testid="trust-phone" groups={trustPhoneGroups({ status, obligations, reload, onSelect })}>
+      {children}
+    </AccountPhonePage>
+  );
+}
+
 export default function TrustCenterPage({ chromeless = false }) {
   const [matrix, setMatrix] = useState(null);   // /api/trust/me
   const [requiredNdas, setRequiredNdas] = useState([]); // /api/trust/nda/required
@@ -1222,7 +1284,9 @@ export default function TrustCenterPage({ chromeless = false }) {
         api.getRequiredNdas(),
         api.kycStatus(),
       ]);
-      if (m.status === 'fulfilled') setMatrix(m.value); else setMatrix({ obligations: [], role });
+      // `failed` is read by the phone view alone, so a failed matrix reads
+      // Unreadable there rather than as an empty list (D700).
+      if (m.status === 'fulfilled') setMatrix(m.value); else setMatrix({ obligations: [], role, failed: true });
       setRequiredNdas(n.status === 'fulfilled' ? (n.value?.items || []) : []);
       setKyc(k.status === 'fulfilled' ? k.value : null);
     } catch (e) {
@@ -1243,6 +1307,16 @@ export default function TrustCenterPage({ chromeless = false }) {
     .filter(o => o.required && o.status !== 'satisfied' && o.status !== 'waived')
     .map(o => OBLIGATION_META[o.obligation_key]?.label || o.obligation_key);
 
+  // D700 — on a phone, A4m's bar and sections come first, then the tabs. The
+  // investor workspace's chromeless frame keeps its own header (decision 12).
+  const phone = usePhoneWidth() && !chromeless;
+  const selectTab = (key) => {
+    setTab(tabs.some((t) => t.key === key) ? key : 'overview');
+    document.getElementById('trust-tabs')?.scrollIntoView?.({ block: 'start' });
+  };
+  if (phone && (loading || err || matrix?.failed)) {
+    return <TrustPhoneView status={loading ? 'loading' : 'unreadable'} reload={load} />;
+  }
   if (loading) return <div className="p-8 text-slate-600">Loading trust center…</div>;
   if (err) return <div className="p-8 text-red-600 flex items-center gap-2"><AlertCircle className="w-5 h-5" />{err}</div>;
 
@@ -1440,40 +1514,28 @@ export default function TrustCenterPage({ chromeless = false }) {
     </Section>
   );
 
-  return (
-    <div className="p-6 max-w-5xl mx-auto">
-      <div className="mb-6 flex items-center justify-between gap-4 flex-wrap">
-        {chromeless ? <div /> : (
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-              <ShieldCheck className="w-7 h-7 text-emerald-600" /> Trust Center
-            </h1>
-            <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">Your obligations, agreements, and verification status — tailored to your role.</p>
-          </div>
-        )}
-        <TrustScoreBadge size="md" score={score} missing={missing} label="Trust score" />
-      </div>
+  // The page's promise about itself — OUTSIDE the `chromeless` guard, and
+  // that placement is a correction.
+  //
+  // It went inside first, with the heading, on the reasoning that the
+  // investor frame supplies its own header and must not get two. Rendering
+  // the investor frame showed the cost: `chromeless` suppressed the line
+  // entirely, so the one reader most likely to be mid-verification never saw
+  // the sentence explaining why nothing here is editable. It is not a
+  // heading — `investorWorkspace` draws an <h1> and no provenance line, so
+  // there was never anything to duplicate. It sits above the tabs now, where
+  // both frames show it exactly once — and on a phone, under A4m's sections.
+  const provenance = (
+    <p className="mb-5 text-xs text-slate-500 dark:text-slate-400">
+      Identity data is managed in{' '}
+      <a href="/kyc" className="underline hover:text-slate-700 dark:hover:text-slate-300">identity verification</a>
+      {' '}· this page reports status only.
+    </p>
+  );
 
-      {/*
-        The page's promise about itself — OUTSIDE the `chromeless` guard, and
-        that placement is a correction.
-
-        It went inside first, with the heading, on the reasoning that the
-        investor frame supplies its own header and must not get two. Rendering
-        the investor frame showed the cost: `chromeless` suppressed the line
-        entirely, so the one reader most likely to be mid-verification never saw
-        the sentence explaining why nothing here is editable. It is not a
-        heading — `investorWorkspace` draws an <h1> and no provenance line, so
-        there was never anything to duplicate. It sits above the tabs now, where
-        both frames show it exactly once.
-      */}
-      <p className="mb-5 text-xs text-slate-500 dark:text-slate-400">
-        Identity data is managed in{' '}
-        <a href="/kyc" className="underline hover:text-slate-700 dark:hover:text-slate-300">identity verification</a>
-        {' '}· this page reports status only.
-      </p>
-
-      <div className="border-b border-slate-200 dark:border-slate-700 mb-6 flex gap-1 overflow-x-auto" data-testid="trust-center-page">
+  const panels = (
+    <>
+      <div id="trust-tabs" className="border-b border-slate-200 dark:border-slate-700 mb-6 flex gap-1 overflow-x-auto" data-testid="trust-center-page">
         {tabs.map(t => {
           const Icon = t.icon;
           const active = tab === t.key;
@@ -1513,6 +1575,34 @@ export default function TrustCenterPage({ chromeless = false }) {
         </div>
       )}
       {tab === 'sanctions'     && <div data-testid="trust-sanctions-panel"><SanctionsTab /></div>}
+    </>
+  );
+
+  if (phone) {
+    return (
+      <TrustPhoneView status="ready" obligations={obligations} reload={load} onSelect={selectTab}>
+        <div>{provenance}{panels}</div>
+      </TrustPhoneView>
+    );
+  }
+
+  return (
+    <div className="p-6 max-w-5xl mx-auto">
+      <div className="mb-6 flex items-center justify-between gap-4 flex-wrap">
+        {chromeless ? <div /> : (
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <ShieldCheck className="w-7 h-7 text-emerald-600" /> Trust Center
+            </h1>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">Your obligations, agreements, and verification status — tailored to your role.</p>
+          </div>
+        )}
+        <TrustScoreBadge size="md" score={score} missing={missing} label="Trust score" />
+      </div>
+
+      {provenance}
+
+      {panels}
     </div>
   );
 }

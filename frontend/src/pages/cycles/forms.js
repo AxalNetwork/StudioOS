@@ -4,8 +4,9 @@
  * markets and obligations (D664); Build's risks, formation steps and MVP
  * must-haves (D662).
  *
- * WHAT A FORM IS. Its fields, the body its Worker route takes (`toBody`),
- * and the writes it makes (`submit`). The fields follow the route's own rules:
+ * WHAT A FORM IS. Its `key` (unique in its module: `/new?form=<key>` opens
+ * it, D695), its `cta`, its fields, the body its Worker route takes
+ * (`toBody`), and the writes it makes (`submit`). The fields follow the route's own rules:
  * the same required fields, the same lengths, the same choices. The Worker
  * still checks everything, and its sentence is what the founder sees when it
  * refuses. `cycle_adapters_d661.test.ts` sends every form's body through the
@@ -69,6 +70,7 @@ const marketPartsBody = (v) => Object.fromEntries(MARKET_PARTS.flatMap(([k]) => 
 // ---------- Grow (routes/cycle_grow.ts) --------------------------------------
 
 const feedback = {
+  key: 'feedback', cta: 'Log feedback',
   button: 'Log feedback',
   title: 'Log feedback',
   lead: 'One piece of feedback, from a customer, an investor or the team.',
@@ -89,6 +91,7 @@ const feedback = {
 };
 
 const channel = {
+  key: 'channel', cta: 'Add channel',
   button: 'Add channel',
   title: 'Add a channel',
   lead: 'A channel is counted by the UTM source its links carry. Spend is what you type; it is shown as typed.',
@@ -108,6 +111,7 @@ const channel = {
 };
 
 const partner = {
+  key: 'partner', cta: 'Add partner',
   button: 'Add partner',
   title: 'Add a partner',
   lead: 'A reseller, an integration, an agency or a referrer. Revenue is what you type; it is shown as typed.',
@@ -128,6 +132,7 @@ const partner = {
 };
 
 const market = {
+  key: 'market', cta: 'Add market',
   button: 'Add market',
   title: 'Add a market',
   lead: 'Score each part from 0 to 10 when you have evidence, and say where it came from. A part you have not scored stays not recorded.',
@@ -142,6 +147,7 @@ const market = {
 };
 
 const obligation = {
+  key: 'obligation', cta: 'Add obligation',
   button: 'Add obligation',
   title: 'Add an obligation',
   lead: 'A filing, a board meeting, a renewal: anything with a date the company must keep.',
@@ -159,6 +165,7 @@ const obligation = {
 // ---------- Build (routes/cycle_build.ts) ------------------------------------
 
 const risk = {
+  key: 'risk', cta: 'Add risk',
   button: 'Add risk',
   title: 'Add a risk',
   lead: 'A risk to the venture, with how bad it is and what you are doing about it.',
@@ -172,6 +179,7 @@ const risk = {
 };
 
 const formationStep = {
+  key: 'formation-step', cta: 'Add formation step',
   button: 'Add formation step',
   title: 'Add a formation step',
   lead: 'A step in forming the company, such as filing the certificate or getting a tax ID.',
@@ -184,6 +192,7 @@ const formationStep = {
 };
 
 const mustHave = {
+  key: 'must-have', cta: 'Add a must-have',
   button: 'Add a must-have',
   title: 'Add a must-have',
   lead: 'A feature the MVP cannot ship without. It joins your MVP scope, marked as a must-have.',
@@ -204,26 +213,63 @@ const mustHave = {
   },
 };
 
+const feature = {
+  key: 'feature', cta: 'Add feature',
+  button: 'Add feature', title: 'Add a feature',
+  lead: 'A feature of the solution. It can be linked to a pain theme later.',
+  fields: mustHave.fields.slice(0, 3),
+  toBody: (v) => ({ title: str(v.title), added_value: v.added_value || 'High', effort: v.effort || 'M', delivery_status: 'Backlog' }),
+  submit: (w, projectId, v) => w.build.mvpFeature(projectId, feature.toBody(v)),
+};
+
+const readiness = {
+  key: 'readiness', cta: 'Score readiness',
+  button: 'Score readiness', title: 'Score readiness',
+  lead: 'Check the deck, use of funds, cap table, traction, data room and narrative against their recorded evidence.',
+  fields: [], submit: (w, projectId) => w.raise.rescore(projectId),
+};
+
+const narrative = {
+  key: 'narrative-version', cta: 'New version',
+  button: 'New version', title: 'New narrative version',
+  lead: 'Save the current narrative for an investor type and check it against recorded metrics.',
+  fields: [{ name: 'investor_type', label: 'Investor type', type: 'select', required: true, options: opts([
+    ['angel', 'Angel'], ['pre_seed_fund', 'Pre-seed fund'], ['seed_fund', 'Seed fund'],
+    ['series_a_fund', 'Series A fund'], ['strategic', 'Strategic'], ['grant', 'Grant'], ['other', 'Other'],
+  ]) }],
+  toBody: (v) => ({ investor_type: v.investor_type || null }),
+  submit: (w, projectId, v) => w.raise.narrativeVersion(projectId, narrative.toBody(v)),
+};
+
 /** The forms, by cycle and module slug. A slug not here has no Add form. */
 export const FORMS = {
+  raise: {
+    'fundraising-readiness': [readiness],
+    'investor-narrative': [narrative],
+  },
   grow: {
-    'product-improvement': feedback,
-    distribution: channel,
-    'partner-network': partner,
-    'market-expansion': market,
-    'durable-company-building': obligation,
+    'product-improvement': [feedback],
+    distribution: [channel],
+    'partner-network': [partner],
+    'market-expansion': [market],
+    'durable-company-building': [obligation],
   },
   build: {
-    'solution-design': risk,
-    'prototype-mvp': mustHave,
-    'company-creation': formationStep,
+    'solution-design': [feature, risk],
+    'prototype-mvp': [mustHave],
+    'company-creation': [formationStep],
   },
 };
 
+/** All Add forms for a module, in button order. */
+export function formsFor(cycle, slug) {
+  const byCycle = Object.prototype.hasOwnProperty.call(FORMS, cycle) ? FORMS[cycle] : null;
+  return byCycle && Object.prototype.hasOwnProperty.call(byCycle, slug) ? byCycle[slug] : [];
+}
+
 /** The form for a cycle's module, or null. Own entries only: a slug never reaches Object.prototype. */
 export function formFor(cycle, slug) {
-  const byCycle = Object.prototype.hasOwnProperty.call(FORMS, cycle) ? FORMS[cycle] : null;
-  return byCycle && Object.prototype.hasOwnProperty.call(byCycle, slug) ? byCycle[slug] : null;
+  return formsFor(cycle, slug)[0] || null;
 }
 
 // ---------- Edit a row -------------------------------------------------------
@@ -245,10 +291,12 @@ const buildId = (prefix) => (row) => {
   return Number.isInteger(n) && n > 0 ? n : null;
 };
 
-const EDIT = { button: 'Edit' };
+/** An Edit saves with "Save" (D695 decision 7); its row button stays "Edit". */
+const EDIT = { button: 'Edit', cta: 'Save' };
 
 const editFeedback = {
   ...EDIT,
+  key: 'edit-feedback',
   title: 'Edit feedback',
   lead: 'Where it stands, and what it belongs to. What was said, and by whom, stays as logged.',
   fields: [
@@ -264,6 +312,7 @@ const editFeedback = {
 
 const editChannel = {
   ...EDIT,
+  key: 'edit-channel',
   title: 'Edit channel',
   lead: 'Its name and its state. Its UTM source is what counts its customers, so it stays as added.',
   fields: [
@@ -278,6 +327,7 @@ const editChannel = {
 
 const editPartner = {
   ...EDIT,
+  key: 'edit-partner',
   title: 'Edit partner',
   lead: 'Its type, its stage and its terms.',
   fields: [
@@ -293,6 +343,7 @@ const editPartner = {
 
 const editMarket = {
   ...EDIT,
+  key: 'edit-market',
   title: 'Edit market',
   lead: 'Its state, your decision, and each part\'s score with its source. Emptying a score clears it.',
   fields: [
@@ -313,6 +364,7 @@ const editMarket = {
 
 const editObligation = {
   ...EDIT,
+  key: 'edit-obligation',
   title: 'Edit obligation',
   lead: 'Its state, its owner and its date.',
   fields: [
@@ -328,6 +380,7 @@ const editObligation = {
 
 const editFormationStep = {
   ...EDIT,
+  key: 'edit-formation-step',
   title: 'Edit formation step',
   lead: 'Its name, its date and where it stands. A step the Lab or a filing obligation tracks is changed where it lives.',
   fields: [
@@ -344,6 +397,7 @@ const editFormationStep = {
 
 const editMustHave = {
   ...EDIT,
+  key: 'edit-must-have',
   title: 'Edit must-have',
   lead: 'Its date, or take it off the must-haves. The feature stays in your MVP scope.',
   fields: [
@@ -358,6 +412,7 @@ const editMustHave = {
 
 const editFeature = {
   ...EDIT,
+  key: 'edit-feature',
   button: 'Mark',
   title: 'Must-have or not',
   lead: 'A must-have is a feature the MVP cannot ship without. Marked ones are listed under Prototype / MVP.',
@@ -400,6 +455,7 @@ export function systemOptions(read, kind, projectId = null) {
 }
 
 const editSystem = {
+  key: 'edit-system', cta: 'Save',
   button: 'Choose connector',
   title: 'Choose a connector',
   lead: 'Which of your connected tools is this system, and who uses it. Only connections enabled for this project’s company are offered.',
@@ -447,12 +503,57 @@ export function editFor(cycle, slug) {
   return byCycle && Object.prototype.hasOwnProperty.call(byCycle, slug) ? byCycle[slug] : null;
 }
 
-/** The first value of each field: its `initial`, else empty; then a row's own values, as text. */
+// ---------- Fields: today's types and the canvas's kinds ---------------------
+//
+// D695 decision 2: a field is today's `{ name, label, type }`, or the
+// canvas's `{ name, kind: 'T'|'CH'|'CK', k, opts?, def?, input?, parts?, when? }`.
+// CH is one choice from its options, CK any number of them (an array), and T a
+// box whose `input` (text, date, money, score, email, file) is today's `type`.
+// A `parts` field is two boxes on one row, each its own field; a `when` field
+// counts only while another field holds the value it names.
+
+/** A field's kind: its own, else what today's type draws as. */
+export const kindOf = (f) => f?.kind || (f?.type === 'select' ? 'CH' : 'T');
+const labelOf = (f) => f?.label ?? f?.k ?? f?.name;
+const inputOf = (f) => f?.input ?? f?.type ?? 'text';
+/** A field's choices as `{ value, label, checked }`, from `options` or the canvas's `opts`. */
+const choicesOf = (f) => (f?.options ?? f?.opts ?? []).map((o) => (typeof o === 'string'
+  ? { value: o, label: o, checked: false }
+  : Array.isArray(o) ? { value: String(o[0]), label: String(o[0]), checked: !!o[2] }
+    : { value: String(o?.value ?? o?.t ?? o?.label), label: String(o?.label ?? o?.t ?? o?.value), checked: !!(o?.checked ?? o?.on) }));
+/** The fields a form holds values for: a `parts` field's own parts in its place. */
+const leafFields = (fields) => (fields || []).flatMap((f) => (Array.isArray(f?.parts) ? leafFields(f.parts) : [f]));
+/** Whether a `when` field counts now (D695 decision 2). */
+export function shownWith(field, values) {
+  if (!field?.when) return true;
+  if (typeof field.when === 'function') return !!field.when(values || {});
+  const v = values?.[field.when.name];
+  return Array.isArray(v) ? v.includes(field.when.value) : v === field.when.value;
+}
+
+/**
+ * The first value of each field, then a row's own values: a CK field's is an
+ * array (its checked options), every other field's is text. A CH field's
+ * `def` may be its option's index, as the canvas writes it.
+ */
 export function initialValues(form, current = null) {
-  const base = Object.fromEntries((form?.fields || []).map((f) => [f.name, f.initial ?? '']));
-  if (!current) return base;
-  for (const f of form?.fields || []) {
-    if (Object.prototype.hasOwnProperty.call(current, f.name)) base[f.name] = current[f.name] == null ? '' : String(current[f.name]);
+  const base = {};
+  for (const f of leafFields(form?.fields)) {
+    const kind = kindOf(f);
+    const has = current != null && Object.prototype.hasOwnProperty.call(current, f.name);
+    if (kind === 'CK') {
+      const v = has ? current[f.name] : null;
+      base[f.name] = Array.isArray(v) ? v.map(String) : choicesOf(f).filter((o) => o.checked).map((o) => o.value);
+      continue;
+    }
+    if (has) { base[f.name] = current[f.name] == null ? '' : String(current[f.name]); continue; }
+    let v = f.initial ?? f.def;
+    if (kind === 'CH') {
+      const choices = choicesOf(f);
+      if (typeof v === 'number' && !choices.some((o) => o.value === String(v))) v = choices[v]?.value;
+      if (v == null) v = choices.find((o) => o.checked)?.value;
+    }
+    base[f.name] = v == null ? '' : String(v);
   }
   return base;
 }
@@ -460,15 +561,25 @@ export function initialValues(form, current = null) {
 /** `{ field: sentence }` for what the form can tell before sending; empty when it may be sent. */
 export function validate(form, values) {
   const errors = {};
-  for (const f of form?.fields || []) {
+  for (const f of leafFields(form?.fields)) {
+    if (!shownWith(f, values)) continue;
+    const kind = kindOf(f);
+    const label = labelOf(f);
     const raw = values?.[f.name];
+    if (kind === 'CK') {
+      const picked = Array.isArray(raw) ? raw : [];
+      if (f.required && picked.length === 0) errors[f.name] = `${label} is required.`;
+      else if (picked.some((v) => !choicesOf(f).some((o) => o.value === String(v)))) errors[f.name] = `Pick the recorded choices for ${String(label).toLowerCase()}.`;
+      continue;
+    }
     const text = typeof raw === 'string' ? raw.trim() : raw;
-    if (f.required && (text == null || text === '')) { errors[f.name] = `${f.label} is required.`; continue; }
-    if (typeof text === 'string' && f.max && text.length > f.max) errors[f.name] = `${f.label} is at most ${f.max} characters.`;
-    if (f.type === 'money' && Number.isNaN(toCents(raw))) errors[f.name] = 'Type an amount in US dollars, 0 or more.';
-    if (f.type === 'score' && Number.isNaN(toScore(raw))) errors[f.name] = 'A score is a whole number from 0 to 10.';
-    if (f.type === 'date' && text && !/^\d{4}-\d{2}-\d{2}$/.test(text)) errors[f.name] = 'Pick a date.';
-    if (f.type === 'select' && text && !(f.options || []).some((o) => o.value === text)) errors[f.name] = `Pick one of the choices for ${f.label.toLowerCase()}.`;
+    if (f.required && (text == null || text === '')) { errors[f.name] = `${label} is required.`; continue; }
+    if (typeof text === 'string' && f.max && text.length > f.max) errors[f.name] = `${label} is at most ${f.max} characters.`;
+    const input = inputOf(f);
+    if (input === 'money' && Number.isNaN(toCents(raw))) errors[f.name] = 'Type an amount in US dollars, 0 or more.';
+    if (input === 'score' && Number.isNaN(toScore(raw))) errors[f.name] = 'A score is a whole number from 0 to 10.';
+    if (input === 'date' && text && !/^\d{4}-\d{2}-\d{2}$/.test(text)) errors[f.name] = 'Pick a date.';
+    if (kind === 'CH' && text && !choicesOf(f).some((o) => o.value === text)) errors[f.name] = `Pick one of the choices for ${String(label).toLowerCase()}.`;
   }
   return { ...errors, ...(typeof form?.check === 'function' ? form.check(values || {}) : {}) };
 }

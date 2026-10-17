@@ -96,7 +96,27 @@ be told apart; churn needs two billings) and rewrites `revenue_movements`.
 D663: `raiseCycle.ts` computes the Raise figures, seven cards and records, plus D686's independently readable, project-scoped Calls history, for
 `../routes/cycle_raise.ts`, including the computed readiness checks, the
 diligence checklist and the narrative consistency check (fixed patterns, no
-model). `raiseWriters.ts` has one writer per migration 442 record.
+model). Since D691 (#1699) each list carries the canvas's title, columns,
+filters and default sort (the first in `sorts`), and its row ids are addresses
+that never hold a name: an item key, a version, a link, file or prospect id, a
+cap-table `h-<n>`, `e-<n>` or `pool`, and a use-of-funds section key.
+`raiseWriters.ts` has one writer per migration 442 record.
+`capTableWrites.ts` (D691, #1699) is the cap table's one save, `saveScenario()`,
+which `POST` and `PUT /api/captable/scenarios` call: the one-per-venture upsert,
+its unique-index recovery and D632's activity row, plus an `e-<n>` key on every
+founder, SAFE and round entry, matched by name and never reused, which the Raise
+list reads as the holder's id. It also holds `addHolder()` and `updateHolder()`
+(D691, #1700): Founders · Common writes a `cap_table_holders` row (and its
+vesting row, on the same `user_id` and `holder_id`) and returns `h-<id>`;
+Investors · SAFE or note adds a `safes[]` entry and returns its `e-<n>`. Both
+refuse a caller below `studio` with `ensureTier`'s 402, recompute through
+`saveScenario()`, and log nothing themselves.
+`dataRoomAccess.ts` (D691 decision 6, #1700) is the data room's one access
+predicate, `tierAdmits()`: a file's `access_tier` (`invited`, `committed`,
+`nobody`) and `access_expires_at`, with `investorCommitted()` (a committed
+prospect of the venture, by email) and `admittedCounts()`. Every read outside
+the founder's (the investor room, `research.ts`, the advisor brief) decides
+with it, so a hidden file is never listed, counted or downloaded.
 `deckSlideDwell.ts` stores a share-link view's seconds per slide, bounded so
 they never add up to more than the view's read time.
 `peerBenchmark.ts` (#1524) is the peer-group benchmark for every founder:
@@ -165,3 +185,8 @@ held on its `interview_date`.
 call's transcript is imported, when a chat is assigned, and when an assigned
 chat goes quiet. Its findings are proposals for the founder to review. It keeps
 #1470's consent rule and the D640 budget, and re-runs at most every six hours.
+
+D691 (#1696): Grow’s Durable card reads the production compliance calendar’s
+`due_date` and `completion_status` columns. Its existing next-90-days filter,
+seeded events and new-venture action are preserved; TypeScript maps `due_date`
+to the existing calendar field.

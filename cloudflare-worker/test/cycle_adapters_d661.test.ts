@@ -202,6 +202,7 @@ function raiseFixture() {
   }
   db.exec(sqlOf('249_project_metrics.sql'));
   db.exec(sqlOf('442_raise_cycle_stores.sql'));
+  db.exec(sqlOf('463_raise_record_stores.sql'));
   db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (?, ?, ?, ?, 1, ?)').run(FOUNDER, 'founder', 'Fay Founder', 'fay@example.test', 1001);
   db.exec(`INSERT INTO projects (id, name, founder_id) VALUES (${P}, 'Acme', 1001)`);
   return db;
@@ -227,8 +228,10 @@ function raiseSeeded() {
   const db = raiseFixture();
   const before = [{ holder: 'Fay', type: 'founder', shares: 8000 }, { holder: 'Option Pool', type: 'option_pool', shares: 2000 }];
   const after = [...before, { holder: 'Seed investors', type: 'preferred', shares: 2500 }];
+  // Saved with the entry keys every save now gives (D691, #1699); a scenario without them reads id: null.
+  const inputs = { founders: [{ name: 'Fay', shares: 8000, key: 'e-1' }], option_pool_pct: 20, rounds: [{ name: 'Seed', pre_money: 8000, investment: 2500, key: 'e-2' }], entry_key_seq: 2 };
   db.exec(`INSERT INTO cap_table_scenarios (owner_user_id, project_id, name, inputs_json, result_json) VALUES
-           (${FOUNDER}, ${P}, 'Main', '{}', '${JSON.stringify({ founding: before, rounds: [{ name: 'Seed', ledger: after }] })}')`);
+           (${FOUNDER}, ${P}, 'Main', '${JSON.stringify(inputs)}', '${JSON.stringify({ founding: before, rounds: [{ name: 'Seed', ledger: after }] })}')`);
   db.exec(`UPDATE projects SET funding_needed = 1000000,
              use_of_funds = '[{"label":"Product & engineering","pct":60},{"label":"GTM: sales and marketing","pct":40}]'
            WHERE id = ${P}`);
@@ -337,12 +340,14 @@ async function growFixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   db.exec(`CREATE TABLE users (id INTEGER PRIMARY KEY, role TEXT NOT NULL, founder_id INTEGER, is_active INTEGER NOT NULL DEFAULT 1,
                                jwt_min_iat INTEGER, name TEXT, email TEXT, spinout_lab_active INTEGER);
-           CREATE TABLE projects (id INTEGER PRIMARY KEY, uid TEXT, name TEXT, founder_id INTEGER, company_id INTEGER, deleted_at TEXT);
+           CREATE TABLE projects (id INTEGER PRIMARY KEY, uid TEXT, name TEXT, founder_id INTEGER, company_id INTEGER, entity_id INTEGER, deleted_at TEXT);
            CREATE TABLE user_company_links (id INTEGER PRIMARY KEY, company_id INTEGER, user_id INTEGER);
            CREATE TABLE documents (id INTEGER PRIMARY KEY, project_id INTEGER);
            CREATE TABLE activity_logs (id INTEGER PRIMARY KEY, action TEXT, details TEXT, user_id INTEGER, entity_type TEXT, entity_id TEXT);
            CREATE TABLE waitlist_signups (id INTEGER PRIMARY KEY, project_id INTEGER, email TEXT, audience TEXT, created_at TEXT DEFAULT (datetime('now')));
            CREATE TABLE spinout_lab_milestones (id INTEGER PRIMARY KEY, user_id INTEGER, week INTEGER, milestone_key TEXT, completed_at TEXT);`);
+  db.exec(tableFromBaseline(BASELINE, 'entities'));
+  db.exec(tableFromBaseline(BASELINE, 'compliance_events'));
   for (const p of ['034', '119', '127', '132', '326']) db.exec(migDdl(p));
   db.exec(migFile('311'));
   db.exec('ALTER TABLE contacts ADD COLUMN utm_json TEXT');
@@ -690,7 +695,7 @@ test('D661: every Build module page\'s records are {key,label} columns and {id,c
 
 // ── The Add forms (forms.js), through the real Worker routes ───────────────
 
-import { EDITS, FORMS, editFor, formFor, initialValues, validate, toCents, toScore, thisMonth } from '../../frontend/src/pages/cycles/forms.js';
+import { EDITS, FORMS, editFor, formFor, formsFor, initialValues, validate, toCents, toScore, thisMonth } from '../../frontend/src/pages/cycles/forms.js';
 import { makeCycleWrites } from '../../frontend/src/lib/api/cycleWrites.js';
 import progress from '../src/routes/progress.ts';
 
@@ -743,8 +748,9 @@ test('D661: every Add form sends a body its Worker route accepts, and the row re
   const buildDb = buildFixture();
   const w = makeCycleWrites(routeRequest(grow, buildDb));
   const now = new Date();
-  for (const [cycle, forms] of Object.entries(FORMS)) {
-    for (const [slug, form] of Object.entries(forms as Record<string, any>)) {
+  for (const cycle of ['grow', 'build'] as const) {
+    for (const slug of Object.keys(FORMS[cycle])) {
+      const form = cycle === 'build' && slug === 'solution-design' ? formsFor(cycle, slug)[1] : formFor(cycle, slug)!;
       const values = { ...initialValues(form), ...SAMPLES[cycle][slug] };
       assert.deepEqual(validate(form, values), {}, `${cycle}/${slug}: the sample is valid`);
       await form.submit(w, cycle === 'grow' ? GP : BP, values, now);
@@ -786,15 +792,17 @@ test('D661: every choice a form offers is one its Worker route accepts', async (
   const buildDb = buildFixture();
   const w = makeCycleWrites(routeRequest(grow, buildDb));
   let n = 0;
-  for (const [cycle, forms] of Object.entries(FORMS)) {
-    for (const [slug, form] of Object.entries(forms as Record<string, any>)) {
+  for (const cycle of ['grow', 'build'] as const) {
+    for (const slug of Object.keys(FORMS[cycle])) {
+      const form = cycle === 'build' && slug === 'solution-design' ? formsFor(cycle, slug)[1] : formFor(cycle, slug)!;
       for (const field of form.fields.filter((f: any) => f.type === 'select')) {
         for (const option of field.options) {
           n += 1;
           // Unique names, so a channel's UTM source or a market's name never collides.
           const values = { ...initialValues(form), ...SAMPLES[cycle][slug], [field.name]: option.value,
             ...(slug === 'distribution' ? { utm_source: `src${n}`, spend: '' } : {}), ...(slug === 'market-expansion' ? { name: `Market ${n}` } : {}),
-            ...(slug === 'partner-network' ? { revenue: '' } : {}) };
+            ...(slug === 'partner-network' ? { revenue: '' } : {}),
+            ...(slug === 'durable-company-building' ? { due_at: new Date(Date.UTC(2099, 0, n)).toISOString().slice(0, 10) } : {}) };
           await assert.doesNotReject(form.submit(w, cycle === 'grow' ? GP : BP, values), `${cycle}/${slug}: ${field.name}=${option.value} was refused`);
         }
       }
@@ -838,7 +846,8 @@ test('D661: every Grow Edit form starts from its row, and the change reads back 
   const grow = await growFixture();
   const w = makeCycleWrites(routeRequest(grow, buildFixture()));
   const now = new Date();
-  for (const [slug, form] of Object.entries(FORMS.grow as Record<string, any>)) {
+  for (const slug of Object.keys(FORMS.grow)) {
+    const form = formFor('grow', slug)!;
     await form.submit(w, GP, { ...initialValues(form), ...SAMPLES.grow[slug] }, now);
   }
   const read = async (slug: string) => (await growCall(grow, 'GET', `/modules/${slug}?project=${GP}`)).body;

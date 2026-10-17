@@ -1,4 +1,4 @@
-import { createContext, useContext } from 'react';
+import { createContext, useCallback, useContext } from 'react';
 
 /**
  * Holds the currently selected company for the authenticated session.
@@ -22,4 +22,19 @@ export const ActiveCompanyContext = createContext({
 
 export function useActiveCompany() {
   return useContext(ActiveCompanyContext);
+}
+
+/** Refresh a company's details without changing the selection or membership metadata. */
+export function mergeCompanyDetails(current, updated) {
+  if (!current || !updated?.uid || current.uid !== updated.uid) return current;
+  return { ...current, ...updated };
+}
+
+/** Company edits refresh both surfaces; only the switcher changes the selection. */
+export function useUpdateCompanyDetails() {
+  const { setCompany, setCompanies } = useActiveCompany();
+  return useCallback((updated) => {
+    setCompany(current => mergeCompanyDetails(current, updated));
+    setCompanies(current => current.map(company => mergeCompanyDetails(company, updated)));
+  }, [setCompany, setCompanies]);
 }

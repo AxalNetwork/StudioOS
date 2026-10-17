@@ -9,6 +9,9 @@ import { useToast } from '../../components/useToast';
 import PageExplainer from '../../components/PageExplainer';
 import EventQRCode from '../../components/events/EventQRCode';
 import { Unreadable } from '../../ui';
+import { usePhoneWidth } from '../../ui/phone/usePhoneWidth';
+import { AccountPhonePage, phonePending } from '../account/AccountPhonePage';
+import { ACCOUNT_PHONE_PAGES } from '../account/accountPhone';
 
 const STATUS_STYLES = {
   draft: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
@@ -48,6 +51,102 @@ function StatusBadge({ status, map = STATUS_STYLES }) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// D700 (#1662) — A7m, the page on a phone.
+// ---------------------------------------------------------------------------
+
+const GOING = new Set(['registered', 'confirmed']);
+const shortDay = (value) => {
+  const d = new Date(value);
+  return value && !Number.isNaN(d.getTime()) ? d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : 'Date TBD';
+};
+const whereOf = (e) => e.location_text || e.location_kind || '';
+
+/** A ticket's pill: Going, Waitlist, Attended, or its own status word. */
+function ticketPill(status, upcoming) {
+  if (upcoming && GOING.has(status)) return { label: 'Going', tone: 'ok' };
+  if (status === 'waitlisted') return { label: 'Waitlist', tone: 'warn' };
+  if (status === 'attended') return { label: 'Attended', tone: 'ok' };
+  return { label: String(status || '').replace(/_/g, ' ') || 'registered', tone: 'neutral' };
+}
+
+/**
+ * A7m's sections from `eventsApi.list` (`events`: { status, hosting,
+ * attending, reload }) and `eventsApi.suggested` (`suggested`: the events, or
+ * null while it is out or after it failed — best-effort, as on the desktop).
+ * Past has no Replay pill, and Hosting is a third section (decision 10).
+ */
+export function eventsPhoneGroups({ events, suggested, now = new Date() }) {
+  const [upTitle, pastTitle] = ACCOUNT_PHONE_PAGES.events.sections;
+  const upcoming = { label: upTitle, rows: [], testid: 'events-phone-upcoming' };
+  const past = { label: pastTitle, rows: [], testid: 'events-phone-past' };
+  const hosting = { label: 'Hosting', rows: [], testid: 'events-phone-hosting', cta: { label: 'New event', to: '/events/new', testid: 'events-phone-new' } };
+  if (events.status !== 'ready') {
+    const note = phonePending(events.status, 'Your events', 'This is not a claim that you have none.', events.reload);
+    return [{ ...upcoming, note }, { ...past, note }, { ...hosting, note }];
+  }
+  const at = (e) => new Date(e.starts_at).getTime();
+  const tickets = [...events.attending].sort((a, b) => (at(a) || 0) - (at(b) || 0));
+  for (const t of tickets) {
+    const ahead = !(at(t) < now.getTime());
+    (ahead ? upcoming : past).rows.push({
+      key: t.id || t.registration_id,
+      title: `${shortDay(t.starts_at)} · ${t.title || t.event_title}`,
+      description: [fmtDate(t.starts_at, t.timezone), whereOf(t)].filter(Boolean).join(' · '),
+      pill: ticketPill(t.status, ahead),
+      testid: 'events-phone-ticket',
+    });
+  }
+  for (const ev of suggested || []) {
+    upcoming.rows.push({
+      key: `suggested-${ev.id}`,
+      title: `${shortDay(ev.starts_at)} · ${ev.title}`,
+      description: ev.suggestion_reason || whereOf(ev) || fmtDate(ev.starts_at, ev.timezone),
+      pill: { label: 'RSVP', tone: 'info' },
+      to: `/events/${ev.slug || ev.id}`,
+      testid: 'events-phone-suggested',
+    });
+  }
+  past.rows.reverse();
+  if (!upcoming.rows.length) upcoming.note = 'No upcoming events.';
+  if (!past.rows.length) past.note = 'No past events.';
+  hosting.rows = events.hosting.map((ev) => ({
+    key: ev.id,
+    title: `${shortDay(ev.starts_at)} · ${ev.title}`,
+    description: [String(ev.status || 'draft').replace(/_/g, ' '), ev.visibility].filter(Boolean).join(' · '),
+    value: 'Manage',
+    to: `/events/${ev.id}/manage`,
+    testid: 'events-phone-hosted',
+  }));
+  if (!hosting.rows.length) hosting.note = "You're not hosting any events yet.";
+  return [upcoming, past, hosting];
+}
+
+/** A7m — the bar and the sections, then `children`: the explainer and the tickets' check-in codes. */
+export function EventsPhoneView({ events, suggested, now, children = null }) {
+  return (
+    <AccountPhonePage pageKey="events" testid="events-phone" groups={eventsPhoneGroups({ events, suggested, now })}>
+      {children}
+    </AccountPhonePage>
+  );
+}
+
+/** `GET /events/suggested`, best-effort: the events, or null. */
+function useSuggestedEvents() {
+  const [data, setData] = useState(null); // { archetype, track, events }
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await eventsApi.suggested();
+        if (alive) setData(res || null);
+      } catch { if (alive) setData(null); }
+    })();
+    return () => { alive = false; };
+  }, []);
+  return data;
+}
+
 export default function MyEventsPage() {
   const [tab, setTab] = useState('hosting');
   const [hosting, setHosting] = useState([]);
@@ -76,6 +175,33 @@ export default function MyEventsPage() {
   }, [showToast]);
 
   useEffect(() => { load(); }, [load]);
+  const suggested = useSuggestedEvents();
+  const phone = usePhoneWidth();
+
+  const toastEl = toast && (
+    <div className={`fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-lg px-4 py-2 text-sm text-white shadow-lg ${
+      toast.kind === 'error' ? 'bg-red-600' : 'bg-gray-900 dark:bg-gray-700'
+    }`}>
+      {toast.msg}
+    </div>
+  );
+
+  if (phone) {
+    const events = { status: loading ? 'loading' : loadError ? 'unreadable' : 'ready', hosting, attending, reload: load };
+    const coded = attending.filter((t) => t.checkin_code || t.code || t.qr_code);
+    return (
+      <EventsPhoneView events={events} suggested={Array.isArray(suggested?.events) ? suggested.events : null}>
+        <PageExplainer pageKey="my_events" />
+        {events.status === 'ready' && coded.length > 0 && (
+          <div>
+            <h2 className="text-[11px] font-bold uppercase tracking-wide text-gray-700 dark:text-gray-300">Check-in codes</h2>
+            <AttendingList tickets={coded} />
+          </div>
+        )}
+        {toastEl}
+      </EventsPhoneView>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-6">
@@ -91,7 +217,7 @@ export default function MyEventsPage() {
 
       <PageExplainer pageKey="my_events" />
 
-      <SuggestedEvents />
+      <SuggestedEvents data={suggested} />
 
       <div className="mt-4 flex gap-1 border-b border-gray-200 dark:border-gray-700">
         {[['hosting', 'Hosting', hosting.length], ['attending', 'Attending', attending.length]].map(([key, label, count]) => (
@@ -121,33 +247,15 @@ export default function MyEventsPage() {
         <AttendingList tickets={attending} />
       )}
 
-      {toast && (
-        <div className={`fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-lg px-4 py-2 text-sm text-white shadow-lg ${
-          toast.kind === 'error' ? 'bg-red-600' : 'bg-gray-900 dark:bg-gray-700'
-        }`}>
-          {toast.msg}
-        </div>
-      )}
+      {toastEl}
     </div>
   );
 }
 
-// Task #7 — archetype/track-aware suggestions from GET /events/suggested.
+// Task #7 — archetype/track-aware suggestions from GET /events/suggested
+// (read by `useSuggestedEvents`, so the phone's Upcoming shares it).
 // Best-effort: renders nothing when there's nothing to suggest or the call fails.
-function SuggestedEvents() {
-  const [data, setData] = useState(null); // { archetype, track, events }
-
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const res = await eventsApi.suggested();
-        if (alive) setData(res || null);
-      } catch { if (alive) setData(null); }
-    })();
-    return () => { alive = false; };
-  }, []);
-
+function SuggestedEvents({ data }) {
   const events = Array.isArray(data?.events) ? data.events : [];
   if (!events.length) return null;
   const arch = data?.archetype?.label;

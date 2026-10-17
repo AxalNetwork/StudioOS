@@ -23,6 +23,7 @@ import { PERSONAS } from '../src/lib/personas.js';
 import { companySheetApi } from '../src/lib/api/companySheet.js';
 import { KEY as SUPPORT_KEY } from '../src/lib/supportSession.js';
 import { existsSync } from 'node:fs';
+import { __resetEadwynPanelForTest, useEadwynPanel, useEadwynRailServes } from '../src/ui/eadwynPanel.js';
 import { AccountSheet } from '../src/ui/phone/AccountSheet.jsx';
 import { ActiveCompanyContext } from '../src/contexts/ActiveCompanyContext.js';
 import { moreGroups } from '../src/pages/MorePage.jsx';
@@ -359,4 +360,48 @@ test('D699 census: every destination a founder\'s phone had keeps a phone home (
   // The one control with no phone home: the sidebar search filters drawer
   // rows, and the drawer is not reachable on a founder's phone (D699.md).
   assert.match(read('frontend/src/ui/SidebarNav.jsx'), /search/i);
+});
+
+// ── The bar's Eadwyn button (test 10, D698) ─────────────────────────────────
+
+async function barButtons(barProps, { served }) {
+  __resetEadwynPanelForTest();
+  const out = {};
+  // Stands in for a founder `WorkerRail`: the rail is what makes the panel available.
+  const Rail = () => { useEadwynRailServes(served); return null; };
+  const Probe = () => { out.panel = useEadwynPanel(); return null; };
+  const mounted = await mountContracts(h(React.Fragment, null, h(Rail), h(Probe),
+    h(PhoneBar, { back: { label: 'Back', to: '/account' }, title: 'Usage', ...barProps })), '/account/usage');
+  try {
+    await mounted.flush();
+    const buttons = mounted.nodes().filter(node => node.tagName === 'BUTTON');
+    const open = buttons.find(node => mounted.props(node)['aria-label'] === 'Open Eadwyn for this page');
+    if (open) await act(async () => mounted.props(open).onClick());
+    return { buttons: buttons.length, open: !!open, panel: { ...out.panel }, text: mounted.text() };
+  } finally {
+    await mounted.unmount();
+    __resetEadwynPanelForTest();
+  }
+}
+
+test('D699 the bar draws D698\'s Eadwyn button from eadwynLabel, only for a viewer the panel serves (test 10)', async () => {
+  const served = await barButtons({ eadwynLabel: 'Account · Usage' }, { served: true });
+  assert.equal(served.open, true, 'no "Open Eadwyn for this page" button');
+  assert.equal(served.buttons, 1, 'the bar draws a second button beside EadwynButton');
+  assert.equal(served.panel.triggered, true, 'the button did not register its trigger, so the floating button stays');
+  assert.equal(served.panel.open, true, 'the button did not open the panel');
+  assert.equal(served.panel.label, 'Account · Usage', 'the panel opened without the bar\'s eadwynLabel');
+
+  const unserved = await barButtons({ eadwynLabel: 'Usage' }, { served: false });
+  assert.equal(unserved.buttons, 0, 'a viewer the panel does not serve got a button or a stand-in');
+
+  const none = await barButtons({}, { served: true });
+  assert.equal(none.buttons, 0, 'a bar with no eadwynLabel drew a button');
+
+  const action = await barButtons({ eadwynLabel: 'Usage', action: h('a', { href: '/menu' }, 'Menu') }, { served: true });
+  assert.equal(action.open, false, 'action did not replace the Eadwyn button');
+  assert.match(action.text, /Menu/);
+
+  assert.match(read('frontend/src/ui/phone/PhoneBar.jsx'), /import \{ EadwynButton \} from '\.\.\/EadwynPanel\.jsx';/);
+  assert.doesNotMatch(read('frontend/src/ui/phone/PhoneBar.jsx'), /aria-label="Open Eadwyn for this page"/, 'the bar draws its own copy of the button');
 });

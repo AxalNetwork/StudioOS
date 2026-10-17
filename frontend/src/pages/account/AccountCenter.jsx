@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Card, PhoneBar, PhoneRows, SectionLabel, Skeleton } from '../../ui';
 import { ACCOUNT_PHONE_PAGES, accountIndexGroups } from './accountPhone';
+import { PHONE_PAGE } from './AccountPhonePage';
 import { accentChipClass } from '../../workspaces/shellConfig';
 
 /**
@@ -238,9 +239,7 @@ export function AccountPhoneIndex({ role, follows, billing }) {
   );
 }
 
-// The shell pads the page (`p-4 md:p-6`, App.jsx); the phone view takes that
-// back so the bar spans the width, and its body takes AMP's 22px gutter.
-const PHONE_PAGE = '-m-4 md:-m-6 lg:m-0 min-h-screen bg-white dark:bg-gray-950';
+// The phone page's gutter is `PHONE_PAGE`, shared with A4m–A10m (AccountPhonePage.jsx).
 
 /**
  * D700 — the phone's `/account`. `view` is `accountViewFor`'s answer and

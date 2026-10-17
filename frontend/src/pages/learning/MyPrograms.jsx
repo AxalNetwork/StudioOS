@@ -121,7 +121,6 @@ function OpenProgram({ program, onEnrol, enrolling, error }) {
  */
 export function MyProgramsSection({ enrolled, open, onEnrol, enrolling = null, said = null, onRetry = {} }) {
   const rows = enrolled?.status === 'ready' ? enrolled.rows || [] : [];
-  const joinable = open?.status === 'ready' ? (open.programs || []).filter((p) => !p.enrolled) : [];
   let body;
   if (isLoading(enrolled)) body = <LearningLoading rows={2} what="your programs" />;
   else if (enrolled.status !== 'ready') body = <LearningUnreadable what="Your programs" claim="This is not a claim that you are in none." onRetry={onRetry.enrolled} />;
@@ -136,23 +135,7 @@ export function MyProgramsSection({ enrolled, open, onEnrol, enrolling = null, s
   return (
     <SectionCard title="My programs" meta={rows.length ? `${rows.length}` : null} testid="section-programs">
       {body}
-      {isLoading(open) && enrolled?.status === 'ready' && <div className="mt-3"><LearningLoading rows={1} what="the programs open to you" /></div>}
-      {open?.status === 'unreadable' && (
-        <div className="mt-3">
-          <RouteUnreadable reason="The programs open to self-enrolment could not be read, so this is not a claim that there are none." onRetry={onRetry.open} testid="open-programs-unreadable" />
-        </div>
-      )}
-      {joinable.length > 0 && (
-        <div className="mt-3 border-t border-axal-hairline pt-3 dark:border-gray-800" data-testid="list-open-programs">
-          <h3 className="text-[12.5px] font-bold text-axal-ink dark:text-gray-100">Open to join</h3>
-          <p className="mb-2 text-[11.5px] text-axal-faint dark:text-gray-500">You can join these yourself. Only a Super Admin can take you out of a program.</p>
-          <ul className="divide-y divide-axal-hairline dark:divide-gray-800">
-            {joinable.map((p) => (
-              <OpenProgram key={p.uid} program={p} onEnrol={onEnrol} enrolling={enrolling} error={said?.uid === p.uid ? said.message : ''} />
-            ))}
-          </ul>
-        </div>
-      )}
+      <OpenPrograms enrolled={enrolled} open={open} onEnrol={onEnrol} enrolling={enrolling} said={said} onRetry={onRetry} />
       <p className="mt-3 text-[11.5px] text-axal-faint dark:text-gray-500">Most programs are by invitation: a Super Admin enrols their members.</p>
     </SectionCard>
   );
@@ -179,6 +162,35 @@ export function useMyPrograms(enabled = true) {
     }
   };
   return { enrolled, open, onEnrol, enrolling, said, onRetry: { enrolled: retryEnrolled, open: retryOpen } };
+}
+
+/**
+ * "Open to join": the programs the member may enrol in themselves, with the
+ * enrol button. Part of My programs, and kept under A8m on a phone (D700).
+ */
+export function OpenPrograms({ enrolled, open, onEnrol, enrolling = null, said = null, onRetry = {} }) {
+  const joinable = open?.status === 'ready' ? (open.programs || []).filter((p) => !p.enrolled) : [];
+  return (
+    <>
+      {isLoading(open) && enrolled?.status === 'ready' && <div className="mt-3"><LearningLoading rows={1} what="the programs open to you" /></div>}
+      {open?.status === 'unreadable' && (
+        <div className="mt-3">
+          <RouteUnreadable reason="The programs open to self-enrolment could not be read, so this is not a claim that there are none." onRetry={onRetry.open} testid="open-programs-unreadable" />
+        </div>
+      )}
+      {joinable.length > 0 && (
+        <div className="mt-3 border-t border-axal-hairline pt-3 dark:border-gray-800" data-testid="list-open-programs">
+          <h3 className="text-[12.5px] font-bold text-axal-ink dark:text-gray-100">Open to join</h3>
+          <p className="mb-2 text-[11.5px] text-axal-faint dark:text-gray-500">You can join these yourself. Only a Super Admin can take you out of a program.</p>
+          <ul className="divide-y divide-axal-hairline dark:divide-gray-800">
+            {joinable.map((p) => (
+              <OpenProgram key={p.uid} program={p} onEnrol={onEnrol} enrolling={enrolling} error={said?.uid === p.uid ? said.message : ''} />
+            ))}
+          </ul>
+        </div>
+      )}
+    </>
+  );
 }
 
 /**

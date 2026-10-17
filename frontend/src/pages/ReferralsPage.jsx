@@ -19,16 +19,9 @@ import { parseLinkedInCsv, PENDING_LINKEDIN_IMPORT_KEY } from '../lib/linkedinCs
 import { useToast } from '../components/useToast';
 import ToastMessage from '../components/ToastMessage';
 import { Unreadable } from '../ui';
+import BrandIcon from '../ui/BrandIcon.jsx';
 import './referrals/referrals.css';
 import { appOrigin } from '../lib/branchHost';
-
-function LinkedinIcon({ size = 14 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M4.98 3.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zM3 9h4v12H3zM9 9h3.8v1.7h.05c.53-.95 1.83-1.95 3.77-1.95 4.03 0 4.78 2.5 4.78 5.76V21h-4v-5.6c0-1.34-.03-3.06-1.9-3.06-1.9 0-2.2 1.45-2.2 2.96V21H9z" />
-    </svg>
-  );
-}
 
 const STATUS_TONE = {
   draft: 'grey',
@@ -43,14 +36,6 @@ const STATUS_TONE = {
   rejected: 'red',
   closed: 'grey',
 };
-
-function FacebookIcon({ size = 14 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M14 9V6.8c0-1 .3-1.6 1.7-1.6H18V2h-3c-3 0-4.3 1.6-4.3 4.4V9H8v3.4h2.7V22H14v-9.6h3l.5-3.4H14z" />
-    </svg>
-  );
-}
 
 const PILL = 'inline-block whitespace-nowrap rounded-full px-2.5 py-1 text-[10.5px] font-bold';
 
@@ -164,6 +149,9 @@ function shareMessages(link, code) {
   };
 }
 
+// D687: each tile's glyph is BrandIcon's one copy, white on the tile's own colour
+// (tone="current"). The '𝕏', 'WA' and 'TG' text stand-ins are gone: screen readers
+// read them aloud, and the visible label already names the service.
 function sharePlatforms(link, code) {
   const m = shareMessages(link, code);
   const enc = encodeURIComponent;
@@ -172,17 +160,17 @@ function sharePlatforms(link, code) {
     {
       key: 'linkedin', label: 'LinkedIn', preview: m.linkedin.slice(0, 72) + '…', iconBg: '#0A66C2',
       go: () => window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${enc(m.shareUrl)}`, '_blank'),
-      icon: <LinkedinIcon size={16} />,
+      icon: <BrandIcon provider="linkedin" size={16} variant="bare" tone="current" />,
     },
     {
       key: 'x', label: 'X / Twitter', preview: m.x.slice(0, 72) + '…', iconBg: '#000000',
       go: () => window.open(`https://twitter.com/intent/tweet?text=${enc(m.x)}`, '_blank'),
-      icon: <span className="text-sm font-bold">𝕏</span>,
+      icon: <BrandIcon provider="x" size={16} variant="bare" tone="current" />,
     },
     {
       key: 'whatsapp', label: 'WhatsApp', preview: m.whatsapp.slice(0, 72) + '…', iconBg: '#25D366',
       go: () => window.open(`https://wa.me/?text=${enc(m.whatsapp)}`, '_blank'),
-      icon: <span className="text-xs">WA</span>,
+      icon: <BrandIcon provider="whatsapp" size={16} variant="bare" tone="current" />,
     },
     {
       // Facebook's sharer accepts a URL and NOTHING else — it ignores any text
@@ -193,12 +181,12 @@ function sharePlatforms(link, code) {
       copyNote: 'Caption copied — paste it into the Facebook composer',
       copyText: m.facebook,
       go: () => window.open(`https://www.facebook.com/sharer/sharer.php?u=${enc(m.shareUrl)}`, '_blank'),
-      icon: <FacebookIcon size={16} />,
+      icon: <BrandIcon provider="facebook" size={16} variant="bare" tone="current" />,
     },
     {
       key: 'telegram', label: 'Telegram', preview: m.telegram.slice(0, 72) + '…', iconBg: '#26A5E4',
       go: () => window.open(`https://t.me/share/url?url=${enc(m.shareUrl)}&text=${enc(m.telegram)}`, '_blank'),
-      icon: <span className="text-xs">TG</span>,
+      icon: <BrandIcon provider="telegram" size={16} variant="bare" tone="current" />,
     },
   ];
 }
@@ -930,7 +918,7 @@ export default function ReferralsPage({ embedded = false }) {
                 </div>
                 <div className="flex flex-none flex-wrap gap-2">
                   <button type="button" className="rf-btn inline-flex items-center gap-1.5 rounded-lg bg-[#0a66c2] px-4 py-2 text-[12.5px] font-bold text-white" onClick={importLinkedin}>
-                    <LinkedinIcon size={14} /> Import from LinkedIn
+                    <BrandIcon provider="linkedin" size={14} variant="bare" tone="current" /> Import from LinkedIn
                   </button>
                   <button type="button" className="rf-btn inline-flex items-center gap-1.5 rounded-lg bg-violet-700 px-4 py-2 text-[12.5px] font-bold text-white" onClick={() => csvInputRef.current?.click()}>
                     <Upload size={14} /> Upload CSV

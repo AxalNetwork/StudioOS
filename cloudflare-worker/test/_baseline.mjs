@@ -215,3 +215,23 @@ export function stripForeignKeys(ddl) {
     '',
   );
 }
+
+/**
+ * Apply a migration's `ALTER TABLE <table> ADD COLUMN` statements to a fixture
+ * built from the baseline, skipping a column the table already has — so the
+ * fixture keeps working once the baseline is re-dumped with the column in it.
+ *
+ * For a migration newer than `schema_baseline.sql` (463, D691, is the first
+ * caller): the fixture runs the migration's own SQL, never a hand-typed copy of
+ * the column. A `startsWith` walk, not a regex, for the reason the reader above
+ * gives.
+ */
+export function addColumnsFrom(db, migrationSql, table) {
+  const prefix = `ALTER TABLE ${table} ADD COLUMN `;
+  const have = new Set(db.prepare('SELECT name FROM pragma_table_info(?)').all(table).map((r) => r.name));
+  for (const stmt of splitStatements(migrationSql)) {
+    if (!stmt.startsWith(prefix)) continue;
+    const column = stmt.slice(prefix.length).trim().split(/\s/)[0];
+    if (!have.has(column)) db.exec(stmt);
+  }
+}

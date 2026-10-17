@@ -147,7 +147,8 @@ test('closing goes back to the page underneath, makes no server call, and a plai
   assert.match(route, /navigate\(`\/\$\{cycle\}\/\$\{def\.path\}\$\{q\}`, \{ state: \{ under: `\$\{location\.pathname\}\$\{location\.search\}` \} \}\)/);
   assert.match(route, /<RecordMount projectId=\{projectId\} interviewId=\{searchParams\.get\('interview'\)\}/);
   assert.match(route, /\{lightbox && Mount && projectId && \(/);
-  assert.match(route, /navigate\(`\/validate\/session\/\$\{session\.id\}`, \{ state: \{ interview \}, replace: true \}\)/, 'the session replaces /record, so Back does not reopen the setup');
+  // D694: `finishPath` names the page, and every finish replaces /record, so Back does not reopen the setup.
+  assert.match(route, /const to = finishPath\(session, where, projectId\);\s*navigate\(to, to\.startsWith\('\/validate\/session\/'\) \? \{ state: \{ interview \}, replace: true \} : \{ replace: true \}\);/, 'every finish replaces /record, so Back does not reopen the setup');
   const m = /const closeAction = \(\) => \{[\s\S]*?\n {2}\};/.exec(route)[0];
   assert.doesNotMatch(m, /api\.|fetch|sessions\./);
 });

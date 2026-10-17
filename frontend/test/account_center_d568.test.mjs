@@ -36,8 +36,10 @@ import {
 } from '../src/pages/account/accountCenterModel.js';
 import { AccountSectionNav, accountRailCoverage } from '../src/pages/account/AccountCenter.jsx';
 import ProfileIdentityCanvas, {
-  PersonalDetailsCard, IdentityCard, CompanyProfileCard, PublicArchetypeCard, ChangeHistoryCard,
+  PersonalDetailsCard, IdentityCard, CompanyProfileCard, SigningEntityCard, PublicArchetypeCard, ChangeHistoryCard,
 } from '../src/pages/account/AccountProfile.jsx';
+import { ActiveCompanyContext, mergeCompanyDetails, useUpdateCompanyDetails } from '../src/contexts/ActiveCompanyContext.js';
+import { setReadState } from '../src/ui/CompanySwitcher.jsx';
 import { PushDevicesCard, SessionsCard } from '../src/pages/account/AccountDevices.jsx';
 import { PlanHeader, OrdersCard } from '../src/pages/account/AccountBilling.jsx';
 import { FollowingList } from '../src/pages/account/AccountFollowing.jsx';
@@ -323,18 +325,80 @@ test('Identity: legal name, a birth date that does not shift a day, and countrie
   assert.match(none, /Legal name Not recorded Date of birth Not recorded Nationality Not recorded Tax residence Not recorded/);
 });
 
-test('Company profile: empty, filled, loading and unreadable are four different cards', () => {
-  const empty = html(h(CompanyProfileCard, { corporate: ready(CORP_EMPTY), onSave: noop }));
-  assert.match(empty, /data-testid="company-profile-empty"/);
-  assert.match(text(h(CompanyProfileCard, { corporate: ready(CORP_EMPTY), onSave: noop })), /No company profile yet\. Add one if you represent a company\. Add company profile/);
-  assert.doesNotMatch(empty, /button-edit-company/, 'nothing to edit until one is added');
-  const filled = text(h(CompanyProfileCard, { corporate: ready(CORP), onSave: noop }));
+test('Signing entity: empty, filled, loading and unreadable are four different cards', () => {
+  const empty = html(h(SigningEntityCard, { corporate: ready(CORP_EMPTY), onSave: noop }));
+  assert.match(empty, /data-testid="signing-entity-empty"/);
+  assert.match(text(h(SigningEntityCard, { corporate: ready(CORP_EMPTY), onSave: noop })), /No signing entity recorded\. Add the legal entity you sign for\. Add signing entity/);
+  assert.doesNotMatch(empty, /button-edit-signing-entity/, 'nothing to edit until one is added');
+  const filled = text(h(SigningEntityCard, { corporate: ready(CORP), onSave: noop }));
   assert.match(filled, /Company Quintero Labs SA Role CEO Registration CHE-123\.456\.789 Country Switzerland/);
-  assert.match(html(h(CompanyProfileCard, { corporate: ready(CORP), onSave: noop })), /data-testid="button-edit-company"/);
-  assert.match(html(h(CompanyProfileCard, { corporate: loading(), onSave: noop })), /data-testid="account-loading"/);
-  const bad = text(h(CompanyProfileCard, { corporate: unreadable(''), onSave: noop }));
-  assert.match(bad, /Your company profile could not be read\. This is not a claim that you have none\./);
+  assert.match(html(h(SigningEntityCard, { corporate: ready(CORP), onSave: noop })), /data-testid="button-edit-signing-entity"/);
+  assert.match(html(h(SigningEntityCard, { corporate: loading(), onSave: noop })), /data-testid="account-loading"/);
+  const bad = text(h(SigningEntityCard, { corporate: unreadable(''), onSave: noop }));
+  assert.match(bad, /Your signing entity could not be read\. This is not a claim that you have none\./);
   assert.doesNotMatch(bad, /No company profile yet/);
+});
+
+const COMPANY_A = { id: 7, uid: 'company-a', company_name: 'Example Labs', my_role: 'Founder', is_primary_admin: true, stage: 'Seed', website: 'https://example.com', cycles_active: ['build'] };
+const COMPANY_B = { id: 8, uid: 'company-b', company_name: 'Other Labs', my_role: 'Viewer' };
+const companyCard = (company) => h(ActiveCompanyContext.Provider, { value: { company } }, h(CompanyProfileCard));
+
+test('Company profile follows the selected company even when the signing entity is empty', (t) => {
+  t.after(() => setReadState({ loading: true, failed: false }));
+  setReadState({ loading: false, failed: false });
+  const first = html(companyCard(COMPANY_A));
+  assert.match(text(companyCard(COMPANY_A)), /Company Example Labs Role Founder Stage Seed Website https:\/\/example.com/);
+  assert.match(first, /href="\/company-settings"/);
+  assert.doesNotMatch(first, /No company|Add company profile/);
+  assert.match(text(companyCard(COMPANY_B)), /Company Other Labs Role Viewer/);
+  assert.doesNotMatch(html(companyCard(COMPANY_B)), /Example Labs|https:\/\/example.com/);
+  const canvas = html(h(ActiveCompanyContext.Provider, { value: { company: COMPANY_A } }, h(ProfileIdentityCanvas, { data: ACCOUNT })));
+  assert.match(canvas, /Example Labs/);
+  assert.match(canvas, /card-signing-entity/);
+});
+
+test('Company profile distinguishes an empty membership list, loading and a failed read', (t) => {
+  t.after(() => setReadState({ loading: true, failed: false }));
+  setReadState({ loading: false, failed: false });
+  const empty = html(companyCard(null));
+  assert.match(empty, /No company selected/);
+  assert.match(empty, /href="\/company-settings"/);
+  setReadState({ loading: true, failed: false });
+  assert.match(html(companyCard(null)), /account-loading/);
+  assert.doesNotMatch(html(companyCard(null)), /No company selected/);
+  setReadState({ loading: false, failed: true });
+  assert.match(html(companyCard(null)), /Your company profile could not be read/);
+  assert.doesNotMatch(html(companyCard(null)), /No company selected/);
+});
+
+test('company edits update the selected profile and the dropdown without losing membership metadata', () => {
+  let company = COMPANY_A;
+  let companies = [COMPANY_A, COMPANY_B];
+  let update;
+  function Capture() { update = useUpdateCompanyDetails(); return null; }
+  html(h(ActiveCompanyContext.Provider, { value: {
+    company, companies,
+    setCompany: fn => { company = fn(company); },
+    setCompanies: fn => { companies = fn(companies); },
+  } }, h(Capture)));
+  update({ id: 7, uid: 'company-a', company_name: 'Renamed Labs', website: 'https://renamed.example' });
+  assert.equal(company.company_name, 'Renamed Labs');
+  assert.equal(companies[0].company_name, 'Renamed Labs');
+  assert.equal(company.website, 'https://renamed.example');
+  assert.equal(company.my_role, 'Founder');
+  assert.equal(company.is_primary_admin, true);
+  assert.deepEqual(company.cycles_active, ['build']);
+  assert.strictEqual(companies[1], COMPANY_B);
+  // The user switches while the old company's request is in flight.
+  company = COMPANY_B;
+  update({ id: 7, uid: 'company-a', company_name: 'Later save' });
+  assert.strictEqual(company, COMPANY_B);
+  assert.equal(companies[0].company_name, 'Later save');
+  company = null;
+  update({ uid: 'company-a', company_name: 'After leaving' });
+  assert.equal(company, null);
+  assert.strictEqual(mergeCompanyDetails(COMPANY_A, null), COMPANY_A);
+  assert.strictEqual(mergeCompanyDetails(COMPANY_A, {}), COMPANY_A);
 });
 
 test('Public archetype: the archetype, its confidence and the publish switch; or why there is none', () => {

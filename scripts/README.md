@@ -158,6 +158,7 @@ pull.
 | `fixtures/` | Small inputs for the importers. `shai-goldman-sample.csv` has the third fund list's shape and no real row from that list. |
 | `ci/` | CI-only entry points. |
 | `og-assets/` | Open Graph image sources. |
+| `claude-review/` | The advisory pull-request review on the Anthropic Messages API (`claude-review.yml`): `review.mjs`, its own `package.json` pinning the SDK, and `rates.json`. Its rules live in `lib/claudeReview.mjs`. |
 | `__pycache__/` | Python bytecode. Not source. |
 
 ## Adding a guard

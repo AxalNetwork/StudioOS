@@ -22,7 +22,8 @@ import { Link } from 'react-router-dom';
 import { Loader2, Lock } from 'lucide-react';
 import { api, assessment } from '../lib/api';
 import { reportError } from '../lib/log';
-import { Unreadable } from '../ui';
+import { PhoneBar, Unreadable, usePhoneWidth } from '../ui';
+import { EadwynMenuButton } from './profile/ProfileFrame';
 import { XpBar } from '../components/profile/xpBar';
 import { openPaywall } from '../components/PaywallModal';
 import { archetypeLock, lockedLine, lockedPlanName } from '../lib/archetypeLock';
@@ -44,7 +45,7 @@ export function complementAccent(label) {
   return ACCENT_BY_LABEL[label] || '#ececf1';
 }
 
-function confidencePct(value) {
+export function confidencePct(value) {
   if (value == null) return null;
   if (typeof value === 'number') {
     return Number.isFinite(value) ? Math.max(0, Math.min(100, Math.round(value * 100))) : null;
@@ -71,8 +72,193 @@ function BannerImg({ src, className }) {
   );
 }
 
+// The page's own styles, shared by both layouts. D702 (#1664) adds the phone
+// banner's rules after them: a 4:3 ratio and the canvas's bottom gradient
+// (SMP:25), in classes of their own, so `.acp-hero` keeps 21:9 and `.acp-well`
+// draws no gradient (D620) at 1024px and up.
+const ACP_STYLE = `
+  .acp-lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; }
+  .acp-mono { font-family: 'Roboto Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+  .acp-card { border-radius: 16px; box-shadow: 0 1px 2px rgba(24,24,27,.03); overflow: hidden; }
+  .acp-hero { position: relative; aspect-ratio: 21 / 9; background: linear-gradient(115deg, #5b21b6 0%, #7c3aed 48%, #6d28d9 100%); overflow: hidden; }
+  .acp-hero img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; }
+  .acp-split { position: absolute; inset: 0; display: grid; grid-template-columns: 1fr 1fr; }
+  .acp-split img { position: relative; width: 100%; height: 100%; object-fit: cover; }
+  /* D620 — the still carries its own #140c26 well down the left, so the
+     overlay draws no gradient of its own: only a text shadow. */
+  .acp-well {
+    position: absolute; left: 0; bottom: 0; width: 42%; min-width: min(360px, 100%);
+    padding: 0 24px 29px; box-sizing: border-box;
+    color: #fff;
+    pointer-events: none;
+  }
+  .acp-bloom { color: #c4b5fd; }
+  .acp-chip { font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 9px; border-radius: 99px; white-space: nowrap; background: rgba(255,255,255,.16); color: #fff; border: 1px solid rgba(255,255,255,.3); }
+  .acp-pill { background: #7c3aed; border-color: #7c3aed; text-transform: none; letter-spacing: 0; font-size: 11px; }
+  .acp-title { margin: 8px 0 0; font-size: 32px; font-weight: 900; letter-spacing: -.025em; line-height: 1.05; color: #fff; text-shadow: 0 2px 10px rgba(0,0,0,.55); }
+  .acp-tagline { font-size: 15px; font-weight: 500; color: #f4f0fe; text-shadow: 0 1px 6px rgba(0,0,0,.5); }
+  .acp-hairline { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; }
+  .acp-wellbox { border-radius: 12px; padding: 16px 18px; background: #f8f7fb; border: 1px solid #ececf1; }
+  .dark .acp-wellbox { background: #18181b; border-color: #27272a; }
+  .acp-comp { display: inline-flex; align-items: center; font-size: 11.5px; font-weight: 600; padding: 5px 11px; border-radius: 99px; border: 1px solid #ececf1; background: #fff; color: #18181b; }
+  .dark .acp-comp { background: #111827; color: #f4f4f5; }
+  .acp-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; }
+  @media (max-width: 720px) {
+    .acp-well { width: 100%; min-width: 0; padding: 0 14px 15px; }
+    .acp-title { font-size: 24px; }
+    .acp-tagline { display: none; }
+  }
+  .acp-hero.acp-hero-phone { aspect-ratio: 4 / 3; border-radius: 16px; }
+  .acp-fade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(20,12,38,0) 35%, rgba(20,12,38,.86) 100%); pointer-events: none; }
+  .acp-phone-well { position: absolute; left: 16px; right: 16px; bottom: 14px; display: flex; flex-direction: column; gap: 4px; color: #fff; }
+  .acp-phone-well .acp-tagline { display: block; font-size: 13px; color: #ede9fe; }
+  .acp-phone-well .acp-title { margin: 4px 0 0; font-size: 24px; }
+`;
+
+// ---------------------------------------------------------------------------
+// D702 (#1664) — board S8m, the card on a phone (SMP:25, :146-152).
+// ---------------------------------------------------------------------------
+
+export const PHONE_TITLE = 'Archetype card';
+export const PHONE_SUB = 'Read from your conversations with Eadwyn, not a quiz.';
+// The canvas's "Members see your archetype name and tagline" is not true:
+// `/published-members` serves each member's name, role and archetype (and a
+// values band to a caller who has published), and no tagline (D702).
+export const PUBLISHED_SUB = 'Members see your name, role and archetype. Those who publish theirs also see how your values compare.';
+
+function PhoneHeading({ children }) {
+  return <h2 className="mb-2 text-[10px] font-extrabold uppercase tracking-wide text-gray-700 dark:text-gray-300">{children}</h2>;
+}
+
+function PhoneList({ items, dot, testid }) {
+  return (
+    <div className="border-t border-[#f0eff3] dark:border-gray-800" data-testid={testid}>
+      {items.map((t) => (
+        <div key={t} className="flex min-h-[44px] items-start gap-[9px] border-b border-[#f0eff3] py-2.5 text-[14px] leading-snug text-gray-900 dark:border-gray-800 dark:text-gray-100">
+          <span className="mt-[7px] h-[6px] w-[6px] shrink-0 rounded-full" style={{ background: dot }} aria-hidden="true" />
+          <span>{t}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** "Shown to members": the existing publish toggle, as a row. */
+export function PublishedRow({ publish, onToggle, onRetry }) {
+  const ready = publish?.state === 'ready';
+  const on = ready && publish.published === true;
+  return (
+    <div className="flex min-h-[56px] items-center gap-3 border-y border-[#f0eff3] py-[9px] dark:border-gray-800" data-testid="archetype-published-row">
+      <div className="min-w-0 flex-1">
+        <div className="text-[14px] font-semibold text-gray-900 dark:text-gray-100" id="archetype-published-label">Published</div>
+        <div className="mt-0.5 text-[12px] text-[#615c6e] dark:text-gray-400">{PUBLISHED_SUB}</div>
+        {ready && publish.saveFailed && <div role="alert" className="mt-0.5 text-[12px] font-semibold text-red-700 dark:text-red-300">Your choice was not saved. Try again.</div>}
+      </div>
+      {publish?.state === 'loading' && <span className="text-[12px] text-gray-600 dark:text-gray-400">Loading…</span>}
+      {publish?.state === 'unreadable' && <Unreadable what="Whether yours is published" claim="" onRetry={onRetry} />}
+      {ready && (
+        <button
+          type="button"
+          role="switch"
+          aria-checked={on ? 'true' : 'false'}
+          aria-labelledby="archetype-published-label"
+          disabled={publish.saving}
+          onClick={() => onToggle?.(!on)}
+          className={`relative h-6 w-10 flex-none rounded-full disabled:opacity-60 ${on ? 'bg-violet-600' : 'bg-[#d4d1dc] dark:bg-gray-600'}`}
+          data-testid="archetype-published-switch"
+        >
+          <span className={`absolute top-[3px] h-[18px] w-[18px] rounded-full bg-white ${on ? 'right-[3px]' : 'left-[3px]'}`} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The page below 1024px: `PhoneBar` in place of the crumb row, the 4:3 banner
+ * with the canvas's gradient, the canvas's sections stacked, "Shown to
+ * members", then the page's other sections, so nothing is lost. A founder's
+ * bar carries the Eadwyn menu button; no other role's does, since the menu
+ * is a founder's.
+ */
+export function PhoneArchetypePage({ activeRole, latest, meta, sex, pct, title, accent, licence, xp, onRetryXp, publish, onTogglePublish, onRetryPublish, states, sections }) {
+  return (
+    <div className="acp-root -m-4 min-h-full bg-white text-gray-900 md:-m-6 lg:m-0 dark:bg-gray-950 dark:text-gray-100" data-testid="archetype-card-page" data-phone="true">
+      <style>{ACP_STYLE}</style>
+      <PhoneBar
+        back={{ label: 'Studio', to: '/studio' }}
+        title={PHONE_TITLE}
+        sub={PHONE_SUB}
+        action={activeRole === 'founder' ? <EadwynMenuButton active="/studio/archetype" /> : undefined}
+      />
+      <div className="flex flex-col gap-5 px-[22px] pb-4 pt-4">
+        {states}
+        {latest && (
+          <>
+            <div className="acp-hero acp-hero-phone" data-testid="archetype-banner" data-sex={sex} style={{ '--arch-accent': accent }}>
+              {sex === 'both' ? (
+                <div className="acp-split">
+                  <BannerImg src={archetypeBanner(latest.slug, 'f')} />
+                  <BannerImg src={archetypeBanner(latest.slug, 'm')} />
+                </div>
+              ) : (
+                <BannerImg src={archetypeBanner(latest.slug, sex)} />
+              )}
+              <div className="acp-fade" aria-hidden="true" />
+              <div className="acp-phone-well">
+                <span className="acp-chip self-start" data-testid="archetype-licence">{licence}</span>
+                <span className="acp-lbl acp-bloom mt-1">Primary archetype</span>
+                <span className="flex items-baseline gap-2">
+                  <h2 className="acp-title" data-testid="archetype-title">{title}</h2>
+                  {pct != null && <span className="text-[12px] font-extrabold text-[#c4b5fd]" data-testid="archetype-confidence-pill">{pct}%</span>}
+                </span>
+                {meta?.tagline && <span className="acp-tagline" data-testid="archetype-tagline">{meta.tagline}</span>}
+              </div>
+              <div className="acp-hairline" style={{ background: accent }} aria-hidden="true" />
+            </div>
+            {meta?.tagline && <section><PhoneHeading>Core approach</PhoneHeading><p className="text-[14.5px] leading-relaxed text-[#2b2735] dark:text-gray-200">{meta.tagline}</p></section>}
+            {meta?.description && <section><PhoneHeading>Description</PhoneHeading><p className="text-[14.5px] leading-relaxed text-[#2b2735] dark:text-gray-200">{meta.description}</p></section>}
+            <section><PhoneHeading>Strengths</PhoneHeading><PhoneList items={meta?.strengths || []} dot="#15803d" testid="archetype-strengths" /></section>
+            <section><PhoneHeading>Blind spots</PhoneHeading><PhoneList items={meta?.blindSpots || []} dot="#b45309" testid="archetype-blindspots" /></section>
+            <section data-testid="archetype-complements">
+              <PhoneHeading>Complements</PhoneHeading>
+              <div className="flex flex-wrap gap-2">
+                {(meta?.complements || []).map((c) => (
+                  <span key={c} className="acp-comp min-h-9" style={{ borderColor: complementAccent(c) }}>
+                    <span className="acp-dot" style={{ background: complementAccent(c) }} aria-hidden="true" />
+                    {c}
+                  </span>
+                ))}
+              </div>
+            </section>
+            <section><PhoneHeading>Shown to members</PhoneHeading><PublishedRow publish={publish} onToggle={onTogglePublish} onRetry={onRetryPublish} /></section>
+            <div className="acp-wellbox" data-testid="archetype-confidence">
+              <div className="acp-lbl text-[#a1a1aa]">Confidence</div>
+              <div className="mt-1.5 flex items-baseline gap-2.5">
+                <span className="acp-mono text-[28px] font-bold tracking-[-0.02em] text-[#7c3aed] dark:text-violet-300">{pct != null ? `${pct}%` : 'N/A'}</span>
+                <span className="text-[12.5px] text-[#71717a] dark:text-gray-400">{pct != null ? 'from your conversation with Eadwyn' : 'no reading recorded yet'}</span>
+              </div>
+              <div className="mt-4"><XpBar xp={xp} onRetry={onRetryXp} /></div>
+            </div>
+            <div className="acp-wellbox">
+              <div className="acp-lbl text-[#a1a1aa]">How we read this</div>
+              <div className="mt-1.5 text-[12.5px] leading-[1.5] text-[#3f3f46] dark:text-gray-300">From your conversation with Eadwyn, not a quiz.</div>
+            </div>
+            <div className="flex items-center justify-between px-1">
+              <span className="acp-lbl text-[#71717a] dark:text-gray-400">Illustration</span>
+              <span className="acp-mono text-[11px] text-[#71717a] dark:text-gray-400" data-testid="archetype-illustration">{sex === 'both' ? 'm · f (both)' : sex}</span>
+            </div>
+          </>
+        )}
+        {sections}
+      </div>
+    </div>
+  );
+}
+
 export default function ArchetypeCardPage({ activeRole }) {
   const audience = archetypeAudienceFromRole(activeRole);
+  const phone = usePhoneWidth();
   const [fit, setFit] = useState({ data: null, error: '' });
   const [xp, setXp] = useState({ state: 'loading', data: null });
   const [retry, setRetry] = useState(0);
@@ -194,42 +380,9 @@ export default function ArchetypeCardPage({ activeRole }) {
       });
   }, [readMembers]);
 
-  return (
-    <div className="acp-root max-w-5xl mx-auto" data-testid="archetype-card-page">
-      <style>{`
-        .acp-lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; }
-        .acp-mono { font-family: 'Roboto Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
-        .acp-card { border-radius: 16px; box-shadow: 0 1px 2px rgba(24,24,27,.03); overflow: hidden; }
-        .acp-hero { position: relative; aspect-ratio: 21 / 9; background: linear-gradient(115deg, #5b21b6 0%, #7c3aed 48%, #6d28d9 100%); overflow: hidden; }
-        .acp-hero img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; }
-        .acp-split { position: absolute; inset: 0; display: grid; grid-template-columns: 1fr 1fr; }
-        .acp-split img { position: relative; width: 100%; height: 100%; object-fit: cover; }
-        /* D620 — the still carries its own #140c26 well down the left, so the
-           overlay draws no gradient of its own: only a text shadow. */
-        .acp-well {
-          position: absolute; left: 0; bottom: 0; width: 42%; min-width: min(360px, 100%);
-          padding: 0 24px 29px; box-sizing: border-box;
-          color: #fff;
-          pointer-events: none;
-        }
-        .acp-bloom { color: #c4b5fd; }
-        .acp-chip { font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 9px; border-radius: 99px; white-space: nowrap; background: rgba(255,255,255,.16); color: #fff; border: 1px solid rgba(255,255,255,.3); }
-        .acp-pill { background: #7c3aed; border-color: #7c3aed; text-transform: none; letter-spacing: 0; font-size: 11px; }
-        .acp-title { margin: 8px 0 0; font-size: 32px; font-weight: 900; letter-spacing: -.025em; line-height: 1.05; color: #fff; text-shadow: 0 2px 10px rgba(0,0,0,.55); }
-        .acp-tagline { font-size: 15px; font-weight: 500; color: #f4f0fe; text-shadow: 0 1px 6px rgba(0,0,0,.5); }
-        .acp-hairline { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; }
-        .acp-wellbox { border-radius: 12px; padding: 16px 18px; background: #f8f7fb; border: 1px solid #ececf1; }
-        .dark .acp-wellbox { background: #18181b; border-color: #27272a; }
-        .acp-comp { display: inline-flex; align-items: center; font-size: 11.5px; font-weight: 600; padding: 5px 11px; border-radius: 99px; border: 1px solid #ececf1; background: #fff; color: #18181b; }
-        .dark .acp-comp { background: #111827; color: #f4f4f5; }
-        .acp-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; }
-        @media (max-width: 720px) {
-          .acp-well { width: 100%; min-width: 0; padding: 0 14px 15px; }
-          .acp-title { font-size: 24px; }
-          .acp-tagline { display: none; }
-        }
-      `}</style>
-
+  // The desktop's crumb row; on a phone `PhoneBar` takes its place.
+  const crumbs = (
+    <>
       {/* D620 — board A5's crumb row. "‹ Back to studio" sits at the card's
           foot; this is the way back from every state, the empty and locked
           ones included. */}
@@ -237,7 +390,12 @@ export default function ArchetypeCardPage({ activeRole }) {
         <Link to="/studio" className="text-[12px] font-semibold text-[#a1a1aa] hover:text-[#7c3aed]" data-testid="archetype-crumb-studio">‹ Studio</Link>
         <span className="acp-mono text-[11px] text-[#a1a1aa]">Profile &amp; Fit · Archetype</span>
       </div>
-
+    </>
+  );
+  // The states and the sections both layouts draw: loading, unreadable,
+  // locked and empty stay as they are on a phone (D702, #1664).
+  const stateBlocks = (
+    <>
       {loading && (
         <div className="acp-card bg-white dark:bg-gray-900 border border-[#ececf1] dark:border-gray-700 p-[48px] flex justify-center text-gray-400">
           <Loader2 className="animate-spin" size={22} />
@@ -279,6 +437,55 @@ export default function ArchetypeCardPage({ activeRole }) {
           Answer a few archetype questions with Eadwyn to reveal your archetype.
         </div>
       )}
+
+    </>
+  );
+  const sectionBlocks = (
+    <>
+      {/* D619 — the three sections, once the archetype read has settled. Skills
+          always; the history and the matches belong to an archetype, so they
+          show with one (or the history's "not classified" line, or the
+          matches' lock when the plan withholds the archetype). */}
+      {!loading && (
+        <div className="mt-9 flex flex-col gap-9" data-testid="archetype-sections">
+          <SkillsSection state={skills.state} model={skillsModel} onRetry={readSkills} />
+          {latest && (
+            <HistorySection state={history.state} view={historyView} cardLabel={title} onRetry={readHistory} />
+          )}
+          {!latest && !lock && !failed && <HistorySection state="unclassified" />}
+          {(latest || lock) && (
+            <MatchesSection
+              state={lock ? 'locked' : members.state}
+              groups={groups}
+              reply={members.reply}
+              publish={publish}
+              onTogglePublish={togglePublish}
+              onRetryPublish={readPublish}
+              onRetry={() => readMembers()}
+            />
+          )}
+        </div>
+      )}
+    </>
+  );
+
+  if (phone) {
+    return (
+      <PhoneArchetypePage
+        activeRole={activeRole} latest={latest} meta={meta} sex={sex} pct={pct} title={title} accent={accent} licence={licence}
+        xp={xp} onRetryXp={readXp} publish={publish} onTogglePublish={togglePublish} onRetryPublish={readPublish}
+        states={stateBlocks} sections={sectionBlocks}
+      />
+    );
+  }
+
+  return (
+    <div className="acp-root max-w-5xl mx-auto" data-testid="archetype-card-page">
+      <style>{ACP_STYLE}</style>
+
+      {crumbs}
+
+      {stateBlocks}
 
       {latest && (
         <article className="acp-card bg-white dark:bg-gray-900 border border-[#ececf1] dark:border-gray-700" style={{ '--arch-accent': accent }}>
@@ -407,30 +614,7 @@ export default function ArchetypeCardPage({ activeRole }) {
         </article>
       )}
 
-      {/* D619 — the three sections, once the archetype read has settled. Skills
-          always; the history and the matches belong to an archetype, so they
-          show with one (or the history's "not classified" line, or the
-          matches' lock when the plan withholds the archetype). */}
-      {!loading && (
-        <div className="mt-9 flex flex-col gap-9" data-testid="archetype-sections">
-          <SkillsSection state={skills.state} model={skillsModel} onRetry={readSkills} />
-          {latest && (
-            <HistorySection state={history.state} view={historyView} cardLabel={title} onRetry={readHistory} />
-          )}
-          {!latest && !lock && !failed && <HistorySection state="unclassified" />}
-          {(latest || lock) && (
-            <MatchesSection
-              state={lock ? 'locked' : members.state}
-              groups={groups}
-              reply={members.reply}
-              publish={publish}
-              onTogglePublish={togglePublish}
-              onRetryPublish={readPublish}
-              onRetry={() => readMembers()}
-            />
-          )}
-        </div>
-      )}
+      {sectionBlocks}
     </div>
   );
 }

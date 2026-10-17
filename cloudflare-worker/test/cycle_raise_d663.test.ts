@@ -14,6 +14,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
@@ -32,6 +33,8 @@ const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const BASELINE = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
 const sqlOf = (file: string) => readFileSync(resolve(process.cwd(), `cloudflare-worker/sql/migrations/${file}`), 'utf8');
 const MIG442 = sqlOf('442_raise_cycle_stores.sql');
+// D691 (#1699): the lists read migration 463's columns (a link's investor, a file's access, a prospect's fund).
+const MIG463 = sqlOf('463_raise_record_stores.sql');
 
 const FOUNDER = 10, OTHER = 20, ADMIN = 30, PARTNER = 40, INVESTOR = 50;
 const P = 1, P_OTHER = 2;
@@ -50,6 +53,7 @@ function fixture() {
   }
   db.exec(sqlOf('249_project_metrics.sql'));
   db.exec(MIG442);
+  db.exec(MIG463);
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (?, ?, ?, ?, 1, ?)');
   u.run(FOUNDER, 'founder', 'Fay Founder', 'fay@example.test', 1001);
   u.run(OTHER, 'founder', 'Bo Other', 'bo@example.test', 1002);
@@ -143,7 +147,7 @@ test('readiness with no items returns empty, with the action that starts it', as
   const c = card(r.body, 'fundraising-readiness');
   assert.equal(c.state, 'empty');
   assert.equal(c.series, null);
-  assert.deepEqual(c.next, { text: 'Score fundraising readiness', href: `/raise/fundraising-readiness?project=${P}` });
+  assert.deepEqual(c.next, { text: 'Score readiness', href: `/raise/fundraising-readiness?project=${P}&add=1` });
   assert.equal(fig(r.body, 'readiness_score').state, 'empty');
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM readiness_items').get().n, 0, 'reading creates no item');
 
@@ -266,9 +270,12 @@ test('capSlideSeconds bounds a slide by what the view has left', () => {
 test('per-slide time never exceeds the view\'s total', async () => {
   const db = fixture();
   db.exec(`INSERT INTO pitch_decks (id, project_id, version, slides) VALUES (5, ${P}, 1, '[]'), (6, ${P_OTHER}, 1, '[]')`);
-  db.exec(`INSERT INTO pitch_deck_share_tokens (id, deck_id, token_hash, expires_at) VALUES (1, 5, 'h1', '2999-01-01 00:00:00')`);
-  db.exec(`INSERT INTO deck_share_views (id, share_token_id, deck_id, read_seconds) VALUES (7, 1, 5, 0), (8, 1, 6, 0)`);
   const tok = await shareToken(5);
+  // D691 decision 5 (#1700) — the heartbeat counts only for a live link, so the
+  // row carries the hash of the token the beats are sent with.
+  db.prepare(`INSERT INTO pitch_deck_share_tokens (id, deck_id, token_hash, expires_at) VALUES (1, 5, ?, '2999-01-01 00:00:00')`)
+    .run(createHash('sha256').update(tok).digest('hex'));
+  db.exec(`INSERT INTO deck_share_views (id, share_token_id, deck_id, read_seconds) VALUES (7, 1, 5, 0), (8, 1, 6, 0)`);
 
   assert.equal(await heartbeat(db, tok, { view_id: 7, seconds: 60, slides: { 0: 50, 1: 30 } }), 200);
   assert.equal(readOf(db, 7), 60);
@@ -369,8 +376,9 @@ test('data room: checklist coverage by area, a file matched through the writer, 
   assert.equal(c.series[1].items[0].label, 'Ivy Investor');
   assert.equal(c.next.text, 'Match 1 file to the diligence checklist');
   const rec = await moduleRead(db, 'data-room', '&sort=name');
+  // D691: Access is the file's tier (463's default, invited) with its NDA gate.
   assert.deepEqual(rec.body.records.rows.map((r: any) => [r.cells.file, r.cells.folder, r.cells.answers, r.cells.access]),
-    [['COI.pdf', 'Legal', 'Certificate of incorporation', 'NDA'], ['Model.xlsx', 'Top level', null, 'Open']]);
+    [['COI.pdf', 'Legal', 'Certificate of incorporation', 'Invited investors · NDA'], ['Model.xlsx', 'Top level', null, 'Invited investors']]);
 });
 
 test('cap table: ownership by group before and after the first planned round', async () => {

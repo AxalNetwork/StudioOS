@@ -115,7 +115,7 @@ test('phone only, a full-width CTA, dark pairs; mounted above the Validate overv
   assert.match(tag(first, 'phone-focus-cta'), /href="\/validate\/record\?project_id=3"/);
   assert.doesNotMatch(first, /data-testid="phone-meter"/, 'no meter on the first-conversation card, as drawn');
   const route = readFileSync('frontend/src/pages/cycles/CycleRoute.jsx', 'utf8');
-  assert.match(route, /\{cycle === 'validate' && overviewStatus === 'ready' && rawOverview && projectStatus !== 'unreadable' && <ValidatePhoneFocus raw=\{rawOverview\} search=\{q\} projectId=\{projectId\} onChanged=\{\(\) => setReload\(\(n\) => n \+ 1\)\} \/>\}/, 'a saved target re-reads the overview');
+  assert.match(route, /<ValidatePhoneFocus cycle=\{cycle\} raw=\{rawOverview\} search=\{q\} projectId=\{projectId\} onChanged=\{\(\) => setReload\(\(n\) => n \+ 1\)\} \/>/, 'a saved target re-reads the overview');
   assert.match(route, /setRawOverview\(data\); setOverview\(adaptOverview\(cycle, data\)\)/, 'the raw read, before adapting');
 });
 

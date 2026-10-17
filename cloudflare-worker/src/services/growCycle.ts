@@ -186,7 +186,12 @@ export async function productCard(x: Ctx): Promise<CardBody> {
     `SELECT theme, status, source, from_email, roadmap_item_label FROM product_feedback WHERE project_id = ? AND substr(created_at, 1, 10) >= ?`,
   ).bind(x.projectId, since).all<{ theme: string | null; status: string; source: string; from_email: string | null; roadmap_item_label: string | null }>();
   const rows = r.results || [];
-  if (!rows.length) return { state: 'empty', range: 'Last 90 days', series: [], next: { text: 'Log the first piece of feedback.', href: x.href('product-improvement') }, reason: 'No feedback logged in the last 90 days' };
+  if (!rows.length) {
+    const any = await x.env.DB.prepare('SELECT 1 FROM product_feedback WHERE project_id = ? LIMIT 1').bind(x.projectId).first();
+    return any
+      ? { state: 'empty', range: 'Last 90 days', series: [], next: { text: 'Log the first piece of feedback.', href: x.href('product-improvement') }, reason: 'No feedback logged in the last 90 days' }
+      : { state: 'empty', range: 'Last 90 days', series: [], next: { text: 'Log feedback', href: `${x.href('product-improvement')}&add=1` }, reason: 'No feedback yet. Themes by volume appear here.' };
+  }
   const themes = new Map<string, { theme: string; open: number; planned: number; shipped: number }>();
   for (const f of rows) {
     const t = f.theme && f.theme.trim() ? f.theme.trim() : 'Not recorded';
@@ -249,7 +254,7 @@ export async function distributionCard(x: Ctx): Promise<CardBody> {
     { stage: 'Paying', value: paying ? paying.paying_accounts : null, source: paying ? snapSource(paying.source) : null,
       reason: paying ? null : 'Not recorded: no snapshot records paying customers' },
   ];
-  if (!rows.length) return { state: 'empty', range: 'Last 30 days', series: { channels: [], funnel }, next: { text: 'Add your first channel.', href: x.href('distribution') }, reason: 'No channel added yet' };
+  if (!rows.length) return { state: 'empty', range: 'Last 30 days', series: { channels: [], funnel }, next: { text: 'Add channel', href: `${x.href('distribution')}&add=1` }, reason: 'No channels yet. Cost per customer by channel appears here.' };
   const priced = rows.filter((r) => r.cac_cents != null && r.state !== 'paused').sort((a, b) => (b.cac_cents as number) - (a.cac_cents as number));
   const worst = priced.length >= 2 ? priced[0] : null;
   return {
@@ -271,6 +276,7 @@ export async function revenueCard(x: Ctx): Promise<CardBody> {
   for (const r of rows) by.set(r.month, { ...(by.get(r.month) || {}), [r.kind]: r.amount_cents });
   const series = months.filter((m) => by.has(m)).map((m) => ({ month: m, ...by.get(m) }));
   const periods = billingPeriods(ledger);
+  const snapshots = await readSnapshots(x.env, x.projectId);
   const churn = periods < 2
     ? { value: null, state: 'not_recorded', reason: 'Needs 2 billings' }
     : null;
@@ -279,8 +285,9 @@ export async function revenueCard(x: Ctx): Promise<CardBody> {
   return {
     state, range: 'Last 12 months',
     series: { movements: series, cohorts: cohortRetention(ledger), churn },
-    next: unsplit ? { text: `Name the customer on the Stripe charges of ${unsplit} month${unsplit === 1 ? '' : 's'} to split expansion from new.`, href: x.href('revenue-and-traction') } : null,
-    reason: periods === 0 ? 'No recurring revenue on the ledger yet' : series.length === 0 ? 'Not recorded: needs 2 billings' : null,
+    next: ledger.length === 0 && !snapshots.length ? { text: 'Enter a KPI', href: `/grow/focus?project_id=${x.projectId}` }
+      : unsplit ? { text: `Name the customer on the Stripe charges of ${unsplit} month${unsplit === 1 ? '' : 's'} to split expansion from new.`, href: x.href('revenue-and-traction') } : null,
+    reason: ledger.length === 0 && !snapshots.length ? 'No KPIs yet. MRR and retention appear here.' : periods === 0 ? 'No recurring revenue on the ledger yet' : series.length === 0 ? 'Not recorded: needs 2 billings' : null,
     source: rows.length ? `Revenue ledger · ${rows[rows.length - 1].source}` : 'Revenue ledger',
     as_of: rows.length ? rows[rows.length - 1].as_of : null,
   };
@@ -311,12 +318,14 @@ export async function teamCard(x: Ctx): Promise<CardBody> {
   for (const a of apps.results || []) { const s = a.stage || 'applied'; stages.set(s, (stages.get(s) ?? 0) + 1); }
   const funnel = ['applied', 'screen', 'interview', 'offer'].map((s) => ({ stage: s, count: stages.get(s) ?? 0 }));
   const recorded = actual.filter((v) => v != null).length;
+  const roles = company == null ? null : await x.env.DB.prepare("SELECT 1 FROM job_postings WHERE project_id = ? AND status IN ('open', 'published') LIMIT 1").bind(x.projectId).first();
   const newApplicants = stages.get('applied') ?? 0;
   return {
     state: company == null ? 'not_recorded' : seriesState(recorded), range: 'Last 6 months',
     series: { months, headcount: actual, plan, roles_by_stage: funnel },
-    next: newApplicants ? { text: `Review the ${newApplicants} new applicant${newApplicants === 1 ? '' : 's'}.`, href: x.href('team-expansion') } : null,
-    reason: company == null ? 'Not recorded: this venture has no company roster yet' : null, source: 'Team roster and open roles', as_of: iso(x.now),
+    next: company != null && recorded === 0 && !roles ? { text: 'Open a role', href: '/jobs/new' }
+      : newApplicants ? { text: `Review the ${newApplicants} new applicant${newApplicants === 1 ? '' : 's'}.`, href: x.href('team-expansion') } : null,
+    reason: company == null ? 'Not recorded: this venture has no company roster yet' : recorded === 0 && !roles ? 'No open roles yet. Headcount against the plan appears here.' : recorded === 0 ? 'No one is on the team roster yet.' : null, source: 'Team roster and open roles', as_of: iso(x.now),
   };
 }
 
@@ -325,7 +334,7 @@ export async function partnerCard(x: Ctx): Promise<CardBody> {
     `SELECT id, name, stage, updated_at FROM growth_partners WHERE project_id = ? ORDER BY updated_at`,
   ).bind(x.projectId).all<{ id: number; name: string; stage: string; updated_at: string }>();
   const rows = ps.results || [];
-  if (!rows.length) return { state: 'empty', range: 'Last 6 months', series: { by_stage: [], revenue: [] }, next: { text: 'Add your first partner.', href: x.href('partner-network') }, reason: 'No partner added yet' };
+  if (!rows.length) return { state: 'empty', range: 'Last 6 months', series: { by_stage: [], revenue: [] }, next: { text: 'Add partner', href: `${x.href('partner-network')}&add=1` }, reason: 'No partners yet. Partners by stage appear here.' };
   const months = monthsBack(x.now, 6);
   const rev = await x.env.DB.prepare(
     `SELECT r.month, SUM(r.amount_cents) AS cents FROM partner_revenue r JOIN growth_partners g ON g.id = r.partner_id
@@ -370,7 +379,7 @@ export async function marketRows(env: Env, projectId: number): Promise<MarketRow
 
 export async function marketCard(x: Ctx): Promise<CardBody> {
   const rows = await marketRows(x.env, x.projectId);
-  if (!rows.length) return { state: 'empty', range: 'Current', series: [], next: { text: 'Add a market you are considering.', href: x.href('market-expansion') }, reason: 'No market added yet' };
+  if (!rows.length) return { state: 'empty', range: 'Current', series: [], next: { text: 'Add market', href: `${x.href('market-expansion')}&add=1` }, reason: 'No markets yet. Readiness by market appears here.' };
   const gap = rows.map((m) => ({ m, r: readiness(m) })).find((x2) => x2.r.missing.length);
   return {
     state: 'ok', range: 'Current',
@@ -404,21 +413,23 @@ export async function checklist(env: Env, projectId: number) {
 export async function durableCard(x: Ctx): Promise<CardBody> {
   const until = iso(x.now + 90 * DAY);
   const ev = await x.env.DB.prepare(
-    `SELECT id, title, due_at, status, owner_name FROM compliance_events
-      WHERE project_id = ? AND due_at IS NOT NULL AND substr(due_at, 1, 10) BETWEEN ? AND ? ORDER BY due_at`,
-  ).bind(x.projectId, iso(x.now), until).all<{ id: number; title: string; due_at: string; status: string; owner_name: string | null }>();
+    `SELECT id, title, due_date, completion_status, owner_name FROM compliance_events
+      WHERE project_id = ? AND due_date IS NOT NULL AND substr(due_date, 1, 10) BETWEEN ? AND ? ORDER BY due_date`,
+  ).bind(x.projectId, iso(x.now), until).all<{ id: number; title: string; due_date: string; completion_status: string; owner_name: string | null }>();
   const list = await checklist(x.env, x.projectId);
   const done = list.filter((i) => i.done).length;
-  const events = ev.results || [];
+  const events = (ev.results || []).map(({ due_date, ...event }) => ({ ...event, due_at: due_date }));
+  const anyEvent = await x.env.DB.prepare('SELECT 1 FROM compliance_events WHERE project_id = ? LIMIT 1').bind(x.projectId).first();
   const firstOpen = list.find((i) => !i.done);
   const ownerless = events.find((e) => !e.owner_name);
   return {
     state: events.length || done ? 'ok' : 'empty', range: 'Next 90 days',
     series: { calendar: events.map((e) => ({ title: e.title, due: e.due_at.slice(0, 10), owner: e.owner_name })),
       checklist: { done, total: list.length, pct: Math.round((done / list.length) * 100) } },
-    next: ownerless ? { text: `Give ${ownerless.title} an owner.`, href: x.href('durable-company-building') }
+    next: !anyEvent && !done ? { text: 'Add obligation', href: `${x.href('durable-company-building')}&add=1` }
+      : ownerless ? { text: `Give ${ownerless.title} an owner.`, href: x.href('durable-company-building') }
       : firstOpen ? { text: `${firstOpen.label}.`, href: x.href('durable-company-building') } : null,
-    reason: null, source: 'Compliance calendar and checklist', as_of: iso(x.now),
+    reason: !anyEvent && !done ? 'No obligations yet. The compliance calendar appears here.' : !events.length && !done ? 'No obligation falls due in the next 90 days.' : null, source: 'Compliance calendar and checklist', as_of: iso(x.now),
   };
 }
 
