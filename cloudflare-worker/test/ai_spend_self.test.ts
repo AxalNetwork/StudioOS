@@ -459,9 +459,11 @@ INSERT INTO ai_usage_logs (user_id, task, model, est_cost_usd, created_at, surfa
   const r = await loadMyAiSpend({ DB } as any, { id: 11, role: 'founder' }, AT);
   assert.equal(r.by_surface_recorded, true);
   const by = new Map(r.by_surface.map((s) => [s.surface, s]));
-  // Only this user's rows, only this month's.
-  assert.equal(by.get('/validate/interviews')?.calls, 2);
-  assert.equal(Number(by.get('/validate/interviews')?.spend_usd.toFixed(4)), 0.004);
+  // Only this user's rows, only this month's. D704: the retired Interviews
+  // page's runs count under Customer research, the module that holds it now.
+  assert.equal(by.get('/validate/customer-research')?.calls, 2);
+  assert.equal(Number(by.get('/validate/customer-research')?.spend_usd.toFixed(4)), 0.004);
+  assert.equal(by.has('/validate/interviews'), false, 'a retired page keeps its own entry');
   assert.equal(by.get('/build/board')?.calls, 1);
   // The unattributed runs are ONE entry, reported rather than dropped.
   assert.equal(by.get(null)?.calls, 1, 'the month\'s runs with no page were dropped');

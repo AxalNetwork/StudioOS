@@ -37,7 +37,7 @@ function fixture() {
     CREATE TABLE integration_companies(integration_id INTEGER, company_id INTEGER, enabled INTEGER);
     CREATE TABLE ritual_runs(id INTEGER PRIMARY KEY, project_id INTEGER, run_date TEXT, state TEXT);
     CREATE TABLE spinout_applications(id INTEGER PRIMARY KEY, user_id INTEGER, status TEXT, answers_json TEXT);
-    CREATE TABLE activity_logs(id INTEGER PRIMARY KEY, project_id INTEGER, user_id INTEGER, action TEXT, details TEXT, actor TEXT);
+    CREATE TABLE activity_logs(id INTEGER PRIMARY KEY, project_id INTEGER, user_id INTEGER, action TEXT, details TEXT, actor TEXT, entity_type TEXT, entity_id TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
     INSERT INTO users(id, role, founder_id, name) VALUES (1, 'founder', 11, 'One'), (2, 'founder', 22, 'Two'), (3, 'admin', NULL, 'Admin');
     INSERT INTO projects(id, founder_id, company_id, entity_id) VALUES (101, 11, 10, 501), (202, 22, 20, 502);
     INSERT INTO user_company_links VALUES (1, 10), (2, 20);
@@ -45,6 +45,7 @@ function fixture() {
   `);
   db.exec(migration);
   db.exec(readFileSync('cloudflare-worker/sql/migrations/455_core_systems_workspace.sql', 'utf8'));
+  db.exec(readFileSync('cloudflare-worker/sql/migrations/459_cycle_activity_convention.sql', 'utf8'));
   db.exec(readFileSync('cloudflare-worker/sql/migrations/461_build_record_stores.sql', 'utf8'));
   db.exec('CREATE TABLE google_oauth_tokens(user_id INTEGER PRIMARY KEY); CREATE TABLE microsoft_oauth_tokens(user_id INTEGER PRIMARY KEY)');
   const env = { DB: d1Over(db), JWT_SECRET, ENVIRONMENT: 'development' } as any;
@@ -165,7 +166,7 @@ test('unknown vested shares remain unrecorded and created risks have an atomic a
 test('new fields reject cross-project links and disabled or foreign connector mappings', async () => {
   const { db, env } = fixture();
   db.exec(`INSERT INTO mvp_features(id,project_id,title) VALUES (1,101,'Build');
-    INSERT INTO pain_groups VALUES (10,202,'Their pain');
+    INSERT INTO pain_groups(id, project_id, title) VALUES (10,202,'Their pain');
     INSERT INTO integrations(id,user_id,provider_key,display_name,status,last_synced_at) VALUES (11,1,'hubspot','CRM','active',NULL);
     INSERT INTO integration_companies VALUES (11,10,0);`);
   let r = await call(env, '/api/cycles/build/features/1?project=101', 1, 'PATCH', { pain_group_id: 10 });
@@ -228,8 +229,8 @@ test('Lab formation and IP reuse project data; obligations are scoped by project
 
 test('solution links and founder risks share the project but not the analyst register', async () => {
   const { db, env } = fixture();
-  db.exec(`INSERT INTO pain_groups VALUES (1,101,'Slow reporting');
-    INSERT INTO hypotheses VALUES (2,101,'Automate the monthly close');
+  db.exec(`INSERT INTO pain_groups(id, project_id, title) VALUES (1,101,'Slow reporting');
+    INSERT INTO hypotheses(id, project_id, claim) VALUES (2,101,'Automate the monthly close');
     INSERT INTO mvp_features(id,project_id,title,added_value,effort,pain_group_id,hypothesis_id)
       VALUES (3,101,'Auto report','High','M',1,2);`);
   const added = await call(env, '/api/cycles/build/risks?project=101', 1, 'POST', { title: 'Vendor outage', severity: 'high', mitigation: 'Keep an export' });
@@ -290,8 +291,8 @@ test('Build field writes persist only within the owned project and record their 
   const { db, env } = fixture();
   db.exec(`INSERT INTO cap_table_holders(id,user_id,project_id,name) VALUES (10,1,101,'Founder One');
     INSERT INTO entity_obligations(id,entity_id,title,status) VALUES (50,501,'Annual return','open');
-    INSERT INTO pain_groups VALUES (11,101,'Slow reporting');
-    INSERT INTO hypotheses VALUES (12,101,'Automate the close');
+    INSERT INTO pain_groups(id, project_id, title) VALUES (11,101,'Slow reporting');
+    INSERT INTO hypotheses(id, project_id, claim) VALUES (12,101,'Automate the close');
     INSERT INTO mvp_features(id,project_id,title) VALUES (20,101,'Auto report');`);
   const feature = await call(env, '/api/cycles/build/features/20?project=101', 1, 'PATCH',
     { pain_group_id: 11, hypothesis_id: 12, is_must_have: true });
@@ -305,8 +306,8 @@ test('Build field writes persist only within the owned project and record their 
     { title: 'File certificate', due_date: '2026-12-01' });
   assert.equal(formation.status, 201);
   assert.equal(db.prepare('SELECT due_date FROM formation_steps WHERE id = ?').get(formation.body.id)?.due_date, '2026-12-01');
-  assert.equal(db.prepare("SELECT json_extract(details, '$.id') AS id FROM activity_logs WHERE action = 'build_formation_step_created'").get()?.id,
-    formation.body.id);
+  assert.equal(db.prepare("SELECT entity_id FROM activity_logs WHERE action = 'build_formation_step_created'").get()?.entity_id,
+    `step-${formation.body.id}`);
   const proof = await call(env, '/api/cycles/build/obligations/50/proof?project=101', 1, 'PATCH', { proof_file_key: 'proof/annual-return' });
   assert.equal(proof.status, 200);
   assert.equal(db.prepare('SELECT proof_file_key FROM entity_obligations WHERE id = 50').get()?.proof_file_key, 'proof/annual-return');

@@ -275,9 +275,18 @@ test('8. the consent page draws a mark only for the identity the Worker verified
 
 // ── 9 (part). The GitHub glyph alias is gone from the console ───────────────
 
-test('9. only AdminPage.jsx still imports lucide\'s GitBranch as a GitHub icon', async () => {
+test('9. no file imports lucide\'s GitBranch as a GitHub icon; GitHub Sync draws GitHub\'s mark (#1742)', async () => {
   const { srcFilesWith } = await import('./_srcFilesWith.mjs');
-  assert.deepEqual(srcFilesWith(/GitBranch as Github/), ['frontend/src/pages/AdminPage.jsx']);
+  assert.deepEqual(srcFilesWith(/GitBranch as Github/), []);
+  const admin = read('frontend/src/pages/AdminPage.jsx');
+  assert.match(admin, /\{ value: 'github', label: 'GitHub Sync', Icon: GithubMark \}/);
+  assert.match(admin, /function GithubMark\(\{ size = 16, className = '' \}\) \{\n  return <BrandIcon provider="github" size=\{size\} variant="bare" tone="current" className=\{className\} \/>;/);
+  assert.match(admin, /^import BrandIcon from '\.\.\/ui\/BrandIcon';$/m);
+  // Drawn the way the menu draws every entry's icon: the mark, its key, the passed size and colour.
+  const out = html(h(BrandIcon, { provider: 'github', size: 14, variant: 'bare', tone: 'current', className: 'shrink-0 text-gray-400 dark:text-gray-500' }));
+  assert.match(out, /data-provider="github"/);
+  assert.match(out, /width="14"/);
+  assert.match(out, /text-gray-400 dark:text-gray-500/);
   assert.doesNotMatch(read('frontend/src/pages/account/connectorTools.jsx'), /export const Linkedin|predates the `Linkedin` glyph/, 'the hand-copied LinkedIn glyph and its wrong comment are gone');
 });
 
