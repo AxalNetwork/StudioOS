@@ -38,9 +38,21 @@ export const KPI_LABEL: Record<KpiKey, string> = {
   churn: 'Churn', net_burn: 'Burn', runway: 'Runway',
 };
 
-/** The column a hand entry writes. A fixed map: a request never names a column. */
-const TYPED_COLUMN = { mrr: 'mrr', paying_accounts: 'paying_accounts', churn: 'monthly_churn_pct', net_burn: 'net_burn' } as const;
-type TypedKey = keyof typeof TYPED_COLUMN;
+/**
+ * The statement a hand entry runs, one literal per KPI, so a request never
+ * names a column: today's manual row for that day, or a new one.
+ */
+const TYPED_UPSERT = {
+  mrr: `INSERT INTO project_metrics (project_id, snapshot_date, mrr, notes, source, created_by) VALUES (?, ?, ?, ?, 'manual', ?)
+    ON CONFLICT(project_id, snapshot_date, source) DO UPDATE SET mrr = excluded.mrr, notes = COALESCE(excluded.notes, notes)`,
+  paying_accounts: `INSERT INTO project_metrics (project_id, snapshot_date, paying_accounts, notes, source, created_by) VALUES (?, ?, ?, ?, 'manual', ?)
+    ON CONFLICT(project_id, snapshot_date, source) DO UPDATE SET paying_accounts = excluded.paying_accounts, notes = COALESCE(excluded.notes, notes)`,
+  churn: `INSERT INTO project_metrics (project_id, snapshot_date, monthly_churn_pct, notes, source, created_by) VALUES (?, ?, ?, ?, 'manual', ?)
+    ON CONFLICT(project_id, snapshot_date, source) DO UPDATE SET monthly_churn_pct = excluded.monthly_churn_pct, notes = COALESCE(excluded.notes, notes)`,
+  net_burn: `INSERT INTO project_metrics (project_id, snapshot_date, net_burn, notes, source, created_by) VALUES (?, ?, ?, ?, 'manual', ?)
+    ON CONFLICT(project_id, snapshot_date, source) DO UPDATE SET net_burn = excluded.net_burn, notes = COALESCE(excluded.notes, notes)`,
+} as const;
+type TypedKey = keyof typeof TYPED_UPSERT;
 
 const REFUSED: Partial<Record<KpiKey, string>> = {
   new_mrr: 'New MRR is worked out from the revenue ledger.',
@@ -237,18 +249,13 @@ export async function enterKpi(env: Env, projectId: number, userId: number, b: K
   const note = typeof b.note === 'string' && b.note.trim() ? b.note.trim().slice(0, 1000) : null;
   if (REFUSED[key as KpiKey]) throw new KpiRefused(400, REFUSED[key as KpiKey]!, 'kpi');
 
-  if (key in TYPED_COLUMN) {
+  if (key in TYPED_UPSERT) {
     const k = key as TypedKey;
     const unit = k === 'paying_accounts' ? 'count' : k === 'churn' ? 'pct' : 'usd';
     let value = checkUnit(number(b.value), unit);
     if (k === 'mrr' && value < 0) throw new KpiRefused(400, 'MRR is 0 or more', 'value');
     if (k === 'paying_accounts') value = Math.trunc(value);
-    const col = TYPED_COLUMN[k];
-    await env.DB.prepare(
-      `INSERT INTO project_metrics (project_id, snapshot_date, ${col}, notes, source, created_by)
-       VALUES (?, ?, ?, ?, 'manual', ?)
-       ON CONFLICT(project_id, snapshot_date, source) DO UPDATE SET ${col} = excluded.${col}, notes = COALESCE(excluded.notes, notes)`,
-    ).bind(projectId, asOf, value, note, userId).run();
+    await env.DB.prepare(TYPED_UPSERT[k]).bind(projectId, asOf, value, note, userId).run();
     return { id: k, as_of: asOf, value, unit, source: 'manual', created_kpi: false };
   }
 
