@@ -20,7 +20,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { resolve, join, relative } from 'node:path';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -54,9 +54,11 @@ const consent = await import('../src/lib/cookieConsent.js');
 const { default: CookieConsent, CookiePreferencesDialog } = await import('../src/components/CookieConsent.jsx');
 
 const render = (el, url = '/') => renderToStaticMarkup(React.createElement(MemoryRouter, { initialEntries: [url] }, el));
+// `&amp;` is decoded last, so an escaped entity (`&amp;lt;`) reads as the text
+// `&lt;` it is, not as `<`.
 const text = (html) => html
   .replace(/<[^>]+>/g, ' ')
-  .replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+  .replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
   .replace(/\s+/g, ' ')
   .trim();
 const pills = (html) => [...html.matchAll(/<button type="button" class="ax-pill[^"]*" aria-pressed="(true|false)">([^<]+)<\/button>/g)]
@@ -181,7 +183,10 @@ test('the canvas\'s confidentiality line is printed, and the route it describes 
   assert.ok(text(html).includes('Everything you send is confidential. We do not share applications outside the fund team.'),
     'the canvas\'s line is missing');
   const routeCode = ROUTE_SRC.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-  assert.doesNotMatch(routeCode, /api\.github\.com/, 'contact.ts calls GitHub');
+  // No `api.github.` anywhere in the code, so GitHub's API host fails this in
+  // any URL or bare string. It is a ban on the text, not a URL check, so it
+  // stops at the dot: every string that holds `api.github.com` still fails.
+  assert.doesNotMatch(routeCode, /api\.github\./, 'contact.ts calls GitHub');
   assert.doesNotMatch(routeCode, /GITHUB_/, 'contact.ts reads a GitHub setting');
   assert.match(routeCode, /INSERT INTO contact_submissions/, 'the route stores the submission');
   assert.match(routeCode, /sendNotificationEmail\(/, 'the route emails the firm');
@@ -254,9 +259,12 @@ test('option A: none of the canvas\'s legal text appears on the live pages', asy
 function gatedCategories() {
   const out = new Map();
   const walk = (dir) => {
-    for (const name of readdirSync(dir)) {
+    // The entry's own type from the listing: no separate stat of the path
+    // before it is read.
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const { name } = entry;
       const full = join(dir, name);
-      if (statSync(full).isDirectory()) walk(full);
+      if (entry.isDirectory()) walk(full);
       else if (/\.(jsx?|tsx?)$/.test(name)) {
         const rel = relative(ROOT, full);
         if (/lib\/cookieConsent\.js$|components\/CookieConsent\.jsx$/.test(rel)) continue;

@@ -2530,15 +2530,20 @@ export const SeriesBDiligenceDeckApp: React.FC<{
     setData((prev) => {
       const next = structuredClone(prev) as any;
       const parts = path.split('.');
-      if (parts.some(p => p === '__proto__' || p === 'constructor' || p === 'prototype')) return prev;
+      // Each segment is checked where it is used; an unsafe one drops the
+      // clone and keeps `prev`.
+      const leaf = parts[parts.length - 1];
+      if (leaf === '__proto__' || leaf === 'constructor' || leaf === 'prototype') return prev;
       let cur = next;
       for (let i = 0; i < parts.length - 1; i++) {
         const k = parts[i];
+        if (k === '__proto__' || k === 'constructor' || k === 'prototype') return prev;
         const isArrKey = !isNaN(Number(parts[i + 1]));
         if (cur[k] == null) cur[k] = isArrKey ? [] : {};
+        // nosemgrep: javascript.lang.security.audit.prototype-pollution.prototype-pollution-loop.prototype-pollution-loop -- every segment is checked against __proto__/constructor/prototype before it is used
         cur = cur[k];
       }
-      cur[parts[parts.length - 1]] = value;
+      cur[leaf] = value;
       return next;
     });
   }, []);

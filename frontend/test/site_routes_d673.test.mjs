@@ -21,8 +21,8 @@ const ROOT = process.cwd();
 const read = (p) => readFileSync(resolve(ROOT, p), 'utf8');
 const APP = read('frontend/src/App.jsx');
 const route = (path) => {
-  const m = APP.match(new RegExp(`<Route\\s+path="${path.replace(/[/:]/g, (c) => `\\${c}`)}"\\s+element=\\{([^\\n]+?)\\}\\s*/>`));
-  return m ? m[1] : null;
+  const m = [...APP.matchAll(/<Route\s+path="([^"]*)"\s+element=\{([^\n]+?)\}\s*\/>/g)].find((r) => r[1] === path);
+  return m ? m[2] : null;
 };
 
 const PAGES = {

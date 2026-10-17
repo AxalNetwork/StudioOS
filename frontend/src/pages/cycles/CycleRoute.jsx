@@ -209,7 +209,7 @@ const CYCLE_DEFS = {
       'durable-company-building': () => ({ label: 'Open the compliance calendar', href: '/compliance' }),
     }),
     add: toFnMap({}),
-    fills: {},
+    fills: { 'product-improvement': 'feedback_theme' },
     // The Grow desk's two AI bands (ZoneDraft, D424), on the modules they
     // read: the applicant ranking on Team expansion, the outreach sequence
     // for sign-ups who have not converted on Distribution.
@@ -378,9 +378,10 @@ export function RecordMount({ projectId, interviewId, onClose, onStarted }) {
 
 /** The module slug of a cycle path (`/validate/customer-research?…`), or null for the overview and the cycle's own action path. */
 export function underSlug(path, cycle = 'validate', action = 'record') {
-  if (!/^[a-z]+$/.test(cycle)) return null;
-  const m = new RegExp(`^/${cycle}/([a-z0-9-]+)(?:[/?#]|$)`).exec(String(path || ''));
-  return m && m[1] !== action ? m[1] : null;
+  // One fixed pattern reads the cycle segment, which is then compared, so no
+  // regex is ever built from `cycle`.
+  const m = /^\/([a-z]+)\/([a-z0-9-]+)(?:[/?#]|$)/.exec(String(path || ''));
+  return m && m[1] === cycle && m[2] !== action ? m[2] : null;
 }
 
 /**
@@ -697,6 +698,8 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
     : !projectId ? null
     : formOpen ? (
       <FormLightbox key={`add-${formOpen.key}`} form={formOpen} cycle={cycle} slug={slug} search={location.search}
+        loadOptions={formOpen.loadOptions ? () => formOpen.loadOptions(cyclesWrite, projectId) : null}
+        onSearch={formOpen.search ? (_field, q) => formOpen.search(cyclesWrite, projectId, q) : null}
         onSubmit={(values) => formOpen.submit(cyclesWrite, projectId, values)}
         onSaved={saved}
         onClose={closeAdd} />

@@ -502,8 +502,8 @@ const READS: Record<Slug, (env: Env, p: Project, viewer: Viewer) => Promise<Modu
 async function safeRead(slug: Slug, env: Env, project: Project, viewer: Viewer): Promise<ModuleRead> {
   try { return await READS[slug](env, project, viewer); }
   catch (error) {
-    console.error(`[cycle_build] ${MODULES.find(m => m[0] === slug)![2]} read failed`, error);
     const spec = MODULES.find(m => m[0] === slug)!;
+    console.error('[cycle_build] %s read failed', spec[2], error);
     return { card: unreadableBuildCard(slug, spec[1], spec[2], spec[3]), cols: [], rows: [] };
   }
 }
@@ -955,7 +955,7 @@ async function patchRoadmap(c: WriteCall, ctx: WriteCtx): Promise<Response> {
   }
   // The column goes through the roadmap's own move, so `okr_column_moves` still feeds "shipped this month".
   if (typeof column === 'string' && column !== existing.kanban_status) {
-    await moveRoadmapItem(c.env, { existing: { id: id!, project_id: ctx.project.id, kanban_status: existing.kanban_status },
+    await moveRoadmapItem(c.env, { existing: { id: id!, project_id: ctx.project.id, kanban_status: existing.kanban_status, objective: title },
       userId: ctx.user.id, kanbanStatus: column, sortOrder: await columnEnd(c.env, ctx.project.id, column) });
   }
   return c.json({ ok: true, id });
