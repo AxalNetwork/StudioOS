@@ -2,7 +2,7 @@
  * D709 (#1774) — the shared fixture for the fee routes' tests. The tables the
  * fee reads take their DDL from `schema_baseline.sql` with `ddl()` (the
  * pattern of capital_call_ledger.test.ts:65-77: foreign keys dropped, the
- * quoted `capital_calls` read), then 312 and 473 are applied from their files.
+ * quoted `capital_calls` read), then 312, 472 and 473 are applied from their files.
  * Every name, figure and email is made up.
  */
 import assert from 'node:assert/strict';
@@ -16,6 +16,7 @@ import fundFees from '../src/routes/fund_fees.ts';
 import funds from '../src/routes/funds.ts';
 import capital from '../src/routes/capital.ts';
 import { parseQuarter, quarterOf } from '../src/services/fundFeeCalc.ts';
+import { encryptColumn } from '../src/services/columnCipher.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BASELINE = readFileSync(resolve(HERE, '../sql/schema_baseline.sql'), 'utf8');
@@ -55,6 +56,7 @@ const SCHEMA = [
   `CREATE TABLE notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, type TEXT, title TEXT, body TEXT, link TEXT, created_at TEXT);`,
   `CREATE TABLE job_idempotency (idempotency_key TEXT PRIMARY KEY, created_at TEXT);`,
   readFileSync(resolve(HERE, '../sql/migrations/312_fund_call_ledger.sql'), 'utf8'),
+  readFileSync(resolve(HERE, '../sql/migrations/472_entity_bank_accounts.sql'), 'utf8'),
   readFileSync(resolve(HERE, '../sql/migrations/473_fund_management_fees.sql'), 'utf8'),
 ].join('\n');
 
@@ -85,6 +87,24 @@ INSERT INTO portfolio_positions (uid, fund_id, project_id, round_name, invested_
 export function makeEnv(): any {
   const { DB, db } = makeD1(SCHEMA, seed());
   return { JWT_SECRET, ENVIRONMENT: 'development', DB, __db: db };
+}
+
+/**
+ * D708 decision 9: a call on Fund I issues only while the Fund has a payable
+ * account, so a test that calls capital adds one first, as the console would
+ * write it (fund_call_payable_d708.test.ts's account). Synthetic number.
+ */
+export async function addFundAccount(env: any) {
+  if (env.__db.prepare(`SELECT 1 FROM entity_bank_accounts WHERE entity_key = 'fund'`).get()) return;
+  const uid = '0000bbbb-0000-4000-8000-000000000709';
+  const number = '8100223344';
+  const enc = await encryptColumn(env, 'entity_bank_accounts', 'account_number_enc', uid, number);
+  env.__db.prepare(`INSERT INTO entity_bank_accounts
+      (uid, entity_key, label, bank_name, bank_address, beneficiary_name, beneficiary_address, account_kind,
+       account_number_enc, account_last4, routing_number, swift_code, purposes_json, recorded_by)
+     VALUES (?, 'fund', 'Fund checking', 'Column N.A.', '1 Letterman Drive', 'Axal VC Spin-Out Lab Fund I LP',
+             '16192 Coastal Highway', 'checking', ?, ?, '121145433', 'CLNOUS66MER', '["capital_contribution","gp_commitment"]', ?)`)
+    .run(uid, enc, number.slice(-4), SUPER);
 }
 
 const app = new Hono<any>();

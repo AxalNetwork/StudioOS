@@ -8,10 +8,11 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { GP, Q0, FEE_START, makeEnv, call, q, one, readyFund, preview, issue } from './_fund_fees_d709_harness.ts';
+import { GP, Q0, FEE_START, makeEnv, call, q, one, readyFund, preview, issue, addFundAccount } from './_fund_fees_d709_harness.ts';
 
 /** A call of $1,500,000 split 2:1, so LP A's line owes 100,000,000 cents and LP B's 50,000,000. */
 async function capitalCall(env: any, cents = 150_000_000) {
+  await addFundAccount(env);
   const r = await call(env, GP, '/api/funds/1/capital-call', { method: 'POST', body: { amount_cents: cents } });
   assert.equal(r.status < 300, true, JSON.stringify(r.body));
   const header = one(env, 'SELECT id, uid FROM fund_capital_calls ORDER BY id DESC LIMIT 1');
