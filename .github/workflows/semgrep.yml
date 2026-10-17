@@ -20,12 +20,13 @@ permissions:
 # required SEMGREP_APP_TOKEN + SEMGREP_DEPLOYMENT_ID secrets which were
 # never set on this repo — that's why every run was red.
 #
-# Findings are listed in this job's summary page (D672). They used to go to
-# the Security tab via SARIF upload, but the repository is private and code
-# scanning there needs GitHub Code Security, which is not on: since
-# 2026-10-10 every upload was refused and this job went red on every PR. To
-# stop running Semgrep entirely, delete this file — no other workflow
-# depends on it.
+# Findings go to the Security tab by SARIF upload, and are also listed in
+# this job's summary page. D672 stopped the upload while the repository was
+# private and code scanning needed GitHub Code Security. The repository is
+# public now, where code scanning is free, so D718 restored the upload. The
+# summary stays because the agents that fix findings cannot read the
+# code-scanning API. To stop running Semgrep entirely, delete this file — no
+# other workflow depends on it.
 #
 # WHAT THIS JOB'S RED/GREEN MEANS, because it used to mean nothing.
 # Findings do NOT fail it: there are ~40 standing ones and the summary is
@@ -101,7 +102,7 @@ jobs:
           # image layout is not ours to depend on.
           PY="$(command -v python3 || command -v python)"
           "$PY" scripts/strip-suppressed-sarif.py semgrep.sarif
-      # NO `if: always()` ON EITHER OF THESE TWO STEPS.
+      # NO `if: always()` ON ANY OF THESE THREE STEPS.
       #
       # A fatally-failed semgrep still writes a SARIF — measured on 1.176.1, a
       # bad config exits 7 having written a structurally VALID file,
@@ -111,11 +112,17 @@ jobs:
       # CAN. A report built from it would read "0 findings" after a scan that
       # never ran.
       #
-      # So both steps take the default `if: success()`. A scan that failed,
-      # was cancelled, or timed out stops here and the job goes red. (Until
-      # D672 the last step was a SARIF upload, which REPLACES the tool's alert
-      # set, so that payload would also have closed every open alert as
-      # "fixed". Nothing is uploaded now; the rule stays for the report.)
+      # So all three take the default `if: success()`. A scan that failed,
+      # was cancelled, or timed out stops here and the job goes red. The
+      # upload matters most: a SARIF upload REPLACES the tool's alert set for
+      # the ref, so a resultless payload would close every open alert as
+      # "fixed".
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4
+        # No `category`, as before D672, so this upload replaces the alert set
+        # the old uploads left open instead of starting a second one.
+        with:
+          sarif_file: semgrep.sarif
       - name: Report findings
         run: |
           PY="$(command -v python3 || command -v python)"

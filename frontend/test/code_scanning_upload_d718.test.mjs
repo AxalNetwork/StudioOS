@@ -1,16 +1,21 @@
 /**
- * D672 (#1542) — CodeQL and Semgrep scan without uploading to code scanning.
+ * D718 — CodeQL and Semgrep upload to code scanning again, and still report
+ * in the job summary.
  *
- * The repository is private, and code scanning on a private repository needs
- * GitHub Code Security, which is not on. From 2026-10-10 every SARIF upload
- * was refused ("Code Security must be enabled for this repository to use code
- * scanning"), so all three scanning checks went red on every PR with no repo
- * change. Both workflows now keep their SARIF in the workspace and list the
- * findings in the job summary through scripts/sarif-summary.py.
+ * D672 (#1542) stopped both uploads while the repository was private, because
+ * code scanning there needs GitHub Code Security, which was off. The
+ * repository is public now, where code scanning is free. Uploading is also
+ * what lets Copilot Autofix propose fixes for CodeQL alerts. The job-summary
+ * report from D672 stays, because the agents that fix findings cannot read
+ * the code-scanning API.
  *
  * This pins:
- *   - neither workflow uploads (no upload-sarif, CodeQL's analyze says
- *     `upload: never`), and each ends with the report step;
+ *   - both workflows upload: CodeQL's analyze no longer says `upload: never`;
+ *     Semgrep uploads its stripped SARIF, after the strip, with the default
+ *     `if:` (an upload replaces the alert set, so a resultless SARIF from a
+ *     crashed scan would close every open alert), and with no `category`, so
+ *     it replaces the alert set the pre-D672 uploads left;
+ *   - each workflow still ends with the report step;
  *   - the report counts what the scanner did not suppress, and fails only
  *     when it has no readable SARIF, since an empty report reads as clean.
  */
@@ -27,13 +32,24 @@ const CODEQL = code(read('.github/workflows/codeql.yml'));
 const SEMGREP = code(read('.github/workflows/semgrep.yml'));
 const SCRIPT = resolve(process.cwd(), 'scripts/sarif-summary.py');
 
-test('neither workflow uploads SARIF to code scanning', () => {
-  for (const [name, src] of [['codeql.yml', CODEQL], ['semgrep.yml', SEMGREP]]) {
-    assert.doesNotMatch(src, /upload-sarif/, `${name} uploads SARIF again; code scanning is off on this private repository`);
-  }
+test('CodeQL uploads its analysis and still writes the SARIF the report reads', () => {
   const analyze = CODEQL.slice(CODEQL.indexOf('codeql-action/analyze'));
-  assert.match(analyze, /^\s*upload:\s*never\s*$/m, 'CodeQL analyze must say `upload: never`');
+  assert.doesNotMatch(analyze, /^\s*upload:\s*(never|false)\s*$/m, 'CodeQL analyze must upload to code scanning (D718); `upload: never` is D672, from when the repository was private');
   assert.match(analyze, /^\s*output:\s*codeql-results\s*$/m, 'CodeQL must write its SARIF where the report step reads it');
+});
+
+test('Semgrep uploads the stripped SARIF, only after a scan that succeeded', () => {
+  const at = (re) => SEMGREP.search(re);
+  const strip = at(/- name: Drop nosemgrep/);
+  const upload = at(/- name: Upload SARIF/);
+  const report = at(/- name: Report findings/);
+  assert.ok(upload > -1, 'semgrep.yml must upload its SARIF to code scanning (D718)');
+  assert.ok(strip > -1 && strip < upload && upload < report, 'order must be strip -> upload -> report');
+  const step = SEMGREP.slice(upload, report);
+  assert.match(step, /uses: github\/codeql-action\/upload-sarif@[0-9a-f]{40}\b/, 'the upload action must be pinned by commit SHA');
+  assert.match(step, /^\s*sarif_file:\s*semgrep\.sarif\s*$/m, 'the upload must send the stripped SARIF');
+  assert.doesNotMatch(step, /^\s*if:/m, 'the upload must take the default if: success(); always() would upload the resultless SARIF a crashed scan leaves and close every alert');
+  assert.doesNotMatch(step, /^\s*category:/m, 'no category, so the upload replaces the alert set the pre-D672 uploads left open');
 });
 
 test('each workflow lists its findings in the job summary', () => {
@@ -42,7 +58,7 @@ test('each workflow lists its findings in the job summary', () => {
 });
 
 function run(args, env = {}) {
-  const dir = mkdtempSync(join(tmpdir(), 'sarif-d672-'));
+  const dir = mkdtempSync(join(tmpdir(), 'sarif-d718-'));
   const summary = join(dir, 'summary.md');
   writeFileSync(summary, '');
   const r = spawnSync('python3', [SCRIPT, ...args(dir)], { env: { ...process.env, GITHUB_STEP_SUMMARY: summary, ...env }, encoding: 'utf8' });

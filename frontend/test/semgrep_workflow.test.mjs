@@ -4,10 +4,10 @@
  * scan as a clean one. Both were absent until D170, and neither is visible in
  * a diff unless you know what the three deleted settings did together.
  *
- * D672: the repository is private and code scanning is off, so the last step
- * now lists the findings in the job summary instead of uploading the SARIF.
- * The upload is what made a resultless SARIF close every open alert; the
- * report step keeps the same rule, because a resultless SARIF would still
+ * D672 replaced the upload with a job-summary report while the repository
+ * was private; D718 put the upload back once it was public, before the
+ * report. The upload is what made a resultless SARIF close every open alert,
+ * and the report keeps the same rule, because a resultless SARIF would still
  * read as "0 findings" after a scan that never ran.
  *
  * THE FAILURE THIS GUARDS, stated once so a future edit cannot re-introduce
@@ -81,6 +81,7 @@ function steps() {
 const scanStep = () => steps().find((s) => s.name.startsWith('Run semgrep'));
 const stripStep = () => steps().find((s) => s.name.startsWith('Drop nosemgrep'));
 const reportStep = () => steps().find((s) => s.name.startsWith('Report findings'));
+const uploadStep = () => steps().find((s) => s.name.startsWith('Upload SARIF'));
 
 test('the scan step passes no --error, so its exit code means something', () => {
   const step = scanStep();
@@ -109,7 +110,7 @@ test('nothing in the job continues past a failed scan', () => {
   );
 });
 
-for (const [label, get] of [['strip', stripStep], ['report', reportStep]]) {
+for (const [label, get] of [['strip', stripStep], ['upload', uploadStep], ['report', reportStep]]) {
   test(`the ${label} step is unreachable from a failed scan`, () => {
     const step = get();
     assert.ok(step, `no ${label} step found in ${WORKFLOW}`);
