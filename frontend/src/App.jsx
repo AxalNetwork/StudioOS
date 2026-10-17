@@ -2887,15 +2887,20 @@ function AppInner() {
           cap table stays one per company at /raise/capital/cap-table. */}
       <Route path="/raise/cap-table/variants" element={guard(['admin', 'founder'], founderWorkspace('raise', <CapTableVariantsPage />))} />
       <Route path="/raise/cap-table/variants/:variant" element={guard(['admin', 'founder'], founderWorkspace('raise', <CapTableVariantsPage />))} />
-      {/* Founders manage their room here. An investor's rooms are read by grant under Research ·
-          Diligence (D311): the investor branch is a redirect there, so a bookmark still lands, and the
-          guard keeps admitting investor so the redirect can run. */}
+      {/* D696 decision 12: /raise/data-room answers by mode, in this order. An investor's rooms are
+          read by grant under Research · Diligence (D311): the investor branch is a redirect there, so a
+          bookmark still lands, and the guard keeps admitting investor so the redirect can run. A founder's
+          ?mode=workspace is the files tool (uploads, Share and Revoke, the NDA switches, advisor grants);
+          ?mode=access is the read-only access view; the bare address is the Data room module page,
+          whose records open at /raise/data-room/:id. Both tools return to the module page. */}
       <Route path="/raise/data-room" element={guard(['admin', 'founder', 'investor'],
         effectiveRole === 'investor'
           ? <Navigate to="/research/diligence" replace />
           : new URLSearchParams(location.search).get('mode') === 'workspace'
             ? founderWorkspace('raise', founderEditor(<DataRoomPage user={user} />))
-            : <FounderRaiseDataRoom />)} />
+            : new URLSearchParams(location.search).get('mode') === 'access'
+              ? founderEditor(<FounderRaiseDataRoom />)
+              : <CycleRoute cycle="raise" slug="data-room" />)} />
        <Route path="/raise/liquidity" element={guard(['admin', 'founder'],
          new URLSearchParams(location.search).get('mode') === 'workspace'
            ? founderWorkspace('raise', founderEditor(<LiquidityPage currentUser={user} />))
@@ -3407,7 +3412,8 @@ function AppInner() {
           and only for a founder in landing mode. */}
       {/* D661 (#1474): a founder's /raise is the cycle overview from #1501's
           read, and /raise/<module> its module pages. Every Raise tool route
-          above is static and wins, so /raise/data-room stays the data room. */}
+          above is static and wins; /raise/data-room's own route draws the Data
+          room module page itself when no mode is asked for (D696). */}
       <Route path="/raise" element={founderRaiseLanding
         ? guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" />)
         : <Navigate to="/raise/capital/pipeline" replace />} />

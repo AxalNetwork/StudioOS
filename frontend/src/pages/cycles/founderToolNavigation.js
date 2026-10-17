@@ -25,7 +25,7 @@ export const FOUNDER_TOOLS = [
   { path: '/raise/capital', cycle: 'raise', module: 'use-of-funds' },
   { path: '/raise/capital/cap-table', cycle: 'raise', module: 'cap-table' },
   { path: '/raise/capital/pipeline', cycle: 'raise', module: 'capital-relationships' },
-  { path: '/raise/data-room', cycle: 'raise', module: 'data-room' },
+  { path: '/raise/data-room', query: 'mode=workspace', cycle: 'raise', module: 'data-room', label: 'Open the files tool', door: true, roles: ['admin', 'founder'] },
   { path: '/raise/legal-engine', cycle: 'build', module: 'company-creation' },
 ];
 
@@ -38,11 +38,18 @@ export function projectSearch(search = '') {
   return project && /^[1-9]\d*$/.test(project) ? '?project_id=' + project : '';
 }
 
+/** A door's own `query` (D696: the files tool's `mode=workspace`) comes ahead of the venture. */
+function doorHref(tool, search) {
+  const venture = projectSearch(search);
+  if (!tool.query) return tool.path + venture;
+  return tool.path + '?' + tool.query + (venture ? '&' + venture.slice(1) : '');
+}
+
 export function moduleToolLinks(cycle, slug, user, search = '') {
   if (!['admin', 'founder'].includes(user?.role)) return [];
   return FOUNDER_TOOLS.filter((tool) => tool.door && tool.cycle === cycle && tool.module === slug
     && tool.roles.includes(user.role) && hasTier(user, tool.requiredTier))
-    .map((tool) => ({ label: tool.label, href: tool.path + projectSearch(search) }));
+    .map((tool) => ({ label: tool.label, href: doorHref(tool, search) }));
 }
 
 export function editorModuleLink(pathname, search = '', user) {

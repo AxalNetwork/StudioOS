@@ -14,8 +14,8 @@ import { CYCLE_NAMES, FIRST_FOCUS, ROOT_ACTION_PATHS, phoneFocus, phoneIndex, ph
  * (`validatePhone.js`); only Validate's rule-1 focus, meter fallback and
  * "Set a target" are cycle-specific.
  *
- * Not mounted yet: #1665's PR 1b puts it in `CycleRoute` below 1024px, in
- * place of `ValidatePhoneFocus`, the overview and `AlsoIn`.
+ * `CycleRoute` draws it below 1024px on a cycle's root, in place of the
+ * overview and `AlsoIn` (#1665's PR 1b); the desktop page draws neither.
  */
 
 const NR = 'rounded border border-gray-300 px-1.5 text-[9.5px] font-bold text-gray-700 dark:border-gray-700 dark:text-gray-300';

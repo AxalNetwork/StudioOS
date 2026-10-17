@@ -18,7 +18,7 @@
 
 export const PAGE_SIZE = 10;
 
-export const CATEGORY_ORDER = ['CRM', 'Payments', 'Calendar', 'Calendar and workspace', 'Messaging', 'Signing', 'Cap table', 'Data', 'Code', 'Design', 'Docs'];
+export const CATEGORY_ORDER = ['CRM', 'Payments', 'Accounting and banking', 'Calendar', 'Calendar and workspace', 'Messaging', 'Signing', 'Cap table', 'Data', 'Code', 'Design', 'Docs'];
 
 /**
  * Build's own group order (D686 §5.4): the canvas's Code, Design, Payments,

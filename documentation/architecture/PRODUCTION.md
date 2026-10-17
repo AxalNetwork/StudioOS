@@ -163,6 +163,8 @@ A grant older than a raised session floor is also refused on every tool call (`g
       bank account (D708, which answers 503 `cipher_key_missing`). Changing it
       leaves every encrypted value unreadable; each bank account then reads
       `account_unreadable` until it is retired and added again.
+      D710's Mercury entity tokens are stored under it too, and read
+      `token_unreadable` after a change until the Super Admin enters them again.
 
 ### Cloudflare Worker (optional, per feature)
 - [ ] `GITHUB_ACCESS_TOKEN` – ticket → GitHub-issue sync.
