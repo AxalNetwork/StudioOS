@@ -18,8 +18,21 @@ export const AXAL_ENTITIES = {
   fund: { key: 'fund', name: 'Axal VC Fund I, LP', descriptor: 'a Delaware limited partnership, acting by its general partner Axal VC GP LLC' },
 };
 
+// D706 — the Fund I catalog entries, routed by name (see the worker file).
+const FUND_PARTY_SLUGS_D706 = new Set([
+  'lp_side_letter', 'lp_interest_transfer', 'investment_management_agreement',
+  'clawback_guarantee', 'management_rights_letter', 'pro_rata_information_rights_side_letter',
+]);
+const GP_PARTY_SLUGS_D706 = new Set([
+  'lpa_amended_restated', 'lpa_initial', 'gp_closing_certificate', 'capital_call_notice',
+  'distribution_notice', 'default_notice', 'lpac_charter', 'gp_llc_agreement',
+  'gp_fund_formation_consent', 'carried_interest_award_letter',
+]);
+
 export function axalEntityKeyForDoc(slugOrType, category) {
   const s = String(slugOrType || '').toLowerCase();
+  if (FUND_PARTY_SLUGS_D706.has(s)) return 'fund';
+  if (GP_PARTY_SLUGS_D706.has(s)) return 'gp';
   const fundEntityDocs = new Set([
     'subscription booklet & lpa', 'spv joinder agreement', 'co-investment side letter',
     'strategic side letter / focused spv', 'lpa', 'ppm', 'subscription',
@@ -33,13 +46,27 @@ export function axalEntityKeyForDoc(slugOrType, category) {
   return 'management';
 }
 
-const POLICY_SLUGS = new Set(['tos_v1', 'privacy_v1', 'aml_kyc', 'form_adv']);
+const POLICY_SLUGS = new Set([
+  'tos_v1', 'privacy_v1', 'aml_kyc', 'form_adv',
+  // D706 (Fund I catalog)
+  'compliance_manual_code_of_ethics', 'investor_privacy_notice_reg_sp', 'valuation_policy',
+  'conflicts_allocation_policy',
+]);
 const UNILATERAL_SLUGS = new Set([
   'section_83b', 'accreditation_v1', 'ein_application_kit', 'sg_acra_form_45_kit',
   'uk_form_in01_kit', 'ee_e_residency_application_kit', 'data_access_acknowledgment_admin',
   'mentor_engagement_disclaimer',
+  // D706 (Fund I catalog)
+  'certificate_of_limited_partnership_de', 'mfn_election_form', 'lp_investor_questionnaire',
+  'lp_aml_kyc_certification', 'lp_tax_status_certification', 'lp_electronic_delivery_consent',
+  'form_d_filing_kit', 'bad_actor_questionnaire_506d',
 ]);
-const RESOLUTION_SLUGS = new Set(['ic_charter']);
+const RESOLUTION_SLUGS = new Set([
+  'ic_charter',
+  // D706 (Fund I catalog)
+  'gp_closing_certificate', 'capital_call_notice', 'distribution_notice', 'default_notice',
+  'lpac_charter', 'gp_fund_formation_consent',
+]);
 const CORPORATE_SLUGS = new Set([
   'certificate_of_incorporation_de', 'bylaws', 'uk_articles_of_association',
   'uk_memorandum_of_association', 'sg_constitution', 'ee_articles_of_association',
