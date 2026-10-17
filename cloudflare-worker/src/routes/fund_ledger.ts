@@ -6,6 +6,7 @@ import { lpMembershipScope } from '../services/tenancyScope';
 import { claimLpRowsByEmail } from '../services/lpClaim';
 import { AUTH_ERROR_STATUSES } from '../util/authErrors';
 import { refuse } from '../util/refusal';
+import { assertAdminAct, auditFundAct, type FundActKey } from '../services/fundAdminAccess';
 import { LedgerRefusal,ledgerId,ledgerCents,ledgerDate,ledgerText,accountCategories,ledgerAudit,commitLedger,
   ledgerPeriod,postLedgerEntry,accrueFundFee,readFundLedger } from '../services/fundLedger';
 const r = new Hono<{Bindings:Env}>();
@@ -14,6 +15,16 @@ r.onError((error,c)=>{
   const status=AUTH_ERROR_STATUSES[error.message];
   if (status) return refuse(c,status,{code:'fund_access_refused',message:'This account cannot access the fund ledger.'});
   return refuse(c,503,{code:'fund_ledger_unreadable',message:'Fund ledger is Unreadable. Please retry.',raw:error});
+});
+/**
+ * D714 decision 4: an admin's ledger write leaves one `fund_admin.<act>` row,
+ * after the write. `access` stashes the act it asserted; this runs once the
+ * handler has answered, and only when it answered with success.
+ */
+r.use('*',async(c,next)=>{
+  await next();
+  const done=(c as any).get('fundAdminAct') as {user:any,act:FundActKey,fund_id:number}|undefined;
+  if (done && c.res.ok) await auditFundAct(c.env,done.user,done.act,{fund_id:done.fund_id,route:`${c.req.method} ${c.req.path}`});
 });
 const parseId=(raw:string)=>/^\d+$/.test(raw) && ledgerId(Number(raw)) ? Number(raw) : null;
 async function funds(env:Env,user:any) {
@@ -27,13 +38,19 @@ async function funds(env:Env,user:any) {
   if (!result.success) throw new Error('Fund ledger scope unreadable');
   return result.results;
 }
-async function access(c:any,write=false) {
+/** D714: a write asserts its act; the administrator PUT asserts its own, a Super Admin act. */
+async function access(c:any,write:boolean|'fund_ledger.administrator'=false) {
   const user=await requireAuth(c), id=parseId(c.req.param('id'));
   if (!id || !['admin','investor'].includes(user.role)) throw new LedgerRefusal('Fund not found.',404);
   const fund=(await funds(c.env,user)).find((f:any)=>f.id===id);
   if (!fund) throw new LedgerRefusal('Fund not found.',404);
   const full=user.role==='admin' || fund.fund_admin_user_id===user.id;
   if (write && !full) throw new LedgerRefusal('Only an admin or the assigned fund administrator can write this ledger.',404);
+  if (write) {
+    const act:FundActKey=write===true ? 'fund_ledger.write' : write;
+    await assertAdminAct(c,user,act);
+    c.set('fundAdminAct',{user,act,fund_id:fund.id});
+  }
   return {user,fund,full};
 }
 const body=(c:any)=>c.req.json().catch(()=>null);
@@ -51,7 +68,7 @@ r.get('/:id',async c=>{
   return c.json(await readFundLedger(c.env,fund,full,periodId));
 });
 r.put('/:id/administrator',async c=>{
-  const {user,fund}=await access(c,true), data=await body(c);
+  const {user,fund}=await access(c,'fund_ledger.administrator'), data=await body(c);
   if (user.role!=='admin') throw new LedgerRefusal('Only an admin can assign the fund administrator.',404);
   if (!data || !(data.user_id===null || ledgerId(data.user_id))) throw new LedgerRefusal('Choose an active investor account or null to remove the administrator.');
   const result=await commitLedger(c.env,[c.env.DB.prepare(`UPDATE vc_funds SET fund_admin_user_id=? WHERE id=? AND fund_admin_user_id IS ?
