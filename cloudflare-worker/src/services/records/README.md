@@ -14,7 +14,11 @@ default action tone when a spec omits one.
 
 `../cycleActivity.ts` writes scoped activity and reads one record's timeline.
 Older activity is only included when a spec declares an `oldRows` matcher.
-Nothing rewrites historical activity.
+Nothing rewrites historical activity. Grow (D691, #1698) lists its six stores
+in `owned.ts`, and its matchers admit today's Grow rows, which carry no
+`project_id`, only under `grow_*` actions (`unscopedActions`), plus a month's
+figure logged as `<id>:<month>` (`idPrefixTypes`) and an application's stage
+row through its posting (`children`).
 
 `verdict.ts` is Validate's Verdict record (D693, #1703). It is tested through a
 registry of its own and joins `RECORD_SPECS` with Validate's service.

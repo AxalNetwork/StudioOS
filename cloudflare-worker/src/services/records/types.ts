@@ -94,13 +94,26 @@ export type OldRowsMatcher = {
   /** Older JSON details whose $.id is this id, optionally without a prefix. */
   actions?: string[];
   idWithoutPrefix?: string;
+  /**
+   * D691 (#1698): rows written before the convention, with no `project_id`,
+   * admitted only under these `grow_*` action names. The route has already
+   * proven the id with `ownedRow`, and each such row names its own table.
+   */
+  unscopedActions?: string[];
+  /** Older rows whose entity id is `<record id>:<suffix>` (a month's figure). */
+  idPrefixTypes?: string[];
+  /** Older rows on a child, matched through its parent. Each is a fixed statement. */
+  children?: Array<'job_applications'>;
 };
 
 export type Store =
   | 'pain_groups' | 'discovery_interviews' | 'customer_segments'
   | 'competitor_candidates' | 'demand_signals' | 'revenue_entries'
   | 'waitlist_signups' | 'hypotheses' | 'hypothesis_pain_links'
-  | 'interview_sessions' | 'validation_decisions' | 'validation_decision_commitments';
+  | 'interview_sessions' | 'validation_decisions' | 'validation_decision_commitments'
+  // D691 (#1698): Grow's stores.
+  | 'product_feedback' | 'growth_channels' | 'job_postings'
+  | 'growth_partners' | 'markets' | 'compliance_events';
 
 export type ModuleSpec = {
   read: Gate;
