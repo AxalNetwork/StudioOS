@@ -7,7 +7,8 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { makeCycleWrites } from '../src/lib/api/cycleWrites.js';
 import { MODULES } from '../src/pages/cycles/modules.js';
 import { extractClientCalls, normalizePath } from '../../scripts/lib/apiModules.mjs';
@@ -64,4 +65,35 @@ test('the drift check reads formOptions as GET /api/cycles/:p/modules/:p/form-op
   assert.match(readFileSync('cloudflare-worker/src/index.ts', 'utf8'), /app\.route\('\/api\/cycles', cycleRecords\);/);
   // The app binds the same factory, so `cyclesWrite.formOptions` is the method #1657 and #1704 call.
   assert.match(readFileSync('frontend/src/lib/api/cycles.js', 'utf8'), /export const cyclesWrite = makeCycleWrites\(request\);/);
+});
+
+// `npm run test:drift` finds every route (test 11). D690 builds its router in a
+// factory (`createCycleRecords()`, so a test can pass its own registry), and
+// the guard used to count only verbs on the mounted name, so this call read
+// as drift although the route is mounted. The guard now reads that router.
+const GUARD = 'scripts/check-api-drift.mjs';
+function guardOutput(script) {
+  try { return execFileSync('node', [script], { encoding: 'utf8' }); } catch (e) { return `${e.stdout || ''}${e.stderr || ''}`; }
+}
+function assertGuardSees(script) {
+  const out = guardOutput(script);
+  assert.match(out, /Worker routes resolved/, 'the guard ran');
+  assert.ok(!out.includes('- GET /api/cycles/:p/modules/:p/form-options'), 'formOptions is not reported as a call with no worker route');
+}
+
+test('the drift guard reads the router D690\'s factory builds, so formOptions\'s route is found', () => {
+  assertGuardSees(GUARD);
+  const src = readFileSync(GUARD, 'utf8');
+  for (const [before, after] of [
+    ['const declaredOn = (name, at) => name === ident || (built && name === built.name && at > built.from && at < built.to);', 'const declaredOn = (name) => name === ident;'],
+    ['return local ? { name: local[1], from, to } : null;', 'return null;'],
+  ]) {
+    assert.ok(src.includes(before), 'mutation target: ' + before);
+    // The guard resolves its root from its own path, so the copy sits beside it, for one run.
+    const copy = `scripts/.drift-mutant-${process.pid}.mjs`;
+    try {
+      writeFileSync(copy, src.replace(before, after));
+      assert.throws(() => assertGuardSees(copy), { name: 'AssertionError' }, 'mutation must fail: ' + after);
+    } finally { rmSync(copy, { force: true }); }
+  }
 });
