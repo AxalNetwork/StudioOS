@@ -146,7 +146,7 @@ test('the cycle body takes the canvas gutter in a cycle size container, and no o
     ['the narrow bottom', (src) => src.replace('lg:@max-[760px]/cycle:pb-[40px]', 'lg:pb-[40px]')],
     ['the phone sides', (src) => src.replace('px-[22px] ', 'px-5 ')],
     ['p-5 kept', (src) => src.replace('min-w-0 px-[22px]', 'min-w-0 p-5 px-[22px]')],
-    ['the form dialog mounted inside the body', (src) => src.replace('      {!phone && openForm}\n', '').replace('        {phone && openForm ? openForm : body}\n', '        {phone && openForm ? openForm : body}\n        {!phone && openForm}\n')],
+    ['the form dialog mounted inside the body', (src) => src.replace('      {!phone && openForm}\n', '').replace('        {phone && openForm ? openForm : phone && dialog?.page ? dialog.element : body}\n', '        {phone && openForm ? openForm : phone && dialog?.page ? dialog.element : body}\n        {!phone && openForm}\n')],
     ['the form page drawn outside the body', (src) => src.replace('{phone && openForm ? openForm : phone && dialog?.page ? dialog.element : body}', '{body}').replace('      {!phone && openForm}\n', '      {!phone && openForm}\n      {phone && openForm ? openForm : phone && dialog?.page ? dialog.element : body}\n')],
     ['the parts dialog drawn inside the body', (src) => src.replace('      {dialog && !(phone && dialog.page) && dialog.element}\n', '').replace('        {phone && openForm ? openForm : phone && dialog?.page ? dialog.element : body}\n', '        {phone && openForm ? openForm : phone && dialog?.page ? dialog.element : body}\n        {dialog && !(phone && dialog.page) && dialog.element}\n')],
   ]) {
