@@ -2,6 +2,7 @@
 import type { Env } from '../../types';
 import type { Store } from './types';
 import { FUND_SECTIONS, READINESS_KEYS } from '../raiseCycle';
+import { KPI_KEYS as GROW_KPI_KEYS } from '../growKpis';
 
 export const RECORD_ID = /^[a-z0-9][a-z0-9_-]*$/;
 
@@ -130,6 +131,17 @@ export async function ownedRow(env: Env, store: Store, id: string | number, proj
     case 'compliance_events': {
       const n = numeric(value);
       return n !== null && !!await db.prepare('SELECT 1 FROM compliance_events WHERE id = ? AND project_id = ?').bind(n, projectId).first();
+    }
+    // A fixed KPI key, or the venture's own custom KPI (decision 4); any other key is not a record.
+    case 'grow_kpis':
+      if ((GROW_KPI_KEYS as readonly string[]).includes(value)) return true;
+      return value.startsWith('custom-')
+        && !!await db.prepare('SELECT 1 FROM custom_kpis WHERE uid = ? AND project_id = ?').bind(value.slice('custom-'.length), projectId).first();
+    case 'obligation_occurrences': {
+      const n = numeric(value);
+      return n !== null && !!await db.prepare(
+        'SELECT 1 FROM obligation_occurrences o JOIN compliance_events e ON e.id = o.event_id WHERE o.id = ? AND e.project_id = ?',
+      ).bind(n, projectId).first();
     }
     // D690 (S18-B, #1694): Build. Each id resolves through its store and the venture.
     case 'mvp_features': {
