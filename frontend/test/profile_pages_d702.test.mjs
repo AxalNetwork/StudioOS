@@ -30,6 +30,7 @@ import React, { act } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { mountContracts } from './_contracts_dom.mjs';
+import { escapeRe } from './_escapeRe.mjs';
 import { EadwynMenu, PROFILE_ROWS_LIVE } from '../src/pages/founder/EadwynMenu.jsx';
 import ProfileFrame from '../src/pages/profile/ProfileFrame.jsx';
 import YouPage, { YouView, COFOUNDER_EDITOR, PROFILE_EDITOR, safeLink } from '../src/pages/profile/YouPage.jsx';
@@ -119,7 +120,7 @@ const hrefs = (m) => [...m.matchAll(/<a [^>]*href="([^"]*)"/g)].map((x) => x[1].
 
 test('9. the three /profile/* lines are founders only; /profile is You for a founder and the redirect for anyone else', () => {
   for (const [path, page] of [['/profile/venture', 'VenturePage'], ['/profile/preview', 'ProfilePreviewPage'], ['/profile/visibility', 'VisibilityPage']]) {
-    assert.match(APP, new RegExp(`<Route path="${path.replace(/\//g, '\\/')}" element=\\{guard\\(\\['founder'\\], <${page} \\/>\\)\\} \\/>`), path);
+    assert.match(APP, new RegExp(`<Route path="${escapeRe(path)}" element=\\{guard\\(\\['founder'\\], <${page} \\/>\\)\\} \\/>`), path);
   }
   assert.match(APP, /<Route path="\/profile" element=\{effectiveRole === 'founder' \? guard\(\['founder'\], <YouPage \/>\) : <SettingsRedirect \/>\} \/>/);
   // The redirect still carries the query and the hash.
@@ -343,9 +344,12 @@ test('11. You draws its stores, and each Edit opens the editor that owns the dat
   assert.equal(links.filter((x) => x === PROFILE_EDITOR).length, 4, 'person, Bio, Background and Links edit at /account/profile');
   assert.ok(links.includes(COFOUNDER_EDITOR));
   assert.equal(COFOUNDER_EDITOR, '/build/team?mode=workspace&tab=cofounder');
-  assert.ok(links.includes('https://linkedin.com/in/sam-example'));
-  assert.ok(!links.some((x) => x.startsWith('javascript:')), 'a member-typed link that is not http(s) is never an href');
-  assert.equal(safeLink('javascript:alert(1)'), null);
+  assert.equal(links.filter((x) => x === 'https://linkedin.com/in/sam-example').length, 1, 'the LinkedIn link is drawn once');
+  // Every href's scheme, read by the URL parser (relative ones resolve against
+  // the site), so no casing or leading space can hide a script scheme.
+  const scheme = (x) => { try { return new URL(x, 'https://axal.vc').protocol; } catch { return null; } };
+  assert.deepEqual(links.filter((x) => !['http:', 'https:'].includes(scheme(x))), [], 'a member-typed link that is not http(s) is never an href');
+  for (const bad of ['javascript:alert(1)', 'data:text/html,hi', 'vbscript:msgbox(1)']) assert.equal(safeLink(bad), null, bad);
   // No co-founder profile reads Not recorded with its reason.
   const none = text(html(h(YouView, { me: ready({ ...ME, preferences: { recorded: false, reason: 'No co-founder profile yet' } }), fit: LOADING })));
   assert.match(none, /Founder preferences Edit Founder preferences No co-founder profile yet Not recorded/);
@@ -379,7 +383,7 @@ test('12. at 390 the card draws PhoneBar, the 4:3 banner with its tagline, and t
   assert.match(m, /<img src="\/archetypes\/banners\/[^"]+\.webp"/);
   assert.match(m, /class="acp-fade"/);
   const meta = archetypeMeta('fo_missionary');
-  assert.match(m, new RegExp(`data-testid="archetype-tagline">${meta.tagline.replace(/[.]/g, '\\.')}<`));
+  assert.match(m, new RegExp(`data-testid="archetype-tagline">${escapeRe(meta.tagline)}<`));
   const row = text(m.slice(m.indexOf('data-testid="archetype-published-row"')));
   assert.ok(row.includes(PUBLISHED_SUB));
   assert.doesNotMatch(row, /tagline/);

@@ -64,8 +64,11 @@ from jwt import PyJWKClient
 logger = logging.getLogger(__name__)
 
 # Module-level "we already warned about disabled state" flag. Without this
-# we'd spam the logs on every request when CF Access isn't configured.
-_warned_disabled = False
+# we'd spam the logs on every request when CF Access isn't configured. It is
+# a dict entry, not a `global` flag, as in settings.py (D476): CodeQL's
+# unused-global check does not follow a flag written on one call and read on
+# the next. Same warn-once behaviour.
+_warned_once = {"disabled": False}
 
 
 def _env(name: str) -> Optional[str]:
@@ -147,22 +150,14 @@ def verify_cf_access_jwt(request: Request) -> Optional[dict]:
         )
 
     if not team or not aud:
-        global _warned_disabled
-        if not _warned_disabled:
+        if not _warned_once["disabled"]:
             logger.warning(
                 "Cloudflare Access verification is DISABLED "
                 "(CF_ACCESS_TEAM_DOMAIN / CF_ACCESS_AUD not set). "
                 "Backoffice routes rely on application auth only. "
                 "Set both env vars to activate the perimeter."
             )
-            # codeql[py/unused-global-variable] -- _warned_disabled is read via the `global _warned_disabled` guard
-            # a few lines above (`if not _warned_disabled:`); the write here is what a LATER, separate
-            # call's read observes. CodeQL's dead-store analysis does not model a global's value
-            # persisting across separate invocations of the function that sets it, so it sees this
-            # write as never consumed. It is: this flag exists to log the "Access verification is
-            # DISABLED" warning exactly once per process instead of once per request, so it doesn't
-            # spam the logs on every unauthenticated-perimeter call.
-            _warned_disabled = True
+            _warned_once["disabled"] = True
         return None
 
     # API-server policy: header only. We deliberately do NOT fall back to

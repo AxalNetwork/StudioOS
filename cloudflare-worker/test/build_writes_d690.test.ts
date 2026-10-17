@@ -728,6 +728,10 @@ test('test 7: move writes okr_column_moves, and is offered as "Move to <the next
   // Edit reopens it, through the same move.
   assert.equal((await act(db, 'product-roadmap', '6', 'edit', { column: 'later' })).status, 200);
   assert.equal(count(db, 'SELECT COUNT(*) AS n FROM okr_column_moves'), 2);
+  // An Edit that renames and moves logs the move under the item's new name.
+  assert.equal((await act(db, 'product-roadmap', '6', 'edit', { title: 'Ship reconciliation v2', column: 'next' })).status, 200);
+  assert.equal(db.prepare(`SELECT details FROM activity_logs WHERE action = 'roadmap_moved' ORDER BY id DESC LIMIT 1`).get()!.details,
+    'Ship reconciliation v2 moved to next');
   assert.equal(actionOf(await rec(db, 'product-roadmap', '7'), 'move').label, 'Move to Later');
   db.close();
 });

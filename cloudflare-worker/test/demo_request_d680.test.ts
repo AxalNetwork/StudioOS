@@ -74,6 +74,8 @@ function mailsSent(calls: Call[]): string[] {
     });
 }
 const recipient = (mail: string) => (mail.match(/^To: (.+)$/m) || [])[1];
+/** A request to GitHub by its parsed host (github.com or any subdomain), not by a substring of the URL. */
+const toGitHub = (url: string) => { const host = new URL(url).hostname; return host === 'github.com' || host.endsWith('.github.com'); };
 
 test('a demo request is stored, emailed to the team, and never sent to GitHub', async () => {
   const { res, json, rows, calls } = await request('product');
@@ -82,7 +84,7 @@ test('a demo request is stored, emailed to the team, and never sent to GitHub', 
   assert.equal(rows.length, 1);
   assert.equal(rows[0].email, LEAD.email);
   assert.equal(rows[0].github_issue_url, null);
-  assert.equal(calls.filter((c) => c.url.includes('github.com')).length, 0, 'no request reaches GitHub, even with a token set');
+  assert.equal(calls.filter((c) => toGitHub(c.url)).length, 0, 'no request reaches GitHub, even with a token set');
   const to = mailsSent(calls).map(recipient);
   assert.ok(to.includes(LEAD.email), 'the lead gets the confirmation');
   assert.ok(to.includes(DEFAULT_CONTACT_MAILBOX), 'the team gets the request');

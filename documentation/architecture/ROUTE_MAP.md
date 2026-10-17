@@ -268,7 +268,10 @@ checks every id it takes against this venture (404 otherwise) and logs one
 `raise.<module>` activity row per record it writes. The record actions
 (duplicate, revoke, add-hire, log, add-feedback, mark-passed, edit, edit-split,
 re-score, score, and the data room's replace and remove) are declared on the
-records in "Cycle records" above, each through the same writer.
+records in "Cycle records" above, each through the same writer. #1700's third
+PR wrote the writers for duplicate, revoke, add-hire, log, add-feedback and
+mark-passed, and the data room's `replaceDataRoomFile()` and
+`removeDataRoomFile()`.
 Only the venture and admins reach it. The
 pipeline, cap table, data room and pitch tools keep their own pages; the
 module pages summarise them and link there. The deck share viewer's heartbeat

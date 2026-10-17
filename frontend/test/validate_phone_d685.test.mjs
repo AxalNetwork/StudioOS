@@ -22,7 +22,10 @@ import { installDocument } from './_contracts_dom.mjs';
 
 const h = React.createElement;
 const html = (raw, search = '?project_id=3') => renderToStaticMarkup(h(MemoryRouter, null, h(PhoneCycleRoot, { cycle: 'validate', raw, search })));
-const tag = (out, id) => new RegExp(`<[a-z]+[^>]*data-testid="${id}"[^>]*>`).exec(out)?.[0] ?? '';
+const tag = (out, id) => {
+  const at = out.indexOf(`data-testid="${id}"`);
+  return at < 0 ? '' : out.slice(out.lastIndexOf('<', at), out.indexOf('>', at) + 1);
+};
 
 const RAW = {
   figures: [

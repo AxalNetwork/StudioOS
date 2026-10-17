@@ -14,7 +14,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 
 const ROOT = process.cwd();
@@ -36,10 +36,15 @@ test('the catalogue sells Free, Validate + Build, and Raise + Grow', () => {
 
 test('the Worker quotes the catalogue\'s names and prices', () => {
   const src = W('middleware/requireTier.ts');
+  // The body of the first `{ … }` after `export const <name>`, found by string
+  // search rather than a RegExp built from `name`.
   const table = (name) => {
-    const m = new RegExp(`export const ${name}[^{]*\\{([^}]*)\\}`).exec(src);
-    assert.ok(m, `${name} is exported`);
-    return Object.fromEntries([...m[1].matchAll(/(growth|studio):\s*'([^']*)'/g)].map((x) => [x[1], x[2]]));
+    const at = src.indexOf(`export const ${name}`);
+    assert.ok(at >= 0, `${name} is exported`);
+    const open = src.indexOf('{', at);
+    const close = open < 0 ? -1 : src.indexOf('}', open);
+    assert.ok(open >= 0 && close > open, `${name} is an object`);
+    return Object.fromEntries([...src.slice(open + 1, close).matchAll(/(growth|studio):\s*'([^']*)'/g)].map((x) => [x[1], x[2]]));
   };
   const names = table('PLAN_NAME');
   const prices = table('PLAN_PRICE_LABEL');
@@ -62,12 +67,16 @@ test('Raise and Grow work asks for Raise + Grow; Validate and Build work for Val
   assert.doesNotMatch(decks, /required_tier: 'growth'|tierCovers\(tier, 'growth'\)/, 'no deck path asks for growth');
   assert.doesNotMatch(W('services/decks/branding.ts'), /'growth'/, 'deck branding and premium methods are Raise + Grow');
   assert.doesNotMatch(read('frontend/src/decks/templates/index.ts'), /required_tier: 'growth'/, 'premium templates are Raise + Grow');
+  // An ensureTier call for each tier, its arguments allowed one level of nested
+  // call (`requireAuth(c)`).
+  const GATE = {
+    growth: /ensureTier\((?:[^()]|\([^()]*\))*'growth'\)/,
+    studio: /ensureTier\((?:[^()]|\([^()]*\))*'studio'\)/,
+  };
   for (const [file, what] of [['routes/captable.ts', 'cap-table writes'], ['routes/comarketing.ts', 'co-marketing'], ['routes/compliance.ts', 'compliance events']]) {
     const src = W(file);
-    // An ensureTier call, its arguments allowed one level of nested call (`requireAuth(c)`).
-    const gate = (tier) => new RegExp(`ensureTier\\((?:[^()]|\\([^()]*\\))*'${tier}'\\)`);
-    assert.doesNotMatch(src, gate('growth'), `${what} no longer ask for growth`);
-    assert.match(src, gate('studio'), `${what} ask for Raise + Grow`);
+    assert.doesNotMatch(src, GATE.growth, `${what} no longer ask for growth`);
+    assert.match(src, GATE.studio, `${what} ask for Raise + Grow`);
   }
   assert.match(W('routes/advisors.ts'), /ensureTier\(user, 'studio'\); \/\/ D683/, 'advisor booking is Raise + Grow');
   // Validate and Build keep the cheaper plan.
@@ -79,10 +88,12 @@ test('Raise and Grow work asks for Raise + Grow; Validate and Build work for Val
 test('no old founder price is left in the source', () => {
   const hits = [];
   const walk = (dir) => {
-    for (const name of readdirSync(dir)) {
-      const p = join(dir, name);
-      if (statSync(p).isDirectory()) { walk(p); continue; }
-      if (!/\.(jsx?|tsx?)$/.test(name)) continue;
+    // The entry's own type from the listing: no separate stat of the path
+    // before it is read.
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, entry.name);
+      if (entry.isDirectory()) { walk(p); continue; }
+      if (!/\.(jsx?|tsx?)$/.test(entry.name)) continue;
       const src = readFileSync(p, 'utf8');
       if (/\$79\b(?![,.\d])|\$249\b(?![,.\d])|79 \/ month|249 \/ month|79\/mo|249\/mo/.test(src)) hits.push(p);
     }

@@ -77,9 +77,11 @@ function isTailConsumerTable(name) {
   return name === 'tail_consumers' || /(^|\.)tail_consumers$/.test(name);
 }
 
+// Read each `service = "<name>"` line's quoted value and compare it as a
+// string, so the service name is never compiled into a pattern.
+const SERVICE_LINE_RE = /^\s*service\s*=\s*["'](.*)["']\s*$/;
 function sectionDeclaresService(section, service) {
-  const re = new RegExp(`^\\s*service\\s*=\\s*["']${service}["']\\s*$`);
-  return section.body.some((l) => re.test(l));
+  return section.body.some((l) => SERVICE_LINE_RE.exec(l)?.[1] === service);
 }
 
 function readFileOrExit(file) {

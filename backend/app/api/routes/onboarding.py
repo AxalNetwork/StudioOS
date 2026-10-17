@@ -48,12 +48,14 @@ router = APIRouter(prefix="/onboarding", tags=["Onboarding"])
 
 VALID_FLOWS = {"founder", "investor", "partner"}
 
-_migrated = False
+# A dict entry, not a `global` flag, as in settings.py (D476): CodeQL's
+# unused-global check does not follow a flag written on one call and read
+# on the next. Same run-once behaviour.
+_schema_once = {"onboarding": False}
 
 
 def _ensure_schema(session: Session) -> None:
-    global _migrated
-    if _migrated:
+    if _schema_once["onboarding"]:
         return
     try:
         session.exec(text(
@@ -71,13 +73,7 @@ def _ensure_schema(session: Session) -> None:
             """
         ))
         session.commit()
-        # codeql[py/unused-global-variable] -- _migrated is read via the `global _migrated` guard at the top of this same function (`if
-        # _migrated: return`); the write here is what a LATER, separate call's read observes. CodeQL's
-        # dead-store analysis does not model a global's value persisting across separate invocations of
-        # the function that sets it, so it sees this write as never consumed. It is: this flag exists
-        # specifically to make the schema-migration idempotent-but-skippable after the first successful
-        # request in this process.
-        _migrated = True
+        _schema_once["onboarding"] = True
     except Exception:
         session.rollback()
 
@@ -402,12 +398,12 @@ _CHECKLIST_CATALOG: Dict[str, list] = {
     ],
 }
 
-_checklist_migrated = False
+# Same dict-entry run-once flag as `_schema_once` above.
+_checklist_once = {"checklist": False}
 
 
 def _ensure_checklist_schema(session: Session) -> None:
-    global _checklist_migrated
-    if _checklist_migrated:
+    if _checklist_once["checklist"]:
         return
     try:
         session.exec(text(
@@ -434,13 +430,7 @@ def _ensure_checklist_schema(session: Session) -> None:
             """
         ))
         session.commit()
-        # codeql[py/unused-global-variable] -- _checklist_migrated is read via the `global _checklist_migrated` guard at the top of this
-        # same function (`if _checklist_migrated: return`); the write here is what a LATER, separate
-        # call's read observes. CodeQL's dead-store analysis does not model a global's value persisting
-        # across separate invocations of the function that sets it, so it sees this write as never
-        # consumed. It is: this flag exists specifically to make the schema-migration idempotent-but-
-        # skippable after the first successful request in this process.
-        _checklist_migrated = True
+        _checklist_once["checklist"] = True
     except Exception:
         session.rollback()
 

@@ -108,14 +108,21 @@ const FORBIDDEN_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
 
 function setPath(obj: Data, dotted: string, value: any): boolean {
   const keys = dotted.split('.');
+  // Rejected before anything is written, so a bad path leaves `obj` untouched.
   if (keys.some((k) => FORBIDDEN_KEYS.has(k))) return false;
+  // And again at each point of use, which is the only place CodeQL
+  // (js/prototype-pollution-utility) reads a guard.
+  const leaf = keys[keys.length - 1];
+  if (leaf === '__proto__' || leaf === 'constructor' || leaf === 'prototype') return false;
   let cur = obj;
   for (let i = 0; i < keys.length - 1; i++) {
     const k = keys[i];
+    if (k === '__proto__' || k === 'constructor' || k === 'prototype') return false;
     if (typeof cur[k] !== 'object' || cur[k] === null || Array.isArray(cur[k])) cur[k] = {};
+    // nosemgrep: javascript.lang.security.audit.prototype-pollution.prototype-pollution-loop.prototype-pollution-loop -- every segment is checked against __proto__/constructor/prototype before it is used
     cur = cur[k];
   }
-  cur[keys[keys.length - 1]] = value;
+  cur[leaf] = value;
   return true;
 }
 

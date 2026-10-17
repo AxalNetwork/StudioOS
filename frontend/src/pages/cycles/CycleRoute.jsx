@@ -379,9 +379,10 @@ export function RecordMount({ projectId, interviewId, onClose, onStarted, asPage
 
 /** The module slug of a cycle path (`/validate/customer-research?…`), or null for the overview and the cycle's own action path. */
 export function underSlug(path, cycle = 'validate', action = 'record') {
-  if (!/^[a-z]+$/.test(cycle)) return null;
-  const m = new RegExp(`^/${cycle}/([a-z0-9-]+)(?:[/?#]|$)`).exec(String(path || ''));
-  return m && m[1] !== action ? m[1] : null;
+  // One fixed pattern reads the cycle segment, which is then compared, so no
+  // regex is ever built from `cycle`.
+  const m = /^\/([a-z]+)\/([a-z0-9-]+)(?:[/?#]|$)/.exec(String(path || ''));
+  return m && m[1] === cycle && m[2] !== action ? m[2] : null;
 }
 
 /**

@@ -85,6 +85,7 @@ export const v = (data: DeckData, path: string, fallback = '') => {
   for (const k of keys) {
     if (cur == null) return fallback;
     if (k === '__proto__' || k === 'constructor' || k === 'prototype') return fallback;
+    // nosemgrep: javascript.lang.security.audit.prototype-pollution.prototype-pollution-loop.prototype-pollution-loop -- read-only walk that assigns nothing onto the data; unsafe segments are rejected above
     cur = cur[k]; // codeql[js/prototype-polluting-function] -- read-only deck-data walk; __proto__/constructor/prototype rejected above, returns value/fallback
   }
   return cur ?? fallback;
