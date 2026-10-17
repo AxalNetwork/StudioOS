@@ -29,6 +29,7 @@ function SignatureParty({ party }) {
     <div className="mb-5">
       <div className="font-bold text-[11pt] text-gray-900 dark:text-gray-100">{party.heading}</div>
       <div className="mt-1 text-[10.5pt] leading-6 text-gray-800 dark:text-gray-200 font-mono whitespace-pre">
+        {party.through ? <>{party.through}{'\n'}</> : null}
         {party.by}
         {'\n'}{party.name}
         {'\n'}{party.title}
@@ -74,7 +75,7 @@ export default function PaperPreview({
     : null;
 
   const execution = kind !== 'policy'
-    ? buildExecutionBlock({ kind, axalEntityName: entityName, counterpartyName: counterpartyName || null })
+    ? buildExecutionBlock({ kind, axalEntityKey: entityKey, axalEntityName: entityName, counterpartyName: counterpartyName || null })
     : null;
 
   return (

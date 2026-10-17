@@ -263,14 +263,17 @@ function drawBody(cur: Cursor, body: string) {
 function executionBlockHeight(block: ExecutionBlock, f: Fonts): number {
   const recitalLines = wrapTextToWidth(block.recital, f.italic, 8.5, CONTENT_WIDTH).length;
   const partyHeight = 5 * 13 + 16; // heading + By/Name/Title/Date + spacing
-  return 22 + recitalLines * 12 + 14 + block.parties.length * partyHeight + 20;
+  // D705 — a party that signs through another (the Fund, through its GP) has one more line.
+  const throughLines = block.parties.filter((p) => p.through).length;
+  return 22 + recitalLines * 12 + 14 + block.parties.length * partyHeight + throughLines * 13 + 20;
 }
 
 function drawSignatureParty(
-  cur: Cursor, f: Fonts, party: { heading: string; by: string; name: string; title: string; date: string },
+  cur: Cursor, f: Fonts, party: { heading: string; through?: string; by: string; name: string; title: string; date: string },
   sigImg: PDFImage | null, sigDims: { w: number; h: number } | null,
 ) {
   cur.paragraph(party.heading, { size: 10, font: 'bold', color: INK_STRONG, lineHeight: 14 });
+  if (party.through) cur.paragraph(party.through, { size: 9.5, lineHeight: 13 });
   cur.gap(2);
   if (sigImg && sigDims) {
     cur.image(sigImg, sigDims.w, sigDims.h);
@@ -391,6 +394,7 @@ export async function renderAgreementPdf(opts: RenderOptions): Promise<Uint8Arra
   if (kind !== 'policy' && !opts.suppressExecutionBlock) {
     const block = buildExecutionBlock({
       kind,
+      axalEntityKey: entityKey,
       axalEntityName: entityName,
       counterpartyName: opts.signerName || opts.signerEmail,
       signedDate,
@@ -460,7 +464,7 @@ export async function renderTemplatePreviewPdf(opts: PreviewRenderOptions): Prom
   drawBody(cur, stripTrailingSignatureBlock(opts.documentBody));
 
   if (kind !== 'policy') {
-    const block = buildExecutionBlock({ kind, axalEntityName: entityName, counterpartyName: opts.counterpartyName || null });
+    const block = buildExecutionBlock({ kind, axalEntityKey: entityKey, axalEntityName: entityName, counterpartyName: opts.counterpartyName || null });
     await drawExecutionBlock(cur, f, block, doc);
   }
 
