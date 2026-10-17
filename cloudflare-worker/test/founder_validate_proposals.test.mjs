@@ -331,8 +331,13 @@ test('accepting writes through the same function the manual route uses', async (
   const writes = await readFile(resolve(__dirname, '../src/routes/_founder_validate_writes.ts'), 'utf8');
   const fn = writes.slice(writes.indexOf('export async function insertHypothesis'));
   const bodyOnly = fn.slice(0, fn.indexOf('\n}') + 2);
-  assert.match(bodyOnly, /MAX\(CAST\(substr\(code, 2\) AS INTEGER\)\)/);
-  assert.doesNotMatch(bodyOnly, /COUNT\(\*\)/, 'codes must come from the highest ever used, not the count');
+  // D690 (#1692): the allocation is one INSERT … SELECT in the statement
+  // builder that `insertHypothesis` (and `insertHypothesisWithLinks`) run.
+  assert.match(bodyOnly, /insertHypothesisStatement\(env, \{ projectId, claim, userId \}\)/);
+  const stmtFn = writes.slice(writes.indexOf('export function insertHypothesisStatement'));
+  const stmtBody = stmtFn.slice(0, stmtFn.indexOf('\n}') + 2);
+  assert.match(stmtBody, /MAX\(CAST\(substr\(code, 2\) AS INTEGER\)\)/);
+  assert.doesNotMatch(stmtBody, /COUNT\(\*\)/, 'codes must come from the highest ever used, not the count');
 });
 
 test('a run reads only this project, and nothing a caller names', async () => {

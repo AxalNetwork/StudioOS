@@ -21,6 +21,7 @@
  *   POST   /sessions/:id/transcribe         the final transcript
  *   PATCH  /sessions/:id/segments/:segId    assign a passage's speaker
  *   GET    /sessions/:id/receipt            what each job cost, and the budget left
+ *   GET    /sessions/:id/audio              one signed download per recorded chunk (D690)
  *   DELETE /sessions/:id                    the session, its audio and its transcript
  *
  * A session belongs to a `discovery_interviews` row, so a Spin-Out Lab
@@ -54,6 +55,7 @@ import {
 import { consentRefusal, modelFrom, processingBusy, refusedBody, refusedStatus } from './founder_validate_structure';
 import { activeSessionsOf } from '../services/sessionSweeper';
 import { ensureTier, ensureTierSchema, FREE_TIER_LIMITS, userMeetsTier } from '../middleware/requireTier';
+import { mintDownloadToken } from '../services/signedDownload';
 
 const sessions = new Hono<{ Bindings: Env }>();
 
@@ -768,6 +770,46 @@ sessions.get('/sessions/:id/receipt', async (c) => {
     budget,
     budget_error: budgetError,
   });
+});
+
+/**
+ * D690 (#1692) — a session's recorded audio, as one signed download per
+ * chunk (decision 11): `{ parts: [{ seq, url, mime, start_ms, expires_at }] }`
+ * in `seq` order, or null when the session has no chunk.
+ *
+ * Each URL is `routes/files.ts`' single-use, two-minute token (audience
+ * `validate-audio:<session uid>`), served as an attachment, so a player
+ * fetches each part once, as a blob, and asks again for fresh URLs. Every key
+ * is checked against `AUDIO_PREFIX` first, as transcribe checks it.
+ */
+export async function sessionAudioParts(env: Env, session: SessionRow, userId: number):
+  Promise<Array<{ seq: number; url: string; mime: string | null; start_ms: number | null; expires_at: string }> | null> {
+  const chunks = await listChunks(env, session.id);
+  if (!chunks.length) return null;
+  if (chunks.some((ch) => !ch.r2_key.startsWith(AUDIO_PREFIX))) throw new Error('A chunk key is outside validate-audio/');
+  const parts = [];
+  for (const ch of chunks) {
+    const { token, expires_at } = await mintDownloadToken(env, {
+      key: ch.r2_key, audience: `validate-audio:${session.uid}`, userId, ttlSec: 120,
+    });
+    parts.push({ seq: Number(ch.seq), url: `/api/files/dl/${token}`, mime: ch.mime ?? null, start_ms: ch.start_ms ?? null, expires_at });
+  }
+  return parts;
+}
+
+// D690 (#1692) — Open recording. Behind `scopeSession`, so anyone who cannot
+// write the venture gets 404, as for every other session route.
+sessions.get('/sessions/:id/audio', async (c) => {
+  const s = await scopeSession(c);
+  if (s instanceof Response) return s;
+  try {
+    const parts = await sessionAudioParts(c.env, s.session, Number(s.user.id));
+    if (!parts) return json({ detail: 'This session has no recorded audio.' }, 404);
+    return json({ parts });
+  } catch (e) {
+    console.error('[sessions] audio refused:', (e as Error).message);
+    return json({ detail: 'storage_read_failed' }, 502);
+  }
 });
 
 sessions.delete('/sessions/:id', async (c) => {

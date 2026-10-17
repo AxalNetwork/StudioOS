@@ -12,6 +12,7 @@ const EMPLOYMENT_TYPES = [
   { id: 'part_time', label: 'Part-time' },
   { id: 'intern', label: 'Internship' },
   { id: 'contract', label: 'Contract' },
+  { id: 'fractional', label: 'Fractional' },
 ];
 const SENIORITIES = [
   { id: 'intern', label: 'Intern' },

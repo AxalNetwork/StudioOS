@@ -10,6 +10,7 @@ import type { Card } from '../services/cycleCards';
 import { buildPhone } from '../services/cycleFocus';
 import { addHolder, updateHolder, HolderError } from '../services/capTableWrites';
 import { logCycleWriteStatement } from '../services/cycleActivity';
+import { hasRecords } from '../services/records/index';
 import { ownedRow } from '../services/records/owned';
 import { MVP_VALUES, MVP_EFFORTS, MVP_STATUSES } from './progress';
 import { pageBuildRows, unreadableBuildCard, type BuildFigure, type BuildRecords, type Cell, type ChartSpec, type RecordRow } from '../services/buildCycleRecords';
@@ -565,7 +566,7 @@ app.get('/modules/:slug', async c => {
   const sorts = list ? [list.sort, ...bySort.filter(s => s.key !== list.sort.key).map(s => s.label === list.sort.label ? { ...s, label: `${s.label} ascending` } : s)] : bySort;
   return c.json({ module: { slug, name: spec[1], records_title: spec[4] }, card: result.card, records: { cols: result.cols,
     ...pageBuildRows(result.rows, query, 25, { orders: list?.orders, defaultSort: list?.sort.key }), filters, sorts,
-    ...(result.add ? { add: result.add } : {}) }, ...(result.facts ? { facts: result.facts } : {}), ...(result.parts ? { parts: result.parts } : {}) });
+    ...(result.add ? { add: result.add } : {}), linkable: hasRecords('build') }, ...(result.facts ? { facts: result.facts } : {}), ...(result.parts ? { parts: result.parts } : {}) });
 });
 
 // The existing MVP, OKR, cap table and obligation writers remain canonical for

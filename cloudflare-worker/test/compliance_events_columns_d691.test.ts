@@ -62,7 +62,7 @@ test('1: Grow obligations save and read on a full fresh build with foreign keys 
   const read = () => call('GET', '/modules/durable-company-building?project=' + PROJECT);
   const module = await read();
   assert.deepEqual(module.body.records.rows.find((r: any) => r.id === add.body.id),
-    { id: add.body.id, title: 'Example board', kind: 'governance', due_at: due, owner_name: null, status: 'scheduled' });
+    { id: add.body.id, title: 'Example board', kind: 'governance', due_at: due, owner_name: null, status: 'scheduled', repeats: 'once', due_window: 'next_30' });
   assert.ok(module.body.card.series.calendar.some((event: any) => event.title === 'Example board' && event.due === due));
   const patch = (body: unknown) => call('PATCH', '/obligations/' + add.body.id, body);
   for (const [status, completion] of [['done', 'completed'], ['snoozed', 'snoozed'], ['overdue', 'pending'],

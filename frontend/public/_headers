@@ -32,13 +32,16 @@
 # Permissions-Policy allows the microphone to this origin only, `(self)`: the
 # interview recorder (D685, lib/interviewCapture.js) and the advisor's voice
 # input call getUserMedia, and `microphone=()` refused them in every
-# Chromium browser (#1587). No other origin, no frame, gets it.
+# Chromium browser (#1587). The camera likewise, `(self)`: the event check-in
+# scanner (components/events/CheckinScanner.jsx) reads QR codes from it, and
+# `camera=()` sent every organiser to manual entry. No other origin, no frame,
+# gets either.
 /*
   Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
   Referrer-Policy: strict-origin-when-cross-origin
-  Permissions-Policy: geolocation=(), camera=(), microphone=(self), payment=(), usb=(), bluetooth=(), accelerometer=(), gyroscope=(), magnetometer=(), midi=(), serial=(), hid=(), interest-cohort=()
+  Permissions-Policy: geolocation=(), camera=(self), microphone=(self), payment=(), usb=(), bluetooth=(), accelerometer=(), gyroscope=(), magnetometer=(), midi=(), serial=(), hid=(), interest-cohort=()
 
 # NO Content-Security-Policy here, and that is a decision rather than an
 # omission. The Worker's CSP is nonce-based and generated per request, which a

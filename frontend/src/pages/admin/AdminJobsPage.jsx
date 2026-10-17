@@ -24,7 +24,7 @@ const JOB_STATUS_STYLES = {
   closed: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
 };
 const EMPLOYMENT_LABELS = {
-  full_time: 'Full-time', part_time: 'Part-time', intern: 'Internship', contract: 'Contract',
+  full_time: 'Full-time', part_time: 'Part-time', intern: 'Internship', contract: 'Contract', fractional: 'Fractional',
 };
 
 export default function AdminJobsPage() {
