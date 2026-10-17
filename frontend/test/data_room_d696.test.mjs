@@ -101,7 +101,9 @@ for (const [what, add] of [
     try {
       assert.ok(view.requests.some((u) => u.includes('/cycles/raise/modules/data-room')), 'the module read is made');
       assert.deepEqual(view.by('cycle-module').length, 1);
-      assert.deepEqual(view.links('records-add').map((l) => l.href), [add], "the read's own Add, as sent");
+      // #1657's Upload form is registered (D695), so the Add is the form's own address,
+      // whatever the read's `records.add` points at.
+      assert.deepEqual(view.links('records-add').map((l) => l.href), ['/raise/data-room/new?project_id=3'], 'the Add opens the Upload form');
       assert.deepEqual(view.links('cycle-module-tool'), [
         { href: '/raise/data-room?mode=access&project_id=3', text: ACCESS },
         { href: '/raise/data-room?mode=workspace&project_id=3', text: 'Open the files tool' },
