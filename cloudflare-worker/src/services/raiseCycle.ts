@@ -50,6 +50,11 @@ export type Ctx = { env: Env; projectId: number; today: string };
 
 const href = (ctx: Ctx, slug: string) => `/raise/${slug}?project=${ctx.projectId}`;
 /**
+ * D695 (#1657) decision 11: a module's Add form, which its empty card and its
+ * records' Add both open (D688: a card and its module page's Add go to one place).
+ */
+const addHref = (ctx: Ctx, slug: string) => `/raise/${slug}/new?project=${ctx.projectId}`;
+/**
  * The full tools the module pages summarise; the pages link to them.
  * `dataRoom` is the file tool (`DataRoomPage`), which holds upload, grants and
  * the NDA switch; the bare `/raise/data-room` becomes D696's module page.
@@ -576,7 +581,7 @@ export async function pitchDeckCard(ctx: Ctx): Promise<Card> {
       'SELECT COUNT(*) AS n FROM deck_share_views v JOIN pitch_decks d ON d.id = v.deck_id WHERE d.project_id = ?',
     ).bind(ctx.projectId).first<{ n: number }>();
     if (Number(total?.n ?? 0) === 0) {
-      return { state: 'empty', series: null, next: { text: 'Share the deck with an investor', href: TOOL_HREF.pitch }, reason: 'No one has opened a deck link yet.' };
+      return { state: 'empty', series: null, next: { text: 'Share the deck with an investor', href: addHref(ctx, 'pitch-deck') }, reason: 'No one has opened a deck link yet.' };
     }
     const weeks = await weeklyViews(ctx, 8);
     const slides = await ctx.env.DB.prepare(
@@ -608,6 +613,8 @@ async function pitchRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
        LEFT JOIN raise_prospects p ON p.id = t.prospect_id AND p.project_id = d.project_id
       WHERE d.project_id = ? ORDER BY t.created_at DESC, t.id DESC`,
   ).bind(ctx.projectId).all<any>();
+  // A link needs a deck: with none, the Add builds one first (D695 decision 11).
+  const deck = await ctx.env.DB.prepare('SELECT id FROM pitch_decks WHERE project_id = ? LIMIT 1').bind(ctx.projectId).first();
   const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
   const status = (t: any) => (t.revoked_at ? 'revoked' : String(t.expires_at) < now ? 'expired' : 'active');
   // The investor a link was made for: a prospect still of this venture, else the
@@ -642,7 +649,7 @@ async function pitchRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
     {
       filters: [{ key: 'status', label: 'State', options: [{ value: 'active', label: 'Active' }, { value: 'expired', label: 'Expired' }, { value: 'revoked', label: 'Revoked' }] }],
       sorts: [{ key: 'last_viewed', label: 'Last viewed' }, { key: 'newest', label: 'Newest' }, { key: 'views', label: 'Most views' }],
-      add: { text: 'Create a share link', href: TOOL_HREF.pitch },
+      add: deck ? { text: 'New link', href: addHref(ctx, 'pitch-deck') } : { text: 'Build your deck', href: TOOL_HREF.pitch },
     },
   );
 }
@@ -685,7 +692,7 @@ export async function dataRoomCard(ctx: Ctx): Promise<Card> {
       'SELECT COUNT(*) AS n FROM data_room_files WHERE project_id = ?',
     ).bind(ctx.projectId).first<{ n: number }>();
     if (Number(files?.n ?? 0) === 0) {
-      return { state: 'empty', series: null, next: { text: 'Upload', href: TOOL_HREF.dataRoom }, reason: 'No files yet. Coverage of the diligence checklist appears here.' };
+      return { state: 'empty', series: null, next: { text: 'Upload', href: addHref(ctx, 'data-room') }, reason: 'No files yet. Coverage of the diligence checklist appears here.' };
     }
     const mapped = await ctx.env.DB.prepare(
       'SELECT DISTINCT checklist_item FROM data_room_files WHERE project_id = ? AND checklist_item IS NOT NULL',
@@ -786,7 +793,7 @@ async function dataRoomRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
         { key: 'area', label: 'Area', options: CHECKLIST_AREAS.map((a) => ({ value: a, label: a })) },
       ],
       sorts: [{ key: 'updated', label: 'Updated' }, { key: 'name', label: 'Name' }],
-      add: { text: 'Upload a file', href: TOOL_HREF.dataRoom },
+      add: { text: 'Upload', href: addHref(ctx, 'data-room') },
     },
   );
 }
@@ -900,7 +907,7 @@ export async function capTableCard(ctx: Ctx): Promise<Card> {
   return safeCard(meta('cap-table', 'Planned round', 'Ownership by holder group, before and after the planned round.', 'Cap table'), async (): Promise<CardBody> => {
     const cap = await loadCap(ctx);
     if (!cap.exists) {
-      return { state: 'empty', series: null, next: { text: 'Add holder', href: TOOL_HREF.capTable }, reason: 'No holders yet. Ownership before and after the round appears here.' };
+      return { state: 'empty', series: null, next: { text: 'Add holder', href: addHref(ctx, 'cap-table') }, reason: 'No holders yet. Ownership before and after the round appears here.' };
     }
     if (!cap.computed) {
       return { state: 'not_recorded', series: null, next: { text: 'Compute the cap table', href: TOOL_HREF.capTable }, reason: 'The cap table has not been computed yet.' };
@@ -938,7 +945,7 @@ async function capRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
         { key: 'instrument', label: 'Instrument', options: [...INSTRUMENTS] },
       ],
       sorts: [{ key: 'ownership', label: 'Ownership' }, { key: 'after', label: 'Largest after the round' }],
-      add: { text: 'Open the cap table', href: TOOL_HREF.capTable },
+      add: { text: 'Add holder', href: addHref(ctx, 'cap-table') },
     },
   );
 }
@@ -1005,7 +1012,7 @@ export async function useOfFundsCard(ctx: Ctx): Promise<Card> {
   return safeCard(meta('use-of-funds', 'Next 18 months', 'The planned split of the raise, and cash over the next 18 months with and without it.', 'Use of funds'), async (): Promise<CardBody> => {
     const f = await loadFunds(ctx);
     if (!f.alloc) {
-      return { state: 'empty', series: null, next: { text: 'Edit split', href: TOOL_HREF.model }, reason: 'No split yet. The planned split and runway appear here.' };
+      return { state: 'empty', series: null, next: { text: 'Edit split', href: addHref(ctx, 'use-of-funds') }, reason: 'No split yet. The planned split and runway appear here.' };
     }
     const series: unknown[] = [{
       kind: 'stack', bare: true, rows: [{ label: 'Planned split', parts: f.alloc }], tones: FUND_TONES,
@@ -1065,7 +1072,7 @@ async function fundsRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
     {
       filters: [{ key: 'category', label: 'Category', options: FUND_SECTIONS.map((s) => ({ value: s.key, label: s.label })) }],
       sorts: [{ key: 'share', label: 'Share' }, { key: 'order', label: 'Order' }],
-      add: { text: 'Edit the allocation', href: TOOL_HREF.model },
+      add: { text: 'Edit split', href: addHref(ctx, 'use-of-funds') },
     },
   );
 }
@@ -1145,7 +1152,7 @@ export async function capitalCard(ctx: Ctx): Promise<Card> {
   return safeCard(meta('capital-relationships', 'Current round', 'Investors by the furthest pipeline stage they reached, and the follow-ups due.', 'Raise pipeline'), async (): Promise<CardBody> => {
     const prospects = await loadProspects(ctx.env, ctx.projectId);
     if (prospects.length === 0) {
-      return { state: 'empty', series: null, next: { text: 'Add investor', href: TOOL_HREF.pipeline }, reason: 'No investors yet. The pipeline by stage appears here.' };
+      return { state: 'empty', series: null, next: { text: 'Add investor', href: addHref(ctx, 'capital-relationships') }, reason: 'No investors yet. The pipeline by stage appears here.' };
     }
     const fu = followUps(prospects, ctx.today);
     const series = [
@@ -1268,7 +1275,7 @@ async function capitalRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
         ...(calls ? [{ key: 'source', label: 'Source', options: [{ value: 'call', label: 'Responded to a call' }] }] : []),
       ],
       sorts: [{ key: 'last_contact', label: 'Last contact' }, { key: 'recent', label: 'Recently updated' }, { key: 'due', label: 'Next step due' }, { key: 'name', label: 'Name' }],
-      add: { text: 'Add an investor', href: TOOL_HREF.pipeline },
+      add: { text: 'Add investor', href: addHref(ctx, 'capital-relationships') },
     },
   );
 }
