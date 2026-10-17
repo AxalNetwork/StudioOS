@@ -30,7 +30,7 @@ import {
   type PainGroupModel, type PainGroupsView, type PainSeverityLevel,
 } from './painGroups';
 import { evidenceFor, verdictFor, laneFor, VALIDATION_BAR } from '../routes/_founder_validate_helpers';
-import { loadVerdictHistory, observationAt, changedWithin, parseObserved, RECENTLY_MOVED_DAYS } from './verdictHistory';
+import { loadVerdictHistory, recordVerdictChanges, observationAt, changedWithin, parseObserved, RECENTLY_MOVED_DAYS } from './verdictHistory';
 import { seedSegmentFromIcp, WAITLIST_TARGET_KEY } from './validateWriters';
 import { claimFills } from './fills/provenance';
 
@@ -247,6 +247,9 @@ export type Claim = {
   /** The founder's Inconclusive mark, which `history:last_week` dates. */
   inconclusive_at: string | null;
   links: LinkRow[];
+  /** The board's verdict and lane, which the verdict history records (D704 decision 7). */
+  verdict: string | null;
+  lane: string;
 };
 
 const STRENGTH_RANK: Record<string, number> = { anecdote: 1, pattern: 2, measured: 3 };
@@ -287,7 +290,7 @@ export function claimsOf(hyps: HypRow[], links: LinkRow[], interviews: Interview
       evidence: e.supporting + e.contradicting, strength, sprint: h.sprint,
       owner: h.owner_name ?? null, updated_at: h.updated_at,
       supporting: e.supporting, contradicting: e.contradicting, fit_unrecorded: e.fitUnrecorded,
-      inconclusive_at: h.inconclusive_at, links: ls,
+      inconclusive_at: h.inconclusive_at, links: ls, verdict, lane,
     };
   });
 }
@@ -1339,10 +1342,9 @@ export type ClaimProvenance = 'eadwyn' | 'eadwyn_edited' | 'unreadable' | null;
 async function experimentRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   // Retired claims are read only for `status:retired`; the counts are always the open ones.
   const retired = rq.filter.status === 'retired';
-  const [open, gone, interviews, model, history, sprints] = await Promise.all([
+  const [open, gone, interviews, model, sprints] = await Promise.all([
     loadHypotheses(ctx, 'open'), retired ? loadHypotheses(ctx, 'retired') : null,
     loadInterviews(ctx), loadPainGroupModel(ctx.env, ctx.projectId, { strict: true }),
-    loadVerdictHistory(ctx.env, ctx.projectId),
     ctx.env.DB.prepare(
       `SELECT DISTINCT sprint FROM hypotheses
         WHERE project_id = ? AND retired_at IS NULL AND sprint IS NOT NULL AND trim(sprint) != '' ORDER BY sprint`,
@@ -1362,6 +1364,14 @@ async function experimentRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   };
   const openClaims = claimsOf(open.hyps, open.links, interviews, model);
   const claims = gone ? claimsOf(gone.hyps, gone.links, interviews, model) : openClaims;
+  // D704 decision 7: with the board page gone, this read keeps the verdict
+  // history growing, as `buildBoard` did. Every live claim, before search,
+  // filters and paging, and before the history is loaded; the writer writes
+  // only on a change, logs no activity row, and never fails the read.
+  await recordVerdictChanges(ctx.env, ctx.projectId, openClaims.map((c) => ({
+    hypothesis_id: c.id, verdict: c.verdict, lane: c.lane,
+  }))).catch(() => 0);
+  const history = await loadVerdictHistory(ctx.env, ctx.projectId);
 
   // FVW's views over the verdict history (decision 16), before paging.
   const now = new Date();

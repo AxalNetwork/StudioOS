@@ -87,6 +87,23 @@ export async function ownedRow(env: Env, store: Store, id: string | number, proj
     // D693 (#1703): Verdict's two stores, read only here and in services/verdict.ts.
     case 'validation_decisions': { const n = numeric(value); return n !== null && !!await db.prepare('SELECT 1 FROM validation_decisions WHERE id = ? AND project_id = ?').bind(n, projectId).first(); }
     case 'validation_decision_commitments': { const n = numeric(value); return n !== null && !!await db.prepare('SELECT 1 FROM validation_decision_commitments c JOIN validation_decisions d ON d.id = c.decision_id WHERE c.id = ? AND c.project_id = ? AND d.project_id = ?').bind(n, projectId, projectId).first(); }
+    // D691 (#1698): Grow's stores, by uid or id within the venture.
+    case 'product_feedback':
+      return !!await db.prepare('SELECT 1 FROM product_feedback WHERE uid = ? AND project_id = ?').bind(value, projectId).first();
+    case 'growth_channels':
+      return !!await db.prepare('SELECT 1 FROM growth_channels WHERE uid = ? AND project_id = ?').bind(value, projectId).first();
+    case 'growth_partners':
+      return !!await db.prepare('SELECT 1 FROM growth_partners WHERE uid = ? AND project_id = ?').bind(value, projectId).first();
+    case 'markets':
+      return !!await db.prepare('SELECT 1 FROM markets WHERE uid = ? AND project_id = ?').bind(value, projectId).first();
+    case 'job_postings': {
+      const n = numeric(value);
+      return n !== null && !!await db.prepare('SELECT 1 FROM job_postings WHERE id = ? AND project_id = ?').bind(n, projectId).first();
+    }
+    case 'compliance_events': {
+      const n = numeric(value);
+      return n !== null && !!await db.prepare('SELECT 1 FROM compliance_events WHERE id = ? AND project_id = ?').bind(n, projectId).first();
+    }
     // D690 (S18-B, #1694): Build. Each id resolves through its store and the venture.
     case 'mvp_features': {
       const n = numeric(value);

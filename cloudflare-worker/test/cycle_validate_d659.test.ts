@@ -653,7 +653,7 @@ test('D685 §5.12: the newest session needing review leads, counting themes and 
   proposal(db, 1, 'pain_severity', { phrase: 'Assistant' }, { run: null });
   const f = (await overview(db)).body.focus;
   assert.deepEqual([f.rule, f.headline, f.why, f.cta, f.then], ['review', 'Review the interview with Robin Reyes from 14 Oct.',
-    'Its findings would move 3 pain themes and 2 hypotheses.', { label: 'Review the interview', href: `/validate/interviews/${iv}` }, null]);
+    'Its findings would move 3 pain themes and 2 hypotheses.', { label: 'Review the interview', href: `/validate/customer-research/${iv}?session=1` }, null]);
   // A transcribed session that is not placed says so.
   db.prepare("INSERT INTO interview_sessions (id, project_id, interview_id, status, stopped_at) VALUES (2, ?, ?, 'transcribed', '2026-10-15 10:00:00')").run(P, iv);
   assert.equal((await overview(db)).body.focus.why, 'It is transcribed but not yet placed.');
