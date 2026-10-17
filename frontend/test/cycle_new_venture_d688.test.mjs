@@ -55,7 +55,7 @@ test('D688: Build phone focus has the Add feature link and no Validate meter or 
   assert.doesNotMatch(absent, /data-testid="phone-focus"/);
 });
 
-test('D688: Solution design has two distinct Add forms; Score readiness has no fields; narrative requires type', () => {
+test('D688: Solution design has two distinct Add forms; Score readiness opens Re-score; narrative requires type', () => {
   const forms = formsFor('build', 'solution-design');
   assert.deepEqual(forms.map((form) => form.button), ['Add feature', 'Add risk']);
   assert.equal(formFor('build', 'solution-design'), forms[0]);
@@ -69,9 +69,10 @@ test('D688: Solution design has two distinct Add forms; Score readiness has no f
   const record = html(h(RecordsTable, { title: 'Features', records: { cols: [], rows: [], total: 0 }, add: forms.map((form) => ({ text: form.button, onClick() {} })) }));
   assert.match(record, /Add feature/);
   assert.match(record, /Add risk/);
+  // D695 (#1657): the card's "Score readiness" opens Re-score, the canvas form (CO:317).
   const rescore = formFor('raise', 'fundraising-readiness');
-  assert.deepEqual(rescore.fields, []);
-  assert.match(html(h(FormLightbox, { form: rescore, cycle: 'raise', slug: 'fundraising-readiness', onSubmit() {}, onClose() {} })), /Score readiness/);
+  assert.deepEqual(rescore.fields.map((field) => field.name), ['items', 'since']);
+  assert.match(html(h(FormLightbox, { form: rescore, cycle: 'raise', slug: 'fundraising-readiness', onSubmit() {}, onClose() {} })), /Re-score now/);
   const narrative = formFor('raise', 'investor-narrative');
   assert.ok(validate(narrative, {}).investor_type);
   assert.deepEqual(validate(narrative, { investor_type: 'angel' }), {});

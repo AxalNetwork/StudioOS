@@ -697,6 +697,8 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
     : !projectId ? null
     : formOpen ? (
       <FormLightbox key={`add-${formOpen.key}`} form={formOpen} cycle={cycle} slug={slug} search={location.search}
+        loadOptions={formOpen.loadOptions ? () => formOpen.loadOptions(cyclesWrite, projectId) : null}
+        onSearch={formOpen.search ? (_field, q) => formOpen.search(cyclesWrite, projectId, q) : null}
         onSubmit={(values) => formOpen.submit(cyclesWrite, projectId, values)}
         onSaved={saved}
         onClose={closeAdd} />
