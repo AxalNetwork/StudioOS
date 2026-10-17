@@ -18,11 +18,8 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { adminConsoleSource } from './_adminConsoles.mjs';
 
-const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const ADMIN_PAGE = adminConsoleSource();
 
 function retagBody() {
