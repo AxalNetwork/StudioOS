@@ -105,6 +105,11 @@ rail section and the model picked per section and router task, for the caller
 only. A null clears a row. localStorage stays the cache, so a mode or a pick
 set on a laptop is in place on a phone after a reload.
 
+D708 (#1773): `bankAccounts.js` calls `/api/admin/bank-accounts` (the Super
+Admin's list, add, label and purposes, retire, and a recorded reveal of one
+number) and the LP's own `GET /api/funds/:id/capital-calls/lines/:lineId/pay-instructions`.
+A reveal's answer is held in the caller's component state only, never stored.
+
 D702 (#1664): `profile.js` calls `/api/profile/me`, `/api/profile/venture` (GET
 and PATCH) and `/api/profile/preview` (`cloudflare-worker/src/routes/founder_profile.ts`), and the
 existing `/api/settings/privacy` with `?project=` for the venture's investor

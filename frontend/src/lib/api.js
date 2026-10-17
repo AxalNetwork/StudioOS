@@ -12,6 +12,7 @@ export * from './api/adminIncorporations.js';
 export * from './api/adminLearning.js';
 export * from './api/aiBudget.js';
 export * from './api/assistants.js';
+export * from './api/bankAccounts.js';
 export * from './api/channels.js';
 export * from './api/communityTasks.js';
 export * from './api/companyEin.js';

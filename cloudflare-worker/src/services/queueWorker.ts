@@ -343,7 +343,7 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
       // line this run wrote — `issueFundCall`, the same function `POST
       // /api/funds/:id/capital-call` runs. Every write is keyed on `callUid`,
       // so a re-run writes nothing it already has.
-      await issueFundCall(env, {
+      const issued = await issueFundCall(env, {
         fundId: Number(fundId),
         amountCents,
         callUid,
@@ -352,6 +352,24 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
         issuedBy: Number.isSafeInteger(Number(payload.issued_by)) && Number(payload.issued_by) > 0
           ? Number(payload.issued_by) : null,
       });
+
+      // D708 decision 9: a call on Fund I while the Fund has no payable
+      // account wrote nothing. The issuer is told why, once per run, and the
+      // job ends: retrying cannot add the account, and the GP issues the call
+      // again once it exists.
+      if (issued.held) {
+        const issuer = Number.isSafeInteger(Number(payload.issued_by)) && Number(payload.issued_by) > 0
+          ? Number(payload.issued_by) : null;
+        await env.DB.prepare(
+          `INSERT INTO activity_logs (action, details, actor, user_id)
+           VALUES ('capital_call_held', ?, 'system', ?)`,
+        ).bind(
+          `Capital call on fund #${fundId} was not issued (${issued.held.code}): ${issued.held.message} `
+            + "Issue the call again once the Fund's account is added.",
+          issuer,
+        ).run();
+        return;
+      }
 
       // AND THIS HANDLER NO LONGER TOUCHES `vc_funds.deployed_capital`. It used
       // to bump it by the call amount here, and removing that is a deliberate,

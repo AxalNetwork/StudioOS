@@ -23,6 +23,7 @@ export const ADMIN_CONSOLE_FILES = [
   'frontend/src/pages/admin/consoles/GithubSyncConsole.jsx',
   'frontend/src/pages/admin/consoles/PromoCodesConsole.jsx',
   'frontend/src/pages/admin/consoles/PaymentsConsole.jsx',
+  'frontend/src/pages/admin/consoles/BankAccountsConsole.jsx',
   'frontend/src/pages/admin/consoles/BillingConsole.jsx',
   'frontend/src/pages/admin/consoles/WellbeingConsole.jsx',
   'frontend/src/pages/admin/consoles/shared.jsx',

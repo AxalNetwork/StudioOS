@@ -10,7 +10,7 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAuth, requireApprovedKyc } from '../auth';
+import { requireAuth, requireApprovedKyc, isSuperAdmin, requireSuperAdminWriteBar, selectJwt } from '../auth';
 import { FundReportRefusal,reportId,readFundPage,readFundPeriod,saveFundPeriod } from '../services/fundReports';
 import { AUTH_ERROR_STATUSES } from '../util/authErrors';
 import { requireFundGp, requireFundCreator } from '../services/fundGpAccess';
@@ -33,6 +33,9 @@ import { splitCall } from '../services/fundCallSplit';
 import {
   issueFundCall, recordReceipt, readLine, readFundCalls, readFundLedger,
 } from '../services/fundCallLedger';
+import {
+  FUND_I_SLUG, assertFundCallPayable, capitalCallReference, fundPayeeOf, payInstructionsFor, revealPayInstructions,
+} from '../services/payInstructions';
 import {
   rollUpFundRow, readFundCapital, totalFundRollups, FUND_METRIC_UNAVAILABLE,
   type FundRollup, type FundRollupRow,
@@ -158,6 +161,33 @@ funds.get('/lp-portal', async (c) => {
   } catch (e) {
     console.error('[funds] lp-portal calls unreadable', e);
     callsRecorded = false;
+  }
+
+  // D708 decision 11: each unpaid line on Fund I says where to pay, masked,
+  // with the reference to quote, or why it cannot. Never the number: that is
+  // `GET /:id/capital-calls/lines/:lineId/pay-instructions`, which records it.
+  const fundI = calls.length ? await Funds.bySlug(c.env, FUND_I_SLUG) : null;
+  const unpaidOnFundI = (cc: any) => fundI && Number(cc.fund_id) === Number(fundI.id)
+    && cc.status !== 'paid' && Number(cc.received_cents) < Number(cc.owed_cents);
+  if (calls.some(unpaidOnFundI)) {
+    const pay = await payInstructionsFor(c.env, 'fund', 'capital_contribution');
+    calls = calls.map((cc: any) => {
+      if (!unpaidOnFundI(cc)) return { ...cc, pay_instructions: null };
+      if (!pay.ok) return { ...cc, pay_instructions: { available: false, code: pay.code, message: pay.message } };
+      return {
+        ...cc,
+        pay_instructions: {
+          available: true,
+          bank_name: pay.instructions.bank_name,
+          beneficiary_name: pay.instructions.beneficiary_name,
+          account_masked: pay.instructions.account_masked,
+          reference: capitalCallReference(Number(cc.fund_id), Number(cc.limited_partner_id), Number(cc.id)),
+          warning: pay.warning,
+        },
+      };
+    });
+  } else {
+    calls = calls.map((cc: any) => ({ ...cc, pay_instructions: null }));
   }
 
   // Performance per-LP-row: TVPI = (returns + distributions) / invested ; DPI = distributions / invested
@@ -709,6 +739,21 @@ funds.patch('/:id', async (c) => {
   const body = await c.req.json();
   const act = fundPatchAct(gp.fund, body);
   await assertFundAct(c, gp, act);
+  // D708 decision 13: the `spinout-fund-i` slug decides which fund the Fund's
+  // bank account pays, so moving it onto or off a fund is the Super Admin's,
+  // behind the same bar as the Bank accounts console, and the fund's own GP
+  // stays refused. Inline until D714's table carries a `fund.slug_fund_i` row
+  // whose gate refuses a GP of record too. Checked before any write.
+  if (body && typeof body === 'object' && 'slug' in body) {
+    const was = gp.fund?.slug ?? null;
+    const next = body.slug ?? null;
+    if (next !== was && (was === FUND_I_SLUG || next === FUND_I_SLUG)) {
+      if (!isSuperAdmin(gp.user as any)) {
+        return c.json({ code: 'super_admin_required', detail: 'Super admin required' }, 403);
+      }
+      await requireSuperAdminWriteBar(c);
+    }
+  }
   const f = await Funds.update(c.env, id, body);
   // D714 decision 4: the edit wrote no audit row. The changed field names, and
   // for the control fields their old and new values.
@@ -895,6 +940,12 @@ funds.post('/:id/lps', async (c) => {
   const firstCall = !!(body?.first_call_cents && body.first_call_cents > 0);
   const act: FundActKey = firstCall ? 'capital_call.issue' : 'fund.write';
   await assertFundAct(c, gp, act);
+  // D708 decision 9: a first call on Fund I is refused before the LP is
+  // written, so the GP is not left with an LP and a call that never issued.
+  if (firstCall) {
+    const held = await assertFundCallPayable(c.env, [fundId]);
+    if (held) return refuse(c, 409, { code: held.code, message: held.message });
+  }
   const lp = await LPs.create(c.env, { ...body, fund_id: fundId });
   if (!lp) return c.json({ error: 'create failed' }, 500);
   // First-call automation: enqueue a notice immediately if amount provided.
@@ -1060,6 +1111,8 @@ funds.post('/:id/capital-call', async (c) => {
   const issued = await issueFundCall(c.env, {
     fundId, amountCents, callUid: crypto.randomUUID(), dueDate, purpose, issuedBy: Number(user.id),
   });
+  // D708 decision 9: Fund I with no payable account. Nothing was written.
+  if (issued.held) return refuse(c, 409, issued.held);
   if (!issued.call) {
     return refuse(c, 409, {
       code: 'no_billable_lps',
@@ -1121,8 +1174,21 @@ funds.post('/:id/capital-calls/preview', async (c) => {
       ...who(l.lpId), commitment_cents: l.commitmentCents, share_cents: l.shareCents, residual: l.residual,
     })),
     excluded: split.excluded.map((x) => ({ ...who(x.lpId), reason: x.reason })),
+    payment_instructions: await previewInstructions(c.env, fundId),
   });
 });
+
+/**
+ * D708: what the call's notice will print, masked, or why the call cannot
+ * issue. Null for a fund that is not Fund I, which the registry does not pay.
+ */
+async function previewInstructions(env: Env, fundId: number) {
+  if (await fundPayeeOf(env, fundId) !== 'fund') return null;
+  const pay = await payInstructionsFor(env, 'fund', 'capital_contribution');
+  return pay.ok
+    ? { ok: true, instructions: pay.instructions, warning: pay.warning }
+    : { ok: false, code: pay.code, message: pay.message };
+}
 
 /** Every call on the fund, each with its LP lines, and the fund's call totals. */
 funds.get('/:id/capital-calls', async (c) => {
@@ -1167,6 +1233,52 @@ funds.get('/:id/ledger', async (c) => {
       raw: e,
     });
   }
+});
+
+/**
+ * D708 decision 11: the LP's own wire details for one open line on Fund I —
+ * the full account number, the reference to quote and the warning. The
+ * reveal is recorded before the number is decrypted, and a support session
+ * never sees it. Another LP's line, a line on another fund, or a fund that is
+ * not Fund I is the same 404 as a line that does not exist.
+ */
+funds.get('/:id/capital-calls/lines/:lineId/pay-instructions', async (c) => {
+  c.header('Cache-Control', 'no-store');
+  const user = await requireAuth(c);
+  if ((await selectJwt(c))?.payload.impersonated_by) {
+    return refuse(c, 403, {
+      code: 'support_session_refused',
+      message: 'A support session cannot see payment instructions. The LP opens them from their own account.',
+    });
+  }
+  const fundId = parseInt(c.req.param('id'), 10);
+  const lineId = parseInt(c.req.param('lineId'), 10);
+  const notFound = () => refuse(c, 404, { code: 'call_line_not_found', message: 'That call line is not one of yours on this fund.' });
+  if (!Number.isSafeInteger(fundId) || fundId <= 0 || !Number.isSafeInteger(lineId) || lineId <= 0) return notFound();
+  const scope = lpSelfScope(user as any);
+  const mine = await c.env.DB.prepare(
+    `SELECT cc.id FROM capital_calls cc
+       JOIN limited_partners lp ON lp.id = cc.limited_partner_id
+      WHERE cc.id = ? AND ${scope.sql}`,
+  ).bind(lineId, ...scope.binds).first();
+  if (!mine) return notFound();
+  const line = await readLine(c.env, lineId);
+  if (!line || Number(line.fund_id) !== fundId || await fundPayeeOf(c.env, fundId) !== 'fund') return notFound();
+  if (line.status === 'paid' || line.outstanding_cents <= 0) {
+    return refuse(c, 409, { code: 'line_already_paid', message: 'This line is paid in full, so there is nothing to wire.' });
+  }
+  const pay = await revealPayInstructions(c.env, 'fund', 'capital_contribution', {
+    actorUserId: Number(user.id), context: 'capital_call_line', contextRef: String(lineId),
+  });
+  if (!pay.ok) return refuse(c, 409, { code: pay.code, message: pay.message });
+  return c.json({
+    ok: true,
+    line_id: lineId,
+    outstanding_cents: line.outstanding_cents,
+    instructions: pay.instructions,
+    reference: capitalCallReference(fundId, Number(line.limited_partner_id), lineId),
+    warning: pay.warning,
+  });
 });
 
 /**

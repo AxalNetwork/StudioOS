@@ -28,6 +28,22 @@ export function callState(line, today) {
   return 'pending';
 }
 
+/** The Worker's `pay_instructions` on a line, or null. Never a full number: the portal carries none. */
+function payInstructionsOf(p) {
+  if (!p || typeof p !== 'object') return null;
+  if (p.available === true) {
+    return {
+      available: true,
+      bank_name: p.bank_name ?? null,
+      beneficiary_name: p.beneficiary_name ?? null,
+      account_masked: p.account_masked ?? null,
+      reference: p.reference ?? null,
+      warning: p.warning ?? null,
+    };
+  }
+  return { available: false, code: p.code ?? null, message: p.message ?? null };
+}
+
 /**
  * One capital-call line as the card shows it. A line marked paid before
  * receipts existed has no receipt behind it; for the LP it is still settled.
@@ -48,6 +64,9 @@ function callLine(c, today) {
     issued_on: c.created_at ? String(c.created_at).slice(0, 10) : null,
     paid_date: c.paid_date ? String(c.paid_date).slice(0, 10) : null,
     status: c.status || 'pending',
+    // D708: on an unpaid Fund I line, where to wire (masked, with the
+    // reference) or why it cannot be said; null on every other line.
+    pay_instructions: payInstructionsOf(c.pay_instructions),
   };
   return { ...line, state: callState(line, today) };
 }
