@@ -74,7 +74,7 @@ def _post_slack(webhook: str, text_msg: str) -> None:
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        urlopen(req, timeout=3).read()
+        urlopen(req, timeout=3).read()  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected -- scheme and host pinned to https://hooks.slack.com/ by the guard above, so no file:// or other scheme reaches urllib
     except Exception as exc:
         logger.warning("notify: slack post failed: %s", exc)
 

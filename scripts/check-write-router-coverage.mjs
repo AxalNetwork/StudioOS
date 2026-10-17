@@ -49,6 +49,7 @@ function extractRouterIds(src) {
 }
 
 const routerIds = extractRouterIds(writeRouter);
+// nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- the patterns are this repo's own committed allowlist, read by a CI guard; nothing outside the repo reaches them
 const allowPatterns = (allowlist.patterns || []).map((p) => new RegExp(p));
 const allowIds = new Set(allowlist.ids || []);
 

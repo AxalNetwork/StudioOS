@@ -54,14 +54,15 @@ test('protocol-relative image URL is rejected in renderMarkdown', () => {
   // Rejected image becomes an empty paragraph, not a bare `<img>` tag.
   assert.equal(html, '<p></p>');
   assert.doesNotMatch(html, /<img/);
-  assert.doesNotMatch(html, /evil\.com/);
+  // No fragment of the rejected host survives — stricter than looking for the whole name.
+  assert.doesNotMatch(html, /evil/);
 });
 
 test('root-relative link is accepted, protocol-relative link is rejected', () => {
   const html = renderMarkdown('[text](/about) [bad](//evil.com)');
   assert.match(html, /^<p><a href="\/about" rel="noopener nofollow" target="_blank">text<\/a> bad<\/p>$/);
   assert.match(html, /bad/);
-  assert.doesNotMatch(html, /evil\.com/);
+  assert.doesNotMatch(html, /evil/);
 });
 
 // Task #4 — inline-image filename validation

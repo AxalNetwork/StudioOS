@@ -237,7 +237,9 @@ test('D680: nothing goes to GitHub', async () => {
     const { calls } = await submit(body);
     assert.ok(calls.length > 0, 'the stub saw the mail calls');
     for (const c of calls) {
-      assert.ok(!c.url.includes('github.com'), `a request went to ${c.url}`);
+      // The parsed host, not a substring: github.com and every subdomain (api., uploads., …).
+      const host = new URL(c.url).hostname;
+      assert.ok(host !== 'github.com' && !host.endsWith('.github.com'), `a request went to ${c.url}`);
       assert.ok(/^https:\/\/(oauth2|gmail)\.googleapis\.com\//.test(c.url), `an unexpected request to ${c.url}`);
     }
   }

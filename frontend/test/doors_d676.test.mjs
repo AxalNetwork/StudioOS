@@ -49,7 +49,7 @@ const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const attr = (s) => s.replace(/&/g, '&amp;');
 /** The text of a `<Route path="…">` in App.jsx, up to the next Route, or null. */
 function routeBlock(path) {
-  const m = new RegExp(`<Route\\s+path="${esc(path)}"`).exec(APP);
+  const m = [...APP.matchAll(/<Route\s+path="([^"]*)"/g)].find((r) => r[1] === path);
   if (!m) return null;
   const rest = APP.slice(m.index + m[0].length);
   const end = rest.search(/<Route\s/);

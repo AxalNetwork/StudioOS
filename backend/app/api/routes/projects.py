@@ -3,7 +3,7 @@ import logging
 import math
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlmodel import Session, select
-from sqlalchemy import text
+from sqlalchemy import column, delete, table, text
 
 logger = logging.getLogger("studioos.projects")
 from backend.app.database import get_session
@@ -767,11 +767,11 @@ def delete_project(project_id: int, session: Session = Depends(get_session), adm
                   AND ccu.column_name = 'id'
                 """
             )).all()
-            for table, col in rows:
-                session.execute(
-                    text(f'DELETE FROM "{table}" WHERE "{col}" = :pid'),
-                    {"pid": project_id},
-                )
+            # Built with SQLAlchemy Core rather than an f-string in text(): the
+            # dialect quotes the referencing table and column identifiers.
+            for ref_table, ref_col in rows:
+                t = table(ref_table, column(ref_col))
+                session.execute(delete(t).where(t.c[ref_col] == project_id))
         session.delete(project)
         session.commit()
     except HTTPException:

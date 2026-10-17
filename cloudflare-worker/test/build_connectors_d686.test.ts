@@ -19,7 +19,6 @@ import { issueOauthState,consumeOauthState } from '../src/integrations/oauth.ts'
 
 const JWT_SECRET = 'x'.repeat(64); // synthetic fixture key
 const migration = readFileSync('cloudflare-worker/sql/migrations/435_connector_companies.sql', 'utf8');
-const index = readFileSync('cloudflare-worker/src/index.ts', 'utf8');
 
 function fixture() {
   const db = new DatabaseSync(':memory:');
@@ -58,20 +57,6 @@ async function auth(userId = 1) {
     .setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
     .sign(new TextEncoder().encode(JWT_SECRET));
 }
-
-const app = new Hono<any>();
-app.route('/api/connectors', routes.default);
-app.route('/api/integrations', routes.default);
-app.onError((e, c) => c.json({ error: e.message }, 500));
-async function call(env: any, method: string, path: string, body?: unknown, company = 10, user = 1) {
-  const res = await app.request(path, {
-    method,
-    headers: { Authorization: `Bearer ${await auth(user)}`, 'X-Company-Id': String(company), 'Content-Type': 'application/json' },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  }, env);
-  return { status: res.status, body: await res.json() as any };
-}
-
 
 type Mods = { route: typeof routes; reg: typeof registry; labels: typeof labels; fed: typeof fed; cal: typeof cal; li: typeof li; stripe: typeof stripe };
 const real: Mods = { route: routes, reg: registry, labels, fed, cal, li, stripe };
