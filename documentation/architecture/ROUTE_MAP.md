@@ -75,6 +75,19 @@ The `github` provider is a GitHub App's read-only user authorization. `GET /:uid
 
 It answers no key and no account number. `stripeCall` refuses a Stripe create with no money kind, or with a fund or intercompany kind, before any request leaves the Worker. `POST /api/payments/intent` refuses a body with no `price_id` (`money_kind_required`). Neither has a frontend method.
 
+### Fund fees Worker contract (D709, #1774)
+
+`/api/fund-fees/:fundId` (`fund_fees.ts`). Every route opens with `requireFundGp` (the GP of record or an admin; 401, 402 or 404 otherwise). Every write refuses a support session (403). Through admin access, confirm and issue need the Super Admin: `super_admin_required` (403) first, then `requireSuperAdminWriteBar`.
+- `GET /`: terms versions and their defaults, billable LPs with admission dates (a missing one flagged), net invested records, offsets, periods.
+- `POST /terms` writes a `draft` version; `POST /terms/:termsUid/confirm` makes it `confirmed`, the only state that bills.
+- `PUT /lps/:lpId/admission`, `POST /net-invested`, `POST /offsets`.
+- `POST /periods/:quarter/preview` saves the quarter's draft and answers its `digest`; a refusal saves nothing.
+- `POST /periods/:quarter/issue` with `{ digest, funding_call_uid? }`: a digest that no longer matches is 409; issuing an issued quarter with its digest answers `already_issued: true` and writes nothing.
+- `POST /periods/:quarter/funding-call` with `{ call_uid }` links issued lines to their LPs' lines in that call.
+- `GET /periods/:quarter` (period and lines) and `GET /periods/:quarter/statements/:lpId`.
+
+`:quarter` is `YYYYQn`. An LP, terms version or call of another fund is 404. Issuing records amounts and the `AXAL-MF-<quarter>-L<lp>` and `-F<fund>` references; nothing moves money, and no route has a frontend method yet (#1779's `fundFeesApi`).
+
 ### AI allowance Worker contract (D640, #1433)
 
 The Usage page work in #1430 uses the mounted `ai_budget.ts` routes. `GET /api/ai-budget/me` returns the caller's allowance and paid balance with `held_for_review` (UID, time, held micro-USD and recorded cost); a review hold blocks new runs without hiding that read. Super Admin routes `GET /api/ai-budget/reviews` and `POST /api/ai-budget/reviews/:uid/charge|refund` list and settle those holds with a recorded reason and actor. `GET /api/ai-budget/caps` lists all ten plan keys, their effective daily/monthly allowances and whether each value is recorded or from the environment; `PUT /api/ai-budget/caps/:licence` remains the audited write. These are Worker routes for #1435's screens (moved from S09), not frontend API methods added by this issue.
