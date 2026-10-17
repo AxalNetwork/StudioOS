@@ -26,7 +26,7 @@ import { addHolder, updateHolder, HolderError, type AddHolderArgs } from './capT
 import { SERVED_FUNDS } from './researchFundDirectory';
 import { normalizeUseOfFunds } from '../util/useOfFunds';
 import { ensureTier } from '../middleware/requireTier';
-import { createShareLink, SHARE_NEVER_EXPIRES } from '../routes/decks';
+import { createShareLink, revokeShareLink, SHARE_NEVER_EXPIRES } from '../routes/decks';
 import { createProspect, RAISE_STAGES } from '../routes/contacts';
 import {
   READINESS_ITEMS, READINESS_KEYS, EVIDENCE, INVESTOR_TYPES, INVESTOR_TYPE_LABEL, VERSION_MARKER_KEY, CHECKLIST_KEYS, FUND_SECTIONS,
@@ -220,7 +220,7 @@ export async function saveNarrativeVersion(env: Env, a: { projectId: number; use
   const mismatches = await runCheck(env, a.projectId, version);
   const label = INVESTOR_TYPE_LABEL[investorType] ?? investorType;
   await logRaise(env, a.userId, a.projectId, 'investor-narrative', version, 'narrative_version_created',
-    `Version ${version} saved for ${label}; ${mismatches.length} ${mismatches.length === 1 ? 'mismatch' : 'mismatches'}`);
+    `Version ${version} saved for ${label}${basedOn != null ? `, based on version ${basedOn}` : ''}; ${mismatches.length} ${mismatches.length === 1 ? 'mismatch' : 'mismatches'}`);
   return { version, mismatches };
 }
 
@@ -625,6 +625,105 @@ export async function updateProspect(env: Env, a: { projectId: number; userId: n
     .bind(...params, id, a.projectId).run();
   await logRaise(env, a.userId, a.projectId, 'capital-relationships', id, 'prospect_updated', `Investor edited: ${changed.join(', ')}`);
   return { ok: true as const, id };
+}
+
+// ---------------------------------------------------------------------------
+// Record actions (step 6), each one writer, each id checked and one row logged.
+// The closing PR declares them on `services/records/raise.ts`'s records.
+// ---------------------------------------------------------------------------
+
+/**
+ * Duplicate a narrative version: the next version, started from this one
+ * (`start_from: 'version'`) for the same investor type, through
+ * `saveNarrativeVersion`, which logs it on the new version's record.
+ */
+export async function duplicateNarrativeVersion(env: Env, a: { projectId: number; userId: number; version: unknown }) {
+  await ensureSpinoutDeckOverridesSchema(env);
+  const version = await ownVersion(env, a.projectId, a.version, 'Version');
+  const marker = await env.DB.prepare(
+    'SELECT investor_type FROM spinout_deck_overrides WHERE project_id = ? AND version = ? AND investor_type IS NOT NULL LIMIT 1',
+  ).bind(a.projectId, version).first<{ investor_type: string }>();
+  if (!marker) throw new WriterError(409, 'This version records no investor type, so it cannot be duplicated');
+  return saveNarrativeVersion(env, { projectId: a.projectId, userId: a.userId, startFrom: 'version', basedOnVersion: version, investorType: marker.investor_type });
+}
+
+/**
+ * Revoke a link: the same withdrawal as `DELETE /api/decks/:id/shares/:shareId`
+ * (`revokeShareLink()`), on a link of this venture's deck. Revoking expires it
+ * and keeps every view. Not a paid capability: a lapsed plan may still
+ * withdraw a link it issued.
+ */
+export async function revokeDeckLink(env: Env, a: { projectId: number; userId: number; linkId: unknown }) {
+  const id = posInt(typeof a.linkId === 'string' && /^[1-9][0-9]{0,9}$/.test(a.linkId) ? Number(a.linkId) : a.linkId);
+  const row = id == null ? null : await env.DB.prepare(
+    'SELECT t.id, t.deck_id FROM pitch_deck_share_tokens t JOIN pitch_decks d ON d.id = t.deck_id WHERE t.id = ? AND d.project_id = ?',
+  ).bind(id, a.projectId).first<{ id: number; deck_id: number }>();
+  if (!row) throw new WriterError(404, 'Link not found');
+  const out = await revokeShareLink(env, Number(row.deck_id), Number(row.id));
+  if (!out) throw new WriterError(404, 'Link not found');
+  await logRaise(env, a.userId, a.projectId, 'pitch-deck', row.id, 'deck_link_revoked', out.newly_revoked ? 'Link revoked' : 'Link already revoked');
+  return { ok: true as const, ...out };
+}
+
+const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+/** Add a hire to a use-of-funds section: `{ role, start_month (YYYY-MM), annual_cents, currency }`. */
+export async function addSectionHire(env: Env, a: { projectId: number; userId: number; sectionKey: unknown; body: Record<string, unknown> }) {
+  const section = FUND_SECTIONS.find((f) => f.key === a.sectionKey);
+  if (!section) throw new WriterError(404, 'Section not found');
+  const b = a.body;
+  const role = trimOrNull(b.role, 200);
+  if (!role) throw new WriterError(400, 'Name the role');
+  const month = b.start_month == null || b.start_month === '' ? null : String(b.start_month).trim();
+  if (month != null && !MONTH.test(month)) throw new WriterError(400, 'start_month is YYYY-MM');
+  const annual = b.annual_cents == null ? null : posInt(b.annual_cents);
+  if (b.annual_cents != null && annual == null) throw new WriterError(400, 'annual_cents is a positive whole number of cents');
+  const currency = b.currency == null || b.currency === '' ? 'usd' : String(b.currency).trim().toLowerCase();
+  if (!/^[a-z]{3}$/.test(currency)) throw new WriterError(400, 'currency is a three-letter code');
+  const ins = await env.DB.prepare(
+    `INSERT INTO use_of_funds_hires (project_id, category_key, role, start_month, annual_cents, currency, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(a.projectId, section.key, role, month, annual, currency, a.userId).run();
+  await logRaise(env, a.userId, a.projectId, 'use-of-funds', section.key, 'hire_added', `Hire added: ${role}${month ? ` from ${month}` : ''}`);
+  return { ok: true as const, id: Number(ins?.meta?.last_row_id) || null };
+}
+
+export const EVENT_KINDS = ['meeting', 'intro', 'email', 'call', 'note'] as const;
+
+/**
+ * Log a step on a prospect's timeline: `{ kind, note, on }`. A date on or
+ * before today is when it happened (`done_at`); a later one is when it is
+ * due (`due_on`), and the timeline reads it as open.
+ */
+export async function logProspectEvent(env: Env, a: { projectId: number; userId: number; prospectId: unknown; body: Record<string, unknown> }) {
+  const id = await ownProspect(env, a.projectId, a.prospectId);
+  const b = a.body;
+  const kind = String(b.kind ?? '');
+  if (!(EVENT_KINDS as readonly string[]).includes(kind)) throw new WriterError(400, 'kind is meeting, intro, email, call or note');
+  const on = b.on == null || b.on === '' ? new Date().toISOString().slice(0, 10) : isoDateOrNull(b.on);
+  if (on == null) throw new WriterError(400, 'on is YYYY-MM-DD');
+  const today = new Date().toISOString().slice(0, 10);
+  await env.DB.prepare(
+    `INSERT INTO raise_prospect_events (prospect_id, kind, note, due_on, done_at, created_by) VALUES (?, ?, ?, ?, ?, ?)`,
+  ).bind(id, kind, trimOrNull(b.note, 2000), on > today ? on : null, on > today ? null : on, a.userId).run();
+  await logRaise(env, a.userId, a.projectId, 'capital-relationships', id, 'prospect_event_logged', `${kind[0].toUpperCase()}${kind.slice(1)} logged for ${on}`);
+  return { ok: true as const };
+}
+
+/** Add feedback a prospect gave: `{ objection, answer? }`. */
+export async function addProspectFeedback(env: Env, a: { projectId: number; userId: number; prospectId: unknown; body: Record<string, unknown> }) {
+  const id = await ownProspect(env, a.projectId, a.prospectId);
+  const objection = trimOrNull(a.body.objection, 1000);
+  if (!objection) throw new WriterError(400, 'Write the objection');
+  await env.DB.prepare(
+    `INSERT INTO raise_prospect_feedback (prospect_id, objection, answer, created_by) VALUES (?, ?, ?, ?)`,
+  ).bind(id, objection, trimOrNull(a.body.answer, 2000), a.userId).run();
+  await logRaise(env, a.userId, a.projectId, 'capital-relationships', id, 'prospect_feedback_added', 'Feedback added');
+  return { ok: true as const };
+}
+
+/** Mark passed: the stage `passed`, through Edit investor's own path. */
+export function markProspectPassed(env: Env, a: { projectId: number; userId: number; prospectId: number }) {
+  return updateProspect(env, { ...a, body: { stage: 'passed' } });
 }
 
 // ---------------------------------------------------------------------------
