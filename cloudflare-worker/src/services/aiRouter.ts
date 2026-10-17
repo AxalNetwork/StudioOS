@@ -52,6 +52,8 @@ export type TaskClass =
   | 'transcribe'
   | 'validate_tag_pains'
   | 'validate_draft_hypotheses'
+  // D691 (#1698) — Grow's feedback-theme fill, a restatement like the pain tagger.
+  | 'grow_theme_feedback'
   | 'market_sizing_inputs'
   | 'competitor_scan'
   | 'research_ask'
@@ -407,6 +409,14 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
     isAudio: true,
   },
   validate_tag_pains: {
+    provider: 'workers-ai',
+    model: MID_LLAMA,
+    fallbackChain: [SMALL_LLAMA],
+    alternates: [MID_LLAMA, SMALL_LLAMA, '@cf/meta/llama-3.2-3b-instruct'],
+  },
+  // D691 (#1698) — places unthemed feedback into the venture's own themes. Like
+  // tagging, it picks from a list the founder wrote, so the same three are offered.
+  grow_theme_feedback: {
     provider: 'workers-ai',
     model: MID_LLAMA,
     fallbackChain: [SMALL_LLAMA],

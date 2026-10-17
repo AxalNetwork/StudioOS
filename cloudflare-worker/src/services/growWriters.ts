@@ -19,6 +19,7 @@ import { logCycleWrite, logCycleWriteStatement } from './cycleActivity';
 import { closePosting, createPosting, submitForReview } from './jobBoardCommon';
 import { APPLICATION_STAGES, MARKET_PARTS, type GrowSlug } from './growCycle';
 import { calendarDay } from './growKpis';
+import { mintDownloadToken } from './signedDownload';
 
 export class Refused extends Error {
   status: number; sentence: string; field: string | null;
@@ -583,4 +584,207 @@ export async function setChecklistItem(env: Env, pid: number, user: User, key: s
   await logGrowWrite(env, pid, user.id, { module: 'durable-company-building', entityId: key, action: done ? 'grow_checklist_done' : 'grow_checklist_undone',
     summary: done ? 'Checklist item ticked' : 'Checklist item unticked' });
   return { key, done };
+}
+
+// ── The records' actions (#1698) ────────────────────────────────────────────
+// Each action on a Grow record (`services/records/grow.ts`) runs one of these,
+// or the PATCH writer above, so a record and a route write a row one way.
+
+export const TOLD_VIA = ['email', 'call', 'message', 'in_person'] as const;
+
+/**
+ * Mark told (decision 5): the founder told the customer themselves. Records how
+ * and when, and hands back a `mailto:` draft for their own mail client when the
+ * feedback carries an address; the platform never emails a venture's customer.
+ */
+export async function markFeedbackTold(env: Env, pid: number, user: User, uid: string, b: Body) {
+  const row = await owned<{ id: number; body: string; from_name: string | null; from_email: string | null; roadmap_item_label: string | null;
+    notify_on_ship: number; status: string }>(env,
+    'SELECT id, body, from_name, from_email, roadmap_item_label, notify_on_ship, status FROM product_feedback WHERE uid = ? AND project_id = ?', uid, pid);
+  if (Number(row.notify_on_ship) !== 1) throw new Refused(400, 'Nobody asked to be told about this feedback', 'via');
+  if (row.status !== 'shipped') throw new Refused(400, 'Mark it told once it has shipped', 'via');
+  const via = oneOf(b.via, TOLD_VIA, 'via', true)!;
+  const at = nowIso();
+  await env.DB.prepare('UPDATE product_feedback SET told_at = ?, told_via = ?, updated_by = ?, updated_at = ? WHERE id = ?')
+    .bind(at, via, user.id, at, row.id).run();
+  await logGrowWrite(env, pid, user.id, { module: 'product-improvement', entityId: uid, action: 'grow_feedback_told', summary: `Customer told it shipped (${via.replace('_', ' ')})` });
+  const what = row.roadmap_item_label ? `"${row.roadmap_item_label}"` : 'what you asked for';
+  const mailto = row.from_email
+    ? `mailto:${encodeURIComponent(row.from_email)}?subject=${encodeURIComponent('It shipped')}&body=${encodeURIComponent(
+      `Hi${row.from_name ? ` ${row.from_name}` : ''},\n\nYou told us: "${String(row.body).slice(0, 300)}"\n\n${what} has shipped. Thank you for asking for it.\n`)}`
+    : null;
+  return { uid, told_at: at, told_via: via, mailto };
+}
+
+export async function addExperiment(env: Env, pid: number, user: User, channelUid: string, b: Body) {
+  const ch = await owned<{ id: number }>(env, 'SELECT id FROM growth_channels WHERE uid = ? AND project_id = ?', channelUid, pid);
+  const title = str(b.title, 200);
+  if (!title) throw new Refused(400, 'An experiment has a title', 'title');
+  const cac = centsOrNull(b.cac_cents, 'cac_cents');
+  const id = newUid();
+  await env.DB.batch([
+    env.DB.prepare('INSERT INTO channel_experiments (uid, channel_id, title, run_on, cac_cents, currency, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .bind(id, ch.id, title, day(b.run_on, 'run_on'), cac, currencyFor(cac, b.currency, 'currency'), user.id),
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'distribution', entityId: channelUid, action: 'grow_experiment_added', summary: 'Experiment added' })),
+  ]);
+  return { uid: id };
+}
+
+export const ALERT_MEASURES = ['value', 'change_30d_pct'] as const;
+export const ALERT_OPS = ['below', 'above'] as const;
+
+/** Set an alert: a threshold for a count or a percentage, or whole cents for money; never both. */
+export async function setKpiAlert(env: Env, pid: number, user: User, kpi: string, b: Body) {
+  const measure = oneOf(b.measure, ALERT_MEASURES, 'measure') ?? 'value';
+  const op = oneOf(b.op, ALERT_OPS, 'op', true)!;
+  const hasThreshold = b.threshold != null && b.threshold !== '';
+  const hasCents = b.threshold_cents != null && b.threshold_cents !== '';
+  if (hasThreshold === hasCents) throw new Refused(400, 'An alert has one threshold: a number, or an amount in cents', 'threshold');
+  let threshold: number | null = null;
+  if (hasThreshold) {
+    threshold = typeof b.threshold === 'object' || typeof b.threshold === 'boolean' ? NaN : Number(b.threshold);
+    if (!Number.isFinite(threshold)) throw new Refused(400, 'threshold is a number', 'threshold');
+  }
+  const cents = hasCents ? centsOrNull(b.threshold_cents, 'threshold_cents') : null;
+  if (cents != null && measure !== 'value') throw new Refused(400, 'A change is a percentage, not an amount', 'threshold_cents');
+  const id = newUid();
+  await env.DB.batch([
+    env.DB.prepare('INSERT INTO kpi_alerts (uid, project_id, kpi_key, measure, op, threshold, threshold_cents, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .bind(id, pid, kpi, measure, op, threshold, cents, user.id),
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'revenue-and-traction', entityId: kpi, action: 'grow_alert_set', summary: 'Alert set' })),
+  ]);
+  return { uid: id, kpi };
+}
+
+export async function addPartnerDeal(env: Env, pid: number, user: User, partnerUid: string, b: Body) {
+  const p = await owned<{ id: number }>(env, 'SELECT id FROM growth_partners WHERE uid = ? AND project_id = ?', partnerUid, pid);
+  const customer = str(b.customer, 200);
+  if (!customer) throw new Refused(400, 'A deal names its customer', 'customer');
+  const amount = centsOrNull(b.amount_cents, 'amount_cents');
+  const id = newUid();
+  await env.DB.batch([
+    env.DB.prepare('INSERT INTO growth_partner_deals (uid, partner_id, customer, closed_on, amount_cents, currency, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .bind(id, p.id, customer, day(b.closed_on, 'closed_on'), amount, currencyFor(amount, b.currency, 'currency'), user.id),
+    // The partner's record; the customer is never named in activity.
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'partner-network', entityId: partnerUid, action: 'grow_deal_added', summary: 'Deal added' })),
+  ]);
+  return { uid: id };
+}
+
+export async function addEntryStep(env: Env, pid: number, user: User, marketUid: string, b: Body) {
+  const m = await owned<{ id: number }>(env, 'SELECT id FROM markets WHERE uid = ? AND project_id = ?', marketUid, pid);
+  const text = str(b.text, 300);
+  if (!text) throw new Refused(400, 'A step says what is to be done', 'text');
+  const id = newUid();
+  await env.DB.batch([
+    env.DB.prepare('INSERT INTO market_entry_steps (uid, market_id, text, owner_name, due_on) VALUES (?, ?, ?, ?, ?)')
+      .bind(id, m.id, text, str(b.owner_name, 120), day(b.due_on, 'due_on')),
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'market-expansion', entityId: marketUid, action: 'grow_entry_step_added', summary: 'Entry step added' })),
+  ]);
+  return { uid: id };
+}
+
+export const LOCALISATION_KEYS = ['language', 'payments', 'legal_entity'] as const;
+
+export async function setLocalisation(env: Env, pid: number, user: User, marketUid: string, b: Body) {
+  const m = await owned<{ id: number }>(env, 'SELECT id FROM markets WHERE uid = ? AND project_id = ?', marketUid, pid);
+  const key = oneOf(b.key, LOCALISATION_KEYS, 'key', true)!;
+  const done = b.done === true || b.done === 1 || b.done === '1' || b.done === 'true';
+  await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO market_localisation (uid, market_id, key, done_at) VALUES (?, ?, ?, ?)
+       ON CONFLICT(market_id, key) DO UPDATE SET done_at = excluded.done_at, updated_at = datetime('now')`,
+    ).bind(newUid(), m.id, key, done ? nowIso() : null),
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'market-expansion', entityId: marketUid, action: 'grow_localisation_checked',
+      summary: `${key.replace('_', ' ')} ${done ? 'done' : 'reopened'}` })),
+  ]);
+  return { key, done };
+}
+
+export async function addAgendaItem(env: Env, pid: number, user: User, eventId: number, b: Body) {
+  const e = await owned<{ id: number }>(env, 'SELECT id FROM compliance_events WHERE id = ? AND project_id = ?', eventId, pid);
+  const text = str(b.text, 300);
+  if (!text) throw new Refused(400, 'An agenda item says what is discussed', 'text');
+  const id = newUid();
+  await env.DB.batch([
+    env.DB.prepare('INSERT INTO obligation_agenda_items (uid, event_id, text, owner_name) VALUES (?, ?, ?, ?)').bind(id, e.id, text, str(b.owner_name, 120)),
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'durable-company-building', entityId: e.id, action: 'grow_agenda_added', summary: 'Agenda item added' })),
+  ]);
+  return { uid: id };
+}
+
+/** The month length each repeat moves an obligation by (decision 2); a one-time obligation is completed instead. */
+const REPEAT_MONTHS: Record<string, number> = { monthly: 1, quarterly: 3, annual: 12 };
+
+/** `YYYY-MM-DD` moved by whole calendar months, clamped to the target month's last day. */
+export function addCalendarMonths(date: string, months: number): string {
+  const [y, m, d] = date.split('-').map(Number);
+  const target = new Date(Date.UTC(y, m - 1 + months, 1));
+  const last = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+  target.setUTCDate(Math.min(d, last));
+  return target.toISOString().slice(0, 10);
+}
+
+/** Minutes: a PDF or a DOCX, 20 MB at most, under a key the server makes and that carries no file name. */
+const MINUTES_TYPES: Record<string, string> = {
+  'application/pdf': 'pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+};
+export const MINUTES_MAX_BYTES = 20 * 1024 * 1024;
+export const minutesPrefix = (pid: number) => `grow-minutes/${pid}/`;
+
+/**
+ * Mark held (decision 2): an occurrence (date, notes, optional minutes) and the
+ * same obligation moved to its next due date, so its id, agenda and past
+ * meetings stay on one record; the reminders it sent are reset. A one-time
+ * obligation is completed instead. A clash with another obligation of the
+ * same kind on the new date answers 409 and writes nothing.
+ */
+export async function markHeld(env: Env, pid: number, user: User, eventId: number, b: Body & { minutes?: unknown }) {
+  const e = await owned<Row & { id: number; due_date: string; recurrence: string }>(env,
+    'SELECT id, kind, event_type, due_date, recurrence FROM compliance_events WHERE id = ? AND project_id = ?', eventId, pid);
+  const heldOn = day(b.held_on, 'held_on');
+  if (!heldOn) throw new Refused(400, 'When was it held?', 'held_on');
+  const file = b.minutes && typeof b.minutes === 'object' && 'arrayBuffer' in (b.minutes as object) ? b.minutes as File : null;
+  let key: string | null = null;
+  if (file) {
+    if (!env.FILES) throw new Refused(503, 'File storage is not configured', 'minutes');
+    const ext = MINUTES_TYPES[String(file.type || '').toLowerCase()];
+    if (!ext) throw new Refused(415, 'Minutes are a PDF or a DOCX file', 'minutes');
+    if (file.size > MINUTES_MAX_BYTES) throw new Refused(413, 'Minutes are 20 MB at most', 'minutes');
+    key = `${minutesPrefix(pid)}${newUid()}.${ext}`;
+    await env.FILES.put(key, await file.arrayBuffer(), { httpMetadata: { contentType: file.type } });
+  }
+  const months = REPEAT_MONTHS[e.recurrence];
+  const next = months ? addCalendarMonths(e.due_date, months) : e.due_date;
+  const at = nowIso();
+  const occurrence = newUid();
+  const statements = [
+    env.DB.prepare('INSERT INTO obligation_occurrences (uid, event_id, held_on, minutes_file_key, notes, created_by) VALUES (?, ?, ?, ?, ?, ?)')
+      .bind(occurrence, e.id, heldOn, key, str(b.notes, 2000), user.id),
+    months
+      ? env.DB.prepare("UPDATE compliance_events SET due_date = ?, reminders_sent_json = '[]', updated_at = ? WHERE id = ?").bind(next, at, e.id)
+      : env.DB.prepare("UPDATE compliance_events SET completion_status = 'completed', completed_at = ?, completed_by_user_id = ?, updated_at = ? WHERE id = ?")
+        .bind(at, user.id, at, e.id),
+    logCycleWriteStatement(env, entry(pid, user.id, { module: 'durable-company-building', entityId: e.id, action: 'grow_obligation_held',
+      summary: months ? `Held on ${heldOn}; next due ${next}` : `Held on ${heldOn}; completed` })),
+  ];
+  try { await env.DB.batch(statements); } catch (error) {
+    if (key) { try { await env.FILES?.delete(key); } catch { /* the stored file is orphaned, never served */ } }
+    obligationClash(error, obligationKind(e), next);
+  }
+  return { id: e.id, occurrence, due_at: next, status: months ? 'pending' : 'completed' };
+}
+
+/** Open minutes: one signed download, for a key under this venture's own prefix only; anything else is a 404. */
+export async function openMinutes(env: Env, pid: number, user: User, eventId: number, occurrenceId: number) {
+  const row = await env.DB.prepare(
+    `SELECT o.id, o.minutes_file_key FROM obligation_occurrences o JOIN compliance_events e ON e.id = o.event_id
+      WHERE o.id = ? AND o.event_id = ? AND e.project_id = ?`,
+  ).bind(occurrenceId, eventId, pid).first<{ id: number; minutes_file_key: string | null }>();
+  if (!row || !row.minutes_file_key || !row.minutes_file_key.startsWith(minutesPrefix(pid))) throw new Refused(404, 'Not found', 'occurrence');
+  const { token, expires_at } = await mintDownloadToken(env, {
+    key: row.minutes_file_key, audience: `grow-minutes:occurrence-${row.id}`, userId: user.id, ttlSec: 120,
+  });
+  return { open: { url: `/api/files/dl/${token}`, expires_at } };
 }

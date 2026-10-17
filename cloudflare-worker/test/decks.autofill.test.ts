@@ -63,7 +63,7 @@ function makeEnv(opts: { project: any; financials: any; holders: any[] }) {
 // entirely '—'. This matches how prod behaves with a live OpenAI key.
 const realFetch = globalThis.fetch;
 globalThis.fetch = (async (url: any, init?: any) => {
-  if (typeof url === 'string' && url.includes('openai.com')) {
+  if (typeof url === 'string' && URL.canParse(url) && new URL(url).hostname === 'api.openai.com') {
     let prompt = '';
     try { prompt = JSON.parse(init?.body || '{}').messages?.[1]?.content || ''; } catch {}
     const m = prompt.match(/Hints:\s*(\[[^\]]+\])/);
