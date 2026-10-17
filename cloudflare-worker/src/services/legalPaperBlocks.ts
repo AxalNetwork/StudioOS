@@ -163,7 +163,8 @@ function splitRow(line: string): string[] {
 }
 
 const DELIM_CELL = /^:?-{1,}:?$/;
-const FIGURE = /^[\s(]*[-−–]?[\s]*[$€£¥]?\s*[-−–]?\d[\d,]*(\.\d+)?\s*(%|x)?[\s)]*$/;
+// A figure, read with its whitespace removed: `$1,000`, `(250.00)`, `-5%`, `2.5x`.
+const FIGURE = /^\(?[-−–]?[$€£¥]?[-−–]?\d[\d,]*(?:\.\d+)?(?:%|x)?\)?$/;
 
 function isDelimiterRow(line: string): boolean {
   const cells = splitRow(line);
@@ -181,7 +182,7 @@ function tableBlock(lines: string[], merge: MergeMode): Block {
     const d = delims[c] || '';
     const explicit: Align | null = d.startsWith(':') && d.endsWith(':') ? 'center' : d.endsWith(':') ? 'right' : d.startsWith(':') ? 'left' : null;
     const cells = body.map((r) => r[c] ?? '').filter((x) => x !== '');
-    const figures = cells.length > 0 && cells.every((x) => FIGURE.test(x.replace(/\*\*/g, '')));
+    const figures = cells.length > 0 && cells.every((x) => FIGURE.test(x.replace(/\*\*/g, '').replace(/\s+/g, '')));
     align.push(explicit ?? (figures ? 'right' : 'left'));
     mono.push(explicit === null && figures);
   }
@@ -197,7 +198,9 @@ function tableBlock(lines: string[], merge: MergeMode): Block {
 
 // --- blocks --------------------------------------------------------------------
 
-const NUM_DOTTED = /^(\d+\.(?:\d+\.?)*)\s+(.*)$/;
+// `1.`, `1.1`, `1.1.`, `1.2.3`: dot-ended segments, then optional digits, so no
+// two paths match the same text (no backtracking blow-up).
+const NUM_DOTTED = /^(\d+\.(?:\d+\.)*\d*)\s+(.*)$/;
 const NUM_PAREN = /^\(([a-z]{1,2}|[ivxl]{1,5}|\d{1,2})\)\s+(.*)$/i;
 const TASK = /^[-*+]\s+\[([ xX])\]\s+(.*)$/;
 const BOX_LINE = /^(?:\[([ xX])\]|([☐☑✓✔]))\s+(.*)$/u;
