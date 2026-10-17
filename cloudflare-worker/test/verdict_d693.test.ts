@@ -21,7 +21,7 @@ import cycleVerdict from '../src/routes/cycle_verdict.ts';
 import founderValidate from '../src/routes/founder_validate.ts';
 import {
   recordDecision, currentDecision, decisionsFor, decisionById, DECISION_EVIDENCE_BAR, NO_EVIDENCE_REASON,
-  VerdictError, type EvidenceItem, type EvidenceSource,
+  VerdictError, adaptEvidenceReader, type EvidenceItem, type EvidenceSource, type PivotStatements,
 } from '../src/services/verdict.ts';
 import { hardDeleteProject } from '../src/services/projectTrash.ts';
 import { ensurePainGroupsSchema } from '../src/services/painGroups.ts';
@@ -279,13 +279,84 @@ test('3: a venture seeded with two current legacy rows has one current after the
 // 5. Evidence, through the seam
 // ---------------------------------------------------------------------------
 
+/** Fixture statements only; the production default remains unwired in this part. */
+const pivotStatements: PivotStatements = (env, { projectId, claim, userId }) => [
+  env.DB.prepare(
+    `INSERT INTO hypotheses (project_id, code, claim, created_by)
+     SELECT ?, 'H' || (COALESCE(MAX(CAST(substr(code, 2) AS INTEGER)), 0) + 1), ?, ?
+       FROM hypotheses WHERE project_id = ? RETURNING id`,
+  ).bind(projectId, claim, userId, projectId),
+  env.DB.prepare('SELECT id FROM hypotheses WHERE project_id = ? ORDER BY id DESC LIMIT 1').bind(projectId),
+];
+
+test('4: given and withheld Pivots create their claim and return its stored id in the same batch', async () => {
+  const db = fixture();
+  const env = envOf(db);
+  hypothesis(db, P, 'H1');
+  hypothesis(db, P_OTHER, 'H99');
+  // Make decision ids differ from hypothesis ids: reading the builder's
+  // RETURNING row instead of the decision's must not accidentally pass.
+  await recordDecision(env, userOf(FOUNDER), { id: P }, { decision: 'proceed', for: 'venture' });
+  for (const n of [5, 1]) {
+    const ev = items(n);
+    const claim = `Dispatch claim ${n}`;
+    const result = await recordDecision(env, userOf(FOUNDER), { id: P }, {
+      decision: 'pivot', for: 'venture', evidence: keys(ev), pivot_claim: claim,
+    }, { evidenceSource: fixed(ev), pivotStatements });
+    const created = db.prepare('SELECT id, project_id, claim, created_by FROM hypotheses WHERE claim = ?').get(claim) as any;
+    assert.deepEqual({ ...created }, { id: result.pivot_hypothesis_id, project_id: P, claim, created_by: FOUNDER });
+    assert.ok(result.pivot_hypothesis_id);
+    const saved = rows(db).find((r) => r.id === result.id);
+    assert.equal(saved.pivot_hypothesis_id, created.id);
+    assert.equal(saved.decision, 'pivot');
+    assert.equal(result.state, n === 5 ? 'given' : 'withheld');
+    assert.equal(result.supersedes_id, null);
+    assert.equal(saved.superseded_at, null);
+  }
+  assert.equal(current(db).length, 1);
+});
+
+test('4: a failed decision insert rolls back the Pivot hypothesis and all activity', async () => {
+  for (const bar of [0, 5]) {
+    const db = fixture();
+    const env = envOf(db);
+    // The fixture rejects the decision after the hypothesis INSERT has run.
+    db.exec("CREATE TRIGGER reject_decision BEFORE INSERT ON validation_decisions BEGIN SELECT RAISE(ABORT, 'fixture rejects decision'); END");
+    await assert.rejects(recordDecision(env, userOf(FOUNDER), { id: P }, {
+      decision: 'pivot', for: 'venture', pivot_claim: 'Dispatch by phone',
+    }, { bar, pivotStatements }), /fixture rejects decision/);
+    assert.equal((db.prepare('SELECT COUNT(*) AS n FROM hypotheses').get() as any).n, 0);
+    assert.equal(rows(db).length, 0);
+    assert.equal((db.prepare('SELECT COUNT(*) AS n FROM activity_logs').get() as any).n, 0);
+  }
+});
+
+test('4: claims without Pivot are refused before the builder; a Pivot without a claim never invokes it', async () => {
+  const db = fixture();
+  const env = envOf(db);
+  hypothesis(db, P, 'H1');
+  const builder: PivotStatements = () => { throw new Error('builder must not run'); };
+  for (const decision of ['proceed', 'stop']) {
+    await assert.rejects(recordDecision(env, userOf(FOUNDER), { id: P }, {
+      decision, for: 'venture', pivot_claim: 'Dispatch by phone',
+    }, { pivotStatements: builder }),
+    (e: any) => e instanceof VerdictError && e.status === 400 && e.sentence === 'Only a Pivot starts a new hypothesis.');
+  }
+  const result = await recordDecision(env, userOf(FOUNDER), { id: P }, {
+    decision: 'pivot', for: 'venture',
+  }, { pivotStatements: builder });
+  assert.equal(result.pivot_hypothesis_id, null);
+  assert.equal(rows(db)[0].pivot_hypothesis_id, null);
+  assert.equal(rows(db).length, 1);
+});
+
 /**
  * A stand-in for #1692's `evidenceFor`, over this fixture: one item per
  * interview behind a pain link, keyed by the link, labelled by its claim.
  */
-const fromLinks: EvidenceSource = async (env, projectId) => {
+const fromLinks = adaptEvidenceReader(async ({ env, projectId }) => {
   const res = await env.DB.prepare(
-    `SELECT l.id AS link_id, i.id AS interview_id, i.interviewee_name AS name, i.interview_date AS d, h.code
+    `SELECT l.id AS link_id, i.id AS interview_id, i.interviewee_name AS name, i.interview_date AS d, h.code, h.id AS hypothesis_id
        FROM hypothesis_pain_links l
        JOIN hypotheses h ON h.id = l.hypothesis_id
        JOIN pain_groups g ON g.id = l.pain_group_id
@@ -293,10 +364,11 @@ const fromLinks: EvidenceSource = async (env, projectId) => {
       WHERE h.project_id = ? ORDER BY l.id, i.id`,
   ).bind(projectId).all<any>();
   return (res.results || []).map((r: any) => ({
-    id: `pain-${r.link_id}-${r.interview_id}`, kind: 'interview', label: `${r.name} · ${r.code}`,
+    id: `pain-${r.link_id}-${r.interview_id}`, link: `pain-${r.link_id}`, ref_id: String(r.interview_id),
+    hypothesis_id: r.hypothesis_id, kind: 'interview', label: `${r.name} · ${r.code}`,
     strength: 'anecdote', direction: 'supports', date: r.d,
   }));
-};
+});
 
 function painLinkSetup(db: any) {
   const h1 = hypothesis(db, P, 'H1');
@@ -313,7 +385,9 @@ test('5: a key that is not this venture\'s answers 404 and nothing is written', 
   const env = envOf(db);
   const ours = items(5);
   const theirs: EvidenceItem[] = items(1, { prefix: 'beta' });
-  const source: EvidenceSource = async (_e, pid) => (pid === P ? ours : theirs);
+  const source = adaptEvidenceReader(async ({ projectId }) => (projectId === P ? ours : theirs).map((it) => ({
+    ...it, kind: 'interview' as const, link: it.id, ref_id: '1', hypothesis_id: 1,
+  })));
   await assert.rejects(
     recordDecision(env, userOf(FOUNDER), { id: P }, { decision: 'proceed', for: 'venture', evidence: [...keys(ours).slice(0, 4), 'beta-1'] }, { evidenceSource: source }),
     (e: any) => e instanceof VerdictError && e.status === 404 && e.sentence === 'Evidence not found.',

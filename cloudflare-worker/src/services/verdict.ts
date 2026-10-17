@@ -26,6 +26,7 @@
  * empty history: "no decision yet" and "the decision could not be read" are
  * different facts.
  */
+import type { EvidenceCtx, EvidenceItemFull } from './validateEvidence';
 import type { Env, User } from '../types';
 import { logCycleWriteStatement } from './cycleActivity';
 import { ownsVenture, type ProjectRef } from '../routes/_founder_validate_helpers';
@@ -73,14 +74,20 @@ export type EvidenceItem = {
 
 export type EvidenceSource = (env: Env, projectId: number) => Promise<EvidenceItem[]>;
 
-/**
- * THE SEAM, STUBBED. `services/validateEvidence.ts`'s `evidenceFor` (#1692)
- * is not on `main` yet, so the venture has no evidence items here and every
- * decision recorded through the new route is withheld. #1703 points this at
- * the real reader. Tests pass their own source through `recordDecision`'s
- * options, so the bar and the scopes are tested now.
- */
+/** Adapt Validate's context reader without losing its link-based keys or metadata. */
+export function adaptEvidenceReader(
+  reader: (ctx: EvidenceCtx, opts?: { hypothesisId?: number }) => Promise<EvidenceItemFull[]>,
+): EvidenceSource {
+  return (env, projectId) => reader({ env, projectId }, {});
+}
+
+/** Defaults are wired with #1692's record registration in the closing part. */
 export const evidenceFor: EvidenceSource = async () => [];
+
+/** Hypothesis statements run inside the decision's transaction, before its INSERT. */
+export type PivotStatements = (
+  env: Env, input: { projectId: number; claim: string; userId: number | null },
+) => D1PreparedStatement[];
 
 /** A refusal with its own status and the sentence the caller shows. */
 export class VerdictError extends Error {
@@ -163,7 +170,9 @@ export async function recordDecision(
   user: User,
   project: { id: number },
   input: RecordInput,
-  { bar = DECISION_EVIDENCE_BAR, evidenceSource = evidenceFor }: { bar?: number; evidenceSource?: EvidenceSource } = {},
+  { bar = DECISION_EVIDENCE_BAR, evidenceSource = evidenceFor, pivotStatements }: {
+    bar?: number; evidenceSource?: EvidenceSource; pivotStatements?: PivotStatements;
+  } = {},
 ): Promise<Recorded> {
   const projectId = project.id;
   if (!isDecisionKind(input.decision)) throw new VerdictError(400, 'decision must be proceed, pivot or stop');
@@ -207,8 +216,9 @@ export async function recordDecision(
     }
   }
 
-  // #1703 replaces this with the Pivot's new hypothesis, written in this batch.
-  if (pivotClaim) throw new VerdictError(400, 'A Pivot cannot start a hypothesis yet.');
+  // Keep the refusal until a builder is wired; never write a decision that
+  // silently discards the founder's new claim.
+  if (pivotClaim && !pivotStatements) throw new VerdictError(400, 'A Pivot cannot start a hypothesis yet.');
 
   const state: DecisionState = items.length >= bar ? 'given' : 'withheld';
   const word = KIND_WORD[decision];
@@ -216,18 +226,23 @@ export async function recordDecision(
     ? `Recorded ${word} for ${scopeWord}`
     : `Recorded ${word} for ${scopeWord}, withheld`;
 
-  const stmts = [];
+  const stmts = pivotClaim && pivotStatements
+    ? pivotStatements(env, { projectId, claim: pivotClaim, userId: user.id ?? null })
+    : [];
+  const decisionIndex = stmts.length;
+  const hasPivot = pivotClaim ? 1 : 0;
   if (state === 'given') {
     // The pointer is the newest current given decision of the same scope,
     // chosen inside the batch.
     stmts.push(env.DB.prepare(
-      `INSERT INTO validation_decisions (project_id, hypothesis_id, decision, reasoning, decided_by, state, supersedes_id)
+      `INSERT INTO validation_decisions (project_id, hypothesis_id, decision, reasoning, decided_by, state, supersedes_id, pivot_hypothesis_id)
        SELECT ?, ?, ?, ?, ?, 'given',
               (SELECT id FROM validation_decisions
                 WHERE project_id = ? AND hypothesis_id IS ? AND state = 'given' AND superseded_at IS NULL
-                ORDER BY decided_at DESC, id DESC LIMIT 1)
-       RETURNING id, supersedes_id`,
-    ).bind(projectId, hypothesisId, decision, reasoning, user.id ?? null, projectId, hypothesisId));
+                ORDER BY decided_at DESC, id DESC LIMIT 1),
+              CASE WHEN ? = 1 THEN (SELECT MAX(id) FROM hypotheses WHERE project_id = ?) ELSE NULL END
+       RETURNING id, supersedes_id, pivot_hypothesis_id`,
+    ).bind(projectId, hypothesisId, decision, reasoning, user.id ?? null, projectId, hypothesisId, hasPivot, projectId));
     // Every earlier current given decision of the scope is superseded: a
     // venture may hold two from the old unbatched route, and after this
     // decision it holds exactly one.
@@ -238,10 +253,11 @@ export async function recordDecision(
     ).bind(projectId, hypothesisId, projectId));
   } else {
     stmts.push(env.DB.prepare(
-      `INSERT INTO validation_decisions (project_id, hypothesis_id, decision, reasoning, decided_by, state, supersedes_id)
-       VALUES (?, ?, ?, ?, ?, 'withheld', NULL)
-       RETURNING id, supersedes_id`,
-    ).bind(projectId, hypothesisId, decision, reasoning, user.id ?? null));
+      `INSERT INTO validation_decisions (project_id, hypothesis_id, decision, reasoning, decided_by, state, supersedes_id, pivot_hypothesis_id)
+       VALUES (?, ?, ?, ?, ?, 'withheld', NULL,
+               CASE WHEN ? = 1 THEN (SELECT MAX(id) FROM hypotheses WHERE project_id = ?) ELSE NULL END)
+       RETURNING id, supersedes_id, pivot_hypothesis_id`,
+    ).bind(projectId, hypothesisId, decision, reasoning, user.id ?? null, hasPivot, projectId));
   }
   // Each item as it reads now, so the record does not change when the
   // evidence is edited later.
@@ -268,13 +284,13 @@ export async function recordDecision(
   }
 
   const out = await env.DB.batch(stmts);
-  const row = ((out[0] as any)?.results?.[0] ?? null) as { id: number; supersedes_id: number | null } | null;
+  const row = ((out[decisionIndex] as any)?.results?.[0] ?? null) as { id: number; supersedes_id: number | null; pivot_hypothesis_id: number | null } | null;
   if (!row) throw new Error('The decision was not written');
   return {
     id: Number(row.id),
     state,
     supersedes_id: row.supersedes_id == null ? null : Number(row.supersedes_id),
-    pivot_hypothesis_id: null,
+    pivot_hypothesis_id: row.pivot_hypothesis_id == null ? null : Number(row.pivot_hypothesis_id),
   };
 }
 
