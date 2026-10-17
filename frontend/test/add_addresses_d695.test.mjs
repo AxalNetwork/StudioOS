@@ -28,7 +28,10 @@ const KEY = /^[a-z0-9][a-z0-9-]*$/;
 const ADD_KEYS = {
   // D693 (#1704): Record a decision, Verdict's one Add.
   validate: { verdict: ['decision'] },
-  raise: { 'fundraising-readiness': ['readiness'], 'investor-narrative': ['narrative-version'] },
+  raise: {
+    'fundraising-readiness': ['rescore'], 'investor-narrative': ['narrative-version'], 'pitch-deck': ['deck-link'], 'data-room': ['upload'],
+    'cap-table': ['holder'], 'use-of-funds': ['split'], 'capital-relationships': ['investor'],
+  },
   grow: {
     'product-improvement': ['feedback'], distribution: ['channel'], 'revenue-and-traction': ['kpi'], 'team-expansion': ['role'],
     'partner-network': ['partner'], 'market-expansion': ['market'], 'durable-company-building': ['obligation'],
@@ -36,6 +39,11 @@ const ADD_KEYS = {
   build: { 'solution-design': ['feature', 'risk'], 'prototype-mvp': ['must-have'], 'company-creation': ['formation-step'] },
 };
 const EDIT_KEYS = {
+  // Use of funds' Edit is its Add (D695 decision 9), so it keeps the Add's key.
+  raise: {
+    'investor-narrative': 'edit-version', 'pitch-deck': 'edit-link', 'data-room': 'edit-file', 'cap-table': 'edit-holder',
+    'use-of-funds': 'split', 'capital-relationships': 'edit-investor',
+  },
   grow: {
     'product-improvement': 'edit-feedback', distribution: 'edit-channel', 'revenue-and-traction': 'edit-kpi',
     'team-expansion': 'edit-role', 'partner-network': 'edit-partner', 'market-expansion': 'edit-market',
@@ -44,10 +52,14 @@ const EDIT_KEYS = {
   build: { 'solution-design': 'edit-feature', 'prototype-mvp': 'edit-must-have', 'company-creation': 'edit-formation-step', 'operating-systems': 'edit-system' },
 };
 const CTA_APART = {
+  'raise/fundraising-readiness': ['Re-score', 'Re-score now'], 'raise/investor-narrative': ['New version', 'Create version'],
+  'raise/pitch-deck': ['New link', 'Create link'], 'raise/use-of-funds': ['Edit split', 'Save split'],
   'grow/revenue-and-traction': ['Enter a KPI', 'Save KPI'], 'grow/team-expansion': ['Open a role', 'Open role'],
   // CO:335's CTA is "Record", its button CO:342's "Record a decision".
   'validate/verdict': ['Record a decision', 'Record'],
 };
+/** An Edit that is its module's Add (Use of funds), which keeps the Add's key and CTA. */
+const editIsAdd = (m, cycle, slug) => m.formsFor(cycle, slug).some((f) => f.key === m.editFor(cycle, slug)?.key && f.title === m.editFor(cycle, slug)?.title);
 const mapTable = (table, fn) => Object.fromEntries(Object.entries(table).map(([cycle, bySlug]) => [cycle, Object.fromEntries(Object.entries(bySlug).map(([slug, v]) => [slug, fn(v)]))]));
 const allForms = (m) => [
   ...Object.values(m.FORMS).flatMap((bySlug) => Object.values(bySlug).flat()),
@@ -71,13 +83,14 @@ function assertKeys(m) {
         else assert.equal(f.cta, f.button, `${cycle}/${slug} ${f.key}: an Add's CTA is its button`);
       }
       // `?form=<key>` names one form of the module's own: Add and Edit keys never collide.
-      const keys = [...forms.map((f) => f.key), m.editFor(cycle, slug)?.key].filter(Boolean);
+      const keys = [...forms.map((f) => f.key), editIsAdd(m, cycle, slug) ? null : m.editFor(cycle, slug)?.key].filter(Boolean);
       assert.equal(new Set(keys).size, keys.length, `${cycle}/${slug} keys are unique`);
     }
   }
   for (const [cycle, bySlug] of Object.entries(m.EDITS)) {
     for (const [slug, f] of Object.entries(bySlug)) {
       assert.ok(MODULES[cycle].some((mod) => mod.slug === slug), `${cycle}/${slug} is a module`);
+      if (editIsAdd(m, cycle, slug)) { assert.deepEqual([f.title, f.cta], ['Edit split', 'Save split'], `${cycle}/${slug}: its Edit is its Add`); continue; }
       assert.match(f.key, /^edit-[a-z0-9-]+$/);
       assert.equal(f.cta, 'Save', `${cycle}/${slug}: an Edit saves with Save`);
     }
@@ -197,7 +210,8 @@ function assertKinds(m) {
 
   // Forms still written in today's types keep today's rules; the canvas forms are read as `canvas()` is.
   const legacy = allForms(m).filter((f) => (f.fields || []).every((x) => !x.kind && !x.parts));
-  assert.ok(legacy.length >= 10, `${legacy.length} legacy forms checked`);
+  // #1652's two Raise forms were legacy-typed until #1657 drew Raise's canvas forms.
+  assert.ok(legacy.length >= 8, `${legacy.length} legacy forms checked`);
   for (const f of legacy) {
     assert.deepEqual(m.initialValues(f), legacyInitial(f), `${f.key}: first values`);
     for (const values of legacyCases(f)) {

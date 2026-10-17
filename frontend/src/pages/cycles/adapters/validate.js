@@ -332,11 +332,19 @@ const money = (cents, currency, period) => {
 const trend = (n) => (!num(n) ? null : n === 0 ? 'no change' : `${n > 0 ? '▲' : '▼'} ${Math.abs(n)}`);
 const seg = (id) => (id == null ? null : String(id));
 
+/**
+ * D696 (decision 7): the record a row opens, as the Worker's own id, or null
+ * when the read sent none. A row keeps its `id` (fallback included) as its
+ * key, but a fallback is never a record: a row with a null `recordId` is
+ * never linked (`recordModel.js`).
+ */
+const workerId = (v) => (v == null || v === '' ? null : String(v));
+
 /** Column keys in the order the read lists its labels; each row builder fills them. */
 export const RECORDS = {
   'problem-discovery': {
     keys: ['theme', 'mentions', 'severity', 'trend', 'supports'],
-    row: (r, i) => ({ id: `theme-${i}-${r.theme}`, cells: {
+    row: (r, i) => ({ id: `theme-${i}-${r.theme}`, recordId: workerId(r.id), cells: {
       theme: r.theme ?? null,
       mentions: num(r.mentions) ? `${r.mentions} ${r.mentions === 1 ? 'interview' : 'interviews'}` : null,
       severity: SEVERITY_WORD[r.severity] ? { text: SEVERITY_WORD[r.severity], tone: SEVERITY_TONE[r.severity] } : null,
@@ -356,11 +364,12 @@ export const RECORDS = {
     // D690 decision 10: the canvas's five columns plus State. Channel stays a
     // filter and a cell (its words are pinned), but no column names it.
     keys: ['interviewee', 'company', 'date', 'icp_fit', 'consent', 'state'],
-    row: (r) => ({ id: r.id, cells: {
-      // D685 §5.11: the interviewee opens the interview's review. The scoped
-      // read carries the project, so no ?project_id= is threaded.
+    row: (r) => ({ id: r.id, recordId: workerId(r.id), cells: {
+      // D685 §5.11: the interviewee opens the interview's review, Customer
+      // research's record (D696 decision 6). A linked row draws it as text.
+      // The scoped read carries the project, so no ?project_id= is threaded.
       interviewee: r.interviewee == null || r.interviewee === '' ? null
-        : r.id != null && /^\d+$/.test(String(r.id)) ? { text: r.interviewee, href: `/validate/interviews/${r.id}` } : r.interviewee,
+        : r.id != null && /^\d+$/.test(String(r.id)) ? { text: r.interviewee, href: `/validate/customer-research/${r.id}` } : r.interviewee,
       company: r.company ?? null,
       date: r.date ?? null,
       icp_fit: pill(FIT, r.icp_fit),
@@ -379,7 +388,7 @@ export const RECORDS = {
   },
   'ideal-customer-profile': {
     keys: ['segment', 'interviews', 'strong_fit', 'evidence', 'updated'],
-    row: (r, i) => ({ id: seg(r.id) ?? `segment-${i}`, cells: {
+    row: (r, i) => ({ id: seg(r.id) ?? `segment-${i}`, recordId: workerId(r.id), cells: {
       segment: r.segment ?? null,
       interviews: num(r.interviews) ? r.interviews : null,
       strong_fit: num(r.strong_fit) ? r.strong_fit : null,
@@ -391,7 +400,7 @@ export const RECORDS = {
   },
   'market-intelligence': {
     keys: ['company', 'kind', 'latest_signal', 'date', 'source'],
-    row: (r, i) => ({ id: r.id ?? `competitor-${i}`, cells: {
+    row: (r, i) => ({ id: r.id ?? `competitor-${i}`, recordId: workerId(r.id), cells: {
       company: r.company ?? null,
       kind: pill(KIND, r.kind),
       latest_signal: r.latest_signal ?? null,
@@ -408,7 +417,7 @@ export const RECORDS = {
   },
   'demand-signals': {
     keys: ['signal', 'who', 'amount', 'date', 'counts'],
-    row: (r, i) => ({ id: r.id ?? `signal-${i}`, cells: {
+    row: (r, i) => ({ id: r.id ?? `signal-${i}`, recordId: workerId(r.id), cells: {
       signal: word(SIGNAL, r.signal),
       who: r.who ?? null,
       amount: r.signal === 'waitlist' ? '—' : money(r.amount_cents, r.currency, r.period),
@@ -423,7 +432,7 @@ export const RECORDS = {
   },
   experiments: {
     keys: ['hypothesis', 'status', 'evidence', 'sprint', 'owner', 'source'],
-    row: (r) => ({ id: r.id, cells: {
+    row: (r) => ({ id: r.id, recordId: workerId(r.id), cells: {
       hypothesis: r.hypothesis ?? null,
       // D697: a retired claim reads Retired; one whose lane moved in the last 14 days says so beside its status.
       status: r.retired === true ? { text: 'Retired', tone: 'grey' }

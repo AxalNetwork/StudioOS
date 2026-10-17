@@ -179,9 +179,9 @@ const ctx = (db: InstanceType<typeof DatabaseSync>, projectId = P) =>
 
 test('every kind is registered under its own surface, and nothing else slipped in', () => {
   assert.deepEqual(Object.keys(FILL_KINDS).sort(),
-    ['competitor', 'hypothesis', 'market_input', 'pain_tag']);
+    ['competitor', 'feedback_theme', 'hypothesis', 'market_input', 'pain_tag']);
   assert.deepEqual([...FILL_SURFACES].sort(),
-    ['market/competitors', 'market/sizing', 'validate/hypotheses', 'validate/pain-map']);
+    ['grow/feedback-themes', 'market/competitors', 'market/sizing', 'validate/hypotheses', 'validate/pain-map']);
   assert.equal(fillKind('pain_tag')?.surface, 'validate/pain-map');
   assert.equal(fillKind('market_input')?.surface, 'market/sizing');
   assert.equal(fillKind('nope'), null, 'an unknown kind must resolve to null, not undefined-shaped');
@@ -246,9 +246,16 @@ test('every kind has a host that mounts its band — the other half of D17', () 
     'frontend/src/workspaces/founder/FounderValidateWorkspace.jsx',
     'frontend/src/pages/SpinoutLabMarketPage.jsx',
   ].map((p) => readFileSync(resolve(HERE, '../..', p), 'utf8')).join('\n');
+  // The cycle pages mount a kind through their `fills` entries (D691, #1698:
+  // Grow's feedback theme), read as `frontend/test/_cycleBands.mjs` reads them,
+  // and the page passes that kind to the one band it draws.
+  const route = readFileSync(resolve(HERE, '../../frontend/src/pages/cycles/CycleRoute.jsx'), 'utf8');
+  const cycleKinds = [...route.matchAll(/\n {4}fills: \{([^}]*)\},/g)]
+    .flatMap((m) => [...m[1].matchAll(/'?[a-z-]+'?: '([a-z_]+)'/g)].map((k) => k[1]));
+  assert.match(route, /<FillProposals [^>]*kind=\{fillKind\}/, 'the cycle page passes no kind to its band');
 
   for (const k of Object.values(FILL_KINDS)) {
-    assert.ok(hosts.includes(`kind="${k.kind}"`),
+    assert.ok(hosts.includes(`kind="${k.kind}"`) || cycleKinds.includes(k.kind),
       `${k.kind} is registered and no page offers it, so the switch does nothing`);
   }
   // And both sides read ONE mode store, so flipping the switch cannot leave the
@@ -403,7 +410,7 @@ test('each kind keeps the promise its class makes, and only that one', () => {
   const citation = { kind: 'library' as const, document_id: 1, title: 't', chunk: 0, quote: 'a real sentence' };
   const bare = { payload: {}, targetRef: 'x', readable: 'something' };
   const expected: Record<string, string> = {
-    pain_tag: 'restatement', hypothesis: 'restatement',
+    pain_tag: 'restatement', hypothesis: 'restatement', feedback_theme: 'restatement',
     market_input: 'sourced', competitor: 'sourced',
   };
   for (const k of Object.values(FILL_KINDS)) {

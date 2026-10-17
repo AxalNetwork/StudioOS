@@ -210,3 +210,11 @@ revenue, markets, obligations and the durability checklist. Each logs one
 KPI is kept and how each KPI is read (Stripe from the last 35 days over a hand
 entry, Runway derived, custom KPIs as `custom-<uid>`); Revenue and traction's
 list, its record and Build's roadmap KPI list read through it.
+
+D691 (#1698): `growWriters.ts` also holds the record actions' writers (Mark
+told, an experiment, an alert, a deal, an entry step, a localisation check, an
+agenda item, Mark held and Open minutes), and `growKpis.ts` checks a KPI's
+alerts on every hand entry (`checkKpiAlerts`). `growDaily.ts` is Grow's daily
+step, run from `../index.ts` at 05:35 UTC: an obligation's reminders on the
+days its `remind_days_json` names, and every venture's KPI alerts, each sent
+once, in the app only.

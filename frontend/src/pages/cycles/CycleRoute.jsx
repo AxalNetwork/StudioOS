@@ -212,7 +212,7 @@ const CYCLE_DEFS = {
       'durable-company-building': () => ({ label: 'Open the compliance calendar', href: '/compliance' }),
     }),
     add: toFnMap({}),
-    fills: {},
+    fills: { 'product-improvement': 'feedback_theme' },
     // The Grow desk's two AI bands (ZoneDraft, D424), on the modules they
     // read: the applicant ranking on Team expansion, the outreach sequence
     // for sign-ups who have not converted on Distribution.
@@ -758,6 +758,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
       <FormLightbox key={`add-${formOpen.key}`} form={formOpen} cycle={cycle} slug={slug} search={location.search}
         // An Add whose choices are the Worker's (Record a decision's For and Evidence, D693) reads them here.
         loadOptions={formOpen.loadOptions ? () => formOpen.loadOptions(formWrites, projectId) : null}
+        onSearch={formOpen.search ? (_field, q) => formOpen.search(formWrites, projectId, q) : null}
         onSubmit={(values) => formOpen.submit(formWrites, projectId, values)}
         onSaved={saved}
         onClose={closeAdd} />
