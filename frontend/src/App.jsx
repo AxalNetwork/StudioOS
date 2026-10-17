@@ -71,6 +71,7 @@ import { api, initActiveCompanyId, setActiveCompanyId } from './lib/api';
 // surface on mount; a lazy chunk could load AFTER the background settings 401
 // returns, racing the flag and still bouncing logged-out visitors to /login.
 import NotFoundPage from './pages/NotFoundPage';
+import { ParamRedirect } from './pages/cycles/ParamRedirect.jsx';
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const ArchetypeCardPage = lazy(() => import('./pages/ArchetypeCardPage'));
 const ScoringPage = lazy(() => import('./pages/ScoringPage'));
@@ -523,6 +524,10 @@ export function HistoryRedirect({ to, hash }) {
   const location = useLocation();
   return <Navigate replace to={{ pathname: to, search: location.search, hash }} />;
 }
+
+// D696 (#1658, decision 13): an old or canvas-slug address that names a
+// record, redirected with its params encoded and the query and hash kept.
+export { ParamRedirect };
 
 function DashboardRedirect() {
   const loc = useLocation();
@@ -2528,8 +2533,17 @@ function AppInner() {
       <Route path="/validate/record/live" element={guard(labRoles(['admin', 'founder']), <RecordLivePage />)} />
       <Route path="/validate/:slug" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" />)} />
       <Route path="/validate/interviews" element={guard(labRoles(['admin', 'founder']), founderEditor(<FounderValidateWorkspace />))} />
-      {/* D685 §5.11 (#1589): one interview's review: its sessions, the summary and the proposed findings. */}
-      <Route path="/validate/interviews/:id" element={guard(labRoles(['admin', 'founder']), <InterviewReviewPage />)} />
+      {/* D685 §5.11 (#1589): one interview's review: its sessions, the summary and the proposed findings.
+          D696 (#1658): it is Customer research's record, so its address is
+          /validate/customer-research/:id, and the old one redirects there with
+          the query and the hash. Until #1659 reframes it, the page is drawn as it is. */}
+      <Route path="/validate/customer-research/:id" element={guard(labRoles(['admin', 'founder']), <InterviewReviewPage />)} />
+      <Route path="/validate/interviews/:id" element={guard(labRoles(['admin', 'founder']), <ParamRedirect to="/validate/customer-research/:id" />)} />
+      {/* D696 decision 13: the canvas's module slugs, redirected to the app's. */}
+      <Route path="/validate/experiments-and-evidence" element={<ParamRedirect to="/validate/experiments" />} />
+      <Route path="/validate/experiments-and-evidence/:id" element={<ParamRedirect to="/validate/experiments/:id" />} />
+      <Route path="/validate/demand-and-urgency-signals" element={<ParamRedirect to="/validate/demand-signals" />} />
+      <Route path="/validate/demand-and-urgency-signals/:id" element={<ParamRedirect to="/validate/demand-signals/:id" />} />
       <Route path="/validate/pain-map" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
       <Route path="/validate/hypotheses" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
       <Route path="/validate/verdict" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
