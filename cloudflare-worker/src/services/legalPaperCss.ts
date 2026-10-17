@@ -330,6 +330,16 @@ section.execution .recital { font-style: italic; color: ${C.muted}; font-size: 9
 .party .sigimg { display: block; max-width: 180pt; max-height: 48pt; margin: 4pt 0 2pt; }
 .party .signed { font-family: 'Roboto Mono', monospace; font-size: ${T.size.audit}; color: ${C.muted}; margin: 0 0 3pt; }
 section.certificate { break-before: page; }
+section.execution.inline { break-before: auto; margin-top: 16pt; }
+.addressee { margin: 0 0 12pt; }
+.addressee p { margin: 0 0 2pt; }
+dl.key-figures { display: grid; grid-template-columns: 14em 1fr; gap: 3pt 10pt; margin: 6pt 0 12pt; break-inside: avoid; }
+dl.key-figures dt { font-weight: 700; font-size: ${T.size.eyebrow}; text-transform: uppercase; letter-spacing: 0.08em; color: ${C.muted}; }
+dl.key-figures dd { margin: 0; }
+.table-title { margin-top: 10pt; }
+.warning-box { text-transform: none; }
+section.payment { margin: 6pt 0 12pt; break-inside: avoid; }
+.payment-refusal { font-weight: 700; }
 section.certificate table td { font-size: 9pt; }
 .cover-inner { display: flex; flex-direction: column; height: 100%; }
 .cover .cover-fund { font-size: ${T.size.coverFund}; font-weight: 700; letter-spacing: 0.04em; margin-top: 1.4in; }
