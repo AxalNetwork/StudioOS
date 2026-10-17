@@ -195,3 +195,14 @@ D691 (#1696): Grow’s Durable card reads the production compliance calendar’s
 `due_date` and `completion_status` columns. Its existing next-90-days filter,
 seeded events and new-venture action are preserved; TypeScript maps `due_date`
 to the existing calendar field.
+
+D691 (#1697): `growWriters.ts` has one writer per Grow store, called by
+`../routes/cycle_grow.ts` and by #1698's actions and feedback-theme fill:
+feedback (with `setFeedbackTheme`), channels and their spend, roles (through
+`jobBoardCommon.ts`'s `createPosting`, `submitForReview` and `closePosting`,
+which keep the board's host-or-admin rule), applications, partners and their
+revenue, markets, obligations and the durability checklist. Each logs one
+`grow.<module>` row through `cycleActivity.ts`. `growKpis.ts` is where a typed
+KPI is kept and how each KPI is read (Stripe from the last 35 days over a hand
+entry, Runway derived, custom KPIs as `custom-<uid>`); Revenue and traction's
+list, its record and Build's roadmap KPI list read through it.

@@ -79,6 +79,11 @@ const STATEMENTS: string[] = [
   `ALTER TABLE job_applications ADD COLUMN stage TEXT NOT NULL DEFAULT 'applied' CHECK (stage IN ('applied', 'screen', 'interview', 'offer', 'hired', 'declined'))`,
   `ALTER TABLE job_applications ADD COLUMN stage_changed_at TEXT`,
   `ALTER TABLE job_applications ADD COLUMN stage_changed_by INTEGER REFERENCES users(id)`,
+  // D691 (migration 462): Open a role's compensation band, on the record only.
+  `ALTER TABLE job_postings ADD COLUMN comp_min_cents INTEGER`,
+  `ALTER TABLE job_postings ADD COLUMN comp_max_cents INTEGER`,
+  `ALTER TABLE job_postings ADD COLUMN comp_currency TEXT`,
+  `ALTER TABLE job_postings ADD COLUMN equity_pct REAL CHECK (equity_pct IS NULL OR equity_pct BETWEEN 0 AND 100)`,
 ];
 
 export async function ensureJobBoardSchema(env: Env): Promise<boolean> {
