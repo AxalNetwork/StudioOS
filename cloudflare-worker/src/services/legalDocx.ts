@@ -193,7 +193,7 @@ function headerXml(m: PaperModel, pageSize: PaperPageSize): string {
     + '<w:pBdr><w:bottom w:val="single" w:sz="4" w:space="4" w:color="D4D2DC"/></w:pBdr></w:pPr>'
     + run('AXAL VC', '<w:rFonts w:ascii="Space Grotesk" w:hAnsi="Space Grotesk"/><w:b/><w:color w:val="6D28D9"/><w:sz w:val="20"/>')
     + run('\tCONFIDENTIAL', '<w:b/><w:color w:val="6D28D9"/><w:spacing w:val="20"/>') + '</w:p>'
-    + `<w:p><w:pPr><w:pStyle w:val="HeaderLine"/></w:pPr>${run(state.toUpperCase(), '<w:b/>')}</w:p>`
+    + `<w:p><w:pPr><w:pStyle w:val="HeaderLine"/></w:pPr>${run(state, '<w:b/>')}</w:p>`
     + '</w:hdr>';
 }
 
