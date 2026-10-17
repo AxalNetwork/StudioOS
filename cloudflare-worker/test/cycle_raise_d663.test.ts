@@ -14,6 +14,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
@@ -269,9 +270,12 @@ test('capSlideSeconds bounds a slide by what the view has left', () => {
 test('per-slide time never exceeds the view\'s total', async () => {
   const db = fixture();
   db.exec(`INSERT INTO pitch_decks (id, project_id, version, slides) VALUES (5, ${P}, 1, '[]'), (6, ${P_OTHER}, 1, '[]')`);
-  db.exec(`INSERT INTO pitch_deck_share_tokens (id, deck_id, token_hash, expires_at) VALUES (1, 5, 'h1', '2999-01-01 00:00:00')`);
-  db.exec(`INSERT INTO deck_share_views (id, share_token_id, deck_id, read_seconds) VALUES (7, 1, 5, 0), (8, 1, 6, 0)`);
   const tok = await shareToken(5);
+  // D691 decision 5 (#1700) — the heartbeat counts only for a live link, so the
+  // row carries the hash of the token the beats are sent with.
+  db.prepare(`INSERT INTO pitch_deck_share_tokens (id, deck_id, token_hash, expires_at) VALUES (1, 5, ?, '2999-01-01 00:00:00')`)
+    .run(createHash('sha256').update(tok).digest('hex'));
+  db.exec(`INSERT INTO deck_share_views (id, share_token_id, deck_id, read_seconds) VALUES (7, 1, 5, 0), (8, 1, 6, 0)`);
 
   assert.equal(await heartbeat(db, tok, { view_id: 7, seconds: 60, slides: { 0: 50, 1: 30 } }), 200);
   assert.equal(readOf(db, 7), 60);

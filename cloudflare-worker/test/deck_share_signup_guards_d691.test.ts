@@ -21,6 +21,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
@@ -48,8 +49,17 @@ function b64url(bytes: Uint8Array): string {
   return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-/** A share token signed exactly as decks.ts mints one, for deck `DECK`. */
-async function shareToken(): Promise<string> {
+/**
+ * A share token signed exactly as decks.ts mints one, for deck `DECK`. One
+ * per run, so the fixture can store the link row it names: since D691 (#1700)
+ * a share action needs a live link, not only a valid signature.
+ */
+let TOKEN: Promise<string> | null = null;
+function shareToken(): Promise<string> {
+  TOKEN ??= mintShareToken();
+  return TOKEN;
+}
+async function mintShareToken(): Promise<string> {
   const body = b64url(new TextEncoder().encode(JSON.stringify({
     k: `deck:${DECK}:v1`, exp: Math.floor(Date.now() / 1000) + 3600,
   })));
@@ -65,10 +75,23 @@ function fixture() {
   for (const t of TABLES) db.exec(stripForeignKeys(tableFromBaseline(BASELINE, t)));
   db.prepare(`INSERT INTO projects (id, name) VALUES (1, 'Testventure Labs')`).run();
   db.prepare(`INSERT INTO pitch_decks (id, project_id, title, slides) VALUES (?, 1, 'Seed deck', '[]')`).run(DECK);
+  // D691 (#1700) — the link row the token names, with migration 248's
+  // `revoked_at` and 463's columns, which the live-link check reads.
+  db.exec(readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/248_deck_share_revoked_at.sql'), 'utf8')
+    .replace(/^\s*--[^\n]*$/gm, ''));
+  for (const stmt of readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/463_raise_record_stores.sql'), 'utf8')
+    .replace(/^\s*--[^\n]*$/gm, '').split(';').map((x) => x.trim())
+    .filter((x) => x.startsWith('ALTER TABLE pitch_deck_share_tokens'))) db.exec(stmt);
   const env = {
     JWT_SECRET, ENVIRONMENT: 'production', TURNSTILE_SECRET_KEY: 'test-secret-d691', DB: d1Over(db),
   } as any;
   return { db, env };
+}
+
+async function liveLink(db: any) {
+  const hash = createHash('sha256').update(await shareToken()).digest('hex');
+  db.prepare(`INSERT INTO pitch_deck_share_tokens (deck_id, token_hash, expires_at, view_limit, view_count)
+              VALUES (?, ?, '2999-01-01 00:00:00', 2147483647, 0)`).run(DECK, hash);
 }
 
 async function signup(env: any, body: Record<string, unknown>) {
@@ -99,6 +122,7 @@ const count = (db: any, sql: string, ...args: unknown[]) => Number((db.prepare(s
 
 test('a missing Turnstile token answers 403 and creates nothing, before the email is looked up', async () => {
   const { db, env } = fixture();
+  await liveLink(db);
   const r = await signup(env, {});
   assert.equal(r.status, 403);
   assert.equal(r.body.error, 'Bot verification failed. Please try again.');
@@ -109,6 +133,7 @@ test('a missing Turnstile token answers 403 and creates nothing, before the emai
 
 test('an unsolved token answers 403, and the refusal is logged with a hashed email and an IP bucket only', async () => {
   const { db, env } = fixture();
+  await liveLink(db);
   const r = await signup(env, { turnstileToken: 'forged-token' });
   assert.equal(r.status, 403);
   assert.deepEqual(r.verified, ['forged-token'], 'the token was not checked with Cloudflare');
@@ -124,6 +149,7 @@ test('an unsolved token answers 403, and the refusal is logged with a hashed ema
 
 test('an existing email behind a failed challenge gets 403, not the 409 that would confirm the account', async () => {
   const { db, env } = fixture();
+  await liveLink(db);
   db.prepare(`INSERT INTO users (email, name, role) VALUES (?, 'Sam Example', 'investor')`).run(EMAIL);
   const r = await signup(env, {});
   assert.equal(r.status, 403);
@@ -132,6 +158,7 @@ test('an existing email behind a failed challenge gets 403, not the 409 that wou
 
 test('a solved challenge creates the user exactly as before', async () => {
   const { db, env } = fixture();
+  await liveLink(db);
   const r = await signup(env, { turnstileToken: SOLVED });
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(r.body.ok, true);

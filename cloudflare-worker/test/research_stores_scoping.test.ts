@@ -152,10 +152,14 @@ test('the diligence read is scoped to the caller as the grantee', () => {
 test('diligence counts withheld files and never names them', () => {
   // The data room's own rule, kept: "A count, never the names."
   assert.match(DILIGENCE, /withheld_behind_nda/);
-  const stmt = touching(DILIGENCE, 'data_room_files')[0];
-  assert.ok(stmt, 'no prepared statement in /diligence reads data_room_files');
-  assert.match(stmt, /COUNT\(\*\) FROM data_room_files/);
-  assert.doesNotMatch(stmt, /f\.name|f\.uid|f\.r2_key/);
+  // D691 decision 6 (#1700) — the counts come from `admittedCounts`, the one
+  // predicate every room read shares; /diligence reads no file row itself.
+  assert.equal(touching(DILIGENCE, 'data_room_files').length, 0, '/diligence counts through admittedCounts, not its own SELECT');
+  assert.match(DILIGENCE, /admittedCounts\(c\.env, pid, await investorCommitted\(c\.env, pid, user\.id\), nda\)/);
+  const access = read('cloudflare-worker/src/services/dataRoomAccess.ts');
+  const stmt = access.slice(access.indexOf("'SELECT visibility"), access.indexOf("WHERE project_id = ?',") + 21);
+  assert.match(stmt, /FROM data_room_files WHERE project_id = \?/);
+  assert.doesNotMatch(stmt, /name|uid|r2_key/);
 });
 
 test('every other room read in this file is bound to an owned project', () => {

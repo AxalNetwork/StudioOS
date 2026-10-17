@@ -26,6 +26,15 @@ import { ReviewDealSlotContext } from '../decks/templates/reviewDealSlot';
 const INNER_W = 1920;
 const INNER_H = 1080;
 
+/**
+ * D691 decision 5 — whether the viewer offers Save as PDF. Outside share mode,
+ * always. In share mode, unless the link was made with download off; an older
+ * link sends no `allow_download` and keeps the button.
+ */
+export function canSavePdf(shareMode, deck) {
+  return !shareMode || deck?.allow_download !== false;
+}
+
 // Pull the method_id out of the persisted slide blob the same way the
 // editor does — /apply-method stamps every slide with method_id.
 function detectMethodId(deck) {
@@ -644,8 +653,9 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
       <h1 className="text-lg font-semibold text-gray-900">This deck isn't available</h1>
       <p className="mt-2 text-sm text-gray-600">{error}</p>
       {shareMode && (
-        <p className="mt-4 text-xs text-gray-500">
-          Share links are single-use and expire after 72 hours. Ask the founder for a fresh link.
+        // D691 — links are no longer single-use, and can last 7, 14 or 30 days or have no end.
+        <p className="mt-4 text-xs text-gray-500 dark:text-gray-400">
+          Ask the founder for a fresh link.
         </p>
       )}
     </div>
@@ -783,13 +793,19 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
           {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
           <span className="hidden sm:inline">{isFullscreen ? 'Exit' : 'Fullscreen'}</span>
         </button>
-        <button
-          onClick={exportPdf} disabled={exporting}
-          className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-50"
-        >
-          {exporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-          {exporting ? 'Exporting…' : 'Save as PDF'}
-        </button>
+        {/* D691 decision 5 — a share link made with download off hides Save as
+            PDF. The deck is drawn in the browser, so this does not stop a
+            screenshot or the browser's own print. An absent field is an older
+            link, which keeps the button. */}
+        {canSavePdf(shareMode, deck) && (
+          <button
+            onClick={exportPdf} disabled={exporting}
+            className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-50"
+          >
+            {exporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+            {exporting ? 'Exporting…' : 'Save as PDF'}
+          </button>
+        )}
       </div>
     </div>
   );

@@ -59,6 +59,12 @@ test('the gate is re-checked at download, not inherited from the listing', () =>
 test('nothing NDA-gated is listed to an investor who cannot open it', () => {
   const w = read(ROUTE);
   const shared = w.slice(w.indexOf("r.get('/shared/:projectUid'"), w.indexOf('function folderUid'));
+  // D691 decision 6 (#1700): the tier and expiry come first, through the one
+  // shared predicate, and the NDA gate applies to what they admit.
+  assert.match(shared, /const committed = await investorCommitted\(c\.env, project\.id, user\.id\)/);
+  assert.match(shared, /const admitted = \(files\.results \|\| \[\]\)\.filter\(\(f\) => tierAdmits\(f, committed, now\)\)/);
+  assert.match(shared, /const openFiles = admitted\.filter\(\(f\) => visible\(f\.visibility\)\)/);
+  assert.match(shared, /const withheld = admitted\.length - openFiles\.length/);
   assert.match(shared, /const visible = \(v: string\) => v === 'open' \|\| nda/);
   assert.match(shared, /withheld_behind_nda: withheld/,
     'the investor is told SOMETHING is withheld, so the gate is not invisible');

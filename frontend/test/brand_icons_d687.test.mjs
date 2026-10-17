@@ -332,3 +332,101 @@ test('vendor palettes: Microsoft and Slack keep their supplied colours in dark t
     for (const colour of colours) assert.ok(out.toLowerCase().includes(`fill="${colour}"`), `${provider}: ${colour}`);
   }
 });
+
+// ── 10 (step 10). Record a session's Provider chips ─────────────────────────
+
+import { Radios } from '../src/pages/founder/RecordLightbox.jsx';
+import PublicFooter from '../src/components/PublicFooter.jsx';
+import { codeOnly } from './_codeOnly.mjs';
+import ShareButtons from '../src/components/ShareButtons.jsx';
+
+test('step 10. Record a session\'s Provider chips draw the bare 16px mark before the label, real marks only', () => {
+  const src = read('frontend/src/pages/founder/RecordLightbox.jsx');
+  // Only the Provider group passes an icon; mode, model, thread and consent stay text.
+  assert.equal((src.match(/icon: <BrandIcon/g) || []).length, 1, 'one Radios group passes marks');
+  assert.match(src, /<Radios label="Provider"[\s\S]*?icon: <BrandIcon provider=\{c\.value\} size=\{16\} variant="bare" fallback="none" \/>/);
+  const chips = ['zoom', 'google_meet', 'slack', 'linkedin', 'teams', 'phone_speaker', 'paste'];
+  const out = html(h(Radios, { label: 'Provider', value: 'zoom', onChange() {}, testId: 'p',
+    options: chips.map((k) => ({ value: k, label: `${k} · Ready`, disabled: k === 'slack',
+      icon: h(BrandIcon, { provider: k, size: 16, variant: 'bare', fallback: 'none' }) })) }));
+  for (const k of ['zoom', 'google_meet', 'slack', 'linkedin']) {
+    assert.match(out, new RegExp(`data-testid="p-${k}"[^>]*>(<span[^>]*>)?<svg[^>]*width="16"[^>]*data-provider="${k}"[\\s\\S]*?<span>${k} · Ready</span></button>`), `${k}: the mark, then its label`);
+  }
+  for (const k of ['teams', 'phone_speaker', 'paste']) {
+    assert.match(out, new RegExp(`data-testid="p-${k}"[^>]*><span>${k} · Ready</span></button>`), `${k}: text only (fallback none)`);
+  }
+  // A disabled chip dims its mark with it: the mark sits inside the chip that carries disabled:opacity-50.
+  const slack = out.match(/<button[^>]*data-testid="p-slack"[^>]*>[\s\S]*?<\/button>/)[0];
+  assert.match(slack, /\sdisabled=""/, 'the slack fixture chip is disabled');
+  assert.match(slack, /class="[^"]*disabled:opacity-50/, 'a disabled chip dims');
+  assert.match(slack, /<svg[^>]*data-provider="slack"/, 'the dimmed chip holds its mark, so the mark dims with it');
+  assert.match(out, /disabled:opacity-50[^"]* inline-flex items-center gap-1\.5/, 'the chip lays its mark out inline');
+  // Radios without icons renders exactly as before.
+  const plain = html(h(Radios, { label: 'How', value: 'a', onChange() {}, options: [{ value: 'a', label: 'A' }] }));
+  assert.doesNotMatch(plain, /inline-flex|<svg|<span>/);
+});
+
+// ── 11. One copy of every mark ──────────────────────────────────────────────
+
+test('step 11. the footer, share buttons, author card and Referrals draw BrandIcon\'s marks, each surface in its own colour', () => {
+  const footer = html(h(MemoryRouter, null, h(PublicFooter)));
+  for (const { key, label } of SOCIAL_LINKS) {
+    assert.match(footer, new RegExp(`aria-label="${label}" title="${label}"><svg[^>]*data-provider="${key}"`), `footer: ${label}`);
+  }
+  assert.doesNotMatch(footer, /lucide-send/, 'Telegram is its own mark, not lucide Send');
+  assert.doesNotMatch(footer, /--brand:/, 'the footer stays monochrome (tone="current")');
+
+  const share = html(h(ShareButtons, { url: 'https://axal.vc/a', title: 'A' }));
+  for (const [k, label] of [['x', 'Share on X'], ['linkedin', 'Share on LinkedIn'], ['facebook', 'Share on Facebook'], ['whatsapp', 'Share on WhatsApp']]) {
+    assert.match(share, new RegExp(`aria-label="${label}" title="${label}"[^>]*><svg[^>]*data-provider="${k}"`), label);
+  }
+  assert.doesNotMatch(share, /--brand:/);
+
+  for (const { key, Icon } of SOCIALS.filter((s) => s.key !== 'website')) {
+    assert.match(html(h(Icon, { size: 14 })), new RegExp(`width="14"[^>]*data-provider="${canon(key)}"`), `AuthorCard: ${key}`);
+  }
+
+  const referrals = read('frontend/src/pages/ReferralsPage.jsx');
+  for (const k of ['linkedin', 'x', 'whatsapp', 'facebook', 'telegram']) {
+    assert.match(referrals, new RegExp(`icon: <BrandIcon provider="${k}" size=\\{16\\} variant="bare" tone="current" \\/>`), `Referrals: ${k}`);
+  }
+  assert.doesNotMatch(codeOnly(referrals), /𝕏|>WA<|>TG</, 'the text stand-ins screen readers read aloud are gone');
+  assert.match(referrals, /<BrandIcon provider="linkedin" size=\{14\} variant="bare" tone="current" \/> Import from LinkedIn/);
+
+  const wrappers = [
+    ['frontend/src/pages/ArticleReaderPage.jsx', ['x', 'linkedin', 'facebook']],
+    ['frontend/src/pages/PublicProfilePage.jsx', ['linkedin', 'x', 'github']],
+    ['frontend/src/pages/admin/AdminTeam.jsx', ['linkedin', 'x']],
+    ['frontend/src/pages/AdvisoryPage.jsx', ['linkedin']],
+    ['frontend/src/pages/jobs/JobManagePage.jsx', ['linkedin']],
+    ['frontend/src/components/CompanyProfilePanel.jsx', ['linkedin']],
+  ];
+  for (const [file, keys] of wrappers) {
+    const src = read(file);
+    for (const k of keys) assert.match(src, new RegExp(`<BrandIcon provider="${k}" size=\\{(size|16)\\} variant="bare" tone="current"`), `${file}: ${k}`);
+    assert.doesNotMatch(src, /<svg[^>]*viewBox="0 0 24 24"[^>]*fill="currentColor"/, `${file} still hand-draws a mark`);
+    assert.doesNotMatch(src, /predates the `Linkedin` glyph|inline minimal SVGs instead/, `${file}: the stale lucide comment`);
+  }
+});
+
+test('9. one copy of every mark: each BRAND_MARKS path lives only in ui/BrandIcon.jsx, and no old copy survives', async () => {
+  const { srcFilesWith } = await import('./_srcFilesWith.mjs');
+  const firstPath = (m) => m.path || m.paths?.[0]?.d || (function walk(nodes) {
+    for (const n of nodes || []) { if (n.attrs?.d) return n.attrs.d; const d = walk(n.children); if (d) return d; }
+    return null;
+  })(m.artwork);
+  const firstFill = (nodes) => { for (const n of nodes || []) { if (n.attrs?.fill?.startsWith('#')) return n.attrs.fill; const f = firstFill(n.children); if (f) return f; } return null; };
+  for (const [k, m] of Object.entries(BRAND_MARKS)) {
+    // A mark drawn only from shapes (Microsoft's four squares) has no path; its first fill is its fingerprint.
+    const print = firstPath(m)?.slice(0, 16) || firstFill(m.artwork);
+    assert.ok(print, `${k} has a path or a coloured shape`);
+    assert.deepEqual(srcFilesWith(new RegExp(print.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')), ['frontend/src/ui/BrandIcon.jsx'], `${k}'s mark is copied outside BrandIcon.jsx`);
+  }
+  for (const old of ['M20.447 20.452', 'M4.98 3.5', 'M16 8a6 6', 'M18.244 2.25', 'M18.244 2H21', 'M24 12.073', 'M14 9V6.8', 'M12 2.163c3.204', 'M12 .5C5.73', 'M16.6 5.82']) {
+    assert.deepEqual(srcFilesWith(old), [], `an old copy (${old}) survives`);
+  }
+  // The sign-in G is the one exemption: Google's own Sign in with Google G is
+  // not recorded yet (D687's open row, #1008 item 22), and a monogram must
+  // never sit on a Continue with Google button, so the three buttons keep it.
+  assert.deepEqual(srcFilesWith('#FFC107'), ['frontend/src/pages/LoginPage.jsx', 'frontend/src/pages/RegisterPage.jsx', 'frontend/src/pages/SettingsPage.jsx']);
+});
