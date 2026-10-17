@@ -1,7 +1,7 @@
 /** D690 — one scoped activity convention for cycle record writes. */
 import type { Env } from '../types';
 import { RECORD_ID } from './records/owned';
-import type { Cycle, OldRowsMatcher, Store } from './records/types';
+import { isRaiseStore, type Cycle, type OldRowsMatcher, type RaiseStore, type Store } from './records/types';
 
 export type CycleWrite = {
   projectId: number;
@@ -78,8 +78,54 @@ export async function logCycleWrite(env: Env, input: CycleWrite): Promise<void> 
 type Creator = { name: string | null; created_at: string | null };
 type CreatorStore = Store | 'mvp_features' | 'roadmap_okrs';
 
+/**
+ * D691 decision 12 (#1699): a Raise record's creator column, for a record
+ * with no create row: `scored_by` (its first score), the version marker's
+ * `updated_by`, a link's `created_by`, a file's `uploaded_by_user_id`, the
+ * base scenario's `owner_user_id`; a prospect has only its date, and a
+ * use-of-funds section neither.
+ */
+async function raiseCreatorFor(env: Env, store: RaiseStore, id: string, projectId: number): Promise<Creator | null> {
+  const n = Number(id);
+  const numeric = Number.isSafeInteger(n) && n > 0;
+  switch (store) {
+    case 'readiness_items':
+      return env.DB.prepare(
+        `SELECT u.name, COALESCE(s.scored_at, i.created_at) AS created_at FROM readiness_items i
+           LEFT JOIN readiness_scores s ON s.id = (SELECT MIN(f.id) FROM readiness_scores f WHERE f.item_id = i.id)
+           LEFT JOIN users u ON u.id = s.scored_by
+          WHERE i.project_id = ? AND i.item_key = ?`,
+      ).bind(projectId, id).first<Creator>();
+    case 'spinout_deck_overrides':
+      return numeric ? env.DB.prepare(
+        `SELECT u.name, o.updated_at AS created_at FROM spinout_deck_overrides o LEFT JOIN users u ON u.id = o.updated_by
+          WHERE o.project_id = ? AND o.version = ? ORDER BY (o.field_key = '_version') DESC, o.id LIMIT 1`,
+      ).bind(projectId, n).first<Creator>() : null;
+    case 'pitch_deck_share_tokens':
+      return numeric ? env.DB.prepare(
+        `SELECT u.name, t.created_at FROM pitch_deck_share_tokens t JOIN pitch_decks d ON d.id = t.deck_id
+           LEFT JOIN users u ON u.id = t.created_by WHERE t.id = ? AND d.project_id = ?`,
+      ).bind(n, projectId).first<Creator>() : null;
+    case 'data_room_files':
+      return numeric ? env.DB.prepare(
+        'SELECT u.name, f.created_at FROM data_room_files f LEFT JOIN users u ON u.id = f.uploaded_by_user_id WHERE f.id = ? AND f.project_id = ?',
+      ).bind(n, projectId).first<Creator>() : null;
+    case 'cap_table_scenarios':
+      return env.DB.prepare(
+        `SELECT u.name, s.created_at FROM cap_table_scenarios s LEFT JOIN users u ON u.id = s.owner_user_id
+          WHERE s.project_id = ? AND COALESCE(s.is_variant, 0) = 0 ORDER BY s.updated_at DESC LIMIT 1`,
+      ).bind(projectId).first<Creator>();
+    case 'raise_prospects':
+      return numeric ? env.DB.prepare('SELECT NULL AS name, p.created_at FROM raise_prospects p WHERE p.id = ? AND p.project_id = ?')
+        .bind(n, projectId).first<Creator>() : null;
+    case 'use_of_funds':
+      return null;
+  }
+}
+
 /** Literal lookups only; legacy rows are never updated to manufacture a creator. */
 async function creatorFor(env: Env, store: CreatorStore, id: string, projectId: number): Promise<Creator | null> {
+  if (isRaiseStore(store)) return raiseCreatorFor(env, store, id, projectId);
   if (store === 'competitor_candidates') {
     return env.DB.prepare('SELECT NULL AS name, c.created_at FROM competitor_candidates c JOIN competitor_analyses a ON a.id = c.analysis_id WHERE c.id = ? AND a.project_id = ?').bind(id, projectId).first<Creator>();
   }
@@ -109,6 +155,7 @@ async function creatorFor(env: Env, store: CreatorStore, id: string, projectId: 
       return env.DB.prepare('SELECT u.name, s.created_at FROM demand_signals s LEFT JOIN users u ON u.id = s.created_by WHERE s.id = ? AND s.project_id = ?').bind(n, projectId).first<Creator>();
     case 'interview_sessions':
       return env.DB.prepare('SELECT u.name, s.created_at FROM interview_sessions s JOIN discovery_interviews i ON i.id = s.interview_id LEFT JOIN users u ON u.id = s.created_by_user_id WHERE s.id = ? AND i.project_id = ?').bind(n, projectId).first<Creator>();
+    case 'mvp_must_haves':
     case 'mvp_features':
       return env.DB.prepare('SELECT u.name, f.created_at FROM mvp_features f LEFT JOIN users u ON u.id = f.created_by WHERE f.id = ? AND f.project_id = ?').bind(n, projectId).first<Creator>();
     case 'roadmap_okrs':

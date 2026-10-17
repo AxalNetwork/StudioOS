@@ -32,6 +32,8 @@ export type SectionSpec = {
   gate?: Gate;
   /** Required when a custom gate represents a writer-only section. */
   publicGate?: 'read' | 'write';
+  /** A section only some records of the module have (D691: Mock diligence, the Data room item's only). */
+  when?: (id: string, record: RecordContent) => boolean;
   read: (ctx: RecordContext, id: string, record: RecordContent) => Promise<Pick<RecordSection, 'rows' | 'empty' | 'action'>>;
 };
 
@@ -59,6 +61,8 @@ export type RecordContent = {
   sub: string;
   pills: Array<string | { text: string; tone?: string }>;
   facts: [RecordFact, RecordFact, RecordFact, RecordFact];
+  /** A store's own uid beside the record id, where its other routes address it by uid (D691: a data-room file). */
+  uid?: string;
   createdBy?: number | null;
   createdAt?: string | null;
 };
@@ -106,6 +110,16 @@ export type OldRowsMatcher = {
   children?: Array<'job_applications'>;
 };
 
+/** D691 (#1699): Raise's stores, each named by the table or column its ids resolve through. */
+export type RaiseStore =
+  | 'readiness_items' | 'spinout_deck_overrides' | 'pitch_deck_share_tokens'
+  | 'data_room_files' | 'cap_table_scenarios' | 'use_of_funds' | 'raise_prospects';
+export const RAISE_STORES: readonly RaiseStore[] = [
+  'readiness_items', 'spinout_deck_overrides', 'pitch_deck_share_tokens',
+  'data_room_files', 'cap_table_scenarios', 'use_of_funds', 'raise_prospects',
+];
+export const isRaiseStore = (store: string): store is RaiseStore => (RAISE_STORES as readonly string[]).includes(store);
+
 export type Store =
   | 'pain_groups' | 'discovery_interviews' | 'customer_segments'
   | 'competitor_candidates' | 'demand_signals' | 'revenue_entries'
@@ -113,7 +127,14 @@ export type Store =
   | 'interview_sessions' | 'validation_decisions' | 'validation_decision_commitments'
   // D691 (#1698): Grow's stores.
   | 'product_feedback' | 'growth_channels' | 'job_postings'
-  | 'growth_partners' | 'markets' | 'compliance_events';
+  | 'growth_partners' | 'markets' | 'compliance_events'
+  // D690 (S18-B, #1694): Build's records, then the rows its sections name.
+  | 'mvp_features' | 'mvp_must_haves' | 'roadmap_okrs' | 'cap_table_founders'
+  | 'build_filings' | 'build_systems'
+  | 'mvp_test_sessions' | 'mvp_test_findings' | 'mvp_feature_links' | 'mvp_release_checks'
+  | 'venture_risks' | 'founder_contributions' | 'formation_step_checks'
+  // D691 (#1699): Raise's records.
+  | RaiseStore;
 
 export type ModuleSpec = {
   read: Gate;

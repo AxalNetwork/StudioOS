@@ -27,37 +27,38 @@ import { cardView, cycleOf, cycleTabs, figureDelta, figureValue, isPlainClick, l
 const SECTION = 'text-[10px] font-extrabold uppercase tracking-[.09em]';
 const CARD = 'flex min-w-0 flex-col gap-2.5 rounded-xl border border-axal-hairline bg-white px-4 py-3.5 dark:border-gray-800 dark:bg-gray-900';
 
-export function CycleHeader({ cycle, cards, active = null, action, title, search = '' }) {
+export function CycleHeader({ cycle, cards, active = null, action, title, sub, record = false, moduleName, search = '' }) {
   const meta = cycleOf(cycle);
   const navigate = useNavigate();
-  const tabs = cycleTabs(meta.key, cards, active, search);
+  const tabs = cycleTabs(meta.key, cards, active, search, { back: record ? `‹ Back to ${moduleName}` : null });
   const current = tabs.find((t) => t.active) || tabs[0];
   const label = action?.label || meta.action;
   const href = safeHref(action?.href);
   const btn = 'inline-flex items-center rounded-[9px] bg-axal-violet px-3.5 py-2 text-[12.5px] font-bold text-white hover:bg-axal-violet-deep';
   return (
     <header className="flex flex-col gap-1.5" data-testid="cycle-header">
-      <span className={`${SECTION} text-axal-violet dark:text-violet-300`}>{meta.question}</span>
+      <span className={`${SECTION} text-axal-violet dark:text-violet-300`}>{meta.name} · {record ? moduleName : meta.question}</span>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <h1 className="m-0 text-[20px] font-extrabold leading-tight tracking-[-.025em] text-axal-ink sm:text-2xl dark:text-gray-100">{title || meta.name}</h1>
-        {action?.onClick
+        {!record && action?.onClick
           ? <button type="button" className={btn} onClick={action.onClick} data-testid="cycle-action">{label}</button>
-          : href ? <Link className={btn} to={href} data-testid="cycle-action" aria-haspopup={action?.onOpen ? 'dialog' : undefined} onClick={action?.onOpen ? (e) => { if (isPlainClick(e)) { e.preventDefault(); action.onOpen(); } } : undefined}>{label}</Link> : null}
+          : !record && href ? <Link className={btn} to={href} data-testid="cycle-action" aria-haspopup={action?.onOpen ? 'dialog' : undefined} onClick={action?.onOpen ? (e) => { if (isPlainClick(e)) { e.preventDefault(); action.onOpen(); } } : undefined}>{label}</Link> : null}
       </div>
-      <p className="m-0 text-[13px] leading-relaxed text-axal-ink/80 dark:text-gray-300">{meta.outcome}</p>
+      <p className="m-0 text-[13px] leading-relaxed text-axal-ink/80 dark:text-gray-300">{sub ?? `${meta.outcome}. The cycle’s data at a glance; the tabs above move between modules.`}</p>
       <nav aria-label={`${meta.name} modules`} className="mt-1 hidden flex-wrap gap-1.5 md:flex" data-testid="cycle-tabs">
         {tabs.map((t) => (
-          <Link key={t.key || 'overview'} to={t.href} aria-current={t.active ? 'page' : undefined}
+          <Link key={t.key || 'overview'} to={t.href} aria-current={t.active && !t.back ? 'page' : undefined}
             className={`whitespace-nowrap rounded-full border px-[11px] py-[5px] text-[11px] ${t.active ? 'border-axal-lavender-edge bg-axal-lavender font-bold text-axal-violet-deep dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300' : 'border-axal-hairline bg-white font-semibold text-axal-muted hover:text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:text-gray-100'}`}>
             {t.name}
           </Link>
         ))}
       </nav>
       <label className="mt-1 flex min-h-[44px] items-center gap-2 rounded-xl border border-axal-hairline bg-white px-3.5 md:hidden dark:border-gray-700 dark:bg-gray-900">
-        <span className={`${SECTION} text-axal-muted dark:text-gray-400`}>Module</span>
+        <span className={`${SECTION} text-axal-muted dark:text-gray-400`}>{record ? 'Record' : 'Module'}</span>
         {/* Keyed by tab, not href (D686): a history tab and its module tab can share one path. */}
-        <select className="min-w-0 flex-1 bg-transparent text-sm font-bold text-axal-ink outline-none dark:text-gray-100" value={current.key || 'overview'}
+        <select className="min-w-0 flex-1 bg-transparent text-sm font-bold text-axal-ink outline-none dark:text-gray-100" value={record ? 'record' : current.key || 'overview'}
           onChange={(e) => { const to = tabs.find((t) => (t.key || 'overview') === e.target.value); if (to) navigate(to.href); }} aria-label={`${meta.name} module`}>
+          {record && <option value="record">{title}</option>}
           {tabs.map((t) => <option key={t.key || 'overview'} value={t.key || 'overview'}>{t.name}</option>)}
         </select>
       </label>

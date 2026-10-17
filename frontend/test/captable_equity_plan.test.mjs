@@ -46,8 +46,8 @@ test('cap-table vesting readers remain scoped to their intended audience', () =>
   // and writes nothing — pinned below so the list can grow only that way.
   assert.deepEqual(
     readers.sort(),
-    ['integrations/providers/carta.ts', 'routes/captable.ts', 'routes/company.ts', 'routes/cycle_build.ts', 'services/capTableWrites.ts'],
-    'only the Carta importer, the three reviewed readers and the one reviewed writer should touch these tables',
+    ['integrations/providers/carta.ts', 'routes/captable.ts', 'routes/company.ts', 'routes/cycle_build.ts', 'services/capTableWrites.ts', 'services/records/build.ts'],
+    'only the Carta importer, the four reviewed readers and the one reviewed writer should touch these tables',
   );
   const company = read('cloudflare-worker/src/routes/company.ts');
   assert.doesNotMatch(company, /cap_table_vesting/, 'the Team page reads pools, not vesting rows');
@@ -58,6 +58,12 @@ test('cap-table vesting readers remain scoped to their intended audience', () =>
   assert.match(build, /v\.holder_id = h\.id AND v\.user_id = h\.user_id[\s\S]*WHERE h\.project_id = \?/,
     'the Build cycle can read vesting only through a holder of the requested project and owner');
   assert.doesNotMatch(build, /(INSERT INTO|UPDATE|DELETE FROM)\s+cap_table_vesting/, 'the Build cycle cannot write personal vesting');
+  // D690 (S18-B, #1694): Build's Founding team record reads one founder's
+  // vesting the same way the list does, and writes nothing.
+  const buildRecord = read('cloudflare-worker/src/services/records/build.ts');
+  assert.match(buildRecord, /v\.holder_id = h\.id AND v\.user_id = h\.user_id[\s\S]*WHERE h\.project_id = \?/,
+    'the Build founder record can read vesting only through a holder of the requested project and owner');
+  assert.doesNotMatch(buildRecord, /(INSERT INTO|UPDATE|DELETE FROM)\s+cap_table_(vesting|option_pools)/, 'the Build founder record cannot write personal vesting');
   // D691 decision 4 (#1700): `addHolder()` and `updateHolder()` write a founder's
   // vesting, only ever for a holder of the requested venture, on that holder's
   // own user_id. It names no pool.

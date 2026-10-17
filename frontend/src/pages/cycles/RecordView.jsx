@@ -1,12 +1,11 @@
 /**
- * D696: unmounted record body. The route owns reads, forms, confirms and errors.
+ * D696: record body mounted by CycleRoute. The route owns reads, forms, confirms and errors.
  * Reusable parts also serve Customer research (#1659) and phone layout (#1665).
  */
 import { isPlainClick } from './cycleModel.js';
 import { declaredActions, dispatchOf, pillView, rowAction, rowView, sectionId, toneOf } from './recordModel.js';
 
-// Same NR class as CycleModulePage. PR 2 imports its export after its owners merge.
-const NR = 'rounded-full border border-dashed border-gray-300 bg-axal-ground px-2 py-0.5 text-[10.5px] font-semibold text-axal-muted dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400';
+import { NR } from './CycleModulePage.jsx';
 const PILL = {
   v1: 'border-axal-lavender-edge bg-axal-lavender text-axal-violet-deep dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300',
   v2: 'border-axal-lavender-edge bg-axal-lavender text-axal-violet-deep dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300',
@@ -62,7 +61,7 @@ export function RecordFacts({ facts = [] }) {
 }
 
 export function RecordSection({ section, side = false, cycleName, moduleName, declarations = new Map(), ...handlers }) {
-  const action = typeof section.action === 'object' ? section.action : rowAction(section.action, declarations);
+  const action = rowAction(section.action, declarations);
   const rows = section.rows ?? [];
   return <section id={sectionId(cycleName, moduleName, section.title)} className={CARD}>
     <header className="flex items-center justify-between gap-3 border-b border-axal-hairline px-4 py-3 dark:border-gray-700">
