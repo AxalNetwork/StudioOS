@@ -26,8 +26,8 @@ import { billingPeriods, readRecurring } from './revenueMovements';
 import { runwayMonths } from './saasMetrics';
 
 export class KpiRefused extends Error {
-  status: number; field: string | null;
-  constructor(status: number, sentence: string, field: string | null = null) { super(sentence); this.status = status; this.field = field; }
+  status: number; sentence: string; field: string | null;
+  constructor(status: number, sentence: string, field: string | null = null) { super(sentence); this.status = status; this.sentence = sentence; this.field = field; }
 }
 
 export const KPI_KEYS = ['mrr', 'paying_accounts', 'new_mrr', 'expansion_mrr', 'churn', 'net_burn', 'runway'] as const;

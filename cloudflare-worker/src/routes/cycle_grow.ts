@@ -68,7 +68,7 @@ async function writes(c: C, user: User, pid: number): Promise<boolean> {
 
 function fail(c: C, e: unknown) {
   if (e instanceof Refused) return c.json({ detail: e.sentence, ...(e.field ? { field: e.field } : {}) }, e.status as 400);
-  if (e instanceof KpiRefused) return c.json({ detail: e.message, ...(e.field ? { field: e.field } : {}) }, e.status as 400);
+  if (e instanceof KpiRefused) return c.json({ detail: e.sentence, ...(e.field ? { field: e.field } : {}) }, e.status as 400);
   throw e;
 }
 
