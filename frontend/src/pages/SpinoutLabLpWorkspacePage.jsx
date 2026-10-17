@@ -39,7 +39,7 @@ import { WorkspaceHeader } from '../components/WorkspaceTabs';
 // requires this import wherever the name is called.
 import { reportError } from '../lib/log';
 import { useAuth } from '../hooks/useAuthSync';
-import { api, spinoutLab } from '../lib/api';
+import { api, fundReportingApi, spinoutLab } from '../lib/api';
 import {
   fundModel, money, lpAccessState, lpHasReports, lpAllocationOpen,
   ALLOC_THRESHOLD_K, LP_STATES, FUND, PROGRAM, THESIS, fundTerms,
@@ -362,15 +362,24 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
     try {
       const { exportQuarterlyReportPdf } = await import('../lib/quarterlyReportPdf');
       const isIssued = row.kind === 'issued';
+      // D712: an issued period prints the date it was issued, never today's, and
+      // the LP's own frozen statement when the reporting queue issued it.
+      const issuedStamp = isIssued ? new Date(row.periodRow.issued_at) : null;
+      const statement = isIssued
+        ? (portal?.capital_statements || []).find((st) => Number(st.report_period_id) === Number(row.periodRow.id)
+          && Number(st.limited_partner_id) === Number(holding.lp_id))
+        : null;
       await exportQuarterlyReportPdf({
         payload: portal,
         fundId: holding.fund_id,
         period: isIssued
           ? { ...quarterOf(new Date(`${row.periodRow.period_end}T12:00:00`)), label: row.periodRow.period }
           : lastClosedQuarter(new Date()),
-        issuedAt: new Date(),
+        issuedAt: issuedStamp && !Number.isNaN(issuedStamp.getTime()) ? issuedStamp : new Date(),
         narrative: isIssued ? row.periodRow.narrative : null,
         issued: isIssued,
+        statement: statement?.figures || null,
+        figures: isIssued ? row.periodRow.figures || null : null,
       });
     } catch (e) {
       setReportErr(e?.message || 'Could not generate the statement.');
@@ -1336,13 +1345,33 @@ function GpReportDesk() {
       const payload = await api.fundsLpReport(fundId, lpId);
       const { exportQuarterlyReportPdf } = await import('../lib/quarterlyReportPdf');
       const issued = selected.status === 'issued';
+      // D712: an issued period prints its recorded issue date and, when the
+      // reporting queue issued it, the LP's frozen statement and the period's
+      // frozen fund figures. Before issue, a live draft opens through the
+      // queue's audited read, so the read is recorded.
+      let statement = null;
+      let figures = null;
+      if (issued) {
+        statement = (payload?.capital_statements || []).find((st) => Number(st.report_period_id) === Number(selected.row?.id))?.figures || null;
+        const snap = selected.row?.snapshot;
+        if (snap && snap.schema === 'lp_quarterly_report/1') {
+          const { statements: _statements, ...fundFigures } = snap;
+          figures = fundFigures;
+        }
+      } else {
+        const draft = (payload?.statement_drafts || []).find((d) => d.period_label === selected.label);
+        if (draft) statement = (await fundReportingApi.read(draft.uid))?.figures || null;
+      }
+      const issuedStamp = issued ? new Date(selected.row?.issued_at) : null;
       const out = await exportQuarterlyReportPdf({
         payload,
         fundId: Number(fundId),
         period: { ...selected, label: selected.label },
-        issuedAt: new Date(),
+        issuedAt: issuedStamp && !Number.isNaN(issuedStamp.getTime()) ? issuedStamp : new Date(),
         narrative: selected.row?.narrative || null,
         issued,
+        statement,
+        figures,
       });
       setNote(`${out.filename} · ${out.pages} pages${out.draft ? ' · marked DRAFT' : ''}`);
     } catch (e) {

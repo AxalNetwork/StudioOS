@@ -131,10 +131,12 @@ export function selectHolding(payload, { fundSlug, fundId } = {}) {
  * @param {Date}    [opts.issuedAt] issue stamp; defaults to now
  * @param {object}  [opts.narrative] GP-authored { letter[], developments[], outlook[], subsequent[] }
  * @param {boolean} [opts.issued]   true when the GP has issued this period
+ * @param {object}  [opts.statement] D712: this LP's frozen capital statement figures, from the reporting queue
+ * @param {object}  [opts.figures]   D712: the period's frozen fund-level report figures, from the reporting queue
  * @returns {{ ok: boolean, reason?: string } & object}
  */
 export function quarterlyReportModel({
-  payload, fundSlug, fundId, period, issuedAt, narrative, issued = false,
+  payload, fundSlug, fundId, period, issuedAt, narrative, issued = false, statement = null, figures = null,
 } = {}) {
   const holding = selectHolding(payload, { fundSlug, fundId });
   if (!holding) {
@@ -405,7 +407,7 @@ export function quarterlyReportModel({
     recorded: !!gp.name,
   };
 
-  return {
+  const base = {
     ok: true,
     meta: {
       period: p.label,
@@ -453,6 +455,93 @@ export function quarterlyReportModel({
     calls,
     concentration,
     subsequent: Array.isArray(nar.subsequent) ? nar.subsequent : [],
+  };
+  // D712: a period issued through the reporting queue, or a draft statement
+  // opened from it, prints its frozen figures and nothing from the fund model.
+  return statement || figures ? { ...base, ...frozenSections({ statement, figures, providers }), meta: { ...base.meta, marksNote: null } } : base;
+}
+
+const NOT_RECORDED = 'Not recorded';
+/** A frozen `{ cents }` line as dollars, or Not recorded. */
+const frozenValue = (line) => (line && Number.isFinite(line.cents) ? usd(line.cents / 100) : NOT_RECORDED);
+const frozenWhy = (line) => (line && line.cents == null && typeof line.reason === 'string' ? line.reason : null);
+const frozenRatio = (r) => (r && Number.isFinite(r.value) ? `${r.value.toFixed(2)}×` : NOT_RECORDED);
+
+/**
+ * D712 (#1777) — the sections of a report built from the reporting queue's
+ * frozen figures. Every line the figures do not carry prints Not recorded, and
+ * the sections only the fund model could fill (positions, deployment, cohorts,
+ * exposure, progression, concentration, key dates) are empty, which the PDF
+ * draws as Not recorded.
+ */
+export function frozenSections({ statement, figures, providers = {} }) {
+  const st = statement || {};
+  const al = st.allocated || {};
+  const ff = figures?.fund_figures || {};
+  const totals = figures?.totals || {};
+  const row = (k, line, source, opts = {}) => ({ k, v: frozenValue(line), source, why: frozenWhy(line), ...opts });
+  const feesLine = al.expenses?.cents != null && al.management_fee?.cents != null
+    ? { cents: al.expenses.cents + al.management_fee.cents }
+    : { cents: null, reason: al.expenses?.reason || al.management_fee?.reason || NOT_RECORDED };
+  const neg = (line) => (line && Number.isFinite(line.cents) ? { cents: -line.cents } : line);
+  const capitalAccount = [
+    row('Commitment', st.commitment, 'record', { strong: true }),
+    row('Capital called to date', st.called_to_date, 'record'),
+    row('Unfunded commitment', st.unfunded, 'record'),
+    row('Capital called this quarter', st.called_in_quarter, 'record'),
+    row('Contributed this quarter', st.contributed_in_quarter, 'record'),
+    row('Paid-in capital', st.paid_in, 'record'),
+    row('Share of investment value', al.investment_value, 'allocated'),
+    row('Share of fund cash', al.cash, 'allocated'),
+    row('Less: fees and expenses this quarter', neg(feesLine), 'allocated', { negative: true }),
+    row('Less: liabilities', neg(al.liabilities), 'allocated', { negative: true }),
+    row('Distributions to date', st.distributions_to_date, 'record'),
+    row('Net asset value', st.nav, 'allocated', { strong: true, accent: true }),
+  ];
+  const ties = st.ties || null;
+  const reconciliation = ties
+    ? { paidCallsTotal: Number(ties.receipts_cents || 0) / 100, investedAmount: Number(ties.recorded_invested_cents || 0) / 100, ties: !!ties.ties }
+    : { paidCallsTotal: 0, investedAmount: 0, ties: true };
+  const cell = (k, line, note) => ({ k, v: frozenValue(line), note: frozenWhy(line) || note, tone: '#18181b' });
+  const headline = [
+    cell('Committed capital', totals.commitments, figures ? `${figures.lp_count} LPs in this report` : NOT_RECORDED),
+    cell('Called to date', totals.called_to_date, 'From the capital calls'),
+    cell('Contributed this quarter', totals.contributed_in_quarter, 'From the receipts'),
+    cell('Investment value', ff.investment_value, 'Recorded marks'),
+    cell('Net asset value', ff.nav, figures?.nav_basis || NOT_RECORDED),
+  ];
+  const fundSummary = [
+    { k: 'LPs in this report', v: figures ? String(figures.lp_count) : NOT_RECORDED },
+    { k: 'Distributions this quarter', v: frozenValue(totals.distributions_in_quarter) },
+    { k: 'Fund cash', v: frozenValue(ff.cash) },
+    { k: 'Recorded liabilities', v: frozenValue(ff.liabilities) },
+    { k: 'Books closed for the quarter', v: figures ? (figures.books_closed ? 'Yes' : 'No') : NOT_RECORDED },
+    { k: 'Your DPI', v: frozenRatio(st.ratios?.dpi) },
+    { k: 'Your net TVPI', v: frozenRatio(st.ratios?.tvpi) },
+    { k: 'Your RVPI', v: frozenRatio(st.ratios?.rvpi) },
+  ];
+  const fees = [
+    { k: 'Management fee · this quarter', v: frozenValue(ff.management_fee) },
+    { k: 'Fund expenses · this quarter', v: frozenValue(ff.expenses) },
+    { k: 'Carried interest', v: 'Not accrued' },
+    { k: 'Allocated to your account (quarter)', v: frozenValue(feesLine), strong: true },
+  ];
+  return {
+    headline, capitalAccount, reconciliation, fundSummary, fees,
+    portfolio: [], portfolioTotals: null, deployBars: [], cohorts: [], exposure: [], progression: [], concentration: [], keyDates: [],
+    reserve: [{ k: 'Reserve position', v: NOT_RECORDED }],
+    admin: [
+      { k: 'Fund administrator', v: providers.fund_admin || NOT_RECORDED, missing: !providers.fund_admin },
+      { k: 'Legal counsel', v: providers.legal_counsel || NOT_RECORDED, missing: !providers.legal_counsel },
+      { k: 'Auditor', v: providers.auditor || NOT_RECORDED, missing: !providers.auditor },
+      { k: 'Banking / custody', v: providers.custodian || NOT_RECORDED, missing: !providers.custodian },
+      { k: 'Valuation policy', v: providers.valuation_policy || NOT_RECORDED, missing: !providers.valuation_policy },
+    ],
+    notes: [
+      { title: 'Figures as issued', body: 'Every figure in this report was frozen when the period was issued, from the fund records. A line the records could not support says Not recorded and why.' },
+      { title: 'Basis of your capital account', body: 'Commitment, calls, contributions and distributions are your own records. Investment value, cash, fees and liabilities are your share of fund figures by percentage interest: your commitment over the commitments of the LPs in this report.' },
+      { title: 'Net asset value', body: `Investment value plus the Fund's cash less recorded liabilities, ${figures?.nav_basis || 'before carried interest, which is not accrued'}. ${st.distributions_basis ? `Distributions are dated by the ${st.distributions_basis}.` : ''}`.trim() },
+    ],
   };
 }
 

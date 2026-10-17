@@ -25,6 +25,7 @@ export * from './api/cycles.js';
 export * from './api/eadwyn.js';
 export * from './api/fundLedger.js';
 export * from './api/fundPerformance.js';
+export * from './api/fundReporting.js';
 export * from './api/fundReports.js';
 export * from './api/helpCenter.js';
 export * from './api/interviewSessions.js';

@@ -53,6 +53,7 @@ widened guard on this very sentence, which is the rule working.)
                                          (D655: GET /:uid/sync-status, GET /:uid/fed, GET|PUT /:uid/repositories for GitHub)
 /api/infra         → infra.ts
 /api/funds         → funds.ts
+/api/fund-reporting → fund_reporting.ts
 /api/liquidity     → liquidity.ts
 /api/email         → email.ts
 /api/pipeline      → pipeline.ts

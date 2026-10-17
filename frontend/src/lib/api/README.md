@@ -109,3 +109,9 @@ D702 (#1664): `profile.js` calls `/api/profile/me`, `/api/profile/venture` (GET
 and PATCH) and `/api/profile/preview` (`cloudflare-worker/src/routes/founder_profile.ts`), and the
 existing `/api/settings/privacy` with `?project=` for the venture's investor
 toggle. Every read is the caller's own, or a venture the caller can write.
+
+D712 (#1777): `fundReporting.js` calls `/api/fund-reporting`, the fund
+reporting queue: drafts an Admin builds, reads, prepares, returns, rebuilds,
+corrects and exports, and a Super Admin issues. A draft's figures come only
+from `read` and `exportCsv`, which the Worker records before it answers; the
+list carries none.
