@@ -233,27 +233,28 @@ test('12. below 1024px the founder\'s /studio is the phone page: the bar, its ow
 });
 
 test('13. the drawer: a dialog of the routes that work, keeping project_id, marking the current row', async () => {
-  assert.equal(PROFILE_ROWS_LIVE, false);
+  // D702 (#1664) turned the four profile rows on with their routes.
+  assert.equal(PROFILE_ROWS_LIVE, true);
   const menu = (path, props = {}) => inRouter(h(EadwynMenu, { open: true, onClose() {}, ...props }), path);
   const closed = inRouter(h(EadwynMenu, { open: false, onClose() {} }));
   assert.equal(closed, '', 'closed, it draws nothing');
 
-  const five = menu('/studio');
+  const five = menu('/studio', { profileRowsLive: false });
   assert.match(five, /role="dialog" aria-modal="true" aria-label="Eadwyn menu"/);
   assert.match(five, /z-50/);
   assert.deepEqual(hrefs(five), ['/studio/tickets/new', '/studio', '/studio?tab=tasks', '/studio?tab=tickets', '/studio/archetype']);
   assert.ok(!hrefs(five).some((x) => x.startsWith('/profile')));
   assert.match(textOf(five), /Eadwyn .*Open a ticket .*Conversations .*Tasks .*My tickets .*Your profile .*Archetype card/);
 
-  const nine = menu('/studio', { profileRowsLive: true });
+  const nine = menu('/studio');
   assert.deepEqual(hrefs(nine), ['/studio/tickets/new', '/studio', '/studio?tab=tasks', '/studio?tab=tickets',
     '/profile', '/profile/venture', '/studio/archetype', '/profile/preview', '/profile/visibility']);
   assert.deepEqual(EADWYN_MENU.flatMap((g) => g.rows.map((r) => r.route)), hrefs(nine));
 
-  const kept = hrefs(menu('/studio?project_id=7&tab=tasks'));
+  const kept = hrefs(menu('/studio?project_id=7&tab=tasks', { profileRowsLive: false }));
   assert.deepEqual(kept, ['/studio/tickets/new?project_id=7', '/studio?project_id=7', '/studio?tab=tasks&project_id=7',
     '/studio?tab=tickets&project_id=7', '/studio/archetype']);
-  const keptLive = hrefs(menu('/studio?project_id=7&tab=tasks', { profileRowsLive: true }));
+  const keptLive = hrefs(menu('/studio?project_id=7&tab=tasks'));
   assert.deepEqual(keptLive.slice(4), ['/profile', '/profile/venture?project_id=7', '/studio/archetype',
     '/profile/preview?project_id=7', '/profile/visibility?project_id=7']);
 

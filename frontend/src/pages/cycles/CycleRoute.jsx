@@ -18,6 +18,8 @@ import { takeBuildProject, toolDeepLink } from '../account/connectorsModel';
 import RoundCallSheet from '../founder/RoundCallSheet';
 import RecordLightbox from '../founder/RecordLightbox';
 import { recordingHref } from '../founder/recordSetup';
+import { openingStep } from '../founder/assistantSession.js';
+import { reviewPath } from '../../lib/activeRecording';
 import { useActiveRecording } from '../../contexts/ActiveRecordingContext';
 import CreateStartupForm from '../../components/CreateStartupForm';
 import CycleOverview from './CycleOverview';
@@ -29,7 +31,7 @@ import UpdatesHistory from './UpdatesHistory';
 import UpdateAskReplies from './UpdateAskReplies';
 import CallsHistory from './CallsHistory';
 import RecordFormSheet from './RecordFormSheet';
-import { editFor, formFor } from './forms';
+import { editFor, formsFor } from './forms';
 import { adaptCard, adaptModule, adaptOverview, fnOf, toFnMap } from './adapters';
 import { cellView, cycleOf } from './cycleModel';
 import { MODULES } from './modules';
@@ -284,9 +286,10 @@ export function useProject(reloadKey = 0, { kept = null, drop = [] } = {}) {
   const latest = useRef(searchParams);
   latest.current = searchParams;
   const dropRef = useRef(drop);
-  const writeProject = useCallback((id) => {
+  const writeProject = useCallback((id, extraDrop = []) => {
     const next = new URLSearchParams(latest.current);
     for (const k of dropRef.current || []) next.delete(k);
+    for (const k of extraDrop) next.delete(k);
     next.set('project_id', String(id));
     setSearchParams(next, { replace: true });
   }, [setSearchParams]);
@@ -315,7 +318,7 @@ export function useProject(reloadKey = 0, { kept = null, drop = [] } = {}) {
     }).catch(() => { if (alive) setStatus('unreadable'); });
     return () => { alive = false; };
   }, [requested, writeProject, reloadKey]);
-  return { projectId, status };
+  return { projectId, status, writeProject };
 }
 
 /** The module page under the lightbox: the founder's, when it is one of this cycle's modules; else the overview (null). */
@@ -349,6 +352,18 @@ export function underSlug(path, cycle = 'validate', action = 'record') {
   if (!/^[a-z]+$/.test(cycle)) return null;
   const m = new RegExp(`^/${cycle}/([a-z0-9-]+)(?:[/?#]|$)`).exec(String(path || ''));
   return m && m[1] !== action ? m[1] : null;
+}
+
+/**
+ * Where a Record a session finish lands (D694): the live view while it
+ * records here; a channel session still waiting for its messages or its
+ * transcript keeps its session page, the one page that draws that wait; every
+ * other finish is Customer research, in the session's venture, else the page's.
+ */
+export function finishPath(session, where, projectId) {
+  if (where === 'live') return `/validate/record/live?session=${encodeURIComponent(session?.id)}`;
+  if (openingStep(session) === 'channel') return `/validate/session/${encodeURIComponent(session?.id)}`;
+  return reviewPath({ ...session, project_id: session?.project_id ?? projectId });
 }
 
 /*
@@ -397,7 +412,7 @@ export default function CycleRoute({ cycle, lightbox = false }) {
   const [projectsKey, setProjectsKey] = useState(0);
   // Build's lightbox reads a sign-in's return or `?tool=` once; the venture's write drops those keys too (#1597).
   const [connectDrop] = useState(() => (lightbox && cycle === 'build' ? toolDeepLink(location.search, [])?.strip || [] : []));
-  const { projectId, status: projectStatus } = useProject(projectsKey, { kept: lightbox && cycle === 'build' ? takeBuildProject : null, drop: connectDrop });
+  const { projectId, status: projectStatus, writeProject } = useProject(projectsKey, { kept: lightbox && cycle === 'build' ? takeBuildProject : null, drop: connectDrop });
   const creates = Boolean(def?.creates);
   const [creating, setCreating] = useState(() => creates && searchParams.get('new') === '1');
   // Followed, not only seeded: the Command Palette can address `?new=1` from
@@ -414,11 +429,20 @@ export default function CycleRoute({ cycle, lightbox = false }) {
   const dirty = useRef(false);
   // The module's Add and Edit forms (`forms.js`), for a store with no page of
   // its own. `editing` is the row being edited.
-  const form = slug && def ? formFor(cycle, slug) : null;
+  const forms = useMemo(() => (slug && def ? formsFor(cycle, slug) : []), [cycle, slug, def]);
   const edit = slug && def ? editFor(cycle, slug) : null;
-  const [formOpen, setFormOpen] = useState(false);
+  const [formOpen, setFormOpen] = useState(null);
   const [editing, setEditing] = useState(null);
-  useEffect(() => { setFormOpen(false); setEditing(null); }, [slug]);
+  useEffect(() => { setFormOpen(null); setEditing(null); }, [slug]);
+  useEffect(() => {
+    if (slug && forms.length && searchParams.get('add') === '1') setFormOpen(forms[0]);
+  }, [slug, forms, searchParams]);
+  const closeForm = () => {
+    setFormOpen(null);
+    if (searchParams.get('add') === '1') {
+      setSearchParams((old) => { const params = new URLSearchParams(old); params.delete('add'); return params; }, { replace: true });
+    }
+  };
   const drafts = slug && def?.drafts instanceof Map && Array.isArray(def.drafts.get(slug)) ? def.drafts.get(slug) : [];
   const fillKind = slug && def?.fills && Object.prototype.hasOwnProperty.call(def.fills, slug) ? def.fills[slug] : null;
   // The cost before a run (D424), read only while a band is drawn: a draft
@@ -489,12 +513,14 @@ export default function CycleRoute({ cycle, lightbox = false }) {
     if (location.state?.under) navigate(-1);
     else navigate(`/${cycle}${q}`, { replace: true });
   };
-  // What finishing does: the recording view or the session replaces the action
-  // route, and a sent update opens its page, so Back never reopens the lightbox.
+  // What finishing does: `finishPath`'s page replaces the action route, and a
+  // sent update opens its page, so Back never reopens the lightbox. Only the
+  // session page reads the interview it was opened for.
   const onDone = cycle === 'validate'
-    ? (session, interview, where) => (where === 'live'
-      ? navigate(`/validate/record/live?session=${encodeURIComponent(session.id)}`, { replace: true })
-      : navigate(`/validate/session/${session.id}`, { state: { interview }, replace: true }))
+    ? (session, interview, where) => {
+      const to = finishPath(session, where, projectId);
+      navigate(to, to.startsWith('/validate/session/') ? { state: { interview }, replace: true } : { replace: true });
+    }
     : cycle === 'grow' ? (uid) => navigate(`/updates/${encodeURIComponent(uid)}`, { replace: true }) : undefined;
   const action = def.action(q, openAction);
   const Mount = def.Mount || null;
@@ -525,7 +551,7 @@ export default function CycleRoute({ cycle, lightbox = false }) {
   } else if (!slug) {
     body = (
       <>
-        {cycle === 'validate' && overviewStatus === 'ready' && rawOverview && projectStatus !== 'unreadable' && <ValidatePhoneFocus raw={rawOverview} search={q} projectId={projectId} onChanged={() => setReload((n) => n + 1)} />}
+        {(cycle === 'validate' || rawOverview?.focus) && overviewStatus === 'ready' && rawOverview && projectStatus !== 'unreadable' && <ValidatePhoneFocus cycle={cycle} raw={rawOverview} search={q} projectId={projectId} onChanged={() => setReload((n) => n + 1)} />}
         <CycleOverview
           cycle={cycle}
           data={overview}
@@ -554,7 +580,7 @@ export default function CycleRoute({ cycle, lightbox = false }) {
         query={query}
         onQuery={setQuery}
         action={action}
-        add={fnOf(def.add, slug)?.(q, openAction) || (form && projectId ? { text: form.button, onClick: () => setFormOpen(true) } : undefined)}
+        add={forms.length && projectId ? forms.map((entry) => ({ text: entry.button, onClick: () => setFormOpen(entry) })) : fnOf(def.add, slug)?.(q, openAction)}
         rowAction={edit && projectId && !edit.hiddenFor?.(module) ? (row) => (edit.idOf(row) == null ? null : {
           text: edit.button,
           label: `${edit.button} ${((v) => (v.nr ? 'this row' : v.text))(cellView(row?.cells?.[recs?.cols?.[0]?.key]))}`,
@@ -586,9 +612,14 @@ export default function CycleRoute({ cycle, lightbox = false }) {
   return (
     <RailCrumbsProvider section={name} module={moduleName}>
     <RailFrame rail={rail} data-testid={`cycle-route-${cycle}`}>
-      {/* The route is full-bleed (`p-0`), so the inset is this page's own,
-          the same `p-5` WorkspaceShell gives every other workspace page. */}
-      <div className="min-w-0 p-5" data-testid="cycle-route-body">
+      {/* Every cycle path is full-bleed (`cyclePaths.js`, D694), so this is the
+          one gutter: the canvas's 22/24/30px (CO:54), 14/14/40px in a cycle
+          column under 760px (CO:18), and 14/22/18px on a phone (CO:25-26).
+          The column is the size container. The form sheets and the action
+          Mount draw `fixed` layers, so they sit after it: an older browser
+          would place them against the column (decision 13). */}
+      <div className="@container/cycle min-w-0">
+      <div className="min-w-0 px-[22px] pt-[14px] pb-[18px] lg:px-6 lg:pt-[22px] lg:pb-[30px] lg:@max-[760px]/cycle:px-[14px] lg:@max-[760px]/cycle:pt-[14px] lg:@max-[760px]/cycle:pb-[40px]" data-testid="cycle-route-body">
         {body}
         {creates && (
           <CreateStartupForm
@@ -600,27 +631,28 @@ export default function CycleRoute({ cycle, lightbox = false }) {
                 setSearchParams((old) => { const params = new URLSearchParams(old); params.delete('new'); return params; }, { replace: true });
               }
             }}
-            onCreated={() => setProjectsKey((n) => n + 1)}
+            onCreated={(created) => { if (created?.id) writeProject(created.id, ['new']); setProjectsKey((n) => n + 1); }}
           />
         )}
-        {form && formOpen && projectId && (
-          <RecordFormSheet form={form} cycle={name}
-            onSubmit={(values) => form.submit(cyclesWrite, projectId, values)}
-            onSaved={() => setReload((n) => n + 1)}
-            onClose={() => setFormOpen(false)} />
-        )}
-        {edit && editing && projectId && edit.idOf(editing) != null && (
-          <RecordFormSheet key={String(editing.id)} form={edit} current={edit.valuesOf(editing)} cycle={name}
-            loadOptions={edit.loadOptions ? () => edit.loadOptions(cyclesWrite, projectId, edit.idOf(editing)) : null}
-            onSubmit={(values) => edit.submit(cyclesWrite, projectId, edit.idOf(editing), values)}
-            onSaved={() => setReload((n) => n + 1)}
-            onClose={() => setEditing(null)} />
-        )}
-        {lightbox && Mount && projectId && (
-          <Mount projectId={projectId} q={q} searchParams={searchParams} onClose={closeAction} onDone={onDone}
-            onChanged={() => { dirty.current = true; }} />
-        )}
       </div>
+      </div>
+      {formOpen && projectId && (
+        <RecordFormSheet key={formOpen.title} form={formOpen} cycle={name}
+          onSubmit={(values) => formOpen.submit(cyclesWrite, projectId, values)}
+          onSaved={() => setReload((n) => n + 1)}
+          onClose={closeForm} />
+      )}
+      {edit && editing && projectId && edit.idOf(editing) != null && (
+        <RecordFormSheet key={String(editing.id)} form={edit} current={edit.valuesOf(editing)} cycle={name}
+          loadOptions={edit.loadOptions ? () => edit.loadOptions(cyclesWrite, projectId, edit.idOf(editing)) : null}
+          onSubmit={(values) => edit.submit(cyclesWrite, projectId, edit.idOf(editing), values)}
+          onSaved={() => setReload((n) => n + 1)}
+          onClose={() => setEditing(null)} />
+      )}
+      {lightbox && Mount && projectId && (
+        <Mount projectId={projectId} q={q} searchParams={searchParams} onClose={closeAction} onDone={onDone}
+          onChanged={() => { dirty.current = true; }} />
+      )}
     </RailFrame>
     </RailCrumbsProvider>
   );

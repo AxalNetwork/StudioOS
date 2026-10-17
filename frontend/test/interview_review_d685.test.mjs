@@ -287,7 +287,9 @@ test('the route, and the rows that link to it: Customer research and the intervi
   const ws = readFileSync('frontend/src/workspaces/founder/FounderValidateWorkspace.jsx', 'utf8');
   assert.match(ws, /<Link to=\{`\/validate\/interviews\/\$\{encodeURIComponent\(r\.id\)\}`\}[^>]*data-testid=\{`interview-row-link-\$\{r\.id\}`\}>/);
   const app = readFileSync('frontend/src/App.jsx', 'utf8');
-  assert.match(app, /<Route path="\/validate\/interviews\/:id" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <InterviewReviewPage \/>\)\} \/>/);
+  // D696 (#1658): the review is Customer research's record; the old address redirects to it.
+  assert.match(app, /<Route path="\/validate\/customer-research\/:id" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <InterviewReviewPage \/>\)\} \/>/);
+  assert.match(app, /<Route path="\/validate\/interviews\/:id" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <ParamRedirect to="\/validate\/customer-research\/:id" \/>\)\} \/>/);
   assert.match(app, /<Route path="\/validate\/session\/:id" /, 'the per-session deep link stays');
   const page = readFileSync('frontend/src/pages/founder/InterviewReviewPage.jsx', 'utf8');
   assert.doesNotMatch(page, /<Link[^>]*\/placements\//, 'no placement action is a link');

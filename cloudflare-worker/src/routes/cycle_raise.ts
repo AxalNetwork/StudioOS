@@ -5,7 +5,11 @@
  *   GET /overview?project=:pid
  *     → { cycle, question, figures: [Figure ×4], cards: [Card ×7] }
  *   GET /modules/:slug?project=:pid&q=&filter=&sort=&page=
- *     → { module, card: Card, records: { cols, rows, total, page, page_size, filters?, sorts?, add? } }
+ *     → { module: { slug, name, records_title }, card: Card,
+ *         records: { cols, rows, total, page, page_size, filters?, sorts?, add? } }
+ *     The first sort is the default. Row ids are D691's (#1699): an item key,
+ *     a version, a link, file or prospect id, a cap-table `h-`/`e-` key or
+ *     `pool`, or a use-of-funds section key.
  *
  *   PUT  /readiness/:key            { score, evidence, missing? }
  *   POST /readiness/rescore
@@ -98,7 +102,7 @@ cycleRaise.get('/modules/:slug', async (c) => {
     console.warn('[cycle_raise] records unreadable:', slug, (e as Error)?.message);
     records = { state: 'unreadable', reason: `${mod.name} records could not be read`, cols: [], rows: [], total: null, page: rq.page, page_size: null };
   }
-  return c.json({ module: { slug: mod.slug, name: mod.name }, card, records,
+  return c.json({ module: { slug: mod.slug, name: mod.name, records_title: mod.records_title }, card, records,
     ...(slug === 'capital-relationships' ? {parts:{calls:await callsHistory(ctx)}} : {}) });
 });
 

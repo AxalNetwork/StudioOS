@@ -71,6 +71,7 @@ import { api, initActiveCompanyId, setActiveCompanyId } from './lib/api';
 // surface on mount; a lazy chunk could load AFTER the background settings 401
 // returns, racing the flag and still bouncing logged-out visitors to /login.
 import NotFoundPage from './pages/NotFoundPage';
+import { ParamRedirect } from './pages/cycles/ParamRedirect.jsx';
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const ArchetypeCardPage = lazy(() => import('./pages/ArchetypeCardPage'));
 const ScoringPage = lazy(() => import('./pages/ScoringPage'));
@@ -389,6 +390,11 @@ const CapTableVariantsPage = lazy(() => import('./pages/CapTableVariantsPage'));
 const DataRoomPage = lazy(() => import('./pages/raise/DataRoomPage'));
 const MessagesPage = lazy(() => import('./pages/MessagesPage'));
 const MorePage = lazy(() => import('./pages/MorePage'));
+// D702 (#1664) — the founder's profile pages (Studio · Mobile S6m, S7m, S9m, S10m).
+const YouPage = lazy(() => import('./pages/profile/YouPage'));
+const VenturePage = lazy(() => import('./pages/profile/VenturePage'));
+const ProfilePreviewPage = lazy(() => import('./pages/profile/PreviewPage'));
+const VisibilityPage = lazy(() => import('./pages/profile/VisibilityPage'));
 const PerksPage = lazy(() => import('./pages/PerksPage'));
 const FounderMarketplacePage = lazy(() => import('./pages/FounderMarketplacePage'));
 const NeedsBoardPage = lazy(() => import('./pages/NeedsBoardPage'));
@@ -523,6 +529,10 @@ export function HistoryRedirect({ to, hash }) {
   const location = useLocation();
   return <Navigate replace to={{ pathname: to, search: location.search, hash }} />;
 }
+
+// D696 (#1658, decision 13): an old or canvas-slug address that names a
+// record, redirected with its params encoded and the query and hash kept.
+export { ParamRedirect };
 
 function DashboardRedirect() {
   const loc = useLocation();
@@ -731,6 +741,14 @@ function UserDropdown({ user, onLogout }) {
           className="absolute right-0 top-full mt-1.5 w-52 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl py-1.5 z-50"
           role="menu"
         >
+          {/* D702 (#1664) — the founder's profile pages, above Account. A
+              phone reaches them from the Eadwyn menu and the account sheet. */}
+          {user?.role === 'founder' && (
+            <Link to="/profile" onClick={() => setOpen(false)}
+              className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
+              Your profile
+            </Link>
+          )}
           <Link to="/account" onClick={() => setOpen(false)}
             className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
             Account
@@ -2527,9 +2545,21 @@ function AppInner() {
       {/* D685 §5.6.2 (#1588): the Recording View full screen, bound to the app's one recording. */}
       <Route path="/validate/record/live" element={guard(labRoles(['admin', 'founder']), <RecordLivePage />)} />
       <Route path="/validate/:slug" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" />)} />
+      {/* D695: every Add has an address. Customer research's Add stays Record a session, the query kept. */}
+      <Route path="/validate/customer-research/new" element={guard(labRoles(['admin', 'founder']), <HistoryRedirect to="/validate/record" />)} />
+      <Route path="/validate/:slug/new" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" adding />)} />
       <Route path="/validate/interviews" element={guard(labRoles(['admin', 'founder']), founderEditor(<FounderValidateWorkspace />))} />
-      {/* D685 §5.11 (#1589): one interview's review: its sessions, the summary and the proposed findings. */}
-      <Route path="/validate/interviews/:id" element={guard(labRoles(['admin', 'founder']), <InterviewReviewPage />)} />
+      {/* D685 §5.11 (#1589): one interview's review: its sessions, the summary and the proposed findings.
+          D696 (#1658): it is Customer research's record, so its address is
+          /validate/customer-research/:id, and the old one redirects there with
+          the query and the hash. Until #1659 reframes it, the page is drawn as it is. */}
+      <Route path="/validate/customer-research/:id" element={guard(labRoles(['admin', 'founder']), <InterviewReviewPage />)} />
+      <Route path="/validate/interviews/:id" element={guard(labRoles(['admin', 'founder']), <ParamRedirect to="/validate/customer-research/:id" />)} />
+      {/* D696 decision 13: the canvas's module slugs, redirected to the app's. */}
+      <Route path="/validate/experiments-and-evidence" element={<ParamRedirect to="/validate/experiments" />} />
+      <Route path="/validate/experiments-and-evidence/:id" element={<ParamRedirect to="/validate/experiments/:id" />} />
+      <Route path="/validate/demand-and-urgency-signals" element={<ParamRedirect to="/validate/demand-signals" />} />
+      <Route path="/validate/demand-and-urgency-signals/:id" element={<ParamRedirect to="/validate/demand-signals/:id" />} />
       <Route path="/validate/pain-map" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
       <Route path="/validate/hypotheses" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
       <Route path="/validate/verdict" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
@@ -2824,6 +2854,7 @@ function AppInner() {
       <Route path="/build/connect" element={guard(['admin', 'founder'], <CycleRoute cycle="build" lightbox />)} />
       <Route path="/build/tools" element={guard(['admin', 'founder'], <HistoryRedirect to="/build/operating-systems" hash="#tools" />)} />
       <Route path="/build/:slug" element={guard(['admin', 'founder'], <CycleRoute cycle="build" />)} />
+      <Route path="/build/:slug/new" element={guard(['admin', 'founder'], <CycleRoute cycle="build" adding />)} />
       <Route path="/execution" element={guard(['admin', 'founder'], effectiveRole === 'founder' && !founderExecutionEditor
         ? <Navigate to={`/build${location.search}`} replace />
         : founderWorkspace('build', founderEditor(<ExecutionPage />)))} />
@@ -3047,6 +3078,7 @@ function AppInner() {
       <Route path="/grow/update" element={guard(['admin', 'founder'], <CycleRoute cycle="grow" lightbox />)} />
       <Route path="/grow/updates" element={guard(['admin', 'founder'], <HistoryRedirect to="/grow/durable-company-building" hash="#updates" />)} />
       <Route path="/grow/:slug" element={guard(['admin', 'founder'], <CycleRoute cycle="grow" />)} />
+      <Route path="/grow/:slug/new" element={guard(['admin', 'founder'], <CycleRoute cycle="grow" adding />)} />
       <Route path="/grow/focus" element={guard(['admin', 'founder'], <FounderGrowFocus />)} />
       <Route path="/grow/talent" element={guard(['admin', 'founder'], <FounderGrowTalent />)} />
       <Route path="/grow/customers" element={guard(['admin', 'founder'], <FounderGrowCustomers />)} />
@@ -3381,6 +3413,7 @@ function AppInner() {
       <Route path="/raise/call" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" lightbox />)} />
       <Route path="/raise/calls" element={guard(labRoles(['admin', 'founder']), <HistoryRedirect to="/raise/capital-relationships" hash="#calls" />)} />
       <Route path="/raise/:slug" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" />)} />
+      <Route path="/raise/:slug/new" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" adding />)} />
       {/* Standalone Referrals page (Refer & Earn + Payouts). Legacy /refer also redirects here. */}
       {/* Advisors were the one signed-in licence this guard omitted, and the
           omission was not a policy: `ReferralsPage` has no role branch at all,
@@ -3458,8 +3491,13 @@ function AppInner() {
           "Profile" nav row could highlight independently of Settings. That row
           is gone; the exploring sidebar's "My Profile" now points at /account
           itself. D433 retires the duplicate on D304's shape: a redirect, never
-          a 404, with the query and hash carried through. */}
-      <Route path="/profile" element={<SettingsRedirect />} />
+          a 404, with the query and hash carried through. D702 (#1664) narrows
+          that: a founder gets You here, and every other role keeps the
+          redirect. The three pages under it are a founder's alone. */}
+      <Route path="/profile" element={effectiveRole === 'founder' ? guard(['founder'], <YouPage />) : <SettingsRedirect />} />
+      <Route path="/profile/venture" element={guard(['founder'], <VenturePage />)} />
+      <Route path="/profile/preview" element={guard(['founder'], <ProfilePreviewPage />)} />
+      <Route path="/profile/visibility" element={guard(['founder'], <VisibilityPage />)} />
       <Route path="/account" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
       <Route path="/settings" element={<SettingsRedirect />} />
 

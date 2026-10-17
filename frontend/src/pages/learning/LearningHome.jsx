@@ -1,11 +1,13 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { CalendarPlus, ChevronLeft, ChevronRight, Search, SquarePen } from 'lucide-react';
-import { Card, Pill, RailFrame, Unrecorded, WorkerRail } from '../../ui';
+import { Card, Pill, RailFrame, Unrecorded, WorkerRail, usePhoneWidth } from '../../ui';
+import { AccountPhonePage, phonePending } from '../account/AccountPhonePage';
+import { ACCOUNT_PHONE_PAGES } from '../account/accountPhone';
 import { COMING_SOON_LINE } from './learningAccess';
 import {
   ALL_LIMIT, ARTICLES_PAGE_SIZE, EVENTS_PAGE_SIZE, LEARNING_TABS, TAB_KIND, TAB_NOT_LIVE,
-  durationLabel, formatDay, formatWhen, kindLabel, matchesQuery, minutesLabel, rangeLabel, resolveTab, sourceStates, tabMode,
+  durationLabel, formatDay, formatWhen, kindLabel, matchesQuery, minutesLabel, rangeLabel, resolveTab, sourceStates, tabMode, webinarPhase,
 } from './learningModel';
 import { readArticles, readCatalog, readEvents, readMe, readPublications } from './learningReads';
 import { readWebinars } from './webinarReads';
@@ -13,8 +15,10 @@ import {
   ComingSoonCard, LearningEmpty, LearningHeader, LearningLoading, LearningUnreadable, NotLiveYet,
   RouteUnreadable, SectionCard,
 } from './LearningStates';
-import { MyProgramsSection, useMyPrograms } from './MyPrograms';
+import { MyProgramsSection, OpenPrograms, useMyPrograms } from './MyPrograms';
 import { UpcomingWebinarsList, WebinarsTabPanel, useNow } from './LearningWebinars';
+import { formatWebinarDayTime, seatsOf } from './webinarModel';
+import { programProgress, progressLine } from './programModel';
 import useLearningRead from './useLearningRead';
 
 /** The canvas's one header action, kept for every profile: Articles stay open. */
@@ -349,6 +353,59 @@ export function catalogFor(state, kind) {
   return state?.status === 'ready' && (state.kind || null) !== (kind || null) ? { status: 'loading' } : state;
 }
 
+function AdminLinks({ links }) {
+  if (!links.length) return null;
+  return (
+    <nav aria-label="Learning pages" className="flex flex-wrap gap-x-4 gap-y-1 text-[12.5px]" data-testid="learning-admin-links">
+      {links.map((l) => (
+        <Link key={l.to} to={l.to} className="font-semibold text-axal-violet-deep underline hover:text-axal-violet dark:text-violet-300">{l.label}</Link>
+      ))}
+    </nav>
+  );
+}
+
+/** The catalogue card: the tab bar, the search and the open tab's list. */
+function LearningCatalogue({
+  gated, tab, onTab, query, onQuery, q, catalog, articles, publications, events, upcoming, past, now,
+  onCatalogPage, onArticlesPage, onRetry,
+}) {
+  const mode = tabMode(tab, gated);
+  return (
+    <Card padding="none" data-testid="learning-catalogue">
+      <TabBar tab={tab} gated={gated} onTab={onTab} />
+      {mode === 'live' && (
+        <div className="px-4 pt-3">
+          <label htmlFor="learning-search" className="sr-only">Search</label>
+          <div className="relative">
+            <Search size={14} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-axal-faint dark:text-gray-500" />
+            <input
+              id="learning-search"
+              type="search"
+              value={query}
+              onChange={(e) => onQuery(e.target.value)}
+              placeholder={gated ? 'Search articles' : 'Search courses, videos, webinars, articles, publications and events'}
+              className="w-full rounded-axal-md border border-axal-hairline bg-white py-2 pl-9 pr-3 text-[13px] text-axal-ink placeholder:text-axal-faint dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100"
+              data-testid="input-learning-search"
+            />
+          </div>
+        </div>
+      )}
+      <div id="learning-panel" role="tabpanel" aria-labelledby={`learning-tab-${tab}`} className="p-4" data-testid={`panel-${tab}`} data-mode={mode}>
+        {mode === 'coming_soon' && <ComingSoonCard />}
+        {mode === 'not_live' && <NotLiveYet line={TAB_NOT_LIVE[tab]} />}
+        {mode === 'live' && tab === 'all' && <CatalogList state={catalog} q={q} onRetry={onRetry.catalog} />}
+        {mode === 'live' && TAB_KIND[tab] && <CatalogList state={catalog} kind={TAB_KIND[tab]} q={q} onPage={onCatalogPage} onRetry={onRetry.catalog} />}
+        {mode === 'live' && tab === 'webinars' && (
+          <WebinarsTabPanel upcoming={upcoming} past={past} q={q} now={now} onRetry={{ upcoming: onRetry.upcoming, past: onRetry.past }} />
+        )}
+        {mode === 'live' && tab === 'articles' && <ArticleList state={articles} q={q} onPage={onArticlesPage} onRetry={onRetry.article} />}
+        {mode === 'live' && tab === 'publications' && <PublicationList state={publications} q={q} onRetry={onRetry.publication} />}
+        {mode === 'live' && tab === 'events' && <EventList state={events} q={q} onRetry={onRetry.event} />}
+      </div>
+    </Card>
+  );
+}
+
 /**
  * The learner home, drawn entirely from its props so every state can be
  * rendered without a fetch (D562). `LearningHome` below owns the reads.
@@ -372,7 +429,6 @@ export function LearningHomeView({
   upcoming = IDLE, past = IDLE, programs = PROGRAMS_IDLE, now = Date.now(),
   onCatalogPage = () => {}, onArticlesPage = () => {}, onRetry = {}, links = [],
 }) {
-  const mode = tabMode(tab, gated);
   return (
     <>
       <LearningHeader
@@ -381,13 +437,7 @@ export function LearningHomeView({
         sub="Courses, videos, webinars, articles, publications, events, exercises and exams, in one place."
         action={<WriteArticleLink />}
       />
-      {links.length > 0 && (
-        <nav aria-label="Learning pages" className="flex flex-wrap gap-x-4 gap-y-1 text-[12.5px]" data-testid="learning-admin-links">
-          {links.map((l) => (
-            <Link key={l.to} to={l.to} className="font-semibold text-axal-violet-deep underline hover:text-axal-violet dark:text-violet-300">{l.label}</Link>
-          ))}
-        </nav>
-      )}
+      <AdminLinks links={links} />
       {gated ? (
         <ComingSoonCard articlesLink={false} testid="learning-coming-soon-sections" />
       ) : (
@@ -396,44 +446,110 @@ export function LearningHomeView({
           <MyProgramsSection {...programs} />
         </div>
       )}
-      <Card padding="none" data-testid="learning-catalogue">
-        <TabBar tab={tab} gated={gated} onTab={onTab} />
-        {mode === 'live' && (
-          <div className="px-4 pt-3">
-            <label htmlFor="learning-search" className="sr-only">Search</label>
-            <div className="relative">
-              <Search size={14} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-axal-faint dark:text-gray-500" />
-              <input
-                id="learning-search"
-                type="search"
-                value={query}
-                onChange={(e) => onQuery(e.target.value)}
-                placeholder={gated ? 'Search articles' : 'Search courses, videos, webinars, articles, publications and events'}
-                className="w-full rounded-axal-md border border-axal-hairline bg-white py-2 pl-9 pr-3 text-[13px] text-axal-ink placeholder:text-axal-faint dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100"
-                data-testid="input-learning-search"
-              />
-            </div>
-          </div>
-        )}
-        <div id="learning-panel" role="tabpanel" aria-labelledby={`learning-tab-${tab}`} className="p-4" data-testid={`panel-${tab}`} data-mode={mode}>
-          {mode === 'coming_soon' && <ComingSoonCard />}
-          {mode === 'not_live' && <NotLiveYet line={TAB_NOT_LIVE[tab]} />}
-          {mode === 'live' && tab === 'all' && <CatalogList state={catalog} q={q} onRetry={onRetry.catalog} />}
-          {mode === 'live' && TAB_KIND[tab] && <CatalogList state={catalog} kind={TAB_KIND[tab]} q={q} onPage={onCatalogPage} onRetry={onRetry.catalog} />}
-          {mode === 'live' && tab === 'webinars' && (
-            <WebinarsTabPanel upcoming={upcoming} past={past} q={q} now={now} onRetry={{ upcoming: onRetry.upcoming, past: onRetry.past }} />
-          )}
-          {mode === 'live' && tab === 'articles' && <ArticleList state={articles} q={q} onPage={onArticlesPage} onRetry={onRetry.article} />}
-          {mode === 'live' && tab === 'publications' && <PublicationList state={publications} q={q} onRetry={onRetry.publication} />}
-          {mode === 'live' && tab === 'events' && <EventList state={events} q={q} onRetry={onRetry.event} />}
-        </div>
-      </Card>
+      <LearningCatalogue
+        gated={gated} tab={tab} onTab={onTab} query={query} onQuery={onQuery} q={q}
+        catalog={catalog} articles={articles} publications={publications} events={events}
+        upcoming={upcoming} past={past} now={now} onCatalogPage={onCatalogPage} onArticlesPage={onArticlesPage} onRetry={onRetry}
+      />
       {!gated && (
         <SectionCard title="Upcoming webinars" testid="section-webinars">
           <UpcomingWebinarsList state={upcoming} now={now} onRetry={onRetry.upcoming} />
         </SectionCard>
       )}
     </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// D700 (#1662) — A8m, the page on a phone.
+// ---------------------------------------------------------------------------
+
+const BROWSE = [
+  { title: 'Courses', tab: 'courses' },
+  { title: 'Articles and publications', tab: 'articles' },
+  { title: 'Exercises and exams', tab: 'exercises' },
+];
+
+/** A8m's Browse: three rows into the tab lists. Gated rows but Articles say "Coming soon". */
+export function browseGroup({ gated }) {
+  const page = ACCOUNT_PHONE_PAGES.learning;
+  return {
+    label: page.sections[3],
+    testid: 'learning-phone-browse',
+    rows: BROWSE.map((b) => ({
+      key: b.tab,
+      title: b.title,
+      description: b.tab === 'exercises' ? TAB_NOT_LIVE.exercises : '',
+      pill: gated && b.tab !== 'articles' ? { label: 'Coming soon', tone: 'neutral' } : null,
+      to: `/learning?tab=${b.tab}`,
+      chevron: true,
+      testid: `learning-phone-browse-${b.tab}`,
+    })),
+    note: gated ? <span data-testid="learning-phone-coming-soon">{COMING_SOON_LINE}</span> : null,
+  };
+}
+
+/**
+ * A8m's sections. A profile the gate holds gets Browse alone, with the
+ * coming-soon line, and none of these reads is made for it (decision 10).
+ * Everyone else gets Continue learning, My programs and Upcoming webinars
+ * first, from the same reads as the desktop's cards.
+ */
+export function learningPhoneGroups({ gated, me = IDLE, programs = PROGRAMS_IDLE, upcoming = IDLE, now = Date.now(), onRetry = {} }) {
+  if (gated) return [browseGroup({ gated })];
+  const [continueTitle, programsTitle, webinarsTitle] = ACCOUNT_PHONE_PAGES.learning.sections;
+  const status = (st) => (isLoading(st) ? 'loading' : st.status);
+
+  const cont = { label: continueTitle, rows: [], testid: 'learning-phone-continue' };
+  if (status(me) !== 'ready') cont.note = phonePending(status(me), 'Your progress', 'This is not a claim that you have started nothing.', onRetry.me);
+  else {
+    cont.rows = (me.in_progress || []).filter((r) => r.href).slice(0, 3).map((r) => {
+      const p = Number(r.percent);
+      const has = r.percent !== null && r.percent !== undefined && Number.isFinite(p);
+      return { key: `${r.subject_kind}:${r.subject_uid}`, title: r.title || 'Untitled', description: kindLabel(r.subject_kind === 'item' ? r.item_kind : r.subject_kind), value: has ? `${Math.round(p)}%` : 'Started', bar: has ? Math.round(p) : null, to: r.href, testid: 'learning-phone-continue-row' };
+    });
+    if (!cont.rows.length) cont.note = 'Nothing in progress. A course you start appears here, with where you left off.';
+  }
+
+  const mine = { label: programsTitle, rows: [], testid: 'learning-phone-programs' };
+  const enrolled = programs.enrolled || IDLE;
+  if (status(enrolled) !== 'ready') mine.note = phonePending(status(enrolled), 'Your programs', 'This is not a claim that you are in none.', programs.onRetry?.enrolled);
+  else {
+    mine.rows = (enrolled.rows || []).map(({ program, detail }) => {
+      const progress = detail.status === 'ready' ? programProgress(detail.contents, detail.completion) : null;
+      const row = { key: program.uid, title: program.name || 'Untitled program', testid: 'learning-phone-program' };
+      if (!progress) {
+        const reason = detail.status === 'ready' ? 'The program route sent no completion for you.' : 'Your progress in this program could not be read.';
+        return { ...row, description: program.region || '', notRecorded: true, notRecordedReason: reason };
+      }
+      const pct = progress.total ? Math.round((100 * progress.done) / progress.total) : null;
+      return { ...row, description: progressLine(progress), value: pct == null ? '' : `${pct}%`, bar: pct };
+    });
+    if (!mine.rows.length) mine.note = 'You are in no program yet. Most programs are by invitation: a Super Admin enrols their members.';
+  }
+
+  const web = { label: webinarsTitle, rows: [], testid: 'learning-phone-webinars' };
+  if (status(upcoming) !== 'ready') web.note = phonePending(status(upcoming), 'The upcoming webinars', 'This is not a claim that none is scheduled.', onRetry.upcoming);
+  else {
+    web.rows = (upcoming.rows || []).slice(0, 3).map((w) => {
+      const phase = webinarPhase(w, now);
+      const pill = phase === 'cancelled' ? { label: 'Cancelled', tone: 'danger' }
+        : w.registered ? { label: 'Registered', tone: 'info' }
+          : seatsOf(w).full ? { label: 'Full', tone: 'neutral' }
+            : w.href ? { label: 'Register', tone: 'info' } : null;
+      return { key: w.uid, title: w.title || 'Untitled webinar', description: formatWebinarDayTime(w.starts_at) || 'Start not recorded', pill, to: w.href || undefined, testid: 'learning-phone-webinar' };
+    });
+    if (!web.rows.length) web.note = 'No webinar scheduled. Webinars HQ schedules appear here, with a way to register.';
+  }
+  return [cont, mine, web, browseGroup({ gated })];
+}
+
+/** A8m — the bar and the sections, then `children`: the tab lists Browse opens. */
+export function LearningPhoneView({ gated, me, programs, upcoming, now, onRetry, children = null }) {
+  return (
+    <AccountPhonePage pageKey="learning" testid="learning-phone" groups={learningPhoneGroups({ gated, me, programs, upcoming, now, onRetry })}>
+      {children}
+    </AccountPhonePage>
   );
 }
 
@@ -502,6 +618,14 @@ export default function LearningHome({ gated, links = [] }) {
     setCatalogOffset(0);
     setParams((old) => { const next = new URLSearchParams(old); next.set('tab', key); return next; }, { replace: true });
   }, [setParams]);
+  const onCatalogPage = (step) => setCatalogOffset((o) => Math.max(0, o + step * ALL_LIMIT));
+  const onArticlesPage = (step) => setPage((p) => Math.max(0, p + step));
+  const onRetry = {
+    catalog: retryCatalog, article: retryArticles, publication: retryPublications, event: retryEvents, me: retryMe,
+    upcoming: retryUpcoming, past: retryPast,
+  };
+  // D700 — a phone draws A8m inside the frame, so the founder rail stays mounted.
+  const phone = usePhoneWidth();
 
   return (
     <RailFrame
@@ -521,32 +645,41 @@ export default function LearningHome({ gated, links = [] }) {
       )}
       data-testid="learning-home"
     >
-      <div className="space-y-4">
-        <LearningHomeView
-          gated={gated}
-          tab={tab}
-          onTab={onTab}
-          query={query}
-          onQuery={setQuery}
-          q={q}
-          catalog={catalog}
-          articles={articles}
-          publications={publications}
-          events={events}
-          me={me}
-          upcoming={upcoming}
-          past={past}
-          programs={programs}
-          now={now}
-          onCatalogPage={(step) => setCatalogOffset((o) => Math.max(0, o + step * ALL_LIMIT))}
-          onArticlesPage={(step) => setPage((p) => Math.max(0, p + step))}
-          onRetry={{
-            catalog: retryCatalog, article: retryArticles, publication: retryPublications, event: retryEvents, me: retryMe,
-            upcoming: retryUpcoming, past: retryPast,
-          }}
-          links={links}
-        />
-      </div>
+      {phone ? (
+        <LearningPhoneView gated={gated} me={me} programs={programs} upcoming={upcoming} now={now} onRetry={onRetry}>
+          <AdminLinks links={links} />
+          {!gated && <OpenPrograms {...programs} />}
+          <LearningCatalogue
+            gated={gated} tab={tab} onTab={onTab} query={query} onQuery={setQuery} q={q}
+            catalog={catalog} articles={articles} publications={publications} events={events}
+            upcoming={upcoming} past={past} now={now} onCatalogPage={onCatalogPage} onArticlesPage={onArticlesPage} onRetry={onRetry}
+          />
+        </LearningPhoneView>
+      ) : (
+        <div className="space-y-4">
+          <LearningHomeView
+            gated={gated}
+            tab={tab}
+            onTab={onTab}
+            query={query}
+            onQuery={setQuery}
+            q={q}
+            catalog={catalog}
+            articles={articles}
+            publications={publications}
+            events={events}
+            me={me}
+            upcoming={upcoming}
+            past={past}
+            programs={programs}
+            now={now}
+            onCatalogPage={onCatalogPage}
+            onArticlesPage={onArticlesPage}
+            onRetry={onRetry}
+            links={links}
+          />
+        </div>
+      )}
     </RailFrame>
   );
 }

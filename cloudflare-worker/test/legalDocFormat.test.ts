@@ -19,6 +19,7 @@ import {
   AXAL_LEGAL_ADDRESS,
   AXAL_SIGNATORY_NAME,
   AXAL_SIGNATORY_TITLE,
+  AXAL_ENTITIES,
 } from '../src/services/legalDocFormat.ts';
 
 test('normalizeLegalBody strips ATX headings but keeps the text', () => {
@@ -144,4 +145,50 @@ test('winAnsiSafe downgrades the 3-way NDA arrow', () => {
   assert.equal(winAnsiSafe('Founder ↔ Investor ↔ Axal'), 'Founder <-> Investor <-> Axal');
   // cp1252-mappable punctuation (em dash, bullet) is preserved.
   assert.equal(winAnsiSafe('A — B • C'), 'A — B • C');
+});
+
+// ---------------------------------------------------------------------------
+// D705 (#1716) — the Fund's legal name, titles by party, and the Fund signs
+// through its general partner.
+// ---------------------------------------------------------------------------
+
+const FUND_SIGNS = [
+  'subscription', 'investor_subscription_pro', 'investor_subscription_inst', 'subscription booklet & lpa',
+  'co-investment side letter', 'safe', 'term_sheet', 'spa', 'voting_rights',
+];
+const STAYS_GP = [
+  'lpa', 'ppm', 'mgmt_company', 'carried_interest', 'investor_nda_axal', 'accreditation_v1',
+  'spv joinder agreement', 'strategic side letter / focused spv', 'secondary purchase agreement',
+  'fund formation memo',
+];
+
+test('D705: the nine documents the Fund signs route to fund; the rest of the fund set stays gp', () => {
+  for (const s of FUND_SIGNS) assert.equal(axalEntityKeyForDoc(s), 'fund', s);
+  for (const s of STAYS_GP) assert.equal(axalEntityKeyForDoc(s), 'gp', s);
+  assert.equal(axalEntityKeyForDoc('SAFE'), 'fund', 'the slug is read case-insensitively');
+});
+
+test('D705: the Fund is Axal VC Spin-Out Lab Fund I LP, acting by its general partner', () => {
+  assert.equal(AXAL_ENTITIES.fund.name, 'Axal VC Spin-Out Lab Fund I LP');
+  const p = buildPreamble({ documentTitle: 'Subscription Agreement', axalEntityKey: axalEntityKeyForDoc('subscription') });
+  assert.ok(p.includes('by and between Axal VC Spin-Out Lab Fund I LP, a Delaware limited partnership, acting by its general partner Axal VC GP LLC with its principal legal address'), p);
+});
+
+test('D705: each Axal party signs under its own title; the Fund signs through its GP', () => {
+  const party = (key: 'fund' | 'gp' | 'management' | 'holdings') =>
+    buildExecutionBlock({ kind: 'agreement', axalEntityKey: key }).parties.find((x) => x.role === 'axal')!;
+  const fund = party('fund');
+  assert.deepEqual([fund.heading, fund.through, fund.by, fund.name, fund.title], [
+    'Axal VC Spin-Out Lab Fund I LP', 'By: Axal VC GP LLC, its general partner', 'By: ___________________________',
+    `Name: ${AXAL_SIGNATORY_NAME}`, 'Title: General Partner',
+  ]);
+  const gp = party('gp');
+  assert.deepEqual([gp.heading, gp.through, gp.title], ['Axal VC GP LLC', undefined, 'Title: General Partner']);
+  const mgmt = party('management');
+  assert.deepEqual([mgmt.heading, mgmt.through, mgmt.title], ['Axal VC Management LLC', undefined, 'Title: Managing Partner']);
+  assert.equal(party('holdings').title, 'Title: Managing Partner');
+  // A resolution signed by the GP carries the GP's title too.
+  assert.equal(buildExecutionBlock({ kind: 'resolution', axalEntityKey: 'gp' }).parties[0].title, 'Title: General Partner');
+  // Management's constant keeps its value for the graduation certificate.
+  assert.equal(AXAL_SIGNATORY_TITLE, 'Managing Partner');
 });

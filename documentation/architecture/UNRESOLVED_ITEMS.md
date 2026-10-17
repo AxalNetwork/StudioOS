@@ -370,6 +370,10 @@ shipped without the question being asked, not because a surface is waiting.
 
 ## U5 — Fund I terms are facts only the firm holds
 
+**NAME 2026-10-17 — the owner gave the Fund's legal name (D705, #1716).** It is
+**Axal VC Spin-Out Lab Fund I LP**, with Axal VC GP LLC as its general partner.
+This settles the naming half of U5 only; the Fund's terms below stay open.
+
 **SOURCE CHECK 2026-10-02 — the candidate booklet does not settle this item.**
 Retrieved the repository's Git LFS object for
 `attached_assets/StudioOS_AI_Fund_I_Subscription_Booklet_LPA_1777726603311.docx`

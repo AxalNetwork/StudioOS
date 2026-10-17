@@ -27,10 +27,10 @@ export const LEGAL_ENTITIES = {
     short: "GP",
     jurisdiction: "Delaware",
     type: "LLC",
-    role: "General Partner of Axal VC Fund I, LP. Manages the Fund, makes investment decisions, approves exits, owes fiduciary duties to LPs, and carries fund-level carry economics. Does not sign platform terms or customer contracts.",
+    role: "General Partner of Axal VC Spin-Out Lab Fund I LP. Manages the Fund, makes investment decisions, approves exits, owes fiduciary duties to LPs, and carries fund-level carry economics. Does not sign platform terms or customer contracts.",
   },
   fund: {
-    name: "Axal VC Fund I, LP",
+    name: "Axal VC Spin-Out Lab Fund I LP",
     short: "Fund I",
     jurisdiction: "Delaware",
     type: "LP",

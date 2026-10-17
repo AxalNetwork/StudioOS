@@ -16,14 +16,20 @@
 
 // Wrangler bundles ?raw imports as TS string literals. The
 // `as any` cast keeps tsc happy without needing a custom .d.ts.
-import tos                            from '../templates/legal/tos_v1.md?raw';
-import privacy                        from '../templates/legal/privacy_v1.md?raw';
+//
+// D705 (#1717): six of these keys read a newer file that names the Fund
+// Axal VC Spin-Out Lab Fund I LP. The key is unchanged, so every caller and
+// every recorded obligation key stays as it was; the older file stays in the
+// folder, because a document already signed names its version.
+// `tos_v3.md` descends from `tos_v1.md`; `tos_v2.md` is imported by nothing.
+import tos                            from '../templates/legal/tos_v3.md?raw';
+import privacy                        from '../templates/legal/privacy_v2.md?raw';
 import founderNda                     from '../templates/legal/founder_nda_v1.md?raw';
-import investorNda                    from '../templates/legal/investor_nda_v1.md?raw';
+import investorNda                    from '../templates/legal/investor_nda_v2.md?raw';
 import advisorNda                      from '../templates/legal/mentor_nda_v1.md?raw';
-import advisorDisclaimer               from '../templates/legal/mentor_disclaimer_v1.md?raw';
-import partnerMsa                     from '../templates/legal/partner_msa_v1.md?raw';
-import accreditation                  from '../templates/legal/accreditation_v1.md?raw';
+import advisorDisclaimer               from '../templates/legal/mentor_disclaimer_v2.md?raw';
+import partnerMsa                     from '../templates/legal/partner_msa_v2.md?raw';
+import accreditation                  from '../templates/legal/accreditation_v2.md?raw';
 import nda3Way                        from '../templates/legal/nda_3way_founder_investor_axal_v1.md?raw';
 
 // Defined in `./legalDocTypes` (which holds no assets) and re-exported here so

@@ -89,3 +89,8 @@ on the Worker (`/api/ai/rail-preferences`, migration 465): the assist mode per
 rail section and the model picked per section and router task, for the caller
 only. A null clears a row. localStorage stays the cache, so a mode or a pick
 set on a laptop is in place on a phone after a reload.
+
+D702 (#1664): `profile.js` calls `/api/profile/me`, `/api/profile/venture` (GET
+and PATCH) and `/api/profile/preview` (`cloudflare-worker/src/routes/founder_profile.ts`), and the
+existing `/api/settings/privacy` with `?project=` for the venture's investor
+toggle. Every read is the caller's own, or a venture the caller can write.

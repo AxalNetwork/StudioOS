@@ -22,6 +22,8 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
+import { usePhoneWidth } from '../ui';
+import PricingPhone from './account/PricingPhone';
 import AxalCheckout from '../components/AxalCheckout';
 import { useCart } from '../components/products/useCart';
 import BillingCartBar from '../components/products/BillingCartBar';
@@ -524,6 +526,9 @@ export default function ProductsPage() {
     );
   }, [products, addons, audienceFilter]);
 
+  // D700 — on a phone A10m's bar and sections come first, and its bar is the heading.
+  const phone = usePhoneWidth();
+
   const loadingState = products === null && (
     <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 py-10 justify-center">
       <Loader2 size={16} className="animate-spin" /> Loading catalog…
@@ -535,7 +540,7 @@ export default function ProductsPage() {
     </p>
   );
 
-  return (
+  const page = (
     <div className="max-w-[1240px] space-y-7">
       {/* Slide-over / drawer animations (scoped inline — global CSS untouched). */}
       <style>{`
@@ -546,13 +551,17 @@ export default function ProductsPage() {
 
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div className="min-w-0">
-          <h1 className="text-[32px] leading-tight font-extrabold tracking-[-.02em] text-gray-900 dark:text-gray-100 flex items-center gap-2.5">
-            <Package size={26} className="text-violet-600 dark:text-violet-400" /> Products
-          </h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1.5 max-w-2xl">
-            One clear catalog — profile bundles, introduction packs, and add-ons. Purchased
-            in-app, or unlocked with a promo code.
-          </p>
+          {!phone && (
+            <>
+              <h1 className="text-[32px] leading-tight font-extrabold tracking-[-.02em] text-gray-900 dark:text-gray-100 flex items-center gap-2.5">
+                <Package size={26} className="text-violet-600 dark:text-violet-400" /> Products
+              </h1>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1.5 max-w-2xl">
+                One clear catalog — profile bundles, introduction packs, and add-ons. Purchased
+                in-app, or unlocked with a promo code.
+              </p>
+            </>
+          )}
           <PromoRedeemCard initialCode={deepLinkCode} onRedeemed={refreshUnlocks} />
         </div>
         {isAdmin && (
@@ -698,4 +707,6 @@ export default function ProductsPage() {
       )}
     </div>
   );
+
+  return phone ? <PricingPhone role={user?.role}>{page}</PricingPhone> : page;
 }

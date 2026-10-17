@@ -63,6 +63,7 @@ import {
 import { refuseReason } from '../services/fills/types';
 import { run as aiRun, audioMinutesFromBytes } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
+import { currentDecision, decisionsFor, recordDecision, VerdictError } from '../services/verdict';
 
 const founderValidate = new Hono<{ Bindings: Env }>();
 
@@ -81,13 +82,6 @@ const trimOrNull = (v: unknown): string | null => {
 const ICP_VALUES = new Set(['strong', 'partial', 'none']);
 const DIRECTIONS = new Set(['supports', 'contradicts']);
 const DECISIONS = new Set(['proceed', 'pivot', 'stop']);
-
-/** The actor on a Validate write. The row's own column is not the audit log. */
-async function recordActor(env: Env, user: User, projectId: number, action: string, details: string) {
-  await env.DB.prepare(
-    `INSERT INTO activity_logs (action, details, actor, user_id, project_id) VALUES (?, ?, ?, ?, ?)`,
-  ).bind(action, details, `user:${user.id}`, user.id ?? null, projectId).run();
-}
 
 type ProjectRow = ProjectRef & { name: string };
 
@@ -454,53 +448,61 @@ founderValidate.get('/summary/:projectId/export.csv', async (c) => {
   if (s instanceof Response) return s;
 
   const board = await buildBoard(c.env, s.project.id);
-  const cur = await c.env.DB.prepare(
-    `SELECT decision, reasoning, decided_at FROM validation_decisions
-      WHERE project_id = ? AND superseded_at IS NULL
-      ORDER BY decided_at DESC, id DESC LIMIT 1`,
-  ).bind(s.project.id).first<{ decision: string; reasoning: string | null; decided_at: string | null }>()
-    .catch(() => null);
+  // The venture's current given decision, through the one reader (D693). A
+  // read that fails refuses the export: a summary with no decision in it
+  // would say the founder has not decided.
+  let cur: Awaited<ReturnType<typeof currentDecision>>;
+  try {
+    cur = await currentDecision(c.env, s.project.id, 'venture');
+  } catch (e) {
+    console.error('[founder_validate] decision unreadable:', (e as Error)?.message);
+    return json({ detail: 'The decision could not be read.' }, 503);
+  }
 
   return csvResponse(
-    serializeSummaryCsv(board.hypotheses as any, cur || null),
+    serializeSummaryCsv(board.hypotheses as any, cur ? { decision: cur.decision, reasoning: cur.reasoning, decided_at: cur.decided_at } : null),
     exportName(s.project.name, 'validation-summary'),
     { 'X-Export-Rows': String(board.hypotheses.length) },
   );
 });
 
+// D693: both routes go through `services/verdict.ts`. `current` is the
+// venture's current given decision; `history` is the venture's own rows, each
+// with its `state`, never a hypothesis's. #1666 removes both routes.
 founderValidate.get('/decision/:projectId', async (c) => {
   const s = await scope(c, Number(c.req.param('projectId')), canReadDecision);
   if (s instanceof Response) return s;
-  const res = await c.env.DB.prepare(
-    `SELECT id, decision, reasoning, decided_at, superseded_at
-       FROM validation_decisions WHERE project_id = ?
-      ORDER BY decided_at DESC, id DESC`,
-  ).bind(s.project.id).all<any>().catch(() => ({ results: [] as any[] }));
-  const rows = res.results || [];
-  return json({
-    current: rows.find((r) => !r.superseded_at) || null,
-    history: rows,
-  });
+  try {
+    const [current, history] = await Promise.all([
+      currentDecision(c.env, s.project.id, 'venture'),
+      decisionsFor(c.env, s.project.id, { scope: 'venture', sort: 'newest', pageSize: 200 }),
+    ]);
+    return json({ current, history: history.rows });
+  } catch (e) {
+    console.error('[founder_validate] decisions unreadable:', (e as Error)?.message);
+    return json({ detail: 'The decision could not be read.' }, 503);
+  }
 });
 
+// The earlier verdict page sends no evidence, so until #1704 retires it this
+// route records with no bar: a given venture decision, superseding only the
+// venture's current given one. `recordDecision` logs the activity.
 founderValidate.post('/decision/:projectId', async (c) => {
   const s = await scope(c, Number(c.req.param('projectId')), canWrite);
   if (s instanceof Response) return s;
   const b = await c.req.json().catch(() => ({} as any));
   const decision = String(b.decision || '');
   if (!DECISIONS.has(decision)) return json({ detail: 'decision must be proceed, pivot or stop' }, 400);
-
-  // Supersede rather than overwrite. A decision that vanishes when the next one
-  // is taken is a record of the current mood, not of a decision.
-  await c.env.DB.prepare(
-    "UPDATE validation_decisions SET superseded_at = datetime('now') WHERE project_id = ? AND superseded_at IS NULL",
-  ).bind(s.project.id).run();
-  const r = await c.env.DB.prepare(
-    `INSERT INTO validation_decisions (project_id, decision, reasoning, decided_by)
-     VALUES (?, ?, ?, ?)`,
-  ).bind(s.project.id, decision, trimOrNull(b.reasoning), s.user.id).run();
-  await recordActor(c.env, s.user, s.project.id, 'validation_decision_recorded', decision);
-  return json({ id: r.meta?.last_row_id, decision }, 201);
+  try {
+    const r = await recordDecision(c.env, s.user, s.project, {
+      decision, for: 'venture', reasoning: trimOrNull(b.reasoning), evidence: b.evidence ?? [],
+    }, { bar: 0 });
+    return json({ id: r.id, decision }, 201);
+  } catch (e) {
+    if (e instanceof VerdictError) return json({ detail: e.sentence }, e.status);
+    console.error('[founder_validate] decision not recorded:', (e as Error)?.message);
+    return json({ detail: 'The decision could not be recorded' }, 500);
+  }
 });
 
 // ---------------------------------------------------------------------------

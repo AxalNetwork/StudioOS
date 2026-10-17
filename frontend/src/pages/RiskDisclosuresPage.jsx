@@ -80,7 +80,7 @@ const SECTIONS = [
     h: 'No reliance on Axal.vc data',
     body: (
       <>
-        <p>While <strong>Axal VC Management LLC</strong> performs certain due diligence as platform operator and <strong>Axal VC GP LLC</strong> performs investment diligence as general partner of Axal VC Fund I, LP, neither entity guarantees the accuracy or completeness of the information provided by the companies (the "Issuers").</p>
+        <p>While <strong>Axal VC Management LLC</strong> performs certain due diligence as platform operator and <strong>Axal VC GP LLC</strong> performs investment diligence as general partner of Axal VC Spin-Out Lab Fund I LP, neither entity guarantees the accuracy or completeness of the information provided by the companies (the "Issuers").</p>
         <ul>
           <li><strong>Forward-Looking Statements:</strong> Pitch decks and financial projections are "forward-looking statements" and are inherently unreliable. Actual results may differ materially from those projected.</li>
           <li><strong>Third-Party Info:</strong> No Axal VC entity is responsible for the truthfulness of information provided by founders or third-party data providers.</li>

@@ -5,7 +5,7 @@ The corpus the first integration pass worked from. Sorted by one question:
 
 | Folder | Count | Meaning |
 | --- | --- | --- |
-| `integrated/` | 91 | A route is running on main. Graded `CURRENT`, `UPGRADE` or `RESKIN` — the surface exists, and for `UPGRADE`/`RESKIN` the canvas is a *diff against* something already live. |
+| `integrated/` | 95 | A route is running on main. Graded `CURRENT`, `UPGRADE` or `RESKIN` — the surface exists, and for `UPGRADE`/`RESKIN` the canvas is a *diff against* something already live. |
 | `backlog/` | 28 | Graded `NEW` or `DEFERRED`. No route yet. |
 | `out-of-scope/` | 26 | Deliberately not being built. The `ROUTE_MAP.md` row says why. |
 | `shared/` | 6 | The dc-runtime bundle every canvas loads, plus two standalone pitch-deck exports. Generated — both code scanners ignore this tree. Every canvas asks for it as `src="./support.js"`, which resolves next to the canvas and **not** to this folder, so opening one straight from `integrated/` in a browser gets a blank page: copy `shared/support.js` beside it first. Nothing runs these at runtime, so the reference is nominal — it is a convention marking "the shared runtime, not an inlined 69KB copy", and `scripts/read-canvas.mjs` reproduces it when it decodes a new export. |
@@ -391,3 +391,18 @@ Canvas imports it. The incoming Founder Workspaces Canvas also imports
 AIRail, and that import no longer resolves inside `incoming/`
 (`design/incoming/README.md` says so). Every departure from the canvas is
 listed in `documentation/architecture/decisions/D698.md`.
+
+**2026-10-17 (D700, #1662), two canvases graduated.** `Account Menu · Mobile`
+and `Account Mobile Page` moved from `design/incoming/` to `integrated/`
+together, unedited, because AM imports AMP by name (AM:17). All ten account
+pages, A1m–A10m, now draw their phone view below 1024px. **`integrated/`
+went 91 → 93.** Every departure from the canvas is listed in
+`documentation/architecture/decisions/D700.md`.
+
+**2026-10-17 (D702, #1664), two more graduated.** `Studio · Mobile` and
+`Studio Mobile Page` moved from `design/incoming/` to `integrated/` together,
+unedited, because SM imports SMP by name (SM:20). D701 (#1663) built S1m–S5m
+(Studio on a phone and the Eadwyn menu) and D702 built S6m–S10m (You, Your
+venture, the archetype card on a phone, What others see and Visibility).
+**`integrated/` went 93 → 95.** The departures are in
+`documentation/architecture/decisions/D702.md`.

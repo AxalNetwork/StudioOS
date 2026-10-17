@@ -12,6 +12,8 @@ import type { Env } from '../types';
 import { verifySignedToken } from './decks';
 import { createJWT, setAuthCookies, generateCsrfToken, requireAuth } from '../auth';
 import { hashEmail } from '../util/hashEmail';
+import { verifyTurnstile } from '../services/turnstile';
+import { ipPrefix } from '../services/securityEvents';
 import { renderLegalTemplate, templateKeyForDocType } from '../services/legalTemplates';
 import { bindingKey } from '../util/schemaBootstrap';
 
@@ -180,9 +182,16 @@ deckShareActions.get('/share/:token/context', async (c) => {
 
 // ─────────────────────────────────────────────────────────────────────
 // POST /signup — anonymous viewer creates an account & receives a
-// short-lived session cookie + bearer. Reuses /api/auth/register
-// semantics by minting the user row directly (Turnstile is bypassed
-// because the share-token-gated flow already proves intent).
+// short-lived session cookie + bearer, minting the user row directly.
+//
+// D691 — BOTH GUARDS /api/auth/register HAS APPLY HERE TOO. A share token
+// proves access to one deck, not intent: a link with no expiry and no view
+// cap stays usable by whoever it reaches, and this route creates an account
+// per call. So the body must carry a Turnstile token, verified before any
+// read or insert (before the existing-email check too, so a script cannot
+// use the 409 to probe which addresses have accounts), and the path has its
+// own fail-closed `deck_share_signup` bucket in middleware/rateLimit.ts
+// (6/min/IP) instead of only the generic 200/min/IP one.
 // ─────────────────────────────────────────────────────────────────────
 deckShareActions.post('/share/:token/signup', async (c) => {
   const tok = await verifyShareToken(c.env, c.req.param('token'));
@@ -198,6 +207,26 @@ deckShareActions.post('/share/:token/signup', async (c) => {
   const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
   if (!emailRe.test(email)) return c.json({ error: 'invalid_email' }, 400);
   if (!name) return c.json({ error: 'name_required' }, 400);
+
+  const clientIp = c.req.header('cf-connecting-ip') || undefined;
+  const turnstileOk = await verifyTurnstile(c.env, String(body?.turnstileToken || ''), clientIp);
+  if (!turnstileOk) {
+    // Logged as /api/auth/register logs it: a hash of the email and a /24
+    // (IPv4) or /48 (IPv6) bucket, never the raw address — the submitter
+    // never authenticated, so there is no basis to keep their plain email.
+    try {
+      const ipBucket = ipPrefix(clientIp);
+      await c.env.DB.prepare(
+        `INSERT INTO activity_logs (action, details, actor) VALUES ('turnstile_failed', ?, ?)`
+      ).bind(
+        `deck share signup blocked: email_hash=${await hashEmail(email)} ip_bucket=${ipBucket} deck_id=${tok.deckId}`,
+        ipBucket,
+      ).run();
+    } catch (e) {
+      console.error('[deck_share] failed to log turnstile failure', e);
+    }
+    return c.json({ error: 'Bot verification failed. Please try again.' }, 403);
+  }
 
   const ctx = await loadDeckContext(c.env, tok.deckId);
   if (!ctx) return c.json({ error: 'deck_not_found' }, 404);

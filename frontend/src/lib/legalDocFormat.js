@@ -9,37 +9,76 @@
 export const AXAL_LEGAL_ADDRESS = '16192 Coastal Highway, Lewes, Delaware 19958';
 export const AXAL_LEGAL_EMAIL = 'legal@axal.vc';
 export const AXAL_SIGNATORY_NAME = 'Joseph Gabriel Guillaume Lauzier';
+// Management's title; the graduation certificate signs as Management. D705:
+// every other party carries its own `signatoryTitle` (see the worker file).
 export const AXAL_SIGNATORY_TITLE = 'Managing Partner';
 
 export const AXAL_ENTITIES = {
-  management: { key: 'management', name: 'Axal VC Management LLC', descriptor: 'a Delaware limited liability company' },
-  holdings: { key: 'holdings', name: 'Axal VC Holdings LLC', descriptor: 'a Delaware limited liability company' },
-  gp: { key: 'gp', name: 'Axal VC GP LLC', descriptor: 'a Delaware limited liability company' },
-  fund: { key: 'fund', name: 'Axal VC Fund I, LP', descriptor: 'a Delaware limited partnership, acting by its general partner Axal VC GP LLC' },
+  management: { key: 'management', name: 'Axal VC Management LLC', descriptor: 'a Delaware limited liability company', signatoryTitle: 'Managing Partner' },
+  holdings: { key: 'holdings', name: 'Axal VC Holdings LLC', descriptor: 'a Delaware limited liability company', signatoryTitle: 'Managing Partner' },
+  gp: { key: 'gp', name: 'Axal VC GP LLC', descriptor: 'a Delaware limited liability company', signatoryTitle: 'General Partner' },
+  fund: {
+    key: 'fund', name: 'Axal VC Spin-Out Lab Fund I LP',
+    descriptor: 'a Delaware limited partnership, acting by its general partner Axal VC GP LLC',
+    signatoryTitle: 'General Partner', through: 'By: Axal VC GP LLC, its general partner',
+  },
 };
+
+// D705 — the Fund signs these, through its general partner (see the worker file).
+const FUND_SIGNS_D705 = new Set([
+  'subscription', 'investor_subscription_pro', 'investor_subscription_inst', 'subscription booklet & lpa',
+  'co-investment side letter',
+  'safe', 'term_sheet', 'spa', 'voting_rights',
+]);
+
+// D706 — the Fund I catalog entries, routed by name (see the worker file).
+const FUND_PARTY_SLUGS_D706 = new Set([
+  'lp_side_letter', 'lp_interest_transfer', 'investment_management_agreement',
+  'clawback_guarantee', 'management_rights_letter', 'pro_rata_information_rights_side_letter',
+]);
+const GP_PARTY_SLUGS_D706 = new Set([
+  'lpa_amended_restated', 'lpa_initial', 'gp_closing_certificate', 'capital_call_notice',
+  'distribution_notice', 'default_notice', 'lpac_charter', 'gp_llc_agreement',
+  'gp_fund_formation_consent', 'carried_interest_award_letter',
+]);
 
 export function axalEntityKeyForDoc(slugOrType, category) {
   const s = String(slugOrType || '').toLowerCase();
-  const fundEntityDocs = new Set([
-    'subscription booklet & lpa', 'spv joinder agreement', 'co-investment side letter',
-    'strategic side letter / focused spv', 'lpa', 'ppm', 'subscription',
-    'mgmt_company', 'investor_subscription_pro', 'investor_subscription_inst',
-    'accreditation_v1', 'investor_nda_axal', 'carried_interest',
-    'safe', 'term_sheet', 'spa', 'voting_rights', 'secondary purchase agreement',
+  if (FUND_PARTY_SLUGS_D706.has(s)) return 'fund';
+  if (GP_PARTY_SLUGS_D706.has(s)) return 'gp';
+  if (FUND_SIGNS_D705.has(s)) return 'fund';
+  const gpEntityDocs = new Set([
+    'spv joinder agreement', 'strategic side letter / focused spv', 'lpa', 'ppm',
+    'mgmt_company', 'accreditation_v1', 'investor_nda_axal', 'carried_interest',
+    'secondary purchase agreement',
   ]);
-  if (fundEntityDocs.has(s) || /\b(lpa|ppm|subscription|side letter|spv|fund)\b/.test(s)) return 'gp';
+  if (gpEntityDocs.has(s) || /\b(lpa|ppm|subscription|side letter|spv|fund)\b/.test(s)) return 'gp';
   const holdingsDocs = new Set(['ip_license', 'ip_background_schedule']);
   if (holdingsDocs.has(s) || /\b(trademark|brand[\s_-]?ip|domain)\b/.test(s)) return 'holdings';
   return 'management';
 }
 
-const POLICY_SLUGS = new Set(['tos_v1', 'privacy_v1', 'aml_kyc', 'form_adv']);
+const POLICY_SLUGS = new Set([
+  'tos_v1', 'privacy_v1', 'aml_kyc', 'form_adv',
+  // D706 (Fund I catalog)
+  'compliance_manual_code_of_ethics', 'investor_privacy_notice_reg_sp', 'valuation_policy',
+  'conflicts_allocation_policy',
+]);
 const UNILATERAL_SLUGS = new Set([
   'section_83b', 'accreditation_v1', 'ein_application_kit', 'sg_acra_form_45_kit',
   'uk_form_in01_kit', 'ee_e_residency_application_kit', 'data_access_acknowledgment_admin',
   'mentor_engagement_disclaimer',
+  // D706 (Fund I catalog)
+  'certificate_of_limited_partnership_de', 'mfn_election_form', 'lp_investor_questionnaire',
+  'lp_aml_kyc_certification', 'lp_tax_status_certification', 'lp_electronic_delivery_consent',
+  'form_d_filing_kit', 'bad_actor_questionnaire_506d',
 ]);
-const RESOLUTION_SLUGS = new Set(['ic_charter']);
+const RESOLUTION_SLUGS = new Set([
+  'ic_charter',
+  // D706 (Fund I catalog)
+  'gp_closing_certificate', 'capital_call_notice', 'distribution_notice', 'default_notice',
+  'lpac_charter', 'gp_fund_formation_consent',
+]);
 const CORPORATE_SLUGS = new Set([
   'certificate_of_incorporation_de', 'bylaws', 'uk_articles_of_association',
   'uk_memorandum_of_association', 'sg_constitution', 'ee_articles_of_association',
@@ -141,16 +180,18 @@ const BLANK_SIG = 'By: ___________________________';
 
 export function buildExecutionBlock(opts) {
   const kind = opts.kind || 'agreement';
-  const axalName = (opts.axalEntityName || '').trim() || AXAL_ENTITIES.management.name;
+  const ent = AXAL_ENTITIES[opts.axalEntityKey || 'management'] || AXAL_ENTITIES.management;
+  const axalName = (opts.axalEntityName || '').trim() || ent.name;
   const cpName = (opts.counterpartyName || '').trim();
   const cpDate = (opts.signedDate || '').trim();
 
   const axalParty = {
     role: 'axal',
     heading: axalName,
+    ...(ent.through ? { through: ent.through } : {}),
     by: BLANK_SIG,
     name: `Name: ${AXAL_SIGNATORY_NAME}`,
-    title: `Title: ${AXAL_SIGNATORY_TITLE}`,
+    title: `Title: ${ent.signatoryTitle}`,
     date: cpDate ? `Date: ${cpDate}` : 'Date: ___________________________',
     isSigner: kind === 'resolution',
   };

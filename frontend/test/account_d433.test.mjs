@@ -220,7 +220,8 @@ test('no notification label calls anything a recommendation, advice, or an AI\'s
 // ---------------------------------------------------------------------------
 
 test('/profile redirects to /account with query and hash, and the sidebar row points where it lands', () => {
-  assert.match(APP, /<Route path="\/profile" element=\{<SettingsRedirect \/>\} \/>/);
+  // D702 (#1664): founders get You at /profile; every other role keeps the redirect.
+  assert.match(APP, /<Route path="\/profile" element=\{effectiveRole === 'founder' \? guard\(\['founder'\], <YouPage \/>\) : <SettingsRedirect \/>\} \/>/);
   assert.doesNotMatch(APP, /path="\/profile" element=\{guard\(/, 'the second SettingsPage mount is gone');
   const redirect = slice(APP, 'function SettingsRedirect()', 'function SettingsSectionRedirect()');
   assert.match(redirect, /pathname: '\/account', search: loc\.search, hash: loc\.hash/);

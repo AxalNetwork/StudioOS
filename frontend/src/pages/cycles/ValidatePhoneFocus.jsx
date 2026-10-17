@@ -54,20 +54,20 @@ function TargetForm({ projectId, current, api, onSaved, onCancel }) {
 }
 const NR = 'rounded-full border border-dashed border-gray-300 bg-axal-ground px-2 py-0.5 text-[10.5px] font-semibold text-axal-muted dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400';
 
-export default function ValidatePhoneFocus({ raw, search = '', projectId = null, api = cycleValidateApi, onChanged }) {
+export default function ValidatePhoneFocus({ cycle = 'validate', raw, search = '', projectId = null, api = cycleValidateApi, onChanged }) {
   const [editing, setEditing] = useState(false);
   const focus = phoneFocus(raw, search);
-  const meter = phoneMeter(raw);
-  const rows = phoneIndex(raw, search);
+  const meter = cycle === 'validate' ? phoneMeter(raw) : null;
+  const rows = cycle === 'validate' ? phoneIndex(raw, search) : [];
   return (
-    <div className="flex flex-col gap-3 md:hidden" data-testid="validate-phone">
+    <div className="flex flex-col gap-3 md:hidden" data-testid={`${cycle}-phone`}>
       {focus && (
         <section className="rounded-2xl border border-axal-hairline bg-white p-4 dark:border-gray-800 dark:bg-gray-900" data-testid="phone-focus" aria-labelledby="phone-focus-title">
           <p className="m-0 text-[11px] font-bold uppercase tracking-[.08em] text-axal-violet-deep dark:text-violet-300">{focus.eyebrow}</p>
           <h2 id="phone-focus-title" className="m-0 mt-1 text-[18px] font-extrabold leading-snug text-axal-ink dark:text-gray-100">{focus.headline}</h2>
           {focus.why && <p className="m-0 mt-1.5 text-[13px] text-axal-muted dark:text-gray-400" data-testid="phone-focus-why">{focus.why}</p>}
           {/* A venture with no interview has nothing to count yet: the canvas draws no meter there. */}
-          {focus.headline !== FIRST_FOCUS.headline && <div className="mt-3 rounded-xl bg-axal-ground p-3 dark:bg-gray-800" data-testid="phone-meter">
+          {cycle === 'validate' && focus.headline !== FIRST_FOCUS.headline && <div className="mt-3 rounded-xl bg-axal-ground p-3 dark:bg-gray-800" data-testid="phone-meter">
             <div className="flex items-baseline justify-between gap-2 text-[12.5px]">
               <span className="font-semibold text-axal-ink dark:text-gray-100">{meter.label}</span>
               <span className="tabular-nums text-axal-ink dark:text-gray-100" data-testid="phone-meter-value">
@@ -93,7 +93,7 @@ export default function ValidatePhoneFocus({ raw, search = '', projectId = null,
           {focus.then && <p className="m-0 mt-2 text-[12px] text-axal-muted dark:text-gray-400" data-testid="phone-focus-then">Then: {focus.then}</p>}
         </section>
       )}
-      <section aria-labelledby="phone-index-title" data-testid="phone-index">
+      {cycle === 'validate' && <section aria-labelledby="phone-index-title" data-testid="phone-index">
         <h2 id="phone-index-title" className="m-0 mb-1.5 px-1 text-[11px] font-bold uppercase tracking-[.08em] text-axal-muted dark:text-gray-400">Everything else in Validate</h2>
         <ul className="m-0 list-none divide-y divide-axal-hairline overflow-hidden rounded-2xl border border-axal-hairline bg-white p-0 dark:divide-gray-800 dark:border-gray-800 dark:bg-gray-900">
           {rows.map((r) => (
@@ -108,7 +108,7 @@ export default function ValidatePhoneFocus({ raw, search = '', projectId = null,
             </li>
           ))}
         </ul>
-      </section>
+      </section>}
     </div>
   );
 }
