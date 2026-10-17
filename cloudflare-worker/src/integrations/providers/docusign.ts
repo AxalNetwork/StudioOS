@@ -503,15 +503,32 @@ function mapDsStatus(s: string): 'sent' | 'partially_signed' | 'completed' | 're
  * routes/esign.ts detect the `.enc` suffix and decrypt on the way out
  * with the same `cryptoBox` key (AXAL_ENCRYPTION_SECRET || JWT_SECRET).
  */
-async function pullAndStoreSignedPdf(env: Env, _row: IntegrationRow, dsEnvelopeId: string, envelopeUuid: string): Promise<{ key: string; sha256: string; fileSha256: string; bytes: number } | null> {
+/**
+ * D711 — one `docusign_signed` registry row for a returned file. Its hash is
+ * over the plaintext bytes DocuSign returned. The webhook and the cron poller
+ * can both reach this for one envelope; the INSERT ends ON CONFLICT … DO
+ * NOTHING, so the second leaves the first row alone.
+ */
+export async function recordDocusignSignedFile(env: Env, envelopeId: number, key: string, plaintext: Uint8Array): Promise<void> {
+  await fileRowStatement(env, {
+    uid: newFileUid(),
+    kind: 'docusign_signed',
+    envelopeId,
+    fileSha256: await sha256HexBytes(plaintext),
+    fileBytes: plaintext.length,
+    contentType: 'application/pdf',
+    renderer: 'docusign',
+    paperSha256: null,
+    r2Key: key,
+  }).run();
+}
+
+async function pullAndStoreSignedPdf(env: Env, _row: IntegrationRow, dsEnvelopeId: string, envelopeUuid: string): Promise<{ key: string; sha256: string; plaintext: Uint8Array } | null> {
   const res = await dsFetch(env, _row, `/envelopes/${encodeURIComponent(dsEnvelopeId)}/documents/combined`);
   if (!res.ok) return null;
   const buf = new Uint8Array(await res.arrayBuffer());
   if (buf.length === 0) return null;
   const sha = await sha256Hex(new TextDecoder('latin1').decode(buf));
-  // D711 — the registry's hash is over the plaintext bytes DocuSign returned,
-  // not `sha` above (a latin1 string re-encoded as UTF-8).
-  const fileSha256 = await sha256HexBytes(buf);
   // Encrypt the executed PDF before R2 put — matches the encrypted-at-rest
   // policy for sensitive contract artifacts (see services/cryptoBox.ts and
   // routes/dd.ts for prior art). The `.enc` suffix is the canonical marker
@@ -524,7 +541,7 @@ async function pullAndStoreSignedPdf(env: Env, _row: IntegrationRow, dsEnvelopeI
       customMetadata: { inner_content_type: 'application/pdf', encrypted: '1' },
     });
   }
-  return { key, sha256: sha, fileSha256, bytes: buf.length };
+  return { key, sha256: sha, plaintext: buf };
 }
 
 /**
@@ -582,25 +599,11 @@ async function reconcileEnvelope(env: Env, row: IntegrationRow, dsEnvelopeId: st
   if (newStatus === 'completed') {
     const stored = await pullAndStoreSignedPdf(env, row, dsEnvelopeId, local.envelope_uuid);
     signedKey = stored?.key || null;
-    // D711 — one `docusign_signed` row per returned file. The webhook and the
-    // cron poller can both reach here for one envelope; the INSERT ends
-    // ON CONFLICT … DO NOTHING, so the second leaves the first row alone.
+    // D711 — one `docusign_signed` row per returned file (not `stored.sha256`,
+    // a latin1 string re-encoded as UTF-8).
     if (stored) {
-      try {
-        await fileRowStatement(env, {
-          uid: newFileUid(),
-          kind: 'docusign_signed',
-          envelopeId: local.id,
-          fileSha256: stored.fileSha256,
-          fileBytes: stored.bytes,
-          contentType: 'application/pdf',
-          renderer: 'docusign',
-          paperSha256: null,
-          r2Key: stored.key,
-        }).run();
-      } catch (e) {
-        console.warn(JSON.stringify({ event: 'legal_file_row_failed', code: 'docusign_signed' }));
-      }
+      try { await recordDocusignSignedFile(env, local.id, stored.key, stored.plaintext); }
+      catch { console.warn(JSON.stringify({ event: 'legal_file_row_failed', code: 'docusign_signed' })); }
     }
     if (!signedKey) {
       // PDF retrieval failed — DO NOT finalize the envelope status,

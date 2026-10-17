@@ -496,7 +496,7 @@ export function paperHtml(m: PaperModel, o: PaperHtmlOptions): string {
 
   const head = screen
     ? `<header class="screen-head"><div class="lockup"><img alt="" src="${markDataUri()}"><span class="wordmark">AXAL VC</span></div><span class="confidential">Confidential</span></header>`
-    : '<span class="font-warm" aria-hidden="true">AXAL VC</span>';
+    : '<span class="lockup-font-warm" aria-hidden="true">AXAL VC</span>';
   const foot = screen
     ? `<footer class="screen-foot"><div>${escapeHtml(m.footerLeft)}</div><div class="audit">${escapeHtml(m.auditLine)}</div></footer>`
     : '';

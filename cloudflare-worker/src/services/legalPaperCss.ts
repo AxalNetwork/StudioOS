@@ -254,7 +254,7 @@ export function paperCss(o: PaperCssOptions): string {
 .screen-only { display: none; }
 /* A face used only in a margin box is never loaded, so the lockup's wordmark
    would print blank: this invisible run in the page loads it. */
-.font-warm { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; font-family: 'Space Grotesk', sans-serif; font-weight: 700; }
+.lockup-font-warm { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; font-family: 'Space Grotesk', sans-serif; font-weight: 700; }
 ` : `
 body { max-width: 7in; margin: 0 auto; padding: 24px 20px; background: ${C.white}; }
 .cover { min-height: 9in; padding: ${T.space.pageMargin}; margin-bottom: 24px; }
