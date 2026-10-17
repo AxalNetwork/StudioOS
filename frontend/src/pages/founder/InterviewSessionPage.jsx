@@ -10,6 +10,7 @@ import { ModelList, AUDIO } from './RecordSessionSheet';
 import InterviewReview from './InterviewReview';
 import SessionSummary from './SessionSummary';
 import { ChannelSessionPanel } from './InterviewChannels';
+import { clock } from './interviewReviewModel.js';
 
 /**
  * Validate › an interview session (D660, #1473), at `/validate/session/:id`, to
@@ -63,8 +64,12 @@ export function StartPanel({ session, error, liveHref = null, busy, onStart, onC
   );
 }
 
-/** The review step: the transcript, one tap per speaker. */
-export function TranscriptReview({ segments, intervieweeName, onAssign }) {
+/**
+ * The review step: the transcript, one tap per speaker. With `time` (the
+ * interview record, D697), each passage starts with its time as `[hh:mm:ss]`;
+ * this page's own review does not pass it, so it draws no time.
+ */
+export function TranscriptReview({ segments, intervieweeName, onAssign, time = false }) {
   const finals = segments.filter((s) => s.source === 'final');
   const rows = finals.length ? finals : segments;
   if (!rows.length) return <p className="text-[13px] text-axal-faint" data-testid="transcript-empty">Not recorded</p>;
@@ -79,7 +84,12 @@ export function TranscriptReview({ segments, intervieweeName, onAssign }) {
                 className={`rounded-full border px-2 py-0.5 text-[11px] font-bold ${s.speaker_label === label ? 'border-violet-700 bg-violet-700 text-white' : 'border-gray-200 text-gray-600 dark:border-gray-700 dark:text-gray-300'}`}>{label}</button>
             ))}
           </div>
-          <p className="text-gray-800 dark:text-gray-200">{s.text}</p>
+          <p className="text-gray-800 dark:text-gray-200">
+            {time && clock(s.start_ms) && (
+              <span className="mr-1.5 font-mono text-[11.5px] tabular-nums text-axal-faint dark:text-gray-400" data-testid={`seg-time-${s.id}`}>{clock(s.start_ms)}</span>
+            )}
+            {s.text}
+          </p>
         </li>
       ))}
     </ol>

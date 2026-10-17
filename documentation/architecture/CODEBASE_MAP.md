@@ -407,7 +407,9 @@ without a matching worker route — but the enforcement has a debt ledger.
 - Enforcer: **`scripts/check-api-drift.mjs`**. It statically resolves the worker
   route graph (following `app.route()` mounts and nested sub-mounts) and matches
   on `(METHOD, path)`, normalising Hono params and template interpolation to
-  `:p`. It additionally checks that every `c.json({…}, >=400)` carries an
+  `:p`. A mounted router a same-file factory builds (`const x = makeRoutes()`,
+  whose body declares `new Hono()`, as D690's `cycle_records.ts` does) is read
+  through the factory's local name (D695, #1656). It additionally checks that every `c.json({…}, >=400)` carries an
   `error` / `detail` / `message` key.
 - Baseline: **`scripts/api-drift-baseline.json`** records pre-existing drift so
   the gate fails only on *new* drift. Current contents: **58** `missing_route`

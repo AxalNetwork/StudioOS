@@ -27,6 +27,8 @@
  * different facts.
  */
 import type { Env, User } from '../types';
+import { logCycleWriteStatement } from './cycleActivity';
+import { ownsVenture, type ProjectRef } from '../routes/_founder_validate_helpers';
 
 /**
  * Pieces of evidence a decision must rest on before a verdict is given.
@@ -132,37 +134,22 @@ function evidenceKeys(raw: unknown): string[] {
 }
 
 /**
- * The activity row for a decision, as a statement for the decision's batch.
+ * The activity rows for a decision, as statements for the decision's batch,
+ * through `services/cycleActivity.ts`'s statement form (#1690, D-e).
  *
- * A LOCAL HELPER, replaced in #1703 by `services/cycleActivity.ts`'s
- * `logCycleWrite` statement form (#1690), which writes the same columns.
  * Logged only under `entity_type 'validate.verdict'`, never against the
  * hypothesis, because partners read a hypothesis's activity and never a
  * decision. The summary says the decision and its scope; it never carries
  * the reasoning or a commitment's text.
  *
  * The new decision's id is not known before the batch and the table has no
- * `uid`, so it is read back as `MAX(id)` for the venture inside the batch
- * (D1 runs a batch as one transaction).
+ * `uid`, so it is read back inside the batch (D1 runs a batch as one
+ * transaction): the recorded row names the venture's newest decision, and the
+ * superseded row names that decision's `supersedes_id`, written only when it
+ * is set, so a Withheld decision logs no superseded row.
  */
-function logRecorded(env: Env, user: User, projectId: number, summary: string) {
-  return env.DB.prepare(
-    `INSERT INTO activity_logs (project_id, user_id, action, details, actor, entity_type, entity_id)
-     VALUES (?, ?, 'validation_decision_recorded', ?, ?, 'validate.verdict',
-             (SELECT CAST(MAX(id) AS TEXT) FROM validation_decisions WHERE project_id = ?))`,
-  ).bind(projectId, user.id ?? null, summary, `user:${user.id}`, projectId);
-}
-
-/** The row on the decision the new one superseded, written only when it did. */
-function logSuperseded(env: Env, user: User, projectId: number, summary: string) {
-  return env.DB.prepare(
-    `INSERT INTO activity_logs (project_id, user_id, action, details, actor, entity_type, entity_id)
-     SELECT ?, ?, 'validation_decision_superseded', ?, ?, 'validate.verdict', CAST(d.supersedes_id AS TEXT)
-       FROM validation_decisions d
-      WHERE d.id = (SELECT MAX(id) FROM validation_decisions WHERE project_id = ?)
-        AND d.supersedes_id IS NOT NULL`,
-  ).bind(projectId, user.id ?? null, summary, `user:${user.id}`, projectId);
-}
+const verdictWrite = (user: User, projectId: number, action: string, summary: string) =>
+  ({ projectId, userId: user.id ?? null, cycle: 'validate' as const, module: 'verdict', action, summary });
 
 /**
  * Record a decision. Never edits or deletes one (D693 decision 4).
@@ -269,8 +256,16 @@ export async function recordDecision(
       it.date ?? null,
     ));
   }
-  stmts.push(logRecorded(env, user, projectId, recordedSummary));
-  if (state === 'given') stmts.push(logSuperseded(env, user, projectId, `Superseded by ${word}`));
+  stmts.push(logCycleWriteStatement(env, {
+    ...verdictWrite(user, projectId, 'validation_decision_recorded', recordedSummary),
+    readback: { table: 'validation_decisions', by: 'max' },
+  }));
+  if (state === 'given') {
+    stmts.push(logCycleWriteStatement(env, {
+      ...verdictWrite(user, projectId, 'validation_decision_superseded', `Superseded by ${word}`),
+      readback: { table: 'validation_decisions', by: 'supersedes' },
+    }));
+  }
 
   const out = await env.DB.batch(stmts);
   const row = ((out[0] as any)?.results?.[0] ?? null) as { id: number; supersedes_id: number | null } | null;
@@ -433,3 +428,96 @@ export async function decisionById(
  * at least the bar.
  */
 export const NO_EVIDENCE_REASON = 'Recorded on the earlier verdict page, which kept no evidence.';
+
+/**
+ * Whether a given decision of the same scope was recorded before this one,
+ * for the record's Supersedes fact (D693 decision 10): with none, "Nothing,
+ * the first for <scope>"; with one and no pointer, the old route never kept
+ * it, and the fact is Not recorded.
+ */
+export async function earlierGivenInScope(env: Env, projectId: number, decision: { id: number; hypothesis_id: number | null }): Promise<boolean> {
+  const row = await env.DB.prepare(
+    `SELECT 1 AS found FROM validation_decisions
+      WHERE project_id = ? AND hypothesis_id IS ? AND state = 'given' AND id < ? LIMIT 1`,
+  ).bind(projectId, decision.hypothesis_id, decision.id).first<{ found: number }>();
+  return !!row;
+}
+
+// ---------------------------------------------------------------------------
+// Commitments (D693 decision 8). Added and closed through the record's action
+// route; there is no commitments route of its own. A commitment's owner must
+// own the venture, so no other user's name is written.
+// ---------------------------------------------------------------------------
+
+export const MAX_COMMITMENT = 500;
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+export type CommitmentInput = { text?: unknown; owner_user_id?: unknown; due_date?: unknown };
+
+async function ventureOwner(env: Env, project: ProjectRef, raw: unknown): Promise<number> {
+  const id = typeof raw === 'number' ? raw : typeof raw === 'string' && /^[1-9][0-9]{0,9}$/.test(raw) ? Number(raw) : NaN;
+  if (!Number.isSafeInteger(id) || id < 1) throw new VerdictError(400, 'The owner must own this venture.');
+  const owner = await env.DB.prepare('SELECT id, role, founder_id, spinout_lab_active FROM users WHERE id = ? AND is_active = 1')
+    .bind(id).first<User>();
+  if (!owner || !ownsVenture(project, owner)) throw new VerdictError(400, 'The owner must own this venture.');
+  return id;
+}
+
+/**
+ * Add a commitment to one of the venture's decisions. The owner defaults to
+ * the caller when the caller owns the venture; an admin's commitment has no
+ * owner unless one is named. Logged on the decision, without its text.
+ */
+export async function addCommitment(
+  env: Env, user: User, project: ProjectRef, decisionId: number, input: CommitmentInput,
+): Promise<{ id: number }> {
+  const text = typeof input.text === 'string' ? input.text.replace(/\s+/g, ' ').trim() : '';
+  if (!text) throw new VerdictError(400, 'A commitment needs its text.');
+  if (text.length > MAX_COMMITMENT) throw new VerdictError(400, `A commitment must be ${MAX_COMMITMENT} characters or fewer.`);
+  const due = input.due_date === undefined || input.due_date === null || input.due_date === '' ? null : input.due_date;
+  if (due !== null && !(typeof due === 'string' && DATE_ONLY.test(due) && !Number.isNaN(Date.parse(`${due}T00:00:00Z`)))) {
+    throw new VerdictError(400, 'due_date must be a date (YYYY-MM-DD).');
+  }
+  const named = input.owner_user_id !== undefined && input.owner_user_id !== null && input.owner_user_id !== '';
+  const owner = named ? await ventureOwner(env, project, input.owner_user_id) : (ownsVenture(project, user) ? Number(user.id) : null);
+  const found = await env.DB.prepare('SELECT id FROM validation_decisions WHERE id = ? AND project_id = ?')
+    .bind(decisionId, project.id).first<{ id: number }>();
+  if (!found) throw new VerdictError(404, 'Record not found.');
+  const out = await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO validation_decision_commitments (uid, decision_id, project_id, text, owner_user_id, created_by, due_date)
+       VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+    ).bind(crypto.randomUUID(), decisionId, project.id, text, owner, user.id ?? null, due),
+    logCycleWriteStatement(env, { ...verdictWrite(user, project.id, 'validation_commitment_added', 'Added a commitment'), entityId: decisionId }),
+  ]);
+  return { id: Number((out[0] as any)?.results?.[0]?.id) };
+}
+
+/** The decision's commitments that are still open, for its done form. */
+export async function openCommitments(env: Env, projectId: number, decisionId: number): Promise<DecisionCommitmentRow[]> {
+  const res = await env.DB.prepare(
+    `SELECT c.id, c.uid, c.text, c.owner_user_id, u.name AS owner_name, c.created_by, c.due_date, c.done_at, c.created_at
+       FROM validation_decision_commitments c LEFT JOIN users u ON u.id = c.owner_user_id
+      WHERE c.decision_id = ? AND c.project_id = ? AND c.done_at IS NULL ORDER BY c.id`,
+  ).bind(decisionId, projectId).all<DecisionCommitmentRow>();
+  return res.results || [];
+}
+
+/** Mark one of this decision's open commitments done. Another decision's answers 404. */
+export async function completeCommitment(
+  env: Env, user: User, project: ProjectRef, decisionId: number, rawId: unknown,
+): Promise<void> {
+  const id = typeof rawId === 'number' ? rawId : typeof rawId === 'string' && /^[1-9][0-9]{0,9}$/.test(rawId) ? Number(rawId) : NaN;
+  if (!Number.isSafeInteger(id) || id < 1) throw new VerdictError(404, 'Commitment not found.');
+  const open = await env.DB.prepare(
+    'SELECT id FROM validation_decision_commitments WHERE id = ? AND decision_id = ? AND project_id = ? AND done_at IS NULL',
+  ).bind(id, decisionId, project.id).first<{ id: number }>();
+  if (!open) throw new VerdictError(404, 'Commitment not found.');
+  await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE validation_decision_commitments SET done_at = datetime('now'), updated_at = datetime('now')
+        WHERE id = ? AND decision_id = ? AND project_id = ? AND done_at IS NULL`,
+    ).bind(id, decisionId, project.id),
+    logCycleWriteStatement(env, { ...verdictWrite(user, project.id, 'validation_commitment_done', 'Marked a commitment done'), entityId: decisionId }),
+  ]);
+}
