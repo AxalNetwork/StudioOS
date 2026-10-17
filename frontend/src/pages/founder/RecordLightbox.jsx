@@ -50,7 +50,9 @@ const FIELD = 'w-full rounded-[9px] border border-axal-hairline bg-white px-3 py
 /**
  * A radio group of buttons: one tab stop, arrow keys move and choose. An
  * option may carry an `icon`, drawn before its label (D687 step 10: only the
- * Provider group passes one). A disabled chip dims its icon with it.
+ * Provider group passes one). A disabled chip dims its icon with it. Beside an
+ * icon the label is its own <span>, so a status change re-renders it as text
+ * content rather than as a bare sibling text node.
  */
 export function Radios({ label, options, value, onChange, className = 'flex flex-wrap gap-1.5', style = chip, testId }) {
   const enabled = options.filter((o) => !o.disabled);
@@ -72,7 +74,7 @@ export function Radios({ label, options, value, onChange, className = 'flex flex
           disabled={o.disabled} data-value={o.value} data-testid={testId ? `${testId}-${o.value}` : undefined}
           tabIndex={stop && stop.value === o.value ? 0 : -1} onKeyDown={onKey}
           onClick={() => !o.disabled && onChange(o.value)} className={`${style(o.value === value)}${o.icon ? ' inline-flex items-center gap-1.5' : ''}`} title={o.title}>
-          {o.icon}{o.label}
+          {o.icon}{o.icon ? <span>{o.label}</span> : o.label}
         </button>
       ))}
     </div>

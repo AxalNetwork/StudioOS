@@ -350,10 +350,10 @@ test('step 10. Record a session\'s Provider chips draw the bare 16px mark before
     options: chips.map((k) => ({ value: k, label: `${k} · Ready`, disabled: k === 'slack',
       icon: h(BrandIcon, { provider: k, size: 16, variant: 'bare', fallback: 'none' }) })) }));
   for (const k of ['zoom', 'google_meet', 'slack', 'linkedin']) {
-    assert.match(out, new RegExp(`data-testid="p-${k}"[^>]*>(<span[^>]*>)?<svg[^>]*width="16"[^>]*data-provider="${k}"[\\s\\S]*?${k} · Ready</button>`), `${k}: the mark, then its label`);
+    assert.match(out, new RegExp(`data-testid="p-${k}"[^>]*>(<span[^>]*>)?<svg[^>]*width="16"[^>]*data-provider="${k}"[\\s\\S]*?<span>${k} · Ready</span></button>`), `${k}: the mark, then its label`);
   }
   for (const k of ['teams', 'phone_speaker', 'paste']) {
-    assert.match(out, new RegExp(`data-testid="p-${k}"[^>]*>${k} · Ready</button>`), `${k}: text only (fallback none)`);
+    assert.match(out, new RegExp(`data-testid="p-${k}"[^>]*><span>${k} · Ready</span></button>`), `${k}: text only (fallback none)`);
   }
   // A disabled chip dims its mark with it: the mark sits inside the chip that carries disabled:opacity-50.
   const slack = out.match(/<button[^>]*data-testid="p-slack"[^>]*>[\s\S]*?<\/button>/)[0];
@@ -363,7 +363,7 @@ test('step 10. Record a session\'s Provider chips draw the bare 16px mark before
   assert.match(out, /disabled:opacity-50[^"]* inline-flex items-center gap-1\.5/, 'the chip lays its mark out inline');
   // Radios without icons renders exactly as before.
   const plain = html(h(Radios, { label: 'How', value: 'a', onChange() {}, options: [{ value: 'a', label: 'A' }] }));
-  assert.doesNotMatch(plain, /inline-flex|<svg/);
+  assert.doesNotMatch(plain, /inline-flex|<svg|<span>/);
 });
 
 // ── 11. One copy of every mark ──────────────────────────────────────────────
