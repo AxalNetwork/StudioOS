@@ -455,6 +455,12 @@ test('5: the default sort applies when none is sent, and two filters joined as t
   assert.deepEqual(fb.records.filters.find((x: any) => x.key === 'theme').options.map((o: any) => o.value), ['Exports', 'Sync']);
   const newest = (await list(f, 'product-improvement')).body.records.rows.map((r: any) => r.body);
   assert.equal(newest.length, 3);
+  // KPIs read in the canvas's order (MRR first, custom KPIs last); the default sort, Period, puts the latest first.
+  await grow(f, FOUNDER, 'POST', '/kpis', { kpi: 'mrr', value: 100, as_of: day(-70) });
+  await grow(f, FOUNDER, 'POST', '/kpis', { kpi: 'custom', label: 'Signups', value: 4, as_of: day(-1) });
+  const kpis = (await list(f, 'revenue-and-traction')).body.records.rows;
+  assert.equal(kpis[0].kpi, 'Signups', 'the latest period first, when no sort is sent');
+  assert.equal((await list(f, 'revenue-and-traction', '&sort=kpi')).body.records.rows[0].kpi, 'Burn', 'a sent sort still wins');
 });
 
 test('5: Revenue and traction lists Burn, Runway and each custom KPI, Not recorded until it has a value; MRR reads Stripe from the last 35 days', async () => {
