@@ -9,14 +9,27 @@
 export const AXAL_LEGAL_ADDRESS = '16192 Coastal Highway, Lewes, Delaware 19958';
 export const AXAL_LEGAL_EMAIL = 'legal@axal.vc';
 export const AXAL_SIGNATORY_NAME = 'Joseph Gabriel Guillaume Lauzier';
+// Management's title; the graduation certificate signs as Management. D705:
+// every other party carries its own `signatoryTitle` (see the worker file).
 export const AXAL_SIGNATORY_TITLE = 'Managing Partner';
 
 export const AXAL_ENTITIES = {
-  management: { key: 'management', name: 'Axal VC Management LLC', descriptor: 'a Delaware limited liability company' },
-  holdings: { key: 'holdings', name: 'Axal VC Holdings LLC', descriptor: 'a Delaware limited liability company' },
-  gp: { key: 'gp', name: 'Axal VC GP LLC', descriptor: 'a Delaware limited liability company' },
-  fund: { key: 'fund', name: 'Axal VC Fund I, LP', descriptor: 'a Delaware limited partnership, acting by its general partner Axal VC GP LLC' },
+  management: { key: 'management', name: 'Axal VC Management LLC', descriptor: 'a Delaware limited liability company', signatoryTitle: 'Managing Partner' },
+  holdings: { key: 'holdings', name: 'Axal VC Holdings LLC', descriptor: 'a Delaware limited liability company', signatoryTitle: 'Managing Partner' },
+  gp: { key: 'gp', name: 'Axal VC GP LLC', descriptor: 'a Delaware limited liability company', signatoryTitle: 'General Partner' },
+  fund: {
+    key: 'fund', name: 'Axal VC Spin-Out Lab Fund I LP',
+    descriptor: 'a Delaware limited partnership, acting by its general partner Axal VC GP LLC',
+    signatoryTitle: 'General Partner', through: 'By: Axal VC GP LLC, its general partner',
+  },
 };
+
+// D705 — the Fund signs these, through its general partner (see the worker file).
+const FUND_SIGNS_D705 = new Set([
+  'subscription', 'investor_subscription_pro', 'investor_subscription_inst', 'subscription booklet & lpa',
+  'co-investment side letter',
+  'safe', 'term_sheet', 'spa', 'voting_rights',
+]);
 
 // D706 — the Fund I catalog entries, routed by name (see the worker file).
 const FUND_PARTY_SLUGS_D706 = new Set([
@@ -33,14 +46,13 @@ export function axalEntityKeyForDoc(slugOrType, category) {
   const s = String(slugOrType || '').toLowerCase();
   if (FUND_PARTY_SLUGS_D706.has(s)) return 'fund';
   if (GP_PARTY_SLUGS_D706.has(s)) return 'gp';
-  const fundEntityDocs = new Set([
-    'subscription booklet & lpa', 'spv joinder agreement', 'co-investment side letter',
-    'strategic side letter / focused spv', 'lpa', 'ppm', 'subscription',
-    'mgmt_company', 'investor_subscription_pro', 'investor_subscription_inst',
-    'accreditation_v1', 'investor_nda_axal', 'carried_interest',
-    'safe', 'term_sheet', 'spa', 'voting_rights', 'secondary purchase agreement',
+  if (FUND_SIGNS_D705.has(s)) return 'fund';
+  const gpEntityDocs = new Set([
+    'spv joinder agreement', 'strategic side letter / focused spv', 'lpa', 'ppm',
+    'mgmt_company', 'accreditation_v1', 'investor_nda_axal', 'carried_interest',
+    'secondary purchase agreement',
   ]);
-  if (fundEntityDocs.has(s) || /\b(lpa|ppm|subscription|side letter|spv|fund)\b/.test(s)) return 'gp';
+  if (gpEntityDocs.has(s) || /\b(lpa|ppm|subscription|side letter|spv|fund)\b/.test(s)) return 'gp';
   const holdingsDocs = new Set(['ip_license', 'ip_background_schedule']);
   if (holdingsDocs.has(s) || /\b(trademark|brand[\s_-]?ip|domain)\b/.test(s)) return 'holdings';
   return 'management';
@@ -168,16 +180,18 @@ const BLANK_SIG = 'By: ___________________________';
 
 export function buildExecutionBlock(opts) {
   const kind = opts.kind || 'agreement';
-  const axalName = (opts.axalEntityName || '').trim() || AXAL_ENTITIES.management.name;
+  const ent = AXAL_ENTITIES[opts.axalEntityKey || 'management'] || AXAL_ENTITIES.management;
+  const axalName = (opts.axalEntityName || '').trim() || ent.name;
   const cpName = (opts.counterpartyName || '').trim();
   const cpDate = (opts.signedDate || '').trim();
 
   const axalParty = {
     role: 'axal',
     heading: axalName,
+    ...(ent.through ? { through: ent.through } : {}),
     by: BLANK_SIG,
     name: `Name: ${AXAL_SIGNATORY_NAME}`,
-    title: `Title: ${AXAL_SIGNATORY_TITLE}`,
+    title: `Title: ${ent.signatoryTitle}`,
     date: cpDate ? `Date: ${cpDate}` : 'Date: ___________________________',
     isSigner: kind === 'resolution',
   };

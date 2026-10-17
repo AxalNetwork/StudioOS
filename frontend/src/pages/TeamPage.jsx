@@ -99,7 +99,7 @@ export default function TeamPage() {
               <p className="mt-4 text-sm leading-relaxed text-slate-600 dark:text-slate-400">
                 The platform is operated by Axal VC Management LLC, a Delaware company.
                 Axal VC Holdings LLC owns the brand and platform intellectual property.
-                Axal VC GP LLC is the general partner of Axal VC Fund I, LP.
+                Axal VC GP LLC is the general partner of Axal VC Spin-Out Lab Fund I LP.
               </p>
               <Link to="/privacy" className="mt-4 inline-block text-sm font-medium text-violet-700 dark:text-violet-300 hover:underline">
                 How the entities handle your information

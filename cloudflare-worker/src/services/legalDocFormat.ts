@@ -30,6 +30,11 @@
 export const AXAL_LEGAL_ADDRESS = '16192 Coastal Highway, Lewes, Delaware 19958';
 export const AXAL_LEGAL_EMAIL = 'legal@axal.vc';
 export const AXAL_SIGNATORY_NAME = 'Joseph Gabriel Guillaume Lauzier';
+/**
+ * Management's signatory title. Kept exported with this value because the
+ * graduation certificate signs as Management (`lib/graduationCertificate.js`).
+ * D705: every other Axal party carries its own `signatoryTitle` below.
+ */
 export const AXAL_SIGNATORY_TITLE = 'Managing Partner';
 
 export type AxalEntityKey = 'management' | 'holdings' | 'gp' | 'fund';
@@ -39,6 +44,10 @@ interface AxalEntity {
   name: string;
   /** Phrase that follows the name in the preamble (legal form + form state). */
   descriptor: string;
+  /** D705 — the title the owner signs under for this party. */
+  signatoryTitle: string;
+  /** D705 — the capacity line for a party that signs through another (the Fund, through its GP). */
+  through?: string;
 }
 
 export const AXAL_ENTITIES: Record<AxalEntityKey, AxalEntity> = {
@@ -46,28 +55,38 @@ export const AXAL_ENTITIES: Record<AxalEntityKey, AxalEntity> = {
     key: 'management',
     name: 'Axal VC Management LLC',
     descriptor: 'a Delaware limited liability company',
+    signatoryTitle: 'Managing Partner',
   },
   holdings: {
     key: 'holdings',
     name: 'Axal VC Holdings LLC',
     descriptor: 'a Delaware limited liability company',
+    // Until the owner gives Holdings another title (D705 decision 2).
+    signatoryTitle: 'Managing Partner',
   },
   gp: {
     key: 'gp',
     name: 'Axal VC GP LLC',
     descriptor: 'a Delaware limited liability company',
+    signatoryTitle: 'General Partner',
   },
   fund: {
     key: 'fund',
-    name: 'Axal VC Fund I, LP',
+    // D705 — the legal name, as the owner gave it on 2026-10-17. If the
+    // Certificate of Limited Partnership reads differently, the certificate wins.
+    name: 'Axal VC Spin-Out Lab Fund I LP',
     descriptor: 'a Delaware limited partnership, acting by its general partner Axal VC GP LLC',
+    signatoryTitle: 'General Partner',
+    through: 'By: Axal VC GP LLC, its general partner',
   },
 };
 
 /**
  * Pick the Axal entity that signs a given document, per the routing rules in
  * documentation/architecture/LEGAL_ENTITIES.md:
- *   - Fund formation / LP capital docs  -> GP LLC (as GP of the Fund)
+ *   - The LP's subscription, its side letter, and the instruments the Fund
+ *     invests through -> the Fund, signing through its GP (D705)
+ *   - Other fund formation / LP capital docs -> GP LLC (as GP of the Fund)
  *   - Brand / platform IP ownership     -> Holdings LLC
  *   - Everything operational (default)  -> Management LLC
  * `slugOrType` is the template slug or doc_type; `category` is the store
@@ -87,20 +106,27 @@ const GP_PARTY_SLUGS_D706 = new Set([
   'gp_fund_formation_consent', 'carried_interest_award_letter',
 ]);
 
+// D705 — the LP's subscription, its side letter, and the instruments the Fund
+// invests through. Counsel confirms this before any of them goes to an LP.
+const FUND_SIGNS_D705 = new Set([
+  'subscription', 'investor_subscription_pro', 'investor_subscription_inst', 'subscription booklet & lpa',
+  'co-investment side letter',
+  'safe', 'term_sheet', 'spa', 'voting_rights',
+]);
+
 export function axalEntityKeyForDoc(slugOrType: string, category?: string | null): AxalEntityKey {
   const s = String(slugOrType || '').toLowerCase();
   if (FUND_PARTY_SLUGS_D706.has(s)) return 'fund';
   if (GP_PARTY_SLUGS_D706.has(s)) return 'gp';
-  // Fund-level docs + portfolio investment instruments: the Axal party is the
-  // Fund, signing through its general partner Axal VC GP LLC.
-  const fundEntityDocs = new Set([
-    'subscription booklet & lpa', 'spv joinder agreement', 'co-investment side letter',
-    'strategic side letter / focused spv', 'lpa', 'ppm', 'subscription',
-    'mgmt_company', 'investor_subscription_pro', 'investor_subscription_inst',
-    'accreditation_v1', 'investor_nda_axal', 'carried_interest',
-    'safe', 'term_sheet', 'spa', 'voting_rights', 'secondary purchase agreement',
+  // D705 — the Fund is the party, signing through its general partner.
+  if (FUND_SIGNS_D705.has(s)) return 'fund';
+  // Other fund-level docs: the GP, as general partner of the Fund.
+  const gpEntityDocs = new Set([
+    'spv joinder agreement', 'strategic side letter / focused spv', 'lpa', 'ppm',
+    'mgmt_company', 'accreditation_v1', 'investor_nda_axal', 'carried_interest',
+    'secondary purchase agreement',
   ]);
-  if (fundEntityDocs.has(s) || /\b(lpa|ppm|subscription|side letter|spv|fund)\b/.test(s)) {
+  if (gpEntityDocs.has(s) || /\b(lpa|ppm|subscription|side letter|spv|fund)\b/.test(s)) {
     return 'gp';
   }
   const holdingsDocs = new Set(['ip_license', 'ip_background_schedule']);
@@ -323,6 +349,8 @@ export interface SignatureParty {
   role: SignatureRole;
   /** Legal name of the contracting party (the heading of the block). */
   heading: string;
+  /** D705 — the capacity line under the heading, for a party that signs through another. */
+  through?: string;
   by: string;
   name: string;
   title: string;
@@ -338,6 +366,8 @@ export interface ExecutionBlock {
 
 export interface ExecutionOptions {
   kind?: DocumentKind;
+  /** D705 — the Axal party, which sets its title and any `through` line. Management when absent. */
+  axalEntityKey?: AxalEntityKey;
   axalEntityName?: string | null;
   /** Filled signer name for a completed counterparty signature (else blank). */
   counterpartyName?: string | null;
@@ -356,16 +386,18 @@ const BLANK_SIG = 'By: ___________________________';
  */
 export function buildExecutionBlock(opts: ExecutionOptions): ExecutionBlock {
   const kind = opts.kind || 'agreement';
-  const axalName = (opts.axalEntityName || '').trim() || AXAL_ENTITIES.management.name;
+  const ent = AXAL_ENTITIES[opts.axalEntityKey || 'management'] || AXAL_ENTITIES.management;
+  const axalName = (opts.axalEntityName || '').trim() || ent.name;
   const cpName = (opts.counterpartyName || '').trim();
   const cpDate = (opts.signedDate || '').trim();
 
   const axalParty: SignatureParty = {
     role: 'axal',
     heading: axalName,
+    ...(ent.through ? { through: ent.through } : {}),
     by: BLANK_SIG,
     name: `Name: ${AXAL_SIGNATORY_NAME}`,
-    title: `Title: ${AXAL_SIGNATORY_TITLE}`,
+    title: `Title: ${ent.signatoryTitle}`,
     date: cpDate ? `Date: ${cpDate}` : 'Date: ___________________________',
     isSigner: kind === 'resolution',
   };

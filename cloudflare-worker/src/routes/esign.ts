@@ -206,19 +206,17 @@ interface AgreementTemplate {
 // trail is meaningful from day one.
 function buildTemplateBody(agreementType: string, recipientName: string, recipientEmail: string): AgreementTemplate {
   // Operating contracts (platform terms, partner, vendor, advisor, etc.) are
-  // signed by Axal VC Management LLC. Fund subscription documents (LPA,
-  // subscription booklets, side letters) substitute "Axal VC GP LLC, the
-  // general partner of Axal VC Fund I, LP" below — see the Subscription
-  // Booklet & LPA entry in the template library.
-  const fundEntityAgreements = new Set([
-    'Subscription Booklet & LPA',
-    'SPV Joinder Agreement',
-    'Co-Investment Side Letter',
-    'Strategic Side Letter / Focused SPV',
-  ]);
-  const axalSignerName = fundEntityAgreements.has(agreementType)
-    ? 'Axal VC GP LLC, as general partner of Axal VC Fund I, LP ("Axal")'
-    : 'Axal VC Management LLC ("Axal")';
+  // signed by Axal VC Management LLC. D705: the LP's subscription and its
+  // co-investment side letter are the Fund's, acting by its general partner;
+  // the SPV joinder and the strategic side letter are the GP's, as general
+  // partner of the Fund (legalDocFormat.ts `axalEntityKeyForDoc`).
+  const fundAgreements = new Set(['Subscription Booklet & LPA', 'Co-Investment Side Letter']);
+  const gpAgreements = new Set(['SPV Joinder Agreement', 'Strategic Side Letter / Focused SPV']);
+  const axalSignerName = fundAgreements.has(agreementType)
+    ? 'Axal VC Spin-Out Lab Fund I LP, a Delaware limited partnership acting by its general partner Axal VC GP LLC ("Axal")'
+    : gpAgreements.has(agreementType)
+      ? 'Axal VC GP LLC, as general partner of Axal VC Spin-Out Lab Fund I LP ("Axal")'
+      : 'Axal VC Management LLC ("Axal")';
   const intro = `This Agreement is entered into between ${axalSignerName} and ${recipientName || recipientEmail} ("Counterparty"), effective on the date of electronic signature appearing below.\n\n`;
   const closer = `\n\n---\n\nBy signing electronically below, the parties acknowledge that they have read and agree to the terms set forth in this Agreement and that an electronic signature has the same legal effect as a handwritten signature under the U.S. Electronic Signatures in Global and National Commerce Act (E-SIGN, 15 U.S.C. § 7001 et seq.) and the Uniform Electronic Transactions Act (UETA).`;
   const lib: Record<string, AgreementTemplate> = {

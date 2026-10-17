@@ -4,7 +4,7 @@
 
 Internal codename: Axal StudioOS. Operated by **Axal VC Management LLC**
 (Delaware). Brand and platform IP owned by **Axal VC Holdings LLC**
-(Delaware). **Axal VC Fund I, LP** (Delaware) is managed by **Axal VC
+(Delaware). **Axal VC Spin-Out Lab Fund I LP** (Delaware) is managed by **Axal VC
 GP LLC** (Delaware) — the GP signs no platform contracts and is not the
 operating entity. See [`documentation/architecture/LEGAL_ENTITIES.md`](./LEGAL_ENTITIES.md) for the
 canonical entity map.

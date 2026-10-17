@@ -7,12 +7,18 @@ the document/code to match.
 
 ## The four entities
 
-| Entity                    | Type | Jurisdiction | Role                                                                                              |
-| ------------------------- | ---- | ------------ | ------------------------------------------------------------------------------------------------- |
-| **Axal VC Holdings LLC**  | LLC  | Delaware     | Passive holding company. Owns IP, brand, domains, subsidiaries, treasury.                         |
-| **Axal VC Management LLC**| LLC  | Delaware     | Operating company. Operates the platform, signs platform/customer/vendor/employment contracts.     |
-| **Axal VC GP LLC**        | LLC  | Delaware     | General Partner of Axal VC Fund I, LP. Manages the Fund, makes investment decisions.              |
-| **Axal VC Fund I, LP**    | LP   | Delaware     | The Fund itself. Limited partnership pooling LP capital; managed exclusively by Axal VC GP LLC.   |
+| Entity                    | Type | Jurisdiction | Role                                                                                              | Signatory (D705)                                   |
+| ------------------------- | ---- | ------------ | ------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| **Axal VC Holdings LLC**  | LLC  | Delaware     | Passive holding company. Owns IP, brand, domains, subsidiaries, treasury.                         | Managing Partner, until the owner gives another   |
+| **Axal VC Management LLC**| LLC  | Delaware     | Operating company. Operates the platform, signs platform/customer/vendor/employment contracts.     | Managing Partner                                   |
+| **Axal VC GP LLC**        | LLC  | Delaware     | General Partner of Axal VC Spin-Out Lab Fund I LP. Manages the Fund, makes investment decisions.  | General Partner                                    |
+| **Axal VC Spin-Out Lab Fund I LP** | LP | Delaware | The Fund itself. Limited partnership pooling LP capital; managed exclusively by Axal VC GP LLC.   | General Partner, signing "By: Axal VC GP LLC, its general partner" |
+
+The Fund's legal name is **Axal VC Spin-Out Lab Fund I LP**, as the owner gave
+it on 2026-10-17 (D705). If the Certificate of Limited Partnership on file reads
+differently, the certificate wins. Both LLCs the owner signs for are at 16192
+Coastal Hwy, Lewes, DE 19958, United States. The `vc_funds` row's display name
+("Spin-Out Fund I") is an admin-editable label, not the legal name.
 
 ## Under Axal VC Holdings LLC
 
@@ -47,7 +53,7 @@ Operating / active business layer. Belongs here:
 
 ## Axal VC GP LLC role
 
-- General Partner of Axal VC Fund I, LP.
+- General Partner of Axal VC Spin-Out Lab Fund I LP.
 - Authority to manage the Fund, make investment decisions, approve exits,
   and oversee fund governance.
 - Carries the fiduciary responsibility to act in the best interest of
@@ -97,13 +103,22 @@ Operating / active business layer. Belongs here:
    (trademark assignment, brand-IP licence, domain transfer, platform
    source-code assignment) → **Axal VC Holdings LLC** is the owner /
    counterparty.
-3. If the agreement governs **investment in Axal VC Fund I, LP** (LPA,
-   subscription booklet, side letters, capital calls, distributions) →
-   **Axal VC GP LLC** (as GP of the Fund) is the counterparty.
+3. If the agreement is an **LP's subscription to Axal VC Spin-Out Lab Fund I
+   LP** or that LP's co-investment side letter → **the Fund** is the party,
+   signing through its general partner Axal VC GP LLC ("By: Axal VC GP LLC,
+   its general partner"; Title: General Partner). Other fund formation and
+   governance documents (LPA, PPM, SPV joinder, strategic side letter,
+   capital calls, distributions, carried interest) → **Axal VC GP LLC**, as
+   general partner of the Fund.
 4. If the agreement is for **investment in a portfolio company** (SAFE,
-   term sheet, SPA), the counterparty is the **portfolio company
-   itself**, with the Fund (or an SPV) as investor — not any of the
-   Axal VC management/holding/GP entities directly.
+   term sheet, SPA, voting rights), the counterparty is the **portfolio
+   company itself**, with **the Fund** (or an SPV) as investor, signing
+   through its general partner — not any of the Axal VC management or
+   holding entities directly.
+
+The routing lives in `axalEntityKeyForDoc` (both `legalDocFormat` files).
+Counsel confirms rules 3 and 4 before any of these documents is sent to an
+LP (D705).
 
 When adding a new legal document or contract type, update this file and
 the entity-constant map in `frontend/src/brand/gvpn.ts` together.

@@ -106,7 +106,7 @@ const FAQS = [
   },
   {
     q: 'Is this an SEC-registered fund?',
-    a: 'Axal VC GP LLC manages Axal VC Fund I, LP as a private fund under applicable exemptions. We comply with all relevant securities regulations. Full regulatory documentation is available during due diligence.',
+    a: 'Axal VC GP LLC manages Axal VC Spin-Out Lab Fund I LP as a private fund under applicable exemptions. We comply with all relevant securities regulations. Full regulatory documentation is available during due diligence.',
   },
   {
     q: 'How do co-investments work?',
