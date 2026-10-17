@@ -327,6 +327,7 @@ section.certificate table td { font-size: 9pt; }
 .cover-dark .legend { border-color: ${C.coverDarkInk}; }
 .cover-dark .fill { border-bottom-color: ${C.coverDarkInk}; }
 section.contents { break-after: page; }
+section.contents.last { break-after: auto; }
 section.contents ol { list-style: none; padding: 0; margin: 0; }
 section.contents li { display: flex; align-items: baseline; gap: 4pt; margin: 0 0 5pt; }
 section.contents .leader { flex: 1; border-bottom: 1pt dotted ${C.faint}; }

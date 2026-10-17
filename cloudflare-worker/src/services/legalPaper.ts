@@ -446,12 +446,12 @@ function coverHtml(m: PaperModel, cover: PaperCover): string {
     + '</div></section>';
 }
 
-function contentsHtml(m: PaperModel, pages: (number | null)[] | null): string {
+function contentsHtml(m: PaperModel, pages: (number | null)[] | null, last = false): string {
   const items = m.articles.map((a, i) => {
     const pg = pages && pages[i] != null ? `<span class="pg">${pages[i]}</span>` : '';
     return `<li><span>${escapeHtml(a.text)}</span>${pg ? '<span class="leader"></span>' + pg : ''}</li>`;
   }).join('');
-  return `<section class="contents"><div class="eyebrow">Contents</div><h1 class="title">${escapeHtml(m.title)}</h1><ol>${items}</ol></section>`;
+  return `<section class="contents${last ? ' last' : ''}"><div class="eyebrow">Contents</div><h1 class="title">${escapeHtml(m.title)}</h1><ol>${items}</ol></section>`;
 }
 
 function certificateHtml(m: PaperModel): string {
@@ -504,7 +504,7 @@ export function paperHtml(m: PaperModel, o: PaperHtmlOptions): string {
   const parts: string[] = [];
   if (part !== 'body' && m.cover) {
     parts.push(coverHtml(m, cover));
-    parts.push(contentsHtml(m, screen ? null : (o.tocPages ?? null)));
+    parts.push(contentsHtml(m, screen ? null : (o.tocPages ?? null), part === 'front'));
   }
   if (part !== 'front') {
     parts.push(stateHtml(m.state));
