@@ -37,15 +37,24 @@ const FUND_PARTY_SLUGS_D706 = new Set([
   'clawback_guarantee', 'management_rights_letter', 'pro_rata_information_rights_side_letter',
 ]);
 const GP_PARTY_SLUGS_D706 = new Set([
-  'lpa_amended_restated', 'lpa_initial', 'gp_closing_certificate', 'capital_call_notice',
-  'distribution_notice', 'default_notice', 'lpac_charter', 'gp_llc_agreement',
+  'lpa_amended_restated', 'lpa_initial', 'gp_closing_certificate', 'lpac_charter', 'gp_llc_agreement',
   'gp_fund_formation_consent', 'carried_interest_award_letter',
 ]);
+
+// D716 — the notices and the Subscription Booklet (see the worker file).
+const FUND_PARTY_SLUGS_D716 = new Set([
+  'capital_call_notice', 'distribution_notice', 'default_notice', 'management_fee_statement', 'subscription_booklet',
+]);
+const GP_PARTY_SLUGS_D716 = new Set(['management_fee_invoice']);
+const HOLDINGS_PARTY_SLUGS_D716 = new Set(['platform_licence_fee_invoice']);
 
 export function axalEntityKeyForDoc(slugOrType, category) {
   const s = String(slugOrType || '').toLowerCase();
   if (FUND_PARTY_SLUGS_D706.has(s)) return 'fund';
   if (GP_PARTY_SLUGS_D706.has(s)) return 'gp';
+  if (FUND_PARTY_SLUGS_D716.has(s)) return 'fund';
+  if (GP_PARTY_SLUGS_D716.has(s)) return 'gp';
+  if (HOLDINGS_PARTY_SLUGS_D716.has(s)) return 'holdings';
   if (FUND_SIGNS_D705.has(s)) return 'fund';
   const gpEntityDocs = new Set([
     'spv joinder agreement', 'strategic side letter / focused spv', 'lpa', 'ppm',
@@ -58,11 +67,20 @@ export function axalEntityKeyForDoc(slugOrType, category) {
   return 'management';
 }
 
+// D716 — the seven notice types and the packet (see the worker file).
+const NOTICE_SLUGS = new Set([
+  'capital_call_notice', 'distribution_notice', 'default_notice', 'management_fee_statement',
+  'management_fee_invoice', 'platform_licence_fee_invoice', 'payment_instructions_letter',
+]);
+const BOOKLET_SLUGS = new Set(['subscription_booklet']);
+
 const POLICY_SLUGS = new Set([
   'tos_v1', 'privacy_v1', 'aml_kyc', 'form_adv',
   // D706 (Fund I catalog)
   'compliance_manual_code_of_ethics', 'investor_privacy_notice_reg_sp', 'valuation_policy',
   'conflicts_allocation_policy',
+  // D716 — the booklet cover's legend (migration 478)
+  'securities_legend',
 ]);
 const UNILATERAL_SLUGS = new Set([
   'section_83b', 'accreditation_v1', 'ein_application_kit', 'sg_acra_form_45_kit',
@@ -76,8 +94,7 @@ const UNILATERAL_SLUGS = new Set([
 const RESOLUTION_SLUGS = new Set([
   'ic_charter',
   // D706 (Fund I catalog)
-  'gp_closing_certificate', 'capital_call_notice', 'distribution_notice', 'default_notice',
-  'lpac_charter', 'gp_fund_formation_consent',
+  'gp_closing_certificate', 'lpac_charter', 'gp_fund_formation_consent',
 ]);
 const CORPORATE_SLUGS = new Set([
   'certificate_of_incorporation_de', 'bylaws', 'uk_articles_of_association',
@@ -89,6 +106,8 @@ const CORPORATE_SLUGS = new Set([
 
 export function classifyDocument(slugOrType) {
   const s = String(slugOrType || '').toLowerCase();
+  if (NOTICE_SLUGS.has(s)) return 'notice';
+  if (BOOKLET_SLUGS.has(s)) return 'booklet';
   if (POLICY_SLUGS.has(s)) return 'policy';
   if (UNILATERAL_SLUGS.has(s)) return 'unilateral';
   if (RESOLUTION_SLUGS.has(s)) return 'resolution';
@@ -176,6 +195,15 @@ export function buildPreamble(opts) {
   );
 }
 
+// D716 — a notice's addressee lines (see the worker file).
+export function buildAddresseeBlock(opts) {
+  const to = (opts.to || '').trim() || '[Addressee]';
+  const lp = opts.lpNumber == null ? '' : String(opts.lpNumber).trim();
+  if (lp) return [`To: ${to}`, `Limited partner no. L${lp}`];
+  if (opts.from && AXAL_ENTITIES[opts.from]) return [`From: ${AXAL_ENTITIES[opts.from].name}, ${AXAL_LEGAL_ADDRESS}`, `To: ${to}`];
+  return [`To: ${to}`];
+}
+
 const BLANK_SIG = 'By: ___________________________';
 
 export function buildExecutionBlock(opts) {
@@ -208,6 +236,9 @@ export function buildExecutionBlock(opts) {
   if (kind === 'resolution') {
     return { recital: 'The undersigned, being duly authorized, executes this instrument as of the date written below.', parties: [axalParty] };
   }
+  // D716 — a notice is issued, not signed; the booklet's blocks are per part.
+  if (kind === 'notice') return { recital: '', parties: [{ ...axalParty, by: '', isSigner: false }] };
+  if (kind === 'booklet') return { recital: '', parties: [] };
   if (kind === 'unilateral') {
     return { recital: 'IN WITNESS WHEREOF, the undersigned has executed this instrument as of the date written below.', parties: [counterparty] };
   }
@@ -231,3 +262,16 @@ export function buildExecutionBlock(opts) {
     parties: [axalParty, counterparty],
   };
 }
+
+// D716 — the booklet's nine parts, in order (see the worker file).
+export const SUBSCRIPTION_BOOKLET_PARTS = [
+  { part: 1, title: 'Cover', slug: 'securities_legend', block: null },
+  { part: 2, title: 'Instructions and Checklist', slug: null, block: null },
+  { part: 3, title: 'Subscription Agreement', slug: 'subscription', block: { kind: 'agreement', axalEntityKey: 'fund' } },
+  { part: 4, title: 'Investor Questionnaire', slug: 'lp_investor_questionnaire', block: { kind: 'unilateral' } },
+  { part: 5, title: 'AML/KYC and Beneficial Ownership Certification', slug: 'lp_aml_kyc_certification', block: { kind: 'unilateral' } },
+  { part: 6, title: 'Tax Status Certification', slug: 'lp_tax_status_certification', block: { kind: 'unilateral' } },
+  { part: 7, title: 'Electronic Delivery Consent', slug: 'lp_electronic_delivery_consent', block: { kind: 'unilateral' } },
+  { part: 8, title: 'Signature Pages', slug: 'lpa_amended_restated', block: { kind: 'unilateral' } },
+  { part: 9, title: 'Acceptance by the General Partner', slug: 'gp_closing_certificate', block: { kind: 'resolution', axalEntityKey: 'fund' } },
+];
