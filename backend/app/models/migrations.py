@@ -1786,7 +1786,7 @@ def ensure_calendar_tables() -> None:
             """))
             session.commit()
         except Exception as exc:  # noqa: BLE001
-            logger.warning("ensure_calendar_tables: google_oauth_tokens: %s", exc)
+            logger.warning("ensure_calendar_tables: google_oauth_tokens: %s", exc)  # nosemgrep: python.lang.security.audit.logging.logger-credential-leak.python-logger-credential-disclosure -- "tokens" is the table's name; exc is a CREATE TABLE error with no bound parameters, so no token value can reach the log
             session.rollback()
 
         try:
