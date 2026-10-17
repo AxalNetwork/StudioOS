@@ -3,7 +3,8 @@
  * contract) and the writes for the records migration 442 added.
  *
  *   GET /overview?project=:pid
- *     → { cycle, question, figures: [Figure ×4], cards: [Card ×7] }
+ *     → { cycle, question, figures: [Figure ×4], cards: [Card ×7], focus, meter, index }
+ *       (D692: the phone's parts, in the shape all four cycles share; services/cycleFocus.ts)
  *   GET /modules/:slug?project=:pid&q=&filter=&sort=&page=
  *     → { module: { slug, name, records_title }, card: Card,
  *         records: { cols, rows, total, page, page_size, filters?, sorts?, add? } }
@@ -34,6 +35,7 @@ import { CYCLE, QUESTION, MODULES, CARD_FOR, RECORDS_FOR, figures, cards, callsH
 import {
   WriterError, scoreReadinessItem, rescoreReadiness, saveNarrativeVersion, setFileChecklistItem, setProspectNextStep,
 } from '../services/raiseWriters';
+import { raisePhone } from '../services/cycleFocus';
 
 const cycleRaise = new Hono<{ Bindings: Env }>();
 
@@ -81,7 +83,7 @@ cycleRaise.get('/overview', async (c) => {
   if (s instanceof Response) return s;
   const ctx = ctxOf(c, s.projectId);
   const [figs, cs] = await Promise.all([figures(ctx), cards(ctx)]);
-  return c.json({ cycle: CYCLE, question: QUESTION, figures: figs, cards: cs });
+  return c.json({ cycle: CYCLE, question: QUESTION, figures: figs, cards: cs, ...(await raisePhone(ctx, figs, cs)) });
 });
 
 cycleRaise.get('/modules/:slug', async (c) => {

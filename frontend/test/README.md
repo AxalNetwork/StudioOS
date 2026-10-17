@@ -59,4 +59,7 @@ extensionless or directory import in a mutated source as the loader hook does.
 mounts the real `CycleRoute` (the Worker stubbed) for the `/new` addresses, the
 phone page, `?add=1`, a save's re-read and Edit through `state.editing`, each
 against source mutations of `CycleRoute.jsx` too.
+`form_options_d695.test.mjs` is test 11's client half: `formOptions`'s path and
+query for every cycle module against a stubbed `request`, the refused cycles
+and slugs, and the drift parser's `GET /cycles/:p/modules/:p/form-options`.
 Registry and routing integration cases follow when their dependencies merge.

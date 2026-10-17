@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Shield, Users, ChevronDown, Briefcase, Check, ShieldCheck, FileText, Sparkles, KeyRound, Heart, Ticket, CreditCard, Package, GitBranch as Github, FlaskConical } from 'lucide-react';
+import { Shield, Users, ChevronDown, Briefcase, Check, ShieldCheck, FileText, Sparkles, KeyRound, Heart, Ticket, CreditCard, Package, FlaskConical } from 'lucide-react';
+import BrandIcon from '../ui/BrandIcon';
 // D648 (#1448) — one component per console, each in its own file under
 // ./admin/consoles/ and each loading only its own data. This page is the
 // shell: the header, the section dropdown, and the one console it mounts.
@@ -22,8 +23,20 @@ import { WellbeingExpertsPanel } from './admin/consoles/WellbeingConsole';
 import AdminNetworkProfiles from './admin/AdminNetworkProfiles';
 import AdminSpinoutLab from './admin/AdminSpinoutLab';
 
-// `pages/hq/ContractsPage.jsx` mounts the Legal console alone from here.
+// The Legal console's panel. Contracts (`pages/hq/ContractsPage.jsx`, D647)
+// renders its own desk, `pages/admin/contracts/ContractsDesk.jsx`, not this,
+// and `/admin?tab=legal` redirects there before this shell mounts
+// (`LegacyContractsRedirect`).
 export { LegalPanel };
+
+/**
+ * GitHub Sync's entry draws GitHub's own mark from `ui/BrandIcon.jsx` (D687,
+ * #1742), not lucide's branch glyph. It takes the `size` and `className` the
+ * other entries' icons take, so the menu tints it like them.
+ */
+function GithubMark({ size = 16, className = '' }) {
+  return <BrandIcon provider="github" size={size} variant="bare" tone="current" className={className} />;
+}
 
 // Task #15 — single ordered source for the Admin Console section nav. The
 // dropdown trigger and menu both render from this list instead of a hardcoded
@@ -40,7 +53,7 @@ const ADMIN_SECTIONS = [
   { value: 'personas', label: 'Personas', Icon: Sparkles },
   { value: 'directory', label: 'Directory', Icon: Sparkles },
   { value: 'integration-keys', label: 'Integration Keys', Icon: KeyRound },
-  { value: 'github', label: 'GitHub Sync', Icon: Github },
+  { value: 'github', label: 'GitHub Sync', Icon: GithubMark },
   { value: 'promos', label: 'Promo Codes', Icon: Ticket },
   { value: 'payments', label: 'Payments', Icon: Package },
   { value: 'billing', label: 'Billing', Icon: CreditCard },

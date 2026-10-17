@@ -15,7 +15,11 @@ export type CycleWrite = {
 
 export type Readback =
   | { table: 'pain_groups' | 'hypotheses' | 'mvp_features' | 'roadmap_okrs' | 'formation_steps'; by: 'max'; prefix?: string }
-  | { table: 'interview_sessions'; by: 'uid'; uid: string; prefix?: string };
+  | { table: 'interview_sessions'; by: 'uid'; uid: string; prefix?: string }
+  // D693 (#1703): a decision's rows. `max` names the venture's newest
+  // decision; `supersedes` names the decision it replaced, and writes no row
+  // when it replaced none.
+  | { table: 'validation_decisions'; by: 'max' | 'supersedes'; prefix?: string };
 
 export type BatchedCycleWrite = Omit<CycleWrite, 'entityId'> & { readback: Readback };
 
@@ -45,6 +49,11 @@ export function logCycleWriteStatement(env: Env, input: CycleWrite | BatchedCycl
   const prefix = readback.prefix ?? '';
   if (prefix && !/^[a-z][a-z0-9_-]*-$/.test(prefix)) throw new Error('Invalid cycle activity prefix');
   const tail = [input.action, summary, actor];
+  if (readback.table === 'validation_decisions' && readback.by === 'supersedes') {
+    return env.DB.prepare(
+      "INSERT INTO activity_logs (project_id, user_id, entity_type, entity_id, action, details, actor) SELECT ?, ?, ?, ? || CAST(d.supersedes_id AS TEXT), ?, ?, ? FROM validation_decisions d WHERE d.id = (SELECT MAX(id) FROM validation_decisions WHERE project_id = ?) AND d.supersedes_id IS NOT NULL",
+    ).bind(...common, prefix, ...tail, input.projectId);
+  }
   if (readback.by === 'uid') {
     return env.DB.prepare(
       "INSERT INTO activity_logs (project_id, user_id, entity_type, entity_id, action, details, actor) VALUES (?, ?, ?, ? || (SELECT CAST(id AS TEXT) FROM interview_sessions WHERE uid = ? AND project_id = ?), ?, ?, ?)",
@@ -57,6 +66,7 @@ export function logCycleWriteStatement(env: Env, input: CycleWrite | BatchedCycl
     roadmap_okrs: "INSERT INTO activity_logs (project_id, user_id, entity_type, entity_id, action, details, actor) VALUES (?, ?, ?, ? || (SELECT CAST(MAX(id) AS TEXT) FROM roadmap_okrs WHERE project_id = ?), ?, ?, ?)",
     // D690 (#1693): Build's filings, read back as `step-<id>`.
     formation_steps: "INSERT INTO activity_logs (project_id, user_id, entity_type, entity_id, action, details, actor) VALUES (?, ?, ?, ? || (SELECT CAST(MAX(id) AS TEXT) FROM formation_steps WHERE project_id = ?), ?, ?, ?)",
+    validation_decisions: "INSERT INTO activity_logs (project_id, user_id, entity_type, entity_id, action, details, actor) VALUES (?, ?, ?, ? || (SELECT CAST(MAX(id) AS TEXT) FROM validation_decisions WHERE project_id = ?), ?, ?, ?)",
   }[readback.table];
   return env.DB.prepare(sql).bind(...common, prefix, input.projectId, ...tail);
 }
@@ -99,8 +109,8 @@ async function creatorFor(env: Env, store: CreatorStore, id: string, projectId: 
       return env.DB.prepare('SELECT NULL AS name, w.created_at FROM waitlist_signups w WHERE w.id = ? AND w.project_id = ? AND (w.audience IS NULL OR w.audience = \'customer\')').bind(n, projectId).first<Creator>();
     case 'hypothesis_pain_links':
       return env.DB.prepare('SELECT NULL AS name, l.created_at FROM hypothesis_pain_links l JOIN hypotheses h ON h.id = l.hypothesis_id WHERE l.id = ? AND h.project_id = ?').bind(n, projectId).first<Creator>();
-    // D690 (#1694): Build's other records have no creator column to read.
     default:
+      // Verdict logs every decision it records, so it has no creator to fall back on.
       return null;
   }
 }

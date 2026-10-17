@@ -2,6 +2,8 @@
 // `/validate/interviews/:id`, kept apart from the page so a Node test reads
 // them without React: which session opens, what each one is called in the
 // switcher, and which passage a summary sentence's citation points at.
+// D697 (#1659) adds the record's: a passage's start as `[hh:mm:ss]`, the
+// passages Search keeps, and where Delete lands.
 
 /** A session with a transcript to review: the review opens on the newest of these (§5.11.1). */
 export const REVIEWABLE = new Set(['transcribed', 'structured', 'reviewed']);
@@ -63,4 +65,46 @@ export function whoLine(interview) {
   const name = String(interview?.interviewee_name || '').trim() || 'Name not recorded';
   const company = String(interview?.interviewee_company || '').trim() || 'Not recorded';
   return { name, company };
+}
+
+/**
+ * A passage's start as `[hh:mm:ss]`, from its `start_ms` (D697). Null when the
+ * start is absent or unreadable, so the passage draws no time rather than a
+ * made-up `[00:00:00]`.
+ */
+export function clock(ms) {
+  if (ms === null || ms === undefined || ms === '') return null;
+  const n = Number(ms);
+  if (!Number.isFinite(n) || n < 0) return null;
+  const total = Math.floor(n / 1000);
+  const pad = (v) => String(v).padStart(2, '0');
+  return `[${pad(Math.floor(total / 3600))}:${pad(Math.floor((total % 3600) / 60))}:${pad(total % 60)}]`;
+}
+
+/**
+ * The passages the transcript draws, narrowed by Search (D697). The same
+ * passages `TranscriptReview` draws, the final segments when there are any,
+ * then those whose words hold the search text, case aside. Empty or blank
+ * text keeps every passage. It reads nothing: Search filters what the page
+ * already holds.
+ */
+export function findPassages(segments, text) {
+  const all = Array.isArray(segments) ? segments : [];
+  const finals = all.filter((s) => s?.source === 'final');
+  const rows = finals.length ? finals : all;
+  const needle = typeof text === 'string' ? text.trim().toLowerCase() : '';
+  // Every passage holds the empty text, so blank keeps them all.
+  return rows.filter((s) => String(s?.text ?? '').toLowerCase().includes(needle));
+}
+
+/**
+ * Where the record lands after Delete (D697): Customer research, for the same
+ * venture. An id that is not a positive whole number is left off, so a stray
+ * value never reaches the URL.
+ */
+export function afterDelete(projectId) {
+  const id = String(projectId ?? '').trim();
+  return /^[1-9][0-9]{0,15}$/.test(id)
+    ? `/validate/customer-research?project_id=${id}`
+    : '/validate/customer-research';
 }

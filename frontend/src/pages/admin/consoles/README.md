@@ -33,7 +33,9 @@ them directly.
   `ConsoleUnreadable` ("… could not be read", with Try again) when its read
   fails, never the empty list.
 - **Mount a console alone where only one is needed.** HQ · Accounts mounts
-  `UsersConsole`; Contracts imports `LegalPanel` directly from `LegalConsole.jsx`.
+  `UsersConsole`. Contracts (`/admin/contracts`, D647) does not mount
+  `LegalPanel`: it renders its own desk, `../contracts/ContractsDesk.jsx`,
+  and the old `/admin?tab=legal` link redirects there with a "has moved" notice.
 - **Tests read the consoles through `frontend/test/_adminConsoles.mjs`**, which
   lists every file here; a new console file is added to that list and to the
   `COMPOSED` table in `admin_route_reachability.test.mjs`.
