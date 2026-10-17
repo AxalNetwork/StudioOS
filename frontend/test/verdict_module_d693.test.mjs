@@ -19,6 +19,14 @@ import { verdictForm, evidenceNote, DECISION_EVIDENCE_BAR } from '../src/pages/c
 import { decisionMemoModel, decisionMemoFilename, MEMO_LIMITS } from '../src/lib/decisionMemoViewModel.js';
 import { renderDecisionMemo } from '../src/lib/decisionMemoPdf.js';
 import { verdictApi } from '../src/lib/api/verdict.js';
+import { createRoot } from 'react-dom/client';
+import { Route, Routes } from 'react-router-dom';
+import CycleRoute from '../src/pages/cycles/CycleRoute.jsx';
+import CycleOverview from '../src/pages/cycles/CycleOverview.jsx';
+import { MODULES } from '../src/pages/cycles/modules.js';
+import { CLIENT_ACTIONS, dispatchOf } from '../src/pages/cycles/recordModel.js';
+import { cyclesApi } from '../src/lib/api/cycles.js';
+import { installDocument } from './_contracts_dom.mjs';
 import { createPdfStub } from './_pdf-stub.mjs';
 import { h, mountForm } from './_form_d695.mjs';
 import { sourceModule, mutate, mutationCheck } from './_record_d696.mjs';
@@ -166,6 +174,62 @@ test('19: a refused module page draws the Worker\'s sentence, with no chart, no 
   ], true);
 });
 
+/** A Validate module page through the real CycleRoute, its module read answering `fail`. */
+async function routeWith(fail) {
+  const restore = installDocument();
+  const container = document.createElement('div'); document.body.appendChild(container);
+  const root = createRoot(container);
+  const fetchBefore = globalThis.fetch;
+  const moduleBefore = cyclesApi.module;
+  globalThis.fetch = async () => ({ ok: true, status: 200, headers: { get: () => 'application/json' }, json: async () => ({}), text: async () => '{}' });
+  cyclesApi.module = async () => { throw fail; };
+  const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
+  const textOf = (n) => (n.nodeType === 3 ? n.textContent || '' : n.childNodes?.length ? n.childNodes.map(textOf).join('') : n.textContent || '');
+  try {
+    await act(async () => root.render(h(MemoryRouter, { initialEntries: ['/validate/experiments?project_id=7'] },
+      h(Routes, null, h(Route, { path: '/validate/:slug', element: h(CycleRoute, { cycle: 'validate' }) })))));
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    const nodes = walk(container);
+    return {
+      text: textOf(container),
+      refused: nodes.some((n) => Object.entries(n).some(([k, v]) => k.startsWith('__reactProps$') && v?.['data-testid'] === 'cycle-module-refused')),
+      buttons: nodes.filter((n) => n.tagName === 'BUTTON').map(textOf),
+    };
+  } finally {
+    await act(async () => root.unmount());
+    cyclesApi.module = moduleBefore;
+    globalThis.fetch = fetchBefore;
+    restore();
+  }
+}
+const httpError = (status, message) => Object.assign(new Error(message), { status });
+
+test('19: a 403 module read is drawn as refused through CycleRoute, with the Worker\'s sentence and no Retry', async () => {
+  const refused = await routeWith(httpError(403, 'Partners do not see decisions.'));
+  // The AI rail beside the page has its own Retry; only the module's body is asserted here.
+  const retries = (v) => v.buttons.filter((b) => /Retry|Try again/.test(b)).length;
+  assert.equal(refused.refused, true, 'the refused box is drawn');
+  assert.match(refused.text, /Partners do not see decisions\./);
+  assert.doesNotMatch(refused.text, /experiments could not be read/);
+  // Any other failure is still a failure, with its Retry.
+  const failed = await routeWith(httpError(500, 'Boom'));
+  assert.equal(failed.refused, false);
+  assert.match(failed.text, /experiments could not be read/);
+  assert.doesNotMatch(failed.text, /Boom/, 'a failure never prints the error text');
+  assert.equal(retries(refused), retries(failed) - 1, 'a refusal draws no Retry of its own');
+});
+
+// ---------------------------------------------------------------------------
+// 21. Loading
+// ---------------------------------------------------------------------------
+
+test('21: a loading overview draws one placeholder per module of its cycle (decision 14)', () => {
+  const count = (cycle) => (renderToStaticMarkup(h(MemoryRouter, null, h(CycleOverview, { cycle, data: null })))
+    .match(/data-testid="card-loading"/g) || []).length;
+  for (const cycle of ['validate', 'raise', 'grow', 'build']) assert.equal(count(cycle), MODULES[cycle].length, cycle);
+  assert.deepEqual(['raise', 'grow', 'build'].map(count), [7, 7, 6]);
+});
+
 // ---------------------------------------------------------------------------
 // 20. The decision memo
 // ---------------------------------------------------------------------------
@@ -276,6 +340,12 @@ test('20: the memo is one letter page, with 40 evidence items and 12 commitments
     ['const y = 438 + i * 36;', 'const y = 438 + i * 360;'],
     ["let rest = String(value ?? '');", "let rest = String(value ?? ''); if (rest.length > 100) return [rest];"],
   ]);
+});
+
+test('20: the record\'s Export memo is a client action that draws the memo', () => {
+  assert.equal(dispatchOf({ key: 'export-memo' }), 'client');
+  assert.equal(typeof CLIENT_ACTIONS.get('export-memo'), 'function');
+  assert.match(read('src/pages/cycles/recordModel.js'), /\['export-memo', \(record\) => exportDecisionMemoPdf\(record\)\]/);
 });
 
 test('20: Export memo loads jsPDF, draws the page and saves the dated file', async () => {
