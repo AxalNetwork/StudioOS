@@ -9,8 +9,7 @@
  * would refuse are inserted by hand, because the resolver re-checks them.
  *
  * The cross-check against #1772's `MONEY_KINDS` belongs to whichever of #1772
- * and #1773 merges second; `moneyRails.ts` is not on `main` as this lands, so
- * #1772 carries it.
+ * and #1773 merges second. #1772 (D707) merged first, so it is here.
  *
  * Every account number here is synthetic.
  *
@@ -29,6 +28,7 @@ import {
   purposeForMoneyKind, fundPayeeOf, assertFundCallPayable,
 } from '../src/services/payInstructions.ts';
 import { encryptColumn } from '../src/services/columnCipher.ts';
+import { MONEY_KINDS } from '../src/services/moneyRails.ts';
 import { tableFromBaseline } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 
@@ -205,6 +205,23 @@ test('purposeForMoneyKind gives each listed kind its purpose, and null for any o
   }
   assert.deepEqual(Object.fromEntries(Object.entries(PAYMENT_PURPOSES).map(([k, v]) => [k, v.payee])),
     { capital_contribution: 'fund', gp_commitment: 'fund', management_fee: 'gp', platform_licence_fee: 'holdings' });
+});
+
+test('every kind a purpose lists is a Mercury kind paid to that purpose\'s payee, and every Mercury kind paid to an Axal entity has exactly one purpose', () => {
+  const AXAL = new Set(['holdings', 'management', 'gp', 'fund']);
+  const row = new Map(MONEY_KINDS.map((r) => [r.kind as string, r]));
+  for (const [purpose, def] of Object.entries(PAYMENT_PURPOSES)) {
+    for (const kind of def.money_kinds) {
+      const r = row.get(kind);
+      assert.ok(r, `${purpose} lists ${kind}, which MONEY_KINDS does not name`);
+      assert.equal(r.rail, 'mercury', `${purpose} lists ${kind}, which is not on the Mercury rail`);
+      assert.equal(r.payee, def.payee, `${purpose} is paid to ${def.payee}, but ${kind} is paid to ${r.payee}`);
+    }
+  }
+  for (const r of MONEY_KINDS.filter((k) => k.rail === 'mercury' && AXAL.has(k.payee as string))) {
+    const owners = Object.entries(PAYMENT_PURPOSES).filter(([, d]) => (d.money_kinds as readonly string[]).includes(r.kind));
+    assert.equal(owners.length, 1, `${r.kind} belongs to ${owners.length} purposes`);
+  }
 });
 
 // ── Who may give a number ───────────────────────────────────────────────
