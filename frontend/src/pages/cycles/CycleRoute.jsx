@@ -209,7 +209,7 @@ const CYCLE_DEFS = {
       'durable-company-building': () => ({ label: 'Open the compliance calendar', href: '/compliance' }),
     }),
     add: toFnMap({}),
-    fills: {},
+    fills: { 'product-improvement': 'feedback_theme' },
     // The Grow desk's two AI bands (ZoneDraft, D424), on the modules they
     // read: the applicant ranking on Team expansion, the outreach sequence
     // for sign-ups who have not converted on Distribution.

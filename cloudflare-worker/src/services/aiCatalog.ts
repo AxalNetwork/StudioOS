@@ -39,6 +39,7 @@ export const TASK_LABELS: Record<TaskClass, string> = {
   transcribe: 'Transcribe audio',
   validate_tag_pains: 'Tag interview pains',
   validate_draft_hypotheses: 'Draft hypotheses',
+  grow_theme_feedback: 'Theme product feedback',
   market_sizing_inputs: 'Propose market sizing inputs',
   competitor_scan: 'Find competitors',
   research_ask: 'Answer from your documents',
