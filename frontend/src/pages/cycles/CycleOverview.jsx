@@ -2,6 +2,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Unrecorded, Unreadable } from '../../ui';
 import { Chart, Spark } from './CycleCharts';
 import { cardView, cycleOf, cycleTabs, figureDelta, figureValue, isPlainClick, linkSearch, nextHref, safeHref, sparkDrawable } from './cycleModel';
+import { MODULES } from './modules';
 
 /**
  * D661 (#1474) — one overview for all four cycles, drawn to
@@ -155,7 +156,8 @@ export function CycleCard({ cycle, card, slug, onRetry, search = '' }) {
   );
 }
 
-export default function CycleOverview({ cycle, data, status = data ? 'ready' : 'loading', message = '', onRetry, onRetryCard, action, placeholders = 6, search = '' }) {
+// D693 decision 14: a loading overview draws one placeholder per module of its cycle.
+export default function CycleOverview({ cycle, data, status = data ? 'ready' : 'loading', message = '', onRetry, onRetryCard, action, placeholders = MODULES[cycle]?.length ?? 6, search = '' }) {
   const meta = cycleOf(cycle);
   if (!meta) return null;
   const cards = Array.isArray(data?.cards) ? data.cards : [];
