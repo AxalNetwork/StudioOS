@@ -55,4 +55,8 @@ and CK kinds in `initialValues` and `validate` (each legacy form checked
 against the rules it had before), the four `/:slug/new` routes and Customer
 research's redirect, and the Add link's `state`. The helper resolves an
 extensionless or directory import in a mutated source as the loader hook does.
+`add_routes_d695.test.mjs` renders every registered form in the dialog, and
+mounts the real `CycleRoute` (the Worker stubbed) for the `/new` addresses, the
+phone page, `?add=1`, a save's re-read and Edit through `state.editing`, each
+against source mutations of `CycleRoute.jsx` too.
 Registry and routing integration cases follow when their dependencies merge.

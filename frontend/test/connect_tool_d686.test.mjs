@@ -366,7 +366,7 @@ test('Build\'s list for the project\'s company: Use for it keeps the others, out
 
 import { EDITS, SYSTEM_KINDS, UNMAP, systemOptions } from '../src/pages/cycles/forms.js';
 import { makeCycleWrites } from '../src/lib/api/cycleWrites.js';
-import RecordFormSheet from '../src/pages/cycles/RecordFormSheet.jsx';
+import FormLightbox, { formErrors, formFields } from '../src/pages/cycles/FormLightbox.jsx';
 import ToolsHistory from '../src/pages/cycles/ToolsHistory.jsx';
 import { renderToStaticMarkup } from 'react-dom/server';
 
@@ -403,13 +403,14 @@ test('a core system\'s connector: its choices, unmapping, the body each kind tak
   ]);
 });
 
-test('the mapping sheet reads the choices before it draws, validates against them, and says when there is none', async () => {
+test('the mapping dialog reads the choices before it draws, validates against them, and says when there is none', async () => {
   const edit = EDITS.build['operating-systems'];
   let resolve;
   const loading = new Promise((r) => { resolve = r; });
   const sent = [];
-  const m = await mount(h(MemoryRouter, null, h(RecordFormSheet, {
-    form: edit, current: edit.valuesOf({ cells: { used_by: 'Finance' } }), cycle: 'Build',
+  // D695: the centred dialog replaces the side sheet; its choices are chips.
+  const m = await mount(h(MemoryRouter, null, h(FormLightbox, {
+    form: edit, current: edit.valuesOf({ cells: { used_by: 'Finance' } }), cycle: 'build', slug: 'operating-systems',
     loadOptions: () => loading.then(() => edit.loadOptions({ build: { systemChoices: async () => CHOICES } }, 7, 'bank')),
     onSubmit: async (v) => { sent.push(v); }, onClose() {},
   })));
@@ -427,11 +428,11 @@ test('the mapping sheet reads the choices before it draws, validates against the
     await act(async () => { await m.pr(f).onSubmit({ preventDefault() {} }); });
     assert.deepEqual(sent, [], 'no choice made: nothing is sent');
     assert.ok(m.text().includes('Connector is required.'));
-    await act(async () => { m.pr(walk(document.body).find((n) => m.pr(n).id === 'cycle-form-choice')).onChange({ target: { value: 'uid:someone-else' } }); });
-    await act(async () => { await m.pr(f).onSubmit({ preventDefault() {} }); });
-    assert.deepEqual(sent, [], 'a value the read did not offer is refused before sending');
-    assert.ok(m.text().includes('Pick one of the choices for connector.'));
-    await act(async () => { m.pr(walk(document.body).find((n) => m.pr(n).id === 'cycle-form-choice')).onChange({ target: { value: UNMAP } }); });
+    const chips = walk(document.body).filter((n) => n.tagName === 'INPUT' && m.pr(n).name === 'choice');
+    assert.deepEqual(chips.map((n) => m.pr(n).value), [UNMAP], 'only what the read offered can be picked');
+    const read = await edit.loadOptions({ build: { systemChoices: async () => CHOICES } }, 7, 'bank');
+    assert.equal(formErrors(edit, formFields(edit, read), { choice: 'uid:someone-else', used_by: '' }).choice, 'Pick one of the choices for connector.', 'a value the read did not offer is refused before sending');
+    await act(async () => { m.pr(chips[0]).onChange({ target: { value: UNMAP } }); });
     await act(async () => { await m.pr(f).onSubmit({ preventDefault() {} }); });
     assert.deepEqual(sent, [{ choice: UNMAP, used_by: 'Finance' }], 'unmapping is a choice');
   } finally { await m.unmount(); }

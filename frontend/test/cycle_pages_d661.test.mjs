@@ -22,7 +22,7 @@ import CycleOverview, { CycleCard, FigureTile } from '../src/pages/cycles/CycleO
 import CycleModulePage, { RecordsTable } from '../src/pages/cycles/CycleModulePage.jsx';
 import { Chart } from '../src/pages/cycles/CycleCharts.jsx';
 import DurabilityChecklist from '../src/pages/cycles/DurabilityChecklist.jsx';
-import RecordFormSheet from '../src/pages/cycles/RecordFormSheet.jsx';
+import FormLightbox from '../src/pages/cycles/FormLightbox.jsx';
 import { EDITS, FORMS, editFor, formFor } from '../src/pages/cycles/forms.js';
 import { MODULES, OVERVIEWS, card, figure, records, slugOf } from './_cycle_fixtures.mjs';
 import { MODULES as LIVE_MODULES } from '../src/pages/cycles/modules.js';
@@ -205,23 +205,26 @@ test('BUILD: the one way to create a startup survives, next links keep the ventu
   assert.deepEqual(shareWidths, [287, 71, 179, 179], 'rows with several parts still split their own total');
 });
 
-test('ADD FORMS: one side sheet draws each form, the module offers it, and the checklist can be ticked', () => {
-  const sheet = html(h(RecordFormSheet, { form: formFor('grow', 'market-expansion'), cycle: 'Grow', onSubmit: async () => {}, onClose() {} }));
-  assert.match(sheet, /role="dialog" aria-label="Add a market"/);
-  assert.match(text(sheet), /Grow Add a market/);
-  assert.match(text(sheet), /Market · required/);
-  assert.match(sheet, /id="cycle-form-regulation_score"[^>]*type="number"/);
-  assert.equal(html(h(RecordFormSheet, { form: null, cycle: 'Grow' })), '', 'no form, no sheet');
-  const channel = html(h(RecordFormSheet, { form: formFor('grow', 'distribution'), cycle: 'Grow', onSubmit: async () => {}, onClose() {} }));
+test('ADD FORMS: one dialog draws each form, the module offers it, and the checklist can be ticked', () => {
+  // D695: the centred dialog replaces the side sheet; it draws no required marker (decision 14).
+  const sheet = html(h(FormLightbox, { form: formFor('grow', 'market-expansion'), cycle: 'grow', slug: 'market-expansion', onSubmit: async () => {}, onClose() {} }));
+  assert.match(sheet, /role="dialog" aria-modal="true" aria-label="Add a market"/);
+  assert.match(text(sheet), /Grow · Market expansion Add a market/);
+  assert.doesNotMatch(text(sheet), /· required/);
+  assert.match(sheet, /data-testid="cycle-form-regulation_score"[^>]*type="number"/);
+  assert.equal(html(h(FormLightbox, { form: null, cycle: 'grow' })), '', 'no form, no dialog');
+  const channel = html(h(FormLightbox, { form: formFor('grow', 'distribution'), cycle: 'grow', slug: 'distribution', onSubmit: async () => {}, onClose() {} }));
   assert.match(channel, /The utm_source on this channel/, 'a hint is shown under its field');
   assert.match(channel, /inputMode="decimal"/, 'money is typed as an amount');
   // Every module with a form, and no other, offers Add from it.
   assert.deepEqual(Object.entries(FORMS).flatMap(([c, f]) => Object.keys(f).map((s) => `${c}/${s}`)).sort(),
     ['build/company-creation', 'build/prototype-mvp', 'build/solution-design', 'grow/distribution', 'grow/durable-company-building', 'grow/market-expansion', 'grow/partner-network', 'grow/product-improvement', 'raise/fundraising-readiness', 'raise/investor-narrative']);
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
-  assert.match(route, /add=\{forms\.length && projectId \? forms\.map\(\(entry\) => \(\{ text: entry\.button, onClick: \(\) => setFormOpen\(entry\) \}\)\) : fnOf\(def\.add, slug\)\?\.\(q, openAction\)\}/);
+  // D695: each Add is a link to its `/new` address, pushed with `state.under`.
+  assert.match(route, /add=\{forms\.length && projectId\s*\? forms\.map\(\(entry, i\) => \(\{ text: entry\.button, href: addHref\(entry, i\), state: \{ under: `\$\{location\.pathname\}\$\{location\.search\}` \} \}\)\)\s*: fnOf\(def\.add, slug\)\?\.\(q, openAction\)\}/);
   assert.match(route, /onSubmit=\{\(values\) => formOpen\.submit\(cyclesWrite, projectId, values\)\}/);
-  assert.match(route, /onSaved=\{\(\) => setReload\(\(n\) => n \+ 1\)\}/, 'a save reads the module again');
+  assert.match(route, /const saved = \(\) => \{ dirty\.current = true; \};/);
+  assert.equal((route.match(/onSaved=\{saved\}/g) || []).length, 2, 'a save, Add or Edit, reads the module again once the form closes');
   // The checklist: tick an open item, undo your own tick, never undo the Lab's.
   const items = [
     { key: 'ein_received', label: 'Tax ID (EIN) received', done: true, source: 'Spin-Out Lab', done_at: null },
@@ -249,21 +252,23 @@ test('ROW EDITS: a row the route can change draws Edit, the sheet starts from th
   assert.match(table, /role="columnheader" class="sr-only">Actions</);
   assert.equal((table.match(/role="cell"/g) || []).length, 9, 'every row keeps one cell per column, the action cell included');
   assert.doesNotMatch(html(h(RecordsTable, { title: 'Channels', records: recs })), /records-row-action|Actions</, 'no rowAction, no column');
-  // The sheet starts from the row's own values, as text.
+  // The dialog starts from the row's own values, as text; a choice is a checked chip (D695).
   const market = editFor('grow', 'market-expansion');
-  const sheet = html(h(RecordFormSheet, { form: market, current: { state: 'entering', decision: 'enter', demand_score: 7, demand_source: 'Waitlist' }, cycle: 'Grow', onSubmit: async () => {}, onClose() {} }));
+  const sheet = html(h(FormLightbox, { form: market, current: { state: 'entering', decision: 'enter', demand_score: 7, demand_source: 'Waitlist' }, cycle: 'grow', slug: 'market-expansion', onSubmit: async () => {}, onClose() {} }));
   assert.match(sheet, /aria-label="Edit market"/);
-  assert.match(sheet, /id="cycle-form-demand_score"[^>]*value="7"/);
-  assert.match(sheet, /id="cycle-form-demand_source"[^>]*value="Waitlist"/);
-  assert.match(sheet, /<option value="entering" selected="">Entering<\/option>/);
+  assert.match(sheet, /data-testid="cycle-form-demand_score"[^>]*value="7"/);
+  assert.match(sheet, /data-testid="cycle-form-demand_source"[^>]*value="Waitlist"/);
+  assert.match(sheet, /<input[^>]*type="radio"[^>]*name="state" checked="" value="entering"\/>/);
   // Every module with an Edit form, and the page wiring. D686 §5.4 adds Operating systems' connector mapping.
   assert.deepEqual(Object.entries(EDITS).flatMap(([c, f]) => Object.keys(f).map((s) => `${c}/${s}`)).sort(),
     ['build/company-creation', 'build/operating-systems', 'build/prototype-mvp', 'build/solution-design', 'grow/distribution', 'grow/durable-company-building', 'grow/market-expansion', 'grow/partner-network', 'grow/product-improvement']);
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   assert.match(route, /rowAction=\{edit && projectId && !edit\.hiddenFor\?\.\(module\) \? \(row\) => \(edit\.idOf\(row\) == null \? null : \{/, 'Edit is drawn only on a row its route can change, and not on a card the module hides it for');
-  assert.match(route, /<RecordFormSheet key=\{String\(editing\.id\)\} form=\{edit\} current=\{edit\.valuesOf\(editing\)\}/);
+  assert.match(route, /<FormLightbox key=\{`edit-\$\{editing\.id\}`\} form=\{edit\} current=\{edit\.valuesOf\(editing\)\}/);
   assert.match(route, /onSubmit=\{\(values\) => edit\.submit\(cyclesWrite, projectId, edit\.idOf\(editing\), values\)\}/);
-  assert.match(route, /useEffect\(\(\) => \{ setFormOpen\(null\); setEditing\(null\); \}, \[slug\]\);/, 'a sheet does not follow the founder to another module');
+  // D695: the open Add is the address's and the open Edit the history entry's, so neither follows the founder to another module.
+  assert.match(route, /const formOpen = adding && forms\.length \? forms\.find\(\(f\) => f\.key === searchParams\.get\('form'\)\) \|\| forms\[0\] : null;/);
+  assert.match(route, /const editingId = !adding && edit && location\.state\?\.editing != null \? String\(location\.state\.editing\) : null;/);
 });
 
 // ------------------------------------------------------------------ the screens
