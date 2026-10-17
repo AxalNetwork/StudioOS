@@ -267,7 +267,17 @@ test('D716 #1776\'s paper for a capital call notice prints no signature line and
   const html = paperHtml(paperModel({
     title: 'Capital Call Notice', body: 'The Fund calls capital.', slug: 'capital_call_notice', bodySha256: 'a'.repeat(64), state: { kind: 'draft' },
   }), { pageSize: 'letter', cover: 'light', medium: 'screen', fonts: 'omit' });
-  assert.ok(!html.includes('By: ___'), 'no signature line');
+  assert.ok(!html.includes('By: ___') && !/<p class="line">By:/.test(html), 'no signature line');
   assert.ok(!html.includes('[Counterparty Legal Name]'), 'no counterparty block');
   assert.ok(html.includes('Axal VC Spin-Out Lab Fund I LP') && html.includes('By: Axal VC GP LLC, its general partner'), 'the sender, through its GP');
+});
+
+test('D716 the pdf-lib fallback draws nothing for a block with no parties: no signature-page line and no new page', async () => {
+  const { paperModel } = await import('../src/services/legalPaper.ts');
+  const { renderPaperFallbackPdf } = await import('../src/services/pdf.ts');
+  const { PDFDocument } = await import('pdf-lib');
+  const model = paperModel({ title: 'Subscription Booklet', body: 'The parts follow.', slug: 'subscription_booklet', bodySha256: 'a'.repeat(64), state: { kind: 'draft' } });
+  assert.deepEqual(model.execution?.parties, []);
+  const doc = await PDFDocument.load(await renderPaperFallbackPdf(model, { pageSize: 'letter' }));
+  assert.equal(doc.getPageCount(), 1, 'no page for an empty execution block');
 });

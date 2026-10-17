@@ -311,6 +311,8 @@ test('D716 reads: an LP lists only their own notices; anyone else gets 404; a br
   assert.deepEqual([branch.status, branch.body?.error], [403, 'hq_only'], branch.text);
   const support = await f.call(SUPER, 'POST', '/issue', { ...CALL_LINE, page_size: 'letter', figures_sha256: 'b'.repeat(64) }, { impersonatedBy: ADMIN });
   assert.deepEqual([support.status, support.body.code], [403, 'support_session_refused']);
+  const supportRead = await f.call(ADMIN, 'GET', `/${n.uid}`, undefined, { impersonatedBy: SUPER });
+  assert.deepEqual([supportRead.status, supportRead.body.error], [403, 'support_session_refused'], 'a support session reads no notice either');
 });
 
 test('D716 files: drawn once through Browser Run and kept; a failure keeps nothing; a superseded notice keeps a second file', async () => {
