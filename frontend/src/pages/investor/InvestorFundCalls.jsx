@@ -11,6 +11,7 @@ import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { investorZoneActions } from '../../workspaces/investorZoneActions';
 import { investorZoneFilters } from '../../workspaces/investorZoneFilters';
 import { useManagedFund, FundPicker } from './managedFund';
+import { FundActControl, useFundActs } from '../../lib/fundActs';
 import ZoneDraft from '../../workspaces/ZoneDraft';
 import { reminderSubject } from './fundLpCommsModel';
 import {
@@ -55,6 +56,9 @@ export default function InvestorFundCalls() {
   const [wires, setWires] = useState({ status: 'loading', data: null });
   const [composer, setComposer] = useState(null);
   const [receipt, setReceipt] = useState(null);
+  // D714: issuing is a Super Admin act. A plain Admin previews and reads the
+  // sentence where Issue would be; the Worker still decides.
+  const acts = useFundActs();
   // D553: one open follow-up per page — a reminder draft or a "Log as sent"
   // form — on one LP's line.
   const [followUp, setFollowUp] = useState(null);
@@ -195,7 +199,7 @@ export default function InvestorFundCalls() {
       <section className="i6-card if2-none" data-testid="status-no-managed-fund"><h2>No fund to operate</h2>
         <p>You are not the general partner of record for any fund you can operate here, so there is no call ledger to open. Calls issued against your own LP commitments are in <Link to="/spinout-lab/investor-workspace#my-commitment">My commitment</Link>, on the LP workspace.</p></section>
     ) : <>
-      {composer && <CallComposer composer={composer} setComposer={setComposer} onPreview={previewCall} onIssue={issueCall} />}
+      {composer && <CallComposer composer={composer} setComposer={setComposer} onPreview={previewCall} onIssue={issueCall} acts={acts} />}
       {ledger.status === 'unreadable' && <div className="if2-unavailable" data-testid="status-call-ledger-unreadable"><Unreadable what="This fund's call ledger" claim="This is not a claim that the fund has no calls." onRetry={load} /></div>}
       <section className="if2-stats">
         <Stat label="Called to date" value={summary ? money(summary.called_cents) : null} note={calledNote} />
@@ -318,7 +322,7 @@ export function LineTable({ lines, showCall, receipt, setReceipt, onOpen, onSave
   </tbody></table></div>;
 }
 
-function CallComposer({ composer, setComposer, onPreview, onIssue }) {
+function CallComposer({ composer, setComposer, onPreview, onIssue, acts }) {
   const { preview } = composer;
   // Changing the amount drops the preview, so Issue can only send the amount
   // whose split is on screen.
@@ -342,9 +346,11 @@ function CallComposer({ composer, setComposer, onPreview, onIssue }) {
           {preview.lines.map((l) => <tr key={l.lp_id}><td>{l.name || l.email || `LP #${l.lp_id}`}{l.residual ? ' · carries the residual' : ''}</td><td className="right">{money(l.commitment_cents)}</td><td className="right">{money(l.share_cents)}</td><td>{kycLabel(l)}</td></tr>)}
         </tbody></table></div>
         {preview.excluded.length > 0 && <p className="if2-note">Not billed, for want of a recorded commitment: {preview.excluded.map((x) => x.name || x.email || `LP #${x.lp_id}`).join(', ')}.</p>}
-        <button type="button" className="if2-issue" data-testid="button-issue-call" disabled={composer.busy} onClick={onIssue}>
-          {composer.busy ? 'Issuing…' : `Issue call ${preview.next_call_number} to ${plural(preview.lines.length, 'LP')}`}
-        </button>
+        <FundActControl access={acts} act="capital_call.issue" testId="text-issue-call-refused" className="if2-note">
+          <button type="button" className="if2-issue" data-testid="button-issue-call" disabled={composer.busy} onClick={onIssue}>
+            {composer.busy ? 'Issuing…' : `Issue call ${preview.next_call_number} to ${plural(preview.lines.length, 'LP')}`}
+          </button>
+        </FundActControl>
       </>}
     </div>}
   </section>;

@@ -179,7 +179,8 @@ function job(payload: Record<string, unknown>) {
   };
 }
 
-// A refusal built by `refuse()` (D278) carries its code as `error`.
+// A refusal built by `refuse()` (D278) carries its code as `error`. Since
+// D714 a call is a Super Admin act, so the legacy routes run as the holder.
 
 // ── The four paths, held ────────────────────────────────────────────────
 
@@ -219,7 +220,7 @@ test('held: the capital_call_notice job writes capital_call_held for the issuer,
 test('held: the legacy POST /api/capital/calls refuses a line on Fund I', async () => {
   const env = makeEnv();
   const before = lines(env).length;
-  const r = await call(capital, env, ADMIN_ID, '/calls', { method: 'POST', body: { limited_partner_id: 100, amount: 25 } });
+  const r = await call(capital, env, HOLDER_ID, '/calls', { method: 'POST', jti: 'totp-holder', body: { limited_partner_id: 100, amount: 25 } });
   assert.equal(r.status, 409, r.text);
   assert.equal(r.body.error, 'fund_account_missing');
   assert.equal(lines(env).length, before);
@@ -228,7 +229,7 @@ test('held: the legacy POST /api/capital/calls refuses a line on Fund I', async 
 test('held: the legacy POST /api/capital/capitalCall, which bills every active LP, writes nothing', async () => {
   const env = makeEnv();
   const before = lines(env).length;
-  const r = await call(capital, env, ADMIN_ID, '/capitalCall', { method: 'POST', body: { startup_id: 77, amount: 300 } });
+  const r = await call(capital, env, HOLDER_ID, '/capitalCall', { method: 'POST', jti: 'totp-holder', body: { startup_id: 77, amount: 300 } });
   assert.equal(r.status, 409, r.text);
   assert.equal(r.body.error, 'fund_account_missing');
   assert.equal(lines(env).length, before);
@@ -265,9 +266,9 @@ test('with the Fund\'s account, every path issues as before', async () => {
   assert.equal(headers(env).length, 2);
   assert.equal(q(env, "SELECT * FROM activity_logs WHERE action = 'capital_call_held'").length, 0);
 
-  const one = await call(capital, env, ADMIN_ID, '/calls', { method: 'POST', body: { limited_partner_id: 100, amount: 25 } });
+  const one = await call(capital, env, HOLDER_ID, '/calls', { method: 'POST', jti: 'totp-holder', body: { limited_partner_id: 100, amount: 25 } });
   assert.equal(one.status, 201, one.text);
-  const all = await call(capital, env, ADMIN_ID, '/capitalCall', { method: 'POST', body: { startup_id: 77, amount: 300 } });
+  const all = await call(capital, env, HOLDER_ID, '/capitalCall', { method: 'POST', jti: 'totp-holder', body: { startup_id: 77, amount: 300 } });
   assert.equal(all.status, 200, all.text);
 });
 
@@ -276,7 +277,7 @@ test('another fund\'s call issues with no registry table at all', async () => {
   const r = await call(funds, env, GP_ID, '/4/capital-call', { method: 'POST', body: { amount_cents: 100_000 } });
   assert.equal(r.status, 201, r.text);
   assert.equal(r.body.lines_written, 1);
-  const legacy = await call(capital, env, ADMIN_ID, '/calls', { method: 'POST', body: { limited_partner_id: 600, amount: 25 } });
+  const legacy = await call(capital, env, HOLDER_ID, '/calls', { method: 'POST', jti: 'totp-holder', body: { limited_partner_id: 600, amount: 25 } });
   assert.equal(legacy.status, 201, legacy.text);
 });
 

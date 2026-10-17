@@ -13,6 +13,7 @@ import type { Env } from '../types';
 import { getSQL } from '../db';
 import { lpMembershipScope, fundGpScope } from '../services/tenancyScope';
 import { requireFundGp } from '../services/fundGpAccess';
+import { assertAdminAct, auditFundAct } from '../services/fundAdminAccess';
 import { refuse } from '../util/refusal';
 import { claimLpRowsByEmail } from '../services/lpClaim';
 import { requireAuth, canViewLpData } from '../auth';
@@ -153,6 +154,8 @@ capital.post('/calls', async (c) => {
   // Task #9 — capital calls are issued by the fund/GP, never by an individual
   // LP. Admin-only; investors keep read + pay-own-call access.
   if (__u.role !== 'admin') return c.json({ error: "Forbidden: admin access required" }, 403);
+  // D714: issuing is a Super Admin act, here as on the fund routes.
+  await assertAdminAct(c, __u, 'capital_call.issue');
   const data = await c.req.json();
   // Accept either canonical or legacy field name.
   const lpId = data.limited_partner_id ?? data.lp_investor_id;
@@ -214,6 +217,9 @@ capital.post('/calls', async (c) => {
   } catch (e) { console.warn('[capital] notify capital_call_issued failed', e); }
 
   await sql.end();
+  await auditFundAct(c.env, __u, 'capital_call.issue', {
+    route: 'POST /api/capital/calls', limited_partner_id: resolvedLpId, amount_cents: Math.round(Number(call.amount) * 100),
+  });
   return c.json(callDto(call), 201);
 });
 
@@ -384,6 +390,8 @@ capital.post('/capitalCall', async (c) => {
   // fund/GP operation. Admin-only; investors keep read access (recording a
   // payment is the GP's, D370).
   if (__u.role !== 'admin') return c.json({ error: "Forbidden: admin access required" }, 403);
+  // D714: issuing is a Super Admin act, here as on the fund routes.
+  await assertAdminAct(c, __u, 'capital_call.issue');
   const data = await c.req.json();
   const sql = getSQL(c.env);
   const projects = await sql`SELECT * FROM projects WHERE id = ${data.startup_id}`;
@@ -422,6 +430,10 @@ capital.post('/capitalCall', async (c) => {
     p.specialization && projects[0].sector &&
     projects[0].sector.toLowerCase().includes(p.specialization.toLowerCase().split(',')[0]?.trim())
   );
+  await auditFundAct(c.env, __u, 'capital_call.issue', {
+    route: 'POST /api/capital/capitalCall', startup_id: data.startup_id,
+    amount_cents: Math.round(Number(data.amount) * 100), lines: callsCreated.length,
+  });
 
   return c.json({
     startup_id: data.startup_id,
