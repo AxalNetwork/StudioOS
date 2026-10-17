@@ -340,12 +340,14 @@ async function growFixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   db.exec(`CREATE TABLE users (id INTEGER PRIMARY KEY, role TEXT NOT NULL, founder_id INTEGER, is_active INTEGER NOT NULL DEFAULT 1,
                                jwt_min_iat INTEGER, name TEXT, email TEXT, spinout_lab_active INTEGER);
-           CREATE TABLE projects (id INTEGER PRIMARY KEY, uid TEXT, name TEXT, founder_id INTEGER, company_id INTEGER, deleted_at TEXT);
+           CREATE TABLE projects (id INTEGER PRIMARY KEY, uid TEXT, name TEXT, founder_id INTEGER, company_id INTEGER, entity_id INTEGER, deleted_at TEXT);
            CREATE TABLE user_company_links (id INTEGER PRIMARY KEY, company_id INTEGER, user_id INTEGER);
            CREATE TABLE documents (id INTEGER PRIMARY KEY, project_id INTEGER);
            CREATE TABLE activity_logs (id INTEGER PRIMARY KEY, action TEXT, details TEXT, user_id INTEGER, entity_type TEXT, entity_id TEXT);
            CREATE TABLE waitlist_signups (id INTEGER PRIMARY KEY, project_id INTEGER, email TEXT, audience TEXT, created_at TEXT DEFAULT (datetime('now')));
            CREATE TABLE spinout_lab_milestones (id INTEGER PRIMARY KEY, user_id INTEGER, week INTEGER, milestone_key TEXT, completed_at TEXT);`);
+  db.exec(tableFromBaseline(BASELINE, 'entities'));
+  db.exec(tableFromBaseline(BASELINE, 'compliance_events'));
   for (const p of ['034', '119', '127', '132', '326']) db.exec(migDdl(p));
   db.exec(migFile('311'));
   db.exec('ALTER TABLE contacts ADD COLUMN utm_json TEXT');
@@ -801,7 +803,8 @@ test('D661: every choice a form offers is one its Worker route accepts', async (
           // Unique names, so a channel's UTM source or a market's name never collides.
           const values = { ...initialValues(form), ...SAMPLES[cycle][slug], [field.name]: option.value,
             ...(slug === 'distribution' ? { utm_source: `src${n}`, spend: '' } : {}), ...(slug === 'market-expansion' ? { name: `Market ${n}` } : {}),
-            ...(slug === 'partner-network' ? { revenue: '' } : {}) };
+            ...(slug === 'partner-network' ? { revenue: '' } : {}),
+            ...(slug === 'durable-company-building' ? { due_at: new Date(Date.UTC(2099, 0, n)).toISOString().slice(0, 10) } : {}) };
           await assert.doesNotReject(form.submit(w, cycle === 'grow' ? GP : BP, values), `${cycle}/${slug}: ${field.name}=${option.value} was refused`);
         }
       }

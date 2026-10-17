@@ -48,3 +48,8 @@ the first `)`.
   the 30s sign-in outage of 2026-09-12 passed every existing test (D74).
 
 D642: `usage_storage_d642.test.ts` exercises caller-only storage aggregates through JWT/Hono and the canonical SQLite schema (including migration 323), covering company independence, unknown sizes, partial failures, precision and recording attribution.
+
+D691: `compliance_events_columns_d691.test.ts` builds the full baseline and every
+post-cutoff migration with foreign keys on. It checks Grow obligation writes,
+API state mappings, seeded compliance events and calendar reads, and bans SQL
+references to the absent migration-034 columns throughout Worker source.

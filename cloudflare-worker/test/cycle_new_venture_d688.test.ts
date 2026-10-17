@@ -180,12 +180,14 @@ async function growFixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   db.exec(`CREATE TABLE users (id INTEGER PRIMARY KEY, role TEXT NOT NULL, founder_id INTEGER, is_active INTEGER NOT NULL DEFAULT 1,
       jwt_min_iat INTEGER, name TEXT, email TEXT, spinout_lab_active INTEGER);
-    CREATE TABLE projects (id INTEGER PRIMARY KEY, uid TEXT, name TEXT, founder_id INTEGER, company_id INTEGER, deleted_at TEXT);
+    CREATE TABLE projects (id INTEGER PRIMARY KEY, uid TEXT, name TEXT, founder_id INTEGER, company_id INTEGER, entity_id INTEGER, deleted_at TEXT);
     CREATE TABLE user_company_links (id INTEGER PRIMARY KEY, company_id INTEGER, user_id INTEGER);
     CREATE TABLE documents (id INTEGER PRIMARY KEY, project_id INTEGER);
     CREATE TABLE activity_logs (id INTEGER PRIMARY KEY, action TEXT, details TEXT, user_id INTEGER, entity_type TEXT, entity_id TEXT);
     CREATE TABLE waitlist_signups (id INTEGER PRIMARY KEY, project_id INTEGER, email TEXT, audience TEXT, created_at TEXT DEFAULT (datetime('now')));
     CREATE TABLE spinout_lab_milestones (id INTEGER PRIMARY KEY, user_id INTEGER, week INTEGER, milestone_key TEXT, completed_at TEXT);`);
+  db.exec(tableFromBaseline(base, 'entities'));
+  db.exec(tableFromBaseline(base, 'compliance_events'));
   for (const number of ['034', '119', '127', '132', '326']) db.exec(ddl(number));
   db.exec(file('311'));
   db.exec('ALTER TABLE contacts ADD COLUMN utm_json TEXT');
@@ -257,7 +259,7 @@ test('D688: Raise deck with no views keeps its Share action, and tool actions ag
 test('D688: Grow distinguishes no store from a record outside the visible range, and no company from an empty roster', async () => {
   const { db, env } = await growFixture();
   db.exec("INSERT INTO product_feedback(uid, project_id, body, source, created_at) VALUES ('old', 7, 'Old feedback', 'team', '2020-01-01')");
-  db.exec("INSERT INTO compliance_events(project_id, title, due_at) VALUES (7, 'Future filing', date('now', '+120 days'))");
+  db.exec("INSERT INTO compliance_events(project_id, jurisdiction, event_type, title, due_date) VALUES (7, 'Unspecified', 'other', 'Future filing', date('now', '+120 days'))");
   let { body } = await growCall(env, '/overview?project=7');
   assert.equal(body.cards[0].reason, 'No feedback logged in the last 90 days');
   assert.equal(body.cards[6].reason, 'No obligation falls due in the next 90 days.');

@@ -1,6 +1,6 @@
 /**
  * D664 (#1477) — the Grow stores (migration 443) and /api/cycles/grow, on real
- * SQLite over the migrations that create each table: 034 (compliance_events),
+ * SQLite over the production baseline (compliance_events) and migrations
  * 119, 127 + 166 (contacts), 132 (job board), 311 (revenue ledger), 326 (team
  * roster), 437 (Share an update) and 443.
  *
@@ -25,6 +25,7 @@ import { readiness, utmSource, DURABILITY_ITEMS } from '../src/services/growCycl
 import { landReply } from '../src/services/updateShare.ts';
 import { STRIPE_NO_CUSTOMER } from '../src/services/revenueLedger.ts';
 import { d1Over } from './_d1_sqlite.mjs';
+import { tableFromBaseline } from './_baseline.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const M = resolve(here, '../sql/migrations');
@@ -112,12 +113,15 @@ async function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   db.exec(`CREATE TABLE users (id INTEGER PRIMARY KEY, role TEXT NOT NULL, founder_id INTEGER, is_active INTEGER NOT NULL DEFAULT 1,
                                jwt_min_iat INTEGER, name TEXT, email TEXT, spinout_lab_active INTEGER);
-           CREATE TABLE projects (id INTEGER PRIMARY KEY, uid TEXT, name TEXT, founder_id INTEGER, company_id INTEGER, deleted_at TEXT);
+           CREATE TABLE projects (id INTEGER PRIMARY KEY, uid TEXT, name TEXT, founder_id INTEGER, company_id INTEGER, entity_id INTEGER, deleted_at TEXT);
            CREATE TABLE user_company_links (id INTEGER PRIMARY KEY, company_id INTEGER, user_id INTEGER);
            CREATE TABLE documents (id INTEGER PRIMARY KEY, project_id INTEGER);
            CREATE TABLE activity_logs (id INTEGER PRIMARY KEY, action TEXT, details TEXT, user_id INTEGER, entity_type TEXT, entity_id TEXT);
            CREATE TABLE waitlist_signups (id INTEGER PRIMARY KEY, project_id INTEGER, email TEXT, audience TEXT, created_at TEXT DEFAULT (datetime('now')));
            CREATE TABLE spinout_lab_milestones (id INTEGER PRIMARY KEY, user_id INTEGER, week INTEGER, milestone_key TEXT, completed_at TEXT);`);
+  const baseline = readFileSync(resolve(here, '../sql/schema_baseline.sql'), 'utf8');
+  db.exec(tableFromBaseline(baseline, 'entities'));
+  db.exec(tableFromBaseline(baseline, 'compliance_events'));
   for (const p of ['034', '119', '127', '132', '326']) db.exec(ddl(p));
   db.exec(file('311'));
   db.exec('ALTER TABLE contacts ADD COLUMN utm_json TEXT');
@@ -380,7 +384,26 @@ test('durable company-building: the checklist starts from the Lab\'s gates; obli
   const due = new Date(Date.now() + 10 * 86_400_000).toISOString().slice(0, 10);
   const ob = await call(f, FOUNDER, 'POST', '/api/cycles/grow/obligations', { project: PID, title: 'Board meeting', kind: 'governance', due_at: due });
   assert.equal(ob.status, 201);
+  const stored = () => f.db.prepare('SELECT * FROM compliance_events WHERE id = ?').get(ob.body.id) as any;
+  assert.deepEqual([stored().due_date, stored().completion_status, stored().recurrence, stored().event_type,
+    stored().source, stored().kind, stored().jurisdiction, stored().entity_id, stored().created_by_user_id, stored().created_by],
+    [due, 'pending', 'one_time', 'board_meeting', 'manual', 'governance', 'Unspecified', null, FOUNDER, FOUNDER]);
+  const duplicate = await call(f, FOUNDER, 'POST', '/api/cycles/grow/obligations',
+    { project: PID, title: 'Another board', kind: 'governance', due_at: due });
+  assert.deepEqual([duplicate.status, duplicate.body.detail],
+    [409, `Another governance obligation is already due on ${due}. Pick another date.`]);
+  const missing = await call(f, FOUNDER, 'POST', '/api/cycles/grow/obligations', { project: PID, title: 'No date', kind: 'compliance' });
+  assert.deepEqual([missing.status, missing.body.detail], [400, 'An obligation has a due date.']);
+  f.db.exec(`INSERT INTO entities (id, name, entity_type, jurisdiction) VALUES (9, 'Example entity', 'project', 'Example jurisdiction'); UPDATE projects SET entity_id = 9 WHERE id = ${PID}`);
+  const entityOb = await call(f, FOUNDER, 'POST', '/api/cycles/grow/obligations',
+    { project: PID, title: 'Culture gathering', kind: 'culture', due_at: due });
+  assert.equal(entityOb.status, 201);
+  const entityRow = f.db.prepare('SELECT entity_id, jurisdiction, event_type FROM compliance_events WHERE id = ?').get(entityOb.body.id) as any;
+  assert.deepEqual([entityRow.entity_id, entityRow.jurisdiction, entityRow.event_type], [9, 'Example jurisdiction', 'culture']);
   const mod = await module_(f, 'durable-company-building');
+  assert.equal(mod.status, 200);
+  assert.deepEqual(mod.body.records.rows.find((r: any) => r.id === ob.body.id),
+    { id: ob.body.id, title: 'Board meeting', kind: 'governance', due_at: due, owner_name: null, status: 'scheduled' });
   const list = Object.fromEntries(mod.body.parts.checklist.map((i: any) => [i.key, i]));
   assert.deepEqual([list.section83b_filed.done, list.section83b_filed.source], [true, 'Spin-Out Lab']);
   assert.deepEqual([list.key_person_cover.done, list.key_person_cover.source], [true, 'manual']);
@@ -388,5 +411,23 @@ test('durable company-building: the checklist starts from the Lab\'s gates; obli
   const card = (await overview(f)).body.cards.find((c: any) => c.slug === 'durable-company-building');
   assert.deepEqual(card.series.checklist, { done: 2, total: DURABILITY_ITEMS.length, pct: Math.round((2 / DURABILITY_ITEMS.length) * 100) });
   assert.equal(card.next.text, 'Give Board meeting an owner.');
+  assert.ok(card.series.calendar.some((event: any) => event.title === 'Board meeting' && event.due === due));
+  const patch = (body: any) => call(f, FOUNDER, 'PATCH', `/api/cycles/grow/obligations/${ob.body.id}`, { project: PID, ...body });
+  assert.equal((await patch({ status: 'done' })).status, 200);
+  assert.deepEqual([stored().completion_status, stored().completed_by_user_id], ['completed', FOUNDER]);
+  assert.ok(stored().completed_at);
+  assert.equal((await patch({ status: 'overdue' })).status, 200);
+  assert.deepEqual([stored().completion_status, stored().completed_at, stored().completed_by_user_id], ['pending', null, null]);
+  f.db.prepare("UPDATE compliance_events SET reminders_sent_json = '[14]' WHERE id = ?").run(ob.body.id);
+  assert.equal((await patch({ due_at: '2020-01-01' })).status, 200);
+  assert.equal(stored().reminders_sent_json, '[]');
+  const past = (await module_(f, 'durable-company-building')).body.records.rows.find((r: any) => r.id === ob.body.id);
+  assert.deepEqual([past.due_at, past.status], ['2020-01-01', 'overdue']);
+  f.db.prepare(`INSERT INTO compliance_events (project_id, jurisdiction, event_type, title, due_date)
+    VALUES (?, 'Unspecified', 'franchise_tax', 'Seeded tax', ?), (?, 'Unspecified', 'board_meeting', 'Seeded board', ?)`)
+    .run(PID, due, PID, due);
+  const seeded = (await module_(f, 'durable-company-building')).body.records.rows;
+  assert.deepEqual(seeded.filter((r: any) => r.title.startsWith('Seeded')).sort((a: any, b: any) => a.title.localeCompare(b.title)).map((r: any) => [r.title, r.kind, r.status]),
+    [['Seeded board', 'governance', 'scheduled'], ['Seeded tax', 'compliance', 'upcoming']]);
   assert.equal((await call(f, FOUNDER, 'PUT', '/api/cycles/grow/checklist/made_up', { project: PID, done: true })).status, 404);
 });

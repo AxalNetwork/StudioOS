@@ -186,3 +186,8 @@ held on its `interview_date`.
 call's transcript is imported, when a chat is assigned, and when an assigned
 chat goes quiet. Its findings are proposals for the founder to review. It keeps
 #1470's consent rule and the D640 budget, and re-runs at most every six hours.
+
+D691 (#1696): Grow’s Durable card reads the production compliance calendar’s
+`due_date` and `completion_status` columns. Its existing next-90-days filter,
+seeded events and new-venture action are preserved; TypeScript maps `due_date`
+to the existing calendar field.

@@ -413,12 +413,12 @@ export async function checklist(env: Env, projectId: number) {
 export async function durableCard(x: Ctx): Promise<CardBody> {
   const until = iso(x.now + 90 * DAY);
   const ev = await x.env.DB.prepare(
-    `SELECT id, title, due_at, status, owner_name FROM compliance_events
-      WHERE project_id = ? AND due_at IS NOT NULL AND substr(due_at, 1, 10) BETWEEN ? AND ? ORDER BY due_at`,
-  ).bind(x.projectId, iso(x.now), until).all<{ id: number; title: string; due_at: string; status: string; owner_name: string | null }>();
+    `SELECT id, title, due_date, completion_status, owner_name FROM compliance_events
+      WHERE project_id = ? AND due_date IS NOT NULL AND substr(due_date, 1, 10) BETWEEN ? AND ? ORDER BY due_date`,
+  ).bind(x.projectId, iso(x.now), until).all<{ id: number; title: string; due_date: string; completion_status: string; owner_name: string | null }>();
   const list = await checklist(x.env, x.projectId);
   const done = list.filter((i) => i.done).length;
-  const events = ev.results || [];
+  const events = (ev.results || []).map(({ due_date, ...event }) => ({ ...event, due_at: due_date }));
   const anyEvent = await x.env.DB.prepare('SELECT 1 FROM compliance_events WHERE project_id = ? LIMIT 1').bind(x.projectId).first();
   const firstOpen = list.find((i) => !i.done);
   const ownerless = events.find((e) => !e.owner_name);
