@@ -269,7 +269,8 @@ export async function chargeSession(
     },
     // One intent per booking, replayed rather than duplicated. A double-submit
     // on a money call is the failure this exists for.
-    { idempotencyKey: `pi:advisory:${args.bookingUid}` },
+    // D707: a Connect destination charge; Management stays merchant of record.
+    { idempotencyKey: `pi:advisory:${args.bookingUid}`, moneyKind: 'partner_service' },
   );
 
   return {

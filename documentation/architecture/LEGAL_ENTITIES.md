@@ -9,9 +9,9 @@ the document/code to match.
 
 | Entity                    | Type | Jurisdiction | Role                                                                                              | Signatory (D705)                                   |
 | ------------------------- | ---- | ------------ | ------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| **Axal VC Holdings LLC**  | LLC  | Delaware     | Passive holding company. Owns IP, brand, domains, subsidiaries, treasury.                         | Managing Partner, until the owner gives another   |
-| **Axal VC Management LLC**| LLC  | Delaware     | Operating company. Operates the platform, signs platform/customer/vendor/employment contracts.     | Managing Partner                                   |
-| **Axal VC GP LLC**        | LLC  | Delaware     | General Partner of Axal VC Spin-Out Lab Fund I LP. Manages the Fund, makes investment decisions.  | General Partner                                    |
+| **Axal VC Holdings LLC**  | LLC  | Delaware     | Passive holding company. Owns IP, brand, domains, subsidiaries, treasury. Axal VC Holdings LLC licenses the software IP platform to Axal VC Management LLC for management administration, and to Axal VC GP LLC for fund administration. | Managing Partner, until the owner gives another   |
+| **Axal VC Management LLC**| LLC  | Delaware     | Operating company. Operates the platform, signs platform/customer/vendor/employment contracts. Axal VC Management LLC operates between the different partners as Managing Partner under the Spin-Out Lab, and manages the other operating partners across the platform. | Managing Partner                                   |
+| **Axal VC GP LLC**        | LLC  | Delaware     | Axal VC GP LLC is the General Partner that manages the Fund's investors, and the founders getting funding through Axal VC Spin-Out Lab Fund I LP. Manages the Fund, makes investment decisions. | General Partner                                    |
 | **Axal VC Spin-Out Lab Fund I LP** | LP | Delaware | The Fund itself. Limited partnership pooling LP capital; managed exclusively by Axal VC GP LLC.   | General Partner, signing "By: Axal VC GP LLC, its general partner" |
 
 The Fund's legal name is **Axal VC Spin-Out Lab Fund I LP**, as the owner gave
@@ -33,10 +33,15 @@ Passive / ownership layer. Belongs here:
 - Equity holdings in subsidiaries and SPVs.
 - Passive investments, reserves, treasury assets, and other long-term
   holdings.
-- Licenses of IP down to the operating company (Axal VC Management LLC)
-  for platform operation.
+- Two platform IP licences (D707): the software IP platform to Axal VC
+  Management LLC for management administration
+  (`platform_ip_licence_management_admin`), and to Axal VC GP LLC for fund
+  administration (`platform_ip_licence_fund_admin`). Both are catalog stubs
+  until counsel writes them; each licensee pays its licence fee on Mercury.
 
 ## Under Axal VC Management LLC
+
+Axal VC Management LLC operates between the different partners as Managing Partner under the Spin-Out Lab, and manages the other operating partners across the platform.
 
 Operating / active business layer. Belongs here:
 
@@ -52,6 +57,8 @@ Operating / active business layer. Belongs here:
 - Day-to-day partnership, service, and operational obligations.
 
 ## Axal VC GP LLC role
+
+Axal VC GP LLC is the General Partner that manages the Fund's investors, and the founders getting funding through Axal VC Spin-Out Lab Fund I LP.
 
 - General Partner of Axal VC Spin-Out Lab Fund I LP.
 - Authority to manage the Fund, make investment decisions, approve exits,
@@ -92,6 +99,7 @@ Operating / active business layer. Belongs here:
 | Spin-out wizard subsidiary defaults         | `cloudflare-worker/src/routes/legalcap.ts` (`subsidiaries.holding_company_id`) |
 | Esign intro boilerplate                     | `cloudflare-worker/src/routes/esign.ts` (`buildTemplateBody`)         |
 | Public footer entity attribution            | `frontend/src/components/PublicFooter.jsx`                            |
+| Entity roles and money rails (D707): who pays whom, on Stripe or Mercury | `cloudflare-worker/src/services/moneyRails.ts` |
 
 ## Default rules of thumb
 
@@ -115,6 +123,14 @@ Operating / active business layer. Belongs here:
    company itself**, with **the Fund** (or an SPV) as investor, signing
    through its general partner — not any of the Axal VC management or
    holding entities directly.
+5. If the agreement is one of the two **platform IP licences**
+   (`platform_ip_licence_management_admin`, `platform_ip_licence_fund_admin`)
+   → **Axal VC Holdings LLC** is the licensor (D707).
+6. If the agreement is an **operating-partner agreement** (`partner_msa_v1`,
+   `partner_services`, `partner_equity`, `partner_revshare`, `partner_custom`,
+   `partner_nda_nonsolicit`) → **Axal VC Management LLC** is the counterparty
+   (D707). A capital partnership (`partner_capital`) is an investor
+   relationship, and is not routed by this rule.
 
 The routing lives in `axalEntityKeyForDoc` (both `legalDocFormat` files).
 Counsel confirms rules 3 and 4 before any of these documents is sent to an

@@ -493,7 +493,7 @@ legal.post('/incorporate/checkout', async (c) => {
   }));
 
   try {
-    const session = await stripeCall<{ url: string; id: string; amount_total?: number }>(c.env, '/checkout/sessions', params);
+    const session = await stripeCall<{ url: string; id: string; amount_total?: number }>(c.env, '/checkout/sessions', params, { moneyKind: 'marketplace' });
     const incId = await createPendingIncorporation(c.env, {
       user_id: user.id,
       project_id: project.id,
@@ -697,7 +697,7 @@ legal.post('/incorporation/order', async (c) => {
       // invoice's PaymentIntent then carries the computed tax in its amount.
       // Requires the customer to have a tax-determinable address once enabled.
       ...automaticTaxParams(stripeTaxEnabled(c.env)),
-    });
+    }, { moneyKind: 'marketplace' });
     // 2) Add the incorporation fee as the sole line item on this invoice.
     await stripeCall(c.env, '/invoiceitems', {
       customer,
@@ -705,7 +705,7 @@ legal.post('/incorporation/order', async (c) => {
       amount: String(amountCents),
       currency,
       description: `Incorporation — ${j.label} — ${companyName}`,
-    });
+    }, { moneyKind: 'marketplace' });
     // 3) Finalize → Stripe mints the PaymentIntent we confirm in-app.
     const finalized = await stripeCall<{
       id: string;
@@ -731,7 +731,7 @@ legal.post('/incorporation/order', async (c) => {
       'metadata[incorporation_id]': String(incId),
       'metadata[user_id]': String(user.id),
       'metadata[jurisdiction_id]': j.id,
-    });
+    }, { moneyKind: 'marketplace' });
     await attachIncorporationPaymentIntent(c.env, incId, piId);
 
     return c.json({

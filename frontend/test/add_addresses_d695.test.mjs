@@ -28,18 +28,20 @@ const KEY = /^[a-z0-9][a-z0-9-]*$/;
 const ADD_KEYS = {
   raise: { 'fundraising-readiness': ['readiness'], 'investor-narrative': ['narrative-version'] },
   grow: {
-    'product-improvement': ['feedback'], distribution: ['channel'], 'partner-network': ['partner'],
-    'market-expansion': ['market'], 'durable-company-building': ['obligation'],
+    'product-improvement': ['feedback'], distribution: ['channel'], 'revenue-and-traction': ['kpi'], 'team-expansion': ['role'],
+    'partner-network': ['partner'], 'market-expansion': ['market'], 'durable-company-building': ['obligation'],
   },
   build: { 'solution-design': ['feature', 'risk'], 'prototype-mvp': ['must-have'], 'company-creation': ['formation-step'] },
 };
 const EDIT_KEYS = {
   grow: {
-    'product-improvement': 'edit-feedback', distribution: 'edit-channel', 'partner-network': 'edit-partner',
-    'market-expansion': 'edit-market', 'durable-company-building': 'edit-obligation',
+    'product-improvement': 'edit-feedback', distribution: 'edit-channel', 'revenue-and-traction': 'edit-kpi',
+    'team-expansion': 'edit-role', 'partner-network': 'edit-partner', 'market-expansion': 'edit-market',
+    'durable-company-building': 'edit-obligation',
   },
   build: { 'solution-design': 'edit-feature', 'prototype-mvp': 'edit-must-have', 'company-creation': 'edit-formation-step', 'operating-systems': 'edit-system' },
 };
+const CTA_APART = { 'grow/revenue-and-traction': ['Enter a KPI', 'Save KPI'], 'grow/team-expansion': ['Open a role', 'Open role'] };
 const mapTable = (table, fn) => Object.fromEntries(Object.entries(table).map(([cycle, bySlug]) => [cycle, Object.fromEntries(Object.entries(bySlug).map(([slug, v]) => [slug, fn(v)]))]));
 const allForms = (m) => [
   ...Object.values(m.FORMS).flatMap((bySlug) => Object.values(bySlug).flat()),
@@ -57,7 +59,10 @@ function assertKeys(m) {
       for (const f of forms) {
         assert.match(f.key, KEY, `${cycle}/${slug}: ${f.key}`);
         assert.equal(encodeURIComponent(f.key), f.key, 'a key goes in `?form=` as it is');
-        assert.equal(f.cta, f.button, `${cycle}/${slug} ${f.key}: an Add's CTA is its button`);
+        // The records table's Add reads the canvas's LISTS label (CO:623-636); two CTAs differ from it (CO:326-327).
+        const apart = CTA_APART[`${cycle}/${slug}`];
+        if (apart) assert.deepEqual([f.button, f.cta], apart, `${cycle}/${slug}: the canvas's button and CTA`);
+        else assert.equal(f.cta, f.button, `${cycle}/${slug} ${f.key}: an Add's CTA is its button`);
       }
       // `?form=<key>` names one form of the module's own: Add and Edit keys never collide.
       const keys = [...forms.map((f) => f.key), m.editFor(cycle, slug)?.key].filter(Boolean);
@@ -184,7 +189,10 @@ function assertKinds(m) {
   assert.deepEqual(m.validate(evidence, { evidence: ['a'] }), {});
   assert.deepEqual(m.validate(evidence, { evidence: ['a', 'a'] }), { evidence: 'One only.' }, "the form's own check still runs");
 
-  for (const f of allForms(m)) {
+  // Forms still written in today's types keep today's rules; the canvas forms are read as `canvas()` is.
+  const legacy = allForms(m).filter((f) => (f.fields || []).every((x) => !x.kind && !x.parts));
+  assert.ok(legacy.length >= 10, `${legacy.length} legacy forms checked`);
+  for (const f of legacy) {
     assert.deepEqual(m.initialValues(f), legacyInitial(f), `${f.key}: first values`);
     for (const values of legacyCases(f)) {
       assert.deepEqual(m.initialValues(f, values), legacyInitial(f, values), `${f.key}: a row's values`);

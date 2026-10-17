@@ -12,7 +12,7 @@ import Skeleton from './Skeleton';
  * Renders Stripe Elements (Payment Element) INSIDE the app so users pay without
  * ever leaving for checkout.stripe.com. The component:
  *   1. Fetches a `client_secret` from `POST /api/payments/intent` for the given
- *      price id (or ad-hoc amount).
+ *      price id. A charge needs a priced product (D707): there is no ad-hoc amount.
  *   2. Mounts <Elements> with an Axal-themed appearance (light/dark aware).
  *   3. Confirms the payment in-app via `stripe.confirmPayment({ redirect:
  *      'if_required' })` — a 3DS / SCA challenge surfaces inline (Stripe renders
@@ -28,8 +28,6 @@ import Skeleton from './Skeleton';
  *                  transfer). When provided, the component renders that intent
  *                  directly and skips its own POST /api/payments/intent fetch.
  *   priceId      — Stripe price id (recurring → subscription, one-time → charge)
- *   amount       — ad-hoc one-time amount in the smallest currency unit (cents)
- *   currency     — ISO currency for the ad-hoc path (default 'usd')
  *   quantity     — line quantity (default 1)
  *   description  — optional charge description
  *   submitLabel  — button label (default 'Pay now')
@@ -64,7 +62,7 @@ function formatMoney(cents, currency) {
 }
 
 export default function AxalCheckout(props) {
-  const { priceId, amount, currency, quantity, description, clientSecret: providedClientSecret } = props;
+  const { priceId, quantity, description, clientSecret: providedClientSecret } = props;
   const { effectiveTheme } = useSettings();
   const isDark = effectiveTheme === 'dark';
 
@@ -116,7 +114,7 @@ export default function AxalCheckout(props) {
       setLoadError(null);
       return;
     }
-    if (priceId == null && amount == null) {
+    if (priceId == null) {
       setLoadError('Nothing to pay for.');
       return;
     }
@@ -133,11 +131,7 @@ export default function AxalCheckout(props) {
     setClientSecret(null);
     setLoadError(null);
     const body = { nonce: nonceRef.current };
-    if (priceId != null) body.price_id = priceId;
-    if (amount != null) {
-      body.amount = amount;
-      if (currency) body.currency = currency;
-    }
+    body.price_id = priceId;
     if (quantity != null) body.quantity = quantity;
     if (description) body.description = description;
     // Promo code flows into the idempotency key server-side, so applying or
@@ -169,7 +163,7 @@ export default function AxalCheckout(props) {
     return () => {
       cancelled = true;
     };
-  }, [stripeConfigured, priceId, amount, currency, quantity, description, providedClientSecret, promoCode, promoFree, freeConfirm]);
+  }, [stripeConfigured, priceId, quantity, description, providedClientSecret, promoCode, promoFree, freeConfirm]);
 
   // Still resolving the runtime key — show a neutral loading placeholder.
   if (stripeConfigured === null) {
@@ -191,8 +185,7 @@ export default function AxalCheckout(props) {
     );
   }
 
-  // Promo codes only apply to catalog-priced purchases (a raw ad-hoc amount has
-  // no product to scope the allow-list against, and the server rejects it).
+  // Promo codes apply to catalog-priced purchases; a pre-created intent has none.
   const showPromo = priceId != null && !providedClientSecret;
   const promoField = showPromo ? (
     <PromoField

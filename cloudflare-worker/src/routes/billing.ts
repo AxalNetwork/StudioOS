@@ -30,6 +30,7 @@ import {
   type StripeErrorKind,
 } from '../util/stripeError';
 import { refuse } from '../util/refusal';
+import { assertStripeMoneyKind, type StripeMoneyKind } from '../services/moneyRails';
 
 // Epic 6 — Market Intel Pro billing surface.
 //
@@ -57,12 +58,41 @@ function isValidPlan(p: unknown): p is 'mi_pro_monthly' | 'mi_pro_annual' {
   return p === 'mi_pro_monthly' || p === 'mi_pro_annual';
 }
 
+/**
+ * D707 (#1772) — the Stripe paths that create an object which takes money. A
+ * `POST` to one of them must name a platform money kind (`services/moneyRails.ts`).
+ */
+export const STRIPE_CREATE_PATHS: readonly string[] = Object.freeze([
+  '/checkout/sessions', '/subscriptions', '/subscription_items', '/subscription_schedules', '/invoices',
+  '/invoiceitems', '/quotes', '/payment_intents', '/payment_links', '/charges',
+]);
+
+/** A path with its query string and any trailing slash removed, as the guard compares it. */
+export function stripePathOf(path: string): string {
+  const bare = String(path).split('?')[0].split('#')[0];
+  return bare.length > 1 ? bare.replace(/\/+$/, '') : bare;
+}
+
 export async function stripeCall<T>(
   env: Env,
   path: string,
   body: Record<string, string>,
-  opts?: { idempotencyKey?: string; method?: 'GET' | 'POST' | 'DELETE' },
+  opts?: { idempotencyKey?: string; method?: 'GET' | 'POST' | 'DELETE'; moneyKind?: StripeMoneyKind },
 ): Promise<T> {
+  // D707: a create that takes money names its kind, and only Management's
+  // platform kinds travel on Stripe. Checked before the key is read, so a
+  // refused call never leaves the Worker.
+  if ((opts?.method ?? 'POST') === 'POST' && STRIPE_CREATE_PATHS.includes(stripePathOf(path))) {
+    assertStripeMoneyKind(opts?.moneyKind);
+  } else if (opts?.moneyKind !== undefined) {
+    assertStripeMoneyKind(opts.moneyKind);
+  }
+  if (opts?.moneyKind) {
+    body = { ...body, 'metadata[money_kind]': opts.moneyKind };
+    if (Object.keys(body).some((k) => k.startsWith('subscription_data[metadata]'))) {
+      body['subscription_data[metadata][money_kind]'] = opts.moneyKind;
+    }
+  }
   const key = env.STRIPE_SECRET_KEY;
   if (!key) throw new Error('stripe_not_configured');
   const method = opts?.method ?? 'POST';
@@ -172,7 +202,7 @@ billing.post('/mi-pro/checkout', async (c) => {
   }));
 
   try {
-    const session = await stripeCall<{ url: string; id: string }>(c.env, '/checkout/sessions', params);
+    const session = await stripeCall<{ url: string; id: string }>(c.env, '/checkout/sessions', params, { moneyKind: 'platform_plan' });
     return c.json({ url: session.url, session_id: session.id });
   } catch (e) {
     return refuse(c, 502, { code: 'checkout_failed', message: 'Checkout could not be started. Nothing was charged; try again in a moment.', raw: e, audience: 'member' });
@@ -308,7 +338,7 @@ billing.post('/tier/checkout', async (c) => {
   }));
 
   try {
-    const session = await stripeCall<{ url: string; id: string }>(c.env, '/checkout/sessions', params);
+    const session = await stripeCall<{ url: string; id: string }>(c.env, '/checkout/sessions', params, { moneyKind: 'platform_plan' });
     return c.json({ url: session.url, session_id: session.id });
   } catch (e) {
     return refuse(c, 502, { code: 'checkout_failed', message: 'Checkout could not be started. Nothing was charged; try again in a moment.', raw: e, audience: 'member' });
@@ -508,7 +538,7 @@ billing.post('/investor/checkout', async (c) => {
   }));
 
   try {
-    const session = await stripeCall<{ url: string; id: string }>(c.env, '/checkout/sessions', params);
+    const session = await stripeCall<{ url: string; id: string }>(c.env, '/checkout/sessions', params, { moneyKind: 'investor_tier' });
     return c.json({ url: session.url, session_id: session.id });
   } catch (e) {
     return refuse(c, 502, { code: 'checkout_failed', message: 'Checkout could not be started. Nothing was charged; try again in a moment.', raw: e, audience: 'member' });
@@ -693,7 +723,7 @@ billing.post('/plan/checkout', async (c) => {
     const sub = await stripeCall<{
       id: string; status: string;
       latest_invoice?: { payment_intent?: { client_secret?: string } };
-    }>(c.env, '/subscriptions', subParams);
+    }>(c.env, '/subscriptions', subParams, { moneyKind: 'platform_plan' });
     const clientSecret = sub.latest_invoice?.payment_intent?.client_secret;
     if (!clientSecret) {
       // Zero-due first invoice (e.g. a trial) → already active/trialing.
@@ -1177,7 +1207,10 @@ billing.post('/subscription/swap/confirm', async (c) => {
   }
 
   try {
-    const updated = await stripeCall<StripeSubscription>(c.env, `/subscriptions/${subId}`, params);
+    // D707: the swap re-stamps `metadata[kind]`, so it stamps the matching money kind too.
+    const moneyKind = params['metadata[kind]'] === 'investor' ? 'investor_tier' as const
+      : params['metadata[kind]'] === 'tier' ? 'platform_plan' as const : undefined;
+    const updated = await stripeCall<StripeSubscription>(c.env, `/subscriptions/${subId}`, params, { moneyKind });
     // Align D1 immediately (webhook will re-affirm). Scoped to the calling user.
     if (scope === 'investor' && mapped?.investorTier) {
       const t = mapped.investorTier as InvestorTier;

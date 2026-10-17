@@ -69,7 +69,7 @@ export async function createEventTicketPaymentIntent(
 
   const intent = await stripeCall<{ id: string; client_secret: string }>(
     env, '/payment_intents', params,
-    { idempotencyKey: `pi:event_ticket:${registration.id}` },
+    { idempotencyKey: `pi:event_ticket:${registration.id}`, moneyKind: 'marketplace' },
   );
 
   await env.DB.prepare(
