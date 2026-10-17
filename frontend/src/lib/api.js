@@ -23,6 +23,7 @@ export * from './api/cycleValidate.js';
 export * from './api/cycleWrites.js';
 export * from './api/cycles.js';
 export * from './api/eadwyn.js';
+export * from './api/fundAdmin.js';
 export * from './api/fundLedger.js';
 export * from './api/fundPerformance.js';
 export * from './api/fundReports.js';
