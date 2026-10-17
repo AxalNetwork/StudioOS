@@ -343,7 +343,7 @@ async function growFixture() {
            CREATE TABLE projects (id INTEGER PRIMARY KEY, uid TEXT, name TEXT, founder_id INTEGER, company_id INTEGER, entity_id INTEGER, deleted_at TEXT);
            CREATE TABLE user_company_links (id INTEGER PRIMARY KEY, company_id INTEGER, user_id INTEGER);
            CREATE TABLE documents (id INTEGER PRIMARY KEY, project_id INTEGER);
-           CREATE TABLE activity_logs (id INTEGER PRIMARY KEY, action TEXT, details TEXT, user_id INTEGER, entity_type TEXT, entity_id TEXT);
+           CREATE TABLE activity_logs (id INTEGER PRIMARY KEY, project_id INTEGER, action TEXT, details TEXT, user_id INTEGER, entity_type TEXT, entity_id TEXT, actor TEXT);
            CREATE TABLE waitlist_signups (id INTEGER PRIMARY KEY, project_id INTEGER, email TEXT, audience TEXT, created_at TEXT DEFAULT (datetime('now')));
            CREATE TABLE spinout_lab_milestones (id INTEGER PRIMARY KEY, user_id INTEGER, week INTEGER, milestone_key TEXT, completed_at TEXT);`);
   db.exec(tableFromBaseline(BASELINE, 'entities'));
@@ -353,6 +353,7 @@ async function growFixture() {
   db.exec('ALTER TABLE contacts ADD COLUMN utm_json TEXT');
   db.exec(migDdl('125')); db.exec(migFile('437'));
   db.exec(migFile('443'));
+  db.exec(migFile('462'));
   db.prepare('INSERT INTO users (id, role, founder_id, name, email) VALUES (?, ?, ?, ?, ?)').run(FOUNDER, 'founder', 1001, 'Fay', 'fay@example.test');
   db.prepare(`INSERT INTO projects (id, uid, name, founder_id, company_id) VALUES (?, 'p7', 'Venture', 1001, 70)`).run(GP);
   const env = { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) } as any;
@@ -421,7 +422,7 @@ async function growSeeded() {
   person.run('p1', 'Fay', dayFrom(-200)); person.run('p2', 'Gus', dayFrom(-90)); person.run('p3', 'Hal', dayFrom(-20));
   const plan = db.prepare(`INSERT INTO company_headcount_plan (uid, company_id, period_label, target_headcount, updated_by) VALUES (?, 70, ?, ?, ${FOUNDER})`);
   plan.run('h1', monthAgo(1).slice(0, 7), 3); plan.run('h2', monthAgo(0).slice(0, 7), 4);
-  db.exec(`INSERT INTO job_postings (id, slug, host_user_id, project_id, title, status, team, target_start) VALUES (5, 'eng', ${FOUNDER}, ${GP}, 'Engineer', 'open', 'Engineering', '2027-01')`);
+  db.exec(`INSERT INTO job_postings (id, slug, host_user_id, project_id, title, status, team, target_start) VALUES (5, 'eng', ${FOUNDER}, ${GP}, 'Engineer', 'published', 'Engineering', '2027-01')`);
   db.exec(`INSERT INTO job_applications (id, posting_id, email) VALUES (1, 5, 'a@x.example'), (2, 5, 'b@x.example'), (3, 5, 'c@x.example')`);
   assert.equal((await growCall(f, 'PATCH', '/applications/1/stage', { project: GP, stage: 'interview' })).status, 200);
   // Partner network
@@ -509,14 +510,13 @@ test('D661: every Grow table has a value source for each column, and its filter 
       assert.ok(d.records.rows.some((row: any) => row.cells[c.key] != null), `${m.slug}: the "${c.label}" column has no value in any seeded row`);
     }
     assert.equal(new Set(d.records.rows.map((row: any) => String(row.id))).size, d.records.rows.length, `${m.slug}: row ids repeat`);
-    // D664's records filter on one row field and sort on a row field.
+    // D664's records filter and sort on row fields; since D691 (#1697) the read sends the filters, and each applies.
     const raw = new Set(r.body.records.rows.flatMap((row: any) => Object.keys(row)));
-    assert.ok(d.records.filters.length <= 1, `${m.slug}: the read takes one filter`);
     for (const fl of d.records.filters) {
       assert.ok(raw.has(fl.key), `${m.slug}: filter "${fl.key}" is not a field of the read's rows`);
       const v = fl.options[0].value;
       const narrowed = await growCall(f, 'GET', `/modules/${m.slug}?project=${GP}&filter=${encodeURIComponent(`${fl.key}:${v}`)}`);
-      assert.ok(narrowed.body.records.rows.every((row: any) => String(row[fl.key]).toLowerCase() === v), `${m.slug}: filter ${fl.key}:${v} did not narrow`);
+      assert.ok(narrowed.body.records.rows.every((row: any) => String(row[fl.key]).toLowerCase() === String(v).toLowerCase()), `${m.slug}: filter ${fl.key}:${v} did not narrow`);
     }
     for (const s of d.records.sorts) assert.ok(raw.has(s.key.replace(/^-/, '')), `${m.slug}: sort "${s.key}" is not a field of the read's rows`);
   }

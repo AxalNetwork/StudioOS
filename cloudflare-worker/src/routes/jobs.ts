@@ -20,11 +20,14 @@ import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { ensureJobBoardSchema } from '../services/jobBoardSchema';
 import {
-  ensureUniqueJobSlug,
+  canManagePosting,
+  closePosting,
+  createPosting,
   normalizeEmploymentType,
   normalizeSeniority,
   shapeJobApplication,
   shapeJobPosting,
+  submitForReview,
 } from '../services/jobBoardCommon';
 import { canAccessProject } from '../services/projectAccess';
 import { mintDownloadToken } from '../services/signedDownload';
@@ -39,9 +42,7 @@ async function auth(c: any): Promise<User | Response> {
   }
 }
 
-function canManage(posting: any, user: User): boolean {
-  return user.role === 'admin' || Number(posting.host_user_id) === Number(user.id);
-}
+const canManage = canManagePosting;
 
 async function loadPosting(env: Env, id: number): Promise<any | null> {
   return env.DB.prepare(`SELECT * FROM job_postings WHERE id = ?`).bind(id).first();
@@ -140,25 +141,15 @@ jobs.post('/', async (c) => {
   const projErr = await validateProjectId(c, u, projectId);
   if (projErr) return projErr;
 
-  const slug = await ensureUniqueJobSlug(c.env, title);
-  const ins: any = await c.env.DB.prepare(
-    `INSERT INTO job_postings
-       (slug, host_user_id, project_id, title, employment_type, location_text, remote, seniority, summary, description, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft')`,
-  ).bind(
-    slug,
-    u.id,
-    projectId,
+  const created = await createPosting(c.env, u.id, projectId, {
     title,
-    normalizeEmploymentType(body.employment_type),
-    body.location_text ? String(body.location_text).slice(0, 300) : null,
-    body.remote ? 1 : 0,
-    normalizeSeniority(body.seniority),
-    body.summary ? String(body.summary).slice(0, 500) : null,
-    body.description ? String(body.description).slice(0, 20000) : null,
-  ).run();
-
-  const created = await loadPosting(c.env, Number(ins?.meta?.last_row_id));
+    employment_type: body.employment_type,
+    location_text: body.location_text ? String(body.location_text).slice(0, 300) : null,
+    remote: !!body.remote,
+    seniority: body.seniority,
+    summary: body.summary ? String(body.summary).slice(0, 500) : null,
+    description: body.description ? String(body.description).slice(0, 20000) : null,
+  });
   return c.json({ job: shapeJobPosting(created, { includePrivate: true }) }, 201);
 });
 
@@ -223,12 +214,9 @@ jobs.post('/:id/submit-review', async (c) => {
   if (!id) return c.json({ error: 'not_found' }, 404);
   const posting = await loadPosting(c.env, id);
   if (!posting) return c.json({ error: 'not_found' }, 404);
-  if (!canManage(posting, u)) return c.json({ error: 'forbidden' }, 403);
-  if (!String(posting.title || '').trim()) return c.json({ error: 'title_required' }, 400);
-  await c.env.DB.prepare(
-    `UPDATE job_postings SET status = 'pending_review', review_notes = NULL, updated_at = datetime('now') WHERE id = ?`,
-  ).bind(id).run();
-  return c.json({ job: shapeJobPosting(await loadPosting(c.env, id), { includePrivate: true }) });
+  const out = await submitForReview(c.env, posting, u);
+  if (!out.ok) return c.json({ error: out.error }, out.status);
+  return c.json({ job: shapeJobPosting(out.posting, { includePrivate: true }) });
 });
 
 // ── POST /:id/close — founder closes the posting ───────────────────────────
@@ -239,11 +227,9 @@ jobs.post('/:id/close', async (c) => {
   if (!id) return c.json({ error: 'not_found' }, 404);
   const posting = await loadPosting(c.env, id);
   if (!posting) return c.json({ error: 'not_found' }, 404);
-  if (!canManage(posting, u)) return c.json({ error: 'forbidden' }, 403);
-  await c.env.DB.prepare(
-    `UPDATE job_postings SET status = 'closed', admin_published = 0, updated_at = datetime('now') WHERE id = ?`,
-  ).bind(id).run();
-  return c.json({ job: shapeJobPosting(await loadPosting(c.env, id), { includePrivate: true }) });
+  const out = await closePosting(c.env, posting, u);
+  if (!out.ok) return c.json({ error: out.error }, out.status);
+  return c.json({ job: shapeJobPosting(out.posting, { includePrivate: true }) });
 });
 
 // ── GET /:id/applications — applicant list (host/admin only) ────────────────
