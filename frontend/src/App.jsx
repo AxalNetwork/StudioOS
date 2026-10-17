@@ -84,7 +84,6 @@ const ScoringPage = lazy(() => import('./pages/ScoringPage'));
 const FounderValidateWorkspace = lazy(() => import('./workspaces/founder/FounderValidateWorkspace'));
 // D660 (#1473) — one interview session: record, live transcript, review.
 const InterviewSessionPage = lazy(() => import('./pages/founder/InterviewSessionPage'));
-const InterviewReviewPage = lazy(() => import('./pages/founder/InterviewReviewPage'));
 // D684 (#1578) — customer chats from business Telegram and WhatsApp, waiting for an interview.
 const ChannelsInboxPage = lazy(() => import('./pages/founder/ChannelsInbox'));
 const ResearchWorkspace = lazy(() => import('./workspaces/ResearchWorkspace'));
@@ -2551,8 +2550,9 @@ function AppInner() {
       {/* D685 §5.11 (#1589): one interview's review: its sessions, the summary and the proposed findings.
           D696 (#1658): it is Customer research's record, so its address is
           /validate/customer-research/:id, and the old one redirects there with
-          the query and the hash. Until #1659 reframes it, the page is drawn as it is. */}
-      <Route path="/validate/customer-research/:id" element={guard(labRoles(['admin', 'founder']), <InterviewReviewPage />)} />
+          the query and the hash. D697 (#1659): CycleRoute draws it in record
+          mode, through Validate's `recordPage`; the static path passes its slug. */}
+      <Route path="/validate/customer-research/:id" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" slug="customer-research" record />)} />
       <Route path="/validate/interviews/:id" element={guard(labRoles(['admin', 'founder']), <ParamRedirect to="/validate/customer-research/:id" />)} />
       {/* D696 decision 13: the canvas's module slugs, redirected to the app's. */}
       <Route path="/validate/experiments-and-evidence" element={<ParamRedirect to="/validate/experiments" />} />
