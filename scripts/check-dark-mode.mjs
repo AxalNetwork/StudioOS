@@ -20,7 +20,7 @@
  * Runs as part of `npm run test:drift`. To auto-fix offenders, run:
  *   node scripts/codemod-dark-mode.mjs
  */
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { closeSync, constants, fstatSync, openSync, readFileSync, readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ALLOWLIST, PAIRINGS } from './codemod-dark-mode.mjs';
@@ -96,13 +96,23 @@ function walk(dir) {
   try { entries = readdirSync(dir); } catch { return; }
   for (const name of entries) {
     const full = join(dir, name);
-    let st;
-    try { st = statSync(full); } catch { continue; }
-    if (st.isDirectory()) { walk(full); continue; }
-    if (!/\.(jsx|tsx)$/.test(name)) continue;
+    // The directory test and the read go through one descriptor, so the file
+    // audited is the file that was checked. Every entry is opened, not just
+    // stat'd, so the open must not block: a plain open of a FIFO waits for a
+    // writer and would hang the guard on an entry it never reads.
+    let fd;
+    try { fd = openSync(full, constants.O_RDONLY | constants.O_NONBLOCK); } catch { continue; }
+    let isDir = false;
+    let src = null;
     const rel = relative(REPO_ROOT, full).replaceAll('\\', '/');
-    if (ALLOWLIST.has(rel)) continue;
-    audit(rel, readFileSync(full, 'utf8'));
+    try {
+      isDir = fstatSync(fd).isDirectory();
+      if (!isDir && /\.(jsx|tsx)$/.test(name) && !ALLOWLIST.has(rel)) src = readFileSync(fd, 'utf8');
+    } finally {
+      closeSync(fd);
+    }
+    if (isDir) walk(full);
+    else if (src !== null) audit(rel, src);
   }
 }
 

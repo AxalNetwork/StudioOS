@@ -70,9 +70,11 @@ test('D706 the preview names the Fund or the GP as the Axal party, and none on a
 // The two files are kept in lock-step by hand; read the worker's D706 sets
 // from its source and hold the mirror to the same members.
 function setMembers(src, name) {
-  const m = src.match(new RegExp(`const ${name} = new Set\\(\\[([\\s\\S]*?)\\]\\);`));
-  assert.ok(m, `${name} not found`);
-  return [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1]).sort();
+  const open = `const ${name} = new Set([`;
+  const at = src.indexOf(open);
+  const end = at < 0 ? -1 : src.indexOf(']);', at + open.length);
+  assert.ok(end >= 0, `${name} not found`);
+  return [...src.slice(at + open.length, end).matchAll(/'([^']+)'/g)].map((x) => x[1]).sort();
 }
 
 test('D706 the worker and the mirror list the same slugs in every set', () => {

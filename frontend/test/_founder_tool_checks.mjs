@@ -24,9 +24,16 @@ export const actual = { navigation, CycleModulePage, FounderModuleBackLink, SHEL
   oldTabsExist: existsSync('frontend/src/pages/founder/FounderWorkspaceTabs.jsx') };
 const founder = {role:'founder',subscription_tier:'studio'};
 const render = (Component, props, path='/') => renderToStaticMarkup(React.createElement(MemoryRouter,{initialEntries:[path]},React.createElement(Component,props)));
+// A link's text: tags stripped until none is left, so one split by another
+// (`<a<b>>`) cannot come back together as a tag after a single pass.
+const stripTags = (s) => {
+  let out = s;
+  for (let prev = null; prev !== out;) { prev = out; out = out.replace(/<[^>]*>/g,''); }
+  return out;
+};
 const links = (html, testid) => [...html.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/g)]
   .filter((m)=>m[1].includes('data-testid="'+testid+'"'))
-  .map((m)=>({href:m[1].match(/href="([^"]*)"/)?.[1],label:m[2].replace(/<[^>]*>/g,''),
+  .map((m)=>({href:m[1].match(/href="([^"]*)"/)?.[1],label:stripTags(m[2]),
     quiet: !/\b(?:rounded|border|bg)-/.test(m[1].match(/class="([^"]*)"/)?.[1]||'')}));
 export const RETURNS = [
   ['/validate/interviews','/validate/customer-research','← Validate › Customer research'],

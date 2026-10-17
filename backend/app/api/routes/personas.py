@@ -201,15 +201,17 @@ def _is_allowed_overlap(a: str, b: str) -> bool:
 
 # --- Schema bootstrap (Postgres) --------------------------------------------
 
-_personas_schema_ready = False
+# A dict entry, not a `global` flag, as in settings.py (D476): CodeQL's
+# unused-global check does not follow a flag written on one call and read
+# on the next. Same run-once behaviour.
+_schema_once = {"personas": False}
 
 
 def _ensure_personas_schema(db: Session) -> None:
     """Idempotent schema bootstrap. Only flips the cached flag if every DDL
     statement succeeds — a half-applied schema must keep retrying on the
     next request rather than masking the failure forever."""
-    global _personas_schema_ready
-    if _personas_schema_ready:
+    if _schema_once["personas"]:
         return
     statements = [
         """
@@ -258,13 +260,7 @@ def _ensure_personas_schema(db: Session) -> None:
     except Exception:
         db.rollback()
         raise
-    # codeql[py/unused-global-variable] -- _personas_schema_ready is read via the `global _personas_schema_ready` guard at the top of
-    # this same function (`if _personas_schema_ready: return`); the write here is what a LATER,
-    # separate call's read observes. CodeQL's dead-store analysis does not model a global's value
-    # persisting across separate invocations of the function that sets it, so it sees this write as
-    # never consumed. It is: this flag exists specifically to make the schema-migration idempotent-
-    # but-skippable after the first successful request in this process.
-    _personas_schema_ready = True
+    _schema_once["personas"] = True
 
 
 # --- Heuristic classifier ---------------------------------------------------
