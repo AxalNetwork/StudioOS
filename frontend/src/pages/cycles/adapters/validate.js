@@ -244,7 +244,6 @@ const CLAIM_TONE = { supported: 'ok', refuted: 'bad', testing: 'v2', untested: '
 const CLAIM_WORD = { supported: 'Supported', refuted: 'Refuted', testing: 'Testing', untested: 'Untested', inconclusive: 'Inconclusive', not_recorded: 'Fit not recorded' };
 const FIT = { strong: ['Strong', 'ok'], partial: ['Partial', 'v2'], none: ['None', 'grey'] };
 const CONSENT = { agreed: ['Agreed', 'ok'], declined: ['Declined', 'bad'] };
-const STAGE = { lead: 'Lead', invited: 'Invited', booked: 'Booked', done: 'Done' };
 /** D690 decision 9: an interview's state, by the key the Worker sends. */
 export const STATE = {
   failed: 'Failed',
@@ -267,8 +266,12 @@ export const STATE = {
  */
 export const CHANNEL = { in_person: 'In person', video: 'Video call', phone: 'Audio call', text: 'Text chat', manual: 'Entered by hand' };
 
-/** The list's title: the module is Customer research, the table is the interview log. */
-export const TITLES = { 'customer-research': 'Interviews' };
+/**
+ * Each list's title where the module's name is not it (CO:611, :612, :616):
+ * the interview log, the pain themes and the hypotheses (D697, #1659). A
+ * `records_title` the read sends wins.
+ */
+export const TITLES = { 'customer-research': 'Interviews', 'problem-discovery': 'Pain themes', experiments: 'Hypotheses' };
 const EVIDENCE = { anecdote: ['Anecdote', 'warn'], pattern: ['Pattern', 'v2'], measured: ['Measured', 'ok'] };
 const SIGNAL = { loi: 'Letter of intent', pre_sale: 'Pre-sale', waitlist: 'Waitlist', need_to_have: 'Need-to-have', would_pay: 'Would pay' };
 const COUNTS = { confirmed: ['Confirmed', 'ok'], counted: ['Counted', 'v2'], to_confirm: ['To confirm', 'warn'] };
@@ -306,8 +309,11 @@ export const RECORDS = {
     filters: [
       { key: 'severity', label: 'Severity', options: [{ value: 'severe', label: 'Severe' }, { value: 'real', label: 'Real' }, { value: 'mild', label: 'Mild' }, { value: 'not_recorded', label: 'Not judged' }] },
       { key: 'hypothesis', label: 'Hypothesis', options: [{ value: 'linked', label: 'Linked' }, { value: 'unlinked', label: 'Not linked' }] },
+      // D697: FVW's ICP only and Need-to-have chips, as the Worker filters them.
+      { key: 'icp', label: 'ICP only', options: [{ value: 'yes', label: 'ICP only' }] },
+      { key: 'need', label: 'Need-to-have', options: [{ value: 'yes', label: 'Need-to-have' }] },
     ],
-    sorts: [{ key: 'mentions', label: 'Mentions' }, { key: 'trend', label: 'Trend' }, { key: 'theme', label: 'Theme' }],
+    sorts: [{ key: 'mentions', label: 'Mentions' }, { key: 'trend', label: 'Trend' }, { key: 'theme', label: 'Theme' }, { key: 'recent', label: 'Most recent' }],
   },
   'customer-research': {
     // D690 decision 10: the canvas's five columns plus State. Channel stays a
@@ -327,8 +333,9 @@ export const RECORDS = {
     } }),
     filters: [
       { key: 'icp', label: 'ICP fit', options: [{ value: 'strong', label: 'Strong' }, { value: 'partial', label: 'Partial' }, { value: 'none', label: 'None' }, { value: 'not_recorded', label: 'Not recorded' }] },
-      { key: 'consent', label: 'Consent', options: [{ value: 'agreed', label: 'Agreed' }, { value: 'declined', label: 'Declined' }, { value: 'not_asked', label: 'Not asked' }] },
-      { key: 'stage', label: 'Stage', options: Object.entries(STAGE).map(([value, label]) => ({ value, label })) },
+      // D697 decision 4: FVW's Deck-eligible view is the Agreed rows, and Stage
+      // gave way to State (the Worker keeps `stage:pipeline` for the recruiting picker).
+      { key: 'consent', label: 'Consent', options: [{ value: 'agreed', label: 'Agreed · deck-eligible' }, { value: 'declined', label: 'Declined' }, { value: 'not_asked', label: 'Not asked' }] },
       { key: 'channel', label: 'Channel', options: ['in_person', 'video', 'phone', 'text'].map((value) => ({ value, label: CHANNEL[value] })) },
     ],
     sorts: [{ key: 'newest', label: 'Newest' }, { key: 'oldest', label: 'Oldest' }, { key: 'name', label: 'Name' }],
@@ -381,7 +388,9 @@ export const RECORDS = {
     keys: ['hypothesis', 'status', 'evidence', 'sprint', 'owner', 'source'],
     row: (r) => ({ id: r.id, cells: {
       hypothesis: r.hypothesis ?? null,
-      status: CLAIM_WORD[r.status] ? { text: CLAIM_WORD[r.status], tone: CLAIM_TONE[r.status] } : null,
+      // D697: a retired claim reads Retired; one whose lane moved in the last 14 days says so beside its status.
+      status: r.retired === true ? { text: 'Retired', tone: 'grey' }
+        : CLAIM_WORD[r.status] ? { text: `${CLAIM_WORD[r.status]}${r.moved === 'recent' ? ' · Moved' : ''}`, tone: CLAIM_TONE[r.status] } : null,
       evidence: num(r.evidence) && r.evidence > 0
         ? `${r.evidence}${EVIDENCE[r.strength] ? ` · ${EVIDENCE[r.strength][0]}` : ''}`
         : null,
@@ -390,8 +399,14 @@ export const RECORDS = {
       source: pill(PROVENANCE, r.provenance),
     } }),
     filters: [
-      { key: 'status', label: 'Status', options: Object.entries(CLAIM_WORD).map(([value, label]) => ({ value, label })) },
+      // D697: the Worker's options, in its order. Sprint's are the venture's own, so only the read can list them.
+      { key: 'status', label: 'Status', options: ['untested', 'testing', 'supported', 'refuted', 'inconclusive', 'not_recorded']
+        .map((value) => ({ value, label: CLAIM_WORD[value] })).concat([{ value: 'retired', label: 'Retired' }]) },
+      { key: 'sprint', label: 'Sprint', options: [] },
       { key: 'strength', label: 'Strength', options: [{ value: 'anecdote', label: 'Anecdote' }, { value: 'pattern', label: 'Pattern' }, { value: 'measured', label: 'Measured' }, { value: 'not_recorded', label: 'Not recorded' }] },
+      // FVW's Recently moved, and the verdict zone's two history views (decision 19).
+      { key: 'moved', label: 'Recently moved', options: [{ value: 'recent', label: 'Recently moved' }] },
+      { key: 'history', label: 'History', options: [{ value: 'last_week', label: 'As of last week' }, { value: 'this_month', label: 'Changed this month' }] },
     ],
     sorts: [{ key: 'updated', label: 'Updated' }, { key: 'status', label: 'Status' }, { key: 'code', label: 'Code' }],
   },
