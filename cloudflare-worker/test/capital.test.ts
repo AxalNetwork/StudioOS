@@ -82,7 +82,7 @@ CREATE TABLE users (
 CREATE TABLE vc_funds (
   id INTEGER PRIMARY KEY, name TEXT, status TEXT DEFAULT 'active',
   total_commitment REAL DEFAULT 0, deployed_capital REAL DEFAULT 0, lp_count INTEGER DEFAULT 0,
-  gp_user_id INTEGER, company_id INTEGER,
+  gp_user_id INTEGER, company_id INTEGER, slug TEXT,
   created_at TEXT, updated_at TEXT);
 CREATE TABLE partners (id INTEGER PRIMARY KEY, name TEXT, status TEXT DEFAULT 'active');
 CREATE TABLE limited_partners (

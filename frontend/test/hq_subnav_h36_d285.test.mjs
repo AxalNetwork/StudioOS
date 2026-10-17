@@ -54,6 +54,8 @@ const PLATFORM = [
 ];
 // D642 (#1435) — U7's page joins the Platform row after Topology, so it lights that row.
 PLATFORM.splice(3, 0, ['AI allowances', '/admin/platform/allowances']);
+// D708 (#1773) — the Bank accounts console joins the Platform row after Payments.
+PLATFORM.splice(PLATFORM.findIndex(([l]) => l === 'Payments') + 1, 0, ['Bank accounts', '/admin?tab=bank-accounts']);
 const CONTENT = [
   ['Overview', '/admin/content'], ['Content queue', '/admin/articles'], ['Publications', '/admin/publications'],
   ['Assessment Studio', '/admin/assessment'], ['Personas', '/admin?tab=personas'],
@@ -178,8 +180,9 @@ test('the Admin Console tab follows location.search, writes back with replace, a
   assert.match(ADMIN_PAGE, /onChange=\{pickTab\}/, 'the section nav does not go through the write-back');
   assert.match(ADMIN_PAGE, /if \(section && ADMIN_SECTION_VALUES\.has\(section\)\) return section;/, 'the section override no longer wins the first read');
   assert.doesNotMatch(adminConsoleSource(), /row of 12 tab buttons/, 'the comment still says twelve');
-  assert.match(adminConsoleSource(), /fourteen sections today/);
-  assert.equal(TABS.length, 14);
+  // D708 (#1773) added Bank accounts, the fifteenth.
+  assert.match(adminConsoleSource(), /fifteen sections today/);
+  assert.equal(TABS.length, 15);
 });
 
 /* ------------------------------------------------------------------ *

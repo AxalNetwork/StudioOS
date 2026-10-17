@@ -18,6 +18,7 @@ import { claimLpRowsByEmail } from '../services/lpClaim';
 import { requireAuth, canViewLpData } from '../auth';
 import { insertCapitalCall, insertCapitalCalls } from './_capital_call_writes';
 import { recordReceipt } from '../services/fundCallLedger';
+import { assertFundCallPayable } from '../services/payInstructions';
 import { logActivity } from './partnernet';
 
 const capital = new Hono<{ Bindings: Env }>();
@@ -179,6 +180,10 @@ capital.post('/calls', async (c) => {
     if (mapped.length > 0) resolvedLpId = mapped[0].id;
   }
   if (resolvedLpId == null) { await sql.end(); return c.json({ error: 'Investor not found' }, 404); }
+  // D708 decision 9: no line on Fund I while the Fund has no payable account.
+  const lineFund = await sql`SELECT fund_id FROM limited_partners WHERE id = ${resolvedLpId}`;
+  const heldOne = await assertFundCallPayable(c.env, lineFund.map((r: any) => Number(r.fund_id)));
+  if (heldOne) { await sql.end(); return refuse(c, 409, { code: heldOne.code, message: heldOne.message }); }
   // Task #197 — one writer for this table now (`_capital_call_writes.ts`), so
   // this route, the fund-wide call below, and the `capital_call_notice` queue job
   // cannot drift about what a call row contains. No `uid` is passed, so the
@@ -386,6 +391,10 @@ capital.post('/capitalCall', async (c) => {
 
   const investors = await sql`SELECT * FROM limited_partners WHERE status = 'active'`;
   if (investors.length === 0) { await sql.end(); return c.json({ error: 'No active investors found' }, 404); }
+  // D708 decision 9: this bills every active LP, Fund I's among them, so it
+  // writes nothing while the Fund has no payable account.
+  const heldAll = await assertFundCallPayable(c.env, investors.map((inv: any) => Number(inv.fund_id)));
+  if (heldAll) { await sql.end(); return refuse(c, 409, { code: heldAll.code, message: heldAll.message }); }
 
   const perInvestor = Math.round((data.amount / investors.length) * 100) / 100;
   // Batch all inserts into a single D1 round-trip instead of one INSERT per

@@ -315,6 +315,7 @@ import catalog, { adminCatalog } from './routes/catalog';
 // Task #16 — Admin Stripe management (webhook endpoints + publishable key).
 import adminStripe from './routes/admin_stripe';
 import adminMoneyRails from './routes/admin_money_rails';
+import adminBankAccounts from './routes/admin_bank_accounts';
 // PaymentIntent + SetupIntent surface for the Axal-branded embedded card UI.
 import payments from './routes/payments';
 // One-time CART ORDER surface (combined PaymentIntent for one_time SKUs).
@@ -612,6 +613,9 @@ const COOL_OFF_PREFIXES = [
   // exclusive grant over whole countries. Same class as promos: pause it for a
   // freshly-recovered admin.
   '/api/admin/licences',
+  // D708 — each Axal entity's bank accounts: the payment instructions every
+  // notice prints. Pause them for a freshly-recovered admin.
+  '/api/admin/bank-accounts',
 ];
 for (const p of COOL_OFF_PREFIXES) {
   app.use(p, recoveryCoolOff);
@@ -891,6 +895,9 @@ app.route('/api/admin/catalog', adminCatalog);
 app.route('/api/admin/stripe', adminStripe);
 // D707 (#1772) — the entities' roles and the money rails. Before the catch-all.
 app.route('/api/admin/money-rails', adminMoneyRails);
+// D708 — each Axal entity's bank accounts, Super Admin only. Before the
+// catch-all /api/admin so /api/admin/bank-accounts/* resolves here.
+app.route('/api/admin/bank-accounts', adminBankAccounts);
 // Task #9 — promo-code admin CRUD; mount before the `/api/admin` catch-all.
 app.route('/api/admin/promos', adminPromos);
 // Task #39 — Event engine admin (§8.3). Mount BEFORE the catch-all /api/admin
