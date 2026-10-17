@@ -30,7 +30,6 @@ import type { EvidenceCtx, EvidenceItemFull } from './validateEvidence';
 import type { Env, User } from '../types';
 import { logCycleWriteStatement } from './cycleActivity';
 import { safeCard, PAGE_SIZE, type Card } from './cycleCards';
-import { dayMonth } from './cycleFocus';
 import type { Ctx, FilterSpec, RecordQuery, Records, SortSpec } from './cycleValidate';
 import { ownsVenture, type ProjectRef } from '../routes/_founder_validate_helpers';
 

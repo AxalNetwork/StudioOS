@@ -461,7 +461,7 @@ export const RECORDS = {
   // every row reads "<d Mon> · <Name>" (decision 10).
   verdict: {
     keys: ['decision', 'for', 'reasoning', 'evidence', 'date'],
-    row: (r) => ({ id: r.id, cells: {
+    row: (r) => ({ id: r.id, recordId: workerId(r.id), cells: {
       decision: r.state === 'withheld' ? { text: 'Withheld', tone: 'grey' }
         : DECISION_WORD[r.decision] ? { text: DECISION_WORD[r.decision], tone: DECISION_TONE[r.decision] } : null,
       for: r.for ?? null,
