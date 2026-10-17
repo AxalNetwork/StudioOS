@@ -55,6 +55,25 @@ async function call(db: DatabaseSync, method: string, path: string, body?: unkno
 
 const logs = (db: DatabaseSync) => db.prepare('SELECT project_id, user_id, action, details, actor FROM activity_logs ORDER BY id').all() as any[];
 
+/**
+ * D691 (#1699) — a saved entry carries the key the Raise list reads as its id,
+ * and the scenario keeps the highest key it issued. Set both aside to compare
+ * what was stored with what was posted; `keysOf` pins them.
+ */
+const withoutKeys = (inputs: any) => {
+  const { entry_key_seq: _seq, ...rest } = inputs;
+  for (const list of ['founders', 'safes', 'rounds']) {
+    if (Array.isArray(rest[list])) rest[list] = rest[list].map(({ key: _key, ...e }: any) => e);
+  }
+  return rest;
+};
+const keysOf = (inputs: any) => ({
+  founders: (inputs.founders || []).map((e: any) => e.key),
+  safes: (inputs.safes || []).map((e: any) => e.key),
+  rounds: (inputs.rounds || []).map((e: any) => e.key),
+  seq: inputs.entry_key_seq,
+});
+
 test('D632: a variant is renamed and edited in place; the main table is untouched', async () => {
   const db = freshDb();
   const main = await call(db, 'POST', '/scenarios', { name: 'Main', project_id: 1, inputs: MAIN });
@@ -67,12 +86,14 @@ test('D632: a variant is renamed and edited in place; the main table is untouche
   assert.equal(edited.body.uid, made.body.uid, 'the same row, edited in place');
   assert.equal(edited.body.name, 'Bigger seed');
   assert.equal(edited.body.is_variant, 1);
-  assert.deepEqual(edited.body.inputs, DRAFT);
+  assert.deepEqual(withoutKeys(edited.body.inputs), DRAFT);
+  assert.deepEqual(keysOf(edited.body.inputs), { founders: ['e-1', 'e-2'], safes: ['e-3'], rounds: ['e-4'], seq: 4 });
   assert.equal(edited.body.result.rounds.length, 1, 'the edit is simulated again');
 
   const cmp = await call(db, 'GET', '/scenarios/by-project/1/compare');
   assert.equal(cmp.body.canonical.uid, main.body.uid);
-  assert.deepEqual(cmp.body.canonical.inputs, MAIN, 'the main cap table did not move');
+  assert.deepEqual(withoutKeys(cmp.body.canonical.inputs), MAIN, 'the main cap table did not move');
+  assert.deepEqual(keysOf(cmp.body.canonical.inputs), { founders: ['e-1'], safes: [], rounds: [], seq: 1 });
   assert.deepEqual(cmp.body.variants.map((v: any) => v.name), ['Bigger seed']);
   assert.equal((db.prepare('SELECT COUNT(*) AS n FROM cap_table_scenarios WHERE is_variant = 0').get() as any).n, 1);
 });

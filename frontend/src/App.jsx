@@ -7,7 +7,7 @@ import { consumePendingNextOnce, markPendingNextRedirected, pendingNextRedirecte
 import { Routes, Route, Navigate, Link, useNavigate, useLocation, useParams } from 'react-router-dom';
 import SidebarNav from './ui/SidebarNav';
 import { AuthProvider, useAuth } from './hooks/useAuthSync';
-import { SettingsProvider, useSettings } from './contexts/SettingsContext';
+import { SettingsProvider } from './contexts/SettingsContext';
 import { ActiveCompanyContext } from './contexts/ActiveCompanyContext';
 // ViewModeContext lives in its own module so App.jsx exports only React
 // components — mixing component + hook exports breaks Vite Fast Refresh.
@@ -949,18 +949,10 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
   const [viewAsBranch, setViewAsBranch] = useState(null);
   const [companyList, setCompanyList] = useState([]);
 
-  // Task #31 — Honor the user's "Sidebar default" appearance preference on
-  // first paint AND when the async appearance load completes (so the
-  // server-side preference wins over the cached default on a fresh device).
-  // Applied on desktop too: when 'collapsed' the sidebar slides off-screen
-  // and a hamburger reveals it.
-  const { appearance, loading: settingsLoading } = useSettings();
-  // Mobile defaults to closed regardless of preference (the drawer covers the
-  // whole viewport so opening it on every load would block the page). On
-  // desktop we honor the user's saved sidebar_default.
+  // Start with the desktop sidebar visible and the mobile drawer closed.
+  // Manual sidebar controls continue to manage it after the first render.
   const [sidebarOpen, setSidebarOpen] = useState(() => {
-    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches) return false;
-    return appearance?.sidebar_default !== 'collapsed';
+    return typeof window === 'undefined' || !window.matchMedia('(max-width: 1023px)').matches;
   });
   // Desktop-only collapsed rail state. When true, the sidebar stays
   // visible at a narrow width showing only icons + 1-3 letter
@@ -994,21 +986,8 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
       return next;
     });
   }, []);
-  const initialSyncRef = React.useRef(false);
-  useEffect(() => {
-    // One-shot sync the moment the SettingsProvider's first /appearance
-    // round-trip resolves; subsequent toggles by the user are NOT
-    // overridden because we flip the ref on the first run.
-    if (initialSyncRef.current) return;
-    if (settingsLoading) return;
-    const isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches;
-    setSidebarOpen(!isMobile && appearance?.sidebar_default !== 'collapsed');
-    initialSyncRef.current = true;
-  }, [settingsLoading, appearance?.sidebar_default]);
-  // On desktop the sidebar should stay open during normal navigation —
-  // only the user's explicit close button (or selecting "collapsed" in
-  // Settings → Appearance) should hide it. On mobile, tapping any nav link
-  // collapses the drawer so the page is visible.
+  // Keep the desktop sidebar open during navigation; on mobile, selecting
+  // a destination closes the drawer so the page is visible.
   const closeOnMobileNav = useCallback(() => {
     if (typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches) {
       setSidebarOpen(false);
@@ -1399,7 +1378,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
                 first render, so a reload that lands on the same company does
                 not remount once the switcher confirms it. */}
             <RailStripSlot.Provider value={railStrip}>
-              <div key={activeCompany?.id ?? savedCompanyId ?? 'none'} data-app-main data-density-target className={`${flushSurface ? 'p-0 edge-to-edge-surface' : 'p-4 md:p-6'} ${fullWidthSurface ? '' : 'max-w-7xl mx-auto w-full'}${onboardingCanvas ? ' flex w-full min-h-full flex-1 flex-col' : ''}`}>
+              <div key={activeCompany?.id ?? savedCompanyId ?? 'none'} data-app-main className={`${flushSurface ? 'p-0 edge-to-edge-surface' : 'p-4 md:p-6'} ${fullWidthSurface ? '' : 'max-w-7xl mx-auto w-full'}${onboardingCanvas ? ' flex w-full min-h-full flex-1 flex-col' : ''}`}>
                 {children}
               </div>
             </RailStripSlot.Provider>

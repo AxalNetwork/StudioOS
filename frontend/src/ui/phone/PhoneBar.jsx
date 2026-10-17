@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuthSync.jsx';
 import { useViewMode } from '../../contexts/ViewModeContext.js';
 import { useActiveCompany } from '../../contexts/ActiveCompanyContext.js';
+import { EadwynButton } from '../EadwynPanel.jsx';
 
 export function backFallback({ shellRole, role, labActive, pathname = '', lastCycle }) {
   if (shellRole === 'founder') {
@@ -15,7 +16,16 @@ export function backFallback({ shellRole, role, labActive, pathname = '', lastCy
   return '/account';
 }
 
-export function PhoneBar({ back = { label: 'Studio' }, title, sub, action }) {
+/**
+ * The pushed page's bar (CO:24): "‹ Back", the title and an optional sub.
+ *
+ * With `eadwynLabel`, the right side is D698's `EadwynButton` with that label:
+ * the 40px "Open Eadwyn for this page" button, which registers its trigger so
+ * the rail hides its floating button. It draws nothing while the panel serves
+ * no one (any viewer but a founder on a page with a founder rail), so the bar
+ * then has no button and no stand-in. `action` replaces it (#1664's menu).
+ */
+export function PhoneBar({ back = { label: 'Studio' }, title, sub, eadwynLabel, action }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth() || {};
@@ -32,7 +42,7 @@ export function PhoneBar({ back = { label: 'Studio' }, title, sub, action }) {
     <div className="flex items-center justify-between gap-2">
       <div><h1 className="text-[19px] font-extrabold text-gray-900 dark:text-gray-100">{title}</h1>
         {sub && <p className="text-[11.5px] text-gray-600 dark:text-gray-400">{sub}</p>}</div>
-      {action}
+      {action ?? (eadwynLabel ? <EadwynButton label={eadwynLabel} /> : null)}
     </div>
   </div>;
 }

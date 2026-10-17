@@ -5321,34 +5321,6 @@ function AppearanceTab({ flash }) {
         </div>
       </Card>
 
-      <Card title="Density" description="Tighter spacing reclaims vertical real-estate on dashboards.">
-        <div className="grid grid-cols-2 gap-2">
-          {['comfy', 'compact'].map(d => {
-            const active = appearance.density === d;
-            return (
-              <button key={d} disabled={busy} onClick={() => set({ density: d })}
-                className={`px-4 py-3 rounded-lg border text-sm capitalize transition-colors ${
-                  active ? 'border-violet-600 bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-900'
-                }`}>{d}</button>
-            );
-          })}
-        </div>
-      </Card>
-
-      <Card title="Sidebar default" description="Whether the sidebar starts expanded or collapsed on each visit.">
-        <div className="grid grid-cols-2 gap-2">
-          {['expanded', 'collapsed'].map(s => {
-            const active = appearance.sidebar_default === s;
-            return (
-              <button key={s} disabled={busy} onClick={() => set({ sidebar_default: s })}
-                className={`px-4 py-3 rounded-lg border text-sm capitalize transition-colors ${
-                  active ? 'border-violet-600 bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-900'
-                }`}>{s}</button>
-            );
-          })}
-        </div>
-      </Card>
-
       <HelpExplainersCard flash={flash} />
     </>
   );
