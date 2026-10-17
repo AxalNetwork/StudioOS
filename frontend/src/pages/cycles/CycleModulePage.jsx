@@ -51,6 +51,10 @@ export function Cell({ cell, first = false, linkState = undefined }) {
  * `rowAction(row)` → `{ text, label, onClick }` or null: one control at the
  * end of each row the caller can act on (Edit). A row it returns null for
  * draws an empty cell, so the columns stay aligned.
+ *
+ * Each `add` entry is `{ text, href, state?, onOpen?, onClick? }`. A link
+ * passes its `state` on, so an Add's `/new` address carries `state.under`
+ * and closing it can go back to the page that opened it (D695).
  */
 export function RecordsTable({ title, records, status = 'ready', message = '', query = {}, onQuery, onRetry, add, rowAction }) {
   const [text, setText] = useState(query.q || '');
@@ -76,7 +80,7 @@ export function RecordsTable({ title, records, status = 'ready', message = '', q
             const className = 'whitespace-nowrap rounded-[9px] bg-axal-violet px-3.5 py-2 text-[12.5px] font-bold text-white hover:bg-axal-violet-deep';
             return addBtn?.text && (addBtn.onClick
               ? <button key={addBtn.text} type="button" onClick={addBtn.onClick} className={className}>{addBtn.text}</button>
-              : addHref ? <Link key={addBtn.text} to={addHref} data-testid="records-add" aria-haspopup={addBtn.onOpen ? 'dialog' : undefined} onClick={addBtn.onOpen ? (e) => { if (isPlainClick(e)) { e.preventDefault(); addBtn.onOpen(); } } : undefined} className={className}>{addBtn.text}</Link> : null);
+              : addHref ? <Link key={addBtn.text} to={addHref} state={addBtn.state} data-testid="records-add" aria-haspopup={addBtn.onOpen ? 'dialog' : undefined} onClick={addBtn.onOpen ? (e) => { if (isPlainClick(e)) { e.preventDefault(); addBtn.onOpen(); } } : undefined} className={className}>{addBtn.text}</Link> : null);
           })}</div>
         </div>
         <form role="search" onSubmit={(e) => { e.preventDefault(); set({ q: text.trim() }); }}>
