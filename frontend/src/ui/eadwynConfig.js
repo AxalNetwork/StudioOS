@@ -154,7 +154,7 @@ export const ASSIST_SURFACES = {
         safety: 'Drafts stay here until you use them. Nothing reaches an investor without your click.',
       },
       Grow: {
-        fills: 'Ranks applicants with reasons, and drafts an outreach sequence opened on your own recorded pains.',
+        fills: 'Ranks applicants with reasons, drafts an outreach sequence opened on your own recorded pains, and proposes a theme for unthemed feedback.',
         safety: 'Outreach is drafted, never sent. Sending is always your click.',
       },
       Network: {
