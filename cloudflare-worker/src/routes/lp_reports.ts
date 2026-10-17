@@ -20,6 +20,7 @@ import { requireAuth, canViewLpData } from '../auth';
 import { isAdmin, isInvestor, mapError, nowIso, newUid } from './_t13t14t15_helpers';
 import { lpMembershipScope } from '../services/tenancyScope';
 import { claimLpRowsByEmail } from '../services/lpClaim';
+import { requireFundGp } from '../services/fundGpAccess';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -112,8 +113,8 @@ r.post('/', async (c) => {
     const fundId = Number(body.fund_id);
     const period = body.period ? String(body.period).slice(0, 32) : null;
     if (!Number.isFinite(fundId) || !period) return c.json({ detail: 'fund_id and period required' }, 400);
-    const fund = await c.env.DB.prepare('SELECT id FROM vc_funds WHERE id = ?').bind(fundId).first<{ id: number }>();
-    if (!fund) return c.json({ detail: 'Fund not found' }, 404);
+    // D712 decision 6: only the fund's GP of record (or an admin) writes its reports.
+    await requireFundGp(c, fundId);
     const uid = newUid();
     try {
       const ins = await c.env.DB.prepare(
@@ -166,6 +167,9 @@ r.put('/:uid', async (c) => {
     await requireGp(c);
     const x = await c.env.DB.prepare('SELECT * FROM lp_reports WHERE uid = ?').bind(c.req.param('uid')).first<ReportRow>();
     if (!x) return c.json({ detail: 'Not found' }, 404);
+    await requireFundGp(c, Number(x.fund_id));
+    // A published report is what its LPs read; it is never edited (D712).
+    if (x.status === 'published') return c.json({ detail: 'A published report cannot be edited.', code: 'report_published' }, 409);
     const body = await c.req.json().catch(() => ({} as any));
     await c.env.DB.prepare(
       `UPDATE lp_reports SET nav=?, called=?, distributed=?, dpi=?, tvpi=?, irr=?, narrative=?, updated_at=? WHERE id=?`
@@ -190,7 +194,11 @@ r.post('/:uid/publish', async (c) => {
     await requireGp(c);
     const x = await c.env.DB.prepare('SELECT * FROM lp_reports WHERE uid = ?').bind(c.req.param('uid')).first<ReportRow>();
     if (!x) return c.json({ detail: 'Not found' }, 404);
-    await c.env.DB.prepare("UPDATE lp_reports SET status='published', published_at=?, updated_at=? WHERE id=?")
+    const { viaAdmin } = await requireFundGp(c, Number(x.fund_id));
+    // D712 decision 6: admins issue LP reports from the reporting queue.
+    if (viaAdmin) return c.json({ detail: 'Admins issue LP reports from the reporting queue.', code: 'issue_from_reporting_queue' }, 409);
+    if (x.status === 'published') return c.json({ detail: 'This report is already published.', code: 'report_published' }, 409);
+    await c.env.DB.prepare("UPDATE lp_reports SET status='published', published_at=?, updated_at=? WHERE id=? AND status <> 'published'")
       .bind(nowIso(), nowIso(), x.id).run();
     const fresh = await c.env.DB.prepare('SELECT * FROM lp_reports WHERE id = ?').bind(x.id).first<ReportRow>();
     return c.json(await dto(c.env, fresh!));

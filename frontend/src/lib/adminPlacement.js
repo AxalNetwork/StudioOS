@@ -109,6 +109,8 @@ export const ADMIN_PLACEMENT = [
   tab('integration-keys', 'Integration keys', hq('Platform', 'sub-nav'), { how: 'Sub-navigation item.' }),
   tab('github', 'GitHub Sync', hq('Platform', 'sub-nav'), { how: 'Sub-navigation item.' }),
   tab('payments', 'Payments', hq('Platform', 'sub-nav'), { how: 'Sub-navigation item.' }),
+  // D708 (#1773) — beside Payments: the Super Admin's bank-account registry.
+  tab('bank-accounts', 'Bank accounts', hq('Platform', 'sub-nav'), { how: 'Sub-navigation item, after Payments.' }),
   tab('promos', 'Promo codes', hq('Platform', 'sub-nav'), { how: 'Sub-navigation item. Promo ceilings stay on Revenue.' }),
   tab('billing', 'Billing', hq('Revenue', 'card link'), { how: 'Card link.' }),
   // Wellbeing had no home on H35. The decision: Admin · Community — the

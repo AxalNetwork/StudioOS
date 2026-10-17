@@ -3,30 +3,24 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { stripTypeScriptTypes } from 'node:module';
-import { createHmac } from 'node:crypto';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
 import { tableFromBaseline } from './_baseline.mjs';
 import { memKV } from './_mem_kv.mjs';
-import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
-import meetingsRouter, { zoomWebhook } from '../src/routes/founder_validate_meetings.ts';
-import { MEET_TRANSCRIPT_SCOPE } from '../src/services/channels/googleMeet.ts';
+import meetingsRouter from '../src/routes/founder_validate_meetings.ts';
 import { openSession,writableInterview } from '../src/services/interviewIntake.ts';
 import { decryptCredentials,encryptCredentials } from '../src/integrations/secrets.ts';
-import { encryptString } from '../src/services/cryptoBox.ts';
 import * as zoom from '../src/services/channels/zoom.ts';
 import * as meeting from '../src/services/channels/meetings.ts';
 import * as reg from '../src/integrations/registry.ts';
 
-/** How the interviewee agreed: a call is scheduled only with consent recorded (#1470's rule). */
-const CONSENT = { status: 'given', method: 'verbal' };
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const mig = (name: string) => readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8');
 
 const JWT_SECRET = 'd684-s18-fixture-only-signing-secret-0123456789';
 const WEBHOOK_SECRET = 'zoom-webhook-fixture-secret';
-const ME = 2, OTHER = 3, FOUNDER = 9;
+const ME = 2, FOUNDER = 9;
 const PROJECT = 7, OTHER_PROJECT = 8;
 const INTERVIEW = 101, THEIR_INTERVIEW = 501;
 const MEETING_ID = '85746065432';
@@ -94,13 +88,6 @@ async function connectZoom(f: World, creds: Record<string, unknown> = {}, userId
                 VALUES (?, ?, 'zoom', 'active', 'oauth2', ?)`).run(uid, userId, enc);
 }
 
-async function connectGoogle(f: World, scope: string, userId = ME) {
-  f.db.prepare('INSERT INTO google_oauth_tokens (user_id, refresh_token, scope) VALUES (?, ?, ?)')
-    .run(userId, await encryptString(f.env, 'google-refresh-token'), scope);
-}
-const GRANTED = `https://www.googleapis.com/auth/calendar.events openid ${MEET_TRANSCRIPT_SCOPE}`;
-const NO_MEET = 'https://www.googleapis.com/auth/calendar.events openid';
-
 /** A ref as the POST route leaves it, last looked at long ago (so a sweep finds it due). */
 async function seedRef(f: World, over: Partial<{ provider: string; external_ref: string; status: string; ends_at: string; join_url: string }> = {}) {
   const provider = (over.provider ?? 'zoom') as 'zoom' | 'google_meet';
@@ -123,71 +110,6 @@ type Handler = (url: URL, init: any) => Response | Promise<Response>;
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', ...headers } });
 
-/** Routes are `METHOD origin+path`; a request nothing matches throws, so no test reaches a provider. */
-function mockFetch(t: any, routes: Record<string, Handler>) {
-  const calls: { key: string; url: URL; headers: Headers; body: string | null }[] = [];
-  const original = globalThis.fetch;
-  globalThis.fetch = (async (input: any, init: any = {}) => {
-    const url = new URL(typeof input === 'string' ? input : input.url);
-    const key = `${(init.method || 'GET').toUpperCase()} ${url.origin}${url.pathname}`;
-    const body = init.body == null ? null : String(init.body);
-    calls.push({ key, url, headers: new Headers(init.headers), body });
-    const handler = routes[key] ?? (/^GET https:\/\/api\.zoom\.us\/v2\/past_meetings\/\d+\/instances$/.test(key) ? (() => json({ meetings: [] })) : undefined);
-    if (!handler) throw new Error(`unmocked fetch: ${key}`);
-    return handler(url, init);
-  }) as typeof fetch;
-  t.after(() => { globalThis.fetch = original; });
-  return calls;
-}
-
-// ── HTTP ──────────────────────────────────────────────────────────────────────
-
-const app = (() => {
-  const a = new Hono();
-  a.route('/api/founder/validate', meetingsRouter as any);
-  a.route('/api/channels', zoomWebhook as any);
-  a.onError((err: any, c) => {
-    const st = AUTH_ERROR_STATUSES[err?.message ?? ''];
-    if (st) return c.json({ detail: err.message }, st);
-    console.error(err);
-    return c.json({ detail: 'Internal server error' }, 500);
-  });
-  return a;
-})();
-
-async function call(env: any, user: number, method: string, path: string, body?: unknown) {
-  const tok = await new SignJWT({ user_id: user, role: 'founder' }).setProtectedHeader({ alg: 'HS256' })
-    .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
-  const headers: Record<string, string> = { Authorization: `Bearer ${tok}` };
-  if (body !== undefined) headers['content-type'] = 'application/json';
-  const res = await app.fetch(new Request(`http://x/api/founder/validate${path}`, {
-    method, headers, body: body === undefined ? undefined : JSON.stringify(body),
-  }), env);
-  return { status: res.status, body: await res.json().catch(() => null) as any };
-}
-
-const hmac = (secret: string, msg: string) => createHmac('sha256', secret).update(msg).digest('hex');
-function signed(body: string, { ts = Math.floor(Date.now() / 1000), secret = WEBHOOK_SECRET } = {}) {
-  return { 'x-zm-signature': `v0=${hmac(secret, `v0:${ts}:${body}`)}`, 'x-zm-request-timestamp': String(ts), 'content-type': 'application/json' };
-}
-async function zoomPost(env: any, payload: unknown, headers?: Record<string, string>) {
-  const body = typeof payload === 'string' ? payload : JSON.stringify(payload);
-  const res = await app.fetch(new Request('http://x/api/channels/zoom/webhook', {
-    method: 'POST', headers: headers ?? signed(body), body,
-  }), env);
-  return { status: res.status, body: await res.json().catch(() => null) as any };
-}
-const transcriptEvent = (id: string | number = Number(MEETING_ID), uuid = 'Mtg+uuid==') => ({
-  event: 'recording.transcript_completed', event_ts: Date.now(),
-  payload: {
-    // Host and account fields are Zoom's view of the world; tenancy never reads them.
-    account_id: 'some-other-account', object: {
-      id, uuid, host_id: 'someone-else', topic: 'Customer interview',
-      recording_files: [{ file_type: 'TRANSCRIPT', download_url: 'https://zoom.us/rec/download/not-used-from-payload' }],
-    },
-  },
-});
-
 const VTT = [
   'WEBVTT', 'Kind: captions', '',
   'NOTE Zoom audio transcript', 'spans two lines', '',
@@ -195,11 +117,6 @@ const VTT = [
   '2', '00:00:04.500 --> 00:00:07.000 align:start position:10%', 'Sam Founder: Who signs off?', '', '', '',
   '3', '00:00:07.000 --> 00:00:09.250', 'Dana Ruiz: The CFO &amp; me.', '',
 ].join('\r\n');
-
-const zoomRecordings = (files: unknown[]) => json({ uuid: 'Mtg+uuid==', id: Number(MEETING_ID), recording_files: files });
-const TRANSCRIPT_FILE = { file_type: 'TRANSCRIPT', file_extension: 'VTT', status: 'completed', recording_type: 'audio_transcript',
-  download_url: 'https://zoom.us/rec/download/transcript-file' };
-
 
 const real={zoom,meeting,route:meetingsRouter,reg};
 const snap=(got:unknown,want:unknown)=>assert.deepEqual(got,want);

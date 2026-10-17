@@ -198,7 +198,11 @@ export type EdgeWrite =
  * a cycle through `wouldCycle`. The only function here that reads the store;
  * the caller has checked access and that the store exists.
  */
-export async function addOkrDependency(env: Env, input: { projectId: number; okrId: number; blocksOkrId: number; note: string | null; userId: number | null }): Promise<EdgeWrite> {
+export async function addOkrDependency(env: Env, input: {
+  projectId: number; okrId: number; blocksOkrId: number; note: string | null; userId: number | null;
+  /** D690 (#1695 decision 15): statements that land with the edge, in its batch (Build's activity row). */
+  also?: ReturnType<Env['DB']['prepare']>[];
+}): Promise<EdgeWrite> {
   const { projectId, okrId, blocksOkrId } = input;
   if (okrId === blocksOkrId) return { ok: false, status: 400, detail: 'An objective cannot block itself' };
   const okrs = await env.DB.prepare('SELECT id FROM roadmap_okrs WHERE project_id = ?').bind(projectId).all<{ id: number }>();
@@ -213,9 +217,10 @@ export async function addOkrDependency(env: Env, input: { projectId: number; okr
   if (wouldCycle(edges, okrId, blocksOkrId)) {
     return { ok: false, status: 409, detail: 'That link would make two objectives block each other', cycle: true };
   }
-  const res = await env.DB.prepare(
+  const insert = env.DB.prepare(
     'INSERT INTO okr_dependencies (project_id, okr_id, blocks_okr_id, note, created_by)'
     + ' VALUES (?,?,?,?,?)',
-  ).bind(projectId, okrId, blocksOkrId, input.note, input.userId).run();
+  ).bind(projectId, okrId, blocksOkrId, input.note, input.userId);
+  const [res] = input.also?.length ? await env.DB.batch([insert, ...input.also]) : [await insert.run()];
   return { ok: true, id: res.meta?.last_row_id ?? null, okr_id: okrId, blocks_okr_id: blocksOkrId };
 }

@@ -31,6 +31,7 @@ from backend.app.database import get_session
 from backend.app.models.entities import User
 from backend.app.services import linkedin_import as _lin
 from backend.app.services.email_service import send_verification_email
+from backend.app.services.settings_schema import ensure_settings_schema as _ensure_schema
 
 router = APIRouter(prefix="/settings", tags=["Settings"])
 
@@ -46,148 +47,15 @@ def _safe_rollback(session: Session) -> None:
 
 
 # --- one-shot schema migration ---------------------------------------------
-
-_USER_COLUMNS = [
-    ("bio", "TEXT"),
-    ("headline", "TEXT"),
-    ("headshot_local_path", "TEXT"),
-    ("jurisdictions", "TEXT"),
-    ("socials", "TEXT"),
-    ("notification_prefs", "TEXT"),
-    ("privacy_prefs", "TEXT"),
-    ("role_prefs", "TEXT"),
-    ("jwt_min_iat", "BIGINT DEFAULT 0"),
-    ("deletion_requested_at", "TIMESTAMP"),
-    ("totp_recovery_codes", "TEXT"),
-    # Task #66 — structured, public-facing career background (JSON text) +
-    # a website URL. Mirrors the worker's profileExpansion.ts columns.
-    ("experience", "TEXT"),
-    ("education", "TEXT"),
-    ("certifications", "TEXT"),
-    ("website", "TEXT"),
-    # Task #67 — LinkedIn profile photo URL captured at OAuth callback, used by
-    # the "Import from LinkedIn" flow (account source). Mirrors the worker.
-    ("linkedin_picture_url", "TEXT"),
-]
+#
+# The ALTER / CREATE bootstrap lives in services/settings_schema.py so that
+# auth.py can run it before inserting a session row without importing this
+# router (auth → settings → auth was an import cycle). Same function, same
+# run-once flag, so the many `_ensure_schema(session)` calls below are
+# unchanged.
 
 FOUNDER_INVITE_CAP_PER_PROJECT = 10
 FOUNDER_INVITE_EXPIRY_DAYS = 14
-
-_migrated = False
-
-
-def _ensure_schema(session: Session) -> None:
-    """Idempotent ALTER / CREATE — Postgres in dev. Each statement is its own
-    transaction so a single failure (e.g. column already exists) doesn't
-    poison the rest, and we cache the success flag to keep request latency
-    low after first boot."""
-    global _migrated
-    if _migrated:
-        return
-    for col, kind in _USER_COLUMNS:
-        try:
-            session.exec(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {col} {kind}"))
-            session.commit()
-        except Exception:
-            session.rollback()
-    try:
-        session.exec(
-            text(
-                """
-                CREATE TABLE IF NOT EXISTS email_change_requests (
-                    id BIGSERIAL PRIMARY KEY,
-                    user_id INTEGER NOT NULL,
-                    old_email TEXT NOT NULL,
-                    new_email TEXT NOT NULL,
-                    confirm_token_hash TEXT NOT NULL UNIQUE,
-                    revoke_token_hash TEXT NOT NULL UNIQUE,
-                    requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    confirm_expires_at TIMESTAMP NOT NULL,
-                    revoke_expires_at TIMESTAMP NOT NULL,
-                    confirmed_at TIMESTAMP,
-                    revoked_at TIMESTAMP
-                )
-                """
-            )
-        )
-        session.commit()
-    except Exception:
-        session.rollback()
-    try:
-        session.exec(text("CREATE INDEX IF NOT EXISTS idx_ecr_user ON email_change_requests(user_id)"))
-        session.commit()
-    except Exception:
-        session.rollback()
-    # user_sessions
-    try:
-        session.exec(
-            text(
-                """
-                CREATE TABLE IF NOT EXISTS user_sessions (
-                    id BIGSERIAL PRIMARY KEY,
-                    user_id INTEGER NOT NULL,
-                    jti TEXT NOT NULL UNIQUE,
-                    user_agent TEXT,
-                    ip TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    last_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    revoked_at TIMESTAMP
-                )
-                """
-            )
-        )
-        session.commit()
-    except Exception:
-        session.rollback()
-    for stmt in (
-        "CREATE INDEX IF NOT EXISTS idx_us_user ON user_sessions(user_id)",
-        "CREATE INDEX IF NOT EXISTS idx_us_jti ON user_sessions(jti)",
-    ):
-        try:
-            session.exec(text(stmt))
-            session.commit()
-        except Exception:
-            session.rollback()
-    # founder_invites
-    try:
-        session.exec(
-            text(
-                """
-                CREATE TABLE IF NOT EXISTS founder_invites (
-                    id BIGSERIAL PRIMARY KEY,
-                    project_id INTEGER,
-                    inviter_user_id INTEGER NOT NULL,
-                    invitee_email TEXT NOT NULL,
-                    invitee_name TEXT,
-                    role TEXT NOT NULL DEFAULT 'co-founder',
-                    token_hash TEXT NOT NULL UNIQUE,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    expires_at TIMESTAMP NOT NULL,
-                    accepted_at TIMESTAMP,
-                    revoked_at TIMESTAMP
-                )
-                """
-            )
-        )
-        session.commit()
-    except Exception:
-        session.rollback()
-    for stmt in (
-        "CREATE INDEX IF NOT EXISTS idx_fi_inviter ON founder_invites(inviter_user_id)",
-        "CREATE INDEX IF NOT EXISTS idx_fi_project ON founder_invites(project_id)",
-    ):
-        try:
-            session.exec(text(stmt))
-            session.commit()
-        except Exception:
-            session.rollback()
-    # codeql[py/unused-global-variable] -- _migrated is read via the `global _migrated` guard at the top of this same function (`if
-    # _migrated: return`); the write here is what a LATER, separate call's read observes. CodeQL's
-    # dead-store analysis does not model a global's value persisting across separate invocations of
-    # the function that sets it, so it sees this write as never consumed. It is: this flag exists
-    # specifically to make the schema-migration idempotent-but-skippable after the first successful
-    # request in this process.
-    _migrated = True
 
 
 # --- helpers ----------------------------------------------------------------
@@ -629,13 +497,19 @@ def linkedin_import_apply(
     if bg_updates:
         session.commit()
 
-    # Photo (best-effort): fetch the host-allowlisted licdn URL and store it via
-    # the same hardened local-file headshot path. Never fatal.
+    # Photo (best-effort). The client's photo_url only says "keep the photo the
+    # preview offered": what is fetched is the URL stored at the LinkedIn OAuth
+    # callback (users.linkedin_picture_url, which is what the preview sent), and
+    # only when the two match — so a request body never chooses the URL this
+    # server fetches. Stored via the same hardened local-file headshot path.
+    # Never fatal.
     photo_applied = False
-    if p["photo_url"] and _lin.is_linkedin_image_host(p["photo_url"]):
-        photo_applied = _apply_linkedin_photo(session, user, p["photo_url"])
-        if photo_applied:
-            applied.append("photo")
+    if p["photo_url"]:
+        stored = _stored_linkedin_picture_url(session, user.id)
+        if stored and stored[:1000] == p["photo_url"] and _lin.is_linkedin_image_host(stored):
+            photo_applied = _apply_linkedin_photo(session, user, stored)
+            if photo_applied:
+                applied.append("photo")
 
     return Response(
         content=json.dumps({"ok": True, "applied": applied, "photo_applied": photo_applied}),
@@ -644,16 +518,31 @@ def linkedin_import_apply(
     )
 
 
+def _stored_linkedin_picture_url(session: Session, user_id: int) -> Optional[str]:
+    """The LinkedIn photo URL saved for this user at the OAuth callback (the
+    same column the account-source preview reads), or None."""
+    try:
+        row = session.exec(text(
+            "SELECT linkedin_picture_url FROM users WHERE id = :uid").bindparams(uid=user_id)).first()
+    except Exception:
+        _safe_rollback(session)
+        return None
+    pic = row._mapping["linkedin_picture_url"] if row else None  # type: ignore[attr-defined]
+    return str(pic) if pic else None
+
+
 def _apply_linkedin_photo(session: Session, user: User, url: str) -> bool:
-    """Fetch a LinkedIn CDN photo (host already allowlisted) and persist it to
-    the local headshot path. Best-effort — any failure is swallowed."""
+    """Fetch the user's stored LinkedIn CDN photo (host already allowlisted)
+    and persist it to the local headshot path. Best-effort — any failure is
+    swallowed."""
     import urllib.request
 
     try:
-        # Defense-in-depth SSRF guard: re-assert the allowlist (https + LinkedIn
-        # CDN host) immediately before the request, independent of the caller's
-        # check. `is_linkedin_image_host` verifies scheme==https and hostname ∈
-        # *.licdn.com / *.linkedin.com, so the URL is not attacker-chosen.
+        # Defense-in-depth SSRF guard: the caller passes only the URL stored at
+        # the LinkedIn OAuth callback, never one from the request body; still
+        # re-assert the allowlist (https + LinkedIn CDN host) immediately before
+        # the request. `is_linkedin_image_host` verifies scheme==https and
+        # hostname ∈ *.licdn.com / *.linkedin.com.
         if not _lin.is_linkedin_image_host(url):
             return False
         req = urllib.request.Request(url, headers={"User-Agent": "AxalStudioOS"})

@@ -26,6 +26,7 @@
 import type { Env } from '../types';
 import { splitCall, type CallSplit } from './fundCallSplit';
 import { capitalCallStatement } from '../routes/_capital_call_writes';
+import { assertFundCallPayable } from './payInstructions';
 
 /** A line's owed amount in cents: exact where the line carries it, rounded from dollars where it predates 312. */
 const OWED_CENTS_SQL = `COALESCE(cc.amount_cents, CAST(ROUND(cc.amount * 100) AS INTEGER))`;
@@ -53,6 +54,12 @@ export interface IssueResult {
   split: CallSplit;
   /** The LP ids whose line this run wrote (a retry writes none it already has). */
   written: number[];
+  /**
+   * D708 decision 9: set when the call is on Fund I and the Fund cannot be
+   * paid (no account for capital contributions, or one the resolver refuses).
+   * Nothing was written; `call` is null.
+   */
+  held?: { code: string; message: string };
 }
 
 /** Whole dollars print bare; anything else prints its cents. */
@@ -63,6 +70,9 @@ function dollars(cents: number): string {
 /**
  * Write a call's header and one line per billed LP, then log a notice to each
  * LP whose line this run wrote.
+ *
+ * HELD ON FUND I (D708). A call on Fund I writes nothing while the Fund has
+ * no payable account; the result carries `held` and the caller says why.
  *
  * RE-RUN SAFE. The header and every line are `INSERT OR IGNORE` on uids
  * derived from `callUid`, and they are one batch, so a run either writes the
@@ -104,6 +114,12 @@ export async function issueFundCall(env: Env, input: IssueInput): Promise<IssueR
       );
     }
   }
+
+  // D708 decision 9: no line asks an LP to pay a Fund that has nowhere to be
+  // paid. Checked before anything is written, after a finished call's retry,
+  // which writes nothing either way.
+  const refusal = await assertFundCallPayable(env, [fundId]);
+  if (refusal) return { call: null, split, written: [], held: { code: refusal.code, message: refusal.message } };
 
   const header = env.DB.prepare(
     `INSERT OR IGNORE INTO fund_capital_calls

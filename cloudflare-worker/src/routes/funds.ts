@@ -10,10 +10,12 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAuth, requireApprovedKyc } from '../auth';
+import { requireAuth, requireApprovedKyc, isSuperAdmin, requireSuperAdminWriteBar, selectJwt } from '../auth';
 import { FundReportRefusal,reportId,readFundPage,readFundPeriod,saveFundPeriod } from '../services/fundReports';
 import { AUTH_ERROR_STATUSES } from '../util/authErrors';
 import { requireFundGp, requireFundCreator } from '../services/fundGpAccess';
+import { assertFundAct, auditFundAct, type FundActKey } from '../services/fundAdminAccess';
+import { DISTRIBUTION_LPS_SQL, splitDistribution } from '../services/fundDistributionSplit';
 import { Funds, LPs } from '../models/funds';
 import { Jobs } from '../models/jobs';
 import { enqueueJob } from '../services/queue';
@@ -31,6 +33,9 @@ import { splitCall } from '../services/fundCallSplit';
 import {
   issueFundCall, recordReceipt, readLine, readFundCalls, readFundLedger,
 } from '../services/fundCallLedger';
+import {
+  FUND_I_SLUG, assertFundCallPayable, capitalCallReference, fundPayeeOf, payInstructionsFor, revealPayInstructions,
+} from '../services/payInstructions';
 import {
   rollUpFundRow, readFundCapital, totalFundRollups, FUND_METRIC_UNAVAILABLE,
   type FundRollup, type FundRollupRow,
@@ -158,6 +163,33 @@ funds.get('/lp-portal', async (c) => {
     callsRecorded = false;
   }
 
+  // D708 decision 11: each unpaid line on Fund I says where to pay, masked,
+  // with the reference to quote, or why it cannot. Never the number: that is
+  // `GET /:id/capital-calls/lines/:lineId/pay-instructions`, which records it.
+  const fundI = calls.length ? await Funds.bySlug(c.env, FUND_I_SLUG) : null;
+  const unpaidOnFundI = (cc: any) => fundI && Number(cc.fund_id) === Number(fundI.id)
+    && cc.status !== 'paid' && Number(cc.received_cents) < Number(cc.owed_cents);
+  if (calls.some(unpaidOnFundI)) {
+    const pay = await payInstructionsFor(c.env, 'fund', 'capital_contribution');
+    calls = calls.map((cc: any) => {
+      if (!unpaidOnFundI(cc)) return { ...cc, pay_instructions: null };
+      if (!pay.ok) return { ...cc, pay_instructions: { available: false, code: pay.code, message: pay.message } };
+      return {
+        ...cc,
+        pay_instructions: {
+          available: true,
+          bank_name: pay.instructions.bank_name,
+          beneficiary_name: pay.instructions.beneficiary_name,
+          account_masked: pay.instructions.account_masked,
+          reference: capitalCallReference(Number(cc.fund_id), Number(cc.limited_partner_id), Number(cc.id)),
+          warning: pay.warning,
+        },
+      };
+    });
+  } else {
+    calls = calls.map((cc: any) => ({ ...cc, pay_instructions: null }));
+  }
+
   // Performance per-LP-row: TVPI = (returns + distributions) / invested ; DPI = distributions / invested
   const perfByLp = lpRows.map((lp: any) => {
     const lpDists = distRows.filter((d: any) => d.fund_id === lp.fund_id);
@@ -204,6 +236,8 @@ funds.get('/lp-portal', async (c) => {
     // archive lists these; a draft period is the GP's working copy and is not an
     // LP-facing document until it is issued.
     report_periods: await issuedPeriods(c.env, lpRows.map((r: any) => r.fund_id)),
+    // D712: the caller's own issued capital statements, matched on the LP rows above.
+    ...statementsPart(await issuedStatements(c.env, lpRows.map((r: any) => Number(r.id)))),
   });
 });
 
@@ -223,11 +257,46 @@ async function issuedPeriods(env: Env, fundIds: number[]) {
       WHERE fund_id IN (${marks}) AND status = 'issued'
       ORDER BY period_end DESC LIMIT 40`
   ).bind(...ids).all().catch(() => ({ results: [] }));
+  // D712: a period issued through the reporting queue carries its report's
+  // frozen fund-level figures, without the list of statements. A period issued
+  // here before the queue has none, and the renderer says Not recorded.
+  const periodIds = (r.results || []).map((row: any) => Number(row.id));
+  const frozen = new Map<number, any>();
+  if (periodIds.length) {
+    const reports = await env.DB.prepare(
+      `SELECT report_period_id, figures_json FROM fund_report_drafts
+        WHERE kind = 'lp_quarterly_report' AND status = 'issued' AND report_period_id IN (SELECT value FROM json_each(?))`,
+    ).bind(JSON.stringify(periodIds)).all<{ report_period_id: number; figures_json: string }>().catch(() => ({ results: [] as any[] }));
+    for (const rep of reports.results || []) {
+      const { statements: _statements, ...figures } = parseJson<Record<string, unknown>>(rep.figures_json, {});
+      frozen.set(Number(rep.report_period_id), figures);
+    }
+  }
   return (r.results || []).map((row: any) => ({
     ...row,
     notes: undefined,
     narrative: parseJson<PeriodNarrative>(row?.notes, {}),
+    figures: frozen.get(Number(row.id)) ?? null,
   }));
+}
+
+/**
+ * D712: issued capital statements for the given LP rows, newest first. Only an
+ * issued statement leaves the queue; a draft never does. A failed read is
+ * `null`, never an empty list: "no statement" is a claim about the LP.
+ */
+async function issuedStatements(env: Env, lpIds: number[]): Promise<any[] | null> {
+  const ids = [...new Set(lpIds.filter((n) => Number.isSafeInteger(n) && n > 0))];
+  if (!ids.length) return [];
+  const r = await env.DB.prepare(
+    `SELECT uid, fund_id, limited_partner_id, report_period_id, period_label, period_start, period_end, revision,
+            corrects_draft_id, issued_at, figures_json
+       FROM fund_report_drafts
+      WHERE kind = 'lp_capital_statement' AND status = 'issued' AND limited_partner_id IN (SELECT value FROM json_each(?))
+      ORDER BY period_end DESC, id DESC LIMIT 80`,
+  ).bind(JSON.stringify(ids)).all<any>().catch((e) => { console.error('[funds] capital statements unreadable', (e as Error)?.message); return null; });
+  if (!r) return null;
+  return (r.results || []).map(({ figures_json, ...row }: any) => ({ ...row, figures: parseJson(figures_json, null) }));
 }
 
 /**
@@ -624,17 +693,85 @@ funds.post('/', async (c) => {
   return c.json({ ok: true, fund: f, lpa_status: 'enqueued' }, 201);
 });
 
+/**
+ * D714 — an activity row, written directly. `logActivity` leaves
+ * `activity_logs.action` (NOT NULL) unset and swallows the failure, so on a
+ * database built from the migrations it records nothing — the LP-type route
+ * below says the same. The act has already happened, so this never throws.
+ */
+async function recordFundActivity(
+  env: Env, userId: number, action: string, entityType: string, entityId: number, metadata: Record<string, unknown>,
+): Promise<void> {
+  try {
+    await env.DB.prepare(
+      `INSERT INTO activity_logs (user_id, action, action_type, entity_type, entity_id, metadata)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).bind(userId, action, action, entityType, String(entityId), JSON.stringify(metadata)).run();
+  } catch (e) {
+    console.warn('[funds] activity row failed', action, (e as Error).message);
+  }
+}
+
+/** A stored value and a requested one, compared as the column holds them (null included). */
+const sameValue = (stored: unknown, next: unknown) => {
+  const norm = (v: unknown) => (v === null || v === undefined || v === '' ? null : Number(v));
+  return norm(stored) === norm(next);
+};
+
+/**
+ * D714 — which act a PATCH is. Changing the GP of record hands every GP gate
+ * to another account, and the distribution job withholds carry at
+ * `carried_interest`; both are Super Admin acts. Anything else is `fund.write`.
+ */
+function fundPatchAct(fund: any, body: any): FundActKey {
+  const has = (k: string) => body && typeof body === 'object' && Object.prototype.hasOwnProperty.call(body, k);
+  if (has('gp_user_id') && !sameValue(fund?.gp_user_id, body.gp_user_id)) return 'fund.gp_of_record';
+  if (['carried_interest', 'management_fee'].some((k) => has(k) && !sameValue(fund?.[k], body[k]))) return 'fund.economics';
+  return 'fund.write';
+}
+
+/** The fields that record who controls a fund or what it withholds: their old and new values are kept. */
+const FUND_CONTROL_FIELDS = ['gp_user_id', 'carried_interest', 'management_fee'];
+
 funds.patch('/:id', async (c) => {
   const id = parseInt(c.req.param('id'), 10);
-  await requireFundGp(c, id);
+  const gp = await requireFundGp(c, id);
   const body = await c.req.json();
+  const act = fundPatchAct(gp.fund, body);
+  await assertFundAct(c, gp, act);
+  // D708 decision 13: the `spinout-fund-i` slug decides which fund the Fund's
+  // bank account pays, so moving it onto or off a fund is the Super Admin's,
+  // behind the same bar as the Bank accounts console, and the fund's own GP
+  // stays refused. Inline until D714's table carries a `fund.slug_fund_i` row
+  // whose gate refuses a GP of record too. Checked before any write.
+  if (body && typeof body === 'object' && 'slug' in body) {
+    const was = gp.fund?.slug ?? null;
+    const next = body.slug ?? null;
+    if (next !== was && (was === FUND_I_SLUG || next === FUND_I_SLUG)) {
+      if (!isSuperAdmin(gp.user as any)) {
+        return c.json({ code: 'super_admin_required', detail: 'Super admin required' }, 403);
+      }
+      await requireSuperAdminWriteBar(c);
+    }
+  }
   const f = await Funds.update(c.env, id, body);
+  // D714 decision 4: the edit wrote no audit row. The changed field names, and
+  // for the control fields their old and new values.
+  const before: any = gp.fund || {};
+  const after: any = f || {};
+  const fields = Object.keys(after).filter((k) => k !== 'updated_at' && k in before && before[k] !== after[k]);
+  const changes: Record<string, { from: unknown; to: unknown }> = {};
+  for (const k of FUND_CONTROL_FIELDS) if (fields.includes(k)) changes[k] = { from: before[k] ?? null, to: after[k] ?? null };
+  await recordFundActivity(c.env, Number(gp.user.id), 'fund_updated', 'fund', id, { fields, changes });
+  await auditFundAct(c.env, gp.user, act, { fund_id: id, fields, changes });
   return c.json({ ok: true, fund: f });
 });
 
 funds.post('/:id/regenerate-lpa', async (c) => {
   const id = parseInt(c.req.param('id'), 10);
-  const { fund } = await requireFundGp(c, id);
+  const gp = await requireFundGp(c, id);
+  await assertFundAct(c, gp, 'fund.write');
+  const { fund } = gp;
   if (!fund?.gp_user_id) {
     return refuse(c, 409, {
       code: 'no_gp_of_record',
@@ -644,6 +781,7 @@ funds.post('/:id/regenerate-lpa', async (c) => {
   // Clear any prior LPA doc reference so the worker re-generates.
   await c.env.DB.prepare(`UPDATE vc_funds SET lpa_doc_id = NULL WHERE id = ?`).bind(id).run();
   const job = await Jobs.enqueue(c.env, 'lpa_generation', { fund_id: id });
+  await auditFundAct(c.env, gp.user, 'fund.write', { fund_id: id, write: 'regenerate_lpa' });
   return c.json({ ok: true, enqueued_job: job });
 });
 
@@ -684,8 +822,16 @@ funds.post('/:id/report-periods', async (c) => {
  try{
   const fundId=reportId(c.req.param('id'));
   if(!fundId)throw new FundReportRefusal('not_found',404);
-  const {user:issuer}=await requireFundGp(c,fundId);
-  const result=await saveFundPeriod(c.env,fundId,issuer.id,await c.req.json().catch(()=>null));
+  const gp=await requireFundGp(c,fundId);
+  // D714: the body is read once, the draft act asserted, and the same body
+  // saved. D712 decision 6: an admin issues only through the reporting queue;
+  // saving a draft stays open to admins, and a non-admin GP of record still
+  // issues here.
+  const body=await c.req.json().catch(()=>null);
+  await assertFundAct(c,gp,'fund_report.draft');
+  if(gp.viaAdmin&&body?.issue===true)return refuse(c,409,{code:'issue_from_reporting_queue',message:'Admins issue a reporting period from the reporting queue.'});
+  const result=await saveFundPeriod(c.env,fundId,gp.user.id,body);
+  await auditFundAct(c.env,gp.user,'fund_report.draft',{fund_id:fundId,period_id:result.period?.id??null});
   return c.json({ok:true,period:result.period},result.created?201:200);
  }catch(error){return fundReportError(c,error);}
 });
@@ -704,7 +850,7 @@ funds.get('/:id/lp-report/:lpId', async (c) => {
   await ensureFundGpColumns(c.env);
   const fundId = parseInt(c.req.param('id'), 10);
   const lpId = parseInt(c.req.param('lpId'), 10);
-  await requireFundGp(c, fundId);
+  const { viaAdmin } = await requireFundGp(c, fundId);
   if (!Number.isFinite(fundId) || !Number.isFinite(lpId)) {
     return c.json({ error: 'bad id' }, 400);
   }
@@ -766,13 +912,40 @@ funds.get('/:id/lp-report/:lpId', async (c) => {
     }],
     funds: fundFacts([lp]),
     recipient: { name: lp.lp_display_name ?? null, email: lp.lp_display_email ?? null },
+    // D712: the LP's issued statements; for an admin, the live drafts by uid,
+    // status and period only. Their figures come through the audited read.
+    ...statementsPart(await issuedStatements(c.env, [lpId])),
+    ...(viaAdmin ? { statement_drafts: await liveStatementDrafts(c.env, fundId, lpId) } : {}),
   });
 });
 
+const statementsPart = (rows: any[] | null) => ({ capital_statements: rows ?? [], capital_statements_recorded: rows !== null });
+
+async function liveStatementDrafts(env: Env, fundId: number, lpId: number) {
+  const r = await env.DB.prepare(
+    `SELECT uid, status, period_label, period_start, period_end, revision FROM fund_report_drafts
+      WHERE kind = 'lp_capital_statement' AND fund_id = ? AND limited_partner_id = ? AND status IN ('draft', 'prepared')
+      ORDER BY period_end DESC, id DESC`,
+  ).bind(fundId, lpId).all().catch(() => null);
+  return r ? r.results || [] : null;
+}
+
 funds.post('/:id/lps', async (c) => {
   const fundId = parseInt(c.req.param('id'), 10);
-  const { user } = await requireFundGp(c, fundId);
+  const gp = await requireFundGp(c, fundId);
+  const { user } = gp;
   const body = await c.req.json();
+  // D714: an LP with a first call issues a call — a Super Admin act — so a
+  // plain Admin's request is refused whole, and nothing is written.
+  const firstCall = !!(body?.first_call_cents && body.first_call_cents > 0);
+  const act: FundActKey = firstCall ? 'capital_call.issue' : 'fund.write';
+  await assertFundAct(c, gp, act);
+  // D708 decision 9: a first call on Fund I is refused before the LP is
+  // written, so the GP is not left with an LP and a call that never issued.
+  if (firstCall) {
+    const held = await assertFundCallPayable(c.env, [fundId]);
+    if (held) return refuse(c, 409, { code: held.code, message: held.message });
+  }
   const lp = await LPs.create(c.env, { ...body, fund_id: fundId });
   if (!lp) return c.json({ error: 'create failed' }, 500);
   // First-call automation: enqueue a notice immediately if amount provided.
@@ -789,6 +962,9 @@ funds.post('/:id/lps', async (c) => {
       issued_by: Number(user.id),
     });
   }
+  await auditFundAct(c.env, user, act, {
+    fund_id: fundId, lp_id: (lp as any)?.id ?? null, ...(firstCall ? { amount_cents: body.first_call_cents } : {}),
+  });
   return c.json({ ok: true, lp }, 201);
 });
 
@@ -801,7 +977,9 @@ funds.post('/:id/lps', async (c) => {
 funds.put('/:id/lps/:lpId/type', async (c) => {
   const fundId = parseInt(c.req.param('id'), 10);
   const lpId = parseInt(c.req.param('lpId'), 10);
-  const { user } = await requireFundGp(c, fundId);
+  const gp = await requireFundGp(c, fundId);
+  const { user } = gp;
+  await assertFundAct(c, gp, 'fund.write');
   const body = await c.req.json().catch(() => ({} as any));
   let lpType;
   try { lpType = parseLpType(body?.lp_type); } catch (e) {
@@ -819,6 +997,7 @@ funds.put('/:id/lps/:lpId/type', async (c) => {
     `INSERT INTO activity_logs (user_id, action, action_type, entity_type, entity_id, metadata)
      VALUES (?, 'lp_type_set', 'lp_type_set', 'limited_partner', ?, ?)`,
   ).bind(Number(user.id), String(lpId), JSON.stringify({ fund_id: fundId, lp_type: lpType })).run();
+  await auditFundAct(c.env, user, 'fund.write', { fund_id: fundId, lp_id: lpId, write: 'lp_type' });
   return c.json({ ok: true, id: lpId, lp_type: lpType });
 });
 
@@ -843,7 +1022,9 @@ funds.get('/:id/comms', async (c) => {
 
 funds.post('/:id/comms', async (c) => {
   const fundId = parseInt(c.req.param('id'), 10);
-  const { user } = await requireFundGp(c, fundId);
+  const gp = await requireFundGp(c, fundId);
+  const { user } = gp;
+  await assertFundAct(c, gp, 'fund.write');
   const body = await c.req.json().catch(() => ({} as any));
   let input;
   try { input = parseCommInput(body); } catch (e) {
@@ -852,6 +1033,7 @@ funds.post('/:id/comms', async (c) => {
   }
   const id = await addCommunication(c.env, fundId, Number(user.id), input);
   if (id === null) return c.json({ error: 'LP or call line not found on this fund' }, 404);
+  await auditFundAct(c.env, user, 'fund.write', { fund_id: fundId, write: 'comms', comm_id: id });
   return c.json({ ok: true, id, logged_by: Number(user.id) }, 201);
 });
 
@@ -910,7 +1092,9 @@ const BAD_AMOUNT = {
  */
 funds.post('/:id/capital-call', async (c) => {
   const fundId = parseInt(c.req.param('id'), 10);
-  const { user } = await requireFundGp(c, fundId);
+  const gp = await requireFundGp(c, fundId);
+  const { user } = gp;
+  await assertFundAct(c, gp, 'capital_call.issue');
   const body = await c.req.json<{
     amount_cents?: number; amount?: number; note?: string; purpose?: string; due_date?: string;
   }>().catch(() => ({} as any));
@@ -927,6 +1111,8 @@ funds.post('/:id/capital-call', async (c) => {
   const issued = await issueFundCall(c.env, {
     fundId, amountCents, callUid: crypto.randomUUID(), dueDate, purpose, issuedBy: Number(user.id),
   });
+  // D708 decision 9: Fund I with no payable account. Nothing was written.
+  if (issued.held) return refuse(c, 409, issued.held);
   if (!issued.call) {
     return refuse(c, 409, {
       code: 'no_billable_lps',
@@ -937,6 +1123,9 @@ funds.post('/:id/capital-call', async (c) => {
     entityType: 'fund', entityId: fundId,
     metadata: { call_number: issued.call.call_number, amount_cents: amountCents, lines: issued.written.length },
   }).catch(() => {});
+  await auditFundAct(c.env, user, 'capital_call.issue', {
+    fund_id: fundId, call_number: issued.call.call_number, amount_cents: amountCents, lines: issued.written.length,
+  });
   return c.json({ ok: true, call: issued.call, lines_written: issued.written.length, due_date: dueDate }, 201);
 });
 
@@ -947,7 +1136,8 @@ funds.post('/:id/capital-call', async (c) => {
  */
 funds.post('/:id/capital-calls/preview', async (c) => {
   const fundId = parseInt(c.req.param('id'), 10);
-  await requireFundGp(c, fundId);
+  const gp = await requireFundGp(c, fundId);
+  await assertFundAct(c, gp, 'capital_call.preview');
   const body = await c.req.json<{ amount_cents?: number; amount?: number }>().catch(() => ({} as any));
   const amountCents = requestCents(body);
   if (amountCents === null) return refuse(c, 400, BAD_AMOUNT);
@@ -972,6 +1162,7 @@ funds.post('/:id/capital-calls/preview', async (c) => {
       kyc_status: lp.user_id != null ? (lp.kyc_status ?? null) : null,
     };
   };
+  await auditFundAct(c.env, gp.user, 'capital_call.preview', { fund_id: fundId, amount_cents: amountCents });
   return c.json({
     ok: true,
     amount_cents: amountCents,
@@ -983,8 +1174,21 @@ funds.post('/:id/capital-calls/preview', async (c) => {
       ...who(l.lpId), commitment_cents: l.commitmentCents, share_cents: l.shareCents, residual: l.residual,
     })),
     excluded: split.excluded.map((x) => ({ ...who(x.lpId), reason: x.reason })),
+    payment_instructions: await previewInstructions(c.env, fundId),
   });
 });
+
+/**
+ * D708: what the call's notice will print, masked, or why the call cannot
+ * issue. Null for a fund that is not Fund I, which the registry does not pay.
+ */
+async function previewInstructions(env: Env, fundId: number) {
+  if (await fundPayeeOf(env, fundId) !== 'fund') return null;
+  const pay = await payInstructionsFor(env, 'fund', 'capital_contribution');
+  return pay.ok
+    ? { ok: true, instructions: pay.instructions, warning: pay.warning }
+    : { ok: false, code: pay.code, message: pay.message };
+}
 
 /** Every call on the fund, each with its LP lines, and the fund's call totals. */
 funds.get('/:id/capital-calls', async (c) => {
@@ -1032,6 +1236,52 @@ funds.get('/:id/ledger', async (c) => {
 });
 
 /**
+ * D708 decision 11: the LP's own wire details for one open line on Fund I —
+ * the full account number, the reference to quote and the warning. The
+ * reveal is recorded before the number is decrypted, and a support session
+ * never sees it. Another LP's line, a line on another fund, or a fund that is
+ * not Fund I is the same 404 as a line that does not exist.
+ */
+funds.get('/:id/capital-calls/lines/:lineId/pay-instructions', async (c) => {
+  c.header('Cache-Control', 'no-store');
+  const user = await requireAuth(c);
+  if ((await selectJwt(c))?.payload.impersonated_by) {
+    return refuse(c, 403, {
+      code: 'support_session_refused',
+      message: 'A support session cannot see payment instructions. The LP opens them from their own account.',
+    });
+  }
+  const fundId = parseInt(c.req.param('id'), 10);
+  const lineId = parseInt(c.req.param('lineId'), 10);
+  const notFound = () => refuse(c, 404, { code: 'call_line_not_found', message: 'That call line is not one of yours on this fund.' });
+  if (!Number.isSafeInteger(fundId) || fundId <= 0 || !Number.isSafeInteger(lineId) || lineId <= 0) return notFound();
+  const scope = lpSelfScope(user as any);
+  const mine = await c.env.DB.prepare(
+    `SELECT cc.id FROM capital_calls cc
+       JOIN limited_partners lp ON lp.id = cc.limited_partner_id
+      WHERE cc.id = ? AND ${scope.sql}`,
+  ).bind(lineId, ...scope.binds).first();
+  if (!mine) return notFound();
+  const line = await readLine(c.env, lineId);
+  if (!line || Number(line.fund_id) !== fundId || await fundPayeeOf(c.env, fundId) !== 'fund') return notFound();
+  if (line.status === 'paid' || line.outstanding_cents <= 0) {
+    return refuse(c, 409, { code: 'line_already_paid', message: 'This line is paid in full, so there is nothing to wire.' });
+  }
+  const pay = await revealPayInstructions(c.env, 'fund', 'capital_contribution', {
+    actorUserId: Number(user.id), context: 'capital_call_line', contextRef: String(lineId),
+  });
+  if (!pay.ok) return refuse(c, 409, { code: pay.code, message: pay.message });
+  return c.json({
+    ok: true,
+    line_id: lineId,
+    outstanding_cents: line.outstanding_cents,
+    instructions: pay.instructions,
+    reference: capitalCallReference(fundId, Number(line.limited_partner_id), lineId),
+    warning: pay.warning,
+  });
+});
+
+/**
  * The GP records a wire against one LP's line: how much, the date it landed,
  * its reference. Append-only (migration 312); the line is paid once its
  * receipts reach what it owes. The line must be on this fund — a line id from
@@ -1040,7 +1290,9 @@ funds.get('/:id/ledger', async (c) => {
 funds.post('/:id/capital-calls/lines/:lineId/receipts', async (c) => {
   const fundId = parseInt(c.req.param('id'), 10);
   const lineId = parseInt(c.req.param('lineId'), 10);
-  const { user } = await requireFundGp(c, fundId);
+  const gp = await requireFundGp(c, fundId);
+  const { user } = gp;
+  await assertFundAct(c, gp, 'capital_call.receipt');
   const notFound = () => refuse(c, 404, { code: 'call_line_not_found', message: 'That call line is not on this fund.' });
   if (!Number.isSafeInteger(lineId) || lineId <= 0) return notFound();
   const line = await readLine(c.env, lineId);
@@ -1080,6 +1332,10 @@ funds.post('/:id/capital-calls/lines/:lineId/receipts', async (c) => {
     entityType: 'capital_call', entityId: lineId,
     metadata: { fund_id: fundId, amount_cents: cents, received_on: receivedOn, paid: outcome.paid },
   }).catch(() => {});
+  // No reference: bank text never enters the audit row.
+  await auditFundAct(c.env, user, 'capital_call.receipt', {
+    fund_id: fundId, line_id: lineId, amount_cents: cents, received_on: receivedOn, paid: outcome.paid,
+  });
   return c.json({ ok: true, receipt: outcome.receipt, line: outcome.line, paid: outcome.paid }, 201);
 });
 
@@ -1107,7 +1363,10 @@ funds.post('/distributions/execute', async (c) => {
   if (!body?.fund_id) {
     return c.json({ error: 'fund_id required (target a specific fund)' }, 400);
   }
-  const { user } = await requireFundGp(c, Number(body.fund_id));
+  const gp = await requireFundGp(c, Number(body.fund_id));
+  const { user } = gp;
+  // D714: a Super Admin act, still asserted after the body read for the reason above.
+  await assertFundAct(c, gp, 'distribution.execute');
   // For manual runs without a real liquidity event, create a placeholder one
   // so source_liquidity_event_id is always non-null and distributions are auditable.
   let evtId = body.liquidity_event_id;
@@ -1128,7 +1387,33 @@ funds.post('/distributions/execute', async (c) => {
     entityType: 'fund', entityId: body.fund_id ?? 0,
     metadata: { proceeds_cents: body.proceeds_cents, liquidity_event_id: evtId },
   }).catch(() => {});
+  await auditFundAct(c.env, user, 'distribution.execute', {
+    fund_id: Number(body.fund_id), proceeds_cents: body.proceeds_cents, liquidity_event_id: evtId ?? null,
+  });
   return c.json({ ok: true, enqueued_job: job, liquidity_event_id: evtId });
+});
+
+/**
+ * D714 decision 3 — what Execute would write, before anyone presses it: the
+ * basis returned, the profit, the carry withheld and the rate it used (and
+ * whether that rate is the job's 0.20 default), each LP's line, and the cents
+ * no line received. The same `splitDistribution` the `returns_distribution`
+ * job runs, over the same LPs, so the two cannot disagree. Nothing is written.
+ */
+funds.post('/:id/distributions/preview', async (c) => {
+  const fundId = parseInt(c.req.param('id'), 10);
+  const gp = await requireFundGp(c, fundId);
+  await assertFundAct(c, gp, 'distribution.preview');
+  const body = await c.req.json<{ proceeds_cents?: number }>().catch(() => ({} as any));
+  const proceeds = Number(body?.proceeds_cents);
+  if (!Number.isSafeInteger(proceeds) || proceeds <= 0) {
+    return refuse(c, 400, { code: 'invalid_amount', message: 'A distribution needs proceeds above zero, in whole cents.' });
+  }
+  const lps = (await c.env.DB.prepare(DISTRIBUTION_LPS_SQL).bind(fundId)
+    .all<{ id: number; commitment_amount: number; invested_amount: number }>()).results || [];
+  const split = splitDistribution(proceeds, gp.fund?.carried_interest, lps);
+  await auditFundAct(c.env, gp.user, 'distribution.preview', { fund_id: fundId, proceeds_cents: proceeds });
+  return c.json({ ok: true, fund_id: fundId, ...split });
 });
 
 funds.post('/distributions/:id/mark-paid', async (c) => {
@@ -1146,7 +1431,8 @@ funds.post('/distributions/:id/mark-paid', async (c) => {
   if (!row) return c.json({ error: 'not found' }, 404);
   // Gate BEFORE the status check, so 'already settled' cannot confirm the
   // existence of another GP's distribution.
-  await requireFundGp(c, Number((row as any).fund_id));
+  const gp = await requireFundGp(c, Number((row as any).fund_id));
+  await assertFundAct(c, gp, 'distribution.mark_paid');
   if (row.status !== 'pending') return c.json({ error: 'already settled' }, 409);
 
   const dollars = row.amount_cents / 100;
@@ -1167,6 +1453,13 @@ funds.post('/distributions/:id/mark-paid', async (c) => {
   // @ts-ignore — D1 result shape: meta.changes
   const changed = (updRes as any)?.meta?.changes ?? 0;
   if (!changed) return c.json({ error: 'lost race; already settled' }, 409);
+  // D714 decision 4: mark-paid had no activity row, for any caller.
+  const fundOfRow = Number((row as any).fund_id);
+  await recordFundActivity(c.env, Number(gp.user.id), 'distribution_marked_paid', 'fund_distribution', id,
+    { fund_id: fundOfRow, lp_id: row.lp_id, amount_cents: row.amount_cents });
+  await auditFundAct(c.env, gp.user, 'distribution.mark_paid', {
+    fund_id: fundOfRow, distribution_id: id, lp_id: row.lp_id, amount_cents: row.amount_cents,
+  });
   return c.json({
     ok: true,
     distribution: { ...row, status: 'paid' },

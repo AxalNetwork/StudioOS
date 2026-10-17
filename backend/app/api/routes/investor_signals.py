@@ -42,12 +42,14 @@ TICKET_RANGES = {
     "$1M+": (1_000_000, 5_000_000),
 }
 
-_schema_ready = False
+# A dict entry, not a `global` flag, as in settings.py (D476): CodeQL's
+# unused-global check does not follow a flag written on one call and read
+# on the next. Same run-once behaviour.
+_schema_once = {"investor_profiles": False}
 
 
 def _ensure_schema(session: Session) -> None:
-    global _schema_ready
-    if _schema_ready:
+    if _schema_once["investor_profiles"]:
         return
     try:
         session.exec(text("""
@@ -59,13 +61,7 @@ def _ensure_schema(session: Session) -> None:
             )
         """))
         session.commit()
-        # codeql[py/unused-global-variable] -- _schema_ready is read via the `global _schema_ready` guard at the top of this same function
-        # (`if _schema_ready: return`); the write here is what a LATER, separate call's read observes.
-        # CodeQL's dead-store analysis does not model a global's value persisting across separate
-        # invocations of the function that sets it, so it sees this write as never consumed. It is: this
-        # flag exists specifically to make the schema-migration idempotent-but-skippable after the first
-        # successful request in this process.
-        _schema_ready = True
+        _schema_once["investor_profiles"] = True
     except Exception:
         session.rollback()
 

@@ -18,7 +18,11 @@ test.describe('Calendar > Google OAuth start (post-AO verification)', () => {
         r => /\/api\/calendar\/google\/(oauth|start|connect)/i.test(r.url()),
         { timeout: 5_000 }
       ).catch(() => null);
-      const navToGoogle = page.waitForURL(/accounts\.google\.com|google\.com\/o\/oauth2/i, { timeout: 5_000 }).catch(() => null);
+      // Google's own host, read from the parsed URL, so a Google address in a
+      // query string or a lookalike host does not count as the navigation.
+      const isGoogleOAuth = (url) => url.hostname === 'accounts.google.com'
+        || ((url.hostname === 'google.com' || url.hostname.endsWith('.google.com')) && url.pathname.startsWith('/o/oauth2'));
+      const navToGoogle = page.waitForURL(isGoogleOAuth, { timeout: 5_000 }).catch(() => null);
       await connect.click().catch(() => {}); // popup may already block before resolution
       const [resp, nav] = await Promise.all([oauthStart, navToGoogle]);
       expect(resp || nav, 'expected either OAuth start API call OR navigation to Google').toBeTruthy();

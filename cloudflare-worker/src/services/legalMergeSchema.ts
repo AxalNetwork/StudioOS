@@ -323,18 +323,24 @@ export function bracketLabel(path: string): string {
  */
 export const PLACEHOLDER_MERGE_CONTEXT: Record<string, unknown> = buildPlaceholderContext();
 
+// The paths are the static LEGAL_MERGE_SCHEMA keys, so nothing here is caller
+// data; the guard is for the day one is mistyped. A path with a segment that
+// names the prototype chain is skipped WHOLE: the old per-segment `continue`
+// skipped only that segment, so the example landed one level up, and the leaf
+// was never checked at all (`a.__proto__` went to the prototype setter instead
+// of setting a key). Each node walked is an own object created here, never an
+// inherited value.
 function buildPlaceholderContext(): Record<string, unknown> {
   const root: Record<string, unknown> = {};
   for (const [path, def] of Object.entries(LEGAL_MERGE_SCHEMA)) {
     const parts = path.split('.');
-    let cur = root;
-    for (let i = 0; i < parts.length - 1; i++) {
-      const key = parts[i];
-      if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
-      if (typeof cur[key] !== 'object' || cur[key] == null) cur[key] = {};
-      cur = cur[key] as Record<string, unknown>; // codeql[js/prototype-polluting-function] -- keys come from the static LEGAL_MERGE_SCHEMA; __proto__/constructor/prototype skipped above
-    }
-    cur[parts[parts.length - 1]] = def.example;
+    if (parts.some((key) => key === '__proto__' || key === 'constructor' || key === 'prototype')) continue;
+    const leaf = parts.pop()!;
+    const parent = parts.reduce<Record<string, unknown>>((node, key) => {
+      if (!Object.prototype.hasOwnProperty.call(node, key) || typeof node[key] !== 'object' || node[key] == null) node[key] = {};
+      return node[key] as Record<string, unknown>;
+    }, root);
+    parent[leaf] = def.example;
   }
   return root;
 }

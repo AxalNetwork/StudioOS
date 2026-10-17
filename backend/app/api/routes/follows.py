@@ -28,7 +28,10 @@ from backend.app.models.entities import User
 logger = logging.getLogger("studioos.follows")
 router = APIRouter(prefix="/follows", tags=["follows"])
 
-_schema_ready = False
+# A dict entry, not a `global` flag, as in settings.py (D476): CodeQL's
+# unused-global check does not follow a flag written on one call and read
+# on the next. Same run-once behaviour.
+_schema_once = {"follows": False}
 
 
 def _safe_rollback(session: Session) -> None:
@@ -43,8 +46,7 @@ def _ensure_follows_schema(session: Session) -> None:
     """Idempotent CREATE TABLE / INDEX. Mirrors the worker's follows table.
     Each statement is its own transaction so one failure doesn't poison the
     rest, and we cache the success flag to keep request latency low."""
-    global _schema_ready
-    if _schema_ready:
+    if _schema_once["follows"]:
         return
     try:
         session.exec(text(
@@ -71,15 +73,9 @@ def _ensure_follows_schema(session: Session) -> None:
             session.commit()
         except Exception:
             session.rollback()
-    # One-time init guard (declared global above, read at function entry): set
-    # only after the schema is ensured so later requests skip this work.
-    # codeql[py/unused-global-variable] -- _schema_ready is read via the `global _schema_ready` guard at the top of this same function
-    # (`if _schema_ready: return`); the write here is what a LATER, separate call's read observes.
-    # CodeQL's dead-store analysis does not model a global's value persisting across separate
-    # invocations of the function that sets it, so it sees this write as never consumed. It is: this
-    # flag exists specifically to make the schema-migration idempotent-but-skippable after the first
-    # successful request in this process.
-    _schema_ready = True
+    # One-time init guard (read at function entry): set only after the schema
+    # is ensured so later requests skip this work.
+    _schema_once["follows"] = True
 
 
 def _parse_target(entity_type, entity_id) -> Optional[tuple[str, int]]:

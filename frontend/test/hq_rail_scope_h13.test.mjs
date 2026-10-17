@@ -35,7 +35,6 @@ import { codeOnly } from './_codeOnly.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const RAIL = codeOnly(read('frontend/src/ui/WorkerRail.jsx'));
-const CSS = read('frontend/src/ui/workerRail.css');
 const HOME = codeOnly(read('frontend/src/pages/hq/HqHomePage.jsx'));
 const OVERLAY = codeOnly(read('frontend/src/pages/hq/HqBranchOverlay.jsx'));
 const API = codeOnly(read('frontend/src/lib/api.js'));
