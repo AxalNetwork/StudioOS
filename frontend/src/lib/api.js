@@ -45,6 +45,7 @@ export * from './api/section83bReview.js';
 export * from './api/shareUpdate.js';
 export * from './api/ticketReviews.js';
 export * from './api/usage.js';
+export * from './api/verdict.js';
 // api-modules:end
 
 const BASE = '/api';

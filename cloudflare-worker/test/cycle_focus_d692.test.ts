@@ -374,8 +374,10 @@ function routed(href: string, routes: string[]): boolean {
     if (r === path) return true;
     const m = /^\/(validate|raise|grow|build)\/:slug$/.exec(r);
     if (!m) {
-      const re = new RegExp(`^${r.split('/').map((s) => (s.startsWith(':') ? '[^/]+' : s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))).join('/')}$`);
-      return !r.includes(':slug') && re.test(path);
+      // Segment by segment, so a route's own text is never compiled as a pattern.
+      const want = r.split('/'), got = path.split('/');
+      return !r.includes(':slug') && want.length === got.length
+        && want.every((s, i) => (s.startsWith(':') ? got[i] !== '' : s === got[i]));
     }
     const [, cycle, slug] = /^\/([a-z]+)\/([^/]+)$/.exec(path) || [];
     return cycle === m[1] && (SLUGS[cycle] || []).includes(slug);

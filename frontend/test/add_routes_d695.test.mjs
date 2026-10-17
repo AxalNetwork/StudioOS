@@ -195,7 +195,8 @@ test('each Add opens from its /new address: over the page on a desktop, as the p
     ["forms.find((f) => f.key === searchParams.get('form')) || forms[0]", 'forms[0]'],
     ['if (location.state?.under) { navigate(-1); return; }', ''],
     ["    if (i > 0) params.set('form', entry.key);\n", ''],
-    ['{phone && openForm ? openForm : body}', '{body}'],
+    // D697: the body's phone line also carries a further part's page dialog.
+    ['{phone && openForm ? openForm : phone && dialog?.page ? dialog.element : body}', '{phone && dialog?.page ? dialog.element : body}'],
     ['{!phone && openForm}', '{openForm}'],
     ['  if (adding && slug && !forms.length) return <Navigate to={`/${cycle}/${slug}${location.search}`} replace />;\n', ''],
     ["navigate(`/${cycle}/${slug}/new${rest ? `?${rest}` : ''}`, { replace: true });", "navigate(`/${cycle}/${slug}/new${rest ? `?${rest}` : ''}`);"],

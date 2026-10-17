@@ -34,9 +34,10 @@ import ToolsHistory from './ToolsHistory';
 import UpdatesHistory from './UpdatesHistory';
 import UpdateAskReplies from './UpdateAskReplies';
 import CallsHistory from './CallsHistory';
+import { InterviewsSection, PainThemesSection, HypothesesSection } from './ValidateSections';
 import FormLightbox from './FormLightbox';
 import { usePhoneWidth } from '../../ui/phone/usePhoneWidth';
-import { editFor, formsFor } from './forms';
+import { editFor, formFor, formsFor } from './forms';
 import { adaptCard, adaptModule, adaptOverview, fnOf, toFnMap } from './adapters';
 import { cellView, cycleOf } from './cycleModel';
 import { MODULES } from './modules';
@@ -89,6 +90,29 @@ const CYCLE_DEFS = {
     }),
     // The AI fill bands the Validate desk carried, on the module they fill.
     fills: { 'problem-discovery': 'pain_tag', experiments: 'hypothesis' },
+    // D697 (#1659): the three bottom sections, what the Interviews, Pain map
+    // and Hypotheses pages drew. They read nothing: counts are the module
+    // read's `parts`, writes are these callbacks, and the venture is always
+    // the page's, never a row's. Each dialog goes through `ctx.openDialog`.
+    parts: toFnMap({
+      'customer-research': (data, ctx) => <InterviewsSection parts={data?.parts} projectId={ctx.projectId} query={ctx.query} openDialog={ctx.openDialog}
+        onLog={(payload) => api.createInterview(ctx.projectId, payload).then(ctx.reload)}
+        onExport={() => api.exportValidateInterviews(ctx.projectId)} />,
+      'problem-discovery': (data, ctx) => <PainThemesSection parts={data?.parts} projectId={ctx.projectId} query={ctx.query} openDialog={ctx.openDialog}
+        onExport={() => api.exportValidatePainMap(ctx.projectId)}
+        // #1692's `attach` on the theme record, so the theme's activity logs it.
+        onAssign={(themeId, body) => cyclesApi.recordAction('validate', ctx.projectId, 'problem-discovery', themeId, 'attach', body).then(ctx.reload)}
+        newThemeHref={formFor('validate', 'problem-discovery') ? `/validate/problem-discovery/new?project_id=${encodeURIComponent(ctx.projectId)}` : null} />,
+      experiments: (data, ctx) => <HypothesesSection parts={data?.parts} projectId={ctx.projectId} query={ctx.query} openDialog={ctx.openDialog}
+        // Link to a pain's lists, as FVW handed them: the board's unretired claims and its themes.
+        onLoadLinkLists={() => api.getValidationBoard(ctx.projectId).then((board) => ({
+          hypotheses: (board?.hypotheses || []).filter((h) => !h.retired_at), painGroups: board?.pain_groups || [],
+        }))}
+        // #1692's `link` on the theme record, so both sides log it.
+        onLink={(painGroupId, body) => cyclesApi.recordAction('validate', ctx.projectId, 'problem-discovery', painGroupId, 'link', body).then(ctx.reload)}
+        // Only until #1656 registers New hypothesis as the table's Add (decision 20).
+        onNewHypothesis={formFor('validate', 'experiments') ? undefined : (body) => api.createHypothesis(ctx.projectId, body).then(ctx.reload)} />,
+    }),
   },
   /**
    * Raise's read (#1501, D663) is already in D661's shape: its cards carry
@@ -572,6 +596,13 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
 
   const [query, setQuery] = useState({ q: '', filter: {}, sort: '', page: 1 });
   const [reload, setReload] = useState(0);
+  // D697 decision 21: the one dialog a module's further parts opened. It is
+  // drawn after the size container (a `fixed` layer inside it would sit against
+  // the column), or as the body below 1024px when it is a page; a new module
+  // or record closes it.
+  const [dialog, setDialog] = useState(null);
+  const openDialog = useCallback((element, { page = false } = {}) => setDialog(element ? { element, page } : null), []);
+  useEffect(() => { setDialog(null); }, [cycle, slug, recordId]);
   const known = !slug || (def?.modules || []).some((m) => m.slug === slug);
   const validRecord = RECORD_ID.test(recordId ?? '') && recordId !== 'new';
   const recordState = useCycleRecord({ enabled: record && known && validRecord && !!projectId && !!def,
@@ -773,7 +804,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
         {fillsOn && projectId ? drafts.map((draft) => (
           <ZoneDraft key={`${slug}-${draft.surface}`} {...draft} scopeKey={String(projectId)} ai={ai} accent="violet" />
         )) : null}
-        {moduleStatus === 'ready' && fnOf(def.parts, slug)?.(module, { projectId, reload: () => setReload((n) => n + 1), openAction })}
+        {moduleStatus === 'ready' && fnOf(def.parts, slug)?.(module, { projectId, reload: () => setReload((n) => n + 1), openAction, query, openDialog })}
       </CycleModulePage>
     );
   }
@@ -795,7 +826,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
           would place them against the column (decision 13). */}
       <div className="@container/cycle min-w-0">
       <div className="min-w-0 px-[22px] pt-[14px] pb-[18px] lg:px-6 lg:pt-[22px] lg:pb-[30px] lg:@max-[760px]/cycle:px-[14px] lg:@max-[760px]/cycle:pt-[14px] lg:@max-[760px]/cycle:pb-[40px]" data-testid="cycle-route-body">
-        {phone && openForm ? openForm : body}
+        {phone && openForm ? openForm : phone && dialog?.page ? dialog.element : body}
         {creates && !record && (
           <CreateStartupForm
             open={creating}
@@ -817,6 +848,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
         <Mount projectId={projectId} q={q} searchParams={searchParams} onClose={closeAction} onDone={onDone}
           onChanged={() => { dirty.current = true; }} />
       )}
+      {dialog && !(phone && dialog.page) && dialog.element}
     </RailFrame>
     </RailCrumbsProvider>
   );
