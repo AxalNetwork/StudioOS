@@ -89,6 +89,7 @@ import adminContractDocRegistry from './routes/admin_contract_doc_registry';
 // Task #9 — Hardcoded IRS-style forms (SS-4, 8821, Faxed-EIN, Confirmation).
 import adminForms from './routes/admin_forms';
 import adminIntegrationKeys from './routes/admin_integration_keys';
+import adminMercury from './routes/admin_mercury';
 import adminGithub from './routes/admin_github';
 import githubWebhook from './routes/github';
 // Task #4 (AW) — Admin reader for advisor_turn_audit (L6) + lock/shadow controls (L7).
@@ -840,6 +841,8 @@ app.route('/api/admin/contracts', adminContracts);
 // Task #9 — IRS-style forms catalog + PDF preview/download (admin-only).
 app.route('/api/admin/forms', adminForms);
 app.route('/api/admin/integration-keys', adminIntegrationKeys);
+// D710 (#1775): Mercury, read-only, for fund administration.
+app.route('/api/admin/mercury', adminMercury);
 app.route('/api/admin/github', adminGithub);
 app.route('/api/github', githubWebhook);
 app.route('/api/admin/advisor-audit', adminAdvisorAudit);
@@ -1785,6 +1788,19 @@ export default {
         // D572 part 3b — the partner leaderboard's daily standings, so the
         // board's "change" has an earlier standing to compare with. Every
         // tier: a branch's partners are its own. Idempotent per day.
+        // D691 (#1698) — Grow's daily step: obligation reminders and KPI
+        // alerts, in the app only. Each is claimed before it is sent, so a
+        // second run the same day sends nothing.
+        if (now.getUTCHours() === 5 && now.getUTCMinutes() === 35) {
+          try {
+            const { runGrowDaily } = await import('./services/growDaily');
+            const r = await runGrowDaily(env, now.getTime());
+            if (r.reminders || r.alerts) console.info(`[cron] grow daily reminders=${r.reminders} alerts=${r.alerts}`);
+            cronSummary.push(`grow daily reminders=${r.reminders} alerts=${r.alerts}`);
+          } catch (e) {
+            console.error('[cron] grow daily failed', e instanceof Error ? e.message : 'error');
+          }
+        }
         if (now.getUTCHours() === 5 && now.getUTCMinutes() === 25) {
           try {
             const { writeLeaderboardSnapshots } = await import('./services/partnerLeaderboard');
@@ -2021,6 +2037,18 @@ export default {
               if (p.errors.length) console.warn('[cron] scheduled posts errors', p.errors.slice(0, 5));
             }
           } catch (e) { console.error('[cron] scheduled posts sweep failed', e); }
+        }
+        // D710 (#1775) — Mercury's read-only sync of each Axal entity's
+        // accounts and transactions, then the matchers. Hourly at minute 17, a
+        // minute no other block uses. GATED ON `hqCadences`: these are HQ's
+        // entities in HQ's database, and the function itself does nothing on
+        // a branch. Reports, never throws.
+        if (hqCadences && now.getUTCMinutes() === 17) {
+          try {
+            const { syncAllMercuryEntityConnections } = await import('./services/mercury/sync');
+            const r = await syncAllMercuryEntityConnections(env);
+            if (r.scanned > 0) console.info(`[cron] mercury sync scanned=${r.scanned} ok=${r.ok} failed=${r.failed}`);
+          } catch (e) { console.error('[cron] mercury sync failed', e); }
         }
         // D272 — licence pushes that did not land are re-sent, each at most
         // once per hour (LICENCE_PUSH_RETRY_WINDOW_MINUTES, per row), so a

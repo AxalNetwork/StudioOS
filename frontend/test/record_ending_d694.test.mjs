@@ -38,7 +38,10 @@ test('ready pill and processing copy say where the recording lands', () => {
 test('Validate has only module tabs and its six phone index rows', () => {
   const cards = [{ slug: 'problem-discovery', name: 'Problem discovery' }, { slug: 'customer-research', name: 'Customer research' }];
   assert.deepEqual(cycleTabs('validate', cards, null, '?project_id=7').map((tab) => tab.name), ['Overview', 'Problem discovery', 'Customer research']);
-  assert.deepEqual(phoneIndex({ figures: [], cards: [] }).map((row) => row.key), ['problem-discovery', 'customer-research', 'ideal-customer-profile', 'market-intelligence', 'demand-signals', 'experiments']);
+  // D703 (#1665's PR 1b): the six rows are the Worker's (#1701's PR 1b), drawn as sent; the browser builds none.
+  const six = ['problem-discovery', 'customer-research', 'ideal-customer-profile', 'market-intelligence', 'demand-signals', 'experiments'];
+  assert.deepEqual(phoneIndex({ index: six.map((key) => ({ key, title: key, detail: '', value: null, href: `/validate/${key}` })), cards: [] }).map((row) => row.key), six);
+  assert.deepEqual(phoneIndex({ figures: [], cards: [] }), []);
   for (const [cycle, title] of [['build', 'Tools'], ['raise', 'Calls'], ['grow', 'Updates']]) {
     assert.equal(cycleTabs(cycle, cards)[1].name, title);
   }

@@ -43,6 +43,7 @@ runs these directly against an in-process SQLite, with no request at all.
 | `email/` | Transactional mail. |
 | `fills/` | "AI fills the blanks" — the fill-kind registry and the provenance of an accepted fill. A `sourced` fill carries a citation or it is dropped. |
 | `market_intel/` | Sourcing, extraction and scoring for market intelligence. |
+| `mercury/` | D710: Mercury for fund administration, read-only. A GET-only client, the boundary parser that drops account numbers, the gates and read audit, the entity connections' store, the hourly sync and the reconciliation matches. Its README has the rules. |
 | `referrals/` | Referral submissions. |
 | `records/` | D690's scoped cycle record contract, registry and ownership checks. |
 | `signals/` | Signal ingestion and evidence. |
@@ -209,3 +210,11 @@ revenue, markets, obligations and the durability checklist. Each logs one
 KPI is kept and how each KPI is read (Stripe from the last 35 days over a hand
 entry, Runway derived, custom KPIs as `custom-<uid>`); Revenue and traction's
 list, its record and Build's roadmap KPI list read through it.
+
+D691 (#1698): `growWriters.ts` also holds the record actions' writers (Mark
+told, an experiment, an alert, a deal, an entry step, a localisation check, an
+agenda item, Mark held and Open minutes), and `growKpis.ts` checks a KPI's
+alerts on every hand entry (`checkKpiAlerts`). `growDaily.ts` is Grow's daily
+step, run from `../index.ts` at 05:35 UTC: an obligation's reminders on the
+days its `remind_days_json` names, and every venture's KPI alerts, each sent
+once, in the app only.

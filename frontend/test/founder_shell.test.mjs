@@ -253,7 +253,7 @@ test('a founder desk pill opens its route — navigating on a desktop, switching
   // NavLink would navigate on a phone too.
   // The Validate, Build, Raise and Grow desks are retired (D661, #1474). The
   // cycle pages that replaced them draw their module tabs only from the
-  // md breakpoint up (`cycle-tabs`), so no phone taps one.
+  // lg breakpoint up (`cycle-tabs`), so no phone taps one.
   const DESKS = ['FounderNetworkDesk', 'FounderResearchDesk'];
   const routes = new Set(
     [...app.matchAll(/path="([^":]+)"/g)].map((m) => m[1]).filter((p) => p.startsWith('/')),

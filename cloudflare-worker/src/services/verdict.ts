@@ -30,6 +30,7 @@ import type { EvidenceCtx, EvidenceItemFull } from './validateEvidence';
 import type { Env, User } from '../types';
 import { logCycleWriteStatement } from './cycleActivity';
 import { safeCard, PAGE_SIZE, type Card } from './cycleCards';
+import { dayMonth } from './cycleFocus';
 import type { Ctx, FilterSpec, RecordQuery, Records, SortSpec } from './cycleValidate';
 import { ownsVenture, type ProjectRef } from '../routes/_founder_validate_helpers';
 
@@ -579,8 +580,10 @@ const isOldRoute = (d: Pick<DecisionRow, 'state' | 'evidence_count'>) => d.state
  *   first; Withheld ones carried with their state) and the current verdict.
  * - `unreadable`: `safeCard`'s, when a read throws.
  *
- * `series.next` and the card's `next` stay null until the deadline store
- * (#1692's migration 460) gives the sprint a date.
+ * - Next (CO:542's open step): the earliest deadline, today or later, of the
+ *   venture's open hypotheses (migration 460's `hypotheses.deadline`). The
+ *   card's `next` records the decision for that hypothesis. Both are null
+ *   when no deadline is ahead.
  */
 export async function verdictCard(ctx: Ctx): Promise<Card> {
   return safeCard({ slug: 'verdict', name: 'Verdict', range: 'All time', caption: 'Every decision, oldest to newest, never overwritten.', source: 'Decisions' }, async () => {
@@ -598,7 +601,10 @@ export async function verdictCard(ctx: Ctx): Promise<Card> {
         reason: 'No verdict for the venture yet. Withheld decisions and decisions on one hypothesis are in the table.',
       };
     }
-    const recent = await decisionsFor(ctx.env, ctx.projectId, { scope: 'venture', sort: 'newest', pageSize: TIMELINE_CAP });
+    const [recent, sprint] = await Promise.all([
+      decisionsFor(ctx.env, ctx.projectId, { scope: 'venture', sort: 'newest', pageSize: TIMELINE_CAP }),
+      nextSprint(ctx),
+    ]);
     return {
       state: 'ok',
       series: {
@@ -607,12 +613,30 @@ export async function verdictCard(ctx: Ctx): Promise<Card> {
           decision: current.decision, date: day(current.decided_at),
           evidence: isOldRoute(current) ? null : Number(current.evidence_count),
         },
-        next: null,
+        next: sprint ? { date: sprint.deadline } : null,
       },
-      next: null,
+      next: sprint
+        ? {
+          text: `Record the decision for the sprint ending ${dayMonth(sprint.deadline)}.`,
+          href: `/validate/verdict/new?project=${ctx.projectId}&for=h-${sprint.id}`,
+        }
+        : null,
       reason: null,
     };
   });
+}
+
+/**
+ * The sprint the card's Next names: the venture's open hypothesis with the
+ * earliest deadline on or after today, or null when none is ahead.
+ */
+async function nextSprint(ctx: Ctx): Promise<{ id: number; deadline: string } | null> {
+  const row = await ctx.env.DB.prepare(
+    `SELECT id, substr(deadline, 1, 10) AS deadline FROM hypotheses
+      WHERE project_id = ? AND retired_at IS NULL AND deadline IS NOT NULL AND substr(deadline, 1, 10) >= ?
+      ORDER BY substr(deadline, 1, 10), id LIMIT 1`,
+  ).bind(ctx.projectId, ctx.today).first<{ id: number; deadline: string }>();
+  return row && day(row.deadline) ? { id: Number(row.id), deadline: String(row.deadline) } : null;
 }
 
 const DECISION_WORD: Record<DecisionFilter, string> = { proceed: 'Proceed', pivot: 'Pivot', stop: 'Stop', withheld: 'Withheld' };
