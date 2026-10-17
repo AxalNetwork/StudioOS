@@ -8,7 +8,7 @@ import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-rou
 
 import CycleOverview from '../src/pages/cycles/CycleOverview.jsx';
 import { RecordsTable } from '../src/pages/cycles/CycleModulePage.jsx';
-import RecordFormSheet from '../src/pages/cycles/RecordFormSheet.jsx';
+import FormLightbox from '../src/pages/cycles/FormLightbox.jsx';
 import ValidatePhoneFocus from '../src/pages/cycles/ValidatePhoneFocus.jsx';
 import { formFor, formsFor, validate } from '../src/pages/cycles/forms.js';
 import { makeCycleWrites } from '../src/lib/api/cycleWrites.js';
@@ -71,7 +71,7 @@ test('D688: Solution design has two distinct Add forms; Score readiness has no f
   assert.match(record, /Add risk/);
   const rescore = formFor('raise', 'fundraising-readiness');
   assert.deepEqual(rescore.fields, []);
-  assert.match(html(h(RecordFormSheet, { form: rescore, cycle: 'Raise', onSubmit() {}, onClose() {} })), /Score readiness/);
+  assert.match(html(h(FormLightbox, { form: rescore, cycle: 'raise', slug: 'fundraising-readiness', onSubmit() {}, onClose() {} })), /Score readiness/);
   const narrative = formFor('raise', 'investor-narrative');
   assert.ok(validate(narrative, {}).investor_type);
   assert.deepEqual(validate(narrative, { investor_type: 'angel' }), {});
@@ -91,9 +91,10 @@ test('D688: Raise writes use existing query-scoped Worker routes', async () => {
 test('D688: route follows ?add=1 and selects the project returned by CreateStartupForm', () => {
   const route = source('frontend/src/pages/cycles/CycleRoute.jsx');
   const create = source('frontend/src/components/CreateStartupForm.jsx');
-  assert.match(route, /if \(slug && forms\.length && searchParams\.get\('add'\) === '1'\) setFormOpen\(forms\[0\]\)/);
+  // D695: `?add=1` is the first Add's address, `/new`, the rest of the query kept.
+  assert.match(route, /if \(adding \|\| lightbox \|\| !slug \|\| !forms\.length \|\| searchParams\.get\('add'\) !== '1'\) return;/);
   assert.match(route, /params\.delete\('add'\)/);
-  assert.match(route, /setSearchParams\(\(old\) => \{ const params = new URLSearchParams\(old\); params\.delete\('add'\); return params; \}, \{ replace: true \}\)/);
+  assert.match(route, /navigate\(`\/\$\{cycle\}\/\$\{slug\}\/new\$\{rest \? `\?\$\{rest\}` : ''\}`, \{ replace: true \}\);/);
   assert.match(route, /if \(created\?\.id\) writeProject\(created\.id, \['new'\]\)/);
   assert.match(create, /onCreated\(created\)/);
 });
@@ -113,21 +114,21 @@ test('D688: the returned venture replaces the old selection and drops ?new=1 in 
   } finally { await mounted.unmount(); }
 });
 
-test('D688: ?add=1 opens the first form on load and later navigation; close removes it; no-form routes ignore it', async () => {
+test('D688: ?add=1 opens the first form at its /new address on load and later navigation; close leaves it; no-form routes ignore it', async () => {
   const restore = installDocument();
   const container = document.createElement('div'); document.body.appendChild(container);
   const root = createRoot(container);
   const fetchBefore = globalThis.fetch;
   globalThis.fetch = async () => ({ ok: true, status: 200, headers: { get: () => 'application/json' }, json: async () => ({}), text: async () => '{}' });
-  let navigate; let search;
-  function Address() { navigate = useNavigate(); search = useLocation().search; return null; }
+  let navigate; let search; let path;
+  function Address() { navigate = useNavigate(); const at = useLocation(); search = at.search; path = at.pathname; return null; }
   function form() {
     const key = Object.keys(container).find((entry) => entry.startsWith('__reactContainer$'));
     const stack = [container[key]];
     while (stack.length) {
       const node = stack.pop();
       if (!node) continue;
-      if (node.type?.name === 'RecordFormSheet') return node.memoizedProps;
+      if (node.type?.name === 'FormLightbox') return node.memoizedProps;
       stack.push(node.sibling, node.child);
     }
     return null;
@@ -136,15 +137,19 @@ test('D688: ?add=1 opens the first form on load and later navigation; close remo
     await act(async () => root.render(h(MemoryRouter, { initialEntries: ['/build/solution-design?project_id=7&add=1'] },
       h(Address), h(Routes, null,
         h(Route, { path: '/build', element: h(CycleRoute, { cycle: 'build' }) }),
-        h(Route, { path: '/build/:slug', element: h(CycleRoute, { cycle: 'build' }) })))));
+        h(Route, { path: '/build/:slug', element: h(CycleRoute, { cycle: 'build' }) }),
+        h(Route, { path: '/build/:slug/new', element: h(CycleRoute, { cycle: 'build', adding: true }) })))));
     assert.equal(form()?.form.button, 'Add feature');
+    assert.equal(`${path}${search}`, '/build/solution-design/new?project_id=7', '?add=1 becomes the address');
     await act(async () => form().onClose());
     assert.equal(form(), null);
-    assert.equal(search, '?project_id=7');
+    assert.equal(`${path}${search}`, '/build/solution-design?project_id=7');
     await act(async () => navigate('/build/solution-design?project_id=7&add=1'));
     assert.equal(form()?.form.button, 'Add feature', 'query added after mount opens the form');
+    assert.equal(path, '/build/solution-design/new');
     await act(async () => navigate('/build/product-roadmap?project_id=7&add=1'));
     assert.equal(form(), null, 'module with no form ignores add');
+    assert.equal(`${path}${search}`, '/build/product-roadmap?project_id=7&add=1');
     await act(async () => navigate('/build?project_id=7&add=1'));
     assert.equal(form(), null, 'overview ignores add');
   } finally {

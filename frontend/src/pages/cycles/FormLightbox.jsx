@@ -1,5 +1,6 @@
 /**
- * D695 PR 1: reusable form body, not yet mounted by CycleRoute.
+ * D695: the one dialog for every cycle Add and Edit, which CycleRoute mounts
+ * at a module's `/new` address or for `state.editing` (a page below 1024px).
  * The parent owns navigation, API writes and per-row keys. Legacy forms are
  * adapted here until their registry owners merge; no registry is changed early.
  */

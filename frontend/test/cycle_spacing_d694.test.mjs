@@ -69,14 +69,14 @@ const routePath = 'frontend/src/pages/cycles/CycleRoute.jsx';
 const jsxName = (node) => node.openingElement.name.name;
 const attr = (node, name) => node.openingElement.attributes.find((a) => a.type === 'JSXAttribute' && a.name.name === name);
 const attrText = (node, name) => attr(node, name)?.value?.value ?? null;
-/** Every JSX element in the source, with its JSX ancestors (nearest last). */
-function jsxElements(source) {
+/** Every JSX element (and, with `type`, every node of that type) in the source, with its JSX ancestors (nearest last). */
+function jsxElements(source, type = 'JSXElement') {
   const ast = espree.parse(source, { ecmaVersion: 'latest', sourceType: 'module', ecmaFeatures: { jsx: true }, range: true });
   const out = [];
   const visit = (node, chain) => {
     if (!node || typeof node.type !== 'string') return;
     const next = node.type === 'JSXElement' ? [...chain, node] : chain;
-    if (node.type === 'JSXElement') out.push({ node, ancestors: chain });
+    if (node.type === type) out.push({ node, ancestors: chain });
     for (const [key, value] of Object.entries(node)) {
       if (key === 'parent' || key === 'range') continue;
       if (Array.isArray(value)) value.forEach((v) => visit(v, next));
@@ -112,11 +112,22 @@ function assertBody(source) {
   assert.equal(forms.length, 1);
   assert.ok(within(body.node, forms[0]), 'CreateStartupForm is inside the body');
   // Decision 13: a `fixed` layer inside a size container is placed against the column in older browsers.
-  const overlays = [...named('RecordFormSheet'), ...named('Mount').filter((m) => attr(m, 'projectId'))];
-  assert.ok(overlays.length >= 3, 'the form sheets and the action Mount are found');
+  // The forms are one `openForm` (#1656, D695): the dialog at its mount after the container at 1024px
+  // and up, the page inside the body below it.
+  const slots = jsxElements(source, 'JSXExpressionContainer');
+  const code = (node) => source.slice(node.range[0], node.range[1]);
+  const dialogMount = slots.filter(({ node }) => code(node) === '{!phone && openForm}').map(({ node }) => node);
+  assert.equal(dialogMount.length, 1, 'the form dialog has one mount');
+  const pageSlot = slots.filter(({ node }) => code(node) === '{phone && openForm ? openForm : body}').map(({ node }) => node);
+  assert.equal(pageSlot.length, 1, 'below 1024px the form is the body');
+  assert.ok(within(body.node, pageSlot[0]), 'the form page sits in the body, in its gutter');
+  for (const sheet of named('FormLightbox')) assert.ok(!within(container, sheet), 'no form dialog is drawn inside the container');
+  const overlays = [...dialogMount, ...named('Mount').filter((m) => attr(m, 'projectId'))];
+  assert.equal(overlays.length, 2, 'the form mount and the action Mount are found');
   for (const overlay of overlays) {
-    assert.ok(overlay.range[0] > container.range[1], `${jsxName(overlay)} comes after the size container closes`);
-    assert.ok(within(frame, overlay), `${jsxName(overlay)} stays inside RailFrame`);
+    const label = overlay.type === 'JSXElement' ? jsxName(overlay) : code(overlay);
+    assert.ok(overlay.range[0] > container.range[1], `${label} comes after the size container closes`);
+    assert.ok(within(frame, overlay), `${label} stays inside RailFrame`);
   }
 }
 
@@ -131,6 +142,8 @@ test('the cycle body takes the canvas gutter in a cycle size container, and no o
     ['the narrow bottom', (src) => src.replace('lg:@max-[760px]/cycle:pb-[40px]', 'lg:pb-[40px]')],
     ['the phone sides', (src) => src.replace('px-[22px] ', 'px-5 ')],
     ['p-5 kept', (src) => src.replace('min-w-0 px-[22px]', 'min-w-0 p-5 px-[22px]')],
+    ['the form dialog mounted inside the body', (src) => src.replace('      {!phone && openForm}\n', '').replace('        {phone && openForm ? openForm : body}\n', '        {phone && openForm ? openForm : body}\n        {!phone && openForm}\n')],
+    ['the form page drawn outside the body', (src) => src.replace('{phone && openForm ? openForm : body}', '{body}').replace('      {!phone && openForm}\n', '      {!phone && openForm}\n      {phone && openForm ? openForm : body}\n')],
   ]) {
     const mutated = mutate(source);
     assert.notEqual(mutated, source, `mutation applies: ${label}`);

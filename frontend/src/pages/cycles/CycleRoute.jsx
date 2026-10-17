@@ -30,7 +30,8 @@ import ToolsHistory from './ToolsHistory';
 import UpdatesHistory from './UpdatesHistory';
 import UpdateAskReplies from './UpdateAskReplies';
 import CallsHistory from './CallsHistory';
-import RecordFormSheet from './RecordFormSheet';
+import FormLightbox from './FormLightbox';
+import { usePhoneWidth } from '../../ui/phone/usePhoneWidth';
 import { editFor, formsFor } from './forms';
 import { adaptCard, adaptModule, adaptOverview, fnOf, toFnMap } from './adapters';
 import { cellView, cycleOf } from './cycleModel';
@@ -53,12 +54,14 @@ import { moduleToolLinks } from './founderToolNavigation.js';
  * sentence to the bands in its own entry.
  *
  * THE MODULES' WORKING TOOLS STAY WHERE THEY ARE. No canvas yet draws a
- * module's Add form, a record's edit view, or Validate's curation (merging
- * pain themes, linking evidence, the Verdict): S02 found the gap on #1474.
- * D661 already gives a module page a link to "the module's own tool where it
- * has one, rather than a second copy of it", so each module links to the
- * zone page that edits it today. Add is offered only where it opens a form
- * directly; a button with nothing behind it is not drawn.
+ * record's edit view, or Validate's curation (merging pain themes, linking
+ * evidence, the Verdict): S02 found the gap on #1474. D661 already gives a
+ * module page a link to "the module's own tool where it has one, rather than
+ * a second copy of it", so each module links to the zone page that edits it
+ * today. Each Add has an address, `/<cycle>/<slug>/new` (`?form=<key>` for a
+ * later one): its form is a dialog over the module page, or the page itself
+ * on a phone (D695). Add is offered only where it opens a form; a button with
+ * nothing behind it is not drawn.
  */
 
 const CYCLE_DEFS = {
@@ -396,7 +399,7 @@ function GrowMount({ projectId, onClose, onDone }) {
  * founder was on (`location.state.under`), the overview on a deep link. Closing
  * goes back to it; the lightbox makes no server call.
  */
-export default function CycleRoute({ cycle, lightbox = false }) {
+export default function CycleRoute({ cycle, lightbox = false, adding = false }) {
   const { slug: routeSlug } = useParams();
   const location = useLocation();
   const { user } = useAuth() || {};
@@ -428,21 +431,24 @@ export default function CycleRoute({ cycle, lightbox = false }) {
   // it reloads on close, not behind the lightbox, so nothing flashes.
   const dirty = useRef(false);
   // The module's Add and Edit forms (`forms.js`), for a store with no page of
-  // its own. `editing` is the row being edited.
+  // its own (D695). The open Add is the address's: `/new` opens the first form,
+  // `?form=<key>` a later one. The open Edit is the row the history entry names
+  // (`state.editing`), so Back closes it as it closes an Add.
   const forms = useMemo(() => (slug && def ? formsFor(cycle, slug) : []), [cycle, slug, def]);
   const edit = slug && def ? editFor(cycle, slug) : null;
-  const [formOpen, setFormOpen] = useState(null);
-  const [editing, setEditing] = useState(null);
-  useEffect(() => { setFormOpen(null); setEditing(null); }, [slug]);
+  const formOpen = adding && forms.length ? forms.find((f) => f.key === searchParams.get('form')) || forms[0] : null;
+  const editingId = !adding && edit && location.state?.editing != null ? String(location.state.editing) : null;
+  const phone = usePhoneWidth();
+  // #1652's `?add=1` (the Worker's card hrefs) is the first Add's address: the
+  // URL becomes `/new`, the rest of the query kept. A module with no form, and
+  // the overview, ignore it (D688).
   useEffect(() => {
-    if (slug && forms.length && searchParams.get('add') === '1') setFormOpen(forms[0]);
-  }, [slug, forms, searchParams]);
-  const closeForm = () => {
-    setFormOpen(null);
-    if (searchParams.get('add') === '1') {
-      setSearchParams((old) => { const params = new URLSearchParams(old); params.delete('add'); return params; }, { replace: true });
-    }
-  };
+    if (adding || lightbox || !slug || !forms.length || searchParams.get('add') !== '1') return;
+    const params = new URLSearchParams(searchParams);
+    params.delete('add');
+    const rest = params.toString();
+    navigate(`/${cycle}/${slug}/new${rest ? `?${rest}` : ''}`, { replace: true });
+  }, [adding, lightbox, slug, forms, searchParams, cycle, navigate]);
   const drafts = slug && def?.drafts instanceof Map && Array.isArray(def.drafts.get(slug)) ? def.drafts.get(slug) : [];
   const fillKind = slug && def?.fills && Object.prototype.hasOwnProperty.call(def.fills, slug) ? def.fills[slug] : null;
   // The cost before a run (D424), read only while a band is drawn: a draft
@@ -467,6 +473,11 @@ export default function CycleRoute({ cycle, lightbox = false }) {
   useEffect(() => {
     if (!lightbox && dirty.current) { dirty.current = false; setReload((n) => n + 1); }
   }, [lightbox]);
+  // An Add or an Edit (D695) is followed the same way: a save marks the page,
+  // and it re-reads once the form's address or history entry is left.
+  useEffect(() => {
+    if (!adding && !editingId && dirty.current) { dirty.current = false; setReload((n) => n + 1); }
+  }, [adding, editingId]);
 
   // The table's query resets when the module changes.
   useEffect(() => { setQuery({ q: '', filter: {}, sort: '', page: 1 }); }, [slug]);
@@ -505,6 +516,8 @@ export default function CycleRoute({ cycle, lightbox = false }) {
   if (toLive) return <Navigate to={toLive} replace />;
   if (!def) return null;
   if (!known) return <Navigate to={`/${cycle}${q}`} replace />;
+  // A known module with no Add form has no `/new`: its page instead.
+  if (adding && slug && !forms.length) return <Navigate to={`/${cycle}/${slug}${location.search}`} replace />;
 
   const openAction = projectId && def.path
     ? () => navigate(`/${cycle}/${def.path}${q}`, { state: { under: `${location.pathname}${location.search}` } })
@@ -513,6 +526,43 @@ export default function CycleRoute({ cycle, lightbox = false }) {
     if (location.state?.under) navigate(-1);
     else navigate(`/${cycle}${q}`, { replace: true });
   };
+  // An Add pushed from the page goes back to it; a deep link to `/new` replaces
+  // itself with the module page, the venture kept (as `closeAction` does). An
+  // Edit is the same URL with `state.editing`, so closing it is Back.
+  const closeAdd = () => {
+    if (location.state?.under) { navigate(-1); return; }
+    const params = new URLSearchParams(searchParams);
+    params.delete('form');
+    const rest = params.toString();
+    navigate(`/${cycle}/${slug}${rest ? `?${rest}` : ''}`, { replace: true });
+  };
+  const closeEdit = () => {
+    if (location.key !== 'default') navigate(-1);
+    else navigate(`${location.pathname}${location.search}`, { replace: true });
+  };
+  const addHref = (entry, i) => {
+    const params = new URLSearchParams(q);
+    if (i > 0) params.set('form', entry.key);
+    const rest = params.toString();
+    return `/${cycle}/${slug}/new${rest ? `?${rest}` : ''}`;
+  };
+  const editing = editingId ? (module?.records?.rows || []).find((row) => String(row?.id) === editingId) || null : null;
+  // The one open form, Add or Edit. Below 1024px it is the page, drawn in the
+  // body's gutter; at 1024px and up it is the dialog at the mount below.
+  const saved = () => { dirty.current = true; };
+  const openForm = !projectId ? null
+    : formOpen ? (
+      <FormLightbox key={`add-${formOpen.key}`} form={formOpen} cycle={cycle} slug={slug} search={location.search}
+        onSubmit={(values) => formOpen.submit(cyclesWrite, projectId, values)}
+        onSaved={saved}
+        onClose={closeAdd} />
+    ) : editing && edit.idOf(editing) != null ? (
+      <FormLightbox key={`edit-${editing.id}`} form={edit} current={edit.valuesOf(editing)} cycle={cycle} slug={slug}
+        loadOptions={edit.loadOptions ? () => edit.loadOptions(cyclesWrite, projectId, edit.idOf(editing)) : null}
+        onSubmit={(values) => edit.submit(cyclesWrite, projectId, edit.idOf(editing), values)}
+        onSaved={saved}
+        onClose={closeEdit} />
+    ) : null;
   // What finishing does: `finishPath`'s page replaces the action route, and a
   // sent update opens its page, so Back never reopens the lightbox. Only the
   // session page reads the interview it was opened for.
@@ -580,11 +630,13 @@ export default function CycleRoute({ cycle, lightbox = false }) {
         query={query}
         onQuery={setQuery}
         action={action}
-        add={forms.length && projectId ? forms.map((entry) => ({ text: entry.button, onClick: () => setFormOpen(entry) })) : fnOf(def.add, slug)?.(q, openAction)}
+        add={forms.length && projectId
+          ? forms.map((entry, i) => ({ text: entry.button, href: addHref(entry, i), state: { under: `${location.pathname}${location.search}` } }))
+          : fnOf(def.add, slug)?.(q, openAction)}
         rowAction={edit && projectId && !edit.hiddenFor?.(module) ? (row) => (edit.idOf(row) == null ? null : {
           text: edit.button,
           label: `${edit.button} ${((v) => (v.nr ? 'this row' : v.text))(cellView(row?.cells?.[recs?.cols?.[0]?.key]))}`,
-          onClick: () => setEditing(row),
+          onClick: () => navigate(`${location.pathname}${location.search}`, { state: { editing: String(row.id) } }),
         }) : undefined}
         tool={fnOf(def.tools, slug)?.(q)}
         tools={moduleToolLinks(cycle, slug, user, q)}
@@ -620,7 +672,7 @@ export default function CycleRoute({ cycle, lightbox = false }) {
           would place them against the column (decision 13). */}
       <div className="@container/cycle min-w-0">
       <div className="min-w-0 px-[22px] pt-[14px] pb-[18px] lg:px-6 lg:pt-[22px] lg:pb-[30px] lg:@max-[760px]/cycle:px-[14px] lg:@max-[760px]/cycle:pt-[14px] lg:@max-[760px]/cycle:pb-[40px]" data-testid="cycle-route-body">
-        {body}
+        {phone && openForm ? openForm : body}
         {creates && (
           <CreateStartupForm
             open={creating}
@@ -636,19 +688,7 @@ export default function CycleRoute({ cycle, lightbox = false }) {
         )}
       </div>
       </div>
-      {formOpen && projectId && (
-        <RecordFormSheet key={formOpen.title} form={formOpen} cycle={name}
-          onSubmit={(values) => formOpen.submit(cyclesWrite, projectId, values)}
-          onSaved={() => setReload((n) => n + 1)}
-          onClose={closeForm} />
-      )}
-      {edit && editing && projectId && edit.idOf(editing) != null && (
-        <RecordFormSheet key={String(editing.id)} form={edit} current={edit.valuesOf(editing)} cycle={name}
-          loadOptions={edit.loadOptions ? () => edit.loadOptions(cyclesWrite, projectId, edit.idOf(editing)) : null}
-          onSubmit={(values) => edit.submit(cyclesWrite, projectId, edit.idOf(editing), values)}
-          onSaved={() => setReload((n) => n + 1)}
-          onClose={() => setEditing(null)} />
-      )}
+      {!phone && openForm}
       {lightbox && Mount && projectId && (
         <Mount projectId={projectId} q={q} searchParams={searchParams} onClose={closeAction} onDone={onDone}
           onChanged={() => { dirty.current = true; }} />

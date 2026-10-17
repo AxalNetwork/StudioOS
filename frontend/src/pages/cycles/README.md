@@ -17,7 +17,7 @@ The canvases are `design/canvases/integrated/Cycle Overview.dc.html` and its two
 | `CycleModulePage.jsx` | A module page: the chart at full size, the records as a working table (search, filters, sort, pages, Add), quiet text links to the module's tools where it has them, then its further parts |
 | `CycleRoute.jsx` | The route component: picks the project (`?project_id=`, or the read's own `?project=`, else the founder's first) and hands it to every tab and card link, reads the cycle through `frontend/src/lib/api/cycles.js`, adapts it, and draws the overview (`/validate`, `/build`, `/raise`, `/grow`) or a module page (`/<cycle>/:slug`) beside the Eadwyn AI rail. It wraps the frame in `RailCrumbsProvider` (`../../ui/railCrumbs.js`, D698) with the cycle's name and, on a module route, the module's, so the rail reads "Validate › Customer research"; a record view adds its title with `useSetRailCrumbs`. It names each module's working tool and Add, the AI bands each module carries, and Grow's Share an update lightbox (`ShareUpdateLightbox`, D686 §5.8, #1599) D686 (#1596): with `lightbox`, it is the cycle's action route (`/validate/record`, `/build/connect`, `/raise/call`, `/grow/update`); each `CYCLE_DEFS` entry names its `path` and the `Mount` that renders the open lightbox, `openAction` pushes the route with `state.under`, `closeAction` goes back, and finishing replaces it. `cycleModel.js`'s Build, Raise and Grow histories are each cycle's second tab, drawn once `live`; Validate uses Customer research's table (D694). |
 | `forms.js` | The Add and Edit forms for the stores with no page of their own (Grow's feedback, channels, partners, markets and obligations; Build's risks, formation steps and MVP must-haves): each form's `key` (unique in its module, for `/new?form=`), its `cta`, its fields (today's types or the canvas's T, CH and CK kinds, which `initialValues` and `validate` both read, D695), the body its Worker route takes, and its writes. An Edit form also reads a row's store id (`idOf`) and current values (`valuesOf`), and saves with "Save". Pure, so the contract test sends each body through the real route |
-| `RecordFormSheet.jsx` | The one side sheet that draws every Add and Edit form: the fields (an Edit form's from the row), the form's own checks, then the Worker's sentence on the field it names when it refuses |
+| `FormLightbox.jsx` | The one dialog that draws every Add and Edit form (D695): the eyebrow "<Cycle> · <Module>", the fields in the T, CH and CK kinds (an Edit form's from the row), the form's own checks, then the Worker's sentence on the field it names when it refuses. Below 1024px it is a page (`frontend/src/ui/Lightbox.jsx`'s `pageBelow`), which `CycleRoute` draws as the body's content |
 | `DurabilityChecklist.jsx` | Durable company-building's further part: the durability checklist from Grow's module read, each item done by a Spin-Out Lab milestone or by hand, with a tick for an open item and an undo for the founder's own tick |
 | `founderToolNavigation.js` | The shared module/tool map for quiet tool doors and editor return links; preserves the selected project, route roles and Liquidity's Studio navigation gate (#1539) |
 | `validatePhone.js`, `ValidatePhoneFocus.jsx` | Validate's phone focus below md (D685 §5.12, #1589): the focus card, the interviews meter and the six "Everything else in Validate" rows (D694). The Worker's `focus`, `meter` and `index` (#1609) come first; where one is null (unreadable) it falls back to the raw overview's figures and cards (raw because adapting a card replaces its series). "Set a target" writes `PUT /cycles/validate/interviews-target` and re-reads the overview. `CycleRoute.jsx` mounts it above the overview |
@@ -30,7 +30,7 @@ The canvases are `design/canvases/integrated/Cycle Overview.dc.html` and its two
 
 ## Rules
 
-On a module page, `?add=1` opens its first Add form. Closing or saving the form removes the parameter with a replace. Modules without a form and cycle overviews ignore it (D688).
+On a module page, `?add=1` is its first Add's address: the URL becomes `/<cycle>/<slug>/new`, the rest of the query kept. Modules without a form and cycle overviews ignore it (D688, D695).
 
 - **The components read nothing themselves.** `CycleRoute.jsx` is the one
   file that reads: it calls `frontend/src/lib/api/cycles.js`, whose table gains a cycle in
@@ -57,8 +57,9 @@ On a module page, `?add=1` opens its first Add form. Closing or saving the form 
   Every Add has an address (D695): `App.jsx` routes `/<cycle>/:slug/new` to
   `CycleRoute` with `adding`, and `/validate/customer-research/new` redirects
   to Record a session, the query kept. `RecordsTable`'s Add link passes its
-  entry's `state`, for `state.under`. Until #1655's PR 2 lands, `CycleRoute`
-  draws `/new` as its module page.
+  entry's `state`, for `state.under`. `CycleRoute` opens the form named by
+  `?form=` (else the first) as a dialog over the module page, or as the page
+  itself below 1024px; an Edit is the same URL with `state.editing`.
 - **The overview draws no module list, no status pill and no Pro strip.** The
   cards are the modules.
 - **A card fails alone.** An `unreadable` card names its source and offers its
