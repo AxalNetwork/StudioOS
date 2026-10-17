@@ -136,6 +136,7 @@ async function refusal(setup: (env: any, db: any) => Promise<void>, payee: any, 
 const REFUSALS: Array<[string, string, (env: any, db: any) => Promise<void>, string, string, RegExp]> = [
   ['payee_not_entitled', 'the fee asked of Management', async () => {}, 'management', 'management_fee', /is not paid management fee\. It is paid to Axal VC GP LLC\./],
   ['fund_account_missing', 'a Fund purpose with no Fund account', async () => {}, 'fund', 'capital_contribution', /Do not send money until Axal adds the Fund's account\./],
+  ['fund_account_missing', 'the GP commitment keeps its acronym', async () => {}, 'fund', 'gp_commitment', /has no bank account for GP commitment yet/],
   ['no_active_account', 'the GP with only a retired account for the fee', async (env, db) => {
     await insert(env, db, { entity: 'gp', number: GP_NUMBER, purposes: ['management_fee'], status: 'retired' });
   }, 'gp', 'management_fee', /has no active account for management fee/],

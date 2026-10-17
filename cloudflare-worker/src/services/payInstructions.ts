@@ -43,6 +43,10 @@ export const PAYMENT_PURPOSES = Object.freeze({
 });
 export type PaymentPurpose = keyof typeof PAYMENT_PURPOSES;
 
+/** A purpose's label inside a sentence: "management fee", but "GP commitment", whose acronym keeps its capitals. */
+export const purposeInSentence = (label: string): string =>
+  /^[A-Z]{2}/.test(label) ? label : label.charAt(0).toLowerCase() + label.slice(1);
+
 export const isPaymentPurpose = (v: unknown): v is PaymentPurpose =>
   typeof v === 'string' && Object.hasOwn(PAYMENT_PURPOSES, v);
 
@@ -75,25 +79,25 @@ async function resolve(env: Env, payee: AxalEntityKey, purpose: PaymentPurpose):
   const def = isPaymentPurpose(purpose) ? PAYMENT_PURPOSES[purpose] : null;
   if (!def || def.payee !== payee) {
     return no('payee_not_entitled', def
-      ? `${nameOf(payee)} is not paid ${def.label.toLowerCase()}. It is paid to ${nameOf(def.payee)}.`
+      ? `${nameOf(payee)} is not paid ${purposeInSentence(def.label)}. It is paid to ${nameOf(def.payee)}.`
       : `${nameOf(payee)} is not paid for this.`);
   }
   const rows = await activeRowsCarrying(env, purpose);
   if (!rows.length) {
     return payee === 'fund'
-      ? no('fund_account_missing', `${nameOf('fund')} has no bank account for ${def.label.toLowerCase()} yet, so no payment instructions can be given. Do not send money until Axal adds the Fund's account.`)
-      : no('no_active_account', `${nameOf(payee)} has no active account for ${def.label.toLowerCase()}, so no payment instructions can be given.`);
+      ? no('fund_account_missing', `${nameOf('fund')} has no bank account for ${purposeInSentence(def.label)} yet, so no payment instructions can be given. Do not send money until Axal adds the Fund's account.`)
+      : no('no_active_account', `${nameOf(payee)} has no active account for ${purposeInSentence(def.label)}, so no payment instructions can be given.`);
   }
   if (rows.length > 1) {
-    return no('ambiguous_account', `More than one active account takes ${def.label.toLowerCase()}, so none is given. Keep the purpose on one account.`);
+    return no('ambiguous_account', `More than one active account takes ${purposeInSentence(def.label)}, so none is given. Keep the purpose on one account.`);
   }
   const row = rows[0];
   // No commingling: the account must be held by the payee, in its own legal name.
   if (row.entity_key !== payee || row.beneficiary_name !== nameOf(payee)) {
-    return no('holder_not_payee', `The account that takes ${def.label.toLowerCase()} is not held by ${nameOf(payee)}, so it is not given.`);
+    return no('holder_not_payee', `The account that takes ${purposeInSentence(def.label)} is not held by ${nameOf(payee)}, so it is not given.`);
   }
   if (row.account_kind !== 'checking') {
-    return no('savings_account', `The account that takes ${def.label.toLowerCase()} is a savings account, so it is not given. Give the purpose to a checking account.`);
+    return no('savings_account', `The account that takes ${purposeInSentence(def.label)} is a savings account, so it is not given. Give the purpose to a checking account.`);
   }
   return { row };
 }

@@ -18,7 +18,7 @@ import type { Env } from '../types';
 import { encryptColumn, decryptColumn } from './columnCipher';
 import { AXAL_ENTITIES, type AxalEntityKey } from './legalDocFormat';
 // Imported inside function bodies only, so the two modules may import each other.
-import { PAYMENT_PURPOSES, isPaymentPurpose, type PaymentPurpose } from './payInstructions';
+import { PAYMENT_PURPOSES, isPaymentPurpose, purposeInSentence, type PaymentPurpose } from './payInstructions';
 
 export const BANK_TABLE = 'entity_bank_accounts';
 export const BANK_COLUMN = 'account_number_enc';
@@ -140,7 +140,7 @@ async function checkPurposes(env: Env, entityKey: AxalEntityKey, kind: AccountKi
   ).bind(entityKey, exceptUid).all<{ uid: string; purposes_json: string }>();
   for (const row of taken.results || []) {
     const clash = purposesOf(row).find((p) => purposes.includes(p));
-    if (clash) refuse(409, 'purpose_taken', `Another active account of ${AXAL_ENTITIES[entityKey].name} already takes ${PAYMENT_PURPOSES[clash].label.toLowerCase()}. Remove it there first.`);
+    if (clash) refuse(409, 'purpose_taken', `Another active account of ${AXAL_ENTITIES[entityKey].name} already takes ${purposeInSentence(PAYMENT_PURPOSES[clash].label)}. Remove it there first.`);
   }
 }
 
