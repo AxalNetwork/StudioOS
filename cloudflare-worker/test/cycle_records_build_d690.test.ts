@@ -545,7 +545,8 @@ test('test 3: systems read their sync, show writers their log and permissions, a
   assert.doesNotMatch(JSON.stringify(founder) + JSON.stringify(partner.body), /Okafor Ventures/, 'never a company the viewer is not in');
 
   const bank = (await one(db, 'operating-systems', 'bank')).body;
-  assert.equal(bank.title, 'Bank · mercury', 'the catalogue name, not the member\'s own');
+  // D710 (#1775): Mercury is in the catalogue now, so its catalogue name reads.
+  assert.equal(bank.title, 'Bank · Mercury', 'the catalogue name, not the member\'s own');
   assert.doesNotMatch(JSON.stringify(bank), /private treasury/);
   assert.deepEqual(section(bank, 'permissions').rows[0].b, 'The connector stored no granted scopes.');
   db.exec(`UPDATE integrations SET scopes_json = '["oauth"]' WHERE id = 11`);

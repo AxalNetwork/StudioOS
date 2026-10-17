@@ -87,6 +87,8 @@ test('one row each for Google Calendar and Microsoft 365: the registry entries m
   assert.equal(bare.find((p) => p.key === 'microsoft').category, 'Calendar and workspace');
   assert.equal(bare.find((p) => p.key === 'google').category, 'Calendar and workspace');
   assert.ok(CATEGORY_ORDER.includes('Calendar and workspace'), 'a Connectors chip for it');
+  // D710 (#1775): Mercury's category gets a chip, right after Payments, as Build orders it.
+  assert.equal(CATEGORY_ORDER.indexOf('Accounting and banking'), CATEGORY_ORDER.indexOf('Payments') + 1);
 });
 
 test('a sign-in return: the Worker\'s scope_overreach is the overreach view, and GitHub lands on choosing its repositories', () => {

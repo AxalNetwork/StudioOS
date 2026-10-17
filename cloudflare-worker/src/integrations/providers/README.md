@@ -30,6 +30,11 @@ call runs at boot.
   `cloudflare-worker/src/services/channels/zoom.ts`, which calls
   `registerProvider` at module load and is imported by
   `cloudflare-worker/src/routes/founder_validate_meetings.ts`.
+- D710 (#1775) — Mercury is a registry provider (`mercury`) with NO
+  implementation in this folder and no `registerProvider` call: it is an HQ
+  entity connection a Super Admin adds per Axal organization, kept in its own
+  store and synced read-only by `cloudflare-worker/src/services/mercury/`,
+  behind `cloudflare-worker/src/routes/admin_mercury.ts`.
 
 ## Credential handling
 
