@@ -49,8 +49,10 @@ On a module page, `?add=1` is its first Add's address: the URL becomes `/<cycle>
   opens `CreateStartupForm` on it, and every cycle with no venture yet
   offers "Create your startup".
   Raise's read is already in D661's shape and passes through with no adapter.
-  `/raise/data-room` is the data room tool's own route, so the Data room tab
-  opens the tool itself.
+  `/raise/data-room` answers by mode (D696): with no mode it is the Data room
+  module page, `?mode=access` the read-only access view (its tool link) and
+  `?mode=workspace` the files tool (a #1539 door in `founderToolNavigation.js`,
+  so no file here spells that mode).
 - **The page adapts; the Worker is not changed** (S1 on #1474). A read in
   D661's shape passes through. Validate's merged with its own, so
   `adapters/validate.js` maps it, and `cloudflare-worker/test/cycle_adapters_d661.test.ts`
@@ -83,4 +85,5 @@ only through `/api/files/dl/` without rereading; successful mutations reread,
 and a deleted record returns to its module. Activity pages append on Show all.
 Rows link only with `records.linkable` and a genuine Worker id. Build and Raise
 pass their ids through, Grow has `recordId`, and Validate’s adapter changes wait
-for #1691. Data-room modes and record rail crumbs remain PR 3’s work.
+for #1691. In record mode the rail's crumbs carry the record's title
+(`RecordCrumb`, D696).

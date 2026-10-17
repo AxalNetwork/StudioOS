@@ -4,7 +4,7 @@ import { api } from '../../lib/api';
 import { cyclesApi, cyclesWrite } from '../../lib/api/cycles';
 import { WorkerRail, Unreadable } from '../../ui';
 import RailFrame from '../../ui/RailFrame';
-import { RailCrumbsProvider } from '../../ui/railCrumbs';
+import { RailCrumbsProvider, useSetRailCrumbs } from '../../ui/railCrumbs';
 import { ASSIST_SURFACES } from '../../ui/eadwynConfig';
 import FillProposals from '../../workspaces/FillProposals';
 import ZoneDraft from '../../workspaces/ZoneDraft';
@@ -120,10 +120,11 @@ const CYCLE_DEFS = {
    * adapter. Its modules are in `modules.js`, held to `services/raiseCycle.ts`'s
    * list by `cycle_adapters_d661.test.ts`.
    *
-   * `/raise/data-room` IS THE DATA ROOM. The module's slug and the tool's
-   * route are the same path, and the tool's static route wins, so the Data
-   * room tab opens the working tool itself, which is D661's rule for a
-   * module that has one. The other six have module pages.
+   * Data room's module page is `/raise/data-room` with no mode: that static
+   * route draws this page with `slug="data-room"` (D696 decision 12), so all
+   * seven Raise modules have module pages. Its two tools are reached from it:
+   * the read-only access view through the tool link below, and the files tool
+   * through `founderToolNavigation.js`'s door.
    */
   raise: {
     modules: MODULES.raise,
@@ -143,15 +144,17 @@ const CYCLE_DEFS = {
       'cap-table': () => ({ label: 'Open the cap table', href: '/raise/capital/cap-table' }),
       'use-of-funds': () => ({ label: 'Open the financial model', href: '/raise/capital/model' }),
       'capital-relationships': () => ({ label: 'Open the investor pipeline', href: '/raise/capital/pipeline' }),
+      // D696 decision 12: the access view manages nothing, so the label says what it shows.
+      'data-room': (q) => ({ label: 'Open the access view: grants, NDA state and recent access', href: `/raise/data-room?mode=access${q ? `&${q.slice(1)}` : ''}` }),
     }),
     add: toFnMap({}),
     fills: {},
     // The Raise desk's four AI bands (ZoneDraft, D424), on the modules they
     // read: the round and its order of payment on Cap table, which holds the
     // scenario both read; the room and the clauses on Fundraising readiness,
-    // which scores the data room and the documents. Data room has no module
-    // page of its own (its tool's route wins), so its band sits here too. The
-    // narrative band sits on Investor narrative, whose check it phrases.
+    // which scores the data room and the documents, so the room's band sits
+    // there rather than on Data room's module page. The narrative band sits on
+    // Investor narrative, whose check it phrases.
     drafts: new Map([
       ['cap-table', [{
         surface: 'raise/capital', label: 'Proposal · plain-language read', run: 'Read the round back', accept: 'Attach to scenario',
@@ -528,6 +531,20 @@ export function useCycleRecord({ enabled, cycle, projectId, slug, id, reload, ed
  * founder was on (`location.state.under`), the overview on a deep link. Closing
  * goes back to it; the lightbox makes no server call.
  */
+/**
+ * D696 (#1658): a record's title as the rail's third crumb, "section › module
+ * › record", while the record is drawn; leaving the record drops it. It sits
+ * inside `RailCrumbsProvider`, whose setter it calls, and draws nothing.
+ */
+function RecordCrumb({ title }) {
+  const setCrumbs = useSetRailCrumbs();
+  useEffect(() => {
+    setCrumbs({ record: title || null });
+    return () => setCrumbs({ record: null });
+  }, [setCrumbs, title]);
+  return null;
+}
+
 export default function CycleRoute({ cycle, lightbox = false, adding = false, record = false, slug: suppliedSlug }) {
   const { slug: routeSlug, id: recordId } = useParams();
   const location = useLocation();
@@ -810,8 +827,8 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   }
 
   // D698 — where the rail is: the cycle, and on a module route the module, so
-  // it reads "Validate › Customer research". A record view below adds its
-  // title through `useSetRailCrumbs` (#1658). The provider draws no element.
+  // it reads "Validate › Customer research". In record mode `RecordCrumb`
+  // adds the record's title (D696). The provider draws no element.
   // The rail sits in the one frame every rail host uses (D556), as the
   // Validate desk's own did; the frame is this page's outermost element so it
   // docks to the edge.
@@ -849,6 +866,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
           onChanged={() => { dirty.current = true; }} />
       )}
       {dialog && !(phone && dialog.page) && dialog.element}
+      <RecordCrumb title={record && recordState.status === 'ready' ? recordState.data?.title : null} />
     </RailFrame>
     </RailCrumbsProvider>
   );
