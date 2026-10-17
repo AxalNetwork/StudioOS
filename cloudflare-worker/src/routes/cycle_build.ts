@@ -4,10 +4,14 @@ import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { CONNECTOR_METADATA, getDescriptor } from '../integrations/registry';
 import { MODULE_LABELS } from '../integrations/fed';
+import { validateConnectorSettings } from '../integrations/connectorRules';
 import { canReadBoard, canWrite } from './_founder_validate_helpers';
 import type { Card } from '../services/cycleCards';
 import { buildPhone } from '../services/cycleFocus';
+import { addHolder, updateHolder, HolderError } from '../services/capTableWrites';
 import { logCycleWriteStatement } from '../services/cycleActivity';
+import { ownedRow } from '../services/records/owned';
+import { MVP_VALUES, MVP_EFFORTS, MVP_STATUSES } from './progress';
 import { pageBuildRows, unreadableBuildCard, type BuildFigure, type BuildRecords, type Cell, type ChartSpec, type RecordRow } from '../services/buildCycleRecords';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -642,39 +646,132 @@ app.post('/project/ip-copy', async c => {
   return c.json({ ip });
 });
 
+// D690 (#1695 decisions 2, 3, 7 and 16). Impact is `added_value`; Effort is
+// `effort` (Low, Medium and High write S, M and L); a state writes
+// `delivery_status`. Each is checked against MVP scope's own sets.
+const IMPACT_IN: Record<string, string> = { high: 'High', medium: 'Medium', low: 'Low' };
+const EFFORT_IN: Record<string, string> = { low: 'S', medium: 'M', high: 'L', s: 'S', m: 'M', l: 'L', xl: 'XL' };
+const STATE_IN: Record<string, string> = { not_started: 'Backlog', in_progress: 'In Progress', done: 'Done', blocked: 'Blocked' };
+/** A canvas word, or the stored value, mapped into its column's set: undefined when absent, false when invalid. */
+function mvpValue(body: Record<string, unknown>, key: string, map: Record<string, string>, set: Set<string>): string | undefined | false {
+  if (!Object.hasOwn(body, key)) return undefined;
+  const raw = typeof body[key] === 'string' ? (body[key] as string).trim() : '';
+  const v = set.has(raw) ? raw : known(map, raw.toLowerCase()) ?? known(map, raw.toLowerCase().replace(/[\s-]+/g, '_'));
+  return v && set.has(v) ? v : false;
+}
+function scopeValue(body: Record<string, unknown>): 'core' | 'out' | null | undefined | false {
+  if (!Object.hasOwn(body, 'scope')) return undefined;
+  if (body.scope == null) return null;
+  return body.scope === 'core' || body.scope === 'out' ? body.scope : false;
+}
+/** A pain theme or hypothesis a body names, checked by `ownedRow`: a foreign id answers 404 (decision 16). */
+async function linkedIds(c: any, p: Project, body: Record<string, unknown>, existing: { pain_group_id?: unknown; hypothesis_id?: unknown } = {}) {
+  const read = (key: 'pain_group_id' | 'hypothesis_id') => Object.hasOwn(body, key) ? (body[key] == null ? null : positiveId(body[key]) ?? false) : (existing[key] ?? null) as number | null;
+  const painId = read('pain_group_id'), hypothesisId = read('hypothesis_id');
+  if (painId === false || hypothesisId === false) return c.json({ detail: 'Invalid feature field' }, 400) as Response;
+  if (painId != null && Object.hasOwn(body, 'pain_group_id') && !await ownedRow(c.env, 'pain_groups', painId, p.id)) return c.json({ detail: 'Pain theme belongs to another project or does not exist' }, 404) as Response;
+  if (hypothesisId != null && Object.hasOwn(body, 'hypothesis_id') && !await ownedRow(c.env, 'hypotheses', hypothesisId, p.id)) return c.json({ detail: 'Hypothesis belongs to another project or does not exist' }, 404) as Response;
+  return { painId, hypothesisId };
+}
+async function ownerChecked(c: any, p: Project, raw: unknown): Promise<number | null | Response> {
+  if (raw == null) return null;
+  const ownerId = positiveId(raw);
+  if (!ownerId) return c.json({ detail: 'Invalid owner' }, 400);
+  const member = await c.env.DB.prepare('SELECT 1 FROM user_company_links WHERE company_id = ? AND user_id = ?').bind(p.company_id, ownerId).first();
+  return member ? ownerId : c.json({ detail: 'Owner is not a member of this company' }, 400);
+}
+/**
+ * A Linked URL (decision 7): https on figma.com, www.figma.com or github.com
+ * only. A GitHub issue or pull request also stores its ledger key.
+ */
+function featureLink(raw: unknown): { kind: 'figma' | 'github'; url: string; external_ref: string | null } | null {
+  let u: URL;
+  try { u = new URL(String(raw ?? '')); } catch { return null; }
+  if (u.protocol !== 'https:' || u.username || u.password || u.port) return null;
+  if (u.hostname === 'figma.com' || u.hostname === 'www.figma.com') return { kind: 'figma', url: u.toString(), external_ref: null };
+  if (u.hostname !== 'github.com') return null;
+  const m = /^\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\/(issues|pull)\/([1-9][0-9]{0,9})\/?$/.exec(u.pathname);
+  return { kind: 'github', url: u.toString(), external_ref: m ? `${m[3] === 'issues' ? 'issue' : 'pull'}:${m[1]}/${m[2]}#${m[4]}` : null };
+}
+
+app.post('/features', async c => {
+  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  const body = await jsonBody(c); if (!body) return c.json({ detail: 'Body required' }, 400);
+  const title = text(body.title), description = text(body.description, 2000);
+  const impact = mvpValue(body, 'impact', IMPACT_IN, MVP_VALUES), effort = mvpValue(body, 'effort', EFFORT_IN, MVP_EFFORTS), scope = scopeValue(body);
+  if (!title || description === false || impact === false || effort === false || scope === false) return c.json({ detail: 'A feature needs a title; Impact is High, Medium or Low, Effort Low, Medium or High' }, 400);
+  const links = await linkedIds(c, ctx.project, body); if (links instanceof Response) return links;
+  await c.env.DB.batch([
+    c.env.DB.prepare(`INSERT INTO mvp_features (project_id, title, description, added_value, effort, scope, pain_group_id, hypothesis_id, is_must_have, delivery_status, sort_order, created_by, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 'Backlog', COALESCE((SELECT MAX(sort_order) + 1 FROM mvp_features WHERE project_id = ?), 0), ?, datetime('now'), datetime('now'))`)
+      .bind(ctx.project.id, title, description, impact ?? 'Medium', effort ?? 'M', scope ?? null, links.painId, links.hypothesisId, ctx.project.id, ctx.user.id),
+    logCycleWriteStatement(c.env, { projectId: ctx.project.id, userId: ctx.user.id, cycle: 'build', module: 'solution-design',
+      readback: { table: 'mvp_features', by: 'max' }, action: 'build_feature_created', summary: 'Feature added' }),
+  ]);
+  const row = await c.env.DB.prepare('SELECT MAX(id) AS id FROM mvp_features WHERE project_id = ?').bind(ctx.project.id).first<{ id: number }>();
+  return c.json({ id: Number(row?.id) }, 201);
+});
+
+app.post('/must-haves', async c => {
+  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  const body = await jsonBody(c); if (!body) return c.json({ detail: 'Body required' }, 400);
+  const title = text(body.title), due = dateValue(body.due_date);
+  const state = mvpValue(body, 'state', STATE_IN, MVP_STATUSES);
+  if (!title || due === false || state === false) return c.json({ detail: 'A must-have needs a title; State is Not started, In progress, Done or Blocked' }, 400);
+  const rawLinks = body.links == null ? [] : body.links;
+  if (!Array.isArray(rawLinks) || rawLinks.length > 2) return c.json({ detail: 'Up to two links' }, 400);
+  const links = rawLinks.map(featureLink);
+  if (links.some(l => l == null)) return c.json({ detail: 'A link is an https Figma or GitHub URL' }, 400);
+  const ids = await linkedIds(c, ctx.project, { hypothesis_id: body.hypothesis_id ?? null }); if (ids instanceof Response) return ids;
+  const owner = await ownerChecked(c, ctx.project, body.owner_user_id); if (owner instanceof Response) return owner;
+  const status = state ?? 'Backlog';
+  await c.env.DB.batch([
+    // Migration 441's triggers date a must-have that starts, or moves to, Done.
+    c.env.DB.prepare(`INSERT INTO mvp_features (project_id, title, hypothesis_id, is_must_have, delivery_status, owner_user_id, due_date, added_value, effort, sort_order, created_by, created_at, updated_at)
+      VALUES (?, ?, ?, 1, ?, ?, ?, 'High', 'M', COALESCE((SELECT MAX(sort_order) + 1 FROM mvp_features WHERE project_id = ?), 0), ?, datetime('now'), datetime('now'))`)
+      .bind(ctx.project.id, title, ids.hypothesisId, status, owner, due, ctx.project.id, ctx.user.id),
+    ...[...new Map(links.map(l => [l!.url, l!])).values()].map(l => c.env.DB.prepare(
+      `INSERT INTO mvp_feature_links (feature_id, kind, url, external_ref, created_by) VALUES ((SELECT MAX(id) FROM mvp_features WHERE project_id = ?), ?, ?, ?, ?)`,
+    ).bind(ctx.project.id, l.kind, l.url, l.external_ref, ctx.user.id)),
+    logCycleWriteStatement(c.env, { projectId: ctx.project.id, userId: ctx.user.id, cycle: 'build', module: 'solution-design',
+      readback: { table: 'mvp_features', by: 'max' }, action: 'build_must_have_created', summary: 'Must-have added' }),
+  ]);
+  const row = await c.env.DB.prepare('SELECT MAX(id) AS id FROM mvp_features WHERE project_id = ?').bind(ctx.project.id).first<{ id: number }>();
+  return c.json({ id: Number(row?.id) }, 201);
+});
+
 app.patch('/features/:id', async c => {
   const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
   const id = positiveId(c.req.param('id'));
   if (!id) return c.json({ detail: 'Invalid feature id' }, 400);
   const existing = await c.env.DB.prepare(
-    'SELECT pain_group_id, hypothesis_id, is_must_have, owner_user_id, due_date FROM mvp_features WHERE id = ? AND project_id = ?',
+    'SELECT title, description, added_value, effort, scope, delivery_status, pain_group_id, hypothesis_id, is_must_have, owner_user_id, due_date FROM mvp_features WHERE id = ? AND project_id = ?',
   ).bind(id, ctx.project.id).first<any>();
   if (!existing) return c.json({ detail: 'Feature not found' }, 404);
   const body = await jsonBody(c);
   if (!body) return c.json({ detail: 'Body required' }, 400);
-  const painId = Object.hasOwn(body, 'pain_group_id') ? (body.pain_group_id == null ? null : positiveId(body.pain_group_id)) : existing.pain_group_id;
-  const hypothesisId = Object.hasOwn(body, 'hypothesis_id') ? (body.hypothesis_id == null ? null : positiveId(body.hypothesis_id)) : existing.hypothesis_id;
+  const title = Object.hasOwn(body, 'title') ? text(body.title) : existing.title;
+  const description = Object.hasOwn(body, 'description') ? text(body.description, 2000) : existing.description;
+  const impact = mvpValue(body, 'impact', IMPACT_IN, MVP_VALUES), effort = mvpValue(body, 'effort', EFFORT_IN, MVP_EFFORTS);
+  const state = mvpValue(body, 'state', STATE_IN, MVP_STATUSES), scope = scopeValue(body);
   const ownerId = Object.hasOwn(body, 'owner_user_id') ? (body.owner_user_id == null ? null : positiveId(body.owner_user_id)) : existing.owner_user_id;
   const due = Object.hasOwn(body, 'due_date') ? dateValue(body.due_date) : existing.due_date;
   const must = Object.hasOwn(body, 'is_must_have') ? body.is_must_have : existing.is_must_have;
-  if (painId === false || hypothesisId === false || ownerId === false || due === false || ![true, false, 0, 1, null].includes(must as never)) return c.json({ detail: 'Invalid feature field' }, 400);
-  if (Object.hasOwn(body, 'pain_group_id') && body.pain_group_id != null && painId == null) return c.json({ detail: 'Invalid pain theme' }, 400);
-  if (Object.hasOwn(body, 'hypothesis_id') && body.hypothesis_id != null && hypothesisId == null) return c.json({ detail: 'Invalid hypothesis' }, 400);
+  if (!title || description === false || impact === false || effort === false || state === false || scope === false
+    || ownerId === false || due === false || ![true, false, 0, 1, null].includes(must as never)) return c.json({ detail: 'Invalid feature field' }, 400);
   if (Object.hasOwn(body, 'owner_user_id') && body.owner_user_id != null && ownerId == null) return c.json({ detail: 'Invalid owner' }, 400);
-  if (painId != null && !(await c.env.DB.prepare('SELECT id FROM pain_groups WHERE id = ? AND project_id = ?').bind(painId, ctx.project.id).first())) {
-    return c.json({ detail: 'Pain theme belongs to another project or does not exist' }, 400);
-  }
-  if (hypothesisId != null && !(await c.env.DB.prepare('SELECT id FROM hypotheses WHERE id = ? AND project_id = ?').bind(hypothesisId, ctx.project.id).first())) {
-    return c.json({ detail: 'Hypothesis belongs to another project or does not exist' }, 400);
-  }
+  const links = await linkedIds(c, ctx.project, body, existing); if (links instanceof Response) return links;
   if (ownerId != null) {
     const member = await c.env.DB.prepare('SELECT 1 FROM user_company_links WHERE company_id = ? AND user_id = ?').bind(ctx.project.company_id, ownerId).first();
     if (!member) return c.json({ detail: 'Owner is not a member of this company' }, 400);
   }
+  // `done_at` is migration 441's triggers': dated on the move to Done, cleared on a reopen.
   await c.env.DB.batch([
-    c.env.DB.prepare('UPDATE mvp_features SET pain_group_id = ?, hypothesis_id = ?, is_must_have = ?, owner_user_id = ?, due_date = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?')
-      .bind(painId, hypothesisId, must == null ? null : Number(must), ownerId, due, id, ctx.project.id),
-    logged(c.env, ctx.project.id, ctx.user.id, 'solution-design', id, 'build_feature_details_changed', 'Links, must-have mark, owner or due date changed'),
+    c.env.DB.prepare(`UPDATE mvp_features SET title = ?, description = ?, added_value = ?, effort = ?, scope = ?, delivery_status = ?,
+        pain_group_id = ?, hypothesis_id = ?, is_must_have = ?, owner_user_id = ?, due_date = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?`)
+      .bind(title, description, impact ?? existing.added_value, effort ?? existing.effort, scope === undefined ? existing.scope : scope, state ?? existing.delivery_status,
+        links.painId, links.hypothesisId, must == null ? null : Number(must), ownerId, due, id, ctx.project.id),
+    logged(c.env, ctx.project.id, ctx.user.id, 'solution-design', id, 'build_feature_details_changed', 'Feature details changed'),
   ]);
   return c.json({ ok: true, id });
 });
@@ -739,19 +836,97 @@ app.patch('/roadmap/:id', async c => {
   return c.json({ ok: true, id });
 });
 
+// D690 (#1695 decision 6): a founder is a holder the cap-table code writes.
+// `addHolder()` and `updateHolder()` run their own batch, keep the cap
+// table's plan gate (a 402 Response) and log nothing, so the route logs its
+// `build.founding-team` row right after they return.
+const VESTING_PRESETS: Record<string, { total_months: number; cliff_months: number }> = {
+  '4y_1y_cliff': { total_months: 48, cliff_months: 12 }, '4y_no_cliff': { total_months: 48, cliff_months: 0 },
+};
+const AGREEMENT_NEXT = { label: 'Draft the co-founder agreement', href: '/raise/legal-engine/founders' };
+function holderFailed(c: any, e: unknown) {
+  if (e instanceof HolderError) return c.json({ detail: e.sentence }, e.status as any);
+  if (e instanceof Response) return e; // the plan gate's 402, with its upgrade body
+  throw e;
+}
+/** The vesting a founder body asks for: undefined when it names none, false when it is invalid. */
+function vestingOf(body: Record<string, unknown>): { start_date: string; total_months: number; cliff_months: number } | null | undefined | false {
+  if (!Object.hasOwn(body, 'vesting')) return undefined;
+  if (body.vesting == null) return null;
+  const start = typeof body.vesting_start === 'string' && dateOnly(body.vesting_start) ? body.vesting_start : null;
+  const preset = typeof body.vesting === 'string' && Object.hasOwn(VESTING_PRESETS, body.vesting) ? VESTING_PRESETS[body.vesting] : null;
+  const custom = body.vesting === 'custom' ? { total_months: Number(body.total_months), cliff_months: Number(body.cliff_months) } : null;
+  const months = preset ?? custom;
+  if (!start || !months || !Number.isInteger(months.total_months) || months.total_months < 1
+    || !Number.isInteger(months.cliff_months) || months.cliff_months < 0 || months.cliff_months > months.total_months) return false;
+  return { start_date: start, ...months };
+}
+/** 100 less every other holder's recorded percentage and the base scenario's pool. */
+async function unallocated(env: Env, p: Project, exceptHolder: number | null): Promise<number> {
+  const held = await env.DB.prepare('SELECT COALESCE(SUM(ownership_pct), 0) AS n FROM cap_table_holders WHERE project_id = ? AND id IS NOT ?')
+    .bind(p.id, exceptHolder).first<{ n: number }>();
+  return Math.round((100 - Number(held?.n ?? 0) - (await optionPool(env, p) ?? 0)) * 100) / 100;
+}
+async function equityChecked(c: any, p: Project, pct: unknown, exceptHolder: number | null): Promise<number | null | undefined | Response> {
+  if (pct === undefined) return undefined;
+  if (pct === null) return null;
+  const n = Number(pct);
+  if (typeof pct !== 'number' || !Number.isFinite(n) || n <= 0 || n >= 100) return c.json({ detail: 'Equity must be between 0 and 100' }, 400);
+  const left = await unallocated(c.env, p, exceptHolder);
+  if (n > left) return c.json({ detail: `That takes the cap table over 100%. The unallocated share is ${left}%.` }, 400);
+  return n;
+}
+
+app.post('/founders', async c => {
+  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  const body = await jsonBody(c); if (!body) return c.json({ detail: 'Body required' }, 400);
+  const role = text(body.role, 100), email = text(body.email, 320);
+  if (role === false || email === false) return c.json({ detail: 'Invalid founder field' }, 400);
+  const vesting = vestingOf(body);
+  if (vesting === false) return c.json({ detail: 'Vesting needs a start date and a preset or its months' }, 400);
+  const pct = await equityChecked(c, ctx.project, body.equity_pct, null);
+  if (pct instanceof Response) return pct;
+  let out: { id: string };
+  try {
+    out = await addHolder(c.env, { projectId: ctx.project.id, actor: ctx.user as any, name: String(body.name ?? ''), email, group: 'founders', instrument: 'common',
+      ownership_pct: pct ?? null, founder_role: role, vesting: vesting ?? null });
+  } catch (e) { return holderFailed(c, e); }
+  await logCycleWriteStatement(c.env, { projectId: ctx.project.id, userId: ctx.user.id, cycle: 'build', module: 'founding-team', entityId: out.id,
+    action: 'build_founder_created', summary: role ? `Founder added as ${role}` : 'Founder added' }).run();
+  return c.json({ id: out.id, next: AGREEMENT_NEXT }, 201);
+});
+
 app.patch('/founders/:id', async c => {
   const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
-  const id = positiveId(c.req.param('id'));
+  const id = positiveId(String(c.req.param('id')).replace(/^h-/, ''));
   if (!id || !(await c.env.DB.prepare('SELECT 1 FROM cap_table_holders WHERE id = ? AND project_id = ?').bind(id, ctx.project.id).first())) return c.json({ detail: 'Holder not found' }, 404);
   const body = await jsonBody(c);
-  if (!body || !Object.hasOwn(body, 'role')) return c.json({ detail: 'role required' }, 400);
-  const role = text(body.role, 100);
+  if (!body) return c.json({ detail: 'Body required' }, 400);
+  const role = Object.hasOwn(body, 'role') ? text(body.role, 100) : undefined;
   if (role === false) return c.json({ detail: 'Invalid role' }, 400);
-  await c.env.DB.batch([
+  const holderFields = ['name', 'email', 'equity_pct', 'vesting'].filter(k => Object.hasOwn(body, k));
+  if (role === undefined && !holderFields.length) return c.json({ detail: 'Nothing to change' }, 400);
+  // The cap table's own fields go through `updateHolder()` and its gate; a role alone keeps today's.
+  if (holderFields.length) {
+    const vesting = vestingOf(body);
+    if (vesting === false) return c.json({ detail: 'Vesting needs a start date and a preset or its months' }, 400);
+    const email = Object.hasOwn(body, 'email') ? text(body.email, 320) : undefined;
+    if (email === false) return c.json({ detail: 'Invalid founder field' }, 400);
+    const pct = await equityChecked(c, ctx.project, body.equity_pct, id);
+    if (pct instanceof Response) return pct;
+    try {
+      await updateHolder(c.env, { projectId: ctx.project.id, actor: ctx.user as any, id: `h-${id}`,
+        ...(Object.hasOwn(body, 'name') ? { name: String(body.name ?? '') } : {}), ...(email !== undefined ? { email } : {}),
+        ...(pct !== undefined ? { ownership_pct: pct } : {}), ...(vesting !== undefined ? { vesting } : {}) });
+    } catch (e) { return holderFailed(c, e); }
+  }
+  const log = logged(c.env, ctx.project.id, ctx.user.id, 'founding-team', `h-${id}`, 'build_founder_role_changed',
+    role === undefined ? 'Split or vesting changed' : role ? `Role set to ${role}` : 'Role cleared');
+  await c.env.DB.batch(role === undefined ? [log] : [
     c.env.DB.prepare('UPDATE cap_table_holders SET founder_role = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?').bind(role, id, ctx.project.id),
-    logged(c.env, ctx.project.id, ctx.user.id, 'founding-team', `h-${id}`, 'build_founder_role_changed', role ? `Role set to ${role}` : 'Role cleared'),
+    log,
   ]);
-  return c.json({ ok: true, id });
+  return c.json({ ok: true, id: `h-${id}` });
 });
 
 app.post('/formation-steps', async c => {
@@ -806,35 +981,62 @@ app.patch('/obligations/:id/proof', async c => {
 });
 
 
-app.get('/systems/choices', async c => {
-  const project = await context(c); if (project instanceof Response) return project;
-  const user = await requireAuth(c);
-  if (!project.company_id) return c.json({ detail: 'Project has no company' }, 409);
-  const member = await c.env.DB.prepare('SELECT 1 FROM user_company_links WHERE user_id = ? AND company_id = ?').bind(user.id, project.company_id).first();
-  if (!member) return c.json({ error: 'not_in_company', detail: 'You are not in this project’s company.' }, 403);
-  const own = rows(await c.env.DB.prepare(
+/**
+ * Per kind, the caller's own enabled connections a kind can name, whether it
+ * already names one, and its Used by (D686 §5.4). `GET /systems/choices`
+ * answers it, and Operating systems' form-options read the same function
+ * (D690, #1695). Kinds and booleans only: no other member's connector names.
+ */
+export async function systemChoices(env: Env, project: Project, user: Viewer) {
+  const own = rows(await env.DB.prepare(
     `SELECT i.uid, i.provider_key FROM integrations i
        JOIN integration_companies ic ON ic.integration_id = i.id AND ic.company_id = ? AND ic.enabled = 1
        JOIN user_company_links ucl ON ucl.company_id = ic.company_id AND ucl.user_id = i.user_id
       WHERE i.user_id = ? ORDER BY i.id`,
   ).bind(project.company_id, user.id).all<{ uid: string; provider_key: string }>());
   const workspace: string[] = [];
-  for (const provider of ['google_calendar', 'microsoft_365']) if (await workspaceConnected(c.env, user.id, provider)) workspace.push(provider);
+  for (const provider of ['google_calendar', 'microsoft_365']) if (await workspaceConnected(env, user.id, provider)) workspace.push(provider);
   // Which kinds already name a connector, and their Used by, so Connect a
   // tool's "Use as your <kind>" offers only an unmapped kind and keeps what
   // the row says (D686 §5.4). Kinds and booleans only: no connector names.
-  const current = new Map(rows(await c.env.DB.prepare(
+  const current = new Map(rows(await env.DB.prepare(
     'SELECT kind, integration_id, provider_key, used_by FROM project_core_systems WHERE project_id = ?',
   ).bind(project.id).all<{ kind: string; integration_id: number | null; provider_key: string | null; used_by: string | null }>()).map(r => [r.kind, r]));
-  return c.json({ kinds: SYSTEM_KINDS.map(kind => ({
+  return SYSTEM_KINDS.map(kind => ({
     kind, label: SYSTEM_LABEL[kind],
     mapped: current.get(kind)?.integration_id != null || current.get(kind)?.provider_key != null,
     used_by: current.get(kind)?.used_by ?? null,
     choices: kind === 'workspace' ? workspace.map(provider_key => ({ uid: null, provider_key, display_name: getDescriptor(provider_key)?.display_name ?? provider_key, category: 'Calendar and workspace' }))
       : own.filter(i => fitsKind(kind, i.provider_key)).map(i => ({ ...i, display_name: getDescriptor(i.provider_key)?.display_name ?? i.provider_key, category: CONNECTOR_METADATA[i.provider_key]?.category })),
-  })) });
+  }));
+}
+
+app.get('/systems/choices', async c => {
+  const project = await context(c); if (project instanceof Response) return project;
+  const user = await requireAuth(c);
+  if (!project.company_id) return c.json({ detail: 'Project has no company' }, 409);
+  const member = await c.env.DB.prepare('SELECT 1 FROM user_company_links WHERE user_id = ? AND company_id = ?').bind(user.id, project.company_id).first();
+  if (!member) return c.json({ error: 'not_in_company', detail: 'You are not in this project’s company.' }, 403);
+  return c.json({ kinds: await systemChoices(c.env, project, user) });
 });
 
+const SYNC_CHOICES = ['live', 'hourly', 'daily', 'manual'] as const;
+/** A connection's sync, merged into its own `config_json` as `PATCH /api/connectors/:uid/config` merges it. */
+function syncWrite(env: Env, integrationId: number, ownerId: number, sync: string) {
+  return env.DB.prepare(
+    `UPDATE integrations SET config_json = json_set(CASE WHEN json_valid(config_json) THEN config_json ELSE '{}' END, '$.sync_frequency', ?),
+            updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?`,
+  ).bind(sync, integrationId, ownerId);
+}
+
+/**
+ * D690 (#1695 decisions 10 and 5). A connector key maps that connector; sent
+ * as null it unmaps (a Workspace row is deleted); absent, the mapping stays.
+ * `used_by`, `feeds` and `sync` change only when the body carries them. A
+ * sync goes to the mapped connection's own setting, and only its owner may
+ * set it; with no connection it waits in `sync_request` for one, and a
+ * mapping the caller makes takes the caller's own waiting choice.
+ */
 app.put('/systems/:kind', async c => {
   const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
   const rawKind = c.req.param('kind');
@@ -846,7 +1048,24 @@ app.put('/systems/:kind', async c => {
   if (!member) return c.json({ error: 'not_in_company', detail: 'You are not in this project’s company.' }, 403);
   const body = await jsonBody(c), usedBy = text(body?.used_by, 200);
   if (!body || usedBy === false) return c.json({ detail: 'Invalid mapping' }, 400);
+  const has = (key: string) => Object.hasOwn(body, key);
+  let feeds: string[] | null | undefined;
+  if (has('feeds')) {
+    if (body.feeds != null && (!Array.isArray(body.feeds) || body.feeds.some(f => typeof f !== 'string' || !Object.hasOwn(FEEDS_LABEL, f)))) return c.json({ detail: 'Feeds are use_of_funds, kpis or team' }, 400);
+    feeds = body.feeds == null ? null : [...new Set(body.feeds as string[])];
+  }
+  const sync = has('sync') ? body.sync : undefined;
+  if (sync !== undefined && (typeof sync !== 'string' || !(SYNC_CHOICES as readonly string[]).includes(sync))) return c.json({ detail: 'Sync is live, hourly, daily or manual' }, 400);
+  const stored = await c.env.DB.prepare(
+    `SELECT s.integration_id, s.provider_key, s.used_by, s.feeds_json, s.sync_request, s.sync_request_by, i.user_id AS owner_id, i.provider_key AS integration_provider
+       FROM project_core_systems s LEFT JOIN integrations i ON i.id = s.integration_id
+      WHERE s.project_id = ? AND s.kind = ?`,
+  ).bind(ctx.project.id, kind).first<any>();
+  const keepUsedBy = has('used_by') ? usedBy : stored?.used_by ?? null;
+  const keepFeeds = feeds === undefined ? stored?.feeds_json ?? null : feeds == null ? null : JSON.stringify(feeds);
   let integrationId: number | null = null, providerKey: string | null = null;
+  const keyed = kind === 'workspace' ? has('provider_key') : has('integration_uid') || has('integration_id');
+  let mappedNow: { id: number; provider_key: string } | null = null;
   if (kind === 'workspace') {
     if (body.integration_uid != null || body.integration_id != null) return c.json({ error: 'kind_mismatch', detail: 'That connector is not a workspace tool.' }, 400);
     if (body.provider_key != null) {
@@ -870,17 +1089,58 @@ app.put('/systems/:kind', async c => {
       if (!enabled) return c.json({ detail: 'Connector not enabled for this company or not owned by you' }, 403);
       if (!fitsKind(kind, enabled.provider_key)) return c.json({ error: 'kind_mismatch', detail: `That connector is not a ${kind} tool.` }, 400);
       integrationId = enabled.id;
-    }
+      mappedNow = enabled;
+    } else if (!keyed) integrationId = stored?.integration_id ?? null; // no connector key: the mapping stays
   }
-  const change = kind === 'workspace' && providerKey == null
-    ? c.env.DB.prepare('DELETE FROM project_core_systems WHERE project_id = ? AND kind = ?').bind(ctx.project.id, kind)
-    : c.env.DB.prepare(
-      `INSERT INTO project_core_systems (project_id, kind, integration_id, provider_key, used_by, updated_by)
-       VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(project_id, kind) DO UPDATE SET
-         integration_id = excluded.integration_id, provider_key = excluded.provider_key, used_by = excluded.used_by,
+  const log = logged(c.env, ctx.project.id, ctx.user.id, 'operating-systems', kind, 'build_system_mapping_changed', `${SYSTEM_LABEL[kind]} mapping changed`);
+  if (kind === 'workspace') {
+    // Workspace has no connection row, so a `sync` for it is ignored.
+    if (kind === 'workspace' && providerKey == null && keyed) {
+      await c.env.DB.batch([c.env.DB.prepare('DELETE FROM project_core_systems WHERE project_id = ? AND kind = ?').bind(ctx.project.id, kind), log]);
+      return c.json({ ok: true, kind });
+    }
+    if (!keyed) {
+      // Its row needs its provider: with none stored there is nothing to keep the Feeds on.
+      if (!stored) return c.json({ ok: true, kind, stored: false });
+      await c.env.DB.batch([c.env.DB.prepare('UPDATE project_core_systems SET used_by = ?, feeds_json = ?, updated_at = CURRENT_TIMESTAMP WHERE project_id = ? AND kind = ?')
+        .bind(keepUsedBy, keepFeeds, ctx.project.id, kind), log]);
+      return c.json({ ok: true, kind });
+    }
+    await c.env.DB.batch([c.env.DB.prepare(
+      `INSERT INTO project_core_systems (project_id, kind, integration_id, provider_key, used_by, feeds_json, updated_by)
+       VALUES (?, ?, NULL, ?, ?, ?, ?) ON CONFLICT(project_id, kind) DO UPDATE SET
+         integration_id = NULL, provider_key = excluded.provider_key, used_by = excluded.used_by, feeds_json = excluded.feeds_json,
          updated_by = excluded.updated_by, updated_at = CURRENT_TIMESTAMP`,
-    ).bind(ctx.project.id, kind, integrationId, providerKey, usedBy, ctx.user.id);
-  await c.env.DB.batch([change, logged(c.env, ctx.project.id, ctx.user.id, 'operating-systems', kind, 'build_system_mapping_changed', `${SYSTEM_LABEL[kind]} mapping changed`)]);
+    ).bind(ctx.project.id, kind, providerKey, keepUsedBy, keepFeeds, ctx.user.id), log]);
+    return c.json({ ok: true, kind });
+  }
+  // The sync (decision 5). A body without `sync` is never refused here.
+  const writes: ReturnType<Env['DB']['prepare']>[] = [];
+  let request: string | null = stored?.sync_request ?? null, requestBy: number | null = stored?.sync_request_by ?? null;
+  if (mappedNow) {
+    // A choice waiting for a connection reaches it only when its owner made it; it clears either way.
+    const waiting = request && requestBy === ctx.user.id ? request : null;
+    const chosen = typeof sync === 'string' ? sync : waiting;
+    if (chosen) {
+      if (!validateConnectorSettings(mappedNow.provider_key, { sync_frequency: chosen }).ok) return c.json({ detail: 'Invalid sync' }, 400);
+      writes.push(syncWrite(c.env, mappedNow.id, Number(ctx.user.id), chosen));
+    }
+    request = null; requestBy = null;
+  } else if (typeof sync === 'string') {
+    if (integrationId != null) {
+      if (Number(stored?.owner_id) !== Number(ctx.user.id)) return c.json({ error: 'not_your_connection', detail: 'Only the connection’s owner changes its sync.' }, 403);
+      if (!validateConnectorSettings(String(stored?.integration_provider ?? ''), { sync_frequency: sync }).ok) return c.json({ detail: 'Invalid sync' }, 400);
+      writes.push(syncWrite(c.env, integrationId, Number(ctx.user.id), sync));
+    } else { request = sync; requestBy = Number(ctx.user.id); }
+  }
+  const change = c.env.DB.prepare(
+    `INSERT INTO project_core_systems (project_id, kind, integration_id, provider_key, used_by, feeds_json, sync_request, sync_request_by, updated_by)
+     VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?) ON CONFLICT(project_id, kind) DO UPDATE SET
+       integration_id = excluded.integration_id, provider_key = excluded.provider_key, used_by = excluded.used_by,
+       feeds_json = excluded.feeds_json, sync_request = excluded.sync_request, sync_request_by = excluded.sync_request_by,
+       updated_by = excluded.updated_by, updated_at = CURRENT_TIMESTAMP`,
+  ).bind(ctx.project.id, kind, integrationId, keepUsedBy, keepFeeds, request, requestBy, ctx.user.id);
+  await c.env.DB.batch([change, ...writes, log]);
   return c.json({ ok: true, kind });
 });
 
