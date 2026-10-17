@@ -82,7 +82,11 @@ test('the client\'s source has no method but GET, no body, and no money-movement
 });
 
 test('only the client names Mercury\'s API host, and no file names a send-money or transfer-money act', () => {
-  const host = SOURCES.filter((s) => s.text.includes(HOST)).map((s) => s.path);
+  // A ban on the text, not a URL check: it stops at the dot after `mercury`,
+  // so every file that holds `api.mercury.com`, in a URL or a bare string,
+  // is still found, and so is any other `api.mercury.` host.
+  const namesHost = /api\.mercury\./;
+  const host = SOURCES.filter((s) => namesHost.test(s.text)).map((s) => s.path);
   assert.deepEqual(host, [CLIENT]);
   const acts = /send-money|sendMoney|transfer-money|requestSendMoney|requestTransferMoney/;
   assert.deepEqual(SOURCES.filter((s) => acts.test(s.text)).map((s) => s.path), []);
