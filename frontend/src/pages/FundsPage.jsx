@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useEscapeClose } from '../components/useEscapeClose';
+import { FundActControl, useFundActs } from '../lib/fundActs';
 
 const fmtCents = (cents) => {
   const v = Number(cents || 0) / 100;
@@ -285,6 +286,9 @@ export function LPADrawer({ fundId, onClose }) {
 // ----- Admin/Operator view -----
 export function AdminFundsView() {
   const [funds, setFunds] = useState(null);
+  // D714: issuing a call and executing a distribution are Super Admin acts.
+  // A plain Admin reads the sentence in their place; the Worker still decides.
+  const acts = useFundActs();
   const [active, setActive] = useState(null);          // selected fund
   const [activeDistribs, setActiveDistribs] = useState([]);
   const [activeLPs, setActiveLPs] = useState([]);
@@ -375,8 +379,12 @@ export function AdminFundsView() {
             <div className="flex gap-2 flex-wrap">
               <button onClick={() => setShowLpa(active.id)} className="px-2.5 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded flex items-center gap-1"><FileText size={11} /> View LPA</button>
               <button onClick={() => regenLpa(active.id)} className="px-2.5 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded">Regenerate LPA</button>
-              <button onClick={() => setShowCC(active)} className="px-2.5 py-1 text-xs bg-violet-600 hover:bg-violet-700 text-white rounded flex items-center gap-1"><Send size={11} /> Capital call</button>
-              <button onClick={() => setShowDist(active)} className="px-2.5 py-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded flex items-center gap-1"><Banknote size={11} /> Distribute</button>
+              <FundActControl access={acts} act="capital_call.issue" testId="text-capital-call-refused" className="px-2.5 py-1 text-xs text-gray-500 dark:text-gray-400">
+                <button onClick={() => setShowCC(active)} className="px-2.5 py-1 text-xs bg-violet-600 hover:bg-violet-700 text-white rounded flex items-center gap-1"><Send size={11} /> Capital call</button>
+              </FundActControl>
+              <FundActControl access={acts} act="distribution.execute" testId="text-distribute-refused" className="px-2.5 py-1 text-xs text-gray-500 dark:text-gray-400">
+                <button onClick={() => setShowDist(active)} className="px-2.5 py-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded flex items-center gap-1"><Banknote size={11} /> Distribute</button>
+              </FundActControl>
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
