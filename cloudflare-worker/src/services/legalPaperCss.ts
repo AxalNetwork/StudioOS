@@ -3,10 +3,19 @@
 // Every legal document prints on one HTML paper (services/legalPaper.ts).
 // This file is its look: the brand faces, inlined as data: URIs so no render
 // fetches anything, and one CSS string built from named tokens. Every colour,
-// size and space is a token here, from the approved canvas "Legal Documents ·
-// Templates" (boards R1, R2, L0–L5) and the brand values; the canvas's final
-// `.dc.html` changes the tokens, never the rules that use them (D711
-// decision 10). Tests read token names, not values.
+// size and space is a token here. Tests read token names, not values.
+//
+// The values are R2's, the canvas's brand pass ("Legal Documents ·
+// Templates", boards R1, R2 and the page renderer), set by the library sweep
+// (#1865, D711 § "The library sweep and the R2 restyle"). That pass changed
+// four rules as well as the tokens:
+//   - violet only in CONFIDENTIAL, the eyebrows, clause numbers, links, the
+//     table-header underline, the Draft and Superseded states and the light
+//     cover's top rule; the wordmark, table-header text and Issued stamp ink;
+//   - Public Sans prints at 400 and 700 only: the canvas's 600 and 800 map to
+//     the shipped 700, so no browser fakes a bold;
+//   - body paragraphs are justified;
+//   - the wordmark reads "Axal VC".
 //
 // NOTE: authored to load under `node --experimental-strip-types` (the worker
 // test gate) — no `enum`s, no TS parameter properties.
@@ -110,42 +119,67 @@ export function markDataUri(): string {
 
 export const PAPER_TOKENS = {
   color: {
-    ink: '#1f1d2b',
-    inkStrong: '#111018',
+    ink: '#141118',
+    inkStrong: '#141118',
     violet: '#6d28d9',
     muted: '#6b6577',
-    faint: '#a1a1aa',
-    rule: '#d4d2dc',
-    mergeTint: '#ede9fe',
-    stampInk: '#4c1d95',
-    stampGround: '#f4f0fe',
-    diagonalDraft: '#a1a1aa',
-    diagonalSpecimen: '#c4c2cc',
-    coverDarkGround: '#14101f',
-    coverDarkInk: '#f4f0fe',
-    coverDarkMuted: '#b8b2c8',
-    coverGlow: 'rgba(109, 40, 217, 0.55)',
+    faint: '#9a96a8',
+    rule: '#ececf1',
+    mergeTint: '#efe7fd',
+    mergeInk: '#5b21b6',
+    tableHeadGround: '#faf9fc',
+    stampIssued: '#141118',
+    stampSuperseded: '#6d28d9',
+    stampGround: '#ffffff',
+    diagonalDraft: '#6d28d9',
+    diagonalSpecimen: '#6b6577',
+    coverDarkGround: '#141118',
+    coverDarkInk: '#ffffff',
+    coverDarkMuted: '#9a96a8',
+    coverDarkEyebrow: '#a78bfa',
+    coverGlow: 'rgba(124, 58, 237, 0.55)',
     coverLightGround: '#ffffff',
     white: '#ffffff',
   },
   size: {
     body: '10.5pt',
-    bodyLine: '14pt',
+    bodyLine: '15pt',
     title: '15pt',
-    article: '11.5pt',
+    titleLine: '19pt',
+    article: '12.5pt',
+    articleLine: '16pt',
     section: '10.5pt',
+    sectionLine: '15pt',
     lockup: '10pt',
-    confidential: '8.5pt',
+    confidential: '8pt',
     eyebrow: '8pt',
+    eyebrowLine: '10pt',
     footer: '8pt',
+    footerLine: '10pt',
     audit: '6.5pt',
+    auditLine: '8pt',
+    figures: '9.5pt',
+    figuresLine: '13pt',
+    tableHead: '8.5pt',
+    tableCell: '9.5pt',
     legend: '9pt',
     diagonal: '48pt',
-    coverTitle: '26pt',
-    coverFund: '11pt',
+    coverTitle: '40pt',
+    coverTitleLine: '44pt',
+    coverFund: '10.5pt',
+    coverMark: '24pt',
+    coverWordmark: '16pt',
     checkbox: '9pt',
-    mark: '12pt',
+    mark: '13pt',
   },
+  track: {
+    wordmark: '-0.025em',
+    eyebrow: '0.14em',
+    confidential: '0.14em',
+    tableHead: '0.06em',
+    coverTitle: '-0.03em',
+  },
+  angle: { diagonal: '-38deg' },
   space: {
     pageMargin: '0.75in',
     titleAfter: '12pt',
@@ -221,9 +255,9 @@ export function paperCss(o: PaperCssOptions): string {
   size: ${dim.css};
   margin: ${T.space.pageMargin};
   @top-left {
-    content: "AXAL VC";
+    content: "Axal VC";
     font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: ${T.size.lockup};
-    color: ${C.violet}; letter-spacing: 0.04em;
+    color: ${C.ink}; letter-spacing: ${T.track.wordmark};
     background: url(${markDataUri()}) no-repeat left 0 bottom 5pt / ${T.size.mark} ${T.size.mark};
     padding-left: calc(${T.size.mark} + 5pt);
     vertical-align: bottom; padding-bottom: 6pt;
@@ -233,18 +267,18 @@ export function paperCss(o: PaperCssOptions): string {
   @top-right {
     content: "CONFIDENTIAL";
     font-family: 'Public Sans', sans-serif; font-weight: 700; font-size: ${T.size.confidential};
-    letter-spacing: 0.12em; color: ${C.violet};
+    letter-spacing: ${T.track.confidential}; color: ${C.violet};
     vertical-align: bottom; padding-bottom: 6pt;
     border-bottom: ${T.rule.header} solid ${C.rule};
   }
   @bottom-left {
     content: ${footer};
-    white-space: pre; font-family: 'Public Sans', sans-serif; font-size: ${T.size.footer};
+    white-space: pre; font-family: 'Public Sans', sans-serif; font-size: ${T.size.footer}; line-height: ${T.size.footerLine};
     color: ${C.muted}; vertical-align: top; padding-top: 8pt;
   }
   @bottom-right {
     content: ${pageRule};
-    font-family: 'Public Sans', sans-serif; font-size: ${T.size.footer};
+    font-family: 'Public Sans', sans-serif; font-size: ${T.size.footer}; line-height: ${T.size.footerLine};
     color: ${C.muted}; vertical-align: top; padding-top: 8pt;
   }
 }
@@ -280,28 +314,32 @@ em { font-style: italic; }
 .screen-head { display: flex; justify-content: space-between; align-items: flex-end; padding-bottom: 6pt; margin-bottom: 14pt; border-bottom: ${T.rule.header} solid ${C.rule}; }
 .lockup { display: inline-flex; align-items: center; gap: 5pt; }
 .lockup img { width: ${T.size.mark}; height: ${T.size.mark}; }
-.lockup .wordmark { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: ${T.size.lockup}; color: ${C.violet}; letter-spacing: 0.04em; }
-.eyebrow, .confidential { font-family: 'Public Sans', sans-serif; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: ${C.violet}; font-size: ${T.size.eyebrow}; }
-.confidential { font-size: ${T.size.confidential}; }
-.screen-foot { margin-top: 24pt; padding-top: 8pt; border-top: ${T.rule.header} solid ${C.rule}; font-size: ${T.size.footer}; color: ${C.muted}; }
-.audit { font-family: 'Roboto Mono', monospace; font-size: ${T.size.audit}; color: ${C.faint}; }
+.lockup .wordmark { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: ${T.size.lockup}; color: ${C.ink}; letter-spacing: ${T.track.wordmark}; }
+.eyebrow, .confidential { font-family: 'Public Sans', sans-serif; font-weight: 700; text-transform: uppercase; letter-spacing: ${T.track.eyebrow}; color: ${C.violet}; font-size: ${T.size.eyebrow}; line-height: ${T.size.eyebrowLine}; }
+.confidential { font-size: ${T.size.confidential}; letter-spacing: ${T.track.confidential}; }
+a { color: ${C.violet}; }
+.screen-foot { margin-top: 24pt; padding-top: 8pt; border-top: ${T.rule.header} solid ${C.rule}; font-size: ${T.size.footer}; line-height: ${T.size.footerLine}; color: ${C.muted}; }
+.audit { font-family: 'Roboto Mono', monospace; font-size: ${T.size.audit}; line-height: ${T.size.auditLine}; color: ${C.muted}; }
 .state-banner { font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; font-size: ${T.size.eyebrow}; color: ${C.muted}; margin: 0 0 12pt; }
-.stamp { display: inline-block; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; font-size: ${T.size.eyebrow}; color: ${C.stampInk}; background: ${C.stampGround}; border: ${T.rule.legend} solid ${C.stampInk}; padding: 2pt 6pt; margin: 0 0 12pt; }
+.state-banner.draft { color: ${C.violet}; }
+.stamp { display: inline-block; font-weight: 700; letter-spacing: 0.1em; font-size: ${T.size.eyebrow}; background: ${C.stampGround}; border: ${T.rule.legend} solid currentColor; padding: 2pt 6pt; margin: 0 0 12pt; }
+.stamp.issued { color: ${C.stampIssued}; }
+.stamp.superseded { color: ${C.stampSuperseded}; }
 .restricted { font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; font-size: ${T.size.eyebrow}; color: ${C.violet}; margin: 0 0 12pt; }
-.diagonal { position: fixed; top: 46%; left: 0; right: 0; text-align: center; transform: rotate(-45deg); font-family: 'Public Sans', sans-serif; font-weight: 700; font-size: ${T.size.diagonal}; opacity: ${T.opacity.diagonal}; pointer-events: none; z-index: 0; }
+.diagonal { position: fixed; top: 46%; left: 0; right: 0; text-align: center; transform: rotate(${T.angle.diagonal}); font-family: 'Public Sans', sans-serif; font-weight: 700; font-size: ${T.size.diagonal}; opacity: ${T.opacity.diagonal}; pointer-events: none; z-index: 0; }
 .diagonal.draft { color: ${C.diagonalDraft}; }
 .diagonal.specimen { color: ${C.diagonalSpecimen}; }
-h1.title { font-family: 'Bricolage Grotesque', sans-serif; font-weight: 800; font-size: ${T.size.title}; line-height: 1.25; text-transform: uppercase; text-align: center; color: ${C.inkStrong}; margin: 0 0 ${T.space.titleAfter}; break-after: avoid; }
-h2.article { font-family: 'Bricolage Grotesque', sans-serif; font-weight: 800; font-size: ${T.size.article}; color: ${C.inkStrong}; margin: ${T.space.articleBefore} 0 ${T.space.articleAfter}; break-after: avoid; }
+h1.title { font-family: 'Bricolage Grotesque', sans-serif; font-weight: 800; font-size: ${T.size.title}; line-height: ${T.size.titleLine}; text-transform: uppercase; text-align: center; color: ${C.inkStrong}; margin: 0 0 ${T.space.titleAfter}; break-after: avoid; }
+h2.article { font-family: 'Bricolage Grotesque', sans-serif; font-weight: 800; font-size: ${T.size.article}; line-height: ${T.size.articleLine}; color: ${C.inkStrong}; margin: ${T.space.articleBefore} 0 ${T.space.articleAfter}; break-after: avoid; }
 h2.article a { color: inherit; text-decoration: none; }
 h1.title a { color: inherit; text-decoration: none; }
-h3.section { font-weight: 700; font-size: ${T.size.section}; margin: 10pt 0 4pt; break-after: avoid; }
+h3.section { font-weight: 700; font-size: ${T.size.section}; line-height: ${T.size.sectionLine}; margin: 10pt 0 4pt; break-after: avoid; }
 h2.schedule { font-family: 'Bricolage Grotesque', sans-serif; font-weight: 800; font-size: ${T.size.article}; text-align: center; text-transform: uppercase; margin: ${T.space.articleBefore} 0 2pt; break-after: avoid; }
 p.dateline { text-align: center; color: ${C.muted}; margin: 0 0 10pt; }
-p { margin: 0 0 ${T.space.paragraphAfter}; orphans: 2; widows: 2; }
+p { margin: 0 0 ${T.space.paragraphAfter}; orphans: 2; widows: 2; text-align: justify; }
 p.preamble { margin-bottom: 12pt; }
-p.recital { padding-left: ${T.space.hang}; }
-p.clause { padding-left: ${T.space.hang}; text-indent: -${T.space.hang}; }
+p.recital { padding-left: ${T.space.hang}; text-align: justify; }
+p.clause { padding-left: ${T.space.hang}; text-indent: -${T.space.hang}; text-align: justify; }
 p.clause.depth-2 { padding-left: calc(${T.space.hang} * 2); }
 p.clause .num { display: inline-block; width: ${T.space.hang}; text-indent: 0; color: ${C.violet}; font-weight: 700; }
 .runin { font-weight: 700; }
@@ -309,8 +347,8 @@ ul.bullets { margin: 0 0 ${T.space.paragraphAfter}; padding-left: ${T.space.hang
 ul.bullets li { margin-bottom: 3pt; }
 table.paper-table { width: 100%; border-collapse: collapse; margin: 6pt 0 10pt; }
 table.paper-table thead { display: table-header-group; }
-table.paper-table th { text-align: left; font-weight: 700; font-size: ${T.size.eyebrow}; text-transform: uppercase; letter-spacing: 0.08em; color: ${C.violet}; border-bottom: ${T.rule.tableHead} solid ${C.ink}; padding: 3pt 4pt; }
-table.paper-table td { border-bottom: ${T.rule.table} solid ${C.rule}; padding: 3pt 4pt; vertical-align: top; }
+table.paper-table th { text-align: left; font-weight: 700; font-size: ${T.size.tableHead}; text-transform: uppercase; letter-spacing: ${T.track.tableHead}; color: ${C.ink}; background: ${C.tableHeadGround}; border-bottom: ${T.rule.tableHead} solid ${C.violet}; padding: 3pt 4pt; }
+table.paper-table td { font-size: ${T.size.tableCell}; border-bottom: ${T.rule.table} solid ${C.rule}; padding: 3pt 4pt; vertical-align: top; }
 table.paper-table tr { break-inside: avoid; }
 table.paper-table .right { text-align: right; }
 table.paper-table .center { text-align: center; }
@@ -324,7 +362,7 @@ table.paper-table tr.total td { border-top: ${T.rule.total} solid ${C.ink}; font
   linear-gradient(45deg, transparent 44%, ${C.ink} 44%, ${C.ink} 56%, transparent 56%),
   linear-gradient(-45deg, transparent 44%, ${C.ink} 44%, ${C.ink} 56%, transparent 56%); }
 .fill { display: inline-block; min-width: 12em; border-bottom: ${T.rule.fill} solid ${C.ink}; height: 0.9em; }
-.merge { background: ${C.mergeTint}; padding: 0 2pt; border-radius: 2pt; }
+.merge { background: ${C.mergeTint}; color: ${C.mergeInk}; padding: 0 2pt; border-radius: 2pt; }
 hr.paper-rule { border: 0; border-top: ${T.rule.table} solid ${C.rule}; margin: 10pt 0; }
 .sig-follows { font-style: italic; text-align: center; color: ${C.muted}; margin-top: 16pt; }
 section.execution { break-before: page; break-inside: avoid; }
@@ -385,8 +423,10 @@ section.payment { margin: 6pt 0 12pt; break-inside: avoid; }
 .payment-refusal { font-weight: 700; }
 section.certificate table td { font-size: 9pt; }
 .cover-inner { display: flex; flex-direction: column; height: 100%; }
-.cover .cover-fund { font-size: ${T.size.coverFund}; font-weight: 700; letter-spacing: 0.04em; margin-top: 1.4in; }
-.cover h1.cover-title { font-family: 'Bricolage Grotesque', sans-serif; font-weight: 800; font-size: ${T.size.coverTitle}; line-height: 1.15; text-transform: uppercase; margin: 10pt 0 18pt; }
+.cover .cover-fund { font-size: ${T.size.coverFund}; font-weight: 700; text-transform: uppercase; letter-spacing: ${T.track.eyebrow}; margin-top: 1.4in; }
+.cover h1.cover-title { font-family: 'Bricolage Grotesque', sans-serif; font-weight: 800; font-size: ${T.size.coverTitle}; line-height: ${T.size.coverTitleLine}; letter-spacing: ${T.track.coverTitle}; text-transform: uppercase; margin: 10pt 0 18pt; }
+.cover .lockup img { width: ${T.size.coverMark}; height: ${T.size.coverMark}; }
+.cover .lockup .wordmark { font-size: ${T.size.coverWordmark}; }
 .cover dl { display: grid; grid-template-columns: 9em 1fr; gap: 6pt 10pt; margin: 0 0 18pt; }
 .cover dt { font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; font-size: ${T.size.eyebrow}; }
 .cover dd { margin: 0; }
@@ -394,7 +434,11 @@ section.certificate table td { font-size: 9pt; }
 .cover-${cover} { ${cover === 'dark'
     ? `background: radial-gradient(circle at 100% 0%, ${C.coverGlow} 0, transparent 45%), ${C.coverDarkGround}; color: ${C.coverDarkInk};`
     : `background: ${C.coverLightGround}; color: ${C.ink};`} }
-.cover-dark .eyebrow, .cover-dark dt { color: ${C.coverDarkMuted}; }
+.cover-dark .lockup .wordmark { color: ${C.coverDarkInk}; }
+.cover-dark .eyebrow, .cover-dark .cover-fund { color: ${C.coverDarkEyebrow}; }
+.cover-dark dt { color: ${C.coverDarkMuted}; }
+.cover-light { border-top: 2pt solid ${C.violet}; }
+.cover-light .cover-fund { color: ${C.violet}; }
 .cover-dark .legend { border-color: ${C.coverDarkInk}; }
 .cover-dark .fill { border-bottom-color: ${C.coverDarkInk}; }
 section.contents { break-after: page; }

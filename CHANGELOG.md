@@ -17,6 +17,20 @@
   says "Signature received". New pure module `frontend/src/lib/esignSteps.js`;
   tests in `frontend/test/esign_steps_d717.test.mjs`.
 
+## Every library document renders from a coded template (D758, #1861)
+
+- The 24 old seed bodies that lived only inside migration 085 (`lpa`, `ppm`,
+  `safe` and 21 more) are now `<slug>_v1.md` files under
+  `cloudflare-worker/src/templates/legal/`, byte for byte.
+- Migration 484 fills every active `legal_templates` row that has no text
+  from its file, as a new version with the empty one kept in history. In
+  production that is D706's 25 stubs; a row with any text is never touched.
+  Their sends now use the file's text instead of `buildTemplateBody`.
+- The catalog gains "Operating Partner Agreement (Spin-Out Lab)" as a counsel
+  stub (`COUNSEL_DRAFT_SLUGS`, now 32).
+- `scripts/gen-legal-templates-seed.py` no longer rewrites an applied
+  migration: every output is skipped once it exists.
+
 ## The bank-account registry restyled per entity (D717, #1856)
 
 - `/admin?tab=bank-accounts` (`BankAccountsConsole.jsx`) now draws the "Legal
@@ -29,6 +43,23 @@
   `GET /api/admin/bank-accounts` answers `refusals`
   (`services/payInstructions.ts`' new `refusalMessage` and `NOTICE_REFUSALS`).
   No migration, and no new route.
+
+## Every library document on the R2 paper, checked by one sweep (D711, #1865)
+
+- The legal paper's tokens are R2's (`PAPER_TOKENS`, `services/legalPaperCss.ts`):
+  ink `#141118`, the "Axal VC" wordmark in ink, violet only in CONFIDENTIAL, the
+  eyebrows, clause numbers, links, the table-header underline and the Draft and
+  Superseded states. Body paragraphs are justified. The pdf-lib fallback reads
+  the same tokens (`hexRgb`).
+- The paper now reads a wrapped paragraph as one paragraph, brackets every merge
+  token in a preview, reads plain-capitals headings in a body with no `#`, maps
+  → and ← to > and < in every printed string, marks a stub ("No body in the
+  store yet."), prints no empty contents page, and stamps `SUPERSEDED BY v<N>`
+  and `Issued · v<N> · SHA-256 <12 hex>`.
+- `cloudflare-worker/test/library_paper_sweep_d711.test.ts` draws all 97
+  catalog rows, the seven notice types, the Subscription Booklet and the five
+  outside keys, and asserts L0–L7, L8 item 2 and L10 on each. No body, `.md`
+  file or migration changed. Thumbnails redraw once.
 
 ## The entity and money map on screen, with one numbering on paper (D717, #1855)
 
@@ -47,6 +78,21 @@
   a "Bank accounts" link for the Super Admin. A plain Admin sees "Only the
   Super Admin can see or change payment instructions." in every account cell.
   A branch gets neither. Nothing moves money.
+
+## The template editor on Contracts › Templates (D717 PR 2c, #1852)
+
+- `contracts/TemplateEditor.jsx` replaces the modal on the Contracts desk and
+  opens in place: the Markdown source with line numbers and merge-field chips
+  (a mirror under a transparent textarea), the live paper scrolling with it
+  (`lib/paneSync.js`), and the render answer's merge fields with "Filled from
+  the envelope" or "Unfilled". The legacy console keeps the modal.
+- Kind and Axal VC party are segmented controls over `format_options`; a save
+  sends both, `null` for "From the slug". `formatOptions` adds `entity`.
+- Save draft keeps the editor open. Publish v[N] (`PublishDialog.jsx`) asks
+  first and publishes that one template; a published stub offers Withdraw.
+  A branch Worker reads the editor with no authoring control.
+- `PaperPreview` takes `docKind`, `axalParty`, `onDrawn` and `onFrameLoad`;
+  without them its request is unchanged.
 
 ## The AI top-up says what is wrong, and the rail shows money to the cent (D750, #1841)
 

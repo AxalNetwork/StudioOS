@@ -24,8 +24,9 @@ const SLUG_FIXED_KINDS: ReadonlySet<DocumentKind> = new Set(['notice', 'booklet'
 
 /**
  * The catalog entries created with no body anywhere: D706's 28 (migration
- * 468), D707's two (471) and D716's securities legend (478). Counsel drafts
- * them; test/template_format_d717.test.ts reads them out of the migrations.
+ * 468), D707's two (471), D716's securities legend (478) and D758's Operating
+ * Partner Agreement (484). Counsel drafts them;
+ * test/template_format_d717.test.ts reads them out of the migrations.
  */
 export const COUNSEL_DRAFT_SLUGS: ReadonlySet<string> = new Set([
   'certificate_of_limited_partnership_de', 'lpa_amended_restated', 'lpa_initial', 'lp_side_letter', 'mfn_election_form',
@@ -37,6 +38,7 @@ export const COUNSEL_DRAFT_SLUGS: ReadonlySet<string> = new Set([
   'pro_rata_information_rights_side_letter',
   'platform_ip_licence_management_admin', 'platform_ip_licence_fund_admin',
   'securities_legend',
+  'operating_partner_agreement_spin_out_lab',
 ]);
 /** The documents that carry the Structure of the Fund page (decision 11; PR 1c places it). */
 export const STRUCTURE_MAP_SLUGS: ReadonlySet<string> = new Set(['ppm', 'subscription_booklet', 'compliance_manual_code_of_ethics']);
@@ -51,10 +53,15 @@ export function formatView(row: { slug: string; category?: string | null; doc_ki
     format_source: eff.source, format_fixed: formatFixed(row.slug) };
 }
 
-/** The editor's choices: the storable kinds, the parties, which kinds are partyless, and the slug's own pair. */
+/**
+ * The editor's choices: the storable kinds, the parties, which kinds are
+ * partyless, the slug's own pair, and `entity`, the entity the slug names when
+ * the chosen kind takes a party (D717 #1852: a partyless slug's `derived.party`
+ * is `none`, which says nothing about the party an agreement kind would print).
+ */
 export function formatOptions(slug: string, category?: string | null) {
   return { kinds: [...STORABLE_KINDS], parties: [...TEMPLATE_PARTIES], partyless_kinds: [...PARTYLESS_KINDS],
-    derived: derivedFormat(slug, category) };
+    derived: derivedFormat(slug, category), entity: axalEntityKeyForDoc(slug, category) };
 }
 
 export type TemplateFormat = { kind: DocumentKind; party: TemplateParty };
