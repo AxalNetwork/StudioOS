@@ -525,9 +525,9 @@ export async function completeEmbeddedSignup(env: Env, userId: number, input: Si
   if (!input.phoneNumberId) {
     if (listed.length !== 1) return { ok: false, status: listed.length ? 409 : 400, code: listed.length ? 'choose_number' : 'number_not_in_waba' };
     input = { ...input, phoneNumberId: idStr(listed[0]!.id) ?? '' };
+    if (isAxal()) return { ok: false, status: 409, code: 'axal_number' };
     if (await isTaken(input.phoneNumberId)) return { ok: false, status: 409, code: 'number_taken' };
   }
-  if (isAxal()) return { ok: false, status: 409, code: 'axal_number' };
   const number = listed.find((n) => idStr(n?.id) === input.phoneNumberId);
   if (!number) return { ok: false, status: 400, code: 'number_not_in_waba' };
 

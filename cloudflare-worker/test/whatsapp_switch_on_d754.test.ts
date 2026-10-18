@@ -669,7 +669,7 @@ async function case13(eligibility = callingEligibility) {
       { code: 'not_built', sentence: 'Axal does not answer or place WhatsApp calls yet.' },
       { code: 'region', sentence: 'Meta does not offer business-initiated calls for numbers in the US or Canada (+1).' },
     ],
-    sentence: 'Calls: not yet, because Axal does not answer or place WhatsApp calls yet; Meta does not offer business-initiated calls for numbers in the US and Canada.',
+    sentence: 'Calls: not yet, because Axal does not answer or place WhatsApp calls yet; Meta does not offer business-initiated calls for numbers in the US or Canada (+1).',
     tier: 'TIER_10K', checked_at: current,
   });
 }
@@ -740,7 +740,7 @@ const mutations: Mutation[] = [
     after: '', check: case7 })),
   { name: 'canary event check omitted', path: routePath, before: "if (!(await channelOpenToMember(env, conn.provider, conn.userId))) {", after: 'if (false) {', check: case8 },
   { name: 'job downloads while closed', path: routePath, before: "if (!(await channelOpenToMember(env, conn.provider, conn.userId))) return giveBack('ignored', 'rollout');", after: '', check: case9 },
-  { name: 'resolved Axal number can subscribe', path: whatsappPath, before: "  }\n  if (isAxal()) return { ok: false, status: 409, code: 'axal_number' };\n  const number", after: "  }\n  const number", check: case10, dependency: '../services/channels/whatsapp' },
+  { name: 'resolved Axal number can subscribe', path: whatsappPath, before: "    if (isAxal()) return { ok: false, status: 409, code: 'axal_number' };\n    if (await isTaken(input.phoneNumberId))", after: "    if (await isTaken(input.phoneNumberId))", check: case10, dependency: '../services/channels/whatsapp' },
   { name: 'Axal number comparison is not trimmed', path: whatsappPath, before: "String(env.WHATSAPP_AXAL_PHONE_NUMBER_ID ?? '').trim()", after: "String(env.WHATSAPP_AXAL_PHONE_NUMBER_ID ?? '')", check: case10, dependency: '../services/channels/whatsapp' },
   { name: 'Telegram given a media deadline', path: failurePath, before: '!msg.awaiting_transcription || days == null', after: '!msg.awaiting_transcription', check: case11, dependency: '../services/channels/voiceFailures' },
   { name: 'text gets a deadline', path: failurePath, before: '!msg.awaiting_transcription || days == null', after: 'days == null', check: case11, dependency: '../services/channels/voiceFailures' },

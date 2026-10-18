@@ -129,21 +129,24 @@ export async function channelOpenToMember(env: Env, provider: 'whatsapp' | 'tele
   if (mode === 'on') return true;
   if (mode === 'off') return false;
   const row = await env.DB.prepare('SELECT id, role FROM users WHERE id = ?')
-    .bind(userId).first<{ id: number; role: string }>();
+    .bind(userId).first<{ id: number; role: User['role'] }>();
   if (!row) return false;
   // auth's general hydrator fails closed on a D1 fault. For a webhook that
   // would acknowledge and lose an event: remember the fault, then rethrow it
   // after hydration so processEvent releases the claim for provider retry.
   let hydrationError: unknown;
-  const watch = (statement: D1PreparedStatement): D1PreparedStatement => ({
-    ...statement,
-    bind(...values: unknown[]) {
-      try { return watch(statement.bind(...values)); }
-      catch (error) { hydrationError = error; throw error; }
-    },
-    async first<T>(column?: string): Promise<T | null> {
-      try { return await statement.first<T>(column); }
-      catch (error) { hydrationError = error; throw error; }
+  const watch = (statement: D1PreparedStatement): D1PreparedStatement => new Proxy(statement, {
+    get(target, key) {
+      if (key === 'bind') return (...values: unknown[]) => {
+        try { return watch(target.bind(...values)); }
+        catch (error) { hydrationError = error; throw error; }
+      };
+      if (key === 'first') return async (column?: string) => {
+        try { return column === undefined ? await target.first() : await target.first(column); }
+        catch (error) { hydrationError = error; throw error; }
+      };
+      const value = Reflect.get(target, key, target);
+      return typeof value === 'function' ? value.bind(target) : value;
     },
   });
   const hydrationEnv = { ...env, DB: { ...env.DB, prepare(sql: string) {
