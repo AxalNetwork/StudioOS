@@ -155,7 +155,7 @@ test('a founder\'s pre and detail views: the uses, the never rows, where it land
     assert.equal(detail.by('button-sync-now'), undefined);
     assert.ok(!detail.nodes().some((n) => /^connector-company-/.test(detail.pr(n)['data-testid'] || '')), 'no company tick');
     assert.equal(fed, 1, 'Now fed by is a founder\'s');
-    assert.match(t, new RegExp(`On disconnect: ${MEMBER_DISCONNECT_NOTE.replace(/\./g, '\\.')}`));
+    assert.ok(t.includes(`On disconnect: ${MEMBER_DISCONNECT_NOTE}`));
   } finally { await detail.unmount(); connectorsApi.fed = saved; }
 });
 
