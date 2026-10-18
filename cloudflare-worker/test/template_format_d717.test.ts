@@ -188,6 +188,13 @@ test('D717 the routes: a notice slug takes no stored pair (409 format_fixed); pp
   assert.deepEqual([ppm.kind, ppm.party], [derivedFormat('ppm', ppm.category).kind, derivedFormat('ppm', ppm.category).party]);
   assert.deepEqual(ppm.format_options.parties, ['management', 'holdings', 'gp', 'fund', 'none']);
   assert.deepEqual(ppm.format_options.kinds, ['agreement', 'corporate', 'resolution', 'unilateral', 'policy']);
+  // #1852: the entity the slug names, for the editor's "From the slug" party.
+  assert.equal(ppm.format_options.entity, axalEntityKeyForDoc('ppm', ppm.category));
+  const policy = (await call(db, '/templates/store/valuation_policy')).body.template;
+  assert.equal(classifyDocument('valuation_policy'), 'policy');
+  assert.equal(policy.format_options.derived.party, 'none');
+  assert.ok(['management', 'holdings', 'gp', 'fund'].includes(policy.format_options.entity), policy.format_options.entity);
+  assert.equal(policy.format_options.entity, axalEntityKeyForDoc('valuation_policy', policy.category));
   const set = await put('ppm', ppm, { doc_kind: 'agreement', axal_party: 'gp' });
   assert.equal(set.status, 200);
   assert.deepEqual([set.body.template.kind, set.body.template.party, set.body.template.format_source], ['agreement', 'gp', 'row']);

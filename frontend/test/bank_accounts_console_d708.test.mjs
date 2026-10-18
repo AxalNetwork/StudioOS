@@ -1,10 +1,12 @@
 /**
  * D708 (#1773) — the Bank accounts console, rendered with effects run on the
- * minimal DOM the Contracts tests use, with `bankAccountsApi` replaced by
- * recorders.
+ * minimal DOM the Contracts tests use, with `bankAccountsApi` and (#1856)
+ * `adminMercuryApi` replaced by recorders.
  *
  *   · the Super Admin sees the masked rows, where each payment goes and the
- *     Fund I line, and the console reads only `bankAccountsApi.list`;
+ *     Fund I line, and the console reads the registry only through
+ *     `bankAccountsApi.list` (D717's L11 restyle, #1856, adds the Mercury
+ *     reads, held in `bank_accounts_l11_d717.test.mjs`);
  *   · no full number is in the DOM before a reveal, and none 30 seconds after,
  *     and nothing the reveal answered is written to storage;
  *   · anyone else gets one sentence, no controls, and no read is made;
@@ -23,6 +25,7 @@ import React, { act } from 'react';
 import { mountContracts } from './_contracts_dom.mjs';
 import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import { bankAccountsApi } from '../src/lib/api/bankAccounts.js';
+import { adminMercuryApi } from '../src/lib/api/adminMercury.js';
 import BankAccountsPanel, { BANK_ACCOUNTS_HOLDER_ONLY, MERCURY_PRESET, REVEAL_MS } from '../src/pages/admin/consoles/BankAccountsConsole.jsx';
 import { ADMIN_PLACEMENT } from '../src/lib/adminPlacement.js';
 import { HQ_STRIPS } from '../src/lib/hqStrips.js';
@@ -50,14 +53,17 @@ const LIST = {
 };
 
 const ORIGINAL = { ...bankAccountsApi };
+const MERCURY = { ...adminMercuryApi };
 function stub(answers) {
   const calls = [];
   for (const k of Object.keys(ORIGINAL)) {
     bankAccountsApi[k] = (...args) => { calls.push(k); return k in answers ? answers[k](...args) : new Promise(() => {}); };
   }
+  // #1856: the Mercury reads never settle here; bank_accounts_l11_d717 holds them.
+  for (const k of Object.keys(MERCURY)) adminMercuryApi[k] = () => new Promise(() => {});
   return calls;
 }
-const restore = () => Object.assign(bankAccountsApi, ORIGINAL);
+const restore = () => { Object.assign(bankAccountsApi, ORIGINAL); Object.assign(adminMercuryApi, MERCURY); };
 const el = () => React.createElement(AuthProvider, null, React.createElement(BankAccountsPanel));
 
 async function mounted(user, answers) {
@@ -96,11 +102,12 @@ test('a reveal shows the number for 30 seconds, then only the last four, and sto
   const realSet = globalThis.localStorage.setItem;
   globalThis.localStorage.setItem = (k, val) => { writes.push([k, String(val)]); return realSet(k, val); };
   try {
-    await v.click('Reveal number');
-    await v.fill('Why you need the number', 'Checking against Mercury');
-    const form = v.nodes().find((n) => n.tagName === 'FORM');
+    // #1856: the reveal goes through the row's Manage strip and the Reveal dialog.
+    await v.click('Manage');
+    await v.click('Reveal');
+    await v.fill('Reason', 'Checking against Mercury');
     mock.timers.enable({ apis: ['setTimeout'] });
-    await act(async () => { v.props(form).onSubmit({ preventDefault() {} }); });
+    await v.click('Reveal for 30 seconds');
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
     assert.ok(v.text().includes(NUMBER), 'the revealed number is not shown');
     assert.deepEqual(calls.filter((c) => c === 'reveal'), ['reveal']);

@@ -77,6 +77,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/admin',                'the admin console'],
   ['frontend/src/pages/admin/assessment',     'the assessment game editor'],
   ['frontend/src/pages/admin/consoles',       'one file per Admin Console tool (D648)'],
+  ['frontend/src/pages/admin/contracts',      'the Contracts desk (D647), its Structure of the Fund sheet and the template editor (D717)'],
   ['frontend/src/pages/account',              'the Account center\'s sections, one file per canvas section (D568, D642)'],
   ['frontend/src/pages/cycles',               'the four cycle overviews and module pages, from the shared cycle read (D661)'],
   ['frontend/src/pages/events',                 'event host tools and public/member detail'],

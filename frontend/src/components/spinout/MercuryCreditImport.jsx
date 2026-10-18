@@ -89,7 +89,7 @@ export function MercuryCreditImportView({ state, on }) {
           })}
         </ul>
       )}
-      {capped && <p className="text-[10.5px] text-amber-600 dark:text-amber-400" data-testid="mercury-import-capped">Only part of this window was read; narrow it to see older credits.</p>}
+      {capped && <p className="text-[10.5px] text-amber-600 dark:text-amber-400" data-testid="mercury-import-capped">Only part of this window was read. Credits outside this partial result are not shown.</p>}
       <p className="text-[10.5px] text-gray-400">The amount and date come from Mercury, not from this form. Imported credits are Supported: matched to a credit in your Mercury account.</p>
       {result && <p className="text-[11.5px] text-gray-600 dark:text-gray-300" data-testid="mercury-import-result">{mercuryImportLine(result)}</p>}
       {result && Array.isArray(result.refused) && result.refused.length > 0 && (
@@ -117,7 +117,8 @@ export default function MercuryCreditImport({ projectId, onImported, onBusy }) {
     setRead({ status: 'loading' });
     try {
       const res = await mercuryPersonalApi.credits(projectId);
-      setRead({ status: 'ok', data: { credits: Array.isArray(res?.credits) ? res.credits : [], window: res?.window || null, capped: !!res?.capped } });
+      if (!Array.isArray(res?.credits)) throw new Error('The Mercury credits response could not be read.');
+      setRead({ status: 'ok', data: { credits: res.credits, window: res?.window || null, capped: !!res?.capped } });
     } catch (e) {
       reportError('spinout-revenue:ledger-mercury-read', e);
       setRead({ status: 'failed', outcome: mercuryReadOutcome(e) });

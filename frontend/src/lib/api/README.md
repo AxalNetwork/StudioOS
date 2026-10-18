@@ -132,7 +132,8 @@ D715 (#1780): `adminMercury.js` calls `/api/admin/mercury` (`cloudflare-worker/s
 the four entity connections (each with its accounts by ending), the Super
 Admin's connect with `confirm_read_only: true` and disconnect with a reason,
 sync now, and the accounts, transactions and matches reads. D749 (#1838) adds
-`markNotOurs` and `withdrawNotOurs`. Every read is audited by the Worker;
+`markNotOurs` and `withdrawNotOurs`. D717 (#1856): `transactions` takes
+`direction` (`credit` or `debit`). Every read is audited by the Worker;
 nothing here moves money. #1779's console imports it.
 
 D713 (#1778): `mercuryPersonal.js` calls a member's own read-only Mercury:
@@ -161,6 +162,11 @@ reporting queue: drafts an Admin builds, reads, prepares, returns, rebuilds,
 corrects and exports, and a Super Admin issues. A draft's figures come only
 from `read` and `exportCsv`, which the Worker records before it answers; the
 list carries none.
+
+D717 (#1782) decision 11, #1855: `fundStructure.js` reads the entity and money
+map, `GET /api/admin/fund-structure`, for the "Structure of the Fund" sheet on
+the Contracts desk. HQ admins only. The Super Admin's answer lists each entity's
+accounts masked to the last four; a plain Admin's carries no account at all.
 
 D714 (#1779): `fundAdmin.js` reads the act table (`/api/fund-admin/access`) and
 a distribution's preview (`POST /api/funds/:id/distributions/preview`), which
