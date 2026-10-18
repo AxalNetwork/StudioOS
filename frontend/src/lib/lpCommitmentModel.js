@@ -55,6 +55,7 @@ function callLine(c, today) {
   const line = {
     id: c.id,
     fund_id: intOr(c.fund_id),
+    limited_partner_id: intOr(c.limited_partner_id),
     call_number: intOr(c.call_number),
     owed_cents: owed,
     received_cents: received,
@@ -89,11 +90,25 @@ export function commitmentsByFund(portal, today = new Date().toISOString().slice
     const fundId = intOr(h.fund_id);
     const lpId = intOr(h.id);
     const p = perf.find((row) => intOr(row.lp_id) === lpId) || {};
-    const own = calls
+    const fundLines = calls
       .filter((c) => c.fund_id === fundId)
       .sort((a, b) => String(b.issued_on || '').localeCompare(String(a.issued_on || '')) || b.id - a.id);
     const commitment = toCents(h.commitment_amount);
     const sum = (key) => own.reduce((s, c) => s + (c[key] ?? 0), 0);
+    // D717 (#1859): the paper notice's arithmetic for "Unfunded after this
+    // call" — the commitment minus every call on this LP row up to and
+    // including this line (`fundNotices.ts`, `commitmentTable`), unclamped so
+    // the screen and the notice print the same figure. Unknown when either
+    // side is: no commitment, an unread calls list, or a counted line with no
+    // owed amount. A line that predates the field counts as this row's.
+    const rowLines = fundLines.filter((c) => c.limited_partner_id == null || c.limited_partner_id === lpId);
+    const unfundedAfter = (line) => {
+      if (commitment == null || !callsKnown) return null;
+      const counted = rowLines.filter((c) => c.id <= line.id);
+      if (counted.some((c) => c.owed_cents == null)) return null;
+      return commitment - counted.reduce((s, c) => s + c.owed_cents, 0);
+    };
+    const own = fundLines.map((c) => ({ ...c, unfunded_after_cents: unfundedAfter(c) }));
     const called = callsKnown ? sum('owed_cents') : null;
     const due = callsKnown ? sum('outstanding_cents') : null;
     const upcoming = own.filter((c) => c.state !== 'paid' && c.due_date).map((c) => c.due_date).sort();

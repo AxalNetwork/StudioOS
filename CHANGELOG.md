@@ -4,6 +4,17 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## The LP's capital call opens on the amount, and the fee statement is on screen (D717, #1859)
+
+- An open Fund I line's panel on the LP workspace opens on "Amount due", the
+  amount, the due date and LP number, and the paper notice's four rows. The
+  masked wire instructions sit behind the phone check ("I confirmed by phone",
+  then "Show wire instructions"); the full number is one tap after that,
+  through `revealWire` in `lib/lpWireGate.js`. Nothing is stored.
+- "Management fee statements" lists the LP's issued statements under My
+  commitment, newest open, drawn by `FeeStatementView` with no account digits.
+  Frontend only: no route, migration or API method changes.
+
 ## Every connector's page, as data the Worker holds to its code (D753, #1875)
 
 - `cloudflare-worker/src/integrations/connectorPages.ts` describes each
