@@ -327,8 +327,8 @@ function ConnectionPill({ mercury, row, onConnect }) {
   const pill = mercury.status === 'ready' ? connectionPill(row) : mercury.status === 'unreadable' ? connectionPill(null) : null;
   if (!pill) return <span className={`text-[11px] ${muted}`}>{CONSOLE_LOADING}</span>;
   return (
-    <div className="flex flex-wrap items-center justify-end gap-2">
-      <Pill tone={pill.tone} data-testid="bank-accounts-connection">{pill.text}</Pill>
+    <div className="flex min-w-0 flex-wrap items-center gap-2 sm:justify-end">
+      <Pill tone={pill.tone} className="max-w-full max-sm:whitespace-normal" data-testid="bank-accounts-connection">{pill.text}</Pill>
       {mercury.status === 'ready' && row && (
         <button type="button" className={btnCls} onClick={onConnect}>{row.connected ? 'Replace' : 'Connect'}</button>
       )}
