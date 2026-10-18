@@ -279,3 +279,17 @@ test('a stale D1 lease can be claimed after its holder dies', async t => {
   assert.equal(await accessToken(f.env, f.row()), 'ghu_t5_new'); assert.equal(gh.tokens().length, 1);
   assert.equal((await f.read())!.refresh_lease, undefined);
 });
+
+
+test('CAS loss respects an expired or refused reconnect instead of returning an unstored token', async t => {
+  for (const reauth_required of [false, true]) {
+    const f = await fixture(t); const entered = deferred(); const answer = deferred();
+    github([async () => { entered.resolve(); return answer.promise; }]);
+    const pending = accessToken(f.env, f.row()); await entered.promise;
+    await f.write(expired({ access_token: 'ghu_t5_reconnect', reauth_required }));
+    const enc = f.row().credentials_enc;
+    const checked = rejectsSafe(() => pending, reauth_required ? /github_sign_in_expired/ : /github_refresh_busy/);
+    answer.resolve(json(refreshed)); await checked;
+    assert.equal(f.row().credentials_enc, enc);
+  }
+});

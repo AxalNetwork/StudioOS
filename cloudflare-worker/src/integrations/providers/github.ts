@@ -238,7 +238,9 @@ export async function accessToken(env: Env, row: IntegrationRow): Promise<string
       refresh_token_expires_at: expiryAt(now, tok.refresh_token_expires_in) ?? stored.creds.refresh_token_expires_at ?? null,
     };
     if (await swapStored(env, row, stored.enc, next)) return tok.access_token;
-    return liveToken((await readStored(env, row)).creds) || tok.access_token;
+    const currentToken = checkedLive((await readStored(env, row)).creds);
+    if (currentToken) return currentToken;
+    throw new Error(REFRESH_BUSY);
   } finally {
     if (d1Lease) {
       // Restore the exact original ciphertext only if this lease still stands.
