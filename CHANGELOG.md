@@ -4,6 +4,20 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## Investors show Axal they can fund a commitment, from their own Mercury (D752, #1891)
+
+- Four doors, for an investor on HQ only and never needed to commit: their
+  own row on a deal's Commitments tab, an optional step after "Confirm
+  Commitment", their Fund I application, and each Fund I card in My commitment.
+- The share sheet (`pages/investor/ProofOfFunds.jsx`) picks checking and
+  savings accounts by name and last four, holds the amount to the
+  commitment's figure, shows the exact sentence Axal's admins read, needs the
+  Worker's consent words, and prints every refusal as the Worker wrote it.
+- "Proof of funds you've shared" on the LP workspace lists each statement
+  with its state, dates and views, and revokes it after a confirmation.
+- No screen draws a balance. `lib/api/mercuryAttestations.js` is new; no
+  Worker change.
+
 ## Admins read an investor's proof of funds, audited (D752, #1890)
 
 - `GET /api/admin/capital-attestations` (`routes/admin_capital_attestations.ts`):

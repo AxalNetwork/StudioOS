@@ -4,6 +4,12 @@ Dedicated canvas landing pages for the Investor / LP role, mirroring the
 pattern in `../founder/`: a role-specific component owns the page instead of
 the generic route wrapper once a canvas has graduated.
 
+- `ProofOfFunds.jsx` (D752, #1891) is the investor's "Show Axal you can fund
+  this": `useProofTargets`, `ProofDoor`, `ProofOfFundsSheet` and
+  `SharedProofOfFunds`, drawn on the Deal Room, the LP workspace and My
+  commitment for an investor on HQ only. It never draws a balance, and the
+  account id lives in state only. `proofOfFundsModel.js` holds its words and
+  rules, pure, and fills in the Worker's own consent and statement words.
 - `InvestorWorkspacePage.jsx` is the shared investor workspace frame — it
   wraps a page with the investor chrome and, on the Deals route, renders
   `InvestorDealsWorkspace` inline rather than handing off to a separate page.
