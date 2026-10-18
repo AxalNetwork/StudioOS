@@ -53,7 +53,9 @@ async function sendAndSign(db: any, files: any, e: any, beforeSign?: () => void)
   const rec = db.prepare('SELECT signing_token FROM esign_recipients ORDER BY id DESC LIMIT 1').get();
   const signed = await call(e, 'POST', `/sign/${rec.signing_token}`, RECIPIENT, { accepted: true, typed_name: 'Ivy Investor', signature_data_url: PNG });
   assert.equal(signed.status, 200, JSON.stringify(signed.body));
-  const pdf = files.objects.get(`esign/signed/${env.envelope_uuid}.pdf`);
+  // D711: each signature keeps its own copy, at the key its registry row names.
+  const file = db.prepare("SELECT r2_key FROM legal_document_files WHERE kind = 'signed_copy' ORDER BY id DESC LIMIT 1").get();
+  const pdf = file && files.objects.get(file.r2_key);
   assert.ok(pdf, 'the signed copy was stored');
   return { env: { ...env }, text: (await pageTexts(pdf)).join('\n') };
 }
@@ -110,4 +112,16 @@ test('D717 the DocuSign source receives the envelope\'s pair', async () => {
   const esign = readFileSync('cloudflare-worker/src/routes/esign.ts', 'utf8');
   const call = esign.slice(esign.indexOf('sendDocusignEnvelope(env, dsRow, {'));
   assert.match(call.slice(0, call.indexOf('});')), /documentType: opts\.documentType,\s*\.\.\.renderFormat\(format\),/);
+});
+
+test('D717 the signer\'s paper prints the envelope\'s pair, not the template\'s later edit', async () => {
+  const { db, e } = await setup('holdings');
+  const sent = await call(e, 'POST', '/send', SENDER, { document_type: NDA, recipient_email: 'investor@example.test', recipient_name: 'Ivy Investor', provider: 'native' });
+  assert.equal(sent.status, 200, JSON.stringify(sent.body));
+  db.exec(`UPDATE legal_templates SET axal_party = 'gp' WHERE slug = '${NDA}'`);
+  const rec = db.prepare('SELECT signing_token FROM esign_recipients ORDER BY id DESC LIMIT 1').get();
+  const paper = await call(e, 'GET', `/sign/${rec.signing_token}/paper`, RECIPIENT);
+  assert.equal(paper.status, 200, JSON.stringify(paper.body));
+  const text = String(paper.body.html).replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&');
+  assert.deepEqual(partyIn(text), ['holdings']);
 });

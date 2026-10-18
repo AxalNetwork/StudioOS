@@ -67,6 +67,17 @@ const LFS_EXEMPT_PATHS = new Set([
   // 130 bytes of pointer text, so all 13 cards report stale and the "Card
   // images are current" CI gate can never pass. 22 KB.
   "scripts/og-assets/SpaceGrotesk-Variable.woff2",
+  // D711 (#1776): the legal paper's faces, inlined byte-for-byte as data:
+  // URIs into every legal PDF and preview by services/legalPaperCss.ts. As
+  // LFS pointers they would inline pointer text and every paper would print
+  // in the fallback sans. Seven subsets, 108 KB together.
+  "cloudflare-worker/src/templates/legal/paper/bricolage-grotesque-800.woff2",
+  "cloudflare-worker/src/templates/legal/paper/public-sans-400.woff2",
+  "cloudflare-worker/src/templates/legal/paper/public-sans-400-italic.woff2",
+  "cloudflare-worker/src/templates/legal/paper/public-sans-700.woff2",
+  "cloudflare-worker/src/templates/legal/paper/roboto-mono-400.woff2",
+  "cloudflare-worker/src/templates/legal/paper/roboto-mono-700.woff2",
+  "cloudflare-worker/src/templates/legal/paper/space-grotesk-700.woff2",
 ]);
 
 const args = new Set(process.argv.slice(2));

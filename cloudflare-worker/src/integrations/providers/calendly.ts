@@ -208,7 +208,10 @@ async function getActiveAccessToken(env: Env, row: IntegrationRow): Promise<stri
   }
 }
 
+// The member's bearer goes to api.calendly.com and nowhere else: `path` must
+// be an absolute path on that host, never a URL or a host suffix.
 async function clFetch(env: Env, row: IntegrationRow, path: string, init: RequestInit = {}): Promise<Response> {
+  if (!path.startsWith('/')) throw new Error('calendly_path_invalid');
   const token = await getActiveAccessToken(env, row);
   const headers = new Headers(init.headers || {});
   headers.set('Authorization', `Bearer ${token}`);
@@ -324,14 +327,11 @@ async function connect(c: Context<{ Bindings: Env }>, _user: User, input: Extend
     expires_at: expiresAt,
   } as CredentialBlob;
 
-  // Webhook subscription is registered on the next sync() run (where
-  // row.uid is available); the registry foundation has no post-connect
-  // hook so we can't subscribe here. The signing key is persisted in
-  // the credential blob and exposed via webhook_secret_enc on the
-  // route's monkey-patch. (Previously computed `callbackBase` here for
-  // the eventual `/webhook/:provider/:uid` URL — removed because the
-  // value was unused; sync() recomputes it via stripTrailingSlashes
-  // when the uid is known.)
+  // The webhook subscription is created once the row and its uid exist:
+  // postConnect (below) calls ensureWebhookSubscription, which registers
+  // the subscription and stores Calendly's signing key in the row's
+  // webhook_secret_enc, and sync() calls it again for a row that still
+  // has no key. The receiver takes deliveries only for a row with a key.
 
   return {
     credentials,
@@ -463,10 +463,25 @@ async function listScheduledEvents(env: Env, row: IntegrationRow, userUri: strin
   return out;
 }
 
+/**
+ * The API path of a Calendly scheduled-event URI, or null when the URI does
+ * not parse to origin `https://api.calendly.com` with the path
+ * `/scheduled_events/<id>`. Only the parsed path is returned, so the caller
+ * fetches that one resource on that one host.
+ */
+function scheduledEventPath(uri: unknown): string | null {
+  if (typeof uri !== 'string') return null;
+  let url: URL;
+  try { url = new URL(uri); } catch { return null; }
+  if (url.origin !== CL_API) return null;
+  if (!/^\/scheduled_events\/[A-Za-z0-9-]+$/.test(url.pathname)) return null;
+  return url.pathname;
+}
+
 async function fetchInviteeForEvent(env: Env, row: IntegrationRow, eventUri: string): Promise<CalendlyInviteeResource | null> {
-  // eventUri is full URL ending in /scheduled_events/<uuid>
-  const tail = eventUri.replace(CL_API, '');
-  const r = await clFetch(env, row, `${tail}/invitees?count=1`);
+  const path = scheduledEventPath(eventUri);
+  if (!path) return null;
+  const r = await clFetch(env, row, `${path}/invitees?count=1`);
   if (!r.ok) return null;
   const body = await r.json() as { collection: CalendlyInviteeResource[] };
   return body.collection?.[0] || null;
@@ -485,6 +500,9 @@ async function upsertCalendarEvent(
   const organizer = ev.event_memberships?.[0]?.user_email || null;
   const uid = `cl_${ev.uri.split('/').pop() || crypto.randomUUID()}`.slice(0, 64);
   const raw = JSON.stringify({ ev, invitee }).slice(0, 8000);
+  // One row per Calendly event URI. The conflict update rewrites the row only
+  // when it already belongs to this connection's member; a row another member
+  // holds for the same URI is left as it is.
   await env.DB.prepare(
     'INSERT INTO calendar_events (uid, user_id, source, external_uri, external_id, title, start_at, end_at, status, location_kind, location_uri, organizer_email, invitee_email, invitee_name, notes, raw_json) ' +
     "VALUES (?, ?, 'calendly', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
@@ -492,7 +510,8 @@ async function upsertCalendarEvent(
     'title=excluded.title, start_at=excluded.start_at, end_at=excluded.end_at, status=excluded.status, ' +
     'location_kind=excluded.location_kind, location_uri=excluded.location_uri, organizer_email=excluded.organizer_email, ' +
     'invitee_email=excluded.invitee_email, invitee_name=excluded.invitee_name, raw_json=excluded.raw_json, ' +
-    'updated_at=CURRENT_TIMESTAMP',
+    'updated_at=CURRENT_TIMESTAMP ' +
+    'WHERE calendar_events.user_id = excluded.user_id',
   ).bind(
     uid, userId, ev.uri, ev.uri.split('/').pop() || null, ev.name || 'Calendly meeting',
     ev.start_time, ev.end_time, status, locKind, locUri, organizer,
@@ -551,10 +570,12 @@ async function webhook(
   const evt = JSON.parse(body) as CalendlyWebhookEvent;
   const eventUri = evt.payload?.event;
   if (!eventUri) return { summary: `noop event=${evt.event}` };
+  // Only a Calendly scheduled-event URI is fetched; anything else is skipped.
+  const path = scheduledEventPath(eventUri);
+  if (!path) return { summary: `skipped event=${evt.event} (not a Calendly scheduled event)` };
 
   // Pull the canonical event resource so our row matches what /sync would write.
-  const tail = eventUri.replace(CL_API, '');
-  const r = await clFetch(c.env, row, tail);
+  const r = await clFetch(c.env, row, path);
   if (!r.ok) {
     return { summary: `event_fetch_failed status=${r.status}` };
   }

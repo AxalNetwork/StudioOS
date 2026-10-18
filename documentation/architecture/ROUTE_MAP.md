@@ -75,6 +75,24 @@ The `github` provider is a GitHub App's read-only user authorization. `GET /:uid
 
 It answers no key and no account number. `stripeCall` refuses a Stripe create with no money kind, or with a fund or intercompany kind, before any request leaves the Worker. `POST /api/payments/intent` refuses a body with no `price_id` (`money_kind_required`). Neither has a frontend method.
 
+### Legal paper Worker contract (D711, #1776)
+
+Every legal document draws one HTML paper (`services/legalPaper.ts`), printed to PDF by Browser Run through `BROWSER.quickAction('pdf', …)`, with pdf-lib (`services/pdf.ts`) as the fallback. Every kept or handed-out file gets an append-only `legal_document_files` row (migration 475). See `decisions/D711.md`.
+
+New routes:
+- `POST /api/admin/contracts/templates/render` · admin: `{ title, body, slug, category, version, page_size, cover, resolve, fonts }` → `{ html, body_sha256, page_size, paper_sha256, state }`, `no-store`. A body over 256 KB is 413 `body_too_large`.
+- `GET /api/admin/contracts/templates/paper-fonts` · admin: `{ css, paper_sha256 }`, `private, max-age=86400`.
+- `GET /api/admin/contracts/templates/store/:slug/export.docx?resolve=&page=` · admin: a Word file, after its `docx_export` row is written; 503 `export_unrecorded` and no file when the row cannot be written. Binary, outside the typed drift surface.
+- `GET /api/admin/contracts/:uid/files` · the envelope's creator or a Super Admin: per file, its kind, renderer, page size, hash, size, `created_at`, whether a stored copy exists, and `signer`. Never a storage key, name or email.
+- `GET /api/legal/esign/sign/:token/paper` · the signing token: `{ html, body_sha256, page_size }`, `no-store`; the token, expiry and void checks of `GET /sign/:token`, with no audit event.
+
+Changed routes:
+- `POST /api/legal/esign/sign/:token` writes `esign/signed/<uuid>/<file uid>.pdf` and its `signed_copy` row in the batch that signs.
+- `GET /api/legal/esign/sign/:token/document` serves the recipient's own newest copy (else `signed_r2_key`).
+- `POST /api/admin/contracts/envelopes/preview` and `/send`, and `POST /api/legal/esign/send`, take `page_size` (`letter`|`a4`) and `cover` (`dark`|`light`), else 400 `page_size_invalid` / `cover_invalid`. The preview answers `renderer` and `page_size`.
+- `GET /api/admin/contracts/templates/store/:slug/preview.pdf` takes `?page=` and `?cover=` and sends `X-Axal-Renderer`.
+- The DocuSign send writes a `docusign_source` row, and each reconcile a `docusign_signed` row (one per file).
+
 ### Fund fees Worker contract (D709, #1774)
 
 `/api/fund-fees/:fundId` (`fund_fees.ts`). Every route opens with `requireFundGp` (the GP of record or an admin; 401, 402 or 404 otherwise). Every write refuses a support session (403). Through admin access, confirm and issue need the Super Admin: `super_admin_required` (403) first, then `requireSuperAdminWriteBar`.
@@ -84,7 +102,7 @@ It answers no key and no account number. `stripeCall` refuses a Stripe create wi
 - `POST /periods/:quarter/preview` saves the quarter's draft and answers its `digest`; a refusal saves nothing.
 - `POST /periods/:quarter/issue` with `{ digest, funding_call_uid? }`: a digest that no longer matches is 409; issuing an issued quarter with its digest answers `already_issued: true` and writes nothing.
 - `POST /periods/:quarter/funding-call` with `{ call_uid }` links issued lines to their LPs' lines in that call.
-- `GET /periods/:quarter` (period, lines, and `collected`: the posted date and last four of a confirmed Mercury match, else null; D710) and `GET /periods/:quarter/statements/:lpId`.
+- `GET /periods/:quarter` (period, lines, `collected`: the posted date and last four of a confirmed Mercury match, else null, D710; and `remittance`) and `GET /periods/:quarter/statements/:lpId` (its `pay_to` is never due, plus the same `remittance`). On Fund I the remittance is #1773's `payInstructionsFor('gp', 'management_fee')`, masked with its warning, or its refusal; on any other fund it is `not_an_axal_fund` and the registry is not read.
 
 `:quarter` is `YYYYQn`. An LP, terms version or call of another fund is 404. Issuing records amounts and the `AXAL-MF-<quarter>-L<lp>` and `-F<fund>` references; nothing moves money, and no route has a frontend method yet (#1779's `fundFeesApi`).
 

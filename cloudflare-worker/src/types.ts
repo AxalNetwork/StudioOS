@@ -347,7 +347,13 @@ export interface Env {
   // Task #2 (AU) / Task #13 — Cloudflare Browser Rendering binding used
   // by both the analytics export PDF path and admin publication renders.
   // When undefined the publication render falls back to inline HTML.
-  BROWSER?: { fetch: (input: string, init?: RequestInit) => Promise<Response> };
+  // D711 — `quickAction` is the documented Browser Run call (compatibility
+  // date 2026-03-24 or later); services/browserRun.ts prints legal paper
+  // through it. The six older callers still post through `fetch`.
+  BROWSER?: {
+    fetch: (input: string, init?: RequestInit) => Promise<Response>;
+    quickAction?: (action: string, options: Record<string, unknown>) => Promise<Response>;
+  };
   // Native Cloudflare Queues binding. Optional so unit-test envs and
   // older deploys that haven't been re-deployed against the updated
   // wrangler.toml don't crash on absence — the producer falls back to
