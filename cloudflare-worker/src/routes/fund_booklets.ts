@@ -1,0 +1,139 @@
+/**
+ * D716 (#1781, PR 2) — the Subscription Booklet, mounted at /api/fund-booklets.
+ *
+ * The applicant (the user of an `approved` Fund I `lp_applications` row;
+ * anyone else gets 404):
+ *   POST /mine                 opens the booklet, or returns the live one
+ *   GET  /mine                 the parts, the fields with their ticks, and the digest of what it shows
+ *   PUT  /mine/answers         {answers: [{field_id, checked}]}: 400 field_unknown, 409 booklet_not_open
+ *   POST /mine/submit          {digest}: 409 booklet_part_missing or content_changed
+ *
+ * An Admin on HQ (a branch answers `HQ only`; a support session is refused):
+ *   GET  /                     the booklets, never a tick        fund_booklet.read
+ *   GET  /:uid                 one booklet with its ticks, audited fund_booklet.read
+ *   POST /:uid/withdraw        {reason}: 10 to 200 characters     fund_booklet.withdraw
+ *
+ * `GET /mine/paper` and `GET /:uid/pdf` draw #1776's paper and land with the
+ * notices PR. Every refusal goes through `refuse()` with a code and echoes no
+ * input.
+ */
+import { Hono } from 'hono';
+import type { Env } from '../types';
+import { requireAdmin, requireAuth } from '../auth';
+import { AUTH_ERROR_STATUSES, STEP_UP_REQUIRED, stepUpRefusalBody } from '../util/authErrors';
+import { HQ_ONLY, branchOf } from '../util/branch';
+import { refuse } from '../util/refusal';
+import { SUPPORT_SESSION_REFUSED_CODE, assertAdminAct, auditFundAct, isSupportSession } from '../services/fundAdminAccess';
+import {
+  BookletRefusal, answerBooklet, bookletByUid, bookletView, listBooklets, mineOrNull, openBooklet, readAnswers,
+  submitBooklet, withdrawBooklet,
+} from '../services/subscriptionBooklet';
+
+const r = new Hono<{ Bindings: Env }>();
+
+r.onError((error: any, c) => {
+  if (error instanceof Response) return error;
+  if (error instanceof BookletRefusal) {
+    return refuse(c, error.status, { code: error.code, message: error.publicMessage, extra: error.extra });
+  }
+  if (error?.message === STEP_UP_REQUIRED) return c.json(stepUpRefusalBody(error), 403);
+  const status = AUTH_ERROR_STATUSES[error?.message];
+  if (status) {
+    const sentence = error?.message === HQ_ONLY
+      ? 'HQ only: subscription booklets are administered on HQ, not on a branch.'
+      : 'This account cannot use subscription booklets.';
+    return refuse(c, status, { code: error?.message === HQ_ONLY ? 'hq_only' : 'fund_booklets_refused', message: sentence });
+  }
+  return refuse(c, 503, { code: 'fund_booklets_unreadable', message: 'Unreadable: the booklet could not be read or saved. Try again.', raw: error });
+});
+
+const body = async (c: any) => {
+  const parsed = await c.req.json().catch(() => null);
+  return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+};
+
+/** A support session never writes an applicant's booklet. */
+async function refuseSupportSession(c: any) {
+  if (await isSupportSession(c)) {
+    throw new BookletRefusal(403, SUPPORT_SESSION_REFUSED_CODE, 'A support session cannot answer or submit a booklet.');
+  }
+}
+
+/** An Admin, on HQ. */
+async function admin(c: any) {
+  const user = await requireAdmin(c);
+  if (branchOf(c.env)) throw new Error(HQ_ONLY);
+  return user;
+}
+
+const missing = () => new BookletRefusal(404, 'booklet_not_found', 'No subscription booklet here.');
+
+// ── The applicant ───────────────────────────────────────────────────────────
+
+r.post('/mine', async (c) => {
+  const user = await requireAuth(c);
+  await refuseSupportSession(c);
+  const { booklet, created } = await openBooklet(c.env, Number(user.id));
+  c.header('Cache-Control', 'no-store');
+  return c.json(await bookletView(c.env, booklet), created ? 201 : 200);
+});
+
+r.get('/mine', async (c) => {
+  const user = await requireAuth(c);
+  const booklet = await mineOrNull(c.env, Number(user.id));
+  if (!booklet) throw missing();
+  c.header('Cache-Control', 'no-store');
+  return c.json(await bookletView(c.env, booklet));
+});
+
+r.put('/mine/answers', async (c) => {
+  const user = await requireAuth(c);
+  await refuseSupportSession(c);
+  const booklet = await mineOrNull(c.env, Number(user.id));
+  if (!booklet) throw missing();
+  await answerBooklet(c.env, booklet, Number(user.id), readAnswers(await body(c)));
+  c.header('Cache-Control', 'no-store');
+  return c.json(await bookletView(c.env, booklet));
+});
+
+r.post('/mine/submit', async (c) => {
+  const user = await requireAuth(c);
+  await refuseSupportSession(c);
+  const booklet = await mineOrNull(c.env, Number(user.id));
+  if (!booklet) throw missing();
+  const out = await submitBooklet(c.env, booklet, (await body(c)).digest);
+  return c.json({ uid: booklet.uid, status: 'submitted', ...out });
+});
+
+// ── The Admin, on HQ ────────────────────────────────────────────────────────
+
+r.get('/', async (c) => {
+  const user = await admin(c);
+  await assertAdminAct(c, user, 'fund_booklet.read');
+  c.header('Cache-Control', 'no-store');
+  return c.json({ booklets: await listBooklets(c.env) });
+});
+
+r.get('/:uid', async (c) => {
+  const user = await admin(c);
+  await assertAdminAct(c, user, 'fund_booklet.read');
+  const booklet = await bookletByUid(c.env, c.req.param('uid'));
+  if (!booklet) throw missing();
+  const view = await bookletView(c.env, booklet);
+  // Opening a booklet's ticks is audited (decision 9).
+  await auditFundAct(c.env, user, 'fund_booklet.read', { booklet_uid: booklet.uid, status: booklet.status });
+  c.header('Cache-Control', 'no-store');
+  return c.json({ ...view, withdrawn_reason: booklet.withdrawn_reason });
+});
+
+r.post('/:uid/withdraw', async (c) => {
+  const user = await admin(c);
+  await assertAdminAct(c, user, 'fund_booklet.withdraw');
+  const booklet = await bookletByUid(c.env, c.req.param('uid'));
+  if (!booklet) throw missing();
+  await withdrawBooklet(c.env, booklet, Number(user.id), (await body(c)).reason);
+  await auditFundAct(c.env, user, 'fund_booklet.withdraw', { booklet_uid: booklet.uid });
+  return c.json({ uid: booklet.uid, status: 'withdrawn' });
+});
+
+export default r;
