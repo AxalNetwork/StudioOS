@@ -41,7 +41,7 @@ const CI = '.github/workflows/ci.yml';
 const FORMS = '.github/ISSUE_TEMPLATE';
 
 const STATE_LABELS = ['state:ready', 'state:in-progress', 'state:blocked', 'state:review'];
-const SLOT_LABELS = Array.from({ length: 20 }, (_, i) => `slot:S${String(i + 1).padStart(2, '0')}`);
+const SLOT_LABELS = Array.from({ length: 25 }, (_, i) => `slot:S${String(i + 1).padStart(2, '0')}`);
 
 /** The block every agent posts. AGENTS.md carries it to be reproduced exactly. */
 const STATUS_BLOCK = [
@@ -198,7 +198,7 @@ function formLabels(src) {
 
 // ---------- .github/labels.yml ----------
 
-test('labels.yml declares the four state labels, needs-decision and slot:S01 to slot:S20', () => {
+test('labels.yml declares the four state labels, needs-decision and slot:S01 to slot:S25', () => {
   const names = declaredLabels().map((l) => l.name);
   const missing = [...STATE_LABELS, 'needs-decision', ...SLOT_LABELS].filter((n) => !names.includes(n));
   assert.deepEqual(missing, [],

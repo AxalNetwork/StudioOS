@@ -56,6 +56,12 @@ export interface Env {
   // claim Axal's number. Unset, the guard does nothing.
   WHATSAPP_AXAL_PHONE_NUMBER_ID?: string;
   WHATSAPP_AXAL_WABA_ID?: string;
+  // D754 way B ("Send to Axal", the owner's yes on 2026-10-18): the system
+  // user's token for Axal's own number (a secret), and that number in E.164 for
+  // the wa.me link members open (a public wrangler var). Way B stays hidden and
+  // its webhook branch ignores everything until the three Axal secrets are set.
+  WHATSAPP_AXAL_ACCESS_TOKEN?: string;
+  WHATSAPP_AXAL_DISPLAY_NUMBER?: string;
   /** Zoom General app (user-managed OAuth) and its webhook secret token. */
   ZOOM_CLIENT_ID?: string;
   ZOOM_CLIENT_SECRET?: string;

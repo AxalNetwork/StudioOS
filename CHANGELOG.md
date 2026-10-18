@@ -20,6 +20,19 @@
   date. Google's third permission now reads "Gmail (read-only) is asked for at
   sign-in; Axal VC does not read your Gmail."
 
+## Signing in four steps, at every width (D717, #1857)
+
+- `/esign/:token` now goes Read → Consent → Adopt → Confirm for every
+  envelope. The consent is one row at least 44 px tall; the signature is
+  typed (default, drawn in Public Sans italic 400) or drawn, adopted once,
+  and shown back on a confirm sheet whose Sign is the only press that sends.
+- The Worker receives the same `{ accepted, typed_name, signature_data_url }`
+  as before; no route or API changed. `frontend/index.html` adds the italic
+  face to the one Google Fonts request.
+- A drawing survives a phone's address bar hiding, and a decline no longer
+  says "Signature received". New pure module `frontend/src/lib/esignSteps.js`;
+  tests in `frontend/test/esign_steps_d717.test.mjs`.
+
 ## Every library document renders from a coded template (D758, #1861)
 
 - The 24 old seed bodies that lived only inside migration 085 (`lpa`, `ppm`,
