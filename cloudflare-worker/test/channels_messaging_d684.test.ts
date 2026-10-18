@@ -134,6 +134,7 @@ async function world(opts: { seed?: boolean; budget?: number } = {}) {
   const aiCalls: any[] = [];
   const env: any = {
     DB, ENVIRONMENT: 'development', JWT_SECRET, KEK_PII: 'k'.repeat(48), ...SECRETS,
+    WHATSAPP_CHANNEL: 'on', TELEGRAM_CHANNEL: 'on',
     APP_URL: 'https://axal.vc', PUBLIC_BASE_URL: 'https://axal.vc',
     RATE_LIMITS: memKV(), USE_CF_QUEUE: 'true',
     JOB_QUEUE: { async send(body: any) { queued.push(body); } },
@@ -1106,7 +1107,7 @@ test('Availability names missing secrets to admins only, hands the browser the s
   const tg = forMember.body.providers.find((p: any) => p.provider === 'telegram');
   assert.deepEqual([tg.available, tg.missing], [false, []]);
   const wa = forMember.body.providers.find((p: any) => p.provider === 'whatsapp');
-  assert.deepEqual(wa.signup, { app_id: SECRETS.WHATSAPP_APP_ID, config_id: SECRETS.WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID });
+  assert.deepEqual(wa.signup, { app_id: SECRETS.WHATSAPP_APP_ID, config_id: SECRETS.WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID, graph_version: 'v23.0' });
   assert.deepEqual(forMember.body.providers.map((p: any) => p.provider), ['telegram', 'whatsapp', 'zoom', 'google_meet']);
   assert.equal(forMember.body.providers.find((p: any) => p.provider === 'zoom').available, false);
   assert.deepEqual(Object.keys(forMember.body.connections.whatsapp).sort(), ['calls', 'can_reply', 'connected_at', 'external_account_name', 'status'], 'calls: the Calling eligibility read (#1586)');
