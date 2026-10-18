@@ -164,6 +164,13 @@ Behind `requireHqAuthoring`: `POST /published-templates/:slug/publish` `{ versio
 
 `preview.pdf` and `POST /envelopes/preview` print the effective pair. A send records the pair on `esign_envelopes`, the publication's for the contract send and the active row's otherwise, and signing and the DocuSign source read the envelope's values. No screen calls these yet; PR 2 adds the `contracts.js` methods.
 
+PR 1b, behind `requireAdmin`:
+- `GET /templates/store/:slug/thumbnail.png` and `GET /templates/outside/:key/thumbnail.png`: page 1 as a PNG drawn once per version by Browser Run's screenshot and kept in `FILES`; `private, max-age=86400`, the key as the ETag, 304 on a match; 503 `thumbnail_unavailable` when it cannot be drawn, writing nothing. Binary, outside the typed drift surface.
+- `POST /templates/render` also takes `doc_kind` and `axal_party` (a present key wins, `null` is from the slug; the checks and codes of a save) and answers `fields: [{ key, filled_by }]` (`send` or `sender`). `POST /templates/render.pdf` takes the same body and answers the draft's PDF with `X-Axal-Renderer` and `no-store`; 413 `body_too_large` over 256 KB. Binary, outside the typed drift surface.
+- `ppm`, `subscription_booklet` and `compliance_manual_code_of_ethics` print the Structure of the Fund page wherever they are drawn: bracketed accounts on a preview, masked accounts on an issued copy.
+
+`GET /api/admin/fund-structure` (`admin_fund_structure.ts`, `requireAdmin`, HQ only): the entity and money map (`services/fundStructure.ts`). A Super Admin's carries each receiving account masked or the resolver's sentence; a plain Admin's carries "Only the Super Admin can see or change payment instructions." and reads no account. `no-store`; 503 `fund_structure_unreadable`.
+
 ### Usage page and HQ allowances (D642, #1435)
 
 `GET /api/usage/storage` (`usage.ts`, `services/storageUsage.ts`) reads the caller's own stored files across all their companies, whatever company the sidebar has selected. It returns `{ total_bytes, files, unknown_size_files, areas }`, with one area per store: `data_room`, `diligence_files`, `research_library`, `message_attachments` and `interview_recordings`. A recording counts toward the member who owns its project. A NULL size counts as unknown, never as 0 bytes, and a failed read marks only that area `recorded: false`.

@@ -47,6 +47,7 @@ import { esignEnvelopeScope } from '../services/tenancyScope';
 import { sendAgreementAssignedEmail } from '../services/email';
 import { sha256Hex, sha256HexBytes } from '../services/pdf';
 import { paperModel, paperHtml, paperSha256, type PaperRecipient } from '../services/legalPaper';
+import { structureForPaper } from '../services/fundStructure';
 import { renderLegalPdf } from '../services/legalPaperRender';
 import { readPaperChoice, PAPER_CHOICE_MESSAGES } from '../services/legalPaperCss';
 import { fileRowStatement, newFileUid } from '../services/legalDocumentFiles';
@@ -1274,6 +1275,7 @@ esign.get('/sign/:token/paper', async (c) => {
     version: rec.template_version ?? null,
     // D717: the pair the send recorded, as the signed copy prints it.
     ...renderFormat({ doc_kind: rec.doc_kind, axal_party: rec.axal_party }),
+    structure: await structureForPaper(c.env, rec.document_type, 'issued'),
     bodySha256: rec.body_sha256,
     envelopeUuid: rec.envelope_uuid,
     state: { kind: 'issued' },
@@ -1407,6 +1409,7 @@ esign.post('/sign/:token', async (c) => {
       version: rec.template_version ?? null,
       // D717: the pair the send recorded; NULL columns render as before.
       ...renderFormat({ doc_kind: rec.doc_kind, axal_party: rec.axal_party }),
+      structure: await structureForPaper(c.env, rec.document_type, 'issued'),
       bodySha256: rec.body_sha256,
       envelopeUuid: rec.envelope_uuid,
       effectiveDate: signedAt.slice(0, 10),

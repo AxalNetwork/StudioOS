@@ -14,12 +14,14 @@ import { fanOut } from '../services/branches';
 import { usageFromContractRows } from '../services/contractTemplateUsage';
 import { publishedContractTemplates, publicationFields, publishContractTemplates, preparePublishedContract, ContractPreparationError,
   publishOneTemplate, withdrawTemplatePublication, PublicationError } from '../services/contractPublication';
-import { formatView, formatOptions, renderFormat, effectiveFormat, templateFormatFor } from '../services/templateFormat';
+import { formatView, formatOptions, renderFormat, effectiveFormat, COUNSEL_DRAFT_SLUGS } from '../services/templateFormat';
+import { renderLegalPng } from '../services/browserRun';
+import { structureForPaper } from '../services/fundStructure';
 import { createAndSendEnvelope } from './esign';
 import { userMeetsTier } from '../middleware/requireTier';
 import { findActiveDocusignIntegrationForUser } from '../integrations/providers/docusign';
 import { sha256Hex, sha256HexBytes } from '../services/pdf';
-import { paperModel, paperHtml, paperSha256, paperStateFor, stateLabel, type PublicationRef } from '../services/legalPaper';
+import { paperModel, paperHtml, paperSha256, paperStateFor, stateLabel, PART_STUB, type PublicationRef } from '../services/legalPaper';
 import { paperFontsCss, readPaperChoice, PAPER_CHOICE_MESSAGES } from '../services/legalPaperCss';
 import { renderLegalPdf } from '../services/legalPaperRender';
 import { buildLegalDocx, docxFilename, DOCX_CONTENT_TYPE } from '../services/legalDocx';
@@ -33,6 +35,8 @@ import {
   updateTemplate as storeUpdateTemplate,
   softDeleteTemplate as storeSoftDeleteTemplate,
   TemplateError,
+  resolveFormat,
+  type FormatPatch,
 } from '../services/legalTemplateStore';
 
 type AppContext = Context<{ Bindings: Env }>;
@@ -172,6 +176,7 @@ function envelopeHandler(operation: 'preview' | 'send') {
         category: prepared.template.category, version: prepared.template.version, bodySha256: bodySha,
         counterpartyName: prepared.recipientName || null,
         ...renderFormat(effectiveFormat(prepared.template)),
+        structure: await structureForPaper(c.env, prepared.template.slug, 'preview'),
         state: paperStateFor({
           version: prepared.template.version,
           bodySha256: await sha256Hex(prepared.template.body_md || ''),
@@ -1906,6 +1911,7 @@ adminContracts.get('/templates/store/:slug/preview.pdf', async (c) => {
     merge: c.req.query('resolve') === 'raw' ? 'raw' : 'brackets',
     ...renderFormat(effectiveFormat(tpl)),
     state: paperStateFor({ version: tpl.version, bodySha256: bodySha, publication: await publicationRef(c.env, slug) }),
+    structure: await structureForPaper(c.env, slug, 'preview'),
   });
   const rendered = await renderLegalPdf(c.env, model, { pageSize: paper.pageSize, cover: paper.cover });
   if (!rendered.ok) return refuse(c, 503, { code: 'preview_unrenderable', message: 'The preview could not be drawn. Try again.' });
@@ -1925,33 +1931,152 @@ adminContracts.get('/templates/store/:slug/preview.pdf', async (c) => {
 // POST /templates/render — D711: the live preview's paper, as HTML. The faces
 // are left out with `fonts: 'omit'`; the page fetches them once per
 // `paper_sha256` from /templates/paper-fonts.
+//
+// D717 (#1782): the editor's unsaved `doc_kind` and `axal_party` go with the
+// body. A key that is present wins (`null`: from the slug), an absent one
+// keeps the stored row's, and the pair gets the checks a save gets. The answer
+// lists the body's merge fields and who fills each, so the editor keeps no
+// copy of that list. POST /templates/render.pdf draws the same draft as the
+// real PDF, for the editor's "Pages" view.
 const RENDER_BODY_MAX = 256 * 1024;
-adminContracts.post('/templates/render', async (c) => {
-  await requireAdmin(c);
-  let input: Record<string, unknown>;
-  try { input = await c.req.json(); }
-  catch { return refuse(c, 400, { code: 'invalid_request', message: 'Send the template as JSON.' }); }
-  if (!input || typeof input !== 'object' || Array.isArray(input)) return refuse(c, 400, { code: 'invalid_request', message: 'Send the template as JSON.' });
+type DraftInput = Record<string, unknown>;
+type DraftPaper =
+  | { ok: true; model: ReturnType<typeof paperModel>; body: string; bodySha: string; state: ReturnType<typeof paperStateFor>;
+      paper: { pageSize: 'letter' | 'a4'; cover: 'dark' | 'light' } }
+  | { ok: false; status: 400 | 409 | 413; code: string; message: string };
+
+async function draftPaper(env: Env, input: DraftInput): Promise<DraftPaper> {
   const body = typeof input.body === 'string' ? input.body : '';
   if (new TextEncoder().encode(body).length > RENDER_BODY_MAX) {
-    return refuse(c, 413, { code: 'body_too_large', message: 'The body is over 256 KB, so it cannot be previewed.' });
+    return { ok: false, status: 413, code: 'body_too_large', message: 'The body is over 256 KB, so it cannot be previewed.' };
   }
   const paper = readPaperChoice(input.page_size, input.cover);
-  if (!paper.ok) return refuse(c, 400, { code: paper.code, message: PAPER_CHOICE_MESSAGES[paper.code] });
+  if (!paper.ok) return { ok: false, status: 400, code: paper.code, message: PAPER_CHOICE_MESSAGES[paper.code] };
   const title = typeof input.title === 'string' && input.title.trim() ? input.title.trim().slice(0, 300) : 'Untitled';
   const slug = typeof input.slug === 'string' ? input.slug.slice(0, 200) : '';
   const version = Number.isInteger(input.version) ? input.version as number : null;
+  const stored = slug ? await storeGetTemplate(env, slug) : null;
+  const category = typeof input.category === 'string' ? input.category : stored?.category ?? null;
+  let pair: { doc_kind: string | null; axal_party: string | null };
+  try {
+    pair = resolveFormat(slug || title, category || '', input as FormatPatch,
+      { doc_kind: stored?.doc_kind ?? null, axal_party: stored?.axal_party ?? null });
+  } catch (e) {
+    if (e instanceof TemplateError) return { ok: false, status: e.status === 409 ? 409 : 400, code: e.code, message: e.message };
+    throw e;
+  }
   const bodySha = await sha256Hex(body);
-  const state = paperStateFor({ version, bodySha256: bodySha, publication: slug ? await publicationRef(c.env, slug) : null });
+  const state = paperStateFor({ version, bodySha256: bodySha, publication: slug ? await publicationRef(env, slug) : null });
   const model = paperModel({
-    title, body, slug: slug || title, category: typeof input.category === 'string' ? input.category : null,
+    title, body, slug: slug || title, category,
     version, bodySha256: bodySha, merge: input.resolve === 'raw' ? 'raw' : 'brackets', state,
-    // D717: a stored template's kind and Axal party, as its send would print them.
-    ...(slug ? renderFormat(await templateFormatFor(c.env, slug)) : {}),
+    ...renderFormat(effectiveFormat({ slug: slug || title, category, ...pair })),
+    structure: await structureForPaper(env, slug, 'preview'),
   });
-  const html = paperHtml(model, { pageSize: paper.pageSize, cover: paper.cover, medium: 'screen', fonts: input.fonts === 'inline' ? 'inline' : 'omit' });
+  return { ok: true, model, body, bodySha, state, paper: { pageSize: paper.pageSize, cover: paper.cover } };
+}
+
+async function readDraftInput(c: Context<{ Bindings: Env }>): Promise<DraftInput | null> {
+  let input: unknown;
+  try { input = await c.req.json(); } catch { return null; }
+  return input && typeof input === 'object' && !Array.isArray(input) ? input as DraftInput : null;
+}
+
+adminContracts.post('/templates/render', async (c) => {
+  await requireAdmin(c);
+  const input = await readDraftInput(c);
+  if (!input) return refuse(c, 400, { code: 'invalid_request', message: 'Send the template as JSON.' });
+  const d = await draftPaper(c.env, input);
+  if (!d.ok) return refuse(c, d.status, { code: d.code, message: d.message });
+  const html = paperHtml(d.model, { pageSize: d.paper.pageSize, cover: d.paper.cover, medium: 'screen', fonts: input.fonts === 'inline' ? 'inline' : 'omit' });
+  const fields = extractMergeFields(d.body).map((key) => ({ key, filled_by: isAutoMergeKey(key) ? 'send' : 'sender' }));
   c.header('Cache-Control', 'no-store');
-  return c.json({ html, body_sha256: bodySha, page_size: paper.pageSize, paper_sha256: await paperSha256(), state: stateLabel(state) });
+  return c.json({ html, body_sha256: d.bodySha, page_size: d.paper.pageSize, paper_sha256: await paperSha256(), state: stateLabel(d.state), fields });
+});
+
+// POST /templates/render.pdf — D717 decision 8: the unsaved draft as the real
+// PDF, so the editor shows where pages break. A preview: no file row, never
+// stored, never cached. Binary endpoint — kept OUT of the typed API drift surface.
+adminContracts.post('/templates/render.pdf', async (c) => {
+  await requireAdmin(c);
+  const input = await readDraftInput(c);
+  if (!input) return refuse(c, 400, { code: 'invalid_request', message: 'Send the template as JSON.' });
+  const d = await draftPaper(c.env, input);
+  if (!d.ok) return refuse(c, d.status, { code: d.code, message: d.message });
+  const rendered = await renderLegalPdf(c.env, d.model, { pageSize: d.paper.pageSize, cover: d.paper.cover });
+  if (!rendered.ok) return refuse(c, 503, { code: 'preview_unrenderable', message: 'The preview could not be drawn. Try again.' });
+  return new Response(rendered.bytes, {
+    status: 200,
+    headers: { 'Content-Type': 'application/pdf', 'Cache-Control': 'no-store', 'X-Axal-Renderer': rendered.renderer },
+  });
+});
+
+// GET /templates/store/:slug/thumbnail.png and /templates/outside/:key/thumbnail.png
+// — D717 decision 5: page 1 of the paper as an image, drawn once per version
+// by Browser Run's screenshot and kept in FILES. A new version or a new paper
+// style is a new key, so an image never goes stale. A thumbnail is not a legal
+// file, so it gets no legal_document_files row. On a miss that cannot be drawn
+// it answers 503 `thumbnail_unavailable` and writes nothing. Binary endpoints —
+// kept OUT of the typed API drift surface.
+const THUMB_VIEWPORT = { width: 816, height: 1056, deviceScaleFactor: 0.5 } as const; // Letter page 1, in CSS px
+const STUB_LINE = 'No body in the store yet.';
+const COUNSEL_LINE = PART_STUB; // "Stub — counsel to draft."
+
+/** The body a stub's thumbnail shows: the two marks of decision 4, never legal text. */
+export function thumbnailBody(slug: string, body: string | null | undefined, isStub: boolean): string {
+  if (!isStub && (body || '').trim()) return body as string;
+  return COUNSEL_DRAFT_SLUGS.has(slug) ? `${STUB_LINE}\n\n${COUNSEL_LINE}` : STUB_LINE;
+}
+
+async function thumbnailResponse(c: Context<{ Bindings: Env }>, key: string, html: () => Promise<string>): Promise<Response> {
+  const etag = `"${key}"`;
+  const headers = { 'Content-Type': 'image/png', 'Cache-Control': 'private, max-age=86400', ETag: etag };
+  if (c.req.header('If-None-Match') === etag) return new Response(null, { status: 304, headers });
+  const hit = await c.env.FILES?.get(key).catch(() => null);
+  if (hit) return new Response(await hit.arrayBuffer(), { status: 200, headers });
+  const shot = await renderLegalPng(c.env, await html(), THUMB_VIEWPORT);
+  if (!shot.ok) {
+    console.warn(JSON.stringify({ event: 'legal_thumbnail_unavailable', code: shot.code }));
+    return refuse(c, 503, { code: 'thumbnail_unavailable', message: 'Thumbnail not drawn: the page renderer did not answer.' });
+  }
+  // A failed write still serves the image; the next request draws it again.
+  await c.env.FILES?.put(key, shot.bytes, { httpMetadata: { contentType: 'image/png' } }).catch(() => {});
+  return new Response(shot.bytes, { status: 200, headers });
+}
+
+function thumbnailHtml(model: ReturnType<typeof paperModel>): string {
+  return paperHtml(model, { pageSize: 'letter', cover: 'dark', medium: 'screen', fonts: 'inline' });
+}
+
+adminContracts.get('/templates/store/:slug/thumbnail.png', async (c) => {
+  await requireAdmin(c);
+  const slug = c.req.param('slug');
+  const tpl = await storeGetTemplate(c.env, slug);
+  if (!tpl) return c.json({ error: 'Template not found', code: 'not_found', slug }, 404);
+  const stub = !!tpl.is_stub || !(tpl.body_md || '').trim();
+  const body = thumbnailBody(slug, tpl.body_md, stub);
+  const key = `legal/thumbnails/${await sha256Hex(slug)}/v${tpl.version ?? 0}-${(await paperSha256()).slice(0, 16)}.png`;
+  const bodySha = await sha256Hex(tpl.body_md || '');
+  const state = paperStateFor({ version: tpl.version, bodySha256: bodySha, publication: await publicationRef(c.env, slug) });
+  return thumbnailResponse(c, key, async () => thumbnailHtml(paperModel({
+    title: tpl.title, body, slug, category: tpl.category, version: tpl.version, bodySha256: bodySha,
+    merge: 'brackets', state, ...renderFormat(effectiveFormat(tpl)),
+    structure: await structureForPaper(c.env, slug, 'preview'),
+  })));
+});
+
+adminContracts.get('/templates/outside/:key/thumbnail.png', async (c) => {
+  await requireAdmin(c);
+  const entry = LEGAL_TEMPLATE_CATALOG.find(e => e.key === c.req.param('key') && e.key !== e.doc_type);
+  if (!entry) return c.json({ error: 'Template not found', code: 'not_found' }, 404);
+  const { getLegalTemplateBody } = await import('../services/legalTemplates');
+  const body = getLegalTemplateBody(entry.key as Parameters<typeof getLegalTemplateBody>[0]);
+  const bodySha = await sha256Hex(body);
+  // No version: the bundled body's hash names the image, so a new text is a new key.
+  const key = `legal/thumbnails/outside/${await sha256Hex(entry.key)}/${bodySha.slice(0, 16)}-${(await paperSha256()).slice(0, 16)}.png`;
+  return thumbnailResponse(c, key, async () => thumbnailHtml(paperModel({
+    title: entry.title, body, slug: entry.doc_type, version: null, bodySha256: bodySha, merge: 'brackets', state: { kind: 'draft' },
+  })));
 });
 
 // GET /templates/paper-fonts — D711: the paper's @font-face rules, fetched

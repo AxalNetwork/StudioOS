@@ -339,6 +339,25 @@ section.execution .recital { font-style: italic; color: ${C.muted}; font-size: 9
 .party .sigimg { display: block; max-width: 180pt; max-height: 48pt; margin: 4pt 0 2pt; }
 .party .signed { font-family: 'Roboto Mono', monospace; font-size: ${T.size.audit}; color: ${C.muted}; margin: 0 0 3pt; }
 section.certificate { break-before: page; }
+/* D717 (#1782) — the Structure of the Fund page (services/fundStructurePaper.ts).
+   Its own page, never split. Boxes take the ink rule, Mercury lines the ink,
+   Stripe lines the violet dashed, markers the violet. #1782's PR 2 intake sets
+   these from the final export with the other tokens. */
+section.structure-page { break-before: page; break-after: page; break-inside: avoid; }
+.structure-figure { margin: 8pt 0 10pt; }
+svg.fund-structure { display: block; width: 100%; height: auto; font-family: 'Public Sans', sans-serif; }
+svg.fund-structure .fs-node { fill: ${C.white}; stroke: ${C.ink}; stroke-width: 0.75; }
+svg.fund-structure .fs-node.fs-outside { fill: ${C.mergeTint}; stroke: ${C.muted}; stroke-dasharray: 3 2; }
+svg.fund-structure .fs-label { font-size: 8.5px; font-weight: 700; fill: ${C.inkStrong}; }
+svg.fund-structure .fs-line { fill: none; stroke: ${C.ink}; stroke-width: 1; }
+svg.fund-structure .fs-line.fs-stripe { stroke: ${C.violet}; stroke-dasharray: 4 3; }
+svg.fund-structure .fs-head { fill: ${C.ink}; }
+svg.fund-structure .fs-head.fs-stripe { fill: ${C.violet}; }
+svg.fund-structure .fs-marker { fill: ${C.violet}; }
+svg.fund-structure .fs-num { font-family: 'Roboto Mono', monospace; font-size: 8px; font-weight: 700; fill: ${C.white}; }
+svg.fund-structure .fs-small { font-size: 8px; fill: ${C.muted}; }
+ul.structure-key { list-style: none; padding: 0; margin: 0; font-size: ${T.size.legend}; line-height: 1.45; }
+ul.structure-key li { margin: 0 0 3pt; break-inside: avoid; }
 section.execution.inline { break-before: auto; margin-top: 16pt; }
 section.booklet-part + section.booklet-part { margin-top: 24pt; }
 section.execution.part-block { break-before: auto; margin-top: 16pt; }

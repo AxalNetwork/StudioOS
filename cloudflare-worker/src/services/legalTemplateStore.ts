@@ -223,14 +223,15 @@ export class TemplateError extends Error {
   }
 }
 
-type FormatPatch = { doc_kind?: unknown; axal_party?: unknown };
+export type FormatPatch = { doc_kind?: unknown; axal_party?: unknown };
 
 /**
  * D717: the pair a write stores. An absent key keeps `current`'s value, `null`
  * returns it to the slug, anything else is checked on the effective pair. A
  * notice or booklet slug (#1781) takes no stored value: 409 `format_fixed`.
+ * The render routes check an unsaved pair the same way (PR 1b).
  */
-function resolveFormat(
+export function resolveFormat(
   slug: string,
   category: string,
   input: FormatPatch,

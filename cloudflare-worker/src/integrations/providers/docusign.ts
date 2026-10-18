@@ -59,6 +59,7 @@ import {
 import { encryptBytes } from '../../services/cryptoBox';
 import { sha256Hex, sha256HexBytes } from '../../services/pdf';
 import { paperModel, paperSha256 } from '../../services/legalPaper';
+import { structureForPaper } from '../../services/fundStructure';
 import { renderLegalPdf, type LegalRenderer } from '../../services/legalPaperRender';
 import { fileRowStatement, newFileUid } from '../../services/legalDocumentFiles';
 import type { AxalEntityKey, DocumentKind } from '../../services/legalDocFormat';
@@ -390,6 +391,7 @@ export async function sendDocusignEnvelope(
     // D717: the envelope's recorded kind and Axal party; absent renders from the slug.
     documentKind: opts.documentKind,
     axalEntityKey: opts.axalEntityKey,
+    structure: await structureForPaper(env, opts.documentType, 'issued'),
     bodySha256: bodySha,
     envelopeUuid: opts.envelopeUuid || null,
     counterpartyName: opts.recipientName || null,

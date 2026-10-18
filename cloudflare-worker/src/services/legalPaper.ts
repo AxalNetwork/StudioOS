@@ -40,6 +40,10 @@ import {
 } from './legalPaperCss';
 
 /** The long instruments that get a cover and contents (decision 12). */
+import { STRUCTURE_MAP_SLUGS } from './templateFormat';
+import { STRUCTURE_HEADING, STRUCTURE_MARKER, structureLines, structureSvg } from './fundStructurePaper';
+import type { StructureModel } from './fundStructure';
+
 export const COVER_SLUGS = new Set(['lpa_amended_restated', 'ppm', 'compliance_manual_code_of_ethics', 'subscription_booklet']);
 
 export const DEFAULT_COUNTERSIGNER_EMAIL = 'legal@axal.vc';
@@ -154,6 +158,14 @@ export interface PaperInput {
    * its own named page with its own block.
    */
   parts?: PaperPartInput[] | null;
+  /**
+   * D717 (#1782) — the entity and money map (services/fundStructure.ts), for
+   * the audience this paper is printed for. It prints only on a
+   * `STRUCTURE_MAP_SLUGS` document, on its own page: at a body line that reads
+   * exactly `[STRUCTURE OF THE FUND]`, else straight after the preamble; in the
+   * booklet, after Part 2.
+   */
+  structure?: StructureModel | null;
 }
 
 /** D716 — one part of a composite paper. */
@@ -239,6 +251,8 @@ export interface PaperModel {
   stamp: 'issued' | 'superseded' | null;
   inlineExecution: boolean;
   parts: PaperPart[] | null;
+  /** D717 — the Structure of the Fund page: the drawing, its key, and the block index it precedes. */
+  structure: { svg: string; lines: string[]; at: number } | null;
 }
 
 const BASE64 = /^[A-Za-z0-9+/=]+$/;
@@ -417,6 +431,15 @@ export function paperModel(input: PaperInput): PaperModel {
       }
     : null;
 
+  // D717 — the Structure of the Fund page, on a map document only: at the
+  // marker line (which is dropped), else straight after the preamble.
+  let structure: PaperModel['structure'] = null;
+  if (input.structure && STRUCTURE_MAP_SLUGS.has(slug.toLowerCase())) {
+    const marker = blocks.findIndex((b) => b.t === 'para' && !b.num && !b.runIn && runsText(b.runs).trim() === STRUCTURE_MARKER);
+    if (marker >= 0) blocks = blocks.filter((_, i) => i !== marker);
+    structure = { svg: structureSvg(input.structure), lines: structureLines(input.structure), at: marker >= 0 ? marker : 0 };
+  }
+
   const issued = input.state.kind === 'issued' && !!uuid;
   return {
     title: input.title,
@@ -449,6 +472,7 @@ export function paperModel(input: PaperInput): PaperModel {
     stamp: input.stamp || null,
     inlineExecution: !!input.inlineExecution,
     parts,
+    structure,
   };
 }
 
@@ -590,6 +614,14 @@ function contentsHtml(m: PaperModel, pages: (number | null)[] | null, last = fal
   return `<section class="contents${last ? ' last' : ''}"><div class="eyebrow">Contents</div><h1 class="title">${escapeHtml(m.title)}</h1><ol>${items}</ol></section>`;
 }
 
+/** D717 — the Structure of the Fund page: its drawing and its numbered key. */
+function structureHtml(st: NonNullable<PaperModel['structure']>): string {
+  return `<section class="structure-page"><div class="eyebrow">${escapeHtml(STRUCTURE_HEADING)}</div>`
+    + `<h2 class="article structure-heading">${escapeHtml(STRUCTURE_HEADING)}</h2>`
+    + `<figure class="structure-figure">${st.svg}</figure>`
+    + `<ul class="structure-key">${st.lines.map((l) => `<li>${escapeHtml(l)}</li>`).join('')}</ul></section>`;
+}
+
 function certificateHtml(m: PaperModel): string {
   const c = m.certificate!;
   const rows = c.rows.map((r) => `<tr><td>${escapeHtml(r.label)}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.status)}</td><td class="mono">${escapeHtml(r.at)}</td></tr>`).join('');
@@ -658,6 +690,8 @@ export function paperHtml(m: PaperModel, o: PaperHtmlOptions): string {
             + `<div class="parties">${pt.execution.parties.map(partyHtml).join('')}</div></section>`
           : '')
         + '</section>');
+      // D717 — the booklet's Structure of the Fund page, a generated page after Part 2.
+      if (pt.n === 2 && m.structure) parts.push(structureHtml(m.structure));
     }
   } else if (part !== 'front') {
     parts.push(m.stamp && m.state.kind === 'issued'
@@ -667,7 +701,9 @@ export function paperHtml(m: PaperModel, o: PaperHtmlOptions): string {
     parts.push(`<h1 class="title">${escapeHtml(m.title)}</h1>`);
     if (m.addressee) parts.push(`<div class="addressee">${m.addressee.map((l) => `<p>${escapeHtml(l)}</p>`).join('')}</div>`);
     if (m.preamble) parts.push(`<p class="preamble">${escapeHtml(m.preamble)}</p>`);
-    parts.push(m.blocks.map((b) => blockHtml(b, part === 'body')).join('\n'));
+    const bodyHtml = m.blocks.map((b) => blockHtml(b, part === 'body'));
+    if (m.structure) bodyHtml.splice(Math.min(m.structure.at, bodyHtml.length), 0, structureHtml(m.structure));
+    parts.push(bodyHtml.join('\n'));
     if (m.keyFigures) parts.push(keyFiguresHtml(m.keyFigures));
     if (m.tables) parts.push(m.tables.map(noticeTableHtml).join(''));
     // The phone check sits directly above the payment block, or above the

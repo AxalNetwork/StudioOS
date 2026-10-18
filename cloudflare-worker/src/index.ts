@@ -326,6 +326,7 @@ import adminMoneyRails from './routes/admin_money_rails';
 import { adminPartnerSettlements, partnerSettlements } from './routes/partner_settlements';
 import mercuryPersonalRoutes from './routes/mercury_personal';
 import adminBankAccounts from './routes/admin_bank_accounts';
+import adminFundStructure from './routes/admin_fund_structure';
 // PaymentIntent + SetupIntent surface for the Axal-branded embedded card UI.
 import payments from './routes/payments';
 // One-time CART ORDER surface (combined PaymentIntent for one_time SKUs).
@@ -931,6 +932,8 @@ app.route('/api/mercury/personal', mercuryPersonalRoutes);
 // D708 — each Axal entity's bank accounts, Super Admin only. Before the
 // catch-all /api/admin so /api/admin/bank-accounts/* resolves here.
 app.route('/api/admin/bank-accounts', adminBankAccounts);
+// D717 (#1782) — the entity and money map, read-only, HQ only. Before the catch-all.
+app.route('/api/admin/fund-structure', adminFundStructure);
 // Task #9 — promo-code admin CRUD; mount before the `/api/admin` catch-all.
 app.route('/api/admin/promos', adminPromos);
 // Task #39 — Event engine admin (§8.3). Mount BEFORE the catch-all /api/admin
