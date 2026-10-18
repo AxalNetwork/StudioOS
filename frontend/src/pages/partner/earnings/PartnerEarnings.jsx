@@ -476,7 +476,7 @@ export default function PartnerEarnings() {
   const loadSettlements = useCallback(() => {
     setSettlements({ status: 'loading', data: null });
     partnerSettlementsApi.mine()
-      .then((data) => setSettlements({ status: 'ready', data: Array.isArray(data) ? data : [] }))
+      .then((data) => setSettlements(Array.isArray(data) ? { status: 'ready', data } : { status: 'unreadable', data: null }))
       .catch(() => setSettlements({ status: 'unreadable', data: null }));
   }, []);
   useEffect(() => { loadCommissions(); loadPayouts(); loadSettlements(); }, [loadCommissions, loadPayouts, loadSettlements]);
@@ -588,7 +588,7 @@ export default function PartnerEarnings() {
         <StatedLimit title="What this page does not claim">
           <p><strong>Paid means claimed by a payout request.</strong> The ledger marks a commission Paid the moment a request claims it, before any money moves. The payout’s own status says whether it was settled.</p>
           <p className="mt-2"><strong>Older payouts recorded less.</strong> A payout requested before payouts recorded their currency and their commissions shows no currency, and if it fails, none of its commissions go back to Accrued. Since then, a failed payout returns them.</p>
-          <p className="mt-2"><strong>Received is your own bank’s line.</strong> A payout or settlement reads Received once you match it to a line in your own Mercury account. That is evidence beside the payout’s status, which stays the admin’s, and nothing here sends or requests money.</p>
+          <p className="mt-2"><strong>Received is your own bank’s line.</strong> A payout reads Received once you match it to a credit in your own Mercury account. A settlement reads Matched after you confirm its credit or debit. That is evidence beside the payout’s status, which stays the admin’s, and nothing here sends or requests money.</p>
           <p className="mt-2"><strong>Totals are per currency.</strong> Amounts in different currencies are never added together, and a request covers one currency.</p>
         </StatedLimit>
       </div>
