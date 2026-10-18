@@ -82,6 +82,7 @@ test('the table: unique keys, the decision\'s tiers, and a sentence on every Sup
     'distribution.preview': 'admin', 'distribution.execute': 'super_admin', 'distribution.mark_paid': 'admin',
     'fund_report.draft': 'admin', 'fund_report.issue': 'super_admin', 'fund.gp_of_record': 'super_admin', 'fund.economics': 'super_admin', 'fund.write': 'admin',
     'fund_ledger.administrator': 'super_admin', 'fund_ledger.write': 'admin',
+    'mercury.connection': 'super_admin', 'mercury.sync': 'admin', 'mercury.reconcile': 'admin',
   });
   for (const a of FUND_ACTS) assert.equal(a.sentence !== null, a.tier === 'super_admin', a.act);
 });
@@ -93,6 +94,14 @@ const ROUTERS: Record<string, { file: string; name: string }> = {
   '/api/capital': { file: 'routes/capital.ts', name: 'capital' },
   '/api/fund-ledger': { file: 'routes/fund_ledger.ts', name: 'r' },
   '/api/fund-reporting': { file: 'routes/fund_reporting.ts', name: 'r' },
+  '/api/admin/mercury': { file: 'routes/admin_mercury.ts', name: 'r' },
+};
+
+/** #1775's rows keep their own gates: each handler is held to the call it makes. */
+const OWN_GATES: Record<string, string> = {
+  'mercury.connection': 'await requireMercuryCredentialWriter(c)',
+  'mercury.sync': 'await requireMercuryReader(c)',
+  'mercury.reconcile': 'await requireMercuryReader(c)',
 };
 
 /** The source of one handler: from its registration to the next one on the same router. */
@@ -102,7 +111,8 @@ function handler(file: string, router: string, method: string, path: string): st
   const at = text.indexOf(opener);
   if (at < 0) return null;
   const rest = text.slice(at + opener.length);
-  const next = rest.search(/\n[A-Za-z]+\.(get|post|put|patch|delete|use)\(/);
+  // A router built inside a factory (`admin_mercury.ts`) registers at two spaces.
+  const next = rest.search(/\n(?:  )?[A-Za-z]+\.(get|post|put|patch|delete|use)\('/);
   return next < 0 ? rest : rest.slice(0, next);
 }
 
@@ -126,7 +136,9 @@ test('every route FUND_ACTS names is mounted, and its handler asserts that act',
       const { file, name } = ROUTERS[prefix!];
       const body = handler(file, name, method, full.slice(prefix!.length));
       assert.ok(body, `${route} (${row.act}) is not a route in ${file}`);
-      if (file === 'routes/fund_ledger.ts') {
+      if (OWN_GATES[row.act]) {
+        assert.ok(body!.includes(OWN_GATES[row.act]), `${route} no longer runs ${OWN_GATES[row.act]}`);
+      } else if (file === 'routes/fund_ledger.ts') {
         const expected = row.act === 'fund_ledger.administrator' ? "access(c,'fund_ledger.administrator')" : 'access(c,true)';
         assert.ok(body!.includes(expected), `${route} does not assert ${row.act}`);
       } else if (method === 'PATCH') {
@@ -166,6 +178,7 @@ test('COOL_OFF_ROUTES holds decision 5\'s three routes', () => {
     assert.ok(list.includes(`'${route}'`), `${route} is not in COOL_OFF_ROUTES`);
   }
   assert.ok(index.split("app.route('/api/fund-admin', fundAdmin)").length > 1, '/api/fund-admin is not mounted');
+  assert.ok(index.split("app.route('/api/admin/mercury', adminMercury)").length > 1, '/api/admin/mercury is not mounted');
 });
 
 test('execute asserts its act after the body read, which names the fund', () => {

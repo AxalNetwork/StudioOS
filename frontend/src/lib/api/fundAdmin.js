@@ -7,4 +7,6 @@ import { request } from '../api.js';
  */
 export const fundAdminApi = {
   access: () => request('/fund-admin/access'),
+  /** Decision 9: the stores' overview. Audited before it answers; a 503 means the read was not made. */
+  overview: () => request('/fund-admin/overview'),
 };
