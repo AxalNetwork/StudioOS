@@ -17,6 +17,19 @@
   says "Signature received". New pure module `frontend/src/lib/esignSteps.js`;
   tests in `frontend/test/esign_steps_d717.test.mjs`.
 
+## The bank-account registry restyled per entity (D717, #1856)
+
+- `/admin?tab=bank-accounts` (`BankAccountsConsole.jsx`) now draws the "Legal
+  Documents · Templates" canvas's board L11: one card per Axal entity with its
+  read-only Mercury connection, its accounts and where each payment goes; the
+  unmatched receipts per connected entity; what a notice refuses, in the
+  resolver's own sentences; and "Add account" and "Reveal the full number?"
+  dialogs. A plain Admin still gets one sentence and no read.
+- `GET /api/admin/mercury/transactions` takes `direction=credit|debit`, and
+  `GET /api/admin/bank-accounts` answers `refusals`
+  (`services/payInstructions.ts`' new `refusalMessage` and `NOTICE_REFUSALS`).
+  No migration, and no new route.
+
 ## The entity and money map on screen, with one numbering on paper (D717, #1855)
 
 - `GET /api/admin/fund-structure` (`services/fundStructure.ts`) now numbers
