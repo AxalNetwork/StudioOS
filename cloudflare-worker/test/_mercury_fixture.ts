@@ -3,8 +3,8 @@
  *
  * A real `node:sqlite` database: the users, sessions and audit tables and the
  * fund tables cut from schema_baseline.sql, then migrations 312 (the call
- * ledger), 472 (#1773's bank-account registry), 473 (#1774's fee tables, which
- * a receipt now updates) and 474 (Mercury).
+ * ledger), 472 (#1773's bank-account registry), 473 (#1774's fee periods)
+ * and 474 (Mercury).
  * `withRegistry()` inserts registry rows that satisfy 472's checks.
  *
  * Every Mercury call goes to `mercuryStub`, which records each request. Every
