@@ -4,6 +4,18 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## Code scanning uploads follow the repository's visibility (D721)
+
+- `codeql.yml` and `semgrep.yml` start with a `visibility` job that reads
+  `private` and `security_and_analysis.code_security.status` from the
+  repository API. CodeQL's `upload` and Semgrep's `Upload SARIF` step follow
+  its answer: they upload when the repository is public or Code Security is
+  on, and skip the upload otherwise. Findings are listed in the job summary
+  either way.
+- `.gitignore` ignores `node_modules` symlinks too, and the one committed at
+  `cloudflare-worker/node_modules` is removed. `profile_pages_d702.test.ts`
+  deletes its 0.5 GB temp folder after its tests.
+
 ## Connector webhooks need a signing key (D719)
 
 - `POST /api/integrations/webhook/:provider/:uid` (and its `/api/connectors`
