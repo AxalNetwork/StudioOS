@@ -157,3 +157,19 @@ export async function preview(env: any, quarter = Q0, who = GP) {
 export async function issue(env: any, digest: unknown, quarter = Q0, who = GP, extra: Record<string, unknown> = {}) {
   return call(env, who, `/api/fund-fees/1/periods/${quarter}/issue`, { method: 'POST', body: { digest, ...extra } });
 }
+
+/**
+ * #1773's registry rows, written as its console would. The numbers are
+ * synthetic and end in no real account's last four.
+ */
+export const GP_NUMBER = '5512340093';
+export async function bankAccount(env: any, entity: 'gp' | 'fund', number: string, purpose: string, beneficiary: string) {
+  const uid = `0000bbbb-0000-4000-8000-${entity === 'gp' ? '000000000711' : '000000000712'}`;
+  const enc = await encryptColumn(env, 'entity_bank_accounts', 'account_number_enc', uid, number);
+  env.__db.prepare(`INSERT INTO entity_bank_accounts
+      (uid, entity_key, label, bank_name, bank_address, beneficiary_name, beneficiary_address, account_kind,
+       account_number_enc, account_last4, routing_number, swift_code, purposes_json, status, recorded_by)
+     VALUES (?, ?, 'Checking', 'Column N.A.', '1 Letterman Drive', ?, '16192 Coastal Highway', 'checking',
+       ?, ?, '121145433', 'CLNOUS66MER', ?, 'active', ?)`).run(uid, entity, beneficiary, enc, number.slice(-4), JSON.stringify([purpose]), SUPER);
+}
+export const gpAccount = (env: any) => bankAccount(env, 'gp', GP_NUMBER, 'management_fee', 'Axal VC GP LLC');

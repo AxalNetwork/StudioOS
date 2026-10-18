@@ -120,6 +120,19 @@ docs/.build-source merge=union
 # undo it again. (.agents/memory/font-lfs-attribute-quirk.md has the history.)
 scripts/og-assets/SpaceGrotesk-Variable.woff2 -filter -diff -merge -text
 
+# D711 (#1776): the legal paper's faces are inlined byte-for-byte as data: URIs
+# into every legal PDF and preview (services/legalPaperCss.ts), and the tests
+# check each starts `wOF2`. As LFS pointers, CI — which fetches no LFS — would
+# inline 130 bytes of pointer text and every paper would draw the fallback
+# sans. Seven subset files, 108 KB together (paper/README.md).
+cloudflare-worker/src/templates/legal/paper/bricolage-grotesque-800.woff2 -filter -diff -merge -text
+cloudflare-worker/src/templates/legal/paper/public-sans-400.woff2 -filter -diff -merge -text
+cloudflare-worker/src/templates/legal/paper/public-sans-400-italic.woff2 -filter -diff -merge -text
+cloudflare-worker/src/templates/legal/paper/public-sans-700.woff2 -filter -diff -merge -text
+cloudflare-worker/src/templates/legal/paper/roboto-mono-400.woff2 -filter -diff -merge -text
+cloudflare-worker/src/templates/legal/paper/roboto-mono-700.woff2 -filter -diff -merge -text
+cloudflare-worker/src/templates/legal/paper/space-grotesk-700.woff2 -filter -diff -merge -text
+
 # ---- Generated and pasted trees: linguist-generated ---------------------------
 # Not hand-written source. The same five trees are already excluded from the
 # repo's own CodeQL (.github/codeql/codeql-config.yml paths-ignore) and from

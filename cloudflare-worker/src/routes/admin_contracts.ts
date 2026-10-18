@@ -14,11 +14,17 @@ import { fanOut } from '../services/branches';
 import { usageFromContractRows } from '../services/contractTemplateUsage';
 import { publishedContractTemplates, publicationFields, publishContractTemplates, preparePublishedContract, ContractPreparationError,
   publishOneTemplate, withdrawTemplatePublication, PublicationError } from '../services/contractPublication';
-import { formatView, formatOptions, renderFormat, effectiveFormat } from '../services/templateFormat';
+import { formatView, formatOptions, renderFormat, effectiveFormat, templateFormatFor } from '../services/templateFormat';
 import { createAndSendEnvelope } from './esign';
 import { userMeetsTier } from '../middleware/requireTier';
 import { findActiveDocusignIntegrationForUser } from '../integrations/providers/docusign';
 import { sha256Hex, sha256HexBytes } from '../services/pdf';
+import { paperModel, paperHtml, paperSha256, paperStateFor, stateLabel, type PublicationRef } from '../services/legalPaper';
+import { paperFontsCss, readPaperChoice, PAPER_CHOICE_MESSAGES } from '../services/legalPaperCss';
+import { renderLegalPdf } from '../services/legalPaperRender';
+import { buildLegalDocx, docxFilename, DOCX_CONTENT_TYPE } from '../services/legalDocx';
+import { fileRowStatement, newFileUid } from '../services/legalDocumentFiles';
+import { refuse } from '../util/refusal';
 import {
   listTemplates as storeListTemplates,
   getTemplate as storeGetTemplate,
@@ -123,6 +129,25 @@ adminContracts.get('/envelope-providers', async (c) => {
   }
 });
 
+// D711 — the published version and body hash of a template, the stored state
+// a page's Specimen / Superseded / Draft label comes from (decision 11).
+async function publicationRef(env: Env, slug: string): Promise<PublicationRef | null> {
+  try {
+    const row = await env.DB.prepare(
+      'SELECT version, body_md FROM legal_template_publications WHERE slug = ?',
+    ).bind(slug).first<{ version: number; body_md: string }>();
+    return row ? { version: Number(row.version), bodySha256: await sha256Hex(row.body_md || '') } : null;
+  } catch {
+    return null;
+  }
+}
+
+function bytesToB64(bytes: Uint8Array): string {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(binary);
+}
+
 // Preview and send derive their body from the same recorded snapshot. Neither
 // accepts a caller-supplied document body or a caller-supplied signer identity.
 function envelopeHandler(operation: 'preview' | 'send') {
@@ -137,15 +162,29 @@ function envelopeHandler(operation: 'preview' | 'send') {
       if (e instanceof ContractPreparationError) return c.json({ error: e.code, code: e.code, fields: e.fields }, e.status);
       return c.json({ error: 'The document could not be prepared. Nothing was sent. Try again.', code: 'preparation_unreadable' }, 503);
     }
+    // D711 — the paper every copy of this envelope prints on.
+    const paper = readPaperChoice(input.page_size, input.cover);
+    if (!paper.ok) return refuse(c, 400, { code: paper.code, message: PAPER_CHOICE_MESSAGES[paper.code] });
     if (operation === 'preview') {
-      const pdf = await renderTemplatePreviewPdf({ documentTitle: prepared.template.title,
-        documentBody: prepared.body, documentVersion: prepared.template.version,
-        documentType: prepared.template.slug, category: prepared.template.category,
-        ...renderFormat(effectiveFormat(prepared.template)) });
-      let binary = '';
-      for (const byte of pdf) binary += String.fromCharCode(byte);
+      const bodySha = await sha256Hex(prepared.body);
+      const model = paperModel({
+        title: prepared.template.title, body: prepared.body, slug: prepared.template.slug,
+        category: prepared.template.category, version: prepared.template.version, bodySha256: bodySha,
+        counterpartyName: prepared.recipientName || null,
+        ...renderFormat(effectiveFormat(prepared.template)),
+        state: paperStateFor({
+          version: prepared.template.version,
+          bodySha256: await sha256Hex(prepared.template.body_md || ''),
+          publication: await publicationRef(c.env, prepared.template.slug),
+        }),
+      });
+      const rendered = await renderLegalPdf(c.env, model, { pageSize: paper.pageSize, cover: paper.cover });
+      if (!rendered.ok) return refuse(c, 503, { code: 'preview_unrenderable', message: 'The preview could not be drawn. Nothing was sent. Try again.' });
       c.header('Cache-Control', 'no-store');
-      return c.json({ pdf_base64: btoa(binary), body_sha256: await sha256Hex(prepared.body), template_version: prepared.template.version });
+      return c.json({
+        pdf_base64: bytesToB64(rendered.bytes), body_sha256: bodySha, template_version: prepared.template.version,
+        renderer: rendered.renderer, page_size: paper.pageSize,
+      });
     }
     if (input.preview_sha256 !== await sha256Hex(prepared.body)) return c.json({ error: 'Preview this document again before sending.', code: 'preview_changed' }, 409);
     if (input.provider !== 'native' && input.provider !== 'docusign') return c.json({ error: 'provider_invalid' }, 400);
@@ -166,6 +205,7 @@ function envelopeHandler(operation: 'preview' | 'send') {
         documentType: prepared.template.slug, dealId: prepared.dealId, appUrl: c.env.APP_URL || 'https://axal.vc',
         viaProvider: input.provider, actorIp: c.req.header('CF-Connecting-IP') || undefined,
         renderedBody: { title: prepared.template.title, body: prepared.body }, refuseUnfilled: true,
+        pageSize: paper.pageSize, cover: paper.cover, templateVersion: prepared.template.version,
         format: effectiveFormat(prepared.template),
       });
       // Signing URLs contain a bearer credential; this admin flow only needs
@@ -1181,6 +1221,42 @@ adminContracts.get('/:uid/history', async (c) => {
   } finally { await sql.end(); }
 });
 
+// GET /:uid/files — D711: every file the registry holds for an envelope.
+// Gated like /:uid/signed-pdf. Ids, hashes, sizes and codes only: never the
+// storage key, a name or an email. `signer` is the recipient's 1-based
+// position in `ORDER BY id`, the order of /:uid/history.
+adminContracts.get('/:uid/files', async (c) => {
+  const admin = await requireAdmin(c);
+  const sql = getSQL(c.env);
+  try {
+    const ref = await findContractByUid(sql, c.req.param('uid'));
+    if (!ref) return c.json({ error: 'Contract not found' }, 404);
+    if (ref.source !== 'esign') return c.json({ files: [], reason: 'This store does not record rendered files.' });
+    if (!isSuperAdmin(admin) && ref.row.created_by !== admin.id) return c.json({ error: 'Super admin required' }, 403);
+    const recipients = await c.env.DB.prepare('SELECT id FROM esign_recipients WHERE envelope_id = ? ORDER BY id').bind(ref.row.id).all<{ id: number }>();
+    const position = new Map((recipients.results || []).map((r, i) => [r.id, i + 1]));
+    const rows = await c.env.DB.prepare(`SELECT kind, recipient_id, renderer, page_size, file_sha256, file_bytes, created_at, r2_key
+      FROM legal_document_files WHERE envelope_id = ? ORDER BY created_at, id`).bind(ref.row.id).all<{
+      kind: string; recipient_id: number | null; renderer: string; page_size: string | null; file_sha256: string;
+      file_bytes: number; created_at: string; r2_key: string | null }>();
+    const files = [];
+    for (const r of rows.results || []) {
+      let stored = false;
+      if (r.r2_key && c.env.FILES) {
+        try { stored = !!(await c.env.FILES.head(r.r2_key)); } catch { stored = false; }
+      }
+      files.push({
+        kind: r.kind, renderer: r.renderer, page_size: r.page_size, sha256: r.file_sha256, bytes: r.file_bytes,
+        created_at: r.created_at, stored, signer: r.recipient_id != null ? position.get(r.recipient_id) ?? null : null,
+      });
+    }
+    c.header('Cache-Control', 'no-store');
+    return c.json({ files });
+  } catch (e) {
+    return refuse(c, 503, { code: 'files_unreadable', message: 'The file list is unreadable. Try again.', raw: e });
+  } finally { await sql.end(); }
+});
+
 adminContracts.get('/:uid/signed-pdf', async (c) => {
   const admin = await requireAdmin(c);
   const sql = getSQL(c.env);
@@ -1810,37 +1886,116 @@ adminContracts.delete('/templates/store/:slug', async (c) => {
   return c.json({ ok: true });
 });
 
-// GET /templates/store/:slug/preview.pdf — watermarked preview PDF (no signature block).
-// Task #31. Binary endpoint — kept OUT of the typed API drift surface.
-import { renderTemplatePreviewPdf } from '../services/pdf';
-import { resolveWithBrackets } from '../services/mergeFields';
-
+// GET /templates/store/:slug/preview.pdf — the template on the legal paper
+// (D711), at `?page=letter|a4` and `?cover=dark|light`, its state from the
+// publication. Binary endpoint — kept OUT of the typed API drift surface.
 adminContracts.get('/templates/store/:slug/preview.pdf', async (c) => {
   await requireAdmin(c);
   const slug = c.req.param('slug');
+  const paper = readPaperChoice(c.req.query('page'), c.req.query('cover'));
+  if (!paper.ok) return refuse(c, 400, { code: paper.code, message: PAPER_CHOICE_MESSAGES[paper.code] });
   const tpl = await storeGetTemplate(c.env, slug);
   if (!tpl) return c.json({ error: 'Template not found', code: 'not_found', slug }, 404);
 
-  const resolve = c.req.query('resolve') || 'brackets';
-  const body = resolve === 'raw'
-    ? (tpl.body_md || '')
-    : resolveWithBrackets(tpl.body_md || '');
-
-  const pdf = await renderTemplatePreviewPdf({
-    documentTitle: tpl.title,
-    documentBody: body,
-    documentVersion: tpl.version,
-    documentType: slug,
-    category: tpl.category,
+  // The raw body and the resolve mode go to the model: `brackets` marks each
+  // known merge token as a [LABEL] run.
+  const body = tpl.body_md || '';
+  const bodySha = await sha256Hex(body);
+  const model = paperModel({
+    title: tpl.title, body, slug, category: tpl.category, version: tpl.version, bodySha256: bodySha,
+    merge: c.req.query('resolve') === 'raw' ? 'raw' : 'brackets',
     ...renderFormat(effectiveFormat(tpl)),
+    state: paperStateFor({ version: tpl.version, bodySha256: bodySha, publication: await publicationRef(c.env, slug) }),
   });
+  const rendered = await renderLegalPdf(c.env, model, { pageSize: paper.pageSize, cover: paper.cover });
+  if (!rendered.ok) return refuse(c, 503, { code: 'preview_unrenderable', message: 'The preview could not be drawn. Try again.' });
 
-  const filename = `${slug}-v${tpl.version}-preview.pdf`;
-  return new Response(pdf, {
+  const filename = `${docxFilename(slug, tpl.version).replace(/\.docx$/, '')}-preview.pdf`;
+  return new Response(rendered.bytes, {
     status: 200,
     headers: {
       'Content-Type': 'application/pdf',
       'Content-Disposition': `inline; filename="${filename}"`,
+      'Cache-Control': 'no-store',
+      'X-Axal-Renderer': rendered.renderer,
+    },
+  });
+});
+
+// POST /templates/render — D711: the live preview's paper, as HTML. The faces
+// are left out with `fonts: 'omit'`; the page fetches them once per
+// `paper_sha256` from /templates/paper-fonts.
+const RENDER_BODY_MAX = 256 * 1024;
+adminContracts.post('/templates/render', async (c) => {
+  await requireAdmin(c);
+  let input: Record<string, unknown>;
+  try { input = await c.req.json(); }
+  catch { return refuse(c, 400, { code: 'invalid_request', message: 'Send the template as JSON.' }); }
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return refuse(c, 400, { code: 'invalid_request', message: 'Send the template as JSON.' });
+  const body = typeof input.body === 'string' ? input.body : '';
+  if (new TextEncoder().encode(body).length > RENDER_BODY_MAX) {
+    return refuse(c, 413, { code: 'body_too_large', message: 'The body is over 256 KB, so it cannot be previewed.' });
+  }
+  const paper = readPaperChoice(input.page_size, input.cover);
+  if (!paper.ok) return refuse(c, 400, { code: paper.code, message: PAPER_CHOICE_MESSAGES[paper.code] });
+  const title = typeof input.title === 'string' && input.title.trim() ? input.title.trim().slice(0, 300) : 'Untitled';
+  const slug = typeof input.slug === 'string' ? input.slug.slice(0, 200) : '';
+  const version = Number.isInteger(input.version) ? input.version as number : null;
+  const bodySha = await sha256Hex(body);
+  const state = paperStateFor({ version, bodySha256: bodySha, publication: slug ? await publicationRef(c.env, slug) : null });
+  const model = paperModel({
+    title, body, slug: slug || title, category: typeof input.category === 'string' ? input.category : null,
+    version, bodySha256: bodySha, merge: input.resolve === 'raw' ? 'raw' : 'brackets', state,
+    // D717: a stored template's kind and Axal party, as its send would print them.
+    ...(slug ? renderFormat(await templateFormatFor(c.env, slug)) : {}),
+  });
+  const html = paperHtml(model, { pageSize: paper.pageSize, cover: paper.cover, medium: 'screen', fonts: input.fonts === 'inline' ? 'inline' : 'omit' });
+  c.header('Cache-Control', 'no-store');
+  return c.json({ html, body_sha256: bodySha, page_size: paper.pageSize, paper_sha256: await paperSha256(), state: stateLabel(state) });
+});
+
+// GET /templates/paper-fonts — D711: the paper's @font-face rules, fetched
+// once per `paper_sha256` by the live preview.
+adminContracts.get('/templates/paper-fonts', async (c) => {
+  await requireAdmin(c);
+  c.header('Cache-Control', 'private, max-age=86400');
+  return c.json({ css: paperFontsCss(), paper_sha256: await paperSha256() });
+});
+
+// GET /templates/store/:slug/export.docx — D711: a template as Word, with a
+// `docx_export` registry row. No row, no file. Binary endpoint — kept OUT of
+// the typed API drift surface.
+adminContracts.get('/templates/store/:slug/export.docx', async (c) => {
+  const admin = await requireAdmin(c);
+  const slug = c.req.param('slug');
+  const paper = readPaperChoice(c.req.query('page'), 'light');
+  if (!paper.ok) return refuse(c, 400, { code: paper.code, message: PAPER_CHOICE_MESSAGES[paper.code] });
+  const tpl = await storeGetTemplate(c.env, slug);
+  if (!tpl) return c.json({ error: 'Template not found', code: 'not_found', slug }, 404);
+  const body = tpl.body_md || '';
+  const bodySha = await sha256Hex(body);
+  const model = paperModel({
+    title: tpl.title, body, slug, category: tpl.category, version: tpl.version, bodySha256: bodySha,
+    merge: c.req.query('resolve') === 'raw' ? 'raw' : 'brackets',
+    ...renderFormat(effectiveFormat(tpl)),
+    state: paperStateFor({ version: tpl.version, bodySha256: bodySha, publication: await publicationRef(c.env, slug) }),
+  });
+  const bytes = buildLegalDocx(model, { pageSize: paper.pageSize });
+  try {
+    await fileRowStatement(c.env, {
+      uid: newFileUid(), kind: 'docx_export', templateSlug: slug, templateVersion: tpl.version ?? null,
+      bodySha256: bodySha, fileSha256: await sha256HexBytes(bytes), fileBytes: bytes.length,
+      contentType: DOCX_CONTENT_TYPE, pageSize: paper.pageSize, renderer: 'docx', paperSha256: await paperSha256(),
+      actorUserId: admin.id,
+    }).run();
+  } catch (e) {
+    return refuse(c, 503, { code: 'export_unrecorded', message: 'The export could not be recorded, so no file was handed out. Try again.', raw: e });
+  }
+  return new Response(bytes, {
+    status: 200,
+    headers: {
+      'Content-Type': DOCX_CONTENT_TYPE,
+      'Content-Disposition': `attachment; filename="${docxFilename(slug, tpl.version ?? null)}"`,
       'Cache-Control': 'no-store',
     },
   });

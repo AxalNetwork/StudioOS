@@ -28,11 +28,12 @@
  * without prod credentials still gets a working flow).
  *
  * Required env secrets (per-environment): `DOCUSIGN_CLIENT_ID`,
- * `DOCUSIGN_CLIENT_SECRET`. The optional `DOCUSIGN_CONNECT_HMAC` env
- * var, when set on the worker side, is used as the FALLBACK webhook
- * secret if the per-connection webhook_secret column hasn't been
- * configured yet (e.g. the user copy-pasted the same secret DocuSign
- * Admin generates for the whole account).
+ * `DOCUSIGN_CLIENT_SECRET`. There is no account-wide webhook secret: a
+ * Connect delivery is checked against the connection's own
+ * `webhook_secret_enc`, which `postConnect` stores with the Connect
+ * configuration it provisions, or the first send stores
+ * (`ensureDocusignWebhookSecret`). The receiver in routes/integrations.ts
+ * answers a row with none as an unknown connection (D719).
  *
  * IMPORTANT: imported once from index.ts so registerProvider() runs at boot.
  */
@@ -56,7 +57,10 @@ import {
   type CredentialBlob,
 } from '../secrets';
 import { encryptBytes } from '../../services/cryptoBox';
-import { renderAgreementPdf, sha256Hex } from '../../services/pdf';
+import { sha256Hex, sha256HexBytes } from '../../services/pdf';
+import { paperModel, paperSha256 } from '../../services/legalPaper';
+import { renderLegalPdf, type LegalRenderer } from '../../services/legalPaperRender';
+import { fileRowStatement, newFileUid } from '../../services/legalDocumentFiles';
 import type { AxalEntityKey, DocumentKind } from '../../services/legalDocFormat';
 
 const PROVIDER_KEY = 'docusign';
@@ -330,6 +334,12 @@ interface SendEnvelopeOpts {
   documentTitle: string;
   documentBody: string;
   documentType?: string;
+  /** D711 — the template version the sender sent, printed in the footer. */
+  templateVersion?: number | null;
+  /** D711 — the local envelope this source belongs to (its audit line). */
+  envelopeUuid?: string;
+  pageSize?: 'letter' | 'a4';
+  cover?: 'dark' | 'light';
   /** D717 (#1782): the envelope's recorded kind and Axal party. */
   documentKind?: DocumentKind;
   axalEntityKey?: AxalEntityKey;
@@ -352,6 +362,8 @@ interface SendEnvelopeOpts {
 interface SendEnvelopeResult {
   docusign_envelope_id: string;
   status: string;
+  /** D711 — the PDF sent to DocuSign, for its `docusign_source` registry row. */
+  source: { sha256: string; bytes: number; renderer: LegalRenderer; pageSize: 'letter' | 'a4'; paperSha256: string };
 }
 
 /**
@@ -366,29 +378,31 @@ export async function sendDocusignEnvelope(
 ): Promise<SendEnvelopeResult> {
   const ANCHOR = '_____ESIGN_HERE_____';
   const bodyWithAnchor = `${opts.documentBody}\n\nSignature: ${ANCHOR}\n`;
-  // renderAgreementPdf requires a signature image — DocuSign handles the
-  // actual signing UI so we embed a 1x1 transparent PNG placeholder; the
-  // signed PDF we ultimately store is the one DocuSign returns.
-  const TRANSPARENT_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv/lxKUAAAAASUVORK5CYII=';
+  // D711 — the paper, with the anchor text kept and no execution block or
+  // certificate: DocuSign draws its own signature tabs at the anchor.
   const bodySha = await sha256Hex(bodyWithAnchor);
-  const pdf = await renderAgreementPdf({
-    envelopeUuid: 'docusign-pending',
-    documentTitle: opts.documentTitle,
-    documentBody: bodyWithAnchor,
-    documentType: opts.documentType,
+  const pageSize = opts.pageSize === 'a4' ? 'a4' : 'letter';
+  const model = paperModel({
+    title: opts.documentTitle,
+    body: bodyWithAnchor,
+    slug: opts.documentType || opts.documentTitle,
+    version: opts.templateVersion ?? null,
+    // D717: the envelope's recorded kind and Axal party; absent renders from the slug.
     documentKind: opts.documentKind,
     axalEntityKey: opts.axalEntityKey,
-    signerName: opts.recipientName || opts.recipientEmail,
-    signerEmail: opts.recipientEmail,
-    signerIp: 'docusign',
-    signedAt: new Date().toISOString(),
-    signatureDataUrl: TRANSPARENT_PNG,
     bodySha256: bodySha,
-    // DocuSign draws its own signature tabs at the in-body anchor, so keep the
-    // anchor text and don't append our execution block.
+    envelopeUuid: opts.envelopeUuid || null,
+    counterpartyName: opts.recipientName || null,
+    state: { kind: 'issued' },
     preserveBody: true,
     suppressExecutionBlock: true,
   });
+  const rendered = await renderLegalPdf(env, model, { pageSize, cover: opts.cover === 'light' ? 'light' : 'dark' });
+  if (!rendered.ok) throw new Error(`docusign_render_failed: ${rendered.code}`);
+  const pdf = rendered.bytes;
+  const source = {
+    sha256: await sha256HexBytes(pdf), bytes: pdf.length, renderer: rendered.renderer, pageSize, paperSha256: await paperSha256(),
+  } as const;
   const pdfBase64 = bytesToBase64(pdf);
   // eventNotification — per-envelope Connect subscription. DocuSign POSTs
   // status updates to our worker route, signing the body with HMAC-SHA256
@@ -459,7 +473,7 @@ export async function sendDocusignEnvelope(
   }
   const out = await res.json() as { envelopeId?: string; status?: string };
   if (!out.envelopeId) throw new Error('docusign_envelope_create_no_id');
-  return { docusign_envelope_id: out.envelopeId, status: out.status || 'sent' };
+  return { docusign_envelope_id: out.envelopeId, status: out.status || 'sent', source };
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -497,7 +511,27 @@ function mapDsStatus(s: string): 'sent' | 'partially_signed' | 'completed' | 're
  * routes/esign.ts detect the `.enc` suffix and decrypt on the way out
  * with the same `cryptoBox` key (AXAL_ENCRYPTION_SECRET || JWT_SECRET).
  */
-async function pullAndStoreSignedPdf(env: Env, _row: IntegrationRow, dsEnvelopeId: string, envelopeUuid: string): Promise<{ key: string; sha256: string } | null> {
+/**
+ * D711 — one `docusign_signed` registry row for a returned file. Its hash is
+ * over the plaintext bytes DocuSign returned. The webhook and the cron poller
+ * can both reach this for one envelope; the INSERT ends ON CONFLICT … DO
+ * NOTHING, so the second leaves the first row alone.
+ */
+export async function recordDocusignSignedFile(env: Env, envelopeId: number, key: string, plaintext: Uint8Array): Promise<void> {
+  await fileRowStatement(env, {
+    uid: newFileUid(),
+    kind: 'docusign_signed',
+    envelopeId,
+    fileSha256: await sha256HexBytes(plaintext),
+    fileBytes: plaintext.length,
+    contentType: 'application/pdf',
+    renderer: 'docusign',
+    paperSha256: null,
+    r2Key: key,
+  }).run();
+}
+
+async function pullAndStoreSignedPdf(env: Env, _row: IntegrationRow, dsEnvelopeId: string, envelopeUuid: string): Promise<{ key: string; sha256: string; plaintext: Uint8Array } | null> {
   const res = await dsFetch(env, _row, `/envelopes/${encodeURIComponent(dsEnvelopeId)}/documents/combined`);
   if (!res.ok) return null;
   const buf = new Uint8Array(await res.arrayBuffer());
@@ -515,7 +549,7 @@ async function pullAndStoreSignedPdf(env: Env, _row: IntegrationRow, dsEnvelopeI
       customMetadata: { inner_content_type: 'application/pdf', encrypted: '1' },
     });
   }
-  return { key, sha256: sha };
+  return { key, sha256: sha, plaintext: buf };
 }
 
 /**
@@ -573,6 +607,12 @@ async function reconcileEnvelope(env: Env, row: IntegrationRow, dsEnvelopeId: st
   if (newStatus === 'completed') {
     const stored = await pullAndStoreSignedPdf(env, row, dsEnvelopeId, local.envelope_uuid);
     signedKey = stored?.key || null;
+    // D711 — one `docusign_signed` row per returned file (not `stored.sha256`,
+    // a latin1 string re-encoded as UTF-8).
+    if (stored) {
+      try { await recordDocusignSignedFile(env, local.id, stored.key, stored.plaintext); }
+      catch { console.warn(JSON.stringify({ event: 'legal_file_row_failed', code: 'docusign_signed' })); }
+    }
     if (!signedKey) {
       // PDF retrieval failed — DO NOT finalize the envelope status,
       // otherwise the cron sweep (which only polls sent /
