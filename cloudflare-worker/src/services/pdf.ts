@@ -479,6 +479,32 @@ async function drawParty(cur: Cursor, party: PaperParty, doc: PDFDocument) {
   cur.gap(16);
 }
 
+async function drawParts(cur: Cursor, model: PaperModel, doc: PDFDocument, articlePages: Map<string, number>) {
+  // The first part starts on the body's first page; `drawStructureList`
+  // opens its own page and leaves a fresh one after it.
+  let fresh = true;
+  for (const pt of (model.parts || []).filter((x) => x.n > 1)) {
+    if (!fresh) cur.newPage();
+    fresh = false;
+    articlePages.set(pt.id, cur.pages.length);
+    cur.paragraph(`PART ${pt.n}`, { size: 9, font: 'bold', color: VIOLET, lineHeight: 14 });
+    cur.paragraph(pt.title.toUpperCase(), { size: TITLE_FONT_SIZE, font: 'bold', align: 'center', color: INK_STRONG, lineHeight: TITLE_FONT_SIZE + 5 });
+    cur.gap(8);
+    drawBlocks(cur, pt.blocks, articlePages);
+    if (pt.execution && pt.execution.parties.length) {
+      cur.gap(10);
+      if (pt.execution.recital) cur.paragraph(pt.execution.recital, { size: 8.5, font: 'italic', color: MUTED, lineHeight: 12 });
+      cur.gap(14);
+      for (const party of pt.execution.parties) await drawParty(cur, party, doc);
+    }
+    // D717 — the Structure of the Fund page follows Part 2, as on the paper.
+    if (pt.n === 2 && model.structure) {
+      drawStructureList(cur, model.structure.lines);
+      fresh = true;
+    }
+  }
+}
+
 function drawCertificate(cur: Cursor, model: PaperModel) {
   const c = model.certificate!;
   cur.newPage();
@@ -532,17 +558,24 @@ export async function renderPaperFallbackPdf(model: PaperModel, opts: FallbackOp
   const articlePages = new Map<string, number>();
 
   drawState(cur, model);
-  cur.paragraph(model.title.toUpperCase(), { size: TITLE_FONT_SIZE, font: 'bold', align: 'center', color: INK_STRONG, lineHeight: TITLE_FONT_SIZE + 5 });
-  cur.gap(8);
-  if (model.preamble) { cur.paragraph(model.preamble); cur.gap(10); }
-  if (model.structure) {
-    // D717 — the Structure of the Fund page, as its list (no arrow character).
-    const at = Math.min(model.structure.at, model.blocks.length);
-    drawBlocks(cur, model.blocks.slice(0, at), articlePages);
-    drawStructureList(cur, model.structure.lines);
-    drawBlocks(cur, model.blocks.slice(at), articlePages);
+  if (model.parts) {
+    // D759 (#1858) — a composite paper (the Subscription Booklet): each part
+    // after the cover on its own page, with its own block, so a signed copy
+    // drawn here carries every part it was signed over.
+    await drawParts(cur, model, bodyDoc, articlePages);
   } else {
-    drawBlocks(cur, model.blocks, articlePages);
+    cur.paragraph(model.title.toUpperCase(), { size: TITLE_FONT_SIZE, font: 'bold', align: 'center', color: INK_STRONG, lineHeight: TITLE_FONT_SIZE + 5 });
+    cur.gap(8);
+    if (model.preamble) { cur.paragraph(model.preamble); cur.gap(10); }
+    if (model.structure) {
+      // D717 — the Structure of the Fund page, as its list (no arrow character).
+      const at = Math.min(model.structure.at, model.blocks.length);
+      drawBlocks(cur, model.blocks.slice(0, at), articlePages);
+      drawStructureList(cur, model.structure.lines);
+      drawBlocks(cur, model.blocks.slice(at), articlePages);
+    } else {
+      drawBlocks(cur, model.blocks, articlePages);
+    }
   }
   if (model.execution) await drawExecution(cur, model, bodyDoc);
   if (model.certificate) drawCertificate(cur, model);
