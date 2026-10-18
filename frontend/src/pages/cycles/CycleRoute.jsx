@@ -62,11 +62,10 @@ import { moduleToolLinks } from './founderToolNavigation.js';
  * sentence to the bands in its own entry.
  *
  * THE MODULES' WORKING TOOLS STAY WHERE THEY ARE. D696 draws records with
- * D695's Add/Edit forms. Validate's curation stays in its existing tools until
- * its own replacement lands (#1659, #1666). D661 already gives a
- * module page a link to "the module's own tool where it has one, rather than
- * a second copy of it", so each module links to the zone page that edits it
- * today. Each Add has an address, `/<cycle>/<slug>/new` (`?form=<key>` for a
+ * D695's Add/Edit forms. D661 gives a module page a link to "the module's own
+ * tool where it has one, rather than a second copy of it". Validate's zone
+ * pages are gone (D704): its curation lives on its module pages and records,
+ * and only Market intelligence still links a tool of its own. Each Add has an address, `/<cycle>/<slug>/new` (`?form=<key>` for a
  * later one): its form is a dialog over the module page, or the page itself
  * on a phone (D695). Add is offered only where it opens a form; a button with
  * nothing behind it is not drawn.
@@ -83,9 +82,7 @@ const CYCLE_DEFS = {
     Mount: ValidateMount,
     action: (q, open) => ({ label: 'Record a session', href: `/validate/record${q}`, onOpen: open }),
     tools: toFnMap({
-      'problem-discovery': (q) => ({ label: 'Curate pain themes: merge, rename, judge severity', href: `/validate/pain-map${q}` }),
       'market-intelligence': () => ({ label: 'Open the competitor tracker', href: '/build/competitors' }),
-      experiments: (q) => ({ label: 'Open the hypothesis board and the verdict', href: `/validate/hypotheses${q}` }),
     }),
     add: toFnMap({
       'customer-research': (q, open) => ({ text: 'Record a session', href: `/validate/record${q}`, onOpen: open }),

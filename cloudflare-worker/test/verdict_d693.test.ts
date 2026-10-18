@@ -435,17 +435,14 @@ test('5: each stored item keeps its label, strength, direction and date after it
 
 test('6: a partner, an advisor, an investor and another venture\'s founder are refused every decision route', async () => {
   const db = fixture();
-  await oldPost(db, FOUNDER, { decision: 'proceed', reasoning: 'Carriers pay for it' });
+  // D704 (#1666) removed the old GET and POST; test 14 holds their 404.
+  await post(db, FOUNDER, { decision: 'proceed', for: 'venture', reasoning: 'Carriers pay for it' });
   for (const who of [PARTNER, ADVISOR, INVESTOR, OTHER]) {
     const p = await post(db, who, { decision: 'stop', for: 'venture' });
     assert.equal(p.status, 403, `${roleOf[who]} POST /decisions`);
-    const g = await oldGet(db, who);
-    assert.equal(g.status, 403, `${roleOf[who]} old GET`);
-    assert.equal(g.text.includes('Carriers pay for it'), false);
     const c = await summaryCsv(db, who);
     assert.equal(c.status, 403, `${roleOf[who]} summary CSV`);
-    const o = await oldPost(db, who, { decision: 'stop' });
-    assert.equal(o.status, 403, `${roleOf[who]} old POST`);
+    assert.equal(c.text.includes('Carriers pay for it'), false);
   }
   assert.equal(rows(db).length, 1, 'no refused caller wrote a decision');
 });
@@ -457,7 +454,6 @@ test('6: the founder, an admitted Lab member on their own venture and an admin r
     assert.equal(p.status, 201, `${roleOf[who]} POST ${JSON.stringify(p.body)}`);
     assert.equal(p.body.state, 'withheld');
     assert.deepEqual(Object.keys(p.body).sort(), ['id', 'pivot_hypothesis_id', 'state', 'supersedes_id']);
-    assert.equal((await oldGet(db, who, pid)).status, 200, `${roleOf[who]} old GET`);
     assert.equal((await summaryCsv(db, who, pid)).status, 200, `${roleOf[who]} CSV`);
   }
 });
@@ -526,20 +522,16 @@ test('7: a decision logs one validate.verdict row; a superseding one also logs o
 // 9. Failures · 10. One reader · 11. The old POST
 // ---------------------------------------------------------------------------
 
-test('9: a failed decisions read answers 503 on the old GET and the summary CSV, never an empty history', async () => {
+test('9: a failed decisions read answers 503 on the summary CSV, never a summary with no decision', async () => {
   const db = fixture();
-  await oldPost(db, FOUNDER, { decision: 'proceed' });
+  await post(db, FOUNDER, { decision: 'proceed', for: 'venture' });
   db.exec('ALTER TABLE validation_decisions RENAME TO validation_decisions_unreadable');
-  const g = await oldGet(db, FOUNDER);
-  assert.equal(g.status, 503);
-  assert.equal(g.body.detail, 'The decision could not be read.');
-  assert.equal('history' in g.body, false);
   const c = await summaryCsv(db, FOUNDER);
   assert.equal(c.status, 503);
   assert.equal(c.body.detail, 'The decision could not be read.');
 });
 
-test('10: the old GET and the summary CSV read the venture\'s current given decision, never a hypothesis\'s or a withheld one', async () => {
+test('10: the summary CSV reads the venture\'s current given decision, never a hypothesis\'s or a withheld one', async () => {
   const db = fixture();
   const env = envOf(db);
   const h2 = hypothesis(db, P, 'H2');
@@ -548,12 +540,10 @@ test('10: the old GET and the summary CSV read the venture\'s current given deci
   await recordDecision(env, userOf(FOUNDER), { id: P }, { decision: 'stop', for: h2, reasoning: 'H2 call', evidence: keys(items(5)) }, { evidenceSource: ev });
   await recordDecision(env, userOf(FOUNDER), { id: P }, { decision: 'pivot', for: 'venture', reasoning: 'Withheld call' }, { evidenceSource: ev });
 
-  const g = await oldGet(db, FOUNDER);
-  assert.equal(g.status, 200);
-  assert.equal(g.body.current.id, venture.id);
-  assert.equal(g.body.current.decision, 'proceed');
-  assert.deepEqual(g.body.history.map((r: any) => [r.decision, r.state]), [['pivot', 'withheld'], ['proceed', 'given']]);
-  assert.equal(g.body.history.some((r: any) => r.hypothesis_id !== null), false, 'history is the venture\'s own rows');
+  assert.equal((await currentDecision(env, P, 'venture'))?.id, venture.id);
+  const history = await decisionsFor(env, P, { scope: 'venture', sort: 'newest', pageSize: 200 });
+  assert.deepEqual(history.rows.map((r: any) => [r.decision, r.state]), [['pivot', 'withheld'], ['proceed', 'given']]);
+  assert.equal(history.rows.some((r: any) => r.hypothesis_id !== null), false, 'the venture scope is the venture\'s own rows');
 
   const c = await summaryCsv(db, FOUNDER);
   assert.equal(c.status, 200);
@@ -590,23 +580,18 @@ test('10: no file under cloudflare-worker/src but services/verdict.ts names vali
   assert.deepEqual(offenders, []);
 });
 
-test('11: the old POST records a given venture decision that supersedes only the venture\'s current given one', async () => {
+test('14: the old decision routes answer 404 for the venture\'s founder; the Verdict module and its writer still answer', async () => {
+  // D704 (#1666) removed `GET` and `POST /api/founder/validate/decision/:id`
+  // (D-f). Verdict answers instead: #1704's module read and #1702's writer.
   const db = fixture();
-  const env = envOf(db);
-  const h2 = hypothesis(db, P, 'H2');
-  const hd = await recordDecision(env, userOf(FOUNDER), { id: P }, { decision: 'proceed', for: h2, evidence: keys(items(5)) }, { evidenceSource: fixed(items(5)) });
-  const a = await oldPost(db, FOUNDER, { decision: 'proceed', reasoning: 'ship it' });
-  assert.equal(a.status, 201, JSON.stringify(a.body));
-  assert.deepEqual(Object.keys(a.body).sort(), ['decision', 'id']);
-  const b = await oldPost(db, FOUNDER, { decision: 'pivot', reasoning: 'narrow it' });
-  assert.equal(b.status, 201);
-  const second = rows(db).find((r) => r.id === b.body.id);
-  assert.equal(second.state, 'given');
-  assert.equal(second.hypothesis_id, null);
-  assert.equal(second.supersedes_id, a.body.id);
-  assert.equal((await currentDecision(env, P, h2))?.id, hd.id, 'H2\'s decision is still current');
-  assert.equal((await currentDecision(env, P, 'venture'))?.id, b.body.id);
-  assert.equal((await oldPost(db, FOUNDER, { decision: 'maybe' })).status, 400);
+  const g = await oldGet(db, FOUNDER);
+  assert.equal(g.status, 404);
+  const o = await oldPost(db, FOUNDER, { decision: 'proceed', reasoning: 'ship it' });
+  assert.equal(o.status, 404);
+  assert.equal(rows(db).length, 0, 'the old POST wrote nothing');
+  const p = await post(db, FOUNDER, { decision: 'proceed', for: 'venture', reasoning: 'ship it' });
+  assert.equal(p.status, 201, JSON.stringify(p.body));
+  assert.equal(rows(db).length, 1, 'the writer records the founder\'s decision');
 });
 
 // ---------------------------------------------------------------------------

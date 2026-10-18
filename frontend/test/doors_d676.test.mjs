@@ -39,6 +39,7 @@ const { FOUNDER_TIERS, INVESTOR_TIERS } = await import('../src/data/pricing.js')
 const { PRODUCT_PAGES } = await import('../src/data/productPages.js');
 const { DOOR_LINKS } = await import('../src/lib/siteLinks.js');
 const { bucketsFor } = await import('../src/workspaces/shellConfig.js');
+const { MODULES } = await import('../src/pages/cycles/modules.js');
 
 const render = (key) => renderToStaticMarkup(
   React.createElement(MemoryRouter, { initialEntries: [DOORS[key].path] }, React.createElement(DoorPage, { door: key })),
@@ -54,6 +55,16 @@ function routeBlock(path) {
   const rest = APP.slice(m.index + m[0].length);
   const end = rest.search(/<Route\s/);
   return end === -1 ? rest : rest.slice(0, end);
+}
+/**
+ * A live item's route: its own line, or, for a cycle's module page
+ * (`/<cycle>/<module slug>`), the cycle's `/<cycle>/:slug` line (D704 decision 5).
+ */
+function liveRoute(path) {
+  const own = routeBlock(path);
+  if (own) return own;
+  const m = /^\/([a-z]+)\/([a-z-]+)$/.exec(path);
+  return m && MODULES[m[1]]?.some((x) => x.slug === m[2]) ? routeBlock(`/${m[1]}/:slug`) : null;
 }
 const tier = (list, id) => list.find((t) => t.id === id);
 
@@ -119,7 +130,7 @@ test('every live item names a route App.jsx serves, and none is a redirect', () 
     assert.ok(DOORS[k].live.length > 0, `${k} lists what is live`);
     for (const item of DOORS[k].live) {
       assert.equal(typeof item.route, 'string', `${k}: "${item.t}" names its route`);
-      const block = routeBlock(item.route);
+      const block = liveRoute(item.route);
       assert.ok(block, `${k}: "${item.t}" claims ${item.route}, which App.jsx does not route`);
       assert.doesNotMatch(block, /^\s*element=\{\s*<Navigate\b/, `${k}: "${item.t}" points at ${item.route}, which only redirects`);
       const row = new RegExp(`data-route="${esc(item.route)}"><span>${esc(attr(item.t))}</span><span class="ax-door-pill">Live</span>`);
@@ -240,12 +251,16 @@ test('the founders door walks the whole founder workspace (owner, 2026-10-13)', 
   for (const b of bucketsFor('founder')) assert.ok(keys.includes(b.label), `the founders door has a ${b.label} chapter`);
   assert.ok(keys.includes('Idea to company') && keys.includes('Already a company'), 'both ways in: the Lab, and an existing company');
   // A chapter that lists a bucket's screens lists every one, by the name the
-  // founder's menu gives it (Network draws its introduction flow instead).
+  // founder's menu gives it (Network draws its introduction flow instead). A
+  // cycle bucket with no zones (Validate, since D704) lists its modules.
   for (const b of bucketsFor('founder')) {
     const c = DOORS.founders.chapters.find((ch) => ch.k === b.label);
     if (!c.list) continue;
-    assert.deepEqual(c.list, b.zones.map((z) => z.label), `${b.label} lists its screens as the menu names them`);
-    for (const z of b.zones) assert.ok(PAGES.founders.includes(`<span class="ax-door-dot" aria-hidden="true"></span>${attr(z.label)}</li>`), `${b.label} › ${z.label} is drawn`);
+    const cycle = b.prefix.slice(1);
+    const screens = b.zones.length ? b.zones.map((z) => z.label) : (MODULES[cycle] ?? []).map((m) => m.name);
+    assert.ok(screens.length > 0, `${b.label} has screens to list`);
+    assert.deepEqual(c.list, screens, `${b.label} lists its screens as the menu names them`);
+    for (const label of screens) assert.ok(PAGES.founders.includes(`<span class="ax-door-dot" aria-hidden="true"></span>${attr(label)}</li>`), `${b.label} › ${label} is drawn`);
   }
   const listed = DOORS.founders.chapters.filter((c) => bucketsFor('founder').some((b) => b.label === c.k) && c.list).map((c) => c.k);
   assert.deepEqual(listed, ['Validate', 'Build', 'Raise', 'Grow', 'Research'], 'the four cycles and Research list their screens');

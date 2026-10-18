@@ -319,11 +319,9 @@ test('every live history path is a static route in App.jsx or a module of its cy
 
 // ── Validate keeps the venture ───────────────────────────────────────────────
 
-test('the Validate tools read the venture from the address, and their links keep it', () => {
-  const ws = read('frontend/src/workspaces/founder/FounderValidateWorkspace.jsx');
-  assert.match(ws, /const asked = Number\(searchParams\.get\('project_id'\) \|\| searchParams\.get\('project'\)\) \|\| null;/);
-  assert.match(ws, /if \(asked\) \{ setProjectId\(asked\); setReady\(true\); return undefined; \}/, 'the first venture only when none is asked for');
-  assert.equal((ws.match(/to=\{`\/validate\/interviews\$\{keep\}`\}/g) || []).length, 2);
+test('the zone links keep the venture from the address', () => {
+  // D704: the Validate tools' own venture reads went with FounderValidateWorkspace;
+  // its pages redirect with the query kept (validate_pages_removed_d704 test 1).
   assert.match(read('frontend/src/workspaces/ZoneNav.jsx'), /to=\{`\$\{zonePath\(bucket, zone\)\}\$\{projectSearch\(location\.search\)\}`\}/);
 });
 

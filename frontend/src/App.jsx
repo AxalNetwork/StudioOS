@@ -81,7 +81,6 @@ const ScoringPage = lazy(() => import('./pages/ScoringPage'));
 // lives in src/workspaces/shellConfig.js — the sidebar, the zone nav and a
 // guard test all read that one file, so a row can never advertise a door the
 // router does not open.
-const FounderValidateWorkspace = lazy(() => import('./workspaces/founder/FounderValidateWorkspace'));
 // D660 (#1473) — one interview session: record, live transcript, review.
 const InterviewSessionPage = lazy(() => import('./pages/founder/InterviewSessionPage'));
 // D684 (#1578) — customer chats from business Telegram and WhatsApp, waiting for an interview.
@@ -2533,10 +2532,9 @@ function AppInner() {
           D661 (#1474): /validate is the cycle overview from #1487's read, and
           /validate/<module> its module pages. D704 (#1666, decision 2): the
           root no longer branches, so every role the guard admits, with or
-          without `?mode=workspace`, gets the cycle page. Interviews redirects
-          to Customer research below (PR 2b); Pain map and Hypotheses still
-          render until #1666's closing PR redirects them too
-          (`ValidateZoneRedirect`). */}
+          without `?mode=workspace`, gets the cycle page. The Interviews, Pain
+          map and Hypotheses pages are gone: each address redirects to its
+          module below (`ValidateZoneRedirect`). */}
       <Route path="/validate" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" />)} />
       {/* D685 §5.4: Record a session is the Validate page with the setup lightbox open over it, deep-linkable; closing goes back. */}
       <Route path="/validate/record" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" lightbox />)} />
@@ -2562,8 +2560,10 @@ function AppInner() {
       <Route path="/validate/experiments-and-evidence/:id" element={<ParamRedirect to="/validate/experiments/:id" />} />
       <Route path="/validate/demand-and-urgency-signals" element={<ParamRedirect to="/validate/demand-signals" />} />
       <Route path="/validate/demand-and-urgency-signals/:id" element={<ParamRedirect to="/validate/demand-signals/:id" />} />
-      <Route path="/validate/pain-map" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
-      <Route path="/validate/hypotheses" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
+      {/* D704 (#1666): the Pain map and Hypotheses pages are Problem discovery
+          and Experiments and evidence, the query and the hash kept (decision 1). */}
+      <Route path="/validate/pain-map" element={guard(labRoles(['admin', 'founder']), <ValidateZoneRedirect zone="pain-map" />)} />
+      <Route path="/validate/hypotheses" element={guard(labRoles(['admin', 'founder']), <ValidateZoneRedirect zone="hypotheses" />)} />
       {/* D693 decision 12 (#1704): a static line, so the founder zone keeps its roles; it renders the Verdict module. */}
       <Route path="/validate/verdict" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" slug="verdict" />)} />
       <Route path="/validate/session/:id" element={guard(labRoles(['admin', 'founder']), <InterviewSessionPage />)} />

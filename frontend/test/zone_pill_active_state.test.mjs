@@ -205,12 +205,12 @@ test('AdvisorWorkspaceShell no longer marks a nav item current by index', () => 
     'the advisory tab strip still derives active from the pathname');
 });
 
-test('the two route modules that resolve a zone carry the root opt-out', () => {
+test('the route modules that resolve a zone carry the root opt-out', () => {
   // `zoneForPath` answers a bucket ROOT with its first zone — right on a zone
-  // route, wrong on a root. Four route modules opt out with `isRoot`; these two
+  // route, wrong on a root. Four route modules opt out with `isRoot`; these
   // did not, and were safe only because nothing mounts them on a root today.
+  // (FounderValidateWorkspace was the other one; D704 deleted it.)
   for (const file of [
-    'frontend/src/workspaces/founder/FounderValidateWorkspace.jsx',
     'frontend/src/workspaces/investor/InvestorDealsRoutes.jsx',
   ]) {
     const src = codeOnly(read(file));

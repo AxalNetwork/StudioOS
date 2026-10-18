@@ -35,7 +35,8 @@ import {
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const PAGE = codeOnly(raw('frontend/src/pages/SpinoutLabDiscoveryPage.jsx'));
 const MODAL = codeOnly(raw('frontend/src/components/discovery/LogInterviewModal.jsx'));
-const VALIDATE = codeOnly(raw('frontend/src/workspaces/founder/FounderValidateWorkspace.jsx'));
+// D704: Validate mounts LogInterviewModal in #1659's Customer research section now.
+const VALIDATE = codeOnly(raw('frontend/src/pages/cycles/ValidateSections.jsx'));
 const PAIN_GROUPS = raw('cloudflare-worker/src/services/painGroups.ts');
 const PROGRESS = raw('cloudflare-worker/src/routes/progress.ts');
 const CANVAS = raw('design/canvases/out-of-scope/Customer Discovery.dc.html');

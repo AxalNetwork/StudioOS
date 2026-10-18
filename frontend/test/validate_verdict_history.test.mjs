@@ -145,28 +145,10 @@ test('`historyReaches` is what lets the page say when the record starts', () => 
   assert.equal(historyReaches('2026-08-20 09:00:00', startOfMonth(NOW)), true);
 });
 
-test('all four verdict chips and all four hypothesis chips are live', () => {
-  // COUNTING THE CHIPS IS NOT ENOUGH, and that is worth stating because it was
-  // the first thing this test did. `zoneFilterBuilder` returns a chip for an
-  // `unbuilt` entry too — `disabled: true`, with the reason as a hover title
-  // (#180 changed it from dropping the entry entirely). So a refusing chip is
-  // still IN the array, and a length assertion passes straight over it. What
-  // separates live from refusing is `disabled` and `onSelect`.
-  const verdict = founderZoneFilters('validate/verdict', { value: 'current', onChange() {} });
-  assert.deepEqual(verdict.map((f) => f.label),
-    ['Current', 'As of last week', 'Changed this month', 'Retired claims']);
-  for (const f of verdict) {
-    assert.ok(!f.disabled, `the verdict chip "${f.label}" is still refusing`);
-    assert.equal(typeof f.onSelect, 'function',
-      `the verdict chip "${f.label}" cannot be selected, so its view is unreachable`);
-  }
-
-  const hyp = founderZoneFilters('validate/hypotheses', { value: 'all', onChange() {} });
-  const moved = hyp.find((f) => f.label === 'Recently moved');
-  assert.ok(moved, 'the Recently moved chip is gone');
-  assert.ok(!moved.disabled, 'the Recently moved chip is still refusing');
-  assert.equal(typeof moved.onSelect, 'function');
-});
+// D704: 'all four verdict chips and all four hypothesis chips are live' read
+// the `validate/verdict` and `validate/hypotheses` zone filters, which went with
+// their zones. The three views now sit on Experiments and evidence's
+// Hypotheses table, which validate_sections_d697 test 3 pins.
 
 test('NO_VERDICT_SNAPSHOT is deleted, not reworded', () => {
   // THE ASSERTION THAT OUTLIVES THE OTHERS, and the file's own established
@@ -181,21 +163,16 @@ test('NO_VERDICT_SNAPSHOT is deleted, not reworded', () => {
     'a chip is refusing on a reason whose store now exists');
 });
 
-test('the zones read the history through the shared rules, not their own', () => {
-  // One store, one set of predicates. The verdict zone and the hypothesis board
-  // ask different questions of the same rows, and a second copy of "what was
-  // this on Tuesday" in either file is how the two start disagreeing about the
-  // same claim.
-  const ws = src('frontend/src/workspaces/founder/FounderValidateWorkspace.jsx');
-  assert.match(ws, /from '\.\.\/\.\.\/lib\/verdictHistory'/);
-  for (const fn of ['verdictAsOf', 'verdictChangedSince', 'laneChangedSince', 'historyReaches']) {
-    assert.ok(ws.includes(fn), `${fn} is no longer used — the zone has grown its own rule`);
-  }
-  assert.doesNotMatch(ws, /new Date\(String\([^)]*observed_at/,
-    'the zone parses an observation itself; `parseObserved` owns the space-vs-T trap');
-  // And the seam is on screen in both zones, not just in the data.
-  assert.match(ws, /data-testid="text-summary-history-since"/);
-  assert.match(ws, /data-testid="text-hypotheses-moved-since"/);
+test('the Hypotheses section reads the history through the shared rules, not its own', () => {
+  // One store, one set of predicates. D704 deleted the verdict zone and the
+  // hypothesis board; #1659's section is where the views draw now, and a second
+  // copy of "what was this on Tuesday" there is how it would start disagreeing
+  // with the Worker's read about the same claim.
+  const sections = src('frontend/src/pages/cycles/ValidateSections.jsx');
+  assert.match(sections, /from '\.\.\/\.\.\/lib\/verdictHistory'/);
+  assert.ok(sections.includes('historyReaches'), 'historyReaches is no longer used — the section has grown its own rule');
+  assert.doesNotMatch(sections, /new Date\(String\([^)]*observed_at/,
+    'the section parses an observation itself; `parseObserved` owns the space-vs-T trap');
 });
 
 test('the board carries the history and says when the record starts', () => {

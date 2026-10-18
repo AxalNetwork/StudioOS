@@ -78,28 +78,11 @@ async function call(db: any, who: number, role: string, method: string, path: st
   return { status: res.status, body: await res.json().catch(() => null) as any };
 }
 
-test('a second decision keeps the first, and a partner cannot read either', async () => {
-  const db = fresh();
-  const first = await call(db, FOUNDER, 'founder', 'POST', `/decision/${PROJECT}`, { decision: 'proceed', reasoning: 'ship it' });
-  assert.equal(first.status, 201, JSON.stringify(first.body));
-  const second = await call(db, FOUNDER, 'founder', 'POST', `/decision/${PROJECT}`, { decision: 'pivot', reasoning: 'narrow it' });
-  assert.equal(second.status, 201, JSON.stringify(second.body));
-
-  const got = await call(db, FOUNDER, 'founder', 'GET', `/decision/${PROJECT}`);
-  assert.equal(got.status, 200, JSON.stringify(got.body));
-  assert.equal(got.body.current.decision, 'pivot');
-  assert.equal(got.body.history.length, 2);
-  const kept = got.body.history.find((row: any) => row.decision === 'proceed');
-  assert.ok(kept?.superseded_at, 'the first decision was overwritten');
-  const logged = db.prepare(`SELECT action, user_id FROM activity_logs WHERE action = 'validation_decision_recorded'`).all();
-  assert.equal(logged.length, 2);
-  assert.equal((logged[0] as any).user_id, FOUNDER);
-
-  const partner = await call(db, PARTNER, 'partner', 'GET', `/decision/${PROJECT}`);
-  assert.equal(partner.status, 403);
-  assert.equal(JSON.stringify(partner.body).includes('ship it'), false);
-  assert.equal(JSON.stringify(partner.body).includes('narrow it'), false);
-});
+// D704 (#1666): 'a second decision keeps the first, and a partner cannot read
+// either' drove the old `GET` and `POST /decision/:id`, which are removed. The
+// same facts are pinned on the Verdict writer and module: a later decision keeps
+// the earlier one (verdict_d693 test 3), a partner is refused (test 6), each is
+// logged once (test 7), and the old routes answer 404 (test 14).
 
 test('interview evidence is stored as sent, and Not recorded stays null', async () => {
   const db = fresh();
