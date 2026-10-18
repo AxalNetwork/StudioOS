@@ -51,10 +51,15 @@ export function formatView(row: { slug: string; category?: string | null; doc_ki
     format_source: eff.source, format_fixed: formatFixed(row.slug) };
 }
 
-/** The editor's choices: the storable kinds, the parties, which kinds are partyless, and the slug's own pair. */
+/**
+ * The editor's choices: the storable kinds, the parties, which kinds are
+ * partyless, the slug's own pair, and `entity`, the entity the slug names when
+ * the chosen kind takes a party (D717 #1852: a partyless slug's `derived.party`
+ * is `none`, which says nothing about the party an agreement kind would print).
+ */
 export function formatOptions(slug: string, category?: string | null) {
   return { kinds: [...STORABLE_KINDS], parties: [...TEMPLATE_PARTIES], partyless_kinds: [...PARTYLESS_KINDS],
-    derived: derivedFormat(slug, category) };
+    derived: derivedFormat(slug, category), entity: axalEntityKeyForDoc(slug, category) };
 }
 
 export type TemplateFormat = { kind: DocumentKind; party: TemplateParty };
