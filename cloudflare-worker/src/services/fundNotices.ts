@@ -223,6 +223,12 @@ async function proseFor(env: Env, slug: string, ctx: Record<string, string>):
   };
 }
 
+/** D758: why a prose notice cannot issue while its library row has no body, in `proseFor`'s own words; else null. */
+export async function noticeBodyRefusal(env: Env, slug: string): Promise<{ code: string; message: string } | null> {
+  const { refusal } = await proseFor(env, slug, {});
+  return refusal && refusal.code === 'notice_body_missing' ? { code: refusal.code, message: refusal.message } : null;
+}
+
 // ---------------------------------------------------------------- the builders
 
 export interface NoticeRequest {
