@@ -248,18 +248,21 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
   // #1588: never handed over while this tab records another session, which
   // would leave that one's microphone running; the page shows it itself.
   const recordingOther = inFlight && !!liveRefusal(rec, recorder.isCapturing());
-  const handOver = inFlight && !recordingOther;
+  // #1933: a session imported from a chat, an assistant or a call (`submitted_via`)
+  // has nothing to capture, so it never opens the Recording View; the page shows its processing.
+  const imported = inFlight && !!String(data?.session?.submitted_via || '').trim();
+  const handOver = inFlight && !recordingOther && !imported;
   useEffect(() => {
     if (!handOver) return;
     recorder.follow({ session: data.session, interview: location.state?.interview || data.interview || null, processing: data.processing, callLabel: data.call_label ?? null });
     navigate(`/validate/record/live?session=${encodeURIComponent(data.session.id)}`, { replace: true });
   }, [handOver, data, recorder, navigate, location.state]);
-  // Poll while the Worker transcribes.
+  // Poll while the Worker transcribes, or processes an imported session here.
   useEffect(() => {
-    if (data?.session?.status !== 'transcribing') return undefined;
+    if (data?.session?.status !== 'transcribing' && !imported) return undefined;
     const t = setTimeout(() => { load(); }, POLL_MS);
     return () => clearTimeout(t);
-  }, [data, load]);
+  }, [data, imported, load]);
 
   if (data === undefined) return <div className="p-6 text-[13px] text-axal-faint">Reading the session…</div>;
   if (data === null) return <div role="alert" className="p-6 text-[13px] text-red-700">{error}</div>;
@@ -364,13 +367,13 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
             )}
           </section>
         )}
-        {recordingOther && (
+        {(recordingOther || imported) && (
           <section role="status" className="rounded-2xl border border-axal-hairline p-4 text-[13px] dark:border-gray-800" data-testid="processing-here">
             <p className="m-0 font-semibold">
               {data.processing.stage === 'failed' ? 'Processing stopped' : `Processing · ${STAGES[STAGE_KEYS.indexOf(data.processing.stage)] || 'under way'}`}
             </p>
             {data.processing.error && <p className="m-0 mt-1 text-amber-800 dark:text-amber-300">{data.processing.error}</p>}
-            <p className="m-0 mt-1 text-axal-muted dark:text-gray-400">You are recording another session. Its processing view opens here once you stop that one.</p>
+            {recordingOther && <p className="m-0 mt-1 text-axal-muted dark:text-gray-400">You are recording another session. Its processing view opens here once you stop that one.</p>}
           </section>
         )}
         {session.status === 'transcribing' && <p className="text-[13px] text-axal-faint" data-testid="session-transcribing">Transcribing…</p>}

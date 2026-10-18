@@ -460,6 +460,102 @@ test('ignore and stop ignoring', async () => {
   assert.equal(html(h(MessageList, { messages: [], contact: 'x' })), '');
 });
 
+// #1933: a voice note that was not transcribed says why, in the Worker's sentence, with Retry when the Worker allows it.
+const SENT = 'Axal could not transcribe this voice note: your AI budget was spent when it arrived.';
+const voiceMsg = (uid, failure) => ({ uid, side: 'contact', kind: 'voice', text: null, awaiting_transcription: true, sent_at: '2026-10-13T08:59:00Z', transcription_failure: failure });
+
+test('#1933 a voice note that was not transcribed shows the Worker\'s sentence as sent, or the fallback, never the code', () => {
+  const t = text(h(MessageList, { messages: [
+    voiceMsg('v1', { reason: 'budget_spent', sentence: SENT, retry: null }),
+    voiceMsg('v2', { reason: 'some_new_reason_x', sentence: '', retry: null }),
+    voiceMsg('v3', { reason: 'expired', retry: null }),
+  ], contact: 'Ada', threadUid: 'th1' }));
+  assert.match(t, new RegExp(`Ada · Voice note\\s*${escapeRe(SENT)}`));
+  assert.equal(t.split('This voice note could not be transcribed.').length - 1, 2, 'both notes without a sentence take the fallback');
+  assert.doesNotMatch(t, /budget_spent|some_new_reason_x|expired|could not be read|transcribed when you add/);
+  assert.doesNotMatch(t, /Retry|Try again/, 'retry null: no action');
+});
+
+test('#1933 each retry state draws its own action', () => {
+  const one = (retry) => {
+    const markup = html(h(MessageList, { messages: [voiceMsg('v1', { reason: 'r', sentence: SENT, retry })], contact: 'Ada', threadUid: 'th1' }));
+    return { markup, t: renderedText(markup) };
+  };
+  const available = one('available');
+  assert.match(available.markup, /data-testid="button-voice-retry-v1"[^>]*>Retry</);
+  const assign = one('after_assign');
+  assert.match(assign.t, /Add this chat to an interview to try again\./);
+  assert.doesNotMatch(assign.markup, /button-voice-retry/);
+  const budget = one('after_budget');
+  assert.match(budget.t, /Try again when your AI allowance resets, or after adding tokens\. See usage/);
+  assert.match(budget.markup, /data-testid="link-voice-usage-v1" href="\/account\/usage"/);
+  assert.doesNotMatch(budget.markup, /button-voice-retry/);
+  const unknown = one('unknown');
+  assert.match(unknown.t, /Try again later\./);
+  assert.doesNotMatch(unknown.markup, /button-voice-retry/);
+  for (const retry of [null, 'something_else']) {
+    const n = one(retry);
+    assert.doesNotMatch(n.markup, /button-voice-retry|link-voice-usage/);
+    assert.doesNotMatch(n.t, /try again/i);
+  }
+});
+
+test('#1933 Retry calls retryVoice with the thread and the message, says "Trying again…", then reads the thread again', async () => {
+  let reads = 0;
+  const { api, calls } = inboxApi({
+    thread: async () => {
+      reads += 1;
+      // The retry clears the failure (voiceFailures.ts queues it), so the second read has none.
+      return { thread: THREAD, messages: [voiceMsg('v1', reads === 1 ? { reason: 'r', sentence: SENT, retry: 'available' } : null)] };
+    },
+    retryVoice: async (t, m) => { calls.push(['retryVoice', t, m]); return { ok: true, queued: 1 }; },
+  });
+  const m = await mount(h(ChannelsInboxPage, { api, source: SOURCE, now: NOW }));
+  try {
+    await m.flush();
+    await m.click('thread-row-th1');
+    await m.flush();
+    assert.match(m.text(), new RegExp(escapeRe(SENT)));
+    assert.equal(reads, 1);
+    await m.click('button-voice-retry-v1');
+    await m.flush();
+    assert.deepEqual(calls.find((c) => c[0] === 'retryVoice'), ['retryVoice', 'th1', 'v1']);
+    assert.equal(reads, 2, 'the thread is read again');
+    assert.ok(m.byTestId('voice-retrying-v1'));
+    assert.match(m.text(), /Trying again…/);
+    assert.equal(m.byTestId('button-voice-retry-v1'), undefined);
+  } finally { await m.unmount(); }
+});
+
+test('#1933 a 409 voice_not_retryable shows the Worker\'s message, and the thread is not read again', async () => {
+  let reads = 0;
+  const refusal = Object.assign(new Error('This voice note cannot be retried.'), { status: 409, code: 'voice_not_retryable' });
+  const { api } = inboxApi({
+    thread: async () => { reads += 1; return { thread: THREAD, messages: [voiceMsg('v1', { reason: 'r', sentence: SENT, retry: 'available' })] }; },
+    retryVoice: async () => { throw refusal; },
+  });
+  const m = await mount(h(ChannelsInboxPage, { api, source: SOURCE, now: NOW }));
+  try {
+    await m.flush();
+    await m.click('thread-row-th1');
+    await m.flush();
+    await m.click('button-voice-retry-v1');
+    await m.flush();
+    assert.match(m.text(), /This voice note cannot be retried\./);
+    assert.doesNotMatch(m.text(), /Trying again…|voice_not_retryable/);
+    assert.equal(reads, 1);
+    assert.ok(m.byTestId('button-voice-retry-v1'), 'Retry stays');
+  } finally { await m.unmount(); }
+});
+
+test('#1933 retryVoice posts to the Worker\'s retry route, each part encoded', async () => {
+  const src = readFileSync('frontend/src/lib/api/channels.js', 'utf8');
+  assert.match(src, /retryVoice\s+POST\s+\/channels\/threads\/:uid\/voice\/:message\/retry/, 'listed in the header');
+  assert.match(src, /retryVoice: \(threadUid, messageUid\) => request\(`\/channels\/threads\/\$\{enc\(threadUid\)\}\/voice\/\$\{enc\(messageUid\)\}\/retry`, \{\s*method: 'POST'/);
+  const worker = readFileSync('cloudflare-worker/src/routes/channels.ts', 'utf8');
+  assert.match(worker, /channels\.post\('\/threads\/:uid\/voice\/:message\/retry'/);
+});
+
 // ------------------------------------------------------------------ the interview's panels
 
 test('Connect panel: the waiting chats, each assigned to THIS interview in one click', async () => {
