@@ -34,6 +34,8 @@ const out = join(mkdtempSync(join(tmpdir(), 'd239-')), 'worker.mjs');
 await build({
   entryPoints: [new URL('../src/index.ts', import.meta.url).pathname],
   bundle: true, format: 'esm', platform: 'node', outfile: out, logLevel: 'silent',
+  // D711 — the legal paper's faces and mark, as wrangler.toml's `Data` rule bundles them.
+  loader: { '.woff2': 'binary', '.png': 'binary' }, target: 'node22',
   mainFields: ['module', 'main'], conditions: ['workerd', 'worker', 'import'],
   plugins: [{
     name: 'workers-shims',
