@@ -136,3 +136,10 @@ reporting queue: drafts an Admin builds, reads, prepares, returns, rebuilds,
 corrects and exports, and a Super Admin issues. A draft's figures come only
 from `read` and `exportCsv`, which the Worker records before it answers; the
 list carries none.
+
+D714 (#1779): `fundAdmin.js` reads the act table (`/api/fund-admin/access`) and
+a distribution's preview (`POST /api/funds/:id/distributions/preview`), which
+writes nothing. `fundFees.js` calls `/api/fund-fees/:fundId` (D709, #1774): the
+fee state, terms and their confirmation, admissions, net invested, offsets, a
+period's preview, issue and funding call, and one LP's statement. The Worker
+decides each act: confirm and issue are the Super Admin's.
