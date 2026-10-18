@@ -23,7 +23,7 @@ import { reviewPath } from '../../lib/activeRecording';
 import { useActiveRecording } from '../../contexts/ActiveRecordingContext';
 import CreateStartupForm from '../../components/CreateStartupForm';
 import CycleOverview, { CycleHeader } from './CycleOverview';
-import RecordView from './RecordView';
+import RecordView, { RecordPhoneProvider } from './RecordView';
 import InterviewRecord from '../founder/InterviewReviewPage';
 import Lightbox, { LightboxBarProvider } from '../../ui/Lightbox';
 import { RECORD_ID } from './cyclePaths';
@@ -83,7 +83,6 @@ const CYCLE_DEFS = {
     action: (q, open) => ({ label: 'Record a session', href: `/validate/record${q}`, onOpen: open }),
     tools: toFnMap({
       'problem-discovery': (q) => ({ label: 'Curate pain themes: merge, rename, judge severity', href: `/validate/pain-map${q}` }),
-      'customer-research': (q) => ({ label: 'Open the interview log: notes, recordings, evidence', href: `/validate/interviews${q}` }),
       'market-intelligence': () => ({ label: 'Open the competitor tracker', href: '/build/competitors' }),
       experiments: (q) => ({ label: 'Open the hypothesis board and the verdict', href: `/validate/hypotheses${q}` }),
     }),
@@ -823,9 +822,19 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
       </div>
     );
   } else if (record) {
+    const recordTitle = recordState.data?.title || moduleName;
     body = <div className="space-y-4" data-testid="cycle-record-page">
-      <CycleHeader cycle={cycle} cards={tabs} active={slug} record moduleName={moduleName}
-        title={recordState.data?.title || moduleName} sub={recordState.data?.sub || ''} search={q} />
+      {/* D703 step 7: below 1024px the record is a pushed page under
+          `CycleBar`, whose Back goes to the module; the loading, refused and
+          unreadable states draw under it too. */}
+      {phone ? (
+        <CycleBar back={{ label: moduleName || name, to: `/${cycle}/${slug}${q}` }} title={recordTitle}
+          sub={recordState.data?.sub || undefined} eadwynLabel={`${name} · ${recordTitle}`} />
+      ) : (
+        <CycleHeader cycle={cycle} cards={tabs} active={slug} record moduleName={moduleName}
+          title={recordTitle} sub={recordState.data?.sub || ''} search={q} />
+      )}
+      <RecordPhoneProvider phone={phone}>
       {recordState.status === 'loading' ? <p className="text-sm text-axal-muted dark:text-gray-400" aria-busy="true">Loading record…</p>
         : recordState.status === 'refused' ? <p className="text-sm text-axal-ink dark:text-gray-100">{recordState.error}</p>
         : recordState.status === 'unreadable' ? <Unreadable what="This record" claim={recordState.error} onRetry={() => setReload(n => n + 1)} />
@@ -833,6 +842,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
           ?? <RecordView record={recordState.data} activity={recordState.activity}
           cycleName={name} moduleName={moduleName} onLink={recordState.link} onForm={recordState.openForm}
           onWrite={recordState.write} onClient={recordState.client} onShowAll={recordState.showAll} />)}
+      </RecordPhoneProvider>
       {recordState.actionError && <p role="alert" className="text-sm text-red-700 dark:text-red-300">{recordState.actionError}</p>}
     </div>;
   } else if (!slug) {

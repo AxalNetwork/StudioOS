@@ -80,7 +80,7 @@ test('the table: unique keys, the decision\'s tiers, and a sentence on every Sup
   assert.deepEqual(tiers, {
     'capital_call.preview': 'admin', 'capital_call.issue': 'super_admin', 'capital_call.receipt': 'admin',
     'distribution.preview': 'admin', 'distribution.execute': 'super_admin', 'distribution.mark_paid': 'admin',
-    'fund_report.draft': 'admin', 'fund_report.issue': 'super_admin', 'fund.gp_of_record': 'super_admin', 'fund.slug_fund_i': 'super_admin', 'fund.economics': 'super_admin', 'fund.write': 'admin',
+    'fund_report.draft': 'admin', 'fund_report.issue': 'super_admin', 'fund_booklet.read': 'admin', 'fund_booklet.withdraw': 'admin', 'fund.gp_of_record': 'super_admin', 'fund.slug_fund_i': 'super_admin', 'fund.economics': 'super_admin', 'fund.write': 'admin',
     'fund_ledger.administrator': 'super_admin', 'fund_ledger.write': 'admin',
     'bank_account.see': 'super_admin', 'bank_account.change': 'super_admin', 'bank_account.reveal': 'super_admin',
     'fee_terms.confirm': 'super_admin', 'fee_period.issue': 'super_admin', 'fee.write': 'admin',
@@ -96,6 +96,7 @@ const ROUTERS: Record<string, { file: string; name: string }> = {
   '/api/capital': { file: 'routes/capital.ts', name: 'capital' },
   '/api/fund-ledger': { file: 'routes/fund_ledger.ts', name: 'r' },
   '/api/fund-reporting': { file: 'routes/fund_reporting.ts', name: 'r' },
+  '/api/fund-booklets': { file: 'routes/fund_booklets.ts', name: 'r' },
   '/api/fund-fees': { file: 'routes/fund_fees.ts', name: 'app' },
   '/api/admin/bank-accounts': { file: 'routes/admin_bank_accounts.ts', name: 'r' },
   '/api/admin/mercury': { file: 'routes/admin_mercury.ts', name: 'r' },

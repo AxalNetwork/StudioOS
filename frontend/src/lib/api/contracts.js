@@ -14,4 +14,8 @@ export const contractsApi = {
   send: body => request('/admin/contracts/envelopes/send', { method: 'POST', body: JSON.stringify(body) }),
   history: uid => request(`/admin/contracts/${encodeURIComponent(uid)}/history`),
   signedPdf: uid => request(`/admin/contracts/${encodeURIComponent(uid)}/signed-pdf`),
+  // D711 (#1776): the envelope's recorded files; the template paper as HTML; its faces.
+  files: uid => request(`/admin/contracts/${encodeURIComponent(uid)}/files`),
+  renderPaper: body => request('/admin/contracts/templates/render', { method: 'POST', body: JSON.stringify(body) }),
+  paperFonts: () => request('/admin/contracts/templates/paper-fonts'),
 };

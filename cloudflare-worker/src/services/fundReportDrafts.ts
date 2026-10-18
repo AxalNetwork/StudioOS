@@ -16,9 +16,11 @@
 import type { Env } from '../types';
 import { logAdminAction } from './adminAudit';
 import {
-  administeredFunds, allocate, fundFigures, isAdministered, isClosed, lastClosedQuarter, packLps,
-  quarterPeriod, reportFigures, statementFigures, type Line, type Period,
+  administeredFunds, allocate, feeStatementFigures, fundFigures, isAdministered, isClosed, lastClosedMonth, lastClosedQuarter,
+  feeQuarterOf, monthPeriod, packLps, quarterLabelOf, quarterPeriod, reportFigures, statementFigures, type Line, type Period,
 } from './fundReportBuild';
+import { cashSummaryFigures, connectedEntities, fundUnmatchedCount } from './fundCashSummary';
+import { statementFor } from './fundFees';
 
 export const DRAFT_KINDS = ['entity_cash_monthly', 'lp_capital_statement', 'lp_quarterly_report', 'mgmt_fee_statement'] as const;
 export type DraftKind = (typeof DRAFT_KINDS)[number];
@@ -111,16 +113,16 @@ export async function readDraft(env: Env, uid: string, actor: { id: number; emai
 // ── Building a pack ──────────────────────────────────────────────────────────
 
 type Insert = {
-  uid: string; kind: DraftKind; audience: string; subject_key: string; fund_id: number; limited_partner_id: number | null;
-  report_period_id: number; period: Period; revision: number; figures_json: string; figures_sha256: string;
-  corrects_draft_id: number | null; built_by: number | null;
+  uid: string; kind: DraftKind; audience: string; subject_key: string; entity_key?: string | null; fund_id: number | null;
+  limited_partner_id: number | null; report_period_id: number | null; period: Period; revision: number;
+  figures_json: string; figures_sha256: string; corrects_draft_id: number | null; built_by: number | null;
 };
 
 const insertStatement = (env: Env, r: Insert) => env.DB.prepare(
-  `INSERT INTO fund_report_drafts (uid, kind, audience, subject_key, fund_id, limited_partner_id, report_period_id,
+  `INSERT INTO fund_report_drafts (uid, kind, audience, subject_key, entity_key, fund_id, limited_partner_id, report_period_id,
      period_label, period_start, period_end, revision, status, figures_json, figures_sha256, corrects_draft_id, built_by)
-   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?)`,
-).bind(r.uid, r.kind, r.audience, r.subject_key, r.fund_id, r.limited_partner_id, r.report_period_id,
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?)`,
+).bind(r.uid, r.kind, r.audience, r.subject_key, r.entity_key ?? null, r.fund_id, r.limited_partner_id, r.report_period_id,
   r.period.label, r.period.start, r.period.end, r.revision, r.figures_json, r.figures_sha256, r.corrects_draft_id, r.built_by);
 
 const builtEvent = (env: Env, uid: string, actor: number | null) => env.DB.prepare(
@@ -148,8 +150,15 @@ async function composePack(
   const lps = await packLps(env, fund.id, p.end);
   if (!lps.length) return null;
   const figures = await fundFigures(env, fund, p);
+  // An issued #1774 fee period gives each LP its own net fee line; a pack LP
+  // with none reads Not recorded. Any other quarter keeps D628's allocation.
+  const feeShares = figures.fee_lines
+    ? new Map<number, Line>(lps.map((lp) => [lp.id, figures.fee_lines!.has(lp.id)
+      ? { cents: figures.fee_lines!.get(lp.id)! }
+      : { cents: null, reason: `Not recorded: no management fee line for this LP in ${p.label}` }]))
+    : allocate(figures.management_fee, lps);
   const allocs = {
-    expenses: allocate(figures.expenses, lps), management_fee: allocate(figures.management_fee, lps),
+    expenses: allocate(figures.expenses, lps), management_fee: feeShares,
     investment_value: allocate(figures.investment_value, lps), cash: allocate(figures.cash, lps),
     liabilities: allocate(figures.liabilities, lps),
   };
@@ -172,7 +181,8 @@ async function composePack(
       report_period_id: periodRowId, period: p, revision, figures_json: json, figures_sha256: await sha256Hex(json),
       corrects_draft_id: corrects.get(subject) ?? null, built_by: actor });
   }
-  const report = reportFigures(fund, p, lps.length, totals, figures, rows.map((r) => ({ uid: r.uid, figures_sha256: r.figures_sha256 })));
+  const report = reportFigures(fund, p, lps.length, totals, figures, rows.map((r) => ({ uid: r.uid, figures_sha256: r.figures_sha256 })),
+    await fundUnmatchedCount(env, fund.id, p));
   const json = JSON.stringify(report);
   const subject = `fund:${fund.id}`;
   rows.push({ uid: newUid(), kind: 'lp_quarterly_report', audience: 'fund_lps', subject_key: subject, fund_id: fund.id, limited_partner_id: null,
@@ -208,28 +218,168 @@ export async function buildPack(env: Env, fundId: number, p: Period, actor: numb
   return { fund_id: fundId, period: p.label, result: 'built', uids: rows.map((r) => r.uid) };
 }
 
-/** POST /build: the missing packs of one closed quarter, for one fund or every administered fund. */
-export async function buildPeriod(env: Env, input: { kind: unknown; period_label: unknown; fund_id?: unknown }, actor: number, today: string) {
+// ── The single drafts: a month's cash summary and a fee statement (PR 2) ─────
+
+type Single = Omit<Insert, 'uid' | 'revision' | 'corrects_draft_id' | 'built_by'>;
+export type SingleOutcome = { subject: string; period: string; result: 'built' | 'exists'; uid?: string };
+
+/** One entity's cash and reconciliation summary for a closed month (decision 10). Admins only. */
+async function composeCash(env: Env, entity: string, p: Period): Promise<Single> {
+  const json = JSON.stringify(await cashSummaryFigures(env, entity, p));
+  return { kind: 'entity_cash_monthly', audience: 'admins', subject_key: `entity:${entity}`, entity_key: entity, fund_id: null,
+    limited_partner_id: null, report_period_id: null, period: p, figures_json: json, figures_sha256: await sha256Hex(json) };
+}
+
+type FeeLine = { uid: string; fund_id: number; fund_name: string; limited_partner_id: number; lp_name: string | null; quarter: string };
+
+/** A #1774 fee line of an issued or paid period, or null. */
+async function feeLine(env: Env, lineUid: string): Promise<FeeLine | null> {
+  return env.DB.prepare(
+    `SELECT l.uid, l.fund_id, f.name AS fund_name, l.limited_partner_id, COALESCE(u.name, lp.name) AS lp_name, p.quarter
+       FROM fund_fee_lines l JOIN fund_fee_periods p ON p.id = l.period_id JOIN vc_funds f ON f.id = l.fund_id
+       JOIN limited_partners lp ON lp.id = l.limited_partner_id LEFT JOIN users u ON u.id = lp.user_id
+      WHERE l.uid = ? AND p.status IN ('issued', 'paid')`,
+  ).bind(lineUid).first<FeeLine>();
+}
+
+/** One LP's fee statement: `statementFor`'s named fields, frozen. Its audience is that LP. */
+async function composeFee(env: Env, line: FeeLine): Promise<Single> {
+  const p = quarterPeriod(quarterLabelOf(line.quarter))!;
+  const statement = await statementFor(env, line.fund_id, line.quarter, line.limited_partner_id);
+  const json = JSON.stringify(feeStatementFigures({ id: line.fund_id, name: line.fund_name }, { id: line.limited_partner_id, name: line.lp_name }, p, statement));
+  return { kind: 'mgmt_fee_statement', audience: 'lp', subject_key: `fee:${line.uid}`, entity_key: null, fund_id: line.fund_id,
+    limited_partner_id: line.limited_partner_id, report_period_id: null, period: p, figures_json: json, figures_sha256: await sha256Hex(json) };
+}
+
+/** A single draft's fresh figures, for a rebuild or a correction. */
+async function composeAgain(env: Env, row: DraftRow): Promise<Single> {
+  if (row.kind === 'entity_cash_monthly') return composeCash(env, row.entity_key!, monthPeriod(row.period_label)!);
+  const line = await feeLine(env, row.subject_key.slice('fee:'.length));
+  if (!line) throw refusal.state('The fee period this statement reads is no longer issued.');
+  return composeFee(env, line);
+}
+
+/** Write a single draft when no draft of any status exists for its subject and period. */
+async function insertSingle(env: Env, single: Single, actor: number | null): Promise<SingleOutcome> {
+  const out = { subject: single.subject_key, period: single.period.label };
+  const exists = await env.DB.prepare('SELECT 1 FROM fund_report_drafts WHERE kind = ? AND subject_key = ? AND period_label = ? LIMIT 1')
+    .bind(single.kind, single.subject_key, single.period.label).first();
+  if (exists) return { ...out, result: 'exists' };
+  const row: Insert = { ...single, uid: newUid(), revision: 1, corrects_draft_id: null, built_by: actor };
+  try {
+    await env.DB.batch([insertStatement(env, row), builtEvent(env, row.uid, actor)]);
+  } catch (e) {
+    if (/UNIQUE/i.test(String((e as Error)?.message))) return { ...out, result: 'exists' };
+    throw e;
+  }
+  return { ...out, result: 'built', uid: row.uid };
+}
+
+/** The month's missing cash summaries, for every entity with a Mercury entity connection, or the ones named. */
+export async function buildCashSummaries(env: Env, p: Period, actor: number | null, entities?: string[]): Promise<SingleOutcome[]> {
+  const out: SingleOutcome[] = [];
+  for (const e of entities ?? await connectedEntities(env)) out.push(await insertSingle(env, await composeCash(env, e, p), actor));
+  return out;
+}
+
+/**
+ * The missing fee statements: one per line of an issued or paid #1774 fee
+ * period of an administered fund. The fee is billed in advance, so a statement
+ * is due once its period is issued, whether or not the quarter has closed.
+ */
+export async function buildFeeStatements(env: Env, actor: number | null, only: { fundId?: number; quarter?: string } = {}): Promise<SingleOutcome[]> {
+  const funds = only.fundId ? [{ id: only.fundId }] : await administeredFunds(env);
+  const out: SingleOutcome[] = [];
+  for (const f of funds) {
+    const lines = await env.DB.prepare(
+      `SELECT l.uid FROM fund_fee_lines l JOIN fund_fee_periods p ON p.id = l.period_id
+        WHERE l.fund_id = ? AND p.status IN ('issued', 'paid') AND (? IS NULL OR p.quarter = ?)
+          AND NOT EXISTS (SELECT 1 FROM fund_report_drafts d WHERE d.kind = 'mgmt_fee_statement' AND d.subject_key = 'fee:' || l.uid)
+        ORDER BY p.quarter, l.limited_partner_id`,
+    ).bind(f.id, only.quarter ?? null, only.quarter ?? null).all<{ uid: string }>();
+    for (const l of lines.results || []) {
+      const line = await feeLine(env, l.uid);
+      if (line) out.push(await insertSingle(env, await composeFee(env, line), actor));
+    }
+  }
+  return out;
+}
+
+/** One named fund, administered, or every administered fund. */
+async function fundsFor(env: Env, fundId: unknown): Promise<Array<{ id: number }>> {
+  if (fundId === undefined || fundId === null || fundId === '') return administeredFunds(env);
+  const id = Number(fundId);
+  if (!Number.isSafeInteger(id) || id <= 0 || !await env.DB.prepare('SELECT 1 FROM vc_funds WHERE id = ?').bind(id).first()) throw refusal.notFound();
+  if (!await isAdministered(env, id)) throw new DraftRefusal(409, 'not_administered', "The fund's GP of record reports this fund.");
+  return [{ id }];
+}
+
+/**
+ * POST /build: one period's missing drafts of a kind. A pack and a cash
+ * summary need a closed period; a fee statement needs only its issued fee
+ * period, because the fee is billed in advance.
+ */
+export async function buildPeriod(
+  env: Env, input: { kind: unknown; period_label: unknown; fund_id?: unknown; entity_key?: unknown }, actor: number, today: string,
+) {
   const kind = String(input.kind ?? '');
-  if (kind === 'entity_cash_monthly' || kind === 'mgmt_fee_statement') {
-    throw new DraftRefusal(409, 'builder_not_available', 'This kind of draft is built once the bank data and fee statements it reads are on record.');
+  if (kind === 'entity_cash_monthly') {
+    const p = monthPeriod(input.period_label);
+    if (!p) throw new DraftRefusal(400, 'period', 'Name a month as 2026-09.');
+    if (!isClosed(p, today)) throw new DraftRefusal(409, 'period_open', 'Only a closed month can be built.');
+    let entities: string[] | undefined;
+    if (input.entity_key !== undefined && input.entity_key !== null && input.entity_key !== '') {
+      const key = String(input.entity_key);
+      if (!(ENTITY_KEYS as readonly string[]).includes(key) || !(await connectedEntities(env)).includes(key)) {
+        throw new DraftRefusal(404, 'no_connection', 'That entity has no Mercury connection on record.');
+      }
+      entities = [key];
+    }
+    return { period: p.label, results: await buildCashSummaries(env, p, actor, entities) };
+  }
+  if (kind === 'mgmt_fee_statement') {
+    const p = quarterPeriod(input.period_label);
+    if (!p) throw new DraftRefusal(400, 'period', 'Name a quarter as Q3 2026.');
+    const results: SingleOutcome[] = [];
+    for (const f of await fundsFor(env, input.fund_id)) results.push(...await buildFeeStatements(env, actor, { fundId: f.id, quarter: feeQuarterOf(p) }));
+    return { period: p.label, results };
   }
   if (kind !== 'lp_quarterly_report' && kind !== 'lp_capital_statement') throw new DraftRefusal(400, 'kind', 'Name a kind of draft to build.');
   const p = quarterPeriod(input.period_label);
   if (!p) throw new DraftRefusal(400, 'period', 'Name a quarter as Q3 2026.');
   if (!isClosed(p, today)) throw new DraftRefusal(409, 'period_open', 'Only a closed quarter can be built.');
-  let funds: Array<{ id: number }>;
-  if (input.fund_id !== undefined && input.fund_id !== null && input.fund_id !== '') {
-    const id = Number(input.fund_id);
-    if (!Number.isSafeInteger(id) || id <= 0 || !await env.DB.prepare('SELECT 1 FROM vc_funds WHERE id = ?').bind(id).first()) throw refusal.notFound();
-    if (!await isAdministered(env, id)) throw new DraftRefusal(409, 'not_administered', "The fund's GP of record reports this fund.");
-    funds = [{ id }];
-  } else {
-    funds = await administeredFunds(env);
-  }
   const results: BuildOutcome[] = [];
-  for (const f of funds) results.push(await buildPack(env, f.id, p, actor));
+  for (const f of await fundsFor(env, input.fund_id)) results.push(await buildPack(env, f.id, p, actor));
   return { period: p.label, results };
+}
+
+/** A single draft's rebuild: supersede it and write the next revision, in one batch, the UPDATE first. */
+async function rebuildSingle(env: Env, row: DraftRow, actor: number) {
+  const single = await composeAgain(env, row);
+  const next: Insert = { ...single, uid: newUid(), revision: row.revision + 1, corrects_draft_id: row.corrects_draft_id, built_by: actor };
+  const results = await env.DB.batch([
+    env.DB.prepare("UPDATE fund_report_drafts SET status = 'superseded' WHERE uid = ? AND status IN ('draft', 'prepared')").bind(row.uid),
+    insertStatement(env, next),
+    env.DB.prepare("INSERT INTO fund_report_draft_events (draft_id, action, actor) SELECT id, 'superseded', ? FROM fund_report_drafts WHERE uid = ? AND status = 'superseded'")
+      .bind(actor, row.uid),
+    builtEvent(env, next.uid, actor),
+  ]);
+  if (Number(results[0].meta?.changes ?? 0) !== 1) throw refusal.contentChanged();
+  return { superseded: [row.uid], built: [next.uid] };
+}
+
+/** A single draft's correction: a new draft naming the issued one, which stays issued. */
+async function correctSingle(env: Env, row: DraftRow, actor: number) {
+  const live = await env.DB.prepare(
+    "SELECT 1 FROM fund_report_drafts WHERE kind = ? AND subject_key = ? AND period_label = ? AND status IN ('draft', 'prepared') LIMIT 1",
+  ).bind(row.kind, row.subject_key, row.period_label).first();
+  if (live) throw refusal.state('A correction of this draft is already open.');
+  const latest = await env.DB.prepare('SELECT MAX(revision) AS n FROM fund_report_drafts WHERE kind = ? AND subject_key = ? AND period_label = ?')
+    .bind(row.kind, row.subject_key, row.period_label).first<{ n: number }>();
+  const single = await composeAgain(env, row);
+  const next: Insert = { ...single, uid: newUid(), revision: Number(latest?.n ?? row.revision) + 1, corrects_draft_id: row.id, built_by: actor };
+  await env.DB.batch([insertStatement(env, next), builtEvent(env, next.uid, actor)]);
+  return { corrects: row.uid, period: row.period_label, built: [next.uid] };
 }
 
 /** The live rows of one pack: its report and its statements. */
@@ -249,7 +399,7 @@ export async function rebuildDraft(env: Env, uid: string, actor: number) {
   const row = await byUid(env, uid);
   if (!row) throw refusal.notFound();
   if (row.status !== 'draft' && row.status !== 'prepared') throw refusal.state('Only a draft or a prepared draft can be rebuilt.');
-  if (row.kind !== 'lp_quarterly_report' && row.kind !== 'lp_capital_statement') throw new DraftRefusal(409, 'builder_not_available', 'This kind of draft is rebuilt once its builder is on record.');
+  if (row.kind === 'entity_cash_monthly' || row.kind === 'mgmt_fee_statement') return rebuildSingle(env, row, actor);
   const p = quarterPeriod(row.period_label)!;
   const old = await livePack(env, row.fund_id!, row.period_label);
   const report = old.find((r) => r.kind === 'lp_quarterly_report');
@@ -458,7 +608,7 @@ export async function correctDraft(env: Env, uid: string, actor: number) {
   const row = await byUid(env, uid);
   if (!row) throw refusal.notFound();
   if (row.status !== 'issued') throw refusal.state('Only an issued draft can be corrected.');
-  if (row.kind !== 'lp_quarterly_report' && row.kind !== 'lp_capital_statement') throw new DraftRefusal(409, 'builder_not_available', 'This kind of draft is corrected once its builder is on record.');
+  if (row.kind === 'entity_cash_monthly' || row.kind === 'mgmt_fee_statement') return correctSingle(env, row, actor);
   const issuedPack = await env.DB.prepare(
     `SELECT * FROM fund_report_drafts WHERE fund_id = ? AND period_label = ? AND status = 'issued' AND issued_at = ?
        AND kind IN ('lp_quarterly_report', 'lp_capital_statement')`,
@@ -491,16 +641,22 @@ export async function correctDraft(env: Env, uid: string, actor: number) {
 // ── The schedule (decision 12) ───────────────────────────────────────────────
 
 /**
- * Builds every due and missing pack for the last closed quarter, due from the
- * 5th day after it ends. A second run builds nothing; an issued period is never
- * rebuilt. The monthly cash summary joins with #1775's data (PR 2).
+ * Builds every due and missing draft. A pack for the last closed quarter is due
+ * from the 5th day after it ends; the last closed month's cash summaries from
+ * the 3rd; a fee statement as soon as its fee period is issued. A second run
+ * builds nothing; an issued draft is never rebuilt. `quarter`, `due` and
+ * `results` keep PR 1's shape, which `index.ts`'s 05:20 block logs; the other
+ * builds are `built`'s.
  */
 export async function runReportingSchedule(env: Env, now: Date) {
   const today = now.toISOString().slice(0, 10);
+  const month = lastClosedMonth(today);
+  const cash = Number(today.slice(8, 10)) >= 3 ? await buildCashSummaries(env, month, null) : [];
+  const built = { month: month.label, cash_summaries: cash, fee_statements: await buildFeeStatements(env, null) };
   const q = lastClosedQuarter(today);
   const due = new Date(Date.parse(`${q.end}T00:00:00Z`) + 5 * 86_400_000).toISOString().slice(0, 10);
-  if (today < due) return { quarter: q.label, due: false, results: [] as BuildOutcome[] };
+  if (today < due) return { quarter: q.label, due: false, results: [] as BuildOutcome[], built };
   const results: BuildOutcome[] = [];
   for (const f of await administeredFunds(env)) results.push(await buildPack(env, f.id, q, null));
-  return { quarter: q.label, due: true, results };
+  return { quarter: q.label, due: true, results, built };
 }

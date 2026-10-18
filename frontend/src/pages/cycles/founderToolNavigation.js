@@ -4,8 +4,6 @@ import { cycleOf } from './cycleModel.js';
 
 /** #1539: module doors and editor returns share one project-aware map. */
 export const FOUNDER_TOOLS = [
-  // D686: the interview log returns to Customer research, the venture kept.
-  { path: '/validate/interviews', cycle: 'validate', module: 'customer-research' },
   { path: '/grow/brand', cycle: 'grow', module: 'distribution', label: 'Open landing-page builder', door: true, roles: ['admin', 'founder'] },
   { path: '/grow/launch', cycle: 'grow', module: 'distribution', label: 'Open launch calendar', door: true, roles: ['admin', 'founder'] },
   { path: '/raise/liquidity', aliases: ['/liquidity'], cycle: 'raise', module: 'cap-table', label: 'Open liquidity', door: true, roles: ['admin', 'founder'], requiredTier: 'studio' },

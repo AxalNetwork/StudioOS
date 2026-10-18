@@ -452,8 +452,8 @@ test('A CYCLE IS MOUNTED ONLY ONCE ITS READ IS WIRED: all four are, each with it
   for (const zone of ['pain-map', 'hypotheses', 'verdict']) {
     assert.match(app, new RegExp(`<Route path="/validate/${zone}" element=\\{guard\\([^)]*\\), <FounderValidateWorkspace />\\)\\} />`), `/validate/${zone} lost its working tool`);
   }
-  // D686: the interview log is a founder tool, with its one return to Customer research.
-  assert.match(app, /<Route path="\/validate\/interviews" element=\{guard\([^)]*\), founderEditor\(<FounderValidateWorkspace \/>\)\)\} \/>/, '/validate/interviews lost its working tool');
+  // D704 (#1666, PR 2b): the interview log is Customer research now; its old address redirects there.
+  assert.match(app, /<Route path="\/validate\/interviews" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <ValidateZoneRedirect zone="interviews" \/>\)\} \/>/, '/validate/interviews redirects to Customer research');
   assert.doesNotMatch(read('frontend/src/lib/api.js'), /request\(`\/cycles\//, 'the cycle client lives in lib/api/cycles.js, not api.js');
   for (const f of ['cycleModel.js', 'CycleOverview.jsx', 'CycleModulePage.jsx', 'CycleCharts.jsx', 'DurabilityChecklist.jsx', 'adapters/index.js', 'adapters/validate.js', 'adapters/grow.js']) {
     assert.doesNotMatch(read(`frontend/src/pages/cycles/${f}`), /from '\.\.\/\.\.\/lib\/api|from '\.\.\/\.\.\/\.\.\/lib\/api|api\./, `${f} reads nothing itself`);
