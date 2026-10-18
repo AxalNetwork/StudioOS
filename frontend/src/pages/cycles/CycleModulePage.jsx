@@ -115,7 +115,7 @@ export function RecordsTable({ title, records, status = 'ready', message = '', q
       {status === 'ready' && (
         <>
           {cols.length > 0 && (
-            <div role="row" className="hidden gap-2.5 border-b border-axal-hairline bg-axal-ground/60 px-4 py-2 text-[10.5px] font-bold uppercase tracking-[.06em] text-axal-muted md:grid dark:border-gray-800 dark:bg-gray-800/60 dark:text-gray-400" style={grid}>
+            <div role="row" className="hidden gap-2.5 border-b border-axal-hairline bg-axal-ground/60 px-4 py-2 text-[10.5px] font-bold uppercase tracking-[.06em] text-axal-muted lg:grid dark:border-gray-800 dark:bg-gray-800/60 dark:text-gray-400" style={grid}>
               {cols.map((c) => <span key={c.key} role="columnheader">{c.label}</span>)}
               {acts && <span role="columnheader" className="sr-only">Actions</span>}
             </div>
@@ -128,10 +128,10 @@ export function RecordsTable({ title, records, status = 'ready', message = '', q
           {rows.map((r, ri) => {
             const href = rowHref?.(r);
             return (
-            <div key={r.id ?? ri} role="row" className="relative grid grid-cols-2 items-center gap-x-2.5 gap-y-1 border-b border-axal-ground px-4 py-2.5 text-[12.5px] last:border-b-0 md:[grid-template-columns:var(--cols)] dark:border-gray-800" style={{ '--cols': grid.gridTemplateColumns }}>
+            <div key={r.id ?? ri} role="row" className="relative grid grid-cols-2 items-center gap-x-2.5 gap-y-1 border-b border-axal-ground px-4 py-2.5 text-[12.5px] last:border-b-0 lg:[grid-template-columns:var(--cols)] dark:border-gray-800" style={{ '--cols': grid.gridTemplateColumns }}>
               {cols.map((c, ci) => (
-                <span key={c.key} role="cell" className={ci === 0 ? 'col-span-2 md:col-span-1' : ''}>
-                  {ci > 0 && <span className="mr-1.5 text-[10.5px] uppercase tracking-[.06em] text-axal-faint md:hidden">{c.label}</span>}
+                <span key={c.key} role="cell" className={ci === 0 ? 'col-span-2 lg:col-span-1' : ''}>
+                  {ci > 0 && <span className="mr-1.5 text-[10.5px] uppercase tracking-[.06em] text-axal-faint lg:hidden">{c.label}</span>}
                   {ci === 0 && href ? <Link to={href} className="after:absolute after:inset-0 focus-visible:underline">
                     <Cell cell={r.cells?.[c.key]} first plain />
                   </Link> : <Cell cell={r.cells?.[c.key]} first={ci === 0} plain={!!href} />}
@@ -161,7 +161,7 @@ export function RecordsTable({ title, records, status = 'ready', message = '', q
 
 function RowAction({ action }) {
   return (
-    <span role="cell" className="col-span-2 md:col-span-1 md:justify-self-end">
+    <span role="cell" className="col-span-2 lg:col-span-1 lg:justify-self-end">
       {action?.text && typeof action.onClick === 'function' && (
         <button type="button" onClick={action.onClick} aria-label={action.label || action.text} data-testid="records-row-action"
           className="relative z-10 rounded-[9px] border border-axal-hairline px-2.5 py-1 text-[11.5px] font-semibold text-axal-violet-deep hover:bg-axal-lavender dark:border-gray-700 dark:text-violet-300 dark:hover:bg-violet-900/30">

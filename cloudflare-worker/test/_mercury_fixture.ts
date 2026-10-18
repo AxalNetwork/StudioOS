@@ -3,8 +3,8 @@
  *
  * A real `node:sqlite` database: the users, sessions and audit tables and the
  * fund tables cut from schema_baseline.sql, then migrations 312 (the call
- * ledger), 472 (#1773's bank-account registry), 473 (#1774's fee lines, which
- * `recordReceipt` marks paid) and 474 (Mercury).
+ * ledger), 472 (#1773's bank-account registry), 473 (#1774's fee periods)
+ * and 474 (Mercury).
  * `withRegistry()` inserts registry rows that satisfy 472's checks.
  *
  * Every Mercury call goes to `mercuryStub`, which records each request. Every
@@ -45,6 +45,7 @@ export function freshDb(): DatabaseSync {
     db.exec(noFks(tableFromBaseline(BASELINE, t)));
   }
   db.exec(migration('312_fund_call_ledger.sql'));
+  db.exec(migration('473_fund_management_fees.sql'));
   db.exec(migration('472_entity_bank_accounts.sql'));
   db.exec(migration('473_fund_management_fees.sql'));
   db.exec(migration('474_mercury_entity_connections.sql'));

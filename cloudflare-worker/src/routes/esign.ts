@@ -46,6 +46,7 @@ import { templatesFor, mayOriginate, notOfferedFor, originatorName, SEND_ABSENCE
 import { esignEnvelopeScope } from '../services/tenancyScope';
 import { sendAgreementAssignedEmail } from '../services/email';
 import { renderAgreementPdf, sha256Hex } from '../services/pdf';
+import { templateFormatFor, renderFormat, type TemplateFormat } from '../services/templateFormat';
 import { PDFDocument } from 'pdf-lib';
 import { bindingKey } from '../util/schemaBootstrap';
 import { clientIp } from '../util/clientIp';
@@ -124,6 +125,11 @@ async function ensureSchema(env: Env): Promise<void> {
     // reason for DocuSign; null for in-house). Surfaced in the admin
     // contracts UI so reviewers don't have to dig into audit events.
     `ALTER TABLE esign_envelopes ADD COLUMN last_error TEXT`,
+    // D717 (#1782), as migration 479: the kind and Axal party the send
+    // printed. Every later copy of the envelope reads these, never the
+    // template's; NULL renders from the slug, as before.
+    `ALTER TABLE esign_envelopes ADD COLUMN doc_kind TEXT CHECK (doc_kind IS NULL OR doc_kind IN ('agreement','corporate','resolution','unilateral','policy','notice','booklet'))`,
+    `ALTER TABLE esign_envelopes ADD COLUMN axal_party TEXT CHECK (axal_party IS NULL OR axal_party IN ('management','holdings','gp','fund','none'))`,
     `CREATE INDEX IF NOT EXISTS idx_esign_provider          ON esign_envelopes(provider)`,
     `CREATE INDEX IF NOT EXISTS idx_esign_docusign_envelope ON esign_envelopes(docusign_envelope_id)`,
     `CREATE INDEX IF NOT EXISTS idx_esign_docusign_account  ON esign_envelopes(docusign_account_id)`,
@@ -353,6 +359,13 @@ export async function createAndSendEnvelope(
      * refused (RenderedBodyError) rather than silently ignored.
      */
     renderedBody?: { title: string; body: string };
+    /**
+     * D717 (#1782) — the kind and Axal party this send prints, recorded on
+     * the envelope so every later copy reads them, never the template's. The
+     * contract send passes its publication's; any other caller omits it and
+     * gets the active row's (`templateFormatFor`), stored or from the slug.
+     */
+    format?: TemplateFormat;
   }
 ): Promise<{ envelope_id: number; envelope_uuid: string; signing_url: string; email_sent: boolean; provider?: string; already_pending?: boolean } | null> {
   await ensureSchema(env);
@@ -533,13 +546,14 @@ export async function createAndSendEnvelope(
            AND NOT EXISTS (SELECT 1 FROM esign_recipients rr WHERE rr.envelope_id = x.id))
     )`;
   const sameSendBinds = [opts.documentType, opts.adminUserId, recipientKey, dealKey, opts.recipientEmail];
+  const format = opts.format ?? await templateFormatFor(env, opts.documentType);
   const insertEnvelope = env.DB.prepare(
-    `INSERT INTO esign_envelopes (envelope_uuid, user_id, deal_id, document_type, document_title, document_body, body_sha256, status, created_by, audit_log)
-     SELECT ?, ?, ?, ?, ?, ?, ?, 'sent', ?, '[]'
+    `INSERT INTO esign_envelopes (envelope_uuid, user_id, deal_id, document_type, document_title, document_body, body_sha256, status, created_by, audit_log, doc_kind, axal_party)
+     SELECT ?, ?, ?, ?, ?, ?, ?, 'sent', ?, '[]', ?, ?
       WHERE NOT EXISTS (SELECT 1 FROM esign_envelopes x WHERE ${SAME_PENDING_SEND})
      RETURNING id`
   ).bind(
-    envelopeUuid, opts.recipientUserId, opts.dealId || null, opts.documentType, tpl.title, tpl.body, bodySha, opts.adminUserId,
+    envelopeUuid, opts.recipientUserId, opts.dealId || null, opts.documentType, tpl.title, tpl.body, bodySha, opts.adminUserId, format.kind, format.party,
     ...sameSendBinds,
   );
   // The in-house signing token is minted before the insert so its recipients
@@ -609,6 +623,8 @@ export async function createAndSendEnvelope(
         const ds = await sendDocusignEnvelope(env, dsRow, {
           documentTitle: tpl.title,
           documentBody: tpl.body,
+          documentType: opts.documentType,
+          ...renderFormat(format),
           recipientEmail: opts.recipientEmail,
           recipientName: opts.recipientName,
           emailSubject: `Please sign: ${tpl.title}`,
@@ -1174,7 +1190,7 @@ esign.post('/sign/:token', async (c) => {
 
   const rec: any = await c.env.DB.prepare(
     `SELECT r.*, e.envelope_uuid, e.document_type, e.document_title, e.document_body, e.body_sha256, e.user_id AS envelope_user_id,
-            e.status AS envelope_status
+            e.status AS envelope_status, e.doc_kind, e.axal_party
        FROM esign_recipients r JOIN esign_envelopes e ON e.id = r.envelope_id
       WHERE r.signing_token = ?`
   ).bind(token).first();
@@ -1265,6 +1281,8 @@ esign.post('/sign/:token', async (c) => {
       documentTitle: rec.document_title,
       documentBody: rec.document_body,
       documentType: rec.document_type,
+      // D717: the pair the send recorded; NULL columns render as before.
+      ...renderFormat({ doc_kind: rec.doc_kind, axal_party: rec.axal_party }),
       signerName,
       signerEmail: rec.recipient_email,
       signerIp: ip,

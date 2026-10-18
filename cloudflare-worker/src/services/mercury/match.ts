@@ -16,10 +16,11 @@
  *    days after its end.
  *
  * FUND I is the fund #1773's `fundPayeeOf` answers `'fund'` for (the
- * `spinout-fund-i` row). FEE PERIODS are #1774's, not on `main` yet: until
- * they land, `feePeriods` answers none, so no fee match is proposed, a manual
- * fee pair answers 409, and `collectedFor` reads only confirmed matches. Both
- * are parameters so the rules are tested against fixture periods.
+ * `spinout-fund-i` row). FEE PERIODS are #1774's `fund_fee_periods` on Fund I
+ * (migration 473), issued or paid, with `net_cents` as the net total. With no
+ * Fund I there are none, so no fee match is proposed and a manual fee pair
+ * answers 409. Both are parameters so the rules are tested against fixture
+ * periods. `collectedFor` serves #1774's period read from confirmed matches.
  *
  * Confirming a capital-call match writes one receipt through `recordReceipt`,
  * `reference: 'mercury:<transaction id>'`. The unique index on `mercury:`
@@ -43,8 +44,8 @@ export interface FeePeriod { id: number; fund_id: number; status: string; net_to
 export interface MatchDeps {
   /** Fund I's `vc_funds.id`, the fund `fundPayeeOf` answers `'fund'` for, or null when none carries the slug. */
   fundOneId: (env: Env) => Promise<number | null>;
-  /** #1774's issued or paid periods on Fund I. Empty until #1774. */
-  feePeriods: (env: Env) => Promise<FeePeriod[]>;
+  /** #1774's issued or paid periods on Fund I. */
+  feePeriods: (env: Env, fundId: number) => Promise<FeePeriod[]>;
 }
 
 export const DEFAULT_MATCH_DEPS: MatchDeps = {
@@ -53,7 +54,10 @@ export const DEFAULT_MATCH_DEPS: MatchDeps = {
     const id = fund ? Number(fund.id) : NaN;
     return Number.isInteger(id) && await fundPayeeOf(env, id) === 'fund' ? id : null;
   },
-  feePeriods: async () => [],
+  feePeriods: async (env, fundId) => (await env.DB.prepare(
+    `SELECT id, fund_id, status, net_cents AS net_total_cents, window_start, window_end
+       FROM fund_fee_periods WHERE fund_id = ? AND status IN ('issued', 'paid') ORDER BY id`,
+  ).bind(fundId).all<FeePeriod>()).results || [],
 };
 
 const deps = (d?: Partial<MatchDeps>): MatchDeps => ({ ...DEFAULT_MATCH_DEPS, ...(d || {}) });
@@ -113,7 +117,7 @@ export async function proposeMatches(env: Env, d?: Partial<MatchDeps>): Promise<
   let proposed = 0;
   const fundId = await m.fundOneId(env);
   const lines = fundId == null ? [] : await openLines(env, fundId);
-  const periods = (await m.feePeriods(env)).filter((p) => p.status === 'issued' || p.status === 'paid');
+  const periods = (fundId == null ? [] : await m.feePeriods(env, fundId)).filter((p) => p.status === 'issued' || p.status === 'paid');
   for (const c of credits) {
     if (c.entity_key === 'fund' && fundId != null) {
       const fits = lines.filter((l) => l.outstanding_cents === c.amount_cents && c.posted_on >= l.from && c.posted_on <= l.to);
@@ -166,7 +170,9 @@ export async function proposeManual(env: Env, user: User, body: { transaction_ui
     if (credit.amount_cents > line.outstanding_cents) return refusal(409, 'exceeds_outstanding', 'The credit is more than the line still owes.');
   } else {
     if (credit.entity_key !== 'gp') return refusal(409, 'wrong_entity', 'A fee period is matched only to a credit on the GP’s account.');
-    const period = (await m.feePeriods(env)).find((p) => p.id === targetId && (p.status === 'issued' || p.status === 'paid'));
+    const fundId = await m.fundOneId(env);
+    const period = fundId == null ? undefined
+      : (await m.feePeriods(env, fundId)).find((p) => p.id === targetId && (p.status === 'issued' || p.status === 'paid'));
     if (!period) return refusal(409, 'fee_periods_unavailable', 'No issued fee period with that id can be matched.');
     if (period.net_total_cents !== credit.amount_cents) return refusal(409, 'amount_differs', 'A fee period’s credit must equal its net total.');
   }
@@ -209,7 +215,8 @@ export async function confirmMatch(env: Env, user: User, uid: string, d?: Partia
   if (match.state !== 'proposed') return refusal(409, `match_${match.state}`, `This match is already ${match.state}.`);
   if (match.target_kind === 'fee_period') {
     // The link only: nothing is written to #1774's tables.
-    const period = (await m.feePeriods(env)).find((p) => p.id === match.target_id);
+    const fundId = await m.fundOneId(env);
+    const period = fundId == null ? undefined : (await m.feePeriods(env, fundId)).find((p) => p.id === match.target_id);
     if (!period) return refusal(409, 'fee_periods_unavailable', 'The fee period cannot be read, so this match cannot be confirmed yet.');
     await env.DB.prepare(
       `UPDATE mercury_matches SET state = 'confirmed', confirmed_by = ?, confirmed_at = datetime('now'), updated_at = datetime('now')

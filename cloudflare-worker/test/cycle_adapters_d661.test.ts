@@ -719,7 +719,7 @@ test('D661: every Build module page\'s records are {key,label} columns and {id,c
 
 // ── The Add forms (forms.js), through the real Worker routes ───────────────
 
-import { EDITS, FORMS, editFor, formFor, formsFor, initialValues, validate, toCents, toScore, thisMonth } from '../../frontend/src/pages/cycles/forms.js';
+import { EDITS, FORMS, editFor, formFor, initialValues, validate, toCents, toScore, thisMonth } from '../../frontend/src/pages/cycles/forms.js';
 import { makeCycleWrites } from '../../frontend/src/lib/api/cycleWrites.js';
 import progress from '../src/routes/progress.ts';
 
@@ -763,24 +763,22 @@ const SAMPLES: Record<string, Record<string, Record<string, unknown>>> = {
     'market-expansion': { name: 'Portugal', state: 'considering', parts: ['demand'], demand_score: '7', demand_source: 'Waitlist by country' },
     'durable-company-building': { title: 'Annual report', kind: 'compliance', due_at: dayFrom(20), owner_name: 'Fay' },
   },
-  build: {
-    'solution-design': { title: 'Key-person dependency', severity: 'high', mitigation: 'Document the bank integration' },
-    'prototype-mvp': { title: 'Reconciliation report', added_value: 'High', effort: 'S', delivery_status: 'In Progress', due_date: dayFrom(30) },
-    'company-creation': { title: 'Register for payroll', due_date: dayFrom(45) },
-  },
 };
+// Build's canvas forms (D695 #1656 PR 3b) need #1792's stores, so their bodies,
+// choices and Edits run in `cycle_forms_d695.test.ts`, on the baseline plus
+// every migration, through the same routes.
 
 test('D661: every Add form sends a body its Worker route accepts, and the row reads back on the module\'s table', async () => {
   const grow = await growFixture();
   const buildDb = buildFixture();
   const w = makeCycleWrites(routeRequest(grow, buildDb));
   const now = new Date();
-  for (const cycle of ['grow', 'build'] as const) {
+  for (const cycle of ['grow'] as const) {
     for (const slug of Object.keys(FORMS[cycle])) {
-      const form = cycle === 'build' && slug === 'solution-design' ? formsFor(cycle, slug)[1] : formFor(cycle, slug)!;
+      const form = formFor(cycle, slug)!;
       const values = { ...initialValues(form), ...SAMPLES[cycle][slug] };
       assert.deepEqual(validate(form, values), {}, `${cycle}/${slug}: the sample is valid`);
-      await form.submit(w, cycle === 'grow' ? GP : BP, values, now);
+      await form.submit(w, GP, values, now);
     }
   }
   const growRow = async (slug: string, pick: (r: any) => boolean) => {
@@ -806,13 +804,6 @@ test('D661: every Add form sends a body its Worker route accepts, and the row re
   assert.deepEqual([portugal.demand_score, portugal.demand_source, portugal.regulation_score, portugal.readiness], [7, 'Waitlist by country', null, null], 'an unscored part stays null, never 0');
   const annual = await growRow('durable-company-building', (r) => r.title === 'Annual report');
   assert.deepEqual([annual.kind, annual.owner_name, annual.status, String(annual.due_at).slice(0, 10)], ['compliance', 'Fay', 'upcoming', dayFrom(20)]);
-  const risks = (await buildCall(buildDb, `/modules/solution-design?project=${BP}`)).body.facts.risks;
-  assert.deepEqual(risks.map((r: any) => [r.title, r.severity, r.mitigation]), [['Key-person dependency', 'high', 'Document the bank integration']]);
-  const steps = (await buildCall(buildDb, `/modules/company-creation?project=${BP}`)).body.records.rows;
-  assert.ok(steps.some((r: any) => r.cells.filing === 'Register for payroll' && r.cells.due === dayFrom(45)));
-  // A must-have: MVP scope adds the feature, D662's route marks it and dates it.
-  const musts = (await buildCall(buildDb, `/modules/prototype-mvp?project=${BP}`)).body.records.rows;
-  assert.deepEqual(musts.map((r: any) => [r.cells.must_have, r.cells.state, r.cells.due]), [['Reconciliation report', 'In progress', dayFrom(30)]]);
   // The checklist tick, and its undo.
   await w.grow.checklist(GP, 'board_cadence', true);
   let parts = (await growCall(grow, 'GET', `/modules/durable-company-building?project=${GP}`)).body.parts.checklist;
@@ -828,9 +819,9 @@ test('D661: every choice a form offers is one its Worker route accepts', async (
   const buildDb = buildFixture();
   const w = makeCycleWrites(routeRequest(grow, buildDb));
   let n = 0;
-  for (const cycle of ['grow', 'build'] as const) {
+  for (const cycle of ['grow'] as const) {
     for (const slug of Object.keys(FORMS[cycle])) {
-      const form = cycle === 'build' && slug === 'solution-design' ? formsFor(cycle, slug)[1] : formFor(cycle, slug)!;
+      const form = formFor(cycle, slug)!;
       // Today's selects and the canvas's CH chips (D695): a disabled chip is never sent.
       for (const field of form.fields.filter((f: any) => f.type === 'select' || f.kind === 'CH')) {
         for (const option of (field.options ?? field.opts).filter((o: any) => !o.disabled)) {
@@ -840,12 +831,13 @@ test('D661: every choice a form offers is one its Worker route accepts', async (
             ...(slug === 'distribution' ? { name: `Channel ${n}`, spend: '' } : {}), ...(slug === 'market-expansion' ? { name: `Market ${n}` } : {}),
             ...(slug === 'revenue-and-traction' ? { label: `Custom ${n}`, value: '12' } : {}),
             ...(slug === 'durable-company-building' ? { due_at: new Date(Date.UTC(2099, 0, n)).toISOString().slice(0, 10) } : {}) };
-          await assert.doesNotReject(form.submit(w, cycle === 'grow' ? GP : BP, values), `${cycle}/${slug}: ${field.name}=${option.value} was refused`);
+          await assert.doesNotReject(form.submit(w, GP, values), `${cycle}/${slug}: ${field.name}=${option.value} was refused`);
         }
       }
     }
   }
-  assert.ok(n >= 60, `${n} choices checked`);
+  // Grow's choices; Build's moved to cycle_forms_d695.test.ts with its canvas forms (#1656 PR 3b).
+  assert.ok(n >= 57, `${n} choices checked`);
 });
 
 test('D661: the forms refuse what the Worker would, and show the Worker\'s own sentence on its field', async () => {
@@ -929,43 +921,7 @@ test('D661: every Grow Edit form starts from its row, and the change reads back 
   assert.deepEqual([ob.title, ob.status, ob.owner_name, String(ob.due_at).slice(0, 10)], ['Annual report', 'done', 'Gus', dayFrom(5)]);
 });
 
-test('D661: Build\'s Edit forms change formation steps and the must-have mark, and only their own rows', async () => {
-  const buildDb = buildSeeded();
-  const w = makeCycleWrites(routeRequest(await growFixture(), buildDb));
-  const rows = async (slug: string) => adaptModule('build', slug, (await buildCall(buildDb, `/modules/${slug}?project=${BP}`)).body).records.rows;
-
-  // Formation steps share their table with the Lab's steps and the entity's
-  // filings; only a `step-<id>` row is one this route changes.
-  const step = editFor('build', 'company-creation');
-  const filings = await rows('company-creation');
-  assert.ok(filings.some((r: any) => String(r.id).startsWith('obligation-')), 'the fixture has an obligation row to refuse');
-  for (const r of filings) assert.equal(step.idOf(r) != null, String(r.id).startsWith('step-'), `${r.id} offers Edit wrongly`);
-  const ein = filings.find((r: any) => r.cells.filing === 'Get EIN');
-  const current = initialValues(step, step.valuesOf(ein));
-  assert.deepEqual(current, { title: 'Get EIN', due_date: '', state: 'todo' });
-  await step.submit(w, BP, step.idOf(ein), { ...current, state: 'done', due_date: dayFrom(10) });
-  assert.deepEqual((await rows('company-creation')).filter((r: any) => r.cells.filing === 'Get EIN').map((r: any) => [r.cells.state, r.edit.state, r.cells.due]), [['Filed', 'done', dayFrom(10)]]);
-
-  // A must-have's date, and taking one off the list; the feature stays in scope.
-  const must = editFor('build', 'prototype-mvp');
-  const before = await rows('prototype-mvp');
-  const exceptions = before.find((r: any) => r.cells.must_have === 'Exceptions queue');
-  await must.submit(w, BP, must.idOf(exceptions), { ...initialValues(must, must.valuesOf(exceptions)), due_date: dayFrom(20) });
-  const audit = before.find((r: any) => r.cells.must_have === 'Audit export');
-  assert.deepEqual(initialValues(must, must.valuesOf(audit)), { is_must_have: 'yes', due_date: '' });
-  await must.submit(w, BP, must.idOf(audit), { is_must_have: 'no', due_date: '' });
-  const after = await rows('prototype-mvp');
-  assert.deepEqual(after.map((r: any) => r.cells.must_have).sort(), ['Bank sync', 'Exceptions queue', 'Match rules']);
-  assert.equal(after.find((r: any) => r.cells.must_have === 'Exceptions queue').cells.due, dayFrom(20));
-  assert.ok((await rows('solution-design')).some((r: any) => r.cells.feature === 'Audit export'), 'taking off the mark removed the feature');
-
-  // And back on, from the feature table, where nothing is pre-chosen.
-  const mark = editFor('build', 'solution-design');
-  const feature = (await rows('solution-design')).find((r: any) => r.cells.feature === 'Audit export');
-  assert.deepEqual(validate(mark, initialValues(mark, mark.valuesOf(feature))), { is_must_have: 'Must-have for the MVP is required.' });
-  await mark.submit(w, BP, mark.idOf(feature), { is_must_have: 'yes' });
-  assert.ok((await rows('prototype-mvp')).some((r: any) => r.cells.must_have === 'Audit export'));
-});
+// Build's Edits (D695 #1656 PR 3b) open from their records; `cycle_forms_d695.test.ts` runs them.
 
 test('D661: an Edit is refused for a row the venture does not hold, and the slug never reaches an inherited form', async () => {
   const grow = await growFixture();

@@ -26,11 +26,12 @@ import CreateStartupForm from '../../components/CreateStartupForm';
 import CycleOverview, { CycleHeader } from './CycleOverview';
 import RecordView from './RecordView';
 import InterviewRecord from '../founder/InterviewReviewPage';
-import Lightbox from '../../ui/Lightbox';
+import Lightbox, { LightboxBarProvider } from '../../ui/Lightbox';
 import { RECORD_ID } from './cyclePaths';
-import { availableRecord, CLIENT_ACTIONS, confirmView, declaredActions, finishRecordWrite, recordActionBody, recordFormFor, rowAction } from './recordModel';
+import { availableRecord, CLIENT_ACTIONS, confirmView, declaredActions, finishRecordWrite, recordActionBody, recordEditAction, recordFormFor, rowAction } from './recordModel';
 import PhoneCycleRoot from './PhoneCycleRoot';
 import CycleModulePage from './CycleModulePage';
+import PhoneModulePage, { CycleBar, PHONE_GUTTER } from './PhoneModulePage';
 import DurabilityChecklist from './DurabilityChecklist';
 import ToolsHistory from './ToolsHistory';
 import UpdatesHistory from './UpdatesHistory';
@@ -405,7 +406,7 @@ export function underModule(modules, path, cycle = 'validate', action = 'record'
  * row's "Record a session") read first so Who is pre-filled. An interview that
  * cannot be found opens the lightbox with Who empty rather than not at all.
  */
-export function RecordMount({ projectId, interviewId, onClose, onStarted }) {
+export function RecordMount({ projectId, interviewId, onClose, onStarted, asPage }) {
   const { recorder } = useActiveRecording();
   const [interview, setInterview] = useState(interviewId ? undefined : null);
   useEffect(() => {
@@ -417,7 +418,7 @@ export function RecordMount({ projectId, interviewId, onClose, onStarted }) {
     return () => { alive = false; };
   }, [projectId, interviewId]);
   if (interview === undefined) return null;
-  return <RecordLightbox projectId={projectId} interview={interview} onClose={onClose} onStarted={onStarted} recorder={recorder} />;
+  return <RecordLightbox projectId={projectId} interview={interview} onClose={onClose} onStarted={onStarted} recorder={recorder} asPage={asPage} />;
 }
 
 /** The module slug of a cycle path (`/validate/customer-research?…`), or null for the overview and the cycle's own action path. */
@@ -448,19 +449,19 @@ export function finishPath(session, where, projectId) {
  * Validate's `RecordMount` draws `RecordLightbox`. This route draws no frame
  * around any of them: two dialogs must never nest.
  */
-function ValidateMount({ projectId, searchParams, onClose, onDone }) {
-  return <RecordMount projectId={projectId} interviewId={searchParams.get('interview')} onClose={onClose} onStarted={onDone} />;
+function ValidateMount({ projectId, searchParams, onClose, onDone, asPage }) {
+  return <RecordMount projectId={projectId} interviewId={searchParams.get('interview')} onClose={onClose} onStarted={onDone} asPage={asPage} />;
 }
 // D686 §5.4 (#1597): the sheet connects for this project's company, and a
 // change re-reads the Build page once the lightbox closes.
-function BuildMount({ projectId, onClose, onChanged }) {
-  return <ConnectToolSheet projectId={projectId} onClose={onClose} onChanged={onChanged} />;
+function BuildMount({ projectId, onClose, onChanged, asPage }) {
+  return <ConnectToolSheet projectId={projectId} onClose={onClose} onChanged={onChanged} asPage={asPage} />;
 }
-function RaiseMount({ projectId, onClose }) {
-  return <RoundCallSheet projectId={projectId} onClose={onClose} />;
+function RaiseMount({ projectId, onClose, asPage }) {
+  return <RoundCallSheet projectId={projectId} onClose={onClose} asPage={asPage} />;
 }
-function GrowMount({ projectId, onClose, onDone }) {
-  return <ShareUpdateLightbox projectId={projectId} onClose={onClose} onSent={onDone} />;
+function GrowMount({ projectId, onClose, onDone, asPage }) {
+  return <ShareUpdateLightbox projectId={projectId} onClose={onClose} onSent={onDone} asPage={asPage} />;
 }
 
 /** D696: a scoped record read and its declared actions; the route owns every mount. */
@@ -573,6 +574,27 @@ export function useCycleRecord({ enabled, cycle, projectId, slug, id, reload, ed
  * founder was on (`location.state.under`), the overview on a deep link. Closing
  * goes back to it; the lightbox makes no server call.
  */
+/**
+ * D695 (#1656): a row's Edit that reads its record (Validate's rows carry no
+ * `edit`) opens once the record answers, through `recordFormFor`, as the
+ * record page opens it. `target` is null when no such Edit is open.
+ */
+function useRowRecordEdit(target) {
+  const [state, setState] = useState(null);
+  const key = target ? `${target.cycle}/${target.slug}/${target.projectId}/${target.row.id}` : null;
+  useEffect(() => {
+    if (!target) return undefined;
+    let live = true;
+    cyclesApi.record(target.cycle, target.projectId, target.slug, target.row.id)
+      .then((read) => { if (live) setState({ key, spec: recordFormFor(recordEditAction(read), read, target.edit), error: null }); },
+        (error) => { if (live) setState({ key, spec: null, error: error?.message || 'This record could not be read.' }); });
+    return () => { live = false; };
+    // `key` names the record; a new `target` object for it does not re-read.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  return state && state.key === key ? state : null;
+}
+
 /**
  * D696 (#1658): a record's title as the rail's third crumb, "section › module
  * › record", while the record is drawn; leaving the record drops it. It sits
@@ -736,6 +758,9 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   const tabs = useMemo(() => (def?.modules || [])
     .filter((m) => canReadDecisions || !(cycle === 'validate' && m.slug === 'verdict'))
     .map((m) => ({ slug: m.slug, name: m.name })), [def, cycle, canReadDecisions]);
+  const editing = editingId ? (module?.records?.rows || []).find((row) => String(row?.id) === editingId) || null : null;
+  const rowEdit = useRowRecordEdit(!record && projectId && edit?.readsRecord && editing && edit.idOf(editing) != null
+    ? { cycle, slug, projectId, edit, row: editing } : null);
 
   if (toLive) return <Navigate to={toLive} replace />;
   if (!def) return null;
@@ -771,7 +796,6 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
     const rest = params.toString();
     return `/${cycle}/${slug}/new${rest ? `?${rest}` : ''}`;
   };
-  const editing = editingId ? (module?.records?.rows || []).find((row) => String(row?.id) === editingId) || null : null;
   // The one open form, Add or Edit. Below 1024px it is the page, drawn in the
   // body's gutter; at 1024px and up it is the dialog at the mount below.
   const saved = () => { dirty.current = true; };
@@ -785,6 +809,18 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
         onSubmit={(values) => formOpen.submit(formWrites, projectId, values)}
         onSaved={saved}
         onClose={closeAdd} />
+    ) : editing && edit.idOf(editing) != null && edit.readsRecord ? (
+      // Drawn once the record answers: its values, or the refusal in the dialog.
+      rowEdit?.spec ? (
+        <FormLightbox key={`edit-${editing.id}`} form={rowEdit.spec.form} current={rowEdit.spec.current} cycle={cycle} slug={slug}
+          loadOptions={edit.loadOptions ? () => edit.loadOptions(cyclesWrite, projectId, rowEdit.spec.id) : null}
+          onSubmit={(values) => edit.submit(cyclesWrite, projectId, rowEdit.spec.id, values)}
+          onSaved={saved}
+          onClose={closeEdit} />
+      ) : rowEdit ? (
+        <FormLightbox key={`edit-${editing.id}-refused`} form={{ ...edit, fields: [] }} cycle={cycle} slug={slug}
+          refused={rowEdit.error || 'This record has no Edit.'} onSubmit={() => {}} onClose={closeEdit} />
+      ) : null
     ) : editing && edit.idOf(editing) != null ? (
       <FormLightbox key={`edit-${editing.id}`} form={edit} current={edit.valuesOf(editing)} cycle={cycle} slug={slug}
         loadOptions={edit.loadOptions ? () => edit.loadOptions(cyclesWrite, projectId, edit.idOf(editing)) : null}
@@ -814,6 +850,17 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
       footer="Traceable surface · no unsupported automated actions"
     />
   );
+
+  // D703 step 8: the bar every phone page below 1024px draws, as a function
+  // of the page's own title, sub and Back (the `Lightbox` page mode calls it).
+  // Its back label names where Back goes (decision 5).
+  const phoneBar = (backLabel) => ({ title, sub, onBack }) => (
+    <CycleBar back={{ label: backLabel, onClick: onBack }} title={title} sub={sub} eadwynLabel={`${name} · ${title}`} />
+  );
+  // An Add or Edit page's Back returns to the module, or in record mode to the record (step 9).
+  const pageBack = record ? (recordState.data?.title || moduleName || name) : (moduleName || name);
+  // Below 1024px an action page is the route's only content (decision 11).
+  const actionPage = phone && lightbox && Mount && projectId;
 
   let body;
   if (projectStatus === 'none') {
@@ -863,8 +910,10 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
     );
   } else {
     const recs = module?.records;
+    // D703 step 6: below 1024px the module is a pushed page with the same props.
+    const ModulePage = phone ? PhoneModulePage : CycleModulePage;
     body = (
-      <CycleModulePage
+      <ModulePage
         cycle={cycle}
         slug={slug}
         cards={tabs}
@@ -897,7 +946,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
           <ZoneDraft key={`${slug}-${draft.surface}`} {...draft} scopeKey={String(projectId)} ai={ai} accent="violet" />
         )) : null}
         {moduleStatus === 'ready' && fnOf(def.parts, slug)?.(module, { projectId, reload: () => setReload((n) => n + 1), openAction, query, openDialog })}
-      </CycleModulePage>
+      </ModulePage>
     );
   }
 
@@ -916,9 +965,14 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
           The column is the size container. The form sheets and the action
           Mount draw `fixed` layers, so they sit after it: an older browser
           would place them against the column (decision 13). */}
+      {/* D703 decision 11: below 1024px an action page is the route's only
+          content, so neither the size container nor the body is drawn. */}
+      {!actionPage && (
       <div className="@container/cycle min-w-0">
       <div className="min-w-0 px-[22px] pt-[14px] pb-[18px] lg:px-6 lg:pt-[22px] lg:pb-[30px] lg:@max-[760px]/cycle:px-[14px] lg:@max-[760px]/cycle:pt-[14px] lg:@max-[760px]/cycle:pb-[40px]" data-testid="cycle-route-body">
+        <LightboxBarProvider bar={phone ? phoneBar(pageBack) : null}>
         {phone && openForm ? openForm : phone && dialog?.page ? dialog.element : body}
+        </LightboxBarProvider>
         {creates && !record && (
           <CreateStartupForm
             open={creating}
@@ -934,10 +988,12 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
         )}
       </div>
       </div>
+      )}
       {!phone && openForm}
       {record && recordState.confirm}
       {lightbox && Mount && projectId && (
         <Mount projectId={projectId} q={q} searchParams={searchParams} onClose={closeAction} onDone={onDone}
+          asPage={phone ? { pageBelow: 'lg', bar: phoneBar(moduleName || name), pageClass: PHONE_GUTTER } : undefined}
           onChanged={() => { dirty.current = true; }} />
       )}
       {dialog && !(phone && dialog.page) && dialog.element}

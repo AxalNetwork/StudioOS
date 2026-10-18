@@ -75,6 +75,16 @@ routes; `cycles.js` binds it to the app's client as `cyclesWrite`. Its one
 D690's `GET /api/cycles/:cycle/modules/:slug/form-options?project=N` for every
 cycle, `query` (a search's `{ q }`) after `project` (D695 decision 16); it sends
 only a known cycle and a module slug's charset.
+Its `validate` group (D695, #1656 PR 2b) holds Validate's five Adds and their
+PATCHes, `/api/cycles/validate/{themes,segments,competitors,demand-signals,hypotheses}`
+with `?project=N`. The forms write through it, not through `cycleValidate.js`,
+whose segment, demand-signal and competitor-mention adds now have no caller.
+Its `build` group (PR 3b) adds Build's canvas Adds and Edits over #1792's routes
+(`features`, `must-haves`, `roadmap`, `founders`, each with `?project=N`;
+`founder` and `founderUpdate` pass `inlinePaywall`, so the dialog shows the
+cap table's plan refusal itself), and `recordAction` is the one write of a
+record's own action, which `cyclesApi.recordAction` calls and Add filing's
+Proof sends as `FormData`.
 
 D696 (#1658): `cyclesApi.record`, `recordActivity` and `recordAction` call
 D690’s mounted `/api/cycles/:cycle/modules/:slug/records/:id`, its `/activity`

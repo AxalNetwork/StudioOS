@@ -2,7 +2,7 @@
  * D709 (#1774) — the shared fixture for the fee routes' tests. The tables the
  * fee reads take their DDL from `schema_baseline.sql` with `ddl()` (the
  * pattern of capital_call_ledger.test.ts:65-77: foreign keys dropped, the
- * quoted `capital_calls` read), then 312, 472 and 473 are applied from their files.
+ * quoted `capital_calls` read), then 312, 472, 473 and 474 are applied from their files.
  * Every name, figure and email is made up.
  */
 import assert from 'node:assert/strict';
@@ -58,6 +58,7 @@ const SCHEMA = [
   readFileSync(resolve(HERE, '../sql/migrations/312_fund_call_ledger.sql'), 'utf8'),
   readFileSync(resolve(HERE, '../sql/migrations/472_entity_bank_accounts.sql'), 'utf8'),
   readFileSync(resolve(HERE, '../sql/migrations/473_fund_management_fees.sql'), 'utf8'),
+  readFileSync(resolve(HERE, '../sql/migrations/474_mercury_entity_connections.sql'), 'utf8'),
 ].join('\n');
 
 /** This quarter and the next, from today (UTC): the routes read the real clock. */
