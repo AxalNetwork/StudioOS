@@ -19,7 +19,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { commitmentsByFund } from '../src/lib/lpCommitmentModel.js';
-import { MyCommitment, WireDetails } from '../src/pages/SpinoutLabLpCommitment.jsx';
+import { MyCommitment, WireDetails, WireInstructions } from '../src/pages/SpinoutLabLpCommitment.jsx';
 import { SERVICE_PROVIDERS } from '../src/lib/spinoutFundModel.js';
 
 const TODAY = '2026-10-17';
@@ -66,16 +66,26 @@ test('commitmentsByFund keeps pay_instructions on each line, and null where ther
 });
 
 test('an unpaid Fund I line offers Wire details: the bank, the masked account, the reference and the warning', () => {
+  // D717 (#1859): the panel now opens on the amount and the phone check, so
+  // the masked block is no longer in the first render. It is drawn by
+  // `WireInstructions` once the LP ticks and asks; that block is held here.
   const html = card(AVAILABLE);
   assert.match(html, /data-testid="wire-details-10"/);
-  assert.match(html, /Wire details/);
-  assert.match(html, /Column N\.A\./);
-  assert.match(html, /••••5577/);
-  assert.match(html, /AXAL-CC-1-L100-10/);
-  assert.ok(html.includes(WARNING.replace(/'/g, '&#x27;')) || html.includes(WARNING), 'the warning is not printed');
-  assert.match(html, /Show the full account number/);
+  assert.match(html, /Amount due/);
+  assert.match(html, /I confirmed by phone/);
+  assert.match(html, /Show wire instructions/);
+  assert.doesNotMatch(html, /Column N\.A\./);
+  assert.doesNotMatch(html, /••••5577/);
+  assert.doesNotMatch(html, /AXAL-CC-1-L100-10/);
   assert.doesNotMatch(html, /data-testid="wire-details-12"/, 'a paid line offers wire details');
   assert.doesNotMatch(html, /data-testid="wire-details-13"/, 'a line on another fund offers wire details');
+  const block = render(React.createElement(WireInstructions, { p: AVAILABLE, full: null, busy: false, err: '', onReveal() {}, onHide() {}, testId: 10 }));
+  assert.match(block, /Wire details/);
+  assert.match(block, /Column N\.A\./);
+  assert.match(block, /••••5577/);
+  assert.match(block, /AXAL-CC-1-L100-10/);
+  assert.ok(block.includes(WARNING.replace(/'/g, '&#x27;')) || block.includes(WARNING), 'the warning is not printed');
+  assert.match(block, /Show the full account number/);
 });
 
 test('with no Fund account, the line prints the refusal\'s sentence and offers no number', () => {
