@@ -186,9 +186,8 @@ const verdictWrite = (user: User, projectId: number, action: string, summary: st
 /**
  * Record a decision. Never edits or deletes one (D693 decision 4).
  *
- * `bar` is the evidence bar. The old verdict route passes 0 until #1704
- * retires the page that calls it, which sends no evidence: its decision is a
- * given venture decision, superseding only the venture's current given one.
+ * `bar` is the evidence bar, `DECISION_EVIDENCE_BAR` for every route (D693
+ * decision 12); a test may pass another.
  */
 export async function recordDecision(
   env: Env,

@@ -590,23 +590,32 @@ test('10: no file under cloudflare-worker/src but services/verdict.ts names vali
   assert.deepEqual(offenders, []);
 });
 
-test('11: the old POST records a given venture decision that supersedes only the venture\'s current given one', async () => {
+test('11: the old POST obeys the bar: with no evidence it records Withheld, which supersedes nothing', async () => {
+  // #1704 (decision 12): /validate/verdict renders the module, so the old POST
+  // stops passing `bar: 0` and obeys the bar as the module does.
   const db = fixture();
   const env = envOf(db);
   const h2 = hypothesis(db, P, 'H2');
   const hd = await recordDecision(env, userOf(FOUNDER), { id: P }, { decision: 'proceed', for: h2, evidence: keys(items(5)) }, { evidenceSource: fixed(items(5)) });
-  const a = await oldPost(db, FOUNDER, { decision: 'proceed', reasoning: 'ship it' });
+  const given = await recordDecision(env, userOf(FOUNDER), { id: P }, { decision: 'proceed', for: 'venture', evidence: keys(items(5)) }, { evidenceSource: fixed(items(5)) });
+  const a = await oldPost(db, FOUNDER, { decision: 'pivot', reasoning: 'narrow it' });
   assert.equal(a.status, 201, JSON.stringify(a.body));
   assert.deepEqual(Object.keys(a.body).sort(), ['decision', 'id']);
-  const b = await oldPost(db, FOUNDER, { decision: 'pivot', reasoning: 'narrow it' });
-  assert.equal(b.status, 201);
-  const second = rows(db).find((r) => r.id === b.body.id);
-  assert.equal(second.state, 'given');
-  assert.equal(second.hypothesis_id, null);
-  assert.equal(second.supersedes_id, a.body.id);
+  const withheld = rows(db).find((r) => r.id === a.body.id);
+  assert.equal(withheld.state, 'withheld');
+  assert.equal(withheld.hypothesis_id, null);
+  assert.equal(withheld.supersedes_id, null, 'a Withheld decision supersedes nothing');
+  assert.equal((await currentDecision(env, P, 'venture'))?.id, given.id, 'the venture\'s given decision is still current');
   assert.equal((await currentDecision(env, P, h2))?.id, hd.id, 'H2\'s decision is still current');
-  assert.equal((await currentDecision(env, P, 'venture'))?.id, b.body.id);
   assert.equal((await oldPost(db, FOUNDER, { decision: 'maybe' })).status, 400);
+  // No caller passes `bar` any more, so every route records against the one bar.
+  const src = resolve(ROOT, 'cloudflare-worker/src');
+  const walk = (d: string): string[] => readdirSync(d).flatMap((n) => {
+    const f = join(d, n);
+    return statSync(f).isDirectory() ? walk(f) : [f];
+  });
+  const callers = walk(src).filter((f) => /recordDecision\([^;]*\bbar\s*:/s.test(readFileSync(f, 'utf8')));
+  assert.deepEqual(callers.map((f) => relative(src, f)), []);
 });
 
 // ---------------------------------------------------------------------------
