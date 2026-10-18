@@ -3,8 +3,7 @@
  *
  * PR A's database (`_mercury_d713.ts`: users 10 founder, 20 and 21 partners,
  * 30 investor; projects 1 and 2 of founder 100), plus migrations 312, 472 and
- * 474 for decision 3's registry reads (472's `entity_bank_accounts` replaced by a
- * stand-in of the three columns personal code may read), 445 for `connector_fed_items`, and the
+ * 474 for decision 3's registry reads, 445 for `connector_fed_items`, and the
  * full `integrations` and `integration_logs` tables.
  *
  * Every Mercury call goes to `bank()`, a global fetch stub that records each
@@ -39,11 +38,6 @@ export async function personalFixture(opts: { migrate?: boolean } = {}) {
   const baseline = readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8');
   for (const t of ['capital_calls', 'limited_partners', 'vc_funds']) db.exec(tableFromBaseline(baseline, t));
   for (const m of ['312_fund_call_ledger.sql', '472_entity_bank_accounts.sql', '474_mercury_entity_connections.sql', '445_connector_fed_items.sql', '435_connector_companies.sql']) db.exec(mig(m));
-  // #1773's registry as a stand-in with only the three columns decision 3 may
-  // read: a query naming any other column fails here, and no fixture needs a
-  // routing number or a ciphertext.
-  db.exec(`DROP TABLE entity_bank_accounts;
-    CREATE TABLE entity_bank_accounts (id INTEGER PRIMARY KEY, entity_key TEXT NOT NULL, account_last4 TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active');`);
   db.exec('DROP TABLE integrations');
   env.KEK_PII = 'fixture-cipher-key-'.repeat(4);
   await ensureIntegrationsSchema(env);
@@ -134,8 +128,20 @@ export async function req(env: any, who: number, method: string, path: string, b
   return { status: res.status, body: parsed, text };
 }
 
-/** A registry row of #1773's, through the stand-in. */
-export const registered = (db: any, entity: string, last4: string, status = 'active') =>
-  db.prepare('INSERT INTO entity_bank_accounts (entity_key, account_last4, status) VALUES (?, ?, ?)').run(entity, last4, status);
+/**
+ * A row in 472's real registry carrying only what decision 3 reads: entity,
+ * last four and status. The number columns are left empty, with 472's CHECKs
+ * lifted for this one insert, so no fixture holds an account number, a
+ * routing number or a ciphertext.
+ */
+export function registered(db: any, entity: string, last4: string, status = 'active') {
+  db.exec('PRAGMA ignore_check_constraints = ON');
+  try {
+    db.prepare(`INSERT INTO entity_bank_accounts (uid, entity_key, label, bank_name, bank_address, beneficiary_name, beneficiary_address,
+      account_kind, account_number_enc, account_last4, routing_number, status, retired_at, recorded_by)
+      VALUES (?, ?, 'Fixture', 'Fixture Bank', 'Fixture', 'Fixture', 'Fixture', 'checking', '', ?, '', ?, ?, 1)`)
+      .run(`eba-${crypto.randomUUID()}`, entity, last4, status, status === 'active' ? null : '2026-01-01');
+  } finally { db.exec('PRAGMA ignore_check_constraints = OFF'); }
+}
 
 export const count = (db: any, sql: string, ...args: any[]) => Number((db.prepare(sql).get(...args) as any).n);
