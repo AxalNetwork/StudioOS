@@ -926,6 +926,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
       <ModulePage
         cycle={cycle}
         slug={slug}
+        moduleName={moduleName}
         cards={tabs}
         data={module}
         status={projectStatus === 'unreadable' ? 'unreadable' : moduleStatus}
