@@ -9,8 +9,9 @@ import { publishedContractTemplates, publishContractTemplates, preparePublishedC
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   const baseline = readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8');
-  for (const table of ['users', 'activity_logs', 'legal_templates', 'deals']) db.exec(tableFromBaseline(baseline, table));
+  for (const table of ['users', 'activity_logs', 'legal_templates', 'legal_template_versions', 'esign_envelopes', 'deals']) db.exec(tableFromBaseline(baseline, table));
   db.exec(readFileSync('cloudflare-worker/sql/migrations/434_contract_template_publications.sql', 'utf8'));
+  db.exec(readFileSync('cloudflare-worker/sql/migrations/479_template_kind_party.sql', 'utf8'));
   db.exec("INSERT INTO users(id,name,email,role) VALUES(1,'Admin','admin@example.test','admin'),(2,'Other','other@example.test','admin'),(3,'Founder','founder@example.test','founder'); INSERT INTO legal_templates(id,slug,title,body_md,version) VALUES(1,'safe','SAFE','Hello {{recipient_name}} {{company.name}} {{price}}',3),(2,'draft','Draft','Draft body',1),(3,'stub','Stub','Stub body',1); UPDATE legal_templates SET is_stub=1 WHERE id=3");
   return { db, env: { DB: d1Over(db) } as any };
 }
