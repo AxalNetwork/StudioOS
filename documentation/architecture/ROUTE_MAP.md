@@ -115,7 +115,7 @@ It answers no key and no account number. `stripeCall` refuses a Stripe create wi
 
 ### Legal paper Worker contract (D711, #1776)
 
-Every legal document draws one HTML paper (`services/legalPaper.ts`), printed to PDF by Browser Run through `BROWSER.quickAction('pdf', …)`, with pdf-lib (`services/pdf.ts`) as the fallback. Every kept or handed-out file gets an append-only `legal_document_files` row (migration 475). See `decisions/D711.md`.
+Every legal document draws one HTML paper (`services/legalPaper.ts`), printed to PDF by Browser Run through `BROWSER.quickAction('pdf', …)`, with pdf-lib (`services/pdf.ts`) as the fallback. Every kept or handed-out file gets an append-only `legal_document_files` row (migration 475). See `decisions/D711.md`. Since #1865 the paper's tokens are R2's, and a stub's paper (`preview.pdf`, `render`, `render.pdf` and the thumbnail) reads "No body in the store yet." and, for a counsel slug, "Stub — counsel to draft."
 
 New routes:
 - `POST /api/admin/contracts/templates/render` · admin: `{ title, body, slug, category, version, page_size, cover, resolve, fonts }` → `{ html, body_sha256, page_size, paper_sha256, state }`, `no-store`. A body over 256 KB is 413 `body_too_large`.
@@ -174,6 +174,8 @@ PR 1b, behind `requireAdmin`:
 - `ppm`, `subscription_booklet` and `compliance_manual_code_of_ethics` print the Structure of the Fund page wherever they are drawn: bracketed accounts on a preview, masked accounts on an issued copy.
 
 `GET /api/admin/fund-structure` (`admin_fund_structure.ts`, `requireAdmin`, HQ only): the entity and money map (`services/fundStructure.ts`). A Super Admin's carries each receiving account masked or the resolver's sentence; a plain Admin's carries "Only the Super Admin can see or change payment instructions." and reads no account. #1855: the model also carries the eight numbered `rows`, the `map` both drawings print, `signing` and `rails`, and, for the Super Admin only, `accounts` (each entity's active accounts masked to the last four, from the registry's list; null if it cannot be read). `no-store`; 503 `fund_structure_unreadable`. Its screen caller is the "Structure of the Fund" sheet on `/admin/contracts` (`?sheet=structure`, `pages/admin/contracts/FundStructureSheet.jsx`): a door in the desk header on every tab, read only once open, absent on a branch, with a "Bank accounts" link for the Super Admin.
+
+D758 (#1861) changes no route. Migration 484 fills every active row that has no text from its file under `templates/legal/`, as a new version with the empty one in history, and the catalog gains "Operating Partner Agreement (Spin-Out Lab)" as a counsel stub. From then on every catalog row is either a coded body or a counsel stub in `COUNSEL_DRAFT_SLUGS`.
 
 ### Usage page and HQ allowances (D642, #1435)
 

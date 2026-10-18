@@ -13,7 +13,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import { d1Over } from './_d1_sqlite.mjs';
-import { PDFDocument, PDFArray, PDFName, PDFRawStream, decodePDFRawStream } from 'pdf-lib';
+import { pdfText } from './_pdf_text.ts';
 import { tableFromBaseline } from './_baseline.mjs';
 import contracts from '../src/routes/admin_contracts.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
@@ -72,14 +72,7 @@ async function previewText(db: DatabaseSync, slug: string): Promise<string> {
     .setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(SECRET))}` } },
     { JWT_SECRET: SECRET, ENVIRONMENT: 'development', DB: d1Over(db) });
   assert.equal(res.status, 200);
-  const doc = await PDFDocument.load(new Uint8Array(await res.arrayBuffer()));
-  return doc.getPages().map((page) => {
-    const raw = page.node.lookup(PDFName.of('Contents'));
-    const streams = raw instanceof PDFArray ? raw.asArray().map((r) => doc.context.lookup(r)) : [raw];
-    let ops = '';
-    for (const st of streams) if (st instanceof PDFRawStream) ops += Buffer.from(decodePDFRawStream(st).decode()).toString('latin1');
-    return [...ops.matchAll(/<([0-9A-Fa-f]*)>\s*Tj/g)].map((m) => Buffer.from(m[1], 'hex').toString('latin1')).join(' ');
-  }).join(' ').replace(/\s+/g, ' ');
+  return pdfText(new Uint8Array(await res.arrayBuffer()));
 }
 
 test('D717 migration 479: every existing row reads NULL, and the CHECKs refuse an unknown kind or party', () => {
@@ -162,9 +155,9 @@ test('D717 a change is an edit: the version bumps, history holds the old pair, a
     (e: any) => e.code === 'kind_invalid');
 });
 
-test('D717 COUNSEL_DRAFT_SLUGS equals the slugs migrations 468, 471 and 478 insert', () => {
-  const slugs = ['468', '471', '478'].flatMap((n) => insertedSlugs(migration(n)));
-  assert.equal(slugs.length, 31);
+test('D717 COUNSEL_DRAFT_SLUGS equals the slugs migrations 468, 471, 478 and 484 insert', () => {
+  const slugs = ['468', '471', '478', '484'].flatMap((n) => insertedSlugs(migration(n)));
+  assert.equal(slugs.length, 32);
   assert.deepEqual([...COUNSEL_DRAFT_SLUGS].sort(), [...new Set(slugs)].sort());
 });
 

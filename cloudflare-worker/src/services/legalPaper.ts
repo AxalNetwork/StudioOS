@@ -13,6 +13,13 @@
 // What never reaches paper: an IP address or an email (decision 13). The
 // email in a recipient row only finds the counter-signer.
 //
+// The library sweep (#1865): `paperModel` runs `paperText` on every string
+// it prints, not only body runs, so the HTML, the fallback and the Word export
+// read the same clean text; a stub prints its layout with `STUB_LINE` (and
+// `COUNSEL_LINE` for a counsel slug); a contents page prints only when there
+// is an article; the stamps read as L3 draws them; the wordmark reads
+// "Axal VC".
+//
 // NOTE: authored to load under `node --experimental-strip-types` (the worker
 // test gate) — no `enum`s, no TS parameter properties.
 
@@ -27,7 +34,7 @@ import {
   type DocumentKind,
   type SignatureParty,
 } from './legalDocFormat';
-import { paperBlocks, runsText, type Block, type MergeMode, type Run } from './legalPaperBlocks';
+import { paperBlocks, paperText, runsText, type Block, type MergeMode, type Run } from './legalPaperBlocks';
 import {
   assertCover,
   assertPageSize,
@@ -40,7 +47,7 @@ import {
 } from './legalPaperCss';
 
 /** The long instruments that get a cover and contents (decision 12). */
-import { STRUCTURE_MAP_SLUGS } from './templateFormat';
+import { COUNSEL_DRAFT_SLUGS, STRUCTURE_MAP_SLUGS } from './templateFormat';
 import { STRUCTURE_HEADING, STRUCTURE_MARKER, STRUCTURE_SUBTITLE, licenceLines, structureLines, structureSvg, structureTable } from './fundStructurePaper';
 import type { StructureModel } from './fundStructure';
 
@@ -135,6 +142,11 @@ export interface PaperInput {
   preserveBody?: boolean;
   /** Print no execution block or certificate (DocuSign draws its own). */
   suppressExecutionBlock?: boolean;
+  /**
+   * #1865 — a template with no body yet: the body is replaced by `STUB_LINE`
+   * (and `COUNSEL_LINE` for a counsel slug), and the layout still draws.
+   */
+  stub?: boolean;
   // D716 — a notice's sections. Each is optional and prints only when given.
   /** The addressee lines (`buildAddresseeBlock`). */
   addressee?: string[] | null;
@@ -208,6 +220,11 @@ export interface PaperPart {
 
 /** What a part with no text from counsel prints. */
 export const PART_STUB = 'Stub — counsel to draft.';
+
+/** #1865 — what a template with no body prints in its place (L8 learn item 2). */
+export const STUB_LINE = 'No body in the store yet.';
+/** …and, for a `COUNSEL_DRAFT_SLUGS` slug, this under it. */
+export const COUNSEL_LINE = PART_STUB;
 
 export interface NoticeKeyFigure { label: string; value: string; mono?: boolean }
 export interface NoticeTable {
@@ -321,7 +338,33 @@ function withDate(p: SignatureParty, signedAt: string | null | undefined): Signa
   return d ? { ...p, date: `Date: ${d}` } : p;
 }
 
-export function paperModel(input: PaperInput): PaperModel {
+/** #1865 — the input with `paperText` run on every string the paper prints. */
+function cleanInput(raw: PaperInput): PaperInput {
+  const t = (v: string | null | undefined) => (v == null ? v : paperText(v));
+  const tt = (v: string | null | undefined) => (v == null ? '' : paperText(v));
+  const pay = raw.payment;
+  return {
+    ...raw,
+    title: tt(raw.title),
+    counterpartyName: t(raw.counterpartyName),
+    counterpartyTitle: t(raw.counterpartyTitle),
+    offeree: t(raw.offeree),
+    copyNumber: t(raw.copyNumber),
+    parts: raw.parts ? raw.parts.map((pt) => ({ ...pt, title: tt(pt.title), footer: tt(pt.footer), counterpartyName: t(pt.counterpartyName) })) : raw.parts,
+    addressee: raw.addressee ? raw.addressee.map(tt) : raw.addressee,
+    keyFigures: raw.keyFigures ? raw.keyFigures.map((k) => ({ ...k, label: tt(k.label), value: tt(k.value) })) : raw.keyFigures,
+    tables: raw.tables
+      ? raw.tables.map((tb) => ({ ...tb, title: t(tb.title), columns: tb.columns.map((c) => ({ ...c, label: tt(c.label) })), rows: tb.rows.map((r) => r.map(tt)) }))
+      : raw.tables,
+    warning: t(raw.warning),
+    payment: !pay ? pay
+      : 'refusal' in pay ? { refusal: tt(pay.refusal) }
+        : { lines: pay.lines.map((l) => ({ ...l, label: tt(l.label), value: tt(l.value) })), reference: t(pay.reference) ?? null },
+  };
+}
+
+export function paperModel(raw: PaperInput): PaperModel {
+  const input = cleanInput(raw);
   const slug = String(input.slug || input.title || '');
   const kind = input.documentKind || classifyDocument(slug);
   const entityKey = input.axalEntityKey || axalEntityKeyForDoc(slug, input.category);
@@ -348,7 +391,8 @@ export function paperModel(input: PaperInput): PaperModel {
       })
     : null;
 
-  const body = input.preserveBody ? input.body : stripTrailingSignatureBlock(input.body || '');
+  const stubBody = COUNSEL_DRAFT_SLUGS.has(slug.toLowerCase()) ? `${STUB_LINE}\n\n${COUNSEL_LINE}` : STUB_LINE;
+  const body = input.stub ? stubBody : input.preserveBody ? input.body : stripTrailingSignatureBlock(input.body || '');
   const allBlocks = paperBlocks(body, { merge: input.merge || 'raw', title: input.title });
 
   // A cover slug's legends before the first article move to its cover.
@@ -620,12 +664,21 @@ function paymentHtml(p: NoticePayment): string {
     + '</dl></section>';
 }
 
-function stateHtml(s: PaperState): string {
+/** #1865 — the stamps' words, as L3 draws them; the pdf-lib fallback prints the same. */
+export function stampText(s: PaperState, m: { version: number | null; bodySha256: string }): string | null {
   switch (s.kind) {
-    case 'draft': return '<div class="state-banner">DRAFT — for counsel review</div><div class="diagonal draft" aria-hidden="true">DRAFT</div>';
+    case 'superseded': return `SUPERSEDED BY v${s.by}`;
+    case 'issued': return ['Issued', m.version ? `v${m.version}` : null, `SHA-256 ${m.bodySha256.slice(0, 12)}`].filter(Boolean).join(' · ');
+    default: return null;
+  }
+}
+
+function stateHtml(s: PaperState, m: { version: number | null; bodySha256: string }): string {
+  switch (s.kind) {
+    case 'draft': return '<div class="state-banner draft">DRAFT — for counsel review</div><div class="diagonal draft" aria-hidden="true">DRAFT</div>';
     case 'specimen': return '<div class="diagonal specimen" aria-hidden="true">SPECIMEN</div>';
-    case 'superseded': return `<div class="stamp">Superseded by v${s.by}</div>`;
-    case 'issued': return '<div class="stamp">Issued</div>';
+    case 'superseded': return `<div class="stamp superseded">${escapeHtml(stampText(s, m)!)}</div>`;
+    case 'issued': return `<div class="stamp issued">${escapeHtml(stampText(s, m)!)}</div>`;
   }
 }
 
@@ -633,7 +686,7 @@ function coverHtml(m: PaperModel, cover: PaperCover): string {
   const c = m.cover!;
   const fill = (v: string | null) => (v ? escapeHtml(v) : '<span class="fill"></span>');
   return `<section class="cover cover-${cover}"><div class="cover-inner">`
-    + `<div class="lockup"><img alt="" src="${markDataUri()}"><span class="wordmark">AXAL VC</span></div>`
+    + `<div class="lockup"><img alt="" src="${markDataUri()}"><span class="wordmark">Axal VC</span></div>`
     + `<div class="cover-fund">${escapeHtml(c.fund)}</div>`
     + `<h1 class="cover-title">${escapeHtml(c.name)}</h1>`
     + `<div class="eyebrow">Confidential</div>`
@@ -711,8 +764,8 @@ export function paperHtml(m: PaperModel, o: PaperHtmlOptions): string {
   const fonts = o.fonts === 'inline' ? paperFontsCss() : '';
 
   const head = screen
-    ? `<header class="screen-head"><div class="lockup"><img alt="" src="${markDataUri()}"><span class="wordmark">AXAL VC</span></div><span class="confidential">Confidential</span></header>`
-    : '<span class="lockup-font-warm" aria-hidden="true">AXAL VC</span>';
+    ? `<header class="screen-head"><div class="lockup"><img alt="" src="${markDataUri()}"><span class="wordmark">Axal VC</span></div><span class="confidential">Confidential</span></header>`
+    : '<span class="lockup-font-warm" aria-hidden="true">Axal VC</span>';
   const foot = screen
     ? `<footer class="screen-foot"><div>${escapeHtml(m.footerLeft)}</div><div class="audit">${escapeHtml(m.auditLine)}</div></footer>`
     : '';
@@ -720,12 +773,13 @@ export function paperHtml(m: PaperModel, o: PaperHtmlOptions): string {
   const parts: string[] = [];
   if (part !== 'body' && m.cover) {
     parts.push(coverHtml(m, cover));
-    parts.push(contentsHtml(m, screen ? null : (o.tocPages ?? null), part === 'front'));
+    // #1865 — no contents page without an article (a stub cover slug).
+    if (m.articles.length) parts.push(contentsHtml(m, screen ? null : (o.tocPages ?? null), part === 'front'));
   }
   if (part !== 'front' && m.parts) {
     // D716 — a composite paper: each part on its own named page, its heading
     // the one link the body pass prints, so the contents finds its page.
-    if (m.state.kind === 'draft') parts.push(stateHtml(m.state));
+    if (m.state.kind === 'draft') parts.push(stateHtml(m.state, m));
     for (const pt of m.parts.filter((x) => x.n > 1)) {
       const heading = part === 'body' ? `<a href="#${pt.id}">${escapeHtml(pt.title)}</a>` : escapeHtml(pt.title);
       parts.push(`<section class="booklet-part part-${pt.n}"><div class="eyebrow">Part ${pt.n}</div>`
@@ -741,9 +795,10 @@ export function paperHtml(m: PaperModel, o: PaperHtmlOptions): string {
       if (pt.n === 2 && m.structure) parts.push(structureHtml(m.structure));
     }
   } else if (part !== 'front') {
+    // A notice has no template version: its stamp is the word, and its audit line names it.
     parts.push(m.stamp && m.state.kind === 'issued'
-      ? `<div class="stamp">${m.stamp === 'superseded' ? 'Superseded' : 'Issued'}</div>`
-      : stateHtml(m.state));
+      ? (m.stamp === 'superseded' ? '<div class="stamp superseded">SUPERSEDED</div>' : '<div class="stamp issued">Issued</div>')
+      : stateHtml(m.state, m));
     if (m.restricted) parts.push('<div class="restricted">Confidential — GP and LPAC only</div>');
     parts.push(`<h1 class="title">${escapeHtml(m.title)}</h1>`);
     if (m.addressee) parts.push(`<div class="addressee">${m.addressee.map((l) => `<p>${escapeHtml(l)}</p>`).join('')}</div>`);
@@ -766,7 +821,7 @@ export function paperHtml(m: PaperModel, o: PaperHtmlOptions): string {
     }
     if (m.certificate) parts.push(certificateHtml(m));
   } else {
-    parts.push(stateHtml(m.state).replace(/<div class="(state-banner|stamp)">[^<]*<\/div>/, ''));
+    parts.push(stateHtml(m.state, m).replace(/<div class="(state-banner|stamp)[^"]*">[^<]*<\/div>/, ''));
   }
 
   return '<!doctype html><html lang="en"><head><meta charset="utf-8">'
