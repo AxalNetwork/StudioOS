@@ -44,7 +44,6 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
-import channels from '../src/routes/channels.ts';
 import { encryptCredentials, decryptCredentials } from '../src/integrations/secrets.ts';
 import { runChannelJob } from '../src/services/channels/jobs.ts';
 import { transcriptionFailures } from '../src/services/channels/voiceFailures.ts';

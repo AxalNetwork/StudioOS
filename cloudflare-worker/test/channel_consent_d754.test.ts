@@ -43,7 +43,7 @@ import { consentBlocks } from '../src/services/interviewSessions.ts';
 import { sweepQuietChats } from '../src/services/sessionAutoStructure.ts';
 import { normaliseWhatsAppPayload, GRAPH_BASE } from '../src/services/channels/whatsapp.ts';
 import {
-  INTERVIEW, JWT_SECRET, ME, OTHER, PNID, PNID_GONE, PROJECT, OTHER_PROJECT, SECRET_VALUES, SECRETS, WA_CUSTOMER, WA_TOKEN,
+  INTERVIEW, JWT_SECRET, ME, OTHER, PNID, PNID_GONE, PROJECT, SECRET_VALUES, SECRETS, WA_CUSTOMER, WA_TOKEN,
   businessMessage, call, count, mockFetch, noSecretsSeen, now, ref, seen, sign, telegramApi, tgHook, waHook, waPayload, waText,
   world, type Route,
 } from './_channels_fixture.ts';
@@ -670,7 +670,6 @@ test('re-links: the same interview twice opens one session; another venture is r
   const ns = sessionRow(db, same.body.session_id);
   assert.deepEqual([ns.consent_status, ns.consent_method], ['given', 'chat_reply']);
   assert.equal(threadRow(db, uid).consent_state, 'given');
-  void OTHER_PROJECT;
 });
 
 // ---------------------------------------------------------------------------
@@ -687,7 +686,6 @@ test('the purge removes an empty waiting draft after 30 days, with the interview
   db.prepare(`UPDATE channel_thread_messages SET sent_at = datetime('now', '-31 days')`).run();
   // A draft on an interview the member made earlier, with no waiting copy.
   db.prepare(`INSERT INTO discovery_interviews (id, project_id, interviewee_name, created_at) VALUES (401, ${PROJECT}, 'Mine', datetime('now', '-60 days'))`).run();
-  const uid2 = await waChat(env, []);
   db.exec(`INSERT INTO channel_threads (uid, provider, integration_id, user_id, external_chat_id) SELECT 'thread-2', 'whatsapp', integration_id, user_id, '447700900222' FROM channel_threads LIMIT 1`);
   const mine = await call(env, ME, 'POST', `/threads/thread-2/assign`, { interview_id: 401 });
   db.prepare(`UPDATE interview_sessions SET created_at = datetime('now', '-31 days') WHERE id = ?`).run(mine.body.session_id);
@@ -700,7 +698,6 @@ test('the purge removes an empty waiting draft after 30 days, with the interview
   // A given session with segments.
   db.prepare(`INSERT INTO interview_sessions (uid, interview_id, project_id, created_by_user_id, channel, status, consent_status, submitted_via, created_at)
               VALUES ('given-1', ${INTERVIEW}, ${PROJECT}, ${ME}, 'text', 'transcribed', 'given', 'whatsapp', datetime('now', '-40 days'))`).run();
-  void uid2;
 
   const r = await purgeExpired(env, new Date());
   assert.equal(r.drafts, 2);
