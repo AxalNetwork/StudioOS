@@ -37,6 +37,7 @@ import {
 import { decryptCredentials, encryptCredentials, type CredentialBlob } from '../secrets';
 import { loadDealstageMap, studioStageToHubspot, hubspotStageToStudio, type StudioStage } from '../mappings/hubspot_stages';
 import { enabledCompanyIds, projectEnabled, scheduledConnectorEnabled } from '../companyScope';
+import { acquireRefreshLease } from '../refreshLease';
 
 const HS_API = 'https://api.hubapi.com';
 const HS_AUTH = 'https://app.hubspot.com';
@@ -160,7 +161,8 @@ async function fetchTokenInfo(accessToken: string): Promise<HubSpotTokenInfo> {
  * the integration row UID; losers spin briefly and re-read the freshly
  * persisted blob from D1.
  */
-async function getActiveAccessToken(env: Env, row: IntegrationRow): Promise<string> {
+// Exported for kv_refresh_lease.test.ts (#1903).
+export async function getActiveAccessToken(env: Env, row: IntegrationRow): Promise<string> {
   const skewMs = 60 * 1000;
   const readCreds = async () => {
     const fresh = await env.DB.prepare(
@@ -191,17 +193,7 @@ async function getActiveAccessToken(env: Env, row: IntegrationRow): Promise<stri
   // Acquire short KV lease so concurrent refreshes serialize. KV has eventual
   // consistency, so the lease is best-effort; we additionally re-check the
   // DB after acquiring and after the wait loop.
-  const lockKey = `hubspot:refresh:${row.uid}`;
-  const holder = crypto.randomUUID();
-  let acquired = false;
-  try {
-    const cur = await env.RATE_LIMITS.get(lockKey);
-    if (!cur) {
-      await env.RATE_LIMITS.put(lockKey, holder, { expirationTtl: 30 });
-      const verify = await env.RATE_LIMITS.get(lockKey);
-      acquired = verify === holder;
-    }
-  } catch { /* lease infra failure → fall through, single-flight not guaranteed */ }
+  const { acquired, release } = await acquireRefreshLease(env, 'hubspot', row.uid);
 
   if (!acquired) {
     // Loser: poll DB up to ~3 s for the winner's refreshed blob.
@@ -220,7 +212,7 @@ async function getActiveAccessToken(env: Env, row: IntegrationRow): Promise<stri
     if (liveFresh) {
       // We're in the `else` of `if (!acquired)` above, so `acquired` is
       // always true here — no need to re-check it.
-      try { await env.RATE_LIMITS.delete(lockKey); } catch {}
+      await release();
       return liveFresh;
     }
     creds = fresh;
@@ -228,7 +220,7 @@ async function getActiveAccessToken(env: Env, row: IntegrationRow): Promise<stri
 
   const refreshToken = typeof creds?.refresh_token === 'string' ? creds!.refresh_token as string : '';
   if (!refreshToken) {
-    try { if (acquired) await env.RATE_LIMITS.delete(lockKey); } catch {}
+    await release();
     throw new Error('hubspot_refresh_token_missing');
   }
   try {
@@ -245,7 +237,7 @@ async function getActiveAccessToken(env: Env, row: IntegrationRow): Promise<stri
     ).bind(enc, row.id).run();
     return refreshed.access_token;
   } finally {
-    try { if (acquired) await env.RATE_LIMITS.delete(lockKey); } catch {}
+    await release();
   }
 }
 
