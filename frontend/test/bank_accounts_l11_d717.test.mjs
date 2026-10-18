@@ -413,7 +413,7 @@ test('Add account: the default is Holdings once the Fund has an account; Another
     await v.fill('Bank', 'other');
     const labels = labelTexts(v, one(v, 'bank-accounts-add-dialog'));
     for (const t of ['Bank name', 'Bank address', 'Beneficiary address', 'ABA routing number']) assert.ok(labels.includes(t), t);
-    assert.ok(!labels.some((t) => /^Label|legal name/.test(t)), labels.join('|'));
+    assert.ok(!labels.some((t) => t.startsWith('Label') || t.includes('legal name')), labels.join('|'));
     await v.fill('Bank name', 'Synthetic Bank');
     await v.fill('ABA routing number', '011000015');
     await v.click('Save account');
