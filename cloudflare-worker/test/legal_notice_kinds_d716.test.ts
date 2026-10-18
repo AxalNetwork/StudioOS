@@ -276,8 +276,10 @@ test('D716 the pdf-lib fallback draws nothing for a block with no parties: no si
   const { paperModel } = await import('../src/services/legalPaper.ts');
   const { renderPaperFallbackPdf } = await import('../src/services/pdf.ts');
   const { PDFDocument } = await import('pdf-lib');
-  const model = paperModel({ title: 'Subscription Booklet', body: 'The parts follow.', slug: 'subscription_booklet', bodySha256: 'a'.repeat(64), state: { kind: 'draft' } });
+  const input = { title: 'Subscription Booklet', body: 'The parts follow.', slug: 'subscription_booklet', bodySha256: 'a'.repeat(64), state: { kind: 'draft' as const } };
+  const model = paperModel(input);
   assert.deepEqual(model.execution?.parties, []);
-  const doc = await PDFDocument.load(await renderPaperFallbackPdf(model, { pageSize: 'letter' }));
-  assert.equal(doc.getPageCount(), 1, 'no page for an empty execution block');
+  const pages = async (m: any) => (await PDFDocument.load(await renderPaperFallbackPdf(m, { pageSize: 'letter' }))).getPageCount();
+  // The booklet is a cover slug, so the fallback also draws its cover and contents: compare against no block at all.
+  assert.equal(await pages(model), await pages(paperModel({ ...input, suppressExecutionBlock: true })), 'no page for an empty execution block');
 });
