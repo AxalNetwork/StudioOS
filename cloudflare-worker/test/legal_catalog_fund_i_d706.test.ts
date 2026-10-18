@@ -113,6 +113,7 @@ test('D706 a second run of 468 adds nothing, and a row with the same slug is lef
 
 test('D706 no existing document changes: rows, store bodies and the Templates list are identical', async () => {
   const { db, env } = fixture();
+  await listTemplates(env); // the store's first read adds D717's two columns (migration 479) before the snapshot
   const before = rowsBySlug(db);
   const bodies = new Map<string, string | null>();
   for (const slug of before.keys()) bodies.set(slug, await getActiveTemplateBody(env, slug));

@@ -77,7 +77,23 @@ export function makeCycleWrites(request) {
       roleUpdate: (projectId, id, body) => request(`/cycles/grow/roles/${seg(id)}`, { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
       obligationUpdate: (projectId, id, body) => request(`/cycles/grow/obligations/${seg(id)}`, { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
     },
+    // D696 (#1658): a record's own action, as `cyclesApi.recordAction` sends it; a
+    // FormData body (Upload proof) goes as it is.
+    recordAction: (cycle, projectId, slug, id, key, body = {}) => {
+      if (!CYCLE_KEY.test(String(cycle)) || !MODULE_SLUG.test(String(slug))) return Promise.reject(new Error('That module has no records.'));
+      return request(`/cycles/${cycle}/modules/${slug}/records/${seg(id)}/actions/${seg(key)}?${q(projectId)}`, {
+        method: 'POST', body: body instanceof FormData ? body : JSON.stringify(body),
+      });
+    },
     build: {
+      // D695 (#1656, PR 3b): Build's canvas Adds and Edits, through #1695's routes (#1792).
+      addFeature: (projectId, body) => request(`/cycles/build/features?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
+      addMustHave: (projectId, body) => request(`/cycles/build/must-haves?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
+      roadmapItem: (projectId, body) => request(`/cycles/build/roadmap?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
+      roadmapItemUpdate: (projectId, id, body) => request(`/cycles/build/roadmap/${seg(id)}?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+      // The cap table's plan gate answers 402; the dialog shows it as its refusal (D651).
+      founder: (projectId, body) => request(`/cycles/build/founders?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body), inlinePaywall: true }),
+      founderUpdate: (projectId, id, body) => request(`/cycles/build/founders/${seg(id)}?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify(body), inlinePaywall: true }),
       risk: (projectId, body) => request(`/cycles/build/risks?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
       formationStep: (projectId, body) => request(`/cycles/build/formation-steps?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
       formationStepUpdate: (projectId, id, body) => request(`/cycles/build/formation-steps/${seg(id)}?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify(body) }),

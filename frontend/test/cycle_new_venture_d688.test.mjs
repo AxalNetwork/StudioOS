@@ -57,20 +57,20 @@ test('D688: Build phone focus has the Add feature link and no Validate meter or 
   assert.doesNotMatch(absent, /data-testid="phone-focus"/);
 });
 
-test('D688: Solution design has two distinct Add forms; Score readiness opens Re-score; narrative requires type', () => {
+test('D688: Solution design\'s Add is Add feature (Add a risk is its record\'s, #1656 PR 3b); Score readiness opens Re-score; narrative requires type', () => {
   const forms = formsFor('build', 'solution-design');
-  assert.deepEqual(forms.map((form) => form.button), ['Add feature', 'Add risk']);
+  assert.deepEqual(forms.map((form) => form.button), ['Add feature']);
   assert.equal(formFor('build', 'solution-design'), forms[0]);
   assert.equal(formFor('build', 'constructor'), null);
   assert.equal(formFor('raise', 'toString'), null);
-  assert.deepEqual(forms[0].fields.map((field) => field.name), ['title', 'added_value', 'effort']);
+  assert.deepEqual(forms[0].fields.map((field) => field.name), ['title', 'pain_group_id', 'hypothesis_id', 'impact', 'effort', 'scope']);
   const calls = [];
-  const w = { build: { mvpFeature: (...args) => { calls.push(args); return { id: 1 }; } } };
+  const w = { build: { addFeature: (...args) => { calls.push(args); return { id: 1 }; } } };
   forms[0].submit(w, 7, { title: 'First feature' });
-  assert.equal(calls[0][1].is_must_have, undefined);
+  assert.equal(calls[0][1].is_must_have, undefined, 'a feature is not a must-have until marked');
   const record = html(h(RecordsTable, { title: 'Features', records: { cols: [], rows: [], total: 0 }, add: forms.map((form) => ({ text: form.button, onClick() {} })) }));
   assert.match(record, /Add feature/);
-  assert.match(record, /Add risk/);
+  assert.doesNotMatch(record, /Add risk/);
   // D695 (#1657): the card's "Score readiness" opens Re-score, the canvas form (CO:317).
   const rescore = formFor('raise', 'fundraising-readiness');
   assert.deepEqual(rescore.fields.map((field) => field.name), ['items', 'since']);
@@ -141,7 +141,9 @@ test('D688: ?add=1 opens the first form at its /new address on load and later na
       h(Address), h(Routes, null,
         h(Route, { path: '/build', element: h(CycleRoute, { cycle: 'build' }) }),
         h(Route, { path: '/build/:slug', element: h(CycleRoute, { cycle: 'build' }) }),
-        h(Route, { path: '/build/:slug/new', element: h(CycleRoute, { cycle: 'build', adding: true }) })))));
+        h(Route, { path: '/build/:slug/new', element: h(CycleRoute, { cycle: 'build', adding: true }) }),
+        h(Route, { path: '/validate/:slug', element: h(CycleRoute, { cycle: 'validate' }) }),
+        h(Route, { path: '/validate/:slug/new', element: h(CycleRoute, { cycle: 'validate', adding: true }) })))));
     assert.equal(form()?.form.button, 'Add feature');
     assert.equal(`${path}${search}`, '/build/solution-design/new?project_id=7', '?add=1 becomes the address');
     await act(async () => form().onClose());
@@ -150,9 +152,12 @@ test('D688: ?add=1 opens the first form at its /new address on load and later na
     await act(async () => navigate('/build/solution-design?project_id=7&add=1'));
     assert.equal(form()?.form.button, 'Add feature', 'query added after mount opens the form');
     assert.equal(path, '/build/solution-design/new');
+    // Every Build module has its Add since #1656 PR 3b; Customer research has none (it records a session).
     await act(async () => navigate('/build/product-roadmap?project_id=7&add=1'));
+    assert.equal(form()?.form.button, 'Add item', 'Product roadmap\'s Add opens');
+    await act(async () => navigate('/validate/customer-research?project_id=7&add=1'));
     assert.equal(form(), null, 'module with no form ignores add');
-    assert.equal(`${path}${search}`, '/build/product-roadmap?project_id=7&add=1');
+    assert.equal(`${path}${search}`, '/validate/customer-research?project_id=7&add=1');
     await act(async () => navigate('/build?project_id=7&add=1'));
     assert.equal(form(), null, 'overview ignores add');
   } finally {

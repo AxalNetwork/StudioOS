@@ -63,6 +63,9 @@ export interface PublishedContractTemplate {
   title: string;
   category: string;
   body_md: string;
+  /** D717: the kind and Axal party the publication prints; NULL is "from the slug". */
+  doc_kind: string | null;
+  axal_party: string | null;
   published_at: string;
   published_by: number;
 }
@@ -95,8 +98,8 @@ export async function publishContractTemplates(env: Env, actorId: number, actor:
   // publish a body under the wrong version.
   await env.DB.batch([
     env.DB.prepare(`INSERT OR REPLACE INTO legal_template_publications
-      (template_id, slug, version, title, category, body_md, published_at, published_by)
-      SELECT id, slug, version, title, category, body_md, ?, ? FROM legal_templates
+      (template_id, slug, version, title, category, body_md, doc_kind, axal_party, published_at, published_by)
+      SELECT id, slug, version, title, category, body_md, doc_kind, axal_party, ?, ? FROM legal_templates
       WHERE is_active = 1 AND is_stub = 0 AND LENGTH(TRIM(body_md)) > 0`).bind(at, actorId),
     env.DB.prepare(`DELETE FROM legal_template_publications WHERE template_id IN
       (SELECT id FROM legal_templates WHERE is_active <> 1 OR is_stub <> 0 OR LENGTH(TRIM(body_md)) = 0)`),
@@ -105,4 +108,52 @@ export async function publishContractTemplates(env: Env, actorId: number, actor:
       .bind(JSON.stringify({ published_at: at }), actor, actorId),
   ]);
   return publishedContractTemplates(env);
+}
+
+export class PublicationError extends Error {
+  code: 'template_not_found' | 'published_version_changed' | 'template_has_no_body' | 'not_published';
+  status: 404 | 409;
+  constructor(code: PublicationError['code'], status: 404 | 409) { super(code); this.code = code; this.status = status; }
+}
+
+/**
+ * D717 decision 10: publish one template's saved version. The snapshot (both
+ * format columns included) and its audit row commit together, and the SELECT
+ * runs inside the batch guarded on `version`, so an edit after the check
+ * publishes nothing under the wrong number.
+ */
+export async function publishOneTemplate(env: Env, slug: string, version: number, actorId: number, actor: string) {
+  const row = await env.DB.prepare(`SELECT id, version, is_stub, LENGTH(TRIM(body_md)) AS body_len FROM legal_templates
+    WHERE slug = ? AND is_active = 1`).bind(slug).first<{ id: number; version: number; is_stub: number; body_len: number }>();
+  if (!row) throw new PublicationError('template_not_found', 404);
+  if (row.version !== version) throw new PublicationError('published_version_changed', 409);
+  if (row.is_stub || !row.body_len) throw new PublicationError('template_has_no_body', 409);
+  const at = new Date().toISOString();
+  const [insert] = await env.DB.batch([
+    env.DB.prepare(`INSERT OR REPLACE INTO legal_template_publications
+      (template_id, slug, version, title, category, body_md, doc_kind, axal_party, published_at, published_by)
+      SELECT id, slug, version, title, category, body_md, doc_kind, axal_party, ?, ? FROM legal_templates
+      WHERE id = ? AND version = ? AND is_active = 1 AND is_stub = 0 AND LENGTH(TRIM(body_md)) > 0`).bind(at, actorId, row.id, version),
+    env.DB.prepare(`INSERT INTO activity_logs (action, details, actor, user_id)
+      SELECT 'contract_template_published', ?, ?, ? WHERE EXISTS
+        (SELECT 1 FROM legal_template_publications WHERE template_id = ? AND version = ? AND published_at = ?)`)
+      .bind(JSON.stringify({ slug, version, published_at: at }), actor, actorId, row.id, version, at),
+  ]);
+  if (!(insert.meta?.changes ?? 0)) throw new PublicationError('published_version_changed', 409);
+  return (await publishedContractTemplates(env)).find(t => t.template_id === row.id) ?? null;
+}
+
+/** D717 decision 10: withdraw one template's publication, with its audit row. */
+export async function withdrawTemplatePublication(env: Env, slug: string, actorId: number, actor: string) {
+  const pub = await env.DB.prepare(`SELECT template_id, version FROM legal_template_publications WHERE slug = ?`)
+    .bind(slug).first<{ template_id: number; version: number }>();
+  if (!pub) throw new PublicationError('not_published', 404);
+  const [del] = await env.DB.batch([
+    env.DB.prepare(`DELETE FROM legal_template_publications WHERE template_id = ? AND version = ?`).bind(pub.template_id, pub.version),
+    env.DB.prepare(`INSERT INTO activity_logs (action, details, actor, user_id)
+      SELECT 'contract_template_withdrawn', ?, ?, ? WHERE changes() > 0`)
+      .bind(JSON.stringify({ slug, version: pub.version }), actor, actorId),
+  ]);
+  if (!(del.meta?.changes ?? 0)) throw new PublicationError('not_published', 404);
+  return { slug, version: pub.version };
 }
