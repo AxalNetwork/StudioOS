@@ -41,6 +41,7 @@ const HELPER_CALL = /\b(?:refuse|refusalBody|rowFailureSentence)\(/g;
  */
 export const LEDGER = [
   { file: 'admin_contracts.ts', contains: 'if (e instanceof TemplateError) return c.json({ error: e.message', reason: 'TemplateError carries a sentence services/ wrote, not provider or SQLite text.' },
+  { file: 'admin_contracts.ts', contains: 'if (e instanceof TemplateError) return { ok: false, status: e.status === 409 ? 409 : 400, code: e.code, message: e.message };', reason: 'D717: the draft reader passes the same TemplateError sentence (resolveFormat) on to refuse().' },
   { file: 'admin_telegram.ts', contains: "error: 'telegram_token_missing', code: 'telegram_token_missing', message: e.message", reason: 'TelegramTokenMissing is our own configuration sentence.' },
   { file: 'admin_x.ts', contains: 'if (e instanceof XConfigMissing) return', reason: 'XConfigMissing is our own configuration sentence.' },
   { file: 'cofounder.ts', contains: 'try { gate(user); } catch (e: any) { return c.json({ detail: e.message }', reason: "gate() throws one sentence we wrote ('Co-founder matching is for founder accounts')." },
