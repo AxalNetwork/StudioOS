@@ -17,8 +17,9 @@ import { MemoryRouter } from 'react-router-dom';
 import { mountContracts } from './_contracts_dom.mjs';
 import { mercuryPersonalApi } from '../src/lib/api/mercuryPersonal.js';
 import { partnerSettlementsApi } from '../src/lib/api/partnerSettlements.js';
+import { api } from '../src/lib/api.js';
 import MercuryMatch, { MercuryMatchView, matchTargetOf, receivedLine } from '../src/components/MercuryMatch.jsx';
-import { SettlementsList, PayoutHistory } from '../src/pages/partner/earnings/PartnerEarnings.jsx';
+import PartnerEarnings, { SettlementsList, PayoutHistory } from '../src/pages/partner/earnings/PartnerEarnings.jsx';
 import SettlementsDesk, { SettlementRows } from '../src/pages/admin/contracts/SettlementsDesk.jsx';
 import { memberDirection, settlementDraft, settlementKindLabel, settlementStateLabel } from '../src/lib/partnerSettlements.js';
 
@@ -151,6 +152,26 @@ test('the member\'s settlements: states, words, and Match on issued and matched 
   assert.doesNotMatch(html, /mercury-match-open-settlement-3/);
   assert.match(html, /data-testid="text-settlement-void-c"[^>]*>Voided: Entered twice</);
   assert.match(html, /Due date not recorded/);
+});
+
+test('a malformed settlements response is Unreadable, while an empty array is a measured empty state', async () => {
+  const saved = { commissionsMe: api.commissionsMe, payoutsMe: api.payoutsMe, mine: partnerSettlementsApi.mine };
+  api.commissionsMe = async () => ({ commissions: [] });
+  api.payoutsMe = async () => [];
+  try {
+    for (const data of [{ error: 'bad response' }, null, []]) {
+      partnerSettlementsApi.mine = async () => data;
+      const v = await mountContracts(h(PartnerEarnings), '/partner/earnings');
+      try {
+        await v.flush();
+        if (Array.isArray(data)) assert.match(v.text(), /No settlement under a partner deal has been issued to you/);
+        else {
+          assert.match(v.text(), /Your partner-deal settlements could not be read/);
+          assert.doesNotMatch(v.text(), /No settlement under a partner deal has been issued to you/);
+        }
+      } finally { await v.unmount(); }
+    }
+  } finally { api.commissionsMe = saved.commissionsMe; api.payoutsMe = saved.payoutsMe; partnerSettlementsApi.mine = saved.mine; }
 });
 
 test('settlement words: every Worker key, and an unknown one said as unknown', () => {
