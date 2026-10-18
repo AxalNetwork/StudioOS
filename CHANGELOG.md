@@ -4,6 +4,17 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## GitHub sign-ins renew themselves, and disconnecting revokes them (D655 follow-up, #1883)
+
+- GitHub user tokens renew 60 seconds before expiry. Rotated tokens are stored
+  with compare-and-swap so a concurrent reconnect is preserved; lease losers
+  wait for the result and never renew on their own.
+- A refused refresh shows Reconnect and is not retried until sign-in. Temporary
+  failures leave credentials intact. Disconnect revokes the authorization best
+  effort; the App remains installed on the member's repositories.
+- No new routes, bindings or migrations. Expiry can be enabled by the owner
+  after this change merges; setup remains tracked in #1008 and #1885.
+
 ## Signing in four steps, at every width (D717, #1857)
 
 - `/esign/:token` now goes Read → Consent → Adopt → Confirm for every

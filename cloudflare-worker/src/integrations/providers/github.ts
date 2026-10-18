@@ -11,8 +11,16 @@
  * WHAT IS GRANTED IS READ, NOT ASSUMED. A user token carries no scope string,
  * so `grantedPermissions` reads each installation's `permissions` and returns
  * them as `name:level`. The route layer compares them with the registry's
- * `oauth_scopes` (`hasScopeOverreach`): any `write` or `admin` is refused, at
+ * `oauth_scopes` (`hasScopeOverreach`): any permission outside the four requested
+ * reads is refused, including another read permission, at
  * the callback and again whenever repositories are chosen.
+ *
+ * TOKENS: renew 60 seconds early, once under a 60-second KV lease. A loser
+ * polls and never refreshes; ciphertext compare-and-swap protects a reconnect
+ * or a newer pair, even when KV is unavailable. A final refusal marks the row
+ * for sign-in and is not retried until reconnect.
+ * DISCONNECT: best-effort revocation ends the grant. The App stays installed
+ * on the member's repositories until they uninstall it on GitHub.
  *
  * WHERE THE DATA LANDS (`connector_fed_items`, migration 445):
  *   - an issue becomes a Product roadmap item (`roadmap_okrs`);
@@ -34,7 +42,7 @@ import {
   type IntegrationRow,
   type SyncResult,
 } from '../registry';
-import { decryptCredentials, type CredentialBlob } from '../secrets';
+import { decryptCredentials, encryptCredentials, type CredentialBlob } from '../secrets';
 
 const PROVIDER_KEY = 'github';
 const API = 'https://api.github.com';
@@ -85,11 +93,145 @@ async function ghPages<T>(token: string, path: string, pick: (body: any) => T[] 
   return out;
 }
 
+const REFRESH_SKEW_MS = 60_000;
+const LEASE_TTL_S = 60;
+const LEASE_POLL_MS = 500;
+const LEASE_POLLS = 6;
+export const GITHUB_SIGN_IN_EXPIRED = 'github_sign_in_expired: Sign in to GitHub again.';
+const REFRESH_BUSY = 'github_refresh_busy: Axal is renewing this GitHub sign-in. Try again in a minute.';
+const REFRESH_UNAVAILABLE = 'github_refresh_unavailable: GitHub did not answer the renewal of this sign-in.';
+
+type Stored = { enc: string; creds: CredentialBlob };
+const expiryAt = (issued: unknown, seconds: unknown): number | null =>
+  typeof issued === 'number' && Number.isFinite(issued) && typeof seconds === 'number' && Number.isFinite(seconds) && seconds > 0
+    ? issued + seconds * 1000 : null;
+function expiryOf(creds: CredentialBlob): number | null {
+  return typeof creds.expires_at === 'number' && Number.isFinite(creds.expires_at)
+    ? creds.expires_at : expiryAt(creds.issued_at, creds.expires_in);
+}
+function liveToken(creds: CredentialBlob): string {
+  if (creds.reauth_required === true) return '';
+  const expires = expiryOf(creds);
+  return expires == null || expires > Date.now() + REFRESH_SKEW_MS
+    ? (typeof creds.access_token === 'string' ? creds.access_token : '') : '';
+}
+async function readStored(env: Env, row: IntegrationRow): Promise<Stored> {
+  const found = await env.DB.prepare('SELECT credentials_enc FROM integrations WHERE id = ?').bind(row.id)
+    .first<{ credentials_enc: string | null }>();
+  const enc = found?.credentials_enc || '';
+  const creds = await decryptCredentials(env, row.uid, enc);
+  if (!creds) throw new Error('github_credentials_missing');
+  return { enc, creds };
+}
+async function swapStored(env: Env, row: IntegrationRow, from: string, creds: CredentialBlob, mark = false): Promise<boolean> {
+  const enc = await encryptCredentials(env, row.uid, creds);
+  const result = mark
+    ? await env.DB.prepare(`UPDATE integrations SET credentials_enc = ?, status = 'error', last_error = ?,
+        last_error_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND credentials_enc = ?`)
+      .bind(enc, GITHUB_SIGN_IN_EXPIRED, row.id, from).run()
+    : await env.DB.prepare('UPDATE integrations SET credentials_enc = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND credentials_enc = ?')
+      .bind(enc, row.id, from).run();
+  return Number(result.meta?.changes || 0) > 0;
+}
+function checkedLive(creds: CredentialBlob): string {
+  if (creds.reauth_required === true) throw new Error(GITHUB_SIGN_IN_EXPIRED);
+  return liveToken(creds);
+}
+async function refusedRefresh(env: Env, row: IntegrationRow, spent: unknown): Promise<string> {
+  const current = await readStored(env, row);
+  if (current.creds.refresh_token !== spent) {
+    const token = checkedLive(current.creds);
+    if (token) return token;
+    throw new Error(REFRESH_BUSY);
+  }
+  if (await swapStored(env, row, current.enc, Object.assign({}, current.creds, { refresh_token: null, reauth_required: true }), true)) {
+    throw new Error(GITHUB_SIGN_IN_EXPIRED);
+  }
+  const token = checkedLive((await readStored(env, row)).creds);
+  if (token) return token;
+  throw new Error(REFRESH_BUSY);
+}
+
+type RefreshResult = { ok: true; tok: Record<string, any> } | { refused: true } | { failed: string } | { unavailable: true };
+async function refreshGrant(env: Env, refreshToken: string): Promise<RefreshResult> {
+  const { id, secret } = await ensureCreds(env);
+  try {
+    const res = await fetch('https://github.com/login/oauth/access_token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+      body: new URLSearchParams({ client_id: id, client_secret: secret, grant_type: 'refresh_token', refresh_token: refreshToken }),
+    });
+    if (!res.ok) { console.warn('[github] renewal unavailable', res.status); return { unavailable: true }; }
+    const tok: any = await res.json();
+    if (tok?.error === 'bad_refresh_token') return { refused: true };
+    if (tok?.error) return { failed: typeof tok.error === 'string' && /^[a-z_]{1,64}$/.test(tok.error) ? tok.error : 'unknown' };
+    if (typeof tok?.access_token !== 'string' || !tok.access_token) return { unavailable: true };
+    return { ok: true, tok };
+  } catch { return { unavailable: true }; }
+}
+
+/** Renew once, with a KV lease and ciphertext CAS protecting newer credentials. */
 export async function accessToken(env: Env, row: IntegrationRow): Promise<string> {
-  const creds = await decryptCredentials(env, row.uid, row.credentials_enc);
-  const at = typeof creds?.access_token === 'string' ? creds.access_token : '';
-  if (!at) throw new Error('github_credentials_missing');
-  return at;
+  const first = await decryptCredentials(env, row.uid, row.credentials_enc);
+  if (!first) throw new Error('github_credentials_missing');
+  const live = checkedLive(first);
+  if (live) return live;
+  if (!first.access_token) throw new Error('github_credentials_missing');
+  let stored = await readStored(env, row);
+  const newer = checkedLive(stored.creds);
+  if (newer) return newer;
+  const refresh = stored.creds.refresh_token;
+  if (typeof refresh !== 'string' || !refresh ||
+    (typeof stored.creds.refresh_token_expires_at === 'number' && stored.creds.refresh_token_expires_at <= Date.now())) {
+    return refusedRefresh(env, row, refresh);
+  }
+  const key = `github:refresh:${row.uid}`;
+  const holder = crypto.randomUUID();
+  let held = false;
+  try {
+    let loser = false;
+    try {
+      if (await env.RATE_LIMITS.get(key)) loser = true;
+      else {
+        await env.RATE_LIMITS.put(key, holder, { expirationTtl: LEASE_TTL_S });
+        held = (await env.RATE_LIMITS.get(key)) === holder;
+        loser = !held;
+      }
+    } catch { /* KV is advisory; the ciphertext CAS still protects stored state. */ }
+    if (loser) {
+      for (let poll = 0; poll < LEASE_POLLS; poll += 1) {
+        await new Promise((resolve) => setTimeout(resolve, LEASE_POLL_MS));
+        const token = checkedLive((await readStored(env, row)).creds);
+        if (token) return token;
+      }
+      throw new Error(REFRESH_BUSY);
+    }
+    stored = await readStored(env, row);
+    const token = checkedLive(stored.creds);
+    if (token) return token;
+    const sent = typeof stored.creds.refresh_token === 'string' ? stored.creds.refresh_token : '';
+    if (!sent || (typeof stored.creds.refresh_token_expires_at === 'number' && stored.creds.refresh_token_expires_at <= Date.now())) {
+      return await refusedRefresh(env, row, stored.creds.refresh_token);
+    }
+    const result = await refreshGrant(env, sent);
+    if ('refused' in result) return await refusedRefresh(env, row, sent);
+    if ('failed' in result) throw new Error(`github_refresh_failed: ${result.failed}`);
+    if (!('ok' in result)) throw new Error(REFRESH_UNAVAILABLE);
+    const { tok } = result;
+    const now = Date.now();
+    const next: CredentialBlob = {
+      ...stored.creds, access_token: tok.access_token, refresh_token: tok.refresh_token || sent, token_type: 'Bearer',
+      issued_at: now, expires_in: tok.expires_in ?? null, expires_at: expiryAt(now, tok.expires_in),
+      refresh_token_expires_at: expiryAt(now, tok.refresh_token_expires_in) ?? stored.creds.refresh_token_expires_at ?? null,
+    };
+    if (await swapStored(env, row, stored.enc, next)) return tok.access_token;
+    return liveToken((await readStored(env, row)).creds) || tok.access_token;
+  } finally {
+    if (held) {
+      try { if ((await env.RATE_LIMITS.get(key)) === holder) await env.RATE_LIMITS.delete(key); }
+      catch { /* the lease expires on its own */ }
+    }
+  }
 }
 
 /**
@@ -226,12 +368,15 @@ async function connect(c: Context<{ Bindings: Env }>, _user: User, input: Connec
   const token = String(tok.access_token);
   const me = await ghJson<any>(token, '/user');
   const granted = await grantedPermissions(token);
+  const issuedAt = Date.now();
   const credentials: CredentialBlob = {
     access_token: token,
     refresh_token: tok.refresh_token || null,
     token_type: 'Bearer',
-    issued_at: Date.now(),
+    issued_at: issuedAt,
     expires_in: tok.expires_in || null,
+    expires_at: expiryAt(issuedAt, tok.expires_in),
+    refresh_token_expires_at: expiryAt(issuedAt, tok.refresh_token_expires_in),
   };
   return {
     credentials,
@@ -246,12 +391,17 @@ async function connect(c: Context<{ Bindings: Env }>, _user: User, input: Connec
 async function revokeGranted(env: Env, result: ConnectResult): Promise<void> {
   const token = typeof result.credentials?.access_token === 'string' ? result.credentials.access_token : '';
   if (!token) return;
+  await revokeGrant(env, token);
+}
+
+async function revokeGrant(env: Env, token: string): Promise<void> {
   const { id, secret } = await ensureCreds(env);
-  await fetch(`${API}/applications/${encodeURIComponent(id)}/grant`, {
+  const res = await fetch(`${API}/applications/${encodeURIComponent(id)}/grant`, {
     method: 'DELETE',
     headers: { Authorization: `Basic ${btoa(`${id}:${secret}`)}`, Accept: 'application/vnd.github+json', 'User-Agent': 'StudioOS-Connectors' },
     body: JSON.stringify({ access_token: token }),
-  });
+  }).catch(() => { throw new Error('github_revoke_failed: unavailable'); });
+  if (res.status !== 204) throw new Error(`github_revoke_failed: ${res.status}`);
 }
 
 async function buildAuthorizeUrl(c: Context<{ Bindings: Env }>, _user: User, state: string): Promise<string> {
@@ -313,6 +463,7 @@ registerProvider({
   key: PROVIDER_KEY,
   connect,
   revokeGranted,
+  disconnect: async (c, _user, row) => revokeGrant(c.env, await accessToken(c.env, row)),
   buildAuthorizeUrl,
   sync: (c, _user, row) => syncGithub(c.env, row),
   // The repository choice has its own route (`PUT /:uid/repositories`), which
