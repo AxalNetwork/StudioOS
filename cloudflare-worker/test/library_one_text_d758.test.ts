@@ -218,6 +218,8 @@ test('D758 the deck-share NDA is the investor_nda_axal row, merged; an emptied r
   assert.match(src, /refuse\(c, 409, \{ code: 'template_fields_unfilled'/);
   assert.match(src, /refuse\(c, 503, \{ code: 'template_unreadable'/);
   assert.match(src, /nda_template_key: DECK_SHARE_NDA_SLUG/);
+  // Production's row names the investor; the route fills it with the viewer, who signs.
+  assert.match(src, /investor_name: user\.name \|\| signedBy,\s*investor_email: user\.email,/);
 });
 
 // ─────────────────────────────────────────────── source: no direct render

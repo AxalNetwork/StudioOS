@@ -372,9 +372,13 @@ deckShareActions.post('/share/:token/nda', async (c) => {
 
   let ndaBody: string | null = null;
   try {
+    // The viewer is the investor who signs, so the row's investor fields are
+    // theirs too (production's investor_nda_axal v2 names them, D758).
     ndaBody = await deckShareNdaBody(c.env, {
       recipient_name: user.name || signedBy,
       recipient_email: user.email,
+      investor_name: user.name || signedBy,
+      investor_email: user.email,
       counterparty_name: ctx.project_name || 'the Project',
       effective_date: new Date().toISOString().slice(0, 10),
     });
