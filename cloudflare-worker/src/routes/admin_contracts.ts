@@ -12,7 +12,9 @@ import { mintDownloadToken } from '../services/signedDownload';
 import { sendAgreementAssignedEmail } from '../services/email';
 import { fanOut } from '../services/branches';
 import { usageFromContractRows } from '../services/contractTemplateUsage';
-import { publishedContractTemplates, publicationFields, publishContractTemplates, preparePublishedContract, ContractPreparationError } from '../services/contractPublication';
+import { publishedContractTemplates, publicationFields, publishContractTemplates, preparePublishedContract, ContractPreparationError,
+  publishOneTemplate, withdrawTemplatePublication, PublicationError } from '../services/contractPublication';
+import { formatView, formatOptions, renderFormat, effectiveFormat, templateFormatFor } from '../services/templateFormat';
 import { createAndSendEnvelope } from './esign';
 import { userMeetsTier } from '../middleware/requireTier';
 import { findActiveDocusignIntegrationForUser } from '../integrations/providers/docusign';
@@ -66,6 +68,53 @@ adminContracts.post('/published-templates/publish', async (c) => {
     template_count: templates.length, answered: branches.filter(b => b.status === 'ok').length, total: branches.length,
     branches: branches.map(b => ({ code: b.code, status: b.status, ...b.data, reason: b.reason })),
     ...(branches.length ? {} : { branches_reason: 'No branch Worker is bound. Publication is recorded here; no branch received the catalogue.' }) });
+});
+
+// D717 decision 10: publish ONE template's saved version, withdraw one, and
+// push the recorded publications to the branches as they stand. The library
+// publish above keeps working with no screen caller (D717.md).
+function publicationRefusal(c: AppContext, e: unknown) {
+  if (!(e instanceof PublicationError)) return c.json({ error: 'Publication could not be recorded. Try again.', code: 'publication_failed' }, 503);
+  const text: Record<PublicationError['code'], string> = {
+    template_not_found: 'Template not found.',
+    published_version_changed: 'This template changed since it was opened. Open it again to publish the saved version.',
+    template_has_no_body: 'A stub has no body to publish.',
+    not_published: 'This template has no recorded publication.',
+  };
+  return c.json({ error: text[e.code], code: e.code }, e.status);
+}
+
+adminContracts.post('/published-templates/:slug/publish', async (c) => {
+  const admin = await requireHqAuthoring(c);
+  let input: { version?: unknown };
+  try { input = await c.req.json(); } catch { input = {}; }
+  if (!input || !Number.isSafeInteger(input.version)) return c.json({ error: 'Send the version to publish.', code: 'version_required' }, 400);
+  try {
+    const published = await publishOneTemplate(c.env, c.req.param('slug'), input.version as number, admin.id, await hashEmail(admin.email));
+    if (!published) return c.json({ error: 'Publication could not be recorded. Try again.', code: 'publication_failed' }, 503);
+    const { body_md: _body, ...publication } = published;
+    return c.json({ ok: true, publication });
+  } catch (e) { return publicationRefusal(c, e); }
+});
+
+adminContracts.post('/published-templates/:slug/withdraw', async (c) => {
+  const admin = await requireHqAuthoring(c);
+  try {
+    return c.json({ ok: true, withdrawn: await withdrawTemplatePublication(c.env, c.req.param('slug'), admin.id, await hashEmail(admin.email)) });
+  } catch (e) { return publicationRefusal(c, e); }
+});
+
+adminContracts.post('/published-templates/push', async (c) => {
+  await requireHqAuthoring(c);
+  let templates;
+  try { templates = await publishedContractTemplates(c.env); }
+  catch { return c.json({ error: 'Published templates are unreadable. Try again.', code: 'publications_unreadable' }, 503); }
+  const payload = { templates: templates.map(t => ({ slug: t.slug, title: t.title, category: t.category, version: t.version })), pushed_at: new Date().toISOString() };
+  const branches = await fanOut<{ stored: number; withdrawn: number }>(c.env, 'publishTemplate', [payload]);
+  return c.json({ ok: true, template_count: templates.length, answered: branches.filter(b => b.status === 'ok').length, total: branches.length,
+    branches: branches.map(b => ({ code: b.code, status: b.status, ...(b.data ? { stored: b.data.stored, withdrawn: b.data.withdrawn } : {}),
+      ...(b.reason ? { reason: b.reason } : {}) })),
+    ...(branches.length ? {} : { branches_reason: 'No branch Worker is bound. No branch received the catalogue.' }) });
 });
 
 adminContracts.get('/envelope-providers', async (c) => {
@@ -122,6 +171,7 @@ function envelopeHandler(operation: 'preview' | 'send') {
         title: prepared.template.title, body: prepared.body, slug: prepared.template.slug,
         category: prepared.template.category, version: prepared.template.version, bodySha256: bodySha,
         counterpartyName: prepared.recipientName || null,
+        ...renderFormat(effectiveFormat(prepared.template)),
         state: paperStateFor({
           version: prepared.template.version,
           bodySha256: await sha256Hex(prepared.template.body_md || ''),
@@ -156,6 +206,7 @@ function envelopeHandler(operation: 'preview' | 'send') {
         viaProvider: input.provider, actorIp: c.req.header('CF-Connecting-IP') || undefined,
         renderedBody: { title: prepared.template.title, body: prepared.body }, refuseUnfilled: true,
         pageSize: paper.pageSize, cover: paper.cover, templateVersion: prepared.template.version,
+        format: effectiveFormat(prepared.template),
       });
       // Signing URLs contain a bearer credential; this admin flow only needs
       // the envelope id and the delivery outcome.
@@ -1642,6 +1693,22 @@ const LEGAL_TEMPLATE_CATALOG: ReadonlyArray<{
   { key: 'nda_3way_founder_investor_axal_v1', doc_type: 'nda_3way_founder_investor_axal',   title: '3-Way NDA (Founder ↔ Investor ↔ Axal) v1' },
 ];
 
+// D717 decision 6: the bundled keys whose text is not the store body of the
+// row they count under. Read-only; the thumbnails come with PR 1b.
+adminContracts.get('/templates/outside', async (c) => {
+  await requireAdmin(c);
+  const outside = LEGAL_TEMPLATE_CATALOG.filter(e => e.key !== e.doc_type);
+  try {
+    const items = await Promise.all(outside.map(async (e) => {
+      const row = await storeGetTemplate(c.env, e.doc_type);
+      return { key: e.key, title: e.title, doc_type: e.doc_type, counted_under: { slug: e.doc_type, title: row?.title ?? null } };
+    }));
+    return c.json({ items });
+  } catch {
+    return c.json({ error: 'Templates are unreadable. Try again.', code: 'templates_unreadable' }, 503);
+  }
+});
+
 adminContracts.get('/templates/legal', async (c) => {
   await requireAdmin(c);
   return c.json({ items: LEGAL_TEMPLATE_CATALOG });
@@ -1676,6 +1743,7 @@ adminContracts.get('/templates/store', async (c) => {
       layer_label: TEMPLATE_LAYERS[t.category]?.label || t.category,
       usage_count: usage.get(t.slug) || 0,
       last_used_at: lastUsed.get(t.slug) || null,
+      ...formatView(t),
       ...(publications ? { published_version: publications.get(t.slug)?.version ?? null,
         has_unpublished_changes: publications.has(t.slug) ? !!t.is_stub || !t.body_md.trim() || publications.get(t.slug)?.version !== t.version
           : !t.is_stub && !!t.body_md.trim() } : {}),
@@ -1695,14 +1763,15 @@ adminContracts.get('/templates/store', async (c) => {
 // changes for an HQ admin.
 adminContracts.post('/templates/store', async (c) => {
   const admin = await requireHqAuthoring(c);
-  const body = await c.req.json<{ slug?: string; title?: string; category?: string; body_md?: string }>();
+  const body = await c.req.json<{ slug?: string; title?: string; category?: string; body_md?: string; doc_kind?: unknown; axal_party?: unknown }>();
   try {
     const tpl = await storeCreateTemplate(
       c.env,
-      { slug: String(body.slug || ''), title: String(body.title || ''), category: String(body.category || ''), body_md: body.body_md },
+      { slug: String(body.slug || ''), title: String(body.title || ''), category: String(body.category || ''), body_md: body.body_md,
+        doc_kind: body.doc_kind, axal_party: body.axal_party },
       admin.id,
     );
-    return c.json({ template: tpl }, 201);
+    return c.json({ template: { ...tpl, ...formatView(tpl) } }, 201);
   } catch (e) {
     if (e instanceof TemplateError) return c.json({ error: e.message, code: e.code }, e.status);
     throw e;
@@ -1771,7 +1840,8 @@ adminContracts.get('/templates/store/:slug', async (c) => {
   const tpl = await storeGetTemplate(c.env, slug);
   if (!tpl) return c.json({ error: 'Template not found', code: 'not_found', slug }, 404);
   return c.json({
-    template: { ...tpl, layer: tpl.category, layer_label: TEMPLATE_LAYERS[tpl.category]?.label || tpl.category },
+    template: { ...tpl, layer: tpl.category, layer_label: TEMPLATE_LAYERS[tpl.category]?.label || tpl.category,
+      ...formatView(tpl), format_options: formatOptions(tpl.slug, tpl.category) },
   });
 });
 
@@ -1789,15 +1859,16 @@ adminContracts.get('/templates/store/:slug/versions', async (c) => {
 adminContracts.put('/templates/store/:slug', async (c) => {
   const admin = await requireHqAuthoring(c);
   const slug = c.req.param('slug');
-  const body = await c.req.json<{ title?: string; category?: string; body_md?: string }>();
+  const body = await c.req.json<{ title?: string; category?: string; body_md?: string; doc_kind?: unknown; axal_party?: unknown }>();
   try {
     const tpl = await storeUpdateTemplate(
       c.env,
       slug,
-      { title: String(body.title || ''), category: String(body.category || ''), body_md: String(body.body_md ?? '') },
+      { title: String(body.title || ''), category: String(body.category || ''), body_md: String(body.body_md ?? ''),
+        doc_kind: body.doc_kind, axal_party: body.axal_party },
       admin.id,
     );
-    return c.json({ template: tpl });
+    return c.json({ template: { ...tpl, ...formatView(tpl) } });
   } catch (e) {
     if (e instanceof TemplateError) return c.json({ error: e.message, code: e.code }, e.status);
     throw e;
@@ -1833,6 +1904,7 @@ adminContracts.get('/templates/store/:slug/preview.pdf', async (c) => {
   const model = paperModel({
     title: tpl.title, body, slug, category: tpl.category, version: tpl.version, bodySha256: bodySha,
     merge: c.req.query('resolve') === 'raw' ? 'raw' : 'brackets',
+    ...renderFormat(effectiveFormat(tpl)),
     state: paperStateFor({ version: tpl.version, bodySha256: bodySha, publication: await publicationRef(c.env, slug) }),
   });
   const rendered = await renderLegalPdf(c.env, model, { pageSize: paper.pageSize, cover: paper.cover });
@@ -1874,6 +1946,8 @@ adminContracts.post('/templates/render', async (c) => {
   const model = paperModel({
     title, body, slug: slug || title, category: typeof input.category === 'string' ? input.category : null,
     version, bodySha256: bodySha, merge: input.resolve === 'raw' ? 'raw' : 'brackets', state,
+    // D717: a stored template's kind and Axal party, as its send would print them.
+    ...(slug ? renderFormat(await templateFormatFor(c.env, slug)) : {}),
   });
   const html = paperHtml(model, { pageSize: paper.pageSize, cover: paper.cover, medium: 'screen', fonts: input.fonts === 'inline' ? 'inline' : 'omit' });
   c.header('Cache-Control', 'no-store');
@@ -1903,6 +1977,7 @@ adminContracts.get('/templates/store/:slug/export.docx', async (c) => {
   const model = paperModel({
     title: tpl.title, body, slug, category: tpl.category, version: tpl.version, bodySha256: bodySha,
     merge: c.req.query('resolve') === 'raw' ? 'raw' : 'brackets',
+    ...renderFormat(effectiveFormat(tpl)),
     state: paperStateFor({ version: tpl.version, bodySha256: bodySha, publication: await publicationRef(c.env, slug) }),
   });
   const bytes = buildLegalDocx(model, { pageSize: paper.pageSize });

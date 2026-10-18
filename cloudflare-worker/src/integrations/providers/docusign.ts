@@ -60,6 +60,7 @@ import { sha256Hex, sha256HexBytes } from '../../services/pdf';
 import { paperModel, paperSha256 } from '../../services/legalPaper';
 import { renderLegalPdf, type LegalRenderer } from '../../services/legalPaperRender';
 import { fileRowStatement, newFileUid } from '../../services/legalDocumentFiles';
+import type { AxalEntityKey, DocumentKind } from '../../services/legalDocFormat';
 
 const PROVIDER_KEY = 'docusign';
 const SCOPES = ['signature', 'extended'];
@@ -338,6 +339,9 @@ interface SendEnvelopeOpts {
   envelopeUuid?: string;
   pageSize?: 'letter' | 'a4';
   cover?: 'dark' | 'light';
+  /** D717 (#1782): the envelope's recorded kind and Axal party. */
+  documentKind?: DocumentKind;
+  axalEntityKey?: AxalEntityKey;
   recipientEmail: string;
   recipientName: string;
   emailSubject?: string;
@@ -382,6 +386,9 @@ export async function sendDocusignEnvelope(
     body: bodyWithAnchor,
     slug: opts.documentType || opts.documentTitle,
     version: opts.templateVersion ?? null,
+    // D717: the envelope's recorded kind and Axal party; absent renders from the slug.
+    documentKind: opts.documentKind,
+    axalEntityKey: opts.axalEntityKey,
     bodySha256: bodySha,
     envelopeUuid: opts.envelopeUuid || null,
     counterpartyName: opts.recipientName || null,
