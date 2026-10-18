@@ -125,7 +125,7 @@ async function withGoogle<T>(
     if (url === TOKEN_URL) {
       calls.token.push(new URLSearchParams(String(init?.body ?? '')));
       if (tokenAnswer instanceof Response) return tokenAnswer;
-      return new Response(JSON.stringify({ id_token: tokenAnswer, access_token: 'ya29.unused', token_type: 'Bearer' }), {
+      return new Response(JSON.stringify({ id_token: tokenAnswer, access_token: 'test-access-token-unused', token_type: 'Bearer' }), {
         headers: { 'content-type': 'application/json' },
       });
     }

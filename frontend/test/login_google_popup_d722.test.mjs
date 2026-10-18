@@ -17,12 +17,16 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
 const read = (p) => readFileSync(path.join(ROOT, p), 'utf8');
+// Every host name in a text, compared whole: a substring or unanchored match
+// would also count a longer host that merely contains the name.
+const hostsIn = (src) => src.toLowerCase().match(/[a-z0-9-]+(?:\.[a-z0-9-]+)+/g) || [];
+const isClientIdHost = (host) => host === 'apps.googleusercontent.com' || host.endsWith('.apps.googleusercontent.com');
 const LOGIN = codeOnly(read('frontend/src/pages/LoginPage.jsx'));
 const POPUP = codeOnly(read('frontend/src/lib/googlePopup.js'));
 const SIGNIN_API = codeOnly(read('frontend/src/lib/api/googleSignIn.js'));
@@ -93,7 +97,7 @@ test('Google’s script is loaded from one URL, never at import or in render, an
   const effect = LOGIN.slice(LOGIN.indexOf('useEffect(() => {\n    mountedRef.current = true;'));
   assert.match(effect.slice(0, 200), /whenIdle\(\(\) => askGoogleConfig\(\)\)/);
   const html = read('frontend/index.html');
-  assert.ok(!/accounts\.google\.com/.test(html), 'index.html loads Google’s script on every page');
+  assert.ok(!hostsIn(html).includes('accounts.google.com'), 'index.html loads Google’s script on every page');
 });
 
 test('the button is primed on hover, focus and touch', () => {
@@ -191,10 +195,10 @@ test('a non-JSON 403 or no answer at all reads as unreachable; a known code wins
 test('no Google client ID is committed anywhere in the SPA source', () => {
   const hits = [];
   const walk = (dir) => {
-    for (const e of readdirSync(dir)) {
-      const p = path.join(dir, e);
-      if (statSync(p).isDirectory()) walk(p);
-      else if (/\.(jsx?|tsx?|json|html|css)$/.test(e) && readFileSync(p, 'utf8').includes('apps.googleusercontent.com')) hits.push(p);
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (/\.(jsx?|tsx?|json|html|css)$/.test(e.name) && hostsIn(readFileSync(p, 'utf8')).some(isClientIdHost)) hits.push(p);
     }
   };
   walk(path.join(ROOT, 'frontend/src'));
