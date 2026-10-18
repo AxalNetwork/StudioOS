@@ -4,6 +4,25 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## Every conversation reaches one Validate engine (D757, #1898)
+
+- `cloudflare-worker/src/services/validateEngine.ts` is the one entry that
+  summarises and structures a session. The recorder, Zoom and Meet imports,
+  assigned and quiet chats, the pasted chat and typed notes, consent recorded
+  after an import, an assistant's submission (summary only) and the Summarise
+  and Structure buttons all reach `digestSession`; no source calls a model.
+- The same transcript is digested once, whoever triggers it (a sha256 of the
+  final transcript, and a claim two triggers cannot share); a button always
+  runs. Automatic runs honour the member's Manual mode and model picks for
+  Validate, and never re-propose a finding already proposed on the interview.
+- After a recording, consent takes two changes: recorded after an imported call
+  (queues the digest), or withdrawn (removes the summary and the pending
+  suggestions, keeps decisions without their quote). `digest_running` is a new
+  409 on the two buttons.
+- One free-tier interview cap (`interviewCapRefusal`) now also covers "Create
+  interview from this chat" and an assistant's `submit_interview`.
+- Migration 487 adds nine nullable digest columns to `interview_sessions`.
+
 ## The LP's capital call opens on the amount, and the fee statement is on screen (D717, #1859)
 
 - An open Fund I line's panel on the LP workspace opens on "Amount due", the
