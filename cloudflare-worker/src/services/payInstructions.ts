@@ -74,30 +74,56 @@ export type RevealedInstructions = {
 const nameOf = (key: AxalEntityKey) => AXAL_ENTITIES[key]?.name ?? key;
 const no = (code: PayRefusal['code'], message: string): PayRefusal => ({ ok: false, code, message });
 
+type SentenceCode = 'payee_not_entitled' | 'fund_account_missing' | 'no_active_account' | 'ambiguous_account' | 'holder_not_payee' | 'savings_account';
+
+/**
+ * #1856: the one source of the resolver's refusal sentences, so the Bank
+ * accounts console prints what a notice reads without copying it. Each names
+ * the payee and the purpose; `payee_not_entitled` also names who is paid.
+ */
+export function refusalMessage(code: SentenceCode, payee: AxalEntityKey, purpose: PaymentPurpose): string {
+  const def = PAYMENT_PURPOSES[purpose];
+  const what = purposeInSentence(def.label);
+  switch (code) {
+    case 'payee_not_entitled': return `${nameOf(payee)} is not paid ${what}. It is paid to ${nameOf(def.payee)}.`;
+    case 'fund_account_missing': return `${nameOf('fund')} has no bank account for ${what} yet, so no payment instructions can be given. Do not send money until Axal adds the Fund's account.`;
+    case 'no_active_account': return `${nameOf(payee)} has no active account for ${what}, so no payment instructions can be given.`;
+    case 'ambiguous_account': return `More than one active account takes ${what}, so none is given. Keep the purpose on one account.`;
+    case 'holder_not_payee': return `The account that takes ${what} is not held by ${nameOf(payee)}, so it is not given.`;
+    case 'savings_account': return `The account that takes ${what} is a savings account, so it is not given. Give the purpose to a checking account.`;
+  }
+}
+
+/** #1856: the refusals the console shows under "What a notice refuses", in the canvas's order, with the example each is drawn from. */
+export const NOTICE_REFUSALS: readonly Readonly<{ code: SentenceCode; payee: AxalEntityKey; purpose: PaymentPurpose }>[] = Object.freeze([
+  { code: 'no_active_account' as const, payee: 'gp' as AxalEntityKey, purpose: 'management_fee' as PaymentPurpose },
+  { code: 'holder_not_payee' as const, payee: 'gp' as AxalEntityKey, purpose: 'management_fee' as PaymentPurpose },
+  { code: 'savings_account' as const, payee: 'gp' as AxalEntityKey, purpose: 'management_fee' as PaymentPurpose },
+  { code: 'fund_account_missing' as const, payee: 'fund' as AxalEntityKey, purpose: 'capital_contribution' as PaymentPurpose },
+].map((r) => Object.freeze(r)));
+
 /** The one row a payee is paid into for a purpose, or why there is none. */
 async function resolve(env: Env, payee: AxalEntityKey, purpose: PaymentPurpose): Promise<{ row: BankAccountRow } | PayRefusal> {
   const def = isPaymentPurpose(purpose) ? PAYMENT_PURPOSES[purpose] : null;
   if (!def || def.payee !== payee) {
-    return no('payee_not_entitled', def
-      ? `${nameOf(payee)} is not paid ${purposeInSentence(def.label)}. It is paid to ${nameOf(def.payee)}.`
-      : `${nameOf(payee)} is not paid for this.`);
+    return no('payee_not_entitled', def ? refusalMessage('payee_not_entitled', payee, purpose) : `${nameOf(payee)} is not paid for this.`);
   }
   const rows = await activeRowsCarrying(env, purpose);
   if (!rows.length) {
     return payee === 'fund'
-      ? no('fund_account_missing', `${nameOf('fund')} has no bank account for ${purposeInSentence(def.label)} yet, so no payment instructions can be given. Do not send money until Axal adds the Fund's account.`)
-      : no('no_active_account', `${nameOf(payee)} has no active account for ${purposeInSentence(def.label)}, so no payment instructions can be given.`);
+      ? no('fund_account_missing', refusalMessage('fund_account_missing', payee, purpose))
+      : no('no_active_account', refusalMessage('no_active_account', payee, purpose));
   }
   if (rows.length > 1) {
-    return no('ambiguous_account', `More than one active account takes ${purposeInSentence(def.label)}, so none is given. Keep the purpose on one account.`);
+    return no('ambiguous_account', refusalMessage('ambiguous_account', payee, purpose));
   }
   const row = rows[0];
   // No commingling: the account must be held by the payee, in its own legal name.
   if (row.entity_key !== payee || row.beneficiary_name !== nameOf(payee)) {
-    return no('holder_not_payee', `The account that takes ${purposeInSentence(def.label)} is not held by ${nameOf(payee)}, so it is not given.`);
+    return no('holder_not_payee', refusalMessage('holder_not_payee', payee, purpose));
   }
   if (row.account_kind !== 'checking') {
-    return no('savings_account', `The account that takes ${purposeInSentence(def.label)} is a savings account, so it is not given. Give the purpose to a checking account.`);
+    return no('savings_account', refusalMessage('savings_account', payee, purpose));
   }
   return { row };
 }

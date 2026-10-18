@@ -4,7 +4,9 @@
  *
  *   GET  /              every account, masked; `coverage`, the resolver's
  *                       answer per payment purpose; `fund_i`, the fund that
- *                       carries the `spinout-fund-i` slug, or null
+ *                       carries the `spinout-fund-i` slug, or null; and
+ *                       `refusals` (#1856), the resolver's own sentence for
+ *                       each refusal the console explains, read from nothing
  *   POST /              add one account                       (201, masked)
  *   PATCH /:uid         the label and the purposes, nothing else
  *   POST /:uid/retire   retire it, with a reason
@@ -31,7 +33,7 @@ import { Funds } from '../models/funds';
 import {
   BankAccountError, createAccount, listAccounts, updateAccount, retireAccount, revealAccount,
 } from '../services/entityBankAccounts';
-import { PAYMENT_PURPOSES, FUND_I_SLUG, payInstructionsFor, type PaymentPurpose } from '../services/payInstructions';
+import { PAYMENT_PURPOSES, FUND_I_SLUG, NOTICE_REFUSALS, payInstructionsFor, refusalMessage, type PaymentPurpose } from '../services/payInstructions';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -71,7 +73,8 @@ r.get('/', async (c) => {
       ? { purpose, label: def.label, payee: def.payee, ok: true, account_uid: pay.instructions.uid, account_masked: pay.instructions.account_masked }
       : { purpose, label: def.label, payee: def.payee, ok: false, code: pay.code, message: pay.message });
   }
-  return c.json({ accounts, coverage, fund_i: fundI ? { id: Number(fundI.id), name: fundI.name } : null });
+  const refusals = NOTICE_REFUSALS.map(({ code, payee, purpose }) => ({ code, message: refusalMessage(code, payee, purpose) }));
+  return c.json({ accounts, coverage, fund_i: fundI ? { id: Number(fundI.id), name: fundI.name } : null, refusals });
 });
 
 r.post('/', async (c) => {
