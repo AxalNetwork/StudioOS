@@ -319,6 +319,7 @@ import catalog, { adminCatalog } from './routes/catalog';
 // Task #16 — Admin Stripe management (webhook endpoints + publishable key).
 import adminStripe from './routes/admin_stripe';
 import adminMoneyRails from './routes/admin_money_rails';
+import { adminPartnerSettlements, partnerSettlements } from './routes/partner_settlements';
 import adminBankAccounts from './routes/admin_bank_accounts';
 // PaymentIntent + SetupIntent surface for the Axal-branded embedded card UI.
 import payments from './routes/payments';
@@ -912,6 +913,8 @@ app.route('/api/admin/catalog', adminCatalog);
 app.route('/api/admin/stripe', adminStripe);
 // D707 (#1772) — the entities' roles and the money rails. Before the catch-all.
 app.route('/api/admin/money-rails', adminMoneyRails);
+app.route('/api/admin/partner-settlements', adminPartnerSettlements);
+app.route('/api/partner-settlements', partnerSettlements);
 // D708 — each Axal entity's bank accounts, Super Admin only. Before the
 // catch-all /api/admin so /api/admin/bank-accounts/* resolves here.
 app.route('/api/admin/bank-accounts', adminBankAccounts);

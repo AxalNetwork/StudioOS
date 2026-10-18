@@ -14,7 +14,7 @@ import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { Unreadable, Unrecorded } from '../../ui';
 import {
-  IMPORT_FIELDS, LEDGER_FILTERS, LEDGER_STATUS, LEDGER_TYPES,
+  ledgerSourceLabel, ledgerVerificationNote, IMPORT_FIELDS, LEDGER_FILTERS, LEDGER_STATUS, LEDGER_TYPES,
   fmtLedgerCents, guessMapping, mapImportRows, parseCsv, stripeImportLine, summarizeLedger,
 } from '../../lib/revenueLedger';
 
@@ -269,14 +269,14 @@ export default function RevenueLedger({ project, canEdit }) {
                   <tr key={e.uid} className="border-b border-gray-50 dark:border-gray-800/60 align-top" data-testid={`ledger-row-${e.uid}`}>
                     <td className="py-2 pr-2">
                       <div className="font-semibold text-gray-900 dark:text-gray-50">{e.customer}</div>
-                      <div className="text-[10.5px] text-gray-400">{e.source === 'csv' ? 'CSV import' : e.source === 'stripe' ? 'Stripe' : 'Manual'}</div>
+                      <div className="text-[10.5px] text-gray-400">{ledgerSourceLabel(e.source)}</div>
                       {rowErr.uid === e.uid && <div className="text-[10.5px] text-rose-600 dark:text-rose-400" data-testid={`ledger-row-error-${e.uid}`}>{rowErr.message}</div>}
                     </td>
                     <td className="py-2 pr-2 text-right font-mono font-bold tabular-nums">{fmtLedgerCents(e.amount_cents)}</td>
                     <td className="py-2 pr-2">{typeLabel(e.revenue_type)}</td>
                     <td className="py-2 pr-2 font-mono text-gray-600 dark:text-gray-300">{e.received_on}</td>
                     <td className="py-2 pr-2">
-                      <span className={`text-[10.5px] font-semibold rounded-full px-2 py-0.5 ${STATUS_CLS[e.verification] || STATUS_CLS.manual}`} title={LEDGER_STATUS[e.verification]?.note}>
+                      <span className={`text-[10.5px] font-semibold rounded-full px-2 py-0.5 ${STATUS_CLS[e.verification] || STATUS_CLS.manual}`} title={ledgerVerificationNote(e)}>
                         {LEDGER_STATUS[e.verification]?.label || e.verification}
                       </span>
                     </td>

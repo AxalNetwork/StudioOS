@@ -19,6 +19,16 @@ export const LEDGER_STATUS = {
   manual: { label: 'Manual', note: 'No evidence attached' },
 };
 
+export function ledgerSourceLabel(source) {
+  const labels = { manual: 'Manual', csv: 'CSV import', stripe: 'Stripe', mercury: 'Mercury' };
+  return Object.hasOwn(labels, source) ? labels[source] : 'Unknown source';
+}
+
+export function ledgerVerificationNote(entry) {
+  if (entry.verification === 'supported' && entry.source === 'mercury' && entry.proof_document_id == null) return 'Matched to a credit in your Mercury account';
+  return LEDGER_STATUS[entry.verification]?.note;
+}
+
 /** The canvas's five filters, in its order. */
 export const LEDGER_FILTERS = [
   { k: 'all', label: 'All', test: () => true },

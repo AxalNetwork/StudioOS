@@ -6,6 +6,7 @@
  * Engagement transitions: accepted → in_progress → delivered → reviewed → invoiced
  * (cancelled is terminal from any non-terminal state).
  */
+import { matchFor } from '../services/mercuryPersonal';
 import { Hono } from 'hono';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import type { Context } from 'hono';
@@ -744,7 +745,7 @@ engagementsRouter.get('/:id/invoice', async (c) => {
       'SELECT * FROM engagement_invoices WHERE engagement_id = ?',
     ).bind(id).first<any>();
     if (!row) return c.json({ detail: 'Not found' }, 404);
-    return c.json(invoiceDto(row));
+    return c.json(invoiceDto(row, await matchFor(c.env, 'engagement_invoice', row.id), isPartner(user) ? 'partner' : 'founder'));
   } catch (err) { return mapError(c, err); }
 });
 

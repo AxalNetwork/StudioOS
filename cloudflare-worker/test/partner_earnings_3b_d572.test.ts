@@ -47,6 +47,8 @@ function freshDb(opts: { m409?: boolean } = {}) {
   db.exec(MIG('343_partner_interaction_void.sql'));
   db.exec(MIG('368_relationship_requests.sql'));
   db.exec(MIG('393_partner_earnings.sql'));
+  // D713: payout GETs read stored bank evidence after migration 477.
+  for (const migration of ['311_revenue_entries.sql', '400_revenue_stripe_charge_index.sql', '477_mercury_personal.sql']) db.exec(MIG(migration));
   if (opts.m409 !== false) exec(db, MIG('409_payout_destination_and_leaderboard.sql'));
   const u = db.prepare('INSERT INTO users (id, role, name, email, network_score) VALUES (?, ?, ?, ?, ?)');
   u.run(PARTNER, 'partner', 'Pat Partner', 'pat@example.test', 40);

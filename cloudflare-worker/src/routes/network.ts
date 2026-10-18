@@ -1,3 +1,4 @@
+import { matchFor } from '../services/mercuryPersonal';
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
@@ -738,7 +739,8 @@ network.get('/payouts/me', async (c) => {
   const sql = getSQL(c.env);
   try {
     const rows = await sql`SELECT * FROM payouts WHERE user_id = ${user.id} ORDER BY created_at DESC`;
-    return c.json(await withCommissionIds(c.env, rows as any[]));
+    const payouts = await withCommissionIds(c.env, rows as any[]);
+    return c.json(await Promise.all(payouts.map(async (p) => ({ ...p, bank_match: await matchFor(c.env, 'payout', p.id) }))));
   } finally { await sql.end(); }
 });
 
@@ -929,7 +931,8 @@ network.get('/admin/payouts', async (c) => {
       JOIN users u ON u.id = p.user_id
       LEFT JOIN users pu ON pu.id = p.processed_by
       ORDER BY p.created_at DESC LIMIT 200`;
-    return c.json(await withCommissionIds(c.env, rows as any[]));
+    const payouts = await withCommissionIds(c.env, rows as any[]);
+    return c.json(await Promise.all(payouts.map(async (p) => ({ ...p, bank_match: await matchFor(c.env, 'payout', p.id) }))));
   } finally { await sql.end(); }
 });
 
