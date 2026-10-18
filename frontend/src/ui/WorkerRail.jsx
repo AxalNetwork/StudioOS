@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { PanelRightClose, PanelRightOpen, X } from 'lucide-react';
 import { UNSAFE_LocationContext } from 'react-router-dom';
 import useAiBudget from '../hooks/useAiBudget';
-import { microMoney } from './AiBudgetUsage';
+import { aiTopupState, microMoney, TOPUP_UNAVAILABLE, usageMoney } from './AiBudgetUsage';
 import useAiSpend from '../hooks/useAiSpend';
 import useAssistMode from '../hooks/useAssistMode';
 import { safeReadJSON, safeWriteJSON } from '../lib/storage';
@@ -301,16 +301,8 @@ export const NO_SWITCH_LINE = 'No switch here. Nothing on this page fills a blan
  */
 export const SAFETY_LINE = 'Eadwyn drafts; you send.';
 
-/** The top-up read as Add tokens draws it: `AiBudgetUsage.jsx`'s checks. */
-export function topUpState(product, productError) {
-  const p = product;
-  const integer = (n) => Number.isSafeInteger(n) && n >= 0;
-  if (productError || !p || typeof p.configured !== 'boolean') return 'unreadable';
-  if (!p.configured) return 'unconfigured';
-  if (!p.product || !/^price_[A-Za-z0-9]+$/.test(p.product.price_id) || p.product.currency !== 'usd'
-    || !integer(p.product.unit_amount) || p.product.unit_amount === 0) return 'unreadable';
-  return 'configured';
-}
+/** The top-up read as Add tokens draws it: `AiBudgetUsage.jsx`'s checks (D750 decision 3). */
+export const topUpState = aiTopupState;
 
 /**
  * THE USAGE BOX (AIR:30-36), from `GET /api/ai-budget/me` and `/top-up`
@@ -350,7 +342,7 @@ export function RailUsage({ reading }) {
         const meter = r.cap > 0 ? spendMeter(r.spent, r.cap) : null;
         return (
           <div key={r.id} className="fwr-usage-row" data-testid={`text-worker-rail-usage-${r.id}`}>
-            <div className="fwr-usage-line"><span>{r.t}</span><b>{`${microMoney(r.spent)} of ${microMoney(r.cap)}`}</b></div>
+            <div className="fwr-usage-line"><span>{r.t}</span><b title={`${microMoney(r.spent)} of ${microMoney(r.cap)}`}>{`${usageMoney(r.spent)} of ${microMoney(r.cap)}`}</b></div>
             {meter && (
               <div className="fwr-meter" role="presentation">
                 <i className={meter.over ? 'fwr-over' : undefined} style={{ width: `${meter.fraction * 100}%` }} />
@@ -361,16 +353,16 @@ export function RailUsage({ reading }) {
         );
       })}
       <div className="fwr-usage-line" data-testid="text-worker-rail-usage-held">
-        <span>Held by runs in progress</span><b>{microMoney(b.month_reserved_microusd + b.topup_reserved_microusd)}</b>
+        <span>Held by runs in progress</span><b title={microMoney(b.month_reserved_microusd + b.topup_reserved_microusd)}>{usageMoney(b.month_reserved_microusd + b.topup_reserved_microusd)}</b>
       </div>
       <div className="fwr-usage-line" data-testid="text-worker-rail-usage-balance">
         <span>Top-up balance</span><b>{microMoney(b.balance_microusd)}</b>
       </div>
       <p className="fwr-usage-note">Runs use your plan's allowance first, then your top-up balance.</p>
-      {topUp === 'configured' && (
+      {topUp === 'ready' && (
         <a href="/checkout?ai_topup=1" className="fwr-add-tokens" data-testid="link-worker-rail-add-tokens">Add tokens</a>
       )}
-      {topUp === 'unconfigured' && <p className="fwr-usage-note" data-testid="text-worker-rail-topup">Top-up not configured</p>}
+      {topUp === 'unavailable' && <p className="fwr-usage-note" data-testid="text-worker-rail-topup">{TOPUP_UNAVAILABLE}</p>}
       {topUp === 'unreadable' && (
         <div data-testid="text-worker-rail-topup">
           <Unreadable what="The AI top-up" claim="Retry to read the purchase option." onRetry={reading.reload} />

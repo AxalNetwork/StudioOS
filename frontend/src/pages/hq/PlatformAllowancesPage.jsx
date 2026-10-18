@@ -200,9 +200,47 @@ export function HeldCard({ reviews, onSettled }) {
   );
 }
 
+/**
+ * D750 (#1841) — one plain sentence per top-up state, from
+ * `GET /api/ai-budget/top-up/status`. The ID shows as its last six characters
+ * only; the reading never carries a key.
+ */
+export const TOPUP_REASON_LINES = {
+  missing_from_catalog: (mode) => `The price is not in the catalog mirror and Stripe does not know it in ${mode} mode.`,
+  inactive: () => 'The price or its product is archived in Stripe. The top-up needs an active price.',
+  not_one_time: () => 'STRIPE_PRICE_AI_TOPUP names a recurring price. The top-up needs a one-time USD price.',
+  not_usd: () => 'STRIPE_PRICE_AI_TOPUP names a price that is not in US dollars. The top-up needs a one-time USD price.',
+  bad_amount: () => 'The price has no whole, positive amount. The top-up needs a fixed amount in cents.',
+  bad_config: () => 'STRIPE_PRICE_AI_TOPUP does not look like a Stripe price ID (price_…).',
+  mode_mismatch: (mode) => `STRIPE_PRICE_AI_TOPUP is a price from the other Stripe mode; the secret key is ${mode} mode.`,
+};
+export function topUpStatusLine(s) {
+  if (!s || typeof s.state !== 'string') return null;
+  const mode = s.mode === 'live' ? 'live' : 'test';
+  const suffix = typeof s.price_id_suffix === 'string' ? s.price_id_suffix : null;
+  if (s.state === 'unset') return { tone: 'neutral', text: 'STRIPE_PRICE_AI_TOPUP is not set, so members are told the top-up isn\'t available yet.' };
+  if (s.state === 'ready') return { tone: 'success', text: `The top-up is on sale${suffix ? ` (price …${suffix})` : ''}, ${mode} mode. Members see Add tokens.` };
+  const line = TOPUP_REASON_LINES[s.reason];
+  return s.state === 'not_ready' && line ? { tone: 'warning', text: `${line(mode)}${suffix ? ` Price …${suffix}.` : ''} Members are told it isn't available yet.` } : null;
+}
+export function TopUpReadinessCard({ status }) {
+  const line = status.status === 'ready' ? topUpStatusLine(status.data) : null;
+  return (
+    <Card padding="none" className="overflow-hidden" data-testid="hq-topup-readiness">
+      <div className="border-b border-axal-hairline px-4 py-3 text-sm font-bold dark:border-gray-800">AI top-up</div>
+      <div className="px-4 py-3 text-[12.5px]">
+        {status.status === 'loading' ? <p className="text-axal-muted">Reading the top-up…</p>
+          : !line ? <Unreadable what="The AI top-up" claim="Nothing about the top-up has changed." onRetry={status.reload} />
+            : <p data-testid="hq-topup-readiness-line" data-tone={line.tone}>{line.text}</p>}
+      </div>
+    </Card>
+  );
+}
+
 export default function PlatformAllowancesPage() {
   const caps = useAccountRead(() => aiBudgetApi.caps());
   const reviews = useAccountRead(() => aiBudgetApi.reviews());
+  const topUpStatus = useAccountRead(() => aiBudgetApi.topUpStatus());
   const [editing, setEditing] = useState(null);
   const [done, setDone] = useState(null);
   const plans = caps.status === 'ready' && Array.isArray(caps.data?.plans) ? caps.data.plans : [];
@@ -246,6 +284,7 @@ export default function PlatformAllowancesPage() {
                 onSaved={(msg) => { setEditing(null); setDone(msg); caps.reload(); }} />
             )}
             <HeldCard reviews={reviews} onSettled={(msg) => { setDone(msg); reviews.reload(); }} />
+            <TopUpReadinessCard status={topUpStatus} />
           </div>
         </div>
       </div>

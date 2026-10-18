@@ -95,7 +95,7 @@ const BUDGET = {
   day_reserved_microusd: 20000, month_reserved_microusd: 30000, topup_reserved_microusd: 20000,
   held_for_review: [],
 };
-const TOPUP = { configured: true, product: { price_id: 'price_TestTopUp1', currency: 'usd', unit_amount: 1000 } };
+const TOPUP = { configured: true, state: 'ready', product: { price_id: 'price_TestTopUp1', currency: 'usd', unit_amount: 1000 } };
 const SPEND = { recorded: true, month: { spend_usd: 3.1, calls: 12 }, by_task: [] };
 
 /**
@@ -516,8 +516,11 @@ test('18 · Usage: today and this month, what runs hold, the balance, the senten
 });
 
 test('18 · Usage: the top-up\'s three states, and every failed read is Unreadable, never $0.00', () => {
-  assert.match(renderedText(usage({ product: { configured: false } })), /Top-up not configured/);
-  assert.doesNotMatch(usage({ product: { configured: false } }), /Add tokens/);
+  // D750: unset and not_ready are configuration, so the line names no Retry.
+  for (const product of [{ configured: false }, { configured: true, state: 'not_ready' }]) {
+    assert.match(renderedText(usage({ product })), /Top-up isn't available yet\./);
+    assert.doesNotMatch(usage({ product }), /Add tokens|Retry|could not be read/);
+  }
   assert.match(renderedText(usage({ productError: true })), /The AI top-up could not be read/);
   for (const bad of [{ budgetError: true }, { budget: null }, { budget: { ...BUDGET, held_for_review: undefined } }]) {
     const html = usage(bad);

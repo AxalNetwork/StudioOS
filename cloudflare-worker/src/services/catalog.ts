@@ -229,6 +229,20 @@ function deriveKind(metadata: Record<string, string>, prices: CatalogPrice[]): P
   return prices.some((p) => p.type === 'recurring') ? 'subscription' : 'alacarte';
 }
 
+/** One Stripe price as the mirror stores it. */
+function normalisePrice(p: StripePriceRaw): CatalogPrice {
+  return {
+    id: p.id,
+    currency: p.currency,
+    unit_amount: p.unit_amount,
+    interval: p.recurring?.interval ?? null,
+    interval_count: p.recurring?.interval_count ?? null,
+    nickname: p.nickname,
+    type: p.type,
+    active: p.active,
+  };
+}
+
 /** Fetch the live catalog from Stripe (no caching). Returns [] if Stripe unconfigured. */
 export async function fetchStripeCatalog(env: Env): Promise<CatalogProduct[]> {
   if (!env.STRIPE_SECRET_KEY) return [];
@@ -239,16 +253,7 @@ export async function fetchStripeCatalog(env: Env): Promise<CatalogProduct[]> {
 
   const pricesByProduct = new Map<string, CatalogPrice[]>();
   for (const p of prices) {
-    const norm: CatalogPrice = {
-      id: p.id,
-      currency: p.currency,
-      unit_amount: p.unit_amount,
-      interval: p.recurring?.interval ?? null,
-      interval_count: p.recurring?.interval_count ?? null,
-      nickname: p.nickname,
-      type: p.type,
-      active: p.active,
-    };
+    const norm = normalisePrice(p);
     const arr = pricesByProduct.get(p.product) ?? [];
     arr.push(norm);
     pricesByProduct.set(p.product, arr);
@@ -335,6 +340,78 @@ function rowToProduct(row: CatalogRow): CatalogProduct {
   };
 }
 
+/** One product's mirror row, written the one way both `syncCatalog` and `fetchAndMirrorPrice` write it. */
+async function upsertCatalogRow(env: Env, p: CatalogProduct): Promise<void> {
+  await env.DB.prepare(
+    `INSERT INTO stripe_products (id, name, kind, active, metadata_json, prices_json, synced_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       name = excluded.name,
+       kind = excluded.kind,
+       active = excluded.active,
+       metadata_json = excluded.metadata_json,
+       prices_json = excluded.prices_json,
+       synced_at = excluded.synced_at`,
+  )
+    .bind(
+      p.id,
+      p.name,
+      p.kind,
+      p.active ? 1 : 0,
+      JSON.stringify(p.metadata),
+      JSON.stringify(p.prices),
+      p.synced_at,
+    )
+    .run();
+}
+
+/**
+ * D750 (#1841) — one price the mirror lacks, read from Stripe and written into
+ * the mirror as `syncCatalog` writes it, its product's other mirrored prices
+ * kept. A read only (`GET /v1/prices/:id`, product expanded): nothing in Stripe
+ * is created or changed.
+ *
+ * `missing` when Stripe does not know the price; `mode_mismatch` when Stripe
+ * knows it in the other mode than `STRIPE_SECRET_KEY`'s (its 404 says "a
+ * similar object exists in test mode", or the price's `livemode` disagrees).
+ * Any other failure throws, so the caller answers "could not be read".
+ */
+export async function fetchAndMirrorPrice(
+  env: Env,
+  priceId: string,
+): Promise<
+  | { state: 'mirrored'; product: CatalogProduct; price: CatalogPrice }
+  | { state: 'missing' | 'mode_mismatch' }
+> {
+  if (!env.STRIPE_SECRET_KEY) return { state: 'missing' };
+  let raw: Omit<StripePriceRaw, 'product'> & { livemode?: boolean; product: string | StripeProductRaw };
+  try {
+    raw = await stripeCall(env, `/prices/${encodeURIComponent(priceId)}`, { 'expand[]': 'product' }, { method: 'GET' });
+  } catch (e) {
+    const status = (e as { status?: unknown }).status;
+    if (status === 404) {
+      return /similar object exists in (test|live) mode/i.test(String((e as Error).message)) ? { state: 'mode_mismatch' } : { state: 'missing' };
+    }
+    throw e;
+  }
+  const prod = raw && typeof raw.product === 'object' ? raw.product : null;
+  if (!raw || raw.id !== priceId || !prod || typeof prod.id !== 'string') throw new Error('stripe price unreadable');
+  if (typeof raw.livemode === 'boolean' && raw.livemode !== (stripeMode(env) === 'live')) return { state: 'mode_mismatch' };
+  const price = normalisePrice({ ...raw, product: prod.id });
+  await ensureCatalogSchema(env);
+  const existing = await env.DB.prepare('SELECT * FROM stripe_products WHERE id = ?').bind(prod.id).first<CatalogRow>();
+  const kept = existing ? rowToProduct(existing).prices.filter((p) => p.id !== price.id) : [];
+  const prices = [...kept, price];
+  const metadata = prod.metadata ?? {};
+  const kind = deriveKind(metadata, prices);
+  const product: CatalogProduct = {
+    id: prod.id, name: prod.name, kind, active: prod.active, metadata,
+    categories: deriveCategories(prod.name, kind, metadata), prices, synced_at: new Date().toISOString(),
+  };
+  await upsertCatalogRow(env, product);
+  return { state: 'mirrored', product, price };
+}
+
 /**
  * Re-pull from Stripe and repopulate the D1 mirror cleanly + idempotently:
  * upsert every current product, then delete mirror rows no longer in Stripe.
@@ -344,29 +421,7 @@ export async function syncCatalog(env: Env): Promise<{ synced: number }> {
   await ensureCatalogSchema(env);
   const catalog = await getLiveCatalog(env, { forceRefresh: true });
 
-  for (const p of catalog) {
-    await env.DB.prepare(
-      `INSERT INTO stripe_products (id, name, kind, active, metadata_json, prices_json, synced_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET
-         name = excluded.name,
-         kind = excluded.kind,
-         active = excluded.active,
-         metadata_json = excluded.metadata_json,
-         prices_json = excluded.prices_json,
-         synced_at = excluded.synced_at`,
-    )
-      .bind(
-        p.id,
-        p.name,
-        p.kind,
-        p.active ? 1 : 0,
-        JSON.stringify(p.metadata),
-        JSON.stringify(p.prices),
-        p.synced_at,
-      )
-      .run();
-  }
+  for (const p of catalog) await upsertCatalogRow(env, p);
 
   // Drop rows that no longer exist in Stripe so the mirror stays clean.
   const ids = catalog.map((p) => p.id);

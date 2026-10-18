@@ -9,7 +9,7 @@ import budgetRoute from '../src/routes/ai_budget.ts';
 import billingRoute from '../src/routes/billing.ts';
 import ordersRoute from '../src/routes/orders.ts';
 import { ensureOrdersSchema } from '../src/services/orders.ts';
-import { readAiTopupProduct } from '../src/services/aiTopups.ts';
+import { readAiTopupProduct, resetAiTopupMirrorWindow } from '../src/services/aiTopups.ts';
 import { spawnSync } from 'node:child_process';
 import { ensureCatalogSchema } from '../src/services/catalog.ts';
 
@@ -214,20 +214,21 @@ test('checkout confirmation never credits AI balance even when a paid top-up pur
 });
 test('configured price must be an active one-time USD product; absent makes no provider request',async()=>{
  const f=fixture();const fetchBefore=globalThis.fetch;let calls=0;try{
+  resetAiTopupMirrorWindow();
   globalThis.fetch=async()=>{calls++;throw Error('provider down');};
-  assert.deepEqual(await readAiTopupProduct(f.env),{configured:false,product:null});assert.equal(calls,0);
+  assert.deepEqual(await readAiTopupProduct(f.env),{configured:false});assert.equal(calls,0);
   f.env.STRIPE_PRICE_AI_TOPUP='price_owner';
-  await assert.rejects(()=>readAiTopupProduct(f.env),/unreadable/);
   await ensureCatalogSchema(f.env);
   const price={id:'price_owner',currency:'usd',unit_amount:2000,type:'one_time',active:true,interval:null};
   f.db.prepare("INSERT INTO stripe_products(id,name,kind,active,metadata_json,prices_json) VALUES('prod_owner','Owner AI top-up','alacarte',1,'{}',?)").run(JSON.stringify([price]));
-  assert.deepEqual(await readAiTopupProduct(f.env),{configured:true,product:{price_id:'price_owner',product_id:'prod_owner',name:'Owner AI top-up',currency:'usd',unit_amount:2000,cycle:'onetime',credit_microusd:20000000}});
-  for(const changed of [{currency:'eur'},{type:'recurring'},{active:false},{unit_amount:0},{unit_amount:1.5}]) {
+  assert.deepEqual(await readAiTopupProduct(f.env),{configured:true,state:'ready',product:{price_id:'price_owner',product_id:'prod_owner',name:'Owner AI top-up',currency:'usd',unit_amount:2000,cycle:'onetime',credit_microusd:20000000}});
+  for(const [changed,reason] of [[{currency:'eur'},'not_usd'],[{type:'recurring'},'not_one_time'],[{active:false},'inactive'],[{unit_amount:0},'bad_amount'],[{unit_amount:1.5},'bad_amount']] as const) {
     f.db.prepare("UPDATE stripe_products SET prices_json=? WHERE id='prod_owner'").run(JSON.stringify([{...price,...changed}]));
-    await assert.rejects(()=>readAiTopupProduct(f.env),/unreadable/);
+    assert.deepEqual(await readAiTopupProduct(f.env),{configured:true,state:'not_ready',reason});
   }
   f.db.prepare("UPDATE stripe_products SET active=0,prices_json=? WHERE id='prod_owner'").run(JSON.stringify([price]));
-  await assert.rejects(()=>readAiTopupProduct(f.env),/unreadable/);
+  assert.deepEqual(await readAiTopupProduct(f.env),{configured:true,state:'not_ready',reason:'inactive'});
+  assert.equal(calls,0);
  }finally{globalThis.fetch=fetchBefore;f.db.close();}
 });
 test('database constraints reject fractional/negative balance, invented users and malformed payment/draw state',()=>{
@@ -291,6 +292,6 @@ test('mounted self-read refuses anonymous requests; unconfigured top-up has no p
   const token=await new SignJWT({user_id:2}).setProtectedHeader({alg:'HS256'}).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(f.env.JWT_SECRET));
   const headers={Authorization:`Bearer ${token}`};
   assert.equal((await budgetRoute.request('/me',{headers},f.env)).status,200);
-  const p=await budgetRoute.request('/top-up',{headers},f.env);assert.equal(p.status,200);assert.deepEqual(await p.json(),{configured:false,product:null});
+  const p=await budgetRoute.request('/top-up',{headers},f.env);assert.equal(p.status,200);assert.deepEqual(await p.json(),{configured:false});
  }finally{f.db.close();}
 });

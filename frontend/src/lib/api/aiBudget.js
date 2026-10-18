@@ -9,6 +9,8 @@ const body = (b) => JSON.stringify(b ?? {});
 export const aiBudgetApi = {
   mine: () => request('/ai-budget/me'),
   topUp: () => request('/ai-budget/top-up'),
+  // D750 — Super Admin: why the top-up is or is not offered.
+  topUpStatus: () => request('/ai-budget/top-up/status'),
   // D641 — every model the router can price, read from its own tables.
   rates: () => request('/ai/rates'),
   // D640 — Super Admin: the ten plans' allowances, and runs held for a check.

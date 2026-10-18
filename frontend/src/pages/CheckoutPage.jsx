@@ -325,7 +325,7 @@ export default function CheckoutPage() {
 
   if (wantsAiTopup && ['loading','not-configured','unreadable'].includes(aiTopupState)) {
     return <div className="max-w-lg mx-auto py-16 text-center text-gray-700 dark:text-gray-300" aria-busy={aiTopupState==='loading'}>
-      <h1 className="text-lg font-bold">{aiTopupState==='loading'?'Loading AI top-up…':aiTopupState==='not-configured'?'Top-up not configured':'Unreadable'}</h1>
+      <h1 className="text-lg font-bold">{aiTopupState==='loading'?'Loading AI top-up…':aiTopupState==='not-configured'?"Top-up isn't available yet.":'Unreadable'}</h1>
       {aiTopupState==='unreadable' && <p>The AI top-up could not be read. Refresh to retry.</p>}
     </div>;
   }

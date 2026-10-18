@@ -50,7 +50,7 @@ const BUDGET = {
   day_reserved_microusd: 0, month_reserved_microusd: 50_000, topup_reserved_microusd: 0,
   balance_microusd: 10_000_000, held_for_review: [],
 };
-const PRODUCT = { configured: true, product: { price_id: 'price_abc123', currency: 'usd', unit_amount: 1000 } };
+const PRODUCT = { configured: true, state: 'ready', product: { price_id: 'price_abc123', currency: 'usd', unit_amount: 1000 } };
 const DAYS = Array.from({ length: 30 }, (_, i) => {
   const d = new Date(Date.UTC(2026, 8, 9 + i));
   const key = d.toISOString().slice(0, 10);
@@ -144,6 +144,10 @@ test('U1: the allowance view, its used-up, no-allowance and paused states, and a
   assert.equal(allowanceView({ ...BUDGET, held_for_review: undefined }), null);
   assert.equal(topUpState(PRODUCT), 'available');
   assert.equal(topUpState({ configured: false, product: null }), 'unavailable');
+  // D750: a configuration problem is unavailable, never unreadable.
+  assert.equal(topUpState({ configured: true, state: 'not_ready' }), 'unavailable');
+  assert.equal(topUpState({ configured: true, state: 'ready', product: null }), 'unreadable');
+  assert.equal(topUpState({ configured: true, product: PRODUCT.product }), 'unreadable', 'a reading with no state is not on sale');
   assert.equal(topUpState({ configured: true, product: { price_id: 'x' } }), 'unreadable');
   assert.equal(topUpState(null), 'unreadable');
 });
