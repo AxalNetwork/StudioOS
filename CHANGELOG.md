@@ -4,6 +4,22 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## One text per document: every sender reads its library row (D758, #1863, PR 1)
+
+- `services/legalDocTypes.ts` gains `LIBRARY_SLUG_FOR` / `librarySlugFor`
+  (seven spellings → their `legal_templates` row) and `BUNDLED_SENT_DIRECTLY`
+  (`partner_msa_v1`, until PR 2).
+- `templateBodyFor` and `createAndSendEnvelope` resolve the row by slug: an
+  envelope records, prints and dedupes under it (either spelling still
+  dedupes), and `envelope_created` adds `requested_as`.
+- The 3-way NDA and the deck-share NDA read their rows and refuse a field
+  left (409 `template_fields_unfilled`; deck-share 503
+  `template_unreadable`), with no free-text fallback.
+- Usage counts the store's own slugs, matches exactly first, folds spellings
+  through the same map, counts partner deals under `partner_services`, and
+  counts a relationship row and its envelope once. The drill-down uses the
+  same fold. `GET /templates/outside` lists `BUNDLED_SENT_DIRECTLY`.
+
 ## The entity and money map on screen, with one numbering on paper (D717, #1855)
 
 - `GET /api/admin/fund-structure` (`services/fundStructure.ts`) now numbers
@@ -21,22 +37,6 @@
   a "Bank accounts" link for the Super Admin. A plain Admin sees "Only the
   Super Admin can see or change payment instructions." in every account cell.
   A branch gets neither. Nothing moves money.
-## One text per document: every sender reads its library row (D758, #1863, PR 1)
-
-- `services/legalDocTypes.ts` gains `LIBRARY_SLUG_FOR` / `librarySlugFor`
-  (seven spellings → their `legal_templates` row) and `BUNDLED_SENT_DIRECTLY`
-  (`partner_msa_v1`, until PR 2).
-- `templateBodyFor` and `createAndSendEnvelope` resolve the row by slug: an
-  envelope records, prints and dedupes under it (either spelling still
-  dedupes), and `envelope_created` adds `requested_as`.
-- The 3-way NDA and the deck-share NDA read their rows and refuse a field
-  left (409 `template_fields_unfilled`; deck-share 503
-  `template_unreadable`), with no free-text fallback.
-- Usage counts the store's own slugs, matches exactly first, folds spellings
-  through the same map, counts partner deals under `partner_services`, and
-  counts a relationship row and its envelope once. The drill-down uses the
-  same fold. `GET /templates/outside` lists `BUNDLED_SENT_DIRECTLY`.
-
 ## The AI top-up says what is wrong, and the rail shows money to the cent (D750, #1841)
 
 - `readAiTopupProduct` (`services/aiTopups.ts`) returns `ready`, or
