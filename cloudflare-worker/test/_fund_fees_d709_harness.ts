@@ -59,6 +59,7 @@ const SCHEMA = [
   readFileSync(resolve(HERE, '../sql/migrations/472_entity_bank_accounts.sql'), 'utf8'),
   readFileSync(resolve(HERE, '../sql/migrations/473_fund_management_fees.sql'), 'utf8'),
   readFileSync(resolve(HERE, '../sql/migrations/474_mercury_entity_connections.sql'), 'utf8'),
+  readFileSync(resolve(HERE, '../sql/migrations/483_mercury_not_ours.sql'), 'utf8'),
 ].join('\n');
 
 /** This quarter and the next, from today (UTC): the routes read the real clock. */

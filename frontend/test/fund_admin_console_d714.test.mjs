@@ -101,6 +101,8 @@ function stubs(over = {}) {
         proposeMatch: rec('proposeMatch', async () => ({ ok: true })),
         confirmMatch: rec('confirmMatch', async () => ({ ok: true })),
         rejectMatch: rec('rejectMatch', async () => ({ ok: true })),
+        markNotOurs: rec('markNotOurs', async () => ({ ok: true, uid: 'mk-new' })),
+        withdrawNotOurs: rec('withdrawNotOurs', async () => ({ ok: true })),
       },
       fees: {
         state: rec('feeState', async () => FEES()),
@@ -369,4 +371,90 @@ test('#1780 decision 12: the entity sheet on Connectors opens this console\'s Ba
   assert.match(page, /href="\/admin\/fund-admin\?tab=banking"[^>]*>Open Banking</);
   const branch = renderToStaticMarkup(h(MemoryRouter, null, h(MercuryEntitySheet, { p, api, branch: 'ldn', onClose() {} })));
   assert.doesNotMatch(branch, /Open Banking/);
+});
+
+// ------------------------------------------------------------------ D749: Not ours
+
+const NOT_OURS_FIXTURE = ({ match } = {}) => {
+  const credit = { uid: 'tc-1', amount_cents: 250000, created_on: '2026-10-07', posted_on: '2026-10-07', counterparty_name: 'Unknown <i>Sender</i>', entity_key: 'fund', last_four: '9004', status: 'sent', match: null, not_ours: null };
+  const debit = { ...credit, uid: 'td-1', amount_cents: -5000 };
+  const review = { ...credit, uid: 'tr-1', not_ours: { uid: 'mk-review', reason: 'duplicate', note: null, state: 'needs_review', marked_at: '2026-10-08' } };
+  const active = { ...credit, uid: 'ta-1', not_ours: { uid: 'mk-active', reason: 'other_entity', note: 'Belongs to <b>GP</b>', state: 'active', marked_at: '2026-10-08' } };
+  const items = match === 'none' ? [credit, debit, review] : match === 'not_ours' ? [active, review] : [credit, active];
+  return { ok: true, page: 1, page_size: 50, total: items.length, items };
+};
+const notOursStubs = (over = {}) => stubs({ transactions: async (q) => NOT_OURS_FIXTURE(q), ...over });
+
+test('D749: the reasons are the Worker\'s keys, in its order, and the pill names the reason or the review', async () => {
+  const { NOT_OURS_REASONS, notOursText } = await import('../src/pages/admin/fundAdmin/fundAdminModel.js');
+  const worker = readFileSync(resolve('cloudflare-worker/src/services/mercury/notOurs.ts'), 'utf8');
+  const keys = [...worker.slice(worker.indexOf('NOT_OURS_REASONS'), worker.indexOf('] as const')).matchAll(/key: '([a-z_]+)'/g)].map((m) => m[1]);
+  assert.deepEqual(NOT_OURS_REASONS.map(([k]) => k), keys);
+  assert.equal(keys.length, 4);
+  assert.equal(notOursText({ reason: 'duplicate', state: 'active' }), 'Not ours · Duplicate');
+  assert.equal(notOursText({ reason: 'duplicate', state: 'needs_review' }), 'Not ours · needs review');
+  assert.equal(notOursText(null), null);
+});
+
+test('D749: Unmatched credits lists credits only; Not ours posts { reason, note } and needs a note for Other', async () => {
+  const s = notOursStubs();
+  const m = await mount(ADMIN, s.apis, '/admin/fund-admin?tab=reconciliation');
+  assert.ok(m.by('unmatched-tc-1') && !m.by('unmatched-td-1'), 'a debit is never offered');
+  assert.ok(m.by('unmatched-tr-1') && !m.by('not-ours-tr-1'), 'a line in review shows its pill, with no second mark');
+  assert.ok(m.text(m.by('unmatched-tr-1')).includes('Not ours · needs review'));
+  assert.ok(m.text().includes('Unknown <i>Sender</i>'), 'bank text is drawn as text');
+  await m.click('not-ours-tc-1');
+  await m.type('not-ours-reason-tc-1', 'other');
+  await m.type('not-ours-note-tc-1', 'too short');
+  const submit = () => Object.entries(m.by('not-ours-submit-tc-1')).find(([k]) => k.startsWith('__reactProps$'))[1];
+  assert.equal(submit().disabled, true, 'Other needs a note of ten characters');
+  await m.type('not-ours-note-tc-1', 'A wire meant for another fund');
+  assert.equal(submit().disabled, false);
+  const before = s.calls.filter((c) => c[0] === 'transactions').length;
+  await m.submit(m.by('not-ours-form-tc-1'));
+  assert.deepEqual(s.calls.find((c) => c[0] === 'markNotOurs'), ['markNotOurs', 'tc-1', { reason: 'other', note: 'A wire meant for another fund' }]);
+  assert.ok(s.calls.filter((c) => c[0] === 'transactions').length > before, 'both groups reload after the act');
+  await m.unmount();
+  // A reason other than Other posts with no note.
+  const t = notOursStubs();
+  const n = await mount(ADMIN, t.apis, '/admin/fund-admin?tab=reconciliation');
+  await n.click('not-ours-tc-1');
+  await n.submit(n.by('not-ours-form-tc-1'));
+  assert.deepEqual(t.calls.find((c) => c[0] === 'markNotOurs'), ['markNotOurs', 'tc-1', { reason: 'not_fund_transaction', note: undefined }]);
+  await n.unmount();
+});
+
+test('D749: the Not ours group offers Withdraw only, with a ten-character reason; a refusal shows the Worker\'s sentence', async () => {
+  const s = notOursStubs({ withdrawNotOurs: async () => { throw Object.assign(new Error('This mark is already withdrawn.'), { status: 409 }); } });
+  const m = await mount(ADMIN, s.apis, '/admin/fund-admin?tab=reconciliation');
+  const row = m.by('not-ours-mark-mk-active');
+  assert.ok(row && m.by('not-ours-mark-mk-review'));
+  assert.ok(m.text(row).includes('Not ours · Belongs to another entity') && m.text(row).includes('Belongs to <b>GP</b>'));
+  assert.ok(!m.ids().some((id) => /^(match-confirm|not-ours-submit)-.*mk-/.test(id)), 'no Confirm on a mark');
+  await m.click('not-ours-withdraw-mk-active');
+  await m.type('not-ours-withdraw-reason-mk-active', 'short');
+  const btn = () => Object.entries(m.by('not-ours-withdraw-submit-mk-active')).find(([k]) => k.startsWith('__reactProps$'))[1];
+  assert.equal(btn().disabled, true);
+  await m.type('not-ours-withdraw-reason-mk-active', 'It was ours after all');
+  await m.submit(m.form('not-ours-withdraw-reason-mk-active'));
+  assert.deepEqual(s.calls.find((c) => c[0] === 'withdrawNotOurs'), ['withdrawNotOurs', 'mk-active', 'It was ours after all']);
+  assert.ok(m.text().includes('This mark is already withdrawn.'));
+  await m.unmount();
+});
+
+test('D749: with mercury.reconcile refused, the Not ours and Withdraw buttons give way to the sentence', async () => {
+  const refused = { super_admin: false, acts: [{ act: 'mercury.reconcile', tier: 'admin', allowed: false, sentence: 'An Admin reconciles bank lines.' }] };
+  const s = notOursStubs({ access: async () => refused });
+  const m = await mount(ADMIN, s.apis, '/admin/fund-admin?tab=reconciliation');
+  assert.ok(!m.by('not-ours-tc-1') && m.by('not-ours-refused-tc-1'));
+  assert.ok(!m.by('not-ours-withdraw-mk-active') && m.by('not-ours-withdraw-refused-mk-active'));
+  await m.unmount();
+});
+
+test('D749: the Transactions pill reads the mark for a marked line', async () => {
+  const s = notOursStubs();
+  const m = await mount(ADMIN, s.apis, '/admin/fund-admin?tab=banking');
+  assert.ok(m.text().includes('Not ours · Belongs to another entity'));
+  assert.ok(m.text().includes('Unmatched'));
+  await m.unmount();
 });
