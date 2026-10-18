@@ -14,7 +14,9 @@
 // no figure, row, response or file here ever holds a full account number. The
 // phone check is #1773's `PAY_WARNING`, imported, never copied (decision 4).
 // The two fee types (`management_fee_statement`, `management_fee_invoice`)
-// need #1774's reads and join this table in a later PR.
+// read #1774's period and statement (`readPeriod`, `statementFor`), never its
+// tables. The statement previews and draws its paper only: it reaches an LP
+// through #1777's queue, so it never issues here.
 //
 // NOTE: authored to load under `node --experimental-strip-types` (the worker
 // test gate) — no `enum`s, no TS parameter properties.
@@ -26,6 +28,8 @@ import {
   type PaymentPurpose,
 } from './payInstructions';
 import { readLine } from './fundCallLedger';
+import { FeeRefusal, readPeriod, statementFor } from './fundFees';
+import { parseQuarter } from './fundFeeCalc';
 import { commitmentCents, splitCall } from './fundCallSplit';
 import { getTemplate } from './legalTemplateStore';
 import { bracketLabel } from './legalMergeSchema';
@@ -33,6 +37,7 @@ import type { NoticeKeyFigure, NoticePayment, NoticeTable, PaperInput } from './
 
 export type NoticeType =
   | 'capital_call_notice' | 'distribution_notice' | 'default_notice'
+  | 'management_fee_statement' | 'management_fee_invoice'
   | 'platform_licence_fee_invoice' | 'payment_instructions_letter';
 
 export interface NoticeTypeDef {
@@ -46,11 +51,13 @@ export interface NoticeTypeDef {
   senderBlock: boolean;
 }
 
-/** Decision 3, the five types this PR builds. */
+/** Decision 3, the seven types. */
 export const NOTICE_TYPES: readonly NoticeTypeDef[] = Object.freeze([
   { type: 'capital_call_notice', title: 'Capital Call Notice', sender: 'fund', prose: true, senderBlock: true },
   { type: 'distribution_notice', title: 'Distribution Notice', sender: 'fund', prose: true, senderBlock: true },
   { type: 'default_notice', title: 'Notice of Default', sender: 'fund', prose: true, senderBlock: true },
+  { type: 'management_fee_statement', title: 'Management Fee Statement', sender: 'fund', prose: false, senderBlock: true },
+  { type: 'management_fee_invoice', title: 'Management Fee Invoice', sender: 'gp', prose: false, senderBlock: false },
   { type: 'platform_licence_fee_invoice', title: 'Platform Licence Fee Invoice', sender: 'holdings', prose: false, senderBlock: false },
   { type: 'payment_instructions_letter', title: 'Payment Instructions', sender: 'purpose_payee', prose: false, senderBlock: true },
 ] as NoticeTypeDef[]);
@@ -75,6 +82,8 @@ export const NOTICE_SENTENCES = Object.freeze({
   stub: 'Stub — counsel to draft',
   onlyInstructions: (entity: string) => `These are the only instructions on which ${entity} accepts payment.`,
   replacesEarlier: (entity: string) => `This letter replaces any earlier payment instructions from ${entity}.`,
+  /** #1774's `pay_to.sentence`: the LP funds its share through a capital call. */
+  nothingDue: 'Nothing is due from you against this statement.',
 });
 
 /** The licence each licensee pays for (#1772's two platform IP licences). */
@@ -480,6 +489,122 @@ async function licenceInvoice(env: Env, req: NoticeRequest, today: string): Prom
   return { figures, refusal: pay.refusal };
 }
 
+// ---------------------------------------------------------------- the fee types
+
+/** "2.00% a year" from basis points, never through a float. */
+function rateText(bps: number | null): string {
+  if (bps == null || !Number.isSafeInteger(bps)) return 'Not recorded';
+  return `${Math.floor(bps / 100)}.${String(bps % 100).padStart(2, '0')}% a year`;
+}
+
+/** #1774's period, issued or paid: its draft is not a fee anyone owes yet. */
+async function issuedPeriod(env: Env, src: Record<string, unknown>) {
+  const fundId = posInt(src.fund_id);
+  const quarter = typeof src.quarter === 'string' ? src.quarter : '';
+  if (!fundId || !parseQuarter(quarter)) throw new NoticeRefusal(400, 'source_invalid', 'Name the fund and the quarter, as 2026-Q3.');
+  await assertAxalFund(env, fundId);
+  let read;
+  try { read = await readPeriod(env, fundId, quarter); } catch (e) {
+    if (e instanceof FeeRefusal && e.status === 404) throw new NoticeRefusal(404, 'source_not_found', 'No fee period here.');
+    throw e;
+  }
+  if (read.period.status === 'draft') {
+    throw new NoticeRefusal(409, 'fee_period_not_issued', 'This fee period is still a draft. Issue it before its statement or invoice.');
+  }
+  return { fundId, quarter, read };
+}
+
+async function feeStatement(env: Env, req: NoticeRequest, today: string): Promise<BuiltNotice> {
+  const src = req.source || {};
+  const lpId = posInt(src.lp_id);
+  if (!lpId) throw new NoticeRefusal(400, 'source_invalid', 'Name the fund, the quarter and the LP.');
+  const { fundId, quarter } = await issuedPeriod(env, src);
+  let st;
+  try { st = await statementFor(env, fundId, quarter, lpId); } catch (e) {
+    if (e instanceof FeeRefusal && e.status === 404) throw new NoticeRefusal(404, 'source_not_found', 'This LP has no fee line in that quarter.');
+    throw e;
+  }
+  const lp = await lpRow(env, lpId);
+  if (!lp) throw new NoticeRefusal(404, 'source_not_found', 'No limited partner here.');
+  const BASIS: Record<string, string> = { committed: 'Commitment', net_invested_share: 'Share of net invested capital' };
+  const figures: NoticeFigures = {
+    type: 'management_fee_statement', title: 'Management Fee Statement', notice_date: today, sender: 'fund', payee: null, purpose: null,
+    fund_id: fundId, limited_partner_id: lpId, source_ref: `fee_line:${fundId}:${quarter}:${lpId}`,
+    addressee: buildAddresseeBlock({ to: lp.name || '', lpNumber: lpId }),
+    key_figures: [
+      { label: 'Statement date', value: today },
+      { label: 'Quarter', value: quarter },
+      { label: 'Fee window', value: `${st.window.start} to ${st.window.end} (${st.window.days} days)` },
+      { label: 'Rate', value: rateText(st.rate_bps) },
+      { label: 'Net fee', value: formatCents(st.net_fee_cents), mono: true },
+      { label: 'Reference', value: st.reference_code, mono: true },
+    ],
+    tables: [
+      {
+        title: 'Basis',
+        columns: [{ label: 'Basis' }, { label: 'Days', align: 'right' }, { label: 'Amount', align: 'right' }],
+        rows: st.basis.map((b) => [BASIS[b.basis] || b.basis, String(b.days), formatCents(Number(b.cents))]),
+      },
+      {
+        title: 'Fee',
+        columns: [{ label: 'Item' }, { label: 'Amount', align: 'right' }],
+        rows: [
+          ['Gross fee', formatCents(st.gross_fee_cents)],
+          [`Catch-up (${st.catch_up_days} days)`, formatCents(st.catch_up_cents)],
+          ['Offset', formatCents(-st.offset_cents)],
+          ['Net fee', formatCents(st.net_fee_cents)],
+        ],
+        total: true,
+      },
+    ],
+    warning: PAY_WARNING,
+    // Decision 4: the LP funds its share through a capital call, whose notice carries the block.
+    payment: null,
+    reference: st.reference_code,
+    amount_cents: st.net_fee_cents,
+    prose: null,
+    closing: [NOTICE_SENTENCES.nothingDue],
+  };
+  return { figures, refusal: null };
+}
+
+async function feeInvoice(env: Env, req: NoticeRequest, today: string): Promise<BuiltNotice> {
+  const { fundId, quarter, read } = await issuedPeriod(env, req.source || {});
+  const p = read.period as Record<string, any>;
+  const reference = String(p.remittance_reference);
+  const pay = await paymentBlock(env, 'gp', 'management_fee', reference, false);
+  const net = Number(p.net_cents);
+  const figures: NoticeFigures = {
+    type: 'management_fee_invoice', title: 'Management Fee Invoice', notice_date: today, sender: 'gp', payee: 'gp',
+    purpose: 'management_fee', fund_id: fundId, limited_partner_id: null, source_ref: `fee_period:${fundId}:${quarter}`,
+    addressee: buildAddresseeBlock({ to: AXAL_ENTITIES.fund.name, from: 'gp' }),
+    key_figures: [
+      { label: 'Invoice date', value: today },
+      { label: 'Quarter', value: quarter },
+      { label: 'Fee window', value: `${p.window_start} to ${p.window_end}` },
+      { label: 'Amount due', value: formatCents(net), mono: true },
+    ],
+    tables: [{
+      title: 'Fee lines',
+      columns: [{ label: 'LP' }, { label: 'Days', align: 'right' }, { label: 'Gross', align: 'right' }, { label: 'Catch-up', align: 'right' },
+        { label: 'Offset', align: 'right' }, { label: 'Net', align: 'right' }],
+      rows: [
+        ...read.lines.map((l: any) => [`L${l.limited_partner_id}`, String(Number(l.committed_days) + Number(l.invested_days)),
+          formatCents(Number(l.gross_fee_cents)), formatCents(Number(l.catch_up_cents)), formatCents(-Number(l.offset_cents)), formatCents(Number(l.net_fee_cents))]),
+        ['Total', '', formatCents(Number(p.gross_cents)), formatCents(Number(p.catch_up_cents)), formatCents(-Number(p.offset_applied_cents)), formatCents(net)],
+      ],
+      total: true,
+    }],
+    warning: PAY_WARNING,
+    payment: pay.payment,
+    reference,
+    amount_cents: net,
+    prose: null,
+    closing: [],
+  };
+  return { figures, refusal: pay.refusal };
+}
+
 async function letter(env: Env, req: NoticeRequest, today: string): Promise<BuiltNotice> {
   const purpose = req.inputs?.purpose;
   if (!isPaymentPurpose(purpose)) {
@@ -519,6 +644,8 @@ export async function buildNoticeFigures(env: Env, req: NoticeRequest, today: st
     case 'capital_call_notice': return capitalCall(env, req, today);
     case 'distribution_notice': return distribution(env, req);
     case 'default_notice': return defaultNotice(env, req, today);
+    case 'management_fee_statement': return feeStatement(env, req, today);
+    case 'management_fee_invoice': return feeInvoice(env, req, today);
     case 'platform_licence_fee_invoice': return licenceInvoice(env, req, today);
     case 'payment_instructions_letter': return letter(env, req, today);
   }

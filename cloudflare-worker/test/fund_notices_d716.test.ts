@@ -24,7 +24,8 @@ const mig = (f: string) => readFileSync(new URL(`../sql/migrations/${f}`, import
 const TABLES = ['users', 'super_admins', 'user_sessions', 'activity_logs', 'admin_audit_log', 'vc_funds', 'limited_partners',
   'capital_calls', 'fund_distributions', 'legal_templates', 'legal_template_versions', 'lp_applications'];
 const SCHEMA = TABLES.map((t) => stripForeignKeys(tableFromBaseline(baseline, t))).join('\n')
-  + '\n' + ['312_fund_call_ledger.sql', '472_entity_bank_accounts.sql', '478_fund_notices_booklets.sql'].map(mig).join('\n');
+  + '\n' + ['312_fund_call_ledger.sql', '472_entity_bank_accounts.sql', '473_fund_management_fees.sql', '474_mercury_entity_connections.sql',
+    '478_fund_notices_booklets.sql'].map(mig).join('\n');
 const SECRET = ['d716', 'notices', 'fixture', 'signing', 'secret'].join('-');
 
 const ADMIN = 1, SUPER = 2, LP_A = 5, LP_B = 6, PLAIN_TOTP = 8;
@@ -108,14 +109,14 @@ function fixture() {
 type F = ReturnType<typeof fixture>;
 
 let seq = 0;
-async function account(f: F, o: { kind?: string; beneficiary?: string; purposes?: string[] } = {}) {
+async function account(f: F, o: { kind?: string; beneficiary?: string; purposes?: string[]; entity?: string } = {}) {
   const uid = `0000bbbb-0000-4000-8000-${String(++seq).padStart(12, '0')}`;
   const enc = await encryptColumn(f.env, 'entity_bank_accounts', 'account_number_enc', uid, FUND_NUMBER);
   f.db.prepare(`INSERT INTO entity_bank_accounts
       (uid, entity_key, label, bank_name, bank_address, beneficiary_name, beneficiary_address, account_kind,
        account_number_enc, account_last4, routing_number, swift_code, purposes_json, status, recorded_by)
-     VALUES (?, 'fund', 'Fund operating', 'Column N.A.', '1 Letterman Drive', ?, '16192 Coastal Highway', ?, ?, ?, '121145433', 'CLNOUS66MER', ?, 'active', ?)`)
-    .run(uid, o.beneficiary ?? 'Axal VC Spin-Out Lab Fund I LP', o.kind ?? 'checking', enc, FUND_NUMBER.slice(-4),
+     VALUES (?, ?, 'Fund operating', 'Column N.A.', '1 Letterman Drive', ?, '16192 Coastal Highway', ?, ?, ?, '121145433', 'CLNOUS66MER', ?, 'active', ?)`)
+    .run(uid, o.entity ?? 'fund', o.beneficiary ?? 'Axal VC Spin-Out Lab Fund I LP', o.kind ?? 'checking', enc, FUND_NUMBER.slice(-4),
       JSON.stringify(o.purposes ?? ['capital_contribution']), SUPER);
   return uid;
 }
@@ -352,4 +353,82 @@ test('D716 seals: legal_notices and legal_notice_files refuse UPDATE and DELETE'
   for (const sql of ["UPDATE legal_notices SET reason = 'x'", 'DELETE FROM legal_notices', "UPDATE legal_notice_files SET r2_key = 'x'", 'DELETE FROM legal_notice_files']) {
     assert.throws(() => f.db.exec(sql), /append-only/, sql);
   }
+});
+
+/** #1774's period for 2026-Q3 on Fund I, with two lines; issued unless asked for a draft. */
+function seedFees(f: F, status: 'draft' | 'issued' = 'issued') {
+  f.db.exec(`
+    INSERT INTO fund_mgmt_fee_terms (id, uid, fund_id, fee_start_date, investment_period_end, effective_from, lpa_reference, status, confirmed_at)
+      VALUES (1, 'terms-1', 10, '2026-01-01', '2030-12-31', '2026-01-01', 'LPA s. 4.2', 'confirmed', '2026-01-01T00:00:00Z');
+    INSERT INTO fund_fee_periods (id, uid, fund_id, quarter, window_start, window_end, terms_id, status, digest, gross_cents, catch_up_cents,
+        offset_pool_cents, offset_applied_cents, offset_carried_cents, net_cents, remittance_reference)
+      VALUES (1, 'period-1', 10, '2026Q3', '2026-07-01', '2026-09-30', 1, 'draft', '${'d'.repeat(64)}', 2000, 300, 100, 100, 0, 2200, 'AXAL-MF-2026Q3-F10');
+    INSERT INTO fund_fee_lines (uid, period_id, fund_id, limited_partner_id, commitment_cents, committed_days, invested_days, gross_fee_cents,
+        catch_up_days, catch_up_cents, offset_cents, net_fee_cents, reference_code)
+      VALUES ('line-a', 1, 10, 101, 100000, 92, 0, 500, 31, 300, 25, 775, 'AXAL-MF-2026Q3-L101'),
+             ('line-b', 1, 10, 102, 300000, 92, 0, 1500, 0, 0, 75, 1425, 'AXAL-MF-2026Q3-L102');
+  `);
+  if (status === 'issued') {
+    f.db.exec("UPDATE fund_fee_periods SET status = 'issued', issued_at = '2026-07-01T00:00:00Z' WHERE id = 1");
+    f.db.exec("UPDATE fund_fee_lines SET status = 'issued' WHERE period_id = 1");
+  }
+}
+const STATEMENT = { type: 'management_fee_statement', source: { fund_id: 10, quarter: '2026Q3', lp_id: 101 } };
+const INVOICE = { type: 'management_fee_invoice', source: { fund_id: 10, quarter: '2026Q3' } };
+
+test('D716 the fee statement: #1774\'s figures, "Nothing is due from you", no account and no block; it previews and never issues here', async () => {
+  const f = fixture();
+  seedFees(f);
+  await account(f, { purposes: ['capital_contribution'] });
+  const p = await preview(f, STATEMENT);
+  assert.equal(p.status, 200, p.text);
+  assert.equal(p.body.refusal, null);
+  const fig = p.body.figures;
+  assert.deepEqual([fig.sender, fig.payee, fig.payment, fig.reference, fig.amount_cents], ['fund', null, null, 'AXAL-MF-2026Q3-L101', 775]);
+  assert.ok(fig.addressee.includes('Limited partner no. L101'));
+  const keys = Object.fromEntries(fig.key_figures.map((k: any) => [k.label, k.value]));
+  assert.deepEqual([keys['Fee window'], keys.Rate, keys['Net fee']], ['2026-07-01 to 2026-09-30 (92 days)', '2.00% a year', '$7.75']);
+  assert.deepEqual(fig.tables[1].rows, [['Gross fee', '$5.00'], ['Catch-up (31 days)', '$3.00'], ['Offset', '-$0.25'], ['Net fee', '$7.75']]);
+  assert.ok(p.body.html.includes('Nothing is due from you against this statement.'));
+  assert.ok(!p.body.html.includes('section class="payment"') && !p.body.html.includes('ending ') && !p.body.html.includes(FUND_NUMBER.slice(-4)),
+    'no block and no account, masked or not');
+  const issued = await f.call(SUPER, 'POST', '/issue', { page_size: 'letter', ...STATEMENT, figures_sha256: p.body.figures_sha256 });
+  assert.deepEqual([issued.status, issued.body.error], [409, 'statement_not_issued_here']);
+  assert.equal(f.count('SELECT COUNT(*) AS n FROM legal_notices'), 0);
+  const other = await preview(f, { ...STATEMENT, source: { fund_id: 10, quarter: '2026Q3', lp_id: 999 } });
+  assert.deepEqual([other.status, other.body.error], [404, 'source_not_found']);
+  assert.equal((await preview(f, { ...STATEMENT, source: { fund_id: 10, quarter: 'Q3', lp_id: 101 } })).body.error, 'source_invalid');
+  assert.equal((await preview(f, { ...STATEMENT, source: { fund_id: 20, quarter: '2026Q3', lp_id: 201 } })).body.error, 'not_an_axal_fund');
+});
+
+test('D716 the fee invoice: the GP to the Fund, the period\'s lines and remittance reference, the GP\'s masked block; a draft period is refused', async () => {
+  const draft = fixture();
+  seedFees(draft, 'draft');
+  for (const req of [INVOICE, STATEMENT]) {
+    const r = await preview(draft, req);
+    assert.deepEqual([r.status, r.body.error], [409, 'fee_period_not_issued'], req.type);
+  }
+  const f = fixture();
+  seedFees(f);
+  const none = await preview(f, INVOICE);
+  assert.equal(none.status, 200, none.text);
+  assert.equal(none.body.refusal.code, 'no_active_account', 'no GP account yet: #1773\'s refusal in the block\'s place');
+  await account(f, { entity: 'gp', beneficiary: 'Axal VC GP LLC', purposes: ['management_fee'] });
+  const p = await preview(f, INVOICE);
+  assert.equal(p.body.refusal, null, p.text);
+  const fig = p.body.figures;
+  assert.deepEqual([fig.sender, fig.payee, fig.purpose, fig.reference, fig.amount_cents], ['gp', 'gp', 'management_fee', 'AXAL-MF-2026Q3-F10', 2200]);
+  assert.ok(fig.addressee[0].startsWith('From: Axal VC GP LLC') && fig.addressee[1] === 'To: Axal VC Spin-Out Lab Fund I LP');
+  assert.deepEqual(fig.tables[0].rows.map((r: string[]) => r[0]), ['L101', 'L102', 'Total']);
+  assert.deepEqual(fig.tables[0].rows[2], ['Total', '', '$20.00', '$3.00', '-$1.00', '$22.00']);
+  assert.ok(p.body.html.includes(`ending ${FUND_NUMBER.slice(-4)}`) && p.body.html.includes('AXAL-MF-2026Q3-F10'), 'the GP block and the remittance reference');
+  assert.ok(!p.text.includes(FUND_NUMBER), 'no response holds the full number');
+  assert.ok(!p.body.html.includes('class="execution'), 'an invoice prints no block');
+  // A plain Admin previews; only the Super Admin issues.
+  const plain = await f.call(ADMIN, 'POST', '/issue', { page_size: 'letter', ...INVOICE, figures_sha256: p.body.figures_sha256 });
+  assert.deepEqual([plain.status, plain.body.code ?? plain.body.error], [403, 'super_admin_required']);
+  const done = await issue(f, INVOICE);
+  assert.equal(done.status, 201, done.text);
+  assert.equal(f.one("SELECT reference FROM legal_notices").reference, 'AXAL-MF-2026Q3-F10');
+  assert.equal((await issue(f, INVOICE)).body.already_issued, true);
 });
