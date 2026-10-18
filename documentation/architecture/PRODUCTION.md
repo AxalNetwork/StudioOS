@@ -174,6 +174,8 @@ A grant older than a raised session floor is also refused on every tool call (`g
 - [ ] `SUMSUB_APP_TOKEN`, `SUMSUB_SECRET_KEY`, `SUMSUB_WEBHOOK_SECRET` – KYC.
 - [ ] `OPENAI_API_KEY` – AI scoring fallback (Workers AI is the primary).
 - [ ] `TURNSTILE_SECRET_KEY` – bot protection on register / login.
+- [ ] `GOOGLE_AUTH_CLIENT_ID`, `GOOGLE_AUTH_CLIENT_SECRET` – "Continue with Google" sign-in. Its own Web client, never mail's or the Calendar client. Google Cloud Console setup: Authorized JavaScript origins `https://axal.vc` and `https://app.axal.vc` (D722, Google's window on /login); Authorized redirect URI `https://app.axal.vc/api/auth/google/callback` (the redirect fallback); OAuth consent screen External and "In production", so gmail.com accounts can sign in. Without both secrets the button stays and a click answers "Google sign-in is not enabled on this environment."
+  - `GOOGLE_SIGNIN_POPUP` is a wrangler **var**, not a secret, in both `[vars]` and `[env.production.vars]`: `"on"` lets /login open Google's own window, anything else keeps every click on the redirect. It ships `"off"`; flip both blocks in one PR only after the JavaScript origins above are registered. Rollback is `"off"` and a deploy.
 - [ ] Interview channels (D684). Each provider reports itself unavailable until all of its secrets are set; none is ever committed.
   - `TELEGRAM_CHANNEL_BOT_TOKEN`, `TELEGRAM_CHANNEL_BOT_USERNAME`, `TELEGRAM_CHANNEL_WEBHOOK_SECRET` – the Telegram Business bot. It is a separate bot from `TELEGRAM_BOT_TOKEN`, and needs Business Mode switched on in @BotFather.
   - `WHATSAPP_APP_ID`, `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID` – the Meta app (Tech Provider) for Embedded Signup and the Cloud API webhook.

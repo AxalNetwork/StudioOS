@@ -4,6 +4,31 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## Continue with Google signs in through Google's window on /login (D722)
+
+- `GET /api/auth/google/config` says whether this deployment opens Google's
+  own window (`{configured, popup, client_id}`, env only, no-store,
+  rate-limit exempt). `POST /api/auth/google/popup` takes the code from the
+  GIS authorization-code popup, checks Origin, `X-Requested-With`, the body
+  and the double-submitted `studioos_google_popup` state, exchanges it with
+  `redirect_uri=postmessage`, verifies the id_token against Google's keys
+  (`services/googleIdToken.ts`) and answers `{token, user}` as passkey
+  sign-in does. New `google_popup` rate-limit bucket (10/min/IP,
+  fail-closed).
+- `/popup` and `/callback` share `resolveGoogleSignin` and
+  `mintGoogleSession`. An inactive account is now refused before it is
+  linked. The redirect's state cookie carries the session's Domain, so the
+  KV-miss fallback works across axal.vc and app.axal.vc.
+- `/login` asks the config at idle, loads `accounts.google.com/gsi/client`
+  ahead of the click, and opens the window with nothing awaited before
+  `requestCode()`. A blocked window, a script not yet loaded or the switch
+  off all take the `/start` redirect. The button always renders (D185).
+- `GOOGLE_SIGNIN_POPUP = "off"` in both wrangler var blocks until the owner
+  registers `https://axal.vc` and `https://app.axal.vc` as JavaScript
+  origins on the sign-in client; "off" is also the rollback.
+- `check-spa-live.mjs` asserts no COOP on `/login` and a well-formed
+  `/api/auth/google/config` on both hosts.
+
 ## Code scanning uploads follow the repository's visibility (D721)
 
 - `codeql.yml` and `semgrep.yml` start with a `visibility` job that reads
