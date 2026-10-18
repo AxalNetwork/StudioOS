@@ -27,7 +27,7 @@ const TABLES = ['users', 'super_admins', 'user_sessions', 'activity_logs', 'vc_f
   'capital_calls', 'fund_distributions', 'portfolio_positions', 'user_company_links', 'admin_audit_log'];
 const SCHEMA = TABLES.map((t) => stripForeignKeys(tableFromBaseline(baseline, t))).join('\n')
   + '\nCREATE UNIQUE INDEX idx_fund_report_periods_fund_period ON fund_report_periods(fund_id, period);\n'
-  + ['312_fund_call_ledger.sql', '417_fund_position_valuations.sql', '418_fund_ledger.sql', '473_fund_management_fees.sql', '474_mercury_entity_connections.sql', '476_fund_report_drafts.sql'].map(mig).join('\n');
+  + ['312_fund_call_ledger.sql', '417_fund_position_valuations.sql', '418_fund_ledger.sql', '473_fund_management_fees.sql', '474_mercury_entity_connections.sql', '476_fund_report_drafts.sql', '483_mercury_not_ours.sql'].map(mig).join('\n');
 const SECRET = ['d712', 'fixture', 'signing', 'secret', 'only'].join('-');
 
 const ADMIN = 1, SUPER = 2, SUPER2 = 3, OUTSIDE_GP = 4, LP = 5, FOUNDER = 6, PARTNER = 7, PLAIN_TOTP = 8;

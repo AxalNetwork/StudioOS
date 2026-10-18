@@ -32,7 +32,7 @@ const TABLES = ['users', 'super_admins', 'user_sessions', 'activity_logs', 'vc_f
 const SCHEMA = TABLES.map((t) => stripForeignKeys(tableFromBaseline(baseline, t))).join('\n')
   + '\nCREATE UNIQUE INDEX idx_fund_report_periods_fund_period ON fund_report_periods(fund_id, period);\n'
   + ['312_fund_call_ledger.sql', '417_fund_position_valuations.sql', '418_fund_ledger.sql', '472_entity_bank_accounts.sql',
-    '473_fund_management_fees.sql', '474_mercury_entity_connections.sql', '476_fund_report_drafts.sql'].map(mig).join('\n');
+    '473_fund_management_fees.sql', '474_mercury_entity_connections.sql', '476_fund_report_drafts.sql', '483_mercury_not_ours.sql'].map(mig).join('\n');
 
 const SECRET = ['d712', 'pr2', 'fixture', 'secret'].join('-');
 const ADMIN = 1, SUPER2 = 3, LP_A = 5, LP_B = 6, LP_C = 7;
@@ -468,4 +468,46 @@ test('the schedule builds last month\'s summaries from the 3rd and any missing f
   assert.deepEqual(again.built.cash_summaries.map((x: any) => x.result), ['exists', 'exists']);
   assert.deepEqual(again.built.fee_statements, []);
   assert.equal(f.one("SELECT COUNT(*) AS n FROM fund_report_drafts WHERE built_by IS NULL").n, 3);
+});
+
+// ── D749 (#1838): a credit marked Not ours ──────────────────────────────────
+
+const markNotOurs = (f: F, txnId: number, reason: string, state: 'active' | 'needs_review' | 'withdrawn' = 'active') => f.db.prepare(
+  `INSERT INTO mercury_not_ours (uid, transaction_id, reason, amount_cents, marked_by, state, withdrawn_at, withdraw_reason)
+   SELECT ?, id, ?, amount_cents, ?, ?, ?, ? FROM mercury_transactions WHERE id = ?`,
+).run(`mark-${txnId}-${state}`, reason, ADMIN, state, state === 'withdrawn' ? '2026-10-01 00:00:00' : null,
+  state === 'withdrawn' ? 'It was ours after all' : null, txnId);
+
+test('D749: an active Not ours mark leaves unmatched and is counted by reason; a needs_review mark stays unmatched', async () => {
+  const f = fixture();
+  const { stray } = seedSeptember(f);
+  markNotOurs(f, stray, 'other_entity');
+  assert.equal((await buildCash(f, 'gp')).status, 201);
+  const gp = figuresOf(f, 'entity_cash_monthly', 'entity:gp');
+  assert.equal(gp.unmatched_count, 2, 'three before the mark');
+  assert.ok(!gp.reconciliation.unmatched.some((l: any) => l.amount_cents === 5_000_000), 'the marked credit is not listed');
+  assert.deepEqual([gp.reconciliation.not_ours_count, gp.reconciliation.not_ours_by_reason], [1, { other_entity: 1 }]);
+  assert.equal(gp.schema, 'entity_cash_monthly/1', 'the schema label stays');
+
+  const g = fixture();
+  const s = seedSeptember(g);
+  markNotOurs(g, s.stray, 'other_entity', 'needs_review');
+  assert.equal((await buildCash(g, 'gp')).status, 201);
+  const review = figuresOf(g, 'entity_cash_monthly', 'entity:gp');
+  assert.deepEqual([review.unmatched_count, review.reconciliation.not_ours_count, review.reconciliation.not_ours_by_reason], [3, 0, {}]);
+});
+
+test('D749: the quarterly report\'s unmatched count drops by one per active mark, and a withdrawn mark counts again', async () => {
+  const report = async (f: F) => {
+    assert.equal((await f.call(ADMIN, 'POST', '/fund-reporting/build', { kind: 'lp_quarterly_report', period_label: 'Q3 2026', fund_id: 10 })).status, 201);
+    return JSON.parse(f.one("SELECT figures_json FROM fund_report_drafts WHERE kind = 'lp_quarterly_report'").figures_json).unmatched_count;
+  };
+  const f = fixture();
+  const { fund } = seedSeptember(f);
+  markNotOurs(f, f.txn(fund, 12_000, '2026-07-15', '2026-07-15'), 'duplicate');
+  assert.equal(await report(f), 1, "September's debit only");
+  const g = fixture();
+  const s = seedSeptember(g);
+  markNotOurs(g, g.txn(s.fund, 12_000, '2026-07-15', '2026-07-15'), 'duplicate', 'withdrawn');
+  assert.equal(await report(g), 2);
 });

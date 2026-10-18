@@ -169,8 +169,10 @@ export const FUND_ACTS: readonly FundAct[] = Object.freeze([
     routes: ['PUT /api/admin/mercury/connections/:entityKey', 'DELETE /api/admin/mercury/connections/:entityKey'] }),
   act({ act: 'mercury.sync', label: "Sync an entity's Mercury now", tier: 'admin', owner: '#1775', sentence: null,
     routes: ['POST /api/admin/mercury/connections/:entityKey/sync'] }),
-  act({ act: 'mercury.reconcile', label: 'Propose, confirm or reject a bank match', tier: 'admin', owner: '#1775', sentence: null,
-    routes: ['POST /api/admin/mercury/matches', 'POST /api/admin/mercury/matches/:uid/confirm', 'POST /api/admin/mercury/matches/:uid/reject'] }),
+  // D749 (#1838): marking a credit Not ours, and withdrawing the mark, are reconciliation too.
+  act({ act: 'mercury.reconcile', label: 'Propose, confirm or reject a bank match, or mark a credit Not ours', tier: 'admin', owner: '#1775', sentence: null,
+    routes: ['POST /api/admin/mercury/matches', 'POST /api/admin/mercury/matches/:uid/confirm', 'POST /api/admin/mercury/matches/:uid/reject',
+      'POST /api/admin/mercury/transactions/:uid/not-ours', 'POST /api/admin/mercury/not-ours/:uid/withdraw'] }),
 ]);
 
 /**

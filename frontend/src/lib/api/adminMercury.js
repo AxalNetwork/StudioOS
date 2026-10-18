@@ -1,7 +1,8 @@
 // D715 (#1780) — the admin's Mercury, for the four Axal entity connections
 // (D710, #1775): read the connections, connect or replace a Read Only token,
 // disconnect with a reason, sync now, and read accounts, transactions and
-// matches. #1779's console imports this module rather than adding its own.
+// matches, and (D749) mark a credit Not ours or withdraw the mark. #1779's
+// console imports this module rather than adding its own.
 // Nothing here sends, transfers, pays or wires: every route under
 // /api/admin/mercury only reads Mercury (`mercury_read_only_d710`).
 // Worker: routes/admin_mercury.ts.
@@ -40,4 +41,10 @@ export const adminMercuryApi = {
   }),
   confirmMatch: (uid) => request(`${match(uid)}/confirm`, { method: 'POST' }),
   rejectMatch: (uid, reason) => request(`${match(uid)}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  /** D749: a posted credit no record should claim. `note` is required for `other`. */
+  markNotOurs: (transactionUid, { reason, note } = {}) => request(`${BASE}/transactions/${encodeURIComponent(transactionUid)}/not-ours`, {
+    method: 'POST', body: JSON.stringify({ reason, note }),
+  }),
+  /** D749: withdraw a mark with a reason of at least ten characters; the line is unmatched again. */
+  withdrawNotOurs: (uid, reason) => request(`${BASE}/not-ours/${encodeURIComponent(uid)}/withdraw`, { method: 'POST', body: JSON.stringify({ reason }) }),
 };

@@ -8,11 +8,13 @@
  *  DELETE /connections/:entityKey            { reason }                          Super Admin, write bar
  *  POST   /connections/:entityKey/sync       sync now (once in five minutes)
  *  GET    /accounts?entity=
- *  GET    /transactions?entity=&account=&from=&to=&match=&page=   (50 a page)
+ *  GET    /transactions?entity=&account=&from=&to=&match=&page=   (50 a page; match=none|not_ours|<state>)
  *  GET    /matches?state=
  *  POST   /matches                           { transaction_uid, target_kind, target_id }
  *  POST   /matches/:uid/confirm
  *  POST   /matches/:uid/reject               { reason }
+ *  POST   /transactions/:uid/not-ours        { reason, note }   D749: a credit no record should claim
+ *  POST   /not-ours/:uid/withdraw            { reason }
  *
  * WHO (decision 4, `services/mercury/access.ts`): connect, replace and
  * disconnect are the Super Admin's, behind `requireSuperAdminWriteBar`, with
@@ -45,6 +47,7 @@ import {
 } from '../services/mercury/store';
 import { syncConnection } from '../services/mercury/sync';
 import { confirmMatch, proposeManual, rejectMatch, type MatchDeps } from '../services/mercury/match';
+import { markNotOurs, withdrawNotOurs } from '../services/mercury/notOurs';
 
 type C = Context<{ Bindings: Env }>;
 
@@ -222,24 +225,27 @@ export function createAdminMercury(opts: AdminMercuryOptions = {}) {
     const entity = q('entity'); const account = q('account'); const from = q('from'); const to = q('to'); const match = q('match');
     if (entity && !isEntityKey(entity)) return c.json({ code: 'unknown_entity', detail: 'No such Axal entity.' }, 400);
     if ((from && !day(from)) || (to && !day(to))) return c.json({ code: 'invalid_date', detail: 'Dates are YYYY-MM-DD.' }, 400);
-    if (match && match !== 'none' && !(MATCH_STATES as readonly string[]).includes(match)) return c.json({ code: 'invalid_match_filter', detail: 'Unknown match filter.' }, 400);
+    if (match && match !== 'none' && match !== 'not_ours' && !(MATCH_STATES as readonly string[]).includes(match)) return c.json({ code: 'invalid_match_filter', detail: 'Unknown match filter.' }, 400);
     if (account && !/^[a-f0-9]{32}$/.test(account)) return c.json({ code: 'invalid_account', detail: 'Unknown account.' }, 400);
     const page = Math.max(1, Math.min(10_000, Number.parseInt(q('page') || '1', 10) || 1));
-    const binds = [entity, entity, account, account, from, from, to, to, match, match, match];
+    const binds = [entity, entity, account, account, from, from, to, to, match, match, match, match];
     const total = await c.env.DB.prepare(
       `SELECT COUNT(*) AS n FROM mercury_transactions t JOIN mercury_accounts a ON a.id = t.account_id LEFT JOIN mercury_matches m ON m.transaction_id = t.id AND m.state <> 'rejected'
+         LEFT JOIN mercury_not_ours n ON n.transaction_id = t.id AND n.state <> 'withdrawn'
        WHERE (? IS NULL OR a.entity_key = ?) AND (? IS NULL OR a.uid = ?)
         AND (? IS NULL OR t.created_on >= ?) AND (? IS NULL OR t.created_on <= ?)
-        AND (? IS NULL OR (? = 'none' AND m.id IS NULL) OR m.state = ?)`,
+        AND (? IS NULL OR (? = 'none' AND m.id IS NULL AND (n.id IS NULL OR n.state = 'needs_review')) OR (? = 'not_ours' AND n.id IS NOT NULL) OR m.state = ?)`,
     ).bind(...binds).first<{ n: number }>();
     const rows = (await c.env.DB.prepare(
       `SELECT t.uid, t.amount_cents, t.created_on, t.posted_on, t.counterparty_name, t.memo, t.status, t.kind,
               a.uid AS account_uid, a.entity_key, a.last_four,
-              m.uid AS match_uid, m.state AS match_state, m.target_kind, m.target_id
+              m.uid AS match_uid, m.state AS match_state, m.target_kind, m.target_id,
+              n.uid AS mark_uid, n.reason AS mark_reason, n.note AS mark_note, n.state AS mark_state, n.marked_at AS mark_at
          FROM mercury_transactions t JOIN mercury_accounts a ON a.id = t.account_id LEFT JOIN mercury_matches m ON m.transaction_id = t.id AND m.state <> 'rejected'
+         LEFT JOIN mercury_not_ours n ON n.transaction_id = t.id AND n.state <> 'withdrawn'
        WHERE (? IS NULL OR a.entity_key = ?) AND (? IS NULL OR a.uid = ?)
         AND (? IS NULL OR t.created_on >= ?) AND (? IS NULL OR t.created_on <= ?)
-        AND (? IS NULL OR (? = 'none' AND m.id IS NULL) OR m.state = ?)
+        AND (? IS NULL OR (? = 'none' AND m.id IS NULL AND (n.id IS NULL OR n.state = 'needs_review')) OR (? = 'not_ours' AND n.id IS NOT NULL) OR m.state = ?)
         ORDER BY t.created_on DESC, t.id DESC LIMIT ? OFFSET ?`,
     ).bind(...binds, TRANSACTIONS_PAGE, (page - 1) * TRANSACTIONS_PAGE).all<any>()).results || [];
     if (!await auditRead(c.env, user, 'mercury_transactions_read', { entity, account, from, to, match, page, rows: rows.length })) return c.json(AUDIT_UNAVAILABLE, 503);
@@ -250,6 +256,7 @@ export function createAdminMercury(opts: AdminMercuryOptions = {}) {
         amount_cents: Number(t.amount_cents), created_on: t.created_on, posted_on: t.posted_on,
         counterparty_name: t.counterparty_name, memo: t.memo, status: t.status, kind: t.kind,
         match: t.match_uid ? { uid: t.match_uid, state: t.match_state, target_kind: t.target_kind, target_id: Number(t.target_id) } : null,
+        not_ours: t.mark_uid ? { uid: t.mark_uid, reason: t.mark_reason, note: t.mark_note, state: t.mark_state, marked_at: t.mark_at } : null,
       })),
     });
   });
@@ -294,6 +301,25 @@ export function createAdminMercury(opts: AdminMercuryOptions = {}) {
     const body = (await c.req.json().catch(() => ({}))) as { reason?: unknown };
     const out = await rejectMatch(c.env, user as User, uid, body.reason);
     if (out.ok) await logAdminAction(c.env, user.id, user.email, 'mercury_match_rejected', { match_uid: uid });
+    return answer(c, out);
+  });
+
+  // D749: "Not ours". The audit carries uids and the reason key, never the note.
+  r.post('/transactions/:uid/not-ours', async (c) => {
+    const user = await requireMercuryReader(c); if (user instanceof Response) return user;
+    const transactionUid = c.req.param('uid');
+    const body = (await c.req.json().catch(() => ({}))) as { reason?: unknown; note?: unknown };
+    const out = await markNotOurs(c.env, user as User, transactionUid, body);
+    if (out.ok) await logAdminAction(c.env, user.id, user.email, 'mercury_not_ours_marked', { transaction_uid: transactionUid, mark_uid: out.uid, reason: body.reason });
+    return out.ok ? c.json(out, 201) : answer(c, out);
+  });
+
+  r.post('/not-ours/:uid/withdraw', async (c) => {
+    const user = await requireMercuryReader(c); if (user instanceof Response) return user;
+    const uid = c.req.param('uid');
+    const body = (await c.req.json().catch(() => ({}))) as { reason?: unknown };
+    const out = await withdrawNotOurs(c.env, user as User, uid, body.reason);
+    if (out.ok) await logAdminAction(c.env, user.id, user.email, 'mercury_not_ours_withdrawn', { mark_uid: uid });
     return answer(c, out);
   });
 
