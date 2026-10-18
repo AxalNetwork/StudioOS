@@ -110,6 +110,63 @@ export function clearPopupStateCookie() {
   } catch { /* no document */ }
 }
 
+// ───────────────────────────────────── after Google's window answers ──
+//
+// Everything the page does once a code is in hand, as pure functions, so the
+// node tests pin it without a browser (login_google_popup_d722.test.mjs).
+
+/** The body POST /api/auth/google/popup takes: the typed address only when it is one. */
+export function popupRequestBody({ code, state, typed }) {
+  const body = { code, state };
+  if (looksLikeEmail(typed)) body.expected_email = typed;
+  return body;
+}
+
+/**
+ * What a Google sign-in clears before it stores its own session (Task #4, as
+ * useAuthSync does when the account changes): a previous person's Bearer, view
+ * mode and impersonation handles must not ride along into this session.
+ */
+export const GOOGLE_SESSION_PURGE = ['token', 'viewMode', 'realUser', 'realToken'];
+
+/**
+ * Store the session /popup answered with, as passkey sign-in does, and return
+ * where the page goes: `next` (a same-origin path the caller already checked),
+ * else /onboarding for a new account, else /studio. An answer that is not a
+ * session throws before anything is cleared or written.
+ */
+export function applyGoogleSession(res, storage, { next = null } = {}) {
+  if (!res?.token || !res?.user) {
+    const e = new Error('Invalid response from server.');
+    e.code = 'internal_error';
+    throw e;
+  }
+  for (const key of GOOGLE_SESSION_PURGE) {
+    try { storage.removeItem(key); } catch { /* storage unavailable */ }
+  }
+  storage.setItem('token', res.token);
+  storage.setItem('user', JSON.stringify(res.user));
+  return next || (res.new_signup ? '/onboarding' : '/studio');
+}
+
+/**
+ * Refusals of POST /popup that the same-tab redirect still gets past, so the
+ * page continues there instead of stopping on an error: a rate limit (the
+ * limiter refuses before any exchange, so nothing was spent), the limiter's
+ * store being unavailable, and the switch turned off after this tab loaded.
+ */
+export function popupShouldRedirect(e) {
+  return e?.status === 429 || e?.code === 'rate_limit_unavailable' || e?.code === 'popup_off';
+}
+
+/**
+ * Whether this /login was opened as the owner's canary (`?google_window=1`):
+ * while GOOGLE_SIGNIN_POPUP is "canary", only such a page is offered the window.
+ */
+export function wantsGoogleCanary(search) {
+  try { return new URLSearchParams(search || '').get('google_window') === '1'; } catch { return false; }
+}
+
 /**
  * Open Google's window for one attempt. Synchronous on purpose (see the
  * header): build the code client, then `requestCode()`, in the click's own

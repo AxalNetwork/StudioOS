@@ -151,7 +151,7 @@ test('every code the /popup handler answers with has a sentence on the page', ()
     assert.ok(keys.has(type), `GOOGLE_ERROR_COPY has no line for '${type}'`);
   }
   // The shared helper's refusals reach /callback's redirect too.
-  for (const code of ['link_blocked_unverified', 'account_inactive']) assert.ok(keys.has(code));
+  for (const code of ['link_blocked_unverified', 'link_requires_email_proof', 'account_inactive']) assert.ok(keys.has(code));
 });
 
 test('the unconfirmed-account copy points at the email link, not at a Settings step that no longer exists', () => {
@@ -169,11 +169,18 @@ test('a non-JSON 403 or no answer at all reads as unreachable; a known code wins
   const src = LOGIN.slice(at, end + 2);
   const make = new Function(`${src}; return { googlePopupErrorCopy, GOOGLE_ERROR_COPY };`);
   const { googlePopupErrorCopy: copy, GOOGLE_ERROR_COPY: C } = make();
-  assert.equal(copy(Object.assign(new Error('Forbidden'), { status: 403 }), ''), C.unreachable);
+  // A 403 with no code arrived — a challenge or the CSRF check — so it is not
+  // "we couldn't reach Axal VC"; no status at all is.
+  assert.equal(copy(Object.assign(new Error('Forbidden'), { status: 403 }), ''), C.security_check);
+  assert.equal(copy(Object.assign(new Error('CSRF token missing or invalid'), { status: 403 }), ''), C.security_check);
   assert.equal(copy(new TypeError('Failed to fetch'), ''), C.unreachable);
   assert.equal(copy(Object.assign(new Error('x'), { status: 403, code: 'bad_state' }), ''), C.bad_state);
-  assert.equal(copy(Object.assign(new Error('Rate limit exceeded for google_popup bucket. Try again in 60 seconds.'), { status: 429 }), ''),
-    'Rate limit exceeded for google_popup bucket. Try again in 60 seconds.', 'a rate limit keeps the server’s own sentence');
+  // A 429 never shows the limiter's internal bucket name.
+  const rate = copy(Object.assign(new Error('Rate limit exceeded for google_popup bucket. Try again in 60 seconds.'), { status: 429 }), '');
+  assert.equal(rate, C.rate_limited);
+  assert.ok(!/bucket/.test(rate));
+  // An answer that is not a session is our fault, not the network's.
+  assert.equal(copy(Object.assign(new Error('Invalid response from server.'), { code: 'internal_error' }), ''), C.internal_error);
   assert.equal(
     copy(Object.assign(new Error('x'), { status: 409, code: 'different_account', data: { google_email: 'me@gmail.test' } }), 'work@example.test'),
     'You typed work@example.test, but Google signed in me@gmail.test. Choose work@example.test in the Google window, or clear the email field to continue as me@gmail.test.',
@@ -307,3 +314,149 @@ test('whenIdle falls back to a timeout where requestIdleCallback is missing (Saf
   assert.equal(m.looksLikeEmail('a@b'), false);
   assert.equal(m.looksLikeEmail(''), false);
 });
+
+// ─────────────────────────────── after the code: pure, and pinned here ──
+
+test('the POST body carries expected_email only for an address the person typed', async () => {
+  const m = await import('../src/lib/googlePopup.js');
+  assert.deepEqual(m.popupRequestBody({ code: 'c', state: 's', typed: 'Work@Example.test' }),
+    { code: 'c', state: 's', expected_email: 'Work@Example.test' });
+  for (const typed of ['', 'not an email', 'a@b', undefined]) {
+    assert.deepEqual(m.popupRequestBody({ code: 'c', state: 's', typed }), { code: 'c', state: 's' }, String(typed));
+  }
+  // The page hands the typed value through, so the different_account rule is live.
+  const { body } = handler(LOGIN, 'finishGooglePopup');
+  assert.match(body, /googleSignInApi\.popup\(popupRequestBody\(\{\s*code,\s*state,\s*typed\s*\}\)\)/,
+    'finishGooglePopup no longer builds its body with popupRequestBody({ code, state, typed })');
+});
+
+function recordingStorage(initial = {}) {
+  const data = new Map(Object.entries(initial));
+  const ops = [];
+  return {
+    data, ops,
+    removeItem(k) { ops.push(['remove', k]); data.delete(k); },
+    setItem(k, v) { ops.push(['set', k]); data.set(k, String(v)); },
+    getItem(k) { return data.has(k) ? data.get(k) : null; },
+  };
+}
+
+test('the session: the previous person’s four keys go before token and user are written (Task #4)', async () => {
+  const m = await import('../src/lib/googlePopup.js');
+  const st = recordingStorage({ token: 'old-bearer', viewMode: 'founder', realUser: '{"id":1}', realToken: 'imp', unrelated: 'kept' });
+  const res = { token: 'new-token', user: { id: 47, email: 'a@example.test' }, new_signup: false };
+  m.applyGoogleSession(res, st);
+  assert.deepEqual(m.GOOGLE_SESSION_PURGE, ['token', 'viewMode', 'realUser', 'realToken']);
+  assert.deepEqual(st.ops, [
+    ['remove', 'token'], ['remove', 'viewMode'], ['remove', 'realUser'], ['remove', 'realToken'],
+    ['set', 'token'], ['set', 'user'],
+  ]);
+  assert.equal(st.getItem('token'), 'new-token');
+  assert.deepEqual(JSON.parse(st.getItem('user')), res.user);
+  assert.equal(st.getItem('viewMode'), null);
+  assert.equal(st.getItem('realToken'), null);
+  assert.equal(st.getItem('unrelated'), 'kept');
+
+  // A storage whose removeItem throws still gets the session.
+  const flaky = recordingStorage();
+  flaky.removeItem = () => { throw new Error('denied'); };
+  m.applyGoogleSession(res, flaky);
+  assert.equal(flaky.getItem('token'), 'new-token');
+
+  // An answer that is not a session clears and writes nothing.
+  for (const bad of [null, {}, { token: 't' }, { user: { id: 1 } }]) {
+    const untouched = recordingStorage({ token: 'old-bearer' });
+    assert.throws(() => m.applyGoogleSession(bad, untouched), (e) => e.code === 'internal_error');
+    assert.deepEqual(untouched.ops, [], JSON.stringify(bad));
+  }
+  // The page calls it with localStorage and its own checked next path.
+  const { body } = handler(LOGIN, 'finishGooglePopup');
+  assert.match(body, /applyGoogleSession\(res,\s*localStorage,\s*\{\s*next:\s*safeNextPath\(\)\s*\}\)/);
+  assert.ok(!/localStorage\.setItem/.test(body), 'finishGooglePopup writes the session itself again, beside applyGoogleSession');
+});
+
+test('the landing: the checked ?next= first, then /onboarding for a new account, then /studio', async () => {
+  const m = await import('../src/lib/googlePopup.js');
+  const user = { id: 1 };
+  assert.equal(m.applyGoogleSession({ token: 't', user, new_signup: false }, recordingStorage()), '/studio');
+  assert.equal(m.applyGoogleSession({ token: 't', user, new_signup: true }, recordingStorage()), '/onboarding');
+  assert.equal(m.applyGoogleSession({ token: 't', user, new_signup: true }, recordingStorage(), { next: '/events/42?x=1' }), '/events/42?x=1');
+  assert.equal(m.applyGoogleSession({ token: 't', user }, recordingStorage(), { next: null }), '/studio');
+});
+
+test('a rate limit, the limiter’s store and the switch turned off continue through the redirect, and nothing else does', async () => {
+  const m = await import('../src/lib/googlePopup.js');
+  const e = (status, code) => Object.assign(new Error('x'), { status, ...(code ? { code } : {}) });
+  assert.equal(m.popupShouldRedirect(e(429)), true);
+  assert.equal(m.popupShouldRedirect(e(503, 'rate_limit_unavailable')), true);
+  assert.equal(m.popupShouldRedirect(e(503, 'popup_off')), true);
+  for (const [status, code] of [[403, 'bad_state'], [409, 'different_account'], [502, 'exchange_failed'], [503, 'not_configured'], [403, undefined], [500, 'internal_error']]) {
+    assert.equal(m.popupShouldRedirect(e(status, code)), false, `${status} ${code}`);
+  }
+  assert.equal(m.popupShouldRedirect(new TypeError('Failed to fetch')), false);
+  // ...and the page acts on it before it shows an error.
+  const { body } = handler(LOGIN, 'finishGooglePopup');
+  const at = body.indexOf('popupShouldRedirect(e)');
+  assert.ok(at > 0 && at < body.indexOf('setError('), 'the redirect fallback must come before the error copy');
+  assert.match(body.slice(at, at + 400), /continueWithGoogle\(\{\s*forceRedirect:\s*true/);
+});
+
+test('a window blocked inside requestCode() leaves the redirect’s stage alone; the button locks only once a sign-in is under way', () => {
+  const { body } = handler(LOGIN, 'continueWithGoogle');
+  const open = body.indexOf('openCodePopup(');
+  const after = body.slice(open, body.indexOf('return;', open));
+  assert.match(after, /if \(googleAttemptRef\.current === state\) setGoogleStage\('waiting'\);/,
+    'an unconditional "waiting" overwrites the "redirecting" a synchronous popup_failed_to_open set');
+  const lock = LOGIN.match(/const googleLocked = ([^;]+);/);
+  assert.ok(lock, 'googleLocked is gone');
+  assert.ok(/'signing'/.test(lock[1]) && /'redirecting'/.test(lock[1]) && !/'waiting'/.test(lock[1]),
+    `googleLocked must cover signing and redirecting and leave waiting live: ${lock[1]}`);
+  // A closed window resets the button.
+  const { body: fail } = handler(LOGIN, 'failGooglePopup');
+  const closedPath = fail.slice(fail.indexOf('return;'));
+  assert.match(closedPath, /setGoogleStage\(''\)/, 'a closed window leaves the button on "Waiting for Google…"');
+});
+
+test('/login?google_window=1 asks for the canary config; nothing else does', async () => {
+  const m = await import('../src/lib/googlePopup.js');
+  assert.equal(m.wantsGoogleCanary('?google_window=1'), true);
+  assert.equal(m.wantsGoogleCanary('?next=/x&google_window=1'), true);
+  for (const q of ['', '?google_window=0', '?google_window=true', '?canary=1', undefined]) assert.equal(m.wantsGoogleCanary(q), false, String(q));
+  const ask = handler(LOGIN, 'askGoogleConfig').body;
+  assert.match(ask, /googleSignInApi\.config\(\{\s*canary:\s*wantsGoogleCanary\(window\.location\.search\)\s*\}\)/);
+
+  globalThis.localStorage ??= { getItem: () => null, setItem: () => {}, removeItem: () => {} };
+  globalThis.document ??= { cookie: '' };
+  const { googleSignInApi } = await import('../src/lib/api/googleSignIn.js');
+  const seen = [];
+  const real = globalThis.fetch;
+  globalThis.fetch = async (url) => { seen.push(url); return { ok: true, status: 200, json: async () => ({}) }; };
+  try {
+    await googleSignInApi.config();
+    await googleSignInApi.config({ canary: true });
+  } finally { globalThis.fetch = real; }
+  assert.deepEqual(seen, ['/api/auth/google/config', '/api/auth/google/config?canary=1']);
+});
+
+test('?next= is parsed against this origin: a backslash, a tab or a newline cannot turn it into another site', async () => {
+  const { sameOriginNextPath, sanitizeNextPath } = await import('../src/lib/pendingNext.js');
+  const O = 'https://axal.vc';
+  // Each of these resolves to evil.com in a browser's URL parser.
+  for (const raw of ['/\\evil.com', '/\\/evil.com', '/\t/evil.com', '/\n/evil.com', '/\r/evil.com', '//evil.com', 'https://evil.com', 'evil.com', '']) {
+    assert.equal(sameOriginNextPath(raw, O), null, JSON.stringify(raw));
+  }
+  assert.equal(new URL('/\\evil.com', O).host, 'evil.com', 'the premise: the browser treats \\ as /');
+  assert.equal(sameOriginNextPath('/studio?x=1', O), '/studio?x=1');
+  assert.equal(sameOriginNextPath('/events/42#pay', O), '/events/42#pay');
+  assert.equal(sameOriginNextPath('/a/../studio', O), '/studio', 'the parsed path is returned, never the raw string');
+  assert.equal(sameOriginNextPath('/x'.repeat(101), O), null, 'longer than 200');
+  assert.equal(sameOriginNextPath(null, O), null);
+  // The stored copy for the magic link refuses the same characters.
+  assert.equal(sanitizeNextPath('/\\evil.com'), null);
+  assert.equal(sanitizeNextPath('/studio'), '/studio');
+  // LoginPage's helper is this one, against its own origin.
+  const at = LOGIN.indexOf('function safeNextPath()');
+  const fn = LOGIN.slice(at, LOGIN.indexOf('\n}\n', at));
+  assert.match(fn, /sameOriginNextPath\(new URLSearchParams\(window\.location\.search\)\.get\('next'\), window\.location\.origin\)/);
+});
+
