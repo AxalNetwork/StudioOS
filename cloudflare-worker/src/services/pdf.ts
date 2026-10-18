@@ -6,10 +6,10 @@
  * down, slow or answers something that is not a PDF, this file draws the same
  * model so signing never fails because a render service is down (decision 3):
  *
- *   - the header: the lockup (the mark, then "AXAL VC" in violet) left and
- *     CONFIDENTIAL right, over a rule, on every page;
+ *   - the header: the lockup (the mark, then "Axal VC" in ink) left and
+ *     CONFIDENTIAL in violet right, over a rule, on every page;
  *   - the state: the Draft banner and diagonal, the Specimen diagonal, or the
- *     Superseded / Issued stamp;
+ *     Superseded / Issued stamp, in the HTML paper's words (`stampText`);
  *   - the body as the paper's typed blocks — headings, numbered clauses with a
  *     hanging indent, tables, legend and warning boxes, drawn checkboxes and
  *     fill-in rules;
@@ -23,6 +23,9 @@
  * Helvetica is WinAnsi only, so `winAnsiSafe` still downgrades characters
  * outside it here; the Browser Run paper prints them as typed. No IP address
  * and no email reaches paper. Letter is 612 × 792, A4 595.28 × 841.89.
+ *
+ * Its colours are the HTML paper's tokens (`PAPER_TOKENS`, R2's values since
+ * #1865), read through `hexRgb`, so a token change reaches both renderers.
  */
 import { PDFDocument, StandardFonts, rgb, degrees, PDFFont, PDFPage, PDFImage } from 'pdf-lib';
 import type { RGB } from 'pdf-lib';
@@ -32,8 +35,8 @@ import {
   type DocumentKind,
 } from './legalDocFormat';
 import type { Block, Run } from './legalPaperBlocks';
-import { paperModel, type PaperModel, type PaperParty } from './legalPaper';
-import { LEGAL_MARK_PNG, type PaperPageSize } from './legalPaperCss';
+import { paperModel, stampText, type PaperModel, type PaperParty } from './legalPaper';
+import { LEGAL_MARK_PNG, PAPER_TOKENS, type PaperPageSize } from './legalPaperCss';
 
 export const PAGE_SIZES_PT: Record<PaperPageSize, [number, number]> = {
   letter: [612, 792],
@@ -49,12 +52,27 @@ const BODY_LINE_HEIGHT = 14;
 const TITLE_FONT_SIZE = 15;
 const HANG = 24;
 
-const INK = rgb(0.12, 0.114, 0.169);
-const INK_STRONG = rgb(0.067, 0.063, 0.094);
-const VIOLET = rgb(0.427, 0.157, 0.851);   // #6d28d9
-const MUTED = rgb(0.42, 0.396, 0.467);
-const FAINT = rgb(0.63, 0.63, 0.667);
-const LINE = rgb(0.83, 0.824, 0.863);
+/** A `#rrggbb` paper token as a pdf-lib colour. */
+export function hexRgb(hex: string): RGB {
+  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
+  if (!m) throw new Error(`hexRgb: not a #rrggbb colour: ${hex}`);
+  return rgb(parseInt(m[1], 16) / 255, parseInt(m[2], 16) / 255, parseInt(m[3], 16) / 255);
+}
+
+const TC = PAPER_TOKENS.color;
+const INK = hexRgb(TC.ink);
+const INK_STRONG = hexRgb(TC.inkStrong);
+const VIOLET = hexRgb(TC.violet);
+const MUTED = hexRgb(TC.muted);
+const FAINT = hexRgb(TC.faint);
+const LINE = hexRgb(TC.rule);
+const TABLE_HEAD_GROUND = hexRgb(TC.tableHeadGround);
+const STAMP_ISSUED = hexRgb(TC.stampIssued);
+const STAMP_SUPERSEDED = hexRgb(TC.stampSuperseded);
+const DIAGONAL_DRAFT = hexRgb(TC.diagonalDraft);
+const DIAGONAL_SPECIMEN = hexRgb(TC.diagonalSpecimen);
+/** The diagonal's angle, from the token (`-38deg` in CSS turns clockwise; pdf-lib's rotate is counter-clockwise). */
+const DIAGONAL_DEG = Math.abs(parseFloat(PAPER_TOKENS.angle.diagonal));
 
 interface Fonts { regular: PDFFont; bold: PDFFont; italic: PDFFont; boldItalic: PDFFont }
 type FontName = 'regular' | 'bold' | 'italic';
@@ -247,9 +265,9 @@ function drawHeader(page: PDFPage, f: Fonts, mark: PDFImage | null) {
     page.drawImage(mark, { x, y: H - 41, width: 11, height: 11 });
     x += 15;
   }
-  page.drawText('AXAL VC', { x, y: H - 39, size: 10, font: f.bold, color: VIOLET });
+  page.drawText('Axal VC', { x, y: H - 39, size: 10, font: f.bold, color: INK });
   const conf = 'CONFIDENTIAL';
-  page.drawText(conf, { x: W - MARGIN_X - f.bold.widthOfTextAtSize(conf, 8.5), y: H - 39, size: 8.5, font: f.bold, color: VIOLET });
+  page.drawText(conf, { x: W - MARGIN_X - f.bold.widthOfTextAtSize(conf, 8), y: H - 39, size: 8, font: f.bold, color: VIOLET });
   page.drawLine({ start: { x: MARGIN_X, y: H - 50 }, end: { x: W - MARGIN_X, y: H - 50 }, thickness: 0.5, color: LINE });
 }
 
@@ -262,14 +280,16 @@ function drawFooter(page: PDFPage, f: Fonts, pageLabel: string, model: PaperMode
   if (leftFit !== left) leftFit = leftFit.replace(/[\s—-]+$/, '') + '…';
   page.drawText(leftFit, { x: MARGIN_X, y: 44, size: 8, font: f.regular, color: MUTED });
   page.drawText(pageLabel, { x: W - MARGIN_X - f.regular.widthOfTextAtSize(pageLabel, 8), y: 44, size: 8, font: f.regular, color: MUTED });
-  page.drawText(winAnsiSafe(model.auditLine), { x: MARGIN_X, y: 33, size: 6.5, font: f.regular, color: FAINT });
+  page.drawText(winAnsiSafe(model.auditLine), { x: MARGIN_X, y: 33, size: 6.5, font: f.regular, color: MUTED });
 }
 
 function drawDiagonal(page: PDFPage, font: PDFFont, text: string, color: RGB) {
   const { width: W, height: H } = page.getSize();
+  const half = font.widthOfTextAtSize(text, 48) / 2;
+  const rad = DIAGONAL_DEG * Math.PI / 180;
   page.drawText(text, {
-    x: W / 2 - font.widthOfTextAtSize(text, 48) / 2 * Math.SQRT1_2, y: H / 2 - font.widthOfTextAtSize(text, 48) / 2 * Math.SQRT1_2,
-    size: 48, font, color, opacity: 0.2, rotate: degrees(45),
+    x: W / 2 - half * Math.cos(rad), y: H / 2 - half * Math.sin(rad),
+    size: 48, font, color, opacity: 0.2, rotate: degrees(DIAGONAL_DEG),
   });
 }
 
@@ -279,8 +299,8 @@ function paintChrome(pages: PDFPage[], f: Fonts, mark: PDFImage | null, model: P
       drawHeader(p, f, mark);
       drawFooter(p, f, label(i, pages.length), model);
     }
-    if (model.state.kind === 'draft') drawDiagonal(p, f.bold, 'DRAFT', LINE);
-    if (model.state.kind === 'specimen') drawDiagonal(p, f.bold, 'SPECIMEN', FAINT);
+    if (model.state.kind === 'draft') drawDiagonal(p, f.bold, 'DRAFT', DIAGONAL_DRAFT);
+    if (model.state.kind === 'specimen') drawDiagonal(p, f.bold, 'SPECIMEN', DIAGONAL_SPECIMEN);
   });
 }
 
@@ -293,13 +313,20 @@ function roman(n: number): string {
 
 // --- the body ---------------------------------------------------------------
 
+/** The state line, in the HTML paper's words (#1865): a notice's stamp is the word alone. */
+export function fallbackStateText(model: PaperModel): string | null {
+  const s = model.state;
+  if (s.kind === 'draft') return 'DRAFT — FOR COUNSEL REVIEW';
+  if (model.stamp && s.kind === 'issued') return model.stamp === 'superseded' ? 'SUPERSEDED' : 'Issued';
+  return stampText(s, model);
+}
+
 function drawState(cur: Cursor, model: PaperModel) {
   const s = model.state;
-  const label = s.kind === 'draft' ? 'DRAFT — FOR COUNSEL REVIEW'
-    : s.kind === 'superseded' ? `SUPERSEDED BY V${s.by}`
-    : s.kind === 'issued' ? 'ISSUED' : null;
+  const label = fallbackStateText(model);
   if (label) {
-    cur.paragraph(label, { size: 8, font: 'bold', color: s.kind === 'draft' ? MUTED : VIOLET, lineHeight: 12 });
+    const superseded = s.kind === 'superseded' || (s.kind === 'issued' && model.stamp === 'superseded');
+    cur.paragraph(label, { size: 8, font: 'bold', color: s.kind === 'issued' && !superseded ? STAMP_ISSUED : superseded ? STAMP_SUPERSEDED : VIOLET, lineHeight: 12 });
     cur.gap(4);
   }
   if (model.restricted) {
@@ -338,10 +365,11 @@ function drawTable(cur: Cursor, b: Extract<Block, { t: 'table' }>) {
   const size = 9.5;
   const lh = 13;
   const cellText = (cell: Run[]) => winAnsiSafe(cell.map((r) => ('text' in r ? r.text : '____')).join(''));
-  const drawRow = (cells: Run[][], font: PDFFont, color: RGB, upper: boolean) => {
+  const drawRow = (cells: Run[][], font: PDFFont, color: RGB, upper: boolean, ground: RGB | null = null) => {
     const wrapped = cells.map((c) => wrapTextToWidth(upper ? cellText(c).toUpperCase() : cellText(c), font, size, colW - 8));
     const rows = Math.max(1, ...wrapped.map((w) => w.length));
     cur.need(rows * lh + 4);
+    if (ground) cur.page.drawRectangle({ x: MARGIN_X, y: cur.y - (rows - 1) * lh - 4, width: cur.width, height: rows * lh + 4, color: ground });
     for (let i = 0; i < rows; i++) {
       wrapped.forEach((lines, c) => {
         const t = lines[i];
@@ -355,8 +383,9 @@ function drawTable(cur: Cursor, b: Extract<Block, { t: 'table' }>) {
     }
   };
   cur.gap(4);
-  drawRow(b.head, cur.f.bold, VIOLET, true);
-  cur.rule({ gapBefore: -9, gapAfter: 13, color: INK, thickness: 0.75 });
+  // R2's table head: ink text on the wash, over a violet rule (#1865).
+  drawRow(b.head, cur.f.bold, INK, true, TABLE_HEAD_GROUND);
+  cur.rule({ gapBefore: -9, gapAfter: 13, color: VIOLET, thickness: 0.75 });
   b.rows.forEach((r, i) => {
     const total = b.total && i === b.rows.length - 1;
     if (total) cur.rule({ gapBefore: -9, gapAfter: 13, color: INK, thickness: 1.25 });
@@ -573,10 +602,13 @@ export async function renderPaperFallbackPdf(model: PaperModel, opts: FallbackOp
   }
   front.gap(30);
   for (const l of c.legends) if (l.t === 'legend') drawLegend(front, l);
-  front.newPage();
-  front.paragraph('CONTENTS', { size: 9, font: 'bold', color: VIOLET, lineHeight: 14 });
-  front.paragraph(model.title.toUpperCase(), { size: TITLE_FONT_SIZE, font: 'bold', align: 'center', color: INK_STRONG, lineHeight: TITLE_FONT_SIZE + 5 });
-  front.gap(8);
+  // #1865 — no contents page without an article (a stub cover slug).
+  if (model.articles.length) {
+    front.newPage();
+    front.paragraph('CONTENTS', { size: 9, font: 'bold', color: VIOLET, lineHeight: 14 });
+    front.paragraph(model.title.toUpperCase(), { size: TITLE_FONT_SIZE, font: 'bold', align: 'center', color: INK_STRONG, lineHeight: TITLE_FONT_SIZE + 5 });
+    front.gap(8);
+  }
   for (const a of model.articles) {
     const pg = String(articlePages.get(a.id) ?? '');
     const text = winAnsiSafe(a.text);
