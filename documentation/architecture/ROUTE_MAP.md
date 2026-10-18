@@ -176,7 +176,7 @@ The canvas is `design/incoming/Legal Documents · Templates.dc.html` (#1850). Wh
 | Canvas | Live route | Component and Worker | Status |
 | --- | --- | --- | --- |
 | L9 "The Templates tab · desktop": `catalog` ("Catalog · light"), `catalog-dark` ("Catalog · dark (the paper stays white)"), `push` ("Push to branches"); L8 thumbnails and "Not in the catalog" | `/admin/contracts?tab=templates` · Admin and Super Admin; a branch reads only | `AdminTemplates.jsx` (`recordedPublication`, from `ContractsDesk.jsx:52`); `admin_contracts.ts` | UPGRADE: #1851 |
-| L9 `editor` ("Editor"), `publish` ("Publish confirmation and result") | the same | `AdminTemplates.jsx` `TemplateEditorModal` | UPGRADE: #1852 |
+| L9 `editor` ("Editor"), `publish` ("Publish confirmation and result") | the same: an open template replaces the tab on the Contracts desk | `pages/admin/contracts/TemplateEditor.jsx`, `PublishDialog.jsx` (#1852, merged as #1918; D717 "PR 2c"); the legacy console keeps `TemplateEditorModal` | CURRENT |
 | L9 the editor's Pages view, `history` ("Version history") | the same | none yet | UPGRADE: #1853 |
 | L10 "The entity and money map": "Entity and money map · admin", "The four entities", "The accounts · masked to the last four" | a sheet over `/admin/contracts` (`?sheet=structure`), opened from the Contracts desk header; and from the Bank accounts console's header (#1856) | `pages/admin/contracts/FundStructureSheet.jsx`, `FundStructureMap.jsx`; `admin_fund_structure.ts` | CURRENT |
 | L12 `p-list` ("Catalog"), `p-sheet` ("Filters sheet"), `p-preview` ("Preview, one sheet at a time") | `/admin/contracts?tab=templates` below `md` | `AdminTemplates.jsx` | UPGRADE: #1854 |
