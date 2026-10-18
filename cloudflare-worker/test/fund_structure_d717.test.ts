@@ -125,7 +125,7 @@ test('D717 the SVG draws with paths, escapes every text and uses no arrow charac
     flows: m.flows.map((f, i) => (i === 0 ? { ...f, payer_label: '</svg><script>x</script>' } : f)),
   };
   const out = structureSvg(hostile);
-  assert.doesNotMatch(out, /<img|<script|<\/svg><script/);
+  assert.doesNotMatch(out, /<img|<script|<\/svg>\s*<script/i);
   assert.ok(out.includes('&lt;img'));
   for (const l of structureLines(m)) assert.doesNotMatch(l, ARROWS);
   assert.ok(structureLines(m).some((l) => l.includes('Paid to the LP')));
