@@ -31,6 +31,7 @@ export * from './api/fundLedger.js';
 export * from './api/fundPerformance.js';
 export * from './api/fundReporting.js';
 export * from './api/fundReports.js';
+export * from './api/googleSignIn.js';
 export * from './api/helpCenter.js';
 export * from './api/interviewSessions.js';
 export * from './api/labReportShares.js';
@@ -843,7 +844,10 @@ export const api = {
   // Task #51 — "Continue with Google" sign-in. /auth/google/start returns
   // {url} when called with Accept: application/json so the SPA can do a
   // top-level navigation (window.location.href = url). 503 means the
-  // env vars GOOGLE_AUTH_CLIENT_ID/SECRET aren't set — the buttons hide.
+  // env vars GOOGLE_AUTH_CLIENT_ID/SECRET aren't set — the click shows the
+  // server's "not enabled" sentence; the button itself always renders (D185).
+  // On /login this is the fallback: Google's own window comes first when the
+  // deployment switches it on (D722, lib/api/googleSignIn.js).
   googleStartUrl: (params = {}) => {
     const qs = new URLSearchParams();
     if (params.action) qs.set('action', params.action);
