@@ -366,6 +366,16 @@ function drawTable(cur: Cursor, b: Extract<Block, { t: 'table' }>) {
   cur.gap(6);
 }
 
+/** D717 — the fallback's Structure of the Fund page: the heading, then one line per fact. */
+function drawStructureList(cur: Cursor, lines: string[]) {
+  cur.newPage();
+  cur.paragraph('STRUCTURE OF THE FUND', { size: 9, font: 'bold', color: VIOLET, lineHeight: 14 });
+  cur.paragraph('Structure of the Fund', { size: 11.5, font: 'bold', color: INK_STRONG, lineHeight: 15 });
+  cur.gap(6);
+  for (const l of lines) { cur.need(BODY_LINE_HEIGHT * 2); cur.paragraph(l, { size: 9 }); cur.gap(3); }
+  cur.newPage();
+}
+
 function drawBlocks(cur: Cursor, blocks: Block[], articlePages: Map<string, number>) {
   for (const b of blocks) {
     switch (b.t) {
@@ -525,7 +535,15 @@ export async function renderPaperFallbackPdf(model: PaperModel, opts: FallbackOp
   cur.paragraph(model.title.toUpperCase(), { size: TITLE_FONT_SIZE, font: 'bold', align: 'center', color: INK_STRONG, lineHeight: TITLE_FONT_SIZE + 5 });
   cur.gap(8);
   if (model.preamble) { cur.paragraph(model.preamble); cur.gap(10); }
-  drawBlocks(cur, model.blocks, articlePages);
+  if (model.structure) {
+    // D717 — the Structure of the Fund page, as its list (no arrow character).
+    const at = Math.min(model.structure.at, model.blocks.length);
+    drawBlocks(cur, model.blocks.slice(0, at), articlePages);
+    drawStructureList(cur, model.structure.lines);
+    drawBlocks(cur, model.blocks.slice(at), articlePages);
+  } else {
+    drawBlocks(cur, model.blocks, articlePages);
+  }
   if (model.execution) await drawExecution(cur, model, bodyDoc);
   if (model.certificate) drawCertificate(cur, model);
   paintChrome(cur.pages, f, mark, model, (i, n) => `Page ${i + 1} of ${n}`);

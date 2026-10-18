@@ -31,6 +31,7 @@ import {
   readAnswers, submitBooklet, withdrawBooklet,
 } from '../services/subscriptionBooklet';
 import { paperHtml, paperModel } from '../services/legalPaper';
+import { structureForPaper } from '../services/fundStructure';
 import { readPaperChoice } from '../services/legalPaperCss';
 import { renderLegalPdf } from '../services/legalPaperRender';
 
@@ -104,7 +105,9 @@ r.get('/mine/paper', async (c) => {
   const booklet = await mineOrNull(c.env, Number(user.id));
   if (!booklet) throw missing();
   const input = await bookletPaperInput(c.env, booklet);
-  const html = paperHtml(paperModel(input), { pageSize: paper.pageSize, cover: paper.cover, medium: 'screen', fonts: 'inline' });
+  // D717 — the booklet's Structure of the Fund page, after Part 2.
+  const structure = await structureForPaper(c.env, input.slug, input.state.kind === 'issued' ? 'issued' : 'preview');
+  const html = paperHtml(paperModel({ ...input, structure }), { pageSize: paper.pageSize, cover: paper.cover, medium: 'screen', fonts: 'inline' });
   c.header('Cache-Control', 'no-store');
   return c.json({ html, digest: input.bodySha256, page_size: paper.pageSize });
 });
@@ -155,7 +158,9 @@ r.get('/:uid/pdf', async (c) => {
   const paper = paperChoice(c);
   const booklet = await bookletByUid(c.env, c.req.param('uid'));
   if (!booklet) throw missing();
-  const rendered = await renderLegalPdf(c.env, paperModel(await bookletPaperInput(c.env, booklet)),
+  const input = await bookletPaperInput(c.env, booklet);
+  const structure = await structureForPaper(c.env, input.slug, input.state.kind === 'issued' ? 'issued' : 'preview');
+  const rendered = await renderLegalPdf(c.env, paperModel({ ...input, structure }),
     { pageSize: paper.pageSize, cover: paper.cover, fallback: false });
   if (!rendered.ok) {
     throw new BookletRefusal(503, 'booklet_render_unavailable', 'The booklet could not be printed just now. Try again.');
