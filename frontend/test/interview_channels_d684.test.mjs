@@ -158,7 +158,7 @@ test('every request in the module is written as a literal path the drift check c
     'DELETE /channels/:p', 'DELETE /founder/validate/interviews/:p/meetings/:p',
     'GET /channels', 'GET /channels/telegram/link', 'GET /channels/threads', 'GET /channels/threads/:p', 'GET /founder/validate/interviews/:p/meetings',
     'POST /channels/:p/test', 'POST /channels/telegram/link', 'POST /channels/telegram/link/:p/confirm', 'POST /channels/threads/:p/assign', 'POST /channels/threads/:p/ignore',
-    'POST /channels/threads/:p/reply', 'POST /channels/whatsapp/connect', 'POST /founder/validate/interviews/:p/meetings',
+    'POST /channels/threads/:p/reply', 'POST /channels/threads/:p/voice/:p/retry', 'POST /channels/whatsapp/connect', 'POST /founder/validate/interviews/:p/meetings',
     // #1588: attach by link posts to the same route as scheduling (D685 §5.3.2).
     'POST /founder/validate/interviews/:p/meetings',
     'POST /founder/validate/interviews/:p/meetings/:p/import',
@@ -458,10 +458,10 @@ test('a thread row: contact, provider, message count, last message time; GET /th
 });
 
 test('a message shows its side, and a voice note says it was transcribed', () => {
-  assert.deepEqual(messageView({ uid: 'm1', side: 'contact', kind: 'voice', text: 'We lose a day a week.' }, 'Ada'), { uid: 'm1', mine: false, who: 'Ada', label: 'Voice note (transcribed)', text: 'We lose a day a week.' });
-  assert.deepEqual(messageView({ uid: 'm2', side: 'me', kind: 'text', text: 'Thanks' }, 'Ada'), { uid: 'm2', mine: true, who: 'You', label: '', text: 'Thanks' });
+  assert.deepEqual(messageView({ uid: 'm1', side: 'contact', kind: 'voice', text: 'We lose a day a week.' }, 'Ada'), { uid: 'm1', mine: false, who: 'Ada', label: 'Voice note (transcribed)', text: 'We lose a day a week.', failure: null });
+  assert.deepEqual(messageView({ uid: 'm2', side: 'me', kind: 'text', text: 'Thanks' }, 'Ada'), { uid: 'm2', mine: true, who: 'You', label: '', text: 'Thanks', failure: null });
   // A pending chat's voice note waits, untranscribed, until the member adds the chat to an interview (threads.ts readThread).
-  assert.deepEqual(messageView({ uid: 'm4', side: 'contact', kind: 'voice', text: null, awaiting_transcription: true, duration_sec: 12 }, 'Ada'), { uid: 'm4', mine: false, who: 'Ada', label: 'Voice note, transcribed when you add this chat to an interview', text: null });
+  assert.deepEqual(messageView({ uid: 'm4', side: 'contact', kind: 'voice', text: null, awaiting_transcription: true, duration_sec: 12 }, 'Ada'), { uid: 'm4', mine: false, who: 'Ada', label: 'Voice note, transcribed when you add this chat to an interview', text: null, failure: null });
   assert.equal(messageView({ uid: 'm3', side: 'contact', kind: 'text', text: null }, '').text, null, 'an undecryptable message is said, not blank');
 });
 
