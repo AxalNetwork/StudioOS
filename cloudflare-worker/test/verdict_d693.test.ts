@@ -590,23 +590,32 @@ test('10: no file under cloudflare-worker/src but services/verdict.ts names vali
   assert.deepEqual(offenders, []);
 });
 
-test('11: the old POST records a given venture decision that supersedes only the venture\'s current given one', async () => {
+test('11: the old POST obeys the bar: with no evidence it records Withheld, which supersedes nothing', async () => {
+  // #1704 (decision 12): /validate/verdict renders the module, so the old POST
+  // stops passing `bar: 0` and obeys the bar as the module does.
   const db = fixture();
   const env = envOf(db);
   const h2 = hypothesis(db, P, 'H2');
   const hd = await recordDecision(env, userOf(FOUNDER), { id: P }, { decision: 'proceed', for: h2, evidence: keys(items(5)) }, { evidenceSource: fixed(items(5)) });
-  const a = await oldPost(db, FOUNDER, { decision: 'proceed', reasoning: 'ship it' });
+  const given = await recordDecision(env, userOf(FOUNDER), { id: P }, { decision: 'proceed', for: 'venture', evidence: keys(items(5)) }, { evidenceSource: fixed(items(5)) });
+  const a = await oldPost(db, FOUNDER, { decision: 'pivot', reasoning: 'narrow it' });
   assert.equal(a.status, 201, JSON.stringify(a.body));
   assert.deepEqual(Object.keys(a.body).sort(), ['decision', 'id']);
-  const b = await oldPost(db, FOUNDER, { decision: 'pivot', reasoning: 'narrow it' });
-  assert.equal(b.status, 201);
-  const second = rows(db).find((r) => r.id === b.body.id);
-  assert.equal(second.state, 'given');
-  assert.equal(second.hypothesis_id, null);
-  assert.equal(second.supersedes_id, a.body.id);
+  const withheld = rows(db).find((r) => r.id === a.body.id);
+  assert.equal(withheld.state, 'withheld');
+  assert.equal(withheld.hypothesis_id, null);
+  assert.equal(withheld.supersedes_id, null, 'a Withheld decision supersedes nothing');
+  assert.equal((await currentDecision(env, P, 'venture'))?.id, given.id, 'the venture\'s given decision is still current');
   assert.equal((await currentDecision(env, P, h2))?.id, hd.id, 'H2\'s decision is still current');
-  assert.equal((await currentDecision(env, P, 'venture'))?.id, b.body.id);
   assert.equal((await oldPost(db, FOUNDER, { decision: 'maybe' })).status, 400);
+  // No caller passes `bar` any more, so every route records against the one bar.
+  const src = resolve(ROOT, 'cloudflare-worker/src');
+  const walk = (d: string): string[] => readdirSync(d).flatMap((n) => {
+    const f = join(d, n);
+    return statSync(f).isDirectory() ? walk(f) : [f];
+  });
+  const callers = walk(src).filter((f) => /recordDecision\([^;]*\bbar\s*:/s.test(readFileSync(f, 'utf8')));
+  assert.deepEqual(callers.map((f) => relative(src, f)), []);
 });
 
 // ---------------------------------------------------------------------------
@@ -1103,6 +1112,48 @@ test('12: the filters, the search and the pages run in SQL, bound, before paging
   assert.equal((await table(db, {}, P_OTHER)).total, 0, 'another venture reads none of these');
 });
 
+// ---------------------------------------------------------------------------
+// #1704 closing PR: the module read, and MCP
+// ---------------------------------------------------------------------------
+
+test('12: the Verdict module read sends the Decisions table: its columns, filters, Newest first, row ids and linkable', async () => {
+  const db = fixture();
+  const h1 = hypothesis(db, P, 'H1', 'Fleets pay');
+  await decide(db, { decision: 'proceed', n: 5, on: '2026-10-01' });
+  await decide(db, { decision: 'stop', n: 2, on: '2026-10-05' });
+  await decide(db, { decision: 'pivot', for: h1, on: '2026-10-09' });
+  const route = new Hono<any>();
+  route.route('/api/cycles/validate', cycleValidateRoute);
+  const read = async (who: number) => {
+    const token = await new SignJWT({ user_id: who, role: roleOf[who] }).setProtectedHeader({ alg: 'HS256' })
+      .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+    const res = await route.request(`/api/cycles/validate/modules/verdict?project=${P}`, { headers: { Authorization: `Bearer ${token}` } }, envOf(db));
+    return { status: res.status, body: await res.json() as any };
+  };
+  const r = await read(FOUNDER);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.deepEqual(r.body.module, { slug: 'verdict', name: 'Verdict', records_title: 'Decisions' });
+  assert.deepEqual(r.body.records.cols, ['Decision', 'For', 'Reasoning', 'Evidence', 'Date · by']);
+  assert.deepEqual(r.body.records.filters.map((f: any) => f.key), ['decision', 'for']);
+  assert.deepEqual(r.body.records.sorts.map((x: any) => x.key), ['newest', 'oldest']);
+  assert.equal(r.body.records.linkable, true);
+  assert.equal(r.body.can_read_decisions, true);
+  const ids = (db.prepare('SELECT id FROM validation_decisions WHERE project_id = ? ORDER BY decided_at DESC, id DESC').all(P) as any[]).map((x) => Number(x.id));
+  assert.deepEqual(r.body.records.rows.map((x: any) => Number(x.id)), ids, 'every row id is the decision\'s, newest first');
+  assert.equal(r.body.card.slug, 'verdict');
+  // A partner is refused before anything is read.
+  const p = await read(PARTNER);
+  assert.equal(p.status, 403);
+  assert.deepEqual(p.body, { detail: 'Partners do not see decisions.' });
+});
+
+test('15: the MCP context tool still reads three Validate slugs, never Verdict', () => {
+  const src = readFileSync(resolve(ROOT, 'cloudflare-worker/src/mcp/tools/context.ts'), 'utf8');
+  const union = /slug: ('[a-z-]+'(?:\s*\|\s*'[a-z-]+')*)/.exec(src);
+  assert.ok(union, 'the slug union is still there');
+  assert.deepEqual(union![1].split('|').map((x) => x.trim().replace(/'/g, '')), ['problem-discovery', 'ideal-customer-profile', 'experiments']);
+  assert.equal(/verdict/i.test(src), false);
+});
 
 // #1703 closing integration: real evidence, production Pivot and registry.
 function realEvidence(db: any) {
@@ -1218,47 +1269,4 @@ test('6/8/14 integration: registered Verdict serves real choices and records wit
   const done = await rec(db, FOUNDER, 'POST', `/records/${d.body.id}/actions/commitment-done?project=${P}`, { commitment_id: commitment.id }, null);
   assert.equal(done.status, 200, done.text);
   assert.ok(commitments(db)[0].done_at);
-});
-
-// ---------------------------------------------------------------------------
-// #1704 closing PR: the module read, and MCP
-// ---------------------------------------------------------------------------
-
-test('12: the Verdict module read sends the Decisions table: its columns, filters, Newest first, row ids and linkable', async () => {
-  const db = fixture();
-  const h1 = hypothesis(db, P, 'H1', 'Fleets pay');
-  await decide(db, { decision: 'proceed', n: 5, on: '2026-10-01' });
-  await decide(db, { decision: 'stop', n: 2, on: '2026-10-05' });
-  await decide(db, { decision: 'pivot', for: h1, on: '2026-10-09' });
-  const route = new Hono<any>();
-  route.route('/api/cycles/validate', cycleValidateRoute);
-  const read = async (who: number) => {
-    const token = await new SignJWT({ user_id: who, role: roleOf[who] }).setProtectedHeader({ alg: 'HS256' })
-      .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
-    const res = await route.request(`/api/cycles/validate/modules/verdict?project=${P}`, { headers: { Authorization: `Bearer ${token}` } }, envOf(db));
-    return { status: res.status, body: await res.json() as any };
-  };
-  const r = await read(FOUNDER);
-  assert.equal(r.status, 200, JSON.stringify(r.body));
-  assert.deepEqual(r.body.module, { slug: 'verdict', name: 'Verdict', records_title: 'Decisions' });
-  assert.deepEqual(r.body.records.cols, ['Decision', 'For', 'Reasoning', 'Evidence', 'Date · by']);
-  assert.deepEqual(r.body.records.filters.map((f: any) => f.key), ['decision', 'for']);
-  assert.deepEqual(r.body.records.sorts.map((x: any) => x.key), ['newest', 'oldest']);
-  assert.equal(r.body.records.linkable, true);
-  assert.equal(r.body.can_read_decisions, true);
-  const ids = (db.prepare('SELECT id FROM validation_decisions WHERE project_id = ? ORDER BY decided_at DESC, id DESC').all(P) as any[]).map((x) => Number(x.id));
-  assert.deepEqual(r.body.records.rows.map((x: any) => Number(x.id)), ids, 'every row id is the decision\'s, newest first');
-  assert.equal(r.body.card.slug, 'verdict');
-  // A partner is refused before anything is read.
-  const p = await read(PARTNER);
-  assert.equal(p.status, 403);
-  assert.deepEqual(p.body, { detail: 'Partners do not see decisions.' });
-});
-
-test('15: the MCP context tool still reads three Validate slugs, never Verdict', () => {
-  const src = readFileSync(resolve(ROOT, 'cloudflare-worker/src/mcp/tools/context.ts'), 'utf8');
-  const union = /slug: ('[a-z-]+'(?:\s*\|\s*'[a-z-]+')*)/.exec(src);
-  assert.ok(union, 'the slug union is still there');
-  assert.deepEqual(union![1].split('|').map((x) => x.trim().replace(/'/g, '')), ['problem-discovery', 'ideal-customer-profile', 'experiments']);
-  assert.equal(/verdict/i.test(src), false);
 });
