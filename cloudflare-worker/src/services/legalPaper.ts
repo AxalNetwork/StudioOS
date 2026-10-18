@@ -719,7 +719,8 @@ export function paperHtml(m: PaperModel, o: PaperHtmlOptions): string {
   if (only) parts.push(only); else if (part !== 'front' && m.parts) {
     // D716 — a composite paper: each part on its own named page, its heading
     // the one link the body pass prints, so the contents finds its page.
-    if (m.state.kind === 'draft') parts.push(stateHtml(m.state));
+    // D758 — a specimen (the catalog's booklet) carries its diagonal as a draft does.
+    if (m.state.kind === 'draft' || m.state.kind === 'specimen') parts.push(stateHtml(m.state));
     for (const pt of m.parts.filter((x) => x.n > 1)) {
       const heading = part === 'body' ? `<a href="#${pt.id}">${escapeHtml(pt.title)}</a>` : escapeHtml(pt.title);
       parts.push(`<section class="booklet-part part-${pt.n}"><div class="eyebrow">Part ${pt.n}</div>`
