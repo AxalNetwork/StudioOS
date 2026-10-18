@@ -162,6 +162,11 @@ corrects and exports, and a Super Admin issues. A draft's figures come only
 from `read` and `exportCsv`, which the Worker records before it answers; the
 list carries none.
 
+D717 (#1782) decision 11, #1855: `fundStructure.js` reads the entity and money
+map, `GET /api/admin/fund-structure`, for the "Structure of the Fund" sheet on
+the Contracts desk. HQ admins only. The Super Admin's answer lists each entity's
+accounts masked to the last four; a plain Admin's carries no account at all.
+
 D714 (#1779): `fundAdmin.js` reads the act table (`/api/fund-admin/access`) and
 a distribution's preview (`POST /api/funds/:id/distributions/preview`), which
 writes nothing. `fundFees.js` calls `/api/fund-fees/:fundId` (D709, #1774): the
