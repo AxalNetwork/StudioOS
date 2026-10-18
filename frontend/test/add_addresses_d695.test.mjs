@@ -35,6 +35,9 @@ const ADD_KEYS = {
     'partner-network': ['partner'], 'market-expansion': ['market'], 'durable-company-building': ['obligation'],
   },
   build: { 'solution-design': ['feature', 'risk'], 'prototype-mvp': ['must-have'], 'company-creation': ['formation-step'] },
+  validate: {
+    'problem-discovery': ['theme'], 'ideal-customer-profile': ['segment'], 'market-intelligence': ['competitor'], 'demand-signals': ['signal'], experiments: ['hypothesis'],
+  },
 };
 const EDIT_KEYS = {
   // Use of funds' Edit is its Add (D695 decision 9), so it keeps the Add's key.
@@ -48,6 +51,9 @@ const EDIT_KEYS = {
     'durable-company-building': 'edit-obligation',
   },
   build: { 'solution-design': 'edit-feature', 'prototype-mvp': 'edit-must-have', 'company-creation': 'edit-formation-step', 'operating-systems': 'edit-system' },
+  validate: {
+    'problem-discovery': 'edit-theme', 'ideal-customer-profile': 'edit-segment', 'market-intelligence': 'edit-competitor', 'demand-signals': 'edit-signal', experiments: 'edit-hypothesis',
+  },
 };
 const CTA_APART = {
   'raise/fundraising-readiness': ['Re-score', 'Re-score now'], 'raise/investor-narrative': ['New version', 'Create version'],

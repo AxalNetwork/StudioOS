@@ -19,7 +19,7 @@ that.
 | `access.ts` | Who: `requireMercuryReader` (an Admin on HQ) and `requireMercuryCredentialWriter` (the Super Admin, with `super_admin_required` before the write bar). Both refuse a support session and a branch. `auditRead` writes a read's audit row first; the read does not happen without it. |
 | `store.ts` | The entity connections (token as `v1.` ciphertext bound to its row), the check against #1773's registry by entity and last four, and the upserts of accounts, daily balance snapshots and transactions. A changed or cancelled matched line turns its match `needs_review`. |
 | `sync.ts` | One connection's sync (one run at a time, a watermark, oldest first, at most 2,000 lines a run) and the hourly HQ sweep. A run row holds counts and a code, never a body. |
-| `match.ts` | The matchers, a manual pair, confirm (one receipt through `recordReceipt`, `mercury:<id>`), reject, and `collectedFor`. Fund I (found through #1773's `fundPayeeOf`) and #1774's fee periods are dependencies; the fee periods answer "none" until #1774 is on `main`. |
+| `match.ts` | The matchers, a manual pair, confirm (one receipt through `recordReceipt`, `mercury:<id>`), reject, and `collectedFor`. Fund I (found through #1773's `fundPayeeOf`) and #1774's issued or paid fee periods are dependencies. `services/fundFees.ts`'s period read calls `collectedFor`; it is the one importer outside this folder. |
 
 **Who imports `store.ts`:** only `routes/admin_mercury.ts`, the files in this
 folder and `index.ts`'s cron block (D710 decision 11). #1778's personal
