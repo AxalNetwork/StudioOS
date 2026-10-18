@@ -14,7 +14,7 @@ canvas behind it still shows up here.
 | --- | --- | --- | --- |
 | Headerless | Studio | `/studio` | Founder Studio |
 | Headerless | Spin-Out Lab | `/spinout-lab` | Spin-Out Lab · Intro, Spin-Out Lab · Landing, Spin-Out Lab Page, Spin-Out Lab Workspace |
-| Headerless | Validate | `/validate` | Founder Workspaces Canvas, Pages · Founder Validate |
+| Headerless | Validate | `/validate` | Founder Workspaces Canvas |
 | Headerless | Build | `/build` | Founder Workspaces Canvas, Pages · Founder Build |
 | Headerless | Raise | `/raise` | Founder Workspaces Canvas |
 | Headerless | Grow | `/grow` | Founder Workspaces Canvas, Pages · Founder Grow |

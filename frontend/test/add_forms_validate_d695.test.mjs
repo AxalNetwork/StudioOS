@@ -396,10 +396,13 @@ test('6: each Validate Edit is titled Edit <noun>, saves with Save, and sends on
 
 // ---------- Registered (PR 2b) -----------------------------------------------
 
-test('15: PR 2b registers the five Adds and their Edits, and each module with no spec still has no form', () => {
-  assert.deepEqual(Object.keys(m0.FORMS.validate), SLUGS);
+test('15: PR 2b registers the five Adds and their Edits, D693 adds Record a decision, and each module with no spec still has no form', () => {
+  // D693 (#1704): Verdict's one Add is Record a decision, with no Edit (decision 4).
+  assert.deepEqual(Object.keys(m0.FORMS.validate), [...SLUGS, 'verdict']);
   assert.deepEqual(Object.keys(m0.EDITS.validate), SLUGS);
-  for (const { slug } of MODULES.validate) {
+  assert.equal(m0.formFor('validate', 'verdict')?.key, 'decision');
+  assert.equal(m0.editFor('validate', 'verdict'), null);
+  for (const { slug } of MODULES.validate.filter((m) => m.slug !== 'verdict')) {
     const spec = m0.VALIDATE_FORMS[slug];
     assert.equal(m0.formFor('validate', slug), spec ? spec[0] : null, `${slug}: its Add, or none`);
     assert.equal(m0.editFor('validate', slug), m0.VALIDATE_EDITS[slug] ?? null, `${slug}: its Edit, or none`);

@@ -916,8 +916,10 @@ test('14: with Upload registered, the Data room module\'s Add is Upload, and its
   assert.equal(upload.button, 'Upload');
   const route = readFileSync(new URL('../src/pages/cycles/CycleRoute.jsx', import.meta.url), 'utf8');
   assert.match(route, /forms\.map\(\(entry, i\) => \(\{ text: entry\.button, href: addHref\(entry, i\)/, 'a module with a form draws its Add from the form');
-  assert.match(route, /loadOptions=\{formOpen\.loadOptions \? \(\) => formOpen\.loadOptions\(cyclesWrite, projectId\) : null\}/, 'an Add reads its choices');
-  assert.match(route, /onSearch=\{formOpen\.search \? \(_field, q\) => formOpen\.search\(cyclesWrite, projectId, q\) : null\}/, 'and searches through its form');
+  assert.match(route, /loadOptions=\{formOpen\.loadOptions \? \(\) => formOpen\.loadOptions\(formWrites, projectId\) : null\}/, 'an Add reads its choices');
+  // D693 (#1704): an Add's writes are the cycles' writes plus Verdict's.
+  assert.match(route, /const formWrites = \{ \.\.\.cyclesWrite, verdict: verdictApi \};/);
+  assert.match(route, /onSearch=\{formOpen\.search \? \(_field, q\) => formOpen\.search\(formWrites, projectId, q\) : null\}/, 'and searches through its form');
   const worker = readFileSync(new URL('../../cloudflare-worker/src/services/raiseCycle.ts', import.meta.url), 'utf8');
   assert.match(worker, /add: \{ text: 'Upload', href: addHref\(ctx, 'data-room'\) \}/);
   assert.match(worker, /next: \{ text: 'Upload', href: addHref\(ctx, 'data-room'\) \}/);

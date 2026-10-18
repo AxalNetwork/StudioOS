@@ -173,6 +173,15 @@ follows the founder board's `canReadBoard` rule and writing follows
 `canWrite`. A card whose store fails is `unreadable` on its own. See
 `documentation/architecture/decisions/D659.md`.
 
+D693 (#1704): Verdict is the seventh module `cycle_validate.ts` serves. The
+overview adds the Verdict card only for a viewer `canReadDecision` admits, and
+`GET /modules/verdict` refuses anyone else with 403 "Partners do not see
+decisions." before reading anything. Every Validate read sends
+`can_read_decisions`. Decisions are recorded through `cycle_verdict.ts`
+(`POST /api/cycles/validate/decisions`), and each one's record, activity,
+actions and form-options are `../services/records/verdict.ts`'s. See
+`documentation/architecture/decisions/D693.md`.
+
 D663 (#1476): `cycle_raise.ts` is mounted at `/api/cycles/raise` in
 `index.ts`. `GET /overview` returns the four Raise figures and seven cards,
 and `GET /modules/:slug` returns one card plus its records. The reads are

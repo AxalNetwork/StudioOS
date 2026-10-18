@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { cyclesApi, cyclesWrite } from '../../lib/api/cycles';
+import { verdictApi } from '../../lib/api/verdict';
 import { WorkerRail, Unreadable } from '../../ui';
 import RailFrame from '../../ui/RailFrame';
 import { RailCrumbsProvider, useSetRailCrumbs } from '../../ui/railCrumbs';
@@ -113,6 +114,8 @@ const CYCLE_DEFS = {
         onLink={(painGroupId, body) => cyclesApi.recordAction('validate', ctx.projectId, 'problem-discovery', painGroupId, 'link', body).then(ctx.reload)}
         // Only until #1656 registers New hypothesis as the table's Add (decision 20).
         onNewHypothesis={formFor('validate', 'experiments') ? undefined : (body) => api.createHypothesis(ctx.projectId, body).then(ctx.reload)} />,
+      // D693 decision 13 (#1704): the verdict zone's Export summary, under the Decisions table.
+      verdict: (_data, ctx) => <ExportSummary projectId={ctx.projectId} />,
     }),
     // D697 (#1659): an interview is Customer research's record. The page draws
     // what the read sends, with the session's working parts inside it.
@@ -357,6 +360,38 @@ export function useProject(reloadKey = 0, { kept = null, drop = [], immediate = 
     return () => { alive = false; };
   }, [requested, writeProject, reloadKey]);
   return { projectId: immediate && requested ? requested : projectId, status: immediate && requested ? 'ready' : status, writeProject };
+}
+
+/**
+ * The writes an Add form submits through: the cycles' own, and Verdict's
+ * `record` as `w.verdict` (D693, Record a decision).
+ */
+const formWrites = { ...cyclesWrite, verdict: verdictApi };
+
+/**
+ * D693 decision 13: Export summary, the verdict zone's CSV (`founder_validate.ts`,
+ * gated by `canReadDecision` as the module is). A quiet button; a failure shows
+ * the Worker's sentence.
+ */
+function ExportSummary({ projectId }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const run = () => {
+    if (!projectId || busy) return;
+    setBusy(true); setError('');
+    Promise.resolve(api.exportValidateSummary(projectId))
+      .catch((e) => setError(e?.message || 'The summary could not be exported.'))
+      .finally(() => setBusy(false));
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-3" data-testid="verdict-export-summary">
+      <button type="button" onClick={run} disabled={busy}
+        className="rounded-lg border border-axal-hairline px-3 py-1.5 text-[12.5px] font-semibold text-axal-ink disabled:opacity-50 dark:border-gray-700 dark:text-gray-200">
+        {busy ? 'Exporting…' : 'Export summary'}
+      </button>
+      {error && <span role="alert" className="text-[12px] text-red-700 dark:text-red-400">{error}</span>}
+    </div>
+  );
 }
 
 /** The module page under the lightbox: the founder's, when it is one of this cycle's modules; else the overview (null). */
@@ -639,6 +674,9 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   const [moduleStatus, setModuleStatus] = useState('loading');
   // D693 decision 7: a read refused on purpose keeps the Worker's sentence.
   const [moduleMessage, setModuleMessage] = useState('');
+  // D693 decision 7: false once a Validate read says the viewer may not read
+  // decisions, or the Verdict read refuses; the tabs then drop Verdict.
+  const [canReadDecisions, setCanReadDecisions] = useState(true);
   // D686: a history address (`#tools`, `#calls`, `#updates`) scrolls once its section is drawn.
 
   const [query, setQuery] = useState({ q: '', filter: {}, sort: '', page: 1 });
@@ -676,7 +714,11 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
     let alive = true;
     setOverviewStatus('loading');
     cyclesApi.overview(cycle, projectId)
-      .then((data) => { if (alive) { setRawOverview(data); setOverview(adaptOverview(cycle, data)); setOverviewStatus('ready'); } })
+      .then((data) => {
+        if (!alive) return;
+        if (typeof data?.can_read_decisions === 'boolean') setCanReadDecisions(data.can_read_decisions);
+        setRawOverview(data); setOverview(adaptOverview(cycle, data)); setOverviewStatus('ready');
+      })
       .catch(() => { if (alive) setOverviewStatus('unreadable'); });
     return () => { alive = false; };
   }, [record, cycle, slug, projectId, reload, def]);
@@ -686,12 +728,19 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
     let alive = true;
     setModuleStatus('loading');
     cyclesApi.module(cycle, projectId, slug, { q: query.q, filter: filterString(query.filter), sort: query.sort, page: query.page })
-      .then((data) => { if (alive) { setModule(adaptModule(cycle, slug, data)); setModuleMessage(''); setModuleStatus('ready'); } })
+      .then((data) => {
+        if (!alive) return;
+        if (typeof data?.can_read_decisions === 'boolean') setCanReadDecisions(data.can_read_decisions);
+        setModule(adaptModule(cycle, slug, data)); setModuleMessage(''); setModuleStatus('ready');
+      })
       // A 403 is a refusal, not a failure (D693 decision 7: "Partners do not
       // see decisions."), so it is drawn as the Worker's sentence, with no Retry.
       .catch((error) => {
         if (!alive) return;
-        if (error?.status === 403) { setModuleMessage(error?.message || ''); setModuleStatus('refused'); } else setModuleStatus('unreadable');
+        if (error?.status === 403) {
+          if (slug === 'verdict') setCanReadDecisions(false);
+          setModuleMessage(error?.message || ''); setModuleStatus('refused');
+        } else setModuleStatus('unreadable');
       });
     return () => { alive = false; };
   }, [record, cycle, slug, known, projectId, query, reload, def]);
@@ -705,7 +754,9 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
       .catch(() => {});
   }, [cycle, projectId]);
 
-  const tabs = useMemo(() => (def?.modules || []).map((m) => ({ slug: m.slug, name: m.name })), [def]);
+  const tabs = useMemo(() => (def?.modules || [])
+    .filter((m) => canReadDecisions || !(cycle === 'validate' && m.slug === 'verdict'))
+    .map((m) => ({ slug: m.slug, name: m.name })), [def, cycle, canReadDecisions]);
   const editing = editingId ? (module?.records?.rows || []).find((row) => String(row?.id) === editingId) || null : null;
   const rowEdit = useRowRecordEdit(!record && projectId && edit?.readsRecord && editing && edit.idOf(editing) != null
     ? { cycle, slug, projectId, edit, row: editing } : null);
@@ -751,9 +802,10 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
     : !projectId ? null
     : formOpen ? (
       <FormLightbox key={`add-${formOpen.key}`} form={formOpen} cycle={cycle} slug={slug} search={location.search}
-        loadOptions={formOpen.loadOptions ? () => formOpen.loadOptions(cyclesWrite, projectId) : null}
-        onSearch={formOpen.search ? (_field, q) => formOpen.search(cyclesWrite, projectId, q) : null}
-        onSubmit={(values) => formOpen.submit(cyclesWrite, projectId, values)}
+        // An Add whose choices are the Worker's (Record a decision's For and Evidence, D693) reads them here.
+        loadOptions={formOpen.loadOptions ? () => formOpen.loadOptions(formWrites, projectId) : null}
+        onSearch={formOpen.search ? (_field, q) => formOpen.search(formWrites, projectId, q) : null}
+        onSubmit={(values) => formOpen.submit(formWrites, projectId, values)}
         onSaved={saved}
         onClose={closeAdd} />
     ) : editing && edit.idOf(editing) != null && edit.readsRecord ? (

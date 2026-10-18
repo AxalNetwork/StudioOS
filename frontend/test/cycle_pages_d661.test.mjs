@@ -220,11 +220,13 @@ test('ADD FORMS: one dialog draws each form, the module offers it, and the check
   assert.match(channel, /inputMode="decimal"/, 'money is typed as an amount');
   // Every module with a form, and no other, offers Add from it.
   assert.deepEqual(Object.entries(FORMS).flatMap(([c, f]) => Object.keys(f).map((s) => `${c}/${s}`)).sort(),
-    ['build/company-creation', 'build/founding-team', 'build/operating-systems', 'build/product-roadmap', 'build/prototype-mvp', 'build/solution-design', 'grow/distribution', 'grow/durable-company-building', 'grow/market-expansion', 'grow/partner-network', 'grow/product-improvement', 'grow/revenue-and-traction', 'grow/team-expansion', 'raise/cap-table', 'raise/capital-relationships', 'raise/data-room', 'raise/fundraising-readiness', 'raise/investor-narrative', 'raise/pitch-deck', 'raise/use-of-funds', 'validate/demand-signals', 'validate/experiments', 'validate/ideal-customer-profile', 'validate/market-intelligence', 'validate/problem-discovery']);
+    ['build/company-creation', 'build/founding-team', 'build/operating-systems', 'build/product-roadmap', 'build/prototype-mvp', 'build/solution-design', 'grow/distribution', 'grow/durable-company-building', 'grow/market-expansion', 'grow/partner-network', 'grow/product-improvement', 'grow/revenue-and-traction', 'grow/team-expansion', 'raise/cap-table', 'raise/capital-relationships', 'raise/data-room', 'raise/fundraising-readiness', 'raise/investor-narrative', 'raise/pitch-deck', 'raise/use-of-funds', 'validate/demand-signals', 'validate/experiments', 'validate/ideal-customer-profile', 'validate/market-intelligence', 'validate/problem-discovery', 'validate/verdict']);
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   // D695: each Add is a link to its `/new` address, pushed with `state.under`.
   assert.match(route, /add=\{forms\.length && projectId\s*\? forms\.map\(\(entry, i\) => \(\{ text: entry\.button, href: addHref\(entry, i\), state: \{ under: `\$\{location\.pathname\}\$\{location\.search\}` \} \}\)\)\s*: fnOf\(def\.add, slug\)\?\.\(q, openAction\)\}/);
-  assert.match(route, /onSubmit=\{\(values\) => formOpen\.submit\(cyclesWrite, projectId, values\)\}/);
+  // D693 (#1704): the Add submits through the cycles' writes plus Verdict's `record` (`formWrites`).
+  assert.match(route, /onSubmit=\{\(values\) => formOpen\.submit\(formWrites, projectId, values\)\}/);
+  assert.match(route, /const formWrites = \{ \.\.\.cyclesWrite, verdict: verdictApi \};/);
   assert.match(route, /const saved = \(\) => \{ dirty\.current = true; \};/);
   // D695 (#1656): the Add, an Edit from the row's values, and an Edit from its record (Validate's).
   assert.equal((route.match(/onSaved=\{saved\}/g) || []).length, 3, 'a save, Add or Edit, reads the module again once the form closes');
@@ -449,9 +451,13 @@ test('A CYCLE IS MOUNTED ONLY ONCE ITS READ IS WIRED: all four are, each with it
   }
   // The four zone pages stay mounted: each module page links to the one that
   // edits it until canvases for Add and a record's edit view exist.
-  for (const zone of ['pain-map', 'hypotheses', 'verdict']) {
+  for (const zone of ['pain-map', 'hypotheses']) {
     assert.match(app, new RegExp(`<Route path="/validate/${zone}" element=\\{guard\\([^)]*\\), <FounderValidateWorkspace />\\)\\} />`), `/validate/${zone} lost its working tool`);
   }
+  // D693 decision 12 (#1704): /validate/verdict stays a static line, with the
+  // zone's guard, and renders the Verdict module, never the old workspace.
+  assert.match(app, /<Route path="\/validate\/verdict" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <CycleRoute cycle="validate" slug="verdict" \/>\)\} \/>/, '/validate/verdict renders the Verdict module');
+  assert.doesNotMatch(app, /<Route path="\/validate\/verdict" element=\{[^}]*FounderValidateWorkspace/);
   // D704 (#1666, PR 2b): the interview log is Customer research now; its old address redirects there.
   assert.match(app, /<Route path="\/validate\/interviews" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <ValidateZoneRedirect zone="interviews" \/>\)\} \/>/, '/validate/interviews redirects to Customer research');
   assert.doesNotMatch(read('frontend/src/lib/api.js'), /request\(`\/cycles\//, 'the cycle client lives in lib/api/cycles.js, not api.js');

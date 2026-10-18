@@ -490,9 +490,10 @@ founderValidate.get('/decision/:projectId', async (c) => {
   }
 });
 
-// The earlier verdict page sends no evidence, so until #1704 retires it this
-// route records with no bar: a given venture decision, superseding only the
-// venture's current given one. `recordDecision` logs the activity.
+// The earlier verdict page's route. Since #1704 moved /validate/verdict to the
+// Verdict module, it obeys the evidence bar as the module does (D693 decision
+// 12), so a decision sent with no evidence is Withheld. `recordDecision` logs
+// the activity.
 founderValidate.post('/decision/:projectId', async (c) => {
   const s = await scope(c, Number(c.req.param('projectId')), canWrite);
   if (s instanceof Response) return s;
@@ -502,7 +503,7 @@ founderValidate.post('/decision/:projectId', async (c) => {
   try {
     const r = await recordDecision(c.env, s.user, s.project, {
       decision, for: 'venture', reasoning: trimOrNull(b.reasoning), evidence: b.evidence ?? [],
-    }, { bar: 0 });
+    });
     return json({ id: r.id, decision }, 201);
   } catch (e) {
     if (e instanceof VerdictError) return json({ detail: e.sentence }, e.status);

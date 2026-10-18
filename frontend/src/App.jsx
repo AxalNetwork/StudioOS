@@ -2566,7 +2566,8 @@ function AppInner() {
       <Route path="/validate/demand-and-urgency-signals/:id" element={<ParamRedirect to="/validate/demand-signals/:id" />} />
       <Route path="/validate/pain-map" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
       <Route path="/validate/hypotheses" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
-      <Route path="/validate/verdict" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
+      {/* D693 decision 12 (#1704): a static line, so the founder zone keeps its roles; it renders the Verdict module. */}
+      <Route path="/validate/verdict" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" slug="verdict" />)} />
       <Route path="/validate/session/:id" element={guard(labRoles(['admin', 'founder']), <InterviewSessionPage />)} />
       <Route path="/validate/inbox" element={guard(labRoles(['admin', 'founder']), <ChannelsInboxPage />)} />
 

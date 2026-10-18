@@ -31,7 +31,6 @@ import { insertHypothesisWithLinksStatements } from '../routes/_founder_validate
 import type { Env, User } from '../types';
 import { logCycleWriteStatement } from './cycleActivity';
 import { safeCard, PAGE_SIZE, type Card } from './cycleCards';
-import { dayMonth } from './cycleFocus';
 import type { Ctx, FilterSpec, RecordQuery, Records, SortSpec } from './cycleValidate';
 import { ownsVenture, type ProjectRef } from '../routes/_founder_validate_helpers';
 
@@ -187,9 +186,8 @@ const verdictWrite = (user: User, projectId: number, action: string, summary: st
 /**
  * Record a decision. Never edits or deletes one (D693 decision 4).
  *
- * `bar` is the evidence bar. The old verdict route passes 0 until #1704
- * retires the page that calls it, which sends no evidence: its decision is a
- * given venture decision, superseding only the venture's current given one.
+ * `bar` is the evidence bar, `DECISION_EVIDENCE_BAR` for every route (D693
+ * decision 12); a test may pass another.
  */
 export async function recordDecision(
   env: Env,
@@ -577,6 +575,14 @@ export async function completeCommitment(
 
 /** The card's timeline holds the venture's six newest decisions, then Next. */
 export const TIMELINE_CAP = 6;
+
+const MONTH = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/**
+ * "24 Oct" from a `YYYY-MM-DD` date, as the canvas writes it ("3 Sep", where
+ * newer `en-GB` locale data says "Sept"). Kept here, not `cycleFocus.ts`'s:
+ * that module reaches `cycleValidate.ts`, which imports this one.
+ */
+const dayMonth = (d: string) => `${Number(d.slice(8, 10))} ${MONTH[Number(d.slice(5, 7)) - 1]}`;
 
 const day = (raw: string | null | undefined) => {
   const d = String(raw ?? '').slice(0, 10);
