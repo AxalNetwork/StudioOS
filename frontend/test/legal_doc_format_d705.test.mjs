@@ -1,13 +1,11 @@
 // D705 (#1716) — the admin preview's mirror of legalDocFormat names the Fund
 // Axal VC Spin-Out Lab Fund I LP, signs each Axal party under its own title,
 // has the Fund sign through its general partner, and routes the same slugs as
-// the worker. PaperPreview draws the capacity line.
+// the worker. The paper's capacity line is the Worker's test since D711.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import {
   AXAL_ENTITIES,
   AXAL_SIGNATORY_NAME,
@@ -16,7 +14,6 @@ import {
   buildExecutionBlock,
   buildPreamble,
 } from '../src/lib/legalDocFormat.js';
-import PaperPreview from '../src/components/PaperPreview.jsx';
 
 const FUND_SIGNS = [
   'subscription', 'investor_subscription_pro', 'investor_subscription_inst', 'subscription booklet & lpa',
@@ -61,16 +58,9 @@ test('D705: the mirror names the Fund and signs each party under its own title',
   assert.equal(AXAL_SIGNATORY_TITLE, 'Managing Partner');
 });
 
-test('D705: PaperPreview draws the Fund\'s capacity line on a subscription, and none on a Management document', () => {
-  const sub = renderToStaticMarkup(createElement(PaperPreview, { title: 'Subscription Agreement', body: 'The Investor subscribes.', docType: 'subscription' }));
-  assert.ok(sub.includes('Axal VC Spin-Out Lab Fund I LP'));
-  assert.ok(sub.includes('By: Axal VC GP LLC, its general partner'));
-  assert.ok(sub.includes('Title: General Partner'));
-  assert.ok(sub.indexOf('By: Axal VC GP LLC, its general partner') < sub.indexOf('By: ___'), 'the capacity line precedes the signature line');
-  const mgmt = renderToStaticMarkup(createElement(PaperPreview, { title: 'Mentor Agreement', body: 'The Mentor advises.', docType: 'mentor_nda_axal' }));
-  assert.ok(mgmt.includes('Title: Managing Partner'));
-  assert.ok(!mgmt.includes('its general partner'));
-});
+// The Fund's capacity line on the paper (a subscription prints it, a Management
+// document does not) is held by cloudflare-worker/test/legal_paper_d711.test.ts
+// since D711: the preview draws the Worker's paper.
 
 test('D705: no code or named page prints the old fund name', () => {
   for (const f of [
