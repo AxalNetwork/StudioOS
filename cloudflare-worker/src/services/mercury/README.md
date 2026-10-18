@@ -26,4 +26,6 @@ that.
 folder and `index.ts`'s cron block (D710 decision 11). #1778's personal
 connection keeps its own tables (`services/mercuryPersonal.ts`); it uses this
 folder's `client.ts` and `parse.ts` only, and reads `mercury_accounts` for
-decision 3 alone.
+decision 3 alone. An investor's proof-of-capital statements live in
+`capital_attestations` (`services/capitalAttestations.ts`, D752, migration
+491), which stores the statement and no balance.

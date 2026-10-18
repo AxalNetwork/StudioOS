@@ -128,6 +128,8 @@ export interface PersonalConnection {
   token: string;
   accounts: ParsedAccount[];
   use: PersonalUse;
+  /** The organization's legal name as Mercury gave it on this read (D752). */
+  legal_name: string | null;
 }
 
 async function markError(env: Env, row: IntegrationRow, code: string): Promise<void> {
@@ -171,7 +173,7 @@ export async function personalConnection(c: C, user: User, use: PersonalUse): Pr
     if (entity.status === 409) await markError(c.env, row, entity.code);
     return refused(c, entity.status, entity.code, entity.sentence);
   }
-  return { row, token, accounts: read.accounts, use };
+  return { row, token, accounts: read.accounts, use, legal_name: read.org.legal_name };
 }
 
 /** A Mercury read that failed after the connection was checked: a 401 or 403 marks the row `error`. */
