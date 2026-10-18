@@ -9,6 +9,7 @@
  *   practice_income   a partner, for their own invoices      own credits              a match; issued → paid
  *   partner_deals     a partner: own payouts and settlements own credits and debits   a match
  *   capital_attestation  an investor, on HQ: proof of funds  own accounts (#1888)    a statement (#1888)
+ *   venture_spend     a founder, for a project they found    own credits, debits and balances   the snapshot they save
  *
  * Any other pairing is 403 `purpose_not_allowed`. The uses in `HQ_ONLY_USES`
  * are HQ only (403 `hq_only`): only Management's payments are matched, and only
@@ -42,11 +43,11 @@ type C = Context<{ Bindings: Env }>;
 
 export type PersonalMatchTarget = 'engagement_invoice' | 'payout' | 'partner_deal_settlement';
 export type BankMatch = { posted_on: string; last_four: string };
-export type PersonalUse = 'venture_revenue' | 'practice_income' | 'partner_deals' | 'capital_attestation';
+export type PersonalUse = 'venture_revenue' | 'practice_income' | 'partner_deals' | 'capital_attestation' | 'venture_spend';
 
 /** Decision 4's table, by role. A role absent here holds no personal connection. */
 export const PERSONAL_USES: Readonly<Record<string, readonly PersonalUse[]>> = Object.freeze({
-  founder: ['venture_revenue'],
+  founder: ['venture_revenue', 'venture_spend'],
   partner: ['practice_income', 'partner_deals'],
   investor: ['capital_attestation'],
 });
@@ -206,6 +207,8 @@ export interface BankLine {
   internal: boolean;
   voided: boolean;
   counterparty_name: string | null;
+  /** D752: Mercury's category, when it reports one; shown only to the member. */
+  category: string | null;
 }
 
 function toLine(t: ParsedTransaction, account: ParsedAccount): BankLine {
@@ -220,18 +223,21 @@ function toLine(t: ParsedTransaction, account: ParsedAccount): BankLine {
     internal: INTERNAL_KINDS.includes(String(t.kind || '')),
     voided: VOID_STATUSES.includes(String(t.status || '')),
     counterparty_name: t.counterparty_name,
+    category: t.category,
   };
 }
 
 /** The member's lines in a window, oldest first, at most `MAX_LINES` across their accounts. */
-export async function listOwnTransactions(conn: PersonalConnection, window: { from: string; to: string }): Promise<{ lines: BankLine[]; capped: boolean }> {
+export async function listOwnTransactions(conn: PersonalConnection, window: { from: string; to: string }): Promise<{ lines: BankLine[]; capped: boolean; refused: number }> {
   const lines: BankLine[] = [];
   let capped = false;
+  let refused = 0;
   for (const account of conn.accounts) {
     for (let offset = 0; ; offset += PAGE) {
       const limit = Math.min(PAGE, MAX_LINES - lines.length);
       if (limit <= 0) { capped = true; break; }
       const page = parseTransactions(await listTransactions(conn.token, account.mercury_account_id, { start: window.from, limit, offset }));
+      refused += page.refused;
       for (const t of page.transactions) {
         const day = t.posted_on ?? t.created_on;
         if (day && day >= window.from && day <= window.to) lines.push(toLine(t, account));
@@ -240,7 +246,7 @@ export async function listOwnTransactions(conn: PersonalConnection, window: { fr
     }
     if (capped) break;
   }
-  return { lines, capped };
+  return { lines, capped, refused };
 }
 
 /** One of the member's lines, re-read by id from their own accounts; null when none of them holds it. */

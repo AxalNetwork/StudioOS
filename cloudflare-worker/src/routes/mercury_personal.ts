@@ -12,6 +12,7 @@
  * THE USE KEYS (`services/mercuryPersonal.ts` `PERSONAL_USES`), as `/status` names them:
  *
  *   venture_revenue   founder   the revenue import, at /api/revenue/projects/:id/mercury-credits
+ *   venture_spend     founder   spending, burn, cash and runway, at /api/revenue/projects/:id/mercury-spend
  *   practice_income   partner   target=invoice: their own engagement invoices
  *   partner_deals     partner   target=payout and target=settlement; HQ only
  *   capital_attestation  investor  the proof of funds (D752; its routes come with #1888); HQ only

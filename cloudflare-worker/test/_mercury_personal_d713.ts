@@ -22,6 +22,7 @@ import { encryptCredentials } from '../src/integrations/secrets.ts';
 import integrations from '../src/routes/integrations.ts';
 import revenue from '../src/routes/revenue.ts';
 import mercuryPersonal from '../src/routes/mercury_personal.ts';
+import progress from '../src/routes/progress.ts';
 import '../src/integrations/providers/mercury.ts';
 
 export const TOKEN = 'fixture-not-a-token-3';
@@ -110,6 +111,8 @@ const app = new Hono<any>();
 app.route('/api/connectors', integrations);
 app.route('/api/revenue', revenue);
 app.route('/api/mercury/personal', mercuryPersonal);
+// D752 (#1889): the metrics routes, for the source lock.
+app.route('/api/progress', progress);
 app.onError((e: any, c) => c.json({ detail: e.message }, AUTH_ERROR_STATUSES[e.message] || 500));
 
 export async function req(env: any, who: number, method: string, path: string, body?: unknown,
