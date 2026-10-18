@@ -107,6 +107,7 @@ import fundLedger from './routes/fund_ledger';
 import fundFees from './routes/fund_fees';
 import fundAdmin from './routes/fund_admin';
 import fundReporting from './routes/fund_reporting';
+import fundBooklets from './routes/fund_booklets';
 import fundNotices from './routes/fund_notices';
 import fundPerformance from './routes/fund_performance';
 import liquidity from './routes/liquidity';
@@ -623,6 +624,9 @@ const COOL_OFF_PREFIXES = [
   // D708 — each Axal entity's bank accounts: the payment instructions every
   // notice prints. Pause them for a freshly-recovered admin.
   '/api/admin/bank-accounts',
+  // D716 — the Subscription Booklet: an applicant's submission and HQ's
+  // withdrawal of it. Pause them for a freshly-recovered account.
+  '/api/fund-booklets',
   // D716 — fund notices ask an LP or an entity for money. Pause them for a
   // freshly-recovered account.
   '/api/fund-notices',
@@ -1051,6 +1055,8 @@ app.route('/api/fund-fees', fundFees); // D709 (#1774): the management fee; reco
 // D714 — the fund administration console: which fund acts this admin may take.
 app.route('/api/fund-admin', fundAdmin);
 app.route('/api/fund-reporting', fundReporting);
+// D716 — the Subscription Booklet: the applicant's ticks and submit, and HQ's read and withdraw.
+app.route('/api/fund-booklets', fundBooklets);
 // D716 — fund notices: an Admin previews, the Super Admin issues, the LP reads their own.
 app.route('/api/fund-notices', fundNotices);
 app.route('/api/fund-performance', fundPerformance);

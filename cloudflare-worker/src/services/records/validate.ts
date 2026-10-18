@@ -11,6 +11,7 @@
  * anyone else as `QUOTE_WITHHELD`. What is not data is "Not recorded" with
  * its reason, or is not drawn (decision 15). Decision numbers are D690's.
  */
+import { verdictSpec } from './verdict';
 import type { User } from '../../types';
 import { canWrite, ownsVenture } from '../../routes/_founder_validate_helpers';
 import { sessionAudioParts, sessionReceiptLines } from '../../routes/founder_validate_sessions';
@@ -1439,5 +1440,6 @@ export const VALIDATE_SPECS: Record<string, ModuleSpec> = {
   'market-intelligence': market,
   'demand-signals': demand,
   experiments,
+  verdict: verdictSpec(),
 };
 

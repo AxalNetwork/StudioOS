@@ -7,9 +7,7 @@
  * decision tables goes through `services/verdict.ts` (decision 6); this file
  * names them only as its store keys.
  *
- * Not yet in `RECORD_SPECS`: registering one Validate spec turns on records
- * for the whole cycle, so the dispatch line lands with #1692's Validate
- * service (#1703's closing PR).
+ * Registered beside the six Validate records in `services/records/validate.ts`.
  */
 import { canReadDecision, canWrite, ownsVenture } from '../../routes/_founder_validate_helpers';
 import type { User } from '../../types';

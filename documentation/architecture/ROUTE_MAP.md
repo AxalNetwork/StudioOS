@@ -68,7 +68,19 @@ The `github` provider is a GitHub App's read-only user authorization. `GET /:uid
 
 ### Fund notices and booklets Worker contract (D716, #1781)
 
-Fund notices are mounted at `/api/fund-notices` (`routes/fund_notices.ts`, `services/fundNotices.ts`, `services/fundNoticeStore.ts`, migration 478). The Subscription Booklet's store is `/api/fund-booklets` (#1817). See `decisions/D716.md`.
+The Subscription Booklet's store is mounted at `/api/fund-booklets` (`routes/fund_booklets.ts`, `services/subscriptionBooklet.ts`, migration 478).
+- **The applicant** (an approved Fund I `lp_applications` row; anyone else gets 404):
+  - `POST /mine` opens the booklet, or returns the live one.
+  - `GET /mine` answers the parts, the fields with their ticks, `missing_parts` and the digest.
+  - `PUT /mine/answers { answers: [{ field_id, checked }] }`: 400 `field_unknown`, 409 `booklet_not_open`.
+  - `POST /mine/submit { digest }`: 409 `booklet_part_missing` (naming the parts) or `content_changed`.
+  - A support session cannot write.
+- **An Admin on HQ** (`hq_only` on a branch; support session refused; D714 acts):
+  - `GET /` lists the booklets, with no ticks (`fund_booklet.read`).
+  - `GET /:uid` answers one booklet with its ticks, audited (`fund_booklet.read`).
+  - `POST /:uid/withdraw { reason }` takes a reason of 10–200 characters (`fund_booklet.withdraw`).
+
+Fund notices are mounted at `/api/fund-notices` (`routes/fund_notices.ts`, `services/fundNotices.ts`, `services/fundNoticeStore.ts`, migration 478). See `decisions/D716.md`.
 - **An Admin on HQ** (`hq_only` on a branch; support session refused):
   - `GET /types`.
   - `POST /preview { type, source, inputs, page_size }` answers `{ html, paper_sha256, figures, figures_sha256, refusal }`, with fonts omitted, Draft and `no-store` (`fund_notice.preview`).
