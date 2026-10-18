@@ -301,5 +301,7 @@ test('no Mercury method names a money path, and no frontend file names Mercury\'
   const walk = (d) => { for (const n of readdirSync(d)) { const f = join(d, n); if (statSync(f).isDirectory()) walk(f); else if (/\.(jsx?|tsx?)$/.test(n)) files.push(f); } };
   walk(resolve(process.cwd(), 'frontend/src'));
   // Any Mercury host at all: the help link comes from the registry's `docs_url`, never from source.
-  for (const f of files) assert.ok(!readFileSync(f, 'utf8').toLowerCase().includes('mercury.com'), f);
+  const hosts = (src) => (src.toLowerCase().match(/[a-z0-9-]+(?:\.[a-z0-9-]+)+/g) || []);
+  const isMercury = (host) => host === 'mercury.com' || host.endsWith('.mercury.com');
+  for (const f of files) assert.ok(!hosts(readFileSync(f, 'utf8')).some(isMercury), f);
 });
