@@ -106,7 +106,7 @@ test('real inputs, chips, checks, notes, paired fields and files update and vali
     ['if (!fieldVisible(field, values)) return null;', 'if (false) return null;'],
     ['setValue(field.name, option.value);', "setValue(field.name, 'invented');"],
     ['if (Object.keys(found).length) return;', 'if (false) return;'],
-    ['onSubmit(submittedValues(fields, values))', 'onSubmit(values)'],
+    ['onSubmit({ ...submittedValues(fields, values), ...picked() })', 'onSubmit({ ...values, ...picked() })'],
     ['event.target.files?.[0] ?? null', 'null'],
   ]);
 });
@@ -140,8 +140,8 @@ async function assertOptions(m) {
 test('options load before fields, supply defaults/notes, and a refusal prevents saving', async () => {
   await assertOptions({ default: FormLightbox });
   await mutationCheck(source, path, assertOptions, [
-    ["useState(loadOptions ? undefined : {})", 'useState({})'],
-    ['busy || !loaded} data-testid="cycle-form-save"', 'busy} data-testid="cycle-form-save"'],
+    ["useState(refused ? null : loadOptions ? undefined : {})", 'useState(refused ? null : {})'],
+    ['busy || !loaded || blocked} data-testid="cycle-form-save"', 'busy || blocked} data-testid="cycle-form-save"'],
     ['setValues(formValues(formFields(base, result), current, queryValues));', ''],
     ['setRefusal(error?.message ||', "setRefusal('Wrong sentence' ||"],
   ]);

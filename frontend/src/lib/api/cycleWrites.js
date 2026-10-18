@@ -4,8 +4,8 @@
  * yet. A factory over `request`, so `cycles.js` binds it to the app's helper
  * and `cycle_adapters_d661.test.ts` binds it to the real Worker routes.
  *
- * Grow's routes take the venture in the body (`project`), Build's in the
- * query, as each route reads it. Each path and method is spelled out for the
+ * Grow's routes take the venture in the body (`project`), Validate's, Build's
+ * and Raise's in the query, as each route reads it. Each path and method is spelled out for the
  * drift check.
  */
 const seg = (v) => encodeURIComponent(String(v));
@@ -25,9 +25,37 @@ export function makeCycleWrites(request) {
       for (const [key, value] of Object.entries(query || {})) if (key !== 'project' && value != null) params.append(key, String(value));
       return request(`/cycles/${cycle}/modules/${slug}/form-options?${params}`);
     },
+    // D695 (#1656, PR 2b): Validate's Adds and Edits, through #1692's routes
+    // (`routes/cycle_validate.ts`), the venture in the query.
+    validate: {
+      theme: (projectId, body) => request(`/cycles/validate/themes?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
+      themeUpdate: (projectId, id, body) => request(`/cycles/validate/themes/${seg(id)}?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+      segment: (projectId, body) => request(`/cycles/validate/segments?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
+      segmentUpdate: (projectId, id, body) => request(`/cycles/validate/segments/${seg(id)}?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+      competitor: (projectId, body) => request(`/cycles/validate/competitors?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
+      competitorUpdate: (projectId, id, body) => request(`/cycles/validate/competitors/${seg(id)}?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+      signal: (projectId, body) => request(`/cycles/validate/demand-signals?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
+      signalUpdate: (projectId, id, body) => request(`/cycles/validate/demand-signals/${seg(id)}?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+      hypothesis: (projectId, body) => request(`/cycles/validate/hypotheses?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
+      hypothesisUpdate: (projectId, id, body) => request(`/cycles/validate/hypotheses/${seg(id)}?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+    },
+    // D695 (#1657, PR 2): Raise's Adds and Edits, through #1700's routes. The
+    // venture goes in the query; the data room's routes take its uid in the
+    // path, as `api.dataRoomUploadFile` and `dataRoomUpdateFile` call them.
     raise: {
-      rescore: (projectId) => request(`/cycles/raise/readiness/rescore?${q(projectId)}`, { method: 'POST' }),
+      // #1652's caller sends no body, and Re-score sends `{ items, since }`.
+      rescore: (projectId, body) => request(`/cycles/raise/readiness/rescore?${q(projectId)}`, { method: 'POST', ...(body ? { body: JSON.stringify(body) } : {}) }),
       narrativeVersion: (projectId, body) => request(`/cycles/raise/narrative-versions?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
+      narrativeVersionUpdate: (projectId, version, body) => request(`/cycles/raise/narrative-versions/${seg(version)}?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+      deckLink: (projectId, body) => request(`/cycles/raise/deck-links?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
+      deckLinkUpdate: (projectId, id, body) => request(`/cycles/raise/deck-links/${seg(id)}?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+      holder: (projectId, body) => request(`/cycles/raise/holders?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
+      holderUpdate: (projectId, id, body) => request(`/cycles/raise/holders/${seg(id)}?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+      useOfFunds: (projectId, body) => request(`/cycles/raise/use-of-funds?${q(projectId)}`, { method: 'PUT', body: JSON.stringify(body) }),
+      prospect: (projectId, body) => request(`/cycles/raise/prospects?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
+      prospectUpdate: (projectId, id, body) => request(`/cycles/raise/prospects/${seg(id)}?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+      upload: (projectUid, body) => request(`/data-room/${seg(projectUid)}/files`, { method: 'POST', body: JSON.stringify(body) }),
+      fileUpdate: (projectUid, uid, body) => request(`/data-room/${seg(projectUid)}/files/${seg(uid)}`, { method: 'PATCH', body: JSON.stringify(body) }),
     },
     grow: {
       feedback: (projectId, body) => request('/cycles/grow/feedback', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
@@ -49,7 +77,23 @@ export function makeCycleWrites(request) {
       roleUpdate: (projectId, id, body) => request(`/cycles/grow/roles/${seg(id)}`, { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
       obligationUpdate: (projectId, id, body) => request(`/cycles/grow/obligations/${seg(id)}`, { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
     },
+    // D696 (#1658): a record's own action, as `cyclesApi.recordAction` sends it; a
+    // FormData body (Upload proof) goes as it is.
+    recordAction: (cycle, projectId, slug, id, key, body = {}) => {
+      if (!CYCLE_KEY.test(String(cycle)) || !MODULE_SLUG.test(String(slug))) return Promise.reject(new Error('That module has no records.'));
+      return request(`/cycles/${cycle}/modules/${slug}/records/${seg(id)}/actions/${seg(key)}?${q(projectId)}`, {
+        method: 'POST', body: body instanceof FormData ? body : JSON.stringify(body),
+      });
+    },
     build: {
+      // D695 (#1656, PR 3b): Build's canvas Adds and Edits, through #1695's routes (#1792).
+      addFeature: (projectId, body) => request(`/cycles/build/features?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
+      addMustHave: (projectId, body) => request(`/cycles/build/must-haves?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
+      roadmapItem: (projectId, body) => request(`/cycles/build/roadmap?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
+      roadmapItemUpdate: (projectId, id, body) => request(`/cycles/build/roadmap/${seg(id)}?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+      // The cap table's plan gate answers 402; the dialog shows it as its refusal (D651).
+      founder: (projectId, body) => request(`/cycles/build/founders?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body), inlinePaywall: true }),
+      founderUpdate: (projectId, id, body) => request(`/cycles/build/founders/${seg(id)}?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify(body), inlinePaywall: true }),
       risk: (projectId, body) => request(`/cycles/build/risks?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
       formationStep: (projectId, body) => request(`/cycles/build/formation-steps?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
       formationStepUpdate: (projectId, id, body) => request(`/cycles/build/formation-steps/${seg(id)}?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify(body) }),

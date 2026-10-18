@@ -447,7 +447,7 @@ test('the doors: the user menu under Usage, the Account section after Usage, and
   const def = build.slice(build.indexOf('\n  build: {'), build.indexOf('\n};', build.indexOf('\n  build: {')));
   assert.match(def, /path: 'connect',\s*Mount: BuildMount,\s*action: \(q, open\) => \(\{ label: 'Connect a tool', href: `\/build\/connect\$\{q\}`, onOpen: open \}\),/);
   // D686 §5.4 (#1597): the sheet connects for the project's company and tells the page a tool changed.
-  assert.match(build, /function BuildMount\(\{ projectId, onClose, onChanged \}\) \{\s*return <ConnectToolSheet projectId=\{projectId\} onClose=\{onClose\} onChanged=\{onChanged\} \/>;/);
+  assert.match(build, /function BuildMount\(\{ projectId, onClose, onChanged, asPage \}\) \{\s*return <ConnectToolSheet projectId=\{projectId\} onClose=\{onClose\} onChanged=\{onChanged\} asPage=\{asPage\} \/>;/);
   assert.match(build, /import ConnectToolSheet from '\.\.\/account\/ConnectToolSheet';/);
   assert.match(build, /\{lightbox && Mount && projectId && \(\s*<Mount projectId=\{projectId\} q=\{q\} searchParams=\{searchParams\} onClose=\{closeAction\}/);
 });

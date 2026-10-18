@@ -18,12 +18,13 @@ const ago = (days: number) => new Date(seedNow - days * 86400000).toISOString();
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   for (const name of ['users', 'super_admins', 'user_sessions', 'activity_logs', 'admin_audit_log', 'documents',
-    'projects', 'founders', 'deals', 'esign_envelopes', 'esign_recipients', 'esign_audit_events', 'pairwise_ndas', 'partner_deals', 'partner_referral_redemptions', 'legal_templates']) {
+    'projects', 'founders', 'deals', 'esign_envelopes', 'esign_recipients', 'esign_audit_events', 'pairwise_ndas', 'partner_deals', 'partner_referral_redemptions', 'legal_templates', 'legal_template_versions']) {
     db.exec(tableFromBaseline(baseline, name));
   }
   db.exec(readFileSync('cloudflare-worker/sql/migrations/332_contract_doc_type_registry.sql', 'utf8'));
   db.exec(readFileSync('cloudflare-worker/sql/migrations/416_contract_doc_type_pending_draft.sql', 'utf8'));
   db.exec(readFileSync('cloudflare-worker/sql/migrations/434_contract_template_publications.sql', 'utf8'));
+  db.exec(readFileSync('cloudflare-worker/sql/migrations/479_template_kind_party.sql', 'utf8'));
   db.exec(readFileSync('cloudflare-worker/sql/migrations/264_admin_notices.sql', 'utf8'));
   const user = db.prepare('INSERT INTO users(id,role,name,email,is_active) VALUES(?,?,?,?,?)');
   user.run(1, 'admin', 'HQ owner', 'hq@example.test', 1);

@@ -26,22 +26,49 @@ const app = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
 
 const KEY = /^[a-z0-9][a-z0-9-]*$/;
 const ADD_KEYS = {
-  raise: { 'fundraising-readiness': ['readiness'], 'investor-narrative': ['narrative-version'] },
+  raise: {
+    'fundraising-readiness': ['rescore'], 'investor-narrative': ['narrative-version'], 'pitch-deck': ['deck-link'], 'data-room': ['upload'],
+    'cap-table': ['holder'], 'use-of-funds': ['split'], 'capital-relationships': ['investor'],
+  },
   grow: {
     'product-improvement': ['feedback'], distribution: ['channel'], 'revenue-and-traction': ['kpi'], 'team-expansion': ['role'],
     'partner-network': ['partner'], 'market-expansion': ['market'], 'durable-company-building': ['obligation'],
   },
-  build: { 'solution-design': ['feature', 'risk'], 'prototype-mvp': ['must-have'], 'company-creation': ['formation-step'] },
+  build: {
+    'solution-design': ['feature'], 'prototype-mvp': ['must-have'], 'product-roadmap': ['item'], 'founding-team': ['founder'],
+    'company-creation': ['filing'], 'operating-systems': ['system'],
+  },
+  validate: {
+    'problem-discovery': ['theme'], 'ideal-customer-profile': ['segment'], 'market-intelligence': ['competitor'], 'demand-signals': ['signal'], experiments: ['hypothesis'],
+  },
 };
 const EDIT_KEYS = {
+  // Use of funds' Edit is its Add (D695 decision 9), so it keeps the Add's key.
+  raise: {
+    'investor-narrative': 'edit-version', 'pitch-deck': 'edit-link', 'data-room': 'edit-file', 'cap-table': 'edit-holder',
+    'use-of-funds': 'split', 'capital-relationships': 'edit-investor',
+  },
   grow: {
     'product-improvement': 'edit-feedback', distribution: 'edit-channel', 'revenue-and-traction': 'edit-kpi',
     'team-expansion': 'edit-role', 'partner-network': 'edit-partner', 'market-expansion': 'edit-market',
     'durable-company-building': 'edit-obligation',
   },
-  build: { 'solution-design': 'edit-feature', 'prototype-mvp': 'edit-must-have', 'company-creation': 'edit-formation-step', 'operating-systems': 'edit-system' },
+  build: {
+    'solution-design': 'edit-feature', 'prototype-mvp': 'edit-must-have', 'product-roadmap': 'edit-item', 'founding-team': 'edit-founder',
+    'company-creation': 'edit-filing', 'operating-systems': 'edit-system',
+  },
+  validate: {
+    'problem-discovery': 'edit-theme', 'ideal-customer-profile': 'edit-segment', 'market-intelligence': 'edit-competitor', 'demand-signals': 'edit-signal', experiments: 'edit-hypothesis',
+  },
 };
-const CTA_APART = { 'grow/revenue-and-traction': ['Enter a KPI', 'Save KPI'], 'grow/team-expansion': ['Open a role', 'Open role'] };
+const CTA_APART = {
+  'raise/fundraising-readiness': ['Re-score', 'Re-score now'], 'raise/investor-narrative': ['New version', 'Create version'],
+  'raise/pitch-deck': ['New link', 'Create link'], 'raise/use-of-funds': ['Edit split', 'Save split'],
+  'grow/revenue-and-traction': ['Enter a KPI', 'Save KPI'], 'grow/team-expansion': ['Open a role', 'Open role'],
+  'build/operating-systems': ['Connect a system', 'Continue to sign-in'],
+};
+/** An Edit that is its module's Add (Use of funds), which keeps the Add's key and CTA. */
+const editIsAdd = (m, cycle, slug) => m.formsFor(cycle, slug).some((f) => f.key === m.editFor(cycle, slug)?.key && f.title === m.editFor(cycle, slug)?.title);
 const mapTable = (table, fn) => Object.fromEntries(Object.entries(table).map(([cycle, bySlug]) => [cycle, Object.fromEntries(Object.entries(bySlug).map(([slug, v]) => [slug, fn(v)]))]));
 const allForms = (m) => [
   ...Object.values(m.FORMS).flatMap((bySlug) => Object.values(bySlug).flat()),
@@ -65,22 +92,23 @@ function assertKeys(m) {
         else assert.equal(f.cta, f.button, `${cycle}/${slug} ${f.key}: an Add's CTA is its button`);
       }
       // `?form=<key>` names one form of the module's own: Add and Edit keys never collide.
-      const keys = [...forms.map((f) => f.key), m.editFor(cycle, slug)?.key].filter(Boolean);
+      const keys = [...forms.map((f) => f.key), editIsAdd(m, cycle, slug) ? null : m.editFor(cycle, slug)?.key].filter(Boolean);
       assert.equal(new Set(keys).size, keys.length, `${cycle}/${slug} keys are unique`);
     }
   }
   for (const [cycle, bySlug] of Object.entries(m.EDITS)) {
     for (const [slug, f] of Object.entries(bySlug)) {
       assert.ok(MODULES[cycle].some((mod) => mod.slug === slug), `${cycle}/${slug} is a module`);
+      if (editIsAdd(m, cycle, slug)) { assert.deepEqual([f.title, f.cta], ['Edit split', 'Save split'], `${cycle}/${slug}: its Edit is its Add`); continue; }
       assert.match(f.key, /^edit-[a-z0-9-]+$/);
       assert.equal(f.cta, 'Save', `${cycle}/${slug}: an Edit saves with Save`);
     }
   }
-  // The row buttons are unchanged: Edit, Mark, Choose connector.
+  // The row buttons: Edit, and Operating systems' Choose connector.
   assert.equal(m.editFor('grow', 'distribution').button, 'Edit');
-  assert.equal(m.editFor('build', 'solution-design').button, 'Mark');
+  assert.equal(m.editFor('build', 'solution-design').button, 'Edit', 'Edit feature replaces Mark (#1656 PR 3b)');
   assert.equal(m.editFor('build', 'operating-systems').button, 'Choose connector');
-  assert.deepEqual(m.formsFor('build', 'solution-design').map((f) => f.key), ['feature', 'risk']);
+  assert.deepEqual(m.formsFor('build', 'solution-design').map((f) => f.key), ['feature'], 'Add a risk is the feature record\'s action');
   assert.equal(m.formFor('build', 'solution-design').key, 'feature', '`/new` with no `?form=` opens the first');
 }
 
@@ -88,7 +116,7 @@ test('every Add and Edit form has a key unique in its module and its own call to
   assertKeys({ FORMS, EDITS, editFor, formFor, formsFor });
   await mutationCheck(formsSource, formsPath, assertKeys, [
     ["key: 'channel', cta: 'Add channel'", "key: 'channel', cta: 'Add a channel'"],
-    ["key: 'risk', cta", "key: 'feature', cta"],
+    ["  key: 'edit-item', title: 'Edit item',", "  key: 'item', title: 'Edit item',"],
     ["key: 'narrative-version'", "key: 'narrative_version'"],
     ["const EDIT = { button: 'Edit', cta: 'Save' };", "const EDIT = { button: 'Edit' };"],
     ["key: 'edit-system', cta: 'Save'", "key: 'edit-system', cta: 'Choose connector'"],
@@ -191,7 +219,9 @@ function assertKinds(m) {
 
   // Forms still written in today's types keep today's rules; the canvas forms are read as `canvas()` is.
   const legacy = allForms(m).filter((f) => (f.fields || []).every((x) => !x.kind && !x.parts));
-  assert.ok(legacy.length >= 10, `${legacy.length} legacy forms checked`);
+  // #1652's two Raise forms were legacy-typed until #1657 drew Raise's canvas forms.
+  // Build's canvas forms (#1656 PR 3b) leave Operating systems' Choose connector the one legacy-typed form.
+  assert.ok(legacy.length >= 1, `${legacy.length} legacy forms checked`);
   for (const f of legacy) {
     assert.deepEqual(m.initialValues(f), legacyInitial(f), `${f.key}: first values`);
     for (const values of legacyCases(f)) {

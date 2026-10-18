@@ -179,6 +179,15 @@ the spec calls this out explicitly.
 | Google Calendar push | `https://app.axal.vc/api/calendar/google/push`                | n/a            | _pending_  |
 | Outlook notification | `https://app.axal.vc/api/calendar/outlook/notification`       | n/a            | _pending_  |
 
+> **Connector rows (2026-10-17, D719).** The Stripe, HubSpot, Salesforce,
+> Calendly, DocuSign and Affinity connector webhooks are received at
+> `https://app.axal.vc/api/integrations/webhook/<provider>/<uid>`, one URL
+> per connection, not at the `/api/integrations/<provider>/webhook` paths in
+> the table, which no route serves. The receiver takes a delivery only for an
+> active connection whose provider has a webhook handler and which holds a
+> signing key. HubSpot needs no stored key, because its handler checks its
+> own signature. Any other delivery gets 404.
+
 ### 6. Email auth + deliverability
 
 Publish on the `axal.vc` zone (TXT records). Aim for ≥ 9/10 at

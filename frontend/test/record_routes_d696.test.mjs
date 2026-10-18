@@ -6,8 +6,11 @@
  *      interview review, the old `/validate/interviews/:id` and the canvas's
  *      two module slugs redirect through `ParamRedirect` with the query, the
  *      hash and an encoded id, and `isCyclePath` covers record paths;
- *   9. Grow's rows (decision 7): `recordId` is the Worker's id or null, never
- *      a fallback made from an index or a label;
+ *   9. Grow's and Validate's rows (decision 7): `recordId` is the Worker's id
+ *      or null, never a fallback made from an index or a label; the
+ *      interviewee cell points at `/validate/customer-research/<id>` and is
+ *      text inside a linked row (decision 6), and no adapter links
+ *      `/validate/interviews`;
  *   `cycleTabs`' `{ back }` relabels the active module tab.
  *
  * The four `/:slug/:id` routes, the client methods and record mode are the
@@ -17,10 +20,11 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import React from 'react';
-import { Routes, Route, useLocation } from 'react-router-dom';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { codeOnly } from './_codeOnly.mjs';
 import { routeBlock } from './_routes.mjs';
 import { mountContracts } from './_contracts_dom.mjs';
@@ -28,6 +32,8 @@ import { ParamRedirect } from '../src/pages/cycles/ParamRedirect.jsx';
 import { isCyclePath } from '../src/pages/cycles/cyclePaths.js';
 import { cycleTabs } from '../src/pages/cycles/cycleModel.js';
 import { RECORDS as GROW } from '../src/pages/cycles/adapters/grow.js';
+import { RECORDS as VALIDATE } from '../src/pages/cycles/adapters/validate.js';
+import CycleModulePage from '../src/pages/cycles/CycleModulePage.jsx';
 import { recordId, rowLinks } from '../src/pages/cycles/recordModel.js';
 
 const h = React.createElement;
@@ -38,7 +44,8 @@ const APP = codeOnly(read('frontend/src/App.jsx'));
 
 test('8. the interview review is Customer research\'s record; the old address and the canvas slugs redirect', () => {
   const guard = "guard\\(labRoles\\(\\['admin', 'founder'\\]\\), ";
-  assert.match(routeBlock(APP, '/validate/customer-research/:id'), new RegExp(`element=\\{${guard}<InterviewReviewPage />\\)\\}`));
+  // D697 (#1659): CycleRoute draws the interview in record mode; the static path passes its slug.
+  assert.match(routeBlock(APP, '/validate/customer-research/:id'), new RegExp(`element=\\{${guard}<CycleRoute cycle="validate" slug="customer-research" record />\\)\\}`));
   assert.match(routeBlock(APP, '/validate/interviews/:id'), new RegExp(`element=\\{${guard}<ParamRedirect to="/validate/customer-research/:id" />\\)\\}`));
   assert.doesNotMatch(routeBlock(APP, '/validate/interviews/:id'), /<InterviewReviewPage/, 'the old address renders the page no more');
   for (const [from, to] of [
@@ -127,6 +134,72 @@ test('9. no Grow recordId is built from an index or a label', () => {
     assert.match(expr, /^workerId\(r\.(uid|id)\)$/, expr);
   }
   assert.doesNotMatch(src, /recordId:[^,}]*`/, 'no template-built recordId');
+});
+
+// --- 9. Validate's rows (decision 7, PR 2 step 7) -----------------------------
+
+const V_ROWS = {
+  'problem-discovery': [{ id: 3, theme: 'Slow onboarding', mentions: 4 }, { theme: 'No group yet', mentions: 1 }],
+  'customer-research': [{ id: 41, interviewee: 'Dana Ruiz', company: 'Example Co' }, { interviewee: 'Unsaved' }],
+  'ideal-customer-profile': [{ id: 5, segment: 'Ops leads' }, { segment: 'No id' }],
+  'market-intelligence': [{ id: 12, company: 'Example Rival' }, { company: 'No id' }],
+  'demand-signals': [{ id: 'signal-9', signal: 'preorder' }, { signal: 'waitlist' }],
+  experiments: [{ id: 8, hypothesis: 'H1 · Teams pay' }, { hypothesis: 'No id' }],
+};
+const V_WORKER_ID = {
+  'problem-discovery': '3', 'customer-research': '41', 'ideal-customer-profile': '5',
+  'market-intelligence': '12', 'demand-signals': 'signal-9', experiments: '8',
+};
+
+test('9. each Validate row\'s recordId is the Worker\'s own id as a string, or null; its key keeps its fallback', () => {
+  for (const [slug, [withId, without]] of Object.entries(V_ROWS)) {
+    const a = VALIDATE[slug].row(withId, 0);
+    const b = VALIDATE[slug].row(without, 1);
+    assert.equal(a.recordId, V_WORKER_ID[slug], slug);
+    assert.equal(b.recordId, null, `${slug}: a fallback is never a record`);
+    assert.equal(recordId(b), null, slug);
+    assert.equal(rowLinks({ linkable: true }, b), false, `${slug}: a null recordId is never linked, even with linkable`);
+    assert.equal(rowLinks({ linkable: true }, a), true, slug);
+    assert.equal(rowLinks({ linkable: false }, a), false, `${slug}: without linkable the row is plain`);
+  }
+  // The row keys are unchanged: Problem discovery's stays its theme fallback, so cycle_adapters_d661 holds.
+  assert.equal(VALIDATE['problem-discovery'].row(V_ROWS['problem-discovery'][0], 0).id, 'theme-0-Slow onboarding');
+  assert.equal(VALIDATE['ideal-customer-profile'].row(V_ROWS['ideal-customer-profile'][1], 2).id, 'segment-2');
+  // Every Validate module with a row-id line is covered.
+  assert.deepEqual(Object.keys(VALIDATE).filter((k) => typeof VALIDATE[k].row === 'function').sort(), Object.keys(V_ROWS).sort());
+});
+
+test('9. no Validate recordId is built from an index or a label', () => {
+  const src = codeOnly(read('frontend/src/pages/cycles/adapters/validate.js'));
+  const ids = [...src.matchAll(/recordId: ([^,}]+)/g)].map((m) => m[1].trim());
+  assert.equal(ids.length, 6);
+  for (const expr of ids) assert.equal(expr, 'workerId(r.id)', expr);
+  assert.doesNotMatch(src, /recordId:[^,}]*`/, 'no template-built recordId');
+});
+
+test('9. the interviewee cell points at Customer research\'s record, and is text inside a linked row', () => {
+  const cols = [{ key: 'interviewee', label: 'Interviewee' }, { key: 'company', label: 'Company' }];
+  const row = VALIDATE['customer-research'].row({ id: 41, interviewee: 'Dana Ruiz', company: 'Example Co' });
+  assert.deepEqual(row.cells.interviewee, { text: 'Dana Ruiz', href: '/validate/customer-research/41' });
+  const markup = (linkable) => renderToStaticMarkup(h(MemoryRouter, null, h(CycleModulePage, {
+    cycle: 'validate', slug: 'customer-research', search: '?project_id=3',
+    data: { card: { name: 'Customer research' }, records: { linkable, cols, rows: [row] } },
+  })));
+  const hrefs = (html) => [...html.matchAll(/href="([^"]+)"/g)].map((m) => m[1]).filter((x) => x.includes('/customer-research/'));
+  // Linked: the row opens the record once, and the cell inside it is plain text.
+  assert.deepEqual(hrefs(markup(true)), ['/validate/customer-research/41?project_id=3']);
+  // Not linked (the read sent no `linkable`): the cell is the one way to the review.
+  assert.deepEqual(hrefs(markup(false)), ['/validate/customer-research/41']);
+});
+
+test('9. no adapter output links /validate/interviews', () => {
+  const dir = 'frontend/src/pages/cycles/adapters';
+  for (const name of readdirSync(resolve(process.cwd(), dir)).filter((n) => n.endsWith('.js'))) {
+    assert.doesNotMatch(codeOnly(read(`${dir}/${name}`)), /\/validate\/interviews\//, name);
+  }
+  for (const [slug, [withId]] of Object.entries(V_ROWS)) {
+    assert.doesNotMatch(JSON.stringify(VALIDATE[slug].row(withId, 0)), /\/validate\/interviews/, slug);
+  }
 });
 
 // --- cycleTabs' back -------------------------------------------------------------

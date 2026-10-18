@@ -13,18 +13,16 @@
 //     target set"; any other cycle with no `display` reads Not recorded;
 //   · the index: one row per card in the read, each "Unreadable", linking its
 //     module page. A module the Worker hides stays hidden: the browser never
-//     adds a row.
-// Until #1701's PR 1b, Validate's read sends `index` as an object
-// ({ interviews_total, booked }); Validate then keeps its client-built rows.
+//     adds a row. Any `index` that is not an array reads as none sent (#1701's
+//     PR 1b sends Validate's as rows; the `{ interviews_total, booked }` object
+//     it replaced, and the rows the browser built from it, are gone).
 // Every fallback reads the RAW overview: adapting a card replaces its series
 // with chart specs. A missing value reads "Not recorded", never 0, and the
 // browser never formats money.
 
-import { usdShort } from './adapters/validate.js';
 import { safeHref } from './cycleModel.js';
 
 const num = (v) => typeof v === 'number' && Number.isFinite(v);
-const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const sentence = (t) => { const s = String(t || '').trim(); return !s ? '' : /[.!?]$/.test(s) ? s : `${s}.`; };
 
 /** The canvas's words for a venture with no interview yet (`mobData.focus.new`). */
@@ -125,42 +123,9 @@ export function phoneIndex(raw, search = '', cycle = 'validate') {
       value: r.value == null ? null : String(r.value), href: safeHref(r.href),
     }));
   }
-  if (cycle === 'validate' && index !== null && (index === undefined || typeof index === 'object')) return validateRows(raw, search);
   return (Array.isArray(raw?.cards) ? raw.cards : []).filter((c) => c?.slug && /^[a-z0-9-]+$/.test(c.slug)).map((c) => ({
     key: c.slug, title: c.name || c.slug, detail: c.caption || '', value: 'Unreadable', href: `/${cycle}/${c.slug}${search}`,
   }));
-}
-
-/**
- * Validate's client-built rows, kept only while its read sends `index` as
- * the `{ interviews_total, booked }` object (S1's ruling). #1701's PR 1b
- * deletes this with `ValidatePhoneFocus.jsx`.
- */
-function validateRows(raw, search = '') {
-  const at = (slug) => `/validate/${slug}${search}`;
-  const themes = figure(raw, 'pain_themes');
-  const supported = figure(raw, 'hypotheses_supported');
-  const research = card(raw, 'customer-research');
-  const icp = card(raw, 'ideal-customer-profile');
-  const market = card(raw, 'market-intelligence');
-  const demand = card(raw, 'demand-signals');
-  const funnel = research?.series?.funnel;
-  const booked = num(raw?.index?.booked) ? raw.index.booked
-    : num(funnel?.booked) && num(funnel?.done) ? Math.max(0, funnel.booked - funnel.done) : null;
-  const segments = Array.isArray(icp?.series?.segments) ? icp.series.segments.length : null;
-  const sam = market?.series?.sam?.value;
-  const bar = demand?.series?.bar;
-  return [
-    { key: 'problem-discovery', title: 'Problem discovery',
-      detail: num(themes?.value) ? `${plural(themes.value, 'pain theme', 'pain themes')}${num(themes.delta_30d) && themes.delta_30d > 0 ? ` · ${themes.delta_30d} new` : ''}` : 'Pain themes',
-      value: num(themes?.value) ? '' : null, href: at('problem-discovery') },
-    { key: 'customer-research', title: 'Customer research', detail: booked != null ? `Recruiting · ${booked} booked` : 'Recruiting', value: booked != null ? '' : null, href: at('customer-research') },
-    { key: 'ideal-customer-profile', title: 'Ideal customer profile', detail: segments != null ? plural(segments, 'segment', 'segments') : 'Segments', value: segments != null ? '' : null, href: at('ideal-customer-profile') },
-    { key: 'market-intelligence', title: 'Market intelligence', detail: 'Total, serviceable, obtainable', value: num(sam) ? usdShort(sam) : null, href: at('market-intelligence') },
-    { key: 'demand-signals', title: 'Demand and urgency signals', detail: num(bar) ? `Waitlist against the bar of ${bar}` : 'Waitlist against the bar', value: num(bar) ? '' : null, href: at('demand-signals') },
-    { key: 'experiments', title: 'Experiments and evidence', detail: 'Hypotheses supported',
-      value: num(supported?.value) ? `${supported.value}${supported.unit && /^of \d+$/.test(supported.unit) ? ` ${supported.unit}` : ''}` : null, href: at('experiments') },
-  ];
 }
 
 /** The target form's value as the Worker takes it: a positive whole number, null to clear, or a sentence. */

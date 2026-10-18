@@ -17,6 +17,7 @@ live here, one file each:
 | `ConnectorSheet.jsx` | The connector sheet and the connect flow, and `useConnectors`, the catalogue read every connectors surface shares |
 | `ConnectToolSheet.jsx` | Build's "Connect a tool" lightbox (D651, D686 §5.1), at `/build/connect` over the Build page, the cycle overview's primary action in `../cycles/CycleRoute.jsx`. `?tool=<key>` opens one tool where its row would; a sign-in returns to `/build/connect` with `?oauth=` and the venture, and reopens that tool's view. D686 §5.4 (#1597): its rows say what is true, and every path connects for the project's company |
 | `GithubSyncSheet.jsx`, `githubSync.js` | GitHub's `sync` view (D686 §5.4): choose the repositories, sync them with the Worker's progress, then the success banner; `githubSync.js` holds its rules (refusals, progress, the banner) |
+| `mercuryModel.js` | D715 (#1780): Mercury's words and rows, pure. The four entity rows in order (Holdings, Management, GP, Fund), their state and error words, and the entity sheet's sentences. Also a member's "never", "where it lands" and "how it reads" rows, the personal row's words, and the not-offered sentence. Imports nothing from `connectorsModel.js` |
 | `connectorTools.jsx` | The provider tools the sheet opens, moved from the retired Integrations page: the LinkedIn import, HubSpot's pipeline and Salesforce's mapping |
 | `AccountFollowing.jsx` | Following |
 | `AccountDeveloper.jsx` | Developer, for the one role its routes answer |

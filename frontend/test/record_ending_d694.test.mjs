@@ -38,7 +38,10 @@ test('ready pill and processing copy say where the recording lands', () => {
 test('Validate has only module tabs and its six phone index rows', () => {
   const cards = [{ slug: 'problem-discovery', name: 'Problem discovery' }, { slug: 'customer-research', name: 'Customer research' }];
   assert.deepEqual(cycleTabs('validate', cards, null, '?project_id=7').map((tab) => tab.name), ['Overview', 'Problem discovery', 'Customer research']);
-  assert.deepEqual(phoneIndex({ figures: [], cards: [] }).map((row) => row.key), ['problem-discovery', 'customer-research', 'ideal-customer-profile', 'market-intelligence', 'demand-signals', 'experiments']);
+  // D703 (#1665's PR 1b): the six rows are the Worker's (#1701's PR 1b), drawn as sent; the browser builds none.
+  const six = ['problem-discovery', 'customer-research', 'ideal-customer-profile', 'market-intelligence', 'demand-signals', 'experiments'];
+  assert.deepEqual(phoneIndex({ index: six.map((key) => ({ key, title: key, detail: '', value: null, href: `/validate/${key}` })), cards: [] }).map((row) => row.key), six);
+  assert.deepEqual(phoneIndex({ figures: [], cards: [] }), []);
   for (const [cycle, title] of [['build', 'Tools'], ['raise', 'Calls'], ['grow', 'Updates']]) {
     assert.equal(cycleTabs(cycle, cards)[1].name, title);
   }
@@ -48,11 +51,15 @@ test('the three breadcrumbs and review delete return to Customer research', () =
   const review = read('frontend/src/pages/founder/InterviewReviewPage.jsx');
   const session = read('frontend/src/pages/founder/InterviewSessionPage.jsx');
   const inbox = read('frontend/src/pages/founder/ChannelsInbox.jsx');
-  for (const page of [review, session, inbox]) {
+  for (const page of [session, inbox]) {
     assert.match(page, />Customer research<\/Link>/);
     assert.doesNotMatch(page, /<Link to="\/validate\/interviews"/);
   }
-  assert.match(review, /navigate\(`\/validate\/customer-research\?project_id=\$\{interview\.project_id\}`/);
+  // D697 (#1659): the review is Customer research's record inside the cycle, so the
+  // cycle's "‹ Back to Customer research" tab replaces its breadcrumb, and Delete
+  // lands through afterDelete, on Customer research for the same venture.
+  assert.doesNotMatch(review, /\/validate\/interviews/);
+  assert.match(review, /navigate\(afterDelete\(projectId\), \{ replace: true \}\)/);
 });
 
 // ---------- PR 2: every Record a session finish (test 9) ----------------------

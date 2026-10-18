@@ -10,7 +10,7 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAuth, requireApprovedKyc, isSuperAdmin, requireSuperAdminWriteBar, selectJwt } from '../auth';
+import { requireAuth, requireApprovedKyc, selectJwt } from '../auth';
 import { FundReportRefusal,reportId,readFundPage,readFundPeriod,saveFundPeriod } from '../services/fundReports';
 import { AUTH_ERROR_STATUSES } from '../util/authErrors';
 import { requireFundGp, requireFundCreator } from '../services/fundGpAccess';
@@ -719,12 +719,22 @@ const sameValue = (stored: unknown, next: unknown) => {
 };
 
 /**
- * D714 — which act a PATCH is. Changing the GP of record hands every GP gate
+ * D714 — which act a PATCH is. Moving the Fund I slug decides which fund
+ * the Fund I bank account pays, changing the GP of record hands every GP gate
  * to another account, and the distribution job withholds carry at
- * `carried_interest`; both are Super Admin acts. Anything else is `fund.write`.
+ * `carried_interest`; all three are Super Admin acts. Anything else is
+ * `fund.write`.
  */
 function fundPatchAct(fund: any, body: any): FundActKey {
   const has = (k: string) => body && typeof body === 'object' && Object.prototype.hasOwnProperty.call(body, k);
+  // D708 decision 13: the `spinout-fund-i` slug decides which fund the Fund's
+  // bank account pays. Answered first, so a body that also moves the GP of
+  // record is still refused on a branch Worker.
+  if (has('slug')) {
+    const was = fund?.slug ?? null;
+    const next = body.slug ?? null;
+    if (next !== was && (was === FUND_I_SLUG || next === FUND_I_SLUG)) return 'fund.slug_fund_i';
+  }
   if (has('gp_user_id') && !sameValue(fund?.gp_user_id, body.gp_user_id)) return 'fund.gp_of_record';
   if (['carried_interest', 'management_fee'].some((k) => has(k) && !sameValue(fund?.[k], body[k]))) return 'fund.economics';
   return 'fund.write';
@@ -739,21 +749,6 @@ funds.patch('/:id', async (c) => {
   const body = await c.req.json();
   const act = fundPatchAct(gp.fund, body);
   await assertFundAct(c, gp, act);
-  // D708 decision 13: the `spinout-fund-i` slug decides which fund the Fund's
-  // bank account pays, so moving it onto or off a fund is the Super Admin's,
-  // behind the same bar as the Bank accounts console, and the fund's own GP
-  // stays refused. Inline until D714's table carries a `fund.slug_fund_i` row
-  // whose gate refuses a GP of record too. Checked before any write.
-  if (body && typeof body === 'object' && 'slug' in body) {
-    const was = gp.fund?.slug ?? null;
-    const next = body.slug ?? null;
-    if (next !== was && (was === FUND_I_SLUG || next === FUND_I_SLUG)) {
-      if (!isSuperAdmin(gp.user as any)) {
-        return c.json({ code: 'super_admin_required', detail: 'Super admin required' }, 403);
-      }
-      await requireSuperAdminWriteBar(c);
-    }
-  }
   const f = await Funds.update(c.env, id, body);
   // D714 decision 4: the edit wrote no audit row. The changed field names, and
   // for the control fields their old and new values.

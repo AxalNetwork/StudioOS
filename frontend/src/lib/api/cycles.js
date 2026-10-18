@@ -50,10 +50,9 @@ export const cyclesApi = {
     if (!WIRED_CYCLES.includes(cycle)) return Promise.reject(new Error('No such cycle'));
     return request(`/cycles/${cycle}/modules/${encodeURIComponent(slug)}/records/${encodeURIComponent(id)}/activity?project=${encodeURIComponent(projectId)}&page=${encodeURIComponent(page)}`);
   },
+  // One implementation with the write table's, which Add filing's Proof calls (D695 #1656).
   recordAction: (cycle, projectId, slug, id, key, body = {}) => {
     if (!WIRED_CYCLES.includes(cycle)) return Promise.reject(new Error('No such cycle'));
-    return request(`/cycles/${cycle}/modules/${encodeURIComponent(slug)}/records/${encodeURIComponent(id)}/actions/${encodeURIComponent(key)}?project=${encodeURIComponent(projectId)}`, {
-      method: 'POST', body: body instanceof FormData ? body : JSON.stringify(body),
-    });
+    return cyclesWrite.recordAction(cycle, projectId, slug, id, key, body);
   },
 };

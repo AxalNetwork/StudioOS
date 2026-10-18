@@ -70,6 +70,9 @@ function fixture({ fk = false }: { fk?: boolean } = {}) {
   db.exec(MIG464);
   // #1703: #1690's convention (`created_by` and the activity index).
   db.exec(sqlOf('459_cycle_activity_convention.sql'));
+  // #1704 PR A: #1692's `hypotheses.deadline`, the card's Next. #1703: the
+  // real evidence reader's `hypothesis_evidence_links` and the Pivot's
+  // createHypothesis columns. Applied once: its ALTERs cannot run twice.
   db.exec(sqlOf('460_validate_record_stores.sql'));
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id, spinout_lab_active) VALUES (?, ?, ?, ?, 1, ?, ?)');
   u.run(FOUNDER, 'founder', 'Fay Founder', 'fay@example.test', 1001, 0);
@@ -939,7 +942,7 @@ test('12: an ok card draws the venture\'s six newest decisions oldest first, wit
   await decide(db, { decision: 'stop', for: h1, on: '2026-10-15' });
   const c = await verdictCard(ctxOf(db));
   assert.equal(c.state, 'ok');
-  assert.equal(c.next, null, 'Next waits on the deadline store (#1692)');
+  assert.equal(c.next, null, 'no hypothesis has a deadline, so there is no Next');
   assert.equal(c.reason, null);
   const s = c.series as any;
   assert.equal(TIMELINE_CAP, 6);
@@ -954,6 +957,51 @@ test('12: an ok card draws the venture\'s six newest decisions oldest first, wit
   assert.ok(s.decisions.length + 1 <= 7, 'with Next, at most seven steps');
   assert.deepEqual(s.current, { decision: 'proceed', date: '2026-10-12', evidence: 6 });
   assert.equal(s.next, null);
+});
+
+test('12: Next is the nearest open hypothesis deadline, today or later, and null with none ahead', async () => {
+  const db = fixture();
+  await decide(db, { decision: 'proceed', n: 5, on: '2026-10-12' });
+  const h1 = hypothesis(db, P, 'H1');
+  const h2 = hypothesis(db, P, 'H2');
+  const h3 = hypothesis(db, P, 'H3');
+  const h4 = hypothesis(db, P, 'H4');
+  const hOther = hypothesis(db, P_OTHER, 'H1');
+  const due = (id: number, d: string | null) => db.prepare('UPDATE hypotheses SET deadline = ? WHERE id = ?').run(d, id);
+  due(h1, '2026-10-16');                                   // passed
+  due(h2, '2026-11-02');                                   // later
+  due(h3, '2026-10-24');                                   // nearest
+  due(h4, '2026-10-20');                                   // nearer, but retired
+  db.prepare("UPDATE hypotheses SET retired_at = '2026-10-01' WHERE id = ?").run(h4);
+  due(hOther, '2026-10-18');                               // another venture's
+  let c = await verdictCard(ctxOf(db));
+  assert.equal(c.state, 'ok');
+  assert.deepEqual((c.series as any).next, { date: '2026-10-24' });
+  assert.deepEqual(c.next, {
+    text: 'Record the decision for the sprint ending 24 Oct.',
+    href: `/validate/verdict/new?project=${P}&for=h-${h3}`,
+  });
+  // A deadline today still counts.
+  due(h1, '2026-10-17');
+  c = await verdictCard(ctxOf(db));
+  assert.deepEqual((c.series as any).next, { date: '2026-10-17' });
+  assert.equal((c.next as any).href, `/validate/verdict/new?project=${P}&for=h-${h1}`);
+  // None ahead: both null.
+  for (const id of [h1, h2, h3]) due(id, '2026-09-01');
+  c = await verdictCard(ctxOf(db));
+  assert.equal((c.series as any).next, null);
+  assert.equal(c.next, null);
+});
+
+test('12: with Next, the timeline holds at most seven steps', async () => {
+  const db = fixture();
+  for (let i = 1; i <= 8; i++) await decide(db, { decision: 'proceed', n: 5, on: `2026-09-${String(i).padStart(2, '0')}` });
+  const h1 = hypothesis(db, P, 'H1');
+  db.prepare("UPDATE hypotheses SET deadline = '2026-10-30' WHERE id = ?").run(h1);
+  const s = (await verdictCard(ctxOf(db))).series as any;
+  assert.equal(s.decisions.length, TIMELINE_CAP);
+  assert.ok(s.next);
+  assert.equal(s.decisions.length + (s.next ? 1 : 0), 7);
 });
 
 test('12: an old-route decision is the current verdict with no evidence count', async () => {

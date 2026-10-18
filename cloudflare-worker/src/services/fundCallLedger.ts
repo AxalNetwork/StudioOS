@@ -242,6 +242,23 @@ export async function recordReceipt(env: Env, input: ReceiptInput): Promise<Rece
         WHERE cc.id = ? AND cc.status <> 'paid' AND ${mine}
           AND ${RECEIVED_CENTS_SQL} >= ${OWED_CENTS_SQL}`,
     ).bind(input.receivedOn, input.lineId, uid),
+    // D709 (#1774): a management-fee line linked to this call line is paid
+    // with it, then its period once no unpaid line is left. Each only if this
+    // receipt landed and the call line is now paid; the receipt is the audit.
+    env.DB.prepare(
+      `UPDATE fund_fee_lines
+          SET status = 'paid', paid_via = 'capital_call', paid_evidence = ?, paid_at = datetime('now'), updated_at = datetime('now')
+        WHERE capital_call_line_id = ? AND status = 'issued'
+          AND EXISTS (SELECT 1 FROM capital_call_receipts WHERE uid = ?)
+          AND EXISTS (SELECT 1 FROM capital_calls WHERE id = ? AND status = 'paid')`,
+    ).bind(uid, input.lineId, uid, input.lineId),
+    env.DB.prepare(
+      `UPDATE fund_fee_periods
+          SET status = 'paid', paid_at = datetime('now'), updated_at = datetime('now')
+        WHERE status = 'issued'
+          AND id IN (SELECT period_id FROM fund_fee_lines WHERE capital_call_line_id = ? AND paid_evidence = ?)
+          AND NOT EXISTS (SELECT 1 FROM fund_fee_lines l WHERE l.period_id = fund_fee_periods.id AND l.status <> 'paid')`,
+    ).bind(input.lineId, uid),
   ]);
 
   const inserted = Number(results[0]?.meta?.changes ?? 0) === 1;
