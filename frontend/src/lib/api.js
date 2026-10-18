@@ -351,7 +351,6 @@ export const SLOW_PATHS = [
   /^\/deck-reviewer\/[^/]+\/regenerate$/,
   /^\/decks\/generate$/,
   /^\/funds\/[^/]+\/regenerate-lpa$/,
-  /^\/legal\/templates\/[^/]+\/generate$/,
   /^\/legalcap\/legal\/generate$/,
   /^\/profiling\/chat$/,                 // onboarding chat
   /^\/references\/[^/]+\/(transcribe|summarize)$/,
