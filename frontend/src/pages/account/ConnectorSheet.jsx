@@ -10,12 +10,14 @@ import { BrandIcon, Pill, Unrecorded, Unreadable } from '../../ui';
 import { BTN, INPUT, LoadingRows } from './AccountCenter';
 import { HubspotConfigModal, LinkedInCsvImportModal, SalesforceConfigModal } from './connectorTools';
 import GithubSyncSheet from './GithubSyncSheet';
-import { MercuryEntityPanel } from './MercurySheet';
+import { MercuryEntityPanel, MercuryLandsGroup, MercuryReadsGroup, MercuryUsesGroups } from './MercurySheet';
+import { MEMBER_REPLACE } from './mercuryModel';
+import { useAuth } from '../../hooks/useAuthSync';
 import { successBanner } from './githubSync';
 import {
   TIER_LABEL, agoLabel, authKind, buildCatalogue, companiesLabel, connectFailure, connectionStatus,
   disconnectNote, feedsLabel, flowBanner, lastSyncLabel, moduleLabel,
-  keepBuildProject, coreSystemOffer, isEntityRow,
+  keepBuildProject, coreSystemOffer, isEntityRow, isPersonalMercury,
   FREE_KEEPS_CONNECTORS,
 } from './connectorsModel';
 import { cyclesWrite } from '../../lib/api/cycles';
@@ -413,6 +415,9 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
   // Build acts for its project's company (D686 §5.4); elsewhere, the active one.
   const opts = companyId ? { companyId } : undefined;
   const navigate = useNavigate();
+  // D715 decision 8: a member's Mercury says where it lands in the viewer's role's words.
+  const viewerRole = useAuth()?.user?.role ?? null;
+  const personalMercury = isPersonalMercury(p);
   const conn = p.connection;
   const status = connectionStatus(conn, p);
   const kind = authKind(p);
@@ -507,12 +512,13 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
     if (blocked) return;
     setMessage('');
     let config;
-    if (configText.trim()) {
+    // D715: Mercury draws no settings field, so a stored config never rides along unseen.
+    if (configText.trim() && p.key !== 'mercury') {
       try { config = JSON.parse(configText); } catch { setMessage('Settings must be valid JSON.'); return; }
     }
     if (p.key === 'mercury') {
       if (!confirmReadOnly) { setMessage('Confirm this is a Read Only token.'); return; }
-      config = { ...config, confirm_read_only: true };
+      config = { confirm_read_only: true };
     }
     setBusy(true);
     try {
@@ -522,7 +528,9 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
       onChanged?.();
     } catch (err) {
       setMessage(err?.message || '');
-      setView(connectFailure(err, p));
+      // D715 decision 8: a refused Mercury token prints only the Worker's sentence, on the key form, with the token cleared.
+      if (personalMercury && err?.status !== 402) { setApiKey(''); if (!err?.message) setMessage('Mercury could not be connected.'); }
+      else setView(connectFailure(err, p));
     } finally { setBusy(false); }
   };
 
@@ -556,26 +564,32 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
 
   if (view === 'detail' && conn) {
     sub = `by ${p.by || name} · ${status.label}${p.verified ? ' · Verified by Axal' : ''}${conn.external_account_name ? ` · ${conn.external_account_name}` : ''}`;
-    if (status.why) {
+    if (status.why && personalMercury) {
+      // Decision 8: the attention words and the fix; never "sync", never the raw `last_error`.
+      banner = <Banner tone="warn" data-testid="connector-attention">{`${status.why}. ${MEMBER_REPLACE}`}</Banner>;
+    } else if (status.why) {
       const when = agoLabel(conn.last_synced_at);
       banner = <Banner tone="warn" data-testid="connector-attention">{status.why}. {when ? `The last good sync was ${when}.` : 'Nothing has synced yet.'}{conn.last_error && !conn.last_error.startsWith('rate_limited') ? ` ${name} said: ${conn.last_error}` : ''}</Banner>;
     }
     body = (
       <>
-        <UsesGroups p={p} />
+        {personalMercury ? <MercuryUsesGroups /> : <UsesGroups p={p} />}
         <PermissionsGroup p={p} />
-        <CompaniesGroup conn={conn} onChanged={onChanged} />
-        <FedGroup conn={conn} name={name} projectId={projectId} onOpen={dismiss} />
+        {personalMercury ? <MercuryLandsGroup role={viewerRole} /> : <CompaniesGroup conn={conn} onChanged={onChanged} />}
+        {/* Decision 8: Now fed by is a founder's; a partner's Mercury feeds no module. */}
+        {(!personalMercury || viewerRole === 'founder') && <FedGroup conn={conn} name={name} projectId={projectId} onOpen={dismiss} />}
         {p.key === 'github' && conn.uid && (
           <Group label="Repositories">
             <Row a="What StudioOS reads" b="Choose the repositories, and sync them." action={<button type="button" className={BTN.link} onClick={() => go('sync')} data-testid="button-choose-repositories">Choose</button>} />
           </Group>
         )}
-        <Group label="Sync">
-          <Row a="How often" b={syncFrequencyLabel(conn)} />
-          <Row a="Last sync" b={syncNote || lastSyncLabel(conn)}
-            action={conn.uid ? <button type="button" className={BTN.link} disabled={syncing} onClick={syncNow} data-testid="button-sync-now">{syncing ? 'Syncing…' : 'Sync now'}</button> : null} />
-        </Group>
+        {personalMercury ? <MercuryReadsGroup /> : (
+          <Group label="Sync">
+            <Row a="How often" b={syncFrequencyLabel(conn)} />
+            <Row a="Last sync" b={syncNote || lastSyncLabel(conn)}
+              action={conn.uid ? <button type="button" className={BTN.link} disabled={syncing} onClick={syncNow} data-testid="button-sync-now">{syncing ? 'Syncing…' : 'Sync now'}</button> : null} />
+          </Group>
+        )}
         {(p.key === 'hubspot' || p.key === 'salesforce' || p.key === 'linkedin' || (conn.uid && kind !== 'oauth')) && (
           <Group label="Settings">
             {p.key === 'hubspot' && <Row a="Pipeline" b={conn.config?.pipeline_label || 'Default pipeline'} action={<button type="button" className={BTN.link} onClick={() => setTool('hubspot')}>Change</button>} />}
@@ -607,7 +621,7 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
   } else if (view === 'pro') {
     sub = `by ${p.by || name}${p.status === 'beta' ? ' · Beta' : ''}`;
     banner = <Banner tone="neutral" data-testid="connector-pro">{`${name} is part of the ${TIER_LABEL[p.tier] || 'paid'} plan. ${FREE_KEEPS_CONNECTORS}${message ? ` ${message}` : ''}`}</Banner>;
-    body = <UsesGroups p={p} />;
+    body = personalMercury ? <MercuryUsesGroups /> : <UsesGroups p={p} />;
     footer = <>{backBtn}<button type="button" className={BTN.ghost} onClick={onClose}>Close</button><Link className={BTN.primary} to="/account/billing" onClick={dismiss}>See plans</Link></>;
   } else if (view === 'pre' && teammate && !ownChosen) {
     title = `Connect ${name}`;
@@ -625,10 +639,20 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
     body = (
       <>
         <Steps names={keySteps} at={0} />
-        <UsesGroups p={p} read="It will read" write="It will write" />
-        <Group label="It will serve">
-          <Row a={p.first_party ? 'Your account' : (companyName || 'Your active company')} b={p.first_party ? 'It connects to you, not to a company.' : 'Once connected, choose the other companies it feeds from its sheet.'} />
-        </Group>
+        {personalMercury ? (
+          <>
+            <MercuryUsesGroups />
+            <MercuryLandsGroup role={viewerRole} />
+            <MercuryReadsGroup />
+          </>
+        ) : (
+          <>
+            <UsesGroups p={p} read="It will read" write="It will write" />
+            <Group label="It will serve">
+              <Row a={p.first_party ? 'Your account' : (companyName || 'Your active company')} b={p.first_party ? 'It connects to you, not to a company.' : 'Once connected, choose the other companies it feeds from its sheet.'} />
+            </Group>
+          </>
+        )}
         {p.key === 'salesforce' && (
           <Group label="Org type">
             <label className="flex items-center gap-2 px-3 py-2 text-[13px]"><input type="radio" name="sf_env" checked={!sfSandbox} onChange={() => setSfSandbox(false)} /> Production</label>
@@ -697,22 +721,23 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
             Your portal is cleared for HubSpot's public app? <button type="button" className={BTN.link} onClick={startOauth}>Connect with OAuth instead</button>
           </p>
         )}
-        <div className="mx-5 mt-4">
+        {/* D715 decision 8: no Advanced for Mercury, so no settings field that could carry a confirmation the box did not give. */}
+        {p.key !== 'mercury' && <div className="mx-5 mt-4">
           <button type="button" className={BTN.link} onClick={() => setAdvanced((v) => !v)} aria-expanded={advanced}>{advanced ? 'Hide advanced' : 'Advanced'}</button>
           {advanced && (
             <div className="mt-2 space-y-3">
-              {p.key !== 'mercury' && <div className="space-y-1">
+              <div className="space-y-1">
                 <label htmlFor="connector-webhook" className="text-[12px] font-semibold text-axal-muted dark:text-gray-400">Webhook secret (optional)</label>
                 <input id="connector-webhook" type="password" className={INPUT} value={webhookSecret} onChange={(e) => setWebhookSecret(e.target.value)} placeholder={conn?.has_webhook_secret ? '••••••••' : ''} />
                 <p className="text-[11.5px] text-axal-muted dark:text-gray-400">Webhooks sent to /api/integrations/webhook/{p.key}/&lt;uid&gt; are checked against this secret (HMAC-SHA256 in the X-Axal-Signature header, or the signature the provider adds). Without one, the connection takes no webhooks and updates when it syncs. HubSpot checks its own signature and needs none.</p>
-              </div>}
+              </div>
               <div className="space-y-1">
                 <label htmlFor="connector-config" className="text-[12px] font-semibold text-axal-muted dark:text-gray-400">Settings (JSON, optional)</label>
                 <textarea id="connector-config" rows={4} className={`${INPUT} font-mono text-xs`} value={configText} onChange={(e) => setConfigText(e.target.value)} />
               </div>
             </div>
           )}
-        </div>
+        </div>}
         {message && view !== 'badkey' && <Banner tone="danger">{message}</Banner>}
       </form>
     );
