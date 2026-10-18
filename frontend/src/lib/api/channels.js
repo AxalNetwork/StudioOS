@@ -14,6 +14,7 @@
 //   assign           POST   /channels/threads/:uid/assign  { interview_id } | { create: { interviewee_name, interviewee_company?, project_id } }, quote_consent?
 //   ignore           POST   /channels/threads/:uid/ignore  { ignored }
 //   reply            POST   /channels/threads/:uid/reply   { text, client_key }
+//   retryVoice       POST   /channels/threads/:uid/voice/:message/retry  a voice note that was not transcribed, again (#1586) → { ok, queued }
 //   meetings         GET    /founder/validate/interviews/:id/meetings
 //   scheduleMeeting  POST   /founder/validate/interviews/:id/meetings  { provider, starts_at, duration_min, topic?, consent, auto_record? }
 //   cancelMeeting    DELETE /founder/validate/interviews/:id/meetings/:refUid
@@ -79,6 +80,9 @@ export const channelsApi = {
   }),
   reply: (uid, text, clientKey) => request(`/channels/threads/${enc(uid)}/reply`, {
     method: 'POST', body: JSON.stringify({ text, client_key: clientKey }),
+  }),
+  retryVoice: (threadUid, messageUid) => request(`/channels/threads/${enc(threadUid)}/voice/${enc(messageUid)}/retry`, {
+    method: 'POST', body: JSON.stringify({}),
   }),
   meetings: (interviewId) => request(`/founder/validate/interviews/${enc(interviewId)}/meetings`),
   scheduleMeeting: (interviewId, { provider: p, starts_at, duration_min, topic, consent, auto_record }) => {
