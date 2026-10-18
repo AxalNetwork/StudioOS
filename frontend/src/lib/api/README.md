@@ -56,6 +56,10 @@ through the shared request client; callers create and revoke temporary blob URLs
 D711 (#1776) adds `files` (an envelope's recorded files), `renderPaper` (the
 template paper as HTML, faces omitted) and `paperFonts` (its faces, once per
 `paper_sha256`).
+D717 (#1782) adds `publishOne(slug, version)` and `withdraw(slug)` (one template's
+publication), `push()` (the recorded publications to every branch, publishing
+nothing) and `outside()` (the bundled documents not in the catalog). The thumbnail
+and draft-PDF blobs come with PR 2's screens, outside the typed drift surface.
 
 D652 (#1464): `eadwyn.js` calls `/api/eadwyn`, the Worker AI rail's conversations
 and the connectors in them. D701 (#1663) adds `conversationsMine`
@@ -118,6 +122,12 @@ rail section and the model picked per section and router task, for the caller
 only. A null clears a row. localStorage stays the cache, so a mode or a pick
 set on a laptop is in place on a phone after a reload.
 
+D715 (#1780) PR 3b: `mercuryPersonal.js` calls `GET /api/mercury/personal/status`
+(`cloudflare-worker/src/routes/mercury_personal.ts`, D713): the caller's own
+Mercury connection and the uses their role holds, each with `available` and a
+`reason`. The member's sheet draws its "What StudioOS uses it for" group from
+it. #1778's PR C adds the match and import calls to the same file.
+
 D715 (#1780): `adminMercury.js` calls `/api/admin/mercury` (`cloudflare-worker/src/routes/admin_mercury.ts`, D710):
 the four entity connections (each with its accounts by ending), the Super
 Admin's connect with `confirm_read_only: true` and disconnect with a reason,
@@ -158,3 +168,11 @@ writes nothing. `fundFees.js` calls `/api/fund-fees/:fundId` (D709, #1774): the
 fee state, terms and their confirmation, admissions, net invested, offsets, a
 period's preview, issue and funding call, and one LP's statement. The Worker
 decides each act: confirm and issue are the Super Admin's.
+
+D722: `googleSignIn.js` calls `GET /api/auth/google/config` (whether this
+deployment opens Google's own window on /login, and the client to open it for;
+`{ canary: true }` adds `?canary=1`, which /login sends from `?google_window=1`)
+and `POST /api/auth/google/popup` (the code that window returned, with the
+attempt's state; the answer is `{ token, user, new_signup }`). The POST carries
+`X-Requested-With: XmlHttpRequest`, which the Worker requires and which no
+other origin can send. The redirect fallback stays `api.googleStartUrl`.

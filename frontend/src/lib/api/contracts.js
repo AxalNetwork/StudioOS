@@ -18,4 +18,11 @@ export const contractsApi = {
   files: uid => request(`/admin/contracts/${encodeURIComponent(uid)}/files`),
   renderPaper: body => request('/admin/contracts/templates/render', { method: 'POST', body: JSON.stringify(body) }),
   paperFonts: () => request('/admin/contracts/templates/paper-fonts'),
+  // D717 (#1782): publish one template at the version the editor saved, withdraw
+  // its publication, push the recorded publications to every branch, and the
+  // bundled documents not in the catalog.
+  publishOne: (slug, version) => request(`/admin/contracts/published-templates/${encodeURIComponent(slug)}/publish`, { method: 'POST', body: JSON.stringify({ version }) }),
+  withdraw: slug => request(`/admin/contracts/published-templates/${encodeURIComponent(slug)}/withdraw`, { method: 'POST', body: JSON.stringify({}) }),
+  push: () => request('/admin/contracts/published-templates/push', { method: 'POST', body: JSON.stringify({}) }),
+  outside: () => request('/admin/contracts/templates/outside'),
 };

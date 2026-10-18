@@ -255,6 +255,23 @@ const BUCKETS: Bucket[] = [
     scope: 'ip',
     failClosed: true,
   },
+  // D722 — the code from Google's sign-in window. Unauthenticated, and each
+  // accepted call is an outbound exchange with Google's token endpoint, so it
+  // gets a ceiling of its own below the generic 200/min/IP: 60/min/IP, room
+  // for a whole office or event network behind one address. FAIL-OPEN, like
+  // every other sign-in path (/start, /callback, magic link, passkey): this is
+  // the main way in, the redirect beside it creates accounts by the same rules
+  // with no fail-closed bucket, and every account it creates needs a real
+  // Google account and a single-use code, so a KV outage that refused it would
+  // close the front door and protect nothing. The page answers a 429 here by
+  // continuing through the redirect. Exact path and POST only.
+  {
+    name: 'google_popup',
+    limit: 60,
+    windowSec: 60,
+    test: (p, m) => m === 'POST' && p === '/api/auth/google/popup',
+    scope: 'ip',
+  },
   // D691 — a deck share link's signup. Unauthenticated, and every accepted
   // POST creates a user (plus an activity_logs and an onboarding_progress
   // row) for whoever holds a live share token, and a link with no expiry and
@@ -360,11 +377,18 @@ const BUCKETS: Bucket[] = [
 // routes (login, verify, me) stay exempt because the 200/min/IP general
 // bucket already covers them and they have their own brute-force
 // protections (Turnstile on login + JWT verification cost on me).
+//
+// D722 — `/api/auth/google/config` is a constant read of the deployment's
+// config: no D1, no KV, no session, and its only effect is whether /login
+// opens Google's window or redirects. A limiter in front of it could only ever
+// turn the window off. `/api/auth/google/start` and `/popup` stay limited
+// (D74; the `google_popup` bucket above).
 const RATE_LIMIT_EXEMPT = [
   '/api/health',
   '/api/auth/login',
   '/api/auth/verify',
   '/api/auth/me',
+  '/api/auth/google/config',
   '/api/monitoring/metrics',
   '/api/monitoring/rate-limits',
 ];

@@ -1,7 +1,7 @@
 /**
  * D715 (#1780) PR 3 — a founder's or partner's own Mercury: the sheet's
  * groups (decision 8) and the row's words in Yours and in Build (decision 9).
- * The uses group stays "Not recorded" until #1778's PR B names the uses.
+ * PR 3b: the uses group reads `GET /api/mercury/personal/status` (#1778's PR B).
  *
  * Every token here is invented and assembled at run time.
  *
@@ -23,8 +23,9 @@ import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import { ConnectorPanel } from '../src/pages/account/ConnectorSheet.jsx';
 import { ConnectorsView } from '../src/pages/account/AccountConnectors.jsx';
 import { ConnectToolView } from '../src/pages/account/ConnectToolSheet.jsx';
-import { MercuryLandsGroup, USES_NOT_READ } from '../src/pages/account/MercurySheet.jsx';
-import { MEMBER_DISCONNECT_NOTE, MEMBER_REPLACE, NEVER_ROWS, READS_ROW } from '../src/pages/account/mercuryModel.js';
+import { MercuryLandsGroup, MercuryUsesGroups } from '../src/pages/account/MercurySheet.jsx';
+import { MEMBER_DISCONNECT_NOTE, MEMBER_REPLACE, NEVER_ROWS, READS_ROW, USE_REASONS, USE_WORDS, usesRows } from '../src/pages/account/mercuryModel.js';
+import { mercuryPersonalApi } from '../src/lib/api/mercuryPersonal.js';
 
 const h = React.createElement;
 const flat = (s) => s.replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/&amp;/g, '&').replace(/\s+/g, ' ');
@@ -84,6 +85,20 @@ const panel = (p, view, extra = {}) => h(ConnectorPanel, { p, view, setView() {}
 const SYNC_WORDS = /What it pulls in|What it sends out|It will read|It will write|It will serve|Sync now|How often|only sends out|only pulls in/;
 const NEVER = NEVER_ROWS.join(' ');
 
+/** The status route's answer (`routes/mercury_personal.ts`), for a founder, a partner on HQ and a partner on a branch. */
+const use = (key, available, reason = null) => ({ key, available, reason });
+const STATUS = {
+  founder: { connected: true, connection: null, uses: [use('venture_revenue', true), use('practice_income', false, 'purpose_not_allowed'), use('partner_deals', false, 'purpose_not_allowed')] },
+  partnerHq: { connected: true, connection: null, uses: [use('venture_revenue', false, 'purpose_not_allowed'), use('practice_income', true), use('partner_deals', true)] },
+  partnerBranch: { connected: true, connection: null, uses: [use('venture_revenue', false, 'purpose_not_allowed'), use('practice_income', true), use('partner_deals', false, 'hq_only')] },
+};
+/** Stub the one status read, counting calls; `answer` is a value, or an Error to fail it. */
+function stubStatus(answer) {
+  const saved = mercuryPersonalApi.status; const calls = { n: 0 };
+  mercuryPersonalApi.status = async () => { calls.n += 1; if (answer instanceof Error) throw answer; return answer; };
+  return { calls, restore() { mercuryPersonalApi.status = saved; } };
+}
+
 // ------------------------------------------------------------------ decision 9's words
 
 test('the personal row\'s words in Yours and Build; every other row keeps today\'s', () => {
@@ -134,11 +149,11 @@ test('Yours draws Reads on request, Read on request, You and the feeds; the atte
 test('a founder\'s pre and detail views: the uses, the never rows, where it lands, how it reads; nothing a sync draws', async () => {
   const saved = connectorsApi.fed; let fed = 0;
   connectorsApi.fed = async () => { fed += 1; return { modules: [] }; };
+  const status = stubStatus(STATUS.founder);
   const pre = await mount(panel({ ...row('mercury', catalogue()), connection: null }, 'pre'), { user: FOUNDER });
   try {
     const t = pre.text();
-    assert.match(t, /What StudioOS uses it for Not recorded/);
-    assert.ok(pre.nodes().some((n) => pre.pr(n).title === USES_NOT_READ), 'the reason is on the Not recorded');
+    assert.ok(t.includes(`What StudioOS uses it for ${USE_WORDS.venture_revenue}`), 'the founder\'s one use, from the status read');
     assert.ok(t.includes(NEVER), 'the three never rows');
     assert.match(t, /Where it lands Only the venture you import into/);
     assert.ok(t.includes(`How it reads ${READS_ROW}`));
@@ -156,7 +171,7 @@ test('a founder\'s pre and detail views: the uses, the never rows, where it land
     assert.ok(!detail.nodes().some((n) => /^connector-company-/.test(detail.pr(n)['data-testid'] || '')), 'no company tick');
     assert.equal(fed, 1, 'Now fed by is a founder\'s');
     assert.ok(t.includes(`On disconnect: ${MEMBER_DISCONNECT_NOTE}`));
-  } finally { await detail.unmount(); connectorsApi.fed = saved; }
+  } finally { await detail.unmount(); connectorsApi.fed = saved; status.restore(); }
 });
 
 test('a partner\'s sheet: their own landing words, and no Now fed by', async () => {
@@ -240,4 +255,62 @@ test('Build: the failing Mercury row reconnects and syncs nothing; its lightbox 
     assert.ok(m.text().includes(NEVER), 'Reconnect opens the Mercury sheet');
     assert.doesNotMatch(m.text(), SYNC_WORDS);
   } finally { await m.unmount(); Object.assign(connectorsApi, saved); }
+});
+
+// ------------------------------------------------------------------ PR 3b: the uses, from the status route
+
+test('PR 3b: a founder draws venture revenue only; a partner on HQ draws practice income and partner deals, in that order', async () => {
+  for (const [who, status, want, absent] of [
+    [FOUNDER, STATUS.founder, ['venture_revenue'], ['practice_income', 'partner_deals']],
+    [PARTNER, STATUS.partnerHq, ['practice_income', 'partner_deals'], ['venture_revenue']],
+  ]) {
+    const stub = stubStatus(status);
+    const m = await mount(h(MercuryUsesGroups), { user: who });
+    try {
+      const t = m.text();
+      assert.ok(t.includes(`What StudioOS uses it for ${want.map((k) => USE_WORDS[k]).join(' ')}`), `${who.role}: ${want}`);
+      for (const k of absent) assert.ok(!t.includes(USE_WORDS[k]), `${who.role} has no ${k}`);
+      assert.ok(t.includes(NEVER), 'the never rows draw beside the uses');
+      assert.equal(stub.calls.n, 1, 'one status read per mount');
+    } finally { await m.unmount(); stub.restore(); }
+  }
+});
+
+test('PR 3b: a branch partner\'s partner deals are HQ only, so only practice income draws; with nothing left the reason says HQ', async () => {
+  const stub = stubStatus(STATUS.partnerBranch);
+  const m = await mount(h(MercuryUsesGroups), { user: PARTNER });
+  try {
+    const t = m.text();
+    assert.ok(t.includes(USE_WORDS.practice_income));
+    assert.ok(!t.includes(USE_WORDS.partner_deals), 'hq_only is not available off HQ');
+  } finally { await m.unmount(); stub.restore(); }
+  const none = usesRows({ uses: [use('practice_income', false, 'purpose_not_allowed'), use('partner_deals', false, 'hq_only')] });
+  assert.deepEqual(none, { rows: [], reason: USE_REASONS.hq_only });
+  assert.equal(USE_REASONS.hq_only, 'Your deals with Axal VC Management LLC are matched on HQ only.');
+});
+
+test('PR 3b: a key the model has no words for is never drawn; with none left the group reads Not recorded with its reason', async () => {
+  const stub = stubStatus({ connected: false, connection: null, uses: [use('crypto_custody', true), use('constructor', true)] });
+  const m = await mount(h(MercuryUsesGroups), { user: FOUNDER });
+  try {
+    const t = m.text();
+    assert.match(t, /What StudioOS uses it for Not recorded/);
+    assert.ok(m.nodes().some((n) => m.pr(n).title === USE_REASONS.purpose_not_allowed), 'the reason is on the Not recorded');
+    assert.doesNotMatch(t, /crypto_custody|constructor/);
+    assert.ok(t.includes(NEVER));
+  } finally { await m.unmount(); stub.restore(); }
+  assert.deepEqual(usesRows(null), { rows: [], reason: USE_REASONS.purpose_not_allowed });
+  assert.deepEqual(usesRows({ uses: [use('venture_revenue', 'yes')] }).rows, [], 'only available === true draws');
+});
+
+test('PR 3b: a failed status read makes the uses Unreadable, never "none", and the never rows still draw', async () => {
+  const stub = stubStatus(Object.assign(new Error('no network'), { status: 503 }));
+  const m = await mount(h(MercuryUsesGroups), { user: PARTNER });
+  try {
+    assert.ok(m.by('mercury-uses-unreadable'), 'Unreadable');
+    const t = m.text();
+    assert.doesNotMatch(t, /What StudioOS uses it for Not recorded/);
+    for (const k of Object.keys(USE_WORDS)) assert.ok(!t.includes(USE_WORDS[k]));
+    assert.ok(t.includes(NEVER), 'the next group still draws');
+  } finally { await m.unmount(); stub.restore(); }
 });

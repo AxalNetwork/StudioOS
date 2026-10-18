@@ -2,10 +2,16 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Shield, LogIn, KeyRound, Mail, ChevronDown, ChevronUp } from 'lucide-react';
 import { api } from '../lib/api';
+import { googleSignInApi } from '../lib/api/googleSignIn.js';
 import { track } from '../lib/funnel';
-import { storePendingNext } from '../lib/pendingNext';
+import { storePendingNext, sameOriginNextPath } from '../lib/pendingNext';
 import useForcedLightTheme from '../hooks/useForcedLightTheme';
 import { loadTurnstile } from '../lib/turnstile';
+import {
+  loadGis, gisReady, whenIdle, newPopupState,
+  writePopupStateCookie, clearPopupStateCookie, openCodePopup,
+  popupRequestBody, applyGoogleSession, popupShouldRedirect, wantsGoogleCanary,
+} from '../lib/googlePopup';
 import AuthShell, { AuthCard, authV2 } from '../components/auth/AuthShell';
 
 // Single-page sign-in: email + authenticator code + Cloudflare Turnstile.
@@ -21,18 +27,68 @@ const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || '';
 // Task #51 — "Continue with Google" error → toast copy. Mirrors the codes
 // raised by routes/auth_google.ts::callbackError() so the user gets a
 // human-readable explanation when the callback couldn't sign them in.
+// D722 — the same map serves Google's window: the codes POST
+// /api/auth/google/popup answers with, and GIS's own failure types
+// (popup_failed_to_open, popup_closed, access_denied), so both ways in say
+// the same thing for the same cause.
 const GOOGLE_ERROR_COPY = {
   not_configured: 'Google sign-in is not enabled on this environment.',
-  cancelled: 'Google sign-in cancelled.',
-  provider_error: 'Google sign-in failed. Please try again.',
+  cancelled: 'Google sign-in was cancelled.',
+  access_denied: 'Google sign-in was cancelled.',
+  popup_closed: 'Google sign-in was cancelled. Nothing was changed.',
+  popup_failed_to_open: 'Your browser blocked the Google window, so Google is opening in this tab.',
+  provider_error: "Google didn't confirm your sign-in. Please try again.",
   missing_code: 'Google sign-in failed. Please try again.',
-  bad_state: 'Sign-in link expired. Please try again.',
-  exchange_failed: 'Could not verify your Google account. Please try again.',
+  bad_state: 'This sign-in attempt expired. Press Continue with Google again.',
+  bad_request: 'Google sign-in failed. Please try again.',
+  bad_origin: 'Google sign-in failed. Please try again.',
+  // The switch was turned off after this tab loaded, or the window's answer
+  // was refused before any exchange (a rate limit): the redirect takes over.
+  popup_off: 'Continuing with Google in this tab instead.',
+  popup_fallback: 'Continuing with Google in this tab instead.',
+  exchange_failed: "Google didn't confirm your sign-in. Please try again.",
+  token_invalid: "We couldn't verify your Google account. Please try again.",
   email_unverified_at_google: 'Your Google email is not verified. Verify it with Google, then retry.',
-  link_blocked_unverified: 'An Axal VC account exists for that email but the address is unverified. Sign in with a magic link first to verify, then link Google in Settings → Security.',
+  // Rule 2 links a verified address on its own, so the old "then link Google
+  // in Settings" step is gone: confirming the address once is all it takes.
+  link_blocked_unverified: "An Axal VC account already uses this email, but the address isn't confirmed yet. Use 'Email me a sign-in link' once to confirm it; after that, Continue with Google works.",
+  // Rules 2 and 4 need Google to vouch for the inbox (gmail.com or a Workspace
+  // account); for any other address the email link proves it, and Settings
+  // binds Google from inside that session.
+  link_requires_email_proof: "Google doesn't host this address, so it can't prove the inbox is yours. Use 'Email me a sign-in link' once, then press Link Google under Account → Security; after that, Continue with Google works.",
+  // The page fills in both addresses when it has them (differentAccountCopy).
+  different_account: 'Google signed in a different account from the email you typed. Choose that account in the Google window, or clear the email field.',
   account_inactive: 'Your Axal VC account is inactive. Contact support.',
   internal_error: 'Something went wrong on our side. Please try again.',
+  unreachable: "We couldn't reach Axal VC. Check your connection and try again.",
+  // A 403 with no code of ours: the request arrived, and something in front of
+  // the route refused it — a Cloudflare challenge, or the CSRF check on a
+  // stale session cookie.
+  security_check: "A security check stopped this sign-in. Reload the page and try again, or use 'Email me a sign-in link'.",
+  rate_limited: 'Too many Google sign-in attempts from this network. Wait a minute, then press Continue with Google again.',
 };
+
+function differentAccountCopy(typed, googleEmail) {
+  if (!typed || !googleEmail) return GOOGLE_ERROR_COPY.different_account;
+  return `You typed ${typed}, but Google signed in ${googleEmail}. Choose ${typed} in the Google window, or clear the email field to continue as ${googleEmail}.`;
+}
+
+// What the person reads when POST /api/auth/google/popup does not sign them
+// in. The server's code picks the sentence; a refusal with no code we know
+// keeps the server's own sentence. No status at all is a network that never
+// answered; a 403 with no code is not ours (a Cloudflare challenge, the CSRF
+// check); a 429 names no bucket to the person. (A 429 normally never reaches
+// this: `popupShouldRedirect` continues through the redirect first.)
+function googlePopupErrorCopy(e, typed) {
+  const code = e?.code;
+  if (code === 'different_account') return differentAccountCopy(typed, e?.data?.google_email);
+  if (code && GOOGLE_ERROR_COPY[code]) return GOOGLE_ERROR_COPY[code];
+  if (code === 'timeout') return e.message;
+  if (!e?.status) return GOOGLE_ERROR_COPY.unreachable;
+  if (e.status === 403 && !code) return GOOGLE_ERROR_COPY.security_check;
+  if (e.status === 429) return GOOGLE_ERROR_COPY.rate_limited;
+  return e?.message || GOOGLE_ERROR_COPY.provider_error;
+}
 
 // BLOCK-AUTH-01 — copy for the codes raised by GET /api/auth/magic/verify when
 // a magic link can't sign the user in (mirrors routes/auth.ts::fail()).
@@ -49,13 +105,14 @@ const MAGIC_ERROR_COPY = {
 };
 
 // Honor a `?next=` return path (e.g. a paid event invitation that bounced the
-// user here to sign in) while refusing open redirects: only same-origin paths
-// that start with a single `/` are accepted, everything else falls through to
-// the default landing page chosen by the caller.
+// user here to sign in) while refusing open redirects: the value is parsed
+// against this origin and kept only if it stays here (`sameOriginNextPath`:
+// a single leading `/`, no backslash or control character — `/\evil.com` and
+// `/%09/evil.com` both resolve to evil.com in a browser). Everything else
+// falls through to the default landing page chosen by the caller.
 function safeNextPath() {
   try {
-    const n = new URLSearchParams(window.location.search).get('next');
-    if (n && n.startsWith('/') && !n.startsWith('//')) return n;
+    return sameOriginNextPath(new URLSearchParams(window.location.search).get('next'), window.location.origin);
   } catch { /* ignore */ }
   return null;
 }
@@ -67,7 +124,17 @@ export default function LoginPage() {
   const [turnstileToken, setTurnstileToken] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [googleBusy, setGoogleBusy] = useState(false);
+  // D722 — '' | 'waiting' (Google's window is open) | 'signing' (its code is
+  // with the Worker) | 'redirecting' (the same-tab fallback is under way).
+  const [googleStage, setGoogleStage] = useState('');
+  // `{ clientId }` once GET /api/auth/google/config says this deployment opens
+  // Google's window; null means every click redirects. Refs, not state: the
+  // button never renders differently for it, and the click reads it in the
+  // same turn it opens the window.
+  const googlePopupRef = useRef(null);
+  const googleConfigAskedRef = useRef(false);
+  const googleAttemptRef = useRef(null);
+  const mountedRef = useRef(true);
   // BLOCK-AUTH-02 — passkey state.
   const [passkeyBusy, setPasskeyBusy] = useState(false);
   // The full WebAuthn probe runs only after a passkey click. Checking property
@@ -122,6 +189,42 @@ export default function LoginPage() {
   // GOOGLE_ERROR_COPY.not_configured for a genuine 503. The absence is still
   // stated; it is stated at the moment of the attempt, by the server, rather
   // than guessed on mount by a request that fails for four other reasons.
+  //
+  // D722 — the one Google request this page makes before a click is NOT that
+  // probe, and the difference is the point. GET /api/auth/google/config is a
+  // pure read of env (no D1, no KV, no cookie), it is rate-limit exempt, it
+  // runs after first paint at idle, and it decides only HOW the button works:
+  // Google's own window when the deployment switched it on, the redirect
+  // otherwise. It never decides WHETHER the button renders. Any failure —
+  // slow, refused, offline — leaves `googlePopupRef` null, which is the
+  // redirect, which is today's behaviour.
+  useEffect(() => {
+    mountedRef.current = true;
+    const cancel = whenIdle(() => askGoogleConfig());
+    return () => { mountedRef.current = false; cancel(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const askGoogleConfig = () => {
+    if (googleConfigAskedRef.current) return;
+    googleConfigAskedRef.current = true;
+    // `/login?google_window=1` is the owner's canary page (GOOGLE_SIGNIN_POPUP
+    // "canary"): only it is offered the window until the switch is "on".
+    googleSignInApi.config({ canary: wantsGoogleCanary(window.location.search) }).then((cfg) => {
+      if (!mountedRef.current) return;
+      if (cfg?.popup === true && typeof cfg.client_id === 'string' && cfg.client_id) {
+        googlePopupRef.current = { clientId: cfg.client_id };
+        loadGis().catch(() => { /* every click redirects until a load succeeds */ });
+      }
+    }).catch(() => { /* the redirect is the answer */ });
+  };
+
+  // Hover, focus or a touch on the button: ask now if the idle call has not
+  // run yet, and start loading Google's script if the window is on.
+  const primeGoogle = () => {
+    askGoogleConfig();
+    if (googlePopupRef.current && !gisReady()) loadGis().catch(() => { /* redirect */ });
+  };
 
   // One-shot toast for any error the callback bounced us back with.
   useEffect(() => {
@@ -173,7 +276,7 @@ export default function LoginPage() {
       // Task #2 — funnel: flushed by the tracker's pagehide hook as this
       // full-page navigation unloads the SPA.
       track('login_success', { method: 'passkey' });
-      window.location.href = safeNextPath() || '/studio'; // codeql[js/client-side-unvalidated-url-redirection] -- safeNextPath() returns only same-origin '/'-prefixed paths (rejects '//'); defence-in-depth
+      window.location.href = safeNextPath() || '/studio'; // codeql[js/client-side-unvalidated-url-redirection] -- safeNextPath() is parsed against this origin and kept only if it stays here; defence-in-depth
     } catch (e) {
       if (e?.name === 'NotAllowedError' || e?.name === 'AbortError') {
         setError('Passkey sign-in was cancelled.');
@@ -185,12 +288,95 @@ export default function LoginPage() {
     } finally { setPasskeyBusy(false); }
   };
 
-  const continueWithGoogle = async () => {
-    setGoogleBusy(true); setError('');
+  // D722 — Google's window answered with a code. Only the CURRENT attempt's
+  // answer is used: a second click starts a fresh attempt, and a late answer
+  // from the first window carries the first state, so it is dropped here.
+  const finishGooglePopup = async ({ code, state }, typed) => {
+    if (!state || state !== googleAttemptRef.current) return;
+    googleAttemptRef.current = null;
+    setGoogleStage('signing');
+    try {
+      // lib/googlePopup.js: the body, the Task #4 purge, the session and the
+      // landing are pure functions there, pinned by node tests.
+      const res = await googleSignInApi.popup(popupRequestBody({ code, state, typed }));
+      clearPopupStateCookie();
+      const landing = applyGoogleSession(res, localStorage, { next: safeNextPath() });
+      track('login_success', { method: 'google' });
+      window.location.href = landing; // codeql[js/client-side-unvalidated-url-redirection] -- landing is safeNextPath() (parsed against this origin and kept only if it stays here) or a literal
+    } catch (e) {
+      clearPopupStateCookie();
+      if (popupShouldRedirect(e)) {
+        // Refused before any exchange — a rate limit, the limiter's store, or
+        // the switch turned off since this tab loaded. The redirect still works.
+        track('login_error', { method: 'google', reason: String(e?.code || e?.status || 'popup').slice(0, 40) });
+        continueWithGoogle({ forceRedirect: true, notice: GOOGLE_ERROR_COPY.popup_fallback });
+        return;
+      }
+      setError(googlePopupErrorCopy(e, typed));
+      track('login_error', { method: 'google', reason: String(e?.code || 'popup').slice(0, 40) });
+      setGoogleStage('');
+    }
+  };
+
+  // D722 — Google's window did not give us a code. A blocked window is not a
+  // failure: the same-tab redirect takes over and says why.
+  const failGooglePopup = ({ type, state }) => {
+    if (!state || state !== googleAttemptRef.current) return;
+    googleAttemptRef.current = null;
+    clearPopupStateCookie();
+    if (type === 'popup_failed_to_open') {
+      track('login_error', { method: 'google', reason: 'popup_blocked' });
+      continueWithGoogle({ forceRedirect: true, notice: GOOGLE_ERROR_COPY.popup_failed_to_open });
+      return;
+    }
+    setGoogleStage('');
+    setError(GOOGLE_ERROR_COPY[type] || GOOGLE_ERROR_COPY.provider_error);
+    track('login_error', { method: 'google', reason: String(type || 'popup').slice(0, 40) });
+  };
+
+  // `opts` is read defensively because the button passes its click event.
+  const continueWithGoogle = async (opts) => {
+    const forceRedirect = opts?.forceRedirect === true;
+    const popup = googlePopupRef.current;
+    // D722 — Google's own window. NOTHING IS AWAITED between the click and
+    // requestCode(): a browser opens a window only inside the click that asked
+    // for it, and Safari counts an await as leaving it. The script was loaded
+    // ahead of time; when it is not ready, the redirect below runs instead.
+    if (!forceRedirect && popup && gisReady()) {
+      setError('');
+      track('login_submit', { method: 'google' });
+      const typed = email.trim();
+      const state = newPopupState();
+      googleAttemptRef.current = state;
+      try {
+        writePopupStateCookie(state);
+        openCodePopup({
+          clientId: popup.clientId,
+          state,
+          loginHint: typed,
+          onCode: (r) => { finishGooglePopup(r, typed); },
+          onError: failGooglePopup,
+        });
+        // Google reports a blocked window INSIDE requestCode(), before it
+        // returns (gsi/client: `!this.i && this.error_callback ? …
+        // "popup_failed_to_open"`), so failGooglePopup may already have spent
+        // this attempt and started the redirect. Only a live attempt waits.
+        // The button stays enabled while it does: pressing it again opens a
+        // fresh attempt.
+        if (googleAttemptRef.current === state) setGoogleStage('waiting');
+        return;
+      } catch {
+        // The library is there but refused to build a client — the redirect
+        // still works, so use it rather than report a failure.
+        googleAttemptRef.current = null;
+        clearPopupStateCookie();
+      }
+    }
+    setGoogleStage('redirecting'); setError(opts?.notice || '');
     // Task #2 — funnel: no login_success counterpart here — the OAuth
     // callback lands the user signed in; failures bounce back as
     // ?google_error= (tracked above).
-    track('login_submit', { method: 'google' });
+    if (!opts?.notice) track('login_submit', { method: 'google' });
     try {
       // Preserve a `?next=` return path (e.g. a paid event invite) across the
       // Google round-trip. The worker's /auth/google/start re-sanitizes the
@@ -201,7 +387,7 @@ export default function LoginPage() {
       window.location.href = url;
     } catch (e) {
       setError(e?.message || 'Google sign-in unavailable.');
-      setGoogleBusy(false);
+      setGoogleStage('');
     }
   };
 
@@ -312,7 +498,7 @@ export default function LoginPage() {
       // Relative path — stays on whichever canonical host the user signed in
       // on (axal.vc post-flip). The Worker serves the SPA on /studio for
       // both axal.vc and app.axal.vc per the apex routing table in wrangler.toml.
-      window.location.href = safeNextPath() || '/studio'; // codeql[js/client-side-unvalidated-url-redirection] -- safeNextPath() returns only same-origin '/'-prefixed paths (rejects '//'); defence-in-depth
+      window.location.href = safeNextPath() || '/studio'; // codeql[js/client-side-unvalidated-url-redirection] -- safeNextPath() is parsed against this origin and kept only if it stays here; defence-in-depth
     } catch (e) {
       const msg = e?.message || 'Sign in failed.';
       // Task #10 — accounts without a TOTP enrolment (e.g. partners created
@@ -380,6 +566,15 @@ export default function LoginPage() {
   // The collapsed toggle is the same promise in miniature: it named a passkey on
   // every browser, including the ones that cannot offer one.
   const altFactorsLabel = passkeySupported ? 'Passkey or authenticator code' : 'Authenticator code';
+  // D722 — while Google's window is open the button stays live (a second press
+  // opens a fresh attempt); it locks only once a sign-in is actually under way.
+  const googleLocked = googleStage === 'signing' || googleStage === 'redirecting';
+  const GOOGLE_LABELS = {
+    waiting: 'Waiting for Google…',
+    signing: 'Signing you in…',
+    redirecting: 'Redirecting…',
+  };
+  const googleLabel = GOOGLE_LABELS[googleStage] || 'Continue with Google';
 
   return (
     <AuthShell showApplyCard applyLabel="Apply to Axal VC →" backgroundSrc="/auth/login-background.webp">
@@ -462,7 +657,10 @@ export default function LoginPage() {
           <button
             type="button"
             onClick={continueWithGoogle}
-            disabled={googleBusy}
+            onPointerEnter={primeGoogle}
+            onFocus={primeGoogle}
+            onTouchStart={primeGoogle}
+            disabled={googleLocked}
             className={authV2.btnSecondary}
             data-testid="login-google"
             style={{ borderColor: authV2.hair, background: '#fff', color: authV2.ink }}
@@ -473,7 +671,7 @@ export default function LoginPage() {
               <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2c-2 1.4-4.5 2.4-7.2 2.4-5.2 0-9.6-3.3-11.2-8l-6.6 5.1C9.6 39.6 16.2 44 24 44z" />
               <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.2 5.6l6.2 5.2c-.4.4 6.7-4.9 6.7-14.8 0-1.3-.1-2.4-.4-3.5z" />
             </svg>
-            {googleBusy ? 'Redirecting…' : 'Continue with Google'}
+            {googleLabel}
           </button>
 
           <button
