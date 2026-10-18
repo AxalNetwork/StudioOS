@@ -4,6 +4,27 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## The token-pack, top-up and plan reads, and HQ's pack and account routes (D755, #1919)
+
+- `GET /api/ai-budget/top-up` adds the packs on sale, `on_hold` and the
+  latest purchase in 24 hours (`waiting`, `overdue`, `credited`, `refunded`
+  or `disputed`); D750's `configured` and `product` stay until CR4 and CR7.
+  `GET /api/ai-budget/history` pages the member's own ledger, newest first,
+  never with an adjustment's reason.
+- `GET /api/public/plans-and-packs` (no session, D1 only, cached 60 s, its own
+  `public_plans` rate-limit bucket) lists every plan family with its price and
+  AI allowance, and the packs on sale. It names no person.
+- Super Admin only: `POST /api/admin/catalog/token-packs` creates the product
+  and price with Stripe Idempotency-Keys, plus `/adopt`, `PATCH /:uid` and
+  `/:uid/archive`; `GET /api/ai-budget/members/:userId` (logged),
+  `POST …/adjustments` (§16's bounds, one row per key, no reason in the
+  notice), `GET /reconcile`, and one line per pack on `GET /top-up/status`.
+- The generic catalog writes refuse a pack with `token_pack_managed_on_hq`;
+  `ProductKind` gains `token_pack`. `/api/admin/catalog` and the adjustment
+  route join the cool-off lists.
+- Frontend API modules: `lib/api/tokenPacks.js`, `lib/api/publicPricing.js`,
+  and `aiBudgetApi.history`.
+
 ## A token pack is bought alone and credited once by the payment webhook (D755, #1905, PR 2 of 2)
 
 - `POST /api/orders/intent`: when a line is a token pack (a row of
