@@ -8,7 +8,8 @@
  *   ThreadView  { uid, provider, contact_name, status, message_count,
  *                 last_message_at, last_inbound_at, interview_id,
  *                 interviewee_name, session_id, can_reply, reply_window_open }
- *   message     { uid, side: 'contact' | 'me', kind: 'text' | 'voice', text, sent_at }
+ *   message     { uid, side: 'contact' | 'me', kind: 'text' | 'voice', text, sent_at,
+ *                 transcription_failure: { reason, sentence, retry } | null }
  * and a meeting ref (`interview_channel_refs`):
  *   { uid, provider, join_url, starts_at, ends_at, status, last_error, session_id }
  *
@@ -58,14 +59,45 @@ export function threadRow(t, now = Date.now()) {
 
 /** One message in the thread view: who wrote it, and a voice note said as one. */
 export function messageView(m, contact) {
+  const failure = m?.kind === 'voice' ? voiceFailure(m) : null;
   return {
     uid: m?.uid,
     mine: m?.side === 'me',
     who: m?.side === 'me' ? 'You' : (str(contact) || 'Contact'),
-    label: m?.kind !== 'voice' ? '' : m?.awaiting_transcription === true ? 'Voice note, transcribed when you add this chat to an interview' : 'Voice note (transcribed)',
+    label: m?.kind !== 'voice' ? '' : failure ? 'Voice note' : m?.awaiting_transcription === true ? 'Voice note, transcribed when you add this chat to an interview' : 'Voice note (transcribed)',
     text: typeof m?.text === 'string' && m.text ? m.text : null,
+    failure,
   };
 }
+
+/** Where a spent AI allowance is read, until #1916 gives the top-up its own path. */
+export const USAGE_HREF = '/account/usage';
+
+/**
+ * #1933: why a waiting voice note was not transcribed, and what the member can
+ * do about it, from the thread read's `transcription_failure` (#1586,
+ * services/channels/voiceFailures.ts). The sentence is the Worker's, drawn as
+ * it was sent: a reason this file has never heard of still says itself, and
+ * the code is never shown. `action` follows `retry`:
+ *   'available'     { kind: 'retry' }: the retry route queues it now
+ *   'after_assign'  { kind: 'note' }:  assigning the chat queues it
+ *   'after_budget'  { kind: 'link' }:  once the allowance allows a run
+ *   'unknown'       { kind: 'note' }:  the budget could not be read
+ *   null, or anything else: no action.
+ * Null when the message carries no failure.
+ */
+export function voiceFailure(m) {
+  const f = m?.transcription_failure;
+  if (!f || typeof f !== 'object') return null;
+  return { sentence: str(f.sentence) || 'This voice note could not be transcribed.', action: VOICE_ACTIONS[f.retry] || null };
+}
+
+const VOICE_ACTIONS = {
+  available: { kind: 'retry' },
+  after_assign: { kind: 'note', text: 'Add this chat to an interview to try again.' },
+  after_budget: { kind: 'link', text: 'Try again when your AI allowance resets, or after adding tokens.', href: USAGE_HREF, link: 'See usage' },
+  unknown: { kind: 'note', text: 'Try again later.' },
+};
 
 /**
  * Whether the reply composer may send, and when it may not, why, in plain

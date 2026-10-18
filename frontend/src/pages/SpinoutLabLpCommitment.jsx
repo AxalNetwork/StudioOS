@@ -6,13 +6,14 @@
 // Every figure is summed from the caller's own rows in GET /api/funds/lp-portal
 // by `lib/lpCommitmentModel.js`. A read that failed says so with a retry; a
 // figure with nothing behind it says "not recorded". Neither is ever a zero.
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useReducer, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { MessageSquare } from 'lucide-react';
 import { Unreadable, Unrecorded } from '../ui';
 import { api } from '../lib/api';
 import { bankAccountsApi } from '../lib/api/bankAccounts';
 import { commitmentsByFund, commitmentBar } from '../lib/lpCommitmentModel';
+import { PHONE_CHECK, initialWire, revealWire, showsInstructions, wireReducer } from '../lib/lpWireGate';
 import { formatCents } from './investor/fundCallsModel';
 import { LPADrawer } from './FundsPage';
 
@@ -29,35 +30,86 @@ const STATE = {
 };
 const multiple = (x) => (typeof x === 'number' ? `${x.toFixed(2)}×` : null);
 
+/** The paper notice's split, which no column records (D717 decision 3). */
+const SPLIT_REASON = 'This call records one amount. How it divides between investments, the management fee and partnership expenses is not recorded.';
+const ROW = 'flex min-h-[40px] items-center justify-between gap-3 border-b border-[#f0eff3] dark:border-gray-800 text-[14px]';
+
+/**
+ * D717 decision 2, items 1 to 4 (L12 `p-call`): what the call asks for, before
+ * anything about where to send it — the amount due, the due date and LP
+ * number, and the four rows of the paper notice's commitment table.
+ */
+export function WireHead({ line }) {
+  const amount = money(line.outstanding_cents);
+  const lp = line.limited_partner_id != null ? `LP no. L${line.limited_partner_id}` : null;
+  const when = line.due_date ? `Due ${line.due_date}` : 'No due date recorded';
+  const split = <Unrecorded reason={SPLIT_REASON} />;
+  return (
+    <div>
+      <div className="text-[10.5px] font-extrabold uppercase tracking-[.09em] text-[#7d7889] dark:text-gray-400">Amount due</div>
+      <div className="mt-1 text-[30px] font-extrabold tracking-[-.02em] tabular-nums text-gray-900 dark:text-gray-100">
+        {amount ?? <Unrecorded />}
+      </div>
+      <div className="mt-[14px] text-[13px] text-[#615c6e] dark:text-gray-400">{lp ? `${when} · ${lp}` : when}</div>
+      <div className="mt-3">
+        <div className={ROW}><span>Investments</span><span className="font-bold">{split}</span></div>
+        <div className={ROW}><span>Management fee</span><span className="font-bold">{split}</span></div>
+        <div className={ROW}><span>Partnership expenses</span><span className="font-bold">{split}</span></div>
+        <div className={ROW}>
+          <span>Unfunded after this call</span>
+          <span className="font-bold tabular-nums">{money(line.unfunded_after_cents) ?? <Unrecorded />}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * D717 decision 2, items 5 to 7, and decision 4's gate: the phone-check box,
+ * one tick, and "Show wire instructions", disabled until the box is ticked.
+ * #1860 draws the same gate on the notice screen.
+ */
+export function WireGate({ wire, onConfirm, onShow, testId = '' }) {
+  return (
+    <div>
+      <p className="mb-[10px] mt-4 rounded-[12px] border-[1.5px] border-[#9E3338] px-[14px] py-[12px] text-[13px] font-bold leading-[1.45] text-[#9E3338] dark:border-red-400 dark:text-red-300">
+        {PHONE_CHECK}
+      </p>
+      <label className="flex min-h-[44px] cursor-pointer items-center gap-[10px] text-[14px] text-gray-800 dark:text-gray-200">
+        <input
+          type="checkbox"
+          checked={wire.confirmed}
+          onChange={(e) => onConfirm(e.target.checked)}
+          className="h-[22px] w-[22px] shrink-0 rounded-[6px] border-[1.5px] border-[#c9c6d2] accent-indigo-600"
+          data-testid={testId ? `wire-gate-confirm-${testId}` : undefined}
+        />
+        I confirmed by phone
+      </label>
+      {wire.step === 'gate' && (
+        <button
+          type="button"
+          onClick={onShow}
+          disabled={!wire.confirmed}
+          className="mt-2 min-h-[50px] w-full rounded-[14px] bg-indigo-600 text-[15px] font-bold text-white disabled:bg-[#f4f3f7] disabled:text-[#9a95a6] dark:disabled:bg-gray-800 dark:disabled:text-gray-500 md:w-auto md:px-6"
+          data-testid={testId ? `wire-gate-show-${testId}` : undefined}
+        >
+          Show wire instructions
+        </button>
+      )}
+    </div>
+  );
+}
+
 /**
  * D708 (#1773) — where to wire one open Fund I line: the Fund's bank, the
- * masked account, the reference to quote and the warning, or the sentence
- * saying why there are no details yet. The full number is fetched only when
- * the LP asks, is recorded by the Worker first, and is held in this
- * component's state alone, never stored.
+ * masked account, the reference to quote and the Worker's warning, which
+ * prints with every set of instructions (D708 decision 10). The full number
+ * is fetched only when the LP asks, and is held in the caller's state alone.
  */
-export function WireDetails({ fundId, line }) {
-  const p = line.pay_instructions;
-  const [full, setFull] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState('');
-  if (!p) return null;
-  if (!p.available) {
-    return (
-      <div className="px-3 pb-2 text-[11px] text-amber-700 dark:text-amber-400" data-testid={`wire-details-${line.id}`}>
-        <span className="font-semibold">Wire details</span> · {p.message || 'No payment instructions can be given for this call yet. Do not send money until Axal gives them.'}
-      </div>
-    );
-  }
-  const show = async () => {
-    setBusy(true); setErr('');
-    try { setFull(await bankAccountsApi.linePayInstructions(fundId, line.id)); }
-    catch (e) { setErr(e?.data?.message || e?.message || 'The account number could not be shown.'); }
-    finally { setBusy(false); }
-  };
+export function WireInstructions({ p, full, busy, err, onReveal, onHide, testId = '' }) {
   const i = full?.instructions;
   return (
-    <div className="mx-3 mb-2 rounded-lg bg-gray-50 dark:bg-gray-800/60 px-3 py-2 text-[11px] text-gray-600 dark:text-gray-300" data-testid={`wire-details-${line.id}`}>
+    <div className="mt-3 rounded-lg bg-gray-50 dark:bg-gray-800/60 px-3 py-2 text-[11px] text-gray-600 dark:text-gray-300">
       <div className={LBL}>Wire details</div>
       <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
         <dt>Bank</dt><dd>{p.bank_name}</dd>
@@ -73,13 +125,59 @@ export function WireDetails({ fundId, line }) {
       {err && <p className="mt-1 text-red-700 dark:text-red-400" role="alert">{err}</p>}
       <div className="mt-1.5">
         {full ? (
-          <button type="button" onClick={() => setFull(null)} className="font-semibold underline">Hide the full details</button>
+          <button type="button" onClick={onHide} className="font-semibold underline">Hide the full details</button>
         ) : (
-          <button type="button" onClick={show} disabled={busy} className="font-semibold underline disabled:opacity-50" data-testid={`wire-details-show-${line.id}`}>
+          <button type="button" onClick={onReveal} disabled={busy} className="font-semibold underline disabled:opacity-50" data-testid={testId ? `wire-details-show-${testId}` : undefined}>
             {busy ? 'Opening…' : 'Show the full account number'}
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * D717 decision 13 (#1859) — one open Fund I line's panel. It opens on the
+ * amount and the due date (`WireHead`); the masked instructions sit behind
+ * the phone check (`WireGate`), and the full number one tap after that,
+ * through `revealWire`, the one place the reveal route is called. Unticking
+ * goes back to the gate and drops the number. Nothing is stored.
+ */
+export function WireDetails({ fundId, line }) {
+  const p = line.pay_instructions;
+  const [wire, dispatch] = useReducer(wireReducer, undefined, initialWire);
+  const [full, setFull] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  if (!p) return null;
+  const confirm = (value) => {
+    if (!value) { setFull(null); setErr(''); }
+    dispatch({ type: 'confirm', value });
+  };
+  const reveal = async () => {
+    const asked = revealWire(wire, () => bankAccountsApi.linePayInstructions(fundId, line.id));
+    if (!asked) return;
+    setBusy(true); setErr('');
+    try { setFull(await asked); dispatch({ type: 'revealed' }); }
+    catch (e) { setErr(e?.data?.message || e?.message || 'The account number could not be shown.'); }
+    finally { setBusy(false); }
+  };
+  const hide = () => { setFull(null); dispatch({ type: 'hide' }); };
+  return (
+    <div className="mx-3 mb-2 rounded-xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 px-4 py-4 text-gray-900 dark:text-gray-100" data-testid={`wire-details-${line.id}`}>
+      <WireHead line={line} />
+      {!p.available ? (
+        <p className="mt-4 rounded-[12px] border-[1.5px] border-[#92400e] px-[14px] py-[12px] text-[13px] font-bold leading-[1.45] text-[#92400e] dark:border-amber-400 dark:text-amber-300">
+          {p.message || 'No payment instructions can be given for this call yet. Do not send money until Axal gives them.'}
+        </p>
+      ) : (
+        <>
+          <WireGate wire={wire} onConfirm={confirm} onShow={() => dispatch({ type: 'show' })} testId={line.id} />
+          {showsInstructions(wire) && (
+            <WireInstructions p={p} full={full} busy={busy} err={err} onReveal={reveal} onHide={hide} testId={line.id} />
+          )}
+        </>
+      )}
     </div>
   );
 }

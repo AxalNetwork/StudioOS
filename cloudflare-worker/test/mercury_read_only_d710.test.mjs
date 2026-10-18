@@ -89,7 +89,9 @@ test('only the client names Mercury\'s API host, and no file names a send-money 
   // is still found, and so is any other `api.mercury.` host.
   const namesHost = /api\.mercury\./;
   const host = SOURCES.filter((s) => namesHost.test(s.text)).map((s) => s.path);
-  assert.deepEqual(host, [CLIENT]);
+  // D753: the connector pages hold the host as data (`endpoints.api`) and call nothing
+  // (`connector_pages_d753.test.ts`, case 15); every other file still may not name it.
+  assert.deepEqual(host, ['cloudflare-worker/src/integrations/connectorPages.ts', CLIENT]);
   const acts = /send-money|sendMoney|transfer-money|requestSendMoney|requestTransferMoney/;
   assert.deepEqual(SOURCES.filter((s) => acts.test(s.text)).map((s) => s.path), []);
 });
