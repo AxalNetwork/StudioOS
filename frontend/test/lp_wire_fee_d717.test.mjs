@@ -53,7 +53,9 @@ const portal = (open, { due = '2026-12-01', commitment = 1000 } = {}) => ({
 });
 
 const render = (el) => renderToStaticMarkup(React.createElement(MemoryRouter, null, el));
-const unescape = (h) => h.replace(/&#x27;/g, "'").replace(/&amp;/g, '&').replace(/&quot;/g, '"');
+// One pass, so an escaped ampersand is never decoded a second time.
+const ENTITIES = { '&#x27;': "'", '&amp;': '&', '&quot;': '"' };
+const unescape = (h) => h.replace(/&#x27;|&amp;|&quot;/g, (e) => ENTITIES[e]);
 /** The `wire-details-10` panel's markup, cut out of the whole card. */
 function panel(open, opts) {
   const html = unescape(render(React.createElement(MyCommitment, { portal: portal(open, opts), onReload: () => {} })));
