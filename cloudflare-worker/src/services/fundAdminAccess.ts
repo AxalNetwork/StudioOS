@@ -32,7 +32,10 @@
  *      Super Admin then passes `requireSuperAdminWriteBar`;
  *   6. a non-admin GP of record keeps today's power over their own fund,
  *      except changing its GP of record, which hands every GP gate to another
- *      account.
+ *      account, and moving the Fund I slug, which decides which fund the Fund
+ *      I bank account pays (D708 decision 13). The slug move is checked
+ *      before step 3, so a branch Worker refuses it too: no branch account
+ *      holds the elevation.
  *
  * IT REFUSES BY THROWING A `Response`, never an `Error`, as `requireFundGp`
  * does. The report-period handlers and the ledger router map every thrown
@@ -61,8 +64,9 @@ export type FundActKey =
   | 'capital_call.preview' | 'capital_call.issue' | 'capital_call.receipt'
   | 'distribution.preview' | 'distribution.execute' | 'distribution.mark_paid'
   | 'fund_report.draft' | 'fund_report.issue'
-  | 'fund.gp_of_record' | 'fund.economics' | 'fund.write'
+  | 'fund.gp_of_record' | 'fund.slug_fund_i' | 'fund.economics' | 'fund.write'
   | 'fund_ledger.administrator' | 'fund_ledger.write'
+  | 'bank_account.see' | 'bank_account.change' | 'bank_account.reveal'
   | 'mercury.connection' | 'mercury.sync' | 'mercury.reconcile';
 
 export type FundAct = Readonly<{
@@ -79,7 +83,7 @@ export type FundAct = Readonly<{
 
 const act = (row: FundAct): FundAct => Object.freeze({ ...row, routes: Object.freeze([...row.routes]) });
 
-/** Decision 1: one act table. Rows of #1773 and #1774 join from `main` (decision 6); #1777's issue row (D712) and #1775's rows have joined. */
+/** Decision 1: one act table. #1774's rows join from `main` (decision 6); #1777's issue row (D712), #1773's rows and #1775's rows have joined. */
 export const FUND_ACTS: readonly FundAct[] = Object.freeze([
   act({ act: 'capital_call.preview', label: 'Preview a capital call', tier: 'admin', owner: '#1779', sentence: null,
     routes: ['POST /api/funds/:id/capital-calls/preview'] }),
@@ -104,6 +108,9 @@ export const FUND_ACTS: readonly FundAct[] = Object.freeze([
   act({ act: 'fund.gp_of_record', label: "Change a fund's general partner of record", tier: 'super_admin', owner: '#1779',
     sentence: "A Super Admin changes a fund's general partner of record.",
     routes: ['PATCH /api/funds/:id (gp_user_id)'] }),
+  act({ act: 'fund.slug_fund_i', label: "Move the Fund I slug onto or off a fund", tier: 'super_admin', owner: '#1773',
+    sentence: 'A Super Admin decides which fund the Fund I bank account pays.',
+    routes: ['PATCH /api/funds/:id (slug, to or from spinout-fund-i)'] }),
   act({ act: 'fund.economics', label: "Change a fund's carry or management fee", tier: 'super_admin', owner: '#1779',
     sentence: "A Super Admin changes a fund's carry or management fee.",
     routes: ['PATCH /api/funds/:id (carried_interest, management_fee)'] }),
@@ -118,6 +125,18 @@ export const FUND_ACTS: readonly FundAct[] = Object.freeze([
       'POST /api/fund-ledger/:id/periods/:periodId/entries', 'POST /api/fund-ledger/:id/periods/:periodId/fee-accrual',
       'POST /api/fund-ledger/:id/periods/:periodId/expenses', 'POST /api/fund-ledger/:id/lines/:lineId/reconcile',
       'POST /api/fund-ledger/:id/periods/:periodId/state'] }),
+  // #1773's console (D708 decision 5). Its routes keep their own gates
+  // (`requireSuperAdmin`, `superAdminWriter`); the rows let the console say
+  // who holds them.
+  act({ act: 'bank_account.see', label: "See the entities' bank accounts", tier: 'super_admin', owner: '#1773',
+    sentence: "A Super Admin sees the entities' bank accounts.",
+    routes: ['GET /api/admin/bank-accounts'] }),
+  act({ act: 'bank_account.change', label: 'Enter, change or retire bank details', tier: 'super_admin', owner: '#1773',
+    sentence: 'A Super Admin enters and changes bank details.',
+    routes: ['POST /api/admin/bank-accounts', 'PATCH /api/admin/bank-accounts/:uid', 'POST /api/admin/bank-accounts/:uid/retire'] }),
+  act({ act: 'bank_account.reveal', label: 'Reveal a full account number', tier: 'super_admin', owner: '#1773',
+    sentence: 'A Super Admin reveals a full account number.',
+    routes: ['POST /api/admin/bank-accounts/:uid/reveal'] }),
   // #1775's Mercury connector (D710). Its routes keep their own gates
   // (`requireMercuryCredentialWriter`, `requireMercuryReader`); the rows let
   // the console say who holds them. Reads carry no act.
@@ -187,6 +206,10 @@ async function gate(
     const coolOff = recoveryCoolOffBody(user);
     if (coolOff) throw refusal(423, coolOff);
   }
+  // Only the Super Admin points the Fund I bank account at a fund. Checked
+  // before the branch passthrough: on a branch `hydrateSuperAdmin` sets the
+  // flag to 0 whatever `super_admins` holds (D106), so every caller is refused.
+  if (row.act === 'fund.slug_fund_i' && !isSuperAdmin(user)) throw superAdminRequired();
   if (branchOf(c.env)) return;
   const isAdmin = String(user?.role ?? '') === 'admin';
   if (!isAdmin) {

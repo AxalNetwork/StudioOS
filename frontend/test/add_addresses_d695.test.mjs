@@ -34,7 +34,10 @@ const ADD_KEYS = {
     'product-improvement': ['feedback'], distribution: ['channel'], 'revenue-and-traction': ['kpi'], 'team-expansion': ['role'],
     'partner-network': ['partner'], 'market-expansion': ['market'], 'durable-company-building': ['obligation'],
   },
-  build: { 'solution-design': ['feature', 'risk'], 'prototype-mvp': ['must-have'], 'company-creation': ['formation-step'] },
+  build: {
+    'solution-design': ['feature'], 'prototype-mvp': ['must-have'], 'product-roadmap': ['item'], 'founding-team': ['founder'],
+    'company-creation': ['filing'], 'operating-systems': ['system'],
+  },
   validate: {
     'problem-discovery': ['theme'], 'ideal-customer-profile': ['segment'], 'market-intelligence': ['competitor'], 'demand-signals': ['signal'], experiments: ['hypothesis'],
   },
@@ -50,7 +53,10 @@ const EDIT_KEYS = {
     'team-expansion': 'edit-role', 'partner-network': 'edit-partner', 'market-expansion': 'edit-market',
     'durable-company-building': 'edit-obligation',
   },
-  build: { 'solution-design': 'edit-feature', 'prototype-mvp': 'edit-must-have', 'company-creation': 'edit-formation-step', 'operating-systems': 'edit-system' },
+  build: {
+    'solution-design': 'edit-feature', 'prototype-mvp': 'edit-must-have', 'product-roadmap': 'edit-item', 'founding-team': 'edit-founder',
+    'company-creation': 'edit-filing', 'operating-systems': 'edit-system',
+  },
   validate: {
     'problem-discovery': 'edit-theme', 'ideal-customer-profile': 'edit-segment', 'market-intelligence': 'edit-competitor', 'demand-signals': 'edit-signal', experiments: 'edit-hypothesis',
   },
@@ -59,6 +65,7 @@ const CTA_APART = {
   'raise/fundraising-readiness': ['Re-score', 'Re-score now'], 'raise/investor-narrative': ['New version', 'Create version'],
   'raise/pitch-deck': ['New link', 'Create link'], 'raise/use-of-funds': ['Edit split', 'Save split'],
   'grow/revenue-and-traction': ['Enter a KPI', 'Save KPI'], 'grow/team-expansion': ['Open a role', 'Open role'],
+  'build/operating-systems': ['Connect a system', 'Continue to sign-in'],
 };
 /** An Edit that is its module's Add (Use of funds), which keeps the Add's key and CTA. */
 const editIsAdd = (m, cycle, slug) => m.formsFor(cycle, slug).some((f) => f.key === m.editFor(cycle, slug)?.key && f.title === m.editFor(cycle, slug)?.title);
@@ -97,11 +104,11 @@ function assertKeys(m) {
       assert.equal(f.cta, 'Save', `${cycle}/${slug}: an Edit saves with Save`);
     }
   }
-  // The row buttons are unchanged: Edit, Mark, Choose connector.
+  // The row buttons: Edit, and Operating systems' Choose connector.
   assert.equal(m.editFor('grow', 'distribution').button, 'Edit');
-  assert.equal(m.editFor('build', 'solution-design').button, 'Mark');
+  assert.equal(m.editFor('build', 'solution-design').button, 'Edit', 'Edit feature replaces Mark (#1656 PR 3b)');
   assert.equal(m.editFor('build', 'operating-systems').button, 'Choose connector');
-  assert.deepEqual(m.formsFor('build', 'solution-design').map((f) => f.key), ['feature', 'risk']);
+  assert.deepEqual(m.formsFor('build', 'solution-design').map((f) => f.key), ['feature'], 'Add a risk is the feature record\'s action');
   assert.equal(m.formFor('build', 'solution-design').key, 'feature', '`/new` with no `?form=` opens the first');
 }
 
@@ -109,7 +116,7 @@ test('every Add and Edit form has a key unique in its module and its own call to
   assertKeys({ FORMS, EDITS, editFor, formFor, formsFor });
   await mutationCheck(formsSource, formsPath, assertKeys, [
     ["key: 'channel', cta: 'Add channel'", "key: 'channel', cta: 'Add a channel'"],
-    ["key: 'risk', cta", "key: 'feature', cta"],
+    ["  key: 'edit-item', title: 'Edit item',", "  key: 'item', title: 'Edit item',"],
     ["key: 'narrative-version'", "key: 'narrative_version'"],
     ["const EDIT = { button: 'Edit', cta: 'Save' };", "const EDIT = { button: 'Edit' };"],
     ["key: 'edit-system', cta: 'Save'", "key: 'edit-system', cta: 'Choose connector'"],
@@ -213,7 +220,8 @@ function assertKinds(m) {
   // Forms still written in today's types keep today's rules; the canvas forms are read as `canvas()` is.
   const legacy = allForms(m).filter((f) => (f.fields || []).every((x) => !x.kind && !x.parts));
   // #1652's two Raise forms were legacy-typed until #1657 drew Raise's canvas forms.
-  assert.ok(legacy.length >= 8, `${legacy.length} legacy forms checked`);
+  // Build's canvas forms (#1656 PR 3b) leave Operating systems' Choose connector the one legacy-typed form.
+  assert.ok(legacy.length >= 1, `${legacy.length} legacy forms checked`);
   for (const f of legacy) {
     assert.deepEqual(m.initialValues(f), legacyInitial(f), `${f.key}: first values`);
     for (const values of legacyCases(f)) {

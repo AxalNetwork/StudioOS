@@ -80,8 +80,9 @@ test('the table: unique keys, the decision\'s tiers, and a sentence on every Sup
   assert.deepEqual(tiers, {
     'capital_call.preview': 'admin', 'capital_call.issue': 'super_admin', 'capital_call.receipt': 'admin',
     'distribution.preview': 'admin', 'distribution.execute': 'super_admin', 'distribution.mark_paid': 'admin',
-    'fund_report.draft': 'admin', 'fund_report.issue': 'super_admin', 'fund.gp_of_record': 'super_admin', 'fund.economics': 'super_admin', 'fund.write': 'admin',
+    'fund_report.draft': 'admin', 'fund_report.issue': 'super_admin', 'fund.gp_of_record': 'super_admin', 'fund.slug_fund_i': 'super_admin', 'fund.economics': 'super_admin', 'fund.write': 'admin',
     'fund_ledger.administrator': 'super_admin', 'fund_ledger.write': 'admin',
+    'bank_account.see': 'super_admin', 'bank_account.change': 'super_admin', 'bank_account.reveal': 'super_admin',
     'mercury.connection': 'super_admin', 'mercury.sync': 'admin', 'mercury.reconcile': 'admin',
   });
   for (const a of FUND_ACTS) assert.equal(a.sentence !== null, a.tier === 'super_admin', a.act);
@@ -94,11 +95,15 @@ const ROUTERS: Record<string, { file: string; name: string }> = {
   '/api/capital': { file: 'routes/capital.ts', name: 'capital' },
   '/api/fund-ledger': { file: 'routes/fund_ledger.ts', name: 'r' },
   '/api/fund-reporting': { file: 'routes/fund_reporting.ts', name: 'r' },
+  '/api/admin/bank-accounts': { file: 'routes/admin_bank_accounts.ts', name: 'r' },
   '/api/admin/mercury': { file: 'routes/admin_mercury.ts', name: 'r' },
 };
 
-/** #1775's rows keep their own gates: each handler is held to the call it makes. */
+/** #1773's and #1775's rows keep their own gates: each handler is held to the call it makes. */
 const OWN_GATES: Record<string, string> = {
+  'bank_account.see': 'await requireSuperAdmin(c)',
+  'bank_account.change': 'await superAdminWriter(c)',
+  'bank_account.reveal': 'await superAdminWriter(c)',
   'mercury.connection': 'await requireMercuryCredentialWriter(c)',
   'mercury.sync': 'await requireMercuryReader(c)',
   'mercury.reconcile': 'await requireMercuryReader(c)',
@@ -131,10 +136,10 @@ test('every route FUND_ACTS names is mounted, and its handler asserts that act',
   for (const row of FUND_ACTS) {
     for (const route of row.routes) {
       const [method, full] = route.replace(/\s*\(.*\)$/, '').split(' ');
-      const prefix = Object.keys(ROUTERS).find((p) => full.startsWith(`${p}/`));
+      const prefix = Object.keys(ROUTERS).find((p) => full === p || full.startsWith(`${p}/`));
       assert.ok(prefix, `${route}: no router owns this prefix`);
       const { file, name } = ROUTERS[prefix!];
-      const body = handler(file, name, method, full.slice(prefix!.length));
+      const body = handler(file, name, method, full.slice(prefix!.length) || '/');
       assert.ok(body, `${route} (${row.act}) is not a route in ${file}`);
       if (OWN_GATES[row.act]) {
         assert.ok(body!.includes(OWN_GATES[row.act]), `${route} no longer runs ${OWN_GATES[row.act]}`);

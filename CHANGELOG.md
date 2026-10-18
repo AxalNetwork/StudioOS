@@ -4,6 +4,15 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## Connector webhooks need a signing key (D719)
+
+- `POST /api/integrations/webhook/:provider/:uid` (and its `/api/connectors`
+  mount) takes a delivery only for an active connection whose provider has a
+  handler and which holds a signing key; HubSpot's handler checks its own
+  signature and needs no stored key. Anything else gets 404 `not_found`
+  before the body is read. A Calendly delivery is fetched only when its event
+  URI is an `https://api.calendly.com/scheduled_events/<id>` resource.
+
 ## Scale plan for the first 1,000 daily users
 
 `documentation/audits/SCALE_1000_DAU_AUDIT_2026-09-18.md` is a point-in-time

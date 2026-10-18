@@ -79,6 +79,12 @@ Its `validate` group (D695, #1656 PR 2b) holds Validate's five Adds and their
 PATCHes, `/api/cycles/validate/{themes,segments,competitors,demand-signals,hypotheses}`
 with `?project=N`. The forms write through it, not through `cycleValidate.js`,
 whose segment, demand-signal and competitor-mention adds now have no caller.
+Its `build` group (PR 3b) adds Build's canvas Adds and Edits over #1792's routes
+(`features`, `must-haves`, `roadmap`, `founders`, each with `?project=N`;
+`founder` and `founderUpdate` pass `inlinePaywall`, so the dialog shows the
+cap table's plan refusal itself), and `recordAction` is the one write of a
+record's own action, which `cyclesApi.recordAction` calls and Add filing's
+Proof sends as `FormData`.
 
 D696 (#1658): `cyclesApi.record`, `recordActivity` and `recordAction` call
 D690’s mounted `/api/cycles/:cycle/modules/:slug/records/:id`, its `/activity`
@@ -108,6 +114,12 @@ on the Worker (`/api/ai/rail-preferences`, migration 465): the assist mode per
 rail section and the model picked per section and router task, for the caller
 only. A null clears a row. localStorage stays the cache, so a mode or a pick
 set on a laptop is in place on a phone after a reload.
+
+D715 (#1780): `adminMercury.js` calls `/api/admin/mercury` (`cloudflare-worker/src/routes/admin_mercury.ts`, D710):
+the four entity connections (each with its accounts by ending), the Super
+Admin's connect with `confirm_read_only: true` and disconnect with a reason,
+sync now, and the accounts, transactions and matches reads. Every read is
+audited by the Worker; nothing here moves money. #1779's console imports it.
 
 D708 (#1773): `bankAccounts.js` calls `/api/admin/bank-accounts` (the Super
 Admin's list, add, label and purposes, retire, and a recorded reveal of one

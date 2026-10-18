@@ -67,8 +67,9 @@ Edits against a stubbed write table, with PR 2b's registration, chip loaders,
 search and record-opened Edits. It reads each body's keys against
 `cloudflare-worker/src/routes/cycle_validate.ts` on `main`;
 `cloudflare-worker/test/cycle_forms_d695.test.ts` sends them through the real routes.
-`add_forms_build_d695.test.mjs` does the same for Build's six specs (PR 3a),
-reading each body against `cloudflare-worker/src/routes/cycle_build.ts` on `main`.
+`add_forms_build_d695.test.mjs` does the same for Build's six specs (PR 3a) and
+PR 3b's registration, loaders, Proof and stored words, reading each body
+against `cloudflare-worker/src/routes/cycle_build.ts` on `main`.
 `add_forms_raise_grow_d695.test.mjs` mounts Grow's and Raise's seven canvas
 forms and their Edits (#1657) against a stubbed write table, Raise's with each
 module's `form-options` reply, and checks their client writes.

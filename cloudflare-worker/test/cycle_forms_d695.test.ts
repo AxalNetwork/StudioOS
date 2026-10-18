@@ -1,7 +1,7 @@
 /**
- * D695 (#1656) PR 2b — Validate's five Add forms and their Edits, sent through
- * the real Worker routes (test 12), with another venture's ids (test 13).
- * Build's cases join this file with PR 3b.
+ * D695 (#1656) — Validate's five Add forms and Build's six, and their Edits,
+ * sent through the real Worker routes (test 12), with another venture's ids
+ * and the write gate (test 13). PR 2b added Validate's cases, PR 3b Build's.
  *
  * The forms are `frontend/src/pages/cycles/forms.js` itself and the writes
  * `makeCycleWrites`, bound here to `routes/cycle_validate.ts` and D690's
@@ -26,6 +26,7 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 
 import cycleValidate from '../src/routes/cycle_validate.ts';
+import cycleBuild from '../src/routes/cycle_build.ts';
 import { createCycleRecords } from '../src/routes/cycle_records.ts';
 import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
@@ -79,22 +80,31 @@ function fixture() {
 
 const app = new Hono<any>();
 app.route('/api/cycles/validate', cycleValidate);
+app.route('/api/cycles/build', cycleBuild);
 app.route('/api/cycles', createCycleRecords());
 app.onError((err: any, c) => c.json({ detail: String(err?.message || '') }, 500));
 
 type Call = { path: string; method: string; body: any };
 /** `makeCycleWrites` over the real routes, as `who`: a refusal throws the Worker's sentence with its status. */
-function writesAs(db: DatabaseSync, who = FOUNDER) {
+/** A stand-in for the R2 bucket, for Upload proof. */
+function bucket() {
+  const objects = new Map<string, Uint8Array>();
+  return { objects, put: async (key: string, bytes: any) => { objects.set(key, bytes instanceof Uint8Array ? bytes : new Uint8Array(await new Response(bytes).arrayBuffer())); },
+    get: async (key: string) => (objects.has(key) ? { body: objects.get(key) } : null), delete: async (key: string) => { objects.delete(key); } };
+}
+function writesAs(db: DatabaseSync, who = FOUNDER, files = bucket()) {
   const calls: Call[] = [];
   const request = async (path: string, opts: any = {}) => {
-    calls.push({ path, method: opts.method || 'GET', body: opts.body ? JSON.parse(opts.body) : undefined });
+    calls.push({ path, method: opts.method || 'GET', body: typeof opts.body === 'string' ? JSON.parse(opts.body) : opts.body });
     const token = await new SignJWT({ user_id: who, role: ROLE[who] }).setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
     const saved = [console.warn, console.error]; console.warn = () => {}; console.error = () => {};
     try {
+      const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+      if (!(opts.body instanceof FormData)) headers['Content-Type'] = 'application/json';
       const res = await withThrownResponses(() => app.request(`/api${path}`, {
-        method: opts.method || 'GET', body: opts.body, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      }, { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) } as any));
+        method: opts.method || 'GET', body: opts.body, headers,
+      }, { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db), FILES: files } as any));
       const raw = await res.text();
       const body = raw ? JSON.parse(raw) : null;
       if (!res.ok) {
@@ -106,7 +116,8 @@ function writesAs(db: DatabaseSync, who = FOUNDER) {
     } finally { [console.warn, console.error] = saved; }
   };
   const record = (slug: string, id: string | number, project = P) => request(`/cycles/validate/modules/${slug}/records/${encodeURIComponent(String(id))}?project=${project}`);
-  return { w: makeCycleWrites(request), calls, record };
+  const buildRecord = (slug: string, id: string | number, project = P) => request(`/cycles/build/modules/${slug}/records/${encodeURIComponent(String(id))}?project=${project}`);
+  return { w: makeCycleWrites(request), calls, record, buildRecord, files };
 }
 
 /** A form's fields with what its `loadOptions` answered laid over each, as `FormLightbox`'s `formFields` lays them. */
@@ -124,9 +135,9 @@ async function refusal(work: () => Promise<unknown>) {
   assert.fail('expected a refusal');
 }
 /** An Edit as the record page and a row open it: the record's Edit values, through `recordFormFor`. */
-async function editOpened(slug: string, id: string | number, read: (s: string, i: string | number) => Promise<any>) {
+async function editOpened(slug: string, id: string | number, read: (s: string, i: string | number) => Promise<any>, cycle = 'validate') {
   const rec = await read(slug, id);
-  const spec = recordFormFor(recordEditAction(rec), rec, editFor('validate', slug));
+  const spec = recordFormFor(recordEditAction(rec), rec, editFor(cycle, slug));
   assert.ok(spec, `${slug} ${id}: its record declares an Edit`);
   return spec!;
 }
@@ -300,4 +311,164 @@ test('13: a partner, an investor and another venture\'s founder get the Worker\'
 test('12: Validate\'s five Adds and Edits are registered, and every Edit reads its record', () => {
   assert.deepEqual(Object.keys(FORMS.validate), ['problem-discovery', 'ideal-customer-profile', 'market-intelligence', 'demand-signals', 'experiments']);
   for (const [slug, edit] of Object.entries(EDITS.validate) as Array<[string, any]>) assert.equal(edit.readsRecord, true, slug);
+});
+
+// ---------------------------------------------------------------------------
+// PR 3b: Build's six forms and their Edits (#1792's routes and records)
+// ---------------------------------------------------------------------------
+
+/** The Validate fixture, with the venture in a company its founder is a member of, on the plan Add founder needs. */
+function buildFixture() {
+  const db = fixture();
+  db.exec(`UPDATE projects SET company_id = 10 WHERE id = ${P}`);
+  db.exec(`UPDATE projects SET company_id = 20 WHERE id = ${PB}`);
+  db.exec(`INSERT INTO user_company_links (uid, user_id, company_id) VALUES ('ucl-1', ${FOUNDER}, 10), ('ucl-2', ${OTHER}, 20)`);
+  db.exec(`UPDATE users SET subscription_tier = 'studio', subscription_status = 'active' WHERE id = ${FOUNDER}`);
+  db.exec(`INSERT INTO mvp_features (id, project_id, title) VALUES (91, ${PB}, 'Their feature')`);
+  return db;
+}
+const PDF = () => new File([new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34, 0x0a])], 'proof.pdf', { type: 'application/pdf' });
+
+test('12 (Build): each Add\'s body through #1792\'s route, read back, with every fixed chip accepted', async () => {
+  const db = buildFixture();
+  const { w } = writesAs(db);
+  let n = 0;
+  const each = async (slug: string, sample: Record<string, unknown>, vary: string[]) => {
+    const form = formFor('build', slug);
+    const { values, fields } = await opened(form, w);
+    const base = { ...values, ...sample };
+    assert.deepEqual(validate({ ...form, fields }, base), {}, `${slug}: the sample is valid`);
+    const first = await form.submit(w, P, base);
+    for (const name of vary) {
+      for (const value of choices(fields, name)) {
+        n += 1;
+        await assert.doesNotReject(form.submit(w, P, { ...base, [name]: value, title: `${String(base.title ?? slug)} ${n}`, name: `${String(base.name ?? slug)} ${n}` }), `${slug}: ${name}=${value}`);
+      }
+    }
+    return first;
+  };
+  const feature = await each('solution-design', { title: 'Bank feed import', pain_group_id: '11', hypothesis_id: '5' }, ['impact', 'effort', 'scope', 'pain_group_id', 'hypothesis_id']);
+  assert.deepEqual({ ...one(db, 'SELECT title, added_value, effort, scope, pain_group_id, hypothesis_id, is_must_have FROM mvp_features WHERE id = ?', feature.id) },
+    { title: 'Bank feed import', added_value: 'High', effort: 'S', scope: 'core', pain_group_id: 11, hypothesis_id: 5, is_must_have: 0 }, 'High impact and Low effort, as the canvas chooses them');
+  const must = await each('prototype-mvp', { title: 'Reconciliation report', owner_user_id: String(FOUNDER), due_date: '2026-11-08', linked: ['github'], github_url: 'https://github.com/example/app/issues/4' }, ['state']);
+  assert.deepEqual({ ...one(db, 'SELECT is_must_have, delivery_status, owner_user_id, due_date FROM mvp_features WHERE id = ?', must.id) },
+    { is_must_have: 1, delivery_status: 'Backlog', owner_user_id: FOUNDER, due_date: '2026-11-08' });
+  assert.equal(one(db, 'SELECT COUNT(*) AS n FROM mvp_feature_links WHERE feature_id = ?', must.id).n, 1);
+  const item = await each('product-roadmap', { title: 'Approval rules', kpi_key: 'mrr', target_date: '2026-12-01' }, ['column']);
+  assert.deepEqual({ ...one(db, 'SELECT objective, kanban_status, kpi_key, target_date FROM roadmap_okrs WHERE id = ?', item.id) },
+    { objective: 'Approval rules', kanban_status: 'next', kpi_key: 'mrr', target_date: '2026-12-01' }, 'Next, as the canvas chooses it');
+  const waits = await formFor('build', 'product-roadmap').submit(w, P, { title: 'Second bank', column: 'later', waits_on_id: String(item.id) });
+  assert.equal(one(db, 'SELECT COUNT(*) AS n FROM okr_dependencies WHERE okr_id = ? AND blocks_okr_id = ?', item.id, waits.id).n, 1, 'Waits on is an edge from the item it names');
+  // 10% each, so the founder and one per vesting choice stay inside the cap table.
+  const founder = await each('founding-team', { name: 'Ana Wren', role: 'CEO', equity_pct: '10', vesting_start: '2026-03-12', total_months: '36', cliff_months: '6' }, ['vesting']);
+  assert.match(String(founder.id), /^h-\d+$/);
+  assert.equal(formFor('build', 'founding-team').done(founder)?.href, '/raise/legal-engine/founders', 'the legal engine, once saved');
+  const holder = one(db, 'SELECT name, founder_role, ownership_pct FROM cap_table_holders WHERE id = ?', Number(String(founder.id).slice(2)));
+  assert.deepEqual([holder.name, holder.founder_role, holder.ownership_pct], ['Ana Wren', 'CEO', 10]);
+  for (const kind of choices(formFor('build', 'company-creation').fields, 'kind')) {
+    for (const state of ['upcoming', 'filed']) {
+      n += 1;
+      await formFor('build', 'company-creation').submit(w, P, { kind, jurisdiction: 'Federal', due_date: '2026-11-11', state, ...(kind === '83b' ? { for_holder_id: founder.id } : {}) });
+    }
+  }
+  assert.ok(one(db, "SELECT COUNT(*) AS n FROM formation_steps WHERE project_id = ? AND kind = '83b' AND for_holder_id IS NOT NULL", P).n >= 1);
+  // Connect a system: one keyless PUT, then the hand-off; every sync accepted.
+  const sys = formFor('build', 'operating-systems');
+  for (const sync of choices(sys.fields, 'sync')) {
+    n += 1;
+    const out = await sys.submit(w, P, { system: 'crm', provider_crm: 'hubspot', sync, feeds: ['kpis'] });
+    assert.equal(out.next, `/build/connect?project_id=${P}&tool=hubspot`);
+  }
+  assert.equal(one(db, "SELECT sync_request FROM project_core_systems WHERE project_id = ? AND kind = 'crm'", P).sync_request, 'manual');
+  assert.ok(n >= 25, `${n} Build choices checked (with Grow's 57 in cycle_adapters_d661)`);
+});
+
+test('12 (Build): each loader fills only the venture\'s own choices, after the venture\'s records and before None yet', async () => {
+  const db = buildFixture();
+  const { w } = writesAs(db);
+  let { fields, values } = await opened(formFor('build', 'solution-design'), w);
+  assert.deepEqual(choices(fields, 'pain_group_id'), ['11', ''], 'the themes, then None yet');
+  assert.deepEqual([values.pain_group_id, values.impact, values.effort], ['11', 'high', 'low'], 'the canvas\'s chips keep its words');
+  ({ fields } = await opened(formFor('build', 'prototype-mvp'), w));
+  assert.deepEqual(choices(fields, 'owner_user_id'), [String(FOUNDER)]);
+  ({ fields, values } = await opened(formFor('build', 'product-roadmap'), w));
+  assert.ok(choices(fields, 'kpi_key').includes('mrr') && choices(fields, 'kpi_key').at(-1) === '');
+  assert.deepEqual([values.feedback_theme, values.waits_on_id], ['', ''], 'None and Nothing chosen');
+  ({ fields } = await opened(formFor('build', 'company-creation'), w));
+  assert.deepEqual(choices(fields, 'jurisdiction'), ['Federal', ''], 'the entity\'s jurisdiction (none here), Federal, Other');
+  const sysLoaded = await formFor('build', 'operating-systems').loadOptions(w, P);
+  assert.ok(sysLoaded.provider_crm.options.some((o: any) => o.value === 'hubspot'), 'CRM\'s catalogue providers');
+  assert.equal(sysLoaded.sync.when({ system: 'workspace' }), false, 'Workspace draws no Sync');
+  assert.equal(sysLoaded.sync.when({ system: 'crm' }), true, 'nothing mapped: the caller may set it');
+});
+
+test('12 (Build): Add filing stores its proof through the new step\'s Upload proof', async () => {
+  const db = buildFixture();
+  const { w, files, calls } = writesAs(db);
+  const out = await formFor('build', 'company-creation').submit(w, P, { kind: 'ein', jurisdiction: 'Federal', due_date: '2026-11-11', state: 'upcoming', proof: PDF() });
+  const action = calls.find((c) => c.path.includes('/actions/upload-proof'));
+  assert.equal(action?.path, `/cycles/build/modules/company-creation/records/step-${out.id}/actions/upload-proof?project=${P}`);
+  assert.ok(action!.body instanceof FormData);
+  const step = one(db, 'SELECT proof_file_key FROM formation_steps WHERE id = ?', out.id);
+  assert.match(String(step.proof_file_key), new RegExp(`^build-proof/${P}/`), 'the key the Worker derives');
+  assert.equal(files.objects.size, 1);
+  // A proof the Worker refuses leaves the filing added, and says so.
+  const bad = new File([new Uint8Array([1, 2, 3])], 'proof.pdf', { type: 'application/pdf' });
+  const r = await refusal(() => formFor('build', 'company-creation').submit(w, P, { kind: 'other', jurisdiction: 'Federal', due_date: '2026-11-12', state: 'upcoming', proof: bad }));
+  assert.match(r.message, /^The filing was added; its proof was not stored: /);
+  assert.equal(one(db, "SELECT COUNT(*) AS n FROM formation_steps WHERE project_id = ? AND due_date = '2026-11-12'", P).n, 1);
+});
+
+test('12 (Build): each Build Edit opens with its record\'s values and saves through its PATCH, with nothing else moved', async () => {
+  const db = buildFixture();
+  const { w, buildRecord } = writesAs(db);
+  const feature = await formFor('build', 'solution-design').submit(w, P, { title: 'Bank feed import', impact: 'medium', effort: 'high', scope: 'core', pain_group_id: '11' });
+  let spec = await editOpened('solution-design', feature.id, buildRecord, 'build');
+  assert.deepEqual([spec.current.impact, spec.current.effort], ['medium', 'high'], 'the stored Medium and L read as the canvas\'s words');
+  await editFor('build', 'solution-design').submit(w, P, spec.id, { ...spec.current, title: 'Bank feed sync' });
+  assert.deepEqual({ ...one(db, 'SELECT title, added_value, effort, pain_group_id FROM mvp_features WHERE id = ?', feature.id) },
+    { title: 'Bank feed sync', added_value: 'Medium', effort: 'L', pain_group_id: 11 });
+
+  const must = await formFor('build', 'prototype-mvp').submit(w, P, { title: 'Report', state: 'in_progress', due_date: '2026-11-08' });
+  spec = await editOpened('prototype-mvp', must.id, buildRecord, 'build');
+  assert.equal(spec.current.state, 'in_progress');
+  await editFor('build', 'prototype-mvp').submit(w, P, spec.id, { ...spec.current, state: 'done' });
+  assert.deepEqual({ ...one(db, 'SELECT delivery_status, due_date FROM mvp_features WHERE id = ?', must.id) }, { delivery_status: 'Done', due_date: '2026-11-08' });
+
+  const item = await formFor('build', 'product-roadmap').submit(w, P, { title: 'Approval rules', column: 'next', target_date: '2026-12-01' });
+  spec = await editOpened('product-roadmap', item.id, buildRecord, 'build');
+  await editFor('build', 'product-roadmap').submit(w, P, spec.id, { ...spec.current, column: 'now' });
+  assert.deepEqual({ ...one(db, 'SELECT objective, kanban_status, target_date FROM roadmap_okrs WHERE id = ?', item.id) }, { objective: 'Approval rules', kanban_status: 'now', target_date: '2026-12-01' });
+
+  const founder = await formFor('build', 'founding-team').submit(w, P, { name: 'Ana Wren', role: 'CEO', equity_pct: '40', vesting: '4y_1y_cliff', vesting_start: '2026-03-12' });
+  spec = await editOpened('founding-team', founder.id, buildRecord, 'build');
+  await editFor('build', 'founding-team').submit(w, P, spec.id, { ...spec.current, role: 'CTO' });
+  assert.equal(one(db, 'SELECT founder_role FROM cap_table_holders WHERE id = ?', Number(String(founder.id).slice(2))).founder_role, 'CTO');
+
+  const step = await formFor('build', 'company-creation').submit(w, P, { kind: 'ein', jurisdiction: 'Federal', due_date: '2026-11-11', state: 'upcoming' });
+  spec = await editOpened('company-creation', `step-${step.id}`, buildRecord, 'build');
+  assert.equal(spec.current.state, 'upcoming');
+  await editFor('build', 'company-creation').submit(w, P, spec.id, { ...spec.current, state: 'filed' });
+  assert.deepEqual({ ...one(db, 'SELECT state, kind, due_date FROM formation_steps WHERE id = ?', step.id) }, { state: 'done', kind: 'ein', due_date: '2026-11-11' });
+});
+
+test('13 (Build): another venture\'s choices and ids are refused, and a partner or investor writes nothing', async () => {
+  const db = buildFixture();
+  const { w } = writesAs(db);
+  for (const slug of Object.keys(FORMS.build)) {
+    const form = formFor('build', slug);
+    if (form.loadOptions) assert.equal((await refusal(() => form.loadOptions(w, PB))).status, 403, `${slug}: B's choices`);
+  }
+  const before = Number(one(db, 'SELECT COUNT(*) AS n FROM activity_logs').n);
+  assert.equal((await refusal(() => w.build.feature(P, 91, { title: 'x' }))).status, 404, 'B\'s feature');
+  assert.equal((await refusal(() => w.build.addFeature(P, { title: 'x', pain_group_id: 22 }))).status, 404, 'B\'s pain theme');
+  assert.equal((await refusal(() => w.build.addMustHave(P, { title: 'x', hypothesis_id: 23 }))).status, 404, 'B\'s hypothesis');
+  assert.equal(Number(one(db, 'SELECT COUNT(*) AS n FROM activity_logs').n), before, 'nothing written');
+  for (const who of [PARTNER, INVESTOR, OTHER]) {
+    const { w: x } = writesAs(db, who);
+    for (const work of [() => x.build.addFeature(P, { title: 'x' }), () => x.build.roadmapItem(P, { title: 'x' }), () => x.build.formationStep(P, { kind: 'ein' })]) {
+      assert.ok([403, 404].includes((await refusal(work)).status), `a Build write as ${who}`);
+    }
+  }
+  assert.equal(Number(one(db, 'SELECT COUNT(*) AS n FROM mvp_features WHERE project_id = ?', P).n), 0);
 });

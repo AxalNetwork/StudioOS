@@ -5,7 +5,7 @@ The corpus the first integration pass worked from. Sorted by one question:
 
 | Folder | Count | Meaning |
 | --- | --- | --- |
-| `integrated/` | 95 | A route is running on main. Graded `CURRENT`, `UPGRADE` or `RESKIN` — the surface exists, and for `UPGRADE`/`RESKIN` the canvas is a *diff against* something already live. |
+| `integrated/` | 97 | A route is running on main. Graded `CURRENT`, `UPGRADE` or `RESKIN` — the surface exists, and for `UPGRADE`/`RESKIN` the canvas is a *diff against* something already live. |
 | `backlog/` | 28 | Graded `NEW` or `DEFERRED`. No route yet. |
 | `out-of-scope/` | 26 | Deliberately not being built. The `ROUTE_MAP.md` row says why. |
 | `shared/` | 6 | The dc-runtime bundle every canvas loads, plus two standalone pitch-deck exports. Generated — both code scanners ignore this tree. Every canvas asks for it as `src="./support.js"`, which resolves next to the canvas and **not** to this folder, so opening one straight from `integrated/` in a browser gets a blank page: copy `shared/support.js` beside it first. Nothing runs these at runtime, so the reference is nominal — it is a convention marking "the shared runtime, not an inlined 69KB copy", and `scripts/read-canvas.mjs` reproduces it when it decodes a new export. |
@@ -406,3 +406,11 @@ unedited, because SM imports SMP by name (SM:20). D701 (#1663) built S1m–S5m
 venture, the archetype card on a phone, What others see and Visibility).
 **`integrated/` went 93 → 95.** The departures are in
 `documentation/architecture/decisions/D702.md`.
+
+**2026-10-17 (D703, #1665), two more graduated.** `Cycle Overviews · Mobile`
+and `Cycle Modules · Mobile` moved from `design/incoming/` to `integrated/`,
+unedited, where their `Cycle Overview` import resolves. Below 1024px each
+cycle root is its One Next Thing, and each module, add form and cycle action
+is its own page; the phone record page follows in #1665's closing PR.
+**`integrated/` went 95 → 97.** The departures are in
+`documentation/architecture/decisions/D703.md`.

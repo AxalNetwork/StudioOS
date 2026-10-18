@@ -86,7 +86,9 @@ jobs:
                 echo "::error::migration must look like 403_research_company_directory_wikidata.sql"
                 exit 1
               fi
-              if ls cloudflare-worker/sql/migrations | grep -q "^${MIGRATION:0:3}_"; then
+              # A glob, not `ls | grep -q`: under pipefail, grep -q's early exit
+              # can SIGPIPE ls and turn a taken number into a pass.
+              if compgen -G "cloudflare-worker/sql/migrations/${MIGRATION:0:3}_*" > /dev/null; then
                 echo "::error::migration number ${MIGRATION:0:3} is already taken"
                 exit 1
               fi
