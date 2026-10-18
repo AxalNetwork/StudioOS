@@ -1893,6 +1893,25 @@ async function handleStripeEvent(
       await handleChargeSucceeded(env, obj);
       return;
     }
+    // D755 §8 (#1920): a refund or a dispute of a token pack takes its tokens
+    // back, up to the balance, and records the rest. Each acts only on a charge
+    // whose PaymentIntent has an ai_topup_purchases row; every other charge is
+    // untouched. A case that cannot act throws, so Stripe retries.
+    case 'charge.refunded': {
+      const { reverseRefund } = await import('../services/aiCreditReversals');
+      await reverseRefund(env, obj);
+      return;
+    }
+    case 'charge.dispute.created': {
+      const { reverseDispute } = await import('../services/aiCreditReversals');
+      await reverseDispute(env, obj);
+      return;
+    }
+    case 'charge.dispute.closed': {
+      const { closeDispute } = await import('../services/aiCreditReversals');
+      await closeDispute(env, obj);
+      return;
+    }
     default:
       return;
   }
