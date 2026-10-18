@@ -370,7 +370,7 @@ export function ConnectorsView({ data, initialTab = 'yours', initialChip = 'All'
   const rows = useMemo(() => yoursRows(data.catalogue, { q, filter, sort }), [data.catalogue, q, filter, sort]);
   const paged = pageOf(rows, page);
   const sections = useMemo(() => discoverSections(data.catalogue, chip, { q, suggestions: data.suggestions ?? null }), [data.catalogue, chip, q, data.suggestions]);
-  const chips = useMemo(() => discoverChips(data.catalogue), [data.catalogue]);
+  const chips = useMemo(() => discoverChips(data.catalogue, data.categoryOrder), [data.catalogue, data.categoryOrder]);
   const anyConnected = data.catalogue.some((p) => p.connection);
   // One search rule (`matchesQuery`) for the lists and for "No connector
   // called…": on Yours the question is your connectors, on Discover the catalogue.

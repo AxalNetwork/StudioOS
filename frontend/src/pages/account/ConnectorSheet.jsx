@@ -50,7 +50,7 @@ export function suggestionsNote(e) {
  * reads as `forbidden` with the Worker's own sentence: retrying cannot help.
  */
 export function useConnectors({ companyId = null } = {}) {
-  const [state, setState] = useState({ status: 'loading', message: '', providers: [], items: null, waitlist: [], firstParty: {}, itemsFailed: false, companies: null, suggestions: null, suggestionsNote: '' });
+  const [state, setState] = useState({ status: 'loading', message: '', providers: [], categoryOrder: null, items: null, waitlist: [], firstParty: {}, itemsFailed: false, companies: null, suggestions: null, suggestionsNote: '' });
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let live = true;
@@ -72,6 +72,7 @@ export function useConnectors({ companyId = null } = {}) {
         status: 'ready',
         message: '',
         providers: av?.providers || av?.items || [],
+        categoryOrder: Array.isArray(av?.category_order) ? av.category_order : null,
         items: mine ? mine.items || [] : null,
         itemsFailed: !mine,
         waitlist: wl?.items || [],

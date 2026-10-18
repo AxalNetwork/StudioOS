@@ -4,6 +4,20 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## A connector's page body, from the registry (D753 F7, #1955, part 1)
+
+- `ConnectorBody` in `ConnectorPage.jsx` draws About (the long description,
+  It reads / It writes marked Automatically or Asks first, What Axal VC can
+  access), Tools grouped as Reads, Writes, Keeps the connection working and
+  Calls Axal VC, Prompts, the trust notice (`role="note"`) and Details from
+  the Worker's description of a connector. A field it does not send reads
+  "Not recorded"; only `https:` links are drawn; `capabilities` is never read.
+- `connectorsModel.js`: `ALIAS_FIELDS` carries the page fields `/available`
+  will send, a card's "by" is `made_by.name`, and the Discover chips follow
+  the answer's `category_order` when it sends one.
+- Nothing changes on screen until W2 (#1878) serves the description and the
+  page reads it (part 2).
+
 ## Every connector has its own page (D753 F1, #1876)
 
 - `/account/connectors/:key` (`ConnectorPage.jsx`, `connectorPageModel.js`)
