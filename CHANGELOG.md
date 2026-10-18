@@ -20,6 +20,17 @@
   counts a relationship row and its envelope once. The drill-down uses the
   same fold. `GET /templates/outside` lists `BUNDLED_SENT_DIRECTLY`.
 
+## The LP's capital call opens on the amount, and the fee statement is on screen (D717, #1859)
+
+- An open Fund I line's panel on the LP workspace opens on "Amount due", the
+  amount, the due date and LP number, and the paper notice's four rows. The
+  masked wire instructions sit behind the phone check ("I confirmed by phone",
+  then "Show wire instructions"); the full number is one tap after that,
+  through `revealWire` in `lib/lpWireGate.js`. Nothing is stored.
+- "Management fee statements" lists the LP's issued statements under My
+  commitment, newest open, drawn by `FeeStatementView` with no account digits.
+  Frontend only: no route, migration or API method changes.
+
 ## Every connector's page, as data the Worker holds to its code (D753, #1875)
 
 - `cloudflare-worker/src/integrations/connectorPages.ts` describes each
@@ -48,6 +59,18 @@
 - A drawing survives a phone's address bar hiding, and a decline no longer
   says "Signature received". New pure module `frontend/src/lib/esignSteps.js`;
   tests in `frontend/test/esign_steps_d717.test.mjs`.
+
+## The OAuth refresh leases hold (KV's 60-second minimum) (#1903)
+
+- HubSpot, Calendly, Carta, DocuSign and Salesforce wrote their refresh lease
+  with `expirationTtl: 30`, below Workers KV's 60-second minimum, so the `put`
+  threw, the `catch` swallowed it and no caller held the lease. Every expired
+  token waited ~3 s polling D1, and concurrent reads each refreshed.
+- One helper, `integrations/refreshLease.ts` (`acquireRefreshLease`, 60 s),
+  replaces the five copies; the key is unchanged.
+- `test/_mem_kv.mjs` now refuses a TTL under 60, and
+  `test/kv_refresh_lease.test.ts` fails on any literal under 60 in
+  `cloudflare-worker/src`.
 
 ## Every library document renders from a coded template (D758, #1861)
 

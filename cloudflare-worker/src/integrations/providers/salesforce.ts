@@ -47,6 +47,7 @@ import {
   DEFAULT_STAGE_MAP,
   type StudioStage,
 } from '../mappings/salesforce_fields';
+import { acquireRefreshLease } from '../refreshLease';
 
 const PROVIDER_KEY = 'salesforce';
 const SF_API_VERSION = 'v60.0';
@@ -161,18 +162,9 @@ async function getActiveAccessToken(env: Env, row: IntegrationRow): Promise<{ to
   return { token: at, instanceUrl: instUrl };
 }
 
-async function refreshAndPersist(env: Env, row: IntegrationRow): Promise<{ token: string; instanceUrl: string }> {
-  const lockKey = `salesforce:refresh:${row.uid}`;
-  const holder = crypto.randomUUID();
-  let acquired = false;
-  try {
-    const cur = await env.RATE_LIMITS.get(lockKey);
-    if (!cur) {
-      await env.RATE_LIMITS.put(lockKey, holder, { expirationTtl: 30 });
-      const verify = await env.RATE_LIMITS.get(lockKey);
-      acquired = verify === holder;
-    }
-  } catch { /* lease infra failure → continue, single-flight not guaranteed */ }
+// Exported for kv_refresh_lease.test.ts (#1903).
+export async function refreshAndPersist(env: Env, row: IntegrationRow): Promise<{ token: string; instanceUrl: string }> {
+  const { acquired, release } = await acquireRefreshLease(env, 'salesforce', row.uid);
 
   const reread = async (): Promise<CredentialBlob | null> => {
     const fresh = await env.DB.prepare('SELECT credentials_enc FROM integrations WHERE id = ?').bind(row.id).first<{ credentials_enc: string }>();
@@ -214,7 +206,7 @@ async function refreshAndPersist(env: Env, row: IntegrationRow): Promise<{ token
     ).bind(enc, row.id).run();
     return { token: refreshed.access_token, instanceUrl: refreshed.instance_url };
   } finally {
-    try { if (acquired) await env.RATE_LIMITS.delete(lockKey); } catch {}
+    await release();
   }
 }
 
