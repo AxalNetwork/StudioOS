@@ -4,6 +4,25 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## The AI top-up says what is wrong, and the rail shows money to the cent (D750, #1841)
+
+- `readAiTopupProduct` (`services/aiTopups.ts`) returns `ready`, or
+  `not_ready` with a reason (`missing_from_catalog`, `inactive`,
+  `not_one_time`, `not_usd`, `bad_amount`, `bad_config`, `mode_mismatch`),
+  instead of throwing. `GET /api/ai-budget/top-up` is 503 only when D1 or
+  Stripe cannot be read, and gives members the state without the reason.
+- `fetchAndMirrorPrice` (`services/catalog.ts`) reads one price a stale
+  mirror lacks (`GET /v1/prices/:id?expand[]=product`) at most once per 10
+  minutes per isolate and writes it as `syncCatalog` does. Nothing in Stripe
+  is created or changed.
+- `GET /api/ai-budget/top-up/status` (Super Admin) returns
+  `{state, reason, price_id_suffix, mode}`; the AI allowances screen draws it
+  as one sentence.
+- The rail, the compact card and checkout say "Top-up isn't available yet."
+  with no Retry when the price is unset or not ready. `usageMoney` shows
+  spend to the cent ("<$0.01" under half a cent), with the exact figure in
+  `title`.
+
 ## "Not ours" for an unmatched Mercury credit (D749, #1838)
 
 - Migration 483 adds `mercury_not_ours`: an Admin's mark on a posted credit

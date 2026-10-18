@@ -142,7 +142,7 @@ Changed routes:
 
 ### AI allowance Worker contract (D640, #1433)
 
-The Usage page work in #1430 uses the mounted `ai_budget.ts` routes. `GET /api/ai-budget/me` returns the caller's allowance and paid balance with `held_for_review` (UID, time, held micro-USD and recorded cost); a review hold blocks new runs without hiding that read. Super Admin routes `GET /api/ai-budget/reviews` and `POST /api/ai-budget/reviews/:uid/charge|refund` list and settle those holds with a recorded reason and actor. `GET /api/ai-budget/caps` lists all ten plan keys, their effective daily/monthly allowances and whether each value is recorded or from the environment; `PUT /api/ai-budget/caps/:licence` remains the audited write. These are Worker routes for #1435's screens (moved from S09), not frontend API methods added by this issue.
+The Usage page work in #1430 uses the mounted `ai_budget.ts` routes. `GET /api/ai-budget/me` returns the caller's allowance and paid balance with `held_for_review` (UID, time, held micro-USD and recorded cost); a review hold blocks new runs without hiding that read. Super Admin routes `GET /api/ai-budget/reviews` and `POST /api/ai-budget/reviews/:uid/charge|refund` list and settle those holds with a recorded reason and actor. `GET /api/ai-budget/caps` lists all ten plan keys, their effective daily/monthly allowances and whether each value is recorded or from the environment; `PUT /api/ai-budget/caps/:licence` remains the audited write. Since D750 (#1841), `GET /api/ai-budget/top-up` answers `{configured:false}`, `{configured:true,state:'ready',product}` or `{configured:true,state:'not_ready'}` (503 only when D1 or Stripe cannot be read), and the Super Admin route `GET /api/ai-budget/top-up/status` returns `{state, reason, price_id_suffix, mode}` for the AI allowances screen. These are Worker routes for #1435's screens (moved from S09), not frontend API methods added by this issue.
 
 
 ### Bank accounts Worker contract (D708, #1773)
@@ -180,7 +180,7 @@ Both screens are built to the Usage canvas (`Ops · Boards.dc.html`, set `usage`
 | Canvas | Live route | Component and Worker | Status |
 | --- | --- | --- | --- |
 | `integrated/ops-data.js` · `us-allowance`, `us-days`, `us-where`, `us-models`, `us-receipt`, `us-storage` (U1–U6) | `/account/usage` (`#days`, `#where`, `#models`, `#last-run`, `#storage`) · every signed-in role; "Usage" in the user menu, under Account | `pages/account/AccountUsage.jsx` (in `SettingsPage.jsx`, after Billing and orders); `GET /api/ai-budget/me`, `GET /api/ai-budget/top-up`, `GET /api/ai/me/spend`, `GET /api/ai/rates`, `GET /api/usage/storage` | CURRENT |
-| `integrated/ops-data.js` · `hq-allowances` (U7) | `/admin/platform/allowances` · Super Admin; on the Platform strip, linked from Platform | `pages/hq/PlatformAllowancesPage.jsx`; `GET /api/ai-budget/caps`, `PUT /api/ai-budget/caps/:licence`, `GET /api/ai-budget/reviews`, `POST /api/ai-budget/reviews/:uid/charge\|refund` | CURRENT |
+| `integrated/ops-data.js` · `hq-allowances` (U7) | `/admin/platform/allowances` · Super Admin; on the Platform strip, linked from Platform | `pages/hq/PlatformAllowancesPage.jsx`; `GET /api/ai-budget/caps`, `PUT /api/ai-budget/caps/:licence`, `GET /api/ai-budget/reviews`, `POST /api/ai-budget/reviews/:uid/charge\|refund`, `GET /api/ai-budget/top-up/status` (D750's readiness line) | CURRENT |
 
 ### Connectors page and Build's "Connect a tool" (D651, #1463)
 

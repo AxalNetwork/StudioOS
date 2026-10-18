@@ -9,6 +9,30 @@ const money=n=>{
 };
 export const microMoney=money;
 const integer=n=>Number.isSafeInteger(n)&&n>=0;
+/**
+ * D750 (#1841) — a spend to the cent, for the rail and this card: rounded half
+ * up, and "<$0.01" for a spend above zero that rounds to nothing. The exact
+ * figure stays on `/account/usage` and in the element's `title`.
+ */
+export function usageMoney(n){
+  const micro=BigInt(n);
+  if (micro>0n && micro<5000n) return '<$0.01';
+  const cents=(micro+5000n)/10000n;
+  return `$${(cents/100n).toLocaleString('en-US')}.${(cents%100n).toString().padStart(2,'0')}`;
+}
+/**
+ * The top-up as Add tokens draws it (D750 decision 3): `ready` with a sellable
+ * price, `unavailable` when it is unset or `not_ready` (configuration a retry
+ * cannot fix, so no Retry), and `unreadable` only when the read failed.
+ */
+export function aiTopupState(p,productError){
+  if (productError || !p || typeof p.configured!=='boolean') return 'unreadable';
+  if (!p.configured || p.state==='not_ready') return 'unavailable';
+  const pr=p.product;
+  if (p.state!=='ready' || !pr || !/^price_[A-Za-z0-9]+$/.test(pr.price_id) || pr.currency!=='usd' || !integer(pr.unit_amount) || pr.unit_amount===0) return 'unreadable';
+  return 'ready';
+}
+export const TOPUP_UNAVAILABLE="Top-up isn't available yet.";
 const BUDGET_KEYS=['daily_microusd','monthly_microusd','day_spend_microusd','month_spend_microusd','balance_microusd','day_reserved_microusd','month_reserved_microusd','topup_reserved_microusd'];
 const budgetKnown=(b,budgetError)=>!!b && !budgetError && typeof b.licence==='string' && BUDGET_KEYS.every(key=>integer(b[key]));
 /** The month's allowance, spent and cap in micro-USD, or null when unread (the Worker AI rail's Usage card). */
@@ -20,23 +44,24 @@ export function AiBudgetUsage({reading}) {
   const known=budgetKnown(b,budgetError);
   if (loading) return <div aria-busy="true" className="text-xs text-gray-500 dark:text-gray-400">Loading AI allowance…</div>;
   if (!known) return <Unreadable what="Unreadable: your AI allowance and top-up balance" claim="Retry to read the recorded figures." onRetry={reload} />;
+  const topUp=aiTopupState(p,productError);
   const held=b.day_reserved_microusd+b.month_reserved_microusd+b.topup_reserved_microusd>0;
   return <div className="space-y-2 text-xs text-gray-700 dark:text-gray-300" data-testid="ai-budget-usage">
     <p className="font-semibold">Included allowance · {b.licence.replace(':',' / ')}</p>
     {/* D642 (#1435) — the compact card opens the full Usage page. */}
     <a href="/account/usage" className="inline-block underline text-violet-700 dark:text-violet-300" data-testid="ai-budget-usage-link">See usage</a>
-    <p>Today · {money(b.day_spend_microusd)} of {money(b.daily_microusd)}</p>
-    <p>This month · {money(b.month_spend_microusd)} of {money(b.monthly_microusd)}</p>
+    <p>Today · <span title={money(b.day_spend_microusd)}>{usageMoney(b.day_spend_microusd)}</span> of {money(b.daily_microusd)}</p>
+    <p>This month · <span title={money(b.month_spend_microusd)}>{usageMoney(b.month_spend_microusd)}</span> of {money(b.monthly_microusd)}</p>
     {b.monthly_microusd>0 && <div className="h-1 rounded-full bg-gray-200 dark:bg-gray-700" role="presentation">
       <div className="h-1 rounded-full bg-violet-600 dark:bg-violet-400" style={{width:`${Math.min(100,b.month_spend_microusd/b.monthly_microusd*100)}%`}} />
     </div>}
     <p className="font-semibold">Top-up balance · {money(b.balance_microusd)}</p>
-    {held && <p>Runs in progress reserve {money(b.month_reserved_microusd)} of allowance and {money(b.topup_reserved_microusd)} of top-up.</p>}
-    {productError || !p || typeof p.configured!=='boolean' || (p.configured && (!p.product || !/^price_[A-Za-z0-9]+$/.test(p.product.price_id) || p.product.currency!=='usd' || !integer(p.product.unit_amount) || p.product.unit_amount===0))
+    {held && <p>Runs in progress reserve <span title={money(b.month_reserved_microusd)}>{usageMoney(b.month_reserved_microusd)}</span> of allowance and <span title={money(b.topup_reserved_microusd)}>{usageMoney(b.topup_reserved_microusd)}</span> of top-up.</p>}
+    {topUp==='unreadable'
       ? <Unreadable what="Unreadable: the AI top-up" claim="Retry to read the purchase option." onRetry={reload} />
-      : p.configured
+      : topUp==='ready'
         ? <a href="/checkout?ai_topup=1" className="inline-block underline font-semibold text-violet-700 dark:text-violet-300">Add tokens</a>
-        : <p>Top-up not configured</p>}
+        : <p data-testid="ai-budget-topup-unavailable">{TOPUP_UNAVAILABLE}</p>}
   </div>;
 }
 export function LiveAiBudgetUsage({refreshKey}) {

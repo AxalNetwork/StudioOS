@@ -45,3 +45,11 @@ e68e99682469eac1afc768ef22f41e99614845be:cloudflare-worker/src/services/intervie
 937837d05366e0c909f3eca44ec81283969ab064:cloudflare-worker/test/cycle_activity_d690.test.ts:generic-api-key:149
 ea14fa69b6089abb2615fd3805541846acab1160:cloudflare-worker/test/validate_export_gate_d690.test.ts:generic-api-key:15
 ea14fa69b6089abb2615fd3805541846acab1160:cloudflare-worker/test/cycle_records_validate_d690.test.ts:generic-api-key:17
+
+# D750 (#1841) — commit 3c4069358 put a Stripe PaymentIntent client_secret
+# fixture ('pi_topupE2E_secret_fixture') in the stubbed Stripe answer of
+# ai_topup_ready_d750.test.ts. It is made-up test data that never reached
+# Stripe. The next commit splits the literal, as the file's header asks for
+# key-shaped fixtures; this entry covers only that one finding in the pushed
+# commit.
+3c4069358e16313a0a163b0275eb0d2d9c7e4919:cloudflare-worker/test/ai_topup_ready_d750.test.ts:generic-api-key:192

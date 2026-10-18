@@ -3,7 +3,7 @@ import type { Env } from '../types';
 import { requireAuth, requireSuperAdmin } from '../auth';
 import { AI_LICENCE_KEYS, AiBudgetReviewConflict, AiBudgetReviewNotFound, listAiBudgetReviews,
   listAiLicenceCaps, loadAiBudget, settleAiBudgetReview, usdToMicro } from '../services/aiBudget';
-import { readAiTopupProduct } from '../services/aiTopups';
+import { aiTopupStatus, memberTopupReading, readAiTopupProduct } from '../services/aiTopups';
 import { refuse } from '../util/refusal';
 import { AUTH_ERROR_STATUSES } from '../util/authErrors';
 
@@ -20,8 +20,14 @@ r.get('/me',async c=>{
 });
 r.get('/top-up',async c=>{
   await requireAuth(c);
-  try { return c.json(await readAiTopupProduct(c.env)); }
+  try { return c.json(memberTopupReading(await readAiTopupProduct(c.env))); }
   catch(error) { return refuse(c,503,{code:'ai_topup_unreadable',message:'Unreadable: the AI top-up could not be read.',raw:error,audience:'member'}); }
+});
+// D750: why the top-up is or is not offered, for the Super Admin only.
+r.get('/top-up/status',async c=>{
+  await requireSuperAdmin(c);
+  try { return c.json(await aiTopupStatus(c.env)); }
+  catch(error) { return refuse(c,503,{code:'ai_topup_unreadable',message:'Unreadable: the AI top-up could not be read.',raw:error}); }
 });
 r.get('/caps',async c=>{
   await requireSuperAdmin(c);

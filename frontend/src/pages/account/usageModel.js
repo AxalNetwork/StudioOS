@@ -148,12 +148,14 @@ export function allowanceView(b, now = new Date()) {
 }
 
 /**
- * The top-up purchase option, from `/ai-budget/top-up`: `available`,
- * `unavailable` (no product is configured yet) or `unreadable`.
+ * The top-up purchase option, from `/ai-budget/top-up` (D750): `available`
+ * (state `ready` with a sellable price), `unavailable` (unset, or `not_ready`:
+ * a configuration HQ must fix, which a retry cannot) or `unreadable`.
  */
 export function topUpState(p) {
   if (!p || typeof p.configured !== 'boolean') return 'unreadable';
-  if (!p.configured) return 'unavailable';
+  if (!p.configured || p.state === 'not_ready') return 'unavailable';
+  if (p.state !== 'ready') return 'unreadable';
   const pr = p.product;
   const ok = pr && /^price_[A-Za-z0-9]+$/.test(pr.price_id) && pr.currency === 'usd'
     && isCount(pr.unit_amount) && pr.unit_amount > 0;

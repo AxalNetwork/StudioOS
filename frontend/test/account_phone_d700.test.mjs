@@ -255,7 +255,7 @@ const BUDGET = {
   day_reserved_microusd: 0, month_reserved_microusd: 50_000, topup_reserved_microusd: 0,
   balance_microusd: 10_000_000, held_for_review: [],
 };
-const PRODUCT = { configured: true, product: { price_id: 'price_abc123', currency: 'usd', unit_amount: 1000 } };
+const PRODUCT = { configured: true, state: 'ready', product: { price_id: 'price_abc123', currency: 'usd', unit_amount: 1000 } };
 const SPEND = {
   ok: true, recorded: true,
   month: { key: '2026-10', spend_usd: 0.91, cap_usd: 5, enforced_usd: null, calls: 9 },

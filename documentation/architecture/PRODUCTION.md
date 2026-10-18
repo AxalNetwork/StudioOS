@@ -171,6 +171,17 @@ A grant older than a raised session floor is also refused on every tool call (`g
 - [ ] `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET` – the GitHub connector (D655): the StudioOS GitHub App's client, with read-only issues, pull requests, contents and metadata permissions. Also settable in Admin → Integration Keys.
 - [ ] `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN` – outbound email.
 - [ ] `STRIPE_ATLAS_API_KEY`, `STRIPE_WEBHOOK_SECRET` – spin-out incorporation.
+- [ ] `STRIPE_PRICE_AI_TOPUP` – the AI top-up's price (D629, D750): the ID
+      (`price_…`) of an **active, one-time, USD** price with a fixed amount, in
+      the same Stripe mode as `STRIPE_SECRET_KEY` (a live key needs a live
+      price). One US dollar paid buys one dollar of AI balance, credited only
+      by the `payment_intent.succeeded` webhook, so `STRIPE_WEBHOOK_SECRET`
+      must be set too. A price created after the last **Sync from Stripe** is
+      fetched into the catalog mirror on first read (at most once per 10
+      minutes per isolate); pressing Sync also clears it. Unset, or set to an
+      unusable price, members see "Top-up isn't available yet." and the
+      Super Admin's AI allowances screen (`GET /api/ai-budget/top-up/status`)
+      says why in one sentence.
 - [ ] `SUMSUB_APP_TOKEN`, `SUMSUB_SECRET_KEY`, `SUMSUB_WEBHOOK_SECRET` – KYC.
 - [ ] `OPENAI_API_KEY` – AI scoring fallback (Workers AI is the primary).
 - [ ] `TURNSTILE_SECRET_KEY` – bot protection on register / login.
