@@ -9,6 +9,7 @@ lives in `providers/`.
 | File | What it does |
 | --- | --- |
 | `registry.ts` | The single source of truth for providers: `REGISTRY` (one descriptor each: status, tier, auth type, OAuth scopes), `CONNECTOR_METADATA` (category, what it pulls and sends, the modules it feeds, the permission sentences), `registerProvider` / `getProviderImpl`, `IntegrationRow`, `ensureIntegrationsSchema` and `publicDescriptor`, which adds `feed_modules` beside the plain `feeds` strings (D686). |
+| `connectorPages.ts` | Each connector's page, as data (D753): tagline, long description, the tools Axal VC runs through it (each with the source fragments of its calls), Eadwyn prompts, maker, service, sign-in, endpoints, added month, links and `verified_on`; Mercury by audience and LinkedIn as a first-party page. `trustFor`, `pageDescriptor` (by viewer, through `audienceFor`), `connectorPagePath`, `CATEGORY_ORDER`. Read only through `pageDescriptor` and `registry.ts`' one re-export line. It imports only types and `audienceFor` from `./registry`, reads no registry value at its top level (the two form a cycle), and imports no provider or service. `cloudflare-worker/test/connector_pages_d753.test.ts` holds every fact to the code. |
 | `moduleLabels.ts` | `MODULE_LABELS` and `MODULE_HREFS`: each fed module's name and the page that shows its data (D686). Its own file because `fed.ts` imports `registry.ts`, so the registry cannot import `fed.ts` back. `moduleHref` answers `null` for an unknown key. |
 | `fed.ts` | "Now fed by" (D655): `fedCounts` counts what each connector delivered to each module from `connector_fed_items`, with the module's `href`. A connector that records nothing gets `count: null` and a reason, never 0. Re-exports `MODULE_LABELS`. |
 | `secrets.ts` | Credential encryption over `../services/columnCipher.ts`, with the row's uid in the AAD, and the masked previews the list endpoints show. Never logs plaintext. |
@@ -16,6 +17,7 @@ lives in `providers/`.
 | `companyScope.ts` | Which providers write project-backed data, and whether a connection is enabled for a company or project. A missing scope row denies the write. |
 | `connectorRules.ts` | `hasScopeOverreach` (a grant wider than the request is refused) and the validation of a connector's settings patch. |
 | `autopush.ts` | Background pushes started outside the connector routes (a deal's stage change, a new project), logged to `integration_logs` like a user's own push. |
+| `refreshLease.ts` | `acquireRefreshLease` and `REFRESH_LEASE_TTL_S`: the KV lease on `<provider>:refresh:<uid>` that serializes one connection's OAuth token refresh, shared by HubSpot, Calendly, Carta, DocuSign and Salesforce (#1903). `release()` deletes the key only for the caller that acquired it. Best-effort: KV is eventually consistent, so the providers keep their D1 re-checks. |
 
 ## Subfolders
 
@@ -25,8 +27,11 @@ lives in `providers/`.
 
 ## Adding here
 
-A new provider goes in `providers/` with an entry in both `REGISTRY` and
-`CONNECTOR_METADATA` (every registry entry needs metadata). A new fed module
+A new provider goes in `providers/` with an entry in `REGISTRY`,
+`CONNECTOR_METADATA` **and `CONNECTOR_PAGES`** (every registry entry needs
+metadata and a page), with its tools taken from its calls. A new fed module
 needs a label and a page in `moduleLabels.ts`. Shared connector logic that is
 not one provider's goes in this folder; anything with HTTP belongs in
 `../routes/`.
+
+A KV TTL is at least 60 seconds, KV's minimum: a shorter `expirationTtl` makes the `put` throw in production. `cloudflare-worker/test/kv_refresh_lease.test.ts` fails on a literal under 60 anywhere in `cloudflare-worker/src`, and `cloudflare-worker/test/_mem_kv.mjs` refuses one as KV does.

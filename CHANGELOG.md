@@ -15,6 +15,58 @@
 - `frontend/test/brand_icons_d687.test.mjs` pins that Mercury is drawn as the
   monogram, never lucide `Landmark` and never the canvas placeholder `#5b6cff`.
 
+## The LP's capital call opens on the amount, and the fee statement is on screen (D717, #1859)
+
+- An open Fund I line's panel on the LP workspace opens on "Amount due", the
+  amount, the due date and LP number, and the paper notice's four rows. The
+  masked wire instructions sit behind the phone check ("I confirmed by phone",
+  then "Show wire instructions"); the full number is one tap after that,
+  through `revealWire` in `lib/lpWireGate.js`. Nothing is stored.
+- "Management fee statements" lists the LP's issued statements under My
+  commitment, newest open, drawn by `FeeStatementView` with no account digits.
+  Frontend only: no route, migration or API method changes.
+
+## Every connector's page, as data the Worker holds to its code (D753, #1875)
+
+- `cloudflare-worker/src/integrations/connectorPages.ts` describes each
+  connector's page: a tagline and description, the tools Axal VC runs through
+  it, the Eadwyn prompts the code supports, maker (Axal VC on every one),
+  service, sign-in, endpoints, the month it was added, links and a trust
+  sentence built from the tools. `registry.ts` re-exports it; nothing serves
+  or draws it yet (#1878 and F7 do).
+- `test/connector_pages_d753.test.ts` holds every fact to the providers'
+  source: each tool's calls are in the code, every request that writes is
+  named by a tool, and "never writes" and "cannot move money" follow the tools.
+- The six "Verified by Axal" badges (HubSpot, Calendly, Slack, Stripe, Google
+  Calendar, Microsoft 365) are gone until each live check is recorded with its
+  date. Google's third permission now reads "Gmail (read-only) is asked for at
+  sign-in; Axal VC does not read your Gmail."
+
+## Signing in four steps, at every width (D717, #1857)
+
+- `/esign/:token` now goes Read → Consent → Adopt → Confirm for every
+  envelope. The consent is one row at least 44 px tall; the signature is
+  typed (default, drawn in Public Sans italic 400) or drawn, adopted once,
+  and shown back on a confirm sheet whose Sign is the only press that sends.
+- The Worker receives the same `{ accepted, typed_name, signature_data_url }`
+  as before; no route or API changed. `frontend/index.html` adds the italic
+  face to the one Google Fonts request.
+- A drawing survives a phone's address bar hiding, and a decline no longer
+  says "Signature received". New pure module `frontend/src/lib/esignSteps.js`;
+  tests in `frontend/test/esign_steps_d717.test.mjs`.
+
+## The OAuth refresh leases hold (KV's 60-second minimum) (#1903)
+
+- HubSpot, Calendly, Carta, DocuSign and Salesforce wrote their refresh lease
+  with `expirationTtl: 30`, below Workers KV's 60-second minimum, so the `put`
+  threw, the `catch` swallowed it and no caller held the lease. Every expired
+  token waited ~3 s polling D1, and concurrent reads each refreshed.
+- One helper, `integrations/refreshLease.ts` (`acquireRefreshLease`, 60 s),
+  replaces the five copies; the key is unchanged.
+- `test/_mem_kv.mjs` now refuses a TTL under 60, and
+  `test/kv_refresh_lease.test.ts` fails on any literal under 60 in
+  `cloudflare-worker/src`.
+
 ## Every library document renders from a coded template (D758, #1861)
 
 - The 24 old seed bodies that lived only inside migration 085 (`lpa`, `ppm`,

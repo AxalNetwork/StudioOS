@@ -1,8 +1,11 @@
 /**
  * An in-memory KVNamespace for unit tests: get (text or json), put (with
  * expirationTtl), delete and list (prefix, cursor, limit). Expiry follows
- * `now()`, which a test may move forward.
+ * `now()`, which a test may move forward. Like Workers KV, `put` refuses an
+ * expiry under 60 seconds away (#1903: the OAuth refresh leases asked for 30,
+ * and this file accepted it while KV threw).
  */
+const KV_MIN_TTL_S = 60;
 export function memKV({ now = () => Date.now() } = {}) {
   const m = new Map();
   const live = (k) => { const e = m.get(k); if (!e) return null; if (e.exp && e.exp <= now()) { m.delete(k); return null; } return e; };
@@ -19,6 +22,12 @@ export function memKV({ now = () => Date.now() } = {}) {
       return { value: type === 'json' ? JSON.parse(e.v) : e.v, metadata: e.meta ?? null };
     },
     async put(key, value, opts = {}) {
+      if (opts.expirationTtl != null && opts.expirationTtl < KV_MIN_TTL_S) {
+        throw new Error(`Invalid expiration_ttl of ${opts.expirationTtl}. Expiration TTL must be at least ${KV_MIN_TTL_S}.`);
+      }
+      if (opts.expiration != null && opts.expiration * 1000 - now() < KV_MIN_TTL_S * 1000) {
+        throw new Error(`Invalid expiration of ${opts.expiration}. Expiration times must be at least ${KV_MIN_TTL_S} seconds in the future.`);
+      }
       const exp = opts.expirationTtl ? now() + opts.expirationTtl * 1000 : opts.expiration ? opts.expiration * 1000 : null;
       m.set(key, { v: String(value), exp, meta: opts.metadata });
     },
