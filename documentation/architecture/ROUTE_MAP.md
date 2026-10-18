@@ -102,7 +102,7 @@ Changed routes:
 - `POST /periods/:quarter/preview` saves the quarter's draft and answers its `digest`; a refusal saves nothing.
 - `POST /periods/:quarter/issue` with `{ digest, funding_call_uid? }`: a digest that no longer matches is 409; issuing an issued quarter with its digest answers `already_issued: true` and writes nothing.
 - `POST /periods/:quarter/funding-call` with `{ call_uid }` links issued lines to their LPs' lines in that call.
-- `GET /periods/:quarter` (period, lines, and `collected`: the posted date and last four of a confirmed Mercury match, else null; D710) and `GET /periods/:quarter/statements/:lpId`.
+- `GET /periods/:quarter` (period, lines, `collected`: the posted date and last four of a confirmed Mercury match, else null, D710; and `remittance`) and `GET /periods/:quarter/statements/:lpId` (its `pay_to` is never due, plus the same `remittance`). On Fund I the remittance is #1773's `payInstructionsFor('gp', 'management_fee')`, masked with its warning, or its refusal; on any other fund it is `not_an_axal_fund` and the registry is not read.
 
 `:quarter` is `YYYYQn`. An LP, terms version or call of another fund is 404. Issuing records amounts and the `AXAL-MF-<quarter>-L<lp>` and `-F<fund>` references; nothing moves money, and no route has a frontend method yet (#1779's `fundFeesApi`).
 
