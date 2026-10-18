@@ -165,6 +165,15 @@ export async function personalConnection(c: C, user: User, use: PersonalUse): Pr
   return { row, token, accounts: read.accounts, use };
 }
 
+/** A Mercury read that failed after the connection was checked: a 401 or 403 marks the row `error`. */
+export async function readFailure(c: C, conn: PersonalConnection, e: unknown): Promise<Response> {
+  if (e instanceof MercuryClientError && e.code === 'unauthorized') {
+    await markError(c.env, conn.row, 'token_rejected');
+    return refused(c, 409, 'mercury_reconnect_required', 'Mercury no longer accepts your token. Reconnect it with a Read Only token.');
+  }
+  return refuse(c, 502, { code: 'mercury_unreadable', message: 'Your Mercury account could not be read. Nothing changed; try again.', raw: e, audience: 'owner' });
+}
+
 /** Decision 5: one log row per read, with the use and counts, never a payload. */
 export async function logPersonalRead(env: Env, conn: PersonalConnection, user: User, event: string, counts: Record<string, number>): Promise<void> {
   const summary = [`use=${conn.use}`, ...Object.entries(counts).map(([k, v]) => `${k}=${v}`)].join(' ');

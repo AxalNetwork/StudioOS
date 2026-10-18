@@ -353,7 +353,7 @@ _CHECKLIST_CATALOG: Dict[str, list] = {
     "existingFounder": [
         {"key": "ef.persona", "label": "Complete persona chatbot", "route": "/onboarding/persona"},
         {"key": "ef.stripe", "label": "Connect Stripe (verify MRR)", "route": "/settings/integrations"},
-        {"key": "ef.plaid", "label": "Connect Plaid (verify cash)", "route": "/settings/integrations"},
+        {"key": "ef.plaid", "label": "Connect Mercury (verify revenue)", "route": "/settings/integrations"},
         {"key": "ef.captable", "label": "Connect or upload cap table", "route": "/build/captable"},
         {"key": "ef.financials", "label": "Populate financial model", "route": "/build/financials"},
         {"key": "ef.83b", "label": "Confirm 83(b) status", "route": "/spinout-lab/83b"},
