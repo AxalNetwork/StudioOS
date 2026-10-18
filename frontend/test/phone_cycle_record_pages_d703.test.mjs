@@ -11,6 +11,10 @@
  *     "Record not found." under the bar;
  *   · test 11: an Edit opened from a record draws "‹ <record title>".
  *
+ * The closing PR adds the Verdict cases that waited on #1704's closing PR
+ * (#1814): test 6's `slug="verdict"` module page, and test 10's refused
+ * Verdict module read and 403 on a Verdict record.
+ *
  * Phone width is #1656's `matchMedia` stub. Every name is made up.
  *
  * Run with:
@@ -24,6 +28,7 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import CycleRoute from '../src/pages/cycles/CycleRoute.jsx';
 import FormLightbox from '../src/pages/cycles/FormLightbox.jsx';
 import { CycleBar } from '../src/pages/cycles/PhoneModulePage.jsx';
+import { CycleHeader } from '../src/pages/cycles/CycleOverview.jsx';
 import { FORMS } from '../src/pages/cycles/forms.js';
 import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import { PHONE_QUERY } from '../src/workspaces/lens.jsx';
@@ -43,6 +48,24 @@ const PROBLEM_DISCOVERY = {
   card: { ...card('validate', 'Problem discovery', 0), caption: 'The pains interviews keep naming.', next: { text: 'Group two more interviews into a theme.' } },
   records: { cols: [{ key: 'theme', label: 'Theme' }, { key: 'interviews', label: 'Interviews' }], rows: PAIN_ROWS, total: 40, page: 1, page_size: 25, linkable: true },
 };
+
+// #1704's Verdict module read, in the Worker's shape (verdict_module_d693's VERDICT_READ).
+const VERDICT = {
+  module: { slug: 'verdict', name: 'Verdict', records_title: 'Decisions' },
+  card: {
+    slug: 'verdict', name: 'Verdict', range: 'All time', caption: 'Every decision, oldest to newest, never overwritten.', state: 'ok', reason: null,
+    next: { text: 'Record the decision for the sprint ending 24 Oct.' },
+    series: { decisions: [{ decision: 'proceed', state: 'given', date: '2026-10-12' }], current: { decision: 'proceed', date: '2026-10-12', evidence: 6 }, next: { date: '2026-10-24' } },
+  },
+  records: {
+    cols: ['Decision', 'For', 'Reasoning', 'Evidence', 'Date · by'],
+    rows: [{ id: 41, decision: 'proceed', state: 'given', for: 'The venture', reasoning: 'Three fleets paid for the pilot.', evidence: 6, date: '2026-10-12', by: 'Ada Quill' }],
+    total: 1, page: 1, page_size: 25, linkable: true,
+  },
+  parts: { can_write: true },
+  can_read_decisions: true,
+};
+const REFUSED = 'Partners do not see decisions.';
 
 /** The generic record, with a Next that names the record's own Edit. */
 const RECORD = () => ({ ...fixture(), next: { text: 'Attach the first quote to this pain.', action: 'edit' } });
@@ -89,6 +112,8 @@ async function mount(entry, answer, { phone = true } = {}) {
   const at = {};
   function Address() { const l = useLocation(); Object.assign(at, { path: l.pathname, search: l.search }); return null; }
   await act(async () => root.render(h(MemoryRouter, { initialEntries: [entry] }, h(AuthProvider, null, h(Address), h(Routes, null,
+    // App.jsx's static line (D693 decision 12, #1704).
+    h(Route, { path: '/validate/verdict', element: h(CycleRoute, { cycle: 'validate', slug: 'verdict' }) }),
     h(Route, { path: '/validate/:slug', element: h(CycleRoute, { cycle: 'validate' }) }),
     h(Route, { path: '/validate/:slug/new', element: h(CycleRoute, { cycle: 'validate', adding: true }) }),
     h(Route, { path: '/validate/:slug/:id', element: h(CycleRoute, { cycle: 'validate', record: true }) }),
@@ -147,6 +172,25 @@ test('6 (route): below 1024px /validate/problem-discovery is the pushed module p
     const heading = walk(m.by('phone-module-chart')).find((n) => n.tagName === 'H2');
     assert.equal([pr(heading).children].flat().join(''), 'Problem discovery · at a glance');
     assert.match(m.text(), /Pain themes · 1–25 of 40/);
+  } finally { await m.close(); }
+});
+
+test('6 (route): <CycleRoute cycle="validate" slug="verdict" /> below 1024px is the pushed module page too, over #1704\'s Decisions', async () => {
+  const m = await mount(`/validate/verdict${Q}`, reads({ '/cycles/validate/modules/verdict': VERDICT }));
+  try {
+    assert.equal(m.all('phone-module').length, 1);
+    assert.equal(pr(m.by('phone-module'))['data-module'], 'verdict');
+    assert.equal(m.by('cycle-module'), undefined, 'CycleModulePage does not render');
+    const bars = m.fibers(CycleBar);
+    assert.equal(bars.length, 1);
+    assert.deepEqual([bars[0].back.label, bars[0].back.to, bars[0].title, bars[0].sub, bars[0].eadwynLabel],
+      ['Validate', `/validate${Q}`, 'Verdict', 'Every decision, oldest to newest, never overwritten.', 'Validate · Verdict']);
+    assert.match(m.text(m.by('phone-module-next')), /One next thing.*Record the decision for the sprint ending 24 Oct\./);
+    assert.equal(pr(m.by('phone-module-cta')).href, `/validate/verdict/new${Q}`, 'Record a decision, #1704\'s Add');
+    const heading = walk(m.by('phone-module-chart')).find((n) => n.tagName === 'H2');
+    assert.equal([pr(heading).children].flat().join(''), 'Verdict · at a glance');
+    assert.match(m.text(), /the venture’s current verdict · 12 Oct · rests on 6 pieces of evidence/);
+    assert.match(m.text(), /Decisions · 1–1 of 1/);
   } finally { await m.close(); }
 });
 
@@ -249,6 +293,37 @@ test('10 (route): a record read that answers 404 draws "Record not found." under
     assert.equal(bars.length, 1, 'the bar still draws');
     assert.deepEqual([bars[0].back.label, bars[0].back.to], ['Problem discovery', `/validate/problem-discovery${Q}`]);
     assert.match(m.text(m.by('cycle-record-page')), /Record not found\./);
+    for (const id of ['record-view', 'record-facts', 'record-actions', 'record-next-cta']) assert.equal(m.by(id), undefined, id);
+  } finally { await m.close(); }
+});
+
+test('10 (route): a refused Verdict module read draws "Partners do not see decisions." under the bar, with no chart, no rows and no CTA', async () => {
+  const m = await mount(`/validate/verdict${Q}`, reads({ '/cycles/validate/modules/verdict': () => json({ detail: REFUSED }, 403) }));
+  try {
+    const bars = m.fibers(CycleBar);
+    assert.equal(bars.length, 1, 'the bar still draws');
+    assert.deepEqual([bars[0].back.label, bars[0].back.to, bars[0].title, bars[0].eadwynLabel],
+      ['Validate', `/validate${Q}`, 'Verdict', 'Validate · Verdict'], 'named from the cycle\'s list, never "verdict"');
+    assert.equal(m.text(m.by('phone-module-refused')).trim(), REFUSED);
+    for (const id of ['phone-module-chart', 'phone-module-next', 'phone-module-cta']) assert.equal(m.by(id), undefined, id);
+    assert.doesNotMatch(m.text(), /Decisions ·|Record a decision|Export summary/, 'no rows and no CTA');
+  } finally { await m.close(); }
+  // At 1024px the desktop page names it the same way.
+  const d = await mount(`/validate/verdict${Q}`, reads({ '/cycles/validate/modules/verdict': () => json({ detail: REFUSED }, 403) }), { phone: false });
+  try {
+    assert.ok(d.by('cycle-module-refused'));
+    assert.deepEqual(d.fibers(CycleHeader).map((x) => x.title), ['Verdict']);
+  } finally { await d.close(); }
+});
+
+test('10 (route): a 403 on a Verdict record draws "Partners do not see decisions." under the bar, with no facts, actions or CTA', async () => {
+  const m = await mount(`/validate/verdict/41${Q}`, reads({ '/cycles/validate/modules/verdict/records/41?': () => json({ detail: REFUSED }, 403) }));
+  try {
+    const bars = m.fibers(CycleBar);
+    assert.equal(bars.length, 1, 'the bar still draws');
+    assert.deepEqual([bars[0].back.label, bars[0].back.to], ['Verdict', `/validate/verdict${Q}`], 'Back goes to the module');
+    assert.match(m.text(m.by('cycle-record-page')), /Partners do not see decisions\./);
+    assert.doesNotMatch(m.text(m.by('cycle-record-page')), /Retry/, 'a refusal, not an unreadable read: no Retry');
     for (const id of ['record-view', 'record-facts', 'record-actions', 'record-next-cta']) assert.equal(m.by(id), undefined, id);
   } finally { await m.close(); }
 });

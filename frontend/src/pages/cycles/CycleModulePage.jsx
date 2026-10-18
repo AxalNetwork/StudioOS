@@ -173,14 +173,15 @@ function RowAction({ action }) {
 }
 
 export default function CycleModulePage({
-  cycle, slug, cards, data, status = data ? 'ready' : 'loading', message = '', onRetry,
+  cycle, slug, moduleName, cards, data, status = data ? 'ready' : 'loading', message = '', onRetry,
   records, recordsStatus, recordsMessage, query, onQuery, onRetryRecords, action, add, rowAction, tool, tools = [], children, search = '',
 }) {
   const meta = cycleOf(cycle);
   if (!meta) return null;
   const card = data?.card || null;
   const view = cardView(card);
-  const name = card?.name || data?.module?.name || slug;
+  // A refused or unreadable read sends no card, so the cycle's own list names it (never its slug).
+  const name = card?.name || data?.module?.name || moduleName || slug;
   const toolLinks = [tool, ...tools].filter((item) => safeHref(item?.href));
   const recs = records ?? data?.records;
   return (
