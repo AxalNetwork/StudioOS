@@ -4,6 +4,15 @@ import { reportError } from '../../../lib/log';
 import { SidePanel, ReadState, useRead, button, input, pdfBlob, Pagination } from './parts';
 
 const steps = ['Template', 'Recipient', 'Fields', 'Deal', 'Provider', 'Preview and send'];
+const PAGE_LABELS = { letter: 'Letter', a4: 'A4' };
+const COVER_LABELS = { dark: 'Dark cover', light: 'Light cover' };
+
+/** The preview and send body. D711: `page_size` and `cover` are the paper every copy prints on. */
+export function envelopeBody({ template, name, email, fields, deal, provider, pageSize = 'letter', cover = 'dark' }) {
+  return { template_slug: template?.slug, template_version: template?.version,
+    recipient_name: name, recipient_email: email, fields, deal_id: deal?.id ?? null, provider, page_size: pageSize, cover };
+}
+
 export default function EnvelopeWizard({ onClose, onTemplates, onSent }) {
   const templates = useRead(() => contractsApi.published());
   const providers = useRead(() => contractsApi.providers());
@@ -20,13 +29,14 @@ export default function EnvelopeWizard({ onClose, onTemplates, onSent }) {
   const [fields, setFields] = useState({});
   const [deal, setDeal] = useState(null);
   const [provider, setProvider] = useState('native');
+  const [pageSize, setPageSize] = useState('letter');
+  const [cover, setCover] = useState('dark');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [outcome, setOutcome] = useState(null);
-  const body = { template_slug: template?.slug, template_version: template?.version,
-    recipient_name: name, recipient_email: email, fields, deal_id: deal?.id ?? null, provider };
+  const body = envelopeBody({ template, name, email, fields, deal, provider, pageSize, cover });
   const serialized = JSON.stringify(body);
   useEffect(() => { setPreview(null); setError(''); }, [serialized]);
   useEffect(() => {
@@ -84,8 +94,10 @@ export default function EnvelopeWizard({ onClose, onTemplates, onSent }) {
       <ReadState read={deals} what="Deals">{deals.data && <><div>{deals.data.items.map(d => <button type="button" className={`${button} block w-full text-left`} key={d.id} onClick={() => setDeal(d)}>{d.project_name} · {d.uid}</button>)}</div><Pagination data={deals.data} offset={dealOffset} onPage={setDealOffset} /></>}</ReadState></div>}
     {step === 4 && <ReadState read={providers} what="Signing providers"><div className="space-y-2"><button type="button" className={button} aria-pressed={provider === 'native'} onClick={() => setProvider('native')}>Native · signed in the app</button>
       <button type="button" className={button} aria-pressed={provider === 'docusign'} disabled={!providers.data?.docusign?.available} onClick={() => setProvider('docusign')}>DocuSign · Studio plan</button>
-      {!providers.data?.docusign?.available && <p>DocuSign not available. {providers.data?.docusign?.reason}</p>}</div></ReadState>}
-    {step === 5 && <div className="space-y-3"><p>{template?.title} · v{template?.version} · {name} · {email} · {provider}</p>
+      {!providers.data?.docusign?.available && <p>DocuSign not available. {providers.data?.docusign?.reason}</p>}
+      <p>Paper</p><div className="flex flex-wrap gap-2">{Object.entries(PAGE_LABELS).map(([key, label]) => <button key={key} type="button" className={button} aria-pressed={pageSize === key} onClick={() => setPageSize(key)}>{label}</button>)}</div>
+      <div className="flex flex-wrap gap-2">{Object.entries(COVER_LABELS).map(([key, label]) => <button key={key} type="button" className={button} aria-pressed={cover === key} onClick={() => setCover(key)}>{label}</button>)}</div></div></ReadState>}
+    {step === 5 && <div className="space-y-3"><p>{template?.title} · v{template?.version} · {name} · {email} · {provider} · {PAGE_LABELS[pageSize]} · {COVER_LABELS[cover]}</p>
       <button type="button" className={button} disabled={busy || !!outcome} onClick={prepare}>{busy ? 'Working…' : 'Preview PDF'}</button>
       {previewUrl && <iframe title="Envelope preview" src={previewUrl} className="h-96 w-full border border-axal-hairline" />}
       <button type="button" className={`${button} bg-violet-600 text-white`} disabled={!preview || busy || !!outcome} onClick={send}>Send</button></div>}

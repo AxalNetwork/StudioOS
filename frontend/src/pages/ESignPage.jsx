@@ -6,6 +6,21 @@ import { Check, AlertCircle, FileText, Shield, Clock, Eraser, X } from 'lucide-r
 import DocumentBody from '../components/DocumentBody';
 import AxalLogo from '../components/AxalLogo';
 import { normalizeLegalBody } from '../lib/legalDocFormat';
+import { PaperFrame } from '../components/PaperPreview';
+
+/**
+ * D711 (#1776) — the signer reads the paper they sign. With no paper (the
+ * read failed), the body as text, saying so; while it loads, the text alone.
+ */
+export function SignerPaper({ paper, envelope }) {
+  if (paper?.html) return <PaperFrame html={paper.html} title={envelope?.document_title || 'Document'} />;
+  return (
+    <>
+      {!paper?.loading && <p className="mb-3 text-[11px] text-amber-700 dark:text-amber-400" role="status">The formatted page did not load. This is the same text.</p>}
+      <DocumentBody text={normalizeLegalBody(envelope?.document_body || '')} className="font-sans text-[13.5px] leading-relaxed text-gray-800 dark:text-gray-200" />
+    </>
+  );
+}
 
 /**
  * Public eSignature page reached via deal@axal.vc magic link.
@@ -15,6 +30,7 @@ export default function ESignPage() {
   const { token } = useParams();
   const [loading, setLoading] = useState(true);
   const [envelope, setEnvelope] = useState(null);
+  const [paper, setPaper] = useState({ loading: true });
   // `loadError` gates the whole page (envelope fetch failed — nothing to
   // show). `error` is the inline, in-flow alert for a failed submit/reject
   // once the signing UI is already up. These must stay separate: they used
@@ -57,6 +73,9 @@ export default function ESignPage() {
       .then((env) => { if (alive) { setEnvelope(env); setTypedName(env.recipient_name || ''); } })
       .catch((e) => { if (alive) setLoadError(e.message || 'Could not load this signing link.'); })
       .finally(() => { if (alive) setLoading(false); });
+    api.esignPaperByToken(token)
+      .then((p) => { if (alive) setPaper(p); })
+      .catch(() => { if (alive) setPaper(null); });
     return () => { alive = false; };
   }, [token]);
 
@@ -177,7 +196,7 @@ export default function ESignPage() {
             </div>
           </div>
           <div className="px-6 py-5 max-h-[440px] overflow-y-auto bg-gray-50/50">
-            <DocumentBody text={normalizeLegalBody(envelope.document_body)} className="font-sans text-[13.5px] leading-relaxed text-gray-800 dark:text-gray-200" />
+            <SignerPaper paper={paper} envelope={envelope} />
           </div>
           <div className="px-6 py-3 bg-gray-50 border-t border-gray-200 flex flex-wrap items-center justify-between gap-2 text-[11px] text-gray-500 dark:border-gray-800">
             <div className="flex items-center gap-1.5"><Clock className="w-3 h-3" /> Expires {new Date(envelope.expires_at).toLocaleDateString()}</div>

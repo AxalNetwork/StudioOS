@@ -53,6 +53,9 @@ D647: `contracts.js` calls the mounted admin_contracts publication, guided
 preview/send, provider, counted picker, recorded agreement/stat, history and
 signed-PDF endpoints. Binary PDFs are returned as authenticated JSON/base64
 through the shared request client; callers create and revoke temporary blob URLs.
+D711 (#1776) adds `files` (an envelope's recorded files), `renderPaper` (the
+template paper as HTML, faces omitted) and `paperFonts` (its faces, once per
+`paper_sha256`).
 
 D652 (#1464): `eadwyn.js` calls `/api/eadwyn`, the Worker AI rail's conversations
 and the connectors in them. D701 (#1663) adds `conversationsMine`
