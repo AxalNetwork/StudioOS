@@ -8,7 +8,8 @@
  *  DELETE /connections/:entityKey            { reason }                          Super Admin, write bar
  *  POST   /connections/:entityKey/sync       sync now (once in five minutes)
  *  GET    /accounts?entity=
- *  GET    /transactions?entity=&account=&from=&to=&match=&page=   (50 a page; match=none|not_ours|<state>)
+ *  GET    /transactions?entity=&account=&from=&to=&match=&direction=&page=   (50 a page; match=none|not_ours|<state>;
+ *                                            direction=credit|debit, #1856)
  *  GET    /matches?state=
  *  POST   /matches                           { transaction_uid, target_kind, target_id }
  *  POST   /matches/:uid/confirm
@@ -223,18 +224,22 @@ export function createAdminMercury(opts: AdminMercuryOptions = {}) {
     const user = await requireMercuryReader(c); if (user instanceof Response) return user;
     const q = (k: string) => c.req.query(k) || null;
     const entity = q('entity'); const account = q('account'); const from = q('from'); const to = q('to'); const match = q('match');
+    const direction = q('direction');
     if (entity && !isEntityKey(entity)) return c.json({ code: 'unknown_entity', detail: 'No such Axal entity.' }, 400);
     if ((from && !day(from)) || (to && !day(to))) return c.json({ code: 'invalid_date', detail: 'Dates are YYYY-MM-DD.' }, 400);
     if (match && match !== 'none' && match !== 'not_ours' && !(MATCH_STATES as readonly string[]).includes(match)) return c.json({ code: 'invalid_match_filter', detail: 'Unknown match filter.' }, 400);
+    if (direction && direction !== 'credit' && direction !== 'debit') return c.json({ code: 'invalid_direction', detail: 'Direction is credit or debit.' }, 400);
     if (account && !/^[a-f0-9]{32}$/.test(account)) return c.json({ code: 'invalid_account', detail: 'Unknown account.' }, 400);
     const page = Math.max(1, Math.min(10_000, Number.parseInt(q('page') || '1', 10) || 1));
-    const binds = [entity, entity, account, account, from, from, to, to, match, match, match, match];
+    // #1856: a receipt is a credit, so `direction=credit` keeps amount_cents > 0 (and `debit` < 0); absent keeps both.
+    const binds = [entity, entity, account, account, from, from, to, to, match, match, match, match, direction, direction, direction];
     const total = await c.env.DB.prepare(
       `SELECT COUNT(*) AS n FROM mercury_transactions t JOIN mercury_accounts a ON a.id = t.account_id LEFT JOIN mercury_matches m ON m.transaction_id = t.id AND m.state <> 'rejected'
          LEFT JOIN mercury_not_ours n ON n.transaction_id = t.id AND n.state <> 'withdrawn'
        WHERE (? IS NULL OR a.entity_key = ?) AND (? IS NULL OR a.uid = ?)
         AND (? IS NULL OR t.created_on >= ?) AND (? IS NULL OR t.created_on <= ?)
-        AND (? IS NULL OR (? = 'none' AND m.id IS NULL AND (n.id IS NULL OR n.state = 'needs_review')) OR (? = 'not_ours' AND n.id IS NOT NULL) OR m.state = ?)`,
+        AND (? IS NULL OR (? = 'none' AND m.id IS NULL AND (n.id IS NULL OR n.state = 'needs_review')) OR (? = 'not_ours' AND n.id IS NOT NULL) OR m.state = ?)
+        AND (? IS NULL OR (? = 'credit' AND t.amount_cents > 0) OR (? = 'debit' AND t.amount_cents < 0))`,
     ).bind(...binds).first<{ n: number }>();
     const rows = (await c.env.DB.prepare(
       `SELECT t.uid, t.amount_cents, t.created_on, t.posted_on, t.counterparty_name, t.memo, t.status, t.kind,
@@ -246,9 +251,10 @@ export function createAdminMercury(opts: AdminMercuryOptions = {}) {
        WHERE (? IS NULL OR a.entity_key = ?) AND (? IS NULL OR a.uid = ?)
         AND (? IS NULL OR t.created_on >= ?) AND (? IS NULL OR t.created_on <= ?)
         AND (? IS NULL OR (? = 'none' AND m.id IS NULL AND (n.id IS NULL OR n.state = 'needs_review')) OR (? = 'not_ours' AND n.id IS NOT NULL) OR m.state = ?)
+        AND (? IS NULL OR (? = 'credit' AND t.amount_cents > 0) OR (? = 'debit' AND t.amount_cents < 0))
         ORDER BY t.created_on DESC, t.id DESC LIMIT ? OFFSET ?`,
     ).bind(...binds, TRANSACTIONS_PAGE, (page - 1) * TRANSACTIONS_PAGE).all<any>()).results || [];
-    if (!await auditRead(c.env, user, 'mercury_transactions_read', { entity, account, from, to, match, page, rows: rows.length })) return c.json(AUDIT_UNAVAILABLE, 503);
+    if (!await auditRead(c.env, user, 'mercury_transactions_read', { entity, account, from, to, match, direction, page, rows: rows.length })) return c.json(AUDIT_UNAVAILABLE, 503);
     return c.json({
       ok: true, page, page_size: TRANSACTIONS_PAGE, total: Number(total?.n ?? 0),
       items: rows.map((t) => ({
