@@ -4,6 +4,22 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## "Not ours" for an unmatched Mercury credit (D749, #1838)
+
+- Migration 483 adds `mercury_not_ours`: an Admin's mark on a posted credit
+  that no record should claim. It is withdrawn with a reason, never deleted.
+- `POST /api/admin/mercury/transactions/:uid/not-ours` and
+  `POST /api/admin/mercury/not-ours/:uid/withdraw` (`services/mercury/notOurs.ts`)
+  mark a line and withdraw the mark. A line holds one live match or one live
+  mark, never both: the matcher, `insertMatch` and `proposeManual` respect a
+  live mark, and marking refuses a matched line.
+- An active mark leaves `?match=none`, the monthly summary's `unmatched` and
+  `unmatched_count`, and the quarterly report's `unmatched_count`. The summary
+  gains `reconciliation.not_ours_count` and `not_ours_by_reason`. A sync that
+  changes a marked line turns the mark `needs_review`, and the line counts
+  again.
+- The console's Reconciliation tab gains Unmatched credits, with Not ours, and
+  Not ours, with Withdraw.
 ## Continue with Google signs in through Google's window on /login (D722)
 
 - `GET /api/auth/google/config` says whether this deployment opens Google's

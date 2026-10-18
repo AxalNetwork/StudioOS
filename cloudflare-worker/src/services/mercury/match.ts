@@ -26,6 +26,11 @@
  * `reference: 'mercury:<transaction id>'`. The unique index on `mercury:`
  * references (migration 474) makes a second receipt for one bank line
  * impossible.
+ *
+ * NOT OURS (D749, `notOurs.ts`). A line an Admin marked Not ours is never
+ * matched while the mark is live (`active` or `needs_review`): the matcher's
+ * query and `insertMatch` carry the same NOT EXISTS, and a manual pair
+ * answers 409 `marked_not_ours`. Withdrawing the mark makes it matchable again.
  */
 import type { Env, User } from '../../types';
 import { readLine, recordReceipt } from '../fundCallLedger';
@@ -71,7 +76,7 @@ const plusDays = (d: string, n: number) => {
 /** A credit that may be matched at all, the same four conditions in both statements below: posted, a credit, not internal, on a registered account. */
 const eligibleBinds = () => [JSON.stringify(POSTED_STATUSES), JSON.stringify(INTERNAL_KINDS)];
 
-interface Credit { id: number; uid: string; mercury_transaction_id: string; amount_cents: number; posted_on: string; entity_key: string; last_four: string }
+export interface Credit { id: number; uid: string; mercury_transaction_id: string; amount_cents: number; posted_on: string; entity_key: string; last_four: string }
 
 interface OpenLine { id: number; outstanding_cents: number; from: string; to: string }
 
@@ -95,10 +100,12 @@ async function openLines(env: Env, fundId: number): Promise<OpenLine[]> {
 
 async function insertMatch(env: Env, credit: Pick<Credit, 'id'>, kind: 'capital_call_line' | 'fee_period', targetId: number,
   amount: number, origin: 'matcher' | 'manual', by: number | null): Promise<boolean> {
+  // D749: a line with a live Not ours mark is never matched, checked in the INSERT itself.
   const r = await env.DB.prepare(
     `INSERT OR IGNORE INTO mercury_matches (uid, transaction_id, target_kind, target_id, state, origin, amount_cents, proposed_by)
-     VALUES (?, ?, ?, ?, 'proposed', ?, ?, ?)`,
-  ).bind(newUid(), credit.id, kind, targetId, origin, amount, by).run();
+     SELECT ?, t.id, ?, ?, 'proposed', ?, ?, ? FROM mercury_transactions t
+      WHERE t.id = ? AND NOT EXISTS (SELECT 1 FROM mercury_not_ours n WHERE n.transaction_id = t.id AND n.state <> 'withdrawn')`,
+  ).bind(newUid(), kind, targetId, origin, amount, by, credit.id).run();
   return Number(r.meta?.changes ?? 0) === 1;
 }
 
@@ -112,6 +119,7 @@ export async function proposeMatches(env: Env, d?: Partial<MatchDeps>): Promise<
   AND t.status IN (SELECT value FROM json_each(?)) AND COALESCE(t.kind, '') NOT IN (SELECT value FROM json_each(?))
   AND a.registered = 1
         AND NOT EXISTS (SELECT 1 FROM mercury_matches x WHERE x.transaction_id = t.id AND x.state <> 'rejected')
+        AND NOT EXISTS (SELECT 1 FROM mercury_not_ours n WHERE n.transaction_id = t.id AND n.state <> 'withdrawn')
       ORDER BY t.posted_on, t.id`,
   ).bind(...eligibleBinds()).all<Credit>()).results || [];
   let proposed = 0;
@@ -133,7 +141,8 @@ export async function proposeMatches(env: Env, d?: Partial<MatchDeps>): Promise<
 export type MatchRefusal = { ok: false; status: 400 | 404 | 409; code: string; detail: string };
 const refusal = (status: 400 | 404 | 409, code: string, detail: string): MatchRefusal => ({ ok: false, status, code, detail });
 
-async function creditByUid(env: Env, uid: string): Promise<(Credit & { eligible: number }) | null> {
+/** A bank line by uid with `eligible`: the four conditions a match, or a D749 Not ours mark, needs. */
+export async function creditByUid(env: Env, uid: string): Promise<(Credit & { eligible: number }) | null> {
   return await env.DB.prepare(
     `SELECT t.id, t.uid, t.mercury_transaction_id, t.amount_cents, t.posted_on, a.entity_key, a.last_four,
             CASE WHEN t.amount_cents > 0 AND t.posted_on IS NOT NULL
@@ -159,6 +168,8 @@ export async function proposeManual(env: Env, user: User, body: { transaction_ui
     'SELECT state FROM mercury_matches WHERE transaction_id = ? AND target_kind = ? AND target_id = ?',
   ).bind(credit.id, kind, targetId).first<{ state: string }>();
   if (prior?.state === 'rejected') return refusal(409, 'pair_rejected', 'This pair was rejected and is not proposed again.');
+  const marked = await env.DB.prepare("SELECT 1 AS x FROM mercury_not_ours WHERE transaction_id = ? AND state <> 'withdrawn'").bind(credit.id).first();
+  if (marked) return refusal(409, 'marked_not_ours', 'This line is marked Not ours. Withdraw the mark first.');
   if (kind === 'capital_call_line') {
     if (credit.entity_key !== 'fund') return refusal(409, 'wrong_entity', 'A capital-call line is matched only to a credit on the Fund’s account.');
     const fundId = await m.fundOneId(env);
