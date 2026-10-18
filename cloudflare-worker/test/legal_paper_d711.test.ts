@@ -21,9 +21,9 @@ const mainOf = (h: string) => h.slice(h.indexOf('<main>'), h.indexOf('</main>'))
 
 test('D711 an agreement prints the lockup, title, preamble with the address, body, both parties and the footer', () => {
   const sub = html({ title: 'Subscription Agreement', slug: 'subscription', version: 4 });
-  assert.ok(sub.includes('url(data:image/png;base64,') && sub.includes('"AXAL VC"'), 'the pdf lockup');
+  assert.ok(sub.includes('url(data:image/png;base64,') && sub.includes('"Axal VC"'), 'the pdf lockup');
   const screen = html({ title: 'Subscription Agreement', slug: 'subscription', version: 4 }, { medium: 'screen' });
-  assert.ok(/<img alt="" src="data:image\/png;base64,[A-Za-z0-9+/=]+">/.test(screen) && screen.includes('>AXAL VC<'), 'the screen lockup');
+  assert.ok(/<img alt="" src="data:image\/png;base64,[A-Za-z0-9+/=]+">/.test(screen) && screen.includes('>Axal VC<'), 'the screen lockup');
   assert.ok(sub.includes('<h1 class="title">Subscription Agreement</h1>'));
   assert.ok(sub.includes(AXAL_LEGAL_ADDRESS), 'the preamble writes the address out');
   assert.ok(sub.includes('The parties agree.'));
@@ -50,9 +50,9 @@ test('D711 the state comes from stored state: Draft, Specimen, Superseded, Issue
   assert.ok(draft.includes('DRAFT — for counsel review') && draft.includes('class="diagonal draft"'));
   const specimen = mainOf(html({ state: { kind: 'specimen' } }));
   assert.ok(specimen.includes('class="diagonal specimen"') && !specimen.includes('DRAFT'));
-  assert.ok(mainOf(html({ state: { kind: 'superseded', by: 5 } })).includes('<div class="stamp">Superseded by v5</div>'));
+  assert.ok(mainOf(html({ state: { kind: 'superseded', by: 5 } })).includes('<div class="stamp superseded">SUPERSEDED BY v5</div>'));
   const issued = html({ state: { kind: 'issued' }, envelopeUuid: 'env-77' });
-  assert.ok(mainOf(issued).includes('<div class="stamp">Issued</div>'));
+  assert.ok(mainOf(issued).includes(`<div class="stamp issued">Issued · SHA-256 ${SHA.slice(0, 12)}</div>`));
   assert.ok(issued.includes(`SHA-256 ${SHA.slice(0, 16)}… · Envelope env-77`), 'only an issued copy prints the audit line');
   for (const s of [{ kind: 'draft' }, { kind: 'specimen' }, { kind: 'superseded', by: 5 }] as const) {
     const h = html({ state: s, envelopeUuid: null });

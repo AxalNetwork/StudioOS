@@ -232,7 +232,8 @@ test('D717 #1851 card copy: stubs, the counsel mark, states, the slug mark and t
 
 test('D717 #1851 Add body opens the editor on the body', async () => {
   const stub = NINE[0];
-  const { view } = await open({}, HQ, { adminTemplateStoreGet: async () => ({ template: stub }), adminTemplateStoreVersions: async () => ({ versions: [] }) });
+  const { view } = await open({ renderPaper: async () => ({ html: '<p>paper</p>', paper_sha256: 'sha', fields: [] }), paperFonts: async () => ({ paper_sha256: 'sha', css: '' }) },
+    HQ, { adminTemplateStoreGet: async () => ({ template: stub }), adminTemplateStoreVersions: async () => ({ versions: [] }) });
   try {
     const add = view.nodes().find((n) => n.tagName === 'BUTTON' && textOf(n).trim() === 'Add body' && textOf(n.parentNode.parentNode).includes('counsel to draft'));
     await view.flush();
@@ -393,8 +394,12 @@ test('D717 #1851 on a branch Worker the tab is read-only, and a card still opens
   void calls;
 });
 
-test('D717 #1851 decision 8: the interim library Publish stays on HQ until #1852 lands', async () => {
+test('D717 #1851 decision 8: #1852 has merged, so the tab has no library-wide Publish', async () => {
   const { view } = await open();
-  try { assert.ok(buttons(view).includes('Publish')); assert.ok(buttons(view).includes('New template')); assert.ok(buttons(view).includes('Push to branches')); }
-  finally { await view.unmount(); restore(); }
+  try {
+    assert.ok(!buttons(view).includes('Publish'));
+    assert.equal(testid(view, 'template-publish'), undefined);
+    assert.doesNotMatch(view.text(), /templates have unpublished changes/);
+    assert.ok(buttons(view).includes('New template') && buttons(view).includes('Push to branches'));
+  } finally { await view.unmount(); restore(); }
 });

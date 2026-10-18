@@ -1,14 +1,15 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { FileText, X, Plus, Save, Trash2, History, Loader2, AlertTriangle, RefreshCw, Eye, Download, Send } from 'lucide-react';
 import { api } from '../../lib/api';
 import { contractsApi } from '../../lib/api/contracts';
 import { ConsoleUnreadable } from './consoles/shared';
 import TemplateCatalog from './contracts/TemplateCatalog';
-import { useAuth } from '../../hooks/useAuthSync';
-import { branchOfUser } from '../../lib/shellRole';
 import { reportError } from '../../lib/log';
 import { useEscapeClose } from '../../components/useEscapeClose';
 import PaperPreview from '../../components/PaperPreview';
+import TemplateEditor from './contracts/TemplateEditor';
+import { useAuth } from '../../hooks/useAuthSync';
+import { branchOfUser } from '../../lib/shellRole';
 
 // Task #8 — Markdown template editor + full template catalog.
 //
@@ -30,6 +31,7 @@ const CATEGORY_META = {
   compliance: { label: 'Compliance & Regulatory', description: 'SEC filings, AML/KYC, and tax elections' },
 };
 const CATEGORY_ORDER = ['gp', 'fund', 'portfolio', 'compliance'];
+const LAYERS = CATEGORY_ORDER.map(id => [id, CATEGORY_META[id].label]);
 
 function fmtDate(iso) {
   if (!iso) return '';
@@ -48,6 +50,7 @@ function detectMergeFields(body) {
 }
 
 export default function AdminTemplates({ onOpenUsage, recordedPublication = false }) {
+  const { user } = useAuth() || {};
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
@@ -59,9 +62,6 @@ export default function AdminTemplates({ onOpenUsage, recordedPublication = fals
   const [publishing, setPublishing] = useState(false);
   const [publishResult, setPublishResult] = useState(null);
   const [publishErr, setPublishErr] = useState('');
-  const [confirmPublish, setConfirmPublish] = useState(false);
-  // D717 (#1851) decision 11: a branch Worker reads HQ's library and never authors it.
-  const authoring = !branchOfUser(useAuth()?.user);
 
   const reload = async () => {
     setLoading(true);
@@ -91,6 +91,26 @@ export default function AdminTemplates({ onOpenUsage, recordedPublication = fals
 
   const onSaved = () => { setEditing(null); reload(); };
 
+  // D717 (#1852): on the Contracts desk the editor opens in place and the tab
+  // draws only it. Checked first, so a background reload never unmounts it.
+  if (recordedPublication && editing) {
+    return (
+      <TemplateEditor
+        key={editing.slug || 'new'}
+        slug={editing.slug}
+        isNew={!!editing.isNew}
+        row={items.find(t => t.slug === editing.slug)}
+        focus={editing.focus}
+        authoring={!branchOfUser(user)}
+        layers={LAYERS}
+        user={user}
+        onClose={() => setEditing(null)}
+        onChanged={reload}
+        onDeleted={() => { setEditing(null); reload(); }}
+      />
+    );
+  }
+
   // THE PUSH IS THE WHOLE LIBRARY, AND IT IS REPORTED PER BRANCH. A failure to
   // reach one branch is not a failure of the push — HQ's library is HQ's
   // either way — so nothing here throws the operator back to an error page
@@ -101,34 +121,21 @@ export default function AdminTemplates({ onOpenUsage, recordedPublication = fals
     setPublishing(true);
     setPublishErr('');
     try {
-      setPublishResult(await (recordedPublication ? contractsApi.publish() : api.adminTemplatesPublish()));
-      setConfirmPublish(false);
+      setPublishResult(await api.adminTemplatesPublish());
     } catch (e) {
       // The library is untouched: this only failed to SEND. Saying which is the
       // difference between "retry" and "check what you just saved".
-      setPublishErr(recordedPublication ? 'Publication could not be confirmed. Reload the published versions before retrying.' : (e.message || 'The library could not be sent. Nothing in it changed.'));
+      setPublishErr(e.message || 'The library could not be sent. Nothing in it changed.');
       reportError('AdminTemplates:publish', e);
     } finally {
       setPublishing(false);
     }
   };
 
-  // D717 (#1851) decision 8: the library-wide Publish stays on the catalog's
-  // toolbar until #1852's per-template Publish v[N] replaces it.
-  const publishButton = (
-    <button
-      type="button"
-      onClick={recordedPublication ? () => setConfirmPublish(true) : publish}
-      disabled={unavailable || publishing || !items.length}
-      data-testid="template-publish"
-      title="Send this library to every branch Worker bound to HQ"
-      className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:border-violet-400 disabled:opacity-50 font-medium flex items-center gap-1 dark:border-gray-800 dark:text-gray-200">
-      <Send size={12} /> {publishing ? 'Publishing…' : recordedPublication ? 'Publish' : 'Publish to branches'}
-    </button>
-  );
-
   return (
     <div>
+      {/* D717 (#1851): on the Contracts desk the catalog's toolbar replaces this
+          header, and #1852's Publish v[N] the library-wide Publish. */}
       {!recordedPublication && <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
         <div className="text-xs text-gray-500">
           {unavailable ? 'Template store is worker-only.' : `${items.length} template${items.length === 1 ? '' : 's'} in the catalog`}
@@ -137,7 +144,15 @@ export default function AdminTemplates({ onOpenUsage, recordedPublication = fals
           <button onClick={reload} className="text-xs text-gray-500 hover:text-violet-600 flex items-center gap-1">
             <RefreshCw size={12} /> Refresh
           </button>
-          {publishButton}
+          <button
+            type="button"
+            onClick={publish}
+            disabled={unavailable || publishing || !items.length}
+            data-testid="template-publish"
+            title="Send this library to every branch Worker bound to HQ"
+            className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:border-violet-400 disabled:opacity-50 font-medium flex items-center gap-1 dark:border-gray-800 dark:text-gray-200">
+            <Send size={12} /> {publishing ? 'Publishing…' : 'Publish to branches'}
+          </button>
           <button
             onClick={() => setEditing({ isNew: true })}
             disabled={unavailable}
@@ -149,13 +164,6 @@ export default function AdminTemplates({ onOpenUsage, recordedPublication = fals
       </div>}
 
       {err && <ConsoleUnreadable what="Templates" onRetry={reload} />}
-      {recordedPublication && authoring && !loading && !err && <p className="mb-3 text-xs text-gray-600 dark:text-gray-400">{items.filter(t => t.has_unpublished_changes).length} templates have unpublished changes. Publishing offers the latest saved versions to New envelope.</p>}
-      {confirmPublish && <div role="dialog" aria-modal="true" aria-label="Publish templates" className="rounded-xl border border-violet-200 bg-violet-50 p-4 dark:border-violet-900 dark:bg-violet-950/30">
-        <h3 className="font-semibold">Publish templates</h3><p>Publishing makes these versions the versions New envelope offers. Saved drafts stop changing that body until you publish again. Archived or blank templates are withdrawn; agreements already sent keep their copy. The catalogue is also sent to bound branches.</p>
-        <ul>{items.filter(t => !t.is_stub && t.body_md?.trim()).map(t => <li key={t.slug}>{t.title} · v{t.version}</li>)}</ul>
-        <ul>{items.filter(t => t.published_version != null && (t.is_stub || !t.body_md?.trim())).map(t => <li key={t.slug}>Withdraw {t.title} · published v{t.published_version}</li>)}</ul>
-        <button type="button" onClick={publish} disabled={publishing}>Confirm publish</button>{' '}<button type="button" onClick={() => setConfirmPublish(false)} disabled={publishing}>Cancel</button>
-      </div>}
 
       {publishErr && (
         <div
@@ -170,7 +178,7 @@ export default function AdminTemplates({ onOpenUsage, recordedPublication = fals
           data-testid="template-publish-result"
           className="bg-gray-50 border border-gray-200 text-xs p-3 rounded-lg mb-3 dark:bg-gray-900 dark:border-gray-800">
           <div className="font-semibold text-gray-900 dark:text-gray-100">
-            {publishResult.template_count} template{publishResult.template_count === 1 ? '' : 's'} {recordedPublication ? 'published' : 'sent'}
+            {publishResult.template_count} template{publishResult.template_count === 1 ? '' : 's'} sent
             {' · '}
             {publishResult.answered} of {publishResult.total} branch{publishResult.total === 1 ? '' : 'es'} answered
           </div>
@@ -215,11 +223,10 @@ export default function AdminTemplates({ onOpenUsage, recordedPublication = fals
       ) : recordedPublication ? (
         <TemplateCatalog
           items={items}
-          authoring={authoring}
+          authoring={!branchOfUser(user)}
           onOpen={(slug, opts) => setEditing({ slug, focus: opts?.focus })}
           onNew={() => setEditing({ isNew: true })}
-          onOpenUsage={onOpenUsage}
-          toolbarExtra={publishButton} />
+          onOpenUsage={onOpenUsage} />
       ) : (
         <div className="space-y-6">
           {CATEGORY_ORDER.filter(cat => (grouped[cat] || []).length).map(cat => (
@@ -267,7 +274,6 @@ export default function AdminTemplates({ onOpenUsage, recordedPublication = fals
         <TemplateEditorModal
           slug={editing.slug}
           isNew={!!editing.isNew}
-          focus={editing.focus}
           onClose={() => setEditing(null)}
           onSaved={onSaved}
         />
@@ -276,7 +282,7 @@ export default function AdminTemplates({ onOpenUsage, recordedPublication = fals
   );
 }
 
-function TemplateEditorModal({ slug, isNew, focus, onClose, onSaved }) {
+function TemplateEditorModal({ slug, isNew, onClose, onSaved }) {
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -330,9 +336,6 @@ function TemplateEditorModal({ slug, isNew, focus, onClose, onSaved }) {
   }, [slug, isNew]);
 
   const mergeFields = useMemo(() => detectMergeFields(body), [body]);
-  // D717 (#1851): Add body opens the editor on the body.
-  const bodyRef = useRef(null);
-  useEffect(() => { if (focus === 'body' && !loading) bodyRef.current?.scrollIntoView?.({ block: 'center' }); }, [focus, loading]);
 
   const save = async () => {
     setErr('');
@@ -501,8 +504,6 @@ function TemplateEditorModal({ slug, isNew, focus, onClose, onSaved }) {
                 value={body}
                 onChange={e => { setBody(e.target.value); setViewVersion(null); }}
                 spellCheck={false}
-                autoFocus={focus === 'body'}
-                ref={bodyRef}
                 data-testid="template-body"
                 placeholder="SECTION TITLE&#10;&#10;1.1  Clause text with {{merge_field}} tokens…&#10;&#10;Signed: ______________________"
                 className="flex-1 min-h-[280px] w-full px-4 py-3 text-[13px] font-mono leading-relaxed resize-none focus:outline-none bg-white dark:bg-gray-900 dark:text-gray-100" />

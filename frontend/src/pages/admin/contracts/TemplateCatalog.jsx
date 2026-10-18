@@ -163,7 +163,7 @@ function OutsideGroup({ thumbs }) {
   </section>;
 }
 
-export default function TemplateCatalog({ items, authoring, onOpen, onNew, onOpenUsage, toolbarExtra }) {
+export default function TemplateCatalog({ items, authoring, onOpen, onNew, onOpenUsage }) {
   const thumbs = useThumbnails();
   const [q, setQ] = useState('');
   const [layer, setLayer] = useState('all');
@@ -204,7 +204,6 @@ export default function TemplateCatalog({ items, authoring, onOpen, onNew, onOpe
           {`${FILTER_LABEL[f]} · ${f === 'published' && counts.published === 0 ? 'none yet' : counts[f]}`}
         </button>)}
       </div>
-      {authoring && toolbarExtra}
       {authoring && <button type="button" className={`${button} bg-white dark:bg-gray-900`} disabled={push.running} onClick={runPush}>{push.running ? 'Pushing…' : 'Push to branches'}</button>}
       {authoring && <button type="button" data-testid="template-new" className={`${button} ${rose}`} onClick={onNew}>New template</button>}
     </div>
