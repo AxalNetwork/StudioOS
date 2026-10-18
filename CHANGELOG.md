@@ -15,6 +15,24 @@
   commitment, newest open, drawn by `FeeStatementView` with no account digits.
   Frontend only: no route, migration or API method changes.
 
+## The entity and money map on screen, with one numbering on paper (D717, #1855)
+
+- `GET /api/admin/fund-structure` (`services/fundStructure.ts`) now numbers
+  the flows 1 to 8 in the "Legal Documents · Templates" canvas's order
+  (`FLOW_ROWS`, every money kind in exactly one row), names the licences A and
+  B, and computes the map once (`STRUCTURE_LAYOUT` to `map`: path data and
+  text positions). It adds who signs for each entity (`ENTITY_SIGNS`), and,
+  for the Super Admin only, each entity's active accounts masked to the last
+  four (`accounts`; never revealed or decrypted).
+- The paper's "Structure of the Fund" page prints that map and a No. | Flow |
+  Rail | Receiving account table, so the PPM, the Subscription Booklet and
+  the Compliance Manual number the flows as the screen does.
+- The Contracts desk header has a "Structure of the Fund" door on every tab
+  (`?sheet=structure`, `FundStructureSheet.jsx`, `FundStructureMap.jsx`), and
+  a "Bank accounts" link for the Super Admin. A plain Admin sees "Only the
+  Super Admin can see or change payment instructions." in every account cell.
+  A branch gets neither. Nothing moves money.
+
 ## The AI top-up says what is wrong, and the rail shows money to the cent (D750, #1841)
 
 - `readAiTopupProduct` (`services/aiTopups.ts`) returns `ready`, or

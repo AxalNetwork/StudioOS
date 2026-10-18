@@ -21,7 +21,7 @@ const toForm = (row) => ({
   kind: row.kind, direction: row.direction, amount: (Number(row.amount_cents) / 100).toFixed(2), due_on: row.due_on || '', memo: row.memo || '',
 });
 
-export function SettlementRows({ rows, superAdmin, busy, onEdit, onDelete, onIssue, onVoid }) {
+export function SettlementRows({ rows, superAdmin, dealActive = true, busy, onEdit, onDelete, onIssue, onVoid }) {
   if (!rows.length) return <p className="text-sm text-axal-muted" data-testid="settlements-empty">No settlement is drafted under this deal.</p>;
   return <ul className="divide-y divide-axal-hairline text-sm" data-testid="settlements-list">{rows.map((s) => (
     <li key={s.uid} className="space-y-1 py-2" data-testid={`settlement-${s.uid}`}>
@@ -34,9 +34,9 @@ export function SettlementRows({ rows, superAdmin, busy, onEdit, onDelete, onIss
       {s.issued_at ? <p className="text-xs text-axal-muted">Issued <Recorded value={date(s.issued_at)} reason="The issue date could not be read." /></p> : null}
       {s.state === 'void' ? <p className="text-xs text-axal-muted">Voided: <Recorded value={s.void_reason} reason="No reason was recorded." /></p> : null}
       <div className="flex flex-wrap gap-2">
-        {s.state === 'draft' && <button type="button" className={button} disabled={busy} onClick={() => onEdit(s)} data-testid={`settlement-edit-${s.uid}`}>Edit</button>}
+        {dealActive && s.state === 'draft' && <button type="button" className={button} disabled={busy} onClick={() => onEdit(s)} data-testid={`settlement-edit-${s.uid}`}>Edit</button>}
         {s.state === 'draft' && <button type="button" className={button} disabled={busy} onClick={() => onDelete(s)} data-testid={`settlement-delete-${s.uid}`}>Delete draft</button>}
-        {superAdmin && s.state === 'draft' && <button type="button" className={`${button} bg-violet-600 text-white`} disabled={busy} onClick={() => onIssue(s)} data-testid={`settlement-issue-${s.uid}`}>Issue</button>}
+        {superAdmin && dealActive && s.state === 'draft' && <button type="button" className={`${button} bg-violet-600 text-white`} disabled={busy} onClick={() => onIssue(s)} data-testid={`settlement-issue-${s.uid}`}>Issue</button>}
         {superAdmin && s.state === 'issued' && <button type="button" className={button} disabled={busy} onClick={() => onVoid(s)} data-testid={`settlement-void-${s.uid}`}>Void</button>}
       </div>
     </li>
@@ -67,7 +67,11 @@ export function SettlementForm({ form, editing, busy, error, onForm, onSave, onC
 
 export default function SettlementsDesk({ deal, superAdmin, onClose }) {
   const [revision, setRevision] = useState(0);
-  const read = useRead(() => partnerSettlementsApi.list({ deal: deal.id }), [deal.id, revision]);
+  const read = useRead(async () => {
+    const rows = await partnerSettlementsApi.list({ deal: deal.id });
+    if (!Array.isArray(rows)) throw new Error('The settlement list response could not be read.');
+    return rows;
+  }, [deal.id, revision]);
   const [form, setForm] = useState(EMPTY);
   const [editing, setEditing] = useState(null);
   const [voiding, setVoiding] = useState(null);
@@ -83,6 +87,10 @@ export default function SettlementsDesk({ deal, superAdmin, onClose }) {
     catch (e) { reportError('contracts:settlements', e); setError(e?.message || fallback); }
     finally { setBusy(false); }
   };
+  const clearEditing = (uid) => {
+    if (editing?.uid !== uid) return;
+    setEditing(null); setForm(EMPTY);
+  };
   const save = () => {
     const out = settlementDraft({ ...form, partner_deal_id: deal.id });
     if (out.error) { setError(out.error); return; }
@@ -93,12 +101,12 @@ export default function SettlementsDesk({ deal, superAdmin, onClose }) {
   return <SidePanel title={`Settlements · ${deal.partner_name || deal.partner_email || `Deal ${deal.id}`}`} onClose={onClose}>
     <p className="text-xs text-axal-muted">What Management and the partner owe each other under this signed deal. Recording one moves no money: the partner matches an issued settlement to a line in their own bank.</p>
     {!superAdmin && <p className="text-xs text-axal-muted" data-testid="settlements-super-admin-note">Issuing and voiding are the Super Admin’s. You can draft, edit and delete drafts.</p>}
-    {error && !editing && <p role="alert" className="text-xs text-red-700" data-testid="settlements-error">{error}</p>}
+    {error && (!editing || !active) && <p role="alert" className="text-xs text-red-700" data-testid="settlements-error">{error}</p>}
     <ReadState read={read} what="Settlements">
-      {Array.isArray(read.data) && <SettlementRows rows={read.data} superAdmin={superAdmin} busy={busy}
+      {Array.isArray(read.data) && <SettlementRows rows={read.data} superAdmin={superAdmin} dealActive={active} busy={busy}
         onEdit={(s) => { setEditing(s); setForm(toForm(s)); setError(''); }}
-        onDelete={(s) => run(() => partnerSettlementsApi.remove(s.uid), 'The draft could not be deleted. It is unchanged.')}
-        onIssue={(s) => run(() => partnerSettlementsApi.issue(s.uid), 'The settlement could not be issued. It is still a draft.')}
+        onDelete={(s) => run(() => partnerSettlementsApi.remove(s.uid), 'The draft could not be deleted. It is unchanged.', () => clearEditing(s.uid))}
+        onIssue={(s) => run(() => partnerSettlementsApi.issue(s.uid), 'The settlement could not be issued. It is still a draft.', () => clearEditing(s.uid))}
         onVoid={(s) => { setVoiding(s); setReason(''); }} />}
     </ReadState>
     {superAdmin && voiding && <div className="space-y-2 rounded-lg border border-axal-hairline p-3" data-testid="settlement-void-form">

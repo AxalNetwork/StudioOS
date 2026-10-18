@@ -31,6 +31,7 @@ export * from './api/fundLedger.js';
 export * from './api/fundPerformance.js';
 export * from './api/fundReporting.js';
 export * from './api/fundReports.js';
+export * from './api/fundStructure.js';
 export * from './api/googleSignIn.js';
 export * from './api/helpCenter.js';
 export * from './api/interviewSessions.js';
