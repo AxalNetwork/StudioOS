@@ -18,15 +18,17 @@ export function withPaperFonts(html, css) {
 /**
  * The paper in a frame that runs no script: the sandbox is `allow-same-origin`
  * only, so the parent can read the frame's height, and the paper's own CSP
- * forbids scripts too.
+ * forbids scripts too. `onFrameLoad(iframe)` lets the template editor read the
+ * paper's headings from outside (D717 #1852); nothing runs inside the frame.
  */
-export function PaperFrame({ html, title }) {
+export function PaperFrame({ html, title, onFrameLoad }) {
   const ref = useRef(null);
   const [height, setHeight] = useState(1056);
   const fit = () => {
     const doc = ref.current?.contentDocument;
     const h = doc?.documentElement?.scrollHeight;
     if (h) setHeight(h);
+    if (onFrameLoad && ref.current) onFrameLoad(ref.current);
   };
   return (
     <iframe
@@ -54,8 +56,16 @@ export default function PaperPreview({
   category = null,
   pageSize = 'letter',
   cover = 'dark',
+  // D717 (#1852): the editor's unsaved pair (`null` is "from the slug"). An
+  // absent prop sends no key, so the legacy modal's request is unchanged.
+  docKind,
+  axalParty,
+  onDrawn,
+  onFrameLoad,
 }) {
   const [paper, setPaper] = useState(null);
+  const drawnRef = useRef(onDrawn);
+  drawnRef.current = onDrawn;
   const [fonts, setFonts] = useState({ sha: null, css: '' });
   const [drawing, setDrawing] = useState(false);
   const [failed, setFailed] = useState('');
@@ -70,9 +80,12 @@ export default function PaperPreview({
           title: title || '', body: body || '', slug: docType || '', category,
           version: Number.isInteger(version) ? version : null,
           resolve: resolveTokens ? 'brackets' : 'raw', page_size: pageSize, cover, fonts: 'omit',
+          ...(docKind !== undefined ? { doc_kind: docKind } : {}),
+          ...(axalParty !== undefined ? { axal_party: axalParty } : {}),
         });
         if (ask !== latest.current) return;
         setPaper(drawn);
+        drawnRef.current?.(drawn);
         setFailed('');
         if (drawn.paper_sha256 && drawn.paper_sha256 !== fonts.sha) {
           const faces = await contractsApi.paperFonts();
@@ -87,7 +100,7 @@ export default function PaperPreview({
     return () => clearTimeout(timer);
     // `fonts.sha` is read, not watched: a new face set never redraws the paper.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [title, body, resolveTokens, version, docType, category, pageSize, cover]);
+  }, [title, body, resolveTokens, version, docType, category, pageSize, cover, docKind, axalParty]);
 
   return (
     <div className="py-4 px-3" data-testid="paper-preview">
@@ -97,7 +110,7 @@ export default function PaperPreview({
         </div>
       )}
       {paper?.html
-        ? <PaperFrame html={withPaperFonts(paper.html, fonts.css)} title={`${title || 'Document'} — preview`} />
+        ? <PaperFrame html={withPaperFonts(paper.html, fonts.css)} title={`${title || 'Document'} — preview`} onFrameLoad={onFrameLoad} />
         : !failed && <div className="text-xs text-gray-400">Drawing the paper…</div>}
     </div>
   );

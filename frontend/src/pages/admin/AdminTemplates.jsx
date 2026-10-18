@@ -7,6 +7,9 @@ import { Recorded, Pagination, input as contractInput, button as contractButton 
 import { reportError } from '../../lib/log';
 import { useEscapeClose } from '../../components/useEscapeClose';
 import PaperPreview from '../../components/PaperPreview';
+import TemplateEditor from './contracts/TemplateEditor';
+import { useAuth } from '../../hooks/useAuthSync';
+import { branchOfUser } from '../../lib/shellRole';
 
 // Task #8 — Markdown template editor + full template catalog.
 //
@@ -28,6 +31,7 @@ const CATEGORY_META = {
   compliance: { label: 'Compliance & Regulatory', description: 'SEC filings, AML/KYC, and tax elections' },
 };
 const CATEGORY_ORDER = ['gp', 'fund', 'portfolio', 'compliance'];
+const LAYERS = CATEGORY_ORDER.map(id => [id, CATEGORY_META[id].label]);
 
 function fmtDate(iso) {
   if (!iso) return '';
@@ -46,6 +50,7 @@ function detectMergeFields(body) {
 }
 
 export default function AdminTemplates({ onOpenUsage, recordedPublication = false }) {
+  const { user } = useAuth() || {};
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
@@ -92,6 +97,26 @@ export default function AdminTemplates({ onOpenUsage, recordedPublication = fals
   }, [items]);
 
   const onSaved = () => { setEditing(null); reload(); };
+
+  // D717 (#1852): on the Contracts desk the editor opens in place and the tab
+  // draws only it. Checked first, so a background reload never unmounts it.
+  if (recordedPublication && editing) {
+    return (
+      <TemplateEditor
+        key={editing.slug || 'new'}
+        slug={editing.slug}
+        isNew={!!editing.isNew}
+        row={items.find(t => t.slug === editing.slug)}
+        focus={editing.focus}
+        authoring={!branchOfUser(user)}
+        layers={LAYERS}
+        user={user}
+        onClose={() => setEditing(null)}
+        onChanged={reload}
+        onDeleted={() => { setEditing(null); reload(); }}
+      />
+    );
+  }
 
   // THE PUSH IS THE WHOLE LIBRARY, AND IT IS REPORTED PER BRANCH. A failure to
   // reach one branch is not a failure of the push — HQ's library is HQ's
