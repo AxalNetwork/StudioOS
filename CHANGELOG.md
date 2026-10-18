@@ -13,19 +13,34 @@
   and the double-submitted `studioos_google_popup` state, exchanges it with
   `redirect_uri=postmessage`, verifies the id_token against Google's keys
   (`services/googleIdToken.ts`) and answers `{token, user}` as passkey
-  sign-in does. New `google_popup` rate-limit bucket (10/min/IP,
-  fail-closed).
+  sign-in does. With the switch off it answers 503 `popup_off` before it
+  calls Google. New `google_popup` rate-limit bucket (60/min/IP, fail-open,
+  like every other sign-in path).
 - `/popup` and `/callback` share `resolveGoogleSignin` and
   `mintGoogleSession`. An inactive account is now refused before it is
-  linked. The redirect's state cookie carries the session's Domain, so the
-  KV-miss fallback works across axal.vc and app.axal.vc.
+  linked. Rules 2 and 4 (link by email, create by email) run only where
+  Google is authoritative for the address (gmail.com, or a Workspace
+  account's `hd`); anywhere else the answer is `link_requires_email_proof`.
+- **Login CSRF on the redirect closed.** `/callback` took a KV record in
+  place of the `studioos_google_state` cookie, and the record proved only
+  that `/start` minted the state, so an attacker's own state opened in the
+  victim's browser signed the victim in. The cookie, now carrying the
+  session's Domain so it reaches app.axal.vc, is the only binding; `/start`
+  writes no KV record.
 - `/login` asks the config at idle, loads `accounts.google.com/gsi/client`
   ahead of the click, and opens the window with nothing awaited before
-  `requestCode()`. A blocked window, a script not yet loaded or the switch
-  off all take the `/start` redirect. The button always renders (D185).
-- `GOOGLE_SIGNIN_POPUP = "off"` in both wrangler var blocks until the owner
+  `requestCode()`. A blocked window (reported inside `requestCode()`), a
+  script not yet loaded, the switch off, a 429 or `popup_off` all take the
+  `/start` redirect. The button always renders (D185). `?next=` is parsed
+  against the page's origin (`/\evil.com` and `/%09/evil.com` no longer
+  leave it).
+- `GOOGLE_SIGNIN_POPUP`: `"off"` in both wrangler var blocks until the owner
   registers `https://axal.vc` and `https://app.axal.vc` as JavaScript
-  origins on the sign-in client; "off" is also the rollback.
+  origins on the sign-in client; `"canary"` offers the window only to
+  `/login?google_window=1`; `"on"` to everyone. `"off"` is the rollback and
+  closes `/popup` too.
+- `pr-preview.yml` gains a `login-e2e` job: the D722 Playwright spec against
+  the PR's preview, in Chromium, with no secret.
 - `check-spa-live.mjs` asserts no COOP on `/login` and a well-formed
   `/api/auth/google/config` on both hosts.
 

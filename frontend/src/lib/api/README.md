@@ -148,7 +148,8 @@ period's preview, issue and funding call, and one LP's statement. The Worker
 decides each act: confirm and issue are the Super Admin's.
 
 D722: `googleSignIn.js` calls `GET /api/auth/google/config` (whether this
-deployment opens Google's own window on /login, and the client to open it for)
+deployment opens Google's own window on /login, and the client to open it for;
+`{ canary: true }` adds `?canary=1`, which /login sends from `?google_window=1`)
 and `POST /api/auth/google/popup` (the code that window returned, with the
 attempt's state; the answer is `{ token, user, new_signup }`). The POST carries
 `X-Requested-With: XmlHttpRequest`, which the Worker requires and which no

@@ -149,10 +149,11 @@ export interface Env {
   GOOGLE_AUTH_CLIENT_ID?: string;
   GOOGLE_AUTH_CLIENT_SECRET?: string;
   // D722 — "on" lets /login open Google's own window (the GIS code client)
-  // for the client above; anything else keeps every click on the /start
-  // redirect. A wrangler var, "off" in both [vars] and [env.production.vars]
-  // until the owner has registered https://axal.vc and https://app.axal.vc
-  // as Authorized JavaScript origins on that client.
+  // for the client above; "canary" only for /login?google_window=1; anything
+  // else keeps every click on the /start redirect and closes POST /popup. A
+  // wrangler var, "off" in both [vars] and [env.production.vars] until the
+  // owner has registered https://axal.vc and https://app.axal.vc as
+  // Authorized JavaScript origins on that client.
   GOOGLE_SIGNIN_POPUP?: string;
   // Dedicated Google Sheets OAuth for `/research/funds` sync. SEPARATE from
   // the calendar client (`GOOGLE_CAL_*` / `GOOGLE_CLIENT_*`) so adding the

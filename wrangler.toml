@@ -179,11 +179,12 @@ ENVIRONMENT       = "production"
 # D653: owner and counsel must authorize enablement (#1008).
 ROUND_CALLS_ENABLED = "false"
 # D722: "on" lets /login open Google's own sign-in window (GIS code client,
-# POST /api/auth/google/popup); "off" keeps every click on the /start redirect.
-# Flip to "on" in BOTH this block and the production vars block below, in one
-# PR, only after https://axal.vc and https://app.axal.vc are Authorized
-# JavaScript origins on the GOOGLE_AUTH_CLIENT_ID client. Rollback: "off" and
-# deploy.
+# POST /api/auth/google/popup); "canary" offers it only to
+# /login?google_window=1; "off" keeps every click on the /start redirect and
+# closes /popup. Change BOTH this block and the production vars block below,
+# in one PR, and only after https://axal.vc and https://app.axal.vc are
+# Authorized JavaScript origins on the GOOGLE_AUTH_CLIENT_ID client: first
+# "canary", checked on both hosts, then "on". Rollback: "off" and deploy.
 GOOGLE_SIGNIN_POPUP = "off"
 # D681 (#1555): StudioOS MCP and OAuth; a missing OAUTH_KV still keeps them off.
 # The lasting switch-off is one PR to main that sets this flag and production's
