@@ -19,8 +19,8 @@
   `fanOut` marks an `unreadable` result that hit the deadline `timed_out`, and
   the push answers `pushed_at`. Retry re-runs the whole push, which writes
   nothing.
-- On a branch Worker the tab is read-only. The library-wide Publish stays on
-  the toolbar until #1852's Publish v[N].
+- On a branch Worker the tab is read-only. The library-wide Publish is gone
+  from the tab: publishing is #1852's per-template Publish v[N], in the editor.
 
 ## Every library document renders from a coded template (D758, #1861)
 

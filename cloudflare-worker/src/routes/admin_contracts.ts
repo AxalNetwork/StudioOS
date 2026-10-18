@@ -14,7 +14,7 @@ import { fanOut } from '../services/branches';
 import { usageFromContractRows } from '../services/contractTemplateUsage';
 import { publishedContractTemplates, publicationFields, publishContractTemplates, preparePublishedContract, ContractPreparationError,
   publishOneTemplate, withdrawTemplatePublication, PublicationError } from '../services/contractPublication';
-import { formatView, formatOptions, renderFormat, effectiveFormat } from '../services/templateFormat';
+import { formatView, formatOptions, renderFormat, effectiveFormat, COUNSEL_DRAFT_SLUGS } from '../services/templateFormat';
 import { renderLegalPng } from '../services/browserRun';
 import { structureForPaper } from '../services/fundStructure';
 import { createAndSendEnvelope } from './esign';
