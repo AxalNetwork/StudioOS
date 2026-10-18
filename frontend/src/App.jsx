@@ -272,6 +272,8 @@ const CreditRulesPage = lazy(() => import('./pages/hq/CreditRulesRegistryPage'))
 const MemberCreditsPage = lazy(() => import('./pages/hq/MemberCreditsPage'));
 const TrustObligationsPage = lazy(() => import('./pages/hq/TrustObligationsPage'));
 const HqFundsPage = lazy(() => import('./pages/hq/HqFundsPage'));
+// D714 (#1779) PR 4a — fund administration for the Super Admin and every Admin on HQ.
+const FundAdminConsole = lazy(() => import('./pages/admin/fundAdmin/FundAdminConsole'));
 const KYCPage = lazy(() => import('./pages/KYCPage'));
 const TrustCenterPage = lazy(() => import('./pages/TrustCenterPage'));
 const AdvisorsPage = lazy(() => import('./pages/AdvisorsPage'));
@@ -2688,6 +2690,8 @@ function AppInner() {
           fee, the revenue share and an exclusive grant over whole countries. */}
       <Route path="/admin/licences" element={guard(['admin'], hqOnly(<AdminLicences />))} />
       <Route path="/admin/funds" element={guard(['admin'], hqOnly(<HqFundsPage />))} />
+      {/* D714 decision 7: guard(['admin']), not hqOnly — that wrapper admits the Super Admin alone. On a branch the console says so and reads nothing. */}
+      <Route path="/admin/fund-admin" element={guard(['admin'], <FundAdminConsole />)} />
       {/* A subsidiary admin reads their OWN licence; /admin/licences is HQ's ledger of every one. */}
       <Route path="/admin/my-licence" element={guard(['admin'], <MyLicencePage />)} />
       {/* D286 — S20's five landings. `guard(['admin'])` and never `hqOnly`:

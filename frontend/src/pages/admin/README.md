@@ -47,6 +47,11 @@ its drawing pieces with the partner earnings screens (`parts.jsx`).
 
 `assessment/` holds the assessment game editor — see its own README.
 
+`fundAdmin/` is D714's fund administration console at `/admin/fund-admin`, for
+the Super Admin and every Admin on HQ: capital calls, distributions,
+management fees, reconciliation, bank accounts and LP reports, each control
+drawn from the Worker's act table — see its own README.
+
 `contracts/` owns the D647 desk, counted agreement pages, related lists,
 signing detail and guided envelope panel. Both shells reach `/admin/contracts`.
 
