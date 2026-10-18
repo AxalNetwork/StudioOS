@@ -5,6 +5,9 @@ import { Card, EmptyState, Pill, SectionLabel, Skeleton, Unreadable, Unrecorded,
 import WorkspaceShell from '../../../workspaces/WorkspaceShell';
 import ZoneNav from '../../../workspaces/ZoneNav';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
+import MercuryMatch, { receivedLine } from '../../../components/MercuryMatch';
+import { partnerSettlementsApi } from '../../../lib/api/partnerSettlements';
+import { memberDirection, settlementKindLabel, settlementStateLabel } from '../../../lib/partnerSettlements';
 import { Field, StatedLimit, inputClass } from '../kit';
 import {
   COMMISSION_STATUS, EARNINGS_AREA, PAYOUT_CURRENCY_GAP, PAYOUT_METHODS, PAYOUT_MIN_CENTS, PAYOUT_STATUS, PERIODS,
@@ -327,7 +330,7 @@ export function PayoutRequestForm({ state, plan, draft, stage = 'form', busy, re
 }
 
 /** The payout history, newest first, with the four states. */
-export function PayoutHistory({ state, rows, onRetry }) {
+export function PayoutHistory({ state, rows, onRetry, onMatched }) {
   let body;
   if (state === 'loading') body = <div className="p-4"><Skeleton.Text lines={3} /></div>;
   else if (state === 'unreadable') {
@@ -381,6 +384,16 @@ export function PayoutHistory({ state, rows, onRetry }) {
                   {Array.isArray(details) ? details.map(([k, v]) => `${k === 'note' ? 'Note' : k}: ${v}`).join(' · ') : `Note: ${details}`}
                 </p>
               ) : null}
+              {status.key !== 'failed' ? (
+                // D713: Received is a line in the partner's own Mercury they matched
+                // to this payout. It is evidence beside the status, never the status.
+                <div className="flex flex-wrap items-center gap-2 text-[11.5px]" data-testid={`text-payout-received-${p.id}`}>
+                  <span className="text-axal-muted">
+                    {receivedLine(p?.bank_match) || <Unrecorded reason="No line in your own Mercury account has been matched to this payout.">Not matched to a bank line</Unrecorded>}
+                  </span>
+                  {onMatched ? <MercuryMatch target="payout" targetId={p.id} matched={p?.bank_match} onChanged={onMatched} /> : null}
+                </div>
+              ) : null}
             </li>
           );
         })}
@@ -390,9 +403,53 @@ export function PayoutHistory({ state, rows, onRetry }) {
   return <Panel title="Payout history" meta={state === 'ready' && rows.length ? `${rows.length} request${rows.length === 1 ? '' : 's'}` : null} testid="panel-payout-history">{body}</Panel>;
 }
 
+/**
+ * D713 (F29d): the settlements Management issued to this member under their
+ * signed partner deals, newest due first. An issued one can be matched to a
+ * line in their own Mercury; a matched one shows its match. Drafts are the
+ * Admin's and never reach this list.
+ */
+export function SettlementsList({ state, rows, onRetry, onMatched }) {
+  let body;
+  if (state === 'loading') body = <div className="p-4"><Skeleton.Text lines={2} /></div>;
+  else if (state === 'unreadable') {
+    body = <div className="p-4"><Unreadable what="Your partner-deal settlements" claim="This is not a claim that none was issued to you." onRetry={onRetry} /></div>;
+  } else if (!rows.length) {
+    body = <p className="px-4 py-4 text-[12.5px] text-axal-muted" data-testid="empty-settlements">No settlement under a partner deal has been issued to you.</p>;
+  } else {
+    body = (
+      <ul className="divide-y divide-axal-hairline dark:divide-gray-800" data-testid="list-settlements">
+        {rows.map((s) => (
+          <li key={s.uid} className="space-y-1 px-4 py-2.5 text-[13px]" data-testid={`row-settlement-${s.uid}`}>
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+              <span className="flex flex-wrap items-center gap-2">
+                <Money cents={s.amount_cents} currency="USD" />
+                <span className="text-axal-muted">{settlementKindLabel(s.kind)} · {memberDirection(s.direction)}</span>
+                <Pill>{settlementStateLabel(s.state)}</Pill>
+              </span>
+              <span className="text-[11.5px] tabular-nums text-axal-muted">
+                {s.due_on ? `Due ${s.due_on}` : <Unrecorded>Due date not recorded</Unrecorded>}
+              </span>
+            </div>
+            {s.memo ? <p className="text-[11.5px] text-axal-muted">{s.memo}</p> : null}
+            {s.state === 'void'
+              ? <p className="text-[11.5px] text-axal-muted" data-testid={`text-settlement-void-${s.uid}`}>Voided: {String(s.void_reason ?? '').trim() || <Unrecorded>No reason recorded</Unrecorded>}</p>
+              : null}
+            {(s.state === 'issued' || s.state === 'matched') && onMatched
+              ? <MercuryMatch target="settlement" targetId={s.id} matched={s.state === 'matched' ? {} : null} onChanged={onMatched} />
+              : null}
+          </li>
+        ))}
+      </ul>
+    );
+  }
+  return <Panel title="Partner-deal settlements" meta={state === 'ready' && rows.length ? `${rows.length}` : null} testid="panel-settlements">{body}</Panel>;
+}
+
 export default function PartnerEarnings() {
   const [commissions, setCommissions] = useState({ status: 'loading', data: null });
   const [payouts, setPayouts] = useState({ status: 'loading', data: null });
+  const [settlements, setSettlements] = useState({ status: 'loading', data: null });
   const [status, setStatus] = useState('all');
   const [source, setSource] = useState('all');
   const [period, setPeriod] = useState('all');
@@ -416,7 +473,13 @@ export default function PartnerEarnings() {
       .then((data) => setPayouts({ status: 'ready', data: Array.isArray(data) ? data : [] }))
       .catch(() => setPayouts({ status: 'unreadable', data: null }));
   }, []);
-  useEffect(() => { loadCommissions(); loadPayouts(); }, [loadCommissions, loadPayouts]);
+  const loadSettlements = useCallback(() => {
+    setSettlements({ status: 'loading', data: null });
+    partnerSettlementsApi.mine()
+      .then((data) => setSettlements({ status: 'ready', data: Array.isArray(data) ? data : [] }))
+      .catch(() => setSettlements({ status: 'unreadable', data: null }));
+  }, []);
+  useEffect(() => { loadCommissions(); loadPayouts(); loadSettlements(); }, [loadCommissions, loadPayouts, loadSettlements]);
 
   const rows = useMemo(
     () => (Array.isArray(commissions.data?.commissions) ? commissions.data.commissions : []),
@@ -519,11 +582,13 @@ export default function PartnerEarnings() {
             onConfirm={confirm}
             onCancel={cancel}
           />
-          <PayoutHistory state={payouts.status} rows={payoutRows} onRetry={loadPayouts} />
+          <PayoutHistory state={payouts.status} rows={payoutRows} onRetry={loadPayouts} onMatched={loadPayouts} />
         </div>
+        <SettlementsList state={settlements.status} rows={Array.isArray(settlements.data) ? settlements.data : []} onRetry={loadSettlements} onMatched={loadSettlements} />
         <StatedLimit title="What this page does not claim">
           <p><strong>Paid means claimed by a payout request.</strong> The ledger marks a commission Paid the moment a request claims it, before any money moves. The payout’s own status says whether it was settled.</p>
           <p className="mt-2"><strong>Older payouts recorded less.</strong> A payout requested before payouts recorded their currency and their commissions shows no currency, and if it fails, none of its commissions go back to Accrued. Since then, a failed payout returns them.</p>
+          <p className="mt-2"><strong>Received is your own bank’s line.</strong> A payout or settlement reads Received once you match it to a line in your own Mercury account. That is evidence beside the payout’s status, which stays the admin’s, and nothing here sends or requests money.</p>
           <p className="mt-2"><strong>Totals are per currency.</strong> Amounts in different currencies are never added together, and a request covers one currency.</p>
         </StatedLimit>
       </div>

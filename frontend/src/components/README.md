@@ -33,6 +33,11 @@ building blocks.
 
 ## Top-level shell pieces
 
+- `MercuryMatch.jsx` (D713) — "Match to my Mercury" for one of a member's own
+  invoices, payouts or settlements. It reads the member's bank only when they
+  press it, and confirms or withdraws a match through
+  `/api/mercury/personal/matches`. `NeedsBoardPage.jsx`'s invoice and the
+  partner's Earnings page both mount it; nothing in it moves money.
 - `MobileTabBar.jsx` (D425) — the phone's four tabs and More sheet below
   1024px, founder first, from `../lib/mobileTabs.js`. `mobileTabBar.css` holds its
   safe-area insets and `--mobile-tabbar-h`, which pads the page's content while

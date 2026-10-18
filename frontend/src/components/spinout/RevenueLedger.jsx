@@ -8,11 +8,14 @@
 // this startup is attached and "Manual" until then. "Verified" is written only
 // by the Stripe charge import (D587): until a charge has been imported,
 // "Verified revenue" reads Not recorded with that reason rather than 0%.
+// "Import from Mercury" (D713) opens MercuryCreditImport in the same modal:
+// the founder's own Mercury credits, imported as Supported.
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CreditCard, Eye, EyeOff, FileText, Loader2, Plus, Trash2, Upload, X } from 'lucide-react';
+import { CreditCard, Eye, EyeOff, FileText, Landmark, Loader2, Plus, Trash2, Upload, X } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { Unreadable, Unrecorded } from '../../ui';
+import MercuryCreditImport from './MercuryCreditImport';
 import {
   ledgerSourceLabel, ledgerVerificationNote, IMPORT_FIELDS, LEDGER_FILTERS, LEDGER_STATUS, LEDGER_TYPES,
   fmtLedgerCents, guessMapping, mapImportRows, parseCsv, stripeImportLine, summarizeLedger,
@@ -48,7 +51,7 @@ export default function RevenueLedger({ project, canEdit }) {
   const [docs, setDocs] = useState(null); // null = not read / failed
   const [filter, setFilter] = useState('all');
   const [investorView, setInvestorView] = useState(false);
-  const [modal, setModal] = useState(null); // 'manual' | 'import' | null
+  const [modal, setModal] = useState(null); // 'manual' | 'import' | 'mercury' | null
   const [form, setForm] = useState(EMPTY_FORM);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -232,6 +235,9 @@ export default function RevenueLedger({ project, canEdit }) {
             <button type="button" onClick={runStripeImport} disabled={busy} data-testid="ledger-import-stripe" className="text-[12px] font-bold text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800 rounded-lg px-3 py-1.5 inline-flex items-center gap-1.5 disabled:opacity-50">
               <CreditCard size={13} /> {busy ? 'Importing…' : 'Import charges from Stripe'}
             </button>
+            <button type="button" onClick={() => { setErr(''); setModal('mercury'); }} disabled={busy} data-testid="ledger-import-mercury" className="text-[12px] font-bold text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800 rounded-lg px-3 py-1.5 inline-flex items-center gap-1.5 disabled:opacity-50">
+              <Landmark size={13} /> Import from Mercury
+            </button>
           </div>
         )}
         {canEdit && stripeResult && (
@@ -340,10 +346,12 @@ export default function RevenueLedger({ project, canEdit }) {
           onClick={() => !busy && setModal(null)} data-testid={`modal-ledger-${modal}`}>
           <div className={`${CARD} w-full max-w-lg`} onClick={(ev) => ev.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
-              <div className="text-[14px] font-bold text-gray-900 dark:text-gray-50">{modal === 'manual' ? 'Add a revenue entry' : 'Import revenue from CSV'}</div>
+              <div className="text-[14px] font-bold text-gray-900 dark:text-gray-50">{modal === 'manual' ? 'Add a revenue entry' : modal === 'mercury' ? 'Import from Mercury' : 'Import revenue from CSV'}</div>
               <button type="button" onClick={() => setModal(null)} className="text-gray-400"><X size={16} /></button>
             </div>
-            {modal === 'manual' ? (
+            {modal === 'mercury' ? (
+              <MercuryCreditImport projectId={project.id} onImported={load} onBusy={setBusy} />
+            ) : modal === 'manual' ? (
               <div className="space-y-3">
                 <label className="block"><span className={LBL}>Customer / company</span>
                   <input className={INPUT} value={form.customer} maxLength={200} onChange={(ev) => setForm({ ...form, customer: ev.target.value })} data-testid="ledger-input-customer" /></label>
