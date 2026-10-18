@@ -58,6 +58,21 @@
   Super Admin can see or change payment instructions." in every account cell.
   A branch gets neither. Nothing moves money.
 
+## The template editor on Contracts › Templates (D717 PR 2c, #1852)
+
+- `contracts/TemplateEditor.jsx` replaces the modal on the Contracts desk and
+  opens in place: the Markdown source with line numbers and merge-field chips
+  (a mirror under a transparent textarea), the live paper scrolling with it
+  (`lib/paneSync.js`), and the render answer's merge fields with "Filled from
+  the envelope" or "Unfilled". The legacy console keeps the modal.
+- Kind and Axal VC party are segmented controls over `format_options`; a save
+  sends both, `null` for "From the slug". `formatOptions` adds `entity`.
+- Save draft keeps the editor open. Publish v[N] (`PublishDialog.jsx`) asks
+  first and publishes that one template; a published stub offers Withdraw.
+  A branch Worker reads the editor with no authoring control.
+- `PaperPreview` takes `docKind`, `axalParty`, `onDrawn` and `onFrameLoad`;
+  without them its request is unchanged.
+
 ## The AI top-up says what is wrong, and the rail shows money to the cent (D750, #1841)
 
 - `readAiTopupProduct` (`services/aiTopups.ts`) returns `ready`, or
