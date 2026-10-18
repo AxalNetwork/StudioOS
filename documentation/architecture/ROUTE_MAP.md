@@ -153,8 +153,8 @@ The resolver is `services/payInstructions.ts`. `payInstructionsFor` gives masked
 
 | Canvas | Live route | Component and Worker | Status |
 | --- | --- | --- | --- |
-| `Legal Documents · Templates` · L11 "The bank-account registry · super admin" (D717, #1856) | `/admin?tab=bank-accounts` · Super Admin; on the HQ · Platform strip after Payments | `pages/admin/consoles/BankAccountsConsole.jsx`; `admin_bank_accounts.ts`, `GET /api/admin/mercury/connections`, `GET /api/admin/mercury/transactions?match=none&direction=credit` | CURRENT |
-| None, by decision | `/spinout-lab/investor-workspace` My commitment · an LP; Wire details on an unpaid Fund I line | `pages/SpinoutLabLpCommitment.jsx` (`WireDetails`); `GET /api/funds/lp-portal`, `GET /api/funds/:id/capital-calls/lines/:lineId/pay-instructions` | CURRENT |
+| `Legal Documents · Templates.dc.html` · L11 ("The bank-account registry · super admin"; D717, #1856; D708 decision 14 had drawn none) | `/admin?tab=bank-accounts` · Super Admin; on the HQ · Platform strip after Payments | `pages/admin/consoles/BankAccountsConsole.jsx`; `admin_bank_accounts.ts`, `GET /api/admin/mercury/connections`, `GET /api/admin/mercury/transactions?match=none&direction=credit` | CURRENT |
+| `Legal Documents · Templates.dc.html` · L12 `p-call` ("Capital-call notice") | `/spinout-lab/investor-workspace` My commitment · an LP; Wire details on an unpaid Fund I line | `pages/SpinoutLabLpCommitment.jsx` (`WireDetails`, `:39`); `GET /api/funds/lp-portal`, `GET /api/funds/:id/capital-calls/lines/:lineId/pay-instructions` | UPGRADE: #1859 opens it on the amount and due date, with the instructions behind the phone check |
 
 ### Legal templates Worker contract (D717, #1782)
 
@@ -170,6 +170,31 @@ PR 1b, behind `requireAdmin`:
 - `ppm`, `subscription_booklet` and `compliance_manual_code_of_ethics` print the Structure of the Fund page wherever they are drawn: bracketed accounts on a preview, masked accounts on an issued copy.
 
 `GET /api/admin/fund-structure` (`admin_fund_structure.ts`, `requireAdmin`, HQ only): the entity and money map (`services/fundStructure.ts`). A Super Admin's carries each receiving account masked or the resolver's sentence; a plain Admin's carries "Only the Super Admin can see or change payment instructions." and reads no account. #1855: the model also carries the eight numbered `rows`, the `map` both drawings print, `signing` and `rails`, and, for the Super Admin only, `accounts` (each entity's active accounts masked to the last four, from the registry's list; null if it cannot be read). `no-store`; 503 `fund_structure_unreadable`. Its screen caller is the "Structure of the Fund" sheet on `/admin/contracts` (`?sheet=structure`, `pages/admin/contracts/FundStructureSheet.jsx`): a door in the desk header on every tab, read only once open, absent on a branch, with a "Bank accounts" link for the Super Admin.
+
+The canvas is `design/incoming/Legal Documents · Templates.dc.html` (#1850). Where it differs from #1782, the export wins on layout and copy, and the issue wins on data, routes and who may act (D717 decision 1).
+
+| Canvas | Live route | Component and Worker | Status |
+| --- | --- | --- | --- |
+| L9 "The Templates tab · desktop": `catalog` ("Catalog · light"), `catalog-dark` ("Catalog · dark (the paper stays white)"), `push` ("Push to branches"); L8 thumbnails and "Not in the catalog" | `/admin/contracts?tab=templates` · Admin and Super Admin; a branch reads only | `AdminTemplates.jsx` (`recordedPublication`, from `ContractsDesk.jsx:52`); `admin_contracts.ts` | UPGRADE: #1851 |
+| L9 `editor` ("Editor"), `publish` ("Publish confirmation and result") | the same: an open template replaces the tab on the Contracts desk | `pages/admin/contracts/TemplateEditor.jsx`, `PublishDialog.jsx` (#1852, merged as #1918; D717 "PR 2c"); the legacy console keeps `TemplateEditorModal` | CURRENT |
+| L9 the editor's Pages view, `history` ("Version history") | the same | none yet | UPGRADE: #1853 |
+| L10 "The entity and money map": "Entity and money map · admin", "The four entities", "The accounts · masked to the last four" | a sheet over `/admin/contracts` (`?sheet=structure`), opened from the Contracts desk header; and from the Bank accounts console's header (#1856) | `pages/admin/contracts/FundStructureSheet.jsx`, `FundStructureMap.jsx`; `admin_fund_structure.ts` | CURRENT |
+| L12 `p-list` ("Catalog"), `p-sheet` ("Filters sheet"), `p-preview` ("Preview, one sheet at a time") | `/admin/contracts?tab=templates` below `md` | `AdminTemplates.jsx` | UPGRADE: #1854 |
+| L12 "Signing a booklet page": `p-read` ("1 · Read"), `p-check` ("2 · Check the boxes"), `p-adopt` ("3 · Adopt a signature"), `p-done` ("4 · Confirm") | `/esign/:token` · a signer, at every width | `pages/ESignPage.jsx` (`SignaturePad`, `:275`); `esign.ts` `/sign/:token` | UPGRADE: the four steps #1857; the booklet ticks #1866; the booklet's e-sign send #1858 |
+| L12 "Management fee statement · LP view"; L6 notices on the LP side | `/spinout-lab/investor-workspace` · an LP | `SpinoutLabLpWorkspacePage.jsx`; `funds.ts` `fee_statements` (`:920`); `fund_notices.ts` `/mine` (`:151`) | UPGRADE: the fee statement #1859; the notices #1860 |
+| L7 "The Subscription Booklet · new kind": the LP's on-screen form | the same LP workspace | `fund_booklets.ts` `/mine*` (mounted at `index.ts:1070`); no screen yet | UPGRADE: #1866 |
+| L8 "Every document's presentation"; R1, R2, L0 to L7 (the paper) | every route that prints a legal document | `services/legalPaper.ts`, `services/legalPaperCss.ts`, `admin_contracts.ts` `/templates/render` | UPGRADE: every row on a coded template #1861, #1862, #1863; the generated documents #1864; the L0 to L7 sweep and R2's tokens #1865 |
+| L6 the refused-notice state ("This notice can't issue: …") and the admin notice screens | `/admin/fund-admin` | #1779 (S03) | DEFERRED: waits on the "Fund Administration · Admin" export (#1779) |
+
+Not built from the canvas, by decision (#1850):
+- "New draft · counsel review" and "Stub — counsel to confirm" (L8's legend; the catalog's "New draft" pill). No record holds either state. The catalog draws D717 decision 3's four states and decision 4's two stub lines, and `investment_management_agreement`, a `COUNSEL_DRAFT_SLUGS` entry, reads "Stub — counsel to draft."
+- The canvas's 44-row Fund I checklist. The 41 slugs of D717 decision 7 (`frontend/src/lib/fundIDocuments.js`) win.
+- The "Stripe payouts" purpose on L11 (#1782 decision 12): no record says where Stripe pays out.
+- Per-branch Retry on the push results. No route retries one branch; Retry re-runs the whole push, which is idempotent (`POST /published-templates/push`).
+- "Helvetica" on the page header, L0 and L1 is the WinAnsi fallback only, and L0's "CONFIDENTIAL bold 8.5 pt red" is the violet accent. The drawn pages use R2's faces in `cloudflare-worker/src/templates/legal/paper/`.
+- R0 ("NDA · hardcoded from your pages") is a content and structure reference only. A4 stays the existing page-size option.
+- The Investment Memorandum (R1 C): it has no catalog row.
+- The canvas's counts ("Page 1 of all 111", "All · 101", "Has a body · 41", "Stub · 56"). Screens print what the store returns.
 
 D758 (#1861) changes no route. Migration 484 fills every active row that has no text from its file under `templates/legal/`, as a new version with the empty one in history, and the catalog gains "Operating Partner Agreement (Spin-Out Lab)" as a counsel stub. From then on every catalog row is either a coded body or a counsel stub in `COUNSEL_DRAFT_SLUGS`.
 
