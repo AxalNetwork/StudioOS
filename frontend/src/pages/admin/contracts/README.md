@@ -13,6 +13,12 @@ D713: Partner deals has a Settlements button per deal, opening
 `SettlementsDesk.jsx`. An Admin drafts, edits and deletes drafts; Issue and
 Void are drawn only for the Super Admin. Nothing in it moves money.
 
+D717 (#1855): `FundStructureSheet.jsx` is the "Structure of the Fund" sheet. It
+opens on `?sheet=structure` from the desk header's door, on every tab, and reads
+`GET /api/admin/fund-structure` only once it opens. HQ only: a branch gets no
+door. The Super Admin also gets a "Bank accounts" link to the registry's console.
+`FundStructureMap.jsx` draws the Worker's `map` as given, paths and text only.
+
 D717 (#1852): `TemplateEditor.jsx` is the template editor, opened in place on
 the Templates tab: the Markdown source with numbered lines and highlighted
 merge fields, the live paper scrolling with it, the merge fields with who

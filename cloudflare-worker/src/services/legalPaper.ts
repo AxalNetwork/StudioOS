@@ -41,7 +41,7 @@ import {
 
 /** The long instruments that get a cover and contents (decision 12). */
 import { STRUCTURE_MAP_SLUGS } from './templateFormat';
-import { STRUCTURE_HEADING, STRUCTURE_MARKER, structureLines, structureSvg } from './fundStructurePaper';
+import { STRUCTURE_HEADING, STRUCTURE_MARKER, STRUCTURE_SUBTITLE, licenceLines, structureLines, structureSvg, structureTable } from './fundStructurePaper';
 import type { StructureModel } from './fundStructure';
 
 export const COVER_SLUGS = new Set(['lpa_amended_restated', 'ppm', 'compliance_manual_code_of_ethics', 'subscription_booklet']);
@@ -251,8 +251,15 @@ export interface PaperModel {
   stamp: 'issued' | 'superseded' | null;
   inlineExecution: boolean;
   parts: PaperPart[] | null;
-  /** D717 — the Structure of the Fund page: the drawing, its key, and the block index it precedes. */
-  structure: { svg: string; lines: string[]; at: number } | null;
+  /**
+   * D717 — the Structure of the Fund page: the drawing, the numbered table, the
+   * licence lines, the closing paragraph and the note (#1855), the pdf-lib
+   * fallback's lines, and the block index it precedes.
+   */
+  structure: {
+    svg: string; lines: string[]; at: number;
+    subtitle: string; table: [string, string, string, string][]; licences: string[]; closing: string; note: string;
+  } | null;
 }
 
 const BASE64 = /^[A-Za-z0-9+/=]+$/;
@@ -437,7 +444,11 @@ export function paperModel(input: PaperInput): PaperModel {
   if (input.structure && STRUCTURE_MAP_SLUGS.has(slug.toLowerCase())) {
     const marker = blocks.findIndex((b) => b.t === 'para' && !b.num && !b.runIn && runsText(b.runs).trim() === STRUCTURE_MARKER);
     if (marker >= 0) blocks = blocks.filter((_, i) => i !== marker);
-    structure = { svg: structureSvg(input.structure), lines: structureLines(input.structure), at: marker >= 0 ? marker : 0 };
+    const st = input.structure;
+    structure = {
+      svg: structureSvg(st), lines: structureLines(st), at: marker >= 0 ? marker : 0,
+      subtitle: STRUCTURE_SUBTITLE, table: structureTable(st), licences: licenceLines(st), closing: st.rails_note, note: st.note,
+    };
   }
 
   const issued = input.state.kind === 'issued' && !!uuid;
@@ -614,12 +625,22 @@ function contentsHtml(m: PaperModel, pages: (number | null)[] | null, last = fal
   return `<section class="contents${last ? ' last' : ''}"><div class="eyebrow">Contents</div><h1 class="title">${escapeHtml(m.title)}</h1><ol>${items}</ol></section>`;
 }
 
-/** D717 — the Structure of the Fund page: its drawing and its numbered key. */
+/**
+ * D717 — the Structure of the Fund page, in L10's paper order (#1855 decision
+ * 3): the heading and subtitle, the map, the numbered table, the licences A and
+ * B, the closing paragraph and the note.
+ */
 function structureHtml(st: NonNullable<PaperModel['structure']>): string {
+  const head = ['No.', 'Flow', 'Rail', 'Receiving account'].map((h) => `<th>${escapeHtml(h)}</th>`).join('');
+  const rows = st.table.map((r) => `<tr>${r.map((c) => `<td>${escapeHtml(c)}</td>`).join('')}</tr>`).join('');
   return `<section class="structure-page"><div class="eyebrow">${escapeHtml(STRUCTURE_HEADING)}</div>`
     + `<h2 class="article structure-heading">${escapeHtml(STRUCTURE_HEADING)}</h2>`
+    + `<p class="structure-subtitle">${escapeHtml(st.subtitle)}</p>`
     + `<figure class="structure-figure">${st.svg}</figure>`
-    + `<ul class="structure-key">${st.lines.map((l) => `<li>${escapeHtml(l)}</li>`).join('')}</ul></section>`;
+    + `<table class="structure-table"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`
+    + st.licences.map((l) => `<p class="structure-licence">${escapeHtml(l)}</p>`).join('')
+    + `<p class="structure-closing">${escapeHtml(st.closing)}</p>`
+    + `<p class="structure-note">${escapeHtml(st.note)}</p></section>`;
 }
 
 function certificateHtml(m: PaperModel): string {
