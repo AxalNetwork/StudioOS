@@ -225,7 +225,8 @@ export const VOIDED_STATUSES = ['cancelled', 'failed'];
 /**
  * Upsert one line on Mercury's id, so a pending line that posts is updated in
  * place. A matched line whose amount changes, or that is cancelled or fails,
- * turns its proposed or confirmed match `needs_review` (decision 9).
+ * turns its proposed or confirmed match `needs_review` (decision 9), and its
+ * active Not ours mark `needs_review` too (D749 decision 6).
  */
 export async function upsertTransaction(env: Env, account: Pick<AccountRow, 'id'>, t: ParsedTransaction): Promise<'inserted' | 'updated' | 'unchanged'> {
   const prior = await env.DB.prepare(
@@ -253,6 +254,11 @@ export async function upsertTransaction(env: Env, account: Pick<AccountRow, 'id'
     await env.DB.prepare(
       `UPDATE mercury_matches SET state = 'needs_review', updated_at = datetime('now')
         WHERE transaction_id = ? AND state IN ('proposed', 'confirmed')`,
+    ).bind(prior.id).run();
+    // D749: an active Not ours mark on a changed line goes to review too.
+    await env.DB.prepare(
+      `UPDATE mercury_not_ours SET state = 'needs_review', updated_at = datetime('now')
+        WHERE transaction_id = ? AND state = 'active'`,
     ).bind(prior.id).run();
   }
   return 'updated';

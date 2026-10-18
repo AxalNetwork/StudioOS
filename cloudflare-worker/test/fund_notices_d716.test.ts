@@ -25,7 +25,7 @@ const TABLES = ['users', 'super_admins', 'user_sessions', 'activity_logs', 'admi
   'capital_calls', 'fund_distributions', 'legal_templates', 'legal_template_versions', 'lp_applications'];
 const SCHEMA = TABLES.map((t) => stripForeignKeys(tableFromBaseline(baseline, t))).join('\n')
   + '\n' + ['312_fund_call_ledger.sql', '472_entity_bank_accounts.sql', '473_fund_management_fees.sql', '474_mercury_entity_connections.sql',
-    '478_fund_notices_booklets.sql'].map(mig).join('\n');
+    '478_fund_notices_booklets.sql', '483_mercury_not_ours.sql'].map(mig).join('\n');
 const SECRET = ['d716', 'notices', 'fixture', 'signing', 'secret'].join('-');
 
 const ADMIN = 1, SUPER = 2, LP_A = 5, LP_B = 6, PLAIN_TOTP = 8;

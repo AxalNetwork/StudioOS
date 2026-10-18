@@ -53,6 +53,8 @@ type Txn = {
   id: number; uid: string; account_id: number; last_four: string; entity_key: string; registered: number;
   amount_cents: number; posted_on: string; counterparty_name: string | null; memo: string | null; kind: string | null; status: string | null;
   match_kind: string | null;
+  /** D749: the reason of the line's `active` Not ours mark, or null. A `needs_review` mark leaves it null. */
+  not_ours: string | null;
 };
 
 type Scope = { account?: number; entity?: string; registered?: boolean };
@@ -62,7 +64,8 @@ async function postedBetween(env: Env, scope: Scope, start: string, end: string)
   const res = await env.DB.prepare(
     `SELECT t.id, t.uid, t.account_id, a.last_four, a.entity_key, a.registered, t.amount_cents, t.posted_on,
             t.counterparty_name, t.memo, t.kind, t.status,
-            (SELECT m.target_kind FROM mercury_matches m WHERE m.transaction_id = t.id AND m.state = 'confirmed' LIMIT 1) AS match_kind
+            (SELECT m.target_kind FROM mercury_matches m WHERE m.transaction_id = t.id AND m.state = 'confirmed' LIMIT 1) AS match_kind,
+            (SELECT n.reason FROM mercury_not_ours n WHERE n.transaction_id = t.id AND n.state = 'active') AS not_ours
        FROM mercury_transactions t JOIN mercury_accounts a ON a.id = t.account_id
       WHERE (? IS NULL OR t.account_id = ?) AND (? IS NULL OR a.entity_key = ?) AND (? = 0 OR a.registered = 1)
         AND t.posted_on IS NOT NULL AND t.posted_on BETWEEN ? AND ?
@@ -149,8 +152,11 @@ export async function cashSummaryFigures(env: Env, entity: string, p: Period) {
   const matched: Record<string, number> = {};
   for (const t of posted) if (t.match_kind) matched[t.match_kind] = (matched[t.match_kind] ?? 0) + 1;
   // D710 matches credits only, so every other posted line is unmatched,
-  // debits and internal transfers included.
-  const unmatched = posted.filter((t) => !t.match_kind);
+  // debits and internal transfers included, except a credit an Admin marked
+  // Not ours (D749): it is counted by reason instead.
+  const unmatched = posted.filter((t) => !t.match_kind && !t.not_ours);
+  const notOurs: Record<string, number> = {};
+  for (const t of posted) if (!t.match_kind && t.not_ours) notOurs[t.not_ours] = (notOurs[t.not_ours] ?? 0) + 1;
   return {
     schema: 'entity_cash_monthly/1',
     entity: entity,
@@ -163,6 +169,8 @@ export async function cashSummaryFigures(env: Env, entity: string, p: Period) {
       matched_by_kind: matched,
       unmatched: unmatched.slice(0, UNMATCHED_CAP).map(unmatchedLine),
       unmatched_more: Math.max(0, unmatched.length - UNMATCHED_CAP),
+      not_ours_count: Object.values(notOurs).reduce((a, b) => a + b, 0),
+      not_ours_by_reason: notOurs,
     },
     intercompany: await intercompany(env, entity, p),
     // Those past the 500-row cap included (decision 3).
@@ -192,10 +200,11 @@ export async function fundCash(env: Env, fundId: number, date: string): Promise<
   return known(total);
 }
 
-/** A quarterly report's `unmatched_count`: the Fund's posted lines in the quarter that no confirmed match covers. */
+/** A quarterly report's `unmatched_count`: the Fund's posted lines in the quarter that no confirmed match covers and no active Not ours mark takes out. */
 export async function fundUnmatchedCount(env: Env, fundId: number, p: Period): Promise<number> {
   const accounts = await fundAccounts(env, fundId);
   if (!accounts) return 0;
   const posted = await postedBetween(env, { entity: 'fund', registered: true }, p.start, p.end);
-  return posted.filter((t) => !t.match_kind).length;
+  // D749: a line with an active Not ours mark is not unmatched.
+  return posted.filter((t) => !t.match_kind && !t.not_ours).length;
 }
