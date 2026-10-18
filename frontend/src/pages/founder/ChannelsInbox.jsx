@@ -79,18 +79,48 @@ export function ThreadList({ items, selected, onSelect, now }) {
   );
 }
 
-/** The messages of a waiting conversation, oldest first, each side on its own side. */
-export function MessageList({ messages, contact }) {
+/**
+ * The messages of a waiting conversation, oldest first, each side on its own
+ * side. A voice note that was not transcribed says why, in the Worker's
+ * sentence, with Retry when the Worker allows it (#1933, `voiceFailure`).
+ */
+export function MessageList({ messages, contact, threadUid, api = channelsApi, onRetried }) {
+  // Per message: 'busy', 'sent' ("Trying again…", kept after the re-read clears the failure), or the Worker's refusal.
+  const [retries, setRetries] = useState({});
   if (!messages.length) return null;
+  const retry = async (uid) => {
+    setRetries((r) => ({ ...r, [uid]: { state: 'busy' } }));
+    try {
+      await api.retryVoice(threadUid, uid);
+      setRetries((r) => ({ ...r, [uid]: { state: 'sent' } }));
+      onRetried?.();
+    } catch (e) {
+      setRetries((r) => ({ ...r, [uid]: { state: 'error', text: e?.message || 'That voice note could not be retried. Try again.' } }));
+    }
+  };
   return (
     <ol className="space-y-2" data-testid="thread-messages">
       {messages.map((m) => {
         const v = messageView(m, contact);
+        const r = retries[v.uid];
         return (
           <li key={v.uid} className={`flex ${v.mine ? 'justify-end' : 'justify-start'}`} data-side={v.mine ? 'me' : 'contact'}>
             <div className={`max-w-[85%] rounded-xl px-3 py-2 text-[13px] ${v.mine ? 'bg-violet-50 text-gray-900 dark:bg-violet-950/40 dark:text-gray-100' : 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100'}`}>
               <div className="mb-0.5 text-[11px] font-semibold text-axal-faint">{v.who}{v.label ? ` · ${v.label}` : ''}</div>
-              {v.text != null ? <p className="whitespace-pre-wrap break-words">{v.text}</p> : <p className="italic text-gray-500 dark:text-gray-400">This message could not be read.</p>}
+              {v.text != null
+                ? <p className="whitespace-pre-wrap break-words">{v.text}</p>
+                : v.failure
+                  ? <p className="text-amber-800 dark:text-amber-300" data-testid={`voice-failure-${v.uid}`}>{v.failure.sentence}</p>
+                  : <p className="italic text-gray-500 dark:text-gray-400">This message could not be read.</p>}
+              {v.failure?.action?.kind === 'retry' && r?.state !== 'sent' && (
+                <button type="button" className={`${SMALL} mt-1`} disabled={r?.state === 'busy'} onClick={() => retry(v.uid)} data-testid={`button-voice-retry-${v.uid}`}>Retry</button>
+              )}
+              {v.failure?.action?.kind === 'note' && <p className={`${NOTE} mt-1`}>{v.failure.action.text}</p>}
+              {v.failure?.action?.kind === 'link' && (
+                <p className={`${NOTE} mt-1`}>{v.failure.action.text}{' '}<Link to={v.failure.action.href} className="font-semibold text-violet-800 underline dark:text-violet-200" data-testid={`link-voice-usage-${v.uid}`}>{v.failure.action.link}</Link></p>
+              )}
+              {r?.state === 'sent' && <p role="status" className={`${NOTE} mt-1`} data-testid={`voice-retrying-${v.uid}`}>Trying again…</p>}
+              {r?.state === 'error' && <p role="alert" className="mt-1 text-[12px] font-semibold text-red-700 dark:text-red-400">{r.text}</p>}
             </div>
           </li>
         );
@@ -252,7 +282,7 @@ export function ThreadPanel({ uid, api = channelsApi, venture, onChanged, makeKe
         </p>
       )}
       {thread.status === 'pending' && !messages.length && <p className={NOTE}>No message is waiting in this conversation.</p>}
-      <MessageList messages={messages} contact={thread.contact_name} />
+      <MessageList messages={messages} contact={thread.contact_name} threadUid={thread.uid} api={api} onRetried={load} />
       {thread.status !== 'ignored' && venture && (
         <AssignControls key={thread.uid} thread={thread} venture={venture} api={api}
           onAssigned={(r, label) => { setAssigned({ ...r, label }); load(); onChanged?.(); }} />
