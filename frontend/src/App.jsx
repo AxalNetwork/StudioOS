@@ -81,7 +81,6 @@ const ScoringPage = lazy(() => import('./pages/ScoringPage'));
 // lives in src/workspaces/shellConfig.js — the sidebar, the zone nav and a
 // guard test all read that one file, so a row can never advertise a door the
 // router does not open.
-const FounderValidateWorkspace = lazy(() => import('./workspaces/founder/FounderValidateWorkspace'));
 // D660 (#1473) — one interview session: record, live transcript, review.
 const InterviewSessionPage = lazy(() => import('./pages/founder/InterviewSessionPage'));
 // D684 (#1578) — customer chats from business Telegram and WhatsApp, waiting for an interview.
@@ -272,6 +271,8 @@ const CreditRulesPage = lazy(() => import('./pages/hq/CreditRulesRegistryPage'))
 const MemberCreditsPage = lazy(() => import('./pages/hq/MemberCreditsPage'));
 const TrustObligationsPage = lazy(() => import('./pages/hq/TrustObligationsPage'));
 const HqFundsPage = lazy(() => import('./pages/hq/HqFundsPage'));
+// D714 (#1779) PR 4a — fund administration for the Super Admin and every Admin on HQ.
+const FundAdminConsole = lazy(() => import('./pages/admin/fundAdmin/FundAdminConsole'));
 const KYCPage = lazy(() => import('./pages/KYCPage'));
 const TrustCenterPage = lazy(() => import('./pages/TrustCenterPage'));
 const AdvisorsPage = lazy(() => import('./pages/AdvisorsPage'));
@@ -2533,10 +2534,9 @@ function AppInner() {
           D661 (#1474): /validate is the cycle overview from #1487's read, and
           /validate/<module> its module pages. D704 (#1666, decision 2): the
           root no longer branches, so every role the guard admits, with or
-          without `?mode=workspace`, gets the cycle page. Interviews redirects
-          to Customer research below (PR 2b); Pain map and Hypotheses still
-          render until #1666's closing PR redirects them too
-          (`ValidateZoneRedirect`). */}
+          without `?mode=workspace`, gets the cycle page. The Interviews, Pain
+          map and Hypotheses pages are gone: each address redirects to its
+          module below (`ValidateZoneRedirect`). */}
       <Route path="/validate" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" />)} />
       {/* D685 §5.4: Record a session is the Validate page with the setup lightbox open over it, deep-linkable; closing goes back. */}
       <Route path="/validate/record" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" lightbox />)} />
@@ -2562,9 +2562,12 @@ function AppInner() {
       <Route path="/validate/experiments-and-evidence/:id" element={<ParamRedirect to="/validate/experiments/:id" />} />
       <Route path="/validate/demand-and-urgency-signals" element={<ParamRedirect to="/validate/demand-signals" />} />
       <Route path="/validate/demand-and-urgency-signals/:id" element={<ParamRedirect to="/validate/demand-signals/:id" />} />
-      <Route path="/validate/pain-map" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
-      <Route path="/validate/hypotheses" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
-      <Route path="/validate/verdict" element={guard(labRoles(['admin', 'founder']), <FounderValidateWorkspace />)} />
+      {/* D704 (#1666): the Pain map and Hypotheses pages are Problem discovery
+          and Experiments and evidence, the query and the hash kept (decision 1). */}
+      <Route path="/validate/pain-map" element={guard(labRoles(['admin', 'founder']), <ValidateZoneRedirect zone="pain-map" />)} />
+      <Route path="/validate/hypotheses" element={guard(labRoles(['admin', 'founder']), <ValidateZoneRedirect zone="hypotheses" />)} />
+      {/* D693 decision 12 (#1704): a static line, so the founder zone keeps its roles; it renders the Verdict module. */}
+      <Route path="/validate/verdict" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" slug="verdict" />)} />
       <Route path="/validate/session/:id" element={guard(labRoles(['admin', 'founder']), <InterviewSessionPage />)} />
       <Route path="/validate/inbox" element={guard(labRoles(['admin', 'founder']), <ChannelsInboxPage />)} />
 
@@ -2688,6 +2691,8 @@ function AppInner() {
           fee, the revenue share and an exclusive grant over whole countries. */}
       <Route path="/admin/licences" element={guard(['admin'], hqOnly(<AdminLicences />))} />
       <Route path="/admin/funds" element={guard(['admin'], hqOnly(<HqFundsPage />))} />
+      {/* D714 decision 7: guard(['admin']), not hqOnly — that wrapper admits the Super Admin alone. On a branch the console says so and reads nothing. */}
+      <Route path="/admin/fund-admin" element={guard(['admin'], <FundAdminConsole />)} />
       {/* A subsidiary admin reads their OWN licence; /admin/licences is HQ's ledger of every one. */}
       <Route path="/admin/my-licence" element={guard(['admin'], <MyLicencePage />)} />
       {/* D286 — S20's five landings. `guard(['admin'])` and never `hqOnly`:

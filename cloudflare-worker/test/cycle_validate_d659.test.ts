@@ -42,7 +42,7 @@ function fixture() {
   for (const t of [
     'users', 'projects', 'activity_logs', 'discovery_interviews', 'interview_pain_severities', 'pain_groups',
     'pain_group_aliases', 'hypotheses', 'hypothesis_pain_links', 'waitlist_signups', 'metric_targets',
-    'competitor_analyses', 'competitor_candidates', 'competitor_sources', 'competitor_signals',
+    'competitor_analyses', 'competitor_candidates', 'competitor_sources', 'competitor_signals', 'validation_decisions',
   ]) db.exec(tableFromBaseline(BASELINE, t));
   db.exec('ALTER TABLE projects ADD COLUMN icp_definition_meta TEXT');
   db.exec(sqlOf('255_hypothesis_verdict_history.sql'));
@@ -50,6 +50,8 @@ function fixture() {
   db.exec(MIG440);
   // D690 (#1692): the tracked list and Experiments' links read 460's stores.
   db.exec(sqlOf('460_validate_record_stores.sql'));
+  // D693 (#1704): Verdict is the seventh card, over migration 464's decisions.
+  db.exec(sqlOf('464_verdict_decisions.sql'));
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id, spinout_lab_active) VALUES (?, ?, ?, ?, 1, ?, ?)');
   u.run(FOUNDER, 'founder', 'Fay Founder', 'fay@example.test', 1001, 0);
   u.run(OTHER, 'founder', 'Bo Other', 'bo@example.test', 1002, 0);
@@ -110,7 +112,7 @@ function interview(db: any, pid: number, o: Record<string, unknown> = {}) {
 // The contract
 // ---------------------------------------------------------------------------
 
-test('D659: the overview is #1469\'s shape — four figures, six cards, every state one of five', async () => {
+test('D659: the overview is #1469\'s shape — four figures, seven cards, every state one of five', async () => {
   const db = fixture();
   interview(db, P, { pains: ['slow dispatch'] });
   const r = await overview(db);
@@ -118,7 +120,7 @@ test('D659: the overview is #1469\'s shape — four figures, six cards, every st
   assert.equal(r.body.cycle, 'validate');
   assert.equal(r.body.question, 'Is this worth building?');
   assert.deepEqual(r.body.figures.map((f: any) => f.key), ['interviews_this_month', 'pain_themes', 'hypotheses_supported', 'waitlist_signups']);
-  assert.deepEqual(r.body.cards.map((c: any) => c.slug), ['problem-discovery', 'customer-research', 'ideal-customer-profile', 'market-intelligence', 'demand-signals', 'experiments']);
+  assert.deepEqual(r.body.cards.map((c: any) => c.slug), ['problem-discovery', 'customer-research', 'ideal-customer-profile', 'market-intelligence', 'demand-signals', 'experiments', 'verdict']);
   for (const f of r.body.figures) {
     assert.deepEqual(Object.keys(f).filter((k) => k !== 'reason').sort(), ['as_of', 'delta_30d', 'key', 'label', 'source', 'spark', 'state', 'unit', 'value']);
     assert.ok((CARD_STATES as readonly string[]).includes(f.state), f.key);
@@ -143,6 +145,7 @@ test('D659: a new venture — every card empty with its one starting action, eve
   assert.equal(card(r.body, 'market-intelligence').next.text, 'Add the total market, with its source');
   assert.equal(card(r.body, 'demand-signals').next.text, 'Connect a landing page');
   assert.equal(card(r.body, 'experiments').next.text, 'Write the claim you most need to be true');
+  assert.equal(card(r.body, 'verdict').next.text, 'Record a decision');
   for (const f of r.body.figures) {
     assert.equal(f.value, null, `${f.key} is null, not 0`);
     assert.equal(f.delta_30d, null, `${f.key} change is null`);
@@ -168,6 +171,17 @@ test('D659: one failing source makes only its own card unreadable, naming the so
   for (const c of r.body.cards.filter((x: any) => x.slug !== 'demand-signals')) {
     assert.notEqual(c.state, 'unreadable', `${c.slug} is untouched by the demand store`);
   }
+});
+
+test('D693 test 9: with the decisions read failing, the Verdict card is unreadable while the other six draw', async () => {
+  const db = fixture();
+  interview(db, P, { pains: ['slow dispatch'] });
+  db.exec('DROP TABLE validation_decisions');
+  const r = await overview(db);
+  assert.equal(r.status, 200);
+  assert.equal(r.body.cards.length, 7);
+  assert.equal(card(r.body, 'verdict').state, 'unreadable');
+  for (const c of r.body.cards.filter((x: any) => x.slug !== 'verdict')) assert.notEqual(c.state, 'unreadable', c.slug);
 });
 
 test('D659: a broken competitor store makes the market card unreadable and nothing else', async () => {
@@ -361,8 +375,16 @@ test('D693 decision 7: the overview and every module read say whether the viewer
     const o = await overview(db, who, pid);
     assert.equal(o.status, 200);
     assert.equal(o.body.can_read_decisions, can, `overview, user ${who}`);
+    // A partner gets no Verdict card (decision 7).
+    assert.equal(o.body.cards.some((c: any) => c.slug === 'verdict'), can, `Verdict card, user ${who}`);
     for (const slug of slugs) {
       const m = await call(db, who, 'GET', `/modules/${slug}?project=${pid}`);
+      if (slug === 'verdict' && !can) {
+        assert.equal(m.status, 403, `${slug}, user ${who}`);
+        assert.equal(m.body.detail, 'Partners do not see decisions.');
+        assert.equal(m.body.card, undefined, 'nothing was read');
+        continue;
+      }
       assert.equal(m.status, 200, `${slug}, user ${who}`);
       assert.equal(m.body.can_read_decisions, can, `${slug}, user ${who}`);
     }

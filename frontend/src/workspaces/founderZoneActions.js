@@ -1,8 +1,9 @@
 import { makeZoneActions } from './zoneActionBuilder';
 
 /**
- * The founder profile's thirty zones, and what each of their canvas actions
- * actually does. `zoneActionBuilder.js` states the four outcomes and the rules
+ * The founder profile's twenty-six zones, and what each of their canvas actions
+ * actually does. Validate's four zone pages were retired by D704: each became a
+ * module page, so they have no entry here and the guard lists them as excluded. `zoneActionBuilder.js` states the four outcomes and the rules
  * they follow; this file is the founder's answers.
  *
  * WHERE THE LABELS COME FROM. Verbatim from the `ops:` array of the zone's
@@ -37,48 +38,6 @@ import { makeZoneActions } from './zoneActionBuilder';
  */
 
 export const FOUNDER_ZONE_ACTIONS = {
-  // ── Validate ─────────────────────────────────────────────────────────────
-  // THE ZONE SET THAT NEEDED A FOURTH KIND. Every op here is performed by
-  // `FounderValidateWorkspace` itself: three open a dialog it owns, and the
-  // three exports are server-side CSV downloads with a busy spinner and a shared
-  // error line — not `exportView` over rows the page has already loaded. Before
-  // `kind: 'handler'` none of that could be said in a table, so the workspace
-  // kept its own local `ACTIONS` map and these four zones stayed outside every
-  // guard this file is checked by. See `zoneActionBuilder.js` and D67.
-  'validate/interviews': [
-    { label: 'Log an interview', kind: 'handler', handler: 'logInterview' },
-    // THE ONE LABEL HERE THAT IS NOT THE CANVAS'S. The artboard says "Export
-    // transcripts" and the file does not contain any: `INTERVIEWS_CSV_HEADER` is
-    // id, name, role, company, date, fit, consent, deck_eligible, rating,
-    // comment, pains, notes. Migration 215 DID add `transcript` and the
-    // recording columns — the two docblocks claiming the table has neither are
-    // stale and are corrected — but the export still does not select them, so
-    // the canvas's word would promise a column the download has not got.
-    { canvas: 'Export transcripts', label: 'Export interviews', kind: 'handler', handler: 'exportInterviews' },
-  ],
-  // "Send to Problem slide" IS NOW THE LINK THIS COMMENT ASKED FOR, and the
-  // label is not the canvas's because the canvas's would be a lie. It is drawn
-  // on two artboards and performs nothing on either — not because the pipe is
-  // missing, but because it already runs without a button: `pain_groups` is
-  // curated for the deck's slide 2 (`services/spinoutDeckData.ts` reads it,
-  // `axalSpinoutDemoDay.ts` renders it), so a control that "sends" would be
-  // theatre over a connection that is already live. A reader who presses it
-  // wants to SEE the slide, and that is a route they may open — so the op is a
-  // link to the deck and says what is already true on hover. Same reasoning as
-  // `Export transcripts` above: keep the artboard's word in `canvas`, put the
-  // honest one in `label`.
-  'validate/pain-map': [
-    { canvas: 'Send to Problem slide', label: 'Open the Problem slide', to: '/raise/pitch?mode=workspace', linkNote: 'These themes already feed the deck’s Problem slide — open the deck to read it.' },
-    { label: 'Export map', kind: 'handler', handler: 'exportPainMap' },
-  ],
-  'validate/hypotheses': [
-    { label: 'New hypothesis', kind: 'handler', handler: 'newHypothesis' },
-    { label: 'Link to a pain', kind: 'handler', handler: 'linkPain' },
-  ],
-  'validate/verdict': [
-    { label: 'Export summary', kind: 'handler', handler: 'exportSummary' },
-    { canvas: 'Send to Problem slide', label: 'Open the Problem slide', to: '/raise/pitch?mode=workspace', linkNote: 'These themes already feed the deck’s Problem slide — open the deck to read it.' },
-  ],
   // ── Build ────────────────────────────────────────────────────────────────
   'build/this-week': [
     { label: 'Export CSV', kind: 'export' },

@@ -14,7 +14,7 @@ canvas behind it still shows up here.
 | --- | --- | --- | --- |
 | Headerless | Studio | `/studio` | Founder Studio |
 | Headerless | Spin-Out Lab | `/spinout-lab` | Spin-Out Lab · Intro, Spin-Out Lab · Landing, Spin-Out Lab Page, Spin-Out Lab Workspace |
-| Headerless | Validate | `/validate` | Founder Workspaces Canvas, Pages · Founder Validate |
+| Headerless | Validate | `/validate` | Founder Workspaces Canvas |
 | Headerless | Build | `/build` | Founder Workspaces Canvas, Pages · Founder Build |
 | Headerless | Raise | `/raise` | Founder Workspaces Canvas |
 | Headerless | Grow | `/grow` | Founder Workspaces Canvas, Pages · Founder Grow |
@@ -59,7 +59,7 @@ canvas behind it still shows up here.
 | Headerless | Network | `/network` | Partner Operator Canvas |
 | Headerless | Research | `/research` | Research · Main |
 
-## `admin` — 8 destinations in 1 group
+## `admin` — 9 destinations in 1 group
 
 | Group | Label | Route | Canvas behind it |
 | --- | --- | --- | --- |
@@ -69,6 +69,7 @@ canvas behind it still shows up here.
 | Admin | Programs | `/admin/held/programs` | — (no canvas; shipped ahead of the design corpus) |
 | Admin | Community | `/admin/held/community` | — (no canvas; shipped ahead of the design corpus) |
 | Admin | Contracts | `/admin/contracts` | Contracts · Subsidiary |
+| Admin | Fund admin | `/admin/fund-admin` | — (no canvas; shipped ahead of the design corpus) |
 | Admin | Insights | `/admin/held/insights` | — (no canvas; shipped ahead of the design corpus) |
 | Admin | Settings | `/admin/my-licence` | — (no canvas; shipped ahead of the design corpus) |
 
@@ -81,13 +82,14 @@ canvas behind it still shows up here.
 | Home | Messages | `/messages` | — (no canvas; shipped ahead of the design corpus) |
 | Account | My Profile | `/account` | — (no canvas; shipped ahead of the design corpus) |
 
-## `super_admin` — 11 destinations in 1 group
+## `super_admin` — 12 destinations in 1 group
 
 | Group | Label | Route | Canvas behind it |
 | --- | --- | --- | --- |
 | HQ | Home | `/hq` | Admin · Super |
 | HQ | Licences | `/admin/licences` | Admin · Super |
 | HQ | Funds | `/admin/funds` | Admin · Super |
+| HQ | Fund admin | `/admin/fund-admin` | — (no canvas; shipped ahead of the design corpus) |
 | HQ | Contracts | `/admin/contracts` | Admin · Super, Contracts · Super, Ops Page · HQ tools (Q1–Q3, D633) |
 | HQ | Team | `/admin/accounts` | Admin · Super |
 | HQ | Revenue | `/admin/revenue` | — (no canvas; shipped ahead of the design corpus) |
@@ -112,7 +114,7 @@ canvas behind it still shows up here.
 
 ## Destinations with no canvas
 
-30 of the 62 sidebar rows above are not claimed
+32 of the 64 sidebar rows above are not claimed
 by any row in `ROUTE_MAP.md`. That is expected — the platform predates the
 design corpus and not every shipped surface was redesigned — but the list is
 worth keeping visible, because it is also where a canvas would be *missing*
@@ -130,12 +132,14 @@ rather than merely absent.
 - admin · Admin · Approvals (`/admin/held/approvals`)
 - admin · Admin · Programs (`/admin/held/programs`)
 - admin · Admin · Community (`/admin/held/community`)
+- admin · Admin · Fund admin (`/admin/fund-admin`)
 - admin · Admin · Insights (`/admin/held/insights`)
 - admin · Admin · Settings (`/admin/my-licence`)
 - exploring · Home · Studio (`/exploring`)
 - exploring · Home · Spin-Out Lab (`/spinout-lab`)
 - exploring · Home · Messages (`/messages`)
 - exploring · Account · My Profile (`/account`)
+- super_admin · HQ · Fund admin (`/admin/fund-admin`)
 - super_admin · HQ · Revenue (`/admin/revenue`)
 - super_admin · HQ · Content (`/admin/content`)
 - super_admin · HQ · Platform (`/admin/platform`)

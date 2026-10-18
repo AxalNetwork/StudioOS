@@ -80,10 +80,11 @@ test('the table: unique keys, the decision\'s tiers, and a sentence on every Sup
   assert.deepEqual(tiers, {
     'capital_call.preview': 'admin', 'capital_call.issue': 'super_admin', 'capital_call.receipt': 'admin',
     'distribution.preview': 'admin', 'distribution.execute': 'super_admin', 'distribution.mark_paid': 'admin',
-    'fund_report.draft': 'admin', 'fund_report.issue': 'super_admin', 'fund_booklet.read': 'admin', 'fund_booklet.withdraw': 'admin', 'fund.gp_of_record': 'super_admin', 'fund.slug_fund_i': 'super_admin', 'fund.economics': 'super_admin', 'fund.write': 'admin',
+    'fund_report.draft': 'admin', 'fund_report.issue': 'super_admin', 'fund_booklet.read': 'admin', 'fund_booklet.withdraw': 'admin', 'fund_notice.preview': 'admin', 'fund_notice.issue': 'super_admin', 'fund.gp_of_record': 'super_admin', 'fund.slug_fund_i': 'super_admin', 'fund.economics': 'super_admin', 'fund.write': 'admin',
     'fund_ledger.administrator': 'super_admin', 'fund_ledger.write': 'admin',
     'bank_account.see': 'super_admin', 'bank_account.change': 'super_admin', 'bank_account.reveal': 'super_admin',
     'fee_terms.confirm': 'super_admin', 'fee_period.issue': 'super_admin', 'fee.write': 'admin',
+    'mercury.connection': 'super_admin', 'mercury.sync': 'admin', 'mercury.reconcile': 'admin',
   });
   for (const a of FUND_ACTS) assert.equal(a.sentence !== null, a.tier === 'super_admin', a.act);
 });
@@ -96,15 +97,20 @@ const ROUTERS: Record<string, { file: string; name: string }> = {
   '/api/fund-ledger': { file: 'routes/fund_ledger.ts', name: 'r' },
   '/api/fund-reporting': { file: 'routes/fund_reporting.ts', name: 'r' },
   '/api/fund-booklets': { file: 'routes/fund_booklets.ts', name: 'r' },
+  '/api/fund-notices': { file: 'routes/fund_notices.ts', name: 'r' },
   '/api/fund-fees': { file: 'routes/fund_fees.ts', name: 'app' },
   '/api/admin/bank-accounts': { file: 'routes/admin_bank_accounts.ts', name: 'r' },
+  '/api/admin/mercury': { file: 'routes/admin_mercury.ts', name: 'r' },
 };
 
-/** #1773's rows keep their own gates: each handler is held to the call it makes. */
+/** #1773's and #1775's rows keep their own gates: each handler is held to the call it makes. */
 const OWN_GATES: Record<string, string> = {
   'bank_account.see': 'await requireSuperAdmin(c)',
   'bank_account.change': 'await superAdminWriter(c)',
   'bank_account.reveal': 'await superAdminWriter(c)',
+  'mercury.connection': 'await requireMercuryCredentialWriter(c)',
+  'mercury.sync': 'await requireMercuryReader(c)',
+  'mercury.reconcile': 'await requireMercuryReader(c)',
 };
 
 /** The source of one handler: from its registration to the next one on the same router. */
@@ -114,7 +120,8 @@ function handler(file: string, router: string, method: string, path: string): st
   const at = text.indexOf(opener);
   if (at < 0) return null;
   const rest = text.slice(at + opener.length);
-  const next = rest.search(/\n[A-Za-z]+\.(get|post|put|patch|delete|use)\(/);
+  // A router built inside a factory (`admin_mercury.ts`) registers at two spaces.
+  const next = rest.search(/\n(?:  )?[A-Za-z]+\.(get|post|put|patch|delete|use)\('/);
   return next < 0 ? rest : rest.slice(0, next);
 }
 
@@ -202,6 +209,7 @@ test('COOL_OFF_ROUTES holds decision 5\'s three routes', () => {
     assert.ok(list.includes(`'${route}'`), `${route} is not in COOL_OFF_ROUTES`);
   }
   assert.ok(index.split("app.route('/api/fund-admin', fundAdmin)").length > 1, '/api/fund-admin is not mounted');
+  assert.ok(index.split("app.route('/api/admin/mercury', adminMercury)").length > 1, '/api/admin/mercury is not mounted');
 });
 
 test('execute asserts its act after the body read, which names the fund', () => {

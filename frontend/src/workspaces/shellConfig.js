@@ -193,13 +193,11 @@ export const SHELLS = {
       { kind: 'link', label: 'Home', to: '/studio' },
       // Spin-Out Lab keeps its own tree. One row, one target, nothing below it.
       { kind: 'link', label: 'Spin-Out Lab', to: '/spinout-lab', untouched: true },
+      // D704 (#1666, decision 3): Validate keeps its row, prefix and tagline, with
+      // no zones. Its pages are the cycle's module pages (`CycleRoute`), and the
+      // prefix still drives full bleed and `bucketForPath`.
       { kind: 'bucket', label: 'Validate', prefix: '/validate', tagline: 'Prove someone wants this',
-        zones: [
-          { slug: 'interviews', label: 'Interviews', archetype: A.COLLECTION, legacy: '/build/discovery?tab=interviews' },
-          { slug: 'pain-map', label: 'Pain map', archetype: A.ANALYTICS, legacy: '/build/discovery?tab=insights' },
-          { slug: 'hypotheses', label: 'Hypotheses', archetype: A.WORK_BOARD },
-          { slug: 'verdict', label: 'Verdict', archetype: A.LEDGER },
-        ] },
+        zones: [] },
       { kind: 'bucket', label: 'Build', prefix: '/build', tagline: 'Operate the company this week',
         zones: [
           { slug: 'this-week', label: 'This week', archetype: A.WORK_BOARD },

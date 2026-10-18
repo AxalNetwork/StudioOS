@@ -49,7 +49,7 @@ test('every row points at a route that is actually registered', () => {
   );
 });
 
-test('all eleven rows are present, in canvas order', () => {
+test('all twelve rows are present: the canvas\'s eleven in canvas order, with D714\'s Fund admin after Funds', () => {
   // The canvas order is Home, Licences, Funds, Contracts, Team, Revenue,
   // Content, Platform, Support, Security, Settings. "Security", not
   // "Governance" — decision A4.
@@ -59,8 +59,11 @@ test('all eleven rows are present, in canvas order', () => {
   // Content, Governance — so Revenue, Content and Platform sit straight
   // after Accounts, which ships as Team. That completes the H5/H6 rows;
   // the eight-row shell this array started as came from the newer
-  // `Support Security · Super.dc.html`.
-  assert.deepEqual(rows.map((r) => r.label), ['Home', 'Licences', 'Funds', 'Contracts', 'Team', 'Revenue', 'Content', 'Platform', 'Support', 'Security', 'Settings']);
+  // `Support Security · Super.dc.html`. D714 (#1779) decision 7 places Fund
+  // admin straight after Funds, until the canvas "Fund Administration · Admin"
+  // places it elsewhere.
+  assert.deepEqual(rows.map((r) => r.label), ['Home', 'Licences', 'Funds', 'Fund admin', 'Contracts', 'Team', 'Revenue', 'Content', 'Platform', 'Support', 'Security', 'Settings']);
+  assert.equal(rows.find((r) => r.label === 'Fund admin')?.to, '/admin/fund-admin');
   assert.equal(rows.find((r) => r.label === 'Revenue')?.to, '/admin/revenue');
   assert.equal(rows.find((r) => r.label === 'Content')?.to, '/admin/content',
     'Content is the HQ pipeline view, not /admin/articles (the plain-admin Content Queue)');

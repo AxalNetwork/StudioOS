@@ -13,9 +13,11 @@
  *   counts the checks as they change.
  * - **If Pivot** is drawn only while Pivot is chosen.
  *
- * It submits through `verdictApi.record`, handed in as `w.verdict`, and has no
- * Edit: a decision is never edited (D693 decision 4). It is registered in
- * `forms.js` with the Verdict module, in #1704's closing PR.
+ * It submits through `verdictApi.record`, handed in as `w.verdict` (the page's
+ * Add writes, `formWrites` in `CycleRoute.jsx`), and has no Edit: a decision
+ * is never edited (D693 decision 4). It is registered in `forms.js` as
+ * `FORMS.validate.verdict` (#1704's closing PR). It imports nothing, so the
+ * Worker's tests can read `forms.js`.
  */
 
 /** Checked pieces of evidence a decision needs before a verdict is given (the Worker's `DECISION_EVIDENCE_BAR`). */

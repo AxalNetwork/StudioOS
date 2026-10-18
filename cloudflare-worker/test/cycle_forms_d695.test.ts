@@ -267,10 +267,16 @@ test('12: each Validate Edit opens with its record\'s values and saves through i
 // Test 13: another venture, and the write gate
 // ---------------------------------------------------------------------------
 
+/**
+ * PR 2b's five forms. D693's Record a decision (`verdict`) reads Verdict's own
+ * form-options, whose gates `verdict_d693.test.ts` tests 6 and 14 hold.
+ */
+const PR2B = ['problem-discovery', 'ideal-customer-profile', 'market-intelligence', 'demand-signals', 'experiments'];
+
 test('13: another venture\'s choices are refused, and its ids answer 404 with the Worker\'s sentence; nothing is written', async () => {
   const db = fixture();
   const { w } = writesAs(db);
-  for (const slug of Object.keys(FORMS.validate)) {
+  for (const slug of PR2B) {
     const form = formFor('validate', slug);
     if (form.loadOptions) assert.equal((await refusal(() => form.loadOptions(w, PB))).status, 403, `${slug}: B's choices`);
   }
@@ -295,7 +301,7 @@ test('13: a partner, an investor and another venture\'s founder get the Worker\'
   const db = fixture();
   for (const who of [PARTNER, INVESTOR, OTHER]) {
     const { w } = writesAs(db, who);
-    for (const slug of Object.keys(FORMS.validate)) {
+    for (const slug of PR2B) {
       const form = formFor('validate', slug);
       if (form.loadOptions) assert.equal((await refusal(() => form.loadOptions(w, P))).status, 403, `${slug} choices as ${who}`);
     }
@@ -308,8 +314,9 @@ test('13: a partner, an investor and another venture\'s founder get the Worker\'
   assert.equal(Number(one(db, 'SELECT COUNT(*) AS n FROM activity_logs').n), 0);
 });
 
-test('12: Validate\'s five Adds and Edits are registered, and every Edit reads its record', () => {
-  assert.deepEqual(Object.keys(FORMS.validate), ['problem-discovery', 'ideal-customer-profile', 'market-intelligence', 'demand-signals', 'experiments']);
+test('12: Validate\'s five Adds and Edits are registered, with D693\'s Record a decision, and every Edit reads its record', () => {
+  assert.deepEqual(Object.keys(FORMS.validate), [...PR2B, 'verdict']);
+  assert.deepEqual(Object.keys(EDITS.validate), PR2B);
   for (const [slug, edit] of Object.entries(EDITS.validate) as Array<[string, any]>) assert.equal(edit.readsRecord, true, slug);
 });
 

@@ -72,7 +72,7 @@ it, where in their nav, and how do they get there.*
 | Pages · Founder Network | `/network` | Headerless | Full page | Sidebar → Headerless → Network | RESKIN | High |
 | Pages · Founder Raise | `/raise/pitch` · `/raise/capital` · `/raise/legal-engine` · `/liquidity` · `/raise/liquidity?mode=workspace` | Headerless | Full page (proposed) | Sidebar → Headerless → Raise | UPGRADE | Low |
 | Pages · Founder Research | `/research/ask` · `/research/library` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
-| Pages · Founder Validate | `/validate` · `/validate/:module` · `/validate/{interviews` | Headerless | Full page (proposed) | Sidebar → Headerless → Validate | CURRENT | Low |
+| Pages · Founder Validate | `/validate/verdict` | Headerless | Full page | Sidebar → Headerless → Validate | RETIRED | High |
 | Pages · Fund dossier | `/research/funds/:uid` · `/research/funds` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Pages · Funds and fund research | `/research/funds` · `/research/funds/:uid` · `/funds` · `/research/companies/:id` · `/research/companies/:analysisId/:candidateId` · `/funds/:id` | Headerless | Full page | Sidebar → Headerless → Research | UPGRADE | High |
 | Pages · Market reading | `/research/markets/:uid` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
@@ -269,9 +269,9 @@ it, where in their nav, and how do they get there.*
 
 | Confidence | Rows | Meaning |
 | --- | ---: | --- |
-| High | 104 | Live route, reachable from that workspace’s sidebar. |
+| High | 105 | Live route, reachable from that workspace’s sidebar. |
 | Medium | 44 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
-| Low | 40 | Not routed. Proposed route only. |
+| Low | 39 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts
 and wizards are reached from the surface above them by design; the brief’s

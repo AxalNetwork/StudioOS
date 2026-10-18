@@ -48,7 +48,7 @@
  * `requireFundGp` itself does not change.
  */
 import type { Context } from 'hono';
-import type { Env } from '../types';
+import type { Env, User } from '../types';
 import { isSuperAdmin, requireAdmin, requireAuth, requireSuperAdminWriteBar, selectJwt } from '../auth';
 import { branchOf, HQ_ONLY } from '../util/branch';
 import {
@@ -65,10 +65,12 @@ export type FundActKey =
   | 'distribution.preview' | 'distribution.execute' | 'distribution.mark_paid'
   | 'fund_report.draft' | 'fund_report.issue'
   | 'fund_booklet.read' | 'fund_booklet.withdraw'
+  | 'fund_notice.preview' | 'fund_notice.issue'
   | 'fund.gp_of_record' | 'fund.slug_fund_i' | 'fund.economics' | 'fund.write'
   | 'fund_ledger.administrator' | 'fund_ledger.write'
   | 'bank_account.see' | 'bank_account.change' | 'bank_account.reveal'
-  | 'fee_terms.confirm' | 'fee_period.issue' | 'fee.write';
+  | 'fee_terms.confirm' | 'fee_period.issue' | 'fee.write'
+  | 'mercury.connection' | 'mercury.sync' | 'mercury.reconcile';
 
 export type FundAct = Readonly<{
   act: FundActKey;
@@ -84,7 +86,7 @@ export type FundAct = Readonly<{
 
 const act = (row: FundAct): FundAct => Object.freeze({ ...row, routes: Object.freeze([...row.routes]) });
 
-/** Decision 1: one act table. #1775's rows join from `main` (decision 6); #1777's issue row (D712), #1773's rows and #1774's fee rows have joined. */
+/** Decision 1: one act table. The rows of #1773, #1774 and #1775 have joined it (decision 6), with #1777's issue row (D712). */
 export const FUND_ACTS: readonly FundAct[] = Object.freeze([
   act({ act: 'capital_call.preview', label: 'Preview a capital call', tier: 'admin', owner: '#1779', sentence: null,
     routes: ['POST /api/funds/:id/capital-calls/preview'] }),
@@ -107,9 +109,14 @@ export const FUND_ACTS: readonly FundAct[] = Object.freeze([
     sentence: 'A Super Admin issues fund reports.',
     routes: ['POST /api/fund-reporting/drafts/:uid/issue'] }),
   act({ act: 'fund_booklet.read', label: 'Read subscription booklets and their ticks', tier: 'admin', owner: '#1781', sentence: null,
-    routes: ['GET /api/fund-booklets/', 'GET /api/fund-booklets/:uid'] }),
+    routes: ['GET /api/fund-booklets/', 'GET /api/fund-booklets/:uid', 'GET /api/fund-booklets/:uid/pdf'] }),
   act({ act: 'fund_booklet.withdraw', label: 'Withdraw a subscription booklet', tier: 'admin', owner: '#1781', sentence: null,
     routes: ['POST /api/fund-booklets/:uid/withdraw'] }),
+  act({ act: 'fund_notice.preview', label: 'Preview a fund notice', tier: 'admin', owner: '#1781', sentence: null,
+    routes: ['POST /api/fund-notices/preview', 'POST /api/fund-notices/calls/:callUid/preview'] }),
+  act({ act: 'fund_notice.issue', label: 'Issue a fund notice', tier: 'super_admin', owner: '#1781',
+    sentence: 'A Super Admin issues fund notices.',
+    routes: ['POST /api/fund-notices/issue', 'POST /api/fund-notices/calls/:callUid/issue'] }),
   act({ act: 'fund.gp_of_record', label: "Change a fund's general partner of record", tier: 'super_admin', owner: '#1779',
     sentence: "A Super Admin changes a fund's general partner of record.",
     routes: ['PATCH /api/funds/:id (gp_user_id)'] }),
@@ -154,6 +161,16 @@ export const FUND_ACTS: readonly FundAct[] = Object.freeze([
     routes: ['POST /api/fund-fees/:fundId/terms', 'PUT /api/fund-fees/:fundId/lps/:lpId/admission',
       'POST /api/fund-fees/:fundId/net-invested', 'POST /api/fund-fees/:fundId/offsets',
       'POST /api/fund-fees/:fundId/periods/:quarter/preview', 'POST /api/fund-fees/:fundId/periods/:quarter/funding-call'] }),
+  // #1775's Mercury connector (D710). Its routes keep their own gates
+  // (`requireMercuryCredentialWriter`, `requireMercuryReader`); the rows let
+  // the console say who holds them. Reads carry no act.
+  act({ act: 'mercury.connection', label: "Connect, replace or disconnect an entity's Mercury", tier: 'super_admin', owner: '#1775',
+    sentence: "A Super Admin connects and disconnects an entity's Mercury.",
+    routes: ['PUT /api/admin/mercury/connections/:entityKey', 'DELETE /api/admin/mercury/connections/:entityKey'] }),
+  act({ act: 'mercury.sync', label: "Sync an entity's Mercury now", tier: 'admin', owner: '#1775', sentence: null,
+    routes: ['POST /api/admin/mercury/connections/:entityKey/sync'] }),
+  act({ act: 'mercury.reconcile', label: 'Propose, confirm or reject a bank match', tier: 'admin', owner: '#1775', sentence: null,
+    routes: ['POST /api/admin/mercury/matches', 'POST /api/admin/mercury/matches/:uid/confirm', 'POST /api/admin/mercury/matches/:uid/reject'] }),
 ]);
 
 /**
@@ -281,6 +298,21 @@ export async function auditFundAct(
 }
 
 /**
+ * The console's reads (`/access`, `/overview`): an admin on HQ, in their own
+ * session. A support session is refused first, a frozen admin then gets the
+ * D135 423 from `requireAdmin`, and a branch Worker is refused last.
+ */
+export async function requireFundAdminReader(c: Context<{ Bindings: Env }>): Promise<User> {
+  await requireAuth(c);
+  if (await isSupportSession(c)) {
+    throw refusal(403, { detail: 'A support session cannot read fund administration.', code: SUPPORT_SESSION_REFUSED_CODE });
+  }
+  const user = await requireAdmin(c);
+  if (branchOf(c.env)) throw new Error(HQ_ONLY);
+  return user;
+}
+
+/**
  * Decision 6 — what `GET /api/fund-admin/access` answers: an admin on HQ, in
  * their own session. The console draws its controls from this; the Worker
  * still decides each act.
@@ -289,12 +321,7 @@ export async function fundAdminAccess(c: Context<{ Bindings: Env }>): Promise<{
   super_admin: boolean;
   acts: Array<{ act: FundActKey; label: string; tier: FundActTier; owner: string; sentence: string | null; allowed: boolean }>;
 }> {
-  await requireAuth(c);
-  if (await isSupportSession(c)) {
-    throw refusal(403, { detail: 'A support session cannot read fund administration.', code: SUPPORT_SESSION_REFUSED_CODE });
-  }
-  const user = await requireAdmin(c);
-  if (branchOf(c.env)) throw new Error(HQ_ONLY);
+  const user = await requireFundAdminReader(c);
   const superAdmin = isSuperAdmin(user as any);
   return {
     super_admin: superAdmin,

@@ -68,13 +68,13 @@ const routeLine = (path) => APP.split('\n').find((l) => l.includes(`path="${path
 const doorsIn = (code) => [...code.matchAll(/\bto="(\/[^"]*)"/g)].map((m) => m[1]);
 
 /* ------------------------------------------------------------------ *
- * S20 — the eight rows
+ * S20 — the eight rows, and D714's ninth
  * ------------------------------------------------------------------ */
 
-test('the eight rows are S20\'s, in S20\'s order, one group, each an /admin console or /studio and never /branch/*', () => {
-  assert.equal(SIDEBAR_GROUPS.admin.length, 1, 'S20 draws one group of eight rows');
+test('the nine rows are S20\'s eight, in S20\'s order, with D714\'s Fund admin after Contracts, one group, each an /admin console or /studio and never /branch/*', () => {
+  assert.equal(SIDEBAR_GROUPS.admin.length, 1, 'S20 draws one group');
   assert.deepEqual(rows.map((r) => r.label),
-    ['Studio', 'Accounts', 'Approvals', 'Programs', 'Community', 'Contracts', 'Insights', 'Settings']);
+    ['Studio', 'Accounts', 'Approvals', 'Programs', 'Community', 'Contracts', 'Fund admin', 'Insights', 'Settings']);
   assert.deepEqual(rows.map((r) => r.to), [
     '/studio',
     '/admin/held/accounts',
@@ -82,6 +82,7 @@ test('the eight rows are S20\'s, in S20\'s order, one group, each an /admin cons
     '/admin/held/programs',
     '/admin/held/community',
     '/admin/contracts',
+    '/admin/fund-admin',
     '/admin/held/insights',
     '/admin/my-licence',
   ]);

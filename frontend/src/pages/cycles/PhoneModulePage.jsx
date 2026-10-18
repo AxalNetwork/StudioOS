@@ -70,7 +70,7 @@ function Cta({ add }) {
 }
 
 export default function PhoneModulePage({
-  cycle, slug, data, status = data ? 'ready' : 'loading', message = '', onRetry,
+  cycle, slug, moduleName, data, status = data ? 'ready' : 'loading', message = '', onRetry,
   records, recordsStatus, recordsMessage, query = {}, onQuery, onRetryRecords, add, rowAction, tool, tools = [], children, search = '',
 }) {
   const [text, setText] = useState(query.q || '');
@@ -79,7 +79,8 @@ export default function PhoneModulePage({
   const cycleName = meta.name;
   const card = data?.card || null;
   const view = cardView(card);
-  const name = card?.name || data?.module?.name || slug;
+  // A refused or unreadable read sends no card, so the cycle's own list names it (never its slug).
+  const name = card?.name || data?.module?.name || moduleName || slug;
   const recs = records ?? data?.records;
   const bar = (
     <CycleBar back={{ label: cycleName, to: `/${meta.key}${search}` }} title={name} sub={card?.caption || undefined}

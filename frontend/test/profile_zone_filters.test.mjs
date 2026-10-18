@@ -127,13 +127,15 @@ const PROFILES = {
     // listed with a reason and re-checked on every run. The eight shared-surface
     // routes moved from the first mechanism to the second here.
     canvas: /^Pages · Founder /,
-    // `workspaces/founder` holds `FounderValidateWorkspace`, which mounts all
-    // four `/validate/*` rows. The walk does not recurse, so the subdirectory
-    // is named outright rather than inherited from its parent.
+    // The walk does not recurse, so `workspaces/founder` is named outright
+    // rather than inherited from its parent. Since D704 it mounts no zone:
+    // `FounderValidateWorkspace`, which mounted the four `/validate/*` rows, is
+    // deleted.
     pages: ['frontend/src/pages/founder', 'frontend/src/workspaces', 'frontend/src/workspaces/founder'],
     actions: 'frontend/src/workspaces/founderZoneActions.js',
-    zones: 30,
-    mounted: 30,
+    // 30 → 26 (D704): the four `validate/*` zones are retired; see `excluded`.
+    zones: 26,
+    mounted: 26,
     bodies: { ...RESEARCH_BODIES, ...NETWORK_BODIES.founder },
     // EMPTY, AND THIS TIME THE COUNT PROVES IT RATHER THAN AGREEING WITH IT.
     // The four `validate/*` zones sat here for one release, and the note that
@@ -160,10 +162,10 @@ const PROFILES = {
     // is that fourth kind, D67 records it, and the six Validate ops are its first
     // and only use.
     //
-    // The count moved 26 → 30 in the same commit. It counts the DIRECTORY, so it
-    // is what refuses the reading the old note's own first line fell into — a
-    // covered set agreeing with itself.
-    excluded: [],
+    // The count moved 26 → 30 in the same commit, and back to 26 when D704
+    // retired the four zones, which now sit here by name (decision 4): the
+    // canvas still draws them, and no table may declare them.
+    excluded: ['validate/hypotheses', 'validate/interviews', 'validate/pain-map', 'validate/verdict'],
     // Counts welded onto a real filter — `All 14`, `All 14 mo`, `Aug 2026`.
     samples: /\b(14|2026)\b/,
     // Founder canvas routes are the live routes.

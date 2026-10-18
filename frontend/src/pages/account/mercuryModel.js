@@ -198,6 +198,12 @@ export function personalToolBanner(lastError) {
 
 export const NOT_OFFERED = 'Mercury is not offered to your profile. Axal\'s admins use it for fund administration, and founders and partners for their own revenue and partner deals.';
 
+/** Whether a search names Mercury: "mercury", or three or more of its first letters, in any case. */
+export function isMercurySearch(q) {
+  const t = String(q || '').trim().toLowerCase();
+  return t.length >= 3 && ('mercury'.startsWith(t) || t.startsWith('mercury'));
+}
+
 /** A "mercury" search with no Mercury row: the branch admin's sentence, else the profile one. Never a request. */
 export function notOfferedSentence({ branchAdmin = false } = {}) {
   return branchAdmin ? BRANCH_MANAGED : NOT_OFFERED;

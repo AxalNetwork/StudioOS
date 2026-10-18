@@ -5,17 +5,19 @@
  * anyone else gets 404):
  *   POST /mine                 opens the booklet, or returns the live one
  *   GET  /mine                 the parts, the fields with their ticks, and the digest of what it shows
+ *   GET  /mine/paper           the booklet on #1776's paper, as screen HTML (faces inline), no-store
  *   PUT  /mine/answers         {answers: [{field_id, checked}]}: 400 field_unknown, 409 booklet_not_open
  *   POST /mine/submit          {digest}: 409 booklet_part_missing or content_changed
  *
  * An Admin on HQ (a branch answers `HQ only`; a support session is refused):
  *   GET  /                     the booklets, never a tick        fund_booklet.read
  *   GET  /:uid                 one booklet with its ticks, audited fund_booklet.read
+ *   GET  /:uid/pdf             its PDF, drawn on request, never kept, audited   fund_booklet.read
  *   POST /:uid/withdraw        {reason}: 10 to 200 characters     fund_booklet.withdraw
  *
- * `GET /mine/paper` and `GET /:uid/pdf` draw #1776's paper and land with the
- * notices PR. Every refusal goes through `refuse()` with a code and echoes no
- * input.
+ * The PDF goes through #1776's `renderLegalPdf(…, { fallback: false })`, never
+ * pdf-lib: a failed call answers 503 `booklet_render_unavailable`. Every
+ * refusal goes through `refuse()` with a code and echoes no input.
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
@@ -25,9 +27,12 @@ import { HQ_ONLY, branchOf } from '../util/branch';
 import { refuse } from '../util/refusal';
 import { SUPPORT_SESSION_REFUSED_CODE, assertAdminAct, auditFundAct, isSupportSession } from '../services/fundAdminAccess';
 import {
-  BookletRefusal, answerBooklet, bookletByUid, bookletView, listBooklets, mineOrNull, openBooklet, readAnswers,
-  submitBooklet, withdrawBooklet,
+  BookletRefusal, answerBooklet, bookletByUid, bookletPaperInput, bookletView, listBooklets, mineOrNull, openBooklet,
+  readAnswers, submitBooklet, withdrawBooklet,
 } from '../services/subscriptionBooklet';
+import { paperHtml, paperModel } from '../services/legalPaper';
+import { readPaperChoice } from '../services/legalPaperCss';
+import { renderLegalPdf } from '../services/legalPaperRender';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -68,6 +73,13 @@ async function admin(c: any) {
 
 const missing = () => new BookletRefusal(404, 'booklet_not_found', 'No subscription booklet here.');
 
+/** `?page=letter|a4` and `?cover=dark|light`. */
+function paperChoice(c: any) {
+  const paper = readPaperChoice(c.req.query('page'), c.req.query('cover'));
+  if (!paper.ok) throw new BookletRefusal(400, paper.code, 'page must be letter or a4, and cover dark or light.');
+  return paper;
+}
+
 // ── The applicant ───────────────────────────────────────────────────────────
 
 r.post('/mine', async (c) => {
@@ -84,6 +96,17 @@ r.get('/mine', async (c) => {
   if (!booklet) throw missing();
   c.header('Cache-Control', 'no-store');
   return c.json(await bookletView(c.env, booklet));
+});
+
+r.get('/mine/paper', async (c) => {
+  const user = await requireAuth(c);
+  const paper = paperChoice(c);
+  const booklet = await mineOrNull(c.env, Number(user.id));
+  if (!booklet) throw missing();
+  const input = await bookletPaperInput(c.env, booklet);
+  const html = paperHtml(paperModel(input), { pageSize: paper.pageSize, cover: paper.cover, medium: 'screen', fonts: 'inline' });
+  c.header('Cache-Control', 'no-store');
+  return c.json({ html, digest: input.bodySha256, page_size: paper.pageSize });
 });
 
 r.put('/mine/answers', async (c) => {
@@ -124,6 +147,29 @@ r.get('/:uid', async (c) => {
   await auditFundAct(c.env, user, 'fund_booklet.read', { booklet_uid: booklet.uid, status: booklet.status });
   c.header('Cache-Control', 'no-store');
   return c.json({ ...view, withdrawn_reason: booklet.withdrawn_reason });
+});
+
+r.get('/:uid/pdf', async (c) => {
+  const user = await admin(c);
+  await assertAdminAct(c, user, 'fund_booklet.read');
+  const paper = paperChoice(c);
+  const booklet = await bookletByUid(c.env, c.req.param('uid'));
+  if (!booklet) throw missing();
+  const rendered = await renderLegalPdf(c.env, paperModel(await bookletPaperInput(c.env, booklet)),
+    { pageSize: paper.pageSize, cover: paper.cover, fallback: false });
+  if (!rendered.ok) {
+    throw new BookletRefusal(503, 'booklet_render_unavailable', 'The booklet could not be printed just now. Try again.');
+  }
+  // The PDF carries the ticks, so reading it is audited as reading them is.
+  await auditFundAct(c.env, user, 'fund_booklet.read', { booklet_uid: booklet.uid, status: booklet.status, pdf: true });
+  return new Response(rendered.bytes, {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="subscription-booklet-${booklet.uid.replace(/[^A-Za-z0-9_-]/g, '')}.pdf"`,
+      'Cache-Control': 'private, no-store',
+    },
+  });
 });
 
 r.post('/:uid/withdraw', async (c) => {

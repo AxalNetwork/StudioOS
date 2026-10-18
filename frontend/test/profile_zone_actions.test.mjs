@@ -41,17 +41,18 @@ const APP = read('frontend/src/App.jsx');
 const PROFILES = {
   founder: {
     table: 'frontend/src/workspaces/founderZoneActions.js',
-    // `workspaces/founder/FounderValidateWorkspace` mounts the four
-    // `/validate/*` rows and needs no entry of its own: `pageFiles` RECURSES, so
-    // naming the subdirectory here would walk that file twice and trip the
-    // mounted-exactly-once check against itself. Its sibling's `mountingFile`
+    // `pageFiles` RECURSES, so `workspaces/founder` needs no entry of its own:
+    // naming it here would walk its files twice. Its sibling's `mountingFile`
     // does not recurse and does name it — the two readers differ, and this
-    // comment is here because the symmetry is the tempting wrong guess.
+    // comment is here because the symmetry is the tempting wrong guess. Since
+    // D704 that folder mounts no zone: `FounderValidateWorkspace` is deleted.
     pages: ['frontend/src/pages/founder', 'frontend/src/pages/research', 'frontend/src/workspaces'],
     call: 'founderZoneActions',
     canvas: /^Pages · Founder /,
     buckets: /^(validate|build|grow|network|raise|research)\//,
-    zones: 30,
+    // 30 → 26 (D704): the four `validate/*` zones are retired and listed in
+    // `excluded` below. 30 artboard zones − 4 retired = 26.
+    zones: 26,
     // 17 → 22 → 23. Five ops that were `unbuilt` became links because their
     // destination already existed and the reader may open it: `Send to Problem
     // slide` on two zones, `Configure zone`, `Edit templates` and `Send for
@@ -78,7 +79,9 @@ const PROFILES = {
     // `project_id` this desk's own role chips filter on — `jobs.create()` writes
     // one, and `/jobs/new` is a route a founder may open. Task #68 built the
     // posting surface; this desk had simply never pointed at it.
-    links: 23,
+    // 23 → 21 (D704): the two `Open the Problem slide` links, on `validate/pain-map`
+    // and `validate/verdict`, went with their zones.
+    links: 21,
     // 20 → 21 with `build/cadence`'s `Export archive`. Migration 250 gave the
     // zone a review archive, so an export over the rows the page is showing is
     // the same `kind: 'export'` every other zone uses.
@@ -115,8 +118,12 @@ const PROFILES = {
     // 14 → 15 with `build/roadmap`'s `New scenario` (migration 254). Seven ops
     // across three Build subpages have moved to this kind in one pass, which is what
     // pinning the count is for: each one was read before it was moved.
-    handlers: 16,
-    // NOTHING IS EXCLUDED ANY MORE. `research/funds` sat here as "a card in
+    // 16 → 10 (D704): the six Validate handlers went with their zones —
+    // `logInterview` and `exportInterviews` (interviews), `exportPainMap`
+    // (pain map), `newHypothesis` and `linkPain` (hypotheses), `exportSummary`
+    // (verdict). Each has its home on a module page or record (#1659, #1704).
+    handlers: 10,
+    // NOTHING IS EXCLUDED BUT VALIDATE'S RETIRED ZONES. `research/funds` sat here as "a card in
     // `ResearchWorkspace`'s ZONE_COPY, not a body" — true when it was written
     // and untrue since `ZONE_COPY` became `{}` and `LIVE_ZONES` gained `funds`.
     // `FundsZone` takes `zoneActions` and renders `zoneActions(visible)`, so the
@@ -127,7 +134,9 @@ const PROFILES = {
     // `New deep-dive` left when Markets became the sector directory: the
     // reason no longer says a run happens on a schedule somewhere else.
     elsewhere: ['Brief me'],
-    excluded: [],
+    // D704 (decision 4): the canvas is retired in place, so the guard still
+    // checks that the artboard draws these four and that no table declares them.
+    excluded: ['validate/hypotheses', 'validate/interviews', 'validate/pain-map', 'validate/verdict'],
     embeddedGuards: 3,
     // Founder canvas routes are the live routes.
     // #1539 moves FG5's existing body/controls to Raise; its artboard remains the visual source.

@@ -30,6 +30,7 @@ import { recordQuery } from '../src/services/cycleValidate.ts';
 import { hardDeleteProject } from '../src/services/projectTrash.ts';
 import { ensurePainGroupsSchema } from '../src/services/painGroups.ts';
 import { createCycleRecords } from '../src/routes/cycle_records.ts';
+import cycleValidateRoute from '../src/routes/cycle_validate.ts';
 import { verdictSpec } from '../src/services/records/verdict.ts';
 import { createHypothesis } from '../src/services/validateWriters.ts';
 import { evidenceFor as validateEvidenceFor } from '../src/services/validateEvidence.ts';
@@ -434,17 +435,14 @@ test('5: each stored item keeps its label, strength, direction and date after it
 
 test('6: a partner, an advisor, an investor and another venture\'s founder are refused every decision route', async () => {
   const db = fixture();
-  await oldPost(db, FOUNDER, { decision: 'proceed', reasoning: 'Carriers pay for it' });
+  // D704 (#1666) removed the old GET and POST; test 14 holds their 404.
+  await post(db, FOUNDER, { decision: 'proceed', for: 'venture', reasoning: 'Carriers pay for it' });
   for (const who of [PARTNER, ADVISOR, INVESTOR, OTHER]) {
     const p = await post(db, who, { decision: 'stop', for: 'venture' });
     assert.equal(p.status, 403, `${roleOf[who]} POST /decisions`);
-    const g = await oldGet(db, who);
-    assert.equal(g.status, 403, `${roleOf[who]} old GET`);
-    assert.equal(g.text.includes('Carriers pay for it'), false);
     const c = await summaryCsv(db, who);
     assert.equal(c.status, 403, `${roleOf[who]} summary CSV`);
-    const o = await oldPost(db, who, { decision: 'stop' });
-    assert.equal(o.status, 403, `${roleOf[who]} old POST`);
+    assert.equal(c.text.includes('Carriers pay for it'), false);
   }
   assert.equal(rows(db).length, 1, 'no refused caller wrote a decision');
 });
@@ -456,7 +454,6 @@ test('6: the founder, an admitted Lab member on their own venture and an admin r
     assert.equal(p.status, 201, `${roleOf[who]} POST ${JSON.stringify(p.body)}`);
     assert.equal(p.body.state, 'withheld');
     assert.deepEqual(Object.keys(p.body).sort(), ['id', 'pivot_hypothesis_id', 'state', 'supersedes_id']);
-    assert.equal((await oldGet(db, who, pid)).status, 200, `${roleOf[who]} old GET`);
     assert.equal((await summaryCsv(db, who, pid)).status, 200, `${roleOf[who]} CSV`);
   }
 });
@@ -525,20 +522,16 @@ test('7: a decision logs one validate.verdict row; a superseding one also logs o
 // 9. Failures · 10. One reader · 11. The old POST
 // ---------------------------------------------------------------------------
 
-test('9: a failed decisions read answers 503 on the old GET and the summary CSV, never an empty history', async () => {
+test('9: a failed decisions read answers 503 on the summary CSV, never a summary with no decision', async () => {
   const db = fixture();
-  await oldPost(db, FOUNDER, { decision: 'proceed' });
+  await post(db, FOUNDER, { decision: 'proceed', for: 'venture' });
   db.exec('ALTER TABLE validation_decisions RENAME TO validation_decisions_unreadable');
-  const g = await oldGet(db, FOUNDER);
-  assert.equal(g.status, 503);
-  assert.equal(g.body.detail, 'The decision could not be read.');
-  assert.equal('history' in g.body, false);
   const c = await summaryCsv(db, FOUNDER);
   assert.equal(c.status, 503);
   assert.equal(c.body.detail, 'The decision could not be read.');
 });
 
-test('10: the old GET and the summary CSV read the venture\'s current given decision, never a hypothesis\'s or a withheld one', async () => {
+test('10: the summary CSV reads the venture\'s current given decision, never a hypothesis\'s or a withheld one', async () => {
   const db = fixture();
   const env = envOf(db);
   const h2 = hypothesis(db, P, 'H2');
@@ -547,12 +540,10 @@ test('10: the old GET and the summary CSV read the venture\'s current given deci
   await recordDecision(env, userOf(FOUNDER), { id: P }, { decision: 'stop', for: h2, reasoning: 'H2 call', evidence: keys(items(5)) }, { evidenceSource: ev });
   await recordDecision(env, userOf(FOUNDER), { id: P }, { decision: 'pivot', for: 'venture', reasoning: 'Withheld call' }, { evidenceSource: ev });
 
-  const g = await oldGet(db, FOUNDER);
-  assert.equal(g.status, 200);
-  assert.equal(g.body.current.id, venture.id);
-  assert.equal(g.body.current.decision, 'proceed');
-  assert.deepEqual(g.body.history.map((r: any) => [r.decision, r.state]), [['pivot', 'withheld'], ['proceed', 'given']]);
-  assert.equal(g.body.history.some((r: any) => r.hypothesis_id !== null), false, 'history is the venture\'s own rows');
+  assert.equal((await currentDecision(env, P, 'venture'))?.id, venture.id);
+  const history = await decisionsFor(env, P, { scope: 'venture', sort: 'newest', pageSize: 200 });
+  assert.deepEqual(history.rows.map((r: any) => [r.decision, r.state]), [['pivot', 'withheld'], ['proceed', 'given']]);
+  assert.equal(history.rows.some((r: any) => r.hypothesis_id !== null), false, 'the venture scope is the venture\'s own rows');
 
   const c = await summaryCsv(db, FOUNDER);
   assert.equal(c.status, 200);
@@ -589,23 +580,26 @@ test('10: no file under cloudflare-worker/src but services/verdict.ts names vali
   assert.deepEqual(offenders, []);
 });
 
-test('11: the old POST records a given venture decision that supersedes only the venture\'s current given one', async () => {
+test('14: the old decision routes answer 404 for the venture\'s founder; the Verdict module and its writer still answer', async () => {
+  // D704 (#1666) removed `GET` and `POST /api/founder/validate/decision/:id`
+  // (D-f). Verdict answers instead: #1704's module read and #1702's writer.
   const db = fixture();
-  const env = envOf(db);
-  const h2 = hypothesis(db, P, 'H2');
-  const hd = await recordDecision(env, userOf(FOUNDER), { id: P }, { decision: 'proceed', for: h2, evidence: keys(items(5)) }, { evidenceSource: fixed(items(5)) });
-  const a = await oldPost(db, FOUNDER, { decision: 'proceed', reasoning: 'ship it' });
-  assert.equal(a.status, 201, JSON.stringify(a.body));
-  assert.deepEqual(Object.keys(a.body).sort(), ['decision', 'id']);
-  const b = await oldPost(db, FOUNDER, { decision: 'pivot', reasoning: 'narrow it' });
-  assert.equal(b.status, 201);
-  const second = rows(db).find((r) => r.id === b.body.id);
-  assert.equal(second.state, 'given');
-  assert.equal(second.hypothesis_id, null);
-  assert.equal(second.supersedes_id, a.body.id);
-  assert.equal((await currentDecision(env, P, h2))?.id, hd.id, 'H2\'s decision is still current');
-  assert.equal((await currentDecision(env, P, 'venture'))?.id, b.body.id);
-  assert.equal((await oldPost(db, FOUNDER, { decision: 'maybe' })).status, 400);
+  const g = await oldGet(db, FOUNDER);
+  assert.equal(g.status, 404);
+  const o = await oldPost(db, FOUNDER, { decision: 'proceed', reasoning: 'ship it' });
+  assert.equal(o.status, 404);
+  assert.equal(rows(db).length, 0, 'the old POST wrote nothing');
+  const p = await post(db, FOUNDER, { decision: 'proceed', for: 'venture', reasoning: 'ship it' });
+  assert.equal(p.status, 201, JSON.stringify(p.body));
+  assert.equal(rows(db).length, 1, 'the writer records the founder\'s decision');
+  // No caller passes `bar` any more, so every route records against the one bar.
+  const src = resolve(ROOT, 'cloudflare-worker/src');
+  const walk = (d: string): string[] => readdirSync(d).flatMap((n) => {
+    const f = join(d, n);
+    return statSync(f).isDirectory() ? walk(f) : [f];
+  });
+  const callers = walk(src).filter((f) => /recordDecision\([^;]*\bbar\s*:/s.test(readFileSync(f, 'utf8')));
+  assert.deepEqual(callers.map((f) => relative(src, f)), []);
 });
 
 // ---------------------------------------------------------------------------
@@ -1102,6 +1096,48 @@ test('12: the filters, the search and the pages run in SQL, bound, before paging
   assert.equal((await table(db, {}, P_OTHER)).total, 0, 'another venture reads none of these');
 });
 
+// ---------------------------------------------------------------------------
+// #1704 closing PR: the module read, and MCP
+// ---------------------------------------------------------------------------
+
+test('12: the Verdict module read sends the Decisions table: its columns, filters, Newest first, row ids and linkable', async () => {
+  const db = fixture();
+  const h1 = hypothesis(db, P, 'H1', 'Fleets pay');
+  await decide(db, { decision: 'proceed', n: 5, on: '2026-10-01' });
+  await decide(db, { decision: 'stop', n: 2, on: '2026-10-05' });
+  await decide(db, { decision: 'pivot', for: h1, on: '2026-10-09' });
+  const route = new Hono<any>();
+  route.route('/api/cycles/validate', cycleValidateRoute);
+  const read = async (who: number) => {
+    const token = await new SignJWT({ user_id: who, role: roleOf[who] }).setProtectedHeader({ alg: 'HS256' })
+      .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+    const res = await route.request(`/api/cycles/validate/modules/verdict?project=${P}`, { headers: { Authorization: `Bearer ${token}` } }, envOf(db));
+    return { status: res.status, body: await res.json() as any };
+  };
+  const r = await read(FOUNDER);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.deepEqual(r.body.module, { slug: 'verdict', name: 'Verdict', records_title: 'Decisions' });
+  assert.deepEqual(r.body.records.cols, ['Decision', 'For', 'Reasoning', 'Evidence', 'Date · by']);
+  assert.deepEqual(r.body.records.filters.map((f: any) => f.key), ['decision', 'for']);
+  assert.deepEqual(r.body.records.sorts.map((x: any) => x.key), ['newest', 'oldest']);
+  assert.equal(r.body.records.linkable, true);
+  assert.equal(r.body.can_read_decisions, true);
+  const ids = (db.prepare('SELECT id FROM validation_decisions WHERE project_id = ? ORDER BY decided_at DESC, id DESC').all(P) as any[]).map((x) => Number(x.id));
+  assert.deepEqual(r.body.records.rows.map((x: any) => Number(x.id)), ids, 'every row id is the decision\'s, newest first');
+  assert.equal(r.body.card.slug, 'verdict');
+  // A partner is refused before anything is read.
+  const p = await read(PARTNER);
+  assert.equal(p.status, 403);
+  assert.deepEqual(p.body, { detail: 'Partners do not see decisions.' });
+});
+
+test('15: the MCP context tool still reads three Validate slugs, never Verdict', () => {
+  const src = readFileSync(resolve(ROOT, 'cloudflare-worker/src/mcp/tools/context.ts'), 'utf8');
+  const union = /slug: ('[a-z-]+'(?:\s*\|\s*'[a-z-]+')*)/.exec(src);
+  assert.ok(union, 'the slug union is still there');
+  assert.deepEqual(union![1].split('|').map((x) => x.trim().replace(/'/g, '')), ['problem-discovery', 'ideal-customer-profile', 'experiments']);
+  assert.equal(/verdict/i.test(src), false);
+});
 
 // #1703 closing integration: real evidence, production Pivot and registry.
 function realEvidence(db: any) {

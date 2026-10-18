@@ -1,10 +1,9 @@
 /**
  * D716 (#1781, PR 2) — the Subscription Booklet's store over real SQLite:
  * field ids, who may open, ticks, submit, the audited admin read, and
- * withdraw. The paper's cases (a page per part, the footer, the contents, the
- * X squares) land with the notices PR, which draws #1776's paper. `main`
- * already tests the part order, the stub and the triggers
- * (`legal_notice_kinds_d716.test.ts`).
+ * withdraw. Then the paper, which draws #1776's (PR 1): a page per part, the
+ * footer, the contents, the X squares, and the admin PDF. `main` already tests
+ * the part order, the stub and the triggers (`legal_notice_kinds_d716.test.ts`).
  *
  * The store is the baseline's tables plus migration 478, read from its file.
  */
@@ -17,6 +16,7 @@ import { makeD1 } from './_d1_sqlite.mjs';
 import { tableFromBaseline, stripForeignKeys } from './_baseline.mjs';
 import booklets from '../src/routes/fund_booklets.ts';
 import { bookletFields } from '../src/services/subscriptionBooklet.ts';
+import { PDFDocument, PDFName } from 'pdf-lib';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 
 const baseline = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
@@ -194,4 +194,106 @@ test('D716 withdraw needs a reason of 10 to 200 characters, then lets the applic
   assert.equal(again.status, 201);
   assert.notEqual(again.body.uid, opened.uid);
   assert.throws(() => f.db.exec('DELETE FROM fund_subscription_booklets'), /never deleted/);
+});
+
+// ── The paper (PR 1) ────────────────────────────────────────────────────────
+
+/** Each part's section, by part number, from the paper's HTML. */
+function sections(html: string): Map<number, string> {
+  const out = new Map<number, string>();
+  for (const m of html.matchAll(/<section class="booklet-part part-(\d+)">([\s\S]*?)(?=<section class="booklet-part|<\/main>)/g)) out.set(Number(m[1]), m[2]);
+  return out;
+}
+
+test('D716 the paper: Parts 2 to 9 in order after the cover, each with its own block', async () => {
+  const f = fixture();
+  fillLegend(f);
+  await f.call(APPLICANT, 'POST', '/mine');
+  const r = await f.call(APPLICANT, 'GET', '/mine/paper');
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const html: string = r.body.html;
+  assert.deepEqual([...html.matchAll(/<section class="booklet-part part-(\d+)">/g)].map((m) => Number(m[1])), [2, 3, 4, 5, 6, 7, 8, 9]);
+  const parts = sections(html);
+  const headings = (s: string) => [...s.matchAll(/<div class="heading">([^<]*)<\/div>/g)].map((m) => m[1]);
+  assert.deepEqual(headings(parts.get(3)!), ['Axal VC Spin-Out Lab Fund I LP', 'Ivy Applicant'], 'Part 3: the Fund and the applicant');
+  assert.deepEqual(headings(parts.get(8)!), ['Ivy Applicant'], 'Part 8: only the applicant');
+  assert.deepEqual(headings(parts.get(9)!), ['Axal VC Spin-Out Lab Fund I LP'], 'Part 9: the Fund');
+  assert.ok(parts.get(9)!.includes('By: Axal VC GP LLC, its general partner'), 'with its through line');
+  assert.ok(html.lastIndexOf('<div class="heading">') === html.indexOf('Axal VC Spin-Out Lab Fund I LP', html.lastIndexOf('<section class="booklet-part part-9">')) - '<div class="heading">'.length, 'the Fund block is last');
+  assert.equal(parts.get(2)!.includes('Complete Part 3, Subscription Agreement.'), true);
+  assert.ok(parts.get(2)!.includes('Send no money until you receive a Capital Call Notice.'));
+  assert.ok(!html.includes('DRAFT'), 'every part has text, so no Draft');
+  assert.ok(html.includes('THESE INTERESTS HAVE NOT BEEN REGISTERED.') && html.includes('<section class="cover'), 'the legend is on the cover');
+  assert.equal(r.body.digest, (await f.call(APPLICANT, 'GET', '/mine')).body.digest);
+});
+
+test('D716 the paper prints a ticked field as an X square and an unticked one as empty, by field id', async () => {
+  const f = fixture();
+  fillLegend(f);
+  const opened = (await f.call(APPLICANT, 'POST', '/mine')).body;
+  const q = opened.parts.find((p: any) => p.part === 4).fields;
+  await f.call(APPLICANT, 'PUT', '/mine/answers', { answers: [{ field_id: q[1].id, checked: true }] });
+  const part4 = sections((await f.call(APPLICANT, 'GET', '/mine/paper')).body.html).get(4)!;
+  const boxes = [...part4.matchAll(/<div class="check"><span class="box( x)?"><\/span><span>([^<]*)<\/span>/g)].map((m) => [m[2], !!m[1]]);
+  assert.deepEqual(boxes, [['I am an accredited investor.', false], ['I am a qualified purchaser.', true]]);
+  // Part 9's task item is the GP's: no applicant tick reaches it.
+  assert.ok(sections((await f.call(APPLICANT, 'GET', '/mine/paper')).body.html).get(9)!.includes('<span class="box"></span>'));
+});
+
+test('D716 a part with no text from counsel prints the stub sentence and makes the paper a Draft; only the applicant reads it', async () => {
+  const f = fixture();
+  fillLegend(f);
+  f.db.prepare("UPDATE legal_templates SET is_stub = 1 WHERE slug = 'lp_tax_status_certification'").run();
+  await f.call(APPLICANT, 'POST', '/mine');
+  const html = (await f.call(APPLICANT, 'GET', '/mine/paper')).body.html;
+  assert.ok(sections(html).get(6)!.includes('Stub — counsel to draft.'));
+  assert.ok(!sections(html).get(5)!.includes('Stub — counsel to draft.'));
+  assert.ok(html.includes('DRAFT'));
+  for (const who of [PENDING, STRANGER, FOUNDER, ADMIN]) assert.equal((await f.call(who, 'GET', '/mine/paper')).status, 404, `user ${who}`);
+  assert.equal((await f.call(APPLICANT, 'GET', '/mine/paper?page=folio')).body.error, 'page_size_invalid');
+});
+
+async function pdfWithLinks(n: number, linkPages: number[]): Promise<Uint8Array> {
+  const doc = await PDFDocument.create();
+  for (let i = 0; i < n; i++) doc.addPage([612, 792]);
+  for (const p of linkPages) {
+    const annot = doc.context.obj({ Type: 'Annot', Subtype: 'Link', Rect: [0, 0, 10, 10], Border: [0, 0, 0] });
+    doc.getPage(p - 1).node.set(PDFName.of('Annots'), doc.context.obj([doc.context.register(annot)]));
+  }
+  return doc.save();
+}
+
+test('D716 the admin PDF prints in two passes, its contents from each part\'s page; a failed call is 503 and never pdf-lib', async () => {
+  const f = fixture();
+  fillLegend(f);
+  const opened = (await f.call(APPLICANT, 'POST', '/mine')).body;
+  const calls: string[] = [];
+  let fetched = 0;
+  const BROWSER = {
+    fetch: async () => { fetched++; throw new Error('BROWSER.fetch must not be called'); },
+    quickAction: async (_a: string, o: any) => { calls.push(o.html); return new Response(calls.length === 1 ? await pdfWithLinks(14, [1, 2, 4, 5, 7, 9, 11, 12]) : await pdfWithLinks(2, [])); },
+  };
+  const r = await f.call(ADMIN, 'GET', `/${opened.uid}/pdf`, undefined, { envExtra: { BROWSER } });
+  assert.equal(r.status, 200, JSON.stringify(r.body).slice(0, 200));
+  assert.equal(calls.length, 2, 'two passes');
+  assert.ok(calls[0].includes('<a href="#part-3">Subscription Agreement</a>') && !calls[0].includes('<section class="cover'), 'pass 1 links each part heading');
+  assert.equal([...calls[0].matchAll(/<a href="#/g)].length, 8, 'and nothing else, so the k-th link is the k-th part');
+  for (const n of [2, 3, 4, 5, 6, 7, 8, 9]) {
+    assert.ok(calls[0].includes(`section.booklet-part.part-${n} { page: part-${n}; }`), `part ${n} has its named page`);
+    assert.match(calls[0], new RegExp(`@page part-${n} \\{ @bottom-left \\{ content: "Subscription Booklet · Part ${n}"`), `part ${n} names itself in the footer`);
+  }
+  assert.ok(calls[0].includes('section.booklet-part { break-before: page; }'), 'each part starts a new page');
+  assert.deepEqual([...calls[1].matchAll(/<span class="pg">(\d+)<\/span>/g)].map((m) => m[1]), ['1', '2', '4', '5', '7', '9', '11', '12']);
+  const toc = [...calls[1].matchAll(/<li><span>([^<]*)<\/span>(?:<span class="leader"><\/span><span class="pg">(\d+)<\/span>)?<\/li>/g)].map((m) => [m[1], m[2] ?? null]);
+  assert.deepEqual(toc[0], ['Part 2 · Instructions and Checklist', '1'], 'the contents starts at Part 2: the cover is not a part it lists');
+  assert.deepEqual(toc[toc.length - 1], ['Part 9 · Acceptance by the General Partner', '12']);
+  assert.equal(toc.length, 8);
+  assert.equal(fetched, 0);
+  assert.equal(f.one("SELECT COUNT(*) AS n FROM admin_audit_log WHERE action = 'fund_admin.fund_booklet.read'").n, 1, 'the PDF read is audited');
+
+  const down = await f.call(ADMIN, 'GET', `/${opened.uid}/pdf`, undefined, { envExtra: { BROWSER: { quickAction: async () => new Response('busy', { status: 503 }) } } });
+  assert.deepEqual([down.status, down.body.error], [503, 'booklet_render_unavailable']);
+  const unbound = await f.call(ADMIN, 'GET', `/${opened.uid}/pdf`);
+  assert.deepEqual([unbound.status, unbound.body.error], [503, 'booklet_render_unavailable'], 'no binding is never the pdf-lib fallback');
+  assert.equal((await f.call(APPLICANT, 'GET', `/${opened.uid}/pdf`, undefined, { envExtra: { BROWSER } })).status, 403);
 });

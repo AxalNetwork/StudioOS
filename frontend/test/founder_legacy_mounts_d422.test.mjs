@@ -91,9 +91,9 @@ test('the editors keep their deep links: ?mode=workspace, Discovery ?tab=, and t
   // Research: any query beyond project_id, or ?mode=workspace, skips the desk.
   assert.match(app, /const founderResearchLanding = effectiveRole === 'founder'\s*&& \(researchMode === 'landing' \|\| \(!researchHasNonProjectQuery && researchMode !== 'workspace'\)\);/);
   // AND THE PATHS THAT STILL LINK TO THEM GO TO THE EDITOR, not the redirect:
-  // the Validate interviews zone sends ICP-fit edits to `?tab=interviews`, and
-  // the Roadmap zone sends objective edits to `/execution/roadmap`.
-  assert.match(zoneSource, /to="\/build\/discovery\?tab=interviews"/);
+  // the Roadmap zone sends objective edits to `/execution/roadmap`. (The
+  // Validate interviews zone that linked `?tab=interviews` is gone, D704: ICP
+  // fit is edited on the interview's record, `interview_record_d697`.)
   assert.match(routeBlock('/execution/roadmap'), /<ExecutionPage \/>/);
 });
 

@@ -20,7 +20,7 @@ import {
   UserCircle, Shield, ShieldCheck, Network, Sparkles, Briefcase,
   TrendingUp, MessageSquare, Package, Calendar,
   Inbox, Radar, Wallet, Landmark, Mail,
-  Map, UserCog, Coins, FileStack, SlidersHorizontal,
+  Map, UserCog, Coins, FileStack, SlidersHorizontal, Banknote,
 } from 'lucide-react';
 
 // `workspaces/shellConfig.js` is a pure leaf module — it imports nothing — so
@@ -116,6 +116,9 @@ export const SIDEBAR_GROUPS = {
       // super-admin-only server-side (routes/admin_licences.ts).
       { to: '/admin/licences', icon: Map, label: 'Licences' },
       { to: '/admin/funds', icon: Landmark, label: 'Funds' },
+      // D714 (#1779) decision 7 — fund administration, after Funds. Funds keeps
+      // its cross-branch registry; this row is HQ's own funds and entities.
+      { to: '/admin/fund-admin', icon: Banknote, label: 'Fund admin' },
       // The master template library. The doc-type REGISTRY the Contracts ·
       // Super canvas draws above it has no store; the page says so.
       { to: '/admin/contracts', icon: FileText, label: 'Contracts' },
@@ -222,6 +225,10 @@ export const SIDEBAR_GROUPS = {
       // `requireHqAuthoring` refuses only on a branch, so a plain HQ admin
       // authors templates today. Whether they should is D286's filed question.
       { to: '/admin/contracts', icon: FileText, label: 'Contracts' },
+      // D714 (#1779) decision 7 — the same console as the HQ row, after
+      // Contracts. A plain Admin prepares there; the Worker refuses the acts
+      // only a Super Admin takes.
+      { to: '/admin/fund-admin', icon: Banknote, label: 'Fund admin' },
       { to: '/admin/held/insights', icon: TrendingUp, label: 'Insights' },
       // Licensing appears only here, as the administrator's own read of their
       // licence (S20's wall rule 4). HQ's ledger of every licence

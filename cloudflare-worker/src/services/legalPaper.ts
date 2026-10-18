@@ -40,7 +40,7 @@ import {
 } from './legalPaperCss';
 
 /** The long instruments that get a cover and contents (decision 12). */
-export const COVER_SLUGS = new Set(['lpa_amended_restated', 'ppm', 'compliance_manual_code_of_ethics']);
+export const COVER_SLUGS = new Set(['lpa_amended_restated', 'ppm', 'compliance_manual_code_of_ethics', 'subscription_booklet']);
 
 export const DEFAULT_COUNTERSIGNER_EMAIL = 'legal@axal.vc';
 
@@ -131,7 +131,70 @@ export interface PaperInput {
   preserveBody?: boolean;
   /** Print no execution block or certificate (DocuSign draws its own). */
   suppressExecutionBlock?: boolean;
+  // D716 — a notice's sections. Each is optional and prints only when given.
+  /** The addressee lines (`buildAddresseeBlock`). */
+  addressee?: string[] | null;
+  /** Key figures, in rows. A `mono` value prints in the figures face. */
+  keyFigures?: NoticeKeyFigure[] | null;
+  /** Figures tables: columns with their alignment, and an optional totals row under a strong rule. */
+  tables?: NoticeTable[] | null;
+  /** The phone check (#1773's PAY_WARNING), in the warning box. */
+  warning?: string | null;
+  /** The payment-instructions block, or the resolver's refusal in its place. */
+  payment?: NoticePayment | null;
+  /** An issued notice's stamp; replaces the state stamp. */
+  stamp?: 'issued' | 'superseded' | null;
+  /** The footer's audit line, in place of the envelope's. */
+  audit?: string | null;
+  /** The sender's block takes no page of its own (a notice is issued, not signed). */
+  inlineExecution?: boolean;
+  /**
+   * D716 — a composite paper (the Subscription Booklet): its parts, in order.
+   * The input's own body is then the cover's legend, and each part prints on
+   * its own named page with its own block.
+   */
+  parts?: PaperPartInput[] | null;
 }
+
+/** D716 — one part of a composite paper. */
+export interface PaperPartInput {
+  n: number;
+  title: string;
+  /** The part's body, or null for a part that prints only its block (Part 8). */
+  body: string | null;
+  /** The part's store row has no text yet: it prints the stub sentence. */
+  missing?: boolean;
+  /** The part's own block, or null for none. */
+  block: { kind: DocumentKind; axalEntityKey?: AxalEntityKey } | null;
+  counterpartyName?: string | null;
+  /** The footer's title on this part's pages. */
+  footer: string;
+}
+
+export interface PaperPart {
+  n: number;
+  title: string;
+  /** The heading's id: the contents links to it. */
+  id: string;
+  blocks: Block[];
+  execution: { recital: string; parties: PaperParty[] } | null;
+  footer: string;
+}
+
+/** What a part with no text from counsel prints. */
+export const PART_STUB = 'Stub — counsel to draft.';
+
+export interface NoticeKeyFigure { label: string; value: string; mono?: boolean }
+export interface NoticeTable {
+  title?: string | null;
+  columns: { label: string; align?: 'left' | 'right' }[];
+  rows: string[][];
+  /** The last row is the totals row. */
+  total?: boolean;
+}
+export type NoticePayment =
+  | { lines: { label: string; value: string; mono?: boolean }[]; reference: string | null }
+  | { refusal: string };
 
 export interface PaperParty extends SignatureParty {
   /** "Signed <UTC> · Envelope <id>" under the By line, once signed. */
@@ -168,6 +231,14 @@ export interface PaperModel {
   cover: { fund: string; name: string; copyNumber: string | null; preparedFor: string | null; date: string | null; legends: Block[] } | null;
   footerLeft: string;
   auditLine: string;
+  addressee: string[] | null;
+  keyFigures: NoticeKeyFigure[] | null;
+  tables: NoticeTable[] | null;
+  warning: string | null;
+  payment: NoticePayment | null;
+  stamp: 'issued' | 'superseded' | null;
+  inlineExecution: boolean;
+  parts: PaperPart[] | null;
 }
 
 const BASE64 = /^[A-Za-z0-9+/=]+$/;
@@ -252,7 +323,8 @@ export function paperModel(input: PaperInput): PaperModel {
   if (COVER_SLUGS.has(slug.toLowerCase())) {
     const first = allBlocks.findIndex((b) => b.t === 'article');
     const head = first < 0 ? allBlocks : allBlocks.slice(0, first);
-    const legends: Block[] = head.filter((b) => b.t === 'legend');
+    // D716 — a composite paper's own body is all cover: the legend.
+    const legends: Block[] = input.parts?.length ? allBlocks : head.filter((b) => b.t === 'legend');
     blocks = allBlocks.filter((b) => !legends.includes(b));
     cover = {
       fund: AXAL_ENTITIES.fund.name,
@@ -263,7 +335,31 @@ export function paperModel(input: PaperInput): PaperModel {
       legends,
     };
   }
-  const articles = blocks.filter((b): b is Extract<Block, { t: 'article' }> => b.t === 'article').map((b) => ({ id: b.id, text: b.text }));
+  // D716 — each part prints its own block, parties as `buildExecutionBlock` names them.
+  const parts: PaperPart[] | null = input.parts?.length
+    ? input.parts.map((pt) => {
+        const base = pt.block
+          ? buildExecutionBlock({ kind: pt.block.kind, axalEntityKey: pt.block.axalEntityKey, counterpartyName: pt.counterpartyName || null })
+          : null;
+        const blocksOf = pt.missing
+          ? paperBlocks(PART_STUB, { merge: 'raw', title: pt.title })
+          : pt.body ? paperBlocks(stripTrailingSignatureBlock(pt.body), { merge: input.merge || 'raw', title: pt.title }) : [];
+        return {
+          n: pt.n,
+          title: pt.title,
+          id: `part-${pt.n}`,
+          blocks: blocksOf,
+          execution: base && base.parties.length
+            ? { recital: base.recital, parties: base.parties.map((p) => ({ ...p, signedLine: null, image: null, nested: !!p.through })) }
+            : null,
+          footer: pt.footer,
+        };
+      })
+    : null;
+  // A composite paper's contents lists its parts after the cover.
+  const articles = parts
+    ? parts.filter((pt) => pt.n > 1).map((pt) => ({ id: pt.id, text: `Part ${pt.n} · ${pt.title}` }))
+    : blocks.filter((b): b is Extract<Block, { t: 'article' }> => b.t === 'article').map((b) => ({ id: b.id, text: b.text }));
 
   let execution: PaperModel['execution'] = null;
   if (kind !== 'policy' && !input.suppressExecutionBlock) {
@@ -340,9 +436,19 @@ export function paperModel(input: PaperInput): PaperModel {
     certificate,
     cover,
     footerLeft: version ? `${input.title} — v${version}` : input.title,
-    auditLine: issued
-      ? `SHA-256 ${input.bodySha256.slice(0, 16)}… · Envelope ${uuid}`
-      : 'SHA-256 and envelope id assigned when issued',
+    auditLine: input.audit
+      ? input.audit
+      : issued
+        ? `SHA-256 ${input.bodySha256.slice(0, 16)}… · Envelope ${uuid}`
+        : 'SHA-256 and envelope id assigned when issued',
+    addressee: input.addressee?.length ? input.addressee : null,
+    keyFigures: input.keyFigures?.length ? input.keyFigures : null,
+    tables: input.tables?.length ? input.tables : null,
+    warning: input.warning || null,
+    payment: input.payment || null,
+    stamp: input.stamp || null,
+    inlineExecution: !!input.inlineExecution,
+    parts,
   };
 }
 
@@ -416,11 +522,41 @@ function lineHtml(s: string): string {
 function partyHtml(p: PaperParty): string {
   const sig = p.image ? `<img class="sigimg" alt="Signature" src="${p.image}">` : '';
   const signed = p.signedLine ? `<p class="signed">${escapeHtml(p.signedLine)}</p>` : '';
-  const lines = `${sig}<p class="line">${lineHtml(p.by)}</p>${signed}<p class="line">${lineHtml(p.name)}</p>`
+  // D716 — a notice's sender has no By line.
+  const by = p.by ? `<p class="line">${lineHtml(p.by)}</p>` : '';
+  const lines = `${sig}${by}${signed}<p class="line">${lineHtml(p.name)}</p>`
     + `<p class="line">${lineHtml(p.title)}</p><p class="line">${lineHtml(p.date)}</p>`;
   return `<div class="party"><div class="heading">${escapeHtml(p.heading)}</div>`
     + (p.through ? `<p class="line through">${escapeHtml(p.through)}</p><div class="through-block">${lines}</div>` : lines)
     + '</div>';
+}
+
+// --- D716: a notice's sections -----------------------------------------------
+
+function keyFiguresHtml(rows: NoticeKeyFigure[]): string {
+  return '<dl class="key-figures">' + rows.map((r) =>
+    `<dt>${escapeHtml(r.label)}</dt><dd${r.mono ? ' class="mono"' : ''}>${escapeHtml(r.value)}</dd>`).join('') + '</dl>';
+}
+
+function noticeTableHtml(t: NoticeTable): string {
+  const cls = (c: number) => (t.columns[c]?.align === 'right' ? ' class="right mono"' : '');
+  const head = `<thead><tr>${t.columns.map((col, c) => `<th${cls(c)}>${escapeHtml(col.label)}</th>`).join('')}</tr></thead>`;
+  const rows = t.rows.map((r, i) => {
+    const total = !!t.total && i === t.rows.length - 1;
+    return `<tr${total ? ' class="total"' : ''}>${r.map((v, c) => `<td${cls(c)}>${escapeHtml(v)}</td>`).join('')}</tr>`;
+  }).join('');
+  return (t.title ? `<div class="eyebrow table-title">${escapeHtml(t.title)}</div>` : '')
+    + `<table class="paper-table">${head}<tbody>${rows}</tbody></table>`;
+}
+
+function paymentHtml(p: NoticePayment): string {
+  if ('refusal' in p) {
+    return `<section class="payment"><div class="eyebrow">Payment instructions</div><p class="payment-refusal">${escapeHtml(p.refusal)}</p></section>`;
+  }
+  return '<section class="payment"><div class="eyebrow">Payment instructions</div><dl class="key-figures">'
+    + p.lines.map((l) => `<dt>${escapeHtml(l.label)}</dt><dd${l.mono ? ' class="mono"' : ''}>${escapeHtml(l.value)}</dd>`).join('')
+    + (p.reference ? `<dt>Reference to quote</dt><dd class="mono">${escapeHtml(p.reference)}</dd>` : '')
+    + '</dl></section>';
 }
 
 function stateHtml(s: PaperState): string {
@@ -491,6 +627,7 @@ export function paperHtml(m: PaperModel, o: PaperHtmlOptions): string {
   const screen = o.medium === 'screen';
   const css = paperCss({
     pageSize, cover, medium: o.medium, footerLeft: m.footerLeft, auditLine: m.auditLine, frontMatter: part === 'front',
+    parts: m.parts ? m.parts.filter((pt) => pt.n > 1).map((pt) => ({ n: pt.n, footer: pt.footer })) : null,
   });
   const fonts = o.fonts === 'inline' ? paperFontsCss() : '';
 
@@ -506,16 +643,42 @@ export function paperHtml(m: PaperModel, o: PaperHtmlOptions): string {
     parts.push(coverHtml(m, cover));
     parts.push(contentsHtml(m, screen ? null : (o.tocPages ?? null), part === 'front'));
   }
-  if (part !== 'front') {
-    parts.push(stateHtml(m.state));
+  if (part !== 'front' && m.parts) {
+    // D716 — a composite paper: each part on its own named page, its heading
+    // the one link the body pass prints, so the contents finds its page.
+    if (m.state.kind === 'draft') parts.push(stateHtml(m.state));
+    for (const pt of m.parts.filter((x) => x.n > 1)) {
+      const heading = part === 'body' ? `<a href="#${pt.id}">${escapeHtml(pt.title)}</a>` : escapeHtml(pt.title);
+      parts.push(`<section class="booklet-part part-${pt.n}"><div class="eyebrow">Part ${pt.n}</div>`
+        + `<h1 class="title" id="${pt.id}">${heading}</h1>`
+        + pt.blocks.map((b) => blockHtml(b, false)).join('\n')
+        + (pt.execution
+          ? '<section class="execution part-block">'
+            + (pt.execution.recital ? `<p class="recital">${escapeHtml(pt.execution.recital)}</p>` : '')
+            + `<div class="parties">${pt.execution.parties.map(partyHtml).join('')}</div></section>`
+          : '')
+        + '</section>');
+    }
+  } else if (part !== 'front') {
+    parts.push(m.stamp && m.state.kind === 'issued'
+      ? `<div class="stamp">${m.stamp === 'superseded' ? 'Superseded' : 'Issued'}</div>`
+      : stateHtml(m.state));
     if (m.restricted) parts.push('<div class="restricted">Confidential — GP and LPAC only</div>');
     parts.push(`<h1 class="title">${escapeHtml(m.title)}</h1>`);
+    if (m.addressee) parts.push(`<div class="addressee">${m.addressee.map((l) => `<p>${escapeHtml(l)}</p>`).join('')}</div>`);
     if (m.preamble) parts.push(`<p class="preamble">${escapeHtml(m.preamble)}</p>`);
     parts.push(m.blocks.map((b) => blockHtml(b, part === 'body')).join('\n'));
-    if (m.execution) {
-      parts.push('<p class="sig-follows">[Signature page follows]</p>');
-      parts.push('<section class="execution"><div class="eyebrow">Execution</div>'
-        + `<p class="recital">${escapeHtml(m.execution.recital)}</p>`
+    if (m.keyFigures) parts.push(keyFiguresHtml(m.keyFigures));
+    if (m.tables) parts.push(m.tables.map(noticeTableHtml).join(''));
+    // The phone check sits directly above the payment block, or above the
+    // sender's block when there is none.
+    if (m.warning) parts.push(`<div class="legend warning warning-box"><p>${escapeHtml(m.warning)}</p></div>`);
+    if (m.payment) parts.push(paymentHtml(m.payment));
+    if (m.execution && m.execution.parties.length) {
+      if (!m.inlineExecution) parts.push('<p class="sig-follows">[Signature page follows]</p>');
+      parts.push(`<section class="execution${m.inlineExecution ? ' inline' : ''}">`
+        + (m.inlineExecution ? '' : '<div class="eyebrow">Execution</div>')
+        + (m.execution.recital ? `<p class="recital">${escapeHtml(m.execution.recital)}</p>` : '')
         + `<div class="parties">${m.execution.parties.map(partyHtml).join('')}</div></section>`);
     }
     if (m.certificate) parts.push(certificateHtml(m));

@@ -16,6 +16,7 @@ import { act } from 'react';
 import FormLightbox from '../src/pages/cycles/FormLightbox.jsx';
 import CycleModulePage from '../src/pages/cycles/CycleModulePage.jsx';
 import { verdictForm, evidenceNote, DECISION_EVIDENCE_BAR } from '../src/pages/cycles/verdictForm.js';
+import { FORMS, formFor, editFor } from '../src/pages/cycles/forms.js';
 import { decisionMemoModel, decisionMemoFilename, MEMO_LIMITS } from '../src/lib/decisionMemoViewModel.js';
 import { renderDecisionMemo } from '../src/lib/decisionMemoPdf.js';
 import { verdictApi } from '../src/lib/api/verdict.js';
@@ -27,6 +28,8 @@ import { MODULES } from '../src/pages/cycles/modules.js';
 import { CLIENT_ACTIONS, dispatchOf } from '../src/pages/cycles/recordModel.js';
 import { cyclesApi } from '../src/lib/api/cycles.js';
 import { installDocument } from './_contracts_dom.mjs';
+import { api } from '../src/lib/api.js';
+import { CARDS, RECORDS, MODULES as VALIDATE_MODULES } from '../src/pages/cycles/adapters/validate.js';
 import { createPdfStub } from './_pdf-stub.mjs';
 import { h, mountForm } from './_form_d695.mjs';
 import { sourceModule, mutate, mutationCheck } from './_record_d696.mjs';
@@ -142,8 +145,10 @@ test('18: the body is the Worker\'s, it submits through verdictApi.record, reads
   assert.equal(ev.kind, 'CK');
   assert.ok(ev.options.every((o) => !o.checked && !o.on), 'the form itself checks no evidence either');
   for (const s of allStrings(verdictForm)) assert.equal(/[[\]]/.test(s), false, s);
-  // The form joins `forms.js` with the Verdict module, in the closing PR.
-  assert.equal(/verdictForm/.test(read('src/pages/cycles/forms.js')), false);
+  // The closing PR registers it with the Verdict module, and no Edit beside it.
+  assert.deepEqual(FORMS.validate.verdict, [verdictForm]);
+  assert.equal(formFor('validate', 'verdict'), verdictForm);
+  assert.equal(editFor('validate', 'verdict'), null);
 });
 
 // ---------------------------------------------------------------------------
@@ -210,11 +215,12 @@ test('19: a 403 module read is drawn as refused through CycleRoute, with the Wor
   const retries = (v) => v.buttons.filter((b) => /Retry|Try again/.test(b)).length;
   assert.equal(refused.refused, true, 'the refused box is drawn');
   assert.match(refused.text, /Partners do not see decisions\./);
-  assert.doesNotMatch(refused.text, /experiments could not be read/);
+  // D703 (#1665): a read with no card is named from the cycle's list, never by its slug.
+  assert.doesNotMatch(refused.text, /Experiments and evidence could not be read/);
   // Any other failure is still a failure, with its Retry.
   const failed = await routeWith(httpError(500, 'Boom'));
   assert.equal(failed.refused, false);
-  assert.match(failed.text, /experiments could not be read/);
+  assert.match(failed.text, /Experiments and evidence could not be read/);
   assert.doesNotMatch(failed.text, /Boom/, 'a failure never prints the error text');
   assert.equal(retries(refused), retries(failed) - 1, 'a refusal draws no Retry of its own');
 });
@@ -391,4 +397,203 @@ test('22: verdictApi holds record alone, a POST to the mounted decisions route, 
   } finally { delete globalThis.__d693Sent; }
   assert.deepEqual(sent, [['/cycles/validate/decisions?project=7', { method: 'POST', body: '{"decision":"stop","for":"venture"}' }]]);
   await act(async () => {});
+});
+
+// ---------------------------------------------------------------------------
+// #1704 closing PR: the module on the page
+// ---------------------------------------------------------------------------
+
+/** The Verdict module read, as `routes/cycle_validate.ts` sends it. */
+const VERDICT_READ = {
+  module: { slug: 'verdict', name: 'Verdict', records_title: 'Decisions' },
+  card: {
+    slug: 'verdict', name: 'Verdict', range: 'All time', caption: 'Every decision, oldest to newest, never overwritten.',
+    state: 'ok', reason: null,
+    next: { text: 'Record the decision for the sprint ending 24 Oct.', href: '/validate/verdict/new?project=7&for=h-12' },
+    series: {
+      decisions: [
+        { decision: 'proceed', state: 'given', date: '2026-07-14' },
+        { decision: 'pivot', state: 'withheld', date: '2026-09-03' },
+        { decision: 'proceed', state: 'given', date: '2026-10-12' },
+      ],
+      current: { decision: 'proceed', date: '2026-10-12', evidence: 6 },
+      next: { date: '2026-10-24' },
+    },
+  },
+  records: {
+    cols: ['Decision', 'For', 'Reasoning', 'Evidence', 'Date · by'],
+    rows: [
+      { id: 41, decision: 'proceed', state: 'given', for: 'The venture', reasoning: 'Three fleets paid for the pilot.', evidence: 6, date: '2026-10-12', by: 'Fay Founder' },
+      { id: 40, decision: 'stop', state: 'withheld', for: 'H2 · Dispatchers lose an hour a day', reasoning: '2 of 5 pieces of evidence', evidence: 2, date: '2026-10-05', by: 'Fay Founder' },
+      { id: 39, decision: 'pivot', state: 'given', for: 'H1 · Fleets pay', reasoning: 'Starts H4 · Owners decide', evidence: 5, date: '2026-09-03', by: 'Ada Admin' },
+    ],
+    total: 3, page: 1, page_size: 25, linkable: true,
+    filters: [{ key: 'decision', label: 'Decision', options: [] }, { key: 'for', label: 'For', options: [] }],
+    sorts: [{ key: 'newest', label: 'Newest' }, { key: 'oldest', label: 'Oldest' }],
+  },
+  parts: { can_write: true },
+  can_read_decisions: true,
+};
+
+/** A route through the real CycleRoute: `/validate/:slug` and App.jsx's static `/validate/verdict` line. */
+async function mountRoute(url, read) {
+  const restore = installDocument();
+  const container = document.createElement('div'); document.body.appendChild(container);
+  const root = createRoot(container);
+  const before = { fetch: globalThis.fetch, module: cyclesApi.module, overview: cyclesApi.overview, exportSummary: api.exportValidateSummary };
+  const calls = [];
+  globalThis.fetch = async () => ({ ok: true, status: 200, headers: { get: () => 'application/json' }, json: async () => ({}), text: async () => '{}' });
+  cyclesApi.module = async (...args) => { calls.push(['module', ...args]); return read(args[2]); };
+  cyclesApi.overview = async (...args) => { calls.push(['overview', ...args]); return read(null); };
+  api.exportValidateSummary = async (...args) => { calls.push(['exportValidateSummary', ...args]); };
+  const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
+  const textOf = (n) => (n.nodeType === 3 ? n.textContent || '' : n.childNodes?.length ? n.childNodes.map(textOf).join('') : n.textContent || '');
+  const props = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
+  await act(async () => root.render(h(MemoryRouter, { initialEntries: [url] }, h(Routes, null,
+    h(Route, { path: '/validate', element: h(CycleRoute, { cycle: 'validate' }) }),
+    h(Route, { path: '/validate/verdict', element: h(CycleRoute, { cycle: 'validate', slug: 'verdict' }) }),
+    h(Route, { path: '/validate/:slug', element: h(CycleRoute, { cycle: 'validate' }) })))));
+  await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+  return {
+    calls,
+    text: () => textOf(container),
+    nodes: () => walk(container),
+    hrefs: () => walk(container).filter((n) => n.tagName === 'A').map((n) => props(n).href).filter(Boolean),
+    async click(label) {
+      const b = walk(container).find((n) => n.tagName === 'BUTTON' && textOf(n).trim() === label);
+      assert.ok(b, `No button: ${label}`);
+      await act(async () => { await props(b).onClick?.({ preventDefault() {}, stopPropagation() {} }); });
+      await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    },
+    async unmount() {
+      await act(async () => root.unmount());
+      Object.assign(globalThis, { fetch: before.fetch });
+      cyclesApi.module = before.module; cyclesApi.overview = before.overview; api.exportValidateSummary = before.exportSummary;
+      restore();
+    },
+  };
+}
+
+test('17: /validate/verdict renders the Decisions table from the module read, with Export summary under it', async () => {
+  const v = await mountRoute('/validate/verdict?project_id=7', () => VERDICT_READ);
+  try {
+    const reads = v.calls.filter((c) => c[0] === 'module');
+    assert.ok(reads.length >= 1 && reads.every((c) => c[1] === 'validate' && c[3] === 'verdict'), JSON.stringify(reads));
+    const t = v.text();
+    assert.match(t, /Decisions/);
+    assert.match(t, /Three fleets paid for the pilot\./);
+    assert.match(t, /Withheld/);
+    assert.match(t, /2 of 5 pieces of evidence/);
+    assert.match(t, /Starts H4 · Owners decide/);
+    assert.match(t, /12 Oct · Fay Founder/);
+    assert.match(t, /Proceed/);
+    assert.match(t, /the venture’s current verdict · 12 Oct · rests on 6 pieces of evidence/);
+    assert.ok(v.hrefs().some((href) => /^\/validate\/verdict\/41(\?|$)/.test(href)), 'a row opens its record');
+    // Test 21: Export summary sits under the table and calls the CSV export.
+    await v.click('Export summary');
+    assert.deepEqual(v.calls.filter((c) => c[0] === 'exportValidateSummary'), [['exportValidateSummary', 7]]);
+  } finally { await v.unmount(); }
+});
+
+test('19: with can_read_decisions false, a module page draws no Verdict tab; with true it does', async () => {
+  const tabsOf = (v) => v.hrefs().filter((href) => /^\/validate\/verdict(\?|$)/.test(href)).length;
+  const read = (can) => (slug) => ({ ...VERDICT_READ, module: { slug: 'experiments', name: 'Experiments and evidence', records_title: 'Hypotheses' },
+    card: { ...VERDICT_READ.card, slug: 'experiments', name: 'Experiments and evidence', state: 'empty', series: null, next: null }, records: { ...VERDICT_READ.records, cols: [], rows: [], total: 0 }, can_read_decisions: can });
+  const hidden = await mountRoute('/validate/experiments?project_id=7', read(false));
+  try { assert.equal(tabsOf(hidden), 0, 'a partner sees no Verdict tab'); } finally { await hidden.unmount(); }
+  const shown = await mountRoute('/validate/experiments?project_id=7', read(true));
+  try { assert.ok(tabsOf(shown) > 0, 'the founder sees the Verdict tab'); } finally { await shown.unmount(); }
+  // A 403 on the Verdict read drops the tab too, and draws the Worker's sentence.
+  const refused = await mountRoute('/validate/verdict?project_id=7', () => { throw Object.assign(new Error('Partners do not see decisions.'), { status: 403 }); });
+  try {
+    assert.match(refused.text(), /Partners do not see decisions\./);
+    assert.equal(tabsOf(refused), 0, 'a refused Verdict read drops its tab');
+  } finally { await refused.unmount(); }
+});
+
+test('17: App.jsx keeps /validate/verdict a static line with its guard, rendering the Verdict module; no line of its own for :id or new', () => {
+  const app = read('src/App.jsx');
+  assert.match(app, /<Route path="\/validate\/verdict" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <CycleRoute cycle="validate" slug="verdict" \/>\)\} \/>/);
+  assert.doesNotMatch(app, /path="\/validate\/verdict\/(:id|new)"/);
+  // Every static /validate/<slug> line whose slug is a module renders CycleRoute.
+  for (const m of VALIDATE_MODULES) {
+    const line = new RegExp(`<Route path="/validate/${m.slug}" element=\\{[^\\n]*`).exec(app)?.[0];
+    if (line) assert.match(line, /<CycleRoute cycle="validate"/, `/validate/${m.slug} is shadowed`);
+  }
+});
+
+test('16, 21: Validate lists seven modules, Verdict last, and its loading overview draws seven placeholders', () => {
+  assert.equal(VALIDATE_MODULES.length, 7);
+  assert.deepEqual(VALIDATE_MODULES.at(-1), { slug: 'verdict', name: 'Verdict' });
+  const loading = renderToStaticMarkup(h(MemoryRouter, null, h(CycleOverview, { cycle: 'validate', data: null })));
+  assert.equal((loading.match(/data-testid="card-loading"/g) || []).length, 7);
+});
+
+test('12: the card adapter draws the timeline (Withheld hollow, Next last) and the big verdict', () => {
+  const [timeline, big] = CARDS.verdict(VERDICT_READ.card.series);
+  assert.deepEqual(timeline, { kind: 'timeline', steps: [
+    { label: 'Proceed', date: '14 Jul', done: true }, { label: 'Withheld', date: '3 Sep', done: false },
+    { label: 'Proceed', date: '12 Oct', done: true }, { label: 'Next', date: '24 Oct', done: false },
+  ] });
+  assert.deepEqual(big, { kind: 'big', value: 'Proceed', label: 'the venture’s current verdict · 12 Oct · rests on 6 pieces of evidence' });
+  // One piece; an old-route decision drops the clause; one step and no Next draws no timeline.
+  assert.match(CARDS.verdict({ ...VERDICT_READ.card.series, current: { decision: 'stop', date: '2026-10-12', evidence: 1 } })[1].label, /rests on 1 piece of evidence$/);
+  assert.equal(CARDS.verdict({ ...VERDICT_READ.card.series, current: { decision: 'stop', date: '2026-10-12', evidence: null } })[1].label, 'the venture’s current verdict · 12 Oct');
+  assert.deepEqual(CARDS.verdict({ decisions: [{ decision: 'proceed', state: 'given', date: '2026-10-12' }], current: { decision: 'proceed', date: '2026-10-12', evidence: 5 }, next: null }).map((x) => x.kind), ['big']);
+  assert.deepEqual(CARDS.verdict(null), []);
+  // The table's keys follow the Worker's columns.
+  assert.deepEqual(RECORDS.verdict.keys, ['decision', 'for', 'reasoning', 'evidence', 'date']);
+  assert.deepEqual(RECORDS.verdict.row(VERDICT_READ.records.rows[1]).cells.decision, { text: 'Withheld', tone: 'grey' });
+});
+
+test('18: Record a decision at /validate/verdict/new reads its For and Evidence from form-options and records through POST /decisions', async () => {
+  const restore = installDocument();
+  const container = document.createElement('div'); document.body.appendChild(container);
+  const root = createRoot(container);
+  const fetchBefore = globalThis.fetch;
+  const moduleBefore = cyclesApi.module;
+  const sent = [];
+  const json = (body) => ({ ok: true, status: 200, headers: { get: () => 'application/json' }, json: async () => body, text: async () => JSON.stringify(body) });
+  globalThis.fetch = async (url, init = {}) => {
+    const u = String(url);
+    sent.push([init.method || 'GET', u, init.body ?? null]);
+    if (u.includes('/cycles/validate/modules/verdict/form-options')) return json(OPTIONS);
+    if (u.includes('/cycles/validate/decisions')) return json({ id: 51, state: 'withheld' });
+    return json({});
+  };
+  cyclesApi.module = async () => VERDICT_READ;
+  const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
+  const textOf = (n) => (n.nodeType === 3 ? n.textContent || '' : n.childNodes?.length ? n.childNodes.map(textOf).join('') : n.textContent || '');
+  const lightbox = () => {
+    const key = Object.keys(container).find((k) => k.startsWith('__reactContainer$'));
+    const stack = [container[key]];
+    while (stack.length) {
+      const node = stack.pop();
+      if (!node) continue;
+      if (node.type?.name === 'FormLightbox') return node.memoizedProps;
+      stack.push(node.sibling, node.child);
+    }
+    return null;
+  };
+  try {
+    await act(async () => root.render(h(MemoryRouter, { initialEntries: ['/validate/verdict/new?project_id=7&for=h-12'] }, h(Routes, null,
+      h(Route, { path: '/validate/verdict', element: h(CycleRoute, { cycle: 'validate', slug: 'verdict' }) }),
+      h(Route, { path: '/validate/:slug/new', element: h(CycleRoute, { cycle: 'validate', adding: true }) }),
+      h(Route, { path: '/validate/:slug', element: h(CycleRoute, { cycle: 'validate' }) })))));
+    for (let i = 0; i < 3; i += 1) await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    const props = lightbox();
+    assert.equal(props?.form?.key, 'decision', 'Record a decision is the open form');
+    assert.equal(typeof props.loadOptions, 'function', 'the Add is handed its choices');
+    assert.ok(sent.some(([m, u]) => m === 'GET' && /\/cycles\/validate\/modules\/verdict\/form-options\?project=7/.test(u)), JSON.stringify(sent));
+    assert.match(textOf(container), /Pilot invoice · H2 · Measured/, 'the evidence choices are drawn');
+    await act(async () => { await props.onSubmit({ decision: 'proceed', for: 'h-12', reasoning: 'Fleets paid.', evidence: ['evidence-1'] }); });
+    const post = sent.find(([m, u]) => m === 'POST' && /\/cycles\/validate\/decisions\?project=7$/.test(u));
+    assert.ok(post, JSON.stringify(sent));
+    assert.deepEqual(JSON.parse(post[2]), { decision: 'proceed', for: 'h-12', reasoning: 'Fleets paid.', evidence: ['evidence-1'] });
+  } finally {
+    await act(async () => root.unmount());
+    cyclesApi.module = moduleBefore;
+    globalThis.fetch = fetchBefore;
+    restore();
+  }
 });

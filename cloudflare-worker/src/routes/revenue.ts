@@ -36,7 +36,7 @@ import {
   LEDGER_CURRENCY,
   MAX_IMPORT_ROWS,
   chargeToEntry,
-  STRIPE_LOCKED_FIELDS,
+  STRIPE_LOCKED_FIELDS, MERCURY_LOCKED_FIELDS,
   type LedgerRow,
 } from '../services/revenueLedger';
 import { listLedgerChargesForUser } from '../integrations/providers/stripe';
@@ -288,6 +288,12 @@ revenue.patch('/projects/:projectId/entries/:uid', async (c) => {
         fields: changed,
       }, 409);
     }
+  }
+  // D713: the bank establishes the amount and date, never the customer label.
+  if (row.source === 'mercury') {
+    const stored: Record<string, unknown> = { amount_cents: Number(row.amount_cents), received_on: String(row.received_on).slice(0, 10) };
+    const changed = MERCURY_LOCKED_FIELDS.filter((k) => k in body && body[k] !== stored[k]);
+    if (changed.length) return c.json({ error: 'synced_entry_locked', message: 'This entry came from Mercury, so its amount and date stay as Mercury reported them.', fields: changed }, 409);
   }
   // The stored row, overlaid with what the request sent, validated as a whole.
   const merged = {

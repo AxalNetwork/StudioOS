@@ -19,6 +19,7 @@
  * from 0 to 10 and needs its source (D664). An empty field is sent as null,
  * never as 0 or "".
  */
+import { verdictForm } from './verdictForm.js';
 
 import { queueRefusal } from '../raise/dataRoomRead.js';
 
@@ -1556,8 +1557,9 @@ export const VALIDATE_EDITS = {
 };
 
 // Registered here, after the specs, since `FORMS` and `EDITS` are declared
-// above them. #1704 adds Verdict's `verdict` to `FORMS.validate`.
-FORMS.validate = { ...VALIDATE_FORMS };
+// above them. D693 (#1704): Verdict's one Add is Record a decision, and it
+// has no Edit (decision 4).
+FORMS.validate = { ...VALIDATE_FORMS, verdict: [verdictForm] };
 EDITS.validate = { ...VALIDATE_EDITS };
 
 // ---------- Build (routes/cycle_build.ts, D690 #1695) ------------------------

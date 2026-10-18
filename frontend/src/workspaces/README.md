@@ -1,7 +1,7 @@
 # `frontend/src/workspaces/` — the chrome every workspace subpage sits in
 
 A **bucket** is a route prefix that owns a group of pages (`/validate`, `/deals`,
-`/practice`, `/offers`). A **zone** is one page inside it (`/validate/interviews`).
+`/practice`, `/offers`). A **zone** is one page inside it (`/build/this-week`).
 This folder holds the shell those pages share, and the four per-licence route
 modules that mount bodies into it. The pages themselves live in
 `frontend/src/pages/founder/`, `.../investor/`, `.../advisor/` and `.../partner/`.
@@ -36,7 +36,7 @@ modules that mount bodies into it. The pages themselves live in
 
 | Folder | Role |
 | --- | --- |
-| `founder/` | `FounderValidateWorkspace.jsx` — the four `/validate/*` zones. |
+| `founder/` | `InterviewRecording.jsx` (attach and transcribe a recording, used by the interview record and the Lab) and `ValidateDialogs.jsx` (New hypothesis and Link to a pain, used by Validate's sections in `../pages/cycles/ValidateSections.jsx`). The Validate zones' page was deleted by D704. |
 | `investor/` | `InvestorDealsRoutes.jsx` — the four `/deals/*` zones. |
 | `advisor/` | `AdvisorBucketRoutes.jsx` — `/practice/*`, `/cohorts/*`, `/expertise/*`. |
 | `partner/` | `PartnerBucketRoutes.jsx` — `/pipeline/*`, `/delivery/*`, `/offers/*`. |

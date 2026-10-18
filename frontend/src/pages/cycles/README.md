@@ -1,7 +1,7 @@
 # pages/cycles — the four cycle overviews and their module pages (D661)
 
 One overview and one module page draw all four founder cycles (Validate,
-Build, Raise, Grow) and their 26 modules from #1469's shared read (D656):
+Build, Raise, Grow) and their 27 modules from #1469's shared read (D656):
 `GET /api/cycles/:cycle/overview` and `GET /api/cycles/:cycle/modules/:slug`.
 The canvases are `design/canvases/integrated/Cycle Overview.dc.html` and its two boards.
 
@@ -59,10 +59,10 @@ On a module page, `?add=1` is its first Add's address: the URL becomes `/<cycle>
   `adapters/validate.js` maps it, and `cloudflare-worker/test/cycle_adapters_d661.test.ts`
   runs the Worker's real output through it: every `ok` card must draw, and
   every column must have a value source.
-- **A module's working tool stays where it is.** D695 supplies the Add/Edit forms and D696 the record pages. Validate’s curation remains in its working tools until #1666's closing PR, so a module page links
-  to the zone page that edits it (`/validate/pain-map`, `/validate/hypotheses`,
-  `/build/competitors`). Customer research has none: since D704's PR 2b its
-  module and record are the tool, and `/validate/interviews` redirects there. Add is drawn only where it opens a form.
+- **A module's working tool stays where it is.** D695 supplies the Add/Edit forms and D696 the record pages. A module page links
+  to the tool that edits it where it has one (`/build/competitors` for Market
+  intelligence). Validate's zone pages are gone (D704): its curation is its
+  module pages and records, and the three old addresses redirect there. Add is drawn only where it opens a form.
   Every Add has an address (D695): `App.jsx` routes `/<cycle>/:slug/new` to
   `CycleRoute` with `adding`, and `/validate/customer-research/new` redirects
   to Record a session, the query kept. `RecordsTable`'s Add link passes its

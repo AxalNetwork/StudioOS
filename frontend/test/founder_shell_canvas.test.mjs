@@ -29,14 +29,12 @@ test('founder bucket taglines match the Founder Workspaces Canvas headings', () 
   }
 });
 
-test('founder Validate zones match Pages · Founder Validate (V1–V4)', () => {
+test('founder Validate has no zones: Pages · Founder Validate (V1–V4) is retired (D704)', () => {
+  // The canvas stays in place, retired as D670 retired Signals; each of its four
+  // zones is a Validate module page now, so the bucket keeps its row and prefix.
   const validate = founder.rows.find((r) => r.label === 'Validate');
-  assert.deepEqual(validate.zones.map((z) => [z.slug, archetypeLabel(z)]), [
-    ['interviews', 'COLLECTION'],
-    ['pain-map', 'ANALYTICS'],
-    ['hypotheses', 'WORK BOARD'],
-    ['verdict', 'LEDGER'],
-  ]);
+  assert.equal(validate.prefix, '/validate');
+  assert.deepEqual(validate.zones, []);
 });
 
 test('founder Build zones match Pages · Founder Build (FB1–FB5)', () => {

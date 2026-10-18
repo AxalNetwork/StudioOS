@@ -53,7 +53,7 @@ export async function ensureRevenueEntriesSchema(env: Env): Promise<void> {
       currency          TEXT NOT NULL DEFAULT 'usd',
       revenue_type      TEXT NOT NULL CHECK (revenue_type IN ('recurring', 'pilot', 'one_time', 'deposit')),
       received_on       TEXT NOT NULL,
-      source            TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'csv', 'stripe')),
+      source            TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'csv', 'stripe', 'mercury')),
       source_ref        TEXT,
       verification      TEXT NOT NULL DEFAULT 'manual' CHECK (verification IN ('verified', 'supported', 'manual')),
       proof_document_id INTEGER REFERENCES documents(id),
@@ -68,6 +68,8 @@ export async function ensureRevenueEntriesSchema(env: Env): Promise<void> {
     // Migration 400 (D587): a Stripe charge is on a project's ledger once.
     `CREATE UNIQUE INDEX IF NOT EXISTS uq_revenue_entries_stripe_charge
       ON revenue_entries(project_id, source_ref) WHERE source = 'stripe'`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS uq_revenue_entries_mercury_txn
+      ON revenue_entries(source_ref) WHERE source = 'mercury'`,
   ];
   for (const s of stmts) {
     try { await env.DB.prepare(s).run(); } catch (e) {
@@ -114,6 +116,7 @@ export function normalizeRevenueType(raw: unknown): RevenueType | null {
 /** The verification the Worker assigns. A request cannot choose it. */
 export function verificationFor(row: { source: string; proof_document_id: number | null | undefined }): Verification {
   if (row.source === 'stripe') return 'verified';
+  if (row.source === 'mercury') return 'supported';
   return row.proof_document_id != null ? 'supported' : 'manual';
 }
 
@@ -229,6 +232,8 @@ export function entryDto(r: LedgerRow) {
 export const STRIPE_NO_CUSTOMER = 'Stripe charge';
 
 /** The fields of a synced entry its PATCH may not change (D587). */
+export const MERCURY_LOCKED_FIELDS = ['amount_cents', 'amount', 'received_on'] as const;
+
 export const STRIPE_LOCKED_FIELDS = ['customer', 'amount_cents', 'amount', 'received_on'] as const;
 
 export interface ChargeIn {

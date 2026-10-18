@@ -108,6 +108,7 @@ import fundFees from './routes/fund_fees';
 import fundAdmin from './routes/fund_admin';
 import fundReporting from './routes/fund_reporting';
 import fundBooklets from './routes/fund_booklets';
+import fundNotices from './routes/fund_notices';
 import fundPerformance from './routes/fund_performance';
 import liquidity from './routes/liquidity';
 import email from './routes/email';
@@ -320,6 +321,7 @@ import catalog, { adminCatalog } from './routes/catalog';
 // Task #16 — Admin Stripe management (webhook endpoints + publishable key).
 import adminStripe from './routes/admin_stripe';
 import adminMoneyRails from './routes/admin_money_rails';
+import { adminPartnerSettlements, partnerSettlements } from './routes/partner_settlements';
 import adminBankAccounts from './routes/admin_bank_accounts';
 // PaymentIntent + SetupIntent surface for the Axal-branded embedded card UI.
 import payments from './routes/payments';
@@ -626,6 +628,9 @@ const COOL_OFF_PREFIXES = [
   // D716 — the Subscription Booklet: an applicant's submission and HQ's
   // withdrawal of it. Pause them for a freshly-recovered account.
   '/api/fund-booklets',
+  // D716 — fund notices ask an LP or an entity for money. Pause them for a
+  // freshly-recovered account.
+  '/api/fund-notices',
 ];
 for (const p of COOL_OFF_PREFIXES) {
   app.use(p, recoveryCoolOff);
@@ -916,6 +921,8 @@ app.route('/api/admin/catalog', adminCatalog);
 app.route('/api/admin/stripe', adminStripe);
 // D707 (#1772) — the entities' roles and the money rails. Before the catch-all.
 app.route('/api/admin/money-rails', adminMoneyRails);
+app.route('/api/admin/partner-settlements', adminPartnerSettlements);
+app.route('/api/partner-settlements', partnerSettlements);
 // D708 — each Axal entity's bank accounts, Super Admin only. Before the
 // catch-all /api/admin so /api/admin/bank-accounts/* resolves here.
 app.route('/api/admin/bank-accounts', adminBankAccounts);
@@ -1053,6 +1060,8 @@ app.route('/api/fund-admin', fundAdmin);
 app.route('/api/fund-reporting', fundReporting);
 // D716 — the Subscription Booklet: the applicant's ticks and submit, and HQ's read and withdraw.
 app.route('/api/fund-booklets', fundBooklets);
+// D716 — fund notices: an Admin previews, the Super Admin issues, the LP reads their own.
+app.route('/api/fund-notices', fundNotices);
 app.route('/api/fund-performance', fundPerformance);
 app.route('/api/liquidity', liquidity);
 app.route('/api/email', email);
