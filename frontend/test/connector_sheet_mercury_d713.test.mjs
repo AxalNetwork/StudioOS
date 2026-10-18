@@ -17,10 +17,10 @@ test('Mercury key form requires explicit Read Only confirmation, sends it, and h
     const checkbox=()=>ui.nodes().find(n=>ui.props(n)?.type==='checkbox');
     assert.equal(ui.props(checkbox()).required,true);
     await submit(ui); assert.equal(calls.length,0); assert.match(ui.text(),/Confirm this is a Read Only token/);
-    await ui.click('Advanced'); assert.equal(byId(ui,'connector-webhook'),undefined);
+    // D715 PR 3: Mercury draws no Advanced toggle, so no webhook or settings field at all.
+    assert.doesNotMatch(ui.text(),/Advanced/); assert.equal(byId(ui,'connector-webhook'),undefined); assert.equal(byId(ui,'connector-config'),undefined);
     await act(async()=>{
       ui.props(byId(ui,'connector-key')).onChange({target:{value:'test-placeholder'}});
-      ui.props(byId(ui,'connector-config')).onChange({target:{value:'{"confirm_read_only":false}'}});
       ui.props(checkbox()).onChange({target:{checked:true}});
     });
     await submit(ui);

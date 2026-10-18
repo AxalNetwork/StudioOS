@@ -10,7 +10,7 @@ import { AssistantsSection } from './AssistantsGroup';
 import { ChannelsSection } from './ChannelsGroup';
 import {
   MOVED_SEEN_KEY, YOURS_FILTERS, YOURS_SORTS, cardAction, cardPill, companiesLabel, discoverChips,
-  discoverSections, doesLabel, feedsLabel, lastSyncLabel, matchesQuery, oauthReturn, pageOf, stripReturn, yoursRows,
+  discoverSections, doesLabel, isPersonalMercury, lastSyncLabel, matchesQuery, oauthReturn, pageOf, stripReturn, yoursFeedsLabel, yoursRows,
   SUGGESTED,
 } from './connectorsModel';
 import { ACCOUNT_PHONE_COPY, ACCOUNT_PHONE_PAGES } from './accountPhone';
@@ -76,8 +76,8 @@ export function YoursTable({ rows, onOpen }) {
           </span>
           <span className="hidden text-axal-muted md:block dark:text-gray-400">{p.category || <NR />}</span>
           <span className="hidden text-axal-muted md:block dark:text-gray-400">{doesLabel(p) || <NR reason={NOT_IN_REGISTRY} />}</span>
-          <span className="hidden truncate text-axal-ink md:block dark:text-gray-300">{feedsLabel(p) || <NR reason={NOT_IN_REGISTRY} />}</span>
-          <span className="hidden font-mono text-[12px] text-axal-muted md:block dark:text-gray-400">{p.connection?.first_party ? 'You' : companiesLabel(p.connection) || <NR reason={NO_COMPANIES} />}</span>
+          <span className="hidden truncate text-axal-ink md:block dark:text-gray-300">{yoursFeedsLabel(p) || <NR reason={NOT_IN_REGISTRY} />}</span>
+          <span className="hidden font-mono text-[12px] text-axal-muted md:block dark:text-gray-400">{p.connection?.first_party || isPersonalMercury(p) ? 'You' : companiesLabel(p.connection) || <NR reason={NO_COMPANIES} />}</span>
           <span className="hidden font-mono text-[12px] text-axal-muted md:block dark:text-gray-400">{lastSyncLabel(p.connection)}</span>
           <span className="flex flex-col items-start gap-0.5">
             <Pill tone={status.tone}>{status.label}</Pill>
@@ -275,7 +275,7 @@ export function yoursGroup({ data, rows, paged, setPage = () => {}, onOpen, labe
     key: p.key,
     icon: <BrandIcon provider={p.key} name={p.display_name} />,
     title: p.display_name,
-    description: [status.why, feedsLabel(p), lastSyncLabel(p.connection, now)].filter(Boolean).join(' · '),
+    description: [status.why, yoursFeedsLabel(p), lastSyncLabel(p.connection, now)].filter(Boolean).join(' · '),
     pill: { label: status.label, tone: status.tone },
     onClick: () => onOpen(p),
     testid: `connector-row-${p.key}`,

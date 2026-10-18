@@ -8,8 +8,8 @@ import { BTN, INPUT, LoadingRows } from './AccountCenter';
 import { Banner, Group, Row, Sheet } from './ConnectorSheet';
 import { agoLabel } from './connectorsModel';
 import {
-  ADMIN_ONLY, BRANCH_MANAGED, DISCONNECT_REASON_MIN, ENTITY_AUDIT_FOOT, ENTITY_DISCONNECT_NOTE, ENTITY_FEEDS, OPEN_BANKING, TOKEN_HELP,
-  confirmReadOnlyLabel, entityRows, retryAfterSentence,
+  ADMIN_ONLY, BRANCH_MANAGED, DISCONNECT_REASON_MIN, ENTITY_AUDIT_FOOT, ENTITY_DISCONNECT_NOTE, ENTITY_FEEDS, MEMBER_GROUPS, NEVER_ROWS, OPEN_BANKING,
+  READS_ROW, TOKEN_HELP, confirmReadOnlyLabel, entityRows, landsWords, retryAfterSentence,
 } from './mercuryModel';
 
 /**
@@ -237,5 +237,52 @@ export function MercuryEntityPanel({ p, onClose, eyebrow }) {
   return (
     <MercuryEntitySheet p={p} superAdmin={isSuperAdminUser(user)} branch={branchOfUser(user)} api={adminMercuryApi}
       onClose={onClose} eyebrow={eyebrow} />
+  );
+}
+
+// ── A member's own Mercury (D715 PR 3, decision 8) ────────────────────────────
+//
+// `ConnectorPanel` draws these for the personal row (`isPersonalMercury`) in
+// its `pre`, `pro` and `detail` views, in place of what a syncing connector
+// shows: what it pulls in and sends out, the companies it serves, and Sync.
+// No canvas covers them yet; they use the sheet's own `Group` and `Row`.
+
+/**
+ * Why the uses group reads "Not recorded" until #1778's PR B: the uses a
+ * profile allows come from `GET /api/mercury/personal/status`, whose keys
+ * `routes/mercury_personal.ts` names. They are never guessed (S1, #1780).
+ */
+export const USES_NOT_READ = 'StudioOS does not yet read which uses your profile allows, so none is listed here.';
+
+/** "What StudioOS uses it for" and "What it never does". The never rows are fixed; the uses wait on PR B. */
+export function MercuryUsesGroups() {
+  return (
+    <>
+      <Group label={MEMBER_GROUPS.uses}>
+        <Row a={<Unrecorded reason={USES_NOT_READ}>Not recorded</Unrecorded>} />
+      </Group>
+      <Group label={MEMBER_GROUPS.never}>
+        {NEVER_ROWS.map((t) => <Row key={t} a={t} />)}
+      </Group>
+    </>
+  );
+}
+
+/** "Where it lands", in the viewer's role's words; in place of the company ticks, which gate nothing for Mercury. */
+export function MercuryLandsGroup({ role }) {
+  const words = landsWords(role);
+  return (
+    <Group label={MEMBER_GROUPS.lands}>
+      <Row a={words || <Unrecorded reason="Your profile has no Mercury of its own.">Not recorded</Unrecorded>} />
+    </Group>
+  );
+}
+
+/** "How it reads", in place of the Sync group: a member's Mercury never syncs, so there is no Sync now. */
+export function MercuryReadsGroup() {
+  return (
+    <Group label={MEMBER_GROUPS.reads}>
+      <Row a={READS_ROW} />
+    </Group>
   );
 }

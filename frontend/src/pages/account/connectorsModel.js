@@ -16,7 +16,21 @@
  * A field none of them carries still says "Not recorded".
  */
 
+import {
+  MEMBER_DISCONNECT_NOTE, PERSONAL_DOES, PERSONAL_FEEDS_FALLBACK, PERSONAL_LAST_SYNC, personalAttention, personalToolBanner,
+} from './mercuryModel.js';
+
 export const PAGE_SIZE = 10;
+
+/**
+ * D715 (#1780) decision 9: a member's own Mercury, the `mercury` row the
+ * Worker serves a founder or a partner (`connection_source: 'integrations'`).
+ * It reads only when asked and never syncs, so its words differ from every
+ * other connector's. The connection-only rules test `provider_key`, because
+ * the entity row never carries a member's connection.
+ */
+export const isPersonalMercury = (p) => p?.key === 'mercury' && !isEntityRow(p);
+const isMercuryConn = (conn) => conn?.provider_key === 'mercury';
 
 export const CATEGORY_ORDER = ['CRM', 'Payments', 'Accounting and banking', 'Calendar', 'Calendar and workspace', 'Messaging', 'Signing', 'Cap table', 'Data', 'Code', 'Design', 'Docs'];
 
@@ -165,6 +179,8 @@ export function buildCatalogue({ providers = [], items = [], waitlist = [], firs
 export function attentionReason(conn) {
   if (!conn) return '';
   const e = String(conn.last_error || '');
+  // Decision 9: a member's Mercury says what is wrong with its token, never "sync".
+  if (isMercuryConn(conn)) return e || (conn.status && conn.status !== 'active' && conn.status !== 'paused') ? personalAttention(e) : '';
   if (e.startsWith('rate_limited')) return 'Daily limit reached';
   if (/expired|invalid_grant|unauthori[sz]ed|\b401\b|revoked/i.test(e)) return 'Sign-in expired';
   if (e) return 'Last sync failed';
@@ -188,6 +204,7 @@ export function connectionStatus(conn, p, { syncing = false } = {}) {
 
 /** "Pulls in", "Sends out" or "Both", from the registry's `pulls` and `sends`; null when it carries neither. */
 export function doesLabel(p) {
+  if (isPersonalMercury(p)) return PERSONAL_DOES;
   if (!Array.isArray(p?.pulls) && !Array.isArray(p?.sends)) return null;
   const pulls = (p.pulls || []).length > 0;
   const sends = (p.sends || []).length > 0;
@@ -214,6 +231,11 @@ export function feedsLabel(p) {
   }
   if (!Array.isArray(p?.feeds) || !p.feeds.length) return null;
   return p.feeds.map((f) => (typeof f === 'string' ? humanKey(f) : f?.label || humanKey(f?.key))).filter(Boolean).join(', ') || null;
+}
+
+/** Yours' Feeds: the Worker's feeds; for a member's Mercury that names none, "Your own payments" (decision 9). */
+export function yoursFeedsLabel(p) {
+  return feedsLabel(p) || (isPersonalMercury(p) ? PERSONAL_FEEDS_FALLBACK : null);
 }
 
 /** One module a connector fills, named as the Worker names it (`feed_modules`), else its key made readable. */
@@ -253,8 +275,9 @@ export function agoLabel(iso, now = Date.now()) {
   return d === 1 ? '1 day ago' : `${d} days ago`;
 }
 
-/** A connection's last sync; "Not recorded · never ran" when it has none. */
+/** A connection's last sync; "Not recorded · never ran" when it has none. A member's Mercury never syncs: "Read on request". */
 export function lastSyncLabel(conn, now = Date.now()) {
+  if (isMercuryConn(conn)) return PERSONAL_LAST_SYNC;
   return agoLabel(conn?.last_synced_at, now) || 'Not recorded · never ran';
 }
 
@@ -615,6 +638,7 @@ export function flowBanner(view, name, { reason = '', banner = '' } = {}) {
 
 /** What a disconnect does, said before the click. */
 export function disconnectNote(p) {
+  if (isPersonalMercury(p)) return MEMBER_DISCONNECT_NOTE;
   if (p?.first_party) {
     if (p.key === 'google') return 'Calendar and Gmail access stop, and "Continue with Google" sign-in is unlinked. Events already in StudioOS stay.';
     if (p.key === 'linkedin') return 'Contacts you already imported stay in Refer & Earn.';
@@ -722,6 +746,10 @@ export function toolRow(p) {
     return { state: 'locked', pill: [tier || 'Paid plan', 'info'], detail: feeds ? `Feeds ${feeds}` : (p.capabilities || []).slice(0, 2).join(', '),
       action: 'upgrade', actionLabel: tier ? `Upgrade to ${tier}` : 'See plans' };
   }
+  // Decision 9: a member's Mercury has no sync to try again; its fix is a new token.
+  if (s === 'failing' && isPersonalMercury(p)) {
+    return { state: s, pill: ['Failing', 'danger'], detail: attentionReason(p.connection), action: 'reconnect', actionLabel: 'Reconnect' };
+  }
   if (s === 'failing') {
     const why = attentionReason(p.connection);
     const action = why === 'Sign-in expired' ? 'reconnect' : why === 'Last sync failed' ? 'retry' : null;
@@ -729,7 +757,7 @@ export function toolRow(p) {
       action, actionLabel: action === 'reconnect' ? 'Reconnect' : action === 'retry' ? 'Try again' : null };
   }
   if (s === 'connected') {
-    const synced = p.connection.last_synced_at ? ` · synced ${lastSyncLabel(p.connection)}` : ' · last sync not recorded';
+    const synced = isPersonalMercury(p) ? ` · ${PERSONAL_LAST_SYNC.toLowerCase()}` : p.connection.last_synced_at ? ` · synced ${lastSyncLabel(p.connection)}` : ' · last sync not recorded';
     return { state: s, pill: ['Connected', 'ok'], detail: `${feeds ? `Feeds ${feeds}` : (p.capabilities || []).slice(0, 2).join(', ')}${synced}`, action: 'disconnect', actionLabel: 'Disconnect' };
   }
   if (s === 'soon') return { state: s, pill: ['Coming soon', 'neutral'], detail: feeds ? `Will feed ${feeds}` : 'What it will feed is not recorded', action: null, actionLabel: null };
@@ -772,6 +800,9 @@ export const FREE_KEEPS_CONNECTORS = 'Free keeps every connector you already hav
 /** The banner above Build's list: a failing tool first, then a locked one; null when neither. */
 export function toolBanner(catalogue, { timeZone } = {}) {
   const failing = (catalogue || []).find((p) => toolState(p) === 'failing');
+  if (failing && isPersonalMercury(failing)) {
+    return { tone: 'danger', view: 'failed', key: failing.key, text: personalToolBanner(failing.connection.last_error) };
+  }
   if (failing) {
     // "<Name> sync failed at <D Mon> · <HH:MM>. <feeds> shows the last good data." (D686 §5.4);
     // without the Worker's failure time, the last good sync is the sentence.
