@@ -40,6 +40,8 @@ const ADD_KEYS = {
   },
   validate: {
     'problem-discovery': ['theme'], 'ideal-customer-profile': ['segment'], 'market-intelligence': ['competitor'], 'demand-signals': ['signal'], experiments: ['hypothesis'],
+    // D693 (#1704): Record a decision, Verdict's one Add.
+    verdict: ['decision'],
   },
 };
 const EDIT_KEYS = {
@@ -66,6 +68,8 @@ const CTA_APART = {
   'raise/pitch-deck': ['New link', 'Create link'], 'raise/use-of-funds': ['Edit split', 'Save split'],
   'grow/revenue-and-traction': ['Enter a KPI', 'Save KPI'], 'grow/team-expansion': ['Open a role', 'Open role'],
   'build/operating-systems': ['Connect a system', 'Continue to sign-in'],
+  // CO:335's CTA is "Record", its button CO:342's "Record a decision".
+  'validate/verdict': ['Record a decision', 'Record'],
 };
 /** An Edit that is its module's Add (Use of funds), which keeps the Add's key and CTA. */
 const editIsAdd = (m, cycle, slug) => m.formsFor(cycle, slug).some((f) => f.key === m.editFor(cycle, slug)?.key && f.title === m.editFor(cycle, slug)?.title);

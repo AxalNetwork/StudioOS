@@ -33,6 +33,7 @@ import { evidenceFor, verdictFor, laneFor, VALIDATION_BAR } from '../routes/_fou
 import { loadVerdictHistory, recordVerdictChanges, observationAt, changedWithin, parseObserved, RECENTLY_MOVED_DAYS } from './verdictHistory';
 import { seedSegmentFromIcp, WAITLIST_TARGET_KEY } from './validateWriters';
 import { claimFills } from './fills/provenance';
+import { verdictCard, decisionRecords, DECISION_COLUMNS, DECISION_FILTERS, DECISION_SORTS } from './verdict';
 
 export const CYCLE = 'validate';
 export const QUESTION = 'Is this worth building?';
@@ -46,6 +47,8 @@ export const MODULES = [
   { slug: 'market-intelligence', name: 'Market intelligence', records_title: 'Competitors tracked' },
   { slug: 'demand-signals', name: 'Demand and urgency signals', records_title: 'Signals' },
   { slug: 'experiments', name: 'Experiments and evidence', records_title: 'Hypotheses' },
+  // D693 (#1704): Verdict is Validate's seventh module (board MV7).
+  { slug: 'verdict', name: 'Verdict', records_title: 'Decisions' },
 ] as const;
 export type ModuleSlug = (typeof MODULES)[number]['slug'];
 
@@ -933,10 +936,16 @@ export async function experimentsCard(ctx: Ctx): Promise<Card> {
   });
 }
 
-export async function cards(ctx: Ctx): Promise<Card[]> {
+/**
+ * The overview's cards, in `MODULES` order. The Verdict card is appended only
+ * when the viewer may read decisions (D693 decision 7: a partner gets no
+ * Verdict card), so a caller that does not say gets the six.
+ */
+export async function cards(ctx: Ctx, { decisions = false }: { decisions?: boolean } = {}): Promise<Card[]> {
   return Promise.all([
     problemDiscoveryCard(ctx), customerResearchCard(ctx), icpCard(ctx),
     marketCard(ctx), demandCard(ctx), experimentsCard(ctx),
+    ...(decisions ? [verdictCard(ctx)] : []),
   ]);
 }
 
@@ -947,6 +956,7 @@ export const CARD_FOR: Record<ModuleSlug, (ctx: Ctx) => Promise<Card>> = {
   'market-intelligence': marketCard,
   'demand-signals': demandCard,
   experiments: experimentsCard,
+  verdict: verdictCard,
 };
 
 // ---------------------------------------------------------------------------
@@ -1066,6 +1076,20 @@ export const LISTS: Record<ModuleSlug, { cols: string[]; filters: FilterSpec[]; 
       { key: 'history', label: 'History', options: [opt('last_week', 'As of last week'), opt('this_month', 'Changed this month')] },
     ],
     sorts: [{ key: 'updated', label: 'Updated' }, { key: 'status', label: 'Status' }, { key: 'code', label: 'Code' }],
+  },
+  // D693 (#1704): the Decisions table (CO:610). For's hypotheses are the
+  // venture's own, added on read by `decisionRecords`. A getter: `verdict.ts`
+  // reaches this module through `cycleActivity.ts`, so its constants may not
+  // exist yet while this one loads.
+  get verdict() {
+    return {
+      cols: DECISION_COLUMNS,
+      filters: [
+        { key: 'decision', label: 'Decision', options: DECISION_FILTERS.map((k) => opt(k, `${k[0].toUpperCase()}${k.slice(1)}`)) },
+        { key: 'for', label: 'For', options: [opt('venture', 'The venture')] },
+      ],
+      sorts: DECISION_SORTS,
+    };
   },
 };
 
@@ -1479,4 +1503,5 @@ export const RECORDS_FOR: Record<ModuleSlug, (ctx: Ctx, rq: RecordQuery) => Prom
   'market-intelligence': marketRecords,
   'demand-signals': demandRecords,
   experiments: experimentRecords,
+  verdict: decisionRecords,
 };
