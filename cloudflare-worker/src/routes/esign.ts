@@ -50,6 +50,7 @@ import { paperModel, paperHtml, paperSha256, type PaperRecipient } from '../serv
 import { renderLegalPdf } from '../services/legalPaperRender';
 import { readPaperChoice, PAPER_CHOICE_MESSAGES } from '../services/legalPaperCss';
 import { fileRowStatement, newFileUid } from '../services/legalDocumentFiles';
+import { templateFormatFor, renderFormat, type TemplateFormat } from '../services/templateFormat';
 import { PDFDocument } from 'pdf-lib';
 import { bindingKey } from '../util/schemaBootstrap';
 import { clientIp } from '../util/clientIp';
@@ -134,6 +135,11 @@ async function ensureSchema(env: Env): Promise<void> {
     `ALTER TABLE esign_envelopes ADD COLUMN page_size TEXT NOT NULL DEFAULT 'letter'`,
     `ALTER TABLE esign_envelopes ADD COLUMN cover TEXT NOT NULL DEFAULT 'dark'`,
     `ALTER TABLE esign_envelopes ADD COLUMN template_version INTEGER`,
+    // D717 (#1782), as migration 479: the kind and Axal party the send
+    // printed. Every later copy of the envelope reads these, never the
+    // template's; NULL renders from the slug, as before.
+    `ALTER TABLE esign_envelopes ADD COLUMN doc_kind TEXT CHECK (doc_kind IS NULL OR doc_kind IN ('agreement','corporate','resolution','unilateral','policy','notice','booklet'))`,
+    `ALTER TABLE esign_envelopes ADD COLUMN axal_party TEXT CHECK (axal_party IS NULL OR axal_party IN ('management','holdings','gp','fund','none'))`,
     `CREATE INDEX IF NOT EXISTS idx_esign_provider          ON esign_envelopes(provider)`,
     `CREATE INDEX IF NOT EXISTS idx_esign_docusign_envelope ON esign_envelopes(docusign_envelope_id)`,
     `CREATE INDEX IF NOT EXISTS idx_esign_docusign_account  ON esign_envelopes(docusign_account_id)`,
@@ -368,6 +374,13 @@ export async function createAndSendEnvelope(
     cover?: 'dark' | 'light';
     /** D711 — the template version sent, when the sender knows it (decision 8). */
     templateVersion?: number | null;
+    /**
+     * D717 (#1782) — the kind and Axal party this send prints, recorded on
+     * the envelope so every later copy reads them, never the template's. The
+     * contract send passes its publication's; any other caller omits it and
+     * gets the active row's (`templateFormatFor`), stored or from the slug.
+     */
+    format?: TemplateFormat;
   }
 ): Promise<{ envelope_id: number; envelope_uuid: string; signing_url: string; email_sent: boolean; provider?: string; already_pending?: boolean } | null> {
   await ensureSchema(env);
@@ -551,15 +564,16 @@ export async function createAndSendEnvelope(
            AND NOT EXISTS (SELECT 1 FROM esign_recipients rr WHERE rr.envelope_id = x.id))
     )`;
   const sameSendBinds = [opts.documentType, opts.adminUserId, recipientKey, dealKey, opts.recipientEmail];
+  const format = opts.format ?? await templateFormatFor(env, opts.documentType);
   const insertEnvelope = env.DB.prepare(
     `INSERT INTO esign_envelopes (envelope_uuid, user_id, deal_id, document_type, document_title, document_body, body_sha256, status, created_by, audit_log,
-                                  page_size, cover, template_version)
-     SELECT ?, ?, ?, ?, ?, ?, ?, 'sent', ?, '[]', ?, ?, ?
+                                  page_size, cover, template_version, doc_kind, axal_party)
+     SELECT ?, ?, ?, ?, ?, ?, ?, 'sent', ?, '[]', ?, ?, ?, ?, ?
       WHERE NOT EXISTS (SELECT 1 FROM esign_envelopes x WHERE ${SAME_PENDING_SEND})
      RETURNING id`
   ).bind(
     envelopeUuid, opts.recipientUserId, opts.dealId || null, opts.documentType, tpl.title, tpl.body, bodySha, opts.adminUserId,
-    pageSize, cover, templateVersion,
+    pageSize, cover, templateVersion, format.kind, format.party,
     ...sameSendBinds,
   );
   // The in-house signing token is minted before the insert so its recipients
@@ -630,6 +644,7 @@ export async function createAndSendEnvelope(
           documentTitle: tpl.title,
           documentBody: tpl.body,
           documentType: opts.documentType,
+          ...renderFormat(format),
           templateVersion,
           envelopeUuid,
           pageSize,
@@ -1242,7 +1257,7 @@ esign.get('/sign/:token/paper', async (c) => {
   if (!token || token.length < 32) return c.json({ error: 'Invalid token' }, 400);
   const rec: any = await c.env.DB.prepare(
     `SELECT r.id, r.envelope_id, r.token_expires_at, e.envelope_uuid, e.document_type, e.document_title, e.document_body,
-            e.status AS envelope_status, e.body_sha256, e.page_size, e.cover, e.template_version
+            e.status AS envelope_status, e.body_sha256, e.page_size, e.cover, e.template_version, e.doc_kind, e.axal_party
        FROM esign_recipients r JOIN esign_envelopes e ON e.id = r.envelope_id
       WHERE r.signing_token = ?`
   ).bind(token).first();
@@ -1257,6 +1272,8 @@ esign.get('/sign/:token/paper', async (c) => {
     body: rec.document_body,
     slug: rec.document_type,
     version: rec.template_version ?? null,
+    // D717: the pair the send recorded, as the signed copy prints it.
+    ...renderFormat({ doc_kind: rec.doc_kind, axal_party: rec.axal_party }),
     bodySha256: rec.body_sha256,
     envelopeUuid: rec.envelope_uuid,
     state: { kind: 'issued' },
@@ -1288,7 +1305,7 @@ esign.post('/sign/:token', async (c) => {
 
   const rec: any = await c.env.DB.prepare(
     `SELECT r.*, e.envelope_uuid, e.document_type, e.document_title, e.document_body, e.body_sha256, e.user_id AS envelope_user_id,
-            e.status AS envelope_status, e.page_size, e.cover, e.template_version
+            e.status AS envelope_status, e.page_size, e.cover, e.template_version, e.doc_kind, e.axal_party
        FROM esign_recipients r JOIN esign_envelopes e ON e.id = r.envelope_id
       WHERE r.signing_token = ?`
   ).bind(token).first();
@@ -1388,6 +1405,8 @@ esign.post('/sign/:token', async (c) => {
       body: rec.document_body,
       slug: rec.document_type,
       version: rec.template_version ?? null,
+      // D717: the pair the send recorded; NULL columns render as before.
+      ...renderFormat({ doc_kind: rec.doc_kind, axal_party: rec.axal_party }),
       bodySha256: rec.body_sha256,
       envelopeUuid: rec.envelope_uuid,
       effectiveDate: signedAt.slice(0, 10),
