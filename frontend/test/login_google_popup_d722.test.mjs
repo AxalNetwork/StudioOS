@@ -97,7 +97,7 @@ test('Google’s script is loaded from one URL, never at import or in render, an
   const effect = LOGIN.slice(LOGIN.indexOf('useEffect(() => {\n    mountedRef.current = true;'));
   assert.match(effect.slice(0, 200), /whenIdle\(\(\) => askGoogleConfig\(\)\)/);
   const html = read('frontend/index.html');
-  assert.ok(!hostsIn(html).includes('accounts.google.com'), 'index.html loads Google’s script on every page');
+  assert.ok(!hostsIn(html).some((host) => host === 'accounts.google.com'), 'index.html loads Google’s script on every page');
 });
 
 test('the button is primed on hover, focus and touch', () => {
