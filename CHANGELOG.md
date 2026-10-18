@@ -4,6 +4,20 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## WhatsApp Business and Telegram Business get their own pages (D753 C1, #1958)
+
+- Worker: `CHANNEL_PAGES` in `connectorPages.ts` describes both channels, with
+  their words from D754 §11 and D756 §1.11, their tools read off
+  `services/channels/` and the new sign-in kind `channel`. `pageDescriptor`,
+  `connectorPagePath` and `channelPage(key)` answer `whatsapp` and `telegram`.
+  `connector_pages_d753.test.ts` holds their tools to the code too. No route,
+  migration or API method changes.
+- Frontend: `/account/connectors/whatsapp` and `/account/connectors/telegram`
+  (`ChannelPage.jsx`, `channelPageModel.js`) draw the connector page frame
+  from `GET /api/channels`, with today's card in "Connect and manage". On the
+  hub, the Customer conversations cards' titles link to the pages. An
+  interview's cards are unchanged.
+
 ## Every connector has its own page (D753 F1, #1876)
 
 - `/account/connectors/:key` (`ConnectorPage.jsx`, `connectorPageModel.js`)

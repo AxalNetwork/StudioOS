@@ -387,7 +387,7 @@ test('11. CATEGORY_ORDER holds every category once, with the Connectors page\'s 
   assert.deepEqual(CATEGORY_ORDER.slice(0, list.length), list);
 });
 
-test('12. pageDescriptor picks Mercury\'s variant by viewer, and works in either import order', () => {
+test('12. pageDescriptor picks Mercury\'s variant by viewer, and works in either import order', async () => {
   const mercury = getDescriptor('mercury')!;
   const v = (role: string, hq: boolean) => ({ role, hq });
   assert.equal(pageDescriptor(mercury, v('admin', true))!.tagline, (CONNECTOR_PAGES.mercury as any).entity.tagline);
@@ -411,6 +411,17 @@ test('12. pageDescriptor picks Mercury\'s variant by viewer, and works in either
     assert.deepEqual(pageDescriptor({ key }), d, key);
   }
   for (const bad of ['github', 'linkedin', 'signal', '', 'hasOwnProperty']) assert.equal(channelPage(bad), null, bad);
+  // The channel page draws these words itself until #1878 serves them: held equal here.
+  const front = await import('../../frontend/src/pages/account/channelPageModel.js');
+  assert.deepEqual([...front.CHANNEL_PAGE_KEYS].sort(), [...CHANNELS].sort());
+  for (const key of CHANNELS) {
+    const page = (CHANNEL_PAGES as any)[key];
+    const text = front.CHANNEL_PAGE_TEXT[key];
+    assert.equal(text.tagline, page.tagline, `${key}: the frontend tagline`);
+    assert.deepEqual([...text.about], page.long_description, `${key}: the frontend About`);
+    assert.equal(text.signIn, page.sign_in.label, `${key}: the frontend sign-in`);
+    assert.equal(text.docs, page.links.developer_docs, `${key}: the frontend documentation link`);
+  }
 
   // The other order: connectorPages first, in a fresh process.
   const root = fileURLToPath(new URL('../../', import.meta.url));
