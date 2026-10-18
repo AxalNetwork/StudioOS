@@ -1,8 +1,8 @@
 /**
- * D655 (#1467) — the GitHub connector and "now fed by" counts.
+ * D655 follow-up (#1883) — GitHub token renewal and grant revocation.
  *
  * Run with:
- *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/github_connector_d655.test.ts
+ *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/github_token_refresh_d655.test.ts
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -11,8 +11,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import integrations from '../src/routes/integrations.ts';
-import { getDescriptor, getProviderImpl, publicDescriptor } from '../src/integrations/registry.ts';
-import { hasScopeOverreach } from '../src/integrations/connectorRules.ts';
+import { getProviderImpl } from '../src/integrations/registry.ts';
 import { accessToken, GITHUB_SIGN_IN_EXPIRED } from '../src/integrations/providers/github.ts';
 import { encryptCredentials, decryptCredentials } from '../src/integrations/secrets.ts';
 
