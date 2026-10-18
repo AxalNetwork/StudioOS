@@ -28,6 +28,7 @@ test('477 preserves every preexisting value, existing indexes, Stripe reimport d
   const {db,env}=fixture(false);
   for(const [i,source] of ['manual','csv','stripe'].entries()) entry(db,source,i+10);
   const before=db.prepare('SELECT * FROM revenue_entries ORDER BY id').all();
+  db.exec('PRAGMA foreign_keys = ON');
   db.exec(mig('477_mercury_personal.sql'));
   assert.deepEqual(db.prepare('SELECT * FROM revenue_entries ORDER BY id').all(),before);
   const indexes=db.prepare("PRAGMA index_list('revenue_entries')").all().map((r:any)=>r.name);

@@ -34,6 +34,16 @@ test('own and admin payout GETs expose the same minimal evidence without changin
   assert.equal(admin.status,200,JSON.stringify(admin)); assert.equal(admin.body.length,2);
   assert.deepEqual(admin.body.find((p:any)=>p.id===1).bank_match,own.body[0].bank_match);
   assert.equal(admin.body.find((p:any)=>p.id===2).bank_match,null);
+  const insert = db.prepare("INSERT INTO payouts(user_id,amount_cents,currency,status,payout_method) VALUES(20,5000,'USD','requested','wire')");
+  for (let i=0;i<200;i++) insert.run();
+  let evidenceReads=0;
+  const prepare=env.DB.prepare.bind(env.DB);
+  env.DB.prepare=(sql:string)=>{if(sql.includes('mercury_personal_matches')) evidenceReads++;return prepare(sql);};
+  const page=await call(network,env,'/payouts/me',20);
+  assert.equal(page.status,200); assert.equal(page.body.length,201);
+  assert.equal(evidenceReads,3,'evidence reads are chunked, not one per payout');
+  assert.deepEqual(page.body.find((p:any)=>p.id===1).bank_match,own.body[0].bank_match);
+
 });
 test('only confirmed matches read; unique transaction and target indexes release on withdrawal',async()=>{
   const {db,env}=fixture(); match(db,'payout',1);
