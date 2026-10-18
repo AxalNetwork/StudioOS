@@ -18,6 +18,10 @@
  * step-up modal for nothing. `super_admin_required` comes first and writes
  * nothing. Once #1779's `assertAdminAct` and its row for these acts are on
  * `main`, `requireMercuryCredentialWriter` calls it instead.
+ *
+ * D752 (#1890): the admin read of an investor's shared proof of funds
+ * (`routes/admin_capital_attestations.ts`) uses `requireMercuryReader` and
+ * `auditRead` (`capital_attestations_read`), and reads no Mercury.
  */
 import type { Context } from 'hono';
 import type { Env, User } from '../../types';
@@ -27,7 +31,7 @@ import { ensureAdminAuditLogTable } from '../../routes/admin';
 
 type C = Context<{ Bindings: Env }>;
 
-export const READ_AUDIT_ACTIONS = ['mercury_connections_read', 'mercury_accounts_read', 'mercury_transactions_read', 'mercury_matches_read'] as const;
+export const READ_AUDIT_ACTIONS = ['mercury_connections_read', 'mercury_accounts_read', 'mercury_transactions_read', 'mercury_matches_read', 'capital_attestations_read'] as const;
 export type ReadAuditAction = typeof READ_AUDIT_ACTIONS[number];
 
 async function supportSession(c: C): Promise<boolean> {

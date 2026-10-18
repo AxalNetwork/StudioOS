@@ -309,6 +309,7 @@ import adminBestFit from './routes/admin_bestfit';
 // Task #9 — Admin review queue for 'exploring' users (binding e-sign + role assignment).
 import adminExploring from './routes/admin_exploring';
 import adminLpApplications from './routes/admin_lp_applications';
+import adminCapitalAttestations from './routes/admin_capital_attestations';
 import bestFitSelf from './routes/best_fit';
 // T3 — Reserve allocation + waterfall simulator (Task #46 port).
 import fundSimulatorRoutes from './routes/fund_simulator';
@@ -958,6 +959,8 @@ app.route('/api/admin/best-fit', adminBestFit);
 app.route('/api/admin/exploring', adminExploring);
 // GP review queue for Spin-Out Fund I LP applications. requireAdmin per-route.
 app.route('/api/admin/lp-applications', adminLpApplications);
+// D752 — admins on HQ read an investor's shared proof of funds; audited before it answers. Before the catch-all.
+app.route('/api/admin/capital-attestations', adminCapitalAttestations);
 // Wave 4 — territory licence ledger. Mount BEFORE the catch-all /api/admin so
 // /api/admin/licences/* resolves here, not in the generic admin router.
 // D110 — the Deploy step and the Platform Deployments zone. Mounted at

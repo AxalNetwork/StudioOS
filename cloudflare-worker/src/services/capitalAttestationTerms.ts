@@ -105,3 +105,116 @@ export function ownerDto(row: AttestationRow, today: string) {
     statement: statementSentence(row),
   };
 }
+
+// ─────────────────────────────────────────────────────────── D752 §4 (#1890): what Axal's admins read
+
+/** The most statements one admin read returns, and the most other active statements beside each. */
+export const ADMIN_READ_LIMIT = 500;
+export const OTHER_ACTIVE_MAX = 10;
+
+/** Today in UTC, `YYYY-MM-DD`. */
+export const todayUtc = (now: Date = new Date()): string => now.toISOString().slice(0, 10);
+
+/** The label from the purpose and ids alone; the screen around it already names the deal, applicant or LP. */
+export function adminTargetLabel(purpose: AttestationPurpose, dealId: number | null): string {
+  if (purpose === 'deal_commitment') return `Commitment on deal #${dealId ?? '?'}`;
+  if (purpose === 'lp_application') return 'Fund I application';
+  return 'Fund I commitment';
+}
+
+export const REVOKED_SENTENCE = (date: string): string => `Revoked by the investor on ${date}.`;
+
+export interface AdminAttestationRow {
+  id: number;
+  uid: string;
+  user_id: number;
+  purpose: AttestationPurpose;
+  target_id: number;
+  deal_id: number | null;
+  fund_id: number | null;
+  amount_floor_cents: number;
+  as_of: string;
+  expires_on: string;
+  holder_name: string;
+  accounts_counted: number;
+  consented_at: string;
+  state: AttestationState;
+  revoked_at: string | null;
+  investor_name: string | null;
+}
+
+/**
+ * One statement per (investor, purpose, target): the active one, else the
+ * newest revoked one. A superseded statement is never kept.
+ */
+export function currentPerTarget<T extends Pick<AdminAttestationRow, 'id' | 'user_id' | 'purpose' | 'target_id' | 'state' | 'revoked_at'>>(rows: T[]): T[] {
+  const by = new Map<string, T>();
+  for (const r of rows) {
+    if (r.state === 'superseded') continue;
+    const k = `${r.user_id}:${r.purpose}:${r.target_id}`;
+    const have = by.get(k);
+    if (!have) { by.set(k, r); continue; }
+    if (have.state === 'active') continue;
+    if (r.state === 'active') { by.set(k, r); continue; }
+    const newer = String(r.revoked_at ?? '') > String(have.revoked_at ?? '')
+      || (String(r.revoked_at ?? '') === String(have.revoked_at ?? '') && Number(r.id) > Number(have.id));
+    if (newer) by.set(k, r);
+  }
+  return [...by.values()];
+}
+
+export type ProofState = 'active' | 'expired' | 'revoked' | 'none';
+
+/** One application's state for the queue: no amount, no holder, no date. */
+export function proofState(rows: Array<Pick<AdminAttestationRow, 'state' | 'expires_on'>>, today: string): ProofState {
+  const active = rows.find((r) => r.state === 'active');
+  if (active) return isExpired(active.expires_on, today) ? 'expired' : 'active';
+  return rows.some((r) => r.state === 'revoked') ? 'revoked' : 'none';
+}
+
+export type OtherActive = Pick<AdminAttestationRow, 'uid' | 'purpose' | 'deal_id' | 'amount_floor_cents' | 'as_of' | 'expires_on'>;
+
+/**
+ * What an admin reads about one statement, built field by field. A revoked
+ * statement carries its date and nothing it once said: no amount, holder,
+ * date read, account count or other statements.
+ */
+export function adminDto(row: AdminAttestationRow, today: string, others: OtherActive[] = []) {
+  const base = {
+    uid: row.uid,
+    purpose: row.purpose,
+    target_id: Number(row.target_id),
+    deal_id: row.deal_id == null ? null : Number(row.deal_id),
+    fund_id: row.fund_id == null ? null : Number(row.fund_id),
+    investor_user_id: Number(row.user_id),
+    investor_name: row.investor_name ?? null,
+    target_label: adminTargetLabel(row.purpose, row.deal_id == null ? null : Number(row.deal_id)),
+  };
+  if (row.state === 'revoked') {
+    const on = String(row.revoked_at ?? '').slice(0, 10);
+    return { ...base, state: 'revoked' as const, label: 'Revoked' as const, revoked_on: on, statement: REVOKED_SENTENCE(on) };
+  }
+  const expired = isExpired(row.expires_on, today);
+  const sorted = [...others].sort((a, b) => String(b.as_of).localeCompare(String(a.as_of)));
+  return {
+    ...base,
+    state: 'active' as const,
+    label: expired ? 'Expired' as const : 'Active' as const,
+    expired,
+    amount_floor_cents: Number(row.amount_floor_cents),
+    as_of: row.as_of,
+    expires_on: row.expires_on,
+    holder_name: row.holder_name,
+    accounts_counted: Number(row.accounts_counted),
+    shared_on: String(row.consented_at).slice(0, 10),
+    statement: statementSentence(row),
+    other_active: sorted.slice(0, OTHER_ACTIVE_MAX).map((o) => ({
+      purpose: o.purpose,
+      target_label: adminTargetLabel(o.purpose, o.deal_id == null ? null : Number(o.deal_id)),
+      amount_floor_cents: Number(o.amount_floor_cents),
+      as_of: o.as_of,
+      expired: isExpired(o.expires_on, today),
+    })),
+    other_active_count: others.length,
+  };
+}
