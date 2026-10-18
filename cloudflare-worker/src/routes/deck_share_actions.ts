@@ -14,7 +14,8 @@ import { createJWT, setAuthCookies, generateCsrfToken, requireAuth } from '../au
 import { hashEmail } from '../util/hashEmail';
 import { verifyTurnstile } from '../services/turnstile';
 import { ipPrefix } from '../services/securityEvents';
-import { renderLegalTemplate, templateKeyForDocType } from '../services/legalTemplates';
+import { applyMergeFields, mergeTokensIn } from '../services/mergeFields';
+import { refuse } from '../util/refusal';
 import { bindingKey } from '../util/schemaBootstrap';
 
 const deckShareActions = new Hono<{ Bindings: Env }>();
@@ -179,7 +180,7 @@ deckShareActions.get('/share/:token/context', async (c) => {
     project_id: ctx.project_id,
     project_name: ctx.project_name,
     deck_title: ctx.deck_title,
-    nda_template_key: 'investor_nda_v1',
+    nda_template_key: DECK_SHARE_NDA_SLUG,
   });
 });
 
@@ -316,11 +317,33 @@ deckShareActions.post('/share/:token/signup', async (c) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────
-// POST /nda — viewer accepts the project NDA. We render the canonical
-// `investor_nda_v1` template, persist an audit `documents` row marked
-// signed, and log the conversion. Non-contract doc_type so the
-// CONTRACT_DOC_TYPES guard in legal.ts is satisfied.
+// POST /nda — viewer accepts the project NDA. The text is the
+// `investor_nda_axal` library row (D758), with its bundled file only as the
+// row's fallback; we persist an audit `documents` row marked signed, and log
+// the conversion. Non-contract doc_type so the CONTRACT_DOC_TYPES guard in
+// legal.ts is satisfied. An NDA that cannot be read, or that still has a
+// field nobody filled, is refused and nothing is recorded: a viewer never
+// "accepts" a free-text stand-in.
 // ─────────────────────────────────────────────────────────────────────
+
+/** D758: the library row the deck-share NDA is read from. */
+export const DECK_SHARE_NDA_SLUG = 'investor_nda_axal';
+
+/**
+ * The deck-share NDA's text, merged. Null when neither the row nor its
+ * bundled fallback can be read; throws `UnfilledFieldsError` when a merge
+ * token is left.
+ */
+export async function deckShareNdaBody(env: Env, merge: Record<string, string>): Promise<string | null> {
+  const { templateBodyFor, UnfilledFieldsError } = await import('./esign');
+  const source = await templateBodyFor(env, DECK_SHARE_NDA_SLUG);
+  if (!source?.body) return null;
+  const body = applyMergeFields(source.body, merge);
+  const left = [...mergeTokensIn(body)];
+  if (left.length) throw new UnfilledFieldsError(left);
+  return body;
+}
+
 deckShareActions.post('/share/:token/nda', async (c) => {
   const tok = await verifyShareToken(c.env, c.req.param('token'), c);
   if (!tok) return c.json({ error: 'invalid_token' }, 401);
@@ -347,18 +370,22 @@ deckShareActions.post('/share/:token/nda', async (c) => {
     .bind(userId).first<any>();
   if (!user) return c.json({ error: 'user_not_found' }, 404);
 
-  const tplKey = templateKeyForDocType('investor_nda_v1') || 'investor_nda_v1';
-  let ndaBody = '';
+  let ndaBody: string | null = null;
   try {
-    ndaBody = await renderLegalTemplate(tplKey as any, {
+    ndaBody = await deckShareNdaBody(c.env, {
       recipient_name: user.name || signedBy,
       recipient_email: user.email,
       counterparty_name: ctx.project_name || 'the Project',
       effective_date: new Date().toISOString().slice(0, 10),
     });
   } catch (e) {
-    console.error('[deck_share] nda render failed', (e as Error).message);
-    ndaBody = `# NDA acceptance\n\nViewer ${signedBy} accepted NDA for ${ctx.project_name || 'Project'} on ${new Date().toISOString()}.`;
+    if ((e as Error)?.message === 'unfilled_fields') {
+      return refuse(c, 409, { code: 'template_fields_unfilled', message: 'This NDA is not ready to sign yet, so nothing was recorded. Try again later.', raw: e });
+    }
+    return refuse(c, 503, { code: 'template_unreadable', message: 'The NDA could not be read, so nothing was recorded. Try again in a moment.', raw: e });
+  }
+  if (!ndaBody) {
+    return refuse(c, 503, { code: 'template_unreadable', message: 'The NDA could not be read, so nothing was recorded. Try again in a moment.' });
   }
 
   // Persist as nda_acceptance (non-contract type — safe to insert).
@@ -371,7 +398,7 @@ deckShareActions.post('/share/:token/nda', async (c) => {
       ctx.project_id,
       `NDA — ${ctx.project_name || ('Deck ' + tok.deckId)}`,
       ndaBody,
-      tplKey,
+      DECK_SHARE_NDA_SLUG,
       signedBy,
     ).run();
     docId = Number((ins as any)?.meta?.last_row_id || 0) || null;
@@ -385,7 +412,7 @@ deckShareActions.post('/share/:token/nda', async (c) => {
     type: 'nda_signed', refId: docId ? String(docId) : null,
   });
 
-  return c.json({ ok: true, document_id: docId, template_key: tplKey });
+  return c.json({ ok: true, document_id: docId, template_key: DECK_SHARE_NDA_SLUG });
 });
 
 // ─────────────────────────────────────────────────────────────────────
