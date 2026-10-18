@@ -23,7 +23,11 @@ they share lives here, so a tool page and its admin preview draw the same thing.
 
 - **Every Lab tool page renders `LabPageShell`**; `spinout_lab_spacing.test.mjs`
   fails a page that owns its own gutters.
-- **Nothing here fetches.** The page reads `/state` once and passes it down, so
-  two pieces on one screen cannot disagree about the same application.
+- **Application state comes from the page.** The page reads `/state` once
+  and passes it down, so two pieces cannot disagree about the application.
+  Domain tools such as `RevenueLedger` own their separate API reads.
+  `MercuryCreditImport` reads the founder’s credits only while the ledger’s
+  import modal is mounted, imports through `mercuryPersonalApi`, and asks
+  the ledger to reload after an import (D713). It never reads `/state`.
 - **Absent is drawn as absent.** A date, name or count no row records is left
   out or said as not recorded — never filled from the canvas's sample.

@@ -118,6 +118,10 @@ export default function MercuryMatch({ target, targetId, matched, onChanged }) {
     setRead({ status: 'loading' });
     try {
       const res = await mercuryPersonalApi.matches(target);
+      if (!Array.isArray(res?.items) || !Array.isArray(res?.matches)
+        || res.items.some((item) => !Array.isArray(item?.candidates))) {
+        throw new Error('The Mercury matches response could not be read.');
+      }
       setRead({ status: 'ok', ...matchTargetOf(res, targetId) });
     } catch (e) {
       reportError(`mercury-match:${target}`, e);
