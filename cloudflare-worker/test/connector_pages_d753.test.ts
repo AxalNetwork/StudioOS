@@ -288,10 +288,13 @@ test('8. shapes: added, links, taglines, makers, modules', () => {
   }
 });
 
+/** A provider constant's string value, by name: `const NAME = '…'`. */
 const constant = (src: string, name: string) => {
-  const m = new RegExp(`const ${name} = '([^']+)'`).exec(src);
-  assert.ok(m, `no constant ${name}`);
-  return m![1];
+  const head = `const ${name} = '`;
+  const at = src.indexOf(head);
+  assert.ok(at >= 0, `no constant ${name}`);
+  const start = at + head.length;
+  return src.slice(start, src.indexOf("'", start));
 };
 const ENDPOINTS: Record<string, { file: string; sign_in: [string, string] | null; api: string | null }> = {
   hubspot: { file: 'integrations/providers/hubspot.ts', sign_in: ['HS_AUTH', '/oauth/authorize'], api: 'HS_API' },
