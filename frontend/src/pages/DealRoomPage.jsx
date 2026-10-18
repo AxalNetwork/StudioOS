@@ -7,6 +7,9 @@ import { api } from '../lib/api';
 import { adminCapitalAttestationsApi } from '../lib/api/adminCapitalAttestations';
 import { branchOfUser } from '../lib/shellRole';
 import { ProofStatement } from '../components/ProofOfFunds';
+import { mercuryAttestationsApi } from '../lib/api/mercuryAttestations';
+import { ProofDoor, ProofOfFundsSheet, useProofTargets } from './investor/ProofOfFunds';
+import { COMMIT_RECORDED, SHARE_BUTTON, newestDealTarget, ownDealTarget, showsProof } from './investor/proofOfFundsModel';
 import { Unreadable } from '../ui';
 import { useDealroomQuota, QuotaLine, JoinNote, JoinLeaveButton } from '../components/deals/DealRoomJoin';
 import DealInvitationsTab from '../components/deals/DealInvitationsTab';
@@ -66,6 +69,10 @@ export default function DealRoomPage() {
   const [tab, setTab] = useState('Overview');
   const [error, setError] = useState('');
   const [commitOpen, setCommitOpen] = useState(false);
+  // D752 (#1891): the investor's share sheet, opened from their own row or after a commitment.
+  const [proofSheet, setProofSheet] = useState(null); // { target, consent, minimumCents }
+  const [proofKey, setProofKey] = useState(0);
+  const openProof = (target, read) => setProofSheet({ target, consent: read?.consent, minimumCents: read?.minimum_cents });
   const [inviteOpen, setInviteOpen] = useState(false);
   const [myInvite, setMyInvite] = useState(null);
 
@@ -167,7 +174,7 @@ export default function DealRoomPage() {
         </>
       )}
       {tab === 'Documents' && <DocumentsTab dealId={deal.id} />}
-      {tab === 'Commitments' && <CommitmentsTab dealId={deal.id} proof={isAdmin && !branchOfUser(user)} />}
+      {tab === 'Commitments' && <CommitmentsTab key={proofKey} dealId={deal.id} proof={isAdmin && !branchOfUser(user)} user={user} onShare={openProof} />}
       {tab === 'Activity' && <ActivityTab dealId={deal.id} />}
       {tab === 'Invitations' && tabs.includes('Invitations') && (
         <DealInvitationsTab dealId={deal.id} onInvite={canInvite ? () => setInviteOpen(true) : undefined} />
@@ -175,7 +182,18 @@ export default function DealRoomPage() {
       {tab === 'Transfers' && tabs.includes('Transfers') && <DealTransfersTab dealId={deal.id} canRecord={isAdmin || role === 'partner'} />}
       {tab === 'References' && tabs.includes('References') && <DealReferencesTab dealId={deal.id} />}
 
-      {commitOpen && <CommitModal deal={deal} onClose={() => setCommitOpen(false)} onDone={() => { setCommitOpen(false); loadDeal(); setTab('Commitments'); }} />}
+      {commitOpen && <CommitModal deal={deal} user={user} onClose={() => setCommitOpen(false)} onDone={async (opts) => {
+        setCommitOpen(false); loadDeal(); setTab('Commitments');
+        if (!opts?.share || !showsProof(user)) return;
+        try {
+          const read = await mercuryAttestationsApi.targets();
+          const target = newestDealTarget(read, deal.id);
+          if (target) openProof(target, read);
+        } catch (e) { reportError('proof-of-funds:after-commit', e); }
+      }} />}
+      {proofSheet && <ProofOfFundsSheet target={proofSheet.target} consent={proofSheet.consent} minimumCents={proofSheet.minimumCents}
+        onClose={() => setProofSheet(null)} onShared={() => setProofKey((k) => k + 1)}
+        onTargetsChanged={async () => { setProofKey((k) => k + 1); try { return await mercuryAttestationsApi.targets(); } catch { return null; } }} />}
       {inviteOpen && <InviteModal dealId={deal.id} onClose={() => setInviteOpen(false)} />}
     </div>
   );
@@ -276,7 +294,9 @@ function DocumentsTab({ dealId }) {
 // proof of funds, once, after the commitments load: an audited request that
 // counts a view. It comes from its own route, never from `dealCommitments`,
 // which other invited investors read. Every other viewer makes no proof read.
-function CommitmentsTab({ dealId, proof = false }) {
+export function CommitmentsTab({ dealId, proof = false, user = null, onShare }) {
+  // D752 (#1891): an investor on HQ sees a door on their own row only.
+  const own = useProofTargets({ enabled: showsProof(user) });
   const [items, setItems] = useState(null);
   const [failed, setFailed] = useState(false);
   const [proofs, setProofs] = useState(null); // { byTarget } | { error }
@@ -323,6 +343,7 @@ function CommitmentsTab({ dealId, proof = false }) {
           <div className="flex-none text-right">
             <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{fmtMoney(c.amount)}</div>
             <div className="text-xs text-gray-500 capitalize">{c.status}</div>
+            {own.status === 'ready' && <ProofDoor target={ownDealTarget(own.read, c, user)} onShare={(t) => onShare?.(t, own.read)} />}
           </div>
         </div>
       ))}
@@ -357,11 +378,13 @@ function ActivityTab({ dealId }) {
   );
 }
 
-function CommitModal({ deal, onClose, onDone }) {
+export function CommitModal({ deal, onClose, onDone, user = null }) {
   const [amount, setAmount] = useState(deal.minimum_check || '');
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+  // D752 (#1891): an optional last step for an investor on HQ, once the commitment is recorded.
+  const [recorded, setRecorded] = useState(false);
   const submit = async () => {
     const amt = Number(amount);
     if (!amt || amt <= 0) { setErr('Enter a positive amount.'); return; }
@@ -369,11 +392,32 @@ function CommitModal({ deal, onClose, onDone }) {
     setSaving(true); setErr('');
     try {
       await api.createCommitment(deal.id, { amount: amt, notes: notes || null });
-      onDone();
+      if (showsProof(user)) setRecorded(true);
+      else onDone();
     } catch (e) { setErr(e.message || 'Could not record commitment'); reportError('CommitModal', e); }
     finally { setSaving(false); }
   };
   const input = 'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:border-violet-500 focus:ring-1 focus:ring-violet-200 focus:outline-none dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100';
+  if (recorded) {
+    // Every close is today's success: Done, ×, the backdrop. Only Show Axal asks for the sheet.
+    return (
+      <>
+        <div className="fixed inset-0 bg-black/40 z-40" onClick={() => onDone()} />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md dark:bg-gray-900" data-testid="commit-recorded">
+            <div className="p-5 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">{COMMIT_RECORDED}</h2>
+              <button onClick={() => onDone()} className="text-gray-400 hover:text-gray-700 p-1" aria-label="Close"><X size={18} /></button>
+            </div>
+            <div className="p-5 flex flex-wrap justify-end gap-2">
+              <button onClick={() => onDone()} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400" data-testid="commit-done">Done</button>
+              <button onClick={() => onDone({ share: true })} className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm font-medium" data-testid="commit-share">{SHARE_BUTTON}</button>
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  }
   return (
     <>
       <div className="fixed inset-0 bg-black/40 z-40" onClick={onClose} />
