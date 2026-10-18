@@ -641,11 +641,19 @@ test('google_popup is fail-closed; /config is exempt and never touches KV', asyn
   assert.equal(((await r.json()) as any).bucket, 'google_popup');
   assert.equal(l.handled(), 0);
 
+  // Exempt means the limiter never reads or writes KV for it at all — a
+  // healthy store, so a non-exempt path's generic buckets WOULD touch it...
   const ok = limited();
-  ok.env.RATE_LIMITS.get = async () => { throw new Error('Synthetic KV outage'); };
   const cfg = await ok.req('GET', '/api/auth/google/config');
-  assert.equal(cfg.status, 200, 'a KV outage turned the window off');
+  assert.equal(cfg.status, 200);
   assert.equal(ok.touched(), 0, '/config reached the limiter');
+  // ...and the sibling it is not: /start is still counted (D74).
+  assert.equal((await ok.req('GET', '/api/auth/google/start')).status, 200);
+  assert.ok(ok.touched() > 0, 'the control path did not touch KV, so the exemption check above proves nothing');
+  // A KV outage cannot turn the window off either.
+  const down = limited();
+  down.env.RATE_LIMITS.get = async () => { throw new Error('Synthetic KV outage'); };
+  assert.equal((await down.req('GET', '/api/auth/google/config')).status, 200, 'a KV outage turned the window off');
 });
 
 test('/config skips the cold-start role-schema repair; both wrangler blocks declare the same popup switch', () => {
