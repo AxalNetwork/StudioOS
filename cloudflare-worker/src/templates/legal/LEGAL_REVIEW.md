@@ -93,6 +93,33 @@ Each of the three LLCs also needs its own **executed** operating
 agreement (the template is generic); still to confirm: whether
 Management and GP are wholly owned by Holdings.
 
+**Operating Partner Agreement (Spin-Out Lab)** (`operating_partner_agreement_spin_out_lab`,
+D758, migration 484) — catalog stub for counsel to draft; the canvas draws
+it for Axal VC Management LLC, as Managing Partner. Question for counsel:
+does it replace "MSA + Equity-for-Services (Operating Partner)"
+(`msa_equity_for_services_v1.md`), or is it a separate document?
+
+## Seed skeletons (D758)
+
+These 24 files hold the old plain-text templates exactly as migration 085
+seeded them; until D758 the text existed only in that migration. Each is a
+**seed skeleton, counsel to expand**. They keep the flat merge tokens the
+incorporation wizard fills — `{{company_name}}`, `{{incorporation_date}}`,
+`{{registered_agent_name}}` and `{{registered_agent_address}}` — which are not
+in `LEGAL_MERGE_SCHEMA`, so a preview shows them as written. Expanding one is
+a new `_v2` file and a new store version, never an edit of the `_v1` file.
+
+- Compliance: `aml_kyc_v1.md`, `ee_e_residency_application_kit_v1.md`,
+  `ein_application_kit_v1.md`, `form_adv_v1.md`, `section_83b_v1.md`,
+  `sg_acra_form_45_kit_v1.md`, `uk_form_in01_kit_v1.md`.
+- Fund: `lpa_v1.md`, `mgmt_company_v1.md`, `ppm_v1.md`, `subscription_v1.md`.
+- Portfolio: `bylaws_v1.md`, `certificate_of_incorporation_de_v1.md`,
+  `ee_articles_of_association_v1.md`, `equity_split_v1.md`, `ip_license_v1.md`,
+  `safe_v1.md`, `sg_constitution_v1.md`, `spa_v1.md`,
+  `stock_purchase_agreement_v1.md`, `term_sheet_v1.md`,
+  `uk_articles_of_association_v1.md`, `uk_memorandum_of_association_v1.md`,
+  `voting_rights_v1.md`.
+
 ## Red flags for counsel — highest priority first
 
 1. **Broker-dealer exposure.** The platform sells intro credit packs,

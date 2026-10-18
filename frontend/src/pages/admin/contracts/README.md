@@ -18,3 +18,10 @@ opens on `?sheet=structure` from the desk header's door, on every tab, and reads
 `GET /api/admin/fund-structure` only once it opens. HQ only: a branch gets no
 door. The Super Admin also gets a "Bank accounts" link to the registry's console.
 `FundStructureMap.jsx` draws the Worker's `map` as given, paths and text only.
+
+D717 (#1852): `TemplateEditor.jsx` is the template editor, opened in place on
+the Templates tab: the Markdown source with numbered lines and highlighted
+merge fields, the live paper scrolling with it, the merge fields with who
+fills each, Kind and Axal VC party, Save draft and Publish v[N]. It is
+read-only on a branch Worker. `PublishDialog.jsx` asks before publishing one
+template or withdrawing a stub's publication, and prints the Worker's refusal.

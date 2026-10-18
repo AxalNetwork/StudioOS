@@ -200,6 +200,7 @@ test('a branch Worker refuses the holder, read and write', async () => {
   const list = await call(env, 'GET', '/', HOLDER, 'totp-holder');
   assert.ok(list.status >= 400, list.text);
   assert.equal(list.body.accounts, undefined);
+  assert.equal(list.body.refusals, undefined);
   const add = await call(env, 'POST', '/', HOLDER, 'totp-holder', GP_CHECKING);
   assert.ok(add.status >= 400, add.text);
   assert.equal(accountRows(db).length, 0);
@@ -211,7 +212,19 @@ test('a plain Admin does not see even the masked list', async () => {
   const r = await call(envFor(db), 'GET', '/', PLAIN_ADMIN, 'totp-plain');
   assert.equal(r.status, 403, r.text);
   assert.equal(r.body.accounts, undefined);
+  assert.equal(r.body.refusals, undefined);
   assert.ok(!r.text.includes(NUMBER_A.slice(-4)));
+});
+
+test('#1856 GET / answers the four refusals the console explains, in order, each with the resolver\'s sentence', async () => {
+  const db = freshDb();
+  const r = await call(envFor(db), 'GET', '/', HOLDER, 'totp-holder');
+  assert.equal(r.status, 200, r.text);
+  assert.deepEqual(r.body.refusals.map((x: any) => x.code), ['no_active_account', 'holder_not_payee', 'savings_account', 'fund_account_missing']);
+  for (const x of r.body.refusals) {
+    assert.deepEqual(Object.keys(x).sort(), ['code', 'message']);
+    assert.ok(typeof x.message === 'string' && x.message.length > 20, x.code);
+  }
 });
 
 // One test per write route and session: 403 super_admin_required, never a TOTP or step-up demand, nothing written.

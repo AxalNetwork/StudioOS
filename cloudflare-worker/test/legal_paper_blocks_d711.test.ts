@@ -61,11 +61,11 @@ test('D711 a blockquote is a legend and "Warning: …" a warning; [x] and ✓ ar
   assert.deepEqual(sign.runs.map((r) => r.k), ['text', 'fill']);
 });
 
-test('D711 brackets marks known merge tokens only, and filled marks none', () => {
+test('D711 brackets marks every well-formed merge token (#1865 decision 9), and filled marks none', () => {
   const body = 'Between {{company.legal_name}} and {{not.a_token}}.';
   const b = one(paperBlocks(body, { merge: 'brackets' }), 'para');
-  assert.deepEqual(b.runs.filter((r) => r.k === 'merge').map((r) => (r as any).text), ['[COMPANY LEGAL NAME]']);
-  assert.ok(runsText(b.runs).includes('{{not.a_token}}'));
+  assert.deepEqual(b.runs.filter((r) => r.k === 'merge').map((r) => (r as any).text), ['[COMPANY LEGAL NAME]', '[NOT A TOKEN]']);
+  assert.ok(!runsText(b.runs).includes('{{'), 'no preview prints a raw token');
   assert.equal(one(paperBlocks(body, { merge: 'filled' }), 'para').runs.some((r) => r.k === 'merge'), false);
   assert.equal(one(paperBlocks(body, { merge: 'raw' }), 'para').runs.some((r) => r.k === 'merge'), false);
 });
