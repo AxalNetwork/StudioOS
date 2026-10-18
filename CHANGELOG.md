@@ -4,6 +4,21 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## Admins read an investor's proof of funds, audited (D752, #1890)
+
+- `GET /api/admin/capital-attestations` (`routes/admin_capital_attestations.ts`):
+  an Admin on HQ reads investors' shared statements by target, by deal or by
+  fund. Each read writes its `capital_attestations_read` audit row first (or
+  answers 503) and counts a view on the investor's list. A revoked statement
+  shows its date only; a superseded one never shows. It reads
+  `capital_attestations` and `users` only, and never calls Mercury.
+- The LP application queue's rows carry `proof_of_funds`, a state only.
+- Screens, from existing parts (`components/ProofOfFunds.jsx`,
+  `lib/proofOfFunds.js`, `lib/api/adminCapitalAttestations.js`): a chip and a
+  "Proof of funds" row on `/admin/lp-applications`, each commitment's proof on a
+  deal's Commitments tab for an admin on HQ, and "Proof of funds shared by LPs"
+  on the fund console's Calls tab, read only on Show. No migration.
+
 ## An investor's proof of capital from their own Mercury (D752, #1888)
 
 - Migration 491 adds `capital_attestations`: a dated statement, "at least $X
