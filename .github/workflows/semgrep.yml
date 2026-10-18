@@ -20,10 +20,11 @@ permissions:
 # required SEMGREP_APP_TOKEN + SEMGREP_DEPLOYMENT_ID secrets which were
 # never set on this repo — that's why every run was red.
 #
-# Findings go to the Security tab by SARIF upload, and are also listed in
-# this job's summary page. D672 stopped the upload while the repository was
-# private and code scanning needed GitHub Code Security. The repository is
-# public now, where code scanning is free, so D718 restored the upload. The
+# Findings go to the Security tab by SARIF upload where code scanning takes
+# one, and are always listed in this job's summary page. D672 stopped the
+# upload while the repository was private and code scanning needed GitHub
+# Code Security; D718 restored it once the repository was public, where code
+# scanning is free. The `visibility` job now decides on every run (D721). The
 # summary stays because the agents that fix findings cannot read the
 # code-scanning API. To stop running Semgrep entirely, delete this file — no
 # other workflow depends on it.
@@ -33,8 +34,45 @@ permissions:
 # how they are reported, not the exit code. A SCANNER THAT COULD NOT RUN
 # does fail it, and then nothing is reported. See the two comments below.
 jobs:
+  # D721: ask, do not assume, whether code scanning takes an upload. It is
+  # free on a public repository and needs GitHub Code Security on a private
+  # one, which this repository does not have. The repository has been both
+  # (private under D672, public under D718, private again on 2026-10-18), and
+  # an upload it refuses turns this check red on every PR. The same job is in
+  # codeql.yml and semgrep.yml; code_scanning_visibility_d721.test.mjs keeps
+  # the two identical and runs its step.
+  visibility:
+    name: code scanning takes uploads?
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      upload: ${{ steps.ask.outputs.upload }}
+    steps:
+      - name: Ask the repository API
+        id: ask
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # code_security reads "unknown" when this token cannot see it.
+          answer="$(gh api "repos/$GITHUB_REPOSITORY" --jq '[.private, (.security_and_analysis.code_security.status // "unknown")] | map(tostring) | join(" ")')"
+          case "$answer" in
+            "false "*|"true enabled")
+              echo "upload=always" >> "$GITHUB_OUTPUT"
+              ;;
+            "true "*)
+              echo "upload=never" >> "$GITHUB_OUTPUT"
+              echo "::notice::This repository is private and code scanning is off, so the findings are in the job summary only (D721)."
+              ;;
+            *)
+              echo "::error::The repository API answered '$answer' for private and code_security."
+              exit 1
+              ;;
+          esac
+
   scan:
     name: Scan
+    needs: visibility
     runs-on: ubuntu-latest
     # The scan itself takes ~4m40s on this repo and the rule packs grow. A
     # timeout is a cancellation, and a cancelled job used to still reach the
@@ -118,6 +156,9 @@ jobs:
       # the ref, so a resultless payload would close every open alert as
       # "fixed".
       - name: Upload SARIF
+        # No status function, so the default success() still applies (D721):
+        # this only adds "and code scanning takes uploads".
+        if: needs.visibility.outputs.upload == 'always'
         uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4
         # No `category`, as before D672, so this upload replaces the alert set
         # the old uploads left open instead of starting a second one.

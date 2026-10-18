@@ -50,7 +50,12 @@ const src = readFileSync(resolve(process.cwd(), WORKFLOW), 'utf8');
  * forbade the sentence refusing the thing). Assertions read `.code`.
  */
 function steps() {
+  // From the `scan` job on: the `visibility` job (D721) comes first and has
+  // steps of its own.
   const lines = src.split('\n');
+  const at = lines.findIndex((l) => /^ {2}scan:\s*$/.test(l));
+  assert.ok(at >= 0, `no scan job in ${WORKFLOW}`);
+  lines.splice(0, at);
   const out = [];
   let cur = null;
   let inSteps = false;
@@ -115,6 +120,9 @@ for (const [label, get] of [['strip', stripStep], ['upload', uploadStep], ['repo
     const step = get();
     assert.ok(step, `no ${label} step found in ${WORKFLOW}`);
     const cond = step.code.match(/^\s*if:\s*(.+)$/m);
+    // D721: the upload also waits for code scanning to take uploads. That
+    // condition holds no status function, so the default success() stays.
+    if (label === 'upload' && cond && cond[1].trim() === "needs.visibility.outputs.upload == 'always'") return;
     assert.equal(
       cond, null,
       `the ${label} step must take the DEFAULT if: success(). It carried `
