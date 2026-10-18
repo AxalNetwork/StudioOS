@@ -11,7 +11,8 @@ import { hashEmail } from '../util/hashEmail';
 import { mintDownloadToken } from '../services/signedDownload';
 import { sendAgreementAssignedEmail } from '../services/email';
 import { fanOut } from '../services/branches';
-import { usageFromContractRows } from '../services/contractTemplateUsage';
+import { usageFromContractRows, usageRowsFor } from '../services/contractTemplateUsage';
+import { BUNDLED_SENT_DIRECTLY, librarySlugFor } from '../services/legalDocTypes';
 import { publishedContractTemplates, publicationFields, publishContractTemplates, preparePublishedContract, ContractPreparationError,
   publishOneTemplate, withdrawTemplatePublication, PublicationError } from '../services/contractPublication';
 import { formatView, formatOptions, renderFormat, effectiveFormat, COUNSEL_DRAFT_SLUGS } from '../services/templateFormat';
@@ -425,6 +426,11 @@ interface UnifiedContract {
   valid_until?: string | null;
   /** Partner deals only — null when absent. */
   expires_at?: string | null;
+  /**
+   * D758 — pairwise NDAs and partner deals: the envelope the relationship was
+   * signed in, so usage counts that document once, not once per source.
+   */
+  envelope_uuid?: string | null;
 }
 
 function decorateDocType<T extends UnifiedContract>(row: T): T {
@@ -627,6 +633,7 @@ async function loadPairwiseNdaContracts(sql: ReturnType<typeof getSQL>, strict =
     can_resend: false,
     valid_until: r.valid_until ?? null,
     expires_at: null,
+    envelope_uuid: r.nda_envelope_uuid ?? null,
   }));
 }
 
@@ -642,6 +649,16 @@ function mapPartnerDealStatus(s: string): string {
   return 'sent';
 }
 
+// D758 decision 7: every partner deal is sent from the Partner Services row
+// (partner onboarding's agreement), whatever its deal type, so it is labelled
+// and counted there. Which document a deal type SHOULD send is an owner
+// follow-up, not decided here.
+const PARTNER_DEAL_DOC_TYPE = 'partner_services';
+function partnerDealTitle(r: { deal_type?: string | null; partner_email?: string | null; partner_name?: string | null }): string {
+  const words = String(r.deal_type || 'custom').toLowerCase().replace(/_/g, ' ');
+  return `Partner Services Agreement — ${words} — ${r.partner_email || r.partner_name || 'unknown'}`;
+}
+
 async function loadPartnerDealContracts(sql: ReturnType<typeof getSQL>, strict = false): Promise<UnifiedContract[]> {
   let rows: any[] = [];
   try {
@@ -653,9 +670,11 @@ async function loadPartnerDealContracts(sql: ReturnType<typeof getSQL>, strict =
       SELECT d.id, d.user_id AS partner_user_id, d.deal_type, d.term_months,
              d.granted_tier_founder, d.granted_tier_investor,
              d.status, d.created_at, d.expires_at,
-             u.email AS partner_email, u.name AS partner_name
+             u.email AS partner_email, u.name AS partner_name,
+             e.envelope_uuid AS envelope_uuid
         FROM partner_deals d
         LEFT JOIN users u ON u.id = d.user_id
+        LEFT JOIN esign_envelopes e ON e.id = d.envelope_id
        ORDER BY d.created_at DESC
     `;
   } catch (error) {
@@ -663,13 +682,12 @@ async function loadPartnerDealContracts(sql: ReturnType<typeof getSQL>, strict =
     return [];
   }
   return rows.map((r): UnifiedContract => {
-    const dt = `partner_${String(r.deal_type || 'custom').toLowerCase()}`;
-    const docType = TEMPLATES[dt] ? dt : 'partner_custom';
+    const docType = PARTNER_DEAL_DOC_TYPE;
     const unified = mapPartnerDealStatus(r.status);
     return decorateDocType({
       id: r.id,
       uid: `partner_deal:${r.id}`,
-      title: `${TEMPLATES[docType]?.title || 'Partner Deal'} — ${r.partner_email || r.partner_name || 'unknown'}`,
+      title: partnerDealTitle(r),
       doc_type: docType,
       status: unified,
       template_name: docType,
@@ -693,6 +711,7 @@ async function loadPartnerDealContracts(sql: ReturnType<typeof getSQL>, strict =
       can_resend: false,
       valid_until: null,
       expires_at: r.expires_at ?? null,
+      envelope_uuid: r.envelope_uuid ?? null,
     });
   });
 }
@@ -988,8 +1007,14 @@ adminContracts.get('/stats', async (c) => {
   }
 });
 
-export async function loadTemplateUsage(sql: ReturnType<typeof getSQL>, strict = false) {
-  const catalogKeys = new Set(Object.keys(TEMPLATES));
+/**
+ * D758: `keys` are the slugs counted under. The store route passes its own
+ * rows' slugs, so a row outside the static `TEMPLATES` (the spaced slugs
+ * among them) reads its real count; the legacy `GET /templates` keeps
+ * `TEMPLATES`' keys.
+ */
+export async function loadTemplateUsage(sql: ReturnType<typeof getSQL>, strict = false, keys: ReadonlySet<string> = new Set(Object.keys(TEMPLATES))) {
+  const catalogKeys = keys;
   const rows = await loadAllContracts(sql, strict);
   return usageFromContractRows(rows, catalogKeys);
 }
@@ -1353,13 +1378,12 @@ adminContracts.get('/:uid', async (c) => {
     }
     if (ref.source === 'partner_deal') {
       const r = ref.row;
-      const dt = `partner_${String(r.deal_type || 'custom').toLowerCase()}`;
-      const docType = TEMPLATES[dt] ? dt : 'partner_custom';
+      const docType = PARTNER_DEAL_DOC_TYPE;
       const unified = mapPartnerDealStatus(r.status);
       const detail = decorateDocType({
         id: r.id,
         uid: `partner_deal:${r.id}`,
-        title: `${TEMPLATES[docType]?.title || 'Partner Deal'} — ${r.partner_email || r.partner_name || 'unknown'}`,
+        title: partnerDealTitle(r),
         doc_type: docType,
         status: unified,
         template_name: docType,
@@ -1698,15 +1722,16 @@ const LEGAL_TEMPLATE_CATALOG: ReadonlyArray<{
   { key: 'nda_3way_founder_investor_axal_v1', doc_type: 'nda_3way_founder_investor_axal',   title: '3-Way NDA (Founder ↔ Investor ↔ Axal) v1' },
 ];
 
-// D717 decision 6: the bundled keys whose text is not the store body of the
-// row they count under. Read-only; the thumbnails come with PR 1b.
+// D717 decision 6, narrowed by D758 decision 3: the bundled keys a sender
+// still sends as the bundled file rather than its library row
+// (`BUNDLED_SENT_DIRECTLY`), each with the row it counts under. Read-only.
 adminContracts.get('/templates/outside', async (c) => {
   await requireAdmin(c);
-  const outside = LEGAL_TEMPLATE_CATALOG.filter(e => e.key !== e.doc_type);
   try {
-    const items = await Promise.all(outside.map(async (e) => {
-      const row = await storeGetTemplate(c.env, e.doc_type);
-      return { key: e.key, title: e.title, doc_type: e.doc_type, counted_under: { slug: e.doc_type, title: row?.title ?? null } };
+    const items = await Promise.all(BUNDLED_SENT_DIRECTLY.map(async (e) => {
+      const slug = librarySlugFor(e.key);
+      const row = await storeGetTemplate(c.env, slug);
+      return { key: e.key, title: e.title, doc_type: slug, counted_under: { slug, title: row?.title ?? null } };
     }));
     return c.json({ items });
   } catch {
@@ -1739,7 +1764,7 @@ adminContracts.get('/templates/store', async (c) => {
 
   const sql = getSQL(c.env);
   try {
-    const { usage, lastUsed } = await loadTemplateUsage(sql, c.req.query('recorded') === 'true');
+    const { usage, lastUsed } = await loadTemplateUsage(sql, c.req.query('recorded') === 'true', new Set(items.map(t => t.slug)));
     const publications = c.req.query('recorded') === 'true' ? new Map((await publishedContractTemplates(c.env)).map(t => [t.slug, t])) : null;
 
     const out = items.map((t) => ({
@@ -2067,8 +2092,9 @@ adminContracts.get('/templates/store/:slug/thumbnail.png', async (c) => {
 
 adminContracts.get('/templates/outside/:key/thumbnail.png', async (c) => {
   await requireAdmin(c);
-  const entry = LEGAL_TEMPLATE_CATALOG.find(e => e.key === c.req.param('key') && e.key !== e.doc_type);
-  if (!entry) return c.json({ error: 'Template not found', code: 'not_found' }, 404);
+  const found = BUNDLED_SENT_DIRECTLY.find(e => e.key === c.req.param('key'));
+  if (!found) return c.json({ error: 'Template not found', code: 'not_found' }, 404);
+  const entry = { key: found.key, title: found.title, doc_type: librarySlugFor(found.key) };
   const { getLegalTemplateBody } = await import('../services/legalTemplates');
   const body = getLegalTemplateBody(entry.key as Parameters<typeof getLegalTemplateBody>[0]);
   const bodySha = await sha256Hex(body);
@@ -2170,7 +2196,10 @@ adminContracts.get('/templates/:doc_type/usage', async (c) => {
   const sql = getSQL(c.env);
   try {
     const all = await loadAllContracts(sql);
-    const rows = all.filter(r => r.doc_type === docType);
+    // D758 — the same fold and skip the "[n] uses" chip counts with, so the
+    // list and its counters equal the chip.
+    const keys = new Set([...(await storeListTemplates(c.env)).map(t => t.slug), ...Object.keys(TEMPLATES)]);
+    const rows = usageRowsFor(all, keys, docType);
 
     const byStatus: Record<string, number> = { draft: 0, generated: 0, sent: 0, signed: 0, void: 0 };
     const signDays: number[] = [];
