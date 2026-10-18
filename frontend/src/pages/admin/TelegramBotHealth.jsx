@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Bot, RefreshCw, Loader2 } from 'lucide-react';
-import { channelsAdminApi } from '../../lib/api';
+import { channelsAdminApi } from '../../lib/api/channels.js';
 import { Unreadable } from '../../ui';
 import { healthLines } from './telegramBotHealth';
 
