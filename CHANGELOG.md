@@ -4,6 +4,19 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## The bank-account registry restyled per entity (D717, #1856)
+
+- `/admin?tab=bank-accounts` (`BankAccountsConsole.jsx`) now draws the "Legal
+  Documents · Templates" canvas's board L11: one card per Axal entity with its
+  read-only Mercury connection, its accounts and where each payment goes; the
+  unmatched receipts per connected entity; what a notice refuses, in the
+  resolver's own sentences; and "Add account" and "Reveal the full number?"
+  dialogs. A plain Admin still gets one sentence and no read.
+- `GET /api/admin/mercury/transactions` takes `direction=credit|debit`, and
+  `GET /api/admin/bank-accounts` answers `refusals`
+  (`services/payInstructions.ts`' new `refusalMessage` and `NOTICE_REFUSALS`).
+  No migration, and no new route.
+
 ## The entity and money map on screen, with one numbering on paper (D717, #1855)
 
 - `GET /api/admin/fund-structure` (`services/fundStructure.ts`) now numbers
@@ -21,6 +34,21 @@
   a "Bank accounts" link for the Super Admin. A plain Admin sees "Only the
   Super Admin can see or change payment instructions." in every account cell.
   A branch gets neither. Nothing moves money.
+
+## The template editor on Contracts › Templates (D717 PR 2c, #1852)
+
+- `contracts/TemplateEditor.jsx` replaces the modal on the Contracts desk and
+  opens in place: the Markdown source with line numbers and merge-field chips
+  (a mirror under a transparent textarea), the live paper scrolling with it
+  (`lib/paneSync.js`), and the render answer's merge fields with "Filled from
+  the envelope" or "Unfilled". The legacy console keeps the modal.
+- Kind and Axal VC party are segmented controls over `format_options`; a save
+  sends both, `null` for "From the slug". `formatOptions` adds `entity`.
+- Save draft keeps the editor open. Publish v[N] (`PublishDialog.jsx`) asks
+  first and publishes that one template; a published stub offers Withdraw.
+  A branch Worker reads the editor with no authoring control.
+- `PaperPreview` takes `docKind`, `axalParty`, `onDrawn` and `onFrameLoad`;
+  without them its request is unchanged.
 
 ## The AI top-up says what is wrong, and the rail shows money to the cent (D750, #1841)
 
