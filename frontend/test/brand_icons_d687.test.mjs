@@ -224,6 +224,7 @@ const markThenName = (out, key, name) => {
 test('7. Connectors, Build\'s rows, channel cards, setup cards, provider tags and origin badges draw the mark beside the name', () => {
   const p = { key: 'stripe', display_name: 'Stripe', by: 'Stripe', description: 'Payments.', available: true, has_implementation: true, status: 'live' };
   markThenName(routed(h(ConnectorCard, { p, onOpen() {} })), 'stripe', 'Stripe');
+  assert.match(routed(h(ConnectorCard, { p })), /data-testid="connector-card-stripe"[\s\S]*?width:34px;height:34px/, 'the card keeps the 34px tile');
   markThenName(routed(h(YoursTable, { rows: [{ p: { ...p, key: 'github', display_name: 'GitHub', by: 'GitHub' }, status: { label: 'Connected', tone: 'ok' } }], onOpen() {} })), 'github', 'GitHub');
   markThenName(routed(h(ConnectorCard, { p: { ...p, key: 'salesforce', display_name: 'Salesforce' }, onOpen() {} })), 'salesforce', 'Salesforce');
   markThenName(routed(h(Sheet, { title: 'HubSpot', provider: 'hubspot', providerName: 'HubSpot', onClose() {} })), 'hubspot', 'HubSpot');
@@ -250,7 +251,9 @@ test('7b. the surfaces this test cannot mount pass the key to BrandIcon at the a
   has('frontend/src/pages/hq/PlatformPage.jsx', /<BrandIcon provider=\{k\.provider_key\} name=\{PROVIDER_LABEL\[k\.provider_key\] \|\| k\.provider_key\} size=\{24\} \/>/, 'a 24px tile by each label');
   has('frontend/src/pages/admin/consoles/GithubSyncConsole.jsx', /<BrandIcon provider="github" name="GitHub" size=\{18\} variant="bare" tone="current" className="text-gray-800 dark:text-gray-100" \/>/, 'the GitHub mark in GitHub\'s documented monochrome, as the console drew it, not lucide\'s GitBranch');
   has('frontend/src/pages/account/AccountConnectors.jsx', /<BrandIcon provider="telegram" name="Telegram" \/>\s*<span className="text-sm font-bold[^"]*">Telegram · Axal VC channels/, 'the Telegram card\'s tile');
-  has('frontend/src/pages/account/AccountConnectors.jsx', /role="img" title="Built and verified by Axal" aria-label="Verified by Axal"/, 'the ✓ is an image');
+  has('frontend/src/pages/account/AccountConnectors.jsx', /<VerifiedBadge on=\{p\.verified_on\} \/>/, 'the Verified mark is the one primitive');
+  has('frontend/src/ui/VerifiedBadge.jsx', /role="img" aria-label="Verified"/, 'the Verified mark is an image');
+  assert.doesNotMatch(read('frontend/src/pages/account/AccountConnectors.jsx'), /title="Built and verified by Axal"/, 'the unrecorded ✓ is gone');
   has('frontend/src/pages/account/connectorTools.jsx', /<BrandIcon provider="hubspot" name="HubSpot" size=\{24\} \/>HubSpot pipeline/, 'HubSpot\'s modal title');
   has('frontend/src/pages/account/connectorTools.jsx', /<BrandIcon provider="salesforce" name="Salesforce" size=\{24\} \/>Salesforce field mapping/, 'Salesforce\'s modal title');
   has('frontend/src/pages/account/GithubSyncSheet.jsx', /title=\{`\$\{name\} is synced`\} provider="github"[\s\S]*title=\{`Connect \$\{name\}`\} provider="github"/, 'both GitHub sheet headers');

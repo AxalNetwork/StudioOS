@@ -353,12 +353,6 @@ export function pageOf(rows, page) {
 
 export const SUGGESTED = 'Suggested for you';
 
-/** The chips: All, Suggested for you, then each category the catalogue holds, in the canvas's order. */
-export function discoverChips(catalogue) {
-  const present = new Set((catalogue || []).map((p) => p.category).filter(Boolean));
-  return ['All', SUGGESTED, ...CATEGORY_ORDER.filter((c) => present.has(c))];
-}
-
 /**
  * D715 (#1780): the Axal entities' Mercury row, which the Worker serves an
  * admin on HQ only (`connection_source`, #1775). It is never a member's own
