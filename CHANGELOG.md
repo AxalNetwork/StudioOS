@@ -4,6 +4,24 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## The generated documents, listed with page-1 specimens (D758, #1864, Worker half)
+
+- `GET /api/admin/contracts/templates/generated` lists the ten documents the
+  platform builds in code (the seven notice types, the Subscription Booklet,
+  the Structure of the Fund page and the certificate of completion), with the
+  library rows each one reads, their state, the Worker's own refusal sentence
+  and a `thumbnail_version`.
+- `GET /api/admin/contracts/templates/generated/:key/thumbnail.png` draws each
+  one's page 1 as a specimen: bracket figures, `RECEIVING_BRACKET` for the
+  account, the specimen state, and no record or account read. The key carries
+  the specimen's hash, so a new body on a notice row redraws its image.
+- `noticeSpecimen` (`fundNotices.ts`), `bookletPaperParts`,
+  `bookletMissingSentence` and `bookletSpecimenInput` (`subscriptionBooklet.ts`),
+  and `paperHtml`'s `only: 'structure' | 'certificate'` (`legalPaper.ts`).
+  Without `only` the paper is unchanged; a composite paper in the specimen
+  state draws the specimen diagonal.
+- The screen half (the catalog group) follows on #1851's `TemplateCatalog`.
+
 ## The bank-account registry restyled per entity (D717, #1856)
 
 - `/admin?tab=bank-accounts` (`BankAccountsConsole.jsx`) now draws the "Legal
