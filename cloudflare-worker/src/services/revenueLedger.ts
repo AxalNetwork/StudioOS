@@ -292,3 +292,62 @@ export function chargeToEntry(ch: ChargeIn): ChargeEntry {
     },
   };
 }
+
+/** What the route knows of one Mercury bank line (D713). Booleans only: no name reaches this function. */
+export interface MercuryCreditFacts {
+  transaction_id: string;
+  amount_cents: number;
+  posted_on: string | null;
+  posted: boolean;
+  internal: boolean;
+  voided: boolean;
+  /** The counterparty names an Axal entity (`providers/mercury.ts` `namesAxalEntity`). */
+  axal_counterparty: boolean;
+  /** The counterparty names Stripe (`namesStripe`). */
+  stripe_counterparty: boolean;
+}
+
+export interface MercuryCreditContext {
+  /** The project holds a `stripe` row, or the founder has an active Stripe connection. */
+  stripeActive: boolean;
+  /** The line is already a row on this project's ledger. */
+  importedHere: boolean;
+  /** The line is already a row on another project's ledger: one bank line is one row on the platform. */
+  importedElsewhere: boolean;
+}
+
+export const MERCURY_CREDIT_REASONS = ['pending', 'internal_transfer', 'axal_entity', 'stripe_payout', 'already_imported', 'imported_elsewhere', 'invalid_amount'] as const;
+export type MercuryCreditReason = (typeof MERCURY_CREDIT_REASONS)[number];
+
+export type MercuryCreditEntry =
+  | { kind: 'entry'; entry: { source_ref: string; amount_cents: number; received_on: string } }
+  | { kind: 'skip' }
+  | { kind: 'refuse'; reason: MercuryCreditReason };
+
+/** A counterparty that names Stripe, as a word. */
+export function namesStripe(counterparty: string | null | undefined): boolean {
+  return /(^|[^a-z0-9])stripe([^a-z0-9]|$)/i.test(String(counterparty ?? ''));
+}
+
+/**
+ * D713 decision 6 — one Mercury bank line → one ledger entry, or why not. Pure.
+ *
+ * - A debit, or a cancelled or failed line, is not a candidate at all (`skip`).
+ * - Each other refusal is listed with its reason and cannot be imported:
+ *   `pending`, `internal_transfer`, `axal_entity` (capital or a partner deal,
+ *   not customer revenue), `stripe_payout` (each Stripe sale would count twice),
+ *   `already_imported` (on this project) and `imported_elsewhere` (on another).
+ * - Amount and date are Mercury's: integer cents from `parse.ts`, and the
+ *   posted date. The customer and the type are the founder's, set by the route.
+ */
+export function mercuryCreditToEntry(f: MercuryCreditFacts, ctx: MercuryCreditContext): MercuryCreditEntry {
+  if (f.voided || !(Number(f.amount_cents) > 0)) return { kind: 'skip' };
+  if (!f.posted || !f.posted_on) return { kind: 'refuse', reason: 'pending' };
+  if (f.internal) return { kind: 'refuse', reason: 'internal_transfer' };
+  if (f.axal_counterparty) return { kind: 'refuse', reason: 'axal_entity' };
+  if (f.stripe_counterparty && ctx.stripeActive) return { kind: 'refuse', reason: 'stripe_payout' };
+  if (ctx.importedHere) return { kind: 'refuse', reason: 'already_imported' };
+  if (ctx.importedElsewhere) return { kind: 'refuse', reason: 'imported_elsewhere' };
+  if (!Number.isSafeInteger(f.amount_cents) || f.amount_cents > MAX_AMOUNT_CENTS) return { kind: 'refuse', reason: 'invalid_amount' };
+  return { kind: 'entry', entry: { source_ref: f.transaction_id, amount_cents: f.amount_cents, received_on: f.posted_on } };
+}

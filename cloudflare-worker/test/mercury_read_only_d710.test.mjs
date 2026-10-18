@@ -53,9 +53,10 @@ test('every client export sends only GET, to an allowlisted path, with redirect 
   await client.listAccounts('fixture-not-a-token-1', fetcher);
   await client.getOrganization('fixture-not-a-token-1', fetcher);
   await client.listTransactions('fixture-not-a-token-1', 'acc-1', { start: '2026-01-01', limit: 10, offset: 0 }, fetcher);
+  await client.getTransaction('fixture-not-a-token-1', 'acc-1', 'txn-1', fetcher);
   const exported = Object.entries(client).filter(([, v]) => typeof v === 'function' && !/^[A-Z]/.test(v.name)).map(([k]) => k).sort();
-  assert.deepEqual(exported, ['getOrganization', 'isReadPath', 'listAccounts', 'listTransactions'], 'a new export must be driven here');
-  assert.equal(calls.length, 3);
+  assert.deepEqual(exported, ['getOrganization', 'getTransaction', 'isReadPath', 'listAccounts', 'listTransactions'], 'a new export must be driven here');
+  assert.equal(calls.length, 4);
   for (const c of calls) {
     assert.equal(c.method, 'GET');
     assert.equal(c.redirect, 'manual');
@@ -66,8 +67,9 @@ test('every client export sends only GET, to an allowlisted path, with redirect 
   }
   status = 302;
   await assert.rejects(() => client.listAccounts('fixture-not-a-token-1', fetcher), (e) => e.code === 'redirect_refused');
-  assert.equal(calls.length, 4, 'the redirect was not followed');
+  assert.equal(calls.length, 5, 'the redirect was not followed');
   await assert.rejects(() => client.listTransactions('t', '../send-money', { start: '2026-01-01', limit: 1, offset: 0 }, fetcher), (e) => e.code === 'path_not_allowed');
+  await assert.rejects(() => client.getTransaction('t', 'acc-1', '../send-money', fetcher), (e) => e.code === 'path_not_allowed');
   for (const p of DENIED_PATHS) assert.equal(client.isReadPath(p), false, p);
 });
 

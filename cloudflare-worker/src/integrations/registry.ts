@@ -113,6 +113,25 @@ export interface ConnectResult {
   config?: Record<string, unknown>;
 }
 
+/**
+ * D713 (#1778): a refusal a provider's `connect` throws on purpose. The route's
+ * catch answers it as it is, with its own status and code and our sentence,
+ * through `refuse`; every other throw stays 400 `connect_failed`.
+ */
+export class ConnectRefusal extends Error {
+  readonly status: number;
+  readonly code: string;
+  /** Our sentence for the member, answered as the refusal's `message`. */
+  readonly sentence: string;
+  constructor(status: number, code: string, sentence: string) {
+    super(code);
+    this.name = 'ConnectRefusal';
+    this.status = status;
+    this.code = code;
+    this.sentence = sentence;
+  }
+}
+
 export interface SyncResult {
   summary: string;
   counts?: Record<string, number>;
@@ -423,14 +442,17 @@ export const REGISTRY: ProviderDescriptor[] = [
   },
   // D710 (#1775): the bank provider D686 left open. Read-only: an HQ entity
   // connection a Super Admin adds per Axal organization, in its own store
-  // (`services/mercury/`), so no per-user `ProviderImpl` is registered and
-  // `has_implementation` is false. Only an admin on HQ sees it.
+  // (`services/mercury/`). Only an admin on HQ sees that row, and to an admin
+  // `has_implementation` stays false: an entity is never connected from here.
+  // D713 (#1778): founders and partners hold their own read-only connection, an
+  // ordinary `integrations` row (`providers/mercury.ts`), and see the personal
+  // variant below (`PERSONAL_MERCURY`), on HQ and on a branch.
   {
     key: 'mercury', display_name: 'Mercury', integration_type: 'data_feed',
     description: 'Read balances and transactions of the Axal entity accounts for fund administration. Read-only: nothing here can move money.',
     status: 'beta', tier: 'growth', auth_type: 'api_key', capabilities: ['Balances', 'Transactions', 'Reconciliation'],
     docs_url: 'https://docs.mercury.com', icon: 'Landmark',
-    entity_roles: ['admin'], personal_roles: [],
+    entity_roles: ['admin'], personal_roles: ['founder', 'partner'],
   },
 ];
 
@@ -454,6 +476,25 @@ export const CONNECTOR_METADATA: Record<string, ConnectorMetadata> = {
   mercury: { category: 'Accounting and banking', verified: false, pulls: [], sends: [], feeds: [], permissions: ['Read balances and transactions of the Axal entity accounts a Super Admin connects.'] },
   microsoft_365: { category: 'Calendar and workspace', verified: true, pulls: [{ what: 'Events', module: 'customer_research' }], sends: [{ what: 'Calendar events', target: 'Microsoft 365', default_mode: 'ask' }], feeds: ['customer_research', 'operating_systems'], permissions: ['Confirm your Microsoft sign-in identity.', 'Read your public Microsoft profile.', 'Read your account email address.', 'Keep the connection active.', 'Read and update calendar events.', 'Read your basic account profile.'] },
 };
+
+/**
+ * D713 (#1778): what a founder or partner reads for their own Mercury
+ * connection. Exactly one permission sentence, as every `api_key` row has
+ * (`connectors_d650.test.ts`). A founder's import feeds Revenue and traction;
+ * a partner's uses (invoices, payouts, settlements) have no module key.
+ */
+export const PERSONAL_MERCURY = {
+  description: 'Your own Mercury account, read-only: import the credits you choose as venture revenue (founders), and match your invoices, payouts and partner-deal settlements to your own bank lines (partners).',
+  capabilities: ['Revenue import', 'Payment matching'],
+  permissions: ['Read your Mercury account names, last four digits and the transactions you review; it never sends, transfers or requests money.'],
+  feedsFor: (role: string): string[] => String(role || '').toLowerCase() === 'founder' ? ['revenue_and_traction'] : [],
+};
+
+/** The modules a connector feeds for this viewer: Mercury's personal variant by role, else the catalogue's. */
+export function connectorFeeds(providerKey: string, role?: string | null): string[] {
+  if (providerKey === 'mercury' && role != null && String(role).toLowerCase() !== 'admin') return PERSONAL_MERCURY.feedsFor(role);
+  return CONNECTOR_METADATA[providerKey]?.feeds ?? [];
+}
 
 const REGISTRY_BY_KEY: Map<string, ProviderDescriptor> = new Map(
   REGISTRY.map(p => [p.key, p]),
@@ -554,22 +595,29 @@ export function audienceFor(p: ProviderDescriptor, viewer: DescriptorViewer): 'o
 }
 
 export function publicDescriptor(p: ProviderDescriptor, viewer?: DescriptorViewer) {
+  const audience = viewer ? audienceFor(p, viewer) : 'open';
+  // D713: a founder or partner reads Mercury's personal variant.
+  const personal = p.key === 'mercury' && audience === 'personal';
+  const feeds = personal ? PERSONAL_MERCURY.feedsFor(viewer!.role) : CONNECTOR_METADATA[p.key]?.feeds ?? [];
   return {
     key: p.key,
     display_name: p.display_name,
     integration_type: p.integration_type,
-    description: p.description,
+    description: personal ? PERSONAL_MERCURY.description : p.description,
     status: p.status,
     tier: p.tier,
     auth_type: p.auth_type,
-    capabilities: p.capabilities,
+    capabilities: personal ? PERSONAL_MERCURY.capabilities : p.capabilities,
     docs_url: p.docs_url,
     icon: p.icon ?? null,
     supports_pat: !!p.supports_pat,
-    has_implementation: PROVIDER_IMPLS.has(p.key),
+    // An entity connection is never made through `/connect`, so the admin's row has no implementation here.
+    has_implementation: PROVIDER_IMPLS.has(p.key) && !(p.key === 'mercury' && audience !== 'personal'),
     ...CONNECTOR_METADATA[p.key],
-    feed_modules: (CONNECTOR_METADATA[p.key]?.feeds ?? []).map(key => ({ key, label: MODULE_LABELS[key] ?? key, href: moduleHref(key) })),
+    ...(personal ? { permissions: PERSONAL_MERCURY.permissions } : {}),
+    feeds,
+    feed_modules: feeds.map(key => ({ key, label: MODULE_LABELS[key] ?? key, href: moduleHref(key) })),
     connection_source: p.key === 'google_calendar' ? 'google_oauth_tokens' : p.key === 'microsoft_365' ? 'microsoft_oauth_tokens'
-      : p.key === 'mercury' && viewer && audienceFor(p, viewer) === 'entity' ? 'mercury_entity_connections' : 'integrations',
+      : p.key === 'mercury' && audience === 'entity' ? 'mercury_entity_connections' : 'integrations',
   };
 }

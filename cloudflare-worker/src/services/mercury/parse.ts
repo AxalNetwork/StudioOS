@@ -23,6 +23,13 @@
  *  - lists: `accounts` and `transactions` arrays, and `total`.
  */
 
+/** UNVERIFIED: the status Mercury gives a settled line. */
+export const POSTED_STATUSES = ['sent'];
+/** UNVERIFIED: the kind Mercury gives a move between two accounts of one organization. */
+export const INTERNAL_KINDS = ['internalTransfer'];
+/** UNVERIFIED: the statuses of a voided line, which no personal list shows (D713 decision 6). */
+export const VOID_STATUSES = ['cancelled', 'failed'];
+
 export type AccountKind = 'checking' | 'savings';
 
 export interface ParsedAccount {
@@ -152,4 +159,40 @@ export function parseTransactions(body: unknown): { transactions: ParsedTransact
   }
   const total = typeof root?.total === 'number' && Number.isSafeInteger(root.total) ? root.total : null;
   return { transactions, refused, total };
+}
+
+/**
+ * D713 (#1778): one transaction read by id, through the same field rules as a
+ * list. UNVERIFIED: the body is the transaction, or holds it under `transaction`.
+ */
+export function parseTransaction(body: unknown): ParsedTransaction | null {
+  const root = obj(body);
+  const one = obj(root?.transaction) ?? root;
+  return one ? parseTransactions({ transactions: [one] }).transactions[0] ?? null : null;
+}
+
+export type TokenPermission = 'read_only' | 'above_read_only' | 'not_reported';
+
+/**
+ * D713 decision 2: what a response says about the token's permission.
+ * UNVERIFIED (D710.md: whether Mercury reports it is not known): a `permission`,
+ * `permissions`, `scope` or `scopes` field, as a string or a list of strings, on
+ * the body or under `organization` or `token`. Read-only is a value naming read
+ * alone (`read`, `read-only`, `ReadOnly`); any other value is above read-only.
+ * No such field is `not_reported`, and connect then needs the member's confirmation.
+ */
+export function parseTokenPermission(body: unknown): TokenPermission {
+  const root = obj(body);
+  const holders = [root, obj(root?.organization), obj(root?.token)].filter(Boolean) as Record<string, unknown>[];
+  const values: string[] = [];
+  for (const h of holders) {
+    for (const k of ['permission', 'permissions', 'scope', 'scopes']) {
+      const v = h[k];
+      if (typeof v === 'string') values.push(v);
+      else if (Array.isArray(v)) for (const x of v) if (typeof x === 'string') values.push(x);
+    }
+  }
+  if (!values.length) return 'not_reported';
+  const readOnly = (v: string) => /^read[\s_-]?(only)?$/i.test(v.trim()) || /^readonly$/i.test(v.trim());
+  return values.every(readOnly) ? 'read_only' : 'above_read_only';
 }

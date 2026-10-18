@@ -18,3 +18,43 @@ test('only member-facing routes can import personal Mercury logic',()=>{
     if(/(?:from\s*|import\s*\(|require\s*\()['"][^'"]*mercuryPersonal(?:\.ts)?['"]/.test(s)) assert.ok(callers.has(relative(root,f)),f);
   }
 });
+
+// ─────────────────────────────────────────────── PR B: what personal code may read and register
+const PERSONAL = ['integrations/providers/mercury.ts', 'services/mercuryPersonal.ts', 'routes/mercury_personal.ts'];
+const src = (f) => readFileSync(join(root, f), 'utf8');
+const code = (f) => src(f).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+test('no Eadwyn connector reader reads Mercury', () => {
+  const line = src('services/eadwynReaders.ts').match(/export const CONNECTOR_READERS[^\n]*/)[0];
+  assert.ok(line.includes('stripe'), 'the readers line was found');
+  assert.doesNotMatch(line, /mercury/i);
+});
+
+test('the personal provider registers connect and nothing else: no sync, push, webhook, preview or action', () => {
+  const s = code('integrations/providers/mercury.ts');
+  const reg = [...s.matchAll(/registerProvider\(\{([^}]*)\}\)/g)];
+  assert.equal(reg.length, 1);
+  assert.deepEqual(reg[0][1].split(',').map((k) => k.split(':')[0].trim()).filter(Boolean).sort(), ['connect', 'key']);
+  for (const hook of ['sync', 'push', 'handleWebhook', 'webhook', 'preview', 'actions', 'revokeGranted']) {
+    assert.doesNotMatch(s, new RegExp(`\\b${hook}\\s*[:(]`), hook);
+  }
+});
+
+test('personal code names only mercury_accounts of 474\'s tables, and only entity_key, account_last4 and status of entity_bank_accounts', () => {
+  const others474 = ['mercury_entity_connections', 'mercury_balance_snapshots', 'mercury_transactions', 'mercury_matches', 'mercury_sync_runs'];
+  let registryReads = 0;
+  for (const f of PERSONAL) {
+    const s = code(f);
+    for (const t of [...others474, 'entity_bank_account_reveals']) assert.doesNotMatch(s, new RegExp(`\\b${t}\\b`), `${f}: ${t}`);
+    assert.doesNotMatch(s, /account_number|routing_number|decryptBank|revealAccount/i, f);
+    for (const m of s.matchAll(/SELECT\s+((?:(?!\bFROM\b)[^`])*?)\s+FROM\s+entity_bank_accounts\b([^`]*)/g)) {
+      registryReads += 1;
+      assert.deepEqual(m[1].split(',').map((x) => x.trim()).sort(), ['account_last4', 'entity_key', 'status'], f);
+      const where = m[2].match(/WHERE([\s\S]*)/)?.[1] ?? '';
+      for (const col of where.match(/\b[a-z_]+(?=\s*(?:=|IN\b))/g) ?? []) assert.ok(['status', 'account_last4'].includes(col), `${f}: ${col}`);
+    }
+    if (/\bentity_bank_accounts\b/.test(s)) assert.equal(f, 'integrations/providers/mercury.ts', 'only decision 3 reads the registry');
+  }
+  assert.equal(registryReads, 1, 'decision 3 reads the registry once');
+  assert.match(code('integrations/providers/mercury.ts'), /FROM mercury_accounts WHERE mercury_account_id IN/);
+});

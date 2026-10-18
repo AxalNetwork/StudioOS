@@ -33,12 +33,15 @@ export const MERCURY_DEADLINE_MS = 10_000;
 /**
  * The read endpoints, and the only paths a request may take. UNVERIFIED:
  * `/accounts` lists the organization's accounts, `/organization` returns its
- * legal name, and `/account/:id/transactions` lists one account's lines.
+ * legal name, `/account/:id/transactions` lists one account's lines, and
+ * `/account/:id/transaction/:txId` reads one line by id (D713, #1778: a
+ * member's import and match re-read the line they picked).
  */
 export const READ_PATHS: readonly RegExp[] = Object.freeze([
   /^\/accounts$/,
   /^\/organization$/,
   /^\/account\/[A-Za-z0-9-]{1,64}\/transactions$/,
+  /^\/account\/[A-Za-z0-9-]{1,64}\/transaction\/[A-Za-z0-9-]{1,64}$/,
 ]);
 
 /** The query parameters a read may carry; anything else is dropped. */
@@ -111,4 +114,16 @@ export function listTransactions(
 ): Promise<unknown> {
   if (!/^[A-Za-z0-9-]{1,64}$/.test(accountId)) return Promise.reject(new MercuryClientError('path_not_allowed'));
   return read(token, `/account/${accountId}/transactions`, { start: page.start, limit: page.limit, offset: page.offset, order: 'asc' }, fetcher);
+}
+
+/**
+ * D713 (#1778): one line of an account, by id. UNVERIFIED: the path and that
+ * the body is the transaction itself (or under a `transaction` key). A 404
+ * reads as `http_error` 404, so a caller can try the organization's next account.
+ */
+export function getTransaction(token: string, accountId: string, transactionId: string, fetcher?: MercuryFetch): Promise<unknown> {
+  if (!/^[A-Za-z0-9-]{1,64}$/.test(accountId) || !/^[A-Za-z0-9-]{1,64}$/.test(transactionId)) {
+    return Promise.reject(new MercuryClientError('path_not_allowed'));
+  }
+  return read(token, `/account/${accountId}/transaction/${transactionId}`, {}, fetcher);
 }

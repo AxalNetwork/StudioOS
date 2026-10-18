@@ -39,10 +39,10 @@ import { FUND_I_SLUG, fundPayeeOf } from '../payInstructions';
 import { newUid } from './store';
 
 export const WINDOW_DAYS_AFTER = 90;
-/** UNVERIFIED: the status Mercury gives a settled line. */
-export const POSTED_STATUSES = ['sent'];
-/** UNVERIFIED: the kind Mercury gives a move between two accounts of one organization. */
-export const INTERNAL_KINDS = ['internalTransfer'];
+// The settled status and the internal-transfer kind live in `parse.ts`, so a
+// member's personal reads (D713) use the same values without this module.
+import { INTERNAL_KINDS, POSTED_STATUSES } from './parse';
+export { INTERNAL_KINDS, POSTED_STATUSES };
 
 export interface FeePeriod { id: number; fund_id: number; status: string; net_total_cents: number; window_start: string; window_end: string }
 

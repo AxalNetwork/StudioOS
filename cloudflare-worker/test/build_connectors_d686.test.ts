@@ -130,7 +130,7 @@ const checks:Check[]=[
  snap(got.map(p=>[p.display_name,p.category,p.feeds,p.feed_modules.map((x:any)=>x.href)]),
  [['Google Calendar','Calendar and workspace',['customer_research','operating_systems'],['/validate/customer-research','/build/operating-systems']],
  ['Microsoft 365','Calendar and workspace',['customer_research','operating_systems'],['/validate/customer-research','/build/operating-systems']]]);}},
- {name:'feed_modules is beside unchanged string feeds',module:'reg',before:"feed_modules: (CONNECTOR_METADATA",after:"wrong_modules: (CONNECTOR_METADATA",run:async m=>{
+ {name:'feed_modules is beside unchanged string feeds',module:'reg',before:"feed_modules: feeds.map",after:"wrong_modules: feeds.map",run:async m=>{
  const p:any=m.reg.publicDescriptor(m.reg.getDescriptor('github')!);snap([p.feeds,p.feed_modules],
  [['product_roadmap','prototype_mvp'],[{key:'product_roadmap',label:'Product roadmap',href:'/build/product-roadmap'},{key:'prototype_mvp',label:'Prototype / MVP',href:'/build/prototype-mvp'}]]);}},
  {name:'Unknown keys including inherited properties have no href',module:'labels',before:"Object.hasOwn(MODULE_HREFS, key)",after:"true",run:async m=>{

@@ -86,7 +86,9 @@ export const CATALOG: Record<ChecklistRole, ChecklistItem[]> = {
     // Connectors live at /account/connectors (D651); the old /integrations
     // addresses only redirect there.
     { key: 'ef.stripe',     label: 'Connect Stripe (verify MRR)',        route: '/account/connectors',        autoDetect: true },
-    { key: 'ef.plaid',      label: 'Connect Plaid (verify cash)',        route: '/account/connectors',      autoDetect: true },
+    // D713: the key stays `ef.plaid` so saved progress survives. It says
+    // revenue, not cash: cash is not a permitted use of a personal Mercury.
+    { key: 'ef.plaid',      label: 'Connect Mercury (verify revenue)',   route: '/account/connectors',      autoDetect: true },
     { key: 'ef.captable',   label: 'Connect or upload cap table',        route: '/build/captable',             autoDetect: true },
     { key: 'ef.financials', label: 'Populate financial model',           route: '/build/financials',           autoDetect: true },
     { key: 'ef.83b',        label: 'Confirm 83(b) status',               route: '/spinout-lab/83b',            autoDetect: true },
@@ -308,7 +310,7 @@ async function detect(env: Env, userId: number, key: string, primaryPersonaId?: 
         userId)) > 0;
     case 'ef.plaid':
       return (await num(env,
-        `SELECT COUNT(*) FROM integrations WHERE user_id = ? AND provider_key = 'plaid' AND status = 'active'`,
+        `SELECT COUNT(*) FROM integrations WHERE user_id = ? AND provider_key = 'mercury' AND status = 'active'`,
         userId)) > 0;
     case 'ef.captable':
       if ((await num(env,

@@ -30,11 +30,17 @@ call runs at boot.
   `cloudflare-worker/src/services/channels/zoom.ts`, which calls
   `registerProvider` at module load and is imported by
   `cloudflare-worker/src/routes/founder_validate_meetings.ts`.
-- D710 (#1775) — Mercury is a registry provider (`mercury`) with NO
-  implementation in this folder and no `registerProvider` call: it is an HQ
-  entity connection a Super Admin adds per Axal organization, kept in its own
-  store and synced read-only by `cloudflare-worker/src/services/mercury/`,
-  behind `cloudflare-worker/src/routes/admin_mercury.ts`.
+- D710 (#1775) — Mercury's HQ entity connection is NOT made here: a Super
+  Admin adds it per Axal organization, kept in its own store and synced
+  read-only by `cloudflare-worker/src/services/mercury/`, behind
+  `cloudflare-worker/src/routes/admin_mercury.ts`.
+- D713 (#1778) — `mercury.ts` is a member's own Mercury, for founders and
+  partners (`personal_roles`). It registers `connect` and nothing else: no
+  sync, push, webhook, preview or action. Connect takes a Read Only token,
+  refuses each failure with its own `ConnectRefusal` (a support session, a
+  webhook secret, a write scope, an Axal entity's organization), and is read
+  on demand by `cloudflare-worker/src/services/mercuryPersonal.ts`. Decision
+  3's entity check lives here, so both share it.
 
 ## Credential handling
 

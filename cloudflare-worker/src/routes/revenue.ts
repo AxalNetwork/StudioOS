@@ -6,6 +6,10 @@
  *   POST   /projects/:projectId/entries/import   CSV rows, already mapped by the page
  *   POST   /projects/:projectId/entries/import-stripe   the founder's own Stripe
  *          charges, one verified entry each (D587, migration 400)
+ *   GET    /projects/:projectId/mercury-credits?from&to   the founder's own Mercury
+ *          credits, each importable or listed with its reason (D713); writes no row
+ *   POST   /projects/:projectId/entries/import-mercury   the credits the founder
+ *          picked, re-read from Mercury, one `supported` entry each (D713, migration 477)
  *   PATCH  /projects/:projectId/entries/:uid     edit an entry or attach its proof
  *   DELETE /projects/:projectId/entries/:uid     remove an entry
  *
@@ -37,8 +41,14 @@ import {
   MAX_IMPORT_ROWS,
   chargeToEntry,
   STRIPE_LOCKED_FIELDS, MERCURY_LOCKED_FIELDS,
+  mercuryCreditToEntry, namesStripe, normalizeRevenueType,
   type LedgerRow,
 } from '../services/revenueLedger';
+import {
+  UUID_RE, listOwnTransactions, logPersonalRead, personalConnection, readFailure, readOwnTransaction, readWindow,
+  type BankLine,
+} from '../services/mercuryPersonal';
+import { namesAxalEntity } from '../integrations/providers/mercury';
 import { listLedgerChargesForUser } from '../integrations/providers/stripe';
 import { recomputeRevenueMovements } from '../services/revenueMovements';
 
@@ -265,6 +275,165 @@ revenue.post('/projects/:projectId/entries/import-stripe', async (c) => {
     capped: listed.capped,
     import_batch: inserted ? batch : null,
   });
+});
+
+// D713 — the founder's own Mercury credits. The candidates are read from the
+// CALLER's own connection, so only the startup's own founder may list or
+// import them (as the Stripe import above). Nothing is stored by the list; the
+// import re-reads every line by id, so amount and date are Mercury's, never
+// the request's, and the customer is the label the founder typed.
+const MAX_MERCURY_IMPORT = 200;
+
+function mercuryOwnerOnly(c: Ctx, g: { user: User; project: Project }): Response | null {
+  if (g.project.founder_id == null || g.user.founder_id !== g.project.founder_id) {
+    return c.json({ error: 'mercury_owner_only', message: 'Only the startup\'s founder can import its Mercury credits, from their own connected account.' }, 403);
+  }
+  return null;
+}
+
+/** The project's Stripe row, or the founder's active Stripe connection: a Stripe payout is then a sale already counted. */
+async function stripeActive(c: Ctx, projectId: number, userId: number): Promise<boolean> {
+  const row = await c.env.DB.prepare(
+    `SELECT 1 AS y FROM revenue_entries WHERE project_id = ? AND source = 'stripe'
+     UNION ALL SELECT 1 FROM integrations WHERE user_id = ? AND provider_key = 'stripe' AND status = 'active' LIMIT 1`,
+  ).bind(projectId, userId).first();
+  return !!row;
+}
+
+/** Which of these lines are already rows, and on which project. */
+async function importedProjects(c: Ctx, ids: string[]): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (!ids.length) return out;
+  const rows = (await c.env.DB.prepare(
+    "SELECT source_ref, project_id FROM revenue_entries WHERE source = 'mercury' AND source_ref IN (SELECT value FROM json_each(?))",
+  ).bind(JSON.stringify(ids)).all<{ source_ref: string; project_id: number }>()).results || [];
+  for (const r of rows) out.set(r.source_ref, Number(r.project_id));
+  return out;
+}
+
+function creditFor(line: BankLine, projectId: number, imported: Map<string, number>, stripe: boolean) {
+  const at = imported.get(line.transaction_id);
+  return mercuryCreditToEntry({
+    transaction_id: line.transaction_id, amount_cents: line.amount_cents, posted_on: line.posted_on,
+    posted: line.posted, internal: line.internal, voided: line.voided,
+    axal_counterparty: namesAxalEntity(line.counterparty_name), stripe_counterparty: namesStripe(line.counterparty_name),
+  }, { stripeActive: stripe, importedHere: at === projectId, importedElsewhere: at != null && at !== projectId });
+}
+
+revenue.get('/projects/:projectId/mercury-credits', async (c) => {
+  const g = await gate(c, true);
+  if (g instanceof Response) return g;
+  const owner = mercuryOwnerOnly(c, g);
+  if (owner) return owner;
+  const window = readWindow(c.req.query('from') || undefined, c.req.query('to') || undefined);
+  if ('error' in window) return c.json({ error: window.error, message: window.message }, 400);
+  const conn = await personalConnection(c, g.user, 'venture_revenue');
+  if (conn instanceof Response) return conn;
+  let read: { lines: BankLine[]; capped: boolean };
+  try { read = await listOwnTransactions(conn, window); }
+  catch (e) { return readFailure(c, conn, e); }
+  const imported = await importedProjects(c, read.lines.map((l) => l.transaction_id));
+  const stripe = await stripeActive(c, g.project.id, g.user.id);
+  const credits = [];
+  for (const l of read.lines) {
+    const out = creditFor(l, g.project.id, imported, stripe);
+    if (out.kind === 'skip') continue;
+    credits.push({
+      transaction_id: l.transaction_id, posted_on: l.posted_on ?? l.created_on, amount_cents: l.amount_cents,
+      last_four: l.last_four, counterparty_name: l.counterparty_name,
+      importable: out.kind === 'entry', reason: out.kind === 'refuse' ? out.reason : null,
+    });
+  }
+  await logPersonalRead(c.env, conn, g.user, 'mercury_credits_read', { lines: read.lines.length, credits: credits.length });
+  return c.json({ currency: LEDGER_CURRENCY, window, credits, lines_read: read.lines.length, capped: read.capped });
+});
+
+const MERCURY_INSERT =
+  'INSERT INTO revenue_entries (uid, project_id, customer, amount_cents, currency, revenue_type, received_on, '
+  + 'source, source_ref, verification, import_batch, created_by) '
+  + "VALUES (?, ?, ?, ?, ?, ?, ?, 'mercury', ?, ?, ?, ?) "
+  + "ON CONFLICT (source_ref) WHERE source = 'mercury' DO NOTHING";
+
+const FED_UPSERT =
+  `INSERT INTO connector_fed_items (integration_id, project_id, module, kind, external_id, local_table, local_id)
+   VALUES (?, ?, 'revenue_and_traction', 'credit', ?, 'revenue_entries', ?)
+   ON CONFLICT(integration_id, external_id) DO UPDATE SET project_id = excluded.project_id, local_table = excluded.local_table,
+     local_id = excluded.local_id, last_seen_at = CURRENT_TIMESTAMP`;
+
+revenue.post('/projects/:projectId/entries/import-mercury', async (c) => {
+  const g = await gate(c, true);
+  if (g instanceof Response) return g;
+  const owner = mercuryOwnerOnly(c, g);
+  if (owner) return owner;
+  const body = (await c.req.json().catch(() => ({}))) as { items?: unknown };
+  const raw = Array.isArray(body.items) ? body.items : null;
+  if (!raw || !raw.length) return c.json({ error: 'items_required', message: 'Pick at least one Mercury credit to import.' }, 400);
+  if (raw.length > MAX_MERCURY_IMPORT) {
+    return c.json({ error: 'too_many_items', message: `Import at most ${MAX_MERCURY_IMPORT} credits at a time.` }, 400);
+  }
+  // Every value is checked before anything reaches Mercury.
+  const items: { transaction_id: string; customer: string; revenue_type: string }[] = [];
+  const seen = new Set<string>();
+  for (const [i, it] of raw.entries()) {
+    const r = (it ?? {}) as Record<string, unknown>;
+    const id = typeof r.transaction_id === 'string' ? r.transaction_id.toLowerCase() : '';
+    if (!UUID_RE.test(id)) return c.json({ error: 'invalid_transaction_id', message: 'Each credit is named by its Mercury transaction id.', index: i }, 400);
+    if (seen.has(id)) return c.json({ error: 'duplicate_transaction_id', message: 'Each credit can be picked once.', index: i }, 400);
+    seen.add(id);
+    const customer = String(r.customer ?? '').trim();
+    if (!customer || customer.length > 200) return c.json({ error: 'invalid_customer', message: 'Enter the customer or company, up to 200 characters.', index: i }, 400);
+    const type = normalizeRevenueType(r.revenue_type);
+    if (!type) return c.json({ error: 'invalid_revenue_type', message: 'Choose recurring, pilot, one-time or deposit.', index: i }, 400);
+    items.push({ transaction_id: id, customer, revenue_type: type });
+  }
+  const conn = await personalConnection(c, g.user, 'venture_revenue');
+  if (conn instanceof Response) return conn;
+  const lines = new Map<string, BankLine | null>();
+  try {
+    for (const it of items) lines.set(it.transaction_id, await readOwnTransaction(conn, it.transaction_id));
+  } catch (e) { return readFailure(c, conn, e); }
+  const imported = await importedProjects(c, items.map((it) => it.transaction_id));
+  const stripe = await stripeActive(c, g.project.id, g.user.id);
+  const verification = verificationFor({ source: 'mercury', proof_document_id: null });
+  const batch = crypto.randomUUID();
+  const refused: { transaction_id: string; reason: string }[] = [];
+  let inserted = 0, already = 0;
+  try {
+    for (const it of items) {
+      const line = lines.get(it.transaction_id);
+      if (!line) { refused.push({ transaction_id: it.transaction_id, reason: 'transaction_not_found' }); continue; }
+      const out = creditFor(line, g.project.id, imported, stripe);
+      if (out.kind === 'skip') { refused.push({ transaction_id: it.transaction_id, reason: 'not_a_credit' }); continue; }
+      if (out.kind === 'refuse') {
+        if (out.reason === 'already_imported') already += 1;
+        else refused.push({ transaction_id: it.transaction_id, reason: out.reason });
+        continue;
+      }
+      const e = out.entry;
+      const uid = crypto.randomUUID();
+      const r = await c.env.DB.prepare(MERCURY_INSERT).bind(uid, g.project.id, it.customer, e.amount_cents, LEDGER_CURRENCY,
+        it.revenue_type, e.received_on, e.source_ref, verification, batch, g.user.id).run();
+      if (!Number(r.meta?.changes ?? 0)) {
+        // Another import wrote this line between the read and the insert.
+        const at = (await importedProjects(c, [e.source_ref])).get(e.source_ref);
+        if (at === g.project.id) already += 1;
+        else refused.push({ transaction_id: it.transaction_id, reason: 'imported_elsewhere' });
+        continue;
+      }
+      const row = await c.env.DB.prepare('SELECT id FROM revenue_entries WHERE uid = ?').bind(uid).first<{ id: number }>();
+      await c.env.DB.prepare(FED_UPSERT).bind(conn.row.id, g.project.id, e.source_ref, row?.id ?? null).run();
+      inserted += 1;
+    }
+  } catch (err) {
+    return refuse(c, 500, {
+      code: 'ledger_import_failed',
+      message: 'The Mercury credits were read but could not all be saved. Run the import again; nothing is recorded twice.',
+      raw: err, audience: 'member',
+    });
+  } finally {
+    await logPersonalRead(c.env, conn, g.user, 'mercury_credits_import', { lines: items.length, inserted }).catch(() => {});
+  }
+  return c.json({ ok: true, inserted, already_imported: already, refused, import_batch: inserted ? batch : null });
 });
 
 revenue.patch('/projects/:projectId/entries/:uid', async (c) => {
