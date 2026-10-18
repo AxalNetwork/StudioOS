@@ -336,8 +336,18 @@ export function discoverChips(catalogue) {
   return ['All', SUGGESTED, ...CATEGORY_ORDER.filter((c) => present.has(c))];
 }
 
-/** The button in a card's corner: "+", a check mark, "Notify me" or "We'll tell you". */
+/**
+ * D715 (#1780): the Axal entities' Mercury row, which the Worker serves an
+ * admin on HQ only (`connection_source`, #1775). It is never a member's own
+ * connector: it opens the entity sheet, and Build never shows it.
+ */
+export const ENTITY_SOURCE = 'mercury_entity_connections';
+export const isEntityRow = (p) => p?.connection_source === ENTITY_SOURCE;
+
+/** The button in a card's corner: "+", a check mark, "Notify me" or "We'll tell you"; Open for the entity row. */
 export function cardAction(p) {
+  // The entity row opens its sheet whatever `available`, `status` or `locked` say (D715 decision 2).
+  if (isEntityRow(p)) return 'entity';
   if (!p.available && p.status === 'coming_soon') return p.joined ? 'joined' : 'notify';
   if (p.connection) return 'connected';
   if (!p.available) return 'unavailable';
@@ -505,9 +515,11 @@ export function takeBuildProject(store = sess()) {
  */
 export function toolDeepLink(search, catalogue) {
   const ret = oauthReturn(search);
-  const list = Array.isArray(catalogue) ? catalogue : [];
+  // A venture has no use for Axal's own accounts (D715 decision 2).
+  const list = (Array.isArray(catalogue) ? catalogue : []).filter((p) => !isEntityRow(p));
   if (ret) {
-    const known = list.some((p) => p.key === ret.key);
+    // Mercury has no sign-in, so a return that names it is crafted, and opens nothing (D715 decision 3).
+    const known = ret.key !== 'mercury' && list.some((p) => p.key === ret.key);
     return { panel: known ? { key: ret.key, view: ret.view, ret } : null, strip: ret.strip };
   }
   const p = new URLSearchParams(search || '');
@@ -636,7 +648,7 @@ export function toolGroups(catalogue, { q = '', filter = 'All', pin = null } = {
     if (filter === 'Failing') return s === 'failing';
     return true;
   };
-  const list = (catalogue || []).filter((p) => matches(p, q) && keep(p));
+  const list = (catalogue || []).filter((p) => !isEntityRow(p) && matches(p, q) && keep(p));
   const groups = [];
   for (const cat of [...BUILD_CATEGORY_ORDER, null]) {
     const rows = list.filter((p) => (cat === null ? !BUILD_CATEGORY_ORDER.includes(p.category) : p.category === cat))

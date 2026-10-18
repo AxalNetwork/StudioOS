@@ -38,7 +38,7 @@ function fresh() {
     CREATE TABLE projects (id INTEGER PRIMARY KEY, founder_id INTEGER NOT NULL, name TEXT);
     CREATE TABLE discovery_interviews (
       id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, interviewee_name TEXT,
-      interviewee_company TEXT, icp_fit TEXT, quote_consent INTEGER,
+      interviewee_company TEXT, icp_fit TEXT, quote_consent INTEGER, interview_date TEXT, pains_json TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
   `);
   // D693: decisions are written in one batch with their activity row, which
@@ -48,6 +48,10 @@ function fresh() {
   db.exec(table('211_founder_validate_evidence', 'hypotheses'));
   db.exec(table('211_founder_validate_evidence', 'hypothesis_pain_links'));
   db.exec(readFileSync(`${SQL}/migrations/464_verdict_decisions.sql`, 'utf8'));
+  // #1704: the old POST obeys the evidence bar, so its decisions rest on links
+  // the evidence reader reads (migration 460's links, 440's pain-link strength).
+  db.exec(table('460_validate_record_stores', 'hypothesis_evidence_links'));
+  db.exec('ALTER TABLE hypothesis_pain_links ADD COLUMN strength TEXT'); // migration 440's, which the reader selects
   db.prepare('INSERT INTO users (id, role, founder_id, email, name) VALUES (?,?,?,?,?)')
     .run(FOUNDER, 'founder', FOUNDER_ID, 'f@example.com', 'Founder');
   db.prepare('INSERT INTO users (id, role, email, name) VALUES (?,?,?,?)')

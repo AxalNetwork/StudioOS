@@ -11,4 +11,6 @@ export const fundAdminApi = {
   access: () => request('/fund-admin/access'),
   distributionPreview: (fundId, proceedsCents) =>
     request(`/funds/${fundId}/distributions/preview`, { method: 'POST', body: JSON.stringify({ proceeds_cents: proceedsCents }) }),
+  /** Decision 9: the stores' overview. Audited before it answers; a 503 means the read was not made. */
+  overview: () => request('/fund-admin/overview'),
 };
