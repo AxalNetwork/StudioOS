@@ -4,6 +4,24 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## The AI credit ledger and the token-pack store (D755, #1905, PR 1 of 2)
+
+- Migration `486_ai_credits_token_packs.sql` adds `ai_token_packs` (the list
+  of packs, never Stripe metadata) and `ai_credit_ledger`, an append-only
+  ledger with one signed row per movement of the AI top-up balance,
+  idempotent on `UNIQUE(kind, source_ref)`. For every member its sum equals
+  `ai_topup_accounts.balance_microusd`.
+- Triggers on `ai_budget_reservations` write each run's `hold`, `release` and
+  `spend`, so the reserve, settle and review code is unchanged except that
+  `commitSettlement` (`services/aiBudget.ts`) no longer writes a `draw`. The
+  old Worker's `ai_topup_ledger` credit is mirrored as a `purchase` until the
+  deploy; its draw is not, because the trigger already writes that spend.
+- The backfill copies every 419 credit and draw, and a hold for every pending
+  or review reservation. `ai_topup_purchases` gains `pack_uid`,
+  `bonus_microusd`, `reversed_microusd` and `dispute_state`.
+- `services/aiCredits.ts` holds `TOKEN_PACK_LIMITS` (D755 §16) and
+  `ledgerBalance`. Nothing is sold yet: buying a pack is PR 2.
+
 ## The entity and money map on screen, with one numbering on paper (D717, #1855)
 
 - `GET /api/admin/fund-structure` (`services/fundStructure.ts`) now numbers
