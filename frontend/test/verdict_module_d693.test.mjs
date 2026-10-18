@@ -215,11 +215,12 @@ test('19: a 403 module read is drawn as refused through CycleRoute, with the Wor
   const retries = (v) => v.buttons.filter((b) => /Retry|Try again/.test(b)).length;
   assert.equal(refused.refused, true, 'the refused box is drawn');
   assert.match(refused.text, /Partners do not see decisions\./);
-  assert.doesNotMatch(refused.text, /experiments could not be read/);
+  // D703 (#1665): a read with no card is named from the cycle's list, never by its slug.
+  assert.doesNotMatch(refused.text, /Experiments and evidence could not be read/);
   // Any other failure is still a failure, with its Retry.
   const failed = await routeWith(httpError(500, 'Boom'));
   assert.equal(failed.refused, false);
-  assert.match(failed.text, /experiments could not be read/);
+  assert.match(failed.text, /Experiments and evidence could not be read/);
   assert.doesNotMatch(failed.text, /Boom/, 'a failure never prints the error text');
   assert.equal(retries(refused), retries(failed) - 1, 'a refusal draws no Retry of its own');
 });
