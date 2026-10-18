@@ -122,6 +122,12 @@ rail section and the model picked per section and router task, for the caller
 only. A null clears a row. localStorage stays the cache, so a mode or a pick
 set on a laptop is in place on a phone after a reload.
 
+D715 (#1780) PR 3b: `mercuryPersonal.js` calls `GET /api/mercury/personal/status`
+(`cloudflare-worker/src/routes/mercury_personal.ts`, D713): the caller's own
+Mercury connection and the uses their role holds, each with `available` and a
+`reason`. The member's sheet draws its "What StudioOS uses it for" group from
+it. #1778's PR C adds the match and import calls to the same file.
+
 D715 (#1780): `adminMercury.js` calls `/api/admin/mercury` (`cloudflare-worker/src/routes/admin_mercury.ts`, D710):
 the four entity connections (each with its accounts by ending), the Super
 Admin's connect with `confirm_read_only: true` and disconnect with a reason,

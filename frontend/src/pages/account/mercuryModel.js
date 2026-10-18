@@ -17,9 +17,9 @@
  * (`D686.md:554`). `last_synced_at` is returned raw so the sheet formats it
  * with `agoLabel`.
  *
- * The member's use words (venture revenue, practice income, partner deals) are
- * keyed by #1778's `routes/mercury_personal.ts`. Until that file is on `main`
- * they are not here: keys are never guessed (S1, #1780).
+ * The member's use words are keyed exactly as `GET /api/mercury/personal/status`
+ * names its uses (`routes/mercury_personal.ts:12-16`, D713): `venture_revenue`,
+ * `practice_income` and `partner_deals` (PR 3b).
  */
 import { AXAL_ENTITIES } from '../../lib/legalDocFormat.js';
 import { NOT_RECORDED } from '../../lib/absence.js';
@@ -152,6 +152,35 @@ export const MEMBER_GROUPS = {
   lands: 'Where it lands',
   reads: 'How it reads',
 };
+
+/** Decision 8's use words, keyed as `routes/mercury_personal.ts` names the uses. */
+export const USE_WORDS = {
+  venture_revenue: 'Your venture\'s revenue. StudioOS lists the credits in your own Mercury account, and you pick the ones that are customer revenue. Only those become rows on your revenue ledger, marked Supported, with Mercury\'s amount and date.',
+  practice_income: 'Your practice income. Match an engagement invoice you issued to the credit that paid it.',
+  partner_deals: 'Your deals with Axal VC Management LLC. Match a payout or a partner-deal settlement to the bank line that settled it.',
+};
+
+/** Why a use is not drawn, in words, from the reason the status route gives. */
+export const USE_REASONS = {
+  hq_only: 'Your deals with Axal VC Management LLC are matched on HQ only.',
+  purpose_not_allowed: 'Your profile uses its own Mercury for nothing StudioOS lists.',
+};
+
+/**
+ * The uses group from the status read: one row per `available` use the model
+ * has words for, in the route's order. With none left, `rows` is empty and
+ * `reason` says why: `hq_only` when a held use is withheld off HQ, else that
+ * the profile holds none. A key without words is never drawn.
+ */
+export function usesRows(status) {
+  const uses = Array.isArray(status?.uses) ? status.uses : [];
+  const rows = uses
+    .filter((u) => u && u.available === true && Object.hasOwn(USE_WORDS, u.key))
+    .map((u) => ({ key: u.key, text: USE_WORDS[u.key] }));
+  if (rows.length) return { rows, reason: null };
+  const hqOnly = uses.some((u) => u?.reason === 'hq_only' && Object.hasOwn(USE_WORDS, u.key));
+  return { rows: [], reason: hqOnly ? USE_REASONS.hq_only : USE_REASONS.purpose_not_allowed };
+}
 
 export const NEVER_ROWS = [
   'It never sends, transfers or requests money, and never changes anything in Mercury.',
