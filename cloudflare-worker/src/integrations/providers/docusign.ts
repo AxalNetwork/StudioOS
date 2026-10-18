@@ -57,6 +57,7 @@ import {
 } from '../secrets';
 import { encryptBytes } from '../../services/cryptoBox';
 import { renderAgreementPdf, sha256Hex } from '../../services/pdf';
+import type { AxalEntityKey, DocumentKind } from '../../services/legalDocFormat';
 
 const PROVIDER_KEY = 'docusign';
 const SCOPES = ['signature', 'extended'];
@@ -329,6 +330,9 @@ interface SendEnvelopeOpts {
   documentTitle: string;
   documentBody: string;
   documentType?: string;
+  /** D717 (#1782): the envelope's recorded kind and Axal party. */
+  documentKind?: DocumentKind;
+  axalEntityKey?: AxalEntityKey;
   recipientEmail: string;
   recipientName: string;
   emailSubject?: string;
@@ -372,6 +376,8 @@ export async function sendDocusignEnvelope(
     documentTitle: opts.documentTitle,
     documentBody: bodyWithAnchor,
     documentType: opts.documentType,
+    documentKind: opts.documentKind,
+    axalEntityKey: opts.axalEntityKey,
     signerName: opts.recipientName || opts.recipientEmail,
     signerEmail: opts.recipientEmail,
     signerIp: 'docusign',

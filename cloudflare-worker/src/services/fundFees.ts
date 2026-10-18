@@ -19,6 +19,7 @@ import {
   type FeeTerms, type PeriodInputs, type PeriodResult,
 } from './fundFeeCalc';
 import { fundPayeeOf, payInstructionsFor } from './payInstructions';
+import { collectedFor } from './mercury/match';
 
 /** Every refusal this store gives, as fixed sentences (as D628's `LEDGER_SENTENCES`). */
 export const FEE_SENTENCES = [
@@ -393,7 +394,10 @@ export async function readPeriod(env: Env, fundId: number, quarter: string) {
        FROM fund_fee_lines l LEFT JOIN capital_calls cc ON cc.id = l.capital_call_line_id WHERE l.period_id = ? ORDER BY l.limited_partner_id`,
   ).bind(period.id).all<any>());
   const { id: _id, terms_id: _t, net_invested_id: _n, issued_by: _b, ...out } = period;
-  return { period: out, lines, remittance: await remittanceFor(env, fundId, period.remittance_reference) };
+  // D710 (#1775): the Fund's remittance as a person confirmed it against a
+  // Mercury line (posted date, last four), else null. Derived, never stored.
+  const collected = (await collectedFor(env, [Number(period.id)])).get(Number(period.id)) ?? null;
+  return { period: out, lines, collected, remittance: await remittanceFor(env, fundId, period.remittance_reference) };
 }
 
 /**
