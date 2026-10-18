@@ -80,8 +80,9 @@ test('the table: unique keys, the decision\'s tiers, and a sentence on every Sup
   assert.deepEqual(tiers, {
     'capital_call.preview': 'admin', 'capital_call.issue': 'super_admin', 'capital_call.receipt': 'admin',
     'distribution.preview': 'admin', 'distribution.execute': 'super_admin', 'distribution.mark_paid': 'admin',
-    'fund_report.draft': 'admin', 'fund_report.issue': 'super_admin', 'fund_notice.preview': 'admin', 'fund_notice.issue': 'super_admin', 'fund.gp_of_record': 'super_admin', 'fund.economics': 'super_admin', 'fund.write': 'admin',
+    'fund_report.draft': 'admin', 'fund_report.issue': 'super_admin', 'fund_notice.preview': 'admin', 'fund_notice.issue': 'super_admin', 'fund.gp_of_record': 'super_admin', 'fund.slug_fund_i': 'super_admin', 'fund.economics': 'super_admin', 'fund.write': 'admin',
     'fund_ledger.administrator': 'super_admin', 'fund_ledger.write': 'admin',
+    'bank_account.see': 'super_admin', 'bank_account.change': 'super_admin', 'bank_account.reveal': 'super_admin',
   });
   for (const a of FUND_ACTS) assert.equal(a.sentence !== null, a.tier === 'super_admin', a.act);
 });
@@ -94,6 +95,14 @@ const ROUTERS: Record<string, { file: string; name: string }> = {
   '/api/fund-ledger': { file: 'routes/fund_ledger.ts', name: 'r' },
   '/api/fund-reporting': { file: 'routes/fund_reporting.ts', name: 'r' },
   '/api/fund-notices': { file: 'routes/fund_notices.ts', name: 'r' },
+  '/api/admin/bank-accounts': { file: 'routes/admin_bank_accounts.ts', name: 'r' },
+};
+
+/** #1773's rows keep their own gates: each handler is held to the call it makes. */
+const OWN_GATES: Record<string, string> = {
+  'bank_account.see': 'await requireSuperAdmin(c)',
+  'bank_account.change': 'await superAdminWriter(c)',
+  'bank_account.reveal': 'await superAdminWriter(c)',
 };
 
 /** The source of one handler: from its registration to the next one on the same router. */
@@ -122,12 +131,14 @@ test('every route FUND_ACTS names is mounted, and its handler asserts that act',
   for (const row of FUND_ACTS) {
     for (const route of row.routes) {
       const [method, full] = route.replace(/\s*\(.*\)$/, '').split(' ');
-      const prefix = Object.keys(ROUTERS).find((p) => full.startsWith(`${p}/`));
+      const prefix = Object.keys(ROUTERS).find((p) => full === p || full.startsWith(`${p}/`));
       assert.ok(prefix, `${route}: no router owns this prefix`);
       const { file, name } = ROUTERS[prefix!];
-      const body = handler(file, name, method, full.slice(prefix!.length));
+      const body = handler(file, name, method, full.slice(prefix!.length) || '/');
       assert.ok(body, `${route} (${row.act}) is not a route in ${file}`);
-      if (file === 'routes/fund_ledger.ts') {
+      if (OWN_GATES[row.act]) {
+        assert.ok(body!.includes(OWN_GATES[row.act]), `${route} no longer runs ${OWN_GATES[row.act]}`);
+      } else if (file === 'routes/fund_ledger.ts') {
         const expected = row.act === 'fund_ledger.administrator' ? "access(c,'fund_ledger.administrator')" : 'access(c,true)';
         assert.ok(body!.includes(expected), `${route} does not assert ${row.act}`);
       } else if (method === 'PATCH') {

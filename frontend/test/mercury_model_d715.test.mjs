@@ -168,3 +168,67 @@ test('the model is pure and stands alone: no React, no fetch, no import of conne
   assert.doesNotMatch(SRC, /venture_revenue|practice_income|partner_deal/, '#1778\'s use keys are not on main yet');
   assert.doesNotMatch(SRC, /\b(send|transfer|wire|pay)\w*\s*\(/i, 'nothing here moves money');
 });
+
+// ── PR 1b: adminMercuryApi (decision 11) ─────────────────────────────────────
+
+test('decision 11: adminMercuryApi has one method per #1775 route, each under /api/admin/mercury, and nothing that moves money', async () => {
+  const { adminMercuryApi } = await import('../src/lib/api/adminMercury.js');
+  const api = await import('../src/lib/api.js');
+  assert.equal(api.adminMercuryApi, adminMercuryApi, 'api.js re-exports it in its module block');
+  assert.deepEqual(Object.keys(adminMercuryApi).sort(), [
+    'accounts', 'confirmMatch', 'connect', 'connections', 'disconnect', 'matches', 'proposeMatch', 'rejectMatch', 'sync', 'transactions',
+  ]);
+  globalThis.localStorage ??= { getItem: () => null, setItem() {}, removeItem() {} };
+  globalThis.document ??= { cookie: '' };
+  const seen = [];
+  const savedFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init = {}) => {
+    seen.push({ url: String(url), method: init.method || 'GET', body: init.body ? JSON.parse(init.body) : null });
+    return { ok: true, status: 200, headers: { get: () => 'application/json' }, json: async () => ({ ok: true }), text: async () => '{"ok":true}' };
+  };
+  try {
+    await adminMercuryApi.connections();
+    await adminMercuryApi.connect('gp', 'fixture-not-a-token-1');
+    await adminMercuryApi.disconnect('fund', 'Closing this account for good');
+    await adminMercuryApi.sync('holdings');
+    await adminMercuryApi.accounts({ entity: 'gp' });
+    await adminMercuryApi.transactions({ entity: 'gp', from: '2026-09-01', to: '', page: 2 });
+    await adminMercuryApi.matches({ state: 'proposed' });
+    await adminMercuryApi.proposeMatch({ transaction_uid: 't-1', target_kind: 'capital_call_line', target_id: 7 });
+    await adminMercuryApi.confirmMatch('m-1');
+    await adminMercuryApi.rejectMatch('m-2', 'Not this line at all');
+  } finally { globalThis.fetch = savedFetch; }
+  const path = (u) => new URL(u, 'https://axal.test').pathname + new URL(u, 'https://axal.test').search;
+  assert.deepEqual(seen.map((c) => `${c.method} ${path(c.url)}`), [
+    'GET /api/admin/mercury/connections',
+    'PUT /api/admin/mercury/connections/gp',
+    'DELETE /api/admin/mercury/connections/fund',
+    'POST /api/admin/mercury/connections/holdings/sync',
+    'GET /api/admin/mercury/accounts?entity=gp',
+    'GET /api/admin/mercury/transactions?entity=gp&from=2026-09-01&page=2',
+    'GET /api/admin/mercury/matches?state=proposed',
+    'POST /api/admin/mercury/matches',
+    'POST /api/admin/mercury/matches/m-1/confirm',
+    'POST /api/admin/mercury/matches/m-2/reject',
+  ]);
+  assert.deepEqual(seen[1].body, { api_token: 'fixture-not-a-token-1', confirm_read_only: true }, 'the confirmation is always sent; no webhook or settings field');
+  assert.deepEqual(seen[2].body, { reason: 'Closing this account for good' });
+  for (const c of seen) assert.doesNotMatch(c.url, /send|transfer|pay|wire/i, c.url);
+  const src = readFileSync('frontend/src/lib/api/adminMercury.js', 'utf8');
+  assert.doesNotMatch(src.replace(/^\/\/.*$/gm, ''), /send|transfer|wire|\bpay/i, 'no money-moving name in the code');
+});
+
+test('PR 1b: entityRows reads the connections read as the Worker now serves it, accounts included', () => {
+  const rows = entityRows({ ok: true, entities: [
+    { entity_key: 'holdings', name: 'Axal VC Holdings LLC', connection: null },
+    { entity_key: 'management', name: 'Axal VC Management LLC', connection: null },
+    { entity_key: 'gp', name: 'Axal VC GP LLC', connection: conn({ accounts: [
+      { kind: 'checking', last_four: '1111', nickname: 'checking 1111', registered: true },
+      { kind: 'checking', last_four: '5555', nickname: null, registered: false },
+    ] }) },
+    { entity_key: 'fund', name: 'Axal VC Spin-Out Lab Fund I LP', connection: null },
+  ] });
+  const gp = rows[2];
+  assert.deepEqual(gp.accounts.map((a) => [a.text, a.note]), [['Checking ending 1111', null], ['Checking ending 5555', UNREGISTERED_NOTE]]);
+  assert.equal(gp.accountsReason, null);
+});
