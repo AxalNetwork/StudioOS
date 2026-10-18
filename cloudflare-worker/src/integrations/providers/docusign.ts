@@ -63,6 +63,7 @@ import { structureForPaper } from '../../services/fundStructure';
 import { renderLegalPdf, type LegalRenderer } from '../../services/legalPaperRender';
 import { fileRowStatement, newFileUid } from '../../services/legalDocumentFiles';
 import type { AxalEntityKey, DocumentKind } from '../../services/legalDocFormat';
+import { acquireRefreshLease } from '../refreshLease';
 
 const PROVIDER_KEY = 'docusign';
 const SCOPES = ['signature', 'extended'];
@@ -172,20 +173,11 @@ async function fetchUserInfo(accessToken: string, isDemo: boolean): Promise<User
   return await res.json() as UserInfoResponse;
 }
 
-async function refreshAndPersist(env: Env, row: IntegrationRow): Promise<string> {
+// Exported for kv_refresh_lease.test.ts (#1903).
+export async function refreshAndPersist(env: Env, row: IntegrationRow): Promise<string> {
   const cfg = safeParse(row.config_json);
   const isDemo = cfg.is_demo !== false;  // default demo=true
-  const lockKey = `docusign:refresh:${row.uid}`;
-  const holder = crypto.randomUUID();
-  let acquired = false;
-  try {
-    const cur = await env.RATE_LIMITS.get(lockKey);
-    if (!cur) {
-      await env.RATE_LIMITS.put(lockKey, holder, { expirationTtl: 30 });
-      const verify = await env.RATE_LIMITS.get(lockKey);
-      acquired = verify === holder;
-    }
-  } catch { /* lease infra may be unavailable */ }
+  const { acquired, release } = await acquireRefreshLease(env, 'docusign', row.uid);
 
   const reread = async (): Promise<CredentialBlob | null> => {
     const fresh = await env.DB.prepare('SELECT credentials_enc FROM integrations WHERE id = ?').bind(row.id).first<{ credentials_enc: string }>();
@@ -221,7 +213,7 @@ async function refreshAndPersist(env: Env, row: IntegrationRow): Promise<string>
     ).bind(enc, row.id).run();
     return refreshed.access_token;
   } finally {
-    try { if (acquired) await env.RATE_LIMITS.delete(lockKey); } catch {}
+    await release();
   }
 }
 
