@@ -42,6 +42,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/ui',                 'the design-system primitives everything else composes'],
   ['frontend/src/pages/hq',           'the Super Admin tier — one page per HQ sidebar row, and which canvas each draws'],
   ['frontend/src/pages/branch',       'the subsidiary tier — the frame its eight rows share, and the one AI rail mount in it'],
+  ['frontend/src/pages/admin/contracts', 'the Contracts desk — its tabs, the envelope wizard and the template editor (D647, D717)'],
   ['frontend/src/lib',                'API client, formatting, and browser-side helpers'],
   ['frontend/src/lib/api',            'one module per API domain, re-exported by one line in api.js (D527)'],
   ['frontend/src/hooks',              'shared React state'],
