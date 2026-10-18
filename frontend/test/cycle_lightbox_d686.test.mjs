@@ -325,7 +325,6 @@ test('the Validate tools read the venture from the address, and their links keep
   assert.match(ws, /if \(asked\) \{ setProjectId\(asked\); setReady\(true\); return undefined; \}/, 'the first venture only when none is asked for');
   assert.equal((ws.match(/to=\{`\/validate\/interviews\$\{keep\}`\}/g) || []).length, 2);
   assert.match(read('frontend/src/workspaces/ZoneNav.jsx'), /to=\{`\$\{zonePath\(bucket, zone\)\}\$\{projectSearch\(location\.search\)\}`\}/);
-  assert.match(read('frontend/src/pages/cycles/founderToolNavigation.js'), /\{ path: '\/validate\/interviews', cycle: 'validate', module: 'customer-research' \}/);
 });
 
 // ── The re-read after a change, however the lightbox closes ──────────────────

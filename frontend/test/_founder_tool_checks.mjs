@@ -36,7 +36,6 @@ const links = (html, testid) => [...html.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/g
   .map((m)=>({href:m[1].match(/href="([^"]*)"/)?.[1],label:stripTags(m[2]),
     quiet: !/\b(?:rounded|border|bg)-/.test(m[1].match(/class="([^"]*)"/)?.[1]||'')}));
 export const RETURNS = [
-  ['/validate/interviews','/validate/customer-research','← Validate › Customer research'],
   ['/build/discovery','/validate/customer-research','← Validate › Customer research'],
   ['/build/marketplace','/validate/customer-research','← Validate › Customer research'],
   ['/advisory','/validate/customer-research','← Validate › Customer research'],

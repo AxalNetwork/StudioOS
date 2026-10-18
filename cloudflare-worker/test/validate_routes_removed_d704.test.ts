@@ -1,6 +1,7 @@
 /**
  * D704 (#1666) — Validate's Interviews, Pain map and Hypotheses pages become
- * their modules. PR 1 (this part): the spend history follows them.
+ * their modules. PR 1: the spend history follows them. PR 2b: the surface
+ * value names Customer research, and no Worker source names an old page (test 12).
  *
  * Runs already recorded on an old page path are never rewritten. The two spend
  * reads count them under the module that holds the feature now
@@ -18,7 +19,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
@@ -51,8 +52,47 @@ test('9. AI_SURFACE_ALIASES is frozen and maps exactly the three retired pages t
   for (const [, target] of OLD_TO_MODULE) {
     assert.equal(normaliseSurface(target), target, `${target} is not a path the router records unchanged`);
   }
-  // Decision 8: the value moves in PR 2, with the redirects and D552.md.
-  assert.equal(AI_SURFACE.validateInterviews, '/validate/interviews');
+});
+
+// ── 9 (PR 2). The surface names the module ──────────────────────────────────
+
+test('9. AI_SURFACE.validateInterviews names Customer research, and D552.md lists it', () => {
+  assert.equal(AI_SURFACE.validateInterviews, '/validate/customer-research');
+  assert.equal(AI_SURFACE_ALIASES['/validate/interviews'], AI_SURFACE.validateInterviews, 'the old rows count under the new value');
+  const doc = read('documentation/architecture/decisions/D552.md');
+  assert.match(doc, /^\| `\/validate\/customer-research` \| `validateInterviews` \|/m);
+  assert.doesNotMatch(doc, /^\| `\/validate\/interviews` \|/m, 'no row still names the old page');
+});
+
+// ── 12. Worker guard ────────────────────────────────────────────────────────
+
+/** Test 6's pattern: an old page path, not part of a longer path or name. */
+const OLD_PAGE = /(?<![\w/-])\/validate\/(interviews|pain-map|hypotheses)(?![\w-])/g;
+
+test('12. no Worker source names an old page path, except AI_SURFACE_ALIASES\'s three keys', () => {
+  const root = resolve(process.cwd(), 'cloudflare-worker/src');
+  const files: string[] = [];
+  const walk = (d: string) => { for (const n of readdirSync(d)) { const p = resolve(d, n); if (statSync(p).isDirectory()) walk(p); else if (p.endsWith('.ts')) files.push(p); } };
+  walk(root);
+  assert.ok(files.length > 100, 'the walk found the Worker');
+  const hits: string[] = [];
+  for (const f of files) {
+    let src = codeOnly(readFileSync(f, 'utf8'));
+    if (f.endsWith('/services/aiSurfaces.ts')) {
+      const at = src.indexOf('export const AI_SURFACE_ALIASES');
+      const end = src.indexOf('});', at);
+      assert.ok(at > 0 && end > at, 'the alias map is where the guard expects it');
+      const map = src.slice(at, end);
+      assert.deepEqual([...map.matchAll(OLD_PAGE)].map((m) => m[0]), OLD_TO_MODULE.map(([old]) => old), 'the map holds exactly the three keys');
+      src = src.slice(0, at) + src.slice(end);
+    }
+    for (const m of src.matchAll(OLD_PAGE)) hits.push(`${f.slice(root.length + 1)}: ${m[0]}`);
+  }
+  assert.deepEqual(hits, []);
+  // The pattern is test 6's: an API path or a longer name does not match.
+  assert.equal('/founder/validate/interviews/7/evidence'.match(OLD_PAGE), null);
+  assert.equal("'/validate/interviews-old'".match(OLD_PAGE), null);
+  assert.equal("'/validate/interviews'".match(OLD_PAGE)?.length, 1);
 });
 
 // ── 10. Spend alias, own rows only ──────────────────────────────────────────

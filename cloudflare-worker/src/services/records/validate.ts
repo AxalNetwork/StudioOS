@@ -22,7 +22,7 @@ import {
   loadSegments, loadSeverities, segmentsOf, supportsByGroup, themesOf,
   type ClaimStatus, type HypRow, type InterviewRow, type LinkRow,
 } from '../cycleValidate';
-import { loadPainGroupModel, normPhrase, resolvePhrase, safeParseStrings, severityLevel, type PainGroupModel } from '../painGroups';
+import { getPainGroupsView, loadPainGroupModel, normPhrase, resolvePhrase, safeParseStrings, severityLevel, type PainGroupModel } from '../painGroups';
 import { linkCandidatesToDirectory } from '../competitorDirectoryLink';
 import { KPI_LABEL, evidenceFor } from '../validateEvidence';
 import { deleteInterview, updateInterviewDetails } from '../interviewWriters';
@@ -277,14 +277,24 @@ const problemDiscovery: ModuleSpec = {
       key: 'segments', title: 'Segments', side: true,
       read: async (ctx, id) => {
         const d = await loadTheme(ctx, id);
-        const segments = await loadSegments(vctx(ctx));
+        const [segments, view] = await Promise.all([
+          loadSegments(vctx(ctx)), getPainGroupsView(ctx.env, ctx.projectId, { strict: true }),
+        ]);
         const by = new Map<number, number>();
         for (const { iv } of quotesOf(d)) if (iv.segment_id != null) by.set(Number(iv.segment_id), (by.get(Number(iv.segment_id)) ?? 0) + 1);
-        return {
-          rows: segments.filter((s) => by.has(Number(s.id)))
-            .map((s) => ({ a: s.name, b: plural(by.get(Number(s.id))!, 'mention', 'mentions') })),
-          empty: 'No interview that names it has a segment.',
-        };
+        const rows: Row[] = segments.filter((s) => by.has(Number(s.id)))
+          .map((s) => ({ a: s.name, b: plural(by.get(Number(s.id))!, 'mention', 'mentions') }));
+        // D704 decision 6 (S1, #1666): the pain map's per-theme ICP and fit
+        // counts, the ones the ICP only filter narrows on. With no fit recorded
+        // on any interview, one line says so, never "0 of".
+        const g = view.groups.find((x) => Number(x.id) === Number(d.group.id));
+        const named = d.theme?.mentions ?? 0;
+        if (!view.icp_recorded) rows.push({ a: 'ICP fit', b: 'Not recorded on any interview yet' });
+        else if (g && named > 0) {
+          rows.push({ a: 'Your ICP', b: `strong or partial fit · ${g.icp_count} of ${plural(named, 'interview', 'interviews')}` });
+          if (g.fit_unrecorded_count > 0) rows.push({ a: 'Fit not recorded', b: plural(g.fit_unrecorded_count, 'interview', 'interviews') });
+        }
+        return { rows, empty: 'No interview that names it has a segment.' };
       },
     },
   ],

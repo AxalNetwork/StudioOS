@@ -117,7 +117,7 @@ export interface RunOptions {
   // primary: reporting success under a model the caller did not ask for is
   // the class of lie this router exists to avoid.
   model?: string;
-  // The app path the run was asked from (`/validate/interviews`), written to
+  // The app path the run was asked from (`/validate/customer-research`), written to
   // `ai_usage_logs.surface` (migration 319, D404) so a page can show its own
   // spend. Optional, and absent for every internal caller: NULL is "not
   // recorded". Re-validated in `recordUsage` against SURFACE_RE, so a caller
