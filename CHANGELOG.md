@@ -4,6 +4,20 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## Every library document renders from a coded template (D758, #1861)
+
+- The 24 old seed bodies that lived only inside migration 085 (`lpa`, `ppm`,
+  `safe` and 21 more) are now `<slug>_v1.md` files under
+  `cloudflare-worker/src/templates/legal/`, byte for byte.
+- Migration 484 fills every active `legal_templates` row that has no text
+  from its file, as a new version with the empty one kept in history. In
+  production that is D706's 25 stubs; a row with any text is never touched.
+  Their sends now use the file's text instead of `buildTemplateBody`.
+- The catalog gains "Operating Partner Agreement (Spin-Out Lab)" as a counsel
+  stub (`COUNSEL_DRAFT_SLUGS`, now 32).
+- `scripts/gen-legal-templates-seed.py` no longer rewrites an applied
+  migration: every output is skipped once it exists.
+
 ## The bank-account registry restyled per entity (D717, #1856)
 
 - `/admin?tab=bank-accounts` (`BankAccountsConsole.jsx`) now draws the "Legal

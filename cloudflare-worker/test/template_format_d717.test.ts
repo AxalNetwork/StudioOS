@@ -162,9 +162,9 @@ test('D717 a change is an edit: the version bumps, history holds the old pair, a
     (e: any) => e.code === 'kind_invalid');
 });
 
-test('D717 COUNSEL_DRAFT_SLUGS equals the slugs migrations 468, 471 and 478 insert', () => {
-  const slugs = ['468', '471', '478'].flatMap((n) => insertedSlugs(migration(n)));
-  assert.equal(slugs.length, 31);
+test('D717 COUNSEL_DRAFT_SLUGS equals the slugs migrations 468, 471, 478 and 484 insert', () => {
+  const slugs = ['468', '471', '478', '484'].flatMap((n) => insertedSlugs(migration(n)));
+  assert.equal(slugs.length, 32);
   assert.deepEqual([...COUNSEL_DRAFT_SLUGS].sort(), [...new Set(slugs)].sort());
 });
 
