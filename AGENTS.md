@@ -12,8 +12,8 @@ in one format, so no person has to relay it.
 
 ## Slots
 
-Work belongs to a slot, not to a session. There are twenty-five slots, `S01`
-to `S25`. Each has a label, `slot:SNN`, and its queue is the open issues that
+Work belongs to a slot, not to a session. There are twenty-six slots, `S01`
+to `S26`. Each has a label, `slot:SNN`, and its queue is the open issues that
 carry it. Session 1 is slot `S01` and orchestrates: it writes the tasks and
 answers STATUS comments on the same thread.
 

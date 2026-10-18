@@ -8,7 +8,10 @@ One file per provider. Each module:
 3. Calls `registerProvider({ key: '<provider_key>', ...impl })` at module
    top-level so the route layer picks it up.
 4. Flips its registry entry's `status` from `'coming_soon'` to `'live'`
-   or `'beta'` in `../registry.ts`.
+   or `'beta'` in `../registry.ts`, and its page entry in
+   `../connectorPages.ts`: tagline, description, the tools its calls make,
+   and prompts only if Eadwyn reads it. `cloudflare-worker/test/connector_pages_d753.test.ts`
+   fails until every request that writes is named by a tool (D753).
 
 The module is then imported once from the worker entry point
 (`cloudflare-worker/src/index.ts`) so its top-level `registerProvider`
