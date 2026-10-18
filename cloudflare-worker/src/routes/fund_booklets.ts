@@ -5,7 +5,8 @@
  * anyone else gets 404):
  *   POST /mine                 opens the booklet, or returns the live one
  *   GET  /mine                 the parts, the fields with their ticks, and the digest of what it shows
- *   GET  /mine/paper           the booklet on #1776's paper, as screen HTML (faces inline), no-store
+ *   GET  /mine/paper           the booklet on #1776's paper, as screen HTML (faces inline), no-store;
+ *                              ?part=2..9 draws that one part, no cover or contents (#1866)
  *   PUT  /mine/answers         {answers: [{field_id, checked}]}: 400 field_unknown, 409 booklet_not_open
  *   POST /mine/submit          {digest}: 409 booklet_part_missing or content_changed
  *
@@ -104,10 +105,15 @@ r.get('/mine/paper', async (c) => {
   const paper = paperChoice(c);
   const booklet = await mineOrNull(c.env, Number(user.id));
   if (!booklet) throw missing();
+  // #1866: `?part=2..9` draws one part's page, with no cover and no contents.
+  const raw = c.req.query('part');
+  if (raw !== undefined && !/^[2-9]$/.test(raw)) throw new BookletRefusal(400, 'part_invalid', 'part must be a number from 2 to 9.');
+  const only = raw === undefined ? null : Number(raw);
   const input = await bookletPaperInput(c.env, booklet);
   // D717 — the booklet's Structure of the Fund page, after Part 2.
   const structure = await structureForPaper(c.env, input.slug, input.state.kind === 'issued' ? 'issued' : 'preview');
-  const html = paperHtml(paperModel({ ...input, structure }), { pageSize: paper.pageSize, cover: paper.cover, medium: 'screen', fonts: 'inline' });
+  const model = paperModel({ ...input, ...(only ? { parts: (input.parts ?? []).filter((p) => p.n === only) } : {}), structure });
+  const html = paperHtml(model, { pageSize: paper.pageSize, cover: paper.cover, medium: 'screen', fonts: 'inline', ...(only ? { part: 'body' as const } : {}) });
   c.header('Cache-Control', 'no-store');
   return c.json({ html, digest: input.bodySha256, page_size: paper.pageSize });
 });

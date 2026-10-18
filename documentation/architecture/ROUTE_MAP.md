@@ -74,10 +74,10 @@ The `github` provider is a GitHub App's read-only user authorization. `GET /:uid
 The Subscription Booklet's store is mounted at `/api/fund-booklets` (`routes/fund_booklets.ts`, `services/subscriptionBooklet.ts`, migration 478).
 - **The applicant** (an approved Fund I `lp_applications` row; anyone else gets 404):
   - `POST /mine` opens the booklet, or returns the live one.
-  - `GET /mine` answers the parts, the fields with their ticks, `missing_parts` and the digest.
+  - `GET /mine` answers the parts, the fields with their ticks and `group` (the nearest counsel heading above each, for the screen only, never in the digest; #1866), `missing_parts` and the digest.
   - `PUT /mine/answers { answers: [{ field_id, checked }] }`: 400 `field_unknown`, 409 `booklet_not_open`.
   - `POST /mine/submit { digest }`: 409 `booklet_part_missing` (naming the parts) or `content_changed`.
-  - `GET /mine/paper` answers `{ html, digest, page_size }`: the booklet on #1776's paper, screen HTML with the faces inline, `no-store`.
+  - `GET /mine/paper` answers `{ html, digest, page_size }`: the booklet on #1776's paper, screen HTML with the faces inline, `no-store`. `?part=2..9` draws that one part alone, with no cover and no contents, and the whole booklet's digest; any other value is 400 `part_invalid` (#1866).
   - A support session cannot write.
 - **An Admin on HQ** (`hq_only` on a branch; support session refused; D714 acts):
   - `GET /` lists the booklets, with no ticks (`fund_booklet.read`).

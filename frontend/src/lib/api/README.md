@@ -175,6 +175,12 @@ fee state, terms and their confirmation, admissions, net invested, offsets, a
 period's preview, issue and funding call, and one LP's statement. The Worker
 decides each act: confirm and issue are the Super Admin's.
 
+D716 (#1781, #1866): `fundBooklets.js` calls the LP's own Subscription Booklet
+at `/api/fund-booklets/mine`: open (`POST`), read (`GET`), one part's paper
+(`GET /paper?part=n`), ticks (`PUT /answers`) and submit (`POST /submit` with
+the last view's digest). Every field id comes from the Worker's last view; the
+page builds none, and stores nothing in the browser.
+
 D722: `googleSignIn.js` calls `GET /api/auth/google/config` (whether this
 deployment opens Google's own window on /login, and the client to open it for;
 `{ canary: true }` adds `?canary=1`, which /login sends from `?google_window=1`)

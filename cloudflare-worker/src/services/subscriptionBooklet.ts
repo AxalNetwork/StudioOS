@@ -8,7 +8,9 @@
 // - **A field** is a Markdown task item (`- [ ]`) in a part's store body. Its
 //   id is `<slug>:<n>:<hash>`: the item's place among that body's task items,
 //   and the first 12 hex of the SHA-256 of its text. A reworded item gets a
-//   new id, so an old tick never lands on new words.
+//   new id, so an old tick never lands on new words. Its `group` is the text
+//   of the nearest Markdown heading above it (#1866): for the screen only,
+//   never in the digest or the frozen answers.
 // - **The digest** covers what the applicant sees: each part's slug, version
 //   and body hash, and the ticks, in canonical JSON. Submit freezes that same
 //   object under that digest; a body or tick that changed since is 409
@@ -55,6 +57,8 @@ export interface BookletField {
   id: string;
   part: number;
   text: string;
+  /** #1866: the nearest heading above the item in the same body, or null. Screen only. */
+  group: string | null;
 }
 
 export interface ResolvedPart {
@@ -84,17 +88,21 @@ export function canonicalJson(v: unknown): string {
 }
 
 const TASK_ITEM = /^\s*[-*+]\s+\[[ xX]\]\s+(.*\S)\s*$/;
+const HEADING = /^\s{0,3}#{1,6}\s+(.*?)\s*#*\s*$/;
 
 /** The task items of one part's body, as fields with stable ids. */
 export async function bookletFields(slug: string, body: string, part = 0): Promise<BookletField[]> {
   const out: BookletField[] = [];
   let n = 0;
+  let group: string | null = null;
   for (const line of String(body || '').replace(/\r\n?/g, '\n').split('\n')) {
+    const h = line.match(HEADING);
+    if (h) { group = h[1].trim() || null; continue; }
     const m = line.match(TASK_ITEM);
     if (!m) continue;
     n++;
     const text = m[1];
-    out.push({ id: `${slug}:${n}:${(await sha256Hex(text)).slice(0, 12)}`, part, text });
+    out.push({ id: `${slug}:${n}:${(await sha256Hex(text)).slice(0, 12)}`, part, text, group });
   }
   return out;
 }

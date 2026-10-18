@@ -51,6 +51,7 @@ import {
 } from '../lib/quarterlyReportViewModel';
 import { onboardingStatus } from '../lib/lpCommitmentModel';
 import { MyCommitment, MessageGp } from './SpinoutLabLpCommitment';
+import { SubscriptionBooklet } from './SpinoutLabLpBooklet';
 
 /* ---------------------------------------------------------------- primitives */
 
@@ -686,7 +687,7 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
             </div>
             <div className="mt-0.5 text-[12.5px] leading-relaxed text-gray-600 dark:text-gray-400">
               {derived.applicationStatus === 'approved'
-                ? 'The fund team is preparing your subscription documents. Reporting and participation activate once the general partner records your commitment on the fund’s register.'
+                ? 'Your Subscription Booklet is below: read each part, tick what applies, then submit it. Reporting and participation activate once the general partner records your commitment on the fund’s register.'
                 : 'Fund team review typically completes within five business days. On acceptance you proceed to KYC/AML and subscription documents.'}
             </div>
             {application?.review_note && (
@@ -697,6 +698,9 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
           </div>
         </div>
       )}
+
+      {/* D716 (#1866): the Subscription Booklet, for the viewer's own approved application. */}
+      {derived.applicationStatus === 'approved' && <SubscriptionBooklet />}
 
       {/* I5 · My commitment (D372) — the LP's own position, and where
           /lp-portal lands. Drawn for anyone with a holding, and when the read
