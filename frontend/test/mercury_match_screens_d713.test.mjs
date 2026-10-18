@@ -17,8 +17,9 @@ import { MemoryRouter } from 'react-router-dom';
 import { mountContracts } from './_contracts_dom.mjs';
 import { mercuryPersonalApi } from '../src/lib/api/mercuryPersonal.js';
 import { partnerSettlementsApi } from '../src/lib/api/partnerSettlements.js';
+import { api } from '../src/lib/api.js';
 import MercuryMatch, { MercuryMatchView, matchTargetOf, receivedLine } from '../src/components/MercuryMatch.jsx';
-import { SettlementsList, PayoutHistory } from '../src/pages/partner/earnings/PartnerEarnings.jsx';
+import PartnerEarnings, { SettlementsList, PayoutHistory } from '../src/pages/partner/earnings/PartnerEarnings.jsx';
 import SettlementsDesk, { SettlementRows } from '../src/pages/admin/contracts/SettlementsDesk.jsx';
 import { memberDirection, settlementDraft, settlementKindLabel, settlementStateLabel } from '../src/lib/partnerSettlements.js';
 
@@ -153,6 +154,26 @@ test('the member\'s settlements: states, words, and Match on issued and matched 
   assert.match(html, /Due date not recorded/);
 });
 
+test('a malformed settlements response is Unreadable, while an empty array is a measured empty state', async () => {
+  const saved = { commissionsMe: api.commissionsMe, payoutsMe: api.payoutsMe, mine: partnerSettlementsApi.mine };
+  api.commissionsMe = async () => ({ commissions: [] });
+  api.payoutsMe = async () => [];
+  try {
+    for (const data of [{ error: 'bad response' }, null, []]) {
+      partnerSettlementsApi.mine = async () => data;
+      const v = await mountContracts(h(PartnerEarnings), '/partner/earnings');
+      try {
+        await v.flush();
+        if (Array.isArray(data)) assert.match(v.text(), /No settlement under a partner deal has been issued to you/);
+        else {
+          assert.match(v.text(), /Your partner-deal settlements could not be read/);
+          assert.doesNotMatch(v.text(), /No settlement under a partner deal has been issued to you/);
+        }
+      } finally { await v.unmount(); }
+    }
+  } finally { api.commissionsMe = saved.commissionsMe; api.payoutsMe = saved.payoutsMe; partnerSettlementsApi.mine = saved.mine; }
+});
+
 test('settlement words: every Worker key, and an unknown one said as unknown', () => {
   assert.equal(settlementKindLabel('equity_for_services'), 'Equity for services');
   assert.equal(settlementKindLabel('loan'), 'Unknown kind');
@@ -256,10 +277,138 @@ test('mounted desk: an unreadable list says so; an inactive deal takes no draft'
   });
 });
 
+test('mounted desk: malformed list is Unreadable; a valid empty list says no drafts', async () => {
+  for (const data of [{ items: [] }, null, []]) {
+    await withSettlements(() => data, async () => {
+      const v = await mountContracts(h(SettlementsDesk, { deal: DEAL, superAdmin: true, onClose: () => {} }));
+      try {
+        await v.flush();
+        if (Array.isArray(data)) {
+          assert.match(v.text(), /No settlement is drafted under this deal/);
+          assert.doesNotMatch(v.text(), /Unreadable/);
+        } else {
+          assert.match(v.text(), /Unreadable\. Settlements could not be read\./);
+          assert.doesNotMatch(v.text(), /No settlement is drafted under this deal/);
+        }
+      } finally { await v.unmount(); }
+    });
+  }
+});
+
+test('inactive deals offer draft deletion and issued-row voiding, with no dead Edit or Issue actions', async () => {
+  await withSettlements(() => DESK_ROWS, async (calls) => {
+    for (const status of ['terminated', 'expired']) {
+      const v = await mountContracts(h(SettlementsDesk, { deal: { ...DEAL, status }, superAdmin: true, onClose: () => {} }));
+      try {
+        await v.flush();
+        await assert.rejects(v.click('Edit'), /Missing button/);
+        await assert.rejects(v.click('Issue'), /Missing button/);
+        await assert.rejects(v.click('Save as draft'), /Missing button/);
+        await v.click('Delete draft');
+        await v.flush();
+        assert.deepEqual(calls.filter((c) => c[0] === 'remove').at(-1), ['remove', 'd1']);
+        await v.click('Void');
+        assert.match(v.text(), /Why void this settlement/);
+      } finally { await v.unmount(); }
+    }
+  });
+});
+
+test('a failed deletion stays visible when the deal becomes inactive during an edit', async () => {
+  await withSettlements(() => DESK_ROWS, async () => {
+    partnerSettlementsApi.remove = async () => { throw new Error('Deletion was refused'); };
+    function ChangingDeal() {
+      const [active, setActive] = React.useState(true);
+      return h(React.Fragment, null,
+        h('button', { onClick: () => setActive(false) }, 'End deal'),
+        h(SettlementsDesk, { deal: { ...DEAL, status: active ? 'active' : 'terminated' }, superAdmin: true, onClose: () => {} }));
+    }
+    const v = await mountContracts(h(ChangingDeal));
+    try {
+      await v.flush();
+      await v.click('Edit');
+      assert.match(v.text(), /Edit draft/);
+      await v.click('End deal');
+      await assert.rejects(v.click('Save draft'), /Missing button/);
+      await v.click('Delete draft');
+      await v.flush();
+      assert.match(v.text(), /Deletion was refused/);
+      assert.ok(v.nodes().some((n) => v.props(n)?.role === 'alert' && n.textContent === 'Deletion was refused'));
+    } finally { await v.unmount(); }
+  });
+});
+
+for (const action of ['Delete draft', 'Issue']) {
+  test(`the edit form resets after ${action} succeeds on its draft`, async () => {
+    let rows = DESK_ROWS.map((row) => ({ ...row }));
+    await withSettlements(() => rows, async (calls) => {
+      partnerSettlementsApi.remove = async (uid) => { rows = rows.filter((row) => row.uid !== uid); };
+      partnerSettlementsApi.issue = async (uid) => { rows = rows.map((row) => row.uid === uid ? { ...row, state: 'issued' } : row); };
+      const v = await mountContracts(h(SettlementsDesk, { deal: DEAL, superAdmin: true, onClose: () => {} }));
+      try {
+        await v.flush();
+        await v.click('Edit');
+        assert.match(v.text(), /Edit draft/);
+        await v.click(action);
+        await v.flush();
+        assert.doesNotMatch(v.text(), /Edit draft/);
+        await assert.rejects(v.click('Save draft'), /Missing button/);
+        await v.fill('Kind', 'capital');
+        await v.fill('Direction', 'to_member');
+        await v.fill('Amount (USD)', '30');
+        await v.fill('Due', '2026-12-31');
+        await v.click('Save as draft');
+        await v.flush();
+        assert.equal(calls.filter((call) => call[0] === 'create').length, 1);
+        assert.equal(calls.filter((call) => call[0] === 'update').length, 0);
+      } finally { await v.unmount(); }
+    });
+  });
+}
+
+test('deleting another draft preserves the current edit', async () => {
+  const rows = [...DESK_ROWS, { ...DESK_ROWS[0], id: 3, uid: 'd3' }];
+  await withSettlements(() => rows, async () => {
+    const v = await mountContracts(h(SettlementsDesk, { deal: DEAL, superAdmin: true, onClose: () => {} }));
+    try {
+      await v.flush();
+      await v.click('Edit');
+      await v.fill('Amount (USD)', '99');
+      const removeOther = v.nodes().find((node) => v.props(node)?.['data-testid'] === 'settlement-delete-d3');
+      await React.act(async () => v.props(removeOther).onClick());
+      await v.flush();
+      assert.match(v.text(), /Edit draft/);
+      const amount = v.nodes().find((node) => v.props(node)?.['data-testid'] === 'settlement-amount');
+      assert.equal(v.props(amount).value, '99');
+    } finally { await v.unmount(); }
+  });
+});
+
 test('Contracts › Partner deals opens the desk, and passes who is Super Admin', () => {
   const desk = readFileSync('frontend/src/pages/admin/contracts/ContractsDesk.jsx', 'utf8');
   assert.match(desk, /<RelatedLists key=\{tab\} kind=\{tab\} onOpen=\{setSelected\} superAdmin=\{superAdmin\} \/>/);
   const lists = readFileSync('frontend/src/pages/admin/contracts/RelatedLists.jsx', 'utf8');
   assert.match(lists, /onClick=\{\(\) => setSettling\(row\)\} data-testid=\{`partner-deal-settlements-\$\{row\.id\}`\}>Settlements</);
   assert.match(lists, /<SettlementsDesk deal=\{settling\} superAdmin=\{superAdmin\}/);
+});
+
+
+test('mounted: malformed match lists are Unreadable; valid empty candidates stay empty', async () => {
+  for (const data of [null, {}, { items: [], matches: null }, { items: [ITEM], matches: null },
+    { items: [{ ...ITEM, candidates: null }], matches: [] },
+    { items: [{ ...ITEM, candidates: [] }], matches: [] }]) {
+    await withMercury(() => data, async () => {
+      const v = await mountContracts(h(MercuryMatch, { target: 'invoice', targetId: 5, matched: null }), '/needs');
+      try {
+        await v.click('Match to my Mercury'); await v.flush();
+        if (Array.isArray(data?.items) && Array.isArray(data?.matches) && Array.isArray(data.items[0]?.candidates)) {
+          assert.match(v.text(), /No line in your Mercury account fits/);
+          assert.doesNotMatch(v.text(), /could not be read/);
+        } else {
+          assert.match(v.text(), /Your Mercury account could not be read/);
+          assert.doesNotMatch(v.text(), /No line in your Mercury account fits|is not open to a match/);
+        }
+      } finally { await v.unmount(); }
+    });
+  }
 });
