@@ -66,7 +66,8 @@ export type FundActKey =
   | 'fund_report.draft' | 'fund_report.issue'
   | 'fund.gp_of_record' | 'fund.slug_fund_i' | 'fund.economics' | 'fund.write'
   | 'fund_ledger.administrator' | 'fund_ledger.write'
-  | 'bank_account.see' | 'bank_account.change' | 'bank_account.reveal';
+  | 'bank_account.see' | 'bank_account.change' | 'bank_account.reveal'
+  | 'fee_terms.confirm' | 'fee_period.issue' | 'fee.write';
 
 export type FundAct = Readonly<{
   act: FundActKey;
@@ -82,7 +83,7 @@ export type FundAct = Readonly<{
 
 const act = (row: FundAct): FundAct => Object.freeze({ ...row, routes: Object.freeze([...row.routes]) });
 
-/** Decision 1: one act table. Rows of #1774 and #1775 join from `main` (decision 6); #1777's issue row (D712) and #1773's rows have joined. */
+/** Decision 1: one act table. #1775's rows join from `main` (decision 6); #1777's issue row (D712), #1773's rows and #1774's fee rows have joined. */
 export const FUND_ACTS: readonly FundAct[] = Object.freeze([
   act({ act: 'capital_call.preview', label: 'Preview a capital call', tier: 'admin', owner: '#1779', sentence: null,
     routes: ['POST /api/funds/:id/capital-calls/preview'] }),
@@ -136,7 +137,27 @@ export const FUND_ACTS: readonly FundAct[] = Object.freeze([
   act({ act: 'bank_account.reveal', label: 'Reveal a full account number', tier: 'super_admin', owner: '#1773',
     sentence: 'A Super Admin reveals a full account number.',
     routes: ['POST /api/admin/bank-accounts/:uid/reveal'] }),
+  // #1774's management fee (D709). Nothing here moves money: issuing records
+  // amounts and reference codes.
+  act({ act: 'fee_terms.confirm', label: "Confirm a fund's fee terms", tier: 'super_admin', owner: '#1774',
+    sentence: "A Super Admin confirms a fund's fee terms.",
+    routes: ['POST /api/fund-fees/:fundId/terms/:termsUid/confirm'] }),
+  act({ act: 'fee_period.issue', label: 'Issue a fee period', tier: 'super_admin', owner: '#1774',
+    sentence: 'A Super Admin issues fee periods.',
+    routes: ['POST /api/fund-fees/:fundId/periods/:quarter/issue'] }),
+  act({ act: 'fee.write', label: 'Prepare the management fee', tier: 'admin', owner: '#1774', sentence: null,
+    routes: ['POST /api/fund-fees/:fundId/terms', 'PUT /api/fund-fees/:fundId/lps/:lpId/admission',
+      'POST /api/fund-fees/:fundId/net-invested', 'POST /api/fund-fees/:fundId/offsets',
+      'POST /api/fund-fees/:fundId/periods/:quarter/preview', 'POST /api/fund-fees/:fundId/periods/:quarter/funding-call'] }),
 ]);
+
+/**
+ * Super Admin acts born behind the elevation (#1774): on a branch Worker,
+ * where today's gate stands (rule 3), today's gate already refused an admin
+ * caller, so the passthrough keeps refusing one. A GP of record passes there,
+ * as on HQ.
+ */
+const REFUSED_TO_BRANCH_ADMINS: ReadonlySet<FundActKey> = new Set(['fee_terms.confirm', 'fee_period.issue']);
 
 const BY_ACT = new Map<string, FundAct>(FUND_ACTS.map((row) => [row.act, row]));
 
@@ -199,8 +220,11 @@ async function gate(
   // before the branch passthrough: on a branch `hydrateSuperAdmin` sets the
   // flag to 0 whatever `super_admins` holds (D106), so every caller is refused.
   if (row.act === 'fund.slug_fund_i' && !isSuperAdmin(user)) throw superAdminRequired();
-  if (branchOf(c.env)) return;
   const isAdmin = String(user?.role ?? '') === 'admin';
+  if (branchOf(c.env)) {
+    if (isAdmin && REFUSED_TO_BRANCH_ADMINS.has(row.act)) throw superAdminRequired();
+    return;
+  }
   if (!isAdmin) {
     // Only the Super Admin hands a fund's GP gates to another account.
     if (row.act === 'fund.gp_of_record') throw superAdminRequired();
