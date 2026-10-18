@@ -4,6 +4,17 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## The Mercury icon stays the neutral monogram, re-checked (D752, #1907)
+
+- `frontend/src/ui/BrandIcon.jsx`: `BRAND_MONOGRAM.mercury`'s reason is
+  re-dated 2026-10-18 with each source's answer: Simple Icons 16.35.0 has no
+  `icons/mercury.svg`, the pinned SVGL commit has no Mercury entry, and
+  mercury.com's brand, press and trademark pages were refused by the build
+  session's egress policy.
+- `D687.md` gains the missing `mercury` monogram row; `D710.md` points to it.
+- `frontend/test/brand_icons_d687.test.mjs` pins that Mercury is drawn as the
+  monogram, never lucide `Landmark` and never the canvas placeholder `#5b6cff`.
+
 ## Every library document renders from a coded template (D758, #1861)
 
 - The 24 old seed bodies that lived only inside migration 085 (`lpa`, `ppm`,
