@@ -1,0 +1,106 @@
+/**
+ * D752 (#1886) sections 1 and 2 — who sees which Mercury card, in whose words.
+ *
+ *  - `audienceFor` for every role, on HQ and on a branch, against the table
+ *    written here: an investor is `personal` on HQ and `none` on a branch.
+ *  - The registry, the uses and the variants agree: `personal_roles`,
+ *    `PERSONAL_USES` and `PERSONAL_MERCURY` hold the same roles, and
+ *    `personal_hq_only_roles` is exactly the roles whose every use is in
+ *    `HQ_ONLY_USES`. Founder and partner keep D713's words, written out here.
+ *  - `publicDescriptor` serves the investor's variant and never the audience
+ *    fields; `connectorFeeds` goes by role.
+ *  - `/connect` answers an investor on a branch 403 before its 404 and before
+ *    the provider: nothing reaches Mercury and nothing is stored.
+ *
+ *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
+ *     --test cloudflare-worker/test/mercury_roles_d752.test.ts
+ */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  PERSONAL_MERCURY, audienceFor, connectorFeeds, getDescriptor, personalHqOnlyOffHq, personalMercuryFor, publicDescriptor,
+} from '../src/integrations/registry.ts';
+import { HQ_ONLY_USES, PERSONAL_USES } from '../src/services/mercuryPersonal.ts';
+import { personalFixture, bank, req, count, TOKEN } from './_mercury_personal_d713.ts';
+
+const mercury = getDescriptor('mercury')!;
+
+// role → [on HQ, on a branch]
+const AUDIENCE: Record<string, [string, string]> = {
+  admin: ['entity', 'none'],
+  founder: ['personal', 'personal'],
+  partner: ['personal', 'personal'],
+  investor: ['personal', 'none'],
+  advisor: ['none', 'none'],
+  mentor: ['none', 'none'],
+  operator: ['none', 'none'],
+  service_provider: ['none', 'none'],
+  exploring: ['none', 'none'],
+};
+
+const D713_DESCRIPTION = 'Your own Mercury account, read-only: import the credits you choose as venture revenue (founders), and match your invoices, payouts and partner-deal settlements to your own bank lines (partners).';
+const D713_PERMISSION = 'Read your Mercury account names, last four digits and the transactions you review; it never sends, transfers or requests money.';
+
+const sorted = (xs: Iterable<string>) => [...xs].sort();
+
+test('audienceFor: every role on HQ and on a branch, as D752 section 1\'s table says', () => {
+  for (const [role, [hq, branch]] of Object.entries(AUDIENCE)) {
+    assert.equal(audienceFor(mercury, { role, hq: true }), hq, `${role} on HQ`);
+    assert.equal(audienceFor(mercury, { role, hq: false }), branch, `${role} on a branch`);
+    assert.equal(personalHqOnlyOffHq(mercury, { role, hq: false }), role === 'investor', `${role} HQ-only off HQ`);
+    assert.equal(personalHqOnlyOffHq(mercury, { role, hq: true }), false, `${role} on HQ is never refused as HQ-only`);
+  }
+  assert.equal(audienceFor(mercury, { role: 'INVESTOR', hq: false }), 'none', 'the role is compared lower-cased');
+});
+
+test('the registry, the uses and the variants agree, and founder and partner keep D713\'s words', () => {
+  assert.deepEqual(sorted(mercury.personal_roles!), sorted(Object.keys(PERSONAL_USES)));
+  assert.deepEqual(sorted(mercury.personal_roles!), sorted(Object.keys(PERSONAL_MERCURY)));
+  const hqOnly = Object.entries(PERSONAL_USES).filter(([, uses]) => uses.every((u) => HQ_ONLY_USES.includes(u))).map(([r]) => r);
+  assert.deepEqual(sorted(mercury.personal_hq_only_roles!), sorted(hqOnly));
+  assert.ok(hqOnly.length > 0, 'the list is not empty');
+  for (const [role, v] of Object.entries(PERSONAL_MERCURY)) {
+    assert.equal(v.permissions.length, 1, `${role}: one permission sentence`);
+    assert.match(v.permissions[0], /never sends, transfers or requests money/, role);
+    assert.ok(v.description.trim() && v.capabilities.length, role);
+  }
+  for (const role of ['founder', 'partner'] as const) {
+    assert.equal(PERSONAL_MERCURY[role].description, D713_DESCRIPTION, role);
+    assert.deepEqual(PERSONAL_MERCURY[role].capabilities, ['Revenue import', 'Payment matching'], role);
+    assert.deepEqual(PERSONAL_MERCURY[role].permissions, [D713_PERMISSION], role);
+  }
+  assert.deepEqual(PERSONAL_MERCURY.investor.capabilities, ['Proof of funds']);
+  assert.equal(personalMercuryFor('advisor'), null);
+  assert.equal(personalMercuryFor('Investor'), PERSONAL_MERCURY.investor);
+});
+
+test('publicDescriptor serves the investor\'s variant on HQ and never the audience fields; connectorFeeds goes by role', () => {
+  const own = publicDescriptor(mercury, { role: 'investor', hq: true }) as any;
+  assert.equal(own.description, PERSONAL_MERCURY.investor.description);
+  assert.deepEqual(own.capabilities, ['Proof of funds']);
+  assert.deepEqual(own.permissions, PERSONAL_MERCURY.investor.permissions);
+  assert.deepEqual(own.feeds, []);
+  assert.equal(own.has_implementation, true);
+  for (const field of ['entity_roles', 'personal_roles', 'personal_hq_only_roles']) assert.ok(!(field in own), field);
+  const founder = publicDescriptor(mercury, { role: 'founder', hq: false }) as any;
+  assert.equal(founder.description, D713_DESCRIPTION);
+  assert.deepEqual(founder.feeds, ['revenue_and_traction']);
+  assert.deepEqual(connectorFeeds('mercury', 'investor'), []);
+  assert.deepEqual(connectorFeeds('mercury', 'founder'), ['revenue_and_traction']);
+  assert.deepEqual(connectorFeeds('mercury', 'partner'), []);
+});
+
+test('/connect answers an investor on a branch 403 before its 404 and the provider; nothing reaches Mercury and nothing is stored', async () => {
+  const { db, env } = await personalFixture();
+  const b = bank();
+  try {
+    const r = await req(env, 30, 'POST', '/api/connectors/connect',
+      { provider_key: 'mercury', api_key: TOKEN, config: { confirm_read_only: true } }, { branch: true });
+    assert.deepEqual([r.status, r.body.error, r.body.message], [403, 'purpose_not_allowed', 'Mercury is offered to your profile on HQ only.'], r.text);
+    assert.equal(b.calls.length, 0);
+    assert.equal(count(db, "SELECT COUNT(*) AS n FROM integrations WHERE provider_key = 'mercury'"), 0);
+    assert.equal(count(db, 'SELECT COUNT(*) AS n FROM integration_logs'), 0);
+    const other = await req(env, 30, 'GET', '/api/connectors/mercury', undefined, { branch: true });
+    assert.equal(other.status, 404, 'every other route stays 404');
+  } finally { b.restore(); }
+});
