@@ -1,12 +1,14 @@
 /**
  * D710 (#1775) decision 5 — the catalogue knows who may see Mercury.
  *
- * On HQ, `GET /available` lists `mercury` to an admin only, as an entity
- * connection; on a branch, to no one. Every other provider's row is unchanged
- * for every role `ALLOWED_ROLES` admits. `POST /connect` answers an admin on
- * HQ 409 `entity_connection_only` and everyone else 404, as if the key did not
- * exist; so do the waitlist and notify-me routes. `logEvent` masks bank
- * numbers and an EIN, and leaves `protein` alone.
+ * On HQ, `GET /available` lists `mercury` to an admin as an entity connection
+ * and, since D713 (#1778), to a founder and a partner as their own, personal
+ * one; on a branch, to the founder and the partner only. Every other
+ * provider's row is unchanged for every role `ALLOWED_ROLES` admits.
+ * `POST /connect` answers an admin on HQ 409 `entity_connection_only`, hands a
+ * founder or partner to the personal provider, and answers everyone else 404,
+ * as if the key did not exist; so do the waitlist and notify-me routes.
+ * `logEvent` masks bank numbers and an EIN, and leaves `protein` alone.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/connectors_audience_d710.test.ts
@@ -19,6 +21,7 @@ import { SignJWT } from 'jose';
 import integrations, { logEvent } from '../src/routes/integrations.ts';
 import { REGISTRY, publicDescriptor } from '../src/integrations/registry.ts';
 import { d1Over } from './_d1_sqlite.mjs';
+import '../src/integrations/providers/mercury.ts';
 
 const JWT_SECRET = 'y'.repeat(64); // synthetic fixture key
 const ROLES = ['admin', 'founder', 'partner', 'investor', 'advisor', 'operator', 'service_provider'];
@@ -65,15 +68,16 @@ async function call(db: DatabaseSync, role: string, method: string, path: string
 }
 
 const OTHERS = REGISTRY.filter((p) => p.key !== 'mercury').map((p) => p.key);
+const PERSONAL = ['founder', 'partner'];
 
-test('on HQ, /available lists mercury to an admin only, as an entity connection; every other row is unchanged for every role', async () => {
+test('on HQ, /available lists mercury to an admin as an entity connection and to a founder and a partner as their own; every other row is unchanged', async () => {
   const db = fixture();
   for (const role of ROLES) {
     const r = await call(db, role, 'GET', '/available');
     assert.equal(r.status, 200, role);
     const keys = r.body.items.map((p: any) => p.key);
     assert.deepEqual(keys.filter((k: string) => k !== 'mercury'), OTHERS, `${role}: the other providers, in order`);
-    assert.equal(keys.includes('mercury'), role === 'admin', role);
+    assert.equal(keys.includes('mercury'), role === 'admin' || PERSONAL.includes(role), role);
     for (const p of r.body.items.filter((x: any) => x.key !== 'mercury')) {
       const desc = REGISTRY.find((d) => d.key === p.key)!;
       assert.equal(p.connection_source, publicDescriptor(desc).connection_source, `${role} ${p.key}`);
@@ -85,23 +89,43 @@ test('on HQ, /available lists mercury to an admin only, as an entity connection;
     ['mercury_entity_connections', false, 'Accounting and banking', false, 'beta', 'api_key']);
   assert.deepEqual(admin.permissions, ['Read balances and transactions of the Axal entity accounts a Super Admin connects.']);
   assert.ok(!('entity_roles' in admin) && !('personal_roles' in admin));
+  for (const role of PERSONAL) {
+    const own = (await call(db, role, 'GET', '/available')).body.items.find((p: any) => p.key === 'mercury');
+    assert.deepEqual([own.connection_source, own.has_implementation, own.status, own.auth_type], ['integrations', true, 'beta', 'api_key'], role);
+    assert.deepEqual(own.capabilities, ['Revenue import', 'Payment matching']);
+    assert.match(own.permissions[0], /never sends, transfers or requests money/);
+    assert.deepEqual(own.feeds, role === 'founder' ? ['revenue_and_traction'] : []);
+    assert.ok(!/Axal entity accounts/.test(own.description), 'the personal card never describes the entity console');
+    assert.ok(!('entity_roles' in own) && !('personal_roles' in own));
+  }
 });
 
-test('on a branch, no role sees mercury', async () => {
+test('on a branch, only a founder and a partner see mercury, as their own; the entity row stays HQ only', async () => {
   const db = fixture();
   for (const role of ROLES) {
     const r = await call(db, role, 'GET', '/available', undefined, true);
     assert.equal(r.status, 200);
-    assert.ok(!r.body.items.some((p: any) => p.key === 'mercury'), role);
+    const row = r.body.items.find((p: any) => p.key === 'mercury');
+    assert.equal(!!row, PERSONAL.includes(role), role);
+    if (row) assert.equal(row.connection_source, 'integrations', role);
   }
 });
 
-test('connect: an admin on HQ is 409 entity_connection_only; everyone else, and the waitlist and notify-me, is 404', async () => {
+test('connect: an admin on HQ is 409 entity_connection_only; a founder or partner reaches the personal provider; everyone else, and their waitlist and notify-me, is 404', async () => {
   const db = fixture();
   const admin = await call(db, 'admin', 'POST', '/connect', { provider_key: 'mercury', api_key: 'fixture-not-a-token-1' });
   assert.deepEqual([admin.status, admin.body.error], [409, 'entity_connection_only']);
   assert.equal(db.prepare("SELECT COUNT(*) AS n FROM integrations WHERE provider_key = 'mercury'").get()!.n, 0);
-  for (const role of ROLES.filter((r) => r !== 'admin')) {
+  // No token: the personal provider refuses before anything reaches Mercury.
+  for (const role of PERSONAL) {
+    for (const branch of [false, true]) {
+      const r = await call(db, role, 'POST', '/connect', { provider_key: 'mercury' }, branch);
+      assert.deepEqual([r.status, r.body.error], [400, 'api_key_required'], `${role} branch=${branch}`);
+    }
+    assert.equal((await call(db, role, 'GET', '/mercury')).status, 200, `${role} GET /:key`);
+  }
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM integrations WHERE provider_key = 'mercury'").get()!.n, 0);
+  for (const role of ROLES.filter((r) => r !== 'admin' && !PERSONAL.includes(r))) {
     const r = await call(db, role, 'POST', '/connect', { provider_key: 'mercury', api_key: 'fixture-not-a-token-1' });
     assert.deepEqual([r.status, r.body.error], [404, 'unknown_provider'], role);
     assert.equal((await call(db, role, 'GET', '/mercury')).status, 404, `${role} GET /:key`);
