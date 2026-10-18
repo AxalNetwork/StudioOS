@@ -667,7 +667,7 @@ export async function createAndSendEnvelope(
         const ds = await sendDocusignEnvelope(env, dsRow, {
           documentTitle: tpl.title,
           documentBody: tpl.body,
-          documentType: documentType,
+          documentType,
           ...renderFormat(format),
           templateVersion,
           envelopeUuid,
