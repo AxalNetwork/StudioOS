@@ -19,9 +19,9 @@
  * Run with:
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/profile_pages_d702.test.ts
  */
-import test, { before } from 'node:test';
+import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, mkdtempSync, copyFileSync } from 'node:fs';
+import { readFileSync, readdirSync, mkdtempSync, copyFileSync, rmSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -124,6 +124,9 @@ before(() => {
   db.exec(`VACUUM INTO '${TEMPLATE}'`);
   db.close();
 });
+// The template and its copies come to about 0.5 GB per run; left behind, a few
+// full suites fill the disk.
+after(() => rmSync(dirname(TEMPLATE), { recursive: true, force: true }));
 
 let copies = 0;
 function freshDb() {

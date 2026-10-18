@@ -3,18 +3,22 @@
  * in the job summary.
  *
  * D672 (#1542) stopped both uploads while the repository was private, because
- * code scanning there needs GitHub Code Security, which was off. The
- * repository is public now, where code scanning is free. Uploading is also
- * what lets Copilot Autofix propose fixes for CodeQL alerts. The job-summary
- * report from D672 stays, because the agents that fix findings cannot read
- * the code-scanning API.
+ * code scanning there needs GitHub Code Security, which was off. D718 put
+ * them back once the repository was public, where code scanning is free.
+ * Uploading is also what lets Copilot Autofix propose fixes for CodeQL
+ * alerts. The job-summary report from D672 stays, because the agents that
+ * fix findings cannot read the code-scanning API. Since D721 each workflow's
+ * `visibility` job decides whether to upload (code_scanning_visibility_d721
+ * runs it).
  *
  * This pins:
- *   - both workflows upload: CodeQL's analyze no longer says `upload: never`;
- *     Semgrep uploads its stripped SARIF, after the strip, with the default
- *     `if:` (an upload replaces the alert set, so a resultless SARIF from a
- *     crashed scan would close every open alert), and with no `category`, so
- *     it replaces the alert set the pre-D672 uploads left;
+ *   - both workflows upload when the visibility job says so: CodeQL's
+ *     analyze takes `upload` from it; Semgrep uploads its stripped SARIF,
+ *     after the strip, with an `if:` that names only the visibility job (no
+ *     status function, so the default success() still applies: an upload
+ *     replaces the alert set, so a resultless SARIF from a crashed scan would
+ *     close every open alert), and with no `category`, so it replaces the
+ *     alert set the pre-D672 uploads left;
  *   - each workflow still ends with the report step;
  *   - the report counts what the scanner did not suppress, and fails only
  *     when it has no readable SARIF, since an empty report reads as clean.
@@ -32,9 +36,9 @@ const CODEQL = code(read('.github/workflows/codeql.yml'));
 const SEMGREP = code(read('.github/workflows/semgrep.yml'));
 const SCRIPT = resolve(process.cwd(), 'scripts/sarif-summary.py');
 
-test('CodeQL uploads its analysis and still writes the SARIF the report reads', () => {
+test('CodeQL uploads its analysis when code scanning takes it, and still writes the SARIF the report reads', () => {
   const analyze = CODEQL.slice(CODEQL.indexOf('codeql-action/analyze'));
-  assert.doesNotMatch(analyze, /^\s*upload:\s*(never|false)\s*$/m, 'CodeQL analyze must upload to code scanning (D718); `upload: never` is D672, from when the repository was private');
+  assert.match(analyze, /^\s*upload:\s*\$\{\{ needs\.visibility\.outputs\.upload \}\}\s*$/m, 'CodeQL analyze must take `upload` from the visibility job (D721): a fixed `never` is D672 and drops the alerts on a public repository; no `upload` is D718 and goes red on a private one');
   assert.match(analyze, /^\s*output:\s*codeql-results\s*$/m, 'CodeQL must write its SARIF where the report step reads it');
 });
 
@@ -48,7 +52,9 @@ test('Semgrep uploads the stripped SARIF, only after a scan that succeeded', () 
   const step = SEMGREP.slice(upload, report);
   assert.match(step, /uses: github\/codeql-action\/upload-sarif@[0-9a-f]{40}\b/, 'the upload action must be pinned by commit SHA');
   assert.match(step, /^\s*sarif_file:\s*semgrep\.sarif\s*$/m, 'the upload must send the stripped SARIF');
-  assert.doesNotMatch(step, /^\s*if:/m, 'the upload must take the default if: success(); always() would upload the resultless SARIF a crashed scan leaves and close every alert');
+  const cond = step.match(/^\s*if:\s*(.+?)\s*$/m);
+  assert.ok(cond, 'the upload must run only when code scanning takes uploads (D721)');
+  assert.equal(cond[1], "needs.visibility.outputs.upload == 'always'", 'the upload\'s if: names only the visibility job, with no status function, so the default success() still applies; always() would upload the resultless SARIF a crashed scan leaves and close every alert');
   assert.doesNotMatch(step, /^\s*category:/m, 'no category, so the upload replaces the alert set the pre-D672 uploads left open');
 });
 

@@ -19,18 +19,56 @@ permissions:
 # though FastAPI is not deployed — Python supply-chain issues still hit
 # Replit dev sessions.
 #
-# UPLOADS TO CODE SCANNING AGAIN (D718, reversing D672's upload half). D672
-# stopped the upload while the repository was private and code scanning
-# needed GitHub Code Security, which was off. The repository is public now,
-# where code scanning is free, so the alerts go back to the Security tab.
-# That is also the only place Copilot Autofix can propose a fix for them.
+# UPLOADS ONLY WHERE CODE SCANNING TAKES THEM (D721). D672 stopped the
+# upload while the repository was private and code scanning needed GitHub
+# Code Security, which was off; D718 put it back once the repository was
+# public, where code scanning is free and Copilot Autofix can propose a fix
+# per alert. The `visibility` job below now decides on every run, so a
+# change of visibility no longer turns this check red.
 # The SARIF is still written to codeql-results/, and the report step still
 # lists the findings in the job summary, because the agents that fix them
 # cannot read the code-scanning API (it answers 403 to their token).
 # Findings never fail the job.
 jobs:
+  # D721: ask, do not assume, whether code scanning takes an upload. It is
+  # free on a public repository and needs GitHub Code Security on a private
+  # one, which this repository does not have. The repository has been both
+  # (private under D672, public under D718, private again on 2026-10-18), and
+  # an upload it refuses turns this check red on every PR. The same job is in
+  # codeql.yml and semgrep.yml; code_scanning_visibility_d721.test.mjs keeps
+  # the two identical and runs its step.
+  visibility:
+    name: code scanning takes uploads?
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      upload: ${{ steps.ask.outputs.upload }}
+    steps:
+      - name: Ask the repository API
+        id: ask
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # code_security reads "unknown" when this token cannot see it.
+          answer="$(gh api "repos/$GITHUB_REPOSITORY" --jq '[.private, (.security_and_analysis.code_security.status // "unknown")] | map(tostring) | join(" ")')"
+          case "$answer" in
+            "false "*|"true enabled")
+              echo "upload=always" >> "$GITHUB_OUTPUT"
+              ;;
+            "true "*)
+              echo "upload=never" >> "$GITHUB_OUTPUT"
+              echo "::notice::This repository is private and code scanning is off, so the findings are in the job summary only (D721)."
+              ;;
+            *)
+              echo "::error::The repository API answered '$answer' for private and code_security."
+              exit 1
+              ;;
+          esac
+
   analyze:
     name: analyze (${{ matrix.language }})
+    needs: visibility
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -55,5 +93,6 @@ jobs:
         with:
           category: '/language:${{ matrix.language }}'
           output: codeql-results
+          upload: ${{ needs.visibility.outputs.upload }}
       - name: Report findings
         run: python3 scripts/sarif-summary.py "CodeQL (${{ matrix.language }})" codeql-results
