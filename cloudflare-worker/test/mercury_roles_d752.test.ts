@@ -11,16 +11,21 @@
  *    fields; `connectorFeeds` goes by role.
  *  - `/connect` answers an investor on a branch 403 before its 404 and before
  *    the provider: nothing reaches Mercury and nothing is stored.
+ *  - `personalPolicy` refuses every use in `HQ_ONLY_USES` off HQ with 403
+ *    `hq_only`, through the one list: `capital_attestation` as `partner_deals`.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/mercury_roles_d752.test.ts
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { Hono } from 'hono';
+import { SignJWT } from 'jose';
+import { requireAuth } from '../src/auth.ts';
 import {
   PERSONAL_MERCURY, audienceFor, connectorFeeds, getDescriptor, personalHqOnlyOffHq, personalMercuryFor, publicDescriptor,
 } from '../src/integrations/registry.ts';
-import { HQ_ONLY_USES, PERSONAL_USES } from '../src/services/mercuryPersonal.ts';
+import { HQ_ONLY_USES, PERSONAL_USES, personalPolicy } from '../src/services/mercuryPersonal.ts';
 import { personalFixture, bank, req, count, TOKEN } from './_mercury_personal_d713.ts';
 
 const mercury = getDescriptor('mercury')!;
@@ -103,4 +108,25 @@ test('/connect answers an investor on a branch 403 before its 404 and the provid
     const other = await req(env, 30, 'GET', '/api/connectors/mercury', undefined, { branch: true });
     assert.equal(other.status, 404, 'every other route stays 404');
   } finally { b.restore(); }
+});
+
+test('personalPolicy: each HQ-only use is 403 hq_only off HQ and allowed on HQ, through the one list; a use the role does not hold is purpose_not_allowed', async () => {
+  const { env } = await personalFixture();
+  const app = new Hono<any>();
+  app.get('/policy/:use', async (c) => {
+    const user = await requireAuth(c);
+    return (await personalPolicy(c, user, c.req.param('use') as any)) ?? c.json({ ok: true });
+  });
+  const ask = async (who: number, role: string, use: string, branch: boolean) => {
+    const jwt = await new SignJWT({ user_id: who, role }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
+      .sign(new TextEncoder().encode(env.JWT_SECRET));
+    const res = await app.request(`/policy/${use}`, { headers: { Authorization: `Bearer ${jwt}` } }, branch ? { ...env, BRANCH_CODE: 'ldn' } : env);
+    const body: any = await res.json();
+    return [res.status, body.error ?? null];
+  };
+  assert.deepEqual(await ask(30, 'investor', 'capital_attestation', false), [200, null]);
+  assert.deepEqual(await ask(30, 'investor', 'capital_attestation', true), [403, 'hq_only']);
+  assert.deepEqual(await ask(20, 'partner', 'partner_deals', true), [403, 'hq_only']);
+  assert.deepEqual(await ask(20, 'partner', 'practice_income', true), [200, null], 'a use not in the list works on a branch');
+  assert.deepEqual(await ask(10, 'founder', 'capital_attestation', false), [403, 'purpose_not_allowed']);
 });

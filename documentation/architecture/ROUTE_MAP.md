@@ -33,11 +33,15 @@ their connecting user; company links control writes into project-backed data.
 request, and Super Admin `GET /requests` lists them. `GET /:uid/logs` searches
 and pages activity. Every company ID supplied by a request is checked against
 `user_company_links` before use.
-Mercury (D710, #1775) is listed only to an admin on HQ, as an entity
-connection read from `/api/admin/mercury`; to every other caller, and on a
-branch, `GET /available` omits it and `POST /connect`, `GET /:key` and the
-waitlist and notify-me routes answer 404 as if the key did not exist, while an
-HQ admin's `POST /connect` gets 409 `entity_connection_only`.
+Mercury (D710, #1775; D713, #1778; D752, #1886): an admin on HQ gets the
+entity row, read from `/api/admin/mercury`, and `POST /connect` answers 409
+`entity_connection_only`. A founder or partner, on either host, and an investor
+on HQ get their own row, in their role's words, and connect a Read Only token.
+An investor on a branch gets no row, and `POST /connect` answers 403
+`purpose_not_allowed` ("Mercury is offered to your profile on HQ only.").
+Everyone else, and an admin on a branch, is answered as before: `GET
+/available` omits it and `POST /connect`, `GET /:key` and the waitlist and
+notify-me routes answer 404 as if the key did not exist.
 D749 (#1838): `POST /api/admin/mercury/transactions/:uid/not-ours` `{ reason, note }` marks a posted credit Not ours (201), and `POST /api/admin/mercury/not-ours/:uid/withdraw` `{ reason }` withdraws the mark. Both are an Admin's on HQ, under the `mercury.reconcile` act.
 `GET /api/admin/mercury/transactions?match=none` leaves out a line with an active mark (and `direction=credit|debit`, D717 #1856, keeps only credits or debits), `match=not_ours` lists the marked lines, and each item carries `not_ours`. The monthly cash summary and the quarterly report's `unmatched_count` leave active marks out.
 
