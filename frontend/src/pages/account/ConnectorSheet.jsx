@@ -691,7 +691,7 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
               <div className="space-y-1">
                 <label htmlFor="connector-webhook" className="text-[12px] font-semibold text-axal-muted dark:text-gray-400">Webhook secret (optional)</label>
                 <input id="connector-webhook" type="password" className={INPUT} value={webhookSecret} onChange={(e) => setWebhookSecret(e.target.value)} placeholder={conn?.has_webhook_secret ? '••••••••' : ''} />
-                <p className="text-[11.5px] text-axal-muted dark:text-gray-400">Checks incoming webhooks at /api/integrations/webhook/{p.key}/&lt;uid&gt; with HMAC-SHA256 in the X-Axal-Signature header.</p>
+                <p className="text-[11.5px] text-axal-muted dark:text-gray-400">Webhooks sent to /api/integrations/webhook/{p.key}/&lt;uid&gt; are checked against this secret (HMAC-SHA256 in the X-Axal-Signature header, or the signature the provider adds). Without one, the connection takes no webhooks and updates when it syncs. HubSpot checks its own signature and needs none.</p>
               </div>
               <div className="space-y-1">
                 <label htmlFor="connector-config" className="text-[12px] font-semibold text-axal-muted dark:text-gray-400">Settings (JSON, optional)</label>

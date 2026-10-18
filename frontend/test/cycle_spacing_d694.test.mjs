@@ -46,7 +46,7 @@ test('legacy, static, unknown and malformed child routes keep their own shell', 
 test('literal cycle routes mount a cycle page or a redirect', () => {
   const app = read('frontend/src/App.jsx');
   const routes = [...app.matchAll(/<Route path="([^":]+)" element=\{/g)];
-  const exceptions = new Set(['/validate/record/live', '/raise/data-room']);
+  const exceptions = new Set(['/validate/record/live']);
   for (const [index, route] of routes.entries()) {
     if (!isCyclePath(route[1]) || exceptions.has(route[1])) continue;
     const section = app.slice(route.index, routes[index + 1]?.index ?? app.length);
@@ -138,7 +138,8 @@ function assertBody(source) {
 test('the cycle body takes the canvas gutter in a cycle size container, and no overlay sits inside it', () => {
   const source = read(routePath);
   assertBody(source);
-  const close = '      </div>\n      </div>\n';
+  // D703 (#1665's PR 2c): the container and body sit in the one `!actionPage` condition, which closes with them.
+  const close = '      </div>\n      </div>\n      )}\n';
   const mount = '          onChanged={() => { dirty.current = true; }} />\n      )}\n';
   for (const [label, mutate] of [
     ['the closing tags back below the Mount', (src) => src.replace(close, '').replace(mount, mount + close)],

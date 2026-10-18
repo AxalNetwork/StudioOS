@@ -31,7 +31,10 @@ import {
   getDescriptor,
   getProviderImpl,
   type IntegrationRow,
+  audienceFor,
+  type ProviderDescriptor,
 } from '../integrations/registry';
+import { branchOf } from '../util/branch';
 import {
   encryptCredentials,
   decryptCredentials,
@@ -59,6 +62,16 @@ export function ensureRole(c: Context<{ Bindings: Env }>, user: User) {
       headers: { 'Content-Type': 'application/json' },
     });
   }
+}
+
+/**
+ * D710 (#1775): how this caller may see a provider. A provider with no
+ * audience fields is `open`, as before; Mercury is an `entity` connection for
+ * an admin on HQ and `none` for everyone else, who is answered as if the key
+ * did not exist.
+ */
+function audienceOf(c: Context<{ Bindings: Env }>, user: User, desc: ProviderDescriptor) {
+  return audienceFor(desc, { role: String(user.role || ''), hq: branchOf(c.env) === null });
 }
 
 function safeJson<T>(s: string | null | undefined, def: T): T {
@@ -210,8 +223,10 @@ integrations.get('/available', async (c) => {
   try {
     if (await c.env.DB.prepare('SELECT 1 AS connected FROM microsoft_oauth_tokens WHERE user_id = ?').bind(user.id).first()) connectedSet.add('microsoft_365');
   } catch { unreadableSources.push('microsoft_365'); }
-  const providers = REGISTRY.map(p => {
-    const pub = publicDescriptor(p);
+  const viewer = { role: String(user.role || ''), hq: branchOf(c.env) === null };
+  const providers = REGISTRY.filter(p => audienceOf(c, user, p) !== 'none').map(p => {
+    const pub = publicDescriptor(p, viewer);
+    const entityOnly = audienceOf(c, user, p) === 'entity';
     const lockedForUser = p.tier === 'free' ? false : !userMeetsTier(user, p.tier as 'growth' | 'studio');
     return {
       ...pub,
@@ -222,7 +237,8 @@ integrations.get('/available', async (c) => {
       required_tier: p.tier,
       icon_key: p.icon ?? null,
       locked_for_user: lockedForUser,
-      already_connected: p.key === 'google_calendar' || p.key === 'microsoft_365'
+      // An entity connection is read from its own store, never the caller's rows.
+      already_connected: entityOnly ? false : p.key === 'google_calendar' || p.key === 'microsoft_365'
         ? unreadableSources.includes(p.key) ? null : connectedSet.has(p.key)
         : connectionsReadable ? connectedSet.has(p.key) : null,
       // Legacy aliases — DO NOT remove until FE consumers migrate.
@@ -352,7 +368,8 @@ integrations.get('/:key', async (c, next) => {
   // unknown_provider. Hand that path on (D651).
   if (key === 'waitlist') return next();
   const user = await requireAuth(c);
-  if (!getDescriptor(key)) return c.json({ error: 'unknown_provider' }, 404);
+  const known = getDescriptor(key);
+  if (!known || audienceOf(c, user, known) === 'none') return c.json({ error: 'unknown_provider' }, 404);
   if (!writesProjectData(key)) return c.json({ ok: true, provider_key: key, teammate: null });
   const companyId = await activeCompanyFor(c, user);
   if (!companyId) return c.json({ error: 'active_company_required' }, 400);
@@ -417,7 +434,11 @@ integrations.post('/connect', async (c) => {
   if (!key) return c.json({ error: 'provider_key is required' }, 400);
 
   const desc = getDescriptor(key);
-  if (!desc) return c.json({ error: 'unknown_provider', provider_key: key }, 404);
+  if (!desc || audienceOf(c, user, desc) === 'none') return c.json({ error: 'unknown_provider', provider_key: key }, 404);
+  // D710: an entity connection is added in its own console, never here.
+  if (audienceOf(c, user, desc) === 'entity') {
+    return c.json({ error: 'entity_connection_only', message: `${desc.display_name} is connected per Axal entity by the Super Admin, not from here.` }, 409);
+  }
   const activeCompanyId = await activeCompanyFor(c, user);
   if (!activeCompanyId && writesProjectData(key)) return c.json({ error: 'active_company_required' }, 400);
 
@@ -967,6 +988,14 @@ integrations.get('/:uid/logs', async (c) => {
 
 // ───────────────────────────────────────────────────────────────────── webhook
 
+/**
+ * Providers whose `webhook` handler verifies the delivery's signature itself
+ * and throws on anything it cannot verify, so the connection row needs no
+ * stored signing key. HubSpot signs with the app's client secret (v3), which
+ * `hubspot.ts`'s handler checks before it reads the body.
+ */
+const VERIFIED_IN_HANDLER = new Set(['hubspot']);
+
 integrations.post('/webhook/:provider/:uid', async (c) => {
   await ensureIntegrationsSchema(c.env);
   const provider = c.req.param('provider').toLowerCase();
@@ -974,23 +1003,29 @@ integrations.post('/webhook/:provider/:uid', async (c) => {
 
   const row = await c.env.DB.prepare('SELECT * FROM integrations WHERE uid = ? AND provider_key = ?')
     .bind(uid, provider).first<IntegrationRow>();
-  if (!row) return c.json({ error: 'not_found' }, 404);
+  // A delivery is taken only for an active connection with a handler and
+  // with a signing key to check it against (or a provider that checks its own
+  // signature). Anything else gets the unknown-connection answer, before the
+  // body is read: no handler runs, no fetch is made and nothing is logged.
+  const impl = getProviderImpl(provider);
+  if (!row || row.status !== 'active' || !impl?.webhook ||
+      (!row.webhook_secret_enc && !VERIFIED_IN_HANDLER.has(provider))) {
+    return c.json({ error: 'not_found' }, 404);
+  }
 
   const body = await c.req.text();
   // Generic signature header — providers with non-standard formats
   // (e.g. Calendly's `Calendly-Webhook-Signature`) implement
   // `verifyWebhook` and read their own header from `headers` instead.
-  const implForHeader = getProviderImpl(provider);
   const signature = c.req.header('x-axal-signature')
     || c.req.header('x-hub-signature-256')
     || c.req.header('x-signature')
-    || (implForHeader?.verifyWebhook ? 'provider-verified' : null);
+    || (impl.verifyWebhook ? 'provider-verified' : null);
 
-  // HMAC verification when a webhook_secret is configured. We compute the
+  // HMAC verification against the connection's signing key. We compute the
   // SHA-256 HMAC over the raw body and compare with constant-time equality.
-  // A missing signature header is rejected just as firmly as a wrong one —
-  // otherwise an attacker who knows the URL could replay events without
-  // ever holding the secret.
+  // A missing signature header is refused just as firmly as a wrong one, so
+  // only a sender holding the key gets a delivery processed.
   if (row.webhook_secret_enc) {
     const secret = await decryptWebhookSecret(c.env, row.uid, row.webhook_secret_enc);
     if (!secret) {
@@ -1012,10 +1047,9 @@ integrations.post('/webhook/:provider/:uid', async (c) => {
     // Provider-specific verifier wins when present (Calendly uses a
     // Stripe-style `t=...,v1=...` format that the default check can't
     // express). Fall back to the default `sha256=hex` HMAC otherwise.
-    const implForVerify = getProviderImpl(provider);
     let valid: boolean;
-    if (implForVerify?.verifyWebhook) {
-      try { valid = await implForVerify.verifyWebhook(secret, body, c.req.raw.headers); }
+    if (impl.verifyWebhook) {
+      try { valid = await impl.verifyWebhook(secret, body, c.req.raw.headers); }
       catch { valid = false; }
     } else {
       const expected = await hmacHex(secret, body);
@@ -1038,19 +1072,6 @@ integrations.post('/webhook/:provider/:uid', async (c) => {
     return c.json({ ok: true, skipped: 'company_or_sync_disabled' });
   }
 
-  const impl = getProviderImpl(provider);
-  if (!impl?.webhook) {
-    // Without a handler we simply ack and store the (redacted) payload so
-    // ops can inspect via /:uid/logs. We deliberately do NOT 501 — the
-    // foundation accepts the inbound event for later replay.
-    await logEvent(c.env, {
-      integration_id: row.id, user_id: row.user_id, provider_key: provider,
-      direction: 'inbound', event_type: 'webhook', status: 'ok',
-      response_summary: 'received (no handler yet)',
-      payload: safeJson<unknown>(body, body.slice(0, 500)),
-    });
-    return c.json({ ok: true, accepted: true });
-  }
   try {
     const out = await impl.webhook(c, row, body, signature);
     await logEvent(c.env, {
@@ -1094,7 +1115,9 @@ function constantTimeEqual(a: string, b: string): boolean {
  * Also caps array/string lengths so a runaway payload can't blow up the
  * row size.
  */
-const SECRET_KEY_RE = /(api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|webhook[_-]?secret|secret|password|signing[_-]?key|private[_-]?key|bearer|authorization|x-api-key|cookie|set-cookie|session)/i;
+// D710 (#1775): bank numbers too. `ein` only as a whole key or segment, so
+// `protein` is not masked.
+const SECRET_KEY_RE = /(api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|webhook[_-]?secret|secret|password|signing[_-]?key|private[_-]?key|bearer|authorization|x-api-key|cookie|set-cookie|session|account[_-]?number|routing[_-]?number|tax[_-]?id|(?:^|[_-])ein(?:$|[_-]))/i;
 function redactPayload(value: unknown, depth = 0): unknown {
   if (depth > 6) return '[truncated]';
   if (value == null) return value;
@@ -1122,7 +1145,7 @@ integrations.post('/waitlist', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const key = String(body?.provider_key || '').toLowerCase().trim();
   const desc = getDescriptor(key);
-  if (!desc) return c.json({ error: 'unknown_provider' }, 404);
+  if (!desc || audienceOf(c, user, desc) === 'none') return c.json({ error: 'unknown_provider' }, 404);
   const notes = body?.notes ? String(body.notes).slice(0, 1000) : null;
   try {
     await c.env.DB.prepare(
@@ -1154,7 +1177,7 @@ integrations.post('/notify-me', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const key = String(body?.provider_key || '').toLowerCase().trim();
   const desc = getDescriptor(key);
-  if (!desc) return c.json({ error: 'unknown_provider' }, 404);
+  if (!desc || audienceOf(c, user, desc) === 'none') return c.json({ error: 'unknown_provider' }, 404);
   const notes = body?.notes ? String(body.notes).slice(0, 1000) : null;
   await c.env.DB.prepare(
     'INSERT INTO integration_waitlist (user_id, provider_key, notes) VALUES (?, ?, ?) ' +
@@ -1172,7 +1195,7 @@ integrations.post('/:provider/notify-me', async (c) => {
   ensureRole(c, user);
   const key = c.req.param('provider').toLowerCase();
   const desc = getDescriptor(key);
-  if (!desc) return c.json({ error: 'unknown_provider' }, 404);
+  if (!desc || audienceOf(c, user, desc) === 'none') return c.json({ error: 'unknown_provider' }, 404);
   const body = await c.req.json().catch(() => ({}));
   const notes = body?.notes ? String(body.notes).slice(0, 1000) : null;
   await c.env.DB.prepare(

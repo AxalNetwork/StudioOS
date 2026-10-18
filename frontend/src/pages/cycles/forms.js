@@ -1,8 +1,8 @@
 /**
  * D661 (#1474) — the Add and Edit forms for the cycle stores that have their
  * Worker writes but no page of their own: Grow's feedback, channels, partners,
- * markets and obligations (D664); Build's risks, formation steps and MVP
- * must-haves (D662); Raise's seven modules (D695, #1657).
+ * markets and obligations (D664); Build's six modules and Validate's five
+ * (D695, #1656); Raise's seven modules (D695, #1657).
  *
  * WHAT A FORM IS. Its `key` (unique in its module: `/new?form=<key>` opens
  * it, D695), its `cta`, its fields, the body its Worker route takes
@@ -329,66 +329,6 @@ const obligation = {
   ],
   toBody: (v) => ({ title: str(v.title), kind: v.kind || null, due_at: str(v.due_at), owner_name: str(v.owner_name), repeats: v.repeats || null, remind_days: remindDays(v) }),
   submit: (w, projectId, v) => w.grow.obligation(projectId, obligation.toBody(v)),
-};
-
-// ---------- Build (routes/cycle_build.ts) ------------------------------------
-
-const risk = {
-  key: 'risk', cta: 'Add risk',
-  button: 'Add risk',
-  title: 'Add a risk',
-  lead: 'A risk to the venture, with how bad it is and what you are doing about it.',
-  fields: [
-    { name: 'title', label: 'Risk', type: 'text', required: true, max: 200 },
-    { name: 'severity', label: 'Severity', type: 'select', required: true, options: opts([['high', 'High'], ['medium', 'Medium'], ['low', 'Low']]) },
-    { name: 'mitigation', label: 'Mitigation', type: 'textarea', max: 2000 },
-  ],
-  toBody: (v) => ({ title: str(v.title), severity: v.severity || null, mitigation: str(v.mitigation) }),
-  submit: (w, projectId, v) => w.build.risk(projectId, risk.toBody(v)),
-};
-
-const formationStep = {
-  key: 'formation-step', cta: 'Add formation step',
-  button: 'Add formation step',
-  title: 'Add a formation step',
-  lead: 'A step in forming the company, such as filing the certificate or getting a tax ID.',
-  fields: [
-    { name: 'title', label: 'Step', type: 'text', required: true, max: 200 },
-    { name: 'due_date', label: 'Due', type: 'date' },
-  ],
-  toBody: (v) => ({ title: str(v.title), due_date: str(v.due_date) }),
-  submit: (w, projectId, v) => w.build.formationStep(projectId, formationStep.toBody(v)),
-};
-
-const mustHave = {
-  key: 'must-have', cta: 'Add a must-have',
-  button: 'Add a must-have',
-  title: 'Add a must-have',
-  lead: 'A feature the MVP cannot ship without. It joins your MVP scope, marked as a must-have.',
-  fields: [
-    { name: 'title', label: 'Feature', type: 'text', required: true, max: 200 },
-    { name: 'added_value', label: 'Value it adds', type: 'select', initial: 'High', options: opts([['High', 'High'], ['Medium', 'Medium'], ['Low', 'Low']]) },
-    { name: 'effort', label: 'Effort', type: 'select', initial: 'M', options: opts([['S', 'Small'], ['M', 'Medium'], ['L', 'Large'], ['XL', 'Extra large']]) },
-    { name: 'delivery_status', label: 'State', type: 'select', initial: 'Backlog', options: opts([['Backlog', 'Backlog'], ['In Progress', 'In progress'], ['Review', 'Review'], ['Done', 'Done'], ['Blocked', 'Blocked']]) },
-    { name: 'due_date', label: 'Due', type: 'date' },
-  ],
-  toBody: (v) => ({ title: str(v.title), added_value: v.added_value || 'High', effort: v.effort || 'M', delivery_status: v.delivery_status || 'Backlog' }),
-  // MVP scope adds the feature (progress.ts); D662's feature route marks it a
-  // must-have and sets its date. The route returns the feature it made.
-  async submit(w, projectId, v) {
-    const made = await w.build.mvpFeature(projectId, mustHave.toBody(v));
-    if (made?.id) await w.build.feature(projectId, made.id, { is_must_have: true, due_date: str(v.due_date) });
-    return made;
-  },
-};
-
-const feature = {
-  key: 'feature', cta: 'Add feature',
-  button: 'Add feature', title: 'Add a feature',
-  lead: 'A feature of the solution. It can be linked to a pain theme later.',
-  fields: mustHave.fields.slice(0, 3),
-  toBody: (v) => ({ title: str(v.title), added_value: v.added_value || 'High', effort: v.effort || 'M', delivery_status: 'Backlog' }),
-  submit: (w, projectId, v) => w.build.mvpFeature(projectId, feature.toBody(v)),
 };
 
 // ---------- Raise (routes/cycle_raise.ts, services/raiseWriters.ts) ---------
@@ -836,11 +776,7 @@ export const FORMS = {
     'market-expansion': [market],
     'durable-company-building': [obligation],
   },
-  build: {
-    'solution-design': [feature, risk],
-    'prototype-mvp': [mustHave],
-    'company-creation': [formationStep],
-  },
+  // Build's six canvas forms join from `BUILD_FORMS` below (#1656 PR 3b).
 };
 
 /** All Add forms for a module, in button order. */
@@ -1179,54 +1115,6 @@ const editProspect = {
   submit: (w, projectId, id, v) => w.raise.prospectUpdate(projectId, id, editProspect.toBody(v)),
 };
 
-const editFormationStep = {
-  ...EDIT,
-  key: 'edit-formation-step',
-  title: 'Edit formation step',
-  lead: 'Its name, its date and where it stands. A step the Lab or a filing obligation tracks is changed where it lives.',
-  fields: [
-    { name: 'title', label: 'Step', type: 'text', required: true, max: 200 },
-    { name: 'due_date', label: 'Due', type: 'date' },
-    { name: 'state', label: 'State', type: 'select', required: true, options: opts([['todo', 'To do'], ['doing', 'Doing'], ['done', 'Done']]) },
-  ],
-  // Only `step-<id>` rows are formation steps; Lab steps and obligations share the table.
-  idOf: buildId('step-'),
-  valuesOf: (row) => { const e = growEdit(row); return e ? { ...e, title: asText(e.title), due_date: dateText(e.due_date), state: asText(e.state) } : { title: asText(row?.cells?.filing), due_date: dateText(row?.cells?.due), state: asText(row?.cells?.state) }; },
-  toBody: (v) => ({ title: str(v.title), due_date: str(v.due_date), state: v.state }),
-  submit: (w, projectId, id, v) => w.build.formationStepUpdate(projectId, id, editFormationStep.toBody(v)),
-};
-
-const editMustHave = {
-  ...EDIT,
-  key: 'edit-must-have',
-  title: 'Edit must-have',
-  lead: 'Its date, or take it off the must-haves. The feature stays in your MVP scope.',
-  fields: [
-    { name: 'is_must_have', label: 'Must-have for the MVP', type: 'select', required: true, options: YES_NO },
-    { name: 'due_date', label: 'Due', type: 'date' },
-  ],
-  idOf: buildId(''),
-  valuesOf: (row) => { const e = growEdit(row); return e ? { ...e, is_must_have: 'yes', due_date: dateText(e.due_date) } : { is_must_have: 'yes', due_date: dateText(row?.cells?.due) }; },
-  toBody: (v) => ({ is_must_have: v.is_must_have === 'yes', due_date: str(v.due_date) }),
-  submit: (w, projectId, id, v) => w.build.feature(projectId, id, editMustHave.toBody(v)),
-};
-
-const editFeature = {
-  ...EDIT,
-  key: 'edit-feature',
-  button: 'Mark',
-  title: 'Must-have or not',
-  lead: 'A must-have is a feature the MVP cannot ship without. Marked ones are listed under Prototype / MVP.',
-  fields: [
-    { name: 'is_must_have', label: 'Must-have for the MVP', type: 'select', required: true, options: YES_NO },
-  ],
-  idOf: buildId(''),
-  // The feature table does not carry the mark, so nothing is pre-chosen.
-  valuesOf: () => ({ is_must_have: '' }),
-  toBody: (v) => ({ is_must_have: v.is_must_have === 'yes' }),
-  submit: (w, projectId, id, v) => w.build.feature(projectId, id, editFeature.toBody(v)),
-};
-
 /** The Edit forms, by cycle and module slug. A slug not here draws no Edit. */
 // D686 §5.4 (#1597): a core system's connector, on Operating systems' rows.
 // The row's id is its kind (`cycle_build.ts` records each system by kind).
@@ -1300,12 +1188,7 @@ export const EDITS = {
     'market-expansion': editMarket,
     'durable-company-building': editObligation,
   },
-  build: {
-    'solution-design': editFeature,
-    'prototype-mvp': editMustHave,
-    'company-creation': editFormationStep,
-    'operating-systems': editSystem,
-  },
+  // Build's Edits join from `BUILD_EDITS` below (#1656 PR 3b).
 };
 
 /** The Edit form for a cycle's module, or null. Own entries only, as `formFor`. */
@@ -1318,11 +1201,12 @@ export function editFor(cycle, slug) {
 //
 // D695 PR 2a (#1656): the five canvas forms (CO:306-310) and their Edits, as
 // specs in the canvas's T, CH and CK kinds. Each body is the one its route on
-// `main` takes, and each Edit sends only that route's PATCH fields. They are
-// registered nowhere (decision 15): PR 2b adds the `validate` write group they
-// call, the chip loaders, and `FORMS.validate` / `EDITS.validate`. A chip set
-// read from `form-options` names its key in `optionsFrom`; until a loader
-// fills it, it draws its own "None yet" chip, or its empty sentence.
+// `main` takes, and each Edit sends only that route's PATCH fields. PR 2b
+// registers them as `FORMS.validate` and `EDITS.validate`, with the
+// `validate` write group they call. A chip set read from `form-options` names
+// its key in `optionsFrom`, and the form's `loadOptions` fills it; before the
+// read answers, or with nothing recorded, it draws its "None yet" chip or its
+// empty sentence (decision 4).
 
 const NONE_YET = { value: '', label: 'None yet' };
 /** A whole-number id as typed or chosen; null when there is none. */
@@ -1344,6 +1228,25 @@ const quoteOf = (value) => {
   return at > 0 && id != null && s.slice(at + 1) ? { interview_id: id, phrase: s.slice(at + 1) } : null;
 };
 
+const chipList = (list) => (Array.isArray(list) ? list : []).filter((o) => o && o.value != null && o.value !== '')
+  .map((o) => ({ value: String(o.value), label: String(o.label ?? o.value) }));
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+/**
+ * New theme's choices (#1692's form-options): each quote as its interview and
+ * phrase (the Worker's own value is `<id>|<phrase>`), unthemed ones checked
+ * and a themed one's meta the Worker's "in <theme>",
+ * with the count of those waiting; then None yet and the hypotheses.
+ */
+export function themeOptions(read) {
+  const quotes = (Array.isArray(read?.quotes) ? read.quotes : []).filter((x) => idOrNull(x?.interview_id) != null && typeof x?.phrase === 'string' && x.phrase)
+    .map((x) => ({ value: quoteValue(x.interview_id, x.phrase), label: String(x.label ?? x.phrase), meta: x.theme ? String(x.theme) : 'unthemed', checked: !x.theme }));
+  const waiting = Number(read?.unthemed_total);
+  return {
+    quotes: { options: quotes, ...(waiting > 0 ? { note: `${plural(waiting, 'unthemed quote is', 'unthemed quotes are')} waiting.` } : {}) },
+    hypothesis_id: { options: [NONE_YET, ...chipList(read?.hypotheses)] },
+  };
+}
+
 const theme = {
   key: 'theme', cta: 'Create theme', button: 'Create theme',
   title: 'New theme',
@@ -1361,6 +1264,7 @@ const theme = {
     quotes: (Array.isArray(v.quotes) ? v.quotes : []).map(quoteOf).filter(Boolean),
     hypothesis_id: idOrNull(v.hypothesis_id),
   }),
+  loadOptions: (w, projectId) => w.formOptions('validate', projectId, 'problem-discovery').then(themeOptions),
   submit: (w, projectId, v) => w.validate.theme(projectId, theme.toBody(v)),
 };
 
@@ -1401,6 +1305,20 @@ const kindField = { kind: 'CH', name: 'kind', k: 'Kind', opts: COMPETITOR_KIND, 
 const watchField = { kind: 'CK', name: 'watch', k: 'Watch for', opts: WATCH };
 const whyField = { kind: 'T', name: 'why', k: 'Why it matters', ph: 'One line, optional', max: 1000 };
 const watchBody = (v) => Object.fromEntries(WATCH.map((o) => [o.value, checked(v.watch, o.value)]));
+/**
+ * Add competitor's search (decision 8): first the caller's own analyses'
+ * candidates whose name holds what is typed, sent as `company_ref`; then the
+ * Research › Companies matches the read gives for it, sent as `directory_uid`.
+ * Each group is drawn under a label naming its source.
+ */
+export function companyMatches(read, q) {
+  const typed = String(q ?? '').trim().toLowerCase();
+  const own = chipList(read?.candidates).filter((o) => o.label.toLowerCase().includes(typed))
+    .map((o) => ({ ...o, into: 'company_ref', group: 'Your competitor analyses' }));
+  const directory = chipList(read?.directory).map((o) => ({ ...o, into: 'directory_uid', group: 'Research › Companies' }));
+  return [...own, ...directory];
+}
+
 const competitor = {
   key: 'competitor', cta: 'Add competitor', button: 'Add competitor',
   title: 'Add competitor',
@@ -1410,7 +1328,7 @@ const competitor = {
     // A search box (decision 8): PR 2b's picker sets `company_ref` for one of
     // the caller's own candidates, or `directory_uid` for a Research match;
     // otherwise the typed name is sent.
-    { kind: 'T', name: 'company', k: 'Company', ph: 'Search Research › Companies, or type a name', required: true, max: 120, optionsFrom: 'companies', search: 'q' },
+    { kind: 'T', name: 'company', k: 'Company', ph: 'Search Research › Companies, or type a name', required: true, max: 120, search: { into: 'company_ref' } },
     kindField, watchField, whyField,
   ],
   // The route takes exactly one of the three keys.
@@ -1419,6 +1337,7 @@ const competitor = {
       : str(v.directory_uid) ? { directory_uid: str(v.directory_uid) } : { name: str(v.company) };
     return { ...picked, kind: v.kind || 'direct', watch: watchBody(v), why: str(v.why) };
   },
+  search: (w, projectId, q) => w.formOptions('validate', projectId, 'market-intelligence', { q }).then((read) => companyMatches(read, q)),
   submit: (w, projectId, v) => w.validate.competitor(projectId, competitor.toBody(v)),
 };
 
@@ -1464,6 +1383,9 @@ const ownerDeadline = {
     { kind: 'T', name: 'deadline', k: 'Deadline', input: 'date', ph: '31 Oct' },
   ],
 };
+/** New hypothesis's and Edit hypothesis's choices: the venture's pain themes and the members who can own it. */
+export const hypothesisOptions = (read) => ({ pain_group_id: { options: chipList(read?.themes) }, owner_user_id: { options: chipList(read?.owners) } });
+
 const hypothesis = {
   key: 'hypothesis', cta: 'Create hypothesis', button: 'Create hypothesis',
   title: 'New hypothesis',
@@ -1485,10 +1407,11 @@ const hypothesis = {
       ...(owner == null ? {} : { owner_user_id: owner }), deadline: str(v.deadline),
     };
   },
+  loadOptions: (w, projectId) => w.formOptions('validate', projectId, 'experiments').then(hypothesisOptions),
   submit: (w, projectId, v) => w.validate.hypothesis(projectId, hypothesis.toBody(v)),
 };
 
-/** Validate's Add forms, by module slug (PR 2b registers them as `FORMS.validate`). */
+/** Validate's Add forms, by module slug, registered as `FORMS.validate`. */
 export const VALIDATE_FORMS = {
   'problem-discovery': [theme],
   'ideal-customer-profile': [segment],
@@ -1530,8 +1453,16 @@ export function editFieldsFor(form, current) {
  */
 const onlyShown = (v, body, from = {}) => Object.fromEntries(Object.entries(body).filter(([k]) => Object.hasOwn(v, from[k] ?? k)));
 
+/**
+ * Validate's rows carry no `edit`, so each Edit opens from its record's own
+ * Edit action (#1658's `cyclesApi.record`), on a row or the record page: its
+ * values go through `valuesOf` as the row's `edit`, then `editFieldsFor`
+ * (`recordModel.js`'s `recordFormFor`).
+ */
+const FROM_RECORD = { readsRecord: true };
+
 const editTheme = {
-  ...EDIT,
+  ...EDIT, ...FROM_RECORD,
   key: 'edit-theme', title: 'Edit theme', sub: theme.sub,
   fields: [theme.fields[0], severityField],
   idOf: recordId(/^[1-9]\d*$/),
@@ -1541,7 +1472,7 @@ const editTheme = {
 };
 
 const editSegment = {
-  ...EDIT,
+  ...EDIT, ...FROM_RECORD,
   key: 'edit-segment', title: 'Edit segment', sub: segment.sub,
   fields: segmentFields,
   idOf: recordId(/^[1-9]\d*$/),
@@ -1556,7 +1487,7 @@ const editSegment = {
 };
 
 const editCompetitor = {
-  ...EDIT,
+  ...EDIT, ...FROM_RECORD,
   key: 'edit-competitor', title: 'Edit competitor', sub: competitor.sub,
   fields: [kindField, watchField, whyField],
   // A candidate id the record route takes (D690 decision 4).
@@ -1564,7 +1495,9 @@ const editCompetitor = {
   valuesOf: (row) => {
     const e = growEdit(row) || {};
     const v = carried(['kind', 'why'])(row);
-    if (e.watch && typeof e.watch === 'object') v.watch = WATCH.map((o) => o.value).filter((k) => e.watch[k] === true);
+    // The record's Edit gives the keys watched; a row gave the three switches.
+    if (Array.isArray(e.watch)) v.watch = WATCH.map((o) => o.value).filter((k) => e.watch.includes(k));
+    else if (e.watch && typeof e.watch === 'object') v.watch = WATCH.map((o) => o.value).filter((k) => e.watch[k] === true);
     return v;
   },
   toBody: (v) => onlyShown(v, { kind: v.kind || 'direct', watch: watchBody(v), why: str(v.why) }),
@@ -1572,7 +1505,7 @@ const editCompetitor = {
 };
 
 const editSignal = {
-  ...EDIT,
+  ...EDIT, ...FROM_RECORD,
   key: 'edit-signal', title: 'Edit signal', sub: signal.sub,
   fields: signalFields,
   // Only a `signal-` record is the founder's own (a `revenue-` or `waitlist-` one is not).
@@ -1581,7 +1514,8 @@ const editSignal = {
     const e = growEdit(row) || {};
     const v = carried(['kind', 'who', 'signal_date', 'status'])(row);
     if (v.signal_date) v.signal_date = dateText(v.signal_date);
-    if (Object.hasOwn(e, 'amount_cents')) v.amount = e.amount_cents == null ? '' : String(Number(e.amount_cents) / 100);
+    // The record's Edit gives no amount as '', which is no amount, not 0.
+    if (Object.hasOwn(e, 'amount_cents')) v.amount = e.amount_cents == null || e.amount_cents === '' ? '' : String(Number(e.amount_cents) / 100);
     return v;
   },
   // An amount is sent when its box was shown, and cleared when the kind takes none.
@@ -1594,7 +1528,7 @@ const editSignal = {
 };
 
 const editHypothesis = {
-  ...EDIT,
+  ...EDIT, ...FROM_RECORD,
   key: 'edit-hypothesis', title: 'Edit hypothesis', sub: hypothesis.sub,
   // Its pain links and direction are the record's own section (D690), not PATCH fields.
   fields: [...claimFields, ownerDeadline],
@@ -1608,10 +1542,11 @@ const editHypothesis = {
     const body = { claim: str(v.claim), success_bar: str(v.success_bar), disproof: str(v.disproof), deadline: str(v.deadline), owner_user_id: idOrNull(v.owner_user_id) };
     return onlyShown(v, body);
   },
+  loadOptions: (w, projectId) => w.formOptions('validate', projectId, 'experiments').then((read) => ({ owner_user_id: hypothesisOptions(read).owner_user_id })),
   submit: (w, projectId, id, v) => w.validate.hypothesisUpdate(projectId, id, editHypothesis.toBody(v)),
 };
 
-/** Validate's Edit forms, by module slug (PR 2b registers them as `EDITS.validate`). */
+/** Validate's Edit forms, by module slug, registered as `EDITS.validate`. */
 export const VALIDATE_EDITS = {
   'problem-discovery': editTheme,
   'ideal-customer-profile': editSegment,
@@ -1620,14 +1555,20 @@ export const VALIDATE_EDITS = {
   experiments: editHypothesis,
 };
 
+// Registered here, after the specs, since `FORMS` and `EDITS` are declared
+// above them. #1704 adds Verdict's `verdict` to `FORMS.validate`.
+FORMS.validate = { ...VALIDATE_FORMS };
+EDITS.validate = { ...VALIDATE_EDITS };
+
 // ---------- Build (routes/cycle_build.ts, D690 #1695) ------------------------
 //
 // D695 PR 3a (#1656): Build's six canvas forms (CO:311-316) and their Edits,
-// as specs in the canvas's T, CH and CK kinds, each body the one #1695's write
-// table gives. They are registered nowhere (decision 15), and today's Build
-// forms stay as they are: PR 3b adds the client methods each `submit` names,
-// the chip loaders and the registration, after #1695's closing PR brings the
-// roadmap and formation-step routes and Build's `form-options`.
+// as specs in the canvas's T, CH and CK kinds, each body the one #1695's
+// routes take (#1792, D690.md). PR 3b registers them as `FORMS.build` and
+// `EDITS.build`, with the `build` methods they call. Each form's
+// `loadOptions` reads Build's `form-options`, keyed by field name, and takes
+// only the venture's own choices from it: the fixed sets keep the canvas's
+// words, which the routes accept beside their stored values (D690 decision 2).
 
 /** A number as typed ("40", "40%"); null when empty; NaN when not a number. */
 const numberOf = (v) => {
@@ -1641,6 +1582,13 @@ const LEVEL = [{ value: 'low', label: 'Low' }, { value: 'medium', label: 'Medium
 // A two-part owner box (decision 2): a member the route accepts, then a date.
 const ownerPart = { kind: 'CH', name: 'owner_user_id', k: 'Owner', opts: [], optionsFrom: 'owners', empty: 'No member to choose yet.' };
 const buildHypothesis = { kind: 'CH', name: 'hypothesis_id', k: 'Tests hypothesis', opts: [NONE_YET], def: 0, optionsFrom: 'hypotheses' };
+
+/** A Build `form-options` field's choices, as `{ value, label }`. */
+const readChips = (read, name) => chipList(read?.[name]?.options);
+const buildOptions = (slug, fill) => (w, projectId) => w.formOptions('build', projectId, slug).then((read) => fill(read || {}));
+/** The venture's records first, then the canvas's "None yet" last, the first chosen (CO:311-313). */
+const thenNone = (read, name, none = NONE_YET) => ({ options: [...readChips(read, name), none], def: 0 });
+const ownersOf = (read) => ({ options: readChips(read, 'owner_user_id') });
 
 const featureFields = [
   { kind: 'T', name: 'title', k: 'Feature', ph: 'What it lets the customer do', required: true, max: 200 },
@@ -1663,6 +1611,7 @@ const buildFeature = {
   foot: 'Counted on Solution design’s chart as linked or unlinked.',
   fields: featureFields,
   toBody: featureBody,
+  loadOptions: buildOptions('solution-design', (read) => ({ pain_group_id: thenNone(read, 'pain_group_id'), hypothesis_id: thenNone(read, 'hypothesis_id') })),
   submit: (w, projectId, v) => w.build.addFeature(projectId, buildFeature.toBody(v)),
 };
 
@@ -1692,6 +1641,7 @@ const buildMustHave = {
     { kind: 'T', name: 'github_url', k: 'GitHub issue URL', ph: 'https://github.com/…/issues/…', max: 1000, when: { name: 'linked', value: 'github' } },
   ],
   toBody: (v) => ({ ...mustHaveBody(v), links: LINKS.filter((l) => checked(v.linked, l.value)).map((l) => str(v[`${l.value}_url`])).filter(Boolean) }),
+  loadOptions: buildOptions('prototype-mvp', (read) => ({ hypothesis_id: thenNone(read, 'hypothesis_id'), owner_user_id: ownersOf(read) })),
   submit: (w, projectId, v) => w.build.addMustHave(projectId, buildMustHave.toBody(v)),
 };
 
@@ -1714,6 +1664,11 @@ const buildItem = {
   foot: 'Issues from a connected GitHub repository land here too.',
   fields: [...itemFields, { kind: 'CH', name: 'waits_on_id', k: 'Waits on', opts: [NOTHING], def: 0, optionsFrom: 'roadmap_items' }],
   toBody: (v) => ({ ...itemBody(v), waits_on_id: idOrNull(v.waits_on_id) }),
+  // Answers feedback theme keeps None chosen, and Waits on keeps Nothing first (CO:313).
+  loadOptions: buildOptions('product-roadmap', (read) => ({
+    kpi_key: thenNone(read, 'kpi_key', NONE_CHIP), feedback_theme: { options: [...readChips(read, 'feedback_theme'), NONE_CHIP], def: NONE_CHIP.value },
+    waits_on_id: { options: [NOTHING, ...readChips(read, 'waits_on_id')], def: 0 }, owner_user_id: ownersOf(read),
+  })),
   submit: (w, projectId, v) => w.build.roadmapItem(projectId, buildItem.toBody(v)),
 };
 
@@ -1758,6 +1713,8 @@ const buildFounder = {
   toBody: founderBody,
   // The route returns the legal engine's link as `next`; the dialog shows it once saved.
   done: (result) => (result?.next?.href ? { text: 'Founder added to the cap table.', href: result.next.href } : null),
+  // "unallocated now <n>%" only once a percentage is recorded (decision 3, D690 decision 14).
+  loadOptions: buildOptions('founding-team', (read) => (read?.unallocated?.value == null ? {} : { equity_pct: { note: `Unallocated now ${read.unallocated.value}%.` } })),
   submit: (w, projectId, v) => w.build.founder(projectId, buildFounder.toBody(v)),
 };
 
@@ -1774,6 +1731,8 @@ const filingFields = [
   { kind: 'CH', name: 'for_holder_id', k: 'For', opts: [], optionsFrom: 'founders', empty: 'No founder recorded yet.', when: { name: 'kind', value: '83b' } },
   { kind: 'CH', name: 'state', k: 'State', opts: FILING_STATE, def: 0 },
 ];
+/** The proof file Upload proof takes (D690: a PDF, JPEG or PNG, at most 10 MB). */
+const proofField = { kind: 'T', name: 'proof', k: 'Proof', input: 'file', accept: 'application/pdf,image/jpeg,image/png', note: 'Upload the confirmation when filed' };
 const filingBody = (v) => ({
   kind: v.kind || null, jurisdiction: str(v.jurisdiction), due_date: str(v.due_date),
   for_holder_id: v.kind === '83b' ? str(v.for_holder_id) : null, state: v.state || null,
@@ -1782,11 +1741,25 @@ const buildFiling = {
   key: 'filing', cta: 'Add filing', button: 'Add filing',
   title: 'Add filing',
   sub: 'A filing with its jurisdiction, due date and proof.',
-  // No foot: no job sends filing reminders (decision 8). Proof is the record's
-  // Upload proof once #1658's record page is on main.
-  fields: filingFields,
+  // No foot: no job sends filing reminders (decision 8).
+  fields: [...filingFields, proofField],
   toBody: filingBody,
-  submit: (w, projectId, v) => w.build.formationStep(projectId, buildFiling.toBody(v)),
+  loadOptions: buildOptions('company-creation', (read) => ({
+    jurisdiction: { options: [...readChips(read, 'jurisdiction'), { value: '', label: 'Other' }], def: 0 },
+    for_holder_id: { options: readChips(read, 'for_holder_id') },
+  })),
+  // Proof is the new step's own Upload proof (D690 decision 13), sent once the filing exists.
+  async submit(w, projectId, v) {
+    const made = await w.build.formationStep(projectId, buildFiling.toBody(v));
+    const file = v.proof;
+    if (made?.id && file && typeof file === 'object' && typeof file.name === 'string') {
+      const body = new FormData();
+      body.append('file', file);
+      try { await w.recordAction('build', projectId, 'company-creation', `step-${made.id}`, 'upload-proof', body); }
+      catch (error) { throw new Error(`The filing was added; its proof was not stored: ${error?.message || 'try Upload proof on the filing'}`); }
+    }
+    return made;
+  },
 };
 
 const SYSTEM = [{ value: 'bank', label: 'Bank' }, { value: 'accounting', label: 'Accounting' }, { value: 'payroll', label: 'Payroll' }, { value: 'crm', label: 'CRM' }, { value: 'workspace', label: 'Workspace' }];
@@ -1797,6 +1770,7 @@ const FEEDS = [
   { value: 'team', label: 'Team', meta: 'payroll', checked: false },
 ];
 const systemLabel = (kind) => SYSTEM.find((s) => s.value === kind)?.label ?? 'system';
+const providerField = (kind) => `provider_${kind}`;
 /** The hand-off to Connect a tool (decision 10), for this venture and the chosen catalogue key. */
 export function connectToolHref(projectId, tool) {
   const id = Number(projectId);
@@ -1813,24 +1787,41 @@ const buildSystem = {
   fields: [
     // No Calendar (D-k): Calendar is the Workspace store.
     { kind: 'CH', name: 'system', k: 'System', opts: SYSTEM, def: 1 },
-    // The catalogue providers `form-options` lists for the kind, never filtered here.
-    { kind: 'CH', name: 'provider', k: 'Provider', opts: [], optionsFrom: 'providers', required: true, empty: 'No provider can be connected yet.',
-      note: (v) => ({ text: `No ${systemLabel(v.system)} provider can be connected yet.`, href: '/build/connect' }) },
-    // Workspace has no connection row, so it draws no Sync (decision 10).
+    // The catalogue providers `form-options` lists for each kind, never filtered
+    // here: one Provider field per kind, drawn while that kind is chosen.
+    ...SYSTEM.map(({ value: kind }) => ({
+      kind: 'CH', name: providerField(kind), k: 'Provider', opts: [], optionsFrom: 'providers', required: true, empty: 'No provider can be connected yet.',
+      when: { name: 'system', value: kind },
+      note: (v) => (v[providerField(kind)] ? null : { text: `No ${systemLabel(kind)} provider can be connected yet.`, href: '/build/connect', link: 'Connect a tool' }),
+    })),
+    // Workspace has no connection row, so it draws no Sync (decision 10), and
+    // Sync is drawn only where the read says this caller may set it.
     { kind: 'CH', name: 'sync', k: 'Sync', opts: SYNC, def: 2, when: (v) => v.system !== 'workspace' },
     { kind: 'CK', name: 'feeds', k: 'Feeds', opts: FEEDS },
   ],
   // Never a connector key: an absent key keeps a mapping (decision 10).
   toBody: (v) => ({ feeds: Array.isArray(v.feeds) ? v.feeds : [], ...(v.system !== 'workspace' && v.sync ? { sync: v.sync } : {}) }),
+  loadOptions: buildOptions('operating-systems', (read) => {
+    const kinds = Array.isArray(read?.kinds) ? read.kinds : [];
+    const editable = new Set(kinds.filter((k) => k?.sync_editable === true).map((k) => k.kind));
+    return {
+      ...Object.fromEntries(SYSTEM.map(({ value: kind }) => {
+        const providers = (kinds.find((k) => k?.kind === kind)?.providers ?? []).filter((x) => typeof x?.provider_key === 'string')
+          .map((x) => ({ value: x.provider_key, label: String(x.display_name ?? x.provider_key) }));
+        return [providerField(kind), { options: providers, def: 0 }];
+      })),
+      sync: { when: (v) => v.system !== 'workspace' && editable.has(v.system) },
+    };
+  }),
   // An unmapped Workspace has no row for Feeds, so it goes straight to the hand-off.
   async submit(w, projectId, v) {
     if (v.system !== 'workspace') await w.build.system(projectId, v.system, buildSystem.toBody(v));
-    return { next: connectToolHref(projectId, v.provider) };
+    return { next: connectToolHref(projectId, v[providerField(v.system)]) };
   },
   done: (result) => (result?.next ? { text: 'Continue to the provider’s sign-in.', href: result.next } : null),
 };
 
-/** Build's Add forms, by module slug (PR 3b registers them as `FORMS.build`). */
+/** Build's Add forms, by module slug, registered as `FORMS.build`. Add risk is the feature record's own action (decision 9). */
 export const BUILD_FORMS = {
   'solution-design': [buildFeature],
   'prototype-mvp': [buildMustHave],
@@ -1840,16 +1831,33 @@ export const BUILD_FORMS = {
   'operating-systems': [buildSystem],
 };
 
-// The Edits (decision 7): the Add's fields each PATCH takes. A record's or a
-// row's `edit` carries the current values (#1695, decision 13).
+// The Edits (decision 7): the Add's fields each PATCH takes, opened from the
+// record's own Edit (D690 decision 13), as Validate's are. The record gives
+// the stored words (High, S, Backlog), which each `valuesOf` reads as the
+// canvas's; a stored value the form does not offer (an XL effort, a Review
+// state) is left out, so it is not shown and not sent.
+const IMPACT_STORED = { High: 'high', Medium: 'medium', Low: 'low' };
+const EFFORT_STORED = { S: 'low', M: 'medium', L: 'high' };
+const STATE_STORED = { Backlog: 'not_started', 'In Progress': 'in_progress', Done: 'done', Blocked: 'blocked' };
+/** `formation_steps.state` as the canvas's (D690 decision 8): Filed is done, Upcoming is todo or doing. */
+const FILING_STORED = { todo: 'upcoming', doing: 'upcoming', done: 'filed' };
+/** A stored word as the canvas's, kept only when the form offers it. */
+const canvasWord = (v, key, map, choices) => {
+  if (!Object.hasOwn(v, key)) return;
+  const word = Object.hasOwn(map, v[key]) ? map[v[key]] : v[key];
+  if (choices.some((o) => o.value === word)) v[key] = word;
+  else delete v[key];
+};
 const editBuildFeature = {
-  ...EDIT,
+  ...EDIT, ...FROM_RECORD,
   key: 'edit-feature', title: 'Edit feature', sub: buildFeature.sub,
   fields: [...featureFields, { kind: 'CH', name: 'is_must_have', k: 'Must-have for the MVP', opts: YES_NO }],
   idOf: recordId(/^[1-9]\d*$/),
   valuesOf: (row) => {
     const v = carried(['title', 'pain_group_id', 'hypothesis_id', 'impact', 'effort', 'scope', 'is_must_have'])(row);
-    if (Object.hasOwn(v, 'is_must_have')) v.is_must_have = v.is_must_have === true || Number(v.is_must_have) === 1 ? 'yes' : 'no';
+    if (Object.hasOwn(v, 'is_must_have')) v.is_must_have = v.is_must_have === true || v.is_must_have === 'yes' || Number(v.is_must_have) === 1 ? 'yes' : 'no';
+    canvasWord(v, 'impact', IMPACT_STORED, LEVEL);
+    canvasWord(v, 'effort', EFFORT_STORED, LEVEL);
     return v;
   },
   toBody: (v) => onlyShown(v, { ...featureBody(v), is_must_have: v.is_must_have === 'yes' }),
@@ -1858,13 +1866,14 @@ const editBuildFeature = {
 
 // Linked, Waits on and Proof are the record's own sections (#1695), so no Edit carries them.
 const editBuildMustHave = {
-  ...EDIT,
+  ...EDIT, ...FROM_RECORD,
   key: 'edit-must-have', title: 'Edit must-have', sub: buildMustHave.sub,
   fields: mustHaveFields,
   idOf: recordId(/^[1-9]\d*$/),
   valuesOf: (row) => {
     const v = carried(['title', 'hypothesis_id', 'state', 'owner_user_id', 'due_date'])(row);
     if (v.due_date) v.due_date = dateText(v.due_date);
+    canvasWord(v, 'state', STATE_STORED, MVP_STATE);
     return v;
   },
   toBody: (v) => onlyShown(v, { ...mustHaveBody(v), owner_user_id: idOrNull(v.owner_user_id) }),
@@ -1872,7 +1881,7 @@ const editBuildMustHave = {
 };
 
 const editBuildItem = {
-  ...EDIT,
+  ...EDIT, ...FROM_RECORD,
   key: 'edit-item', title: 'Edit item', sub: buildItem.sub,
   fields: itemFields,
   idOf: recordId(/^[1-9]\d*$/),
@@ -1886,7 +1895,7 @@ const editBuildItem = {
 };
 
 const editBuildFounder = {
-  ...EDIT,
+  ...EDIT, ...FROM_RECORD,
   key: 'edit-founder', title: 'Edit founder', sub: buildFounder.sub,
   fields: founderFields,
   check: founderCheck,
@@ -1902,7 +1911,7 @@ const editBuildFounder = {
 };
 
 const editBuildFiling = {
-  ...EDIT,
+  ...EDIT, ...FROM_RECORD,
   key: 'edit-filing', title: 'Edit filing', sub: buildFiling.sub,
   fields: filingFields,
   // Only `step-<id>` rows are the venture's own filings; Lab steps and obligations are changed where they live.
@@ -1910,6 +1919,9 @@ const editBuildFiling = {
   valuesOf: (row) => {
     const v = carried(['kind', 'jurisdiction', 'due_date', 'for_holder_id', 'state'])(row);
     if (v.due_date) v.due_date = dateText(v.due_date);
+    // A row's `edit` gives the stored step state and the holder's id; the record gives the canvas's words and `h-<id>`.
+    canvasWord(v, 'state', FILING_STORED, FILING_STATE);
+    if (/^[1-9]\d*$/.test(String(v.for_holder_id ?? ''))) v.for_holder_id = `h-${v.for_holder_id}`;
     return v;
   },
   toBody: (v) => onlyShown(v, filingBody(v)),
@@ -1924,6 +1936,9 @@ export const BUILD_EDITS = {
   'founding-team': editBuildFounder,
   'company-creation': editBuildFiling,
 };
+
+FORMS.build = { ...BUILD_FORMS };
+EDITS.build = { ...BUILD_EDITS, 'operating-systems': editSystem };
 
 // ---------- Fields: today's types and the canvas's kinds ---------------------
 //

@@ -18,6 +18,9 @@
  * `POST /api/integrations/webhook/stripe/:uid` (routes/integrations.ts) takes
  * an event from the founder's own account endpoint, verifies it against that
  * connection's signing secret (`verifyWebhook`), and re-syncs (`webhook`).
+ * It takes deliveries only for a connection that holds a signing secret
+ * (D719). The OAuth callback stores none, so an OAuth-connected row is
+ * updated by its first sync, by a manual sync and by the Stripe import.
  *
  * This header used to say the platform endpoint, /api/billing/stripe/webhook,
  * received Connect events with `event.account` set and that routes/billing.ts
@@ -510,9 +513,11 @@ async function webhook(
 
 // Stripe-Signature is `t=…,v1=…` HMAC over `${t}.${body}` keyed by the
 // per-endpoint webhook signing secret. The integration row's
-// webhook_secret_enc holds that key (set via PATCH /:uid/config when the
-// founder pastes their endpoint signing secret), or falls back to the
-// platform STRIPE_WEBHOOK_SECRET via the centralized billing handler.
+// webhook_secret_enc holds that key, and only a `POST /connect` body that
+// carries `webhook_secret` stores one: the OAuth callback stores none, PATCH
+// /:uid/config never touches it, and nothing falls back to the platform's
+// STRIPE_WEBHOOK_SECRET. The receiver in routes/integrations.ts answers a
+// delivery to a row with no key as an unknown connection.
 async function verifyWebhook(secret: string, body: string, headers: Headers): Promise<boolean> {
   const header = headers.get('stripe-signature') || '';
   if (!header) return false;

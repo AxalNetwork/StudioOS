@@ -243,18 +243,18 @@ test('test 11: no cell lacks a column, and no id fails the pattern or holds a na
   db.close();
 });
 
-test('test 11: each row\'s edit holds its stored values, and today\'s three Build Edit forms prefill from it', async () => {
+test('test 11: each row\'s edit holds its stored values, and the Build Edit forms read them (D695 #1656 PR 3b)', async () => {
   const db = seeded();
   const step = (await read(db, 'company-creation')).body.records.rows.find((r: any) => r.id === 'step-2');
   assert.deepEqual(step.edit, { title: '83(b) election · Ana Wren', due_date: day(10), state: 'todo', kind: '83b', jurisdiction: 'US', for_holder_id: 1 });
   const stepForm = editFor('build', 'company-creation');
-  assert.deepEqual(initialValues(stepForm, stepForm.valuesOf(step)), { title: '83(b) election · Ana Wren', due_date: day(10), state: 'todo' });
-  assert.deepEqual(stepForm.valuesOf(step).kind, '83b', 'the form reads every value edit carries');
+  // Edit filing (#1656 PR 3b): the stored state and holder id read as the form's words; the title is not a field.
+  assert.deepEqual(stepForm.valuesOf(step), { due_date: day(10), state: 'upcoming', kind: '83b', jurisdiction: 'US', for_holder_id: 'h-1' }, 'the form reads every value edit carries');
 
   const must = (await read(db, 'prototype-mvp')).body.records.rows.find((r: any) => r.id === 3);
   assert.deepEqual(must.edit, { due_date: day(3) });
   const mustForm = editFor('build', 'prototype-mvp');
-  assert.deepEqual(initialValues(mustForm, mustForm.valuesOf(must)), { is_must_have: 'yes', due_date: day(3) });
+  assert.deepEqual(mustForm.valuesOf(must), { due_date: day(3) }, 'Edit must-have reads the due date edit carries');
 
   const systems = (await read(db, 'operating-systems')).body.records.rows;
   const edit = (id: string) => systems.find((r: any) => r.id === id).edit;
@@ -545,7 +545,8 @@ test('test 3: systems read their sync, show writers their log and permissions, a
   assert.doesNotMatch(JSON.stringify(founder) + JSON.stringify(partner.body), /Okafor Ventures/, 'never a company the viewer is not in');
 
   const bank = (await one(db, 'operating-systems', 'bank')).body;
-  assert.equal(bank.title, 'Bank · mercury', 'the catalogue name, not the member\'s own');
+  // D710 (#1775): Mercury is in the catalogue now, so its catalogue name reads.
+  assert.equal(bank.title, 'Bank · Mercury', 'the catalogue name, not the member\'s own');
   assert.doesNotMatch(JSON.stringify(bank), /private treasury/);
   assert.deepEqual(section(bank, 'permissions').rows[0].b, 'The connector stored no granted scopes.');
   db.exec(`UPDATE integrations SET scopes_json = '["oauth"]' WHERE id = 11`);

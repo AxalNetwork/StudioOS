@@ -45,6 +45,16 @@ export async function load(url, context, nextLoad) {
       const text = readFileSync(fileURLToPath(new URL(u.pathname, 'file://')), 'utf8');
       return { format: 'module', source: `export default ${JSON.stringify(text)};`, shortCircuit: true };
     }
+    // D711 — the legal paper's faces and mark as ArrayBuffers, the way
+    // wrangler.toml's `[[rules]] type = "Data"` bundles them.
+    if (u.pathname.endsWith('.woff2') || u.pathname.endsWith('.png')) {
+      const b64 = readFileSync(fileURLToPath(new URL(u.pathname, 'file://'))).toString('base64');
+      return {
+        format: 'module',
+        source: `const b = Buffer.from(${JSON.stringify(b64)}, 'base64'); export default b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength);`,
+        shortCircuit: true,
+      };
+    }
   }
   return nextLoad(url, context);
 }

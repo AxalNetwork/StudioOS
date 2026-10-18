@@ -9,6 +9,7 @@
  * Not a test file (the leading underscore keeps it out of the glob).
  */
 import { DatabaseSync } from 'node:sqlite';
+import { readFileSync } from 'node:fs';
 import { SignJWT } from 'jose';
 import { Hono } from 'hono';
 
@@ -87,6 +88,11 @@ export function freshDb() {
       (${ADMIN},        'admin',    'admin@example.test',    'Ada Admin'),
       (${EXPLORER},     'exploring','explorer@example.test', 'Eli Explorer');
   `);
+  // D711 — the file registry, as migration 475 creates it. Its ALTERs on
+  // esign_envelopes are left out: that table is the route's own ensureSchema
+  // shape here, which adds the same three columns.
+  db.exec(readFileSync(new URL('../sql/migrations/475_legal_document_files.sql', import.meta.url), 'utf8')
+    .replace(/ALTER TABLE esign_envelopes ADD COLUMN[^;]*;/g, ''));
   return db;
 }
 
