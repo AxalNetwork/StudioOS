@@ -18,6 +18,9 @@ from D1 at render time. `LEGAL_REVIEW.md` in this folder records review status.
   agreement can still be reproduced exactly as it was signed.
 - A bundled file that `cloudflare-worker/src/services/legalTemplates.ts` imports is the fallback for its
   library row, never a second text (D758).
+- **Every catalog row's text is a file here** (D758). The store is filled from
+  it by a migration (484), never by hand, and a seed skeleton keeps its store
+  bytes exactly, with no newline added at the end.
 - Entity and address blocks are stamped from `documentation/architecture/LEGAL_ENTITIES.md`
   — do not hard-code them into a template.
 - Some terms appear here as **prose a human fills in** and nowhere else in the

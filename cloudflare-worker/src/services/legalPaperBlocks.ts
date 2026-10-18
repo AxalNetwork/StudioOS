@@ -21,14 +21,21 @@
 //     the totals row.
 //   - A blockquote is a legend; one opening "Warning" or "Important" a warning.
 //   - `- [ ]` / `- [x]` are checkbox rows; three or more underscores a fill-in.
-//   - `brackets` turns each known merge token into a `[LABEL]` run.
-//   - `paperText` runs on every string: ↔ is an en dash, ☐ ☑ ✓ ✔ drawn
-//     boxes, and emoji are dropped.
+//   - `brackets` turns every well-formed merge token into a tinted `[LABEL]`
+//     run, known to the schema or not, so no preview prints `{{` (#1865).
+//   - A paragraph is the run of lines up to a blank line: a wrapped line joins
+//     the line above it (#1865, `joins`), so bold that wraps is still bold.
+//   - A body with no `#` heading line reads plain capitals as headings:
+//     "ARTICLE I — …", "SECTION 1 — …" and "1. ELIGIBILITY" are articles, any
+//     other short line with no lowercase letter a section (#1865).
+//   - `paperText` runs on every string: ↔ is an en dash, → and ← are > and <
+//     (no arrow characters on paper), ☐ ☑ ✓ ✔ drawn boxes, and emoji are
+//     dropped.
 //
 // NOTE: authored to load under `node --experimental-strip-types` (the worker
 // test gate) — no `enum`s, no TS parameter properties.
 
-import { isKnownMergeToken, bracketLabel } from './legalMergeSchema';
+import { bracketLabel } from './legalMergeSchema';
 
 export type MergeMode = 'brackets' | 'raw' | 'filled';
 
@@ -68,12 +75,15 @@ export interface PaperBlockOptions {
 const CHECK_CHARS: Record<string, boolean> = { '☐': false, '☑': true, '✓': true, '✔': true };
 
 /**
- * Normalise one string for the paper: ↔ becomes an en dash and emoji are
- * dropped. Checkbox glyphs are left for `inlineRuns` to draw.
+ * Normalise one string for the paper: ↔ becomes an en dash, → and ← become
+ * > and <, and emoji are dropped. Checkbox glyphs are left for `inlineRuns`
+ * to draw.
  */
 export function paperText(s: string): string {
   return String(s ?? '')
     .replace(/\u2194/g, '\u2013')
+    .replace(/\u2192/g, '>')
+    .replace(/\u2190/g, '<')
     .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{260F}\u{2612}-\u{27BF}\uFE0F\u200D]/gu, (ch) => (ch in CHECK_CHARS ? ch : ''))
     .replace(/\p{Emoji_Presentation}/gu, '');
 }
@@ -101,7 +111,7 @@ function leafRuns(out: Run[], k: 'text' | 'bold' | 'em', s: string, merge: Merge
     pushText(out, k, s.slice(at, i));
     at = i + m[0].length;
     if (m[1] !== undefined) {
-      if (merge === 'brackets' && isKnownMergeToken(m[1])) out.push({ k: 'merge', text: bracketLabel(m[1]) });
+      if (merge === 'brackets') out.push({ k: 'merge', text: bracketLabel(m[1]) });
       else pushText(out, k, m[0]);
     } else if (m[0].startsWith('_')) {
       out.push({ k: 'fill' });
@@ -208,6 +218,17 @@ const BULLET = /^[-*+•]\s+(.*)$/;
 const HR = /^([-*_])(?:\s*\1){2,}$/;
 const HEADING = /^(#{1,6})\s+(.*?)\s*#*\s*$/;
 
+// #1865 — plain-capitals headings, read only in a body with no `#` heading line.
+const PLAIN_ARTICLE = /^(ARTICLE|SECTION|PART)\s+(\d{1,3}|[IVXLC]{1,7})\s*[—–-]\s*\S/;
+const NUM_CAPS = /^\d{1,2}\.\s+(?=[^a-z]*[A-Z])[^a-z]+$/;
+const FILL_IN = /_{3,}/;
+
+/** A plain-capitals section heading: 2 to 90 characters, no lowercase, no closing `.`, `:` or `;`. */
+function plainSection(line: string): boolean {
+  return line.length >= 2 && line.length <= 90 && /[A-Z]/.test(line) && !/[a-z]/.test(line)
+    && !/[.:;]$/.test(line) && !FILL_IN.test(line);
+}
+
 function sameTitle(a: string, b: string | null | undefined): boolean {
   const n = (s: string) => paperText(s).replace(/\*/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
   return !!b && n(a) === n(b);
@@ -225,12 +246,40 @@ export function paperBlocks(body: string, opts: PaperBlockOptions = {}): Block[]
   let pendingRunIn: Run[] | null = null;
   let lastSchedule: Extract<Block, { t: 'schedule' }> | null = null;
   let articles = 0;
+  let i = 0;
+  const plain = !lines.some((l) => HEADING.test(l.trim()));
 
   const flushRunIn = () => {
     if (pendingRunIn) { out.push({ t: 'section', runs: pendingRunIn }); pendingRunIn = null; }
   };
 
-  for (let i = 0; i < lines.length; i++) {
+  /** Whether a line starts a block of its own, so it never joins the line above. */
+  const startsBlock = (l: string) => HEADING.test(l) || l.startsWith('|') || l.startsWith('>') || HR.test(l)
+    || TASK.test(l) || BOX_LINE.test(l) || (BULLET.test(l) && !/^[-*+]\s*$/.test(l))
+    || NUM_DOTTED.test(l) || NUM_PAREN.test(l) || /^whereas\b/i.test(l)
+    || (plain && (PLAIN_ARTICLE.test(l) || NUM_CAPS.test(l) || plainSection(l)));
+  /**
+   * #1865 — the lines after `i` that continue its paragraph, joined with one
+   * space; `i` moves past them. A line joins when there is no blank line
+   * between, it starts no block of its own, neither line holds a fill-in, and
+   * the line above ends without `.`, `:`, `;`, `?` or `!` or this one starts
+   * lowercase.
+   */
+  const joins = (first: string): string => {
+    let text = first;
+    let prev = first;
+    while (i + 1 < lines.length) {
+      const next = lines[i + 1].trim();
+      if (!next || startsBlock(next) || FILL_IN.test(prev) || FILL_IN.test(next)) break;
+      if (/[.:;?!]$/.test(prev) && !/^[a-z]/.test(next)) break;
+      text += ' ' + next;
+      prev = next;
+      i++;
+    }
+    return text;
+  };
+
+  for (i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
     if (!line) continue;
     const scheduleBefore = lastSchedule;
@@ -311,7 +360,7 @@ export function paperBlocks(body: string, opts: PaperBlockOptions = {}): Block[]
     if (task || boxLine) {
       flushRunIn();
       const checked = task ? task[1].trim() !== '' : boxLine![1] !== undefined ? boxLine![1].trim() !== '' : CHECK_CHARS[boxLine![2]];
-      out.push({ t: 'check', checked, runs: inlineRuns(task ? task[2] : boxLine![3], merge) });
+      out.push({ t: 'check', checked, runs: inlineRuns(joins(task ? task[2] : boxLine![3]), merge) });
       continue;
     }
 
@@ -319,9 +368,24 @@ export function paperBlocks(body: string, opts: PaperBlockOptions = {}): Block[]
     if (bullet && !/^[-*+]\s*$/.test(line)) {
       flushRunIn();
       const prev = out[out.length - 1];
-      const item = inlineRuns(bullet[1], merge);
+      const item = inlineRuns(joins(bullet[1]), merge);
       if (prev && prev.t === 'bullets') prev.items.push(item);
       else out.push({ t: 'bullets', items: [item] });
+      continue;
+    }
+
+    // #1865 — plain capitals, in a body with no `#` heading line.
+    if (plain && (PLAIN_ARTICLE.test(line) || NUM_CAPS.test(line))) {
+      flushRunIn();
+      inRecitals = false;
+      articles++;
+      const runs = inlineRuns(line, merge);
+      out.push({ t: 'article', runs, id: slugId(articles), text: runsText(runs) });
+      continue;
+    }
+    if (plain && plainSection(line)) {
+      flushRunIn();
+      if (!sameTitle(line, opts.title)) out.push({ t: 'section', runs: inlineRuns(line, merge) });
       continue;
     }
 
@@ -336,11 +400,11 @@ export function paperBlocks(body: string, opts: PaperBlockOptions = {}): Block[]
     const runIn = pendingRunIn;
     pendingRunIn = null;
     if (dotted) {
-      out.push({ t: 'para', runs: inlineRuns(dotted[2], merge), num: dotted[1], depth: 1, runIn });
+      out.push({ t: 'para', runs: inlineRuns(joins(dotted[2]), merge), num: dotted[1], depth: 1, runIn });
     } else if (paren) {
-      out.push({ t: 'para', runs: inlineRuns(paren[2], merge), num: `(${paren[1]})`, depth: 2, runIn });
+      out.push({ t: 'para', runs: inlineRuns(joins(paren[2]), merge), num: `(${paren[1]})`, depth: 2, runIn });
     } else {
-      out.push({ t: 'para', runs: inlineRuns(line, merge), num: null, depth: 0, runIn });
+      out.push({ t: 'para', runs: inlineRuns(joins(line), merge), num: null, depth: 0, runIn });
     }
   }
   flushRunIn();
