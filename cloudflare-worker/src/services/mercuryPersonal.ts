@@ -8,6 +8,9 @@
  *   venture_revenue   a founder, for a project they found    own credits              revenue rows they pick
  *   practice_income   a partner, for their own invoices      own credits              a match; issued → paid
  *   partner_deals     a partner: own payouts and settlements own credits and debits   a match
+ *   raise_receipts    a founder, for a project they found    own credits              a match; a prospect's
+ *                                                                                    `commit_status` becomes `wired`,
+ *                                                                                    a commitment becomes `confirmed` (D752)
  *
  * Any other pairing is 403 `purpose_not_allowed`. `partner_deals` is HQ only
  * (403 `hq_only`): only Management's payments are matched. A support session
@@ -32,31 +35,36 @@ import type { IntegrationRow } from '../integrations/registry';
 import { decryptCredentials } from '../integrations/secrets';
 import { entityAccountRefusal, isSupportSession, namesAxalEntity, readOnlyRefusal, readOrganization } from '../integrations/providers/mercury';
 import { getTransaction, listTransactions, MercuryClientError } from './mercury/client';
-import { INTERNAL_KINDS, POSTED_STATUSES, VOID_STATUSES, parseTransaction, parseTransactions, type ParsedAccount, type ParsedTransaction } from './mercury/parse';
+import { INTERNAL_KINDS, POSTED_STATUSES, VOID_STATUSES, parseTransaction, parseTransactions, toCents, type ParsedAccount, type ParsedTransaction } from './mercury/parse';
 import { branchOf, HQ_ONLY } from '../util/branch';
 import { refuse } from '../util/refusal';
 
 type C = Context<{ Bindings: Env }>;
 
-export type PersonalMatchTarget = 'engagement_invoice' | 'payout' | 'partner_deal_settlement';
+export type PersonalMatchTarget = 'engagement_invoice' | 'payout' | 'partner_deal_settlement' | 'raise_prospect' | 'deal_commitment';
 export type BankMatch = { posted_on: string; last_four: string };
-export type PersonalUse = 'venture_revenue' | 'practice_income' | 'partner_deals';
+export type PersonalUse = 'venture_revenue' | 'practice_income' | 'partner_deals' | 'raise_receipts';
 
 /** Decision 4's table, by role. A role absent here holds no personal connection. */
 export const PERSONAL_USES: Readonly<Record<string, readonly PersonalUse[]>> = Object.freeze({
-  founder: ['venture_revenue'],
+  founder: ['venture_revenue', 'raise_receipts'],
   partner: ['practice_income', 'partner_deals'],
 });
 export const USE_OF_TARGET: Readonly<Record<PersonalMatchTarget, PersonalUse>> = Object.freeze({
   engagement_invoice: 'practice_income',
   payout: 'partner_deals',
   partner_deal_settlement: 'partner_deals',
+  raise_prospect: 'raise_receipts',
+  deal_commitment: 'raise_receipts',
 });
 /** The `?target=` words of `GET /matches`. */
 export const TARGET_WORDS: Readonly<Record<string, PersonalMatchTarget>> = Object.freeze({
   invoice: 'engagement_invoice',
   payout: 'payout',
   settlement: 'partner_deal_settlement',
+  // D752: `commitment` is always a deal commitment, never an LP commitment.
+  raise: 'raise_prospect',
+  commitment: 'deal_commitment',
 });
 
 export const usesFor = (role: string | null | undefined): readonly PersonalUse[] => PERSONAL_USES[String(role || '').toLowerCase()] ?? [];
@@ -71,6 +79,10 @@ export const INVOICE_WINDOW_DAYS = 180;
 export const PAYOUT_WINDOW_DAYS = 60;
 export const SETTLEMENT_BEFORE_DAYS = 30;
 export const SETTLEMENT_AFTER_DAYS = 90;
+/** D752 decision 5: a raise target's window opens 30 days before it was recorded. */
+export const RAISE_BEFORE_DAYS = 30;
+/** The two D752 kinds, financing rather than revenue. */
+export const RAISE_KINDS: readonly PersonalMatchTarget[] = Object.freeze(['raise_prospect', 'deal_commitment']);
 export const WITHDRAW_REASON_MIN = 10;
 
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -288,6 +300,9 @@ export interface MatchTarget {
   management: boolean;
   /** The account the line must be on, when the target names one. */
   last_four: string | null;
+  /** D752 decision 4: false when the target's dollars are not a whole, positive number of cents. */
+  matchable: boolean;
+  unmatchable: 'amount_missing' | 'amount_not_whole_cents' | null;
 }
 
 const day10 = (v: unknown) => String(v ?? '').slice(0, 10);
@@ -315,6 +330,7 @@ export async function ownTargets(env: Env, user: User, kind: PersonalMatchTarget
     return rows.map((r) => ({
       kind, id: Number(r.id), label: r.invoice_number, state: r.status, expected_cents: Number(r.total_cents),
       window_start: day10(r.issued_at), window_end: plusDays(day10(r.issued_at), INVOICE_WINDOW_DAYS), management: false, last_four: null,
+      matchable: true, unmatchable: null,
     }));
   }
   if (kind === 'payout') {
@@ -328,23 +344,73 @@ export async function ownTargets(env: Env, user: User, kind: PersonalMatchTarget
       kind, id: Number(r.id), label: `Payout ${r.id}`, state: r.status, expected_cents: Number(r.amount_cents),
       window_start: day10(r.created_at), window_end: plusDays(day10(r.created_at), PAYOUT_WINDOW_DAYS), management: true,
       last_four: r.destination_last4 ? String(r.destination_last4).toUpperCase() : null,
+      matchable: true, unmatchable: null,
     }));
   }
-  const rows = (await env.DB.prepare(
-    `SELECT t.id, t.kind, t.direction, t.amount_cents, t.due_on, t.state FROM partner_deal_settlements t
-      WHERE t.user_id = ?1 AND (t.state = 'issued' OR (t.state = 'matched' AND ?4 = 1)) AND (?2 IS NULL OR t.id = ?3)
+  if (kind === 'raise_prospect' || kind === 'deal_commitment') return raiseTargets(env, user, kind, id, includeMatched);
+  if (kind === 'partner_deal_settlement') {
+    const rows = (await env.DB.prepare(
+      `SELECT t.id, t.kind, t.direction, t.amount_cents, t.due_on, t.state FROM partner_deal_settlements t
+        WHERE t.user_id = ?1 AND (t.state = 'issued' OR (t.state = 'matched' AND ?4 = 1)) AND (?2 IS NULL OR t.id = ?3)
+            AND (?4 = 1 OR NOT EXISTS (SELECT 1 FROM mercury_personal_matches m WHERE m.target_kind = ?5 AND m.target_id = t.id AND m.state = 'confirmed'))
+        ORDER BY t.due_on DESC, t.id DESC`,
+    ).bind(...binds).all<{ id: number; kind: string; direction: string; amount_cents: number; due_on: string; state: string }>()).results || [];
+    return rows.map((r) => ({
+      kind, id: Number(r.id), label: `Settlement ${r.id}`, state: r.state,
+      expected_cents: r.direction === 'from_member' ? -Number(r.amount_cents) : Number(r.amount_cents),
+      window_start: plusDays(r.due_on, -SETTLEMENT_BEFORE_DAYS), window_end: plusDays(r.due_on, SETTLEMENT_AFTER_DAYS), management: true, last_four: null,
+      matchable: true, unmatchable: null,
+    }));
+  }
+  return [];
+}
+
+/**
+ * D752 decisions 2 to 5: the founder's own committed raise prospects, or the
+ * pending commitments on their deals. Bound to `user.founder_id`, never
+ * `user.id`, and never through `canAccessFounderResource` (which also admits
+ * admins and partners). A target whose dollars are not a whole, positive
+ * number of cents is listed with `matchable: false` and its reason.
+ */
+async function raiseTargets(env: Env, user: User, kind: 'raise_prospect' | 'deal_commitment', id?: number, includeMatched = false): Promise<MatchTarget[]> {
+  if (user.founder_id == null) return [];
+  // ?1 the caller's founder id, ?2 and ?3 the target's id (or null), ?4 1 when a matched target counts, ?5 the kind.
+  const binds = [user.founder_id, id ?? null, id ?? null, includeMatched ? 1 : 0, kind];
+  type Row = { id: number; label_a: string | null; label_b: string | null; amount: unknown; state: string; created_at: string; project_name: string | null };
+  const rows = kind === 'raise_prospect'
+    ? (await env.DB.prepare(
+      `SELECT t.id, t.name AS label_a, t.firm AS label_b, t.amount, t.stage AS state, t.created_at, p.name AS project_name
+         FROM raise_prospects t JOIN projects p ON p.id = t.project_id
+        WHERE p.founder_id = ?1 AND t.stage = 'committed' AND (?2 IS NULL OR t.id = ?3)
           AND (?4 = 1 OR NOT EXISTS (SELECT 1 FROM mercury_personal_matches m WHERE m.target_kind = ?5 AND m.target_id = t.id AND m.state = 'confirmed'))
-      ORDER BY t.due_on DESC, t.id DESC`,
-  ).bind(...binds).all<{ id: number; kind: string; direction: string; amount_cents: number; due_on: string; state: string }>()).results || [];
-  return rows.map((r) => ({
-    kind, id: Number(r.id), label: `Settlement ${r.id}`, state: r.state,
-    expected_cents: r.direction === 'from_member' ? -Number(r.amount_cents) : Number(r.amount_cents),
-    window_start: plusDays(r.due_on, -SETTLEMENT_BEFORE_DAYS), window_end: plusDays(r.due_on, SETTLEMENT_AFTER_DAYS), management: true, last_four: null,
-  }));
+        ORDER BY t.created_at DESC, t.id DESC`,
+    ).bind(...binds).all<Row>()).results || []
+    : (await env.DB.prepare(
+      `SELECT t.id, u.name AS label_a, NULL AS label_b, t.amount, t.status AS state, t.created_at, p.name AS project_name
+         FROM commitments t JOIN deals d ON d.id = t.deal_id JOIN projects p ON p.id = d.project_id
+         LEFT JOIN users u ON u.id = t.investor_user_id
+        WHERE p.founder_id = ?1 AND (t.status = 'pending' OR (t.status = 'confirmed' AND ?4 = 1)) AND (?2 IS NULL OR t.id = ?3)
+          AND (?4 = 1 OR NOT EXISTS (SELECT 1 FROM mercury_personal_matches m WHERE m.target_kind = ?5 AND m.target_id = t.id AND m.state = 'confirmed'))
+        ORDER BY t.created_at DESC, t.id DESC`,
+    ).bind(...binds).all<Row>()).results || [];
+  const now = today();
+  const floor = plusDays(now, -MAX_WINDOW_DAYS);
+  return rows.map((r) => {
+    const cents = r.amount == null ? null : toCents(r.amount);
+    const unmatchable = r.amount == null ? 'amount_missing' as const : cents == null ? 'amount_not_whole_cents' as const : cents <= 0 ? 'amount_missing' as const : null;
+    const opened = plusDays(day10(r.created_at), -RAISE_BEFORE_DAYS);
+    const who = r.label_a || r.label_b || (kind === 'raise_prospect' ? `Prospect ${r.id}` : `Commitment ${r.id}`);
+    return {
+      kind, id: Number(r.id), label: `${who} · ${r.project_name || 'Project'}`, state: r.state,
+      expected_cents: unmatchable ? 0 : cents!, window_start: opened < floor ? floor : opened, window_end: now,
+      management: false, last_four: null, matchable: !unmatchable, unmatchable,
+    };
+  });
 }
 
 /** Decision 7: does this line settle this target? Posted, not internal, the exact amount, in the window. */
 export function lineFits(target: MatchTarget, line: BankLine): boolean {
+  if (!target.matchable) return false;
   if (!line.posted || line.internal || line.voided || !line.posted_on) return false;
   if (line.amount_cents !== target.expected_cents) return false;
   if (line.posted_on < target.window_start || line.posted_on > target.window_end) return false;
@@ -354,7 +420,8 @@ export function lineFits(target: MatchTarget, line: BankLine): boolean {
 }
 
 /** The read window that covers every target, clamped to today and to 366 days. */
-export function windowFor(targets: MatchTarget[], now = today()): { from: string; to: string } | null {
+export function windowFor(all: MatchTarget[], now = today()): { from: string; to: string } | null {
+  const targets = all.filter((t) => t.matchable);
   if (!targets.length) return null;
   const to = targets.map((t) => t.window_end).reduce((a, b) => (a > b ? a : b));
   const end = to > now ? now : to;
@@ -371,15 +438,27 @@ async function matchedTransactions(env: Env, user: User): Promise<Set<string>> {
   return new Set(rows.map((r) => r.mercury_transaction_id));
 }
 
+/** D752 decision 10: which of these lines are already rows on the revenue ledger. */
+export async function importedAsRevenue(env: Env, ids: string[]): Promise<Set<string>> {
+  if (!ids.length) return new Set();
+  const rows = (await env.DB.prepare(
+    "SELECT source_ref FROM revenue_entries WHERE source = 'mercury' AND source_ref IN (SELECT value FROM json_each(?))",
+  ).bind(JSON.stringify(ids)).all<{ source_ref: string }>()).results || [];
+  return new Set(rows.map((r) => r.source_ref));
+}
+
 /** Each open target with every line that fits it; several fit, all are listed, and the member picks one. */
 export async function proposals(env: Env, user: User, conn: PersonalConnection, targets: MatchTarget[]) {
   const window = windowFor(targets);
   const { lines, capped } = window ? await listOwnTransactions(conn, window) : { lines: [], capped: false };
   const taken = await matchedTransactions(env, user);
+  // A line already on the revenue ledger is never offered as a raise receipt (D752 decision 10).
+  const revenue = targets.some((t) => RAISE_KINDS.includes(t.kind)) ? await importedAsRevenue(env, lines.map((l) => l.transaction_id)) : new Set<string>();
   const items = targets.map((t) => ({
     target_kind: t.kind, target_id: t.id, label: t.label, state: t.state, amount_cents: Math.abs(t.expected_cents),
     direction: t.expected_cents < 0 ? 'debit' : 'credit', window: { from: t.window_start, to: t.window_end },
-    candidates: lines.filter((l) => !taken.has(l.transaction_id) && lineFits(t, l)).map((l) => ({
+    matchable: t.matchable, unmatchable: t.unmatchable,
+    candidates: lines.filter((l) => !taken.has(l.transaction_id) && !(RAISE_KINDS.includes(t.kind) && revenue.has(l.transaction_id)) && lineFits(t, l)).map((l) => ({
       transaction_id: l.transaction_id, posted_on: l.posted_on, amount_cents: l.amount_cents,
       last_four: l.last_four, counterparty_name: l.counterparty_name,
     })),
@@ -394,20 +473,39 @@ export type MatchOutcome = { ok: true; match: MatchRow } | { ok: false; status: 
  * An invoice that is `issued` becomes `paid` on the posted date; one already `paid`
  * gains the evidence. A settlement becomes `matched`. A payout's status is the
  * Super Admin's and is never changed here.
+ *
+ * D752: a raise prospect's `commit_status` becomes `wired` while it is still
+ * `committed`; a deal commitment moves from `pending` to `confirmed`
+ * (`deals.capital_committed` already counted it). A line already on the
+ * revenue ledger is refused `imported_as_revenue`, checked first and again
+ * inside the INSERT, and the effect runs only when this confirmation's row
+ * exists, so a revenue import racing it cannot leave a prospect `wired`.
  */
-export async function confirmMatch(env: Env, user: User, conn: PersonalConnection, kind: PersonalMatchTarget, targetId: number, transactionId: string): Promise<MatchOutcome> {
+export async function confirmMatch(env: Env, user: User, conn: PersonalConnection, kind: PersonalMatchTarget, targetId: number, transactionId: string,
+  deps: { importedAsRevenue?: typeof importedAsRevenue } = {}): Promise<MatchOutcome> {
+  const raise = RAISE_KINDS.includes(kind);
   const [target] = await ownTargets(env, user, kind, targetId, true);
-  if (!target) return { ok: false, status: 404, code: 'target_not_found', message: 'That is not one of your open invoices, payouts or settlements.' };
+  if (!target) return { ok: false, status: 404, code: 'target_not_found', message: NOT_FOUND[kind] };
   if (await matchFor(env, kind, targetId)) return { ok: false, status: 409, code: 'target_already_matched', message: 'That is already matched to a bank line. Withdraw the match first.' };
-  if (target.state === 'matched') return { ok: false, status: 409, code: 'target_already_matched', message: 'That is already matched to a bank line. Withdraw the match first.' };
+  if (target.state === 'matched' || (kind === 'deal_commitment' && target.state !== 'pending')) {
+    return { ok: false, status: 409, code: 'target_already_matched', message: 'That is already matched to a bank line. Withdraw the match first.' };
+  }
+  if (!target.matchable) return { ok: false, status: 409, code: 'not_matchable', message: 'This commitment has no amount in whole cents, so no bank line can settle it.' };
   const line = await readOwnTransaction(conn, transactionId);
   if (!line) return { ok: false, status: 404, code: 'transaction_not_found', message: 'That line is not in your Mercury account.' };
   if (!lineFits(target, line)) return { ok: false, status: 409, code: 'not_matchable', message: 'That line does not settle this: the amount, date, counterparty or account does not fit.' };
+  if (raise && (await (deps.importedAsRevenue ?? importedAsRevenue)(env, [line.transaction_id])).has(line.transaction_id)) return IMPORTED_AS_REVENUE;
   const uid = crypto.randomUUID();
-  const stmts = [env.DB.prepare(
-    `INSERT INTO mercury_personal_matches (uid, user_id, integration_id, mercury_transaction_id, account_last_four, amount_cents, posted_on, target_kind, target_id, state)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed')`,
-  ).bind(uid, user.id, conn.row.id, line.transaction_id, line.last_four, line.amount_cents, line.posted_on, kind, targetId)];
+  const stmts = [raise
+    ? env.DB.prepare(
+      `INSERT INTO mercury_personal_matches (uid, user_id, integration_id, mercury_transaction_id, account_last_four, amount_cents, posted_on, target_kind, target_id, state)
+       SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed'
+        WHERE NOT EXISTS (SELECT 1 FROM revenue_entries r WHERE r.source = 'mercury' AND r.source_ref = ?)`,
+    ).bind(uid, user.id, conn.row.id, line.transaction_id, line.last_four, line.amount_cents, line.posted_on, kind, targetId, line.transaction_id)
+    : env.DB.prepare(
+      `INSERT INTO mercury_personal_matches (uid, user_id, integration_id, mercury_transaction_id, account_last_four, amount_cents, posted_on, target_kind, target_id, state)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed')`,
+    ).bind(uid, user.id, conn.row.id, line.transaction_id, line.last_four, line.amount_cents, line.posted_on, kind, targetId)];
   if (kind === 'engagement_invoice') {
     stmts.push(env.DB.prepare(
       "UPDATE engagement_invoices SET status = 'paid', paid_at = ?, updated_at = datetime('now') WHERE id = ? AND status = 'issued'",
@@ -418,6 +516,18 @@ export async function confirmMatch(env: Env, user: User, conn: PersonalConnectio
       "UPDATE partner_deal_settlements SET state = 'matched', updated_at = datetime('now') WHERE id = ? AND state = 'issued'",
     ).bind(targetId));
   }
+  if (kind === 'raise_prospect') {
+    stmts.push(env.DB.prepare(
+      `UPDATE raise_prospects SET commit_status = 'wired', updated_at = datetime('now')
+        WHERE id = ? AND stage = 'committed' AND EXISTS (SELECT 1 FROM mercury_personal_matches WHERE uid = ? AND state = 'confirmed')`,
+    ).bind(targetId, uid));
+  }
+  if (kind === 'deal_commitment') {
+    stmts.push(env.DB.prepare(
+      `UPDATE commitments SET status = 'confirmed'
+        WHERE id = ? AND status = 'pending' AND EXISTS (SELECT 1 FROM mercury_personal_matches WHERE uid = ? AND state = 'confirmed')`,
+    ).bind(targetId, uid));
+  }
   try {
     await env.DB.batch(stmts);
   } catch (e) {
@@ -427,14 +537,29 @@ export async function confirmMatch(env: Env, user: User, conn: PersonalConnectio
     throw e;
   }
   const match = await env.DB.prepare('SELECT * FROM mercury_personal_matches WHERE uid = ?').bind(uid).first<MatchRow>();
-  return { ok: true, match: match! };
+  // No row: a revenue import took the line between the check and the INSERT.
+  if (!match) return IMPORTED_AS_REVENUE;
+  return { ok: true, match };
 }
+
+const NOT_FOUND: Record<PersonalMatchTarget, string> = {
+  engagement_invoice: 'That is not one of your open invoices, payouts or settlements.',
+  payout: 'That is not one of your open invoices, payouts or settlements.',
+  partner_deal_settlement: 'That is not one of your open invoices, payouts or settlements.',
+  raise_prospect: 'That is not one of your committed raise prospects.',
+  deal_commitment: 'That is not one of your pending deal commitments.',
+};
+const IMPORTED_AS_REVENUE: MatchOutcome = {
+  ok: false, status: 409, code: 'imported_as_revenue',
+  message: 'That line is already on your revenue ledger. Delete that entry first, or leave the commitment unmatched.',
+};
 
 /**
  * Withdraw a confirmed match, with a reason of at least 10 characters. A
  * settlement returns to `issued`; an invoice stays `paid`, as the partner's
- * own word today; a payout loses its evidence. Another member's uid is 404,
- * exactly as a missing one.
+ * own word today; a payout loses its evidence. D752: a deal commitment returns
+ * to `pending`; a raise prospect keeps its `commit_status`, the founder's own
+ * word. Another member's uid is 404, exactly as a missing one.
  */
 export async function withdrawMatch(env: Env, user: User, uid: string, reason: string): Promise<MatchOutcome> {
   const m = await env.DB.prepare('SELECT * FROM mercury_personal_matches WHERE uid = ? AND user_id = ?').bind(uid, user.id).first<MatchRow>();
@@ -448,6 +573,9 @@ export async function withdrawMatch(env: Env, user: User, uid: string, reason: s
       "UPDATE partner_deal_settlements SET state = 'issued', updated_at = datetime('now') WHERE id = ? AND state = 'matched'",
     ).bind(m.target_id));
   }
+  if (m.target_kind === 'deal_commitment') {
+    stmts.push(env.DB.prepare("UPDATE commitments SET status = 'pending' WHERE id = ? AND status = 'confirmed'").bind(m.target_id));
+  }
   await env.DB.batch(stmts);
   const fresh = await env.DB.prepare('SELECT * FROM mercury_personal_matches WHERE id = ?').bind(m.id).first<MatchRow>();
   return { ok: true, match: fresh! };
@@ -457,4 +585,26 @@ export async function withdrawMatch(env: Env, user: User, uid: string, reason: s
 export async function matchUse(env: Env, user: User, uid: string): Promise<PersonalUse | null> {
   const m = await env.DB.prepare('SELECT target_kind FROM mercury_personal_matches WHERE uid = ? AND user_id = ?').bind(uid, user.id).first<{ target_kind: PersonalMatchTarget }>();
   return m ? USE_OF_TARGET[m.target_kind] ?? null : null;
+}
+
+// ─────────────────────────────────────────────────────────── D752: reads for the revenue ledger
+
+/**
+ * The caller's confirmed raise receipts, by Mercury transaction id, optionally
+ * narrowed to `ids`. Reads the database only; #1889's financing-in counts them.
+ */
+export async function raiseReceiptIds(env: Env, userId: number, ids?: string[]): Promise<Set<string>> {
+  if (ids && !ids.length) return new Set();
+  const rows = (await env.DB.prepare(
+    `SELECT mercury_transaction_id FROM mercury_personal_matches
+      WHERE user_id = ? AND state = 'confirmed' AND target_kind IN ('raise_prospect', 'deal_commitment')
+        AND (? IS NULL OR mercury_transaction_id IN (SELECT value FROM json_each(?)))`,
+  ).bind(userId, ids ? 1 : null, JSON.stringify(ids ?? [])).all<{ mercury_transaction_id: string }>()).results || [];
+  return new Set(rows.map((r) => r.mercury_transaction_id));
+}
+
+/** The caller's open, matchable raise targets of both kinds (decision 11's hint). Reads the database only. */
+export async function openRaiseTargets(env: Env, user: User): Promise<MatchTarget[]> {
+  const all = [...await ownTargets(env, user, 'raise_prospect'), ...await ownTargets(env, user, 'deal_commitment')];
+  return all.filter((t) => t.matchable);
 }

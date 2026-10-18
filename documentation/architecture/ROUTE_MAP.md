@@ -38,6 +38,8 @@ connection read from `/api/admin/mercury`; to every other caller, and on a
 branch, `GET /available` omits it and `POST /connect`, `GET /:key` and the
 waitlist and notify-me routes answer 404 as if the key did not exist, while an
 HQ admin's `POST /connect` gets 409 `entity_connection_only`.
+D752 (#1887): `GET/POST /api/mercury/personal/matches` take `target=raise|commitment` for a founder (`raise_receipts`): their own committed raise prospects and pending deal commitments. Confirming sets the prospect's `commit_status` to `wired`, or the commitment to `confirmed`.
+`GET /api/revenue/projects/:projectId/mercury-credits` items carry `fits_raise_target`, and a confirmed raise receipt's line is refused `raise_receipt`.
 D749 (#1838): `POST /api/admin/mercury/transactions/:uid/not-ours` `{ reason, note }` marks a posted credit Not ours (201), and `POST /api/admin/mercury/not-ours/:uid/withdraw` `{ reason }` withdraws the mark. Both are an Admin's on HQ, under the `mercury.reconcile` act.
 `GET /api/admin/mercury/transactions?match=none` leaves out a line with an active mark, `match=not_ours` lists the marked lines, and each item carries `not_ours`. The monthly cash summary and the quarterly report's `unmatched_count` leave active marks out.
 
