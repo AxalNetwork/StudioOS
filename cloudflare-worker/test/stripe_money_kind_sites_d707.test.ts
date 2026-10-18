@@ -120,9 +120,10 @@ test('every metadata[kind] value is a key of MONEY_KIND_FOR_STRIPE_METADATA, in 
   }
 });
 
-test('only five files name api.stripe.com, and outside billing.ts none POSTs there', () => {
+test('only six files name api.stripe.com, and outside billing.ts none POSTs there', () => {
   const naming = FILES.filter((f) => f.src.split(STRIPE_API_TEXT).length > 1).map((f) => f.rel).sort();
-  assert.deepEqual(naming, ['integrations/providers/stripe.ts', 'middleware/securityHeaders.ts', 'routes/billing.ts',
+  // D753: `integrations/connectorPages.ts` holds the host as data (`endpoints.api`) and makes no call.
+  assert.deepEqual(naming, ['integrations/connectorPages.ts', 'integrations/providers/stripe.ts', 'middleware/securityHeaders.ts', 'routes/billing.ts',
     'routes/wellbeing.ts', 'services/providerOauthTest.ts']);
   for (const rel of naming.filter((r) => r !== 'routes/billing.ts')) {
     const src = FILES.find((f) => f.rel === rel)!.src;
