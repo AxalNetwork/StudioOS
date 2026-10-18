@@ -4,6 +4,25 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## A founder's spending, burn, cash and runway from their own Mercury, and typed metrics can no longer claim Stripe or Mercury (D752, #1889)
+
+- `GET /api/revenue/projects/:projectId/mercury-spend?months=1..12`: the
+  project's own founder reads each month's operating money in, financing in,
+  money out and net burn from their own Mercury, with cash on hand (available
+  balances) and runway. Money from an Axal entity is financing and never
+  lowers burn. Built per request; `services/mercurySpend.ts` is pure.
+- `POST …/mercury-spend/snapshot { include_cash, confirm_visible: true }`
+  saves the last full month's burn, and cash only when asked, as one
+  `source = 'mercury'` `project_metrics` row a day, after the founder confirms
+  who reads saved figures.
+- `POST /api/progress/metrics/:projectId` refuses a `source` of `stripe` or
+  `mercury` (400 `source_reserved`), and a `mercury` row's date and figures
+  cannot be edited (409 `mercury_figure_locked`).
+- The founder holds a new use, `venture_spend`, with its card words in
+  `integrations/registry.ts` and `pages/account/mercuryModel.js`.
+  `parse.ts` keeps a transaction's category when Mercury reports one
+  (UNVERIFIED). No migration.
+
 ## Mercury for investors on HQ, and the card's words by role (D752, #1886)
 
 - `integrations/registry.ts`: Mercury's `personal_roles` gains `investor`, and
