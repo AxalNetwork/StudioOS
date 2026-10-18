@@ -558,3 +558,53 @@ test('#1692: form-options for each module, scoped to the venture and the caller'
   assert.deepEqual(new Set(ex.evidence.map((e: any) => e.value)), new Set(['1', '2', 'signal-7', 'revenue-8', 'waitlist-9', '12']));
   assert.deepEqual((await real(db, 10, 'GET', '/validate/modules/ideal-customer-profile/form-options?project=1')).body, {});
 });
+
+// ---------------------------------------------------------------------------
+// D704 (#1666, PR 2c) — the pain map's per-theme ICP and fit counts live on
+// the theme record's Segments section (S1's ruling on decision 6)
+// ---------------------------------------------------------------------------
+
+const segmentsOf = async (db: DatabaseSync, who: number) =>
+  (await real(db, who, 'GET', rec('problem-discovery', '11'))).body.side.find((s: any) => s.key === 'segments');
+
+test('D704 PR 2c: a theme record\'s Segments section adds its ICP count of the interviews naming it, and the ones with no fit', async () => {
+  const db = seeded();
+  // Theme One is named by interview 1 (strong fit, segment 3) and interview 2 (no fit recorded).
+  // Interview 1 names it twice, through an alias: the count is of interviews, not of wordings.
+  // Another theme, ordered first and named only by interview 2, must not lend its counts.
+  db.exec(`INSERT INTO pain_group_aliases (project_id, group_id, phrase_norm, display_phrase) VALUES (1, 11, 'missed jobs', 'Missed jobs');
+           INSERT INTO pain_groups (id, project_id, title, sort_order) VALUES (13, 1, 'Billing pain', -1);
+           UPDATE discovery_interviews SET pains_json = '["Theme One","Missed jobs"]' WHERE id = 1;
+           UPDATE discovery_interviews SET pains_json = '["Theme One","Billing pain"]' WHERE id = 2;`);
+  const s = await segmentsOf(db, 10);
+  assert.equal(s.title, 'Segments', 'the section keeps its title');
+  assert.deepEqual(s.rows, [
+    { a: 'Fleet ops leads', b: '2 mentions' }, // the segment line counts quotes, as before
+    { a: 'Your ICP', b: 'strong or partial fit · 1 of 2 interviews' },
+    { a: 'Fit not recorded', b: '1 interview' },
+  ]);
+  // A partial fit counts as ICP, and with every fit recorded the second line goes.
+  db.exec("UPDATE discovery_interviews SET icp_fit = 'partial' WHERE id = 2");
+  assert.deepEqual((await segmentsOf(db, 10)).rows.slice(1), [{ a: 'Your ICP', b: 'strong or partial fit · 2 of 2 interviews' }]);
+  // A recorded "no fit" is not ICP, and is not "not recorded" either.
+  db.exec("UPDATE discovery_interviews SET icp_fit = 'none' WHERE id = 2");
+  assert.deepEqual((await segmentsOf(db, 10)).rows.slice(1), [{ a: 'Your ICP', b: 'strong or partial fit · 1 of 2 interviews' }]);
+});
+
+test('D704 PR 2c: with no ICP fit on any interview of the venture, one line says so, never "0 of"', async () => {
+  const db = seeded();
+  db.exec('UPDATE discovery_interviews SET icp_fit = NULL WHERE project_id = 1');
+  // Venture B's recorded fit never counts for venture A.
+  db.exec("UPDATE discovery_interviews SET icp_fit = 'strong' WHERE id = 22");
+  const s = await segmentsOf(db, 10);
+  assert.deepEqual(s.rows.slice(1), [{ a: 'ICP fit', b: 'Not recorded on any interview yet' }]);
+  assert.equal(JSON.stringify(s).includes('0 of'), false);
+});
+
+test('D704 PR 2c: a partner reads the same counts; a theme no interview names gets no count line', async () => {
+  const db = seeded();
+  assert.deepEqual((await segmentsOf(db, 40)).rows, (await segmentsOf(db, 10)).rows);
+  db.exec("INSERT INTO pain_groups (id, project_id, title) VALUES (12, 1, 'Quiet theme')");
+  const quiet = (await real(db, 10, 'GET', rec('problem-discovery', '12'))).body.side.find((x: any) => x.key === 'segments');
+  assert.deepEqual([quiet.rows, quiet.empty], [[], 'No interview that names it has a segment.']);
+});
