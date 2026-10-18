@@ -20,8 +20,8 @@ import { cardView, cellView, cycleOf, isPlainClick, recordsCount, safeHref } fro
  *     exactly when the desktop table links it (`rowLinks`), else its Edit;
  *     any other row is plain;
  *   · paging, the module's tool links as handed, then `children`.
- * Not mounted until #1665's closing PR, which renders it from `CycleRoute`
- * below 1024px in place of `CycleModulePage`.
+ * `CycleRoute` renders it below 1024px on a module route, in place of
+ * `CycleModulePage`, with the same props (#1665's PR 2c).
  */
 
 /** The cycle body's gutter below `lg` (`CycleRoute`'s `cycle-route-body`): an action page draws it itself. */

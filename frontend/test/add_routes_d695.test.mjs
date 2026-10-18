@@ -132,6 +132,8 @@ async function mountCycle(Route_, entry, { phone = false } = {}) {
   const reads = (slug) => calls.filter((c) => c.method === 'GET' && c.path.includes(`/cycles/build/modules/${slug}`) && !c.path.includes('/records/')).length;
   return {
     at, calls, by, all, nodes, forms, reads, form: () => forms()[0] || null,
+    /** The page bar's Back (D703's CycleBar). */
+    barBack: () => walk(by('cycle-bar')).find((n) => n.tagName === 'BUTTON'),
     /** The open form's own <form>, not the records table's search. */
     formNode: () => walk(by('cycle-form') || by('cycle-form-page')).find((n) => n.tagName === 'FORM'),
     async act(fn) { await act(async () => { await fn(); }); await settle(); },
@@ -199,10 +201,13 @@ async function assertAddRoutes(Route_) {
     assert.equal(m.all('cycle-form-page').length, 1, 'one form page');
     assert.ok(inside(m.by('cycle-form-page'), body), 'the page is drawn in the body');
     assert.equal(m.by('cycle-form'), undefined, 'no dialog');
-    assert.equal(m.by('cycle-records'), undefined, 'the form is the body\'s only content');
-    await m.act(() => propsOf(m.by('cycle-form-back')).onClick());
+    assert.equal(m.by('phone-module'), undefined, 'the form is the body\'s only content');
+    // D703 (#1665's PR 2c): the page's bar is the route's CycleBar, "‹ <Module>", calling #1656's close.
+    assert.equal(m.all('cycle-bar').length, 1, 'one bar');
+    assert.ok(textOf(m.by('cycle-bar')).includes('‹ Solution design'));
+    await m.act(() => propsOf(m.barBack()).onClick());
     assert.deepEqual([m.at.path, m.at.search], ['/build/solution-design', '?project_id=3'], '‹ Back closes it');
-    assert.ok(m.by('cycle-records'), 'the module page is back');
+    assert.ok(m.by('phone-module'), 'the module page is back');
   } finally { await m.unmount(); }
 }
 
@@ -291,10 +296,11 @@ async function assertEdit(Route_) {
 
   m = await mountCycle(Route_, '/build/company-creation?project_id=3', { phone: true });
   try {
-    await m.act(() => propsOf(m.all('records-row-action')[0]).onClick());
+    // D703 (#1665's PR 2c): on a phone the module page's row the desktop could edit opens its Edit on a tap.
+    await m.act(() => propsOf(m.all('phone-module-row').find((n) => propsOf(n).onClick)).onClick());
     assert.ok(inside(m.by('cycle-form-page'), m.by('cycle-route-body')), 'on a phone the Edit is the page');
     assert.equal(m.by('cycle-form'), undefined);
-    await m.act(() => propsOf(m.by('cycle-form-back')).onClick());
+    await m.act(() => propsOf(m.barBack()).onClick());
     assert.equal(m.form(), null);
     assert.equal(m.at.type, 'POP');
   } finally { await m.unmount(); }
