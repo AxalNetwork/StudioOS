@@ -244,7 +244,8 @@ function dom() {
     by: (id, from = container) => walk(from).find((n) => pr(n)['data-testid'] === id),
     text: (from = container) => text(from).replace(/\s+/g, ' '),
     fiber(name) { for (const n of walk(container)) { const k = Object.keys(n).find((x) => x.startsWith('__reactFiber$')); let f = k && n[k]; while (f) { if (f.type?.name === name) return f; f = f.return; } } return null; },
-    async press(label) { const n = walk(container).find((x) => x.tagName === 'BUTTON' && text(x).trim() === label); assert.ok(n, `button ${label}`); await act(async () => { await pr(n).onClick?.({ preventDefault() {} }); }); await settle(); },
+    // Below 1024px a record's action is a phone row, "<label> ›" (D703 step 7).
+    async press(label) { const n = walk(container).find((x) => x.tagName === 'BUTTON' && text(x).replace(/\s+/g, ' ').trim().replace(/ ›$/, '') === label); assert.ok(n, `button ${label}`); await act(async () => { await pr(n).onClick?.({ preventDefault() {} }); }); await settle(); },
     async click(id) { const n = api_.by(id); assert.ok(n, id); await act(async () => { await pr(n).onClick?.({ preventDefault() {} }); }); await settle(); },
     async change(id, value) { const n = api_.by(id); assert.ok(n, id); await act(async () => { pr(n).onChange({ target: { value } }); }); await settle(); },
     async close() { await act(async () => root.unmount()); restore(); },
