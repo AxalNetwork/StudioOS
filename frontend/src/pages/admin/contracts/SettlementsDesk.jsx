@@ -67,7 +67,11 @@ export function SettlementForm({ form, editing, busy, error, onForm, onSave, onC
 
 export default function SettlementsDesk({ deal, superAdmin, onClose }) {
   const [revision, setRevision] = useState(0);
-  const read = useRead(() => partnerSettlementsApi.list({ deal: deal.id }), [deal.id, revision]);
+  const read = useRead(async () => {
+    const rows = await partnerSettlementsApi.list({ deal: deal.id });
+    if (!Array.isArray(rows)) throw new Error('The settlement list response could not be read.');
+    return rows;
+  }, [deal.id, revision]);
   const [form, setForm] = useState(EMPTY);
   const [editing, setEditing] = useState(null);
   const [voiding, setVoiding] = useState(null);

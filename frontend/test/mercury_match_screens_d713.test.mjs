@@ -277,6 +277,24 @@ test('mounted desk: an unreadable list says so; an inactive deal takes no draft'
   });
 });
 
+test('mounted desk: malformed list is Unreadable; a valid empty list says no drafts', async () => {
+  for (const data of [{ items: [] }, null, []]) {
+    await withSettlements(() => data, async () => {
+      const v = await mountContracts(h(SettlementsDesk, { deal: DEAL, superAdmin: true, onClose: () => {} }));
+      try {
+        await v.flush();
+        if (Array.isArray(data)) {
+          assert.match(v.text(), /No settlement is drafted under this deal/);
+          assert.doesNotMatch(v.text(), /Unreadable/);
+        } else {
+          assert.match(v.text(), /Unreadable\. Settlements could not be read\./);
+          assert.doesNotMatch(v.text(), /No settlement is drafted under this deal/);
+        }
+      } finally { await v.unmount(); }
+    });
+  }
+});
+
 test('inactive deals offer draft deletion and issued-row voiding, with no dead Edit or Issue actions', async () => {
   await withSettlements(() => DESK_ROWS, async (calls) => {
     for (const status of ['terminated', 'expired']) {
