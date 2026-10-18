@@ -255,6 +255,20 @@ const BUCKETS: Bucket[] = [
     scope: 'ip',
     failClosed: true,
   },
+  // D722 — the code from Google's sign-in window. Unauthenticated, each
+  // accepted call is an outbound exchange with Google's token endpoint, and a
+  // Google identity with no account creates one — the same shape as
+  // `register`, so the same numbers: 10/min/IP, room for a retry after a
+  // cancelled window, and failClosed so an account-creating write waits
+  // rather than running uncapped while KV is down. Exact path and POST only.
+  {
+    name: 'google_popup',
+    limit: 10,
+    windowSec: 60,
+    test: (p, m) => m === 'POST' && p === '/api/auth/google/popup',
+    scope: 'ip',
+    failClosed: true,
+  },
   // D691 — a deck share link's signup. Unauthenticated, and every accepted
   // POST creates a user (plus an activity_logs and an onboarding_progress
   // row) for whoever holds a live share token, and a link with no expiry and
@@ -360,11 +374,18 @@ const BUCKETS: Bucket[] = [
 // routes (login, verify, me) stay exempt because the 200/min/IP general
 // bucket already covers them and they have their own brute-force
 // protections (Turnstile on login + JWT verification cost on me).
+//
+// D722 — `/api/auth/google/config` is a constant read of the deployment's
+// config: no D1, no KV, no session, and its only effect is whether /login
+// opens Google's window or redirects. A limiter in front of it could only ever
+// turn the window off. `/api/auth/google/start` and `/popup` stay limited
+// (D74; the `google_popup` bucket above).
 const RATE_LIMIT_EXEMPT = [
   '/api/health',
   '/api/auth/login',
   '/api/auth/verify',
   '/api/auth/me',
+  '/api/auth/google/config',
   '/api/monitoring/metrics',
   '/api/monitoring/rate-limits',
 ];

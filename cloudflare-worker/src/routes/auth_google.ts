@@ -9,6 +9,23 @@
  *
  * Endpoints (mounted at /api/auth/google in index.ts):
  *
+ *   GET  /config             D722. Whether /login may open Google's own
+ *                            window: {configured, popup, client_id}. A pure
+ *                            read of env — no D1, no KV, no cookie, no
+ *                            session — and rate-limit exempt, so asking it
+ *                            can never be what breaks the page.
+ *
+ *   POST /popup              D722. Google's window (the GIS code client)
+ *                            hands the page an authorization code; the page
+ *                            posts it here with the attempt's state. The
+ *                            code is exchanged with redirect_uri
+ *                            'postmessage', the id_token is checked against
+ *                            Google's keys (services/googleIdToken.ts), the
+ *                            same rules below decide the account, and the
+ *                            answer is {token, user} as passkey's is. Popup
+ *                            first, redirect fallback: every click the popup
+ *                            cannot take goes through /start.
+ *
  *   GET  /start              kicks off OAuth. Accepts ?action=signin|link
  *                            and ?redirect=<absolute-path-on-app.axal.vc>.
  *                            Generates an HMAC-signed state cookie + URL
@@ -19,6 +36,10 @@
  *                            google_sub (preferred) then email, applies
  *                            the linking precedence rules below, mints a
  *                            session, and 302s back to the SPA.
+ *
+ * /popup and /callback decide the account through ONE helper,
+ * `resolveGoogleSignin`, and mint the session through ONE helper,
+ * `mintGoogleSession`, so the two ways in cannot drift apart.
  *
  * Linking precedence (deterministic — every branch is unit-tested by the
  * route-level Vitest in cloudflare-worker/test/auth_google.test.ts):
@@ -45,10 +66,16 @@
  *   4.  No row                            → fresh signup. email_verified
  *                                            is set to TRUE (Google
  *                                            already verified it), role
- *                                            defaults to 'partner' to
- *                                            match /register's default.
+ *                                            'exploring', exactly as the
+ *                                            email link creates one.
  *                                            User lands on the standard
  *                                            onboarding chatbot.
+ *
+ *   A matched row with is_active = 0 is refused BEFORE anything is linked
+ *   (account_inactive). /popup adds one more refusal: when the person typed
+ *   an email and Google signed in a different one that no matched row
+ *   carries, it answers different_account and writes nothing — the chooser
+ *   mistake that would otherwise open a second application.
  *
  *   Linking from an authenticated session (action=link) follows a
  *   parallel set of rules:
@@ -80,6 +107,7 @@
  * verified email + recovery codes).
  */
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import {
@@ -87,12 +115,17 @@ import {
   getCurrentUser,
   setAuthCookies,
   generateCsrfToken,
+  authCookieDomainAttr,
+  revokeStaleCrossIdentitySession,
 } from '../auth';
 import { hashEmail } from '../util/hashEmail';
 // Task #9 follow-up — fresh Google signups land in 'exploring' too, same
 // as /register and magic-link. See exploringSchema.ts.
 import { ensureExploringSchema } from '../services/exploringSchema';
 import { withDeadline } from '../util/deadline';
+import { verifyGoogleIdToken } from '../services/googleIdToken';
+import { recordSecurityEvent } from '../services/securityEvents';
+import { isProductionEnv } from '../util/paymentMode';
 
 // A KV round trip that has not answered in this long is treated as a miss: the
 // cookie fallback covers the put, and a missing bind nonce is already a
@@ -325,9 +358,9 @@ authGoogle.get('/start', async (c) => {
   const stateSig = state.slice(state.indexOf('.') + 1);
   // Bounded, and the catch below is why that matters: a KV that never answers
   // would hold up the redirect to Google for the life of the request, which is
-  // what made /login stop offering the button at all — LoginPage probes this
-  // very endpoint on mount and hides the control when the probe does not
-  // resolve. The cookie written just below is the documented fallback, so a
+  // what made /login stop offering the button at all — LoginPage probed this
+  // very endpoint on mount and hid the control when the probe did not
+  // resolve (until D185). The cookie written just below is the fallback, so a
   // skipped put degrades desktop-only rather than failing the handshake.
   try {
     await withDeadline(
@@ -335,9 +368,16 @@ authGoogle.get('/start', async (c) => {
       STATE_KV_DEADLINE_MS, 'gstate-put',
     );
   } catch (e) { console.error('[auth_google] state KV put failed', e); }
+  // D722 — the cookie carries the session cookie's Domain. /start answers on
+  // the host the SPA runs on (axal.vc) while Google sends the person back to
+  // the registered callback host (app.axal.vc); a host-only cookie set here
+  // never reached /callback, so the fallback this comment promises never
+  // existed on HQ and a KV miss was always "Sign-in link expired". On HQ the
+  // Domain is `.axal.vc`; a branch, localhost and preview stay host-only,
+  // exactly as `setAuthCookies` decides for the session itself.
   c.header(
     'Set-Cookie',
-    `studioos_google_state=${nonce}; HttpOnly; Secure; SameSite=Lax; Path=/api/auth/google; Max-Age=600`,
+    `studioos_google_state=${nonce}; HttpOnly; Secure; SameSite=Lax; Path=/api/auth/google${authCookieDomainAttr(c)}; Max-Age=600`,
     { append: true },
   );
 
@@ -399,12 +439,19 @@ function decodeIdToken(idToken: string): IdTokenPayload | null {
   }
 }
 
-async function exchangeCode(env: Env, code: string): Promise<IdTokenPayload | null> {
+/**
+ * POST an authorization code to Google's token endpoint and return the raw
+ * id_token, or null. `redirectUriValue` is the registered callback URI for a
+ * code from the redirect flow, and the literal 'postmessage' for a code from
+ * the GIS popup — Google's documented value for that case, which needs no
+ * registration. A code is single-use either way.
+ */
+async function fetchIdToken(env: Env, code: string, redirectUriValue: string): Promise<string | null> {
   const body = new URLSearchParams({
     code,
     client_id: env.GOOGLE_AUTH_CLIENT_ID!,
     client_secret: env.GOOGLE_AUTH_CLIENT_SECRET!,
-    redirect_uri: redirectUri(env),
+    redirect_uri: redirectUriValue,
     grant_type: 'authorization_code',
   });
   let resp: Response;
@@ -425,8 +472,13 @@ async function exchangeCode(env: Env, code: string): Promise<IdTokenPayload | nu
     return null;
   }
   const data = await resp.json().catch(() => null) as { id_token?: string } | null;
-  if (!data?.id_token) return null;
-  const payload = decodeIdToken(data.id_token);
+  return typeof data?.id_token === 'string' && data.id_token ? data.id_token : null;
+}
+
+async function exchangeCode(env: Env, code: string): Promise<IdTokenPayload | null> {
+  const idToken = await fetchIdToken(env, code, redirectUri(env));
+  if (!idToken) return null;
+  const payload = decodeIdToken(idToken);
   if (!payload) return null;
   if (payload.aud !== env.GOOGLE_AUTH_CLIENT_ID) {
     console.warn('[auth_google] aud mismatch', payload.aud);
@@ -448,6 +500,185 @@ function callbackError(env: Env, code: string, action: 'signin' | 'link'): Respo
   const path = action === 'link' ? '/account/security' : '/login';
   const url = `${appUrl(env)}${path}?google_error=${encodeURIComponent(code)}`;
   return Response.redirect(url, 302);
+}
+
+// ----- the account and the session (shared by /callback and /popup) -------
+
+type GoogleCtx = Context<{ Bindings: Env }>;
+type Sql = ReturnType<typeof getSQL>;
+
+export type GoogleSigninRefusal = 'link_blocked_unverified' | 'account_inactive' | 'different_account';
+
+type GoogleSigninResult =
+  | { ok: true; user: any; newSignup: boolean }
+  | { ok: false; code: GoogleSigninRefusal; userId?: number };
+
+/**
+ * Decide which account a verified Google identity signs in to, through
+ * `decideSigninAction` (rules 1–4 above). `identity.email` is lower-cased by
+ * the caller. EVERY REFUSAL IS DECIDED BEFORE ANYTHING IS WRITTEN: no link
+ * row, no user row, no log line exists for an attempt this answers with a
+ * refusal.
+ *
+ * `expectedEmail` is the address the person typed on /login, when they typed
+ * one. If Google signed in somebody else — an address that is neither the
+ * Google account's nor the matched account's — the answer is
+ * `different_account` and nothing is created: picking the wrong row in
+ * Google's chooser must not open a second application.
+ */
+async function resolveGoogleSignin(
+  c: GoogleCtx,
+  sql: Sql,
+  identity: { sub: string; email: string; name?: string | null },
+  opts: { lane?: string; expectedEmail?: string } = {},
+): Promise<GoogleSigninResult> {
+  const { sub, email: googleEmail } = identity;
+  // 1) lookup by google_sub via side-table join
+  const bySub = (await sql`
+    SELECT u.* FROM users u
+    INNER JOIN user_google_links l ON l.user_id = u.id
+    WHERE l.google_sub = ${sub} LIMIT 1` as any[])[0] as any | undefined;
+  // 2/3) lookup by case-insensitive email, only when the sub is unknown
+  const byEmail = bySub
+    ? undefined
+    : (await sql`SELECT * FROM users WHERE LOWER(email) = ${googleEmail} LIMIT 1` as any[])[0] as any | undefined;
+  const decision = decideSigninAction(bySub, byEmail);
+  const matched = bySub || byEmail;
+
+  const expected = String(opts.expectedEmail || '').trim().toLowerCase();
+  if (expected && expected !== googleEmail && expected !== String(matched?.email || '').toLowerCase()) {
+    return { ok: false, code: 'different_account' };
+  }
+  // A suspended account is refused before it is linked — /callback used to
+  // link it first and refuse after.
+  if (matched && Number(matched.is_active ?? 1) === 0) {
+    return { ok: false, code: 'account_inactive', userId: Number(matched.id) };
+  }
+  if (decision.kind === 'refuse_unverified_email') {
+    // Rule 3 — block. Operator MUST complete magic-link round-trip first to
+    // prove email ownership.
+    return { ok: false, code: 'link_blocked_unverified', userId: Number(byEmail.id) };
+  }
+  if (decision.kind === 'signin_existing') return { ok: true, user: bySub, newSignup: false };
+
+  if (decision.kind === 'link_then_signin') {
+    // Rule 2 — link verified row. INSERT OR IGNORE so a double-click race (two
+    // concurrent sign-ins for the same verified email) cannot 500 on the
+    // UNIQUE constraint; the second insert becomes a no-op and the existing
+    // link is reused.
+    await sql`INSERT OR IGNORE INTO user_google_links (user_id, google_sub) VALUES (${byEmail.id}, ${sub})`;
+    const eh = await hashEmail(byEmail.email);
+    await sql`INSERT INTO activity_logs (action, details, actor, user_id)
+              VALUES ('google_account_auto_linked',
+                      'first-time Google sign-in matched verified email',
+                      ${eh}, ${byEmail.id})`;
+    return { ok: true, user: { ...byEmail }, newSignup: false };
+  }
+
+  // Rule 4 — fresh signup, exactly as /magic/verify creates an account (there
+  // is no "account not found" here, as there is none there). Google already
+  // verified the email.
+  const name = (identity.name || googleEmail.split('@')[0] || 'New user').slice(0, 200);
+  // Task #9 follow-up — fresh Google signups land directly in 'exploring'
+  // (users.role CHECK relaxed by ensureExploringSchema), matching /register
+  // and magic-link. The landing still routes newSignup users to onboarding so
+  // the Workers AI chatbot can capture a persona into partner_profiles for
+  // admin review; admin assigns the final role manually from the
+  // exploring-users review queue (routes/admin_exploring.ts).
+  await ensureExploringSchema(c.env);
+  const inserted = await sql`
+    INSERT INTO users (email, name, role, email_verified)
+    VALUES (${googleEmail}, ${name}, 'exploring', true)
+    RETURNING *` as any[];
+  const user = inserted[0];
+  // Parity with the classic path (routes/auth.ts:304): record the lane the
+  // applicant picked as a SUGGESTION for the admin review queue. Best-effort:
+  // a failure here must never break an otherwise-valid sign-in.
+  if (opts.lane) {
+    try {
+      const { upsertSuggestedRole } = await import('../services/exploringSchema');
+      await upsertSuggestedRole(c.env, (user as any).id, opts.lane);
+    } catch (e) {
+      console.error('[auth_google] suggested-role upsert failed:', (e as Error).message);
+    }
+  }
+  // INSERT OR IGNORE defends against the rare case where a second concurrent
+  // fresh-signup request for the same google_sub raced us between the
+  // email-lookup miss and here. The new users row is already orphaned in that
+  // race; we accept the leak rather than 500 the surviving caller.
+  // (Belt-and-braces — the email UNIQUE constraint on users would also have
+  // rejected one of the two INSERTs further upstream in most cases.)
+  await sql`INSERT OR IGNORE INTO user_google_links (user_id, google_sub) VALUES (${user.id}, ${sub})`;
+  // Task #66 — seed the onboarding-chatbot gate row. The frontend RequireAuth
+  // guard pins this user to /onboarding/chat until the chatbot save flips
+  // completed_at. INSERT OR IGNORE keeps a double-callback race a no-op.
+  try {
+    await c.env.DB.prepare(
+      `INSERT OR IGNORE INTO onboarding_progress (user_id, flow, step, total_steps, completed_at)
+       VALUES (?, 'licence', 0, 0, NULL)`
+    ).bind(user.id).run();
+  } catch (e) { console.error('[auth_google] onboarding_progress seed failed', e); }
+  const eh = await hashEmail(user.email);
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id)
+            VALUES ('user_registered_google',
+                    ${`Google sign-up (email_hash=${eh})`},
+                    ${eh}, ${user.id})`;
+  // Best-effort downstream seeding (mirrors POST /register and /magic/verify).
+  try {
+    const { seedObligations } = await import('../services/trust');
+    await seedObligations(c.env, user.id, user.role || 'partner');
+  } catch (e) { console.error('[auth_google] trust seed failed', e); }
+  try {
+    const { Jobs } = await import('../models/jobs');
+    await Jobs.enqueue(c.env, 'embed_entity', { type: 'partner', id: user.id });
+  } catch {}
+  return { ok: true, user, newSignup: true };
+}
+
+/**
+ * Mint the Google session: the same primitives in the same order as
+ * /magic/verify (routes/auth.ts), which is the order every sign-in route
+ * inlines — there is no shared mint function in the repo to call instead.
+ *
+ * factor='google' so requireFactor('totp') still gates sensitive routes —
+ * Google is ONE factor, never a TOTP substitute. assurance_level and
+ * step_up_due_at stay NULL, as they always were for a Google session, so
+ * requireStepUp asks for a fresh TOTP and requireSuperAdminWriteBar refuses a
+ * write until the person signs in with an authenticator code.
+ */
+async function mintGoogleSession(
+  c: GoogleCtx,
+  sql: Sql,
+  user: any,
+  newSignup: boolean,
+): Promise<{ token: string; csrf: string }> {
+  const jti = crypto.randomUUID();
+  const token = await createJWT(c.env, user.id, user.email, user.role, undefined, jti);
+  const ua = (c.req.header('user-agent') || '').slice(0, 500);
+  const ip = (c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || '').split(',')[0].trim().slice(0, 64);
+  try {
+    await sql`INSERT INTO user_sessions (user_id, jti, user_agent, ip, factor)
+              VALUES (${user.id}, ${jti}, ${ua || null}, ${ip || null}, 'google')`;
+  } catch (e) { console.error('[auth_google] session insert failed', e); }
+
+  const eh = await hashEmail(user.email);
+  const actionLabel = newSignup ? 'user_login_google_signup' : 'user_login_google';
+  await sql`INSERT INTO activity_logs (action, details, actor, user_id)
+            VALUES (${actionLabel}, 'sign-in via Google', ${eh}, ${user.id})`;
+
+  // Task #4 — kill any incoming stale cross-identity session before the new
+  // cookie overwrites it. This is THE bug that caused the Google sign-in
+  // account leak (a stale admin impersonation Bearer was still mounting an
+  // active user_sessions row that would have remained replayable outside the
+  // browser). The function never throws; the catch is belt-and-braces.
+  try {
+    await revokeStaleCrossIdentitySession(c, user.id);
+  } catch (e) { console.warn('[auth_google] cross-session revoke failed', e); }
+
+  const csrf = generateCsrfToken();
+  // Domain `.axal.vc` on HQ, so the session holds on both hosts.
+  setAuthCookies(c, token, csrf);
+  return { token, csrf };
 }
 
 authGoogle.get('/callback', async (c) => {
@@ -499,11 +730,21 @@ authGoogle.get('/callback', async (c) => {
   try {
     await withDeadline(c.env.TOKENS.delete(`gstate:${stateSig}`), STATE_KV_DEADLINE_MS, 'gstate-delete');
   } catch {}
+  // Cleared with the Domain /start now sets (D722) and without it, so a
+  // host-only cookie from a /start that ran before the change goes too.
+  const stateDom = authCookieDomainAttr(c);
   c.header(
     'Set-Cookie',
-    'studioos_google_state=; HttpOnly; Secure; SameSite=Lax; Path=/api/auth/google; Max-Age=0',
+    `studioos_google_state=; HttpOnly; Secure; SameSite=Lax; Path=/api/auth/google${stateDom}; Max-Age=0`,
     { append: true },
   );
+  if (stateDom) {
+    c.header(
+      'Set-Cookie',
+      'studioos_google_state=; HttpOnly; Secure; SameSite=Lax; Path=/api/auth/google; Max-Age=0',
+      { append: true },
+    );
+  }
 
   const idt = await exchangeCode(c.env, code);
   if (!idt) return callbackError(c.env, 'exchange_failed', state.action);
@@ -558,133 +799,13 @@ authGoogle.get('/callback', async (c) => {
     }
 
     // --- action === 'signin' ---------------------------------------------
-    // 1) lookup by google_sub via side-table join
-    let users = await sql`
-      SELECT u.* FROM users u
-      INNER JOIN user_google_links l ON l.user_id = u.id
-      WHERE l.google_sub = ${sub} LIMIT 1` as any[];
-    let user = users[0] as any | undefined;
-    let newSignup = false;
-
-    if (!user) {
-      // 2/3) lookup by case-insensitive email
-      const byEmail = await sql`SELECT * FROM users WHERE LOWER(email) = ${googleEmail} LIMIT 1` as any[];
-      if (byEmail.length) {
-        const existing = byEmail[0];
-        if (!existing.email_verified) {
-          // Rule 3 — block. Operator MUST complete magic-link round-trip
-          // first to prove email ownership.
-          return callbackError(c.env, 'link_blocked_unverified', 'signin');
-        }
-        // Rule 2 — link verified row. INSERT OR IGNORE so a double-click
-        // race (two concurrent sign-in callbacks for the same verified
-        // email) cannot 500 on the UNIQUE constraint; the second insert
-        // becomes a no-op and the existing link is reused.
-        await sql`INSERT OR IGNORE INTO user_google_links (user_id, google_sub) VALUES (${existing.id}, ${sub})`;
-        const eh = await hashEmail(existing.email);
-        await sql`INSERT INTO activity_logs (action, details, actor, user_id)
-                  VALUES ('google_account_auto_linked',
-                          'first-time Google sign-in matched verified email',
-                          ${eh}, ${existing.id})`;
-        user = { ...existing };
-      } else {
-        // Rule 4 — fresh signup. Google already verified the email.
-        const name = (idt.name || googleEmail.split('@')[0] || 'New user').slice(0, 200);
-        // Task #9 follow-up — fresh Google signups land directly in
-        // 'exploring' (users.role CHECK relaxed by ensureExploringSchema),
-        // matching /register and magic-link. The post-callback redirect
-        // still routes newSignup users to /onboarding/chat so the Workers
-        // AI Llama chatbot can capture a persona into partner_profiles for
-        // admin review; admin assigns the final role manually from the
-        // exploring-users review queue (routes/admin_exploring.ts).
-        await ensureExploringSchema(c.env);
-        const inserted = await sql`
-          INSERT INTO users (email, name, role, email_verified)
-          VALUES (${googleEmail}, ${name}, 'exploring', true)
-          RETURNING *` as any[];
-        user = inserted[0];
-        // Parity with the classic path (routes/auth.ts:304): record the lane
-        // the applicant picked as a SUGGESTION for the admin review queue.
-        // Google signups previously recorded nothing at all, so a founder who
-        // chose "founder" arrived in the queue with no hint of intent while an
-        // identical email signup carried one. Best-effort: a failure here must
-        // never break an otherwise-valid sign-in.
-        if (state.lane) {
-          try {
-            const { upsertSuggestedRole } = await import('../services/exploringSchema');
-            await upsertSuggestedRole(c.env, (user as any).id, state.lane);
-          } catch (e) {
-            console.error('[auth_google] suggested-role upsert failed:', (e as Error).message);
-          }
-        }
-        // INSERT OR IGNORE defends against the rare case where a second
-        // concurrent fresh-signup request for the same google_sub raced
-        // us between the email-lookup miss and here. The new users row
-        // is already orphaned in that race; we accept the leak rather
-        // than 500 the surviving caller. (Belt-and-braces — the email
-        // UNIQUE constraint on users would also have rejected one of
-        // the two INSERTs further upstream in most cases.)
-        await sql`INSERT OR IGNORE INTO user_google_links (user_id, google_sub) VALUES (${user.id}, ${sub})`;
-        // Task #66 — seed the onboarding-chatbot gate row. The frontend
-        // RequireAuth guard pins this user to /onboarding/chat until the
-        // chatbot save flips completed_at. INSERT OR IGNORE keeps a
-        // double-callback race a no-op.
-        try {
-          await c.env.DB.prepare(
-            `INSERT OR IGNORE INTO onboarding_progress (user_id, flow, step, total_steps, completed_at)
-             VALUES (?, 'licence', 0, 0, NULL)`
-          ).bind(user.id).run();
-        } catch (e) { console.error('[auth_google] onboarding_progress seed failed', e); }
-        newSignup = true;
-        const eh = await hashEmail(user.email);
-        await sql`INSERT INTO activity_logs (action, details, actor, user_id)
-                  VALUES ('user_registered_google',
-                          ${`Google sign-up (email_hash=${eh})`},
-                          ${eh}, ${user.id})`;
-        // Best-effort downstream seeding (mirrors POST /register).
-        try {
-          const { seedObligations } = await import('../services/trust');
-          await seedObligations(c.env, user.id, user.role || 'partner');
-        } catch (e) { console.error('[auth_google] trust seed failed', e); }
-        try {
-          const { Jobs } = await import('../models/jobs');
-          await Jobs.enqueue(c.env, 'embed_entity', { type: 'partner', id: user.id });
-        } catch {}
-      }
-    }
-
-    if (!user.is_active && user.is_active !== undefined && user.is_active !== null && Number(user.is_active) === 0) {
-      return callbackError(c.env, 'account_inactive', 'signin');
-    }
-
-    // Mint a session. factor='google' so requireFactor('totp') still gates
-    // sensitive routes — Google is ONE factor, never a TOTP substitute.
-    const jti = crypto.randomUUID();
-    const token = await createJWT(c.env, user.id, user.email, user.role, undefined, jti);
-    const ua = (c.req.header('user-agent') || '').slice(0, 500);
-    const ip = (c.req.header('cf-connecting-ip') || c.req.header('x-forwarded-for') || '').split(',')[0].trim().slice(0, 64);
-    try {
-      await sql`INSERT INTO user_sessions (user_id, jti, user_agent, ip, factor)
-                VALUES (${user.id}, ${jti}, ${ua || null}, ${ip || null}, 'google')`;
-    } catch (e) { console.error('[auth_google] session insert failed', e); }
-
-    const eh = await hashEmail(user.email);
-    const actionLabel = newSignup ? 'user_login_google_signup' : 'user_login_google';
-    await sql`INSERT INTO activity_logs (action, details, actor, user_id)
-              VALUES (${actionLabel}, 'sign-in via Google', ${eh}, ${user.id})`;
-
-    // Task #4 — kill any incoming stale cross-identity session before the
-    // new cookie overwrites it. This is THE bug that caused the Google
-    // sign-in account leak (a stale admin impersonation Bearer was still
-    // mounting an active user_sessions row that would have remained
-    // replayable outside the browser).
-    try {
-      const { revokeStaleCrossIdentitySession } = await import('../auth');
-      await revokeStaleCrossIdentitySession(c, user.id);
-    } catch (e) { console.warn('[auth_google] cross-session revoke failed', e); }
-
-    const csrf = generateCsrfToken();
-    setAuthCookies(c, token, csrf);
+    // The account is decided and the session minted by the two helpers
+    // /popup uses too (D722), so the redirect and the window cannot follow
+    // different rules. Every refusal is decided before anything is written.
+    const resolved = await resolveGoogleSignin(c, sql, { sub, email: googleEmail, name: idt.name }, { lane: state.lane });
+    if (!resolved.ok) return callbackError(c.env, resolved.code, 'signin');
+    const { user, newSignup } = resolved;
+    await mintGoogleSession(c, sql, user, newSignup);
 
     // Fresh Google signups land on the licence picker (Auth v2). Existing users
     // honour the sanitized redirect target the caller passed to /start.
@@ -704,6 +825,197 @@ authGoogle.get('/callback', async (c) => {
     return callbackError(c.env, 'internal_error', state.action);
   } finally {
     try { await sql.end(); } catch {}
+  }
+});
+
+// ----- /config and /popup (D722) --------------------------------------------
+//
+// "Continue with Google" on /login opens Google's own window — the GIS
+// authorization-code client in popup mode, the library and window
+// mail.axal.vc uses — and the page posts the code it gets back to /popup.
+// No callback hop, no KV state and no cross-host cookie: the three things
+// that turned a good Google sign-in into "Sign-in link expired" or a landing
+// back on /login. The redirect above stays as the fallback for every click the
+// window cannot take (switched off, not loaded yet, blocked).
+
+/**
+ * The cookie the page writes before it opens Google's window, holding that
+ * attempt's state. Written by script on the page's own host, `SameSite=Strict`
+ * and scoped to this mount, so it reaches /popup only from this site.
+ */
+const POPUP_STATE_COOKIE = 'studioos_google_popup';
+const POPUP_STATE_RE = /^[A-Za-z0-9_-]{43}$/;
+// A GIS authorization code: printable ASCII, no spaces, bounded.
+const POPUP_CODE_RE = /^[\x21-\x7e]{1,1024}$/;
+const POPUP_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+// Kept equal to index.ts's DEV_LOCALHOSTS, which the CORS allowlist reads.
+const POPUP_DEV_ORIGINS = ['http://localhost:5000', 'http://localhost:5173'];
+
+/**
+ * The window may be used only when the client is configured AND the
+ * deployment switched it on. `GOOGLE_SIGNIN_POPUP` ships "off": a JavaScript
+ * origin missing from the Google client makes Google show its own error inside
+ * the window, which the page cannot see, so the switch flips only after the
+ * owner registers both origins. "off" is also the one-line rollback.
+ */
+function popupEnabled(env: Env): boolean {
+  return !configMissing(env) && env.GOOGLE_SIGNIN_POPUP === 'on';
+}
+
+/**
+ * The request must come from a page on this site. `Origin` must be this
+ * request's own origin — so axal.vc answers axal.vc and app.axal.vc answers
+ * app.axal.vc — and in production a `Sec-Fetch-Site`, when the browser sends
+ * one, must say same-origin. Outside production the dev servers and
+ * `EXTRA_DEV_ORIGINS` are admitted too, because there the SPA is served from a
+ * different port than the Worker.
+ */
+function popupOriginOk(c: GoogleCtx): boolean {
+  const origin = c.req.header('origin') || '';
+  if (!origin) return false;
+  const allowed = new Set<string>([new URL(c.req.url).origin]);
+  const prod = isProductionEnv(c.env);
+  if (!prod) {
+    for (const o of POPUP_DEV_ORIGINS) allowed.add(o);
+    for (const o of String(c.env.EXTRA_DEV_ORIGINS || '').split(',')) {
+      const t = o.trim();
+      if (/^https?:\/\//.test(t)) allowed.add(t);
+    }
+  }
+  if (!allowed.has(origin)) return false;
+  if (prod) {
+    const site = c.req.header('sec-fetch-site');
+    if (site && site !== 'same-origin') return false;
+  }
+  return true;
+}
+
+function readPopupCookie(c: GoogleCtx): string {
+  const header = c.req.header('cookie') || '';
+  for (const part of header.split(';')) {
+    const t = part.trim();
+    const eq = t.indexOf('=');
+    if (eq > 0 && t.slice(0, eq) === POPUP_STATE_COOKIE) return t.slice(eq + 1);
+  }
+  return '';
+}
+
+/** Length-equal, constant-time string comparison, as verifyState does it. */
+function sameString(a: string, b: string): boolean {
+  if (!a || a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+/**
+ * Every refusal is `{ error, code }` — a sentence we wrote and the flag the
+ * page branches on (D278) — and none is a 401, so the SPA's request() never
+ * mistakes a refused sign-in for an expired session and bounces the page.
+ */
+function popupRefuse(c: GoogleCtx, status: 400 | 403 | 409 | 500 | 502 | 503, code: string, error: string, extra: Record<string, unknown> = {}) {
+  return c.json({ error, code, ...extra }, status);
+}
+
+authGoogle.get('/config', (c) => {
+  const configured = !configMissing(c.env);
+  const popup = popupEnabled(c.env);
+  c.header('Cache-Control', 'no-store');
+  // The client ID is public (it is in every Google sign-in URL), but it is
+  // read from the deployment's own config and handed out only when the window
+  // is on — nothing in the SPA bundle carries one.
+  return c.json({ configured, popup, client_id: popup ? c.env.GOOGLE_AUTH_CLIENT_ID! : null });
+});
+
+authGoogle.post('/popup', async (c) => {
+  if (configMissing(c.env)) {
+    return popupRefuse(c, 503, 'not_configured', 'Google sign-in is not enabled on this environment.');
+  }
+  // Origin, then the header no cross-origin page can send (it is not in the
+  // CORS allowHeaders, so a preflight for it is refused), then the body, then
+  // the double-submitted state — all before anything leaves for Google.
+  if (!popupOriginOk(c) || c.req.header('x-requested-with') !== 'XmlHttpRequest') {
+    return popupRefuse(c, 403, 'bad_origin', 'Google sign-in failed. Please try again.');
+  }
+  let body: any;
+  try { body = await c.req.json(); } catch { body = null; }
+  const code = typeof body?.code === 'string' ? body.code : '';
+  const state = typeof body?.state === 'string' ? body.state : '';
+  if (!POPUP_CODE_RE.test(code) || !POPUP_STATE_RE.test(state)) {
+    return popupRefuse(c, 400, 'bad_request', 'Google sign-in failed. Please try again.');
+  }
+  // Whitelisted, not passed through, as /start does it.
+  const laneRaw = typeof body?.lane === 'string' ? body.lane.trim().toLowerCase() : '';
+  const lane = ['founder', 'partner', 'investor'].includes(laneRaw) ? laneRaw : undefined;
+  const expectedRaw = typeof body?.expected_email === 'string' ? body.expected_email.trim().toLowerCase() : '';
+  const expectedEmail = expectedRaw.length <= 320 && POPUP_EMAIL_RE.test(expectedRaw) ? expectedRaw : undefined;
+
+  // The page wrote the state into a SameSite=Strict cookie on this site before
+  // it opened Google's window. A code another page captured cannot carry this
+  // browser's cookie, so it cannot sign this browser in.
+  if (!sameString(readPopupCookie(c), state)) {
+    return popupRefuse(c, 403, 'bad_state', 'This sign-in attempt expired. Press Continue with Google again.');
+  }
+  // The attempt is spent whatever happens next; the cookie goes with it.
+  c.header('Set-Cookie', `${POPUP_STATE_COOKIE}=; Path=/api/auth/google; Max-Age=0; Secure; SameSite=Strict`, { append: true });
+
+  // D200 — the refusals that answer a presented credential are recorded. A
+  // bad origin, a stale state and a different account are not a credential
+  // being refused, and Google's keys not answering is our fault, not the
+  // token's; none of those are written.
+  const googleRefuse = (detail: string, subject?: { email?: string; userId?: number }) =>
+    recordSecurityEvent(c.env, { kind: 'signin', factor: 'google', outcome: 'refused', detail, ip: c.req.header('cf-connecting-ip'), ...subject });
+
+  try {
+    const idToken = await fetchIdToken(c.env, code, 'postmessage');
+    if (!idToken) {
+      await googleRefuse('exchange_failed');
+      return popupRefuse(c, 502, 'exchange_failed', "Google didn't confirm your sign-in. Please try again.");
+    }
+    const checked = await verifyGoogleIdToken(idToken, c.env.GOOGLE_AUTH_CLIENT_ID!);
+    if (!checked.ok) {
+      if (checked.code === 'email_unverified') {
+        await googleRefuse('email_unverified');
+        return popupRefuse(c, 403, 'email_unverified_at_google', 'Your Google email is not verified. Verify it with Google, then retry.');
+      }
+      console.warn('[auth_google] popup id_token refused', checked.reason);
+      if (checked.reason !== 'jwks_unavailable') await googleRefuse('token_invalid');
+      return popupRefuse(c, 502, 'token_invalid', "We couldn't verify your Google account. Please try again.");
+    }
+    const identity = checked.claims;
+
+    const sql = getSQL(c.env);
+    try {
+      const resolved = await resolveGoogleSignin(c, sql, identity, { lane, expectedEmail });
+      if (!resolved.ok) {
+        if (resolved.code === 'different_account') {
+          return popupRefuse(c, 409, 'different_account',
+            `You typed ${expectedEmail}, but Google signed in ${identity.email}.`,
+            { google_email: identity.email });
+        }
+        if (resolved.code === 'account_inactive') {
+          await googleRefuse('inactive', { email: identity.email, userId: resolved.userId });
+          return popupRefuse(c, 403, 'account_inactive', 'Your Axal VC account is inactive. Contact support.');
+        }
+        await googleRefuse('link_blocked_unverified', { email: identity.email, userId: resolved.userId });
+        return popupRefuse(c, 409, 'link_blocked_unverified',
+          "An Axal VC account already uses this email, but the address isn't confirmed yet. Use 'Email me a sign-in link' once to confirm it; after that, Continue with Google works.");
+      }
+      const { user, newSignup } = resolved;
+      const { token, csrf } = await mintGoogleSession(c, sql, user, newSignup);
+      return c.json({
+        token,
+        csrf_token: csrf,
+        user: { id: user.id, email: user.email, name: user.name, role: user.role },
+        expires_in: 24 * 3600,
+        new_signup: newSignup,
+      });
+    } finally {
+      try { await sql.end(); } catch {}
+    }
+  } catch (e: any) {
+    console.error('[auth_google] popup error', e?.message || e, e?.stack);
+    return popupRefuse(c, 500, 'internal_error', 'Something went wrong on our side. Please try again.');
   }
 });
 

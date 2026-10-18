@@ -178,6 +178,13 @@ BOUNTY_GRANTERS = "guillaumelauzier"
 ENVIRONMENT       = "production"
 # D653: owner and counsel must authorize enablement (#1008).
 ROUND_CALLS_ENABLED = "false"
+# D722: "on" lets /login open Google's own sign-in window (GIS code client,
+# POST /api/auth/google/popup); "off" keeps every click on the /start redirect.
+# Flip to "on" in BOTH this block and the production vars block below, in one
+# PR, only after https://axal.vc and https://app.axal.vc are Authorized
+# JavaScript origins on the GOOGLE_AUTH_CLIENT_ID client. Rollback: "off" and
+# deploy.
+GOOGLE_SIGNIN_POPUP = "off"
 # D681 (#1555): StudioOS MCP and OAuth; a missing OAUTH_KV still keeps them off.
 # The lasting switch-off is one PR to main that sets this flag and production's
 # MCP_SERVER_ENABLED to "false", and HQ_MCP_FLAG in
@@ -509,6 +516,8 @@ BOUNTY_GRANTERS = "guillaumelauzier"
 ENVIRONMENT       = "production"
 # D653: owner and counsel must authorize enablement (#1008).
 ROUND_CALLS_ENABLED = "false"
+# D722 — see top-level [vars]. Mirrored because env tables don't inherit.
+GOOGLE_SIGNIN_POPUP = "off"
 # D681 (#1555): StudioOS MCP and OAuth; a missing OAUTH_KV still keeps them off.
 # The lasting switch-off is one PR to main that sets this flag and the top-level
 # MCP_SERVER_ENABLED to "false", and HQ_MCP_FLAG in

@@ -143,10 +143,17 @@ export interface Env {
   // long-lived refresh tokens, whereas the auth client only ever asks
   // for `openid email profile` and never stores a refresh token. Mixing
   // the two would forces the wrong scopes onto sign-in users. When
-  // unset, /api/auth/google/start returns 503 and the SPA hides the
-  // "Continue with Google" buttons.
+  // unset, /api/auth/google/start returns 503 and the SPA shows the
+  // server's "not enabled on this environment" at click time; the button
+  // itself always renders (D185).
   GOOGLE_AUTH_CLIENT_ID?: string;
   GOOGLE_AUTH_CLIENT_SECRET?: string;
+  // D722 — "on" lets /login open Google's own window (the GIS code client)
+  // for the client above; anything else keeps every click on the /start
+  // redirect. A wrangler var, "off" in both [vars] and [env.production.vars]
+  // until the owner has registered https://axal.vc and https://app.axal.vc
+  // as Authorized JavaScript origins on that client.
+  GOOGLE_SIGNIN_POPUP?: string;
   // Dedicated Google Sheets OAuth for `/research/funds` sync. SEPARATE from
   // the calendar client (`GOOGLE_CAL_*` / `GOOGLE_CLIENT_*`) so adding the
   // spreadsheets scope never forces calendar users to re-consent. Resolution
