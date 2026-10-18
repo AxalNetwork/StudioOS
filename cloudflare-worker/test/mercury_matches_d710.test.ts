@@ -1,9 +1,9 @@
 /**
  * D710 (#1775) decisions 9 and 10 — reconciliation proposes, a person confirms.
  *
- * Fund I and #1774's fee periods are not on `main` yet (#1773's `fundPayeeOf`,
- * #1774's periods), so production's defaults propose neither kind; the first
- * test pins that. The rest drive the matcher's rules through the same
+ * The first two tests drive production's defaults: Fund I through #1773's
+ * `fundPayeeOf`, and #1774's `fund_fee_periods` (migration 473) with its
+ * period read. The rest drive the matcher's rules through the same
  * dependencies, with a fixture fund and fixture periods.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
@@ -13,6 +13,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { collectedFor, proposeMatches, type FeePeriod, type MatchDeps } from '../src/services/mercury/match.ts';
 import { upsertTransaction } from '../src/services/mercury/store.ts';
+import { readPeriod } from '../src/services/fundFees.ts';
 import { ADMIN, JTI, appFor, call, envFor, freshDb, one, rows } from './_mercury_fixture.ts';
 
 const FUND = 1;
@@ -63,6 +64,36 @@ test('the default dependencies: Fund I is found by #1773\'s slug and resolver; w
   credit(none, 1, 100000, '2026-09-20');
   assert.deepEqual(await proposeMatches(envFor(none)), { proposed: 0 });
   assert.equal(matches(none).length, 0);
+});
+
+function feePeriod(db: any, id: number, fundId: number, quarter: string, status: string, net: number) {
+  db.prepare(`INSERT INTO fund_fee_periods (id, uid, fund_id, quarter, window_start, window_end, terms_id, status, digest, gross_cents,
+      catch_up_cents, offset_pool_cents, offset_applied_cents, offset_carried_cents, net_cents, remittance_reference)
+    VALUES (?, ?, ?, ?, '2026-07-01', '2026-09-30', 1, ?, ?, ?, 0, 5000, 5000, 0, ?, ?)`)   // an offset: gross is not net
+    .run(id, `fp-${id}`, fundId, quarter, status, 'a'.repeat(64), net + 5000, net, `FEE-${id}`);
+}
+
+test('#1774\'s periods by default: an issued Fund I period is matched, a draft or another fund\'s is not, and its period read reports it collected', async () => {
+  const db = seed();
+  const env = envFor(db);
+  feePeriod(db, 51, FUND, '2026Q3', 'issued', 250_000);
+  feePeriod(db, 52, FUND, '2026Q2', 'draft', 333_000);
+  feePeriod(db, 53, 2, '2026Q3', 'issued', 444_000);
+  credit(db, 2, 250_000, '2026-10-05');
+  credit(db, 2, 333_000, '2026-10-05');
+  credit(db, 2, 444_000, '2026-10-05');
+  assert.deepEqual(await proposeMatches(env), { proposed: 1 });
+  assert.deepEqual(matches(db), [{ target_kind: 'fee_period', target_id: 51, state: 'proposed', origin: 'matcher' }]);
+  assert.equal((await readPeriod(env, FUND, '2026Q3')).collected, null, 'proposed is not collected');
+  const m = one(db, "SELECT uid FROM mercury_matches WHERE target_kind = 'fee_period'");
+  const ok = await call(appFor(), env, 'POST', `/matches/${m.uid}/confirm`, ADMIN, { jti: JTI.adminTotp });
+  assert.equal(ok.status, 200, ok.text);
+  assert.deepEqual({ ...(await readPeriod(env, FUND, '2026Q3')).collected }, { collected_on: '2026-10-05', last_four: '3434' });
+  assert.equal((await readPeriod(env, 2, '2026Q3')).collected, null);
+  // A manual pair on another fund's period is refused.
+  const other = one(db, 'SELECT uid FROM mercury_transactions WHERE amount_cents = 444000');
+  const r = await call(appFor(), env, 'POST', '/matches', ADMIN, { jti: JTI.adminTotp, body: { transaction_uid: other.uid, target_kind: 'fee_period', target_id: 53 } });
+  assert.deepEqual([r.status, r.body.code], [409, 'fee_periods_unavailable']);
 });
 
 test('the matcher: one open line\'s outstanding on the Fund\'s account is proposed; two equal lines propose nothing; the windows hold', async () => {
