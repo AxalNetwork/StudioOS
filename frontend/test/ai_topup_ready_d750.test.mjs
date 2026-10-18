@@ -29,7 +29,14 @@ const CASES = {
 const reading = (over) => ({ budget: BUDGET, loading: false, budgetError: false, reload: () => {}, ...over });
 const rail = (over) => renderToStaticMarkup(h(RailUsage, { reading: reading(over) }));
 const card = (over) => renderToStaticMarkup(h(AiBudgetUsage, { reading: reading(over) }));
-const words = (html) => html.replace(/<[^>]+>/g, '').replace(/&#x27;/g, "'").replace(/&lt;/g, '<');
+// Tags stripped until none is left, so one split by another (`<a<b>>`)
+// cannot come back together after a single pass (as _founder_tool_checks.mjs).
+const stripTags = (s) => {
+  let out = s;
+  for (let prev = null; prev !== out;) { prev = out; out = out.replace(/<[^>]*>/g, ''); }
+  return out;
+};
+const words = (html) => stripTags(html).replace(/&#x27;/g, "'").replace(/&lt;/g, '<');
 
 test('usageMoney rounds to the cent, says <$0.01 under half a cent, and keeps large values exact', () => {
   assert.equal(usageMoney(0), '$0.00');

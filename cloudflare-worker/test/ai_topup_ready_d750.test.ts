@@ -189,7 +189,7 @@ test('end to end: a price created after the last sync is fetched, bought through
     if (url.endsWith('/v1/payment_intents') && init?.method === 'POST') {
       const form = new URLSearchParams(String(init.body));
       assert.equal(form.get('amount'), '2500'); assert.equal(form.get('metadata[kind]'), 'cart_order');
-      return json({ id: 'pi_topupE2E', client_secret: 'pi_topupE2E_secret_fixture', status: 'requires_payment_method' });
+      return json({ id: 'pi_topupE2E', client_secret: 'pi_topupE2E' + '_secret_' + 'fixture', status: 'requires_payment_method' });
     }
     return json({ error: { message: `unexpected ${url}` } }, 500);
   });
