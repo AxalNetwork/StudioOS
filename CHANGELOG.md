@@ -4,6 +4,24 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## An investor's proof of capital from their own Mercury (D752, #1888)
+
+- Migration 491 adds `capital_attestations`: a dated statement, "at least $X
+  was available on <date>, held by <holder>", about one of the investor's own
+  open commitments. It stores no balance, account id, last four, transaction or
+  counterparty. A trigger fixes what a statement says and makes revoked final;
+  a second trigger refuses DELETE.
+- `routes/mercury_attestations.ts` mounts five routes at
+  `/api/mercury/attestations`: list, targets, accounts, share and revoke. HQ
+  only, investors only for the bank reads. `services/capitalAttestations.ts`
+  checks the floor against the picked accounts inside the investor's request,
+  and the sum is never stored, returned or logged.
+  `services/capitalAttestationTerms.ts` holds the versioned consent words
+  (`d752-1`) and the statement sentence.
+- `PersonalConnection` gains `legal_name`. Tests:
+  `cloudflare-worker/test/capital_attestations_d752.test.ts`; the personal
+  guard lists the three new files.
+
 ## Mercury for investors on HQ, and the card's words by role (D752, #1886)
 
 - `integrations/registry.ts`: Mercury's `personal_roles` gains `investor`, and
