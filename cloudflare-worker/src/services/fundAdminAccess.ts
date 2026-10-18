@@ -65,6 +65,7 @@ export type FundActKey =
   | 'distribution.preview' | 'distribution.execute' | 'distribution.mark_paid'
   | 'fund_report.draft' | 'fund_report.issue'
   | 'fund_booklet.read' | 'fund_booklet.withdraw'
+  | 'fund_notice.preview' | 'fund_notice.issue'
   | 'fund.gp_of_record' | 'fund.slug_fund_i' | 'fund.economics' | 'fund.write'
   | 'fund_ledger.administrator' | 'fund_ledger.write'
   | 'bank_account.see' | 'bank_account.change' | 'bank_account.reveal'
@@ -108,9 +109,14 @@ export const FUND_ACTS: readonly FundAct[] = Object.freeze([
     sentence: 'A Super Admin issues fund reports.',
     routes: ['POST /api/fund-reporting/drafts/:uid/issue'] }),
   act({ act: 'fund_booklet.read', label: 'Read subscription booklets and their ticks', tier: 'admin', owner: '#1781', sentence: null,
-    routes: ['GET /api/fund-booklets/', 'GET /api/fund-booklets/:uid'] }),
+    routes: ['GET /api/fund-booklets/', 'GET /api/fund-booklets/:uid', 'GET /api/fund-booklets/:uid/pdf'] }),
   act({ act: 'fund_booklet.withdraw', label: 'Withdraw a subscription booklet', tier: 'admin', owner: '#1781', sentence: null,
     routes: ['POST /api/fund-booklets/:uid/withdraw'] }),
+  act({ act: 'fund_notice.preview', label: 'Preview a fund notice', tier: 'admin', owner: '#1781', sentence: null,
+    routes: ['POST /api/fund-notices/preview', 'POST /api/fund-notices/calls/:callUid/preview'] }),
+  act({ act: 'fund_notice.issue', label: 'Issue a fund notice', tier: 'super_admin', owner: '#1781',
+    sentence: 'A Super Admin issues fund notices.',
+    routes: ['POST /api/fund-notices/issue', 'POST /api/fund-notices/calls/:callUid/issue'] }),
   act({ act: 'fund.gp_of_record', label: "Change a fund's general partner of record", tier: 'super_admin', owner: '#1779',
     sentence: "A Super Admin changes a fund's general partner of record.",
     routes: ['PATCH /api/funds/:id (gp_user_id)'] }),

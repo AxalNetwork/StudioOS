@@ -425,12 +425,16 @@ function drawBlocks(cur: Cursor, blocks: Block[], articlePages: Map<string, numb
 
 async function drawExecution(cur: Cursor, model: PaperModel, doc: PDFDocument) {
   const exec = model.execution!;
+  // D716 — a block with no parties (the booklet's packet) draws nothing, not
+  // even the signature-page line and its new page.
+  if (!exec.parties.length) return;
   cur.gap(10);
   cur.paragraph('[Signature page follows]', { font: 'italic', align: 'center', color: MUTED });
   cur.newPage();
   cur.paragraph('EXECUTION', { size: 9, font: 'bold', color: VIOLET, lineHeight: 14 });
   cur.gap(2);
-  cur.paragraph(exec.recital, { size: 8.5, font: 'italic', color: MUTED, lineHeight: 12 });
+  // D716 — a notice's block has no recital.
+  if (exec.recital) cur.paragraph(exec.recital, { size: 8.5, font: 'italic', color: MUTED, lineHeight: 12 });
   cur.gap(14);
   for (const party of exec.parties) await drawParty(cur, party, doc);
 }
@@ -446,7 +450,9 @@ async function drawParty(cur: Cursor, party: PaperParty, doc: PDFDocument) {
       sig = { img, w: d.width * ratio, h: d.height * ratio };
     } catch { /* fall through to the blank "By:" line */ }
   }
-  cur.need(5 * 13 + 30 + (sig ? sig.h : 0) + (party.through ? 13 : 0) + (party.signedLine ? 11 : 0));
+  // D716 — a notice's sender has no By line, so it neither prints nor counts.
+  const byLines = party.by ? 1 : 0;
+  cur.need((4 + byLines) * 13 + 30 + (sig ? sig.h : 0) + (party.through ? 13 : 0) + (party.signedLine ? 11 : 0));
   cur.paragraph(party.heading, { size: 10, font: 'bold', color: INK_STRONG, lineHeight: 14 });
   const indent = party.through ? 12 : 0;
   if (party.through) cur.paragraph(party.through, { size: 9.5, lineHeight: 13 });
@@ -455,7 +461,7 @@ async function drawParty(cur: Cursor, party: PaperParty, doc: PDFDocument) {
     cur.page.drawImage(sig.img, { x: MARGIN_X + indent, y: cur.y - sig.h, width: sig.w, height: sig.h });
     cur.y -= sig.h + 4;
   }
-  cur.paragraph(party.by, { size: 9.5, lineHeight: 13, indent });
+  if (party.by) cur.paragraph(party.by, { size: 9.5, lineHeight: 13, indent });
   if (party.signedLine) cur.paragraph(party.signedLine, { size: 7, color: MUTED, lineHeight: 11, indent });
   cur.paragraph(party.name, { size: 9.5, lineHeight: 13, indent });
   cur.paragraph(party.title, { size: 9.5, lineHeight: 13, indent });

@@ -261,3 +261,25 @@ test('a booklet moves open -> submitted -> withdrawn only, freezes at submit, an
   assert.throws(() => db.exec('DELETE FROM fund_subscription_booklets'), /never deleted/);
   assert.throws(() => db.exec("INSERT INTO fund_subscription_booklets (uid, application_id, fund_slug) VALUES ('b3', 1, 'other-fund')"), /CHECK/);
 });
+
+test('D716 #1776\'s paper for a capital call notice prints no signature line and no counterparty block', async () => {
+  const { paperModel, paperHtml } = await import('../src/services/legalPaper.ts');
+  const html = paperHtml(paperModel({
+    title: 'Capital Call Notice', body: 'The Fund calls capital.', slug: 'capital_call_notice', bodySha256: 'a'.repeat(64), state: { kind: 'draft' },
+  }), { pageSize: 'letter', cover: 'light', medium: 'screen', fonts: 'omit' });
+  assert.ok(!html.includes('By: ___') && !/<p class="line">By:/.test(html), 'no signature line');
+  assert.ok(!html.includes('[Counterparty Legal Name]'), 'no counterparty block');
+  assert.ok(html.includes('Axal VC Spin-Out Lab Fund I LP') && html.includes('By: Axal VC GP LLC, its general partner'), 'the sender, through its GP');
+});
+
+test('D716 the pdf-lib fallback draws nothing for a block with no parties: no signature-page line and no new page', async () => {
+  const { paperModel } = await import('../src/services/legalPaper.ts');
+  const { renderPaperFallbackPdf } = await import('../src/services/pdf.ts');
+  const { PDFDocument } = await import('pdf-lib');
+  const input = { title: 'Subscription Booklet', body: 'The parts follow.', slug: 'subscription_booklet', bodySha256: 'a'.repeat(64), state: { kind: 'draft' as const } };
+  const model = paperModel(input);
+  assert.deepEqual(model.execution?.parties, []);
+  const pages = async (m: any) => (await PDFDocument.load(await renderPaperFallbackPdf(m, { pageSize: 'letter' }))).getPageCount();
+  // The booklet is a cover slug, so the fallback also draws its cover and contents: compare against no block at all.
+  assert.equal(await pages(model), await pages(paperModel({ ...input, suppressExecutionBlock: true })), 'no page for an empty execution block');
+});

@@ -69,17 +69,34 @@ The `github` provider is a GitHub App's read-only user authorization. `GET /:uid
 
 ### Fund notices and booklets Worker contract (D716, #1781)
 
-The Subscription Booklet's store is mounted at `/api/fund-booklets` (`routes/fund_booklets.ts`, `services/subscriptionBooklet.ts`, migration 478). The notices, and the booklet's two paper routes, join this section with #1781's PR 1. See `decisions/D716.md`.
+The Subscription Booklet's store is mounted at `/api/fund-booklets` (`routes/fund_booklets.ts`, `services/subscriptionBooklet.ts`, migration 478).
 - **The applicant** (an approved Fund I `lp_applications` row; anyone else gets 404):
   - `POST /mine` opens the booklet, or returns the live one.
   - `GET /mine` answers the parts, the fields with their ticks, `missing_parts` and the digest.
   - `PUT /mine/answers { answers: [{ field_id, checked }] }`: 400 `field_unknown`, 409 `booklet_not_open`.
   - `POST /mine/submit { digest }`: 409 `booklet_part_missing` (naming the parts) or `content_changed`.
+  - `GET /mine/paper` answers `{ html, digest, page_size }`: the booklet on #1776's paper, screen HTML with the faces inline, `no-store`.
   - A support session cannot write.
 - **An Admin on HQ** (`hq_only` on a branch; support session refused; D714 acts):
   - `GET /` lists the booklets, with no ticks (`fund_booklet.read`).
   - `GET /:uid` answers one booklet with its ticks, audited (`fund_booklet.read`).
+  - `GET /:uid/pdf` draws its PDF on request through Browser Run (never pdf-lib), keeps nothing, and is audited (`fund_booklet.read`); 503 `booklet_render_unavailable` when the print fails.
   - `POST /:uid/withdraw { reason }` takes a reason of 10–200 characters (`fund_booklet.withdraw`).
+
+Fund notices are mounted at `/api/fund-notices` (`routes/fund_notices.ts`, `services/fundNotices.ts`, `services/fundNoticeStore.ts`, migration 478). See `decisions/D716.md`.
+- **An Admin on HQ** (`hq_only` on a branch; support session refused):
+  - `GET /types`.
+  - `POST /preview { type, source, inputs, page_size }` answers `{ html, paper_sha256, figures, figures_sha256, refusal }`, with fonts omitted, Draft and `no-store` (`fund_notice.preview`).
+  - `POST /calls/:callUid/preview` gives each line's figures and one digest (`fund_notice.preview`).
+  - `GET /` and `GET /:uid` read the notices; `GET /:uid/pdf` serves the kept PDF.
+- **The Super Admin** (`fund_notice.issue`, `super_admin_required` before any TOTP or step-up):
+  - `POST /issue { type, source, inputs, page_size, figures_sha256, reason? }`;
+  - `POST /calls/:callUid/issue { page_size, digest }`.
+- **The LP** (only notices addressed to their own LP row; anyone else gets 404):
+  - `GET /mine` (with `superseded` and `instructions_changed`);
+  - `GET /mine/:uid`;
+  - `GET /mine/:uid/pdf`.
+- **A PDF** is drawn once per stamp through Browser Run (never pdf-lib), kept in R2, and answered `private, no-store`.
 
 ### Money rails Worker contract (D707, #1772)
 
