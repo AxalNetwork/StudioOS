@@ -13,7 +13,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import { d1Over } from './_d1_sqlite.mjs';
-import { PDFDocument, PDFArray, PDFName, PDFRawStream, decodePDFRawStream } from 'pdf-lib';
+import { pdfText } from './_pdf_text.ts';
 import { tableFromBaseline } from './_baseline.mjs';
 import contracts from '../src/routes/admin_contracts.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
@@ -72,14 +72,7 @@ async function previewText(db: DatabaseSync, slug: string): Promise<string> {
     .setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(SECRET))}` } },
     { JWT_SECRET: SECRET, ENVIRONMENT: 'development', DB: d1Over(db) });
   assert.equal(res.status, 200);
-  const doc = await PDFDocument.load(new Uint8Array(await res.arrayBuffer()));
-  return doc.getPages().map((page) => {
-    const raw = page.node.lookup(PDFName.of('Contents'));
-    const streams = raw instanceof PDFArray ? raw.asArray().map((r) => doc.context.lookup(r)) : [raw];
-    let ops = '';
-    for (const st of streams) if (st instanceof PDFRawStream) ops += Buffer.from(decodePDFRawStream(st).decode()).toString('latin1');
-    return [...ops.matchAll(/<([0-9A-Fa-f]*)>\s*Tj/g)].map((m) => Buffer.from(m[1], 'hex').toString('latin1')).join(' ');
-  }).join(' ').replace(/\s+/g, ' ');
+  return pdfText(new Uint8Array(await res.arrayBuffer()));
 }
 
 test('D717 migration 479: every existing row reads NULL, and the CHECKs refuse an unknown kind or party', () => {
@@ -188,6 +181,13 @@ test('D717 the routes: a notice slug takes no stored pair (409 format_fixed); pp
   assert.deepEqual([ppm.kind, ppm.party], [derivedFormat('ppm', ppm.category).kind, derivedFormat('ppm', ppm.category).party]);
   assert.deepEqual(ppm.format_options.parties, ['management', 'holdings', 'gp', 'fund', 'none']);
   assert.deepEqual(ppm.format_options.kinds, ['agreement', 'corporate', 'resolution', 'unilateral', 'policy']);
+  // #1852: the entity the slug names, for the editor's "From the slug" party.
+  assert.equal(ppm.format_options.entity, axalEntityKeyForDoc('ppm', ppm.category));
+  const policy = (await call(db, '/templates/store/valuation_policy')).body.template;
+  assert.equal(classifyDocument('valuation_policy'), 'policy');
+  assert.equal(policy.format_options.derived.party, 'none');
+  assert.ok(['management', 'holdings', 'gp', 'fund'].includes(policy.format_options.entity), policy.format_options.entity);
+  assert.equal(policy.format_options.entity, axalEntityKeyForDoc('valuation_policy', policy.category));
   const set = await put('ppm', ppm, { doc_kind: 'agreement', axal_party: 'gp' });
   assert.equal(set.status, 200);
   assert.deepEqual([set.body.template.kind, set.body.template.party, set.body.template.format_source], ['agreement', 'gp', 'row']);

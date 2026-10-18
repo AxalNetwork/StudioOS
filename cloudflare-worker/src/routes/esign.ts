@@ -46,12 +46,12 @@ import { templatesFor, mayOriginate, notOfferedFor, originatorName, SEND_ABSENCE
 import { esignEnvelopeScope } from '../services/tenancyScope';
 import { sendAgreementAssignedEmail } from '../services/email';
 import { sha256Hex, sha256HexBytes } from '../services/pdf';
-import { paperModel, paperHtml, paperSha256, PART_STUB, type PaperRecipient } from '../services/legalPaper';
+import { paperModel, paperHtml, paperSha256, PART_STUB, STUB_LINE, type PaperRecipient } from '../services/legalPaper';
 import { structureForPaper } from '../services/fundStructure';
 import { renderLegalPdf } from '../services/legalPaperRender';
 import { readPaperChoice, PAPER_CHOICE_MESSAGES } from '../services/legalPaperCss';
 import { fileRowStatement, newFileUid } from '../services/legalDocumentFiles';
-import { templateFormatFor, renderFormat, COUNSEL_DRAFT_SLUGS, STUB_LINE, type TemplateFormat } from '../services/templateFormat';
+import { templateFormatFor, renderFormat, COUNSEL_DRAFT_SLUGS, type TemplateFormat } from '../services/templateFormat';
 import { PDFDocument } from 'pdf-lib';
 import { bindingKey } from '../util/schemaBootstrap';
 import { clientIp } from '../util/clientIp';

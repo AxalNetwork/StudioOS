@@ -14,14 +14,14 @@ import { fanOut } from '../services/branches';
 import { usageFromContractRows } from '../services/contractTemplateUsage';
 import { publishedContractTemplates, publicationFields, publishContractTemplates, preparePublishedContract, ContractPreparationError,
   publishOneTemplate, withdrawTemplatePublication, PublicationError } from '../services/contractPublication';
-import { formatView, formatOptions, renderFormat, effectiveFormat, COUNSEL_DRAFT_SLUGS, STUB_LINE } from '../services/templateFormat';
+import { formatView, formatOptions, renderFormat, effectiveFormat } from '../services/templateFormat';
 import { renderLegalPng } from '../services/browserRun';
 import { structureForPaper } from '../services/fundStructure';
 import { createAndSendEnvelope } from './esign';
 import { userMeetsTier } from '../middleware/requireTier';
 import { findActiveDocusignIntegrationForUser } from '../integrations/providers/docusign';
 import { sha256Hex, sha256HexBytes } from '../services/pdf';
-import { paperModel, paperHtml, paperSha256, paperStateFor, stateLabel, PART_STUB, type PublicationRef } from '../services/legalPaper';
+import { paperModel, paperHtml, paperSha256, paperStateFor, stateLabel, type PublicationRef } from '../services/legalPaper';
 import { paperFontsCss, readPaperChoice, PAPER_CHOICE_MESSAGES } from '../services/legalPaperCss';
 import { renderLegalPdf } from '../services/legalPaperRender';
 import { buildLegalDocx, docxFilename, DOCX_CONTENT_TYPE } from '../services/legalDocx';
@@ -1909,6 +1909,8 @@ adminContracts.get('/templates/store/:slug/preview.pdf', async (c) => {
   const model = paperModel({
     title: tpl.title, body, slug, category: tpl.category, version: tpl.version, bodySha256: bodySha,
     merge: c.req.query('resolve') === 'raw' ? 'raw' : 'brackets',
+    // #1865 — a stub's paper says it is one (L8 learn item 2).
+    stub: !!tpl.is_stub || !body.trim(),
     ...renderFormat(effectiveFormat(tpl)),
     state: paperStateFor({ version: tpl.version, bodySha256: bodySha, publication: await publicationRef(c.env, slug) }),
     structure: await structureForPaper(c.env, slug, 'preview'),
@@ -1970,6 +1972,7 @@ async function draftPaper(env: Env, input: DraftInput): Promise<DraftPaper> {
   const model = paperModel({
     title, body, slug: slug || title, category,
     version, bodySha256: bodySha, merge: input.resolve === 'raw' ? 'raw' : 'brackets', state,
+    stub: !body.trim(),
     ...renderFormat(effectiveFormat({ slug: slug || title, category, ...pair })),
     structure: await structureForPaper(env, slug, 'preview'),
   });
@@ -2019,13 +2022,6 @@ adminContracts.post('/templates/render.pdf', async (c) => {
 // it answers 503 `thumbnail_unavailable` and writes nothing. Binary endpoints —
 // kept OUT of the typed API drift surface.
 const THUMB_VIEWPORT = { width: 816, height: 1056, deviceScaleFactor: 0.5 } as const; // Letter page 1, in CSS px
-const COUNSEL_LINE = PART_STUB; // "Stub — counsel to draft."
-
-/** The body a stub's thumbnail shows: the two marks of decision 4, never legal text. */
-export function thumbnailBody(slug: string, body: string | null | undefined, isStub: boolean): string {
-  if (!isStub && (body || '').trim()) return body as string;
-  return COUNSEL_DRAFT_SLUGS.has(slug) ? `${STUB_LINE}\n\n${COUNSEL_LINE}` : STUB_LINE;
-}
 
 async function thumbnailResponse(c: Context<{ Bindings: Env }>, key: string, html: () => Promise<string>): Promise<Response> {
   const etag = `"${key}"`;
@@ -2052,14 +2048,14 @@ adminContracts.get('/templates/store/:slug/thumbnail.png', async (c) => {
   const slug = c.req.param('slug');
   const tpl = await storeGetTemplate(c.env, slug);
   if (!tpl) return c.json({ error: 'Template not found', code: 'not_found', slug }, 404);
+  // A stub draws its layout with the two stub marks (paperModel's `stub`), never legal text.
   const stub = !!tpl.is_stub || !(tpl.body_md || '').trim();
-  const body = thumbnailBody(slug, tpl.body_md, stub);
   const key = `legal/thumbnails/${await sha256Hex(slug)}/v${tpl.version ?? 0}-${(await paperSha256()).slice(0, 16)}.png`;
   const bodySha = await sha256Hex(tpl.body_md || '');
   const state = paperStateFor({ version: tpl.version, bodySha256: bodySha, publication: await publicationRef(c.env, slug) });
   return thumbnailResponse(c, key, async () => thumbnailHtml(paperModel({
-    title: tpl.title, body, slug, category: tpl.category, version: tpl.version, bodySha256: bodySha,
-    merge: 'brackets', state, ...renderFormat(effectiveFormat(tpl)),
+    title: tpl.title, body: tpl.body_md || '', slug, category: tpl.category, version: tpl.version, bodySha256: bodySha,
+    merge: 'brackets', state, stub, ...renderFormat(effectiveFormat(tpl)),
     structure: await structureForPaper(c.env, slug, 'preview'),
   })));
 });
