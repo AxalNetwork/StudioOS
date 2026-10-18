@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Shield, LogIn, KeyRound, Mail, ChevronDown, ChevronUp } from 'lucide-react';
-import { api, googleSignInApi } from '../lib/api';
+import { api } from '../lib/api';
+import { googleSignInApi } from '../lib/api/googleSignIn.js';
 import { track } from '../lib/funnel';
 import { storePendingNext } from '../lib/pendingNext';
 import useForcedLightTheme from '../hooks/useForcedLightTheme';
