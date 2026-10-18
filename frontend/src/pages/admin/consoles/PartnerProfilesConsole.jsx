@@ -232,6 +232,9 @@ function ProfileReviewModal({ profile, onClose, onSaved }) {
   try { extracted = JSON.parse(profile.extracted_data || '{}'); } catch {}
 
   const [esignFlash, setEsignFlash] = useState(null);
+  // D758 — the send was refused (no body in the library, or an unreadable
+  // store). The profile's new status stands; the modal stays open on the reason.
+  const [esignRefusal, setEsignRefusal] = useState(null);
   const [viaDocusign, setViaDocusign] = useState(false);
   // Real availability check — DocuSign is a Studio-tier provider AND
   // requires an active connected integration on the calling admin's
@@ -263,6 +266,7 @@ function ProfileReviewModal({ profile, onClose, onSaved }) {
   const submit = async (status) => {
     setSaving(true);
     setError('');
+    setEsignRefusal(null);
     try {
       const res = await api.adminVerifyProfile(profile.email, {
         agreement_type: agreement,
@@ -270,7 +274,9 @@ function ProfileReviewModal({ profile, onClose, onSaved }) {
         status,
         provider: viaDocusign && docusignAvailable ? 'docusign' : 'native',
       });
-      if (res?.esign?.envelope_id) {
+      if (res?.esign_refusal) {
+        setEsignRefusal(res.esign_refusal);
+      } else if (res?.esign?.envelope_id) {
         setEsignFlash({
           envelopeId: res.esign.envelope_id,
           emailSent: !!res.esign.email_sent,
@@ -478,6 +484,12 @@ function ProfileReviewModal({ profile, onClose, onSaved }) {
               </div>
             )}
             {error && <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</div>}
+            {esignRefusal && (
+              <div role="alert" className="text-xs bg-amber-50 border border-amber-200 text-amber-800 rounded-lg px-3 py-2.5 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-200">
+                <div className="font-semibold">The profile was saved; the agreement was not sent.</div>
+                <div className="mt-1">{esignRefusal.message}</div>
+              </div>
+            )}
             {esignFlash && (
               <div className="text-xs bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2.5 space-y-1">
                 <div className="font-semibold text-emerald-800 flex items-center gap-1.5">

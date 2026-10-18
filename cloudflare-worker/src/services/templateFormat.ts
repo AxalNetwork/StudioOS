@@ -40,6 +40,11 @@ export const COUNSEL_DRAFT_SLUGS: ReadonlySet<string> = new Set([
   'securities_legend',
   'operating_partner_agreement_spin_out_lab',
 ]);
+/**
+ * A stub's line (D717 decision 4; boards L8 and L9 draw it without the full
+ * stop). The thumbnail and the send refusal (D758) both print it.
+ */
+export const STUB_LINE = 'No body in the store yet.';
 /** The documents that carry the Structure of the Fund page (decision 11; PR 1c places it). */
 export const STRUCTURE_MAP_SLUGS: ReadonlySet<string> = new Set(['ppm', 'subscription_booklet', 'compliance_manual_code_of_ethics']);
 

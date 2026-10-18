@@ -2,11 +2,11 @@
  * D639 (#1396) — one access rule for every document handler, and co-founder
  * NDAs that record uids, on the real routers and node:sqlite.
  *
- *   1. `POST /legal/templates/:key/generate`, `GET /legal/documents` and
- *      `GET /legal/documents/:id` all decide through `canAccessFounderResource`:
- *      for an admin, a partner, an investor, the project's founder and the
- *      founder of another project, the list holds exactly the documents the
- *      single read opens, and generate is admitted for the same projects.
+ *   1. `GET /legal/documents` and `GET /legal/documents/:id` decide through
+ *      `canAccessFounderResource`: for an admin, a partner, an investor, the
+ *      project's founder and the founder of another project, the list holds
+ *      exactly the documents the single read opens. (The generate route this
+ *      also covered was deleted by D758: it never wrote a document.)
  *   2. A new co-founder NDA holds no email in its title or `signed_by`.
  *   3. Only the connection's two members can sign; an admin is refused too.
  *   4. `renderNda` uses a neutral label for an empty or defaulted name.
@@ -127,27 +127,6 @@ test('D639: the project filter narrows the same way, and never widens a founder 
   assert.deepEqual(await ids(OWNER, 1), [1]);
   assert.deepEqual(await ids(OWNER, 2), [], 'another founder’s project lists nothing');
   assert.deepEqual(await ids(INVESTOR, 1), [], 'an investor lists nothing, filtered or not');
-});
-
-test('D639: generate is admitted for the same projects the read opens, and an unattached document is staff-only', async () => {
-  const db = freshDb();
-  // Every template key is a contract doc_type, so an admitted generate ends at
-  // 409 `use_esign_envelope`; a refused one is 403 before it.
-  const gen = (who: number, body: any) => call(db, who, '/legal/templates/term_sheet/generate', { method: 'POST', body });
-  for (const who of [ADMIN, PARTNER, INVESTOR, OWNER, OTHER]) {
-    for (const pid of [1, 2]) {
-      const r = await gen(who, { project_id: pid });
-      const admitted = EXPECTED[who].includes(pid);
-      assert.equal(r.status, admitted ? 409 : 403, `${ROLE[who]} ${who} on project ${pid}`);
-      if (!admitted) assert.equal(r.body.message, 'You can only generate documents for your own project.');
-    }
-    const unattached = await gen(who, {});
-    const staff = who === ADMIN || who === PARTNER;
-    assert.equal(unattached.status, staff ? 409 : 403, `${ROLE[who]} ${who} unattached`);
-    if (!staff) assert.equal(unattached.body.message, 'Only an admin or a partner can generate a document that belongs to no project.');
-  }
-  const missing = await gen(ADMIN, { project_id: 99 });
-  assert.equal(missing.status, 404);
 });
 
 // ── 2–4. co-founder NDAs ───────────────────────────────────────────────────

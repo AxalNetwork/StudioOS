@@ -14,7 +14,7 @@ import { fanOut } from '../services/branches';
 import { usageFromContractRows } from '../services/contractTemplateUsage';
 import { publishedContractTemplates, publicationFields, publishContractTemplates, preparePublishedContract, ContractPreparationError,
   publishOneTemplate, withdrawTemplatePublication, PublicationError } from '../services/contractPublication';
-import { formatView, formatOptions, renderFormat, effectiveFormat, COUNSEL_DRAFT_SLUGS } from '../services/templateFormat';
+import { formatView, formatOptions, renderFormat, effectiveFormat, COUNSEL_DRAFT_SLUGS, STUB_LINE } from '../services/templateFormat';
 import { renderLegalPng } from '../services/browserRun';
 import { structureForPaper } from '../services/fundStructure';
 import { createAndSendEnvelope } from './esign';
@@ -2019,7 +2019,6 @@ adminContracts.post('/templates/render.pdf', async (c) => {
 // it answers 503 `thumbnail_unavailable` and writes nothing. Binary endpoints —
 // kept OUT of the typed API drift surface.
 const THUMB_VIEWPORT = { width: 816, height: 1056, deviceScaleFactor: 0.5 } as const; // Letter page 1, in CSS px
-const STUB_LINE = 'No body in the store yet.';
 const COUNSEL_LINE = PART_STUB; // "Stub — counsel to draft."
 
 /** The body a stub's thumbnail shows: the two marks of decision 4, never legal text. */

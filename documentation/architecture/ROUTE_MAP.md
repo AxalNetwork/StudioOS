@@ -702,7 +702,7 @@ path with no worker handler, already recorded in `scripts/api-drift-baseline.jso
 | Network workspace (`/advisor/network/*`) | `/api/network-introductions/*`, `/api/organizations*` | The Network surface every role's sidebar links to. A second, working Network lives at `/network`. |
 | Trust Center (`/trust`) | 9 routes: `/trust/kyb/status`, `/kyb/submit`, `/accreditation/*` (5), `/nda/status`, `/nda/:p/preview`, `/nda/sign` | The editable KYB / Accreditation / NDA cards. Trust Center v2 converts exactly these to read-only, so v2 is the fix, not merely a redesign. |
 | Marketplace (`/marketplace`) | all 11 `api.marketplace*` calls | The whole page. Implemented only in the dev-only FastAPI. |
-| Legal (`/legal`) | `POST /legal/documents/generate` | Document generation. The worker has `POST /templates/:key/generate` and `POST /documents` under different paths. |
+| Legal (`/legal`) | none since D758 (#1862) | The page reads `GET /legal/templates` and `GET /legal/templates/:key` from the template store (admins and founders) and has no generate call: `generateDocument` and `POST /legal/templates/:key/generate` are deleted. |
 
 Separately, **two code comments block a feature on a premise that is no longer
 true**: `SpinoutLabCofounderAgreementPage.jsx:35` and
