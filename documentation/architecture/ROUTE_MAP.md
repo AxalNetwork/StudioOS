@@ -95,8 +95,8 @@ Fund notices are mounted at `/api/fund-notices` (`routes/fund_notices.ts`, `serv
   - `POST /issue { type, source, inputs, page_size, figures_sha256, reason? }`;
   - `POST /calls/:callUid/issue { page_size, digest }`.
 - **The LP** (only notices addressed to their own LP row; anyone else gets 404):
-  - `GET /mine` (with `superseded` and `instructions_changed`);
-  - `GET /mine/:uid`;
+  - `GET /mine` (with `superseded`, `instructions_changed`, and `call_number` and `due_date` computed on read, #1860);
+  - `GET /mine/:uid` (the same, and the frozen figures);
   - `GET /mine/:uid/pdf`.
 - **A PDF** is drawn once per stamp through Browser Run (never pdf-lib), kept in R2, and answered `private, no-store`.
 

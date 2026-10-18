@@ -52,6 +52,7 @@ import {
 import { onboardingStatus } from '../lib/lpCommitmentModel';
 import { MyCommitment, MessageGp } from './SpinoutLabLpCommitment';
 import { FeeStatements } from './SpinoutLabLpFeeStatement';
+import { MyNotices } from './SpinoutLabLpNotices';
 
 /* ---------------------------------------------------------------- primitives */
 
@@ -708,6 +709,7 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
           <FeeStatements portal={portal} failed={!portal && !!err} onReload={load} />
         </>
       )}
+      {(derived.holdings > 0 || (!portal && !!err)) && <MyNotices portal={portal} />}
 
       {/* underwriting */}
       <div>

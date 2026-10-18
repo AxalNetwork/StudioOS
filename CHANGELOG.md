@@ -4,6 +4,17 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## The LP's notices on screen (D716, #1860)
+
+- "My notices" on the LP workspace lists the notices the Fund issued to the
+  LP, newest first, flagging a superseded notice and changed instructions.
+- A capital-call notice opens on the amount due and the due date, then its
+  frozen tables. Its masked wire instructions open behind #1859's phone check,
+  drawn by whitelist; never for a superseded, changed or paid notice.
+- The kept PDF is fetched only when the LP taps PDF.
+- `GET /api/fund-notices/mine` and `/mine/:uid` add `call_number` and
+  `due_date`, computed on read from the frozen figures (`noticeListFacts`).
+
 ## The LP's capital call opens on the amount, and the fee statement is on screen (D717, #1859)
 
 - An open Fund I line's panel on the LP workspace opens on "Amount due", the
