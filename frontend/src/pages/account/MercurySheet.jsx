@@ -9,8 +9,9 @@ import { Banner, Group, Row, Sheet } from './ConnectorSheet';
 import { agoLabel } from './connectorsModel';
 import {
   ADMIN_ONLY, BRANCH_MANAGED, DISCONNECT_REASON_MIN, ENTITY_AUDIT_FOOT, ENTITY_DISCONNECT_NOTE, ENTITY_FEEDS, MEMBER_GROUPS, NEVER_ROWS, OPEN_BANKING,
-  READS_ROW, TOKEN_HELP, confirmReadOnlyLabel, entityRows, landsWords, retryAfterSentence,
+  READS_ROW, TOKEN_HELP, confirmReadOnlyLabel, entityRows, landsWords, retryAfterSentence, usesRows,
 } from './mercuryModel';
+import { mercuryPersonalApi } from '../../lib/api/mercuryPersonal';
 
 /**
  * D715 (#1780) PR 2a — the four Axal entity connections to Mercury (D710,
@@ -248,18 +249,37 @@ export function MercuryEntityPanel({ p, onClose, eyebrow }) {
 // No canvas covers them yet; they use the sheet's own `Group` and `Row`.
 
 /**
- * Why the uses group reads "Not recorded" until #1778's PR B: the uses a
- * profile allows come from `GET /api/mercury/personal/status`, whose keys
- * `routes/mercury_personal.ts` names. They are never guessed (S1, #1780).
+ * "What StudioOS uses it for" and "What it never does" (PR 3b). The uses come
+ * from one `GET /api/mercury/personal/status` when the group mounts: a row per
+ * use the caller's profile holds, in decision 8's words. With none left it
+ * reads Not recorded with its reason; a failed read is Unreadable, and the
+ * never rows still draw. The rows link nothing until #1778's PR C mounts the
+ * screens where each use happens; the canvas PR adds those doors.
  */
-export const USES_NOT_READ = 'StudioOS does not yet read which uses your profile allows, so none is listed here.';
-
-/** "What StudioOS uses it for" and "What it never does". The never rows are fixed; the uses wait on PR B. */
-export function MercuryUsesGroups() {
+export function MercuryUsesGroups({ api = mercuryPersonalApi }) {
+  const [read, setRead] = useState({ status: 'loading', uses: null });
+  const load = useCallback(() => {
+    let live = true;
+    setRead({ status: 'loading', uses: null });
+    api.status().then(
+      (r) => { if (live) setRead({ status: 'ready', uses: usesRows(r) }); },
+      () => { if (live) setRead({ status: 'unreadable', uses: null }); },
+    );
+    return () => { live = false; };
+  }, [api]);
+  useEffect(() => load(), [load]);
   return (
     <>
       <Group label={MEMBER_GROUPS.uses}>
-        <Row a={<Unrecorded reason={USES_NOT_READ}>Not recorded</Unrecorded>} />
+        {read.status === 'loading' && <div className="px-3 py-2"><LoadingRows lines={2} /></div>}
+        {read.status === 'unreadable' && (
+          <div className="px-3 py-2" data-testid="mercury-uses-unreadable">
+            <Unreadable what="Which uses your profile allows" claim="This is not a claim that it allows none." onRetry={load} />
+          </div>
+        )}
+        {read.status === 'ready' && (read.uses.rows.length
+          ? read.uses.rows.map((u) => <Row key={u.key} a={u.text} />)
+          : <Row a={<Unrecorded reason={read.uses.reason}>Not recorded</Unrecorded>} />)}
       </Group>
       <Group label={MEMBER_GROUPS.never}>
         {NEVER_ROWS.map((t) => <Row key={t} a={t} />)}

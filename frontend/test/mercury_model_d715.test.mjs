@@ -18,7 +18,7 @@ import {
   confirmReadOnlyLabel, DISCONNECT_REASON_MIN, ENTITY_DISCONNECT_NOTE, retryAfterSentence,
   MEMBER_GROUPS, NEVER_ROWS, landsWords, READS_ROW, MEMBER_REPLACE, MEMBER_DISCONNECT_NOTE,
   PERSONAL_DOES, PERSONAL_LAST_SYNC, PERSONAL_COMPANIES, PERSONAL_FEEDS_FALLBACK, personalAttention, personalToolBanner,
-  NOT_OFFERED, notOfferedSentence,
+  NOT_OFFERED, notOfferedSentence, USE_WORDS,
 } from '../src/pages/account/mercuryModel.js';
 
 const SRC = readFileSync('frontend/src/pages/account/mercuryModel.js', 'utf8');
@@ -165,7 +165,11 @@ test('the model is pure and stands alone: no React, no fetch, no import of conne
   assert.doesNotMatch(SRC, /from ['"]react['"]/);
   assert.doesNotMatch(SRC, /from ['"][^'"]*connectorsModel/);
   assert.doesNotMatch(SRC, /\bfetch\(|\brequest\(|from ['"][^'"]*lib\/api/);
-  assert.doesNotMatch(SRC, /venture_revenue|practice_income|partner_deal/, '#1778\'s use keys are not on main yet');
+  // PR 3b: the use keys are exactly the Worker's PersonalUse type, which the status route serves; none guessed.
+  const worker = readFileSync('cloudflare-worker/src/services/mercuryPersonal.ts', 'utf8');
+  const type = /export type PersonalUse = ([^;]+);/.exec(worker)[1];
+  const served = [...type.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]).sort();
+  assert.deepEqual(Object.keys(USE_WORDS).sort(), served);
   assert.doesNotMatch(SRC, /\b(send|transfer|wire|pay)\w*\s*\(/i, 'nothing here moves money');
 });
 
@@ -238,4 +242,20 @@ test('PR 1b: entityRows reads the connections read as the Worker now serves it, 
   const gp = rows[2];
   assert.deepEqual(gp.accounts.map((a) => [a.text, a.note]), [['Checking ending 1111', null], ['Checking ending 5555', UNREGISTERED_NOTE]]);
   assert.equal(gp.accountsReason, null);
+});
+
+test('PR 3b: mercuryPersonalApi.status reads GET /api/mercury/personal/status, and api.js re-exports it', async () => {
+  const { mercuryPersonalApi } = await import('../src/lib/api/mercuryPersonal.js');
+  const api = await import('../src/lib/api.js');
+  assert.equal(api.mercuryPersonalApi, mercuryPersonalApi);
+  globalThis.localStorage ??= { getItem: () => null, setItem() {}, removeItem() {} };
+  globalThis.document ??= { cookie: '' };
+  const seen = [];
+  const savedFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init = {}) => {
+    seen.push(`${init.method || 'GET'} ${new URL(String(url), 'https://axal.test').pathname}`);
+    return { ok: true, status: 200, headers: { get: () => 'application/json' }, json: async () => ({ uses: [] }), text: async () => '{"uses":[]}' };
+  };
+  try { await mercuryPersonalApi.status(); } finally { globalThis.fetch = savedFetch; }
+  assert.deepEqual(seen, ['GET /api/mercury/personal/status']);
 });
