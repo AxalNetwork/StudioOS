@@ -306,3 +306,33 @@ test('disconnect completes local removal when grant revocation times out', async
   assert.equal((await call(f.env, 'DELETE', '/api/connectors/gh1')).status, 200);
   assert.equal(deadline, 5000); assert.equal(calls, 1); assert.equal(f.row(), undefined);
 });
+
+
+test('a rotated pair retries persistence once and never restores the spent token', async t => {
+  for (const failures of [1, 2]) {
+    const f = await fixture(t); const original = f.row().credentials_enc; let writes = 0;
+    const prepare = f.env.DB.prepare.bind(f.env.DB);
+    f.env.DB.prepare = (sql: string) => {
+      const stmt = prepare(sql);
+      if (!sql.startsWith('UPDATE integrations SET credentials_enc')) return stmt;
+      return { ...stmt, bind(...values: any[]) {
+        const bound = stmt.bind(...values);
+        return { ...bound, async run() {
+          writes += 1;
+          if (writes > 1 && writes <= failures + 1) throw new Error('sensitive-description-marker');
+          return bound.run();
+        } };
+      } };
+    };
+    const gh = github([() => json(refreshed)]);
+    if (failures === 1) {
+      assert.equal(await accessToken(f.env, f.row()), 'ghu_t5_new');
+      assert.equal((await f.read())!.refresh_token, 'ghr_t5_new'); assert.equal((await f.read())!.refresh_lease, undefined);
+    } else {
+      await rejectsSafe(() => accessToken(f.env, f.row()), /github_refresh_unavailable/);
+      assert.notEqual(f.row().credentials_enc, original, 'a spent token is never restored to the original ciphertext');
+      assert.ok((await f.read())!.refresh_lease, 'leave the lease bounded while storage is unavailable');
+    }
+    assert.equal(writes, 3); assert.equal(gh.tokens().length, 1);
+  }
+});

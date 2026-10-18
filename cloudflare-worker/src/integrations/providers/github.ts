@@ -202,6 +202,7 @@ export async function accessToken(env: Env, row: IntegrationRow): Promise<string
   const holder = crypto.randomUUID();
   let held = false;
   let d1Lease: { from: string; enc: string } | null = null;
+  let refreshSpent = false;
   try {
     let loser = false;
     try {
@@ -230,6 +231,7 @@ export async function accessToken(env: Env, row: IntegrationRow): Promise<string
     if ('refused' in result) return await refusedRefresh(env, row, sent);
     if ('failed' in result) throw new Error(`github_refresh_failed: ${result.failed}`);
     if (!('ok' in result)) throw new Error(REFRESH_UNAVAILABLE);
+    refreshSpent = true;
     const { tok } = result;
     const now = Date.now();
     const next: CredentialBlob = {
@@ -237,13 +239,18 @@ export async function accessToken(env: Env, row: IntegrationRow): Promise<string
       issued_at: now, expires_in: tok.expires_in ?? null, expires_at: expiryAt(now, tok.expires_in),
       refresh_token_expires_at: expiryAt(now, tok.refresh_token_expires_in) ?? stored.creds.refresh_token_expires_at ?? null,
     };
-    if (await swapStored(env, row, stored.enc, next)) return tok.access_token;
+    let saved: string | null = null;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try { saved = await swapStored(env, row, stored.enc, next); break; }
+      catch { if (attempt === 1) throw new Error(REFRESH_UNAVAILABLE); }
+    }
+    if (saved) return tok.access_token;
     const currentToken = checkedLive((await readStored(env, row)).creds);
     if (currentToken) return currentToken;
     throw new Error(REFRESH_BUSY);
   } finally {
-    if (d1Lease) {
-      // Restore the exact original ciphertext only if this lease still stands.
+    if (d1Lease && !refreshSpent) {
+      // Restore only before rotation, and only if this lease still stands.
       // A successful renewal, refusal or reconnect has already replaced it.
       try {
         await env.DB.prepare('UPDATE integrations SET credentials_enc = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND credentials_enc = ?')
