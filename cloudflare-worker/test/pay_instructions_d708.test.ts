@@ -25,7 +25,7 @@ import { resolve, join, relative } from 'node:path';
 
 import {
   PAYMENT_PURPOSES, PAY_WARNING, payInstructionsFor, revealPayInstructions, capitalCallReference,
-  purposeForMoneyKind, fundPayeeOf, assertFundCallPayable,
+  purposeForMoneyKind, fundPayeeOf, assertFundCallPayable, refusalMessage, NOTICE_REFUSALS,
 } from '../src/services/payInstructions.ts';
 import { encryptColumn } from '../src/services/columnCipher.ts';
 import { MONEY_KINDS } from '../src/services/moneyRails.ts';
@@ -167,6 +167,34 @@ for (const [code, label, setup, payee, purpose, sentence] of REFUSALS) {
     assert.match(masked.message, sentence);
     // Refused before the ledger, except the unreadable account, whose reveal is recorded and then fails to decrypt.
     assert.equal(reveals(db).length, code === 'account_unreadable' ? 1 : 0);
+  });
+}
+
+// ── #1856: one source for the sentences the console explains ─────────────
+
+/** Decision 7 of #1856, whole: the console prints these, and the resolver must say exactly them. */
+const NOTICE_SENTENCES: Record<string, string> = {
+  no_active_account: 'Axal VC GP LLC has no active account for management fee, so no payment instructions can be given.',
+  holder_not_payee: 'The account that takes management fee is not held by Axal VC GP LLC, so it is not given.',
+  savings_account: 'The account that takes management fee is a savings account, so it is not given. Give the purpose to a checking account.',
+  fund_account_missing: 'Axal VC Spin-Out Lab Fund I LP has no bank account for capital contributions yet, so no payment instructions can be given. Do not send money until Axal adds the Fund\'s account.',
+};
+
+test('#1856 NOTICE_REFUSALS lists the canvas\'s four, in order, and refusalMessage gives each whole sentence', () => {
+  assert.deepEqual(NOTICE_REFUSALS.map((r) => [r.code, r.payee, r.purpose]), [
+    ['no_active_account', 'gp', 'management_fee'], ['holder_not_payee', 'gp', 'management_fee'],
+    ['savings_account', 'gp', 'management_fee'], ['fund_account_missing', 'fund', 'capital_contribution'],
+  ]);
+  for (const r of NOTICE_REFUSALS) assert.equal(refusalMessage(r.code, r.payee, r.purpose), NOTICE_SENTENCES[r.code], r.code);
+});
+
+for (const r of NOTICE_REFUSALS) {
+  test(`#1856 the resolver's ${r.code} sentence is refusalMessage's, word for word`, async () => {
+    const [, , setup] = REFUSALS.find(([code, , , payee, purpose]) => code === r.code && payee === r.payee && purpose === r.purpose)!;
+    const { masked } = await refusal(setup, r.payee, r.purpose);
+    assert.equal(masked.code, r.code);
+    assert.equal(masked.message, refusalMessage(r.code, r.payee, r.purpose));
+    assert.equal(masked.message, NOTICE_SENTENCES[r.code]);
   });
 }
 
