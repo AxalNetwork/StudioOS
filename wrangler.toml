@@ -143,6 +143,15 @@ type    = "Text"
 globs   = ["**/legal/*md*"]
 fallthrough = true
 
+# D711 (#1776) — the legal paper's faces and mark, bundled as ArrayBuffers
+# (`import face from '../templates/legal/paper/x.woff2'`) and inlined as
+# data: URIs into every legal PDF and preview, so no render fetches a font.
+# Scoped to the paper folder only, the way the Text rule above is.
+[[rules]]
+type    = "Data"
+globs   = ["**/legal/paper/*.woff2", "**/legal/paper/*.png"]
+fallthrough = true
+
 # ---------- Public (non-secret) variables ----------
 [vars]
 # Task #5 — canonical-host flip complete. APP_URL / PUBLIC_BASE_URL

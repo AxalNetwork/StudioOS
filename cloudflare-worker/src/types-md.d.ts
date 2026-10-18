@@ -5,3 +5,14 @@ declare module '*.md?raw' {
   const content: string;
   export default content;
 }
+
+// D711 — the legal paper's faces and mark, bundled by wrangler.toml's
+// `[[rules]] type = "Data"` block as ArrayBuffers.
+declare module '*.woff2' {
+  const content: ArrayBuffer;
+  export default content;
+}
+declare module '*.png' {
+  const content: ArrayBuffer;
+  export default content;
+}
