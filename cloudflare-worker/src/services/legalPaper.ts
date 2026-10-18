@@ -40,7 +40,7 @@ import {
 } from './legalPaperCss';
 
 /** The long instruments that get a cover and contents (decision 12). */
-export const COVER_SLUGS = new Set(['lpa_amended_restated', 'ppm', 'compliance_manual_code_of_ethics']);
+export const COVER_SLUGS = new Set(['lpa_amended_restated', 'ppm', 'compliance_manual_code_of_ethics', 'subscription_booklet']);
 
 export const DEFAULT_COUNTERSIGNER_EMAIL = 'legal@axal.vc';
 
@@ -148,7 +148,41 @@ export interface PaperInput {
   audit?: string | null;
   /** The sender's block takes no page of its own (a notice is issued, not signed). */
   inlineExecution?: boolean;
+  /**
+   * D716 — a composite paper (the Subscription Booklet): its parts, in order.
+   * The input's own body is then the cover's legend, and each part prints on
+   * its own named page with its own block.
+   */
+  parts?: PaperPartInput[] | null;
 }
+
+/** D716 — one part of a composite paper. */
+export interface PaperPartInput {
+  n: number;
+  title: string;
+  /** The part's body, or null for a part that prints only its block (Part 8). */
+  body: string | null;
+  /** The part's store row has no text yet: it prints the stub sentence. */
+  missing?: boolean;
+  /** The part's own block, or null for none. */
+  block: { kind: DocumentKind; axalEntityKey?: AxalEntityKey } | null;
+  counterpartyName?: string | null;
+  /** The footer's title on this part's pages. */
+  footer: string;
+}
+
+export interface PaperPart {
+  n: number;
+  title: string;
+  /** The heading's id: the contents links to it. */
+  id: string;
+  blocks: Block[];
+  execution: { recital: string; parties: PaperParty[] } | null;
+  footer: string;
+}
+
+/** What a part with no text from counsel prints. */
+export const PART_STUB = 'Stub — counsel to draft.';
 
 export interface NoticeKeyFigure { label: string; value: string; mono?: boolean }
 export interface NoticeTable {
@@ -204,6 +238,7 @@ export interface PaperModel {
   payment: NoticePayment | null;
   stamp: 'issued' | 'superseded' | null;
   inlineExecution: boolean;
+  parts: PaperPart[] | null;
 }
 
 const BASE64 = /^[A-Za-z0-9+/=]+$/;
@@ -288,7 +323,8 @@ export function paperModel(input: PaperInput): PaperModel {
   if (COVER_SLUGS.has(slug.toLowerCase())) {
     const first = allBlocks.findIndex((b) => b.t === 'article');
     const head = first < 0 ? allBlocks : allBlocks.slice(0, first);
-    const legends: Block[] = head.filter((b) => b.t === 'legend');
+    // D716 — a composite paper's own body is all cover: the legend.
+    const legends: Block[] = input.parts?.length ? allBlocks : head.filter((b) => b.t === 'legend');
     blocks = allBlocks.filter((b) => !legends.includes(b));
     cover = {
       fund: AXAL_ENTITIES.fund.name,
@@ -299,7 +335,31 @@ export function paperModel(input: PaperInput): PaperModel {
       legends,
     };
   }
-  const articles = blocks.filter((b): b is Extract<Block, { t: 'article' }> => b.t === 'article').map((b) => ({ id: b.id, text: b.text }));
+  // D716 — each part prints its own block, parties as `buildExecutionBlock` names them.
+  const parts: PaperPart[] | null = input.parts?.length
+    ? input.parts.map((pt) => {
+        const base = pt.block
+          ? buildExecutionBlock({ kind: pt.block.kind, axalEntityKey: pt.block.axalEntityKey, counterpartyName: pt.counterpartyName || null })
+          : null;
+        const blocksOf = pt.missing
+          ? paperBlocks(PART_STUB, { merge: 'raw', title: pt.title })
+          : pt.body ? paperBlocks(stripTrailingSignatureBlock(pt.body), { merge: input.merge || 'raw', title: pt.title }) : [];
+        return {
+          n: pt.n,
+          title: pt.title,
+          id: `part-${pt.n}`,
+          blocks: blocksOf,
+          execution: base && base.parties.length
+            ? { recital: base.recital, parties: base.parties.map((p) => ({ ...p, signedLine: null, image: null, nested: !!p.through })) }
+            : null,
+          footer: pt.footer,
+        };
+      })
+    : null;
+  // A composite paper's contents lists its parts after the cover.
+  const articles = parts
+    ? parts.filter((pt) => pt.n > 1).map((pt) => ({ id: pt.id, text: `Part ${pt.n} · ${pt.title}` }))
+    : blocks.filter((b): b is Extract<Block, { t: 'article' }> => b.t === 'article').map((b) => ({ id: b.id, text: b.text }));
 
   let execution: PaperModel['execution'] = null;
   if (kind !== 'policy' && !input.suppressExecutionBlock) {
@@ -388,6 +448,7 @@ export function paperModel(input: PaperInput): PaperModel {
     payment: input.payment || null,
     stamp: input.stamp || null,
     inlineExecution: !!input.inlineExecution,
+    parts,
   };
 }
 
@@ -566,6 +627,7 @@ export function paperHtml(m: PaperModel, o: PaperHtmlOptions): string {
   const screen = o.medium === 'screen';
   const css = paperCss({
     pageSize, cover, medium: o.medium, footerLeft: m.footerLeft, auditLine: m.auditLine, frontMatter: part === 'front',
+    parts: m.parts ? m.parts.filter((pt) => pt.n > 1).map((pt) => ({ n: pt.n, footer: pt.footer })) : null,
   });
   const fonts = o.fonts === 'inline' ? paperFontsCss() : '';
 
@@ -581,7 +643,23 @@ export function paperHtml(m: PaperModel, o: PaperHtmlOptions): string {
     parts.push(coverHtml(m, cover));
     parts.push(contentsHtml(m, screen ? null : (o.tocPages ?? null), part === 'front'));
   }
-  if (part !== 'front') {
+  if (part !== 'front' && m.parts) {
+    // D716 — a composite paper: each part on its own named page, its heading
+    // the one link the body pass prints, so the contents finds its page.
+    if (m.state.kind === 'draft') parts.push(stateHtml(m.state));
+    for (const pt of m.parts.filter((x) => x.n > 1)) {
+      const heading = part === 'body' ? `<a href="#${pt.id}">${escapeHtml(pt.title)}</a>` : escapeHtml(pt.title);
+      parts.push(`<section class="booklet-part part-${pt.n}"><div class="eyebrow">Part ${pt.n}</div>`
+        + `<h1 class="title" id="${pt.id}">${heading}</h1>`
+        + pt.blocks.map((b) => blockHtml(b, false)).join('\n')
+        + (pt.execution
+          ? '<section class="execution part-block">'
+            + (pt.execution.recital ? `<p class="recital">${escapeHtml(pt.execution.recital)}</p>` : '')
+            + `<div class="parties">${pt.execution.parties.map(partyHtml).join('')}</div></section>`
+          : '')
+        + '</section>');
+    }
+  } else if (part !== 'front') {
     parts.push(m.stamp && m.state.kind === 'issued'
       ? `<div class="stamp">${m.stamp === 'superseded' ? 'Superseded' : 'Issued'}</div>`
       : stateHtml(m.state));

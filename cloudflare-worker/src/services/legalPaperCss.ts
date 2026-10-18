@@ -195,6 +195,8 @@ export interface PaperCssOptions {
   auditLine: string;
   /** Front matter (cover and contents) numbers its pages i, ii, … */
   frontMatter?: boolean;
+  /** D716 — a composite paper's parts: each its own named page, with its own footer title. */
+  parts?: { n: number; footer: string }[] | null;
 }
 
 /** The paper's CSS, faces excluded (they go in `<style id="paper-fonts">`). */
@@ -209,6 +211,10 @@ export function paperCss(o: PaperCssOptions): string {
     ? `"Page " ${counter}`
     : `"Page " counter(page) " of " counter(pages)`;
   const footer = `${cssString(o.footerLeft)} "\\A " ${cssString(o.auditLine)}`;
+  // D716 — one named page per part, so its footer names the part.
+  const partPages = (o.parts || []).filter((pt) => Number.isInteger(pt.n) && pt.n > 0).map((pt) =>
+    `@page part-${pt.n} { @bottom-left { content: ${cssString(pt.footer)} "\\A " ${cssString(o.auditLine)}; } }\n`
+    + `section.booklet-part.part-${pt.n} { page: part-${pt.n}; }`).join('\n');
 
   const print = o.medium === 'pdf' ? `
 @page {
@@ -251,6 +257,8 @@ export function paperCss(o: PaperCssOptions): string {
   @bottom-right { content: none; }
 }
 .cover { page: cover; width: ${dim.w}; height: ${dim.h}; box-sizing: border-box; padding: ${T.space.pageMargin}; break-after: page; }
+${partPages}
+section.booklet-part { break-before: page; }
 .screen-only { display: none; }
 /* A face used only in a margin box is never loaded, so the lockup's wordmark
    would print blank: this invisible run in the page loads it. */
@@ -286,6 +294,7 @@ em { font-style: italic; }
 h1.title { font-family: 'Bricolage Grotesque', sans-serif; font-weight: 800; font-size: ${T.size.title}; line-height: 1.25; text-transform: uppercase; text-align: center; color: ${C.inkStrong}; margin: 0 0 ${T.space.titleAfter}; break-after: avoid; }
 h2.article { font-family: 'Bricolage Grotesque', sans-serif; font-weight: 800; font-size: ${T.size.article}; color: ${C.inkStrong}; margin: ${T.space.articleBefore} 0 ${T.space.articleAfter}; break-after: avoid; }
 h2.article a { color: inherit; text-decoration: none; }
+h1.title a { color: inherit; text-decoration: none; }
 h3.section { font-weight: 700; font-size: ${T.size.section}; margin: 10pt 0 4pt; break-after: avoid; }
 h2.schedule { font-family: 'Bricolage Grotesque', sans-serif; font-weight: 800; font-size: ${T.size.article}; text-align: center; text-transform: uppercase; margin: ${T.space.articleBefore} 0 2pt; break-after: avoid; }
 p.dateline { text-align: center; color: ${C.muted}; margin: 0 0 10pt; }
@@ -331,6 +340,8 @@ section.execution .recital { font-style: italic; color: ${C.muted}; font-size: 9
 .party .signed { font-family: 'Roboto Mono', monospace; font-size: ${T.size.audit}; color: ${C.muted}; margin: 0 0 3pt; }
 section.certificate { break-before: page; }
 section.execution.inline { break-before: auto; margin-top: 16pt; }
+section.booklet-part + section.booklet-part { margin-top: 24pt; }
+section.execution.part-block { break-before: auto; margin-top: 16pt; }
 .addressee { margin: 0 0 12pt; }
 .addressee p { margin: 0 0 2pt; }
 dl.key-figures { display: grid; grid-template-columns: 14em 1fr; gap: 3pt 10pt; margin: 6pt 0 12pt; break-inside: avoid; }

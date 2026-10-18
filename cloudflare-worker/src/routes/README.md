@@ -56,7 +56,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/fund-fees     → fund_fees.ts       (D709: the management fee's terms, admissions, net invested capital, offsets, and fee periods the GP previews and issues; moves no money)
 /api/fund-admin    → fund_admin.ts      (D714: GET /access, which fund acts this admin may take, from FUND_ACTS)
 /api/fund-reporting → fund_reporting.ts
-/api/fund-booklets → fund_booklets.ts (D716: the Subscription Booklet, the applicant's ticks and submit, HQ's read and withdraw)
+/api/fund-booklets → fund_booklets.ts (D716: the Subscription Booklet, the applicant's ticks, paper and submit, HQ's read, PDF and withdraw)
 /api/fund-notices  → fund_notices.ts    (D716: an Admin previews, the Super Admin issues, the LP reads their own; kept PDFs through Browser Run)
 /api/liquidity     → liquidity.ts
 /api/email         → email.ts

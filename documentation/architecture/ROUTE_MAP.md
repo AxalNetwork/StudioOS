@@ -74,10 +74,12 @@ The Subscription Booklet's store is mounted at `/api/fund-booklets` (`routes/fun
   - `GET /mine` answers the parts, the fields with their ticks, `missing_parts` and the digest.
   - `PUT /mine/answers { answers: [{ field_id, checked }] }`: 400 `field_unknown`, 409 `booklet_not_open`.
   - `POST /mine/submit { digest }`: 409 `booklet_part_missing` (naming the parts) or `content_changed`.
+  - `GET /mine/paper` answers `{ html, digest, page_size }`: the booklet on #1776's paper, screen HTML with the faces inline, `no-store`.
   - A support session cannot write.
 - **An Admin on HQ** (`hq_only` on a branch; support session refused; D714 acts):
   - `GET /` lists the booklets, with no ticks (`fund_booklet.read`).
   - `GET /:uid` answers one booklet with its ticks, audited (`fund_booklet.read`).
+  - `GET /:uid/pdf` draws its PDF on request through Browser Run (never pdf-lib), keeps nothing, and is audited (`fund_booklet.read`); 503 `booklet_render_unavailable` when the print fails.
   - `POST /:uid/withdraw { reason }` takes a reason of 10–200 characters (`fund_booklet.withdraw`).
 
 Fund notices are mounted at `/api/fund-notices` (`routes/fund_notices.ts`, `services/fundNotices.ts`, `services/fundNoticeStore.ts`, migration 478). See `decisions/D716.md`.

@@ -108,7 +108,7 @@ export const FUND_ACTS: readonly FundAct[] = Object.freeze([
     sentence: 'A Super Admin issues fund reports.',
     routes: ['POST /api/fund-reporting/drafts/:uid/issue'] }),
   act({ act: 'fund_booklet.read', label: 'Read subscription booklets and their ticks', tier: 'admin', owner: '#1781', sentence: null,
-    routes: ['GET /api/fund-booklets/', 'GET /api/fund-booklets/:uid'] }),
+    routes: ['GET /api/fund-booklets/', 'GET /api/fund-booklets/:uid', 'GET /api/fund-booklets/:uid/pdf'] }),
   act({ act: 'fund_booklet.withdraw', label: 'Withdraw a subscription booklet', tier: 'admin', owner: '#1781', sentence: null,
     routes: ['POST /api/fund-booklets/:uid/withdraw'] }),
   act({ act: 'fund_notice.preview', label: 'Preview a fund notice', tier: 'admin', owner: '#1781', sentence: null,

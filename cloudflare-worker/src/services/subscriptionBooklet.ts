@@ -17,8 +17,10 @@
 // - Migration 478's triggers hold the rest: the status path, the frozen
 //   columns, no delete, and ticks only while the booklet is open.
 //
-// The booklet's paper (`GET /mine/paper`, `GET /:uid/pdf`) draws #1776's
-// paper and lands with the notices PR.
+// - **The paper** (`bookletPaperInput`) is #1776's, as one composite paper:
+//   the cover with Part 1's legend, the contents, then Parts 2 to 9, each on
+//   its own named page with its own block. A part's ticks print in its body
+//   as checked or empty squares, by field id.
 //
 // NOTE: authored to load under `node --experimental-strip-types` (the worker
 // test gate) — no `enum`s, no TS parameter properties.
@@ -26,6 +28,7 @@
 import type { Env } from '../types';
 import { SUBSCRIPTION_BOOKLET_PARTS, type BookletPart } from './legalDocFormat';
 import { getTemplate } from './legalTemplateStore';
+import type { PaperInput, PaperPartInput } from './legalPaper';
 
 export const BOOKLET_FUND_SLUG = 'spinout-fund-i';
 
@@ -308,3 +311,82 @@ export async function withdrawBooklet(env: Env, booklet: BookletRow, adminId: nu
   if (!(res.meta?.changes && res.meta.changes > 0)) throw new BookletRefusal(409, 'booklet_withdrawn', 'This booklet is already withdrawn.');
 }
 
+
+// ── The paper ───────────────────────────────────────────────────────────────
+
+export const BOOKLET_TITLE = 'Subscription Booklet';
+/** Part 2's closing line (decision 8). */
+export const PART_TWO_CLOSE = 'Send no money until you receive a Capital Call Notice.';
+
+/** A part's body with each task item ticked or emptied by its field id. */
+export async function tickedBody(slug: string, body: string, ticks: Map<string, boolean>): Promise<string> {
+  const lines = String(body || '').replace(/\r\n?/g, '\n').split('\n');
+  let n = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(TASK_ITEM);
+    if (!m) continue;
+    n++;
+    const id = `${slug}:${n}:${(await sha256Hex(m[1])).slice(0, 12)}`;
+    lines[i] = lines[i].replace(/\[[ xX]\]/, ticks.get(id) === true ? '[x]' : '[ ]');
+  }
+  return lines.join('\n');
+}
+
+/** Part 2, generated from the part list. */
+function partTwoBody(): string {
+  return SUBSCRIPTION_BOOKLET_PARTS.filter((p) => p.part >= 3 && p.part <= 8)
+    .map((p) => `Complete Part ${p.part}, ${p.title}.`).concat(PART_TWO_CLOSE).join('\n\n');
+}
+
+/** The applicant's printed name: the legal name they recorded, else their account name. */
+async function applicantName(env: Env, applicationId: number): Promise<string | null> {
+  const row = await env.DB.prepare(
+    'SELECT u.full_legal_name, u.name FROM lp_applications a JOIN users u ON u.id = a.user_id WHERE a.id = ?',
+  ).bind(applicationId).first<{ full_legal_name: string | null; name: string | null }>();
+  const name = (row?.full_legal_name || row?.name || '').trim();
+  return name || null;
+}
+
+/**
+ * The booklet as #1776's paper reads it: the cover's legend as the body, and
+ * the nine parts. A part with no text from counsel prints the stub sentence,
+ * and the paper is then a Draft.
+ */
+export async function bookletPaperInput(env: Env, booklet: BookletRow): Promise<PaperInput> {
+  const view = await bookletView(env, booklet);
+  const ticks = new Map(view.parts.flatMap((p) => p.fields.map((f) => [f.id, f.checked] as [string, boolean])));
+  const applicant = await applicantName(env, booklet.application_id);
+  const bodies = new Map<number, string>();
+  for (const p of view.parts) {
+    if (!p.slug || p.missing || !READ_PARTS.has(p.part)) continue;
+    const tpl = await getTemplate(env, p.slug);
+    bodies.set(p.part, await tickedBody(p.slug, String(tpl?.body_md || ''), ticks));
+  }
+  const parts: PaperPartInput[] = (SUBSCRIPTION_BOOKLET_PARTS as readonly BookletPart[]).map((p) => {
+    const resolved = view.parts.find((x) => x.part === p.part);
+    return {
+      n: p.part,
+      title: p.title,
+      body: p.part === 2 ? partTwoBody() : bodies.get(p.part) ?? null,
+      missing: READ_PARTS.has(p.part) && p.part !== 1 && !!resolved?.missing,
+      block: p.block ? { kind: p.block.kind, axalEntityKey: p.block.axalEntityKey } : null,
+      counterpartyName: applicant,
+      footer: `${BOOKLET_TITLE} · Part ${p.part}`,
+    };
+  });
+  const date = (booklet.submitted_at || new Date().toISOString()).slice(0, 10);
+  return {
+    title: BOOKLET_TITLE,
+    body: bodies.get(1) ?? '',
+    slug: 'subscription_booklet',
+    bodySha256: view.digest,
+    state: { kind: view.missing_parts.length ? 'draft' : 'issued' },
+    copyNumber: booklet.uid,
+    offeree: applicant,
+    effectiveDate: date,
+    audit: booklet.status === 'submitted' && booklet.digest
+      ? `Booklet ${booklet.uid} · digest ${booklet.digest.slice(0, 12)}`
+      : `Booklet ${booklet.uid} · digest assigned when submitted`,
+    parts,
+  };
+}
