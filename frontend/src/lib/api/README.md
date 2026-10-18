@@ -135,6 +135,17 @@ sync now, and the accounts, transactions and matches reads. D749 (#1838) adds
 `markNotOurs` and `withdrawNotOurs`. Every read is audited by the Worker;
 nothing here moves money. #1779's console imports it.
 
+D713 (#1778): `mercuryPersonal.js` calls a member's own read-only Mercury:
+`GET /api/revenue/projects/:id/mercury-credits` and `POST
+/api/revenue/projects/:id/entries/import-mercury` (a founder's picked credits,
+imported as `supported` revenue with Mercury's amount and date), and
+`/api/mercury/personal/matches` (a partner's invoice, payout and settlement
+matches: list, confirm, withdraw with a reason). A candidate's counterparty name
+is shown to its owner only and never stored. `partnerSettlements.js` calls
+`GET /api/partner-settlements` (the member's own issued, matched and void rows)
+and `/api/admin/partner-settlements` (an Admin's list, draft, edit and delete;
+the Super Admin's issue and void). Nothing here moves money.
+
 D708 (#1773): `bankAccounts.js` calls `/api/admin/bank-accounts` (the Super
 Admin's list, add, label and purposes, retire, and a recorded reveal of one
 number) and the LP's own `GET /api/funds/:id/capital-calls/lines/:lineId/pay-instructions`.

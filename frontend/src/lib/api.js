@@ -38,6 +38,7 @@ export * from './api/labReportShares.js';
 export * from './api/learning.js';
 export * from './api/memberCredits.js';
 export * from './api/mercuryPersonal.js';
+export * from './api/partnerSettlements.js';
 export * from './api/profile.js';
 export * from './api/publicAiModels.js';
 export * from './api/railPrefs.js';

@@ -9,6 +9,8 @@ import { api } from '../lib/api';
 import { bpsPercent } from '../lib/bps';
 import ZoneActions from '../workspaces/ZoneActions';
 import { useEscapeClose } from '../components/useEscapeClose';
+import MercuryMatch, { receivedLine } from '../components/MercuryMatch';
+import { Unrecorded } from '../ui';
 
 const CATEGORIES = ['legal', 'accounting', 'design', 'recruiting', 'fractional_cfo', 'gtm', 'engineering', 'marketing'];
 const CAT_LABEL = {
@@ -781,6 +783,20 @@ function InvoiceDocument({ engagementId, isPartner, onChanged }) {
         </div>
       </div>
 
+      {(inv.status === 'issued' || inv.status === 'paid') && (
+        <div className="mt-3 text-[12px] text-gray-600 dark:text-gray-400" data-testid="invoice-bank-match">
+          {/* D713: a payment matched to a line in the partner's own Mercury. Both
+              sides see the day; only the partner sees the account's last four. */}
+          {receivedLine({ posted_on: inv.bank_matched_on, last_four: isPartner ? inv.bank_last_four : null })
+            || <Unrecorded reason="No payment on this invoice has been matched to a bank line.">Not matched to a bank line</Unrecorded>}
+        </div>
+      )}
+      {isPartner && (inv.status === 'issued' || inv.status === 'paid') && (
+        <div className="mt-2">
+          <MercuryMatch target="invoice" targetId={inv.id} matched={inv.bank_matched_on ? { posted_on: inv.bank_matched_on } : null}
+            onChanged={() => { load(); onChanged?.(); }} />
+        </div>
+      )}
       {isPartner && inv.status === 'issued' && (
         <button type="button" disabled={busy} onClick={markPaid}
           className="mt-4 border border-green-300 text-green-700 hover:bg-green-50 rounded-md px-3 py-1.5 text-sm disabled:opacity-50 dark:border-green-700 dark:text-green-300">
