@@ -23,6 +23,8 @@ import integrations from '../src/routes/integrations.ts';
 import revenue from '../src/routes/revenue.ts';
 import mercuryPersonal from '../src/routes/mercury_personal.ts';
 import mercuryAttestations from '../src/routes/mercury_attestations.ts';
+import adminCapitalAttestations from '../src/routes/admin_capital_attestations.ts';
+import adminLpApplications from '../src/routes/admin_lp_applications.ts';
 import '../src/integrations/providers/mercury.ts';
 
 export const TOKEN = 'fixture-not-a-token-3';
@@ -114,6 +116,9 @@ app.route('/api/connectors', integrations);
 app.route('/api/revenue', revenue);
 app.route('/api/mercury/personal', mercuryPersonal);
 app.route('/api/mercury/attestations', mercuryAttestations);
+// D752 (#1890): the admin read and the LP application queue.
+app.route('/api/admin/capital-attestations', adminCapitalAttestations);
+app.route('/api/admin/lp-applications', adminLpApplications);
 app.onError((e: any, c) => c.json({ detail: e.message }, AUTH_ERROR_STATUSES[e.message] || 500));
 
 export async function req(env: any, who: number, method: string, path: string, body?: unknown,
