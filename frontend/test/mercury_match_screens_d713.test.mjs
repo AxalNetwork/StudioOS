@@ -299,6 +299,52 @@ test('a failed deletion stays visible when the deal becomes inactive during an e
   });
 });
 
+for (const action of ['Delete draft', 'Issue']) {
+  test(`the edit form resets after ${action} succeeds on its draft`, async () => {
+    let rows = DESK_ROWS.map((row) => ({ ...row }));
+    await withSettlements(() => rows, async (calls) => {
+      partnerSettlementsApi.remove = async (uid) => { rows = rows.filter((row) => row.uid !== uid); };
+      partnerSettlementsApi.issue = async (uid) => { rows = rows.map((row) => row.uid === uid ? { ...row, state: 'issued' } : row); };
+      const v = await mountContracts(h(SettlementsDesk, { deal: DEAL, superAdmin: true, onClose: () => {} }));
+      try {
+        await v.flush();
+        await v.click('Edit');
+        assert.match(v.text(), /Edit draft/);
+        await v.click(action);
+        await v.flush();
+        assert.doesNotMatch(v.text(), /Edit draft/);
+        await assert.rejects(v.click('Save draft'), /Missing button/);
+        await v.fill('Kind', 'capital');
+        await v.fill('Direction', 'to_member');
+        await v.fill('Amount (USD)', '30');
+        await v.fill('Due', '2026-12-31');
+        await v.click('Save as draft');
+        await v.flush();
+        assert.equal(calls.filter((call) => call[0] === 'create').length, 1);
+        assert.equal(calls.filter((call) => call[0] === 'update').length, 0);
+      } finally { await v.unmount(); }
+    });
+  });
+}
+
+test('deleting another draft preserves the current edit', async () => {
+  const rows = [...DESK_ROWS, { ...DESK_ROWS[0], id: 3, uid: 'd3' }];
+  await withSettlements(() => rows, async () => {
+    const v = await mountContracts(h(SettlementsDesk, { deal: DEAL, superAdmin: true, onClose: () => {} }));
+    try {
+      await v.flush();
+      await v.click('Edit');
+      await v.fill('Amount (USD)', '99');
+      const removeOther = v.nodes().find((node) => v.props(node)?.['data-testid'] === 'settlement-delete-d3');
+      await React.act(async () => v.props(removeOther).onClick());
+      await v.flush();
+      assert.match(v.text(), /Edit draft/);
+      const amount = v.nodes().find((node) => v.props(node)?.['data-testid'] === 'settlement-amount');
+      assert.equal(v.props(amount).value, '99');
+    } finally { await v.unmount(); }
+  });
+});
+
 test('Contracts › Partner deals opens the desk, and passes who is Super Admin', () => {
   const desk = readFileSync('frontend/src/pages/admin/contracts/ContractsDesk.jsx', 'utf8');
   assert.match(desk, /<RelatedLists key=\{tab\} kind=\{tab\} onOpen=\{setSelected\} superAdmin=\{superAdmin\} \/>/);

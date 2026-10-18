@@ -83,6 +83,10 @@ export default function SettlementsDesk({ deal, superAdmin, onClose }) {
     catch (e) { reportError('contracts:settlements', e); setError(e?.message || fallback); }
     finally { setBusy(false); }
   };
+  const clearEditing = (uid) => {
+    if (editing?.uid !== uid) return;
+    setEditing(null); setForm(EMPTY);
+  };
   const save = () => {
     const out = settlementDraft({ ...form, partner_deal_id: deal.id });
     if (out.error) { setError(out.error); return; }
@@ -97,8 +101,8 @@ export default function SettlementsDesk({ deal, superAdmin, onClose }) {
     <ReadState read={read} what="Settlements">
       {Array.isArray(read.data) && <SettlementRows rows={read.data} superAdmin={superAdmin} dealActive={active} busy={busy}
         onEdit={(s) => { setEditing(s); setForm(toForm(s)); setError(''); }}
-        onDelete={(s) => run(() => partnerSettlementsApi.remove(s.uid), 'The draft could not be deleted. It is unchanged.')}
-        onIssue={(s) => run(() => partnerSettlementsApi.issue(s.uid), 'The settlement could not be issued. It is still a draft.')}
+        onDelete={(s) => run(() => partnerSettlementsApi.remove(s.uid), 'The draft could not be deleted. It is unchanged.', () => clearEditing(s.uid))}
+        onIssue={(s) => run(() => partnerSettlementsApi.issue(s.uid), 'The settlement could not be issued. It is still a draft.', () => clearEditing(s.uid))}
         onVoid={(s) => { setVoiding(s); setReason(''); }} />}
     </ReadState>
     {superAdmin && voiding && <div className="space-y-2 rounded-lg border border-axal-hairline p-3" data-testid="settlement-void-form">
