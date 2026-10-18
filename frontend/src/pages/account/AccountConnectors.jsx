@@ -1,19 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Check, ChevronDown, Plus } from 'lucide-react';
 import { api } from '../../lib/api';
 import { connectorsApi } from '../../lib/api/connectors';
 import { BrandIcon, PhoneBar, PhoneRows, Pill, Unrecorded, Unreadable, usePhoneWidth } from '../../ui';
 import { BTN, INPUT } from './AccountCenter';
-import { Banner, ConnectorPanel, Group, Sheet, openingView, useConnectors } from './ConnectorSheet';
+import { Banner, Group, Sheet, useConnectors } from './ConnectorSheet';
 import { AssistantsSection } from './AssistantsGroup';
 import { ChannelsSection } from './ChannelsGroup';
 import {
-  MOVED_SEEN_KEY, YOURS_FILTERS, YOURS_SORTS, cardAction, cardPill, companiesLabel, discoverChips,
+  MOVED_SEEN_KEY, YOURS_FILTERS, YOURS_SORTS, cardAction, cardPill, companiesLabel, connectorPagePath, discoverChips,
   discoverSections, doesLabel, isPersonalMercury, lastSyncLabel, matchesQuery, oauthReturn, pageOf, stripReturn, yoursFeedsLabel, yoursRows,
   SUGGESTED,
 } from './connectorsModel';
 import { ACCOUNT_PHONE_COPY, ACCOUNT_PHONE_PAGES } from './accountPhone';
+import { hubSearchFor, hubTabFor } from './connectorPageModel';
 import { isMercurySearch, notOfferedSentence } from './mercuryModel';
 import { useAuth } from '../../hooks/useAuthSync';
 import { branchOfUser } from '../../lib/shellRole';
@@ -26,8 +27,11 @@ import { branchOfUser } from '../../lib/shellRole';
  *
  * Connectors replace Integrations (D649). `/integrations` and
  * `/account/integrations` land here with their query, because every
- * provider's sign-in still returns to `/integrations?…`; this section reads
- * that query, opens the connector's sheet on what happened, and strips it.
+ * provider's sign-in still returns to `/integrations?…`. D753 (#1876): a
+ * return naming a connector goes on to that connector's own page
+ * (`ConnectorPage.jsx`), and every card, row and phone row links its page;
+ * nothing here opens a right sheet but the request form (until F8). The tab
+ * lives in the address (`?tab=discover`).
  *
  * A CONNECTOR BELONGS TO THE MEMBER, and serves the companies its sheet
  * ticks. Two reads are the active company's: "Suggested for you" (its empty
@@ -46,7 +50,7 @@ const NOT_IN_REGISTRY = 'This connector is not in the connector registry, which 
 const NO_COMPANIES = 'Your companies could not be read.';
 
 /** The once-only notice: shown on the first arrival from an old address, then remembered. */
-function useMovedNotice(location) {
+export function useMovedNotice(location) {
   const [show] = useState(() => {
     if (!location.state?.connectorsMoved) return false;
     try {
@@ -58,14 +62,14 @@ function useMovedNotice(location) {
   return show;
 }
 
-export function YoursTable({ rows, onOpen }) {
+export function YoursTable({ rows }) {
   return (
     <div className={`${TONE_CLS} overflow-hidden`} data-testid="connectors-yours">
       <div role="row" className="hidden grid-cols-[minmax(0,1.5fr)_100px_80px_minmax(0,1.3fr)_80px_110px_140px] gap-2.5 border-b border-axal-hairline bg-axal-ground px-4 py-2 font-mono text-[10.5px] font-semibold uppercase tracking-[.06em] text-axal-muted md:grid dark:border-gray-800 dark:bg-gray-800/60 dark:text-gray-400">
         <span>Connector</span><span>Category</span><span>Does</span><span>Feeds</span><span>Companies</span><span>Last sync</span><span>Status</span>
       </div>
       {rows.map(({ p, status }) => (
-        <button key={p.key} type="button" onClick={() => onOpen(p)} data-testid={`connector-row-${p.key}`}
+        <Link key={p.key} to={connectorPagePath(p.key)} state={{ connectorsTab: 'yours' }} data-testid={`connector-row-${p.key}`}
           className={`grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2.5 border-b border-axal-hairline px-4 py-2.5 text-left text-[13px] last:border-b-0 hover:bg-axal-ground/60 md:grid-cols-[minmax(0,1.5fr)_100px_80px_minmax(0,1.3fr)_80px_110px_140px] dark:border-gray-800 dark:hover:bg-gray-800/40 ${status.why ? 'bg-amber-50/40 dark:bg-amber-950/10' : ''}`}>
           <span className="flex min-w-0 items-center gap-2.5">
             <BrandIcon provider={p.key} name={p.display_name} />
@@ -83,28 +87,31 @@ export function YoursTable({ rows, onOpen }) {
             <Pill tone={status.tone}>{status.label}</Pill>
             {status.why && <span className="text-[11px] text-amber-800 dark:text-amber-300">{status.why}</span>}
           </span>
-        </button>
+        </Link>
       ))}
     </div>
   );
 }
 
-export function ConnectorCard({ p, onOpen, onNotify, onUnnotify, busy }) {
+export function ConnectorCard({ p, onNotify, onUnnotify, busy }) {
   const act = cardAction(p);
   const pill = cardPill(p);
   let button = null;
-  if (act === 'add') button = <button type="button" aria-label={`Connect ${p.display_name}`} onClick={() => onOpen(p)} className="grid h-[26px] w-[26px] place-items-center rounded-full border border-axal-hairline font-bold text-axal-ink hover:border-axal-violet/50 dark:border-gray-700 dark:text-gray-100"><Plus size={14} /></button>;
-  if (act === 'connected') button = <button type="button" aria-label={`${p.display_name} is connected`} onClick={() => onOpen(p)} className="grid h-[26px] w-[26px] place-items-center rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"><Check size={14} /></button>;
+  // D753 — "+" opens the page, never a sign-in: the reader sees what a connector reads before connecting it.
+  const to = connectorPagePath(p.key);
+  const state = { connectorsTab: 'discover' };
+  if (act === 'add') button = <Link to={to} state={state} aria-label={`Open ${p.display_name} to connect`} data-testid={`connector-open-${p.key}`} className="grid h-[26px] w-[26px] place-items-center rounded-full border border-axal-hairline font-bold text-axal-ink hover:border-axal-violet/50 dark:border-gray-700 dark:text-gray-100"><Plus size={14} /></Link>;
+  if (act === 'connected') button = <Link to={to} state={state} aria-label={`${p.display_name} is connected. Open its page`} data-testid={`connector-open-${p.key}`} className="grid h-[26px] w-[26px] place-items-center rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"><Check size={14} /></Link>;
   if (act === 'notify') button = <button type="button" disabled={busy} onClick={() => onNotify(p)} className={BTN.link}>Notify me</button>;
   if (act === 'joined') button = <button type="button" disabled={busy} onClick={() => onUnnotify(p)} className={BTN.link} title="Click to stop the notice">We&apos;ll tell you</button>;
   if (act === 'unavailable') button = <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{p.unreadable ? 'Status unreadable' : 'Not set up here'}</span>;
-  // D715: the Axal entities' Mercury opens its sheet, whatever else the row says.
-  if (act === 'entity') button = <button type="button" onClick={() => onOpen(p)} className={BTN.link} data-testid={`connector-open-${p.key}`}>Open</button>;
+  // D715: the Axal entities' Mercury opens its page, whatever else the row says.
+  if (act === 'entity') button = <Link to={to} state={state} aria-label={`Open ${p.display_name}`} className={BTN.link} data-testid={`connector-open-${p.key}`}>Open</Link>;
   return (
     <div className={`${TONE_CLS} relative flex flex-col gap-2 p-3.5`} data-testid={`connector-card-${p.key}`} data-action={act}>
       <div className="flex items-start justify-between"><BrandIcon provider={p.key} name={p.display_name} />{button}</div>
       <span className="flex items-center gap-1.5 text-sm font-bold text-axal-ink dark:text-gray-100">
-        {p.display_name}
+        <Link to={to} state={state} className="hover:underline" data-testid={`connector-name-${p.key}`}>{p.display_name}</Link>
         {p.verified && <span role="img" title="Built and verified by Axal" aria-label="Verified by Axal" className="grid h-3.5 w-3.5 place-items-center rounded-full bg-axal-violet text-[9px] text-white">✓</span>}
       </span>
       <span className="text-[12.5px] leading-snug text-axal-ink/80 dark:text-gray-300">{p.description}</span>
@@ -262,7 +269,7 @@ function catalogueNote(data) {
  * is what it feeds and its last sync, with the reason first when it needs
  * attention; the pill is its status; the section's action is the count line.
  */
-export function yoursGroup({ data, rows, paged, setPage = () => {}, onOpen, label = ACCOUNT_PHONE_PAGES.connectors.sections[0], now = Date.now() }) {
+export function yoursGroup({ data, rows, paged, setPage = () => {}, label = ACCOUNT_PHONE_PAGES.connectors.sections[0], now = Date.now() }) {
   const group = { label, rows: [], testid: 'connectors-phone-yours' };
   const pending = catalogueNote(data);
   if (pending) return { ...group, note: pending };
@@ -277,7 +284,7 @@ export function yoursGroup({ data, rows, paged, setPage = () => {}, onOpen, labe
     title: p.display_name,
     description: [status.why, yoursFeedsLabel(p), lastSyncLabel(p.connection, now)].filter(Boolean).join(' · '),
     pill: { label: status.label, tone: status.tone },
-    onClick: () => onOpen(p),
+    to: connectorPagePath(p.key),
     testid: `connector-row-${p.key}`,
   }));
   group.action = (
@@ -295,7 +302,7 @@ export function yoursGroup({ data, rows, paged, setPage = () => {}, onOpen, labe
  * builds them, each with its card's pill or corner action. The read is the
  * active company's, made without a company parameter, as on desktop.
  */
-export function suggestedGroup({ data, q = '', label = ACCOUNT_PHONE_PAGES.connectors.sections[1], onOpen, onNotify, onBrowse }) {
+export function suggestedGroup({ data, q = '', label = ACCOUNT_PHONE_PAGES.connectors.sections[1], onNotify, onBrowse }) {
   const group = { label, rows: [], testid: 'connectors-phone-suggested' };
   const pending = catalogueNote(data);
   if (pending) return { ...group, note: data.status === 'loading' ? 'Loading suggestions…' : null };
@@ -314,7 +321,7 @@ export function suggestedGroup({ data, q = '', label = ACCOUNT_PHONE_PAGES.conne
       title: p.display_name,
       description: p.why || p.description,
       pill: cardPill(p) || actionPill(p, act),
-      onClick: act === 'notify' ? () => onNotify(p, true) : act === 'joined' ? () => onNotify(p, false) : () => onOpen(p),
+      ...(act === 'notify' ? { onClick: () => onNotify(p, true) } : act === 'joined' ? { onClick: () => onNotify(p, false) } : { to: connectorPagePath(p.key) }),
       testid: `connector-suggested-${p.key}`,
     };
   });
@@ -331,26 +338,34 @@ export function ConnectorsView({ data, initialTab = 'yours', initialChip = 'All'
   const location = useLocation();
   const navigate = useNavigate();
   const moved = useMovedNotice(location);
-  const [tab, setTab] = useState(initialTab);
+  // D753 — the tab is in the address: `?tab=discover`, else Yours (or the test's `initialTab`).
+  const [tab, setTab] = useState(() => hubTabFor(location.search, initialTab));
   const [q, setQ] = useState(initialQuery);
   const [filter, setFilter] = useState('all');
   const [sort, setSort] = useState('name');
   const [page, setPage] = useState(1);
   const [chip, setChip] = useState(initialChip);
-  const [sheet, setSheet] = useState(null); // { key, view, ret }
   const [requesting, setRequesting] = useState(null);
   const [waitBusy, setWaitBusy] = useState(false);
   const [waitError, setWaitError] = useState('');
 
-  // A return from a provider's sign-in: open its sheet on what happened, and
-  // strip the query so a reload does not replay it.
+  // A return from a provider's sign-in (a bookmarked `/account/connectors?oauth=…`):
+  // D753 sends it on to its connector's page, which says what happened.
   const [ret] = useState(() => oauthReturn(location.search));
   useEffect(() => {
     if (!ret) return;
     // Mercury has no sign-in: a return naming it is crafted, and must not cause the entity sheet's audited read (D715).
-    if (ret.key !== 'mercury') setSheet({ key: ret.key, view: ret.view, ret });
-    navigate({ pathname: location.pathname, search: stripReturn(location.search, ret.strip), hash: location.hash }, { replace: true, state: location.state });
+    if (ret.key === 'mercury') {
+      navigate({ pathname: location.pathname, search: stripReturn(location.search, ret.strip), hash: location.hash }, { replace: true, state: location.state });
+    } else {
+      navigate({ pathname: connectorPagePath(ret.key), search: location.search, hash: location.hash }, { replace: true, state: location.state });
+    }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const chooseTab = (t) => {
+    setTab(t);
+    navigate({ pathname: location.pathname, search: hubSearchFor(location.search, t), hash: location.hash }, { replace: true, state: location.state });
+  };
 
   const rows = useMemo(() => yoursRows(data.catalogue, { q, filter, sort }), [data.catalogue, q, filter, sort]);
   const paged = pageOf(rows, page);
@@ -360,14 +375,10 @@ export function ConnectorsView({ data, initialTab = 'yours', initialChip = 'All'
   // One search rule (`matchesQuery`) for the lists and for "No connector
   // called…": on Yours the question is your connectors, on Discover the catalogue.
   const anyMatch = data.catalogue.some((p) => (tab === 'yours' ? !!p.connection : true) && matchesQuery(p, q));
-  // A sign-in's return opens a sheet only for a connector the catalogue holds:
-  // a crafted link naming anything else opens nothing.
-  const sheetP = sheet && (data.catalogue.find((p) => p.key === sheet.key) || null);
   // D715 decision 10: a search for Mercury when the Worker serves this profile no Mercury row says why, and offers no request.
   const mercuryWithheld = isMercurySearch(q) && !data.catalogue.some((p) => p.key === 'mercury');
   const notOffered = <span data-testid="connectors-mercury-not-offered">{notOfferedSentence({ branchAdmin })}</span>;
 
-  const open = (p) => setSheet({ key: p.key, view: openingView(p), ret: {} });
   const notify = async (p, join) => {
     setWaitBusy(true); setWaitError('');
     try {
@@ -401,7 +412,7 @@ export function ConnectorsView({ data, initialTab = 'yours', initialChip = 'All'
           {Array.isArray(s.cards) && !s.cards.length && <p className="text-[13px] text-axal-muted dark:text-gray-400">{s.title === 'Suggested for you' ? 'Nothing to suggest: every module a connector could feed already has data.' : 'No connector here yet.'}</p>}
           {Array.isArray(s.cards) && s.cards.length > 0 && (
             <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
-              {s.cards.map((p) => <ConnectorCard key={p.key} p={p} onOpen={open} onNotify={(x) => notify(x, true)} onUnnotify={(x) => notify(x, false)} busy={waitBusy} />)}
+              {s.cards.map((p) => <ConnectorCard key={p.key} p={p} onNotify={(x) => notify(x, true)} onUnnotify={(x) => notify(x, false)} busy={waitBusy} />)}
             </div>
           )}
         </section>
@@ -443,13 +454,13 @@ export function ConnectorsView({ data, initialTab = 'yours', initialChip = 'All'
       content = (
         <div className={`${TONE_CLS} flex flex-col items-start gap-2.5 px-5 py-7`} data-testid="connectors-yours-empty">
           <span className="text-sm leading-relaxed text-axal-ink/80 dark:text-gray-300">No connectors yet. Connect Stripe to see your revenue, or your calendar to book interviews.</span>
-          <button type="button" className={BTN.primary} onClick={() => setTab('discover')}>Browse connectors</button>
+          <button type="button" className={BTN.primary} onClick={() => chooseTab('discover')}>Browse connectors</button>
         </div>
       );
     } else {
       content = (
         <>
-          <YoursTable rows={paged.rows} onOpen={open} />
+          <YoursTable rows={paged.rows} />
           <div className="flex items-center justify-between px-1 font-mono text-[12px] text-axal-muted dark:text-gray-400" data-testid="connectors-count">
             <span>{paged.count}</span>
             <span className="flex items-center gap-2">
@@ -470,7 +481,7 @@ export function ConnectorsView({ data, initialTab = 'yours', initialChip = 'All'
   // "Browse connectors" scrolls to it in place.
   const browse = phone
     ? () => { setChip('All'); document.getElementById('connectors-discover')?.scrollIntoView?.({ block: 'start' }); }
-    : () => { setTab('discover'); setChip('All'); };
+    : () => { chooseTab('discover'); setChip('All'); };
   const toolbar = (
     <div className="flex flex-wrap items-center gap-2">
       <input type="search" aria-label="Search connectors" placeholder="Search connectors…" className={`${INPUT} min-w-[200px] flex-1`} value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} data-testid="input-connectors-search" />
@@ -490,23 +501,12 @@ export function ConnectorsView({ data, initialTab = 'yours', initialChip = 'All'
   const extras = (
     <>
       {/* D684 (#1578): business Telegram and WhatsApp, Zoom and Google Meet, on
-          both tabs. Zoom and Google connect through this page's own sheet. */}
-      <ChannelsSection catalogue={data.catalogue} onOpenConnector={(key) => { const p = data.catalogue.find((x) => x.key === key); if (p) open(p); }} />
+          both tabs. Zoom and Google connect on their own pages (D753). */}
+      <ChannelsSection catalogue={data.catalogue} onOpenConnector={(key) => { if (data.catalogue.some((x) => x.key === key)) navigate(connectorPagePath(key)); }} />
 
       {/* D668 (#1498): AI assistants that use StudioOS (D665), on both tabs. */}
       <AssistantsSection />
 
-      {sheet && sheetP && (
-        <ConnectorPanel
-          key={`${sheet.key}:${sheetP.connection ? 'c' : 'n'}`}
-          p={sheetP}
-          view={sheet.view}
-          ret={sheet.ret || {}}
-          setView={(view) => setSheet((s) => ({ ...s, view, ret: {} }))}
-          onChanged={data.reload}
-          onClose={() => setSheet(null)}
-        />
-      )}
       {requesting !== null && <RequestSheet tool={requesting} onClose={() => setRequesting(null)} />}
     </>
   );
@@ -519,8 +519,8 @@ export function ConnectorsView({ data, initialTab = 'yours', initialChip = 'All'
           <PhoneBar back={{ label: 'Back' }} title={page.title} sub={page.sub} eadwynLabel={page.title} />
           <div className="pt-[18px]">
             <PhoneRows groups={[
-              yoursGroup({ data, rows, paged, setPage, onOpen: open, label: page.sections[0] }),
-              suggestedGroup({ data, q, label: page.sections[1], onOpen: open, onNotify: notify, onBrowse: browse }),
+              yoursGroup({ data, rows, paged, setPage, label: page.sections[0] }),
+              suggestedGroup({ data, q, label: page.sections[1], onNotify: notify, onBrowse: browse }),
             ]} />
           </div>
         </div>
@@ -548,7 +548,7 @@ export function ConnectorsView({ data, initialTab = 'yours', initialChip = 'All'
         </div>
         <div className="flex rounded-[10px] border border-axal-hairline bg-white p-[3px] dark:border-gray-700 dark:bg-gray-900" role="tablist" aria-label="Connectors">
           {[['yours', 'Yours'], ['discover', 'Discover']].map(([id, label]) => (
-            <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => { setTab(id); setPage(1); }} data-testid={`tab-connectors-${id}`}
+            <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => { chooseTab(id); setPage(1); }} data-testid={`tab-connectors-${id}`}
               className={`rounded-lg px-3.5 py-1.5 text-[12.5px] font-semibold ${tab === id ? 'bg-axal-lavender text-axal-violet-deep dark:bg-violet-900/30 dark:text-violet-300' : 'text-axal-muted dark:text-gray-400'}`}>
               {label}
             </button>
