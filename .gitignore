@@ -11,7 +11,9 @@
 *.key
 
 # ---- Node / frontend ----
-node_modules/
+# No trailing slash: a worktree's node_modules can be a symlink, and `node_modules/`
+# ignores a directory only (e5956580f committed such a link).
+node_modules
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
