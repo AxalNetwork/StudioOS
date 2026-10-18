@@ -56,6 +56,10 @@ through the shared request client; callers create and revoke temporary blob URLs
 D711 (#1776) adds `files` (an envelope's recorded files), `renderPaper` (the
 template paper as HTML, faces omitted) and `paperFonts` (its faces, once per
 `paper_sha256`).
+D717 (#1782) adds `publishOne(slug, version)` and `withdraw(slug)` (one template's
+publication), `push()` (the recorded publications to every branch, publishing
+nothing) and `outside()` (the bundled documents not in the catalog). The thumbnail
+and draft-PDF blobs come with PR 2's screens, outside the typed drift surface.
 
 D652 (#1464): `eadwyn.js` calls `/api/eadwyn`, the Worker AI rail's conversations
 and the connectors in them. D701 (#1663) adds `conversationsMine`
