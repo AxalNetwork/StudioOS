@@ -89,7 +89,6 @@ const DIST = {
 const SUPERSEDED = { ...CALL, uid: 'notice-old-d', superseded: true };
 const CHANGED = { ...CALL, uid: 'notice-changed-e', instructions_changed: true };
 
-const minHeights = (s) => [...s.matchAll(/min-h-\[(\d+)px\]/g)].map((m) => Number(m[1]));
 const list = (notices, opening = null) => html(React.createElement(NoticeList, { notices, onOpen() {}, opening }));
 const detail = (notice, gate, portal = null) => html(React.createElement(NoticeDetail, { notice, portal, gate, dispatch() {}, pdf: {}, onPdf() {}, onBack() {} }));
 const CLOSED = { ticked: false, shown: false };
