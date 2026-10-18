@@ -198,6 +198,10 @@ GOOGLE_SIGNIN_POPUP = "off"
 # these until D754 w1 (#1892) merges.
 WHATSAPP_CHANNEL = "canary"
 TELEGRAM_CHANNEL = "canary"
+# D754 way B — Axal's own WhatsApp number in E.164, for the wa.me link a member
+# opens to link their WhatsApp and send recordings. Empty until the owner has
+# set up the number (#1008 item 31); S01 then sets it in BOTH vars blocks.
+WHATSAPP_AXAL_DISPLAY_NUMBER = ""
 # D757 — who can authorize Axal's Zoom app. "own_account" (the default):
 # only users of Axal's own Zoom account, as Zoom allows for an unpublished
 # app; "beta" once Zoom approves Beta Test sharing; "public" once the app is
@@ -546,6 +550,7 @@ GOOGLE_SIGNIN_POPUP = "off"
 # don't inherit.
 WHATSAPP_CHANNEL = "canary"
 TELEGRAM_CHANNEL = "canary"
+WHATSAPP_AXAL_DISPLAY_NUMBER = ""
 ZOOM_APP_AUDIENCE = "own_account"
 MEET_TRANSCRIPTS_ENABLED = "off"
 # D681 (#1555): StudioOS MCP and OAuth; a missing OAUTH_KV still keeps them off.
