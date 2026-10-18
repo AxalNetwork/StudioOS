@@ -622,7 +622,7 @@ test('SettingsPage lists the canvas sections in its order, and mounts each secti
   for (const [path, id] of [['following', 'following'], ['developer', 'developer'], ["'sign-in'", 'security-privacy'], ['orders', 'billing'], ['activity', 'activity'], ['usage', 'usage'], ['connectors', 'connectors'], ['integrations', 'connectors']]) {
     assert.match(paths, new RegExp(`\\n  ${path.replace(/[-']/g, (c) => (c === '-' ? '\\-' : "'"))}: '${id}',`), `${path} resolves to ${id}`);
   }
-  for (const mount of ['<AccountSectionNav ', '<ProfileIdentityCanvas', '<PushDevices />', '<SessionsCard security={security} />', '<PlanHeader role={role} billing={billing} />', '<Orders />', '<FollowingSection />', '<UsageSection role={role} />', '<ConnectorsTab />', '<DeveloperSection role={data.role} />']) {
+  for (const mount of ['<AccountSectionNav ', '<ProfileIdentityCanvas', '<PushDevices />', '<SessionsCard security={security} />', '<PlanHeader role={role} billing={billing} />', '<Orders />', '<FollowingSection />', '<UsageSection role={role} />', '<ConnectorsTab connectorKey={connectorKey} />', '<DeveloperSection role={data.role} />']) {
     assert.ok(page.includes(mount), `${mount} is mounted`);
   }
   assert.match(page, /<ProfileTabs key=\{profileRev\}/, 'the editors below the profile cards remount after a card saves');
