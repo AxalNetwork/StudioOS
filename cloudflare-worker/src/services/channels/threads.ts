@@ -671,16 +671,26 @@ export interface ThreadView {
   reply_window_open: boolean;
 }
 
+/**
+ * Whether a free-form reply may go now (D756): within CHANNEL_LIMITS.replyWindowMs
+ * of the contact's last message, for both providers. WhatsApp's rule, and Bot
+ * API 10.3's for Telegram ("incoming messages in the last 24 hours"). A thread
+ * whose contact never wrote is closed. Reads a D1 or ISO time.
+ */
+export function replyWindowOpen(t: Pick<ThreadRow, 'last_inbound_at'>, now = Date.now()): boolean {
+  const s = t.last_inbound_at;
+  if (!s) return false;
+  const at = Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? s : `${s.replace(' ', 'T')}Z`);
+  return Number.isFinite(at) && now - at < CHANNEL_LIMITS.replyWindowMs;
+}
+
 async function view(env: Env, t: ThreadRow & { interviewee_name?: string | null }, canReply: boolean): Promise<ThreadView> {
-  // WhatsApp counts from the customer's last message; Telegram from the chat's last activity.
-  const since = t.provider === 'whatsapp' ? t.last_inbound_at : t.last_message_at;
-  const last = since ? Date.parse(since) : NaN;
   return {
     uid: t.uid, provider: t.provider, contact_name: await contactName(env, t), status: t.status,
     message_count: Number(t.message_count) || 0, last_message_at: t.last_message_at, last_inbound_at: t.last_inbound_at,
     interview_id: t.interview_id, interviewee_name: t.interviewee_name ?? null, session_id: t.session_id,
     can_reply: canReply,
-    reply_window_open: canReply && Number.isFinite(last) && Date.now() - last < CHANNEL_LIMITS.replyWindowMs,
+    reply_window_open: canReply && replyWindowOpen(t),
   };
 }
 

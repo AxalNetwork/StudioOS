@@ -13,6 +13,8 @@
  *   too_large     the file is over the provider's cap
  *   unreadable    the file could not be fetched or read
  *   reconnect     the account's connection had expired
+ *   bot_off       the Axal bot is switched off for the member's Telegram
+ *                 Business account (D756)
  *   unreachable   Telegram or Meta did not answer, after every try
  *   not_transcribed  transcription did not answer, after every try
  *   retrying      Telegram, Meta or transcription did not answer yet; the job
@@ -36,7 +38,7 @@ export const STILL_TRYING = new Set(['provider_unreachable', 'transcription_unav
 
 export type VoiceReason =
   | 'budget' | 'ai_off' | 'daily_cap' | 'too_large' | 'unreadable' | 'reconnect'
-  | 'unreachable' | 'not_transcribed' | 'retrying';
+  | 'unreachable' | 'not_transcribed' | 'retrying' | 'bot_off';
 
 const PROVIDER_NAME: Record<MessagingProvider, string> = { telegram: 'Telegram', whatsapp: 'WhatsApp' };
 const PROVIDER_HOST: Record<MessagingProvider, string> = { telegram: 'Telegram', whatsapp: 'Meta' };
@@ -52,6 +54,7 @@ export function voiceReason(error: string | null, held: boolean): VoiceReason | 
   if (code === 'transcription_cap') return 'daily_cap';
   if (code === 'too_large') return 'too_large';
   if (code === 'token_invalid' || code === 'not_connected') return 'reconnect';
+  if (code === 'connection_disabled') return 'bot_off';
   if (code === 'provider_unreachable') return 'unreachable';
   if (code === 'transcription_unavailable') return 'not_transcribed';
   return 'unreadable';
@@ -71,11 +74,15 @@ export function voiceSentence(reason: VoiceReason, provider: MessagingProvider):
     case 'unreachable': return `${host} could not be reached to fetch this voice note, after several tries.`;
     case 'not_transcribed': return 'Transcription did not answer, after several tries, so this voice note was not transcribed.';
     case 'retrying': return 'This voice note could not be transcribed yet. Axal tries again in a few minutes.';
+    case 'bot_off': return 'The Axal bot is switched off for your Telegram Business account, so this voice note was not fetched. Turn it back on in Telegram › Settings › Telegram Business › Chatbots, then retry.';
   }
 }
 
-/** The reasons a member can retry: the budget (checked first), the kill switch (likewise), and the day's cap (the job checks it). */
-const RETRYABLE = new Set<VoiceReason>(['budget', 'ai_off', 'daily_cap', 'unreachable', 'not_transcribed']);
+/**
+ * The reasons a member can retry: the budget (checked first), the kill switch
+ * (likewise), the day's cap and the switched-off bot (the job checks each).
+ */
+const RETRYABLE = new Set<VoiceReason>(['budget', 'ai_off', 'daily_cap', 'unreachable', 'not_transcribed', 'bot_off']);
 const NEEDS_BUDGET = new Set<VoiceReason>(['budget', 'ai_off']);
 
 /**

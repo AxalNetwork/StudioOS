@@ -21,6 +21,10 @@
 //   importMeeting    POST   /founder/validate/interviews/:id/meetings/:refUid/import
 //   attachMeeting    POST   /founder/validate/interviews/:id/meetings  { attach: { join_url }, session_id, provider } (D685 §5.3.2, #1588)
 //
+// `channelsAdminApi`, Super Admin only (D756, #1895):
+//   telegramHealth           GET  /admin/channels/telegram/webhook  the interview bot's health, as codes
+//   registerTelegramWebhook  POST /admin/channels/telegram/webhook  setWebhook → { ok, url, allowed_updates }
+//
 // Every path is written out in full (no shared prefix constant) so the drift
 // check (scripts/check-api-drift.mjs) reads each one against the Worker.
 import { request } from '../api.js';
@@ -106,4 +110,10 @@ export const channelsApi = {
       method: 'POST', body: JSON.stringify({ attach: { join_url }, session_id: Number(session_id), provider: p }),
     });
   },
+};
+
+/** The Telegram Business interview bot, for Super Admins (D756): its health, and registering its webhook. */
+export const channelsAdminApi = {
+  telegramHealth: () => request('/admin/channels/telegram/webhook'),
+  registerTelegramWebhook: () => request('/admin/channels/telegram/webhook', { method: 'POST', body: JSON.stringify({}) }),
 };
