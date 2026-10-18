@@ -117,7 +117,8 @@ export default function MercuryCreditImport({ projectId, onImported, onBusy }) {
     setRead({ status: 'loading' });
     try {
       const res = await mercuryPersonalApi.credits(projectId);
-      setRead({ status: 'ok', data: { credits: Array.isArray(res?.credits) ? res.credits : [], window: res?.window || null, capped: !!res?.capped } });
+      if (!Array.isArray(res?.credits)) throw new Error('The Mercury credits response could not be read.');
+      setRead({ status: 'ok', data: { credits: res.credits, window: res?.window || null, capped: !!res?.capped } });
     } catch (e) {
       reportError('spinout-revenue:ledger-mercury-read', e);
       setRead({ status: 'failed', outcome: mercuryReadOutcome(e) });

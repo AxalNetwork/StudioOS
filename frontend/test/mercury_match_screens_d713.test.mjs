@@ -391,3 +391,24 @@ test('Contracts › Partner deals opens the desk, and passes who is Super Admin'
   assert.match(lists, /onClick=\{\(\) => setSettling\(row\)\} data-testid=\{`partner-deal-settlements-\$\{row\.id\}`\}>Settlements</);
   assert.match(lists, /<SettlementsDesk deal=\{settling\} superAdmin=\{superAdmin\}/);
 });
+
+
+test('mounted: malformed match lists are Unreadable; valid empty candidates stay empty', async () => {
+  for (const data of [null, {}, { items: [], matches: null }, { items: [ITEM], matches: null },
+    { items: [{ ...ITEM, candidates: null }], matches: [] },
+    { items: [{ ...ITEM, candidates: [] }], matches: [] }]) {
+    await withMercury(() => data, async () => {
+      const v = await mountContracts(h(MercuryMatch, { target: 'invoice', targetId: 5, matched: null }), '/needs');
+      try {
+        await v.click('Match to my Mercury'); await v.flush();
+        if (Array.isArray(data?.items) && Array.isArray(data?.matches) && Array.isArray(data.items[0]?.candidates)) {
+          assert.match(v.text(), /No line in your Mercury account fits/);
+          assert.doesNotMatch(v.text(), /could not be read/);
+        } else {
+          assert.match(v.text(), /Your Mercury account could not be read/);
+          assert.doesNotMatch(v.text(), /No line in your Mercury account fits|is not open to a match/);
+        }
+      } finally { await v.unmount(); }
+    });
+  }
+});
