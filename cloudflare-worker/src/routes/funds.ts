@@ -238,6 +238,8 @@ funds.get('/lp-portal', async (c) => {
     report_periods: await issuedPeriods(c.env, lpRows.map((r: any) => r.fund_id)),
     // D712: the caller's own issued capital statements, matched on the LP rows above.
     ...statementsPart(await issuedStatements(c.env, lpRows.map((r: any) => Number(r.id)))),
+    // D712 PR 2: and their issued management fee statements (#1782's PR 3 reads these).
+    ...feeStatementsPart(await issuedStatements(c.env, lpRows.map((r: any) => Number(r.id)), 'mgmt_fee_statement')),
   });
 });
 
@@ -285,16 +287,16 @@ async function issuedPeriods(env: Env, fundIds: number[]) {
  * issued statement leaves the queue; a draft never does. A failed read is
  * `null`, never an empty list: "no statement" is a claim about the LP.
  */
-async function issuedStatements(env: Env, lpIds: number[]): Promise<any[] | null> {
+async function issuedStatements(env: Env, lpIds: number[], kind: 'lp_capital_statement' | 'mgmt_fee_statement' = 'lp_capital_statement'): Promise<any[] | null> {
   const ids = [...new Set(lpIds.filter((n) => Number.isSafeInteger(n) && n > 0))];
   if (!ids.length) return [];
   const r = await env.DB.prepare(
     `SELECT uid, fund_id, limited_partner_id, report_period_id, period_label, period_start, period_end, revision,
             corrects_draft_id, issued_at, figures_json
        FROM fund_report_drafts
-      WHERE kind = 'lp_capital_statement' AND status = 'issued' AND limited_partner_id IN (SELECT value FROM json_each(?))
+      WHERE kind = ? AND status = 'issued' AND audience = 'lp' AND limited_partner_id IN (SELECT value FROM json_each(?))
       ORDER BY period_end DESC, id DESC LIMIT 80`,
-  ).bind(JSON.stringify(ids)).all<any>().catch((e) => { console.error('[funds] capital statements unreadable', (e as Error)?.message); return null; });
+  ).bind(kind, JSON.stringify(ids)).all<any>().catch((e) => { console.error('[funds] issued statements unreadable', kind, (e as Error)?.message); return null; });
   if (!r) return null;
   return (r.results || []).map(({ figures_json, ...row }: any) => ({ ...row, figures: parseJson(figures_json, null) }));
 }
@@ -915,6 +917,7 @@ funds.get('/:id/lp-report/:lpId', async (c) => {
 });
 
 const statementsPart = (rows: any[] | null) => ({ capital_statements: rows ?? [], capital_statements_recorded: rows !== null });
+const feeStatementsPart = (rows: any[] | null) => ({ fee_statements: rows ?? [], fee_statements_recorded: rows !== null });
 
 async function liveStatementDrafts(env: Env, fundId: number, lpId: number) {
   const r = await env.DB.prepare(

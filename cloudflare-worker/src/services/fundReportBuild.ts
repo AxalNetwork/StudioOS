@@ -6,12 +6,14 @@
  * Every figure is integer cents. A missing input makes its line
  * `{ cents: null, reason }`, never 0. The builder reads only the fund records;
  * it never calls a bank, never decrypts a token, and has no path that moves
- * money (decision 11). PR 1 reads no Mercury data, so the Fund's cash, and
- * with it NAV, read Not recorded (decision 9), and every `unmatched_count` is 0.
+ * money (decision 11). PR 2 reads #1775's stored Mercury rows through
+ * `fundCashSummary.ts` (the Fund's cash and the report's unmatched count),
+ * #1774's admissions and its issued fee periods.
  */
 import type { Env } from '../types';
 import { splitCall } from './fundCallSplit';
 import { readFundPerformance } from './fundPerformance';
+import { NO_FUND_ACCOUNT, fundCash } from './fundCashSummary';
 
 export type Line = { cents: number } | { cents: null; reason: string };
 export type Ratio = { value: number } | { value: null; reason: string };
@@ -25,7 +27,7 @@ const nextDay = (iso: string) => day(new Date(Date.parse(`${iso}T00:00:00Z`) + 8
 const known = (value: number): { cents: number } => ({ cents: value });
 const missing = (reason: string): Line => ({ cents: null, reason });
 
-export const NO_FUND_ACCOUNT = 'Not recorded: the Fund has no bank account on record';
+export { NO_FUND_ACCOUNT };
 export const NAV_BASIS = 'before carried interest, which is not accrued';
 export const DISTRIBUTION_BASIS = 'date recorded when marked paid';
 export const ADMISSION_NOT_RECORDED = 'Admission date: Not recorded';
@@ -85,22 +87,51 @@ export async function isAdministered(env: Env, fundId: number): Promise<boolean>
   ).bind(fundId).first();
 }
 
-type PackLp = { id: number; name: string | null; commitment_amount: number; invested_amount: number | null; created_at: string };
+type PackLp = {
+  id: number; name: string | null; commitment_amount: number; invested_amount: number | null; created_at: string;
+  admitted_on: string | null;
+};
 
 /**
  * The LPs a capital call bills, with a positive commitment, admitted by the
- * quarter end. Until #1774's admissions table is on main, admission is the
- * row's `created_at`; `commitment_date` is never read (decision 5).
+ * quarter end. An LP with a #1774 admission row is admitted on its
+ * `admitted_on`; one with none keeps PR 1's rule, the row's `created_at`, so
+ * an LP whose admission is not yet recorded stays in the pack (decision 5's
+ * fallback, per LP). `commitment_date` is never read.
  */
 export async function packLps(env: Env, fundId: number, end: string): Promise<PackLp[]> {
   const res = await env.DB.prepare(
-    `SELECT lp.id, COALESCE(u.name, lp.name) AS name, lp.commitment_amount, lp.invested_amount, lp.created_at
+    `SELECT lp.id, COALESCE(u.name, lp.name) AS name, lp.commitment_amount, lp.invested_amount, lp.created_at, ad.admitted_on
        FROM limited_partners lp LEFT JOIN users u ON u.id = lp.user_id
+       LEFT JOIN fund_lp_admissions ad ON ad.limited_partner_id = lp.id AND ad.fund_id = lp.fund_id
       WHERE lp.fund_id = ? AND lp.status IN ('committed', 'active') AND lp.commitment_amount > 0
-        AND substr(lp.created_at, 1, 10) <= ?
+        AND CASE WHEN ad.admitted_on IS NOT NULL THEN ad.admitted_on <= ? ELSE substr(lp.created_at, 1, 10) <= ? END
       ORDER BY lp.id`,
-  ).bind(fundId, end).all<PackLp>();
+  ).bind(fundId, end, end).all<PackLp>();
   return res.results || [];
+}
+
+/** `Q3 2026` → #1774's quarter code, `2026Q3`. */
+export const feeQuarterOf = (p: Period) => `${p.label.slice(3)}Q${p.label.slice(1, 2)}`;
+/** `2026Q3` → `Q3 2026`, or null. */
+export function quarterLabelOf(code: unknown): string | null {
+  const m = /^(\d{4})Q([1-4])$/.exec(String(code ?? ''));
+  return m ? `Q${m[2]} ${m[1]}` : null;
+}
+
+/**
+ * #1774's fee period for the quarter, when it is issued or paid: its net and
+ * each LP's net fee line. The fee is billed in advance, so it is the quarter's
+ * management fee whether or not the books are closed.
+ */
+export async function issuedFeePeriod(env: Env, fundId: number, p: Period): Promise<{ net_cents: number; lines: Map<number, number> } | null> {
+  const period = await env.DB.prepare(
+    "SELECT id, net_cents FROM fund_fee_periods WHERE fund_id = ? AND quarter = ? AND status IN ('issued', 'paid')",
+  ).bind(fundId, feeQuarterOf(p)).first<{ id: number; net_cents: number }>();
+  if (!period) return null;
+  const lines = await env.DB.prepare('SELECT limited_partner_id, net_fee_cents FROM fund_fee_lines WHERE period_id = ?')
+    .bind(period.id).all<{ limited_partner_id: number; net_fee_cents: number }>();
+  return { net_cents: Number(period.net_cents), lines: new Map((lines.results || []).map((l) => [Number(l.limited_partner_id), Number(l.net_fee_cents)])) };
 }
 
 const toCents = (dollars: unknown): number | null => {
@@ -130,6 +161,8 @@ export async function booksClosed(env: Env, fundId: number, p: Period): Promise<
 export type FundFigures = {
   books_closed: boolean;
   expenses: Line; management_fee: Line; investment_value: Line; cash: Line; liabilities: Line; nav: Line;
+  /** Each LP's net fee, when #1774's fee period for the quarter is issued; else null and the fee is D628's. */
+  fee_lines: Map<number, number> | null;
 };
 
 export async function fundFigures(env: Env, fund: { id: number; name: string; vintage_year?: unknown; status?: unknown }, p: Period): Promise<FundFigures> {
@@ -151,18 +184,21 @@ export async function fundFigures(env: Env, fund: { id: number; name: string; vi
     ).bind(fund.id, p.end).first<{ balance: number }>();
     expenses = known(Number(sums?.expense ?? 0)); fee = known(Number(sums?.fee ?? 0)); liabilities = known(Number(owed?.balance ?? 0));
   }
+  // An issued #1774 fee period is the quarter's fee, books closed or not.
+  const feePeriod = await issuedFeePeriod(env, fund.id, p);
+  if (feePeriod) fee = known(feePeriod.net_cents);
   // Investment value only, as of the quarter end: its calls and distributions are not cut there.
   const perf = await readFundPerformance(env, fund, p.end);
   const investment: Line = perf.nav_cents == null
     ? missing(`Not recorded: ${perf.unavailable.nav_cents ?? 'no investment value is recorded'}`)
     : known(perf.nav_cents);
-  // PR 1 reads no bank data (decision 9).
-  const cash: Line = missing(NO_FUND_ACCOUNT);
+  // Only the Fund's own registered accounts (decision 9).
+  const cash: Line = await fundCash(env, fund.id, p.end);
   const nav: Line = investment.cents == null ? missing(investment.reason)
     : cash.cents == null ? missing(cash.reason)
       : liabilities.cents == null ? missing(liabilities.reason)
         : known(investment.cents + cash.cents - liabilities.cents);
-  return { books_closed: closed, expenses, management_fee: fee, investment_value: investment, cash, liabilities, nav };
+  return { books_closed: closed, expenses, management_fee: fee, investment_value: investment, cash, liabilities, nav, fee_lines: feePeriod?.lines ?? null };
 }
 
 /**
@@ -243,7 +279,7 @@ export async function statementFigures(
     lp: { id: lp.id, name: lp.name ?? null },
     period: p,
     currency: 'USD',
-    admission: { date: null, reason: ADMISSION_NOT_RECORDED },
+    admission: lp.admitted_on ? { date: lp.admitted_on } : { date: null, reason: ADMISSION_NOT_RECORDED },
     commitment: known(commitment),
     percentage_interest: { commitment_cents: commitment, total_commitment_cents: total },
     called_to_date: known(calledToDate),
@@ -285,7 +321,7 @@ export async function statementFigures(
 /** The pack's fund-level report: totals and its statements' digests, never an LP's name or figures. */
 export function reportFigures(
   fund: { id: number; name: string }, p: Period, lps: number, totals: Record<string, number>, figures: FundFigures,
-  statements: Array<{ uid: string; figures_sha256: string }>,
+  statements: Array<{ uid: string; figures_sha256: string }>, unmatched = 0,
 ) {
   return {
     schema: 'lp_quarterly_report/1',
@@ -301,6 +337,31 @@ export function reportFigures(
     },
     nav_basis: NAV_BASIS,
     statements,
+    unmatched_count: unmatched,
+  };
+}
+
+/**
+ * The fields of #1774's `statementFor` a fee statement freezes, by name. A
+ * field `statementFor` gains later (#1820's `remittance`) never reaches a
+ * draft, an export or `/lp-portal`'s `fee_statements`.
+ */
+export const FEE_STATEMENT_FIELDS = [
+  'quarter', 'window', 'rate_bps', 'lpa_reference', 'basis', 'gross_fee_cents', 'catch_up_days', 'catch_up_cents',
+  'offset_cents', 'net_fee_cents', 'reference_code', 'funding_call_line', 'status', 'pay_to',
+] as const;
+
+export function feeStatementFigures(
+  fund: { id: number; name: string }, lp: { id: number; name: string | null }, p: Period, statement: Record<string, unknown>,
+) {
+  const copied = Object.fromEntries(FEE_STATEMENT_FIELDS.map((k) => [k, statement[k] ?? null]));
+  return {
+    schema: 'mgmt_fee_statement/1',
+    fund: { id: fund.id, name: fund.name },
+    lp: { id: lp.id, name: lp.name ?? null },
+    period: p,
+    currency: 'USD',
+    ...copied,
     unmatched_count: 0,
   };
 }
