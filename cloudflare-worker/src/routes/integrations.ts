@@ -32,6 +32,7 @@ import {
   getProviderImpl,
   type IntegrationRow,
   audienceFor,
+  ConnectRefusal,
   type ProviderDescriptor,
 } from '../integrations/registry';
 import { branchOf } from '../util/branch';
@@ -480,6 +481,8 @@ integrations.post('/connect', async (c) => {
       webhook_secret: body.webhook_secret,
     });
   } catch (e) {
+    // D713: a refusal the provider meant keeps its own status and code.
+    if (e instanceof ConnectRefusal) return refuse(c, e.status, { code: e.code, message: e.message });
     return refuse(c, 400, { code: 'connect_failed', message: 'The connection could not be made. Check the credentials and try again.', raw: e, audience: 'owner' });
   }
   if (desc.auth_type === 'oauth2' && hasScopeOverreach(desc, result.scopes || [])) {
@@ -690,7 +693,7 @@ integrations.get('/:uid/fed', async (c) => {
   const row = await loadRow(c.env, c.req.param('uid'), user.id);
   if (!row) return c.json({ error: 'not_found' }, 404);
   try {
-    return c.json({ ok: true, provider_key: row.provider_key, modules: await fedCounts(c.env, row.id, row.provider_key) });
+    return c.json({ ok: true, provider_key: row.provider_key, modules: await fedCounts(c.env, row.id, row.provider_key, user.role) });
   } catch {
     return c.json({ error: 'fed_unreadable', message: 'Unreadable: what this connector delivered could not be read.' }, 503);
   }
@@ -997,8 +1000,11 @@ integrations.get('/:uid/logs', async (c) => {
 const VERIFIED_IN_HANDLER = new Set(['hubspot']);
 
 integrations.post('/webhook/:provider/:uid', async (c) => {
-  await ensureIntegrationsSchema(c.env);
   const provider = c.req.param('provider').toLowerCase();
+  // D713 decision 2: a bank connection takes no webhook. Refused before any
+  // row lookup, body read or log, so a real uid and a made-up one look alike.
+  if (provider === 'mercury') return c.json({ error: 'not_found' }, 404);
+  await ensureIntegrationsSchema(c.env);
   const uid = c.req.param('uid');
 
   const row = await c.env.DB.prepare('SELECT * FROM integrations WHERE uid = ? AND provider_key = ?')

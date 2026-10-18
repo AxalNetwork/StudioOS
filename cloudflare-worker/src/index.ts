@@ -145,6 +145,8 @@ void _registerCrunchbase;
 import './integrations/providers/stripe';
 // D655 (#1467) — GitHub: read-only issues, pull requests and releases from chosen repositories.
 import './integrations/providers/github';
+// D713 (#1778) — a founder's or partner's own Mercury, read-only: `connect` only.
+import './integrations/providers/mercury';
 import crunchbaseRoutes from './routes/crunchbase';
 import network from './routes/network';
 import referEarn from './routes/refer_earn';

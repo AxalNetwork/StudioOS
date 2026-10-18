@@ -1,0 +1,173 @@
+/**
+ * D713 (#1778) — a member's own Mercury connection. READ-ONLY, `connect` ONLY.
+ *
+ * Founders and partners (`personal_roles`) connect their own Mercury
+ * organization with a Read Only API token. The row is an ordinary
+ * `integrations` row, encrypted by the route (`secrets.ts`, KEK_PII); only its
+ * four-character preview is ever shown. It is read on demand, inside a request
+ * its owner makes (`services/mercuryPersonal.ts`): this module defines no
+ * sync, push, webhook, preview or action, and the route answers a Mercury
+ * webhook 404 before it looks anything up.
+ *
+ * Every read goes through #1775's GET-only client and `parse.ts`, which keep
+ * the organization's id and name and the accounts' kind and last four, and
+ * drop every account, routing and EIN field.
+ *
+ * Each refusal keeps its own status and code (`ConnectRefusal`):
+ *   403 support_session_refused    a support session (`impersonated_by`)
+ *   403 purpose_not_allowed        a role that holds no personal connection
+ *   400 webhook_not_supported      a `webhook_secret` was sent
+ *   400 api_key_required           no token
+ *   400 token_rejected             Mercury answered 401 or 403
+ *   403 write_scope_refused        the API reports a permission above read-only
+ *   400 confirm_read_only_required it reports none, and the member did not confirm
+ *   409 mercury_entity_account     decision 3: an Axal entity's organization
+ *   503 bank_registry_unavailable  decision 3 could not be checked; nothing is stored
+ *
+ * DECISION 3 lives here, and `mercuryPersonal.ts` calls it again on every read:
+ * the organization's normalised name against `AXAL_ENTITIES`, its account ids
+ * against #1775's `mercury_accounts`, and its checking and savings last fours
+ * against #1773's active `entity_bank_accounts` (`entity_key`, `account_last4`
+ * and `status` only, never a decrypt). Those are the only reads personal code
+ * makes of a #1775 or #1773 table.
+ */
+import type { Context } from 'hono';
+import type { Env, User } from '../../types';
+import { ConnectRefusal, audienceFor, getDescriptor, registerProvider, type ConnectInput, type ConnectResult } from '../registry';
+import { selectJwt } from '../../auth';
+import { branchOf } from '../../util/branch';
+import { getOrganization, listAccounts, MercuryClientError } from '../../services/mercury/client';
+import { parseAccounts, parseOrganization, parseTokenPermission, type ParsedAccount, type ParsedOrganization, type TokenPermission } from '../../services/mercury/parse';
+import { AXAL_ENTITIES } from '../../services/legalDocFormat';
+
+type C = Context<{ Bindings: Env }>;
+
+/**
+ * Decision 3's normal form: lower-cased, every run of characters that are not
+ * letters or digits made one space, trimmed, and a trailing `llc`, `l l c`,
+ * `lp` or `l p` dropped. "AXAL VC MANAGEMENT, LLC" is "axal vc management".
+ */
+export function normalizeEntityName(name: string | null | undefined): string {
+  return String(name ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+    .replace(/(?:^|\s)(?:llc|l l c|lp|l p)$/, '').trim();
+}
+
+const AXAL_NAMES = Object.values(AXAL_ENTITIES).map((e) => normalizeEntityName(e.name));
+
+/** The organization is an Axal entity's: its normalised name equals one. */
+export function isAxalEntityName(name: string | null | undefined): boolean {
+  const n = normalizeEntityName(name);
+  return !!n && AXAL_NAMES.includes(n);
+}
+
+/** A bank line's counterparty names an Axal entity (D713 decisions 6 and 7). */
+export function namesAxalEntity(counterparty: string | null | undefined, only?: keyof typeof AXAL_ENTITIES): boolean {
+  const n = ` ${normalizeEntityName(counterparty)} `;
+  const names = only ? [normalizeEntityName(AXAL_ENTITIES[only].name)] : AXAL_NAMES;
+  return names.some((e) => n.includes(` ${e} `));
+}
+
+export const ENTITY_REFUSED = 'This Mercury organization belongs to an Axal entity. Connect your own organization; Axal\'s accounts are connected only for fund administration.';
+
+/**
+ * Decision 3. Null when the organization is the member's own; a refusal when
+ * it is, or may be, an Axal entity's. A registry that cannot be read refuses:
+ * the check fails closed.
+ */
+export async function entityAccountRefusal(env: Env, org: ParsedOrganization, accounts: ParsedAccount[]): Promise<ConnectRefusal | null> {
+  if (isAxalEntityName(org.legal_name)) return new ConnectRefusal(409, 'mercury_entity_account', ENTITY_REFUSED);
+  const ids = accounts.map((a) => a.mercury_account_id);
+  const fours = [...new Set(accounts.map((a) => a.last_four))];
+  try {
+    if (ids.length) {
+      const held = await env.DB.prepare(
+        `SELECT 1 AS held FROM mercury_accounts WHERE mercury_account_id IN (${ids.map(() => '?').join(',')}) LIMIT 1`,
+      ).bind(...ids).first();
+      if (held) return new ConnectRefusal(409, 'mercury_entity_account', ENTITY_REFUSED);
+    }
+    if (fours.length) {
+      const registered = await env.DB.prepare(
+        `SELECT entity_key, account_last4, status FROM entity_bank_accounts
+          WHERE status = 'active' AND account_last4 IN (${fours.map(() => '?').join(',')}) LIMIT 1`,
+      ).bind(...fours).first();
+      if (registered) return new ConnectRefusal(409, 'mercury_entity_account', ENTITY_REFUSED);
+    }
+  } catch {
+    return new ConnectRefusal(503, 'bank_registry_unavailable', 'Axal\'s account registry could not be read, so the connection could not be checked. Nothing was saved; try again later.');
+  }
+  return null;
+}
+
+/** Decision 2: a reported permission above read-only is refused; an unreported one needs the member's word. */
+export function readOnlyRefusal(permission: TokenPermission, confirmed: boolean): ConnectRefusal | null {
+  if (permission === 'above_read_only') {
+    return new ConnectRefusal(403, 'write_scope_refused', 'That token can do more than read. Create a Read Only API token in your Mercury organization and use it instead.');
+  }
+  if (permission === 'not_reported' && !confirmed) {
+    return new ConnectRefusal(400, 'confirm_read_only_required', 'Confirm that this is a Read Only token before connecting it.');
+  }
+  return null;
+}
+
+/** A support session acting as the member (`impersonated_by`, as `mcp_consent.ts` reads it). */
+export async function isSupportSession(c: C): Promise<boolean> {
+  return !!(await selectJwt(c))?.payload.impersonated_by;
+}
+
+export interface OrganizationRead {
+  org: ParsedOrganization;
+  accounts: ParsedAccount[];
+  permission: TokenPermission;
+}
+
+/** The organization and its checking and savings accounts, through the GET-only client. */
+export async function readOrganization(token: string): Promise<OrganizationRead> {
+  const orgBody = await getOrganization(token);
+  const accountsBody = await listAccounts(token);
+  const permission = parseTokenPermission(orgBody);
+  return {
+    org: parseOrganization(orgBody),
+    accounts: parseAccounts(accountsBody).accounts,
+    permission: permission === 'not_reported' ? parseTokenPermission(accountsBody) : permission,
+  };
+}
+
+async function connect(c: C, user: User, input: ConnectInput): Promise<ConnectResult> {
+  if (await isSupportSession(c)) {
+    throw new ConnectRefusal(403, 'support_session_refused', 'A support session cannot connect a member\'s bank account.');
+  }
+  const desc = getDescriptor('mercury');
+  if (!desc || audienceFor(desc, { role: String(user.role || ''), hq: branchOf(c.env) === null }) !== 'personal') {
+    throw new ConnectRefusal(403, 'purpose_not_allowed', 'Your role does not hold a personal Mercury connection.');
+  }
+  if (input.webhook_secret) {
+    throw new ConnectRefusal(400, 'webhook_not_supported', 'Mercury takes no webhook here. Leave the webhook secret empty.');
+  }
+  const token = typeof input.api_key === 'string' ? input.api_key.trim() : '';
+  if (!token || token.length > 512) {
+    throw new ConnectRefusal(400, 'api_key_required', 'Paste a Read Only API token from your Mercury organization.');
+  }
+  let read: OrganizationRead;
+  try {
+    read = await readOrganization(token);
+  } catch (e) {
+    if (e instanceof MercuryClientError && e.code === 'unauthorized') {
+      throw new ConnectRefusal(400, 'token_rejected', 'Mercury did not accept that token. Check it and try again.');
+    }
+    throw e;
+  }
+  const confirmed = input.config?.confirm_read_only === true;
+  const scope = readOnlyRefusal(read.permission, confirmed);
+  if (scope) throw scope;
+  const entity = await entityAccountRefusal(c.env, read.org, read.accounts);
+  if (entity) throw entity;
+  return {
+    credentials: { api_key: token },
+    external_account_id: read.org.id,
+    external_account_name: read.org.legal_name,
+    capabilities: ['Revenue import', 'Payment matching'],
+    config: { read_only: read.permission === 'read_only' ? 'reported' : 'confirmed' },
+  };
+}
+
+registerProvider({ key: 'mercury', connect });

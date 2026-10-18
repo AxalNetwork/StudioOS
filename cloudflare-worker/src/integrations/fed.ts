@@ -1,5 +1,5 @@
 import type { Env } from '../types';
-import { CONNECTOR_METADATA } from './registry';
+import { connectorFeeds } from './registry';
 
 /**
  * D655 — "Now fed by": how many items each connector delivered into each
@@ -10,7 +10,7 @@ import { CONNECTOR_METADATA } from './registry';
  * before D655) gets each module it feeds with `count: null` and a reason,
  * never 0: zero would say "nothing arrived", which nobody measured.
  */
-export const FED_LEDGER_PROVIDERS = new Set(['github']);
+export const FED_LEDGER_PROVIDERS = new Set(['github', 'mercury']);
 
 import { MODULE_LABELS, moduleHref } from './moduleLabels';
 export { MODULE_LABELS } from './moduleLabels';
@@ -25,8 +25,9 @@ export interface FedModule {
   reason: string | null;
 }
 
-export async function fedCounts(env: Env, integrationId: number, providerKey: string): Promise<FedModule[]> {
-  const feeds = CONNECTOR_METADATA[providerKey]?.feeds || [];
+/** `role` is the connection owner's: Mercury's personal variant feeds by role (D713). */
+export async function fedCounts(env: Env, integrationId: number, providerKey: string, role?: string | null): Promise<FedModule[]> {
+  const feeds = connectorFeeds(providerKey, role);
   const label = (m: string) => MODULE_LABELS[m] || m;
   if (!FED_LEDGER_PROVIDERS.has(providerKey)) {
     return feeds.map((m) => ({
