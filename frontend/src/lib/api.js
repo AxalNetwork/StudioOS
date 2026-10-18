@@ -26,6 +26,7 @@ export * from './api/cycleWrites.js';
 export * from './api/cycles.js';
 export * from './api/eadwyn.js';
 export * from './api/fundAdmin.js';
+export * from './api/fundFees.js';
 export * from './api/fundLedger.js';
 export * from './api/fundPerformance.js';
 export * from './api/fundReporting.js';
@@ -2091,15 +2092,31 @@ export const api = {
     return { blob, url: URL.createObjectURL(blob), filename };
   },
   // Task #31 — per-template preview PDF blob (binary endpoint, not typed drift).
-  adminTemplateStorePreviewPdfBlob: async (slug, { resolve = 'brackets' } = {}) => {
+  // D711: `page` (letter|a4) and `cover` (dark|light) choose the paper.
+  adminTemplateStorePreviewPdfBlob: async (slug, { resolve = 'brackets', page = 'letter', cover = 'dark' } = {}) => {
     const token = localStorage.getItem('token');
-    const res = await fetch(`/api/admin/contracts/templates/store/${encodeURIComponent(slug)}/preview.pdf?resolve=${resolve}`, {
+    const q = new URLSearchParams({ resolve, page, cover }).toString();
+    const res = await fetch(`/api/admin/contracts/templates/store/${encodeURIComponent(slug)}/preview.pdf?${q}`, {
       credentials: 'include',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     if (!res.ok) throw await refusalError(res, 'PDF generation failed');
     const blob = await res.blob();
     const filename = (res.headers.get('Content-Disposition') || '').match(/filename="?([^"]+)"?/)?.[1] || `${slug}-preview.pdf`;
+    return { blob, url: URL.createObjectURL(blob), filename };
+  },
+  // D711 — a template as Word, with a `docx_export` registry row (binary
+  // endpoint, not typed drift).
+  adminTemplateStoreDocxBlob: async (slug, { resolve = 'brackets', page = 'letter' } = {}) => {
+    const token = localStorage.getItem('token');
+    const q = new URLSearchParams({ resolve, page }).toString();
+    const res = await fetch(`/api/admin/contracts/templates/store/${encodeURIComponent(slug)}/export.docx?${q}`, {
+      credentials: 'include',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw await refusalError(res, 'Word export failed');
+    const blob = await res.blob();
+    const filename = (res.headers.get('Content-Disposition') || '').match(/filename="?([^"]+)"?/)?.[1] || `${slug}.docx`;
     return { blob, url: URL.createObjectURL(blob), filename };
   },
   adminSendEnvelope: (payload) =>
@@ -2366,6 +2383,12 @@ export const api = {
   esignFetchByToken: async (token) => {
     const res = await fetch(`/api/legal/esign/sign/${encodeURIComponent(token)}`);
     if (!res.ok) throw await refusalError(res, 'Failed to load signing envelope');
+    return await res.json();
+  },
+  // D711 — the signer's paper (faces inline), token-gated like the envelope read.
+  esignPaperByToken: async (token) => {
+    const res = await fetch(`/api/legal/esign/sign/${encodeURIComponent(token)}/paper`);
+    if (!res.ok) throw await refusalError(res, 'Failed to load the formatted page');
     return await res.json();
   },
   esignSubmitSignature: async (token, payload) => {

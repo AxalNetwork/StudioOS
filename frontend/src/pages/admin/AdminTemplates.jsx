@@ -289,6 +289,10 @@ function TemplateEditorModal({ slug, isNew, onClose, onSaved }) {
   const [showVersions, setShowVersions] = useState(false);
   const [viewVersion, setViewVersion] = useState(null); // a past version snapshot being previewed
   const [resolveTokens, setResolveTokens] = useState(true);
+  // D711 — the paper the preview, the PDF and the Word export draw on.
+  const [pageSize, setPageSize] = useState('letter');
+  const [cover, setCover] = useState('dark');
+  const [exporting, setExporting] = useState(false);
 
   useEscapeClose(onClose);
 
@@ -363,7 +367,7 @@ function TemplateEditorModal({ slug, isNew, onClose, onSaved }) {
     setDownloading(true);
     try {
       const { url, filename } = await api.adminTemplateStorePreviewPdfBlob(slug, {
-        resolve: resolveTokens ? 'brackets' : 'raw',
+        resolve: resolveTokens ? 'brackets' : 'raw', page: pageSize, cover,
       });
       const a = document.createElement('a');
       a.href = url;
@@ -380,7 +384,31 @@ function TemplateEditorModal({ slug, isNew, onClose, onSaved }) {
     }
   };
 
+  const downloadDocx = async () => {
+    if (isNew || !slug) return;
+    setErr('');
+    setExporting(true);
+    try {
+      const { url, filename } = await api.adminTemplateStoreDocxBlob(slug, {
+        resolve: resolveTokens ? 'brackets' : 'raw', page: pageSize,
+      });
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setErr(e.message || 'Failed to export Word.');
+      reportError('AdminTemplates:downloadDocx', e);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const previewBody = viewVersion ? viewVersion.body_md : body;
+  const paperSelect = 'px-1.5 py-0.5 text-[10px] normal-case font-normal border border-gray-200 rounded bg-white dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100';
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
@@ -488,6 +516,16 @@ function TemplateEditorModal({ slug, isNew, onClose, onSaved }) {
             <div className="md:w-1/2 min-h-0 overflow-y-auto bg-gray-50 dark:bg-gray-900/40">
               <div className="px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400 sticky top-0 bg-gray-50 dark:bg-gray-900/40 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between gap-2">
                 <span>{viewVersion ? `Preview · v${viewVersion.version} (read-only)` : 'Live preview'}</span>
+                <span className="flex items-center gap-1.5">
+                  <select aria-label="Page size" value={pageSize} onChange={e => setPageSize(e.target.value)} data-testid="template-page-size" className={paperSelect}>
+                    <option value="letter">Letter</option>
+                    <option value="a4">A4</option>
+                  </select>
+                  <select aria-label="Cover" value={cover} onChange={e => setCover(e.target.value)} data-testid="template-cover" className={paperSelect}>
+                    <option value="dark">Dark cover</option>
+                    <option value="light">Light cover</option>
+                  </select>
+                </span>
                 <label className="flex items-center gap-1.5 normal-case font-normal text-[10px] cursor-pointer select-none">
                   <input
                     type="checkbox"
@@ -505,6 +543,8 @@ function TemplateEditorModal({ slug, isNew, onClose, onSaved }) {
                 version={viewVersion ? viewVersion.version : version}
                 docType={slugInput || slug}
                 category={category}
+                pageSize={pageSize}
+                cover={cover}
               />
             </div>
           </div>
@@ -537,6 +577,16 @@ function TemplateEditorModal({ slug, isNew, onClose, onSaved }) {
                 data-testid="template-download-pdf"
                 className="text-xs px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 disabled:opacity-50 flex items-center gap-1">
                 {downloading ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />} Download PDF
+              </button>
+            )}
+            {!isNew && (
+              <button
+                type="button"
+                onClick={downloadDocx}
+                disabled={exporting || saving || loading}
+                data-testid="template-download-docx"
+                className="text-xs px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 disabled:opacity-50 flex items-center gap-1">
+                {exporting ? <Loader2 size={12} className="animate-spin" /> : <FileText size={12} />} Download Word
               </button>
             )}
             <button type="button" onClick={onClose} className="text-xs px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300">Cancel</button>

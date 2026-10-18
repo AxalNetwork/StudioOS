@@ -1,0 +1,310 @@
+// D716 (#1781, PR 2) — the Subscription Booklet's store.
+//
+// The booklet is nine parts in order (`SUBSCRIPTION_BOOKLET_PARTS`,
+// legalDocFormat.ts), each resolved here against the template store
+// (`getTemplate`). An approved Fund I applicant opens one booklet, ticks its
+// fields, and submits it; an Admin on HQ reads and withdraws (decision 9).
+//
+// - **A field** is a Markdown task item (`- [ ]`) in a part's store body. Its
+//   id is `<slug>:<n>:<hash>`: the item's place among that body's task items,
+//   and the first 12 hex of the SHA-256 of its text. A reworded item gets a
+//   new id, so an old tick never lands on new words.
+// - **The digest** covers what the applicant sees: each part's slug, version
+//   and body hash, and the ticks, in canonical JSON. Submit freezes that same
+//   object under that digest; a body or tick that changed since is 409
+//   `content_changed`. While any part the booklet reads is a stub, submit
+//   refuses `booklet_part_missing` and names the parts.
+// - Migration 478's triggers hold the rest: the status path, the frozen
+//   columns, no delete, and ticks only while the booklet is open.
+//
+// The booklet's paper (`GET /mine/paper`, `GET /:uid/pdf`) draws #1776's
+// paper and lands with the notices PR.
+//
+// NOTE: authored to load under `node --experimental-strip-types` (the worker
+// test gate) — no `enum`s, no TS parameter properties.
+
+import type { Env } from '../types';
+import { SUBSCRIPTION_BOOKLET_PARTS, type BookletPart } from './legalDocFormat';
+import { getTemplate } from './legalTemplateStore';
+
+export const BOOKLET_FUND_SLUG = 'spinout-fund-i';
+
+/** Parts whose store body the booklet prints: the cover's legend, Parts 3 to 7, and Part 9. */
+const READ_PARTS = new Set([1, 3, 4, 5, 6, 7, 9]);
+/** Parts whose task items are the applicant's fields: Parts 3 to 7. Part 8 prints no LPA body. */
+const FIELD_PARTS = new Set([3, 4, 5, 6, 7]);
+
+export class BookletRefusal extends Error {
+  status: number;
+  code: string;
+  publicMessage: string;
+  extra?: Record<string, unknown>;
+  constructor(status: number, code: string, message: string, extra?: Record<string, unknown>) {
+    super(code);
+    this.status = status;
+    this.code = code;
+    this.publicMessage = message;
+    this.extra = extra;
+  }
+}
+
+export interface BookletField {
+  id: string;
+  part: number;
+  text: string;
+}
+
+export interface ResolvedPart {
+  part: number;
+  title: string;
+  slug: string | null;
+  version: number | null;
+  body_sha256: string | null;
+  /** True when a part the booklet reads has no usable body yet. */
+  missing: boolean;
+  fields: BookletField[];
+}
+
+export async function sha256Hex(s: string): Promise<string> {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** JSON with sorted object keys, so the same value always hashes the same. */
+export function canonicalJson(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(canonicalJson).join(',')}]`;
+  if (v && typeof v === 'object') {
+    return `{${Object.keys(v as Record<string, unknown>).sort()
+      .map((k) => `${JSON.stringify(k)}:${canonicalJson((v as Record<string, unknown>)[k])}`).join(',')}}`;
+  }
+  return JSON.stringify(v ?? null);
+}
+
+const TASK_ITEM = /^\s*[-*+]\s+\[[ xX]\]\s+(.*\S)\s*$/;
+
+/** The task items of one part's body, as fields with stable ids. */
+export async function bookletFields(slug: string, body: string, part = 0): Promise<BookletField[]> {
+  const out: BookletField[] = [];
+  let n = 0;
+  for (const line of String(body || '').replace(/\r\n?/g, '\n').split('\n')) {
+    const m = line.match(TASK_ITEM);
+    if (!m) continue;
+    n++;
+    const text = m[1];
+    out.push({ id: `${slug}:${n}:${(await sha256Hex(text)).slice(0, 12)}`, part, text });
+  }
+  return out;
+}
+
+/** The nine parts, resolved against the store. */
+export async function resolveParts(env: Env): Promise<ResolvedPart[]> {
+  const out: ResolvedPart[] = [];
+  for (const p of SUBSCRIPTION_BOOKLET_PARTS as readonly BookletPart[]) {
+    if (!p.slug || !READ_PARTS.has(p.part)) {
+      out.push({ part: p.part, title: p.title, slug: p.slug, version: null, body_sha256: null, missing: false, fields: [] });
+      continue;
+    }
+    const tpl = await getTemplate(env, p.slug);
+    const body = tpl && !tpl.is_stub ? String(tpl.body_md || '') : '';
+    const missing = !tpl || !!tpl.is_stub || body.trim() === '';
+    out.push({
+      part: p.part,
+      title: p.title,
+      slug: p.slug,
+      version: tpl ? Number(tpl.version) : null,
+      body_sha256: missing ? null : await sha256Hex(body),
+      missing,
+      fields: !missing && FIELD_PARTS.has(p.part) ? await bookletFields(p.slug, body, p.part) : [],
+    });
+  }
+  return out;
+}
+
+export interface BookletRow {
+  id: number;
+  uid: string;
+  application_id: number;
+  status: 'open' | 'submitted' | 'withdrawn';
+  frozen_json: string | null;
+  digest: string | null;
+  submitted_at: string | null;
+  withdrawn_reason: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** The applicant's approved Fund I application, or null (the routes answer 404). */
+export async function approvedApplication(env: Env, userId: number): Promise<{ id: number } | null> {
+  return env.DB.prepare(
+    `SELECT id FROM lp_applications WHERE user_id = ? AND fund_slug = 'spinout-fund-i' AND status = 'approved'
+      ORDER BY id DESC LIMIT 1`,
+  ).bind(userId).first<{ id: number }>();
+}
+
+async function liveBooklet(env: Env, applicationId: number): Promise<BookletRow | null> {
+  return env.DB.prepare(
+    `SELECT id, uid, application_id, status, frozen_json, digest, submitted_at, withdrawn_reason, created_at, updated_at
+       FROM fund_subscription_booklets WHERE application_id = ? AND status <> 'withdrawn'`,
+  ).bind(applicationId).first<BookletRow>();
+}
+
+export async function bookletByUid(env: Env, uid: string): Promise<BookletRow | null> {
+  return env.DB.prepare(
+    `SELECT id, uid, application_id, status, frozen_json, digest, submitted_at, withdrawn_reason, created_at, updated_at
+       FROM fund_subscription_booklets WHERE uid = ?`,
+  ).bind(uid).first<BookletRow>();
+}
+
+const notFound = () => new BookletRefusal(404, 'booklet_not_found', 'No subscription booklet here.');
+
+/** The caller's live booklet, or 404 when they have no approved application or no booklet. */
+export async function mineOrNull(env: Env, userId: number): Promise<BookletRow | null> {
+  const app = await approvedApplication(env, userId);
+  if (!app) throw notFound();
+  return liveBooklet(env, app.id);
+}
+
+/** Open the caller's booklet, or return the one already open or submitted. */
+export async function openBooklet(env: Env, userId: number): Promise<{ booklet: BookletRow; created: boolean }> {
+  const app = await approvedApplication(env, userId);
+  if (!app) throw notFound();
+  const existing = await liveBooklet(env, app.id);
+  if (existing) return { booklet: existing, created: false };
+  // The partial UNIQUE index keeps one live booklet per application, so two
+  // concurrent opens land one row; the loser reads the winner's.
+  await env.DB.prepare(
+    `INSERT INTO fund_subscription_booklets (uid, application_id, fund_slug, status)
+     SELECT ?, ?, 'spinout-fund-i', 'open'
+      WHERE NOT EXISTS (SELECT 1 FROM fund_subscription_booklets WHERE application_id = ? AND status <> 'withdrawn')`,
+  ).bind(crypto.randomUUID(), app.id, app.id).run();
+  const booklet = await liveBooklet(env, app.id);
+  if (!booklet) throw new BookletRefusal(503, 'booklet_unreadable', 'The booklet could not be opened. Try again.');
+  return { booklet, created: true };
+}
+
+async function ticksOf(env: Env, bookletId: number): Promise<Map<string, boolean>> {
+  const rows = await env.DB.prepare(
+    'SELECT field_id, checked FROM fund_booklet_answers WHERE booklet_id = ? ORDER BY field_id',
+  ).bind(bookletId).all<{ field_id: string; checked: number }>();
+  return new Map((rows.results || []).map((r) => [r.field_id, Number(r.checked) === 1]));
+}
+
+/** What the applicant sees and signs off on: the parts' identities and the ticks of current fields. */
+function frozenOf(parts: ResolvedPart[], ticks: Map<string, boolean>) {
+  const fieldIds = parts.flatMap((p) => p.fields.map((f) => f.id)).sort();
+  return {
+    parts: parts.map((p) => ({ part: p.part, slug: p.slug, version: p.version, body_sha256: p.body_sha256 })),
+    ticks: fieldIds.map((id) => [id, ticks.get(id) === true]),
+  };
+}
+
+export interface BookletView {
+  uid: string;
+  status: BookletRow['status'];
+  submitted_at: string | null;
+  digest: string;
+  parts: Array<Omit<ResolvedPart, 'fields'> & { fields: Array<BookletField & { checked: boolean }> }>;
+  missing_parts: number[];
+}
+
+/** The booklet as the applicant (or an admin) reads it, with the digest of what it shows. */
+export async function bookletView(env: Env, booklet: BookletRow): Promise<BookletView> {
+  const parts = await resolveParts(env);
+  const ticks = await ticksOf(env, booklet.id);
+  const digest = booklet.status === 'submitted' && booklet.digest
+    ? booklet.digest
+    : await sha256Hex(canonicalJson(frozenOf(parts, ticks)));
+  return {
+    uid: booklet.uid,
+    status: booklet.status,
+    submitted_at: booklet.submitted_at,
+    digest,
+    parts: parts.map((p) => ({ ...p, fields: p.fields.map((f) => ({ ...f, checked: ticks.get(f.id) === true })) })),
+    missing_parts: parts.filter((p) => p.missing).map((p) => p.part),
+  };
+}
+
+export interface Answer { field_id: string; checked: boolean }
+
+export function readAnswers(body: unknown): Answer[] {
+  const list = (body as { answers?: unknown } | null)?.answers;
+  if (!Array.isArray(list) || list.length === 0 || list.length > 500) {
+    throw new BookletRefusal(400, 'answers_invalid', 'Send answers as a list of { field_id, checked }.');
+  }
+  return list.map((a) => {
+    const id = typeof (a as any)?.field_id === 'string' ? (a as any).field_id : '';
+    if (!id || id.length > 120 || typeof (a as any)?.checked !== 'boolean') {
+      throw new BookletRefusal(400, 'answers_invalid', 'Send answers as a list of { field_id, checked }.');
+    }
+    return { field_id: id, checked: (a as any).checked };
+  });
+}
+
+/** Store ticks on the caller's open booklet. An id that is not a current field is refused. */
+export async function answerBooklet(env: Env, booklet: BookletRow, userId: number, answers: Answer[]): Promise<void> {
+  if (booklet.status !== 'open') throw new BookletRefusal(409, 'booklet_not_open', 'This booklet is no longer open, so its answers cannot change.');
+  const parts = await resolveParts(env);
+  const known = new Set(parts.flatMap((p) => p.fields.map((f) => f.id)));
+  const unknown = answers.filter((a) => !known.has(a.field_id)).map((a) => a.field_id);
+  if (unknown.length) {
+    throw new BookletRefusal(400, 'field_unknown', 'An answer names a field the booklet does not have. Reload the booklet and answer again.', { fields: unknown.length });
+  }
+  await env.DB.batch(answers.map((a) => env.DB.prepare(
+    `INSERT INTO fund_booklet_answers (booklet_id, field_id, checked, answered_by, updated_at)
+     VALUES (?, ?, ?, ?, datetime('now'))
+     ON CONFLICT (booklet_id, field_id) DO UPDATE SET checked = excluded.checked, answered_by = excluded.answered_by, updated_at = excluded.updated_at`,
+  ).bind(booklet.id, a.field_id, a.checked ? 1 : 0, userId)));
+}
+
+/** Freeze the booklet under the digest the applicant saw. */
+export async function submitBooklet(env: Env, booklet: BookletRow, digest: unknown): Promise<{ digest: string; submitted_at: string }> {
+  if (booklet.status !== 'open') throw new BookletRefusal(409, 'booklet_not_open', 'This booklet is no longer open, so it cannot be submitted again.');
+  if (typeof digest !== 'string' || !/^[0-9a-f]{64}$/.test(digest)) {
+    throw new BookletRefusal(400, 'digest_invalid', 'Send the digest of the booklet you read.');
+  }
+  const parts = await resolveParts(env);
+  const missing = parts.filter((p) => p.missing).map((p) => p.part);
+  if (missing.length) {
+    throw new BookletRefusal(409, 'booklet_part_missing',
+      `The booklet cannot be submitted yet: Part ${missing.join(', Part ')} has no text from counsel.`, { parts: missing });
+  }
+  const frozen = frozenOf(parts, await ticksOf(env, booklet.id));
+  const current = await sha256Hex(canonicalJson(frozen));
+  if (current !== digest) {
+    throw new BookletRefusal(409, 'content_changed', 'The booklet changed since you read it. Read it again, then submit.');
+  }
+  const at = new Date().toISOString();
+  const res = await env.DB.prepare(
+    `UPDATE fund_subscription_booklets SET status = 'submitted', frozen_json = ?, digest = ?, submitted_at = ?, updated_at = datetime('now')
+      WHERE id = ? AND status = 'open'`,
+  ).bind(canonicalJson(frozen), current, at, booklet.id).run();
+  if (!(res.meta?.changes && res.meta.changes > 0)) {
+    throw new BookletRefusal(409, 'booklet_not_open', 'This booklet is no longer open, so it cannot be submitted again.');
+  }
+  return { digest: current, submitted_at: at };
+}
+
+/** The admin list: no ticks. */
+export async function listBooklets(env: Env): Promise<Array<Record<string, unknown>>> {
+  const rows = await env.DB.prepare(
+    `SELECT b.uid, b.status, b.submitted_at, b.created_at, b.updated_at, a.user_id, a.investor_type
+       FROM fund_subscription_booklets b JOIN lp_applications a ON a.id = b.application_id
+      ORDER BY b.id DESC LIMIT 500`,
+  ).all<Record<string, unknown>>();
+  return rows.results || [];
+}
+
+/** Withdraw a booklet with a reason, so the applicant can open a new one. */
+export async function withdrawBooklet(env: Env, booklet: BookletRow, adminId: number, reason: unknown): Promise<void> {
+  const text = typeof reason === 'string' ? reason.trim() : '';
+  if (text.length < 10 || text.length > 200) {
+    throw new BookletRefusal(400, 'reason_invalid', 'Give a reason of 10 to 200 characters for the withdrawal.');
+  }
+  if (booklet.status === 'withdrawn') throw new BookletRefusal(409, 'booklet_withdrawn', 'This booklet is already withdrawn.');
+  const res = await env.DB.prepare(
+    `UPDATE fund_subscription_booklets SET status = 'withdrawn', withdrawn_by = ?, withdrawn_reason = ?, updated_at = datetime('now')
+      WHERE id = ? AND status <> 'withdrawn'`,
+  ).bind(adminId, text, booklet.id).run();
+  if (!(res.meta?.changes && res.meta.changes > 0)) throw new BookletRefusal(409, 'booklet_withdrawn', 'This booklet is already withdrawn.');
+}
+

@@ -136,8 +136,9 @@ const isFromLeads = (iv) => (iv.notes || '').startsWith('Promoted from waitlist'
 
 // Recording on one interview (migration 215). Attaching audio is data entry,
 // so it lives here too; transcribing spends money and sits behind the
-// "AI fills the blanks" switch on the Validate desk, so this cell links there
-// rather than running a model from a page with no such switch.
+// "AI fills the blanks" switch in Validate, so this cell links to the
+// interview's record on Customer research (D704), its venture kept, rather
+// than running a model from a page with no such switch.
 function RecordingCell({ interview, onChanged }) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
@@ -165,7 +166,7 @@ function RecordingCell({ interview, onChanged }) {
         {typeof interview.transcript === 'string' ? (
           <span className="block text-[10px]">Transcript on file</span>
         ) : (
-          <Link to="/validate/interviews" className="block text-[10px] font-semibold text-violet-700 dark:text-violet-300">Transcribe on Validate →</Link>
+          <Link to={`/validate/customer-research/${interview.id}${interview.project_id ? `?project_id=${interview.project_id}` : ''}`} className="block text-[10px] font-semibold text-violet-700 dark:text-violet-300">Transcribe on Customer research →</Link>
         )}
       </div>
     );

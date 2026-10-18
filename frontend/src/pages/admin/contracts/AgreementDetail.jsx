@@ -4,11 +4,24 @@ import { contractsApi } from '../../../lib/api/contracts';
 import { reportError } from '../../../lib/log';
 import { ReadState, useRead, SidePanel, Recorded, Missing, button, input, date, downloadPdf } from './parts';
 
+const FILE_KINDS = { signed_copy: 'Signed copy', docx_export: 'Word export', docusign_source: 'DocuSign source', docusign_signed: 'DocuSign signed copy' };
+const RENDERERS = { browser_run: 'Browser Run', pdf_lib: 'Fallback', docx: 'Word', docusign: 'DocuSign' };
+const sizeOf = bytes => bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+
+/** D711 — one row per recorded file: kind, signer, renderer, size, date and hash prefix. */
+export function FileRows({ files }) {
+  if (!files?.length) return null;
+  return <ul className="space-y-1 text-xs">{files.map((f, i) => <li key={i}>
+    {FILE_KINDS[f.kind] || f.kind}{f.signer ? ` · Signer ${f.signer}` : ''} · {RENDERERS[f.renderer] || f.renderer} · {sizeOf(f.bytes)} · {date(f.created_at)} · <span className="font-mono">{String(f.sha256 || '').slice(0, 12)}</span>{f.stored ? '' : ' · not stored'}
+  </li>)}</ul>;
+}
+
 const eventNames = { email_sent: 'Sent', provider_sent: 'Sent through DocuSign', email_resent: 'Sent again', envelope_created: 'Created', envelope_viewed: 'Viewed', envelope_signed: 'Signed', envelope_rejected: 'Declined', reminder_sent: 'Reminder sent', email_failed: 'Invitation failed' };
 export default function AgreementDetail({ uid, onClose, onChanged }) {
   const detail = useRead(() => api.adminGetContract(uid), [uid]);
   const history = useRead(() => contractsApi.history(uid), [uid]);
   const pdf = useRead(() => contractsApi.signedPdf(uid), [uid]);
+  const files = useRead(() => contractsApi.files(uid), [uid]);
   const [voiding, setVoiding] = useState(false);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
@@ -34,6 +47,7 @@ export default function AgreementDetail({ uid, onClose, onChanged }) {
         {history.data.voids?.map((event, i) => <p key={i}>Voided · {date(event.ts)} · {event.reason}</p>)}
       </>}</ReadState>
       <h3 className="font-bold">Signed PDF</h3><ReadState read={pdf} what="Signed PDF">{pdf.data && (pdf.data.available ? <div><p className="font-mono break-all text-xs">SHA-256: {pdf.data.sha256}</p><button type="button" className={button} onClick={() => downloadPdf(pdf.data.pdf_base64, 'signed-agreement.pdf')}>Download signed PDF</button></div> : <Missing reason={pdf.data.reason} />)}</ReadState>
+      <ReadState read={files} what="Recorded files">{files.data && (files.data.files?.length ? <FileRows files={files.data.files} /> : <Missing reason={files.data.reason || 'No rendered file is recorded for this envelope.'} />)}</ReadState>
       {row.void_reason && <p>Void reason: {row.void_reason}</p>}
       <div className="flex gap-2">{row.can_resend && <button type="button" className={button} disabled={busy} onClick={() => act('resend')}>Resend</button>}
         {['documents', 'esign'].includes(row.source) && !['signed', 'void'].includes(row.status) && <button type="button" className={button} disabled={busy} onClick={() => setVoiding(true)}>Void…</button>}</div>

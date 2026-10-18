@@ -2533,9 +2533,10 @@ function AppInner() {
           D661 (#1474): /validate is the cycle overview from #1487's read, and
           /validate/<module> its module pages. D704 (#1666, decision 2): the
           root no longer branches, so every role the guard admits, with or
-          without `?mode=workspace`, gets the cycle page. Interviews, Pain map
-          and Hypotheses still render below until #1666's PR 2b and closing PR
-          redirect them to their modules (`ValidateZoneRedirect`). */}
+          without `?mode=workspace`, gets the cycle page. Interviews redirects
+          to Customer research below (PR 2b); Pain map and Hypotheses still
+          render until #1666's closing PR redirects them too
+          (`ValidateZoneRedirect`). */}
       <Route path="/validate" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" />)} />
       {/* D685 §5.4: Record a session is the Validate page with the setup lightbox open over it, deep-linkable; closing goes back. */}
       <Route path="/validate/record" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" lightbox />)} />
@@ -2546,7 +2547,9 @@ function AppInner() {
       {/* D695: every Add has an address. Customer research's Add stays Record a session, the query kept. */}
       <Route path="/validate/customer-research/new" element={guard(labRoles(['admin', 'founder']), <HistoryRedirect to="/validate/record" />)} />
       <Route path="/validate/:slug/new" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="validate" adding />)} />
-      <Route path="/validate/interviews" element={guard(labRoles(['admin', 'founder']), founderEditor(<FounderValidateWorkspace />))} />
+      {/* D704 (#1666, PR 2b): the Interviews page is Customer research. The
+          query and the hash are kept, and ?new= opens what it opened (decision 1). */}
+      <Route path="/validate/interviews" element={guard(labRoles(['admin', 'founder']), <ValidateZoneRedirect zone="interviews" />)} />
       {/* D685 §5.11 (#1589): one interview's review: its sessions, the summary and the proposed findings.
           D696 (#1658): it is Customer research's record, so its address is
           /validate/customer-research/:id, and the old one redirects there with

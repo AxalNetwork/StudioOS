@@ -27,7 +27,7 @@ The canvases are `design/canvases/integrated/Cycle Overview.dc.html` and its two
 | `validatePhone.js` | The phone root's model (D703, #1665; begun as D685 §5.12's Validate focus, #1589): for each cycle, the Worker's `focus`, `meter` and `index` (#1701) as sent, the cycle as each function's last argument. Where one is null (unreadable) it falls back to the raw overview's figures and cards (raw because adapting a card replaces its series); an `index` that is not an array reads as none sent. `targetValue` is "Set a target"'s value for `PUT /cycles/validate/interviews-target` |
 | `PhoneCycleRoot.jsx` | D703 (#1665): a cycle's phone root, One Next Thing, for all four cycles: the eyebrow with the page's Eadwyn button, the headline, the why, the meter, a 52px CTA, "Then" once, "Everything else in <Cycle>" and "Also in <Cycle>". It draws the Worker's `focus`, `meter` and `index` through `validatePhone.js`, which takes the cycle as each function's last argument. `CycleRoute.jsx` draws it below 1024px on a cycle's root, in place of the overview and `AlsoIn` (#1665's PR 1b); the desktop page draws neither |
 | `PhoneModulePage.jsx` | D703 (#1665): a module as a pushed page on a phone, with `CycleModulePage`'s props: `CycleBar` (the exported wrapper of `PhoneBar`, lifted out of the body's gutter), "One next thing" with the module's Add as its CTA, the chart at a glance, the table's controls, one `PhoneRows` group of records (a row opens its record exactly when `rowLinks` says so), paging, the tool links as handed and `children`. Also exports `PHONE_GUTTER`, the body's gutter below `lg`, for an action page. `CycleRoute.jsx` renders it below 1024px on a module route, in place of `CycleModulePage` (#1665's PR 2c) |
-| `RecordView.jsx` (phone) | D703: under `RecordPhoneProvider` (which `CycleRoute` will set from `usePhoneWidth()`), `RecordView` and its exported parts draw CO:270-273's groups: Next for this record (run through the declared action), the pills, At a glance, each section with its anchor and its action as the last row, Activity with Show all, and Actions with a danger action in red |
+| `RecordView.jsx` (phone) | D703: under `RecordPhoneProvider`, which `CycleRoute` sets from `usePhoneWidth()` in record mode (#1665's PR 3a), `RecordView` and its exported parts draw CO:270-273's groups: Next for this record (run through the declared action), the pills, At a glance, each section with its anchor and its action as the last row, Activity with Show all, and Actions with a danger action in red |
 | `CallsHistory.jsx` | Raise's Calls history (D686 §5.6, #1598), Capital relationships' `#calls` section from the module read's `parts.calls`: Coming soon while round calls are off, Unreadable on a failed read |
 | `ToolsHistory.jsx` | Build's Tools history (D686 §5.4), Operating systems' `#tools` section from the module read's `parts.tools` |
 | `UpdateAskReplies.jsx` | "From update asks" on Distribution (a Lead) and Partner network (a Partner), D686 §5.8 (#1599): the replies a shared update's customer and partner asks brought in, from the module read's `parts.from_update_asks`; nothing is drawn while there is none |
@@ -59,9 +59,10 @@ On a module page, `?add=1` is its first Add's address: the URL becomes `/<cycle>
   `adapters/validate.js` maps it, and `cloudflare-worker/test/cycle_adapters_d661.test.ts`
   runs the Worker's real output through it: every `ok` card must draw, and
   every column must have a value source.
-- **A module's working tool stays where it is.** D695 supplies the Add/Edit forms and D696 the record pages. Validate’s curation remains in its working tools until #1659 and #1666, so a module page links
-  to the zone page that edits it (`/validate/interviews`, `/pain-map`,
-  `/hypotheses`, `/build/competitors`). Add is drawn only where it opens a form.
+- **A module's working tool stays where it is.** D695 supplies the Add/Edit forms and D696 the record pages. Validate’s curation remains in its working tools until #1666's closing PR, so a module page links
+  to the zone page that edits it (`/validate/pain-map`, `/validate/hypotheses`,
+  `/build/competitors`). Customer research has none: since D704's PR 2b its
+  module and record are the tool, and `/validate/interviews` redirects there. Add is drawn only where it opens a form.
   Every Add has an address (D695): `App.jsx` routes `/<cycle>/:slug/new` to
   `CycleRoute` with `adding`, and `/validate/customer-research/new` redirects
   to Record a session, the query kept. `RecordsTable`'s Add link passes its

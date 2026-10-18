@@ -34,8 +34,8 @@
 export const AI_SURFACE = {
   /** Validate · fill proposals (`/api/founder/validate/propose`) and the citations they fetch. */
   validate: '/validate',
-  /** Validate · Interviews — transcribing an interview recording. */
-  validateInterviews: '/validate/interviews',
+  /** Validate · Customer research's Interviews — transcribing an interview recording (D704: the page became the module). */
+  validateInterviews: '/validate/customer-research',
   /** Research · Ask — the grounded answer (`POST /api/research/ask`). */
   researchAsk: '/research/ask',
   /** Research · Companies — the competitor analysis (`/api/competitors/*`). */

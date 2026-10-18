@@ -3,9 +3,10 @@
  *   test 1, `validateZoneTarget` returns decision 1's table exactly;
  *   test 2's MemoryRouter case, `ValidateZoneRedirect` lands on the module (PR 2a);
  *   test 3, `/validate` no longer branches (PR 2a);
- *   test 4's empty-bucket case, `zoneForPath` answers null, not `undefined`.
- * PR 2b and the closing PR add test 2's route case and tests 4-8 when they
- * mount the redirects and remove the zones.
+ *   test 4's empty-bucket case, `zoneForPath` answers null, not `undefined`;
+ *   test 2's route case and test 5's items for `/validate/interviews` (PR 2b).
+ * The closing PR adds the other two route cases and tests 4-8 when it mounts
+ * their redirects and removes the zones.
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/validate_pages_removed_d704.test.mjs
  */
@@ -19,6 +20,8 @@ import { ValidateZoneRedirect } from '../src/pages/cycles/ValidateZoneRedirect.j
 import { installDocument } from './_contracts_dom.mjs';
 import { VALIDATE_ZONE_TARGETS, validateZoneTarget } from '../src/pages/cycles/validateRedirects.js';
 import { zoneForPath, bucketsFor } from '../src/workspaces/shellConfig.js';
+import { FOUNDER_TOOLS } from '../src/pages/cycles/founderToolNavigation.js';
+import { routeBlock } from './_routes.mjs';
 
 /** A target with its query as a set of `key=value` pairs, so order never matters. */
 const asSet = (t) => (t == null ? t : {
@@ -116,4 +119,31 @@ test('D704 test 3: /validate renders CycleRoute for every admitted role, with no
   assert.doesNotMatch(app, /founderValidateLanding/);
   assert.doesNotMatch(app, /<Navigate to="\/validate\/interviews"/, 'no role is sent to the Interviews page from the root');
   assert.ok(existsSync('frontend/src/pages/cycles/ValidateZoneRedirect.jsx'));
+});
+
+// ── PR 2b: /validate/interviews is Customer research ────────────────────────
+
+test('D704 test 2 (route): /validate/interviews renders ValidateZoneRedirect under its guard, and the old tool is gone from it', () => {
+  const app = readFileSync('frontend/src/App.jsx', 'utf8');
+  const block = routeBlock(app, '/validate/interviews');
+  assert.ok(block, 'the route is still declared, so a bookmark lands');
+  assert.match(block, /element=\{guard\(labRoles\(\['admin', 'founder'\]\), <ValidateZoneRedirect zone="interviews" \/>\)\}/);
+  assert.doesNotMatch(block, /FounderValidateWorkspace|founderEditor/, 'no editor chrome and no old page');
+  // #1658's one-interview redirect is untouched.
+  assert.match(routeBlock(app, '/validate/interviews/:id'), /<ParamRedirect to="\/validate\/customer-research\/:id" \/>/);
+});
+
+test('D704 test 5 (interviews): no tool, door or Lab link leads to the Interviews page', () => {
+  const route = readFileSync('frontend/src/pages/cycles/CycleRoute.jsx', 'utf8');
+  const at = route.indexOf('tools: toFnMap({');
+  const tools = route.slice(at, route.indexOf('\n    }),', at)); // Validate's block, to its closing line
+  assert.doesNotMatch(tools, /'customer-research':/, 'Customer research has no tool link: its module is the tool');
+  assert.doesNotMatch(tools, /\/validate\/interviews/);
+  assert.match(tools, /'market-intelligence': \(\) => \(\{ label: 'Open the competitor tracker', href: '\/build\/competitors' \}\)/, 'Market intelligence keeps its tool');
+  assert.equal(FOUNDER_TOOLS.some((t) => t.path === '/validate/interviews' || t.aliases?.includes('/validate/interviews')), false, 'FOUNDER_TOOLS has no /validate/interviews');
+  assert.ok(FOUNDER_TOOLS.some((t) => t.path === '/build/discovery'), 'the other Customer research tools stay');
+  const lab = readFileSync('frontend/src/pages/SpinoutLabDiscoveryPage.jsx', 'utf8');
+  assert.ok(lab.includes("<Link to={`/validate/customer-research/${interview.id}${interview.project_id ? `?project_id=${interview.project_id}` : ''}`}"), "the Lab's cell opens the interview's record, its venture kept");
+  assert.match(lab, />Transcribe on Customer research →<\/Link>/);
+  assert.doesNotMatch(lab, /to="\/validate\/interviews"/);
 });

@@ -59,7 +59,8 @@ async function mounted(handler, { url = '/build/solution-design/7?project_id=3',
     fiber: name => fiber(container, name),
     flush: () => act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); }),
     run: callback => act(async () => { await callback(); }),
-    click: label => act(async () => { const node = nodes().find(n => n.tagName === 'BUTTON' && text(n) === label); assert.ok(node, 'button: ' + label); await props(node).onClick({ preventDefault() {}, stopPropagation() {} }); }),
+    // Below 1024px a record's action is a phone row, "<label> ›" (D703 step 7).
+    click: label => act(async () => { const bare = (v) => v.replace(/\s+/g, '').replace(/›$/, ''); const node = nodes().find(n => n.tagName === 'BUTTON' && (text(n) === label || bare(text(n)) === bare(label))); assert.ok(node, 'button: ' + label); await props(node).onClick({ preventDefault() {}, stopPropagation() {} }); }),
     async close() { await act(async () => root.unmount()); Object.assign(globalThis, previous); restore(); },
   };
 }

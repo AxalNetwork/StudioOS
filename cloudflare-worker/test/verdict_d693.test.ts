@@ -23,7 +23,7 @@ import cycleVerdict from '../src/routes/cycle_verdict.ts';
 import founderValidate from '../src/routes/founder_validate.ts';
 import {
   recordDecision, currentDecision, decisionsFor, decisionById, DECISION_EVIDENCE_BAR, NO_EVIDENCE_REASON,
-  VerdictError, adaptEvidenceReader, verdictCard, decisionRecords, TIMELINE_CAP,
+  VerdictError, adaptEvidenceReader, evidenceFor, verdictCard, decisionRecords, TIMELINE_CAP,
   type EvidenceItem, type EvidenceSource, type PivotStatements,
 } from '../src/services/verdict.ts';
 import { recordQuery } from '../src/services/cycleValidate.ts';
@@ -32,6 +32,8 @@ import { ensurePainGroupsSchema } from '../src/services/painGroups.ts';
 import { createCycleRecords } from '../src/routes/cycle_records.ts';
 import cycleValidateRoute from '../src/routes/cycle_validate.ts';
 import { verdictSpec } from '../src/services/records/verdict.ts';
+import { createHypothesis } from '../src/services/validateWriters.ts';
+import { evidenceFor as validateEvidenceFor } from '../src/services/validateEvidence.ts';
 import { activityFor } from '../src/services/cycleActivity.ts';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { tableFromBaseline } from './_baseline.mjs';
@@ -69,7 +71,9 @@ function fixture({ fk = false }: { fk?: boolean } = {}) {
   db.exec(MIG464);
   // #1703: #1690's convention (`created_by` and the activity index).
   db.exec(sqlOf('459_cycle_activity_convention.sql'));
-  // #1704 PR A: #1692's `hypotheses.deadline`, the card's Next.
+  // #1704 PR A: #1692's `hypotheses.deadline`, the card's Next. #1703: the
+  // real evidence reader's `hypothesis_evidence_links` and the Pivot's
+  // createHypothesis columns. Applied once: its ALTERs cannot run twice.
   db.exec(sqlOf('460_validate_record_stores.sql'));
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id, spinout_lab_active) VALUES (?, ?, ?, ?, 1, ?, ?)');
   u.run(FOUNDER, 'founder', 'Fay Founder', 'fay@example.test', 1001, 0);
@@ -476,7 +480,6 @@ test('the route refuses a malformed body in the documented order', async () => {
     [{ decision: 'proceed', for: 'venture', evidence: Array.from({ length: 51 }, (_, i) => `k-${i}`) }, 400, 'A decision rests on at most 50 pieces of evidence.'],
     [{ decision: 'proceed', for: 'venture', reasoning: 'x'.repeat(4001) }, 400, 'Reasoning must be 4,000 characters or fewer.'],
     [{ decision: 'proceed', for: `h-${h}`, pivot_claim: 'Carriers want a phone app' }, 400, 'Only a Pivot starts a new hypothesis.'],
-    [{ decision: 'pivot', for: `h-${h}`, pivot_claim: 'Carriers want a phone app' }, 400, 'A Pivot cannot start a hypothesis yet.'],
   ];
   for (const [body, status, detail] of cases) {
     const r = await post(db, FOUNDER, body);
@@ -614,13 +617,13 @@ test('11: the old POST records a given venture decision that supersedes only the
 // ---------------------------------------------------------------------------
 
 const EVIDENCE = items(5, { contradicting: 1 }).map((e, i) => ({ ...e, strength: i === 4 ? null : e.strength }));
-function recordsApp(list: EvidenceItem[] = EVIDENCE) {
+function recordsApp(list: EvidenceItem[] | null = EVIDENCE) {
   const r = new Hono<any>();
-  r.route('/api/cycles', createCycleRecords({ validate: { verdict: verdictSpec({ evidenceSource: fixed(list) }) } }));
+  r.route('/api/cycles', list === null ? createCycleRecords() : createCycleRecords({ validate: { verdict: verdictSpec({ evidenceSource: fixed(list) }) } }));
   r.onError((err: any, c) => c.json({ detail: String(err?.message || '') }, 500));
   return r;
 }
-async function rec(db: any, who: number, method: string, path: string, body?: unknown, list?: EvidenceItem[]) {
+async function rec(db: any, who: number, method: string, path: string, body?: unknown, list?: EvidenceItem[] | null) {
   const token = await new SignJWT({ user_id: who, role: roleOf[who] }).setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
   const r = recordsApp(list);
@@ -1141,4 +1144,120 @@ test('15: the MCP context tool still reads three Validate slugs, never Verdict',
   assert.ok(union, 'the slug union is still there');
   assert.deepEqual(union![1].split('|').map((x) => x.trim().replace(/'/g, '')), ['problem-discovery', 'ideal-customer-profile', 'experiments']);
   assert.equal(/verdict/i.test(src), false);
+});
+
+// #1703 closing integration: real evidence, production Pivot and registry.
+function realEvidence(db: any) {
+  const links = painLinkSetup(db);
+  db.prepare('UPDATE discovery_interviews SET pains_json = ? WHERE id = ?').run('["slow dispatch"]', links.iv);
+  db.prepare("UPDATE hypothesis_pain_links SET strength = 'pattern', direction = 'contradicts' WHERE id = ?").run(links.l2);
+  db.prepare("UPDATE hypothesis_pain_links SET strength = 'anecdote' WHERE id = ?").run(links.l1);
+  for (let i = 0; i < 3; i++) {
+    const iv = db.prepare("INSERT INTO discovery_interviews (project_id, interviewee_name, interview_date) VALUES (?, 'Fixture carrier', '2026-10-12') RETURNING id").get(P) as any;
+    db.prepare("INSERT INTO hypothesis_evidence_links (uid, project_id, hypothesis_id, kind, ref_id, direction, strength) VALUES (?, ?, ?, 'interview', ?, 'supports', 'measured')")
+      .run(crypto.randomUUID(), P, links.h1, String(iv.id));
+  }
+  return links;
+}
+
+test('4 integration: production Pivots create distinct codes alongside New hypothesis and keep decision activity private', async () => {
+  for (const pivotFirst of [true, false]) {
+    const db = fixture(); const env = envOf(db);
+    const pivot = () => recordDecision(env, userOf(FOUNDER), { id: P }, {
+      decision: 'pivot', for: 'venture', pivot_claim: 'Dispatch by phone', reasoning: 'Private decision reasoning',
+    });
+    const ordinary = () => createHypothesis(env, { projectId: P, userId: FOUNDER, claim: 'Dispatch by rail' });
+    const results = await Promise.all(pivotFirst ? [pivot(), ordinary()] : [ordinary(), pivot()]);
+    const recorded = results[pivotFirst ? 0 : 1] as any;
+    const claims = db.prepare('SELECT id, code, created_by FROM hypotheses ORDER BY id').all() as any[];
+    assert.deepEqual(claims.map((h) => h.code).sort(), ['H1', 'H2']);
+    assert.equal(claims.find((h) => h.id === recorded.pivot_hypothesis_id)?.created_by, FOUNDER);
+    assert.equal(rows(db)[0].pivot_hypothesis_id, recorded.pivot_hypothesis_id);
+    assert.equal(recorded.state, 'withheld');
+    const history = await activityFor(env, { projectId: P, entityType: 'validate.experiments', entityId: String(recorded.pivot_hypothesis_id), store: 'hypotheses' });
+    assert.equal(history.items.length, 1);
+    assert.equal(history.items[0].action, 'hypothesis_created');
+    assert.equal(history.items[0].a, 'Created by Fay Founder');
+    const logged = db.prepare("SELECT details FROM activity_logs WHERE project_id = ? AND entity_type = 'validate.experiments' AND entity_id = ?").get(P, String(recorded.pivot_hypothesis_id)) as any;
+    assert.equal(logged.details, 'Hypothesis created');
+    assert.equal(JSON.stringify(history).includes('Private decision reasoning'), false);
+    assert.equal(/pivot|decision/i.test(JSON.stringify(history)), false);
+  }
+});
+
+test('4 integration: a failed real Pivot decision rolls back the hypothesis and both kinds of activity', async () => {
+  const db = fixture();
+  db.exec("CREATE TRIGGER reject_real_decision BEFORE INSERT ON validation_decisions BEGIN SELECT RAISE(ABORT, 'fixture rejects decision'); END");
+  await assert.rejects(recordDecision(envOf(db), userOf(FOUNDER), { id: P }, {
+    decision: 'pivot', for: 'venture', pivot_claim: 'Dispatch by phone',
+  }), /fixture rejects decision/);
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM hypotheses').get() as any).n, 0);
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM activity_logs').get() as any).n, 0);
+  assert.equal(rows(db).length, 0);
+});
+
+test('5 integration: real evidence uses distinct link keys, names claims, and snapshots every displayed field', async () => {
+  const db = fixture(); const env = envOf(db); const links = realEvidence(db);
+  const raw = await validateEvidenceFor({ env, projectId: P });
+  const selected = await evidenceFor(env, P);
+  assert.deepEqual(keys(selected), keys(raw));
+  assert.equal(new Set(keys(selected)).size, 5);
+  assert.deepEqual(keys(selected).slice(0, 2), [`pain-${links.l1}-${links.iv}`, `pain-${links.l2}-${links.iv}`]);
+  assert.ok(selected.every((it) => it.label.includes(`${it.hypothesis_id === links.h1 ? 'H1' : 'H2'} claim`)));
+  const r = await post(db, FOUNDER, { decision: 'pivot', for: 'venture', pivot_claim: 'Dispatch by phone', evidence: keys(selected) });
+  assert.equal(r.status, 201, r.text);
+  assert.equal(r.body.state, 'given');
+  assert.ok(r.body.pivot_hypothesis_id);
+  db.exec("UPDATE pain_groups SET title = 'Changed theme'; UPDATE hypotheses SET claim = 'Changed claim'; UPDATE hypothesis_pain_links SET strength = 'measured', direction = 'contradicts'; UPDATE hypothesis_evidence_links SET strength = 'anecdote', direction = 'contradicts'; UPDATE discovery_interviews SET interview_date = '2026-10-16'");
+  assert.notDeepEqual(await evidenceFor(env, P), selected);
+  const saved = await decisionById(env, P, r.body.id);
+  assert.deepEqual(saved!.evidence.map((it) => [it.ref_id, it.label, it.strength, it.direction, it.on_date]),
+    selected.map((it) => [it.id, it.label, it.strength, it.direction, it.date]));
+});
+
+test('5 integration: a foreign real evidence key is 404 before any Pivot, decision, snapshot or activity write', async () => {
+  const db = fixture(); const env = envOf(db); realEvidence(db);
+  const theirs = hypothesis(db, P_OTHER, 'H1');
+  const iv = db.prepare("INSERT INTO discovery_interviews (project_id, interviewee_name) VALUES (?, 'Foreign fixture') RETURNING id").get(P_OTHER) as any;
+  const link = db.prepare("INSERT INTO hypothesis_evidence_links (uid, project_id, hypothesis_id, kind, ref_id, direction) VALUES (?, ?, ?, 'interview', ?, 'supports') RETURNING id")
+    .get(crypto.randomUUID(), P_OTHER, theirs, String(iv.id)) as any;
+  const before = (db.prepare('SELECT COUNT(*) AS n FROM hypotheses').get() as any).n;
+  const selected = await evidenceFor(env, P);
+  const r = await post(db, FOUNDER, { decision: 'pivot', for: 'venture', pivot_claim: 'Must not be written', evidence: [...keys(selected).slice(0, 4), `evidence-${link.id}`] });
+  assert.equal(r.status, 404);
+  assert.equal(r.body.detail, 'Evidence not found.');
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM hypotheses').get() as any).n, before);
+  assert.equal(rows(db).length, 0);
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM validation_decision_evidence').get() as any).n, 0);
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM activity_logs').get() as any).n, 0);
+});
+
+test('6/8/14 integration: registered Verdict serves real choices and records with the decision gates and actions', async () => {
+  const db = fixture(); const env = envOf(db); realEvidence(db);
+  const options = await rec(db, FOUNDER, 'GET', `/form-options?project=${P}`, undefined, null);
+  assert.equal(options.status, 200, options.text);
+  assert.equal(options.body.evidence.bar, 5);
+  const selected = await evidenceFor(env, P);
+  assert.deepEqual(options.body.evidence.options.map((it: any) => it.value), keys(selected));
+  const d = await post(db, FOUNDER, { decision: 'proceed', for: 'venture', evidence: keys(selected) });
+  assert.equal(d.status, 201, d.text);
+  for (const who of [PARTNER, ADVISOR, INVESTOR, OTHER]) {
+    for (const path of [`/records/${d.body.id}?project=${P}`, `/records/${d.body.id}/activity?project=${P}`, `/form-options?project=${P}`]) {
+      assert.equal((await rec(db, who, 'GET', path, undefined, null)).status, 403);
+    }
+    for (const key of ['add-commitment', 'commitment-done']) {
+      assert.equal((await rec(db, who, 'POST', `/records/${d.body.id}/actions/${key}?project=${P}`, {}, null)).status, 403);
+    }
+  }
+  const foreign = await rec(db, OTHER, 'GET', `/records/${d.body.id}?project=${P_OTHER}`, undefined, null);
+  assert.equal(foreign.status, 404);
+  const record = await rec(db, FOUNDER, 'GET', `/records/${d.body.id}?project=${P}`, undefined, null);
+  assert.equal(record.status, 200, record.text);
+  assert.equal(record.body.title, 'Proceed · the venture');
+  const added = await rec(db, FOUNDER, 'POST', `/records/${d.body.id}/actions/add-commitment?project=${P}`, { text: 'Call carriers' }, null);
+  assert.equal(added.status, 200, added.text);
+  const commitment = commitments(db)[0];
+  const done = await rec(db, FOUNDER, 'POST', `/records/${d.body.id}/actions/commitment-done?project=${P}`, { commitment_id: commitment.id }, null);
+  assert.equal(done.status, 200, done.text);
+  assert.ok(commitments(db)[0].done_at);
 });
