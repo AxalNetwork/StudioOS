@@ -988,6 +988,14 @@ integrations.get('/:uid/logs', async (c) => {
 
 // ───────────────────────────────────────────────────────────────────── webhook
 
+/**
+ * Providers whose `webhook` handler verifies the delivery's signature itself
+ * and throws on anything it cannot verify, so the connection row needs no
+ * stored signing key. HubSpot signs with the app's client secret (v3), which
+ * `hubspot.ts`'s handler checks before it reads the body.
+ */
+const VERIFIED_IN_HANDLER = new Set(['hubspot']);
+
 integrations.post('/webhook/:provider/:uid', async (c) => {
   await ensureIntegrationsSchema(c.env);
   const provider = c.req.param('provider').toLowerCase();
@@ -995,23 +1003,29 @@ integrations.post('/webhook/:provider/:uid', async (c) => {
 
   const row = await c.env.DB.prepare('SELECT * FROM integrations WHERE uid = ? AND provider_key = ?')
     .bind(uid, provider).first<IntegrationRow>();
-  if (!row) return c.json({ error: 'not_found' }, 404);
+  // A delivery is taken only for an active connection with a handler and
+  // with a signing key to check it against (or a provider that checks its own
+  // signature). Anything else gets the unknown-connection answer, before the
+  // body is read: no handler runs, no fetch is made and nothing is logged.
+  const impl = getProviderImpl(provider);
+  if (!row || row.status !== 'active' || !impl?.webhook ||
+      (!row.webhook_secret_enc && !VERIFIED_IN_HANDLER.has(provider))) {
+    return c.json({ error: 'not_found' }, 404);
+  }
 
   const body = await c.req.text();
   // Generic signature header — providers with non-standard formats
   // (e.g. Calendly's `Calendly-Webhook-Signature`) implement
   // `verifyWebhook` and read their own header from `headers` instead.
-  const implForHeader = getProviderImpl(provider);
   const signature = c.req.header('x-axal-signature')
     || c.req.header('x-hub-signature-256')
     || c.req.header('x-signature')
-    || (implForHeader?.verifyWebhook ? 'provider-verified' : null);
+    || (impl.verifyWebhook ? 'provider-verified' : null);
 
-  // HMAC verification when a webhook_secret is configured. We compute the
+  // HMAC verification against the connection's signing key. We compute the
   // SHA-256 HMAC over the raw body and compare with constant-time equality.
-  // A missing signature header is rejected just as firmly as a wrong one —
-  // otherwise an attacker who knows the URL could replay events without
-  // ever holding the secret.
+  // A missing signature header is refused just as firmly as a wrong one, so
+  // only a sender holding the key gets a delivery processed.
   if (row.webhook_secret_enc) {
     const secret = await decryptWebhookSecret(c.env, row.uid, row.webhook_secret_enc);
     if (!secret) {
@@ -1033,10 +1047,9 @@ integrations.post('/webhook/:provider/:uid', async (c) => {
     // Provider-specific verifier wins when present (Calendly uses a
     // Stripe-style `t=...,v1=...` format that the default check can't
     // express). Fall back to the default `sha256=hex` HMAC otherwise.
-    const implForVerify = getProviderImpl(provider);
     let valid: boolean;
-    if (implForVerify?.verifyWebhook) {
-      try { valid = await implForVerify.verifyWebhook(secret, body, c.req.raw.headers); }
+    if (impl.verifyWebhook) {
+      try { valid = await impl.verifyWebhook(secret, body, c.req.raw.headers); }
       catch { valid = false; }
     } else {
       const expected = await hmacHex(secret, body);
@@ -1059,19 +1072,6 @@ integrations.post('/webhook/:provider/:uid', async (c) => {
     return c.json({ ok: true, skipped: 'company_or_sync_disabled' });
   }
 
-  const impl = getProviderImpl(provider);
-  if (!impl?.webhook) {
-    // Without a handler we simply ack and store the (redacted) payload so
-    // ops can inspect via /:uid/logs. We deliberately do NOT 501 — the
-    // foundation accepts the inbound event for later replay.
-    await logEvent(c.env, {
-      integration_id: row.id, user_id: row.user_id, provider_key: provider,
-      direction: 'inbound', event_type: 'webhook', status: 'ok',
-      response_summary: 'received (no handler yet)',
-      payload: safeJson<unknown>(body, body.slice(0, 500)),
-    });
-    return c.json({ ok: true, accepted: true });
-  }
   try {
     const out = await impl.webhook(c, row, body, signature);
     await logEvent(c.env, {

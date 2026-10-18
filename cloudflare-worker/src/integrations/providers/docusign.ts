@@ -28,11 +28,12 @@
  * without prod credentials still gets a working flow).
  *
  * Required env secrets (per-environment): `DOCUSIGN_CLIENT_ID`,
- * `DOCUSIGN_CLIENT_SECRET`. The optional `DOCUSIGN_CONNECT_HMAC` env
- * var, when set on the worker side, is used as the FALLBACK webhook
- * secret if the per-connection webhook_secret column hasn't been
- * configured yet (e.g. the user copy-pasted the same secret DocuSign
- * Admin generates for the whole account).
+ * `DOCUSIGN_CLIENT_SECRET`. There is no account-wide webhook secret: a
+ * Connect delivery is checked against the connection's own
+ * `webhook_secret_enc`, which `postConnect` stores with the Connect
+ * configuration it provisions, or the first send stores
+ * (`ensureDocusignWebhookSecret`). The receiver in routes/integrations.ts
+ * answers a row with none as an unknown connection (D719).
  *
  * IMPORTANT: imported once from index.ts so registerProvider() runs at boot.
  */
