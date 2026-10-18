@@ -438,6 +438,45 @@ test('after a reload the session page hands a run under way to the recorder and 
   assert.equal(followed.length, 2);
 });
 
+test('#1933 a session imported from a chat, an assistant or a call never opens the Recording View; the page shows its processing', async () => {
+  const followed = [];
+  const rec = stubRecorder({ phase: 'idle', session: null });
+  rec.follow = (arg) => { followed.push(arg); return Promise.resolve('done'); };
+  setRecorder(rec);
+  const read = (submitted_via) => ({
+    session: { id: 7, interview_id: 41, status: 'transcribed', channel: 'text', consent_status: 'given', ...(submitted_via ? { submitted_via } : {}) },
+    interview: { id: 41, interviewee_name: 'Dana Ruiz' }, call_label: null,
+    processing: { stage: 'structuring', done: null, total: null, error: null, stale: false }, segments: [], marks: [], chunks: [],
+  });
+  const api = (r) => ({ get: async () => r, receipt: async () => ({ items: [] }), models: async () => ({ live: [], final: [] }), placements: async () => ({ items: [] }) });
+  const mount = async (r) => {
+    const restore = installDocument();
+    if (!document.documentElement?.classList) document.documentElement = { ...(document.documentElement || {}), classList: { contains: () => false } };
+    let path = null;
+    function Probe() { const l = useLocation(); path = `${l.pathname}${l.search}`; return null; }
+    const container = document.createElement('div'); document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(h(MemoryRouter, { initialEntries: ['/validate/session/7'] }, h(Probe),
+        h(Routes, null, h(Route, { path: '/validate/session/:id', element: h(InterviewSessionPage, { api: api(r) }) }), h(Route, { path: '/validate/record/live', element: h('p', null, 'live') }))));
+    });
+    await act(async () => { await new Promise((res) => setTimeout(res, 0)); });
+    const textOf = (n) => (!n ? '' : n.nodeType === 3 ? n.textContent || '' : n.childNodes?.length ? n.childNodes.map(textOf).join(' ') : n.textContent || '');
+    const shown = textOf(container).replace(/\s+/g, ' ');
+    await act(async () => root.unmount()); restore();
+    return { path, shown };
+  };
+  for (const via of ['whatsapp', 'telegram', 'claude', 'zoom', 'google_meet']) {
+    const { path, shown } = await mount(read(via));
+    assert.equal(path, '/validate/session/7', `${via}: stays on the session page`);
+    assert.match(shown, /Processing/, `${via}: the page shows the processing itself`);
+    assert.doesNotMatch(shown, /You are recording another session/);
+  }
+  assert.equal(followed.length, 0, 'nothing handed to the recorder');
+  assert.equal((await mount(read(null))).path, '/validate/record/live?session=7', 'a recorder session still opens it');
+  assert.equal(followed.length, 1);
+});
+
 test('the live route: bound to the recording; another session\'s address goes to its page; a finished one lands on Customer research', () => {
   const st = ST();
   assert.equal(liveRedirect(st, null), null);
