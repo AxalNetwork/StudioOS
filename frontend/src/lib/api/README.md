@@ -132,7 +132,8 @@ D715 (#1780): `adminMercury.js` calls `/api/admin/mercury` (`cloudflare-worker/s
 the four entity connections (each with its accounts by ending), the Super
 Admin's connect with `confirm_read_only: true` and disconnect with a reason,
 sync now, and the accounts, transactions and matches reads. D749 (#1838) adds
-`markNotOurs` and `withdrawNotOurs`. Every read is audited by the Worker;
+`markNotOurs` and `withdrawNotOurs`. D717 (#1856): `transactions` takes
+`direction` (`credit` or `debit`). Every read is audited by the Worker;
 nothing here moves money. #1779's console imports it.
 
 D713 (#1778): `mercuryPersonal.js` calls a member's own read-only Mercury:
