@@ -4,6 +4,28 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## Consent before anything from a WhatsApp chat is kept (D754, #1893)
+
+- Migration 488: `channel_consents`, one row per consent request on a chat
+  (the notice's version, when it was asked and delivered, the answer and its
+  source), and `channel_threads.consent_state`, which the gate reads.
+- A WhatsApp chat added to an interview now links and waits: its text stays
+  pending, its voice notes are never fetched, and Structure, Ask, the summary,
+  finish and process refuse, until the interviewee taps "Yes, I agree" on
+  Axal's notice or replies YES to it, or the member confirms once WhatsApp
+  reported the notice delivered. A "No" deletes what waited; a STOP or a later
+  "No" withdraws consent, sets the chat aside and switches quotes off.
+- `POST /api/channels/threads/:uid/consent-request` sends the notice (reply
+  buttons, from the member's number, inside the 24-hour window, at most twice
+  and 24 hours apart, linking `/privacy/interviews?n=1`);
+  `POST /api/channels/threads/:uid/consent` takes the member's word; assign
+  takes `consent: { ask: true } | { method }`. The reply route refuses
+  `consent:` client keys.
+- The session gate (`consentBlocks`) also refuses any session holding audio,
+  and Open recording refuses without consent. Customer research reads
+  "Waiting for consent" or "Declined in WhatsApp". Telegram is unchanged
+  (`consentRequired('telegram')` stays false until D756).
+
 ## The bank-account registry restyled per entity (D717, #1856)
 
 - `/admin?tab=bank-accounts` (`BankAccountsConsole.jsx`) now draws the "Legal

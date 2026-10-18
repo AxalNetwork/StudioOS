@@ -19,7 +19,11 @@
  *   GET    /threads/:uid            one conversation; its pending messages, decrypted for the member only;
  *                                   a waiting voice note carries `transcription_failure` (#1586)
  *   POST   /threads/:uid/assign     { interview_id } | { create: { interviewee_name, interviewee_company?, project_id } },
- *                                   and quote_consent?: true (D685 §5.1.4)
+ *                                   and quote_consent?: true (D685 §5.1.4), and consent?: { ask: true } | { method }
+ *                                   (D754: a chat that waits for consent links and waits; `ask` sends the notice)
+ *   POST   /threads/:uid/consent-request  Axal's consent notice in the chat (D754 §5): only when the member
+ *                                   presses it, inside the window, at most twice, 24 h apart
+ *   POST   /threads/:uid/consent    { method }: the member's word, once the notice was delivered (D754 §4)
  *   POST   /threads/:uid/ignore     { ignored?: boolean } (default true)
  *   POST   /threads/:uid/reply      { text, client_key }: once per client_key, inside the 24 h window
  *   POST   /threads/:uid/voice/:message/retry  a waiting voice note again, once what stopped it allows (#1586)
@@ -50,6 +54,15 @@
  * connection's daily cap (D1, fails closed) and the member's AI budget (D640).
  * Only the text is kept; the audio is never stored.
  *
+ * NOTHING FROM A CHAT IS KEPT BEFORE CONSENT where its provider asks for it
+ * (D754, #1893; services/channels/consent.ts). Such a chat, assigned, links
+ * and waits: its text stays pending and its voice notes are never fetched
+ * until the interviewee taps Yes on Axal's notice, or replies YES to it, or
+ * the member confirms once the notice was delivered. The interviewee's answer
+ * arrives on the signed webhook and is claimed as a 'command' event; on
+ * 'given' a `channel_followup` { kind: 'consent' } job moves what waited,
+ * never the webhook itself. Client keys under `consent:` are the server's.
+ *
  * A TELEGRAM LINK TAKES TWO MESSAGES: `/start <code>` names the Telegram
  * account, and that account's own `/confirm` plus the member's Confirm in Axal
  * must both arrive within the original ten-minute code lifetime.
@@ -74,10 +87,15 @@ import {
 import { createLinkCode, pendingLinkView } from '../services/channels/linkCodes';
 import { beginOutbound, finishOutbound, applyDeliveryStatus, type OutboundRow } from '../services/channels/outbound';
 import {
-  applyDelete, applyEdit, assignThread, forgetConnection, inInterview, listThreads, noteVoiceTry, queueVoiceTranscriptions, readThread,
-  releaseVoiceNote, setThreadIgnored, storeInbound, storeMessage, storeVoiceNote, storeVoiceTranscript, threadForReply,
-  voiceNoteForJob, type AssignTarget, type ThreadRow,
+  admitConsentedThread, applyDelete, applyEdit, assignThread, forgetConnection, inInterview, intervieweeLabel, listThreads, noteVoiceTry,
+  queueVoiceTranscriptions, readThread, releaseVoiceNote, setThreadIgnored, storeInbound, storeMessage, storeVoiceNote,
+  storeVoiceTranscript, threadForChat, threadForReply, voiceNoteForJob, type AssignTarget, type ThreadRow,
 } from '../services/channels/threads';
+import {
+  CONSENT_BUTTONS, CONSENT_KEY_PREFIX, MEMBER_METHODS, attest, consentForThread, markDelivered, markRequested, noticeRefusal,
+  noticeState, noticeText, oneLine, openRequest, recordReply, type ConsentRow, type MemberMethod,
+} from '../services/channels/consent';
+import { CONSENT_NOTICE_VERSION, consentNoticeUrl } from '../services/channels/consentNotice';
 import { enqueueChannelJob, registerChannelJob, type ChannelJobPayload } from '../services/channels/jobs';
 import * as zoom from '../services/channels/zoom';
 import * as meet from '../services/channels/googleMeet';
@@ -85,8 +103,8 @@ import {
   VOICE_RETRY_DELAYS, VOICE_TRIES, retryVoiceNote, transcriptionFailures,
 } from '../services/channels/voiceFailures';
 import {
-  CHANNEL_LIMITS, type InboundEvent, type InboundLink, type InboundLinkConfirm, type InboundMessage, type MessagingProvider,
-  type SendResult,
+  CHANNEL_LIMITS, PROVIDER_LABEL, consentRequired, type InboundConsentReply, type InboundEvent, type InboundLink,
+  type InboundLinkConfirm, type InboundMessage, type MessagingProvider, type SendResult,
 } from '../services/channels/types';
 import * as telegram from '../services/channels/telegram';
 import * as whatsapp from '../services/channels/whatsapp';
@@ -135,9 +153,40 @@ const SENTENCE: Record<string, string> = {
   subscribe_failed: 'Axal could not subscribe to your WhatsApp Business account. Try again.',
   not_stored: 'The connection could not be saved. Try again.',
   base_url_missing: 'The public base URL is not set, so there is no webhook address to register.',
+  // D754 (#1893) — consent in the chat.
+  consent_not_offered: 'Axal does not ask for consent in this channel yet.',
+  consent_needs_interview: 'Add this chat to an interview first: Axal\'s notice names the venture it is for.',
+  already_given: 'Consent is already given in this chat.',
+  consent_method_required: 'Say how the interviewee agreed: verbal, written or pre_agreed.',
+  client_key_reserved: 'That client key is reserved for Axal\'s own messages.',
+  notice_link_missing: 'The public base URL is not set, so Axal cannot link its notice. Nothing was sent.',
   secret_format: 'TELEGRAM_CHANNEL_WEBHOOK_SECRET may use only letters, digits, _ and -, up to 256 characters.',
 };
 const sentence = (code: string) => SENTENCE[code] ?? 'That did not work. Try again.';
+
+/** D754: the consent sentences that name the interviewee. `name` null reads "This contact". */
+function consentSentence(code: string, name: string | null, provider: MessagingProvider): string {
+  const who = name || 'This contact';
+  const them = name || 'them';
+  const app = PROVIDER_LABEL[provider];
+  switch (code) {
+    case 'window_closed': return `${who} last wrote more than 24 hours ago, and ${app} only lets Axal write within 24 hours of their last message. Ask ${them} to send you a message from your ${app} Business app, then ask again.`;
+    case 'too_soon': return `Axal asked ${them} less than 24 hours ago. You can ask once more after that.`;
+    case 'asked_twice': return `Axal has asked ${them} twice. Ask them in your own words, then confirm here once they agree.`;
+    case 'notice_not_delivered': return `Axal's notice has not reached ${them} yet. Ask in ${app} first, and confirm once ${app} shows it delivered.`;
+    case 'interviewee_declined': return `${who} declined in ${app}. Only their own Yes on Axal's notice can change that.`;
+    case 'consent_withdrawn': return `${who} withdrew consent in ${app}. Only their own Yes on Axal's notice can change that.`;
+    default: return sentence(code);
+  }
+}
+
+const CONSENT_NAMED = new Set(['window_closed', 'too_soon', 'asked_twice', 'notice_not_delivered', 'interviewee_declined', 'consent_withdrawn']);
+
+/** A consent refusal; a code that names the interviewee carries our sentence with their name. */
+async function noConsent(c: C, status: number, code: string, thread: ThreadRow, extra: Record<string, unknown> = {}): Promise<Response> {
+  const message = CONSENT_NAMED.has(code) ? consentSentence(code, await intervieweeLabel(c.env, thread), thread.provider) : sentence(code);
+  return refuse(c, status, { code, message, extra: { code, ...extra } });
+}
 
 /** A refusal with our sentence; `code` travels on `error` and `code` both. */
 function no(c: C, status: number, code: string, extra: Record<string, unknown> = {}): Response {
@@ -339,7 +388,9 @@ channels.get('/threads/:uid', member(async (c, user) => {
   // #1586: a waiting voice note that could not be transcribed says why, in our
   // words, with no message or provider text (services/channels/voiceFailures.ts).
   const failures = await transcriptionFailures(c.env, user.id, uid);
-  return c.json({ ...read, messages: read.messages.map((m) => ({ ...m, transcription_failure: failures.get(m.uid) ?? null })) });
+  // D754: the chat's consent, for the member. No hash and no provider id.
+  const consent = await consentForThread(c.env, await threadForReply(c.env, user.id, uid));
+  return c.json({ ...read, consent, messages: read.messages.map((m) => ({ ...m, transcription_failure: failures.get(m.uid) ?? null })) });
 }));
 
 /** #1586: transcribe a waiting voice note again, once what stopped it allows (the budget is checked first). */
@@ -362,8 +413,166 @@ channels.post('/threads/:uid/assign', member(async (c, user) => {
   } else return no(c, 400, 'invalid_request');
   // Quote consent (D685 §5.1.4): only the literal true sets it.
   if (body.quote_consent != null && typeof body.quote_consent !== 'boolean') return no(c, 400, 'invalid_request');
-  const r = await assignThread(c.env, user.id, c.req.param('uid') ?? '', target, { quoteConsent: body.quote_consent === true });
-  return c.json({ ok: true, interview_id: r.interviewId, session_id: r.sessionId, moved: r.moved, voice_queued: r.queued });
+  // D754: { ask: true } sends Axal's notice once linked; { method } is the member's word.
+  const consentAsk = body.consent;
+  let ask = false;
+  let method: MemberMethod | null = null;
+  if (consentAsk != null) {
+    const keys = consentAsk && typeof consentAsk === 'object' && !Array.isArray(consentAsk) ? Object.keys(consentAsk) : null;
+    if (keys?.length === 1 && consentAsk.ask === true) ask = true;
+    else if (keys?.length === 1 && typeof consentAsk.method === 'string') {
+      if (!(MEMBER_METHODS as readonly string[]).includes(consentAsk.method)) {
+        return no(c, 400, 'consent_method_required', { accepted: MEMBER_METHODS });
+      }
+      method = consentAsk.method as MemberMethod;
+    } else return no(c, 400, 'invalid_request');
+  }
+  const uid = c.req.param('uid') ?? '';
+  const before = await threadForReply(c.env, user.id, uid);
+  const waits = consentRequired(before.provider);
+  if (waits && before.consent_state !== 'given') {
+    // Checked before the claim, so a refusal links nothing.
+    if (ask) {
+      const refusal = noticeRefusal(before, await noticeState(c.env, before));
+      if (refusal) return noConsent(c, 409, refusal.code, before, refusal.next_at ? { next_at: refusal.next_at } : {});
+    } else if (method) {
+      const pre = await memberWordRefusal(c.env, before);
+      if (pre) return noConsent(c, 409, pre, before);
+    }
+  }
+  const r = await assignThread(c.env, user.id, uid, target, { quoteConsent: body.quote_consent === true });
+  const out: Record<string, unknown> = { ok: true, interview_id: r.interviewId, session_id: r.sessionId, moved: r.moved, voice_queued: r.queued };
+  if (!waits) return c.json(out);
+  let thread = await threadForReply(c.env, user.id, uid);
+  if (thread.consent_state !== 'given' && ask) {
+    const sent = await askForConsent(c.env, user.id, thread);
+    out.consent_request = sent.ok === true ? { ok: true } : { ok: sent.ok, code: sent.code };
+  } else if (thread.consent_state !== 'given' && method) {
+    const a = await attest(c.env, user.id, thread, method);
+    if (a.ok) {
+      const admitted = await admitConsentedThread(c.env, user.id, thread.id);
+      out.moved = admitted.moved;
+      out.voice_queued = admitted.queued;
+    } else out.consent_request = { ok: false, code: a.code };
+  }
+  thread = await threadForReply(c.env, user.id, uid);
+  return c.json({ ...out, consent: await consentForThread(c.env, thread) });
+}));
+
+/** Why the member's word may not be taken on this chat now, before any link changes: the interviewee's answer wins. */
+async function memberWordRefusal(env: Env, thread: ThreadRow): Promise<string | null> {
+  const answered = await env.DB.prepare(
+    `SELECT MAX(CASE WHEN status = 'declined' THEN 1 ELSE 0 END) AS declined, MAX(CASE WHEN status = 'withdrawn' THEN 1 ELSE 0 END) AS withdrawn
+       FROM channel_consents WHERE thread_id = ?`,
+  ).bind(thread.id).first<{ declined: number | null; withdrawn: number | null }>();
+  if (Number(answered?.withdrawn)) return 'consent_withdrawn';
+  if (Number(answered?.declined)) return 'interviewee_declined';
+  if (!(await noticeState(env, thread)).delivered) return 'notice_not_delivered';
+  return null;
+}
+
+type AskOutcome =
+  | { ok: true; status: 200 }
+  | { ok: false | null; status: number; code: string; extra?: Record<string, unknown> };
+
+/**
+ * D754 §5 — Axal's notice, sent in the chat from the member's own number, with
+ * a server-built client key. The caller has checked that the provider asks
+ * for consent, the chat is linked and consent is not yet given. The window
+ * and the cap are checked here too, before anything is sent; a key used
+ * already answers its first outcome and sends nothing.
+ */
+async function askForConsent(env: Env, userId: number, thread: ThreadRow): Promise<AskOutcome> {
+  const conn = await memberConnection(env, userId, thread.provider);
+  if (!conn || conn.integrationId !== Number(thread.integration_id)) return { ok: false, status: 409, code: 'not_connected' };
+  const notices = await noticeState(env, thread);
+  const refusal = noticeRefusal(thread, notices);
+  if (refusal) return { ok: false, status: 409, code: refusal.code, extra: refusal.next_at ? { next_at: refusal.next_at } : {} };
+  const url = consentNoticeUrl(env);
+  if (!url) return { ok: false, status: 503, code: 'base_url_missing' };
+  const who = await env.DB.prepare(
+    `SELECT u.name AS member_name, p.name AS venture FROM users u
+       LEFT JOIN discovery_interviews di ON di.id = ?
+       LEFT JOIN projects p ON p.id = di.project_id
+      WHERE u.id = ?`,
+  ).bind(thread.interview_id, userId).first<{ member_name: string | null; venture: string | null }>();
+  const firstName = oneLine(who?.member_name, 200).split(' ')[0] || null;
+  const body = noticeText(CONSENT_NOTICE_VERSION, { firstName, venture: who?.venture ?? null, url });
+  if (!body) throw new Error('consent_notice_missing');
+  const row: ConsentRow = await openRequest(env, thread, { interviewId: thread.interview_id, sessionId: thread.session_id });
+
+  let claim: { row: OutboundRow; existing: boolean };
+  try {
+    claim = await beginOutbound(env, thread.provider, userId, thread.id, notices.nextKey!);
+  } catch (err) {
+    if (err instanceof Error && err.message === 'client_key_conflict') return { ok: false, status: 409, code: 'client_key_conflict' };
+    throw err;
+  }
+  // A concurrent press already holds this notice: its outcome, and nothing sent now.
+  if (claim.existing) {
+    if (claim.row.status === 'failed') return { ok: false, status: 409, code: claim.row.error_code ?? 'rejected' };
+    return claim.row.status === 'pending' ? { ok: null, status: 200, code: 'send_in_flight' } : { ok: true, status: 200 };
+  }
+  const result: SendResult = thread.provider === 'whatsapp'
+    ? await whatsapp.sendWhatsAppInteractive(env, conn, thread.external_chat_id, {
+      body,
+      buttons: [
+        { id: `consent_yes:${row.uid}`, title: CONSENT_BUTTONS.yes },
+        { id: `consent_no:${row.uid}`, title: CONSENT_BUTTONS.no },
+      ],
+    })
+    // Telegram's notice arrives with D756; until then its consent is not asked.
+    : { ok: false, code: 'consent_not_offered' };
+  try {
+    await finishOutbound(env, claim.row.id, result);
+    if (result.ok || result.code === 'send_unknown') await markRequested(env, row.id, result.externalMessageId ?? null, thread.provider);
+  } catch {
+    console.error(`[channels] ${thread.provider} consent notice outcome not saved ok=${result.ok}`);
+  }
+  if (result.ok) return { ok: true, status: 200 };
+  if (result.code === 'send_unknown') return { ok: null, status: 200, code: 'send_unknown' };
+  const code = result.code ?? 'rejected';
+  const status = ['window_closed', 'not_connected', 'consent_not_offered'].includes(code) ? 409
+    : code === 'rate_limited' ? 429 : result.retryable ? 503 : 502;
+  return { ok: false, status, code, extra: { retryable: !!result.retryable } };
+}
+
+/** The checks both consent routes make first, in D754's order. Null when the chat may go on. */
+async function consentPreconditions(c: C, thread: ThreadRow, opts: { asking: boolean }): Promise<Response | null> {
+  if (!consentRequired(thread.provider)) return no(c, 409, 'consent_not_offered');
+  if (!opts.asking) return null;
+  // An ignored chat is never linked; saying so is the more useful answer.
+  if (thread.status === 'ignored') return no(c, 409, 'thread_ignored');
+  if (!(thread.status === 'assigned' && thread.interview_id && thread.session_id)) return no(c, 409, 'consent_needs_interview');
+  if (thread.consent_state === 'given') return no(c, 409, 'already_given');
+  return null;
+}
+
+channels.post('/threads/:uid/consent-request', member(async (c, user) => {
+  const thread = await threadForReply(c.env, user.id, c.req.param('uid') ?? '');
+  const pre = await consentPreconditions(c, thread, { asking: true });
+  if (pre) return pre;
+  const sent = await askForConsent(c.env, user.id, thread);
+  const consent = await consentForThread(c.env, await threadForReply(c.env, user.id, thread.uid));
+  if (sent.ok === true) return c.json({ ok: true, consent });
+  if (sent.ok === null) return c.json({ ok: null, pending: true, code: sent.code, message: sentence(sent.code), consent });
+  if (sent.code === 'base_url_missing') return no(c, 503, 'notice_link_missing', { code: 'base_url_missing' });
+  return noConsent(c, sent.status, sent.code, thread, { ...(sent.extra ?? {}), consent });
+}));
+
+channels.post('/threads/:uid/consent', member(async (c, user) => {
+  const body = await c.req.json<Record<string, unknown>>().catch(() => ({} as Record<string, unknown>));
+  const thread = await threadForReply(c.env, user.id, c.req.param('uid') ?? '');
+  const pre = await consentPreconditions(c, thread, { asking: false });
+  if (pre) return pre;
+  const method = typeof body.method === 'string' ? body.method : '';
+  if (!(MEMBER_METHODS as readonly string[]).includes(method)) return no(c, 400, 'consent_method_required', { accepted: MEMBER_METHODS });
+  const a = await attest(c.env, user.id, thread, method as MemberMethod);
+  if (!a.ok) return noConsent(c, 409, a.code, thread);
+  // Given already: nothing changes. Otherwise what waited moves now, as an assignment does.
+  const admitted = a.changed ? await admitConsentedThread(c.env, user.id, thread.id) : { moved: 0, queued: 0 };
+  const consent = await consentForThread(c.env, await threadForReply(c.env, user.id, thread.uid));
+  return c.json({ ok: true, consent, moved: admitted.moved, voice_queued: admitted.queued });
 }));
 
 channels.post('/threads/:uid/ignore', member(async (c, user) => {
@@ -391,6 +600,9 @@ channels.post('/threads/:uid/reply', member(async (c, user) => {
   const clientKey = typeof body.client_key === 'string' ? body.client_key.trim() : '';
   if (!text) return no(c, 400, 'text_required');
   if (!clientKey || clientKey.length > 100) return no(c, 400, 'client_key_required');
+  // D754 §4: `consent:` keys are the server's notices. A reply under one would block
+  // the real notice, and its delivery report would unlock the member's word.
+  if (clientKey.startsWith(CONSENT_KEY_PREFIX)) return no(c, 400, 'client_key_reserved');
   // Another member's thread is not there (404, from threads.ts).
   const thread = await threadForReply(env, user.id, c.req.param('uid') ?? '');
   const max = thread.provider === 'telegram' ? telegram.TELEGRAM_MAX_TEXT : whatsapp.WHATSAPP_MAX_TEXT;
@@ -499,6 +711,7 @@ function eventKind(ev: InboundEvent): EventKind {
     case 'status': return 'status';
     case 'link': case 'link_confirm': return 'link';
     case 'connection': return 'connection';
+    case 'consent_reply': return 'command';
     default: return 'ignored';
   }
 }
@@ -559,6 +772,45 @@ function resolveConnection(env: Env, provider: MessagingProvider, ref: string): 
   return provider === 'telegram' ? connectionForTelegram(env, ref) : connectionForWhatsApp(env, ref);
 }
 
+/**
+ * D754 §4 — what may be the interviewee's answer. The thread is looked up,
+ * never created. An answer that counts is applied by consent.ts; one that does
+ * not is stored as the ordinary message it is (`fallback`), so a typed word is
+ * never lost. On 'given' a follow-up job moves what waited — ids only, never
+ * text on the webhook path.
+ */
+async function handleConsentReply(
+  env: Env, conn: ChannelConnection, ev: InboundConsentReply, claim: number,
+  finish: (status: EventStatus, fields?: EventFields) => Promise<void>, markStored: () => void,
+): Promise<'ok'> {
+  const thread = await threadForChat(env, conn, ev.externalChatId);
+  const out = thread ? await recordReply(env, thread, ev) : { outcome: 'ignored' as const, reason: 'no_notice' as const };
+  if (out.outcome === 'ignored') {
+    // A duplicate was an answer once already: it is not a message now.
+    if (!ev.fallback || out.reason === 'duplicate') {
+      await finish('ignored', { userId: conn.userId, threadId: thread?.id ?? null, error: out.reason });
+      return 'ok';
+    }
+    const kept = await storeInbound(env, conn, ev.fallback);
+    markStored();
+    const ok = kept.stored === 'pending' || kept.stored === 'session';
+    await finish(ok ? 'stored' : 'ignored', {
+      userId: conn.userId, threadId: kept.thread?.id ?? null,
+      sessionId: kept.stored === 'session' ? kept.sessionId : null,
+      error: ok ? null : kept.stored === 'ignored' ? 'thread_ignored' : kept.stored,
+    });
+    return 'ok';
+  }
+  markStored();
+  await finish('done', { userId: conn.userId, threadId: thread!.id, sessionId: out.consent.session_id });
+  if (out.outcome === 'given') {
+    await enqueueChannelJob(env, 'channel_followup', ev.provider, `consent:${out.consent.uid}`, {
+      kind: 'consent', thread: thread!.uid, consent: out.consent.uid, event: claim,
+    });
+  }
+  return 'ok';
+}
+
 /** The member behind a connection must still stand; an inactive one is ignored, not retried. */
 async function memberStands(env: Env, userId: number): Promise<boolean> {
   try {
@@ -610,9 +862,12 @@ async function processEvent(env: Env, ev: InboundEvent): Promise<'ok' | 'retry'>
 
     if (ev.kind === 'status') {
       const known = await applyDeliveryStatus(env, ev.externalMessageId, ev.status, ev.errorCode);
+      // D754: a notice delivered or read unlocks the member's word on its request.
+      if (known) await markDelivered(env, ev.externalMessageId, ev.status);
       await finish(known ? 'done' : 'ignored', { userId: conn.userId, error: known ? null : 'not_ours' });
       return 'ok';
     }
+    if (ev.kind === 'consent_reply') return await handleConsentReply(env, conn, ev, claim, finish, () => { stored = true; });
     if (ev.kind === 'edit') {
       const changed = await applyEdit(env, conn, ev);
       await finish(changed ? 'done' : 'ignored', { userId: conn.userId, error: changed ? null : 'no_pending_copy' });
@@ -746,6 +1001,12 @@ export async function runVoiceFollowup(env: Env, p: ChannelJobPayload): Promise<
   const note = await voiceNoteForJob(env, String(p.message ?? ''), job);
   if (!note) return;
   const fields: EventFields = { userId: Number(note.thread.user_id), threadId: note.thread.id };
+  // D754 §4: no consent, no download and no model — before any other check.
+  if (consentRequired(provider) && note.thread.consent_state !== 'given') {
+    await releaseVoiceNote(env, note.uid, job, 'no_consent');
+    await end('failed', { ...fields, error: 'no_consent' });
+    return;
+  }
   const giveBack = async (status: EventStatus, error: string) => {
     // A failure keeps its code on the note, so the thread can say why (#1586);
     // an 'ignored' give-back (the chat left its interview, the member left) is
@@ -804,10 +1065,32 @@ export async function runVoiceFollowup(env: Env, p: ChannelJobPayload): Promise<
   if (out === 'gone') await end('ignored', { ...fields, error: 'voice_gone' });
 }
 
+/**
+ * `channel_followup` { kind: 'consent', thread, consent }: consent was given
+ * in the chat (D754). Re-checked here — the row and the thread still 'given',
+ * the member standing, the connection active and the thread's — then what
+ * waited moves (`admitConsentedThread`, idempotent).
+ */
+export async function runConsentFollowup(env: Env, p: ChannelJobPayload): Promise<void> {
+  const row = await env.DB.prepare('SELECT * FROM channel_consents WHERE uid = ?').bind(String(p.consent ?? '')).first<ConsentRow>();
+  const thread = await env.DB.prepare('SELECT * FROM channel_threads WHERE uid = ?').bind(String(p.thread ?? '')).first<ThreadRow>();
+  if (!row || !thread || row.status !== 'given' || thread.consent_state !== 'given' || Number(row.thread_id) !== Number(thread.id)) return;
+  if (!(await memberStands(env, Number(thread.user_id)))) return;
+  const conn = await memberConnection(env, Number(thread.user_id), thread.provider);
+  if (!conn || conn.integrationId !== Number(thread.integration_id)) return;
+  await admitConsentedThread(env, Number(thread.user_id), thread.id);
+}
+
+/** One `channel_followup` handler for both providers, by the payload's kind. */
+export async function runChannelFollowup(env: Env, p: ChannelJobPayload): Promise<void> {
+  if (p.kind === 'consent') return runConsentFollowup(env, p);
+  return runVoiceFollowup(env, p);
+}
+
 // Registered at module load: index.ts imports this file, so the handlers exist
 // before the queue delivers anything (services/channels/jobs.ts).
-registerChannelJob('channel_followup', 'telegram', runVoiceFollowup);
-registerChannelJob('channel_followup', 'whatsapp', runVoiceFollowup);
+registerChannelJob('channel_followup', 'telegram', runChannelFollowup);
+registerChannelJob('channel_followup', 'whatsapp', runChannelFollowup);
 
 // ---------------------------------------------------------------------------
 // Admin

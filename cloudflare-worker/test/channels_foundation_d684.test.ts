@@ -112,7 +112,9 @@ function world() {
     '440_validate_cycle_stores.sql', '446_interview_structure_receipts.sql', '447_assistant_interviews.sql',
     '449_interview_channels.sql', '450_channel_events_delete_kind.sql', '451_channel_review_fixes.sql',
     // D685: openSession stores the call (call_provider), as production's 452 lets it.
-    '452_record_session_setup.sql', '454_channel_voice_failures.sql', '458_channel_link_consent.sql']) db.exec(mig(m));
+    '452_record_session_setup.sql', '454_channel_voice_failures.sql', '458_channel_link_consent.sql',
+    // D754 (#1893): the consent store and channel_threads.consent_state.
+    '488_channel_consents.sql']) db.exec(mig(m));
   db.exec(`INSERT INTO telegram_business_connections (uid, business_connection_id, telegram_user_id, user_id, is_enabled, can_reply)
            VALUES ('bc-1', 'BC-ME', '555001', ${ME}, 1, 1), ('bc-2', 'BC-UNLINKED', '777', NULL, 1, 1),
                   ('bc-3', 'BC-OFF', '555001', ${ME}, 0, 1)`);
@@ -663,7 +665,9 @@ test('a member who lost the venture, or a malformed job, runs nothing', async ()
 test('the quiet-chat sweep re-structures a chat with new text once it is quiet, at most every six hours', async () => {
   const { env, db } = world();
   const scoped = await writableInterview(env, ME, INTERVIEW);
-  const quiet = await openSession(env, scoped, 'whatsapp', 'text');
+  // D754 (#1893): a WhatsApp chat is structured only once its consent is given; without it the sweep skips it.
+  const quiet = await openSession(env, scoped, 'whatsapp', 'text', { method: 'chat_reply' });
+  const waiting = await openSession(env, scoped, 'whatsapp', 'text');
   const busy = await openSession(env, scoped, 'telegram', 'text');
   const recent = await openSession(env, scoped, 'telegram', 'text');
   const call = await openSession(env, scoped, 'zoom', 'video', { method: 'verbal' });
@@ -673,8 +677,8 @@ test('the quiet-chat sweep re-structures a chat with new text once it is quiet, 
            VALUES (${recent.id}, 'r1', 'structured', 'm', 0, 0, 0, 'refused', datetime('now', '-1 hour'))`);
   assert.equal(await sweepQuietChats(env, new Date()), 1);
   assert.deepEqual(queued(db, 'session_structure'), [{ session_id: quiet.id, user_id: ME, trigger: 'chat_quiet' }],
-    'not the busy chat, not one run (or refused) within six hours, not a call');
-  void call;
+    'not the busy chat, not one run (or refused) within six hours, not a call, not a chat waiting for consent');
+  void call; void waiting;
 });
 
 // ===========================================================================
