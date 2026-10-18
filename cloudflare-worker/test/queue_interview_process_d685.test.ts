@@ -54,9 +54,9 @@ function world() {
   db.exec('ALTER TABLE interview_sessions ADD COLUMN submitted_via TEXT');
   db.exec(mig('452_record_session_setup.sql'));
   db.exec(mig('453_interview_processing.sql'));
+  for (const t of ['queue_jobs', 'job_idempotency', 'system_metrics']) db.exec(tableFromBaseline(BASELINE, t));
   // D757: the Validate engine's schema (487, 465, 453 and the re-scope's columns).
   applyEngineSchema(db);
-  for (const t of ['queue_jobs', 'job_idempotency', 'system_metrics']) db.exec(tableFromBaseline(BASELINE, t));
   for (const key of ['founder:free', 'other']) {
     db.prepare('INSERT INTO ai_licence_caps(licence_key, daily_microusd, monthly_microusd, recorded_by) VALUES (?, ?, ?, 1)')
       .run(key, 50_000_000, 500_000_000);
