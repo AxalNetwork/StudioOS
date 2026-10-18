@@ -355,7 +355,7 @@ test('D758 a notice\'s thumbnail is its specimen: brackets, the warning, no figu
   }
   for (const label of ['Notice date', 'Call number', 'Amount due', 'Due date']) assert.ok(html.includes(`[${label}]`), label);
   assert.doesNotMatch(html, /\$\d/);
-  assert.doesNotMatch(html, /<div class="state-banner">|DRAFT — for counsel review|class="diagonal draft"/);
+  assert.doesNotMatch(html, /<div class="state-banner|DRAFT — for counsel review|class="diagonal draft"/);
   const keys = [...r2.objects.keys()];
   assert.equal(keys.length, 1);
   assert.match(keys[0], /^legal\/thumbnails\/generated\/[0-9a-f]{64}\/[0-9a-f]{16}-[0-9a-f]{16}\.png$/);

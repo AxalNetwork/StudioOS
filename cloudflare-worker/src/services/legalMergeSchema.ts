@@ -45,9 +45,13 @@ export interface MergeFieldDef {
 
 /**
  * Every canonical token, keyed by its dotted path. The v1 bodies under
- * `templates/legal/*_v1.md` must only use tokens defined here — keeping
- * the two in lockstep is what lets `resolveWithBrackets` bracket-label a
- * body without leaking raw `{{tokens}}`.
+ * `templates/legal/*_v1.md` use tokens defined here — keeping the two in
+ * lockstep is what lets `resolveWithBrackets` bracket-label a body without
+ * leaking raw `{{tokens}}`. The one exception is the 24 seed skeletons (D758,
+ * `SEED_SKELETON_V1` in scripts/gen-legal-templates-seed.py): they keep the
+ * flat tokens the incorporation wizard fills (`company_name`,
+ * `incorporation_date`, `registered_agent_name`, `registered_agent_address`),
+ * and a preview shows those as written. No token is added for them.
  */
 export const LEGAL_MERGE_SCHEMA: Record<string, MergeFieldDef> = {
   // --- company.* -----------------------------------------------------
