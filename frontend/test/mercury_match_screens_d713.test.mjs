@@ -256,6 +256,49 @@ test('mounted desk: an unreadable list says so; an inactive deal takes no draft'
   });
 });
 
+test('inactive deals offer draft deletion and issued-row voiding, with no dead Edit or Issue actions', async () => {
+  await withSettlements(() => DESK_ROWS, async (calls) => {
+    for (const status of ['terminated', 'expired']) {
+      const v = await mountContracts(h(SettlementsDesk, { deal: { ...DEAL, status }, superAdmin: true, onClose: () => {} }));
+      try {
+        await v.flush();
+        await assert.rejects(v.click('Edit'), /Missing button/);
+        await assert.rejects(v.click('Issue'), /Missing button/);
+        await assert.rejects(v.click('Save as draft'), /Missing button/);
+        await v.click('Delete draft');
+        await v.flush();
+        assert.deepEqual(calls.filter((c) => c[0] === 'remove').at(-1), ['remove', 'd1']);
+        await v.click('Void');
+        assert.match(v.text(), /Why void this settlement/);
+      } finally { await v.unmount(); }
+    }
+  });
+});
+
+test('a failed deletion stays visible when the deal becomes inactive during an edit', async () => {
+  await withSettlements(() => DESK_ROWS, async () => {
+    partnerSettlementsApi.remove = async () => { throw new Error('Deletion was refused'); };
+    function ChangingDeal() {
+      const [active, setActive] = React.useState(true);
+      return h(React.Fragment, null,
+        h('button', { onClick: () => setActive(false) }, 'End deal'),
+        h(SettlementsDesk, { deal: { ...DEAL, status: active ? 'active' : 'terminated' }, superAdmin: true, onClose: () => {} }));
+    }
+    const v = await mountContracts(h(ChangingDeal));
+    try {
+      await v.flush();
+      await v.click('Edit');
+      assert.match(v.text(), /Edit draft/);
+      await v.click('End deal');
+      await assert.rejects(v.click('Save draft'), /Missing button/);
+      await v.click('Delete draft');
+      await v.flush();
+      assert.match(v.text(), /Deletion was refused/);
+      assert.ok(v.nodes().some((n) => v.props(n)?.role === 'alert' && n.textContent === 'Deletion was refused'));
+    } finally { await v.unmount(); }
+  });
+});
+
 test('Contracts › Partner deals opens the desk, and passes who is Super Admin', () => {
   const desk = readFileSync('frontend/src/pages/admin/contracts/ContractsDesk.jsx', 'utf8');
   assert.match(desk, /<RelatedLists key=\{tab\} kind=\{tab\} onOpen=\{setSelected\} superAdmin=\{superAdmin\} \/>/);
