@@ -22,6 +22,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, existsSync, readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { resolve, join } from 'node:path';
 
 const root = resolve(process.cwd());
@@ -153,6 +154,23 @@ test('no file under frontend/public is a symlink', () => {
     }
   };
   walk(pub);
+});
+
+test('no node_modules path is tracked, and the ignore rule covers a node_modules that is a link', () => {
+  // `node_modules/` (with the slash) ignores a directory only. A worktree
+  // whose node_modules is a symlink to another checkout's slipped past it, and
+  // `git add -A` committed the link: 645aab7c3 (removed in 4914a121b), then
+  // e5956580f, which reached main with #1824. A checkout of main then swaps a
+  // real node_modules for that link, which on CI points nowhere.
+  const git = (...a) => spawnSync('git', a, { cwd: root, encoding: 'utf8' });
+  const listed = git('ls-files', '-z');
+  if (listed.status !== 0) return;
+  const tracked = listed.stdout.split('\0').filter((p) => p.split('/').includes('node_modules'));
+  assert.deepEqual(tracked, [], 'a node_modules path is tracked: git rm --cached it');
+  // A path that does not exist is checked as a file, so only a rule without
+  // the trailing slash ignores it.
+  assert.equal(git('check-ignore', '--no-index', '-q', 'cloudflare-worker/no-such-dir/node_modules').status, 0,
+    '.gitignore ignores node_modules only as a directory: write the rule without the trailing slash');
 });
 
 test('every moved document is reachable from the index', () => {
