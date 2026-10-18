@@ -4,6 +4,7 @@ import { requireAuth } from '../auth';
 import { stripeCall } from './billing';
 import { ensureTierSchema, type TierUser } from '../middleware/requireTier';
 import { findCatalogPriceById, findCatalogProductByPriceId } from '../services/catalog';
+import { isTokenPackPrice } from '../services/aiCredits';
 import { ensureFeatureUnlockSchema, listActiveUnlocks } from '../services/featureUnlocks';
 import {
   validatePromoForProduct,
@@ -92,6 +93,8 @@ payments.post('/intent', async (c) => {
   if (!body.price_id) {
     return refuse(c, 400, { code: 'money_kind_required', message: 'A charge needs a priced product. Choose one from the catalog.', audience: 'member' });
   }
+  // D755 §9: a token pack is bought only through the order intent, which credits it.
+  if (await isTokenPackPrice(c.env, body.price_id)) return c.json({ error: 'token_pack_checkout_only' }, 400);
   const quantity = Number.isFinite(body.quantity) && (body.quantity as number) > 0
     ? Math.floor(body.quantity as number)
     : 1;
@@ -289,6 +292,7 @@ payments.post('/promo/validate', async (c) => {
   const code = typeof body.code === 'string' ? body.code.trim() : '';
   if (!code) return c.json({ valid: false, reason: 'not_found' });
   if (!body.price_id) return c.json({ error: 'price_id_required' }, 400);
+  if (await isTokenPackPrice(c.env, body.price_id)) return c.json({ error: 'token_pack_checkout_only' }, 400);
   const found = await findCatalogProductByPriceId(c.env, body.price_id);
   if (!found || !found.price.active || !found.product.active) {
     return c.json({ error: 'invalid_price' }, 400);
@@ -420,6 +424,7 @@ payments.post('/alacarte/intent', async (c) => {
     promo_code?: string;
   };
   if (!body.price_id) return c.json({ error: 'price_id_required' }, 400);
+  if (await isTokenPackPrice(c.env, body.price_id)) return c.json({ error: 'token_pack_checkout_only' }, 400);
 
   const found = await findCatalogProductByPriceId(c.env, body.price_id);
   if (!found || !found.price.active || !found.product.active) {
