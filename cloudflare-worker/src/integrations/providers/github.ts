@@ -423,6 +423,7 @@ async function revokeGrant(env: Env, token: string): Promise<void> {
     method: 'DELETE',
     headers: { Authorization: `Basic ${btoa(`${id}:${secret}`)}`, Accept: 'application/vnd.github+json', 'User-Agent': 'StudioOS-Connectors' },
     body: JSON.stringify({ access_token: token }),
+    signal: AbortSignal.timeout(5_000),
   }).catch(() => { throw new Error('github_revoke_failed: unavailable'); });
   if (res.status !== 204) throw new Error(`github_revoke_failed: ${res.status}`);
 }

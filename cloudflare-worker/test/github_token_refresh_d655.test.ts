@@ -292,3 +292,17 @@ test('CAS loss respects an expired or refused reconnect instead of returning an 
     assert.equal(f.row().credentials_enc, enc);
   }
 });
+
+
+test('disconnect completes local removal when grant revocation times out', async t => {
+  const f = await fixture(t, expired({ expires_at: Date.now() + 3600000 }));
+  let deadline = 0; let calls = 0;
+  t.mock.method(AbortSignal, 'timeout', (ms: number) => {
+    deadline = ms; return AbortSignal.abort(new DOMException('sensitive-description-marker', 'TimeoutError'));
+  });
+  globalThis.fetch = (async (_input: any, init: any) => {
+    calls += 1; init.signal?.throwIfAborted(); return new Response(null, { status: 204 });
+  }) as any;
+  assert.equal((await call(f.env, 'DELETE', '/api/connectors/gh1')).status, 200);
+  assert.equal(deadline, 5000); assert.equal(calls, 1); assert.equal(f.row(), undefined);
+});
