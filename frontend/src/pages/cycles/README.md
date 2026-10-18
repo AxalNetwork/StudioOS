@@ -59,9 +59,10 @@ On a module page, `?add=1` is its first Add's address: the URL becomes `/<cycle>
   `adapters/validate.js` maps it, and `cloudflare-worker/test/cycle_adapters_d661.test.ts`
   runs the Worker's real output through it: every `ok` card must draw, and
   every column must have a value source.
-- **A module's working tool stays where it is.** D695 supplies the Add/Edit forms and D696 the record pages. Validate’s curation remains in its working tools until #1659 and #1666, so a module page links
-  to the zone page that edits it (`/validate/interviews`, `/pain-map`,
-  `/hypotheses`, `/build/competitors`). Add is drawn only where it opens a form.
+- **A module's working tool stays where it is.** D695 supplies the Add/Edit forms and D696 the record pages. Validate’s curation remains in its working tools until #1666's closing PR, so a module page links
+  to the zone page that edits it (`/validate/pain-map`, `/validate/hypotheses`,
+  `/build/competitors`). Customer research has none: since D704's PR 2b its
+  module and record are the tool, and `/validate/interviews` redirects there. Add is drawn only where it opens a form.
   Every Add has an address (D695): `App.jsx` routes `/<cycle>/:slug/new` to
   `CycleRoute` with `adding`, and `/validate/customer-research/new` redirects
   to Record a session, the query kept. `RecordsTable`'s Add link passes its

@@ -83,7 +83,6 @@ const CYCLE_DEFS = {
     action: (q, open) => ({ label: 'Record a session', href: `/validate/record${q}`, onOpen: open }),
     tools: toFnMap({
       'problem-discovery': (q) => ({ label: 'Curate pain themes: merge, rename, judge severity', href: `/validate/pain-map${q}` }),
-      'customer-research': (q) => ({ label: 'Open the interview log: notes, recordings, evidence', href: `/validate/interviews${q}` }),
       'market-intelligence': () => ({ label: 'Open the competitor tracker', href: '/build/competitors' }),
       experiments: (q) => ({ label: 'Open the hypothesis board and the verdict', href: `/validate/hypotheses${q}` }),
     }),
