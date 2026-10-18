@@ -6,7 +6,9 @@ name: PR preview
 # `/api/*` is a 404 there, exactly as it was on the retired Cloudflare Pages
 # mirror. Deployed on open / synchronize / reopen, deleted on close, its URL
 # kept in one sticky comment on the PR. Same-repository PRs only — secrets are
-# not available to forks — and never for Dependabot.
+# not available to forks — and never for Dependabot. After the deploy, the
+# `login-e2e` job runs frontend/tests/e2e/google_popup_signin.spec.js (D722)
+# against that preview in Playwright's Chromium.
 #
 # Why not Workers preview URLs or Workers Builds: Cloudflare generates none
 # for a Worker that implements a Durable Object, and `studioos` implements
@@ -40,6 +42,8 @@ jobs:
     timeout-minutes: 15
     env:
       PREVIEW_NAME: studioos-pr-${{ github.event.pull_request.number }}
+    outputs:
+      url: ${{ steps.deploy.outputs.url }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -110,6 +114,45 @@ jobs:
             gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" -f body="$body" > /dev/null
           fi
           echo "preview: $PREVIEW_URL"
+
+  # D722 — the browser half of "Continue with Google" on /login, run in a real
+  # Chromium against the Worker the job above just deployed. The spec serves a
+  # stand-in for Google's gsi/client and stubs every /api/auth/google/* route
+  # (the preview has no API), so it needs no secret and reaches nothing but
+  # the preview. Its own job: a red run never holds back the preview comment.
+  login-e2e:
+    name: /login Google window (Playwright)
+    needs: deploy
+    if: needs.deploy.outputs.url != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      PLAYWRIGHT_BASE_URL: ${{ needs.deploy.outputs.url }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend
+
+      - name: Install Chromium for Playwright
+        run: npm --prefix frontend run test:e2e:install
+
+      # A brand-new workers.dev URL can answer a few seconds after the deploy
+      # reports success; wait for /login rather than fail the first test on it.
+      - name: Wait for the preview to answer
+        run: curl -fsS -o /dev/null --retry 12 --retry-delay 5 --retry-all-errors "$PLAYWRIGHT_BASE_URL/login"
+
+      - name: Run the D722 spec against the preview
+        working-directory: frontend
+        run: npx --no-install playwright test tests/e2e/google_popup_signin.spec.js
 
   delete:
     name: delete the preview Worker

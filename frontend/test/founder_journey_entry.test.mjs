@@ -126,9 +126,18 @@ test('api.js forwards the lane instead of silently dropping it', () => {
 
 test('a Google-path failure to record the lane does not break sign-in', () => {
   const src = code(GOOGLE);
-  const block = src.slice(src.indexOf('if (state.lane)'), src.indexOf('if (state.lane)') + 500);
+  // D722: the lane is recorded in `resolveGoogleSignin`, which both ways in
+  // call — /callback with the signed state's lane, /popup with the body's
+  // whitelisted one — so the best-effort guard lives there once.
+  const at = src.indexOf('if (opts.lane)');
+  assert.ok(at > 0, 'the shared helper no longer records the lane');
+  // The `if` block alone, to its closing brace — a fixed-width window would
+  // also take in the next statement's own try.
+  const block = src.slice(at, src.indexOf('\n  }\n', at));
+  assert.match(block, /upsertSuggestedRole/);
   assert.match(block, /try \{/);
   assert.match(block, /catch/);
+  assert.match(src, /\{ lane: state\.lane \}/, '/callback no longer hands the helper the signed lane');
 });
 
 /* ─────────────────── LP queue: multi-fund selector ────────────────────── */

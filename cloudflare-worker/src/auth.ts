@@ -1145,8 +1145,9 @@ export function generateCsrfToken(): string {
 // apex (`axal.vc/dashboard`, etc). Leaf-host scoping (the old default)
 // would log users out the moment they navigated between the two hosts.
 // Dev/preview (localhost / *.workers.dev) deliberately omits Domain so
-// host-only cookies still work.
-function authCookieDomainAttr(c: Context<{ Bindings: Env }>): string {
+// host-only cookies still work. Exported for the Google state cookie (D722),
+// which has to cross the same two hosts the session does.
+export function authCookieDomainAttr(c: Context<{ Bindings: Env }>): string {
   const host = (c.req.header('host') || '').toLowerCase();
   // A branch Worker's cookies are host-only, and their NAMES carry the branch
   // code (util/branch.ts): a session minted on fr.axal.vc is never presented

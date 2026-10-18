@@ -23,9 +23,30 @@ export function sanitizeNextPath(raw) {
   if (typeof raw !== 'string') return null;
   if (!raw.startsWith('/') || raw.startsWith('//')) return null;
   if (raw.length > 200) return null;
+  // A backslash is a slash to the browser's URL parser, so `/\evil.com` is
+  // `//evil.com`; it strips tabs and newlines, so `/<tab>/evil.com` is too.
   // eslint-disable-next-line no-control-regex
-  if (/[\u0000-\u001f]/.test(raw)) return null;
+  if (/[\\\u0000-\u001f\u007f]/.test(raw)) return null;
   return raw;
+}
+
+/**
+ * `raw` as a path on `origin`, or null — for a value about to be assigned to
+ * `window.location.href`. On top of `sanitizeNextPath`, the path is parsed
+ * against the origin and kept only if it stays there, and what is returned is
+ * the parsed path, query and fragment, never the raw string.
+ */
+export function sameOriginNextPath(raw, origin) {
+  const p = sanitizeNextPath(raw);
+  if (!p) return null;
+  try {
+    const base = new URL(origin);
+    const u = new URL(p, base);
+    if (u.origin !== base.origin) return null;
+    return u.pathname + u.search + u.hash;
+  } catch {
+    return null;
+  }
 }
 
 export function storePendingNext(path) {

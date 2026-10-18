@@ -32,6 +32,15 @@
  *     them; the headers come only from `frontend/public/_headers`, which
  *     Workers static assets read natively. This is the live answer to
  *     UNRESOLVED_ITEMS.md U10 — measured here, not asserted from a document.
+ *   - D722: `/login` carries no `Cross-Origin-Opener-Policy` other than
+ *     `unsafe-none`. Google's sign-in window hands /login its code by
+ *     postMessage; `same-origin` cuts that link, and
+ *     `same-origin-allow-popups` cuts the link to a page that opened /login
+ *     in a window of its own (an MCP client's OAuth window). And
+ *     `/api/auth/google/config` answers 200 JSON with boolean `configured`
+ *     and `popup`, and a `client_id` that is null when the window is off and
+ *     shaped like a Google web client ID when it is on. The ID's value is
+ *     checked for its shape only and never printed.
  *
  * Host model (see wrangler.toml `[[routes]]` + `[assets]`, CLAUDE.md fact 4):
  *   - axal.vc AND app.axal.vc are both whole-host Workers Custom Domains of
@@ -152,6 +161,16 @@ const REQUIRED_SHELL_HEADERS = [
   ['x-frame-options', /^deny$/i],
   ['referrer-policy', /^strict-origin-when-cross-origin$/i],
 ];
+
+// D722 — "Continue with Google" opens Google's own window from /login, and
+// the window answers by postMessage. The shell must send no opener policy
+// that severs it (frontend/test/google_popup_headers_d722.test.mjs holds the
+// file to the same rule; this measures what the host actually sends).
+const GOOGLE_WINDOW_ROUTE = '/login';
+const GOOGLE_CONFIG_PATH = '/api/auth/google/config';
+// A Google OAuth web client ID's shape. Only the shape is checked: the value
+// is the deployment's, and nothing here prints it.
+const GOOGLE_CLIENT_ID_RE = /^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$/;
 
 const hostsArg =
   process.argv.slice(2).filter((a) => !a.startsWith('-')).join(' ') ||
@@ -302,6 +321,17 @@ function assertSecurityHeaders(headers) {
   return problems;
 }
 
+// D722 — the opener policy on the page that opens Google's window. Absent or
+// `unsafe-none` is the only answer that keeps both windows talking.
+function assertOpenerPolicy(headers) {
+  const coop = headers.get('cross-origin-opener-policy');
+  if (coop == null || /^unsafe-none$/i.test(coop.trim())) return [];
+  return [
+    `Cross-Origin-Opener-Policy is "${coop}" — Google's sign-in window can no longer ` +
+      'answer /login (D722); the shell must send none, or unsafe-none',
+  ];
+}
+
 // Pull every hashed `/assets/*.{js,css}` the document references (entry
 // script, modulepreload chunks, stylesheet). These are the files the browser
 // must load for the page to render; if any 404s the page goes blank.
@@ -432,6 +462,7 @@ async function checkRoute(base, route, assetSink) {
       if (route.shell) {
         problems.push(...assertShell(body));
         problems.push(...assertSecurityHeaders(headers));
+        if (route.path === GOOGLE_WINDOW_ROUTE) problems.push(...assertOpenerPolicy(headers));
       } else if (!/<html|<!doctype/i.test(body)) {
         problems.push('body is not an HTML document');
       }
@@ -518,6 +549,54 @@ async function checkApiRouting(base, probePath = API_PROBE_PATH) {
   return lastErr;
 }
 
+// D722 — `GET /api/auth/google/config` is what /login reads to decide between
+// Google's window and the redirect. It is a pure read of the deployment's env,
+// rate-limit exempt, so it must answer on every deploy; a host where it does
+// not answer is a host where every click quietly takes the redirect. Returns
+// null when healthy, else a reason. The client ID is never echoed: a reason
+// names only which field is wrong.
+async function checkGoogleConfig(base) {
+  const url = base.replace(/\/$/, '') + GOOGLE_CONFIG_PATH;
+  let lastErr = '';
+  for (let attempt = 1; attempt <= RETRIES; attempt++) {
+    try {
+      const { status, ctype, body } = await fetchOnce(url);
+      const problems = [];
+      if (status !== 200) problems.push(`HTTP ${status} (expected 200)`);
+      if (!/application\/json/i.test(ctype)) problems.push(`Content-Type "${ctype || '(none)'}" is not JSON`);
+      let cfg = null;
+      try { cfg = JSON.parse(body); } catch { problems.push('body is not JSON'); }
+      // The fields are read only off a 200: a JSON 404 means the route is
+      // not deployed, and listing its missing fields would bury that.
+      if (status === 200 && cfg && typeof cfg === 'object') {
+        if (typeof cfg.configured !== 'boolean') problems.push('`configured` is not a boolean');
+        if (typeof cfg.popup !== 'boolean') problems.push('`popup` is not a boolean');
+        if (cfg.popup === true && cfg.configured !== true) problems.push('`popup` is on while `configured` is not');
+        if (cfg.popup === true) {
+          if (typeof cfg.client_id !== 'string' || !GOOGLE_CLIENT_ID_RE.test(cfg.client_id)) {
+            problems.push('`client_id` is not shaped like a Google web client ID while `popup` is on');
+          }
+        } else if (cfg.client_id !== null) {
+          problems.push('`client_id` is handed out while `popup` is off');
+        }
+      }
+      if (problems.length === 0) {
+        return { ok: true, popup: cfg.popup, configured: cfg.configured };
+      }
+      lastErr = problems.join('; ');
+    } catch (err) {
+      lastErr = `request failed: ${err?.message || err}`;
+    }
+    if (attempt < RETRIES) {
+      console.log(
+        `[spa-live]   retry ${attempt}/${RETRIES - 1} for ${url} (${lastErr})`,
+      );
+      await sleep(RETRY_MS);
+    }
+  }
+  return { ok: false, reason: lastErr };
+}
+
 async function main() {
   console.log(
     `[spa-live] Checking ${HOSTS.length} host(s): ${HOSTS.join(', ')}`,
@@ -563,6 +642,19 @@ async function main() {
         if (exemptProbeOk[base]) limiterSignature.push(base);
       } else {
         console.log(`[spa-live] PASS  ${apiUrl} (rate-limit middleware answers)`);
+      }
+    }
+
+    // D722 — the switch /login reads before it opens Google's window.
+    {
+      const apiUrl = base.replace(/\/$/, '') + GOOGLE_CONFIG_PATH;
+      const res = await checkGoogleConfig(base);
+      if (!res.ok) {
+        console.error(`[spa-live] FAIL  ${apiUrl} — ${res.reason}`);
+        failures.push(`${apiUrl} — ${res.reason}`);
+      } else {
+        const mode = res.popup ? "Google's window" : res.configured ? 'redirect (window off)' : 'not configured';
+        console.log(`[spa-live] PASS  ${apiUrl} (Continue with Google: ${mode})`);
       }
     }
 
