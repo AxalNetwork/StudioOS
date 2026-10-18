@@ -4,6 +4,19 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## Introduction packs are no longer sold (D755, #1915, PR 1)
+
+- `INTRO_PACKS_ON_SALE = false` (`services/introductions.ts`): the 402 and
+  `GET /api/introductions/credits` carry no buy path, `GET /packs` answers
+  `{ packs: [], on_sale: false }`, and `POST /api/payments/intro-credits/intent`
+  answers 410 `intro_packs_retired` before any Stripe call. A PaymentIntent
+  minted before the switch still grants through the webhook; bought credits
+  still spend and show in their history.
+- `/plans-and-pricing` is titled "Plans & Pricing" and drops its Introduction
+  packs section; the Introductions panel drops "Buy credits" and the pack
+  links, and keeps Refer & earn. `api.introPacks` and
+  `api.introCreditsIntent` are gone.
+
 ## Every connector's page, as data the Worker holds to its code (D753, #1875)
 
 - `cloudflare-worker/src/integrations/connectorPages.ts` describes each
