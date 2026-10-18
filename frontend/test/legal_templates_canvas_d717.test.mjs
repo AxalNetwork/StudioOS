@@ -73,7 +73,7 @@ test('D717 the README row names the four routes, the grade and #1782, and says t
   assert.ok(row.includes('there is no L13'));
 });
 
-test('D717 ROUTE_MAP triages L9, L10, L11 and L12, and grades none of them CURRENT', () => {
+test('D717 ROUTE_MAP triages L9 to L12: L9 and L12 wait on their PRs, L10 and L11 are CURRENT', () => {
   const map = at('documentation/architecture/ROUTE_MAP.md');
   const start = map.indexOf('### Legal templates Worker contract (D717, #1782)');
   const end = map.indexOf('\n### ', start + 1);
@@ -81,14 +81,18 @@ test('D717 ROUTE_MAP triages L9, L10, L11 and L12, and grades none of them CURRE
   const section = map.slice(start, end);
   assert.ok(section.includes(`\`design/incoming/${FILE}\``), 'the section names the file');
   const rows = section.split('\n').filter((l) => l.startsWith('| L'));
-  for (const board of ['L9', 'L10', 'L12']) {
+  for (const board of ['L9', 'L12']) {
     const own = rows.filter((l) => l.startsWith(`| ${board} `));
     assert.ok(own.length, `a row for ${board}`);
     for (const l of own) assert.ok(!/\| CURRENT \|/.test(l), `${board} is not CURRENT`);
   }
-  // L11 is the Bank accounts table's row, just above the section.
+  // L10's sheet (#1855) and its Bank accounts door (#1856) have both merged.
+  const l10 = rows.filter((l) => l.startsWith('| L10 '));
+  assert.equal(l10.length, 1, 'a row for L10');
+  assert.ok(/\| CURRENT \|/.test(l10[0]), 'L10 is CURRENT: #1855 and #1856 merged');
+  // L11 is the Bank accounts table's row, just above the section; #1856 built it.
   const bank = map.split('\n').filter((l) => l.startsWith(`| \`${FILE}\` · L11`));
   assert.equal(bank.length, 1, 'the Bank accounts table has the L11 row');
-  assert.ok(!/\| CURRENT \|/.test(bank[0]));
+  assert.ok(/\| CURRENT \|/.test(bank[0]), 'L11 is CURRENT: #1856 merged');
   assert.ok(!map.includes('| None, by decision'), 'no Bank accounts row still says it has no canvas');
 });
