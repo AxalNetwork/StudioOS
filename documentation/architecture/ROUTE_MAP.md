@@ -32,7 +32,10 @@ their connecting user; company links control writes into project-backed data.
 `GET /suggestions` reads empty module stores, `POST /requests` records a tool
 request, and Super Admin `GET /requests` lists them. `GET /:uid/logs` searches
 and pages activity. Every company ID supplied by a request is checked against
-`user_company_links` before use.
+`user_company_links` before use. D751 (#1880): every OAuth connector with an
+implementation also carries `configured` — `true` when Axal holds its client,
+`false` when it does not, `null` when the key store could not be read — and no
+other row carries the field.
 Mercury (D710, #1775) is listed only to an admin on HQ, as an entity
 connection read from `/api/admin/mercury`; to every other caller, and on a
 branch, `GET /available` omits it and `POST /connect`, `GET /:key` and the
@@ -68,6 +71,8 @@ Every admin act leaves one `fund_admin.<act>` row in `admin_audit_log`. `COOL_OF
 ### GitHub connector and "now fed by" (D655, #1467)
 
 The `github` provider is a GitHub App's read-only user authorization. `GET /:uid/repositories` lists what its installations reach and what is chosen; `PUT /:uid/repositories` saves a choice and a project, after re-reading the grant and refusing any permission beyond the registry's four read scopes (`write_scope_refused`). Both need the active company enabled for the connection, and the project must be in it. `POST /:uid/sync` lands issues on `roadmap_okrs` and pull requests on `mvp_features`, linked through `connector_fed_items` (migration 445) so a re-sync updates; releases are recorded with no store. `GET /:uid/sync-status` returns the running sync's percentage and what it is reading. `GET /:uid/fed` returns, for every connector, a count per module it feeds; a connector that does not record deliveries says Not recorded, never 0.
+
+D751 (#1880), for all nine OAuth connectors (Calendly, Carta, DocuSign, GitHub, HubSpot, Salesforce, Slack, Stripe, Zoom): `GET /oauth/:provider/start` checks readiness before it writes any state. An unset client is 503 `oauth_unconfigured` ("<Name> isn't set up on Axal yet…"), and an admin's body adds `env_vars` and, except for Zoom, `admin_href: '/admin?tab=integration-keys'`; an unreadable key store is 503 `oauth_setup_unreadable` with `Retry-After: 60`; a `coming_soon` connector is 503 `coming_soon`, the same body as `POST /connect`. None of them writes an `oauth_state_tokens` row. A client that goes missing mid-flow reaches the page as `reason=not_configured`. See `decisions/D751.md`.
 
 ### Fund notices and booklets Worker contract (D716, #1781)
 

@@ -4,6 +4,21 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## An OAuth connector Axal holds no client for says so, and its start writes nothing (D751, #1880)
+
+- `GET /api/connectors/available` gives each of the nine OAuth connectors
+  with an implementation `configured: true | false | null` (Axal holds its
+  client, does not, or the key store could not be read). No other row
+  carries it.
+- `GET /oauth/:provider/start` refuses an unset client before any
+  `oauth_state_tokens` row: 503 `oauth_unconfigured` with a true sentence
+  ("GitHub isn't set up on Axal yet…"), plus `env_vars` and `admin_href`
+  for an admin; 503 `oauth_setup_unreadable` when the store cannot be read;
+  and `coming_soon` as `POST /connect` refuses it. The callback reports a
+  client gone missing mid-flow as `reason=not_configured`.
+- `oauthCredsReady` (`services/providerOauthKeys.ts`) reads the cache
+  `ensureCreds` reads; Zoom is set up only with all three of its secrets.
+
 ## The LP's capital call opens on the amount, and the fee statement is on screen (D717, #1859)
 
 - An open Fund I line's panel on the LP workspace opens on "Amount due", the

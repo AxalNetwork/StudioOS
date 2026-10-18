@@ -210,6 +210,8 @@ export interface ProviderImpl {
    * the user faces a 15-minute "dead period" before bookings show up.
    */
   postConnect?(c: Context<{ Bindings: Env }>, user: User, row: IntegrationRow): Promise<void>;
+  /** D751 — whether Axal holds this provider's OAuth client. Never a value or a name. */
+  ready?(env: Env): Promise<boolean | null>;
 }
 
 const PROVIDER_IMPLS: Map<string, ProviderImpl> = new Map();
@@ -499,6 +501,18 @@ export function connectorFeeds(providerKey: string, role?: string | null): strin
 const REGISTRY_BY_KEY: Map<string, ProviderDescriptor> = new Map(
   REGISTRY.map(p => [p.key, p]),
 );
+
+/**
+ * D751 — `configured` for `GET /available`: the impl's `ready` for an
+ * `oauth2` provider, a throw read as `null` (unknown). `undefined` (no field)
+ * for any other row, a provider with no impl, or an impl with no `ready`.
+ */
+export async function readinessOf(env: Env, p: ProviderDescriptor): Promise<boolean | null | undefined> {
+  if (p.auth_type !== 'oauth2') return undefined;
+  const impl = PROVIDER_IMPLS.get(p.key);
+  if (!impl?.ready) return undefined;
+  try { return await impl.ready(env); } catch { return null; }
+}
 
 export function getDescriptor(key: string): ProviderDescriptor | null {
   return REGISTRY_BY_KEY.get(key) ?? null;

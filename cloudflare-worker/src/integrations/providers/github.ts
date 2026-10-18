@@ -311,6 +311,8 @@ export async function syncGithub(env: Env, row: IntegrationRow): Promise<SyncRes
 
 registerProvider({
   key: PROVIDER_KEY,
+  // D751: whether Axal holds the OAuth client, from the cache `ensureCreds` reads.
+  ready: async (env) => (await import('../../services/providerOauthKeys')).oauthCredsReady(env, 'github'),
   connect,
   revokeGranted,
   buildAuthorizeUrl,
