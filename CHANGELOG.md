@@ -4,6 +4,19 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+
+## The OAuth refresh leases hold (KV's 60-second minimum) (#1903)
+
+- HubSpot, Calendly, Carta, DocuSign and Salesforce wrote their refresh lease
+  with `expirationTtl: 30`, below Workers KV's 60-second minimum, so the `put`
+  threw, the `catch` swallowed it and no caller held the lease. Every expired
+  token waited ~3 s polling D1, and concurrent reads each refreshed.
+- One helper, `integrations/refreshLease.ts` (`acquireRefreshLease`, 60 s),
+  replaces the five copies; the key is unchanged.
+- `test/_mem_kv.mjs` now refuses a TTL under 60, and
+  `test/kv_refresh_lease.test.ts` fails on any literal under 60 in
+  `cloudflare-worker/src`.
+
 ## Every library document renders from a coded template (D758, #1861)
 
 - The 24 old seed bodies that lived only inside migration 085 (`lpa`, `ppm`,

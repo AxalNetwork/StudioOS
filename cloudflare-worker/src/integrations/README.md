@@ -16,6 +16,7 @@ lives in `providers/`.
 | `companyScope.ts` | Which providers write project-backed data, and whether a connection is enabled for a company or project. A missing scope row denies the write. |
 | `connectorRules.ts` | `hasScopeOverreach` (a grant wider than the request is refused) and the validation of a connector's settings patch. |
 | `autopush.ts` | Background pushes started outside the connector routes (a deal's stage change, a new project), logged to `integration_logs` like a user's own push. |
+| `refreshLease.ts` | `acquireRefreshLease` and `REFRESH_LEASE_TTL_S`: the KV lease on `<provider>:refresh:<uid>` that serializes one connection's OAuth token refresh, shared by HubSpot, Calendly, Carta, DocuSign and Salesforce (#1903). `release()` deletes the key only for the caller that acquired it. Best-effort: KV is eventually consistent, so the providers keep their D1 re-checks. |
 
 ## Subfolders
 
@@ -30,3 +31,5 @@ A new provider goes in `providers/` with an entry in both `REGISTRY` and
 needs a label and a page in `moduleLabels.ts`. Shared connector logic that is
 not one provider's goes in this folder; anything with HTTP belongs in
 `../routes/`.
+
+A KV TTL is at least 60 seconds, KV's minimum: a shorter `expirationTtl` makes the `put` throw in production. `cloudflare-worker/test/kv_refresh_lease.test.ts` fails on a literal under 60 anywhere in `cloudflare-worker/src`, and `cloudflare-worker/test/_mem_kv.mjs` refuses one as KV does.
