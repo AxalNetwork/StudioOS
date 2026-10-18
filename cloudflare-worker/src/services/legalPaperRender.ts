@@ -83,7 +83,8 @@ async function viaBrowserRun(env: Env, model: PaperModel, opts: RenderLegalOptio
   const { pages, doc } = await readLinkPages(pass1.bytes);
   let toc: (number | null)[] | null = null;
   if (pages.length) toc = model.articles.map((_, k) => pages[k] ?? null);
-  else logReason('legal_pdf_toc', 'toc_unresolved');
+  // #1865 — a paper with no article prints no contents, so nothing goes unresolved.
+  else if (model.articles.length > 0) logReason('legal_pdf_toc', 'toc_unresolved');
   const pass2 = await browserRunPdf(env, paperHtml(model, { ...base, part: 'front', tocPages: toc }), run);
   if (!pass2.ok) return pass2;
   return { ok: true, bytes: await merge(pass2.bytes, doc) };

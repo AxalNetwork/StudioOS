@@ -111,7 +111,7 @@ It answers no key and no account number. `stripeCall` refuses a Stripe create wi
 
 ### Legal paper Worker contract (D711, #1776)
 
-Every legal document draws one HTML paper (`services/legalPaper.ts`), printed to PDF by Browser Run through `BROWSER.quickAction('pdf', …)`, with pdf-lib (`services/pdf.ts`) as the fallback. Every kept or handed-out file gets an append-only `legal_document_files` row (migration 475). See `decisions/D711.md`.
+Every legal document draws one HTML paper (`services/legalPaper.ts`), printed to PDF by Browser Run through `BROWSER.quickAction('pdf', …)`, with pdf-lib (`services/pdf.ts`) as the fallback. Every kept or handed-out file gets an append-only `legal_document_files` row (migration 475). See `decisions/D711.md`. Since #1865 the paper's tokens are R2's, and a stub's paper (`preview.pdf`, `render`, `render.pdf` and the thumbnail) reads "No body in the store yet." and, for a counsel slug, "Stub — counsel to draft."
 
 New routes:
 - `POST /api/admin/contracts/templates/render` · admin: `{ title, body, slug, category, version, page_size, cover, resolve, fonts }` → `{ html, body_sha256, page_size, paper_sha256, state }`, `no-store`. A body over 256 KB is 413 `body_too_large`.
