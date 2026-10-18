@@ -30,6 +30,18 @@ export const ENTITY_ROLES: Readonly<Record<AxalEntityKey, string>> = Object.free
   fund: `Limited partnership pooling LP capital. Managed exclusively by ${N('gp')} as general partner.`,
 });
 
+/** D717 decision 11 (#1855): what each entity signs, the "Legal Documents · Templates" canvas's L10 copy. */
+export const ENTITY_SIGNS: Readonly<Record<AxalEntityKey, string>> = Object.freeze({
+  holdings: 'The two platform licences (licensor), brand and IP agreements, intercompany agreements. Never customer-facing.',
+  management: 'Partner and operating-partner, platform, customer, vendor, advisor, mentor and founder-services agreements; Terms; Privacy; DPA.',
+  gp: 'LPA, subscription booklet, side letters, capital calls, distributions, management fee statements.',
+  fund: 'Signs through its general partner. As investor: SAFE, term sheet, SPA, voting and investors’ rights.',
+});
+
+/** Which entity a kind of agreement routes to, L10's "Who signs, and where" sub-line. */
+export const ENTITY_SIGNS_ROUTING = 'Routing: the platform and every partner agreement, Management · platform or brand IP, Holdings · '
+  + 'investing in the Fund, the GP for the Fund · investing in a portfolio company, the company with the Fund as investor.';
+
 export type MoneyParty = AxalEntityKey | 'customer' | 'lp' | 'vendor';
 export type MoneyRail = 'stripe' | 'mercury';
 export type MoneyGroup = 'platform' | 'fund' | 'intercompany';
