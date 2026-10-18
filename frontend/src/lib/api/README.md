@@ -115,6 +115,12 @@ rail section and the model picked per section and router task, for the caller
 only. A null clears a row. localStorage stays the cache, so a mode or a pick
 set on a laptop is in place on a phone after a reload.
 
+D715 (#1780): `adminMercury.js` calls `/api/admin/mercury` (`cloudflare-worker/src/routes/admin_mercury.ts`, D710):
+the four entity connections (each with its accounts by ending), the Super
+Admin's connect with `confirm_read_only: true` and disconnect with a reason,
+sync now, and the accounts, transactions and matches reads. Every read is
+audited by the Worker; nothing here moves money. #1779's console imports it.
+
 D708 (#1773): `bankAccounts.js` calls `/api/admin/bank-accounts` (the Super
 Admin's list, add, label and purposes, retire, and a recorded reveal of one
 number) and the LP's own `GET /api/funds/:id/capital-calls/lines/:lineId/pay-instructions`.
@@ -130,3 +136,10 @@ reporting queue: drafts an Admin builds, reads, prepares, returns, rebuilds,
 corrects and exports, and a Super Admin issues. A draft's figures come only
 from `read` and `exportCsv`, which the Worker records before it answers; the
 list carries none.
+
+D714 (#1779): `fundAdmin.js` reads the act table (`/api/fund-admin/access`) and
+a distribution's preview (`POST /api/funds/:id/distributions/preview`), which
+writes nothing. `fundFees.js` calls `/api/fund-fees/:fundId` (D709, #1774): the
+fee state, terms and their confirmation, admissions, net invested, offsets, a
+period's preview, issue and funding call, and one LP's statement. The Worker
+decides each act: confirm and issue are the Super Admin's.
