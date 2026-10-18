@@ -689,6 +689,21 @@ network.patch('/admin/commission-rules/:key', async (c) => {
  * and no link rows, so its `commission_ids` is null (not recorded) rather
  * than an empty list, which would claim it took nothing.
  */
+/** D713: fetch only evidence for the already-authorized payout rows.
+ * Chunk below D1's bind limit; one query per page of ids, never per payout. */
+async function withPayoutMatches(env: Env, payouts: any[]): Promise<any[]> {
+  const matches = new Map<number, { posted_on: string; last_four: string }>();
+  for (let offset = 0; offset < payouts.length; offset += 80) {
+    const ids = payouts.slice(offset, offset + 80).map((p) => p.id);
+    const rows = await env.DB.prepare(`SELECT target_id, posted_on, account_last_four AS last_four
+      FROM mercury_personal_matches WHERE target_kind = 'payout' AND state = 'confirmed'
+      AND target_id IN (${ids.map(() => '?').join(',')})`).bind(...ids)
+      .all<{ target_id: number; posted_on: string; last_four: string }>();
+    for (const row of rows.results || []) matches.set(row.target_id, { posted_on: row.posted_on, last_four: row.last_four });
+  }
+  return payouts.map((p) => ({ ...p, bank_match: matches.get(p.id) ?? null }));
+}
+
 async function withCommissionIds(env: Env, payouts: any[]): Promise<any[]> {
   if (!payouts.length) return payouts;
   const ids = payouts.map((p) => p.id);
@@ -738,7 +753,8 @@ network.get('/payouts/me', async (c) => {
   const sql = getSQL(c.env);
   try {
     const rows = await sql`SELECT * FROM payouts WHERE user_id = ${user.id} ORDER BY created_at DESC`;
-    return c.json(await withCommissionIds(c.env, rows as any[]));
+    const payouts = await withCommissionIds(c.env, rows as any[]);
+    return c.json(await withPayoutMatches(c.env, payouts));
   } finally { await sql.end(); }
 });
 
@@ -929,7 +945,8 @@ network.get('/admin/payouts', async (c) => {
       JOIN users u ON u.id = p.user_id
       LEFT JOIN users pu ON pu.id = p.processed_by
       ORDER BY p.created_at DESC LIMIT 200`;
-    return c.json(await withCommissionIds(c.env, rows as any[]));
+    const payouts = await withCommissionIds(c.env, rows as any[]);
+    return c.json(await withPayoutMatches(c.env, payouts));
   } finally { await sql.end(); }
 });
 

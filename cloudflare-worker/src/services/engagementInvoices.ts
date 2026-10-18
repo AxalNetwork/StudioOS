@@ -138,9 +138,9 @@ export async function issueInvoice(env: Env, input: IssueInput, uid: string, now
 }
 
 /** Parse the stored snapshot back out, tolerating a bad row rather than throwing. */
-export function invoiceDto(row: any) {
+export function invoiceDto(row: any, match: { posted_on: string; last_four: string } | null = null, viewerSide: 'founder' | 'partner' = 'founder') {
   if (!row) return null;
   let items: LineItem[] = [];
   try { items = JSON.parse(row.line_items_json || '[]'); } catch { items = []; }
-  return { ...row, line_items: Array.isArray(items) ? items : [] };
+  return { ...row, line_items: Array.isArray(items) ? items : [], bank_matched_on: match?.posted_on ?? null, ...(viewerSide === 'partner' ? { bank_last_four: match?.last_four ?? null } : {}) };
 }

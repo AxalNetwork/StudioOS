@@ -421,6 +421,7 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
   const [confirming, setConfirming] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncNote, setSyncNote] = useState('');
+  const [confirmReadOnly, setConfirmReadOnly] = useState(false);
   const [apiKey, setApiKey] = useState('');
   const [webhookSecret, setWebhookSecret] = useState('');
   const [configText, setConfigText] = useState(conn?.config && !conn.first_party ? JSON.stringify(conn.config, null, 2) : '');
@@ -509,9 +510,13 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
     if (configText.trim()) {
       try { config = JSON.parse(configText); } catch { setMessage('Settings must be valid JSON.'); return; }
     }
+    if (p.key === 'mercury') {
+      if (!confirmReadOnly) { setMessage('Confirm this is a Read Only token.'); return; }
+      config = { ...config, confirm_read_only: true };
+    }
     setBusy(true);
     try {
-      await connectorsApi.connect({ provider_key: p.key, display_name: conn?.display_name || name, api_key: apiKey || undefined, webhook_secret: webhookSecret || undefined, config }, opts);
+      await connectorsApi.connect({ provider_key: p.key, display_name: conn?.display_name || name, api_key: apiKey || undefined, webhook_secret: p.key === 'mercury' ? undefined : webhookSecret || undefined, config }, opts);
       setApiKey(''); setWebhookSecret('');
       setView('connected');
       onChanged?.();
@@ -660,6 +665,13 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
     body = (
       <form id="connector-key-form" onSubmit={submitKey}>
         {!updating && <Steps names={keySteps} at={1} />}
+        {p.key === 'mercury' && <>
+          <Banner tone="neutral">Create a <strong>Read Only</strong> API token in your own Mercury organization, never Read and Write.</Banner>
+          <label className="mx-5 mt-4 flex items-center gap-2 text-sm">
+            <input type="checkbox" required checked={confirmReadOnly} onChange={(e) => setConfirmReadOnly(e.target.checked)} />
+            This is a Read Only token
+          </label>
+        </>}
         {p.key === 'crunchbase' && !updating && (
           <Banner tone="neutral">
             <span className="font-semibold">Crunchbase Basic user key.</span> Create one at data.crunchbase.com → API and paste the user_key below. Connect runs a live search to check it before saving. Daily Basic quota is 200 calls.
@@ -689,11 +701,11 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
           <button type="button" className={BTN.link} onClick={() => setAdvanced((v) => !v)} aria-expanded={advanced}>{advanced ? 'Hide advanced' : 'Advanced'}</button>
           {advanced && (
             <div className="mt-2 space-y-3">
-              <div className="space-y-1">
+              {p.key !== 'mercury' && <div className="space-y-1">
                 <label htmlFor="connector-webhook" className="text-[12px] font-semibold text-axal-muted dark:text-gray-400">Webhook secret (optional)</label>
                 <input id="connector-webhook" type="password" className={INPUT} value={webhookSecret} onChange={(e) => setWebhookSecret(e.target.value)} placeholder={conn?.has_webhook_secret ? '••••••••' : ''} />
                 <p className="text-[11.5px] text-axal-muted dark:text-gray-400">Webhooks sent to /api/integrations/webhook/{p.key}/&lt;uid&gt; are checked against this secret (HMAC-SHA256 in the X-Axal-Signature header, or the signature the provider adds). Without one, the connection takes no webhooks and updates when it syncs. HubSpot checks its own signature and needs none.</p>
-              </div>
+              </div>}
               <div className="space-y-1">
                 <label htmlFor="connector-config" className="text-[12px] font-semibold text-axal-muted dark:text-gray-400">Settings (JSON, optional)</label>
                 <textarea id="connector-config" rows={4} className={`${INPUT} font-mono text-xs`} value={configText} onChange={(e) => setConfigText(e.target.value)} />

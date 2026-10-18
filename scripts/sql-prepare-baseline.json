@@ -54,6 +54,7 @@
     "gp.sql @ routes/capital.ts": 1,
     "gp.sql @ routes/legalcap.ts": 1,
     "ids @ services/notify.ts": 1,
+    "ids.map(() => '?').join(',') @ routes/network.ts": 1,
     "incRows.map(() => '?').join(',') || 'NULL' @ routes/public.ts": 1,
     "insertCols @ services/profileExpansion.ts": 1,
     "INTERVIEW_SELECT @ routes/progress.ts": 7,
