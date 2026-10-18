@@ -32,8 +32,9 @@ export const adminMercuryApi = {
   /** Once in five minutes per connection. */
   sync: (entityKey) => request(`${entity(entityKey)}/sync`, { method: 'POST' }),
   accounts: ({ entity: key } = {}) => request(`${BASE}/accounts${query({ entity: key })}`),
-  transactions: ({ entity: key, account, from, to, match: state, page } = {}) => request(
-    `${BASE}/transactions${query({ entity: key, account, from, to, match: state, page })}`,
+  /** `direction` is `credit` or `debit` (#1856: an unmatched receipt is a credit). */
+  transactions: ({ entity: key, account, from, to, match: state, direction, page } = {}) => request(
+    `${BASE}/transactions${query({ entity: key, account, from, to, match: state, direction, page })}`,
   ),
   matches: ({ state } = {}) => request(`${BASE}/matches${query({ state })}`),
   proposeMatch: ({ transaction_uid, target_kind, target_id }) => request(`${BASE}/matches`, {
