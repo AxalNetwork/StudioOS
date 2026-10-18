@@ -111,9 +111,11 @@ const bestMatch = (url) => matchRoutes(declared().map((path) => ({ path })), url
 
 test('the route: /account/connectors/:key beside /account/:section, for the same six roles', () => {
   const app = read('frontend/src/App.jsx');
-  const roles = (path) => app.match(new RegExp(`<Route path="${path.replace(/\//g, '\\/')}" element=\\{guard\\((\\[[^\\]]*\\]), <SettingsPage \\/>\\)\\} \\/>`))?.[1];
+  // The role list of the route declared for a path, read with one fixed pattern.
+  const roles = (path) => [...app.matchAll(/<Route path="([^"]+)" element=\{guard\((\[[^\]]*\]), <SettingsPage \/>\)\} \/>/g)]
+    .find((m) => m[1] === path)?.[2];
   assert.ok(roles('/account/connectors/:key'), 'the connector route');
-  assert.deepEqual(eval(roles('/account/connectors/:key')), eval(roles('/account/:section')));
+  assert.equal(roles('/account/connectors/:key'), roles('/account/:section'));
   const github = bestMatch('/account/connectors/github');
   assert.equal(github.route.path, '/account/connectors/:key');
   assert.equal(github.params.key, 'github');
@@ -166,7 +168,7 @@ test('an unknown key: its sentence, Request it inline in the page frame, and no 
   } finally { await m.unmount(); f.restore(); }
   for (const k of ['__proto__', 'constructor']) {
     const out = flat(renderToStaticMarkup(h(MemoryRouter, { initialEntries: [`/account/connectors/${k}`] }, page(k))));
-    assert.match(out, new RegExp(`No connector called “${k}”`));
+    assert.ok(out.includes(`No connector called “${k}”`), k);
   }
 });
 
@@ -283,7 +285,7 @@ const isInside = (n, root) => { for (let x = n; x; x = x.parentNode) if (x === r
 
 /** The href of the `<a>` carrying a testid, whatever its attribute order; null when it is not a link. */
 const hrefOf = (html, testid) => {
-  const tag = html.match(new RegExp(`<a\\b[^>]*data-testid="${testid}"[^>]*>`))?.[0];
+  const tag = (html.match(/<a\b[^>]*>/g) || []).find((t) => t.includes(` data-testid="${testid}"`));
   return tag ? tag.match(/href="([^"]*)"/)?.[1] ?? null : null;
 };
 
