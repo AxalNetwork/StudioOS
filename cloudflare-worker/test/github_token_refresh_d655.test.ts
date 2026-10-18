@@ -178,11 +178,11 @@ test('refused renewal marks reconnect, repository reads and repeat sync never re
 test('late refusal of a spent token cannot mark a newer pair', async t => {
   const f = await fixture(t); const stale = f.row(); const entered = deferred(); const answer = deferred();
   f.KV.get = async () => { throw new Error('KV down'); };
-  const gh = github([async () => { entered.resolve(); return answer.promise; }, () => json(refreshed)]);
+  const gh = github([async () => { entered.resolve(); return answer.promise; }]);
   const late = accessToken(f.env, stale); await entered.promise;
-  assert.equal(await accessToken(f.env, stale), 'ghu_t5_new');
+  await f.write({ ...refreshed, expires_at: Date.now() + 3600000 });
   answer.resolve(json({ error: 'bad_refresh_token' })); assert.equal(await late, 'ghu_t5_new');
-  assert.equal(gh.tokens().length, 2); assert.equal(f.row().status, 'active'); assert.equal(f.row().last_error, null);
+  assert.equal(gh.tokens().length, 1); assert.equal(f.row().status, 'active'); assert.equal(f.row().last_error, null);
 });
 test('missing or locally expired refresh token is final without a request', async t => {
   for (const patch of [{ refresh_token: null }, { refresh_token_expires_at: Date.now() - 1000 }]) {
@@ -256,4 +256,26 @@ test('disconnect still removes locally on revoke failures or a final refusal', a
 test('overreach revocation checks GitHub status without exposing its body', async t => {
   const f = await fixture(t); github([], () => json({ error_description: 'sensitive-description-marker' }, 422));
   await rejectsSafe(() => getProviderImpl('github')!.revokeGranted!(f.env, { credentials: { access_token: 'ghu_t5_old' } } as any), /github_revoke_failed: 422/);
+});
+
+
+test('D1 lease prevents an early duplicate refusal when KV is unavailable', async t => {
+  const f = await fixture(t); const row = f.row(); const entered = deferred(); const answer = deferred();
+  f.KV.get = async () => { throw new Error('KV down'); };
+  const gh = github([async () => { entered.resolve(); return answer.promise; }, () => json({ error: 'bad_refresh_token' })]);
+  const winner = accessToken(f.env, row); await entered.promise;
+  const loser = accessToken(f.env, row);
+  // Let the loser reach its D1 claim while the successful answer is still held.
+  await new Promise(resolve => setTimeout(resolve, 50));
+  assert.equal(gh.tokens().length, 1, 'the duplicate must never spend the token');
+  answer.resolve(json(refreshed));
+  assert.deepEqual(await Promise.all([winner, loser]), ['ghu_t5_new', 'ghu_t5_new']);
+  assert.equal((await f.read())!.refresh_token, 'ghr_t5_new'); assert.equal((await f.read())!.reauth_required, undefined);
+  assert.equal((await f.read())!.refresh_lease, undefined); assert.equal(f.row().status, 'active'); assert.equal(f.row().last_error, null);
+});
+test('a stale D1 lease can be claimed after its holder dies', async t => {
+  const f = await fixture(t, expired({ refresh_lease: { holder: 'dead-worker', until: Date.now() - 1000 } }));
+  const gh = github([() => json(refreshed)]);
+  assert.equal(await accessToken(f.env, f.row()), 'ghu_t5_new'); assert.equal(gh.tokens().length, 1);
+  assert.equal((await f.read())!.refresh_lease, undefined);
 });

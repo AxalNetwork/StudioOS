@@ -16,8 +16,8 @@
  * the callback and again whenever repositories are chosen.
  *
  * TOKENS: renew 60 seconds early, once under a 60-second KV lease. A loser
- * polls and never refreshes; ciphertext compare-and-swap protects a reconnect
- * or a newer pair, even when KV is unavailable. A final refusal marks the row
+ * polls and never refreshes. An encrypted D1 lease taken by compare-and-swap
+ * prevents duplicate spends even if KV is unavailable; CAS preserves reconnects. A final refusal marks the row
  * for sign-in and is not retried until reconnect.
  * DISCONNECT: best-effort revocation ends the grant. The App stays installed
  * on the member's repositories until they uninstall it on GitHub.
@@ -95,6 +95,7 @@ async function ghPages<T>(token: string, path: string, pick: (body: any) => T[] 
 
 const REFRESH_SKEW_MS = 60_000;
 const LEASE_TTL_S = 60;
+const REFRESH_LEASE_MS = 60_000;
 const LEASE_POLL_MS = 500;
 const LEASE_POLLS = 6;
 export const GITHUB_SIGN_IN_EXPIRED = 'github_sign_in_expired: Sign in to GitHub again.';
@@ -123,7 +124,7 @@ async function readStored(env: Env, row: IntegrationRow): Promise<Stored> {
   if (!creds) throw new Error('github_credentials_missing');
   return { enc, creds };
 }
-async function swapStored(env: Env, row: IntegrationRow, from: string, creds: CredentialBlob, mark = false): Promise<boolean> {
+async function swapStored(env: Env, row: IntegrationRow, from: string, creds: CredentialBlob, mark = false): Promise<string | null> {
   const enc = await encryptCredentials(env, row.uid, creds);
   const result = mark
     ? await env.DB.prepare(`UPDATE integrations SET credentials_enc = ?, status = 'error', last_error = ?,
@@ -131,7 +132,23 @@ async function swapStored(env: Env, row: IntegrationRow, from: string, creds: Cr
       .bind(enc, GITHUB_SIGN_IN_EXPIRED, row.id, from).run()
     : await env.DB.prepare('UPDATE integrations SET credentials_enc = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND credentials_enc = ?')
       .bind(enc, row.id, from).run();
-  return Number(result.meta?.changes || 0) > 0;
+  return Number(result.meta?.changes || 0) > 0 ? enc : null;
+}
+function withoutLease(creds: CredentialBlob): CredentialBlob {
+  const { refresh_lease: _lease, ...rest } = creds;
+  return rest as CredentialBlob;
+}
+function leased(creds: CredentialBlob): boolean {
+  const lease = creds.refresh_lease as { until?: unknown } | undefined;
+  return typeof lease?.until === 'number' && lease.until > Date.now();
+}
+async function waitForRenewal(env: Env, row: IntegrationRow): Promise<string> {
+  for (let poll = 0; poll < LEASE_POLLS; poll += 1) {
+    await new Promise((resolve) => setTimeout(resolve, LEASE_POLL_MS));
+    const token = checkedLive((await readStored(env, row)).creds);
+    if (token) return token;
+  }
+  throw new Error(REFRESH_BUSY);
 }
 function checkedLive(creds: CredentialBlob): string {
   if (creds.reauth_required === true) throw new Error(GITHUB_SIGN_IN_EXPIRED);
@@ -144,7 +161,7 @@ async function refusedRefresh(env: Env, row: IntegrationRow, spent: unknown): Pr
     if (token) return token;
     throw new Error(REFRESH_BUSY);
   }
-  if (await swapStored(env, row, current.enc, Object.assign({}, current.creds, { refresh_token: null, reauth_required: true }), true)) {
+  if (await swapStored(env, row, current.enc, Object.assign({}, withoutLease(current.creds), { refresh_token: null, reauth_required: true }), true)) {
     throw new Error(GITHUB_SIGN_IN_EXPIRED);
   }
   const token = checkedLive((await readStored(env, row)).creds);
@@ -160,6 +177,7 @@ async function refreshGrant(env: Env, refreshToken: string): Promise<RefreshResu
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
       body: new URLSearchParams({ client_id: id, client_secret: secret, grant_type: 'refresh_token', refresh_token: refreshToken }),
+      signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) { console.warn('[github] renewal unavailable', res.status); return { unavailable: true }; }
     const tok: any = await res.json();
@@ -170,7 +188,7 @@ async function refreshGrant(env: Env, refreshToken: string): Promise<RefreshResu
   } catch { return { unavailable: true }; }
 }
 
-/** Renew once, with a KV lease and ciphertext CAS protecting newer credentials. */
+/** Renew once, with a D1 lease and ciphertext CAS protecting newer credentials. */
 export async function accessToken(env: Env, row: IntegrationRow): Promise<string> {
   const first = await decryptCredentials(env, row.uid, row.credentials_enc);
   if (!first) throw new Error('github_credentials_missing');
@@ -180,14 +198,10 @@ export async function accessToken(env: Env, row: IntegrationRow): Promise<string
   let stored = await readStored(env, row);
   const newer = checkedLive(stored.creds);
   if (newer) return newer;
-  const refresh = stored.creds.refresh_token;
-  if (typeof refresh !== 'string' || !refresh ||
-    (typeof stored.creds.refresh_token_expires_at === 'number' && stored.creds.refresh_token_expires_at <= Date.now())) {
-    return refusedRefresh(env, row, refresh);
-  }
   const key = `github:refresh:${row.uid}`;
   const holder = crypto.randomUUID();
   let held = false;
+  let d1Lease: { from: string; enc: string } | null = null;
   try {
     let loser = false;
     try {
@@ -197,18 +211,17 @@ export async function accessToken(env: Env, row: IntegrationRow): Promise<string
         held = (await env.RATE_LIMITS.get(key)) === holder;
         loser = !held;
       }
-    } catch { /* KV is advisory; the ciphertext CAS still protects stored state. */ }
-    if (loser) {
-      for (let poll = 0; poll < LEASE_POLLS; poll += 1) {
-        await new Promise((resolve) => setTimeout(resolve, LEASE_POLL_MS));
-        const token = checkedLive((await readStored(env, row)).creds);
-        if (token) return token;
-      }
-      throw new Error(REFRESH_BUSY);
-    }
+    } catch { /* KV is advisory; the D1 lease below is the exclusive claim. */ }
+    if (loser) return await waitForRenewal(env, row);
     stored = await readStored(env, row);
     const token = checkedLive(stored.creds);
     if (token) return token;
+    if (leased(stored.creds)) return await waitForRenewal(env, row);
+    const leaseCreds = { ...stored.creds, refresh_lease: { holder, until: Date.now() + REFRESH_LEASE_MS } };
+    const leaseEnc = await swapStored(env, row, stored.enc, leaseCreds);
+    if (!leaseEnc) return await waitForRenewal(env, row);
+    d1Lease = { from: stored.enc, enc: leaseEnc };
+    stored = { enc: leaseEnc, creds: leaseCreds };
     const sent = typeof stored.creds.refresh_token === 'string' ? stored.creds.refresh_token : '';
     if (!sent || (typeof stored.creds.refresh_token_expires_at === 'number' && stored.creds.refresh_token_expires_at <= Date.now())) {
       return await refusedRefresh(env, row, stored.creds.refresh_token);
@@ -220,13 +233,21 @@ export async function accessToken(env: Env, row: IntegrationRow): Promise<string
     const { tok } = result;
     const now = Date.now();
     const next: CredentialBlob = {
-      ...stored.creds, access_token: tok.access_token, refresh_token: tok.refresh_token || sent, token_type: 'Bearer',
+      ...withoutLease(stored.creds), access_token: tok.access_token, refresh_token: tok.refresh_token || sent, token_type: 'Bearer',
       issued_at: now, expires_in: tok.expires_in ?? null, expires_at: expiryAt(now, tok.expires_in),
       refresh_token_expires_at: expiryAt(now, tok.refresh_token_expires_in) ?? stored.creds.refresh_token_expires_at ?? null,
     };
     if (await swapStored(env, row, stored.enc, next)) return tok.access_token;
     return liveToken((await readStored(env, row)).creds) || tok.access_token;
   } finally {
+    if (d1Lease) {
+      // Restore the exact original ciphertext only if this lease still stands.
+      // A successful renewal, refusal or reconnect has already replaced it.
+      try {
+        await env.DB.prepare('UPDATE integrations SET credentials_enc = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND credentials_enc = ?')
+          .bind(d1Lease.from, row.id, d1Lease.enc).run();
+      } catch { console.warn('[github] renewal lease release unavailable'); }
+    }
     if (held) {
       try { if ((await env.RATE_LIMITS.get(key)) === holder) await env.RATE_LIMITS.delete(key); }
       catch { /* the lease expires on its own */ }
