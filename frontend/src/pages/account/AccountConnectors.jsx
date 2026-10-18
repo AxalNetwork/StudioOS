@@ -14,6 +14,9 @@ import {
   SUGGESTED,
 } from './connectorsModel';
 import { ACCOUNT_PHONE_COPY, ACCOUNT_PHONE_PAGES } from './accountPhone';
+import { isMercurySearch, notOfferedSentence } from './mercuryModel';
+import { useAuth } from '../../hooks/useAuthSync';
+import { branchOfUser } from '../../lib/shellRole';
 
 /**
  * D651 (#1463) — the Account center's Connectors section, `/account/connectors`,
@@ -95,6 +98,8 @@ export function ConnectorCard({ p, onOpen, onNotify, onUnnotify, busy }) {
   if (act === 'notify') button = <button type="button" disabled={busy} onClick={() => onNotify(p)} className={BTN.link}>Notify me</button>;
   if (act === 'joined') button = <button type="button" disabled={busy} onClick={() => onUnnotify(p)} className={BTN.link} title="Click to stop the notice">We&apos;ll tell you</button>;
   if (act === 'unavailable') button = <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{p.unreadable ? 'Status unreadable' : 'Not set up here'}</span>;
+  // D715: the Axal entities' Mercury opens its sheet, whatever else the row says.
+  if (act === 'entity') button = <button type="button" onClick={() => onOpen(p)} className={BTN.link} data-testid={`connector-open-${p.key}`}>Open</button>;
   return (
     <div className={`${TONE_CLS} relative flex flex-col gap-2 p-3.5`} data-testid={`connector-card-${p.key}`} data-action={act}>
       <div className="flex items-start justify-between"><BrandIcon provider={p.key} name={p.display_name} />{button}</div>
@@ -224,7 +229,10 @@ export function AddMenu({ onBrowse, onRequest, initialOpen = false }) {
 export default function ConnectorsSection() {
   const data = useConnectors();
   const phone = usePhoneWidth();
-  return <ConnectorsView data={data} phone={phone} />;
+  const user = useAuth()?.user ?? null;
+  // Decision 10's branch sentence: an admin on a branch. It chooses words only; the Worker serves the rows.
+  const branchAdmin = user?.role === 'admin' && !!branchOfUser(user);
+  return <ConnectorsView data={data} phone={phone} branchAdmin={branchAdmin} />;
 }
 
 // ---------------------------------------------------------------------------
@@ -237,6 +245,7 @@ function actionPill(p, act) {
   if (act === 'connected') return { label: 'Connected', tone: 'ok' };
   if (act === 'notify') return { label: 'Notify me', tone: 'info' };
   if (act === 'joined') return { label: "We'll tell you", tone: 'neutral' };
+  if (act === 'entity') return { label: 'Open', tone: 'info' };
   return { label: p.unreadable ? 'Status unreadable' : 'Not set up here', tone: 'neutral' };
 }
 
@@ -318,7 +327,7 @@ export function ConnectorsPhoneView(props) {
 }
 
 /** The section, drawn from one `useConnectors()` read; exported so a test can hand it each state. */
-export function ConnectorsView({ data, initialTab = 'yours', initialChip = 'All', initialQuery = '', phone = false }) {
+export function ConnectorsView({ data, initialTab = 'yours', initialChip = 'All', initialQuery = '', phone = false, branchAdmin = false }) {
   const location = useLocation();
   const navigate = useNavigate();
   const moved = useMovedNotice(location);
@@ -338,7 +347,8 @@ export function ConnectorsView({ data, initialTab = 'yours', initialChip = 'All'
   const [ret] = useState(() => oauthReturn(location.search));
   useEffect(() => {
     if (!ret) return;
-    setSheet({ key: ret.key, view: ret.view, ret });
+    // Mercury has no sign-in: a return naming it is crafted, and must not cause the entity sheet's audited read (D715).
+    if (ret.key !== 'mercury') setSheet({ key: ret.key, view: ret.view, ret });
     navigate({ pathname: location.pathname, search: stripReturn(location.search, ret.strip), hash: location.hash }, { replace: true, state: location.state });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -353,6 +363,9 @@ export function ConnectorsView({ data, initialTab = 'yours', initialChip = 'All'
   // A sign-in's return opens a sheet only for a connector the catalogue holds:
   // a crafted link naming anything else opens nothing.
   const sheetP = sheet && (data.catalogue.find((p) => p.key === sheet.key) || null);
+  // D715 decision 10: a search for Mercury when the Worker serves this profile no Mercury row says why, and offers no request.
+  const mercuryWithheld = isMercurySearch(q) && !data.catalogue.some((p) => p.key === 'mercury');
+  const notOffered = <span data-testid="connectors-mercury-not-offered">{notOfferedSentence({ branchAdmin })}</span>;
 
   const open = (p) => setSheet({ key: p.key, view: openingView(p), ret: {} });
   const notify = async (p, join) => {
@@ -420,7 +433,7 @@ export function ConnectorsView({ data, initialTab = 'yours', initialChip = 'All'
   } else if (q.trim() && !anyMatch && !(tab === 'yours' && data.itemsFailed)) {
     content = (
       <div className={`${TONE_CLS} p-5 text-[13px] text-axal-ink dark:text-gray-200`} data-testid="connectors-noresults">
-        No connector called &lsquo;{q.trim()}&rsquo;. <button type="button" className={`${BTN.link} font-bold`} onClick={() => setRequesting(q.trim())}>Request it.</button>
+        {mercuryWithheld ? notOffered : <>No connector called &lsquo;{q.trim()}&rsquo;. <button type="button" className={`${BTN.link} font-bold`} onClick={() => setRequesting(q.trim())}>Request it.</button></>}
       </div>
     );
   } else if (tab === 'yours') {
@@ -517,7 +530,7 @@ export function ConnectorsView({ data, initialTab = 'yours', initialChip = 'All'
           {toolbar}
           {(data.status === 'ready' || data.catalogue.length > 0) && (q.trim() && !data.catalogue.some((p) => matchesQuery(p, q))
             ? <div className={`${TONE_CLS} p-5 text-[13px] text-axal-ink dark:text-gray-200`} data-testid="connectors-noresults">
-                No connector called &lsquo;{q.trim()}&rsquo;. <button type="button" className={`${BTN.link} font-bold`} onClick={() => setRequesting(q.trim())}>Request it.</button>
+                {mercuryWithheld ? notOffered : <>No connector called &lsquo;{q.trim()}&rsquo;. <button type="button" className={`${BTN.link} font-bold`} onClick={() => setRequesting(q.trim())}>Request it.</button></>}
               </div>
             : discover)}
         </section>
