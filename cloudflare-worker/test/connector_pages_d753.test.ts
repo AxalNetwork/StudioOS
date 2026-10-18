@@ -1,7 +1,8 @@
 /**
  * D753 (#1875) — the connector pages' data, held to the code.
  *
- *   1. every registry row, LinkedIn and each Mercury variant has a page;
+ *   1. every registry row, LinkedIn, each Mercury variant and each interview
+ *      channel (C1) has a page;
  *   2. every tool's `calls` fragment is in its connector's source;
  *   3. every request that writes is named by a tool, and a tool's access
  *      matches the requests it names;
@@ -36,7 +37,7 @@ globalThis.fetch = (() => { throw new Error('connector_pages_d753: no provider m
 const registry = await import('../src/integrations/registry.ts');
 const pages = await import('../src/integrations/connectorPages.ts');
 const { REGISTRY, CONNECTOR_METADATA, getDescriptor } = registry;
-const { CONNECTOR_PAGES, FIRST_PARTY_PAGES, CATEGORY_ORDER, PAGE_ALIAS, MONEY_MOVERS, trustFor, pageDescriptor, connectorPagePath } = pages;
+const { CONNECTOR_PAGES, FIRST_PARTY_PAGES, CHANNEL_PAGES, CATEGORY_ORDER, PAGE_ALIAS, MONEY_MOVERS, trustFor, pageDescriptor, connectorPagePath, channelPage } = pages;
 const { CONNECTOR_READERS } = await import('../src/services/eadwynReaders.ts');
 const { SEND_TARGETS, CONNECTOR_KEY_RE } = await import('../src/services/eadwynConnectors.ts');
 const { MODULE_LABELS } = await import('../src/integrations/moduleLabels.ts');
@@ -81,6 +82,11 @@ for (const [key, entry] of Object.entries(CONNECTOR_PAGES)) {
   }
 }
 ENTRIES.push({ id: 'linkedin', key: 'linkedin', page: FIRST_PARTY_PAGES.linkedin });
+for (const [key, page] of Object.entries(CHANNEL_PAGES)) ENTRIES.push({ id: key, key, page });
+
+/** Pages with no registry row: LinkedIn and the channels. */
+const CHANNELS = new Set(Object.keys(CHANNEL_PAGES));
+const NOT_ROWS = new Set(['linkedin', ...CHANNELS]);
 
 /** Each connector's own files. `services/notify.ts` holds Slack's one write but also sends mail, so it is not scanned for coverage. */
 const SOURCES: Record<string, string[]> = {
@@ -98,6 +104,8 @@ const SOURCES: Record<string, string[]> = {
   docusign: ['integrations/providers/docusign.ts'],
   stripe: ['integrations/providers/stripe.ts'],
   crunchbase: ['integrations/providers/crunchbase.ts'],
+  whatsapp: ['services/channels/whatsapp.ts', 'services/channels/outbound.ts'],
+  telegram: ['services/channels/telegram.ts', 'services/channels/outbound.ts'],
 };
 const NOT_SCANNED = new Set(['services/notify.ts']);
 const TEXT = new Map<string, string[]>();
@@ -120,6 +128,7 @@ const ACCOUNT_CALLS: Record<string, string[]> = {
   docusign: ["'/connect'", '/hmac`', '`/connect/${encodeURIComponent(connectId)}`', '/oauth/revoke`'],
   stripe: ['/oauth/deauthorize'],
   zoom: ['/oauth/revoke`'],
+  whatsapp: ['/subscribed_apps`'],
 };
 
 interface Request { file: string; line: number; window: string }
@@ -142,6 +151,12 @@ test('1. every registry row, LinkedIn and each Mercury variant has a page, and n
   assert.deepEqual(keys, REGISTRY.map((r) => r.key).sort());
   assert.ok(FIRST_PARTY_PAGES.linkedin, 'LinkedIn has no page');
   assert.equal(getDescriptor('linkedin'), null, 'LinkedIn must not be a registry row');
+  assert.deepEqual(Object.keys(CHANNEL_PAGES).sort(), ['telegram', 'whatsapp']);
+  for (const key of CHANNELS) assert.equal(getDescriptor(key), null, `${key} must not be a registry row`);
+  // The channel keys are the ones GET /api/channels reports.
+  const providers = /export const MESSAGING_PROVIDERS = \[([^\]]+)\]/.exec(FRONT('pages/account/channelsModel.js'));
+  assert.ok(providers, 'channelsModel.js has no MESSAGING_PROVIDERS');
+  assert.deepEqual([...providers![1].matchAll(/'(\w+)'/g)].map((m) => m[1]).sort(), [...CHANNELS].sort(), 'the channel pages are not the messaging providers');
   for (const row of REGISTRY) {
     const entry = CONNECTOR_PAGES[row.key];
     if (!row.entity_roles && !row.personal_roles) {
@@ -199,7 +214,7 @@ test('3. every request that writes is named by a tool, and each tool\'s access m
   }
   const writes = (id: string) => ENTRIES.filter((e) => e.id === id || e.key === id).some((e) => e.page.tools.some((t) => t.access === 'write'));
   for (const id of ['github', 'mercury', 'stripe', 'carta', 'crunchbase', 'calendly', 'linkedin']) assert.equal(writes(id), false, `${id} has a write tool`);
-  for (const id of ['hubspot', 'salesforce', 'docusign', 'zoom', 'google_calendar', 'microsoft_365', 'slack']) assert.equal(writes(id), true, `${id} has no write tool`);
+  for (const id of ['hubspot', 'salesforce', 'docusign', 'zoom', 'google_calendar', 'microsoft_365', 'slack', 'whatsapp', 'telegram']) assert.equal(writes(id), true, `${id} has no write tool`);
 });
 
 test('4. read_only is "no write tool", and a page that says read-only is read-only', () => {
@@ -253,7 +268,7 @@ test('6. the trust sentence follows the tools, and no connector can move money',
 test('7. verified means a recorded check, and no check is recorded yet', () => {
   for (const e of ENTRIES) {
     assert.ok(e.page.verified_on === null || /^\d{4}-\d{2}-\d{2}$/.test(e.page.verified_on), e.id);
-    if (e.key === 'linkedin') continue;
+    if (NOT_ROWS.has(e.key)) continue;
     assert.equal(CONNECTOR_METADATA[e.key].verified, e.page.verified_on !== null, `${e.id}: verified without a recorded date, or the reverse`);
   }
   for (const k of ['hubspot', 'calendly', 'slack', 'stripe', 'google_calendar', 'microsoft_365']) assert.equal(CONNECTOR_METADATA[k].verified, false, k);
@@ -266,6 +281,8 @@ const ADDED: Record<string, string | null> = {
   carta: '2026-09', docusign: '2026-09', crunchbase: '2026-09',
   github: '2026-10', zoom: '2026-10', google_calendar: '2026-10', microsoft_365: '2026-10', mercury: '2026-10',
   figma: null, salesforce: null, affinity: null,
+  // D754 and D756 switch them on; until then nothing connects on production.
+  whatsapp: null, telegram: null,
 };
 const HTTPS = (v: string | null) => v === null || v.startsWith('https://');
 
@@ -278,7 +295,7 @@ test('8. shapes: added, links, taglines, makers, modules', () => {
     assert.ok(HTTPS(p.service.href), `${e.id}: service.href`);
     assert.ok(HTTPS(p.sign_in.key_help_href), `${e.id}: key_help_href`);
     assert.equal(p.links.help, null, `${e.id}: help is filled by a docs task`);
-    if (e.key !== 'linkedin') assert.equal(p.links.developer_docs, getDescriptor(e.key)!.docs_url, `${e.id}: developer_docs`);
+    if (!NOT_ROWS.has(e.key)) assert.equal(p.links.developer_docs, getDescriptor(e.key)!.docs_url, `${e.id}: developer_docs`);
     assert.equal(p.sign_in.key_help_href !== null, ['key', 'oauth_or_key'].includes(p.sign_in.kind), `${e.id}: key_help_href`);
     assert.ok(p.tagline.length >= 1 && p.tagline.length <= 120, `${e.id}: tagline is ${p.tagline.length} characters`);
     assert.ok(p.long_description.length >= 1 && p.long_description.length <= 4, `${e.id}: long_description`);
@@ -311,6 +328,9 @@ const ENDPOINTS: Record<string, { file: string; sign_in: [string, string] | null
   microsoft_365: { file: 'services/calendar.ts', sign_in: ['MICROSOFT_AUTHORITY', '/common/oauth2/v2.0/authorize'], api: 'MICROSOFT_GRAPH' },
   mercury: { file: 'services/mercury/client.ts', sign_in: null, api: 'MERCURY_API_BASE' },
   linkedin: { file: 'routes/linkedin.ts', sign_in: ['LINKEDIN_AUTHORIZE_URL', ''], api: 'LINKEDIN_USERINFO_URL' },
+  // Both sign in inside the provider's own app (Meta's popup, the bot link), so neither has a sign-in URL.
+  whatsapp: { file: 'services/channels/whatsapp.ts', sign_in: null, api: 'GRAPH_BASE' },
+  telegram: { file: 'services/channels/telegram.ts', sign_in: null, api: 'TELEGRAM_API' },
 };
 
 test('9. endpoints equal the providers\' own constants', () => {
@@ -321,6 +341,13 @@ test('9. endpoints equal the providers\' own constants', () => {
       continue;
     }
     const src = SRC(spec.file);
+    if (e.key === 'whatsapp') {
+      // GRAPH_BASE is a template on GRAPH_VERSION.
+      assert.ok(src.includes('export const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_VERSION}`;'), 'WhatsApp\'s Graph base');
+      assert.equal(e.page.endpoints.api, `https://graph.facebook.com/${constant(src, 'GRAPH_VERSION')}`, `${e.id}: api`);
+      assert.equal(e.page.endpoints.sign_in, null, `${e.id}: sign_in`);
+      continue;
+    }
     if (e.key === 'github') {
       assert.ok(src.includes(`${e.page.endpoints.sign_in}?`), 'GitHub\'s authorize literal');
     } else if (spec.sign_in) {
@@ -340,6 +367,7 @@ test('10. sign-in kinds', () => {
     const row = getDescriptor(e.key);
     const kind = e.page.sign_in.kind;
     if (e.variant === 'entity') assert.equal(kind, 'entity', e.id);
+    else if (CHANNELS.has(e.key)) assert.equal(kind, 'channel', e.id);
     else if (['google_calendar', 'microsoft_365', 'linkedin'].includes(e.key)) assert.equal(kind, 'first_party', e.id);
     else if (row!.auth_type === 'api_key') assert.equal(kind, 'key', e.id);
     else if (row!.supports_pat) assert.equal(kind, 'oauth_or_key', e.id);
@@ -375,6 +403,14 @@ test('12. pageDescriptor picks Mercury\'s variant by viewer, and works in either
   assert.equal(pageDescriptor(getDescriptor('google_calendar')!)!.page_key, 'google');
   assert.equal(pageDescriptor({ key: 'linkedin' })!.tagline, FIRST_PARTY_PAGES.linkedin.tagline);
   assert.equal(pageDescriptor({ key: 'notion' }), null);
+  for (const key of CHANNELS) {
+    const d = channelPage(key)!;
+    assert.equal(d.tagline, (CHANNEL_PAGES as any)[key].tagline, key);
+    assert.equal(d.page_href, `/account/connectors/${key}`, key);
+    assert.equal(d.trust.read_only, false, `${key} sends messages`);
+    assert.deepEqual(pageDescriptor({ key }), d, key);
+  }
+  for (const bad of ['github', 'linkedin', 'signal', '', 'hasOwnProperty']) assert.equal(channelPage(bad), null, bad);
 
   // The other order: connectorPages first, in a fresh process.
   const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -392,6 +428,8 @@ test('13. connectorPagePath', () => {
   assert.equal(connectorPagePath('google'), '/account/connectors/google');
   assert.equal(connectorPagePath('microsoft_365'), '/account/connectors/microsoft');
   assert.equal(connectorPagePath('linkedin'), '/account/connectors/linkedin');
+  assert.equal(connectorPagePath('whatsapp'), '/account/connectors/whatsapp');
+  assert.equal(connectorPagePath('telegram'), '/account/connectors/telegram');
   for (const bad of ['', '../x', 'Github', 'a/b', 'notion']) assert.equal(connectorPagePath(bad), '/account/connectors', bad);
   const re = /const PAGE_KEY_RE = \/(.+)\/;/.exec(SRC('integrations/connectorPages.ts'))![1];
   assert.equal(re, CONNECTOR_KEY_RE.source);
