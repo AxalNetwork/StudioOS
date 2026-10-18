@@ -156,7 +156,7 @@ function HelpHero({ query, setQuery, searchInputRef, guideCount, areaCount }) {
       <p className="mt-2 text-[13.5px] leading-relaxed text-gray-600 dark:text-gray-300">
         {guideCount} guide{guideCount === 1 ? '' : 's'} across {areaCount} area{areaCount === 1 ? '' : 's'}, grouped by what you are doing.
       </p>
-      <div className="mx-auto mt-5 max-w-[540px]">
+      <div className="mt-5">
         <div className="flex items-center gap-3 rounded-xl border border-violet-200 bg-white px-4 py-3 shadow-[0_2px_10px_rgba(124,58,237,0.08)] focus-within:ring-2 focus-within:ring-violet-500/40 dark:border-violet-900 dark:bg-gray-900">
           <Search size={18} className="shrink-0 text-violet-700 dark:text-violet-300" aria-hidden />
           <input
@@ -168,7 +168,7 @@ function HelpHero({ query, setQuery, searchInputRef, guideCount, areaCount }) {
             aria-label="Search the Help Center"
             className="min-w-0 flex-1 bg-transparent text-[14.5px] text-gray-900 placeholder:text-gray-400 focus:outline-none dark:text-gray-100"
           />
-          {query ? (
+          {query && (
             <button
               type="button"
               onClick={() => setQuery('')}
@@ -177,8 +177,6 @@ function HelpHero({ query, setQuery, searchInputRef, guideCount, areaCount }) {
             >
               <X size={14} />
             </button>
-          ) : (
-            <kbd className="shrink-0 rounded-[5px] border border-gray-200 bg-gray-50 px-1.5 py-0.5 font-mono text-[10px] text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400">/</kbd>
           )}
         </div>
         <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
