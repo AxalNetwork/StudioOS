@@ -24,8 +24,9 @@ const SLUG_FIXED_KINDS: ReadonlySet<DocumentKind> = new Set(['notice', 'booklet'
 
 /**
  * The catalog entries created with no body anywhere: D706's 28 (migration
- * 468), D707's two (471) and D716's securities legend (478). Counsel drafts
- * them; test/template_format_d717.test.ts reads them out of the migrations.
+ * 468), D707's two (471), D716's securities legend (478) and D758's Operating
+ * Partner Agreement (484). Counsel drafts them;
+ * test/template_format_d717.test.ts reads them out of the migrations.
  */
 export const COUNSEL_DRAFT_SLUGS: ReadonlySet<string> = new Set([
   'certificate_of_limited_partnership_de', 'lpa_amended_restated', 'lpa_initial', 'lp_side_letter', 'mfn_election_form',
@@ -37,6 +38,7 @@ export const COUNSEL_DRAFT_SLUGS: ReadonlySet<string> = new Set([
   'pro_rata_information_rights_side_letter',
   'platform_ip_licence_management_admin', 'platform_ip_licence_fund_admin',
   'securities_legend',
+  'operating_partner_agreement_spin_out_lab',
 ]);
 /** The documents that carry the Structure of the Fund page (decision 11; PR 1c places it). */
 export const STRUCTURE_MAP_SLUGS: ReadonlySet<string> = new Set(['ppm', 'subscription_booklet', 'compliance_manual_code_of_ethics']);

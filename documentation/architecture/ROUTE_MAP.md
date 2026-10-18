@@ -171,6 +171,8 @@ PR 1b, behind `requireAdmin`:
 
 `GET /api/admin/fund-structure` (`admin_fund_structure.ts`, `requireAdmin`, HQ only): the entity and money map (`services/fundStructure.ts`). A Super Admin's carries each receiving account masked or the resolver's sentence; a plain Admin's carries "Only the Super Admin can see or change payment instructions." and reads no account. `no-store`; 503 `fund_structure_unreadable`.
 
+D758 (#1861) changes no route. Migration 484 fills every active row that has no text from its file under `templates/legal/`, as a new version with the empty one in history, and the catalog gains "Operating Partner Agreement (Spin-Out Lab)" as a counsel stub. From then on every catalog row is either a coded body or a counsel stub in `COUNSEL_DRAFT_SLUGS`.
+
 ### Usage page and HQ allowances (D642, #1435)
 
 `GET /api/usage/storage` (`usage.ts`, `services/storageUsage.ts`) reads the caller's own stored files across all their companies, whatever company the sidebar has selected. It returns `{ total_bytes, files, unknown_size_files, areas }`, with one area per store: `data_room`, `diligence_files`, `research_library`, `message_attachments` and `interview_recordings`. A recording counts toward the member who owns its project. A NULL size counts as unknown, never as 0 bytes, and a failed read marks only that area `recorded: false`.
