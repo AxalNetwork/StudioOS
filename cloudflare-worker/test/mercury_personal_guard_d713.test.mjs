@@ -5,7 +5,7 @@ import { join, relative } from 'node:path';
 const root='cloudflare-worker/src';
 const walk=p=>readdirSync(p,{withFileTypes:true}).flatMap(e=>e.isDirectory()?walk(join(p,e.name)):[join(p,e.name)]);
 const allowed=new Set(['integrations/providers/mercury.ts','services/mercuryPersonal.ts','routes/mercury_personal.ts','routes/revenue.ts','routes/needs.ts','routes/network.ts','routes/partner_settlements.ts','services/onboardingChecklist.ts']);
-const callers=new Set(['routes/revenue.ts','routes/mercury_personal.ts','routes/needs.ts','routes/network.ts']);
+const callers=new Set(['routes/revenue.ts','routes/mercury_personal.ts','routes/needs.ts','routes/network.ts','services/capitalAttestations.ts']);
 test('personal match tables and provider queries stay within the personal allowlist',()=>{
   for(const f of walk(root).filter(f=>/\.[cm]?[jt]s$/.test(f))) {
     const s=readFileSync(f,'utf8');
@@ -20,7 +20,8 @@ test('only member-facing routes can import personal Mercury logic',()=>{
 });
 
 // ─────────────────────────────────────────────── PR B: what personal code may read and register
-const PERSONAL = ['integrations/providers/mercury.ts', 'services/mercuryPersonal.ts', 'routes/mercury_personal.ts'];
+const PERSONAL = ['integrations/providers/mercury.ts', 'services/mercuryPersonal.ts', 'routes/mercury_personal.ts',
+  'services/capitalAttestations.ts', 'services/capitalAttestationTerms.ts', 'routes/mercury_attestations.ts'];
 const src = (f) => readFileSync(join(root, f), 'utf8');
 const code = (f) => src(f).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
