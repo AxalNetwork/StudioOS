@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Pill, Unrecorded, Unreadable } from '../../ui';
 import { useAuth } from '../../hooks/useAuthSync';
 import { branchOfUser, isSuperAdminUser } from '../../lib/shellRole';
@@ -7,7 +8,7 @@ import { BTN, INPUT, LoadingRows } from './AccountCenter';
 import { Banner, Group, Row, Sheet } from './ConnectorSheet';
 import { agoLabel } from './connectorsModel';
 import {
-  ADMIN_ONLY, BRANCH_MANAGED, DISCONNECT_REASON_MIN, ENTITY_AUDIT_FOOT, ENTITY_DISCONNECT_NOTE, ENTITY_FEEDS, TOKEN_HELP,
+  ADMIN_ONLY, BRANCH_MANAGED, DISCONNECT_REASON_MIN, ENTITY_AUDIT_FOOT, ENTITY_DISCONNECT_NOTE, ENTITY_FEEDS, OPEN_BANKING, TOKEN_HELP,
   confirmReadOnlyLabel, entityRows, retryAfterSentence,
 } from './mercuryModel';
 
@@ -224,6 +225,8 @@ export function MercuryEntitySheet({ p, superAdmin = false, branch = null, api =
       footer={<span className="mr-auto text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="mercury-audit-foot">{ENTITY_AUDIT_FOOT}</span>}>
       <MercuryEntityConnections superAdmin={superAdmin} branch={branch} api={api} docsUrl={p?.docs_url || null} />
       {!branch && <p className="mx-5 mt-4 text-[12px] leading-relaxed text-axal-muted dark:text-gray-400" data-testid="mercury-feeds">{ENTITY_FEEDS}</p>}
+      {/* #1780 decision 12: the door to fund administration's Banking tab (D714 PR 4a mounts it). */}
+      {!branch && <Link className={`${BTN.link} mx-5 mt-2 inline-block`} to={OPEN_BANKING.href} data-testid="mercury-open-banking">{OPEN_BANKING.text}</Link>}
     </Sheet>
   );
 }
