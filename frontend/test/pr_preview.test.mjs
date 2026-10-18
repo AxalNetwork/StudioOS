@@ -94,6 +94,22 @@ test('the workflow deploys the preview config under the per-PR name, never wrang
   assert.doesNotMatch(wf, /migrate-d1|d1 execute|d1_databases/, 'a preview never migrates or touches D1');
 });
 
+test('the login-e2e job runs the D722 spec against the preview it just deployed, and holds no secret', () => {
+  const wf = at(WORKFLOW);
+  const at0 = wf.indexOf('\n  login-e2e:\n');
+  assert.ok(at0 > 0, 'the login-e2e job is gone: nothing runs the /login Google window in a browser');
+  const next = wf.indexOf('\n  delete:\n', at0);
+  const job = wf.slice(at0, next > 0 ? next : undefined);
+  assert.match(job, /needs: deploy/);
+  assert.match(wf, /outputs:\n\s+url: \$\{\{ steps\.deploy\.outputs\.url \}\}/, 'the deploy job must expose its URL as an output');
+  assert.match(job, /PLAYWRIGHT_BASE_URL: \$\{\{ needs\.deploy\.outputs\.url \}\}/, 'the spec must run against this PR\'s preview');
+  assert.match(job, /playwright test tests\/e2e\/google_popup_signin\.spec\.js/);
+  assert.match(job, /test:e2e:install/, 'Playwright needs its browser installed');
+  assert.match(job, /permissions:\n\s+contents: read\n/, 'the job reads the repository and nothing more');
+  assert.doesNotMatch(job, /secrets\./, 'the e2e job must hold no secret: the spec stubs every Google route');
+  assert.doesNotMatch(job, /wrangler/, 'the e2e job deploys nothing');
+});
+
 test('the workflows README lists the preview workflow', () => {
   const readme = at('.github/workflows/README.md');
   assert.match(readme, /`pr-preview\.yml`/, 'add the pr-preview.yml row to .github/workflows/README.md');
