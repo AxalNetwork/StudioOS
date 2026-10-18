@@ -79,7 +79,7 @@ jobs:
     # 11 Oct with no code to explain it, and #1543's passing run was cancelled
     # at 20 mid-suite. A timeout reads as a red gate, and an agent cannot
     # re-run a job. A real hang still stops here.
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
