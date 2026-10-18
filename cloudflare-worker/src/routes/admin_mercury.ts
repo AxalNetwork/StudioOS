@@ -3,6 +3,7 @@
  * `/api/admin/mercury`, ahead of the generic `/api/admin` routers.
  *
  *  GET    /connections                       the four entities, each with its connection or null
+ *                                            (and its accounts by ending, D715)
  *  PUT    /connections/:entityKey            { api_token, confirm_read_only }   Super Admin, write bar
  *  DELETE /connections/:entityKey            { reason }                          Super Admin, write bar
  *  POST   /connections/:entityKey/sync       sync now (once in five minutes)
@@ -53,7 +54,23 @@ const MATCH_STATES = ['proposed', 'confirmed', 'rejected', 'needs_review'] as co
 
 export interface AdminMercuryOptions { fetcher?: MercuryFetch; match?: Partial<MatchDeps> }
 
-function view(row: ConnectionRow | null, withPreview: boolean) {
+/** D715 (#1780) decision 4: an account by its ending only. No balance and no Mercury account id is selected. */
+type AccountView = { kind: string; last_four: string; nickname: string | null; registered: boolean };
+
+async function accountsByConnection(env: Env, ids: number[]): Promise<Map<number, AccountView[]>> {
+  const out = new Map<number, AccountView[]>(ids.map((id) => [id, []]));
+  if (!ids.length) return out;
+  const r = await env.DB.prepare(
+    `SELECT connection_id, kind, last_four, nickname, registered FROM mercury_accounts
+      WHERE connection_id IN (SELECT value FROM json_each(?)) ORDER BY connection_id, kind, last_four`,
+  ).bind(JSON.stringify(ids)).all<{ connection_id: number; kind: string; last_four: string; nickname: string | null; registered: number }>();
+  for (const a of r.results || []) {
+    out.get(Number(a.connection_id))?.push({ kind: a.kind, last_four: a.last_four, nickname: a.nickname, registered: Number(a.registered) === 1 });
+  }
+  return out;
+}
+
+function view(row: ConnectionRow | null, withPreview: boolean, accounts?: AccountView[]) {
   if (!row) return null;
   return {
     uid: row.uid,
@@ -65,6 +82,7 @@ function view(row: ConnectionRow | null, withPreview: boolean) {
     last_error: row.last_error,
     last_error_at: row.last_error_at,
     ...(withPreview ? { token_preview: row.token_preview } : {}),
+    ...(accounts ? { accounts } : {}),
   };
 }
 
@@ -90,11 +108,16 @@ export function createAdminMercury(opts: AdminMercuryOptions = {}) {
   r.get('/connections', async (c) => {
     const user = await requireMercuryReader(c); if (user instanceof Response) return user;
     const rows = await Promise.all(ENTITY_KEYS.map((k) => liveConnection(c.env, k)));
+    // D715 (#1780): each connection's accounts by ending, read under the same audit row.
+    const accounts = await accountsByConnection(c.env, rows.filter((r): r is ConnectionRow => !!r).map((r) => r.id));
     if (!await auditRead(c.env, user, 'mercury_connections_read', { connections: rows.filter(Boolean).length })) return c.json(AUDIT_UNAVAILABLE, 503);
     const holder = isSuperAdmin(user as any);
     return c.json({
       ok: true,
-      entities: ENTITY_KEYS.map((k, i) => ({ entity_key: k, name: AXAL_ENTITIES[k].name, connection: view(rows[i], holder) })),
+      entities: ENTITY_KEYS.map((k, i) => ({
+        entity_key: k, name: AXAL_ENTITIES[k].name,
+        connection: view(rows[i], holder, rows[i] ? accounts.get(rows[i]!.id) : undefined),
+      })),
     });
   });
 
