@@ -4,6 +4,22 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## Every connector's page, as data the Worker holds to its code (D753, #1875)
+
+- `cloudflare-worker/src/integrations/connectorPages.ts` describes each
+  connector's page: a tagline and description, the tools Axal VC runs through
+  it, the Eadwyn prompts the code supports, maker (Axal VC on every one),
+  service, sign-in, endpoints, the month it was added, links and a trust
+  sentence built from the tools. `registry.ts` re-exports it; nothing serves
+  or draws it yet (#1878 and F7 do).
+- `test/connector_pages_d753.test.ts` holds every fact to the providers'
+  source: each tool's calls are in the code, every request that writes is
+  named by a tool, and "never writes" and "cannot move money" follow the tools.
+- The six "Verified by Axal" badges (HubSpot, Calendly, Slack, Stripe, Google
+  Calendar, Microsoft 365) are gone until each live check is recorded with its
+  date. Google's third permission now reads "Gmail (read-only) is asked for at
+  sign-in; Axal VC does not read your Gmail."
+
 ## Signing in four steps, at every width (D717, #1857)
 
 - `/esign/:token` now goes Read → Consent → Adopt → Confirm for every
