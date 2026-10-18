@@ -155,12 +155,12 @@ export async function personalConnection(c: C, user: User, use: PersonalUse): Pr
   const scope = readOnlyRefusal(read.permission, true);
   if (scope) {
     await markError(c.env, row, scope.code);
-    return refused(c, scope.status, scope.code, scope.message);
+    return refused(c, scope.status, scope.code, scope.sentence);
   }
   const entity = await entityAccountRefusal(c.env, read.org, read.accounts);
   if (entity) {
     if (entity.status === 409) await markError(c.env, row, entity.code);
-    return refused(c, entity.status, entity.code, entity.message);
+    return refused(c, entity.status, entity.code, entity.sentence);
   }
   return { row, token, accounts: read.accounts, use };
 }
@@ -302,13 +302,14 @@ const day10 = (v: unknown) => String(v ?? '').slice(0, 10);
  *    Management, from 30 days before the due date to 90 after.
  */
 export async function ownTargets(env: Env, user: User, kind: PersonalMatchTarget, id?: number, includeMatched = false): Promise<MatchTarget[]> {
-  const only = id == null ? '' : ' AND t.id = ?';
-  const binds: (number | string)[] = id == null ? [user.id] : [user.id, id];
-  const unmatched = includeMatched ? '' : ` AND NOT EXISTS (SELECT 1 FROM mercury_personal_matches m WHERE m.target_kind = '${kind}' AND m.target_id = t.id AND m.state = 'confirmed')`;
+  // Every filter is bound: ?1 the member, ?2 and ?3 the target's id (or null
+  // for all), ?4 1 when a matched target counts, ?5 the kind.
+  const binds = [user.id, id ?? null, id ?? null, includeMatched ? 1 : 0, kind];
   if (kind === 'engagement_invoice') {
     const rows = (await env.DB.prepare(
       `SELECT t.id, t.invoice_number, t.total_cents, t.status, t.issued_at FROM engagement_invoices t
-        WHERE t.partner_user_id = ? AND t.status IN ('issued', 'paid') AND upper(t.currency) = 'USD' AND t.total_cents > 0${only}${unmatched}
+        WHERE t.partner_user_id = ?1 AND t.status IN ('issued', 'paid') AND upper(t.currency) = 'USD' AND t.total_cents > 0 AND (?2 IS NULL OR t.id = ?3)
+          AND (?4 = 1 OR NOT EXISTS (SELECT 1 FROM mercury_personal_matches m WHERE m.target_kind = ?5 AND m.target_id = t.id AND m.state = 'confirmed'))
         ORDER BY t.issued_at DESC, t.id DESC`,
     ).bind(...binds).all<{ id: number; invoice_number: string; total_cents: number; status: string; issued_at: string }>()).results || [];
     return rows.map((r) => ({
@@ -319,7 +320,8 @@ export async function ownTargets(env: Env, user: User, kind: PersonalMatchTarget
   if (kind === 'payout') {
     const rows = (await env.DB.prepare(
       `SELECT t.id, t.amount_cents, t.status, t.created_at, t.destination_last4 FROM payouts t
-        WHERE t.user_id = ? AND t.status <> 'failed' AND upper(t.currency) = 'USD' AND t.amount_cents > 0${only}${unmatched}
+        WHERE t.user_id = ?1 AND t.status <> 'failed' AND upper(t.currency) = 'USD' AND t.amount_cents > 0 AND (?2 IS NULL OR t.id = ?3)
+          AND (?4 = 1 OR NOT EXISTS (SELECT 1 FROM mercury_personal_matches m WHERE m.target_kind = ?5 AND m.target_id = t.id AND m.state = 'confirmed'))
         ORDER BY t.created_at DESC, t.id DESC`,
     ).bind(...binds).all<{ id: number; amount_cents: number; status: string; created_at: string; destination_last4: string | null }>()).results || [];
     return rows.map((r) => ({
@@ -330,7 +332,8 @@ export async function ownTargets(env: Env, user: User, kind: PersonalMatchTarget
   }
   const rows = (await env.DB.prepare(
     `SELECT t.id, t.kind, t.direction, t.amount_cents, t.due_on, t.state FROM partner_deal_settlements t
-      WHERE t.user_id = ? AND t.state ${includeMatched ? "IN ('issued', 'matched')" : "= 'issued'"}${only}${unmatched}
+      WHERE t.user_id = ?1 AND (t.state = 'issued' OR (t.state = 'matched' AND ?4 = 1)) AND (?2 IS NULL OR t.id = ?3)
+          AND (?4 = 1 OR NOT EXISTS (SELECT 1 FROM mercury_personal_matches m WHERE m.target_kind = ?5 AND m.target_id = t.id AND m.state = 'confirmed'))
       ORDER BY t.due_on DESC, t.id DESC`,
   ).bind(...binds).all<{ id: number; kind: string; direction: string; amount_cents: number; due_on: string; state: string }>()).results || [];
   return rows.map((r) => ({

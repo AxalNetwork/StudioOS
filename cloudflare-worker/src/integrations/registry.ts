@@ -121,11 +121,14 @@ export interface ConnectResult {
 export class ConnectRefusal extends Error {
   readonly status: number;
   readonly code: string;
+  /** Our sentence for the member, answered as the refusal's `message`. */
+  readonly sentence: string;
   constructor(status: number, code: string, sentence: string) {
-    super(sentence);
+    super(code);
     this.name = 'ConnectRefusal';
     this.status = status;
     this.code = code;
+    this.sentence = sentence;
   }
 }
 

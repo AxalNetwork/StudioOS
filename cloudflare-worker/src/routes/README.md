@@ -23,6 +23,7 @@ widened guard on this very sentence, which is the rule working.)
 ```
 /api/admin/partner-settlements → partner_settlements.ts (HQ drafts; Super Admin issue/void, D713)
 /api/partner-settlements → partner_settlements.ts (own non-draft settlements, D713)
+/api/mercury/personal → mercury_personal.ts (a member's own Mercury: status and payment matches, read-only, D713)
 /api/auth          → auth.ts
 /api/scoring       → scoring.ts
 /api/projects      → projects.ts

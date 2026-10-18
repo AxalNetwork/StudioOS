@@ -14,8 +14,8 @@ that.
 
 | File | What it owns |
 | --- | --- |
-| `client.ts` | The only Mercury caller: GET only, `READ_PATHS` only, `redirect: 'manual'`, a 10-second deadline. An error carries a status and a code, never a body. |
-| `parse.ts` | The boundary. It keeps only the named fields a use needs, computes the last four, masks a run of eight or more digits in a memo, and refuses an amount that is not a whole number of cents or not USD. Account and routing numbers and the EIN never leave it. |
+| `client.ts` | The only Mercury caller: GET only, `READ_PATHS` only, `redirect: 'manual'`, a 10-second deadline. An error carries a status and a code, never a body. D713 adds `getTransaction`, one line by id (the path is UNVERIFIED). |
+| `parse.ts` | The boundary. It keeps only the named fields a use needs, computes the last four, masks a run of eight or more digits in a memo, and refuses an amount that is not a whole number of cents or not USD. Account and routing numbers and the EIN never leave it. D713 adds `parseTransaction` (one line read by id) and `parseTokenPermission` (a reported permission, UNVERIFIED), and holds the posted, internal and void status lists `match.ts` re-exports. |
 | `access.ts` | Who: `requireMercuryReader` (an Admin on HQ) and `requireMercuryCredentialWriter` (the Super Admin, with `super_admin_required` before the write bar). Both refuse a support session and a branch. `auditRead` writes a read's audit row first; the read does not happen without it. |
 | `store.ts` | The entity connections (token as `v1.` ciphertext bound to its row), the check against #1773's registry by entity and last four, and the upserts of accounts, daily balance snapshots and transactions. A changed or cancelled matched line turns its match `needs_review`. |
 | `sync.ts` | One connection's sync (one run at a time, a watermark, oldest first, at most 2,000 lines a run) and the hourly HQ sweep. A run row holds counts and a code, never a body. |
@@ -23,4 +23,6 @@ that.
 
 **Who imports `store.ts`:** only `routes/admin_mercury.ts`, the files in this
 folder and `index.ts`'s cron block (D710 decision 11). #1778's personal
-connection keeps its own tables.
+connection keeps its own tables (`services/mercuryPersonal.ts`); it uses this
+folder's `client.ts` and `parse.ts` only, and reads `mercury_accounts` for
+decision 3 alone.

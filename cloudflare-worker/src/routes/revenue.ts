@@ -303,13 +303,11 @@ async function stripeActive(c: Ctx, projectId: number, userId: number): Promise<
 /** Which of these lines are already rows, and on which project. */
 async function importedProjects(c: Ctx, ids: string[]): Promise<Map<string, number>> {
   const out = new Map<string, number>();
-  for (let i = 0; i < ids.length; i += 90) {
-    const part = ids.slice(i, i + 90);
-    const rows = (await c.env.DB.prepare(
-      `SELECT source_ref, project_id FROM revenue_entries WHERE source = 'mercury' AND source_ref IN (${part.map(() => '?').join(',')})`,
-    ).bind(...part).all<{ source_ref: string; project_id: number }>()).results || [];
-    for (const r of rows) out.set(r.source_ref, Number(r.project_id));
-  }
+  if (!ids.length) return out;
+  const rows = (await c.env.DB.prepare(
+    "SELECT source_ref, project_id FROM revenue_entries WHERE source = 'mercury' AND source_ref IN (SELECT value FROM json_each(?))",
+  ).bind(JSON.stringify(ids)).all<{ source_ref: string; project_id: number }>()).results || [];
+  for (const r of rows) out.set(r.source_ref, Number(r.project_id));
   return out;
 }
 

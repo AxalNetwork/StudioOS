@@ -482,7 +482,7 @@ integrations.post('/connect', async (c) => {
     });
   } catch (e) {
     // D713: a refusal the provider meant keeps its own status and code.
-    if (e instanceof ConnectRefusal) return refuse(c, e.status, { code: e.code, message: e.message });
+    if (e instanceof ConnectRefusal) return refuse(c, e.status, { code: e.code, message: e.sentence });
     return refuse(c, 400, { code: 'connect_failed', message: 'The connection could not be made. Check the credentials and try again.', raw: e, audience: 'owner' });
   }
   if (desc.auth_type === 'oauth2' && hasScopeOverreach(desc, result.scopes || [])) {

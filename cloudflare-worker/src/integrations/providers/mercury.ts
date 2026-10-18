@@ -81,15 +81,15 @@ export async function entityAccountRefusal(env: Env, org: ParsedOrganization, ac
   try {
     if (ids.length) {
       const held = await env.DB.prepare(
-        `SELECT 1 AS held FROM mercury_accounts WHERE mercury_account_id IN (${ids.map(() => '?').join(',')}) LIMIT 1`,
-      ).bind(...ids).first();
+        'SELECT 1 AS held FROM mercury_accounts WHERE mercury_account_id IN (SELECT value FROM json_each(?)) LIMIT 1',
+      ).bind(JSON.stringify(ids)).first();
       if (held) return new ConnectRefusal(409, 'mercury_entity_account', ENTITY_REFUSED);
     }
     if (fours.length) {
       const registered = await env.DB.prepare(
         `SELECT entity_key, account_last4, status FROM entity_bank_accounts
-          WHERE status = 'active' AND account_last4 IN (${fours.map(() => '?').join(',')}) LIMIT 1`,
-      ).bind(...fours).first();
+          WHERE status = 'active' AND account_last4 IN (SELECT value FROM json_each(?)) LIMIT 1`,
+      ).bind(JSON.stringify(fours)).first();
       if (registered) return new ConnectRefusal(409, 'mercury_entity_account', ENTITY_REFUSED);
     }
   } catch {
