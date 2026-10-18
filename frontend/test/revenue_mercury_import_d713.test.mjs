@@ -141,3 +141,17 @@ test('the ledger offers Import from Mercury beside the Stripe import, in its own
   assert.match(panel, /mercuryPersonalApi\.importCredits\(projectId, items\)/);
   assert.doesNotMatch(panel, /amount_cents:|received_on:/, 'the panel never sends an amount or a date');
 });
+
+
+test('mounted: malformed credits are Unreadable; a valid empty array is empty', async () => {
+  for (const data of [null, {}, { credits: null }, { credits: [] }]) {
+    const result = await mounted(() => data);
+    if (Array.isArray(data?.credits)) {
+      assert.match(result.text, /Your Mercury account has no credits in this window/);
+      assert.doesNotMatch(result.text, /could not be read/);
+    } else {
+      assert.match(result.text, /Your Mercury credits could not be read/);
+      assert.doesNotMatch(result.text, /has no credits/);
+    }
+  }
+});

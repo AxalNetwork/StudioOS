@@ -340,24 +340,37 @@ section.execution .recital { font-style: italic; color: ${C.muted}; font-size: 9
 .party .signed { font-family: 'Roboto Mono', monospace; font-size: ${T.size.audit}; color: ${C.muted}; margin: 0 0 3pt; }
 section.certificate { break-before: page; }
 /* D717 (#1782) — the Structure of the Fund page (services/fundStructurePaper.ts).
-   Its own page, never split. Boxes take the ink rule, Mercury lines the ink,
-   Stripe lines the violet dashed, markers the violet. #1782's PR 2 intake sets
-   these from the final export with the other tokens. */
+   Its own page, never split. #1855 draws L10's map: entity boxes and Mercury
+   and licence routes in the violet (licences dashed), the Stripe route in the
+   ink, outside boxes and guides in the muted grey, markers white with a ring.
+   The colours are the paper tokens by role; PAPER (S14) sets their values. */
 section.structure-page { break-before: page; break-after: page; break-inside: avoid; }
+.structure-subtitle { margin: 0 0 8pt; font-size: ${T.size.legend}; color: ${C.muted}; }
 .structure-figure { margin: 8pt 0 10pt; }
 svg.fund-structure { display: block; width: 100%; height: auto; font-family: 'Public Sans', sans-serif; }
-svg.fund-structure .fs-node { fill: ${C.white}; stroke: ${C.ink}; stroke-width: 0.75; }
-svg.fund-structure .fs-node.fs-outside { fill: ${C.mergeTint}; stroke: ${C.muted}; stroke-dasharray: 3 2; }
+svg.fund-structure .fs-node { fill: ${C.white}; stroke: ${C.violet}; stroke-width: 0.9; }
+svg.fund-structure .fs-node.fs-outside { stroke: ${C.muted}; stroke-dasharray: 3 2; }
 svg.fund-structure .fs-label { font-size: 8.5px; font-weight: 700; fill: ${C.inkStrong}; }
-svg.fund-structure .fs-line { fill: none; stroke: ${C.ink}; stroke-width: 1; }
-svg.fund-structure .fs-line.fs-stripe { stroke: ${C.violet}; stroke-dasharray: 4 3; }
-svg.fund-structure .fs-head { fill: ${C.ink}; }
-svg.fund-structure .fs-head.fs-stripe { fill: ${C.violet}; }
-svg.fund-structure .fs-marker { fill: ${C.violet}; }
-svg.fund-structure .fs-num { font-family: 'Roboto Mono', monospace; font-size: 8px; font-weight: 700; fill: ${C.white}; }
-svg.fund-structure .fs-small { font-size: 8px; fill: ${C.muted}; }
-ul.structure-key { list-style: none; padding: 0; margin: 0; font-size: ${T.size.legend}; line-height: 1.45; }
-ul.structure-key li { margin: 0 0 3pt; break-inside: avoid; }
+svg.fund-structure .fs-sub { font-size: 6.5px; fill: ${C.muted}; }
+svg.fund-structure .fs-line { fill: none; stroke: ${C.violet}; stroke-width: 0.9; }
+svg.fund-structure .fs-line.fs-licence { stroke-dasharray: 4 2; }
+svg.fund-structure .fs-line.fs-stripe { stroke: ${C.ink}; }
+svg.fund-structure .fs-head { fill: ${C.violet}; }
+svg.fund-structure .fs-head.fs-stripe { fill: ${C.ink}; }
+svg.fund-structure .fs-marker { fill: ${C.white}; stroke: ${C.violet}; stroke-width: 0.8; }
+svg.fund-structure .fs-marker.fs-stripe { stroke: ${C.ink}; }
+svg.fund-structure .fs-num { font-size: 7px; font-weight: 700; fill: ${C.violet}; }
+svg.fund-structure .fs-num.fs-stripe { fill: ${C.ink}; }
+svg.fund-structure .fs-guide { fill: none; stroke: ${C.muted}; stroke-width: 0.6; }
+svg.fund-structure .fs-text.fs-ink { fill: ${C.ink}; }
+svg.fund-structure .fs-text.fs-grey { fill: ${C.muted}; }
+svg.fund-structure .fs-caption { fill: ${C.muted}; }
+table.structure-table { width: 100%; border-collapse: collapse; margin: 0 0 8pt; font-size: ${T.size.legend}; line-height: 1.45; }
+table.structure-table th { text-align: left; font-size: ${T.size.eyebrow}; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: ${C.muted}; padding: 0 6pt 3pt 0; border-bottom: 0.5pt solid ${C.rule}; }
+table.structure-table td { vertical-align: top; padding: 3pt 6pt 3pt 0; border-bottom: 0.5pt solid ${C.rule}; }
+table.structure-table td:first-child { font-weight: 700; }
+table.structure-table tr { break-inside: avoid; }
+.structure-licence, .structure-closing, .structure-note { margin: 0 0 4pt; font-size: ${T.size.legend}; line-height: 1.45; }
 section.execution.inline { break-before: auto; margin-top: 16pt; }
 section.booklet-part + section.booklet-part { margin-top: 24pt; }
 section.execution.part-block { break-before: auto; margin-top: 16pt; }
