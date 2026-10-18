@@ -1,9 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { FileText, X, Plus, Save, Trash2, History, Loader2, AlertTriangle, RefreshCw, Eye, Download, Send } from 'lucide-react';
 import { api } from '../../lib/api';
 import { contractsApi } from '../../lib/api/contracts';
 import { ConsoleUnreadable } from './consoles/shared';
-import { Recorded, Pagination, input as contractInput, button as contractButton } from './contracts/parts';
+import TemplateCatalog from './contracts/TemplateCatalog';
+import { useAuth } from '../../hooks/useAuthSync';
+import { branchOfUser } from '../../lib/shellRole';
 import { reportError } from '../../lib/log';
 import { useEscapeClose } from '../../components/useEscapeClose';
 import PaperPreview from '../../components/PaperPreview';
@@ -58,12 +60,8 @@ export default function AdminTemplates({ onOpenUsage, recordedPublication = fals
   const [publishResult, setPublishResult] = useState(null);
   const [publishErr, setPublishErr] = useState('');
   const [confirmPublish, setConfirmPublish] = useState(false);
-  const [search, setSearch] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('');
-  const [offset, setOffset] = useState(0);
-  const matching = useMemo(() => items.filter(t => (!categoryFilter || t.category === categoryFilter)
-    && `${t.title} ${t.slug}`.toLowerCase().includes(search.toLowerCase())).sort((a, b) =>
-      String(b.updated_at || '').localeCompare(String(a.updated_at || '')) || a.slug.localeCompare(b.slug)), [items, search, categoryFilter]);
+  // D717 (#1851) decision 11: a branch Worker reads HQ's library and never authors it.
+  const authoring = !branchOfUser(useAuth()?.user);
 
   const reload = async () => {
     setLoading(true);
@@ -115,9 +113,23 @@ export default function AdminTemplates({ onOpenUsage, recordedPublication = fals
     }
   };
 
+  // D717 (#1851) decision 8: the library-wide Publish stays on the catalog's
+  // toolbar until #1852's per-template Publish v[N] replaces it.
+  const publishButton = (
+    <button
+      type="button"
+      onClick={recordedPublication ? () => setConfirmPublish(true) : publish}
+      disabled={unavailable || publishing || !items.length}
+      data-testid="template-publish"
+      title="Send this library to every branch Worker bound to HQ"
+      className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:border-violet-400 disabled:opacity-50 font-medium flex items-center gap-1 dark:border-gray-800 dark:text-gray-200">
+      <Send size={12} /> {publishing ? 'Publishing…' : recordedPublication ? 'Publish' : 'Publish to branches'}
+    </button>
+  );
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
+      {!recordedPublication && <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
         <div className="text-xs text-gray-500">
           {unavailable ? 'Template store is worker-only.' : `${items.length} template${items.length === 1 ? '' : 's'} in the catalog`}
         </div>
@@ -125,15 +137,7 @@ export default function AdminTemplates({ onOpenUsage, recordedPublication = fals
           <button onClick={reload} className="text-xs text-gray-500 hover:text-violet-600 flex items-center gap-1">
             <RefreshCw size={12} /> Refresh
           </button>
-          <button
-            type="button"
-            onClick={recordedPublication ? () => setConfirmPublish(true) : publish}
-            disabled={unavailable || publishing || !items.length}
-            data-testid="template-publish"
-            title="Send this library to every branch Worker bound to HQ"
-            className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:border-violet-400 disabled:opacity-50 font-medium flex items-center gap-1 dark:border-gray-800 dark:text-gray-200">
-            <Send size={12} /> {publishing ? 'Publishing…' : recordedPublication ? 'Publish' : 'Publish to branches'}
-          </button>
+          {publishButton}
           <button
             onClick={() => setEditing({ isNew: true })}
             disabled={unavailable}
@@ -142,10 +146,10 @@ export default function AdminTemplates({ onOpenUsage, recordedPublication = fals
             <Plus size={12} /> New template
           </button>
         </div>
-      </div>
+      </div>}
 
       {err && <ConsoleUnreadable what="Templates" onRetry={reload} />}
-      {recordedPublication && !loading && !err && <p className="mb-3 text-xs text-gray-600 dark:text-gray-400">{items.filter(t => t.has_unpublished_changes).length} templates have unpublished changes. Publishing offers the latest saved versions to New envelope.</p>}
+      {recordedPublication && authoring && !loading && !err && <p className="mb-3 text-xs text-gray-600 dark:text-gray-400">{items.filter(t => t.has_unpublished_changes).length} templates have unpublished changes. Publishing offers the latest saved versions to New envelope.</p>}
       {confirmPublish && <div role="dialog" aria-modal="true" aria-label="Publish templates" className="rounded-xl border border-violet-200 bg-violet-50 p-4 dark:border-violet-900 dark:bg-violet-950/30">
         <h3 className="font-semibold">Publish templates</h3><p>Publishing makes these versions the versions New envelope offers. Saved drafts stop changing that body until you publish again. Archived or blank templates are withdrawn; agreements already sent keep their copy. The catalogue is also sent to bound branches.</p>
         <ul>{items.filter(t => !t.is_stub && t.body_md?.trim()).map(t => <li key={t.slug}>{t.title} · v{t.version}</li>)}</ul>
@@ -208,15 +212,15 @@ export default function AdminTemplates({ onOpenUsage, recordedPublication = fals
         <div className="bg-white border border-gray-200 rounded-xl p-10 text-center text-gray-500 text-sm dark:bg-gray-900 dark:border-gray-800">
           No templates yet. Click <span className="font-semibold">New template</span> to add one.
         </div>
-      ) : recordedPublication ? <section className="rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-        <div className="flex flex-wrap gap-3 p-3"><label className="flex-1">Search templates<input className={contractInput} value={search} onChange={e => { setSearch(e.target.value); setOffset(0); }} /></label><label>Layer<select className={contractInput} value={categoryFilter} onChange={e => { setCategoryFilter(e.target.value); setOffset(0); }}><option value="">Every layer</option>{CATEGORY_ORDER.map(id => <option key={id} value={id}>{CATEGORY_META[id].label}</option>)}</select></label><span className="self-end text-xs text-gray-500">Last edited, newest</span></div>
-        <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-left text-xs"><thead><tr>{['Template', 'Version', 'Last edited', 'Usage'].map(label => <th className="p-3" key={label}>{label}</th>)}</tr></thead><tbody>{matching.slice(offset, offset + 25).map(t => <tr className="border-t border-gray-200 dark:border-gray-800" key={t.slug}>
-          <td className="p-3"><button type="button" className="font-semibold" data-testid={`template-card-${t.slug}`} onClick={() => setEditing({ slug: t.slug })}>{t.title}</button><p className="font-mono text-gray-500">{t.slug}</p></td>
-          <td className="p-3">v{t.version}<p>{t.published_version == null ? 'Unpublished' : `Published v${t.published_version}`}{t.has_unpublished_changes ? ' · pending changes' : ''}</p></td>
-          <td className="p-3"><Recorded value={fmtDate(t.updated_at)} reason="No edit date was recorded." /><p>{t.updated_by != null ? `Admin #${t.updated_by}` : 'Not recorded: imported before editors were recorded.'}</p></td>
-          <td className="p-3"><button type="button" className={contractButton} onClick={() => onOpenUsage?.(t.slug, t)}>{t.usage_count} uses</button></td>
-        </tr>)}</tbody></table></div>{!matching.length && <p className="p-4">No template matches these filters.</p>}<Pagination data={{ total: matching.length, items: matching.slice(offset, offset + 25) }} offset={offset} onPage={setOffset} />
-      </section> : (
+      ) : recordedPublication ? (
+        <TemplateCatalog
+          items={items}
+          authoring={authoring}
+          onOpen={(slug, opts) => setEditing({ slug, focus: opts?.focus })}
+          onNew={() => setEditing({ isNew: true })}
+          onOpenUsage={onOpenUsage}
+          toolbarExtra={publishButton} />
+      ) : (
         <div className="space-y-6">
           {CATEGORY_ORDER.filter(cat => (grouped[cat] || []).length).map(cat => (
             <section key={cat}>
@@ -263,6 +267,7 @@ export default function AdminTemplates({ onOpenUsage, recordedPublication = fals
         <TemplateEditorModal
           slug={editing.slug}
           isNew={!!editing.isNew}
+          focus={editing.focus}
           onClose={() => setEditing(null)}
           onSaved={onSaved}
         />
@@ -271,7 +276,7 @@ export default function AdminTemplates({ onOpenUsage, recordedPublication = fals
   );
 }
 
-function TemplateEditorModal({ slug, isNew, onClose, onSaved }) {
+function TemplateEditorModal({ slug, isNew, focus, onClose, onSaved }) {
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -325,6 +330,9 @@ function TemplateEditorModal({ slug, isNew, onClose, onSaved }) {
   }, [slug, isNew]);
 
   const mergeFields = useMemo(() => detectMergeFields(body), [body]);
+  // D717 (#1851): Add body opens the editor on the body.
+  const bodyRef = useRef(null);
+  useEffect(() => { if (focus === 'body' && !loading) bodyRef.current?.scrollIntoView?.({ block: 'center' }); }, [focus, loading]);
 
   const save = async () => {
     setErr('');
@@ -493,6 +501,8 @@ function TemplateEditorModal({ slug, isNew, onClose, onSaved }) {
                 value={body}
                 onChange={e => { setBody(e.target.value); setViewVersion(null); }}
                 spellCheck={false}
+                autoFocus={focus === 'body'}
+                ref={bodyRef}
                 data-testid="template-body"
                 placeholder="SECTION TITLE&#10;&#10;1.1  Clause text with {{merge_field}} tokens…&#10;&#10;Signed: ______________________"
                 className="flex-1 min-h-[280px] w-full px-4 py-3 text-[13px] font-mono leading-relaxed resize-none focus:outline-none bg-white dark:bg-gray-900 dark:text-gray-100" />

@@ -4,6 +4,24 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## The Templates tab is a catalog of cards with page 1 on each (D717, #1851)
+
+- Contracts › Templates draws the L9 catalog in place of the D647 table:
+  search, layer and five state segments whose counts follow the other
+  filters; the Fund I documents panel (41 documents, signing order, "[N] of
+  41 ready to send"); layer sections of cards, each with its real page-1
+  thumbnail (four loads at a time, the version in the URL) and its state;
+  and, while it has rows, the "Not in the catalog" group.
+- A stub card offers Add body, which opens the editor on the body; a counsel
+  draft also reads "Stub — counsel to draft." (the store list's new
+  `counsel_draft`).
+- Push to branches reports each branch as Reached, Failed or Not reached.
+  `fanOut` marks an `unreadable` result that hit the deadline `timed_out`, and
+  the push answers `pushed_at`. Retry re-runs the whole push, which writes
+  nothing.
+- On a branch Worker the tab is read-only. The library-wide Publish stays on
+  the toolbar until #1852's Publish v[N].
+
 ## The entity and money map on screen, with one numbering on paper (D717, #1855)
 
 - `GET /api/admin/fund-structure` (`services/fundStructure.ts`) now numbers

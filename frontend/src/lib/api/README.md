@@ -58,8 +58,11 @@ template paper as HTML, faces omitted) and `paperFonts` (its faces, once per
 `paper_sha256`).
 D717 (#1782) adds `publishOne(slug, version)` and `withdraw(slug)` (one template's
 publication), `push()` (the recorded publications to every branch, publishing
-nothing) and `outside()` (the bundled documents not in the catalog). The thumbnail
-and draft-PDF blobs come with PR 2's screens, outside the typed drift surface.
+nothing) and `outside()` (the bundled documents not in the catalog). #1851 adds
+`thumbnailBlob(slug, version)` and `outsideThumbnailBlob(key)`: page 1 as a PNG,
+`{ blob, url }` (the caller revokes `url`), outside the typed drift surface like
+`preview.pdf`. The store's URL carries `?v=<version>`, because the image is cached
+privately for a day. The draft PDF is #1853's.
 
 D652 (#1464): `eadwyn.js` calls `/api/eadwyn`, the Worker AI rail's conversations
 and the connectors in them. D701 (#1663) adds `conversationsMine`

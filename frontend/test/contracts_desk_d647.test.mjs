@@ -119,7 +119,7 @@ test('D647 tabs display a reason for data that was never recorded', async () => 
   for (const [tab, legacy, domain, missing] of cases) {
     setup(legacy, { stats: async () => ({ total: 1, pending_signature: 1, by_status: { signed: 0 }, avg_days_to_sign: null, signed_last_30d: 0 }), ...domain });
     const view = await mountContracts(element(), `/admin/contracts?tab=${tab}`, user);
-    try { await view.flush(); if (tab === 'document-types') assert.ok(view.nodes().some(node => missing.test(String(view.props(node)?.title || ''))), 'registry missing-data reason is available on hover'); else assert.match(view.text(), missing); assert.match(view.text(), /No signed agreement has both a recorded sent and signed date/); }
+    try { await view.flush(); if (tab === 'templates') assert.ok(view.nodes().some(node => missing.test(String(view.props(node)?.title || ''))), 'D717: the template card carries its missing editor on hover'); else if (tab === 'document-types') assert.ok(view.nodes().some(node => missing.test(String(view.props(node)?.title || ''))), 'registry missing-data reason is available on hover'); else assert.match(view.text(), missing); assert.match(view.text(), /No signed agreement has both a recorded sent and signed date/); }
     finally { await view.unmount(); restore(); }
   }
 });

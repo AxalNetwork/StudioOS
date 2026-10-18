@@ -117,7 +117,8 @@ adminContracts.post('/published-templates/push', async (c) => {
   const branches = await fanOut<{ stored: number; withdrawn: number }>(c.env, 'publishTemplate', [payload]);
   return c.json({ ok: true, template_count: templates.length, answered: branches.filter(b => b.status === 'ok').length, total: branches.length,
     branches: branches.map(b => ({ code: b.code, status: b.status, ...(b.data ? { stored: b.data.stored, withdrawn: b.data.withdrawn } : {}),
-      ...(b.reason ? { reason: b.reason } : {}) })),
+      ...(b.reason ? { reason: b.reason } : {}), ...(b.timed_out ? { timed_out: true } : {}) })),
+    pushed_at: payload.pushed_at,
     ...(branches.length ? {} : { branches_reason: 'No branch Worker is bound. No branch received the catalogue.' }) });
 });
 
@@ -1749,6 +1750,7 @@ adminContracts.get('/templates/store', async (c) => {
       usage_count: usage.get(t.slug) || 0,
       last_used_at: lastUsed.get(t.slug) || null,
       ...formatView(t),
+      counsel_draft: COUNSEL_DRAFT_SLUGS.has(t.slug),
       ...(publications ? { published_version: publications.get(t.slug)?.version ?? null,
         has_unpublished_changes: publications.has(t.slug) ? !!t.is_stub || !t.body_md.trim() || publications.get(t.slug)?.version !== t.version
           : !t.is_stub && !!t.body_md.trim() } : {}),

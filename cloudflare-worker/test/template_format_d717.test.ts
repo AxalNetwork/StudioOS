@@ -208,6 +208,9 @@ test('D717 the routes: a notice slug takes no stored pair (409 format_fixed); pp
   const row = list.body.items.find((t: any) => t.slug === 'ppm');
   assert.deepEqual([row.doc_kind, row.axal_party, row.kind, row.party, row.format_source], ['agreement', 'holdings', 'agreement', 'holdings', 'row']);
   assert.equal(list.body.items.find((t: any) => t.slug === 'capital_call_notice').format_fixed, true);
+  // D717 PR 2b: the counsel-draft mark is the Worker's; the page keeps no copy of the slugs.
+  assert.equal(list.body.items.find((t: any) => t.slug === 'capital_call_notice').counsel_draft, true);
+  assert.equal(row.counsel_draft, false);
 });
 
 test('D717 templateFormatFor reads the active row, falls back to the slug, and renderFormat omits none', async () => {
