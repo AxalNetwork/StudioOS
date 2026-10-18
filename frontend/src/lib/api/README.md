@@ -61,6 +61,11 @@ publication), `push()` (the recorded publications to every branch, publishing
 nothing) and `outside()` (the bundled documents not in the catalog). The thumbnail
 and draft-PDF blobs come with PR 2's screens, outside the typed drift surface.
 
+D752 (#1890): `adminCapitalAttestations.js` reads an investor's shared proof of
+funds for Axal's admins on HQ: `forTarget(purpose, targetId)`, `forDeal(dealId)`
+and `forFund(fundId)`. Each read is audited before it answers and counts as a
+view on the investor's own list.
+
 D652 (#1464): `eadwyn.js` calls `/api/eadwyn`, the Worker AI rail's conversations
 and the connectors in them. D701 (#1663) adds `conversationsMine`
 (`GET /api/eadwyn/conversations/mine`): the caller's rail conversations and

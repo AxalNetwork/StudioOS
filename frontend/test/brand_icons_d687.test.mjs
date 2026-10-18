@@ -256,6 +256,7 @@ test('7b. the surfaces this test cannot mount pass the key to BrandIcon at the a
   has('frontend/src/pages/account/GithubSyncSheet.jsx', /title=\{`\$\{name\} is synced`\} provider="github"[\s\S]*title=\{`Connect \$\{name\}`\} provider="github"/, 'both GitHub sheet headers');
   has('frontend/src/pages/account/ConnectorSheet.jsx', /footer=\{footer\} provider=\{p\.key\} providerName=\{p\.display_name\}/, 'the connector sheet passes its catalogue key');
   has('frontend/src/pages/founder/InterviewChannels.jsx', /<BrandIcon provider=\{p\.key\} size=\{16\} variant="bare"/, 'Call on chips: the bare 16px mark');
+  has('frontend/src/components/ProofOfFunds.jsx', /<BrandIcon provider="mercury" name="Mercury" size=\{24\} \/>/, 'the proof of funds row\'s 24px tile');
   assert.deepEqual(SOCIAL_LINKS.map((l) => [l.key, l.label]), [['facebook', 'Facebook'], ['linkedin', 'LinkedIn'], ['x', 'X'], ['instagram', 'Instagram'], ['youtube', 'YouTube'], ['telegram', 'Telegram'], ['tiktok', 'TikTok']]);
 });
 

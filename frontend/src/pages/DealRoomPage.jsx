@@ -4,6 +4,9 @@ import { reportError } from '../lib/log';
 import { safeReadJSON } from '../lib/storage';
 import { useAuth } from '../hooks/useAuthSync';
 import { api } from '../lib/api';
+import { adminCapitalAttestationsApi } from '../lib/api/adminCapitalAttestations';
+import { branchOfUser } from '../lib/shellRole';
+import { ProofStatement } from '../components/ProofOfFunds';
 import { Unreadable } from '../ui';
 import { useDealroomQuota, QuotaLine, JoinNote, JoinLeaveButton } from '../components/deals/DealRoomJoin';
 import DealInvitationsTab from '../components/deals/DealInvitationsTab';
@@ -164,7 +167,7 @@ export default function DealRoomPage() {
         </>
       )}
       {tab === 'Documents' && <DocumentsTab dealId={deal.id} />}
-      {tab === 'Commitments' && <CommitmentsTab dealId={deal.id} />}
+      {tab === 'Commitments' && <CommitmentsTab dealId={deal.id} proof={isAdmin && !branchOfUser(user)} />}
       {tab === 'Activity' && <ActivityTab dealId={deal.id} />}
       {tab === 'Invitations' && tabs.includes('Invitations') && (
         <DealInvitationsTab dealId={deal.id} onInvite={canInvite ? () => setInviteOpen(true) : undefined} />
@@ -269,32 +272,62 @@ function DocumentsTab({ dealId }) {
   );
 }
 
-function CommitmentsTab({ dealId }) {
+// D752 (#1890): an admin on HQ (`proof`) also reads each commitment's shared
+// proof of funds, once, after the commitments load: an audited request that
+// counts a view. It comes from its own route, never from `dealCommitments`,
+// which other invited investors read. Every other viewer makes no proof read.
+function CommitmentsTab({ dealId, proof = false }) {
   const [items, setItems] = useState(null);
   const [failed, setFailed] = useState(false);
+  const [proofs, setProofs] = useState(null); // { byTarget } | { error }
   const load = () => {
     setFailed(false);
     api.dealCommitments(dealId).then(setItems).catch(() => setFailed(true));
   };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [dealId]);
+  const loaded = items != null;
+  useEffect(() => {
+    if (!proof || !loaded) return undefined;
+    let alive = true;
+    adminCapitalAttestationsApi.forDeal(dealId)
+      .then((r) => { if (alive) setProofs({ byTarget: Object.fromEntries((r?.items || []).map((i) => [i.target_id, i])) }); })
+      .catch((e) => { reportError('proof-of-funds:deal', e); if (alive) setProofs({ error: e }); });
+    return () => { alive = false; };
+  }, [proof, loaded, dealId]);
   if (failed) return <Unreadable what="The commitments" claim="That is not a claim that none is recorded." onRetry={load} />;
   if (items == null) return <div className="text-center text-gray-500 py-8"><Loader2 className="animate-spin inline" size={16} /></div>;
   if (items.length === 0) return <div className="text-center text-gray-500 py-8">No commitments recorded yet</div>;
   return (
+    <>
+    {proof && proofs?.error && (
+      <div className="mb-2" data-testid="deal-proofs-failed">
+        {proofs.error?.status
+          ? <p role="alert" className="text-[12px] text-red-700 dark:text-red-300">{proofs.error.message || 'The proofs of funds could not be read.'}</p>
+          : <Unreadable what="The proofs of funds" claim="This is not a claim that none was shared." />}
+      </div>
+    )}
     <div className="bg-white border border-gray-200 rounded-xl divide-y divide-gray-50 dark:bg-gray-900 dark:border-gray-800 dark:divide-gray-800">
       {items.map(c => (
-        <div key={c.id} className="flex items-center justify-between p-3">
-          <div>
+        <div key={c.id} className="flex items-center justify-between gap-3 p-3">
+          <div className="min-w-0 flex-1">
             <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{c.investor_name || `Investor #${c.investor_user_id}`}</div>
             {c.notes && <div className="text-xs text-gray-500">{c.notes}</div>}
+            {proof && proofs?.byTarget && (
+              <div className="mt-1.5" data-testid={`deal-proof-${c.id}`}>
+                {proofs.byTarget[c.id]
+                  ? <ProofStatement item={proofs.byTarget[c.id]} figureDollars={c.amount} />
+                  : <span className="text-xs text-gray-500 dark:text-gray-400">No proof of funds shared</span>}
+              </div>
+            )}
           </div>
-          <div className="text-right">
+          <div className="flex-none text-right">
             <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{fmtMoney(c.amount)}</div>
             <div className="text-xs text-gray-500 capitalize">{c.status}</div>
           </div>
         </div>
       ))}
     </div>
+    </>
   );
 }
 
