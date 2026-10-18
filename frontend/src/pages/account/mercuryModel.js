@@ -158,6 +158,8 @@ export const USE_WORDS = {
   venture_revenue: 'Your venture\'s revenue. StudioOS lists the credits in your own Mercury account, and you pick the ones that are customer revenue. Only those become rows on your revenue ledger, marked Supported, with Mercury\'s amount and date.',
   practice_income: 'Your practice income. Match an engagement invoice you issued to the credit that paid it.',
   partner_deals: 'Your deals with Axal VC Management LLC. Match a payout or a partner-deal settlement to the bank line that settled it.',
+  // D752 (#1887): the Worker serves this key now; task raise-match-screens draws its match panel.
+  raise_receipts: 'Your venture\'s raise. Match an investor\'s wire to a committed prospect in your raise pipeline, or to a pending commitment on one of your deals.',
 };
 
 /** Why a use is not drawn, in words, from the reason the status route gives. */
