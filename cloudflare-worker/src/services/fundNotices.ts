@@ -18,6 +18,10 @@
 // tables. The statement previews and draws its paper only: it reaches an LP
 // through #1777's queue, so it never issues here.
 //
+// `noticeSpecimen(env, type)` (D758, #1864) is each type's page as a specimen
+// for the Templates catalog: the same labels, every figure a bracket. It reads
+// no record and no account; only the three prose types read their library row.
+//
 // NOTE: authored to load under `node --experimental-strip-types` (the worker
 // test gate) — no `enum`s, no TS parameter properties.
 
@@ -34,6 +38,7 @@ import { commitmentCents, splitCall } from './fundCallSplit';
 import { getTemplate } from './legalTemplateStore';
 import { bracketLabel } from './legalMergeSchema';
 import type { NoticeKeyFigure, NoticePayment, NoticeTable, PaperInput } from './legalPaper';
+import { RECEIVING_BRACKET } from './fundStructure';
 
 export type NoticeType =
   | 'capital_call_notice' | 'distribution_notice' | 'default_notice'
@@ -648,6 +653,116 @@ export async function buildNoticeFigures(env: Env, req: NoticeRequest, today: st
     case 'management_fee_invoice': return feeInvoice(env, req, today);
     case 'platform_licence_fee_invoice': return licenceInvoice(env, req, today);
     case 'payment_instructions_letter': return letter(env, req, today);
+  }
+}
+
+// ---------------------------------------------------------------- the specimen (D758)
+
+const br = (label: string) => `[${label}]`;
+const figs = (labels: [string, boolean?][]): NoticeKeyFigure[] =>
+  labels.map(([label, mono]) => (mono ? { label, value: br(label), mono: true } : { label, value: br(label) }));
+/** One row of bracketed column labels; a totals table also keeps its "Total" row. */
+function specimenTable(t: Omit<NoticeTable, 'rows'>): NoticeTable {
+  const cells = t.columns.map((c) => br(c.label));
+  return { ...t, rows: t.total ? [cells, ['Total', ...cells.slice(1)]] : [cells] };
+}
+/** The payment block's lines with bracket values, and no account read. */
+function specimenPayment(toLp: boolean): NonNullable<NoticeFigures['payment']> {
+  const lines: { label: string; value: string; mono?: boolean }[] = [
+    { label: 'Beneficiary', value: br('Beneficiary') },
+    { label: 'Beneficiary address', value: br('Beneficiary address') },
+    { label: 'Bank', value: br('Bank') },
+    { label: 'Bank address', value: br('Bank address') },
+    { label: 'Routing number (ABA)', value: br('Routing number (ABA)'), mono: true },
+    { label: 'Account', value: RECEIVING_BRACKET, mono: true },
+  ];
+  if (toLp) lines.push({ label: 'Full account number', value: NOTICE_SENTENCES.fullNumber });
+  return { lines, reference: br('Reference') };
+}
+
+/**
+ * A notice type's page with bracket figures, for the Templates catalog's
+ * thumbnail (D758 decision 5). The labels are each builder's own; a test
+ * holds them to a real build. No record and no account is read: the three
+ * prose types read their library row (merged with no values), and nothing else.
+ */
+export async function noticeSpecimen(env: Env, type: unknown): Promise<NoticeFigures> {
+  if (!isNoticeType(type)) {
+    throw new NoticeRefusal(400, 'notice_type_invalid', 'Name one of the notice types this platform builds.');
+  }
+  const def = noticeTypeDef(type);
+  const base = {
+    type, title: def.title, notice_date: br('Notice date'), fund_id: null, limited_partner_id: null,
+    source_ref: br('Source'), warning: PAY_WARNING, amount_cents: null, prose: null, closing: [] as string[],
+  };
+  const toAddressee = buildAddresseeBlock({ to: '[Addressee]' });
+  switch (type) {
+    case 'capital_call_notice':
+      return {
+        ...base, sender: 'fund', payee: 'fund', purpose: 'capital_contribution', addressee: toAddressee,
+        key_figures: figs([['Notice date'], ['Call number'], ['Amount due', true], ['Due date']]),
+        tables: [
+          specimenTable({ title: 'This call', columns: [{ label: 'Purpose' }, { label: 'Amount', align: 'right' }] }),
+          specimenTable({ title: 'Your commitment', columns: [{ label: 'Item' }, { label: 'Amount', align: 'right' }] }),
+        ],
+        payment: specimenPayment(true), reference: br('Reference'),
+        prose: (await proseFor(env, 'capital_call_notice', {})).prose,
+      };
+    case 'distribution_notice':
+      return {
+        ...base, sender: 'fund', payee: null, purpose: null, addressee: toAddressee,
+        key_figures: figs([['Distribution date'], ['Amount', true]]),
+        tables: [specimenTable({ title: 'This distribution', columns: [{ label: 'Type' }, { label: 'Tax character' }, { label: 'Amount', align: 'right' }] })],
+        payment: null, reference: null,
+        prose: (await proseFor(env, 'distribution_notice', {})).prose,
+      };
+    case 'default_notice':
+      return {
+        ...base, sender: 'fund', payee: 'fund', purpose: 'capital_contribution', addressee: toAddressee,
+        key_figures: figs([['Notice date'], ['Call number'], ['Amount outstanding', true], ['Original due date'], ['Cure date'], ['LPA section']]),
+        tables: [], payment: specimenPayment(true), reference: br('Reference'),
+        prose: (await proseFor(env, 'default_notice', {})).prose,
+      };
+    case 'management_fee_statement':
+      return {
+        ...base, sender: 'fund', payee: null, purpose: null, addressee: toAddressee,
+        key_figures: figs([['Statement date'], ['Quarter'], ['Fee window'], ['Rate'], ['Net fee', true], ['Reference', true]]),
+        tables: [
+          specimenTable({ title: 'Basis', columns: [{ label: 'Basis' }, { label: 'Days', align: 'right' }, { label: 'Amount', align: 'right' }] }),
+          specimenTable({ title: 'Fee', columns: [{ label: 'Item' }, { label: 'Amount', align: 'right' }], total: true }),
+        ],
+        payment: null, reference: br('Reference'), closing: [NOTICE_SENTENCES.nothingDue],
+      };
+    case 'management_fee_invoice':
+      return {
+        ...base, sender: 'gp', payee: 'gp', purpose: 'management_fee', addressee: buildAddresseeBlock({ to: '[Addressee]', from: 'gp' }),
+        key_figures: figs([['Invoice date'], ['Quarter'], ['Fee window'], ['Amount due', true]]),
+        tables: [specimenTable({
+          title: 'Fee lines',
+          columns: [{ label: 'LP' }, { label: 'Days', align: 'right' }, { label: 'Gross', align: 'right' }, { label: 'Catch-up', align: 'right' },
+            { label: 'Offset', align: 'right' }, { label: 'Net', align: 'right' }],
+          total: true,
+        })],
+        payment: specimenPayment(false), reference: br('Reference'),
+      };
+    case 'platform_licence_fee_invoice':
+      return {
+        ...base, sender: 'holdings', payee: 'holdings', purpose: 'platform_licence_fee', addressee: buildAddresseeBlock({ to: '[Addressee]', from: 'holdings' }),
+        key_figures: figs([['Invoice date'], ['Period'], ['Amount due', true], ['Due date']]),
+        tables: [specimenTable({ columns: [{ label: 'Licence' }, { label: 'Period' }, { label: 'Amount', align: 'right' }], total: true })],
+        payment: specimenPayment(false), reference: br('Reference'),
+      };
+    case 'payment_instructions_letter': {
+      // Drawn for the first wire purpose, so its sender is that purpose's payee.
+      const purpose = Object.keys(PAYMENT_PURPOSES)[0] as PaymentPurpose;
+      const payee = PAYMENT_PURPOSES[purpose].payee;
+      const name = AXAL_ENTITIES[payee].name;
+      return {
+        ...base, sender: payee, payee, purpose, addressee: buildAddresseeBlock({ to: '[Addressee]', from: payee }),
+        key_figures: figs([['Date'], ['For']]), tables: [], payment: specimenPayment(false), reference: null,
+        closing: [NOTICE_SENTENCES.onlyInstructions(name), NOTICE_SENTENCES.replacesEarlier(name)],
+      };
+    }
   }
 }
 
