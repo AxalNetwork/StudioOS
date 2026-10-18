@@ -121,8 +121,9 @@ set on a laptop is in place on a phone after a reload.
 D715 (#1780): `adminMercury.js` calls `/api/admin/mercury` (`cloudflare-worker/src/routes/admin_mercury.ts`, D710):
 the four entity connections (each with its accounts by ending), the Super
 Admin's connect with `confirm_read_only: true` and disconnect with a reason,
-sync now, and the accounts, transactions and matches reads. Every read is
-audited by the Worker; nothing here moves money. #1779's console imports it.
+sync now, and the accounts, transactions and matches reads. D749 (#1838) adds
+`markNotOurs` and `withdrawNotOurs`. Every read is audited by the Worker;
+nothing here moves money. #1779's console imports it.
 
 D708 (#1773): `bankAccounts.js` calls `/api/admin/bank-accounts` (the Super
 Admin's list, add, label and purposes, retire, and a recorded reveal of one

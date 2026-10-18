@@ -65,6 +65,27 @@ export function pickFund(funds, wanted) {
 /** A quarter as #1774 writes it: `2026Q3`. */
 export const QUARTER_RE = /^\d{4}Q[1-4]$/;
 
+/**
+ * D749 (#1838): why a credit is not ours, as `[key, label]` in the Worker's
+ * order (`services/mercury/notOurs.ts`). The canvas may rename a label; the
+ * keys stay.
+ */
+export const NOT_OURS_REASONS = Object.freeze([
+  ['not_fund_transaction', 'Not a fund transaction'],
+  ['other_entity', 'Belongs to another entity'],
+  ['duplicate', 'Duplicate'],
+  ['other', 'Other'],
+]);
+export const NOT_OURS_NOTE_MAX = 500;
+
+/** A mark as a pill: "Not ours · Duplicate", or "Not ours · needs review" after the line changed. */
+export function notOursText(mark) {
+  if (!mark) return null;
+  if (mark.state === 'needs_review') return 'Not ours · needs review';
+  const label = NOT_OURS_REASONS.find(([k]) => k === mark.reason)?.[1];
+  return label ? `Not ours · ${label}` : 'Not ours';
+}
+
 /** A refusal's own sentence, else the fallback. */
 export function refusalText(e, fallback) {
   const msg = typeof e?.message === 'string' ? e.message.trim() : '';
