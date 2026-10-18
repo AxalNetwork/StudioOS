@@ -145,10 +145,12 @@ const V_ROWS = {
   'market-intelligence': [{ id: 12, company: 'Example Rival' }, { company: 'No id' }],
   'demand-signals': [{ id: 'signal-9', signal: 'preorder' }, { signal: 'waitlist' }],
   experiments: [{ id: 8, hypothesis: 'H1 · Teams pay' }, { hypothesis: 'No id' }],
+  // D693 (#1704): a Decisions row opens its decision's record.
+  verdict: [{ id: 14, decision: 'proceed', state: 'given' }, { decision: 'stop', state: 'withheld' }],
 };
 const V_WORKER_ID = {
   'problem-discovery': '3', 'customer-research': '41', 'ideal-customer-profile': '5',
-  'market-intelligence': '12', 'demand-signals': 'signal-9', experiments: '8',
+  'market-intelligence': '12', 'demand-signals': 'signal-9', experiments: '8', verdict: '14',
 };
 
 test('9. each Validate row\'s recordId is the Worker\'s own id as a string, or null; its key keeps its fallback', () => {
@@ -172,7 +174,7 @@ test('9. each Validate row\'s recordId is the Worker\'s own id as a string, or n
 test('9. no Validate recordId is built from an index or a label', () => {
   const src = codeOnly(read('frontend/src/pages/cycles/adapters/validate.js'));
   const ids = [...src.matchAll(/recordId: ([^,}]+)/g)].map((m) => m[1].trim());
-  assert.equal(ids.length, 6);
+  assert.equal(ids.length, 7);
   for (const expr of ids) assert.equal(expr, 'workerId(r.id)', expr);
   assert.doesNotMatch(src, /recordId:[^,}]*`/, 'no template-built recordId');
 });

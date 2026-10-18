@@ -21,7 +21,9 @@
  * admitted Lab member on their own project included), admins and partners —
  * because every card is derived from the interviews those people may already
  * read (`canReadBoard`). Writing is the venture's own or an admin's
- * (`canWrite`). An investor reaches nothing here.
+ * (`canWrite`). An investor reaches nothing here. The Verdict card and the
+ * Verdict module read check `canReadDecision` too (D693), so partners get
+ * neither.
  */
 import { Hono } from 'hono';
 import { hasRecords } from '../services/records';
@@ -85,7 +87,8 @@ cycleValidate.get('/overview', async (c) => {
   const s = await scope(c, canReadBoard);
   if (s instanceof Response) return s;
   const ctx = ctxOf(c, s.projectId);
-  const [figs, cs] = await Promise.all([figures(ctx), cards(ctx)]);
+  const decisions = canReadDecision(s.project, s.user);
+  const [figs, cs] = await Promise.all([figures(ctx), cards(ctx, { decisions })]);
   // D685 §5.12, D692 — the phone's focus, meter and index rows. Each fails on
   // its own: an unreadable part is null, never a figure it did not read. The
   // focus reads the meter's count, so the two never disagree.
@@ -98,7 +101,7 @@ cycleValidate.get('/overview', async (c) => {
   // drop the Verdict tab for a partner instead of drawing a read that fails.
   return c.json({
     cycle: CYCLE, question: QUESTION, figures: figs, cards: cs, focus, meter, index,
-    can_read_decisions: canReadDecision(s.project, s.user),
+    can_read_decisions: decisions,
   });
 });
 
@@ -108,6 +111,11 @@ cycleValidate.get('/modules/:slug', async (c) => {
   if (!mod) return c.json({ detail: 'No such module', modules: MODULES.map((m) => m.slug) }, 404);
   const s = await scope(c, canReadBoard);
   if (s instanceof Response) return s;
+  // D693 decision 7: decisions never reach anyone `canReadDecision` refuses,
+  // so the Verdict read is refused before anything is read.
+  if (slug === 'verdict' && !canReadDecision(s.project, s.user)) {
+    return c.json({ detail: 'Partners do not see decisions.' }, 403);
+  }
   // D690 decision 16: the viewer's write gate, which `parts.can_write`,
   // `parts.themes` and the Quotes rule read.
   const writer = canWrite(s.project, s.user);

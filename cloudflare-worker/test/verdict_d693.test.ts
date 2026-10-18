@@ -30,6 +30,7 @@ import { recordQuery } from '../src/services/cycleValidate.ts';
 import { hardDeleteProject } from '../src/services/projectTrash.ts';
 import { ensurePainGroupsSchema } from '../src/services/painGroups.ts';
 import { createCycleRecords } from '../src/routes/cycle_records.ts';
+import cycleValidateRoute from '../src/routes/cycle_validate.ts';
 import { verdictSpec } from '../src/services/records/verdict.ts';
 import { createHypothesis } from '../src/services/validateWriters.ts';
 import { evidenceFor as validateEvidenceFor } from '../src/services/validateEvidence.ts';
@@ -1217,4 +1218,47 @@ test('6/8/14 integration: registered Verdict serves real choices and records wit
   const done = await rec(db, FOUNDER, 'POST', `/records/${d.body.id}/actions/commitment-done?project=${P}`, { commitment_id: commitment.id }, null);
   assert.equal(done.status, 200, done.text);
   assert.ok(commitments(db)[0].done_at);
+});
+
+// ---------------------------------------------------------------------------
+// #1704 closing PR: the module read, and MCP
+// ---------------------------------------------------------------------------
+
+test('12: the Verdict module read sends the Decisions table: its columns, filters, Newest first, row ids and linkable', async () => {
+  const db = fixture();
+  const h1 = hypothesis(db, P, 'H1', 'Fleets pay');
+  await decide(db, { decision: 'proceed', n: 5, on: '2026-10-01' });
+  await decide(db, { decision: 'stop', n: 2, on: '2026-10-05' });
+  await decide(db, { decision: 'pivot', for: h1, on: '2026-10-09' });
+  const route = new Hono<any>();
+  route.route('/api/cycles/validate', cycleValidateRoute);
+  const read = async (who: number) => {
+    const token = await new SignJWT({ user_id: who, role: roleOf[who] }).setProtectedHeader({ alg: 'HS256' })
+      .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+    const res = await route.request(`/api/cycles/validate/modules/verdict?project=${P}`, { headers: { Authorization: `Bearer ${token}` } }, envOf(db));
+    return { status: res.status, body: await res.json() as any };
+  };
+  const r = await read(FOUNDER);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.deepEqual(r.body.module, { slug: 'verdict', name: 'Verdict', records_title: 'Decisions' });
+  assert.deepEqual(r.body.records.cols, ['Decision', 'For', 'Reasoning', 'Evidence', 'Date · by']);
+  assert.deepEqual(r.body.records.filters.map((f: any) => f.key), ['decision', 'for']);
+  assert.deepEqual(r.body.records.sorts.map((x: any) => x.key), ['newest', 'oldest']);
+  assert.equal(r.body.records.linkable, true);
+  assert.equal(r.body.can_read_decisions, true);
+  const ids = (db.prepare('SELECT id FROM validation_decisions WHERE project_id = ? ORDER BY decided_at DESC, id DESC').all(P) as any[]).map((x) => Number(x.id));
+  assert.deepEqual(r.body.records.rows.map((x: any) => Number(x.id)), ids, 'every row id is the decision\'s, newest first');
+  assert.equal(r.body.card.slug, 'verdict');
+  // A partner is refused before anything is read.
+  const p = await read(PARTNER);
+  assert.equal(p.status, 403);
+  assert.deepEqual(p.body, { detail: 'Partners do not see decisions.' });
+});
+
+test('15: the MCP context tool still reads three Validate slugs, never Verdict', () => {
+  const src = readFileSync(resolve(ROOT, 'cloudflare-worker/src/mcp/tools/context.ts'), 'utf8');
+  const union = /slug: ('[a-z-]+'(?:\s*\|\s*'[a-z-]+')*)/.exec(src);
+  assert.ok(union, 'the slug union is still there');
+  assert.deepEqual(union![1].split('|').map((x) => x.trim().replace(/'/g, '')), ['problem-discovery', 'ideal-customer-profile', 'experiments']);
+  assert.equal(/verdict/i.test(src), false);
 });
