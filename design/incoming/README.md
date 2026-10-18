@@ -883,3 +883,48 @@ Each top-level board was normalised with `scripts/read-canvas.mjs`. Each nested 
 | D691 | S10 | #1705 | the deck share link's signup gets Turnstile and a rate limit |
 
 Move each new file to `canvases/integrated/` once its bodies are built.
+
+## Landed 2026-10-18 — Legal Documents · Templates (D717, #1782)
+
+The owner approved the Claude Design canvas "Legal Documents · Templates" (artifact `VfkEZzQ8npTgCiQuKJu1MA`) for #1782's screens and the paper they print. #1850 lands it here so that every slot can read it: a slot on another account cannot open the artifact link.
+
+**How it was made.** The Artifact tool read version `1792327281-a3b9` of the artifact, the version S1 read. `scripts/read-canvas.mjs` decoded it and exited 1, naming exactly the two content scripts the template loads by asset id. A one-off script outside the repository inlined both as plain `<script>` blocks, in the template's order, and checked that neither contains `</script`:
+
+- `window.LEGAL` (the paper renderer, the 111-document registry, thumbnails, the Fund I checklist, the accounts and the map), sha256 `18c8ed12a531e257145035b80f53dd082d85812f3fa12bdf21dc041a1bcf3252`;
+- `window.LEGALDESK` (the 14 Templates-tab screens), sha256 `22cac9601af2c7e6d721e96b8a76e656a6e32db2ca304a08601c86529cd67528`.
+
+Both hashes match S1's decode, so this is the content S1 read. The font link was written by hand to name all six families of the template's three `@font-face` blocks (Jost, Inter, Bricolage Grotesque, Public Sans, Roboto Mono and Space Grotesk). `read-canvas.mjs` keeps only the first block's families (`:166-174`), so its own link named Jost alone; the script is unchanged, and S1 decides whether to file the fix. The canvas carries no `data-props`, so it rebuilt without the loss described above. The react and react-dom assets are not committed: the runtime loads them.
+
+| Canvas | Boards | Routes | Grade | Issues |
+| --- | --- | --- | --- | --- |
+| `Legal Documents · Templates.dc.html` | R0, R1, R2, L0–L12 (there is no L13) | `/admin/contracts?tab=templates`, `/admin?tab=bank-accounts`, `/esign/:token`, `/spinout-lab/investor-workspace` | UPGRADE | #1782; #1851, #1852, #1853, #1854, #1855, #1856, #1857, #1858, #1859, #1860, #1861, #1862, #1863, #1864, #1865, #1866 |
+
+**How to build from it.**
+
+- D717 decision 1: where the export and #1782 differ, the export wins on layout and copy, and the issue wins on data, routes and who may act.
+- The screens use the app's type (`--font-app` and `html.app-type`, `frontend/src/index.css`), not the canvas's Inter. The paper keeps the faces in `cloudflare-worker/src/templates/legal/paper/`.
+- Every name, figure and date except the four entities, their signatory and their address is a bracketed placeholder, as the canvas's own header says.
+- "Helvetica" on the page header, L0 and L1 is the WinAnsi fallback only, and L0's "red" CONFIDENTIAL is the violet accent: the paper renderer maps `red` to `#6d28d9`. The only `#b91c1c` left is board chrome (L1's "Avoid" labels and L9's deletion marks), never paper.
+- Not built, by decision: the "New draft · counsel review" and "Stub — counsel to confirm" states (no record holds them); the canvas's 44-row Fund I checklist (the 41 slugs of `frontend/src/lib/fundIDocuments.js` win); the "Stripe payouts" purpose on L11; per-branch Retry on the push results; R0's Jost and A4 layout (a content and structure reference only); the Investment Memorandum (no catalog row); and the canvas's counts (screens print what the store returns).
+- The canvas prints four account endings. They are the entities' public endings, so the file keeps them as drawn, but no screen, test or fixture copies one: screens read the registry, and tests use synthetic numbers.
+
+| Decision | Slot | Issue | What |
+| --- | --- | --- | --- |
+| D717 | S08 | #1851 | L8/L9: the catalog, page-1 thumbnails, the Fund I panel, "Not in the catalog", Push to branches |
+| D717 | S07 | #1852 | L9: the editor, Publish v[N] and Withdraw |
+| D717 | S07 | #1853 | L9: the editor's Pages view and version compare |
+| D717 | S09 | #1855 | L10: the map on screen and its doors |
+| D717 | S09 | #1856 | L11: the registry, restyled per entity |
+| D717 | S07 | #1854 | L12: Templates on a phone; closes #1782 and moves this file |
+| D717 | S10 | #1857 | L12: signing in four steps |
+| D717 | S11 | #1859 | L12: the capital-call wire details and the fee statement |
+| D716 | S11 | #1860 | L6/L12: the LP's notices |
+| D716 | S14 | #1866 | L7/L12: the Subscription Booklet on screen |
+| D759 | S10 | #1858 | L7/L12: a submitted booklet sent for e-signature |
+| D758 | S12 | #1861 | L8/L9: every catalog row has a coded template |
+| D758 | S12 | #1862 | no free text on any send path |
+| D758 | S13 | #1863 | one text per document |
+| D758 | S13 | #1864 | L8: the generated documents in the catalog |
+| D711 | S14 | #1865 | L0–L7: every library document passes the paper rules |
+
+**Counts unchanged: 97 / 28 / 26**, recounted. Nothing entered `canvases/`.
