@@ -1,7 +1,7 @@
 // D750 (#1841) — the AI top-up says what is wrong instead of "could not be
-// Key-shaped fixtures are split ('sk' + '_live_…') so secret scanning does not read them as keys.
 // read", fetches a price the mirror lacks once per window, tells HQ why, and
 // still sells only through the D629 order → verified webhook path.
+// Key-shaped fixtures are split ('sk' + '_live_…') so secret scanning does not read them as keys.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { SignJWT } from 'jose';
