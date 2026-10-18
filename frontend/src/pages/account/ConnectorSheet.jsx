@@ -10,11 +10,12 @@ import { BrandIcon, Pill, Unrecorded, Unreadable } from '../../ui';
 import { BTN, INPUT, LoadingRows } from './AccountCenter';
 import { HubspotConfigModal, LinkedInCsvImportModal, SalesforceConfigModal } from './connectorTools';
 import GithubSyncSheet from './GithubSyncSheet';
+import { MercuryEntityPanel } from './MercurySheet';
 import { successBanner } from './githubSync';
 import {
   TIER_LABEL, agoLabel, authKind, buildCatalogue, companiesLabel, connectFailure, connectionStatus,
   disconnectNote, feedsLabel, flowBanner, lastSyncLabel, moduleLabel,
-  keepBuildProject, coreSystemOffer,
+  keepBuildProject, coreSystemOffer, isEntityRow,
   FREE_KEEPS_CONNECTORS,
 } from './connectorsModel';
 import { cyclesWrite } from '../../lib/api/cycles';
@@ -755,6 +756,10 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
     footer = <button type="button" className={BTN.primary} onClick={() => go(p.locked ? 'pro' : 'pre')}>Connect</button>;
   }
 
+  // D715 (#1780): the Axal entities' Mercury is its own sheet, never this flow. Its one
+  // audited read happens there, on open; nothing above fetches for it (`openingView` is `entity`).
+  if (isEntityRow(p)) return <MercuryEntityPanel p={p} onClose={onClose} eyebrow={eyebrow} />;
+
   // GitHub's choice of repositories is its own sheet (D686 §5.4).
   if (syncView) {
     return <GithubSyncSheet p={p} conn={conn} projectId={projectId} companyId={companyId} eyebrow={eyebrow} onClose={onClose} onChanged={onChanged} back={() => go('detail')} />;
@@ -783,6 +788,8 @@ const CONNECT_VIEWS = new Set(['pre', 'signin', 'key', 'badkey', 'cancelled', 'r
 
 /** The view a click on a connector opens: its sheet when connected, the plan when locked, else the flow's first step. */
 export function openingView(p) {
+  // The entity row opens the entity sheet, so the `pre` view's teammate read never fires for it (D715).
+  if (isEntityRow(p)) return 'entity';
   if (p.connection) return 'detail';
   if (p.locked) return 'pro';
   return 'pre';
