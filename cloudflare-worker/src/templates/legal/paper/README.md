@@ -16,12 +16,17 @@ each one, saying why).
 | `public-sans-400-italic.woff2` | Public Sans Italic, v2.001 | oblique runs, "[Signature page follows]" | 15,144 |
 | `public-sans-700.woff2` | Public Sans Bold, v2.001 | bold runs, defined terms, eyebrows, CONFIDENTIAL | 14,160 |
 | `bricolage-grotesque-800.woff2` | Bricolage Grotesque ExtraBold, v1.001 | the title and article headings | 21,836 |
-| `space-grotesk-700.woff2` | Space Grotesk Bold, v2.000 | the "AXAL VC" wordmark in the lockup, nothing else | 13,264 |
+| `space-grotesk-700.woff2` | Space Grotesk Bold, v2.000 | the "Axal VC" wordmark in the lockup, nothing else | 13,264 |
 | `roboto-mono-400.woff2` | Roboto Mono Regular, v3.001 | figures, the audit line, hashes | 14,776 |
 | `roboto-mono-700.woff2` | Roboto Mono Bold, v3.001 | bold figures (a totals row) | 14,872 |
 | `axal-mark.png` | the Axal mark, a copy of `frontend/public/axal-mark.png` | the lockup | 7,770 |
 
 The seven faces total 108,252 bytes, under the 400 KB cap D711 sets.
+
+The canvas draws Public Sans at 800 (CONFIDENTIAL, eyebrows) and 600 (labels).
+The paper prints both in the shipped 700, and no rule asks Public Sans for 600
+or 800, so no browser fakes a bold (#1865, D711 § "The library sweep and the R2
+restyle").
 
 ## Licences
 

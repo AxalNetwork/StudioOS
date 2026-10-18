@@ -111,7 +111,7 @@ It answers no key and no account number. `stripeCall` refuses a Stripe create wi
 
 ### Legal paper Worker contract (D711, #1776)
 
-Every legal document draws one HTML paper (`services/legalPaper.ts`), printed to PDF by Browser Run through `BROWSER.quickAction('pdf', …)`, with pdf-lib (`services/pdf.ts`) as the fallback. Every kept or handed-out file gets an append-only `legal_document_files` row (migration 475). See `decisions/D711.md`.
+Every legal document draws one HTML paper (`services/legalPaper.ts`), printed to PDF by Browser Run through `BROWSER.quickAction('pdf', …)`, with pdf-lib (`services/pdf.ts`) as the fallback. Every kept or handed-out file gets an append-only `legal_document_files` row (migration 475). See `decisions/D711.md`. Since #1865 the paper's tokens are R2's, and a stub's paper (`preview.pdf`, `render`, `render.pdf` and the thumbnail) reads "No body in the store yet." and, for a counsel slug, "Stub — counsel to draft."
 
 New routes:
 - `POST /api/admin/contracts/templates/render` · admin: `{ title, body, slug, category, version, page_size, cover, resolve, fonts }` → `{ html, body_sha256, page_size, paper_sha256, state }`, `no-store`. A body over 256 KB is 413 `body_too_large`.
@@ -195,6 +195,8 @@ Not built from the canvas, by decision (#1850):
 - R0 ("NDA · hardcoded from your pages") is a content and structure reference only. A4 stays the existing page-size option.
 - The Investment Memorandum (R1 C): it has no catalog row.
 - The canvas's counts ("Page 1 of all 111", "All · 101", "Has a body · 41", "Stub · 56"). Screens print what the store returns.
+
+D758 (#1861) changes no route. Migration 484 fills every active row that has no text from its file under `templates/legal/`, as a new version with the empty one in history, and the catalog gains "Operating Partner Agreement (Spin-Out Lab)" as a counsel stub. From then on every catalog row is either a coded body or a counsel stub in `COUNSEL_DRAFT_SLUGS`.
 
 ### Usage page and HQ allowances (D642, #1435)
 
