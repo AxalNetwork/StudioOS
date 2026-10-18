@@ -17,7 +17,7 @@ import assert from 'node:assert/strict';
 import { SignJWT, generateKeyPair, exportJWK, createLocalJWKSet } from 'jose';
 
 import {
-  verifyGoogleIdToken, googleJwks, GOOGLE_CERTS_URL, GOOGLE_CLOCK_SKEW_SEC, GOOGLE_TOKEN_MAX_AGE_SEC,
+  verifyGoogleIdToken, googleJwks, googleIsAuthoritative, GOOGLE_CERTS_URL, GOOGLE_CLOCK_SKEW_SEC, GOOGLE_TOKEN_MAX_AGE_SEC,
   __testing,
 } from '../src/services/googleIdToken.ts';
 
@@ -57,7 +57,7 @@ test('the untouched token passes, with the email lower-cased', async () => {
   const r = await check(base());
   assert.deepEqual(r, {
     ok: true,
-    claims: { sub: '109876543210987654321', email: 'founder.d722@example.test', name: 'A Founder' },
+    claims: { sub: '109876543210987654321', email: 'founder.d722@example.test', name: 'A Founder', hd: null },
   });
   // The bare issuer spelling Google also documents.
   assert.equal((await check({ ...base(), iss: 'accounts.google.com' })).ok, true);
@@ -194,4 +194,25 @@ test('certs that do not answer are named apart from a bad token', async () => {
     const r = await verifyGoogleIdToken(await mint(fresh()), CLIENT);
     assert.deepEqual(r, { ok: false, code: 'token_invalid', reason: 'jwks_unavailable' });
   } finally { thrown.restore(); __testing.resetJwks(); }
+});
+
+test('hd is returned lower-cased for a Workspace account, null for a consumer one', async () => {
+  const ws = await check({ ...base(), hd: 'Example.TEST' });
+  assert.equal(ws.ok && ws.claims.hd, 'example.test');
+  const blank = await check({ ...base(), hd: '   ' });
+  assert.equal(blank.ok && blank.claims.hd, null);
+});
+
+test('Google is authoritative for gmail.com and for a Workspace account, and for nothing else', () => {
+  assert.equal(googleIsAuthoritative('ada@gmail.com', null), true);
+  assert.equal(googleIsAuthoritative('Ada@GoogleMail.com', null), true);
+  assert.equal(googleIsAuthoritative('ada@company.example', 'company.example'), true);
+  // A Workspace account whose address is on one of the org's other domains.
+  assert.equal(googleIsAuthoritative('ada@alias.example', 'company.example'), true);
+  // A consumer Google account made on an address Google does not host.
+  assert.equal(googleIsAuthoritative('ops@company.example', null), false);
+  assert.equal(googleIsAuthoritative('ops@company.example', ''), false);
+  // Not a suffix trick.
+  assert.equal(googleIsAuthoritative('ada@gmail.com.evil.example', null), false);
+  assert.equal(googleIsAuthoritative('ada@notgmail.com', null), false);
 });

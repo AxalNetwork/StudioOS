@@ -28,8 +28,9 @@
  *
  *   GET  /start              kicks off OAuth. Accepts ?action=signin|link
  *                            and ?redirect=<absolute-path-on-app.axal.vc>.
- *                            Generates an HMAC-signed state cookie + URL
- *                            so the callback can't be replayed.
+ *                            Generates an HMAC-signed state for the URL and
+ *                            sets its nonce in a cookie, so the callback
+ *                            signs in only the browser that started it.
  *
  *   GET  /callback           Google redirects here with ?code & ?state.
  *                            Exchanges code → id_token, lookups by
@@ -70,6 +71,11 @@
  *                                            email link creates one.
  *                                            User lands on the standard
  *                                            onboarding chatbot.
+ *
+ *   Rules 2 and 4 bind a Google identity to an address, so they run only
+ *   where Google is authoritative for it (a gmail.com address, or a Workspace
+ *   account with `hd`); anywhere else the answer is link_requires_email_proof
+ *   and nothing is written (D722, `resolveGoogleSignin`).
  *
  *   A matched row with is_active = 0 is refused BEFORE anything is linked
  *   (account_inactive). /popup adds one more refusal: when the person typed
@@ -122,15 +128,10 @@ import { hashEmail } from '../util/hashEmail';
 // Task #9 follow-up — fresh Google signups land in 'exploring' too, same
 // as /register and magic-link. See exploringSchema.ts.
 import { ensureExploringSchema } from '../services/exploringSchema';
-import { withDeadline } from '../util/deadline';
-import { verifyGoogleIdToken } from '../services/googleIdToken';
+import { verifyGoogleIdToken, googleIsAuthoritative } from '../services/googleIdToken';
 import { recordSecurityEvent } from '../services/securityEvents';
 import { isProductionEnv } from '../util/paymentMode';
 
-// A KV round trip that has not answered in this long is treated as a miss: the
-// cookie fallback covers the put, and a missing bind nonce is already a
-// 'bad_state', which is the honest answer when we cannot verify the binding.
-const STATE_KV_DEADLINE_MS = 2_000;
 // Google's token endpoint gets ten seconds. The catch below already returns
 // null on a network failure; without a signal a hung connection never reaches
 // it, and the user waits on a redirect that will not come.
@@ -312,6 +313,20 @@ function configMissing(env: Env): boolean {
   return !env.GOOGLE_AUTH_CLIENT_ID || !env.GOOGLE_AUTH_CLIENT_SECRET;
 }
 
+/** Every value the request carries for one cookie name, in header order. */
+function cookieValues(c: Context<{ Bindings: Env }>, name: string): string[] {
+  const out: string[] = [];
+  for (const part of (c.req.header('cookie') || '').split(';')) {
+    const t = part.trim();
+    const eq = t.indexOf('=');
+    if (eq > 0 && t.slice(0, eq) === name) out.push(t.slice(eq + 1));
+  }
+  return out;
+}
+
+const STATE_COOKIE = 'studioos_google_state';
+const stateCookieValues = (c: Context<{ Bindings: Env }>) => cookieValues(c, STATE_COOKIE);
+
 // ----- /start ---------------------------------------------------------------
 
 authGoogle.get('/start', async (c) => {
@@ -329,12 +344,11 @@ authGoogle.get('/start', async (c) => {
   }
 
   // Session-bind the OAuth state to defeat login-CSRF / state-replay.
-  // We mint a random nonce, embed it in the signed state JWT, AND set
-  // the same nonce in an httpOnly Secure same-site=Lax cookie. The
-  // /callback handler refuses any state whose `n` doesn't match the
-  // cookie, so an attacker who phishes a {code,state} pair cannot
-  // bounce the victim's browser through /callback to mint a session
-  // bound to the attacker's Google account (or vice-versa).
+  // We mint a random nonce, embed it in the signed state, AND set the same
+  // nonce in an httpOnly Secure SameSite=Lax cookie. /callback refuses any
+  // state whose `n` doesn't match that cookie, so an attacker who mints a
+  // {code,state} pair in their own browser cannot bounce the victim's browser
+  // through /callback to sign it in to the attacker's Google account.
   const nonceBytes = new Uint8Array(16);
   crypto.getRandomValues(nonceBytes);
   const nonce = b64urlEncode(nonceBytes);
@@ -350,31 +364,23 @@ authGoogle.get('/start', async (c) => {
     redirect,
     lane,
   });
-  // Bind the nonce to this OAuth handshake via KV (keyed by the state's
-  // own HMAC signature) AND via cookie for defence-in-depth. The KV
-  // record is the source of truth — mobile in-app browsers (Instagram,
-  // LinkedIn, etc.) commonly drop the third-party-cookie context across
-  // the Google round-trip, which used to surface as 'bad_state'.
-  const stateSig = state.slice(state.indexOf('.') + 1);
-  // Bounded, and the catch below is why that matters: a KV that never answers
-  // would hold up the redirect to Google for the life of the request, which is
-  // what made /login stop offering the button at all — LoginPage probed this
-  // very endpoint on mount and hid the control when the probe did not
-  // resolve (until D185). The cookie written just below is the fallback, so a
-  // skipped put degrades desktop-only rather than failing the handshake.
-  try {
-    await withDeadline(
-      c.env.TOKENS.put(`gstate:${stateSig}`, nonce, { expirationTtl: 600 }),
-      STATE_KV_DEADLINE_MS, 'gstate-put',
-    );
-  } catch (e) { console.error('[auth_google] state KV put failed', e); }
-  // D722 — the cookie carries the session cookie's Domain. /start answers on
-  // the host the SPA runs on (axal.vc) while Google sends the person back to
-  // the registered callback host (app.axal.vc); a host-only cookie set here
-  // never reached /callback, so the fallback this comment promises never
-  // existed on HQ and a KV miss was always "Sign-in link expired". On HQ the
-  // Domain is `.axal.vc`; a branch, localhost and preview stay host-only,
-  // exactly as `setAuthCookies` decides for the session itself.
+  // THE COOKIE IS THE BINDING, AND THE ONLY ONE (D722). Until D722 the nonce
+  // was also written to KV under the state's signature, and /callback took a
+  // KV hit in place of the cookie. A KV record proves only that /start minted
+  // the state and that it is unused — not that it was minted in THIS browser —
+  // so a state the attacker minted in their own browser signed the victim in
+  // (login CSRF). It was the only check that ever ran on HQ, because the
+  // cookie used to be host-only on axal.vc and never reached app.axal.vc.
+  // A browser that finishes Google in a different cookie jar (an in-app
+  // browser handing off to Safari) is indistinguishable from that attack, so
+  // it is refused as `bad_state` too; Google refuses most in-app webviews
+  // anyway (`disallowed_useragent`).
+  //
+  // The cookie carries the session cookie's Domain: /start answers on the host
+  // the SPA runs on (axal.vc) while Google sends the person back to the
+  // registered callback host (app.axal.vc). On HQ the Domain is `.axal.vc`; a
+  // branch, localhost and preview stay host-only, exactly as `setAuthCookies`
+  // decides for the session itself.
   c.header(
     'Set-Cookie',
     `studioos_google_state=${nonce}; HttpOnly; Secure; SameSite=Lax; Path=/api/auth/google${authCookieDomainAttr(c)}; Max-Age=600`,
@@ -415,6 +421,7 @@ interface IdTokenPayload {
   picture?: string;
   aud?: string;
   iss?: string;
+  hd?: string;
 }
 
 /**
@@ -507,7 +514,8 @@ function callbackError(env: Env, code: string, action: 'signin' | 'link'): Respo
 type GoogleCtx = Context<{ Bindings: Env }>;
 type Sql = ReturnType<typeof getSQL>;
 
-export type GoogleSigninRefusal = 'link_blocked_unverified' | 'account_inactive' | 'different_account';
+export type GoogleSigninRefusal =
+  | 'link_blocked_unverified' | 'link_requires_email_proof' | 'account_inactive' | 'different_account';
 
 type GoogleSigninResult =
   | { ok: true; user: any; newSignup: boolean }
@@ -520,6 +528,18 @@ type GoogleSigninResult =
  * row, no user row, no log line exists for an attempt this answers with a
  * refusal.
  *
+ * Rules 2 and 4 bind a Google identity to an ADDRESS, so they run only where
+ * Google is authoritative for that address (`googleIsAuthoritative`: gmail.com,
+ * or a Workspace account with `hd`). For any other address Google's
+ * `email_verified` means only that it was verified when the Google account was
+ * made; a former holder of the inbox (a role address handed on, a former
+ * employee) would otherwise auto-link into the account that now uses it, or
+ * pre-create one its real owner later enters by email link with the stranger's
+ * Google still linked. Those attempts are `link_requires_email_proof`: an
+ * email link proves the inbox now, and Settings → Link Google then binds the
+ * Google account from inside that session (L1–L4). Rule 1, a sub already
+ * linked, is unaffected.
+ *
  * `expectedEmail` is the address the person typed on /login, when they typed
  * one. If Google signed in somebody else — an address that is neither the
  * Google account's nor the matched account's — the answer is
@@ -529,7 +549,7 @@ type GoogleSigninResult =
 async function resolveGoogleSignin(
   c: GoogleCtx,
   sql: Sql,
-  identity: { sub: string; email: string; name?: string | null },
+  identity: { sub: string; email: string; name?: string | null; hd?: string | null },
   opts: { lane?: string; expectedEmail?: string } = {},
 ): Promise<GoogleSigninResult> {
   const { sub, email: googleEmail } = identity;
@@ -560,6 +580,9 @@ async function resolveGoogleSignin(
     return { ok: false, code: 'link_blocked_unverified', userId: Number(byEmail.id) };
   }
   if (decision.kind === 'signin_existing') return { ok: true, user: bySub, newSignup: false };
+  if (!googleIsAuthoritative(googleEmail, identity.hd)) {
+    return { ok: false, code: 'link_requires_email_proof', userId: byEmail ? Number(byEmail.id) : undefined };
+  }
 
   if (decision.kind === 'link_then_signin') {
     // Rule 2 — link verified row. INSERT OR IGNORE so a double-click race (two
@@ -698,38 +721,18 @@ authGoogle.get('/callback', async (c) => {
   const state = await verifyState(c.env, stateRaw);
   if (!state) return callbackError(c.env, 'bad_state', 'signin');
 
-  // Session-bind check: the nonce inside the HMAC'd state MUST equal the
-  // value stored in KV (or the cookie, for desktop browsers) at /start
-  // time. This binds the OAuth handshake to a single browser/session and
-  // defeats login-CSRF (attacker injecting their own {code,state} into
-  // the victim's browser) and state-replay across sessions.
-  //
-  // KV is the primary source of truth because mobile in-app browsers
-  // (Instagram, LinkedIn, etc.) frequently drop the third-party-cookie
-  // context across the Google round-trip — using only the cookie would
-  // surface as 'bad_state' for every such user.
-  const stateSig = stateRaw.slice(stateRaw.indexOf('.') + 1);
-  let bindNonce = '';
-  try {
-    bindNonce = (await withDeadline(
-      c.env.TOKENS.get(`gstate:${stateSig}`), STATE_KV_DEADLINE_MS, 'gstate-get',
-    )) || '';
-  } catch (e) { console.error('[auth_google] state KV get failed', e); }
-  if (!bindNonce) {
-    // Cookie fallback for desktop browsers (KV write may have failed at /start).
-    const cookieHeader = c.req.header('cookie') || '';
-    const m = cookieHeader.match(/(?:^|;\s*)studioos_google_state=([^;]+)/);
-    bindNonce = m ? m[1] : '';
-  }
-  if (!bindNonce || bindNonce !== state.n) {
+  // Session-bind check (D722): the nonce inside the HMAC'd state MUST equal
+  // the `studioos_google_state` cookie /start set in THIS browser. The HMAC
+  // proves /start minted the state; only the cookie proves it was minted
+  // here, which is what defeats login CSRF — an attacker's own {code,state}
+  // opened in the victim's browser arrives without a matching cookie. Every
+  // value the browser sends under that name is tried (an old host-only cookie
+  // can sit beside the `.axal.vc` one), each compared in constant time.
+  if (!stateCookieValues(c).some((v) => sameString(v, state.n))) {
     return callbackError(c.env, 'bad_state', state.action);
   }
-  // One-shot: delete the KV record and clear the binding cookie so the
-  // same {code,state} pair cannot be replayed even if it leaks (Google's
-  // code is already single-use, but defence-in-depth).
-  try {
-    await withDeadline(c.env.TOKENS.delete(`gstate:${stateSig}`), STATE_KV_DEADLINE_MS, 'gstate-delete');
-  } catch {}
+  // One-shot: clear the binding cookie, so the same {code,state} pair cannot
+  // be replayed in this browser either (Google's code is single-use as well).
   // Cleared with the Domain /start now sets (D722) and without it, so a
   // host-only cookie from a /start that ran before the change goes too.
   const stateDom = authCookieDomainAttr(c);
@@ -802,7 +805,9 @@ authGoogle.get('/callback', async (c) => {
     // The account is decided and the session minted by the two helpers
     // /popup uses too (D722), so the redirect and the window cannot follow
     // different rules. Every refusal is decided before anything is written.
-    const resolved = await resolveGoogleSignin(c, sql, { sub, email: googleEmail, name: idt.name }, { lane: state.lane });
+    const resolved = await resolveGoogleSignin(
+      c, sql, { sub, email: googleEmail, name: idt.name, hd: idt.hd }, { lane: state.lane },
+    );
     if (!resolved.ok) return callbackError(c.env, resolved.code, 'signin');
     const { user, newSignup } = resolved;
     await mintGoogleSession(c, sql, user, newSignup);
@@ -852,14 +857,27 @@ const POPUP_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const POPUP_DEV_ORIGINS = ['http://localhost:5000', 'http://localhost:5173'];
 
 /**
- * The window may be used only when the client is configured AND the
- * deployment switched it on. `GOOGLE_SIGNIN_POPUP` ships "off": a JavaScript
- * origin missing from the Google client makes Google show its own error inside
- * the window, which the page cannot see, so the switch flips only after the
- * owner registers both origins. "off" is also the one-line rollback.
+ * `GOOGLE_SIGNIN_POPUP`: "on", "canary", or anything else, which is off. It
+ * ships "off": a JavaScript origin missing from the Google client makes Google
+ * show its own error inside the window, which the page cannot see, so the
+ * switch moves only after the owner registers both origins. "canary" is the
+ * step between: /config offers the window only to a page that asks with
+ * `?canary=1` (`/login?google_window=1`), so the owner can try Google's real
+ * window on both hosts while every other visitor keeps the redirect. "off" is
+ * also the rollback, and it closes POST /popup itself, not only the page.
  */
-function popupEnabled(env: Env): boolean {
-  return !configMissing(env) && env.GOOGLE_SIGNIN_POPUP === 'on';
+type PopupMode = 'on' | 'canary' | 'off';
+
+function popupMode(env: Env): PopupMode {
+  if (configMissing(env)) return 'off';
+  const v = String(env.GOOGLE_SIGNIN_POPUP || '').trim().toLowerCase();
+  return v === 'on' || v === 'canary' ? v : 'off';
+}
+
+/** Whether /config tells this page to open the window. */
+function popupOffered(env: Env, canaryAsked: boolean): boolean {
+  const mode = popupMode(env);
+  return mode === 'on' || (mode === 'canary' && canaryAsked);
 }
 
 /**
@@ -890,16 +908,6 @@ function popupOriginOk(c: GoogleCtx): boolean {
   return true;
 }
 
-function readPopupCookie(c: GoogleCtx): string {
-  const header = c.req.header('cookie') || '';
-  for (const part of header.split(';')) {
-    const t = part.trim();
-    const eq = t.indexOf('=');
-    if (eq > 0 && t.slice(0, eq) === POPUP_STATE_COOKIE) return t.slice(eq + 1);
-  }
-  return '';
-}
-
 /** Length-equal, constant-time string comparison, as verifyState does it. */
 function sameString(a: string, b: string): boolean {
   if (!a || a.length !== b.length) return false;
@@ -919,17 +927,24 @@ function popupRefuse(c: GoogleCtx, status: 400 | 403 | 409 | 500 | 502 | 503, co
 
 authGoogle.get('/config', (c) => {
   const configured = !configMissing(c.env);
-  const popup = popupEnabled(c.env);
+  const popup = popupOffered(c.env, c.req.query('canary') === '1');
   c.header('Cache-Control', 'no-store');
   // The client ID is public (it is in every Google sign-in URL), but it is
   // read from the deployment's own config and handed out only when the window
-  // is on — nothing in the SPA bundle carries one.
+  // is offered — nothing in the SPA bundle carries one.
   return c.json({ configured, popup, client_id: popup ? c.env.GOOGLE_AUTH_CLIENT_ID! : null });
 });
 
 authGoogle.post('/popup', async (c) => {
   if (configMissing(c.env)) {
     return popupRefuse(c, 503, 'not_configured', 'Google sign-in is not enabled on this environment.');
+  }
+  // The switch closes the route, not just the page: with it off, nothing here
+  // calls Google or writes a row, so "off" is a rollback of this code path.
+  // The page answers `popup_off` by continuing through the redirect, which
+  // also covers a tab that loaded /login before the switch moved.
+  if (popupMode(c.env) === 'off') {
+    return popupRefuse(c, 503, 'popup_off', 'Google is opening in this tab instead.');
   }
   // Origin, then the header no cross-origin page can send (it is not in the
   // CORS allowHeaders, so a preflight for it is refused), then the body, then
@@ -953,7 +968,7 @@ authGoogle.post('/popup', async (c) => {
   // The page wrote the state into a SameSite=Strict cookie on this site before
   // it opened Google's window. A code another page captured cannot carry this
   // browser's cookie, so it cannot sign this browser in.
-  if (!sameString(readPopupCookie(c), state)) {
+  if (!cookieValues(c, POPUP_STATE_COOKIE).some((v) => sameString(v, state))) {
     return popupRefuse(c, 403, 'bad_state', 'This sign-in attempt expired. Press Continue with Google again.');
   }
   // The attempt is spent whatever happens next; the cookie goes with it.
@@ -996,6 +1011,11 @@ authGoogle.post('/popup', async (c) => {
         if (resolved.code === 'account_inactive') {
           await googleRefuse('inactive', { email: identity.email, userId: resolved.userId });
           return popupRefuse(c, 403, 'account_inactive', 'Your Axal VC account is inactive. Contact support.');
+        }
+        if (resolved.code === 'link_requires_email_proof') {
+          await googleRefuse('link_requires_email_proof', { email: identity.email, userId: resolved.userId });
+          return popupRefuse(c, 409, 'link_requires_email_proof',
+            "Google doesn't host this address, so it can't prove the inbox is yours. Use 'Email me a sign-in link' once, then press Link Google under Account → Security; after that, Continue with Google works.");
         }
         await googleRefuse('link_blocked_unverified', { email: identity.email, userId: resolved.userId });
         return popupRefuse(c, 409, 'link_blocked_unverified',

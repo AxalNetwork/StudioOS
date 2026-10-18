@@ -63,6 +63,27 @@ export interface GoogleIdentity {
   /** Lower-cased. */
   email: string;
   name: string | null;
+  /**
+   * The Google Workspace domain, lower-cased, when the account is a Workspace
+   * one; null for a consumer account. With the email it says whether Google is
+   * authoritative for the address (`googleIsAuthoritative`).
+   */
+  hd: string | null;
+}
+
+/**
+ * Whether Google vouches for the inbox behind `email` today, by Google's own
+ * rule ("Using email, email_verified and hd", Sign in with Google docs): a
+ * gmail.com address, or a Workspace account (`hd` set). For any other address
+ * `email_verified` only says the address was verified when the Google account
+ * was made — whoever holds that inbox now may be someone else — so it is not
+ * proof of the inbox. googlemail.com is Gmail's legacy spelling of the same
+ * mailboxes.
+ */
+export function googleIsAuthoritative(email: string, hd: string | null | undefined): boolean {
+  const e = String(email || '').trim().toLowerCase();
+  if (/@(gmail|googlemail)\.com$/.test(e)) return true;
+  return typeof hd === 'string' && hd.trim() !== '';
 }
 
 export type GoogleIdTokenResult =
@@ -129,7 +150,8 @@ export async function verifyGoogleIdToken(
   if (!verifiedEmail) return { ok: false, code: 'email_unverified', reason: 'email_unverified' };
 
   const name = typeof payload.name === 'string' && payload.name.trim() ? payload.name.trim() : null;
-  return { ok: true, claims: { sub, email, name } };
+  const hd = typeof payload.hd === 'string' && payload.hd.trim() ? payload.hd.trim().toLowerCase() : null;
+  return { ok: true, claims: { sub, email, name, hd } };
 }
 
 /** Test seam: forget the cached key set, so a test can count the certs fetches. */

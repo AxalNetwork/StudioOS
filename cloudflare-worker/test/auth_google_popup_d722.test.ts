@@ -1,8 +1,9 @@
 /**
  * D722 — "Continue with Google" through Google's own window: GET /config and
  * POST /popup, the shared account and session helpers /callback now uses too,
- * the state cookie's Domain on the redirect fallback, and the two rate-limit
- * entries.
+ * the redirect fallback's state cookie (its Domain, and that it is the only
+ * binding), the switch, Google's authority over an address, and the two
+ * rate-limit entries.
  *
  * HOW IT IS DRIVEN. The real `auth_google.ts` router over HTTP, against a
  * node:sqlite database whose tables are sliced verbatim from
@@ -28,7 +29,7 @@ import { Hono } from 'hono';
 
 import authGoogle, { __testing as stateTesting } from '../src/routes/auth_google.ts';
 import { rateLimitMiddleware } from '../src/middleware/rateLimit.ts';
-import { requireFactor, requireStepUp } from '../src/auth.ts';
+import { requireFactor, requireStepUp, createJWT } from '../src/auth.ts';
 import { GOOGLE_CERTS_URL, __testing as jwksTesting } from '../src/services/googleIdToken.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { codeOnly } from './_codeOnly.mjs';
@@ -93,6 +94,10 @@ function claims(over: Record<string, unknown> = {}) {
   const base: Record<string, unknown> = {
     iss: 'https://accounts.google.com', aud: CLIENT, azp: CLIENT,
     sub: '111222333444555666777', email: 'founder.d722@example.test', email_verified: true,
+    // example.test plays a Google Workspace domain, so Google is authoritative
+    // for these addresses (rules 2 and 4 apply). The consumer-account case is
+    // its own test, with `hd: undefined`.
+    hd: 'example.test',
     name: 'Ada Founder', iat: nowSec() - 5, exp: nowSec() + 3595, ...over,
   };
   for (const k of Object.keys(base)) if (base[k] === undefined) delete base[k];
@@ -108,7 +113,11 @@ type Calls = { token: URLSearchParams[]; certs: number; other: string[] };
  * Play Google for one request. `tokenAnswer` is the token endpoint's reply:
  * an id_token string, or a Response for the failure cases.
  */
-async function withGoogle<T>(tokenAnswer: string | Response | null, fn: (calls: Calls) => Promise<T>): Promise<T> {
+async function withGoogle<T>(
+  tokenAnswer: string | Response | null,
+  fn: (calls: Calls) => Promise<T>,
+  { certs: certsAnswer }: { certs?: () => Response } = {},
+): Promise<T> {
   const calls: Calls = { token: [], certs: 0, other: [] };
   const real = globalThis.fetch;
   globalThis.fetch = (async (input: any, init?: any) => {
@@ -122,6 +131,7 @@ async function withGoogle<T>(tokenAnswer: string | Response | null, fn: (calls: 
     }
     if (url === GOOGLE_CERTS_URL) {
       calls.certs += 1;
+      if (certsAnswer) return certsAnswer();
       return new Response(JSON.stringify({ keys: [JWK] }), { headers: { 'content-type': 'application/json' } });
     }
     calls.other.push(url);
@@ -175,8 +185,8 @@ function seedUser(db: any, { id, email, verified = 1, active = 1, role = 'founde
 
 // ─────────────────────────────────────────────────────────── /config ──
 
-async function config(env: any) {
-  const res = await authGoogle.fetch(new Request(`${ORIGIN}/config`), env);
+async function config(env: any, query = '') {
+  const res = await authGoogle.fetch(new Request(`${ORIGIN}/config${query}`), env);
   return { status: res.status, body: await res.json() as any, res };
 }
 
@@ -202,6 +212,45 @@ test('/config: unconfigured, configured with the window off, and on', async () =
   // No DB, no KV bound at all — it answers from env alone. The secret is
   // never in the answer.
   assert.ok(!JSON.stringify(on.body).includes(SECRET));
+});
+
+test('/config canary: the window is offered only to a page that asks with ?canary=1', async () => {
+  const env = { GOOGLE_AUTH_CLIENT_ID: CLIENT, GOOGLE_AUTH_CLIENT_SECRET: SECRET, GOOGLE_SIGNIN_POPUP: 'canary' };
+  assert.deepEqual((await config(env)).body, { configured: true, popup: false, client_id: null }, 'canary offered the window to everyone');
+  assert.deepEqual((await config(env, '?canary=0')).body, { configured: true, popup: false, client_id: null });
+  assert.deepEqual((await config(env, '?canary=1')).body, { configured: true, popup: true, client_id: CLIENT });
+  // ?canary=1 cannot switch the window on where the switch is off...
+  const off = { ...env, GOOGLE_SIGNIN_POPUP: 'off' };
+  assert.deepEqual((await config(off, '?canary=1')).body, { configured: true, popup: false, client_id: null });
+  // ...nor where the client is not configured.
+  assert.deepEqual((await config({ GOOGLE_AUTH_CLIENT_ID: CLIENT, GOOGLE_SIGNIN_POPUP: 'canary' }, '?canary=1')).body,
+    { configured: false, popup: false, client_id: null });
+  // "on" serves everyone, with or without the query.
+  const on = { ...env, GOOGLE_SIGNIN_POPUP: 'on' };
+  assert.equal((await config(on, '?canary=1')).body.popup, true);
+});
+
+test('the switch closes POST /popup itself: off (or unset) is 503 popup_off before Google or the database is touched; canary accepts', async () => {
+  for (const flag of ['off', undefined, 'yes']) {
+    const db = freshDb();
+    await withGoogle(await idToken(), async (calls) => {
+      const r = await popup(envFor(db, { GOOGLE_SIGNIN_POPUP: flag }));
+      assert.equal(r.status, 503, String(flag));
+      assert.equal(r.body.code, 'popup_off', String(flag));
+      assert.equal(typeof r.body.error, 'string');
+      assert.ok(!setCookies(r.res).some((x) => x.startsWith('studioos_auth=')));
+      assert.equal(calls.token.length, 0, 'the switch was off and the code still went to Google');
+      assert.equal(calls.certs, 0);
+    });
+    assert.equal(count(db, 'SELECT COUNT(*) AS n FROM users'), 0);
+    assert.equal(count(db, 'SELECT COUNT(*) AS n FROM user_sessions'), 0);
+    assert.deepEqual(events(db), []);
+  }
+  const db = freshDb();
+  await withGoogle(await idToken(), async () => {
+    const r = await popup(envFor(db, { GOOGLE_SIGNIN_POPUP: 'canary' }));
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+  });
 });
 
 // ─────────────────────────────────────────────── refusals before Google ──
@@ -506,18 +555,18 @@ test('an unexpected throw is 500 internal_error, and the message is not echoed',
 
 // ─────────────────────────────────────── the redirect fallback, unchanged ──
 
+const NONCE = 'n'.repeat(22);
+
 async function startedState(env: any, extra: Partial<{ redirect: string; lane: string }> = {}) {
-  const nonce = 'n'.repeat(22);
-  const state = await stateTesting.signState(env, {
-    n: nonce, ts: Math.floor(Date.now() / 1000), action: 'signin', redirect: extra.redirect || '/dashboard', lane: extra.lane,
+  return stateTesting.signState(env, {
+    n: NONCE, ts: Math.floor(Date.now() / 1000), action: 'signin', redirect: extra.redirect || '/dashboard', lane: extra.lane,
   } as any);
-  await env.TOKENS.put(`gstate:${state.slice(state.indexOf('.') + 1)}`, nonce);
-  return state;
 }
 
-async function callback(env: any, state: string) {
+/** The browser that ran /start: it carries the nonce in `studioos_google_state`. */
+async function callback(env: any, state: string, cookie: string | null = `studioos_google_state=${NONCE}`) {
   return authGoogle.fetch(new Request(`https://app.axal.vc/callback?code=cb-code&state=${encodeURIComponent(state)}`, {
-    headers: { host: 'app.axal.vc', 'cf-connecting-ip': IP },
+    headers: { host: 'app.axal.vc', 'cf-connecting-ip': IP, ...(cookie ? { cookie } : {}) },
   }), env);
 }
 
@@ -576,21 +625,187 @@ test('/start puts the session Domain on the state cookie on HQ, and stays host-o
   assert.ok(!/Domain=/.test(local), local);
 });
 
-test('/callback reads the state cookie when KV missed — the fallback the Domain makes reachable', async () => {
+test('/callback signs in only the browser that ran /start: the state cookie is the binding, and KV is not consulted', async () => {
+  // Login CSRF, as the review's probe ran it: the attacker runs /start in
+  // their own browser, completes Google with their own account, and opens the
+  // callback URL in the victim's browser. The victim's browser has no cookie,
+  // or another attempt's.
+  for (const [label, cookie] of [
+    ['no cookie', null],
+    ['another attempt’s cookie', `studioos_google_state=${'x'.repeat(22)}`],
+    ['the right value under another name', `studioos_google_popup=${NONCE}`],
+    ['a prefix of the nonce', `studioos_google_state=${NONCE.slice(0, 21)}`],
+  ] as Array<[string, string | null]>) {
+    const db = freshDb();
+    const env = envFor(db);
+    const state = await startedState(env);
+    // Even a KV record shaped exactly like the one /start used to write
+    // must not stand in for the cookie.
+    await env.TOKENS.put(`gstate:${state.slice(state.indexOf('.') + 1)}`, NONCE);
+    const res = await withGoogle(await idToken({ email: 'attacker.d722@example.test', sub: '4242' }), async (calls) => {
+      const out = await callback(env, state, cookie);
+      assert.equal(calls.token.length, 0, `${label}: the code went to Google`);
+      return out;
+    });
+    assert.equal(res.status, 302, label);
+    assert.equal(res.headers.get('location'), 'https://axal.vc/login?google_error=bad_state', label);
+    assert.ok(!setCookies(res).some((x) => x.startsWith('studioos_auth=')), `${label}: a session cookie was set`);
+    assert.equal(count(db, 'SELECT COUNT(*) AS n FROM users'), 0, label);
+    assert.equal(count(db, 'SELECT COUNT(*) AS n FROM user_sessions'), 0, label);
+    assert.equal(count(db, 'SELECT COUNT(*) AS n FROM user_google_links'), 0, label);
+  }
+
+  // The browser that ran /start — a real /start, read back from its own
+  // Set-Cookie — is signed in, and /start no longer writes KV at all.
   const db = freshDb();
   seedUser(db, { id: 52, email: 'founder.d722@example.test' });
   const env = envFor(db);
-  const nonce = 'c'.repeat(22);
-  const state = await stateTesting.signState(env, { n: nonce, ts: Math.floor(Date.now() / 1000), action: 'signin', redirect: '/dashboard' });
-  // No KV record at all: only the cookie /start set on .axal.vc binds it.
-  const res = await withGoogle(await idToken(), () => authGoogle.fetch(new Request(
-    `https://app.axal.vc/callback?code=cb&state=${encodeURIComponent(state)}`,
-    { headers: { host: 'app.axal.vc', cookie: `studioos_google_state=${nonce}` } },
-  ), env));
+  const started = await authGoogle.fetch(new Request('https://axal.vc/start?redirect=/dashboard', {
+    headers: { host: 'axal.vc', accept: 'application/json', 'cf-connecting-ip': IP },
+  }), env);
+  assert.equal(env.TOKENS.m.size, 0, '/start still writes a KV record nothing reads');
+  const state = new URL(((await started.json()) as any).url).searchParams.get('state')!;
+  const set = setCookies(started).find((x) => x.startsWith('studioos_google_state='))!;
+  const nonce = set.slice('studioos_google_state='.length, set.indexOf(';'));
+  const res = await withGoogle(await idToken(), () => callback(env, state, `studioos_google_state=${nonce}`));
   assert.equal(res.headers.get('location'), 'https://axal.vc/dashboard?google=ok');
-  const cleared = setCookies(res).filter((s) => s.startsWith('studioos_google_state=;'));
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM user_sessions WHERE user_id = 52'), 1);
+  const cleared = setCookies(res).filter((x) => x.startsWith('studioos_google_state=;'));
   assert.equal(cleared.length, 2, 'clear both the Domain cookie and any host-only one left from before');
-  assert.ok(cleared.some((s) => /Domain=\.axal\.vc/.test(s)));
+  assert.ok(cleared.some((x) => /Domain=\.axal\.vc/.test(x)));
+});
+
+test('/callback accepts the matching cookie beside a stale host-only one, in either order', async () => {
+  for (const cookie of [
+    `studioos_google_state=${'s'.repeat(22)}; studioos_google_state=${NONCE}`,
+    `studioos_google_state=${NONCE}; studioos_google_state=${'s'.repeat(22)}`,
+  ]) {
+    const db = freshDb();
+    seedUser(db, { id: 53, email: 'founder.d722@example.test' });
+    const env = envFor(db);
+    const res = await withGoogle(await idToken(), async () => callback(env, await startedState(env), cookie));
+    assert.equal(res.headers.get('location'), 'https://axal.vc/dashboard?google=ok', cookie);
+  }
+});
+
+// ───────────────────────────────────── Google's authority over an address ──
+
+test('rules 2 and 4 need Google to be authoritative for the address: a consumer account on an address Google does not host is refused', async () => {
+  // Rule 2: a verified Axal row with that address. A former holder of the
+  // inbox with a consumer Google account on it must not be linked into it.
+  const db = freshDb();
+  seedUser(db, { id: 60, email: 'ops.d722@company.example' });
+  await withGoogle(await idToken({ email: 'ops.d722@company.example', hd: undefined }), async () => {
+    const r = await popup(envFor(db));
+    assert.equal(r.status, 409);
+    assert.equal(r.body.code, 'link_requires_email_proof');
+    assert.match(r.body.error, /Email me a sign-in link/);
+    assert.match(r.body.error, /Link Google/);
+    assert.ok(!setCookies(r.res).some((x) => x.startsWith('studioos_auth=')));
+  });
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM user_google_links'), 0, 'the consumer account was linked');
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM user_sessions'), 0);
+  assert.deepEqual(events(db), [['signin', 'google', 'refused', 'link_requires_email_proof', 60]]);
+
+  // Rule 4: no row. The account is not pre-created for the real owner to walk into.
+  const db2 = freshDb();
+  await withGoogle(await idToken({ email: 'role.d722@company.example', hd: undefined }), async () => {
+    const r = await popup(envFor(db2));
+    assert.equal(r.body.code, 'link_requires_email_proof');
+  });
+  assert.equal(count(db2, 'SELECT COUNT(*) AS n FROM users'), 0, 'an account was created on an address Google cannot vouch for');
+  assert.equal(count(db2, 'SELECT COUNT(*) AS n FROM user_google_links'), 0);
+
+  // The redirect fallback follows the same rule through the same helper.
+  const db3 = freshDb();
+  seedUser(db3, { id: 61, email: 'ops.d722@company.example' });
+  const env3 = envFor(db3);
+  const res = await withGoogle(await idToken({ email: 'ops.d722@company.example', hd: undefined }), async () => callback(env3, await startedState(env3)));
+  assert.equal(res.headers.get('location'), 'https://axal.vc/login?google_error=link_requires_email_proof');
+  assert.equal(count(db3, 'SELECT COUNT(*) AS n FROM user_google_links'), 0);
+});
+
+test('Google is authoritative for gmail.com and for a Workspace account, and rule 1 never asks', async () => {
+  // gmail.com with no hd: rule 4 creates the account.
+  const db = freshDb();
+  await withGoogle(await idToken({ email: 'ada.d722@gmail.com', hd: undefined }), async () => {
+    const r = await popup(envFor(db));
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.equal(r.body.new_signup, true);
+  });
+  // A Workspace account (hd set) on another of the org's domains: rule 2 links.
+  const db2 = freshDb();
+  seedUser(db2, { id: 62, email: 'ada.d722@alias.example' });
+  await withGoogle(await idToken({ email: 'ada.d722@alias.example', hd: 'company.example' }), async () => {
+    const r = await popup(envFor(db2));
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.equal(r.body.user.id, 62);
+  });
+  assert.equal(count(db2, 'SELECT COUNT(*) AS n FROM user_google_links WHERE user_id = 62'), 1);
+  // A sub already linked (through Settings, inside an email-link session)
+  // signs in whatever the address.
+  const db3 = freshDb();
+  seedUser(db3, { id: 63, email: 'ops.d722@company.example' });
+  db3.prepare('INSERT INTO user_google_links (user_id, google_sub) VALUES (63, ?)').run('111222333444555666777');
+  await withGoogle(await idToken({ email: 'ops.d722@company.example', hd: undefined }), async () => {
+    const r = await popup(envFor(db3));
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.equal(r.body.user.id, 63);
+  });
+});
+
+// ──────────────────────────────── the previous person's session is revoked ──
+
+test('a sign-in revokes the previous person’s session the request carried — Bearer on /popup, cookie on /callback (Task #4)', async () => {
+  for (const via of ['popup', 'callback'] as const) {
+    const db = freshDb();
+    seedUser(db, { id: 99, email: 'previous.d722@example.test', role: 'admin' });
+    seedUser(db, { id: 47, email: 'founder.d722@example.test' });
+    db.prepare('INSERT INTO user_google_links (user_id, google_sub) VALUES (47, ?)').run('111222333444555666777');
+    db.prepare("INSERT INTO user_sessions (user_id, jti, factor) VALUES (99, 'jti-previous-d722', 'totp')").run();
+    const env = envFor(db);
+    const stale = await createJWT(env, 99, 'previous.d722@example.test', 'admin', undefined, 'jti-previous-d722');
+    await withGoogle(await idToken(), async () => {
+      if (via === 'popup') {
+        const r = await popup(env, undefined, { authorization: `Bearer ${stale}` });
+        assert.equal(r.status, 200, JSON.stringify(r.body));
+        assert.equal(r.body.user.id, 47);
+      } else {
+        const res = await callback(env, await startedState(env), `studioos_google_state=${NONCE}; studioos_auth=${stale}`);
+        assert.equal(res.headers.get('location'), 'https://axal.vc/dashboard?google=ok');
+      }
+    });
+    const row = db.prepare("SELECT revoked_at FROM user_sessions WHERE jti = 'jti-previous-d722'").get() as any;
+    assert.ok(row.revoked_at, `${via}: the previous person's session is still live`);
+    assert.equal(count(db, `SELECT COUNT(*) AS n FROM activity_logs WHERE action = 'session_revoked_on_signin'`), 1, via);
+    // The new person's own session is untouched.
+    assert.equal(count(db, 'SELECT COUNT(*) AS n FROM user_sessions WHERE user_id = 47 AND revoked_at IS NULL'), 1, via);
+  }
+});
+
+// ─────────────────────────────── Google's keys not answering is not recorded ──
+
+test('Google’s certs not answering is 502 token_invalid and is NOT recorded as a refused credential (D200)', async () => {
+  jwksTesting.resetJwks();
+  try {
+    const db = freshDb();
+    await withGoogle(await idToken(), async (calls) => {
+      const r = await popup(envFor(db));
+      assert.equal(r.status, 502);
+      assert.equal(r.body.code, 'token_invalid');
+      assert.ok(calls.certs >= 1, 'the certs were never asked');
+    }, { certs: () => new Response('unavailable', { status: 503 }) });
+    assert.deepEqual(events(db), [], 'a keys outage was written to security_events as if the token were bad');
+    assert.equal(count(db, 'SELECT COUNT(*) AS n FROM user_sessions'), 0);
+    // The control: a token Google's keys do refuse IS recorded, so the empty
+    // ledger above is the outage rule and not a ledger that records nothing.
+    jwksTesting.resetJwks();
+    const db2 = freshDb();
+    await withGoogle(await idToken({}, { key: stranger.privateKey }), async () => {
+      assert.equal((await popup(envFor(db2))).body.code, 'token_invalid');
+    });
+    assert.deepEqual(events(db2).map((e: any[]) => e[3]), ['token_invalid']);
+  } finally { jwksTesting.resetJwks(); }
 });
 
 // ─────────────────────────────────────────────────────────── the limiter ──
@@ -615,14 +830,14 @@ function limited() {
   return { env, req, handled: () => handled, touched: () => touched };
 }
 
-test('google_popup: the eleventh POST in a minute from one IP is 429; nothing else is in the bucket', async () => {
+test('google_popup: the sixty-first POST in a minute from one IP is 429; nothing else is in the bucket', async () => {
   const previousNow = Date.now;
   Date.now = () => 1_800_000_000_000;
   try {
     const l = limited();
     const statuses: number[] = [];
-    for (let i = 0; i < 11; i++) statuses.push((await l.req('POST', '/api/auth/google/popup')).status);
-    assert.deepEqual(statuses, [...Array(10).fill(200), 429]);
+    for (let i = 0; i < 61; i++) statuses.push((await l.req('POST', '/api/auth/google/popup')).status);
+    assert.deepEqual(statuses, [...Array(60).fill(200), 429]);
     const blocked = await l.req('POST', '/api/auth/google/popup');
     assert.equal(blocked.headers.get('x-ratelimit-bucket'), 'google_popup');
     // Another IP, a GET, and the sibling routes are not in this bucket.
@@ -633,13 +848,14 @@ test('google_popup: the eleventh POST in a minute from one IP is 429; nothing el
   } finally { Date.now = previousNow; }
 });
 
-test('google_popup is fail-closed; /config is exempt and never touches KV', async () => {
+test('google_popup is fail-open like every other sign-in path; /config is exempt and never touches KV', async () => {
+  // A KV outage (the 2026-09-12 shape) must not close the main way in while
+  // the redirect beside it, which creates accounts by the same rules, stays up.
   const l = limited();
   l.env.RATE_LIMITS.get = async () => { throw new Error('Synthetic KV outage'); };
   const r = await l.req('POST', '/api/auth/google/popup');
-  assert.equal(r.status, 503);
-  assert.equal(((await r.json()) as any).bucket, 'google_popup');
-  assert.equal(l.handled(), 0);
+  assert.equal(r.status, 200, 'a KV outage refused Google sign-in');
+  assert.equal(l.handled(), 1);
 
   // Exempt means the limiter never reads or writes KV for it at all — a
   // healthy store, so a non-exempt path's generic buckets WOULD touch it...
@@ -672,7 +888,7 @@ test('/config skips the cold-start role-schema repair; both wrangler blocks decl
   const flag = (b: string) => (b.match(/^GOOGLE_SIGNIN_POPUP\s*=\s*"([^"]*)"/m) || [])[1];
   const top = flag(block('vars'));
   const prod = flag(block('env.production.vars'));
-  assert.ok(top === 'on' || top === 'off', `top-level GOOGLE_SIGNIN_POPUP is ${top}`);
+  assert.ok(top === 'on' || top === 'canary' || top === 'off', `top-level GOOGLE_SIGNIN_POPUP is ${top}`);
   assert.equal(prod, top, 'production and the top level disagree on the popup switch — flip both in one PR');
 });
 

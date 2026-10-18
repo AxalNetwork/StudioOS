@@ -255,19 +255,22 @@ const BUCKETS: Bucket[] = [
     scope: 'ip',
     failClosed: true,
   },
-  // D722 — the code from Google's sign-in window. Unauthenticated, each
-  // accepted call is an outbound exchange with Google's token endpoint, and a
-  // Google identity with no account creates one — the same shape as
-  // `register`, so the same numbers: 10/min/IP, room for a retry after a
-  // cancelled window, and failClosed so an account-creating write waits
-  // rather than running uncapped while KV is down. Exact path and POST only.
+  // D722 — the code from Google's sign-in window. Unauthenticated, and each
+  // accepted call is an outbound exchange with Google's token endpoint, so it
+  // gets a ceiling of its own below the generic 200/min/IP: 60/min/IP, room
+  // for a whole office or event network behind one address. FAIL-OPEN, like
+  // every other sign-in path (/start, /callback, magic link, passkey): this is
+  // the main way in, the redirect beside it creates accounts by the same rules
+  // with no fail-closed bucket, and every account it creates needs a real
+  // Google account and a single-use code, so a KV outage that refused it would
+  // close the front door and protect nothing. The page answers a 429 here by
+  // continuing through the redirect. Exact path and POST only.
   {
     name: 'google_popup',
-    limit: 10,
+    limit: 60,
     windowSec: 60,
     test: (p, m) => m === 'POST' && p === '/api/auth/google/popup',
     scope: 'ip',
-    failClosed: true,
   },
   // D691 — a deck share link's signup. Unauthenticated, and every accepted
   // POST creates a user (plus an activity_logs and an onboarding_progress
