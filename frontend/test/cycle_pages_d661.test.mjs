@@ -449,17 +449,15 @@ test('A CYCLE IS MOUNTED ONLY ONCE ITS READ IS WIRED: all four are, each with it
   for (const tool of ['/raise/pitch', '/raise/data-room', '/raise/capital/cap-table', '/raise/capital/model', '/raise/capital/pipeline']) {
     assert.ok(app.includes(`<Route path="${tool}"`), `${tool} lost its route`);
   }
-  // The four zone pages stay mounted: each module page links to the one that
-  // edits it until canvases for Add and a record's edit view exist.
-  for (const zone of ['pain-map', 'hypotheses']) {
-    assert.match(app, new RegExp(`<Route path="/validate/${zone}" element=\\{guard\\([^)]*\\), <FounderValidateWorkspace />\\)\\} />`), `/validate/${zone} lost its working tool`);
+  // D704 (#1666): the three old zone pages redirect to their modules.
+  for (const zone of ['interviews', 'pain-map', 'hypotheses']) {
+    assert.ok(app.includes(`<Route path="/validate/${zone}" element={guard(labRoles(['admin', 'founder']), <ValidateZoneRedirect zone="${zone}" />)} />`), `/validate/${zone} redirects to its module`);
   }
+  assert.doesNotMatch(app, /FounderValidateWorkspace/, 'the old workspace is gone');
   // D693 decision 12 (#1704): /validate/verdict stays a static line, with the
   // zone's guard, and renders the Verdict module, never the old workspace.
   assert.match(app, /<Route path="\/validate\/verdict" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <CycleRoute cycle="validate" slug="verdict" \/>\)\} \/>/, '/validate/verdict renders the Verdict module');
   assert.doesNotMatch(app, /<Route path="\/validate\/verdict" element=\{[^}]*FounderValidateWorkspace/);
-  // D704 (#1666, PR 2b): the interview log is Customer research now; its old address redirects there.
-  assert.match(app, /<Route path="\/validate\/interviews" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <ValidateZoneRedirect zone="interviews" \/>\)\} \/>/, '/validate/interviews redirects to Customer research');
   assert.doesNotMatch(read('frontend/src/lib/api.js'), /request\(`\/cycles\//, 'the cycle client lives in lib/api/cycles.js, not api.js');
   for (const f of ['cycleModel.js', 'CycleOverview.jsx', 'CycleModulePage.jsx', 'CycleCharts.jsx', 'DurabilityChecklist.jsx', 'adapters/index.js', 'adapters/validate.js', 'adapters/grow.js']) {
     assert.doesNotMatch(read(`frontend/src/pages/cycles/${f}`), /from '\.\.\/\.\.\/lib\/api|from '\.\.\/\.\.\/\.\.\/lib\/api|api\./, `${f} reads nothing itself`);

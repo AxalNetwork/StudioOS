@@ -43,7 +43,6 @@ const src = (p) => codeOnly(read(p));
 /** Every file that renders the shared shell. The rail is a slot on it, so this
  *  is also the complete list of callers that could leave the slot empty. */
 const SHELL_CALLERS = [
-  'frontend/src/workspaces/founder/FounderValidateWorkspace.jsx',
   'frontend/src/workspaces/investor/InvestorDealsRoutes.jsx',
   'frontend/src/workspaces/advisor/AdvisorBucketRoutes.jsx',
   'frontend/src/workspaces/partner/PartnerBucketRoutes.jsx',

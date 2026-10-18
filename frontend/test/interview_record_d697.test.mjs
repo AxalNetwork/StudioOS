@@ -16,7 +16,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -118,17 +118,15 @@ test('7: /validate/session/:id\'s transcript still draws no time', () => {
 // Step 8 — PainSeverity, moved
 // ---------------------------------------------------------------------------
 
-test('8: PainSeverity lives in validatePieces.jsx with its docblock, and FVW imports it rather than defining it', () => {
+test('8: PainSeverity lives in validatePieces.jsx with its docblock, and the old page that forked it is gone', () => {
   const pieces = read('frontend/src/pages/founder/validatePieces.jsx');
-  const fvw = read('frontend/src/workspaces/founder/FounderValidateWorkspace.jsx');
   assert.match(pieces, /export function PainSeverity\(\{ interviewId, pains, onChanged \}\)/);
   assert.match(pieces, /\/\*\*\n \* How severe was this pain, in this conversation\?\n \*\n \* WRITES `interview_pain_severities`/, 'the docblock moved with it');
   assert.match(pieces, /^import \{ api \} from '\.\.\/\.\.\/lib\/api';$/m);
   assert.match(pieces, /`PainSeverity` \("How badly did they need it\?"\) moved here/, 'the file\'s docblock names it');
-  assert.doesNotMatch(fvw, /function PainSeverity\b/, 'not forked: FVW no longer defines it');
-  assert.doesNotMatch(fvw, /How severe was this pain/);
-  assert.match(fvw, /import \{[^}]*\bPainSeverity\b[^}]*\} from '\.\.\/\.\.\/pages\/founder\/validatePieces';/);
-  assert.match(fvw, /<PainSeverity\b/, 'FVW still draws it until #1666 deletes the page');
+  // D704 (#1666) deleted FounderValidateWorkspace, so the record is its one home.
+  assert.equal(existsSync(resolve(process.cwd(), 'frontend/src/workspaces/founder/FounderValidateWorkspace.jsx')), false);
+  assert.match(read('frontend/src/pages/founder/InterviewReviewPage.jsx'), /<PainSeverity\b/, 'the interview record draws it');
 });
 
 async function mountSeverity(props) {

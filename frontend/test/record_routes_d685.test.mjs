@@ -121,7 +121,7 @@ test('which page is under the lightbox: the module the founder was on, else the 
 test('under the lightbox is one of the cycle\'s modules or the overview, never an unknown slug that would redirect away', () => {
   const mods = MODULES.validate;
   assert.equal(underModule(mods, '/validate/customer-research?project_id=7'), 'customer-research');
-  assert.equal(underModule(mods, '/validate/interviews'), null, 'the interview log is a page of its own, not a module');
+  assert.equal(underModule(mods, '/validate/interviews'), null, 'an old page path is not a module: it redirects (D704)');
   assert.equal(underModule(mods, '/validate/pain-map'), null);
   assert.equal(underModule(mods, '/validate/not-a-module'), null);
   assert.equal(underModule(mods, '/validate'), null);
@@ -159,11 +159,11 @@ test('both entry points name /validate/record; the old ?new=record is gone from 
   assert.match(route, /action: \(q, open\) => \(\{ label: 'Record a session', href: `\/validate\/record\$\{q\}`, onOpen: open \}\)/);
   assert.match(route, /'customer-research': \(q, open\) => \(\{ text: 'Record a session', href: `\/validate\/record\$\{q\}`, onOpen: open \}\)/);
   assert.doesNotMatch(route, /new=record/);
-  const ws = read('frontend/src/workspaces/founder/FounderValidateWorkspace.jsx');
-  assert.match(ws, /if \(newParam === 'record'\) \{[\s\S]*navigate\(`\/validate\/record\$\{rest \? `\?\$\{rest\}` : ''\}`, \{ replace: true \}\);/);
-  assert.match(ws, /\['notes', 'upload'\]\.includes\(newParam\)/, 'notes and upload still open the log form');
-  assert.doesNotMatch(ws, /RecordSessionSheet/, 'the side sheet is no longer mounted');
-  assert.match(ws, /navigate\(`\/validate\/record\?interview=\$\{encodeURIComponent\(r\.id\)\}&project_id=\$\{encodeURIComponent\(projectId\)\}`/, 'a row\'s button opens the same lightbox with Who pre-filled');
+  // D704 (#1666): the log is Customer research now. `/validate/interviews?new=record`
+  // redirects to `/validate/record` and `?new=notes|upload` to `?log=`
+  // (validate_pages_removed_d704 test 1); a row's Record a session is the
+  // interview record's (interview_record_d697 test 7).
+  assert.match(read('frontend/src/App.jsx'), /<Route path="\/validate\/interviews" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <ValidateZoneRedirect zone="interviews" \/>\)\} \/>/);
   assert.match(DOORS.founders.live.map((i) => i.route).join(' '), /\/validate\/record\b/, 'the door points at the lightbox');
   assert.equal(DOORS.founders.live.some((i) => i.route === '/validate/session/:id'), false);
 });

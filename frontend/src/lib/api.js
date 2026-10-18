@@ -1523,18 +1523,12 @@ export const api = {
   // Validate · hypotheses and · verdict (migration 211). The board is a
   // curation layer over the same interviews `listInterviews` returns — it does
   // not replace `hypotheses_json`, which the demo-day deck and the discovery
-  // signals score still read.
-  //
-  // `getValidationDecision` is deliberately a SEPARATE call from
-  // `getValidationBoard` rather than a field on it: the two have different
-  // audiences (a partner may read the board and not the decision), and folding
-  // them into one response would mean one 403 hiding both or neither.
+  // signals score still read. D704 (#1666): the board's edits and the old
+  // decision methods went with the Hypotheses and Verdict pages; a claim is
+  // edited and linked through its record's actions, and a decision is the
+  // Verdict module's (`verdictApi`).
   getValidationBoard: (projectId) => request(`/founder/validate/board/${projectId}`),
   createHypothesis: (projectId, data) => request(`/founder/validate/board/${projectId}/hypotheses`, { method: 'POST', body: JSON.stringify(data) }),
-  updateHypothesis: (id, data) => request(`/founder/validate/hypotheses/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-  linkHypothesisPain: (id, data) => request(`/founder/validate/hypotheses/${id}/links`, { method: 'POST', body: JSON.stringify(data) }),
-  unlinkHypothesisPain: (linkId) => request(`/founder/validate/links/${linkId}`, { method: 'DELETE' }),
-  getValidationDecision: (projectId) => request(`/founder/validate/decision/${projectId}`),
 
   // Build · Cadence (#176 FB4). ONE READ FOR THE WHOLE ZONE, because all four
   // of its stat cards are counts over rows the same response carries — a
@@ -1595,7 +1589,6 @@ export const api = {
     api._downloadCsv(`/founder/validate/pain-map/${projectId}/export.csv`, 'pain-map.csv'),
   exportValidateSummary: (projectId) =>
     api._downloadCsv(`/founder/validate/summary/${projectId}/export.csv`, 'validation-summary.csv'),
-  recordValidationDecision: (projectId, data) => request(`/founder/validate/decision/${projectId}`, { method: 'POST', body: JSON.stringify(data) }),
   updateInterviewEvidence: (id, data) => request(`/founder/validate/interviews/${id}/evidence`, { method: 'PATCH', body: JSON.stringify(data) }),
   // Severity is per PAIN and not per interview — one conversation names a
   // must-have and a nice-to-have in the same breath — so it is its own call

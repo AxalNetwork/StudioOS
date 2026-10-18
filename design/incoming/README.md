@@ -279,7 +279,7 @@ for now exists — checked against the store, not the route, per the bar above:
 
 | Canvas | Was waiting on | What closed it |
 | --- | --- | --- |
-| `Pages · Founder Validate.dc.html` | "`hypotheses` and `verdict` have no store" | Migrations 211 and 214. `founder_validate.ts` serves `POST /board/:projectId/hypotheses`, `PATCH /hypotheses/:id` and `POST /hypotheses/:id/links`; `api.createHypothesis` and `api.linkHypothesisPain` are called from `FounderValidateWorkspace.jsx`; no Validate surface renders a `NoStoreYet` card. |
+| `Pages · Founder Validate.dc.html` | "`hypotheses` and `verdict` have no store" | **Retired (D704, #1666).** The canvas stays in place; its four zones are Validate's module pages, and its three page addresses redirect to them. Migrations 211 and 214 stay the stores; `founder_validate.ts` still serves the board and hypothesis routes, and a claim is created and linked from the module's section and the hypothesis record. |
 | `Navigation Shell · Anatomy.dc.html` | "the rail's model card" | `WorkerRail.jsx` reads `ASSIST_SURFACES[WORKSPACE_SURFACE]` and imports `modelsForTask` / `priceForTask`. The registration gap that made the card unshippable is closed, so it names a model for a page that does call one. |
 
 **Both carry zero `filters:` and zero `ops:` rows, which is why the move was a

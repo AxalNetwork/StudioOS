@@ -11,6 +11,8 @@ import { useEscapeClose } from '../../hooks/useEscapeClose';
  * `frontend/src` called either one.** The board rendered lanes, counts and a
  * distance-to-bar note over records no screen could create, and its empty state
  * sent the reader to the pain map. This is the wiring, not a new feature.
+ * (D704 since removed `api.linkHypothesisPain`: Link to a pain now saves
+ * through the theme record's `link` action, which #1659's section calls.)
  *
  * WHAT THE SERVER OWNS, so these forms do not offer it:
  *   · The code. `H1`, `H2` … is allocated from the highest ever used, not from

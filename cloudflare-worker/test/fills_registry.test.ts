@@ -240,10 +240,9 @@ test('every kind has a host that mounts its band — the other half of D17', () 
   // So this asserts the mount, not the config: some page reads the same mode key
   // the rail writes, and passes the kind to the band.
   const hosts = [
-    // The Validate desk was a host until D661 (#1474) retired it; the Validate
-    // cycle pages mount the same two kinds (`CycleRoute.jsx`'s `fills`), and
-    // the workspace below mounts both by name.
-    'frontend/src/workspaces/founder/FounderValidateWorkspace.jsx',
+    // The Validate desk was a host until D661 (#1474) retired it, and
+    // FounderValidateWorkspace until D704 (#1666) deleted it. The Validate cycle
+    // pages mount the same two kinds through `CycleRoute.jsx`'s `fills`.
     'frontend/src/pages/SpinoutLabMarketPage.jsx',
   ].map((p) => readFileSync(resolve(HERE, '../..', p), 'utf8')).join('\n');
   // The cycle pages mount a kind through their `fills` entries (D691, #1698:

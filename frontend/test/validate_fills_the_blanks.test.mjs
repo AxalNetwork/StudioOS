@@ -32,7 +32,10 @@ const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const RAIL = 'frontend/src/ui/WorkerRail.jsx';
 const HOOK = 'frontend/src/hooks/useAssistMode.js';
 const BAND = 'frontend/src/workspaces/FillProposals.jsx';
-const PAGE = 'frontend/src/workspaces/founder/FounderValidateWorkspace.jsx';
+// D704: FounderValidateWorkspace is deleted. Its Themes tile is #1659's
+// Problem discovery section, and its assist-mode read is the interview record.
+const SECTIONS = 'frontend/src/pages/cycles/ValidateSections.jsx';
+const RECORD = 'frontend/src/pages/founder/InterviewReviewPage.jsx';
 const CFG = 'frontend/src/ui/eadwynConfig.js';
 
 test('the mode is off until the founder turns it on', () => {
@@ -68,7 +71,6 @@ test('the rail draws the switch only where flipping it does something', () => {
   // those desks drew a switch, so none of them could be reached. The four
   // cycle pages that replaced them (D661) share one host, `CycleRoute.jsx`.
   const hosts = [
-    'frontend/src/workspaces/founder/FounderValidateWorkspace.jsx',
     CYCLE_ROUTE,
     ...Object.values(DESKS).filter((d) => d.bands.length).map((d) => d.file),
   ];
@@ -284,7 +286,7 @@ test('the two claims the page can no longer make are gone', () => {
   // Through `codeOnly`, because the comment that replaced each string QUOTES
   // the string it replaced — that is the useful thing for the next reader, and
   // a guard that reads it is a guard that fails on the fix.
-  const page = codeOnly(read(PAGE));
+  const page = codeOnly(read(SECTIONS));
   assert.doesNotMatch(page, /never AI-grouped/,
     'the Themes tile still claims nothing is AI-grouped');
   assert.doesNotMatch(page, /does not generate, transcribe, or change records/,
@@ -406,24 +408,10 @@ test('each desk promises exactly the bands it mounts, and nothing else', () => {
   }
 });
 
-test('the rail still names a real gap, and not a closed one', () => {
-  // The "Unavailable here" block is where this workspace says what it cannot
-  // do. Its entry must be true: naming a gap the product has since closed is
-  // the same failure as promising something it cannot do, pointed the other
-  // way, and it is the failure the Transcription entry would now be.
-  const page = codeOnly(read(PAGE));
-  const entry = /unavailable=\{\[\['([^']+)', '([^']+)'\]\]\}/.exec(page);
-  assert.ok(entry, 'the rail no longer names anything as unavailable');
-  const [, title, detail] = entry;
-  assert.doesNotMatch(title, /[Tt]ranscri/,
-    'transcription is backed now; naming it as unavailable is a stale gap');
-  assert.ok(detail.length > 30, 'a gap has to say what is missing, not just label it');
-  // Speaker labels are the current gap and are genuinely absent: Whisper
-  // returns `words` and `vtt`, migration 215 deliberately stores neither.
-  assert.doesNotMatch(read('cloudflare-worker/sql/migrations/215_interview_recordings.sql'),
-    /ADD COLUMN transcript_words|ADD COLUMN transcript_vtt|ADD COLUMN speaker/,
-    'the schema stores what the rail says it does not');
-});
+// D704: 'the rail still names a real gap' read FounderValidateWorkspace's
+// rail, whose one Unavailable entry (speaker labels) went with the page. No
+// Validate page draws an Unavailable block now, so the claim has no home to
+// keep true; D704.md records the deletion.
 
 test('the surface declares what off means, not just that it exists', () => {
   const cfg = read(CFG);
@@ -452,5 +440,5 @@ test('the band and the rail read one mode, not two copies of one', () => {
   assert.match(hook, /for \(const l of listeners\) l\(\);/,
     'a write that notifies nobody is per-component state with extra steps');
   assert.match(codeOnly(read(RAIL)), /useAssistMode\(workspace\)/);
-  assert.match(codeOnly(read(PAGE)), /useAssistMode\('Validate'\)/);
+  assert.match(codeOnly(read(RECORD)), /useAssistMode\('Validate'\)/);
 });

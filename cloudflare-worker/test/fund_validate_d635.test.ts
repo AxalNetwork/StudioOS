@@ -60,19 +60,6 @@ function fresh() {
   return db;
 }
 
-/** Five interviews linked to one claim of the venture: the evidence keys a decision may rest on. */
-function fiveEvidenceKeys(db: InstanceType<typeof DatabaseSync>): string[] {
-  const h = db.prepare("INSERT INTO hypotheses (project_id, code, claim) VALUES (?, 'H1', 'Fleets pay') RETURNING id").get(PROJECT) as any;
-  const keys: string[] = [];
-  for (let i = 0; i < 5; i++) {
-    const iv = db.prepare("INSERT INTO discovery_interviews (project_id, interviewee_name, interview_date) VALUES (?, 'Fixture carrier', '2026-10-12') RETURNING id").get(PROJECT) as any;
-    const link = db.prepare("INSERT INTO hypothesis_evidence_links (uid, project_id, hypothesis_id, kind, ref_id, direction, strength) VALUES (?, ?, ?, 'interview', ?, 'supports', 'measured') RETURNING id")
-      .get(`fixture-link-${i}`, PROJECT, h.id, String(iv.id)) as any;
-    keys.push(`evidence-${link.id}`);
-  }
-  return keys;
-}
-
 // `d1Over` runs a batch as one transaction, as D1 does (D693's writer batches).
 const d1 = (db: InstanceType<typeof DatabaseSync>) => d1Over(db);
 
@@ -95,30 +82,11 @@ async function call(db: any, who: number, role: string, method: string, path: st
   return { status: res.status, body: await res.json().catch(() => null) as any };
 }
 
-test('a second decision keeps the first, and a partner cannot read either', async () => {
-  const db = fresh();
-  // #1704: each POST rests on five of the venture's own pieces of evidence.
-  const evidence = fiveEvidenceKeys(db);
-  const first = await call(db, FOUNDER, 'founder', 'POST', `/decision/${PROJECT}`, { decision: 'proceed', reasoning: 'ship it', evidence });
-  assert.equal(first.status, 201, JSON.stringify(first.body));
-  const second = await call(db, FOUNDER, 'founder', 'POST', `/decision/${PROJECT}`, { decision: 'pivot', reasoning: 'narrow it', evidence });
-  assert.equal(second.status, 201, JSON.stringify(second.body));
-
-  const got = await call(db, FOUNDER, 'founder', 'GET', `/decision/${PROJECT}`);
-  assert.equal(got.status, 200, JSON.stringify(got.body));
-  assert.equal(got.body.current.decision, 'pivot');
-  assert.equal(got.body.history.length, 2);
-  const kept = got.body.history.find((row: any) => row.decision === 'proceed');
-  assert.ok(kept?.superseded_at, 'the first decision was overwritten');
-  const logged = db.prepare(`SELECT action, user_id FROM activity_logs WHERE action = 'validation_decision_recorded'`).all();
-  assert.equal(logged.length, 2);
-  assert.equal((logged[0] as any).user_id, FOUNDER);
-
-  const partner = await call(db, PARTNER, 'partner', 'GET', `/decision/${PROJECT}`);
-  assert.equal(partner.status, 403);
-  assert.equal(JSON.stringify(partner.body).includes('ship it'), false);
-  assert.equal(JSON.stringify(partner.body).includes('narrow it'), false);
-});
+// D704 (#1666): 'a second decision keeps the first, and a partner cannot read
+// either' drove the old `GET` and `POST /decision/:id`, which are removed. The
+// same facts are pinned on the Verdict writer and module: a later decision keeps
+// the earlier one (verdict_d693 test 3), a partner is refused (test 6), each is
+// logged once (test 7), and the old routes answer 404 (test 14).
 
 test('interview evidence is stored as sent, and Not recorded stays null', async () => {
   const db = fresh();

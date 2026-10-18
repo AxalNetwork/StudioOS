@@ -106,8 +106,8 @@ export const DOORS = {
       {
         k: 'Validate',
         t: 'Prove someone wants it.',
-        d: 'Log customer interviews, or record one in person, on a video or phone call, or by text chat; audio starts only once the person has consented. Interviews feed a pain map, the pain map feeds hypotheses, and the evidence reaches a verdict.',
-        list: ['Interviews', 'Pain map', 'Hypotheses', 'Verdict'],
+        d: 'Log customer interviews, or record one in person, on a video or phone call, or by text chat; audio starts only once the person has consented. Interviews feed the pain themes, the pain themes feed hypotheses, and the evidence reaches a verdict.',
+        list: ['Problem discovery', 'Customer research', 'Ideal customer profile', 'Market intelligence', 'Demand and urgency signals', 'Experiments and evidence', 'Verdict'],
       },
       {
         k: 'Build',
@@ -154,9 +154,10 @@ export const DOORS = {
     statusNote: 'The pitch deck builder is live; the AI slide reviewer is not yet. Connecting your own AI assistant to the workspace is coming soon.',
     live: [
       { t: 'Spin-Out Lab', route: '/spinout-lab' },
-      { t: 'Customer interviews', route: '/validate/interviews' },
+      { t: 'Customer interviews', route: '/validate/customer-research' },
       { t: 'Record a session', route: '/validate/record' },
-      { t: 'Pain map, hypotheses, and verdict', route: '/validate/hypotheses' },
+      { t: 'Hypotheses and evidence', route: '/validate/experiments' },
+      { t: 'Verdict', route: '/validate/verdict' },
       { t: 'This week and the board', route: '/build/this-week' },
       { t: 'Roadmap', route: '/build/roadmap' },
       { t: 'Cadence and KPIs', route: '/build/cadence' },

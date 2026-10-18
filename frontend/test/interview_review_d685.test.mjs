@@ -307,8 +307,6 @@ test('the route, and the rows that link to it: Customer research and the intervi
   assert.deepEqual(row.cells.interviewee, { text: 'Dana Ruiz', href: '/validate/customer-research/41' });
   assert.equal(RECORDS['customer-research'].row({ id: 41, interviewee: null }).cells.interviewee, null, 'no name: "Not recorded", not a link');
   assert.equal(RECORDS['customer-research'].row({ id: 'x', interviewee: 'Dana' }).cells.interviewee, 'Dana', 'no numeric id: plain text');
-  const ws = readFileSync('frontend/src/workspaces/founder/FounderValidateWorkspace.jsx', 'utf8');
-  assert.match(ws, /<Link to=\{`\/validate\/interviews\/\$\{encodeURIComponent\(r\.id\)\}`\}[^>]*data-testid=\{`interview-row-link-\$\{r\.id\}`\}>/);
   const app = readFileSync('frontend/src/App.jsx', 'utf8');
   // D696 (#1658): the review is Customer research's record; the old address redirects to it.
   // D697 (#1659): CycleRoute draws it in record mode, so it sits inside Validate.

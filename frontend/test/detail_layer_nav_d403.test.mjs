@@ -145,7 +145,8 @@ test('a zone pill paints through CSS variables, so hover can win', () => {
   // An inline `color`/`background`/`border-color` beats every hover class,
   // which is why the idle pills never answered the pointer.
   for (const role of Object.keys(SHELLS)) {
-    const bucket = bucketsFor(role)[0];
+    // The first bucket with zones: since D704 the founder's Validate has none.
+    const bucket = bucketsFor(role).find((b) => b.zones.length > 0);
     const html = renderNav(role, `${bucket.prefix}/${bucket.zones[1]?.slug || bucket.zones[0].slug}`);
     for (const style of html.match(/style="[^"]*"/g) || []) {
       assert.doesNotMatch(style, /(?:^|[;"])\s*(?:color|background|border-color)\s*:/,

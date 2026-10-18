@@ -19,8 +19,10 @@
  * TWO ACCESS RULES, DELIBERATELY DIFFERENT. The board and summary are derived
  * from interviews and are read by whoever may read the interviews — admins and
  * partners included. The founder's proceed/pivot/stop decision is not derived
- * from anything, and partners are excluded from it. Both predicates live in
- * `_founder_validate_helpers.ts` with the tests that hold them apart.
+ * from anything, and partners are excluded from it: here it reaches only the
+ * summary export. Both predicates live in `_founder_validate_helpers.ts` with
+ * the tests that hold them apart. The decision itself is the Verdict module's
+ * (D693); D704 (#1666) removed this file's old `GET` and `POST /decision/:id`.
  */
 import { Hono } from 'hono';
 import { logCycleWrite } from '../services/cycleActivity';
@@ -63,7 +65,7 @@ import {
 import { refuseReason } from '../services/fills/types';
 import { run as aiRun, audioMinutesFromBytes } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
-import { currentDecision, decisionsFor, recordDecision, VerdictError } from '../services/verdict';
+import { currentDecision } from '../services/verdict';
 
 const founderValidate = new Hono<{ Bindings: Env }>();
 
@@ -81,7 +83,6 @@ const trimOrNull = (v: unknown): string | null => {
 /** ICP fit values the product recognises. NULL is a fourth state, not a value. */
 const ICP_VALUES = new Set(['strong', 'partial', 'none']);
 const DIRECTIONS = new Set(['supports', 'contradicts']);
-const DECISIONS = new Set(['proceed', 'pivot', 'stop']);
 
 type ProjectRow = ProjectRef & { name: string };
 
@@ -375,10 +376,6 @@ founderValidate.delete('/links/:id', async (c) => {
 });
 
 // ---------------------------------------------------------------------------
-// The founder's decision — narrower audience than everything above
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
 // The three exports
 //
 // GET, not POST: none of these takes a filter, so the URL is the whole request
@@ -470,46 +467,6 @@ founderValidate.get('/summary/:projectId/export.csv', async (c) => {
     exportName(s.project.name, 'validation-summary'),
     { 'X-Export-Rows': String(board.hypotheses.length) },
   );
-});
-
-// D693: both routes go through `services/verdict.ts`. `current` is the
-// venture's current given decision; `history` is the venture's own rows, each
-// with its `state`, never a hypothesis's. #1666 removes both routes.
-founderValidate.get('/decision/:projectId', async (c) => {
-  const s = await scope(c, Number(c.req.param('projectId')), canReadDecision);
-  if (s instanceof Response) return s;
-  try {
-    const [current, history] = await Promise.all([
-      currentDecision(c.env, s.project.id, 'venture'),
-      decisionsFor(c.env, s.project.id, { scope: 'venture', sort: 'newest', pageSize: 200 }),
-    ]);
-    return json({ current, history: history.rows });
-  } catch (e) {
-    console.error('[founder_validate] decisions unreadable:', (e as Error)?.message);
-    return json({ detail: 'The decision could not be read.' }, 503);
-  }
-});
-
-// The earlier verdict page's route. Since #1704 moved /validate/verdict to the
-// Verdict module, it obeys the evidence bar as the module does (D693 decision
-// 12), so a decision sent with no evidence is Withheld. `recordDecision` logs
-// the activity.
-founderValidate.post('/decision/:projectId', async (c) => {
-  const s = await scope(c, Number(c.req.param('projectId')), canWrite);
-  if (s instanceof Response) return s;
-  const b = await c.req.json().catch(() => ({} as any));
-  const decision = String(b.decision || '');
-  if (!DECISIONS.has(decision)) return json({ detail: 'decision must be proceed, pivot or stop' }, 400);
-  try {
-    const r = await recordDecision(c.env, s.user, s.project, {
-      decision, for: 'venture', reasoning: trimOrNull(b.reasoning), evidence: b.evidence ?? [],
-    });
-    return json({ id: r.id, decision }, 201);
-  } catch (e) {
-    if (e instanceof VerdictError) return json({ detail: e.sentence }, e.status);
-    console.error('[founder_validate] decision not recorded:', (e as Error)?.message);
-    return json({ detail: 'The decision could not be recorded' }, 500);
-  }
 });
 
 // ---------------------------------------------------------------------------
