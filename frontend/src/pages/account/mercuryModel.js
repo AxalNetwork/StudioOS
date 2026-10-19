@@ -200,7 +200,7 @@ export const NEVER_ROWS = Object.freeze({
   founder: Object.freeze([
     FOUNDER_PARTNER_NEVER[0],
     FOUNDER_PARTNER_NEVER[1],
-    'It reads your Mercury only when you connect it and while you open an import, a match or your spending. It keeps only the lines you import or match, and the figures you choose to save: a month\'s net burn and, if you tick it, your cash on hand. Never memos or counterparty names.',
+    'It reads your Mercury only when you connect it and while you open an import, a match or your spending. Your spending, cash and runway are shown only to you; saved only when you choose: a month\'s net burn and, if you tick it, your cash on hand. It keeps only those and the lines you import or match, never memos or counterparty names.',
   ]),
   partner: FOUNDER_PARTNER_NEVER,
   investor: Object.freeze([
@@ -216,7 +216,7 @@ export function neverRows(role) {
 }
 
 const LANDS = {
-  founder: 'Only the venture you import into or save figures for',
+  founder: 'Only the venture you import into. Your spending is shown only to you; saved only when you choose',
   partner: 'Only your own invoices, payouts and settlements',
   investor: 'Only the statements you choose to share with Axal\'s admins',
 };
