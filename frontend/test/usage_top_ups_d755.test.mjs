@@ -76,7 +76,7 @@ test('D755 nothing in the browser adds up a balance', () => {
 test('D755 no top-ups: the empty state and Add tokens on the one path', () => {
   const markup = html(h(TopUpsCard, { history: ready({ items: [], pending: [], next_before: null }) }));
   assert.match(text(markup), /No top-ups yet\./);
-  assert.match(markup, new RegExp(`<a href="${ADD_TOKENS_PATH.replace(/[?]/g, '\\?')}"[^>]*data-testid="usage-top-ups-add"[^>]*>Add tokens</a>`), 'the one Add tokens path (#1916)');
+  assert.match(markup, new RegExp(`<a href="${ADD_TOKENS_PATH.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"[^>]*data-testid="usage-top-ups-add"[^>]*>Add tokens</a>`), 'the one Add tokens path (#1916)');
 });
 
 test('D755 an unreadable history blanks only this card, with Retry', () => {
