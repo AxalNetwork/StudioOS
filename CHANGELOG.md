@@ -4,41 +4,6 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
-## Consent in Record a Session, the inbox and the session page (D754, #1980, part 1)
-
-- Record a Session › Text chat › WhatsApp: a chat that waits for consent
-  offers "Ask <Name> in WhatsApp" (only while its 24-hour window is open,
-  else D754's sentence) or "<Name> already agreed" with the member's three
-  methods. Start waits for one, and the assign body carries `consent`.
-- The session page says "Waiting for <Name> to agree", "Agreed in WhatsApp
-  at <time>", "Declined in WhatsApp" or "<Name> withdrew consent", the last
-  with "Discard this chat's recording" (`DELETE /sessions/:id`, after a confirm).
-- The inbox's thread view shows the consent state, Ask for consent, and the
-  member's word once Axal's notice was delivered. Rules in
-  `frontend/src/pages/founder/chatConsent.js`. Telegram is unchanged.
-- The voice-note parts (the keep-by line, playback) follow #1935.
-
-## Consent before anything from a WhatsApp chat is kept (D754, #1893)
-
-- Migration 488: `channel_consents`, one row per consent request on a chat
-  (the notice's version, when it was asked and delivered, the answer and its
-  source), and `channel_threads.consent_state`, which the gate reads.
-- A WhatsApp chat added to an interview now links and waits: its text stays
-  pending, its voice notes are never fetched, and Structure, Ask, the summary,
-  finish and process refuse, until the interviewee taps "Yes, I agree" on
-  Axal's notice or replies YES to it, or the member confirms once WhatsApp
-  reported the notice delivered. A "No" deletes what waited; a STOP or a later
-  "No" withdraws consent, sets the chat aside and switches quotes off.
-- `POST /api/channels/threads/:uid/consent-request` sends the notice (reply
-  buttons, from the member's number, inside the 24-hour window, at most twice
-  and 24 hours apart, linking `/privacy/interviews?n=1`);
-  `POST /api/channels/threads/:uid/consent` takes the member's word; assign
-  takes `consent: { ask: true } | { method }`. The reply route refuses
-  `consent:` client keys.
-- The session gate (`consentBlocks`) also refuses any session holding audio,
-  and Open recording refuses without consent. Customer research reads
-  "Waiting for consent" or "Declined in WhatsApp". Telegram is unchanged
-  (`consentRequired('telegram')` stays false until D756).
 ## The LP's capital call opens on the amount, and the fee statement is on screen (D717, #1859)
 
 - An open Fund I line's panel on the LP workspace opens on "Amount due", the
