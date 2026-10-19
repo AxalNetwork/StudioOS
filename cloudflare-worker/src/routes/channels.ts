@@ -13,7 +13,8 @@
  *   POST   /whatsapp/connect        finish Embedded Signup: { code, waba_id, phone_number_id }
  *   POST   /whatsapp/link           D754 way B (#1937): a one-time code, and the wa.me link that
  *                                   sends `LINK <code>` to Axal's own number
- *   GET    /whatsapp/link           the newest claim ('•••• 1234') and the current link
+ *   GET    /whatsapp/link           the newest claim ('•••• 1234') and the current link, with Axal's
+ *                                    public number and a plain wa.me link (#1939)
  *   POST   /whatsapp/link/:uid/confirm  Axal's half: the claimed number becomes the member's link
  *   DELETE /whatsapp/link           unlink
  *   GET    /whatsapp/captures       way B part 2 (#1938): what the member forwarded to Axal's number
@@ -348,8 +349,17 @@ channels.post('/telegram/link/:uid/confirm', member(async (c, user) => {
 // Codes per member per hour are counted on a hashed subject (events.ts).
 const WA_LINK_CODES_PER_HOUR = 10;
 
+/**
+ * Way B is off (#1939). A Super Admin also reads which of Axal's settings are
+ * unset, by name only and never a value; everyone else gets the plain refusal.
+ */
+function wayBOff(c: C, user: User): Response {
+  const missing = waLink.axalNumberMissing(c.env);
+  return no(c, 503, 'not_available', missing.length && isSuperAdmin(user) ? { missing } : {});
+}
+
 channels.post('/whatsapp/link', member(async (c, user) => {
-  if (!waLink.axalNumberReady(c.env) || !channelOpenTo(c.env, 'whatsapp', user)) return no(c, 503, 'not_available');
+  if (!waLink.axalNumberReady(c.env) || !channelOpenTo(c.env, 'whatsapp', user)) return wayBOff(c, user);
   await activeMember(c.env, user.id);
   try {
     if (await linkAttemptOverLimit(c.env, `whatsapp_link:member:${user.id}`, WA_LINK_CODES_PER_HOUR)) return no(c, 429, 'rate_limited');
@@ -359,32 +369,32 @@ channels.post('/whatsapp/link', member(async (c, user) => {
 }));
 
 channels.get('/whatsapp/link', member(async (c, user) => {
-  if (!waLink.axalNumberReady(c.env)) return no(c, 503, 'not_available');
+  if (!waLink.axalNumberReady(c.env)) return wayBOff(c, user);
   await activeMember(c.env, user.id);
-  return c.json(await waLink.whatsappLinkView(c.env, user.id));
+  return c.json({ ...(await waLink.whatsappLinkView(c.env, user.id)), ...waLink.axalContact(c.env) });
 }));
 
 channels.post('/whatsapp/link/:uid/confirm', member(async (c, user) => {
-  if (!waLink.axalNumberReady(c.env) || !channelOpenTo(c.env, 'whatsapp', user)) return no(c, 503, 'not_available');
+  if (!waLink.axalNumberReady(c.env) || !channelOpenTo(c.env, 'whatsapp', user)) return wayBOff(c, user);
   await waLink.confirmWhatsAppLink(c.env, user.id, c.req.param('uid') ?? '');
   return c.json({ ok: true, linked: true, ...(await waLink.whatsappLinkView(c.env, user.id)) });
 }));
 
 channels.delete('/whatsapp/link', member(async (c, user) => {
-  if (!waLink.axalNumberReady(c.env)) return no(c, 503, 'not_available');
+  if (!waLink.axalNumberReady(c.env)) return wayBOff(c, user);
   return c.json({ ok: true, unlinked: await waLink.unlinkMember(c.env, user.id) });
 }));
 
 // D754 way B (#1938): what a linked member forwarded to Axal's number. No media ids leave the Worker.
 channels.get('/whatsapp/captures', member(async (c, user) => {
-  if (!waLink.axalNumberReady(c.env)) return no(c, 503, 'not_available');
+  if (!waLink.axalNumberReady(c.env)) return wayBOff(c, user);
   await activeMember(c.env, user.id);
   return c.json({ items: await capture.listCaptures(c.env, user.id) });
 }));
 
 /** "Agreed beforehand" (or the member's other word) for a capture still waiting, from Axal. */
 channels.post('/whatsapp/captures/:uid/consent', member(async (c, user) => {
-  if (!waLink.axalNumberReady(c.env) || !channelOpenTo(c.env, 'whatsapp', user)) return no(c, 503, 'not_available');
+  if (!waLink.axalNumberReady(c.env) || !channelOpenTo(c.env, 'whatsapp', user)) return wayBOff(c, user);
   await activeMember(c.env, user.id);
   const body = await c.req.json<Record<string, unknown>>().catch(() => ({} as Record<string, unknown>));
   const method = String(body.method ?? '');
