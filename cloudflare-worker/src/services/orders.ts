@@ -24,6 +24,7 @@ import {
   type PromoRow,
 } from './promos';
 import { sendBrandedInvoiceEmail } from './email';
+import { AXAL_ENTITIES } from './legalDocFormat';
 import { bindingKey } from '../util/schemaBootstrap';
 
 // ---------------------------------------------------------------------------
@@ -561,6 +562,7 @@ export async function fulfilOrder(env: Env, orderRef: string): Promise<Order | n
           invoiceNumber: orderRef,
           pdfBytes: pdfBytes ?? null,
           paidAt: new Date(),
+          seller: AXAL_ENTITIES.management.name,
         });
       }
     } catch (e) {
@@ -599,7 +601,7 @@ export async function renderOrderInvoicePdf(env: Env, orderRef: string): Promise
   const { PDFDocument, StandardFonts, rgb } = await import('pdf-lib');
   const doc = await PDFDocument.create();
   doc.setTitle(`Invoice ${orderRef}`);
-  doc.setAuthor('Axal VC');
+  doc.setAuthor(AXAL_ENTITIES.management.name);
   doc.setProducer('Axal StudioOS');
   const regular = await doc.embedFont(StandardFonts.Helvetica);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
@@ -615,7 +617,10 @@ export async function renderOrderInvoicePdf(env: Env, orderRef: string): Promise
   const page = doc.addPage([PAGE_W, PAGE_H]);
   let y = PAGE_H - 64;
 
-  page.drawText('AXAL VC', { x: MARGIN, y, size: 16, font: bold, color: BRAND });
+  // D755 (#1914): every cart order is `marketplace`, paid to Management
+  // (D707), so the seller is Axal VC Management LLC.
+  const seller = AXAL_ENTITIES.management;
+  page.drawText(seller.name, { x: MARGIN, y, size: 16, font: bold, color: BRAND });
   page.drawText('INVOICE', {
     x: PAGE_W - MARGIN - bold.widthOfTextAtSize('INVOICE', 16),
     y,
@@ -623,7 +628,9 @@ export async function renderOrderInvoicePdf(env: Env, orderRef: string): Promise
     font: bold,
     color: INK,
   });
-  y -= 24;
+  y -= 14;
+  page.drawText(seller.descriptor, { x: MARGIN, y, size: 9, font: regular, color: MUTED });
+  y -= 18;
   page.drawText(`Invoice: ${orderRef}`, { x: MARGIN, y, size: 10, font: regular, color: MUTED });
   y -= 14;
   const paidDate = (row.paid_at || row.created_at || '').slice(0, 10);
