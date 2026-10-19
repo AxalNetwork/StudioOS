@@ -59,7 +59,8 @@ export async function fedCounts(env: Env, integrationId: number, providerKey: st
     const unlanded = count - linked;
     return {
       module: m, label: label(m), href: moduleHref(m), count, linked, unlanded,
-      reason: unlanded > 0 ? `${unlanded} arrived with no store to land in (releases have none in ${label(m)} yet).` : null,
+      // An item whose row is gone was deleted here, and stays deleted (#1906).
+      reason: unlanded > 0 ? `${unlanded} arrived and ${unlanded === 1 ? 'its row was' : 'their rows were'} deleted in ${label(m)}; a sync does not bring ${unlanded === 1 ? 'it' : 'them'} back.` : null,
     };
   });
 }
