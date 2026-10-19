@@ -158,9 +158,10 @@ test('each sync is a line: what arrived per module, newest first, and only GitHu
   assert.deepEqual(s.rows.map((r: any) => r.at), ['2026-10-18 09:00:00', '2026-10-17 08:00:00'], 'Stripe\'s sync is not GitHub\'s line');
   const [line] = s.rows;
   assert.deepEqual([line.provider, line.state, line.repositories, line.repositories_more, line.error], ['GitHub', 'done', ['acme/app', 'acme/site'], 1, null]);
-  assert.equal(line.text, '12 issues → Product roadmap, 3 pull requests → Prototype / MVP, 2 releases counted');
-  assert.deepEqual(line.arrived.map((a: any) => [a.module, a.count, a.stored]), [['product_roadmap', 12, true], ['prototype_mvp', 3, true], ['product_roadmap', 2, false]]);
-  assert.equal(s.rows[1].text, '1 issue → Product roadmap, 0 pull requests → Prototype / MVP, 0 releases counted');
+  // D782 (#2111): a release lands in Product roadmap now.
+  assert.equal(line.text, '12 issues → Product roadmap, 3 pull requests → Prototype / MVP, 2 releases → Product roadmap');
+  assert.deepEqual(line.arrived.map((a: any) => [a.module, a.count, a.stored]), [['product_roadmap', 12, true], ['prototype_mvp', 3, true], ['product_roadmap', 2, true]]);
+  assert.equal(s.rows[1].text, '1 issue → Product roadmap, 0 pull requests → Prototype / MVP, 0 releases → Product roadmap');
   // An outsider reads the lines without the repository names.
   assert.equal((await tools(env, 101, 4)).syncs.rows[0].repositories, null);
   db.close();
@@ -177,7 +178,7 @@ test('a failed sync shows its words and never a token; a partial one says so; an
   assert.deepEqual([failed.state, failed.text, failed.arrived], ['failed', null, []]);
   assert.equal(failed.error, '401 /repos/acme/app/issues [hidden] [hidden]');
   assert.ok(!JSON.stringify(r.body).includes('ghs_FIXTURE'), 'the token is nowhere in the read');
-  assert.deepEqual([partial.state, partial.text], ['partial', '100 issues → Product roadmap, 0 pull requests → Prototype / MVP, 0 releases counted']);
+  assert.deepEqual([partial.state, partial.text], ['partial', '100 issues → Product roadmap, 0 pull requests → Prototype / MVP, 0 releases → Product roadmap']);
   assert.deepEqual([old.state, old.text, old.repositories], ['done', 'Not recorded', null]);
   db.close();
 });
@@ -229,14 +230,17 @@ test('the connector page claims only the feeds the code builds', () => {
   const page = CONNECTOR_PAGES.github as any;
   for (const t of page.tools.filter((x: any) => x.lands_in)) assert.ok(githubFedModules().includes(t.lands_in), `${t.name} → ${t.lands_in}`);
   const toolFor = (name: string) => page.tools.find((x: any) => x.name === name)?.lands_in ?? null;
-  assert.deepEqual([toolFor('read_issues'), toolFor('read_pull_requests'), toolFor('read_releases')], GITHUB_LANDINGS.map((l) => l.store === null ? null : l.module));
+  assert.deepEqual([toolFor('read_issues'), toolFor('read_pull_requests'), toolFor('read_releases'), toolFor('read_milestones')], GITHUB_LANDINGS.map((l) => l.store === null ? null : l.module));
   // The long description names every built module.
   const words = page.long_description.join(' ');
   for (const m of githubFedModules()) assert.ok(words.includes(MODULE_LABELS[m]), `the page names ${MODULE_LABELS[m]}`);
   // And the sync writes each stored landing into its store, through the ledger.
-  const src = readFileSync('cloudflare-worker/src/integrations/providers/github.ts', 'utf8');
+  // D782 (#2111): the sync is github.ts and the feed files it calls.
+  const src = ['github.ts', 'github/roadmap.ts'].map((f) => readFileSync(`cloudflare-worker/src/integrations/providers/${f}`, 'utf8')).join('\n');
   for (const l of GITHUB_LANDINGS) {
-    assert.ok(src.includes(`'${l.module}', '${l.kind}'`), `the sync records ${l.kind} under ${l.module}`);
+    // A kind that writes onto another kind's rows (a milestone) has no ledger rows of its own.
+    if ('ledger' in l && l.ledger === false) assert.ok(src.includes(`UPDATE ${l.store} SET milestone_title`), `the sync writes ${l.kind} onto ${l.store}`);
+    else assert.ok(src.includes(`'${l.module}', '${l.kind}'`), `the sync records ${l.kind} under ${l.module}`);
     if (l.store) assert.ok(src.includes(`INSERT INTO ${l.store} `), `the sync lands ${l.kind} in ${l.store}`);
   }
 });
