@@ -296,34 +296,54 @@ export async function enqueueDigest(env: Env, sessionId: number, userId: number,
  * accepted into a module are the founder's own. The transcript stays until the
  * founder deletes the session. One batch, and one log row of counts only.
  */
-export async function withdrawDigest(env: Env, sessionId: number, actorUserId: number): Promise<{ pending_deleted: number; decided_unquoted: number }> {
-  const session = await loadSession(env, sessionId);
-  if (!session) return { pending_deleted: 0, decided_unquoted: 0 };
-  const counts = await env.DB.prepare(
-    `SELECT SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending,
-            SUM(CASE WHEN status <> 'pending' THEN 1 ELSE 0 END) AS decided
-       FROM validate_proposals WHERE session_id = ?`,
-  ).bind(sessionId).first<{ pending: number | null; decided: number | null }>();
-  const out = { pending_deleted: Number(counts?.pending || 0), decided_unquoted: Number(counts?.decided || 0) };
-  // D757 §2.13 (#1923) — the findings already accepted from this session stay
-  // the founder's, without the interviewee's words.
-  const findings = (await presentTables(env, ['interview_findings'])).has('interview_findings')
-    ? [env.DB.prepare('UPDATE interview_findings SET quote = NULL, cite_from = NULL, cite_to = NULL WHERE session_id = ?').bind(sessionId)]
-    : [];
-  await env.DB.batch([
-    ...findings,
-    env.DB.prepare(
-      `UPDATE interview_sessions
-          SET summary = NULL, summary_model = NULL, summarised_at = NULL, summary_citations_json = NULL,
-              digest_json = NULL, digest_hash = NULL, digest_status = 'skipped', digest_note = ?,
-              digested_at = datetime('now'), updated_at = datetime('now')
-        WHERE id = ?`,
-    ).bind(NOTES.withdrawn, sessionId),
-    env.DB.prepare(`DELETE FROM validate_proposals WHERE session_id = ? AND status = 'pending'`).bind(sessionId),
-    env.DB.prepare('UPDATE validate_proposals SET citation_json = NULL WHERE session_id = ?').bind(sessionId),
-    env.DB.prepare(`INSERT INTO activity_logs (action, details, actor, user_id, project_id) VALUES (?, ?, ?, ?, ?)`)
-      .bind('interview_consent_withdrawn', JSON.stringify({ session_uid: session.uid, ...out }),
-        `user:${actorUserId}`, actorUserId, session.project_id),
-  ]);
-  return out;
+export async function withdrawDigest(env: Env, sessionId: number, actorUserId: number, opts: {
+  /** D757 #1930: consent and its cleanup commit in one D1 batch. */
+  before?: D1PreparedStatement[]; otherSessionIds?: number[]; onlyDeclined?: boolean;
+} = {}): Promise<{ pending_deleted: number; decided_unquoted: number; claim_changed?: number }> {
+  const out = { pending_deleted: 0, decided_unquoted: 0 };
+  const statements: D1PreparedStatement[] = [...(opts.before ?? [])];
+  const hasFindings = (await presentTables(env, ['interview_findings'])).has('interview_findings');
+  const onlyDeclined = opts.onlyDeclined ? 1 : 0;
+  for (const id of new Set([sessionId, ...(opts.otherSessionIds ?? [])])) {
+    const session = await loadSession(env, id);
+    if (!session) continue;
+    const counts = await env.DB.prepare(
+      `SELECT SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending,
+              SUM(CASE WHEN status <> 'pending' THEN 1 ELSE 0 END) AS decided
+         FROM validate_proposals WHERE session_id = ?`,
+    ).bind(id).first<{ pending: number | null; decided: number | null }>();
+    const removed = { pending_deleted: Number(counts?.pending || 0), decided_unquoted: Number(counts?.decided || 0) };
+    out.pending_deleted += removed.pending_deleted; out.decided_unquoted += removed.decided_unquoted;
+    // A consent claim that lost its race cannot wipe an unrevoked session.
+    // This condition is evaluated inside the batch, after the consent update.
+    if (hasFindings) statements.push(env.DB.prepare(
+      `UPDATE interview_findings SET quote = NULL, cite_from = NULL, cite_to = NULL WHERE session_id = ?
+         AND (? = 0 OR EXISTS (SELECT 1 FROM interview_sessions s WHERE s.id = ? AND s.consent_status = 'declined'))`,
+    ).bind(id, onlyDeclined, id));
+    statements.push(
+      env.DB.prepare(
+        `UPDATE interview_sessions
+            SET summary = NULL, summary_model = NULL, summarised_at = NULL, summary_citations_json = NULL,
+                digest_json = NULL, digest_hash = NULL, digest_status = 'skipped', digest_note = ?,
+                digested_at = datetime('now'), updated_at = datetime('now')
+          WHERE id = ? AND (? = 0 OR consent_status = 'declined')`,
+      ).bind(NOTES.withdrawn, id, onlyDeclined),
+      env.DB.prepare(
+        `DELETE FROM validate_proposals WHERE session_id = ? AND status = 'pending'
+           AND (? = 0 OR EXISTS (SELECT 1 FROM interview_sessions s WHERE s.id = ? AND s.consent_status = 'declined'))`,
+      ).bind(id, onlyDeclined, id),
+      env.DB.prepare(
+        `UPDATE validate_proposals SET citation_json = NULL WHERE session_id = ?
+           AND (? = 0 OR EXISTS (SELECT 1 FROM interview_sessions s WHERE s.id = ? AND s.consent_status = 'declined'))`,
+      ).bind(id, onlyDeclined, id),
+      env.DB.prepare(
+        `INSERT INTO activity_logs (action, details, actor, user_id, project_id)
+         SELECT ?, ?, ?, ?, ? WHERE ? = 0 OR EXISTS (SELECT 1 FROM interview_sessions s WHERE s.id = ? AND s.consent_status = 'declined')`,
+      ).bind('interview_consent_withdrawn', JSON.stringify({ session_uid: session.uid, ...removed }),
+        `user:${actorUserId}`, actorUserId, session.project_id, onlyDeclined, id),
+    );
+  }
+  if (!statements.length) return out;
+  const result = await env.DB.batch(statements);
+  return { ...out, ...(opts.before?.length ? { claim_changed: Number(result[0]?.meta?.changes ?? 0) } : {}) };
 }

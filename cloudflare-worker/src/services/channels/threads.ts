@@ -40,7 +40,9 @@
  * notes are queued only once its `consent_state` is 'given'. A consent given
  * while the chat is pending waits on the thread and is copied to the session
  * at assignment; a NO keeps the notes held, and a STOP stops further
- * downloads, without setting the chat aside.
+ * downloads, without setting the chat aside. D757 (#1930) additionally clears
+ * the digest on NO/STOP and stops new digest runs on the declined session; raw
+ * text is still kept, and initial audio consent never gates admitted final text.
  *
  * Final text queues D757's engine (chat_text_added); voice notes keep their own
  * consent gate. Inbox reads show the linked digest state and pending suggestions.

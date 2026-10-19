@@ -171,7 +171,7 @@ export async function sweepQuietChats(env: Env, now: Date): Promise<number> {
   const lastRunBefore = new Date(now.getTime() - MIN_HOURS_BETWEEN * 3_600_000).toISOString();
   const due = (await env.DB.prepare(
     `SELECT s.id, s.created_by_user_id AS user_id FROM interview_sessions s
-      WHERE s.submitted_via IN (SELECT value FROM json_each(?)) AND s.status = 'transcribed'
+      WHERE s.submitted_via IN (SELECT value FROM json_each(?)) AND s.status = 'transcribed' AND s.consent_status <> 'declined'
         AND (s.submitted_via NOT IN (SELECT value FROM json_each(?)) OR s.consent_status = 'given')
         AND datetime(s.updated_at) < datetime(?)
         AND NOT EXISTS (SELECT 1 FROM interview_structure_receipts r

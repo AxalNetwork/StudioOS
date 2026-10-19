@@ -225,3 +225,56 @@ test('a job already queued before the first digest cannot bill changed text agai
   assert.equal((await runSessionStructureJob(f.env, jobs(f)[1].payload))?.status, 'done');
   assert.ok(f.modelCalls() > calls);
 });
+
+for (const initial of ['requested', 'given'] as const) test(`${initial}: consent and digest cleanup roll back together and the identical reply can retry`, async t => {
+  const f = await fixture(t, 'telegram', initial === 'given');
+  await runSessionStructureJob(f.env, jobs(f)[0].payload); proposals(f);
+  if (initial === 'requested') f.db.prepare(`INSERT INTO channel_consents(uid, user_id, provider, integration_id, thread_id, interview_id, session_id,
+    status, notice_version, requested_at, request_ref_hash) VALUES ('atomic-request', ?, 'telegram', ?, ?, ?, ?, 'requested', 1, datetime('now'), ?)`)
+    .run(ME, f.conn.integrationId, f.thread.id, INTERVIEW, f.sessionId, await refKey('telegram', 'atomic-notice'));
+  const reply: any = { provider: 'telegram', kind: 'consent_reply', side: 'contact', externalChatId: 'chat-notes',
+    externalMessageId: 'atomic-stop', externalEventId: 'atomic-stop', contextMessageId: 'atomic-notice', via: 'word',
+    answer: initial === 'given' ? 'stop' : 'no', requestUid: null, sentAt: new Date().toISOString() };
+  f.db.exec("CREATE TEMP TRIGGER fail_digest_cleanup BEFORE DELETE ON validate_proposals BEGIN SELECT RAISE(ABORT, 'fixture_cleanup_failure'); END");
+  await assert.rejects(recordReply(f.env, f.thread, reply), /fixture_cleanup_failure/);
+  assert.equal(f.db.prepare('SELECT status FROM channel_consents WHERE thread_id = ?').get(f.thread.id)!.status, initial);
+  assert.ok((await loadSession(f.env, f.sessionId))!.digest_json);
+  assert.equal(f.db.prepare("SELECT COUNT(*) n FROM validate_proposals WHERE status = 'pending'").get()!.n, 1);
+  f.db.exec('DROP TRIGGER fail_digest_cleanup');
+  assert.equal((await recordReply(f.env, f.thread, reply)).outcome, initial === 'given' ? 'withdrawn' : 'declined');
+  assert.equal((await loadSession(f.env, f.sessionId))!.digest_json, null);
+  assert.equal(f.db.prepare("SELECT COUNT(*) n FROM validate_proposals WHERE status = 'pending'").get()!.n, 0);
+  assert.equal((await recordReply(f.env, f.thread, reply)).outcome, 'ignored');
+});
+
+test('a declined request cleans only the session actually marked declined, not an older unrevoked session', async t => {
+  const f = await fixture(t, 'telegram', false);
+  await runSessionStructureJob(f.env, jobs(f)[0].payload);
+  const old = await openSession(f.env, await writableInterview(f.env, ME, INTERVIEW), 'telegram', 'text', { method: 'verbal' });
+  f.db.prepare('UPDATE interview_sessions SET summary = ?, digest_json = ? WHERE id = ?').run('Keep the earlier session', '{"kept":true}', old.id);
+  f.db.prepare(`INSERT INTO channel_consents(uid, user_id, provider, integration_id, thread_id, interview_id, session_id,
+    status, notice_version, requested_at, request_ref_hash) VALUES ('old-request', ?, 'telegram', ?, ?, ?, ?, 'requested', 1, datetime('now'), ?)`)
+    .run(ME, f.conn.integrationId, f.thread.id, INTERVIEW, old.id, await refKey('telegram', 'old-notice'));
+  const out = await recordReply(f.env, f.thread, { provider: 'telegram', kind: 'consent_reply', side: 'contact',
+    externalChatId: 'chat-notes', externalMessageId: 'target-no', contextMessageId: 'old-notice', via: 'word', answer: 'no' } as any);
+  assert.equal(out.outcome, 'declined'); assert.equal((await loadSession(f.env, f.sessionId))!.digest_json, null);
+  const preserved = (await loadSession(f.env, old.id))!;
+  assert.equal(preserved.consent_status, 'given'); assert.equal(preserved.summary, 'Keep the earlier session');
+  assert.equal(preserved.digest_json, '{"kept":true}');
+});
+
+test('a withdrawal claim that lost its race cannot clear a still-consented digest', async t => {
+  const f = await fixture(t, 'telegram'); await runSessionStructureJob(f.env, jobs(f)[0].payload);
+  const consent: any = f.db.prepare('SELECT * FROM channel_consents WHERE thread_id = ?').get(f.thread.id);
+  f.db.prepare("UPDATE channel_consents SET status = 'expired' WHERE id = ?").run(consent.id);
+  assert.equal((await withdraw(f.env, f.thread, consent, await refKey('telegram', 'lost-claim'))).outcome, 'ignored');
+  const session = (await loadSession(f.env, f.sessionId))!;
+  assert.equal(session.consent_status, 'given'); assert.ok(session.digest_json);
+});
+
+test('the quiet sweep never requeues a declined chat even after all timing bounds expire', async t => {
+  const f = await fixture(t, 'telegram');
+  f.db.prepare("UPDATE interview_sessions SET consent_status = 'declined', status = 'transcribed', updated_at = datetime('now', '-2 hours'), digested_at = datetime('now', '-7 hours') WHERE id = ?").run(f.sessionId);
+  const { sweepQuietChats } = await import('../src/services/sessionAutoStructure.ts');
+  assert.equal(await sweepQuietChats(f.env, new Date()), 0); assert.equal(jobs(f).length, 1);
+});
