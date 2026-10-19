@@ -588,8 +588,8 @@ export async function request(path, options = {}) {
     // D765: the rail's page (and option), so the Worker records and switches each run by it.
     const railHeader = railPageHeaders();
     const baseHeaders = isFormData
-      ? { ...getAuthHeaders(), ...csrfHeader, ...companyHeader, ...railHeader, ...options.headers }
-      : { 'Content-Type': 'application/json', ...getAuthHeaders(), ...csrfHeader, ...companyHeader, ...railHeader, ...options.headers };
+      ? { ...getAuthHeaders(), ...csrfHeader, ...railHeader, ...companyHeader, ...options.headers }
+      : { 'Content-Type': 'application/json', ...getAuthHeaders(), ...csrfHeader, ...railHeader, ...companyHeader, ...options.headers };
     const res = await fetch(`${BASE}${path}`, {
       // T6 — `credentials: 'include'` makes the browser attach the
       // `studioos_auth` httpOnly cookie set by /api/auth/login. Same-origin
