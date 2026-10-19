@@ -10,6 +10,11 @@
 //
 // Drawn with each page's own parts; the canvas PR lays it out to boards F29b
 // to F29d.
+//
+// D752 (#1989) adds two founder targets, `raise` (a committed prospect) and
+// `commitment` (a pending deal commitment): the panel says amounts are USD and
+// that the counterparty is shown but not checked, and a target the Worker lists
+// as not matchable says why. The three D713 targets keep their words.
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
@@ -19,7 +24,19 @@ import { Unreadable, Unrecorded } from '../ui';
 import { fmtLedgerCents, mercuryReadOutcome } from '../lib/revenueLedger';
 
 export const WITHDRAW_REASON_MIN = 10;
-const TARGET_NOUN = { invoice: 'invoice', payout: 'payout', settlement: 'settlement' };
+const TARGET_NOUN = { invoice: 'invoice', payout: 'payout', settlement: 'settlement', raise: 'commitment', commitment: 'commitment' };
+/** D752: the raise targets, matched to an investor's wire. */
+export const RAISE_TARGETS = Object.freeze(['raise', 'commitment']);
+const isRaise = (target) => RAISE_TARGETS.includes(target);
+export const RAISE_MATCH_NOTE = 'Amounts are in US dollars. The counterparty is shown but not checked: investors wire from SPVs, trusts and banks.';
+const RAISE_NOT_OPEN = 'This commitment is not open to a match: it is not yours, or it is no longer committed or pending.';
+const RAISE_EMPTY = 'No credit in your Mercury account fits this commitment yet. The amount must match to the cent, posted from 30 days before it was recorded.';
+/** Why the Worker lists a raise target as not matchable (`unmatchable`). */
+export const UNMATCHABLE_TEXT = Object.freeze({
+  amount_missing: 'No amount is recorded for this commitment, so no bank line can settle it. Record its amount first.',
+  amount_not_whole_cents: 'Its amount is not a whole number of cents, so no bank line can settle it. Correct its amount first.',
+});
+export const unmatchableText = (code) => (Object.hasOwn(UNMATCHABLE_TEXT, code) ? UNMATCHABLE_TEXT[code] : 'This commitment cannot be matched to a bank line.');
 const BTN = 'rounded-md border border-teal-300 px-2.5 py-1 text-[12px] font-semibold text-teal-700 hover:bg-teal-50 disabled:opacity-50 dark:border-teal-700 dark:text-teal-300';
 
 /** This target's open item and its confirmed match, from one `/matches` read. */
@@ -73,16 +90,20 @@ export function MercuryMatchView({ target, state, on }) {
     );
   }
   if (!item) {
-    return <p className="text-[12px] text-gray-500" data-testid="mercury-match-not-open">This {noun} is not open to a match: it is not yours, not issued, or not in US dollars.</p>;
+    return <p className="text-[12px] text-gray-500" data-testid="mercury-match-not-open">{isRaise(target) ? RAISE_NOT_OPEN : `This ${noun} is not open to a match: it is not yours, not issued, or not in US dollars.`}</p>;
+  }
+  if (isRaise(target) && item.matchable === false) {
+    return <p className="text-[12px] text-amber-700 dark:text-amber-300" data-testid="mercury-match-unmatchable">{unmatchableText(item.unmatchable)}</p>;
   }
   const candidates = Array.isArray(item.candidates) ? item.candidates : [];
   return (
     <div className="space-y-1.5 text-[12px]" data-testid="mercury-match-candidates">
+      {isRaise(target) && <p className="text-gray-500" data-testid="mercury-match-raise-note">{RAISE_MATCH_NOTE}</p>}
       <p className="text-gray-500">
         A {item.direction === 'debit' ? 'payment out of' : 'credit to'} your account of {fmtLedgerCents(item.amount_cents) ?? 'an amount not recorded'}, posted {item.window?.from || '—'} to {item.window?.to || '—'}.
       </p>
       {candidates.length === 0 ? (
-        <p className="text-gray-500" data-testid="mercury-match-empty">No line in your Mercury account fits this {noun} yet. The amount, the dates and the counterparty must all fit.</p>
+        <p className="text-gray-500" data-testid="mercury-match-empty">{isRaise(target) ? RAISE_EMPTY : `No line in your Mercury account fits this ${noun} yet. The amount, the dates and the counterparty must all fit.`}</p>
       ) : (
         <ul className="space-y-1">
           {candidates.map((l) => (
@@ -103,8 +124,8 @@ export function MercuryMatchView({ target, state, on }) {
 }
 
 /**
- * The button and, once pressed, the panel. `target` is `invoice`, `payout` or
- * `settlement`; `matched` is the read side's match (or null) and only decides
+ * The button and, once pressed, the panel. `target` is `invoice`, `payout`,
+ * `settlement`, or (D752) `raise` or `commitment`; `matched` is the read side's match (or null) and only decides
  * the button's words; `onChanged` reloads the page's own record after a write.
  */
 export default function MercuryMatch({ target, targetId, matched, onChanged }) {

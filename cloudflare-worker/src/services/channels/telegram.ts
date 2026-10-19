@@ -37,7 +37,10 @@
  *   - business_message / edited_business_message are Messages carrying
  *     `business_connection_id`; deleted_business_messages is
  *     BusinessMessagesDeleted { business_connection_id, chat, message_ids }.
- *   - getFile serves files up to 20 MB.
+ *   - getFile serves files up to 20 MB, and "may not preserve the original
+ *     file name and MIME type"; a VideoNote declares no MIME type at all.
+ *     Axal downloads at most 5 MB, under a deadline, and takes the MIME type
+ *     from the message (D756, #1896).
  *   - The Bot API has NO call methods: a bot cannot place or answer a call.
  *
  * MESSAGE IDS ARE `<chat id>:<message_id>`. A Telegram message_id is unique
@@ -49,14 +52,15 @@
  * Nothing here logs a token, a message's text or a name; errors are codes.
  */
 import type { Env } from '../../types';
-import { providerJson } from './providerHttp';
+import { PROVIDER_DOWNLOAD_MS, boundedDownload, providerJson } from './providerHttp';
+import { CHANNEL_AUDIO_MAX_BYTES, admitAudio, audioMimeAdmitted } from './channelAudio';
 import { constantTimeEqual, sha256Hex } from '../../rpc/secret';
 import { IntakeError, activeMember } from '../interviewIntake';
 import { claimDetails, confirmLinkClaim, consumeLinkCode, memberLinkClaim, type LinkClaim } from './linkCodes';
 
 import {
   CHANNEL_LIMITS, consentWord, type InboundConnection, type InboundEvent, type InboundLink, type InboundLinkConfirm,
-  type InboundMessage, type SendResult,
+  type InboundMessage, type SendResult, type VoiceMedia,
 } from './types';
 
 export const TELEGRAM_API = 'https://api.telegram.org';
@@ -66,8 +70,18 @@ export const TELEGRAM_ALLOWED_UPDATES = [
   'message', 'business_connection', 'business_message', 'edited_business_message', 'deleted_business_messages',
 ] as const;
 
-/** getFile's own ceiling: the Bot API serves nothing larger. */
+/**
+ * getFile's own ceiling: the Bot API serves nothing larger. Axal takes at most
+ * the recorder's MAX_CHUNK_BYTES (5 MB, `CHANNEL_AUDIO_MAX_BYTES`), D756.
+ */
 export const TELEGRAM_MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024;
+
+/**
+ * D756 (#1896): round video messages are stored as placeholders but not
+ * fetched, until the owner's live check shows Whisper reads Telegram's MP4
+ * with a video track. A follow-up flips this, with a fixture test.
+ */
+export const TELEGRAM_VIDEO_NOTES = false;
 
 /** sendMessage takes 1–4096 characters. */
 export const TELEGRAM_MAX_TEXT = 4096;
@@ -157,6 +171,35 @@ export function telegramEventId(update: unknown): string | null {
       idStr(obj(msg.chat)?.id) ?? '', idStr(msg.message_id) ?? '', edited ? String(edited.edit_date ?? '') : '');
   }
   return `${updateId}:${fnv1a(parts.join('|'))}`;
+}
+
+const MAX_MIME_CHARS = 100;
+
+/**
+ * D756 (#1896): the one recording a message carries, as a note — a voice
+ * note, an audio file, a round video, or a document whose declared type the
+ * recorder admits. Tried in that order; a message carries at most one. Its
+ * size is `file_size` when that is a safe whole number of 0 or more; its type
+ * is the one declared on the message (a VideoNote declares none: video/mp4).
+ */
+function noteFrom(message: any): NonNullable<InboundMessage['voice']> | null {
+  const kinds: [unknown, VoiceMedia][] = [[message.voice, 'voice'], [message.audio, 'audio'], [message.video_note, 'video_note']];
+  const doc = obj(message.document);
+  if (doc && audioMimeAdmitted(doc.mime_type)) kinds.push([doc, 'audio']);
+  for (const [raw, media] of kinds) {
+    const f = obj(raw);
+    const fileRef = idStr(f?.file_id);
+    if (!f || !fileRef) continue;
+    const declared = typeof f.mime_type === 'string' && f.mime_type ? f.mime_type.slice(0, MAX_MIME_CHARS) : null;
+    return {
+      fileRef,
+      mime: media === 'video_note' ? 'video/mp4' : declared,
+      durationSec: raw === doc ? null : Number.isFinite(Number(f.duration)) ? Number(f.duration) : null,
+      media,
+      sizeBytes: Number.isSafeInteger(f.file_size) && f.file_size >= 0 ? f.file_size : null,
+    };
+  }
+  return null;
 }
 
 /** Telegram's "manage this chat" button: `/start bizChat<chat id>` in the member's private chat with the bot. */
@@ -266,20 +309,15 @@ export function normaliseTelegramUpdate(update: unknown, ownerTelegramUserId: st
     return { kind: 'edit', provider: 'telegram', eventId, connectionRef: conn, externalChatId: chatId, externalMessageId: ref, text };
   }
 
-  const voice = obj(message.voice);
-  const fileId = idStr(voice?.file_id);
-  if (!text && !fileId) return ignored('unsupported_type');
+  const note = noteFrom(message);
+  if (!text && !note) return ignored('unsupported_type');
   const msg: InboundMessage = {
     kind: 'message', provider: 'telegram', eventId, connectionRef: conn, externalChatId: chatId,
     externalMessageId: ref, side,
     // The chat's own user is the contact; their name is the thread's label.
     contactName: side === 'contact' ? displayName(from) : null,
     text: text || null,
-    voice: !text && fileId ? {
-      fileRef: fileId,
-      mime: typeof voice?.mime_type === 'string' ? voice.mime_type : null,
-      durationSec: Number.isFinite(Number(voice?.duration)) ? Number(voice?.duration) : null,
-    } : null,
+    voice: !text && note ? note : null,
     sentAt: isoFromUnix(message.date),
   };
   // D756 §1.5: a possible answer to the consent notice — the chat's own user,
@@ -634,34 +672,44 @@ export type AudioResult =
   | { ok: true; bytes: Uint8Array; mime: string }
   | { ok: false; code: string; retryable: boolean; retryAfterSec?: number };
 
-/** A voice note's audio: getFile, then the file URL. Refused above 20 MB, before and after download. */
-export async function fetchTelegramVoice(env: Env, fileId: string, mimeHint: string | null = null): Promise<AudioResult> {
-  const meta = await call(env, 'getFile', { file_id: fileId });
+/**
+ * A note's audio (D756, #1896). Refused before any call: a round video while
+ * TELEGRAM_VIDEO_NOTES is off, a declared size over 5 MB, a declared type the
+ * recorder does not admit. Then getFile (its `file_size` over 5 MB is refused
+ * before the download), then one bounded download of the file URL, then the
+ * file's own bytes must agree with the declared type. The type returned is the
+ * admitted one, never the download's `content-type`.
+ */
+export async function fetchTelegramVoice(
+  env: Env, note: { file: string; mime: string | null; media: VoiceMedia; size: number | null },
+): Promise<AudioResult> {
+  const refused = (code: string): AudioResult => ({ ok: false, code, retryable: false });
+  if (note.media === 'video_note' && !TELEGRAM_VIDEO_NOTES) return refused('video_note_unsupported');
+  if (note.size != null && note.size > CHANNEL_AUDIO_MAX_BYTES) return refused('too_large');
+  if (note.mime && !audioMimeAdmitted(note.mime)) return refused('unsupported_format');
+  const meta = await call(env, 'getFile', { file_id: note.file });
   if (!meta.ok) return { ok: false, code: meta.code, retryable: meta.retryable, ...(meta.retryAfterSec ? { retryAfterSec: meta.retryAfterSec } : {}) };
   const size = Number(meta.result?.file_size);
-  if (Number.isFinite(size) && size > TELEGRAM_MAX_DOWNLOAD_BYTES) return { ok: false, code: 'too_large', retryable: false };
+  if (Number.isFinite(size) && size > CHANNEL_AUDIO_MAX_BYTES) return refused('too_large');
   const path = typeof meta.result?.file_path === 'string' ? meta.result.file_path : '';
-  if (!path || path.includes('..')) return { ok: false, code: 'no_file_path', retryable: false };
+  if (!path || path.includes('..')) return refused('no_file_path');
   const token = String(env.TELEGRAM_CHANNEL_BOT_TOKEN ?? '').trim();
-  let res: Response;
-  try {
-    res = await fetch(`${TELEGRAM_API}/file/bot${token}/${path}`);
-  } catch {
-    console.error('[channels] telegram file download network_error');
+  const file = await boundedDownload(`${TELEGRAM_API}/file/bot${token}/${path}`, {
+    maxBytes: CHANNEL_AUDIO_MAX_BYTES, deadlineMs: PROVIDER_DOWNLOAD_MS,
+  });
+  if (!file.ok) {
+    console.error(`[channels] telegram file download failed code=${file.code} status=${file.status}`);
+    if (file.code === 'too_large' || file.code === 'empty_file') return refused(file.code);
+    if (file.code === 'http') return { ok: false, ...failure(file.status) };
+    if (file.code === 'bad_url') return refused('no_file_path');
     return { ok: false, code: 'network', retryable: true };
   }
-  if (!res.ok) {
-    const f = failure(res.status);
-    console.error(`[channels] telegram file download failed status=${res.status}`);
-    return { ok: false, ...f };
+  const admitted = admitAudio(note.mime, file.container);
+  if (!admitted.ok) {
+    console.error(`[channels] telegram file download failed code=${admitted.code} status=0`);
+    return refused(admitted.code);
   }
-  if (Number(res.headers.get('content-length') || 0) > TELEGRAM_MAX_DOWNLOAD_BYTES) return { ok: false, code: 'too_large', retryable: false };
-  const bytes = new Uint8Array(await res.arrayBuffer());
-  if (bytes.byteLength > TELEGRAM_MAX_DOWNLOAD_BYTES) return { ok: false, code: 'too_large', retryable: false };
-  if (!bytes.byteLength) return { ok: false, code: 'empty_file', retryable: false };
-  // Telegram voice notes are OGG/Opus.
-  const mime = (mimeHint || res.headers.get('content-type') || 'audio/ogg').split(';')[0].trim() || 'audio/ogg';
-  return { ok: true, bytes, mime };
+  return { ok: true, bytes: file.bytes, mime: admitted.mime };
 }
 
 /**

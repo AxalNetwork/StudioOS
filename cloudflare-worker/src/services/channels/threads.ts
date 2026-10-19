@@ -60,7 +60,7 @@ import { expireCapturesStatements } from './whatsappCapture';
 import { enqueueSessionStructure } from '../sessionAutoStructure';
 import {
   CHANNEL_LIMITS, audioConsentRequired, consentAsked, consentRequired, consentRequiredProviders, type InboundDelete, type InboundEdit, type InboundMessage, type MessageSide,
-  type MessagingProvider,
+  type MessagingProvider, type VoiceMedia,
 } from './types';
 import { deleteSession, dropInterviewMadeFor, type SessionRow } from '../interviewSessions';
 
@@ -339,7 +339,9 @@ export async function storeVoiceNote(env: Env, conn: ChannelConnection, msg: Inb
   const d = msg.voice.durationSec;
   const inserted = await insertPending(env, thread, {
     uid, externalMessageId: msg.externalMessageId, side: msg.side, kind: 'voice', textEnc: '', sentAt: msg.sentAt,
-    voiceRefEnc: await encryptColumn(env, MSG_TABLE, 'voice_ref_enc', uid, JSON.stringify({ file: msg.voice.fileRef, mime: msg.voice.mime })),
+    voiceRefEnc: await encryptColumn(env, MSG_TABLE, 'voice_ref_enc', uid, JSON.stringify({
+      file: msg.voice.fileRef, mime: msg.voice.mime, media: msg.voice.media ?? 'voice', size: msg.voice.sizeBytes ?? null,
+    })),
     durationSec: d != null && Number.isFinite(Number(d)) ? Math.max(0, Math.round(Number(d))) : null,
   });
   return inserted ? { stored: 'voice', thread, messageUid: uid } : { stored: 'duplicate', thread };
@@ -392,10 +394,17 @@ export async function queueVoiceTranscriptions(
   return queued;
 }
 
-/** A waiting voice note, as the job that holds it reads it. */
+/**
+ * A waiting voice note, as the job that holds it reads it. `media` and `size`
+ * (D756, #1896) are the kind and the declared size; a note stored before them
+ * reads as a voice note of unknown size.
+ */
 export interface VoiceJobNote {
-  id: number; uid: string; side: MessageSide; file: string; mime: string | null; durationSec: number | null; sentAt: string; thread: ThreadRow;
+  id: number; uid: string; side: MessageSide; file: string; mime: string | null; media: VoiceMedia; size: number | null;
+  durationSec: number | null; sentAt: string; thread: ThreadRow;
 }
+
+const VOICE_MEDIA: ReadonlySet<string> = new Set<VoiceMedia>(['voice', 'audio', 'video_note']);
 
 /**
  * The note a voice job was queued for, while that job still holds it — or
@@ -410,12 +419,15 @@ export async function voiceNoteForJob(env: Env, messageUid: string, job: string)
   ).bind(messageUid, job).first<{ id: number; uid: string; direction: 'in' | 'out'; voice_ref_enc: string; duration_sec: number | null; sent_at: string; thread_id: number }>();
   if (!row) return null;
   const thread = await env.DB.prepare('SELECT * FROM channel_threads WHERE id = ?').bind(row.thread_id).first<ThreadRow>();
-  let ref: { file?: unknown; mime?: unknown } | null = null;
+  let ref: { file?: unknown; mime?: unknown; media?: unknown; size?: unknown } | null = null;
   try { ref = JSON.parse((await decryptColumn(env, MSG_TABLE, 'voice_ref_enc', row.uid, row.voice_ref_enc)) ?? 'null'); } catch { ref = null; }
   if (!thread || typeof ref?.file !== 'string' || !ref.file) return null;
   return {
     id: Number(row.id), uid: row.uid, side: row.direction === 'out' ? 'me' : 'contact', file: ref.file,
-    mime: typeof ref.mime === 'string' ? ref.mime : null, durationSec: row.duration_sec, sentAt: row.sent_at, thread,
+    mime: typeof ref.mime === 'string' ? ref.mime : null,
+    media: typeof ref.media === 'string' && VOICE_MEDIA.has(ref.media) ? ref.media as VoiceMedia : 'voice',
+    size: Number.isSafeInteger(ref.size) && Number(ref.size) >= 0 ? Number(ref.size) : null,
+    durationSec: row.duration_sec, sentAt: row.sent_at, thread,
   };
 }
 
