@@ -63,4 +63,4 @@ own-number guards, WhatsApp media deadlines/expiry and split calling reasons to
 real SQLite fixtures with every provider stubbed. Its in-process mutation checks
 run the same positive scenarios before restoring ordinary modules.
 
-D755 CR7: `checkout_order_topup_d755.test.ts` reads an owner's pack order in each webhook state, verifies the current account balance and VAT exclusion, rejects other members and failed reads, and leaves ordinary orders unchanged. It covers authentication and embeds nine mutations, with the restored scenario checked before and after each mutant. Providers are forbidden.
+D755 CR7: `checkout_order_topup_d755.test.ts` reads an owner's pack order in each webhook state, verifies the current account balance and VAT exclusion, rejects other members and failed reads, and leaves ordinary orders unchanged. It also preserves historical receipts when HQ adopts their price, bounds ordinary reads to one purchase lookup, handles absent legacy tables without hiding genuine failures, and covers authentication. It embeds thirteen mutations, with the restored scenario checked before and after each mutant. Providers are forbidden.
