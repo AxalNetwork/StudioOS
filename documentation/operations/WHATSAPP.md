@@ -22,16 +22,16 @@ Each part says what it waits on:
 
 | Part | Lands with |
 | --- | --- |
-| `WHATSAPP_CHANNEL` read by the Worker (`off` / `canary` / `on`), 7-day voice-note deadline, split calling reasons | #1950 (D754 `w1_switch_on`, #1892) |
+| `WHATSAPP_CHANNEL` read by the Worker (`off` / `canary` / `on`), 7-day voice-note deadline, split calling reasons | #1950 (D754 `w1_switch_on`, #1892), **on `main`** since 2026-10-19 |
 | Consent in the chat, the member's word, and the gate | #1954 (D754 `w2_consent`, #1893) |
 | Voice notes stored and transcribed as recorder audio; consent and voice notes in Record a Session; the connector page | D754's S10, S11 and S07 tasks, not filed yet |
 | Way B, Send to Axal | #1937 to #1939, and the owner's yes |
 | Unsigned webhook refused, checked on every smoke run | This runbook's PR (`scripts/check-spa-live.mjs`) |
 
-**Do not set the four WhatsApp secrets before #1950 and #1954 have merged.**
-Until #1950 is on `main` the Worker does not read `WHATSAPP_CHANNEL`, so the
-secrets alone would show WhatsApp to every member; until #1954 is on `main`,
-a chat added to an interview would be kept without the interviewee's consent.
+**Do not set the four WhatsApp secrets before #1954 has merged.** #1950 is on
+`main`, so `WHATSAPP_CHANNEL` (shipped `canary`) already keeps WhatsApp from
+members; but until #1954 is on `main`, a chat added to an interview would be
+kept without the interviewee's consent.
 
 ## 1. Owner steps, in order
 
