@@ -9,6 +9,7 @@ import {
   analysisTiles, featureGrid, inputsRow, landscapeRead, notesWithRead, signalColumns, sourceFetched,
 } from './companyAnalysisRead';
 import { companyHref } from '../../lib/companyDirectoryView.js';
+import { useRailOption } from '../../ui/railCrumbs';
 
 /**
  * `/research/companies/:id` — one saved competitor analysis (canvas 90eb4cf2).
@@ -94,6 +95,10 @@ export default function CompanyAnalysis({ role = 'founder' }) {
   const [busy, setBusy] = useState('');
   const [notice, setNotice] = useState(null);
   const [manual, setManual] = useState(EMPTY_MANUAL);
+  // D771 (#2097): `busy` names the run at the model, so the rail names that option; an Add runs one only with a site to crawl.
+  useRailOption(busy === 'rerun' ? 'analyse:again' : null, 'Re-run');
+  useRailOption(busy === 'refresh' ? 'analyse:sources' : null, 'Refresh sources');
+  useRailOption(busy === 'add' && manual.crawl && manual.url.trim() ? 'extract:candidate' : null, 'Add');
   const [preview, setPreview] = useState('');
 
   const take = useCallback((full) => {

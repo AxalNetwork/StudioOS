@@ -9,6 +9,7 @@ import {
 import { api } from '../lib/api';
 import { recordedRelevance } from '../pages/research/companyCandidateRead';
 import ZoneToolbar from '../workspaces/ZoneToolbar';
+import { useRailOption } from '../ui/railCrumbs';
 
 // Competitor Analysis — in-house, Cloudflare-native competitive intelligence.
 // Discovery + controlled public-web crawl + Workers AI synthesis. Prefills from
@@ -142,6 +143,12 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
   const [mode, setMode] = useState(embedded ? 'startup' : 'custom'); // startup | custom
   const [inputs, setInputs] = useState(emptyInputs());
   const [analyzing, setAnalyzing] = useState(false);
+  // D771 (#2097): which run is at the model, so the rail names that option.
+  const [running, setRunning] = useState(null);
+  useRailOption(running === 'analyze' ? 'analyse:competitors' : null, 'Analyze competitors');
+  useRailOption(running === 'rerun' ? 'analyse:again' : null, 'Re-run');
+  useRailOption(running === 'refresh' ? 'analyse:sources' : null, 'Refresh sources');
+  useRailOption(running === 'add' ? 'extract:candidate' : null, 'Add');
   const [analysis, setAnalysis] = useState(null);
   const [saved, setSaved] = useState([]);
   // 'loading' until the first answer, then 'ready' or 'failed'. Four screens,
@@ -261,7 +268,7 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
     if (!inputs.market.trim()) { setError('Enter a market / industry to analyze.'); return; }
     setError('');
     setStatus('');
-    setAnalyzing(true);
+    setAnalyzing(true); setRunning('analyze');
     setAnalysis(null);
     try {
       const payload = { ...inputs };
@@ -281,13 +288,13 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
     } catch (e) {
       setError(e.message || 'Analysis failed. Try again or reduce depth.');
     } finally {
-      setAnalyzing(false);
+      setAnalyzing(false); setRunning(null);
     }
   }
 
   async function onRerun() {
     if (!analysis) return;
-    setAnalyzing(true);
+    setAnalyzing(true); setRunning('rerun');
     setError('');
     try {
       const full = await api.competitors.rerun(analysis.id, { inputs: analysis.inputs || inputs, keep_manual: true });
@@ -296,13 +303,13 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
     } catch (e) {
       setError(e.message || 'Re-run failed.');
     } finally {
-      setAnalyzing(false);
+      setAnalyzing(false); setRunning(null);
     }
   }
 
   async function onRefresh() {
     if (!analysis) return;
-    setAnalyzing(true);
+    setAnalyzing(true); setRunning('refresh');
     setError('');
     try {
       const full = await api.competitors.refresh(analysis.id);
@@ -312,7 +319,7 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
     } catch (e) {
       setError(e.message || 'Refresh failed.');
     } finally {
-      setAnalyzing(false);
+      setAnalyzing(false); setRunning(null);
     }
   }
 
@@ -339,6 +346,8 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
   async function onAddManual() {
     if (!analysis || !manual.name.trim()) return;
     setError('');
+    // Only a crawl of the site runs a model.
+    if (manual.crawl && manual.url.trim()) setRunning('add');
     try {
       const full = await api.competitors.addCandidate(analysis.id, manual);
       setAnalysis(full);
@@ -346,7 +355,7 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
       setShowManual(false);
     } catch (e) {
       setError(e.message || 'Could not add competitor.');
-    }
+    } finally { setRunning(null); }
   }
 
   async function onRemoveCandidate(cid) {
