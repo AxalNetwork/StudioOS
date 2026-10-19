@@ -97,8 +97,21 @@ function fixture(extraEnv: Record<string, string> = {}) {
   }
   db.exec(mig('435_connector_companies.sql'));
   db.exec(tableFromBaseline(BASELINE, 'oauth_state_tokens'));
-  for (const m of ['449_interview_channels.sql', '450_channel_events_delete_kind.sql', '451_channel_review_fixes.sql',
-    '454_channel_voice_failures.sql', '458_channel_link_consent.sql', '492_whatsapp_sender_links.sql']) db.exec(mig(m));
+  // The channel chain `_whatsapp_axal_fixture.ts` applies, then way B's links.
+  db.exec(`CREATE TABLE founders (id INTEGER PRIMARY KEY, user_id INTEGER);
+    CREATE TABLE discovery_interviews (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, interviewee_name TEXT NOT NULL, interviewee_role TEXT,
+      interview_date TEXT, notes TEXT, hypotheses_json TEXT, pains_json TEXT, icp_fit TEXT,
+      transcript TEXT, transcribed_at TEXT, transcribed_by_model TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);`);
+  for (const t of ['waitlist_signups', 'metric_targets', 'competitor_analyses', 'competitor_candidates',
+    'competitor_sources', 'competitor_signals']) db.exec(tableFromBaseline(BASELINE, t));
+  for (const m of ['106_pain_groups.sql', '211_founder_validate_evidence.sql', '214_validate_proposals.sql',
+    '246_fills_the_blanks_everywhere.sql', '438_interview_sessions.sql', '439_validate_proposals_structuring.sql',
+    '440_validate_cycle_stores.sql', '446_interview_structure_receipts.sql', '447_assistant_interviews.sql',
+    '449_interview_channels.sql', '450_channel_events_delete_kind.sql', '451_channel_review_fixes.sql',
+    '452_record_session_setup.sql', '454_channel_voice_failures.sql', '458_channel_link_consent.sql',
+    '488_channel_consents.sql', '492_whatsapp_sender_links.sql']) db.exec(mig(m));
   const env = { DB: d1Over(db), JWT_SECRET, ENVIRONMENT: 'development', ...ZOOM_ENV, ...CHANNEL_ENV, ...extraEnv } as any;
   const states = () => (db.prepare('SELECT COUNT(*) AS n FROM oauth_state_tokens').get() as any).n as number;
   return { db, env, states };
@@ -226,6 +239,15 @@ test('channels: a non-venture member is offered no channel and cannot link or co
     }
     assert.equal((f.db.prepare('SELECT COUNT(*) AS n FROM channel_link_codes').get() as any).n, 0, `${who}: no link code`);
   }
+  // The channel pages on the connectors directory (D753 C1) follow the same rule.
+  // Mutation checked: no venture check on the channel branch of /directory/:key.
+  for (const who of CONNECTORS_NOT_VENTURE) for (const k of ['whatsapp', 'telegram']) {
+    const r = await call(f.env, who, 'GET', `/api/connectors/directory/${k}`);
+    assert.deepEqual([r.status, r.body.error], [404, 'unknown_provider'], `${who}: /directory/${k}`);
+  }
+  for (const who of CONNECTORS_VENTURE) for (const k of ['whatsapp', 'telegram']) {
+    assert.equal((await call(f.env, who, 'GET', `/api/connectors/directory/${k}`)).status, 200, `${who}: /directory/${k}`);
+  }
   for (const who of VENTURE) {
     const list = await call(f.env, who, 'GET', '/api/channels');
     const offered = list.body.providers.map((p: any) => p.provider).sort();
@@ -249,7 +271,7 @@ test('channels: an investor with an existing Telegram connection still sees it a
   // Mutation checked: `venture(` on DELETE /whatsapp/link (404).
   f.db.prepare("INSERT INTO integrations(uid, user_id, provider_key, auth_type, external_account_id) VALUES ('wal-inv', 3, 'whatsapp_link', 'webhook', 'hmac-inv')").run();
   const un = await call(f.env, 'investor', 'DELETE', '/api/channels/whatsapp/link');
-  assert.deepEqual([un.status, un.body.unlinked], [200, true], JSON.stringify(un.body));
+  assert.deepEqual([un.status, un.body?.unlinked], [200, true], JSON.stringify(un.body));
 });
 
 // 7 ───────────────────────────────────────────────────────────────────────────
