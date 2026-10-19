@@ -34,7 +34,9 @@ import {
   splitTheme, stopCompetitor, unlinkEvidence, updateCompetitor, updateDemandSignal, updateHypothesis, updateSegment,
   updateTheme,
 } from '../validateWriters';
-import type { ActionResult, ModuleSpec, RecordAction, RecordContent, RecordContext, RecordFact, Row, Store } from './types';
+import type { ActionResult, ModuleSpec, RecordAction, RecordContent, RecordContext, RecordFact, Row, SectionSpec, Store } from './types';
+import { acceptedPerModule, findingKindsOf, findingsFor } from '../interviewSuggestions';
+import type { FindingKind } from '../interviewFindings';
 
 type Any = Record<string, any>;
 type Body = Record<string, unknown> | FormData;
@@ -466,6 +468,34 @@ function placementTarget(kind: string, p: Any | null): string {
 }
 const PLACEMENT_STATUS: Record<string, [string, string]> = { pending: ['Pending', 'amb'], accepted: ['Accepted', 'ok'], discarded: ['Discarded', 'grey'] };
 
+/**
+ * D757 §2.6 (#1925): a module record's accepted interview findings
+ * (`interview_findings`), behind the Quotes rule, each linked to the
+ * interview it came from. `scope` names the interviews the record is about.
+ */
+function findingsSection(
+  key: string, title: string, kinds: readonly FindingKind[], empty: string,
+  scope: (ctx: RecordContext, id: string) => Promise<{ segmentId?: number; interviewId?: number } | null>,
+): SectionSpec {
+  return {
+    key, title, side: true,
+    read: async (ctx, id) => {
+      const where = await scope(ctx, id);
+      if (!where) return { rows: [], empty };
+      const found = await findingsFor(ctx.env, { projectId: ctx.projectId, kinds, writer: isWriter(ctx), ...where });
+      return {
+        rows: found.map((f) => ({
+          a: f.what,
+          b: joined(f.detail, f.quote == null ? null : f.quote === QUOTE_WITHHELD ? f.quote : `"${f.quote}"`),
+          c: f.interviewee ?? 'Interview', tone: 'vio',
+          href: `/validate/customer-research/${f.interview_id}?project=${ctx.projectId}`,
+        })),
+        empty,
+      };
+    },
+  };
+}
+
 const customerResearch: ModuleSpec = {
   read: 'read', write: 'write', store: 'discovery_interviews',
   activityType: 'validate.customer-research',
@@ -563,11 +593,14 @@ const customerResearch: ModuleSpec = {
           }
         }
         const fit = d.iv.icp_fit ? FIT[String(d.iv.icp_fit)] : null;
+        // D757 §2.7 (#1925): the suggestions accepted from this interview, counted per module.
+        const fed = await acceptedPerModule(ctx.env, ctx.projectId, Number(d.iv.id));
         return {
           rows: [
             { a: 'Pain themes', b: String(groups.size) },
             { a: 'Hypotheses', b: `${supports} supports · ${contradicts} contradicts` },
             { a: 'ICP fit', b: fit ? joined(fit[0], d.segment) : 'Not recorded' },
+            ...fed.map((m) => ({ a: m.name, b: plural(m.count, 'accepted suggestion', 'accepted suggestions'), href: `/validate/${m.slug}?project=${ctx.projectId}` })),
           ],
         };
       },
@@ -739,6 +772,8 @@ const icp: ModuleSpec = {
       key: 'persona', title: 'Persona card', side: true,
       read: async () => ({ rows: [{ a: 'Export', b: 'PDF', action: 'export-persona' }] }),
     },
+    findingsSection('findings', 'From interviews', findingKindsOf('ideal-customer-profile'), 'No firmographic or job to be done accepted from its interviews yet.',
+      async (ctx, id) => ({ segmentId: Number((await loadSegment(ctx, id)).s.id) })),
   ],
   async actions(ctx, id): Promise<RecordAction[]> {
     const { s } = await loadSegment(ctx, id);
@@ -890,6 +925,10 @@ const market: ModuleSpec = {
         ] };
       },
     },
+    // The project's alternatives and market facts: an interview names them
+    // beside a competitor, never as one of its signals.
+    findingsSection('findings', 'From interviews', findingKindsOf('market-intelligence'), 'No alternative or market fact accepted from an interview yet.',
+      async (ctx, id) => { await loadCompetitor(ctx, id); return {}; }),
   ],
   async actions(ctx, id): Promise<RecordAction[]> {
     const { c, tracking, watch } = await loadCompetitor(ctx, id);
@@ -1119,6 +1158,11 @@ const demand: ModuleSpec = {
         return { rows: [{ a: String(d.row.name ?? 'A sign-up with no name'), b: 'Waitlist' }] };
       },
     },
+    findingsSection('findings', 'From the interview', findingKindsOf('demand-signals'), 'No budget, timing, urgency, trigger or objection accepted from its interview.',
+      async (ctx, id) => {
+        const d = await loadDemandRecord(ctx, id);
+        return d.prefix === 'signal' && d.row.interview_id != null ? { interviewId: Number(d.row.interview_id) } : null;
+      }),
   ],
   async actions(ctx, id): Promise<RecordAction[]> {
     const d = await loadDemandRecord(ctx, id);
