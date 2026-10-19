@@ -4,20 +4,6 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
-## The Subscription Booklet on screen (D716, #1866)
-
-- An approved Fund I applicant now opens, reads, ticks and submits their
-  Subscription Booklet in a new section of the LP workspace
-  (`pages/SpinoutLabLpBooklet.jsx`): from 1024 px a rail of Parts 2 to 9 beside
-  the part's boxes and its paper (canvas L7); below it, full-screen Read and
-  Check steps per part and a Review (L12). Rows are at least 44 px (48 on a
-  phone). Taps queue, one PUT at a time, under ids the Worker gave. Submit stays
-  off while any part has no text from counsel, and names the parts.
-- Worker: each booklet field carries `group`, its nearest counsel heading (never
-  in the digest), and `GET /api/fund-booklets/mine/paper?part=2..9` draws one
-  part alone (400 `part_invalid` otherwise).
-- New client `lib/api/fundBooklets.js` and rules `lib/bookletFormModel.js`.
-
 ## Every connector's page, as data the Worker holds to its code (D753, #1875)
 
 - `cloudflare-worker/src/integrations/connectorPages.ts` describes each
