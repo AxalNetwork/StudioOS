@@ -18,7 +18,7 @@ import { notOfferedSentence } from './mercuryModel';
 import { MercuryEntityPageBody, MercuryLandsGroup, MercuryReadsGroup, MercuryUsesGroups } from './MercurySheet';
 import { useAuth } from '../../hooks/useAuthSync';
 import { branchOfUser, isSuperAdminUser } from '../../lib/shellRole';
-import { ZOOM_DISCONNECT_NOTE, ZOOM_SECTIONS, usedByLinks, zoomHowItWorks, zoomNotices } from '../../lib/validateSourceWording';
+import { ZOOM_DISCONNECT_NOTE, ZOOM_SECTIONS, zoomHowItWorks, zoomNotices } from '../../lib/validateSourceWording';
 
 /**
  * D753 (#1876, F1) — a connector's own page, `/account/connectors/<key>`,
@@ -217,12 +217,12 @@ function ReadyPage({ p, back, phone, ret, moved, onChanged, children, connector 
 
 /**
  * D757 §2.12 (#1929): what Zoom feeds and needs, in D757's words, from the
- * catalogue row's `used_by`, `suggests`, `distribution` and `configured`
- * (#1922, D751), so it draws with or without F7's body.
+ * catalogue row's `suggests`, `distribution` and `configured` (#1922, D751),
+ * so it draws with or without F7's body. No Used by links: every profile sees
+ * this page, and Validate is the founder's (validateSourceWording.js).
  */
 export function ZoomValidate({ p }) {
   const notices = zoomNotices(p);
-  const usedBy = usedByLinks(p?.used_by);
   return (
     <section data-testid="connector-page-validate" className="flex min-w-0 flex-col gap-3">
       {notices.map((n) => (
@@ -232,14 +232,6 @@ export function ZoomValidate({ p }) {
         </div>
       ))}
       {(p?.connection || p?.already_connected === true) && <p className="text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="zoom-disconnect-note">{ZOOM_DISCONNECT_NOTE}</p>}
-      {usedBy.length > 0 && (
-        <div className="min-w-0" data-testid="zoom-used-by">
-          <h2 className={H2}>Used by</h2>
-          <ul className="mt-1 flex flex-wrap gap-2">
-            {usedBy.map((u) => <li key={u.href}><Link to={u.href} className={`${BTN.link} text-[13px]`}>{u.label}</Link></li>)}
-          </ul>
-        </div>
-      )}
       <div className="min-w-0" data-testid="zoom-how">
         <h2 className={H2}>How it works</h2>
         <ol className="mt-1 list-decimal pl-5 text-[13px] leading-relaxed text-axal-ink dark:text-gray-200">
