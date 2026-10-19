@@ -87,3 +87,44 @@ export const SAVE_EFFECT = {
     + 'only the variable name. If this Worker has no Cloudflare API token and the key is kept in the '
     + 'database instead, the new secret is stored there, encrypted.',
 };
+
+// ---------- D751 (#1882): what to register, and where ---------------------
+
+/**
+ * The two Worker secret names for a row: the Worker's own `env_vars` when it
+ * sends two strings, else the console's hand-kept fallback map (an older
+ * Worker), else none.
+ */
+export function envNamesFor(row, fallbackMap = {}) {
+  const v = row?.env_vars;
+  if (Array.isArray(v) && v.length >= 2 && v.every((x) => typeof x === 'string' && x)) return [...v];
+  const key = row?.provider_key;
+  return key && Object.hasOwn(fallbackMap, key) && Array.isArray(fallbackMap[key]) ? [...fallbackMap[key]] : [];
+}
+
+/**
+ * What members see while a key is missing, in one sentence: on an `unset`
+ * managed row that serves a card, and on an env-only row that is not set up.
+ * Every other state is '' — a key held somewhere, or one whose state is
+ * unknown, claims nothing about members.
+ */
+export function membersSeeLine({ connector, unset } = {}) {
+  if (!unset || !connector || !connector.display_name) return '';
+  const name = connector.display_name;
+  if (connector.status === 'coming_soon') return `${name} is coming soon, so members can't connect it yet.`;
+  return `Members see "Not set up here" on the ${name} card.`;
+}
+
+/** The command that sets one Worker secret, from the repository root (DEPLOY.md, PRODUCTION.md). */
+export const wranglerPutLine = (name) => `npx wrangler secret put ${name} --config wrangler.toml --env production`;
+
+/** A setup guide is linked only when it is a document in this repository. */
+export const GUIDE_PREFIX = 'https://github.com/AxalNetwork/StudioOS/blob/main/documentation/';
+export function safeGuideHref(href) {
+  return typeof href === 'string' && href.startsWith(GUIDE_PREFIX) && !/[\s<>"']/.test(href) ? href : null;
+}
+
+export const ENV_ONLY_NOTE = "These clients are read only from Worker secrets, so they can't be saved here. "
+  + 'From the repository root, run each command below; wrangler asks for the value. Nothing on this page shows a value.';
+
+export const CALLBACK_COPY = { idle: 'Copy', done: 'Copied', failed: 'Copy failed. Select the address instead.' };
