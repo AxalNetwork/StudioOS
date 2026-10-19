@@ -48,6 +48,10 @@ building blocks.
   safe-area insets and `--mobile-tabbar-h`, which pads the page's content while
   a bar is drawn. The shell (App.jsx) mounts it; it renders nothing for a
   licence with no plan.
+- `DeckProposalPanel.jsx` (D767, #2096) — a "Fill from project" proposal
+  beside the current deck version, slide by slide, with Keep and Discard.
+  `PitchDeckPage.jsx` mounts it; the words and the pairing are
+  `../lib/deckProposal.js`. Nothing is written until Keep.
 
 ## Rules
 
