@@ -26,7 +26,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
-import { CYCLE_ROUTE, cycleBands, cycleFills, cycleRouteSource } from './_cycleBands.mjs';
+import { cycleBands, cycleFills, cycleRouteSource } from './_cycleBands.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const RAIL = 'frontend/src/ui/WorkerRail.jsx';
