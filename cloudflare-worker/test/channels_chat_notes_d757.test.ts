@@ -377,3 +377,38 @@ test('Manual mode can force text Summary and Structure while voice audio waits, 
   for (const action of ['summarise', 'structure']) assert.equal((await request(action)).status, 409);
   assert.equal(f.modelCalls(), calls);
 });
+
+for (const previous of ['manual_mode', 'no_final_transcript']) test(`${previous}: first withdrawal of a skipped digest is audited exactly once`, async t => {
+  const f = await fixture(t, 'telegram'); proposals(f);
+  f.db.prepare("UPDATE interview_sessions SET digest_status = 'skipped', digest_note = ? WHERE id = ?").run(previous === 'manual_mode' ? NOTES.manual : NOTES.noTranscript, f.sessionId);
+  const consent: any = f.db.prepare('SELECT * FROM channel_consents WHERE thread_id = ?').get(f.thread.id);
+  const reply = await refKey('telegram', `skip-${previous}`);
+  await withdraw(f.env, f.thread, consent, reply);
+  assert.equal(f.db.prepare("SELECT COUNT(*) n FROM activity_logs WHERE action = 'interview_consent_withdrawn'").get()!.n, 1);
+  assert.equal((await loadSession(f.env, f.sessionId))!.digest_note, NOTES.withdrawn);
+  await withdraw(f.env, f.thread, consent, reply);
+  assert.equal(f.db.prepare("SELECT COUNT(*) n FROM activity_logs WHERE action = 'interview_consent_withdrawn'").get()!.n, 1);
+});
+
+test('a competing completed job between the quiet SELECT and claim cannot bill changed text', async t => {
+  const f = await fixture(t, 'telegram');
+  const prepare = f.env.DB.prepare.bind(f.env.DB); let injected = false;
+  f.env.DB.prepare = (sql: string) => {
+    const p = prepare(sql);
+    if (!sql.includes("SET digest_status = 'running'")) return p;
+    return { ...p, bind(...args: unknown[]) {
+      const statement = p.bind(...args);
+      return { ...statement, async run() {
+        if (!injected) {
+          injected = true;
+          f.db.prepare("UPDATE interview_sessions SET digest_status = 'done', digest_hash = 'competing-transcript', digested_at = datetime('now') WHERE id = ?").run(f.sessionId);
+        }
+        return statement.run();
+      } };
+    } };
+  };
+  const out: any = await runSessionStructureJob(f.env, jobs(f)[0].payload);
+  assert.equal(injected, true); assert.equal(out.reason, 'quiet_window'); assert.equal(f.modelCalls(), 0);
+  const session = (await loadSession(f.env, f.sessionId))!;
+  assert.equal(session.digest_status, 'done'); assert.equal(session.digest_hash, 'competing-transcript');
+});

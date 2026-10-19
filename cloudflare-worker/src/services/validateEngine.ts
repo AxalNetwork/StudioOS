@@ -207,6 +207,8 @@ export async function digestSession(env: Env, opts: {
     }
   }
 
+  // The chat quiet bound belongs in this atomic claim too: another job may
+  // finish after the SELECT above and before this UPDATE.
   // Two triggers (an import and a button) never bill the same transcript twice
   // at once. An automatic run also claims only while the stored hash differs
   // from its own: a run that finished between the check above and this claim
@@ -214,11 +216,18 @@ export async function digestSession(env: Env, opts: {
   const claim = await env.DB.prepare(
     `UPDATE interview_sessions SET digest_status = 'running', digest_trigger = ?, digested_at = datetime('now')
       WHERE id = ? AND consent_status <> 'declined' AND (digest_status IS NOT 'running' OR datetime(digested_at) < datetime('now', ?))
-        AND (? = 1 OR digest_hash IS NOT ?)`,
-  ).bind(opts.trigger, session.id, `-${CLAIM_STALE_MINUTES} minutes`, force ? 1 : 0, hash).run();
+        AND (? = 1 OR digest_hash IS NOT ?)
+        AND (? = 1 OR ? <> 'chat_text_added' OR digested_at IS NULL OR datetime(digested_at) <= datetime('now', ?))`,
+  ).bind(opts.trigger, session.id, `-${CLAIM_STALE_MINUTES} minutes`, force ? 1 : 0, hash,
+    force ? 1 : 0, opts.trigger, `-${MIN_HOURS_BETWEEN} hours`).run();
   if (Number(claim.meta?.changes || 0) !== 1) {
     const now = await loadSession(env, session.id);
     if (!force && now?.digest_hash === hash) return { ok: true, status: 'unchanged' };
+    if (!force && opts.trigger === 'chat_text_added' && now?.digest_status !== 'running' && await env.DB.prepare(
+      `SELECT 1 AS hit FROM interview_sessions WHERE id = ? AND datetime(digested_at) > datetime('now', ?)`,
+    ).bind(session.id, `-${MIN_HOURS_BETWEEN} hours`).first()) {
+      return { ok: false, status: 'skipped', reason: 'quiet_window', note: NOTES.chatQuiet };
+    }
     return { ok: false, status: 'refused', reason: 'busy', refusal: null, note: NOTES.busy };
   }
 
@@ -323,9 +332,9 @@ export async function withdrawDigest(env: Env, sessionId: number, actorUserId: n
     statements.push(env.DB.prepare(
       `INSERT INTO activity_logs (action, details, actor, user_id, project_id)
        SELECT ?, ?, ?, ?, ? FROM interview_sessions s
-        WHERE s.id = ? AND (? = 0 OR s.consent_status = 'declined') AND s.digest_status IS NOT 'skipped'`,
+        WHERE s.id = ? AND (? = 0 OR s.consent_status = 'declined') AND (s.digest_status IS NOT 'skipped' OR s.digest_note IS NOT ?)`,
     ).bind('interview_consent_withdrawn', JSON.stringify({ session_uid: session.uid, ...removed }),
-      `user:${actorUserId}`, actorUserId, session.project_id, id, onlyDeclined));
+      `user:${actorUserId}`, actorUserId, session.project_id, id, onlyDeclined, NOTES.withdrawn));
     // A consent claim that lost its race cannot wipe an unrevoked session.
     // This condition is evaluated inside the batch, after the consent update.
     if (hasFindings) statements.push(env.DB.prepare(
@@ -339,8 +348,8 @@ export async function withdrawDigest(env: Env, sessionId: number, actorUserId: n
                 digest_json = NULL, digest_hash = NULL, digest_status = 'skipped', digest_note = ?,
                 digested_at = datetime('now'), updated_at = datetime('now')
           WHERE id = ? AND (? = 0 OR consent_status = 'declined')
-            AND (digest_status IS NOT 'skipped' OR summary IS NOT NULL OR digest_json IS NOT NULL OR digest_hash IS NOT NULL)`,
-      ).bind(NOTES.withdrawn, id, onlyDeclined),
+            AND (digest_status IS NOT 'skipped' OR digest_note IS NOT ? OR summary IS NOT NULL OR digest_json IS NOT NULL OR digest_hash IS NOT NULL)`,
+      ).bind(NOTES.withdrawn, id, onlyDeclined, NOTES.withdrawn),
       env.DB.prepare(
         `DELETE FROM validate_proposals WHERE session_id = ? AND status = 'pending'
            AND (? = 0 OR EXISTS (SELECT 1 FROM interview_sessions s WHERE s.id = ? AND s.consent_status = 'declined'))`,
