@@ -62,7 +62,7 @@ export function useMovedNotice(location) {
   return show;
 }
 
-export function YoursTable({ rows }) {
+export function YoursTable({ rows, role = null }) {
   return (
     <div className={`${TONE_CLS} overflow-hidden`} data-testid="connectors-yours">
       <div role="row" className="hidden grid-cols-[minmax(0,1.5fr)_100px_80px_minmax(0,1.3fr)_80px_110px_140px] gap-2.5 border-b border-axal-hairline bg-axal-ground px-4 py-2 font-mono text-[10.5px] font-semibold uppercase tracking-[.06em] text-axal-muted md:grid dark:border-gray-800 dark:bg-gray-800/60 dark:text-gray-400">
@@ -80,7 +80,7 @@ export function YoursTable({ rows }) {
           </span>
           <span className="hidden text-axal-muted md:block dark:text-gray-400">{p.category || <NR />}</span>
           <span className="hidden text-axal-muted md:block dark:text-gray-400">{doesLabel(p) || <NR reason={NOT_IN_REGISTRY} />}</span>
-          <span className="hidden truncate text-axal-ink md:block dark:text-gray-300">{yoursFeedsLabel(p) || <NR reason={NOT_IN_REGISTRY} />}</span>
+          <span className="hidden truncate text-axal-ink md:block dark:text-gray-300">{yoursFeedsLabel(p, role) || <NR reason={NOT_IN_REGISTRY} />}</span>
           <span className="hidden font-mono text-[12px] text-axal-muted md:block dark:text-gray-400">{p.connection?.first_party || isPersonalMercury(p) ? 'You' : companiesLabel(p.connection) || <NR reason={NO_COMPANIES} />}</span>
           <span className="hidden font-mono text-[12px] text-axal-muted md:block dark:text-gray-400">{lastSyncLabel(p.connection)}</span>
           <span className="flex flex-col items-start gap-0.5">
@@ -239,7 +239,7 @@ export default function ConnectorsSection() {
   const user = useAuth()?.user ?? null;
   // Decision 10's branch sentence: an admin on a branch. It chooses words only; the Worker serves the rows.
   const branchAdmin = user?.role === 'admin' && !!branchOfUser(user);
-  return <ConnectorsView data={data} phone={phone} branchAdmin={branchAdmin} />;
+  return <ConnectorsView data={data} phone={phone} branchAdmin={branchAdmin} role={user?.role ?? null} onBranch={!!branchOfUser(user)} />;
 }
 
 // ---------------------------------------------------------------------------
@@ -269,7 +269,7 @@ function catalogueNote(data) {
  * is what it feeds and its last sync, with the reason first when it needs
  * attention; the pill is its status; the section's action is the count line.
  */
-export function yoursGroup({ data, rows, paged, setPage = () => {}, label = ACCOUNT_PHONE_PAGES.connectors.sections[0], now = Date.now() }) {
+export function yoursGroup({ data, rows, paged, setPage = () => {}, label = ACCOUNT_PHONE_PAGES.connectors.sections[0], now = Date.now(), role = null }) {
   const group = { label, rows: [], testid: 'connectors-phone-yours' };
   const pending = catalogueNote(data);
   if (pending) return { ...group, note: pending };
@@ -282,7 +282,7 @@ export function yoursGroup({ data, rows, paged, setPage = () => {}, label = ACCO
     key: p.key,
     icon: <BrandIcon provider={p.key} name={p.display_name} />,
     title: p.display_name,
-    description: [status.why, yoursFeedsLabel(p), lastSyncLabel(p.connection, now)].filter(Boolean).join(' · '),
+    description: [status.why, yoursFeedsLabel(p, role), lastSyncLabel(p.connection, now)].filter(Boolean).join(' · '),
     pill: { label: status.label, tone: status.tone },
     to: connectorPagePath(p.key),
     testid: `connector-row-${p.key}`,
@@ -334,7 +334,7 @@ export function ConnectorsPhoneView(props) {
 }
 
 /** The section, drawn from one `useConnectors()` read; exported so a test can hand it each state. */
-export function ConnectorsView({ data, initialTab = 'yours', initialChip = 'All', initialQuery = '', phone = false, branchAdmin = false }) {
+export function ConnectorsView({ data, initialTab = 'yours', initialChip = 'All', initialQuery = '', phone = false, branchAdmin = false, role = null, onBranch = false }) {
   const location = useLocation();
   const navigate = useNavigate();
   const moved = useMovedNotice(location);
@@ -377,7 +377,7 @@ export function ConnectorsView({ data, initialTab = 'yours', initialChip = 'All'
   const anyMatch = data.catalogue.some((p) => (tab === 'yours' ? !!p.connection : true) && matchesQuery(p, q));
   // D715 decision 10: a search for Mercury when the Worker serves this profile no Mercury row says why, and offers no request.
   const mercuryWithheld = isMercurySearch(q) && !data.catalogue.some((p) => p.key === 'mercury');
-  const notOffered = <span data-testid="connectors-mercury-not-offered">{notOfferedSentence({ branchAdmin })}</span>;
+  const notOffered = <span data-testid="connectors-mercury-not-offered">{notOfferedSentence({ branchAdmin, role, onBranch })}</span>;
 
   const notify = async (p, join) => {
     setWaitBusy(true); setWaitError('');
@@ -460,7 +460,7 @@ export function ConnectorsView({ data, initialTab = 'yours', initialChip = 'All'
     } else {
       content = (
         <>
-          <YoursTable rows={paged.rows} />
+          <YoursTable rows={paged.rows} role={role} />
           <div className="flex items-center justify-between px-1 font-mono text-[12px] text-axal-muted dark:text-gray-400" data-testid="connectors-count">
             <span>{paged.count}</span>
             <span className="flex items-center gap-2">
@@ -519,7 +519,7 @@ export function ConnectorsView({ data, initialTab = 'yours', initialChip = 'All'
           <PhoneBar back={{ label: 'Back' }} title={page.title} sub={page.sub} eadwynLabel={page.title} />
           <div className="pt-[18px]">
             <PhoneRows groups={[
-              yoursGroup({ data, rows, paged, setPage, label: page.sections[0] }),
+              yoursGroup({ data, rows, paged, setPage, label: page.sections[0], role }),
               suggestedGroup({ data, q, label: page.sections[1], onNotify: notify, onBrowse: browse }),
             ]} />
           </div>
