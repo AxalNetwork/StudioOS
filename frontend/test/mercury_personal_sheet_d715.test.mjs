@@ -2,6 +2,7 @@
  * D715 (#1780) PR 3 — a founder's or partner's own Mercury: the sheet's
  * groups (decision 8) and the row's words in Yours and in Build (decision 9).
  * PR 3b: the uses group reads `GET /api/mercury/personal/status` (#1778's PR B).
+ * D752 (#1886): an investor on HQ reads the investor's words in every group.
  *
  * Every token here is invented and assembled at run time.
  *
@@ -24,7 +25,7 @@ import { ConnectorPanel } from '../src/pages/account/ConnectorSheet.jsx';
 import { ConnectorsView } from '../src/pages/account/AccountConnectors.jsx';
 import { ConnectToolView } from '../src/pages/account/ConnectToolSheet.jsx';
 import { MercuryLandsGroup, MercuryUsesGroups } from '../src/pages/account/MercurySheet.jsx';
-import { MEMBER_DISCONNECT_NOTE, MEMBER_REPLACE, NEVER_ROWS, READS_ROW, USE_REASONS, USE_WORDS, usesRows } from '../src/pages/account/mercuryModel.js';
+import { MEMBER_REPLACE, READS_ROW, USE_REASONS, USE_WORDS, landsWords, memberDisconnectNote, neverRows, usesRows } from '../src/pages/account/mercuryModel.js';
 import { mercuryPersonalApi } from '../src/lib/api/mercuryPersonal.js';
 
 const h = React.createElement;
@@ -79,18 +80,21 @@ async function mount(el, { user = null, url = '/account/connectors' } = {}) {
 }
 const FOUNDER = { id: 41, role: 'founder', name: 'Ana Wren' };
 const PARTNER = { id: 42, role: 'partner', name: 'Cai Moreno' };
+const INVESTOR = { id: 43, role: 'investor', name: 'Ines Okafor' };
 const panel = (p, view, extra = {}) => h(ConnectorPanel, { p, view, setView() {}, onClose() {}, ...extra });
 
 /** What a syncing connector draws, and none of which a member's Mercury may draw. */
 const SYNC_WORDS = /What it pulls in|What it sends out|It will read|It will write|It will serve|Sync now|How often|only sends out|only pulls in/;
-const NEVER = NEVER_ROWS.join(' ');
+const NEVER = neverRows('founder').join(' ');
+const FOUNDER_NOTE = memberDisconnectNote('founder');
 
 /** The status route's answer (`routes/mercury_personal.ts`), for a founder, a partner on HQ and a partner on a branch. */
 const use = (key, available, reason = null) => ({ key, available, reason });
 const STATUS = {
-  founder: { connected: true, connection: null, uses: [use('venture_revenue', true), use('practice_income', false, 'purpose_not_allowed'), use('partner_deals', false, 'purpose_not_allowed')] },
-  partnerHq: { connected: true, connection: null, uses: [use('venture_revenue', false, 'purpose_not_allowed'), use('practice_income', true), use('partner_deals', true)] },
-  partnerBranch: { connected: true, connection: null, uses: [use('venture_revenue', false, 'purpose_not_allowed'), use('practice_income', true), use('partner_deals', false, 'hq_only')] },
+  founder: { connected: true, connection: null, uses: [use('venture_revenue', true), use('practice_income', false, 'purpose_not_allowed'), use('partner_deals', false, 'purpose_not_allowed'), use('capital_attestation', false, 'purpose_not_allowed')] },
+  partnerHq: { connected: true, connection: null, uses: [use('venture_revenue', false, 'purpose_not_allowed'), use('practice_income', true), use('partner_deals', true), use('capital_attestation', false, 'purpose_not_allowed')] },
+  partnerBranch: { connected: true, connection: null, uses: [use('venture_revenue', false, 'purpose_not_allowed'), use('practice_income', true), use('partner_deals', false, 'hq_only'), use('capital_attestation', false, 'purpose_not_allowed')] },
+  investorHq: { connected: true, connection: null, uses: [use('venture_revenue', false, 'purpose_not_allowed'), use('practice_income', false, 'purpose_not_allowed'), use('partner_deals', false, 'purpose_not_allowed'), use('capital_attestation', true)] },
 };
 /** Stub the one status read, counting calls; `answer` is a value, or an Error to fail it. */
 function stubStatus(answer) {
@@ -110,7 +114,10 @@ test('the personal row\'s words in Yours and Build; every other row keeps today\
   assert.equal(lastSyncLabel(m.connection), 'Read on request');
   assert.equal(yoursFeedsLabel(m), 'Your own payments', 'a partner\'s Mercury names no feeds');
   assert.equal(yoursFeedsLabel({ ...m, feeds: ['revenue'] }), 'Revenue', 'the Worker\'s feeds when it names them');
-  assert.equal(disconnectNote(m), MEMBER_DISCONNECT_NOTE);
+  assert.equal(disconnectNote(m), FOUNDER_NOTE);
+  assert.equal(disconnectNote(m, 'investor'), memberDisconnectNote('investor'));
+  assert.equal(yoursFeedsLabel(m, 'investor'), 'Statements you share');
+  assert.equal(yoursFeedsLabel(m, 'partner'), 'Your own payments');
   const err = (last_error) => attentionReason(conn('mercury', { status: 'error', last_error }));
   assert.equal(err('mercury_entity_account: org is an Axal entity'), 'An Axal entity\'s Mercury');
   assert.equal(err('write_scope_refused'), 'Token can write');
@@ -170,7 +177,7 @@ test('a founder\'s pre and detail views: the uses, the never rows, where it land
     assert.equal(detail.by('button-sync-now'), undefined);
     assert.ok(!detail.nodes().some((n) => /^connector-company-/.test(detail.pr(n)['data-testid'] || '')), 'no company tick');
     assert.equal(fed, 1, 'Now fed by is a founder\'s');
-    assert.ok(t.includes(`On disconnect: ${MEMBER_DISCONNECT_NOTE}`));
+    assert.ok(t.includes(`On disconnect: ${FOUNDER_NOTE}`));
   } finally { await detail.unmount(); connectorsApi.fed = saved; status.restore(); }
 });
 
@@ -183,8 +190,10 @@ test('a partner\'s sheet: their own landing words, and no Now fed by', async () 
     assert.equal(fed, 0);
     assert.doesNotMatch(m.text(), SYNC_WORDS);
   } finally { await m.unmount(); connectorsApi.fed = saved; }
-  // A role with no Mercury of its own reads Not recorded, never a founder's words.
-  const other = flat(renderToStaticMarkup(h(MercuryLandsGroup, { role: 'investor' })));
+  // D752: an investor reads the investor's words; a role with no Mercury of its own reads Not recorded, never a founder's words.
+  const investor = flat(renderToStaticMarkup(h(MercuryLandsGroup, { role: 'investor' })));
+  assert.ok(investor.includes(`Where it lands ${landsWords('investor')}`));
+  const other = flat(renderToStaticMarkup(h(MercuryLandsGroup, { role: 'advisor' })));
   assert.match(other, /Where it lands Not recorded/);
 });
 
@@ -313,4 +322,34 @@ test('PR 3b: a failed status read makes the uses Unreadable, never "none", and t
     for (const k of Object.keys(USE_WORDS)) assert.ok(!t.includes(USE_WORDS[k]));
     assert.ok(t.includes(NEVER), 'the next group still draws');
   } finally { await m.unmount(); stub.restore(); }
+});
+
+// ------------------------------------------------------------------ D752: an investor on HQ
+
+test('D752: an investor\'s sheet draws the proof-of-funds use, the investor\'s never rows, landing and disconnect words, and no Now fed by', async () => {
+  const saved = connectorsApi.fed; let fed = 0;
+  connectorsApi.fed = async () => { fed += 1; return { modules: [] }; };
+  const status = stubStatus(STATUS.investorHq);
+  const m = await mount(panel(row('mercury', catalogue()), 'detail'), { user: INVESTOR });
+  try {
+    const t = m.text();
+    assert.ok(t.includes(`What StudioOS uses it for ${USE_WORDS.capital_attestation}`), 'the investor\'s one use');
+    assert.ok(t.includes(neverRows('investor').join(' ')), 'the investor\'s never rows');
+    assert.ok(!t.includes(NEVER), 'never the founder\'s rows');
+    assert.ok(t.includes(`Where it lands ${landsWords('investor')}`));
+    assert.ok(t.includes(`On disconnect: ${memberDisconnectNote('investor')}`));
+    assert.equal(fed, 0, 'no Now fed by');
+    assert.doesNotMatch(t, SYNC_WORDS);
+  } finally { await m.unmount(); connectorsApi.fed = saved; status.restore(); }
+});
+
+test('D752: an investor\'s Yours row reads "Statements you share"; a partner\'s still reads "Your own payments"', () => {
+  const cat = catalogue();
+  const draw = (role) => {
+    const out = flat(renderToStaticMarkup(h(MemoryRouter, { initialEntries: ['/account/connectors'] },
+      h(ConnectorsView, { role, data: { status: 'ready', catalogue: cat, items: [], itemsFailed: false, suggestions: [], reload() {} } }))));
+    return out.slice(out.indexOf('Mercury'), out.indexOf('Stripe', out.indexOf('Mercury')));
+  };
+  assert.match(draw('investor'), /Reads on request Statements you share You Read on request/);
+  assert.match(draw('partner'), /Reads on request Your own payments You Read on request/);
 });

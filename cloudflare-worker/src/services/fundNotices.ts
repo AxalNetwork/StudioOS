@@ -166,6 +166,22 @@ export async function figuresDigest(f: NoticeFigures): Promise<string> {
   return sha256Hex(canonicalJson(f));
 }
 
+/**
+ * #1860: the call number and the due date an LP's list shows, read from the
+ * key figures this file writes — "Call number" and "Due date" on a capital
+ * call, "Call number" and "Cure date" on a default notice, both null on any
+ * other type. Computed on read; never part of the figures or their digest. A
+ * value that is not a date ("Not set") is null.
+ */
+export function noticeListFacts(f: NoticeFigures): { call_number: string | null; due_date: string | null } {
+  const dueLabel = f?.type === 'capital_call_notice' ? 'Due date' : f?.type === 'default_notice' ? 'Cure date' : null;
+  if (!dueLabel) return { call_number: null, due_date: null };
+  const figure = (label: string) => (Array.isArray(f.key_figures) ? f.key_figures.find((k) => k.label === label)?.value : undefined);
+  const call = figure('Call number');
+  const due = figure(dueLabel);
+  return { call_number: typeof call === 'string' && call.trim() !== '' ? call : null, due_date: isDate(due) ? due : null };
+}
+
 // ---------------------------------------------------------------- the payment block
 
 /** Decision 4: #1773's answer as L6's block, masked. A refusal prints its sentence in the block's place. */

@@ -21,9 +21,12 @@ import { PDFDocument, PDFName } from 'pdf-lib';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 
 const baseline = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
-const TABLES = ['users', 'super_admins', 'user_sessions', 'activity_logs', 'admin_audit_log', 'lp_applications', 'legal_templates', 'legal_template_versions'];
+// D759 (#1858): the e-sign tables and migration 485, which the booklet view reads for its signing state.
+const TABLES = ['users', 'super_admins', 'user_sessions', 'activity_logs', 'admin_audit_log', 'lp_applications', 'legal_templates', 'legal_template_versions',
+  'esign_envelopes', 'esign_recipients'];
 const SCHEMA = TABLES.map((t) => stripForeignKeys(tableFromBaseline(baseline, t))).join('\n')
-  + '\n' + readFileSync(new URL('../sql/migrations/478_fund_notices_booklets.sql', import.meta.url), 'utf8');
+  + '\n' + readFileSync(new URL('../sql/migrations/478_fund_notices_booklets.sql', import.meta.url), 'utf8')
+  + '\n' + readFileSync(new URL('../sql/migrations/485_fund_booklet_envelopes.sql', import.meta.url), 'utf8');
 const SECRET = ['d716', 'booklet', 'fixture', 'secret'].join('-');
 
 const ADMIN = 1, APPLICANT = 2, PENDING = 3, STRANGER = 4, FOUNDER = 5;
