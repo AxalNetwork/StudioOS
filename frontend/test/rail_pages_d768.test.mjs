@@ -282,5 +282,9 @@ test('the shell mounts the provider with its shell role, and Validate\'s options
   const fill = readFileSync('frontend/src/workspaces/FillProposals.jsx', 'utf8');
   assert.match(fill, /useRailOption\(railOption && enabled && \(busy === 'run' \|\| items\.length > 0\) \? railOption : null/);
   // The rail's body is D769's: this task reads the page key through the provider only.
-  assert.doesNotMatch(readFileSync('frontend/src/ui/WorkerRail.jsx', 'utf8'), /railPages|useRailPage/);
+  // D781 (#2106) part 2 adds one read, the key on the rail's element for its render check.
+  const rail = readFileSync('frontend/src/ui/WorkerRail.jsx', 'utf8');
+  assert.doesNotMatch(rail, /railPages/);
+  assert.deepEqual(rail.match(/useRailPage\(\)[^;]*;/g), ['useRailPage()?.page ?? null;']);
+  assert.match(rail, /\{\.\.\.\(railPage \? \{ 'data-page-key': railPage \} : \{\}\)\}/);
 });
