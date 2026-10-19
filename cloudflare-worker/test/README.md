@@ -19,6 +19,9 @@ fixture is the schema production has rather than a hand-copy that drifts from it
 three tests had each grown their own copy of that reader, and one of the copies
 had already been caught reading a column name production does not use.
 `baseline_reader.test.mjs` holds it to what the regex it replaced returned.
+`_engine_schema.mjs` (D757) gives a world whose sessions reach the Validate engine
+what it reads: migrations 453, 465 and 487, `queue_jobs`, and the member and venture
+columns `writableSession` checks.
 `schema_readiness.test.ts` runs the real bootstraps against two recording D1 stubs
 and asserts each database gets its own DDL — the half `scripts/check-schema-readiness.mjs`
 cannot see, since reading the source tells you a `WeakMap` is there but not that it
@@ -53,3 +56,9 @@ D691: `compliance_events_columns_d691.test.ts` builds the full baseline and ever
 post-cutoff migration with foreign keys on. It checks Grow obligation writes,
 API state mappings, seeded compliance events and calendar reads, and bans SQL
 references to the absent migration-034 columns throughout Worker source.
+
+D754: `whatsapp_switch_on_d754.test.ts` holds the two independent chat rollout
+switches, authenticated off acknowledgements, hydrated canary membership, Axal’s
+own-number guards, WhatsApp media deadlines/expiry and split calling reasons to
+real SQLite fixtures with every provider stubbed. Its in-process mutation checks
+run the same positive scenarios before restoring ordinary modules.

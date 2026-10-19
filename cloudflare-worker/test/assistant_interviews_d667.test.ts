@@ -22,6 +22,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
+import { applyEngineSchema } from './_engine_schema.mjs';
 import { createJWT } from '../src/auth.ts';
 import { tableFromBaseline } from './_baseline.mjs';
 import {
@@ -96,6 +97,8 @@ function world(reply: (model: string, input: any) => any = () => ({ response: '{
   db.exec(mig('449_interview_channels.sql').split(';')
     .filter((sql) => /CREATE TABLE IF NOT EXISTS channel_threads \(/.test(sql)).map((sql) => `${sql};`).join('\n'));
   db.exec(mig('488_channel_consents.sql'));
+  // D757: the Validate engine's schema (487, 465, 453 and the re-scope's columns).
+  applyEngineSchema(db);
   const env: any = {
     JWT_SECRET,
     ENVIRONMENT: 'development',
@@ -234,6 +237,8 @@ test('notes arrive as one segment; transcript and notes together, or neither, ar
 
 test('the limits: 200 segments, 100 KB, 20 submissions a day per grant', async () => {
   const { env, db } = world();
+  // D757: a free founder stops at five interviews (the cap test below); these limits are a paying member's.
+  db.prepare("UPDATE users SET subscription_tier = 'growth' WHERE id = ?").run(ME);
   const many = Array.from({ length: LIMITS.segments + 1 }, (_, i) => ({ speaker: 'A', text: `line ${i}` }));
   await refused(submitInterview(env, GRANT, { ...ARGS(), transcript: many }), 413, 'too_many_segments');
   await refused(submitInterview(env, GRANT, { ...ARGS(), transcript: [{ speaker: 'A', text: 'x'.repeat(LIMITS.bytes) }] }), 413, 'transcript_too_large');
@@ -418,6 +423,30 @@ test('deleting a submitted session deletes its pending proposals, whoever propos
   assert.deepEqual(left.map((r) => ({ ...r })), [{ id: ids[1], status: 'discarded', citation_json: null }]);
   assert.equal(count(db, 'interview_structure_receipts'), 0);
   assert.equal(count(db, 'interview_transcript_segments'), 0);
+});
+
+test('D757: a free founder\'s sixth interview is refused 402 tier_required and nothing is written; Growth and admins pass', async () => {
+  // Mutation checked: removing the interviewCapRefusal call from submitInterview lets the sixth through.
+  const fill = (db: any) => {
+    const have = Number(db.prepare('SELECT COUNT(*) AS n FROM discovery_interviews WHERE project_id = ?').get(PROJECT).n);
+    for (let i = have; i < 5; i += 1) db.prepare('INSERT INTO discovery_interviews (project_id, interviewee_name) VALUES (?, ?)').run(PROJECT, `P${i}`);
+  };
+  const { env, db } = world();
+  fill(db);
+  const before = written(db);
+  const err = await refused(submitInterview(env, GRANT, ARGS()), 402, 'tier_required');
+  assert.match(err.sentence, /plan/);
+  assert.deepEqual(written(db), before, 'nothing written');
+  for (const change of ["subscription_tier = 'growth'", "role = 'admin'"]) {
+    const w = world();
+    fill(w.db);
+    w.db.exec(`UPDATE users SET ${change} WHERE id = ${ME}`);
+    const out = await submitInterview(w.env, GRANT, ARGS());
+    assert.ok(out.session_id, change);
+    // StudioOS's summary is queued for the engine (assistant_submitted), never run inline.
+    const jobs = w.db.prepare("SELECT payload FROM queue_jobs WHERE job_type = 'session_structure'").all().map((r: any) => JSON.parse(r.payload));
+    assert.deepEqual(jobs, [{ session_id: out.session_id, user_id: ME, trigger: 'assistant_submitted' }]);
+  }
 });
 
 // ---------------------------------------------------------------------------

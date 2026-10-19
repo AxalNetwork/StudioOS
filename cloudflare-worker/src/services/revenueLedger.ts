@@ -314,9 +314,11 @@ export interface MercuryCreditContext {
   importedHere: boolean;
   /** The line is already a row on another project's ledger: one bank line is one row on the platform. */
   importedElsewhere: boolean;
+  /** The line is a confirmed raise receipt (D752): financing, never revenue. */
+  raiseReceipt?: boolean;
 }
 
-export const MERCURY_CREDIT_REASONS = ['pending', 'internal_transfer', 'axal_entity', 'stripe_payout', 'already_imported', 'imported_elsewhere', 'invalid_amount'] as const;
+export const MERCURY_CREDIT_REASONS = ['pending', 'internal_transfer', 'raise_receipt', 'axal_entity', 'stripe_payout', 'already_imported', 'imported_elsewhere', 'invalid_amount'] as const;
 export type MercuryCreditReason = (typeof MERCURY_CREDIT_REASONS)[number];
 
 export type MercuryCreditEntry =
@@ -337,6 +339,8 @@ export function namesStripe(counterparty: string | null | undefined): boolean {
  *   `pending`, `internal_transfer`, `axal_entity` (capital or a partner deal,
  *   not customer revenue), `stripe_payout` (each Stripe sale would count twice),
  *   `already_imported` (on this project) and `imported_elsewhere` (on another).
+ *   `raise_receipt` (D752): the line is a confirmed raise receipt, an
+ *   investor's wire matched to a commitment, so it is financing, not revenue.
  * - Amount and date are Mercury's: integer cents from `parse.ts`, and the
  *   posted date. The customer and the type are the founder's, set by the route.
  */
@@ -344,6 +348,7 @@ export function mercuryCreditToEntry(f: MercuryCreditFacts, ctx: MercuryCreditCo
   if (f.voided || !(Number(f.amount_cents) > 0)) return { kind: 'skip' };
   if (!f.posted || !f.posted_on) return { kind: 'refuse', reason: 'pending' };
   if (f.internal) return { kind: 'refuse', reason: 'internal_transfer' };
+  if (ctx.raiseReceipt) return { kind: 'refuse', reason: 'raise_receipt' };
   if (f.axal_counterparty) return { kind: 'refuse', reason: 'axal_entity' };
   if (f.stripe_counterparty && ctx.stripeActive) return { kind: 'refuse', reason: 'stripe_payout' };
   if (ctx.importedHere) return { kind: 'refuse', reason: 'already_imported' };

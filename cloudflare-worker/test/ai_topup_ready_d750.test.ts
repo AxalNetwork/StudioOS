@@ -213,7 +213,9 @@ test('end to end: a price created after the last sync is fetched, bought through
     const hook = { 'stripe-signature': `t=${timestamp},v1=${signature}`, 'content-type': 'application/json' };
     for (let i = 0; i < 2; i++) assert.equal((await billingRoute.request('/stripe/webhook', { method: 'POST', headers: hook, body }, f.env)).status, 200);
     assert.equal((await loadAiBudget(f.env, 2)).balance_microusd, 25000000);
-    assert.equal(f.db.prepare('SELECT COUNT(*) n FROM ai_topup_ledger').get().n, 1);
+    // D755: the credit is one ai_credit_ledger purchase; ai_topup_ledger is no longer written.
+    assert.equal(f.db.prepare('SELECT COUNT(*) n FROM ai_topup_ledger').get().n, 0);
+    assert.equal(f.db.prepare("SELECT COUNT(*) n FROM ai_credit_ledger WHERE kind='purchase'").get().n, 1);
     assert.equal(s.calls.filter((c) => c.includes('/v1/prices/')).length, 1);
     assert.ok(!s.calls.some((c) => /checkout\/sessions|\/v1\/prices( |$)|\/v1\/products/.test(c)), 'no Checkout Session and nothing created in Stripe');
   } finally { s.restore(); f.db.close(); }

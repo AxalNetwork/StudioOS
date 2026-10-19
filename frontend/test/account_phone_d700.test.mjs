@@ -233,7 +233,8 @@ test('4. SettingsPage reads its section from the address on every change, and wr
   // In the render body, not a once-only initialiser.
   assert.match(page, /\n  const active = accountViewFor\(\{ pathname: location\.pathname, hash: location\.hash, phone \}\);/);
   assert.doesNotMatch(page, /initialSection|useState\(initial/);
-  assert.match(page, /const want = accountPathFor\(\{ section: active, phone \}\);/);
+  // D753 — the canonicalising call keeps a connector's key.
+  assert.match(page, /const want = accountPathFor\(\{ section: active, phone, key: connectorKey \}\);/);
   assert.match(page, /\}, \[active, phone, location\.pathname\]\);/, 'the URL effect re-runs when the path moves');
   assert.doesNotMatch(src, /const PATH_TO_SECTION/, 'the map moved to accountPhone.js');
   // On a phone a section is pushed, so Back returns to the index; desktop replaces, as before.
@@ -241,7 +242,8 @@ test('4. SettingsPage reads its section from the address on every change, and wr
   assert.match(page, /<ProfileCompletionBanner onJump=\{\(\) => setActive\('account'\)\} \/>/);
   // The phone view is drawn inside the rail frame, and the desktop keeps its heading.
   assert.ok(page.indexOf('<RailFrame') < page.indexOf('<AccountPhoneFrame'));
-  assert.match(page, /\{phone \? \(\s*<AccountPhoneFrame[\s\S]*?\) : \(\s*<div className="min-w-0" data-testid="settings-page"[^>]*>\s*<h1 [^>]*>Account<\/h1>/);
+  // D753 — on a connector's page its name is the one <h1>, so the heading is drawn only without a key.
+  assert.match(page, /\{phone \? \(\s*<AccountPhoneFrame[\s\S]*?\) : \(\s*<div className="min-w-0" data-testid="settings-page"[^>]*>[\s\S]*?\{!connectorKey && <>\s*<h1 [^>]*>Account<\/h1>/);
 });
 
 // --- 5. The bars, A1m–A3m ------------------------------------------------------
@@ -538,7 +540,7 @@ test('5. at desktop width the pages draw no bar and keep their own heading', () 
   const docs = read('frontend/src/pages/docs/DocsLayout.jsx');
   assert.match(docs, /\) : phone \? \(\s*<HelpPhoneHome[\s\S]*?\) : \(\s*<HelpHome/, 'only the home has a phone view; a guide page is unchanged');
   const products = read('frontend/src/pages/ProductsPage.jsx');
-  assert.match(products, /\{!phone && \(\s*<>\s*<h1 [^>]*>\s*<Package size=\{26\}[^>]*\/> Products/);
+  assert.match(products, /\{!phone && \(\s*<>\s*<h1 [^>]*>\s*<Package size=\{26\}[^>]*\/> Plans &amp; Pricing/);
   assert.match(products, /return phone \? <PricingPhone role=\{user\?\.role\}>\{page\}<\/PricingPhone> : page;/);
 });
 

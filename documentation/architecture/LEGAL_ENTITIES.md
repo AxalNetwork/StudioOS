@@ -97,7 +97,6 @@ Axal VC GP LLC is the General Partner that manages the Fund's investors, and the
 | Partner Equity / Services / Revenue deals   | `cloudflare-worker/src/services/partnerDeals.ts`                      |
 | IP Assignment / Equity Allocation templates | `cloudflare-worker/src/routes/legalcap.ts` (`TEMPLATES.IP_license`)   |
 | Spin-out wizard subsidiary defaults         | `cloudflare-worker/src/routes/legalcap.ts` (`subsidiaries.holding_company_id`) |
-| Esign intro boilerplate                     | `cloudflare-worker/src/routes/esign.ts` (`buildTemplateBody`)         |
 | Public footer entity attribution            | `frontend/src/components/PublicFooter.jsx`                            |
 | Entity roles and money rails (D707): who pays whom, on Stripe or Mercury | `cloudflare-worker/src/services/moneyRails.ts` |
 

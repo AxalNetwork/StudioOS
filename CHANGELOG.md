@@ -4,41 +4,22 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
-## Consent in Record a Session, the inbox and the session page (D754, #1980, part 1)
+## One text per document: every sender reads its library row (D758, #1863, PR 1)
 
-- Record a Session › Text chat › WhatsApp: a chat that waits for consent
-  offers "Ask <Name> in WhatsApp" (only while its 24-hour window is open,
-  else D754's sentence) or "<Name> already agreed" with the member's three
-  methods. Start waits for one, and the assign body carries `consent`.
-- The session page says "Waiting for <Name> to agree", "Agreed in WhatsApp
-  at <time>", "Declined in WhatsApp" or "<Name> withdrew consent", the last
-  with "Discard this chat's recording" (`DELETE /sessions/:id`, after a confirm).
-- The inbox's thread view shows the consent state, Ask for consent, and the
-  member's word once Axal's notice was delivered. Rules in
-  `frontend/src/pages/founder/chatConsent.js`. Telegram is unchanged.
-- The voice-note parts (the keep-by line, playback) follow #1935.
+- `services/legalDocTypes.ts` gains `LIBRARY_SLUG_FOR` / `librarySlugFor`
+  (seven spellings → their `legal_templates` row) and `BUNDLED_SENT_DIRECTLY`
+  (`partner_msa_v1`, until PR 2).
+- `templateBodyFor` and `createAndSendEnvelope` resolve the row by slug: an
+  envelope records, prints and dedupes under it (either spelling still
+  dedupes), and `envelope_created` adds `requested_as`.
+- The 3-way NDA and the deck-share NDA read their rows and refuse a field
+  left (409 `template_fields_unfilled`; deck-share 503
+  `template_unreadable`), with no free-text fallback.
+- Usage counts the store's own slugs, matches exactly first, folds spellings
+  through the same map, counts partner deals under `partner_services`, and
+  counts a relationship row and its envelope once. The drill-down uses the
+  same fold. `GET /templates/outside` lists `BUNDLED_SENT_DIRECTLY`.
 
-## Consent before anything from a WhatsApp chat is kept (D754, #1893)
-
-- Migration 488: `channel_consents`, one row per consent request on a chat
-  (the notice's version, when it was asked and delivered, the answer and its
-  source), and `channel_threads.consent_state`, which the gate reads.
-- A WhatsApp chat added to an interview now links and waits: its text stays
-  pending, its voice notes are never fetched, and Structure, Ask, the summary,
-  finish and process refuse, until the interviewee taps "Yes, I agree" on
-  Axal's notice or replies YES to it, or the member confirms once WhatsApp
-  reported the notice delivered. A "No" deletes what waited; a STOP or a later
-  "No" withdraws consent, sets the chat aside and switches quotes off.
-- `POST /api/channels/threads/:uid/consent-request` sends the notice (reply
-  buttons, from the member's number, inside the 24-hour window, at most twice
-  and 24 hours apart, linking `/privacy/interviews?n=1`);
-  `POST /api/channels/threads/:uid/consent` takes the member's word; assign
-  takes `consent: { ask: true } | { method }`. The reply route refuses
-  `consent:` client keys.
-- The session gate (`consentBlocks`) also refuses any session holding audio,
-  and Open recording refuses without consent. Customer research reads
-  "Waiting for consent" or "Declined in WhatsApp". Telegram is unchanged
-  (`consentRequired('telegram')` stays false until D756).
 ## The LP's capital call opens on the amount, and the fee statement is on screen (D717, #1859)
 
 - An open Fund I line's panel on the LP workspace opens on "Amount due", the
@@ -49,6 +30,18 @@
 - "Management fee statements" lists the LP's issued statements under My
   commitment, newest open, drawn by `FeeStatementView` with no account digits.
   Frontend only: no route, migration or API method changes.
+
+## GitHub sign-ins renew themselves, and disconnecting revokes them (D655 follow-up, #1883)
+
+- GitHub user tokens renew 60 seconds before expiry. Rotated tokens are stored
+  with compare-and-swap so a concurrent reconnect is preserved. An exclusive
+  lease in D1 prevents duplicate renewals even if KV fails; lease losers
+  wait for the result and never renew on their own.
+- A refused refresh shows Reconnect and is not retried until sign-in. Temporary
+  failures leave credentials intact. Disconnect revokes the authorization best
+  effort; the App remains installed on the member's repositories.
+- No new routes, bindings or migrations. Expiry can be enabled by the owner
+  after this change merges; setup remains tracked in #1008 and #1885.
 
 ## Every connector's page, as data the Worker holds to its code (D753, #1875)
 
@@ -65,6 +58,24 @@
   Calendar, Microsoft 365) are gone until each live check is recorded with its
   date. Google's third permission now reads "Gmail (read-only) is asked for at
   sign-in; Axal VC does not read your Gmail."
+
+## The template editor's Pages view and Compare versions (D717, #1853)
+
+- **Pages.** The editor's middle pane switches between "Live paper" and
+  "Pages". Pages draws the unsaved draft's real PDF from
+  `POST /templates/render.pdf` one page at a time, with "Page X of Y",
+  Previous, Next and pinch-to-zoom on touch. It says when the fallback
+  renderer drew it, and when the draft has changed since. New:
+  `pages/admin/contracts/PdfPages.jsx` and `DraftPages.jsx`.
+- **Compare versions.** It sets any two saved versions, or one and the draft,
+  side by side, with deletions struck through and insertions underlined, and
+  lists title, kind and party changes. Restore copies a body only. New:
+  `pages/admin/contracts/VersionCompare.jsx` and `lib/templateVersions.js`.
+- One new dependency: `pdfjs-dist` pinned at exactly `6.4.299` (its legacy
+  build), loaded only when Pages opens. A guard test fails if the installed
+  bundles gain an eval path.
+- `lib/api.js` exports `rawRequestHeaders`; `contractsApi.renderPdfBlob` and
+  `PaperPreview`'s `paperRequest` are new. No Worker change, no migration.
 
 ## Signing in four steps, at every width (D717, #1857)
 

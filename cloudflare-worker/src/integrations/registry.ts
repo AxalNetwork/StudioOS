@@ -61,6 +61,11 @@ export interface ProviderDescriptor {
   entity_roles?: string[];
   /** D710: the roles that may hold their own connection (#1778 adds founders and partners for Mercury). */
   personal_roles?: string[];
+  /**
+   * D752: personal roles whose every use is HQ-only; off HQ they see `none`.
+   * Like the two fields above, it is never served.
+   */
+  personal_hq_only_roles?: string[];
 }
 
 /**
@@ -210,6 +215,8 @@ export interface ProviderImpl {
    * the user faces a 15-minute "dead period" before bookings show up.
    */
   postConnect?(c: Context<{ Bindings: Env }>, user: User, row: IntegrationRow): Promise<void>;
+  /** D751 — whether Axal holds this provider's OAuth client. Never a value or a name. */
+  ready?(env: Env): Promise<boolean | null>;
 }
 
 const PROVIDER_IMPLS: Map<string, ProviderImpl> = new Map();
@@ -445,14 +452,16 @@ export const REGISTRY: ProviderDescriptor[] = [
   // (`services/mercury/`). Only an admin on HQ sees that row, and to an admin
   // `has_implementation` stays false: an entity is never connected from here.
   // D713 (#1778): founders and partners hold their own read-only connection, an
-  // ordinary `integrations` row (`providers/mercury.ts`), and see the personal
-  // variant below (`PERSONAL_MERCURY`), on HQ and on a branch.
+  // ordinary `integrations` row (`providers/mercury.ts`), and see their role's
+  // personal variant below (`PERSONAL_MERCURY`), on HQ and on a branch.
+  // D752 (#1886): investors hold one too, on HQ only (`personal_hq_only_roles`):
+  // their one use, `capital_attestation`, is HQ-only.
   {
     key: 'mercury', display_name: 'Mercury', integration_type: 'data_feed',
-    description: 'Read balances and transactions of the Axal entity accounts for fund administration. Read-only: nothing here can move money.',
+    description: 'Read balances and transactions of the Axal entity accounts for fund administration. Read-only: nothing here can move money. Members connect their own Mercury from their own Connectors page; their accounts never appear here.',
     status: 'beta', tier: 'growth', auth_type: 'api_key', capabilities: ['Balances', 'Transactions', 'Reconciliation'],
     docs_url: 'https://docs.mercury.com', icon: 'Landmark',
-    entity_roles: ['admin'], personal_roles: ['founder', 'partner'],
+    entity_roles: ['admin'], personal_roles: ['founder', 'partner', 'investor'], personal_hq_only_roles: ['investor'],
   },
 ];
 
@@ -477,28 +486,72 @@ export const CONNECTOR_METADATA: Record<string, ConnectorMetadata> = {
   microsoft_365: { category: 'Calendar and workspace', verified: false, pulls: [{ what: 'Events', module: 'customer_research' }], sends: [{ what: 'Calendar events', target: 'Microsoft 365', default_mode: 'ask' }], feeds: ['customer_research', 'operating_systems'], permissions: ['Confirm your Microsoft sign-in identity.', 'Read your public Microsoft profile.', 'Read your account email address.', 'Keep the connection active.', 'Read and update calendar events.', 'Read your basic account profile.'] },
 };
 
+/** What one personal role reads on its own Mercury card. */
+export interface PersonalMercuryVariant {
+  description: string;
+  capabilities: string[];
+  /** Exactly one sentence, as every `api_key` row has (`connectors_d650.test.ts`). */
+  permissions: string[];
+  feeds: string[];
+}
+
+export type PersonalMercuryRole = 'founder' | 'partner' | 'investor';
+
+const FOUNDER_PARTNER_DESCRIPTION = 'Your own Mercury account, read-only: import the credits you choose as venture revenue (founders), and match your invoices, payouts and partner-deal settlements to your own bank lines (partners).';
+const FOUNDER_PARTNER_CAPABILITIES = ['Revenue import', 'Payment matching'];
+const FOUNDER_PARTNER_PERMISSIONS = ['Read your Mercury account names, last four digits and the transactions you review; it never sends, transfers or requests money.'];
+
 /**
- * D713 (#1778): what a founder or partner reads for their own Mercury
- * connection. Exactly one permission sentence, as every `api_key` row has
- * (`connectors_d650.test.ts`). A founder's import feeds Revenue and traction;
- * a partner's uses (invoices, payouts, settlements) have no module key.
+ * D713 (#1778), D752 (#1886): what each personal role reads for its own
+ * Mercury connection. A founder's import feeds Revenue and traction; a
+ * partner's uses (invoices, payouts, settlements) and an investor's proof of
+ * funds have no module key. A PR that changes what a role uses Mercury for
+ * updates that role's variant.
  */
-export const PERSONAL_MERCURY = {
-  description: 'Your own Mercury account, read-only: import the credits you choose as venture revenue (founders), and match your invoices, payouts and partner-deal settlements to your own bank lines (partners).',
-  capabilities: ['Revenue import', 'Payment matching'],
-  permissions: ['Read your Mercury account names, last four digits and the transactions you review; it never sends, transfers or requests money.'],
-  feedsFor: (role: string): string[] => String(role || '').toLowerCase() === 'founder' ? ['revenue_and_traction'] : [],
-};
+export const PERSONAL_MERCURY: Readonly<Record<PersonalMercuryRole, Readonly<PersonalMercuryVariant>>> = Object.freeze({
+  founder: Object.freeze({
+    description: FOUNDER_PARTNER_DESCRIPTION, capabilities: FOUNDER_PARTNER_CAPABILITIES,
+    permissions: FOUNDER_PARTNER_PERMISSIONS, feeds: ['revenue_and_traction'],
+  }),
+  partner: Object.freeze({
+    description: FOUNDER_PARTNER_DESCRIPTION, capabilities: FOUNDER_PARTNER_CAPABILITIES,
+    permissions: FOUNDER_PARTNER_PERMISSIONS, feeds: [],
+  }),
+  investor: Object.freeze({
+    description: "Your own Mercury account, read-only: show Axal's admins that you can fund a commitment you made, with a dated statement of at least an amount you choose. Axal's admins never see your balance.",
+    capabilities: ['Proof of funds'],
+    permissions: ['Read your Mercury account names, last four digits and available balances while you prepare a statement; it never stores or shows a balance, and never sends, transfers or requests money.'],
+    feeds: [],
+  }),
+});
+
+/** The role's personal Mercury variant, or null for a role that holds none. */
+export function personalMercuryFor(role: string | null | undefined): Readonly<PersonalMercuryVariant> | null {
+  const key = String(role || '').toLowerCase();
+  return Object.prototype.hasOwnProperty.call(PERSONAL_MERCURY, key) ? PERSONAL_MERCURY[key as PersonalMercuryRole] : null;
+}
 
 /** The modules a connector feeds for this viewer: Mercury's personal variant by role, else the catalogue's. */
 export function connectorFeeds(providerKey: string, role?: string | null): string[] {
-  if (providerKey === 'mercury' && role != null && String(role).toLowerCase() !== 'admin') return PERSONAL_MERCURY.feedsFor(role);
+  if (providerKey === 'mercury' && role != null && String(role).toLowerCase() !== 'admin') return [...(personalMercuryFor(role)?.feeds ?? [])];
   return CONNECTOR_METADATA[providerKey]?.feeds ?? [];
 }
 
 const REGISTRY_BY_KEY: Map<string, ProviderDescriptor> = new Map(
   REGISTRY.map(p => [p.key, p]),
 );
+
+/**
+ * D751 — `configured` for `GET /available`: the impl's `ready` for an
+ * `oauth2` provider, a throw read as `null` (unknown). `undefined` (no field)
+ * for any other row, a provider with no impl, or an impl with no `ready`.
+ */
+export async function readinessOf(env: Env, p: ProviderDescriptor): Promise<boolean | null | undefined> {
+  if (p.auth_type !== 'oauth2') return undefined;
+  const impl = PROVIDER_IMPLS.get(p.key);
+  if (!impl?.ready) return undefined;
+  try { return await impl.ready(env); } catch { return null; }
+}
 
 export function getDescriptor(key: string): ProviderDescriptor | null {
   return REGISTRY_BY_KEY.get(key) ?? null;
@@ -590,31 +643,49 @@ export function audienceFor(p: ProviderDescriptor, viewer: DescriptorViewer): 'o
   if (!p.entity_roles && !p.personal_roles) return 'open';
   const role = String(viewer.role || '').toLowerCase();
   if (viewer.hq && (p.entity_roles ?? []).includes(role)) return 'entity';
-  if ((p.personal_roles ?? []).includes(role)) return 'personal';
+  // D752: a personal role whose every use is HQ-only sees nothing off HQ.
+  if ((p.personal_roles ?? []).includes(role)) return personalHqOnlyOffHq(p, viewer) ? 'none' : 'personal';
   return 'none';
+}
+
+/**
+ * D752: true when the viewer is off HQ and holds a personal role whose every
+ * use is HQ-only (`personal_hq_only_roles`). `/connect` answers such a viewer
+ * 403 `purpose_not_allowed` with `personalHqOnlySentence`; every other route
+ * stays 404, as for a provider the viewer may not see (D710 decision 5).
+ */
+export function personalHqOnlyOffHq(p: ProviderDescriptor, viewer: DescriptorViewer): boolean {
+  if (viewer.hq) return false;
+  const role = String(viewer.role || '').toLowerCase();
+  return (p.personal_roles ?? []).includes(role) && (p.personal_hq_only_roles ?? []).includes(role);
+}
+
+/** D752: the refusal an HQ-only personal role reads at connect off HQ. */
+export function personalHqOnlySentence(name: string): string {
+  return `${name} is offered to your profile on HQ only.`;
 }
 
 export function publicDescriptor(p: ProviderDescriptor, viewer?: DescriptorViewer) {
   const audience = viewer ? audienceFor(p, viewer) : 'open';
-  // D713: a founder or partner reads Mercury's personal variant.
-  const personal = p.key === 'mercury' && audience === 'personal';
-  const feeds = personal ? PERSONAL_MERCURY.feedsFor(viewer!.role) : CONNECTOR_METADATA[p.key]?.feeds ?? [];
+  // D713, D752: a founder, partner or investor reads their role's Mercury variant.
+  const variant = p.key === 'mercury' && audience === 'personal' ? personalMercuryFor(viewer!.role) : null;
+  const feeds = variant ? [...variant.feeds] : CONNECTOR_METADATA[p.key]?.feeds ?? [];
   return {
     key: p.key,
     display_name: p.display_name,
     integration_type: p.integration_type,
-    description: personal ? PERSONAL_MERCURY.description : p.description,
+    description: variant ? variant.description : p.description,
     status: p.status,
     tier: p.tier,
     auth_type: p.auth_type,
-    capabilities: personal ? PERSONAL_MERCURY.capabilities : p.capabilities,
+    capabilities: variant ? [...variant.capabilities] : p.capabilities,
     docs_url: p.docs_url,
     icon: p.icon ?? null,
     supports_pat: !!p.supports_pat,
     // An entity connection is never made through `/connect`, so the admin's row has no implementation here.
     has_implementation: PROVIDER_IMPLS.has(p.key) && !(p.key === 'mercury' && audience !== 'personal'),
     ...CONNECTOR_METADATA[p.key],
-    ...(personal ? { permissions: PERSONAL_MERCURY.permissions } : {}),
+    ...(variant ? { permissions: [...variant.permissions] } : {}),
     feeds,
     feed_modules: feeds.map(key => ({ key, label: MODULE_LABELS[key] ?? key, href: moduleHref(key) })),
     connection_source: p.key === 'google_calendar' ? 'google_oauth_tokens' : p.key === 'microsoft_365' ? 'microsoft_oauth_tokens'

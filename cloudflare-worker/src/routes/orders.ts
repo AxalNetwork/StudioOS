@@ -37,7 +37,8 @@ import {
   type PricedCart,
 } from '../services/orders';
 import { refuse } from '../util/refusal';
-import { aiTopupCreditQuote, recordAiTopupPurchase } from '../services/aiTopups';
+import { recordAiTopupPurchase } from '../services/aiTopups';
+import { tokenPackQuote } from '../services/aiCredits';
 
 const orders = new Hono<{ Bindings: Env }>();
 
@@ -102,6 +103,21 @@ orders.post('/intent', async (c) => {
   }
   const cart = priced as PricedCart;
 
+  // 6 (first). Deterministic order id/ref per (user + items + promo +
+  //    billing_country + nonce) so a refresh is stable/idempotent.
+  const sig = await sha1Hex(
+    `${user.id}:${cartSignature(items)}:${promoCode.toUpperCase()}:${billingCountry ?? ''}:${nonce}`,
+  );
+  const orderId = `ord_${sig}`;
+  const priorById = await c.env.DB.prepare('SELECT order_ref FROM orders WHERE id = ?')
+    .bind(orderId)
+    .first<{ order_ref: string }>();
+
+  // D755 §5: a token pack is bought alone, at face value, with no promo and
+  // within the limits. Judged before the promo, so it never takes the free path.
+  const aiQuote = await tokenPackQuote(c.env, user.id, cart, promoCode, { excludeOrderRef: priorById?.order_ref ?? null });
+  if (aiQuote && 'error' in aiQuote) return c.json({ error: aiQuote.error }, 400);
+
   // 3. Promo discount (percent on subtotal; amount_off capped at subtotal).
   let discountCents = 0;
   let resolvedPromoCode: string | null = null;
@@ -118,15 +134,6 @@ orders.post('/intent', async (c) => {
   const vatCents = Math.round(netAfterDiscount * rate);
   const total = cart.subtotal - discountCents + vatCents;
 
-  const aiQuote = aiTopupCreditQuote(c.env, cart, discountCents);
-
-  // 6. Deterministic order id/ref per (user + items + promo + billing_country
-  //    + nonce) so a refresh is stable/idempotent.
-  const sig = await sha1Hex(
-    `${user.id}:${cartSignature(items)}:${promoCode.toUpperCase()}:${billingCountry ?? ''}:${nonce}`,
-  );
-  const orderId = `ord_${sig}`;
-
   const itemLineOut = cart.lines.map((l) => ({
     price_id: l.price_id,
     product_id: l.product_id,
@@ -141,9 +148,6 @@ orders.post('/intent', async (c) => {
   if (total <= 0) {
     // Reuse the existing paid order's ref if this signature was already
     // fulfilled; otherwise mint a fresh ref.
-    const priorById = await c.env.DB.prepare('SELECT order_ref FROM orders WHERE id = ?')
-      .bind(orderId)
-      .first<{ order_ref: string }>();
     const orderRef = priorById?.order_ref ?? makeOrderRef();
     await insertPaidFreeOrder(c.env, {
       id: orderId,
@@ -174,9 +178,6 @@ orders.post('/intent', async (c) => {
   }
 
   // 8. Paid — create/refresh ONE combined PaymentIntent for `total`.
-  const priorById = await c.env.DB.prepare('SELECT order_ref FROM orders WHERE id = ?')
-    .bind(orderId)
-    .first<{ order_ref: string }>();
   const orderRef = priorById?.order_ref ?? makeOrderRef();
 
   const customer = await ensurePaymentsCustomer(c.env, user);

@@ -1,8 +1,8 @@
 /**
  * D713 (#1778) — a member's own Mercury connection. READ-ONLY, `connect` ONLY.
  *
- * Founders and partners (`personal_roles`) connect their own Mercury
- * organization with a Read Only API token. The row is an ordinary
+ * Founders, partners and, on HQ, investors (`personal_roles`, D752) connect
+ * their own Mercury organization with a Read Only API token. The row is an ordinary
  * `integrations` row, encrypted by the route (`secrets.ts`, KEK_PII); only its
  * four-character preview is ever shown. It is read on demand, inside a request
  * its owner makes (`services/mercuryPersonal.ts`): this module defines no
@@ -16,6 +16,7 @@
  * Each refusal keeps its own status and code (`ConnectRefusal`):
  *   403 support_session_refused    a support session (`impersonated_by`)
  *   403 purpose_not_allowed        a role that holds no personal connection
+ *   403 purpose_not_allowed        an HQ-only personal role off HQ (D752; the route answers first)
  *   400 webhook_not_supported      a `webhook_secret` was sent
  *   400 api_key_required           no token
  *   400 token_rejected             Mercury answered 401 or 403
@@ -33,7 +34,7 @@
  */
 import type { Context } from 'hono';
 import type { Env, User } from '../../types';
-import { ConnectRefusal, audienceFor, getDescriptor, registerProvider, type ConnectInput, type ConnectResult } from '../registry';
+import { ConnectRefusal, audienceFor, getDescriptor, personalHqOnlyOffHq, personalHqOnlySentence, personalMercuryFor, registerProvider, type ConnectInput, type ConnectResult } from '../registry';
 import { selectJwt } from '../../auth';
 import { branchOf } from '../../util/branch';
 import { getOrganization, listAccounts, MercuryClientError } from '../../services/mercury/client';
@@ -137,7 +138,13 @@ async function connect(c: C, user: User, input: ConnectInput): Promise<ConnectRe
     throw new ConnectRefusal(403, 'support_session_refused', 'A support session cannot connect a member\'s bank account.');
   }
   const desc = getDescriptor('mercury');
-  if (!desc || audienceFor(desc, { role: String(user.role || ''), hq: branchOf(c.env) === null }) !== 'personal') {
+  const viewer = { role: String(user.role || ''), hq: branchOf(c.env) === null };
+  // D752, defence in depth: `/connect` refuses this caller before it gets here.
+  if (desc && personalHqOnlyOffHq(desc, viewer)) {
+    throw new ConnectRefusal(403, 'purpose_not_allowed', personalHqOnlySentence(desc.display_name));
+  }
+  const variant = personalMercuryFor(user.role);
+  if (!desc || !variant || audienceFor(desc, viewer) !== 'personal') {
     throw new ConnectRefusal(403, 'purpose_not_allowed', 'Your role does not hold a personal Mercury connection.');
   }
   if (input.webhook_secret) {
@@ -165,7 +172,7 @@ async function connect(c: C, user: User, input: ConnectInput): Promise<ConnectRe
     credentials: { api_key: token },
     external_account_id: read.org.id,
     external_account_name: read.org.legal_name,
-    capabilities: ['Revenue import', 'Payment matching'],
+    capabilities: [...variant.capabilities],
     config: { read_only: read.permission === 'read_only' ? 'reported' : 'confirmed' },
   };
 }
