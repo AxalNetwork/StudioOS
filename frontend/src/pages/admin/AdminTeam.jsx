@@ -14,6 +14,10 @@ import { useToast } from '../../components/useToast';
 import ToastMessage from '../../components/ToastMessage';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 import { appOrigin } from '../../lib/branchHost';
+import { useAuth } from '../../hooks/useAuthSync';
+import { isSuperAdminUser } from '../../lib/shellRole';
+import { RailFrame, WorkerRail } from '../../ui';
+import useRecordCrumb from './useRecordCrumb';
 
 const EMPTY = {
   slug: '',
@@ -90,6 +94,8 @@ function FocusAreasInput({ value, onChange }) {
 function MemberEditor({ initial, onClose, onSaved, notify }) {
   useEscapeClose(onClose);
   const isNew = !initial?.id;
+  // D775 (#2101): the member being edited is the rail's record; a new one has none yet.
+  useRecordCrumb(isNew ? null : initial?.name, 'team-member', initial?.id);
   const [form, setForm] = useState({ ...EMPTY, ...(initial || {}) });
   const [busy, setBusy] = useState(false);
   const [photoBusy, setPhotoBusy] = useState(false);
@@ -300,6 +306,7 @@ function MemberEditor({ initial, onClose, onSaved, notify }) {
 }
 
 export default function AdminTeam() {
+  const superAdmin = isSuperAdminUser(useAuth()?.user);
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null); // null = closed, {} = new, {...row} = edit
@@ -358,7 +365,12 @@ export default function AdminTeam() {
 
   const sorted = useMemo(() => members, [members]);
 
+  // D775 (#2101): H25 drew no rail. A plain admin edits the public team page too, so the rail takes the viewer's tier, as ContractsDesk does.
+  const railProps = { note: 'Eadwyn reads the team members listed on this page. The public page changes only when you save.' };
+  const rail = superAdmin ? <WorkerRail {...railProps} workspace="Public team page" role="super_admin" data-testid="hq-team-page-rail" /> : <WorkerRail {...railProps} workspace="Public team page" role="admin" data-testid="admin-team-page-rail" />;
+
   return (
+    <RailFrame rail={rail} data-testid="public-team-page">
     <div className="max-w-6xl mx-auto px-6 py-8 dark:text-gray-100">
       <ToastMessage toast={toast} onDismiss={dismissToast} />
       <header className="flex items-center justify-between mb-6">
@@ -467,5 +479,6 @@ export default function AdminTeam() {
         />
       )}
     </div>
+    </RailFrame>
   );
 }

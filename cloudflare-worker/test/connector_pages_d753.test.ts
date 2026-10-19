@@ -90,7 +90,7 @@ const NOT_ROWS = new Set(['linkedin', ...CHANNELS]);
 
 /** Each connector's own files. `services/notify.ts` holds Slack's one write but also sends mail, so it is not scanned for coverage. */
 const SOURCES: Record<string, string[]> = {
-  github: ['integrations/providers/github.ts'],
+  github: ['integrations/providers/github.ts', 'integrations/providers/github/roadmap.ts', 'integrations/providers/github/solutionDesign.ts', 'integrations/providers/github/mvp.ts'],
   mercury: ['services/mercury/client.ts'],
   slack: ['integrations/providers/slack.ts', 'services/notify.ts'],
   zoom: ['services/channels/zoom.ts'],

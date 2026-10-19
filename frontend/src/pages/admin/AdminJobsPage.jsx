@@ -7,6 +7,7 @@ import { Link } from 'react-router-dom';
 import { Briefcase, MapPin, Globe, Users, CheckCircle2, XCircle, EyeOff, Loader2 } from 'lucide-react';
 import { adminJobs } from '../../lib/api';
 import { useToast } from '../../components/useToast';
+import AdminBoardFrame from './AdminBoardFrame';
 
 const STATUS_TABS = [
   { id: 'pending_review', label: 'In review' },
@@ -27,7 +28,7 @@ const EMPLOYMENT_LABELS = {
   full_time: 'Full-time', part_time: 'Part-time', intern: 'Internship', contract: 'Contract', fractional: 'Fractional',
 };
 
-export default function AdminJobsPage() {
+function AdminJobsPageBody() {
   const { toast, showToast } = useToast();
   const [statusFilter, setStatusFilter] = useState('pending_review');
   const [rows, setRows] = useState([]);
@@ -172,5 +173,14 @@ export default function AdminJobsPage() {
         </ul>
       )}
     </div>
+  );
+}
+
+// D774 (#2100): S16 drew no rail. The board's page, in the Admin boards' frame.
+export default function AdminJobsPage() {
+  return (
+    <AdminBoardFrame workspace="Jobs" note="Eadwyn reads the jobs listed here. A job is approved or published only when you do it." data-testid="admin-board-jobs">
+      <AdminJobsPageBody />
+    </AdminBoardFrame>
   );
 }

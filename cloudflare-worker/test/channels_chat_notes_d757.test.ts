@@ -360,7 +360,7 @@ test('replayed withdrawal preserves the original cleanup timestamp and writes no
   assert.equal(f.db.prepare("SELECT COUNT(*) n FROM activity_logs WHERE action = 'interview_consent_withdrawn'").get()!.n, audits);
 });
 
-test('Manual mode can force text Summary and Structure while voice audio waits, but withdrawal refuses both', async t => {
+test('Manual mode skips the automatic run and, since D765, refuses text Summary and Structure; with AI on they run while voice audio waits, and withdrawal refuses both', async t => {
   const f = await fixture(t, 'telegram', false); await chunk(f);
   f.db.prepare("INSERT INTO ai_rail_preferences(uid, user_id, section, task, mode) VALUES ('manual-fixture', ?, 'validate', '', 'manual')").run(ME);
   assert.equal((await runSessionStructureJob(f.env, jobs(f)[0].payload))?.status, 'skipped');
@@ -370,6 +370,14 @@ test('Manual mode can force text Summary and Structure while voice audio waits, 
     .sign(new TextEncoder().encode(JWT_SECRET));
   const request = (action: string) => app.request(`/api/founder/validate/sessions/${f.sessionId}/${action}`,
     { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: '{}' }, f.env);
+  // D765 (#2090), D720 §6: the mode row is the page's AI switch, so the
+  // founder's presses are refused assist_off too, and no model runs.
+  for (const action of ['summarise', 'structure']) {
+    const r = await request(action); assert.equal(r.status, 403, action);
+    assert.equal((await r.json() as any).refusal, 'assist_off');
+  }
+  assert.equal(f.modelCalls(), 0);
+  f.db.prepare("DELETE FROM ai_rail_preferences WHERE uid = 'manual-fixture'").run();
   for (const action of ['summarise', 'structure']) { const r = await request(action); assert.equal(r.status, 201, await r.text()); }
   assert.ok(f.modelCalls() > 0);
   f.db.prepare("UPDATE interview_sessions SET consent_status = 'declined' WHERE id = ?").run(f.sessionId);

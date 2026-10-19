@@ -15,6 +15,7 @@ import { Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useToast } from '../../components/useToast';
 import ToastMessage from '../../components/ToastMessage';
+import AdminBoardFrame from './AdminBoardFrame';
 
 const STATUSES = [
   'submitted', 'under_review', 'more_info_needed', 'qualified',
@@ -36,7 +37,7 @@ const LABELS = {
   closed: 'Closed',
 };
 
-export default function ReferralReview() {
+function ReferralReviewBody() {
   const { toast, success, error: toastError, dismissToast } = useToast();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -221,5 +222,14 @@ function ReviewForm({ row, onDone, onError }) {
         </button>
       </div>
     </div>
+  );
+}
+
+// D774 (#2100): S9 drew no rail. The board's page, in the Admin boards' frame.
+export default function ReferralReview() {
+  return (
+    <AdminBoardFrame workspace="Referrals" note="Eadwyn reads the referrals waiting here. A referral is approved or rejected only when you do it." data-testid="admin-board-referrals">
+      <ReferralReviewBody />
+    </AdminBoardFrame>
   );
 }

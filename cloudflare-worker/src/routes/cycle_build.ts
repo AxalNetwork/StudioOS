@@ -5,6 +5,7 @@ import { requireAuth } from '../auth';
 import { CONNECTOR_METADATA, getDescriptor } from '../integrations/registry';
 import { MODULE_LABELS, fedCounts } from '../integrations/fed';
 import { syncArrivals, syncArrivalsText, syncErrorWords } from '../integrations/githubFeeds';
+import { acceptDesignProposal, dismissDesignProposal, solutionDesignFromCode } from '../integrations/providers/github/solutionDesign';
 import { validateConnectorSettings } from '../integrations/connectorRules';
 import { canReadBoard, canWrite } from './_founder_validate_helpers';
 import type { Card } from '../services/cycleCards';
@@ -205,7 +206,20 @@ async function solution(env: Env, p: Project): Promise<ModuleRead> {
     cols: [['feature', 'Feature'], ['pain_theme', 'Pain theme'], ['hypothesis', 'Hypothesis'], ['impact', 'Impact'], ['effort', 'Effort']].map(([key, label]) => ({ key, label })), rows: featureRows,
     list: { filters: [{ key: 'linked', label: 'Linked', options: options([['yes', 'Linked'], ['no', 'Unlinked']]) }, { key: 'impact', label: 'Impact', options: levels }, { key: 'effort', label: 'Effort', options: levels }],
       sort: { key: 'impact', label: 'Impact' }, orders: { impact: ['high', 'medium', 'low'], effort: ['low', 'medium', 'high'] } },
-    facts: { features: features.length, risks } };
+    facts: { features: features.length, risks }, parts: { from_code: await fromCode(env, p.id) } };
+}
+
+/**
+ * D782 (#2114): what GitHub brought to Solution design — Built with, the
+ * proposals waiting for Accept or Dismiss, and the accepted notes. Its own
+ * failure leaves the features and risks readable.
+ */
+async function fromCode(env: Env, projectId: number) {
+  try { return { state: 'ok', ...(await solutionDesignFromCode(env, projectId)) }; }
+  catch (error) {
+    console.error('[cycle_build] solution_design_* read failed', error);
+    return { state: 'unreadable', reason: 'What GitHub proposed could not be read.' };
+  }
 }
 
 async function prototype(env: Env, p: Project): Promise<ModuleRead> {
@@ -244,7 +258,60 @@ async function prototype(env: Env, p: Project): Promise<ModuleRead> {
     list: { filters: [{ key: 'state', label: 'State', options: options(Object.entries(MUST_LABEL)) },
       { key: 'hypothesis', label: 'Hypothesis', options: optionsOf(mustRows, 'hypothesis', id => id === 'none' ? 'No hypothesis' : tests.get(id) ?? id) }],
     sort: { key: 'state', label: 'State' }, orders: { state: ['blocked', 'in_progress', 'not_started', 'done'] } },
-    facts: { done: done.length, total: must.length, target_date: p.mvp_target_date } };
+    facts: { done: done.length, total: must.length, target_date: p.mvp_target_date },
+    parts: { github: await prototypeGithub(env, p) } };
+}
+
+/** GitHub's state for a fed must-have, in the module's words (D782, #2112). */
+const PR_STATE_LABEL: Record<string, string> = { planned: 'Planned', in_progress: 'In progress', in_review: 'In review', built: 'Built', dropped: 'Dropped' };
+/** How many releases' checks the module lists, newest first; `releases_total` gives the rest's count. */
+export const RELEASE_CHECKS_SHOWN = 12;
+
+/**
+ * D782 (#2112): Prototype / MVP's "From GitHub" part, from what the GitHub sync
+ * wrote (`integrations/providers/github/mvp.ts`):
+ *   - `must_haves`: each fed must-have with GitHub's state and its pull request
+ *     link, a Dropped one included (it has left the must-haves; marking it a
+ *     must-have again undoes that);
+ *   - `releases`: each release's checks, newest first: the must-haves in it,
+ *     then those not in it.
+ * Its own read: a store this part cannot read makes the part Unreadable and
+ * leaves the must-haves' table as it is.
+ */
+async function prototypeGithub(env: Env, p: Project) {
+  try {
+    const fed = rows(await env.DB.prepare(
+      `SELECT id, title, pr_state, pr_url, is_must_have FROM mvp_features
+        WHERE project_id = ? AND pr_state IS NOT NULL ORDER BY sort_order, id`,
+    ).bind(p.id).all<any>());
+    const checks = rows(await env.DB.prepare(
+      `SELECT r.id AS release_id, r.repository, r.tag, r.name, r.published_at, r.url, k.in_release, f.id AS feature_id, f.title
+         FROM mvp_release_checks k
+         JOIN mvp_features f ON f.id = k.feature_id AND f.project_id = ?
+         JOIN roadmap_releases r ON r.id = k.release_id AND r.project_id = f.project_id
+        WHERE k.in_release IS NOT NULL
+        ORDER BY r.published_at IS NULL, r.published_at DESC, r.id DESC, f.sort_order, f.id`,
+    ).bind(p.id).all<any>());
+    const byRelease = new Map<number, any>();
+    for (const c of checks) {
+      if (!byRelease.has(c.release_id)) {
+        byRelease.set(c.release_id, { id: c.release_id, repository: c.repository, tag: c.tag, name: c.name ?? null, published_at: c.published_at ?? null,
+          url: c.url ?? null, in: [] as Array<{ id: number; title: string }>, not_in: [] as Array<{ id: number; title: string }> });
+      }
+      byRelease.get(c.release_id)[number(c.in_release) === 1 ? 'in' : 'not_in'].push({ id: c.feature_id, title: c.title });
+    }
+    const releases = [...byRelease.values()];
+    const empty = !fed.length && !releases.length;
+    return {
+      state: empty ? 'empty' : 'ok',
+      must_haves: fed.map(f => ({ id: f.id, title: f.title, state: f.pr_state, label: PR_STATE_LABEL[f.pr_state] ?? null, url: f.pr_url ?? null, must_have: number(f.is_must_have) === 1 })),
+      releases: releases.slice(0, RELEASE_CHECKS_SHOWN), releases_total: releases.length,
+      reason: empty ? 'No pull request or release from GitHub yet. Connect GitHub and sync to bring them in.' : null,
+    };
+  } catch (error) {
+    console.error('[cycle_build] mvp pull request state read failed', error);
+    return { state: 'unreadable', must_haves: [], releases: [], releases_total: null, reason: 'GitHub\'s pull requests and release checks could not be read.' };
+  }
 }
 
 async function roadmap(env: Env, p: Project): Promise<ModuleRead> {
@@ -281,7 +348,64 @@ async function roadmap(env: Env, p: Project): Promise<ModuleRead> {
     rows: itemRows,
     list: { filters: [{ key: 'column', label: 'Column', options: options(Object.entries(COLUMN_LABEL)) }, { key: 'theme', label: 'Theme', options: optionsOf(itemRows, 'theme') }, { key: 'kpi', label: 'KPI', options: optionsOf(itemRows, 'kpi') }],
       sort: { key: 'column', label: 'Column' }, orders: { column: ['now', 'next', 'later', 'done'] } },
-    facts: { items: items.length, shipped_this_month: months.get(thisMonth)?.size ?? 0 } };
+    facts: { items: items.length, shipped_this_month: months.get(thisMonth)?.size ?? 0 },
+    parts: { github: await roadmapGithub(env, p) } };
+}
+
+/** How many releases the strip shows, newest first; `releases_total` gives the rest's count. */
+export const RELEASES_SHOWN = 12;
+/** Items named under one release in the strip; `shipped` gives the full count. */
+const SHIPPED_NAMED = 10;
+
+/**
+ * D782 (#2111): Product roadmap's "From GitHub" part, from what the GitHub sync
+ * wrote (`integrations/providers/github/roadmap.ts`):
+ *   - `groups`: each milestone title its items carry, with the milestone's due
+ *     date as the group's target, soonest first, and each item's Shipped mark;
+ *   - `releases`: the release rows, newest first, each with the items it shipped.
+ * Its own read: a store this part cannot read makes the part Unreadable and
+ * leaves the roadmap's table as it is.
+ */
+async function roadmapGithub(env: Env, p: Project) {
+  try {
+    const marked = rows(await env.DB.prepare(
+      `SELECT o.id, o.objective, o.kanban_status, o.milestone_title, o.milestone_due, o.shipped_release_id,
+              r.tag AS shipped_tag, r.url AS shipped_url
+         FROM roadmap_okrs o LEFT JOIN roadmap_releases r ON r.id = o.shipped_release_id AND r.project_id = o.project_id
+        WHERE o.project_id = ? AND (o.milestone_title IS NOT NULL OR o.shipped_release_id IS NOT NULL)
+        ORDER BY o.sort_order, o.id`,
+    ).bind(p.id).all<any>());
+    const releases = rows(await env.DB.prepare(
+      `SELECT id, repository, tag, name, published_at, url, prerelease FROM roadmap_releases WHERE project_id = ?
+        ORDER BY published_at IS NULL, published_at DESC, id DESC LIMIT ?`,
+    ).bind(p.id, RELEASES_SHOWN).all<any>());
+    const total = number((await env.DB.prepare('SELECT COUNT(*) AS n FROM roadmap_releases WHERE project_id = ?').bind(p.id).first<{ n: number }>())?.n);
+    const item = (o: any) => ({
+      id: o.id, title: o.objective, column: COLUMN_LABEL[o.kanban_status] ?? null,
+      shipped: o.shipped_release_id != null && o.shipped_tag ? { tag: o.shipped_tag, url: o.shipped_url ?? null } : null,
+    });
+    const byTitle = new Map<string, { title: string; due: string | null; items: ReturnType<typeof item>[] }>();
+    for (const o of marked) {
+      if (!o.milestone_title) continue;
+      if (!byTitle.has(o.milestone_title)) byTitle.set(o.milestone_title, { title: o.milestone_title, due: null, items: [] });
+      const g = byTitle.get(o.milestone_title)!;
+      if (!g.due && o.milestone_due) g.due = o.milestone_due;
+      g.items.push(item(o));
+    }
+    const groups = [...byTitle.values()].sort((a, b) => (a.due ?? '9999').localeCompare(b.due ?? '9999') || a.title.localeCompare(b.title))
+      .map(g => ({ ...g, shipped: g.items.filter(i => i.shipped).length }));
+    const strip = releases.map(r => {
+      const shipped = marked.filter(o => o.shipped_release_id === r.id);
+      return { id: r.id, repository: r.repository, tag: r.tag, name: r.name ?? null, published_at: r.published_at ?? null, url: r.url ?? null,
+        prerelease: r.prerelease === 1, shipped: shipped.length, items: shipped.slice(0, SHIPPED_NAMED).map(o => ({ id: o.id, title: o.objective })) };
+    });
+    const empty = !groups.length && !total;
+    return { state: empty ? 'empty' : 'ok', groups, releases: strip, releases_total: total,
+      reason: empty ? 'No milestone or release from GitHub yet. Connect GitHub and sync to bring them in.' : null };
+  } catch (error) {
+    console.error('[cycle_build] roadmap_releases read failed', error);
+    return { state: 'unreadable', groups: [], releases: [], releases_total: null, reason: 'GitHub\'s milestones and releases could not be read.' };
+  }
 }
 
 /**
@@ -809,6 +933,33 @@ app.post('/features', async c => {
   ]);
   const row = await c.env.DB.prepare('SELECT MAX(id) AS id FROM mvp_features WHERE project_id = ?').bind(ctx.project.id).first<{ id: number }>();
   return c.json({ id: Number(row?.id) }, 201);
+});
+
+// D782 (#2114): the founder's decision on a proposal GitHub made. Nothing is written without Accept.
+function proposalId(c: any): number | null {
+  const raw = c.req.param('id');
+  return /^[1-9][0-9]{0,15}$/.test(raw) && Number.isSafeInteger(Number(raw)) ? Number(raw) : null;
+}
+const DECIDED = { not_found: [404, 'Proposal not found'], decided: [409, 'That proposal was already accepted or dismissed.'] } as const;
+
+app.post('/solution-design/proposals/:id/accept', async c => {
+  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  const id = proposalId(c); if (id == null) return c.json({ detail: 'Proposal not found' }, 404);
+  const out = await acceptDesignProposal(c.env, ctx.project.id, id, ctx.user.id, [logCycleWriteStatement(c.env, {
+    projectId: ctx.project.id, userId: ctx.user.id, cycle: 'build', module: 'solution-design', entityId: null,
+    action: 'build_design_note_accepted', summary: 'Architecture note accepted from GitHub' })]);
+  if (out !== 'ok') return c.json({ detail: DECIDED[out][1] }, DECIDED[out][0]);
+  return c.json({ ok: true });
+});
+
+app.post('/solution-design/proposals/:id/dismiss', async c => {
+  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  const id = proposalId(c); if (id == null) return c.json({ detail: 'Proposal not found' }, 404);
+  const out = await dismissDesignProposal(c.env, ctx.project.id, id, ctx.user.id, [logCycleWriteStatement(c.env, {
+    projectId: ctx.project.id, userId: ctx.user.id, cycle: 'build', module: 'solution-design', entityId: null,
+    action: 'build_design_proposal_dismissed', summary: 'Architecture proposal from GitHub dismissed' })]);
+  if (out !== 'ok') return c.json({ detail: DECIDED[out][1] }, DECIDED[out][0]);
+  return c.json({ ok: true });
 });
 
 app.post('/must-haves', async c => {

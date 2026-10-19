@@ -15,6 +15,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Card, Unreadable } from '../../ui';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
+import AdminBoardFrame from './AdminBoardFrame';
 
 const PERSONA_LABEL = { founder: 'Founders', investor: 'Investors', partner: 'Partners', advisor: 'Advisors', coach: 'Coaches' };
 const STATE_LABEL = {
@@ -163,7 +164,7 @@ export function TrendsView({ data }) {
   );
 }
 
-export default function AdminProfilingTrends() {
+function AdminProfilingTrendsBody() {
   const [months, setMonths] = useState(12);
   const [state, setState] = useState({ status: 'loading', data: null });
   const load = useCallback(() => {
@@ -199,5 +200,14 @@ export default function AdminProfilingTrends() {
         {state.status === 'ready' && <TrendsView data={state.data} />}
       </div>
     </div>
+  );
+}
+
+// D774 (#2100): S23 drew no rail. The board's page, in the Admin boards' frame.
+export default function AdminProfilingTrends() {
+  return (
+    <AdminBoardFrame workspace="Profiling trends" note="Eadwyn reads the trends on this page. It changes nothing." data-testid="admin-board-profiling-trends">
+      <AdminProfilingTrendsBody />
+    </AdminBoardFrame>
   );
 }
