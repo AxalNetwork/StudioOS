@@ -21,6 +21,10 @@
  *   · ASK. An answer must cite at least one span of the transcript; one that
  *     cites nothing is refused rather than shown.
  *
+ * A pain may name one of the founder's themes by `pain_group_id`, checked
+ * against the project's own groups the way `evidence` is, and never a new one:
+ * the parse keeps no field a theme name could travel in (D757, #1897).
+ *
  * Severity is three-level (Severe, Real, Mild), as the canvas draws it and as
  * `interview_pain_severities` stores it since #1472 (D659): accept writes the
  * level itself.
@@ -118,10 +122,15 @@ export const PLACEMENT_KINDS: Record<PlacementKind, KindSpec> = {
     slug: 'problem-discovery',
     module: 'problem_discovery',
     writer: true,
-    parse: (p) => {
+    parse: (p, ctx) => {
       const phrase = str(p.phrase, 120);
       const severity = oneOf(p.severity, PAIN_SEVERITY_LEVELS);
-      return phrase && normPhrase(phrase) && severity ? { phrase, severity } : null;
+      if (!phrase || !normPhrase(phrase) || !severity) return null;
+      // D757 (#1897): a theme is optional, and only ever one of the founder's.
+      if (p.pain_group_id == null) return { phrase, severity };
+      const painGroupId = posInt(p.pain_group_id);
+      if (!painGroupId || !ctx.painGroups.some((g) => g.id === painGroupId)) return null;
+      return { phrase, severity, pain_group_id: painGroupId };
     },
     key: (p) => `pain:${normPhrase(String(p.phrase))}`,
   },
@@ -411,7 +420,8 @@ const AMOUNT = '"amount_cents": <optional whole cents>, "currency": "<optional, 
 
 /** Each kind's payload line, as the prompt teaches it. */
 const KIND_LINES: Record<PlacementKind, string> = {
-  pain_severity: '- pain_severity: {"phrase": "<the pain in a few words>", "severity": "severe" | "real" | "mild"}',
+  pain_severity: '- pain_severity: {"phrase": "<the pain in a few words>", "severity": "severe" | "real" | "mild", "pain_group_id": <optional: the id of the pain group it belongs to>}\n'
+    + '    Give a pain_group_id only when the pain belongs to a pain group in the list. Never invent a group or name a new one: leave pain_group_id out instead.',
   icp_fit: '- icp_fit: {"fit": "strong" | "partial" | "none", "reason": "<one sentence>"}',
   segment: '- segment: {"name": "<the customer segment this person belongs to>"}',
   firmographic: '- firmographic: {"attribute": "role" | "company" | "company_size" | "industry" | "geography" | "stage" | "tools", "value": "<what they said>"}',
