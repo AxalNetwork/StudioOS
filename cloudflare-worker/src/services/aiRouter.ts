@@ -79,7 +79,7 @@ export type TaskClass =
   | 'image_screen'
   | 'image_alt_text'
   // D766 (#2094) PR 3 — Build › Brand's logo, which called FLUX.1 Schnell
-  // directly; a member's press, drawn through D761's image shape.
+  // directly. Now a member's press, drawn through D761's image shape.
   | 'brand_logo'
   // D764 (#2089) — the rail's fourteen kinds of work, one task each. The
   // page's row in `ai/railMatrix.json` names the models a member may pick;
