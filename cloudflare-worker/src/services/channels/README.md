@@ -29,7 +29,29 @@ The routes, the webhook pipeline and the voice-note job for both live in
 `../../routes/channels.ts`. The meetings routes and the public Zoom webhook
 live in `../../routes/founder_validate_meetings.ts`.
 
-## Rules for adding here
+## Telegram after D756
+
+D756 (#1872) switches the Telegram Business bot on. The owner's steps, the
+real-device check, rotation and the off switch are in
+`documentation/operations/TELEGRAM.md`. As decided, and landing task by task
+(the runbook's table says which PR carries each):
+
+- **Media.** The normaliser reads `voice`, `audio`, `video_note` and an audio
+  `document`, carrying the kind, the declared size and the declared MIME type
+  in the encrypted voice reference (no migration). A note over 5 MB, the
+  recorder's chunk limit, is refused on its declared size before any download,
+  through one bounded, streamed download helper in `providerHttp.ts`. Round
+  videos wait as placeholders and are not transcribed yet (#1896).
+- **Consent.** No note of a chat is downloaded until the interviewee answers
+  YES in the chat, through D754's provider-neutral consent store. Only the
+  chat's own user counts, within 7 days of the notice; NO keeps the notes
+  undownloaded, STOP stops later downloads. Telegram offers no member
+  attestation, because the member can always paste the notice (#1977).
+- **Audio.** After YES, each note is stored like the recorder's audio, as a
+  chunk under `validate-audio/`, transcribed once with its speaker taken from
+  the side, and kept until the member deletes the session (#1978). Until
+  then, D684's text-only behaviour stands.
+
 
 - An adapter (`telegram`, `whatsapp`, `zoom`, `googleMeet`) verifies a request,
   normalises it into `types.ts` shapes, and talks to its provider. It never

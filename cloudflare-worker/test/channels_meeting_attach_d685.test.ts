@@ -6,6 +6,7 @@ import { createHmac } from 'node:crypto';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
+import { applyEngineSchema } from './_engine_schema.mjs';
 import { tableFromBaseline } from './_baseline.mjs';
 import { memKV } from './_mem_kv.mjs';
 import meetingsRouter, { zoomWebhook } from '../src/routes/founder_validate_meetings.ts';
@@ -61,6 +62,8 @@ function world() {
     '440_validate_cycle_stores.sql', '446_interview_structure_receipts.sql', '447_assistant_interviews.sql',
     '449_interview_channels.sql', '457_integrations_last_error_at.sql', '458_channel_link_consent.sql',
     '488_channel_consents.sql']) db.exec(migration(name));
+  // D757: the Validate engine's schema (487, 465, 453 and the re-scope's columns).
+  applyEngineSchema(db);
   const jobs: unknown[] = [];
   const env: any = { DB, ENVIRONMENT: 'development', JWT_SECRET: SIGNING_KEY, KEK_PII: 'k'.repeat(48),
     ZOOM_CLIENT_ID: 'zoom-fixture-client', ZOOM_CLIENT_SECRET: 'zoom-fixture-secret', ZOOM_WEBHOOK_SECRET_TOKEN: WEBHOOK_KEY,
