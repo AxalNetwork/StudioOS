@@ -12,7 +12,11 @@
  * moved here so the record's `delete` action and that route are one writer.
  * The route keeps its own auth and calls it.
  *
- * Neither decides who may write: the caller has checked `canWrite` (or the
+ * `addInterviewPain` (D757, #1897) is an accepted pain's mention: the phrase
+ * appended to the interview's `pains_json`, as a guarded statement its caller
+ * batches with the severity and the theme.
+ *
+ * None decides who may write: the caller has checked `canWrite` (or the
  * route's `ensureCanEdit`) for the venture, and each statement is scoped to
  * the interview's own `project_id`.
  */
@@ -20,7 +24,9 @@ import type { Env } from '../types';
 import { logCycleWrite } from './cycleActivity';
 import { deleteSession, type SessionRow } from './interviewSessions';
 import { presentTables } from './interviewFindings';
+import { normPhrase } from './painGroups';
 import { WriterError } from './validateWriters';
+import { MAX_PAIN_PHRASE } from '../routes/_founder_validate_writes';
 
 const detail = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v.trim().slice(0, 200) : null);
 
@@ -135,4 +141,60 @@ export async function deleteInterview(
     entityId: input.interviewId, action: 'interview_deleted', summary: `Interview ${input.interviewId} deleted`,
   });
   return { deleted: input.interviewId, sessions_deleted: (owned.results || []).length };
+}
+
+export type AddedPain = {
+  norm: string;
+  display: string;
+  added: boolean;
+  /** What the row holds once the batch has run; the guard the batch's other statements carry. */
+  painsJson: string | null;
+  /** The guarded UPDATE when the phrase is new, else nothing. */
+  statements: ReturnType<Env['DB']['prepare']>[];
+};
+
+/**
+ * D757 (#1897) — one pain mention, deduplicated by `normPhrase`.
+ *
+ * The list is a JSON blob and `normPhrase` is a regex SQL cannot run, so this
+ * reads first and returns a statement guarded on the value it read: when the
+ * founder's form or a second Accept changes the list in between, the UPDATE
+ * writes nothing and its caller's batch can tell. A phrase the interview
+ * already holds, in any wording, appends nothing and keeps the stored wording.
+ *
+ * A stored value that is not a JSON array is refused, never overwritten:
+ * `safeParseStrings` would read it as empty and the write would erase the
+ * founder's text.
+ */
+export async function addInterviewPain(
+  env: Env,
+  input: { projectId: number; interviewId: number; phrase: string },
+): Promise<AddedPain> {
+  const display = String(input.phrase ?? '').trim().replace(/\s+/g, ' ').slice(0, MAX_PAIN_PHRASE);
+  const norm = normPhrase(display);
+  if (!norm) throw new WriterError(400, 'A pain needs a phrase');
+  const row = await env.DB.prepare('SELECT pains_json FROM discovery_interviews WHERE id = ? AND project_id = ?')
+    .bind(input.interviewId, input.projectId).first<{ pains_json: string | null }>();
+  if (!row) throw new WriterError(404, 'Interview not found on this project');
+  const raw = row.pains_json ?? null;
+  let stored: unknown[] = [];
+  if (raw != null && raw.trim() !== '') {
+    let parsed: unknown;
+    try { parsed = JSON.parse(raw); } catch { parsed = null; }
+    if (!Array.isArray(parsed)) {
+      throw new WriterError(409, "This interview's pains could not be read, so nothing was added. Open the interview and save its pains first.");
+    }
+    stored = parsed;
+  }
+  const same = stored.find((x) => normPhrase(typeof x === 'string' ? x : String(x ?? '')) === norm);
+  if (same !== undefined) {
+    return { norm, display: typeof same === 'string' ? same.trim() : String(same), added: false, painsJson: raw, statements: [] };
+  }
+  const next = JSON.stringify([...stored, display]);
+  return {
+    norm, display, added: true, painsJson: next,
+    statements: [env.DB.prepare(
+      "UPDATE discovery_interviews SET pains_json = ?, updated_at = datetime('now') WHERE id = ? AND project_id = ? AND pains_json IS ?",
+    ).bind(next, input.interviewId, input.projectId, raw)],
+  };
 }

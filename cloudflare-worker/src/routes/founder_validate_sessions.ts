@@ -371,7 +371,8 @@ sessions.get('/sessions/:id', async (c) => {
   if (s instanceof Response) return s;
   const [segments, marks, chunks] = await Promise.all([
     c.env.DB.prepare(
-      `SELECT id, source, start_ms, end_ms, speaker_label, text, model FROM interview_transcript_segments
+      // D757 (#1927): `created_at` is a chat message's time, for "Heard in".
+      `SELECT id, source, start_ms, end_ms, speaker_label, text, model, created_at FROM interview_transcript_segments
         WHERE session_id = ? ORDER BY source, COALESCE(start_ms, 0), id`,
     ).bind(s.session.id).all(),
     c.env.DB.prepare('SELECT id, offset_ms, label, created_at FROM interview_session_marks WHERE session_id = ? ORDER BY offset_ms')

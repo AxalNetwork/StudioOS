@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useActiveRecording, useNow } from '../../contexts/ActiveRecordingContext';
-import { pillVariant, recovering, reviewPath } from '../../lib/activeRecording';
+import { finishLine, pillVariant, recovering, reviewPath } from '../../lib/activeRecording';
 import { useAuth } from '../../hooks/useAuthSync';
 import useAssistMode from '../../hooks/useAssistMode';
 import { prefersReducedMotion } from '../../components/discovery/RingViz';
@@ -17,7 +17,8 @@ import { focusPillOnShow } from './RecordingPill';
  * × "Exit full screen" goes back to where the founder was and leaves the
  * recording running: the pill keeps it in the corner (`RecordingPill.jsx`).
  * When processing finishes here, the founder lands on Customer research
- * (D694); minimised, the ready pill offers the same destination.
+ * (D694), or on the session when Axal drafted its summary (D757, #1927);
+ * minimised, the ready pill offers the same destination.
  */
 
 
@@ -26,7 +27,7 @@ export function liveRedirect(state, sessionParam) {
   const sid = state?.session?.id;
   const asked = sessionParam ? String(sessionParam) : null;
   if (state?.phase === 'discarded') return reviewPath(state?.session);
-  if (sid != null && (!asked || asked === String(sid))) return state.phase === 'ready' ? reviewPath(state.session) : null;
+  if (sid != null && (!asked || asked === String(sid))) return state.phase === 'ready' ? (finishLine(state)?.href || reviewPath(state.session)) : null;
   if (asked && /^\d+$/.test(asked)) return `/validate/session/${asked}`;
   return '/validate';
 }
