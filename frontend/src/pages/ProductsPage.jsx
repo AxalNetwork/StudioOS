@@ -16,6 +16,12 @@
 // The Token packs section, its footer and the pack filter are CR7's
 // (TokenPacksSection.jsx, #1985).
 //
+// D755 §13 (#1915): a visitor (no session) sees the plans and the Token packs.
+// Their plan cards come from the public read, since the catalog needs a
+// session; Subscribe and Preview go to sign-in. The promo box, the cart, the
+// add-ons, active licences, the product modal and the admin tools are not
+// drawn, and none of their reads is made.
+//
 // Prices ALWAYS come from GET /catalog/products — never hardcoded, never
 // client-computed. Subscriptions bypass the cart (one-click Stripe via the
 // slide-over); one-time items go through the cart → /checkout.
@@ -40,7 +46,7 @@ import {
   formatMoney, formatDate, AUDIENCE_FILTERS, priceCycle, isBundleProduct,
 } from '../components/products/productsShared';
 import {
-  planAi, planForProduct, planOf, freePlans,
+  planAi, planForProduct, planOf, freePlans, visitorPlanProducts, VISITOR_SIGN_IN,
 } from '../lib/plansPricing';
 
 const REDEEM_REASONS = {
@@ -278,12 +284,13 @@ export default function ProductsPage() {
   const { productId } = useParams();
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
+  const member = Boolean(user);
   const deepLinkCode = searchParams.get('code') || '';
 
   const cart = useCart();
   const [tokenPacks, setTokenPacks] = useState([]);
   // D755: the public plans-and-packs read and the member's own allowance (its licence names "Your plan").
-  const { pricing, budget } = usePricingReads();
+  const { pricing, budget } = usePricingReads({ member });
   const licence = budget.status === 'ready' && typeof budget.data?.licence === 'string' ? budget.data.licence : null;
   const free = useMemo(() => freePlans(pricing), [pricing]);
   const [products, setProducts] = useState(null);   // null = loading
@@ -309,9 +316,10 @@ export default function ProductsPage() {
   }, []);
 
   useEffect(() => {
+    if (!member) return; // the catalog and the licences need a session (§13)
     loadCatalog();
     refreshUnlocks();
-  }, [loadCatalog, refreshUnlocks]);
+  }, [member, loadCatalog, refreshUnlocks]);
 
   const showToast = useCallback((msg) => {
     setToast(msg);
@@ -345,6 +353,9 @@ export default function ProductsPage() {
     setModalIntent({ qty: qty || 1, checkout: true });
     navigate(`/plans-and-pricing/${encodeURIComponent(product.id)}`);
   }, [navigate]);
+
+  // A visitor's Subscribe and Preview: sign in, then back to the plans (§13).
+  const visitorSignIn = useCallback(() => navigate(VISITOR_SIGN_IN), [navigate]);
 
   const handleCloseProduct = useCallback(() => {
     setModalIntent(null);
@@ -389,8 +400,8 @@ export default function ProductsPage() {
   // subscriptions ("Profile bundles") and everything else ("Add-ons &
   // services"). The audience filter applies to the add-ons grid only.
   const bundles = useMemo(
-    () => (products || []).filter(isBundleProduct),
-    [products],
+    () => (member ? (products || []).filter(isBundleProduct) : visitorPlanProducts(pricing)),
+    [member, products, pricing],
   );
   const addons = useMemo(
     () => (products || []).filter((p) => !isBundleProduct(p) && !isPackProduct(p, tokenPacks)),
@@ -458,7 +469,7 @@ export default function ProductsPage() {
               </p>
             </>
           )}
-          <PromoRedeemCard initialCode={deepLinkCode} onRedeemed={refreshUnlocks} />
+          {member && <PromoRedeemCard initialCode={deepLinkCode} onRedeemed={refreshUnlocks} />}
         </div>
         {isAdmin && (
           <button
@@ -470,12 +481,14 @@ export default function ProductsPage() {
         )}
       </div>
 
-      <BillingCartBar
-        cycle={globalCycle}
-        onCycleChange={setGlobalCycle}
-        cart={cart}
-        onOpenDrawer={() => setDrawerOpen(true)}
-      />
+      {member && (
+        <BillingCartBar
+          cycle={globalCycle}
+          onCycleChange={setGlobalCycle}
+          cart={cart}
+          onOpenDrawer={() => setDrawerOpen(true)}
+        />
+      )}
 
       {paidReceipt && (
         <BillingReceipt
@@ -494,8 +507,8 @@ export default function ProductsPage() {
         />
       )}
 
-      {loadingState}
-      {emptyState}
+      {member && loadingState}
+      {member && emptyState}
 
       {(bundles.length > 0 || free.length > 0) && (
         <section>
@@ -517,8 +530,8 @@ export default function ProductsPage() {
                   key={p.id}
                   product={p}
                   globalCycle={globalCycle}
-                  onPreview={handlePreviewBundle}
-                  onSubscribe={handleSubscribeBundle}
+                  onPreview={member ? handlePreviewBundle : visitorSignIn}
+                  onSubscribe={member ? handleSubscribeBundle : visitorSignIn}
                   ai={planAi(plan, pricing, { licence })}
                   family={plan?.family || null}
                 />
@@ -530,7 +543,7 @@ export default function ProductsPage() {
 
       <TokenPacksSection onPacksRead={setTokenPacks} />
 
-      {(addons.length > 0 || (products !== null && products.length > 0)) && (
+      {member && (addons.length > 0 || (products !== null && products.length > 0)) && (
         <section>
           <div className="flex items-end justify-between gap-3 mb-3.5 flex-wrap">
             <div>
@@ -564,7 +577,7 @@ export default function ProductsPage() {
         </section>
       )}
 
-      {unlocks.length > 0 && (
+      {member && unlocks.length > 0 && (
         <div className="rounded-[14px] border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
           <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
             <BadgeCheck size={15} className="text-emerald-600 dark:text-emerald-400" /> Active licenses
@@ -582,24 +595,28 @@ export default function ProductsPage() {
         </div>
       )}
 
-      <CartDrawer
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        cart={cart}
-        appliedPromo={cart.promo}
-        onPromoChange={cart.setPromo}
-        onCheckout={goCheckout}
-      />
+      {member && (
+        <>
+          <CartDrawer
+            open={drawerOpen}
+            onClose={() => setDrawerOpen(false)}
+            cart={cart}
+            appliedPromo={cart.promo}
+            onPromoChange={cart.setPromo}
+            onCheckout={goCheckout}
+          />
 
-      <ProductSlideOver
-        product={openProduct}
-        globalCycle={globalCycle}
-        onClose={handleCloseProduct}
-        onAddToCart={addToCart}
-        onSubscribed={onSubscribed}
-        initialQty={modalIntent?.qty || 1}
-        initialCheckout={Boolean(modalIntent?.checkout)}
-      />
+          <ProductSlideOver
+            product={openProduct}
+            globalCycle={globalCycle}
+            onClose={handleCloseProduct}
+            onAddToCart={addToCart}
+            onSubscribed={onSubscribed}
+            initialQty={modalIntent?.qty || 1}
+            initialCheckout={Boolean(modalIntent?.checkout)}
+          />
+        </>
+      )}
 
       {showAddProduct && (
         <AddProductModal onClose={() => setShowAddProduct(false)} onCreated={loadCatalog} />
@@ -613,5 +630,6 @@ export default function ProductsPage() {
     </div>
   );
 
-  return phone ? <PricingPhone pricing={pricing} budget={budget}>{page}</PricingPhone> : page;
+  // The phone's account bar (A10m) is a member's; a visitor gets the page itself.
+  return phone && member ? <PricingPhone pricing={pricing} budget={budget}>{page}</PricingPhone> : page;
 }
