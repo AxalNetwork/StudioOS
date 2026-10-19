@@ -4,7 +4,8 @@ import { getSQL } from '../db';
 import { requireAuth, requireAdmin } from '../auth';
 import type { ScoreSnapshotRow, AnomalyFlag } from '../services/scoreIntegrity';
 import analytics from './monitoring_analytics';
-import { loadAiUsageReport } from '../services/aiRouter';
+import { loadAiUsageReport, run as aiRun } from '../services/aiRouter';
+import { AI_SURFACE } from '../services/aiSurfaces';
 import { refuse } from '../util/refusal';
 
 const monitoring = new Hono<{ Bindings: Env }>();
@@ -215,7 +216,9 @@ async function anomalies(c: any, withAi: boolean) {
     }
   }
 
-  // AI summary (Workers AI). Falls back to heuristic text if AI is unavailable.
+  // AI summary, through the router as a system call (D766: userId 0, logged at
+  // cost, charged to no member, guarded). Falls back to heuristic text when
+  // the router refuses or the model fails.
   let aiSummary = '';
   try {
     if (withAi && c.env.AI) {
@@ -228,14 +231,13 @@ Rate-limit blocks: ${blockedCount[0]?.c ?? 0}
 5xx errors: ${errCount[0]?.c ?? 0}
 
 Detected anomalies: ${anomalies.length === 0 ? 'none' : anomalies.map(a => `${a.endpoint} (${a.type})`).join(', ')}`;
-      const r: any = await c.env.AI.run('@cf/meta/llama-3.1-8b-instruct-fp8', {
-        messages: [
-          { role: 'system', content: 'You write short, factual SRE alert summaries.' },
-          { role: 'user', content: prompt },
-        ],
-        max_tokens: 250,
+      const r = await aiRun(c.env, {
+        task: 'ops_summary', userId: 0, surface: AI_SURFACE.monitoring,
+        systemPrompt: 'You write short, factual SRE alert summaries.',
+        text: prompt,
+        maxTokens: 250,
       });
-      aiSummary = (r?.response || r?.result?.response || '').trim();
+      aiSummary = r.ok ? String(r.output ?? '').trim() : '';
     }
   } catch (e) {
     aiSummary = '';
