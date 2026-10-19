@@ -252,7 +252,8 @@ export function segmentsInSpan(segments: readonly Segment[], from: unknown, to: 
 
 export const MAX_QUOTE = 400;
 export const MAX_TRANSCRIPT_BYTES = 100 * 1024;
-export const MAX_MODEL_CALLS = 12;
+/** D757 (#1923): two passes per part, so twice D658's twelve calls: the same transcripts still run. */
+export const MAX_MODEL_CALLS = 24;
 
 /** Whitespace normalised, nothing else: case and punctuation are the quote's. */
 export const normaliseWs = (s: string) => String(s).replace(/\s+/g, ' ').trim();
@@ -340,6 +341,8 @@ export function parsePlacements(
   output: string,
   part: readonly Segment[],
   ctx: StructureContext,
+  /** D757's passes: a known kind outside this list is the other pass's to place, skipped and not counted as dropped. */
+  kinds?: readonly PlacementKind[],
 ): { placements: Placement[]; dropped: number } {
   const obj = firstJsonObject(output);
   const raw = Array.isArray(obj?.placements) ? (obj!.placements as unknown[]) : [];
@@ -348,6 +351,7 @@ export function parsePlacements(
   for (const item of raw) {
     const r = item && typeof item === 'object' ? (item as Record<string, unknown>) : null;
     const kind = r?.kind;
+    if (kinds && isPlacementKind(kind) && !kinds.includes(kind)) continue;
     const cite = r?.cite && typeof r.cite === 'object' ? (r.cite as Record<string, unknown>) : null;
     const quote = typeof r?.quote === 'string' ? normaliseWs(r.quote) : '';
     const span = quote && quote.length <= MAX_QUOTE ? quoteSpan(part, quote) : null;
@@ -384,7 +388,8 @@ export function mergePlacements(lists: readonly Placement[][]): Placement[] {
   return out;
 }
 
-export const STRUCTURE_PROMPT = [
+/** The rules every pass is held to, before its own kinds. */
+const STRUCTURE_RULES = [
   'You read one customer-discovery interview and place what it says into the',
   "founder's Validate modules. You only PROPOSE; the founder accepts or discards",
   'each placement.',
@@ -396,21 +401,63 @@ export const STRUCTURE_PROMPT = [
   '"cite": {"from": <ms>, "to": <ms>}. A placement you cannot tie to a passage',
   'is not a placement: leave it out. Also include a verbatim quote of that passage.',
   'A quote may span at most three segments. Never invent or paraphrase it.',
-  '',
-  'Kinds and their payloads:',
-  '- pain_severity: {"phrase": "<the pain in a few words>", "severity": "severe" | "real" | "mild"}',
-  '- icp_fit: {"fit": "strong" | "partial" | "none", "reason": "<one sentence>"}',
-  '- segment: {"name": "<the customer segment this person belongs to>"}',
-  '- demand_signal: {"signal": "need_to_have" | "would_pay" | "loi" | "pre_sale", "detail": "<optional>"}',
-  '- evidence: {"hypothesis_id": <id from the list>, "pain_group_id": <id from the list>,',
-  '    "direction": "supports" | "refutes", "strength": "anecdote" | "pattern" | "measured"}',
-  '- competitor_mention: {"name": "<company or product>", "context": "<optional>"}',
-  '- market_fact: {"fact": "<one sentence>", "source": "<who said it, or where it comes from>"}',
-  '',
+];
+const STRUCTURE_TAIL = [
   'Use only hypothesis and pain-group ids from the lists you are given. Do not',
   'invent figures. Reply with ONE JSON object and nothing else:',
   '{"placements": [{"kind": "...", "payload": {...}, "cite": {"from": 0, "to": 0}, "quote": "<verbatim passage>"}]}',
-].join('\n');
+];
+const AMOUNT = '"amount_cents": <optional whole cents>, "currency": "<optional, e.g. usd>", "period": "once" | "month" | "year" (optional)';
+
+/** Each kind's payload line, as the prompt teaches it. */
+const KIND_LINES: Record<PlacementKind, string> = {
+  pain_severity: '- pain_severity: {"phrase": "<the pain in a few words>", "severity": "severe" | "real" | "mild"}',
+  icp_fit: '- icp_fit: {"fit": "strong" | "partial" | "none", "reason": "<one sentence>"}',
+  segment: '- segment: {"name": "<the customer segment this person belongs to>"}',
+  firmographic: '- firmographic: {"attribute": "role" | "company" | "company_size" | "industry" | "geography" | "stage" | "tools", "value": "<what they said>"}',
+  job_to_be_done: '- job_to_be_done: {"job": "<what they are trying to get done>"}',
+  competitor_mention: `- competitor_mention: {"name": "<company or product>", "context": "<optional>", ${AMOUNT}}`,
+  market_fact: '- market_fact: {"fact": "<one sentence>", "topic": "size" | "trend" | "regulation" | "pricing" | "other"}',
+  alternative: '- alternative: {"name": "<what they use instead>", "kind": "workaround" | "status_quo" | "in_house"}',
+  demand_signal: `- demand_signal: {"signal": "need_to_have" | "would_pay" | "loi" | "pre_sale", "detail": "<optional>", ${AMOUNT}}`,
+  budget: `- budget: {"detail": "<what they said about budget>", ${AMOUNT}}`,
+  timing: '- timing: {"when": "<when they would buy or start>"}',
+  urgency: '- urgency: {"level": "low" | "medium" | "high", "reason": "<optional>"}',
+  buying_trigger: '- buying_trigger: {"trigger": "<the event that would make them buy>"}',
+  objection: '- objection: {"about": "price" | "risk" | "fit" | "timing" | "trust" | "other", "detail": "<what they objected to>"}',
+  evidence: '- evidence: {"hypothesis_id": <id from the list>, "pain_group_id": <optional id from the list>,\n    "direction": "supports" | "refutes", "strength": "anecdote" | "pattern" | "measured"}',
+  hypothesis_new: '- hypothesis_new: {"claim": "<a new testable claim the interview suggests>", "disproof": "<optional: what would prove it wrong>"}',
+  experiment_idea: '- experiment_idea: {"hypothesis_id": <id from the list>, "title": "<a test to run>", "method": "<optional>"}',
+};
+
+/**
+ * D757 §2.6 (#1923) — the prompt runs as two passes over the transcript, so
+ * each reads for fewer kinds with more room to answer: A, the problem, the
+ * person and the market; B, demand and evidence. Every kind is in exactly one.
+ */
+export const STRUCTURE_PASSES = [
+  { name: 'A', reads: 'the problem, the person and the market',
+    kinds: ['pain_severity', 'icp_fit', 'segment', 'firmographic', 'job_to_be_done', 'competitor_mention', 'market_fact', 'alternative'] },
+  { name: 'B', reads: 'demand and evidence',
+    kinds: ['demand_signal', 'budget', 'timing', 'urgency', 'buying_trigger', 'objection', 'evidence', 'hypothesis_new', 'experiment_idea'] },
+] as const satisfies readonly { name: string; reads: string; kinds: readonly PlacementKind[] }[];
+
+/** Each pass's output budget: raised from one pass's 1500, and the router's reservation follows it. */
+export const PASS_MAX_TOKENS = 2500;
+
+export function passPrompt(pass: (typeof STRUCTURE_PASSES)[number]): string {
+  return [
+    ...STRUCTURE_RULES,
+    '',
+    `This pass reads for ${pass.reads} only. Kinds and their payloads:`,
+    ...pass.kinds.map((k) => KIND_LINES[k]),
+    '',
+    ...STRUCTURE_TAIL,
+  ].join('\n');
+}
+
+/** Pass A's prompt, kept as the name callers and tests read. */
+export const STRUCTURE_PROMPT = passPrompt(STRUCTURE_PASSES[0]);
 
 export function contextLines(ctx: StructureContext): string {
   const h = ctx.hypotheses.length
@@ -440,14 +487,19 @@ export type StructureOutcome =
       dropped: number;
       parts: number;
       receipt: ReceiptLine[];
+      /** Pass B was refused: pass A's placements stand, and this is why the rest is missing. */
+      passBRefusal?: string | null;
     }
   | { ok: false; refusal: string | null; receipt: ReceiptLine[] };
 
 /**
- * Run `structure_interview` over a transcript: one call per part, through the
- * router (which reserves and settles the D640 budget per call), placements
- * merged. A refusal on any part stops the run, and the caller stores nothing:
- * half a structuring is not offered as a whole one.
+ * Run `structure_interview` over a transcript, in D757's two passes: each pass
+ * one call per part, through the router (which reserves and settles the D640
+ * budget per call), each keeping only its own kinds, the placements merged.
+ * A refusal in pass A stops the run, and the caller stores nothing: half a
+ * structuring is not offered as a whole one. A refusal in pass B keeps pass
+ * A's placements whole and returns the refusal beside them, for the engine's
+ * note; nothing of pass B is kept.
  */
 export async function structureTranscript(
   env: Env,
@@ -461,43 +513,53 @@ export async function structureTranscript(
   },
 ): Promise<StructureOutcome> {
   const parts = chunkSegments(opts.segments, opts.maxChars);
-  const refused = transcriptLimit(opts.segments, parts.length);
+  const refused = transcriptLimit(opts.segments, parts.length * STRUCTURE_PASSES.length);
   if (refused) return { ok: false, refusal: refused, receipt: [] };
   const receipt: ReceiptLine[] = [];
-  const lists: Placement[][] = [];
+  const kept: Placement[][] = [];
   let dropped = 0;
-  for (let i = 0; i < parts.length; i += 1) {
-    const r = await aiRun(env, {
-      task: 'structure_interview',
-      userId: opts.userId,
-      model: opts.model,
-      // Every structuring run is asked from Validate's interviews (D552).
-      surface: AI_SURFACE.validateInterviews,
-      systemPrompt: `${STRUCTURE_PROMPT}\n\n${contextLines(opts.context)}`,
-      messages: [{
-        role: 'user',
-        content: parts.length > 1
-          ? `Part ${i + 1} of ${parts.length} of the transcript:\n${transcriptData(parts[i])}`
-          : `Transcript:\n${transcriptData(parts[i])}`,
-      }],
-      maxTokens: 1500,
-      temperature: 0.2,
-    });
-    receipt.push({
-      step: opts.step,
-      model: r.usage.model,
-      requested_model: opts.model ?? null,
-      fallback_used: !!r.usage.fallback_used,
-      est_cost_usd: r.usage.est_cost_usd || 0,
-      prompt_tokens: r.usage.prompt_tokens || 0,
-      completion_tokens: r.usage.completion_tokens || 0,
-    });
-    if (!r.ok) return { ok: false, refusal: r.refusal ?? null, receipt };
-    const parsed = parsePlacements(r.output || '', parts[i], opts.context);
-    lists.push(parsed.placements);
-    dropped += parsed.dropped;
+  for (const [p, pass] of STRUCTURE_PASSES.entries()) {
+    const lists: Placement[][] = [];
+    let passDropped = 0;
+    for (let i = 0; i < parts.length; i += 1) {
+      const r = await aiRun(env, {
+        task: 'structure_interview',
+        userId: opts.userId,
+        model: opts.model,
+        // Every structuring run is asked from Validate's interviews (D552).
+        surface: AI_SURFACE.validateInterviews,
+        systemPrompt: `${passPrompt(pass)}\n\n${contextLines(opts.context)}`,
+        messages: [{
+          role: 'user',
+          content: parts.length > 1
+            ? `Part ${i + 1} of ${parts.length} of the transcript:\n${transcriptData(parts[i])}`
+            : `Transcript:\n${transcriptData(parts[i])}`,
+        }],
+        maxTokens: PASS_MAX_TOKENS,
+        temperature: 0.2,
+      });
+      receipt.push({
+        step: opts.step,
+        model: r.usage.model,
+        requested_model: opts.model ?? null,
+        fallback_used: !!r.usage.fallback_used,
+        est_cost_usd: r.usage.est_cost_usd || 0,
+        prompt_tokens: r.usage.prompt_tokens || 0,
+        completion_tokens: r.usage.completion_tokens || 0,
+      });
+      if (!r.ok) {
+        if (p === 0) return { ok: false, refusal: r.refusal ?? null, receipt };
+        return { ok: true, placements: mergePlacements(kept), dropped, parts: parts.length, receipt, passBRefusal: r.refusal ?? null };
+      }
+      // A pass keeps its own kinds: another pass's kind is that pass's to place.
+      const parsed = parsePlacements(r.output || '', parts[i], opts.context, pass.kinds);
+      lists.push(parsed.placements);
+      passDropped += parsed.dropped;
+    }
+    kept.push(...lists);
+    dropped += passDropped;
   }
-  return { ok: true, placements: mergePlacements(lists), dropped, parts: parts.length, receipt };
+  return { ok: true, placements: mergePlacements(kept), dropped, parts: parts.length, receipt };
 }
 
 /**
