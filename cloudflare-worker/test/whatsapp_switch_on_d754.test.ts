@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { createHash, createHmac } from 'node:crypto';
+import { createHmac } from 'node:crypto';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
@@ -15,10 +15,6 @@ import { voiceFetchBy } from '../src/services/channels/voiceFailures.ts';
 import { callingEligibility, callingRecord, GRAPH_VERSION, unsubscribeApp } from '../src/services/channels/whatsapp.ts';
 import { memberConnection, channelOpenToMember } from '../src/services/channels/connections.ts';
 
-/** Provider ids are stored hashed (events.ts `refKey`); the tests look them up the same way. */
-const refCode = (code: string) => createHash('sha256').update(code).digest('hex');
-const ref = (provider: string, id: string) => createHash('sha256').update(`${provider}:${id}`).digest('hex');
-
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const mig = (name: string) => readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8');
 
@@ -26,7 +22,7 @@ const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const ADMIN = 1, ME = 2, OTHER = 3, GONE = 4, FOUNDER = 9;
 const PROJECT = 7, OTHER_PROJECT = 8;
 const INTERVIEW = 101;
-const TG_ME = '555001', TG_OTHER = '555002', TG_NEW = '555003';
+const TG_ME = '555001', TG_NEW = '555003';
 const PNID = '1000001', PNID_GONE = '1000004';
 const WA_TOKEN = 'EAAG-member-business-token-SECRET';
 
@@ -148,7 +144,9 @@ async function call(env: any, user: number, method: string, path: string, body?:
     .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
   const headers: Record<string, string> = { authorization: `Bearer ${tok}` };
   if (body !== undefined) headers['content-type'] = 'application/json';
-  return send(env, `/api/channels${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+  const result = await send(env, `/api/channels${path === '/' ? '' : path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+  if (method === 'GET') assert.equal(result.status, 200, 'fixture GET must reach its mounted route: ' + path);
+  return result;
 }
 
 function tgHook(env: any, update: unknown, secret: string | null = SECRETS.TELEGRAM_CHANNEL_WEBHOOK_SECRET) {
@@ -210,18 +208,6 @@ const startUpdate = (code: string, tg = TG_ME) => ({
   update_id: ++updateId,
   message: { message_id: 1, date: now(), chat: { id: Number(tg), type: 'private' }, from: tgUser(tg), text: `/start ${code}` },
 });
-const confirmUpdate = (tg = TG_ME) => ({
-  update_id: ++updateId,
-  message: { message_id: 2, date: now(), chat: { id: Number(tg), type: 'private' }, from: tgUser(tg), text: '/confirm' },
-});
-/** Both steps of linking: the code, then the Telegram account's own /confirm. */
-async function linkTelegram(env: any, code: string, tg = TG_ME) {
-  await tgHook(env, startUpdate(code, tg));
-  await tgHook(env, confirmUpdate(tg));
-  const owner = Number((await env.DB.prepare('SELECT user_id FROM channel_link_codes WHERE code_hash = ?').bind(refCode(code)).first<any>()).user_id);
-  const { claim } = (await call(env, owner, 'GET', '/telegram/link')).body;
-  return call(env, owner, 'POST', `/telegram/link/${claim.uid}/confirm`);
-}
 const connectionUpdate = (bc: string, tg: string, extra: Record<string, unknown> = { rights: { can_reply: true, can_read_messages: true } }, enabled = true) => ({
   update_id: ++updateId,
   business_connection: { id: bc, user: tgUser(tg), user_chat_id: Number(tg), date: now(), is_enabled: enabled, ...extra },
@@ -304,7 +290,7 @@ async function seedAdmin(w: World) {
 }
 
 let voiceId = 0;
-const voiceJobs = (queued: any[]) => queued.filter((j) => j.type === 'channel_followup');
+const voiceJobs = (queued: any[]) => queued.filter((j) => j.job_type === 'channel_followup');
 async function incomingVoice(w: World, provider: Provider, days = 0) {
   const id = ++voiceId;
   const response = provider === 'whatsapp'

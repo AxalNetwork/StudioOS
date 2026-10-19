@@ -407,7 +407,7 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
       tool('read_pull_requests', 'pull requests', 'read', 'Reads pull requests in the repositories you chose.', 'prototype_mvp', ['`${path}/pulls?state=all`']),
       tool('read_releases', 'releases', 'read', 'Reads releases in the repositories you chose. They are counted under Product roadmap; no row is made.', null,
         ['`${path}/releases`']),
-      tool('revoke_grant', 'the grant', 'account', 'Revokes the grant when GitHub grants more than read.', null,
+      tool('revoke_grant', 'the grant', 'account', 'Revokes the grant when you disconnect, and when GitHub grants more than read.', null,
         ['`${API}/applications/${encodeURIComponent(id)}/grant`']),
     ],
     prompts: [
