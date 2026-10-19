@@ -20,6 +20,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
+import { applyEngineSchema } from './_engine_schema.mjs';
 import { createJWT } from '../src/auth.ts';
 import {
   chunkSegments,
@@ -87,6 +88,8 @@ function world(reply: (model: string, input: any) => any = () => ({ response: '{
     '453_interview_processing.sql']) {
     db.exec(mig(m));
   }
+  // D757: the Validate engine's schema (487, 465, 453 and the re-scope's columns).
+  applyEngineSchema(db);
   db.exec(`
     INSERT INTO hypotheses (id, project_id, code, claim) VALUES (31, ${PROJECT}, 'H1', 'Finance leads reconcile by hand');
     INSERT INTO pain_groups (id, project_id, title) VALUES (41, ${PROJECT}, 'Manual reconciliation'), (42, ${PROJECT}, 'Cost');

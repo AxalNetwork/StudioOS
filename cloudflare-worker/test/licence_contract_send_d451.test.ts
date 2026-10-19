@@ -171,6 +171,47 @@ test('send writes envelope_uid and derives signed from a completed envelope', as
   assert.match(current.countersignature.reason, /Session 13/);
 });
 
+// D758 — a licence contract is never drafted or sent from a row with no body.
+const NO_BODY_ADMIN = 'No body in the store yet, so nothing was sent. Add its body under Contracts › Templates.';
+const post = (db: InstanceType<typeof DatabaseSync>, path: string, body: unknown = {}) =>
+  call(db, path, { method: 'POST', body: JSON.stringify(body) });
+const contracts = (db: InstanceType<typeof DatabaseSync>) =>
+  db.prepare('SELECT uid, status, superseded_at, envelope_uid FROM licence_contracts ORDER BY id').all() as any[];
+const quietly = async <T>(fn: () => Promise<T>) => {
+  const saved = [console.warn, console.error]; console.warn = () => {}; console.error = () => {};
+  try { return await fn(); } finally { [console.warn, console.error] = saved; }
+};
+
+test('D758 a draft from a stub row is 409, adds no contract and leaves the current draft current', async () => {
+  const db = freshDb();
+  db.prepare("INSERT INTO legal_templates (slug, title, category, body_md, version, is_active, is_stub) VALUES ('territory_side_letter', 'Side letter', 'gp', '', 1, 1, 1)").run();
+  const before = contracts(db);
+  const r = await post(db, '/lic_fr/contract', { template_slug: 'territory_side_letter' });
+  assert.equal(r.status, 409, JSON.stringify(r.body));
+  assert.equal(r.body.error, 'template_has_no_body');
+  assert.equal(r.body.message, NO_BODY_ADMIN);
+  assert.deepEqual(contracts(db), before, 'no new contract, and ctr_1 is not superseded');
+});
+
+test('D758 a platform licence stub is refused with the counsel sentence', async () => {
+  const db = freshDb();
+  db.prepare("INSERT INTO legal_templates (slug, title, category, body_md, version, is_active, is_stub) VALUES ('platform_ip_licence_fund_admin', 'Platform IP Licence', 'gp', '', 1, 1, 1)").run();
+  const r = await post(db, '/lic_fr/contract', { template_slug: 'platform_ip_licence_fund_admin' });
+  assert.equal(r.status, 409);
+  assert.ok(r.body.message.startsWith('Stub — counsel to draft.'), r.body.message);
+});
+
+test('D758 a draft whose row became a stub after drafting is 409 on send, stays draft and has no envelope', async () => {
+  const db = freshDb();
+  db.prepare("UPDATE legal_templates SET body_md = '', is_stub = 1 WHERE slug = 'licence_agreement'").run();
+  const r = await quietly(() => post(db, '/lic_fr/contract/ctr_1/send'));
+  assert.equal(r.status, 409, JSON.stringify(r.body));
+  assert.equal(r.body.error, 'template_has_no_body');
+  const row = contracts(db)[0];
+  assert.equal(row.status, 'draft');
+  assert.equal(row.envelope_uid, null);
+});
+
 test('migration 331 widens licence_events for contract_sent', () => {
   const sql = readFileSync(
     resolve(REPO_ROOT, 'cloudflare-worker/sql/migrations/331_licence_event_contract_sent.sql'),

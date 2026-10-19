@@ -226,20 +226,18 @@ test('Yours: a query matching only connectors you have not connected says "No co
   assert.match(flat(html(h(ConnectorsView, { data: ready(), initialTab: 'discover', initialQuery: 'Calendly' }))), /Calendly description/);
 });
 
-test('a sign-in return naming a connector the catalogue does not hold opens no sheet', async () => {
-  const m = await mount(h(ConnectorsView, { data: ready() }), '/account/connectors?oauth=error&provider=notreal&reason=Call_us');
+// D753 (#1876): a sign-in return no longer opens a sheet on the hub; the hub
+// sends it on to its connector's page. Both cases this test held (a crafted
+// return naming a connector the catalogue lacks, and Stripe's refusal in the
+// Worker's words, never the provider's) now run on `ConnectorPageView` in
+// `connector_page_d753.test.mjs`.
+test('a sign-in return on the hub opens no sheet there: it goes on to its page (D753)', async () => {
+  const m = await mount(h(ConnectorsView, { data: ready() }), '/account/connectors?oauth=error&provider=stripe&reason=Your+account+is+suspended');
   try {
     await m.flush();
     assert.equal(m.byTestId('connector-sheet-refused'), undefined);
-    assert.doesNotMatch(m.text(), /notreal|Call_us/);
+    assert.doesNotMatch(m.text(), /suspended/);
   } finally { await m.unmount(); }
-  const ok = await mount(h(ConnectorsView, { data: ready() }), '/account/connectors?oauth=error&provider=stripe&reason=Your+account+is+suspended');
-  try {
-    await ok.flush();
-    assert.ok(ok.byTestId('connector-sheet-refused'));
-    assert.match(ok.text(), /Stripe refused access\. Ask your Stripe admin/);
-    assert.doesNotMatch(ok.text(), /suspended/);
-  } finally { await ok.unmount(); }
 });
 
 test('the request form stores the request, and says so', async () => {

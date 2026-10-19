@@ -171,7 +171,8 @@ test('D758 what a send reads: the store text after 484, nothing before it', asyn
   for (const slug of ['partner_capital', 'SPV Joinder Agreement']) assert.equal(await templateBodyFor(env, slug), null, `${slug} before 484`);
   db.exec(M484);
   for (const slug of ['partner_capital', 'SPV Joinder Agreement']) {
-    assert.deepEqual(await templateBodyFor(env, slug), { body: expected(slug), source: 'store' }, `${slug} after 484`);
+    const title = (db.prepare('SELECT title FROM legal_templates WHERE slug = ?').get(slug) as any).title;
+    assert.deepEqual(await templateBodyFor(env, slug), { body: expected(slug), source: 'store', title }, `${slug} after 484`);
   }
 });
 

@@ -111,9 +111,7 @@ async function commitSettlement(env:Env,row:any,costMicrousd:number,refund:boole
     env.DB.prepare(`UPDATE ai_topup_accounts SET balance_microusd=balance_microusd+?,updated_at=datetime('now')
       WHERE user_id=? AND EXISTS(SELECT 1 FROM ai_budget_reservations WHERE uid=? AND settlement_uid=?)`)
       .bind(row.topup_microusd-paid,row.user_id,row.uid,token),
-    env.DB.prepare(`INSERT INTO ai_topup_ledger(uid,user_id,kind,amount_microusd,reservation_uid,actor)
-      SELECT ?,user_id,'draw',actual_topup_microusd,uid,CAST(user_id AS TEXT) FROM ai_budget_reservations
-      WHERE uid=? AND settlement_uid=? AND actual_topup_microusd>0`).bind(token,row.uid,token),
+    // D755: the release and spend ledger rows are written by migration 486's trigger on the status change.
   ];
   if (audit) {
     const held=amount(amount(row.included_microusd)+amount(row.topup_microusd));
