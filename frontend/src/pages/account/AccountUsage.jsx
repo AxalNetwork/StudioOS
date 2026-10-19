@@ -7,7 +7,7 @@ import { EmptyState, PhoneBar, PhoneRows, Pill, Unrecorded, Unreadable, usePhone
 import { BTN, Chips, INPUT, LoadingRows, PanelCard, useAccountRead } from './AccountCenter';
 import {
   NOT_COUNTED, allowanceView, dayAxis, dayBars, filterPages, modelRows, pageOf, pageRows,
-  rateRows, receiptView, storageView, STORAGE_AREAS, taskRows, topUpState, topUpRows,
+  rateRows, receiptView, storageView, STORAGE_AREAS, taskRows, topUpState, topUpRows, purchaseLine,
 } from './usageModel';
 import { ACCOUNT_PHONE_COPY, ACCOUNT_PHONE_PAGES } from './accountPhone';
 import { ADD_TOKENS_PATH, TOPUP_UNAVAILABLE_RUNS, pastAllowanceLine } from '../../lib/aiTokens';
@@ -81,6 +81,21 @@ function AddTokens({ topUp }) {
   return <a href={ADD_TOKENS_PATH} className={BTN.ghost} data-testid="usage-add-tokens">Add tokens</a>;
 }
 
+/**
+ * D755 §10 (#1984, part 2): the latest purchase under the top-up balance —
+ * waiting, credited, overdue (with the Help Center) or refunded.
+ */
+function PurchaseNote({ latest, now }) {
+  const line = purchaseLine(latest, now.getTime());
+  if (!line) return null;
+  return (
+    <Muted className="leading-snug" data-testid={`usage-topup-${line.state}`} role={line.help ? 'alert' : undefined}>
+      {line.text}
+      {line.help && <> <a href="/help" className="font-semibold underline" data-testid="usage-topup-help">Help Center</a></>}
+    </Muted>
+  );
+}
+
 /** U1 — the allowance. */
 export function AllowanceCard({ budget, product, now = new Date() }) {
   const v = budget.status === 'ready' ? allowanceView(budget.data, now) : null;
@@ -132,6 +147,7 @@ export function AllowanceCard({ budget, product, now = new Date() }) {
                 ) : (
                   <Muted className="leading-snug">Runs use your included allowance first, then your top-up balance.</Muted>
                 )}
+                {product.status === 'ready' && <PurchaseNote latest={product.data?.latest} now={now} />}
               </div>
             </div>
           </div>
@@ -503,6 +519,11 @@ export function allowanceGroup({ budget, product, now = new Date() }) {
   }
   group.rows.push({ title: ACCOUNT_PHONE_COPY.heldTitle, description: ACCOUNT_PHONE_COPY.heldDescription, value: v.held });
   group.rows.push({ title: ACCOUNT_PHONE_COPY.topUpTitle, description: ACCOUNT_PHONE_COPY.topUpDescription, value: v.balance });
+  const purchase = product.status === 'ready' ? purchaseLine(product.data?.latest, now.getTime()) : null;
+  if (purchase) {
+    group.rows.push({ key: 'latest-top-up', title: 'Your latest top-up', description: purchase.text, testid: `usage-topup-${purchase.state}`,
+      ...(purchase.help ? { href: '/help', chevron: true } : {}) });
+  }
   if (topUp === 'available') group.cta = { label: ACCOUNT_PHONE_COPY.addTokens, href: ADD_TOKENS_PATH, testid: 'usage-add-tokens' };
   else if (topUp === 'unavailable') group.note = <span data-testid="usage-topup-unavailable">{TOPUP_UNAVAILABLE_RUNS}</span>;
   else if (topUp === 'unreadable') group.note = <Unreadable what="The top-up option" claim="Your balance above is unaffected." onRetry={product.reload} />;

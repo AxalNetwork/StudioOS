@@ -11,7 +11,7 @@
  *   - nothing is split by company: every read is the caller's own, across all
  *     their companies, and nothing below takes a company.
  */
-import { aiTokenState } from '../../lib/aiTokens';
+import { aiTokenState, purchaseState } from '../../lib/aiTokens';
 
 export const NOT_COUNTED = 'Not counted';
 
@@ -390,4 +390,32 @@ export function topUpRows(h) {
     };
   });
   return [...pending, ...rows];
+}
+
+/**
+ * D755 §10 (#1984, part 2) — the top-up tile's line for the member's latest
+ * purchase in 24 hours (`/ai-budget/top-up`'s `latest`, #1971), in the state
+ * `purchaseState` decides (lib/aiTokens.js, #1916). Null when there is none,
+ * or for a dispute, which the Top-ups card lists. `help` asks for the Help
+ * Center link. A figure the answer does not carry is left out, never guessed.
+ */
+export function purchaseLine(latest, now = Date.now()) {
+  const state = purchaseState(latest, now);
+  if (!state) return null;
+  const order = latest.order_ref || 'your order';
+  const amount = microUsd(latest.amount_microusd);
+  const reversed = microUsd(latest.reversed_microusd);
+  const when = whenLabel(latest.credited_at || latest.at);
+  switch (state) {
+    case 'waiting':
+      return { state, text: `Adding ${amount ?? 'your tokens'} from order ${order}. It appears here once Stripe confirms the payment.` };
+    case 'credited':
+      return { state, text: `Added ${amount ?? 'your tokens'}${when ? ` on ${when}` : ''} · order ${order}.` };
+    case 'overdue':
+      return { state, help: true, text: `Payment for ${order} is recorded, but the tokens are not in your balance yet. If they are not here within an hour, contact support with the order number.` };
+    case 'refunded':
+      return { state, text: reversed ? `Order ${order} was refunded. ${reversed} was taken off your top-up balance.` : `Order ${order} was refunded. Your top-ups below show what was taken off your top-up balance.` };
+    default:
+      return null;
+  }
 }

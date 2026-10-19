@@ -118,3 +118,59 @@ test('D755 the phone draws the same card', () => {
   assert.match(markup, /id="top-ups"/);
   assert.match(text(markup), /Refund · \$20 of tokens/);
 });
+
+// ── Part 2: the top-up tile's states (lib/aiTokens.js, #1916 / #2027) ─────────
+import { AllowanceCard, allowanceGroup } from '../src/pages/account/AccountUsage.jsx';
+import { TOPUP_UNAVAILABLE_RUNS } from '../src/lib/aiTokens.js';
+import { purchaseLine } from '../src/pages/account/usageModel.js';
+
+const NOW = new Date('2026-10-18T12:00:00Z');
+const BUDGET = {
+  licence: 'founder:growth', source: 'environment', daily_microusd: 2_000_000, monthly_microusd: 40_000_000,
+  day_spend_microusd: 2_000_000, month_spend_microusd: 6_100_000, day_reserved_microusd: 0, month_reserved_microusd: 0,
+  balance_microusd: 20_000_000, topup_reserved_microusd: 0, held_for_review: [],
+};
+const PACK = { price_id: 'price_SYN1', currency: 'usd', unit_amount: 2000, label: '$20 of tokens' };
+const topUp = (o = {}) => ({ state: 'ready', packs: [PACK], on_hold: false, latest: null, ...o });
+const card = (product) => text(html(h(AllowanceCard, { budget: ready(BUDGET), product, now: NOW })));
+const latest = (state, o = {}) => ({ order_ref: 'AX-SYN-9', pack_label: '$20 of tokens', state, amount_microusd: 21 * M, at: '2026-10-18 11:40:00', ...o });
+
+test('D755 the tile: loading, unreadable, not ready and ready each say their sentence', () => {
+  const loading = text(html(h(AllowanceCard, { budget: ready(BUDGET), product: { status: 'loading', data: null, reload() {} }, now: NOW })));
+  assert.doesNotMatch(loading, /Top-up isn't available yet|The top-up option/);
+  assert.match(card({ status: 'unreadable', data: null, reload() {} }), /The top-up option .*Your balance above is unaffected\./);
+  assert.ok(card(ready(topUp({ state: 'not_ready', packs: [] }))).includes(TOPUP_UNAVAILABLE_RUNS));
+  assert.match(card(ready(topUp())), /Runs use your included allowance first, then your top-up balance\./);
+});
+
+test('D755 the tile: waiting, credited, overdue and refunded', () => {
+  assert.match(card(ready(topUp({ latest: latest('waiting') }))),
+    /Adding \$21\.00 from order AX-SYN-9\. It appears here once Stripe confirms the payment\./);
+  assert.match(card(ready(topUp({ latest: latest('credited', { credited_at: '2026-10-18 11:41:00' }) }))),
+    /Added \$21\.00 on 18 Oct, 11:41 UTC · order AX-SYN-9\./);
+  const overdue = html(h(AllowanceCard, { budget: ready(BUDGET), product: ready(topUp({ latest: latest('overdue') })), now: NOW }));
+  assert.match(text(overdue), /Payment for AX-SYN-9 is recorded, but the tokens are not in your balance yet\. If they are not here within an hour, contact support with the order number\./);
+  assert.match(overdue, /<a href="\/help"[^>]*>Help Center<\/a>/);
+  assert.match(card(ready(topUp({ latest: latest('refunded', { reversed_microusd: 15 * M }) }))),
+    /Order AX-SYN-9 was refunded\. \$15\.00 was taken off your top-up balance\./);
+  // CR2's `latest` carries no reversed amount yet: the line names none rather than guess.
+  assert.match(card(ready(topUp({ latest: latest('refunded') }))), /Order AX-SYN-9 was refunded\. Your top-ups below show what was taken off/);
+  // A waiting order paid more than an hour ago reads as overdue (purchaseState).
+  assert.equal(purchaseLine(latest('waiting', { at: '2026-10-18 10:00:00' }), NOW.getTime()).state, 'overdue');
+  assert.equal(purchaseLine(null, NOW.getTime()), null);
+  assert.equal(purchaseLine(latest('disputed'), NOW.getTime()), null, 'a dispute is the card\'s to list');
+});
+
+test('D755 the banners promise no top-up balance when nothing is on sale', () => {
+  const none = card(ready(topUp({ state: 'not_ready', packs: [] })));
+  assert.match(none, /Runs wait until your allowance resets\./);
+  assert.doesNotMatch(none, /Runs use your top-up balance/);
+  assert.match(card(ready(topUp())), /Runs use your top-up balance until then\./);
+});
+
+test('D755 the phone shows the latest top-up too', () => {
+  const g = allowanceGroup({ budget: ready(BUDGET), product: ready(topUp({ latest: latest('overdue') })), now: NOW });
+  const row = g.rows.find((r) => r.key === 'latest-top-up');
+  assert.match(row.description, /Payment for AX-SYN-9 is recorded/);
+  assert.equal(row.href, '/help');
+});
