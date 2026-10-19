@@ -19,14 +19,19 @@ import './contact.css';
  * `sections` is a list of `{ n, h, body }`: `n` is the page's own number,
  * zero-padded as the canvas draws it, or null for an unnumbered closing
  * section; `body` is the section's JSX.
+ *
+ * D756 (#1894): `version`, when set, follows "Last updated" as "· Notice
+ * version <n>", and `notice` is drawn under that line; without `email` there
+ * is no questions line. The three D680 pages pass neither and render as before.
  */
-export default function LegalDocument({ title, updated, intro, sections, email }) {
+export default function LegalDocument({ title, updated, intro, sections, email, version, notice }) {
   return (
     <SitePage title={title}>
       <article className="ax-wrap ax-legal" aria-labelledby="ax-legal-h">
         <Eyebrow muted>Legal</Eyebrow>
         <h1 id="ax-legal-h" className="ax-legal-h1">{title}</h1>
-        <div className="ax-mono ax-legal-updated">Last updated {updated}</div>
+        <div className="ax-mono ax-legal-updated">{version != null ? `Last updated ${updated} · Notice version ${version}` : `Last updated ${updated}`}</div>
+        {notice}
         <div className="ax-legal-intro">{intro}</div>
         <div className="ax-legal-sections">
           {sections.map((s, i) => {
@@ -42,9 +47,11 @@ export default function LegalDocument({ title, updated, intro, sections, email }
             );
           })}
         </div>
-        <div className="ax-legal-q">
-          Questions about this document? Write to <a href={`mailto:${email}`}>{email}</a>.
-        </div>
+        {email && (
+          <div className="ax-legal-q">
+            Questions about this document? Write to <a href={`mailto:${email}`}>{email}</a>.
+          </div>
+        )}
       </article>
     </SitePage>
   );
