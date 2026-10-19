@@ -90,6 +90,11 @@ async function hasNoHorizontalScroll(page) {
 }
 
 test.describe('Connectors: the hub, the filter menu and a connector\'s page (D753)', () => {
+  // The app's service worker would take over the page's fetches, and a
+  // service worker's requests bypass page.route: the stubs would stop
+  // answering and the preview's real 404 would.
+  test.use({ serviceWorkers: 'block' });
+
   test.beforeEach(async ({ page }) => {
     requirePreview(test);
     await signedInWithCatalogue(page);
