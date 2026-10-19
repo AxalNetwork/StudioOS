@@ -14,11 +14,19 @@
  *
  * Codes are 24 characters of an unambiguous alphabet (no 0/O, 1/l/I): about
  * 120 bits, and safe in a Telegram start parameter ([A-Za-z0-9_-], ≤ 64).
+ *
+ * D754 way B (#1937) reuses all of it for 'whatsapp_link': the member sends
+ * `LINK <code>` to Axal's own WhatsApp number (whatsappLink.ts). There the
+ * claimant is an HMAC of the sender's WhatsApp id, never the id, and sending
+ * the code is that side's confirmation, so the claim is confirmed as it is
+ * recorded (`consumeLinkCodeRow`'s `confirm`).
  */
 import type { Env } from '../../types';
 import { decryptColumn, encryptColumn } from '../columnCipher';
 import { sha256Hex } from '../../rpc/secret';
 import { CHANNEL_LIMITS } from './types';
+
+export type LinkProvider = 'telegram' | 'whatsapp_link';
 
 const ALPHABET = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const CODE_LEN = 24;
@@ -32,7 +40,7 @@ export function newCode(): string {
 }
 
 /** A fresh code for the member. Earlier unused codes for the same provider are retired. */
-export async function createLinkCode(env: Env, userId: number, provider: 'telegram'): Promise<{ code: string; expiresAt: string }> {
+export async function createLinkCode(env: Env, userId: number, provider: LinkProvider): Promise<{ code: string; expiresAt: string }> {
   const code = newCode();
   const hash = await sha256Hex(code);
   const expiresAt = new Date(Date.now() + CHANNEL_LIMITS.linkCodeMinutes * 60_000).toISOString();
@@ -58,11 +66,24 @@ export interface LinkClaim {
   expires_at: string; used_at: string | null; confirmed_at: string | null; axal_confirmed_at: string | null;
   activated_at: string | null; cancelled_at: string | null;
 }
-export interface ClaimDetails { display_name: string | null; username: string | null }
+export interface ClaimDetails {
+  display_name: string | null; username: string | null;
+  /** 'whatsapp_link' only: the sender's WhatsApp id, which exists in clear nowhere else. */
+  wa_id?: string;
+}
 
 export async function consumeLinkCode(
-  env: Env, code: string, provider: 'telegram', claimant: string | null = null, details: ClaimDetails | null = null,
+  env: Env, code: string, provider: LinkProvider, claimant: string | null = null, details: ClaimDetails | null = null,
 ): Promise<number | null> {
+  const row = await consumeLinkCodeRow(env, code, provider, claimant, details);
+  return row ? row.userId : null;
+}
+
+/** `consumeLinkCode`, with the code's uid; `confirm` records the claimant's side as given in the same UPDATE. */
+export async function consumeLinkCodeRow(
+  env: Env, code: string, provider: LinkProvider, claimant: string | null = null, details: ClaimDetails | null = null,
+  opts: { confirm?: boolean } = {},
+): Promise<{ userId: number; uid: string } | null> {
   const clean = String(code ?? '').trim();
   if (clean.length !== CODE_LEN || ![...clean].every((ch) => ALPHABET.includes(ch))) return null;
   const hash = await sha256Hex(clean);
@@ -70,15 +91,16 @@ export async function consumeLinkCode(
   if (!codeRow) return null;
   const encrypted = details ? await encryptColumn(env, 'channel_link_codes', 'claim_details_enc', codeRow.uid, JSON.stringify(details)) : null;
   const row = await env.DB.prepare(
-    `UPDATE channel_link_codes SET used_at = datetime('now'), telegram_user_id = ?, claim_details_enc = ?, updated_at = datetime('now')
+    `UPDATE channel_link_codes SET used_at = datetime('now'), telegram_user_id = ?, claim_details_enc = ?,
+            confirmed_at = CASE WHEN ? = 1 THEN datetime('now') ELSE confirmed_at END, updated_at = datetime('now')
       WHERE code_hash = ? AND provider = ? AND used_at IS NULL AND cancelled_at IS NULL AND expires_at > ?
-      RETURNING user_id`,
-  ).bind(claimant, encrypted, hash, provider, new Date().toISOString()).first<{ user_id: number }>();
-  return row ? Number(row.user_id) : null;
+      RETURNING user_id, uid`,
+  ).bind(claimant, encrypted, opts.confirm ? 1 : 0, hash, provider, new Date().toISOString()).first<{ user_id: number; uid: string }>();
+  return row ? { userId: Number(row.user_id), uid: row.uid } : null;
 }
 
 /** Telegram's own confirmation, still within the code's original lifetime. */
-export async function confirmLinkClaim(env: Env, provider: 'telegram', claimant: string): Promise<LinkClaim | null> {
+export async function confirmLinkClaim(env: Env, provider: LinkProvider, claimant: string): Promise<LinkClaim | null> {
   return env.DB.prepare(
     `UPDATE channel_link_codes SET confirmed_at = datetime('now'), updated_at = datetime('now')
       WHERE id = (SELECT id FROM channel_link_codes
@@ -90,9 +112,9 @@ export async function confirmLinkClaim(env: Env, provider: 'telegram', claimant:
   ).bind(provider, String(claimant), new Date().toISOString()).first<LinkClaim>();
 }
 
-export function memberLinkClaim(env: Env, userId: number, uid: string): Promise<LinkClaim | null> {
-  return env.DB.prepare("SELECT * FROM channel_link_codes WHERE user_id = ? AND provider = 'telegram' AND uid = ?")
-    .bind(userId, uid).first<LinkClaim>();
+export function memberLinkClaim(env: Env, userId: number, uid: string, provider: LinkProvider = 'telegram'): Promise<LinkClaim | null> {
+  return env.DB.prepare('SELECT * FROM channel_link_codes WHERE user_id = ? AND provider = ? AND uid = ?')
+    .bind(userId, provider, uid).first<LinkClaim>();
 }
 
 export async function claimDetails(env: Env, claim: LinkClaim): Promise<ClaimDetails | null> {

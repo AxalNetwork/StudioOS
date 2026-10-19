@@ -184,6 +184,8 @@ export async function loadSlackWebhookForUser(env: Env, userId: number): Promise
 
 const impl: ProviderImpl = {
   key: PROVIDER_KEY,
+  // D751: whether Axal holds the OAuth client, from the cache `ensureCreds` reads.
+  ready: async (env) => (await import('../../services/providerOauthKeys')).oauthCredsReady(env, 'slack'),
   connect,
   disconnect,
   buildAuthorizeUrl,

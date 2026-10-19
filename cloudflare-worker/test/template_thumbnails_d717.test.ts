@@ -78,23 +78,20 @@ async function call(db: DatabaseSync, path: string, o: { who?: number | null; me
   return res;
 }
 
-test('D717 /templates/outside lists exactly the five keys, each with the row it counts under', async () => {
+test('D717/D758 /templates/outside lists exactly the bundled keys still sent as the file, each with the row it counts under', async () => {
   const db = fixture();
   const r = await get(db, '/templates/outside');
   assert.equal(r.status, 200);
-  assert.deepEqual(r.body.items.map((i: any) => [i.key, i.counted_under.slug]), [
-    ['investor_nda_v1', 'investor_nda_axal'],
-    ['mentor_nda_v1', 'mentor_nda_axal'],
-    ['mentor_disclaimer_v1', 'mentor_engagement_disclaimer'],
-    ['partner_msa_v1', 'partner_services'],
-    ['nda_3way_founder_investor_axal_v1', 'nda_3way_founder_investor_axal'],
+  // D758 PR 1: only partner onboarding still sends its bundled file.
+  assert.deepEqual(r.body.items.map((i: any) => [i.key, i.title, i.doc_type, i.counted_under.slug]), [
+    ['partner_msa_v1', 'Partner Master Services Agreement', 'partner_services', 'partner_services'],
   ]);
   for (const i of r.body.items) {
     const row = db.prepare('SELECT title FROM legal_templates WHERE slug = ? AND is_active = 1').get(i.counted_under.slug) as any;
     assert.equal(i.counted_under.title, row?.title ?? null, i.key);
-    assert.ok(i.title.length > 5, i.key);
+    assert.notEqual(i.title, i.counted_under.title, 'the card never repeats the title of the row it counts under');
   }
-  assert.ok(r.body.items.some((i: any) => i.counted_under.title), 'at least one row is in the seed catalog');
+  assert.ok(r.body.items.every((i: any) => i.counted_under.title), 'the row is in the seed catalog');
   assert.equal((await get(db, '/templates/outside', null)).status, 401);
   assert.equal((await get(db, '/templates/outside', 3)).status, 403);
 });
@@ -181,18 +178,20 @@ test('D717 a stub\'s thumbnail reads "No body in the store yet.", and a counsel-
   assert.ok(!house.includes('counsel to draft'));
 });
 
-test('D717 an outside key draws its bundled body; a catalog key and an unknown key are 404', async () => {
+test('D717/D758 an outside key draws its bundled body; a key now sent from its row, a catalog key and an unknown key are 404', async () => {
   const db = fixture();
   const browser = fakeBrowser();
   const r2 = fakeR2();
-  const res = await call(db, '/templates/outside/investor_nda_v1/thumbnail.png', { browser, r2 });
+  const res = await call(db, '/templates/outside/partner_msa_v1/thumbnail.png', { browser, r2 });
   assert.equal(res.status, 200);
   assert.equal(browser.calls.length, 1);
-  assert.ok(browser.calls[0].options.html.includes('Investor NDA (Axal) v1'));
+  assert.ok(browser.calls[0].options.html.includes('Partner Master Services Agreement'));
   assert.match([...r2.objects.keys()][0], /^legal\/thumbnails\/outside\/[0-9a-f]{64}\/[0-9a-f]{16}-[0-9a-f]{16}\.png$/);
-  assert.equal((await call(db, '/templates/outside/tos_v1/thumbnail.png', { browser, r2 })).status, 404);
-  assert.equal((await call(db, '/templates/outside/nope/thumbnail.png', { browser, r2 })).status, 404);
-  assert.equal((await call(db, '/templates/outside/investor_nda_v1/thumbnail.png', { browser, r2, who: 3 })).status, 403);
+  for (const key of ['investor_nda_v1', 'mentor_nda_v1', 'mentor_disclaimer_v1', 'nda_3way_founder_investor_axal_v1', 'tos_v1', 'nope']) {
+    assert.equal((await call(db, `/templates/outside/${key}/thumbnail.png`, { browser, r2 })).status, 404, key);
+  }
+  assert.equal(browser.calls.length, 1, 'a 404 never draws');
+  assert.equal((await call(db, '/templates/outside/partner_msa_v1/thumbnail.png', { browser, r2, who: 3 })).status, 403);
   assert.equal(browser.fetches(), 0);
 });
 
