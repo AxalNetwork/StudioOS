@@ -12,6 +12,8 @@ One file per provider. Each module:
    `../connectorPages.ts`: tagline, description, the tools its calls make,
    and prompts only if Eadwyn reads it. `cloudflare-worker/test/connector_pages_d753.test.ts`
    fails until every request that writes is named by a tool (D753).
+5. An OAuth provider implements `ready(env)`; `connector_readiness_d751.test.ts`
+   fails otherwise (D751).
 
 The module is then imported once from the worker entry point
 (`cloudflare-worker/src/index.ts`) so its top-level `registerProvider`
@@ -33,6 +35,10 @@ call runs at boot.
   `cloudflare-worker/src/services/channels/zoom.ts`, which calls
   `registerProvider` at module load and is imported by
   `cloudflare-worker/src/routes/founder_validate_meetings.ts`.
+- D751 (#1880) — each OAuth provider's `ready` reads `oauthCredsReady`, the
+  cache its `ensureCreds` reads, so `GET /available`'s `configured` and the
+  start's refusal agree. Zoom's `ready` lives in
+  `cloudflare-worker/src/services/channels/zoom.ts` (all three Zoom secrets).
 - D710 (#1775) — Mercury's HQ entity connection is NOT made here: a Super
   Admin adds it per Axal organization, kept in its own store and synced
   read-only by `cloudflare-worker/src/services/mercury/`, behind

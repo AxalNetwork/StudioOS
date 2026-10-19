@@ -19,6 +19,10 @@
  * ordinary `projects` row. The computed readiness detectors below are the
  * Lab capital page's data-room readiness rules, moved here and stored, so a
  * Lab venture and a founder see the same scores.
+ *
+ * A RECEIVED WIRE (D752 §5, decision 12). Capital relationships' stage cell
+ * reads a stored raise receipt's posted date only (`receivedDates`), never a
+ * Mercury connection, a last four, a counterparty or a bank figure.
  */
 import type { Env } from '../types';
 import { safeCard, safeFigure, countState, PAGE_SIZE, type Card, type Figure } from './cycleCards';
@@ -1178,10 +1182,13 @@ export async function capitalCard(ctx: Ctx): Promise<Card> {
 /**
  * A prospect's stage, and how it came: "Committed · soft" for a commitment
  * made through a call (D653 writes those as `soft`, never signed), and
- * "· via call" for any responder.
+ * "· via call" for any responder. D752: a committed prospect with a confirmed
+ * raise receipt reads "Committed · received <posted date>", which replaces
+ * "· soft" because the bank line outranks the word.
  */
-export function stageCell(p: ProspectRow): Cell {
+export function stageCell(p: ProspectRow, receivedOn: string | null = null): Cell {
   const label = LIST_STAGE_LABEL[p.stage] ?? p.stage;
+  if (p.stage === 'committed' && receivedOn) return { text: `${label} · received ${receivedOn.slice(0, 10)}${p.via_call ? ' · via call' : ''}` };
   const soft = p.stage === 'committed' && p.commit_status === 'soft';
   const text = `${label}${soft ? ' · soft' : ''}${p.via_call ? ' · via call' : ''}`;
   return soft || p.via_call ? { text, tone: soft ? 'warn' : undefined } : label;
@@ -1234,8 +1241,18 @@ export async function prospectFunds(ctx: Ctx): Promise<Map<number, ProspectFund>
   return out;
 }
 
+/** D752: each prospect's confirmed raise receipt, by its posted date. Stored matches only. */
+export async function receivedDates(env: Env, projectId: number): Promise<Map<number, string>> {
+  const rows = (await env.DB.prepare(
+    `SELECT m.target_id, m.posted_on FROM mercury_personal_matches m JOIN raise_prospects p ON p.id = m.target_id
+      WHERE m.target_kind = 'raise_prospect' AND m.state = 'confirmed' AND p.project_id = ?`,
+  ).bind(projectId).all<{ target_id: number; posted_on: string }>()).results || [];
+  return new Map(rows.map((r) => [Number(r.target_id), String(r.posted_on)]));
+}
+
 async function capitalRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   const funds = await prospectFunds(ctx);
+  const received = await receivedDates(ctx.env, ctx.projectId);
   const fitOf = (p: ProspectRow): Fit | 'not_recorded' => funds.get(Number(p.id))?.fit ?? 'not_recorded';
   let rows = (await loadProspects(ctx.env, ctx.projectId)).filter((p) => has(rq.q, p.name, p.firm, p.warm_path));
   if (rq.filter.stage) rows = rows.filter((p) => p.stage === rq.filter.stage);
@@ -1258,7 +1275,7 @@ async function capitalRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
       id: p.id,
       cells: {
         investor: [p.name, p.firm].filter(Boolean).join(' · ') || null,
-        stage: stageCell(p),
+        stage: stageCell(p, received.get(Number(p.id)) ?? null),
         last_contact: day(p.last_contact),
         next_step: p.next_step
           ? { text: p.next_step_due ? `${p.next_step} · ${p.next_step_due}` : p.next_step, tone: p.next_step_due && p.next_step_due < ctx.today ? 'bad' : undefined }

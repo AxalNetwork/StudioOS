@@ -2477,6 +2477,8 @@ function AppInner() {
           its address carries the same gate. The static path outranks
           `:section` below; the page also lists the section for admins only. */}
       <Route path="/account/developer" element={guard(['admin'], <SettingsPage />)} />
+      {/* D753 — a connector's own page, inside the Account center. */}
+      <Route path="/account/connectors/:key" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
       <Route path="/account/:section" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
       <Route path="/settings/:section" element={<SettingsSectionRedirect />} />
 

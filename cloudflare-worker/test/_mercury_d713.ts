@@ -11,9 +11,10 @@ export function ddl(db: any, name: string) {
   const start = baseline.indexOf(`CREATE TABLE ${name} (`);
   db.exec(baseline.slice(start, baseline.indexOf(');', start) + 2));
 }
-export function fixture(migrate = true) {
+/** `migrate`: true applies 477 and D752's 490; '477' stops after 477 (490's own migration test); false applies neither. */
+export function fixture(migrate: boolean | '477' = true) {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  for (const t of ['users', 'super_admins', 'user_sessions', 'activity_logs', 'admin_audit_log']) ddl(db, t);
+  for (const t of ['users', 'super_admins', 'user_sessions', 'activity_logs', 'admin_audit_log', 'raise_prospects', 'deals', 'commitments', 'deal_invitations']) ddl(db, t);
   db.exec(`CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT, founder_id INTEGER, company_id INTEGER);
     CREATE TABLE documents (id INTEGER PRIMARY KEY, project_id INTEGER);
     CREATE TABLE user_company_links (id INTEGER PRIMARY KEY, user_id INTEGER, company_id INTEGER);
@@ -31,7 +32,20 @@ export function fixture(migrate = true) {
   for (const m of ['028_partner_deals.sql', '311_revenue_entries.sql', '400_revenue_stripe_charge_index.sql']) db.exec(mig(m));
   db.exec("INSERT INTO partner_deals (id,user_id,deal_type,proposal_json,status) VALUES (1,20,'custom','{}','active'), (2,21,'custom','{}','active'), (3,20,'custom','{}','proposed')");
   if (migrate) db.exec(mig('477_mercury_personal.sql'));
+  if (migrate === true) db.exec(mig('490_mercury_raise_receipts.sql'));
   return { db, env: { DB: d1Over(db), JWT_SECRET: crypto.randomUUID(), ENVIRONMENT: 'development' } as any };
+}
+/**
+ * 477's match table and its two indexes, then D752's 490, for a fixture that
+ * does not apply 477 (it rebuilds revenue_entries too). `raise_prospects` must
+ * exist first: 490's trigger is on it.
+ */
+export function personalMatchTables(db: any) {
+  const sql = mig('477_mercury_personal.sql');
+  const start = sql.indexOf('CREATE TABLE IF NOT EXISTS mercury_personal_matches');
+  const end = sql.indexOf('\n', sql.indexOf('CREATE UNIQUE INDEX IF NOT EXISTS uq_mercury_personal_match_target'));
+  db.exec(sql.slice(start, end));
+  db.exec(mig('490_mercury_raise_receipts.sql'));
 }
 export async function call(router: any, env: any, path: string, who = 2, method = 'GET', body?: any, jti?: string) {
   const jwt = await new SignJWT({ user_id: who, ...(jti ? { jti } : {}) }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(env.JWT_SECRET));

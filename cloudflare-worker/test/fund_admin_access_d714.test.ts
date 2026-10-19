@@ -80,7 +80,7 @@ test('the table: unique keys, the decision\'s tiers, and a sentence on every Sup
   assert.deepEqual(tiers, {
     'capital_call.preview': 'admin', 'capital_call.issue': 'super_admin', 'capital_call.receipt': 'admin',
     'distribution.preview': 'admin', 'distribution.execute': 'super_admin', 'distribution.mark_paid': 'admin',
-    'fund_report.draft': 'admin', 'fund_report.issue': 'super_admin', 'fund_booklet.read': 'admin', 'fund_booklet.withdraw': 'admin', 'fund_notice.preview': 'admin', 'fund_notice.issue': 'super_admin', 'fund.gp_of_record': 'super_admin', 'fund.slug_fund_i': 'super_admin', 'fund.economics': 'super_admin', 'fund.write': 'admin',
+    'fund_report.draft': 'admin', 'fund_report.issue': 'super_admin', 'fund_booklet.read': 'admin', 'fund_booklet.withdraw': 'admin', 'fund_booklet.accept': 'super_admin', 'fund_notice.preview': 'admin', 'fund_notice.issue': 'super_admin', 'fund.gp_of_record': 'super_admin', 'fund.slug_fund_i': 'super_admin', 'fund.economics': 'super_admin', 'fund.write': 'admin',
     'fund_ledger.administrator': 'super_admin', 'fund_ledger.write': 'admin',
     'bank_account.see': 'super_admin', 'bank_account.change': 'super_admin', 'bank_account.reveal': 'super_admin',
     'fee_terms.confirm': 'super_admin', 'fee_period.issue': 'super_admin', 'fee.write': 'admin',
