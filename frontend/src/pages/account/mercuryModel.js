@@ -126,6 +126,8 @@ export function entityRows(read) {
 
 export const ENTITY_FEEDS = 'What it feeds: balances and transactions for reconciliation, and the monthly cash and reconciliation drafts. Drafts wait in the review queue. Nothing reaches an LP from here.';
 export const ENTITY_AUDIT_FOOT = 'Opening this page is recorded in the admin audit log.';
+/** The same record, where the rows still open in a sheet (the Bank accounts console, Build's lightbox). */
+export const ENTITY_SHEET_AUDIT_FOOT = 'Opening this sheet is recorded in the admin audit log.';
 export const ADMIN_ONLY = 'Only the Super Admin connects, replaces or disconnects an entity\'s Mercury.';
 export const BRANCH_MANAGED = 'Axal\'s entity accounts are managed from HQ.';
 export const TOKEN_HELP = 'How to create a Read Only token';

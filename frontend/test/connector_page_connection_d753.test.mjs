@@ -68,10 +68,10 @@ test('manageItems: Sync now, Replace key or Reconnect, Disconnect; Reconnect lea
   assert.deepEqual(manageItems({ ...row('stripe'), connection: null }), []);
 });
 
-test('interimPanel: only GitHub, a member\'s Mercury and GitHub\'s sign-in landing keep F1\'s panel; never the entity row', () => {
+test('interimPanel: only GitHub and GitHub\'s sign-in landing keep F1\'s panel; never Mercury (F5, #1991)', () => {
   for (const key of ['stripe', 'hubspot', 'crunchbase', 'slack', 'google']) assert.equal(interimPanel(row(key)), false, key);
   assert.equal(interimPanel(row('github')), true);
-  assert.equal(interimPanel(row('mercury')), true);
+  assert.equal(interimPanel(row('mercury')), false, 'F5 draws a member\'s Mercury in Your connection');
   assert.equal(interimPanel({ ...row('stripe'), connection: null }, 'sync'), true);
   assert.equal(interimPanel({ ...row('github'), connection: null }), false);
   assert.equal(interimPanel({ ...row('mercury'), connection_source: 'mercury_entity_connections' }), false, 'F5 draws the entities\' Mercury itself');
@@ -267,7 +267,7 @@ test('first-party rows disconnect through their own routes, never DELETE /api/co
   }
 });
 
-test('the inline panel is gone for HubSpot, and kept for GitHub and Mercury only', async () => {
+test('the inline panel is gone for HubSpot and Mercury, and kept for GitHub only', async () => {
   const f = stubFetch(readsOk);
   try {
     let m = await mount(page('hubspot'), '/account/connectors/hubspot');
@@ -275,13 +275,16 @@ test('the inline panel is gone for HubSpot, and kept for GitHub and Mercury only
       assert.ok(m.by('connector-page-connection'));
       assert.equal(m.by('connector-page-connect'), undefined, 'no inline panel');
     } finally { await m.unmount(); }
-    for (const key of ['github', 'mercury']) {
-      m = await mount(page(key), `/account/connectors/${key}`);
-      try {
-        assert.equal(m.props(m.by('connector-page-connect'))['data-mode'], 'panel', key);
-        assert.equal(m.by('connector-page-connection'), undefined, `${key}: F4 and F5 take its section over`);
-      } finally { await m.unmount(); }
-    }
+    m = await mount(page('github'), '/account/connectors/github');
+    try {
+      assert.equal(m.props(m.by('connector-page-connect'))['data-mode'], 'panel');
+      assert.equal(m.by('connector-page-connection'), undefined, 'F4 takes its section over');
+    } finally { await m.unmount(); }
+    m = await mount(page('mercury'), '/account/connectors/mercury');
+    try {
+      assert.equal(m.by('connector-page-connect'), undefined, 'F5 (#1991): no inline panel for a member\'s Mercury');
+      assert.ok(m.by('connector-page-connection'));
+    } finally { await m.unmount(); }
   } finally { f.restore(); }
 });
 

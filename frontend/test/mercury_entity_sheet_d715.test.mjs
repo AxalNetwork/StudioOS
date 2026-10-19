@@ -22,7 +22,7 @@ import { ConnectorsView } from '../src/pages/account/AccountConnectors.jsx';
 import { ConnectorPageView } from '../src/pages/account/ConnectorPage.jsx';
 import { openingView } from '../src/pages/account/ConnectorSheet.jsx';
 import { MercuryEntitySheet } from '../src/pages/account/MercurySheet.jsx';
-import { ADMIN_ONLY, BRANCH_MANAGED, ENTITY_AUDIT_FOOT, FUND_NOTE, NOT_OFFERED, NOT_OFFERED_HQ_ONLY, isMercurySearch } from '../src/pages/account/mercuryModel.js';
+import { ADMIN_ONLY, BRANCH_MANAGED, ENTITY_AUDIT_FOOT, ENTITY_SHEET_AUDIT_FOOT, FUND_NOTE, NOT_OFFERED, NOT_OFFERED_HQ_ONLY, isMercurySearch } from '../src/pages/account/mercuryModel.js';
 
 const h = React.createElement;
 const html = (el, entry = '/account/connectors') => renderToStaticMarkup(h(MemoryRouter, { initialEntries: [entry] }, el));
@@ -174,7 +174,8 @@ test('the Super Admin: four entities in order, endings, the Fund note, the previ
     assert.match(t, /Savings ending 9002 Not in the bank-account registry/);
     assert.ok(t.includes(FUND_NOTE));
     assert.match(t, /Token …f1x2/);
-    assert.ok(t.includes(ENTITY_AUDIT_FOOT));
+    assert.ok(t.includes(ENTITY_SHEET_AUDIT_FOOT), 'the sheet says "sheet" (S1 on #1991)');
+    assert.ok(!t.includes(ENTITY_AUDIT_FOOT), 'never the page\'s sentence inside a sheet');
     for (const id of ['mercury-sync-holdings', 'mercury-replace-holdings', 'mercury-disconnect-holdings', 'mercury-connect-fund']) assert.ok(m.by(id), id);
     assert.equal(m.by('mercury-sync-fund'), undefined, 'no sync for an entity that is not connected');
     assert.equal(m.by('mercury-admin-only'), undefined);

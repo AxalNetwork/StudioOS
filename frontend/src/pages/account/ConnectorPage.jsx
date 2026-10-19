@@ -18,7 +18,7 @@ import {
 } from './connectorPageModel';
 import { isChannelKey } from './channelPageModel';
 import ChannelPage from './ChannelPage';
-import { notOfferedSentence } from './mercuryModel';
+import { MEMBER_REPLACE, notOfferedSentence } from './mercuryModel';
 import { MercuryEntityPageBody, MercuryLandsGroup, MercuryReadsGroup, MercuryUsesGroups } from './MercurySheet';
 import { useAuth } from '../../hooks/useAuthSync';
 import { branchOfUser, isSuperAdminUser } from '../../lib/shellRole';
@@ -44,9 +44,9 @@ import { ZOOM_DISCONNECT_NOTE, ZOOM_SECTIONS, usedByLinks, zoomHowItWorks, zoomN
  * "Manage ▾" (`manageItems`): Sync now, Replace key or Reconnect, and
  * Disconnect, which asks first in a centred dialog.
  *
- * NOTHING IS LOST WHILE THE WORK MOVES (decision 7). Until F4 and F5 take them
+ * NOTHING IS LOST WHILE THE WORK MOVES (decision 7). Until F4 takes it
  * over, today's `ConnectorPanel` stays inline only for GitHub's repositories
- * and a member's own Mercury (`interimPanel`), through `SheetFrame`'s `page` layout: in the
+ * (`interimPanel`), through `SheetFrame`'s `page` layout: in the
  * page's flow, no overlay, no dialog role, no × and no Escape of its own.
  *
  * A SIGN-IN COMES BACK HERE (decision 6). `connectorsRedirect` sends a return
@@ -66,8 +66,10 @@ import { ZOOM_DISCONNECT_NOTE, ZOOM_SECTIONS, usedByLinks, zoomHowItWorks, zoomN
  * MERCURY (#1991, F5). The Axal entities' row (`isEntityRow`, an admin on HQ)
  * draws `MercuryEntityPageBody` in "Connect and manage": the entity
  * connections, what they feed, Open Banking and the audit foot, with the one
- * audited read on mount and no header action. A member's connected Mercury
- * stays in the interim panel (`interimPanel`) until F5 lays it out.
+ * audited read on mount and no header action. A member's own Mercury draws
+ * its groups (what it is for, where it lands, what it reads) above the token
+ * form until it is connected, then in "Your connection" with Manage's Sync
+ * now, Replace token and Disconnect: no interim panel, no sign-in redirect.
  *
  * THE READ (#1955, part 2). Handed `readPage` (`connectorsApi.page`), the view
  * reads `GET /api/connectors/directory/<page_key>` once the connector is known,
@@ -180,10 +182,10 @@ function ReadyPage({ p, back, phone, ret, moved, onChanged, children, connector 
   const keyOpen = (view === 'key' || view === 'badkey') && ['key', 'oauth', 'reconnect', 'status'].includes(action.kind);
   // D753 F5 (#1991): the Axal entities' Mercury is drawn on the page itself, never the interim panel.
   const entity = isEntityRow(p);
-  // F1's panel stays only where F4 (GitHub) and F5 (Mercury) take it over; every other connection is "Your connection".
+  // F1's panel stays only where F4 (GitHub) takes it over; every other connection is "Your connection".
   const panelShown = interimPanel(p, view);
   const role = auth?.user?.role ?? null;
-  // A member's own Mercury still says what it is for before the token is asked for, until F5; the band connects.
+  // A member's own Mercury says what it is for above the token form, as the sheet's first step did; the band connects.
   const memberMercury = isPersonalMercury(p) && !p.connection && !panelShown;
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="connector-page" data-state="ready" data-key={p.key}>
@@ -221,7 +223,7 @@ function ReadyPage({ p, back, phone, ret, moved, onChanged, children, connector 
           {!keyOpen && panelShown && <InlinePanel key={`${p.key}:${p.connection ? 'c' : 'n'}`} p={p} ret={view === 'sync' ? { view: 'sync' } : null} onChanged={onChanged} />}
         </section>
       )}
-      {p.connection && !panelShown && !entity && <YourConnection p={p} flow={flow} onChanged={onChanged} />}
+      {p.connection && !panelShown && !entity && <YourConnection p={p} flow={flow} role={role} onChanged={onChanged} />}
       {flow.confirming && (
         <Lightbox label={`Disconnect ${name}?`} title={`Disconnect ${name}?`} onClose={() => flow.setConfirming(false)} width={440} testId="connector-page-disconnect-dialog"
           footer={(
@@ -245,10 +247,16 @@ const ACCOUNT_MISSING = 'The service did not name the account this connection si
  * "Your connection" (decision 3, item 4): the first row, a slot for the
  * provider's own section, then the sheet's Companies, Now fed by, Settings
  * and Activity groups, which Build's lightbox draws too.
+ *
+ * A member's own Mercury (#1991, F5) is drawn as its sheet's connected view
+ * was (D715 decision 8): its section is what StudioOS uses it for, where it
+ * lands and what it reads, in place of Companies; Now fed by is a founder's
+ * only; and the attention line says how to fix it, never the raw error.
  */
-function YourConnection({ p, flow, onChanged }) {
+function YourConnection({ p, flow, role = null, onChanged }) {
   const conn = p.connection;
   const status = connectionStatus(conn, p);
+  const mercury = isPersonalMercury(p);
   return (
     <section data-testid="connector-page-connection" className="flex min-w-0 flex-col gap-2">
       <h2 className={H2}>Your connection</h2>
@@ -269,12 +277,19 @@ function YourConnection({ p, flow, onChanged }) {
             {flow.syncing ? 'Syncing…' : 'Sync now'}
           </button>
         )}
-        {status.why && <p className="w-full text-[12.5px] text-amber-800 dark:text-amber-200" data-testid="connector-page-attention">{status.why}.</p>}
+        {status.why && <p className="w-full text-[12.5px] text-amber-800 dark:text-amber-200" data-testid="connector-page-attention">{mercury ? `${status.why}. ${MEMBER_REPLACE}` : `${status.why}.`}</p>}
       </div>
-      {/* The provider's own section goes here: GitHub's repositories (F4), Mercury (F5), the channel cards (C1). */}
+      {/* The provider's own section goes here: GitHub's repositories (F4), Mercury (F5, below), the channel cards (C1). */}
       <div className="-mx-5">
-        <CompaniesGroup conn={conn} onChanged={onChanged} />
-        <FedGroup conn={conn} name={p.display_name} />
+        {mercury ? (
+          <div data-testid="connector-page-mercury">
+            <MercuryUsesGroups role={role} />
+            <MercuryLandsGroup role={role} />
+            <MercuryReadsGroup />
+          </div>
+        ) : <CompaniesGroup conn={conn} onChanged={onChanged} />}
+        {/* Decision 8: a partner's Mercury feeds no module. */}
+        {(!mercury || role === 'founder') && <FedGroup conn={conn} name={p.display_name} />}
         <SettingsGroup p={p} onTool={flow.setTool} onReplace={() => flow.go('key')} />
         {conn.uid
           ? <ActivityGroup conn={conn} />
@@ -630,7 +645,7 @@ function WaitlistAction({ p, action, onChanged }) {
 
 /** About: what it reads and sends, and what it may do, from today's fields. It makes no read. */
 function About({ p }) {
-  // Mercury's own groups read its status on mount, so they stay in the inline panel (F5 lays out its About).
+  // Mercury's own groups read its status on mount, so they are drawn once: above the token form, then in Your connection.
   const mercury = p.key === 'mercury';
   return (
     <section data-testid="connector-page-about" className="flex min-w-0 flex-col">

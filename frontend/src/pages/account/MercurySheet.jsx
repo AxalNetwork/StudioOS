@@ -8,7 +8,7 @@ import { BTN, INPUT, LoadingRows } from './AccountCenter';
 import { Banner, Group, Row, Sheet } from './ConnectorSheet';
 import { agoLabel } from './connectorsModel';
 import {
-  ADMIN_ONLY, ATTESTATION_DOOR, BRANCH_MANAGED, DISCONNECT_REASON_MIN, ENTITY_AUDIT_FOOT, ENTITY_DISCONNECT_NOTE, ENTITY_FEEDS, MEMBER_GROUPS, OPEN_BANKING,
+  ADMIN_ONLY, ATTESTATION_DOOR, BRANCH_MANAGED, DISCONNECT_REASON_MIN, ENTITY_AUDIT_FOOT, ENTITY_DISCONNECT_NOTE, ENTITY_SHEET_AUDIT_FOOT, ENTITY_FEEDS, MEMBER_GROUPS, OPEN_BANKING,
   READS_ROW, TOKEN_HELP, confirmReadOnlyLabel, entityRows, landsWords, neverRows, retryAfterSentence, usesRows,
 } from './mercuryModel';
 import { mercuryPersonalApi } from '../../lib/api/mercuryPersonal';
@@ -223,7 +223,7 @@ export function MercuryEntitySheet({ p, superAdmin = false, branch = null, api =
   return (
     <Sheet eyebrow={eyebrow} title={`${name} · Axal entities`} provider={p?.key || 'mercury'} providerName={name}
       sub="The four Axal entities' Mercury organizations." onClose={onClose} data-testid="mercury-entity-sheet"
-      footer={<span className="mr-auto text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="mercury-audit-foot">{ENTITY_AUDIT_FOOT}</span>}>
+      footer={<span className="mr-auto text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="mercury-audit-foot">{ENTITY_SHEET_AUDIT_FOOT}</span>}>
       <MercuryEntityConnections superAdmin={superAdmin} branch={branch} api={api} docsUrl={p?.docs_url || null} />
       {!branch && <p className="mx-5 mt-4 text-[12px] leading-relaxed text-axal-muted dark:text-gray-400" data-testid="mercury-feeds">{ENTITY_FEEDS}</p>}
       {/* #1780 decision 12: the door to fund administration's Banking tab (D714 PR 4a mounts it). */}
