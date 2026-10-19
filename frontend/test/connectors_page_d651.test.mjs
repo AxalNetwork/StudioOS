@@ -17,13 +17,13 @@ import { MemoryRouter } from 'react-router-dom';
 
 import {
   agoLabel, attentionReason, authKind, buildCatalogue, cardAction, cardPill, categoryOf, companiesLabel,
-  connectFailure, connectionStatus, connectorsRedirect, discoverSections, disconnectNote, doesLabel,
+  INTEGRATION_KEYS_HREF, adminKeysHref, connectFailure, connectionStatus, connectorsRedirect, isUnconfigured, discoverSections, disconnectNote, doesLabel,
   feedsLabel, firstPartyConnection, flowBanner, lastSyncLabel, oauthReturn, pageOf, stripReturn, toolBanner,
   toolGroups, toolState, yoursRows,
 } from '../src/pages/account/connectorsModel.js';
 import { ConnectorsView, AddMenu, RequestSheet } from '../src/pages/account/AccountConnectors.jsx';
 import { discoverFacets } from '../src/pages/account/discoverModel.js';
-import { ConnectorPanel } from '../src/pages/account/ConnectorSheet.jsx';
+import { ConnectorPanel, SheetFrame } from '../src/pages/account/ConnectorSheet.jsx';
 import { ConnectToolView } from '../src/pages/account/ConnectToolSheet.jsx';
 
 const read = (f) => readFileSync(resolve(process.cwd(), f), 'utf8');
@@ -478,4 +478,77 @@ test('a connector belongs to the member: no connectors read takes a company', ()
   for (const f of ['AccountConnectors.jsx', 'ConnectorSheet.jsx', 'ConnectToolSheet.jsx', 'connectorsModel.js', 'discoverModel.js', 'ConnectorFilterMenu.jsx']) {
     assert.doesNotMatch(read(`frontend/src/pages/account/${f}`), /activeCompany|company_id=|useActiveCompany/, f);
   }
+});
+
+// ============================================================== D751 (#1879)
+
+test('D751: a connector Axal has not set up says so, and a company refusal says to choose one', () => {
+  const stripe = byKey('stripe');
+  const hubspot = byKey('hubspot');
+  // The press: the code decides, never the status.
+  assert.equal(connectFailure({ status: 503, code: 'oauth_unconfigured' }, stripe), 'unconfigured');
+  assert.equal(connectFailure({ status: 503, code: 'github_oauth_unconfigured' }, stripe), 'unconfigured');
+  assert.equal(connectFailure({ status: 500, code: 'oauth_config_missing' }, byKey('google')), 'unconfigured');
+  assert.equal(connectFailure({ status: 400, code: 'active_company_required' }, stripe), 'company');
+  assert.equal(connectFailure({ status: 400, code: 'active_company_required' }, hubspot), 'company', 'HubSpot\'s token path never says a key it did not check is invalid');
+  assert.equal(connectFailure({ status: 503, code: 'oauth_setup_unreadable' }, stripe), 'setup_unreadable');
+  assert.equal(connectFailure({ status: 503, code: 'provider_rolling_out' }, stripe), 'refused');
+  // The anchors: a code that only contains the word is not one.
+  assert.equal(connectFailure({ status: 503, code: 'oauth_unconfigured_later' }, stripe), 'refused');
+  assert.equal(connectFailure({ status: 503, code: 'github_oauth_unconfigured_later' }, stripe), 'refused');
+  assert.equal(isUnconfigured('not_configured'), true);
+  assert.equal(isUnconfigured(''), false);
+  assert.equal(isUnconfigured(undefined), false);
+
+  // The return.
+  assert.equal(oauthReturn('?oauth=error&provider=github&reason=github_oauth_unconfigured').view, 'unconfigured');
+  assert.equal(oauthReturn('?oauth=error&provider=github&reason=not_configured').view, 'unconfigured');
+  assert.equal(oauthReturn('?oauth=error&provider=stripe&reason=company_not_linked').view, 'company');
+  assert.equal(oauthReturn('?linkedin=error&linkedin_error=not_configured').view, 'unconfigured');
+  assert.equal(oauthReturn('?oauth=error&provider=github&reason=server_error').view, 'refused');
+
+  // The words: never "refused", never the provider's admin, never the code.
+  const press = 'GitHub isn\'t set up on Axal yet, so it can\'t be connected. Nothing was sent to GitHub.';
+  const back = 'GitHub isn\'t set up on Axal yet, so it can\'t be connected. Nothing was connected.';
+  const company = 'GitHub connects for one company. Choose a company in the sidebar, then connect again. Nothing was connected.';
+  assert.equal(flowBanner('unconfigured', 'GitHub'), press);
+  assert.equal(flowBanner('unconfigured', 'GitHub', { reason: 'not_configured' }), back);
+  assert.equal(flowBanner('company', 'GitHub'), company);
+  for (const s of [press, back, company, flowBanner('setup_unreadable', 'GitHub')]) assert.doesNotMatch(s, /refused|Ask your|_configured|_unconfigured/);
+
+  // The Integration keys link: only this app's admin tabs.
+  assert.equal(INTEGRATION_KEYS_HREF, '/admin?tab=integration-keys');
+  assert.equal(adminKeysHref({ admin_href: '/admin?tab=integration-keys' }), '/admin?tab=integration-keys');
+  for (const bad of ['https://evil.test/', '/admin?tab=x" onclick="y', '//evil.test', '/admin?tab=', 7]) {
+    assert.equal(adminKeysHref({ admin_href: bad }), INTEGRATION_KEYS_HREF, String(bad));
+  }
+  assert.equal(adminKeysHref(undefined), INTEGRATION_KEYS_HREF);
+
+  // The sheet, as raw markup so the testids stay.
+  const [github] = buildCatalogue({ providers: [P('github', 'GitHub', 'code', 'beta', 'free', 'oauth2')], items: [], firstParty: {} });
+  const sheet = (p, view, extra = {}) => html(h(ConnectorPanel, { p, view, setView() {}, onClose() {}, ...extra }));
+  const un = sheet(github, 'unconfigured');
+  assert.match(un, /data-testid="connector-sheet-unconfigured"/);
+  assert.match(un, /data-testid="connector-unconfigured"/);
+  assert.match(text(un), /GitHub isn't set up on Axal yet/);
+  assert.match(un, />Close</);
+  assert.doesNotMatch(un, /Try again|refused/);
+  assert.doesNotMatch(un, /connector-unconfigured-admin-link/, 'no Super Admin is signed in');
+  const co = sheet(stripe, 'company');
+  assert.match(co, /data-testid="connector-sheet-company"/);
+  assert.doesNotMatch(co, /Try again|refused/);
+  const su = sheet(stripe, 'setup_unreadable');
+  assert.match(su, /data-testid="connector-sheet-setup_unreadable"/);
+  assert.match(su, />Try again<\/button>/);
+  assert.doesNotMatch(su, /refused/);
+  // A blocked Build project offers only Close in each of them.
+  for (const v of ['unconfigured', 'company', 'setup_unreadable']) {
+    const b = sheet(stripe, v, { blocked: true });
+    assert.match(b, /data-testid="button-blocked-close"/, v);
+    assert.doesNotMatch(b, />Try again<\/button>/, v);
+  }
+  // D753's page draws the view inline, too.
+  const page = html(h(SheetFrame.Provider, { value: { layout: 'page', onDismiss() {} } }, h(ConnectorPanel, { p: github, view: 'unconfigured', setView() {}, onClose() {} })));
+  assert.match(page, /data-testid="connector-sheet-unconfigured"[^>]*data-layout="page"|data-layout="page"[^>]*data-testid="connector-sheet-unconfigured"/);
+  assert.doesNotMatch(page, /refused/);
 });

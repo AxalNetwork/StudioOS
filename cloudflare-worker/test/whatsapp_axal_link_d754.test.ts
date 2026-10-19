@@ -25,181 +25,14 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { createHash, createHmac } from 'node:crypto';
-import { Hono } from 'hono';
-import { SignJWT } from 'jose';
-import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
-import { tableFromBaseline } from './_baseline.mjs';
-import channels from '../src/routes/channels.ts';
-import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
+import {
+  AXAL, AXAL_PNID, AXAL_TOKEN, ME, MEMBER_PNID, OTHER, SECRETS, SENDER, SENDER_2,
+  call, count, everyValue, lastEvent, link, mig, mockGraph, now, refCode, seen, waHook, waText, world,
+} from './_whatsapp_axal_fixture.ts';
 import { decryptCredentials } from '../src/integrations/secrets.ts';
 import { purgeExpired } from '../src/services/channels/threads.ts';
 import { senderRef } from '../src/services/channels/whatsappLink.ts';
 import { indexHmac } from '../src/services/columnCipher.ts';
-
-const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
-const mig = (name: string) => readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8');
-const refCode = (code: string) => createHash('sha256').update(code).digest('hex');
-
-const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
-const ME = 2, OTHER = 3, GONE = 4;
-const AXAL_PNID = '3000001';
-const MEMBER_PNID = '1000001';
-const SENDER = '447700900456';
-const SENDER_2 = '447700900789';
-const AXAL_TOKEN = 'EAAG-axal-system-user-SECRET';
-
-const SECRETS = {
-  WHATSAPP_APP_ID: '424242',
-  WHATSAPP_APP_SECRET: 'wa-app-SECRET-value',
-  WHATSAPP_VERIFY_TOKEN: 'wa-verify-SECRET',
-  WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID: '777888',
-};
-const AXAL = {
-  WHATSAPP_AXAL_ACCESS_TOKEN: AXAL_TOKEN,
-  WHATSAPP_AXAL_PHONE_NUMBER_ID: AXAL_PNID,
-  WHATSAPP_AXAL_WABA_ID: '3000002',
-  WHATSAPP_AXAL_DISPLAY_NUMBER: '+1 555 000 9999',
-};
-
-const CHANNEL_MIGRATIONS = ['106_pain_groups.sql', '211_founder_validate_evidence.sql', '214_validate_proposals.sql',
-  '246_fills_the_blanks_everywhere.sql', '438_interview_sessions.sql', '439_validate_proposals_structuring.sql',
-  '440_validate_cycle_stores.sql', '446_interview_structure_receipts.sql', '447_assistant_interviews.sql',
-  '449_interview_channels.sql', '450_channel_events_delete_kind.sql', '451_channel_review_fixes.sql',
-  '452_record_session_setup.sql', '454_channel_voice_failures.sql', '457_integrations_last_error_at.sql',
-  '458_channel_link_consent.sql'];
-
-function world(opts: { axal?: Partial<typeof AXAL>; upTo492?: boolean } = {}) {
-  const { DB, db } = aiBudgetFixture();
-  db.exec(`
-    ALTER TABLE users ADD COLUMN founder_id INTEGER;
-    ALTER TABLE users ADD COLUMN spinout_lab_active INTEGER DEFAULT 0;
-    ALTER TABLE users ADD COLUMN deletion_requested_at TEXT;
-    ALTER TABLE users ADD COLUMN jwt_min_iat INTEGER;
-    UPDATE users SET is_active = 0 WHERE id = ${GONE};
-    CREATE TABLE founders (id INTEGER PRIMARY KEY, user_id INTEGER);
-    CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT, founder_id INTEGER, company_id INTEGER, deleted_at TEXT);
-    CREATE TABLE discovery_interviews (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, interviewee_name TEXT NOT NULL, interviewee_role TEXT,
-      interview_date TEXT, notes TEXT, hypotheses_json TEXT, pains_json TEXT, icp_fit TEXT,
-      transcript TEXT, transcribed_at TEXT, transcribed_by_model TEXT,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE integrations (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE, user_id INTEGER NOT NULL, provider_key TEXT NOT NULL,
-      display_name TEXT, status TEXT NOT NULL DEFAULT 'active', auth_type TEXT NOT NULL, credentials_enc TEXT,
-      webhook_secret_enc TEXT, config_json TEXT, capabilities_json TEXT, scopes_json TEXT,
-      external_account_id TEXT, external_account_name TEXT, last_synced_at TEXT, last_error TEXT,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP, UNIQUE (user_id, provider_key)
-    );
-    ALTER TABLE activity_logs ADD COLUMN project_id INTEGER;
-    CREATE TABLE mi_pro_subscriptions (user_id INTEGER PRIMARY KEY, status TEXT, subscription_id TEXT, plan TEXT, period_end TEXT, stripe_customer_id TEXT);
-    CREATE TABLE user_recovery_state (user_id INTEGER PRIMARY KEY, cooling_off_until TEXT, step_up_due_at TEXT);
-  `);
-  for (const t of ['waitlist_signups', 'metric_targets', 'competitor_analyses', 'competitor_candidates',
-    'competitor_sources', 'competitor_signals']) db.exec(tableFromBaseline(BASELINE, t));
-  for (const m of CHANNEL_MIGRATIONS) db.exec(mig(m));
-  if (opts.upTo492 !== false) db.exec(mig('492_whatsapp_sender_links.sql'));
-  const env: any = {
-    DB, WHATSAPP_CHANNEL: 'on', ENVIRONMENT: 'development', JWT_SECRET, KEK_PII: 'k'.repeat(48), ...SECRETS, ...AXAL, ...(opts.axal ?? {}),
-    APP_URL: 'https://axal.vc', PUBLIC_BASE_URL: 'https://axal.vc',
-  };
-  return { env, db };
-}
-
-// ---------------------------------------------------------------------------
-// Harness
-// ---------------------------------------------------------------------------
-
-const app = (() => {
-  const a = new Hono();
-  a.route('/api/channels', channels as any);
-  a.onError((err: any, c) => {
-    const st = AUTH_ERROR_STATUSES[err?.message ?? ''];
-    if (st) return c.json({ detail: err.message }, st);
-    console.error(err);
-    return c.json({ detail: 'Internal server error' }, 500);
-  });
-  return a;
-})();
-
-const seen: string[] = [];
-
-async function send(env: any, path: string, init: RequestInit) {
-  const res = await app.fetch(new Request(`https://axal.vc${path}`, init), env);
-  const text = await res.text();
-  seen.push(text);
-  let body: any = null;
-  try { body = JSON.parse(text); } catch { body = text; }
-  return { status: res.status, body };
-}
-
-async function call(env: any, user: number, method: string, path: string, body?: unknown) {
-  const tok = await new SignJWT({ user_id: user, role: 'founder' }).setProtectedHeader({ alg: 'HS256' })
-    .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
-  const headers: Record<string, string> = { authorization: `Bearer ${tok}` };
-  if (body !== undefined) headers['content-type'] = 'application/json';
-  return send(env, `/api/channels${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-}
-
-const sign = (raw: string) => `sha256=${createHmac('sha256', SECRETS.WHATSAPP_APP_SECRET).update(raw).digest('hex')}`;
-
-function waHook(env: any, payload: unknown) {
-  const raw = JSON.stringify(payload);
-  return send(env, '/api/channels/whatsapp/webhook', {
-    method: 'POST', headers: { 'content-type': 'application/json', 'X-Hub-Signature-256': sign(raw) }, body: raw,
-  });
-}
-
-let wamid = 0;
-const now = () => Math.floor(Date.now() / 1000);
-/** A text to a number: Axal's by default. Each call is a new message unless `id` repeats one. */
-const waText = (text: string, from = SENDER, o: { id?: string; pnid?: string } = {}) => ({
-  object: 'whatsapp_business_account',
-  entry: [{ id: '3000002', changes: [{ field: 'messages', value: {
-    messaging_product: 'whatsapp', metadata: { display_phone_number: '15550009999', phone_number_id: o.pnid ?? AXAL_PNID },
-    contacts: [{ profile: { name: 'Dana Ruiz' }, wa_id: from }],
-    messages: [{ from, id: o.id ?? `wamid.IN${++wamid}`, timestamp: String(now()), type: 'text', text: { body: text } }],
-  } }] }],
-});
-
-type Sent = { url: string; to: string; text: string; auth: string | null };
-
-/** Graph, as far as way B uses it: a send from Axal's number. Anything else fails the test. */
-function mockGraph() {
-  const sent: Sent[] = [];
-  const original = globalThis.fetch;
-  globalThis.fetch = (async (input: any, init: RequestInit = {}) => {
-    const url = new URL(typeof input === 'string' ? input : input.url);
-    if (url.hostname !== 'graph.facebook.com' || !url.pathname.endsWith(`/${AXAL_PNID}/messages`)) {
-      throw new Error(`unexpected fetch ${url.origin}${url.pathname}`);
-    }
-    const body = JSON.parse(String(init.body));
-    sent.push({ url: url.toString(), to: body.to, text: body.text?.body, auth: (init.headers as any)?.authorization ?? null });
-    return new Response(JSON.stringify({ messages: [{ id: `wamid.OUT${sent.length}` }] }), { status: 200, headers: { 'content-type': 'application/json' } });
-  }) as typeof fetch;
-  return { sent, restore: () => { globalThis.fetch = original; } };
-}
-
-const count = (db: any, sql: string, ...args: unknown[]) => Number(db.prepare(sql).get(...args)?.n ?? 0);
-const lastEvent = (db: any) => db.prepare('SELECT status, error, user_id FROM channel_events ORDER BY id DESC LIMIT 1').get();
-
-/** Every text value in every table, to look for a clear number. */
-function everyValue(db: any): string {
-  const tables = db.prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`).all().map((r: any) => r.name);
-  const out: string[] = [];
-  for (const t of tables) for (const row of db.prepare(`SELECT * FROM "${t}"`).all()) out.push(...Object.values(row).map((v) => String(v)));
-  return out.join('\n');
-}
-
-/** The member's code, sent from `from`, then confirmed in Axal. */
-async function link(env: any, user = ME, from = SENDER) {
-  const { body } = await call(env, user, 'POST', '/whatsapp/link');
-  await waHook(env, waText(`LINK ${body.code}`, from));
-  const view = (await call(env, user, 'GET', '/whatsapp/link')).body;
-  return { code: body.code, confirm: await call(env, user, 'POST', `/whatsapp/link/${view.claim.uid}/confirm`) };
-}
 
 test.afterEach(() => {
   const all = seen.join('\n');
@@ -265,7 +98,8 @@ test('a code, LINK from the sender, one reply, Axal confirms: the link holds an 
     const payload = waText(`link   ${made.body.code}`);
     assert.equal((await waHook(env, payload)).status, 200);
     assert.equal(g.sent.length, 1, 'one reply');
-    assert.deepEqual(g.sent[0], {
+    const { body: _sent, ...first } = g.sent[0];
+    assert.deepEqual(first, {
       url: `https://graph.facebook.com/v23.0/${AXAL_PNID}/messages`, to: SENDER,
       text: 'Confirm in Axal to finish linking this WhatsApp.', auth: `Bearer ${AXAL_TOKEN}`,
     });
@@ -511,7 +345,7 @@ test('a link unused for 180 days lapses in the purge; a used one stays', async (
     // A message from a linked sender counts as use.
     db.prepare(`UPDATE integrations SET last_synced_at = ?, updated_at = ? WHERE user_id = ?`).run(ago(200), ago(200), OTHER);
     await waHook(env, waText('a recording, soon', SENDER_2));
-    assert.equal(lastEvent(db).error, 'capture_not_built');
+    assert.equal(lastEvent(db).error, 'unsupported_type');
     assert.equal((await purgeExpired(env)).lapsed, 0);
     assert.equal(status(OTHER).status, 'active');
   } finally { g.restore(); }
@@ -535,14 +369,15 @@ test("an unlinked sender's message gets no reply and stores no text", async () =
   } finally { g.restore(); }
 });
 
-test("a linked sender's message is left for part 2: no reply, no text", async () => {
+test("a linked sender's text gets the one reply saying what Axal takes, and keeps no text", async () => {
   const { env, db } = world();
   const g = mockGraph();
   try {
     await link(env);
     await waHook(env, waText('Forwarding the call recording now'));
-    assert.equal(g.sent.length, 1);
-    assert.deepEqual({ ...lastEvent(db) }, { status: 'ignored', error: 'capture_not_built', user_id: ME });
+    assert.equal(g.sent.length, 2);
+    assert.equal(g.sent[1].text, 'Axal takes voice notes and audio files here.');
+    assert.deepEqual({ ...lastEvent(db) }, { status: 'ignored', error: 'unsupported_type', user_id: ME });
     assert.equal(everyValue(db).includes('Forwarding'), false);
   } finally { g.restore(); }
 });
