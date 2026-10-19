@@ -57,6 +57,21 @@ export function threadRow(t, now = Date.now()) {
   };
 }
 
+/**
+ * D757 (#1927): what the engine made of an assigned chat, from the thread
+ * read's `digest_status` and `pending_suggestions` (#1930): "Summary drafted
+ * · n suggestions" once it is written, "Summarising…" while it runs, and
+ * nothing otherwise (the session page says why in the Worker's words).
+ */
+export function threadEngineLine(t) {
+  if (t?.status !== 'assigned') return null;
+  if (t.digest_status === 'queued' || t.digest_status === 'running') return 'Summarising…';
+  if (t.digest_status !== 'done') return null;
+  const n = Number(t.pending_suggestions);
+  if (!Number.isInteger(n) || n < 0) return 'Summary drafted';
+  return `Summary drafted · ${n} ${n === 1 ? 'suggestion' : 'suggestions'}`;
+}
+
 /** One message in the thread view: who wrote it, and a voice note said as one. */
 export function messageView(m, contact) {
   const failure = m?.kind === 'voice' ? voiceFailure(m) : null;
