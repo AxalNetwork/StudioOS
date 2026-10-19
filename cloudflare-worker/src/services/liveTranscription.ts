@@ -22,6 +22,7 @@ import type { Env } from '../types';
 import * as aiBudget from './aiBudget';
 import { PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET, budgetRefusalMessage } from './aiRouter';
 import { liveInputFor, parseLiveEvent } from './sttFormats';
+import { websocketUnits, type Units } from './ai/shapes';
 import { labelSegments, recordReceipt, storeLiveSegment, type SessionRow } from './interviewSessions';
 
 /** Under the reservation's five-minute expiry, so a held block never lapses mid-stream. */
@@ -71,7 +72,7 @@ export async function holdBlock(env: Env, userId: number, model: string): Promis
 /** Settle every block against the minutes streamed, and write the job's receipt. */
 export async function settleStream(
   env: Env, session: SessionRow, model: string, holds: aiBudget.AiReservation[], elapsedMs: number,
-): Promise<{ minutes: number; cost_microusd: number }> {
+): Promise<{ minutes: number; cost_microusd: number; units: Units }> {
   const minutes = billedMinutes(elapsedMs);
   const perMinute = PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET[model] ?? 0;
   const total = aiBudget.usdToMicro(minutes * perMinute);
@@ -89,7 +90,8 @@ export async function settleStream(
     kind: 'live', model, requested_model: model, fallback_used: false,
     audio_minutes: minutes, cost_microusd: charged, outcome: 'ok',
   });
-  return { minutes, cost_microusd: charged };
+  // D761 PR 3: the stream's units, as WebSocket minutes, apart from a file's `audio_minutes`.
+  return { minutes, cost_microusd: charged, units: websocketUnits(minutes) };
 }
 
 type AnyWebSocket = WebSocket & { accept(): void };

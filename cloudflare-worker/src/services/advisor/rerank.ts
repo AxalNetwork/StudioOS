@@ -214,6 +214,12 @@ export interface PickOpts {
    * or skipped, and we WANT the rerank to pick a fresh one.
    */
   pinnedId?: string | null;
+  /**
+   * D765 (#2090), D720 §6: whether the model may rank. Only a press passes
+   * true (POST /next-question); a GET, and /start (called on mount), take
+   * the deterministic order, so no run starts without the member's press.
+   */
+  rerank?: boolean;
 }
 
 export async function pickNextQuestion(
@@ -236,7 +242,7 @@ export async function pickNextQuestion(
   }
 
   // Cheap shortcuts — no LLM call needed.
-  if (rerankDisabled(env)) return deterministicNext(bank, answered);
+  if (opts.rerank !== true || rerankDisabled(env)) return deterministicNext(bank, answered);
 
   const cands = candidates(bank, answered);
   if (cands.length === 0) return null;
@@ -262,6 +268,8 @@ export async function pickNextQuestion(
       task: 'rerank',
       userId,
       surface: AI_SURFACE.studio,
+      // D765: off on the page, the run is refused and the heuristic order stands.
+      rail: { page: 'studio', option: 'rank:advisor-questions' },
       systemPrompt: system,
       messages: [{ role: 'user', content: user }],
       maxTokens: 64,

@@ -1,6 +1,7 @@
 import { reportError } from './log';
 import { csrfCookieNameFor } from './branchHost';
 import { storeReason } from './impersonationBar';
+import { railPageHeaders } from './railPage.js';
 import { railBody } from './railPages.js';
 
 // D527 — API domain modules. A new API domain goes in its own file,
@@ -570,7 +571,7 @@ export async function refusalError(res, fallback) {
  * under cookie sign-in (`cloudflare-worker/src/middleware/csrf.ts`).
  */
 export function rawRequestHeaders(method = 'GET') {
-  return { ...getAuthHeaders(), ...getCsrfHeader(method), ...getActiveCompanyHeader() };
+  return { ...getAuthHeaders(), ...getCsrfHeader(method), ...getActiveCompanyHeader(), ...railPageHeaders() };
 }
 
 export async function request(path, options = {}) {
@@ -585,9 +586,11 @@ export async function request(path, options = {}) {
     const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
     const csrfHeader = getCsrfHeader(options.method);
     const companyHeader = getActiveCompanyHeader();
+    // D765: the rail's page (and option), so the Worker records and switches each run by it.
+    const railHeader = railPageHeaders();
     const baseHeaders = isFormData
-      ? { ...getAuthHeaders(), ...csrfHeader, ...companyHeader, ...options.headers }
-      : { 'Content-Type': 'application/json', ...getAuthHeaders(), ...csrfHeader, ...companyHeader, ...options.headers };
+      ? { ...getAuthHeaders(), ...csrfHeader, ...railHeader, ...companyHeader, ...options.headers }
+      : { 'Content-Type': 'application/json', ...getAuthHeaders(), ...csrfHeader, ...railHeader, ...companyHeader, ...options.headers };
     const res = await fetch(`${BASE}${path}`, {
       // T6 — `credentials: 'include'` makes the browser attach the
       // `studioos_auth` httpOnly cookie set by /api/auth/login. Same-origin
@@ -1303,8 +1306,9 @@ export const api = {
       request('/advisor/skip', { method: 'POST', body: JSON.stringify({ conversation_id, question_id }) }),
     progress: () => request('/advisor/progress'),
     // Task #2 (AR) — pinned next-question fetch + canonical manifest.
+    // D765: a press ("drill in"), so a POST: only a press may let the model rank.
     nextQuestion: (focus) =>
-      request(`/advisor/next-question${focus ? `?focus=${encodeURIComponent(focus)}` : ''}`),
+      request(`/advisor/next-question${focus ? `?focus=${encodeURIComponent(focus)}` : ''}`, { method: 'POST', body: JSON.stringify({}) }),
     // Task #2 (CC) — read-only ranked queue used by the right-rail
     // progress widget. Mirrors /turn output but never registers an
     // "asked" timestamp so the widget can re-poll freely.
@@ -2786,7 +2790,8 @@ export const api = {
   networkFxCreateSyndicate: (data) => request('/networkfx/syndicates', { method: 'POST', body: JSON.stringify(data) }),
   networkFxJoinSyndicate: (id, data) => request(`/networkfx/syndicates/${id}/join`, { method: 'POST', body: JSON.stringify(data) }),
   networkFxCloseSyndicate: (id) => request(`/networkfx/syndicates/${id}/close`, { method: 'POST', body: JSON.stringify({}) }),
-  networkFxSyndicateRecs: (id) => request(`/networkfx/syndicates/${id}/recommendations`),
+  // D765: the model's rationale is a press, so a POST.
+  networkFxSyndicateRecs: (id) => request(`/networkfx/syndicates/${id}/recommendations`, { method: 'POST', body: JSON.stringify({}) }),
   networkFxMarketplaceMe: () => request('/networkfx/marketplace/me'),
   networkFxSaveMarketplace: (data) => request('/networkfx/marketplace/me', { method: 'PUT', body: JSON.stringify(data) }),
   networkFxMarketplaceSearch: (filters = {}) => {
@@ -2904,6 +2909,8 @@ export const api = {
   monitoringRateLimits: (minutes = 60) => request(`/monitoring/rate-limits?minutes=${minutes}`),
   monitoringErrors: (limit = 50) => request(`/monitoring/errors?limit=${limit}`),
   monitoringAnomalies: () => request('/monitoring/anomalies'),
+  // D765: the AI summary is a press, never the page's poll.
+  monitoringAnomaliesSummary: () => request('/monitoring/anomalies', { method: 'POST', body: JSON.stringify({}) }),
   // D157 — the caller's OWN privileged actions. Deliberately NOT a filter on
   // `/analytics/audit`, which is super-admin-only because it joins `users` and
   // renders other admins by name: the subject here is bound from the session,

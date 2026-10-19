@@ -50,7 +50,8 @@ import { bpsPercent as pct } from '../../lib/bps';
 import { coverageCells, renewalPipeline, sortCells } from '../../lib/licenceCoverage';
 import { DEPLOY_TIMELINE, deployProgress } from '../../lib/deployTimeline';
 import { reportError } from '../../lib/log';
-import { Unreadable, Unrecorded } from '../../ui';
+import { RailFrame, Unreadable, Unrecorded, WorkerRail } from '../../ui';
+import useRecordCrumb from './useRecordCrumb';
 
 const UNAVAILABLE = Symbol('unavailable');
 import {
@@ -2043,6 +2044,9 @@ export default function AdminLicences() {
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ licence_ref: '', legal_entity_name: '', brand_name: '', kind: 'subsidiary' });
   const [err, setErr] = useState('');
+  // D775 (#2101): the licence open in the detail pane is the rail's record.
+  const open = Array.isArray(data?.items) ? data.items.find((l) => l.uid === sel) : null;
+  useRecordCrumb(open ? (open.brand_name || open.licence_ref) : null, 'licence', open?.uid);
 
   const load = useCallback(() => {
     api.licences()
@@ -2079,20 +2083,25 @@ export default function AdminLicences() {
   }
 
   if (!data) return <div className="p-6 text-sm text-gray-500">Loading…</div>;
+  // D775 (#2101): H1 drew no rail. Licences is HQ-only (`hqOnly`), so the rail is HQ's.
+  const rail = <WorkerRail workspace="Licences" role="super_admin" note="Eadwyn reads the licence ledger on this page and changes nothing in it." data-testid="hq-licences-rail" />;
   if (data === UNAVAILABLE) {
     return (
+      <RailFrame rail={rail} data-testid="hq-licences-page">
       <div className="mx-auto max-w-6xl px-4 py-6">
         <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Territory licences</h1>
         <div className="mt-4">
           <Unreadable what="The licence ledger" claim="This is not a claim that no licences exist." onRetry={load} />
         </div>
       </div>
+      </RailFrame>
     );
   }
   const items = data.items || [];
   const filteredItems = filterByKind(items, kindFilter);
 
   return (
+    <RailFrame rail={rail} data-testid="hq-licences-page">
     <div className="mx-auto max-w-6xl px-4 py-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -2269,5 +2278,6 @@ export default function AdminLicences() {
         </div>
       )}
     </div>
+    </RailFrame>
   );
 }

@@ -54,6 +54,18 @@ export const AI_SURFACE = {
   adminPublications: '/admin/publications',
   /** Grow · Share an update — Eadwyn's draft of the highlights and lowlights (D654, `/api/portfolio-updates/share/draft-lines`). */
   growUpdate: '/grow/update',
+  /** Monitoring — the last hour's summary (`GET /api/monitoring/anomalies`), a system call (D766). */
+  monitoring: '/monitoring',
+  /** HQ · X — the image screen on upload and the drafted alt text (`/api/admin/x/posts/:id/*`), system calls (D766). */
+  adminX: '/admin/x',
+  /** HQ · Platform — the `axal-search` index's embeddings: upserts, the hourly re-embed and query embeddings, system calls (D766). */
+  searchIndex: '/admin/platform',
+  /** Legal & Capital — the legal document's suggestions, the diligence summary and the spin-out's proposed equity split (`/api/legalcap/*`), member presses (D766). */
+  legalCapital: '/legal-capital',
+  /** Pipeline — the decision gate's recommendation (`/api/pipeline/decision-gate/review`), a member press (D766). */
+  pipeline: '/pipeline',
+  /** Network Effects — the syndicate's recommendations and the marketplace match (`/api/networkfx/*`), member presses (D766). */
+  networkEffects: '/network-effects',
 } as const;
 
 export type AiSurface = (typeof AI_SURFACE)[keyof typeof AI_SURFACE];

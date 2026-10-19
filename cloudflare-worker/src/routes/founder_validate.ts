@@ -67,6 +67,7 @@ import { neverFillReason, neverFillMessage } from '../services/fills/neverFill';
 import { run as aiRun, audioMinutesFromBytes } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { currentDecision } from '../services/verdict';
+import { pageFromPath, railFor, refuseAssistOff } from '../util/railContext';
 
 const founderValidate = new Hono<{ Bindings: Env }>();
 
@@ -651,12 +652,15 @@ founderValidate.post('/propose/:projectId', async (c) => {
     userId: s.user.id,
     model,
     surface: AI_SURFACE.validate,
+    // D765: the fill's page (its surface's workspace) and the fill as the option.
+    rail: railFor(c, { page: pageFromPath(spec.surface, 'validate'), option: `fill:${kind}` }, `project:${s.project.id}`),
     systemPrompt: spec.prompt,
     messages: [{ role: 'user', content: gathered.facts }],
     maxTokens: 500,
     temperature: 0.3,
   });
 
+  if (r.refusal === 'assist_off') return refuseAssistOff(c);
   // `run` never throws — a spent budget and an unreachable model both arrive
   // as refusals with their reason intact, and both must keep it.
   if (!r.ok) {
@@ -667,7 +671,11 @@ founderValidate.post('/propose/:projectId', async (c) => {
         ? 'That model is no longer offered for this. Nothing was run.'
         : r.refusal === 'budget_user_month' || r.refusal === 'budget_user_day'
           ? 'This month’s AI budget is spent. Nothing was run.'
-          : 'The model could not be reached. Nothing was run, and nothing was charged.',
+          // D763, D770 (#2095): the guard withheld the proposals, or could not check them; its own words.
+          : r.refusal === 'guard_blocked_output' || r.refusal === 'guard_unavailable'
+            ? r.error
+            : 'The model could not be reached. Nothing was run, and nothing was charged.',
+      ...(r.guard?.refusal?.link ? { link: r.guard.refusal.link } : {}),
       usage: { model: r.usage.model, est_cost_usd: 0 },
     }, 503);
   }
@@ -1099,6 +1107,8 @@ founderValidate.post('/interviews/:id/transcribe', async (c) => {
     task: 'transcribe',
     userId: s.user.id,
     surface: AI_SURFACE.validateInterviews,
+    // D765: saving, which the switch never refuses; recorded with its page and interview.
+    rail: railFor(c, { page: 'validate', option: 'transcribe:interview' }, `interview:${id}`),
     audio: bytes,
     // From the BYTES, not from the duration the client reported.
     audioMinutes: audioMinutesFromBytes(Number(row.recording_size_bytes || bytes.byteLength)),

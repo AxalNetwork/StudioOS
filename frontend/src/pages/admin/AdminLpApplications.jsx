@@ -40,6 +40,7 @@ import { reportError } from '../../lib/log';
 import { titleCase } from '../../lib/absence';
 import { adminCapitalAttestationsApi } from '../../lib/api/adminCapitalAttestations';
 import { ProofChip, ProofOfFundsRow } from '../../components/ProofOfFunds';
+import AdminBoardFrame from './AdminBoardFrame';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700';
 const LBL = 'text-[10.5px] font-bold uppercase tracking-[0.11em] text-gray-400 dark:text-gray-500';
@@ -85,7 +86,7 @@ function StatusChip({ status, label }) {
   );
 }
 
-export default function AdminLpApplications() {
+function AdminLpApplicationsBody() {
   const [tab, setTab] = useState('open');
   const [apps, setApps] = useState([]);
   const [counts, setCounts] = useState({});
@@ -417,5 +418,14 @@ export default function AdminLpApplications() {
         )}
       </div>
     </div>
+  );
+}
+
+// D774 (#2100): S8 drew no rail. The board's page, in the Admin boards' frame.
+export default function AdminLpApplications() {
+  return (
+    <AdminBoardFrame workspace="LP applications" note="Eadwyn reads the LP applications listed here. An application is decided only when you decide it." data-testid="admin-board-lp-applications">
+      <AdminLpApplicationsBody />
+    </AdminBoardFrame>
   );
 }
