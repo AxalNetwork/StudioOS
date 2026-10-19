@@ -56,6 +56,7 @@ import { PDFDocument } from 'pdf-lib';
 import { bindingKey } from '../util/schemaBootstrap';
 import { clientIp } from '../util/clientIp';
 import { refuse } from '../util/refusal';
+import { librarySlugFor, sentAsBundledFile } from '../services/legalDocTypes';
 
 const esign = new Hono<{ Bindings: Env }>();
 
@@ -220,20 +221,36 @@ interface AgreementTemplate {
 // ---------------------------------------------------------------------------
 // The template body a doc type sends, BEFORE any merge — one resolver for the
 // send and the preview (D411), so what a sender reads on the page is what the
-// envelope hashes. Order: the editable D1 store (active, non-stub) keyed by
-// document_type, then the bundled markdown template. Null means the document
-// has no body anywhere, and a send of it is refused (D758): there is no
-// fallback text. A store that cannot be read THROWS, so a caller never takes
-// "unreadable" for "no body". `title` is the store row's; a bundled body has
-// none.
+// envelope hashes.
+//
+// D758 (#1863): THE LIBRARY ROW IS THE DOCUMENT. A spelling is first resolved
+// to its row's slug (`librarySlugFor`), so `investor_nda_v1` reads the
+// `investor_nda_axal` row, never the bundled file while the row has a body.
+// Order: the editable D1 store (active, non-stub) under that slug, then the
+// bundled markdown file for that slug, which is the row's fallback. A key in
+// `BUNDLED_SENT_DIRECTLY` is still sent as its bundled file, as its sender
+// does today. Null means the document has no body anywhere, and a send of it
+// is refused (D758, #1862): there is no fallback text. A store that cannot be
+// read THROWS, so a caller never takes "unreadable" for "no body". `title` is
+// the store row's; a bundled body has none.
 // ---------------------------------------------------------------------------
 export async function templateBodyFor(env: Env, docType: string): Promise<{ body: string; source: 'store' | 'template'; title: string | null } | null> {
   const { templateKeyForDocType, getLegalTemplateBody } = await import('../services/legalTemplates');
   const { activeTemplate } = await import('../services/legalTemplateStore');
-  const stored = await activeTemplate(env, docType);
+  if (sentAsBundledFile(docType)) {
+    const key = templateKeyForDocType(docType);
+    return key ? { body: getLegalTemplateBody(key), source: 'template', title: null } : null;
+  }
+  const slug = librarySlugFor(docType);
+  const stored = await activeTemplate(env, slug);
   if (stored) return { body: stored.body, source: 'store', title: stored.title };
-  const key = templateKeyForDocType(docType);
+  const key = templateKeyForDocType(slug);
   return key ? { body: getLegalTemplateBody(key), source: 'template', title: null } : null;
+}
+
+/** D758: the 3-way NDA under either spelling, the old envelope one and the row's slug. */
+export function isThreeWayNdaType(t: string | null | undefined): boolean {
+  return t === 'nda_3way_v1' || t === 'nda_3way_founder_investor_axal';
 }
 
 /**
@@ -380,6 +397,11 @@ export async function createAndSendEnvelope(
   }
 ): Promise<{ envelope_id: number; envelope_uuid: string; signing_url: string; email_sent: boolean; provider?: string; already_pending?: boolean } | null> {
   await ensureSchema(env);
+  // D758: the envelope records, prints and dedupes under the library row's
+  // slug, so `mentor_disclaimer_v1` is sent as `mentor_engagement_disclaimer`.
+  // A key still sent as its bundled file keeps its own spelling.
+  const documentType = sentAsBundledFile(opts.documentType) ? opts.documentType : librarySlugFor(opts.documentType);
+  const requestedAs = documentType === opts.documentType ? {} : { requested_as: opts.documentType };
 
   const { applyMergeFields, mergeTokensIn } = await import('../services/legalTemplates');
   // The body comes from the library only (D758): the canonical D1 store body
@@ -401,12 +423,12 @@ export async function createAndSendEnvelope(
   let source: Awaited<ReturnType<typeof templateBodyFor>> = null;
   if (!rendered) {
     try {
-      source = await templateBodyFor(env, opts.documentType);
+      source = await templateBodyFor(env, documentType);
     } catch (e) {
       console.error('[esign] template store unreadable', (e as Error)?.message);
-      throw new TemplateBodyError('unreadable', opts.documentType);
+      throw new TemplateBodyError('unreadable', documentType);
     }
-    if (!source) throw new TemplateBodyError('no_body', opts.documentType);
+    if (!source) throw new TemplateBodyError('no_body', documentType);
   }
   let tpl: AgreementTemplate;
   const appliedMergeKeys: string[] = [];
@@ -489,7 +511,7 @@ export async function createAndSendEnvelope(
     // would later be read against.
     const tokens = mergeTokensIn(src.body);
     const body = applyMergeFields(src.body, merge);
-    tpl = { title: originatorName(opts.documentType) ?? src.title ?? opts.documentType, body };
+    tpl = { title: originatorName(documentType) ?? src.title ?? documentType, body };
     if (opts.mergeFields) {
       appliedMergeKeys.push(...Object.keys(opts.mergeFields).filter((k) => tokens.has(k)));
     }
@@ -534,7 +556,7 @@ export async function createAndSendEnvelope(
   const recipientKey = (opts.recipientUserId ?? -1);
   const dealKey = opts.dealId ?? null;
   const SAME_PENDING_SEND = `
-        x.document_type = ?
+        x.document_type IN (?, ?)
     AND x.created_by = ?
     AND COALESCE(x.user_id, -1) = ?
     AND COALESCE(x.deal_id, -2) = COALESCE(?, -2)
@@ -545,8 +567,8 @@ export async function createAndSendEnvelope(
        OR (x.user_id IS NOT NULL
            AND NOT EXISTS (SELECT 1 FROM esign_recipients rr WHERE rr.envelope_id = x.id))
     )`;
-  const sameSendBinds = [opts.documentType, opts.adminUserId, recipientKey, dealKey, opts.recipientEmail];
-  const format = opts.format ?? await templateFormatFor(env, opts.documentType);
+  const sameSendBinds = [documentType, opts.documentType, opts.adminUserId, recipientKey, dealKey, opts.recipientEmail];
+  const format = opts.format ?? await templateFormatFor(env, documentType);
   const insertEnvelope = env.DB.prepare(
     `INSERT INTO esign_envelopes (envelope_uuid, user_id, deal_id, document_type, document_title, document_body, body_sha256, status, created_by, audit_log,
                                   page_size, cover, template_version, doc_kind, axal_party)
@@ -554,7 +576,7 @@ export async function createAndSendEnvelope(
       WHERE NOT EXISTS (SELECT 1 FROM esign_envelopes x WHERE ${SAME_PENDING_SEND})
      RETURNING id`
   ).bind(
-    envelopeUuid, opts.recipientUserId, opts.dealId || null, opts.documentType, tpl.title, tpl.body, bodySha, opts.adminUserId,
+    envelopeUuid, opts.recipientUserId, opts.dealId || null, documentType, tpl.title, tpl.body, bodySha, opts.adminUserId,
     pageSize, cover, templateVersion, format.kind, format.party,
     ...sameSendBinds,
   );
@@ -625,7 +647,7 @@ export async function createAndSendEnvelope(
         const ds = await sendDocusignEnvelope(env, dsRow, {
           documentTitle: tpl.title,
           documentBody: tpl.body,
-          documentType: opts.documentType,
+          documentType,
           ...renderFormat(format),
           templateVersion,
           envelopeUuid,
@@ -648,7 +670,7 @@ export async function createAndSendEnvelope(
             uid: newFileUid(),
             kind: 'docusign_source',
             envelopeId,
-            templateSlug: opts.documentType,
+            templateSlug: documentType,
             templateVersion,
             bodySha256: bodySha,
             fileSha256: ds.source.sha256,
@@ -666,7 +688,7 @@ export async function createAndSendEnvelope(
           signer_email: null,
           action: 'envelope_created',
           ip: opts.actorIp || 'admin',
-          meta: { sender: opts.adminName, document_type: opts.documentType, recipient: opts.recipientEmail, provider: 'docusign', docusign_envelope_id: ds.docusign_envelope_id, body_source: rendered ? 'rendered' : 'template' },
+          meta: { sender: opts.adminName, document_type: documentType, ...requestedAs, recipient: opts.recipientEmail, provider: 'docusign', docusign_envelope_id: ds.docusign_envelope_id, body_source: rendered ? 'rendered' : 'template' },
         });
         return {
           envelope_id: envelopeId,
@@ -712,7 +734,7 @@ export async function createAndSendEnvelope(
     // D416 — which path produced the body, because "rendered by the caller"
     // and "rendered here from the template" are different claims about who
     // decided the document's words.
-    meta: { sender: opts.adminName, document_type: opts.documentType, recipient: opts.recipientEmail, body_source: rendered ? 'rendered' : 'template' },
+    meta: { sender: opts.adminName, document_type: documentType, ...requestedAs, recipient: opts.recipientEmail, body_source: rendered ? 'rendered' : 'template' },
   });
 
   const emailSent = await sendAgreementAssignedEmail(
@@ -1198,6 +1220,18 @@ function voidedRefusal(c: any) {
   });
 }
 
+// D759 (#1858) — a Subscription Booklet envelope signs the booklet's frozen
+// copy, so its paper comes from services/bookletSigning.ts, never from
+// `document_body` (which is the frozen JSON). Imported on demand, as the
+// completion hooks are, and only for that document type.
+const BOOKLET_DOC_TYPE = 'subscription_booklet';
+
+/** A booklet refusal as a response, or null for any other error. */
+async function bookletRefused(c: any, e: unknown): Promise<Response | null> {
+  const { BookletRefusal } = await import('../services/subscriptionBooklet');
+  return e instanceof BookletRefusal ? refuse(c, e.status, { code: e.code, message: e.publicMessage, extra: e.extra }) : null;
+}
+
 // GET /api/legal/esign/sign/:token — public, fetch envelope for signing UI.
 esign.get('/sign/:token', async (c) => {
   await ensureSchema(c.env);
@@ -1221,7 +1255,14 @@ esign.get('/sign/:token', async (c) => {
     ip: clientIp(c.req.raw),
     ua: c.req.header('user-agent') || undefined,
   });
+  // D759 — a booklet envelope says which stage it is and its edition (v[N]).
+  let booklet: { stage: string; edition: number } | null = null;
+  if (rec.document_type === BOOKLET_DOC_TYPE) {
+    const { bookletSignInfo } = await import('../services/bookletSigning');
+    booklet = await bookletSignInfo(c.env, rec.envelope_uuid);
+  }
   return c.json({
+    ...(rec.document_type === BOOKLET_DOC_TYPE ? { booklet } : {}),
     envelope_uuid: rec.envelope_uuid,
     document_type: rec.document_type,
     document_title: rec.document_title,
@@ -1255,20 +1296,37 @@ esign.get('/sign/:token/paper', async (c) => {
     return c.json({ error: 'This signing link has expired. Please request a new one from the Axal admin who sent it.' }, 410);
   }
   const pageSize = rec.page_size === 'a4' ? 'a4' : 'letter';
-  const model = paperModel({
-    title: rec.document_title,
-    body: rec.document_body,
-    slug: rec.document_type,
-    version: rec.template_version ?? null,
-    // D717: the pair the send recorded, as the signed copy prints it.
-    ...renderFormat({ doc_kind: rec.doc_kind, axal_party: rec.axal_party }),
-    structure: await structureForPaper(c.env, rec.document_type, 'issued'),
-    bodySha256: rec.body_sha256,
-    envelopeUuid: rec.envelope_uuid,
-    state: { kind: 'issued' },
-    recipients: await envelopeRecipients(c.env, rec.envelope_id),
-    counterSignerEmail: c.env.AXAL_COUNTERSIGNER_EMAIL || null,
-  });
+  let bookletInput: Awaited<ReturnType<typeof import('../services/bookletSigning').bookletEnvelopeModel>> | null = null;
+  if (rec.document_type === BOOKLET_DOC_TYPE) {
+    try {
+      const { bookletEnvelopeModel } = await import('../services/bookletSigning');
+      bookletInput = await bookletEnvelopeModel(c.env, rec);
+    } catch (e) {
+      const refused = await bookletRefused(c, e);
+      if (refused) return refused;
+      throw e;
+    }
+  }
+  const model = bookletInput
+    ? paperModel({
+        ...bookletInput,
+        recipients: await envelopeRecipients(c.env, rec.envelope_id),
+        counterSignerEmail: c.env.AXAL_COUNTERSIGNER_EMAIL || null,
+      })
+    : paperModel({
+        title: rec.document_title,
+        body: rec.document_body,
+        slug: rec.document_type,
+        version: rec.template_version ?? null,
+        // D717: the pair the send recorded, as the signed copy prints it.
+        ...renderFormat({ doc_kind: rec.doc_kind, axal_party: rec.axal_party }),
+        structure: await structureForPaper(c.env, rec.document_type, 'issued'),
+        bodySha256: rec.body_sha256,
+        envelopeUuid: rec.envelope_uuid,
+        state: { kind: 'issued' },
+        recipients: await envelopeRecipients(c.env, rec.envelope_id),
+        counterSignerEmail: c.env.AXAL_COUNTERSIGNER_EMAIL || null,
+      });
   const html = paperHtml(model, { pageSize, cover: rec.cover === 'light' ? 'light' : 'dark', medium: 'screen', fonts: 'inline' });
   return c.json({ html, body_sha256: rec.body_sha256, page_size: pageSize }, 200, { 'Cache-Control': 'no-store' });
 });
@@ -1362,6 +1420,20 @@ esign.post('/sign/:token', async (c) => {
   // D711 — the paper names the signer, never their email (decision 13).
   const signerName = typedName || rec.recipient_name || '';
 
+  // D759 — a booklet envelope's paper is built BEFORE the claim, so a
+  // refusal (`booklet_text_changed`) changes nothing.
+  let bookletInput: Awaited<ReturnType<typeof import('../services/bookletSigning').bookletEnvelopeModel>> | null = null;
+  if (rec.document_type === BOOKLET_DOC_TYPE) {
+    try {
+      const { bookletEnvelopeModel } = await import('../services/bookletSigning');
+      bookletInput = await bookletEnvelopeModel(c.env, rec, { signature: { imageDataUrl: sigDataUrl, signedAt } });
+    } catch (e) {
+      const refused = await bookletRefused(c, e);
+      if (refused) return refused;
+      throw e;
+    }
+  }
+
   // Atomic claim: only one concurrent POST can transition pending → signing.
   // If two requests race, exactly one sees `meta.changes === 1`; the other
   // gets 0 and we return 409. This guarantees the PDF generation + R2
@@ -1389,23 +1461,31 @@ esign.post('/sign/:token', async (c) => {
     const idx = recipients.findIndex((r) => r.id === rec.id);
     const signed = { signatureDataUrl: sigDataUrl, signedAt };
     if (idx >= 0) recipients[idx] = { ...recipients[idx], name: signerName || recipients[idx].name, status: 'signed', signedAt };
-    const model = paperModel({
-      title: rec.document_title,
-      body: rec.document_body,
-      slug: rec.document_type,
-      version: rec.template_version ?? null,
-      // D717: the pair the send recorded; NULL columns render as before.
-      ...renderFormat({ doc_kind: rec.doc_kind, axal_party: rec.axal_party }),
-      structure: await structureForPaper(c.env, rec.document_type, 'issued'),
-      bodySha256: rec.body_sha256,
-      envelopeUuid: rec.envelope_uuid,
-      effectiveDate: signedAt.slice(0, 10),
-      state: { kind: 'issued' },
-      recipients: idx >= 0 ? recipients : [{ id: rec.id, name: signerName || null, status: 'signed', signedAt }],
-      counterSignerEmail: c.env.AXAL_COUNTERSIGNER_EMAIL || null,
-      signature: { recipientIndex: idx >= 0 ? idx : 0, imageDataUrl: signed.signatureDataUrl, signedAt: signed.signedAt },
-      certificate: true,
-    });
+    const model = bookletInput
+      // D759 — the frozen parts, with this signer's image on their own lines.
+      ? paperModel({
+          ...bookletInput,
+          recipients: idx >= 0 ? recipients : [{ id: rec.id, name: signerName || null, status: 'signed', signedAt }],
+          counterSignerEmail: c.env.AXAL_COUNTERSIGNER_EMAIL || null,
+          certificate: true,
+        })
+      : paperModel({
+          title: rec.document_title,
+          body: rec.document_body,
+          slug: rec.document_type,
+          version: rec.template_version ?? null,
+          // D717: the pair the send recorded; NULL columns render as before.
+          ...renderFormat({ doc_kind: rec.doc_kind, axal_party: rec.axal_party }),
+          structure: await structureForPaper(c.env, rec.document_type, 'issued'),
+          bodySha256: rec.body_sha256,
+          envelopeUuid: rec.envelope_uuid,
+          effectiveDate: signedAt.slice(0, 10),
+          state: { kind: 'issued' },
+          recipients: idx >= 0 ? recipients : [{ id: rec.id, name: signerName || null, status: 'signed', signedAt }],
+          counterSignerEmail: c.env.AXAL_COUNTERSIGNER_EMAIL || null,
+          signature: { recipientIndex: idx >= 0 ? idx : 0, imageDataUrl: signed.signatureDataUrl, signedAt: signed.signedAt },
+          certificate: true,
+        });
     const pageSize = rec.page_size === 'a4' ? 'a4' : 'letter';
     const rendered = await renderLegalPdf(c.env, model, { pageSize, cover: rec.cover === 'light' ? 'light' : 'dark', createdAt: new Date(signedAt) });
     if (!rendered.ok) throw new Error(rendered.code);
@@ -1481,12 +1561,22 @@ esign.post('/sign/:token', async (c) => {
       const envelopeRow = await c.env.DB.prepare(
         `SELECT user_id, created_by, document_title, envelope_uuid, document_type FROM esign_envelopes WHERE id = ?`
       ).bind(rec.envelope_id).first<{ user_id: number | null; created_by: number | null; document_title: string | null; envelope_uuid: string; document_type: string | null }>();
+      // D759 — a booklet's applicant stage sends the General Partner's. Its own
+      // try, so it never fails the signature; the applicant stage's two
+      // notices are skipped below, since the Fund has not signed yet.
+      let bookletStage: string | null = null;
+      if (envelopeRow?.document_type === BOOKLET_DOC_TYPE && envelopeRow.envelope_uuid) {
+        try {
+          const { onBookletEnvelopeCompleted } = await import('../services/bookletSigning');
+          bookletStage = await onBookletEnvelopeCompleted(c.env, envelopeRow.envelope_uuid, c.env.APP_URL || 'https://axal.vc');
+        } catch (e) { console.warn('[esign] booklet_gp_stage_failed', (e as Error)?.name || 'error'); }
+      }
       // Task #3 (Y-1) — Trust Center hook: when a 3-way Founder ↔ Investor
       // ↔ Axal NDA reaches `completed`, flip the matching `pairwise_ndas`
       // row to `active` and stamp a 12-month `valid_until`. Without this,
       // the maskFounderForInvestor gate would keep returning masked rows
       // forever even though all three parties have signed.
-      if (envelopeRow?.document_type === 'nda_3way_v1' && envelopeRow.envelope_uuid) {
+      if (isThreeWayNdaType(envelopeRow?.document_type) && envelopeRow?.envelope_uuid) {
         try {
           const { activatePairwiseNda } = await import('../services/trust');
           await activatePairwiseNda(c.env, envelopeRow.envelope_uuid);
@@ -1522,7 +1612,7 @@ esign.post('/sign/:token', async (c) => {
       // on /account otherwise. The subject's link was '/legal', which only
       // admins and founders can open.
       const statusView = `/legal/send?envelope=${rec.envelope_id}`;
-      if (envelopeRow?.user_id) {
+      if (envelopeRow?.user_id && bookletStage !== 'applicant') {
         const { notify } = await import('../services/notify');
         const subject: any = await c.env.DB.prepare(`SELECT role FROM users WHERE id = ?`)
           .bind(envelopeRow.user_id).first().catch(() => null);
@@ -1547,7 +1637,7 @@ esign.post('/sign/:token', async (c) => {
       // them they "will be emailed when it is executed". Skipped when the
       // sender is the subject, who was just notified above. It runs after the
       // subject's notice, in its own try, so it can never cost them theirs.
-      if (envelopeRow?.created_by && envelopeRow.created_by !== envelopeRow.user_id) {
+      if (bookletStage !== 'applicant' && envelopeRow?.created_by && envelopeRow.created_by !== envelopeRow.user_id) {
         try {
           const { notify } = await import('../services/notify');
           await notify(c.env, {
