@@ -11,7 +11,7 @@
  *   - nothing is split by company: every read is the caller's own, across all
  *     their companies, and nothing below takes a company.
  */
-import { aiTokenState } from '../../lib/aiTokens';
+import { aiTokenState, purchaseState } from '../../lib/aiTokens';
 
 export const NOT_COUNTED = 'Not counted';
 
@@ -334,4 +334,88 @@ export function storageView(s) {
     anyUnreadable: !allRead,
     empty: allRead && s.files === 0,
   };
+}
+
+/**
+ * D755 §10 (#1984) — the Top-ups card's rows, from `/ai-budget/history`.
+ * Newest first, as the Worker pages them; purchases paid but not yet credited
+ * lead as "being added". Every amount is the Worker's signed micro-USD figure
+ * for that row: nothing here sums a balance, and an adjustment's reason never
+ * reaches the member (the Worker does not send it, and this never reads it).
+ */
+const LEDGER_LABEL = {
+  purchase: (p) => p,
+  bonus: (p) => `Bonus on ${p}`,
+  refund: (p) => `Refund · ${p}`,
+  dispute: (p) => `Disputed · ${p}`,
+  dispute_won: (p) => `Dispute won · ${p}`,
+  adjustment: () => 'Adjustment',
+  hold: () => 'AI run · held',
+  release: () => 'AI run · released',
+  spend: () => 'AI run',
+};
+export const RUN_KINDS = Object.freeze(['hold', 'release', 'spend']);
+
+/** A signed micro-USD figure: "+$20.00", "−$4.50". */
+export function signedMicroUsd(n) {
+  if (!Number.isSafeInteger(n)) return null;
+  const abs = usd(Math.abs(n) / 1_000_000);
+  return n < 0 ? `−${abs}` : `+${abs}`;
+}
+
+export function topUpRows(h) {
+  if (!h || !Array.isArray(h.items)) return null;
+  const pack = (r) => r?.pack_label || 'Token pack';
+  const pending = (Array.isArray(h.pending) ? h.pending : []).map((p, i) => ({
+    key: `pending-${p.order_ref || i}`,
+    kind: 'pending',
+    label: pack(p),
+    amount: Number.isSafeInteger(p.amount_microusd) ? signedMicroUsd(p.amount_microusd) : null,
+    note: 'being added',
+    when: whenLabel(p.at),
+    order: p.order_ref || null,
+  }));
+  const rows = h.items.filter((r) => LEDGER_LABEL[r?.kind]).map((r) => {
+    const shortfall = r.kind === 'refund' && Number.isSafeInteger(r.shortfall_microusd) && r.shortfall_microusd > 0
+      ? `${microUsd(r.shortfall_microusd)} of these tokens had already been used.` : null;
+    return {
+      key: r.uid,
+      kind: r.kind,
+      label: LEDGER_LABEL[r.kind](pack(r)),
+      amount: signedMicroUsd(r.delta_microusd),
+      note: shortfall,
+      when: whenLabel(r.at),
+      order: r.order_ref || null,
+      run: RUN_KINDS.includes(r.kind),
+    };
+  });
+  return [...pending, ...rows];
+}
+
+/**
+ * D755 §10 (#1984, part 2) — the top-up tile's line for the member's latest
+ * purchase in 24 hours (`/ai-budget/top-up`'s `latest`, #1971), in the state
+ * `purchaseState` decides (lib/aiTokens.js, #1916). Null when there is none,
+ * or for a dispute, which the Top-ups card lists. `help` asks for the Help
+ * Center link. A figure the answer does not carry is left out, never guessed.
+ */
+export function purchaseLine(latest, now = Date.now()) {
+  const state = purchaseState(latest, now);
+  if (!state) return null;
+  const order = latest.order_ref || 'your order';
+  const amount = microUsd(latest.amount_microusd);
+  const reversed = microUsd(latest.reversed_microusd);
+  const when = whenLabel(latest.credited_at || latest.at);
+  switch (state) {
+    case 'waiting':
+      return { state, text: `Adding ${amount ?? 'your tokens'} from order ${order}. It appears here once Stripe confirms the payment.` };
+    case 'credited':
+      return { state, text: `Added ${amount ?? 'your tokens'}${when ? ` on ${when}` : ''} · order ${order}.` };
+    case 'overdue':
+      return { state, help: true, text: `Payment for ${order} is recorded, but the tokens are not in your balance yet. If they are not here within an hour, contact support with the order number.` };
+    case 'refunded':
+      return { state, text: reversed ? `Order ${order} was refunded. ${reversed} was taken off your top-up balance.` : `Order ${order} was refunded. Your top-ups below show what was taken off your top-up balance.` };
+    default:
+      return null;
+  }
 }
