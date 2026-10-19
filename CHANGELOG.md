@@ -4,20 +4,6 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
-## Consent in the Telegram chat before a note is fetched (D756, #1977)
-
-- Telegram's interviewee is asked through D754's consent store: from Axal
-  (`POST /api/channels/threads/:uid/consent-request`, the notice from the
-  member's business connection, with the reply right and inside the window),
-  or by the member pasting the notice into the chat themselves.
-- A YES, NO or STOP counts only from the chat's own user (never the owner, an
-  offline auto-reply or a business bot), as a reply to the notice or the
-  contact's first message after it, within 7 days. It is also kept as chat
-  text, and the bot confirms it in one line when it may reply.
-- No voice note of a Telegram chat is downloaded before its YES; a NO keeps
-  the notes held, and a STOP stops new downloads. Its text keeps D684's rule,
-  and no member's word is taken for Telegram. No migration.
-
 ## Consent before anything from a WhatsApp chat is kept (D754, #1893)
 
 - Migration 488: `channel_consents`, one row per consent request on a chat
