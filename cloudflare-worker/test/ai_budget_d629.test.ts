@@ -13,6 +13,7 @@ import { readAiTopupProduct, resetAiTopupMirrorWindow } from '../src/services/ai
 import { spawnSync } from 'node:child_process';
 import { ensureCatalogSchema } from '../src/services/catalog.ts';
 
+import { guardSafe } from './_guard_stub.mjs';
 const now=new Date('2026-10-07T12:00:00Z');
 const fixture=()=>{const f=aiBudgetFixture();return {...f,env:{DB:f.DB,JWT_SECRET:'d629-fixture-only-signing-secret',STRIPE_WEBHOOK_SECRET:'d629-fixture-only-webhook-secret',ENVIRONMENT:'development'} as any};};
 const caps=(db:any,day=1000000,month=3000000)=>db.prepare("INSERT INTO ai_licence_caps(licence_key,daily_microusd,monthly_microusd,recorded_by) VALUES('founder:free',?,?,1)").run(day,month);
@@ -263,11 +264,12 @@ test('the owner price variable is read strictly',()=>{
 test('router charges its real estimated cost, releases failed models, preserves cache and org kill',async()=>{
  __resetForTest();const f=fixture();try{
   caps(f.db,0,0);await creditAiTopupFromPayment(f.env,await buy(f,1000000));
-  let calls=0;f.env.AI={run:async()=>{calls++;return{response:'answer',usage:{prompt_tokens:100,completion_tokens:20}};}};
+  // D763: the guard answers free, so the balance moves by the model's cost alone.
+  let calls=0;f.env.AI={run:guardSafe(async()=>{calls++;return{response:'answer',usage:{prompt_tokens:100,completion_tokens:20}};})};
   const good=await run(f.env,{task:'advisor_turn',userId:2,text:'hello'});
   assert.equal(good.ok,true);
   assert.equal((await loadAiBudget(f.env,2)).balance_microusd,1000000-usdToMicro(estimateCostUsd(ROUTE.advisor_turn.model,100,20)));
-  f.env.AI.run=async()=>{throw Error('failed');};const before=(await loadAiBudget(f.env,2)).balance_microusd;
+  f.env.AI.run=guardSafe(async()=>{throw Error('failed');});const before=(await loadAiBudget(f.env,2)).balance_microusd;
   assert.equal((await run(f.env,{task:'advisor_turn',userId:2,text:'retry'})).refusal,'all_models_failed');
   assert.equal((await loadAiBudget(f.env,2)).balance_microusd,before);
   assert.equal(f.db.prepare("SELECT COUNT(*) n FROM ai_budget_reservations WHERE status='refunded'").get().n,1);

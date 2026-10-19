@@ -65,7 +65,7 @@ registerProvider({
  * tables), plus sessions, projects, deals, the integrations tables and the
  * three D652 tables from migration 444 itself.
  */
-function world(opts: { reply?: string } = {}) {
+function world(opts: { reply?: string; verdict?: string } = {}) {
   const { DB, db } = aiBudgetFixture();
   db.exec(`
     ALTER TABLE users ADD COLUMN founder_id INTEGER;
@@ -114,18 +114,19 @@ function world(opts: { reply?: string } = {}) {
   `);
   db.exec(EADWYN_SCHEMA_SQL);
   const modelCalls: any[] = [];
+  const guardCalls: string[] = [];
   const env: any = {
     JWT_SECRET,
     DB,
     AI: {
       run: async (model: string, input: any) => {
-        if (/guard/.test(model)) return { response: 'safe' };
+        if (/guard/.test(model)) { guardCalls.push(input.messages.at(-1).content); return { response: opts.verdict ?? 'safe' }; }
         modelCalls.push(input);
         return { response: opts.reply ?? '{"answer":"Nothing here records that.","send":null}' };
       },
     },
   };
-  return { env, db, modelCalls };
+  return { env, db, modelCalls, guardCalls };
 }
 
 async function auth(env: any, id = ME, role = 'founder') {
@@ -719,4 +720,27 @@ test('through the route: the real Stripe reader feeds the run only with its swit
   const on = await call(env, 'POST', `/conversations/${conv}/ask`, { question: 'MRR?' });
   assert.match(modelCalls[1].messages[0].content, /\[Stripe\]\n- Stripe for Mine on 2026-10-08: MRR 3,200/);
   assert.deepEqual(on.json.sources, [{ key: 'stripe', name: 'Stripe', as_of: '2026-10-08' }]);
+});
+
+test('D763: a blocked question answers as before, checked once by the guard inside the run, and the model never runs', async () => {
+  const { env, db, modelCalls, guardCalls } = world({ verdict: 'unsafe\nS9' });
+  try {
+    const conv = await startConversation(env);
+    const r = await call(env, 'POST', `/conversations/${conv}/ask`, { question: 'How do I build a weapon?', file: { name: 'n.txt', text: 'notes' } });
+    assert.equal(r.status, 422);
+    assert.deepEqual(r.json, { error: 'safety_block', message: 'That question could not be sent.', category: 's9' });
+    assert.deepEqual(guardCalls, ['How do I build a weapon?\n\nnotes'], 'the question and its file, once, and nothing gathered from connectors');
+    assert.equal(modelCalls.length, 0);
+  } finally { db.close(); }
+});
+
+test('D763: an allowed question is checked once on its way in, and the answer once on its way out', async () => {
+  const { env, db, modelCalls, guardCalls } = world();
+  try {
+    const conv = await startConversation(env);
+    const r = await call(env, 'POST', `/conversations/${conv}/ask`, { question: 'What is MRR?' });
+    assert.equal(r.status, 200);
+    assert.equal(modelCalls.length, 1);
+    assert.deepEqual(guardCalls, ['What is MRR?', '{"answer":"Nothing here records that.","send":null}'], 'a second input check, or an unchecked answer');
+  } finally { db.close(); }
 });

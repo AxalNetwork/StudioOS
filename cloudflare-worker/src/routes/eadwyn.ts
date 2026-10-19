@@ -34,7 +34,6 @@ import { activeCompanyFor } from '../middleware/activeCompany';
 import { ensureTier } from '../middleware/requireTier';
 import { canAccessProject } from '../services/projectAccess';
 import { projectInActiveCompany } from '../services/tenancyScope';
-import { classifyInput } from '../services/advisor/guardrails';
 import { run as aiRun } from '../services/aiRouter';
 import { refuse } from '../util/refusal';
 import {
@@ -490,11 +489,6 @@ eadwyn.post('/conversations/:uid/ask', async (c) => {
   const fileName = String(body?.file?.name || '').trim().slice(0, 120);
   const fileText = String(body?.file?.text || '').slice(0, MAX_FILE_TEXT);
 
-  const safety = await classifyInput(c.env, user.id, fileText ? `${question}\n\n${fileText}` : question, page);
-  if (safety.blocked) {
-    return c.json({ error: 'safety_block', message: 'That question could not be sent.', category: safety.category }, 422);
-  }
-
   const enabled = parseConnectorKeys(conv.connectors_json);
   const connections = await loadConnections(c.env, user.id);
   const { readable, reads } = await readForRun(c.env, user, enabled, connections, conv.company_id);
@@ -524,8 +518,16 @@ eadwyn.post('/conversations/:uid/ask', async (c) => {
     messages: [...turns.map((t) => ({ role: t.role, content: t.content })), { role: 'user' as const, content: question }],
     maxTokens: 600,
     temperature: 0.2,
+    // D763: the guard checks what the member typed and attached, once, before
+    // the model runs; the connector data and the earlier turns are not theirs
+    // to be checked again.
+    guardText: fileText ? `${question}\n\n${fileText}` : question,
+    role: user.role,
   });
 
+  if (r.refusal === 'guard_blocked') {
+    return c.json({ error: 'safety_block', message: 'That question could not be sent.', category: r.guard?.codes[0]?.toLowerCase() ?? 'unsafe' }, 422);
+  }
   if (!r.ok) {
     return c.json({
       ok: false,
@@ -534,7 +536,11 @@ eadwyn.post('/conversations/:uid/ask', async (c) => {
         ? 'That model is no longer offered for this page. Nothing was run.'
         : r.refusal === 'budget_user_month' || r.refusal === 'budget_user_day'
           ? 'This month’s AI budget is spent. Nothing was run.'
-          : 'The model could not be reached. Nothing was run, and nothing was charged.',
+          // D763: the guard withheld the answer, or could not check it; its own words.
+          : r.refusal === 'guard_blocked_output' || r.refusal === 'guard_unavailable'
+            ? r.error
+            : 'The model could not be reached. Nothing was run, and nothing was charged.',
+      ...(r.guard?.refusal?.link ? { link: r.guard.refusal.link } : {}),
       usage: { model: r.usage.model, est_cost_usd: 0 },
     }, 503);
   }
