@@ -7,7 +7,7 @@ import { BTN } from './AccountCenter';
 import { ConnectorPanel, KeyFields, PermissionsGroup, SheetFrame, UsesGroups, openingView, useConnectors } from './ConnectorSheet';
 import { useConnectFlow } from './useConnectFlow';
 import { RequestSheet, useMovedNotice } from './AccountConnectors';
-import { isEntityRow, keysHref, moduleLabel, stripReturn } from './connectorsModel';
+import { isEntityRow, isPersonalMercury, keysHref, moduleLabel, stripReturn } from './connectorsModel';
 import {
   DETAIL_MISSING, backHrefFor, bodyDetailsRows, detailsRows, headerTagline, keyHelpOf, modeLabel, pageAction, pageChoices, pageEntry, pageNotice,
   pageReturn, pageTitle, toolGroups,
@@ -15,6 +15,7 @@ import {
 import { isChannelKey } from './channelPageModel';
 import ChannelPage from './ChannelPage';
 import { notOfferedSentence } from './mercuryModel';
+import { MercuryEntityPageBody, MercuryLandsGroup, MercuryReadsGroup, MercuryUsesGroups } from './MercurySheet';
 import { useAuth } from '../../hooks/useAuthSync';
 import { branchOfUser, isSuperAdminUser } from '../../lib/shellRole';
 import { ZOOM_DISCONNECT_NOTE, ZOOM_SECTIONS, usedByLinks, zoomHowItWorks, zoomNotices } from '../../lib/validateSourceWording';
@@ -35,7 +36,7 @@ import { ZOOM_DISCONNECT_NOTE, ZOOM_SECTIONS, usedByLinks, zoomHowItWorks, zoomN
  *
  * NOTHING IS LOST WHILE THE WORK MOVES (decision 7). Until F3 to F5 replace
  * it, the connected half of today's `ConnectorPanel` (companies, fed,
- * settings, activity; the entity Mercury; GitHub's repositories) is mounted
+ * settings, activity; GitHub's repositories) is mounted
  * inline in "Connect and manage", through `SheetFrame`'s `page` layout: in
  * the page's flow, no overlay, no dialog role, no × and no Escape of its own.
  *
@@ -52,6 +53,12 @@ import { ZOOM_DISCONNECT_NOTE, ZOOM_SECTIONS, usedByLinks, zoomHowItWorks, zoomN
  * Tools, Prompts, the trust notice and Details from it (`ConnectorBody`), and
  * the header's line becomes its tagline. Without `body` it draws F1's About
  * and Details from the catalogue row.
+ *
+ * MERCURY (#1991, F5). The Axal entities' row (`isEntityRow`, an admin on HQ)
+ * draws `MercuryEntityPageBody` in "Connect and manage": the entity
+ * connections, what they feed, Open Banking and the audit foot, with the one
+ * audited read on mount and no header action. A member's own Mercury stays in
+ * the interim panel until F3 (#1956) draws "Your connection".
  *
  * THE READ (#1955, part 2). Handed `readPage` (`connectorsApi.page`), the view
  * reads `GET /api/connectors/directory/<page_key>` once the connector is known,
@@ -149,7 +156,8 @@ export function ConnectorPageView({ data, connectorKey, phone = false, branchAdm
  * notice, the inline key form, the connected half, then `children` (the body).
  */
 function ReadyPage({ p, back, phone, ret, moved, onChanged, children, connector = null }) {
-  const superAdmin = isSuperAdminUser(useAuth()?.user);
+  const auth = useAuth();
+  const superAdmin = isSuperAdminUser(auth?.user);
   // A return opens on what happened; GitHub's lands on choosing its repositories (the connected half).
   const [view, setView] = useState(() => (ret ? ret.view : 'idle'));
   const [flowRet, setFlowRet] = useState(ret || {});
@@ -161,7 +169,11 @@ function ReadyPage({ p, back, phone, ret, moved, onChanged, children, connector 
   const notice = pageNotice({ view, ret: flowRet, message: flow.message, name, moved });
   const keyOpen = (view === 'key' || view === 'badkey') && (action.kind === 'key' || action.kind === 'oauth' || action.kind === 'reconnect');
   // The connected half stays inline until F3 to F5; a member's not-connected flow is the band's.
-  const panelShown = isEntityRow(p) || !!p.connection || view === 'sync';
+  // D753 F5 (#1991): the Axal entities' Mercury is drawn on the page itself, never the interim panel.
+  const entity = isEntityRow(p);
+  const panelShown = !entity && (!!p.connection || view === 'sync');
+  // A member's own Mercury still says what it is for before the token is asked for, until F3 (#1956); the band connects.
+  const memberMercury = isPersonalMercury(p) && !p.connection && !panelShown;
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="connector-page" data-state="ready" data-key={p.key}>
       {back}
@@ -180,8 +192,20 @@ function ReadyPage({ p, back, phone, ret, moved, onChanged, children, connector 
         </div>
       )}
 
-      {(keyOpen || panelShown) && (
-        <section aria-label="Connect and manage" data-testid="connector-page-connect" data-mode={keyOpen ? 'key' : 'panel'}>
+      {entity && (
+        <section aria-label="Connect and manage" data-testid="connector-page-connect" data-mode="entity">
+          <MercuryEntityPageBody p={p} />
+        </section>
+      )}
+      {(keyOpen || panelShown || memberMercury) && (
+        <section aria-label="Connect and manage" data-testid="connector-page-connect" data-mode={keyOpen ? 'key' : panelShown ? 'panel' : 'mercury'}>
+          {memberMercury && (
+            <div className="-mx-5">
+              <MercuryUsesGroups role={auth?.user?.role ?? null} />
+              <MercuryLandsGroup role={auth?.user?.role ?? null} />
+              <MercuryReadsGroup />
+            </div>
+          )}
           {keyOpen && <InlineKeyForm p={p} flow={flow} view={view} connector={connector} />}
           {!keyOpen && panelShown && <InlinePanel key={`${p.key}:${p.connection ? 'c' : 'n'}`} p={p} ret={view === 'sync' ? { view: 'sync' } : null} onChanged={onChanged} />}
         </section>
@@ -446,7 +470,7 @@ function InlinePanel({ p, ret, onChanged }) {
         setView={(view) => setState({ view, ret: {} })}
         onChanged={onChanged}
         onClose={reset}
-        eyebrow={isEntityRow(p) ? 'Fund administration' : 'Connect and manage'}
+        eyebrow="Connect and manage"
       />
     </SheetFrame.Provider>
   );
