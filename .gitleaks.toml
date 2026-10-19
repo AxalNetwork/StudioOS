@@ -81,6 +81,11 @@ regexes = [
   # keyed on the separate 128-bit `public_token`, which this does not match.
   # Pinned to the exact shape so nothing looser rides on it (D382).
   '''\bAXL-SOL-(C\d+|X)-\d{6}-\d{4}\b''',
+  # D751 T9 (#1921): the synthetic client secret in
+  # cloudflare-worker/test/health_connectors_d751.test.ts, which the test
+  # sets as an env value and then proves never appears in /api/health. Not
+  # a credential; pinned to the exact literal so nothing looser rides on it.
+  '''\bd751-health-fixture-secret\b''',
   '''dG9rZW4tMjAxNw''',
   '''webgate\.ec\.europa\.eu/fsd/fsf/public/files/jsonFullSanctionsList[^'"\s]+''',
 ]

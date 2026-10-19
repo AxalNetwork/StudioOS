@@ -24,6 +24,7 @@ import { fileURLToPath } from 'node:url';
 import partnerDelivery from '../src/routes/partner_delivery.ts';
 import research from '../src/routes/research.ts';
 
+import { withGuard } from './_guard_stub.mjs';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SQL = resolve(HERE, '../sql');
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
@@ -125,13 +126,13 @@ async function board(db: any, userId: number) {
 
 async function brief(db: any, userId: number): Promise<{ status: number; prompt: string | null }> {
   let prompt: string | null = null;
-  const AI = {
+  const AI = withGuard({
     run: async (_model: string, payload: any) => {
       const messages = payload?.messages || [];
       prompt = String(messages[messages.length - 1]?.content ?? '');
       return { response: 'a drafted paragraph' };
     },
-  };
+  });
   const res = await research.fetch(new Request('http://x/drafts', {
     method: 'POST',
     headers: { Authorization: `Bearer ${await token(userId, 'partner')}`, 'content-type': 'application/json' },

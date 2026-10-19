@@ -110,14 +110,17 @@ test('the insert carries the column, and a null category stays null', () => {
 
 test('the category travels with the score at every audit write', () => {
   // THE RULE, SWEPT RATHER THAN COUNTED. Seventeen `writeTurnAudit` call sites;
-  // seven have a `safety` result in scope and ten do not. Every line binding a
+  // seven have a `safety` result in scope and ten do not. D763: `/explain`'s
+  // shadow reply now comes before the run whose guard gives the verdict, so it
+  // has none, and `/answer` gained a write for a guard that could not answer:
+  // eighteen sites, seven and eleven. Every line binding a
   // score binds a category of the matching kind — and because the interface
   // field is REQUIRED, the typechecker refuses an eighteenth site that omits
   // it, which is a guard that cannot be forgotten to run.
   const withScore = ADVISOR.split('\n').filter((l) => l.includes('safetyScore: safety.score'));
   const withNull = ADVISOR.split('\n').filter((l) => l.includes('safetyScore: null'));
   assert.ok(withScore.length >= 7, `expected the sites that classify, found ${withScore.length}`);
-  assert.ok(withNull.length >= 10, `expected the sites that do not, found ${withNull.length}`);
+  assert.ok(withNull.length >= 11, `expected the sites that do not, found ${withNull.length}`);
   for (const l of withScore) {
     assert.match(l, /guardrailCategory: safety\.category/,
       `an audit write with a safety result drops the category: ${l.trim().slice(0, 70)}`);
