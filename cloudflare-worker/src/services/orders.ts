@@ -553,6 +553,14 @@ export async function fulfilOrder(env: Env, orderRef: string): Promise<Order | n
         .first<{ email: string; name: string | null }>();
       if (buyer?.email) {
         const pdfBytes = await renderOrderInvoicePdf(env, orderRef).catch(() => null);
+        let topUp: { usageUrl: string } | null = null;
+        for (const line of items) {
+          if (await isTokenPackPrice(env, line.price_id)) {
+            const base = String(env.PUBLIC_BASE_URL || (env as any).APP_URL || 'https://axal.vc').replace(/\/$/, '');
+            topUp = { usageUrl: `${base}/account/usage#top-ups` };
+            break;
+          }
+        }
         await sendBrandedInvoiceEmail(env, {
           to: buyer.email,
           name: buyer.name,
@@ -563,6 +571,7 @@ export async function fulfilOrder(env: Env, orderRef: string): Promise<Order | n
           pdfBytes: pdfBytes ?? null,
           paidAt: new Date(),
           seller: AXAL_ENTITIES.management.name,
+          topUp,
         });
       }
     } catch (e) {
@@ -579,6 +588,13 @@ export async function fulfilOrder(env: Env, orderRef: string): Promise<Order | n
 // (renderAgreementPdf) is agreement-specific, so we render a clean itemised
 // invoice here using the same pdf-lib primitives already bundled in the worker.
 // ---------------------------------------------------------------------------
+/** D755 (#1914) §17: the words a token pack's invoice line reads; `cents` is the line's face value. */
+export function tokenPackLineWords(cents: number): string {
+  const dollars = cents % 100 === 0 ? String(cents / 100) : (cents / 100).toFixed(2);
+  return `$${dollars} of tokens — added to your AI top-up balance`;
+}
+export const TOKEN_PACK_INVOICE_NOTE = 'Tokens never expire. VAT, where it applies, is not part of the tokens.';
+
 function formatMoneyCents(cents: number, currency: string): string {
   const cur = (currency || 'usd').toUpperCase();
   return `${(cents / 100).toFixed(2)} ${cur}`;
@@ -671,8 +687,10 @@ export async function renderOrderInvoicePdf(env: Env, orderRef: string): Promise
   page.drawText('Amount', { x: amountX, y, size: 9.5, font: bold, color: INK });
   y -= 16;
 
-  for (const line of items) {
-    let label = line.name || line.price_id;
+  const { isTokenPackPrice } = await import('./aiCredits');
+  const packLines = await Promise.all(items.map((l) => isTokenPackPrice(env, l.price_id)));
+  for (const [i, line] of items.entries()) {
+    let label = packLines[i] ? tokenPackLineWords(line.line_total) : line.name || line.price_id;
     while (label.length > 4 && regular.widthOfTextAtSize(label, 10) > qtyX - MARGIN - 8) {
       label = label.slice(0, -2);
     }
@@ -713,6 +731,11 @@ export async function renderOrderInvoicePdf(env: Env, orderRef: string): Promise
   if (row.discount_cents > 0) totalsRow('Discount', -row.discount_cents);
   totalsRow('VAT', row.vat_cents);
   totalsRow('Total', row.total_cents, true);
+  // A mixed order cannot exist (CR1 refuses it), so a pack line means a pack order.
+  if (packLines.some(Boolean)) {
+    y -= 10;
+    page.drawText(TOKEN_PACK_INVOICE_NOTE, { x: MARGIN, y, size: 9, font: regular, color: MUTED });
+  }
 
   return await doc.save();
 }

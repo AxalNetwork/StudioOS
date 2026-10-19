@@ -156,7 +156,10 @@ test('every request in the module is written as a literal path the drift check c
   const calls = extractClientCalls(readFileSync('frontend/src/lib/api/channels.js', 'utf8')).map((c) => `${c.method} ${normalizePath(c.path)}`);
   assert.deepEqual(calls.sort(), [
     'DELETE /channels/:p', 'DELETE /founder/validate/interviews/:p/meetings/:p',
+    // D757 (#1926): the Calendar status read for meet_transcripts, and the Meet transcript consent.
+    'GET /calendar/google/status',
     'GET /channels', 'GET /channels/telegram/link', 'GET /channels/threads', 'GET /channels/threads/:p', 'GET /founder/validate/interviews/:p/meetings',
+    'POST /calendar/google/meet-transcripts/connect',
     'POST /channels/:p/test', 'POST /channels/telegram/link', 'POST /channels/telegram/link/:p/confirm', 'POST /channels/threads/:p/assign',
     // D754 (#1893): the consent notice and the member's word.
     'POST /channels/threads/:p/consent', 'POST /channels/threads/:p/consent-request', 'POST /channels/threads/:p/ignore',
@@ -684,8 +687,8 @@ test('the schedule form: local time to UTC, a future time, a duration; the refus
     { provider: 'google_meet', available: true, connected: true, transcript_access: 'missing' },
   ] });
   assert.equal(providerNote('zoom', ps.zoom), 'Connect Zoom in Account › Connectors first.');
-  assert.equal(providerNote('google_meet', ps.google_meet), 'Axal cannot import Google Meet transcripts yet. You can still hold the call: use the recorder in Axal during it, or paste the conversation afterwards.');
-  assert.doesNotMatch(providerNote('google_meet', ps.google_meet), /reconnect/i, 'a reconnect cannot help');
+  // Meet's transcript permission is MeetTranscripts' to say, from the Calendar status read (D757, #1926).
+  assert.equal(providerNote('google_meet', ps.google_meet), '');
   assert.equal(providerNote('zoom', meetingProviders(null).zoom), '', 'an unread provider is not a "no"');
   assert.match(providerNote('zoom', { available: false }), /not set up on Axal yet/);
   const notice = 'Google Meet transcripts are not available on Axal yet, so this call’s transcript will not be imported. You can still hold the call: use the recorder in Axal during it, or paste the conversation afterwards.';
