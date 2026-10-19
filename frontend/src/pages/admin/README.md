@@ -28,6 +28,13 @@ templates), the network (profiles, partners, referrals), and integrations
 bot's health from `GET /api/admin/channels/telegram/webhook`, above the news
 bot's tabs (D756).
 
+The AI rail (D775, #2101). Every screen here that is a Super Admin board sits in
+`RailFrame` with `WorkerRail`, as `contracts/ContractsDesk.jsx` does. Where a
+plain admin also reaches the screen, the rail takes the viewer's tier.
+`PublicationsFrame.jsx` is the one frame the three Publications routes share,
+because they are one board. Which board each screen is, and the options it
+offers, are listed in `frontend/src/lib/railOptions/superAdmin.js`.
+
 `HeldZone.jsx` and the five `Held*.jsx` landings are the Admin shell on
 accounts HQ holds directly (canvas S20, D286): `HeldAccounts.jsx` (embeds the
 console's Users panel; links Exploring, Personas, Trash), `HeldApprovals.jsx`
