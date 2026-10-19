@@ -6,6 +6,10 @@
 //   linkTelegram     POST   /channels/telegram/link        → { code, url, expires_at }
 //   telegramClaim    GET    /channels/telegram/link        → { claim }: the member's latest code and who claimed it (#1625)
 //   confirmTelegram  POST   /channels/telegram/link/:uid/confirm  Axal's half of the two-sided confirm → { linked, claim }
+//   whatsappLink     POST   /channels/whatsapp/link        D754 way B (#1937): → { code, wa_link, expires_at }
+//   whatsappLinkView GET    /channels/whatsapp/link        → { claim, link }: the newest claim and the member's own WhatsApp
+//   confirmWhatsAppLink POST /channels/whatsapp/link/:uid/confirm  Axal's half → { linked, claim, link }
+//   unlinkWhatsApp   DELETE /channels/whatsapp/link        → { unlinked }
 //   connectWhatsApp  POST   /channels/whatsapp/connect     { code, waba_id, phone_number_id } from Embedded Signup
 //   disconnect       DELETE /channels/:provider
 //   test             POST   /channels/:provider/test
@@ -65,6 +69,10 @@ export const channelsApi = {
   linkTelegram: () => request('/channels/telegram/link', { method: 'POST', body: JSON.stringify({}) }),
   telegramClaim: () => request('/channels/telegram/link'),
   confirmTelegram: (uid) => request(`/channels/telegram/link/${enc(uid)}/confirm`, { method: 'POST', body: JSON.stringify({}) }),
+  whatsappLink: () => request('/channels/whatsapp/link', { method: 'POST', body: JSON.stringify({}) }),
+  whatsappLinkView: () => request('/channels/whatsapp/link'),
+  confirmWhatsAppLink: (uid) => request(`/channels/whatsapp/link/${enc(uid)}/confirm`, { method: 'POST', body: JSON.stringify({}) }),
+  unlinkWhatsApp: () => request('/channels/whatsapp/link', { method: 'DELETE' }),
   connectWhatsApp: ({ code, waba_id, phone_number_id }) => request('/channels/whatsapp/connect', {
     method: 'POST', body: JSON.stringify({ code, waba_id, phone_number_id: phone_number_id ?? null }),
   }),

@@ -4,6 +4,26 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## Send recordings from your WhatsApp, on WhatsApp's page and in Record a Session (D754 fb part 1, #1939)
+
+- WhatsApp's page draws "Send recordings from your WhatsApp" below way A
+  (`WhatsAppWayB.jsx`, rules in `whatsappWayB.js`), over wb1's
+  `/channels/whatsapp/link` routes: **Link your WhatsApp**; the one-time code,
+  **Open WhatsApp** (the Worker's `wa.me` link with `LINK <code>` typed) and
+  "Expires in 10 minutes", re-read when the tab regains focus; "Is •••• 1234
+  your number? **Confirm**"; and once linked, the masked number, the last
+  recording, the line on what Axal sends, and **Unlink**.
+- While Axal's number is not set up (every wb1 route answers 503
+  `not_available`) the section is not drawn. A Super Admin sees the four
+  `WHATSAPP_AXAL_*` names, never a value.
+- Record a Session gets "Send it from WhatsApp" beside "Send it from your AI
+  assistant": three steps, the 5 MB limit and "Everyone you recorded must
+  have agreed before you recorded.". It reads the link only once opened.
+- `channelsApi` gains `whatsappLink`, `whatsappLinkView`,
+  `confirmWhatsAppLink` and `unlinkWhatsApp` (D527).
+- Not yet: the "Recordings go to" venture picker, Axal's number in the entry,
+  and "Agreed beforehand" (wb2). Frontend only.
+
 ## WhatsApp's page says where WhatsApp stands, in every D754 state (D754 f1, #1959)
 
 - `/account/connectors/whatsapp` draws `WhatsAppPageBody` (`ChannelsGroup.jsx`)
