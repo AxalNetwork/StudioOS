@@ -40,7 +40,7 @@
  */
 import type { Env } from '../types';
 import { budgetRefusalMessage } from './aiRouter';
-import { consentBlocks, loadSession } from './interviewSessions';
+import { loadSession, sessionConsentBlocks } from './interviewSessions';
 import { IntakeError, writableSession } from './interviewIntake';
 import { summariseSession, type SummaryResult } from './interviewProcessing';
 import { enqueueJob } from './queue';
@@ -149,7 +149,7 @@ export async function digestSession(env: Env, opts: {
     throw err;
   }
 
-  const blocked = consentBlocks(session.channel, session.consent_status);
+  const blocked = await sessionConsentBlocks(env, session);
   if (blocked) {
     // A withdrawal's own sentence stays: it says more than the consent rule does.
     if (!(session.consent_status === 'declined' && session.digest_status === 'skipped')) {
