@@ -22,6 +22,8 @@
  * - `at`: where it lives, `[file, call]` pairs: the call is a literal in the
  *   file. `railOptions_founder_d771.test.mjs` holds the list to the code both
  *   ways.
+ * - `rail` (only where it differs from `at`'s files): the files whose
+ *   `useRailOption('<key>', …)` names it to the rail. Each one must.
  *
  * A tool page is listed on the board D768's page map (#2092) gives its route:
  * Pitch deck's editor and the positioning workspace are Pitch deck's, the
@@ -73,12 +75,16 @@ export const FOUNDER_OPTIONS = [
   },
   // Record a session opens from every Validate page; it is Customer research's Add.
   {
-    page: 'Founder · Validate · Customer research', key: 'transcribe:live', route: '/validate/record', label: 'Start recording', kind: 'speech', handler: 'transcribe',
+    page: 'Founder · Validate · Customer research', key: 'transcribe:interview', route: '/validate/record', label: 'Record a session', kind: 'speech', handler: 'transcribe',
     at: [['frontend/src/pages/founder/RecordLightbox.jsx', 'sessions.create('], ['frontend/src/pages/founder/RecordLightbox.jsx', 'sessions.open(']],
+    // D768 names it where the lightbox is mounted (`RecordMount`).
+    rail: [CYCLE],
   },
   {
     page: 'Founder · Validate · Customer research', key: 'transcribe:session', route: '/validate/record/live', label: 'Stop and process', kind: 'speech', handler: 'transcribe',
     at: [['frontend/src/lib/activeRecording.js', 'api.finish('], ['frontend/src/lib/activeRecording.js', 'api.process(']],
+    // The store runs it; the live view, which draws the processing, names it.
+    rail: ['frontend/src/pages/founder/RecordingView.jsx'],
   },
   {
     page: 'Founder · Validate · Customer research', key: 'transcribe:recording', route: '/validate/customer-research/1', label: 'Transcribe', kind: 'speech', handler: 'transcribe',
