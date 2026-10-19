@@ -3034,8 +3034,11 @@ function AppInner() {
           every signed-in role incl. 'exploring' (that's where the Personal
           Advisor's one-time 30-day-license codes get redeemed). D755 §13
           (#1915): visitors see it too — the plans and the Token packs, with
-          Sign in to buy; the page leaves out what only a member has. */}
-      <Route path="/plans-and-pricing" element={<ProductsPage />} />
+          Sign in to buy; the page leaves out what only a member has. A member
+          still reads it through `guard`, so inside the app's header, sidebar
+          and footer; a visitor reads it in the public site's frame
+          (ProductsPage draws `SitePage` for them). */}
+      <Route path="/plans-and-pricing" element={user ? guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <ProductsPage />) : <ProductsPage />} />
       {/* Product slide-over deep link — same page, pre-opens the detail panel. */}
       <Route path="/plans-and-pricing/:productId" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <ProductsPage />)} />
       {/* Legacy /products redirects — keep for any saved links or external references. */}

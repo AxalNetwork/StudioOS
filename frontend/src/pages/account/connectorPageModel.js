@@ -9,7 +9,7 @@
  * unknown keys.
  */
 import {
-  REGISTRY_ALIAS, TIER_LABEL, authKind, cardAction, categoryOf, connectorPagePath, oauthReturn,
+  REGISTRY_ALIAS, TIER_LABEL, authKind, cardAction, categoryOf, connectionStatus, connectorPagePath, flowBanner, isEntityRow, oauthReturn, patOnly,
 } from './connectorsModel.js';
 import { channelEntry, isChannelKey } from './channelPageModel.js';
 
@@ -78,6 +78,96 @@ export function interimMode(p, ret = null) {
   if (act === 'notify' || act === 'joined') return 'waitlist';
   if (act === 'unavailable') return 'unavailable';
   return 'panel';
+}
+
+// ---------- Connect from the page (#1908, F2) ------------------------------
+
+/** Whether a connector connects with a key or token on its page: a key connector, HubSpot's Private App, or a token-only one (D751). */
+export function keyPath(p) {
+  const kind = authKind(p);
+  return kind === 'key' || kind === 'token_first' || patOnly(p);
+}
+
+/**
+ * The header's one action (D753 decision 6), from the row and the flow's
+ * `view`. `kind` is what the band draws:
+ *   `none`        — the Axal entities' Mercury (F5 draws its body);
+ *   `status`      — connected: its status pill (F3's "Manage" takes the slot beside it);
+ *   `reconnect`   — connected but needing attention: "Reconnect", by key or by sign-in (`via`);
+ *   `waitlist`    — coming soon: "Notify me", then "We'll tell you";
+ *   `unavailable` — not set up here, or unreadable: a disabled button with D751's words;
+ *   `plan`        — locked by the plan: the tier pill and "See plans";
+ *   `starting`    — a sign-in is opening: "Opening <Name>…", busy;
+ *   `key`         — "Connect to Axal VC", opening the key form inline;
+ *   `oauth`       — "Connect to Axal VC", sending the browser to the service.
+ */
+export function pageAction(p, { view = 'idle' } = {}) {
+  if (!p || isEntityRow(p)) return { kind: 'none' };
+  const name = p.display_name || 'this connector';
+  if (p.connection) {
+    const pill = connectionStatus(p.connection, p);
+    if (pill.why) return { kind: 'reconnect', label: 'Reconnect', aria: `Reconnect ${name}`, pill, via: keyPath(p) ? 'key' : 'oauth' };
+    return { kind: 'status', pill };
+  }
+  const act = cardAction(p);
+  if (act === 'notify' || act === 'joined') return { kind: 'waitlist', joined: act === 'joined', label: act === 'joined' ? 'We’ll tell you' : 'Notify me' };
+  if (act === 'unavailable') {
+    return p.unreadable
+      ? { kind: 'unavailable', label: 'Status unreadable', note: `Axal couldn't read whether ${name} is set up here.` }
+      : { kind: 'unavailable', label: 'Not set up here', note: `${name} isn't set up on Axal yet, so it can't be connected.` };
+  }
+  if (p.locked) return { kind: 'plan', pill: TIER_LABEL[p.tier] || 'Paid plan', label: 'See plans', to: '/account/billing' };
+  if (view === 'signin') return { kind: 'starting', label: `Opening ${name}…`, busy: true };
+  return { kind: keyPath(p) ? 'key' : 'oauth', label: 'Connect to Axal VC', aria: `Connect ${name} to Axal VC` };
+}
+
+/**
+ * The split chevron's choices: the account kind the sign-in opens
+ * (Salesforce, DocuSign) and the other way in (a personal access token, or
+ * HubSpot's sign-in beside its Private App token). Empty when there is none.
+ */
+export function pageChoices(p) {
+  if (!p) return { env: null, alt: [] };
+  const env = p.key === 'salesforce'
+    ? { name: 'sf_env', label: 'Org type', options: [{ value: 'production', label: 'Production' }, { value: 'sandbox', label: 'Sandbox' }] }
+    : p.key === 'docusign'
+      ? { name: 'ds_env', label: 'Account', options: [{ value: 'production', label: 'Production' }, { value: 'demo', label: 'Demo' }] }
+      : null;
+  const kind = authKind(p);
+  const alt = [];
+  if (p.supports_pat && kind === 'oauth' && !patOnly(p)) alt.push({ id: 'pat', label: 'Use a personal access token' });
+  if (kind === 'token_first' && !p.oauthOff) alt.push({ id: 'oauth', label: `Sign in with ${p.display_name} instead` });
+  return { env, alt };
+}
+
+/** "Get one at <Service> ↗" for the key form, from the Worker's `sign_in.key_help_href`; only an https link, else null. */
+export function keyHelpOf(connector, p) {
+  const href = connector?.sign_in?.key_help_href;
+  if (typeof href !== 'string' || !href.startsWith('https://')) return null;
+  return { href, label: `Get one at ${connector.display_name || p?.display_name || 'the service'}` };
+}
+
+const NOTICE_TONE = {
+  cancelled: 'neutral', unconfigured: 'neutral', setup_unreadable: 'neutral', company: 'warn',
+  refused: 'danger', overreach: 'danger', badkey: 'danger',
+};
+
+/**
+ * The one notice the page's notice region draws (decision 6): what the flow
+ * or a sign-in's return says, else a connect's success, else "Integrations
+ * are now Connectors." Null when there is none.
+ */
+export function pageNotice({ view = 'idle', ret = null, message = '', name = 'This connector', moved = false } = {}) {
+  const r = ret || {};
+  if (Object.hasOwn(NOTICE_TONE, view)) {
+    let text = view === 'setup_unreadable' ? message || flowBanner(view, name, r) : flowBanner(view, name, r);
+    // The Worker's own sentence rides after a refusal at the press, as the sheet prints it (D651).
+    if ((view === 'refused' || view === 'badkey') && message && !r.reason) text = `${text} ${message}`;
+    return { kind: view, tone: NOTICE_TONE[view], text };
+  }
+  if (view === 'connected') return { kind: 'connected', tone: r.banner ? 'warn' : 'ok', text: r.banner || `${name} is connected to Axal VC.` };
+  if (moved) return { kind: 'moved', tone: 'info', text: 'Integrations are now Connectors.' };
+  return null;
 }
 
 const TABS = new Set(['yours', 'discover']);

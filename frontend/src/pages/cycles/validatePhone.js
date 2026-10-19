@@ -136,3 +136,134 @@ export function targetValue(text) {
   if (!Number.isInteger(n) || n <= 0) return { error: 'Enter a whole number of interviews a month, above zero.' };
   return { value: n };
 }
+
+// ---------------------------------------------------------------------------
+// D757 §2.6–§2.7 (#1928) — "From your interviews" and the Verdict line, as
+// pure rules the desktop section and the phone group both draw.
+// ---------------------------------------------------------------------------
+
+/** The panel's empty state. */
+export const NO_SUGGESTIONS = 'No suggestions from your interviews yet.';
+/** At most this many ids go in one Accept all call (#1925's route). */
+export const ACCEPT_ALL_MAX = 50;
+
+/** A transcript time as "00:12:31", or null when it is not a time. */
+export function hms(ms) {
+  if (typeof ms !== 'number' || !Number.isFinite(ms) || ms < 0) return null;
+  const t = Math.floor(ms / 1000);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${p(Math.floor(t / 3600))}:${p(Math.floor((t % 3600) / 60))}:${p(t % 60)}`;
+}
+
+/** "Heard in <name> · 00:12:31 · <speaker>", leaving out what was not recorded. */
+export function heardLine(s) {
+  return ['Heard in ' + (s?.interviewee || 'an interview'), hms(s?.cite_from), s?.speaker || null].filter(Boolean).join(' · ');
+}
+
+/**
+ * The panel's state from the module read's `parts` (#1925): `hidden` for a
+ * reader (the read sends no `suggestions` key), `unreadable` (null), `none`,
+ * or `some` with the rows.
+ */
+export function suggestionsView(parts) {
+  if (!parts || parts.can_write !== true || !Object.hasOwn(parts, 'suggestions')) return { state: 'hidden', rows: [] };
+  if (!Array.isArray(parts.suggestions)) return { state: 'unreadable', rows: [] };
+  const rows = parts.suggestions.filter((s) => s && Number.isInteger(s.id));
+  return { state: rows.length ? 'some' : 'none', rows };
+}
+
+/**
+ * Accept all, as #1925's route takes it: per session, at most 50 ids a call.
+ * A suggestion with no session is accepted on its own (`sessionId: null`).
+ */
+export function acceptAllBatches(rows) {
+  const bySession = new Map();
+  const single = [];
+  for (const s of rows || []) {
+    if (!Number.isInteger(s?.id)) continue;
+    if (Number.isInteger(s.session_id)) {
+      if (!bySession.has(s.session_id)) bySession.set(s.session_id, []);
+      bySession.get(s.session_id).push(s.id);
+    } else single.push({ sessionId: null, ids: [s.id] });
+  }
+  const batches = [];
+  for (const [sessionId, ids] of bySession) {
+    for (let i = 0; i < ids.length; i += ACCEPT_ALL_MAX) batches.push({ sessionId, ids: ids.slice(i, i + ACCEPT_ALL_MAX) });
+  }
+  return [...batches, ...single];
+}
+
+/**
+ * The Verdict card's interview line (§2.6), for writers only: partners and
+ * other readers never see it. Null when the Worker sent none or could not
+ * read it.
+ */
+export function verdictInterviewLine(data) {
+  if (data?.parts?.can_write !== true) return null;
+  const line = data?.card?.interview_evidence;
+  return line && typeof line.text === 'string' && line.text ? line.text : null;
+}
+
+// A finding kind's words, as the Worker's `findingLine`
+// (`cloudflare-worker/src/services/interviewFindings.ts`) writes them; the
+// test reads that function back so the two cannot drift. A suggestion has no
+// text of its own: the module read sends its payload.
+const ATTRIBUTE_WORD = { role: 'Role', company: 'Company', company_size: 'Company size', industry: 'Industry', geography: 'Geography', stage: 'Stage', tools: 'Tools' };
+const KIND_WORD = { workaround: 'Workaround', status_quo: 'Status quo', in_house: 'Built in-house' };
+const capital = (s) => (s ? `${s[0].toUpperCase()}${s.slice(1).replace(/_/g, ' ')}` : s);
+const posInt = (v) => (Number.isInteger(v) && v > 0 ? v : null);
+
+/** "1,200 USD / month", or null when the finding names no amount (the Worker's `amountWord`). */
+export function amountWord(p) {
+  const cents = posInt(p?.amount_cents);
+  if (!cents) return null;
+  const period = p.period === 'month' ? ' / month' : p.period === 'year' ? ' / year' : '';
+  return `${(cents / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })} ${String(p.currency || 'usd').toUpperCase()}${period}`;
+}
+
+/** `{ what, detail }` for a finding kind, or null for any other kind. */
+export function findingLine(kind, p = {}) {
+  switch (kind) {
+    case 'firmographic': return { what: ATTRIBUTE_WORD[String(p.attribute)] ?? 'Firmographic', detail: String(p.value ?? '') };
+    case 'job_to_be_done': return { what: 'Job to be done', detail: String(p.job ?? '') };
+    case 'market_fact': return { what: `Market fact · ${capital(String(p.topic ?? 'other'))}`, detail: String(p.fact ?? '') };
+    case 'alternative': return { what: `Alternative · ${KIND_WORD[String(p.kind)] ?? 'Other'}`, detail: String(p.name ?? '') };
+    case 'budget': return { what: 'Budget', detail: [p.detail, amountWord(p)].filter(Boolean).join(' · ') };
+    case 'timing': return { what: 'Timing', detail: String(p.when ?? '') };
+    case 'urgency': return { what: `Urgency · ${capital(String(p.level ?? ''))}`, detail: String(p.reason ?? '') };
+    case 'buying_trigger': return { what: 'Buying trigger', detail: String(p.trigger ?? '') };
+    case 'objection': return { what: `Objection · ${capital(String(p.about ?? 'other'))}`, detail: String(p.detail ?? '') };
+    default: return null;
+  }
+}
+
+/**
+ * A suggestion in one line: a finding kind's words, a new hypothesis or an
+ * experiment idea; null for the older placement kinds, which the panel draws
+ * with Interview review's `placementText`.
+ */
+export function suggestionLine(s) {
+  const p = s?.payload && typeof s.payload === 'object' ? s.payload : {};
+  if (s?.kind === 'hypothesis_new') return `New hypothesis · ${p.claim ?? ''}${p.disproof ? ` · disproved by: ${p.disproof}` : ''}`;
+  if (s?.kind === 'experiment_idea') return `Experiment · ${p.title ?? ''}${p.method ? ` · ${p.method}` : ''}`;
+  const f = findingLine(s?.kind, p);
+  return f ? (f.detail ? `${f.what} · ${f.detail}` : f.what) : null;
+}
+
+/**
+ * Accept all, batch by batch (`acceptAllBatches`): a session's ids through
+ * #1925's route, a suggestion with no session through its own Accept.
+ * `sessions` is `interviewSessionsApi`. Resolves to how many were not accepted.
+ */
+export async function acceptSuggestions(batches, sessions) {
+  let failed = 0;
+  for (const b of batches || []) {
+    if (b.sessionId == null) {
+      for (const id of b.ids) { try { await sessions.accept(id); } catch { failed += 1; } }
+    } else {
+      const out = await sessions.acceptAll(b.sessionId, b.ids);
+      failed += (Array.isArray(out?.results) ? out.results : []).filter((r) => r?.ok !== true).length;
+    }
+  }
+  return failed;
+}
