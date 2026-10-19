@@ -425,3 +425,37 @@ test('pass B refused keeps pass A\'s placements whole and says why; pass A refus
   assert.equal(refused.ok, false);
   assert.ok(a.calls.every((c) => c.pass === 'A'), 'pass B never runs after pass A is refused');
 });
+
+test('pass B refused partway through a long transcript keeps none of pass B: half a pass is not offered as a whole', async () => {
+  let bCalls = 0;
+  const { env } = routerWorld((pass, input) => {
+    if (pass === 'A') return { response: A_REPLY };
+    bCalls += 1;
+    if (bCalls > 1) throw new Error('capacity');
+    // The first part's answer cites the part it read, so it would be kept if half a pass were.
+    const [, from] = String(input.messages.at(-1).content).match(/\[(\d+)-(\d+)\]/) ?? [];
+    const seg = SEGMENTS.find((s) => s.start === Number(from))!;
+    return { response: JSON.stringify({ placements: [
+      { kind: 'urgency', payload: { level: 'high' }, quote: seg.text, cite: { from: seg.start, to: seg.end } },
+    ] }) };
+  });
+  // Every segment its own part, so each pass makes one call per segment.
+  const out = await structureTranscript(env, { userId: ME, segments: SEGMENTS, context: CTX, step: 'structured', maxChars: 1 });
+  assert.equal(out.ok, true);
+  if (!out.ok) return;
+  assert.equal(out.parts, SEGMENTS.length);
+  assert.ok(bCalls >= 2, 'pass B answered its first part before it was refused');
+  assert.deepEqual([...new Set(out.placements.map((p) => p.kind))].sort(), ['competitor_mention', 'pain_severity'], 'no part of pass B is kept');
+  assert.notEqual(out.passBRefusal, undefined);
+});
+
+test('the call limit counts both passes: 12 parts run (24 calls), 13 parts are refused before any call', async () => {
+  const lines = (n: number): Segment[] => Array.from({ length: n }, (_, i) => ({ start: i * 1000, end: i * 1000 + 1000, speaker: 'A', text: `line ${i}` }));
+  const ok = routerWorld(() => ({ response: '{"placements":[]}' }));
+  const ran = await structureTranscript(ok.env, { userId: ME, segments: lines(12), context: CTX, step: 'structured', maxChars: 1 });
+  assert.equal(ran.ok, true);
+  assert.equal(ok.calls.length, 24);
+  const over = routerWorld(() => ({ response: '{"placements":[]}' }));
+  const refused = await structureTranscript(over.env, { userId: ME, segments: lines(13), context: CTX, step: 'structured', maxChars: 1 });
+  assert.deepEqual([refused.ok, refused.ok ? null : refused.refusal, over.calls.length], [false, 'structure_call_limit', 0]);
+});
