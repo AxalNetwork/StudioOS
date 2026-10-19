@@ -20,6 +20,8 @@ import { useToast } from '../components/useToast';
 import { useEscapeClose } from '../components/useEscapeClose';
 import { useRailOption } from '../ui/railCrumbs';
 import { spinoutPreviewMeta as computeSpinoutPreviewMeta } from './spinoutPreview';
+import DeckProposalPanel from '../components/DeckProposalPanel';
+import { PROPOSAL_COPY } from '../lib/deckProposal';
 
 /**
  * Task #16 (DE) — Pitch Deck Builder rewrite.
@@ -44,6 +46,8 @@ export default function PitchDeckPage({ embedded = false, initialProjects = [], 
   const [projectId, setProjectId] = useState(seededProjectId);
   const [versions, setVersions] = useState([]);
   const [deck, setDeck] = useState(null);
+  // D767 (#2096) — the project's unkept "Fill from project" proposal, if any.
+  const [proposal, setProposal] = useState(null);
   const [activeIdx, setActiveIdx] = useState(0);
   const [busy, setBusy] = useState(false);
   // D771 (#2097): which fill is at the model, so the rail names that option.
@@ -134,12 +138,13 @@ export default function PitchDeckPage({ embedded = false, initialProjects = [], 
 
   useEffect(() => {
     if (!projectId) return;
-    setShareUrl(''); setError(''); setExportMenuOpen(false);
+    setShareUrl(''); setError(''); setExportMenuOpen(false); setProposal(null);
     (async () => {
       try {
         const r = await api.deckListVersions(projectId);
         const list = Array.isArray(r) ? r : (r?.versions || []);
         setVersions(list);
+        setProposal(r?.proposal || null);
         if (list.length) {
           const head = await api.deckGet(list[0].id);
           setDeck(head?.deck || head);
@@ -377,15 +382,17 @@ export default function PitchDeckPage({ embedded = false, initialProjects = [], 
   // coverage_pct[] used by the confidence rail in the slide list.
   // Cleared by applyMethod / version restore so stale values don't
   // bleed across deck swaps.
+  // D767 (#2096): the fill is a proposal shown beside the current version;
+  // the deck itself is not changed until the founder keeps it.
   const fillFromProject = async () => {
     if (!deck?.id) { addToast('No deck loaded', 'error'); return; }
     setBusy(true); setRunning('autofill');
     try {
       const r = await api.deckAutofill(deck.id);
-      setDeck(r?.deck || deck);
+      setProposal(r?.proposal || null);
       setSlideConfidence(Array.isArray(r?.slide_confidence) ? r.slide_confidence : []);
       setTemplateCoverage(Array.isArray(r?.coverage) ? r.coverage : null);
-      addToast(`Refilled from project (${r?.coverage_pct ?? 0}% covered)`, 'success');
+      addToast(`Filled from project (${r?.coverage_pct ?? 0}% covered). Keep it or discard it.`, 'success');
     } catch (e) {
       // D258 — the refusal's code travels on `e.code`, compared whole. The
       // 409 disjunct stays: no_method_id is the route's only 409.
@@ -398,6 +405,27 @@ export default function PitchDeckPage({ embedded = false, initialProjects = [], 
         setError(e.message || 'Refill failed'); reportError('PitchDeckPage:refill', e);
       }
     } finally { setBusy(false); setRunning(null); }
+  };
+
+  const keepProposal = async (p) => {
+    setBusy(true);
+    try {
+      const r = await api.deckKeepProposal(p.id);
+      setDeck(r?.deck || deck); setActiveIdx(0); setProposal(null);
+      const list = await api.deckListVersions(projectId);
+      setVersions(Array.isArray(list) ? list : (list?.versions || []));
+      addToast(PROPOSAL_COPY.kept, 'success');
+    } catch (e) { setError(e.message || 'Keep failed'); reportError('PitchDeckPage:keepProposal', e); }
+    finally { setBusy(false); }
+  };
+  const discardProposal = async (p) => {
+    setBusy(true);
+    try {
+      await api.deckDiscardProposal(p.id);
+      setProposal(null); setSlideConfidence([]); setTemplateCoverage(null);
+      addToast(PROPOSAL_COPY.discarded, 'info');
+    } catch (e) { setError(e.message || 'Discard failed'); reportError('PitchDeckPage:discardProposal', e); }
+    finally { setBusy(false); }
   };
 
   // ---------------- export ----------------
@@ -602,9 +630,10 @@ export default function PitchDeckPage({ embedded = false, initialProjects = [], 
           >
             <LayoutGrid className="w-4 h-4" /> Pick template
           </button>
-          {/* Task #14 — refill the current deck from project data without
-              creating a new version. 409 (no_method_id) re-opens the
-              picker so the user can choose a template first. */}
+          {/* Task #14 — fill from project data. D767: it proposes a version
+              the founder keeps or discards; the deck is not changed until
+              Keep. 409 (no_method_id) re-opens the picker so the user can
+              choose a template first. */}
           <button
             onClick={fillFromProject}
             disabled={!deck?.id || busy}
@@ -614,6 +643,8 @@ export default function PitchDeckPage({ embedded = false, initialProjects = [], 
             <Wand2 className="w-4 h-4" /> Fill from project
           </button>
         </div>
+
+        <DeckProposalPanel proposal={proposal} currentSlides={deck?.slides} onKeep={keepProposal} onDiscard={discardProposal} busy={busy} />
 
         {/* Task #8 — 11-cell coverage grid, axal_spinout_demoday only.
             One card per slide: green/red dot · source table · count badge.

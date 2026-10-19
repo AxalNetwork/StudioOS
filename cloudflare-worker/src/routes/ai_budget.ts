@@ -6,6 +6,7 @@ import { AI_LICENCE_KEYS, AiBudgetReviewConflict, AiBudgetReviewNotFound, listAi
 import { aiTopupStatus, memberTopupReading, readAiTopupProduct } from '../services/aiTopups';
 import { HISTORY_MAX, ledgerBalance, memberAccount, memberHistory, memberTopUp, packLines, packLabel, reconcile, recordAdjustment } from '../services/aiCredits';
 import { logAdminAction } from '../services/adminAudit';
+import { CONSUMPTION_GROUPS, memberConsumption, monthBounds, monthKey, type ConsumptionGroup } from '../services/aiConsumption';
 import { refuse } from '../util/refusal';
 import { AUTH_ERROR_STATUSES } from '../util/authErrors';
 
@@ -40,6 +41,20 @@ r.get('/history',async c=>{
     if (error instanceof RangeError) return c.json({error:'invalid_cursor',message:'That page cursor is not one this list gave.'},400);
     return refuse(c,503,{code:'ai_history_unreadable',message:'Unreadable: your top-up history could not be read.',raw:error,audience:'member'});
   }
+});
+/**
+ * D776 (#2093): the member's own runs this month (or `month=YYYY-MM`), grouped
+ * by the rail's page, by option within a page, or by record, with what they
+ * were charged and the allowance and token split. Their own rows only.
+ */
+r.get('/runs',async c=>{
+  const user=await requireAuth(c);
+  const group=(c.req.query('group')??'page') as ConsumptionGroup;
+  if (!CONSUMPTION_GROUPS.includes(group)) return c.json({error:'invalid_group',message:'Group by page, option or record.'},400);
+  const month=c.req.query('month')??monthKey(new Date());
+  if (!monthBounds(month)) return c.json({error:'invalid_month',message:'Give the month as YYYY-MM.'},400);
+  try { return c.json(await memberConsumption(c.env,user.id,group,month)); }
+  catch(error) { return refuse(c,503,{code:'ai_runs_unreadable',message:'Unreadable: where your AI spend went could not be read.',raw:error,audience:'member'}); }
 });
 // D750, then D755 §14: why each pack is or is not offered, for the Super Admin only. The top-level
 // fields are D750's single-price line, DEPRECATED until CR8 draws `packs`.
