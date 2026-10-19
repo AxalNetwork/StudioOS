@@ -3,7 +3,8 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { CONNECTOR_METADATA, getDescriptor } from '../integrations/registry';
-import { MODULE_LABELS } from '../integrations/fed';
+import { MODULE_LABELS, fedCounts } from '../integrations/fed';
+import { syncArrivals, syncArrivalsText, syncErrorWords } from '../integrations/githubFeeds';
 import { validateConnectorSettings } from '../integrations/connectorRules';
 import { canReadBoard, canWrite } from './_founder_validate_helpers';
 import type { Card } from '../services/cycleCards';
@@ -461,6 +462,7 @@ async function operating(env: Env, p: Project, viewer: Viewer): Promise<ModuleRe
     });
   });
   const failingTool = tools.find(tool => tool.status === 'error' && getDescriptor(tool.provider_key));
+  const code = p.company_id == null ? null : await codeSystems(env, p, viewer, viewerMember);
 
   const rituals = rows(await env.DB.prepare(
     `SELECT run_date, state FROM ritual_runs WHERE project_id = ?
@@ -490,8 +492,85 @@ async function operating(env: Env, p: Project, viewer: Viewer): Promise<ModuleRe
       rows: toolRows, total: p.company_id == null ? null : toolRows.length,
       state: p.company_id == null ? 'not_recorded' : 'ok', reason: p.company_id == null ? 'This project has no company scope for connectors.' : null,
       note: 'Google Calendar and Microsoft 365 are personal connections and are listed only in Connect a tool.',
+      code: code?.code ?? { state: 'not_recorded', systems: [], reason: 'This project has no company scope for connectors.' },
+      syncs: code?.syncs ?? { state: 'not_recorded', rows: [], reason: 'This project has no company scope for connectors.' },
     } } };
 
+}
+
+/** How many sync lines Tools shows, newest first. */
+export const SYNC_LINES = 20;
+const repositoriesOf = (configJson: string | null): string[] => {
+  try { const cfg = JSON.parse(configJson || '{}'); return Array.isArray(cfg.repositories) ? cfg.repositories.filter((r: unknown): r is string => typeof r === 'string') : []; }
+  catch { return []; }
+};
+const parsed = (raw: string | null): Record<string, unknown> | null => {
+  try { const v = JSON.parse(raw || 'null'); return v && typeof v === 'object' && !Array.isArray(v) ? v : null; } catch { return null; }
+};
+
+/**
+ * D782 (#2113): GitHub is Operating systems' Code system, read from each
+ * GitHub connection enabled for the project's company, never written into
+ * `project_core_systems`. A hand-mapped system stays in the systems table;
+ * this one is labelled as coming from the connection.
+ *
+ * Repository names follow the Tools rule for the owner's name: the owner and
+ * the company's members see them, anyone else reads null. What a connection
+ * fed counts its ledger rows in this project only (`fedCounts`).
+ */
+async function codeSystems(env: Env, p: Project, viewer: Viewer, viewerMember: boolean) {
+  const github = rows(await env.DB.prepare(
+    `SELECT i.id, i.user_id, i.status, i.last_synced_at, i.last_error_at, i.config_json, u.name AS owner_name
+       FROM integrations i
+       JOIN integration_companies ic ON ic.integration_id = i.id AND ic.company_id = ? AND ic.enabled = 1
+       JOIN user_company_links ucl ON ucl.company_id = ic.company_id AND ucl.user_id = i.user_id
+       LEFT JOIN users u ON u.id = i.user_id
+      WHERE i.provider_key = 'github' ORDER BY i.id`,
+  ).bind(p.company_id).all<any>());
+  const sees = (userId: number) => userId === viewer.id || viewerMember;
+  const systems = await Promise.all(github.map(async (g) => {
+    const repositories = repositoriesOf(g.config_json);
+    const fed = (await fedCounts(env, g.id, 'github', null, p.id)).filter(m => (m.count ?? 0) > 0);
+    return {
+      kind: 'code', system: 'Code', provider: 'GitHub', source: 'connection', source_label: 'From the GitHub connection',
+      state: g.status === 'active' ? 'Connected' : g.status === 'error' ? 'Failing' : 'Not connected',
+      last_sync: g.last_synced_at ?? null, failed_at: g.last_error_at ?? null,
+      repositories: sees(g.user_id) ? repositories : null, repositories_total: repositories.length,
+      feeds: fed.map(m => ({ module: m.module, label: m.label, href: m.href ? `${m.href}?project_id=${p.id}` : null, count: m.count })),
+      owner: g.user_id === viewer.id ? 'You' : viewerMember ? g.owner_name ?? null : null,
+      action: { text: 'Open', href: connectHref('github', p.id) },
+    };
+  }));
+  const code = { state: systems.length ? 'ok' : 'empty', systems, reason: systems.length ? null : 'No GitHub connection is enabled for this company.' };
+  if (!github.length) return { code, syncs: { state: 'empty', rows: [], reason: 'No GitHub sync yet.' } };
+  const owners = new Map(github.map(g => [Number(g.id), Number(g.user_id)]));
+  let logs: any[];
+  try {
+    logs = rows(await env.DB.prepare(
+      `SELECT id, integration_id, status, response_summary, payload_json, created_at FROM integration_logs
+        WHERE event_type = 'sync' AND integration_id IN (SELECT value FROM json_each(?))
+        ORDER BY created_at DESC, id DESC LIMIT ?`,
+    ).bind(JSON.stringify([...owners.keys()]), SYNC_LINES).all<any>());
+  } catch {
+    return { code, syncs: { state: 'unreadable', rows: [], reason: 'The sync history could not be read.' } };
+  }
+  const lines = logs.map((l) => {
+    const payload = parsed(l.payload_json);
+    const failed = l.status !== 'ok';
+    const arrived = failed ? [] : syncArrivals(payload);
+    const repos = Array.isArray(payload?.repositories) ? (payload!.repositories as unknown[]).filter((r): r is string => typeof r === 'string') : null;
+    const more = Number.isSafeInteger(payload?.repositories_more) ? Number(payload!.repositories_more) : 0;
+    return {
+      id: `sync-${l.id}`, at: l.created_at ?? null, provider: 'GitHub',
+      state: failed ? 'failed' : payload?.partial === true ? 'partial' : 'done',
+      repositories: repos && sees(owners.get(Number(l.integration_id)) ?? -1) ? repos : null,
+      repositories_more: repos ? more : null,
+      arrived: arrived.map(a => ({ module: a.module, label: a.label, count: a.count, stored: a.stored })),
+      text: failed ? null : syncArrivalsText(arrived),
+      error: failed ? syncErrorWords(l.response_summary) : null,
+    };
+  });
+  return { code, syncs: { state: lines.length ? 'ok' : 'empty', rows: lines, reason: lines.length ? null : 'No GitHub sync yet.' } };
 }
 
 const READS: Record<Slug, (env: Env, p: Project, viewer: Viewer) => Promise<ModuleRead>> = {

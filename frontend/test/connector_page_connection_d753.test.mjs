@@ -68,9 +68,10 @@ test('manageItems: Sync now, Replace key or Reconnect, Disconnect; Reconnect lea
   assert.deepEqual(manageItems({ ...row('stripe'), connection: null }), []);
 });
 
-test('interimPanel: only GitHub and GitHub\'s sign-in landing keep F1\'s panel; never Mercury (F5, #1991)', () => {
+test('interimPanel: only a sync landing keeps F1\'s panel; GitHub is F4\'s section (#1957) and Mercury F5\'s (#1991); never the entity row', () => {
   for (const key of ['stripe', 'hubspot', 'crunchbase', 'slack', 'google']) assert.equal(interimPanel(row(key)), false, key);
-  assert.equal(interimPanel(row('github')), true);
+  assert.equal(interimPanel(row('github')), false, 'F4 (#1957): GitHub\'s repositories are its own section');
+  assert.equal(interimPanel(row('github'), 'sync'), false, 'and GitHub\'s sign-in lands there, never on the sync view');
   assert.equal(interimPanel(row('mercury')), false, 'F5 draws a member\'s Mercury in Your connection');
   assert.equal(interimPanel({ ...row('stripe'), connection: null }, 'sync'), true);
   assert.equal(interimPanel({ ...row('github'), connection: null }), false);
@@ -267,7 +268,7 @@ test('first-party rows disconnect through their own routes, never DELETE /api/co
   }
 });
 
-test('the inline panel is gone for HubSpot and Mercury, and kept for GitHub only', async () => {
+test('the inline panel is gone for HubSpot, GitHub (F4, #1957) and Mercury (F5, #1991)', async () => {
   const f = stubFetch(readsOk);
   try {
     let m = await mount(page('hubspot'), '/account/connectors/hubspot');
@@ -277,8 +278,9 @@ test('the inline panel is gone for HubSpot and Mercury, and kept for GitHub only
     } finally { await m.unmount(); }
     m = await mount(page('github'), '/account/connectors/github');
     try {
-      assert.equal(m.props(m.by('connector-page-connect'))['data-mode'], 'panel');
-      assert.equal(m.by('connector-page-connection'), undefined, 'F4 takes its section over');
+      assert.ok(!m.by('connector-page-connect'), 'GitHub: no inline panel');
+      assert.ok(m.by('connector-page-connection'), 'GitHub: Your connection');
+      assert.ok(m.by('connector-page-repositories'), 'with its Repositories section in the provider slot');
     } finally { await m.unmount(); }
     m = await mount(page('mercury'), '/account/connectors/mercury');
     try {

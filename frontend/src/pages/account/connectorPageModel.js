@@ -48,6 +48,29 @@ export function pageReturn(search, key) {
   return ret.key === key && key !== 'mercury' ? { ret, strip: ret.strip } : { ret: null, strip: ret.strip };
 }
 
+/** D753 F4 (#1957): the GitHub App's Setup URL query. Stripped on GitHub's page; never printed or stored. */
+export const GITHUB_SETUP_KEYS = ['installation_id', 'setup_action'];
+
+/**
+ * Where the page lands from its address: `pageReturn`, plus GitHub's own
+ * return. On GitHub's page, its sign-in (`?oauth=ok`, the `sync` view) and the
+ * App's Setup URL land on the Repositories section (`repositories: true`)
+ * instead of opening the sync view, and the Setup URL's query is stripped
+ * with the rest. `{ ret, strip, repositories }`; null when there is no return.
+ */
+export function pageLanding(search, key) {
+  const back = pageReturn(search, key);
+  const q = new URLSearchParams(search || '');
+  const setup = key === 'github' && GITHUB_SETUP_KEYS.some((k) => q.has(k));
+  if (!back && !setup) return null;
+  const synced = key === 'github' && back?.ret?.view === 'sync';
+  return {
+    ret: synced ? null : back?.ret || null,
+    strip: [...(back?.strip || []), ...(setup ? GITHUB_SETUP_KEYS : [])],
+    repositories: setup || synced,
+  };
+}
+
 /** What the Connect and manage region holds until F2 (D753 decision 8). */
 export function interimMode(p, ret = null) {
   if (ret) return 'panel';
@@ -123,14 +146,14 @@ export function manageItems(p) {
 
 /**
  * Whether F1's interim panel is still mounted on a connected page: only
- * where F4 takes it over (GitHub's repositories), or GitHub's sign-in
- * landing on its repositories. Mercury never: F5 (#1991) draws the Axal
- * entities' rows and a member's own connection on the page itself.
+ * where a sign-in lands on the sync view. GitHub's repositories are its
+ * page's own section since F4 (#1957), and its sign-in lands there
+ * (`pageLanding`), never on the sync view. Mercury never: F5 (#1991) draws
+ * the Axal entities' rows and a member's own connection on the page itself.
  */
 export function interimPanel(p, view = 'idle') {
   if (!p || isEntityRow(p)) return false;
-  if (view === 'sync') return true;
-  return !!p.connection && p.key === 'github';
+  return view === 'sync' && p.key !== 'github';
 }
 
 /**
