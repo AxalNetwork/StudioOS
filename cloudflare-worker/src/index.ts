@@ -119,6 +119,7 @@ import esign from './routes/esign';
 import trust from './routes/trust';
 import { expireDueArtifacts as expireTrustArtifacts, resyncKycKyb, renewalSweep } from './services/trust';
 import integrations from './routes/integrations';
+import { REGISTRY, getProviderImpl, readinessOf } from './integrations/registry';
 import eadwynRoutes from './routes/eadwyn';
 // Task #2 — HubSpot provider. Side-effect import: the module's top-level
 // `registerProvider({ key: 'hubspot', ... })` runs at boot so the route
@@ -498,8 +499,20 @@ app.use('*', async (c, next) => {
   return c.redirect(url.toString(), 301);
 });
 
+/**
+ * D751 T9 (#1921): each OAuth connector the catalogue offers (oauth2, an
+ * implementation, not coming soon), read from the same REGISTRY, mapped to
+ * T1's readiness: true set, false unset, null unreadable. Keys and booleans
+ * only: never an env var name, a value or a client id. Never throws.
+ */
+async function connectorsOauth(env: Env): Promise<Record<string, boolean | null>> {
+  const offered = REGISTRY.filter((p) => p.auth_type === 'oauth2' && p.status !== 'coming_soon' && getProviderImpl(p.key));
+  const values = await Promise.all(offered.map((p) => readinessOf(env, p).then((r) => r ?? null, () => null)));
+  return Object.fromEntries(offered.map((p, i) => [p.key, values[i]]));
+}
+
 // Quick health probe used by uptime monitors.
-app.get('/api/health', (c) =>
+app.get('/api/health', async (c) =>
   c.json({
     status: 'ok',
     app: 'StudioOS API',
@@ -517,6 +530,7 @@ app.get('/api/health', (c) =>
       repo: !!(c.env.GITHUB_REPO_OWNER && c.env.GITHUB_REPO_NAME),
       webhook_secret: !!c.env.GITHUB_WEBHOOK_SECRET,
     },
+    connectors_oauth: await connectorsOauth(c.env),
   }),
 );
 

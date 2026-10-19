@@ -72,7 +72,7 @@ export interface Order {
   total: number;
   promo_code: string | null;
   items: OrderLine[];
-  ai_topup?: Awaited<ReturnType<typeof import('./aiCredits').orderTopUp>>;
+  ai_topup?: NonNullable<Awaited<ReturnType<typeof import('./aiCredits').orderTopUp>>> | { state: 'unreadable' };
 }
 
 interface OrderRow {
@@ -306,12 +306,13 @@ export async function getOrderForUser(
   const row = await getOrderRow(env, orderRef);
   if (!row || row.user_id !== userId) return null;
   const order = rowToOrder(row);
-  const { isTokenPackPrice, orderTopUp } = await import('./aiCredits');
-  for (const line of order.items) {
-    if (line.kind === 'token_pack' || await isTokenPackPrice(env, line.price_id)) {
-      order.ai_topup = await orderTopUp(env, userId, orderRef);
-      break;
-    }
+  const { orderTopUp } = await import('./aiCredits');
+  const topup = await orderTopUp(env, userId, orderRef);
+  if (topup) order.ai_topup = topup;
+  else if (order.items.some(line => line.kind === 'token_pack')) {
+    // The order records a pack, but its purchase cannot yet be read. Preserve
+    // the receipt without mistaking a paid order for credited tokens.
+    order.ai_topup = { state: 'unreadable' };
   }
   return order;
 }

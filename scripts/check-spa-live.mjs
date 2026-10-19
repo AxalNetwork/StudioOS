@@ -101,9 +101,15 @@
  *                    NON-exempt `/api/*` path probed to prove the rate-limit
  *                    middleware itself still answers (default a synthetic
  *                    /api/__smoke/rate-limited — see below)
+ *   SMOKE_CONNECTORS_STRICT
+ *                    `1` fails the run when a catalogue OAuth connector has no
+ *                    client or its readiness is unreadable; otherwise that is
+ *                    one WARN line per host and never a failure (D751 T9)
  */
 
 import { probeUnsignedWebhook } from './lib/webhookGuard.mjs';
+import { appendFileSync } from 'node:fs';
+import { CONNECTOR_READINESS_PATH, connectorReadinessVerdict, summaryMarkdown, warnLine } from './lib/connectorReadiness.mjs';
 
 const DEFAULT_HOSTS = ['https://axal.vc', 'https://app.axal.vc'];
 
@@ -607,6 +613,38 @@ async function checkGoogleConfig(base) {
   return { ok: false, reason: lastErr };
 }
 
+// D751 T9 (#1921) — `/api/health`'s `connectors_oauth` block: one WARN line
+// per host listing each catalogue OAuth connector with no client (false) or an
+// unreadable one (null), the same list in the run summary. Fails only when the
+// block is missing or malformed, or under SMOKE_CONNECTORS_STRICT=1. Keys only:
+// nothing here prints a value.
+async function checkConnectorReadiness(base) {
+  const url = base.replace(/\/$/, '') + CONNECTOR_READINESS_PATH;
+  const strict = process.env.SMOKE_CONNECTORS_STRICT === '1';
+  let verdict = null;
+  for (let attempt = 1; attempt <= RETRIES; attempt++) {
+    try {
+      const { status, body } = await fetchOnce(url);
+      let parsed = null;
+      try { parsed = JSON.parse(body); } catch { /* judged as a missing block */ }
+      verdict = connectorReadinessVerdict(status === 200 ? parsed : null, { strict });
+      if (verdict.ok || verdict.unset.length + verdict.unreadable.length > 0) break;
+    } catch (err) {
+      verdict = { ok: false, unset: [], unreadable: [], reason: `request failed: ${err?.message || err}` };
+    }
+    if (attempt < RETRIES) {
+      console.log(`[spa-live]   retry ${attempt}/${RETRIES - 1} for ${url} (${verdict.reason})`);
+      await sleep(RETRY_MS);
+    }
+  }
+  const warn = warnLine(url, verdict);
+  if (warn) console.warn(warn);
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    try { appendFileSync(process.env.GITHUB_STEP_SUMMARY, summaryMarkdown(url, verdict) + '\n'); } catch { /* the summary is a convenience */ }
+  }
+  return { url, ...verdict };
+}
+
 async function main() {
   console.log(
     `[spa-live] Checking ${HOSTS.length} host(s): ${HOSTS.join(', ')}`,
@@ -665,6 +703,18 @@ async function main() {
       } else {
         const mode = res.popup ? "Google's window" : res.configured ? 'redirect (window off)' : 'not configured';
         console.log(`[spa-live] PASS  ${apiUrl} (Continue with Google: ${mode})`);
+      }
+    }
+
+    // D751 T9 — which catalogue OAuth connectors have no client. A WARN,
+    // not a failure, unless the block is malformed or strict mode is on.
+    {
+      const res = await checkConnectorReadiness(base);
+      if (!res.ok) {
+        console.error(`[spa-live] FAIL  ${res.url} — ${res.reason}`);
+        failures.push(`${res.url} — ${res.reason}`);
+      } else if (res.unset.length + res.unreadable.length === 0) {
+        console.log(`[spa-live] PASS  ${res.url} (every catalogue OAuth connector has a client)`);
       }
     }
 

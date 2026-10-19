@@ -323,6 +323,14 @@ async function ordinaryReceipt() {
 }
 async function incompleteProjection() {
   await withWorld(async w => {
+    const page=await w.mount(RECEIPT, '/checkout/confirmation?order='+ORDER.order_ref);
+    assert.match(w.text(), /Unreadable · The token-pack purchase could not be read/);
+    assert.doesNotMatch(w.text(), /Tokens added|Order confirmed|New balance:/);
+    for(let n=0;n<10 && w.timers.length;n++)await w.tick();
+    assert.equal(w.readCount,page.ORDER_POLL_DELAYS.length+1);
+    assert.deepEqual(w.writes,[]);
+  },{order:{...ORDER,ai_topup:{state:'unreadable'}}});
+  await withWorld(async w => {
     await w.mount(RECEIPT, '/checkout/confirmation?order=' + ORDER.order_ref);
     assert.match(w.text(), /New balance: Unreadable/); assert.doesNotMatch(w.text(), /New balance: \$0\.00/);
     assert.deepEqual(w.writes,[]);
@@ -392,6 +400,7 @@ const scenarios = [pricingPacks, pricingReadStates, pricingVisitor, packCheckout
 for (const check of scenarios) test('D755 CR7: ' + check.name, check);
 
 const mutations = [
+  {name:'missing purchase is hidden behind adding',file:RECEIPT,before:"topup?.state === 'unreadable' ? <p>",after:"false ? <p>",check:incompleteProjection},
   {name:"pack links lose their identifier",file:PACKS,before:"encodeURIComponent(pack.uid || pack.price_id)",after:"encodeURIComponent('wrong_pack')",check:pricingPacks},
   {name:"pack price becomes hardcoded",file:PACKS,before:"packLabel(pack.unit_amount)",after:"'$5 of tokens'",check:pricingPacks},
   {name:"pack price is admitted to the shared cart",file:PACKS,before:"packs.some(pack => pack.price_id === price.id)",after:"false",check:pricingPacks},

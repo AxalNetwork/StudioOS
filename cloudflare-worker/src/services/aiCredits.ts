@@ -308,9 +308,22 @@ async function purchasesOf(env: Env, userId: number, where = '', binds: unknown[
 
 /** Owner-scoped checkout receipt projection. Reads existing webhook records only. */
 export async function orderTopUp(env: Env, userId: number, orderRef: string) {
+  // Probe only columns that also existed before D755. An ordinary historical
+  // order is not a pack because HQ later adopts one of its prices.
+  try {
+    const found = await env.DB.prepare('SELECT payment_intent_id FROM ai_topup_purchases WHERE user_id = ? AND order_ref = ? LIMIT 1')
+      .bind(userId, orderRef).all<{ payment_intent_id: string }>();
+    if (found.success !== true) throw new Error('AI top-up purchase unreadable');
+    if (!found.results?.length) return null;
+  } catch (error) {
+    // Older development databases can have ordinary orders without the top-up
+    // table. All other failed reads remain unreadable.
+    if (/no such table: ai_topup_purchases\b/.test(String((error as Error)?.message ?? error))) return null;
+    throw error;
+  }
   const purchases = await purchasesOf(env, userId, 'AND p.order_ref = ?', [orderRef], 1);
   const purchase = purchases[0];
-  if (!purchase) throw new Error('AI top-up purchase unreadable');
+  if (!purchase) return null;
   const account = await env.DB.prepare('SELECT balance_microusd FROM ai_topup_accounts WHERE user_id = ?')
     .bind(userId).first<{ balance_microusd: number }>();
   const balance = account?.balance_microusd ?? 0;

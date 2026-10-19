@@ -24,6 +24,7 @@ import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { encryptCredentials } from '../src/integrations/secrets.ts';
 import { runChannelJob } from '../src/services/channels/jobs.ts';
 
+import { withGuard } from './_guard_stub.mjs';
 /** Provider ids are stored hashed (events.ts `refKey`); the tests look them up the same way. */
 export const refCode = (code: string) => createHash('sha256').update(code).digest('hex');
 export const ref = (provider: string, id: string) => createHash('sha256').update(`${provider}:${id}`).digest('hex');
@@ -113,7 +114,7 @@ export async function world(opts: { seed?: boolean; budget?: number } = {}) {
     APP_URL: 'https://axal.vc', PUBLIC_BASE_URL: 'https://axal.vc',
     RATE_LIMITS: memKV(), USE_CF_QUEUE: 'true',
     JOB_QUEUE: { async send(body: any, opts?: any) { queued.push(body); queuedOpts.push(opts ?? null); } },
-    AI: { async run(model: string, input: any) { aiCalls.push({ model, input }); return { text: 'We lose a whole day every month to this.', transcription_info: { language: 'en' } }; } },
+    AI: withGuard({ async run(model: string, input: any) { aiCalls.push({ model, input }); return { text: 'We lose a whole day every month to this.', transcription_info: { language: 'en' } }; } }),
   };
   if (opts.seed) {
     const creds = await encryptCredentials(env, 'wa-me', { access_token: WA_TOKEN, token_type: 'bearer' });
