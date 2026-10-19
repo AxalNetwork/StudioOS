@@ -256,6 +256,8 @@ test('the first message after the notice counts without replying to it; after an
   db2.exec(`UPDATE channel_threads SET last_inbound_at = datetime('now', '-5 minutes')`);
   await ask(env2, uid2);
   await hook(env2, msg({ text: 'Let me think about it.' }));
+  // Make the ordering explicit when the notice and message land in one millisecond.
+  db2.prepare("UPDATE channel_consents SET requested_at = strftime('%Y-%m-%dT%H:%M:%fZ', requested_at, '-1 second') WHERE thread_id = (SELECT id FROM channel_threads WHERE uid = ?)").run(uid2);
   await hook(env2, msg({ text: 'yes' }));
   assert.equal(row(db2, uid2).status, 'requested', 'not a reply, and not the first message after the notice');
 });

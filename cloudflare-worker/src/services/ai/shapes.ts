@@ -21,7 +21,11 @@
  * those stay with A1.
  */
 
-/** The kinds of model the router can run. PR 1 builds `text` and `reasoning`; D761's later parts add the rest. */
+/**
+ * The kinds of model the router can run. PR 1 built `text` and `reasoning`;
+ * PR 2 adds `rerank`, `embedding` and `translation`, and vision as a
+ * capability of a text or reasoning model (`ModelFacts.vision`), not a kind.
+ */
 export type ModelKind = 'text' | 'reasoning' | 'vision' | 'rerank' | 'embedding' | 'translation' | 'speech' | 'voice' | 'image';
 
 /**
@@ -42,6 +46,8 @@ export interface ModelFacts {
   /** True for a model Workers AI serves on a paid plan only (D760). */
   paid_only: boolean;
   reasoning?: ReasoningControl;
+  /** True for a text or reasoning model that takes images as content parts (PR 2). */
+  vision?: boolean;
 }
 
 /**
@@ -63,11 +69,45 @@ export const REASONING_CONTROLS: Readonly<Record<string, ReasoningControl>> = Ob
   '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b': { via: 'none' },
 });
 
+/**
+ * PR 2: the models Workers AI documents as taking images in a chat's content
+ * parts (`{ type: 'image_url', image_url: { url } }`, `@cloudflare/workers-types`
+ * 5.20261012.1, and each model page's "Vision" flag). The catalogue's list on
+ * 2026-10-17, as #2018 names it.
+ */
+export const VISION_MODELS: ReadonlySet<string> = new Set([
+  '@cf/google/gemma-4-26b-a4b-it',
+  '@cf/meta/llama-4-scout-17b-16e-instruct',
+  '@cf/meta/llama-3.2-11b-vision-instruct',
+  '@cf/moonshotai/kimi-k2.6',
+]);
+
+/**
+ * PR 2: the kinds of the non-chat models a rail can run, until D760's
+ * catalogue says them. Each one's request shape is its model page's
+ * (`/workers-ai/models/<name>/`) and `@cloudflare/workers-types`.
+ */
+export const INTERIM_KINDS: Readonly<Record<string, 'rerank' | 'embedding' | 'translation'>> = Object.freeze({
+  '@cf/baai/bge-reranker-base': 'rerank',
+  '@cf/baai/bge-base-en-v1.5': 'embedding',
+  '@cf/baai/bge-small-en-v1.5': 'embedding',
+  '@cf/baai/bge-large-en-v1.5': 'embedding',
+  '@cf/baai/bge-m3': 'embedding',
+  '@cf/qwen/qwen3-embedding-0.6b': 'embedding',
+  '@cf/google/embeddinggemma-300m': 'embedding',
+  '@cf/pfnet/plamo-embedding-1b': 'embedding',
+  '@cf/meta/m2m100-1.2b': 'translation',
+});
+
 const DEFAULT_FACTS: ModelFacts = Object.freeze({ kind: 'text', context_window: null, paid_only: false }) as ModelFacts;
 
 function interimFacts(model: string): ModelFacts | null {
   const reasoning = REASONING_CONTROLS[model];
-  return reasoning ? { kind: 'reasoning', context_window: null, paid_only: false, reasoning } : null;
+  const vision = VISION_MODELS.has(model) ? { vision: true } : {};
+  if (reasoning) return { kind: 'reasoning', context_window: null, paid_only: false, reasoning, ...vision };
+  const kind = INTERIM_KINDS[model];
+  if (kind) return { kind, context_window: null, paid_only: false };
+  return VISION_MODELS.has(model) ? { kind: 'text', context_window: null, paid_only: false, vision: true } : null;
 }
 
 let factsSource: (model: string) => ModelFacts | null = interimFacts;
@@ -83,6 +123,23 @@ export function factsFor(model: string): ModelFacts {
   if (!found) return DEFAULT_FACTS;
   if (found.kind === 'reasoning' && !found.reasoning && REASONING_CONTROLS[model]) return { ...found, reasoning: REASONING_CONTROLS[model] };
   return found;
+}
+
+/**
+ * PR 2: what a run asks of a model, from the inputs it carries. A model that
+ * cannot serve it is skipped without a call, as a context overflow is: a
+ * text-only model handed an image would answer as if there were none.
+ */
+export type Need = 'chat' | 'vision' | 'rerank' | 'embedding' | 'translation';
+
+export function canServe(facts: ModelFacts, need: Need): boolean {
+  switch (need) {
+    case 'vision': return (facts.kind === 'text' || facts.kind === 'reasoning') && facts.vision === true;
+    case 'rerank': return facts.kind === 'rerank';
+    case 'embedding': return facts.kind === 'embedding';
+    case 'translation': return facts.kind === 'translation';
+    default: return facts.kind === 'text' || facts.kind === 'reasoning';
+  }
 }
 
 // ─────────────────────────────────────────────────────────── timeouts
@@ -171,6 +228,8 @@ export interface Units {
   tokens_cached?: number;
   tokens_out?: number;
   audio_minutes?: number;
+  /** PR 2: images sent to a vision model, counted by the Worker. Billing stays in tokens. */
+  images_in?: number;
 }
 
 const estTokens = (s: string): number => (s ? Math.max(1, Math.ceil(s.length / 4)) : 0);
@@ -179,9 +238,12 @@ const count = (v: unknown): number | null => (typeof v === 'number' && Number.is
 // ─────────────────────────────────────────────────────────── text and reasoning
 
 export type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
+/** A content part a vision model reads (`ChatCompletionContentPart*` in `@cloudflare/workers-types`). */
+export type ContentPart = { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } };
+export type WireMessage = { role: ChatMessage['role']; content: string | ContentPart[] };
 
 /** The chat request for a text or reasoning model. A reasoning control is sent only when it names a value. */
-export function chatRequest(facts: ModelFacts, messages: ChatMessage[], o: { maxTokens: number; temperature?: number; stream?: boolean }): Record<string, unknown> {
+export function chatRequest(facts: ModelFacts, messages: ChatMessage[] | WireMessage[], o: { maxTokens: number; temperature?: number; stream?: boolean }): Record<string, unknown> {
   const payload: Record<string, unknown> = { messages, max_tokens: o.maxTokens };
   if (o.temperature != null) payload.temperature = o.temperature;
   if (o.stream) payload.stream = true;
@@ -273,4 +335,136 @@ export async function firstChunkWithin(stream: ReadableStream, ms: number): Prom
     },
     cancel(reason) { return reader.cancel(reason); },
   });
+}
+
+// ─────────────────────────────────────────────────────────── vision (PR 2)
+
+/**
+ * The images one run may send, and how large each may be. A data URI only:
+ * the Worker measures what it sends, and never hands a model a URL to fetch.
+ */
+export const MAX_IMAGES = 4;
+export const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
+const DATA_URI_RE = /^data:image\/(png|jpeg|webp|gif);base64,([A-Za-z0-9+/]+={0,2})$/;
+
+/** The decoded size of a base64 image data URI, or null when it is not one this router sends. */
+export function imageBytes(uri: unknown): number | null {
+  if (typeof uri !== 'string') return null;
+  const m = DATA_URI_RE.exec(uri);
+  if (!m) return null;
+  const b64 = m[2];
+  const pad = b64.endsWith('==') ? 2 : b64.endsWith('=') ? 1 : 0;
+  return Math.floor((b64.length * 3) / 4) - pad;
+}
+
+/** Why a run's images cannot be sent, or null when every one can. */
+export function imagesRefusal(images: unknown): string | null {
+  if (!Array.isArray(images) || images.length === 0) return 'no images';
+  if (images.length > MAX_IMAGES) return `at most ${MAX_IMAGES} images`;
+  for (const uri of images) {
+    const n = imageBytes(uri);
+    if (n == null) return 'each image is a base64 PNG, JPEG, WebP or GIF data URI';
+    if (n > MAX_IMAGE_BYTES) return `each image is at most ${MAX_IMAGE_BYTES / (1024 * 1024)} MB`;
+  }
+  return null;
+}
+
+/**
+ * The chat with the images attached to its last user message, as content
+ * parts: its text first, then each image in order. A chat with no user
+ * message gets one, holding only the images.
+ */
+export function withImages(messages: ChatMessage[], images: string[]): WireMessage[] {
+  const parts: ContentPart[] = images.map((url) => ({ type: 'image_url', image_url: { url } }));
+  let at = -1;
+  for (let i = messages.length - 1; i >= 0; i--) if (messages[i].role === 'user') { at = i; break; }
+  if (at < 0) return [...messages, { role: 'user', content: parts }];
+  return messages.map((m, i) => (i === at ? { role: m.role, content: [{ type: 'text', text: m.content }, ...parts] } : m));
+}
+
+// ─────────────────────────────────────────────────────────── rerank (PR 2)
+
+export interface RerankInput { query: string; contexts: string[]; topK?: number }
+/** The reranker's own limits: a 512-token input (its model page), and a bound on the list a run sends. */
+export const MAX_RERANK_CONTEXTS = 100;
+
+export function rerankRefusal(r: RerankInput | undefined): string | null {
+  if (!r || typeof r.query !== 'string' || !r.query.trim()) return 'a rerank needs a query';
+  if (!Array.isArray(r.contexts) || !r.contexts.length || r.contexts.some((c) => typeof c !== 'string' || !c.trim())) return 'a rerank needs at least one non-empty context';
+  if (r.contexts.length > MAX_RERANK_CONTEXTS) return `at most ${MAX_RERANK_CONTEXTS} contexts`;
+  if (r.topK != null && (!Number.isInteger(r.topK) || r.topK < 1)) return 'top_k is a positive whole number';
+  return null;
+}
+
+/** `@cf/baai/bge-reranker-base`: `{ query, contexts: [{ text }], top_k? }`, as its model page gives it. */
+export function rerankRequest(r: RerankInput): Record<string, unknown> {
+  const payload: Record<string, unknown> = { query: r.query, contexts: r.contexts.map((text) => ({ text })) };
+  if (r.topK != null) payload.top_k = r.topK;
+  return payload;
+}
+
+export interface RankedContext { index: number; score: number }
+
+/**
+ * The ranking, best first: each entry's `id` is its context's index in the
+ * request. An entry whose index is not one the request sent is dropped.
+ * Units: the input the Worker sent, the query once per context, as the model
+ * reads each pair.
+ */
+export function parseRerank(raw: unknown, r: RerankInput): { ranking: RankedContext[] | null; units: Units } {
+  const src = (raw as { response?: unknown; result?: { response?: unknown } } | null);
+  const list = Array.isArray(src?.response) ? src!.response : Array.isArray(src?.result?.response) ? src!.result!.response : null;
+  const units: Units = { tokens_in: r.contexts.reduce((n, c) => n + estTokens(r.query) + estTokens(c), 0) };
+  if (!list) return { ranking: null, units };
+  const ranking: RankedContext[] = [];
+  for (const e of list as Array<{ id?: unknown; score?: unknown }>) {
+    const index = typeof e?.id === 'number' ? e.id : NaN;
+    const score = typeof e?.score === 'number' ? e.score : NaN;
+    if (Number.isInteger(index) && index >= 0 && index < r.contexts.length && Number.isFinite(score)) ranking.push({ index, score });
+  }
+  ranking.sort((a, b) => b.score - a.score);
+  return { ranking, units };
+}
+
+// ─────────────────────────────────────────────────────────── translation (PR 2)
+
+export interface TranslateInput { sourceLang?: string; targetLang: string }
+/** A language code, as m2m100's page asks for one (`en`, `es`, `pt-BR`). Names are not sent. */
+const LANG_RE = /^[a-z]{2,3}(?:-[A-Za-z]{2,4})?$/;
+
+export function translateRefusal(t: TranslateInput | undefined, text: string | undefined): string | null {
+  if (!t || typeof t.targetLang !== 'string' || !LANG_RE.test(t.targetLang)) return 'a translation needs a target language code';
+  if (t.sourceLang != null && (typeof t.sourceLang !== 'string' || !LANG_RE.test(t.sourceLang))) return 'the source language is a language code';
+  if (typeof text !== 'string' || !text.trim()) return 'a translation needs text';
+  return null;
+}
+
+/** `@cf/meta/m2m100-1.2b`: `{ text, source_lang?, target_lang }`. No source is the model's default, English. */
+export function translateRequest(text: string, t: TranslateInput): Record<string, unknown> {
+  const payload: Record<string, unknown> = { text, target_lang: t.targetLang };
+  if (t.sourceLang) payload.source_lang = t.sourceLang;
+  return payload;
+}
+
+/** The translated text, flat or under `result`, and its units: tokens in and out, priced alike on its page. */
+export function parseTranslate(raw: unknown, text: string): { text: string | null; units: Units } {
+  const r = raw as { translated_text?: unknown; result?: { translated_text?: unknown } } | null;
+  const v = r?.translated_text ?? r?.result?.translated_text;
+  const out = typeof v === 'string' ? v : null;
+  return { text: out, units: { tokens_in: estTokens(text), tokens_out: out == null ? 0 : estTokens(out) } };
+}
+
+// ─────────────────────────────────────────────────────────── the search index (PR 2)
+
+/**
+ * `axal-search` is 768-dimensional and was filled by BGE Base EN v1.5. Only
+ * that model's vectors may be written to it: another model's 768 dimensions
+ * (EmbeddingGemma's) would be accepted by the index and silently wrong.
+ */
+export const SEARCH_INDEX_MODEL = '@cf/baai/bge-base-en-v1.5';
+export const SEARCH_INDEX_DIMENSIONS = 768;
+
+export function searchIndexAccepts(model: string, vector: unknown): boolean {
+  return model === SEARCH_INDEX_MODEL && Array.isArray(vector) && vector.length === SEARCH_INDEX_DIMENSIONS
+    && vector.every((x) => typeof x === 'number' && Number.isFinite(x));
 }
