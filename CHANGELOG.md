@@ -4,34 +4,6 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
-## WhatsApp Business and Telegram Business get their own pages (D753 C1, #1958)
-
-- Worker: `CHANNEL_PAGES` in `connectorPages.ts` describes both channels, with
-  their words from D754 §11 and D756 §1.11, their tools read off
-  `services/channels/` and the new sign-in kind `channel`. `pageDescriptor`,
-  `connectorPagePath` and `channelPage(key)` answer `whatsapp` and `telegram`.
-  `connector_pages_d753.test.ts` holds their tools to the code too. No route,
-  migration or API method changes.
-- Frontend: `/account/connectors/whatsapp` and `/account/connectors/telegram`
-  (`ChannelPage.jsx`, `channelPageModel.js`) draw the connector page frame
-  from `GET /api/channels`, with today's card in "Connect and manage". On the
-  hub, the Customer conversations cards' titles link to the pages. An
-  interview's cards are unchanged.
-
-## Every connector has its own page (D753 F1, #1876)
-
-- `/account/connectors/:key` (`ConnectorPage.jsx`, `connectorPageModel.js`)
-  draws a connector inside the Account center: "← Connectors", a header band
-  with the tile, name and tagline, About and Details. Today's connect and
-  manage panel is mounted inline through `SheetFrame`'s new `page` layout, so
-  nothing is lost until F2 to F5 replace it.
-- Every Discover card, Yours row, phone row and Channels button links the page;
-  the hub no longer opens a right sheet (the request form stays until F8). The
-  hub's tab is in the address (`?tab=discover`).
-- A sign-in return lands on its connector's page (`connectorsRedirect`); a
-  Mercury return goes to the hub with its keys stripped (D715 decision 3).
-  No Worker change.
-
 ## The LP's capital call opens on the amount, and the fee statement is on screen (D717, #1859)
 
 - An open Fund I line's panel on the LP workspace opens on "Amount due", the
