@@ -19,7 +19,7 @@ import { renderedText } from './_renderedText.mjs';
 
 import {
   CHANNEL_WORDING, CHAT_ENGINE, DEFAULT_SUGGESTS, RECORD_ENGINE, VALIDATE_MODULE_LABELS, ZOOM_DISCONNECT_NOTE, ZOOM_DISTRIBUTION,
-  ZOOM_HOW_STEPS, ZOOM_SECTIONS, ZOOM_UNCONFIGURED, engineSentence, listSentence, recordSourceLine, usedByLinks,
+  ZOOM_HOW_STEPS, ZOOM_SECTIONS, ZOOM_UNCONFIGURED, engineSentence, listSentence, recordSourceLine,
   zoomDistributionNotice, zoomHowItWorks, zoomNotices,
 } from '../src/lib/validateSourceWording.js';
 import { ZoomValidate, ConnectorPageView } from '../src/pages/account/ConnectorPage.jsx';
@@ -102,13 +102,19 @@ test('the configured: false sentence comes first; configured true or absent draw
 });
 
 // 5 ───────────────────────────────────────────────────────────────────────────
-test('Zoom\'s page draws Used by, How it works, the four sections and its notices', () => {
-  // Mutations checked: the page not mounting ZoomValidate (no section); Used by
-  // dropped; the disconnect note shown while not connected.
+test('Zoom\'s page draws How it works, the four sections and its notices, and no Used by links', () => {
+  // Mutations checked: the page not mounting ZoomValidate (no section); the
+  // disconnect note shown while not connected; the Used by block restored.
   const t = text(h(ZoomValidate, { p: zoomRow({ configured: false }) }));
-  for (const s of [D757.unset, D757.own, 'Used by', 'Validate › Record a session', 'How it works', D757.how1, D757.how2, D757.how3,
+  for (const s of [D757.unset, D757.own, 'How it works', D757.how1, D757.how2, D757.how3,
     'What you need', D757.need, 'Consent', D757.consent, 'Cost', D757.cost, 'Your data', D757.data]) assert.ok(t.includes(s), s);
-  assert.ok(html(h(ZoomValidate, { p: zoomRow() })).includes('href="/validate/record"'));
+  // The owner, 2026-10-19: every profile sees Connectors and Validate is the
+  // founder's, so the page links to no Validate page even when the Worker's
+  // row names one in `used_by`.
+  const page = html(h(ZoomValidate, { p: zoomRow() }));
+  assert.ok(!t.includes('Used by'), 'no Used by heading');
+  assert.ok(!page.includes('href="/validate/'), 'no link into Validate');
+  assert.ok(!page.includes('zoom-used-by'));
   assert.ok(!html(h(ZoomValidate, { p: zoomRow() })).includes('zoom-disconnect-note'), 'not connected: no disconnect note');
   assert.ok(html(h(ZoomValidate, { p: zoomRow({ connection: { uid: 'z1' } }) })).includes('zoom-disconnect-note'));
   assert.ok(!text(h(ZoomValidate, { p: zoomRow({ distribution: 'public' }) })).includes('Zoom beta'));
@@ -120,35 +126,34 @@ test('Zoom\'s page draws Used by, How it works, the four sections and its notice
 });
 
 // 6 ───────────────────────────────────────────────────────────────────────────
-test('Used by keeps only app paths with a label', () => {
-  // Mutation checked: no href filter (a `//evil` or `https:` link is drawn).
-  assert.deepEqual(usedByLinks([...USED_BY, { label: 'x', href: '//evil.test' }, { label: 'y', href: 'https://evil.test' }, { href: '/a' }, null]), USED_BY);
-  assert.deepEqual(usedByLinks(undefined), []);
+test('the wording module offers no Used by links at all', () => {
+  // Mutation checked: RECORD_SESSION or usedByLinks exported again.
+  const src = readFileSync(new URL('../src/lib/validateSourceWording.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(src, /export (const|function) (RECORD_SESSION|INBOX|usedByLinks)\b/);
+  for (const k of Object.keys(CHANNEL_WORDING)) assert.equal(CHANNEL_WORDING[k].usedBy, undefined, k);
 });
 
 // 7 ───────────────────────────────────────────────────────────────────────────
-test('each conversation card says what uses it and the engine sentence', () => {
-  // Mutations checked: Inbox dropped from the chats; the Zoom sentence on the
-  // chats; CardFrame not drawing ValidateLines.
-  assert.deepEqual(CHANNEL_WORDING.telegram.usedBy.map((u) => u.label), ['Validate › Record a session', 'Validate › Inbox']);
-  assert.deepEqual(CHANNEL_WORDING.whatsapp.usedBy.map((u) => u.label), ['Validate › Record a session', 'Validate › Inbox']);
-  assert.deepEqual(CHANNEL_WORDING.google_meet.usedBy.map((u) => u.label), ['Validate › Record a session']);
+test('each conversation card says what the engine does, with no Used by links', () => {
+  // Mutations checked: the Zoom sentence on the chats; CardFrame not drawing
+  // ValidateLines; the Used by line restored.
   assert.equal(CHANNEL_WORDING.telegram.engine, D757.chats);
   assert.equal(CHANNEL_WORDING.whatsapp.engine, D757.chats);
   assert.equal(CHANNEL_WORDING.google_meet.engine, D757.how3);
   assert.equal(CHANNEL_WORDING.zoom.engine, D757.how3);
   const lines = text(h(ValidateLines, { provider: 'telegram' }));
-  assert.ok(lines.startsWith('Used by: Validate › Record a session and Validate › Inbox'), lines);
-  assert.ok(lines.endsWith(D757.chats), lines);
+  assert.equal(lines.trim(), D757.chats, lines);
   assert.equal(html(h(ValidateLines, { provider: 'slack' })), '');
 
   const overview = readOverview({ providers: ['telegram', 'whatsapp', 'zoom', 'google_meet'].map((provider) => ({ provider, available: true })), connections: {}, pending: {} });
   const group = html(h(ChannelsGroup, { status: 'ready', overview, catalogue: [zoomRow(), { key: 'google', available: true }] }));
   for (const k of ['telegram', 'whatsapp', 'zoom', 'google_meet']) {
-    assert.ok(group.includes(`data-testid="channel-used-by-${k}"`), `${k}: Used by`);
+    assert.ok(!group.includes(`data-testid="channel-used-by-${k}"`), `${k}: no Used by`);
     assert.ok(group.includes(`data-testid="channel-engine-${k}"`), `${k}: engine sentence`);
   }
-  assert.ok(group.includes('href="/validate/inbox"'));
+  // The owner, 2026-10-19: every profile sees these cards, and Validate is the founder's.
+  assert.ok(!group.includes('Used by'), 'no Used by line');
+  assert.ok(!group.includes('href="/validate/record"'), 'no Record a session link');
 });
 
 // 8 ───────────────────────────────────────────────────────────────────────────
