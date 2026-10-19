@@ -20,7 +20,7 @@ test('paid balance preserves one micro-dollar and the largest safe recorded inte
 test('D629 rail shows this licence allowance and exact separate sub-cent paid balance',()=>{
  const html=render({}),words=text({});
  for(const t of ['founder / growth','Today · $0.25 of $5.00','This month · $1.23 of $50.00','Top-up balance · $9.876543','Add tokens']) assert.ok(words.includes(t),t);
- for(const t of ['/checkout?ai_topup=1','width:2.469134%','title="$1.234567"']) assert.ok(html.includes(t),t);
+ for(const t of ['/plans-and-pricing#token-packs','width:2.469134%','title="$1.234567"']) assert.ok(html.includes(t),t);
  assert.doesNotMatch(html,/Unreadable|isn&#x27;t available|Runs in progress/);
 });
 test('an explicitly zero allowance and zero balance remain recorded zeros with no division-by-zero meter',()=>{

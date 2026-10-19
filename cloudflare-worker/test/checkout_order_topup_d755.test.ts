@@ -2,7 +2,7 @@
 // Run with the Worker _ts-loader and node --experimental-strip-types.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { stripTypeScriptTypes } from 'node:module';
 import { SignJWT } from 'jose';
 import { Hono } from 'hono';
@@ -17,7 +17,8 @@ let serial=0;
 const urlOf = (spec: string, file: URL) => {
   if (!spec.startsWith('.')) return import.meta.resolve(spec);
   const path = new URL(spec,file);
-  return [path.href,path.href+'.ts',path.href+'.js',path.href+'.mjs'].find(p=>existsSync(new URL(p)))!;
+  // A file, never a folder: services/email is both email.ts and a folder.
+  return [path.href,path.href+'.ts',path.href+'.js',path.href+'.mjs'].find(p=>statSync(new URL(p),{throwIfNoEntry:false})?.isFile())!;
 };
 const data = (source: string) => 'data:text/javascript;base64,'+Buffer.from(source+'\n// fixture '+serial++).toString('base64');
 function moduleSource(path: string, source: string, creditsUrl?: string) {
@@ -76,7 +77,7 @@ async function readProjection(service: any) {
     const lines=JSON.parse(f.db.prepare("SELECT items_json FROM orders WHERE order_ref='MRD-PACK'").get().items_json);
     lines[0].kind='alacarte';
     f.db.prepare("UPDATE orders SET items_json=? WHERE order_ref='MRD-PACK'").run(JSON.stringify(lines));
-    assert.equal((await service.getOrderForUser(f.env,'MRD-PACK',2)).ai_topup.state,'overdue');
+    assert.equal((await service.getOrderForUser(f.env,'MRD-PACK',2)).ai_topup?.state,'overdue');
     // Missing purchase is unreadable, never an ordinary paid receipt.
     f.db.exec("DELETE FROM ai_topup_purchases");
     await assert.rejects(()=>service.getOrderForUser(f.env,'MRD-PACK',2),/unreadable/);
