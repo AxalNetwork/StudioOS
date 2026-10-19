@@ -11,9 +11,11 @@
  * caller stores nothing.
  *
  * `availability` reports whether a provider's platform secrets exist on this
- * deployment — names only, never values.
+ * deployment — names only, never values. D754/D756 also gate both chat channels
+ * with independent rollout vars: off, Super-Admin-only canary (the default), on.
  */
-import type { Env } from '../../types';
+import type { Env, User } from '../../types';
+import { hydrateSuperAdmin, isSuperAdmin } from '../../auth';
 import { googleOAuthAvailable } from '../calendar';
 import type { ChannelProvider, ProviderAvailability } from './types';
 
@@ -105,4 +107,53 @@ export function availability(env: Env): ProviderAvailability[] {
 
 export function providerAvailable(env: Env, provider: ChannelProvider): boolean {
   return availability(env).find((a) => a.provider === provider)?.available === true;
+}
+
+/** D754 / D756 §1.1: secrets and rollout are separate checks. */
+export type ChannelRollout = 'off' | 'canary' | 'on';
+
+export function channelRollout(env: Env, provider: 'whatsapp' | 'telegram'): ChannelRollout {
+  const raw = provider === 'whatsapp' ? env.WHATSAPP_CHANNEL : env.TELEGRAM_CHANNEL;
+  const mode = String(raw ?? '').trim().toLowerCase();
+  return mode === 'off' || mode === 'on' ? mode : 'canary';
+}
+
+export function channelOpenTo(env: Env, provider: 'whatsapp' | 'telegram', user: Pick<User, 'role'> & { is_super_admin?: unknown }): boolean {
+  const mode = channelRollout(env, provider);
+  return mode === 'on' || (mode === 'canary' && isSuperAdmin(user));
+}
+
+/** The webhook/job's member is hydrated from the elevation table, never a user column. D1 failures propagate for retry. */
+export async function channelOpenToMember(env: Env, provider: 'whatsapp' | 'telegram', userId: number): Promise<boolean> {
+  const mode = channelRollout(env, provider);
+  if (mode === 'on') return true;
+  if (mode === 'off') return false;
+  const row = await env.DB.prepare('SELECT id, role FROM users WHERE id = ?')
+    .bind(userId).first<{ id: number; role: User['role'] }>();
+  if (!row) return false;
+  // auth's general hydrator fails closed on a D1 fault. For a webhook that
+  // would acknowledge and lose an event: remember the fault, then rethrow it
+  // after hydration so processEvent releases the claim for provider retry.
+  let hydrationError: unknown;
+  const watch = (statement: D1PreparedStatement): D1PreparedStatement => new Proxy(statement, {
+    get(target, key) {
+      if (key === 'bind') return (...values: unknown[]) => {
+        try { return watch(target.bind(...values)); }
+        catch (error) { hydrationError = error; throw error; }
+      };
+      if (key === 'first') return async (column?: string) => {
+        try { return column === undefined ? await target.first() : await target.first(column); }
+        catch (error) { hydrationError = error; throw error; }
+      };
+      const value = Reflect.get(target, key, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+  const hydrationEnv = { ...env, DB: { ...env.DB, prepare(sql: string) {
+    try { return watch(env.DB.prepare(sql)); }
+    catch (error) { hydrationError = error; throw error; }
+  } } } as Env;
+  const hydrated = await hydrateSuperAdmin(hydrationEnv, row);
+  if (hydrationError) throw hydrationError;
+  return isSuperAdmin(hydrated);
 }

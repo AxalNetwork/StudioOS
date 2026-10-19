@@ -12,6 +12,8 @@ One file per provider. Each module:
    `../connectorPages.ts`: tagline, description, the tools its calls make,
    and prompts only if Eadwyn reads it. `cloudflare-worker/test/connector_pages_d753.test.ts`
    fails until every request that writes is named by a tool (D753).
+5. An OAuth provider implements `ready(env)`; `connector_readiness_d751.test.ts`
+   fails otherwise (D751).
 
 The module is then imported once from the worker entry point
 (`cloudflare-worker/src/index.ts`) so its top-level `registerProvider`
@@ -27,12 +29,16 @@ call runs at boot.
 - Task #7 — `docusign.ts`
 - Task #8 — `crunchbase.ts`
 - Task #9 — `affinity.ts`
-- D655 (#1467) — `github.ts`: a GitHub App's read-only user authorization; issues to Product roadmap, pull requests to Prototype / MVP, releases recorded with no store. Its first ledger writer (`connector_fed_items`, migration 445).
+- D655 (#1467) — `github.ts`: a GitHub App's read-only user authorization; issues to Product roadmap, pull requests to Prototype / MVP, releases recorded with no store. Its first ledger writer (`connector_fed_items`, migration 445). `accessToken` renews the user token under an exclusive encrypted D1 lease, with a KV hint and compare-and-swap writes; `disconnect` revokes the grant (#1883).
 - D684 (#1577) — Zoom is a registry provider (`zoom`) whose implementation is
   NOT in this folder: it lives with the other interview channels in
   `cloudflare-worker/src/services/channels/zoom.ts`, which calls
   `registerProvider` at module load and is imported by
   `cloudflare-worker/src/routes/founder_validate_meetings.ts`.
+- D751 (#1880) — each OAuth provider's `ready` reads `oauthCredsReady`, the
+  cache its `ensureCreds` reads, so `GET /available`'s `configured` and the
+  start's refusal agree. Zoom's `ready` lives in
+  `cloudflare-worker/src/services/channels/zoom.ts` (all three Zoom secrets).
 - D710 (#1775) — Mercury's HQ entity connection is NOT made here: a Super
   Admin adds it per Axal organization, kept in its own store and synced
   read-only by `cloudflare-worker/src/services/mercury/`, behind
@@ -44,6 +50,11 @@ call runs at boot.
   webhook secret, a write scope, an Axal entity's organization), and is read
   on demand by `cloudflare-worker/src/services/mercuryPersonal.ts`. Decision
   3's entity check lives here, so both share it.
+- D752 (#1886) — investors hold one too, on HQ only
+  (`personal_hq_only_roles`); off HQ the route answers 403
+  `purpose_not_allowed` before the provider, which refuses again. Connect
+  stores the capabilities of the caller's role's variant
+  (`personalMercuryFor`, `registry.ts`).
 
 ## Credential handling
 

@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { makeD1 } from './_d1_sqlite.mjs';
 export const AI_BUDGET_REVIEW_MIGRATION=readFileSync(new URL('../sql/migrations/430_ai_budget_review_cost.sql',import.meta.url),'utf8');
-export const AI_BUDGET_MIGRATION=readFileSync(new URL('../sql/migrations/419_ai_caps_topups.sql',import.meta.url),'utf8')+AI_BUDGET_REVIEW_MIGRATION;
+export const AI_CREDITS_MIGRATION=readFileSync(new URL('../sql/migrations/486_ai_credits_token_packs.sql',import.meta.url),'utf8');
+export const AI_BUDGET_MIGRATION=readFileSync(new URL('../sql/migrations/419_ai_caps_topups.sql',import.meta.url),'utf8')+AI_BUDGET_REVIEW_MIGRATION+AI_CREDITS_MIGRATION;
 export const AI_USERS_SCHEMA=`CREATE TABLE users(id INTEGER PRIMARY KEY,email TEXT,name TEXT,role TEXT,is_active INTEGER DEFAULT 1,
  subscription_tier TEXT DEFAULT 'free',subscription_status TEXT DEFAULT 'active',subscription_renews_at TEXT,
  investor_tier TEXT DEFAULT 'free',investor_subscription_status TEXT DEFAULT 'free',investor_subscription_renews_at TEXT,is_super_admin INTEGER DEFAULT 0);

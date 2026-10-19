@@ -163,6 +163,16 @@ without being merged.
 An issue names the files it owns. Never edit files that another open issue or
 PR owns; ask on your own issue instead.
 
+### CHANGELOG.md is Session 1's
+
+A task PR never edits `CHANGELOG.md`, even when its issue says "CHANGELOG.md:
+one entry". Every PR that added an entry at the top of the file conflicted
+with every other open PR on the same lines, and resolving them cost more than
+the entries were worth (the owner, 2026-10-19). The PR's title and body are the
+record. Session 1 writes `CHANGELOG.md` from merged PRs, in its own PR
+labelled `changelog`. The `CHANGELOG gate` check (`changelog-gate.yml`) fails
+any other PR that touches the file.
+
 ### The repository is public
 
 Never put secrets, tokens, personal data or security-sensitive operational

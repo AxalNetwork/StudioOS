@@ -30,8 +30,11 @@ import {
   ensureIntegrationsSchema,
   getDescriptor,
   getProviderImpl,
+  readinessOf,
   type IntegrationRow,
   audienceFor,
+  personalHqOnlyOffHq,
+  personalHqOnlySentence,
   ConnectRefusal,
   type ProviderDescriptor,
 } from '../integrations/registry';
@@ -46,6 +49,7 @@ import {
 } from '../integrations/secrets';
 import { buildPkce, issueOauthState, consumeOauthState } from '../integrations/oauth';
 import { refuse } from '../util/refusal';
+import { MANAGED_PROVIDERS, PROVIDER_ENV_VARS, type ManagedProviderKey } from '../services/providerOauthKeys';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import { companyEnabled, enabledCompanyIds, projectEnabled, writesProjectData } from '../integrations/companyScope';
 import { hasScopeOverreach, validateConnectorSettings } from '../integrations/connectorRules';
@@ -67,9 +71,11 @@ export function ensureRole(c: Context<{ Bindings: Env }>, user: User) {
 
 /**
  * D710 (#1775): how this caller may see a provider. A provider with no
- * audience fields is `open`, as before; Mercury is an `entity` connection for
- * an admin on HQ and `none` for everyone else, who is answered as if the key
- * did not exist.
+ * audience fields is `open`, as before. Mercury is an `entity` connection for
+ * an admin on HQ, `personal` for a founder or partner on either host and an
+ * investor on HQ (D713, D752), and `none` for everyone else, who is answered
+ * as if the key did not exist. An investor off HQ is `none` too, but
+ * `/connect` tells them it is HQ only (403 `purpose_not_allowed`, D752).
  */
 function audienceOf(c: Context<{ Bindings: Env }>, user: User, desc: ProviderDescriptor) {
   return audienceFor(desc, { role: String(user.role || ''), hq: branchOf(c.env) === null });
@@ -225,8 +231,12 @@ integrations.get('/available', async (c) => {
     if (await c.env.DB.prepare('SELECT 1 AS connected FROM microsoft_oauth_tokens WHERE user_id = ?').bind(user.id).first()) connectedSet.add('microsoft_365');
   } catch { unreadableSources.push('microsoft_365'); }
   const viewer = { role: String(user.role || ''), hq: branchOf(c.env) === null };
-  const providers = REGISTRY.filter(p => audienceOf(c, user, p) !== 'none').map(p => {
+  const listed = REGISTRY.filter(p => audienceOf(c, user, p) !== 'none');
+  // D751: whether Axal holds each OAuth connector's client; no field where it means nothing.
+  const readiness = await Promise.all(listed.map(p => readinessOf(c.env, p)));
+  const providers = listed.map((p, i) => {
     const pub = publicDescriptor(p, viewer);
+    const r = readiness[i];
     const entityOnly = audienceOf(c, user, p) === 'entity';
     const lockedForUser = p.tier === 'free' ? false : !userMeetsTier(user, p.tier as 'growth' | 'studio');
     return {
@@ -244,6 +254,7 @@ integrations.get('/available', async (c) => {
         : connectionsReadable ? connectedSet.has(p.key) : null,
       // Legacy aliases — DO NOT remove until FE consumers migrate.
       tier_locked: lockedForUser,
+      ...(r === undefined ? {} : { configured: r }),
     };
   });
   // Task #8 (AN) spec wants the catalogue under `items`. We also return
@@ -425,6 +436,40 @@ interface ConnectBody {
   oauth_state?: string;
 }
 
+/** The `coming_soon` refusal, the same from `/connect` and the OAuth start (D751). */
+function comingSoonBody(desc: ProviderDescriptor) {
+  return {
+    error: 'coming_soon',
+    message: `${desc.display_name} isn't available yet — join the waitlist to be notified.`,
+    notify_me_url: `/api/integrations/${desc.key}/notify-me`,
+  };
+}
+
+/**
+ * D751 — an OAuth connector Axal holds no client for. The sentence is true
+ * for everyone; an admin also gets the names the keys go under and, where
+ * the Integration keys console can hold them, where. Never a value.
+ */
+async function unconfiguredRefusal(c: Context<{ Bindings: Env }>, user: User, desc: ProviderDescriptor, raw?: unknown): Promise<Response> {
+  const name = desc.display_name;
+  const managed = (MANAGED_PROVIDERS as string[]).includes(desc.key);
+  const vars = managed ? PROVIDER_ENV_VARS[desc.key as ManagedProviderKey] : null;
+  // Zoom's names live with Zoom (env only); loaded here so this route does not register it.
+  const envVars = vars ? [vars.id, vars.secret]
+    : desc.key === 'zoom' ? [...(await import('../services/channels/zoom')).ZOOM_CLIENT_ENV_VARS] : null;
+  const extra: Record<string, unknown> = { provider: desc.key };
+  if (user.role === 'admin') {
+    if (managed) extra.admin_href = '/admin?tab=integration-keys';
+    if (envVars) extra.env_vars = envVars;
+  }
+  return refuse(c, 503, {
+    code: 'oauth_unconfigured',
+    message: `${name} isn't set up on Axal yet, so it can't be connected. Nothing was sent to ${name}.`,
+    raw,
+    extra,
+  });
+}
+
 integrations.post('/connect', async (c) => {
   await ensureIntegrationsSchema(c.env);
   const user = await requireAuth(c);
@@ -435,6 +480,11 @@ integrations.post('/connect', async (c) => {
   if (!key) return c.json({ error: 'provider_key is required' }, 400);
 
   const desc = getDescriptor(key);
+  // D752: a member who followed a link learns why; every other route stays 404.
+  const viewer = { role: String(user.role || ''), hq: branchOf(c.env) === null };
+  if (desc && personalHqOnlyOffHq(desc, viewer)) {
+    return refuse(c, 403, { code: 'purpose_not_allowed', message: personalHqOnlySentence(desc.display_name) });
+  }
   if (!desc || audienceOf(c, user, desc) === 'none') return c.json({ error: 'unknown_provider', provider_key: key }, 404);
   // D710: an entity connection is added in its own console, never here.
   if (audienceOf(c, user, desc) === 'entity') {
@@ -447,11 +497,7 @@ integrations.post('/connect', async (c) => {
     // Spec contract (Task #8 / AN): 503 + coming_soon + provider-scoped
     // notify_me_url. The 409 we used to return was wrong because the
     // resource isn't in conflict — it just isn't available yet.
-    return c.json({
-      error: 'coming_soon',
-      message: `${desc.display_name} isn't available yet — join the waitlist to be notified.`,
-      notify_me_url: `/api/integrations/${key}/notify-me`,
-    }, 503, { 'Retry-After': '86400' });
+    return c.json(comingSoonBody(desc), 503, { 'Retry-After': '86400' });
   }
 
   // Tier gate (founders only; admin/partner/investor/advisor bypass).
@@ -1246,6 +1292,8 @@ integrations.get('/oauth/:provider/start', async (c) => {
   if (!desc || desc.auth_type !== 'oauth2') return c.json({ error: 'oauth_not_supported' }, 404);
   const selectedCompany = await activeCompanyFor(c, user);
   if (!selectedCompany && writesProjectData(provider)) return c.json({ error: 'active_company_required' }, 400);
+  // D751: refused as /connect refuses it, before the plan gate and any state.
+  if (desc.status === 'coming_soon') return c.json(comingSoonBody(desc), 503, { 'Retry-After': '86400' });
   if (desc.tier !== 'free' && !userMeetsTier(user, desc.tier as 'growth' | 'studio')) {
     return c.json(tierUpsell(desc.tier as 'growth' | 'studio'), 402);
   }
@@ -1256,6 +1304,18 @@ integrations.get('/oauth/:provider/start', async (c) => {
       message: `${desc.display_name} OAuth flow is rolling out — please check back shortly.`,
       retry_after_seconds: 86400,
     }, 503, { 'Retry-After': '86400' });
+  }
+  // D751: an unset (or unreadable) client is refused before any sign-in state
+  // is written, so no state row is left that nobody can consume.
+  const ready = await readinessOf(c.env, desc);
+  if (ready === false) return await unconfiguredRefusal(c, user, desc);
+  if (ready === null) {
+    c.header('Retry-After', '60');
+    return refuse(c, 503, {
+      code: 'oauth_setup_unreadable',
+      message: `Axal couldn't check whether ${desc.display_name} is set up, so it can't be connected right now. Nothing was sent to ${desc.display_name}. Try again in a minute.`,
+      extra: { provider },
+    });
   }
   // PKCE + signed state. The state token is bound to (user, provider) and
   // single-use; we hand it to the provider as the OAuth `state` param so
@@ -1297,9 +1357,8 @@ integrations.get('/oauth/:provider/start', async (c) => {
     url = await impl.buildAuthorizeUrl(c, user, state);
   } catch (e) {
     const msg = (e as Error).message || '';
-    if (/_oauth_unconfigured/.test(msg)) {
-      return c.json({ error: 'oauth_unconfigured', provider, message: 'This integration is not yet configured on the server. Please contact your administrator.' }, 503);
-    }
+    // D751's backstop: `ready` said true and the client went missing since.
+    if (/_oauth_unconfigured/.test(msg)) return await unconfiguredRefusal(c, user, desc, msg);
     throw e;
   }
   return c.json({ ok: true, authorize_url: url, state, pkce_method: pkce.method });
@@ -1455,9 +1514,11 @@ integrations.get('/oauth/:provider/callback', async (c) => {
     // could otherwise reflect attacker-controlled content back into the
     // UI's query string.
     const rawMsg = (e as Error).message || 'callback_failed';
-    const code = /^[a-z0-9_]+$/i.test(rawMsg.split(/[:\s]/)[0])
-      ? rawMsg.split(/[:\s]/)[0].slice(0, 64)
-      : 'callback_failed';
+    // D751: a client that went missing mid-flow reads as not configured, not refused.
+    const code = /_oauth_unconfigured/.test(rawMsg) ? 'not_configured'
+      : /^[a-z0-9_]+$/i.test(rawMsg.split(/[:\s]/)[0])
+        ? rawMsg.split(/[:\s]/)[0].slice(0, 64)
+        : 'callback_failed';
     return c.redirect(returnQuery(consumed?.extra, `oauth=error&provider=${encodeURIComponent(provider)}&reason=${encodeURIComponent(code)}`));
   }
 });
