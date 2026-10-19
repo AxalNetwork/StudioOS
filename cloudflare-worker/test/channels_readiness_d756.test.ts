@@ -129,9 +129,11 @@ test('health: each issue, one at a time', async () => {
   }
   assert.deepEqual((await issuesFor({ hook: { allowed_updates: [...ALLOWED].reverse() } })).issues, [], 'the same five in another order match');
 
-  const recent = await issuesFor({ hook: { last_error_date: now() - 3600, last_error_message: `Wrong response from the webhook: ${'x'.repeat(400)}` } });
+  // One clock read: a second boundary between two reads failed this once.
+  const hourAgo = now() - 3600;
+  const recent = await issuesFor({ hook: { last_error_date: hourAgo, last_error_message: `Wrong response from the webhook: ${'x'.repeat(400)}` } });
   assert.deepEqual(recent.issues, ['delivery_error']);
-  assert.equal(recent.webhook.last_error_at, new Date((now() - 3600) * 1000).toISOString());
+  assert.equal(recent.webhook.last_error_at, new Date(hourAgo * 1000).toISOString());
   assert.equal(recent.webhook.last_error.length, 200, 'clipped to 200 characters');
   const old = await issuesFor({ hook: { last_error_date: now() - 8 * 86400, last_error_message: 'Connection timed out' } });
   assert.deepEqual(old.issues, [], 'an old error does not block ready');
