@@ -56,6 +56,18 @@ export const MODEL_COPY = {
   '@cf/deepgram/nova-3': { name: 'Deepgram Nova-3' },
   '@cf/baai/bge-base-en-v1.5': { name: 'BGE Base EN v1.5' },
   '@cf/meta/llama-guard-3-8b': { name: 'Llama Guard 3 8B' },
+  // D764 (#2089): the rail_<kind> tasks' models, by the canvas's names.
+  '@cf/zai-org/glm-4.7-flash': { name: 'GLM-4.7 Flash' },
+  '@cf/openai/gpt-oss-120b': { name: 'GPT-OSS 120B' },
+  '@cf/openai/gpt-oss-20b': { name: 'GPT-OSS 20B' },
+  '@cf/moonshotai/kimi-k2.6': { name: 'Kimi K2.6' },
+  '@cf/moonshotai/kimi-k2.7-code': { name: 'Kimi K2.7 Code' },
+  '@cf/deepseek-ai/deepseek-v4-pro-0813': { name: 'DeepSeek V4 Pro' },
+  '@cf/qwen/qwq-32b': { name: 'QwQ 32B' },
+  '@cf/google/gemma-4-26b-a4b-it': { name: 'Gemma 4 26B' },
+  '@cf/meta/llama-4-scout-17b-16e-instruct': { name: 'Llama 4 Scout' },
+  '@cf/mistralai/mistral-small-3.1-24b-instruct': { name: 'Mistral Small 3.1 24B' },
+  '@cf/ibm-granite/granite-4.0-h-micro': { name: 'Granite 4.0 Micro' },
 };
 
 const L70 = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
