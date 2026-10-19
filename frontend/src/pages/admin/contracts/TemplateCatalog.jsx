@@ -1,13 +1,13 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Pill } from '../../../ui';
 import { contractsApi } from '../../../lib/api/contracts';
 import { AXAL_ENTITIES } from '../../../lib/legalDocFormat';
 import { LAYER_ORDER, STATE_FILTERS, templateState, filterCatalog, layerSections, stateCounts } from '../../../lib/templateCatalogModel';
-import { createThumbnailQueue } from '../../../lib/thumbnailQueue';
 import { reportError } from '../../../lib/log';
 import { card, button, input } from './parts';
 import FundIDocumentsPanel from './FundIDocumentsPanel';
 import PushResults from './PushResults';
+import { Thumbnail, useThumbnails } from './TemplateThumbnail';
 
 // D717 (#1851) — the Templates tab's catalog (board L9, "Catalog · light" and
 // "Catalog · dark (the paper stays white)"; board L8's thumbnail and "Not in
@@ -34,7 +34,6 @@ const PARTY_LINE = {
   fund: `${AXAL_ENTITIES.gp.name} (for the Fund)`,
   none: { policy: 'publisher only, no signatures', corporate: 'none (the company signs)', other: 'none (the filer signs)' },
 };
-const THUMB_NOT_DRAWN = 'Thumbnail not drawn: the page renderer did not answer.';
 const SECTION_PREVIEW = 4;
 const rose = 'bg-[#881337] text-white border-[#881337] dark:bg-[#881337] dark:text-white';
 const link = 'text-xs font-bold text-[#881337] dark:text-rose-300';
@@ -49,65 +48,6 @@ function editedTitle(row) {
   const d = row.updated_at ? new Date(row.updated_at) : null;
   const when = d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : 'Not recorded';
   return `Last edited ${when} · Admin #${row.updated_by}`;
-}
-
-// One IntersectionObserver and one queue of four for the whole tab (decision
-// 5). Without IntersectionObserver (the test DOM), each thumbnail starts on
-// mount, still four at a time.
-function useThumbnails() {
-  return useMemo(() => {
-    const queue = createThumbnailQueue(4);
-    const watchers = new Map();
-    const io = typeof IntersectionObserver === 'function'
-      ? new IntersectionObserver(entries => {
-        for (const e of entries) if (e.isIntersecting && watchers.has(e.target)) { const go = watchers.get(e.target); watchers.delete(e.target); io.unobserve(e.target); go(); }
-      }, { rootMargin: '200px' })
-      : null;
-    return {
-      queue,
-      watch(el, go) {
-        if (!io || !el) { go(); return () => {}; }
-        watchers.set(el, go); io.observe(el);
-        return () => { watchers.delete(el); io.unobserve(el); };
-      },
-    };
-  }, []);
-}
-
-let thumbSeq = 0;
-function Thumbnail({ thumbs, load, version, stub, title }) {
-  const frame = useRef(null);
-  const [state, setState] = useState({ url: null, error: null });
-  const [attempt, setAttempt] = useState(0);
-  const shown = useRef(null);
-  useEffect(() => {
-    let active = true;
-    const key = `thumb-${thumbSeq += 1}`;
-    const stop = thumbs.watch(frame.current, () => {
-      thumbs.queue.enqueue(key, load).then(({ url }) => {
-        if (!active) { try { URL.revokeObjectURL(url); } catch { /* not a blob URL */ } return; }
-        if (shown.current) try { URL.revokeObjectURL(shown.current); } catch { /* not a blob URL */ }
-        shown.current = url;
-        setState({ url, error: null });
-      }, e => {
-        if (!active) return;
-        reportError('TemplateCatalog:thumbnail', e);
-        setState(s => ({ ...s, error: e?.code ? e.message : THUMB_NOT_DRAWN }));
-      });
-    });
-    return () => { active = false; stop(); thumbs.queue.cancel(key); };
-  // `load` is rebuilt each render; the thumbnail it draws is named by `version`.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [thumbs, version, attempt]);
-  useEffect(() => () => { if (shown.current) try { URL.revokeObjectURL(shown.current); } catch { /* not a blob URL */ } }, []);
-  return <div ref={frame} className={`h-[90px] w-[70px] flex-none overflow-hidden rounded-[3px] border bg-white ${stub ? 'border-dashed border-[#c9c6d2]' : 'border-solid border-[#e3e1ea]'}`}>{/* dark-mode-exempt: the paper stays white (frame "Catalog · dark") */}
-    {state.error
-      ? <div role="alert" className="flex h-full flex-col justify-between p-1 text-[8.5px] leading-[10px] text-[#615c6e]">
-        <span>{state.error}</span>
-        <button type="button" className="self-start rounded border border-[#e3e1ea] px-1 text-[9px] font-bold text-[#881337]" onClick={() => { setState(s => ({ ...s, error: null })); setAttempt(n => n + 1); }}>Retry</button>
-      </div>
-      : state.url && <img src={state.url} alt={`Page 1 of ${title}`} className="h-full w-full object-cover object-top" />}
-  </div>;
 }
 
 function TemplateCard({ row, authoring, thumbs, onOpen, onOpenUsage }) {
