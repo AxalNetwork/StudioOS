@@ -39,6 +39,7 @@ runs these directly against an in-process SQLite, with no request at all.
 | Folder | What lives there |
 | --- | --- |
 | `advisor/` | The advisor state machine and its question banks. |
+| `ai/` | D763: the AI router's pure parts. `guard.ts` holds Llama Guard's slicing, verdicts, category policy and refusal copy. Its README has the rule for adding here. |
 | `calendar/` | Calendar sync. |
 | `channels/` | D684: business Telegram and WhatsApp conversations, and Zoom and Google Meet calls, reaching Validate › Interviews. The contract, event dedupe, connection tenancy, link codes, outbound tracking and the pending-thread store. Its README has the rules. |
 | `decks/` | Deck assembly and export. |
