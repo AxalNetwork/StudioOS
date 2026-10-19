@@ -215,6 +215,11 @@ test('the reads: /me says there is no day, HQ cannot type a member plan, and eac
   assert.deepEqual([me.body.daily_capped, me.body.monthly_microusd, me.body.plan.share, me.body.plan.monthly_microusd], [false, 19_750_000, 0.25, 19_750_000]);
   assert.deepEqual(me.body.plan.parts, [{ family: 'founder', source: 'recorded', interval: 'month', allowance_microusd: 19_750_000 }]);
   assert.ok(!JSON.stringify(me.body).includes('amount_cents'), 'the read names what the plan gives, not what it cost');
+  // Mutation checked: pass the Super Admin's member read the raw plan → amount_cents in its body.
+  const account = await call(env, 'GET', `/api/ai-budget/members/${FOUNDER}`, undefined, ADMIN);
+  assert.equal(account.status, 200);
+  assert.deepEqual(account.body.allowance.plan, me.body.plan, 'the Super Admin reads the same projection');
+  assert.ok(!JSON.stringify(account.body).includes('amount_cents'), 'nor does the Super Admin\'s member read');
   const typed = await call(env, 'PUT', '/api/ai-budget/caps/founder:growth', { daily_usd: 1, monthly_usd: 10 }, ADMIN);
   assert.deepEqual([typed.status, typed.body.error ?? typed.body.code], [409, 'ai_allowance_computed']);
   assert.equal((await call(env, 'PUT', '/api/ai-budget/caps/admin', { daily_usd: 1, monthly_usd: 10 }, ADMIN)).status, 200);

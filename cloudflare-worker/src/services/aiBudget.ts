@@ -2,7 +2,7 @@
 import type { Env } from '../types';
 import { userMeetsTier } from '../middleware/requireTier';
 import { effectiveInvestorTier } from '../middleware/requireInvestorTier';
-import { planAllowanceFor } from './planAllowance';
+import { planAllowanceFor, type PlanAllowance } from './planAllowance';
 
 export const AI_USD_SCALE = 1_000_000;
 export const AI_CAP_DEFAULTS = { day: 5, month: 50, orgMonth: 5000 } as const;
@@ -56,6 +56,14 @@ export async function resolveAiCaps(env: Env, userId:number) {
   return { licence, source:recorded ? 'recorded' : 'environment', daily_capped: true,
     daily_microusd:recorded ? amount(recorded.daily_microusd) : usdToMicro(fallback.day),
     monthly_microusd:recorded ? amount(recorded.monthly_microusd) : usdToMicro(fallback.month), plan: null };
+}
+/**
+ * D783: a member's plan allowance as any read shows it: what each plan gives and
+ * where the figure came from, never the amount the member pays.
+ */
+export function planView(plan: PlanAllowance | null) {
+  return plan ? { share: plan.share, monthly_microusd: plan.monthly_microusd,
+    parts: plan.parts.map(p => ({ family: p.family, source: p.source, interval: p.interval, allowance_microusd: p.allowance_microusd })) } : null;
 }
 export async function listAiLicenceCaps(env:Env) {
   const rows=await env.DB.prepare(`SELECT c.licence_key,c.daily_microusd,c.monthly_microusd,c.recorded_by,
@@ -236,10 +244,8 @@ export async function loadAiBudget(env:Env,userId:number,now=new Date()) {
   // D762: a hold still in review from an earlier month is still held, so "Held by runs in progress"
   // counts it. It was counted in that month's spend row, never this one's, so this month's spend is unchanged.
   const earlierReview=amount(row.earlier_review_held);
-  // D783: the member's own plan allowance, without the amounts: what each plan gives, and where the figure came from.
   const { plan, ...rest } = caps;
-  return { ...rest, plan: plan ? { share: plan.share, monthly_microusd: plan.monthly_microusd,
-      parts: plan.parts.map(p => ({ family: p.family, source: p.source, interval: p.interval, allowance_microusd: p.allowance_microusd })) } : null,
+  return { ...rest, plan: planView(plan),
     day_key:t.day,month_key:t.month,
     day_spend_microusd:amount(daily-dayHeld),month_spend_microusd:amount(monthly-monthHeld),
     day_reserved_microusd:dayHeld,month_reserved_microusd:amount(monthHeld+earlierReview),

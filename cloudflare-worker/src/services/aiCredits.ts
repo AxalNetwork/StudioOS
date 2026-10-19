@@ -13,7 +13,7 @@
  * value, which is Stripe's integer cents.
  */
 import type { Env } from '../types';
-import { AI_USD_SCALE } from './aiBudget';
+import { AI_USD_SCALE, planView } from './aiBudget';
 import type { PricedCart } from './orders';
 
 const usd = (dollars: number) => dollars * AI_USD_SCALE;
@@ -406,7 +406,7 @@ export async function memberAccount(env: Env, userId: number, opts: { before?: s
   const shortfalls = await env.DB.prepare(`SELECT uid, kind, shortfall_microusd, source_ref, created_at FROM ai_credit_ledger
     WHERE user_id = ? AND shortfall_microusd > 0 ORDER BY created_at DESC, uid DESC LIMIT 100`).bind(userId).all<any>();
   if (shortfalls.success !== true) throw new Error('AI ledger unreadable');
-  return { member_id: userId, allowance: { licence_key: caps.licence, source: caps.source, daily_capped: caps.daily_capped, daily_microusd: caps.daily_microusd, monthly_microusd: caps.monthly_microusd, plan: caps.plan },
+  return { member_id: userId, allowance: { licence_key: caps.licence, source: caps.source, daily_capped: caps.daily_capped, daily_microusd: caps.daily_microusd, monthly_microusd: caps.monthly_microusd, plan: planView(caps.plan) },
     balance_microusd: bank.balance ?? 0, topup_held_microusd: bank.held, ledger_balance_microusd: await ledgerBalance(env, userId),
     on_hold: await packsOnHold(env, userId), ledger, purchases,
     shortfalls: (shortfalls.results ?? []).map((r: any) => ({ uid: r.uid, kind: r.kind, shortfall_microusd: r.shortfall_microusd, source_ref: r.source_ref, at: r.created_at })) };
