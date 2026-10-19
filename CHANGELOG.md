@@ -4,6 +4,20 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## "Match to my Mercury" on committed raise prospects and on deal commitments (D752, #1989)
+
+- Raise › Capital relationships gains "Investor wires" for a founder: one
+  read of their own Mercury on press, then each committed prospect with the
+  credits that fit it, confirmed or withdrawn (a reason of 10 characters or
+  more) through #1848's match screen. The stage then reads "Committed ·
+  received <date>" from the Worker.
+- The deal room's Commitments tab offers the same match to the deal's own
+  founder on pending and confirmed commitments; everyone else sees the status
+  only.
+- `MercuryMatch` says amounts are USD and the counterparty is not checked
+  for the raise targets, and says why a target is not matchable. The credit
+  import prints `raise_receipt` and the "This may be an investment" hint.
+
 ## Raise receipts on a founder's own Mercury (D752 §6, #1887)
 
 - Migration 490 rebuilds `mercury_personal_matches` with two more target

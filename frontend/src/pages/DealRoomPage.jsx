@@ -10,6 +10,7 @@ import DealInvitationsTab from '../components/deals/DealInvitationsTab';
 import DealTransfersTab from '../components/deals/DealTransfersTab';
 import DealReferencesTab from '../components/deals/DealReferencesTab';
 import DealSyndicates from '../components/deals/DealSyndicates';
+import MercuryMatch from '../components/MercuryMatch';
 import {
   ArrowLeft, Download, FileText, Loader2, X, DollarSign, Send, Check,
   Users, Clock, ThumbsUp, ThumbsDown,
@@ -164,7 +165,7 @@ export default function DealRoomPage() {
         </>
       )}
       {tab === 'Documents' && <DocumentsTab dealId={deal.id} />}
-      {tab === 'Commitments' && <CommitmentsTab dealId={deal.id} />}
+      {tab === 'Commitments' && <CommitmentsTab dealId={deal.id} founderMatch={isDealFounder(role, user, deal)} />}
       {tab === 'Activity' && <ActivityTab dealId={deal.id} />}
       {tab === 'Invitations' && tabs.includes('Invitations') && (
         <DealInvitationsTab dealId={deal.id} onInvite={canInvite ? () => setInviteOpen(true) : undefined} />
@@ -269,7 +270,20 @@ function DocumentsTab({ dealId }) {
   );
 }
 
-function CommitmentsTab({ dealId }) {
+/**
+ * D752 (#1989): the deal's own founder, the only viewer offered "Match to my
+ * Mercury" on its commitments. An investor, an admin or a partner sees each
+ * commitment's status only, never the bank line behind it.
+ */
+export function isDealFounder(role, user, deal) {
+  return role === 'founder' && user?.founder_id != null && deal?.project_founder_id != null
+    && Number(user.founder_id) === Number(deal.project_founder_id);
+}
+
+/** D752: a pending commitment can be matched; a confirmed one keeps its door so the founder can withdraw. */
+export const COMMITMENT_MATCH_STATUSES = Object.freeze(['pending', 'confirmed']);
+
+export function CommitmentsTab({ dealId, founderMatch = false }) {
   const [items, setItems] = useState(null);
   const [failed, setFailed] = useState(false);
   const load = () => {
@@ -291,6 +305,9 @@ function CommitmentsTab({ dealId }) {
           <div className="text-right">
             <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{fmtMoney(c.amount)}</div>
             <div className="text-xs text-gray-500 capitalize">{c.status}</div>
+            {founderMatch && COMMITMENT_MATCH_STATUSES.includes(c.status) && (
+              <div className="mt-1"><MercuryMatch target="commitment" targetId={c.id} matched={c.status === 'confirmed' ? {} : null} onChanged={load} /></div>
+            )}
           </div>
         </div>
       ))}
