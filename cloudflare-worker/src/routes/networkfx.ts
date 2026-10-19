@@ -6,6 +6,9 @@ import { ensureWorkflowSchema } from '../services/workflowSchema';
 import { aiQuotaGate, recordSharedServiceAction } from '../services/aiQuota';
 import { bindingKey } from '../util/schemaBootstrap';
 import { logDealRoomAction } from '../services/dealRoomAudit';
+import { run as runAI } from '../services/aiRouter';
+import { AI_SURFACE } from '../services/aiSurfaces';
+import { railFor, refuseRun } from '../util/railContext';
 
 const networkfx = new Hono<{ Bindings: Env }>();
 
@@ -77,14 +80,24 @@ async function ensureSchema(env: Env) {
 function safeJson<T>(s: any, def: T): T { try { return s ? JSON.parse(s) : def; } catch { return def; } }
 const logAction = (env: Env, actionType: string, performedBy: number | null, details: any = {}) =>
   recordSharedServiceAction(env, actionType, performedBy, details);
-async function llmText(env: Env, system: string, prompt: string): Promise<string | null> {
-  if (!env.AI) return null;
-  try {
-    const out: any = await env.AI.run('@cf/meta/llama-3.1-8b-instruct-fp8', {
-      messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }], max_tokens: 350,
-    });
-    return (out?.response || '').trim() || null;
-  } catch { return null; }
+/**
+ * D766 (#2094): a member's press through the router (`rail_match`, the
+ * network pages' kind), held, guarded and charged, with its page, option and
+ * record (D765). `guardText` is what the member wrote, when the prompt also
+ * carries rows read from the store. `refused` answers a run the router refused;
+ * `text` is null when the model could not be reached, and the press keeps its
+ * non-AI path.
+ */
+async function llmText(c: any, userId: number, option: string, record: string | null, system: string, prompt: string, guardText?: string): Promise<{ text: string | null; model: string | null; refused: Response | null }> {
+  const r = await runAI(c.env, {
+    task: 'rail_match', userId, maxTokens: 350,
+    messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }],
+    ...(guardText != null ? { guardText } : {}),
+    surface: AI_SURFACE.networkEffects,
+    rail: railFor(c, { page: 'network-effects', option }, record),
+  });
+  if (r.ok) return { text: (r.output || '').trim() || null, model: r.usage.model, refused: null };
+  return { text: null, model: null, refused: refuseRun(c, r) };
 }
 
 // ============================================================
@@ -294,7 +307,8 @@ networkfx.post('/syndicates/:id/close', async (c) => {
   return c.json({ ok: true, status: 'closed' });
 });
 
-networkfx.get('/syndicates/:id/recommendations', async (c) => {
+// D765 (#2090), D720 §9: a model call, so a press (POST), never a read.
+networkfx.post('/syndicates/:id/recommendations', async (c) => {
   const user = await requireAuth(c);
   await ensureSchema(c.env);
   const gate = await aiQuotaGate(c.env, user.id);
@@ -332,11 +346,12 @@ networkfx.get('/syndicates/:id/recommendations', async (c) => {
     `;
   }
   await sql.end();
-  const ai = await llmText(c.env,
+  const ai = await llmText(c, user.id, 'recommend:syndicate', `syndicate:${id}`,
     'You are a venture-studio analyst. Suggest a brief 2-sentence rationale for forming this syndicate and what kind of investor would be ideal.',
     `Syndicate: name="${synd.name}", description="${synd.description || ''}", target=$${synd.target_cents ? synd.target_cents/100 : 'open'}, min=$${synd.min_commitment_cents/100}, deal_id=${synd.deal_id || 'none'}.`);
+  if (ai.refused) return ai.refused;
   await logAction(c.env, 'ai_call', user.id, { kind: 'syndicate_recs', syndicate_id: id });
-  return c.json({ rationale: ai || 'AI analysis unavailable.', candidates: recs, model: ai ? '@cf/meta/llama-3.1-8b-instruct-fp8' : 'unavailable' });
+  return c.json({ rationale: ai.text || 'AI analysis unavailable.', candidates: recs, model: ai.text ? ai.model : 'unavailable' });
 });
 
 // ============================================================
@@ -437,10 +452,14 @@ networkfx.post('/marketplace/match', async (c) => {
   const result = await c.env.DB.prepare(`SELECT mp.*, u.name, u.email, u.role FROM marketplace_profiles mp JOIN users u ON u.id = mp.user_id WHERE mp.availability = 'available' ORDER BY mp.rating DESC LIMIT 30`).all();
   const profiles = (result.results || []).map((r: any) => ({ ...r, skills: safeJson(r.skills, []) }));
   const compact = profiles.map((p: any) => ({ id: p.user_id, name: p.name, role: p.role, title: p.title, skills: p.skills, rating: p.rating }));
-  const ai = await llmText(c.env,
+  // The guard reads the member's need; the profiles are other members' own words, already on the platform.
+  const out = await llmText(c, user.id, 'match:marketplace', null,
     'Recommend the top 3 operators/advisors for a stated need. Output JSON {"recommendations":[{"user_id":number,"reason":"1 sentence"}]}.',
-    `Need: ${need}\n\nAvailable profiles: ${JSON.stringify(compact)}`
+    `Need: ${need}\n\nAvailable profiles: ${JSON.stringify(compact)}`,
+    need,
   );
+  if (out.refused) return out.refused;
+  const ai = out.text;
   await logAction(c.env, 'ai_call', user.id, { kind: 'marketplace_match' });
   let recs: any[] = [];
   if (ai) {
@@ -452,7 +471,7 @@ networkfx.post('/marketplace/match', async (c) => {
   // Hydrate
   const byId = new Map(profiles.map((p: any) => [p.user_id, p]));
   const hydrated = recs.map((r: any) => ({ ...r, profile: byId.get(r.user_id) || null })).filter((r: any) => r.profile);
-  return c.json({ need, recommendations: hydrated, model: ai ? '@cf/meta/llama-3.1-8b-instruct-fp8' : 'rule-based' });
+  return c.json({ need, recommendations: hydrated, model: ai ? out.model : 'rule-based' });
 });
 
 // ============================================================

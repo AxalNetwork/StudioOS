@@ -26,11 +26,12 @@ import { requireAuth } from '../auth';
 import { recordCompositionFills } from '../services/fills/provenance';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import { projectInActiveCompany } from '../services/tenancyScope';
-import { run as aiRouterRun } from '../services/aiRouter';
+import { run as aiRouterRun, type RailContext } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { ingestContact } from './contacts';
 import { bindingKey } from '../util/schemaBootstrap';
 import { refuse } from '../util/refusal';
+import { railFor, refuseRun } from '../util/railContext';
 
 const brand = new Hono<{ Bindings: Env }>();
 
@@ -435,6 +436,7 @@ async function aiTemplateContent(
   name: string,
   sector: string | null,
   description: string,
+  rail?: RailContext,
 ): Promise<{
   name: string; cta_text: string; headline: string; subheadline: string;
   tagline: string; content: Record<string, any>;
@@ -462,6 +464,8 @@ async function aiTemplateContent(
       task: 'brand_autofill',
       userId: userId || 0,
       surface: AI_SURFACE.buildBrand,
+      // D765: off on this page, the run is refused and the heuristic answers.
+      rail,
       systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
       temperature: 0.7,
@@ -495,26 +499,28 @@ async function aiTemplateContent(
   }
 }
 
-// Logo via Workers AI text-to-image (flux schnell). Returns a self-contained
-// data URL (base64) so it slots into the existing logo_url handling with no
-// storage plumbing. Returns null on any failure so the caller falls back to
-// the inline SVG. Wrapped in a hard timeout so a slow image gen can't pin the
-// isolate to its CPU cap.
-async function aiLogo(env: Env, prompt: string): Promise<string | null> {
-  const ai = (env as any).AI;
-  if (!ai || typeof ai.run !== 'function') return null;
+// Logo via Workers AI text-to-image (FLUX.1 Schnell, the `brand_logo` task).
+// Returns a self-contained data URL (base64) so it slots into the existing
+// logo_url handling with no storage plumbing. `url` is null when the run did
+// not answer, and the caller falls back to the inline SVG; `refusal` is the
+// router's reason, which the route answers (D766). The router's image class
+// (60 seconds) bounds a slow generation.
+async function aiLogo(env: Env, userId: number, prompt: string, rail: RailContext): Promise<{ url: string | null; refusal?: string | null; error?: string }> {
   const fullPrompt = `${prompt}. Flat minimalist vector logo, single centered mark, solid background, no text, no lettering, high contrast.`;
   try {
-    const raw: any = await Promise.race([
-      ai.run('@cf/black-forest-labs/flux-1-schnell', { prompt: fullPrompt.slice(0, 2048) }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('logo_timeout')), 30_000)),
-    ]);
-    // flux schnell returns { image: "<base64 jpeg>" }.
-    const b64 = typeof raw?.image === 'string' ? raw.image : null;
-    if (!b64) return null;
-    return `data:image/jpeg;base64,${b64}`;
+    // D766 (#2094) PR 3: the member's press through the router (D761's image
+    // shape, 60-second class), held, guarded and charged, with its page.
+    const r = await aiRouterRun(env, {
+      task: 'brand_logo', userId, text: fullPrompt.slice(0, 2048), draw: {},
+      surface: AI_SURFACE.buildBrand,
+      rail,
+    });
+    if (!r.ok || !r.image) return { url: null, refusal: r.refusal ?? null, error: r.error };
+    let binary = '';
+    for (let i = 0; i < r.image.bytes.length; i += 8192) binary += String.fromCharCode(...r.image.bytes.subarray(i, i + 8192));
+    return { url: `data:${r.image.mime};base64,${btoa(binary)}` };
   } catch {
-    return null;
+    return { url: null };
   }
 }
 
@@ -1119,7 +1125,7 @@ function heuristicTaglines(name: string, description: string, audience: string, 
   return bank.map((s) => s.replace(/\$\{name\}/g, name).replace(/\$\{description\}/g, d));
 }
 
-async function aiPalette(env: Env, userId: number, description: string, sector: string | null, seedColor?: string | null): Promise<Record<string, string> | null> {
+async function aiPalette(env: Env, userId: number, description: string, sector: string | null, seedColor?: string | null, rail?: RailContext): Promise<Record<string, string> | null> {
   try {
     const systemPrompt = 'You are a colour strategist. Always return ONLY valid minified JSON, no prose, no markdown fences.';
     const userPrompt = `Suggest a 5-colour palette for a startup.
@@ -1133,6 +1139,7 @@ Rules: all values must be hex; background must be light enough for dark text; in
       task: 'brand_palette',
       userId: userId || 0,
       surface: AI_SURFACE.buildBrand,
+      rail,
       systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
       temperature: 0.8,
@@ -1152,7 +1159,7 @@ Rules: all values must be hex; background must be light enough for dark text; in
   }
 }
 
-async function aiTaglines(env: Env, userId: number, name: string, description: string, audience: string, tone: string, marketAngle: string): Promise<string[] | null> {
+async function aiTaglines(env: Env, userId: number, name: string, description: string, audience: string, tone: string, marketAngle: string, rail?: RailContext): Promise<string[] | null> {
   try {
     const systemPrompt = 'You are a startup copywriter. Always return ONLY valid minified JSON, no prose, no markdown fences.';
     const userPrompt = `Write 6 tagline candidates for a startup.
@@ -1168,6 +1175,7 @@ Rules: each tagline <= 12 words; varied angles; no emojis.`;
       task: 'brand_taglines',
       userId: userId || 0,
       surface: AI_SURFACE.buildBrand,
+      rail,
       systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
       temperature: 0.9,
@@ -1195,7 +1203,7 @@ brand.post('/landing/autofill', async (c) => {
   const sector = body?.sector ? String(body.sector) : null;
   const requested = String(body?.template || '').trim();
   const key = (TEMPLATE_KEYS as readonly string[]).includes(requested) ? (requested as TemplateKey) : 'minimal';
-  const ai = await aiTemplateContent(c.env, user.id, key, name, sector, description);
+  const ai = await aiTemplateContent(c.env, user.id, key, name, sector, description, railFor(c, { page: 'build', option: 'fill:brand/landing' }));
   if (ai) return c.json({ ...ai, ai_generated: true });
   const hero = heuristicHeroCopy(name, sector, description);
   return c.json({
@@ -1208,11 +1216,13 @@ brand.post('/landing/autofill', async (c) => {
 });
 
 brand.post('/logo', async (c) => {
-  await requireAuth(c);
+  const user = await requireAuth(c);
   const body = await c.req.json().catch(() => ({} as any));
   const prompt = String(body?.prompt || '').trim();
   if (prompt.length < 4) return c.json({ error: 'prompt too short' }, 400);
-  const url = await aiLogo(c.env, prompt);
+  const { url, refusal, error } = await aiLogo(c.env, user.id, prompt, railFor(c, { page: 'build', option: 'draw:brand/logo' }));
+  const refused = refuseRun(c, { refusal, error });
+  if (refused) return refused;
   if (url) return c.json({ url, svg: null, source: 'workers-ai' });
   return c.json({ url: null, svg: svgLogo(body?.name || 'A', body?.color || '#7c3aed'), source: 'svg' });
 });
@@ -1279,7 +1289,7 @@ brand.post('/palette/suggest', async (c) => {
   if (description.length < 4) return c.json({ error: 'description too short' }, 400);
   const sector = body?.sector ? String(body.sector) : null;
   const seed = cleanHex(body?.seed_color);
-  const ai = await aiPalette(c.env, user.id, description, sector, seed);
+  const ai = await aiPalette(c.env, user.id, description, sector, seed, railFor(c, { page: 'build', option: 'draft:brand/palette' }));
   const palette = ai || heuristicPalette(description, seed);
   const warnings: string[] = [];
   if (contrastRatio(palette.ink, palette.background) < 4.5) {
@@ -1314,7 +1324,7 @@ brand.post('/tagline/suggest', async (c) => {
   const tone = String(body?.tone || '').trim();
   const marketAngle = String(body?.market_angle || '').trim();
   if (!audience || !tone || !marketAngle) return c.json({ error: 'audience, tone, and market_angle required' }, 400);
-  const ai = await aiTaglines(c.env, user.id, name, description, audience, tone, marketAngle);
+  const ai = await aiTaglines(c.env, user.id, name, description, audience, tone, marketAngle, railFor(c, { page: 'build', option: 'draft:brand/taglines' }));
   const taglines = ai || heuristicTaglines(name, description, audience, tone, marketAngle);
   return c.json({ taglines: taglines.slice(0, 6), ai_generated: !!ai });
 });

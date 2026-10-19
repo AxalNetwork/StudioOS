@@ -16,12 +16,21 @@ import { MODULE_LABELS } from './moduleLabels';
 /**
  * One entry per kind a sync reads. `count` is the sync's figure for that kind;
  * `store` is the table its rows land in, or null when the module has no store
- * for it yet and the item is only counted (a release).
+ * for it yet and the item is only counted. `ledger: false` marks a kind that
+ * writes onto another kind's rows instead of making its own (a milestone sets
+ * its items' group and target), so it has no ledger rows to count.
  */
 export const GITHUB_LANDINGS = [
   { kind: 'issue', count: 'issues', one: 'issue', many: 'issues', what: 'Issues', module: 'product_roadmap', store: 'roadmap_okrs' },
   { kind: 'pull_request', count: 'pull_requests', one: 'pull request', many: 'pull requests', what: 'Pull requests', module: 'prototype_mvp', store: 'mvp_features' },
-  { kind: 'release', count: 'releases', one: 'release', many: 'releases', what: 'Releases', module: 'product_roadmap', store: null },
+  // D782 (#2111): a release is a row in Product roadmap, and marks the items it shipped.
+  { kind: 'release', count: 'releases', one: 'release', many: 'releases', what: 'Releases', module: 'product_roadmap', store: 'roadmap_releases' },
+  // D782 (#2111): a milestone gives its issues' items their group and target.
+  { kind: 'milestone', count: 'milestones', one: 'milestone', many: 'milestones', what: 'Milestones', module: 'product_roadmap', store: 'roadmap_okrs', ledger: false },
+  // #2114: an architecture note is proposed by the sync and lands as a note when the founder accepts it;
+  // the sync's figure is what it proposed. The stack is a fact, one row per repository.
+  { kind: 'design_note', count: 'design_proposals', one: 'architecture proposal', many: 'architecture proposals', what: 'Architecture notes and decisions', module: 'solution_design', store: 'solution_design_notes' },
+  { kind: 'stack', count: 'stacks', one: 'repository stack', many: 'repository stacks', what: 'Languages and topics', module: 'solution_design', store: 'solution_design_stack' },
 ] as const;
 
 /** The modules that read the connection itself rather than ledger rows: GitHub is Operating systems' Code system. */

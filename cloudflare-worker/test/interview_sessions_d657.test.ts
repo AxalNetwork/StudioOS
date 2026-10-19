@@ -1167,7 +1167,8 @@ test('D685 §5.9.3: the sweeper resumes runs that stopped moving, and fails the 
   const tr = (await recordedForProcessing(f, 2)).sid;
   await call(f.env, FOUNDER, 'POST', `/sessions/${tr}/finish`, { last_seq: 1 });
   const pl = (await recordedForProcessing(f, 1)).sid;
-  await call(f.env, FOUNDER, 'POST', `/sessions/${pl}/finish`, { last_seq: 0 });
+  // D765 (#2090): this member chose "Summarise and place" at Stop, so its resume may reach the summary.
+  await call(f.env, FOUNDER, 'POST', `/sessions/${pl}/finish`, { last_seq: 0, auto: true });
   assert.equal(await job(f, pl), 'done');
   const recorded = async (extra = '') => {
     const id = await sessionIn(f, 'stopped', extra);

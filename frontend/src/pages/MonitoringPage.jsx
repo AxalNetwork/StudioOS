@@ -8,6 +8,9 @@ import { Activity, AlertTriangle, RefreshCw, Sparkles, ShieldAlert, Zap, Server,
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, CartesianGrid } from 'recharts';
 import { api } from '../lib/api';
 import { useEscapeClose } from '../components/useEscapeClose';
+import { useAuth } from '../hooks/useAuthSync';
+import { isSuperAdminUser } from '../lib/shellRole';
+import { RailFrame, WorkerRail } from '../ui';
 
 const POLL_MS = 15000;
 
@@ -332,6 +335,7 @@ function MyActionsTab() {
 }
 
 export default function MonitoringPage() {
+  const superAdmin = isSuperAdminUser(useAuth()?.user);
   const [metrics, setMetrics] = useState(null);
   const [rateLimits, setRateLimits] = useState(null);
   const [anomalies, setAnomalies] = useState(null);
@@ -380,6 +384,12 @@ export default function MonitoringPage() {
     }
   };
 
+  const [summarising, setSummarising] = useState(false);
+  // D765 (#2090): the poll reads the heuristic summary; the AI one is this press.
+  const summariseAnomalies = async () => {
+    setSummarising(true);
+    try { setAnomalies(await api.monitoringAnomaliesSummary()); } catch {} finally { setSummarising(false); }
+  };
   const loadAnomalies = async () => {
     try { setAnomalies(await api.monitoringAnomalies()); } catch {}
   };
@@ -406,7 +416,13 @@ export default function MonitoringPage() {
 
   const s = metrics?.summary || {};
 
+  // D775 (#2101): H33 drew no rail. A plain admin watches the platform here too, so the rail takes the viewer's tier, as ContractsDesk does.
+  // The anomaly panel's model call is the page's own, not the rail's (D780 moves it onto the run path).
+  const railProps = { note: 'Eadwyn reads the health, queue and error lines on this page. Draining or retrying a queue stays yours.' };
+  const rail = superAdmin ? <WorkerRail {...railProps} workspace="Monitoring" role="super_admin" data-testid="hq-monitoring-rail" /> : <WorkerRail {...railProps} workspace="Monitoring" role="admin" data-testid="admin-monitoring-rail" />;
+
   return (
+    <RailFrame rail={rail} data-testid="monitoring-frame">
     <div className="max-w-7xl mx-auto space-y-6" data-testid="monitoring-page">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
@@ -496,10 +512,14 @@ export default function MonitoringPage() {
       <div className="bg-gradient-to-br from-violet-50 to-indigo-50 border border-violet-200 rounded-xl p-5">
         <div className="flex items-center gap-2 mb-2">
           <Sparkles size={16} className="text-violet-700" />
-          <span className="text-sm font-semibold text-violet-900">AI Anomaly Detection</span>
+          <span className="text-sm font-semibold text-violet-900">Anomaly Detection</span>
           {anomalies?.generated_at && (
             <span className="text-xs text-violet-700/70 ml-auto">Updated {new Date(anomalies.generated_at).toLocaleTimeString()}</span>
           )}
+          <button type="button" onClick={summariseAnomalies} disabled={summarising} data-testid="monitoring-summarise"
+            className={`${anomalies?.generated_at ? '' : 'ml-auto '}rounded-md border border-violet-300 bg-white px-2.5 py-1 text-xs font-semibold text-violet-800 disabled:opacity-50 dark:border-violet-700 dark:bg-gray-900 dark:text-violet-200`}>
+            {summarising ? 'Summarising…' : 'Summarise with AI'}
+          </button>
         </div>
         <p className="text-sm text-gray-800 whitespace-pre-line dark:text-gray-200">{anomalies?.ai_summary || 'No analysis yet.'}</p>
         {anomalies?.anomalies?.length > 0 && (
@@ -628,6 +648,7 @@ export default function MonitoringPage() {
         onClose={() => setSelectedError(null)}
       />
     </div>
+    </RailFrame>
   );
 }
 
