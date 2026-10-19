@@ -285,6 +285,7 @@ export function LineTable({ lines, showCall, receipt, setReceipt, onOpen, onSave
       followUp?.lineId === line.id && followUp.mode === 'draft' && <tr key={`${line.id}-draft`} className="if2-receipt-row"><td colSpan={showCall ? 8 : 7}>
         <ZoneDraft
           surface="funds/calls"
+          railOption="draft:lp-reminder"
           scopeKey={String(line.id)}
           label="Proposal · a reminder to this LP"
           accept="Accept draft"
