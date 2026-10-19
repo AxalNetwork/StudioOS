@@ -4,21 +4,6 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
-## Chat channels can be switched on in stages (D754, #1892)
-
-- `WHATSAPP_CHANNEL` and `TELEGRAM_CHANNEL` independently take `off`,
-  `canary` (the default, Super Admins only) or `on`. Closed channels refuse
-  connect/link, test and replies, acknowledge authenticated webhooks without
-  storing messages, and give back voice jobs before downloading.
-- Axal’s own WhatsApp number/WABA cannot be claimed through Embedded Signup
-  or unsubscribed by a member’s disconnect.
-- Waiting WhatsApp voice notes expose `voice_fetch_by` (sent + 7 days).
-  A late non-retryable media-id lookup refusal becomes `expired` and is
-  never queued again. The clock alone never refuses a download.
-- WhatsApp Calling eligibility adds inbound/outbound reasons; the region
-  restriction is outbound only. Both remain unavailable.
-- Embedded Signup gets `graph_version` from the Worker’s existing constant.
-
 ## One text per document: every sender reads its library row (D758, #1863, PR 1)
 
 - `services/legalDocTypes.ts` gains `LIBRARY_SLUG_FOR` / `librarySlugFor`
