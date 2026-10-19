@@ -317,7 +317,7 @@ export async function summariseSession(env: Env, session: SessionRow, userId: nu
   };
   await env.DB.prepare(
     `UPDATE interview_sessions SET summary = ?, summary_model = ?, summarised_at = datetime('now'), summary_citations_json = ?,
-            digest_json = ?, digest_kept_at = NULL, digest_kept_by = NULL, updated_at = datetime('now') WHERE id = ?`,
+            digest_json = ?, digest_kept_at = NULL, digest_kept_by = NULL, updated_at = datetime('now') WHERE id = ? AND consent_status <> 'declined'`,
   ).bind(out.sentences.map((s) => s.text).join(' '), usedModel, JSON.stringify(out.sentences), JSON.stringify(digest), session.id).run();
   return { ok: true, sentences: out.sentences, model: usedModel, digest: out.digest };
 }

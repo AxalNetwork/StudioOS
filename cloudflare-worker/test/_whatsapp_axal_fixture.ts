@@ -10,6 +10,7 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
 import { tableFromBaseline } from './_baseline.mjs';
+import { applyEngineSchema } from './_engine_schema.mjs';
 import channels from '../src/routes/channels.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 
@@ -19,6 +20,8 @@ export const refCode = (code: string) => createHash('sha256').update(code).diges
 
 export const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 export const ME = 2, OTHER = 3, GONE = 4;
+/** ME's founder record and venture: where a forwarded recording's draft opens (#1938). */
+export const FOUNDER = 70, PROJECT = 500;
 export const AXAL_PNID = '3000001';
 export const MEMBER_PNID = '1000001';
 export const SENDER = '447700900456';
@@ -56,7 +59,11 @@ export function world(opts: { axal?: Partial<typeof AXAL>; upTo492?: boolean } =
     -- D757 §2.11: OTHER is a second member who may hold a channel (an investor may not).
     UPDATE users SET role = 'founder' WHERE id = ${OTHER};
     CREATE TABLE founders (id INTEGER PRIMARY KEY, user_id INTEGER);
-    CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT, founder_id INTEGER, company_id INTEGER, deleted_at TEXT);
+    CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT, founder_id INTEGER, company_id INTEGER, deleted_at TEXT,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')));
+    INSERT INTO founders (id, user_id) VALUES (${FOUNDER}, ${ME});
+    UPDATE users SET founder_id = ${FOUNDER} WHERE id = ${ME};
+    INSERT INTO projects (id, name, founder_id) VALUES (${PROJECT}, 'Ledger tool', ${FOUNDER});
     CREATE TABLE discovery_interviews (
       id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, interviewee_name TEXT NOT NULL, interviewee_role TEXT,
       interview_date TEXT, notes TEXT, hypotheses_json TEXT, pains_json TEXT, icp_fit TEXT,
@@ -77,12 +84,27 @@ export function world(opts: { axal?: Partial<typeof AXAL>; upTo492?: boolean } =
   for (const t of ['waitlist_signups', 'metric_targets', 'competitor_analyses', 'competitor_candidates',
     'competitor_sources', 'competitor_signals']) db.exec(tableFromBaseline(BASELINE, t));
   for (const m of CHANNEL_MIGRATIONS) db.exec(mig(m));
-  if (opts.upTo492 !== false) db.exec(mig('492_whatsapp_sender_links.sql'));
+  if (opts.upTo492 !== false) {
+    db.exec(mig('492_whatsapp_sender_links.sql'));
+    db.exec(mig('497_whatsapp_capture_import.sql'));
+  }
+  // #1938: the import opens a recorder session, which reaches the pipeline and the engine.
+  applyEngineSchema(db);
+  /** What the routes queued (JOB_QUEUE.send), and the R2 objects stored (FILES). */
+  const queued: any[] = [];
+  const files = new Map<string, { bytes: Uint8Array; opts: any }>();
   const env: any = {
     DB, WHATSAPP_CHANNEL: 'on', ENVIRONMENT: 'development', JWT_SECRET, KEK_PII: 'k'.repeat(48), ...SECRETS, ...AXAL, ...(opts.axal ?? {}),
     APP_URL: 'https://axal.vc', PUBLIC_BASE_URL: 'https://axal.vc',
+    USE_CF_QUEUE: 'true',
+    JOB_QUEUE: { async send(body: any, o?: any) { queued.push({ ...body, opts: o ?? null }); } },
+    FILES: {
+      async put(key: string, value: ArrayBuffer, o: any) { files.set(key, { bytes: new Uint8Array(value), opts: o }); },
+      async get(key: string) { const f = files.get(key); return f ? { arrayBuffer: async () => f.bytes.buffer.slice(0), httpMetadata: f.opts?.httpMetadata } : null; },
+      async delete(keys: string | string[]) { for (const k of Array.isArray(keys) ? keys : [keys]) files.delete(k); },
+    },
   };
-  return { env, db };
+  return { env, db, queued, files };
 }
 
 // ---------------------------------------------------------------------------
@@ -143,12 +165,36 @@ export const waText = (text: string, from = SENDER, o: { id?: string; pnid?: str
 
 export type Sent = { url: string; to: string; text: string; auth: string | null; body: any };
 
-/** Graph, as far as way B uses it: a send from Axal's number. Anything else fails the test. */
-export function mockGraph() {
+/** A file Graph serves for a media id (#1938): its bytes, and what the lookup declares. */
+export type MediaFixture = { bytes: Uint8Array; size?: number; status?: number; lookupStatus?: number };
+export type Fetched = { url: string; auth: string | null };
+
+/**
+ * Graph, as far as way B uses it: a send from Axal's number, and, for the ids
+ * a test hands it in `media`, the media lookup and its download from Meta's
+ * host. Anything else — a media id not handed in included — fails the test.
+ * `fetched` lists every lookup and download, in order.
+ */
+export function mockGraph(media: Record<string, MediaFixture> = {}) {
   const sent: Sent[] = [];
+  const fetched: Fetched[] = [];
   const original = globalThis.fetch;
   globalThis.fetch = (async (input: any, init: RequestInit = {}) => {
     const url = new URL(typeof input === 'string' ? input : input.url);
+    const auth = (init.headers as any)?.authorization ?? null;
+    const id = url.pathname.split('/').pop() ?? '';
+    if (url.hostname === 'graph.facebook.com' && (init.method ?? 'GET') === 'GET' && Object.hasOwn(media, id)) {
+      fetched.push({ url: url.toString(), auth });
+      const m = media[id];
+      if (m.lookupStatus && m.lookupStatus >= 400) return new Response(JSON.stringify({ error: { code: 100 } }), { status: m.lookupStatus });
+      return new Response(JSON.stringify({ url: `https://lookaside.fbsbx.com/whatsapp_business/attachments/?mid=${id}`, file_size: m.size ?? m.bytes.byteLength, mime_type: 'audio/ogg' }), { status: 200 });
+    }
+    if (url.hostname === 'lookaside.fbsbx.com') {
+      fetched.push({ url: url.toString(), auth });
+      const m = media[url.searchParams.get('mid') ?? ''];
+      if (!m) throw new Error(`unexpected download ${url.toString()}`);
+      return new Response(m.bytes, { status: m.status ?? 200 });
+    }
     if (url.hostname !== 'graph.facebook.com' || !url.pathname.endsWith(`/${AXAL_PNID}/messages`)) {
       throw new Error(`unexpected fetch ${url.origin}${url.pathname}`);
     }
@@ -156,7 +202,7 @@ export function mockGraph() {
     sent.push({ url: url.toString(), to: body.to, text: body.text?.body ?? body.interactive?.body?.text, auth: (init.headers as any)?.authorization ?? null, body });
     return new Response(JSON.stringify({ messages: [{ id: `wamid.OUT${sent.length}` }] }), { status: 200, headers: { 'content-type': 'application/json' } });
   }) as typeof fetch;
-  return { sent, restore: () => { globalThis.fetch = original; } };
+  return { sent, fetched, restore: () => { globalThis.fetch = original; } };
 }
 
 export const count = (db: any, sql: string, ...args: unknown[]) => Number(db.prepare(sql).get(...args)?.n ?? 0);

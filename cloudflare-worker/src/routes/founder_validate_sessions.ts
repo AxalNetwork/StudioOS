@@ -52,7 +52,7 @@ import { setInterviewStage } from '../services/validateWriters';
 import {
   afterChunkStored, finishSession, isStale, processingOf, recoverSession, summaryOf, transcribeChunk,
 } from '../services/interviewProcessing';
-import { consentRefusal, finalSegments, modelFrom, processingBusy, refusedBody, refusedStatus } from './founder_validate_structure';
+import { consentRefusal, digestConsentRefusal, finalSegments, modelFrom, processingBusy, refusedBody, refusedStatus } from './founder_validate_structure';
 import { digestSession, enqueueDigest, withdrawDigest } from '../services/validateEngine';
 import { activeSessionsOf } from '../services/sessionSweeper';
 import { interviewCapRefusal } from '../middleware/requireTier';
@@ -371,7 +371,8 @@ sessions.get('/sessions/:id', async (c) => {
   if (s instanceof Response) return s;
   const [segments, marks, chunks] = await Promise.all([
     c.env.DB.prepare(
-      `SELECT id, source, start_ms, end_ms, speaker_label, text, model FROM interview_transcript_segments
+      // D757 (#1927): `created_at` is a chat message's time, for "Heard in".
+      `SELECT id, source, start_ms, end_ms, speaker_label, text, model, created_at FROM interview_transcript_segments
         WHERE session_id = ? ORDER BY source, COALESCE(start_ms, 0), id`,
     ).bind(s.session.id).all(),
     c.env.DB.prepare('SELECT id, offset_ms, label, created_at FROM interview_session_marks WHERE session_id = ? ORDER BY offset_ms')
@@ -800,7 +801,7 @@ sessions.post('/sessions/:id/process', async (c) => {
 sessions.post('/sessions/:id/summarise', async (c) => {
   const s = await scopeSession(c);
   if (s instanceof Response) return s;
-  const blocked = await consentRefusal(c.env, s.session);
+  const blocked = await digestConsentRefusal(c.env, s.session);
   if (blocked) return blocked;
   const busy = processingBusy(s.session);
   if (busy) return busy;
@@ -815,7 +816,7 @@ sessions.post('/sessions/:id/summarise', async (c) => {
   if (out.status === 'skipped') return json({ error: 'no_final_transcript', detail: 'This session has no final transcript to summarise yet.' }, 409);
   if (out.status === 'refused') {
     if (out.reason === 'busy') return json({ error: 'digest_running', detail: out.note }, 409);
-    if (out.reason === 'consent_not_recorded') return (await consentRefusal(c.env, (await loadSession(c.env, s.session.id))!)) ?? json({ error: 'consent_not_recorded' }, 409);
+    if (out.reason === 'consent_not_recorded') return (await digestConsentRefusal(c.env, (await loadSession(c.env, s.session.id))!)) ?? json({ error: 'consent_not_recorded' }, 409);
     return json(refusedBody(out.refusal), refusedStatus(out.refusal));
   }
   if (out.status === 'done' && out.summary && !out.summary.ok && out.summary.reason === 'no_citation') {

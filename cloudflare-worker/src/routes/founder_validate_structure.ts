@@ -66,7 +66,7 @@ import { addInterviewPain, updateInterviewDetails } from '../services/interviewW
 import { INTERVIEW_FIELDS, isFindingKind } from '../services/interviewFindings';
 import { ASSIST_OFF_MESSAGE, budgetRefusalMessage } from '../services/aiRouter';
 import { MODULES } from '../services/cycleValidate';
-import { consentBlocks, loadSession, sessionHasAudio, type SessionRow } from '../services/interviewSessions';
+import { consentBlocks, loadSession, sessionHasAudio, sessionDigestConsentBlocks, type SessionRow } from '../services/interviewSessions';
 import { railFor } from '../util/railContext';
 import {
   PLACEMENT_KINDS,
@@ -169,17 +169,18 @@ export async function storePlacements(
   }
   const deduped = opts.placements.length - placements.length;
   if (!placements.length) return { stored: 0, deduped };
-  await env.DB.batch(placements.map((p) => env.DB.prepare(
+  const written = await env.DB.batch(placements.map((p) => env.DB.prepare(
     `INSERT INTO validate_proposals
        (project_id, kind, payload_json, model, task, created_by, surface, fill_class,
         citation_json, target_ref, session_id, cite_from, cite_to, run_id)
-     VALUES (?, ?, ?, ?, 'structure_interview', ?, 'validate/interview', 'restatement', ?, ?, ?, ?, ?, ?)`,
+     SELECT ?, ?, ?, ?, 'structure_interview', ?, 'validate/interview', 'restatement', ?, ?, ?, ?, ?, ?
+      WHERE NOT EXISTS (SELECT 1 FROM interview_sessions s WHERE s.id = ? AND s.consent_status = 'declined')`,
   ).bind(
     opts.projectId, p.kind, JSON.stringify(p.payload), opts.model, opts.userId,
     JSON.stringify({ kind: 'transcript', session_id: opts.sessionId, from: p.cite.from, to: p.cite.to, quote: p.quote }),
-    `interview:${opts.interviewId}`, opts.sessionId, p.cite.from, p.cite.to, opts.runId,
+    `interview:${opts.interviewId}`, opts.sessionId, p.cite.from, p.cite.to, opts.runId, opts.sessionId,
   )));
-  return { stored: placements.length, deduped };
+  return { stored: written.reduce((n, r) => n + Number(r.meta?.changes ?? 0), 0), deduped };
 }
 
 async function loadPlacement(env: Env, id: number): Promise<PlacementRow | null> {
@@ -591,10 +592,16 @@ export async function consentRefusal(env: Env, session: SessionRow) {
   return blocked ? json(blocked, 409) : null;
 }
 
+/** D757 #1930: explicit engine buttons have the same final-text gate as queued runs. */
+export async function digestConsentRefusal(env: Env, session: SessionRow) {
+  const blocked = await sessionDigestConsentBlocks(env, session);
+  return blocked ? json(blocked, 409) : null;
+}
+
 structure.post('/sessions/:id/structure', async (c) => {
   const s = await scopeSession(c);
   if (s instanceof Response) return s;
-  const blocked = await consentRefusal(c.env, s.session);
+  const blocked = await digestConsentRefusal(c.env, s.session);
   if (blocked) return blocked;
   // D685 §5.9 — never two writers: the pipeline places findings itself.
   const busy = processingBusy(s.session);
@@ -613,7 +620,7 @@ structure.post('/sessions/:id/structure', async (c) => {
   }
   if (out.status === 'refused') {
     if (out.reason === 'busy') return json({ error: 'digest_running', detail: out.note }, 409);
-    if (out.reason === 'consent_not_recorded') return (await consentRefusal(c.env, (await loadSession(c.env, s.session.id))!)) ?? json({ error: 'consent_not_recorded' }, 409);
+    if (out.reason === 'consent_not_recorded') return (await digestConsentRefusal(c.env, (await loadSession(c.env, s.session.id))!)) ?? json({ error: 'consent_not_recorded' }, 409);
     return json(refusedBody(out.refusal), refusedStatus(out.refusal));
   }
   const placed = out.status === 'done' && out.structure?.ok ? out.structure : null;
@@ -663,6 +670,8 @@ structure.get('/sessions/:id/placements', async (c) => {
     id: r.id,
     kind: r.kind,
     module: isPlacementKind(r.kind) ? PLACEMENT_KINDS[r.kind as PlacementKind].module : 'other',
+    // D757 (#1927): the Validate module it lands in, which the session page groups by.
+    slug: isPlacementKind(r.kind) ? placementSlug(r.kind as PlacementKind, parse(r.edited_payload_json) ?? parse(r.payload_json) ?? {}) : null,
     payload: parse(r.payload_json),
     evidence_context: r.kind === 'evidence' ? {
       hypothesis: context.hypotheses.find((h) => h.id === Number((parse(r.edited_payload_json) ?? parse(r.payload_json))?.hypothesis_id)) ?? null,
