@@ -2,7 +2,11 @@
  * Task #7 (2026-05-10) — Admin REST API for managing per-provider
  * OAuth client credentials. Mounted at `/api/admin/integration-keys`.
  *
- *  GET    /                  → list status for every managed provider (no secrets)
+ *  GET    /                  → list status for every managed provider (no secrets),
+ *                              each with its Worker secret names, the callback URL
+ *                              to register, the connector it serves and its setup
+ *                              guide (D751), plus the OAuth clients set only at
+ *                              deploy (`other_oauth`: Zoom, Google, Microsoft)
  *  PUT    /:provider         → upsert {client_id, client_secret}
  *                              → pushes BOTH as Cloudflare Worker secrets
  *                                via the CF API, deletes the encrypted DB row
@@ -49,6 +53,21 @@ import {
 import { testOauthCreds } from '../services/providerOauthTest';
 import { setSecret, deleteSecret, type CfSecretResult } from '../services/cloudflareSecrets';
 import { refusalBody } from '../util/refusal';
+import { getDescriptor } from '../integrations/registry';
+import { redirectUri as githubCallback } from '../integrations/providers/github';
+import { redirectUri as slackCallback } from '../integrations/providers/slack';
+import { redirectUri as hubspotCallback } from '../integrations/providers/hubspot';
+import { redirectUri as calendlyCallback } from '../integrations/providers/calendly';
+import { redirectUri as cartaCallback } from '../integrations/providers/carta';
+import { redirectUri as docusignCallback } from '../integrations/providers/docusign';
+import { redirectUri as stripeCallback } from '../integrations/providers/stripe';
+import { redirectUri as salesforceCallback } from '../integrations/providers/salesforce';
+import { redirectUri as zoomCallback, zoomConfigured, ZOOM_CLIENT_ENV_VARS } from '../services/channels/zoom';
+import { linkedinRedirectUri } from './linkedin';
+import {
+  googleRedirectUri, microsoftRedirectUri, googleOAuthAvailable, microsoftOAuthAvailable,
+  GOOGLE_CAL_ENV_VARS, GOOGLE_CAL_FALLBACK_ENV_VARS, MICROSOFT_CAL_ENV_VARS, MICROSOFT_CAL_FALLBACK_ENV_VARS,
+} from '../services/calendar';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -80,6 +99,95 @@ async function audit(
   });
 }
 
+// ───────────────────────────────────────────── D751: what to register, and where
+
+/**
+ * Each managed key's callback URL, read from the provider's own function so
+ * the console shows exactly what the provider sends. Exhaustive over
+ * `ManagedProviderKey`: a new managed provider fails `tsc` until it is listed.
+ * `null` for a key that is not an OAuth client.
+ */
+const CALLBACK_URL: Record<ManagedProviderKey, ((env: Env) => string) | null> = {
+  slack: slackCallback,
+  hubspot: hubspotCallback,
+  salesforce: salesforceCallback,
+  docusign: docusignCallback,
+  linkedin: linkedinRedirectUri,
+  calendly: calendlyCallback,
+  stripe: stripeCallback,
+  carta: cartaCallback,
+  github: githubCallback,
+  crunchbase: null,
+  affinity: null,
+  telegram: null,
+  gcip: null,
+};
+
+/** LinkedIn connects through its own route, so it has no registry row; the page draws it as a first-party card (`frontend/src/pages/account/connectorsModel.js`). */
+const FIRST_PARTY_CONNECTOR: Record<string, { display_name: string; status: string; tier: string }> = {
+  linkedin: { display_name: 'LinkedIn', status: 'live', tier: 'free' },
+};
+
+const REPO_BLOB = 'https://github.com/AxalNetwork/StudioOS/blob/main/';
+
+/**
+ * Setup steps that exist, by key, as repository paths (the repository is
+ * public). GitHub's points at PRODUCTION.md, which names its two variables,
+ * until #1885's runbook (`documentation/operations/GITHUB_CONNECTOR_APP.md`)
+ * lands; whichever of the two merges second points it at the runbook.
+ */
+export const SETUP_GUIDES: Readonly<Record<string, string>> = Object.freeze({
+  github: 'documentation/architecture/PRODUCTION.md',
+  zoom: 'documentation/architecture/PRODUCTION.md',
+});
+
+type ConnectorRef = { display_name: string; status: string; tier: string };
+
+/** The member-facing card a key's client serves: an OAuth registry row, or LinkedIn's first-party card. Only three facts, never the descriptor. */
+function connectorOf(key: string): ConnectorRef | null {
+  if (Object.hasOwn(FIRST_PARTY_CONNECTOR, key)) return { ...FIRST_PARTY_CONNECTOR[key] };
+  const d = getDescriptor(key);
+  if (!d || d.auth_type !== 'oauth2') return null;
+  return { display_name: d.display_name, status: d.status, tier: d.tier };
+}
+
+const guideHref = (key: string): string | null => (Object.hasOwn(SETUP_GUIDES, key) ? REPO_BLOB + SETUP_GUIDES[key] : null);
+const urlOrNull = (fn: ((env: Env) => string) | null, env: Env): string | null => (fn ? fn(env) || null : null);
+
+/** The four D751 fields on one managed row. Names, a public URL and three card facts: nothing secret. */
+function setupFields(env: Env, key: ManagedProviderKey) {
+  const names = PROVIDER_ENV_VARS[key];
+  return {
+    env_vars: [names.id, names.secret],
+    callback_url: urlOrNull(CALLBACK_URL[key], env),
+    connector: connectorOf(key),
+    guide_href: guideHref(key),
+  };
+}
+
+/**
+ * The OAuth clients read only from Worker secrets, so the console cannot set
+ * them: whether each is set up (measured from env, never unknown), the names
+ * to set, the callback to register, the card it serves and its guide. No
+ * client-id preview.
+ */
+function otherOauthClients(env: Env) {
+  const row = (key: string, configured: boolean, envVars: readonly string[], fallback: readonly string[] | null, callback: (e: Env) => string) => ({
+    key,
+    configured,
+    env_vars: [...envVars],
+    fallback_env_vars: fallback ? [...fallback] : null,
+    callback_url: callback(env) || null,
+    connector: connectorOf(key),
+    guide_href: guideHref(key),
+  });
+  return [
+    row('zoom', zoomConfigured(env), ZOOM_CLIENT_ENV_VARS, null, zoomCallback),
+    row('google_calendar', googleOAuthAvailable(env), GOOGLE_CAL_ENV_VARS, GOOGLE_CAL_FALLBACK_ENV_VARS, googleRedirectUri),
+    row('microsoft_365', microsoftOAuthAvailable(env), MICROSOFT_CAL_ENV_VARS, MICROSOFT_CAL_FALLBACK_ENV_VARS, microsoftRedirectUri),
+  ];
+}
+
 /** Map a CF helper failure into a structured 502 JSON body. */
 function cfErrorJson(c: any, res: CfSecretResult, fallback = 'cf_api_failed') {
   const code = res.code || fallback;
@@ -102,12 +210,15 @@ function cfErrorJson(c: any, res: CfSecretResult, fallback = 'cf_api_failed') {
 // D227 — each key carries `state` (env | db | unset | unreadable) and the
 // payload carries `db_readable`, so a table that did not answer reads as
 // "unknown" on the console rather than as "not configured". `providers` keeps
-// its name and every field it had.
+// its name and every field it had. D751 adds each row's setup fields and the
+// env-only clients, here and not in `listProviderKeyStatus`, so HQ's Platform
+// summary (D213) reads what it always did.
 r.get('/', async (c) => {
   await requireAdmin(c);
   const status = await listProviderKeyStatus(c.env);
   return c.json({
-    providers: status.items,
+    providers: status.items.map((item) => ({ ...item, ...setupFields(c.env, item.provider_key as ManagedProviderKey) })),
+    other_oauth: otherOauthClients(c.env),
     db_readable: status.db_readable,
     ...(status.db_readable ? {} : {
       unreadable_reason:
