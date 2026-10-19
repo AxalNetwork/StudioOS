@@ -4,26 +4,6 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
-## A guard that keeps members' own Mercury data off Eadwyn, MCP, cron and admin paths, and the live checks (D752, #1990)
-
-- `cloudflare-worker/test/mercury_member_privacy_d752.test.mjs` resolves every
-  relative import in the Worker. It fails the build if an Eadwyn file, an MCP
-  file, a cron path, an admin route or the deals code reaches
-  `services/mercuryPersonal.ts`, `services/capitalAttestations.ts` or
-  `services/mercurySpend.ts`.
-- The same test pins:
-  - the admin attestation route's two tables;
-  - migration 491's columns;
-  - the revoked DTO;
-  - the admin pages that draw an available balance;
-  - D710's money guard over D752's new files.
-- `documentation/operations/MERCURY_MEMBER_CHECKS.md`: four Mercury field
-  names for S02 or S03 to read off Axal's own account, and the owner's
-  walk-through with a test investor and founder.
-  `documentation/operations/README.md` now lists every runbook.
-- The proof-of-funds tests create only the deal tables #1887's shared fixture
-  does not.
-
 ## Admins read an investor's proof of funds, audited (D752, #1890)
 
 - `GET /api/admin/capital-attestations` (`routes/admin_capital_attestations.ts`):
@@ -56,24 +36,6 @@
 - `PersonalConnection` gains `legal_name`. Tests:
   `cloudflare-worker/test/capital_attestations_d752.test.ts`; the personal
   guard lists the three new files.
-## A founder's spending, burn, cash and runway from their own Mercury, and typed metrics can no longer claim Stripe or Mercury (D752, #1889)
-
-- `GET /api/revenue/projects/:projectId/mercury-spend?months=1..12`: the
-  project's own founder reads each month's operating money in, financing in,
-  money out and net burn from their own Mercury, with cash on hand (available
-  balances) and runway. Money from an Axal entity is financing and never
-  lowers burn. Built per request; `services/mercurySpend.ts` is pure.
-- `POST …/mercury-spend/snapshot { include_cash, confirm_visible: true }`
-  saves the last full month's burn, and cash only when asked, as one
-  `source = 'mercury'` `project_metrics` row a day, after the founder confirms
-  who reads saved figures.
-- `POST /api/progress/metrics/:projectId` refuses a `source` of `stripe` or
-  `mercury` (400 `source_reserved`), and a `mercury` row's date and figures
-  cannot be edited (409 `mercury_figure_locked`).
-- The founder holds a new use, `venture_spend`, with its card words in
-  `integrations/registry.ts` and `pages/account/mercuryModel.js`.
-  `parse.ts` keeps a transaction's category when Mercury reports one
-  (UNVERIFIED). No migration.
 
 ## Mercury for investors on HQ, and the card's words by role (D752, #1886)
 
@@ -193,22 +155,6 @@
   catalog rows, the seven notice types, the Subscription Booklet and the five
   outside keys, and asserts L0–L7, L8 item 2 and L10 on each. No body, `.md`
   file or migration changed. Thumbnails redraw once.
-## Raise receipts on a founder's own Mercury (D752 §6, #1887)
-
-- Migration 490 rebuilds `mercury_personal_matches` with two more target
-  kinds, `raise_prospect` and `deal_commitment`, keeping every row and both
-  partial unique indexes. Its trigger withdraws a raise receipt when the
-  prospect's amount or stage changes.
-- `GET/POST /api/mercury/personal/matches` take `target=raise|commitment` for
-  a founder (`raise_receipts`). Confirming an investor's wire marks the
-  prospect `wired`, or moves the commitment from `pending` to `confirmed`;
-  withdrawing undoes only the commitment.
-- A line is a receipt or revenue, never both: a receipt's line is refused
-  `raise_receipt` on the revenue import, a revenue line is never proposed, and
-  both checks sit inside each INSERT. The credits list carries
-  `fits_raise_target` as a hint.
-- Raise › Capital relationships reads "Committed · received <date>" from the
-  stored match only. An investor still reads just the commitment's status.
 
 ## The entity and money map on screen, with one numbering on paper (D717, #1855)
 
