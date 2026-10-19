@@ -193,6 +193,19 @@ export interface PaperPartInput {
   counterpartyName?: string | null;
   /** The footer's title on this part's pages. */
   footer: string;
+  /**
+   * D759 (#1858) — a signed booklet: the signature on the party with that
+   * `role`. The image prints only where it is given; a line signed in another
+   * stage's envelope prints its signed line and date with no image.
+   */
+  signed?: { counterparty?: PartSignature | null; axal?: PartSignature | null } | null;
+}
+
+/** D759 — one party's signature on a booklet part. */
+export interface PartSignature {
+  signedAt: string;
+  envelopeUuid: string;
+  imageDataUrl?: string | null;
 }
 
 export interface PaperPart {
@@ -415,7 +428,20 @@ export function paperModel(raw: PaperInput): PaperModel {
           id: `part-${pt.n}`,
           blocks: blocksOf,
           execution: base && base.parties.length
-            ? { recital: base.recital, parties: base.parties.map((p) => ({ ...p, signedLine: null, image: null, nested: !!p.through })) }
+            ? {
+                recital: base.recital,
+                parties: base.parties.map((p) => {
+                  // D759 — a signed booklet places each signature by the party's role.
+                  const sig = pt.signed?.[p.role] || null;
+                  if (!sig) return { ...p, signedLine: null, image: null, nested: !!p.through };
+                  return {
+                    ...withDate(p, sig.signedAt),
+                    signedLine: utcStamp(sig.signedAt) ? `Signed ${utcStamp(sig.signedAt)} · Envelope ${sig.envelopeUuid}` : null,
+                    image: safePngDataUrl(sig.imageDataUrl),
+                    nested: !!p.through,
+                  };
+                }),
+              }
             : null,
           footer: pt.footer,
         };

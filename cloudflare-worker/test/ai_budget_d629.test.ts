@@ -53,7 +53,9 @@ test('included daily/monthly allowance draws first, paid balance follows, settle
   await settleAiReservation(f.env,two.reservation,750000);
   const report=await loadAiBudget(f.env,2,now);
   assert.equal(report.day_spend_microusd,1000000);assert.equal(report.month_spend_microusd,1000000);assert.equal(report.balance_microusd,9750000);assert.equal(report.topup_reserved_microusd,0);
-  assert.deepEqual(f.db.prepare("SELECT kind,amount_microusd,actor FROM ai_topup_ledger WHERE kind='draw'").all().map((r:any)=>({...r})),[{kind:'draw',amount_microusd:250000,actor:'2'}]);
+  // D755: the spend is the 486 trigger's ai_credit_ledger row; no draw is written any more.
+  assert.equal(f.db.prepare("SELECT COUNT(*) AS n FROM ai_topup_ledger WHERE kind='draw'").get().n,0);
+  assert.deepEqual(f.db.prepare("SELECT kind,delta_microusd,actor FROM ai_credit_ledger WHERE kind='spend'").all().map((r:any)=>({...r})),[{kind:'spend',delta_microusd:-250000,actor:'2'}]);
   assert.equal((await loadAiBudget(f.env,3,now)).balance_microusd,0);
  }finally{f.db.close();}
 });

@@ -14,6 +14,7 @@
  *   venture_revenue   founder   the revenue import, at /api/revenue/projects/:id/mercury-credits
  *   practice_income   partner   target=invoice: their own engagement invoices
  *   partner_deals     partner   target=payout and target=settlement; HQ only
+ *   capital_attestation  investor  the proof of funds (D752; its routes come with #1888); HQ only
  *
  * Every route checks the caller's use, branch and support session first
  * (`personalPolicy`), and each value in a request is checked before anything
@@ -27,7 +28,7 @@ import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { branchOf } from '../util/branch';
 import {
-  PERSONAL_USES, TARGET_WORDS, USE_OF_TARGET, UUID_RE, WITHDRAW_REASON_MIN,
+  HQ_ONLY_USES, PERSONAL_USES, TARGET_WORDS, USE_OF_TARGET, UUID_RE, WITHDRAW_REASON_MIN,
   confirmMatch, logPersonalRead, matchDto, matchUse, ownTargets, personalConnection, personalPolicy,
   proposals, readFailure, usesFor, withdrawMatch,
   type MatchRow, type PersonalMatchTarget, type PersonalUse,
@@ -62,8 +63,8 @@ mercuryPersonal.get('/status', async (c) => {
     connection: row ? { uid: row.uid, status: row.status, account_name: row.external_account_name, read_only: readOnly } : null,
     uses: ALL_USES.map((key) => ({
       key,
-      available: held.includes(key) && (key !== 'partner_deals' || hq),
-      reason: !held.includes(key) ? 'purpose_not_allowed' : key === 'partner_deals' && !hq ? 'hq_only' : null,
+      available: held.includes(key) && (!HQ_ONLY_USES.includes(key) || hq),
+      reason: !held.includes(key) ? 'purpose_not_allowed' : HQ_ONLY_USES.includes(key) && !hq ? 'hq_only' : null,
     })),
   });
 });

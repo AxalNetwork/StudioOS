@@ -90,13 +90,15 @@ test('D640: held overage remains visible to its member, blocks new runs, and cha
     assert.deepEqual([(await a.json() as any).already_settled,(await b.json() as any).already_settled].sort(),[false,true]);
     assert.equal((await request(f,`/reviews/${uid}/refund`,1,'POST',{reason:'Refund after charge rejected'})).status,409);
     assert.equal(count(f.db,'activity_logs'),1);
-    assert.equal(count(f.db,'ai_topup_ledger'),1);
+    // D755: the spend is the 486 trigger's ai_credit_ledger row; no draw is written any more.
+    assert.equal(count(f.db,'ai_topup_ledger'),0);
+    assert.equal(f.db.prepare("SELECT COUNT(*) AS n FROM ai_credit_ledger WHERE kind='spend'").get().n,1);
     const audit=f.db.prepare('SELECT action,details,actor,user_id FROM activity_logs').get();
     assert.deepEqual([audit.action,audit.actor,audit.user_id],['ai_budget_review_charge','1',2]);
     assert.deepEqual(JSON.parse(audit.details),{reservation_uid:uid,member_id:2,held_microusd:800000,
       recorded_cost_microusd:900000,charged_microusd:800000,absorbed_microusd:100000,
       included_microusd:500000,topup_microusd:300000,reason:'The platform absorbs overage'});
-    assert.equal(f.db.prepare('SELECT amount_microusd FROM ai_topup_ledger').get().amount_microusd,300000);
+    assert.equal(f.db.prepare("SELECT delta_microusd FROM ai_credit_ledger WHERE kind='spend'").get().delta_microusd,-300000);
     assert.equal((await loadAiBudget(f.env,2,now)).day_spend_microusd,500000);
     assert.equal((await loadAiBudget(f.env,2,now)).balance_microusd,700000);
     assert.deepEqual((await loadAiBudget(f.env,2,now)).held_for_review,[]);
@@ -122,7 +124,7 @@ test('D640: refund releases both kinds of hold once, and invalid states never wr
     assert.equal((await request(f,`/reviews/${uid}/charge`,1,'POST',{reason:'Charge after refund rejected'})).status,409);
     assert.equal((await loadAiBudget(f.env,3,now)).balance_microusd,200000);
     assert.equal((await loadAiBudget(f.env,3,now)).day_spend_microusd,0);
-    assert.equal(count(f.db,'ai_topup_ledger'),0);
+    assert.equal(f.db.prepare("SELECT COUNT(*) AS n FROM ai_credit_ledger WHERE kind='spend'").get().n,0);
     assert.equal(count(f.db,'activity_logs'),1);
     const audit=f.db.prepare('SELECT action,actor,details FROM activity_logs').get();
     assert.equal(audit.action,'ai_budget_review_refund');assert.equal(audit.actor,'1');
@@ -137,7 +139,7 @@ test('D640: audit write failure rolls back the charge and allows retry',async()=
     f.db.exec("DROP TABLE activity_logs; CREATE TABLE activity_logs(id INTEGER PRIMARY KEY,action TEXT CHECK(action!='ai_budget_review_charge'),details TEXT,actor TEXT,user_id INTEGER)");
     assert.equal((await request(f,`/reviews/${uid}/charge`,1,'POST',{reason:'First charge must roll back'})).status,503);
     assert.equal(f.db.prepare('SELECT status FROM ai_budget_reservations WHERE uid=?').get(uid).status,'review');
-    assert.equal(count(f.db,'ai_topup_ledger'),0);
+    assert.equal(f.db.prepare("SELECT COUNT(*) AS n FROM ai_credit_ledger WHERE kind IN ('release','spend')").get().n,0);
     assert.equal((await loadAiBudget(f.env,2,now)).day_reserved_microusd,100000);
     f.db.exec('DROP TABLE activity_logs; CREATE TABLE activity_logs(id INTEGER PRIMARY KEY,action TEXT,details TEXT,actor TEXT,user_id INTEGER)');
     assert.equal((await request(f,`/reviews/${uid}/charge`,1,'POST',{reason:'Retry after audit repair'})).status,200);
