@@ -57,6 +57,7 @@ test('signingLine gives each state\'s sentence exactly; not_sent and unknown giv
   assert.equal(signingLine({ state: 'awaiting_gp' }), 'You signed Parts 3 to 8. The General Partner signs Part 9 to accept.');
   assert.equal(signingLine({ state: 'accepted', accepted_at: '2026-10-18 23:59:59' }), 'Accepted by the General Partner on 2026-10-18. A copy is in your documents.');
   assert.equal(signingLine({ state: 'accepted', accepted_at: '2026-10-18T09:05:41Z' }), 'Accepted by the General Partner on 2026-10-18. A copy is in your documents.');
+  assert.equal(signingLine({ state: 'accepted', accepted_at: '2026-10-19T01:30:00+02:00' }), 'Accepted by the General Partner on 2026-10-18. A copy is in your documents.', 'the day in UTC');
   assert.equal(signingLine({ state: 'void' }), 'This signature request was voided. Ask Axal VC to withdraw the booklet so you can open a new one.');
   assert.equal(signingLine({ state: 'constructor' }), null);
   assert.equal(signingLine(null), null);
