@@ -66,6 +66,7 @@ import { refuseReason } from '../services/fills/types';
 import { run as aiRun, audioMinutesFromBytes } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { currentDecision } from '../services/verdict';
+import { pageFromPath, railFor, refuseAssistOff } from '../util/railContext';
 
 const founderValidate = new Hono<{ Bindings: Env }>();
 
@@ -650,12 +651,15 @@ founderValidate.post('/propose/:projectId', async (c) => {
     userId: s.user.id,
     model,
     surface: AI_SURFACE.validate,
+    // D765: the fill's page (its surface's workspace) and the fill as the option.
+    rail: railFor(c, { page: pageFromPath(spec.surface, 'validate'), option: `fill:${kind}` }, `project:${s.project.id}`),
     systemPrompt: spec.prompt,
     messages: [{ role: 'user', content: gathered.facts }],
     maxTokens: 500,
     temperature: 0.3,
   });
 
+  if (r.refusal === 'assist_off') return refuseAssistOff(c);
   // `run` never throws — a spent budget and an unreachable model both arrive
   // as refusals with their reason intact, and both must keep it.
   if (!r.ok) {
@@ -1072,6 +1076,8 @@ founderValidate.post('/interviews/:id/transcribe', async (c) => {
     task: 'transcribe',
     userId: s.user.id,
     surface: AI_SURFACE.validateInterviews,
+    // D765: saving, which the switch never refuses; recorded with its page and interview.
+    rail: railFor(c, { page: 'validate', option: 'transcribe:interview' }, `interview:${id}`),
     audio: bytes,
     // From the BYTES, not from the duration the client reported.
     audioMinutes: audioMinutesFromBytes(Number(row.recording_size_bytes || bytes.byteLength)),
