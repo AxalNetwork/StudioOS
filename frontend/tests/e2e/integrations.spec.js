@@ -128,7 +128,10 @@ test.describe('Connectors: the hub, the filter menu and a connector\'s page (D75
     const view = page.getByTestId('connector-page');
     await expect(view).toHaveAttribute('data-key', 'github');
     await expect(page.getByTestId('connector-page-band')).toContainText('GitHub');
-    await expect(page.getByTestId('connector-page-connect')).toBeVisible();
+    // F2 (#1908): the band carries the one action. "Connect and manage" is drawn
+    // only for an open key form, a connection or the interim panel, and this
+    // GitHub row has none of them.
+    await expect(page.getByTestId('connector-page-band').getByTestId('connector-page-action')).toBeVisible();
     await expect(page.getByTestId('connector-page-about')).toContainText('What this connector does');
     await page.getByTestId('connector-page-back').click();
     await expect(page).toHaveURL(/\/account\/connectors\?tab=discover$/);
