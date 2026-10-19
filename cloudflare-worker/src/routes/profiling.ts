@@ -10,6 +10,7 @@ import { run as aiRouterRun } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
 // Task #9 — 'exploring' holding state (side table + role-CHECK relax).
 import { ensureExploringSchema, upsertSuggestedRole } from '../services/exploringSchema';
+import { railFor } from '../util/railContext';
 
 const profiling = new Hono<{ Bindings: Env }>();
 
@@ -201,6 +202,8 @@ profiling.post('/chat', async (c) => {
     task: CHAT_TASK,
     userId: authedUser.id,
     surface: AI_SURFACE.onboardingChat,
+    // D765: off here, the turn degrades as any refusal does and "Save & continue" still works.
+    rail: railFor(c, { page: 'onboarding', option: 'ask:onboarding' }),
     systemPrompt: SYSTEM_PROMPT,
     messages: chatMessages,
     maxTokens: 256,
@@ -295,6 +298,7 @@ ${transcript}`;
       task: 'tool_call',
       userId: user.id,
       surface: AI_SURFACE.onboardingChat,
+      rail: railFor(c, { page: 'onboarding', option: 'extract:onboarding' }),
       systemPrompt: 'You are a precise data-extraction engine. Output only valid JSON.',
       messages: [{ role: 'user', content: extractionPrompt }],
       maxTokens: 600,
