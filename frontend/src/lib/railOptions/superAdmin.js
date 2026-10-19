@@ -38,7 +38,7 @@ export const SUPER_ADMIN_BOARDS = [
   { id: 'H1', section: 'Licences', module: null, route: '/admin/licences', files: ['pages/admin/AdminLicences.jsx'], rail: 'pages/admin/AdminLicences.jsx' },
   { id: 'H2', section: 'Funds', module: null, route: '/admin/funds', files: ['pages/hq/HqFundsPage.jsx'], rail: 'pages/hq/HqFundsPage.jsx' },
   { id: 'H3', section: 'Contracts', module: null, route: '/admin/contracts', files: ['pages/admin/contracts/ContractsDesk.jsx'], rail: 'pages/admin/contracts/ContractsDesk.jsx' },
-  { id: 'H4', section: 'Contracts', module: 'Agreements', route: '/admin/contracts', files: ['pages/admin/contracts/AgreementList.jsx', 'pages/admin/contracts/AgreementDetail.jsx'], rail: 'pages/admin/contracts/ContractsDesk.jsx' },
+  { id: 'H4', section: 'Contracts', module: 'Agreements', route: '/admin/contracts?tab=agreements', files: ['pages/admin/contracts/AgreementList.jsx', 'pages/admin/contracts/AgreementDetail.jsx'], rail: 'pages/admin/contracts/ContractsDesk.jsx' },
   { id: 'H5', section: 'Contracts', module: 'NDAs', route: '/admin/contracts?tab=ndas', files: ['pages/admin/contracts/RelatedLists.jsx'], rail: 'pages/admin/contracts/ContractsDesk.jsx' },
   { id: 'H6', section: 'Contracts', module: 'Partner deals', route: '/admin/contracts?tab=partner-deals', files: ['pages/admin/contracts/RelatedLists.jsx'], rail: 'pages/admin/contracts/ContractsDesk.jsx' },
   { id: 'H7', section: 'Contracts', module: 'Templates', route: '/admin/contracts?tab=templates', files: ['pages/admin/AdminTemplates.jsx', 'pages/admin/contracts/TemplateEditor.jsx', 'pages/admin/contracts/TemplateCatalog.jsx'], rail: 'pages/admin/contracts/ContractsDesk.jsx' },

@@ -95,6 +95,8 @@ function fakeGithub(repo: Repo) {
     }
     // #2114: Solution design reads each repository first; this one is not served, so it reads nothing more.
     if (url.pathname === '/repos/acme/app') return j({ message: 'Not Found' }, 404);
+    // #2115: contributors are outside this fixture's MVP scope.
+    if (url.pathname === '/repos/acme/app/contributors') return j({ message: 'Not Found' }, 404);
     throw new Error(`unexpected GET ${url.pathname}`);
   }) as any;
   return { calls, restore: () => { globalThis.fetch = real; } };
