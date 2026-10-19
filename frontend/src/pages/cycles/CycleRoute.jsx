@@ -35,6 +35,8 @@ import PhoneModulePage, { CycleBar, PHONE_GUTTER } from './PhoneModulePage';
 import DurabilityChecklist from './DurabilityChecklist';
 import ToolsHistory from './ToolsHistory';
 import SolutionDesignFromCode from './SolutionDesignFromCode';
+import FoundingTeamFromCode from './FoundingTeamFromCode';
+import CompanyFromCode from './CompanyFromCode';
 import RoadmapFromGithub from './RoadmapFromGithub';
 import MvpFromGithub from './MvpFromGithub';
 import UpdatesHistory from './UpdatesHistory';
@@ -292,6 +294,9 @@ const CYCLE_DEFS = {
       // D782 (#2111): Product roadmap's milestones and releases from GitHub, anchored at #from-github.
       'product-roadmap': (data) => <RoadmapFromGithub github={data?.parts?.github} />,
       'operating-systems': (data) => <ToolsHistory tools={data?.parts?.tools} />,
+      // D782 (#2115): who builds (the founder matches each login) and where the code sits, anchored at #from-github.
+      'founding-team': (data, ctx) => <FoundingTeamFromCode part={data?.parts?.github} projectId={ctx.projectId} reload={ctx.reload} />,
+      'company-creation': (data, ctx) => <CompanyFromCode part={data?.parts?.github} projectId={ctx.projectId} reload={ctx.reload} />,
     }),
     tools: toFnMap({
       'product-roadmap': (q) => ({ label: 'Open the roadmap: Now, Next and Later', href: `/build/roadmap${q}` }),

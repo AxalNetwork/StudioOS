@@ -87,6 +87,8 @@ function fakeGithub(repo: Repo) {
     calls.push(`${url.pathname}?${url.searchParams.get('state') ?? ''}`);
     const m = url.pathname.match(/^\/repos\/acme\/app\/(issues|pulls|releases|milestones)$/);
     // #2114: Solution design reads each repository first; this one is not served, so it reads nothing more.
+    // #2115: Founding team reads who commits; this one is not served either.
+    if (!m && url.pathname === '/repos/acme/app/contributors') return new Response(JSON.stringify({ message: 'Not Found' }), { status: 404, headers: { 'content-type': 'application/json' } });
     if (!m && url.pathname === '/repos/acme/app') return new Response(JSON.stringify({ message: 'Not Found' }), { status: 404, headers: { 'content-type': 'application/json' } });
     // #2112: an open pull request's reviews; none here.
     if (!m && /^\/repos\/acme\/app\/pulls\/\d+\/reviews$/.test(url.pathname)) return new Response('[]', { status: 200, headers: { 'content-type': 'application/json' } });

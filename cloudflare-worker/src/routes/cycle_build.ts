@@ -6,8 +6,10 @@ import { CONNECTOR_METADATA, getDescriptor } from '../integrations/registry';
 import { MODULE_LABELS, fedCounts } from '../integrations/fed';
 import { syncArrivals, syncArrivalsText, syncErrorWords } from '../integrations/githubFeeds';
 import { acceptDesignProposal, dismissDesignProposal, solutionDesignFromCode } from '../integrations/providers/github/solutionDesign';
+import { foundingTeamFromCode, mapLogin, unmapLogin } from '../integrations/providers/github/team';
+import { acceptCompanyProposal, companyFromCode, dismissCompanyProposal } from '../integrations/providers/github/company';
 import { validateConnectorSettings } from '../integrations/connectorRules';
-import { canReadBoard, canWrite } from './_founder_validate_helpers';
+import { canReadBoard, canWrite, ownsVenture } from './_founder_validate_helpers';
 import type { Card } from '../services/cycleCards';
 import { buildPhone } from '../services/cycleFocus';
 import { addHolder, updateHolder, HolderError } from '../services/capTableWrites';
@@ -423,7 +425,7 @@ async function optionPool(env: Env, p: Project): Promise<number | null> {
   return pool == null || pool === '' || !Number.isFinite(Number(pool)) ? null : Number(pool);
 }
 
-async function founding(env: Env, p: Project): Promise<ModuleRead> {
+async function founding(env: Env, p: Project, viewer: Viewer): Promise<ModuleRead> {
   // Vesting belongs to a holder, but its own row is user-keyed. Both keys
   // must agree; a founder's other company's schedule must never be joined.
   const holders = rows(await env.DB.prepare(
@@ -459,10 +461,32 @@ async function founding(env: Env, p: Project): Promise<ModuleRead> {
     rows: holderRows,
     list: { filters: [{ key: 'role', label: 'Role', options: optionsOf(holderRows, 'role') }], sort: { key: '-equity', label: 'Equity' } },
     facts: { cofounder_decision: p.cofounder_decision_meta ? JSON.parse(p.cofounder_decision_meta) : null, option_pool_pct: await optionPool(env, p),
-      agreement_reason: 'The latest document status for a founder is recorded; individual signing status is not.' } };
+      agreement_reason: 'The latest document status for a founder is recorded; individual signing status is not.' },
+    parts: { github: await fromGithub('founding_team', async () => foundingTeamFromCode(env, p.id, await projectMember(env, p, viewer),
+      founderRows.map(h => ({ id: Number(h.id), name: h.name ?? null })))) } };
 }
 
-async function company(env: Env, p: Project): Promise<ModuleRead> {
+/**
+ * D782 (#2115): who may read a contributor's login, its commit count, or an
+ * owner's login: the venture's own founders and the company's members. An
+ * admin or a partner reads the board, but not these: they are personal data.
+ */
+async function projectMember(env: Env, p: Project, viewer: Viewer): Promise<boolean> {
+  if (ownsVenture(p, viewer as any)) return true;
+  return p.company_id != null && !!await env.DB.prepare('SELECT 1 FROM user_company_links WHERE user_id = ? AND company_id = ?')
+    .bind(viewer.id, p.company_id).first();
+}
+
+/** D782 (#2115): a module's part from GitHub. Its own failure leaves the module readable, and never names a login. */
+async function fromGithub(module: 'founding_team' | 'company_creation', read: () => Promise<Record<string, unknown>>) {
+  try { return { state: 'ok', ...(await read()) }; }
+  catch (error) {
+    console.error('[cycle_build] github %s read failed', module, (error as Error)?.message);
+    return { state: 'unreadable', reason: 'What GitHub brought could not be read.' };
+  }
+}
+
+async function company(env: Env, p: Project, viewer: Viewer): Promise<ModuleRead> {
   const steps = rows(await env.DB.prepare(
     'SELECT id, title, due_date, state, proof_file_key, kind, jurisdiction, for_holder_id FROM formation_steps WHERE project_id = ? ORDER BY sort_order, id',
   ).bind(p.id).all<any>());
@@ -505,7 +529,8 @@ async function company(env: Env, p: Project): Promise<ModuleRead> {
     list: { filters: [{ key: 'state', label: 'State', options: options(Object.entries(FILING_LABEL)) },
       { key: 'due_window', label: 'Due', options: options([['overdue', 'Overdue'], ['next_30', 'Next 30 days'], ['later', 'Later'], ['none', 'No date']]) }],
     sort: { key: 'due', label: 'Due' }, orders: { state: ['overdue', 'due_soon', 'upcoming', 'filed'] } },
-    facts: { ip: p.spinout_ip_meta ? JSON.parse(p.spinout_ip_meta) : null, incorporation: p.incorporation_meta ? JSON.parse(p.incorporation_meta) : null } };
+    facts: { ip: p.spinout_ip_meta ? JSON.parse(p.spinout_ip_meta) : null, incorporation: p.incorporation_meta ? JSON.parse(p.incorporation_meta) : null },
+    parts: { github: await fromGithub('company_creation', async () => companyFromCode(env, p.id, await projectMember(env, p, viewer))) } };
 }
 
 const SYSTEM_KINDS = ['bank', 'accounting', 'payroll', 'crm', 'workspace'] as const;
@@ -958,6 +983,56 @@ app.post('/solution-design/proposals/:id/dismiss', async c => {
   const out = await dismissDesignProposal(c.env, ctx.project.id, id, ctx.user.id, [logCycleWriteStatement(c.env, {
     projectId: ctx.project.id, userId: ctx.user.id, cycle: 'build', module: 'solution-design', entityId: null,
     action: 'build_design_proposal_dismissed', summary: 'Architecture proposal from GitHub dismissed' })]);
+  if (out !== 'ok') return c.json({ detail: DECIDED[out][1] }, DECIDED[out][0]);
+  return c.json({ ok: true });
+});
+
+// D782 (#2115): the founder maps a GitHub login to a founder, once; it is never guessed.
+// The activity line never names the login: it is personal data.
+const LOGIN_OUTCOME = {
+  unknown_login: [404, 'That login has not arrived from GitHub for this venture.'],
+  unknown_founder: [404, 'That founder is not on this venture’s cap table.'],
+  not_mapped: [404, 'That login is not matched to a founder.'],
+} as const;
+
+app.post('/founding-team/github-logins', async c => {
+  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  const body = await jsonBody(c);
+  const holderId = positiveId(body?.holder_id);
+  if (!holderId || typeof body?.login !== 'string') return c.json({ detail: 'login and holder_id required' }, 400);
+  const out = await mapLogin(c.env, ctx.project.id, body.login, holderId, ctx.user.id, [logCycleWriteStatement(c.env, {
+    projectId: ctx.project.id, userId: ctx.user.id, cycle: 'build', module: 'founding-team', entityId: `h-${holderId}`,
+    action: 'build_github_login_matched', summary: 'A GitHub login matched to a founder' })]);
+  if (out !== 'ok') return c.json({ detail: LOGIN_OUTCOME[out][1] }, LOGIN_OUTCOME[out][0]);
+  return c.json({ ok: true });
+});
+
+app.delete('/founding-team/github-logins/:login', async c => {
+  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  const out = await unmapLogin(c.env, ctx.project.id, c.req.param('login'), [logCycleWriteStatement(c.env, {
+    projectId: ctx.project.id, userId: ctx.user.id, cycle: 'build', module: 'founding-team', entityId: null,
+    action: 'build_github_login_unmatched', summary: 'A GitHub login unmatched from its founder' })]);
+  if (out !== 'ok') return c.json({ detail: LOGIN_OUTCOME[out][1] }, LOGIN_OUTCOME[out][0]);
+  return c.json({ ok: true });
+});
+
+// D782 (#2115): the founder's decision on the IP step GitHub proposed. Nothing is written without Accept.
+app.post('/company-creation/proposals/:id/accept', async c => {
+  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  const id = proposalId(c); if (id == null) return c.json({ detail: 'Proposal not found' }, 404);
+  const out = await acceptCompanyProposal(c.env, ctx.project.id, id, ctx.user.id, [logCycleWriteStatement(c.env, {
+    projectId: ctx.project.id, userId: ctx.user.id, cycle: 'build', module: 'company-creation', entityId: null,
+    action: 'build_ip_step_accepted', summary: 'Filing added from GitHub: move the code into the company’s organisation' })]);
+  if (out !== 'ok') return c.json({ detail: DECIDED[out][1] }, DECIDED[out][0]);
+  return c.json({ ok: true });
+});
+
+app.post('/company-creation/proposals/:id/dismiss', async c => {
+  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  const id = proposalId(c); if (id == null) return c.json({ detail: 'Proposal not found' }, 404);
+  const out = await dismissCompanyProposal(c.env, ctx.project.id, id, ctx.user.id, [logCycleWriteStatement(c.env, {
+    projectId: ctx.project.id, userId: ctx.user.id, cycle: 'build', module: 'company-creation', entityId: null,
+    action: 'build_ip_step_dismissed', summary: 'Proposed filing from GitHub dismissed' })]);
   if (out !== 'ok') return c.json({ detail: DECIDED[out][1] }, DECIDED[out][0]);
   return c.json({ ok: true });
 });
