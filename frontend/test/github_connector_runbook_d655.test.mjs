@@ -60,7 +60,10 @@ test('the callback is the one the Worker sends, in the runbook and in PRODUCTION
   assert.equal(tomlVar('vars', 'OAUTH_CALLBACK_BASE_URL'), prod, 'both blocks pin the same callback base');
   const key = GITHUB.match(/const PROVIDER_KEY = '([^']+)'/)?.[1];
   assert.equal(key, 'github');
-  assert.match(GITHUB, /\/api\/integrations\/oauth\/\$\{PROVIDER_KEY\}\/callback/);
+  // github.ts builds its redirect URI with the shared helper (D751), which
+  // appends the path to callbackBase.
+  assert.match(GITHUB, /function redirectUri\(env: Env\): string \{\s*return oauthCallbackUrl\(env, PROVIDER_KEY\);/);
+  assert.ok(raw('cloudflare-worker/src/util/url.ts').includes('return `${callbackBase(env)}/api/integrations/oauth/${key}/callback`;'));
   const callback = `${prod}/api/integrations/oauth/${key}/callback`;
   assert.ok(RUNBOOK.includes(`exactly \`${callback}\``), `the runbook registers ${callback}`);
   assert.ok(PRODUCTION.includes(`Callback \`${callback}\``), `PRODUCTION.md registers ${callback}`);
@@ -101,6 +104,12 @@ test('PRODUCTION.md links the runbook from the variables and from Provider setup
   assert.ok(links >= 2, `PRODUCTION.md links the runbook twice, found ${links}`);
   const setup = PRODUCTION.slice(PRODUCTION.indexOf('**Provider setup, owner-run, once each.**'));
   assert.match(setup.split('\n').find((l) => l.includes('**GitHub App.**')) ?? '', /GITHUB_CONNECTOR_APP\.md/);
+});
+
+test('Integration keys links GitHub\'s setup guide to this runbook', () => {
+  // #1882 shipped the console's link to PRODUCTION.md until this runbook landed.
+  const keys = raw('cloudflare-worker/src/routes/admin_integration_keys.ts');
+  assert.ok(keys.includes("github: 'documentation/operations/GITHUB_CONNECTOR_APP.md',"));
 });
 
 test('the docs index links both GitHub runbooks', () => {
