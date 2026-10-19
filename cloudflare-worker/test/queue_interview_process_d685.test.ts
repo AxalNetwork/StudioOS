@@ -31,6 +31,7 @@ import { AI_JOB_TYPES as CONSUMER_AI_JOB_TYPES, queueConsumer } from '../src/que
 import { Jobs } from '../src/models/jobs.ts';
 import { PROCESS_JOB } from '../src/services/interviewProcessing.ts';
 
+import { withGuard } from './_guard_stub.mjs';
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const mig = (name: string) => readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8');
 const FOUNDER = 2;
@@ -73,12 +74,12 @@ function world() {
   const audio = new Uint8Array(64).fill(7);
   const FILES = { async get(k: string) { return k === key ? { arrayBuffer: async () => audio.buffer.slice(0) } : null; } };
   const aiCalls: string[] = [];
-  const AI = {
+  const AI = withGuard({
     async run(model: string) {
       aiCalls.push(model);
       return { text: SAID, transcription_info: { language: 'en' }, segments: [{ start: 0, end: 3, text: SAID }] };
     },
-  };
+  });
   const env: any = { DB, ENVIRONMENT: 'development', FILES, AI };
   const payload = { session_id: sid, user_id: FOUNDER };
   return { env, db, sid, payload, aiCalls };

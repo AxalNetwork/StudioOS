@@ -76,6 +76,7 @@ export const NOTES = {
   noCitation: 'The summary could not be tied to the transcript, so none is stored.',
   modelDropped: 'Your saved model for this is no longer offered, so the default ran.',
   tooLarge: 'This conversation is longer than Axal can summarise in one run yet, so nothing was run and nothing was charged.',
+  tooLargeToStructure: 'The summary is ready. This conversation is longer than Axal can propose findings from in one run yet, so none were proposed and nothing more was charged.',
   budgetTail: ' The transcript is kept; summarise it when the allowance allows.',
   withdrawn: 'The interviewee withdrew consent, so the summary and its suggestions were removed. Decisions you already made are kept, without the quote.',
   passB: 'Axal suggested what it heard about the problem, the person and the market, but not yet about demand and evidence:',
@@ -127,9 +128,11 @@ async function writeOutcome(env: Env, sessionId: number, fields: {
     `UPDATE interview_sessions
         SET digest_status = ?, digest_note = ?, digest_trigger = ?,
             digest_hash = COALESCE(?, digest_hash), digest_run_id = COALESCE(?, digest_run_id),
+            digest_json = CASE WHEN ? IS NOT NULL AND json_valid(digest_json) THEN json_set(digest_json, '$.run_id', ?) ELSE digest_json END,
             digested_at = datetime('now')
       WHERE id = ?`,
-  ).bind(fields.status, fields.note, fields.trigger, fields.hash ?? null, fields.runId ?? null, sessionId).run();
+  ).bind(fields.status, fields.note, fields.trigger, fields.hash ?? null, fields.runId ?? null,
+    fields.runId ?? null, fields.runId ?? null, sessionId).run();
 }
 
 /**
@@ -232,7 +235,8 @@ export async function digestSession(env: Env, opts: {
   const runId = structure?.ok ? structure.runId : undefined;
 
   if (refusal !== undefined) {
-    const note = refusalNote(refusal);
+    // The digest (#1924) summarises in parts; a transcript too long only for the structure pass has its summary.
+    const note = summary?.ok && refusal && TOO_LARGE.has(refusal) ? NOTES.tooLargeToStructure : refusalNote(refusal);
     await writeOutcome(env, session.id, { status: 'refused', note, trigger: opts.trigger, runId });
     console.log('[validateEngine] refused', session.id, opts.trigger, refusal ?? 'unavailable');
     return {

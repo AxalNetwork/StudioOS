@@ -9,6 +9,7 @@ import { SignJWT } from 'jose';
 import { Hono } from 'hono';
 import research from '../src/routes/research.ts';
 
+import { guardSafe } from './_guard_stub.mjs';
 const app = new Hono().route('/api/research', research);
 app.onError((error, c) => c.json({ detail: error.message }, 500));
 const SECRET = 'unit-research-secret-01234567890123456789';
@@ -124,11 +125,12 @@ test('D549: every collection/member route refuses another owner and invalid writ
 
 test('D549: Ask stores the owned citation UID, including when its model is unavailable', async () => {
   const f=fixture();
-  f.env.AI={run:async (model: string)=>model.includes('bge') ? {data:[Array(768).fill(0.01)]} : {response:'The interviews show a recurring need.'}};
+  // D763: the guard answers free, so the outage below is the model's alone.
+  f.env.AI={run:guardSafe(async (model: string)=>model.includes('bge') ? {data:[Array(768).fill(0.01)]} : {response:'The interviews show a recurring need.'})};
   f.env.VECTORIZE={query:async()=>({matches:[{id:'research_doc:1:0',score:0.9,metadata:{type:'research_doc',entity_id:1,owner_user_id:701,title:'Interview',snippet:'Recurring need',chunk:0}},{id:'research_doc:2:0',score:0.9,metadata:{type:'research_doc',entity_id:2,owner_user_id:702,title:'Private',snippet:'Private'}},{id:'research_doc:2:1',score:0.9,metadata:{type:'research_doc',entity_id:2,owner_user_id:701,title:'Stale vector label',snippet:'Synthetic stale reference'}}]})};
   const answered=await call(f,'POST','/ask',{question:'What need?'});
   assert.deepEqual([answered.status,answered.body.reason,answered.body.citations.map((citation: any)=>citation.document_uid)], [200,'answered',['own-doc',null]]);
-  f.env.AI.run=async (model: string)=>{if(model.includes('bge')) return {data:[Array(768).fill(0.01)]};throw Error('synthetic model outage');};
+  f.env.AI.run=guardSafe(async (model: string)=>{if(model.includes('bge')) return {data:[Array(768).fill(0.01)]};throw Error('synthetic model outage');});
   const unavailable=await call(f,'POST','/ask',{question:'What else?'});
   assert.deepEqual([unavailable.status,unavailable.body.reason,unavailable.body.citations.map((citation: any)=>citation.document_uid)], [200,'model_unavailable',['own-doc',null]]);
   assert.deepEqual(rows(f,"SELECT owner_user_id,citations FROM research_ask_answers WHERE uid != 'own-answer' AND uid != 'other-answer'").map((row)=>[row.owner_user_id,JSON.parse(row.citations as string).map((citation: any)=>citation.document_uid)]), [[701,['own-doc',null]],[701,['own-doc',null]]]);
