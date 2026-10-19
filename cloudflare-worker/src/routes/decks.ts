@@ -324,9 +324,10 @@ function heuristicSlides(p: any, snap: any | null): any[] {
   ];
 }
 
-// D767 (#2096): one router run (`dd_synthesis`, Workers AI), held, guarded and
-// charged to the founder who pressed, with the Raise › Pitch deck page and
-// option on its usage row. A refusal or a failed run returns null and the
+// D767 (#2096): one router run on Workers AI, held, guarded and charged to the
+// founder who pressed, with the Raise › Pitch deck page and option on its usage
+// row. The task is the page's row in D764's matrix (`ai/railMatrix.json`,
+// "Founder · Raise · Pitch deck": kind vision, `rail_vision`). A refusal or a failed run returns null and the
 // heuristic deck is used, as a missing key used to.
 async function aiSlides(env: Env, p: any, snap: any | null, userId: number): Promise<any[] | null> {
   try {
@@ -352,7 +353,7 @@ Use exactly these slide titles in order: ${JSON.stringify(SLIDE_TITLES)}.
 Use the scoring numbers in the Traction and Market slides where helpful.
 Startup data: ${JSON.stringify(ctx)}`;
     const res = await aiRouterRun(env, {
-      task: 'dd_synthesis',
+      task: 'rail_vision',
       userId,
       surface: AI_SURFACE.raisePitch,
       // D765: the member's rail context; run() records it as D767's page, option and record.

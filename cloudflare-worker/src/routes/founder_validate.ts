@@ -671,7 +671,11 @@ founderValidate.post('/propose/:projectId', async (c) => {
         ? 'That model is no longer offered for this. Nothing was run.'
         : r.refusal === 'budget_user_month' || r.refusal === 'budget_user_day'
           ? 'This month’s AI budget is spent. Nothing was run.'
-          : 'The model could not be reached. Nothing was run, and nothing was charged.',
+          // D763, D770 (#2095): the guard withheld the proposals, or could not check them; its own words.
+          : r.refusal === 'guard_blocked_output' || r.refusal === 'guard_unavailable'
+            ? r.error
+            : 'The model could not be reached. Nothing was run, and nothing was charged.',
+      ...(r.guard?.refusal?.link ? { link: r.guard.refusal.link } : {}),
       usage: { model: r.usage.model, est_cost_usd: 0 },
     }, 503);
   }
