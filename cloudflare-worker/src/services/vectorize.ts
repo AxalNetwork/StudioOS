@@ -13,8 +13,12 @@
  *   { type, entity_id, title, url, snippet }
  */
 import type { Env } from '../types';
+import { SEARCH_INDEX_MODEL, searchIndexAccepts } from './ai/shapes';
 
-const EMBED_MODEL = '@cf/baai/bge-base-en-v1.5';
+// D761 PR 2: the one model whose vectors `axal-search` holds. A rail's
+// embedding (bge-m3, EmbeddingGemma, …) is never written here: the index
+// would take another model's 768 dimensions and answer wrongly.
+const EMBED_MODEL = SEARCH_INDEX_MODEL;
 const MAX_INPUT_CHARS = 4000; // bge models cap around 512 tokens; ~4k chars is safe.
 
 export type EntityType = 'project' | 'deal' | 'founder' | 'partner' | 'document' | 'academy_lesson' | 'advisor' | 'investor' | 'research_doc';
@@ -101,7 +105,7 @@ export async function upsertEntity(env: Env, args: UpsertArgs): Promise<boolean>
     return false;
   }
   const vector = await embedText(env, args.text);
-  if (!vector) return false;
+  if (!vector || !searchIndexAccepts(EMBED_MODEL, vector)) return false;
   try {
     const metadata: Record<string, unknown> = {
       type: args.type,

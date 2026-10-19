@@ -12,7 +12,8 @@
  * its own when a transcript arrives (`StructureTrigger`):
  *
  *   call_imported        a Zoom or Meet transcript was imported (meetings.ts)
- *   chat_assigned        a customer chat was assigned to an interview (threads.ts)
+ *   chat_assigned        legacy queued assignments
+ *   chat_text_added      final chat text arrived or moved at assignment (#1930)
  *   chat_quiet           an assigned chat gained messages and then went quiet
  *                        for QUIET_MINUTES (the five-minute channel sweep)
  *   recording_processed  the recorder's job reached summarising and placing
@@ -44,19 +45,19 @@
  * reach it through `digestSession`.
  */
 import type { Env } from '../types';
-import { sessionConsentBlocks } from './interviewSessions';
+import { sessionDigestConsentBlocks } from './interviewSessions';
 import { IntakeError, writableSession } from './interviewIntake';
 import { structureTranscript, toSegments, type ReceiptLine, type SegmentRow } from './interviewStructuring';
 import { MESSAGING_PROVIDERS, consentRequiredProviders } from './channels/types';
 import { loadStructureContext, recordStructureReceipt, storePlacements } from '../routes/founder_validate_structure';
 
 export type StructureTrigger =
-  | 'call_imported' | 'chat_assigned' | 'chat_quiet' | 'recording_processed'
+  | 'call_imported' | 'chat_assigned' | 'chat_text_added' | 'chat_quiet' | 'recording_processed'
   | 'consent_given' | 'chat_pasted' | 'assistant_submitted' | 'voice_note_added' | 'manual';
 
 /** What a queued `session_structure` job may carry: every trigger but `manual`, which only a route passes inline. */
 export const JOB_TRIGGERS: readonly StructureTrigger[] = [
-  'call_imported', 'chat_assigned', 'chat_quiet', 'recording_processed',
+  'call_imported', 'chat_assigned', 'chat_text_added', 'chat_quiet', 'recording_processed',
   'consent_given', 'chat_pasted', 'assistant_submitted', 'voice_note_added',
 ];
 
@@ -92,7 +93,7 @@ export async function structureSession(
     if (err instanceof IntakeError) return { ok: false, reason: 'not_writable' };
     throw err;
   }
-  if (await sessionConsentBlocks(env, session)) return { ok: false, reason: 'consent_not_recorded' };
+  if (await sessionDigestConsentBlocks(env, session)) return { ok: false, reason: 'consent_not_recorded' };
 
   const rows = await env.DB.prepare(
     `SELECT start_ms, end_ms, speaker_label, text FROM interview_transcript_segments
@@ -170,7 +171,7 @@ export async function sweepQuietChats(env: Env, now: Date): Promise<number> {
   const lastRunBefore = new Date(now.getTime() - MIN_HOURS_BETWEEN * 3_600_000).toISOString();
   const due = (await env.DB.prepare(
     `SELECT s.id, s.created_by_user_id AS user_id FROM interview_sessions s
-      WHERE s.submitted_via IN (SELECT value FROM json_each(?)) AND s.status = 'transcribed'
+      WHERE s.submitted_via IN (SELECT value FROM json_each(?)) AND s.status = 'transcribed' AND s.consent_status <> 'declined'
         AND (s.submitted_via NOT IN (SELECT value FROM json_each(?)) OR s.consent_status = 'given')
         AND datetime(s.updated_at) < datetime(?)
         AND NOT EXISTS (SELECT 1 FROM interview_structure_receipts r
