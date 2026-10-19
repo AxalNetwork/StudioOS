@@ -16,6 +16,8 @@
  *   GET    /whatsapp/link           the newest claim ('•••• 1234') and the current link
  *   POST   /whatsapp/link/:uid/confirm  Axal's half: the claimed number becomes the member's link
  *   DELETE /whatsapp/link           unlink
+ *   GET    /whatsapp/captures       way B part 2 (#1938): what the member forwarded to Axal's number
+ *   POST   /whatsapp/captures/:uid/consent  { method: 'pre_agreed' | 'verbal' | 'written' } for a capture still waiting
  *   DELETE /:provider               disconnect (telegram | whatsapp)
  *   POST   /:provider/test          Telegram: a message in the member's own chat with the bot.
  *                                   WhatsApp: read the number with the member's token — a test
@@ -65,6 +67,15 @@
  * Only the text is kept; the audio is never stored (D754: for WhatsApp,
  * until the S13 w3 voice-audio task lands).
  *
+ * AXAL'S OWN WHATSAPP NUMBER (way B, whatsappLink.ts) is answered before any
+ * member connection is looked for: `LINK <code>` records a claim and gets one
+ * reply; STOP from a linked sender unlinks with one reply; a linked sender's
+ * recordings wait, as encrypted media ids only, until the member says everyone
+ * recorded agreed (whatsappCapture.ts); an unlinked sender's messages are
+ * claimed by their hashed id and ignored, with no reply and no text kept. Every
+ * way-B route answers 503 until the owner sets all four WHATSAPP_AXAL_*
+ * settings, and until then the webhook ignores the number.
+ *
  * NOTHING FROM A CHAT IS KEPT BEFORE CONSENT where its provider asks for it
  * (D754, #1893; services/channels/consent.ts). Such a chat, assigned, links
  * and waits: its text stays pending and its voice notes are never fetched
@@ -73,13 +84,6 @@
  * arrives on the signed webhook and is claimed as a 'command' event; on
  * 'given' a `channel_followup` { kind: 'consent' } job moves what waited,
  * never the webhook itself. Client keys under `consent:` are the server's.
- *
- * AXAL'S OWN WHATSAPP NUMBER (way B, whatsappLink.ts) is answered before any
- * member connection is looked for: `LINK <code>` records a claim and gets one
- * reply; STOP from a linked sender unlinks with one reply; anything else is
- * claimed by its hashed id and ignored, with no reply and no text kept. Every
- * way-B route answers 503 until the owner sets all four WHATSAPP_AXAL_*
- * settings, and until then the webhook ignores the number.
  *
  * A TELEGRAM LINK TAKES TWO MESSAGES: `/start <code>` names the Telegram
  * account, and that account's own `/confirm` plus the member's Confirm in Axal
@@ -127,6 +131,7 @@ import {
 import * as telegram from '../services/channels/telegram';
 import * as whatsapp from '../services/channels/whatsapp';
 import * as waLink from '../services/channels/whatsappLink';
+import * as capture from '../services/channels/whatsappCapture';
 
 const channels = new Hono<{ Bindings: Env }>();
 export const channelsAdmin = new Hono<{ Bindings: Env }>();
@@ -166,6 +171,7 @@ const SENTENCE: Record<string, string> = {
   invalid_status: 'Choose pending, assigned or ignored.',
   axal_number: "This is Axal's own WhatsApp number. Connect your business's own number instead.",
   number_taken: 'This WhatsApp number is already connected to another Axal account.',
+  capture_not_waiting: 'That recording is not waiting for an answer: it was answered, removed or has expired.',
   number_not_in_waba: 'That number is not part of the WhatsApp Business account you connected.',
   choose_number: 'Your WhatsApp Business account has more than one number. Connect again and choose the number your customers write to.',
   code_exchange_failed: 'Meta did not accept the sign-up. Start the WhatsApp connection again.',
@@ -356,6 +362,25 @@ channels.post('/whatsapp/link/:uid/confirm', member(async (c, user) => {
 channels.delete('/whatsapp/link', member(async (c, user) => {
   if (!waLink.axalNumberReady(c.env)) return no(c, 503, 'not_available');
   return c.json({ ok: true, unlinked: await waLink.unlinkMember(c.env, user.id) });
+}));
+
+// D754 way B (#1938): what a linked member forwarded to Axal's number. No media ids leave the Worker.
+channels.get('/whatsapp/captures', member(async (c, user) => {
+  if (!waLink.axalNumberReady(c.env)) return no(c, 503, 'not_available');
+  await activeMember(c.env, user.id);
+  return c.json({ items: await capture.listCaptures(c.env, user.id) });
+}));
+
+/** "Agreed beforehand" (or the member's other word) for a capture still waiting, from Axal. */
+channels.post('/whatsapp/captures/:uid/consent', member(async (c, user) => {
+  if (!waLink.axalNumberReady(c.env) || !channelOpenTo(c.env, 'whatsapp', user)) return no(c, 503, 'not_available');
+  await activeMember(c.env, user.id);
+  const body = await c.req.json<Record<string, unknown>>().catch(() => ({} as Record<string, unknown>));
+  const method = String(body.method ?? '');
+  if (method !== 'pre_agreed' && method !== 'verbal' && method !== 'written') return no(c, 400, 'invalid_request');
+  const out = await capture.answerCapture(c.env, user.id, c.req.param('uid') ?? '', method);
+  if (out.done !== 'consented') return no(c, 404, 'capture_not_waiting');
+  return c.json({ ok: true, status: 'consented' });
 }));
 
 channels.post('/whatsapp/connect', member(async (c, user) => {
@@ -766,6 +791,7 @@ function eventKind(ev: InboundEvent): EventKind {
     case 'link': case 'link_confirm': return 'link';
     case 'connection': return 'connection';
     case 'consent_reply': return 'command';
+    case 'axal_message': return ev.button ? 'command' : ev.media ? 'voice' : 'message';
     default: return 'ignored';
   }
 }
@@ -826,6 +852,15 @@ async function handleLink(env: Env, claim: number, ev: InboundLink | InboundLink
 const WA_LINK_TRIES_PER_SENDER_HOUR = 5;
 
 /** One reply from Axal's number, once per client key, through the outbound ledger. A failure never fails the webhook. */
+/** The capture's consent question: reply buttons from Axal's number, once per client key. */
+async function axalAsk(env: Env, userId: number, clientKey: string, to: string, body: string, buttons: { id: string; title: string }[]): Promise<void> {
+  const { row, existing } = await beginOutbound(env, 'whatsapp', userId, null, clientKey);
+  if (existing) return;
+  const r = await whatsapp.sendAxalInteractive(env, to, { body, buttons }).catch(() => ({ ok: false, code: 'send_unknown' } as SendResult));
+  await finishOutbound(env, row.id, r);
+  if (!r.ok) console.error(`[channels] axal number question not sent code=${r.code ?? 'unknown'}`);
+}
+
 async function axalReply(env: Env, userId: number, clientKey: string, to: string, text: string): Promise<void> {
   const { row, existing } = await beginOutbound(env, 'whatsapp', userId, null, clientKey);
   if (existing) return;
@@ -835,12 +870,16 @@ async function axalReply(env: Env, userId: number, clientKey: string, to: string
 }
 
 /**
- * D754 way B (#1937): an event on Axal's own WhatsApp number. There is no
- * member connection here; who a message is from is the sender's link.
- *   LINK <code>  records the claim against the sender; one reply.
- *   STOP         from a linked sender: unlinks; one reply.
- *   anything else from a linked sender is part 2's (#1938): until then it
- *                counts as use and is ignored.
+ * D754 way B: an event on Axal's own WhatsApp number (whatsapp.ts
+ * `axalMessageEvent`). There is no member connection here; who a message is
+ * from is the sender's link.
+ *   LINK <code>  records the claim against the sender; one reply (#1937).
+ *   STOP         from a linked sender: unlinks, drops its unanswered
+ *                captures; one reply.
+ *   a recording  from a linked sender: joins a capture (whatsappCapture.ts);
+ *                a new capture asks once whether everyone recorded agreed.
+ *   a button     the member's answer for a capture (#1938).
+ *   anything else from a linked sender: one reply saying what Axal takes.
  *   anything from an unlinked sender: ignored, no reply, nothing kept but
  *                the event's hashed id.
  */
@@ -853,12 +892,9 @@ async function handleAxalNumber(
     const known = await applyDeliveryStatus(env, ev.externalMessageId, ev.status, ev.errorCode);
     return finish(known ? 'done' : 'ignored', { error: known ? null : 'not_ours' });
   }
-  // A typed YES, NO or STOP arrives as a consent reply (D754 §4); on Axal's
-  // number it is only the message it carries.
-  const msg = ev.kind === 'consent_reply' ? ev.fallback : ev.kind === 'message' ? ev : null;
-  if (!msg || msg.side !== 'contact') return finish('ignored', { error: 'unsupported' });
-  const sender = msg.externalChatId;
-  const code = waLink.linkCodeIn(msg.text);
+  if (ev.kind !== 'axal_message') return finish('ignored', { error: 'unsupported' });
+  const sender = ev.externalChatId;
+  const code = waLink.linkCodeIn(ev.text);
   if (code) {
     try {
       if (await linkAttemptOverLimit(env, `whatsapp_link:sender:${sender}`, WA_LINK_TRIES_PER_SENDER_HOUR)) {
@@ -875,11 +911,13 @@ async function handleAxalNumber(
   }
   const link = await waLink.linkedSender(env, sender);
   if (!link) return finish('ignored', { error: 'unlinked_sender' });
-  if (waLink.isStop(msg.text)) {
+  const userId = Number(link.user_id);
+  if (waLink.isStop(ev.text)) {
     spend();
     const unlinked = await waLink.unlinkSender(env, Number(link.id));
-    await finish(unlinked ? 'done' : 'ignored', { userId: Number(link.user_id), error: unlinked ? null : 'not_linked' });
-    if (unlinked) await axalReply(env, Number(link.user_id), `wbstop:${claim}`, sender, waLink.WHATSAPP_LINK_COPY.unlinked);
+    if (unlinked) await capture.dropWaitingCaptures(env, Number(link.id));
+    await finish(unlinked ? 'done' : 'ignored', { userId, error: unlinked ? null : 'not_linked' });
+    if (unlinked) await axalReply(env, userId, `wbstop:${claim}`, sender, waLink.WHATSAPP_LINK_COPY.unlinked);
     return;
   }
   // Management commands can finish in canary, as Telegram's do; captures cannot.
@@ -887,7 +925,32 @@ async function handleAxalNumber(
     return finish('ignored', { userId: Number(link.user_id), error: 'rollout' });
   }
   await waLink.touchLink(env, Number(link.id));
-  return finish('ignored', { userId: Number(link.user_id), error: 'capture_not_built' });
+  if (!(await memberStands(env, userId))) return finish('ignored', { userId, error: 'member_inactive' });
+
+  const press = capture.captureButton(ev.button);
+  if (press) {
+    spend();
+    const out = await capture.answerCapture(env, userId, press.uid, press.answer);
+    // The download and the draft interview follow #1896 (whatsappCapture.ts).
+    return finish(out.done === 'nothing' ? 'ignored' : 'done', { userId, error: out.done === 'nothing' ? 'capture_not_waiting' : null });
+  }
+  if (ev.media && capture.capturable(ev.media)) {
+    spend();
+    if (capture.declaredTooLarge(ev.media)) {
+      await finish('ignored', { userId, error: 'too_large' });
+      await axalReply(env, userId, `wbcapture-large:${claim}`, sender, capture.CAPTURE_COPY.tooLarge);
+      return;
+    }
+    const added = await capture.addToCapture(env, { id: Number(link.id), user_id: userId }, ev.media);
+    await finish('stored', { userId });
+    if (added.created) {
+      await axalAsk(env, userId, `wbcapture:${added.uid}`, sender, capture.CAPTURE_COPY.question, capture.captureButtons(added.uid));
+    }
+    return;
+  }
+  spend();
+  await finish('ignored', { userId, error: 'unsupported_type' });
+  await axalReply(env, userId, `wbunsupported:${claim}`, sender, capture.CAPTURE_COPY.unsupported);
 }
 
 function resolveConnection(env: Env, provider: MessagingProvider, ref: string): Promise<ChannelConnection | null> {
@@ -1088,7 +1151,7 @@ channels.post('/whatsapp/webhook', async (c) => {
   // One POST may carry many events; each is claimed on its own, and one that
   // must be retried does not stop the rest (their claims make the retry a no-op).
   let retry = false;
-  for (const ev of whatsapp.normaliseWhatsAppPayload(body)) {
+  for (const ev of whatsapp.normaliseWhatsAppPayload(body, c.env.WHATSAPP_AXAL_PHONE_NUMBER_ID ?? null)) {
     if ((await processEvent(c.env, ev)) === 'retry') retry = true;
   }
   return retry ? c.json({ error: 'retry', code: 'retry' }, 500) : c.json({ ok: true });
