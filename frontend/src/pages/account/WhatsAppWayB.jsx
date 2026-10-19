@@ -5,7 +5,7 @@ import { Pill } from '../../ui';
 import { BTN } from './AccountCenter';
 import {
   WAY_B, WHATSAPP_ENTRY_CONSENT, WHATSAPP_ENTRY_LIMIT, WHATSAPP_ENTRY_STEPS, WHATSAPP_PAGE_HREF,
-  lastUsedLine, wayBRefusal, wayBState,
+  axalContact, captureLine, lastUsedLine, waitingCaptures, wayBRefusal, wayBState,
 } from './whatsappWayB';
 
 /**
@@ -120,12 +120,53 @@ export function WhatsAppWayBSection({ read, user = null, api = channelsApi, onCh
         <>
           <p className={NOTE} data-testid="way-b-last">{lastUsedLine(view.lastUsedAt)}</p>
           <p className={NOTE} data-testid="way-b-sends">{WAY_B.sends}</p>
+          <WaitingCaptures api={api} />
           <button type="button" className={`${SMALL} self-start`} disabled={busy === 'unlink'} onClick={unlink} data-testid="button-way-b-unlink">{busy === 'unlink' ? 'Unlinking…' : WAY_B.unlink}</button>
         </>
       )}
       {done && <p role="status" className="text-[12px] text-emerald-700 dark:text-emerald-300" data-testid="way-b-done">{done}</p>}
       {error && <p role="alert" className={ALERT} data-testid="way-b-error">{error}</p>}
     </article>
+  );
+}
+
+/**
+ * #1939 step 3: the recordings a linked member forwarded that still wait for
+ * consent (wb2's `GET /channels/whatsapp/captures`), each with **Agreed
+ * beforehand**. A waiting capture has no session yet (it gets one when it is
+ * imported), so it is answered here. A read that fails draws nothing: the
+ * chat's own Yes still works.
+ */
+export function WaitingCaptures({ api = channelsApi, initial = null }) {
+  const [items, setItems] = useState(initial);
+  const [busy, setBusy] = useState('');
+  const [error, setError] = useState('');
+  const reload = useCallback(() => Promise.resolve().then(() => api.whatsappCaptures())
+    .then((r) => setItems(waitingCaptures(r?.items)))
+    .catch(() => setItems([])), [api]);
+  useEffect(() => { if (initial == null) reload(); }, [reload, initial]);
+  const agree = async (uid) => {
+    setBusy(uid); setError('');
+    try { await api.agreeCapture(uid); }
+    catch (e) { setError(wayBRefusal(e, 'Axal could not record that. Answer in the WhatsApp chat instead.')); }
+    finally { setBusy(''); await reload(); }
+  };
+  if (!items || items.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-1.5 rounded-lg border border-axal-hairline p-3 dark:border-gray-700" data-testid="way-b-waiting">
+      <p className="text-[12.5px] font-semibold text-axal-ink dark:text-gray-100">{WAY_B.waiting}</p>
+      <ul className="flex flex-col gap-1.5">
+        {items.map((c) => (
+          <li key={c.uid} className="flex flex-wrap items-center justify-between gap-2" data-testid={`way-b-capture-${c.uid}`}>
+            <span className={NOTE}>{captureLine(c)}</span>
+            <button type="button" className={SMALL} disabled={busy === c.uid} onClick={() => agree(c.uid)} data-testid={`button-way-b-agreed-${c.uid}`}>
+              {busy === c.uid ? 'Saving…' : WAY_B.agreed}
+            </button>
+          </li>
+        ))}
+      </ul>
+      {error && <p role="alert" className={ALERT} data-testid="way-b-waiting-error">{error}</p>}
+    </div>
   );
 }
 
@@ -137,11 +178,13 @@ export function WhatsAppWayB({ user = null, api = channelsApi }) {
 
 /**
  * Record a Session's "From WhatsApp", beside "From an AI assistant": fb's
- * three steps, the 5 MB limit and the consent line. `read` is the same link
- * read; while Axal's number is not set up the entry says so and offers nothing.
+ * three steps, the 5 MB limit, the consent line, and Axal's number with
+ * **Open WhatsApp** (#1939: `axal_number` and `axal_link`). `read` is the same
+ * link read; while Axal's number is not set up the entry says so and offers nothing.
  */
 export function WhatsAppEntry({ read }) {
   const view = wayBState(read);
+  const contact = read?.status === 'ready' ? axalContact(read.view) : null;
   if (view.state === 'loading') return <section className="border-b border-axal-hairline px-5 py-4 dark:border-gray-800" data-testid="whatsapp-entry" data-state="loading"><p className="m-0 text-[12px] text-axal-faint">Reading your WhatsApp link…</p></section>;
   return (
     <section className="border-b border-axal-hairline px-5 py-4 dark:border-gray-800" data-testid="whatsapp-entry" data-state={view.state}>
@@ -155,7 +198,13 @@ export function WhatsAppEntry({ read }) {
             </ol>
             <p className="mt-2 text-[12px] text-gray-700 dark:text-gray-300" data-testid="whatsapp-entry-limit">{WHATSAPP_ENTRY_LIMIT}</p>
             <p className="mt-1 text-[12px] font-semibold text-amber-800 dark:text-amber-300" data-testid="whatsapp-entry-consent">{WHATSAPP_ENTRY_CONSENT}</p>
+            {contact && (
+              <p className="mt-2 text-[12px] text-gray-700 dark:text-gray-300" data-testid="whatsapp-entry-number">
+                Axal’s number: <span className="font-semibold tabular-nums">{contact.number}</span>
+              </p>
+            )}
             <div className="mt-3 flex flex-wrap items-center gap-2">
+              {contact && <a href={contact.href} target="_blank" rel="noopener noreferrer" className="rounded-md border border-gray-200 px-3 py-1.5 text-[12px] font-bold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800" data-testid="link-whatsapp-entry-open">{WAY_B.open}</a>}
               {view.state === 'linked'
                 ? <span className="text-[12px] text-gray-700 dark:text-gray-300" data-testid="whatsapp-entry-linked">{view.number ? `Linked: ${view.number}` : 'Your WhatsApp is linked.'}</span>
                 : <Link to={WHATSAPP_PAGE_HREF} className="rounded-md bg-violet-700 px-3 py-1.5 text-[12px] font-bold text-white hover:bg-violet-800" data-testid="link-whatsapp-page">{WAY_B.link}</Link>}
