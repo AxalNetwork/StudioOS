@@ -309,6 +309,7 @@ import adminBestFit from './routes/admin_bestfit';
 // Task #9 — Admin review queue for 'exploring' users (binding e-sign + role assignment).
 import adminExploring from './routes/admin_exploring';
 import adminLpApplications from './routes/admin_lp_applications';
+import adminCapitalAttestations from './routes/admin_capital_attestations';
 import bestFitSelf from './routes/best_fit';
 // T3 — Reserve allocation + waterfall simulator (Task #46 port).
 import fundSimulatorRoutes from './routes/fund_simulator';
@@ -325,6 +326,7 @@ import adminStripe from './routes/admin_stripe';
 import adminMoneyRails from './routes/admin_money_rails';
 import { adminPartnerSettlements, partnerSettlements } from './routes/partner_settlements';
 import mercuryPersonalRoutes from './routes/mercury_personal';
+import mercuryAttestationRoutes from './routes/mercury_attestations';
 import adminBankAccounts from './routes/admin_bank_accounts';
 import adminFundStructure from './routes/admin_fund_structure';
 // PaymentIntent + SetupIntent surface for the Axal-branded embedded card UI.
@@ -635,6 +637,9 @@ const COOL_OFF_PREFIXES = [
   // D716 — fund notices ask an LP or an entity for money. Pause them for a
   // freshly-recovered account.
   '/api/fund-notices',
+  // D755 — the catalog's writes, token packs included, sell what members pay
+  // for and can mint a pack. Same class as promos.
+  '/api/admin/catalog',
 ];
 for (const p of COOL_OFF_PREFIXES) {
   app.use(p, recoveryCoolOff);
@@ -702,6 +707,10 @@ const COOL_OFF_ROUTES = [
   '/api/funds/:id/capital-call',
   '/api/funds/distributions/execute',
   '/api/fund-ledger/:id/administrator',
+  // D755 — a Super Admin's adjustment of one member's AI top-up balance: money
+  // added or taken on someone else's behalf. The member-account read beside it
+  // stays open.
+  '/api/ai-budget/members/:userId/adjustments',
 ];
 for (const p of COOL_OFF_ROUTES) app.use(p, recoveryCoolOff);
 // Task #6 — Stripe billing surface (tier checkout/portal/webhook + MI Pro).
@@ -929,6 +938,8 @@ app.route('/api/admin/partner-settlements', adminPartnerSettlements);
 app.route('/api/partner-settlements', partnerSettlements);
 // D713 (#1778) — a member's own Mercury: status and payment matches. Read-only.
 app.route('/api/mercury/personal', mercuryPersonalRoutes);
+// D752 — an investor's proof of capital: dated statements from their own Mercury, read-only, HQ only.
+app.route('/api/mercury/attestations', mercuryAttestationRoutes);
 // D708 — each Axal entity's bank accounts, Super Admin only. Before the
 // catch-all /api/admin so /api/admin/bank-accounts/* resolves here.
 app.route('/api/admin/bank-accounts', adminBankAccounts);
@@ -955,6 +966,8 @@ app.route('/api/admin/best-fit', adminBestFit);
 app.route('/api/admin/exploring', adminExploring);
 // GP review queue for Spin-Out Fund I LP applications. requireAdmin per-route.
 app.route('/api/admin/lp-applications', adminLpApplications);
+// D752 — admins on HQ read an investor's shared proof of funds; audited before it answers. Before the catch-all.
+app.route('/api/admin/capital-attestations', adminCapitalAttestations);
 // Wave 4 — territory licence ledger. Mount BEFORE the catch-all /api/admin so
 // /api/admin/licences/* resolves here, not in the generic admin router.
 // D110 — the Deploy step and the Platform Deployments zone. Mounted at

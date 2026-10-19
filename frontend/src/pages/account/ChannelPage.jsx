@@ -1,0 +1,167 @@
+import { useEffect, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
+import { channelsApi } from '../../lib/api/channels.js';
+import { BrandIcon, PhoneBar, Unrecorded, Unreadable, usePhoneWidth } from '../../ui';
+import { BTN } from './AccountCenter';
+import { SheetFrame } from './ConnectorSheet';
+import { RequestSheet, useMovedNotice } from './AccountConnectors';
+import { TelegramPageBody, WhatsAppConnectButton, WhatsAppPageBody, useChannelsOverview, useWhatsAppSignup } from './ChannelsGroup';
+import { WhatsAppWayB } from './WhatsAppWayB';
+import { CARD_TITLE, telegramPageState, whatsappPageState } from './channelsModel';
+import TelegramBotHealth from '../admin/TelegramBotHealth';
+import { useAuth } from '../../hooks/useAuthSync';
+import { CHANNEL_PAGE_TEXT, channelDetailsRows, channelEntry, channelPageTitle } from './channelPageModel';
+import { backHrefFor } from './connectorPageModel';
+
+/**
+ * D753 (#1958, task C1) — WhatsApp Business and Telegram Business on their own
+ * pages, `/account/connectors/whatsapp` and `/account/connectors/telegram`, in
+ * the frame every connector's page has (`ConnectorPage.jsx`): the back link,
+ * the band (mark, name, tagline), the notice region, "Connect and manage",
+ * About and Details.
+ *
+ * The channels are not registry rows, so this page reads `GET /api/channels`
+ * (`useChannelsOverview`) and never the connectors catalogue. "Connect and
+ * manage" mounts each channel's page body.
+ *
+ * D756 §1.11 (#1979): Telegram's is `TelegramPageBody`, in every state for
+ * this viewer (`telegramPageState`), with the card's own parts. A Super Admin
+ * also gets the interview bot's health and Register webhook (#1895's
+ * `TelegramBotHealth`), and the canary line and missing secret names in the
+ * notice region; a member never does.
+ *
+ * D754 f1 (#1959): WhatsApp's "Connect and manage" is `WhatsAppPageBody`, in
+ * every D754 §11 state for this viewer (`whatsappPageState`). Its notices (the
+ * canary line and the missing secret names, Super Admins only) are drawn in
+ * the notice region, and the band's action is the body's Connect: one signup
+ * flow, which opens Meta's popup and never redirects.
+ *
+ * D754 way B (#1939): below it, "Send recordings from your WhatsApp"
+ * (`WhatsAppWayB.jsx`), which reads `GET /api/channels/whatsapp/link` itself.
+ */
+
+const BOX = 'rounded-axal-sm border border-axal-hairline bg-white p-5 text-[13px] text-axal-ink dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200';
+const H2 = 'text-[15px] font-bold text-axal-ink dark:text-gray-100';
+
+export default function ChannelPage({ channelKey }) {
+  const channels = useChannelsOverview();
+  const phone = usePhoneWidth();
+  const user = useAuth()?.user ?? null;
+  return <ChannelPageView channels={channels} channelKey={channelKey} phone={phone} user={user} />;
+}
+
+/** The page, drawn from one `useChannelsOverview()` read; exported so a test can hand it each state. */
+export function ChannelPageView({ channels, channelKey, phone = false, user = null, api = channelsApi, sdk, adminApi }) {
+  const location = useLocation();
+  const moved = useMovedNotice(location);
+  // One signup flow for the band and the body; on Telegram's page it is never offered.
+  const signup = useWhatsAppSignup({ overview: channels?.overview ?? null, api, onChanged: channels?.reload, ...(sdk ? { sdk } : {}) });
+  const entry = channelEntry({ channels, key: channelKey });
+  const ready = entry.state === 'ready';
+  const name = ready ? CARD_TITLE[channelKey] : 'Connectors';
+
+  const title = channelPageTitle(entry);
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined;
+    const previous = document.title;
+    document.title = title;
+    return () => { document.title = previous; };
+  }, [title]);
+
+  const back = phone
+    ? (
+      <div className="-mx-[22px]">
+        <PhoneBar back={{ label: 'Connectors', to: '/account/connectors' }} title={name} eadwynLabel={name} />
+      </div>
+    )
+    : <Link to={backHrefFor(location.state)} className={`${BTN.link} self-start text-[13px]`} data-testid="connector-page-back">← Connectors</Link>;
+
+  if (!ready) {
+    return (
+      <div className="flex min-w-0 flex-col gap-3.5" data-testid="connector-page" data-state={entry.state} data-channel="true">
+        {back}
+        <NotReady state={entry.state} channelKey={channelKey} onRetry={channels?.reload} />
+      </div>
+    );
+  }
+
+  const overview = channels.overview;
+  const text = CHANNEL_PAGE_TEXT[channelKey];
+  const wa = channelKey === 'whatsapp' ? whatsappPageState(overview, user) : null;
+  const tg = channelKey === 'telegram' ? telegramPageState(overview, user) : null;
+  const notices = (wa ?? tg)?.notices ?? [];
+  return (
+    <div className="flex min-w-0 flex-col gap-4" data-testid="connector-page" data-state="ready" data-key={channelKey} data-channel="true">
+      {back}
+      <header data-testid="connector-page-band" className="flex min-w-0 items-center gap-4 rounded-axal-sm bg-axal-ground p-5 dark:bg-gray-800/60">
+        <BrandIcon provider={channelKey} name={CARD_TITLE[channelKey]} size={phone ? 48 : 56} />
+        <div className="min-w-0">
+          {!phone && <h1 className="text-2xl font-extrabold tracking-axal-heading text-axal-ink dark:text-gray-100">{CARD_TITLE[channelKey]}</h1>}
+          <p className="mt-0.5 min-w-0 break-words text-[13.5px] leading-snug text-axal-muted dark:text-gray-400" data-testid="connector-page-tagline">{text.tagline}</p>
+        </div>
+        {wa?.canConnect && <div className="ml-auto shrink-0" data-testid="connector-page-band-action"><WhatsAppConnectButton signup={signup} testId="button-band-connect-whatsapp" /></div>}
+      </header>
+
+      {(moved || notices.length > 0) && (
+        <div className="flex flex-col gap-2" data-testid="connector-page-notices">
+          {moved && <div className="rounded-[10px] border border-axal-violet/25 bg-axal-lavender px-3.5 py-2.5 text-[13px] text-axal-violet-deep dark:bg-violet-900/30 dark:text-violet-200" data-testid="connectors-moved">Integrations are now Connectors.</div>}
+          {notices.map((n, i) => (
+            <div key={n} className="rounded-[10px] border border-amber-300/60 bg-amber-50 px-3.5 py-2.5 text-[13px] text-amber-900 dark:border-amber-700/50 dark:bg-amber-900/20 dark:text-amber-200" data-testid={`${channelKey}-notice-${i}`}>{n}</div>
+          ))}
+        </div>
+      )}
+
+      <section aria-label="Connect and manage" data-testid="connector-page-connect" data-mode="channel">
+        {channelKey === 'whatsapp'
+          ? <WhatsAppPageBody view={wa} signup={signup} pending={overview.pending?.whatsapp ?? null} api={api} onChanged={channels.reload} wayB={<WhatsAppWayB user={user} api={api} />} />
+          : <TelegramPageBody view={tg} claim={overview.telegramLink ?? null} pending={overview.pending?.telegram ?? null} api={api} onChanged={channels.reload}
+            health={tg.health ? <TelegramBotHealth {...(adminApi ? { api: adminApi } : {})} /> : null} />}
+      </section>
+
+      <section data-testid="connector-page-about" className="flex min-w-0 flex-col gap-2">
+        <h2 className={H2}>About</h2>
+        {text.about.map((para) => <p key={para} className="text-[13px] leading-relaxed text-axal-ink/90 dark:text-gray-300">{para}</p>)}
+      </section>
+
+      <section data-testid="connector-page-details" className="flex min-w-0 flex-col gap-2">
+        <h2 className={H2}>Details</h2>
+        <dl className="grid grid-cols-1 gap-x-6 gap-y-2.5 sm:grid-cols-2">
+          {channelDetailsRows(channelKey, overview).map((r) => (
+            <div key={r.label} className="min-w-0">
+              <dt className="text-[10.5px] font-bold uppercase tracking-axal-label text-axal-muted dark:text-gray-400">{r.label}</dt>
+              <dd className="min-w-0 break-words text-[13px] text-axal-ink dark:text-gray-200">
+                {r.value === null
+                  ? <Unrecorded reason={r.reason}>Not recorded</Unrecorded>
+                  : r.href
+                    ? <a href={r.href} target="_blank" rel="noopener noreferrer" className={BTN.link}>Documentation ↗</a>
+                    : r.value}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+    </div>
+  );
+}
+
+/** Loading, unreadable, or a channel `GET /api/channels` does not report. */
+function NotReady({ state, channelKey, onRetry }) {
+  const [requesting, setRequesting] = useState(false);
+  if (state === 'loading') return <div className={`${BOX} text-axal-muted dark:text-gray-400`} data-testid="connector-page-loading">Loading connector…</div>;
+  if (state === 'unreadable') {
+    return <div className={BOX} data-testid="connector-page-unreadable"><Unreadable what="Your connection" claim="This is not a claim that you have none." onRetry={onRetry} /></div>;
+  }
+  return (
+    <>
+      <div className={BOX} data-testid="connector-page-unknown">
+        No connector called &ldquo;{channelKey}&rdquo;.{' '}
+        <button type="button" className={`${BTN.link} font-bold`} onClick={() => setRequesting(true)} data-testid="connector-page-request">Request it.</button>
+      </div>
+      {requesting && (
+        <SheetFrame.Provider value={{ layout: 'page', onDismiss: () => setRequesting(false) }}>
+          <RequestSheet tool={channelKey} onClose={() => setRequesting(false)} />
+        </SheetFrame.Provider>
+      )}
+    </>
+  );
+}

@@ -248,3 +248,270 @@ test('no D755 file prints a markup or reads the perk or the introduction ledger'
     for (const needle of [markup, word, perk, intro]) assert.equal(text.toLowerCase().includes(needle), false, `${rel} contains ${needle}`);
   }
 });
+
+// ---------------------------------------------------------------------------
+// PR 2: a pack is bought alone, at face value, and credited once by the webhook.
+// ---------------------------------------------------------------------------
+import { SignJWT } from 'jose';
+import { tableFromBaseline, stripForeignKeys } from './_baseline.mjs';
+import { ensureCatalogSchema } from '../src/services/catalog.ts';
+import { ensureOrdersSchema, fulfilOrder } from '../src/services/orders.ts';
+import { validatePromoForProduct } from '../src/services/promos.ts';
+import { resetAiTopupMirrorWindow } from '../src/services/aiTopups.ts';
+import { tokenPackForPrice, isTokenPackPrice, isTokenPackProduct, packOnSale } from '../src/services/aiCredits.ts';
+import ordersRoute from '../src/routes/orders.ts';
+import paymentsRoute from '../src/routes/payments.ts';
+import billingRoute from '../src/routes/billing.ts';
+
+const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
+const PACK = 'price_pack25', OTHER = 'price_other10', FALLBACK = 'price_envTopup';
+const price = (id: string, product: string, unit_amount: number) => ({ id, product, active: true, currency: 'usd', unit_amount, nickname: null, type: 'one_time', recurring: null });
+
+/** The D1 world of a member who can check out: orders, catalog mirror, promos, sessions and one $25 pack with a 10% bonus. */
+async function shop(opts: { env?: Record<string, unknown>; mirrored?: number; onSale?: number; pack?: boolean } = {}) {
+  resetAiTopupMirrorWindow();
+  const f = fixture();
+  Object.assign(f.env, { STRIPE_SECRET_KEY: 'sk' + '_test_fixtureOnly000', ...opts.env });
+  await ensureCatalogSchema(f.env);
+  await ensureOrdersSchema(f.env);
+  for (const t of ['promo_codes', 'user_sessions']) f.db.exec(stripForeignKeys(tableFromBaseline(BASELINE, t)));
+  f.db.exec("ALTER TABLE users ADD COLUMN uid TEXT; ALTER TABLE users ADD COLUMN stripe_customer_id TEXT; ALTER TABLE users ADD COLUMN investor_stripe_customer_id TEXT; UPDATE users SET uid='uid-'||id, stripe_customer_id='cus_member'||id");
+  const product = (id: string, name: string, prices: unknown[], metadata = {}) =>
+    f.db.prepare("INSERT INTO stripe_products(id,name,kind,active,metadata_json,prices_json) VALUES(?,?,'alacarte',1,?,?)").run(id, name, JSON.stringify(metadata), JSON.stringify(prices));
+  product('prod_pack25', '$25 of tokens', [price(PACK, 'prod_pack25', opts.mirrored ?? 2500)]);
+  product('prod_other', 'Other', [price(OTHER, 'prod_other', 1000)], { feature_key: 'other_feature' });
+  product('prod_env', 'AI tokens', [price(FALLBACK, 'prod_env', 1500)]);
+  if (opts.pack !== false)
+    f.db.prepare("INSERT INTO ai_token_packs(uid,price_id,product_id,face_cents,bonus_microusd,on_sale,origin) VALUES('pack25',?,'prod_pack25',2500,2500000,?,'created')").run(PACK, opts.onSale ?? 1);
+  f.db.prepare("INSERT INTO promo_codes (id, code, code_normalized, coupon_id, product_ids_json, active, max_redemptions, percent_off) VALUES ('promo-free','FREE100','FREE100','coupon','[]',1,NULL,100)").run();
+  return f;
+}
+/** Stripe, stubbed. A URL no stub answers fails the test. */
+function stripeStub() {
+  const before = globalThis.fetch; const calls: string[] = []; let n = 0;
+  globalThis.fetch = (async (input: any, init: any) => {
+    const url = String(input); calls.push(`${init?.method ?? 'GET'} ${url}`);
+    const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+    if (url.endsWith('/v1/customers') || /\/v1\/customers\/cus_/.test(url)) return json({ id: 'cus_member2' });
+    if (url.endsWith('/v1/payment_intents') && init?.method === 'POST') { n++; return json({ id: `pi_pack${n}`, client_secret: `pi_pack${n}` + '_secret_' + 'fixture', status: 'requires_payment_method' }); }
+    const got = /\/v1\/payment_intents\/(pi_\w+)$/.exec(url);
+    if (got) return json({ id: got[1], status: 'succeeded', amount_received: 2500, currency: 'usd', metadata: stubbedPi.get(got[1]) ?? {} });
+    throw new Error(`no Stripe stub answers ${url}`);
+  }) as any;
+  return { calls, restore: () => { globalThis.fetch = before; } };
+}
+const stubbedPi = new Map<string, Record<string, string>>();
+async function auth(f: any, user = 2) {
+  const jti = `jti-${user}`;
+  f.db.prepare("INSERT OR IGNORE INTO user_sessions (user_id, jti, factor, created_at, last_step_up_at) VALUES (?, ?, 'totp', datetime('now'), datetime('now'))").run(user, jti);
+  const jwt = await new SignJWT({ user_id: user, jti }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(f.env.JWT_SECRET));
+  return { Authorization: `Bearer ${jwt}`, 'content-type': 'application/json' };
+}
+async function intent(f: any, items: unknown[], extra: Record<string, unknown> = {}, user = 2) {
+  const r = await ordersRoute.request('/intent', { method: 'POST', headers: await auth(f, user), body: JSON.stringify({ items, nonce: `n${Math.random()}`.replace('.', ''), ...extra }) }, f.env);
+  return { status: r.status, body: await r.json() as any };
+}
+async function webhook(f: any, pi: Record<string, unknown>) {
+  const body = JSON.stringify({ id: `evt_${pi.id}`, type: 'payment_intent.succeeded', data: { object: pi } });
+  const timestamp = Math.floor(Date.now() / 1000);
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(f.env.STRIPE_WEBHOOK_SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const signature = Array.from(new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${timestamp}.${body}`)))).map((n) => n.toString(16).padStart(2, '0')).join('');
+  return billingRoute.request('/stripe/webhook', { method: 'POST', headers: { 'stripe-signature': `t=${timestamp},v1=${signature}`, 'content-type': 'application/json' }, body }, f.env);
+}
+const ONE = [{ price_id: PACK, quantity: 1 }];
+const ledgerCount = (f: any) => f.db.prepare('SELECT COUNT(*) AS n FROM ai_credit_ledger').get().n;
+
+test('each pack rule answers its code and creates no PaymentIntent', async () => {
+  const cases: [string, (f: any) => void, unknown[], Record<string, unknown>, Record<string, unknown>?][] = [
+    ['token_pack_alone', () => {}, [...ONE, { price_id: OTHER, quantity: 1 }], {}],
+    ['token_pack_alone', () => {}, [{ price_id: PACK, quantity: 2 }], {}],
+    ['promo_not_for_token_packs', () => {}, ONE, { promo_code: 'SAVE10' }],
+    ['promo_not_for_token_packs', () => {}, ONE, { promo_code: 'FREE100' }],
+    ['token_pack_not_on_sale', () => {}, ONE, {}, { onSale: 0 }],
+    ['token_pack_not_on_sale', () => {}, ONE, {}, { mirrored: 3000 }],
+    ['token_pack_not_on_sale', (f) => f.db.prepare("UPDATE ai_token_packs SET on_sale=0, archived_at=datetime('now')").run(), ONE, {}],
+    ['token_pack_daily_limit', (f) => { for (let i = 0; i < 5; i++) f.db.prepare("INSERT INTO ai_topup_purchases(payment_intent_id,order_ref,user_id,price_id,credit_microusd,expected_total_cents,currency,pack_uid,credited_at) VALUES(?,?,2,?,25000000,2500,'usd','pack25',datetime('now'))").run(`pi_day${i}`, `MRD-day${i}`, PACK); f.db.prepare('INSERT INTO ai_topup_accounts(user_id,balance_microusd) VALUES(2,0)').run(); for (let i = 0; i < 5; i++) f.db.prepare("INSERT INTO ai_credit_ledger(user_id,kind,delta_microusd,source_ref,actor) VALUES(2,'purchase',25000000,?,'test')").run(`pi:pi_day${i}`); f.db.prepare('UPDATE ai_topup_accounts SET balance_microusd=125000000 WHERE user_id=2').run(); }, ONE, {}],
+    ['token_balance_ceiling', (f) => { const b = 1_000_000_000 - 27_500_000 + 1; f.db.prepare('INSERT INTO ai_topup_accounts(user_id,balance_microusd) VALUES(2,?)').run(b); f.db.prepare("INSERT INTO ai_credit_ledger(user_id,kind,delta_microusd,source_ref,actor) VALUES(2,'purchase',?,'pi:pi_big','test')").run(b); }, ONE, {}],
+    ['token_balance_ceiling', (f) => { const b = 1_000_000_000 - 27_500_000 - 10_000_000 + 1; f.db.prepare('INSERT INTO ai_topup_accounts(user_id,balance_microusd) VALUES(2,?)').run(b); f.db.prepare("INSERT INTO ai_credit_ledger(user_id,kind,delta_microusd,source_ref,actor) VALUES(2,'purchase',?,'pi:pi_big','test')").run(b); f.db.prepare("INSERT INTO ai_topup_purchases(payment_intent_id,order_ref,user_id,price_id,credit_microusd,expected_total_cents,currency,pack_uid) VALUES('pi_waiting','MRD-waiting',2,?,10000000,1000,'usd','pack25')").run(PACK); }, ONE, {}],
+    ['token_packs_on_hold', (f) => f.db.prepare("INSERT INTO ai_topup_purchases(payment_intent_id,order_ref,user_id,price_id,credit_microusd,expected_total_cents,currency,pack_uid,dispute_state,created_at,credited_at) VALUES('pi_disputed','MRD-dispute',2,?,1,1,'usd','pack25','open',datetime('now','-30 days'),datetime('now','-30 days'))").run(PACK), ONE, {}],
+    ['token_packs_on_hold', (f) => f.db.prepare("INSERT INTO ai_credit_ledger(user_id,kind,delta_microusd,source_ref,shortfall_microusd,actor,created_at) VALUES(2,'refund',0,'rf:ch_1:1',1000,'test',datetime('now','-89 days'))").run(), ONE, {}],
+  ];
+  for (const [code, seed, items, extra, opts] of cases) {
+    const f = await shop(opts ?? {}); const s = stripeStub();
+    try {
+      seed(f);
+      const r = await intent(f, items, extra);
+      assert.deepEqual([r.status, r.body], [400, { error: code }], `${code} ${JSON.stringify([items, extra, opts])}`);
+      assert.deepEqual(s.calls, [], `${code}: no Stripe call`);
+      assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM orders').get().n, 0, `${code}: no order, so no free path`);
+      await assertInvariant(f);
+    } finally { s.restore(); f.db.close(); }
+  }
+  // The edges, the other way: each is allowed and reaches Stripe once for a PaymentIntent.
+  const allowed: [string, (f: any) => void][] = [
+    ['a shortfall 91 days ago', (f) => f.db.prepare("INSERT INTO ai_credit_ledger(user_id,kind,delta_microusd,source_ref,shortfall_microusd,actor,created_at) VALUES(2,'refund',0,'rf:ch_1:1',1000,'test',datetime('now','-91 days'))").run()],
+    ['a won dispute', (f) => f.db.prepare("INSERT INTO ai_topup_purchases(payment_intent_id,order_ref,user_id,price_id,credit_microusd,expected_total_cents,currency,pack_uid,dispute_state,created_at,credited_at) VALUES('pi_won','MRD-won',2,?,1,1,'usd','pack25','won',datetime('now','-30 days'),datetime('now','-30 days'))").run(PACK)],
+    ['four orders today and one 25 hours ago', (f) => { for (let i = 0; i < 5; i++) f.db.prepare("INSERT INTO ai_topup_purchases(payment_intent_id,order_ref,user_id,price_id,credit_microusd,expected_total_cents,currency,pack_uid,created_at) VALUES(?,?,2,?,1,1,'usd','pack25',datetime('now',?))").run(`pi_day${i}`, `MRD-day${i}`, PACK, i === 0 ? '-25 hours' : '-1 hours'); }],
+    ['exactly at the ceiling', (f) => { const b = 1_000_000_000 - 27_500_000; f.db.prepare('INSERT INTO ai_topup_accounts(user_id,balance_microusd) VALUES(2,?)').run(b); f.db.prepare("INSERT INTO ai_credit_ledger(user_id,kind,delta_microusd,source_ref,actor) VALUES(2,'purchase',?,'pi:pi_big','test')").run(b); }],
+  ];
+  for (const [name, seed] of allowed) {
+    const f = await shop(); const s = stripeStub();
+    try {
+      seed(f);
+      const r = await intent(f, ONE);
+      assert.equal(r.status, 200, `${name}: ${JSON.stringify(r.body)}`);
+      assert.equal(r.body.total, 2500); assert.equal(r.body.discount_cents, 0);
+      assert.equal(s.calls.filter((c) => c === 'POST https://api.stripe.com/v1/payment_intents').length, 1, name);
+    } finally { s.restore(); f.db.close(); }
+  }
+});
+
+test('one payment delivered twice credits the pack and its bonus once, with one notice', async () => {
+  const f = await shop(); const s = stripeStub();
+  try {
+    const r = await intent(f, ONE, { billing_country: 'AE' });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.deepEqual([r.body.subtotal, r.body.discount_cents, r.body.vat_cents, r.body.total], [2500, 0, 125, 2625]);
+    assert.deepEqual({ ...f.db.prepare('SELECT price_id,pack_uid,credit_microusd,bonus_microusd,expected_total_cents,credited_at FROM ai_topup_purchases').get() },
+      { price_id: PACK, pack_uid: 'pack25', credit_microusd: 25000000, bonus_microusd: 2500000, expected_total_cents: 2625, credited_at: null }, 'VAT is never part of the tokens');
+    assert.equal(ledgerCount(f), 0, 'placing the order credits nothing');
+    const pi = { id: r.body.payment_intent_id, status: 'succeeded', currency: 'usd', amount_received: 2625, metadata: { kind: 'cart_order', order_ref: r.body.order_ref, user_id: '2' } };
+    for (let i = 0; i < 2; i++) assert.equal((await webhook(f, pi)).status, 200);
+    assert.deepEqual(rows(f.db, 'SELECT kind,delta_microusd,source_ref,pack_uid FROM ai_credit_ledger ORDER BY rowid'), [
+      { kind: 'purchase', delta_microusd: 25000000, source_ref: `pi:${pi.id}`, pack_uid: 'pack25' },
+      { kind: 'bonus', delta_microusd: 2500000, source_ref: `pi:${pi.id}`, pack_uid: 'pack25' },
+    ]);
+    assert.equal(f.db.prepare('SELECT balance_microusd AS b FROM ai_topup_accounts WHERE user_id=2').get().b, 27500000);
+    assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM ai_topup_ledger').get().n, 0, 'no ai_topup_ledger row');
+    const notices = rows(f.db, "SELECT user_id,title,link FROM notifications_inbox WHERE type='ai_tokens_added'");
+    assert.deepEqual(notices, [{ user_id: 2, title: 'Tokens added: $27.50', link: '/account/usage#top-ups' }]);
+    const log = rows(f.db, "SELECT details FROM activity_logs WHERE action='ai_topup_credited'");
+    assert.equal(log.length, 1);
+    assert.deepEqual(JSON.parse(log[0].details), { payment_intent_id: pi.id, order_ref: r.body.order_ref, credit_microusd: 25000000, bonus_microusd: 2500000, pack_uid: 'pack25' });
+    // The pack line grants no licence; fulfilment still marks the order paid.
+    assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM user_products').get().n, 0);
+    assert.equal(f.db.prepare('SELECT status FROM orders').get().status, 'paid');
+    await assertInvariant(f);
+  } finally { s.restore(); f.db.close(); }
+});
+
+test('the webhook checks stay: wrong amount, order, user or no secret credits nothing', async () => {
+  const f = await shop(); const s = stripeStub();
+  try {
+    const r = await intent(f, ONE);
+    const pi = { id: r.body.payment_intent_id, status: 'succeeded', currency: 'usd', amount_received: 2500, metadata: { kind: 'cart_order', order_ref: r.body.order_ref, user_id: '2' } };
+    for (const altered of [{ amount_received: 2499 }, { metadata: { ...pi.metadata, order_ref: 'MRD-other' } }, { metadata: { ...pi.metadata, user_id: '3' } }, { status: 'processing' }, { currency: 'eur' }])
+      await assert.rejects(() => creditAiTopupFromPayment(f.env, { ...pi, ...altered }), /match/, JSON.stringify(altered));
+    const secret = f.env.STRIPE_WEBHOOK_SECRET; delete f.env.STRIPE_WEBHOOK_SECRET;
+    await assert.rejects(() => creditAiTopupFromPayment(f.env, pi), /not configured/);
+    f.env.STRIPE_WEBHOOK_SECRET = secret;
+    assert.equal(ledgerCount(f), 0);
+    assert.equal(f.db.prepare('SELECT credited_at FROM ai_topup_purchases').get().credited_at, null);
+    assert.equal(await creditAiTopupFromPayment(f.env, pi), true, 'the right payment still credits');
+    await assertInvariant(f);
+    // A purchase the old Worker already credited: a late delivery writes neither its purchase nor its bonus.
+    f.db.exec(`INSERT INTO ai_topup_purchases(payment_intent_id,order_ref,user_id,price_id,credit_microusd,expected_total_cents,currency,pack_uid,bonus_microusd,credited_at)
+        VALUES('pi_oldworker','MRD-old',2,'${PACK}',25000000,2500,'usd','pack25',2500000,datetime('now'));
+      INSERT INTO ai_topup_ledger(uid,user_id,kind,amount_microusd,payment_intent_id,actor) VALUES('led_old',2,'credit',25000000,'pi_oldworker','payment_webhook');
+      UPDATE ai_topup_accounts SET balance_microusd=balance_microusd+25000000 WHERE user_id=2;`);
+    const before = ledgerCount(f);
+    assert.equal(await creditAiTopupFromPayment(f.env, { id: 'pi_oldworker', status: 'succeeded', currency: 'usd', amount_received: 2500, metadata: { kind: 'cart_order', order_ref: 'MRD-old', user_id: '2' } }), false);
+    assert.equal(ledgerCount(f), before);
+    await assertInvariant(f);
+  } finally { s.restore(); f.db.close(); }
+});
+
+test('no other path credits: /orders/confirm, fulfilOrder and the free path write no ledger row', async () => {
+  const f = await shop(); const s = stripeStub();
+  try {
+    const r = await intent(f, ONE);
+    stubbedPi.set(r.body.payment_intent_id, { kind: 'cart_order', order_ref: r.body.order_ref, user_id: '2' });
+    const confirm = await ordersRoute.request('/confirm', { method: 'POST', headers: await auth(f), body: JSON.stringify({ payment_intent_id: r.body.payment_intent_id }) }, f.env);
+    assert.ok(confirm.status < 500, await confirm.clone().text());
+    await fulfilOrder(f.env, r.body.order_ref);
+    assert.equal(ledgerCount(f), 0);
+    assert.equal(f.db.prepare('SELECT balance_microusd AS b FROM ai_topup_accounts WHERE user_id=2').get()?.b ?? 0, 0);
+    assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM user_products').get().n, 0, 'a pack line grants no user_products row');
+    // An ordinary line still grants its row, through the paid and the free path alike.
+    const free = await intent(f, [{ price_id: OTHER, quantity: 1 }], { promo_code: 'FREE100' });
+    assert.equal(free.body.free, true, JSON.stringify(free.body));
+    assert.deepEqual(rows(f.db, 'SELECT price_id FROM user_products'), [{ price_id: OTHER }]);
+    assert.equal(ledgerCount(f), 0, 'the free path writes no ledger row');
+    await assertInvariant(f);
+  } finally { s.restore(); f.db.close(); }
+});
+
+test('every direct payment route refuses a pack price and the fallback, before any Stripe call', async () => {
+  const f = await shop({ env: { STRIPE_PRICE_AI_TOPUP: FALLBACK } }); const s = stripeStub();
+  try {
+    const headers = await auth(f);
+    for (const priceId of [PACK, FALLBACK]) {
+      const calls: [any, string, Record<string, unknown>][] = [
+        [paymentsRoute, '/intent', { price_id: priceId }],
+        [paymentsRoute, '/alacarte/intent', { price_id: priceId }],
+        [paymentsRoute, '/promo/validate', { code: 'FREE100', price_id: priceId }],
+        [billingRoute, '/subscription/swap/preview', { subscription_id: 'sub_1', price_id: priceId }],
+        [billingRoute, '/subscription/swap/confirm', { subscription_id: 'sub_1', price_id: priceId }],
+      ];
+      for (const [route, path, body] of calls) {
+        const r = await route.request(path, { method: 'POST', headers, body: JSON.stringify(body) }, f.env);
+        assert.deepEqual([r.status, await r.json()], [400, { error: 'token_pack_checkout_only' }], `${path} ${priceId}`);
+      }
+    }
+    // An archived pack's price is still refused, and the order intent refuses it too.
+    f.db.prepare("UPDATE ai_token_packs SET on_sale=0, archived_at=datetime('now')").run();
+    assert.equal(await isTokenPackPrice(f.env, PACK), true); assert.equal(await tokenPackForPrice(f.env, PACK), null);
+    assert.deepEqual(s.calls, []);
+    // A promo never applies to a pack's product or the fallback's.
+    for (const productId of ['prod_pack25', 'prod_env']) {
+      assert.equal(await isTokenPackProduct(f.env, productId), true);
+      assert.deepEqual(await validatePromoForProduct(f.env, 'FREE100', productId, 2500, 'usd'), { ok: false, reason: 'product_not_eligible' });
+    }
+    assert.equal(await isTokenPackProduct(f.env, 'prod_other'), false);
+    assert.equal((await validatePromoForProduct(f.env, 'FREE100', 'prod_other', 1000, 'usd')).ok, true);
+    // An ordinary price still passes the pack check.
+    assert.equal(await isTokenPackPrice(f.env, OTHER), false);
+  } finally { s.restore(); f.db.close(); }
+});
+
+test('with only STRIPE_PRICE_AI_TOPUP set, a member buys it alone, at face value, with no bonus', async () => {
+  const f = await shop({ pack: false, env: { STRIPE_PRICE_AI_TOPUP: FALLBACK } }); const s = stripeStub();
+  try {
+    assert.deepEqual(await tokenPackForPrice(f.env, FALLBACK), { origin: 'environment', packUid: null, priceId: FALLBACK, productId: null, faceCents: null, bonusMicrousd: 0, onSale: true });
+    assert.deepEqual(await intent(f, [{ price_id: FALLBACK, quantity: 2 }]).then((r) => r.body), { error: 'token_pack_alone' });
+    assert.deepEqual(await intent(f, [{ price_id: FALLBACK, quantity: 1 }], { promo_code: 'FREE100' }).then((r) => r.body), { error: 'promo_not_for_token_packs' });
+    const r = await intent(f, [{ price_id: FALLBACK, quantity: 1 }]);
+    assert.equal(r.status, 200, JSON.stringify(r.body)); assert.equal(r.body.total, 1500);
+    const pi = { id: r.body.payment_intent_id, status: 'succeeded', currency: 'usd', amount_received: 1500, metadata: { kind: 'cart_order', order_ref: r.body.order_ref, user_id: '2' } };
+    assert.equal((await webhook(f, pi)).status, 200);
+    assert.deepEqual(rows(f.db, 'SELECT kind,delta_microusd,pack_uid FROM ai_credit_ledger'), [{ kind: 'purchase', delta_microusd: 15000000, pack_uid: null }]);
+    assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM user_products').get().n, 0);
+    await assertInvariant(f);
+  } finally { s.restore(); f.db.close(); }
+});
+
+test('the PR 2 files are D755 files too', () => {
+  const markup = ['1', '.25'].join(''), word = ['mark', 'up'].join('');
+  const perk = ['perk', 'credit', 'ledger'].join('_'), intro = ['intro', 'credit', 'ledger'].join('_');
+  const text = readFileSync(new URL('../src/services/aiTopups.ts', import.meta.url), 'utf8').toLowerCase();
+  for (const needle of [markup, word, perk, intro]) assert.equal(text.includes(needle), false, `aiTopups.ts contains ${needle}`);
+});
+
+test('packOnSale judges the mirrored price against face_cents; a missing pack store is no pack, any other failed read throws', async () => {
+  for (const [mirrored, onSale, want] of [[2500, 1, true], [3000, 1, false], [2500, 0, false]] as const) {
+    const f = await shop({ mirrored, onSale }); const s = stripeStub();
+    try {
+      const pack = await tokenPackForPrice(f.env, PACK); if (!pack) throw Error('pack');
+      assert.equal(await packOnSale(f.env, pack), want, `${mirrored} ${onSale}`);
+      assert.deepEqual(s.calls, []);
+    } finally { s.restore(); f.db.close(); }
+  }
+  const { DB, db } = makeD1(AI_USERS_SCHEMA);
+  try {
+    assert.equal(await isTokenPackPrice({ DB } as any, PACK), false, 'no table: no pack can exist');
+    assert.equal(await isTokenPackPrice({ DB, STRIPE_PRICE_AI_TOPUP: FALLBACK } as any, FALLBACK), true, 'the fallback is still a pack');
+  } finally { db.close(); }
+  const broken = { DB: { prepare: () => { throw new Error('D1_ERROR: network connection lost'); } } } as any;
+  await assert.rejects(() => isTokenPackPrice(broken, PACK), /network connection lost/);
+  await assert.rejects(() => isTokenPackProduct(broken, 'prod_pack25'), /network connection lost/);
+});

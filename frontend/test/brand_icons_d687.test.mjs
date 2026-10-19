@@ -230,6 +230,7 @@ import { ProviderTag } from '../src/pages/founder/InterviewChannels.jsx';
 import { ChannelOriginBadge } from '../src/pages/founder/ChannelOriginBadge.jsx';
 import { ConsentView } from '../src/pages/connect/ConnectAssistantPage.jsx';
 import { Sheet, Row } from '../src/pages/account/ConnectorSheet.jsx';
+import { ProofOfFundsSheet, SharedProofOfFunds } from '../src/pages/investor/ProofOfFunds.jsx';
 const routed = (el) => html(h(MemoryRouter, null, el));
 /** The provider's mark (or monogram) with the visible name after it. */
 const markThenName = (out, key, name) => {
@@ -241,10 +242,16 @@ const markThenName = (out, key, name) => {
 test('7. Connectors, Build\'s rows, channel cards, setup cards, provider tags and origin badges draw the mark beside the name', () => {
   const p = { key: 'stripe', display_name: 'Stripe', by: 'Stripe', description: 'Payments.', available: true, has_implementation: true, status: 'live' };
   markThenName(routed(h(ConnectorCard, { p, onOpen() {} })), 'stripe', 'Stripe');
+  assert.match(routed(h(ConnectorCard, { p })), /data-testid="connector-card-stripe"[\s\S]*?width:34px;height:34px/, 'the card keeps the 34px tile');
   markThenName(routed(h(YoursTable, { rows: [{ p: { ...p, key: 'github', display_name: 'GitHub', by: 'GitHub' }, status: { label: 'Connected', tone: 'ok' } }], onOpen() {} })), 'github', 'GitHub');
   markThenName(routed(h(ConnectorCard, { p: { ...p, key: 'salesforce', display_name: 'Salesforce' }, onOpen() {} })), 'salesforce', 'Salesforce');
   markThenName(routed(h(Sheet, { title: 'HubSpot', provider: 'hubspot', providerName: 'HubSpot', onClose() {} })), 'hubspot', 'HubSpot');
   markThenName(routed(h(Row, { icon: h(BrandIcon, { provider: 'zoom', size: 24 }), a: 'Zoom' })), 'zoom', 'Zoom');
+  // D752 (#1891): the investor's share sheet title and the shared section's heading.
+  const never = () => new Promise(() => {});
+  const stub = { targets: never, accounts: never, share: never, list: never, revoke: never };
+  markThenName(routed(h(ProofOfFundsSheet, { target: { purpose: 'deal_commitment', target_id: 1, label: 'Deal', max_cents: 100000, attestable: true, active: null }, consent: { version: 'v', template: '' }, minimumCents: 100000, onClose() {}, api: stub, personal: { status: never } })), 'mercury', 'Mercury');
+  markThenName(routed(h(SharedProofOfFunds, { targetsState: { status: 'loading' }, api: stub })), 'mercury', 'Mercury');
   assert.match(read('frontend/src/pages/account/ConnectToolSheet.jsx'), /<Row icon=\{<BrandIcon provider=\{p\.key\} name=\{p\.display_name\} size=\{24\} \/>\}/, 'Build\'s rows pass the 24px tile');
   for (const [provider, title] of [['zoom', 'Zoom'], ['google_meet', 'Google Meet']]) {
     markThenName(routed(h(MeetingChannelCard, { card: { provider, state: 'unavailable', tone: 'neutral', label: 'Not set up' } })), provider, title);
@@ -267,12 +274,16 @@ test('7b. the surfaces this test cannot mount pass the key to BrandIcon at the a
   has('frontend/src/pages/hq/PlatformPage.jsx', /<BrandIcon provider=\{k\.provider_key\} name=\{PROVIDER_LABEL\[k\.provider_key\] \|\| k\.provider_key\} size=\{24\} \/>/, 'a 24px tile by each label');
   has('frontend/src/pages/admin/consoles/GithubSyncConsole.jsx', /<BrandIcon provider="github" name="GitHub" size=\{18\} variant="bare" tone="current" className="text-gray-800 dark:text-gray-100" \/>/, 'the GitHub mark in GitHub\'s documented monochrome, as the console drew it, not lucide\'s GitBranch');
   has('frontend/src/pages/account/AccountConnectors.jsx', /<BrandIcon provider="telegram" name="Telegram" \/>\s*<span className="text-sm font-bold[^"]*">Telegram · Axal VC channels/, 'the Telegram card\'s tile');
-  has('frontend/src/pages/account/AccountConnectors.jsx', /role="img" title="Built and verified by Axal" aria-label="Verified by Axal"/, 'the ✓ is an image');
+  has('frontend/src/pages/account/AccountConnectors.jsx', /<VerifiedBadge on=\{p\.verified_on\} \/>/, 'the Verified mark is the one primitive');
+  has('frontend/src/ui/VerifiedBadge.jsx', /role="img" aria-label="Verified"/, 'the Verified mark is an image');
+  assert.doesNotMatch(read('frontend/src/pages/account/AccountConnectors.jsx'), /title="Built and verified by Axal"/, 'the unrecorded ✓ is gone');
   has('frontend/src/pages/account/connectorTools.jsx', /<BrandIcon provider="hubspot" name="HubSpot" size=\{24\} \/>HubSpot pipeline/, 'HubSpot\'s modal title');
   has('frontend/src/pages/account/connectorTools.jsx', /<BrandIcon provider="salesforce" name="Salesforce" size=\{24\} \/>Salesforce field mapping/, 'Salesforce\'s modal title');
   has('frontend/src/pages/account/GithubSyncSheet.jsx', /title=\{`\$\{name\} is synced`\} provider="github"[\s\S]*title=\{`Connect \$\{name\}`\} provider="github"/, 'both GitHub sheet headers');
   has('frontend/src/pages/account/ConnectorSheet.jsx', /footer=\{footer\} provider=\{p\.key\} providerName=\{p\.display_name\}/, 'the connector sheet passes its catalogue key');
   has('frontend/src/pages/founder/InterviewChannels.jsx', /<BrandIcon provider=\{p\.key\} size=\{16\} variant="bare"/, 'Call on chips: the bare 16px mark');
+  has('frontend/src/components/ProofOfFunds.jsx', /<BrandIcon provider="mercury" name="Mercury" size=\{24\} \/>/, 'the proof of funds row\'s 24px tile');
+  has('frontend/src/pages/investor/ProofOfFunds.jsx', /const MARK = <BrandIcon provider="mercury" name="Mercury" size=\{24\} \/>;[\s\S]*\{MARK\}\s*<span>\{door\.text\}<\/span>/, 'each door\'s chip: the 24px tile before the words naming Mercury');
   assert.deepEqual(SOCIAL_LINKS.map((l) => [l.key, l.label]), [['facebook', 'Facebook'], ['linkedin', 'LinkedIn'], ['x', 'X'], ['instagram', 'Instagram'], ['youtube', 'YouTube'], ['telegram', 'Telegram'], ['tiktok', 'TikTok']]);
 });
 

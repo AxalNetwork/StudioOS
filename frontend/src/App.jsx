@@ -318,6 +318,7 @@ const JoinBranchPage = lazy(() => import('./pages/JoinBranchPage'));
 const ContactPage = lazy(() => import('./pages/ContactPage'));
 const TeamPage = lazy(() => import('./pages/TeamPage'));
 const PrivacyPage = lazy(() => import('./pages/PrivacyPage'));
+const InterviewNoticePage = lazy(() => import('./pages/InterviewNoticePage'));
 const RiskDisclosuresPage = lazy(() => import('./pages/RiskDisclosuresPage'));
 // Task #5 — Public event surface.
 const PublicEventsPage = lazy(() => import('./pages/events/PublicEventsPage'));
@@ -539,6 +540,13 @@ export { ParamRedirect };
 // holds its work now, the query and the hash kept. Mounted by PR 2b and the
 // closing PR on the three addresses.
 export { ValidateZoneRedirect };
+
+// D755 §13 (#1915): /products keeps its query and its hash, so an old
+// /products#token-packs link still lands on the Token packs.
+function ProductsRedirect() {
+  const loc = useLocation();
+  return <Navigate to={{ pathname: '/plans-and-pricing', search: loc.search, hash: loc.hash }} replace />;
+}
 
 function DashboardRedirect() {
   const loc = useLocation();
@@ -2477,6 +2485,8 @@ function AppInner() {
           its address carries the same gate. The static path outranks
           `:section` below; the page also lists the section for admins only. */}
       <Route path="/account/developer" element={guard(['admin'], <SettingsPage />)} />
+      {/* D753 — a connector's own page, inside the Account center. */}
+      <Route path="/account/connectors/:key" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
       <Route path="/account/:section" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
       <Route path="/settings/:section" element={<SettingsSectionRedirect />} />
 
@@ -3022,12 +3032,14 @@ function AppInner() {
       <Route path="/support" element={<SupportRedirect />} />
       {/* Products — catalog + checkout + explorer promo redemption. Open to
           every signed-in role incl. 'exploring' (that's where the Personal
-          Advisor's one-time 30-day-license codes get redeemed). */}
-      <Route path="/plans-and-pricing" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <ProductsPage />)} />
+          Advisor's one-time 30-day-license codes get redeemed). D755 §13
+          (#1915): visitors see it too — the plans and the Token packs, with
+          Sign in to buy; the page leaves out what only a member has. */}
+      <Route path="/plans-and-pricing" element={<ProductsPage />} />
       {/* Product slide-over deep link — same page, pre-opens the detail panel. */}
       <Route path="/plans-and-pricing/:productId" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <ProductsPage />)} />
       {/* Legacy /products redirects — keep for any saved links or external references. */}
-      <Route path="/products" element={<Navigate to="/plans-and-pricing" replace />} />
+      <Route path="/products" element={<ProductsRedirect />} />
       <Route path="/products/:productId" element={<Navigate to="/plans-and-pricing" replace />} />
       {/* One-time cart checkout + post-checkout confirmation (auth-protected). */}
       <Route path="/checkout" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CheckoutPage />)} />
@@ -3587,6 +3599,7 @@ function AppInner() {
       <Route path="/methodology" element={<MethodologyPage />} />
       <Route path="/intelligence" element={<IntelligencePage />} />
       <Route path="/privacy" element={<PrivacyPage />} />
+      <Route path="/privacy/interviews" element={<InterviewNoticePage />} />
       <Route path="/risk-disclosures" element={<RiskDisclosuresPage />} />
       {/* Task #4 (ID) — Public marketing surfaces. No auth. */}
       <Route path="/pricing" element={<PricingPage />} />

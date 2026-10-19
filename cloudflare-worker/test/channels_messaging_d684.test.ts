@@ -36,21 +36,17 @@
  *   · No response carries a platform secret, a token or a phone number;
  *     availability names missing secrets to admins only.
  *
+ * The shared harness (world, app, call, hooks, mockFetch, builders) lives in
+ * `_channels_fixture.ts` since D756 (#1895), unchanged.
+ *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/channels_messaging_d684.test.ts
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { createHash, createHmac } from 'node:crypto';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
-import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
-import { applyEngineSchema } from './_engine_schema.mjs';
-import { tableFromBaseline } from './_baseline.mjs';
-import { memKV } from './_mem_kv.mjs';
-import channels, { channelsAdmin } from '../src/routes/channels.ts';
-import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { encryptCredentials, decryptCredentials } from '../src/integrations/secrets.ts';
 import { runChannelJob } from '../src/services/channels/jobs.ts';
 import { transcriptionFailures } from '../src/services/channels/voiceFailures.ts';
@@ -58,241 +54,15 @@ import { createLinkCode } from '../src/services/channels/linkCodes.ts';
 import { normaliseTelegramUpdate } from '../src/services/channels/telegram.ts';
 import { normaliseWhatsAppPayload, maskNumber } from '../src/services/channels/whatsapp.ts';
 import { CHANNEL_LIMITS } from '../src/services/channels/types.ts';
+import { decryptColumn, encryptColumn } from '../src/services/columnCipher.ts';
+import { voiceNoteForJob } from '../src/services/channels/threads.ts';
+import {
+  ADMIN, app, AUDIO, businessMessage, call, confirmUpdate, connectionUpdate, consentGiven, count, GONE, ids, INTERVIEW,
+  JWT_SECRET, linkTelegram, ME, mockFetch, noSecretsSeen, now, OTHER, OTHER_PROJECT, PNID, PNID_GONE,
+  PROJECT, ref, refCode, type Route, SECRETS, seen, send, sign, startUpdate, telegramApi, TG_ME, TG_NEW, TG_OTHER,
+  tgHook, tgUser, WA_CUSTOMER, WA_TOKEN, waHook, waPayload, waText, world,
+} from './_channels_fixture.ts';
 
-/** Provider ids are stored hashed (events.ts `refKey`); the tests look them up the same way. */
-const refCode = (code: string) => createHash('sha256').update(code).digest('hex');
-const ref = (provider: string, id: string) => createHash('sha256').update(`${provider}:${id}`).digest('hex');
-
-const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
-const mig = (name: string) => readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8');
-
-const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
-const ADMIN = 1, ME = 2, OTHER = 3, GONE = 4, FOUNDER = 9;
-const PROJECT = 7, OTHER_PROJECT = 8;
-const INTERVIEW = 101;
-const TG_ME = '555001', TG_OTHER = '555002', TG_NEW = '555003';
-const PNID = '1000001', PNID_GONE = '1000004';
-const WA_TOKEN = 'EAAG-member-business-token-SECRET';
-
-const SECRETS = {
-  TELEGRAM_CHANNEL_BOT_TOKEN: '123456:tg-bot-token-SECRET',
-  TELEGRAM_CHANNEL_BOT_USERNAME: 'axal_interviews_bot',
-  TELEGRAM_CHANNEL_WEBHOOK_SECRET: 'tg_webhook_SECRET_1',
-  WHATSAPP_APP_ID: '424242',
-  WHATSAPP_APP_SECRET: 'wa-app-SECRET-value',
-  WHATSAPP_VERIFY_TOKEN: 'wa-verify-SECRET',
-  WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID: '777888',
-};
-const SECRET_VALUES = [SECRETS.TELEGRAM_CHANNEL_BOT_TOKEN, SECRETS.TELEGRAM_CHANNEL_WEBHOOK_SECRET, SECRETS.WHATSAPP_APP_SECRET,
-  SECRETS.WHATSAPP_VERIFY_TOKEN, WA_TOKEN, 'EAAG-new-business-token-SECRET'];
-
-async function world(opts: { seed?: boolean; budget?: number } = {}) {
-  const { DB, db } = aiBudgetFixture();
-  db.exec(`
-    ALTER TABLE users ADD COLUMN founder_id INTEGER;
-    ALTER TABLE users ADD COLUMN spinout_lab_active INTEGER DEFAULT 0;
-    ALTER TABLE users ADD COLUMN deletion_requested_at TEXT;
-    ALTER TABLE users ADD COLUMN jwt_min_iat INTEGER;
-    UPDATE users SET founder_id = ${FOUNDER} WHERE id IN (${ME}, ${GONE});
-    UPDATE users SET is_active = 0 WHERE id = ${GONE};
-    CREATE TABLE founders (id INTEGER PRIMARY KEY, user_id INTEGER);
-    INSERT INTO founders VALUES (${FOUNDER}, ${ME});
-    CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT, founder_id INTEGER, company_id INTEGER, deleted_at TEXT);
-    INSERT INTO projects (id, name, founder_id) VALUES (${PROJECT}, 'Ledger tool', ${FOUNDER}), (${OTHER_PROJECT}, 'Not mine', 99);
-    CREATE TABLE discovery_interviews (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, interviewee_name TEXT NOT NULL, interviewee_role TEXT,
-      interview_date TEXT, notes TEXT, hypotheses_json TEXT, pains_json TEXT, icp_fit TEXT,
-      transcript TEXT, transcribed_at TEXT, transcribed_by_model TEXT,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-    );
-    INSERT INTO discovery_interviews (id, project_id, interviewee_name) VALUES (${INTERVIEW}, ${PROJECT}, 'Dana Ruiz');
-    CREATE TABLE integrations (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE, user_id INTEGER NOT NULL, provider_key TEXT NOT NULL,
-      display_name TEXT, status TEXT NOT NULL DEFAULT 'active', auth_type TEXT NOT NULL, credentials_enc TEXT,
-      webhook_secret_enc TEXT, config_json TEXT, capabilities_json TEXT, scopes_json TEXT,
-      external_account_id TEXT, external_account_name TEXT, last_synced_at TEXT, last_error TEXT,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP, UNIQUE (user_id, provider_key)
-    );
-    ALTER TABLE activity_logs ADD COLUMN project_id INTEGER;
-    CREATE TABLE mi_pro_subscriptions (user_id INTEGER PRIMARY KEY, status TEXT, subscription_id TEXT, plan TEXT, period_end TEXT, stripe_customer_id TEXT);
-    CREATE TABLE user_recovery_state (user_id INTEGER PRIMARY KEY, cooling_off_until TEXT, step_up_due_at TEXT);
-  `);
-  for (const t of ['waitlist_signups', 'metric_targets', 'competitor_analyses', 'competitor_candidates',
-    'competitor_sources', 'competitor_signals']) db.exec(tableFromBaseline(BASELINE, t));
-  for (const m of ['106_pain_groups.sql', '211_founder_validate_evidence.sql', '214_validate_proposals.sql',
-    '246_fills_the_blanks_everywhere.sql', '438_interview_sessions.sql', '439_validate_proposals_structuring.sql',
-    '440_validate_cycle_stores.sql', '446_interview_structure_receipts.sql', '447_assistant_interviews.sql',
-    '449_interview_channels.sql', '450_channel_events_delete_kind.sql', '451_channel_review_fixes.sql',
-    // D685: openSession stores the call (call_provider), as production's 452 lets it.
-    '452_record_session_setup.sql', '454_channel_voice_failures.sql',
-    '457_integrations_last_error_at.sql', '458_channel_link_consent.sql']) db.exec(mig(m));
-  // D757: the Validate engine's schema (487, 465, 453 and the re-scope's columns).
-  applyEngineSchema(db);
-  if (opts.budget != null) {
-    for (const key of ['founder:free', 'other']) {
-      db.prepare('INSERT INTO ai_licence_caps(licence_key, daily_microusd, monthly_microusd, recorded_by) VALUES (?, ?, ?, 1)').run(key, opts.budget, opts.budget);
-    }
-  }
-  const queued: any[] = [];
-  const aiCalls: any[] = [];
-  const env: any = {
-    DB, ENVIRONMENT: 'development', JWT_SECRET, KEK_PII: 'k'.repeat(48), ...SECRETS,
-    APP_URL: 'https://axal.vc', PUBLIC_BASE_URL: 'https://axal.vc',
-    RATE_LIMITS: memKV(), USE_CF_QUEUE: 'true',
-    JOB_QUEUE: { async send(body: any) { queued.push(body); } },
-    AI: { async run(model: string, input: any) { aiCalls.push({ model, input }); return { text: 'We lose a whole day every month to this.', transcription_info: { language: 'en' } }; } },
-  };
-  if (opts.seed) {
-    const creds = await encryptCredentials(env, 'wa-me', { access_token: WA_TOKEN, token_type: 'bearer' });
-    const goneCreds = await encryptCredentials(env, 'wa-gone', { access_token: WA_TOKEN, token_type: 'bearer' });
-    db.prepare(`INSERT INTO integrations (uid, user_id, provider_key, auth_type, external_account_id, external_account_name, config_json, credentials_enc)
-                VALUES ('tg-me', ?, 'telegram', 'webhook', ?, '@dana_biz', '{}', NULL),
-                       ('wa-me', ?, 'whatsapp', 'oauth2', ?, 'Ledger Co', ?, ?),
-                       ('wa-gone', ?, 'whatsapp', 'oauth2', ?, 'Gone Co', ?, ?)`)
-      .run(ME, TG_ME, ME, PNID, JSON.stringify({ phone_number_id: PNID, waba_id: '2000001', number_masked: '•••• 1234' }), creds,
-        GONE, PNID_GONE, JSON.stringify({ phone_number_id: PNID_GONE, waba_id: '2000004' }), goneCreds);
-    db.exec(`INSERT INTO telegram_business_connections (uid, business_connection_id, telegram_user_id, user_id, is_enabled, can_reply)
-             VALUES ('bc-1', 'BC-ME', '${TG_ME}', ${ME}, 1, 1)`);
-  }
-  return { env, db, queued, aiCalls };
-}
-
-// ---------------------------------------------------------------------------
-// Harness
-// ---------------------------------------------------------------------------
-
-const app = (() => {
-  const a = new Hono();
-  a.route('/api/channels', channels as any);
-  a.route('/api/admin/channels', channelsAdmin as any);
-  a.onError((err: any, c) => {
-    const st = AUTH_ERROR_STATUSES[err?.message ?? ''];
-    if (st) return c.json({ detail: err.message }, st);
-    console.error(err);
-    return c.json({ detail: 'Internal server error' }, 500);
-  });
-  return a;
-})();
-
-/** Every response body any test saw, to search for secrets at the end of each test. */
-const seen: string[] = [];
-
-async function send(env: any, path: string, init: RequestInit) {
-  const res = await app.fetch(new Request(`https://axal.vc${path}`, init), env);
-  const text = await res.text();
-  seen.push(text);
-  let body: any = null;
-  try { body = JSON.parse(text); } catch { body = text; }
-  return { status: res.status, body };
-}
-
-async function call(env: any, user: number, method: string, path: string, body?: unknown, role = 'founder') {
-  const tok = await new SignJWT({ user_id: user, role }).setProtectedHeader({ alg: 'HS256' })
-    .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
-  const headers: Record<string, string> = { authorization: `Bearer ${tok}` };
-  if (body !== undefined) headers['content-type'] = 'application/json';
-  return send(env, `/api/channels${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-}
-
-function tgHook(env: any, update: unknown, secret: string | null = SECRETS.TELEGRAM_CHANNEL_WEBHOOK_SECRET) {
-  const headers: Record<string, string> = { 'content-type': 'application/json' };
-  if (secret !== null) headers['X-Telegram-Bot-Api-Secret-Token'] = secret;
-  return send(env, '/api/channels/telegram/webhook', { method: 'POST', headers, body: JSON.stringify(update) });
-}
-
-const sign = (raw: string, secret = SECRETS.WHATSAPP_APP_SECRET) => `sha256=${createHmac('sha256', secret).update(raw).digest('hex')}`;
-
-function waHook(env: any, payload: unknown, signature?: string | null) {
-  const raw = JSON.stringify(payload);
-  const headers: Record<string, string> = { 'content-type': 'application/json' };
-  const sig = signature === undefined ? sign(raw) : signature;
-  if (sig !== null) headers['X-Hub-Signature-256'] = sig;
-  return send(env, '/api/channels/whatsapp/webhook', { method: 'POST', headers, body: raw });
-}
-
-type Reply = { status?: number; json?: unknown; body?: BodyInit; headers?: Record<string, string> };
-type Route = (url: URL, init: RequestInit) => Reply | undefined;
-
-/** Mock every provider: a URL no route answers fails the test. */
-function mockFetch(route: Route) {
-  const calls: { url: string; method: string; body: any; auth: string | null }[] = [];
-  const original = globalThis.fetch;
-  globalThis.fetch = (async (input: any, init: RequestInit = {}) => {
-    const url = new URL(typeof input === 'string' ? input : input.url);
-    let body: any = init.body;
-    if (typeof body === 'string') { try { body = JSON.parse(body); } catch { /* raw */ } }
-    const auth = (init.headers as Record<string, string> | undefined)?.authorization ?? null;
-    calls.push({ url: url.toString(), method: String(init.method ?? 'GET'), body, auth });
-    const r = route(url, init);
-    if (!r) throw new Error(`unexpected fetch ${url.origin}${url.pathname}`);
-    const payload = r.body ?? (r.json === undefined ? '' : JSON.stringify(r.json));
-    return new Response(payload, { status: r.status ?? 200, headers: { 'content-type': 'application/json', ...(r.headers ?? {}) } });
-  }) as typeof fetch;
-  return { calls, restore: () => { globalThis.fetch = original; } };
-}
-
-/** Telegram's Bot API, as far as these tests use it. */
-const telegramApi: Route = (url) => {
-  if (url.hostname !== 'api.telegram.org') return undefined;
-  if (url.pathname.endsWith('/sendMessage')) return { json: { ok: true, result: { message_id: 9001, date: 1 } } };
-  if (url.pathname.endsWith('/getFile')) return { json: { ok: true, result: { file_id: 'VOICE-1', file_size: 4000, file_path: 'voice/file_7.oga' } } };
-  if (url.pathname.startsWith('/file/bot')) return { body: new Uint8Array(4000).fill(7), headers: { 'content-type': 'audio/ogg' } };
-  if (url.pathname.endsWith('/setWebhook')) return { json: { ok: true, result: true } };
-  return undefined;
-};
-
-const count = (db: any, sql: string, ...args: unknown[]) => Number(db.prepare(sql).get(...args)?.n ?? 0);
-const now = () => Math.floor(Date.now() / 1000);
-
-let updateId = 100;
-let tgMessageId = 500;
-const tgUser = (id: string, extra: Record<string, unknown> = {}) => ({ id: Number(id), is_bot: false, first_name: 'Dana', username: 'dana_biz', ...extra });
-
-const startUpdate = (code: string, tg = TG_ME) => ({
-  update_id: ++updateId,
-  message: { message_id: 1, date: now(), chat: { id: Number(tg), type: 'private' }, from: tgUser(tg), text: `/start ${code}` },
-});
-const confirmUpdate = (tg = TG_ME) => ({
-  update_id: ++updateId,
-  message: { message_id: 2, date: now(), chat: { id: Number(tg), type: 'private' }, from: tgUser(tg), text: '/confirm' },
-});
-/** Both steps of linking: the code, then the Telegram account's own /confirm. */
-async function linkTelegram(env: any, code: string, tg = TG_ME) {
-  await tgHook(env, startUpdate(code, tg));
-  await tgHook(env, confirmUpdate(tg));
-  const owner = Number((await env.DB.prepare('SELECT user_id FROM channel_link_codes WHERE code_hash = ?').bind(refCode(code)).first<any>()).user_id);
-  const { claim } = (await call(env, owner, 'GET', '/telegram/link')).body;
-  return call(env, owner, 'POST', `/telegram/link/${claim.uid}/confirm`);
-}
-const connectionUpdate = (bc: string, tg: string, extra: Record<string, unknown> = { rights: { can_reply: true, can_read_messages: true } }, enabled = true) => ({
-  update_id: ++updateId,
-  business_connection: { id: bc, user: tgUser(tg), user_chat_id: Number(tg), date: now(), is_enabled: enabled, ...extra },
-});
-const businessMessage = (bc: string, o: { chat?: number; from?: number; id?: number; text?: string; voice?: unknown; key?: string } = {}) => ({
-  update_id: ++updateId,
-  [o.key ?? 'business_message']: {
-    message_id: o.id ?? ++tgMessageId, business_connection_id: bc, date: now(),
-    chat: { id: o.chat ?? 8001, type: 'private', first_name: 'Sam' },
-    from: { id: o.from ?? o.chat ?? 8001, is_bot: false, first_name: 'Sam', last_name: 'Okafor' },
-    ...(o.voice ? { voice: o.voice } : { text: o.text ?? 'We reconcile invoices by hand every Friday.' }),
-  },
-});
-
-const waPayload = (pnid: string, value: Record<string, unknown>, field = 'messages') => ({
-  object: 'whatsapp_business_account',
-  entry: [{ id: '2000001', changes: [{ field, value: { messaging_product: 'whatsapp', metadata: { display_phone_number: '15550001234', phone_number_id: pnid }, ...value } }] }],
-});
-const WA_CUSTOMER = '447700900123';
-const waText = (pnid: string, wamid: string, text = 'Our month-end close takes four days.', from = WA_CUSTOMER) => waPayload(pnid, {
-  contacts: [{ profile: { name: 'Priya Shah' }, wa_id: from }],
-  messages: [{ from, id: wamid, timestamp: String(now()), type: 'text', text: { body: text } }],
-});
-
-function noSecretsSeen() {
-  const all = seen.join('\n');
-  for (const s of SECRET_VALUES) assert.equal(all.includes(s), false, 'a secret reached a response');
-  assert.equal(all.includes(WA_CUSTOMER), false, 'a customer phone number reached a response');
-}
 test.afterEach(() => { noSecretsSeen(); seen.length = 0; });
 
 // ---------------------------------------------------------------------------
@@ -537,7 +307,7 @@ test("Telegram: the owner's messages are 'Me', edits and deletions change pendin
     assert.deepEqual((await call(env, ME, 'GET', `/threads/${t.uid}`)).body.messages.map((m: any) => [m.side, m.text]),
       [['contact', 'fixed text'], ['me', 'How often does that happen?']]);
 
-    await tgHook(env, { update_id: ++updateId, deleted_business_messages: { business_connection_id: 'BC-ME', chat: { id: 8001, type: 'private' }, message_ids: [12] } });
+    await tgHook(env, { update_id: ++ids.update, deleted_business_messages: { business_connection_id: 'BC-ME', chat: { id: 8001, type: 'private' }, message_ids: [12] } });
     assert.equal(count(db, 'SELECT COUNT(*) n FROM channel_thread_messages'), 1);
     assert.equal(f.calls.length, 0, 'receiving sends nothing');
   } finally { f.restore(); }
@@ -551,8 +321,8 @@ test('Telegram: a disabled connection is updated and its messages are nobody’s
     const bc = db.prepare(`SELECT is_enabled, can_reply FROM telegram_business_connections WHERE business_connection_id = 'BC-ME'`).get();
     assert.deepEqual([bc.is_enabled, bc.can_reply], [0, 0]);
     await tgHook(env, businessMessage('BC-ME'));
-    await tgHook(env, { update_id: ++updateId, channel_post: { message_id: 1, chat: { id: -100, type: 'channel' }, text: 'x' } });
-    await tgHook(env, { update_id: ++updateId, message: { message_id: 2, chat: { id: -5, type: 'group' }, from: tgUser('9'), text: '/start abc' } });
+    await tgHook(env, { update_id: ++ids.update, channel_post: { message_id: 1, chat: { id: -100, type: 'channel' }, text: 'x' } });
+    await tgHook(env, { update_id: ++ids.update, message: { message_id: 2, chat: { id: -5, type: 'group' }, from: tgUser('9'), text: '/start abc' } });
     assert.equal(count(db, 'SELECT COUNT(*) n FROM channel_threads'), 0);
     assert.equal(f.calls.length, 0, 'a disabled connection prompts nobody');
   } finally { f.restore(); }
@@ -564,6 +334,8 @@ async function assignedTelegramChat(env: any, chat = 8001) {
   const [t] = (await call(env, ME, 'GET', '/threads?status=pending')).body.items;
   const a = await call(env, ME, 'POST', `/threads/${t.uid}/assign`, { interview_id: INTERVIEW });
   assert.equal(a.status, 200);
+  // D756 (#1977): a Telegram chat's notes are fetched only after the interviewee's YES.
+  await consentGiven(env, null, t.uid);
   return { uid: t.uid as string, sessionId: Number(a.body.session_id) };
 }
 const voiceJobs = (queued: any[]) => queued.filter((j) => j.job_type === 'channel_followup');
@@ -590,7 +362,10 @@ test('Telegram: a voice note on a pending chat runs no model and waits, with no 
       [['voice', null, true, 9], ['voice', null, true, 9], ['voice', null, true, 9]]);
     assert.equal(JSON.stringify(read.body).includes('VOICE-1'), false, 'the file ref never leaves the Worker');
 
-    // The member assigns the chat: now, and only now, the notes are queued — ids only.
+    // D756 (#1977): the interviewee's YES on the pending chat waits on the thread...
+    await consentGiven(env, db, t.uid);
+    assert.equal(queued.length, 0, 'a pending chat queues nothing, consent or not');
+    // ...and the member assigns the chat: now, and only now, the notes are queued — ids only.
     const a = await call(env, ME, 'POST', `/threads/${t.uid}/assign`, { interview_id: INTERVIEW });
     assert.deepEqual([a.status, a.body.moved, a.body.voice_queued], [200, 0, 3]);
     const jobs = voiceJobs(queued);
@@ -651,7 +426,7 @@ test('Telegram: a voice note deleted at the source while its job waits is never 
     const { sessionId } = await assignedTelegramChat(env);
     await tgHook(env, businessMessage('BC-ME', { id: 777, voice: { file_id: 'VOICE-3', duration: 4 } }));
     const [job] = voiceJobs(queued);
-    await tgHook(env, { update_id: ++updateId, deleted_business_messages: { business_connection_id: 'BC-ME', chat: { id: 8001, type: 'private' }, message_ids: [777] } });
+    await tgHook(env, { update_id: ++ids.update, deleted_business_messages: { business_connection_id: 'BC-ME', chat: { id: 8001, type: 'private' }, message_ids: [777] } });
     assert.equal(count(db, 'SELECT COUNT(*) n FROM channel_thread_messages'), 0, 'the placeholder went with the deletion');
     const calls = f.calls.length;
     await runChannelJob(env, 'channel_followup', job.payload);
@@ -857,7 +632,11 @@ test('WhatsApp: one POST with several messages claims each; a voice note waits f
   assert.equal(queued.length, 0, 'a pending chat’s voice note is not queued');
   const [t] = (await call(env, ME, 'GET', '/threads')).body.items;
   const a = await call(env, ME, 'POST', `/threads/${t.uid}/assign`, { interview_id: INTERVIEW });
-  assert.deepEqual([a.body.moved, a.body.voice_queued], [1, 1]);
+  // D754 (#1893): a WhatsApp chat links and waits for the interviewee's consent.
+  assert.deepEqual([a.body.moved, a.body.voice_queued], [0, 0]);
+  assert.equal(queued.length, 0, 'nothing is queued before consent');
+  await consentGiven(env, db, t.uid);
+  assert.equal(segments(db, a.body.session_id).length, 1, 'the text moved once consent was given');
   const [job] = voiceJobs(queued);
   // Review finding 5: a wamid is the customer's number in base64. Neither it,
   // the number nor the media id rides in the job or in its idempotency key.
@@ -1109,7 +888,7 @@ test('Availability names missing secrets to admins only, hands the browser the s
   const tg = forMember.body.providers.find((p: any) => p.provider === 'telegram');
   assert.deepEqual([tg.available, tg.missing], [false, []]);
   const wa = forMember.body.providers.find((p: any) => p.provider === 'whatsapp');
-  assert.deepEqual(wa.signup, { app_id: SECRETS.WHATSAPP_APP_ID, config_id: SECRETS.WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID });
+  assert.deepEqual(wa.signup, { app_id: SECRETS.WHATSAPP_APP_ID, config_id: SECRETS.WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID, graph_version: 'v23.0' });
   assert.deepEqual(forMember.body.providers.map((p: any) => p.provider), ['telegram', 'whatsapp', 'zoom', 'google_meet']);
   assert.equal(forMember.body.providers.find((p: any) => p.provider === 'zoom').available, false);
   assert.deepEqual(Object.keys(forMember.body.connections.whatsapp).sort(), ['calls', 'can_reply', 'connected_at', 'external_account_name', 'status'], 'calls: the Calling eligibility read (#1586)');
@@ -1357,7 +1136,7 @@ test('#1586 voice: the daily cap, too large, unreadable and an expired connectio
     const notes = await waitingNotes(env, uid);
     assert.deepEqual(notes.map((m: any) => [m.transcription_failure.reason, m.transcription_failure.retry]),
       [['too_large', null], ['unreadable', null], ['daily_cap', 'available']]);
-    assert.equal(notes[0].transcription_failure.sentence, 'This voice note is larger than Axal can transcribe from Telegram (20 MB).');
+    assert.equal(notes[0].transcription_failure.sentence, 'This file is over 5 MB. Axal takes up to 5 MB per note from Telegram for now.');
     assert.equal(notes[2].transcription_failure.sentence, 'This Telegram account reached its voice notes for today, so this one waits. Retry it tomorrow.');
     assert.equal((await call(env, ME, 'POST', `/threads/${uid}/voice/${notes[0].uid}/retry`)).status, 409, 'too large is never retried');
   } finally { f.restore(); }
@@ -1366,6 +1145,7 @@ test('#1586 voice: the daily cap, too large, unreadable and an expired connectio
   await waHook(env, waPayload(PNID, { messages: [{ from: WA_CUSTOMER, id: 'wamid.T', timestamp: String(now()), type: 'text', text: { body: 'Hi' } }] }));
   const wa = (await call(env, ME, 'GET', '/threads')).body.items.find((t: any) => t.provider === 'whatsapp');
   assert.equal((await call(env, ME, 'POST', `/threads/${wa.uid}/assign`, { interview_id: INTERVIEW })).status, 200);
+  await consentGiven(env, db, wa.uid);
   await waHook(env, waPayload(PNID, { messages: [{ from: WA_CUSTOMER, id: 'wamid.EXP', timestamp: String(now()), type: 'audio', audio: { id: 'MEDIA-EXP' } }] }));
   const g = mockFetch((url) => (url.pathname === '/v23.0/MEDIA-EXP' ? { status: 401, json: { error: { code: 190, message: 'Session has expired for +447700900123' } } } : undefined));
   try { const jobs = voiceJobs(queued); await runChannelJob(env, 'channel_followup', jobs[jobs.length - 1].payload); } finally { g.restore(); }
@@ -1950,5 +1730,270 @@ test('#1602 mutation: a completed claim is idempotent past expiry and the respon
       'const row = uid ? await memberLinkClaim', 'const row = false ? await memberLinkClaim');
     const wrong = await latestInstead.pendingLinkView(env, ME, uid);
     assert.throws(() => assert.equal(wrong.uid, uid), { name: 'AssertionError' });
+  } finally { f.restore(); }
+});
+
+// ---------------------------------------------------------------------------
+// D756 (#1896): voice notes, audio files, audio documents and round videos —
+// normalised, and downloaded under a deadline and a 5 MB cap.
+
+const MB5 = 5 * 1024 * 1024;
+const TOO_LARGE_TG = 'This file is over 5 MB. Axal takes up to 5 MB per note from Telegram for now.';
+const UNSUPPORTED = 'Axal can transcribe MP3, M4A, OGG, WAV and WebM audio only, so this file was not transcribed.';
+const ROUND_VIDEO = "Round video messages can't be transcribed yet.";
+
+/** Telegram's API with one file per id: getFile names a path per id, and the path serves its bytes. */
+function telegramFiles(files: Record<string, { bytes?: Uint8Array | ReadableStream; size?: number; status?: number; headers?: Record<string, string>; throws?: boolean }>): Route {
+  return (url, init) => {
+    if (url.pathname.endsWith('/getFile')) {
+      const id = String(JSON.parse(String(init.body)).file_id);
+      const file = files[id];
+      if (file) return { json: { ok: true, result: { file_id: id, file_size: file.size ?? 4000, file_path: `music/${id}.bin` } } };
+    }
+    const m = /\/file\/bot[^/]+\/music\/(.+)\.bin$/.exec(url.pathname);
+    if (m && files[m[1]]) {
+      const file = files[m[1]];
+      if (file.throws) throw new TypeError('fetch failed');
+      return { status: file.status ?? 200, body: file.bytes as any ?? AUDIO.OGG, headers: { 'content-type': 'application/octet-stream', ...(file.headers ?? {}) } };
+    }
+    return telegramApi(url, init);
+  };
+}
+const fileCalls = (f: { calls: { url: string }[] }) => ({
+  getFile: f.calls.filter((c) => c.url.endsWith('/getFile')).length,
+  download: f.calls.filter((c) => c.url.includes('/file/bot')).length,
+});
+const dayCount = (db: any) => Number(db.prepare(`SELECT COALESCE(SUM(n), 0) AS n FROM channel_counters WHERE counter = 'transcriptions_day'`).get().n);
+const lastVoiceError = (db: any) => db.prepare(`SELECT error FROM channel_events WHERE kind = 'voice' ORDER BY id DESC LIMIT 1`).get().error;
+/** A 6 MB body with no content-length, in 64 KB chunks; `pulls` and `cancelled` say how far it was read. */
+function bigStream() {
+  const state = { pulls: 0, cancelled: false };
+  const chunk = new Uint8Array(64 * 1024).fill(1);
+  chunk.set([0x4f, 0x67, 0x67, 0x53]);
+  const stream = new ReadableStream<Uint8Array>({
+    pull(c) { state.pulls += 1; if (state.pulls * chunk.byteLength > 6 * 1024 * 1024) c.close(); else c.enqueue(chunk.slice()); },
+    cancel() { state.cancelled = true; },
+  }, { highWaterMark: 0 });
+  return { stream, state };
+}
+async function runLastVoiceJob(env: any, queued: any[]) {
+  const jobs = voiceJobs(queued);
+  await runChannelJob(env, 'channel_followup', jobs[jobs.length - 1].payload);
+}
+
+test('D756 #1896 normaliser: voice, audio, round videos and audio documents become notes; other media, edits and bad sizes do not', () => {
+  const norm = (o: Record<string, unknown>, key = 'business_message') => normaliseTelegramUpdate(businessMessage('BC-ME', { ...o, key } as any)) as any;
+  const voice = norm({ voice: { file_id: 'V1', mime_type: 'audio/ogg', duration: 7, file_size: 4000 } });
+  assert.deepEqual(voice.voice, { fileRef: 'V1', mime: 'audio/ogg', durationSec: 7, media: 'voice', sizeBytes: 4000 });
+  const audio = norm({ audio: { file_id: 'A1', mime_type: 'audio/mpeg', duration: 61, file_size: 9000 }, caption: 'The call with Lee' });
+  assert.equal(audio.text, null, 'a caption is dropped in v1');
+  assert.deepEqual(audio.voice, { fileRef: 'A1', mime: 'audio/mpeg', durationSec: 61, media: 'audio', sizeBytes: 9000 });
+  const round = norm({ video_note: { file_id: 'R1', duration: 12, length: 384, file_size: 5000 } });
+  assert.deepEqual(round.voice, { fileRef: 'R1', mime: 'video/mp4', durationSec: 12, media: 'video_note', sizeBytes: 5000 });
+  const doc = norm({ document: { file_id: 'D1', mime_type: 'audio/x-m4a', file_name: 'call.m4a', file_size: 7000 } });
+  assert.deepEqual(doc.voice, { fileRef: 'D1', mime: 'audio/x-m4a', durationSec: null, media: 'audio', sizeBytes: 7000 });
+  for (const o of [
+    { document: { file_id: 'P1', mime_type: 'application/pdf' } },
+    { document: { file_id: 'P2' } },
+    { video: { file_id: 'VID', mime_type: 'video/mp4', duration: 3 } },
+    { photo: [{ file_id: 'PH', width: 1, height: 1 }] },
+  ]) assert.deepEqual([norm(o).kind, norm(o).reason], ['ignored', 'unsupported_type'], JSON.stringify(o));
+  assert.equal(norm({ audio: { file_id: 'A2', mime_type: 'audio/mpeg' } }, 'edited_business_message').reason, 'unsupported_type', 'an edit stays text only');
+  for (const file_size of [-1, 'x', 2 ** 60]) {
+    assert.equal(norm({ audio: { file_id: 'A3', mime_type: 'audio/mpeg', file_size } }).voice.sizeBytes, null, String(file_size));
+  }
+});
+
+test('D756 #1896 webhook: an audio file needs the secret, lands once, and keeps its kind and size only in the encrypted reference', async () => {
+  const { env, db } = await world({ seed: true });
+  const update = businessMessage('BC-ME', { audio: { file_id: 'AUDIO-FILE-77', mime_type: 'audio/mpeg', duration: 30, file_size: 4000 } });
+  assert.equal((await tgHook(env, update, 'wrong-secret')).status, 401);
+  assert.equal((await tgHook(env, update, null)).status, 401);
+  assert.equal(count(db, 'SELECT COUNT(*) n FROM channel_thread_messages'), 0, 'a forged delivery stores nothing');
+  assert.equal((await tgHook(env, update)).status, 200);
+  assert.equal((await tgHook(env, update)).status, 200);
+  assert.equal(count(db, 'SELECT COUNT(*) n FROM channel_thread_messages'), 1, 'one placeholder');
+  assert.equal(count(db, `SELECT COUNT(*) n FROM channel_events WHERE kind = 'voice'`), 1, 'one event');
+  const row = db.prepare('SELECT * FROM channel_thread_messages').get();
+  assert.equal(row.kind, 'voice');
+  assert.deepEqual(JSON.parse(String(await decryptColumn(env, 'channel_thread_messages', 'voice_ref_enc', row.uid, row.voice_ref_enc))),
+    { file: 'AUDIO-FILE-77', mime: 'audio/mpeg', media: 'audio', size: 4000 });
+  for (const table of ['channel_thread_messages', 'channel_events', 'channel_threads']) {
+    assert.equal(JSON.stringify(db.prepare(`SELECT * FROM ${table}`).all()).includes('AUDIO-FILE-77'), false, `${table} holds the file id`);
+  }
+  // The job reads the kind and size back; a reference written before them (or a bad one) is a voice note of unknown size.
+  db.prepare(`UPDATE channel_thread_messages SET transcribe_job = 'J-1' WHERE uid = ?`).run(row.uid);
+  const job = await voiceNoteForJob(env, row.uid, 'J-1');
+  assert.deepEqual([job?.file, job?.mime, job?.media, job?.size], ['AUDIO-FILE-77', 'audio/mpeg', 'audio', 4000]);
+  for (const [stored, want] of [
+    [{ file: 'OLD', mime: 'audio/ogg' }, ['voice', null]],
+    [{ file: 'BAD', mime: null, media: 'sticker', size: 'x' }, ['voice', null]],
+    [{ file: 'NEG', mime: null, media: 'video_note', size: -1 }, ['video_note', null]],
+  ] as const) {
+    db.prepare('UPDATE channel_thread_messages SET voice_ref_enc = ? WHERE uid = ?')
+      .run(await encryptColumn(env, 'channel_thread_messages', 'voice_ref_enc', row.uid, JSON.stringify(stored)), row.uid);
+    const read = await voiceNoteForJob(env, row.uid, 'J-1');
+    assert.deepEqual([read?.media, read?.size], want, stored.file);
+  }
+});
+
+test('D756 #1896 job: an MP3, an M4A document and a voice note with no type are each transcribed once; a round video waits, never fetched', async () => {
+  const { env, db, queued, aiCalls } = await world({ seed: true });
+  const f = mockFetch(telegramFiles({ MP3: { bytes: AUDIO.MP3_ID3 }, M4A: { bytes: AUDIO.M4A }, OGG: { bytes: AUDIO.OGG } }));
+  try {
+    const { uid, sessionId } = await assignedTelegramChat(env);
+    const notes = [
+      { audio: { file_id: 'MP3', mime_type: 'audio/mpeg', duration: 9 } },
+      { document: { file_id: 'M4A', mime_type: 'audio/x-m4a' } },
+      { voice: { file_id: 'OGG', duration: 4 } },
+    ];
+    for (const [i, n] of notes.entries()) {
+      await tgHook(env, businessMessage('BC-ME', n as any));
+      await runLastVoiceJob(env, queued);
+      assert.equal(aiCalls.length, i + 1, `one model call for ${Object.keys(n)[0]}`);
+    }
+    assert.equal(segments(db, sessionId).length, 4, 'the text and three transcripts');
+    assert.equal(dayCount(db), 3);
+
+    const before = f.calls.length;
+    await tgHook(env, businessMessage('BC-ME', { video_note: { file_id: 'ROUND', duration: 8, length: 384 } }));
+    await runLastVoiceJob(env, queued);
+    assert.deepEqual(fileCalls({ calls: f.calls.slice(before) }), { getFile: 0, download: 0 }, 'a round video is never fetched');
+    assert.equal(aiCalls.length, 3, 'no model ran');
+    assert.equal(lastVoiceError(db), 'video_note_unsupported');
+    const [waiting] = await waitingNotes(env, uid);
+    assert.deepEqual([waiting.transcription_failure.reason, waiting.transcription_failure.sentence, waiting.transcription_failure.retry],
+      ['video_note_unsupported', ROUND_VIDEO, null]);
+  } finally { f.restore(); }
+});
+
+test('D756 #1896 job: a declared size over 5 MB fetches nothing; getFile over 5 MB never downloads; neither takes the day\'s cap', async () => {
+  const { env, db, queued, aiCalls } = await world({ seed: true });
+  const f = mockFetch(telegramFiles({ BIGMETA: { size: MB5 + 1 } }));
+  try {
+    const { uid } = await assignedTelegramChat(env);
+    await tgHook(env, businessMessage('BC-ME', { audio: { file_id: 'BIGMSG', mime_type: 'audio/mpeg', file_size: MB5 + 1 } }));
+    let before = f.calls.length;
+    await runLastVoiceJob(env, queued);
+    assert.deepEqual(fileCalls({ calls: f.calls.slice(before) }), { getFile: 0, download: 0 }, 'no Telegram call at all');
+    assert.equal(lastVoiceError(db), 'too_large');
+
+    await tgHook(env, businessMessage('BC-ME', { audio: { file_id: 'BIGMETA', mime_type: 'audio/mpeg', file_size: 4000 } }));
+    before = f.calls.length;
+    await runLastVoiceJob(env, queued);
+    assert.deepEqual(fileCalls({ calls: f.calls.slice(before) }), { getFile: 1, download: 0 }, 'getFile, then no download');
+    assert.equal(lastVoiceError(db), 'too_large');
+    assert.equal(dayCount(db), 0, "the day's cap is untouched");
+    assert.equal(aiCalls.length, 0);
+    const failures = (await waitingNotes(env, uid)).map((m: any) => [m.transcription_failure.reason, m.transcription_failure.sentence, m.transcription_failure.retry]);
+    assert.deepEqual(failures, [['too_large', TOO_LARGE_TG, null], ['too_large', TOO_LARGE_TG, null]]);
+  } finally { f.restore(); }
+});
+
+test('D756 #1896 job: a stream over 5 MB stops being read; a content-length over 5 MB is never read; no model, no cap', async () => {
+  const { env, db, queued, aiCalls } = await world({ seed: true });
+  const open = bigStream();
+  const declared = bigStream();
+  const f = mockFetch(telegramFiles({
+    STREAM: { bytes: open.stream },
+    LENGTH: { bytes: declared.stream, headers: { 'content-length': String(6 * 1024 * 1024) } },
+  }));
+  try {
+    await assignedTelegramChat(env);
+    await tgHook(env, businessMessage('BC-ME', { voice: { file_id: 'STREAM', mime_type: 'audio/ogg' } }));
+    await runLastVoiceJob(env, queued);
+    assert.equal(lastVoiceError(db), 'too_large');
+    assert.equal(open.state.cancelled, true, 'the read was cancelled');
+    assert.ok(open.state.pulls <= 82, `stopped after about 5 MB (${open.state.pulls} chunks)`);
+
+    await tgHook(env, businessMessage('BC-ME', { voice: { file_id: 'LENGTH', mime_type: 'audio/ogg' } }));
+    await runLastVoiceJob(env, queued);
+    assert.equal(lastVoiceError(db), 'too_large');
+    assert.equal(declared.state.pulls, 0, 'not one chunk read');
+    assert.equal(aiCalls.length, 0);
+    assert.equal(dayCount(db), 0);
+  } finally { f.restore(); }
+});
+
+test('D756 #1896 job: bytes that disagree with the declared type, or a type the recorder does not take, are refused in plain words', async () => {
+  const { env, db, queued, aiCalls } = await world({ seed: true });
+  const f = mockFetch(telegramFiles({ LIE: { bytes: AUDIO.OGG }, JUNK: { bytes: AUDIO.JUNK }, AAC: {}, ADTS: { bytes: AUDIO.ADTS } }));
+  try {
+    const { uid } = await assignedTelegramChat(env);
+    const cases: [string, Record<string, unknown>][] = [
+      ['LIE', { audio: { file_id: 'LIE', mime_type: 'audio/mpeg' } }],
+      ['JUNK', { voice: { file_id: 'JUNK' } }],
+      ['AAC', { audio: { file_id: 'AAC', mime_type: 'audio/aac' } }],
+      ['ADTS', { audio: { file_id: 'ADTS', mime_type: 'audio/mpeg' } }],
+    ];
+    for (const [id, n] of cases) {
+      const before = f.calls.length;
+      await tgHook(env, businessMessage('BC-ME', n as any));
+      await runLastVoiceJob(env, queued);
+      assert.equal(lastVoiceError(db), 'unsupported_format', id);
+      if (id === 'AAC') assert.deepEqual(fileCalls({ calls: f.calls.slice(before) }), { getFile: 0, download: 0 }, 'an unadmitted type is refused before any call');
+    }
+    assert.equal(aiCalls.length, 0);
+    assert.equal(dayCount(db), 0);
+    for (const m of await waitingNotes(env, uid)) {
+      assert.deepEqual([m.transcription_failure.reason, m.transcription_failure.sentence, m.transcription_failure.retry], ['unsupported_format', UNSUPPORTED, null]);
+    }
+  } finally { f.restore(); }
+});
+
+test('D756 #1896 job: a WhatsApp download over 5 MB reaches no model, with D754\'s own sentence', async () => {
+  const { env, db, queued, aiCalls } = await world({ seed: true });
+  await waHook(env, waPayload(PNID, {
+    contacts: [{ profile: { name: 'Priya Shah' }, wa_id: WA_CUSTOMER }],
+    messages: [{ from: WA_CUSTOMER, id: 'wamid.BIG', timestamp: String(now()), type: 'audio', audio: { id: 'MEDIA-BIG', mime_type: 'audio/ogg', voice: true } }],
+  }));
+  const [t] = (await call(env, ME, 'GET', '/threads')).body.items;
+  await call(env, ME, 'POST', `/threads/${t.uid}/assign`, { interview_id: INTERVIEW });
+  await consentGiven(env, db, t.uid);
+  const f = mockFetch((url) => {
+    if (url.hostname === 'graph.facebook.com') return { json: { url: 'https://lookaside.fbsbx.com/whatsapp_business/attachments/?mid=MEDIA-BIG', mime_type: 'audio/ogg', file_size: 3000, id: 'MEDIA-BIG' } };
+    if (url.hostname === 'lookaside.fbsbx.com') return { body: new Uint8Array(6 * 1024 * 1024).fill(1), headers: { 'content-type': 'audio/ogg' } };
+    return undefined;
+  });
+  try {
+    await runLastVoiceJob(env, queued);
+    assert.equal(f.calls.length, 2, 'the lookup and the download');
+    assert.equal(aiCalls.length, 0, 'no model ran');
+    // A note queued by the consent carries no webhook event, so its code is on the note.
+    assert.equal(db.prepare('SELECT transcribe_error FROM channel_thread_messages').get().transcribe_error, 'too_large');
+    assert.equal(dayCount(db), 0);
+    const [note] = await waitingNotes(env, t.uid);
+    assert.equal(note.transcription_failure.sentence, 'This recording is larger than Axal can take from WhatsApp (5 MB). Record it with the in-app recorder instead.');
+  } finally { f.restore(); }
+});
+
+test('D756 #1896 logs and rows: a network throw, a 500, an oversize stream and a mismatch log codes only, never the token, path or file id', async (t) => {
+  const { env, db, queued } = await world({ seed: true });
+  const lines: string[] = [];
+  for (const m of ['log', 'info', 'warn', 'error', 'debug'] as const) {
+    t.mock.method(console, m, (...a: unknown[]) => { lines.push(a.map(String).join(' ')); });
+  }
+  const big = bigStream();
+  const f = mockFetch(telegramFiles({
+    NETFAIL: { throws: true }, SERVER: { status: 500, bytes: new Uint8Array(0) }, HUGESTREAM: { bytes: big.stream }, MISMATCH: { bytes: AUDIO.WEBM },
+  }));
+  try {
+    await assignedTelegramChat(env);
+    for (const id of ['NETFAIL', 'SERVER', 'HUGESTREAM', 'MISMATCH']) {
+      await tgHook(env, businessMessage('BC-ME', { audio: { file_id: id, mime_type: 'audio/mpeg' } }));
+      await runLastVoiceJob(env, queued);
+    }
+    assert.ok(lines.some((l) => l.includes('telegram file download failed code=')), 'the adapter logs a code');
+    const all = lines.join('\n');
+    for (const s of [SECRETS.TELEGRAM_CHANNEL_BOT_TOKEN, '/file/bot', 'music/', 'NETFAIL', 'SERVER', 'HUGESTREAM', 'MISMATCH']) {
+      assert.equal(all.includes(s), false, `a log line carries ${s}`);
+    }
+    const codes = new Set(['provider_unreachable', 'provider_unavailable', 'too_large', 'unsupported_format', 'network']);
+    const errors = [
+      ...db.prepare(`SELECT error FROM channel_events WHERE kind = 'voice' AND error IS NOT NULL`).all().map((r: any) => r.error),
+      ...db.prepare('SELECT transcribe_error AS error FROM channel_thread_messages WHERE transcribe_error IS NOT NULL').all().map((r: any) => r.error),
+    ];
+    assert.ok(errors.length >= 4);
+    for (const e of errors) assert.ok(codes.has(e), `an unexpected error value: ${e}`);
   } finally { f.restore(); }
 });

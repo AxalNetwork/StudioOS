@@ -56,10 +56,10 @@ const DOC_TYPE_TO_TEMPLATE_KEY: Record<string, LegalTemplateKey> = {
 };
 
 /**
- * Returns null when no Y-1 template matches; callers should fall back to the
- * legacy `buildTemplateBody` path in that case (e.g. legacy
- * `Subscription Booklet & LPA` style document_type values used by the older
- * profile flows).
+ * Returns null when no Y-1 template matches. A send then has only the store
+ * row to draw from (e.g. `Subscription Booklet & LPA` style document_type
+ * values used by the older profile flows), and is refused when that row has
+ * no body (D758).
  */
 export function templateKeyForDocType(docType: string | null | undefined): LegalTemplateKey | null {
   if (!docType) return null;
@@ -100,12 +100,11 @@ export interface BundledSentDirectly {
 
 /**
  * D758 decision 3: the bundled keys a sender still sends as the bundled file,
- * not as its library row. Partner onboarding sends `partner_msa_v2.md` until
- * D758 PR 2 moves it to the Partner Services row; then this list is empty.
+ * not as its library row. Empty since D758 PR 2 (#1863), when partner
+ * onboarding moved to the Partner Services row. A future sender of a bundled
+ * file lists itself here, with a test.
  */
-export const BUNDLED_SENT_DIRECTLY: ReadonlyArray<BundledSentDirectly> = Object.freeze([
-  { key: 'partner_msa_v1', title: 'Partner Master Services Agreement', sender: 'routes/partner_onboarding.ts' },
-]);
+export const BUNDLED_SENT_DIRECTLY: ReadonlyArray<BundledSentDirectly> = Object.freeze([]);
 
 export function sentAsBundledFile(docType: string | null | undefined): boolean {
   return !!docType && BUNDLED_SENT_DIRECTLY.some((e) => e.key === docType);

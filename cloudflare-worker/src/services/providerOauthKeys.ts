@@ -86,6 +86,8 @@ export const PROVIDER_ENV_VARS: Record<ManagedProviderKey, { id: string; secret:
 
 interface CacheEntry {
   value: { id: string; secret: string; source: 'env' | 'db' } | null;
+  /** D751: false only when the `provider_oauth_keys` read threw, so "unset" and "unknown" stay apart (D227). */
+  readable: boolean;
   exp: number;
 }
 const CACHE_TTL_MS = 60_000;
@@ -131,9 +133,24 @@ export async function loadOauthCreds(
   env: Env,
   providerKey: ManagedProviderKey,
 ): Promise<{ id: string; secret: string; source: 'env' | 'db' } | null> {
+  return (await credsEntry(env, providerKey)).value;
+}
+
+/**
+ * D751 — whether Axal holds this provider's OAuth client: `true` (the env
+ * pair, or a row that decrypts), `false` (neither, and the table answered),
+ * `null` (no env pair, and the table could not be read). It reads the same
+ * cache entry `loadOauthCreds` does, so readiness and `ensureCreds` agree.
+ */
+export async function oauthCredsReady(env: Env, providerKey: ManagedProviderKey): Promise<boolean | null> {
+  const { value, readable } = await credsEntry(env, providerKey);
+  return value ? true : readable ? false : null;
+}
+
+async function credsEntry(env: Env, providerKey: ManagedProviderKey): Promise<CacheEntry> {
   const now = Date.now();
   const hit = cache.get(providerKey);
-  if (hit && hit.exp > now) return hit.value;
+  if (hit && hit.exp > now) return hit;
 
   // Env-first. Cache the env hit to skip the DB read on subsequent
   // calls within the TTL — important because `ensureCreds` is called
@@ -141,9 +158,9 @@ export async function loadOauthCreds(
   // loop (HubSpot/Salesforce/DocuSign).
   const env_ = envCreds(env, providerKey);
   if (env_) {
-    const value = { id: env_.id, secret: env_.secret, source: 'env' as const };
-    cache.set(providerKey, { value, exp: now + CACHE_TTL_MS });
-    return value;
+    const entry = { value: { id: env_.id, secret: env_.secret, source: 'env' as const }, readable: true, exp: now + CACHE_TTL_MS };
+    cache.set(providerKey, entry);
+    return entry;
   }
 
   await ensureSchema(env);
@@ -154,19 +171,23 @@ export async function loadOauthCreds(
     if (row?.client_id && row?.client_secret_enc) {
       const secret = await decryptString(env, String(row.client_secret_enc));
       if (secret) {
-        const value = { id: String(row.client_id), secret, source: 'db' as const };
-        cache.set(providerKey, { value, exp: now + CACHE_TTL_MS });
-        return value;
+        const entry = { value: { id: String(row.client_id), secret, source: 'db' as const }, readable: true, exp: now + CACHE_TTL_MS };
+        cache.set(providerKey, entry);
+        return entry;
       }
       // Decrypt failed (key rotation / tampered row). Treat as unconfigured.
       console.warn(`[providerOauthKeys] decrypt failed for ${providerKey} — treating as unconfigured`);
     }
   } catch (e) {
     console.warn('[providerOauthKeys] DB read failed', providerKey, e);
+    const unknown = { value: null, readable: false, exp: now + CACHE_TTL_MS };
+    cache.set(providerKey, unknown);
+    return unknown;
   }
 
-  cache.set(providerKey, { value: null, exp: now + CACHE_TTL_MS });
-  return null;
+  const unset = { value: null, readable: true, exp: now + CACHE_TTL_MS };
+  cache.set(providerKey, unset);
+  return unset;
 }
 
 /**

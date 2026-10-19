@@ -9,7 +9,7 @@ lives in `providers/`.
 | File | What it does |
 | --- | --- |
 | `registry.ts` | The single source of truth for providers: `REGISTRY` (one descriptor each: status, tier, auth type, OAuth scopes), `CONNECTOR_METADATA` (category, what it pulls and sends, the modules it feeds, the permission sentences), `registerProvider` / `getProviderImpl`, `IntegrationRow`, `ensureIntegrationsSchema` and `publicDescriptor`, which adds `feed_modules` beside the plain `feeds` strings (D686). |
-| `connectorPages.ts` | Each connector's page, as data (D753): tagline, long description, the tools Axal VC runs through it (each with the source fragments of its calls), Eadwyn prompts, maker, service, sign-in, endpoints, added month, links and `verified_on`; Mercury by audience and LinkedIn as a first-party page. `trustFor`, `pageDescriptor` (by viewer, through `audienceFor`), `connectorPagePath`, `CATEGORY_ORDER`. Read only through `pageDescriptor` and `registry.ts`' one re-export line. It imports only types and `audienceFor` from `./registry`, reads no registry value at its top level (the two form a cycle), and imports no provider or service. `cloudflare-worker/test/connector_pages_d753.test.ts` holds every fact to the code. |
+| `connectorPages.ts` | Each connector's page, as data (D753): tagline, long description, the tools Axal VC runs through it (each with the source fragments of its calls), Eadwyn prompts, maker, service, sign-in, endpoints, added month, links and `verified_on`; Mercury by audience, LinkedIn as a first-party page, and WhatsApp and Telegram as `CHANNEL_PAGES` (D753 C1; `channelPage(key)` for #1878's directory handler). `trustFor`, `pageDescriptor` (by viewer, through `audienceFor`), `connectorPagePath`, `CATEGORY_ORDER`; `FIRST_PARTY_CARDS` (LinkedIn's card facts) and `directoryKeyFor` (a directory request's registry and page key, D753 W2). Read only through `pageDescriptor` and `registry.ts`' one re-export line. It imports only types and `audienceFor` from `./registry`, reads no registry value at its top level (the two form a cycle), and imports no provider or service. `cloudflare-worker/test/connector_pages_d753.test.ts` holds every fact to the code. |
 | `moduleLabels.ts` | `MODULE_LABELS` and `MODULE_HREFS`: each fed module's name and the page that shows its data (D686). Its own file because `fed.ts` imports `registry.ts`, so the registry cannot import `fed.ts` back. `moduleHref` answers `null` for an unknown key. |
 | `fed.ts` | "Now fed by" (D655): `fedCounts` counts what each connector delivered to each module from `connector_fed_items`, with the module's `href`. A connector that records nothing gets `count: null` and a reason, never 0. Re-exports `MODULE_LABELS`. |
 | `secrets.ts` | Credential encryption over `../services/columnCipher.ts`, with the row's uid in the AAD, and the masked previews the list endpoints show. Never logs plaintext. |
@@ -18,6 +18,19 @@ lives in `providers/`.
 | `connectorRules.ts` | `hasScopeOverreach` (a grant wider than the request is refused) and the validation of a connector's settings patch. |
 | `autopush.ts` | Background pushes started outside the connector routes (a deal's stage change, a new project), logged to `integration_logs` like a user's own push. |
 | `refreshLease.ts` | `acquireRefreshLease` and `REFRESH_LEASE_TTL_S`: the KV lease on `<provider>:refresh:<uid>` that serializes one connection's OAuth token refresh, shared by HubSpot, Calendly, Carta, DocuSign and Salesforce (#1903). `release()` deletes the key only for the caller that acquired it. Best-effort: KV is eventually consistent, so the providers keep their D1 re-checks. |
+
+## GitHub's sync (D655, #1906)
+
+`providers/github.ts` lands issues on `roadmap_okrs` and pull requests on
+`mvp_features`, each through its `connector_fed_items` row. **A founder's
+deletion stands**: a re-sync never re-creates a deleted row, and unlinks its
+ledger row (`local_id` NULL), so `fed.ts` counts the item as arrived but not
+linked. **A large sync continues on the next run**: each page is one ledger
+read and one D1 batch, the run counts its subrequests against
+`SYNC_SUBREQUEST_BUDGET` (8,000 of the Worker's 10,000), and at the budget it
+stops "Partly synced", keeping a KV cursor so the next Sync starts where it
+stopped. `cloudflare-worker/test/github_connector_flow_d751.test.ts` drives the
+whole flow against a stubbed GitHub.
 
 ## Subfolders
 

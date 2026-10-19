@@ -47,7 +47,12 @@ export const BUILD_CATEGORY_ORDER = ['Code', 'Design', 'Payments', 'Accounting a
  * first-party row, which keeps its own key, name, status and connection.
  */
 export const REGISTRY_ALIAS = Object.freeze({ google_calendar: 'google', microsoft_365: 'microsoft' });
-const ALIAS_FIELDS = ['category', 'verified', 'pulls', 'sends', 'feeds', 'feed_modules', 'permissions'];
+// D753 (#1955): plus the page fields `/available` sends (decision 4(a)), and
+// the words the first-party rows no longer carry.
+const ALIAS_FIELDS = [
+  'description', 'capabilities', 'category', 'verified', 'pulls', 'sends', 'feeds', 'feed_modules', 'permissions',
+  'tagline', 'made_by', 'service', 'sign_in', 'added', 'verified_on', 'read_only', 'page_key', 'page_href', 'configured',
+];
 
 // The registry's `integration_type`, in the canvas's category words. Stripe is
 // a `data_feed` in the registry and Payments on the canvas; it is the one key
@@ -66,26 +71,15 @@ export function categoryOf(p) {
  * its own first-party route (`/api/calendar/google`, `/api/calendar/microsoft`,
  * `/api/linkedin`), whose token store stays the only one (D650 reads it rather
  * than copying it). They are drawn as connectors with the same row and sheet.
+ *
+ * D753 (#1955): identity only. Their words come from the Worker: Google's and
+ * Microsoft's from the registry rows aliased into them (`REGISTRY_ALIAS`),
+ * LinkedIn's from `/available`'s `first_party` cards.
  */
 export const FIRST_PARTY = [
-  {
-    key: 'google', display_name: 'Google Calendar', by: 'Google', category: 'Calendar and workspace',
-    description: 'Your Google Calendar and Gmail invites, and "Continue with Google" sign-in.',
-    capabilities: ['Calendar', 'Gmail invites', 'Sign in with Google'],
-    status: 'live', tier: 'free', auth_type: 'oauth2', has_implementation: true, first_party: true,
-  },
-  {
-    key: 'microsoft', display_name: 'Microsoft 365', by: 'Microsoft', category: 'Calendar and workspace',
-    description: 'Two-way sync with your Outlook calendar, so sessions land on your work calendar.',
-    capabilities: ['Calendar', 'Two-way sync'],
-    status: 'live', tier: 'free', auth_type: 'oauth2', has_implementation: true, first_party: true,
-  },
-  {
-    key: 'linkedin', display_name: 'LinkedIn', by: 'LinkedIn', category: 'Data',
-    description: 'Sign in with LinkedIn to confirm who you are, then import your connections for referrals.',
-    capabilities: ['Sign in with LinkedIn', 'Import connections (CSV)'],
-    status: 'live', tier: 'free', auth_type: 'oauth2', has_implementation: true, first_party: true,
-  },
+  { key: 'google', display_name: 'Google Calendar', first_party: true, auth_type: 'oauth2', status: 'live', tier: 'free' },
+  { key: 'microsoft', display_name: 'Microsoft 365', first_party: true, auth_type: 'oauth2', status: 'live', tier: 'free' },
+  { key: 'linkedin', display_name: 'LinkedIn', first_party: true, auth_type: 'oauth2', status: 'live', tier: 'free' },
 ];
 
 const FIRST_PARTY_EMAIL = { google: 'google_email', microsoft: 'microsoft_email', linkedin: 'linkedin_email' };
@@ -127,10 +121,18 @@ export function firstPartyConnection(key, status) {
  * told when it ships, and whether their plan locks it.
  *
  * `firstParty` is `{ google, microsoft, linkedin }`, each a status read or
- * null. A first-party connector whose status could not be read, or that is
+ * null. `firstPartyCards` is `/available`'s `first_party` (D753 W2): the
+ * Worker's card for a first-party connector the registry does not list. A first-party connector whose status could not be read, or that is
  * not configured on this deployment, is still listed but cannot be connected.
+ *
+ * D751 (#1881): a registry OAuth connector whose client the Worker reports
+ * unset (`configured: false`) is `oauthOff`. It is listed but cannot be
+ * connected, unless it also takes a personal access token (Calendly,
+ * HubSpot), which then becomes its only way in (`patOnly`). `true`, `null`
+ * (unreadable) and a missing field keep today's behaviour, and an `api_key`
+ * connector is never `oauthOff`: the member brings that key.
  */
-export function buildCatalogue({ providers = [], items = [], waitlist = [], firstParty = {}, companies = null } = {}) {
+export function buildCatalogue({ providers = [], items = [], waitlist = [], firstParty = {}, firstPartyCards = [], companies = null } = {}) {
   const byKey = new Map();
   for (const it of items || []) if (it && !byKey.has(it.provider_key)) byKey.set(it.provider_key, withCompanies(it, companies));
   const joined = new Set((waitlist || []).map((w) => w.provider_key));
@@ -147,22 +149,31 @@ export function buildCatalogue({ providers = [], items = [], waitlist = [], firs
       continue;
     }
     seen.add(p.key);
+    const oauthOff = p.auth_type === 'oauth2' && p.configured === false;
     out.push({
       ...p,
-      by: p.by || p.display_name,
+      oauthOff,
+      // D753 decision 7: Axal VC made every connector; the Worker says so in `made_by`.
+      by: p.made_by?.name || p.display_name,
       category: categoryOf(p),
       connection: byKey.get(p.key) || null,
       joined: joined.has(p.key),
       locked: !!(p.locked_for_user ?? p.tier_locked),
-      available: p.status !== 'coming_soon' && p.has_implementation !== false,
+      available: p.status !== 'coming_soon' && p.has_implementation !== false && !(oauthOff && !p.supports_pat),
     });
   }
+  const cards = new Map((Array.isArray(firstPartyCards) ? firstPartyCards : []).filter((c) => c?.key).map((c) => [c.key, c]));
   for (const fp of FIRST_PARTY) {
     if (seen.has(fp.key)) continue;
     const status = firstParty[fp.key];
+    const words = { ...(cards.get(fp.key) || {}), ...(aliased[fp.key] || {}) };
+    const row = { ...words, ...fp };
     out.push({
-      ...fp,
-      ...(aliased[fp.key] || {}),
+      ...row,
+      // A card with no description of its own reads its tagline, the Worker's line too.
+      description: words.description ?? words.tagline ?? null,
+      by: words.made_by?.name || fp.display_name,
+      category: categoryOf(row),
       connection: firstPartyConnection(fp.key, status),
       joined: false,
       locked: false,
@@ -353,12 +364,6 @@ export function pageOf(rows, page) {
 
 export const SUGGESTED = 'Suggested for you';
 
-/** The chips: All, Suggested for you, then each category the catalogue holds, in the canvas's order. */
-export function discoverChips(catalogue) {
-  const present = new Set((catalogue || []).map((p) => p.category).filter(Boolean));
-  return ['All', SUGGESTED, ...CATEGORY_ORDER.filter((c) => present.has(c))];
-}
-
 /**
  * D715 (#1780): the Axal entities' Mercury row, which the Worker serves an
  * admin on HQ only (`connection_source`, #1775). It is never a member's own
@@ -408,7 +413,8 @@ export function discoverSections(catalogue, chip = 'All', { q = '', suggestions 
     return [{ title: chip, cards }];
   }
   // A connector this deployment cannot connect (a first-party one with no
-  // OAuth app, or one whose status could not be read) stays in Top, with its
+  // OAuth app, a registry one whose OAuth client is unset (D751), or one whose
+  // status could not be read) stays in Top, with its
   // reason in the corner; only the registry's own coming_soon is "Coming soon".
   const top = list.filter((p) => p.status !== 'coming_soon');
   const soon = list.filter((p) => p.status === 'coming_soon');
@@ -426,7 +432,18 @@ export function discoverSections(catalogue, chip = 'All', { q = '', suggestions 
  * sign-in went.
  */
 export function connectorsRedirect({ search = '', hash = '' } = {}) {
-  return { pathname: '/account/connectors', search, hash };
+  const ret = oauthReturn(search);
+  if (!ret) return { pathname: '/account/connectors', search, hash };
+  // D715 decision 3: Mercury has no sign-in. A return naming it is crafted and never reaches the Mercury page, whose mount makes the audited read.
+  if (ret.key === 'mercury') return { pathname: '/account/connectors', search: stripReturn(search, ret.strip), hash };
+  // D753 — a sign-in comes back to its own connector's page.
+  return { pathname: connectorPagePath(ret.key), search, hash };
+}
+
+/** D753 — a connector's own page, for a valid key; the hub otherwise. */
+export function connectorPagePath(key) {
+  const k = codeWord(String(key || '').toLowerCase());
+  return k && k.length <= 40 ? `/account/connectors/${k}` : '/account/connectors';
 }
 
 /** The once-only notice about the rename is remembered under this key. */
@@ -449,10 +466,13 @@ const GOOGLE_ERRORS = {
  *   ?oauth=ok&provider=github             → github, sync (choose the repositories)
  *   ?oauth=error&provider=…&reason=access_denied → cancelled
  *   ?oauth=error&provider=…&reason=scope_overreach → overreach (D650's scope check; `overreach` too)
+ *   ?oauth=error&provider=…&reason=not_configured | <key>_oauth_unconfigured → unconfigured (D751)
+ *   ?oauth=error&provider=…&reason=company_not_linked → company (D751)
  *   ?oauth=error&provider=…&reason=…      → refused
  *   ?oauth=rolling_out&provider=…         → refused, "rolling out"
  *   ?google=connected | ?microsoft=connected | ?linkedin=connected → connected
  *   ?google=error&reason=…  | ?microsoft=error&reason=… | ?linkedin=error&linkedin_error=… → cancelled or refused
+ *   ?linkedin=error&linkedin_error=not_configured → unconfigured (D751)
  */
 const WORD = /^[a-z0-9_]+$/;
 /** A query value the page may print: a lowercase code word, else nothing (a link-maker's sentence never reaches the sheet). */
@@ -475,6 +495,9 @@ export function oauthReturn(search) {
     if (CANCELLED.has(reason)) return { key, view: 'cancelled', reason, banner: '', strip };
     // The Worker's word is `scope_overreach` (integrations.ts); `overreach` is kept for older links.
     if (reason === 'overreach' || reason === 'scope_overreach') return { key, view: 'overreach', reason, banner: '', strip };
+    // D751: Axal holds no client, or the company is gone. Neither is the provider refusing.
+    if (isUnconfigured(reason)) return { key, view: 'unconfigured', reason, banner: '', strip };
+    if (reason === 'company_not_linked') return { key, view: 'company', reason, banner: '', strip };
     return { key, view: 'refused', reason, banner: '', strip };
   }
   for (const key of ['google', 'microsoft']) {
@@ -502,6 +525,7 @@ export function oauthReturn(search) {
     if (li === 'connected') return { key: 'linkedin', view: 'connected', reason: '', banner: '', strip };
     const reason = codeWord(p.get('linkedin_error')) || 'unknown';
     if (CANCELLED.has(reason)) return { key: 'linkedin', view: 'cancelled', reason, banner: '', strip };
+    if (isUnconfigured(reason)) return { key: 'linkedin', view: 'unconfigured', reason, banner: '', strip };
     return { key: 'linkedin', view: 'refused', reason, banner: '', strip };
   }
   return null;
@@ -609,13 +633,59 @@ export function authKind(p) {
 }
 
 /**
- * The view a failed connect lands on. 402 is the plan refusing it (`pro`); a
- * key the provider rejected is `badkey`; anything else is `refused`. The
- * overreach case arrives as the sign-in's return (`oauthReturn`), never here.
+ * D751 — Axal holds no client for this connector: `oauth_unconfigured`, any
+ * `<key>_oauth_unconfigured`, the first-party starts' `oauth_config_missing`,
+ * and the `not_configured` return. The match is on the code, never the
+ * status: a 503 is also `provider_rolling_out`, and that one is `refused`.
+ */
+export function isUnconfigured(code) {
+  const c = String(code || '');
+  return c === 'oauth_unconfigured' || /_oauth_unconfigured$/.test(c) || c === 'oauth_config_missing' || c === 'not_configured';
+}
+
+/** Where a Super Admin sets a connector's keys (D751 decision 6). */
+export const INTEGRATION_KEYS_HREF = '/admin?tab=integration-keys';
+
+/** D751 (#1881): Axal holds no OAuth client, but the connector takes a personal access token, so the token is its only way in. */
+export const patOnly = (p) => !!(p?.oauthOff && p?.supports_pat);
+
+/**
+ * D751 (#1881): the way to a connector's keys, for the one person who can set
+ * them. A fixed same-app path, never a value from the Worker; null for anyone
+ * who is not a Super Admin, a connector Axal is not missing a client for, a
+ * coming-soon one, or the Axal entities' Mercury row.
+ */
+export function keysHref(p, { superAdmin = false } = {}) {
+  if (!superAdmin || !p?.oauthOff || p.status === 'coming_soon' || isEntityRow(p)) return null;
+  return INTEGRATION_KEYS_HREF;
+}
+
+/**
+ * The Integration keys link for an `unconfigured` failure: the Worker's
+ * `admin_href` when it is one of this app's admin tabs, else the console. A
+ * crafted value (another host, `//`, a quote) never becomes a link (D651).
+ */
+export function adminKeysHref(data) {
+  const h = data?.admin_href;
+  return typeof h === 'string' && /^\/admin\?tab=[a-z0-9-]+$/.test(h) ? h : INTEGRATION_KEYS_HREF;
+}
+
+/**
+ * The view a failed connect lands on, checked in this order:
+ *   `pro`              — 402, the plan refusing it;
+ *   `company`          — `active_company_required`: the connector writes project data and no company is chosen (D751);
+ *   `unconfigured`     — Axal holds no client for it (`isUnconfigured`, D751);
+ *   `setup_unreadable` — Axal could not read whether it does (#1880's 503; a retry can work);
+ *   `badkey`           — a key the provider rejected;
+ *   `refused`          — anything else, the provider's own refusal among them.
+ * The overreach case arrives as the sign-in's return (`oauthReturn`), never here.
  */
 export function connectFailure(e, p) {
   const code = e?.code || '';
   if (e?.status === 402) return 'pro';
+  if (code === 'active_company_required') return 'company';
+  if (isUnconfigured(code)) return 'unconfigured';
+  if (code === 'oauth_setup_unreadable') return 'setup_unreadable';
   const kind = authKind(p);
   if ((kind === 'key' || kind === 'token_first') && (e?.status === 400 || code === 'connect_failed')) return 'badkey';
   return 'refused';
@@ -630,6 +700,14 @@ export function flowBanner(view, name, { reason = '', banner = '' } = {}) {
       if (banner === 'rolling_out') return `${name} is still rolling out. Nothing was connected.`;
       return `${name} refused access.${reason ? ` (${reason})` : ''} Ask your ${name} admin to allow Axal StudioOS, or try again.`;
     case 'badkey': return `That key is not valid. Check it at ${name} and paste it again.`;
+    // D751: Axal's side, so never "refused" and never the provider's admin. On a
+    // return the member did visit the provider, so nothing "was sent" is not said.
+    case 'unconfigured':
+      return reason
+        ? `${name} isn't set up on Axal yet, so it can't be connected. Nothing was connected.`
+        : `${name} isn't set up on Axal yet, so it can't be connected. Nothing was sent to ${name}.`;
+    case 'company': return `${name} connects for one company. Choose a company in the sidebar, then connect again. Nothing was connected.`;
+    case 'setup_unreadable': return `Axal couldn't check whether ${name} is set up. Nothing was sent to ${name}. Try again in a minute.`;
     case 'overreach': return 'This sign-in asked for more than StudioOS uses. Nothing was connected. Report it, or try again.';
     case 'pro': return null;
     default: return null;
@@ -651,7 +729,11 @@ export function disconnectNote(p, role = null) {
 
 export const TOOL_FILTERS = ['All', 'Connected', 'Not connected', 'Failing'];
 
-/** A tool's state in Build's sheet: connected, failing, not connected, coming soon, or not set up here. */
+/**
+ * A tool's state in Build's sheet: connected, failing, not connected, coming
+ * soon, or not set up here (a first-party connector with no OAuth app, or a
+ * registry one whose OAuth client is unset, D751).
+ */
 export function toolState(p) {
   if (p.connection) return attentionReason(p.connection) ? 'failing' : 'connected';
   if (p.status === 'coming_soon') return 'soon';

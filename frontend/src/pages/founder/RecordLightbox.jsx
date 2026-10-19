@@ -9,8 +9,10 @@ import { liveRefusal } from '../../lib/activeRecording.js';
 import { cycleValidateApi } from '../../lib/api/cycleValidate.js';
 import { useActiveCompany } from '../../contexts/ActiveCompanyContext';
 import { AssistantEntry } from './AssistantEntry';
+import { WhatsAppEntry, useWhatsAppLink } from '../account/WhatsAppWayB';
 import { SchedulePanel } from './InterviewChannels';
 import { assignedSentence, threadRow } from './channelThreads.js';
+import { chatConsentBlock, chatConsentOf, consentChoices, consentLine, noticeBlocked, windowClosedSentence } from './chatConsent.js';
 import {
   CONSENTS, DURATIONS, MODES, NOT_STORED, PROVIDERS, SETUP_FIELDS, STAGE_WORD, assignTarget, callLabel, chipStatus, consentNote,
   attachesCall, attachOutcome, defaultProvider, estimate, hasMeetingLink, languageOptions, meetingLinkProblem, modeOf, newStartKey, pipelineRows, sessionBody, setupBody,
@@ -81,6 +83,71 @@ export function Radios({ label, options, value, onChange, className = 'flex flex
   );
 }
 
+/**
+ * D754 (#1980) §11: a chat that waits for consent. "Ask <Name> in WhatsApp"
+ * sends Axal's notice once the chat is linked, and is offered only while the
+ * chat's 24-hour window is open; "<Name> already agreed" is the member's
+ * word, which the Worker takes once the notice reached the chat.
+ */
+function ChatConsentPick({ consent, name, provider, value, onChange }) {
+  const choices = consentChoices(name, provider);
+  if (consent.status === 'declined' || consent.status === 'withdrawn') return null;
+  return (
+    <div className="flex flex-col gap-1.5 pt-1" data-testid="record-chat-consent">
+      <p className={`m-0 ${LABEL}`}>Recording consent</p>
+      <Radios label="Recording consent" testId="record-chat-consents" value={value} onChange={onChange} className="flex flex-col gap-1.5"
+        style={(on) => `${chip(on)} !rounded-[9px] text-left`}
+        options={[
+          { value: 'ask', label: choices.ask.label, disabled: !consent.window_open },
+          ...choices.agreed.methods.map((m) => ({ value: m.value, label: `${choices.agreed.label}: ${m.label}` })),
+        ]} />
+      {!consent.window_open && <p className="m-0 text-[11.5px] text-amber-800 dark:text-amber-300" data-testid="record-chat-window">{windowClosedSentence(name, provider)}</p>}
+      <p className="m-0 text-[11.5px] text-axal-faint">Nothing from the chat enters the interview until it is given.</p>
+    </div>
+  );
+}
+
+/**
+ * D756 (#1981) §1.5: a Telegram chat's consent before import. Its state, and
+ * "Ask for consent in Telegram" (the consent-request route) while the bot may
+ * reply and the window is open; otherwise the reason, and "Copy the notice"
+ * when the Worker sends its text. No "already agreed" (ruling 6).
+ */
+function TelegramConsentAsk({ thread, consent, name, source, onAsked }) {
+  const [state, setState] = useState({ busy: false, error: '', copied: false });
+  const blocked = noticeBlocked(thread, consent);
+  const line = consentLine(consent, name, { provider: 'telegram' });
+  const open = consent.status === 'not_asked' || consent.status === 'requested';
+  const ask = async () => {
+    if (state.busy || typeof source?.requestConsent !== 'function') return;
+    setState({ busy: true, error: '', copied: false });
+    try { const r = await source.requestConsent(thread.uid); if (r?.consent) onAsked(r.consent); setState({ busy: false, error: '', copied: false }); }
+    catch (e) { if (e?.data?.consent) onAsked(e.data.consent); setState({ busy: false, error: e?.message || 'The notice could not be sent.', copied: false }); }
+  };
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(consent.notice_text); setState((s) => ({ ...s, copied: true, error: '' })); }
+    catch { setState((s) => ({ ...s, copied: false, error: 'The notice could not be copied. Select it and copy it by hand.' })); }
+  };
+  return (
+    <div className="flex flex-col gap-1.5 pt-1" data-testid="record-telegram-consent" data-status={consent.status}>
+      <p className={`m-0 ${LABEL}`}>Recording consent</p>
+      <p className="m-0 text-[12.5px] text-axal-ink dark:text-gray-100" data-testid="record-telegram-consent-state">{line.text}</p>
+      {open && !blocked && (
+        <button type="button" onClick={ask} disabled={state.busy || !consent.can_request} className="self-start text-[12px] font-semibold text-axal-violet underline disabled:opacity-50 dark:text-violet-300" data-testid="record-telegram-ask">Ask for consent in Telegram</button>
+      )}
+      {open && blocked && (
+        <div className="flex flex-col gap-1" data-testid="record-telegram-copy">
+          <p className="m-0 text-[11.5px] text-amber-800 dark:text-amber-300" data-testid="record-telegram-copy-reason">{`${blocked}, so Axal cannot send the notice. Paste it into the chat yourself.`}</p>
+          {consent.notice_text && <button type="button" onClick={copy} className="self-start text-[12px] font-semibold text-axal-violet underline dark:text-violet-300" data-testid="record-telegram-copy-button">Copy the notice</button>}
+          {state.copied && <p role="status" className="m-0 text-[11.5px] text-emerald-700 dark:text-emerald-300">Copied. Paste it into the Telegram chat.</p>}
+        </div>
+      )}
+      {state.error && <p role="alert" className="m-0 text-[11.5px] font-semibold text-red-700 dark:text-red-400">{state.error}</p>}
+      <p className="m-0 text-[11.5px] text-axal-faint">Start waits for their YES in the chat. Their notes are not downloaded before it.</p>
+    </div>
+  );
+}
+
 function Section({ title, children, testId }) {
   return (
     <section className="flex flex-col gap-1.5 px-5 py-3" data-testid={testId}>
@@ -130,12 +197,20 @@ export default function RecordLightbox({
   const [board, setBoard] = useState(initialBoard);
   const [selected, setSelected] = useState(null); // null: the defaults (the first two), until the founder toggles one
   const [assistant, setAssistant] = useState(false);
+  // D754 way B (#1939): "From WhatsApp", read only once the founder opens it.
+  const [fromWhatsApp, setFromWhatsApp] = useState(false);
+  const whatsappLink = useWhatsAppLink(channelsSource, { enabled: fromWhatsApp });
   // Who, picked from the recruiting pipeline (§5.1.7): booked first. Closed until asked for.
   const [picked, setPicked] = useState(null);
   const [pipeline, setPipeline] = useState({ open: false, status: 'idle', rows: [] });
   // A WhatsApp or Telegram chat waiting in the inbox, imported inline under the Text chips.
   const [threads, setThreads] = useState({ status: 'idle', items: [] });
   const [thread, setThread] = useState(null);
+  // D754 (#1980): how a chat that waits for consent gets it — 'ask', or the member's word (a method).
+  const [chatChoice, setChatChoice] = useState(null);
+  useEffect(() => { setChatChoice(null); }, [thread]);
+  // D756 (#1981): a Telegram chat asked from here carries the Worker's answer, until the list is read again.
+  const [askedConsent, setAskedConsent] = useState({});
   // D684's call for later. A new person is added to the pipeline first, since a call needs an interview.
   const [scheduleLater, setScheduleLater] = useState(false);
   const [planning, setPlanning] = useState({ busy: false, error: null });
@@ -174,7 +249,13 @@ export default function RecordLightbox({
   const importing = mode === 'text' && provider !== 'paste' && !!status && !status.disabled;
   // While importing, the chat is the content: the paste box is not asked for.
   const state = startState({ mode, consent, name, interview: who, conversation, hasThread: importing });
-  const blockedReason = importing && !thread && state.ok ? 'Choose a chat to import.' : null;
+  // D754 §11: a chat that waits for consent starts only once it is asked for, or the member gives their word.
+  const pickedThread = importing && thread ? threads.items.find((t) => t.uid === thread) || null : null;
+  const chatC = !pickedThread ? { required: false }
+    : Object.hasOwn(askedConsent, pickedThread.uid) ? chatConsentOf({ consent: askedConsent[pickedThread.uid] }) : chatConsentOf(pickedThread);
+  const chatName = (who?.interviewee_name || name || (pickedThread ? threadRow(pickedThread).name : '')).trim();
+  const chatBlock = pickedThread ? chatConsentBlock(chatC, chatChoice, chatName, provider) : null;
+  const blockedReason = importing && !thread && state.ok ? 'Choose a chat to import.' : state.ok ? chatBlock : null;
   const linkProblem = hasMeetingLink(mode, provider) ? meetingLinkProblem(provider, link) : null;
   const ready = state.ok && !blockedReason && !linkProblem && !busy;
   const label = m.start;
@@ -259,7 +340,9 @@ export default function RecordLightbox({
     });
     try {
       if (importing) {
-        const r = await channelsSource.assign(thread, assignTarget({ name, company, consent }, { projectId, interview: who }));
+        // Telegram reaches here only once its YES is given (`chatConsentBlock`), so its assign carries no consent.
+        const asks = chatC.required && chatC.status !== 'given' ? chatChoice : null;
+        const r = await channelsSource.assign(thread, assignTarget({ name, company, consent, chatConsent: asks }, { projectId, interview: who }));
         const into = person({ id: r?.interview_id });
         if (r?.session_id != null) { onStarted?.({ id: r.session_id }, into); return; }
         setAssigned(assignedSentence(r, into.interviewee_name));
@@ -416,15 +499,23 @@ export default function RecordLightbox({
                   style={(on) => `${chip(on)} !rounded-[9px] text-left`}
                   options={threads.items.map((t) => { const row = threadRow(t); return { value: t.uid, label: `${row.name} · ${row.count} · ${row.when}` }; })} />
               )}
+              {pickedThread && chatC.required && chatC.status !== 'given' && (
+                provider === 'telegram'
+                  ? <TelegramConsentAsk key={pickedThread.uid} thread={pickedThread} consent={chatC} name={chatName} source={channelsSource}
+                    onAsked={(c) => setAskedConsent((m) => ({ ...m, [pickedThread.uid]: c }))} />
+                  : <ChatConsentPick consent={chatC} name={chatName} provider={provider} value={chatChoice} onChange={setChatChoice} />
+              )}
               <p className="m-0 text-[11.5px] text-axal-faint">{`Its messages become this interview’s Text session, and new messages in the chat follow.`}</p>
             </div>
           )}
           <div className="flex flex-wrap gap-x-4 gap-y-1 pt-0.5">
             <button type="button" aria-expanded={assistant} aria-controls="record-assistant" onClick={() => setAssistant((v) => !v)} className="text-[12px] font-semibold text-axal-violet underline dark:text-violet-300" data-testid="record-assistant-link">Send it from your AI assistant</button>
+            <button type="button" aria-expanded={fromWhatsApp} aria-controls="record-whatsapp" onClick={() => setFromWhatsApp((v) => !v)} className="text-[12px] font-semibold text-axal-violet underline dark:text-violet-300" data-testid="record-whatsapp-link">Send it from WhatsApp</button>
             <button type="button" aria-expanded={scheduleLater} aria-controls="record-schedule" onClick={scheduleCall} disabled={planning.busy} className="text-[12px] font-semibold text-axal-violet underline dark:text-violet-300" data-testid="record-schedule-link">{planning.busy ? 'Adding them to your pipeline…' : 'Schedule the call for later'}</button>
           </div>
           {planning.error && <p role="alert" className="m-0 text-[12px] font-semibold text-red-700 dark:text-red-400" data-testid="record-schedule-error">{planning.error}</p>}
           {assistant && <div id="record-assistant" className="-mx-1"><AssistantEntry companyName={active?.company_name || ''} /></div>}
+          {fromWhatsApp && <div id="record-whatsapp" className="-mx-1"><WhatsAppEntry read={whatsappLink.read} /></div>}
           {who && scheduleLater && <div id="record-schedule" className="-mx-1"><SchedulePanel interview={who} /></div>}
         </Section>
 

@@ -370,7 +370,7 @@ test('the composer: disabled with the reason outside the window; a retry with no
   assert.match(renderedText(closed), /WhatsApp only allows a free reply within 24 hours of the customer’s last message/);
   assert.match(closed.match(/<textarea[^>]*>/)[0], /disabled=""/);
   const tgClosed = renderedText(html(h(ReplyComposer, { thread: { ...THREAD, provider: 'telegram', reply_window_open: false } })));
-  assert.match(tgClosed, /Telegram only lets the bot reply in chats active in the last 24 hours/);
+  assert.match(tgClosed, /Telegram only lets the bot reply within 24 hours of your contact’s last message/);
 
   const keys = [];
   let attempt = 0;
@@ -677,7 +677,9 @@ test('Schedule a call says what to fix before pressing, and repeats the Worker�
   const m = await mount(h(SchedulePanel, { interview: { id: 7 }, api, initialForm: form('google_meet') }));
   try {
     await m.flush();
-    assert.match(m.text(), /Axal cannot import Google Meet transcripts yet\. You can still hold the call/);
+    // An api without the Calendar status read says only the engine sentence about transcripts (D757, #1926).
+    assert.ok(m.byTestId('meet-transcripts-engine'));
+    assert.doesNotMatch(m.text(), /cannot import Google Meet transcripts/);
     assert.doesNotMatch(m.text(), /reconnect Google/i);
     await m.click('button-schedule-meeting');
     assert.ok(m.byTestId('schedule-notice'));
@@ -807,12 +809,14 @@ test('a channel session waiting for its words shows what it waits for, never the
 
 // ------------------------------------------------------------------ where each is mounted
 
-test('mounted: the inbox route, the Connectors group, the sheet’s two ways in; no CSP was added to the shell', () => {
+test('mounted: the inbox route, the Connectors group, the page’s two ways in; no CSP was added to the shell', () => {
   const app = readFileSync('frontend/src/App.jsx', 'utf8');
   assert.match(app, /const ChannelsInboxPage = lazy\(\(\) => import\('\.\/pages\/founder\/ChannelsInbox'\)\);/);
   assert.match(app, /<Route path="\/validate\/inbox" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <ChannelsInboxPage \/>\)\} \/>/);
   const conn = readFileSync('frontend/src/pages/account/AccountConnectors.jsx', 'utf8');
   assert.match(conn, /<ChannelsSection catalogue=\{data\.catalogue\} onOpenConnector=/);
+  // D753 — Zoom and Google Meet's buttons open their connector's own page.
+  assert.match(conn, /onOpenConnector=\{\(key\) => \{ if \(data\.catalogue\.some\(\(x\) => x\.key === key\)\) navigate\(connectorPagePath\(key\)\); \}\}/);
   const lightbox = readFileSync('frontend/src/pages/founder/RecordLightbox.jsx', 'utf8');
   assert.match(lightbox, /channelsSource\.assign\(thread, assignTarget\(/, 'the chat import is the lightbox\'s own, inline (#1587)');
   assert.match(lightbox, /<SchedulePanel interview=\{who\} \/>/);

@@ -131,6 +131,7 @@ function Tokens({ tokens }) {
         <div className="ax-lbl-q">{tokens.k}</div>
         <h3 id="ax-door-tokens-h" className="ax-door-tokens-t">{tokens.t}</h3>
         <p className="ax-door-note">{tokens.d}</p>
+        {tokens.link && <a className="ax-door-tokens-link" href={tokens.link.href} data-testid="door-token-packs">{tokens.link.label}</a>}
       </div>
       <ul className="ax-door-tokens-list">
         {tokens.points.map((t) => (

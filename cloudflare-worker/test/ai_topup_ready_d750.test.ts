@@ -126,7 +126,8 @@ test('the route answers members the state only, and 503 only when D1 or Stripe c
     try {
       await mirror(f, [{ ...PRICE, currency: 'eur' }]);
       const r = await budgetRoute.request('/top-up', { headers: await bearer(f, 2) }, f.env);
-      assert.equal(r.status, 200); assert.deepEqual(await r.json(), { configured: true, state: 'not_ready' }, 'the member never sees the reason');
+      // D755 adds the pack fields beside D750's `configured`; the member still never sees the reason.
+      assert.equal(r.status, 200); assert.deepEqual(await r.json(), { configured: true, state: 'not_ready', packs: [], on_hold: false, latest: null }, 'the member never sees the reason');
       assert.equal((await budgetRoute.request('/top-up', {}, f.env)).status, 401);
     } finally { f.db.close(); }
     f = fixture();
@@ -162,7 +163,10 @@ test('/top-up/status is Super Admin only and carries the reason, six characters 
       const r = await budgetRoute.request('/top-up/status', { headers: await bearer(f, 1) }, f.env);
       assert.equal(r.status, 200);
       const text = await r.text();
-      assert.deepEqual(JSON.parse(text), { state: 'not_ready', reason: 'not_one_time', price_id_suffix: '123abc', mode: 'live' });
+      // D755: D750's line stays at the top level, and `packs` gives the same price as its own line.
+      const { packs, ...line } = JSON.parse(text);
+      assert.deepEqual(line, { state: 'not_ready', reason: 'not_one_time', price_id_suffix: '123abc', mode: 'live' });
+      assert.deepEqual(packs.map((p: any) => [p.origin, p.state, p.reason, p.price_id_suffix, p.adoptable]), [['environment', 'not_ready', 'not_one_time', '123abc', true]]);
       assert.doesNotMatch(text, /price_TopUp|sk_|rk_/);
     } finally { f.db.close(); }
     for (const [extra, want] of [
@@ -199,7 +203,10 @@ test('end to end: a price created after the last sync is fetched, bought through
     f.db.prepare("UPDATE users SET uid='uid-member-2' WHERE id=2").run();
     const headers = await bearer(f, 2);
     const read = await budgetRoute.request('/top-up', { headers }, f.env);
-    assert.deepEqual(await read.json(), READY);
+    // D755: D750's fields fetch and mirror the price first, so the D1-only pack list then offers it as the fallback pack.
+    const { packs, on_hold, latest, ...d750 } = await read.json() as any;
+    assert.deepEqual(d750, READY); assert.deepEqual([on_hold, latest], [false, null]);
+    assert.deepEqual(packs, [{ uid: null, label: '$25 of tokens', price_id: ID, unit_amount: 2500, currency: 'usd', credit_microusd: 25000000, bonus_microusd: 0 }]);
     const order = await ordersRoute.request('/intent', { method: 'POST', headers, body: JSON.stringify({ items: [{ price_id: ID, quantity: 1 }], nonce: 'd750' }) }, f.env);
     assert.equal(order.status, 200, await order.clone().text());
     const placed = await order.json() as any;
@@ -213,7 +220,9 @@ test('end to end: a price created after the last sync is fetched, bought through
     const hook = { 'stripe-signature': `t=${timestamp},v1=${signature}`, 'content-type': 'application/json' };
     for (let i = 0; i < 2; i++) assert.equal((await billingRoute.request('/stripe/webhook', { method: 'POST', headers: hook, body }, f.env)).status, 200);
     assert.equal((await loadAiBudget(f.env, 2)).balance_microusd, 25000000);
-    assert.equal(f.db.prepare('SELECT COUNT(*) n FROM ai_topup_ledger').get().n, 1);
+    // D755: the credit is one ai_credit_ledger purchase; ai_topup_ledger is no longer written.
+    assert.equal(f.db.prepare('SELECT COUNT(*) n FROM ai_topup_ledger').get().n, 0);
+    assert.equal(f.db.prepare("SELECT COUNT(*) n FROM ai_credit_ledger WHERE kind='purchase'").get().n, 1);
     assert.equal(s.calls.filter((c) => c.includes('/v1/prices/')).length, 1);
     assert.ok(!s.calls.some((c) => /checkout\/sessions|\/v1\/prices( |$)|\/v1\/products/.test(c)), 'no Checkout Session and nothing created in Stripe');
   } finally { s.restore(); f.db.close(); }

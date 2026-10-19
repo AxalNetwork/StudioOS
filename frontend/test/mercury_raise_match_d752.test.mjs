@@ -99,7 +99,8 @@ test('the deal room: the founder gets the door on a pending commitment, and on a
 
 test('the deal room passes the founder test, and keeps the commitments read unchanged', () => {
   const src = codeOnly(readFileSync('frontend/src/pages/DealRoomPage.jsx', 'utf8'));
-  assert.match(src, /<CommitmentsTab dealId=\{deal\.id\} founderMatch=\{isDealFounder\(role, user, deal\)\} \/>/);
+  // The tab also carries D752 #1890's admin proof props; only the founder test is pinned here.
+  assert.match(src, /<CommitmentsTab [^>]*dealId=\{deal\.id\}[^>]* founderMatch=\{isDealFounder\(role, user, deal\)\} \/>/);
   assert.match(src, /\{founderMatch && COMMITMENT_MATCH_STATUSES\.includes\(c\.status\) && \(/);
   assert.match(src, /api\.dealCommitments\(dealId\)\.then\(setItems\)/);
 });

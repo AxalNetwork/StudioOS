@@ -27,6 +27,21 @@
  * Edits and deletions at the source change a PENDING message. Once a message
  * is in an interview the transcript is the member's record: they edit it there.
  *
+ * A CHAT WAITS FOR CONSENT WHERE ITS PROVIDER ASKS FOR IT (D754 §4, #1893;
+ * `consentRequired`, WhatsApp today). Assigning such a chat links it to its
+ * interview and opens the draft session, and nothing more: its text stays in
+ * the pending store and its voice notes stay placeholders, never fetched,
+ * until `consent_state` is 'given' (consent.ts). Then `admitConsentedThread`
+ * moves what waited. A decline deletes what waited and sets the chat aside; a
+ * withdrawal sets it aside so nothing new is kept.
+ *
+ * A TELEGRAM CHAT'S NOTES WAIT FOR CONSENT; ITS TEXT DOES NOT (D756 §1.5,
+ * #1977; `audioConsentRequired`). Its text keeps D684's rule, and its voice
+ * notes are queued only once its `consent_state` is 'given'. A consent given
+ * while the chat is pending waits on the thread and is copied to the session
+ * at assignment; a NO keeps the notes held, and a STOP stops further
+ * downloads, without setting the chat aside.
+ *
  * Every function that takes `userId` scopes by it; every write into an
  * interview goes through `interviewIntake.ts`, which re-checks the member and
  * the venture on each call.
@@ -41,17 +56,24 @@ import type { ChannelConnection } from './connections';
 import { refKey } from './events';
 import { enqueueChannelJob } from './jobs';
 import { isOurSend } from './outbound';
+import { expireCapturesStatements } from './whatsappCapture';
 import { enqueueSessionStructure } from '../sessionAutoStructure';
 import {
-  CHANNEL_LIMITS, type InboundDelete, type InboundEdit, type InboundMessage, type MessageSide, type MessagingProvider,
+  CHANNEL_LIMITS, audioConsentRequired, consentAsked, consentRequired, consentRequiredProviders, type InboundDelete, type InboundEdit, type InboundMessage, type MessageSide,
+  type MessagingProvider, type VoiceMedia,
 } from './types';
+import { deleteSession, dropInterviewMadeFor, type SessionRow } from '../interviewSessions';
 
 export interface ThreadRow {
   id: number; uid: string; provider: MessagingProvider; integration_id: number; user_id: number;
   external_chat_id: string; contact_name_enc: string | null; interview_id: number | null; session_id: number | null;
   status: 'pending' | 'assigned' | 'ignored'; message_count: number;
   last_inbound_at: string | null; last_message_at: string | null; created_at: string; updated_at: string;
+  /** D754 (migration 488): NULL where the provider asks for no consent. */
+  consent_state?: ConsentState | null;
 }
+
+export type ConsentState = 'awaiting' | 'given' | 'declined' | 'withdrawn';
 
 interface PendingRow {
   id: number; uid: string; external_message_id: string; direction: 'in' | 'out'; kind: 'text' | 'voice';
@@ -110,6 +132,17 @@ async function contactName(env: Env, t: Pick<ThreadRow, 'uid' | 'contact_name_en
   return decryptColumn(env, THREAD_TABLE, 'contact_name_enc', t.uid, t.contact_name_enc);
 }
 
+/**
+ * Who a sentence about a chat names: the linked interview's interviewee, then
+ * the contact's own name, else null (the caller says "This contact").
+ */
+export async function intervieweeLabel(env: Env, t: ThreadRow): Promise<string | null> {
+  const iv = t.interview_id
+    ? await env.DB.prepare('SELECT interviewee_name FROM discovery_interviews WHERE id = ?').bind(t.interview_id).first<{ interviewee_name: string | null }>()
+    : null;
+  return clip(iv?.interviewee_name, 80) || clip(await contactName(env, t), 80) || null;
+}
+
 /** The transcript speaker for a message: 'Me' for the member, the interviewee for their contact. */
 function speaker(side: MessageSide | 'in' | 'out', intervieweeName: string | null, contact: string | null): string {
   if (side === 'me' || side === 'out') return 'Me';
@@ -155,9 +188,36 @@ async function detach(env: Env, thread: ThreadRow): Promise<ThreadRow> {
   return { ...thread, status: 'pending', interview_id: null, session_id: null };
 }
 
-/** Whether a thread's messages go straight into an interview session. */
-export const inInterview = (t: Pick<ThreadRow, 'status' | 'session_id' | 'interview_id'>): boolean =>
+/** Whether a thread is linked to an interview session (it may still be waiting for consent). */
+const linked = (t: Pick<ThreadRow, 'status' | 'session_id' | 'interview_id'>): boolean =>
   t.status === 'assigned' && !!t.session_id && !!t.interview_id;
+
+/**
+ * Whether a thread's messages go straight into an interview session: it is
+ * linked and, where its provider asks for consent, the consent is given
+ * (D754 §4). This one test keeps a waiting chat's text and voice notes
+ * pending: `storeMessage`, the webhook's voice queue and
+ * `storeVoiceTranscript` all ask it.
+ */
+export const inInterview = (t: Pick<ThreadRow, 'status' | 'session_id' | 'interview_id' | 'provider' | 'consent_state'>): boolean =>
+  linked(t) && (!consentRequired(t.provider) || t.consent_state === 'given');
+
+/**
+ * D754 §4: a chat whose consent was withdrawn keeps nothing new, as an ignored
+ * one. A Telegram STOP stops downloads only (D756 §1.5): its text still flows.
+ */
+const keepsNothing = (t: Pick<ThreadRow, 'status' | 'consent_state' | 'provider'>): boolean =>
+  t.status === 'ignored' || (consentRequired(t.provider) && t.consent_state === 'withdrawn');
+
+/**
+ * #1895 decision 3 (D756): whether a free-form message may go now, counted
+ * from the contact's last message. A contact who never wrote means closed.
+ */
+export function replyWindowOpen(t: Pick<ThreadRow, 'last_inbound_at'>, now = Date.now()): boolean {
+  const s = t.last_inbound_at;
+  const last = s ? Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? s : `${s.replace(' ', 'T')}Z`) : NaN;
+  return Number.isFinite(last) && now - last < CHANNEL_LIMITS.replyWindowMs;
+}
 
 /**
  * The thread's counters for one more message. With `onlyIfRow`, they move
@@ -223,7 +283,7 @@ export async function storeMessage(env: Env, conn: ChannelConnection, m: ThreadM
   const text = clip(m.text, CHANNEL_LIMITS.maxTextChars);
   let thread = await upsertThread(env, conn, m.externalChatId, m.side === 'contact' ? m.contactName : null);
   if (!text) return { stored: 'empty', thread };
-  if (thread.status === 'ignored') {
+  if (keepsNothing(thread)) {
     await heardOnIgnored(env, thread);
     return { stored: 'ignored', thread };
   }
@@ -271,7 +331,7 @@ export async function storeVoiceNote(env: Env, conn: ChannelConnection, msg: Inb
   if (!msg.voice) throw new IntakeError(400, 'voice_required', 'The message had no voice note.');
   await activeMember(env, conn.userId);
   const thread = await upsertThread(env, conn, msg.externalChatId, msg.side === 'contact' ? msg.contactName : null);
-  if (thread.status === 'ignored') {
+  if (keepsNothing(thread)) {
     await heardOnIgnored(env, thread);
     return { stored: 'ignored', thread };
   }
@@ -279,7 +339,9 @@ export async function storeVoiceNote(env: Env, conn: ChannelConnection, msg: Inb
   const d = msg.voice.durationSec;
   const inserted = await insertPending(env, thread, {
     uid, externalMessageId: msg.externalMessageId, side: msg.side, kind: 'voice', textEnc: '', sentAt: msg.sentAt,
-    voiceRefEnc: await encryptColumn(env, MSG_TABLE, 'voice_ref_enc', uid, JSON.stringify({ file: msg.voice.fileRef, mime: msg.voice.mime })),
+    voiceRefEnc: await encryptColumn(env, MSG_TABLE, 'voice_ref_enc', uid, JSON.stringify({
+      file: msg.voice.fileRef, mime: msg.voice.mime, media: msg.voice.media ?? 'voice', size: msg.voice.sizeBytes ?? null,
+    })),
     durationSec: d != null && Number.isFinite(Number(d)) ? Math.max(0, Math.round(Number(d))) : null,
   });
   return inserted ? { stored: 'voice', thread, messageUid: uid } : { stored: 'duplicate', thread };
@@ -298,10 +360,14 @@ export async function queueVoiceTranscriptions(
   env: Env, thread: ThreadRow, opts: { only?: string; event?: number | null } = {},
 ): Promise<number> {
   if (!inInterview(thread)) return 0;
+  // D754 §4, said twice on purpose: a chat that waits for consent queues nothing without it.
+  // D756 §1.5: nor does a Telegram chat, whose text flows but whose notes wait for its YES.
+  if (audioConsentRequired(thread.provider) && thread.consent_state !== 'given') return 0;
   const only = opts.only ?? null;
   const rows = (await env.DB.prepare(
     `SELECT uid FROM channel_thread_messages
       WHERE thread_id = ? AND voice_ref_enc IS NOT NULL AND (? IS NULL OR uid = ?)
+        AND (transcribe_error IS NULL OR transcribe_error != 'expired')
       ORDER BY sent_at, id LIMIT ?`,
   ).bind(thread.id, only, only, CHANNEL_LIMITS.transcriptionsPerDay).all<{ uid: string }>()).results ?? [];
   let queued = 0;
@@ -310,6 +376,7 @@ export async function queueVoiceTranscriptions(
     const claimed = await env.DB.prepare(
       `UPDATE channel_thread_messages SET transcribe_job = ?, transcribe_error = NULL, updated_at = datetime('now')
         WHERE uid = ? AND voice_ref_enc IS NOT NULL
+          AND (transcribe_error IS NULL OR transcribe_error != 'expired')
           AND (transcribe_job IS NULL OR datetime(updated_at) < datetime('now', '-60 minutes'))
         RETURNING id`,
     ).bind(job, r.uid).first<{ id: number }>();
@@ -327,10 +394,17 @@ export async function queueVoiceTranscriptions(
   return queued;
 }
 
-/** A waiting voice note, as the job that holds it reads it. */
+/**
+ * A waiting voice note, as the job that holds it reads it. `media` and `size`
+ * (D756, #1896) are the kind and the declared size; a note stored before them
+ * reads as a voice note of unknown size.
+ */
 export interface VoiceJobNote {
-  id: number; uid: string; side: MessageSide; file: string; mime: string | null; durationSec: number | null; thread: ThreadRow;
+  id: number; uid: string; side: MessageSide; file: string; mime: string | null; media: VoiceMedia; size: number | null;
+  durationSec: number | null; sentAt: string; thread: ThreadRow;
 }
+
+const VOICE_MEDIA: ReadonlySet<string> = new Set<VoiceMedia>(['voice', 'audio', 'video_note']);
 
 /**
  * The note a voice job was queued for, while that job still holds it — or
@@ -340,17 +414,20 @@ export interface VoiceJobNote {
 export async function voiceNoteForJob(env: Env, messageUid: string, job: string): Promise<VoiceJobNote | null> {
   if (!messageUid || !job) return null;
   const row = await env.DB.prepare(
-    `SELECT id, uid, direction, voice_ref_enc, duration_sec, thread_id FROM channel_thread_messages
+    `SELECT id, uid, direction, voice_ref_enc, duration_sec, sent_at, thread_id FROM channel_thread_messages
       WHERE uid = ? AND transcribe_job = ? AND voice_ref_enc IS NOT NULL`,
-  ).bind(messageUid, job).first<{ id: number; uid: string; direction: 'in' | 'out'; voice_ref_enc: string; duration_sec: number | null; thread_id: number }>();
+  ).bind(messageUid, job).first<{ id: number; uid: string; direction: 'in' | 'out'; voice_ref_enc: string; duration_sec: number | null; sent_at: string; thread_id: number }>();
   if (!row) return null;
   const thread = await env.DB.prepare('SELECT * FROM channel_threads WHERE id = ?').bind(row.thread_id).first<ThreadRow>();
-  let ref: { file?: unknown; mime?: unknown } | null = null;
+  let ref: { file?: unknown; mime?: unknown; media?: unknown; size?: unknown } | null = null;
   try { ref = JSON.parse((await decryptColumn(env, MSG_TABLE, 'voice_ref_enc', row.uid, row.voice_ref_enc)) ?? 'null'); } catch { ref = null; }
   if (!thread || typeof ref?.file !== 'string' || !ref.file) return null;
   return {
     id: Number(row.id), uid: row.uid, side: row.direction === 'out' ? 'me' : 'contact', file: ref.file,
-    mime: typeof ref.mime === 'string' ? ref.mime : null, durationSec: row.duration_sec, thread,
+    mime: typeof ref.mime === 'string' ? ref.mime : null,
+    media: typeof ref.media === 'string' && VOICE_MEDIA.has(ref.media) ? ref.media as VoiceMedia : 'voice',
+    size: Number.isSafeInteger(ref.size) && Number(ref.size) >= 0 ? Number(ref.size) : null,
+    durationSec: row.duration_sec, sentAt: row.sent_at, thread,
   };
 }
 
@@ -386,7 +463,7 @@ export async function storeVoiceTranscript(
   const still = await env.DB.prepare(`SELECT thread_id FROM channel_thread_messages WHERE id = ? AND uid = ? AND voice_ref_enc IS NOT NULL`)
     .bind(note.id, note.uid).first<{ thread_id: number }>();
   const thread = still ? await env.DB.prepare('SELECT * FROM channel_threads WHERE id = ?').bind(still.thread_id).first<ThreadRow>() : null;
-  if (!thread || thread.status === 'ignored') return 'gone';
+  if (!thread || keepsNothing(thread)) return 'gone';
   const drop = env.DB.prepare(`DELETE FROM channel_thread_messages WHERE id = ?`).bind(note.id);
   const text = clip(transcript, CHANNEL_LIMITS.maxTextChars);
   if (!text) {
@@ -423,7 +500,7 @@ export function storeInbound(env: Env, conn: ChannelConnection, msg: InboundMess
   return storeMessage(env, conn, messageFromInbound(msg, transcribed));
 }
 
-async function threadForChat(env: Env, conn: ChannelConnection, externalChatId: string): Promise<ThreadRow | null> {
+export async function threadForChat(env: Env, conn: ChannelConnection, externalChatId: string): Promise<ThreadRow | null> {
   return (await env.DB.prepare(`SELECT * FROM channel_threads WHERE integration_id = ? AND external_chat_id = ?`)
     .bind(conn.integrationId, clip(externalChatId, 200)).first<ThreadRow>()) ?? null;
 }
@@ -487,6 +564,37 @@ export interface AssignResult {
   interviewId: number; sessionId: number; moved: number;
   /** Voice notes queued for transcription now that the chat is in an interview. */
   queued: number;
+}
+
+/**
+ * D754 §4 decision 8, D756 §1.5: what consent a chat carries into a new link.
+ *   given     only within the venture its consent was given for (another
+ *             venture is refused: nothing changes). A Telegram chat that
+ *             agreed while pending has no venture yet, and takes this one.
+ *   awaiting  a WhatsApp chat without it: the whole chat waits again.
+ *   keep      a Telegram chat without it: its text keeps D684's rule, and its
+ *             consent state (asked, declined, stopped) stays as it is.
+ */
+async function consentForMove(
+  env: Env, thread: ThreadRow, projectId: number,
+): Promise<{ state: 'awaiting' | 'keep' } | { state: 'given'; method: string; rowId: number }> {
+  const whole = consentRequired(thread.provider);
+  const none = { state: whole ? 'awaiting' as const : 'keep' as const };
+  if (thread.consent_state !== 'given') return none;
+  const row = await env.DB.prepare(
+    `SELECT c.id, c.method,
+            (SELECT di.project_id FROM discovery_interviews di WHERE di.id = COALESCE(?, c.interview_id)) AS project_id
+       FROM channel_consents c
+      WHERE c.thread_id = ? AND c.status = 'given' ORDER BY c.id DESC LIMIT 1`,
+  ).bind(thread.interview_id, thread.id).first<{ id: number; method: string; project_id: number | null }>();
+  if (!row) return none;
+  // A WhatsApp consent whose interview is gone has no venture to carry it to.
+  if (row.project_id == null && whole) return none;
+  if (row.project_id != null && Number(row.project_id) !== Number(projectId)) {
+    throw new IntakeError(409, 'consent_other_venture',
+      'This chat agreed to be recorded for its venture only. Add it to an interview in the same venture, or ask again after moving it.');
+  }
+  return { state: 'given', method: row.method, rowId: Number(row.id) };
 }
 
 /**
@@ -579,9 +687,11 @@ async function assignInto(env: Env, userId: number, threadUid: string, target: A
   const thread = await memberThread(env, userId, threadUid);
   if ('interviewId' in target) {
     const scoped = await writableInterview(env, userId, Number(target.interviewId));
-    if (inInterview(thread) && Number(thread.interview_id) === scoped.interview.id) {
-      // What this moves is new text on a session already structured once: the quiet-chat sweep takes it from here.
+    if (linked(thread) && Number(thread.interview_id) === scoped.interview.id) {
       const sessionId = Number(thread.session_id);
+      // D754 decision 8: a chat waiting for consent is already linked here; the press opens nothing new.
+      if (!inInterview(thread)) return { interviewId: scoped.interview.id, sessionId, moved: 0, queued: 0 };
+      // What this moves is new text on a session already structured once: the quiet-chat sweep takes it from here.
       const moved = await movePending(env, userId, thread, sessionId, scoped);
       return { interviewId: scoped.interview.id, sessionId, moved, queued: await queueAfterAssign(env, thread) };
     }
@@ -589,6 +699,8 @@ async function assignInto(env: Env, userId: number, threadUid: string, target: A
     return moveInto(env, userId, thread, scoped, null);
   }
   refuseIfBusy(thread);
+  // Checked before the interview is created, so a refusal leaves none behind.
+  if (consentAsked(thread.provider)) await consentForMove(env, thread, Number(target.projectId));
   const created = await createInterview(env, userId, Number(target.projectId), target.intervieweeName, target.intervieweeCompany ?? null);
   let scoped: ScopedInterview;
   try {
@@ -604,11 +716,26 @@ async function moveInto(
   env: Env, userId: number, thread: ThreadRow, scoped: ScopedInterview, created: number | null,
 ): Promise<AssignResult> {
   const interviewId = scoped.interview.id;
-  // Claim the thread as it was read: of two concurrent assigns, one claim matches.
+  const waits = consentRequired(thread.provider);
+  let consent: Awaited<ReturnType<typeof consentForMove>> | null = null;
+  if (consentAsked(thread.provider)) {
+    try {
+      consent = await consentForMove(env, thread, scoped.project.id);
+    } catch (err) {
+      if (created) await dropCreatedInterview(env, created).catch(() => {});
+      throw err;
+    }
+  }
+  // Claim the thread as it was read: of two concurrent assigns, one claim
+  // matches. A chat that waits for consent takes its consent state in the
+  // same claim (D754): 'given' within the venture, else 'awaiting'.
   const claim = await env.DB.prepare(
-    `UPDATE channel_threads SET status = 'assigned', interview_id = ?, session_id = NULL, updated_at = datetime('now')
+    `UPDATE channel_threads SET status = 'assigned', interview_id = ?, session_id = NULL,
+            consent_state = CASE WHEN ? = 1 THEN ? ELSE consent_state END, updated_at = datetime('now')
       WHERE id = ? AND user_id = ? AND status = ? AND interview_id IS ? AND session_id IS ? RETURNING id`,
-  ).bind(interviewId, thread.id, userId, thread.status, thread.interview_id, thread.session_id).first<{ id: number }>();
+  ).bind(interviewId, waits ? 1 : 0, consent && consent.state !== 'keep' ? consent.state : null, thread.id, userId, thread.status,
+    thread.interview_id, thread.session_id)
+    .first<{ id: number }>();
   if (!claim) {
     if (created) await dropCreatedInterview(env, created).catch(() => {});
     throw new IntakeError(409, 'thread_busy', 'That conversation changed while you were assigning it. Try again.');
@@ -616,26 +743,56 @@ async function moveInto(
 
   let opened: number | null = null;
   try {
-    const session = await openSession(env, scoped, thread.provider, 'text');
+    // Within the venture a consented chat's new session takes its consent; the consent row keeps its first session.
+    const session = await openSession(env, scoped, thread.provider, 'text', consent?.state === 'given' ? { method: consent.method } : null);
     opened = session.id;
     const setSession = env.DB.prepare(
       `UPDATE channel_threads SET session_id = ?, updated_at = datetime('now') WHERE id = ?`,
     ).bind(session.id, thread.id);
+    if (consentAsked(thread.provider)) {
+      // A request still open was for the chat's old interview: it closes. One
+      // made while the chat was pending (Telegram) now belongs to this interview.
+      await env.DB.batch([
+        env.DB.prepare(
+          `UPDATE channel_consents SET status = 'expired', updated_at = datetime('now')
+            WHERE thread_id = ? AND status = 'requested' AND ? IS NOT NULL`,
+        ).bind(thread.id, thread.interview_id),
+        env.DB.prepare(
+          `UPDATE channel_consents SET interview_id = ?, session_id = ?, updated_at = datetime('now')
+            WHERE thread_id = ? AND status = 'requested' AND interview_id IS NULL`,
+        ).bind(interviewId, session.id, thread.id),
+      ]);
+      // A consent given while pending is copied to its first session; a given row keeps its first session.
+      if (consent?.state === 'given') {
+        await env.DB.prepare(
+          `UPDATE channel_consents SET interview_id = COALESCE(interview_id, ?), session_id = COALESCE(session_id, ?),
+                  updated_at = datetime('now') WHERE id = ?`,
+        ).bind(interviewId, session.id, consent.rowId).run();
+      }
+    }
+    if (consent?.state === 'awaiting') {
+      // D754 §4: linked and waiting. Nothing moves, nothing is structured or queued.
+      await setSession.run();
+      return { interviewId, sessionId: session.id, moved: 0, queued: 0 };
+    }
     // Messages may land pending while the session opens; sweep until none are left.
     const moved = await movePending(env, userId, thread, session.id, scoped, [setSession]);
     // The chat's text is in the interview: the Worker AI proposes its findings
     // now; later messages are picked up by the quiet-chat sweep.
     if (moved > 0) await enqueueSessionStructure(env, session.id, userId, 'chat_assigned');
-    const assigned: ThreadRow = { ...thread, status: 'assigned', interview_id: interviewId, session_id: session.id };
+    const assigned: ThreadRow = {
+      ...thread, status: 'assigned', interview_id: interviewId, session_id: session.id,
+      consent_state: waits && consent && consent.state !== 'keep' ? consent.state : thread.consent_state,
+    };
     return { interviewId, sessionId: session.id, moved, queued: await queueAfterAssign(env, assigned) };
   } catch (err) {
     // If the first move never landed, nothing moved (each move is one batch
     // with its deletion): release the claim and drop the empty session, and
     // the interview this assignment created for it.
     const released = await env.DB.prepare(
-      `UPDATE channel_threads SET status = ?, interview_id = ?, session_id = ?, updated_at = datetime('now')
+      `UPDATE channel_threads SET status = ?, interview_id = ?, session_id = ?, consent_state = ?, updated_at = datetime('now')
         WHERE id = ? AND session_id IS NULL RETURNING id`,
-    ).bind(thread.status, thread.interview_id, thread.session_id, thread.id).first();
+    ).bind(thread.status, thread.interview_id, thread.session_id, thread.consent_state ?? null, thread.id).first();
     if (released && opened) {
       await env.DB.prepare(
         `DELETE FROM interview_sessions WHERE id = ? AND NOT EXISTS (SELECT 1 FROM interview_transcript_segments WHERE session_id = ?)`,
@@ -663,24 +820,65 @@ export async function setThreadIgnored(env: Env, userId: number, threadUid: stri
   return memberThread(env, userId, threadUid);
 }
 
+/**
+ * D754 §4 — consent is given: move what waited on the chat into its session
+ * and queue its voice notes, as an assignment would have. Each step is
+ * idempotent (a move deletes what it appends; a note is claimed once), so the
+ * webhook's follow-up and the member's own confirmation may both run it.
+ */
+export async function admitConsentedThread(
+  env: Env, userId: number, threadId: number,
+): Promise<{ moved: number; queued: number }> {
+  const thread = await env.DB.prepare('SELECT * FROM channel_threads WHERE id = ? AND user_id = ?').bind(threadId, userId).first<ThreadRow>();
+  if (!thread || !inInterview(thread)) return { moved: 0, queued: 0 };
+  const scoped = await writableInterview(env, userId, Number(thread.interview_id));
+  const sessionId = Number(thread.session_id);
+  const moved = await movePending(env, userId, thread, sessionId, scoped);
+  if (moved > 0) await enqueueSessionStructure(env, sessionId, userId, 'chat_assigned');
+  return { moved, queued: await queueAfterAssign(env, thread) };
+}
+
+/**
+ * D754 §4 decision 5 — a decline or a withdrawal sets the chat aside, as an
+ * ignore does: its waiting copies and placeholders are deleted (a running
+ * voice job then finds the note gone), later messages are dropped, and
+ * `consent_state` says why. Unrun, for consent.ts to batch with the consent
+ * row; `onlyIf` is that row's own guard, so the batch lands whole or not at all.
+ */
+export function setAsideStatements(
+  env: Env, threadId: number, state: 'declined' | 'withdrawn', onlyIf: { consentId: number; replyRef: string },
+): D1PreparedStatement[] {
+  return [
+    env.DB.prepare(`DELETE FROM channel_thread_messages WHERE thread_id = ? AND EXISTS (SELECT 1 FROM channel_consents WHERE id = ? AND reply_ref_hash = ? AND status = ?)`)
+      .bind(threadId, onlyIf.consentId, onlyIf.replyRef, state),
+    env.DB.prepare(
+      `UPDATE channel_threads SET status = 'ignored', interview_id = NULL, session_id = NULL, message_count = 0, consent_state = ?,
+              updated_at = datetime('now') WHERE id = ? AND EXISTS (SELECT 1 FROM channel_consents WHERE id = ? AND reply_ref_hash = ? AND status = ?)`,
+    ).bind(state, threadId, onlyIf.consentId, onlyIf.replyRef, state),
+  ];
+}
+
 export interface ThreadView {
   uid: string; provider: MessagingProvider; contact_name: string | null; status: ThreadRow['status'];
   message_count: number; last_message_at: string | null; last_inbound_at: string | null;
   interview_id: number | null; interviewee_name: string | null; session_id: number | null; can_reply: boolean;
   /** Whether a free-form reply is allowed now (CHANNEL_LIMITS.replyWindowMs). */
   reply_window_open: boolean;
+  /**
+   * D754: 'not_asked' | 'awaiting' | 'given' | 'declined' | 'withdrawn' where
+   * the provider waits for consent, so the inbox can mark a waiting chat; null elsewhere.
+   */
+  consent_status: string | null;
 }
 
 async function view(env: Env, t: ThreadRow & { interviewee_name?: string | null }, canReply: boolean): Promise<ThreadView> {
-  // WhatsApp counts from the customer's last message; Telegram from the chat's last activity.
-  const since = t.provider === 'whatsapp' ? t.last_inbound_at : t.last_message_at;
-  const last = since ? Date.parse(since) : NaN;
   return {
     uid: t.uid, provider: t.provider, contact_name: await contactName(env, t), status: t.status,
     message_count: Number(t.message_count) || 0, last_message_at: t.last_message_at, last_inbound_at: t.last_inbound_at,
     interview_id: t.interview_id, interviewee_name: t.interviewee_name ?? null, session_id: t.session_id,
     can_reply: canReply,
-    reply_window_open: canReply && Number.isFinite(last) && Date.now() - last < CHANNEL_LIMITS.replyWindowMs,
+    reply_window_open: canReply && replyWindowOpen(t),
+    consent_status: consentAsked(t.provider) ? t.consent_state ?? 'not_asked' : null,
   };
 }
 
@@ -752,10 +950,50 @@ export async function threadForReply(env: Env, userId: number, threadUid: string
 }
 
 /**
+ * The empty draft sessions a chat that waits for consent left behind
+ * (D754 §7): consent not given, no segment and no chunk, and no thread
+ * pointing at them that still holds a waiting copy. `scope` narrows them to a
+ * connection's threads, or to drafts older than a cutoff. Each goes through
+ * `deleteSession`, and the interview made for it with it.
+ */
+async function dropEmptyDrafts(env: Env, scope: { integrationId: number } | { before: string }): Promise<number> {
+  const providers = JSON.stringify(consentRequiredProviders());
+  const byConn = 'integrationId' in scope ? scope.integrationId : null;
+  const before = 'before' in scope ? scope.before : null;
+  const rows = (await env.DB.prepare(
+    `SELECT s.* FROM interview_sessions s
+      WHERE s.submitted_via IN (SELECT value FROM json_each(?)) AND s.consent_status <> 'given' AND s.status = 'draft'
+        AND NOT EXISTS (SELECT 1 FROM interview_transcript_segments g WHERE g.session_id = s.id)
+        AND NOT EXISTS (SELECT 1 FROM interview_session_chunks k WHERE k.session_id = s.id)
+        AND NOT EXISTS (SELECT 1 FROM channel_threads t JOIN channel_thread_messages m ON m.thread_id = t.id WHERE t.session_id = s.id)
+        AND (? IS NULL OR EXISTS (SELECT 1 FROM channel_threads t WHERE t.session_id = s.id AND t.integration_id = ?))
+        AND (? IS NULL OR datetime(s.created_at) < datetime(?))
+      ORDER BY s.id LIMIT 200`,
+  ).bind(providers, byConn, byConn, before, before).all<SessionRow>()).results ?? [];
+  for (const s of rows) {
+    await deleteSession(env, s, Number(s.created_by_user_id));
+    await dropInterviewMadeFor(env, Number(s.interview_id), s.created_at);
+  }
+  return rows.length;
+}
+
+/**
  * A connection was disconnected: its conversations go. What was already
- * assigned stays in the interviews it was assigned to.
+ * assigned stays in the interviews it was assigned to. What waited for
+ * consent goes first (D754 §7): its open requests, and the empty drafts made
+ * for it; a consent given for an interview that stays keeps its row, without
+ * the thread.
  */
 export async function forgetConnection(env: Env, integrationId: number): Promise<number> {
+  await env.DB.prepare(
+    `DELETE FROM channel_consents WHERE status = 'requested'
+        AND thread_id IN (SELECT id FROM channel_threads WHERE integration_id = ?)`,
+  ).bind(integrationId).run();
+  await dropEmptyDrafts(env, { integrationId });
+  await env.DB.prepare(
+    `UPDATE channel_consents SET thread_id = NULL, updated_at = datetime('now')
+      WHERE thread_id IN (SELECT id FROM channel_threads WHERE integration_id = ?)`,
+  ).bind(integrationId).run();
   const res = await env.DB.prepare(`DELETE FROM channel_threads WHERE integration_id = ?`).bind(integrationId).run();
   return Number(res.meta?.changes ?? 0);
 }
@@ -775,16 +1013,21 @@ export async function forgetConnection(env: Env, integrationId: number): Promise
  *   links     D754 way B (#1937): a linked WhatsApp unused for
  *             CHANNEL_LIMITS.senderLinkDays lapses — phone numbers are
  *             reassigned. Its row stays, disconnected, with only the mask.
+ *   captures  (#1938) forwarded recordings not imported by their `fetch_by`,
+ *             with their consent rows (whatsappCapture.ts).
+ *   drafts    (D754 §7) a draft session a chat waiting for consent left
+ *             empty for that long, with the interview made for it
+ *             (`dropEmptyDrafts`), after the messages above are gone.
  */
 export async function purgeExpired(env: Env, now = new Date()): Promise<{
-  threads: number; messages: number; codes: number; events: number; counters: number; lapsed: number;
+  threads: number; messages: number; codes: number; events: number; counters: number; drafts: number; lapsed: number; captures: number;
 }> {
   const cutoff = new Date(now.getTime() - CHANNEL_LIMITS.pendingDays * 86_400_000).toISOString();
   const day = new Date(now.getTime() - 86_400_000).toISOString();
   const twoDays = new Date(now.getTime() - 2 * 86_400_000).toISOString();
   const events = new Date(now.getTime() - 90 * 86_400_000).toISOString();
   const unused = new Date(now.getTime() - CHANNEL_LIMITS.senderLinkDays * 86_400_000).toISOString();
-  const [msgs, threads, codes, evs, counters, linkAttempts, lapsed] = await env.DB.batch([
+  const [msgs, threads, codes, evs, counters, linkAttempts, lapsed, , captures] = await env.DB.batch([
     env.DB.prepare(`DELETE FROM channel_thread_messages WHERE datetime(sent_at) < datetime(?)`).bind(cutoff),
     env.DB.prepare(
       `DELETE FROM channel_threads WHERE status IN ('pending', 'ignored')
@@ -804,11 +1047,15 @@ export async function purgeExpired(env: Env, now = new Date()): Promise<{
         WHERE provider_key = 'whatsapp_link' AND status = 'active'
           AND datetime(COALESCE(last_synced_at, updated_at, created_at)) < datetime(?)`,
     ).bind(unused),
+    ...expireCapturesStatements(env, now),
   ]);
+  const drafts = await dropEmptyDrafts(env, { before: cutoff });
   return {
+    drafts,
     messages: Number(msgs.meta?.changes ?? 0), threads: Number(threads.meta?.changes ?? 0),
     codes: Number(codes.meta?.changes ?? 0), events: Number(evs.meta?.changes ?? 0),
     counters: Number(counters.meta?.changes ?? 0) + Number(linkAttempts.meta?.changes ?? 0),
     lapsed: Number(lapsed.meta?.changes ?? 0),
+    captures: Number(captures.meta?.changes ?? 0),
   };
 }

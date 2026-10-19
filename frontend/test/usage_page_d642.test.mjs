@@ -230,7 +230,7 @@ test('U1 renders loading, Unreadable (the others still load), ready, and each st
   assert.match(ok, /\$6\.10 <span[^>]*>of \$40\.00/);
   assert.match(ok, /Resets on the 1st at 00:00 UTC/);
   assert.match(ok, /data-testid="usage-held"[\s\S]*\$0\.05[\s\S]*Returned if a run does not finish within 5 minutes/);
-  assert.match(ok, /href="\/checkout\?ai_topup=1"[^>]*>Add tokens</);
+  assert.match(ok, /href="\/plans-and-pricing#token-packs"[^>]*>Add tokens</);
   assert.match(ok, /Runs use your included allowance first, then your top-up balance\./);
   const noDaily = html(h(AllowanceCard, { budget: ready({ ...BUDGET, daily_microusd: 0 }), product: ready(PRODUCT) }));
   assert.match(noDaily, /data-testid="usage-today"[\s\S]*Not recorded[\s\S]*The plan sets no daily allowance\. Runs use your top-up balance\./);
@@ -243,7 +243,7 @@ test('U1 renders loading, Unreadable (the others still load), ready, and each st
   const paused = html(h(AllowanceCard, { budget: ready({ ...BUDGET, held_for_review: [{ uid: 'r1' }] }), product: ready(PRODUCT) }));
   assert.match(paused, /role="alert" data-testid="usage-state-paused"[\s\S]*Runs paused[\s\S]*A run cost more than it held\. New runs wait while HQ checks the charge\./);
   const noTopUp = html(h(AllowanceCard, { budget: ready(BUDGET), product: ready({ configured: false, product: null }) }));
-  assert.match(noTopUp, /Top-ups are not available yet\. Runs use your included allowance only\./);
+  assert.match(noTopUp, /Top-up isn&#x27;t available yet\. Runs use your included allowance only\./);
   assert.doesNotMatch(noTopUp, /Add tokens/);
   const topUpBad = html(h(AllowanceCard, { budget: ready(BUDGET), product: UNREADABLE }));
   assert.match(topUpBad, /The top-up option could not be read\. Your balance above is unaffected\./);

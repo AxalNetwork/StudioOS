@@ -119,7 +119,7 @@ test('D647 tabs display a reason for data that was never recorded', async () => 
   for (const [tab, legacy, domain, missing] of cases) {
     setup(legacy, { stats: async () => ({ total: 1, pending_signature: 1, by_status: { signed: 0 }, avg_days_to_sign: null, signed_last_30d: 0 }), ...domain });
     const view = await mountContracts(element(), `/admin/contracts?tab=${tab}`, user);
-    try { await view.flush(); if (tab === 'document-types') assert.ok(view.nodes().some(node => missing.test(String(view.props(node)?.title || ''))), 'registry missing-data reason is available on hover'); else assert.match(view.text(), missing); assert.match(view.text(), /No signed agreement has both a recorded sent and signed date/); }
+    try { await view.flush(); if (tab === 'templates') assert.ok(view.nodes().some(node => missing.test(String(view.props(node)?.title || ''))), 'D717: the template card carries its missing editor on hover'); else if (tab === 'document-types') assert.ok(view.nodes().some(node => missing.test(String(view.props(node)?.title || ''))), 'registry missing-data reason is available on hover'); else assert.match(view.text(), missing); assert.match(view.text(), /No signed agreement has both a recorded sent and signed date/); }
     finally { await view.unmount(); restore(); }
   }
 });
@@ -137,12 +137,24 @@ test('D647 detail renders parties, history, fingerprint and confirmed reason/res
 });
 
 test('D647 template usage opens filtered agreements and publication asks for a concrete confirmation', async () => {
-  const calls = setup({}, { templates: async () => ({ items: [{ slug: 'safe', title: 'SAFE', version: 3, category: 'gp', body_md: 'Body', usage_count: 18 }] }), stats: never, agreements: empty, publish: async () => ({ template_count: 1, answered: 0, total: 0, branches: [], branches_reason: 'No bound branch.' }) });
-  const view = await mountContracts(element(), '/admin/contracts?tab=templates', user);
+  // D717 (#1851, #1852): publication is per template, from the editor; the tab has no library-wide Publish.
+  const safe = { slug: 'safe', title: 'SAFE', version: 3, category: 'gp', body_md: 'Body', usage_count: 18 };
+  const calls = setup({ adminTemplateStoreGet: async () => ({ template: safe }), adminTemplateStoreVersions: async () => ({ versions: [] }) },
+    { templates: async () => ({ items: [safe] }), stats: never, agreements: empty, renderPaper: async () => ({ html: '<p>paper</p>', paper_sha256: 'sha', fields: [] }), paperFonts: async () => ({ paper_sha256: 'sha', css: '' }),
+      publishOne: async () => ({ ok: true, publication: { version: 3, published_at: '2026-10-18 12:00:00', published_by: 2 } }) });
+  let view = await mountContracts(element(), '/admin/contracts?tab=templates', user);
   try {
-    await view.flush(); await view.click('Publish'); assert.match(view.text(), /makes these versions the versions New envelope offers/); assert.match(view.text(), /SAFE · v3/); assert.equal(calls.filter(([key]) => key === 'publish').length, 0);
-    await view.click('Confirm publish'); await view.flush(); assert.equal(calls.filter(([key]) => key === 'publish').length, 1); assert.match(view.text(), /1 template published/);
-    await view.click('18 uses'); await view.flush(); assert.equal(calls.filter(([key]) => key === 'agreements').at(-1)[1][0].template, 'safe');
+    await view.flush(); assert.ok(!view.nodes().some(n => view.props(n)?.['data-testid'] === 'template-publish'), 'no library-wide Publish');
+    await view.click('SAFE'); await view.flush(); await view.click('Publish v3'); await view.flush();
+    assert.equal(calls.filter(([key]) => key === 'publishOne').length, 0, 'the dialog asks first');
+    const confirm = view.nodes().find(n => view.props(n)?.['data-testid'] === 'template-publish-confirm');
+    const { act } = await import('react');
+    await act(async () => { view.props(confirm).onClick({ stopPropagation() {} }); }); await view.flush();
+    assert.deepEqual(calls.filter(([key]) => key === 'publishOne').map(([, a]) => a), [['safe', 3]]); assert.match(view.text(), /Published v3/);
+  } finally { await view.unmount(); }
+  view = await mountContracts(element(), '/admin/contracts?tab=templates', user);
+  try {
+    await view.flush(); await view.click('18 uses'); await view.flush(); assert.equal(calls.filter(([key]) => key === 'agreements').at(-1)[1][0].template, 'safe');
   } finally { await view.unmount(); restore(); }
 });
 

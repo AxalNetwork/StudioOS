@@ -25,7 +25,7 @@ building blocks.
 | `licence/` | Licence-holder pieces. `DomainWizard.jsx` is S17–S19's custom-host wizard: it states its own absence on a branch, because the host register is HQ's and a branch cannot read another tenant's bindings. Registrar chips name where the person publishes the same two records, and Copy all copies one whole record (D449). |
 | `officehours/` | What an office-hours session left behind (D355): `SessionFollowups.jsx` draws the action items both parties keep and the founder's rating. It fetches for itself, because the founder's Office Hours page and the partner's `/partner/office-hours` render the same list and must not drift apart. |
 | `play/` | Playbook steps. |
-| `products/` | Product and catalogue cards. |
+| `products/` | Product and catalogue cards; `TokenPacksSection.jsx` reads the public pack list, links each pack to its isolated checkout, and keeps pack prices out of the ordinary cart. |
 | `profile/` | Profile blocks shared across personas. |
 | `scoring/` | The scoring engine's panels. |
 | `spinout/` | Spin-Out Lab shared pieces. |
