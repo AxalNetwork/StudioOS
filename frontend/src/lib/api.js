@@ -43,6 +43,7 @@ export * from './api/mercuryPersonal.js';
 export * from './api/partnerSettlements.js';
 export * from './api/profile.js';
 export * from './api/publicAiModels.js';
+export * from './api/publicPricing.js';
 export * from './api/railPrefs.js';
 export * from './api/researchCompanies.js';
 export * from './api/researchFunds.js';
@@ -54,6 +55,7 @@ export * from './api/safeIssuances.js';
 export * from './api/section83bReview.js';
 export * from './api/shareUpdate.js';
 export * from './api/ticketReviews.js';
+export * from './api/tokenPacks.js';
 export * from './api/usage.js';
 export * from './api/verdict.js';
 // api-modules:end
