@@ -11,6 +11,7 @@
  *   2. Use deterministic features (sector overlap, capital availability) and
  *      ask the AI for a one-line explanation per top match.
  */
+import { systemRun } from './systemRun';
 import type { Env } from '../src/types';
 
 const MIN_VALUATION_CENTS = 25_000_00;          // $25k
@@ -60,7 +61,7 @@ Notes: ${ctx.notes ?? ''}`;
 
   let parsed: any = {};
   try {
-    const resp: any = await (env as any).AI.run('@cf/meta/llama-3.1-8b-instruct', {
+    const resp: any = await systemRun(env, {
       messages: [
         { role: 'system', content: 'Strict JSON output only. Pick a realistic $ figure based on inputs.' },
         { role: 'user', content: prompt },
@@ -167,7 +168,7 @@ ${list}`;
   for (const [uid, anon] of anonMap.entries()) reverse[anon] = uid;
   const explanations: Record<number, string> = {};
   try {
-    const resp: any = await (env as any).AI.run('@cf/meta/llama-3.1-8b-instruct', {
+    const resp: any = await systemRun(env, {
       messages: [
         { role: 'system', content: 'Strict JSON only.' },
         { role: 'user', content: prompt },

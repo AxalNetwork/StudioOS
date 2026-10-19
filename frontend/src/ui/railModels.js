@@ -66,6 +66,8 @@ export const MODEL_COPY = {
   '@cf/qwen/qwq-32b': { name: 'QwQ 32B' },
   '@cf/google/gemma-4-26b-a4b-it': { name: 'Gemma 4 26B' },
   '@cf/meta/llama-4-scout-17b-16e-instruct': { name: 'Llama 4 Scout' },
+  // D766: Build › Brand's logo (`brand_logo`).
+  '@cf/black-forest-labs/flux-1-schnell': { name: 'FLUX.1 Schnell' },
   '@cf/mistralai/mistral-small-3.1-24b-instruct': { name: 'Mistral Small 3.1 24B' },
   '@cf/ibm-granite/granite-4.0-h-micro': { name: 'Granite 4.0 Micro' },
 };

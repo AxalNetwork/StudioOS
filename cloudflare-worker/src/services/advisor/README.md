@@ -13,7 +13,6 @@ with the answer, and when to stop.
 | `no_write_allowlist.json` | Answers that are deliberately not persisted. |
 | `guardrails.ts` | What the model may not do. |
 | `tools.ts` | Tool definitions for the model. |
-| `aiClient.ts` | The model call. |
 | `profilingModules.ts` | Module definitions. |
 | `rollout.ts` | Staged rollout gating. |
 | `banks.manifest.json` | The bank registry. |

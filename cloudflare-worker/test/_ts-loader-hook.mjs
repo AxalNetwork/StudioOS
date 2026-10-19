@@ -45,6 +45,12 @@ export async function load(url, context, nextLoad) {
       const text = readFileSync(fileURLToPath(new URL(u.pathname, 'file://')), 'utf8');
       return { format: 'module', source: `export default ${JSON.stringify(text)};`, shortCircuit: true };
     }
+    // D764 — the rail's model matrix as a JSON module, the way wrangler
+    // bundles an imported `.json`. Only that file, so no other JSON changes.
+    if (u.pathname.endsWith('/services/ai/railMatrix.json')) {
+      const text = readFileSync(fileURLToPath(new URL(u.pathname, 'file://')), 'utf8');
+      return { format: 'module', source: `export default ${text};`, shortCircuit: true };
+    }
     // D711 — the legal paper's faces and mark as ArrayBuffers, the way
     // wrangler.toml's `[[rules]] type = "Data"` bundles them.
     if (u.pathname.endsWith('.woff2') || u.pathname.endsWith('.png')) {

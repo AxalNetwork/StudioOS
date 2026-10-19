@@ -152,11 +152,14 @@ test('every model the router routes to has a price', async () => {
   // it — which is the same class of wrong number this file exists to keep out.
   const prices = pricesFrom(src);
   const audio = audioPricesFrom(src);
+  // D766: an image model (`brand_logo`) is priced in its own unit by the
+  // catalogue; `IMAGE_PRICED_MODELS` names the ones the router prices (D761).
+  const images = router.IMAGE_PRICED_MODELS;
   const routed = routedModels(src);
   assert.ok(routed.size >= 4, `only ${routed.size} routed models found — the matcher is not matching`);
   for (const m of routed) {
-    assert.ok(prices.has(m) || audio.has(m),
-      `${m} is routed to but is in neither price table — its runs would bill as zero and no cap would trip`);
+    assert.ok(prices.has(m) || audio.has(m) || images.has(m),
+      `${m} is routed to but is in no price table — its runs would bill as zero and no cap would trip`);
   }
 });
 

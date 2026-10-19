@@ -4,7 +4,9 @@ import { api } from '../lib/api';
 import { formatCost } from '../ui/assistCost';
 import RunEstimate from './RunEstimate';
 import { readRailModel, writeRailModel } from '../ui/railModelChoice';
+import { isNeverFill, neverFillMessage } from '../lib/neverFill';
 import { useRailOption } from '../ui/railCrumbs';
+import { CHECKING, guardRefusal } from './draftCheck';
 
 /**
  * What Eadwyn suggested, and the THREE decisions a founder makes about each one.
@@ -54,6 +56,13 @@ import { useRailOption } from '../ui/railCrumbs';
  * it. No pick sends no model and the router runs its default. A refusal of
  * the pick (`model_not_offered`) clears it, so the next press runs the default
  * rather than failing the same way.
+ *
+ * A FIELD EADWYN NEVER FILLS IS NEVER OFFERED (D777). Each proposal arrives
+ * naming the field it would fill (`field`, as `table.column`), and one that
+ * `lib/neverFill.js` lists — a signature, a payment amount, an identity number,
+ * an attestation — is held back with the registry's sentence instead of drawn
+ * with an Accept button. The Worker refuses to store or apply one too; this is
+ * the check that does not depend on it.
  */
 
 const BAND = 'rounded-[10px] border border-violet-200 bg-violet-50/60 p-3 '
@@ -121,6 +130,8 @@ export default function FillProposals({ projectId, kind, enabled, onApplied, ai,
   const [items, setItems] = useState([]);
   const [kinds, setKinds] = useState(null);
   const [busy, setBusy] = useState('');
+  // D770 (#2095): the guard's link (S11 for a founder or an admin) beside its words.
+  const [guardLink, setGuardLink] = useState(null);
   const [note, setNote] = useState('');
   const [receipt, setReceipt] = useState(null);
   // { id, value } while a proposal is being edited. One at a time, because the
@@ -131,7 +142,10 @@ export default function FillProposals({ projectId, kind, enabled, onApplied, ai,
     if (!projectId || !enabled) { setItems([]); return; }
     try {
       const r = await api.listValidateProposals(projectId);
-      setItems((r?.proposals || []).filter((p) => p.kind === kind));
+      const mine = (r?.proposals || []).filter((p) => p.kind === kind);
+      const held = mine.find((p) => isNeverFill(p.field));
+      setItems(mine.filter((p) => !isNeverFill(p.field)));
+      if (held) setNote(neverFillMessage(held.field));
       if (r?.kinds) setKinds(r.kinds);
     } catch {
       // A failed read is not "no proposals". Leaving the list alone keeps a
@@ -143,7 +157,7 @@ export default function FillProposals({ projectId, kind, enabled, onApplied, ai,
   useEffect(() => { load(); }, [load]);
 
   const propose = async () => {
-    setBusy('run'); setNote(''); setReceipt(null);
+    setBusy('run'); setNote(''); setReceipt(null); setGuardLink(null);
     try {
       const task = kinds?.[kind]?.task;
       const model = task ? readRailModel(workspace, task) : null;
@@ -161,6 +175,8 @@ export default function FillProposals({ projectId, kind, enabled, onApplied, ai,
       if (e?.data?.refusal === 'model_not_offered' && kinds?.[kind]?.task) {
         writeRailModel(workspace, kinds[kind].task, null);
       }
+      // D770 (#2095): a withheld run's proposals are never drawn; the guard's words (`e.message`) are.
+      setGuardLink(guardRefusal(e)?.link || null);
       setNote(e?.message || 'That could not be run. Nothing was charged.');
     } finally {
       setBusy('');
@@ -176,6 +192,8 @@ export default function FillProposals({ projectId, kind, enabled, onApplied, ai,
    * and a table where everything is marked edited says nothing about anything.
    */
   const decide = async (id, how, value) => {
+    const field = items.find((p) => p.id === id)?.field;
+    if (how === 'accept' && isNeverFill(field)) { setNote(neverFillMessage(field)); return; }
     setBusy(`${how}-${id}`); setNote('');
     try {
       if (how === 'accept') await api.acceptValidateProposal(id, value ? { value } : undefined);
@@ -280,11 +298,12 @@ export default function FillProposals({ projectId, kind, enabled, onApplied, ai,
               )}
 
               <div className="mt-2 flex flex-wrap items-center gap-2">
+                {/* D770 (#2095): Accept waits while a run's draft is being checked. */}
                 <button
                   type="button"
                   className={ACCENT}
                   onClick={() => (open ? saveEdit(p) : decide(p.id, 'accept'))}
-                  disabled={busy === `accept-${p.id}`}
+                  disabled={busy === 'run' || busy === `accept-${p.id}`}
                   data-testid={`action-accept-${p.id}`}
                 >
                   {open ? 'Save and add' : copy.accept}
@@ -335,9 +354,15 @@ export default function FillProposals({ projectId, kind, enabled, onApplied, ai,
           {receipt.fallback_used ? ' · the model was busy, a smaller one answered' : ''}
         </p>
       )}
+      {busy === 'run' && (
+        <p role="status" className="mt-2 text-[11.5px] text-gray-600 dark:text-gray-400" data-testid={`proposals-checking-${kind}`}>
+          {CHECKING}
+        </p>
+      )}
       {note && (
         <p className="mt-2 text-[11.5px] text-gray-600 dark:text-gray-400" data-testid={`proposals-note-${kind}`}>
           {note}
+          {guardLink && <> <a href={guardLink.href} className="font-semibold underline">{guardLink.label}</a></>}
         </p>
       )}
     </section>

@@ -180,17 +180,17 @@ test('6 · sections: decoded, trimmed, lower-cased and held to their charset', a
   assert.deepEqual(rows(A).map((r) => r.section).sort(), ['deck_review', 'perks & products', 'y'.repeat(60)].sort());
 });
 
-test('7 · the cap: past 200 rows a new key is 409, an existing key still updates', async () => {
+test('7 · the cap: past RAIL_PREFERENCE_CAP rows (1,000 since D764) a new key is 409, an existing key still updates', async () => {
   const { env, db, rows } = world();
   const ins = db.prepare("INSERT INTO ai_rail_preferences (uid, user_id, section, task, mode) VALUES (?, ?, ?, '', 'manual')");
   for (let i = 0; i < RAIL_PREFERENCE_CAP; i += 1) ins.run(crypto.randomUUID(), A, `section ${i}`);
-  assert.equal(RAIL_PREFERENCE_CAP, 200);
+  assert.equal(RAIL_PREFERENCE_CAP, 1000, "D764 raised it from 200 (D720 §6)");
   const full = await call(env, A, 'PUT', '/rail-preferences/one more', { mode: 'eadwyn' });
   assert.equal(full.status, 409);
   assert.equal(full.body.error, 'too_many_preferences');
   const model = await call(env, A, 'PUT', '/rail-preferences/one more/validate_tag_pains', { model: SMALL });
   assert.equal(model.status, 409, 'a model row is a new key too');
-  assert.equal(rows(A).length, 200);
+  assert.equal(rows(A).length, RAIL_PREFERENCE_CAP);
   const update = await call(env, A, 'PUT', '/rail-preferences/section 7', { mode: 'eadwyn' });
   assert.equal(update.status, 200, 'an update to an existing key still succeeds');
   assert.equal(rows(A).find((r) => r.section === 'section 7').mode, 'eadwyn');

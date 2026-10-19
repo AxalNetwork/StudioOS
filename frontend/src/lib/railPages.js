@@ -294,6 +294,7 @@ const ADMIN = [
   own('/admin/refer-earn', key(AD, 'Approvals', 'Referrals')),
   own('/admin/best-fit', key(AD, 'Approvals', 'Best fit')),
   own('/admin/due-diligence', key(AD, 'Approvals', 'Due diligence')),
+  alias('/due-diligence', key(AD, 'Approvals', 'Due diligence'), 'The same Due diligence list and cases at the path the other profiles share (D774).'),
   own('/admin?tab=lab-applications', key(AD, 'Approvals', 'Spin-Out applications')),
   own('/admin/spinout-moderation', key(AD, 'Approvals', 'Spin-Out moderation')),
   own('/admin/events', key(AD, 'Approvals', 'Events')),
@@ -464,6 +465,10 @@ export const NO_RAIL_ROUTES = [
   { route: '/attest/:token', roles: [], why: 'A consent link a guest opens.' },
   { route: '/attest/partner/:token', roles: [], why: 'A partner’s consent link a guest opens.' },
   { route: '/join/:token', roles: [], why: 'A branch invitation a guest opens.' },
+  { route: '/admin/due-diligence', roles: ['partner', 'investor', 'advisor'], why: 'Due diligence’s rail is the Admin board’s (D774, AdminBoardFrame); a partner, investor or advisor on it gets the page alone until their profile’s rollout gives them one.' },
+  { route: '/admin/due-diligence/:uid', roles: ['partner', 'investor', 'advisor'], why: 'Due diligence’s rail is the Admin board’s (D774, AdminBoardFrame); a partner, investor or advisor on it gets the page alone until their profile’s rollout gives them one.' },
+  { route: '/due-diligence', roles: ['partner', 'investor', 'advisor'], why: 'Due diligence’s rail is the Admin board’s (D774, AdminBoardFrame); a partner, investor or advisor on it gets the page alone until their profile’s rollout gives them one.' },
+  { route: '/due-diligence/:uid', roles: ['partner', 'investor', 'advisor'], why: 'Due diligence’s rail is the Admin board’s (D774, AdminBoardFrame); a partner, investor or advisor on it gets the page alone until their profile’s rollout gives them one.' },
 ];
 
 /** The order an admin's preview of a member page reads the member profiles in. */

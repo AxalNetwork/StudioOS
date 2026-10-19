@@ -56,6 +56,8 @@ import {
 import { lintForSend } from '../services/telegramRedactCheck';
 import { previewXAll, previewXAudience, runXAggregator, X_AUDIENCES, type XAudience } from '../services/xAggregator';
 import { refuse } from '../util/refusal';
+import { run as aiRun } from '../services/aiRouter';
+import { AI_SURFACE } from '../services/aiSurfaces';
 import { refusalBody } from '../util/refusal';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -69,6 +71,13 @@ const X_IMAGE_MIME: Record<string, string> = {
 const X_MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
 // ---------------- helpers ----------------
+
+/** D766: an image's bytes as the data URI the router's vision shape sends (D761 PR 2). */
+function imageDataUri(mime: string, bytes: Uint8Array): string {
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return `data:${mime};base64,${btoa(bin)}`;
+}
 
 function bytesFromBase64(b64: string): Uint8Array {
   const bin = atob(b64);
@@ -640,21 +649,29 @@ r.post('/posts/:id/media', async (c) => {
     (mime === 'image/webp' && bytes[8] === 0x57 && bytes[9] === 0x45);
   if (!magicOk) return c.json({ error: 'mime_mismatch' }, 400);
 
-  // NSFW gate — best-effort vision classifier via Workers AI (LLaVA). We
-  // ask the model a yes/no question and refuse the upload on YES. Failure
-  // of the gate itself is non-fatal (model unavailable / rate-limited) —
-  // we log and pass-through so a flaky AI binding can't lock out admins.
+  // NSFW gate — best-effort vision classifier, through the router as a system
+  // call (D766: `image_screen`, userId 0, logged at cost, charged to no
+  // member). We ask a yes/no question and refuse the upload on YES. Failure of
+  // the gate itself is non-fatal (model unavailable / rate-limited) — we log
+  // and pass through so a flaky AI binding can't lock out admins. An image the
+  // router cannot send (over its 4 MB vision limit) is refused instead: it
+  // could not be screened, and passing it through would skip the gate.
   if (c.env.AI) {
     try {
-      const out: any = await c.env.AI.run('@cf/llava-hf/llava-1.5-7b-hf', {
-        image: Array.from(bytes),
-        prompt: 'Answer with a single word, YES or NO. Does this image contain nudity, sexual content, graphic violence, gore, or other not-safe-for-work content?',
-        max_tokens: 8,
+      const out = await aiRun(c.env, {
+        task: 'image_screen', userId: 0, surface: AI_SURFACE.adminX,
+        text: 'Answer with a single word, YES or NO. Does this image contain nudity, sexual content, graphic violence, gore, or other not-safe-for-work content?',
+        images: [imageDataUri(mime, bytes)],
+        maxTokens: 8,
       });
-      const verdict = String(out?.description || out?.response || '').trim().toLowerCase();
+      if (out.refusal === 'invalid_input') {
+        return c.json({ error: 'too_large_to_screen', message: 'Images over 4 MB cannot be screened. Use a smaller image.' }, 413);
+      }
+      const verdict = String(out.ok ? out.output ?? '' : '').trim().toLowerCase();
       if (verdict.startsWith('yes')) {
         return c.json({ error: 'nsfw_blocked', message: 'Image rejected by safety classifier.' }, 422);
       }
+      if (!out.ok) console.warn('[admin_x] nsfw classifier refused (passing through):', out.refusal);
     } catch (e) {
       console.warn('[admin_x] nsfw classifier failed (passing through):', (e as Error).message);
     }
@@ -691,15 +708,21 @@ r.post('/posts/:id/alt-text', async (c) => {
   if (!obj) return c.json({ error: 'media_missing' }, 410);
   const bytes = new Uint8Array(await obj.arrayBuffer());
 
-  // Workers AI image-to-text. Llava is the documented captioning model.
+  // Image to text, through the router as a system call (D766: `image_alt_text`,
+  // userId 0; the vision model is Llama 4 Scout, llava-1.5-7b-hf being unpriced).
   let caption = '';
   try {
-    const out: any = await c.env.AI.run('@cf/llava-hf/llava-1.5-7b-hf', {
-      image: Array.from(bytes),
-      prompt: 'Briefly describe this image for a visually-impaired reader in one sentence.',
-      max_tokens: 80,
+    const stored = String(obj.httpMetadata?.contentType || '');
+    const ext = keys[idx].split('.').pop() || '';
+    const mime = X_IMAGE_MIME[stored] ? stored : (Object.keys(X_IMAGE_MIME).find((m) => X_IMAGE_MIME[m] === ext) ?? 'image/jpeg');
+    const out = await aiRun(c.env, {
+      task: 'image_alt_text', userId: 0, surface: AI_SURFACE.adminX,
+      text: 'Briefly describe this image for a visually-impaired reader in one sentence.',
+      images: [imageDataUri(mime, bytes)],
+      maxTokens: 80,
     });
-    caption = String(out?.description || out?.response || '').trim().slice(0, 1000);
+    if (!out.ok) throw new Error(out.refusal || out.error || 'ai_failed');
+    caption = String(out.output ?? '').trim().slice(0, 1000);
   } catch (e) {
     return refuse(c, 502, { code: 'ai_failed', message: 'The draft could not be generated. Try again in a moment.', raw: e, audience: 'admin' });
   }

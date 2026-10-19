@@ -674,6 +674,7 @@ export default function InvestorCommitZone() {
 
           <ZoneDraft
             surface="deals/commit"
+            railOption="draft:ic-memo"
             label="Proposal · IC memo from the pipeline"
             accept="Open the memo"
             run="Draft the memo"

@@ -190,13 +190,21 @@ const EXPECTED: Record<string, string[]> = {
   // D684's voice-note call in routes/channels.ts is gone: since D756 (#1978) every
   // consented note is transcribed by interviewProcessing.ts's voice-note mode, above.
   'routes/research.ts': ['AI_SURFACE.researchAsk'],
-  'routes/brand.ts': ['AI_SURFACE.buildBrand', 'AI_SURFACE.buildBrand', 'AI_SURFACE.buildBrand'],
+  'routes/brand.ts': ['AI_SURFACE.buildBrand', 'AI_SURFACE.buildBrand', 'AI_SURFACE.buildBrand', 'AI_SURFACE.buildBrand'], // D766: + the logo
   'services/competitorAnalysis.ts': ['AI_SURFACE.researchCompanies'],
   'services/deckExtract.ts': ['AI_SURFACE.raisePitchReview', 'AI_SURFACE.raisePitchReview'],
   // D767 (#2096): the deck draft and the slide fill.
   'routes/decks.ts': ['AI_SURFACE.raisePitch'],
   'services/decks/autofill.ts': ['AI_SURFACE.raisePitch'],
   'services/publications.ts': ['AI_SURFACE.adminPublications'],
+  // D766 (#2094) — system calls moved into the router.
+  'routes/monitoring.ts': ['AI_SURFACE.monitoring'],
+  'routes/admin_x.ts': ['AI_SURFACE.adminX', 'AI_SURFACE.adminX'],
+  'services/vectorize.ts': ['AI_SURFACE.searchIndex'],
+  // D766 (#2094) PR 1 — member presses moved into the router.
+  'routes/legalcap.ts': ['AI_SURFACE.legalCapital'],
+  'routes/pipeline.ts': ['AI_SURFACE.pipeline'],
+  'routes/networkfx.ts': ['AI_SURFACE.networkEffects'],
   'services/updateShare.ts': ['AI_SURFACE.growUpdate'],
   'services/fills/citations.ts': ['AI_SURFACE.validate'],
   'services/interviewStructuring.ts': ['AI_SURFACE.validateInterviews', 'AI_SURFACE.validateInterviews', 'AI_SURFACE.validateInterviews'], // D658: structure, ask; D685: summarise
