@@ -29,7 +29,8 @@
  *                       The job's voice-note branch resumes a chat session's
  *                       untranscribed chunks the same way, then hands the
  *                       session to the engine (`enqueueDigest`); it never
- *                       structures or summarises per note.
+ *                       structures or summarises per note. A voice note is
+ *                       one of the owner's two exceptions to D765 (#2090).
  *
  * Every AI step reserves and settles the member's D640 budget through the
  * router and leaves receipt lines; a refusal is recorded and shown in the
@@ -250,6 +251,7 @@ async function transcribeVoiceNotes(env: Env, session: SessionRow, userId: numbe
     return 'transcribing';
   }
   await setStage(env, session.id, 'done');
+  // The owner's exception to D765 (2026-10-19): a voice note queues the engine.
   const { enqueueDigest } = await import('./validateEngine');
   await enqueueDigest(env, session.id, userId, 'voice_note_added');
   return 'done';
@@ -578,8 +580,12 @@ export async function recoverSession(env: Env, session: SessionRow, userId: numb
     lastSeq = max?.m ?? null;
   }
   if (lastSeq == null) return { ok: false, detail: 'no_audio', message: 'This session has no recorded audio yet.' };
-  // Resume where it stopped: a transcript already in skips straight to the summary.
-  const resumeAt: Stage = !voiceNotes && (session.status === 'transcribed' || session.status === 'structured') ? 'summarising' : 'transcribing';
+  // Resume where it stopped. D765 (#2090), D720 §6: a transcript already in
+  // goes on to the summary only when the member chose it at Stop
+  // (`processing_auto = 1`); otherwise, and for a row that never recorded a
+  // choice, a retry is transcribe only and there is nothing left to run.
+  const transcribed = !voiceNotes && (session.status === 'transcribed' || session.status === 'structured');
+  const resumeAt: Stage = !transcribed ? 'transcribing' : session.processing_auto === 1 ? 'summarising' : 'done';
   const claimed = await env.DB.prepare(
     `UPDATE interview_sessions
         SET expected_last_seq = ?, processing_auto = CASE WHEN ? = 1 THEN 0 ELSE COALESCE(processing_auto, 0) END,
@@ -591,7 +597,7 @@ export async function recoverSession(env: Env, session: SessionRow, userId: numb
   if (Number(claimed.meta?.changes || 0) !== 1) {
     return { ok: false, detail: 'not_retryable', message: 'This session is still being processed.' };
   }
-  await enqueueProcess(env, session.id, userId);
+  if (resumeAt !== 'done') await enqueueProcess(env, session.id, userId);
   return { ok: true, stage: resumeAt };
 }
 

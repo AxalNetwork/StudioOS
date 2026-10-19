@@ -46,7 +46,7 @@ import {
 import { budgetRefusalMessage } from './aiRouter';
 import { loadStructureContext } from '../routes/founder_validate_structure';
 import { interviewCapRefusal } from '../middleware/requireTier';
-import { digestSession, enqueueDigest } from './validateEngine';
+import { digestSession } from './validateEngine';
 
 /** What #1496's server resolves from an access token. */
 export interface AssistantGrant {
@@ -308,8 +308,7 @@ export async function submitInterview(env: Env, grant: AssistantGrant, args: Sub
   await audit(env, grant, project.id, 'interview_session_submitted', {
     session_uid: uid, interview_id: iv.id, channel, segments: segments.length, summary: summary != null,
   });
-  // D757: StudioOS's own summary, not its placements: the assistant proposes those itself.
-  await enqueueDigest(env, sessionId!, grant.userId, 'assistant_submitted');
+  // D765 (#2090), D720 §6: StudioOS's own summary is the founder's press now, not the submission's.
   const stored = await finalSegments(env, sessionId!);
   return {
     session_id: sessionId!,
