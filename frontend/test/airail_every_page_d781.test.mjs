@@ -27,9 +27,14 @@
  * advisor and operating partner, #2100 admin, #2101 Super Admin). The test
  * fails on a page that is not done and not listed, and on a listed page that
  * is done: whoever finishes a page deletes its line, so the list only
- * shrinks. D781's closing PR empties it and adds the render check, each
- * mapped route drawing exactly one rail with its key in the DOM, which needs
- * the page map's routes.
+ * shrinks.
+ *
+ * PART 2 (S1 on #2106, 2026-10-19) renders: each route in the page map,
+ * mounted in the real App as a member of its profile, draws exactly one rail
+ * with its page key in the DOM, or is listed in `RENDER_NOT_YET` under the
+ * task that wires it. The harness and the list are `_airailRender.mjs`; the
+ * six `airail_render_*_d781.test.mjs` files render; this file holds its rules
+ * to fixtures, below.
  *
  * The rules are pure (`pageKeys`, `pageStatus`, `ratchet`) and are run here
  * on fixtures too, so each failure is shown to fire before the real modules
@@ -43,6 +48,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { RENDER_NOT_YET, renderCases, renderRatchet, renderStatus } from './_airailRender.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const at = (p) => resolve(ROOT, p);
@@ -209,4 +215,67 @@ test('fixtures: an alias row counts as covered, and the matrix is read wherever 
   const mapped = stringsIn({ ALIASES: [{ route: '/admin/exploring', pageKey: 'Admin · Accounts · Exploring members', aliasOf: 'Admin · Approvals' }] });
   assert.ok(mapped.has('Admin · Accounts · Exploring members'));
   assert.ok(stringsIn(new Map([['/x', { key: 'Super Admin · Licences' }]])).has('Super Admin · Licences'));
+});
+
+// ── Part 2: the render check's rules, on fixtures ───────────────────────────
+// The six `airail_render_*_d781.test.mjs` files render App at every route in
+// the page map and judge each with these rules (`_airailRender.mjs`). Each
+// failure is shown to fire here, on drawings a fixture describes.
+
+const drawn = (state, keys, landed, expected) => ({ state, keys, rails: keys.length, landed, expected });
+const FOUNDER_VALIDATE = 'Founder · Validate';
+
+test('render fixtures: one rail with the landed page\'s key passes; none, two, or another key fails', () => {
+  assert.deepEqual(renderStatus([drawn('down', [FOUNDER_VALIDATE], '/validate', FOUNDER_VALIDATE)]), { pass: true, why: [] });
+  assert.deepEqual(renderStatus([drawn('down', [], '/validate', FOUNDER_VALIDATE), drawn('empty', [], '/validate', FOUNDER_VALIDATE)]),
+    { pass: false, why: ['down: no rail at /validate', 'empty: no rail at /validate'] });
+  assert.deepEqual(renderStatus([drawn('down', [FOUNDER_VALIDATE, FOUNDER_VALIDATE], '/validate', FOUNDER_VALIDATE)]).why, ['down: 2 rails']);
+  assert.deepEqual(renderStatus([drawn('down', [null], '/validate', FOUNDER_VALIDATE)]).why,
+    ['down: a rail keyed null at /validate, which is "Founder · Validate"']);
+});
+
+test('render fixtures: a later state can pass a route, but a wrong rail in any state fails it', () => {
+  assert.equal(renderStatus([drawn('down', [], '/studio', 'Founder · Studio'), drawn('empty', ['Founder · Studio'], '/studio', 'Founder · Studio')]).pass, true);
+  const wrong = renderStatus([drawn('down', ['Founder · Build'], '/studio', 'Founder · Studio'), drawn('empty', ['Founder · Studio'], '/studio', 'Founder · Studio')]);
+  assert.equal(wrong.pass, false);
+  // A redirect is judged where it lands: the key expected is the target's.
+  assert.equal(renderStatus([drawn('down', ['Founder · Build'], '/build', 'Founder · Build')]).pass, true);
+});
+
+test('render fixtures: the ratchet holds the list to exactly the routes that do not pass', () => {
+  const pages = {
+    Founder: [{ route: '/validate', key: FOUNDER_VALIDATE }, { route: '/messages', key: 'Founder · Messages', offCanvas: true }],
+    Admin: [{ route: '/admin/held/accounts', key: 'Admin · Accounts' }],
+  };
+  const cases = renderCases(pages);
+  assert.deepEqual(cases.map((c) => c.name), ['Founder /validate', 'Founder /messages', 'Admin /admin/held/accounts']);
+  const pass = { pass: true, why: [] };
+  const fail = { pass: false, why: ['down: no rail at /messages'] };
+  const verdicts = new Map([['Founder /validate', pass], ['Founder /messages', fail], ['Admin /admin/held/accounts', pass]]);
+  assert.deepEqual(renderRatchet(cases, { offCanvas: ['Founder /messages'] }, verdicts), []);
+  // Not listed and failing.
+  assert.deepEqual(renderRatchet(cases, {}, verdicts), ['Founder /messages: down: no rail at /messages, and not in RENDER_NOT_YET']);
+  // Listed and passing: the list only shrinks.
+  assert.deepEqual(renderRatchet(cases, { offCanvas: ['Founder /messages'], 2097: ['Founder /validate'] }, verdicts),
+    ['Founder /validate: draws its rail now, so delete it from RENDER_NOT_YET']);
+  // Misfiled, doubled, or naming no route.
+  assert.deepEqual(renderRatchet(cases, { 2097: ['Founder /messages'] }, verdicts), ['Founder /messages: listed under 2097; it belongs under offCanvas']);
+  assert.deepEqual(renderRatchet(cases, { offCanvas: ['Founder /messages', 'Founder /messages'] }, verdicts), ['Founder /messages: listed twice']);
+  assert.deepEqual(renderRatchet(cases, { offCanvas: ['Founder /messages'], 2097: ['Founder /nowhere'] }, verdicts),
+    ['Founder /nowhere: listed, but the page map has no such route']);
+  // A profile's run judges its own lines only.
+  const founder = cases.filter((c) => c.profile === 'Founder');
+  assert.deepEqual(renderRatchet(founder, { offCanvas: ['Founder /messages'], 2100: ['Admin /admin/held/accounts'] }, verdicts, (n) => n.startsWith('Founder ')), []);
+});
+
+test('the render list names the five board tasks and the off-canvas pages, each route under its owner', () => {
+  assert.deepEqual(Object.keys(RENDER_NOT_YET).sort(), ['2097', '2098', '2099', '2100', '2101', 'offCanvas']);
+  const cases = renderCases();
+  const names = new Set(cases.map((c) => c.name));
+  const listed = Object.values(RENDER_NOT_YET).flat();
+  assert.equal(new Set(listed).size, listed.length, 'no route listed twice');
+  for (const n of listed) assert.ok(names.has(n), `${n} is a route in the page map`);
+  // Every verdict a pass: the rest of the ratchet is the render files'.
+  const verdicts = new Map(cases.map((c) => [c.name, { pass: !listed.includes(c.name), why: ['listed'] }]));
+  assert.deepEqual(renderRatchet(cases, RENDER_NOT_YET, verdicts), []);
 });

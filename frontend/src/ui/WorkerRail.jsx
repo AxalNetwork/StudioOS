@@ -14,7 +14,7 @@ import { DEFAULT_JOBS, jobsFor, railSuggestions } from './railModels';
 import { PRICE_NOTE, SAFETY_SENTENCE, guardSentence, priceSuggestions, railRates } from './railPrices';
 import { aiBudgetApi } from '../lib/api/aiBudget';
 import { readRailModel, syncRailPrefs, writeRailModel } from './railModelChoice';
-import { useRailCrumbs } from './railCrumbs.js';
+import { useRailCrumbs, useRailPage } from './railCrumbs.js';
 import { openEadwynPanel, useEadwynPanel, useEadwynRailServes, eadwynPanelEvent } from './eadwynPanel.js';
 import { EadwynPanel } from './EadwynPanel.jsx';
 import { Unreadable } from './Honesty';
@@ -444,6 +444,9 @@ export default function WorkerRail({
   const view = useViewMode();
   const viewer = view?.shellRole ?? role;
   const crumbs = useRailCrumbs();
+  // D781: the page key the shell's provider gave this rail, on its element, so
+  // a render can tell which page it is on (null outside the provider).
+  const railPage = useRailPage()?.page ?? null;
 
   // One preference for the whole product, not one per page.
   const [collapsed, setCollapsed] = useState(() => safeReadJSON(RAIL_COLLAPSED_KEY, false) === true);
@@ -753,6 +756,7 @@ export default function WorkerRail({
       className={`fwr ${className}`.trim()}
       aria-label={`Eadwyn AI · ${workspace}`}
       data-collapsed={collapsed ? 'true' : 'false'}
+      {...(railPage ? { 'data-page-key': railPage } : {})}
       data-testid={testId}
       style={accentStyle}
     >
