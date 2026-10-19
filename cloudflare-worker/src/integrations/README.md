@@ -19,6 +19,28 @@ lives in `providers/`.
 | `autopush.ts` | Background pushes started outside the connector routes (a deal's stage change, a new project), logged to `integration_logs` like a user's own push. |
 | `refreshLease.ts` | `acquireRefreshLease` and `REFRESH_LEASE_TTL_S`: the KV lease on `<provider>:refresh:<uid>` that serializes one connection's OAuth token refresh, shared by HubSpot, Calendly, Carta, DocuSign and Salesforce (#1903). `release()` deletes the key only for the caller that acquired it. Best-effort: KV is eventually consistent, so the providers keep their D1 re-checks. |
 
+## Who sees a provider
+
+`audienceFor(provider, viewer)` answers `open`, `entity`, `personal` or `none`;
+a `none` provider is answered everywhere as if its key did not exist (404
+`unknown_provider`). The viewer is `{ role, hq, venture }`, built in one place
+per caller (`viewerOf` in `../routes/integrations.ts`, Mercury's own connect).
+
+- **Roles (D710).** `entity_roles` and `personal_roles` — Mercury.
+- **The venture audience (D757 §2.11).** `audience_rule: 'venture'` — Zoom —
+  makes a provider founder-facing: `personal` for a viewer who can hold a
+  venture, `none` for everyone else. `venture` is `canHoldValidateSource` in
+  `../routes/_founder_validate_helpers.ts`: an admin, a `founder`, or an active
+  Lab member with a `founder_id` whatever their role. `/available`,
+  `/directory/:key`, `/connect`, both OAuth starts (before any state is
+  written) and the callback all read it. `GET /api/channels` and its
+  link and connect routes apply the same rule to Telegram, WhatsApp and Meet.
+  An existing connection keeps Disconnect.
+
+Zoom also carries `used_by`, `suggests` (Validate module keys, each in
+`moduleLabels.ts`) and `distribution`, read from `ZOOM_APP_AUDIENCE` by
+`zoomDistribution` (absent, empty or unknown is `own_account`).
+
 ## Subfolders
 
 - `providers/` — one file per provider implementation; see its README.

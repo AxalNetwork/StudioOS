@@ -94,6 +94,8 @@ async function world(opts: { seed?: boolean; budget?: number } = {}) {
     ALTER TABLE users ADD COLUMN jwt_min_iat INTEGER;
     UPDATE users SET founder_id = ${FOUNDER} WHERE id IN (${ME}, ${GONE});
     UPDATE users SET is_active = 0 WHERE id = ${GONE};
+    -- D757 §2.11: OTHER is a second member who may hold a channel (an investor may not).
+    UPDATE users SET role = 'founder' WHERE id = ${OTHER};
     CREATE TABLE founders (id INTEGER PRIMARY KEY, user_id INTEGER);
     INSERT INTO founders VALUES (${FOUNDER}, ${ME});
     CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT, founder_id INTEGER, company_id INTEGER, deleted_at TEXT);

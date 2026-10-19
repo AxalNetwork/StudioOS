@@ -4,6 +4,23 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## Zoom, Meet, WhatsApp and Telegram are founder-facing (D757, #1922)
+
+- `canHoldValidateSource(user)` (`routes/_founder_validate_helpers.ts`): an
+  admin, a `founder`, or an active Lab member with a `founder_id`.
+  `DescriptorViewer` gains `venture`; `audience_rule: 'venture'` on Zoom makes
+  `audienceFor` answer `personal` for such a viewer and `none` otherwise.
+- Zoom is hidden from `/available` and `/directory/zoom` for anyone else, and
+  both OAuth starts and the callback answer 404 `unknown_provider` before any
+  state is written or read. `GET /api/channels` offers no channel to them, and
+  the Telegram link and WhatsApp connect routes answer 404 `unknown_provider`.
+  Existing connections keep Disconnect.
+- Zoom's row gains `used_by`, `suggests` and `distribution` (from
+  `ZOOM_APP_AUDIENCE`; absent, empty or unknown reads as `own_account`).
+- `moduleLabels.ts` gains `problem_discovery`, `ideal_customer_profile`,
+  `demand_signals`, `experiments` and `verdict`, named and routed as
+  `cycleValidate.ts`' modules.
+
 ## Every connector's page is served by the Worker (D753 W2, #1878)
 
 - Each `GET /api/connectors/available` item gains its page fields: `tagline`,

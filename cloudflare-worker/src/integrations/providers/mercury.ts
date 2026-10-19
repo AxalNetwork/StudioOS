@@ -36,6 +36,7 @@ import type { Env, User } from '../../types';
 import { ConnectRefusal, audienceFor, getDescriptor, registerProvider, type ConnectInput, type ConnectResult } from '../registry';
 import { selectJwt } from '../../auth';
 import { branchOf } from '../../util/branch';
+import { canHoldValidateSource } from '../../routes/_founder_validate_helpers';
 import { getOrganization, listAccounts, MercuryClientError } from '../../services/mercury/client';
 import { parseAccounts, parseOrganization, parseTokenPermission, type ParsedAccount, type ParsedOrganization, type TokenPermission } from '../../services/mercury/parse';
 import { AXAL_ENTITIES } from '../../services/legalDocFormat';
@@ -137,7 +138,7 @@ async function connect(c: C, user: User, input: ConnectInput): Promise<ConnectRe
     throw new ConnectRefusal(403, 'support_session_refused', 'A support session cannot connect a member\'s bank account.');
   }
   const desc = getDescriptor('mercury');
-  if (!desc || audienceFor(desc, { role: String(user.role || ''), hq: branchOf(c.env) === null }) !== 'personal') {
+  if (!desc || audienceFor(desc, { role: String(user.role || ''), hq: branchOf(c.env) === null, venture: canHoldValidateSource(user) }) !== 'personal') {
     throw new ConnectRefusal(403, 'purpose_not_allowed', 'Your role does not hold a personal Mercury connection.');
   }
   if (input.webhook_secret) {

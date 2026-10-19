@@ -654,7 +654,7 @@ export function pageDescriptor(p: { key: string } & Partial<ProviderDescriptor>,
     page = FIRST_PARTY_PAGES.linkedin;
   } else if (Object.hasOwn(CONNECTOR_PAGES, key)) {
     const entry = CONNECTOR_PAGES[key];
-    const audience = viewer && (p.entity_roles || p.personal_roles) ? audienceFor(p as ProviderDescriptor, viewer) : 'open';
+    const audience = viewer && (p.entity_roles || p.personal_roles || p.audience_rule) ? audienceFor(p as ProviderDescriptor, viewer) : 'open';
     if (audience === 'none') return null;
     if (isVariant(entry)) {
       if (audience === 'entity') page = entry.entity;

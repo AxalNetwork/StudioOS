@@ -40,7 +40,9 @@ import {
   audienceFor,
   ConnectRefusal,
   type ProviderDescriptor,
+  type DescriptorViewer,
 } from '../integrations/registry';
+import { canHoldValidateSource } from './_founder_validate_helpers';
 import { branchOf } from '../util/branch';
 import {
   encryptCredentials,
@@ -79,7 +81,12 @@ export function ensureRole(c: Context<{ Bindings: Env }>, user: User) {
  * did not exist.
  */
 function audienceOf(c: Context<{ Bindings: Env }>, user: User, desc: ProviderDescriptor) {
-  return audienceFor(desc, { role: String(user.role || ''), hq: branchOf(c.env) === null });
+  return audienceFor(desc, viewerOf(c, user));
+}
+
+/** The caller as `audienceFor` reads them; D757 adds whether they can hold a venture. */
+function viewerOf(c: Context<{ Bindings: Env }>, user: User): DescriptorViewer {
+  return { role: String(user.role || ''), hq: branchOf(c.env) === null, venture: canHoldValidateSource(user) };
 }
 
 function safeJson<T>(s: string | null | undefined, def: T): T {
@@ -181,7 +188,7 @@ function pageBody(page: PageDescriptor) {
   };
 }
 
-type Viewer = { role: string; hq: boolean };
+type Viewer = DescriptorViewer;
 
 /**
  * One catalogue entry, for `/available` and for the page read alike (decision
@@ -196,7 +203,7 @@ async function catalogueEntry(c: Context<{ Bindings: Env }>, user: User, p: Prov
   const page = pageDescriptor(p, viewer);
   if (!page) console.warn('[connectors] page_entry_missing', p.key);
   return {
-    ...publicDescriptor(p, viewer),
+    ...publicDescriptor(p, viewer, c.env),
     // Spec-named fields (Task #8 / AN). Existing fields kept as
     // back-compat aliases so the frontend keeps rendering during the
     // FE migration window.
@@ -310,7 +317,7 @@ integrations.get('/available', async (c) => {
   try {
     if (await c.env.DB.prepare('SELECT 1 AS connected FROM microsoft_oauth_tokens WHERE user_id = ?').bind(user.id).first()) connectedSet.add('microsoft_365');
   } catch { unreadableSources.push('microsoft_365'); }
-  const viewer = { role: String(user.role || ''), hq: branchOf(c.env) === null };
+  const viewer = viewerOf(c, user);
   const listed = REGISTRY.filter(p => audienceOf(c, user, p) !== 'none');
   const providers = await Promise.all(listed.map(async (p) => {
     const entityOnly = audienceOf(c, user, p) === 'entity';
@@ -412,7 +419,7 @@ integrations.get('/suggestions', async (c) => {
 integrations.get('/directory/:key', async (c) => {
   const user = await requireAuth(c);
   ensureRole(c, user);
-  const viewer = { role: String(user.role || ''), hq: branchOf(c.env) === null };
+  const viewer = viewerOf(c, user);
   const k = directoryKeyFor(c.req.param('key'));
   if (!k) return c.json({ error: 'unknown_provider' }, 404);
   if (k.key === 'linkedin') {
@@ -1373,6 +1380,8 @@ integrations.get('/oauth/:provider/start', async (c) => {
   const provider = c.req.param('provider').toLowerCase();
   const desc = getDescriptor(provider);
   if (!desc || desc.auth_type !== 'oauth2') return c.json({ error: 'oauth_not_supported' }, 404);
+  // D757 §2.11: a provider this caller cannot see is answered as /connect answers it, before any state.
+  if (audienceOf(c, user, desc) === 'none') return c.json({ error: 'unknown_provider' }, 404);
   const selectedCompany = await activeCompanyFor(c, user);
   if (!selectedCompany && writesProjectData(provider)) return c.json({ error: 'active_company_required' }, 400);
   // D751: refused as /connect refuses it, before the plan gate and any state.
@@ -1474,6 +1483,8 @@ integrations.get('/oauth/:provider/callback', async (c) => {
   const code = c.req.query('code') || '';
   const state = c.req.query('state') || '';
   const errorParam = c.req.query('error') || '';
+  // D757 §2.11: refused before the state is consumed, as the start refuses it.
+  if (desc && audienceOf(c, user, desc) === 'none') return c.json({ error: 'unknown_provider' }, 404);
   const consumed = state ? await consumeOauthState(c.env, user.id, provider, state) : null;
   if (errorParam) {
     return c.redirect(returnQuery(consumed?.extra, `oauth=error&provider=${encodeURIComponent(provider)}&reason=${encodeURIComponent(/^[a-z0-9_]{1,64}$/i.test(errorParam) ? errorParam : 'callback_failed')}`));
