@@ -159,7 +159,7 @@ D657: interview sessions, for `../routes/founder_validate_sessions.ts`.
   - `activeSessionOf`, the one-live-session-per-member check (assistant and channel sessions excluded).
 - `interviewProcessing.ts` (D685, #1584) runs a stopped recording to the review:
   - `finishSession` (`POST /sessions/:id/finish`) records the last sequence number and queues the `interview_process` job (a `JobType` that `queueWorker.ts`'s `handleJob` dispatches to `runInterviewProcessJob`); a chunk that arrives late is taken and the job picks it up;
-  - the job transcribes chunk by chunk into `interview_chunk_transcripts`, so a retry (`POST /sessions/:id/process`) resumes where it stopped, then summarises and places through `structureSession` (`trigger: 'recording_processed'`);
+  - the job transcribes chunk by chunk into `interview_chunk_transcripts`, so a retry (`POST /sessions/:id/process`) resumes where it stopped, then summarises and places through D757's engine (`digestSession`, `trigger: 'recording_processed'`, one stage per call);
   - the stage is `uploading`, `transcribing`, `summarising`, `placing`, `done` or `failed`, with `processing_error` in words; a run idle 15 minutes counts as stale and may be retried;
   - `summariseSession` keeps only sentences that cite a transcript segment, and writes a row to `interview_summary_receipts`.
 - `sessionSweeper.ts` (D685 §5.6, #1584) is the recording that outlives its tab, on the Worker:
@@ -196,7 +196,26 @@ held on its `interview_date`.
 `sessionAutoStructure.ts` runs D658's Structure without the button: when a
 call's transcript is imported, when a chat is assigned, and when an assigned
 chat goes quiet. Its findings are proposals for the founder to review. It keeps
-#1470's consent rule and the D640 budget, and re-runs at most every six hours.
+#1470's consent rule and the D640 budget, and re-runs at most every six hours,
+counting summary receipts and the engine's last attempt too (D757). Since D757
+its job is the engine's: `runSessionStructureJob` calls `digestSession` for
+every trigger in `JOB_TRIGGERS`, and `enqueueSessionStructure` is
+`enqueueDigest`.
+
+D757 (#1898): `validateEngine.ts` is the Validate engine's one entry. Every
+conversation reaches `digestSession`: the recorder's last two stages, a Zoom or
+Meet import, an assigned or quiet chat, the pasted chat and typed notes, consent
+recorded after an import, an assistant's submission (the summary only), and the
+Summarise and Structure buttons (`force`). The ingestion contract: final
+segments on a session scoped to the member, then `enqueueDigest`; no source
+calls a model. One transcript is digested once (a sha256 of the final
+transcript; a button always runs). An explicit Manual mode for `validate` in
+`ai_rail_preferences` skips automatic runs, and the stored model picks apply to
+them. An audio session needs consent `given`; `withdrawDigest` honours a
+withdrawal. Every outcome is a sentence on the session (`digest_status`,
+`digest_note`, migration 487). It writes only the session's summary and digest
+columns and pending `validate_proposals`, and every model call goes through
+`aiRouter.run`.
 
 D691 (#1696): Grow’s Durable card reads the production compliance calendar’s
 `due_date` and `completion_status` columns. Its existing next-90-days filter,

@@ -471,7 +471,8 @@ D685 S03-A (#1583, migration 452) adds the Worker half of "Record a session" set
 - Deleting an interview (`DELETE /api/progress/discovery/interview/:id`) now deletes each session's audio, rows and pending proposals.
 - `GET /sessions/models` lists the live and final speech-to-text models, priced from the router's own tables, with their tags.
 - `POST /interviews/:id/sessions` opens a session (channel, consent to record, models). `GET /interviews/:id/sessions` lists them, and `GET /sessions/:id` returns segments, marks and chunks.
-- `PATCH /sessions/:id/consent`, then `POST /sessions/:id/{start,pause,resume,stop}`. Starting an audio channel without consent `given` is 409 `consent_not_recorded`.
+- `PATCH /sessions/:id/consent`, then `POST /sessions/:id/{start,pause,resume,stop}`. Starting an audio channel without consent `given` is 409 `consent_not_recorded`. After a recording (D757, #1898) consent takes exactly two changes: `not_recorded → given` with a method, on an imported call (it queues the digest, `consent_given`), and `given | not_recorded → declined`, a withdrawal that removes the summary and the pending suggestions and keeps decided ones without their quote. Anything else is 409 `consent_locked`; a declined session stays declined.
+- `POST /sessions/:id/summarise` and `POST /sessions/:id/structure` run through the Validate engine (`services/validateEngine.ts`): forced, so a button always runs. Either answers 409 `digest_running` while an automatic digest holds the session.
 - `PUT /sessions/:id/chunks/:seq` stores one audio chunk, idempotent by sequence number. `POST /sessions/:id/marks` marks a moment.
 - `GET /sessions/:id/live` is the WebSocket for the live transcript (Nova-3 or Flux). It is 409 `live_off` when live is off.
 - `POST /sessions/:id/transcribe` produces the final transcript, chunk by chunk, after a budget hold for the whole job. `PATCH /sessions/:id/segments/:segId` assigns a speaker.
