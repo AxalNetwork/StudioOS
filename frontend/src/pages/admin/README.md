@@ -34,6 +34,8 @@ plain admin also reaches the screen, the rail takes the viewer's tier.
 `PublicationsFrame.jsx` is the one frame the three Publications routes share,
 because they are one board. Which board each screen is, and the options it
 offers, are listed in `frontend/src/lib/railOptions/superAdmin.js`.
+A record view names its record as the rail's last crumb with
+`useRecordCrumb.js` (D768's contract, as a hook).
 
 `HeldZone.jsx` and the five `Held*.jsx` landings are the Admin shell on
 accounts HQ holds directly (canvas S20, D286): `HeldAccounts.jsx` (embeds the
