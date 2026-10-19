@@ -22,6 +22,7 @@ import { syncGithub, SYNC_SUBREQUEST_BUDGET, MAX_REPOSITORIES } from '../src/int
 import { _clearOauthCredsCache } from '../src/services/providerOauthKeys.ts';
 import { tableFromBaseline } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
+import { addMvpStores } from './_github_mvp_stores.mjs';
 
 const JWT_SECRET = 'z'.repeat(64); // synthetic fixture key
 const CLIENT_ID = 'Iv1.flow-fixture';
@@ -60,6 +61,7 @@ function world() {
     INSERT INTO user_company_links VALUES (1, 10);
     INSERT INTO projects VALUES (100, 10, NULL);`);
   for (const m of MIGRATIONS) db.exec(m);
+  addMvpStores(db);
   db.exec(tableFromBaseline(baseline, 'oauth_state_tokens'));
   const real = d1Over(db) as any;
   const meter = { d1: 0, batches: 0, statements: 0 };
@@ -86,7 +88,7 @@ function world() {
   return { db, env, KV, meter, one, all };
 }
 
-type Repo = { issues: any[]; pulls: any[]; releases: any[]; milestones?: any[] };
+type Repo = { issues: any[]; pulls: any[]; releases: any[]; milestones?: any[]; reviews?: Record<number, any[]> };
 /** A GitHub that answers from tables, pages them, and records every call. A URL it does not know throws. */
 function fakeGithub(opts: { perms?: Record<string, string>; installations?: number; repos?: Record<string, Repo>; reach?: string[] } = {}) {
   const calls: string[] = [];
@@ -124,6 +126,9 @@ function fakeGithub(opts: { perms?: Record<string, string>; installations?: numb
     }
     // #2114: Solution design reads each repository first; these repositories are not served, so it reads nothing more.
     if (/^\/repos\/[^/]+\/[^/]+$/.test(url.pathname)) return j({ message: 'Not Found' }, 404);
+    // #2112: an open pull request's reviews; none unless the repository lists some.
+    const rv = url.pathname.match(/^\/repos\/([^/]+)\/([^/]+)\/pulls\/(\d+)\/reviews$/);
+    if (rv) return j(repos[`${rv[1]}/${rv[2]}`]?.reviews?.[Number(rv[3])] ?? []);
     throw new Error(`unexpected GET ${url.pathname}`);
   }) as any;
   return { calls, restore: () => { globalThis.fetch = real; } };
@@ -264,11 +269,17 @@ test('#1906 the sync lands issues on the roadmap and pull requests on must-haves
     const r = await call(w.env, 'POST', `/api/integrations/${uid}/sync`, {});
     assert.equal(r.status, 200, JSON.stringify(r.body));
     assert.deepEqual(r.body.counts, { issues: 2, pull_requests: 4, releases: 1, roadmap_items_created: 2, must_haves_created: 4,
-      milestones: 0, milestone_items: 0, release_rows_created: 1, items_shipped: 0, design_proposals: 0, stacks: 0 });
+      milestones: 0, milestone_items: 0, release_rows_created: 1, items_shipped: 0, design_proposals: 0, stacks: 0,
+      // D782 (#2112): each fed must-have's state; one open pull request's reviews read; the release has no date, so no check.
+      must_haves_moved: 4, release_checks: 0, release_checks_created: 0, reviews_read: 1 });
     assert.deepEqual(w.all('SELECT objective, kanban_status FROM roadmap_okrs ORDER BY id').map((x) => [x.objective, x.kanban_status]),
       [['Export to CSV', 'next'], ['Fix login', 'done']]);
     assert.deepEqual(w.all('SELECT title, delivery_status FROM mvp_features ORDER BY id').map((x) => [x.title, x.delivery_status]),
-      [['Add export', 'Review'], ['Login fix', 'Done'], ['Old idea', 'Blocked'], ['WIP', 'In Progress']]);
+      // D782 (#2112): open is In Progress, merged Done, a draft Backlog (Planned); closed unmerged keeps
+      // what it landed with and leaves the must-haves (below).
+      [['Add export', 'In Progress'], ['Login fix', 'Done'], ['Old idea', 'Blocked'], ['WIP', 'Backlog']]);
+    assert.deepEqual(w.all('SELECT title, pr_state, is_must_have FROM mvp_features ORDER BY id').map((x) => [x.title, x.pr_state, x.is_must_have]),
+      [['Add export', 'in_progress', 1], ['Login fix', 'built', 1], ['Old idea', 'dropped', 0], ['WIP', 'planned', 1]]);
     assert.equal(w.one("SELECT COUNT(*) AS n FROM roadmap_okrs WHERE objective = 'Add export'").n, 0, 'a pull request the issues endpoint lists is not landed twice');
     assert.deepEqual(w.all('SELECT kind, COUNT(*) AS n FROM connector_fed_items GROUP BY kind ORDER BY kind').map((x) => [x.kind, x.n]),
       [['issue', 2], ['pull_request', 4], ['release', 1]]);
@@ -288,7 +299,9 @@ test('#1906 the sync lands issues on the roadmap and pull requests on must-haves
     assert.equal(again.body.counts.must_haves_created, 0);
     assert.deepEqual(w.all('SELECT objective, kanban_status FROM roadmap_okrs ORDER BY id').map((x) => [x.objective, x.kanban_status]),
       [['Export to CSV and XLSX', 'now'], ['Fix login', 'done']], 'renamed, and the founder\'s lane kept');
-    assert.equal(w.one("SELECT delivery_status FROM mvp_features WHERE title = 'WIP'").delivery_status, 'Blocked');
+    // D782 (#2112): closed unmerged is Dropped: off the must-haves, its delivery state left as it was.
+    assert.deepEqual({ ...w.one("SELECT delivery_status, pr_state, is_must_have FROM mvp_features WHERE title = 'WIP'") },
+      { delivery_status: 'Backlog', pr_state: 'dropped', is_must_have: 0 });
     assert.equal(w.one('SELECT COUNT(*) AS n FROM connector_fed_items').n, 7, 'nothing new');
 
     // GitHub closes the founder's item: a close is GitHub's.
