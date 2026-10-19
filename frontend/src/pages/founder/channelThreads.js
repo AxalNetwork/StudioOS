@@ -273,8 +273,7 @@ export function providerNote(key, p) {
   const name = PROVIDER_LABEL[key];
   if (p?.available === false) return `${name} calls are not set up on Axal yet.`;
   if (p?.connected === false) return key === 'zoom' ? 'Connect Zoom in Account › Connectors first.' : 'Connect Google in Account › Connectors first.';
-  // Reconnecting cannot help: no Google sign-in asks for Meet's transcript scope (D684 §6).
-  if (key === 'google_meet' && p?.transcriptAccess === 'missing') return 'Axal cannot import Google Meet transcripts yet. You can still hold the call: use the recorder in Axal during it, or paste the conversation afterwards.';
+  // Meet's transcript permission is said by MeetTranscripts, from the Calendar status read (D757 §2.12, #1926).
   return '';
 }
 
