@@ -210,6 +210,7 @@ test('the news-bot card stays a hub card with no page', () => {
   const start = src.indexOf('function TelegramCard()');
   const card = src.slice(start, src.indexOf('\n}\n', start));
   assert.ok(card.includes('Telegram · Axal VC channels'));
-  assert.ok(card.includes('data-testid="connector-card-telegram"'));
+  // F6 (#1877, decision 13): the Community card's id, so connector-card-<key> is the catalogue's alone.
+  assert.ok(card.includes('data-testid="connector-community-telegram"'));
   assert.equal(/connectorPagePath|<Link|\/account\/connectors\/telegram/.test(card), false, 'the news-bot card links a page');
 });
