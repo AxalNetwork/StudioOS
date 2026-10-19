@@ -1228,6 +1228,8 @@ export async function ensureDocusignWebhookSecret(env: Env, row: IntegrationRow)
 
 const docusignProvider: ProviderImpl = {
   key: PROVIDER_KEY,
+  // D751: whether Axal holds the OAuth client, from the cache `ensureCreds` reads.
+  ready: async (env) => (await import('../../services/providerOauthKeys')).oauthCredsReady(env, 'docusign'),
   connect,
   revokeGranted,
   sync,
