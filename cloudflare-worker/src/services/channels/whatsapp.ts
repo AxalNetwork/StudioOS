@@ -12,11 +12,18 @@
  *              POST's X-Hub-Signature-256 over the RAW body. The GET challenge
  *              never stands in for the signature.
  *   normalise  entry[].changes[]: `messages` (text, voice; `statuses`) and
- *              `smb_message_echoes` (what the member sent from the app)
+ *              `smb_message_echoes` (what the member sent from the app). A
+ *              contact's reply button on Axal's consent notice
+ *              (`consent_yes:<uid>` / `consent_no:<uid>`), and a contact's
+ *              whole message YES, NO or STOP, become a `consent_reply`
+ *              (D754 §4, #1893); `consent.ts` decides whether it counts. An
+ *              echo — the member's own side — never does.
  *   connect    Embedded Signup's code → business token (encrypted in
  *              integrations.credentials_enc), the number checked against the
  *              WABA, the app subscribed to the WABA
- *   talk       send text, download media, read the number for the test
+ *   talk       send text, send the consent notice as an interactive message
+ *              with two reply buttons (D754 §5), download media, read the
+ *              number for the test
  *
  * GRAPH API VERSION. Pinned at v23.0 (released 2025-05-29). Meta supports a
  * Graph version for at least two years after the next one ships, so v23.0 is
@@ -42,7 +49,7 @@ import { decryptCredentials, encryptCredentials } from '../../integrations/secre
 import type { ChannelConnection } from './connections';
 import { forgetConnection } from './threads';
 import type { AudioResult, SecretCheck } from './telegram';
-import { CHANNEL_LIMITS, type InboundEvent, type MessageSide, type SendResult } from './types';
+import { CHANNEL_LIMITS, type InboundEvent, type InboundMessage, type MessageSide, type SendResult } from './types';
 
 export const GRAPH_VERSION = 'v23.0';
 export const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_VERSION}`;
@@ -110,6 +117,15 @@ const isoFromUnix = (v: unknown): string => {
   return Number.isFinite(n) && n > 0 ? new Date(n * 1000).toISOString() : new Date().toISOString();
 };
 
+/** A consent button's id: `consent_yes:<request uid>` or `consent_no:<request uid>` (consent.ts). */
+const CONSENT_BUTTON_ID = /^consent_(yes|no):([0-9a-f-]{36})$/;
+
+/** A whole message that may answer the notice: yes, no or stop, any case, closing `.` or `!` allowed. */
+export function consentWord(text: string | null | undefined): 'yes' | 'no' | 'stop' | null {
+  const w = String(text ?? '').trim().toLowerCase().replace(/[.!]+$/, '').trim();
+  return w === 'yes' || w === 'no' || w === 'stop' ? w : null;
+}
+
 function messageEvent(m: unknown, phoneNumberId: string, side: MessageSide, names: Map<string, string>): InboundEvent | null {
   const msg = obj(m);
   const id = idStr(msg?.id);
@@ -122,13 +138,26 @@ function messageEvent(m: unknown, phoneNumberId: string, side: MessageSide, name
   const chat = idStr(side === 'contact' ? msg.from : msg.to);
   if (!chat) return ignored('malformed');
   const type = String(msg.type ?? '');
+  const contextId = idStr(obj(msg.context)?.id);
+  // D754 §4: a reply button on Axal's consent notice. Only the contact's own;
+  // any other interactive message stays unsupported.
+  if (type === 'interactive') {
+    const reply = obj(msg.interactive)?.type === 'button_reply' ? obj(obj(msg.interactive)?.button_reply) : null;
+    const button = side === 'contact' ? CONSENT_BUTTON_ID.exec(String(reply?.id ?? '')) : null;
+    if (!button) return ignored('unsupported_type');
+    return {
+      kind: 'consent_reply', provider: 'whatsapp', eventId: id, connectionRef: phoneNumberId, externalChatId: chat,
+      externalMessageId: id, side: 'contact', answer: button[1] as 'yes' | 'no', via: 'button', requestUid: button[2],
+      contextMessageId: contextId, fallback: null, sentAt: isoFromUnix(msg.timestamp),
+    };
+  }
   const text = type === 'text' ? String(obj(msg.text)?.body ?? '').trim().slice(0, CHANNEL_LIMITS.maxTextChars) : '';
   // Voice notes are `audio` with `voice: true`; older payloads used type `voice`.
   const media = type === 'audio' || type === 'voice' ? obj(msg.audio) ?? obj(msg.voice) : null;
   const mediaId = idStr(media?.id);
   if (!text && !mediaId) return ignored('unsupported_type');
   const name = side === 'contact' ? names.get(chat) ?? null : null;
-  return {
+  const message: InboundMessage = {
     kind: 'message', provider: 'whatsapp', eventId: id, connectionRef: phoneNumberId, externalChatId: chat,
     externalMessageId: id, side,
     contactName: name ? name.slice(0, CHANNEL_LIMITS.maxNameChars) : null,
@@ -136,6 +165,17 @@ function messageEvent(m: unknown, phoneNumberId: string, side: MessageSide, name
     voice: !text && mediaId ? { fileRef: mediaId, mime: typeof media?.mime_type === 'string' ? media.mime_type : null, durationSec: null } : null,
     sentAt: isoFromUnix(msg.timestamp),
   };
+  // D754 §4: a contact's whole YES, NO or STOP may answer the notice. It keeps
+  // the message it is, for consent.ts to store when it does not count.
+  const word = side === 'contact' && type === 'text' ? consentWord(text) : null;
+  if (word) {
+    return {
+      kind: 'consent_reply', provider: 'whatsapp', eventId: id, connectionRef: phoneNumberId, externalChatId: chat,
+      externalMessageId: id, side: 'contact', answer: word, via: 'text', requestUid: null,
+      contextMessageId: contextId, fallback: message, sentAt: message.sentAt,
+    };
+  }
+  return message;
 }
 
 const STATUSES = new Set(['sent', 'delivered', 'read', 'failed']);
@@ -253,6 +293,49 @@ export async function sendWhatsAppText(env: Env, conn: ChannelConnection, to: st
   const r = await graph('send', `${GRAPH_BASE}/${encodeURIComponent(pnid)}/messages`, {
     method: 'POST', token,
     json: { messaging_product: 'whatsapp', recipient_type: 'individual', to, type: 'text', text: { body, preview_url: false } },
+  });
+  if (!r.ok) return { ok: false, code: r.code, retryable: r.retryable };
+  const id = idStr(r.data?.messages?.[0]?.id);
+  return id ? { ok: true, externalMessageId: id } : { ok: false, code: 'send_unknown', retryable: false };
+}
+
+/**
+ * D754 §5 — Meta's published limits for reply buttons (Interactive reply
+ * buttons messages): a body of at most 1,024 characters, at most three
+ * buttons, each title at most 20 characters and each id at most 256. A
+ * message over any of them is refused here, before any call.
+ */
+export const INTERACTIVE_LIMITS = { bodyChars: 1024, buttons: 3, titleChars: 20, idChars: 256 } as const;
+
+/**
+ * An interactive message with reply buttons, from the member's own number with
+ * the member's token — the consent notice (consent.ts). Like a text, Meta
+ * takes it only within 24 hours of the contact's last message (131047 is
+ * `window_closed`), and a lost answer stays `send_unknown`.
+ */
+export async function sendWhatsAppInteractive(
+  env: Env, conn: ChannelConnection, to: string, msg: { body: string; buttons: { id: string; title: string }[] },
+): Promise<SendResult> {
+  const body = String(msg.body ?? '').trim();
+  const buttons = Array.isArray(msg.buttons) ? msg.buttons : [];
+  if (!body) return { ok: false, code: 'text_required' };
+  if (body.length > INTERACTIVE_LIMITS.bodyChars) return { ok: false, code: 'text_too_long' };
+  if (!buttons.length || buttons.length > INTERACTIVE_LIMITS.buttons
+    || buttons.some((b) => !b.id || !b.title || b.id.length > INTERACTIVE_LIMITS.idChars || b.title.length > INTERACTIVE_LIMITS.titleChars)) {
+    return { ok: false, code: 'invalid_buttons' };
+  }
+  const pnid = phoneNumberIdOf(conn);
+  const token = await whatsappToken(env, conn);
+  if (!pnid || !token) return { ok: false, code: 'not_connected' };
+  const r = await graph('send', `${GRAPH_BASE}/${encodeURIComponent(pnid)}/messages`, {
+    method: 'POST', token,
+    json: {
+      messaging_product: 'whatsapp', recipient_type: 'individual', to, type: 'interactive',
+      interactive: {
+        type: 'button', body: { text: body },
+        action: { buttons: buttons.map((b) => ({ type: 'reply', reply: { id: b.id, title: b.title } })) },
+      },
+    },
   });
   if (!r.ok) return { ok: false, code: r.code, retryable: r.retryable };
   const id = idStr(r.data?.messages?.[0]?.id);

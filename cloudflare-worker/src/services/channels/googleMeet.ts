@@ -8,10 +8,12 @@
  * `loadRefreshTokenExport` and refreshed with `refreshGoogleAccessToken`), and
  * its `calendar.events` scope is what creates the event with a Meet link.
  *
- * READING A TRANSCRIPT needs one more scope, `meetings.space.readonly`, and no
- * Axal consent screen asks for it yet: the incremental consent that will is
- * #1585 (S18). Until it ships, reconnecting Google cannot grant it, so nothing
- * here tells the member to. The grant's scopes are recorded in
+ * READING A TRANSCRIPT needs one more scope, `meetings.space.readonly`. The
+ * incremental consent that asks for it is
+ * `POST /api/calendar/google/meet-transcripts/connect`, gated by
+ * `MEET_TRANSCRIPTS_ENABLED` (D757, #1926): off, it answers 503 and the member
+ * is offered no button, since Google refuses the scope until the owner has
+ * added it and passed verification. The grant's scopes are recorded in
  * `google_oauth_tokens.scope`; when they are recorded and lack it, nothing is
  * asked of Meet, the call can still be scheduled, and the ref says plainly
  * that Meet transcripts are not available on Axal yet and that the recorder or

@@ -24,7 +24,8 @@ const ROW = {
   consent: 'agreed', channel: 'video', stage: 'done', state: 'ready',
 };
 const WORDS = {
-  failed: 'Failed', recording: 'Recording', waiting_messages: 'Waiting for messages',
+  failed: 'Failed', recording: 'Recording',
+  waiting_consent: 'Waiting for consent', consent_declined: 'Declined in WhatsApp', waiting_messages: 'Waiting for messages',
   waiting_transcript: 'Waiting for the call transcript', processing: 'Processing', ready: 'Ready to review',
   reviewed: 'Reviewed', lead: 'Lead', invited: 'Invited', booked: 'Booked', logged: 'Logged',
 };
