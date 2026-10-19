@@ -93,7 +93,11 @@ export type RefusalReason =
   // D763: the member's input is unsafe under the category policy.
   | 'guard_blocked'
   // D763: the model's output is unsafe; it is withheld.
-  | 'guard_blocked_output';
+  | 'guard_blocked_output'
+  // D761 PR 2: the run's images, rerank or translation are malformed (too
+  // many images, a URL instead of a data URI, no target language). Refused
+  // before the guard, the hold or any model; nothing is charged.
+  | 'invalid_input';
 
 export interface RunOptions {
   task: TaskClass;
@@ -149,6 +153,15 @@ export interface RunOptions {
   railPage?: string;
   railOption?: string;
   recordRef?: string;
+  // D761 PR 2: images for a vision model, as base64 data URIs the Worker
+  // measures (`shapes.imagesRefusal`), attached to the last user message as
+  // content parts. A model that does not take images is skipped uncalled.
+  images?: string[];
+  // D761 PR 2: a rerank (`{ query, contexts, topK? }`) for a rerank model; the
+  // result carries `ranking`, best first, by each context's index.
+  rerank?: shapes.RerankInput;
+  // D761 PR 2: a translation of `text` for a translation model (m2m100).
+  translate?: shapes.TranslateInput;
   // D763 (#2020): the text the MEMBER typed or supplied for this run (typed
   // text, the page's text, an upload's text), which the guard checks in full
   // before the model is called. Absent, it is every message the run sends
@@ -232,6 +245,8 @@ export interface RunResult {
   ok: boolean;
   output?: string;             // assistant text or stringified JSON for tool_call
   embedding?: number[];        // populated for task='embed'
+  // D761 PR 2: a rerank's contexts, best first, by their index in the request.
+  ranking?: shapes.RankedContext[];
   stream?: ReadableStream;     // populated only when opts.stream === true
   // A speech-to-text run's passages, language and speaker labels (D657).
   transcript?: SttTranscript;
@@ -842,9 +857,16 @@ function defaultContentBlob(opts: RunOptions): string {
 async function cacheKeyFor(opts: RunOptions, model: string): Promise<string | null> {
   const route = ROUTE[opts.task];
   if (!route.cacheTtlSec) return null;
-  const seed = opts.contentHash
+  const base = opts.contentHash
     || (opts.task === 'explain' && opts.topic ? `topic:${opts.topic}` : null)
     || defaultContentBlob(opts);
+  // D761 PR 2: the images, the rerank and the translation are part of what was
+  // asked. Without them two runs with the same words and different images, or
+  // different target languages, would share one answer.
+  const extra = opts.images?.length || opts.rerank || opts.translate
+    ? JSON.stringify({ images: opts.images ?? null, rerank: opts.rerank ?? null, translate: opts.translate ?? null })
+    : '';
+  const seed = extra ? `${base}\u0000${extra}` : base;
   if (!seed) return null;
   const hash = await sha256Hex(seed);
   // The MODEL is part of the key, not just the task and the content. Once a
@@ -962,6 +984,7 @@ interface ProviderResult {
   status?: number;
   output?: string;
   embedding?: number[];
+  ranking?: shapes.RankedContext[];
   stream?: ReadableStream;
   transcript?: SttTranscript;
   prompt_tokens?: number;
@@ -1068,6 +1091,20 @@ async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed:
       const transcript = parseAudioOutput(model, out);
       return { ok: true, output: transcript.text, transcript, prompt_tokens: 0, completion_tokens: 0, units: shapes.audioUnits(opts.audioMinutes) };
     }
+    // D761 PR 2: a rerank and a translation have their models' own shapes.
+    if (opts.rerank) {
+      const out = await ai.run(model, shapes.rerankRequest(opts.rerank), runOpt);
+      const { ranking, units } = shapes.parseRerank(out, opts.rerank);
+      if (!ranking) return { ok: false, status: 502, error: 'unexpected rerank response', units };
+      return { ok: true, output: '', ranking, prompt_tokens: units.tokens_in ?? 0, completion_tokens: 0, units };
+    }
+    if (opts.translate) {
+      const source = opts.text ?? '';
+      const out = await ai.run(model, shapes.translateRequest(source, opts.translate), runOpt);
+      const { text, units } = shapes.parseTranslate(out, source);
+      if (text == null) return { ok: false, status: 502, error: 'unexpected translation response', units };
+      return { ok: true, output: text, prompt_tokens: units.tokens_in ?? 0, completion_tokens: units.tokens_out ?? 0, units };
+    }
     if (isEmbed) {
       const text = opts.text ?? defaultContentBlob(opts);
       const out = await ai.run(model, shapes.embedRequest(text), runOpt);
@@ -1085,7 +1122,9 @@ async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed:
     const messages = chatMessagesFor(opts);
     // D761: the shape is the model's — a reasoning model gets its task's output
     // budget and its control as its model page gives it (`./ai/shapes.ts`).
-    const payload = shapes.chatRequest(facts, messages, {
+    // D761 PR 2: a vision run's images ride on the last user message as content parts.
+    const images = opts.images?.length ? opts.images : null;
+    const payload = shapes.chatRequest(facts, images ? shapes.withImages(messages, images) : messages, {
       maxTokens: shapes.maxTokensFor(facts, opts.maxTokens, ROUTE[opts.task]?.reasoningMaxTokens),
       temperature: opts.temperature,
       stream: opts.stream,
@@ -1097,7 +1136,7 @@ async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed:
     // limit (D761); cost accounting falls back to estimated prompt tokens only
     // since we don't see the completion side.
     if (opts.stream && raw && typeof (raw as ReadableStream).getReader === 'function') {
-      const units = shapes.streamOpenUnits(messages);
+      const units = { ...shapes.streamOpenUnits(messages), ...(images ? { images_in: images.length } : {}) };
       const opened = await shapes.firstChunkWithin(raw as ReadableStream, limitMs);
       if (!opened) return { ok: false, status: 504, error: `no first chunk within ${limitMs}ms`, units };
       return { ok: true, stream: opened, prompt_tokens: units.tokens_in ?? 0, completion_tokens: 0, units };
@@ -1110,12 +1149,32 @@ async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed:
     // which previously surfaced to the onboarding user as the degraded
     // "had trouble processing that" fallback even though the model answered.
     // D761: `reasoning_content` is never the answer (`shapes.parseChat`).
-    const { text, units } = shapes.parseChat(raw, facts, messages);
-    return { ok: true, output: text, prompt_tokens: units.tokens_in ?? 0, completion_tokens: units.tokens_out ?? 0, units };
+    const parsed = shapes.parseChat(raw, facts, messages);
+    const units = images ? { ...parsed.units, images_in: images.length } : parsed.units;
+    return { ok: true, output: parsed.text, prompt_tokens: units.tokens_in ?? 0, completion_tokens: units.tokens_out ?? 0, units };
   } catch (e) {
     const f = shapes.failureOf(e);
     return { ok: false, status: f.status, code: f.code, error: (e as Error).message };
   }
+}
+
+/** D761 PR 2: what a run asks of its model, from the inputs it carries. */
+function needOf(opts: RunOptions): shapes.Need {
+  if (opts.rerank) return 'rerank';
+  if (opts.translate) return 'translation';
+  if (ROUTE[opts.task]?.isEmbed) return 'embedding';
+  if (opts.images?.length) return 'vision';
+  return 'chat';
+}
+
+/** D761 PR 2: why a run's own inputs cannot be sent to any model, or null. Checked before any call. */
+function inputRefusal(opts: RunOptions): string | null {
+  const asks = [opts.rerank != null, opts.translate != null, (opts.images?.length ?? 0) > 0].filter(Boolean).length;
+  if (asks > 1) return 'a run is one of: images, a rerank or a translation';
+  if (opts.images?.length) return shapes.imagesRefusal(opts.images);
+  if (opts.rerank) return shapes.rerankRefusal(opts.rerank);
+  if (opts.translate) return shapes.translateRefusal(opts.translate, opts.text);
+  return null;
 }
 
 /** The chat messages a run sends: the caller's, with `systemPrompt` leading unless they brought their own system message. */
@@ -1192,6 +1251,8 @@ function guarded(opts: RunOptions): boolean {
 function guardInputFor(opts: RunOptions): string {
   if (opts.guardText != null) return String(opts.guardText);
   if (ROUTE[opts.task]?.isAudio) return '';
+  // D761 PR 2: a rerank's query and every context it sends.
+  if (opts.rerank) return [opts.rerank.query, ...(opts.rerank.contexts ?? [])].join('\n\n');
   if (opts.messages?.length) return opts.messages.filter((m) => m.role !== 'system').map((m) => m.content).join('\n\n');
   return opts.text ?? '';
 }
@@ -1342,6 +1403,18 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
   }
   const primaryModel = opts.model || route.model;
 
+  // D761 PR 2: a run whose own inputs no model could take is refused here.
+  const badInput = inputRefusal(opts);
+  if (badInput) {
+    const usage: UsageMeta = {
+      task: opts.task, model: primaryModel, latency_ms: 0,
+      prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0,
+      fallback_used: false, cached: false, safety_score: null,
+    };
+    await recordUsage(env, opts, usage, 'invalid_input');
+    return { ok: false, refusal: 'invalid_input', error: badInput, usage };
+  }
+
   // ---- D760: every model this run can reach is priced and offered ----------
   // Checked before the cache, the budget and the call, for the primary and each
   // fallback: a fallback that answered at no price would be the free run this
@@ -1371,11 +1444,11 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
   // D763: a guarded run looks in the cache only after its input has passed
   // the guard (below), so a cached answer never skips the input check. What
   // the cache holds was checked on its output before it was written.
-  const cacheHit = async (): Promise<{ output?: string; embedding?: number[] } | null> => {
+  const cacheHit = async (): Promise<{ output?: string; embedding?: number[]; ranking?: shapes.RankedContext[] } | null> => {
     if (!store || !route.cacheTtlSec || opts.stream) return null;
     const ck = await cacheKeyFor(opts, primaryModel);
     if (!ck) return null;
-    try { return await store.get(ck, 'json') as { output?: string; embedding?: number[] } | null; }
+    try { return await store.get(ck, 'json') as { output?: string; embedding?: number[]; ranking?: shapes.RankedContext[] } | null; }
     catch { return null; /* fall through to fresh call */ }
   };
   const cachedUsage = (): UsageMeta => ({
@@ -1392,6 +1465,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
         ok: true,
         output: hit.output ?? '',
         embedding: hit.embedding,
+        ...(hit.ranking ? { ranking: hit.ranking } : {}),
         usage,
       };
     }
@@ -1555,7 +1629,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
       await writeGuardRows(id);
       const report = guardReport(inputAction, 'none', guardDecisions, guardCalls.length);
       if (!settled) return { ok: false, refusal: 'misconfigured', error: 'Unreadable: the AI allowance and top-up draw could not be recorded.', usage, guard: report };
-      return { ok: true, output: hit.output ?? '', embedding: hit.embedding, usage, guard: report };
+      return { ok: true, output: hit.output ?? '', embedding: hit.embedding, ...(hit.ranking ? { ranking: hit.ranking } : {}), usage, guard: report };
     }
   }
 
@@ -1565,7 +1639,11 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
   // same limit for the handshake and its first chunk; the body after that
   // may legitimately run longer, so it is not timed.
   const gatewayRouted = isGatewayRouted(env, opts.task);
-  const inputTokens = route.isAudio ? 0 : estTokens(route.isEmbed ? (opts.text ?? defaultContentBlob(opts)) : chatMessagesFor(opts).map((m) => m.content).join('\n'));
+  const inputTokens = route.isAudio ? 0
+    : opts.rerank ? estTokens([opts.rerank.query, ...opts.rerank.contexts].join('\n'))
+    : estTokens(route.isEmbed || opts.translate ? (opts.text ?? defaultContentBlob(opts)) : chatMessagesFor(opts).map((m) => m.content).join('\n'));
+  // D761 PR 2: what this run asks of a model (chat, vision, rerank, embedding, translation).
+  const need = needOf(opts);
   const limitFor = (model: string): number => shapes.timeoutMs(shapes.factsFor(model), inputTokens);
   const callWaiRaw = (model: string, bypassGateway: boolean): Promise<ProviderResult> => {
     const ms = limitFor(model);
@@ -1592,6 +1670,11 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
     // D761: an input the model's context window cannot hold skips the model
     // without calling it. An unknown window always fits.
     const facts = shapes.factsFor(model);
+    // D761 PR 2: a model that cannot serve what the run asks (a text-only model
+    // handed images, a chat model handed a rerank) is skipped without a call.
+    if (!route.isAudio && !shapes.canServe(facts, need)) {
+      return record(model, { ok: false, status: 422, error: `${model} cannot serve a ${need} run` }, false);
+    }
     if (!route.isAudio && !shapes.fitsContext(facts, inputTokens, shapes.maxTokensFor(facts, opts.maxTokens, route.reasoningMaxTokens))) {
       return record(model, { ok: false, status: 413, error: `input does not fit ${model}'s context window` }, false);
     }
@@ -1789,7 +1872,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
       try {
         await store.put(
           ck,
-          JSON.stringify({ output: attempt.output, embedding: attempt.embedding }),
+          JSON.stringify({ output: attempt.output, embedding: attempt.embedding, ...(attempt.ranking ? { ranking: attempt.ranking } : {}) }),
           { expirationTtl: route.cacheTtlSec },
         );
       } catch { /* cache best-effort */ }
@@ -1802,6 +1885,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
     ok: true,
     output: attempt.output,
     embedding: attempt.embedding,
+    ...(attempt.ranking ? { ranking: attempt.ranking } : {}),
     stream: attempt.stream,
     transcript: attempt.transcript,
     usage,
