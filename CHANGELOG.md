@@ -4,20 +4,6 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
-## Refunds and disputes take a token pack's tokens back (D755, #1920)
-
-- The Stripe webhook handles `charge.refunded`, `charge.dispute.created` and
-  `charge.dispute.closed` for a token pack's charge (`services/aiCreditReversals.ts`).
-  A refund or a dispute takes `ceil((credit + bonus) × amount / total paid)`,
-  less what was already reversed, up to the member's balance; the rest is the
-  row's `shortfall_microusd`. VAT is shared pro rata, so it is never reversed.
-- A dispute opens the purchase's `dispute_state`, which holds pack purchases;
-  won (or a warning closed) returns exactly what it took; lost moves nothing.
-  Replays change nothing, and a reversal that arrives before its credit is
-  retried by Stripe. Every other charge is untouched.
-- The member gets an in-app notice for each refund, dispute and won dispute.
-- `D755.md` §8 records the owner's answer of 2026-10-18: take back.
-
 ## A token pack is bought alone and credited once by the payment webhook (D755, #1905, PR 2 of 2)
 
 - `POST /api/orders/intent`: when a line is a token pack (a row of
