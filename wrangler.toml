@@ -173,7 +173,7 @@ PUBLIC_MARKETING_URL = "https://axal.vc"
 GITHUB_REPO_OWNER = "AxalNetwork"
 GITHUB_REPO_NAME  = "StudioOS"
 # D655 follow-up (#1884): public GitHub App slug, not a secret. Empty means
-# no install link. Set BOTH this value and [env.production.vars] in one PR.
+# no install link. Set BOTH default and production values in one PR.
 GITHUB_APP_SLUG = ""
 # D542 — the GitHub logins whose bounty labels the webhook acts on. Comma
 # separated; empty means nobody's. Session 1 labels as the owner account.
