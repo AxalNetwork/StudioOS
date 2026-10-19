@@ -462,6 +462,8 @@ export async function structureWithStudioos(env: Env, grant: AssistantGrant, arg
 // ---------------------------------------------------------------------------
 
 const MODULES = [...new Set(Object.values(PLACEMENT_KINDS).map((k) => k.module))];
+/** "module: kind, kind; …", from PLACEMENT_KINDS itself, so the tool's text never lists a kind it refuses (D757, #1923). */
+const KINDS_BY_MODULE = MODULES.map((m) => `${m}: ${Object.entries(PLACEMENT_KINDS).filter(([, k]) => k.module === m).map(([kind]) => kind).join(', ')}`).join('; ');
 
 export const TOOLS = {
   submit_interview: {
@@ -511,6 +513,7 @@ export const TOOLS = {
       'Propose what a submitted interview says for each Validate module. Each placement must quote, word for word,',
       'the passage of the stored transcript it comes from; a placement whose quote is not in the transcript is',
       'dropped and reported. Every placement waits for the founder to accept, edit or discard it in StudioOS.',
+      `Each kind belongs to one module, and a placement naming another is dropped (module_mismatch). ${KINDS_BY_MODULE}.`,
     ].join(' '),
     inputSchema: {
       type: 'object',

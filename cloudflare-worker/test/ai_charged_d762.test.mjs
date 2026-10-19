@@ -50,6 +50,19 @@ test('a member run records what its hold settled at, the hold, and the units, be
   } finally { f.db.close(); }
 });
 
+test('the row\'s units are D761\'s for the answering attempt, cached input among them', async () => {
+  const f = fixture({ AI: answer({ prompt_tokens: 100, completion_tokens: 20, prompt_tokens_details: { cached_tokens: 60 } }) });
+  try {
+    caps(f.db); fund(f.db);
+    const r = await run(f.env, { task: 'advisor_turn', userId: 2, text: 'hello' });
+    const units = JSON.parse(rows(f.db)[0].units_json);
+    assert.equal(units.tokens_in, 100);
+    assert.equal(units.tokens_out, 20);
+    assert.equal(units.tokens_cached, 60, 'the cached input D761 measured was not recorded');
+    assert.deepEqual(units, { ...r.units, tokens_in: 100, tokens_out: 20 }, 'the row does not carry the attempt\'s units');
+  } finally { f.db.close(); }
+});
+
 test('AI_BILLING unset, or any value that is not the switch, charges cost (A1 and this task add "charged")', async () => {
   for (const AI_BILLING of [undefined, '', 'on', 'yes', 'Charged ', 'CHARGED']) {
     const f = fixture({ AI: answer(), ...(AI_BILLING === undefined ? {} : { AI_BILLING }) });
@@ -150,6 +163,7 @@ test('a streamed run settles on the provider\'s final usage when the stream ends
     const [row] = rows(f.db);
     assert.equal(row.completion_tokens, 7);
     assert.equal(row.prompt_tokens, 40);
+    assert.deepEqual([JSON.parse(row.units_json).tokens_in, JSON.parse(row.units_json).tokens_out], [40, 7], 'the units are the stream\'s opening figures, not what it used');
     assert.equal(row.charged_microusd, usdToMicro(estimateCostUsd(MODEL, 40, 7)));
     assert.equal(reservations(f.db)[0].status, 'settled');
   } finally { f.db.close(); }

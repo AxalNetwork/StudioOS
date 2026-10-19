@@ -30,7 +30,8 @@ test('a closed WhatsApp window says templates are not available and nothing is s
 test('a closed Telegram window sends the member back to Telegram', () => {
   const c = replyWindowCopy({ provider: 'telegram', reply_window_open: false });
   assert.equal(c.open, false);
-  assert.match(c.text, /does not let StudioOS reply/);
+  // D756: Telegram counts from the contact's last message too.
+  assert.equal(c.text, 'It has been more than 24 hours since your contact last wrote, so Telegram does not let Axal reply. Reply from Telegram, or wait for your contact to write.');
   assert.match(c.text, /Reply from Telegram/);
   assert.doesNotMatch(c.text, /template/);
 });

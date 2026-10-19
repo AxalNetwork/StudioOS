@@ -508,7 +508,7 @@ test('18 · Usage: today and this month, what runs hold, the balance, the senten
   assert.match(text, /Held by runs in progress\s*\$0\.05/);
   assert.match(text, /Top-up balance\s*\$10\.00/);
   assert.match(text, /Runs use your plan's allowance first, then your top-up balance\./);
-  assert.match(usage(), /<a href="\/checkout\?ai_topup=1"[^>]*>Add tokens<\/a>/);
+  assert.match(usage(), /<a href="\/plans-and-pricing#token-packs"[^>]*>Add tokens<\/a>/);
   assert.match(usage(), /<div class="fwr-meter" role="presentation"><i style="width:42%"/);
   // A cap of 0 draws no bar.
   assert.doesNotMatch(usage({ budget: { ...BUDGET, daily_microusd: 0, day_spend_microusd: 0 } }), /width:0%|width:NaN/);

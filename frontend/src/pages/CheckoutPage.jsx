@@ -1,4 +1,4 @@
-// /checkout — auth-protected one-time cart checkout.
+// /checkout — auth-protected cart checkout, or one isolated D755 token pack.
 //   Left  = editable order summary + promo (subtotal / discount / VAT / total).
 //   Right = Stripe Elements (Payment Intents) with #6B46C1 accent, prefilled
 //           email, card, name, billing address (country drives VAT), optional
@@ -9,8 +9,9 @@
 // Prices/discount/VAT are recomputed server-side by /orders/intent — the client
 // summary is a live preview only.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import useAiTopupCart from '../hooks/useAiTopupCart';
+import { Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { TOKEN_PACKS_PATH, TOPUP_UNAVAILABLE, aiTokenState, packLabel, sellableLine } from '../lib/aiTokens';
+import { aiBudgetApi } from '../lib/api/aiBudget';
 import { Elements, PaymentElement, AddressElement, useElements, useStripe } from '@stripe/react-stripe-js';
 import { Loader2, Lock, AlertTriangle, ArrowLeft, ShoppingCart, CheckCircle2 } from 'lucide-react';
 import { api } from '../lib/api';
@@ -31,7 +32,7 @@ const PROMO_REASONS = {
 };
 
 // Left column — editable order summary + promo.
-function OrderSummary({ cart, appliedPromo, onPromoChange, billingCountry }) {
+export function OrderSummary({ cart, appliedPromo, onPromoChange, billingCountry, pack = null }) {
   const [code, setCode] = useState(appliedPromo?.code || '');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
@@ -74,17 +75,17 @@ function OrderSummary({ cart, appliedPromo, onPromoChange, billingCountry }) {
           <div key={l.price_id} className="py-3">
             <div className="flex justify-between gap-3">
               <div className="min-w-0">
-                <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{l.name}</div>
-                <div className="text-xs text-gray-500 dark:text-gray-400">{cycleCadenceLabel(l.cycle || 'onetime')}</div>
+                <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{pack ? `${packLabel(pack.unit_amount)} · One-time purchase` : l.name}</div>
+                {!pack && <div className="text-xs text-gray-500 dark:text-gray-400">{cycleCadenceLabel(l.cycle || 'onetime')}</div>}
               </div>
-              <button onClick={() => l && cart.remove(l.price_id)} className="text-xs text-gray-400 hover:text-red-500 h-fit">Remove</button>
+              {!pack && <button onClick={() => l && cart.remove(l.price_id)} className="text-xs text-gray-400 hover:text-red-500 h-fit">Remove</button>}
             </div>
             <div className="mt-2 flex items-center justify-between">
-              <div className="inline-flex items-center border border-gray-300 dark:border-gray-700 rounded-lg overflow-hidden">
+              {!pack && <div className="inline-flex items-center border border-gray-300 dark:border-gray-700 rounded-lg overflow-hidden">
                 <button onClick={() => cart.changeQty(l.price_id, -1)} className="w-7 h-8 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800">−</button>
                 <span className="min-w-[24px] text-center text-sm font-semibold text-gray-900 dark:text-gray-100">{l.quantity}</span>
                 <button onClick={() => cart.changeQty(l.price_id, 1)} className="w-7 h-8 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800">+</button>
-              </div>
+              </div>}
               <span className="text-sm font-bold text-gray-900 dark:text-gray-100">
                 {formatMoney((Number(l.unit_amount) || 0) * l.quantity, l.currency)}
               </span>
@@ -93,7 +94,8 @@ function OrderSummary({ cart, appliedPromo, onPromoChange, billingCountry }) {
         ))}
       </div>
 
-      <div className="mt-4 flex gap-2">
+      {pack && <p className="mt-3 text-sm text-gray-600 dark:text-gray-300">Adds {formatMoney(pack.unit_amount, pack.currency)} to your top-up balance once the payment is confirmed.</p>}
+      {!pack && <><div className="mt-4 flex gap-2">
         <input
           value={code}
           onChange={(e) => { setCode(e.target.value); setMsg(null); }}
@@ -112,6 +114,7 @@ function OrderSummary({ cart, appliedPromo, onPromoChange, billingCountry }) {
         </p>
       )}
 
+      </>}
       <div className="mt-4 space-y-2 text-sm border-t border-gray-200 dark:border-gray-800 pt-4">
         <div className="flex justify-between text-gray-500 dark:text-gray-400">
           <span>Subtotal</span>
@@ -203,15 +206,51 @@ function PaymentForm({ email, fullName, onCountryChange, onPay, submitting, erro
   );
 }
 
+// A pack and the retired URL never mount useCart: even a stored promo stays untouched.
 export default function CheckoutPage() {
+  const location = useLocation();
+  const params = new URLSearchParams(location.search);
+  if (params.get('ai_topup') === '1') return <Navigate to={TOKEN_PACKS_PATH} replace />;
+  if (params.has('token_pack')) return <TokenPackCheckout key={params.get('token_pack')} uid={params.get('token_pack')} />;
+  return <CartCheckout />;
+}
+
+function CartCheckout() {
+  const cart = useCart();
+  return <Checkout cart={cart} />;
+}
+
+export function TokenPackCheckout({ uid }) {
+  const [reading, setReading] = useState({ loading: true });
+  useEffect(() => {
+    let live = true;
+    setReading({ loading: true });
+    aiBudgetApi.topUp().then(data => { if (live) setReading({ data }); })
+      .catch(() => { if (live) setReading({ error: true }); });
+    return () => { live = false; };
+  }, [uid]);
+  // CR7 consumes CR2's pack list, not D750's deprecated single-product fields.
+  const state = aiTokenState(reading);
+  // The environment fallback has no pack uid; its advertised price id is its key.
+  const pack = state === 'ready' && Array.isArray(reading.data?.packs)
+    ? reading.data.packs.find(p => p.uid === uid || (p.uid == null && p.price_id === uid)) : null;
+  const cart = useMemo(() => pack && sellableLine(pack) ? {
+    items: [{ ...pack, name: packLabel(pack.unit_amount), quantity: 1, cycle: 'onetime' }],
+    subtotal: pack.unit_amount, currency: pack.currency, promo: null,
+  } : null, [pack]);
+  if (state !== 'ready' || !cart) return <div className="max-w-lg mx-auto py-16 text-center text-gray-700 dark:text-gray-300" aria-busy={state === 'loading'}>
+    <h1 className="text-lg font-bold">{state === 'loading' ? 'Loading token pack…' : state === 'unreadable' ? 'Unreadable' : TOPUP_UNAVAILABLE}</h1>
+    {state === 'unreadable' && <p>The token pack could not be read. Refresh to retry.</p>}
+    <a href="/plans-and-pricing" className="mt-4 inline-flex text-violet-600 dark:text-violet-400">Back to Plans &amp; Pricing</a>
+  </div>;
+  return <Checkout cart={cart} pack={pack} />;
+}
+
+export function Checkout({ cart, pack = null }) {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { effectiveTheme } = useSettings();
   const isDark = effectiveTheme === 'dark';
-  const cart = useCart();
-  const location = useLocation();
-  const wantsAiTopup = new URLSearchParams(location.search).get('ai_topup') === '1';
-  const aiTopupState = useAiTopupCart(cart,wantsAiTopup);
 
   const email = user?.email || '';
   const fullName = user?.full_name || user?.name || '';
@@ -249,15 +288,19 @@ export default function CheckoutPage() {
     if (empty || stripeConfigured !== true) return;
     let cancelled = false;
     setIntentError(null);
+    setClientSecret(null);
+    setOrderRef(null);
+    setFreeOrder(false);
     const body = {
       items: cart.items.map((l) => ({ price_id: l.price_id, quantity: l.quantity })),
       nonce: nonceRef.current,
     };
-    if (appliedPromo?.code) body.promo_code = appliedPromo.code;
+    if (!pack && appliedPromo?.code) body.promo_code = appliedPromo.code;
     if (billingCountry) body.billing_country = billingCountry;
     api.createOrderIntent(body)
       .then((res) => {
         if (cancelled) return;
+        if (pack && res?.free) throw new Error('The token-pack order could not be read. Refresh to retry.');
         setOrderRef(res?.order_ref || null);
         if (res?.free) {
           setFreeOrder(true);
@@ -269,18 +312,19 @@ export default function CheckoutPage() {
       })
       .catch((e) => { if (!cancelled) setIntentError(e?.message || 'Could not start checkout.'); });
     return () => { cancelled = true; };
-  }, [empty, stripeConfigured, cart.items, appliedPromo, billingCountry]);
+  }, [empty, stripeConfigured, cart.items, appliedPromo, billingCountry, pack]);
 
   const finish = useCallback(async (paymentIntentId) => {
     try {
-      if (paymentIntentId) await api.confirmOrder(paymentIntentId);
+      if (paymentIntentId && !pack) await api.confirmOrder(paymentIntentId);
     } catch {
       // Fulfilment also runs server-side via webhook; the confirmation page
       // reads the authoritative order. Don't block the redirect on a 409.
     }
-    cart.clear();
-    navigate(`/checkout/confirmation?order=${encodeURIComponent(orderRef)}`);
-  }, [cart, navigate, orderRef]);
+    if (!pack) cart.clear();
+    const packQuery = pack ? `&token_pack=${encodeURIComponent(pack.uid ?? pack.price_id)}` : '';
+    navigate(`/checkout/confirmation?order=${encodeURIComponent(orderRef)}${packQuery}`);
+  }, [cart, navigate, orderRef, pack]);
 
   // Free order (100%-off promo) — server already fulfilled; just redirect.
   const completeFree = useCallback(async () => {
@@ -293,6 +337,7 @@ export default function CheckoutPage() {
     if (submitting) return;
     setSubmitting(true);
     setPayError(null);
+    try {
     const { error: submitError } = await elements.submit();
     if (submitError) {
       setPayError(submitError.message || 'Please check your payment details.');
@@ -306,11 +351,11 @@ export default function CheckoutPage() {
         payment_method_data: {
           billing_details: { name: fullName || undefined, email: email || undefined },
         },
-        ...(savePm ? { setup_future_usage: 'off_session' } : {}),
+        ...(!pack && savePm ? { setup_future_usage: 'off_session' } : {}),
       },
     });
     if (confirmError) {
-      setPayError(confirmError.message || 'Payment failed. Please try again.');
+      setPayError(pack ? `The payment did not go through, so no tokens were added. ${confirmError.message || ''}`.trim() : confirmError.message || 'Payment failed. Please try again.');
       setSubmitting(false);
       return;
     }
@@ -319,16 +364,14 @@ export default function CheckoutPage() {
       await finish(paymentIntent?.id);
       return;
     }
-    setPayError('Payment could not be completed. Please try another card.');
+    setPayError(pack ? 'The payment did not go through, so no tokens were added.' : 'Payment could not be completed. Please try another card.');
     setSubmitting(false);
-  }, [submitting, fullName, email, savePm, finish]);
-
-  if (wantsAiTopup && ['loading','not-configured','unreadable'].includes(aiTopupState)) {
-    return <div className="max-w-lg mx-auto py-16 text-center text-gray-700 dark:text-gray-300" aria-busy={aiTopupState==='loading'}>
-      <h1 className="text-lg font-bold">{aiTopupState==='loading'?'Loading AI top-up…':aiTopupState==='not-configured'?"Top-up isn't available yet.":'Unreadable'}</h1>
-      {aiTopupState==='unreadable' && <p>The AI top-up could not be read. Refresh to retry.</p>}
-    </div>;
-  }
+    } catch (error) {
+      const message = error?.message || 'Payment could not be completed. Please try another card.';
+      setPayError(pack ? `The payment did not go through, so no tokens were added. ${message}` : message);
+      setSubmitting(false);
+    }
+  }, [submitting, fullName, email, savePm, finish, pack]);
 
   if (empty) {
     return (
@@ -339,7 +382,7 @@ export default function CheckoutPage() {
         <h1 className="text-lg font-bold text-gray-900 dark:text-gray-100">Your order is empty</h1>
         <p className="mt-1.5 text-sm text-gray-500 dark:text-gray-400">Add one-time items from the catalog to check out.</p>
         <button onClick={() => navigate('/plans-and-pricing')} className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium">
-          <ArrowLeft size={15} /> Back to Products
+          <ArrowLeft size={15} /> Back to Plans &amp; Pricing
         </button>
       </div>
     );
@@ -349,7 +392,7 @@ export default function CheckoutPage() {
     <div className="max-w-5xl space-y-6">
       <div>
         <button onClick={() => navigate('/plans-and-pricing')} className="inline-flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-violet-600 dark:hover:text-violet-400 mb-2">
-          <ArrowLeft size={15} /> Back to Products
+          <ArrowLeft size={15} /> Back to Plans &amp; Pricing
         </button>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Checkout</h1>
       </div>
@@ -357,6 +400,7 @@ export default function CheckoutPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
         <OrderSummary
           cart={cart}
+          pack={pack}
           appliedPromo={appliedPromo}
           onPromoChange={setAppliedPromo}
           billingCountry={billingCountry}
@@ -412,10 +456,10 @@ export default function CheckoutPage() {
               stripe={stripePromise}
               options={{ clientSecret, appearance: buildAppearance(isDark) }}
             >
-              <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+              {!pack && <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
                 <input type="checkbox" checked={savePm} onChange={(e) => setSavePm(e.target.checked)} className="rounded border-gray-300 dark:border-gray-700 text-violet-600 focus:ring-violet-500" />
                 Save this payment method for future purchases
-              </label>
+              </label>}
               <PaymentForm
                 email={email}
                 fullName={fullName}
@@ -433,7 +477,8 @@ export default function CheckoutPage() {
             </div>
           )}
         </div>
-      </div>
+        {pack && <p className="text-xs text-gray-500 dark:text-gray-400">Sold by Axal VC Management LLC.</p>}
+    </div>
     </div>
   );
 }

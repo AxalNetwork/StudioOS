@@ -303,7 +303,7 @@ test('5. A2m: Usage on a phone draws the canvas bar and its three sections, then
   assert.match(t, /This month Resets on the 1st at 00:00 UTC \$3\.10 of \$5\.00/);
   assert.match(t, /Held by runs in progress Returned if a run does not finish in 5 minutes \$0\.05/);
   assert.match(t, /Top-up balance Runs use your allowance first, then your top-up \$10\.00/);
-  assert.match(markup, /<a href="\/checkout\?ai_topup=1"[^>]*data-testid="usage-add-tokens">Add tokens<\/a>/);
+  assert.match(markup, /<a href="\/plans-and-pricing#token-packs"[^>]*data-testid="usage-add-tokens">Add tokens<\/a>/);
   assert.match(markup, /style="width:42%"/, 'Today\'s 7px bar');
   // Kept below, in today's form: the four cards the board does not draw.
   for (const card of ['usage-card-days', 'usage-card-where', 'usage-card-rates', 'usage-card-last-run']) assert.match(markup, new RegExp(`data-testid="${card}"`), card);
@@ -312,10 +312,43 @@ test('5. A2m: Usage on a phone draws the canvas bar and its three sections, then
   // Without a configured top-up there is no button, and the line says why.
   const off = text(html(h(UsagePhoneView, { ...usageProps, product: ready({ configured: false }) })));
   assert.doesNotMatch(off, /Add tokens/);
-  assert.match(off, /Top-ups are not available yet\. Runs use your included allowance only\./);
+  // D755 (#1916): one sentence, lib/aiTokens.js's.
+  assert.match(off, /Top-up isn't available yet\. Runs use your included allowance only\./);
   // A paused allowance still says so, above the figures.
   const paused = text(html(h(UsagePhoneView, { ...usageProps, budget: ready({ ...BUDGET, held_for_review: [{ id: 1 }] }) })));
   assert.match(paused, /AI allowance Runs paused A run cost more than it held\./);
+});
+
+test('5b. D751 (#1881): a suggested connector Axal cannot connect reads Not set up here, and a Super Admin\'s row goes to its keys', () => {
+  const P = (key, display_name, integration_type, status, extra = {}) => ({
+    key, display_name, integration_type, status, tier: 'free', auth_type: 'oauth2', description: `${display_name} description.`,
+    capabilities: [], has_implementation: true, locked_for_user: false, ...extra,
+  });
+  const catalogue = buildCatalogue({
+    providers: [P('github', 'GitHub', 'code', 'beta', { configured: false })],
+    items: [], waitlist: [], firstParty: { microsoft: { configured: false, connected: false } },
+  });
+  const data = { status: 'ready', catalogue, items: [], itemsFailed: false, reload: noop,
+    suggestions: [{ provider_key: 'github', reason: 'Build has no code yet.' }, { provider_key: 'microsoft', reason: 'No calendar yet.' }] };
+  // The row's element, from its opening tag to the first close of that tag, found by text, not a built pattern.
+  const row = (markup, key) => {
+    const i = markup.indexOf(` data-testid="connector-suggested-${key}"`);
+    if (i < 0) return '';
+    const start = markup.lastIndexOf('<', i);
+    const tag = /^<(a|div|button)\b/.exec(markup.slice(start))?.[1];
+    const end = tag ? markup.indexOf(`</${tag}>`, i) : -1;
+    return end < 0 ? '' : markup.slice(start, end + tag.length + 3);
+  };
+  const plain = html(h(ConnectorsPhoneView, { data }), '/account/connectors');
+  const gh = row(plain, 'github');
+  assert.match(text(gh), /GitHub .*Not set up here/, 'the reason first, as the card says it');
+  assert.doesNotMatch(text(gh), /Beta/);
+  assert.match(text(row(plain, 'microsoft')), /Not set up here/);
+  assert.doesNotMatch(plain, /Add its keys in Integration keys/);
+  const sup = html(h(ConnectorsPhoneView, { data, superAdmin: true }), '/account/connectors');
+  assert.match(row(sup, 'github'), /^<a[^>]*href="\/admin\?tab=integration-keys"/);
+  assert.match(text(row(sup, 'github')), /Add its keys in Integration keys\./);
+  assert.doesNotMatch(row(sup, 'microsoft'), /integration-keys/, 'a first-party client is not a console key yet');
 });
 
 test('5. A3m: Connectors on a phone draws the canvas bar, Yours and Suggested for you, then keeps Discover', () => {
@@ -595,10 +628,10 @@ test('5. A4m–A10m: each section reads its values from the page\'s sources', ()
   assert.match(html(PHONE_VIEWS.pricing()), /href="\/account\/billing"[^>]*>Manage plan</);
   assert.ok(pricing.includes(`Tokens Past your allowance ${TOKENS_LINE} Add tokens`));
   assert.ok(CANVAS_PAGES.pricing.chunk.includes(TOKENS_LINE), 'the Tokens line is AMP\'s');
-  assert.match(html(PHONE_VIEWS.pricing()), /<a href="\/checkout\?ai_topup=1"[^>]*>[\s\S]*?Past your allowance/);
+  assert.match(html(PHONE_VIEWS.pricing()), /<a href="\/plans-and-pricing#token-packs"[^>]*>[\s\S]*?Past your allowance/);
   // No other role has a tier ladder, so it gets no Plans section.
   assert.deepEqual(sectionTitles(html(h(PricingPhoneView, { role: 'advisor', billing: ready({}), budget: ready(BUDGET), product: ready(PRODUCT) }))), ['Tokens']);
-  assert.match(text(html(h(PricingPhoneView, { role: 'founder', billing: ready(GROWTH), budget: ready(BUDGET), product: ready({ configured: false }) }))), /Top-ups are not available yet\./);
+  assert.match(text(html(h(PricingPhoneView, { role: 'founder', billing: ready(GROWTH), budget: ready(BUDGET), product: ready({ configured: false }) }))), /Top-up isn't available yet\. Runs use your included allowance only\./);
 });
 
 // --- 6. Member routes --------------------------------------------------------------
