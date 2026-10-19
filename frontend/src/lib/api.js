@@ -352,7 +352,6 @@ export const SLOW_PATHS = [
   /^\/deck-reviewer\/[^/]+\/regenerate$/,
   /^\/decks\/generate$/,
   /^\/funds\/[^/]+\/regenerate-lpa$/,
-  /^\/legal\/templates\/[^/]+\/generate$/,
   /^\/legalcap\/legal\/generate$/,
   /^\/profiling\/chat$/,                 // onboarding chat
   /^\/references\/[^/]+\/(transcribe|summarize)$/,
@@ -990,22 +989,6 @@ export const api = {
 
   listTemplates: () => request('/legal/templates'),
   getTemplateContent: (key) => request(`/legal/templates/${key}`),
-  // The worker takes the template key in the PATH (legal.ts:784
-  // `POST /legal/templates/:key/generate`); there is no
-  // `/legal/documents/generate` and there never was, so every call from
-  // LegalPage's generate dialog hit a route the worker does not mount. The
-  // form's `doc_type` IS the template key, so it moves into the path and the
-  // rest of the form travels as the body.
-  //
-  // Two worker behaviours the caller should expect: the document title comes
-  // from the template, not from `title` in the body; and a contract-type
-  // template returns 409 {code:'use_esign_envelope'} because contracts must be
-  // issued through POST /legal/esign/send rather than minted as a documents row.
-  generateDocument: ({ doc_type, ...fields }) =>
-    request(`/legal/templates/${encodeURIComponent(doc_type)}/generate`, {
-      method: 'POST',
-      body: JSON.stringify(fields),
-    }),
   listDocuments: (projectId) => request(`/legal/documents${projectId ? `?project_id=${projectId}` : ''}`),
   getDocument: (id) => request(`/legal/documents/${id}`),
   incorporateProject: (projectId) => request(`/legal/incorporate?project_id=${projectId}`, { method: 'POST' }),

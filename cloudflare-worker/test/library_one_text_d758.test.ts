@@ -86,16 +86,17 @@ test('D758 templateBodyFor reads the row under every spelling, and the bundled f
       const got = await templateBodyFor(e, spelling);
       if (BUNDLED_SENT_DIRECTLY.some((x) => x.key === spelling)) {
         // PR 1: partner onboarding still sends its bundled file, even when the row has a body.
-        assert.deepEqual(got, { body: bundled(key), source: 'template' }, spelling);
+        assert.deepEqual(got, { body: bundled(key), source: 'template', title: null }, spelling);
       } else {
-        assert.deepEqual(got, { body: `ROW ${slug} {{recipient_name}}`, source: 'store' }, spelling);
+        // #1862: a store row also answers its title, which names the envelope.
+        assert.deepEqual(got, { body: `ROW ${slug} {{recipient_name}}`, source: 'store', title: `Title of ${slug}` }, spelling);
       }
     }
   }
   db.exec("UPDATE legal_templates SET is_stub = 1, body_md = ''");
   for (const [slug, key] of Object.entries(ROWS)) {
     for (const spelling of spellingsOf(slug)) {
-      assert.deepEqual(await templateBodyFor(e, spelling), { body: bundled(key), source: 'template' }, `${spelling} falls back`);
+      assert.deepEqual(await templateBodyFor(e, spelling), { body: bundled(key), source: 'template', title: null }, `${spelling} falls back`);
     }
   }
 });

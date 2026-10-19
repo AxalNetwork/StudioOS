@@ -58,8 +58,11 @@ template paper as HTML, faces omitted) and `paperFonts` (its faces, once per
 `paper_sha256`).
 D717 (#1782) adds `publishOne(slug, version)` and `withdraw(slug)` (one template's
 publication), `push()` (the recorded publications to every branch, publishing
-nothing) and `outside()` (the bundled documents not in the catalog). The thumbnail
-and draft-PDF blobs come with PR 2's screens, outside the typed drift surface.
+nothing) and `outside()` (the bundled documents not in the catalog). #1851 adds
+`thumbnailBlob(slug, version)` and `outsideThumbnailBlob(key)`: page 1 as a PNG,
+`{ blob, url }` (the caller revokes `url`), outside the typed drift surface like
+`preview.pdf`. The store's URL carries `?v=<version>`, because the image is cached
+privately for a day.
 D717 (#1853) adds `renderPdfBlob(body)`, the draft's PDF from
 `POST /templates/render.pdf` as `{ blob, renderer }`: a body over
 `RENDER_BODY_MAX` (256 KB) is refused before any request, and its raw `fetch`
