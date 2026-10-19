@@ -807,12 +807,14 @@ test('a channel session waiting for its words shows what it waits for, never the
 
 // ------------------------------------------------------------------ where each is mounted
 
-test('mounted: the inbox route, the Connectors group, the sheet’s two ways in; no CSP was added to the shell', () => {
+test('mounted: the inbox route, the Connectors group, the page’s two ways in; no CSP was added to the shell', () => {
   const app = readFileSync('frontend/src/App.jsx', 'utf8');
   assert.match(app, /const ChannelsInboxPage = lazy\(\(\) => import\('\.\/pages\/founder\/ChannelsInbox'\)\);/);
   assert.match(app, /<Route path="\/validate\/inbox" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <ChannelsInboxPage \/>\)\} \/>/);
   const conn = readFileSync('frontend/src/pages/account/AccountConnectors.jsx', 'utf8');
   assert.match(conn, /<ChannelsSection catalogue=\{data\.catalogue\} onOpenConnector=/);
+  // D753 — Zoom and Google Meet's buttons open their connector's own page.
+  assert.match(conn, /onOpenConnector=\{\(key\) => \{ if \(data\.catalogue\.some\(\(x\) => x\.key === key\)\) navigate\(connectorPagePath\(key\)\); \}\}/);
   const lightbox = readFileSync('frontend/src/pages/founder/RecordLightbox.jsx', 'utf8');
   assert.match(lightbox, /channelsSource\.assign\(thread, assignTarget\(/, 'the chat import is the lightbox\'s own, inline (#1587)');
   assert.match(lightbox, /<SchedulePanel interview=\{who\} \/>/);

@@ -16,7 +16,8 @@
  *
  * The LP (only notices addressed to their own `limited_partners` row; anyone
  * else, admins included, gets 404):
- *   GET  /mine                        type, title, reference, amount, date, superseded, instructions_changed
+ *   GET  /mine                        type, title, reference, amount, date, superseded, instructions_changed,
+ *                                     call_number, due_date (computed on read from the frozen figures)
  *   GET  /mine/:uid                   the masked figures
  *   GET  /mine/:uid/pdf               the kept PDF
  *
@@ -31,7 +32,7 @@ import { AUTH_ERROR_STATUSES, STEP_UP_REQUIRED, stepUpRefusalBody } from '../uti
 import { HQ_ONLY, branchOf } from '../util/branch';
 import { refuse } from '../util/refusal';
 import { SUPPORT_SESSION_REFUSED_CODE, assertAdminAct, isSupportSession } from '../services/fundAdminAccess';
-import { NOTICE_TYPES, NoticeRefusal, buildNoticeFigures, figuresDigest, noticePaperInput, type NoticeFigures } from '../services/fundNotices';
+import { NOTICE_TYPES, NoticeRefusal, buildNoticeFigures, figuresDigest, noticeListFacts, noticePaperInput, type NoticeFigures } from '../services/fundNotices';
 import {
   issueCallNotices, issueNotice, listNotices, myNotice, myNotices, noticeFile, noticeSummary, previewCallNotices, readNotice,
   type NoticeRow,
@@ -152,7 +153,7 @@ r.get('/mine', async (c) => {
   const user = await requireAuth(c);
   const rows = await myNotices(c.env, { id: Number(user.id), email: user.email });
   const notices = [];
-  for (const n of rows) notices.push({ ...noticeSummary(n), instructions_changed: await instructionsChanged(c, n) });
+  for (const n of rows) notices.push({ ...noticeSummary(n), ...noticeListFacts(figuresOf(n)), instructions_changed: await instructionsChanged(c, n) });
   c.header('Cache-Control', 'no-store');
   return c.json({ notices });
 });
@@ -162,7 +163,8 @@ r.get('/mine/:uid', async (c) => {
   const n = await myNotice(c.env, { id: Number(user.id), email: user.email }, c.req.param('uid'));
   if (!n) throw notFound();
   c.header('Cache-Control', 'no-store');
-  return c.json({ ...noticeSummary(n), instructions_changed: await instructionsChanged(c, n), figures: figuresOf(n) });
+  const figures = figuresOf(n);
+  return c.json({ ...noticeSummary(n), ...noticeListFacts(figures), instructions_changed: await instructionsChanged(c, n), figures });
 });
 
 r.get('/mine/:uid/pdf', async (c) => {

@@ -43,6 +43,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
+import { applyEngineSchema } from './_engine_schema.mjs';
 import { tableFromBaseline } from './_baseline.mjs';
 import { claimEvent, connectionOverLimit, finishEvent, releaseEvent, reserveTranscription } from '../src/services/channels/events.ts';
 import { createLinkCode, consumeLinkCode } from '../src/services/channels/linkCodes.ts';
@@ -94,7 +95,7 @@ function world() {
     CREATE TABLE integrations (
       id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE, user_id INTEGER NOT NULL, provider_key TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'active', auth_type TEXT, credentials_enc TEXT, config_json TEXT,
-      external_account_id TEXT, external_account_name TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      external_account_id TEXT, external_account_name TEXT, last_synced_at TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP, UNIQUE (user_id, provider_key)
     );
     INSERT INTO integrations (id, uid, user_id, provider_key, auth_type, external_account_id) VALUES
@@ -113,6 +114,8 @@ function world() {
     '449_interview_channels.sql', '450_channel_events_delete_kind.sql', '451_channel_review_fixes.sql',
     // D685: openSession stores the call (call_provider), as production's 452 lets it.
     '452_record_session_setup.sql', '454_channel_voice_failures.sql', '458_channel_link_consent.sql']) db.exec(mig(m));
+  // D757: the Validate engine's schema (487, 465, 453 and the re-scope's columns).
+  applyEngineSchema(db);
   db.exec(`INSERT INTO telegram_business_connections (uid, business_connection_id, telegram_user_id, user_id, is_enabled, can_reply)
            VALUES ('bc-1', 'BC-ME', '555001', ${ME}, 1, 1), ('bc-2', 'BC-UNLINKED', '777', NULL, 1, 1),
                   ('bc-3', 'BC-OFF', '555001', ${ME}, 0, 1)`);

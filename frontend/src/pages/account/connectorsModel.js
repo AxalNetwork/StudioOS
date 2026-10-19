@@ -17,7 +17,7 @@
  */
 
 import {
-  MEMBER_DISCONNECT_NOTE, PERSONAL_DOES, PERSONAL_FEEDS_FALLBACK, PERSONAL_LAST_SYNC, personalAttention, personalToolBanner,
+  memberDisconnectNote, PERSONAL_DOES, personalFeedsFallback, PERSONAL_LAST_SYNC, personalAttention, personalToolBanner,
 } from './mercuryModel.js';
 
 export const PAGE_SIZE = 10;
@@ -233,9 +233,9 @@ export function feedsLabel(p) {
   return p.feeds.map((f) => (typeof f === 'string' ? humanKey(f) : f?.label || humanKey(f?.key))).filter(Boolean).join(', ') || null;
 }
 
-/** Yours' Feeds: the Worker's feeds; for a member's Mercury that names none, "Your own payments" (decision 9). */
-export function yoursFeedsLabel(p) {
-  return feedsLabel(p) || (isPersonalMercury(p) ? PERSONAL_FEEDS_FALLBACK : null);
+/** Yours' Feeds: the Worker's feeds; for a member's Mercury that names none, its role's words (decision 9, D752). */
+export function yoursFeedsLabel(p, role = null) {
+  return feedsLabel(p) || (isPersonalMercury(p) ? personalFeedsFallback(role) : null);
 }
 
 /** One module a connector fills, named as the Worker names it (`feed_modules`), else its key made readable. */
@@ -426,7 +426,18 @@ export function discoverSections(catalogue, chip = 'All', { q = '', suggestions 
  * sign-in went.
  */
 export function connectorsRedirect({ search = '', hash = '' } = {}) {
-  return { pathname: '/account/connectors', search, hash };
+  const ret = oauthReturn(search);
+  if (!ret) return { pathname: '/account/connectors', search, hash };
+  // D715 decision 3: Mercury has no sign-in. A return naming it is crafted and never reaches the Mercury page, whose mount makes the audited read.
+  if (ret.key === 'mercury') return { pathname: '/account/connectors', search: stripReturn(search, ret.strip), hash };
+  // D753 — a sign-in comes back to its own connector's page.
+  return { pathname: connectorPagePath(ret.key), search, hash };
+}
+
+/** D753 — a connector's own page, for a valid key; the hub otherwise. */
+export function connectorPagePath(key) {
+  const k = codeWord(String(key || '').toLowerCase());
+  return k && k.length <= 40 ? `/account/connectors/${k}` : '/account/connectors';
 }
 
 /** The once-only notice about the rename is remembered under this key. */
@@ -636,9 +647,9 @@ export function flowBanner(view, name, { reason = '', banner = '' } = {}) {
   }
 }
 
-/** What a disconnect does, said before the click. */
-export function disconnectNote(p) {
-  if (isPersonalMercury(p)) return MEMBER_DISCONNECT_NOTE;
+/** What a disconnect does, said before the click; a member's Mercury in their role's words (D752). */
+export function disconnectNote(p, role = null) {
+  if (isPersonalMercury(p)) return memberDisconnectNote(role);
   if (p?.first_party) {
     if (p.key === 'google') return 'Calendar and Gmail access stop, and "Continue with Google" sign-in is unlinked. Events already in StudioOS stay.';
     if (p.key === 'linkedin') return 'Contacts you already imported stay in Refer & Earn.';

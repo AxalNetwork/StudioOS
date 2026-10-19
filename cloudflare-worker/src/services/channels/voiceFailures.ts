@@ -12,6 +12,7 @@
  *   daily_cap     the connection's daily transcription cap was reached
  *   too_large     the file is over the provider's cap
  *   unreadable    the file could not be fetched or read
+ *   expired       WhatsApp refused an old media id at lookup; never queued again
  *   reconnect     the account's connection had expired
  *   unreachable   Telegram or Meta did not answer, after every try
  *   not_transcribed  transcription did not answer, after every try
@@ -36,7 +37,7 @@ export const STILL_TRYING = new Set(['provider_unreachable', 'transcription_unav
 
 export type VoiceReason =
   | 'budget' | 'ai_off' | 'daily_cap' | 'too_large' | 'unreadable' | 'reconnect'
-  | 'unreachable' | 'not_transcribed' | 'retrying';
+  | 'unreachable' | 'not_transcribed' | 'retrying' | 'expired';
 
 const PROVIDER_NAME: Record<MessagingProvider, string> = { telegram: 'Telegram', whatsapp: 'WhatsApp' };
 const PROVIDER_HOST: Record<MessagingProvider, string> = { telegram: 'Telegram', whatsapp: 'Meta' };
@@ -51,6 +52,7 @@ export function voiceReason(error: string | null, held: boolean): VoiceReason | 
   if (code === 'kill_switch') return 'ai_off';
   if (code === 'transcription_cap') return 'daily_cap';
   if (code === 'too_large') return 'too_large';
+  if (code === 'expired') return 'expired';
   if (code === 'token_invalid' || code === 'not_connected') return 'reconnect';
   if (code === 'provider_unreachable') return 'unreachable';
   if (code === 'transcription_unavailable') return 'not_transcribed';
@@ -66,6 +68,7 @@ export function voiceSentence(reason: VoiceReason, provider: MessagingProvider):
     case 'ai_off': return 'AI transcription was switched off on Axal, so this voice note was not transcribed.';
     case 'daily_cap': return `This ${name} account reached its voice notes for today, so this one waits. Retry it tomorrow.`;
     case 'too_large': return `This voice note is larger than Axal can transcribe from ${name} (${CAP[provider] ?? 'the limit'}).`;
+    case 'expired': return 'WhatsApp keeps a voice note for 7 days; this one can no longer be fetched.';
     case 'unreadable': return 'The audio could not be read, so this voice note was not transcribed.';
     case 'reconnect': return `The connection to your ${name} account had expired, so the voice note could not be fetched. Connect it again in Account › Connectors.`;
     case 'unreachable': return `${host} could not be reached to fetch this voice note, after several tries.`;
@@ -166,4 +169,18 @@ export async function retryVoiceNote(env: Env, userId: number, threadUid: string
   const queued = await queueVoiceTranscriptions(env, thread, { only: messageUid });
   if (!queued) throw new IntakeError(409, 'voice_busy', 'That voice note is already being transcribed.');
   return { queued };
+}
+
+/** D754 §6: the inbound media lifetime is one assumption to re-check with Meta. Telegram documents no deadline. */
+export const MEDIA_FETCH_DAYS: Record<MessagingProvider, number | null> = { whatsapp: 7, telegram: null };
+
+/** D1's timestamp without an offset is UTC, just like an ISO timestamp with Z. */
+export const channelTimestampMs = (s: string | null | undefined) => (s ? Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? s : `${s.replace(' ', 'T')}Z`) : NaN);
+
+/** A display deadline only: the clock itself never prevents a fetch. */
+export function voiceFetchBy(provider: MessagingProvider, msg: { awaiting_transcription: boolean; sent_at: string }): string | null {
+  const days = MEDIA_FETCH_DAYS[provider];
+  if (!msg.awaiting_transcription || days == null) return null;
+  const sent = channelTimestampMs(msg.sent_at);
+  return Number.isFinite(sent) ? new Date(sent + days * 86_400_000).toISOString() : null;
 }
