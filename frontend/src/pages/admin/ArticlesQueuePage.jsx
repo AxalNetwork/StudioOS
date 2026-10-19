@@ -9,6 +9,9 @@ import ToastMessage from '../../components/ToastMessage';
 import { reportError } from '../../lib/log';
 import { localInputValue, publishAtFromLocal, utcLabel } from './articlePublishAt';
 import ReviewComments from '../../components/hqReview/ReviewComments';
+import { useAuth } from '../../hooks/useAuthSync';
+import { isSuperAdminUser } from '../../lib/shellRole';
+import { RailFrame, WorkerRail } from '../../ui';
 
 // Admin /admin/articles review queue — the single "Content Queue" (Task #3
 // merged the former News + Articles admin queues). /admin/news redirects here.
@@ -122,6 +125,7 @@ export default function ArticlesQueuePage() {
     error: (m) => showToast({ kind: 'error', msg: m }),
     success: (m) => showToast({ kind: 'success', msg: m }),
   };
+  const superAdmin = isSuperAdminUser(useAuth()?.user);
   const [tab, setTab] = useState('submitted');
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -226,7 +230,12 @@ export default function ArticlesQueuePage() {
     toast.success('Comment deleted');
   };
 
+  // D775 (#2101): H19 drew no rail. A plain admin reviews here too, so the rail takes the viewer's tier, as ContractsDesk does.
+  const railProps = { note: 'Eadwyn reads the queue on this page. Approving, rejecting and scheduling stay yours.' };
+  const rail = superAdmin ? <WorkerRail {...railProps} workspace="Content queue" role="super_admin" data-testid="hq-content-queue-rail" /> : <WorkerRail {...railProps} workspace="Content queue" role="admin" data-testid="admin-content-queue-rail" />;
+
   return (
+    <RailFrame rail={rail} data-testid="content-queue-page">
     <div className="max-w-7xl mx-auto p-6">
       <ToastMessage toast={current} onDismiss={dismissToast} />
       <header className="mb-4">
@@ -400,5 +409,6 @@ export default function ArticlesQueuePage() {
 
       {prompt && <PromptModal {...prompt} onCancel={() => setPrompt(null)} />}
     </div>
+    </RailFrame>
   );
 }

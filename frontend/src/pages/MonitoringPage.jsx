@@ -8,6 +8,9 @@ import { Activity, AlertTriangle, RefreshCw, Sparkles, ShieldAlert, Zap, Server,
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, CartesianGrid } from 'recharts';
 import { api } from '../lib/api';
 import { useEscapeClose } from '../components/useEscapeClose';
+import { useAuth } from '../hooks/useAuthSync';
+import { isSuperAdminUser } from '../lib/shellRole';
+import { RailFrame, WorkerRail } from '../ui';
 
 const POLL_MS = 15000;
 
@@ -332,6 +335,7 @@ function MyActionsTab() {
 }
 
 export default function MonitoringPage() {
+  const superAdmin = isSuperAdminUser(useAuth()?.user);
   const [metrics, setMetrics] = useState(null);
   const [rateLimits, setRateLimits] = useState(null);
   const [anomalies, setAnomalies] = useState(null);
@@ -412,7 +416,13 @@ export default function MonitoringPage() {
 
   const s = metrics?.summary || {};
 
+  // D775 (#2101): H33 drew no rail. A plain admin watches the platform here too, so the rail takes the viewer's tier, as ContractsDesk does.
+  // The anomaly panel's model call is the page's own, not the rail's (D780 moves it onto the run path).
+  const railProps = { note: 'Eadwyn reads the health, queue and error lines on this page. Draining or retrying a queue stays yours.' };
+  const rail = superAdmin ? <WorkerRail {...railProps} workspace="Monitoring" role="super_admin" data-testid="hq-monitoring-rail" /> : <WorkerRail {...railProps} workspace="Monitoring" role="admin" data-testid="admin-monitoring-rail" />;
+
   return (
+    <RailFrame rail={rail} data-testid="monitoring-frame">
     <div className="max-w-7xl mx-auto space-y-6" data-testid="monitoring-page">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
@@ -638,6 +648,7 @@ export default function MonitoringPage() {
         onClose={() => setSelectedError(null)}
       />
     </div>
+    </RailFrame>
   );
 }
 
