@@ -83,16 +83,12 @@ function CardFrame({ card, pageHref = null, children }) {
   );
 }
 
-/** D757 §2.12 (#1929): what the channel is used by, and what the engine does with it. */
+/** D757 §2.12 (#1929): what the engine does with the channel. No Used by links (validateSourceWording.js). */
 export function ValidateLines({ provider }) {
   const w = Object.hasOwn(CHANNEL_WORDING, provider) ? CHANNEL_WORDING[provider] : null;
   if (!w) return null;
   return (
     <div className="flex flex-col gap-1 border-t border-axal-hairline pt-2 dark:border-gray-800" data-testid={`channel-validate-${provider}`}>
-      <p className={NOTE} data-testid={`channel-used-by-${provider}`}>
-        {'Used by: '}
-        {w.usedBy.map((u, i) => <span key={u.href}>{i > 0 && ' and '}<Link to={u.href} className="font-semibold text-axal-violet underline dark:text-violet-300">{u.label}</Link></span>)}
-      </p>
       <p className={NOTE} data-testid={`channel-engine-${provider}`}>{w.engine}</p>
     </div>
   );

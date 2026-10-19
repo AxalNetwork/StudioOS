@@ -356,8 +356,9 @@ async function decline(env: Env, thread: ThreadRow, row: ConsentRow, replyRef: s
   const aside = consentRequired(thread.provider)
     ? setAsideStatements(env, thread.id, 'declined', guard)
     : [stateStatement(env, thread.id, 'declined', guard)];
+  const { withdrawDigest } = await import('../validateEngine');
   try {
-    const [res] = await env.DB.batch([
+    const res = await withdrawDigest(env, Number(sessionId ?? 0), Number(thread.user_id), { onlyDeclined: true, before: [
       env.DB.prepare(
         `UPDATE channel_consents SET status = 'declined', source = 'interviewee_reply', method = 'chat_reply',
                 answered_at = datetime('now'), reply_ref_hash = ?, updated_at = datetime('now')
@@ -365,11 +366,11 @@ async function decline(env: Env, thread: ThreadRow, row: ConsentRow, replyRef: s
       ).bind(replyRef, row.id),
       env.DB.prepare(
         `UPDATE interview_sessions SET consent_status = 'declined', consent_method = NULL, consent_at = NULL,
-                updated_at = datetime('now') WHERE id = ? AND EXISTS (SELECT 1 FROM channel_consents WHERE id = ? AND reply_ref_hash = ? AND status = ?)`,
+                updated_at = datetime('now') WHERE id = ? AND consent_status <> 'declined' AND EXISTS (SELECT 1 FROM channel_consents WHERE id = ? AND reply_ref_hash = ? AND status = ?)`,
       ).bind(sessionId, row.id, replyRef, 'declined'),
       ...aside,
-    ]);
-    if (!Number(res?.meta?.changes ?? 0)) return ignored('duplicate');
+    ] });
+    if (!res.claim_changed) return ignored('duplicate');
   } catch (err) {
     if (isUnique(err)) return ignored('duplicate');
     throw err;
@@ -386,7 +387,7 @@ async function decline(env: Env, thread: ThreadRow, row: ConsentRow, replyRef: s
  */
 export async function withdraw(env: Env, thread: ThreadRow, row: ConsentRow, replyRef: string): Promise<ReplyOutcome> {
   const guard = { consentId: row.id, replyRef };
-  // Telegram (D756 §1.5): STOP stops further downloads; the chat's text and quotes keep D684's rule.
+  // Telegram keeps raw text (D756); D757 #1930 removes the digest and quotes.
   const whole = consentRequired(thread.provider);
   const tail = whole
     ? [
@@ -395,28 +396,24 @@ export async function withdraw(env: Env, thread: ThreadRow, row: ConsentRow, rep
       ...setAsideStatements(env, thread.id, 'withdrawn', guard),
     ]
     : [stateStatement(env, thread.id, 'withdrawn', guard)];
+  const { withdrawDigest } = await import('../validateEngine');
   try {
-    const [res] = await env.DB.batch([
+    const res = await withdrawDigest(env, Number(row.session_id ?? thread.session_id ?? 0), Number(thread.user_id), {
+      onlyDeclined: true, otherSessionIds: thread.session_id == null ? [] : [Number(thread.session_id)], before: [
       env.DB.prepare(
         `UPDATE channel_consents SET status = 'withdrawn', withdrawn_at = datetime('now'), reply_ref_hash = ?, updated_at = datetime('now')
           WHERE id = ? AND status = 'given'`,
       ).bind(replyRef, row.id),
       env.DB.prepare(
         `UPDATE interview_sessions SET consent_status = 'declined', consent_method = NULL, consent_at = NULL,
-                updated_at = datetime('now') WHERE id IN (?, ?) AND EXISTS (SELECT 1 FROM channel_consents WHERE id = ? AND reply_ref_hash = ? AND status = ?)`,
+                updated_at = datetime('now') WHERE id IN (?, ?) AND consent_status <> 'declined' AND EXISTS (SELECT 1 FROM channel_consents WHERE id = ? AND reply_ref_hash = ? AND status = ?)`,
       ).bind(row.session_id, thread.session_id, row.id, replyRef, 'withdrawn'),
       ...tail,
-    ]);
-    if (!Number(res?.meta?.changes ?? 0)) return ignored('duplicate');
+    ] });
+    if (!res.claim_changed) return ignored('duplicate');
   } catch (err) {
     if (isUnique(err)) return ignored('duplicate');
     throw err;
-  }
-  // D757 (#1898): the summary, the digest and the pending suggestions go with
-  // the consent. Loaded here, not at the top: validateEngine reaches the routes.
-  const { withdrawDigest } = await import('../validateEngine');
-  for (const sessionId of new Set([row.session_id, thread.session_id].filter((v): v is number => v != null))) {
-    await withdrawDigest(env, Number(sessionId), Number(thread.user_id));
   }
   return { outcome: 'withdrawn', consent: (await env.DB.prepare('SELECT * FROM channel_consents WHERE id = ?').bind(row.id).first<ConsentRow>())! };
 }
