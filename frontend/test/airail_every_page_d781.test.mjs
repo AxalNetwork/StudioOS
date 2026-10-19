@@ -17,7 +17,10 @@
  *   · the rail draws the switch, "Turn off AI assistance on this page"
  *     (D769, #2088), which D720 §6 puts on every page.
  * A file that is not on this base yet reaches nothing, so on the day this
- * lands no page is done.
+ * landed no page was done. D768 (#2133) then named all 204 keys at once,
+ * beside the matrix and the switch already on main, so every page passes
+ * these three checks and every list is empty (S1, 2026-10-19). Which of
+ * M1–M5's pages really draw their rail is part 2's render check to tell.
  *
  * A RATCHET (S1 on #2106). `NOT_YET` lists every page that is not done, under
  * the board task that finishes it (#2097 founder, #2098 investor, #2099
@@ -120,16 +123,12 @@ export function ratchet(keys, notYet, parts) {
  * done; never add one.
  */
 export const NOT_YET = {
-  2097: [
-  ],
-  2098: [
-  ],
-  2099: [
-  ],
-  2100: [
-  ],
-  2101: [
-  ],
+  // Every page passed the three checks once D768 (#2133) named all 204 keys.
+  2097: [],
+  2098: [],
+  2099: [],
+  2100: [],
+  2101: [],
 };
 
 async function repoParts() {
