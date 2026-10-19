@@ -1,4 +1,4 @@
--- 498 — GitHub feeds Solution design (D782, #2114).
+-- 499 — GitHub feeds Solution design (D782, #2114).
 --
 -- Three new tables, no change to an existing one.
 --
