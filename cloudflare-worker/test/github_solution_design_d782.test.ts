@@ -30,6 +30,7 @@ import {
 import { syncArrivals, syncArrivalsText } from '../src/integrations/githubFeeds.ts';
 import { encryptCredentials } from '../src/integrations/secrets.ts';
 import { d1Over } from './_d1_sqlite.mjs';
+import { addMvpStores } from './_github_mvp_stores.mjs';
 
 const JWT_SECRET = 'x'.repeat(64); // synthetic test fixture
 const mig = (n: string) => readFileSync(`cloudflare-worker/sql/migrations/${n}`, 'utf8');
@@ -80,6 +81,7 @@ function fixture() {
     INSERT INTO user_company_links VALUES (1, 10), (2, 20);
   `);
   for (const m of ['441_build_cycle_stores.sql', '445_connector_fed_items.sql', '455_core_systems_workspace.sql', '459_cycle_activity_convention.sql', '461_build_record_stores.sql', '500_github_solution_design.sql']) db.exec(mig(m));
+  addMvpStores(db);
   db.exec(`INSERT INTO integrations(id, uid, user_id, provider_key, status, auth_type, config_json)
       VALUES (31, 'gh-one', 1, 'github', 'active', 'oauth2', '${JSON.stringify({ repositories: ['acme/app'], project_id: 101 })}');
     INSERT INTO integration_companies(integration_id, company_id, enabled) VALUES (31, 10, 1);`);
