@@ -20,7 +20,6 @@
  */
 import type { Env } from '../../types';
 import { IntakeError, writableSession } from '../interviewIntake';
-import { enqueueSessionStructure } from '../sessionAutoStructure';
 import { PROVIDER_LABEL } from './types';
 import type { ChannelJobPayload } from './jobs';
 import type { ImportedSegment, MeetingProvider } from './types';
@@ -339,9 +338,8 @@ export async function importMeetingRef(
     ).bind(ref.interview_id, destination.id).first());
     const n = await storeWithoutReplacingRecording(env, ref, destination.id, got.segments, !recordedElsewhere);
     await setRefStatus(env, ref.id, 'imported', null);
-    // The transcript is in: the Worker AI proposes its findings (pain points
-    // and the rest) for the founder to review, without waiting for a button.
-    await enqueueSessionStructure(env, destination.id, Number(ref.user_id), 'call_imported');
+    // D765 (#2090), D720 §6: the transcript is in; the founder presses
+    // Summarise or Structure, since no member run starts without a press.
     return { status: 'imported', code: null, retryable: false, segments: n };
   } catch (e) {
     let code: MeetingErrorCode = 'import_failed';

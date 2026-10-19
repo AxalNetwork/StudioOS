@@ -12,6 +12,7 @@ import { branchOfUser } from '../../lib/shellRole';
 import { useAuth } from '../../hooks/useAuthSync';
 import { Unrecorded } from '../../ui';
 import DomainWizard from '../../components/licence/DomainWizard';
+import AdminBoardFrame from '../admin/AdminBoardFrame';
 
 /**
  * My Licence — /admin/my-licence. The subsidiary administrator's own view.
@@ -366,7 +367,7 @@ export function LicencePullNote({ pull }) {
   );
 }
 
-export default function MyLicencePage() {
+function MyLicencePageBody() {
   const { user } = useAuth();
   const onBranch = Boolean(branchOfUser(user));
   const [data, setData] = useState(null);
@@ -734,5 +735,14 @@ export default function MyLicencePage() {
         </p>
       </Panel>
     </div>
+  );
+}
+
+// D774 (#2100): S39 drew no rail. The board's page, in the Admin boards' frame.
+export default function MyLicencePage() {
+  return (
+    <AdminBoardFrame workspace="Settings" note="Eadwyn reads your licence on this page. It changes nothing." data-testid="admin-board-settings">
+      <MyLicencePageBody />
+    </AdminBoardFrame>
   );
 }
