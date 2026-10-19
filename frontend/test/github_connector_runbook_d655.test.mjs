@@ -40,16 +40,17 @@ function tomlVar(block, name) {
   const rest = WRANGLER.slice(start + block.length + 4);
   const end = rest.search(/\n\[/);
   const body = end < 0 ? rest : rest.slice(0, end);
-  const m = body.match(new RegExp(`^${name}\\s*=\\s*"([^"]*)"`, 'm'));
-  assert.ok(m, `[${block}] sets ${name}`);
-  return m[1];
+  const line = body.split('\n').find((l) => l.split('=')[0].trim() === name);
+  const value = line?.slice(line.indexOf('=') + 1).trim().match(/^"([^"]*)"$/)?.[1];
+  assert.ok(value !== undefined, `[${block}] sets ${name}`);
+  return value;
 }
 
 /** The text of one `## n.` section of the runbook. */
 function section(n) {
-  const start = RUNBOOK.search(new RegExp(`^## ${n}\\. `, 'm'));
+  const start = RUNBOOK.indexOf(`\n## ${n}. `);
   assert.ok(start >= 0, `the runbook has §${n}`);
-  const rest = RUNBOOK.slice(start + 3);
+  const rest = RUNBOOK.slice(start + 4);
   const end = rest.search(/^## /m);
   return end < 0 ? rest : rest.slice(0, end);
 }
