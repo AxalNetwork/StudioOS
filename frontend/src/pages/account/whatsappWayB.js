@@ -18,7 +18,11 @@ export const WAY_B = Object.freeze({
   sends: 'Axal only ever sends you the consent question and “Saved”, nothing else.',
   // The four settings wb1's `axalNumberReady` needs. Names only: a value is never drawn.
   settings: ['WHATSAPP_AXAL_ACCESS_TOKEN', 'WHATSAPP_AXAL_PHONE_NUMBER_ID', 'WHATSAPP_AXAL_WABA_ID', 'WHATSAPP_AXAL_DISPLAY_NUMBER'],
-  unsetNotice: 'Send to Axal is off on this deployment. It needs all four of these settings, and at least one is not set:',
+  unsetNotice: 'Send to Axal is off on this deployment. These settings are not set:',
+  // A 503 that names no setting: all four are set, and WhatsApp itself is off or in canary.
+  offNotice: 'Send to Axal is off on this deployment.',
+  agreed: 'Agreed beforehand',
+  waiting: 'Waiting for consent',
   unreadable: 'Your WhatsApp link could not be read. This is not a claim that you have none.',
 });
 
@@ -46,6 +50,41 @@ export function safeWaLink(href) {
   return /^https:\/\/wa\.me\/\d{6,15}\?text=LINK%20[A-Za-z0-9]{24}$/.test(s) ? s : null;
 }
 
+/**
+ * The setting names a Super Admin's 503 carries (#1939), in the Worker's order.
+ * Only the four known names are kept, so a value can never be drawn as one.
+ */
+export function missingSettings(error) {
+  const list = error?.data?.missing;
+  return Array.isArray(list) ? WAY_B.settings.filter((name) => list.includes(name)) : [];
+}
+
+/** Axal's public number and its plain wa.me link, from `GET /channels/whatsapp/link`; null unless both are the Worker's shape. */
+export function axalContact(view) {
+  const number = str(view?.axal_number);
+  const href = str(view?.axal_link);
+  if (!number || number.length > 32 || !/^https:\/\/wa\.me\/\d{6,15}$/.test(href)) return null;
+  return { number, href };
+}
+
+/**
+ * The captures still waiting for consent, newest first, from `GET /channels/whatsapp/captures`
+ * (wb2, #2006): each with how many items it holds and when it arrived. Anything else is left out.
+ */
+export function waitingCaptures(items) {
+  if (!Array.isArray(items)) return [];
+  return items
+    .filter((c) => c && c.status === 'waiting' && typeof c.uid === 'string' && c.uid)
+    .map((c) => ({ uid: c.uid, items: Number.isSafeInteger(Number(c.item_count)) ? Number(c.item_count) : 0, at: str(c.created_at) }));
+}
+
+/** "2 recordings, 3 Oct": what a waiting capture holds, for its row. */
+export function captureLine(c, fmt = defaultDate) {
+  const n = c.items === 1 ? '1 recording' : `${c.items} recordings`;
+  const t = Date.parse(c.at);
+  return Number.isFinite(t) ? `${n}, ${fmt(new Date(t))}` : n;
+}
+
 /** The refusal wb1 sends when Axal's number is not set up. */
 export function wayBUnavailable(error) {
   return error?.code === 'not_available' || (error?.status === 503 && !error?.code);
@@ -69,7 +108,9 @@ export function wayBState(read, { user = null, code = null, now = Date.now() } =
   if (!read || read.status === 'loading') return { state: 'loading' };
   if (read.status === 'error') {
     if (wayBUnavailable(read.error)) {
-      return superAdmin ? { state: 'hidden', notice: `${WAY_B.unsetNotice} ${WAY_B.settings.join(', ')}.` } : { state: 'hidden', notice: '' };
+      if (!superAdmin) return { state: 'hidden', notice: '' };
+      const missing = missingSettings(read.error);
+      return { state: 'hidden', notice: missing.length ? `${WAY_B.unsetNotice} ${missing.join(', ')}.` : WAY_B.offNotice };
     }
     return { state: 'unreadable', why: WAY_B.unreadable };
   }

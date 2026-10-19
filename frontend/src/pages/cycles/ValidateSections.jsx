@@ -3,6 +3,8 @@ import { Link, useSearchParams } from 'react-router-dom';
 import LogInterviewModal from '../../components/discovery/LogInterviewModal';
 import { NewHypothesisDialog, LinkPainDialog } from '../../workspaces/founder/ValidateDialogs';
 import { RECENTLY_MOVED_DAYS, daysBefore, historyReaches, startOfMonth } from '../../lib/verdictHistory';
+import { placementText } from '../founder/InterviewReview';
+import { NO_SUGGESTIONS, acceptAllBatches, heardLine, suggestionLine, suggestionsView } from './validatePhone';
 
 /**
  * D697 (#1659) — Validate's three bottom sections: what the Interviews, Pain
@@ -342,6 +344,98 @@ export function HypothesesSection({ parts, projectId, query, openDialog, onLoadL
             {linkError && <p role="alert" className={ERROR}>{linkError}</p>}
           </span>
         </div>
+      )}
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// D757 §2.7 (#1928) — From your interviews, on every Validate module but Verdict
+// ---------------------------------------------------------------------------
+
+/** A suggestion's own words: a finding's, else Interview review's for the older kinds. */
+export function suggestionText(s) {
+  return suggestionLine(s) ?? placementText(s);
+}
+
+/** One suggestion: what it says, the quote, where it was heard, and Accept, Edit and Discard. */
+function SuggestionRow({ s, busy, error, onAccept, onDiscard }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(() => JSON.stringify(s.payload || {}, null, 2));
+  const [bad, setBad] = useState(false);
+  const accept = () => {
+    if (!editing) return onAccept(s.id);
+    let payload;
+    try { payload = JSON.parse(draft); } catch { setBad(true); return undefined; }
+    setBad(false);
+    return onAccept(s.id, payload);
+  };
+  const heard = heardLine(s);
+  return (
+    <li className="flex flex-col gap-1.5 border-t border-axal-hairline py-2.5 first:border-t-0 dark:border-gray-800" data-testid="validate-suggestion" data-id={s.id}>
+      <span className="text-[13px] font-semibold text-axal-ink dark:text-gray-100">{suggestionText(s)}</span>
+      {s.quote && <blockquote className="m-0 border-l-2 border-violet-300 pl-2 text-[12px] italic text-axal-muted dark:border-violet-700 dark:text-gray-300">{s.quote}</blockquote>}
+      {s.href ? <Link to={s.href} className={LINK} data-testid="validate-suggestion-heard">{heard}</Link>
+        : <span className="text-[11px] text-axal-faint dark:text-gray-500" data-testid="validate-suggestion-heard">{heard}</span>}
+      {editing && (
+        <textarea aria-label="Edit before accepting" rows={4} value={draft} onChange={(e) => setDraft(e.target.value)} data-testid="validate-suggestion-draft"
+          className="w-full rounded-md border border-axal-hairline bg-white p-2 font-mono text-[12px] text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100" />
+      )}
+      {bad && <p role="alert" className={ERROR}>The edit is not valid JSON. Nothing was accepted.</p>}
+      {error && <p role="alert" className={ERROR}>{error} It is still suggested.</p>}
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className={BUTTON} disabled={busy} onClick={accept} data-testid="validate-suggestion-accept">{editing ? 'Save and accept' : 'Accept'}</button>
+        <button type="button" className={BUTTON} disabled={busy} onClick={() => { setEditing((x) => !x); setBad(false); }} data-testid="validate-suggestion-edit">{editing ? 'Cancel edit' : 'Edit'}</button>
+        <button type="button" className={BUTTON} disabled={busy} onClick={() => onDiscard(s.id)} data-testid="validate-suggestion-discard">Discard</button>
+      </div>
+    </li>
+  );
+}
+
+/**
+ * The module's pending interview suggestions (`parts.suggestions`, #1925), for
+ * writers only: a reader's read carries no `suggestions` key, and nothing is
+ * drawn. Each write is a callback from `CycleRoute.jsx`, which reloads the
+ * module after it. Accept all goes per session through #1925's route
+ * (`acceptAllBatches`); it never decides anything the founder did not press.
+ */
+export function FromYourInterviews({ parts, onAccept, onDiscard, onAcceptAll }) {
+  const view = suggestionsView(parts);
+  const [busy, setBusy] = useState(null);
+  const [errors, setErrors] = useState({});
+  const [allError, setAllError] = useState('');
+  if (view.state === 'hidden') return null;
+
+  const run = async (id, fn) => {
+    setBusy(id); setErrors((e) => ({ ...e, [id]: '' }));
+    try { await fn(); } catch (err) { setErrors((e) => ({ ...e, [id]: err?.data?.detail || err?.message || 'It could not be saved.' })); } finally { setBusy(null); }
+  };
+  const acceptAll = async () => {
+    setBusy('all'); setAllError('');
+    try {
+      const failed = await onAcceptAll(acceptAllBatches(view.rows));
+      if (failed > 0) setAllError(`${failed} could not be accepted and ${failed === 1 ? 'is' : 'are'} still suggested.`);
+    } catch (err) { setAllError(err?.message || 'Accept all could not run. Nothing more was accepted.'); } finally { setBusy(null); }
+  };
+
+  return (
+    <section className={SECTION} data-testid="validate-from-interviews" data-state={view.state} aria-labelledby="validate-from-interviews-title">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 id="validate-from-interviews-title" className="m-0 text-[15px] font-extrabold tracking-[-.015em] text-axal-ink dark:text-gray-100">From your interviews</h2>
+        {view.state === 'some' && (
+          <button type="button" className={BUTTON} disabled={busy != null} onClick={acceptAll} data-testid="validate-suggestions-accept-all">Accept all</button>
+        )}
+      </div>
+      {allError && <p role="alert" className={ERROR}>{allError}</p>}
+      {view.state === 'unreadable' && <p className={NOTE} data-testid="validate-suggestions-unreadable">Your interview suggestions could not be read. This is not a claim that there are none.</p>}
+      {view.state === 'none' && <p className={NOTE} data-testid="validate-suggestions-empty">{NO_SUGGESTIONS}</p>}
+      {view.state === 'some' && (
+        <ul className="m-0 list-none p-0">
+          {view.rows.map((s) => (
+            <SuggestionRow key={s.id} s={s} busy={busy != null} error={errors[s.id]}
+              onAccept={(id, payload) => run(id, () => onAccept(id, payload))} onDiscard={(id) => run(id, () => onDiscard(id))} />
+          ))}
+        </ul>
       )}
     </section>
   );

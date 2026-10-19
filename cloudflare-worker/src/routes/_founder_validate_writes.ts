@@ -21,6 +21,11 @@
  * body: it does more than assign (it creates groups by title, un-assigns, and
  * returns the whole view) and folding all of that in would be a refactor of a
  * working route rather than the extraction this needs.
+ *
+ * D757 (#1897): the pain alias and the pain severity also exist as statements
+ * (`upsertPainAliasStatement`, `upsertPainSeverityStatement`), so an accepted
+ * pain can write its mention, its severity and its theme in one batch, each
+ * guarded on the interview's `pains_json` as the batch's caller read it.
  */
 import type { Env } from '../types';
 import { normPhrase } from '../services/painGroups';
@@ -149,17 +154,53 @@ export async function upsertPainAlias(
   ).bind(groupId, projectId).first<{ id: number }>();
   if (!group) return false;
 
+  await upsertPainAliasStatement(env, projectId, groupId, display)!.run();
+  return true;
+}
+
+/**
+ * D757 (#1897) — the guard a batch's statements carry: the interview is this
+ * project's and its `pains_json` still holds what the caller read (`IS`, so a
+ * NULL list matches). When another write changed the list in between, every
+ * guarded statement writes nothing.
+ */
+export type PainsGuard = { interviewId: number; projectId: number; painsJson: string | null };
+
+/**
+ * The alias upsert as one statement. The `pain_groups` check keeps the tenancy
+ * rule inside the statement: a group that is not `projectId`'s writes nothing.
+ * Null for an empty phrase.
+ */
+export function upsertPainAliasStatement(
+  env: Env, projectId: number, groupId: number, phrase: string, guard?: PainsGuard,
+) {
+  const display = String(phrase || '').trim().slice(0, MAX_PAIN_PHRASE);
+  const norm = normPhrase(display);
+  if (!display || !norm) return null;
   const now = new Date().toISOString();
-  await env.DB.prepare(
+  if (!guard) {
+    return env.DB.prepare(
+      `INSERT INTO pain_group_aliases
+         (project_id, group_id, phrase_norm, display_phrase, created_at, updated_at)
+       SELECT ?, ?, ?, ?, ?, ?
+        WHERE EXISTS (SELECT 1 FROM pain_groups WHERE id = ? AND project_id = ?)
+       ON CONFLICT(project_id, phrase_norm)
+         DO UPDATE SET group_id = excluded.group_id,
+                       display_phrase = excluded.display_phrase,
+                       updated_at = excluded.updated_at`,
+    ).bind(projectId, groupId, norm, display, now, now, groupId, projectId);
+  }
+  return env.DB.prepare(
     `INSERT INTO pain_group_aliases
        (project_id, group_id, phrase_norm, display_phrase, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?)
+     SELECT ?, ?, ?, ?, ?, ?
+      WHERE EXISTS (SELECT 1 FROM pain_groups WHERE id = ? AND project_id = ?)
+        AND EXISTS (SELECT 1 FROM discovery_interviews WHERE id = ? AND project_id = ? AND pains_json IS ?)
      ON CONFLICT(project_id, phrase_norm)
        DO UPDATE SET group_id = excluded.group_id,
                      display_phrase = excluded.display_phrase,
                      updated_at = excluded.updated_at`,
-  ).bind(projectId, groupId, norm, display, now, now).run();
-  return true;
+  ).bind(projectId, groupId, norm, display, now, now, groupId, projectId, guard.interviewId, guard.projectId, guard.painsJson);
 }
 
 // ---------------------------------------------------------------------------
@@ -179,12 +220,36 @@ export async function upsertPainSeverity(
   phraseNorm: string,
   severity: string,
 ): Promise<void> {
-  await env.DB.prepare(
+  await upsertPainSeverityStatement(env, interviewId, phraseNorm, severity).run();
+}
+
+/**
+ * The severity upsert as one statement (D757, #1897). With `guard` it is an
+ * `INSERT … SELECT … WHERE EXISTS (…)`, so it writes nothing once the
+ * interview's `pains_json` is no longer what the caller read.
+ */
+export function upsertPainSeverityStatement(
+  env: Env,
+  interviewId: number,
+  phraseNorm: string,
+  severity: string,
+  guard?: PainsGuard,
+) {
+  if (!guard) {
+    return env.DB.prepare(
+      `INSERT INTO interview_pain_severities (interview_id, phrase_norm, severity)
+       VALUES (?, ?, ?)
+       ON CONFLICT(interview_id, phrase_norm)
+       DO UPDATE SET severity = excluded.severity, updated_at = datetime('now')`,
+    ).bind(interviewId, phraseNorm, severity);
+  }
+  return env.DB.prepare(
     `INSERT INTO interview_pain_severities (interview_id, phrase_norm, severity)
-     VALUES (?, ?, ?)
+     SELECT ?, ?, ?
+      WHERE EXISTS (SELECT 1 FROM discovery_interviews WHERE id = ? AND project_id = ? AND pains_json IS ?)
      ON CONFLICT(interview_id, phrase_norm)
      DO UPDATE SET severity = excluded.severity, updated_at = datetime('now')`,
-  ).bind(interviewId, phraseNorm, severity).run();
+  ).bind(interviewId, phraseNorm, severity, guard.interviewId, guard.projectId, guard.painsJson);
 }
 
 /** An interview's ICP fit: strong, partial or none, or null for not recorded. */
