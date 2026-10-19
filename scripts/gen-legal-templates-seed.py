@@ -1,22 +1,29 @@
 #!/usr/bin/env python3
 """Generate the D1 `legal_templates` seed + body-fill migrations.
 
-Two outputs:
-  * migration 085 (base seed) — only (re)written when the file is ABSENT, so the
-    already-deployed/applied 085 stays byte-frozen. Seeds the store from:
+Four outputs, each written once and frozen after that: a run skips any output
+that already exists, so re-running the generator never mutates an applied
+migration (D758). A run on main changes no file.
+  * migration 085 (base seed). Seeds the store from:
       A. Dev FastAPI plain-text templates (backend/app/api/routes/legal.py)
       B. Worker e-sign markdown bodies (cloudflare-worker/src/templates/legal/*.md)
       C. Stub catalog entries (is_stub=1, empty body) for catalog completeness
       D. Task #29 authored v1 bodies (FULL_BODY_V1), seeded as full bodies.
-  * migration 105 (Task #29 body-fill) — ALWAYS written. A stub-gated upsert of
-    the FULL_BODY_V1 bodies: `ON CONFLICT(slug) DO UPDATE ... WHERE is_stub = 1`,
-    so deployed stub rows pick up the authored bodies without clobbering rows an
-    admin has already edited (is_stub=0).
+  * migration 105 (Task #29 body-fill). A stub-gated upsert of the
+    FULL_BODY_V1 bodies: `ON CONFLICT(slug) DO UPDATE ... WHERE is_stub = 1`.
+  * migration 113 (legal-architecture refresh). An unconditional upsert of
+    every `.md`-backed body (all_md_bodies).
+  * migration 484 (D758). Fills every active row that has no text from its
+    file, as a new version with the empty one kept in history, and adds the
+    Operating Partner Agreement (Spin-Out Lab) as a counsel stub.
 
-Re-run after changing any source:
+This list is the one slug-to-file map: all_md_bodies() plus SEED_SKELETON_V1.
+
+Run:
     .venv/bin/python scripts/gen-legal-templates-seed.py
 
-085 uses INSERT OR IGNORE (idempotent); 105 uses a stub-gated upsert.
+085 uses INSERT OR IGNORE (idempotent); 105 uses a stub-gated upsert; 484 is
+gated on an empty body, so a second run changes nothing.
 """
 import os
 import re
@@ -26,6 +33,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "cloudflare-worker", "sql", "migrations", "085_seed_legal_templates.sql")
 OUT_105 = os.path.join(ROOT, "cloudflare-worker", "sql", "migrations", "105_fill_legal_template_bodies.sql")
 OUT_113 = os.path.join(ROOT, "cloudflare-worker", "sql", "migrations", "113_refresh_legal_template_bodies.sql")
+OUT_484 = os.path.join(ROOT, "cloudflare-worker", "sql", "migrations", "484_library_coded_templates.sql")
 MD_DIR = os.path.join(ROOT, "cloudflare-worker", "src", "templates", "legal")
 
 VALID_CATEGORIES = {"gp", "fund", "portfolio", "compliance"}
@@ -117,6 +125,62 @@ NEW_BODY_V1 = [
     ("ip_background_schedule",                "ip_background_schedule_v1.md",                "IP Background Schedule",                           "portfolio"),
     ("data_access_acknowledgment_admin",      "data_access_acknowledgment_admin_v1.md",      "Data Access Acknowledgment (Admin)",               "compliance"),
 ]
+
+# --- F. D758 — the 24 old FastAPI plain-text templates (source A), which until
+# D758 lived only inside migration 085. Each file holds the store text exactly
+# as 085 seeded it (469 changed none of them), byte for byte, with no newline
+# added at the end, and keeps the four flat tokens the incorporation wizard
+# fills. Seed skeletons for counsel to expand (LEGAL_REVIEW.md). NOT part of
+# all_md_bodies(), so nothing emits a force-upsert for them; only 484 reads it.
+SEED_SKELETON_V1 = [
+    # slug,                              md file,                                    title,                                                category
+    ("aml_kyc",                          "aml_kyc_v1.md",                            "AML/KYC Policy",                                     "compliance"),
+    ("ee_e_residency_application_kit",   "ee_e_residency_application_kit_v1.md",     "Estonia e-Residency Application Kit",                "compliance"),
+    ("ein_application_kit",              "ein_application_kit_v1.md",                "IRS EIN Application Kit (Form SS-4)",                "compliance"),
+    ("form_adv",                         "form_adv_v1.md",                           "Form ADV / ERA Registration",                        "compliance"),
+    ("section_83b",                      "section_83b_v1.md",                        "Section 83(b) Election",                             "compliance"),
+    ("sg_acra_form_45_kit",              "sg_acra_form_45_kit_v1.md",                "ACRA Filing Kit \u2014 BizFile Incorporation Pack",   "compliance"),
+    ("uk_form_in01_kit",                 "uk_form_in01_kit_v1.md",                   "UK IN01 Filing Kit (Companies House)",               "compliance"),
+    ("lpa",                              "lpa_v1.md",                                "Limited Partnership Agreement (LPA)",                "fund"),
+    ("mgmt_company",                     "mgmt_company_v1.md",                       "Management Company Agreement",                       "fund"),
+    ("ppm",                              "ppm_v1.md",                                "Private Placement Memorandum (PPM)",                 "fund"),
+    ("subscription",                     "subscription_v1.md",                       "Subscription Agreement",                             "fund"),
+    ("bylaws",                           "bylaws_v1.md",                             "Corporate Bylaws",                                   "portfolio"),
+    ("certificate_of_incorporation_de",  "certificate_of_incorporation_de_v1.md",    "Certificate of Incorporation (Delaware C-Corp)",     "portfolio"),
+    ("ee_articles_of_association",       "ee_articles_of_association_v1.md",         "Articles of Association (Estonia O\u00dc)",          "portfolio"),
+    ("equity_split",                     "equity_split_v1.md",                       "Equity Split Agreement",                             "portfolio"),
+    ("ip_license",                       "ip_license_v1.md",                         "IP License Agreement",                               "portfolio"),
+    ("safe",                             "safe_v1.md",                               "SAFE Agreement",                                     "portfolio"),
+    ("sg_constitution",                  "sg_constitution_v1.md",                    "Company Constitution (Singapore Pte Ltd)",           "portfolio"),
+    ("spa",                              "spa_v1.md",                                "Stock Purchase Agreement (SPA)",                     "portfolio"),
+    ("stock_purchase_agreement",         "stock_purchase_agreement_v1.md",           "Founders' Restricted Stock Purchase Agreement",      "portfolio"),
+    ("term_sheet",                       "term_sheet_v1.md",                         "Term Sheet",                                         "portfolio"),
+    ("uk_articles_of_association",       "uk_articles_of_association_v1.md",         "Articles of Association (UK Ltd) \u2014 Model Articles", "portfolio"),
+    ("uk_memorandum_of_association",     "uk_memorandum_of_association_v1.md",       "Memorandum of Association (UK Ltd)",                 "portfolio"),
+    ("voting_rights",                    "voting_rights_v1.md",                      "Voting & Investors' Rights Agreement",               "portfolio"),
+]
+
+# D705's successors (D705.md, the file table): the same body with the Fund's
+# legal name in place of the old one. A dict, not tuples, so nothing that reads
+# this file's tuples reads it as a slug map.
+OLD_FUND_NAME = "Axal VC Fund I, LP"
+D705_SUCCESSOR = {
+    "accreditation_v1.md": "accreditation_v2.md",
+    "investor_nda_v1.md": "investor_nda_v2.md",
+    "mentor_disclaimer_v1.md": "mentor_disclaimer_v2.md",
+    "partner_msa_v1.md": "partner_msa_v2.md",
+    "privacy_v1.md": "privacy_v2.md",
+    "tos_v1.md": "tos_v3.md",
+    "carried_interest_v1.md": "carried_interest_v2.md",
+    "ic_charter_v1.md": "ic_charter_v2.md",
+    "investor_subscription_inst_v1.md": "investor_subscription_inst_v2.md",
+    "partner_capital_v1.md": "partner_capital_v2.md",
+    "partner_services_v1.md": "partner_services_v2.md",
+}
+
+# D758 — the canvas's "Operating Partner Agreement (Spin-Out Lab)", added by
+# 484 as a counsel stub (no body; COUNSEL_DRAFT_SLUGS in templateFormat.ts).
+OPERATING_PARTNER_STUB = ("operating_partner_agreement_spin_out_lab", "Operating Partner Agreement (Spin-Out Lab)", "gp")
 
 # All `.md`-backed slugs, de-duplicated with FULL_BODY_V1 taking precedence over
 # the older ESIGN_MD mappings (e.g. mentor_nda_axal -> the fuller *_axal body).
@@ -296,7 +360,14 @@ def gen_refresh():
     Force-upserts the clean clause-only body for every `.md`-backed template so
     deployed D1 rows (which carry a mix of older plain-text and raw-Markdown
     bodies, plus inline title/preamble/signature) are realigned with the
-    static-chrome renderer. ALWAYS regenerated from the `.md` sources."""
+    static-chrome renderer.
+
+    Frozen once applied, like 085 and 105: 113 is skipped when it exists, so a
+    run never rewrites it from `.md` files edited since (D758; D705 recorded
+    the hazard)."""
+    if os.path.exists(OUT_113):
+        print(f"Skip {os.path.relpath(OUT_113, ROOT)} (exists; frozen — not regenerated)")
+        return
     rows = [force_upsert_sql(slug, title, category, read_md(fname))
             for slug, fname, title, category in all_md_bodies()]
 
@@ -316,10 +387,110 @@ def gen_refresh():
     print(f"Wrote {len(rows)} body-refresh upserts -> {os.path.relpath(OUT_113, ROOT)}")
 
 
+HEADER_484 = (
+    "-- 484 \u2014 every library row with no text takes its coded template (D758, #1861).\n"
+    "-- Source: scripts/gen-legal-templates-seed.py (gen_484) \u2014 DO NOT hand-edit.\n"
+    "--\n"
+    "-- WHAT IT FILLS. Every catalog row that has a file under\n"
+    "-- `src/templates/legal/`: the 42 `.md`-backed rows of all_md_bodies() and the\n"
+    "-- 24 seed skeletons of SEED_SKELETON_V1. Each body below is copied from the\n"
+    "-- repo file named above its statements; no text is written here.\n"
+    "--\n"
+    "-- THE GATE. `is_active = 1 AND length(trim(body_md)) = 0`. A row with any\n"
+    "-- text is never touched, so an admin's edit and every body production\n"
+    "-- already holds stay as they are. A soft-deleted row is never touched.\n"
+    "--\n"
+    "-- A NEW VERSION, NEVER AN IN-PLACE EDIT, as 469 and the template editor do:\n"
+    "--   1. the row as it stands is copied into `legal_template_versions`\n"
+    "--      (INSERT OR IGNORE on (template_id, version); `created_by` is the row's\n"
+    "--      `updated_by`, and `doc_kind` and `axal_party` are kept);\n"
+    "--   2. `body_md`, `merge_fields` (the body's tokens, sorted), `is_stub = 0`,\n"
+    "--      `version + 1` and `updated_at` change. Nothing else does: not the\n"
+    "--      title, category, kind, party or `updated_by`. No person made this.\n"
+    "--\n"
+    "-- RE-RUNNABLE. After a run no row matches the gate, so a second run changes\n"
+    "-- nothing.\n"
+    "--\n"
+    "-- PRODUCTION. D706 read production with SELECT only: 25 active rows with a\n"
+    "-- file held `is_stub = 1` and an empty body (D706.md). This fill is correct\n"
+    "-- whatever production holds: it fills those 25, and finds nothing to do on a\n"
+    "-- row that has text.\n"
+    "--\n"
+    "-- THE FUND'S NAME. Where a mapped file prints the old name, D705's successor\n"
+    "-- fills the row instead: for the 25 that is partner_capital_v2.md and\n"
+    "-- investor_subscription_inst_v2.md. The generator refuses to write a body\n"
+    "-- that prints the old name.\n"
+    "--\n"
+    "-- THE NEW STUB. The Operating Partner Agreement (Spin-Out Lab) gets a catalog\n"
+    "-- row as a counsel stub (no body), inserted only when its slug is absent.\n"
+    "--\n"
+    "-- Data only. Nothing here can move money, call a provider or send anything.\n"
+    "--\n"
+    "-- No BEGIN/COMMIT.\n\n"
+)
+
+
+def current_file(fname):
+    """The file whose text fills a row: D705's successor when `fname` prints the old Fund name."""
+    if OLD_FUND_NAME in read_md(fname):
+        assert fname in D705_SUCCESSOR, f"{fname} prints {OLD_FUND_NAME!r} and has no D705 successor"
+        return D705_SUCCESSOR[fname]
+    return fname
+
+
+GATE = "is_active = 1 AND length(trim(body_md)) = 0"
+
+
+def fill_sql(slug, fname, body):
+    """History first, then the new version: both gated on an active row with no text."""
+    mf = json.dumps(merge_fields(body))
+    return (
+        f"-- {slug} <- {fname}\n"
+        "INSERT OR IGNORE INTO legal_template_versions (template_id, slug, version, title, category, body_md, merge_fields, created_by, doc_kind, axal_party)\n"
+        "SELECT id, slug, version, title, category, body_md, merge_fields, updated_by, doc_kind, axal_party\n"
+        f"  FROM legal_templates\n WHERE slug = '{esc(slug)}' AND {GATE};\n"
+        "UPDATE legal_templates\n"
+        f"   SET body_md = '{esc(body)}',\n"
+        f"       merge_fields = '{esc(mf)}',\n"
+        "       is_stub = 0,\n"
+        "       version = version + 1,\n"
+        "       updated_at = CURRENT_TIMESTAMP\n"
+        f" WHERE slug = '{esc(slug)}' AND {GATE};"
+    )
+
+
+def gen_484():
+    """D758 — fill every active row with no text from its file, and add the
+    Operating Partner Agreement stub. Written once; skipped when it exists."""
+    if os.path.exists(OUT_484):
+        print(f"Skip {os.path.relpath(OUT_484, ROOT)} (exists; frozen — not regenerated)")
+        return
+    rows = []
+    for slug, fname, _title, _category in all_md_bodies() + SEED_SKELETON_V1:
+        src = current_file(fname)
+        body = read_md(src)
+        assert OLD_FUND_NAME not in body, f"{slug}: {src} prints the old Fund name"
+        rows.append(fill_sql(slug, src, body))
+    op_slug, op_title, op_category = OPERATING_PARTNER_STUB
+    assert op_category in VALID_CATEGORIES
+    rows.append(
+        "-- D758 decision 4: the Operating Partner Agreement (Spin-Out Lab), a counsel stub.\n"
+        "INSERT OR IGNORE INTO legal_templates (slug, title, category, body_md, merge_fields, version, is_active, is_stub)\n"
+        f"SELECT '{esc(op_slug)}', '{esc(op_title)}', '{op_category}', '', '[]', 1, 1, 1\n"
+        f" WHERE NOT EXISTS (SELECT 1 FROM legal_templates WHERE slug = '{esc(op_slug)}');"
+    )
+    with open(OUT_484, "w", encoding="utf-8") as fh:
+        fh.write(HEADER_484)
+        fh.write("\n\n".join(rows))
+        fh.write("\n")
+    print(f"Wrote {len(rows) - 1} gated fills + 1 stub row -> {os.path.relpath(OUT_484, ROOT)}")
+
+
 def main():
     gen_085()
     gen_105()
     gen_refresh()
+    gen_484()
 
 
 if __name__ == "__main__":

@@ -186,6 +186,33 @@ ROUND_CALLS_ENABLED = "false"
 # Authorized JavaScript origins on the GOOGLE_AUTH_CLIENT_ID client: first
 # "canary", checked on both hosts, then "on". Rollback: "off" and deploy.
 GOOGLE_SIGNIN_POPUP = "off"
+# D754 / D756 — who may use the interview chat channels once their platform
+# secrets are set (services/channels/connections.ts). "on": every member;
+# "canary": Super Admins only, so the owner can connect and check a channel
+# while members still read "Not available yet"; "off": nobody, and the
+# channel's webhook verifies, answers 200 and stores nothing. An absent, empty
+# or unknown value reads as "canary". Missing secrets still switch a channel
+# off whatever this says. Ships "canary"; S01 moves a channel to "on" only
+# after the owner's live check, in one PR that changes BOTH this block and the
+# production vars block below. Rollback: "off" and deploy. Nothing reads
+# these until D754 w1 (#1892) merges.
+WHATSAPP_CHANNEL = "canary"
+TELEGRAM_CHANNEL = "canary"
+# D754 way B — Axal's own WhatsApp number in E.164, for the wa.me link a member
+# opens to link their WhatsApp and send recordings. Empty until the owner has
+# set up the number (#1008 item 31); S01 then sets it in BOTH vars blocks.
+WHATSAPP_AXAL_DISPLAY_NUMBER = ""
+# D757 — who can authorize Axal's Zoom app. "own_account" (the default):
+# only users of Axal's own Zoom account, as Zoom allows for an unpublished
+# app; "beta" once Zoom approves Beta Test sharing; "public" once the app is
+# published on the Zoom Marketplace. The Zoom connector page words follow it.
+# Nothing reads this or MEET_TRANSCRIPTS_ENABLED until D757's tasks merge.
+ZOOM_APP_AUDIENCE = "own_account"
+# D757 — "on" offers Google Meet transcript import; "off" (also when unset)
+# hides "Allow transcript import" and the connect route answers 503. "on" only
+# after the owner has added the meetings.space.readonly scope to the Calendar
+# OAuth client, passed Google's verification and enabled the Meet REST API.
+MEET_TRANSCRIPTS_ENABLED = "off"
 # D681 (#1555): StudioOS MCP and OAuth; a missing OAUTH_KV still keeps them off.
 # The lasting switch-off is one PR to main that sets this flag and production's
 # MCP_SERVER_ENABLED to "false", and HQ_MCP_FLAG in
@@ -519,6 +546,13 @@ ENVIRONMENT       = "production"
 ROUND_CALLS_ENABLED = "false"
 # D722 — see top-level [vars]. Mirrored because env tables don't inherit.
 GOOGLE_SIGNIN_POPUP = "off"
+# D754 / D756 / D757 — see top-level [vars]. Mirrored because env tables
+# don't inherit.
+WHATSAPP_CHANNEL = "canary"
+TELEGRAM_CHANNEL = "canary"
+WHATSAPP_AXAL_DISPLAY_NUMBER = ""
+ZOOM_APP_AUDIENCE = "own_account"
+MEET_TRANSCRIPTS_ENABLED = "off"
 # D681 (#1555): StudioOS MCP and OAuth; a missing OAUTH_KV still keeps them off.
 # The lasting switch-off is one PR to main that sets this flag and the top-level
 # MCP_SERVER_ENABLED to "false", and HQ_MCP_FLAG in

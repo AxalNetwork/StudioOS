@@ -48,10 +48,10 @@ function between(src, a, b) {
 }
 
 test('the pad exports a PNG data URL and hands it to the submit', () => {
-  const pad = between(page, 'const handleSubmit = () => {', 'return (');
+  const pad = between(page, 'const handleAdopt = () => {', 'return (');
   assert.match(pad, /const dataUrl = canvas\.toDataURL\('image\/png'\);/,
     'the pad no longer exports a PNG');
-  assert.match(pad, /onSubmit\(dataUrl\);/, 'the pad no longer passes its export to the submit');
+  assert.match(pad, /onAdopt\(dataUrl\);/, 'the pad no longer passes its export to the submit');
   // An empty canvas is never submitted: `hasInk` is set on the first stroke, so
   // a blank white PNG cannot become somebody's signature.
   assert.match(pad, /if \(!canvas \|\| !hasInk\) return;/,
