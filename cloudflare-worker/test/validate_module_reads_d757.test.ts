@@ -287,6 +287,16 @@ test('4: the Verdict line counts interview evidence since the last decision, and
   assert.deepEqual(await interviewEvidenceSince(env, PROJECT), { ids: ['evidence-4', 'evidence-5'], contradicting: 1, since: '2026-10-05 12:00:00' });
   const card = await verdictCard(ctx);
   assert.deepEqual(card.interview_evidence, { count: 2, contradicting: 1, text: '2 new pieces of interview evidence since your last decision, 1 contradicting' });
+  // A pain-link item is as new as the later of its link and its interview.
+  db.prepare("INSERT INTO hypothesis_pain_links (id, hypothesis_id, pain_group_id, direction, created_at) VALUES (81, 31, 41, 'supports', '2026-10-01 00:00:00')").run();
+  db.prepare("UPDATE discovery_interviews SET created_at = CASE id WHEN ? THEN '2026-10-07 00:00:00' ELSE '2026-09-01 00:00:00' END").run(IV);
+  const pains = [{ id: `pain-81-${IV}`, kind: 'interview', direction: 'supports' }, { id: `pain-81-${IV2}`, kind: 'interview', direction: 'supports' }] as any;
+  assert.deepEqual((await interviewEvidenceSince(env, PROJECT, pains)).ids, [`pain-81-${IV}`]);
+  // A current verdict for the venture: the ok card carries the line too.
+  db.prepare("INSERT INTO validation_decisions (project_id, decision, reasoning, decided_by, state, decided_at) VALUES (?, 'persevere', 'r', ?, 'given', '2026-10-05 12:00:00')").run(PROJECT, ME);
+  const ok = await verdictCard(ctx);
+  assert.equal(ok.state, 'ok');
+  assert.equal(ok.interview_evidence!.count, 2);
   assert.equal(interviewEvidenceLine(1, 0, 'x'), '1 new piece of interview evidence since your last decision, 0 contradicting');
 });
 
@@ -339,13 +349,17 @@ test('5: three suggestions, one with a bad payload: two accepted, one back to pe
   ]);
   // A payload its writer refuses: the claim is taken, the writer says no, and it goes back.
   db.prepare("UPDATE validate_proposals SET payload_json = '{\"trigger\":\"\"}', kind = 'buying_trigger' WHERE id = ?").run(urgency);
-  const [extra] = await propose(env, db, [{ kind: 'objection', payload: { about: 'price', detail: 'Too expensive' }, ...Q.ledgerly }]);
+  const [extra, icp] = await propose(env, db, [
+    { kind: 'objection', payload: { about: 'price', detail: 'Too expensive' }, ...Q.ledgerly },
+    // Another module's suggestion is not this module's to accept.
+    { kind: 'firmographic', payload: { attribute: 'tools', value: 'Spreadsheets' }, ...Q.hand },
+  ]);
   const r = await acceptAll(env, ME, SESSION, { slug: 'demand-signals' });
   assert.equal(r.status, 200, JSON.stringify(r.json));
   assert.deepEqual(r.json.results.map((x: any) => [x.id, x.ok, x.error ?? null]), [[timing, true, null], [urgency, false, 'writer_refused'], [extra, true, null]]);
   assert.equal(r.json.results[1].detail, 'That is not a valid value for this finding');
   assert.deepEqual([r.json.accepted, r.json.remaining], [2, 0]);
-  assert.deepEqual([status(db, timing), status(db, urgency), status(db, extra)], ['accepted', 'pending', 'accepted']);
+  assert.deepEqual([status(db, timing), status(db, urgency), status(db, extra), status(db, icp)], ['accepted', 'pending', 'accepted', 'pending']);
   assert.equal(findingsCount(db), 2);
   // Each one ran its own writer, with its own log row.
   assert.equal(db.prepare("SELECT COUNT(*) AS n FROM activity_logs WHERE action = 'interview_finding_written'").get().n, 2);
@@ -377,9 +391,12 @@ test('5: another founder\'s session answers 404; ids outside the session are not
   assert.equal((await acceptAll(env, PARTNER, SESSION, { slug: 'demand-signals' })).status, 404);
   assert.equal((await acceptAll(env, ME, 999, { slug: 'demand-signals' })).status, 404);
   assert.equal(status(db, mine), 'pending');
-  const r = await acceptAll(env, ME, SESSION, { ids: [theirs] });
-  assert.deepEqual(r.json.results, [{ id: theirs, ok: false, error: 'not_found', detail: 'This placement is not in this session.' }]);
-  assert.equal(status(db, theirs), 'pending');
+  // Another venture's, and this venture's from another session: neither is this session's.
+  const [sibling] = await propose(env, db, [{ kind: 'timing', payload: { when: 'soon' }, ...Q.pay }], { session: SESSION2, interview: IV2 });
+  const r = await acceptAll(env, ME, SESSION, { ids: [theirs, sibling] });
+  const nf = { ok: false, error: 'not_found', detail: 'This placement is not in this session.' };
+  assert.deepEqual(r.json.results, [{ id: theirs, ...nf }, { id: sibling, ...nf }]);
+  assert.deepEqual([status(db, theirs), status(db, sibling)], ['pending', 'pending']);
 });
 
 test('5: 51 ids are refused before anything runs; a module with 51 takes 50 and says one remains', async () => {
