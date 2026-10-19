@@ -118,6 +118,8 @@ export async function draftSummary(
     task: 'publication',
     userId,
     surface: AI_SURFACE.adminPublications,
+    // D765: the admin's press on Publications.
+    rail: { page: 'publications', option: 'draft:publication' },
     systemPrompt,
     messages: [{ role: 'user', content: userMessage }],
     maxTokens: 600,
