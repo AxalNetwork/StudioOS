@@ -28,6 +28,7 @@ export * from './api/eadwyn.js';
 export * from './api/fundAdmin.js';
 export * from './api/fundFees.js';
 export * from './api/fundLedger.js';
+export * from './api/fundNotices.js';
 export * from './api/fundPerformance.js';
 export * from './api/fundReporting.js';
 export * from './api/fundReports.js';
@@ -3944,15 +3945,9 @@ export const api = {
     request(`/introductions/propositions/${encodeURIComponent(uid)}/decline`, { method: 'POST' }),
   introCredits: () => request('/introductions/credits'),
   introCreditHistory: () => request('/introductions/credits/history'),
-  introPacks: () => request('/introductions/packs'),
-  // Mint the PaymentIntent for a credit pack (10 / 100 / 1000); the returned
-  // client_secret feeds <AxalCheckout clientSecret={…}>. Fulfilment happens
-  // via the Stripe webhook, idempotent on the intent id.
-  introCreditsIntent: (pack, nonce) =>
-    request('/payments/intro-credits/intent', {
-      method: 'POST',
-      body: JSON.stringify({ pack, nonce }),
-    }),
+  // D755 (#1915): intro credit packs are no longer sold, so `introPacks` and
+  // `introCreditsIntent` are gone. Credits already bought still spend and show
+  // in `introCreditHistory`.
 
   // The Secure Introductions (Task #12) family that used to sit here — a
   // privacy-preserving flow under its own `/network-introductions/*` prefix —
