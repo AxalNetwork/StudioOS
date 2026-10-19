@@ -56,7 +56,13 @@ const FIRST = {
   microsoft: { configured: false, connected: false },
   linkedin: null,
 };
-const CAT = buildCatalogue({ providers: PROVIDERS, items: ITEMS, waitlist: [{ provider_key: 'affinity' }], firstParty: FIRST });
+// D753 (#1955): the first-party rows' words come from the Worker, not `FIRST_PARTY`.
+const FIRST_CARDS = [
+  { key: 'google', category: 'Calendar and workspace', made_by: { name: 'Google' }, description: 'Google Calendar description.', capabilities: ['Calendar', 'Gmail invites'] },
+  { key: 'microsoft', category: 'Calendar and workspace', made_by: { name: 'Microsoft' }, description: 'Microsoft 365 description.', capabilities: ['Calendar', 'Two-way sync'] },
+  { key: 'linkedin', category: 'Data', made_by: { name: 'LinkedIn' }, description: 'LinkedIn description.', capabilities: ['Sign in with LinkedIn'] },
+];
+const CAT = buildCatalogue({ providers: PROVIDERS, items: ITEMS, waitlist: [{ provider_key: 'affinity' }], firstParty: FIRST, firstPartyCards: FIRST_CARDS });
 const byKey = (k) => CAT.find((p) => p.key === k);
 const ready = (catalogue = CAT, extra = {}) => ({ status: 'ready', catalogue, items: [], itemsFailed: false, reload() {}, ...extra });
 
@@ -305,7 +311,7 @@ test('yours: the table with every column, a Needs-attention reason, and the coun
 });
 
 test('yoursEmpty, loading, unreadable, noresults and an unread connection list each say their sentence', () => {
-  const none = buildCatalogue({ providers: PROVIDERS, items: [], firstParty: {} });
+  const none = buildCatalogue({ providers: PROVIDERS, items: [], firstParty: {}, firstPartyCards: FIRST_CARDS });
   assert.match(text(html(h(ConnectorsView, { data: ready(none) }))), /No connectors yet\. Connect Stripe to see your revenue, or your calendar to book interviews\. Browse connectors/);
   assert.match(text(html(h(ConnectorsView, { data: { status: 'loading', catalogue: [], reload() {} } }))), /Loading connectors…/);
   assert.match(text(html(h(ConnectorsView, { data: { status: 'unreadable', catalogue: [], reload() {} } }))), /The catalogue could not be read\. This is not a claim that you have no connectors\./);
