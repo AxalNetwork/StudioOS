@@ -21,6 +21,7 @@ const m435 = readFileSync('cloudflare-worker/sql/migrations/435_connector_compan
 const m445 = readFileSync('cloudflare-worker/sql/migrations/445_connector_fed_items.sql', 'utf8');
 const m001 = readFileSync('cloudflare-worker/sql/migrations/001_progress_tables.sql', 'utf8');
 const m153 = readFileSync('cloudflare-worker/sql/migrations/153_mvp_features.sql', 'utf8');
+const m499 = readFileSync('cloudflare-worker/sql/migrations/499_github_roadmap.sql', 'utf8');
 import { d1Over } from './_d1_sqlite.mjs';
 
 function kv() {
@@ -50,7 +51,7 @@ async function fixture() {
     INSERT INTO company_profiles VALUES (10), (20);
     INSERT INTO user_company_links VALUES (1, 10), (1, 20), (2, 10);
     INSERT INTO projects VALUES (100, 10, NULL), (200, 20, NULL);`);
-  db.exec(m435); db.exec(m445); db.exec(m001); db.exec(m153);
+  db.exec(m435); db.exec(m445); db.exec(m001); db.exec(m153); db.exec(m499);
   const KV = kv();
   const env = { DB: d1Over(db), JWT_SECRET, ENVIRONMENT: 'development', RATE_LIMITS: KV, GITHUB_APP_CLIENT_ID: 'Iv1.fixture', GITHUB_APP_CLIENT_SECRET: 'fixture' } as any;
   const enc = await encryptCredentials(env, 'gh1', { access_token: 'ghu_fixture' });
@@ -76,6 +77,7 @@ function fakeGithub(opts: { perms?: Record<string, string>; issues?: any[]; pull
     if (url.pathname === '/repos/acme/app/issues') return j(opts.issues ?? []);
     if (url.pathname === '/repos/acme/app/pulls') return j(opts.pulls ?? []);
     if (url.pathname === '/repos/acme/app/releases') return j(opts.releases ?? []);
+    if (url.pathname === '/repos/acme/app/milestones') return j([]);
     return new Response('{}', { status: 404 });
   }) as any;
   return { calls, restore: () => { globalThis.fetch = real; } };
@@ -183,10 +185,11 @@ test('sync lands issues on the roadmap and pull requests on must-haves, once; pr
     const fed = await call(env, 'GET', '/api/connectors/gh1/fed');
     assert.equal(fed.status, 200);
     const by = Object.fromEntries(fed.body.modules.map((m: any) => [m.module, m]));
+    // D782 (#2111): the release is a row now, so all three are linked.
     assert.equal(by.product_roadmap.count, 3);
-    assert.equal(by.product_roadmap.linked, 2);
-    assert.equal(by.product_roadmap.unlanded, 1, 'the release arrived with no store to land in');
-    assert.match(by.product_roadmap.reason, /releases have none/);
+    assert.equal(by.product_roadmap.linked, 3);
+    assert.equal(by.product_roadmap.unlanded, 0);
+    assert.equal(by.product_roadmap.reason, null);
     assert.equal(by.prototype_mvp.count, 2);
     assert.equal(by.prototype_mvp.linked, 2);
     assert.equal(by.prototype_mvp.reason, null);
