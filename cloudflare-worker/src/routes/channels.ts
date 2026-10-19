@@ -283,7 +283,7 @@ channels.post('/telegram/link/:uid/confirm', member(async (c, user) => {
 const WA_LINK_CODES_PER_HOUR = 10;
 
 channels.post('/whatsapp/link', member(async (c, user) => {
-  if (!waLink.axalNumberReady(c.env)) return no(c, 503, 'not_available');
+  if (!waLink.axalNumberReady(c.env) || !channelOpenTo(c.env, 'whatsapp', user)) return no(c, 503, 'not_available');
   await activeMember(c.env, user.id);
   try {
     if (await linkAttemptOverLimit(c.env, `whatsapp_link:member:${user.id}`, WA_LINK_CODES_PER_HOUR)) return no(c, 429, 'rate_limited');
@@ -299,7 +299,7 @@ channels.get('/whatsapp/link', member(async (c, user) => {
 }));
 
 channels.post('/whatsapp/link/:uid/confirm', member(async (c, user) => {
-  if (!waLink.axalNumberReady(c.env)) return no(c, 503, 'not_available');
+  if (!waLink.axalNumberReady(c.env) || !channelOpenTo(c.env, 'whatsapp', user)) return no(c, 503, 'not_available');
   await waLink.confirmWhatsAppLink(c.env, user.id, c.req.param('uid') ?? '');
   return c.json({ ok: true, linked: true, ...(await waLink.whatsappLinkView(c.env, user.id)) });
 }));
@@ -665,6 +665,10 @@ async function handleAxalNumber(
     await finish(unlinked ? 'done' : 'ignored', { userId: Number(link.user_id), error: unlinked ? null : 'not_linked' });
     if (unlinked) await axalReply(env, Number(link.user_id), `wbstop:${claim}`, sender, waLink.WHATSAPP_LINK_COPY.unlinked);
     return;
+  }
+  // Management commands can finish in canary, as Telegram's do; captures cannot.
+  if (!(await channelOpenToMember(env, 'whatsapp', Number(link.user_id)))) {
+    return finish('ignored', { userId: Number(link.user_id), error: 'rollout' });
   }
   await waLink.touchLink(env, Number(link.id));
   return finish('ignored', { userId: Number(link.user_id), error: 'capture_not_built' });

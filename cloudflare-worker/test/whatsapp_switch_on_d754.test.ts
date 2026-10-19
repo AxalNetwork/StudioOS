@@ -81,6 +81,7 @@ async function world(opts: { seed?: boolean; budget?: number } = {}) {
     '457_integrations_last_error_at.sql', '458_channel_link_consent.sql']) db.exec(mig(m));
   // D757: the Validate engine's schema (487, 465, 453 and the re-scope's columns).
   applyEngineSchema(db);
+  db.exec(mig('492_whatsapp_sender_links.sql'));
   db.exec("UPDATE users SET role = 'admin', is_super_admin = 1 WHERE id = 5");
   if (opts.budget != null) {
     for (const key of ['founder:free', 'other']) {
@@ -662,7 +663,45 @@ async function case13(eligibility = callingEligibility) {
     tier: 'TIER_10K', checked_at: current,
   });
 }
-const cases = [case1, case2, case3, case4, case5, case6, case7, case8, case9, case10, case11, case12, case13];
+
+async function case14() {
+  await withWorld(async (w) => {
+    Object.assign(w.env, {
+      WHATSAPP_AXAL_ACCESS_TOKEN: WA_TOKEN, WHATSAPP_AXAL_PHONE_NUMBER_ID: '3000001',
+      WHATSAPP_AXAL_WABA_ID: '3000003', WHATSAPP_AXAL_DISPLAY_NUMBER: '+15550009999',
+    });
+    setMode(w.env, 'canary');
+    assert.equal((await call(w.env, ME, 'POST', '/whatsapp/link')).status, 503);
+    assert.equal(count(w.db, "SELECT COUNT(*) n FROM channel_link_codes WHERE provider = 'whatsapp_link'"), 0);
+    assert.equal((await call(w.env, ADMIN, 'POST', '/whatsapp/link', undefined, 'admin')).status, 200);
+    setMode(w.env, 'off');
+    assert.equal((await call(w.env, ADMIN, 'POST', '/whatsapp/link', undefined, 'admin')).status, 503);
+    setMode(w.env, 'on');
+    const code = (await call(w.env, ME, 'POST', '/whatsapp/link')).body.code;
+    assert.equal((await waHook(w.env, waText('3000001', 'axal-link', 'LINK ' + code))).status, 200);
+    const claim = (await call(w.env, ME, 'GET', '/whatsapp/link')).body.claim;
+    setMode(w.env, 'canary');
+    assert.equal((await call(w.env, ME, 'POST', '/whatsapp/link/' + claim.uid + '/confirm')).status, 503);
+    assert.equal(count(w.db, "SELECT COUNT(*) n FROM integrations WHERE provider_key = 'whatsapp_link'"), 0);
+    setMode(w.env, 'on');
+    assert.equal((await call(w.env, ME, 'POST', '/whatsapp/link/' + claim.uid + '/confirm')).status, 200);
+    w.db.exec("UPDATE integrations SET last_synced_at = '2026-01-01T00:00:00.000Z' WHERE provider_key = 'whatsapp_link'");
+    setMode(w.env, 'canary');
+    const calls = w.f.calls.length;
+    assert.equal((await waHook(w.env, waText('3000001', 'axal-closed-capture'))).status, 200);
+    const event = w.db.prepare('SELECT status, error FROM channel_events ORDER BY id DESC LIMIT 1').get() as any;
+    assert.deepEqual([event.status, event.error], ['ignored', 'rollout']);
+    assert.equal((w.db.prepare("SELECT last_synced_at FROM integrations WHERE provider_key = 'whatsapp_link'").get() as any).last_synced_at, '2026-01-01T00:00:00.000Z');
+    assert.equal(w.f.calls.length, calls);
+    // Existing links remain readable; unlink/STOP are management, even in canary.
+    assert.ok((await call(w.env, ME, 'GET', '/whatsapp/link')).body.link);
+    assert.equal((await waHook(w.env, waText('3000001', 'axal-stop', 'STOP'))).status, 200);
+    assert.equal(w.f.calls.length, calls + 1);
+    assert.equal((await call(w.env, ME, 'GET', '/whatsapp/link')).body.link, null);
+  }, { seed: false });
+}
+
+const cases = [case1, case2, case3, case4, case5, case6, case7, case8, case9, case10, case11, case12, case13, case14];
 for (const [index, check] of cases.entries()) test('D754 ' + (index + 1) + ': ' + check.name, () => check());
 
 /**
@@ -695,6 +734,14 @@ type Mutation = {
   dependency?: string; all?: boolean;
 };
 const mutations: Mutation[] = [
+  ...['/whatsapp/link', '/whatsapp/link/:uid/confirm'].map((path): Mutation => ({
+    name: 'Axal-number ' + path + ' bypasses canary', path: routePath,
+    before: `channels.post('${path}', member(async (c, user) => {\n  if (!waLink.axalNumberReady(c.env) || !channelOpenTo(c.env, 'whatsapp', user))`,
+    after: `channels.post('${path}', member(async (c, user) => {\n  if (!waLink.axalNumberReady(c.env))`, check: case14,
+  })),
+  { name: 'Axal-number captures ignore canary', path: routePath,
+    before: "if (!(await channelOpenToMember(env, 'whatsapp', Number(link.user_id)))) {", after: 'if (false) {', check: case14 },
+
   { name: 'hydration read fault acknowledges an event', path: connectionPath,
     before: 'if (hydrationError) throw hydrationError;', after: '', check: case8, dependency: '../services/channels/connections' },
   {"name":"telegram off bypasses authentication","path":"../src/routes/channels.ts","before":"  const check = await telegram.verifyTelegramSecret(c.env, c.req.header('X-Telegram-Bot-Api-Secret-Token'));","after":"  if (channelRollout(c.env, 'telegram') === 'off') return c.json({ ok: true, ignored: 'rollout_off' });\n  const check = await telegram.verifyTelegramSecret(c.env, c.req.header('X-Telegram-Bot-Api-Secret-Token'));", check: case7 },
@@ -721,7 +768,7 @@ const mutations: Mutation[] = [
   { name: 'off opens to Super Admin', path: connectionPath, before: "return mode === 'on' || (mode === 'canary' && isSuperAdmin(user));", after: "return mode === 'on' || isSuperAdmin(user);", check: case3, dependency: '../services/channels/connections' },
   { name: 'GET ignores missing secrets', path: routePath, before: "const available = a.available && (!chat || channelOpenTo(env, a.provider as MessagingProvider, user));", after: "const available = !chat || channelOpenTo(env, a.provider as MessagingProvider, user);", check: case4 },
   ...providers.map((provider): Mutation => ({ name: provider + ' connect/link skips rollout', path: routePath,
-    before: ` || !channelOpenTo(c.env, '${provider}', user)`, after: '', check: case5 })),
+    before: `if (!providerAvailable(c.env, '${provider}') || !channelOpenTo(c.env, '${provider}', user))`, after: `if (!providerAvailable(c.env, '${provider}'))`, check: case5 })),
   { name: 'test skips rollout', path: routePath, before: "if (!providerAvailable(c.env, provider as MessagingProvider) || !channelOpenTo(c.env, provider as MessagingProvider, user))", after: 'if (false)', check: case6 },
   { name: 'reply skips rollout', path: routePath, before: "if (!providerAvailable(env, thread.provider) || !channelOpenTo(env, thread.provider, user))", after: 'if (false)', check: case6 },
   ...providers.map((provider): Mutation => ({ name: provider + ' off claims events', path: routePath,
