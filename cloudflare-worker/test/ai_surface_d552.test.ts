@@ -187,12 +187,15 @@ const EXPECTED: Record<string, string[]> = {
   // D657 — a session's final transcript, on the same page as the interview log.
   // D685 (#1584) moved the call into the processing service the route and the job share.
   'services/interviewProcessing.ts': ['AI_SURFACE.validateInterviews'],
-  // D684 — a Telegram or WhatsApp voice note's transcript, bound for the same interviews page.
-  'routes/channels.ts': ['AI_SURFACE.validateInterviews'],
+  // D684's voice-note call in routes/channels.ts is gone: since D756 (#1978) every
+  // consented note is transcribed by interviewProcessing.ts's voice-note mode, above.
   'routes/research.ts': ['AI_SURFACE.researchAsk'],
   'routes/brand.ts': ['AI_SURFACE.buildBrand', 'AI_SURFACE.buildBrand', 'AI_SURFACE.buildBrand'],
   'services/competitorAnalysis.ts': ['AI_SURFACE.researchCompanies'],
   'services/deckExtract.ts': ['AI_SURFACE.raisePitchReview', 'AI_SURFACE.raisePitchReview'],
+  // D767 (#2096): the deck draft and the slide fill.
+  'routes/decks.ts': ['AI_SURFACE.raisePitch'],
+  'services/decks/autofill.ts': ['AI_SURFACE.raisePitch'],
   'services/publications.ts': ['AI_SURFACE.adminPublications'],
   'services/updateShare.ts': ['AI_SURFACE.growUpdate'],
   'services/fills/citations.ts': ['AI_SURFACE.validate'],

@@ -365,6 +365,12 @@ export interface Env {
   WORKERS_AI_BUDGET_USD_DAY?: string;
   WORKERS_AI_BUDGET_USD_MONTH?: string;
   WORKERS_AI_BUDGET_USD_ORG_MONTH?: string;
+  // D760 (#2017) — owner switches (#1008), both off unless set to 'on'.
+  // AI_PARTNER_MODELS offers the partner models new to the platform (Aura,
+  // FLUX.2, Leonardo); AI_PAID_MODELS stops the paid-only models being
+  // demoted by default (D764 applies it). See services/ai/catalogue.ts.
+  AI_PARTNER_MODELS?: string;
+  AI_PAID_MODELS?: string;
   // R2 bucket for KYC documents and other large/private blobs.
   // Optional so unit-test envs without R2 bindings still type-check.
   FILES?: R2Bucket;

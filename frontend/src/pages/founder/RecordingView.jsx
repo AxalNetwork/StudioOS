@@ -4,6 +4,8 @@ import RingViz from '../../components/discovery/RingViz';
 import { NO_SOUND_MS } from '../../lib/interviewCapture';
 import { STAGES, elapsedMs, processingProgress, stageIndex } from '../../lib/activeRecording';
 import { FOCUSABLE, tabTarget } from '../../ui/lightboxFocus.js';
+import { Unreadable } from '../../ui/Honesty';
+import { STOP_CHOICE, stopQuote, stopWords } from './stopSheet';
 import { useRailOption } from '../../ui/railCrumbs';
 
 /**
@@ -198,10 +200,19 @@ export function ProcessingStages({ processing = null, stageAt = -1, onRetry }) {
   );
 }
 
-/** "Stop and process this session?" (§5.7.9): modal, Escape keeps recording, focus returns to Stop. */
-export function StopConfirm({ onKeep, onStop, onDiscard, returnTo }) {
+/**
+ * "Stop and process this session?" (§5.7.9): modal, Escape keeps recording,
+ * focus returns to Stop. D770 (#2095): "Summarise and place with Eadwyn" is
+ * off by default and is the only source of `auto` (`stopSheet.js`); off, Stop
+ * saves the recording and its transcript only. `ai` is `useAiSpend()`'s
+ * result, for the quote.
+ */
+export function StopConfirm({ onKeep, onStop, onDiscard, returnTo, ai = null }) {
   const box = useRef(null);
   const keep = useRef(null);
+  const [process, setProcess] = useState(false);
+  const words = stopWords(process);
+  const quote = stopQuote(ai);
   useTrap(box, onKeep, true);
   useEffect(() => {
     keep.current?.focus?.();
@@ -213,10 +224,23 @@ export function StopConfirm({ onKeep, onStop, onDiscard, returnTo }) {
       <div ref={box} role="dialog" aria-modal="true" aria-labelledby="stop-title" aria-describedby="stop-body" data-testid="confirm-stop"
         className="w-full max-w-sm rounded-2xl bg-white p-5 text-gray-900 shadow-2xl dark:bg-[#130b22] dark:text-gray-100">
         <h2 id="stop-title" className="m-0 text-[16px] font-bold">Stop and process this session?</h2>
-        <p id="stop-body" className="mt-1 text-[13px] text-gray-600 dark:text-gray-300">The recording ends. Eadwyn transcribes it, writes the summary and proposes placements for you to review.</p>
+        <p id="stop-body" className="mt-1 text-[13px] text-gray-600 dark:text-gray-300">{words.body}</p>
+        <div className="mt-3 rounded-xl border border-gray-200 px-3 py-2.5 dark:border-[#2a2140]" data-testid="stop-choice">
+          <label className="flex items-center justify-between gap-3 text-[13px] font-semibold">
+            <span>{STOP_CHOICE}</span>
+            <input type="checkbox" role="switch" checked={process} aria-checked={process} onChange={(e) => setProcess(e.target.checked)}
+              data-testid="switch-stop-process" className="h-4 w-4 accent-violet-700" />
+          </label>
+          {quote?.state === 'read' && <p className="m-0 mt-1 text-[11.5px] tabular-nums text-gray-500 dark:text-gray-400" data-testid="stop-quote">{quote.text}</p>}
+          {quote?.state === 'unreadable' && (
+            <div className="mt-1" data-testid="stop-quote">
+              <Unreadable what="Your average for these runs" claim="That is not a claim that they cost nothing." onRetry={ai?.reload} />
+            </div>
+          )}
+        </div>
         <div className="mt-4 flex justify-end gap-2">
           <button ref={keep} type="button" onClick={onKeep} data-testid="button-keep-recording" className="rounded-md px-3 py-2 text-[13px] font-bold text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-[#1c1230]">Keep recording</button>
-          <button type="button" onClick={onStop} data-testid="button-confirm-stop" className="rounded-md bg-red-600 px-3 py-2 text-[13px] font-bold text-white hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600">Stop and process</button>
+          <button type="button" onClick={() => onStop?.({ auto: process })} data-testid="button-confirm-stop" className="rounded-md bg-red-600 px-3 py-2 text-[13px] font-bold text-white hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600">{words.stop}</button>
         </div>
         <div className="mt-4 border-t border-gray-100 pt-3 dark:border-[#2a2140]">
           <button type="button" onClick={onDiscard} data-testid="button-discard" className="text-[12.5px] font-semibold text-gray-500 underline hover:text-red-700 dark:text-gray-400 dark:hover:text-red-300">Discard this recording</button>
@@ -247,7 +271,7 @@ export function useDarkTheme() {
   return dark ? 'dark' : 'light';
 }
 
-export default function RecordingView({ st, now = Date.now(), theme = 'light', reduced = false, you = '', actions = {}, onExit, onOpen }) {
+export default function RecordingView({ st, now = Date.now(), theme = 'light', reduced = false, you = '', actions = {}, onExit, onOpen, ai = null }) {
   const exitRef = useRef(null);
   const stopRef = useRef(null);
   const drawerBtn = useRef(null);
@@ -414,7 +438,7 @@ export default function RecordingView({ st, now = Date.now(), theme = 'light', r
       )}
 
       {l.drawer && <PointsDrawer points={st?.points || []} onTick={actions.tick ? (id, on) => actions.tick(id, on) : null} error={st?.pointError || null} onClose={() => actions.toggleDrawer?.(false)} returnTo={drawerBtn} />}
-      {l.confirm && <StopConfirm onKeep={() => actions.cancelStop?.()} onStop={() => actions.confirmStop?.()} onDiscard={() => actions.discard?.()} returnTo={stopRef} />}
+      {l.confirm && <StopConfirm onKeep={() => actions.cancelStop?.()} onStop={(opts) => actions.confirmStop?.(opts)} onDiscard={() => actions.discard?.()} returnTo={stopRef} ai={ai} />}
     </div>
   );
 }
