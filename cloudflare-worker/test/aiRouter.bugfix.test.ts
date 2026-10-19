@@ -16,6 +16,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
+import { withGuard } from './_guard_stub.mjs';
 import { run, ROUTE, __resetForTest, bindAi, GATEWAY_TASKS, GATEWAY_METADATA_KEYS } from '../src/services/aiRouter.ts';
 import type { Env } from '../src/types.ts';
 
@@ -53,7 +54,8 @@ function makeAI(handler: (model: string, payload: unknown, gatewayed: boolean, n
 }
 
 function envWith(ai: any, kv: any, db: any, extra: Record<string, unknown> = {}): Env {
-  return { AI: ai, AI_SPEND: kv, DB: db, ...extra } as unknown as Env;
+  // D763: the guard answers free, so `ai.calls` stays the router's own attempts.
+  return { AI: withGuard(ai), AI_SPEND: kv, DB: db, ...extra } as unknown as Env;
 }
 
 // -----------------------------------------------------------------------------
