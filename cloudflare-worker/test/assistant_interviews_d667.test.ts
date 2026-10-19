@@ -92,6 +92,11 @@ function world(reply: (model: string, input: any) => any = () => ({ response: '{
     '452_record_session_setup.sql', '453_interview_processing.sql']) {
     db.exec(mig(m));
   }
+  // D754 (#1893): deleteSession also deletes the session's chat consents and frees
+  // the chat that pointed at it: 449's thread table, then 488.
+  db.exec(mig('449_interview_channels.sql').split(';')
+    .filter((sql) => /CREATE TABLE IF NOT EXISTS channel_threads \(/.test(sql)).map((sql) => `${sql};`).join('\n'));
+  db.exec(mig('488_channel_consents.sql'));
   // D757: the Validate engine's schema (487, 465, 453 and the re-scope's columns).
   applyEngineSchema(db);
   const env: any = {

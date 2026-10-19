@@ -237,3 +237,14 @@ test('webhook success response: does not contain signing secret value', () => {
   assert.equal(responseJson.includes(fakeSigningSecret), false, 'signing secret value must not appear in response JSON');
   assert.equal(responseJson.includes('whsec_'), false, 'no whsec_ prefix should appear in response JSON');
 });
+
+// ---------------------------------------------------------------------------
+// D755 (#1919) — token packs are a kind of their own, made only on HQ
+// ---------------------------------------------------------------------------
+
+test('validateProductMetadata: token_pack is a product kind and needs no metadata here', async () => {
+  const { isProductKind, PRODUCT_KINDS } = await import('../src/services/catalog.ts');
+  assert.equal(isProductKind('token_pack'), true);
+  assert.equal(PRODUCT_KINDS.has('token_pack'), true);
+  assert.deepEqual(validateProductMetadata('token_pack', {}), []);
+});

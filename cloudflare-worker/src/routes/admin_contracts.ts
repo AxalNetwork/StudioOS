@@ -12,6 +12,7 @@ import { mintDownloadToken } from '../services/signedDownload';
 import { sendAgreementAssignedEmail } from '../services/email';
 import { fanOut } from '../services/branches';
 import { usageFromContractRows, usageRowsFor } from '../services/contractTemplateUsage';
+import { generatedList, generatedSpecimen, isGeneratedKey } from '../services/generatedDocuments';
 import { BUNDLED_SENT_DIRECTLY, librarySlugFor } from '../services/legalDocTypes';
 import { publishedContractTemplates, publicationFields, publishContractTemplates, preparePublishedContract, ContractPreparationError,
   publishOneTemplate, withdrawTemplatePublication, PublicationError } from '../services/contractPublication';
@@ -1740,6 +1741,17 @@ adminContracts.get('/templates/outside', async (c) => {
   }
 });
 
+// D758 (#1864): the documents the platform generates in code, each with the
+// library rows it reads and their states, its refusal and its thumbnail's version.
+adminContracts.get('/templates/generated', async (c) => {
+  await requireAdmin(c);
+  try {
+    return c.json({ items: await generatedList(c.env) });
+  } catch (e) {
+    return refuse(c, 503, { code: 'generated_unreadable', message: 'Generated documents are unreadable. Try again.', raw: e });
+  }
+});
+
 adminContracts.get('/templates/legal', async (c) => {
   await requireAdmin(c);
   return c.json({ items: LEGAL_TEMPLATE_CATALOG });
@@ -2041,13 +2053,17 @@ adminContracts.post('/templates/render.pdf', async (c) => {
   });
 });
 
-// GET /templates/store/:slug/thumbnail.png and /templates/outside/:key/thumbnail.png
+// GET /templates/store/:slug/thumbnail.png, /templates/outside/:key/thumbnail.png
+// and /templates/generated/:key/thumbnail.png
 // — D717 decision 5: page 1 of the paper as an image, drawn once per version
 // by Browser Run's screenshot and kept in FILES. A new version or a new paper
 // style is a new key, so an image never goes stale. A thumbnail is not a legal
 // file, so it gets no legal_document_files row. On a miss that cannot be drawn
 // it answers 503 `thumbnail_unavailable` and writes nothing. Binary endpoints —
 // kept OUT of the typed API drift surface.
+// D758 (#1864): a generated document's image is keyed
+// `legal/thumbnails/generated/<sha256 of key>/<specimen sha256 first 16>-<paper_sha256 first 16>.png`,
+// so a new library body on a row it reads redraws it.
 const THUMB_VIEWPORT = { width: 816, height: 1056, deviceScaleFactor: 0.5 } as const; // Letter page 1, in CSS px
 
 async function thumbnailResponse(c: Context<{ Bindings: Env }>, key: string, html: () => Promise<string>): Promise<Response> {
@@ -2059,15 +2075,19 @@ async function thumbnailResponse(c: Context<{ Bindings: Env }>, key: string, htm
   const shot = await renderLegalPng(c.env, await html(), THUMB_VIEWPORT);
   if (!shot.ok) {
     console.warn(JSON.stringify({ event: 'legal_thumbnail_unavailable', code: shot.code }));
-    return refuse(c, 503, { code: 'thumbnail_unavailable', message: 'Thumbnail not drawn: the page renderer did not answer.' });
+    return thumbnailUnavailable(c);
   }
   // A failed write still serves the image; the next request draws it again.
   await c.env.FILES?.put(key, shot.bytes, { httpMetadata: { contentType: 'image/png' } }).catch(() => {});
   return new Response(shot.bytes, { status: 200, headers });
 }
 
-function thumbnailHtml(model: ReturnType<typeof paperModel>): string {
-  return paperHtml(model, { pageSize: 'letter', cover: 'dark', medium: 'screen', fonts: 'inline' });
+function thumbnailUnavailable(c: Context<{ Bindings: Env }>): Response {
+  return refuse(c, 503, { code: 'thumbnail_unavailable', message: 'Thumbnail not drawn: the page renderer did not answer.' });
+}
+
+function thumbnailHtml(model: ReturnType<typeof paperModel>, only?: 'structure' | 'certificate' | null): string {
+  return paperHtml(model, { pageSize: 'letter', cover: 'dark', medium: 'screen', fonts: 'inline', ...(only ? { only } : {}) });
 }
 
 adminContracts.get('/templates/store/:slug/thumbnail.png', async (c) => {
@@ -2100,6 +2120,26 @@ adminContracts.get('/templates/outside/:key/thumbnail.png', async (c) => {
   return thumbnailResponse(c, key, async () => thumbnailHtml(paperModel({
     title: entry.title, body, slug: entry.doc_type, version: null, bodySha256: bodySha, merge: 'brackets', state: { kind: 'draft' },
   })));
+});
+
+// D758 (#1864) — a generated document's page 1, drawn as a specimen (bracket
+// figures, no record and no account). A specimen that cannot be built answers
+// the same 503 as a renderer that does not answer, and writes nothing.
+adminContracts.get('/templates/generated/:key/thumbnail.png', async (c) => {
+  await requireAdmin(c);
+  const docKey = c.req.param('key');
+  if (!isGeneratedKey(docKey)) return refuse(c, 404, { code: 'not_found', message: 'No generated document has that key.' });
+  let html: string;
+  let key: string;
+  try {
+    const spec = await generatedSpecimen(c.env, docKey);
+    html = thumbnailHtml(paperModel(spec.input), spec.only);
+    key = `legal/thumbnails/generated/${await sha256Hex(docKey)}/${spec.version}-${(await paperSha256()).slice(0, 16)}.png`;
+  } catch {
+    console.warn(JSON.stringify({ event: 'generated_specimen_unbuilt', code: 'specimen_unbuilt' }));
+    return thumbnailUnavailable(c);
+  }
+  return thumbnailResponse(c, key, async () => html);
 });
 
 // GET /templates/paper-fonts — D711: the paper's @font-face rules, fetched
