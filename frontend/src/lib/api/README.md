@@ -122,6 +122,8 @@ Meet). Since D757 (#1926) it also reads the Calendar status
 the Meet transcript permission (`allowMeetTranscripts`, `POST
 /api/calendar/google/meet-transcripts/connect`), going only to Google's consent
 URL. Every path is written out in full so the drift check reads each one.
+D756 (#1895): its `channelsAdminApi` also calls `/api/admin/channels/telegram/webhook`
+(the interview bot's health, and registering its webhook), for Super Admins.
 
 D678 (#1552): `publicAiModels.js` reads `GET /api/public/ai-models`, the
 router's model table as the public Intelligence page shows it: one row per job,

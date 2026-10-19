@@ -860,15 +860,12 @@ export interface ThreadView {
 }
 
 async function view(env: Env, t: ThreadRow & { interviewee_name?: string | null }, canReply: boolean): Promise<ThreadView> {
-  // WhatsApp counts from the customer's last message; Telegram from the chat's last activity.
-  const since = t.provider === 'whatsapp' ? t.last_inbound_at : t.last_message_at;
-  const last = since ? Date.parse(since) : NaN;
   return {
     uid: t.uid, provider: t.provider, contact_name: await contactName(env, t), status: t.status,
     message_count: Number(t.message_count) || 0, last_message_at: t.last_message_at, last_inbound_at: t.last_inbound_at,
     interview_id: t.interview_id, interviewee_name: t.interviewee_name ?? null, session_id: t.session_id,
     can_reply: canReply,
-    reply_window_open: canReply && Number.isFinite(last) && Date.now() - last < CHANNEL_LIMITS.replyWindowMs,
+    reply_window_open: canReply && replyWindowOpen(t),
     consent_status: consentAsked(t.provider) ? t.consent_state ?? 'not_asked' : null,
   };
 }

@@ -36,6 +36,9 @@
  *   · No response carries a platform secret, a token or a phone number;
  *     availability names missing secrets to admins only.
  *
+ * The shared harness (world, app, call, hooks, mockFetch, builders) lives in
+ * `_channels_fixture.ts` since D756 (#1895), unchanged.
+ *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/channels_messaging_d684.test.ts
  */
@@ -52,10 +55,10 @@ import { normaliseTelegramUpdate } from '../src/services/channels/telegram.ts';
 import { normaliseWhatsAppPayload, maskNumber } from '../src/services/channels/whatsapp.ts';
 import { CHANNEL_LIMITS } from '../src/services/channels/types.ts';
 import {
-  ADMIN, GONE, INTERVIEW, JWT_SECRET, ME, OTHER, OTHER_PROJECT, PNID, PNID_GONE, PROJECT, type Route, SECRETS, TG_ME,
-  TG_NEW, TG_OTHER, WA_CUSTOMER, WA_TOKEN, app, businessMessage, call, confirmUpdate, connectionUpdate, consentGiven,
-  count, ids, linkTelegram, mockFetch, noSecretsSeen, now, ref, refCode, seen, send, sign, startUpdate, telegramApi,
-  tgHook, tgUser, waHook, waPayload, waText, world,
+  ADMIN, app, businessMessage, call, confirmUpdate, connectionUpdate, consentGiven, count, GONE, ids, INTERVIEW,
+  JWT_SECRET, linkTelegram, ME, mockFetch, noSecretsSeen, now, OTHER, OTHER_PROJECT, PNID, PNID_GONE,
+  PROJECT, ref, refCode, type Route, SECRETS, seen, send, sign, startUpdate, telegramApi, TG_ME, TG_NEW, TG_OTHER,
+  tgHook, tgUser, WA_CUSTOMER, WA_TOKEN, waHook, waPayload, waText, world,
 } from './_channels_fixture.ts';
 
 test.afterEach(() => { noSecretsSeen(); seen.length = 0; });
