@@ -457,5 +457,7 @@ test('static: no balance field, storage or HTML injection; no money path; no fix
   const ws = read('pages/SpinoutLabLpWorkspacePage.jsx');
   assert.match(ws, /const proofOn = showsProof\(user\);\s*const proofTargets = useProofTargets\(\{ enabled: proofOn \}\);/);
   assert.match(ws, /\{proofOn && <SharedProofOfFunds/);
-  assert.match(read('pages/account/MercurySheet.jsx'), /u\.key === 'capital_attestation' \? <Link className=\{BTN\.link\} to=\{ATTESTATION_DOOR\.href\}>/);
+  // #1780: every use row's door comes from USE_DOORS, and the attestation row's is still ATTESTATION_DOOR.
+  assert.match(read('pages/account/MercurySheet.jsx'), /const door = Object\.hasOwn\(USE_DOORS, u\.key\) \? USE_DOORS\[u\.key\] : null;[^]*<Link className=\{BTN\.link\} to=\{door\.href\}/);
+  assert.match(read('pages/account/mercuryModel.js'), /capital_attestation: ATTESTATION_DOOR,/);
 });

@@ -19,6 +19,8 @@ import InvestorPortfolioCanvas from './investor/InvestorPortfolioCanvas';
 import InvestorPortfolioPositions from './investor/InvestorPortfolioPositions';
 import InvestorPortfolioUpdates from './investor/InvestorPortfolioUpdates';
 import InvestorPortfolioValueAdd from './investor/InvestorPortfolioValueAdd';
+import RailFrame from '../ui/RailFrame';
+import WorkerRail from '../ui/WorkerRail';
 
 export default function PortfolioWorkspace({ activeRole }) {
   const { pathname } = useLocation();
@@ -58,7 +60,7 @@ export default function PortfolioWorkspace({ activeRole }) {
     return <InvestorPortfolioValueAdd />;
   }
 
-  return (
+  const body = (
     <div className="p-6 max-w-7xl mx-auto">
       <WorkspaceHeader
         icon={Briefcase}
@@ -72,5 +74,15 @@ export default function PortfolioWorkspace({ activeRole }) {
       {active === 'performance' && <PortfolioPerformancePage embedded />}
       {active === 'growth' && <PortfolioGrowthPage embedded />}
     </div>
+  );
+  // D772 (#2098): an investor reaches this branch only on Performance (I8),
+  // the one Portfolio board whose page draws no rail of its own. It gets the
+  // investor's rail in the shared frame; every other viewer's page is unchanged.
+  if ((activeRole || role) !== 'investor') return body;
+  return (
+    <RailFrame data-testid="portfolio-performance-frame" rail={(
+      <WorkerRail workspace="Portfolio" role="investor"
+        note="Performance is read from your recorded positions and their marks. Nothing here is estimated, and no figure is filled in by a model." />
+    )}>{body}</RailFrame>
   );
 }
