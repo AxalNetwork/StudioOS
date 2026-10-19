@@ -122,10 +122,11 @@ export async function createInterview(
  * google_meet on video, telegram and whatsapp on text), and only on a channel
  * that admits it — and the interview takes its channel from this session if
  * it had none. One batch: both land, or neither. `submitted_via` keeps its
- * own meaning (imported from elsewhere).
+ * own meaning (imported from elsewhere). An `in_person` session is a
+ * recording a member forwarded to Axal's number (D754 way B, #1938).
  */
 export async function openSession(
-  env: Env, scoped: ScopedInterview, provider: ChannelProvider, channel: 'text' | 'video',
+  env: Env, scoped: ScopedInterview, provider: ChannelProvider, channel: 'text' | 'video' | 'in_person',
   consent: { method: string } | null = null,
 ): Promise<SessionRow> {
   const uid = crypto.randomUUID();

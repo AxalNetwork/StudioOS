@@ -43,7 +43,7 @@
  * errors are codes.
  */
 import type { Env } from '../../types';
-import { PROVIDER_DOWNLOAD_MS, boundedDownload, providerJson } from './providerHttp';
+import { PROVIDER_DOWNLOAD_MS, boundedDownload, providerJson, type AudioContainer } from './providerHttp';
 import { CHANNEL_AUDIO_MAX_BYTES } from './channelAudio';
 import { constantTimeEqual, sha256Hex } from '../../rpc/secret';
 import { decryptCredentials, encryptCredentials } from '../../integrations/secrets';
@@ -394,6 +394,24 @@ export async function sendAxalInteractive(
   return r.code === 'not_connected' ? { ok: false, code: 'not_configured' } : r;
 }
 
+/**
+ * D754 way B (#1938): one file a linked member forwarded to AXAL'S OWN number,
+ * fetched with Axal's token once the member said everyone recorded agreed,
+ * through the same `graphMedia` as a member's voice note. The URL, the token
+ * and the error's text never reach a log or the caller.
+ */
+export type AxalMediaResult =
+  | { ok: true; bytes: Uint8Array; container: AudioContainer }
+  | { ok: false; code: string; retryable: boolean };
+
+export async function fetchAxalMedia(env: Env, mediaId: string): Promise<AxalMediaResult> {
+  const token = String(env.WHATSAPP_AXAL_ACCESS_TOKEN ?? '').trim();
+  if (!token) return { ok: false, code: 'not_configured', retryable: false };
+  const got = await graphMedia(token, mediaId);
+  if (!got.ok) return { ok: false, code: got.code, retryable: got.retryable };
+  return { ok: true, bytes: got.bytes, container: got.container };
+}
+
 async function sendInteractive(
   pnid: string | null, token: string | null, to: string, msg: { body: string; buttons: { id: string; title: string }[] },
 ): Promise<SendResult> {
@@ -431,17 +449,16 @@ function mediaHostAllowed(raw: string): boolean {
 }
 
 /**
- * A voice note's audio: `GET /{media-id}` for its URL, then the URL, both with
- * the member's token. Since D754 W3 (#1935): Graph's `file_size` over 5 MB is
- * refused before the download, the URL must be Meta's before the token is
- * sent, and the file comes through `boundedDownload` (one deadline, a running
- * 5 MB cap). `mime` is the declared type (the message's, else Graph's); the
- * caller checks it against the file's own bytes (`channelAudio.ts`).
+ * A media file's bytes, by its id, with `token`: `GET /{media-id}` for its URL,
+ * then the URL. Since D754 W3 (#1935): Graph's `file_size` over 5 MB is refused
+ * before the download, the URL must be Meta's before the token is sent, and the
+ * file comes through `boundedDownload` (one deadline, a running 5 MB cap).
+ * `lookup` marks a failure of the `GET /{media-id}` itself.
  */
-export type WhatsAppAudioResult = AudioResult & { lookup?: boolean };
-export async function fetchWhatsAppMedia(env: Env, conn: ChannelConnection, mediaId: string, mimeHint: string | null = null): Promise<WhatsAppAudioResult> {
-  const token = await whatsappToken(env, conn);
-  if (!token) return { ok: false, code: 'not_connected', retryable: false };
+type GraphMedia =
+  | { ok: true; bytes: Uint8Array; container: AudioContainer; mime: string | null }
+  | { ok: false; code: string; retryable: boolean; lookup?: boolean };
+async function graphMedia(token: string, mediaId: string): Promise<GraphMedia> {
   const meta = await graph('media', `${GRAPH_BASE}/${encodeURIComponent(mediaId)}`, { token });
   if (!meta.ok) return { ok: false, code: meta.code, retryable: meta.retryable, lookup: true };
   const size = Number(meta.data?.file_size);
@@ -458,8 +475,22 @@ export async function fetchWhatsAppMedia(env: Env, conn: ChannelConnection, medi
     if (file.code === 'bad_url') return { ok: false, code: 'media_host', retryable: false };
     return { ok: false, code: 'network', retryable: true };
   }
-  const declared = typeof mimeHint === 'string' && mimeHint ? mimeHint : typeof meta.data?.mime_type === 'string' ? meta.data.mime_type : null;
-  return { ok: true, bytes: file.bytes, mime: declared ?? '' };
+  return { ok: true, bytes: file.bytes, container: file.container, mime: typeof meta.data?.mime_type === 'string' ? meta.data.mime_type : null };
+}
+
+/**
+ * A voice note's audio, with the member's token, through `graphMedia`. `mime`
+ * is the declared type (the message's, else Graph's); the caller checks it
+ * against the file's own bytes (`channelAudio.ts`).
+ */
+export type WhatsAppAudioResult = AudioResult & { lookup?: boolean };
+export async function fetchWhatsAppMedia(env: Env, conn: ChannelConnection, mediaId: string, mimeHint: string | null = null): Promise<WhatsAppAudioResult> {
+  const token = await whatsappToken(env, conn);
+  if (!token) return { ok: false, code: 'not_connected', retryable: false };
+  const got = await graphMedia(token, mediaId);
+  if (!got.ok) return got;
+  const declared = typeof mimeHint === 'string' && mimeHint ? mimeHint : got.mime;
+  return { ok: true, bytes: got.bytes, mime: declared ?? '' };
 }
 
 /** The test: read the number with the member's token. Sends nothing to anyone. */

@@ -25,7 +25,7 @@ import { ConnectorPanel } from '../src/pages/account/ConnectorSheet.jsx';
 import { ConnectorsView } from '../src/pages/account/AccountConnectors.jsx';
 import { ConnectToolView } from '../src/pages/account/ConnectToolSheet.jsx';
 import { MercuryLandsGroup, MercuryUsesGroups } from '../src/pages/account/MercurySheet.jsx';
-import { MEMBER_REPLACE, READS_ROW, USE_REASONS, USE_WORDS, landsWords, memberDisconnectNote, neverRows, usesRows } from '../src/pages/account/mercuryModel.js';
+import { MEMBER_REPLACE, READS_ROW, USE_DOORS, USE_REASONS, USE_WORDS, landsWords, memberDisconnectNote, neverRows, usesRows } from '../src/pages/account/mercuryModel.js';
 import { mercuryPersonalApi } from '../src/lib/api/mercuryPersonal.js';
 
 const h = React.createElement;
@@ -277,7 +277,9 @@ test('PR 3b: a founder draws venture revenue only; a partner on HQ draws practic
     const m = await mount(h(MercuryUsesGroups), { user: who });
     try {
       const t = m.text();
-      assert.ok(t.includes(`What StudioOS uses it for ${want.map((k) => USE_WORDS[k]).join(' ')}`), `${who.role}: ${want}`);
+      // #1780 canvas PR: each use row ends with its door, where it has one.
+      const rows = want.map((k) => (Object.hasOwn(USE_DOORS, k) ? `${USE_WORDS[k]} ${USE_DOORS[k].text}` : USE_WORDS[k]));
+      assert.ok(t.includes(`What StudioOS uses it for ${rows.join(' ')}`), `${who.role}: ${want}`);
       for (const k of absent) assert.ok(!t.includes(USE_WORDS[k]), `${who.role} has no ${k}`);
       assert.ok(t.includes(NEVER), 'the never rows draw beside the uses');
       assert.equal(stub.calls.n, 1, 'one status read per mount');
@@ -352,4 +354,22 @@ test('D752: an investor\'s Yours row reads "Statements you share"; a partner\'s 
   };
   assert.match(draw('investor'), /Reads on request Statements you share You Read on request/);
   assert.match(draw('partner'), /Reads on request Your own payments You Read on request/);
+});
+
+test('#1780: each use row links the screen where it happens; a use with no screen links nothing', async () => {
+  for (const [who, status, doors] of [
+    [FOUNDER, STATUS.founder, { venture_revenue: '/spinout-lab/revenue' }],
+    [PARTNER, STATUS.partnerHq, { practice_income: '/partner/needs', partner_deals: '/partner/earnings' }],
+  ]) {
+    const stub = stubStatus(status);
+    const m = await mount(h(MercuryUsesGroups), { user: who });
+    try {
+      for (const [key, href] of Object.entries(doors)) {
+        const door = m.by(`mercury-door-${key}`);
+        assert.ok(door, `${who.role}: ${key} has its door`);
+        assert.equal(m.pr(door).href, href);
+      }
+      assert.equal(m.by('mercury-door-venture_spend'), undefined, 'venture_spend has no screen to link yet');
+    } finally { await m.unmount(); stub.restore(); }
+  }
 });
