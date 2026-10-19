@@ -69,6 +69,11 @@ export type TaskClass =
   | 'structure_interview'
   // D685 §5.10 — StudioOS's own summary of a session, every sentence cited.
   | 'summarise_interview'
+  // D766 (#2094) — system calls that used to call env.AI.run directly: the
+  // monitoring summary, and the X post image screen and alt text.
+  | 'ops_summary'
+  | 'image_screen'
+  | 'image_alt_text'
   // D764 (#2089) — the rail's fourteen kinds of work, one task each. The
   // page's row in `ai/railMatrix.json` names the models a member may pick;
   // the entries below are each kind's default and its alternates.
@@ -492,6 +497,8 @@ export function audioMinutesFromBytes(bytes: number): number {
 // deliberate second step rather than a side effect of this one.
 const SMALL_LLAMA = '@cf/meta/llama-3.1-8b-instruct-fp8';
 const MID_LLAMA   = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+// D766 — the vision model for the system's image calls (D761 PR 2's content parts).
+const VISION_SCOUT = '@cf/meta/llama-4-scout-17b-16e-instruct';
 
 export const ROUTE: Record<TaskClass, RouteEntry> = {
   safety:       { provider: 'workers-ai', model: '@cf/meta/llama-guard-3-8b' },
@@ -677,6 +684,11 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   },
   sentiment:    { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA], cacheTtlSec: 30 * 86400 },
   embed:        { provider: 'workers-ai', model: '@cf/baai/bge-base-en-v1.5', isEmbed: true,  cacheTtlSec: 30 * 86400 },
+  // D766 (#2094) — system calls (userId 0): logged at cost, charged to no member.
+  // The monitoring summary keeps the model it called directly.
+  ops_summary:  { provider: 'workers-ai', model: SMALL_LLAMA },
+  image_screen: { provider: 'workers-ai', model: VISION_SCOUT },
+  image_alt_text: { provider: 'workers-ai', model: VISION_SCOUT },
   paraphrase:   { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
   // High-stakes synthesis (Task #2 AU admin publication summaries,
   // dd synthesis). Task #31: Anthropic removed from production. Both
