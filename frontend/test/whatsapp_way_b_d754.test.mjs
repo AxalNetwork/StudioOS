@@ -34,7 +34,9 @@ const SUPER = { id: 1, role: 'admin', is_super_admin: 1 };
 const NOW = Date.parse('2026-10-19T10:00:00Z');
 const CODE_TEXT = 'Ab3dEf6hIj9kLm2nOp5qRs8t';
 const CODE = { code: CODE_TEXT, wa_link: `https://wa.me/14155550100?text=LINK%20${CODE_TEXT}`, expires_at: '2026-10-19T10:10:00Z' };
-const off = () => Object.assign(new Error('WhatsApp is not available on this deployment yet.'), { status: 503, code: 'not_available' });
+// The refusal as `request` throws it: a Super Admin's body names the unset settings (#1939, 3A), a member's does not.
+const off = (missing) => Object.assign(new Error('WhatsApp is not available on this deployment yet.'),
+  { status: 503, code: 'not_available', data: { code: 'not_available', ...(missing ? { missing } : {}) } });
 const ready = (view) => ({ status: 'ready', view });
 const claim = (status, extra = {}) => ({ uid: 'cl_1', number_masked: '•••• 1234', expires_at: '2026-10-19T10:10:00Z', status, message: `The ${status} sentence.`, ...extra });
 const LINK = { number_masked: '•••• 1234', linked_at: '2026-10-01T09:00:00Z', last_used_at: '2026-10-03T12:00:00Z' };
@@ -44,10 +46,15 @@ const LINK = { number_masked: '•••• 1234', linked_at: '2026-10-01T09:00:
 test("Axal's number unset: hidden for a member; a Super Admin sees the four setting names and no value", () => {
   const m = wayBState({ status: 'error', error: off() }, { user: MEMBER });
   assert.deepEqual(m, { state: 'hidden', notice: '' });
-  const s = wayBState({ status: 'error', error: off() }, { user: SUPER });
+  const s = wayBState({ status: 'error', error: off(['WHATSAPP_AXAL_WABA_ID', 'WHATSAPP_AXAL_DISPLAY_NUMBER']) }, { user: SUPER });
   assert.equal(s.state, 'hidden');
-  for (const name of WAY_B.settings) assert.ok(s.notice.includes(name), name);
-  assert.ok(s.notice.startsWith(WAY_B.unsetNotice));
+  assert.equal(s.notice, `${WAY_B.unsetNotice} WHATSAPP_AXAL_WABA_ID, WHATSAPP_AXAL_DISPLAY_NUMBER.`, 'only the unset names, in order');
+  // A name the Worker never sends is not drawn, whatever the body says.
+  assert.equal(wayBState({ status: 'error', error: off(['sk_live_SECRET', 'WHATSAPP_AXAL_WABA_ID']) }, { user: SUPER }).notice,
+    `${WAY_B.unsetNotice} WHATSAPP_AXAL_WABA_ID.`);
+  // All four set, but WhatsApp itself off: no list, and no claim that a setting is missing.
+  assert.equal(wayBState({ status: 'error', error: off() }, { user: SUPER }).notice, WAY_B.offNotice);
+  assert.equal(wayBState({ status: 'error', error: off(['WHATSAPP_AXAL_WABA_ID']) }, { user: MEMBER }).notice, '', 'a member read a setting name');
   // A bare 503 with no code is the same refusal; another code is not.
   assert.equal(wayBState({ status: 'error', error: { status: 503 } }, { user: MEMBER }).state, 'hidden');
   assert.equal(wayBState({ status: 'error', error: { status: 503, code: 'link_limit_unavailable' } }, { user: MEMBER }).state, 'unreadable');
@@ -115,9 +122,10 @@ const draw = (props) => renderToStaticMarkup(h(MemoryRouter, null, h(WhatsAppWay
 
 test('the section draws nothing for a member while Axal\'s number is unset, the names (no value) for a Super Admin', () => {
   assert.equal(draw({ read: { status: 'error', error: off() }, user: MEMBER }), '');
-  const s = draw({ read: { status: 'error', error: off() }, user: SUPER });
+  const s = draw({ read: { status: 'error', error: off(['WHATSAPP_AXAL_DISPLAY_NUMBER']) }, user: SUPER });
   assert.ok(s.includes('data-testid="way-b-unset"'));
   assert.ok(s.includes('WHATSAPP_AXAL_DISPLAY_NUMBER'));
+  assert.ok(!s.includes('WHATSAPP_AXAL_ACCESS_TOKEN'), 'a set setting was named as missing');
   assert.ok(!s.includes(WAY_B.heading), 'no section, only the notice');
   assert.equal(draw({ read: { status: 'loading' }, user: MEMBER }), '');
 });

@@ -12,6 +12,7 @@ one sentence and makes no read.
 | `FundTabs.jsx` | Capital calls, Distributions, Management fees and Reports, each on one administered fund. The Calls tab's "Proof of funds shared by LPs" panel (D752) reads only on Show, because each read is audited and counts a view. |
 | `fundAdminModel.js` | The tab order, the console's own sentences, and the money and act-table helpers. |
 | `useRead.js` | One read's `loading` / `ready` / `unreadable` state. |
+| `parts.jsx` | The drawing parts, from the August canvas "Fund Administration": `Section`, `Panel`, `Line`, `Tiles` and `Table` (which stacks, each cell labelled, below `sm`). |
 
 ## Rules
 
@@ -24,5 +25,9 @@ one sentence and makes no read.
   (`FundReportPeriodPage.jsx`) are opened for the chosen fund, not copied.
 - **Money is integer cents.** A value no store holds is Not recorded with its
   reason; a read that failed is Unreadable, never 0. Bank text is drawn as text.
-- **No canvas covers it yet.** It is drawn only from the Connectors sheet's and
-  the Account center's parts, with no new CSS. The canvas PR lays it out.
+- **Laid out to S1's brief** for "Fund Administration · Admin" (#1779,
+  2026-10-18), in the August canvas's visual system, through `parts.jsx` and
+  the theme's tokens, with no new CSS. A new tab draws with those parts; a
+  dialog is the shared `Lightbox`. If the owner's export lands in
+  `design/incoming/`, it wins where it differs, and no act moves across the
+  table.
