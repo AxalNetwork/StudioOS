@@ -497,8 +497,9 @@ test('the live route: bound to the recording; another session\'s address goes to
   const exitFn = live.slice(live.indexOf('const exit = '), live.indexOf('};', live.indexOf('const exit = ')));
   assert.doesNotMatch(exitFn, /recorder\./, 'leaving the view never ends the recording');
   assert.doesNotMatch(live, /recorder\.(signOut|discard)\(/);
-  assert.match(live, /const \[auto\] = useAssistMode\('Validate'\);/, 'the rail\'s mode decides whether the Worker goes past Transcribing');
-  assert.match(live, /confirmStop: \(\) => recorder\.confirmStop\(\{ auto \}\)/);
+  // D770 (#2095): the Stop sheet's choice decides whether the Worker goes past Transcribing, never the rail's mode.
+  assert.doesNotMatch(live, /useAssistMode/);
+  assert.match(live, /confirmStop: \(opts\) => recorder\.confirmStop\(\{ auto: opts\?\.auto === true \}\)/);
   assert.match(readFileSync('frontend/src/pages/founder/RecordingView.jsx', 'utf8'), /fixed inset-0 z-\[90\]/, 'full screen at every width, above the rail');
 });
 

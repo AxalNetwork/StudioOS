@@ -42,6 +42,8 @@ export const AI_SURFACE = {
   researchCompanies: '/research/companies',
   /** Grow · Brand — landing autofill, palette and tagline suggestions (`/api/brand/*`). */
   buildBrand: '/build/brand',
+  /** Raise · Pitch deck — the deck draft and "Fill from project" (`/api/decks/generate`, `/apply-method`, `/:id/autofill`), D767. */
+  raisePitch: '/raise/pitch',
   /** Raise · Pitch · Review — the deck reviewer's section map and review (`/api/deck-reviewer/*`). */
   raisePitchReview: '/raise/pitch/review',
   /** Studio — Eadwyn's interview: answers, explain, tool routing, rerank, dictation, and their safety pass. */
