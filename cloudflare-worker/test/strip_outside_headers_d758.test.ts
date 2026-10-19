@@ -24,9 +24,24 @@ const FIVE = ['nda_3way_founder_investor_axal', 'investor_nda_axal', 'mentor_nda
 
 /** A slug's body as migration 085 seeds it, read from the file itself. */
 function seedBody(slug: string): string {
-  const m = sqlOf('085_seed_legal_templates.sql').match(new RegExp(`\\('${slug}', '(?:[^']|'')*', '[^']*', '((?:[^']|'')*)'`));
-  assert.ok(m, `${slug} is in 085`);
-  return m[1].replace(/''/g, "'");
+  const sql = sqlOf('085_seed_legal_templates.sql');
+  const i = sql.indexOf(`('${slug}', '`);
+  assert.ok(i >= 0, `${slug} is in 085`);
+  /** Reads the SQL string literal whose opening quote is at `i`; returns its text and the index after it. */
+  const literal = (at: number): [string, number] => {
+    let out = '';
+    for (let j = at + 1; j < sql.length; j++) {
+      if (sql[j] !== "'") { out += sql[j]; continue; }
+      if (sql[j + 1] === "'") { out += "'"; j++; continue; }
+      return [out, j + 1];
+    }
+    throw new Error(`unterminated literal for ${slug}`);
+  };
+  const [, afterSlug] = literal(i + 1);
+  const [, afterTitle] = literal(afterSlug + 2);
+  const [, afterCategory] = literal(afterTitle + 2);
+  const [body] = literal(afterCategory + 2);
+  return body;
 }
 
 function store(edit?: (db: any) => void) {
