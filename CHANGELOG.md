@@ -31,6 +31,18 @@
   commitment, newest open, drawn by `FeeStatementView` with no account digits.
   Frontend only: no route, migration or API method changes.
 
+## GitHub sign-ins renew themselves, and disconnecting revokes them (D655 follow-up, #1883)
+
+- GitHub user tokens renew 60 seconds before expiry. Rotated tokens are stored
+  with compare-and-swap so a concurrent reconnect is preserved. An exclusive
+  lease in D1 prevents duplicate renewals even if KV fails; lease losers
+  wait for the result and never renew on their own.
+- A refused refresh shows Reconnect and is not retried until sign-in. Temporary
+  failures leave credentials intact. Disconnect revokes the authorization best
+  effort; the App remains installed on the member's repositories.
+- No new routes, bindings or migrations. Expiry can be enabled by the owner
+  after this change merges; setup remains tracked in #1008 and #1885.
+
 ## Every connector's page, as data the Worker holds to its code (D753, #1875)
 
 - `cloudflare-worker/src/integrations/connectorPages.ts` describes each
@@ -46,6 +58,24 @@
   Calendar, Microsoft 365) are gone until each live check is recorded with its
   date. Google's third permission now reads "Gmail (read-only) is asked for at
   sign-in; Axal VC does not read your Gmail."
+
+## The template editor's Pages view and Compare versions (D717, #1853)
+
+- **Pages.** The editor's middle pane switches between "Live paper" and
+  "Pages". Pages draws the unsaved draft's real PDF from
+  `POST /templates/render.pdf` one page at a time, with "Page X of Y",
+  Previous, Next and pinch-to-zoom on touch. It says when the fallback
+  renderer drew it, and when the draft has changed since. New:
+  `pages/admin/contracts/PdfPages.jsx` and `DraftPages.jsx`.
+- **Compare versions.** It sets any two saved versions, or one and the draft,
+  side by side, with deletions struck through and insertions underlined, and
+  lists title, kind and party changes. Restore copies a body only. New:
+  `pages/admin/contracts/VersionCompare.jsx` and `lib/templateVersions.js`.
+- One new dependency: `pdfjs-dist` pinned at exactly `6.4.299` (its legacy
+  build), loaded only when Pages opens. A guard test fails if the installed
+  bundles gain an eval path.
+- `lib/api.js` exports `rawRequestHeaders`; `contractsApi.renderPdfBlob` and
+  `PaperPreview`'s `paperRequest` are new. No Worker change, no migration.
 
 ## Signing in four steps, at every width (D717, #1857)
 

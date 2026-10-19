@@ -32,6 +32,8 @@ import {
   getProviderImpl,
   type IntegrationRow,
   audienceFor,
+  personalHqOnlyOffHq,
+  personalHqOnlySentence,
   ConnectRefusal,
   type ProviderDescriptor,
 } from '../integrations/registry';
@@ -67,9 +69,11 @@ export function ensureRole(c: Context<{ Bindings: Env }>, user: User) {
 
 /**
  * D710 (#1775): how this caller may see a provider. A provider with no
- * audience fields is `open`, as before; Mercury is an `entity` connection for
- * an admin on HQ and `none` for everyone else, who is answered as if the key
- * did not exist.
+ * audience fields is `open`, as before. Mercury is an `entity` connection for
+ * an admin on HQ, `personal` for a founder or partner on either host and an
+ * investor on HQ (D713, D752), and `none` for everyone else, who is answered
+ * as if the key did not exist. An investor off HQ is `none` too, but
+ * `/connect` tells them it is HQ only (403 `purpose_not_allowed`, D752).
  */
 function audienceOf(c: Context<{ Bindings: Env }>, user: User, desc: ProviderDescriptor) {
   return audienceFor(desc, { role: String(user.role || ''), hq: branchOf(c.env) === null });
@@ -435,6 +439,11 @@ integrations.post('/connect', async (c) => {
   if (!key) return c.json({ error: 'provider_key is required' }, 400);
 
   const desc = getDescriptor(key);
+  // D752: a member who followed a link learns why; every other route stays 404.
+  const viewer = { role: String(user.role || ''), hq: branchOf(c.env) === null };
+  if (desc && personalHqOnlyOffHq(desc, viewer)) {
+    return refuse(c, 403, { code: 'purpose_not_allowed', message: personalHqOnlySentence(desc.display_name) });
+  }
   if (!desc || audienceOf(c, user, desc) === 'none') return c.json({ error: 'unknown_provider', provider_key: key }, 404);
   // D710: an entity connection is added in its own console, never here.
   if (audienceOf(c, user, desc) === 'entity') {
