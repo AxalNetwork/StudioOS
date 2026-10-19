@@ -109,7 +109,7 @@ test('Fund: every option of the section names itself on its band', () => {
   assertBandsNamed(rows);
 });
 
-// ------------------------------------------------------------------ the band names its option only while it is open
+// ------------------------------------------------------------------ the band names its inventory key while it is open
 
 function Probe({ seen }) {
   const page = useRailPage();
@@ -117,13 +117,14 @@ function Probe({ seen }) {
   return null;
 }
 
-test('a band names its option while a draft runs or waits for Accept, and clears it once accepted or discarded', async () => {
+// D770 (#2095) decides when a band is open (a run in flight, or a draft shown) and its label;
+// `railOption` only replaces the registry's `draft:<surface>` with the profile's key.
+test('a band names its railOption while a draft runs or is shown, and the registry key without one', async () => {
   const saved = { ...api.research };
   let stored = [];
   let release;
   api.research.zoneDrafts = async () => ({ items: stored });
   api.research.zoneDraftRun = () => new Promise((r) => { release = () => { stored = [{ uid: 'd1', body: 'Memo', accepted: false }]; r({ item: stored[0] }); }; });
-  api.research.zoneDraftAccept = async () => { stored = [{ ...stored[0], accepted: true }]; return { item: stored[0] }; };
   const restore = installDocument();
   const container = document.createElement('div'); document.body.appendChild(container);
   const root = createRoot(container);
@@ -134,6 +135,7 @@ test('a band names its option while a draft runs or waits for Accept, and clears
   const button = (text) => walk(container).find((n) => n.tagName?.toLowerCase() === 'button' && (n.textContent || '').includes(text));
   const tree = (railOption) => h(MemoryRouter, { initialEntries: ['/deals/screening'] },
     h(RailPageProvider, { role: 'investor' }, h(ZoneDraft, { surface: 'deals/screening', label: 'Draft · screening memo', run: 'Draft the memo', railOption }), h(Probe, { seen })));
+  const named = { key: 'draft:screening-memo', label: 'Draft · screening memo' };
   try {
     await act(async () => { root.render(tree('draft:screening-memo')); });
     await settle();
@@ -141,18 +143,14 @@ test('a band names its option while a draft runs or waits for Accept, and clears
     assert.equal(seen.at(-1).option, null, 'a closed band names nothing');
     await act(async () => { props(button('Draft the memo')).onClick(); });
     await settle();
-    assert.deepEqual(seen.at(-1).option, { key: 'draft:screening-memo', label: 'Draft the memo' }, 'running');
+    assert.deepEqual(seen.at(-1).option, named, 'running');
     await act(async () => { release(); });
     await settle();
-    assert.deepEqual(seen.at(-1).option, { key: 'draft:screening-memo', label: 'Draft the memo' }, 'waiting for Accept');
-    await act(async () => { await props(button('Accept draft')).onClick(); });
-    await settle();
-    assert.equal(seen.at(-1).option, null, 'accepted, the rail is the page\'s again');
-    // A band with no railOption names nothing, even with a draft waiting.
-    stored = [{ uid: 'd2', body: 'Memo', accepted: false }];
+    assert.deepEqual(seen.at(-1).option, named, 'its draft shown');
+    // Without railOption, the same band names the registry's key (D770).
     await act(async () => { root.render(tree(null)); });
     await settle();
-    assert.equal(seen.at(-1).option, null);
+    assert.deepEqual(seen.at(-1).option, { key: 'draft:deals/screening', label: 'Draft · screening memo' });
   } finally {
     await act(async () => root.unmount());
     restore();

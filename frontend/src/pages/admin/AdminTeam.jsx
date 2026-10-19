@@ -17,6 +17,7 @@ import { appOrigin } from '../../lib/branchHost';
 import { useAuth } from '../../hooks/useAuthSync';
 import { isSuperAdminUser } from '../../lib/shellRole';
 import { RailFrame, WorkerRail } from '../../ui';
+import useRecordCrumb from './useRecordCrumb';
 
 const EMPTY = {
   slug: '',
@@ -93,6 +94,8 @@ function FocusAreasInput({ value, onChange }) {
 function MemberEditor({ initial, onClose, onSaved, notify }) {
   useEscapeClose(onClose);
   const isNew = !initial?.id;
+  // D775 (#2101): the member being edited is the rail's record; a new one has none yet.
+  useRecordCrumb(isNew ? null : initial?.name, 'team-member', initial?.id);
   const [form, setForm] = useState({ ...EMPTY, ...(initial || {}) });
   const [busy, setBusy] = useState(false);
   const [photoBusy, setPhotoBusy] = useState(false);

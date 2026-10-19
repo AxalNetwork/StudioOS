@@ -5,6 +5,7 @@ import { publications } from '../../lib/api';
 import { useToast } from '../../components/useToast';
 import ToastMessage from '../../components/ToastMessage';
 import PublicationsFrame from './PublicationsFrame';
+import useRecordCrumb from './useRecordCrumb';
 
 export default function PublicationDetail() {
   const { id } = useParams();
@@ -22,6 +23,8 @@ export default function PublicationDetail() {
   const [lastRender, setLastRender] = useState(null);
   // Persisted last-render (from admin_audit_log) — survives reloads.
   const persistedLast = data?.last_render || null;
+  // D775 (#2101): this publication is the rail's record.
+  useRecordCrumb(data?.publication?.title, 'publication', data?.publication?.id ?? id);
 
   const load = useCallback(async () => {
     setLoading(true);
