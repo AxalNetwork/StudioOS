@@ -198,7 +198,7 @@ export default function AdvisorStudioHome({
     <RailFrame
       rail={(
         <WorkerRail
-          workspace="Studio"
+          workspace="Home"
           role="advisor"
           stance="Read across your practice record"
           note="Eadwyn reads an interview answer, a voice note or an explain request only when you send it. Every tile reads your stored practice record and writes nothing."
