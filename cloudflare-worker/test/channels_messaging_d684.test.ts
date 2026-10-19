@@ -54,8 +54,10 @@ import { createLinkCode } from '../src/services/channels/linkCodes.ts';
 import { normaliseTelegramUpdate } from '../src/services/channels/telegram.ts';
 import { normaliseWhatsAppPayload, maskNumber } from '../src/services/channels/whatsapp.ts';
 import { CHANNEL_LIMITS } from '../src/services/channels/types.ts';
+import { decryptColumn, encryptColumn } from '../src/services/columnCipher.ts';
+import { voiceNoteForJob } from '../src/services/channels/threads.ts';
 import {
-  ADMIN, app, businessMessage, call, confirmUpdate, connectionUpdate, consentGiven, count, GONE, ids, INTERVIEW,
+  ADMIN, app, AUDIO, businessMessage, call, confirmUpdate, connectionUpdate, consentGiven, count, GONE, ids, INTERVIEW,
   JWT_SECRET, linkTelegram, ME, mockFetch, noSecretsSeen, now, OTHER, OTHER_PROJECT, PNID, PNID_GONE,
   PROJECT, ref, refCode, type Route, SECRETS, seen, send, sign, startUpdate, telegramApi, TG_ME, TG_NEW, TG_OTHER,
   tgHook, tgUser, WA_CUSTOMER, WA_TOKEN, waHook, waPayload, waText, world,
@@ -1134,7 +1136,7 @@ test('#1586 voice: the daily cap, too large, unreadable and an expired connectio
     const notes = await waitingNotes(env, uid);
     assert.deepEqual(notes.map((m: any) => [m.transcription_failure.reason, m.transcription_failure.retry]),
       [['too_large', null], ['unreadable', null], ['daily_cap', 'available']]);
-    assert.equal(notes[0].transcription_failure.sentence, 'This voice note is larger than Axal can transcribe from Telegram (20 MB).');
+    assert.equal(notes[0].transcription_failure.sentence, 'This file is over 5 MB. Axal takes up to 5 MB per note from Telegram for now.');
     assert.equal(notes[2].transcription_failure.sentence, 'This Telegram account reached its voice notes for today, so this one waits. Retry it tomorrow.');
     assert.equal((await call(env, ME, 'POST', `/threads/${uid}/voice/${notes[0].uid}/retry`)).status, 409, 'too large is never retried');
   } finally { f.restore(); }
@@ -1728,5 +1730,270 @@ test('#1602 mutation: a completed claim is idempotent past expiry and the respon
       'const row = uid ? await memberLinkClaim', 'const row = false ? await memberLinkClaim');
     const wrong = await latestInstead.pendingLinkView(env, ME, uid);
     assert.throws(() => assert.equal(wrong.uid, uid), { name: 'AssertionError' });
+  } finally { f.restore(); }
+});
+
+// ---------------------------------------------------------------------------
+// D756 (#1896): voice notes, audio files, audio documents and round videos —
+// normalised, and downloaded under a deadline and a 5 MB cap.
+
+const MB5 = 5 * 1024 * 1024;
+const TOO_LARGE_TG = 'This file is over 5 MB. Axal takes up to 5 MB per note from Telegram for now.';
+const UNSUPPORTED = 'Axal can transcribe MP3, M4A, OGG, WAV and WebM audio only, so this file was not transcribed.';
+const ROUND_VIDEO = "Round video messages can't be transcribed yet.";
+
+/** Telegram's API with one file per id: getFile names a path per id, and the path serves its bytes. */
+function telegramFiles(files: Record<string, { bytes?: Uint8Array | ReadableStream; size?: number; status?: number; headers?: Record<string, string>; throws?: boolean }>): Route {
+  return (url, init) => {
+    if (url.pathname.endsWith('/getFile')) {
+      const id = String(JSON.parse(String(init.body)).file_id);
+      const file = files[id];
+      if (file) return { json: { ok: true, result: { file_id: id, file_size: file.size ?? 4000, file_path: `music/${id}.bin` } } };
+    }
+    const m = /\/file\/bot[^/]+\/music\/(.+)\.bin$/.exec(url.pathname);
+    if (m && files[m[1]]) {
+      const file = files[m[1]];
+      if (file.throws) throw new TypeError('fetch failed');
+      return { status: file.status ?? 200, body: file.bytes as any ?? AUDIO.OGG, headers: { 'content-type': 'application/octet-stream', ...(file.headers ?? {}) } };
+    }
+    return telegramApi(url, init);
+  };
+}
+const fileCalls = (f: { calls: { url: string }[] }) => ({
+  getFile: f.calls.filter((c) => c.url.endsWith('/getFile')).length,
+  download: f.calls.filter((c) => c.url.includes('/file/bot')).length,
+});
+const dayCount = (db: any) => Number(db.prepare(`SELECT COALESCE(SUM(n), 0) AS n FROM channel_counters WHERE counter = 'transcriptions_day'`).get().n);
+const lastVoiceError = (db: any) => db.prepare(`SELECT error FROM channel_events WHERE kind = 'voice' ORDER BY id DESC LIMIT 1`).get().error;
+/** A 6 MB body with no content-length, in 64 KB chunks; `pulls` and `cancelled` say how far it was read. */
+function bigStream() {
+  const state = { pulls: 0, cancelled: false };
+  const chunk = new Uint8Array(64 * 1024).fill(1);
+  chunk.set([0x4f, 0x67, 0x67, 0x53]);
+  const stream = new ReadableStream<Uint8Array>({
+    pull(c) { state.pulls += 1; if (state.pulls * chunk.byteLength > 6 * 1024 * 1024) c.close(); else c.enqueue(chunk.slice()); },
+    cancel() { state.cancelled = true; },
+  }, { highWaterMark: 0 });
+  return { stream, state };
+}
+async function runLastVoiceJob(env: any, queued: any[]) {
+  const jobs = voiceJobs(queued);
+  await runChannelJob(env, 'channel_followup', jobs[jobs.length - 1].payload);
+}
+
+test('D756 #1896 normaliser: voice, audio, round videos and audio documents become notes; other media, edits and bad sizes do not', () => {
+  const norm = (o: Record<string, unknown>, key = 'business_message') => normaliseTelegramUpdate(businessMessage('BC-ME', { ...o, key } as any)) as any;
+  const voice = norm({ voice: { file_id: 'V1', mime_type: 'audio/ogg', duration: 7, file_size: 4000 } });
+  assert.deepEqual(voice.voice, { fileRef: 'V1', mime: 'audio/ogg', durationSec: 7, media: 'voice', sizeBytes: 4000 });
+  const audio = norm({ audio: { file_id: 'A1', mime_type: 'audio/mpeg', duration: 61, file_size: 9000 }, caption: 'The call with Lee' });
+  assert.equal(audio.text, null, 'a caption is dropped in v1');
+  assert.deepEqual(audio.voice, { fileRef: 'A1', mime: 'audio/mpeg', durationSec: 61, media: 'audio', sizeBytes: 9000 });
+  const round = norm({ video_note: { file_id: 'R1', duration: 12, length: 384, file_size: 5000 } });
+  assert.deepEqual(round.voice, { fileRef: 'R1', mime: 'video/mp4', durationSec: 12, media: 'video_note', sizeBytes: 5000 });
+  const doc = norm({ document: { file_id: 'D1', mime_type: 'audio/x-m4a', file_name: 'call.m4a', file_size: 7000 } });
+  assert.deepEqual(doc.voice, { fileRef: 'D1', mime: 'audio/x-m4a', durationSec: null, media: 'audio', sizeBytes: 7000 });
+  for (const o of [
+    { document: { file_id: 'P1', mime_type: 'application/pdf' } },
+    { document: { file_id: 'P2' } },
+    { video: { file_id: 'VID', mime_type: 'video/mp4', duration: 3 } },
+    { photo: [{ file_id: 'PH', width: 1, height: 1 }] },
+  ]) assert.deepEqual([norm(o).kind, norm(o).reason], ['ignored', 'unsupported_type'], JSON.stringify(o));
+  assert.equal(norm({ audio: { file_id: 'A2', mime_type: 'audio/mpeg' } }, 'edited_business_message').reason, 'unsupported_type', 'an edit stays text only');
+  for (const file_size of [-1, 'x', 2 ** 60]) {
+    assert.equal(norm({ audio: { file_id: 'A3', mime_type: 'audio/mpeg', file_size } }).voice.sizeBytes, null, String(file_size));
+  }
+});
+
+test('D756 #1896 webhook: an audio file needs the secret, lands once, and keeps its kind and size only in the encrypted reference', async () => {
+  const { env, db } = await world({ seed: true });
+  const update = businessMessage('BC-ME', { audio: { file_id: 'AUDIO-FILE-77', mime_type: 'audio/mpeg', duration: 30, file_size: 4000 } });
+  assert.equal((await tgHook(env, update, 'wrong-secret')).status, 401);
+  assert.equal((await tgHook(env, update, null)).status, 401);
+  assert.equal(count(db, 'SELECT COUNT(*) n FROM channel_thread_messages'), 0, 'a forged delivery stores nothing');
+  assert.equal((await tgHook(env, update)).status, 200);
+  assert.equal((await tgHook(env, update)).status, 200);
+  assert.equal(count(db, 'SELECT COUNT(*) n FROM channel_thread_messages'), 1, 'one placeholder');
+  assert.equal(count(db, `SELECT COUNT(*) n FROM channel_events WHERE kind = 'voice'`), 1, 'one event');
+  const row = db.prepare('SELECT * FROM channel_thread_messages').get();
+  assert.equal(row.kind, 'voice');
+  assert.deepEqual(JSON.parse(String(await decryptColumn(env, 'channel_thread_messages', 'voice_ref_enc', row.uid, row.voice_ref_enc))),
+    { file: 'AUDIO-FILE-77', mime: 'audio/mpeg', media: 'audio', size: 4000 });
+  for (const table of ['channel_thread_messages', 'channel_events', 'channel_threads']) {
+    assert.equal(JSON.stringify(db.prepare(`SELECT * FROM ${table}`).all()).includes('AUDIO-FILE-77'), false, `${table} holds the file id`);
+  }
+  // The job reads the kind and size back; a reference written before them (or a bad one) is a voice note of unknown size.
+  db.prepare(`UPDATE channel_thread_messages SET transcribe_job = 'J-1' WHERE uid = ?`).run(row.uid);
+  const job = await voiceNoteForJob(env, row.uid, 'J-1');
+  assert.deepEqual([job?.file, job?.mime, job?.media, job?.size], ['AUDIO-FILE-77', 'audio/mpeg', 'audio', 4000]);
+  for (const [stored, want] of [
+    [{ file: 'OLD', mime: 'audio/ogg' }, ['voice', null]],
+    [{ file: 'BAD', mime: null, media: 'sticker', size: 'x' }, ['voice', null]],
+    [{ file: 'NEG', mime: null, media: 'video_note', size: -1 }, ['video_note', null]],
+  ] as const) {
+    db.prepare('UPDATE channel_thread_messages SET voice_ref_enc = ? WHERE uid = ?')
+      .run(await encryptColumn(env, 'channel_thread_messages', 'voice_ref_enc', row.uid, JSON.stringify(stored)), row.uid);
+    const read = await voiceNoteForJob(env, row.uid, 'J-1');
+    assert.deepEqual([read?.media, read?.size], want, stored.file);
+  }
+});
+
+test('D756 #1896 job: an MP3, an M4A document and a voice note with no type are each transcribed once; a round video waits, never fetched', async () => {
+  const { env, db, queued, aiCalls } = await world({ seed: true });
+  const f = mockFetch(telegramFiles({ MP3: { bytes: AUDIO.MP3_ID3 }, M4A: { bytes: AUDIO.M4A }, OGG: { bytes: AUDIO.OGG } }));
+  try {
+    const { uid, sessionId } = await assignedTelegramChat(env);
+    const notes = [
+      { audio: { file_id: 'MP3', mime_type: 'audio/mpeg', duration: 9 } },
+      { document: { file_id: 'M4A', mime_type: 'audio/x-m4a' } },
+      { voice: { file_id: 'OGG', duration: 4 } },
+    ];
+    for (const [i, n] of notes.entries()) {
+      await tgHook(env, businessMessage('BC-ME', n as any));
+      await runLastVoiceJob(env, queued);
+      assert.equal(aiCalls.length, i + 1, `one model call for ${Object.keys(n)[0]}`);
+    }
+    assert.equal(segments(db, sessionId).length, 4, 'the text and three transcripts');
+    assert.equal(dayCount(db), 3);
+
+    const before = f.calls.length;
+    await tgHook(env, businessMessage('BC-ME', { video_note: { file_id: 'ROUND', duration: 8, length: 384 } }));
+    await runLastVoiceJob(env, queued);
+    assert.deepEqual(fileCalls({ calls: f.calls.slice(before) }), { getFile: 0, download: 0 }, 'a round video is never fetched');
+    assert.equal(aiCalls.length, 3, 'no model ran');
+    assert.equal(lastVoiceError(db), 'video_note_unsupported');
+    const [waiting] = await waitingNotes(env, uid);
+    assert.deepEqual([waiting.transcription_failure.reason, waiting.transcription_failure.sentence, waiting.transcription_failure.retry],
+      ['video_note_unsupported', ROUND_VIDEO, null]);
+  } finally { f.restore(); }
+});
+
+test('D756 #1896 job: a declared size over 5 MB fetches nothing; getFile over 5 MB never downloads; neither takes the day\'s cap', async () => {
+  const { env, db, queued, aiCalls } = await world({ seed: true });
+  const f = mockFetch(telegramFiles({ BIGMETA: { size: MB5 + 1 } }));
+  try {
+    const { uid } = await assignedTelegramChat(env);
+    await tgHook(env, businessMessage('BC-ME', { audio: { file_id: 'BIGMSG', mime_type: 'audio/mpeg', file_size: MB5 + 1 } }));
+    let before = f.calls.length;
+    await runLastVoiceJob(env, queued);
+    assert.deepEqual(fileCalls({ calls: f.calls.slice(before) }), { getFile: 0, download: 0 }, 'no Telegram call at all');
+    assert.equal(lastVoiceError(db), 'too_large');
+
+    await tgHook(env, businessMessage('BC-ME', { audio: { file_id: 'BIGMETA', mime_type: 'audio/mpeg', file_size: 4000 } }));
+    before = f.calls.length;
+    await runLastVoiceJob(env, queued);
+    assert.deepEqual(fileCalls({ calls: f.calls.slice(before) }), { getFile: 1, download: 0 }, 'getFile, then no download');
+    assert.equal(lastVoiceError(db), 'too_large');
+    assert.equal(dayCount(db), 0, "the day's cap is untouched");
+    assert.equal(aiCalls.length, 0);
+    const failures = (await waitingNotes(env, uid)).map((m: any) => [m.transcription_failure.reason, m.transcription_failure.sentence, m.transcription_failure.retry]);
+    assert.deepEqual(failures, [['too_large', TOO_LARGE_TG, null], ['too_large', TOO_LARGE_TG, null]]);
+  } finally { f.restore(); }
+});
+
+test('D756 #1896 job: a stream over 5 MB stops being read; a content-length over 5 MB is never read; no model, no cap', async () => {
+  const { env, db, queued, aiCalls } = await world({ seed: true });
+  const open = bigStream();
+  const declared = bigStream();
+  const f = mockFetch(telegramFiles({
+    STREAM: { bytes: open.stream },
+    LENGTH: { bytes: declared.stream, headers: { 'content-length': String(6 * 1024 * 1024) } },
+  }));
+  try {
+    await assignedTelegramChat(env);
+    await tgHook(env, businessMessage('BC-ME', { voice: { file_id: 'STREAM', mime_type: 'audio/ogg' } }));
+    await runLastVoiceJob(env, queued);
+    assert.equal(lastVoiceError(db), 'too_large');
+    assert.equal(open.state.cancelled, true, 'the read was cancelled');
+    assert.ok(open.state.pulls <= 82, `stopped after about 5 MB (${open.state.pulls} chunks)`);
+
+    await tgHook(env, businessMessage('BC-ME', { voice: { file_id: 'LENGTH', mime_type: 'audio/ogg' } }));
+    await runLastVoiceJob(env, queued);
+    assert.equal(lastVoiceError(db), 'too_large');
+    assert.equal(declared.state.pulls, 0, 'not one chunk read');
+    assert.equal(aiCalls.length, 0);
+    assert.equal(dayCount(db), 0);
+  } finally { f.restore(); }
+});
+
+test('D756 #1896 job: bytes that disagree with the declared type, or a type the recorder does not take, are refused in plain words', async () => {
+  const { env, db, queued, aiCalls } = await world({ seed: true });
+  const f = mockFetch(telegramFiles({ LIE: { bytes: AUDIO.OGG }, JUNK: { bytes: AUDIO.JUNK }, AAC: {}, ADTS: { bytes: AUDIO.ADTS } }));
+  try {
+    const { uid } = await assignedTelegramChat(env);
+    const cases: [string, Record<string, unknown>][] = [
+      ['LIE', { audio: { file_id: 'LIE', mime_type: 'audio/mpeg' } }],
+      ['JUNK', { voice: { file_id: 'JUNK' } }],
+      ['AAC', { audio: { file_id: 'AAC', mime_type: 'audio/aac' } }],
+      ['ADTS', { audio: { file_id: 'ADTS', mime_type: 'audio/mpeg' } }],
+    ];
+    for (const [id, n] of cases) {
+      const before = f.calls.length;
+      await tgHook(env, businessMessage('BC-ME', n as any));
+      await runLastVoiceJob(env, queued);
+      assert.equal(lastVoiceError(db), 'unsupported_format', id);
+      if (id === 'AAC') assert.deepEqual(fileCalls({ calls: f.calls.slice(before) }), { getFile: 0, download: 0 }, 'an unadmitted type is refused before any call');
+    }
+    assert.equal(aiCalls.length, 0);
+    assert.equal(dayCount(db), 0);
+    for (const m of await waitingNotes(env, uid)) {
+      assert.deepEqual([m.transcription_failure.reason, m.transcription_failure.sentence, m.transcription_failure.retry], ['unsupported_format', UNSUPPORTED, null]);
+    }
+  } finally { f.restore(); }
+});
+
+test('D756 #1896 job: a WhatsApp download over 5 MB reaches no model, with D754\'s own sentence', async () => {
+  const { env, db, queued, aiCalls } = await world({ seed: true });
+  await waHook(env, waPayload(PNID, {
+    contacts: [{ profile: { name: 'Priya Shah' }, wa_id: WA_CUSTOMER }],
+    messages: [{ from: WA_CUSTOMER, id: 'wamid.BIG', timestamp: String(now()), type: 'audio', audio: { id: 'MEDIA-BIG', mime_type: 'audio/ogg', voice: true } }],
+  }));
+  const [t] = (await call(env, ME, 'GET', '/threads')).body.items;
+  await call(env, ME, 'POST', `/threads/${t.uid}/assign`, { interview_id: INTERVIEW });
+  await consentGiven(env, db, t.uid);
+  const f = mockFetch((url) => {
+    if (url.hostname === 'graph.facebook.com') return { json: { url: 'https://lookaside.fbsbx.com/whatsapp_business/attachments/?mid=MEDIA-BIG', mime_type: 'audio/ogg', file_size: 3000, id: 'MEDIA-BIG' } };
+    if (url.hostname === 'lookaside.fbsbx.com') return { body: new Uint8Array(6 * 1024 * 1024).fill(1), headers: { 'content-type': 'audio/ogg' } };
+    return undefined;
+  });
+  try {
+    await runLastVoiceJob(env, queued);
+    assert.equal(f.calls.length, 2, 'the lookup and the download');
+    assert.equal(aiCalls.length, 0, 'no model ran');
+    // A note queued by the consent carries no webhook event, so its code is on the note.
+    assert.equal(db.prepare('SELECT transcribe_error FROM channel_thread_messages').get().transcribe_error, 'too_large');
+    assert.equal(dayCount(db), 0);
+    const [note] = await waitingNotes(env, t.uid);
+    assert.equal(note.transcription_failure.sentence, 'This recording is larger than Axal can take from WhatsApp (5 MB). Record it with the in-app recorder instead.');
+  } finally { f.restore(); }
+});
+
+test('D756 #1896 logs and rows: a network throw, a 500, an oversize stream and a mismatch log codes only, never the token, path or file id', async (t) => {
+  const { env, db, queued } = await world({ seed: true });
+  const lines: string[] = [];
+  for (const m of ['log', 'info', 'warn', 'error', 'debug'] as const) {
+    t.mock.method(console, m, (...a: unknown[]) => { lines.push(a.map(String).join(' ')); });
+  }
+  const big = bigStream();
+  const f = mockFetch(telegramFiles({
+    NETFAIL: { throws: true }, SERVER: { status: 500, bytes: new Uint8Array(0) }, HUGESTREAM: { bytes: big.stream }, MISMATCH: { bytes: AUDIO.WEBM },
+  }));
+  try {
+    await assignedTelegramChat(env);
+    for (const id of ['NETFAIL', 'SERVER', 'HUGESTREAM', 'MISMATCH']) {
+      await tgHook(env, businessMessage('BC-ME', { audio: { file_id: id, mime_type: 'audio/mpeg' } }));
+      await runLastVoiceJob(env, queued);
+    }
+    assert.ok(lines.some((l) => l.includes('telegram file download failed code=')), 'the adapter logs a code');
+    const all = lines.join('\n');
+    for (const s of [SECRETS.TELEGRAM_CHANNEL_BOT_TOKEN, '/file/bot', 'music/', 'NETFAIL', 'SERVER', 'HUGESTREAM', 'MISMATCH']) {
+      assert.equal(all.includes(s), false, `a log line carries ${s}`);
+    }
+    const codes = new Set(['provider_unreachable', 'provider_unavailable', 'too_large', 'unsupported_format', 'network']);
+    const errors = [
+      ...db.prepare(`SELECT error FROM channel_events WHERE kind = 'voice' AND error IS NOT NULL`).all().map((r: any) => r.error),
+      ...db.prepare('SELECT transcribe_error AS error FROM channel_thread_messages WHERE transcribe_error IS NOT NULL').all().map((r: any) => r.error),
+    ];
+    assert.ok(errors.length >= 4);
+    for (const e of errors) assert.ok(codes.has(e), `an unexpected error value: ${e}`);
   } finally { f.restore(); }
 });

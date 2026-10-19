@@ -201,12 +201,27 @@ export function mockFetch(route: Route) {
   return { calls, restore: () => { globalThis.fetch = original; } };
 }
 
+/** D756 (#1896): each container's first bytes, padded to 4000 bytes. */
+const padded = (head: number[]) => { const b = new Uint8Array(4000).fill(7); b.set(head); return b; };
+const asciiBytes = (s: string) => [...s].map((c) => c.charCodeAt(0));
+export const AUDIO = {
+  OGG: padded(asciiBytes('OggS')),
+  MP3_ID3: padded(asciiBytes('ID3')),
+  MP3_SYNC: padded([0xff, 0xfb]),
+  ADTS: padded([0xff, 0xf1]),
+  WAV: padded([...asciiBytes('RIFF'), 0, 0, 0, 0, ...asciiBytes('WAVE')]),
+  M4A: padded([0, 0, 0, 0x20, ...asciiBytes('ftypM4A ')]),
+  WEBM: padded([0x1a, 0x45, 0xdf, 0xa3]),
+  JUNK: new Uint8Array(4000).fill(7),
+} as const;
+
 /** Telegram's Bot API, as far as these tests use it. */
 export const telegramApi: Route = (url) => {
   if (url.hostname !== 'api.telegram.org') return undefined;
   if (url.pathname.endsWith('/sendMessage')) return { json: { ok: true, result: { message_id: 9001, date: 1 } } };
   if (url.pathname.endsWith('/getFile')) return { json: { ok: true, result: { file_id: 'VOICE-1', file_size: 4000, file_path: 'voice/file_7.oga' } } };
-  if (url.pathname.startsWith('/file/bot')) return { body: new Uint8Array(4000).fill(7), headers: { 'content-type': 'audio/ogg' } };
+  // D756 (#1896): a real Ogg header, served as octet-stream, so the type comes from the message, never the response.
+  if (url.pathname.startsWith('/file/bot')) return { body: AUDIO.OGG, headers: { 'content-type': 'application/octet-stream' } };
   if (url.pathname.endsWith('/setWebhook')) return { json: { ok: true, result: true } };
   return undefined;
 };
@@ -240,13 +255,17 @@ export const connectionUpdate = (bc: string, tg: string, extra: Record<string, u
   update_id: ++ids.update,
   business_connection: { id: bc, user: tgUser(tg), user_chat_id: Number(tg), date: now(), is_enabled: enabled, ...extra },
 });
-export const businessMessage = (bc: string, o: { chat?: number; from?: number; id?: number; text?: string; voice?: unknown; key?: string } = {}) => ({
+type Media = { voice?: unknown; audio?: unknown; video_note?: unknown; document?: unknown; video?: unknown; photo?: unknown; caption?: string };
+const MEDIA_KEYS = ['voice', 'audio', 'video_note', 'document', 'video', 'photo', 'caption'] as const;
+export const businessMessage = (bc: string, o: { chat?: number; from?: number; id?: number; text?: string; key?: string } & Media = {}) => ({
   update_id: ++ids.update,
   [o.key ?? 'business_message']: {
     message_id: o.id ?? ++ids.message, business_connection_id: bc, date: now(),
     chat: { id: o.chat ?? 8001, type: 'private', first_name: 'Sam' },
     from: { id: o.from ?? o.chat ?? 8001, is_bot: false, first_name: 'Sam', last_name: 'Okafor' },
-    ...(o.voice ? { voice: o.voice } : { text: o.text ?? 'We reconcile invoices by hand every Friday.' }),
+    ...(MEDIA_KEYS.some((k) => o[k] !== undefined)
+      ? Object.fromEntries(MEDIA_KEYS.filter((k) => o[k] !== undefined).map((k) => [k, o[k]]))
+      : { text: o.text ?? 'We reconcile invoices by hand every Friday.' }),
   },
 });
 
