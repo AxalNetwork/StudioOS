@@ -141,6 +141,7 @@ export default function CheckoutConfirmationPage() {
         {state === 'credited' ? <p>New balance: {money(topup?.balance_microusd) ?? 'Unreadable'}</p>
           : state === 'refunded' ? <p>This token-pack payment has a refund. Check Usage for the updated balance.</p>
             : state === 'disputed' ? <p>This token-pack payment is disputed. Check Usage for the latest balance.</p>
+              : topup?.state === 'unreadable' ? <p>Unreadable · The token-pack purchase could not be read. Check Usage for the latest token balance.</p>
               : pollingStopped ? <p>{order.status === 'paid' ? 'The payment is recorded.' : 'Your order is recorded.'} Check Usage for the latest token balance.</p>
                 : <p>Adding {amount ?? 'tokens'} to your top-up balance. This page updates when Stripe confirms the payment.</p>}
         {error && <p className="mt-2 text-red-600 dark:text-red-400">{error}</p>}

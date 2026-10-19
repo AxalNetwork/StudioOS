@@ -52,7 +52,7 @@ const STATE_TTL_SECONDS = 600; // 10 minutes per task spec.
 // when present (e.g. preview env pointing at a workers.dev URL), but the
 // production deploy now self-bootstraps to https://axal.vc/api/linkedin/
 // oauth/callback so the LinkedIn consent screen never shows workers.dev.
-function linkedinRedirectUri(env: Env): string {
+export function linkedinRedirectUri(env: Env): string {
   // In production, ignore stale workers.dev overrides (see services/calendar.ts
   // for the same hardening — a workers.dev consent screen would 410-Gone on
   // the callback path and break the connect).
