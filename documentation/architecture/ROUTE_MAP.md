@@ -175,6 +175,20 @@ Changed routes:
 The Usage page work in #1430 uses the mounted `ai_budget.ts` routes. `GET /api/ai-budget/me` returns the caller's allowance and paid balance with `held_for_review` (UID, time, held micro-USD and recorded cost); a review hold blocks new runs without hiding that read. Super Admin routes `GET /api/ai-budget/reviews` and `POST /api/ai-budget/reviews/:uid/charge|refund` list and settle those holds with a recorded reason and actor. `GET /api/ai-budget/caps` lists all ten plan keys, their effective daily/monthly allowances and whether each value is recorded or from the environment; `PUT /api/ai-budget/caps/:licence` remains the audited write. Since D750 (#1841), `GET /api/ai-budget/top-up` answers `{configured:false}`, `{configured:true,state:'ready',product}` or `{configured:true,state:'not_ready'}` (503 only when D1 or Stripe cannot be read), and the Super Admin route `GET /api/ai-budget/top-up/status` returns `{state, reason, price_id_suffix, mode}` for the AI allowances screen. These are Worker routes for #1435's screens (moved from S09), not frontend API methods added by this issue.
 
 
+### Eadwyn AI rail Worker contract (D720, routes on `main`)
+
+`routes/ai.ts`, mounted at `/api/ai`. Every route is signed in (`requireAuth`), reads and writes the caller's own rows only, and takes no user id from the body or the query. The owner's runbook is `documentation/operations/AIRAIL.md`. D720's new routes get their rows when they land: `GET /api/ai/rail` (D764, #2089), `GET /api/ai/catalogue` (D760, #2017), `POST /api/ai/rail/run` (D765) and `GET /api/ai-budget/runs` (D776, #2093).
+
+| Route | Who | What |
+| --- | --- | --- |
+| `GET /api/ai/me/spend` | signed in | The caller's month-to-date and today figures, the caps the router enforces, and their last run. `?surface=<path>` narrows it to one page's month and last run (D552); a value that is not an app path exactly as the router records one is refused with 400. |
+| `GET /api/ai/pricing` | signed in | The router's own tables: `unit` (`usd_per_1m_tokens`), `prices` (`PRICE_USD_PER_1M_TOKENS`), `audio_prices` (per audio minute), and `routes`, each task's `model`, `fallback_chain` and `alternates`. The rail draws "Default" only on a task's `model` (D400). |
+| `GET /api/ai/rates` | signed in | The Usage page's rate card (D641): one row per model either price table holds, with its name, `retired: true` on a model kept only so past runs keep their cost, read from the tables on every request. |
+| `GET /api/ai/rail-preferences` | signed in | The caller's rail `modes` and `models`, by section (D698, migration 465's `ai_rail_preferences`). |
+| `PUT /api/ai/rail-preferences/:section` | signed in | `{ mode: 'eadwyn' \| 'manual' \| null }`; anything else is 400 `invalid_mode`. `null` clears it. At most `RAIL_PREFERENCE_CAP` (200) rows per member. |
+| `PUT /api/ai/rail-preferences/:section/:task` | signed in | `{ model: string \| null }`: one of the task's `alternates`, else 400 `model_not_offered`; a task with no choice is refused. `null` clears the pick. |
+| `POST /api/ai/workspace/explain` | signed in | `{ workspace, zone?, coverage: string[], model?, page? }`: reads back one workspace zone from the coverage lines the rail already draws, never the rows behind them. `workspace` is required (400). The run goes through `run()`, which owns the model allow-list, the budget and Llama Guard (D763), and records `page` as its surface. |
+
 ### AI credits and token packs Worker contract (D755, #1870)
 
 D755 sells the AI top-up balance as token packs (`ai_token_packs`, migration 486) and records every movement of it in the append-only `ai_credit_ledger`. The routes below are Worker routes; the screens that draw them are CR4–CR8.
