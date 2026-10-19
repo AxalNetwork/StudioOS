@@ -975,7 +975,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
       >
         {fillKind && projectId && (
           <FillProposals key={`${slug}-${fillKind}`} projectId={projectId} kind={fillKind} enabled={fillsOn} ai={ai} workspace={name} onApplied={() => setReload((n) => n + 1)}
-            railOption={cycle === 'validate' ? `fill:${fillKind}` : null} />
+            railOption={`fill:${fillKind}`} />
         )}
         {fillsOn && projectId ? drafts.map((draft) => (
           <ZoneDraft key={`${slug}-${draft.surface}`} {...draft} scopeKey={String(projectId)} ai={ai} accent="violet" railOption={`draft:${draft.surface}`} />

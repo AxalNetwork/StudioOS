@@ -277,7 +277,8 @@ test('the shell mounts the provider with its shell role, and Validate\'s options
   assert.match(app, /<RailPageProvider role=\{shellRole\}>\s*<RailStripSlot\.Provider value=\{railStrip\}>/);
   const cycle = readFileSync('frontend/src/pages/cycles/CycleRoute.jsx', 'utf8');
   assert.match(cycle, /useRailOption\('transcribe:interview', 'Record a session'\)/);
-  assert.match(cycle, /railOption=\{cycle === 'validate' \? `fill:\$\{fillKind\}` : null\}/);
+  // D771 (#2097, Grow): every cycle's fill band names itself, not Validate's alone.
+  assert.match(cycle, /railOption=\{`fill:\$\{fillKind\}`\}/);
   const fill = readFileSync('frontend/src/workspaces/FillProposals.jsx', 'utf8');
   assert.match(fill, /useRailOption\(railOption && enabled && \(busy === 'run' \|\| items\.length > 0\) \? railOption : null/);
   // The rail's body is D769's: this task reads the page key through the provider only.

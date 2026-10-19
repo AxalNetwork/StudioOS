@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import ActionSheet, { primary as PRIMARY, ghost as GHOST } from '../../ui/ActionSheet';
 import { shareUpdateApi } from '../../lib/api/shareUpdate.js';
+import { useRailOption } from '../../ui/railCrumbs';
 import ConnectToolSheet from '../account/ConnectToolSheet';
 
 /**
@@ -352,6 +353,9 @@ export default function ShareUpdateSheet({ projectId, onClose, onSent }) {
   });
   const set = (patch) => setS((prev) => ({ ...prev, ...(typeof patch === 'function' ? patch(prev) : patch) }));
   const fail = (e) => set({ busy: false, error: e?.message || 'That did not work. Nothing was sent.' });
+  // D771 (#2097): while Eadwyn drafts the highlights and lowlights, the rail is that option's.
+  const [drafting, setDrafting] = useState(false);
+  useRailOption(drafting ? 'draft:update' : null, 'Share an update');
 
   const loadContext = useCallback(async (p) => {
     set({ busy: true, error: '' });
@@ -362,11 +366,11 @@ export default function ShareUpdateSheet({ projectId, onClose, onSent }) {
   }, [projectId]);
 
   const draft = useCallback(async () => {
-    set({ busy: true, error: '' });
+    set({ busy: true, error: '' }); setDrafting(true);
     try {
       const d = await shareUpdateApi.draftLines(projectId, s.period.start, s.period.end);
       set({ highlights: d.highlights || [], lowlights: d.lowlights || [], draftStatus: d.status, busy: false, step: 2 });
-    } catch (e) { fail(e); }
+    } catch (e) { fail(e); } finally { setDrafting(false); }
   }, [projectId, s.period]);
 
   const send = async () => {
