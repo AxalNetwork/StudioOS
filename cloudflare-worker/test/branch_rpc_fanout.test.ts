@@ -258,7 +258,9 @@ test('a branch that never answers is unreadable rather than a hang', async () =>
   const slow = results.find((r) => r.code === 'slow')!;
   assert.equal(slow.status, 'unreadable');
   assert.match(slow.reason!, /did not answer/);
+  assert.equal(slow.timed_out, true, 'D717: a hang is told apart from an error');
   assert.equal(results.find((r) => r.code === 'fr')!.status, 'ok');
+  assert.equal(results.find((r) => r.code === 'fr')!.timed_out, undefined);
   // The deadline is the point: a hang must not become the page's latency.
   assert.ok(elapsed < 2_000, `the fan-out must not wait on the hanging branch (took ${elapsed}ms)`);
 });
@@ -268,6 +270,7 @@ test('a binding on an older deploy missing the method is named, not silently ok'
   const [r] = await fanOut<any>(env, 'overview');
   assert.equal(r.status, 'unreadable');
   assert.match(r.reason!, /does not expose overview\(\)/);
+  assert.equal(r.timed_out, undefined, 'an older deploy answered; it did not time out');
 });
 
 test('a provisioned licence with no binding reads not_deployed, not unreadable', async () => {
