@@ -27,7 +27,7 @@ still waits is marked here and where it is used:
 | `WHATSAPP_CHANNEL` read by the Worker (`off` / `canary` / `on`), 7-day voice-note deadline, split calling reasons | #1950 (D754 `w1_switch_on`, #1892), **on `main`** since 2026-10-19 |
 | Consent in the chat, the member's word, and the gate | #1954 (D754 `w2_consent`, #1893), **on `main`** |
 | Consent in Record a Session; the WhatsApp connector page | #2001 (#1980) and #1993 (#1959), **on `main`** |
-| Voice notes stored as recorder audio, so **Open recording** plays them | #1935, **not on `main`**: today only a voice note's transcript is kept |
+| Consented voice notes stored as recorder audio in the chat's session, transcribed there, then the engine; **Open recording** plays them | #2063 (#1935, D754 W3), **on `main`** |
 | Way B: linking Axal's number, and forwarded recordings waiting for consent | #2005 (#1937), #2006 (#1938) and #2052 (#1939 part 1), **on `main`** |
 | Way B: a consented recording imported as a draft interview, and the "Saved" reply | The rest of #1939, **not on `main`**: a consented capture waits, and is purged 7 days after its first file |
 | Unsigned webhook refused, checked on every smoke run | #1999 (`scripts/check-spa-live.mjs`), **on `main`** |
@@ -116,8 +116,8 @@ every step here is done from the owner's machine.
      vars blocks.
 9. **Privacy policy and data deletion page.** Say that WhatsApp chats a member
    adds to an interview, and voice notes and forwarded recordings once consent
-   is given, are transcribed and their text stored (their audio too, once
-   #1935 and the rest of #1939 land); that they are kept until the member
+   is given, are stored and transcribed (a forwarded recording's audio once
+   the rest of #1939 lands); that they are kept until the member
    deletes them; and how to delete them. Meta's app settings need the data
    deletion URL.
 10. **The live check**, in canary, on a real device (§3).
@@ -172,7 +172,7 @@ test business number, phone 2 plays the interviewee.
    session page, and "Waiting for consent" in Customer research.
 4. On phone 2, tap **Yes, I agree**. See in Axal: "Agreed in WhatsApp at
    <time>", and the text and the voice note's transcript on the session page.
-   (**Open recording** playing the voice note comes with #1935.)
+   On the interview's page, **Open recording** plays the voice note.
 5. From phone 2, send `STOP`. Send another text. See: "<Name> withdrew
    consent", nothing new in the session, and **Discard this chat's recording**.
    Press it ("This deletes the session and its transcript."), then **Discard**.
