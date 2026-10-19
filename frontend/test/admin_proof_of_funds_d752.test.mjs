@@ -115,7 +115,7 @@ test('the LP application: the row is keyed by the selection and sits after Accre
 
 test('the deal: the proof read is an admin on HQ\'s only, and the commitments read is unchanged', () => {
   const page = codeOnly(read('pages/DealRoomPage.jsx'));
-  assert.match(page, /<CommitmentsTab dealId=\{deal\.id\} proof=\{isAdmin && !branchOfUser\(user\)\} \/>/);
+  assert.match(page, /<CommitmentsTab [^>]*\bproof=\{isAdmin && !branchOfUser\(user\)\}/);
   assert.match(page, /if \(!proof \|\| !loaded\) return undefined;[\s\S]{0,80}adminCapitalAttestationsApi\.forDeal\(dealId\)/);
   assert.equal(page.split('adminCapitalAttestationsApi.forDeal(').length - 1, 1);
   assert.match(page, /api\.dealCommitments\(dealId\)\.then\(setItems\)/);

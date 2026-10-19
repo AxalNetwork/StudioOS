@@ -72,6 +72,11 @@ D717 (#1853) adds `renderPdfBlob(body)`, the draft's PDF from
 `RENDER_BODY_MAX` (256 KB) is refused before any request, and its raw `fetch`
 sends `request()`'s auth, CSRF and company headers through `rawRequestHeaders`.
 
+D752 (#1891): `mercuryAttestations.js` calls `/api/mercury/attestations`, an
+investor's own proof-of-funds statements: `list`, `targets` (no bank read),
+`accounts` (account ids for this request only, never stored), `share` and
+`revoke`. No call returns a balance.
+
 D752 (#1890): `adminCapitalAttestations.js` reads an investor's shared proof of
 funds for Axal's admins on HQ: `forTarget(purpose, targetId)`, `forDeal(dealId)`
 and `forFund(fundId)`. Each read is audited before it answers and counts as a
