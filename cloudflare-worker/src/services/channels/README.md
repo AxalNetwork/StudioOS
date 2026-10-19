@@ -151,6 +151,9 @@ admission rule and both providers' audio-download gates still apply. A decline o
 withdrawal clears the digest and pending suggestions; decided suggestions and
 accepted module rows keep content without quotes. Consent and cleanup commit in one batch: a cleanup failure rolls consent back
 for an identical reply to retry, and an older unrevoked session is preserved.
+Late summary/proposal/outcome writes check stored consent, so an in-flight model
+result cannot restore withdrawn content. Replay keeps the original cleanup time
+and audit row.
 D757 extends Telegram NO/STOP to engine output while retaining raw text; declined
 text sessions enqueue no digest and the quiet sweep excludes them. Thread list/detail reads add `digest_status` (null without a linked
 session) and `pending_suggestions` (only pending rows on that member's session).

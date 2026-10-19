@@ -9,10 +9,11 @@
  * marks, and a receipt per speech-to-text job.
  *
  * The rules this file holds, so a route cannot forget one:
- *   - An audio channel cannot START without consent `given`, and nothing runs
- *     on a session holding audio, or on a chat waiting for the interviewee's
- *     consent (D754), without it (`consentBlocks`). D757 digests only final
- *     text through `sessionDigestConsentBlocks`: untranscribed chunks wait.
+ *   - Recording/transcription and direct audio operations require consent
+ *     (`consentBlocks`). D754's WhatsApp admission gate runs before text is
+ *     stored. D757 #1930 step 3 / #1898 decision 3 deliberately never gate
+ *     engine digestion of admitted final text on audio consent; explicit
+ *     withdrawal still stops it (`sessionDigestConsentBlocks`).
  *   - A chunk is stored once per sequence number (`putChunk`).
  *   - The final transcript replaces the live draft and is copied, as plain
  *     text, to `discovery_interviews.transcript`, so every existing reader of
@@ -123,7 +124,7 @@ export async function sessionConsentBlocks(env: Env, session: SessionRow): Promi
   });
 }
 
-/** D757 (#1930): digest final text even when untranscribed audio waits on consent.
+/** D757 (#1930 step 3, #1898 decision 3): the engine never gates admitted final text on audio consent.
  * Thread admission applies WhatsApp's consent rule before text is stored. An
  * explicit decline/withdrawal stops every text run.
  * Transcription continues to use sessionConsentBlocks/consentBlocks, including the chunk probe.

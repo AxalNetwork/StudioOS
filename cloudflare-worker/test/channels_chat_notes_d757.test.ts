@@ -92,6 +92,7 @@ for (const provider of ['telegram', 'whatsapp'] as const) {
     const s = (await loadSession(f.env, f.sessionId))!;
     assert.equal(s.consent_status, 'declined'); assert.equal(s.summary, null); assert.equal(s.digest_json, null);
     assert.equal(s.digest_hash, null); assert.equal(s.digest_status, 'skipped'); assert.equal(s.digest_note, NOTES.withdrawn);
+    assert.ok(await sessionDigestConsentBlocks(f.env, s), 'withdrawn text has an explicit engine refusal');
     const rows: any[] = f.db.prepare('SELECT status, payload_json, citation_json FROM validate_proposals').all();
     assert.deepEqual(rows.map(r => r.status), ['accepted', 'discarded']);
     assert.ok(rows.every(r => r.citation_json === null && JSON.parse(r.payload_json).phrase === 'manual invoices'));
@@ -277,4 +278,80 @@ test('the quiet sweep never requeues a declined chat even after all timing bound
   f.db.prepare("UPDATE interview_sessions SET consent_status = 'declined', status = 'transcribed', updated_at = datetime('now', '-2 hours'), digested_at = datetime('now', '-7 hours') WHERE id = ?").run(f.sessionId);
   const { sweepQuietChats } = await import('../src/services/sessionAutoStructure.ts');
   assert.equal(await sweepQuietChats(f.env, new Date()), 0); assert.equal(jobs(f).length, 1);
+});
+
+for (const phase of ['summary', 'structure'] as const) test(`withdrawal during the ${phase} model call cannot restore digest content or engine state`, { timeout: 10000 }, async t => {
+  const f = await fixture(t, 'telegram');
+  const model = f.env.AI.run;
+  let start!: () => void, resume!: () => void;
+  const started = new Promise<void>(r => { start = r; });
+  const paused = new Promise<void>(r => { resume = r; });
+  let held = false;
+  f.env.AI.run = async (name: string, input: unknown) => {
+    const summary = JSON.stringify(input).includes('Summarise one customer');
+    if (!held && !/guard/.test(name) && (phase === 'summary' ? summary : !summary)) {
+      held = true; start(); await paused;
+    }
+    return model(name, input);
+  };
+  const running = runSessionStructureJob(f.env, jobs(f)[0].payload);
+  t.after(async () => { resume(); await running.catch(() => {}); });
+  await started;
+  const consent: any = f.db.prepare('SELECT * FROM channel_consents WHERE thread_id = ?').get(f.thread.id);
+  await withdraw(f.env, f.thread, consent, await refKey('telegram', `during-${phase}`));
+  resume(); const outcome: any = await running;
+  assert.equal(outcome.reason, 'consent_not_recorded');
+  const session = (await loadSession(f.env, f.sessionId))!;
+  assert.equal(session.consent_status, 'declined'); assert.equal(session.summary, null); assert.equal(session.digest_json, null);
+  assert.equal(session.digest_hash, null); assert.equal(session.digest_status, 'skipped'); assert.equal(session.digest_note, NOTES.withdrawn);
+  assert.equal(f.db.prepare("SELECT COUNT(*) n FROM validate_proposals WHERE status = 'pending'").get()!.n, 0);
+});
+
+test('late summary and placement writes themselves refuse a declined session', async t => {
+  const f = await fixture(t, 'telegram'); const stale = (await loadSession(f.env, f.sessionId))!;
+  const { summariseSession } = await import('../src/services/interviewProcessing.ts');
+  const { storePlacements } = await import('../src/routes/founder_validate_structure.ts');
+  const placement: any = { projectId: PROJECT, sessionId: f.sessionId, interviewId: INTERVIEW, runId: 'late-result', userId: ME,
+    model: 'fixture', placements: [{ kind: 'pain_severity', payload: { phrase: 'manual invoices', severity: 'severe' }, cite: { from: 0, to: 1000 }, quote: LINE }] };
+  assert.equal((await summariseSession(f.env, stale, ME)).ok, true);
+  assert.equal((await storePlacements(f.env, placement)).stored, 1);
+  const consent: any = f.db.prepare('SELECT * FROM channel_consents WHERE thread_id = ?').get(f.thread.id);
+  await withdraw(f.env, f.thread, consent, await refKey('telegram', 'before-late-writes'));
+  await summariseSession(f.env, stale, ME);
+  assert.equal((await loadSession(f.env, f.sessionId))!.digest_json, null);
+  assert.equal((await storePlacements(f.env, placement)).stored, 0);
+  assert.equal(f.db.prepare("SELECT COUNT(*) n FROM validate_proposals WHERE status = 'pending'").get()!.n, 0);
+});
+
+test('withdrawal between the final check and outcome write cannot overwrite the skipped state', async t => {
+  const f = await fixture(t, 'telegram');
+  const consent: any = f.db.prepare('SELECT * FROM channel_consents WHERE thread_id = ?').get(f.thread.id);
+  const prepare = f.env.DB.prepare.bind(f.env.DB); let injected = false;
+  f.env.DB.prepare = (sql: string) => {
+    const p = prepare(sql);
+    if (!sql.includes('digest_run_id = COALESCE')) return p;
+    return { ...p, bind(...args: unknown[]) {
+      const statement = p.bind(...args);
+      return { ...statement, async run() {
+        if (!injected) { injected = true; await withdraw(f.env, f.thread, consent, await refKey('telegram', 'at-final-write')); }
+        return statement.run();
+      } };
+    } };
+  };
+  await runSessionStructureJob(f.env, jobs(f)[0].payload); assert.equal(injected, true);
+  const session = (await loadSession(f.env, f.sessionId))!;
+  assert.equal(session.digest_status, 'skipped'); assert.equal(session.digest_hash, null); assert.equal(session.digest_note, NOTES.withdrawn);
+});
+
+test('replayed withdrawal preserves the original cleanup timestamp and writes no duplicate audit row', async t => {
+  const f = await fixture(t, 'telegram'); await runSessionStructureJob(f.env, jobs(f)[0].payload);
+  const consent: any = f.db.prepare('SELECT * FROM channel_consents WHERE thread_id = ?').get(f.thread.id);
+  const reply = await refKey('telegram', 'replay');
+  await withdraw(f.env, f.thread, consent, reply);
+  const audits = f.db.prepare("SELECT COUNT(*) n FROM activity_logs WHERE action = 'interview_consent_withdrawn'").get()!.n;
+  f.db.prepare("UPDATE interview_sessions SET digested_at = '2000-01-01 00:00:00', updated_at = '2000-01-01 00:00:00' WHERE id = ?").run(f.sessionId);
+  assert.equal((await withdraw(f.env, f.thread, consent, reply)).outcome, 'ignored');
+  const session = (await loadSession(f.env, f.sessionId))!;
+  assert.equal(session.digested_at, '2000-01-01 00:00:00'); assert.equal(session.updated_at, '2000-01-01 00:00:00');
+  assert.equal(f.db.prepare("SELECT COUNT(*) n FROM activity_logs WHERE action = 'interview_consent_withdrawn'").get()!.n, audits);
 });

@@ -366,7 +366,7 @@ async function decline(env: Env, thread: ThreadRow, row: ConsentRow, replyRef: s
       ).bind(replyRef, row.id),
       env.DB.prepare(
         `UPDATE interview_sessions SET consent_status = 'declined', consent_method = NULL, consent_at = NULL,
-                updated_at = datetime('now') WHERE id = ? AND EXISTS (SELECT 1 FROM channel_consents WHERE id = ? AND reply_ref_hash = ? AND status = ?)`,
+                updated_at = datetime('now') WHERE id = ? AND consent_status <> 'declined' AND EXISTS (SELECT 1 FROM channel_consents WHERE id = ? AND reply_ref_hash = ? AND status = ?)`,
       ).bind(sessionId, row.id, replyRef, 'declined'),
       ...aside,
     ] });
@@ -406,7 +406,7 @@ export async function withdraw(env: Env, thread: ThreadRow, row: ConsentRow, rep
       ).bind(replyRef, row.id),
       env.DB.prepare(
         `UPDATE interview_sessions SET consent_status = 'declined', consent_method = NULL, consent_at = NULL,
-                updated_at = datetime('now') WHERE id IN (?, ?) AND EXISTS (SELECT 1 FROM channel_consents WHERE id = ? AND reply_ref_hash = ? AND status = ?)`,
+                updated_at = datetime('now') WHERE id IN (?, ?) AND consent_status <> 'declined' AND EXISTS (SELECT 1 FROM channel_consents WHERE id = ? AND reply_ref_hash = ? AND status = ?)`,
       ).bind(row.session_id, thread.session_id, row.id, replyRef, 'withdrawn'),
       ...tail,
     ] });

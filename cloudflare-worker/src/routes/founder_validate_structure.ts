@@ -156,17 +156,18 @@ export async function storePlacements(
   }
   const deduped = opts.placements.length - placements.length;
   if (!placements.length) return { stored: 0, deduped };
-  await env.DB.batch(placements.map((p) => env.DB.prepare(
+  const written = await env.DB.batch(placements.map((p) => env.DB.prepare(
     `INSERT INTO validate_proposals
        (project_id, kind, payload_json, model, task, created_by, surface, fill_class,
         citation_json, target_ref, session_id, cite_from, cite_to, run_id)
-     VALUES (?, ?, ?, ?, 'structure_interview', ?, 'validate/interview', 'restatement', ?, ?, ?, ?, ?, ?)`,
+     SELECT ?, ?, ?, ?, 'structure_interview', ?, 'validate/interview', 'restatement', ?, ?, ?, ?, ?, ?
+      WHERE NOT EXISTS (SELECT 1 FROM interview_sessions s WHERE s.id = ? AND s.consent_status = 'declined')`,
   ).bind(
     opts.projectId, p.kind, JSON.stringify(p.payload), opts.model, opts.userId,
     JSON.stringify({ kind: 'transcript', session_id: opts.sessionId, from: p.cite.from, to: p.cite.to, quote: p.quote }),
-    `interview:${opts.interviewId}`, opts.sessionId, p.cite.from, p.cite.to, opts.runId,
+    `interview:${opts.interviewId}`, opts.sessionId, p.cite.from, p.cite.to, opts.runId, opts.sessionId,
   )));
-  return { stored: placements.length, deduped };
+  return { stored: written.reduce((n, r) => n + Number(r.meta?.changes ?? 0), 0), deduped };
 }
 
 async function loadPlacement(env: Env, id: number): Promise<PlacementRow | null> {

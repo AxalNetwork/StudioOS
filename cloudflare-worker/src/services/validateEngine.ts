@@ -131,7 +131,7 @@ async function writeOutcome(env: Env, sessionId: number, fields: {
             digest_hash = COALESCE(?, digest_hash), digest_run_id = COALESCE(?, digest_run_id),
             digest_json = CASE WHEN ? IS NOT NULL AND json_valid(digest_json) THEN json_set(digest_json, '$.run_id', ?) ELSE digest_json END,
             digested_at = datetime('now')
-      WHERE id = ?`,
+      WHERE id = ? AND consent_status <> 'declined'`,
   ).bind(fields.status, fields.note, fields.trigger, fields.hash ?? null, fields.runId ?? null,
     fields.runId ?? null, fields.runId ?? null, sessionId).run();
 }
@@ -201,7 +201,7 @@ export async function digestSession(env: Env, opts: {
     ).bind(session.id, `-${MIN_HOURS_BETWEEN} hours`).first();
     if (recent) {
       await env.DB.prepare(
-        "UPDATE interview_sessions SET digest_status = 'queued', digest_note = ? WHERE id = ? AND digest_status IS NOT 'running'",
+        "UPDATE interview_sessions SET digest_status = 'queued', digest_note = ? WHERE id = ? AND digest_status IS NOT 'running' AND consent_status <> 'declined'",
       ).bind(NOTES.chatQuiet, session.id).run();
       return { ok: false, status: 'skipped', reason: 'quiet_window', note: NOTES.chatQuiet };
     }
@@ -213,7 +213,7 @@ export async function digestSession(env: Env, opts: {
   // has already digested this transcript.
   const claim = await env.DB.prepare(
     `UPDATE interview_sessions SET digest_status = 'running', digest_trigger = ?, digested_at = datetime('now')
-      WHERE id = ? AND (digest_status IS NOT 'running' OR datetime(digested_at) < datetime('now', ?))
+      WHERE id = ? AND consent_status <> 'declined' AND (digest_status IS NOT 'running' OR datetime(digested_at) < datetime('now', ?))
         AND (? = 1 OR digest_hash IS NOT ?)`,
   ).bind(opts.trigger, session.id, `-${CLAIM_STALE_MINUTES} minutes`, force ? 1 : 0, hash).run();
   if (Number(claim.meta?.changes || 0) !== 1) {
@@ -245,6 +245,12 @@ export async function digestSession(env: Env, opts: {
     // Release the claim so a retry is not told it is busy; the error is the caller's.
     await writeOutcome(env, session.id, { status: 'refused', note: refusalNote(null), trigger: opts.trigger });
     throw err;
+  }
+  // Consent may change while a provider/model call is in flight. Its late
+  // result cannot restore the withdrawn digest, suggestions or engine state.
+  if ((await loadSession(env, session.id))?.consent_status === 'declined') {
+    await withdrawDigest(env, session.id, opts.userId, { onlyDeclined: true });
+    return { ok: false, status: 'refused', reason: 'consent_not_recorded', refusal: null, note: NOTES.withdrawn };
   }
   if (prefs.dropped) notes.push(NOTES.modelDropped);
   const runId = structure?.ok ? structure.runId : undefined;
@@ -282,7 +288,7 @@ export async function enqueueDigest(env: Env, sessionId: number, userId: number,
     if (!session || session.consent_status === 'declined' || session.recent) return null;
   }
   await env.DB.prepare(
-    "UPDATE interview_sessions SET digest_status = 'queued', digest_trigger = ? WHERE id = ? AND digest_status IS NOT 'running'",
+    "UPDATE interview_sessions SET digest_status = 'queued', digest_trigger = ? WHERE id = ? AND digest_status IS NOT 'running' AND consent_status <> 'declined'",
   ).bind(trigger, sessionId).run();
   return enqueueJob(env, 'session_structure', { session_id: sessionId, user_id: userId, trigger }, {
     idempotency_key: `session_structure:${sessionId}:${trigger}:${Math.floor(Date.now() / 60_000)}`,
@@ -314,6 +320,12 @@ export async function withdrawDigest(env: Env, sessionId: number, actorUserId: n
     ).bind(id).first<{ pending: number | null; decided: number | null }>();
     const removed = { pending_deleted: Number(counts?.pending || 0), decided_unquoted: Number(counts?.decided || 0) };
     out.pending_deleted += removed.pending_deleted; out.decided_unquoted += removed.decided_unquoted;
+    statements.push(env.DB.prepare(
+      `INSERT INTO activity_logs (action, details, actor, user_id, project_id)
+       SELECT ?, ?, ?, ?, ? FROM interview_sessions s
+        WHERE s.id = ? AND (? = 0 OR s.consent_status = 'declined') AND s.digest_status IS NOT 'skipped'`,
+    ).bind('interview_consent_withdrawn', JSON.stringify({ session_uid: session.uid, ...removed }),
+      `user:${actorUserId}`, actorUserId, session.project_id, id, onlyDeclined));
     // A consent claim that lost its race cannot wipe an unrevoked session.
     // This condition is evaluated inside the batch, after the consent update.
     if (hasFindings) statements.push(env.DB.prepare(
@@ -326,7 +338,8 @@ export async function withdrawDigest(env: Env, sessionId: number, actorUserId: n
             SET summary = NULL, summary_model = NULL, summarised_at = NULL, summary_citations_json = NULL,
                 digest_json = NULL, digest_hash = NULL, digest_status = 'skipped', digest_note = ?,
                 digested_at = datetime('now'), updated_at = datetime('now')
-          WHERE id = ? AND (? = 0 OR consent_status = 'declined')`,
+          WHERE id = ? AND (? = 0 OR consent_status = 'declined')
+            AND (digest_status IS NOT 'skipped' OR summary IS NOT NULL OR digest_json IS NOT NULL OR digest_hash IS NOT NULL)`,
       ).bind(NOTES.withdrawn, id, onlyDeclined),
       env.DB.prepare(
         `DELETE FROM validate_proposals WHERE session_id = ? AND status = 'pending'
@@ -336,11 +349,6 @@ export async function withdrawDigest(env: Env, sessionId: number, actorUserId: n
         `UPDATE validate_proposals SET citation_json = NULL WHERE session_id = ?
            AND (? = 0 OR EXISTS (SELECT 1 FROM interview_sessions s WHERE s.id = ? AND s.consent_status = 'declined'))`,
       ).bind(id, onlyDeclined, id),
-      env.DB.prepare(
-        `INSERT INTO activity_logs (action, details, actor, user_id, project_id)
-         SELECT ?, ?, ?, ?, ? WHERE ? = 0 OR EXISTS (SELECT 1 FROM interview_sessions s WHERE s.id = ? AND s.consent_status = 'declined')`,
-      ).bind('interview_consent_withdrawn', JSON.stringify({ session_uid: session.uid, ...removed }),
-        `user:${actorUserId}`, actorUserId, session.project_id, onlyDeclined, id),
     );
   }
   if (!statements.length) return out;
