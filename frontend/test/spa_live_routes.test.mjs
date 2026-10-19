@@ -123,3 +123,71 @@ test('the smoke list only claims what an unauthenticated fetch can show', () => 
   assert.match(block, /does NOT prove/,
     'the partner block in check-spa-live.mjs must keep saying what it does not prove');
 });
+
+// D751 T9 (#1921) — `/api/health`'s `connectors_oauth` block. The verdict is
+// the pure half in scripts/lib/connectorReadiness.mjs; the wiring is read out
+// of the script and the workflow, for the reason smokedPaths() gives.
+const { connectorReadinessVerdict, warnLine, summaryMarkdown, CONNECTOR_READINESS_PATH } =
+  await import('../../scripts/lib/connectorReadiness.mjs');
+const health = (connectors_oauth) => ({ status: 'ok', connectors_oauth });
+const URL_ = 'https://axal.vc/api/health';
+
+test('D751 T9: a false or null connector is one WARN line, and the run stays green', () => {
+  const v = connectorReadinessVerdict(health({ github: false, slack: true, zoom: null, stripe: false }));
+  assert.equal(v.ok, true);
+  assert.deepEqual(v.unset, ['github', 'stripe']);
+  assert.deepEqual(v.unreadable, ['zoom']);
+  assert.equal(warnLine(URL_, v), `[spa-live] WARN  ${URL_} — OAuth connectors no client: github, stripe; unreadable: zoom`);
+  const nullOnly = connectorReadinessVerdict(health({ slack: null }));
+  assert.equal(nullOnly.ok, true);
+  assert.equal(warnLine(URL_, nullOnly), `[spa-live] WARN  ${URL_} — OAuth connectors unreadable: slack`);
+  assert.equal(warnLine(URL_, connectorReadinessVerdict(health({ github: true }))), null, 'nothing unset, no WARN');
+});
+
+test('D751 T9: a missing or malformed block fails, naming a key and never a value', () => {
+  for (const body of [null, {}, { connectors_oauth: null }, { connectors_oauth: [] }, { connectors_oauth: 'yes' }]) {
+    const v = connectorReadinessVerdict(body);
+    assert.equal(v.ok, false, JSON.stringify(body));
+    assert.match(v.reason, /missing/);
+  }
+  const leaked = connectorReadinessVerdict(health({ github: 'Iv1.fixture-client-id', slack: true }));
+  assert.equal(leaked.ok, false);
+  assert.match(leaked.reason, /`connectors_oauth\.github` is not true, false or null/);
+  assert.ok(!leaked.reason.includes('Iv1.fixture-client-id'), 'the value is never printed');
+  for (const odd of [1, 'true', {}, []]) assert.equal(connectorReadinessVerdict(health({ slack: odd })).ok, false, String(odd));
+  const badKey = connectorReadinessVerdict(health({ 'GITHUB_APP_CLIENT_ID=Iv1.x': true }));
+  assert.equal(badKey.ok, false);
+  assert.ok(!badKey.reason.includes('GITHUB_APP_CLIENT_ID'), 'a key that is not a provider key is not echoed');
+});
+
+test('D751 T9: strict mode fails on false and on null, and passes when every client is set', () => {
+  const strict = { strict: true };
+  const f = connectorReadinessVerdict(health({ github: false, slack: true }), strict);
+  assert.equal(f.ok, false);
+  assert.equal(f.reason, 'strict mode: no client: github');
+  assert.equal(connectorReadinessVerdict(health({ github: null }), strict).ok, false);
+  assert.equal(connectorReadinessVerdict(health({ github: true, slack: true }), strict).ok, true);
+  assert.equal(connectorReadinessVerdict(health({ github: false })).ok, true, 'not strict: a WARN only');
+});
+
+test('D751 T9: the run summary lists the same connectors, keys only', () => {
+  const v = connectorReadinessVerdict(health({ github: false, zoom: null, slack: true }));
+  assert.equal(summaryMarkdown(URL_, v),
+    `### OAuth connectors — ${URL_}\n\n- \`github\`: no client. The fix is the owner's keys.\n- \`zoom\`: the readiness read failed.\n`);
+  assert.equal(summaryMarkdown(URL_, connectorReadinessVerdict(health({ slack: true }))),
+    `### OAuth connectors — ${URL_}\n\nEvery catalogue OAuth connector has a client.\n`);
+  assert.equal(summaryMarkdown(URL_, connectorReadinessVerdict({})),
+    `### OAuth connectors — ${URL_}\n\nFAIL: the \`connectors_oauth\` block is missing from /api/health\n`);
+});
+
+test('D751 T9: the smoke runs the check on every host, and the workflow passes strict mode in', () => {
+  assert.equal(CONNECTOR_READINESS_PATH, '/api/health');
+  assert.match(SMOKE, /async function checkConnectorReadiness\(base\)/);
+  assert.match(SMOKE, /process\.env\.SMOKE_CONNECTORS_STRICT === '1'/);
+  assert.match(SMOKE, /appendFileSync\(process\.env\.GITHUB_STEP_SUMMARY, summaryMarkdown\(/);
+  const loop = SMOKE.slice(SMOKE.indexOf('for (const base of HOSTS)'));
+  assert.match(loop, /await checkConnectorReadiness\(base\);[\s\S]{0,120}if \(!res\.ok\) \{[\s\S]{0,200}failures\.push/);
+  const wf = readFileSync(join(ROOT, '.github', 'workflows', 'post-deploy-smoke.yml'), 'utf8');
+  assert.match(wf, /connectors_strict:\n\s+description: [^\n]+\n\s+required: false\n\s+type: boolean\n\s+default: false/);
+  assert.match(wf, /SMOKE_CONNECTORS_STRICT: \$\{\{ github\.event\.inputs\.connectors_strict == 'true' && '1' \|\| '' \}\}/);
+});

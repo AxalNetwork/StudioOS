@@ -655,7 +655,7 @@ test('6. the member routes mount the pages that draw A7m and A10m; the public pa
   const app = read('frontend/src/App.jsx');
   assert.match(app, /<Route path="\/my\/events" element=\{guard\(\[[^\]]+\], <MyEventsPage \/>\)\} \/>/);
   // D755 §13: /plans-and-pricing opens to visitors; a product's page still needs sign-in.
-  assert.match(app, /<Route path="\/plans-and-pricing" element=\{<ProductsPage \/>\} \/>/);
+  assert.match(app, /<Route path="\/plans-and-pricing" element=\{user \? guard\(\[[^\]]+\], <ProductsPage \/>\) : <ProductsPage \/>\} \/>/);
   assert.match(app, /<Route path="\/plans-and-pricing\/:productId" element=\{guard\(\[[^\]]+\], <ProductsPage \/>\)\} \/>/);
   assert.match(read('frontend/src/pages/events/MyEventsPage.jsx'), /<EventsPhoneView /);
   assert.match(read('frontend/src/pages/account/PricingPhone.jsx'), /<AccountPhonePage pageKey="pricing"/);
