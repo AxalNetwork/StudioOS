@@ -251,6 +251,9 @@ function routesForHost(base) {
     // what is under test is that the two-segment path reaches the SPA rather
     // than being shadowed by `/attest/:token` one segment up.
     { path: '/attest/partner/live-smoke-not-a-real-token', shell: true },
+    // D756 (#1894): the interviewee recording notice, a PUBLIC route reached
+    // from a chat link by someone with no account.
+    { path: '/privacy/interviews', shell: true },
     // The Help Center's addresses (#103, 2026-09-07). `/help` stopped being a
     // one-segment path when the ticket flow moved under it, and the same pass
     // gave `/support` a route for the first time — `ErrorState` had been
