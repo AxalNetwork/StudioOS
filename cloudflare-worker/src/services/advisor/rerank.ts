@@ -262,6 +262,8 @@ export async function pickNextQuestion(
       task: 'rerank',
       userId,
       surface: AI_SURFACE.studio,
+      // D765: off on the page, the run is refused and the heuristic order stands.
+      rail: { page: 'studio', option: 'rank:advisor-questions' },
       systemPrompt: system,
       messages: [{ role: 'user', content: user }],
       maxTokens: 64,

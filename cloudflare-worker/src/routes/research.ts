@@ -76,6 +76,7 @@ import { refuse } from '../util/refusal';
 // read their SQL from there.
 import { activeGrant, ndaActive, logAccess } from './data_room';
 import { tierAdmits, investorCommitted, admittedCounts } from '../services/dataRoomAccess';
+import { pageFromPath, railFor, refuseAssistOff } from '../util/railContext';
 
 const research = new Hono<{ Bindings: Env }>();
 research.route('/collections', researchCollections);
@@ -745,11 +746,13 @@ research.post('/ask', async (c) => {
 
   let answer: string | null = null;
   let usage: { model?: string; prompt_tokens?: number; completion_tokens?: number; cached?: boolean; est_cost_usd?: number } | null = null;
+  let off = false;
   try {
     const out = await runAI(c.env, {
       task: 'research_ask',
       userId: user.id,
       surface: AI_SURFACE.researchAsk,
+      rail: railFor(c, { page: 'research', option: 'ask:library' }),
       // `text` rather than `messages`: the router hashes it for the cache key
       // and this task is uncached, but the shape is what every non-chat task
       // uses. The instructions live in the prompt itself so the retrieved
@@ -758,6 +761,7 @@ research.post('/ask', async (c) => {
       maxTokens: 700,
     });
     answer = out.ok && out.output ? out.output.trim() : null;
+    off = out.refusal === 'assist_off';
     // The router's own receipt, already written to `ai_usage_logs`. Taken
     // whether or not the answer arrived — a model that ran and returned
     // nothing still cost what it cost, and hiding that would make the session
@@ -766,6 +770,9 @@ research.post('/ask', async (c) => {
   } catch (e) {
     console.error('[research] ask failed:', (e as Error).message);
   }
+
+  // D765: off on this page, nothing ran, so no answer is recorded either.
+  if (off) return refuseAssistOff(c);
 
   const receipt = {
     model: usage?.model ?? null,
@@ -3679,11 +3686,14 @@ research.post('/drafts', async (c) => {
       text: `${spec.instruction}\n\n${material.join('\n\n')}`,
       maxTokens: 500,
       surface: page,
+      // D765: the band's page and the draft as the option.
+      rail: railFor(c, { page: pageFromPath(page, pageFromPath(surface, 'research')), option: `draft:${surface}` }),
     });
   } catch (e) {
     console.error('[research] draft failed:', (e as Error).message);
     return c.json({ detail: 'draft_unavailable' }, 503);
   }
+  if (out.refusal === 'assist_off') return refuseAssistOff(c);
   const drafted = out.ok && out.output ? out.output.trim() : '';
   if (!drafted) return c.json({ detail: 'draft_unavailable' }, 503);
   const text = spec.finish ? await spec.finish(c, user.id, scope, drafted) : drafted;
