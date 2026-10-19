@@ -152,6 +152,12 @@ test('railFor takes the browser\'s page and option, URI-decoded, else the route\
 const SYSTEM: Record<string, string> = {
   'services/advisor/guardrails.ts:safety': 'The legacy advisor guard: a check of a member\'s text inside a turn whose own run already carries the page, not assistance; refusing the check would only remove a safety layer.',
   'services/market_intel/extractors/index.ts:paraphrase': 'paraphraseForSnippet has no caller; a reducer sweep that used it would be a job no member started, a system call (D720 §6).',
+  // D766 (#2094): calls that reached env.AI.run directly, now through the router
+  // as system calls (userId 0), logged at cost and charged to no member.
+  'routes/admin_x.ts:image_screen': 'The safety screen on an image an admin uploads for HQ\'s X account: a check, not assistance, run for no member; refusing it would only remove a safety layer.',
+  'routes/admin_x.ts:image_alt_text': 'Alt text for an image HQ posts to its own X account: a system call for no member\'s page, logged at cost and charged to no one.',
+  'routes/monitoring.ts:ops_summary': 'The site-metrics summary on HQ\'s monitoring page: about the platform, for no member\'s page, logged at cost and charged to no member.',
+  'services/vectorize.ts:embed': 'The search index\'s embeddings: retrieval for a lookup or an indexing job, not assistance, run for no member and charged to no one.',
 };
 
 function sources(dir: string, out: string[] = []): string[] {
