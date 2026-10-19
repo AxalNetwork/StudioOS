@@ -11,7 +11,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
@@ -63,6 +63,9 @@ test('the callback is the one the Worker sends, in the runbook and in PRODUCTION
   const callback = `${prod}/api/integrations/oauth/${key}/callback`;
   assert.ok(RUNBOOK.includes(`exactly \`${callback}\``), `the runbook registers ${callback}`);
   assert.ok(PRODUCTION.includes(`Callback \`${callback}\``), `PRODUCTION.md registers ${callback}`);
+  const hosts = [...RUNBOOK.matchAll(/https:\/\/([^/\s`]+)\/api\/integrations\/oauth\/github\/callback/g)].map((m) => m[1]);
+  assert.ok(hosts.length >= 1);
+  for (const h of hosts) assert.ok(['app.axal.vc', 'axal.vc'].includes(h), `callback host ${h}`);
 });
 
 test('the permissions are exactly the registry\'s four read scopes', () => {
@@ -97,6 +100,19 @@ test('PRODUCTION.md links the runbook from the variables and from Provider setup
   assert.ok(links >= 2, `PRODUCTION.md links the runbook twice, found ${links}`);
   const setup = PRODUCTION.slice(PRODUCTION.indexOf('**Provider setup, owner-run, once each.**'));
   assert.match(setup.split('\n').find((l) => l.includes('**GitHub App.**')) ?? '', /GITHUB_CONNECTOR_APP\.md/);
+});
+
+test('the docs index links both GitHub runbooks', () => {
+  const index = raw('documentation/README.md');
+  for (const f of ['GITHUB_CONNECTOR_APP.md', 'TICKET_GITHUB_SYNC.md']) {
+    assert.ok(index.includes(`](operations/${f})`), `documentation/README.md links ${f}`);
+    assert.ok(existsSync(resolve(process.cwd(), `documentation/operations/${f}`)), `${f} exists`);
+  }
+});
+
+test('Test\'s accepted answer is the code GitHub gives for a junk code', () => {
+  assert.ok(raw(SOURCES['providerOauthTest.ts']).includes('bad_verification_code'));
+  assert.ok(RUNBOOK.includes('`bad_verification_code`'));
 });
 
 test('every troubleshooting code is still in the file the row names', () => {
