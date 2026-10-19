@@ -85,6 +85,7 @@ The API client, formatters and helpers. Nothing here renders.
 | `brand/` | Brand template content model. |
 | `railOptions/` | Each profile's rail options: every control on its boards that runs a model, with its page, key, kind and handler (D771, D772). See its README. |
 | `docs/` | Help Center search index. |
+| `railOptions/` | Each profile's options that run a model, as data (D771, #2097): `founder.js` lists every one the founder's boards offer, with its page key, `<verb>:<object>` key, label, one of the canvas's fourteen kinds, its handler and where it lives; `FOUNDER_QUIET_PAGES` says why a page has none. D764 PR 3 (#2089) gives each option its models. `../../test/railOptions_founder_d771.test.mjs` holds the list to the code both ways. |
 | `spinout/` | Spin-Out Lab client logic. |
 
 ## The drift rule
