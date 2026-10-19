@@ -4,21 +4,6 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
-
-## Templates on a phone, and #1782 closed (D717, #1854)
-
-- Below `md`, Contracts › Templates is board L12's read-only list: every row
-  by layer with its page-1 thumbnail, kind and state; a Layer / State / Kind
-  sheet that applies on "Show [n] templates" ("Filters · n" after); a row
-  opens the saved version's PDF one page at a time (`?preview=<slug>`, Back
-  closes it), with pinch to zoom and "Edit on a larger screen.".
-- `usePhoneWidth` takes a query (`BELOW_MD_QUERY`), `PhoneSheet` a
-  `scrimClass`, `filterCatalog` a kind, `PdfPages` a `controls` render prop,
-  and `adminTemplateStorePreviewPdfBlob` returns the renderer. The thumbnail
-  moved to `TemplateThumbnail.jsx`, unchanged on the desktop.
-- `Legal Documents · Templates.dc.html` moved to `design/canvases/integrated/`
-  (98); the corpus reads 145.
-
 ## One text per document: every sender reads its library row (D758, #1863, PR 1)
 
 - `services/legalDocTypes.ts` gains `LIBRARY_SLUG_FOR` / `librarySlugFor`

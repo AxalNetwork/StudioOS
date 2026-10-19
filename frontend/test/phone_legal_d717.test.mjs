@@ -281,7 +281,7 @@ test('Preview alone: the fallback renderer says so in PdfPages\' own words; a re
   const sentence = 'The preview could not be drawn. Try again.';
   const bad = await mountPreview(async () => { asked += 1; throw Object.assign(new Error(sentence), { code: 'preview_unrenderable', status: 503 }); }, async () => lib);
   try {
-    assert.match(bad.text(), new RegExp(sentence.replace(/\./g, '\\.')));
+    assert.ok(bad.text().includes(sentence), 'the Worker\'s sentence is drawn as it came');
     await bad.click('Retry');
     assert.equal(asked, 2);
   } finally { await bad.view.unmount(); }
