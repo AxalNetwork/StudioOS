@@ -2,7 +2,9 @@
  * D754 (#1980) — a WhatsApp chat's recording consent where the founder sees
  * it: the rules (`chatConsent.js`), the session page's consent line and its
  * discard, and the inbox's Ask for consent and the member's word. Record a
- * Session's own gate is in `record_lightbox_d685.test.mjs`. No test calls
+ * Session's own gate is in `record_lightbox_d685.test.mjs`. Part 2 (§5): the
+ * inbox's WhatsApp keep-by line and the session page's voice-note playback
+ * through Open recording's player. No test calls
  * the network: every API is a stub.
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/record_consent_d754.test.mjs
@@ -20,8 +22,9 @@ import {
 } from '../src/pages/founder/chatConsent.js';
 import { assignTarget } from '../src/pages/founder/recordSetup.js';
 import { MEMBER_CONSENT_METHODS } from '../src/lib/api/channels.js';
-import { ChatConsentLine } from '../src/pages/founder/InterviewSessionPage.jsx';
-import { ThreadConsent } from '../src/pages/founder/ChannelsInbox.jsx';
+import { keepByDay, voiceKeepBy } from '../src/pages/founder/channelThreads.js';
+import { ChannelVoiceNotes, ChatConsentLine } from '../src/pages/founder/InterviewSessionPage.jsx';
+import { ThreadConsent, ThreadPanel } from '../src/pages/founder/ChannelsInbox.jsx';
 
 const h = React.createElement;
 const AT = '2026-10-18T14:05:00.000Z';
@@ -133,11 +136,11 @@ test('the session page: the line, and a withdrawn chat\'s discard calls DELETE /
     const v = await mount(h(ChatConsentLine, { consent: view(over), name: 'Dana', onDiscard: async () => {}, when }));
     try {
       assert.equal(v.text(v.by('chat-consent-line')), text);
-      assert.equal(v.by('button-discard-chat'), undefined, 'discard only for a withdrawn chat');
+      assert.ok(!v.by('button-discard-chat'), 'discard only for a withdrawn chat');
     } finally { await v.unmount(); }
   }
   const none = await mount(h(ChatConsentLine, { consent: NOT_REQUIRED, name: 'Tom', onDiscard: async () => {} }));
-  try { assert.equal(none.by('chat-consent'), undefined, 'Telegram: nothing'); } finally { await none.unmount(); }
+  try { assert.ok(!none.by('chat-consent'), 'Telegram: nothing'); } finally { await none.unmount(); }
 });
 
 test('the session page reads channel_consent and discards through the sessions API', () => {
@@ -169,7 +172,7 @@ test('the inbox: the state, Ask for consent once, and the member\'s word after d
   const m = await mount(h(ThreadConsent, { thread: THREAD, consent: view(), api: s.api, onChanged: () => { changed += 1; } }));
   try {
     assert.equal(m.text(m.by('thread-consent-line')), 'Waiting for Dana to agree');
-    assert.equal(m.by('thread-consent-attest'), undefined, 'no word before the notice is delivered');
+    assert.ok(!m.by('thread-consent-attest'), 'no word before the notice is delivered');
     await m.click('button-ask-consent');
     assert.deepEqual(s.calls, [['ask', 'wa-1']]);
     assert.equal(changed, 1, 'the thread is read again');
@@ -213,4 +216,101 @@ test('the inbox panel reads the thread\'s consent and draws it above the message
   const src = readFileSync('frontend/src/pages/founder/ChannelsInbox.jsx', 'utf8');
   assert.match(src, /consent: r\.consent \?\? null/);
   assert.match(src, /<ThreadConsent thread=\{thread\} consent=\{data\.consent\}/);
+});
+
+// ------------------------------------------------- voice notes (D754 §5, part 2)
+
+const day = (iso) => `<${iso.slice(0, 10)}>`;
+const VOICE = [
+  { uid: 'm1', side: 'contact', kind: 'text', text: 'hi', sent_at: '2026-10-17T09:00:00Z', voice_fetch_by: null },
+  { uid: 'm2', side: 'contact', kind: 'voice', text: null, sent_at: '2026-10-19T09:00:00Z', voice_fetch_by: '2026-10-26T09:00:00.000Z' },
+  { uid: 'm3', side: 'contact', kind: 'voice', text: null, sent_at: '2026-10-18T09:00:00Z', voice_fetch_by: '2026-10-25T09:00:00.000Z' },
+];
+const WAITING = { uid: 'wa-2', provider: 'whatsapp', contact_name: 'Dana Ruiz', status: 'pending', interview_id: null, session_id: null };
+
+test('the keep-by line: WhatsApp only, a waiting chat only, from the earliest voice fetch-by date', () => {
+  assert.equal(voiceKeepBy(WAITING, VOICE, day), 'Add this chat to an interview by <2026-10-25> to keep its voice notes.');
+  assert.equal(voiceKeepBy({ ...WAITING, provider: 'telegram' }, VOICE, day), null, 'Telegram keeps no such date');
+  assert.equal(voiceKeepBy({ ...WAITING, status: 'assigned' }, VOICE, day), null, 'already in an interview');
+  assert.equal(voiceKeepBy({ ...WAITING, status: 'ignored' }, VOICE, day), null, 'ignored');
+  assert.equal(voiceKeepBy(WAITING, VOICE.map((m) => ({ ...m, voice_fetch_by: null })), day), null, 'no voice note awaits');
+  assert.equal(voiceKeepBy(WAITING, [{ voice_fetch_by: 'not a date' }], day), null);
+  assert.equal(voiceKeepBy(WAITING, null, day), null);
+  assert.equal(keepByDay('nope'), null);
+  assert.match(keepByDay('2026-10-25T09:00:00.000Z'), /25/);
+});
+
+const threadApi = (thread, messages) => ({ thread: async () => ({ thread, messages, consent: null }) });
+
+test('the thread view draws the keep-by line for a waiting WhatsApp chat, and a Telegram thread is unchanged', async () => {
+  const wa = await mount(h(ThreadPanel, { uid: WAITING.uid, api: threadApi(WAITING, VOICE) }));
+  try {
+    assert.match(wa.text(wa.by('thread-voice-keep-by')), /^Add this chat to an interview by .*25.* to keep its voice notes\.$/);
+  } finally { await wa.unmount(); }
+  // The Worker gives Telegram no fetch-by date; the gate holds even if one came.
+  const tg = await mount(h(ThreadPanel, { uid: 'tg-1', api: threadApi({ ...WAITING, uid: 'tg-1', provider: 'telegram' }, VOICE) }));
+  try {
+    assert.ok(tg.by('thread-panel'), 'the thread is drawn');
+    assert.ok(!tg.by('thread-voice-keep-by'));
+  } finally { await tg.unmount(); }
+  const assigned = await mount(h(ThreadPanel, { uid: 'wa-3', api: threadApi({ ...WAITING, uid: 'wa-3', status: 'assigned', interview_id: 7, session_id: 9 }, VOICE) }));
+  try { assert.ok(!assigned.by('thread-voice-keep-by')); } finally { await assigned.unmount(); }
+});
+
+const CHAT_SESSION = { id: 41, submitted_via: 'whatsapp', status: 'transcribed', project_id: 3 };
+const CHUNKS = [{ seq: 202, size_bytes: 10, start_ms: null }, { seq: 101, size_bytes: 10, start_ms: null }];
+
+function stubPlayback() {
+  const fetched = [];
+  const made = [];
+  const saved = { fetch: globalThis.fetch, create: URL.createObjectURL, revoke: URL.revokeObjectURL };
+  globalThis.fetch = async (url) => { fetched.push(url); return { ok: true, blob: async () => ({ url }) }; };
+  URL.createObjectURL = (b) => { made.push(b.url); return `blob:${b.url}`; };
+  URL.revokeObjectURL = () => {};
+  return { fetched, made, restore() { globalThis.fetch = saved.fetch; URL.createObjectURL = saved.create; URL.revokeObjectURL = saved.revoke; } };
+}
+
+test('the session page: a chat\'s voice notes play through Open recording, in seq order, from GET /sessions/:id/audio', async () => {
+  const calls = [];
+  const later = new Date(Date.now() + 120_000).toISOString();
+  const api = { audio: async (id) => { calls.push(id); return { parts: [
+    { seq: 202, url: '/api/files/dl/b', mime: 'audio/ogg', start_ms: null, expires_at: later },
+    { seq: 101, url: '/api/files/dl/a', mime: 'audio/ogg', start_ms: null, expires_at: later },
+  ] }; } };
+  const net = stubPlayback();
+  const m = await mount(h(ChannelVoiceNotes, { api, session: CHAT_SESSION, chunks: CHUNKS, consent: view({ status: 'given', answered_at: AT }) }));
+  try {
+    assert.match(m.text(m.by('channel-voice-notes')), /2 voice notes Open recording/);
+    await m.click('button-open-voice-notes');
+    assert.deepEqual(calls, [41], 'one audio read for the session');
+    assert.deepEqual(net.fetched, ['/api/files/dl/a', '/api/files/dl/b'], 'parts in seq order');
+    assert.equal(m.by('voice-notes-player').src, 'blob:/api/files/dl/a', 'the first part plays');
+    assert.ok(!m.by('voice-notes-error'));
+    await m.click('button-open-voice-notes');
+    assert.deepEqual(calls, [41], 'a replay fetches nothing');
+  } finally { await m.unmount(); net.restore(); }
+});
+
+test('the session page: no voice-note player without consent, without audio, or for a session not from a chat', async () => {
+  const api = { audio: async () => { throw new Error('must not be called'); } };
+  for (const [props, why] of [
+    [{ session: CHAT_SESSION, chunks: CHUNKS, consent: view({ status: 'withdrawn' }) }, 'withdrawn'],
+    [{ session: CHAT_SESSION, chunks: CHUNKS, consent: view({ status: 'requested' }) }, 'waiting'],
+    [{ session: CHAT_SESSION, chunks: [], consent: view({ status: 'given' }) }, 'no audio'],
+    [{ session: { ...CHAT_SESSION, submitted_via: null }, chunks: CHUNKS, consent: null }, 'recorded here'],
+    [{ session: { ...CHAT_SESSION, submitted_via: 'zoom' }, chunks: CHUNKS, consent: null }, 'a call'],
+  ]) {
+    const m = await mount(h(ChannelVoiceNotes, { api, ...props }));
+    try { assert.ok(!m.by('channel-voice-notes'), why); } finally { await m.unmount(); }
+  }
+  // A Telegram chat (consent not required) plays.
+  const tg = await mount(h(ChannelVoiceNotes, { api, session: { ...CHAT_SESSION, submitted_via: 'telegram' }, chunks: CHUNKS.slice(0, 1), consent: NOT_REQUIRED }));
+  try { assert.match(tg.text(tg.by('channel-voice-notes')), /1 voice note Open recording/); } finally { await tg.unmount(); }
+});
+
+test('the session page draws the voice notes under the consent line, from the session read\'s chunks', () => {
+  const src = readFileSync(new URL('../src/pages/founder/InterviewSessionPage.jsx', import.meta.url), 'utf8');
+  assert.match(src, /<ChannelVoiceNotes api=\{api\} session=\{session\} chunks=\{chunks\} consent=\{data\.channel_consent\} \/>/);
+  const review = readFileSync(new URL('../src/pages/founder/InterviewReviewPage.jsx', import.meta.url), 'utf8');
+  assert.match(review, /useSessionPlayer\(sessions, chosenId\)/, 'Customer research plays through the same player');
 });

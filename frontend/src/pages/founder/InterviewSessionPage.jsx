@@ -14,6 +14,7 @@ import { ChannelSessionPanel } from './InterviewChannels';
 import { clock } from './interviewReviewModel.js';
 import { chatConsentOf, consentLine } from './chatConsent.js';
 import { useRailOption } from '../../ui/railCrumbs';
+import { useSessionPlayer } from './sessionPlayer.js';
 
 /**
  * Validate › an interview session (D660, #1473), at `/validate/session/:id`, to
@@ -35,6 +36,8 @@ import { useRailOption } from '../../ui/railCrumbs';
  * A CHAT'S CONSENT (D754, #1980). A session made from a chat that waits for
  * consent carries `channel_consent`; the page says how consent stands, and a
  * withdrawn one offers "Discard this chat's recording" (`DELETE /sessions/:id`).
+ * A chat's voice notes are its session's chunks (D754 W3): while consent stands,
+ * Open recording plays them through Customer research's player (`useSessionPlayer`).
  */
 
 const POLL_MS = 3000;
@@ -280,6 +283,29 @@ export function ChatConsentLine({ consent, name, provider, onDiscard, when }) {
   );
 }
 
+/**
+ * A chat's voice notes (D754 §5, #1980): Open recording, as on Customer research.
+ * Drawn only for a chat's session (WhatsApp, Telegram) with stored audio whose consent stands; the
+ * audio route refuses every other one.
+ */
+const CHAT_CHANNELS = new Set(['whatsapp', 'telegram']);
+export function ChannelVoiceNotes({ api, session, chunks, consent }) {
+  const { player, held, audioError, open } = useSessionPlayer(api, session?.id ?? null);
+  const count = Array.isArray(chunks) ? chunks.length : 0;
+  if (!CHAT_CHANNELS.has(channelOf(session)) || count === 0) return null;
+  if (consent?.required && chatConsentOf({ consent }).status !== 'given') return null;
+  return (
+    <section className="space-y-2 rounded-2xl border border-axal-hairline p-4 text-[13px] dark:border-gray-800" data-testid="channel-voice-notes">
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="m-0 font-semibold">{count === 1 ? '1 voice note' : `${count} voice notes`}</p>
+        <button type="button" onClick={open} className="rounded-md bg-violet-700 px-3 py-1.5 text-[12px] font-bold text-white hover:bg-violet-800" data-testid="button-open-voice-notes">Open recording</button>
+      </div>
+      <audio ref={player} controls className={held.current.urls.length ? 'w-full' : 'hidden'} data-testid="voice-notes-player" />
+      {audioError && <p role="alert" className="m-0 text-[12.5px] font-semibold text-red-700 dark:text-red-400" data-testid="voice-notes-error">{audioError}</p>}
+    </section>
+  );
+}
+
 export default function InterviewSessionPage({ api = interviewSessionsApi }) {
   const { id } = useParams();
   const location = useLocation();
@@ -437,6 +463,7 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
           <ChatConsentLine consent={data.channel_consent} name={intervieweeName} provider={session.submitted_via}
             onDiscard={async () => { await api.remove(session.id); navigate(`/validate/customer-research?project_id=${session.project_id}`, { replace: true }); }} />
         )}
+        <ChannelVoiceNotes api={api} session={session} chunks={chunks} consent={data.channel_consent} />
         {session.status === 'draft' && (waiting
           ? <ChannelSessionPanel session={session} onChanged={() => { load(); loadReceipt(); }} />
           : <StartPanel session={session} error={startError} liveHref={startLive} busy={busy} onStart={start} onConsent={consent} />)}
