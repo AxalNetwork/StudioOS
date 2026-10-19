@@ -41,6 +41,37 @@ export function consentRequired(provider: string | null | undefined): boolean {
 export const consentRequiredProviders = (): MessagingProvider[] =>
   MESSAGING_PROVIDERS.filter((p) => CONSENT_REQUIRED[p]);
 
+/**
+ * D756 §1.5 (#1977) — the providers whose interviewees are asked in the chat
+ * (consent.ts). For both, no voice note, audio file or video of a chat is
+ * downloaded or transcribed until its consent is `given`
+ * (`audioConsentRequired`). Telegram's TEXT keeps D684's rule
+ * (`consentRequired('telegram')` stays false): only its audio waits.
+ */
+export const CONSENT_ASKED: Record<MessagingProvider, boolean> = { whatsapp: true, telegram: true };
+
+export function consentAsked(provider: string | null | undefined): boolean {
+  return Object.prototype.hasOwnProperty.call(CONSENT_ASKED, String(provider ?? ''))
+    && CONSENT_ASKED[provider as MessagingProvider] === true;
+}
+
+/** Whether a chat's notes may be fetched only once its consent is `given`. */
+export const audioConsentRequired = consentAsked;
+
+/** D756 ruling 6, §2 (m): the member's word stands in for the interviewee's on WhatsApp only. */
+export function memberAttestationAllowed(provider: string | null | undefined): boolean {
+  return provider === 'whatsapp';
+}
+
+/**
+ * A whole message that may answer the consent notice, for every provider:
+ * yes, no or stop, any case, trimmed, with one optional closing `.` or `!`.
+ */
+export function consentWord(text: string | null | undefined): 'yes' | 'no' | 'stop' | null {
+  const w = String(text ?? '').trim().toLowerCase().replace(/[.!]$/, '').trim();
+  return w === 'yes' || w === 'no' || w === 'stop' ? w : null;
+}
+
 /** The `submitted_via_name` an intake session shows, and the badge the UI draws. */
 export const PROVIDER_LABEL: Record<ChannelProvider, string> = {
   telegram: 'Telegram',
@@ -78,9 +109,11 @@ export const CHANNEL_LIMITS = {
    */
   transcriptionsPerDay: 50,
   /**
-   * Free-form reply window, ms. WhatsApp: since the customer's last message
-   * (after it, only an approved template). Telegram Business: the bot may act
-   * only in chats active in the last 24 hours (BusinessConnection.can_reply).
+   * Free-form reply window, ms, counted for both providers from the contact's
+   * last message (`last_inbound_at`, `replyWindowOpen` in threads.ts, D756).
+   * WhatsApp: after it, only an approved template. Telegram Business: the bot
+   * may reply only in chats that had incoming messages in the last 24 hours
+   * (Bot API 10.3, BusinessBotRights.can_reply).
    */
   replyWindowMs: 24 * 60 * 60 * 1000,
 } as const;
@@ -200,6 +233,19 @@ export interface InboundLinkConfirm {
   displayName: string | null;
 }
 
+/**
+ * Telegram: the "manage this chat" button, `/start bizChat<chat id>`, in the
+ * member's private chat with the bot (D756). `chatId` is that private chat, to
+ * answer in; the managed chat's id is not carried.
+ */
+export interface InboundManageChat {
+  kind: 'manage_chat';
+  provider: 'telegram';
+  eventId: string;
+  telegramUserId: string;
+  chatId: string;
+}
+
 /** Anything verified but not acted on (unsupported update types, groups, bots). */
 export interface InboundIgnored {
   kind: 'ignored';
@@ -261,7 +307,7 @@ export interface InboundAxalMessage {
 
 export type InboundEvent =
   | InboundMessage | InboundEdit | InboundDelete | InboundStatus
-  | InboundConnection | InboundLink | InboundLinkConfirm | InboundConsentReply | InboundAxalMessage | InboundIgnored;
+  | InboundConnection | InboundLink | InboundLinkConfirm | InboundManageChat | InboundConsentReply | InboundAxalMessage | InboundIgnored;
 
 /** What a send returns. `submitted` is acceptance by the provider, never delivery. */
 export interface SendResult {
@@ -271,6 +317,8 @@ export interface SendResult {
   code?: string;
   /** True when retrying later may succeed (429, 5xx, network). */
   retryable?: boolean;
+  /** A 429's wait, in seconds, when the provider gave one (Telegram's `retry_after`, D756). */
+  retryAfterSec?: number;
 }
 
 /**

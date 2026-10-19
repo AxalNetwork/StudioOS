@@ -10,7 +10,10 @@ import assert from 'node:assert/strict';
 import { createElement as h } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
-import { AiBudgetUsage, aiTopupState, usageMoney } from '../src/ui/AiBudgetUsage.jsx';
+import { AiBudgetUsage, usageMoney } from '../src/ui/AiBudgetUsage.jsx';
+import { aiTokenState } from '../src/lib/aiTokens.js';
+// D755 (#1916): the reader is lib/aiTokens.js's; `not_ready` is D750's "unavailable".
+const aiTopupState = (p, productError) => aiTokenState({ error: productError, data: p });
 import { RailUsage } from '../src/ui/WorkerRail.jsx';
 import { TOPUP_REASON_LINES } from '../src/pages/hq/PlatformAllowancesPage.jsx';
 import { TokenPacksCard } from '../src/pages/hq/TokenPacks.jsx';
@@ -55,8 +58,8 @@ test('usageMoney rounds to the cent, says <$0.01 under half a cent, and keeps la
 
 test('the shared reader: ready only with a sellable price; not_ready and unset are unavailable; a failed read is unreadable', () => {
   assert.equal(aiTopupState(READY, false), 'ready');
-  assert.equal(aiTopupState({ configured: true, state: 'not_ready' }, false), 'unavailable');
-  assert.equal(aiTopupState({ configured: false }, false), 'unavailable');
+  assert.equal(aiTopupState({ configured: true, state: 'not_ready' }, false), 'not_ready');
+  assert.equal(aiTopupState({ configured: false }, false), 'not_ready');
   assert.equal(aiTopupState(READY, true), 'unreadable');
   assert.equal(aiTopupState(null, false), 'unreadable');
   assert.equal(aiTopupState({ configured: true, product: READY.product }, false), 'unreadable', 'no state is not on sale');

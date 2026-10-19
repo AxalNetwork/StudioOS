@@ -10,7 +10,7 @@ import { AssistantsSection } from './AssistantsGroup';
 import { ChannelsSection } from './ChannelsGroup';
 import {
   MOVED_SEEN_KEY, YOURS_FILTERS, YOURS_SORTS, cardAction, cardPill, companiesLabel, connectorPagePath,
-  discoverSections, doesLabel, isPersonalMercury, lastSyncLabel, matchesQuery, oauthReturn, pageOf, stripReturn, yoursFeedsLabel, yoursRows,
+  discoverSections, doesLabel, isPersonalMercury, keysHref, lastSyncLabel, matchesQuery, oauthReturn, pageOf, stripReturn, yoursFeedsLabel, yoursRows,
   SUGGESTED,
 } from './connectorsModel';
 import { ACCOUNT_PHONE_COPY, ACCOUNT_PHONE_PAGES } from './accountPhone';
@@ -19,7 +19,7 @@ import { NO_FILTER, activeFilters, discoverFacets, discoverGrid, filterCatalogue
 import { ActiveFilters, ConnectorFilterMenu } from './ConnectorFilterMenu';
 import { isMercurySearch, notOfferedSentence } from './mercuryModel';
 import { useAuth } from '../../hooks/useAuthSync';
-import { branchOfUser } from '../../lib/shellRole';
+import { branchOfUser, isSuperAdminUser } from '../../lib/shellRole';
 
 /**
  * D651 (#1463) — the Account center's Connectors section, `/account/connectors`,
@@ -35,6 +35,10 @@ import { branchOfUser } from '../../lib/shellRole';
  * nothing here opens a right sheet but the request form (until F8). The tab
  * lives in the address (`?tab=discover`). Discover's filter is D753 F6's menu
  * (`ConnectorFilterMenu.jsx`), with every count from `discoverModel.js`.
+ *
+ * D751 (#1881): a connector Axal holds no OAuth client for reads "Not set up
+ * here" with no +, on the card and the phone row alike, and a Super Admin
+ * also gets "Add its keys in Integration keys" (`keysHref`).
  *
  * A CONNECTOR BELONGS TO THE MEMBER, and serves the companies its sheet
  * ticks. Two reads are the active company's: "Suggested for you" (its empty
@@ -102,7 +106,7 @@ export function YoursTable({ rows, role = null }) {
  * starts a sign-in from the grid. The corner tiles are decoration (the link
  * says the state); Notify me and the badge are lifted above the link layer.
  */
-export function ConnectorCard({ p, onNotify, onUnnotify, busy }) {
+export function ConnectorCard({ p, onNotify, onUnnotify, busy, keysHref: keys = null }) {
   const act = cardAction(p);
   const pill = cardPill(p);
   const to = connectorPagePath(p.key);
@@ -131,6 +135,7 @@ export function ConnectorCard({ p, onNotify, onUnnotify, busy }) {
         {pill && <Pill tone={pill.tone}>{pill.label}</Pill>}
       </div>
       {p.why && <span className="text-[11.5px] leading-snug text-axal-violet-deep dark:text-violet-300">{p.why}</span>}
+      {keys && <Link to={keys} className={`${BTN.link} relative z-10 self-start text-[11.5px]`} data-testid={`connector-keys-link-${p.key}`}>Add its keys in Integration keys</Link>}
     </article>
   );
 }
@@ -250,7 +255,8 @@ export default function ConnectorsSection() {
   const user = useAuth()?.user ?? null;
   // Decision 10's branch sentence: an admin on a branch. It chooses words only; the Worker serves the rows.
   const branchAdmin = user?.role === 'admin' && !!branchOfUser(user);
-  return <ConnectorsView data={data} phone={phone} branchAdmin={branchAdmin} role={user?.role ?? null} onBranch={!!branchOfUser(user)} />;
+  // D751 (#1881): only a Super Admin can save a connector's keys, so only one is shown the way there.
+  return <ConnectorsView data={data} phone={phone} branchAdmin={branchAdmin} role={user?.role ?? null} onBranch={!!branchOfUser(user)} superAdmin={isSuperAdminUser(user)} />;
 }
 
 // ---------------------------------------------------------------------------
@@ -313,7 +319,7 @@ export function yoursGroup({ data, rows, paged, setPage = () => {}, label = ACCO
  * builds them, each with its card's pill or corner action. The read is the
  * active company's, made without a company parameter, as on desktop.
  */
-export function suggestedGroup({ data, q = '', label = ACCOUNT_PHONE_PAGES.connectors.sections[1], onNotify, onBrowse }) {
+export function suggestedGroup({ data, q = '', label = ACCOUNT_PHONE_PAGES.connectors.sections[1], onNotify, onBrowse, superAdmin = false }) {
   const group = { label, rows: [], testid: 'connectors-phone-suggested' };
   const pending = catalogueNote(data);
   if (pending) return { ...group, note: data.status === 'loading' ? 'Loading suggestions…' : null };
@@ -326,13 +332,16 @@ export function suggestedGroup({ data, q = '', label = ACCOUNT_PHONE_PAGES.conne
   if (!section.cards.length) return { ...group, note: 'Nothing to suggest: every module a connector could feed already has data.' };
   group.rows = section.cards.map((p) => {
     const act = cardAction(p);
+    // D751 (#1881): a row that cannot be connected says so first, as its card does, not "Beta".
+    const pill = act === 'unavailable' ? actionPill(p, act) : cardPill(p) || actionPill(p, act);
+    const keys = keysHref(p, { superAdmin });
     return {
       key: p.key,
       icon: <BrandIcon provider={p.key} name={p.display_name} />,
       title: p.display_name,
-      description: p.why || p.description,
-      pill: cardPill(p) || actionPill(p, act),
-      ...(act === 'notify' ? { onClick: () => onNotify(p, true) } : act === 'joined' ? { onClick: () => onNotify(p, false) } : { to: connectorPagePath(p.key) }),
+      description: keys ? 'Add its keys in Integration keys.' : p.why || p.description,
+      pill,
+      ...(keys ? { to: keys } : act === 'notify' ? { onClick: () => onNotify(p, true) } : act === 'joined' ? { onClick: () => onNotify(p, false) } : { to: connectorPagePath(p.key) }),
       testid: `connector-suggested-${p.key}`,
     };
   });
@@ -345,7 +354,7 @@ export function ConnectorsPhoneView(props) {
 }
 
 /** The section, drawn from one `useConnectors()` read; exported so a test can hand it each state. */
-export function ConnectorsView({ data, initialTab = 'yours', initialFilter = NO_FILTER, initialQuery = '', phone = false, branchAdmin = false, role = null, onBranch = false }) {
+export function ConnectorsView({ data, initialTab = 'yours', initialFilter = NO_FILTER, initialQuery = '', phone = false, branchAdmin = false, role = null, onBranch = false, superAdmin = false }) {
   const location = useLocation();
   const navigate = useNavigate();
   const moved = useMovedNotice(location);
@@ -410,7 +419,7 @@ export function ConnectorsView({ data, initialTab = 'yours', initialFilter = NO_
   };
 
   // Discover: the desktop's second tab, and on a phone the list kept below A3m's sections.
-  const cardOf = (p) => <ConnectorCard key={p.key} p={p} onNotify={(x) => notify(x, true)} onUnnotify={(x) => notify(x, false)} busy={waitBusy} />;
+  const cardOf = (p) => <ConnectorCard key={p.key} p={p} onNotify={(x) => notify(x, true)} onUnnotify={(x) => notify(x, false)} busy={waitBusy} keysHref={keysHref(p, { superAdmin })} />;
   const discover = (
     <>
       {waitError && <p role="alert" className="text-[12px] text-red-700 dark:text-red-300">{waitError}</p>}
@@ -566,7 +575,7 @@ export function ConnectorsView({ data, initialTab = 'yours', initialFilter = NO_
           <div className="pt-[18px]">
             <PhoneRows groups={[
               yoursGroup({ data, rows, paged, setPage, label: page.sections[0], role }),
-              suggestedGroup({ data, q, label: page.sections[1], onNotify: notify, onBrowse: browse }),
+              suggestedGroup({ data, q, label: page.sections[1], onNotify: notify, onBrowse: browse, superAdmin }),
             ]} />
           </div>
         </div>

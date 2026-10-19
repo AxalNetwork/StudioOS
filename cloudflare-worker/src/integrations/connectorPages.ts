@@ -544,6 +544,24 @@ export const FIRST_PARTY_PAGES: { linkedin: ConnectorPage } = {
 };
 
 /**
+ * LinkedIn's card facts (D753 W2, #1878): what the catalogue knows of a
+ * connector with no registry row. The values the SPA's `FIRST_PARTY` uses
+ * (`connectorsModel.js`); `users` holds the LinkedIn identity. No
+ * `has_implementation` (whether it can connect is `/api/linkedin/status`'s
+ * `configured`) and no `already_connected` (the SPA keeps reading that route).
+ */
+export interface FirstPartyCard {
+  key: 'linkedin'; display_name: string; category: ConnectorCategory; status: 'live'; tier: 'free';
+  auth_type: 'oauth2'; supports_pat: false; docs_url: null; first_party: true; connection_source: 'users';
+}
+export const FIRST_PARTY_CARDS: { readonly linkedin: Readonly<FirstPartyCard> } = Object.freeze({
+  linkedin: Object.freeze({
+    key: 'linkedin', display_name: 'LinkedIn', category: 'Data', status: 'live', tier: 'free',
+    auth_type: 'oauth2', supports_pat: false, docs_url: null, first_party: true, connection_source: 'users',
+  } as const),
+});
+
+/**
  * The interview channels (D753 task C1): pages for the keys `GET /api/channels`
  * reports, which are not registry rows. The words are D754 §11's and D756
  * §1.11's; the tools are read off `services/channels/`. Neither is connectable
@@ -584,9 +602,10 @@ export const CHANNEL_PAGES: { whatsapp: ConnectorPage; telegram: ConnectorPage }
   telegram: {
     tagline: 'Telegram Business: the customer chats you choose, and their voice notes, into Validate.',
     long_description: [
-      'Only the chats you choose in Telegram Business, each waiting in Interviews until you add it to an interview.',
-      'Axal sends only what you send from Axal, within 24 hours of the person’s last message.',
-      'It cannot make or receive calls, or read group chats.',
+      'What it reads: only the chats you choose in Telegram Business, each waiting in Interviews until you add it to an interview. Voice notes and audio files are taken in only after the person replies YES to the recording notice, and are kept until you delete them.',
+      'What it sends: only what you send from Axal (replies and the notice), plus one line confirming YES, NO or STOP, within 24 hours of the person’s last message.',
+      'What it can’t do: calls, group chats, files over 5 MB, round videos for now.',
+      'Costs: transcription is billed to your AI budget, up to 50 notes a day. Needs Telegram Premium: chatbots are part of Telegram Business.',
     ],
     tools: [
       tool('download_voice_note', 'voice notes', 'read', 'Downloads a voice note from a chat you added to an interview, to transcribe it.', 'customer_research',
@@ -687,6 +706,18 @@ export function connectorPagePath(key: string): string {
   const pageKey = key === PAGE_ALIAS.google ? 'google' : key === PAGE_ALIAS.microsoft ? 'microsoft' : key;
   const known = Object.hasOwn(PAGE_ALIAS, pageKey) || pageKey === 'linkedin' || Object.hasOwn(CHANNEL_PAGES, pageKey) || Object.hasOwn(CONNECTOR_PAGES, pageKey);
   return known ? `${HUB}/${pageKey}` : HUB;
+}
+
+/**
+ * The registry key and the page key a directory request names (D753 W2,
+ * #1878), or null for a key no page could have. Pure: whether the key exists
+ * is the route's to check. `google` and `microsoft` are page keys
+ * (`PAGE_ALIAS`, own properties only); every other key is its own page key.
+ */
+export function directoryKeyFor(raw: string): { key: string; page_key: string } | null {
+  if (typeof raw !== 'string' || !PAGE_KEY_RE.test(raw)) return null;
+  if (Object.hasOwn(PAGE_ALIAS, raw)) return { key: PAGE_ALIAS[raw as keyof typeof PAGE_ALIAS], page_key: raw };
+  return { key: raw, page_key: raw };
 }
 
 export type PageDescriptor = ConnectorPage & { key: string; page_key: string; page_href: string; trust: Trust };

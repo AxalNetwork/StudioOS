@@ -33,8 +33,14 @@
  * the pending store and its voice notes stay placeholders, never fetched,
  * until `consent_state` is 'given' (consent.ts). Then `admitConsentedThread`
  * moves what waited. A decline deletes what waited and sets the chat aside; a
- * withdrawal sets it aside so nothing new is kept. Telegram keeps D684's
- * behaviour until D756 turns its consent on.
+ * withdrawal sets it aside so nothing new is kept.
+ *
+ * A TELEGRAM CHAT'S NOTES WAIT FOR CONSENT; ITS TEXT DOES NOT (D756 §1.5,
+ * #1977; `audioConsentRequired`). Its text keeps D684's rule, and its voice
+ * notes are queued only once its `consent_state` is 'given'. A consent given
+ * while the chat is pending waits on the thread and is copied to the session
+ * at assignment; a NO keeps the notes held, and a STOP stops further
+ * downloads, without setting the chat aside.
  *
  * Every function that takes `userId` scopes by it; every write into an
  * interview goes through `interviewIntake.ts`, which re-checks the member and
@@ -53,7 +59,7 @@ import { isOurSend } from './outbound';
 import { expireCapturesStatements } from './whatsappCapture';
 import { enqueueSessionStructure } from '../sessionAutoStructure';
 import {
-  CHANNEL_LIMITS, consentRequired, consentRequiredProviders, type InboundDelete, type InboundEdit, type InboundMessage, type MessageSide,
+  CHANNEL_LIMITS, audioConsentRequired, consentAsked, consentRequired, consentRequiredProviders, type InboundDelete, type InboundEdit, type InboundMessage, type MessageSide,
   type MessagingProvider,
 } from './types';
 import { deleteSession, dropInterviewMadeFor, type SessionRow } from '../interviewSessions';
@@ -196,9 +202,12 @@ const linked = (t: Pick<ThreadRow, 'status' | 'session_id' | 'interview_id'>): b
 export const inInterview = (t: Pick<ThreadRow, 'status' | 'session_id' | 'interview_id' | 'provider' | 'consent_state'>): boolean =>
   linked(t) && (!consentRequired(t.provider) || t.consent_state === 'given');
 
-/** D754 §4: a chat whose consent was withdrawn keeps nothing new, as an ignored one. */
-const keepsNothing = (t: Pick<ThreadRow, 'status' | 'consent_state'>): boolean =>
-  t.status === 'ignored' || t.consent_state === 'withdrawn';
+/**
+ * D754 §4: a chat whose consent was withdrawn keeps nothing new, as an ignored
+ * one. A Telegram STOP stops downloads only (D756 §1.5): its text still flows.
+ */
+const keepsNothing = (t: Pick<ThreadRow, 'status' | 'consent_state' | 'provider'>): boolean =>
+  t.status === 'ignored' || (consentRequired(t.provider) && t.consent_state === 'withdrawn');
 
 /**
  * #1895 decision 3 (D756): whether a free-form message may go now, counted
@@ -350,7 +359,8 @@ export async function queueVoiceTranscriptions(
 ): Promise<number> {
   if (!inInterview(thread)) return 0;
   // D754 §4, said twice on purpose: a chat that waits for consent queues nothing without it.
-  if (consentRequired(thread.provider) && thread.consent_state !== 'given') return 0;
+  // D756 §1.5: nor does a Telegram chat, whose text flows but whose notes wait for its YES.
+  if (audioConsentRequired(thread.provider) && thread.consent_state !== 'given') return 0;
   const only = opts.only ?? null;
   const rows = (await env.DB.prepare(
     `SELECT uid FROM channel_thread_messages
@@ -545,25 +555,34 @@ export interface AssignResult {
 }
 
 /**
- * D754 §4 decision 8: what consent a chat that waits for it carries into a
- * new link. 'given' only within the venture the notice named (another venture
- * is refused: nothing changes); anything else starts at 'awaiting'.
+ * D754 §4 decision 8, D756 §1.5: what consent a chat carries into a new link.
+ *   given     only within the venture its consent was given for (another
+ *             venture is refused: nothing changes). A Telegram chat that
+ *             agreed while pending has no venture yet, and takes this one.
+ *   awaiting  a WhatsApp chat without it: the whole chat waits again.
+ *   keep      a Telegram chat without it: its text keeps D684's rule, and its
+ *             consent state (asked, declined, stopped) stays as it is.
  */
 async function consentForMove(
   env: Env, thread: ThreadRow, projectId: number,
-): Promise<{ state: 'awaiting' } | { state: 'given'; method: string }> {
-  if (thread.consent_state !== 'given' || !thread.interview_id) return { state: 'awaiting' };
+): Promise<{ state: 'awaiting' | 'keep' } | { state: 'given'; method: string; rowId: number }> {
+  const whole = consentRequired(thread.provider);
+  const none = { state: whole ? 'awaiting' as const : 'keep' as const };
+  if (thread.consent_state !== 'given') return none;
   const row = await env.DB.prepare(
-    `SELECT c.method, di.project_id FROM channel_consents c
-       JOIN discovery_interviews di ON di.id = ?
+    `SELECT c.id, c.method,
+            (SELECT di.project_id FROM discovery_interviews di WHERE di.id = COALESCE(?, c.interview_id)) AS project_id
+       FROM channel_consents c
       WHERE c.thread_id = ? AND c.status = 'given' ORDER BY c.id DESC LIMIT 1`,
-  ).bind(thread.interview_id, thread.id).first<{ method: string; project_id: number }>();
-  if (!row) return { state: 'awaiting' };
-  if (Number(row.project_id) !== Number(projectId)) {
+  ).bind(thread.interview_id, thread.id).first<{ id: number; method: string; project_id: number | null }>();
+  if (!row) return none;
+  // A WhatsApp consent whose interview is gone has no venture to carry it to.
+  if (row.project_id == null && whole) return none;
+  if (row.project_id != null && Number(row.project_id) !== Number(projectId)) {
     throw new IntakeError(409, 'consent_other_venture',
       'This chat agreed to be recorded for its venture only. Add it to an interview in the same venture, or ask again after moving it.');
   }
-  return { state: 'given', method: row.method };
+  return { state: 'given', method: row.method, rowId: Number(row.id) };
 }
 
 /**
@@ -669,7 +688,7 @@ async function assignInto(env: Env, userId: number, threadUid: string, target: A
   }
   refuseIfBusy(thread);
   // Checked before the interview is created, so a refusal leaves none behind.
-  if (consentRequired(thread.provider)) await consentForMove(env, thread, Number(target.projectId));
+  if (consentAsked(thread.provider)) await consentForMove(env, thread, Number(target.projectId));
   const created = await createInterview(env, userId, Number(target.projectId), target.intervieweeName, target.intervieweeCompany ?? null);
   let scoped: ScopedInterview;
   try {
@@ -687,7 +706,7 @@ async function moveInto(
   const interviewId = scoped.interview.id;
   const waits = consentRequired(thread.provider);
   let consent: Awaited<ReturnType<typeof consentForMove>> | null = null;
-  if (waits) {
+  if (consentAsked(thread.provider)) {
     try {
       consent = await consentForMove(env, thread, scoped.project.id);
     } catch (err) {
@@ -702,7 +721,8 @@ async function moveInto(
     `UPDATE channel_threads SET status = 'assigned', interview_id = ?, session_id = NULL,
             consent_state = CASE WHEN ? = 1 THEN ? ELSE consent_state END, updated_at = datetime('now')
       WHERE id = ? AND user_id = ? AND status = ? AND interview_id IS ? AND session_id IS ? RETURNING id`,
-  ).bind(interviewId, waits ? 1 : 0, consent?.state ?? null, thread.id, userId, thread.status, thread.interview_id, thread.session_id)
+  ).bind(interviewId, waits ? 1 : 0, consent && consent.state !== 'keep' ? consent.state : null, thread.id, userId, thread.status,
+    thread.interview_id, thread.session_id)
     .first<{ id: number }>();
   if (!claim) {
     if (created) await dropCreatedInterview(env, created).catch(() => {});
@@ -717,11 +737,26 @@ async function moveInto(
     const setSession = env.DB.prepare(
       `UPDATE channel_threads SET session_id = ?, updated_at = datetime('now') WHERE id = ?`,
     ).bind(session.id, thread.id);
-    if (waits) {
-      // A request still open was for the chat's old interview: it closes.
-      await env.DB.prepare(
-        `UPDATE channel_consents SET status = 'expired', updated_at = datetime('now') WHERE thread_id = ? AND status = 'requested'`,
-      ).bind(thread.id).run();
+    if (consentAsked(thread.provider)) {
+      // A request still open was for the chat's old interview: it closes. One
+      // made while the chat was pending (Telegram) now belongs to this interview.
+      await env.DB.batch([
+        env.DB.prepare(
+          `UPDATE channel_consents SET status = 'expired', updated_at = datetime('now')
+            WHERE thread_id = ? AND status = 'requested' AND ? IS NOT NULL`,
+        ).bind(thread.id, thread.interview_id),
+        env.DB.prepare(
+          `UPDATE channel_consents SET interview_id = ?, session_id = ?, updated_at = datetime('now')
+            WHERE thread_id = ? AND status = 'requested' AND interview_id IS NULL`,
+        ).bind(interviewId, session.id, thread.id),
+      ]);
+      // A consent given while pending is copied to its first session; a given row keeps its first session.
+      if (consent?.state === 'given') {
+        await env.DB.prepare(
+          `UPDATE channel_consents SET interview_id = COALESCE(interview_id, ?), session_id = COALESCE(session_id, ?),
+                  updated_at = datetime('now') WHERE id = ?`,
+        ).bind(interviewId, session.id, consent.rowId).run();
+      }
     }
     if (consent?.state === 'awaiting') {
       // D754 §4: linked and waiting. Nothing moves, nothing is structured or queued.
@@ -735,7 +770,7 @@ async function moveInto(
     if (moved > 0) await enqueueSessionStructure(env, session.id, userId, 'chat_assigned');
     const assigned: ThreadRow = {
       ...thread, status: 'assigned', interview_id: interviewId, session_id: session.id,
-      consent_state: waits ? consent?.state ?? null : thread.consent_state,
+      consent_state: waits && consent && consent.state !== 'keep' ? consent.state : thread.consent_state,
     };
     return { interviewId, sessionId: session.id, moved, queued: await queueAfterAssign(env, assigned) };
   } catch (err) {
@@ -825,16 +860,13 @@ export interface ThreadView {
 }
 
 async function view(env: Env, t: ThreadRow & { interviewee_name?: string | null }, canReply: boolean): Promise<ThreadView> {
-  // WhatsApp counts from the customer's last message; Telegram from the chat's last activity.
-  const since = t.provider === 'whatsapp' ? t.last_inbound_at : t.last_message_at;
-  const last = since ? Date.parse(since) : NaN;
   return {
     uid: t.uid, provider: t.provider, contact_name: await contactName(env, t), status: t.status,
     message_count: Number(t.message_count) || 0, last_message_at: t.last_message_at, last_inbound_at: t.last_inbound_at,
     interview_id: t.interview_id, interviewee_name: t.interviewee_name ?? null, session_id: t.session_id,
     can_reply: canReply,
-    reply_window_open: canReply && Number.isFinite(last) && Date.now() - last < CHANNEL_LIMITS.replyWindowMs,
-    consent_status: consentRequired(t.provider) ? t.consent_state ?? 'not_asked' : null,
+    reply_window_open: canReply && replyWindowOpen(t),
+    consent_status: consentAsked(t.provider) ? t.consent_state ?? 'not_asked' : null,
   };
 }
 

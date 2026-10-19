@@ -370,7 +370,7 @@ test('the composer: disabled with the reason outside the window; a retry with no
   assert.match(renderedText(closed), /WhatsApp only allows a free reply within 24 hours of the customer’s last message/);
   assert.match(closed.match(/<textarea[^>]*>/)[0], /disabled=""/);
   const tgClosed = renderedText(html(h(ReplyComposer, { thread: { ...THREAD, provider: 'telegram', reply_window_open: false } })));
-  assert.match(tgClosed, /Telegram only lets the bot reply in chats active in the last 24 hours/);
+  assert.match(tgClosed, /Telegram only lets the bot reply within 24 hours of your contact’s last message/);
 
   const keys = [];
   let attempt = 0;

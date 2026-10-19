@@ -65,10 +65,12 @@ async function batch(env:Env, statements:D1PreparedStatement[]) {
 }
 const clock = (now:Date) => ({ day:now.toISOString().slice(0,10),month:now.toISOString().slice(0,7),at:now.toISOString().slice(0,19).replace('T',' ') });
 async function seedSpend(env:Env, userId:number, key:string, length:number) {
-  const row = await env.DB.prepare(`SELECT COALESCE(SUM(est_cost_usd),0) AS spend FROM ai_usage_logs
+  // D762: a run's charge where migration 493 recorded one, and its cost on an older row.
+  const row = await env.DB.prepare(`SELECT COALESCE(SUM(charged_microusd),0) AS charged,
+      COALESCE(SUM(CASE WHEN charged_microusd IS NULL THEN est_cost_usd ELSE 0 END),0) AS spend FROM ai_usage_logs
     WHERE user_id = ? AND refusal IS NULL AND substr(created_at,1,?) = ?`).bind(userId,length,key).first<any>();
   if (!row) throw new Error('AI usage unreadable');
-  let seed = usdToMicro(row.spend);
+  let seed = amount(row.charged) + usdToMicro(row.spend);
   const store = (env as any).AI_SPEND || env.TOKENS;
   if (store) {
     // Existing enforcement may exceed the best-effort usage log. Missing is zero; a failed read is unknown.
@@ -200,18 +202,22 @@ export async function loadAiBudget(env:Env,userId:number,now=new Date()) {
   const row=await env.DB.prepare(`SELECT a.balance_microusd,d.spend_microusd AS daily,m.spend_microusd AS monthly,
       (SELECT COALESCE(SUM(included_microusd),0) FROM ai_budget_reservations WHERE user_id=a.user_id AND status IN ('pending','review') AND day_key=?) AS day_held,
       (SELECT COALESCE(SUM(included_microusd),0) FROM ai_budget_reservations WHERE user_id=a.user_id AND status IN ('pending','review') AND month_key=?) AS month_held,
+      (SELECT COALESCE(SUM(included_microusd),0) FROM ai_budget_reservations WHERE user_id=a.user_id AND status='review' AND month_key<?) AS earlier_review_held,
       (SELECT COALESCE(SUM(topup_microusd),0) FROM ai_budget_reservations WHERE user_id=a.user_id AND status IN ('pending','review')) AS paid_held
     FROM ai_topup_accounts a JOIN ai_included_spend d ON d.user_id=a.user_id AND d.period_kind='day' AND d.period_key=?
       JOIN ai_included_spend m ON m.user_id=a.user_id AND m.period_kind='month' AND m.period_key=? WHERE a.user_id=?`)
-    .bind(t.day,t.month,t.day,t.month,userId).first<any>();
+    .bind(t.day,t.month,t.month,t.day,t.month,userId).first<any>();
   if (!row) throw new Error('AI budget unreadable');
   const held=await env.DB.prepare(`SELECT uid,created_at AS at,included_microusd,topup_microusd,recorded_cost_microusd
     FROM ai_budget_reservations WHERE user_id=? AND status='review' ORDER BY created_at,uid`).bind(userId).all<any>();
   if (held.success !== true) throw new Error('AI reviews unreadable');
   const daily=amount(row.daily),monthly=amount(row.monthly),dayHeld=amount(row.day_held),monthHeld=amount(row.month_held);
+  // D762: a hold still in review from an earlier month is still held, so "Held by runs in progress"
+  // counts it. It was counted in that month's spend row, never this one's, so this month's spend is unchanged.
+  const earlierReview=amount(row.earlier_review_held);
   return { ...caps, day_key:t.day,month_key:t.month,
     day_spend_microusd:amount(daily-dayHeld),month_spend_microusd:amount(monthly-monthHeld),
-    day_reserved_microusd:dayHeld,month_reserved_microusd:monthHeld,
+    day_reserved_microusd:dayHeld,month_reserved_microusd:amount(monthHeld+earlierReview),
     balance_microusd:amount(row.balance_microusd),topup_reserved_microusd:amount(row.paid_held),
     held_for_review:held.results.map(r=>({uid:r.uid,at:r.at,
       held_microusd:amount(amount(r.included_microusd)+amount(r.topup_microusd)),

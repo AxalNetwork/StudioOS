@@ -89,7 +89,7 @@ test('Details: Category, Status, Plan, Sign-in and Documentation, and an unread 
 // ================================================================ the pages
 
 test('both pages draw the frame with their own card: band, Connect and manage, About and Details', () => {
-  for (const [key, title, cardTestId] of [['whatsapp', 'WhatsApp Business', 'channel-card-whatsapp'], ['telegram', 'Telegram Business', 'channel-card-telegram']]) {
+  for (const [key, title, cardTestId] of [['whatsapp', 'WhatsApp Business', 'whatsapp-page-body'], ['telegram', 'Telegram Business', 'telegram-page-body']]) {
     const out = html(key);
     assert.match(out, new RegExp(`data-testid="connector-page" data-state="ready" data-key="${key}" data-channel="true"`), key);
     for (const id of ['connector-page-back', 'connector-page-band', 'connector-page-connect', 'connector-page-about', 'connector-page-details', cardTestId]) {
@@ -104,7 +104,7 @@ test('both pages draw the frame with their own card: band, Connect and manage, A
     // The card on its own page carries no link to itself.
     assert.equal(out.includes(`channel-page-link-${key}`), false, `${key}: the page links to itself`);
   }
-  // WhatsApp's card in the frame: not available yet, with its calls line; Telegram's: Link Telegram.
+  // WhatsApp's body in the frame (D754 f1, #1959): not available yet, with its calls line; Telegram's body (D756, #1979): Link Telegram.
   const wa = flat(html('whatsapp'));
   assert.ok(wa.includes('Axal has not switched this on yet.'), 'the unavailable words');
   assert.ok(wa.includes('WhatsApp calls do not reach Axal'), 'the calls line');
