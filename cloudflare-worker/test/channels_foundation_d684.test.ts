@@ -94,7 +94,7 @@ function world() {
     CREATE TABLE integrations (
       id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE, user_id INTEGER NOT NULL, provider_key TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'active', auth_type TEXT, credentials_enc TEXT, config_json TEXT,
-      external_account_id TEXT, external_account_name TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      external_account_id TEXT, external_account_name TEXT, last_synced_at TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP, UNIQUE (user_id, provider_key)
     );
     INSERT INTO integrations (id, uid, user_id, provider_key, auth_type, external_account_id) VALUES

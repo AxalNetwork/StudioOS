@@ -4,6 +4,29 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## Send to Axal, part 1: linking a member's own WhatsApp through Axal's number (D754 way B, #1937)
+
+- `cloudflare-worker/src/services/channels/whatsappLink.ts` and four routes in
+  `routes/channels.ts`: `POST /api/channels/whatsapp/link` gives a one-time
+  code and a `wa.me` link that types `LINK <code>` to Axal's number;
+  `GET /whatsapp/link` shows the claim as `•••• 1234`;
+  `POST /whatsapp/link/:uid/confirm` is Axal's half; `DELETE /whatsapp/link`
+  unlinks. The webhook answers Axal's number before any member connection:
+  `LINK <code>` records the claim with one reply ("Confirm in Axal to finish
+  linking this WhatsApp."), STOP from a linked sender unlinks with one reply,
+  and anything else gets no reply and keeps no text. Replies go through the
+  outbound ledger (`wblink:<code uid>`) with Axal's own token.
+- Migration 492 rebuilds `channel_link_codes` so `provider` admits
+  `whatsapp_link`, adds the one-member-per-number index on active
+  `whatsapp_link` integrations, and creates `whatsapp_captures` for part 2.
+- No number is stored in clear: an HMAC for lookups, the id encrypted, the
+  mask for show. Sender tries (5) and member codes (10) are limited per hour
+  on hashed subjects. A link unused for 180 days lapses in the channel purge.
+- Inert until the owner sets `WHATSAPP_AXAL_ACCESS_TOKEN`,
+  `WHATSAPP_AXAL_PHONE_NUMBER_ID`, `WHATSAPP_AXAL_WABA_ID` and
+  `WHATSAPP_AXAL_DISPLAY_NUMBER`: until then every way-B route is 503.
+- `test/whatsapp_axal_link_d754.test.ts` (19 tests), with Graph mocked.
+
 ## The LP's capital call opens on the amount, and the fee statement is on screen (D717, #1859)
 
 - An open Fund I line's panel on the LP workspace opens on "Amount due", the
