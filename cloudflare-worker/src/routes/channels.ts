@@ -67,9 +67,13 @@
  * chat's notes are queued when the member assigns it. The job below
  * transcribes with the interview sessions' own speech-to-text, under the
  * connection's daily cap (D1, fails closed) and the member's AI budget (D640).
- * Only the text is kept; the audio is never stored (D754: for WhatsApp,
- * until the S13 w3 voice-audio task lands). No note over 5 MB, the recorder's
- * chunk, reaches a model from either provider (D756, #1896).
+ * For Telegram only the text is kept; the audio is never stored (until
+ * D756's audio task, #1978). A consented WhatsApp note is kept and
+ * transcribed as the recorder's audio is (D754 W3, #1935): a chunk under
+ * `validate-audio/`, the recorder's per-chunk stage and receipt, appended to
+ * the chat's session, then the engine (`ingestChannelAudio`). No note over
+ * 5 MB, the recorder's chunk, reaches a model from either provider (D756,
+ * #1896).
  *
  * AXAL'S OWN WHATSAPP NUMBER (way B, whatsappLink.ts) is answered before any
  * member connection is looked for: `LINK <code>` records a claim and gets one
@@ -103,11 +107,14 @@
 import { Hono, type Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth, requireSuperAdmin, isSuperAdmin } from '../auth';
+import { canHoldValidateSource } from './_founder_validate_helpers';
 import { refuse } from '../util/refusal';
 import { run as aiRun, audioMinutesFromBytes } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { IntakeError, activeMember } from '../services/interviewIntake';
 import { MAX_CHUNK_BYTES } from '../services/interviewSessions';
+import { admitAudio, audioMimeAdmitted, ingestChannelAudio } from '../services/channels/channelAudio';
+import { sniffAudioContainer } from '../services/channels/providerHttp';
 import {
   claimEvent, connectionOverLimit, linkAttemptOverLimit, finishEvent, finishEventStatement, readCappedBody, releaseEvent, reserveTranscription,
   type EventFields, type EventKind, type EventStatus,
@@ -254,6 +261,16 @@ function member(handler: (c: C, user: User) => Promise<Response>) {
   };
 }
 
+/**
+ * D757 §2.11: every channel here (Telegram, WhatsApp, Zoom, Meet transcripts)
+ * is a Validate source, listed and connectable only by a member who can hold a
+ * venture. Anyone else is answered as if the channel did not exist. An
+ * existing connection keeps Disconnect, its test and its threads.
+ */
+function venture(handler: (c: C, user: User) => Promise<Response>) {
+  return member(async (c, user) => (canHoldValidateSource(user) ? handler(c, user) : no(c, 404, 'unknown_provider')));
+}
+
 const parseJson = (s: string | null): Record<string, unknown> => {
   if (!s) return {};
   try { const v = JSON.parse(s); return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; } catch { return {}; }
@@ -267,7 +284,8 @@ channels.get('/', member(async (c, user) => {
   const env = c.env;
   // Secret NAMES help an admin set a deployment up; a member learns only "not available".
   const admin = String(user.role ?? '').toLowerCase() === 'admin';
-  const providers = availability(env).map((a) => {
+  // D757 §2.11: no channel is offered to a member who cannot hold a venture.
+  const providers = (canHoldValidateSource(user) ? availability(env) : []).map((a) => {
     const chat = a.provider === 'whatsapp' || a.provider === 'telegram';
     const available = a.available && (!chat || channelOpenTo(env, a.provider as MessagingProvider, user));
     return {
@@ -320,7 +338,7 @@ channels.get('/', member(async (c, user) => {
   return c.json({ providers, connections, pending, telegram_link: await pendingLinkView(env, user.id) });
 }));
 
-channels.post('/telegram/link', member(async (c, user) => {
+channels.post('/telegram/link', venture(async (c, user) => {
   if (!providerAvailable(c.env, 'telegram') || !channelOpenTo(c.env, 'telegram', user)) return no(c, 503, 'not_available');
   const ip = c.req.header('cf-connecting-ip') || (c.req.header('x-forwarded-for') || '').split(',')[0].trim() || 'unknown';
   await activeMember(c.env, user.id);
@@ -333,12 +351,12 @@ channels.post('/telegram/link', member(async (c, user) => {
 }));
 
 
-channels.get('/telegram/link', member(async (c, user) => {
+channels.get('/telegram/link', venture(async (c, user) => {
   await activeMember(c.env, user.id);
   return c.json({ claim: await pendingLinkView(c.env, user.id) });
 }));
 
-channels.post('/telegram/link/:uid/confirm', member(async (c, user) => {
+channels.post('/telegram/link/:uid/confirm', venture(async (c, user) => {
   const out = await telegram.confirmAxalTelegramLink(c.env, user.id, c.req.param('uid') ?? '');
   if (!out.linked && out.reason === 'member_inactive') return no(c, 403, 'member_inactive');
   if (!out.linked && out.reason === 'identity_taken') return no(c, 409, 'identity_taken');
@@ -350,7 +368,7 @@ channels.post('/telegram/link/:uid/confirm', member(async (c, user) => {
 // Codes per member per hour are counted on a hashed subject (events.ts).
 const WA_LINK_CODES_PER_HOUR = 10;
 
-channels.post('/whatsapp/link', member(async (c, user) => {
+channels.post('/whatsapp/link', venture(async (c, user) => {
   if (!waLink.axalNumberReady(c.env) || !channelOpenTo(c.env, 'whatsapp', user)) return no(c, 503, 'not_available');
   await activeMember(c.env, user.id);
   try {
@@ -360,13 +378,13 @@ channels.post('/whatsapp/link', member(async (c, user) => {
   return c.json({ code, wa_link: waLink.waLink(c.env, code), expires_at: expiresAt });
 }));
 
-channels.get('/whatsapp/link', member(async (c, user) => {
+channels.get('/whatsapp/link', venture(async (c, user) => {
   if (!waLink.axalNumberReady(c.env)) return no(c, 503, 'not_available');
   await activeMember(c.env, user.id);
   return c.json(await waLink.whatsappLinkView(c.env, user.id));
 }));
 
-channels.post('/whatsapp/link/:uid/confirm', member(async (c, user) => {
+channels.post('/whatsapp/link/:uid/confirm', venture(async (c, user) => {
   if (!waLink.axalNumberReady(c.env) || !channelOpenTo(c.env, 'whatsapp', user)) return no(c, 503, 'not_available');
   await waLink.confirmWhatsAppLink(c.env, user.id, c.req.param('uid') ?? '');
   return c.json({ ok: true, linked: true, ...(await waLink.whatsappLinkView(c.env, user.id)) });
@@ -396,7 +414,7 @@ channels.post('/whatsapp/captures/:uid/consent', member(async (c, user) => {
   return c.json({ ok: true, status: 'consented' });
 }));
 
-channels.post('/whatsapp/connect', member(async (c, user) => {
+channels.post('/whatsapp/connect', venture(async (c, user) => {
   if (!providerAvailable(c.env, 'whatsapp') || !channelOpenTo(c.env, 'whatsapp', user)) return no(c, 503, 'not_available');
   const body = await c.req.json<Record<string, unknown>>().catch(() => ({} as Record<string, unknown>));
   const code = typeof body.code === 'string' ? body.code.trim() : '';
@@ -1346,6 +1364,8 @@ export async function runVoiceFollowup(env: Env, p: ChannelJobPayload): Promise<
     return giveBack('failed', 'connection_disabled');
   }
 
+  // D754 W3 (#1935): a declared type the recorder does not take is never downloaded.
+  if (provider === 'whatsapp' && note.mime && !audioMimeAdmitted(note.mime)) return giveBack('failed', 'unsupported_format');
   const audio = provider === 'telegram'
     ? await telegram.fetchTelegramVoice(env, note)
     : await whatsapp.fetchWhatsAppMedia(env, conn, note.file, note.mime);
@@ -1364,7 +1384,38 @@ export async function runVoiceFollowup(env: Env, p: ChannelJobPayload): Promise<
   }
   // D756 (#1896): the recorder's chunk is the memory bound; nothing larger reaches a model, or the day's cap.
   if (audio.bytes.byteLength > MAX_CHUNK_BYTES) return giveBack('failed', 'too_large');
+  // D754 W3 (#1935): a file the recorder would not take spends nothing either.
+  if (provider === 'whatsapp' && !admitAudio(audio.mime || null, sniffAudioContainer(audio.bytes)).ok) {
+    return giveBack('failed', 'unsupported_format');
+  }
   if (!(await reserveTranscription(env, conn.integrationId))) return giveBack('failed', 'transcription_cap');
+
+  if (provider === 'whatsapp') {
+    // D754 W3 (#1935): kept as recorder audio, transcribed by the recorder's
+    // stage, appended, then the engine. The placeholder and the event's record
+    // go in the append's batch, so a retry finds no note and does nothing.
+    const record = event ? [finishEventStatement(env, event, 'done', fields)] : [];
+    let kept: Awaited<ReturnType<typeof ingestChannelAudio>>;
+    try {
+      kept = await ingestChannelAudio(env, {
+        sessionId: Number(note.thread.session_id), userId: conn.userId, seq: note.id, bytes: audio.bytes,
+        declaredMime: audio.mime || null, mediaKind: note.media, side: note.side, provider,
+        speakerLabel: note.side === 'me' ? 'Me' : (await intervieweeLabel(env, note.thread)) || 'Interviewee',
+        alongside: [env.DB.prepare('DELETE FROM channel_thread_messages WHERE id = ? AND uid = ?').bind(note.id, note.uid), ...record],
+      });
+    } catch (err) {
+      // The chat's interview or session went away while the note waited.
+      if (err instanceof IntakeError && err.status === 404) return giveBack('ignored', 'not_assigned');
+      throw err;
+    }
+    if (kept.ok) return;
+    if (kept.reason !== 'transcription') return giveBack('failed', kept.reason);
+    if (!kept.budget && !FINAL_REFUSAL.test(kept.refusal)) {
+      console.error(`[channels] voice transcription failed provider=${provider} refusal=${kept.refusal} try=${Number(p.try) || 1}`);
+      return tryAgain('transcription_unavailable');
+    }
+    return giveBack('failed', kept.refusal);
+  }
 
   const r = await aiRun(env, {
     task: 'transcribe', userId: conn.userId, surface: AI_SURFACE.validateInterviews,

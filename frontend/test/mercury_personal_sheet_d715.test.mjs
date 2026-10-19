@@ -91,7 +91,7 @@ const FOUNDER_NOTE = memberDisconnectNote('founder');
 /** The status route's answer (`routes/mercury_personal.ts`), for a founder, a partner on HQ and a partner on a branch. */
 const use = (key, available, reason = null) => ({ key, available, reason });
 const STATUS = {
-  founder: { connected: true, connection: null, uses: [use('venture_revenue', true), use('practice_income', false, 'purpose_not_allowed'), use('partner_deals', false, 'purpose_not_allowed'), use('capital_attestation', false, 'purpose_not_allowed')] },
+  founder: { connected: true, connection: null, uses: [use('venture_revenue', true), use('venture_spend', true), use('practice_income', false, 'purpose_not_allowed'), use('partner_deals', false, 'purpose_not_allowed'), use('capital_attestation', false, 'purpose_not_allowed')] },
   partnerHq: { connected: true, connection: null, uses: [use('venture_revenue', false, 'purpose_not_allowed'), use('practice_income', true), use('partner_deals', true), use('capital_attestation', false, 'purpose_not_allowed')] },
   partnerBranch: { connected: true, connection: null, uses: [use('venture_revenue', false, 'purpose_not_allowed'), use('practice_income', true), use('partner_deals', false, 'hq_only'), use('capital_attestation', false, 'purpose_not_allowed')] },
   investorHq: { connected: true, connection: null, uses: [use('venture_revenue', false, 'purpose_not_allowed'), use('practice_income', false, 'purpose_not_allowed'), use('partner_deals', false, 'purpose_not_allowed'), use('capital_attestation', true)] },
@@ -270,7 +270,7 @@ test('Build: the failing Mercury row reconnects and syncs nothing; its lightbox 
 
 test('PR 3b: a founder draws venture revenue only; a partner on HQ draws practice income and partner deals, in that order', async () => {
   for (const [who, status, want, absent] of [
-    [FOUNDER, STATUS.founder, ['venture_revenue'], ['practice_income', 'partner_deals']],
+    [FOUNDER, STATUS.founder, ['venture_revenue', 'venture_spend'], ['practice_income', 'partner_deals']],
     [PARTNER, STATUS.partnerHq, ['practice_income', 'partner_deals'], ['venture_revenue']],
   ]) {
     const stub = stubStatus(status);

@@ -39,7 +39,7 @@
  * providers' reconciles and not this one. Filed by D232, not changed there.
  */
 import type { Context } from 'hono';
-import { callbackBase } from '../../util/url';
+import { oauthCallbackUrl } from '../../util/url';
 import { projectEnabled, scheduledConnectorEnabled } from '../companyScope';
 import type { Env, User } from '../../types';
 import {
@@ -59,9 +59,9 @@ const PROVIDER_KEY = 'stripe';
 const STRIPE_API = 'https://api.stripe.com';
 const STRIPE_CONNECT = 'https://connect.stripe.com';
 
-function redirectUri(env: Env): string {
-  const base = callbackBase(env);
-  return `${base}/api/integrations/oauth/${PROVIDER_KEY}/callback`;
+/** The callback URL registered with the provider; Admin → Integration keys shows the same (D751). */
+export function redirectUri(env: Env): string {
+  return oauthCallbackUrl(env, PROVIDER_KEY);
 }
 
 async function ensureCreds(env: Env): Promise<{ clientId: string; secret: string }> {

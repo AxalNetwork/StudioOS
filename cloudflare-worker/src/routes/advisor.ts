@@ -101,8 +101,9 @@ import {
   TOOL_SCHEMAS,
   type ToolEnvelope,
 } from '../services/advisor/tools';
-import { run as aiRouterRun, audioMinutesFromBytes } from '../services/aiRouter';
+import { run as aiRouterRun, audioMinutesFromBytes, budgetRefusalMessage } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
+import { GUARD_COPY } from '../services/ai/guard';
 // Advisor kill switch (Task #5 staged rollout retired in Task #7 — only
 // ADVISOR_V2_DISABLED / ADVISOR_DISABLED env flags remain).
 import { advisorKillState, ADVISOR_DISABLED_MESSAGE } from '../services/advisor/rollout';
@@ -967,7 +968,26 @@ advisor.post('/answer', async (c) => {
   // aiRouter). Runs on every user-typed value before it touches the
   // write-router or the LLM. A block returns 422 with the canonical
   // jailbreak refusal; the routed write does NOT happen.
+  //
+  // D763: this is the one route that still calls `classifyInput`, because no
+  // model run follows it, so `run()`'s own input check never sees the value.
+  // It fails closed: a guard that cannot answer stops the write too, and
+  // says so rather than calling the value unsafe.
   const safety = await classifyInput(c.env, user.id, valueStr, AI_SURFACE.studio);
+  if (safety.unavailable) {
+    await writeTurnAudit(c.env, {
+      userId: user.id, conversationId: conv.id,
+      model: '@cf/meta/llama-guard-3-8b',
+      promptHash: await promptHash(), toolCalls: [],
+      aiSpendUsd: 0, safetyScore: safety.score, guardrailCategory: safety.category,
+      sanitisationActions: [], refusalReason: safety.category.startsWith('budget_') ? safety.category : 'guard_unavailable',
+      shadowFlagged: false,
+    });
+    if (safety.category.startsWith('budget_')) {
+      return c.json({ error: budgetRefusalMessage(safety.category), status: 'refused', reason: safety.category }, 429);
+    }
+    return c.json({ error: GUARD_COPY.unavailable, status: 'refused', reason: 'guard_unavailable' }, 503);
+  }
   if (safety.blocked) {
     await writeTurnAudit(c.env, {
       userId: user.id, conversationId: conv.id,
@@ -2135,24 +2155,9 @@ advisor.post('/explain', async (c) => {
   const topic = String(body?.topic || '').trim().slice(0, 500);
   if (!topic) return c.json({ error: 'topic is required' }, 400);
 
-  // Task #4 (AW) L0 — input safety classifier on the topic.
-  const safety = await classifyInput(c.env, user.id, topic, AI_SURFACE.studio);
-  if (safety.blocked) {
-    await writeTurnAudit(c.env, {
-      userId: user.id, conversationId: null,
-      model: '@cf/meta/llama-guard-3-8b',
-      promptHash: await promptHash(), toolCalls: [],
-      aiSpendUsd: 0, safetyScore: safety.score, guardrailCategory: safety.category,
-      sanitisationActions: [], refusalReason: 'safety_block',
-      shadowFlagged: false,
-    });
-    return c.json({
-      error: REFUSAL.jailbreak,
-      status: 'refused',
-      reason: 'safety_block',
-      category: safety.category,
-    }, 422);
-  }
+  // Task #4 (AW) L0 — input safety on the topic. D763: checked by the guard
+  // inside `aiRouter.run` below, once, in full; a block there answers as this
+  // route always has (422, `safety_block`).
   // Task #4 (AW) L5 — bump the explains-without-commit counter now;
   // the full anomaly check (which needs conversationId for the
   // distinct-tools-this-session signal) runs once we've resolved the
@@ -2207,8 +2212,9 @@ advisor.post('/explain', async (c) => {
     if (conv) conversationId = Number(conv.id);
   }
   if (conversationId) {
+    // D763: the topic's verdict arrives with the run, below; none is known yet.
     await recordMessage(c.env, conversationId, 'user', `[explain] ${safeTopic}`, null, undefined, {
-      safety_score: safety.score,
+      safety_score: null,
     });
   }
 
@@ -2223,7 +2229,7 @@ advisor.post('/explain', async (c) => {
     await writeTurnAudit(c.env, {
       userId: user.id, conversationId, model: null,
       promptHash: await promptHash(), toolCalls: [], aiSpendUsd: 0,
-      safetyScore: safety.score, sanitisationActions: [], guardrailCategory: safety.category,
+      safetyScore: null, sanitisationActions: [], guardrailCategory: null,
       refusalReason: 'shadow_flag', shadowFlagged: true,
     });
     if (conversationId) {
@@ -2254,7 +2260,31 @@ advisor.post('/explain', async (c) => {
     systemPrompt: systemPromptText,
     messages: [{ role: 'user', content: safeTopic }],
     maxTokens: EXPLAIN_MAX_TOKENS,
+    // D763: the member's own words, checked in full before the model runs.
+    guardText: topic,
+    role: user.role,
   });
+  // D763: the guard's verdict on the topic, as the audit rows have always carried it.
+  const safety = {
+    score: !ai.guard || ai.guard.input === 'none' || ai.guard.input === 'fail' ? null : ai.guard.input === 'pass' ? 1 : 0,
+    category: ai.guard?.codes[0]?.toLowerCase() ?? (ai.guard?.input === 'pass' ? 'safe' : null),
+  };
+  if (ai.refusal === 'guard_blocked') {
+    await writeTurnAudit(c.env, {
+      userId: user.id, conversationId,
+      model: '@cf/meta/llama-guard-3-8b',
+      promptHash: await promptHash(), toolCalls: [],
+      aiSpendUsd: 0, safetyScore: safety.score, guardrailCategory: safety.category,
+      sanitisationActions: [], refusalReason: 'safety_block',
+      shadowFlagged: false,
+    });
+    return c.json({
+      error: REFUSAL.jailbreak,
+      status: 'refused',
+      reason: 'safety_block',
+      category: safety.category,
+    }, 422);
+  }
 
   if (!ai.ok) {
     // Task #4 (AW) L6 — even upstream failures get one audit row so
@@ -2272,12 +2302,16 @@ advisor.post('/explain', async (c) => {
     });
     const status = ai.refusal && ai.refusal.startsWith('budget_') ? 429
       : ai.refusal === 'kill_switch' ? 423
+      // D763: the guard withheld the answer, or could not check it.
+      : ai.refusal === 'guard_blocked_output' ? 422
+      : ai.refusal === 'guard_unavailable' ? 503
       : 502;
     return c.json({
       error: ai.refusal === 'kill_switch'
         ? 'AI budget exhausted — try again later.'
         : (ai.error || 'upstream LLM error'),
       reason: ai.refusal || 'upstream_error',
+      ...(ai.guard?.refusal?.link ? { link: ai.guard.refusal.link } : {}),
     }, status);
   }
 
