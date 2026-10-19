@@ -31,10 +31,6 @@ const inMonth = (k: number, d = 10) => {
   return new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() - k, d)).toISOString().slice(0, 10);
 };
 const key = (k: number) => inMonth(k, 1).slice(0, 7);
-const lastDay = (k: number) => {
-  const t = new Date();
-  return new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() - k + 1, 0)).toISOString().slice(0, 10);
-};
 
 // ─────────────────────────────────────────────────────────── the service
 
@@ -284,6 +280,7 @@ test('POST snapshot: the last full month\'s burn, cash only when asked, one row 
       ['mercury', day(0), 30000, null, `Net burn for ${key(1)}, read from your Mercury on ${day(0)}.`]);
     assert.deepEqual([r.body.month, r.body.net_burn, r.body.cash_balance, r.body.source], [key(1), 30000, null, 'mercury']);
     r = await req(env, 10, 'POST', `${SPEND}/snapshot`, { confirm_visible: true, include_cash: true });
+    assert.equal(r.status, 200, r.text);
     rows = metrics(db);
     assert.equal(rows.length, 1);
     assert.deepEqual([rows[0].cash_balance, rows[0].notes], [360000.75, `Net burn for ${key(1)} and cash on hand on ${day(0)}, read from your Mercury on ${day(0)}.`]);
@@ -293,6 +290,7 @@ test('POST snapshot: the last full month\'s burn, cash only when asked, one row 
     assert.deepEqual([burn.value, burn.source], [30000, 'mercury']);
     assert.equal(runway.value, runwayMonths(360000.75, 30000));
     r = await req(env, 10, 'POST', `${SPEND}/snapshot`, { confirm_visible: true, include_cash: false });
+    assert.equal(r.status, 200, r.text);
     rows = metrics(db);
     assert.deepEqual([rows.length, rows[0].cash_balance], [1, null], 'saving again without cash clears it');
     assert.equal(count(db, "SELECT COUNT(*) AS n FROM connector_fed_items WHERE kind = 'metric_snapshot' AND local_table = 'project_metrics' AND module = 'revenue_and_traction'"), 1);

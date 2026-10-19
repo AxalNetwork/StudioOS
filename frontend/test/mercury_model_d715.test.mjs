@@ -135,7 +135,7 @@ test('decision 8: the member\'s groups, the three "never" rows, where it lands, 
   assert.deepEqual(Object.keys(NEVER_ROWS).sort(), ['founder', 'investor', 'partner']);
   // D752 (#1889): the founder's third row names spending and the figures they save.
   const founderNever = [d713Never[0], d713Never[1],
-    'It reads your Mercury only when you connect it and while you open an import, a match or your spending. It keeps only the lines you import or match, and the figures you choose to save: a month\'s net burn and, if you tick it, your cash on hand. Never memos or counterparty names.'];
+    'It reads your Mercury only when you connect it and while you open an import, a match or your spending. Your spending, cash and runway are shown only to you; saved only when you choose: a month\'s net burn and, if you tick it, your cash on hand. It keeps only those and the lines you import or match, never memos or counterparty names.'];
   assert.deepEqual(NEVER_ROWS.founder, founderNever);
   assert.deepEqual(NEVER_ROWS.partner, d713Never);
   // D752: the investor's three rows.
@@ -147,7 +147,7 @@ test('decision 8: the member\'s groups, the three "never" rows, where it lands, 
   assert.deepEqual(neverRows('investor'), NEVER_ROWS.investor);
   assert.deepEqual(neverRows('advisor'), founderNever, 'a role without its own rows reads the founder\'s');
   assert.deepEqual(neverRows(null), founderNever);
-  assert.equal(landsWords('founder'), 'Only the venture you import into or save figures for');
+  assert.equal(landsWords('founder'), 'Only the venture you import into. Your spending is shown only to you; saved only when you choose');
   assert.equal(landsWords('partner'), 'Only your own invoices, payouts and settlements');
   assert.equal(landsWords('investor'), 'Only the statements you choose to share with Axal\'s admins');
   for (const role of ['advisor', 'admin', 'constructor']) assert.equal(landsWords(role), null, role);
