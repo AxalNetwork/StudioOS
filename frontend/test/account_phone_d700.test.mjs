@@ -318,6 +318,30 @@ test('5. A2m: Usage on a phone draws the canvas bar and its three sections, then
   assert.match(paused, /AI allowance Runs paused A run cost more than it held\./);
 });
 
+test('5b. D751 (#1881): a suggested connector Axal cannot connect reads Not set up here, and a Super Admin\'s row goes to its keys', () => {
+  const P = (key, display_name, integration_type, status, extra = {}) => ({
+    key, display_name, integration_type, status, tier: 'free', auth_type: 'oauth2', description: `${display_name} description.`,
+    capabilities: [], has_implementation: true, locked_for_user: false, ...extra,
+  });
+  const catalogue = buildCatalogue({
+    providers: [P('github', 'GitHub', 'code', 'beta', { configured: false })],
+    items: [], waitlist: [], firstParty: { microsoft: { configured: false, connected: false } },
+  });
+  const data = { status: 'ready', catalogue, items: [], itemsFailed: false, reload: noop,
+    suggestions: [{ provider_key: 'github', reason: 'Build has no code yet.' }, { provider_key: 'microsoft', reason: 'No calendar yet.' }] };
+  const row = (markup, key) => markup.match(new RegExp(`<(a|div|button)[^>]*data-testid="connector-suggested-${key}"[^>]*>[^]*?</\\1>`))?.[0] || '';
+  const plain = html(h(ConnectorsPhoneView, { data }), '/account/connectors');
+  const gh = row(plain, 'github');
+  assert.match(text(gh), /GitHub .*Not set up here/, 'the reason first, as the card says it');
+  assert.doesNotMatch(text(gh), /Beta/);
+  assert.match(text(row(plain, 'microsoft')), /Not set up here/);
+  assert.doesNotMatch(plain, /Add its keys in Integration keys/);
+  const sup = html(h(ConnectorsPhoneView, { data, superAdmin: true }), '/account/connectors');
+  assert.match(row(sup, 'github'), /^<a[^>]*href="\/admin\?tab=integration-keys"/);
+  assert.match(text(row(sup, 'github')), /Add its keys in Integration keys\./);
+  assert.doesNotMatch(row(sup, 'microsoft'), /integration-keys/, 'a first-party client is not a console key yet');
+});
+
 test('5. A3m: Connectors on a phone draws the canvas bar, Yours and Suggested for you, then keeps Discover', () => {
   const c = CANVAS_PAGES.connectors;
   const P = (key, display_name, integration_type, status, tier, extra = {}) => ({
