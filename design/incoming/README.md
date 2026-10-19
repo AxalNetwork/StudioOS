@@ -129,8 +129,14 @@ by S1 with no value edited:
 - `cost`: Cloudflare's cost, before the × 1.25 the canvas shows;
 - `new_models`.
 
-D764 generates the Worker's matrix from it, and D769 builds the rail to the
-canvas. D769 moves both into `canvases/integrated/`, replacing `AIRail.dc.html`.
+`airail-every-page-data/cloudflare-pricing-2026-10-15.md` is Cloudflare's
+Workers AI pricing page, published 2026-10-15. S1 copied it through the
+Cloudflare documentation connector, because the host refuses sessions'
+requests to `developers.cloudflare.com`. It covers 69 models, with the neuron
+rate behind each price. D760 (#2017) prices its catalogue from it.
+
+D764 generates the Worker's matrix from `canvas.json`, and D769 builds the rail
+to the canvas. D769 moves both into `canvases/integrated/`, replacing `AIRail.dc.html`.
 
 ## In the queue now — the four-profile layout pass (2026-09-03)
 
