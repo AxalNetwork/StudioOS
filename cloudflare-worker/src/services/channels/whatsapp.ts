@@ -340,6 +340,25 @@ export async function sendWhatsAppInteractive(
   return id ? { ok: true, externalMessageId: id } : { ok: false, code: 'send_unknown', retryable: false };
 }
 
+/**
+ * D754 way B (#1937): a text from Axal's OWN number (`WHATSAPP_AXAL_*`), with
+ * the system user's token — never a member's. Used only for the link's two
+ * replies, each inside the window the sender just opened. The token is read
+ * here and goes nowhere but the Authorization header.
+ */
+export async function sendAxalText(env: Env, to: string, text: string): Promise<SendResult> {
+  const pnid = idStr(env.WHATSAPP_AXAL_PHONE_NUMBER_ID);
+  const token = String(env.WHATSAPP_AXAL_ACCESS_TOKEN ?? '').trim();
+  if (!pnid || !token) return { ok: false, code: 'not_configured' };
+  const r = await graph('send', `${GRAPH_BASE}/${encodeURIComponent(pnid)}/messages`, {
+    method: 'POST', token,
+    json: { messaging_product: 'whatsapp', recipient_type: 'individual', to, type: 'text', text: { body: text, preview_url: false } },
+  });
+  if (!r.ok) return { ok: false, code: r.code, retryable: r.retryable };
+  const id = idStr(r.data?.messages?.[0]?.id);
+  return id ? { ok: true, externalMessageId: id } : { ok: false, code: 'send_unknown', retryable: false };
+}
+
 function mediaHostAllowed(raw: string): boolean {
   try {
     const u = new URL(raw);

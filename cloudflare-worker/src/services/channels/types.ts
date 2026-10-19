@@ -62,6 +62,11 @@ export const CHANNEL_LIMITS = {
   /** A link code lives this long. */
   linkCodeMinutes: 10,
   /**
+   * D754 way B (#1937): a member's linked WhatsApp lapses after this many
+   * days without use, because phone numbers are reassigned (threads.ts purge).
+   */
+  senderLinkDays: 180,
+  /**
    * Webhook events a single connection may deliver per minute, counted in D1
    * (`events.ts`; KV's one write per key per second could never reach it).
    */

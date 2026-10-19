@@ -325,8 +325,9 @@ async function decline(env: Env, thread: ThreadRow, row: ConsentRow, replyRef: s
 /**
  * A "No" or STOP after 'given' (D754 §4 decision 5): nothing new is kept —
  * the chat is set aside — the session reads declined with its method and time
- * cleared, as the recorder's PATCH does, and quotes are switched off. What was
- * kept stays until the member discards the session.
+ * cleared, as the recorder's PATCH does, and quotes are switched off. The
+ * session's summary, digest and pending suggestions go (D757 `withdrawDigest`);
+ * the transcript stays until the member discards the session.
  */
 export async function withdraw(env: Env, thread: ThreadRow, row: ConsentRow, replyRef: string): Promise<ReplyOutcome> {
   const guard = { consentId: row.id, replyRef };
@@ -349,7 +350,12 @@ export async function withdraw(env: Env, thread: ThreadRow, row: ConsentRow, rep
     if (isUnique(err)) return ignored('duplicate');
     throw err;
   }
-  // D757: withdrawDigest(env, sessionId, actorUserId) — #1898 wires it.
+  // D757 (#1898): the summary, the digest and the pending suggestions go with
+  // the consent. Loaded here, not at the top: validateEngine reaches the routes.
+  const { withdrawDigest } = await import('../validateEngine');
+  for (const sessionId of new Set([row.session_id, thread.session_id].filter((v): v is number => v != null))) {
+    await withdrawDigest(env, Number(sessionId), Number(thread.user_id));
+  }
   return { outcome: 'withdrawn', consent: (await env.DB.prepare('SELECT * FROM channel_consents WHERE id = ?').bind(row.id).first<ConsentRow>())! };
 }
 
