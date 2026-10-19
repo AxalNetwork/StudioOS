@@ -25,7 +25,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  AXAL_PNID, AXAL_TOKEN, ME, OTHER, SENDER, SENDER_2, call, count, everyValue, lastEvent, link, mockGraph, now, seen, waHook, world,
+  AXAL_PNID, AXAL_TOKEN, ME, OTHER, SENDER, SENDER_2, call, everyValue, lastEvent, link, mockGraph, now, seen, waHook, world,
 } from './_whatsapp_axal_fixture.ts';
 import { purgeExpired } from '../src/services/channels/threads.ts';
 import { captureItems } from '../src/services/channels/whatsappCapture.ts';

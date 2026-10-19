@@ -86,7 +86,7 @@ export async function world(opts: { seed?: boolean; budget?: number } = {}) {
     '452_record_session_setup.sql', '454_channel_voice_failures.sql',
     '457_integrations_last_error_at.sql', '458_channel_link_consent.sql',
     // D754 (#1893): the consent store and channel_threads.consent_state.
-    '488_channel_consents.sql']) db.exec(mig(m));
+    '488_channel_consents.sql', '492_whatsapp_sender_links.sql']) db.exec(mig(m));
   if (opts.budget != null) {
     for (const key of ['founder:free', 'other']) {
       db.prepare('INSERT INTO ai_licence_caps(licence_key, daily_microusd, monthly_microusd, recorded_by) VALUES (?, ?, ?, 1)').run(key, opts.budget, opts.budget);

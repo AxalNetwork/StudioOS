@@ -4,6 +4,27 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## Send to Axal, part 2: forwarded recordings wait for the member's consent (D754 way B, #1938, first half)
+
+- `cloudflare-worker/src/services/channels/whatsappCapture.ts`. A linked
+  member's voice note, audio file or audio document sent to Axal's number
+  joins a capture (`whatsapp_captures`: encrypted media ids only, 20 files in
+  30 minutes, `fetch_by` seven days on). Axal asks once, with three reply
+  buttons, whether everyone recorded agreed before it started. "Yes, out loud"
+  or "Yes, in writing" writes a `member_attested` `channel_consents` row
+  (`verbal` / `written`) and marks the capture consented; "No" deletes it;
+  `fetch_by` expires it, with its consent rows, in the channel purge; STOP
+  drops the captures still waiting. A file declared over 5 MB, and anything
+  that is not audio, gets one reply.
+- `GET /api/channels/whatsapp/captures` and
+  `POST /api/channels/whatsapp/captures/:uid/consent { method: 'pre_agreed' }`.
+- Messages to Axal's number have their own event shape (`axal_message`), so a
+  YES, NO or STOP there is never read as a customer's consent reply.
+- Nothing is downloaded yet: the import (bounded download, draft interview,
+  `finishSession`) follows #1896.
+- `test/whatsapp_capture_d754.test.ts` (11 tests); the shared way-B harness
+  moved to `test/_whatsapp_axal_fixture.ts`.
+
 ## Send to Axal, part 1: linking a member's own WhatsApp through Axal's number (D754 way B, #1937)
 
 - `cloudflare-worker/src/services/channels/whatsappLink.ts` and four routes in

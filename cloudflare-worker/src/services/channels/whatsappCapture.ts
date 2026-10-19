@@ -140,17 +140,15 @@ export type CaptureAnswerOutcome =
   | { done: 'nothing' };
 
 /**
- * The member's answer for a capture still waiting. Scoped to the member (and,
- * from WhatsApp, to the link the button was pressed on); a capture already
- * answered, expired or gone is `nothing`, so a replayed press does nothing.
+ * The member's answer for a capture still waiting. Scoped to the member: a
+ * button pressed from WhatsApp is the sender's link's member, and a member has
+ * one link. A capture already answered, expired or gone is `nothing`, so a
+ * replayed press does nothing.
  */
-export async function answerCapture(
-  env: Env, scope: { userId: number; integrationId?: number }, uid: string, answer: CaptureAnswer | 'pre_agreed',
-): Promise<CaptureAnswerOutcome> {
+export async function answerCapture(env: Env, userId: number, uid: string, answer: CaptureAnswer | 'pre_agreed'): Promise<CaptureAnswerOutcome> {
   const row = await env.DB.prepare(
-    `SELECT * FROM whatsapp_captures WHERE uid = ? AND user_id = ? AND (? IS NULL OR integration_id = ?) AND status = 'waiting'
-        AND fetch_by > ?`,
-  ).bind(uid, scope.userId, scope.integrationId ?? null, scope.integrationId ?? null, new Date().toISOString()).first<CaptureRow>();
+    `SELECT * FROM whatsapp_captures WHERE uid = ? AND user_id = ? AND status = 'waiting' AND fetch_by > ?`,
+  ).bind(uid, userId, new Date().toISOString()).first<CaptureRow>();
   if (!row) return { done: 'nothing' };
   if (answer === 'no') {
     const [, r] = await env.DB.batch([

@@ -370,7 +370,7 @@ channels.post('/whatsapp/captures/:uid/consent', member(async (c, user) => {
   const body = await c.req.json<Record<string, unknown>>().catch(() => ({} as Record<string, unknown>));
   const method = String(body.method ?? '');
   if (method !== 'pre_agreed' && method !== 'verbal' && method !== 'written') return no(c, 400, 'invalid_request');
-  const out = await capture.answerCapture(c.env, { userId: user.id }, c.req.param('uid') ?? '', method);
+  const out = await capture.answerCapture(c.env, user.id, c.req.param('uid') ?? '', method);
   if (out.done !== 'consented') return no(c, 404, 'capture_not_waiting');
   return c.json({ ok: true, status: 'consented' });
 }));
@@ -916,7 +916,7 @@ async function handleAxalNumber(
   const press = capture.captureButton(ev.button);
   if (press) {
     spend();
-    const out = await capture.answerCapture(env, { userId, integrationId: Number(link.id) }, press.uid, press.answer);
+    const out = await capture.answerCapture(env, userId, press.uid, press.answer);
     // The download and the draft interview follow #1896 (whatsappCapture.ts).
     return finish(out.done === 'nothing' ? 'ignored' : 'done', { userId, error: out.done === 'nothing' ? 'capture_not_waiting' : null });
   }
