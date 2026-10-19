@@ -83,6 +83,7 @@ The API client, formatters and helpers. Nothing here renders.
 | `advisor/` | Advisor-side client logic. |
 | `api/` | One file per new API domain, each re-exported by `api.js` in one alphabetical block (D527). See its README. |
 | `brand/` | Brand template content model. |
+| `railOptions/` | Each profile's rail options: every control on its boards that runs a model, with its page, key, kind and handler (D771, D772). See its README. |
 | `docs/` | Help Center search index. |
 | `spinout/` | Spin-Out Lab client logic. |
 
