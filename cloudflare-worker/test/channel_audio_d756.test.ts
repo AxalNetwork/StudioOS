@@ -226,6 +226,6 @@ test('D756 mutations: the deadline, its length, the abort, the running count and
       "      console.error(url);\n      const res = await fetch(url, { ...(opts.init ?? {}), signal: controller.signal });");
     const s = stub(tt, () => new Response(AUDIO.OGG));
     await m.boundedDownload(URL_OK, { maxBytes: MAX_CHUNK_BYTES });
-    assert.ok(s.logged.some((l) => l.includes(URL_OK)), 'the never-logs check sees it');
+    assert.deepEqual(s.logged, [URL_OK], 'the never-logs check (an empty log) sees it');
   });
 });
