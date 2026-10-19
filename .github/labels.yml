@@ -152,3 +152,6 @@
 - name: "feature:declined"
   color: "F9D0C4"
   description: "Feature declined by the Super Admin; the member was told why"
+- name: "changelog"
+  color: "BFD4F2"
+  description: "Session 1's CHANGELOG PR: the only PR allowed to edit CHANGELOG.md"
