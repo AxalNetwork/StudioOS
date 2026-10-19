@@ -221,6 +221,8 @@ test('a chat\'s line is found by its place in the thread and says when it arrive
   const spans = spansOf(CHAT);
   assert.deepEqual(spans.map((s) => [s.start, s.end, s.segment.id]), [[0, 1000, 21], [1000, 2000, 22]], 'as toSegments spans them');
   assert.equal(lineFor(spans, { from: 1000, to: 2000 }).id, 22);
+  // A live line never stands in for the final one it overlaps.
+  assert.equal(lineFor(spansOf(SEGMENTS), { from: 0, to: 4000 }).id, 11);
   assert.deepEqual(heardIn({ cite: { from: 1000, to: 2000 }, spans, name: 'Dana Example', thread: true }), { text: 'Heard in Dana Example · 19 Oct 10:05 · Dana', href: '#seg-22' });
   assert.deepEqual(heardIn({ cite: { from: 9e6, to: 9e6 + 5 }, spans, name: '' }), { text: 'Heard in this interview', href: null }, 'no line, no link');
   // A blank line takes its place in the count, as the Worker's does.
