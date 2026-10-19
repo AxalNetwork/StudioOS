@@ -14,6 +14,7 @@
  */
 import { TIER_PLANS } from '../../components/PaywallModal';
 import { planSummary } from './accountCenterModel';
+import { codeWord } from './connectorsModel.js';
 
 /**
  * Each board's title, sub and section titles, byte for byte from AMP's
@@ -143,11 +144,26 @@ export function accountViewFor({ pathname = '', hash = '', phone = false } = {})
 }
 
 /**
+ * D753 — the connector key in `/account/connectors/<key>`: the segment
+ * lowercased, when it is a code word of 1 to 40 characters (the Worker's
+ * `CONNECTOR_KEY_RE` cap); null for anything else, which canonicalises to the
+ * hub.
+ */
+export function connectorKeyFor(pathname = '') {
+  const m = String(pathname).match(/^\/account\/connectors\/([^/]+)\/?$/);
+  if (!m) return null;
+  const k = codeWord(m[1].toLowerCase());
+  return k && k.length <= 40 ? k : null;
+}
+
+/**
  * The canonical path for a view. On desktop the profile pane IS the page, so
  * it has no segment of its own (`/account`, never `/account/account`). On a
  * phone bare `/account` is the index, so the profile pane is `/account/profile`.
+ * D753 — Connectors with a valid `key` is that connector's page.
  */
-export function accountPathFor({ section, phone = false } = {}) {
+export function accountPathFor({ section, phone = false, key = null } = {}) {
+  if (section === 'connectors' && key && connectorKeyFor(`/account/connectors/${key}`) === key) return `/account/connectors/${key}`;
   if (section === 'index') return '/account';
   if (section === 'account' || section === 'profile') return phone ? '/account/profile' : '/account';
   return `/account/${section}`;

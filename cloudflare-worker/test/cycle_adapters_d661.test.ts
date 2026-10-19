@@ -28,6 +28,7 @@ import { MODULES as PAGE_MODULES, CARDS, RECORDS } from '../../frontend/src/page
 import { drawableSeries, cardView, figureValue } from '../../frontend/src/pages/cycles/cycleModel.js';
 import { tableFromBaseline } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
+import { personalMatchTables } from './_mercury_d713.ts';
 import { recordFill } from '../src/services/fills/provenance.ts';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
@@ -205,7 +206,7 @@ test('D661: an empty venture draws every card as empty with its action, and noth
 // ---------------------------------------------------------------------------
 
 import cycleRaise from '../src/routes/cycle_raise.ts';
-import { MODULES as RAISE_WORKER_MODULES } from '../src/services/raiseCycle.ts';
+import { MODULES as RAISE_WORKER_MODULES, stageCell } from '../src/services/raiseCycle.ts';
 import { MODULES as PAGE_CYCLE_MODULES } from '../../frontend/src/pages/cycles/modules.js';
 import { CHART_KINDS, CARD_STATES as PAGE_STATES } from '../../frontend/src/pages/cycles/cycleModel.js';
 
@@ -223,6 +224,7 @@ function raiseFixture() {
   }
   db.exec(sqlOf('249_project_metrics.sql'));
   db.exec(sqlOf('442_raise_cycle_stores.sql'));
+  personalMatchTables(db); // D752: Capital relationships reads a raise receipt's posted date
   db.exec(sqlOf('463_raise_record_stores.sql'));
   db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (?, ?, ?, ?, 1, ?)').run(FOUNDER, 'founder', 'Fay Founder', 'fay@example.test', 1001);
   db.exec(`INSERT INTO projects (id, name, founder_id) VALUES (${P}, 'Acme', 1001)`);
@@ -324,6 +326,14 @@ test('D663: a round call\'s responders, with the flag on, draw through the page 
   const c = adaptOverview('raise', (await raiseCall(db, `/overview?project=${P}`, flags)).body).cards.find((x: any) => x.slug === 'capital-relationships');
   const drawn = drawableSeries(c.series);
   assert.ok(drawn.some((s: any) => s.kind === 'rows' && s.items.some((i: any) => i.label === 'Responded to a round call' && i.value === 1)), 'the responders row is drawn');
+});
+
+test('D752: stageCell reads a received date for a committed prospect, with or without a call, and nothing for any other stage', () => {
+  const p = (over: any = {}) => ({ stage: 'committed', commit_status: 'soft', via_call: false, ...over }) as any;
+  assert.deepEqual(stageCell(p(), '2026-10-02'), { text: 'Committed · received 2026-10-02' });
+  assert.deepEqual(stageCell(p({ via_call: true }), '2026-10-02T12:00:00Z'), { text: 'Committed · received 2026-10-02 · via call' });
+  assert.deepEqual(stageCell(p()), { text: 'Committed · soft', tone: 'warn' }, 'no date: as today');
+  assert.equal(stageCell(p({ stage: 'meeting', commit_status: null }), '2026-10-02'), stageCell(p({ stage: 'meeting', commit_status: null })), 'a date never changes another stage');
 });
 
 test('D661: a slug from a read or a URL reaches only the adapter\'s own functions, never an inherited one', () => {
