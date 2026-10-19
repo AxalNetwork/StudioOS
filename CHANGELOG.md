@@ -4,20 +4,6 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
-## A submitted Subscription Booklet is signed electronically (D759, #1858, PR 1)
-
-- `POST /api/fund-booklets/mine/sign` sends the frozen booklet for the
-  applicant's signature (Parts 3 to 8); when they sign, the General Partner's
-  stage (Part 9) goes to the Super Admin at `AXAL_COUNTERSIGNER_EMAIL`. Both
-  envelopes carry `frozen_json`, so their `body_sha256` is the booklet's
-  digest, and every page prints the parts at their frozen versions.
-- Migration 485 adds `fund_booklet_envelopes` (append-only). A Super Admin can
-  resend the acceptance (`POST /:uid/acceptance`, act `fund_booklet.accept`).
-  Withdrawal voids pending booklet envelopes; an accepted booklet cannot be
-  withdrawn. The booklet's map names receiving accounts only once accepted.
-- The pdf-lib fallback now draws a composite paper's parts, so a booklet
-  signed while Browser Run is down still carries every part.
-
 ## The LP's capital call opens on the amount, and the fee statement is on screen (D717, #1859)
 
 - An open Fund I line's panel on the LP workspace opens on "Amount due", the
