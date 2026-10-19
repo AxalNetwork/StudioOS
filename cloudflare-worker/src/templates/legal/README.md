@@ -16,6 +16,8 @@ from D1 at render time. `LEGAL_REVIEW.md` in this folder records review status.
 - **Editing a template changes future legal documents.** This is not a copy
   change. Version it (`_v1`, `_v2`) rather than editing in place, so an existing
   agreement can still be reproduced exactly as it was signed.
+- A bundled file that `cloudflare-worker/src/services/legalTemplates.ts` imports is the fallback for its
+  library row, never a second text (D758).
 - **Every catalog row's text is a file here** (D758). The store is filled from
   it by a migration (484), never by hand, and a seed skeleton keeps its store
   bytes exactly, with no newline added at the end.

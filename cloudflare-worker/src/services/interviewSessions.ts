@@ -9,7 +9,9 @@
  * marks, and a receipt per speech-to-text job.
  *
  * The rules this file holds, so a route cannot forget one:
- *   - An audio channel cannot START without consent `given` (`consentBlocks`).
+ *   - An audio channel cannot START without consent `given`, and nothing runs
+ *     on a session holding audio, or on a chat waiting for the interviewee's
+ *     consent (D754), without it (`consentBlocks`).
  *   - A chunk is stored once per sequence number (`putChunk`).
  *   - The final transcript replaces the live draft and is copied, as plain
  *     text, to `discovery_interviews.transcript`, so every existing reader of
@@ -23,6 +25,7 @@ import type { Env } from '../types';
 import { speakerLabel, type SttSegment } from './sttFormats';
 import { markInterviewHeld } from './sessionSetup';
 import { closeAttachedRefs } from './channels/meetings';
+import { consentRequired } from './channels/types';
 
 export const CHANNELS = ['in_person', 'video', 'phone', 'text', 'manual'] as const;
 export type Channel = typeof CHANNELS[number];
@@ -63,6 +66,10 @@ export interface SessionRow {
   processing_error?: string | null; processing_updated_at?: string | null; processing_auto?: number | null;
   expected_last_seq?: number | null;
   summary?: string | null; summary_model?: string | null; summarised_at?: string | null; summary_citations_json?: string | null;
+  // D757 (migration 487): the Validate engine's state (services/validateEngine.ts).
+  digest_status?: 'queued' | 'running' | 'done' | 'refused' | 'skipped' | null; digest_note?: string | null;
+  digest_hash?: string | null; digest_trigger?: string | null; digest_run_id?: string | null; digested_at?: string | null;
+  digest_json?: string | null; digest_kept_at?: string | null; digest_kept_by?: number | null;
 }
 
 export async function loadSession(env: Env, id: number): Promise<SessionRow | null> {
@@ -70,16 +77,64 @@ export async function loadSession(env: Env, id: number): Promise<SessionRow | nu
   return (await env.DB.prepare('SELECT * FROM interview_sessions WHERE id = ?').bind(id).first<SessionRow>()) ?? null;
 }
 
-/** The 409 a recording start gets without consent, or null when it may start. */
-export function consentBlocks(channel: string, consentStatus: string): { error: 'consent_not_recorded'; message: string } | null {
-  if (!AUDIO_CHANNELS.has(channel)) return null;
+/**
+ * The 409 a session gets without consent, or null when it may go on. It gates
+ * three kinds of session (D754 §4, #1893):
+ *   - an audio channel, as #1470 did;
+ *   - any session that holds an audio chunk, whatever its channel;
+ *   - a chat from a provider whose chats wait for the interviewee's consent
+ *     (`consentRequired`): nothing from it is structured, asked, summarised
+ *     or processed until the interviewee agreed in the chat, or the member
+ *     confirmed it once Axal's notice reached them.
+ * `opts` is required, so a caller that forgets it fails `tsc`.
+ */
+export function consentBlocks(
+  channel: string, consentStatus: string, opts: { hasAudio: boolean; submittedVia: string | null },
+): { error: 'consent_not_recorded'; message: string } | null {
   if (consentStatus === 'given') return null;
+  if (consentRequired(opts.submittedVia)) {
+    return {
+      error: 'consent_not_recorded',
+      message: consentStatus === 'declined'
+        ? 'The interviewee declined or withdrew consent in the chat, so Axal runs nothing on it.'
+        : 'The interviewee has not agreed in the chat yet, so Axal runs nothing on it.',
+    };
+  }
+  if (!AUDIO_CHANNELS.has(channel) && !opts.hasAudio) return null;
   return {
     error: 'consent_not_recorded',
     message: consentStatus === 'declined'
       ? 'The interviewee declined to be recorded. Take notes instead, or switch to manual entry.'
       : 'Record the interviewee’s consent to be recorded before you start.',
   };
+}
+
+/** Whether a session holds any audio chunk: one indexed probe. */
+export async function sessionHasAudio(env: Env, sessionId: number): Promise<boolean> {
+  return !!(await env.DB.prepare('SELECT 1 AS hit FROM interview_session_chunks WHERE session_id = ? LIMIT 1').bind(sessionId).first());
+}
+
+/** `consentBlocks` for a stored session, reading whether it holds audio. */
+export async function sessionConsentBlocks(env: Env, session: SessionRow): Promise<ReturnType<typeof consentBlocks>> {
+  return consentBlocks(session.channel, session.consent_status, {
+    hasAudio: await sessionHasAudio(env, session.id), submittedVia: session.submitted_via ?? null,
+  });
+}
+
+/**
+ * The interview a session was made for, removed with it: only while nothing
+ * else is on it — no transcript, no other session, no recruiting stage past
+ * booked — and only when it was created within five seconds of the session.
+ * `createInterview` sets no stage, so NULL counts as booked. An interview the
+ * founder logged by hand is never removed.
+ */
+export async function dropInterviewMadeFor(env: Env, interviewId: number, sessionCreatedAt: string): Promise<void> {
+  await env.DB.prepare(
+    `DELETE FROM discovery_interviews
+      WHERE id = ? AND (stage IS NULL OR stage = 'booked') AND transcript IS NULL
+        AND ABS(julianday(created_at) - julianday(?)) * 86400 <= 5
+        AND NOT EXISTS (SELECT 1 FROM interview_sessions WHERE interview_id = discovery_interviews.id)`,
+  ).bind(interviewId, sessionCreatedAt).run();
 }
 
 /**
@@ -262,6 +317,13 @@ export async function deleteSession(env: Env, session: SessionRow, actorUserId: 
     // D685 §5.9–§5.10 — the staged chunk transcripts and the summary's receipts.
     env.DB.prepare('DELETE FROM interview_chunk_transcripts WHERE session_id = ?').bind(session.id),
     env.DB.prepare('DELETE FROM interview_summary_receipts WHERE session_id = ?').bind(session.id),
+    // D754 (#1893) — the chat consent given for this session goes with it, and
+    // a chat that pointed here is pending again, its consent to be asked anew.
+    env.DB.prepare('DELETE FROM channel_consents WHERE session_id = ?').bind(session.id),
+    env.DB.prepare(
+      `UPDATE channel_threads SET status = 'pending', interview_id = NULL, session_id = NULL, consent_state = NULL,
+              updated_at = datetime('now') WHERE session_id = ?`,
+    ).bind(session.id),
     env.DB.prepare('DELETE FROM interview_sessions WHERE id = ?').bind(session.id),
     env.DB.prepare(
       `INSERT INTO activity_logs (action, details, actor, user_id, project_id) VALUES (?, ?, ?, ?, ?)`,

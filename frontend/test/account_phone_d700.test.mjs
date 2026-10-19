@@ -233,7 +233,8 @@ test('4. SettingsPage reads its section from the address on every change, and wr
   // In the render body, not a once-only initialiser.
   assert.match(page, /\n  const active = accountViewFor\(\{ pathname: location\.pathname, hash: location\.hash, phone \}\);/);
   assert.doesNotMatch(page, /initialSection|useState\(initial/);
-  assert.match(page, /const want = accountPathFor\(\{ section: active, phone \}\);/);
+  // D753 — the canonicalising call keeps a connector's key.
+  assert.match(page, /const want = accountPathFor\(\{ section: active, phone, key: connectorKey \}\);/);
   assert.match(page, /\}, \[active, phone, location\.pathname\]\);/, 'the URL effect re-runs when the path moves');
   assert.doesNotMatch(src, /const PATH_TO_SECTION/, 'the map moved to accountPhone.js');
   // On a phone a section is pushed, so Back returns to the index; desktop replaces, as before.
@@ -241,7 +242,8 @@ test('4. SettingsPage reads its section from the address on every change, and wr
   assert.match(page, /<ProfileCompletionBanner onJump=\{\(\) => setActive\('account'\)\} \/>/);
   // The phone view is drawn inside the rail frame, and the desktop keeps its heading.
   assert.ok(page.indexOf('<RailFrame') < page.indexOf('<AccountPhoneFrame'));
-  assert.match(page, /\{phone \? \(\s*<AccountPhoneFrame[\s\S]*?\) : \(\s*<div className="min-w-0" data-testid="settings-page"[^>]*>\s*<h1 [^>]*>Account<\/h1>/);
+  // D753 — on a connector's page its name is the one <h1>, so the heading is drawn only without a key.
+  assert.match(page, /\{phone \? \(\s*<AccountPhoneFrame[\s\S]*?\) : \(\s*<div className="min-w-0" data-testid="settings-page"[^>]*>[\s\S]*?\{!connectorKey && <>\s*<h1 [^>]*>Account<\/h1>/);
 });
 
 // --- 5. The bars, A1m–A3m ------------------------------------------------------
@@ -310,10 +312,43 @@ test('5. A2m: Usage on a phone draws the canvas bar and its three sections, then
   // Without a configured top-up there is no button, and the line says why.
   const off = text(html(h(UsagePhoneView, { ...usageProps, product: ready({ configured: false }) })));
   assert.doesNotMatch(off, /Add tokens/);
-  assert.match(off, /Top-ups are not available yet\. Runs use your included allowance only\./);
+  // D755 (#1916): one sentence, lib/aiTokens.js's.
+  assert.match(off, /Top-up isn't available yet\. Runs use your included allowance only\./);
   // A paused allowance still says so, above the figures.
   const paused = text(html(h(UsagePhoneView, { ...usageProps, budget: ready({ ...BUDGET, held_for_review: [{ id: 1 }] }) })));
   assert.match(paused, /AI allowance Runs paused A run cost more than it held\./);
+});
+
+test('5b. D751 (#1881): a suggested connector Axal cannot connect reads Not set up here, and a Super Admin\'s row goes to its keys', () => {
+  const P = (key, display_name, integration_type, status, extra = {}) => ({
+    key, display_name, integration_type, status, tier: 'free', auth_type: 'oauth2', description: `${display_name} description.`,
+    capabilities: [], has_implementation: true, locked_for_user: false, ...extra,
+  });
+  const catalogue = buildCatalogue({
+    providers: [P('github', 'GitHub', 'code', 'beta', { configured: false })],
+    items: [], waitlist: [], firstParty: { microsoft: { configured: false, connected: false } },
+  });
+  const data = { status: 'ready', catalogue, items: [], itemsFailed: false, reload: noop,
+    suggestions: [{ provider_key: 'github', reason: 'Build has no code yet.' }, { provider_key: 'microsoft', reason: 'No calendar yet.' }] };
+  // The row's element, from its opening tag to the first close of that tag, found by text, not a built pattern.
+  const row = (markup, key) => {
+    const i = markup.indexOf(` data-testid="connector-suggested-${key}"`);
+    if (i < 0) return '';
+    const start = markup.lastIndexOf('<', i);
+    const tag = /^<(a|div|button)\b/.exec(markup.slice(start))?.[1];
+    const end = tag ? markup.indexOf(`</${tag}>`, i) : -1;
+    return end < 0 ? '' : markup.slice(start, end + tag.length + 3);
+  };
+  const plain = html(h(ConnectorsPhoneView, { data }), '/account/connectors');
+  const gh = row(plain, 'github');
+  assert.match(text(gh), /GitHub .*Not set up here/, 'the reason first, as the card says it');
+  assert.doesNotMatch(text(gh), /Beta/);
+  assert.match(text(row(plain, 'microsoft')), /Not set up here/);
+  assert.doesNotMatch(plain, /Add its keys in Integration keys/);
+  const sup = html(h(ConnectorsPhoneView, { data, superAdmin: true }), '/account/connectors');
+  assert.match(row(sup, 'github'), /^<a[^>]*href="\/admin\?tab=integration-keys"/);
+  assert.match(text(row(sup, 'github')), /Add its keys in Integration keys\./);
+  assert.doesNotMatch(row(sup, 'microsoft'), /integration-keys/, 'a first-party client is not a console key yet');
 });
 
 test('5. A3m: Connectors on a phone draws the canvas bar, Yours and Suggested for you, then keeps Discover', () => {
@@ -343,6 +378,9 @@ test('5. A3m: Connectors on a phone draws the canvas bar, Yours and Suggested fo
   assert.match(markup, /id="connectors-discover"/, 'Discover is kept below');
   assert.ok(markup.indexOf('connectors-phone-suggested') < markup.indexOf('connectors-discover'));
   assert.doesNotMatch(markup, /role="tablist" aria-label="Connectors"/, 'no Yours/Discover tabs on a phone');
+  // D753 F6 (#1877): the phone's Discover filters through the bottom-sheet menu, not a sideways chip strip.
+  assert.match(markup, /data-testid="button-connectors-filter"[^>]*aria-haspopup="dialog"|aria-haspopup="dialog"[^>]*data-testid="button-connectors-filter"/);
+  assert.doesNotMatch(markup, /connectors-chips/);
   // A failed suggestions read keeps today's reason, never an empty list.
   const none = text(html(h(ConnectorsPhoneView, { data: { ...data, suggestions: null, suggestionsNote: 'Choose a company in the sidebar to see what its empty modules could be fed by.' } })));
   assert.match(none, /Suggested for you Browse connectors Not recorded · Choose a company in the sidebar/, 'the CTA, then the note, in the canvas\'s order');
@@ -538,7 +576,7 @@ test('5. at desktop width the pages draw no bar and keep their own heading', () 
   const docs = read('frontend/src/pages/docs/DocsLayout.jsx');
   assert.match(docs, /\) : phone \? \(\s*<HelpPhoneHome[\s\S]*?\) : \(\s*<HelpHome/, 'only the home has a phone view; a guide page is unchanged');
   const products = read('frontend/src/pages/ProductsPage.jsx');
-  assert.match(products, /\{!phone && \(\s*<>\s*<h1 [^>]*>\s*<Package size=\{26\}[^>]*\/> Products/);
+  assert.match(products, /\{!phone && \(\s*<>\s*<h1 [^>]*>\s*<Package size=\{26\}[^>]*\/> Plans &amp; Pricing/);
   assert.match(products, /return phone \? <PricingPhone role=\{user\?\.role\}>\{page\}<\/PricingPhone> : page;/);
 });
 
@@ -593,7 +631,7 @@ test('5. A4m–A10m: each section reads its values from the page\'s sources', ()
   assert.match(html(PHONE_VIEWS.pricing()), /<a href="\/checkout\?ai_topup=1"[^>]*>[\s\S]*?Past your allowance/);
   // No other role has a tier ladder, so it gets no Plans section.
   assert.deepEqual(sectionTitles(html(h(PricingPhoneView, { role: 'advisor', billing: ready({}), budget: ready(BUDGET), product: ready(PRODUCT) }))), ['Tokens']);
-  assert.match(text(html(h(PricingPhoneView, { role: 'founder', billing: ready(GROWTH), budget: ready(BUDGET), product: ready({ configured: false }) }))), /Top-ups are not available yet\./);
+  assert.match(text(html(h(PricingPhoneView, { role: 'founder', billing: ready(GROWTH), budget: ready(BUDGET), product: ready({ configured: false }) }))), /Top-up isn't available yet\. Runs use your included allowance only\./);
 });
 
 // --- 6. Member routes --------------------------------------------------------------

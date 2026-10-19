@@ -580,6 +580,8 @@ async function postConnect(c: Context<{ Bindings: Env }>, user: User, row: Integ
 
 const impl: ProviderImpl = {
   key: PROVIDER_KEY,
+  // D751: whether Axal holds the OAuth client, from the cache `ensureCreds` reads.
+  ready: async (env) => (await import('../../services/providerOauthKeys')).oauthCredsReady(env, 'stripe'),
   connect,
   revokeGranted,
   buildAuthorizeUrl,

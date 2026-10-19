@@ -41,6 +41,11 @@
  *     and `popup`, and a `client_id` that is null when the window is off and
  *     shaped like a Google web client ID when it is on. The ID's value is
  *     checked for its shape only and never printed.
+ *   - D754: the WhatsApp webhook refuses an unsigned body. An unsigned
+ *     `POST /api/channels/whatsapp/webhook` carrying an empty entry list
+ *     must answer 401 or 403 (or 503 while its secrets are unset); a 2xx
+ *     fails the check. No call reaches Meta and no secret is needed. The
+ *     verdict lives in `lib/webhookGuard.mjs`.
  *
  * Host model (see wrangler.toml `[[routes]]` + `[assets]`, CLAUDE.md fact 4):
  *   - axal.vc AND app.axal.vc are both whole-host Workers Custom Domains of
@@ -97,6 +102,8 @@
  *                    middleware itself still answers (default a synthetic
  *                    /api/__smoke/rate-limited — see below)
  */
+
+import { probeUnsignedWebhook } from './lib/webhookGuard.mjs';
 
 const DEFAULT_HOSTS = ['https://axal.vc', 'https://app.axal.vc'];
 
@@ -244,6 +251,9 @@ function routesForHost(base) {
     // what is under test is that the two-segment path reaches the SPA rather
     // than being shadowed by `/attest/:token` one segment up.
     { path: '/attest/partner/live-smoke-not-a-real-token', shell: true },
+    // D756 (#1894): the interviewee recording notice, a PUBLIC route reached
+    // from a chat link by someone with no account.
+    { path: '/privacy/interviews', shell: true },
     // The Help Center's addresses (#103, 2026-09-07). `/help` stopped being a
     // one-segment path when the ticket flow moved under it, and the same pass
     // gave `/support` a route for the first time — `ErrorState` had been
@@ -655,6 +665,19 @@ async function main() {
       } else {
         const mode = res.popup ? "Google's window" : res.configured ? 'redirect (window off)' : 'not configured';
         console.log(`[spa-live] PASS  ${apiUrl} (Continue with Google: ${mode})`);
+      }
+    }
+
+    // D754 — the WhatsApp webhook refuses an unsigned body. It fails only on
+    // an acceptance; reachability is the checks above.
+    {
+      const hook = await probeUnsignedWebhook(base, fetch, { timeoutMs: TIMEOUT_MS });
+      if (!hook.ok) {
+        console.error(`[spa-live] FAIL  ${hook.url} — ${hook.reason}`);
+        failures.push(`${hook.url} — ${hook.reason}`);
+      } else {
+        const what = { guarded: 'unsigned body refused', unconfigured: 'not configured yet, fails closed', other: `HTTP ${hook.status}, not an acceptance`, unreachable: 'not reached; the checks above cover reachability' }[hook.kind];
+        console.log(`[spa-live] PASS  ${hook.url} (WhatsApp webhook: ${what})`);
       }
     }
 

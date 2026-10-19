@@ -11,7 +11,9 @@
 //   test             POST   /channels/:provider/test
 //   threads          GET    /channels/threads?status=      → { items: ThreadView[] }
 //   thread           GET    /channels/threads/:uid         → { thread, messages }
-//   assign           POST   /channels/threads/:uid/assign  { interview_id } | { create: { interviewee_name, interviewee_company?, project_id } }, quote_consent?
+//   assign           POST   /channels/threads/:uid/assign  { interview_id } | { create: { interviewee_name, interviewee_company?, project_id } }, quote_consent?, consent?
+//   requestConsent   POST   /channels/threads/:uid/consent-request  Axal's consent notice in the chat (D754 §5) → { ok, consent }
+//   attestConsent    POST   /channels/threads/:uid/consent  { method }: the member's word, once the notice was delivered (D754 §4)
 //   ignore           POST   /channels/threads/:uid/ignore  { ignored }
 //   reply            POST   /channels/threads/:uid/reply   { text, client_key }
 //   retryVoice       POST   /channels/threads/:uid/voice/:message/retry  a voice note that was not transcribed, again (#1586) → { ok, queued }
@@ -20,6 +22,12 @@
 //   cancelMeeting    DELETE /founder/validate/interviews/:id/meetings/:refUid
 //   importMeeting    POST   /founder/validate/interviews/:id/meetings/:refUid/import
 //   attachMeeting    POST   /founder/validate/interviews/:id/meetings  { attach: { join_url }, session_id, provider } (D685 §5.3.2, #1588)
+//   googleStatus     GET    /calendar/google/status        → { connected, meet_transcripts: 'granted' | 'available' | 'not_set_up', … } (D757, #1926)
+//   allowMeetTranscripts POST /calendar/google/meet-transcripts/connect?return_to=  then the page goes to Google's consent (D757, #1926)
+//
+// `channelsAdminApi`, Super Admin only (D756, #1895):
+//   telegramHealth           GET  /admin/channels/telegram/webhook  the interview bot's health, as codes
+//   registerTelegramWebhook  POST /admin/channels/telegram/webhook  setWebhook → { ok, url, allowed_updates }
 //
 // Every path is written out in full (no shared prefix constant) so the drift
 // check (scripts/check-api-drift.mjs) reads each one against the Worker.
@@ -29,6 +37,17 @@ const enc = encodeURIComponent;
 const PROVIDERS = new Set(['telegram', 'whatsapp', 'zoom', 'google_meet']);
 const THREAD_STATUSES = new Set(['pending', 'assigned', 'ignored']);
 const MEETING_PROVIDERS = new Set(['zoom', 'google_meet']);
+/** D754: how a member says the interviewee agreed — the recorder's methods without `in_app`. */
+export const MEMBER_CONSENT_METHODS = ['verbal', 'written', 'pre_agreed'];
+
+function memberMethod(m) {
+  if (!MEMBER_CONSENT_METHODS.includes(m)) throw new Error(`Unknown consent method: ${m}`);
+  return m;
+}
+
+// Where Google sends the member back: Connectors (via /integrations) or Record a session.
+const MEET_RETURNS = new Set(['integrations', 'record']);
+const GOOGLE_CONSENT = /^https:\/\/accounts\.google\.com\//;
 
 function provider(p) {
   if (!PROVIDERS.has(p)) throw new Error(`Unknown channel provider: ${p}`);
@@ -45,7 +64,7 @@ function threadsQuery(status) {
 /**
  * The assignment body: an interview the member already has, or one made from
  * this chat (with Who's company, D685 §5.3). Quote consent (§5.1.4) is sent
- * only as the literal true.
+ * only as the literal true. `consent` (D754) is `{ ask: true }` or `{ method }`.
  */
 function assignBody(target) {
   const body = target && target.create
@@ -57,7 +76,25 @@ function assignBody(target) {
     } }
     : { interview_id: Number(target?.interview_id) };
   if (target?.quote_consent === true) body.quote_consent = true;
+  // D754: ask in the chat once linked, or the member's word.
+  if (target?.consent?.ask === true) body.consent = { ask: true };
+  else if (target?.consent?.method) body.consent = { method: memberMethod(target.consent.method) };
   return body;
+}
+
+/**
+ * Ask Google for the Meet transcript permission (D757, #1926): the Worker
+ * answers with Google's consent URL, and the page goes there. A refusal
+ * (503 meet_transcripts_not_set_up while the owner has not switched it on)
+ * throws, as every other call here does; so does a URL that is not Google's.
+ */
+export async function allowMeetTranscripts(returnTo = 'integrations', assign = (url) => window.location.assign(url)) {
+  if (!MEET_RETURNS.has(returnTo)) throw new Error(`Unknown return: ${returnTo}`);
+  const r = await request(`/calendar/google/meet-transcripts/connect?return_to=${enc(returnTo)}`, { method: 'POST', body: JSON.stringify({}) });
+  const url = r?.redirect_url || r?.auth_url;
+  if (typeof url !== 'string' || !GOOGLE_CONSENT.test(url)) throw new Error('Google did not answer with its consent page. Try again in a moment.');
+  assign(url);
+  return url;
 }
 
 export const channelsApi = {
@@ -78,9 +115,15 @@ export const channelsApi = {
   ignore: (uid, ignored = true) => request(`/channels/threads/${enc(uid)}/ignore`, {
     method: 'POST', body: JSON.stringify({ ignored: !!ignored }),
   }),
+  requestConsent: (uid) => request(`/channels/threads/${enc(uid)}/consent-request`, { method: 'POST', body: JSON.stringify({}) }),
+  attestConsent: (uid, method) => request(`/channels/threads/${enc(uid)}/consent`, {
+    method: 'POST', body: JSON.stringify({ method: memberMethod(method) }),
+  }),
   reply: (uid, text, clientKey) => request(`/channels/threads/${enc(uid)}/reply`, {
     method: 'POST', body: JSON.stringify({ text, client_key: clientKey }),
   }),
+  googleStatus: () => request('/calendar/google/status'),
+  allowMeetTranscripts,
   retryVoice: (threadUid, messageUid) => request(`/channels/threads/${enc(threadUid)}/voice/${enc(messageUid)}/retry`, {
     method: 'POST', body: JSON.stringify({}),
   }),
@@ -106,4 +149,10 @@ export const channelsApi = {
       method: 'POST', body: JSON.stringify({ attach: { join_url }, session_id: Number(session_id), provider: p }),
     });
   },
+};
+
+/** The Telegram Business interview bot, for Super Admins (D756): its health, and registering its webhook. */
+export const channelsAdminApi = {
+  telegramHealth: () => request('/admin/channels/telegram/webhook'),
+  registerTelegramWebhook: () => request('/admin/channels/telegram/webhook', { method: 'POST', body: JSON.stringify({}) }),
 };

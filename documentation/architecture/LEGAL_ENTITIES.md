@@ -88,6 +88,7 @@ Axal VC GP LLC is the General Partner that manages the Fund's investors, and the
 | Terms of Service (signable template)        | `cloudflare-worker/src/templates/legal/tos_v1.md`                     |
 | Privacy Policy (user-facing)                | `frontend/src/pages/PrivacyPage.jsx`                                  |
 | Privacy Policy (signable template)          | `cloudflare-worker/src/templates/legal/privacy_v1.md`                 |
+| Interview recording notice (interviewees)   | `frontend/src/pages/InterviewNoticePage.jsx`                          |
 | Risk Disclosures (user-facing)              | `frontend/src/pages/RiskDisclosuresPage.jsx`                          |
 | Founder / Investor / Mentor mutual NDAs     | `cloudflare-worker/src/templates/legal/{founder,investor,mentor}_nda_v1.md` |
 | Three-way founder ↔ investor ↔ Axal NDA     | `cloudflare-worker/src/templates/legal/nda_3way_founder_investor_axal_v1.md` |
@@ -97,7 +98,6 @@ Axal VC GP LLC is the General Partner that manages the Fund's investors, and the
 | Partner Equity / Services / Revenue deals   | `cloudflare-worker/src/services/partnerDeals.ts`                      |
 | IP Assignment / Equity Allocation templates | `cloudflare-worker/src/routes/legalcap.ts` (`TEMPLATES.IP_license`)   |
 | Spin-out wizard subsidiary defaults         | `cloudflare-worker/src/routes/legalcap.ts` (`subsidiaries.holding_company_id`) |
-| Esign intro boilerplate                     | `cloudflare-worker/src/routes/esign.ts` (`buildTemplateBody`)         |
 | Public footer entity attribution            | `frontend/src/components/PublicFooter.jsx`                            |
 | Entity roles and money rails (D707): who pays whom, on Stripe or Mercury | `cloudflare-worker/src/services/moneyRails.ts` |
 

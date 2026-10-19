@@ -77,9 +77,10 @@ function interview(db: DatabaseSync, o: Record<string, unknown> = {}) {
 function session(db: DatabaseSync, interviewId: number, o: Record<string, unknown> = {}) {
   seq += 1;
   const r = db.prepare(
-    `INSERT INTO interview_sessions (uid, interview_id, project_id, created_by_user_id, channel, status, submitted_via, processing_stage, active_ms)
-     VALUES (?, ?, ?, ?, 'in_person', ?, ?, ?, ?) RETURNING id`,
-  ).get(`session-${seq}`, interviewId, P, FOUNDER, o.status ?? 'draft', o.via ?? null, o.processing ?? null, o.active_ms ?? 0) as any;
+    `INSERT INTO interview_sessions (uid, interview_id, project_id, created_by_user_id, channel, status, submitted_via, processing_stage, active_ms, consent_status)
+     VALUES (?, ?, ?, ?, 'in_person', ?, ?, ?, ?, ?) RETURNING id`,
+  ).get(`session-${seq}`, interviewId, P, FOUNDER, o.status ?? 'draft', o.via ?? null, o.processing ?? null, o.active_ms ?? 0,
+    o.consent ?? 'not_recorded') as any;
   return Number(r.id);
 }
 function group(db: DatabaseSync, id: number, title: string, phrase: string) {
@@ -179,7 +180,11 @@ test('D690 decision 9: every state key, from the latest session by id or the sta
   add('Rhea Recording', 'recording', {}, [{ status: 'recording' }]);
   add('Pia Paused', 'recording', {}, [{ status: 'paused', processing: 'uploading' }]);
   add('Tomas Telegram', 'waiting_messages', {}, [{ status: 'draft', via: 'telegram' }]);
-  add('Wren WhatsApp', 'waiting_messages', {}, [{ status: 'draft', via: 'whatsapp' }]);
+  // D754 (#1893): a WhatsApp draft waits for the interviewee's consent before it waits for messages.
+  add('Wren WhatsApp', 'waiting_messages', {}, [{ status: 'draft', via: 'whatsapp', consent: 'given' }]);
+  add('Cora Consent', 'waiting_consent', {}, [{ status: 'draft', via: 'whatsapp' }]);
+  add('Dex Declined', 'consent_declined', {}, [{ status: 'draft', via: 'whatsapp', consent: 'declined' }]);
+  add('Tia Telegram', 'waiting_messages', {}, [{ status: 'draft', via: 'telegram', consent: 'declined' }]);
   add('Zia Zoom', 'waiting_transcript', {}, [{ status: 'draft', via: 'zoom' }]);
   add('Gus Meet', 'waiting_transcript', {}, [{ status: 'draft', via: 'google_meet' }]);
   add('Pax Processing', 'processing', {}, [{ status: 'transcribed', processing: 'summarising' }]);
