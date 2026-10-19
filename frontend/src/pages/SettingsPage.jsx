@@ -3161,7 +3161,7 @@ function NotificationsSection({ data }) {
         {renderTable(NOTIFICATION_EVENTS)}
         {!slackConnected && (
           <p className="mt-2 text-[11.5px] text-axal-muted dark:text-gray-400">
-            Slack joins this table once it is connected in <a href="/account/connectors" className="font-semibold text-axal-violet-deep hover:underline dark:text-violet-300">Connectors</a>.
+            Slack joins this table once it is connected in <a href="/account/connectors/slack" className="font-semibold text-axal-violet-deep hover:underline dark:text-violet-300">Connectors</a>.
           </p>
         )}
         <div className="mt-2"><Outcome outcome={outcome} /></div>

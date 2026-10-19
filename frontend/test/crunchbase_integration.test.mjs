@@ -43,7 +43,9 @@ test('the Connectors sheet has a Crunchbase user_key field', () => {
 test('the Connectors sheet sends DocuSign demo=0|1 and has an account picker', () => {
   const src = readFileSync(resolve(root, 'frontend/src/pages/account/ConnectorSheet.jsx'), 'utf8');
   assert.match(src, /data-testid="docusign-env-picker"/);
-  assert.match(src, /params\.demo = dsDemo \? '1' : '0'/);
+  // D753 (#1908): the start's params moved with the flow into useConnectFlow.js.
+  const flow = readFileSync(resolve(root, 'frontend/src/pages/account/useConnectFlow.js'), 'utf8');
+  assert.match(flow, /params\.demo = dsDemo \? '1' : '0'/);
 });
 
 test('SPA calls the three Crunchbase enrichment routes the worker mounts', () => {
