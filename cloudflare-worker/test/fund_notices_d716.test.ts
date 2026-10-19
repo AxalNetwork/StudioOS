@@ -16,6 +16,7 @@ import { makeD1 } from './_d1_sqlite.mjs';
 import { tableFromBaseline, stripForeignKeys } from './_baseline.mjs';
 import notices from '../src/routes/fund_notices.ts';
 import { PAY_WARNING } from '../src/services/payInstructions.ts';
+import { noticeListFacts } from '../src/services/fundNotices.ts';
 import { encryptColumn } from '../src/services/columnCipher.ts';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 
@@ -314,6 +315,34 @@ test('D716 reads: an LP lists only their own notices; anyone else gets 404; a br
   assert.deepEqual([support.status, support.body.code], [403, 'support_session_refused']);
   const supportRead = await f.call(ADMIN, 'GET', `/${n.uid}`, undefined, { impersonatedBy: SUPER });
   assert.deepEqual([supportRead.status, supportRead.body.error], [403, 'support_session_refused'], 'a support session reads no notice either');
+});
+
+test('#1860 /mine and /mine/:uid carry call_number and due_date, computed on read; the admin list keeps its shape', async () => {
+  const f = fixture();
+  await account(f);
+  writeBody(f, 'capital_call_notice', BODY);
+  writeBody(f, 'default_notice', 'Dear {{lp.name}}: cure {{default.amount}} by {{default.cure_date}}.');
+  const call = (await issue(f, CALL_LINE)).body.notice;
+  const def = (await issue(f, { type: 'default_notice', source: { line_id: 11 }, inputs: { cure_date: FUTURE, lpa_section: 'Section 3.4' } })).body.notice;
+  const dist = (await issue(f, { type: 'distribution_notice', source: { distribution_id: 41 }, inputs: { tax_character: 'long_term_capital_gain' } })).body.notice;
+  assert.ok(call?.uid && def?.uid && dist?.uid, 'all three issued');
+  const mine = await f.call(LP_A, 'GET', '/mine');
+  const by = Object.fromEntries(mine.body.notices.map((x: any) => [x.uid, x]));
+  assert.deepEqual([by[call.uid].call_number, by[call.uid].due_date], ['1', PAST]);
+  assert.deepEqual([by[def.uid].call_number, by[def.uid].due_date], ['1', FUTURE], 'a default notice gives its cure date');
+  assert.deepEqual([by[dist.uid].call_number, by[dist.uid].due_date], [null, null]);
+  for (const n of [call, def, dist]) {
+    const one = await f.call(LP_A, 'GET', `/mine/${n.uid}`);
+    assert.deepEqual([one.body.call_number, one.body.due_date], [by[n.uid].call_number, by[n.uid].due_date]);
+    assert.ok(!one.text.includes(FUND_NUMBER), 'a full account number leaked');
+  }
+  assert.ok(!mine.text.includes(FUND_NUMBER), 'a full account number leaked');
+  const notSet = { type: 'capital_call_notice', key_figures: [{ label: 'Call number', value: '2' }, { label: 'Due date', value: 'Not set' }] } as any;
+  assert.deepEqual(noticeListFacts(notSet), { call_number: '2', due_date: null });
+  const adminList = await f.call(ADMIN, 'GET', '');
+  assert.equal(adminList.status, 200, adminList.text);
+  assert.ok(adminList.body.notices.length >= 3);
+  for (const n of adminList.body.notices) assert.equal('due_date' in n, false, 'noticeSummary is unchanged');
 });
 
 test('D716 files: drawn once through Browser Run and kept; a failure keeps nothing; a superseded notice keeps a second file', async () => {

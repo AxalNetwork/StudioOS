@@ -302,6 +302,7 @@ export async function queueVoiceTranscriptions(
   const rows = (await env.DB.prepare(
     `SELECT uid FROM channel_thread_messages
       WHERE thread_id = ? AND voice_ref_enc IS NOT NULL AND (? IS NULL OR uid = ?)
+        AND (transcribe_error IS NULL OR transcribe_error != 'expired')
       ORDER BY sent_at, id LIMIT ?`,
   ).bind(thread.id, only, only, CHANNEL_LIMITS.transcriptionsPerDay).all<{ uid: string }>()).results ?? [];
   let queued = 0;
@@ -310,6 +311,7 @@ export async function queueVoiceTranscriptions(
     const claimed = await env.DB.prepare(
       `UPDATE channel_thread_messages SET transcribe_job = ?, transcribe_error = NULL, updated_at = datetime('now')
         WHERE uid = ? AND voice_ref_enc IS NOT NULL
+          AND (transcribe_error IS NULL OR transcribe_error != 'expired')
           AND (transcribe_job IS NULL OR datetime(updated_at) < datetime('now', '-60 minutes'))
         RETURNING id`,
     ).bind(job, r.uid).first<{ id: number }>();
@@ -329,7 +331,7 @@ export async function queueVoiceTranscriptions(
 
 /** A waiting voice note, as the job that holds it reads it. */
 export interface VoiceJobNote {
-  id: number; uid: string; side: MessageSide; file: string; mime: string | null; durationSec: number | null; thread: ThreadRow;
+  id: number; uid: string; side: MessageSide; file: string; mime: string | null; durationSec: number | null; sentAt: string; thread: ThreadRow;
 }
 
 /**
@@ -340,9 +342,9 @@ export interface VoiceJobNote {
 export async function voiceNoteForJob(env: Env, messageUid: string, job: string): Promise<VoiceJobNote | null> {
   if (!messageUid || !job) return null;
   const row = await env.DB.prepare(
-    `SELECT id, uid, direction, voice_ref_enc, duration_sec, thread_id FROM channel_thread_messages
+    `SELECT id, uid, direction, voice_ref_enc, duration_sec, sent_at, thread_id FROM channel_thread_messages
       WHERE uid = ? AND transcribe_job = ? AND voice_ref_enc IS NOT NULL`,
-  ).bind(messageUid, job).first<{ id: number; uid: string; direction: 'in' | 'out'; voice_ref_enc: string; duration_sec: number | null; thread_id: number }>();
+  ).bind(messageUid, job).first<{ id: number; uid: string; direction: 'in' | 'out'; voice_ref_enc: string; duration_sec: number | null; sent_at: string; thread_id: number }>();
   if (!row) return null;
   const thread = await env.DB.prepare('SELECT * FROM channel_threads WHERE id = ?').bind(row.thread_id).first<ThreadRow>();
   let ref: { file?: unknown; mime?: unknown } | null = null;
@@ -350,7 +352,7 @@ export async function voiceNoteForJob(env: Env, messageUid: string, job: string)
   if (!thread || typeof ref?.file !== 'string' || !ref.file) return null;
   return {
     id: Number(row.id), uid: row.uid, side: row.direction === 'out' ? 'me' : 'contact', file: ref.file,
-    mime: typeof ref.mime === 'string' ? ref.mime : null, durationSec: row.duration_sec, thread,
+    mime: typeof ref.mime === 'string' ? ref.mime : null, durationSec: row.duration_sec, sentAt: row.sent_at, thread,
   };
 }
 
@@ -772,15 +774,19 @@ export async function forgetConnection(env: Env, integrationId: number): Promise
  *             while the contact keeps writing.
  *   codes     spent link codes after a day; event ids after 90 days; the
  *             per-connection counters after two days.
+ *   links     D754 way B (#1937): a linked WhatsApp unused for
+ *             CHANNEL_LIMITS.senderLinkDays lapses — phone numbers are
+ *             reassigned. Its row stays, disconnected, with only the mask.
  */
 export async function purgeExpired(env: Env, now = new Date()): Promise<{
-  threads: number; messages: number; codes: number; events: number; counters: number;
+  threads: number; messages: number; codes: number; events: number; counters: number; lapsed: number;
 }> {
   const cutoff = new Date(now.getTime() - CHANNEL_LIMITS.pendingDays * 86_400_000).toISOString();
   const day = new Date(now.getTime() - 86_400_000).toISOString();
   const twoDays = new Date(now.getTime() - 2 * 86_400_000).toISOString();
   const events = new Date(now.getTime() - 90 * 86_400_000).toISOString();
-  const [msgs, threads, codes, evs, counters, linkAttempts] = await env.DB.batch([
+  const unused = new Date(now.getTime() - CHANNEL_LIMITS.senderLinkDays * 86_400_000).toISOString();
+  const [msgs, threads, codes, evs, counters, linkAttempts, lapsed] = await env.DB.batch([
     env.DB.prepare(`DELETE FROM channel_thread_messages WHERE datetime(sent_at) < datetime(?)`).bind(cutoff),
     env.DB.prepare(
       `DELETE FROM channel_threads WHERE status IN ('pending', 'ignored')
@@ -795,10 +801,16 @@ export async function purgeExpired(env: Env, now = new Date()): Promise<{
     env.DB.prepare(`DELETE FROM channel_events WHERE datetime(created_at) < datetime(?)`).bind(events),
     env.DB.prepare(`DELETE FROM channel_counters WHERE datetime(created_at) < datetime(?)`).bind(twoDays),
     env.DB.prepare(`DELETE FROM channel_link_attempts WHERE window_start < ?`).bind(twoDays),
+    env.DB.prepare(
+      `UPDATE integrations SET status = 'disconnected', credentials_enc = NULL, external_account_id = NULL, updated_at = CURRENT_TIMESTAMP
+        WHERE provider_key = 'whatsapp_link' AND status = 'active'
+          AND datetime(COALESCE(last_synced_at, updated_at, created_at)) < datetime(?)`,
+    ).bind(unused),
   ]);
   return {
     messages: Number(msgs.meta?.changes ?? 0), threads: Number(threads.meta?.changes ?? 0),
     codes: Number(codes.meta?.changes ?? 0), events: Number(evs.meta?.changes ?? 0),
     counters: Number(counters.meta?.changes ?? 0) + Number(linkAttempts.meta?.changes ?? 0),
+    lapsed: Number(lapsed.meta?.changes ?? 0),
   };
 }
