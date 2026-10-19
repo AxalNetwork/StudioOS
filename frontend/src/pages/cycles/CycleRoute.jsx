@@ -970,7 +970,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
             railOption={cycle === 'validate' ? `fill:${fillKind}` : null} />
         )}
         {fillsOn && projectId ? drafts.map((draft) => (
-          <ZoneDraft key={`${slug}-${draft.surface}`} {...draft} scopeKey={String(projectId)} ai={ai} accent="violet" />
+          <ZoneDraft key={`${slug}-${draft.surface}`} {...draft} scopeKey={String(projectId)} ai={ai} accent="violet" railOption={`draft:${draft.surface}`} />
         )) : null}
         {/* D757 §2.7 (#1928): each Validate module's interview suggestions, writers only. Verdict takes none. */}
         {moduleStatus === 'ready' && cycle === 'validate' && slug !== 'verdict' && (
