@@ -107,6 +107,37 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-10-19 — AIRail · every page (D720)
+
+The owner's artifact `UzN4NdcwEHVYuh4ZoPLkTp`, the rail on every page, is
+`AIRail · every page.dc.html`. It is a newer export of
+`canvases/integrated/AIRail.dc.html`, which D698 built and
+`airail_d698.test.mjs` still pins. Per the rule above, it lands here instead of
+overwriting that file. It adds:
+- the per-page switch, "Turn off AI assistance on this page";
+- each suggested model's billed price, in and out;
+- All models in ten groups, with New badges;
+- the Llama Guard sentence;
+- the Usage box with Add tokens.
+
+`airail-every-page-data/canvas.json` holds the canvas's own tables, extracted
+by S1 with no value edited:
+- `profiles`: the six profiles' sections and modules;
+- `task_kind`: each page's kind of work, one of fourteen;
+- `suggested`: each kind's models, with role and line;
+- `all_models`: the groups;
+- `cost`: Cloudflare's cost, before the × 1.25 the canvas shows;
+- `new_models`.
+
+`airail-every-page-data/cloudflare-pricing-2026-10-15.md` is Cloudflare's
+Workers AI pricing page, published 2026-10-15. S1 copied it through the
+Cloudflare documentation connector, because the host refuses sessions'
+requests to `developers.cloudflare.com`. It covers 69 models, with the neuron
+rate behind each price. D760 (#2017) prices its catalogue from it.
+
+D764 generates the Worker's matrix from `canvas.json`, and D769 builds the rail
+to the canvas. D769 moves both into `canvases/integrated/`, replacing `AIRail.dc.html`.
+
 ## In the queue now — the four-profile layout pass (2026-09-03)
 
 Eleven canvases landed here from the layout pass. Everything else the owner

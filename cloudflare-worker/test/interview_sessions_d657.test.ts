@@ -380,10 +380,12 @@ test('the model list carries the router’s prices, tags, and what can be chosen
   const m = listSttModels();
   const live = Object.fromEntries(m.live.map((x: any) => [x.model, x]));
   const fin = Object.fromEntries(m.final.map((x: any) => [x.model, x]));
-  assert.equal(live['@cf/deepgram/nova-3'].price_usd_per_minute, 0.0092);
+  // D760 (#2017): each rate is the model's neuron price (neurons × $0.011 / 1,000),
+  // not the pricing table's rounded dollars: 836.36, 700.00, 472.73 and 46.63 neurons a minute.
+  assert.equal(live['@cf/deepgram/nova-3'].price_usd_per_minute, 0.00919996);
   assert.equal(live['@cf/deepgram/flux'].price_usd_per_minute, 0.0077);
-  assert.equal(fin['@cf/deepgram/nova-3'].price_usd_per_minute, 0.0052);
-  assert.equal(fin['@cf/openai/whisper-large-v3-turbo'].price_usd_per_minute, 0.0005);
+  assert.equal(fin['@cf/deepgram/nova-3'].price_usd_per_minute, 0.00520003);
+  assert.equal(fin['@cf/openai/whisper-large-v3-turbo'].price_usd_per_minute, 0.00051293);
   assert.ok(fin['@cf/openai/whisper-large-v3-turbo'].tags.includes('Default'));
   assert.equal(fin['@cf/openai/whisper-tiny-en'].price_usd_per_minute, null);
   assert.equal(fin['@cf/openai/whisper-tiny-en'].choosable, false);
@@ -852,7 +854,7 @@ test('D685 §5.9: /finish counts the chunks; a late chunk queues the job; the jo
   llmAi(f);
   const { sid, sent } = await recordedForProcessing(f, 2);
   // Three chunks expected, two stored: uploading 2 of 3, nothing queued.
-  // D765 (#2090): the member chose "Summarise and place" at Stop (`auto: true`).
+  // D770 (#2095): the Stop sheet's "Summarise and place with Eadwyn", on.
   const fin = await call(f.env, FOUNDER, 'POST', `/sessions/${sid}/finish`, { last_seq: 2, auto: true });
   assert.equal(fin.status, 202);
   assert.deepEqual([fin.body.processing.stage, fin.body.processing.done, fin.body.processing.total], ['uploading', 2, 3]);
@@ -961,6 +963,35 @@ test('D685 §5.9: Manual mode stops after Transcribing; /transcribe and /structu
   assert.equal(f.db.prepare('SELECT summary FROM interview_sessions WHERE id = ?').get(sid).summary, null);
   // Done: a re-run is allowed again.
   assert.equal((await call(f.env, FOUNDER, 'POST', `/sessions/${sid}/summarise`)).status, 201);
+});
+
+test('D770 (#2095): Stop without the choice is manual, whatever else auto says; a retry with no recorded choice is manual too', async () => {
+  // One fixture per recording: each is its own member's session.
+  const fresh = async () => { const f = fixture(); llmAi(f); return { f, ...(await recordedForProcessing(f, 1)) }; };
+  const autoOf = (f: any, sid: number) => f.db.prepare('SELECT processing_auto AS a FROM interview_sessions WHERE id = ?').get(sid).a;
+  const summaryOf = (f: any, sid: number) => f.db.prepare('SELECT summary FROM interview_sessions WHERE id = ?').get(sid).summary;
+  // No choice sent, and a choice that is not `true`: the recording and its transcript only.
+  for (const body of [{ last_seq: 0 }, { last_seq: 0, auto: 'yes' }, { last_seq: 0, auto: 1 }]) {
+    const { f, sid } = await fresh();
+    assert.equal((await call(f.env, FOUNDER, 'POST', `/sessions/${sid}/finish`, body)).status, 202);
+    assert.equal(autoOf(f, sid), 0, JSON.stringify(body));
+    assert.equal(await job(f, sid), 'done');
+    assert.equal(stage(f, sid).status, 'transcribed', `no summary queued: ${JSON.stringify(body)}`);
+    assert.equal(summaryOf(f, sid), null);
+  }
+  // A run that failed before any choice was recorded: the member's Retry stops after Transcribing.
+  const a = await fresh();
+  a.f.db.prepare("UPDATE interview_sessions SET expected_last_seq = 0, processing_auto = NULL, processing_stage = 'failed', processing_updated_at = datetime('now') WHERE id = ?").run(a.sid);
+  assert.equal((await call(a.f.env, FOUNDER, 'POST', `/sessions/${a.sid}/process`)).status, 202);
+  assert.equal(autoOf(a.f, a.sid), 0, 'a retry defaults to manual');
+  assert.equal(await job(a.f, a.sid), 'done');
+  assert.equal(stage(a.f, a.sid).status, 'transcribed');
+  assert.equal(summaryOf(a.f, a.sid), null);
+  // The choice, once made, is kept by a retry.
+  const b = await fresh();
+  b.f.db.prepare("UPDATE interview_sessions SET expected_last_seq = 0, processing_auto = 1, processing_stage = 'failed', processing_updated_at = datetime('now') WHERE id = ?").run(b.sid);
+  assert.equal((await call(b.f.env, FOUNDER, 'POST', `/sessions/${b.sid}/process`)).status, 202);
+  assert.equal(autoOf(b.f, b.sid), 1);
 });
 
 test('D685 §5.9: a stale run, and a session the old route left in transcribing, are recovered', async () => {

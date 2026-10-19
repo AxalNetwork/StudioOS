@@ -7,7 +7,7 @@
  *   · consent given: one note is one R2 object under `validate-audio/`, one
  *     chunk row, one receipt line; its segment is APPENDED under the
  *     interviewee's label, the chat's text stays in the transcript and its
- *     mirror, and the placeholder goes; since D765 no digest is queued;
+ *     mirror, the placeholder goes, and `enqueueDigest` is queued once;
  *   · no consent: no download, no object, and the note waits;
  *   · two notes racing on one session get two `seq` and two objects; one
  *     note's job run twice at once appends once;
@@ -112,9 +112,8 @@ test('D754 W3 consent given: one R2 object, one chunk, one receipt; appended aft
   assert.equal(count(w.db, 'SELECT COUNT(*) n FROM channel_thread_messages WHERE voice_ref_enc IS NOT NULL'), 0, 'the placeholder went with the append');
 
   const s = w.db.prepare('SELECT processing_auto, processing_stage, digest_status FROM interview_sessions WHERE id = ?').get(sessionId);
-  // D765 (#2090), D720 §6: transcribed, and no summary is queued; the founder presses it.
-  assert.deepEqual([s.processing_auto, s.processing_stage, s.digest_status], [0, 'done', null]);
-  assert.equal(digests(w.queued).length - before, 0, 'no digest is queued');
+  assert.deepEqual([s.processing_auto, s.processing_stage, s.digest_status], [0, 'done', 'queued']);
+  assert.equal(digests(w.queued).length - before, 1, 'enqueueDigest once');
   assert.equal(w.aiCalls.length, 1);
 
   // The webhook's event is done, recorded in the same batch.
@@ -219,7 +218,7 @@ test('D754 W3 the one model call is the recorder\'s per-chunk stage; no direct c
   assert.equal(w.aiCalls.length, 1);
   assert.equal(w.aiCalls[0].model, DEFAULT_FINAL_MODEL, 'the session\'s final model, the recorder\'s default for a chat');
   assert.ok(w.aiCalls[0].input.audio, 'audio, from the stored chunk');
-  assert.equal(w.db.prepare('SELECT digest_status FROM interview_sessions WHERE id = ?').get(sessionId).digest_status, null, 'D765: no summary is queued, and none runs');
+  assert.equal(w.db.prepare('SELECT digest_status FROM interview_sessions WHERE id = ?').get(sessionId).digest_status, 'queued', 'queued, not run');
 
   // D754 §6: a note is ONE final segment under its speaker, however many the model returned.
   const run = w.env.AI.run;
@@ -250,7 +249,7 @@ test('D754 W3 the one model call is the recorder\'s per-chunk stage; no direct c
   for (const banned of ['replaceWithFinal', 'digestSession', 'summariseSession', 'aiRun']) {
     assert.equal(new RegExp(`\\b${banned}\\(`).test(mode), false, `voice-note mode calls ${banned}`);
   }
-  assert.equal(mode.includes('enqueueDigest('), false, 'D765: a voice note queues no digest');
+  assert.ok(mode.includes("enqueueDigest(env, session.id, userId, 'voice_note_added')"));
 });
 
 test('D754 W3 recovery: the sweeper resumes a chat session\'s stuck chunk in voice-note mode; a chat with no chunk is refused', async () => {
@@ -283,7 +282,7 @@ test('D754 W3 recovery: the sweeper resumes a chat session\'s stuck chunk in voi
   assert.equal(count(w.db, 'SELECT COUNT(*) n FROM channel_thread_messages WHERE voice_ref_enc IS NOT NULL'), 0, 'its placeholder went with it');
   const s = w.db.prepare('SELECT processing_stage, processing_auto FROM interview_sessions WHERE id = ?').get(sessionId);
   assert.deepEqual([s.processing_stage, s.processing_auto], ['done', 0]);
-  assert.equal(digests(w.queued).length - before, 0, 'D765: no digest is queued');
+  assert.equal(digests(w.queued).length - before, 1, 'the engine, once');
 
   // A chat session with no chunk has nothing to resume.
   const other: any = await world({ seed: true });

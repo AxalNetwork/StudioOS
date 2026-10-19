@@ -251,13 +251,14 @@ test('Stop and process: stop, flush, finish with the last seq recorded, then the
   assert.equal(r.getSnapshot().confirm, true);
   r.cancelStop();
   assert.equal(r.getSnapshot().confirm, false, 'Keep recording');
-  const pending = r.confirmStop();
+  // D770 (#2095): the Stop sheet's "Summarise and place with Eadwyn", on.
+  const pending = r.confirmStop({ auto: true });
   assert.equal(r.getSnapshot().phase, 'stopping');
   assert.equal(r.isCapturing(), true, 'still leaving this device: nothing may reload or log out yet');
   assert.equal(await pending, 'done');
   const calls = w.calls.map((c) => c.join(':')).filter((c) => !c.startsWith('chunk'));
-  // D765 (#2090): Stop transcribes only unless the member chose more (D770's Stop sheet).
-  assert.deepEqual(calls.slice(0, 3), ['action:start', 'action:stop', 'finish:0:false'], 'finish names the last seq queued, after the flush');
+  // D765 (#2090): past Transcribing only because the member chose it on D770's Stop sheet.
+  assert.deepEqual(calls.slice(0, 3), ['action:start', 'action:stop', 'finish:0:true'], 'finish names the last seq queued, after the flush');
   assert.ok(w.calls.findIndex((c) => c[0] === 'chunk') < w.calls.findIndex((c) => c[0] === 'finish'), 'the last slice is uploaded before finish');
   assert.equal(calls.filter((c) => c === 'get').length, 5, 'polled until done');
   assert.deepEqual(seen.map((x) => x[1]), [0, 1, 2, 3], 'each stage in turn, from the Worker');
@@ -271,12 +272,13 @@ test('Stop and process: stop, flush, finish with the last seq recorded, then the
 
 test('the client posts finish with last_seq and auto, process and summarise, to #1605\'s mounted routes', () => {
   const client = readFileSync('frontend/src/lib/api/interviewSessions.js', 'utf8');
+  // D770 (#2095): manual unless the Stop sheet's choice is on.
   assert.match(client, /finish: \(id, lastSeq, auto = false\) => request\(`\$\{P\}\/sessions\/\$\{enc\(id\)\}\/finish`, \{\s*method: 'POST', body: JSON\.stringify\(\{ last_seq: lastSeq, auto: auto === true \}\),/);
   assert.match(client, /process: \(id\) => request\(`\$\{P\}\/sessions\/\$\{enc\(id\)\}\/process`, \{ method: 'POST'/);
   assert.match(client, /summarise: \(id, model\) => request\(`\$\{P\}\/sessions\/\$\{enc\(id\)\}\/summarise`/);
   const worker = readFileSync('cloudflare-worker/src/routes/founder_validate_sessions.ts', 'utf8');
   for (const r of ['finish', 'process', 'summarise']) assert.match(worker, new RegExp(`sessions\\.post\\('/sessions/:id/${r}'`), r);
-  assert.match(worker, /body\?\.auto === true/, 'the Worker reads auto the same way: only an explicit choice (D765)');
+  assert.match(worker, /body\?\.auto === true/, 'the Worker reads auto the same way: only an explicit choice (D765, D770)');
 });
 
 test('the honest ring: a fraction only while uploading or transcribing, from the Worker\'s counts; none for summarising or placing', () => {
@@ -293,6 +295,20 @@ test('the honest ring: a fraction only while uploading or transcribing, from the
   assert.equal(stageIndex(P('done')), 4);
   assert.equal(stageIndex(P('failed'), 1), 1, 'a failure keeps the stage it reached');
   assert.equal(POLL_MS, 2000);
+});
+
+test('D770 (#2095): no choice on the Stop sheet is manual, only `true` is the choice, and a retry keeps the choice made', async () => {
+  for (const [opts, want] of [[undefined, false], [{}, false], [{ auto: 'yes' }, false], [{ auto: true }, true]]) {
+    const w = processingApi([P('done')]);
+    const finish = w.api.finish;
+    let down = true;
+    w.api.finish = async (...a) => { if (down) { down = false; throw new Error('offline'); } return finish(...a); };
+    const r = createRecorder({ api: w.api, browser: fakeBrowser().browser, queue: memoryQueue(), setTimeout: (f, ms) => (ms ? 0 : f()), wait: async () => {} });
+    await r.begin({ session: draft() });
+    assert.equal(await r.confirmStop(opts), 'failed', 'the first finish is refused');
+    assert.equal(await r.retry(), 'done');
+    assert.deepEqual(w.calls.filter((c) => c[0] === 'finish').map((c) => c[2]), [want], JSON.stringify(opts));
+  }
 });
 
 test('Manual mode sends auto: false; a recording with no audio fails in words and never calls finish', async () => {
@@ -352,7 +368,7 @@ test('a dropped read keeps polling; a stale run fails in words; a chunk left on 
   const up = w.api.uploadChunk;
   w.api.uploadChunk = async (...a) => { if (failUpload) throw new Error('offline'); return up(...a); };
   assert.equal(await r.confirmStop(), 'done');
-  assert.deepEqual(w.calls.find((c) => c[0] === 'finish'), ['finish', 0, false], 'the queued seq is the last one');
+  assert.deepEqual(w.calls.find((c) => c[0] === 'finish'), ['finish', 0, false], 'the queued seq is the last one; no choice, so manual');
   assert.ok(w.calls.some((c) => c[0] === 'chunk' && c[1] === 0), 'sent by the poll while the Worker waited for it');
   assert.deepEqual(await queue.list(7), []);
   assert.equal(w.calls.some((c) => c[0] === 'action'), false, 'already stopped: no second stop is posted');

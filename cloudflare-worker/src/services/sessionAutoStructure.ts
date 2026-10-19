@@ -3,12 +3,14 @@
  * every run goes through the Validate engine (`validateEngine.ts`), which runs
  * the summary as well as this file's structure pass.
  *
- * D765 (#2090), D720 §6: NO DIGEST STARTS WITHOUT A PRESS. The triggers below
- * that fired on their own (an imported call, an assigned or quiet chat,
- * consent given, a pasted chat, a voice note, an assistant's submission) no
- * longer queue anything, and the quiet-chat sweep is gone. A job is queued
- * only for what a press started; the recorder's `processing_auto` is set only
- * by the member's explicit choice at Stop. What follows is D684's history.
+ * D765 (#2090), D720 §6: NO DIGEST STARTS WITHOUT A PRESS, with the owner's
+ * two exceptions (2026-10-19): a chat's final text (`chat_text_added`, and the
+ * quiet-chat sweep's `chat_quiet`) and a consented voice note
+ * (`voice_note_added`) still queue the engine on their own. The other
+ * triggers that fired on their own (an imported call, consent given after a
+ * call, a pasted chat, an assistant's submission) queue nothing, and the
+ * recorder's `processing_auto` is set only by the member's explicit choice
+ * at Stop. What follows is D684's history.
  *
  * The goal is the owner's: a call or a customer chat is transcribed, the
  * Worker AI finds the pain points, and the other Validate modules fill in. The
@@ -19,9 +21,10 @@
  * its own when a transcript arrives (`StructureTrigger`):
  *
  *   call_imported        a Zoom or Meet transcript was imported (meetings.ts)
- *   chat_assigned        a customer chat was assigned to an interview (threads.ts)
+ *   chat_assigned        legacy queued assignments
+ *   chat_text_added      final chat text arrived or moved at assignment (#1930)
  *   chat_quiet           an assigned chat gained messages and then went quiet
- *                        for thirty minutes (the sweep D765 removed)
+ *                        for QUIET_MINUTES (the five-minute channel sweep)
  *   recording_processed  the recorder's job reached summarising and placing
  *   consent_given        consent was recorded after an imported call (D757)
  *   chat_pasted          a pasted text chat or typed notes (openOn, D757)
@@ -40,7 +43,7 @@
  *     Structure.
  *
  * Re-runs are bounded so a chatty customer cannot spend the member's budget:
- * a session is auto-structured at most once per six hours, counting
+ * a session is auto-structured at most once per MIN_HOURS_BETWEEN, counting
  * structure receipts, summary receipts and the engine's own last attempt
  * (`digested_at`, refused runs included), and only when it has new text since
  * its last run (its status is back to `transcribed`). Automatic runs never
@@ -51,21 +54,26 @@
  * reach it through `digestSession`.
  */
 import type { Env } from '../types';
-import { sessionConsentBlocks } from './interviewSessions';
+import { sessionDigestConsentBlocks } from './interviewSessions';
 import { IntakeError, writableSession } from './interviewIntake';
 import { structureTranscript, toSegments, type ReceiptLine, type SegmentRow } from './interviewStructuring';
+import { MESSAGING_PROVIDERS, consentRequiredProviders } from './channels/types';
 import { loadStructureContext, recordStructureReceipt, storePlacements } from '../routes/founder_validate_structure';
 
 export type StructureTrigger =
-  | 'call_imported' | 'chat_assigned' | 'chat_quiet' | 'recording_processed'
+  | 'call_imported' | 'chat_assigned' | 'chat_text_added' | 'chat_quiet' | 'recording_processed'
   | 'consent_given' | 'chat_pasted' | 'assistant_submitted' | 'voice_note_added' | 'manual';
 
 /** What a queued `session_structure` job may carry: every trigger but `manual`, which only a route passes inline. */
 export const JOB_TRIGGERS: readonly StructureTrigger[] = [
-  'call_imported', 'chat_assigned', 'chat_quiet', 'recording_processed',
+  'call_imported', 'chat_assigned', 'chat_text_added', 'chat_quiet', 'recording_processed',
   'consent_given', 'chat_pasted', 'assistant_submitted', 'voice_note_added',
 ];
 
+/** An assigned chat is structured again once it has been quiet this long. */
+export const QUIET_MINUTES = 30;
+/** And never more often than this, refused runs included. */
+export const MIN_HOURS_BETWEEN = 6;
 
 export type StructureOutcome =
   | { ok: true; runId: string; step: 'structured' | 're_structured'; stored: number; dropped: number; parts: number; receipt: ReceiptLine[];
@@ -94,7 +102,7 @@ export async function structureSession(
     if (err instanceof IntakeError) return { ok: false, reason: 'not_writable' };
     throw err;
   }
-  if (await sessionConsentBlocks(env, session)) return { ok: false, reason: 'consent_not_recorded' };
+  if (await sessionDigestConsentBlocks(env, session)) return { ok: false, reason: 'consent_not_recorded' };
 
   const rows = await env.DB.prepare(
     `SELECT start_ms, end_ms, speaker_label, text FROM interview_transcript_segments
@@ -134,6 +142,15 @@ export async function structureSession(
 }
 
 /**
+ * Queue a digest (`session_structure`), through the engine. One per session
+ * and trigger moment. Dynamic: `validateEngine.ts` imports this file.
+ */
+export async function enqueueSessionStructure(env: Env, sessionId: number, userId: number, trigger: StructureTrigger) {
+  const { enqueueDigest } = await import('./validateEngine');
+  return enqueueDigest(env, sessionId, userId, trigger);
+}
+
+/**
  * The `session_structure` job: the engine's digest. A refusal or a missing
  * transcript is an outcome, not a failure to retry. An assistant's submission
  * gets StudioOS's summary only: the assistant proposes its own placements.
@@ -149,4 +166,31 @@ export async function runSessionStructureJob(env: Env, payload: unknown) {
   return digestSession(env, {
     sessionId, userId, trigger, stages: trigger === 'assistant_submitted' ? ['summarise'] : ['summarise', 'structure'],
   });
+}
+
+/**
+ * The quiet-chat sweep: assigned chat sessions with new text since their last
+ * run, quiet for QUIET_MINUTES, and not structured, summarised or attempted
+ * (refused runs included, `digested_at`) in the last MIN_HOURS_BETWEEN. A
+ * bounded batch per tick. A chat whose provider waits for consent is skipped
+ * until its consent is `given` (D754): the gate would refuse the run.
+ */
+export async function sweepQuietChats(env: Env, now: Date): Promise<number> {
+  const quietBefore = new Date(now.getTime() - QUIET_MINUTES * 60_000).toISOString();
+  const lastRunBefore = new Date(now.getTime() - MIN_HOURS_BETWEEN * 3_600_000).toISOString();
+  const due = (await env.DB.prepare(
+    `SELECT s.id, s.created_by_user_id AS user_id FROM interview_sessions s
+      WHERE s.submitted_via IN (SELECT value FROM json_each(?)) AND s.status = 'transcribed' AND s.consent_status <> 'declined'
+        AND (s.submitted_via NOT IN (SELECT value FROM json_each(?)) OR s.consent_status = 'given')
+        AND datetime(s.updated_at) < datetime(?)
+        AND NOT EXISTS (SELECT 1 FROM interview_structure_receipts r
+                         WHERE r.session_id = s.id AND datetime(r.created_at) >= datetime(?))
+        AND NOT EXISTS (SELECT 1 FROM interview_summary_receipts r2
+                         WHERE r2.session_id = s.id AND datetime(r2.created_at) >= datetime(?))
+        AND (s.digested_at IS NULL OR datetime(s.digested_at) < datetime(?))
+      ORDER BY s.updated_at LIMIT 20`,
+  ).bind(JSON.stringify(MESSAGING_PROVIDERS), JSON.stringify(consentRequiredProviders()), quietBefore, lastRunBefore, lastRunBefore, lastRunBefore)
+    .all<{ id: number; user_id: number }>()).results ?? [];
+  for (const row of due) await enqueueSessionStructure(env, Number(row.id), Number(row.user_id), 'chat_quiet');
+  return due.length;
 }

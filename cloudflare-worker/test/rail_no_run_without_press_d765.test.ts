@@ -104,21 +104,30 @@ test('the syndicate rationale and the monitoring AI summary are presses (POST); 
 
 // ================================================================ no digest without a press
 
-test('nothing queues an interview\'s summary or placement on its own: no automatic trigger, no quiet-chat sweep', () => {
+test('nothing queues an interview\'s summary or placement on its own but the owner\'s two exceptions: a chat\'s text and a voice note', () => {
+  // The owner's ruling (2026-10-19): a chat's final text, with the quiet-chat
+  // sweep, and a consented voice note still queue the engine; nothing else does.
+  const ALLOWED = ['chat_quiet', 'chat_text_added', 'voice_note_added'];
   const dirs = ['src/routes', 'src/services', 'src/services/channels'];
   const offenders: string[] = [];
+  const seen = new Set<string>();
   for (const d of dirs) {
     for (const name of readdirSync(join(ROOT, d)).filter((n) => n.endsWith('.ts'))) {
       const s = read(`${d}/${name}`);
       for (const m of s.matchAll(/^(?!\s*(?:\/\/|\*)).*\b(enqueueDigest|enqueueSessionStructure)\(/gm)) {
         if (/export async function (enqueueDigest|enqueueSessionStructure)/.test(m[0])) continue;
-        offenders.push(`${d}/${name}: ${m[0].trim()}`);
+        const line = s.slice(m.index, s.indexOf('\n', m.index));
+        // enqueueSessionStructure's own body hands its caller's trigger on.
+        if (/return enqueueDigest\(env, sessionId, userId, trigger\);/.test(line)) continue;
+        const trigger = line.match(/'([a-z_]+)'\);/)?.[1];
+        if (trigger && ALLOWED.includes(trigger)) seen.add(trigger);
+        else offenders.push(`${d}/${name}: ${line.trim()}`);
       }
     }
   }
-  assert.deepEqual(offenders, [], 'an automatic digest is queued');
-  assert.doesNotMatch(read('src/index.ts'), /sweepQuietChats/);
-  assert.doesNotMatch(read('src/services/sessionAutoStructure.ts'), /export async function sweepQuietChats/);
+  assert.deepEqual(offenders, [], 'an automatic digest is queued outside the owner\'s exceptions');
+  assert.deepEqual([...seen].sort(), ALLOWED, 'each exception is still queued where it was');
+  assert.match(read('src/index.ts'), /await sweepQuietChats\(env, now\);/, 'the quiet-chat sweep runs on the cron');
 });
 
 test('Stop and Retry transcribe only unless the member chose more; never from the page\'s mode', () => {
@@ -132,7 +141,8 @@ test('Stop and Retry transcribe only unless the member chose more; never from th
   assert.match(front('lib/activeRecording.js'), /return await process\(state\.auto === true\);/);
   assert.match(front('lib/api/interviewSessions.js'), /finish: \(id, lastSeq, auto = false\) =>/);
   const live = front('pages/founder/RecordLivePage.jsx');
-  assert.match(live, /recorder\.confirmStop\(\{ auto: false \}\)/);
+  // D770 (#2095): the Stop sheet's own choice, never the page's mode.
+  assert.match(live, /recorder\.confirmStop\(\{ auto: opts\?\.auto === true \}\)/);
   assert.doesNotMatch(live, /useAssistMode/, 'the page\'s mode no longer decides Stop');
 });
 

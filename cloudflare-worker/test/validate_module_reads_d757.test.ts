@@ -188,6 +188,10 @@ test('1: every suggestion maps to exactly one module through its slug', async ()
     ['problem-discovery'], ['customer-research'], ['ideal-customer-profile'], ['market-intelligence'], ['demand-signals'], ['experiments'],
   ]);
   for (const [i, p] of ONE_PER_MODULE.entries()) assert.deepEqual(seen.get(ids[i]), [placementSlug(p.kind as any, p.payload)]);
+  // #1927: the session's placements read names the same module, which the session page groups by.
+  const read = await send(structure, env, ME, 'GET', `/sessions/${SESSION}/placements`);
+  assert.equal(read.status, 200);
+  assert.deepEqual(read.json.runs[0].placements.map((p: any) => p.slug), ids.map((id) => seen.get(id)![0]));
 });
 
 // ── 2. the ICP, Market and Demand records list their findings ───────────────

@@ -33,6 +33,7 @@ runs these directly against an in-process SQLite, with no request at all.
 | `supportQueues.ts` | HQ Support's three queues read from HQ's own records (D204). **One definition of an open ticket** — `OPEN_TICKET_STATUSES` and `ticketBacklog`, which HQ Home's Queue backlog reads too — and `personaOf`, which sorts each open ticket by its requester's standing NOW: no account, a closed account, bound in `licence_admins` (the binding beats the role), HQ staff, else an HQ-held user. The licence kind is never read. Every read answers for itself: a failed one is `available: false` with its reason, a read past its ceiling is `complete: false` and its count is withheld rather than shown as the length of a cut list. The GET never runs the sync bootstrap. |
 | `escalationConcerns.ts` | What a content escalation can name (D208): HQ's template library as pushed to the branch, and the branch's own newest hundred articles. **One label format**, `concernLabel`, builds both what the drawer lists and what the route stores and sends to HQ, so the two are the same bytes; a long title gives way before the slug does, and the whole fits the 300 characters both escalation tables keep. The list never throws — each source reads in its own try, and an unreadable one is its own state with its reason, never an empty list. A pick is read again at the raise (`resolveConcern`), never taken from the client, and one that no longer resolves is a typed refusal the route turns into a 400 or a 503 before HQ is called. A label names an item; it does not say the submission localises it, which is why HQ's Localised count stays unrecorded. |
 | `topology.ts` | What a Worker is, stated once per tier (D209, canvases H14 and S14): the bindings each tier declares and what each names (D681's OAuth namespace is HQ-only), both RPC entrypoints method for method with whether anything calls each and whether it takes a secret, what the shared Analytics Engine dataset carries and what it does not, who deploys what, which screens write Worker secrets, and where Cloudflare Access is mounted. **Structural facts are literals** held by `cloudflare-worker/test/topology_d209.test.ts` to the file that decides each — `wrangler.toml`, the RPC classes, the generator, the workflows, `index.ts` — because a deployed Worker carries none of them; **runtime facts** (which bindings are present, whether the SQL credentials are set, where a secret write would land) are read from `env` on the request. Pure over `env`, so it has no store to fail, and it never returns a secret value. Both `GET /api/admin/platform/topology` and `GET /api/branch/deployment` answer from it, so the two tiers cannot describe the architecture two ways. |
+| `aiConsumption.ts` | D776 (#2093): a member's own AI runs in a month, grouped by the rail's page, by option within a page, or by record, with what they were charged (`charged_microusd`, D762), and the allowance and token split read once per hold from `ai_budget_reservations`. A NULL charge is counted as Not recorded, never as 0. The member's rows only; `GET /api/ai-budget/runs` serves it. |
 | `aiCredits.ts` | D755: the AI top-up balance bought as token packs. `TOKEN_PACK_LIMITS` is §16's one constant block; `ledgerBalance` sums `ai_credit_ledger` (migration 486), which must equal `ai_topup_accounts.balance_microusd` for every member. Holds, releases and spends are written by 486's triggers on `ai_budget_reservations`, so `aiBudget.ts` writes no ledger row. `tokenPackForPrice`, `isTokenPackPrice`, `packOnSale` and `tokenPackQuote` decide what a pack is and whether it can be bought: alone, at face value, no promo, within §16's limits. Only the order intent sells one, and only the payment webhook (`aiTopups.ts`) credits it. `orderTopUp` projects the recorded owner-scoped purchase state and current balance for the order receipt; it never credits or fulfils an order. It returns no projection for historical ordinary orders, even when their prices are later adopted as packs; an explicit pack line without a purchase keeps its receipt with an unreadable marker. Today’s catalogue never reclassifies receipts. Kept apart from Perk and Introduction credits: nothing here reads their ledgers. |
 | `aiCreditReversals.ts` | D755 §8: `charge.refunded`, `charge.dispute.created` and `charge.dispute.closed` take a token pack's tokens back, up to the member's balance, recording the rest as `shortfall_microusd`. The share and the balance are read inside the one INSERT that writes the row, so the balance CHECK never fires and racing deliveries take a share once. Acts only on a charge whose PaymentIntent has an `ai_topup_purchases` row; every other charge is untouched. |
 | `approvalAssignments.ts` | Who is looking at a board item (D470, migration 341). One current reviewer per lane and item, and an event only when this write changes that person. A missing table stays unreadable — it is not "nobody assigned". A reviewer is an active admin. The write does not change a queue's status and does not open a thread. |
@@ -46,7 +47,7 @@ runs these directly against an in-process SQLite, with no request at all.
 | `ai/` | D763: the AI router's pure parts. `guard.ts` holds Llama Guard's slicing, verdicts, category policy and refusal copy. Its README has the rule for adding here. |
 | `calendar/` | Calendar sync. |
 | `channels/` | D684: business Telegram and WhatsApp conversations, and Zoom and Google Meet calls, reaching Validate › Interviews. The contract, event dedupe, connection tenancy, link codes, outbound tracking and the pending-thread store. Its README has the rules. |
-| `ai/` | D761: the AI router's request and response shapes, per-class timeouts, context-window and paid-only fallbacks, session affinity and the units each attempt used. Pure; `aiRouter.ts` calls it. |
+| `ai/` | D761: the AI router's request and response shapes, per-class timeouts, context-window and paid-only fallbacks, session affinity and the units each attempt used. D760: `catalogue.ts`, every Workers AI model priced in each unit Cloudflare bills, and `pricing.ts`, cost and billed in exact decimals with `AI_MARKUP` written once. Pure; `aiRouter.ts` calls it. |
 | `decks/` | Deck assembly and export. |
 | `email/` | Transactional mail. |
 | `fills/` | "AI fills the blanks" — the fill-kind registry and the provenance of an accepted fill. A `sourced` fill carries a citation or it is dropped. |
@@ -205,20 +206,21 @@ chat goes quiet. Its findings are proposals for the founder to review. It keeps
 #1470's consent rule and the D640 budget, and re-runs at most every six hours,
 counting summary receipts and the engine's last attempt too (D757). Since D757
 its job is the engine's: `runSessionStructureJob` calls `digestSession` for
-every trigger in `JOB_TRIGGERS`. **Since D765 (#2090) nothing queues it on its
-own** (D720 §6): an import, an assigned or quiet chat, consent, a pasted chat, a
-voice note and an assistant's submission store and transcribe, and the founder
-presses Summarise or Structure. The quiet-chat sweep and
-`enqueueSessionStructure` are gone; the job remains for what a press queues.
+every trigger in `JOB_TRIGGERS`. **Since D765 (#2090) only a chat's text and a
+voice note queue it on their own** (D720 §6, the owner's two exceptions): an
+import, consent, a pasted chat and an assistant's submission store and
+transcribe, and the founder presses Summarise or Structure. A chat's final text
+(`chat_text_added`), the quiet-chat sweep (`chat_quiet`) and a consented voice
+note (`voice_note_added`) still queue the engine.
 
 D757 (#1898): `validateEngine.ts` is the Validate engine's one entry. Every
 conversation reaches `digestSession`: the recorder's last two stages, a Zoom or
 Meet import, an assigned or quiet chat, the pasted chat and typed notes, consent
 recorded after an import, an assistant's submission (the summary only), and the
-Summarise and Structure buttons (`force`). Since D765 (#2090) only the buttons
-and the recorder's own stages reach it, the recorder's only when the member
-chose it at Stop: no source queues a digest on its own, and no source calls a
-model. One transcript is digested once (a sha256 of the final
+Summarise and Structure buttons (`force`). Since D765 (#2090) only the buttons,
+the recorder's own stages (only when the member chose it at Stop), a chat's
+text with its quiet sweep, and a voice note reach it; no other source queues a
+digest on its own, and no source calls a model. One transcript is digested once (a sha256 of the final
 transcript; a button always runs). An explicit Manual mode for `validate` in
 `ai_rail_preferences` skips automatic runs, and the stored model picks apply to
 them. An audio session needs consent `given`; `withdrawDigest` honours a

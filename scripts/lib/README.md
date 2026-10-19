@@ -24,6 +24,7 @@ can be read to find out what a rule actually is.
 | `claudeReviewRun.mjs` | The whole review run with git, the GitHub API and the Anthropic client handed in, so a missing secret, a fork, an empty or oversized diff, a repeat, a budget refusal, an API failure, a refusal and a malformed answer are all tested with fakes. |
 | `webhookGuard.mjs` | Whether the WhatsApp webhook refuses an unsigned POST (D754): any 2xx fails, 401 or 403 passes as guarded, 503 passes as not configured yet, and any other answer or an unreachable host is not this check's business. The probe takes `fetch` handed in, so it is tested with fakes; it never calls Meta and needs no secret. Owned by `../check-spa-live.mjs`. |
 | `connectorReadiness.mjs` | Which catalogue OAuth connectors have no client, read off `/api/health`'s `connectors_oauth` block (D751 T9): a false or null key is one WARN line and a run-summary row, a missing or malformed block fails, and strict mode (`SMOKE_CONNECTORS_STRICT=1`) fails on any WARN. Keys only: a value, or a key that is not a provider key, is never printed. Owned by `../check-spa-live.mjs`; tested in `frontend/test/spa_live_routes.test.mjs` beside the script's wiring. |
+| `railMatrixOverrides.json` | D764 (#2089): what `../build-rail-matrix.mjs` adds to the owner's canvas: each canvas model's Workers AI id and capabilities, each kind's shape, the kinds that read `axal-search`, and the page rows the canvas has no board for (`Admin · Home`). Edit it, then rerun the script. |
 
 ## Tests
 

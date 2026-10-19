@@ -419,3 +419,56 @@ export function purchaseLine(latest, now = Date.now()) {
       return null;
   }
 }
+
+/**
+ * D776 (#2093) — "Where it went", charged: `GET /ai-budget/runs?group=option`
+ * folded into pages, each with its options, what was charged and the
+ * allowance and token split. A page or option a run did not record is
+ * `noPage` / `noOption`, shown last as "Not recorded"; a charge the Worker
+ * reads as null (rows before migration 493, runs held for a review) is null
+ * here, never $0.00. A page links only when its key is an app path: D720's
+ * page keys wait on its page map to become links. Null for anything that is
+ * not the Worker's shape.
+ */
+export function chargedPages(read) {
+  if (!read || !Array.isArray(read.rows)) return null;
+  const pages = new Map();
+  const add = (into, r) => {
+    into.runs += isCount(r.runs) ? r.runs : 0;
+    into.notRecorded += isCount(r.not_recorded) ? r.not_recorded : 0;
+    if (isCount(r.charged_microusd)) into.chargedMicro = (into.chargedMicro ?? 0) + r.charged_microusd;
+    into.allowanceMicro += isCount(r.allowance_microusd) ? r.allowance_microusd : 0;
+    into.tokensMicro += isCount(r.tokens_microusd) ? r.tokens_microusd : 0;
+  };
+  const blank = () => ({ runs: 0, notRecorded: 0, chargedMicro: null, allowanceMicro: 0, tokensMicro: 0 });
+  for (const r of read.rows) {
+    if (!r || typeof r !== 'object') continue;
+    const key = typeof r.page === 'string' && r.page ? r.page : null;
+    const id = key ?? '(none)';
+    if (!pages.has(id)) {
+      const path = key && /^\/(?!\/)[A-Za-z0-9/_.-]*$/.test(key) ? key : null;
+      pages.set(id, { key: id, noPage: key == null, label: key == null ? null : (path ? surfaceLabel(path) : key), href: path, options: [], ...blank() });
+    }
+    const page = pages.get(id);
+    add(page, r);
+    const opt = typeof r.option === 'string' && r.option ? r.option : null;
+    const o = { key: opt ?? '(none)', label: opt, noOption: opt == null, ...blank() };
+    add(o, r);
+    page.options.push(o);
+  }
+  const view = (x) => ({
+    ...x,
+    charged: x.chargedMicro == null ? null : microUsd(x.chargedMicro),
+    allowance: microUsd(x.allowanceMicro),
+    tokens: microUsd(x.tokensMicro),
+  });
+  const byCharge = (a, b) => (b.chargedMicro ?? -1) - (a.chargedMicro ?? -1) || b.runs - a.runs;
+  const all = [...pages.values()].map((p) => ({
+    ...view(p),
+    options: [...p.options.filter((o) => !o.noOption).sort(byCharge), ...p.options.filter((o) => o.noOption)].map(view),
+  }));
+  return {
+    pages: [...all.filter((p) => !p.noPage).sort(byCharge), ...all.filter((p) => p.noPage)],
+    truncated: read.truncated === true,
+  };
+}

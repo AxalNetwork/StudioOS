@@ -126,12 +126,30 @@ export function entityRows(read) {
 
 export const ENTITY_FEEDS = 'What it feeds: balances and transactions for reconciliation, and the monthly cash and reconciliation drafts. Drafts wait in the review queue. Nothing reaches an LP from here.';
 export const ENTITY_AUDIT_FOOT = 'Opening this page is recorded in the admin audit log.';
+/** The same record, where the rows still open in a sheet (the Bank accounts console, Build's lightbox). */
+export const ENTITY_SHEET_AUDIT_FOOT = 'Opening this sheet is recorded in the admin audit log.';
 export const ADMIN_ONLY = 'Only the Super Admin connects, replaces or disconnects an entity\'s Mercury.';
 export const BRANCH_MANAGED = 'Axal\'s entity accounts are managed from HQ.';
 export const TOKEN_HELP = 'How to create a Read Only token';
 export const OPEN_BANKING = { text: 'Open Banking', href: '/admin/fund-admin?tab=banking' };
 /** D752 (#1891): the `capital_attestation` use's door, to the LP workspace's proof of funds. */
 export const ATTESTATION_DOOR = { text: 'Show Axal you can fund this', href: '/spinout-lab/investor-workspace#proof-of-funds' };
+
+/**
+ * #1780 (canvas PR): each use row's door, to the screen where that use
+ * happens (#1778's screens, #1848). A use with no screen on `main` has no
+ * door: `raise_receipts` and `venture_spend` are matched and read from their
+ * own pages' panels, which this sheet does not link yet.
+ */
+export const USE_DOORS = {
+  venture_revenue: { text: 'Import from Mercury', href: '/spinout-lab/revenue' },
+  practice_income: { text: 'Match an invoice', href: '/partner/needs' },
+  partner_deals: { text: 'Match a payout or settlement', href: '/partner/earnings' },
+  capital_attestation: ATTESTATION_DOOR,
+};
+
+/** #1780 decision 2: the hub's group for the Axal entities' Mercury, and its Discover badge. */
+export const FUND_ADMIN_GROUP = { title: 'Fund administration', badge: 'Entity connections' };
 
 /** The Connect box's label: "This is a Read Only token from <entity>'s Mercury organization." */
 export function confirmReadOnlyLabel(entityName) {

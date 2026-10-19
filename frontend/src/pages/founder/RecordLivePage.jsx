@@ -1,8 +1,9 @@
 import React, { useMemo } from 'react';
 import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useActiveRecording, useNow } from '../../contexts/ActiveRecordingContext';
-import { pillVariant, recovering, reviewPath } from '../../lib/activeRecording';
+import { finishLine, pillVariant, recovering, reviewPath } from '../../lib/activeRecording';
 import { useAuth } from '../../hooks/useAuthSync';
+import useAiSpend from '../../hooks/useAiSpend';
 import { prefersReducedMotion } from '../../components/discovery/RingViz';
 import RecordingView, { useDarkTheme } from './RecordingView';
 import { focusPillOnShow } from './RecordingPill';
@@ -16,7 +17,8 @@ import { focusPillOnShow } from './RecordingPill';
  * × "Exit full screen" goes back to where the founder was and leaves the
  * recording running: the pill keeps it in the corner (`RecordingPill.jsx`).
  * When processing finishes here, the founder lands on Customer research
- * (D694); minimised, the ready pill offers the same destination.
+ * (D694), or on the session when Axal drafted its summary (D757, #1927);
+ * minimised, the ready pill offers the same destination.
  */
 
 
@@ -25,7 +27,7 @@ export function liveRedirect(state, sessionParam) {
   const sid = state?.session?.id;
   const asked = sessionParam ? String(sessionParam) : null;
   if (state?.phase === 'discarded') return reviewPath(state?.session);
-  if (sid != null && (!asked || asked === String(sid))) return state.phase === 'ready' ? reviewPath(state.session) : null;
+  if (sid != null && (!asked || asked === String(sid))) return state.phase === 'ready' ? (finishLine(state)?.href || reviewPath(state.session)) : null;
   if (asked && /^\d+$/.test(asked)) return `/validate/session/${asked}`;
   return '/validate';
 }
@@ -38,9 +40,10 @@ export default function RecordLivePage() {
   const { user } = useAuth() || {};
   const theme = useDarkTheme();
   const now = useNow(state.phase === 'recording');
-  // D765 (#2090), D720 §6: Stop transcribes only. Summarising and placing
-  // come from the member's choice on D770's Stop sheet, never the page's mode.
-  const actions = useMemo(() => Object.assign(Object.create(recorder), { confirmStop: () => recorder.confirmStop({ auto: false }) }), [recorder]);
+  // D770 (#2095): `auto` is the Stop sheet's choice, never the rail's mode. The spend read is the sheet's
+  // quote, made only while the sheet is open.
+  const actions = useMemo(() => Object.assign(Object.create(recorder), { confirmStop: (opts) => recorder.confirmStop({ auto: opts?.auto === true }) }), [recorder]);
+  const ai = useAiSpend({ enabled: !!state.confirm });
   // A reload: the recording comes back once recovery has run (§5.6.7). Until
   // then there is no session to show and none to leave for (#1588).
   if (!state.session && params.get('session') && recovering(state)) {
@@ -60,6 +63,6 @@ export default function RecordLivePage() {
 
   return (
     <RecordingView st={state} now={now} theme={theme} reduced={prefersReducedMotion()} you={user?.name || user?.full_name || ''}
-      onExit={exit} onOpen={(href) => navigate(href, { replace: true })} actions={actions} />
+      onExit={exit} onOpen={(href) => navigate(href, { replace: true })} actions={actions} ai={ai} />
   );
 }

@@ -27,9 +27,10 @@
  *                       batch, so a chunk is appended once: a second run's
  *                       batch fails on the staged row's key and rolls back.
  *                       The job's voice-note branch resumes a chat session's
- *                       untranscribed chunks the same way. Since D765
- *                       (#2090) that is all: it never summarises or
- *                       structures, per note or after (D720 §6).
+ *                       untranscribed chunks the same way, then hands the
+ *                       session to the engine (`enqueueDigest`); it never
+ *                       structures or summarises per note. A voice note is
+ *                       one of the owner's two exceptions to D765 (#2090).
  *
  * Every AI step reserves and settles the member's D640 budget through the
  * router and leaves receipt lines; a refusal is recorded and shown in the
@@ -249,8 +250,10 @@ async function transcribeVoiceNotes(env: Env, session: SessionRow, userId: numbe
     await enqueueProcess(env, session.id, userId);
     return 'transcribing';
   }
-  // D765 (#2090), D720 §6: the note is transcribed (saving); no summary starts without a press.
   await setStage(env, session.id, 'done');
+  // The owner's exception to D765 (2026-10-19): a voice note queues the engine.
+  const { enqueueDigest } = await import('./validateEngine');
+  await enqueueDigest(env, session.id, userId, 'voice_note_added');
   return 'done';
 }
 
@@ -316,7 +319,7 @@ export async function summariseSession(env: Env, session: SessionRow, userId: nu
   };
   await env.DB.prepare(
     `UPDATE interview_sessions SET summary = ?, summary_model = ?, summarised_at = datetime('now'), summary_citations_json = ?,
-            digest_json = ?, digest_kept_at = NULL, digest_kept_by = NULL, updated_at = datetime('now') WHERE id = ?`,
+            digest_json = ?, digest_kept_at = NULL, digest_kept_by = NULL, updated_at = datetime('now') WHERE id = ? AND consent_status <> 'declined'`,
   ).bind(out.sentences.map((s) => s.text).join(' '), usedModel, JSON.stringify(out.sentences), JSON.stringify(digest), session.id).run();
   return { ok: true, sentences: out.sentences, model: usedModel, digest: out.digest };
 }
@@ -559,6 +562,9 @@ export function isStale(session: SessionRow, now = Date.now()): boolean {
  * the same row at once. The resume is one UPDATE guarded on the stage, the
  * stage's time and the status the caller read, so only one of them queues a
  * run; the other is told the session is still being processed.
+ *
+ * A retry keeps the member's Stop choice. One that never recorded a choice
+ * (`processing_auto` NULL) is manual: it stops after Transcribing (D770, #2095).
  */
 export async function recoverSession(env: Env, session: SessionRow, userId: number, now = Date.now(), note: string | null = null): Promise<{ ok: true; stage: Stage } | { ok: false; detail: string; message: string }> {
   const legacyStuck = !session.processing_stage && session.status === 'transcribing';

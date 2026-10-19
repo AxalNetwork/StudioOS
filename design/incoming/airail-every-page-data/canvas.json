@@ -1,0 +1,994 @@
+{
+ "_source": "design/incoming/AIRail · every page.dc.html (the owner's AIRail artifact, 2026-10-19). Extracted by S1 from the canvas's renderVals(); no value edited.",
+ "_units": "cost is Cloudflare's USD price before the margin. Kinds: t = [in, out, cached?] per 1M tokens; e = per 1M tokens; m = per audio minute; c = per 1k characters; nova = [per min, per min live]; mp = [first megapixel, each more]; tile2/step2 = [per input tile, per output tile]; ts = [per tile, per step]. The canvas displays each price x 1.25.",
+ "profiles": {
+  "Founder": {
+   "Studio": [],
+   "Validate": [
+    "Problem discovery",
+    "Customer research",
+    "Ideal customer profile",
+    "Market intelligence",
+    "Demand and urgency signals",
+    "Experiments and evidence",
+    "Verdict"
+   ],
+   "Build": [
+    "Solution design",
+    "Prototype / MVP",
+    "Product roadmap",
+    "Founding team",
+    "Company creation",
+    "Operating systems"
+   ],
+   "Raise": [
+    "Fundraising readiness",
+    "Investor narrative",
+    "Pitch deck",
+    "Data room",
+    "Cap table",
+    "Use of funds",
+    "Capital relationships"
+   ],
+   "Grow": [
+    "Product improvement",
+    "Distribution",
+    "Revenue and traction",
+    "Team expansion",
+    "Partner network",
+    "Market expansion",
+    "Durable company-building"
+   ],
+   "Network": [
+    "Relationships",
+    "Introductions",
+    "Organizations"
+   ],
+   "Research": [
+    "Ask",
+    "Markets",
+    "Geographies",
+    "Companies",
+    "Funds",
+    "Library"
+   ]
+  },
+  "Investor": {
+   "Home": [],
+   "Deals": [
+    "Pipeline",
+    "Screening",
+    "Commit",
+    "Closing"
+   ],
+   "Portfolio": [
+    "Positions",
+    "Performance",
+    "Updates",
+    "Value-add"
+   ],
+   "Axal VC Fund": [],
+   "Fund": [
+    "Overview",
+    "LPs",
+    "Capital calls",
+    "Distributions",
+    "Reporting"
+   ],
+   "Network": [
+    "Relationships",
+    "Introductions",
+    "Organizations"
+   ],
+   "Research": [
+    "Ask",
+    "Diligence",
+    "Benchmarking",
+    "Markets",
+    "Library"
+   ]
+  },
+  "Advisor": {
+   "Home": [],
+   "Practice": [
+    "Opportunities",
+    "Engagements",
+    "Delivery",
+    "Sessions",
+    "Earnings"
+   ],
+   "Cohorts": [
+    "Founders",
+    "Guidance",
+    "This week",
+    "Calendar",
+    "Outcomes"
+   ],
+   "Expertise": [
+    "Profile",
+    "Services",
+    "Proof",
+    "Thinking",
+    "Visibility"
+   ],
+   "Network": [
+    "Relationships",
+    "Introductions",
+    "Organizations"
+   ],
+   "Research": [
+    "Ask",
+    "Client prep",
+    "Markets",
+    "Companies",
+    "Library"
+   ]
+  },
+  "Operating Partner": {
+   "Home": [],
+   "Pipeline": [
+    "Leads",
+    "Proposals",
+    "Negotiations",
+    "Retainers",
+    "Analytics"
+   ],
+   "Delivery": [
+    "Engagements",
+    "Deliverables",
+    "Capacity",
+    "Reporting",
+    "Health"
+   ],
+   "Offers": [
+    "Catalog",
+    "Perk deals",
+    "Visibility",
+    "Proof",
+    "Audience fit"
+   ],
+   "Network": [
+    "Relationships",
+    "Introductions",
+    "Organizations"
+   ],
+   "Research": [
+    "Ask",
+    "Client prep",
+    "Market",
+    "Library"
+   ]
+  },
+  "Admin": {
+   "Accounts": [
+    "Users",
+    "Exploring members",
+    "Trash"
+   ],
+   "Approvals": [
+    "Identity checks",
+    "Entity profiles",
+    "LP applications",
+    "Referrals",
+    "Best fit",
+    "Due diligence",
+    "Spin-Out applications",
+    "Spin-Out moderation",
+    "Exploring members",
+    "Events",
+    "Jobs",
+    "Communities",
+    "Advisor cohort access"
+   ],
+   "Programs": [
+    "Spin-Out Lab",
+    "Advisor cohorts",
+    "Assessment runs",
+    "Profiling trends"
+   ],
+   "Community": [
+    "Events",
+    "Jobs",
+    "Communities",
+    "Wellbeing experts",
+    "Advisors and partners",
+    "Directory",
+    "Partner invitations"
+   ],
+   "Contracts": [
+    "Agreements",
+    "NDAs",
+    "Partner deals",
+    "Templates",
+    "Forms"
+   ],
+   "Insights": [],
+   "Settings": []
+  },
+  "Super Admin": {
+   "Licences": [],
+   "Funds": [],
+   "Contracts": [
+    "Agreements",
+    "NDAs",
+    "Partner deals",
+    "Templates",
+    "Forms",
+    "Document types"
+   ],
+   "Team": [
+    "Users"
+   ],
+   "Revenue": [
+    "Overview",
+    "Disputes",
+    "Refunds",
+    "Statements",
+    "Promotions"
+   ],
+   "Content": [
+    "Content queue",
+    "Publications",
+    "Assessment Studio",
+    "Personas",
+    "Advisors and partners",
+    "Directory",
+    "Public team page"
+   ],
+   "Platform": [
+    "Integration keys",
+    "GitHub sync",
+    "Payments catalogue",
+    "Promo codes",
+    "Credit rules",
+    "AI allowances",
+    "Monitoring",
+    "Telegram channels"
+   ],
+   "Support": [],
+   "Security": [],
+   "Settings": []
+  }
+ },
+ "task_kind": {
+  "Studio": "chat",
+  "Home": "chat",
+  "Axal VC Fund": "research",
+  "Validate": "synth",
+  "Problem discovery": "synth",
+  "Customer research": "speech",
+  "Ideal customer profile": "synth",
+  "Market intelligence": "research",
+  "Demand and urgency signals": "numbers",
+  "Experiments and evidence": "reason",
+  "Verdict": "reason",
+  "Build": "plan",
+  "Solution design": "plan",
+  "Prototype / MVP": "code",
+  "Product roadmap": "plan",
+  "Founding team": "plan",
+  "Company creation": "legal",
+  "Operating systems": "plan",
+  "Raise": "reason",
+  "Fundraising readiness": "reason",
+  "Investor narrative": "write",
+  "Pitch deck": "vision",
+  "Data room": "vision",
+  "Cap table": "numbers",
+  "Use of funds": "numbers",
+  "Capital relationships": "match",
+  "Grow": "plan",
+  "Product improvement": "synth",
+  "Distribution": "write",
+  "Revenue and traction": "numbers",
+  "Team expansion": "plan",
+  "Partner network": "match",
+  "Market expansion": "multi",
+  "Durable company-building": "legal",
+  "Network": "match",
+  "Relationships": "match",
+  "Introductions": "match",
+  "Organizations": "match",
+  "Research": "research",
+  "Ask": "research",
+  "Markets": "research",
+  "Market": "research",
+  "Geographies": "multi",
+  "Companies": "research",
+  "Funds": "research",
+  "Library": "search",
+  "Client prep": "research",
+  "Diligence": "vision",
+  "Benchmarking": "numbers",
+  "Deals": "reason",
+  "Pipeline": "match",
+  "Screening": "reason",
+  "Commit": "reason",
+  "Closing": "legal",
+  "Portfolio": "numbers",
+  "Positions": "numbers",
+  "Performance": "numbers",
+  "Updates": "synth",
+  "Value-add": "match",
+  "Fund": "numbers",
+  "Overview": "numbers",
+  "LPs": "match",
+  "Capital calls": "numbers",
+  "Distributions": "numbers",
+  "Reporting": "write",
+  "Practice": "plan",
+  "Opportunities": "match",
+  "Engagements": "plan",
+  "Delivery": "plan",
+  "Sessions": "speech",
+  "Earnings": "numbers",
+  "Cohorts": "synth",
+  "Founders": "match",
+  "Guidance": "write",
+  "This week": "plan",
+  "Calendar": "plan",
+  "Outcomes": "synth",
+  "Expertise": "write",
+  "Profile": "write",
+  "Services": "write",
+  "Proof": "synth",
+  "Thinking": "write",
+  "Visibility": "match",
+  "Leads": "match",
+  "Proposals": "write",
+  "Negotiations": "legal",
+  "Retainers": "numbers",
+  "Analytics": "numbers",
+  "Deliverables": "write",
+  "Capacity": "plan",
+  "Health": "synth",
+  "Offers": "write",
+  "Catalog": "write",
+  "Perk deals": "write",
+  "Audience fit": "match",
+  "Accounts": "match",
+  "Users": "match",
+  "Exploring members": "match",
+  "Trash": "plan",
+  "Approvals": "reason",
+  "Identity checks": "vision",
+  "Entity profiles": "vision",
+  "LP applications": "reason",
+  "Referrals": "match",
+  "Best fit": "match",
+  "Due diligence": "vision",
+  "Spin-Out applications": "reason",
+  "Spin-Out moderation": "reason",
+  "Events": "plan",
+  "Jobs": "write",
+  "Communities": "write",
+  "Advisor cohort access": "plan",
+  "Programs": "plan",
+  "Spin-Out Lab": "plan",
+  "Advisor cohorts": "plan",
+  "Assessment runs": "synth",
+  "Profiling trends": "numbers",
+  "Community": "write",
+  "Wellbeing experts": "match",
+  "Advisors and partners": "match",
+  "Directory": "match",
+  "Partner invitations": "write",
+  "Contracts": "legal",
+  "Agreements": "legal",
+  "NDAs": "legal",
+  "Partner deals": "legal",
+  "Templates": "legal",
+  "Forms": "legal",
+  "Document types": "legal",
+  "Insights": "numbers",
+  "Settings": "plan",
+  "Licences": "legal",
+  "Team": "match",
+  "Revenue": "numbers",
+  "Disputes": "legal",
+  "Refunds": "numbers",
+  "Statements": "numbers",
+  "Promotions": "write",
+  "Content": "write",
+  "Content queue": "write",
+  "Publications": "write",
+  "Assessment Studio": "write",
+  "Personas": "synth",
+  "Public team page": "write",
+  "Platform": "code",
+  "Integration keys": "code",
+  "GitHub sync": "code",
+  "Payments catalogue": "numbers",
+  "Promo codes": "numbers",
+  "Credit rules": "numbers",
+  "AI allowances": "numbers",
+  "Monitoring": "code",
+  "Telegram channels": "write",
+  "Support": "write",
+  "Security": "legal"
+ },
+ "suggested": {
+  "chat": [
+   {
+    "t": "GLM-4.7 Flash",
+    "role": "Default",
+    "line": "Fast replies that can use your workspace"
+   },
+   {
+    "t": "Llama 3.3 70B Fast",
+    "role": "Longer",
+    "line": "Fuller answers and drafts"
+   },
+   {
+    "t": "GPT-OSS 120B",
+    "role": "Deeper",
+    "line": "Hard questions that need reasoning"
+   }
+  ],
+  "synth": [
+   {
+    "t": "Llama 3.3 70B Fast",
+    "role": "Default",
+    "line": "Groups notes and quotes into themes"
+   },
+   {
+    "t": "GLM-4.7 Flash",
+    "role": "Faster",
+    "line": "Quick tagging at a lower cost"
+   },
+   {
+    "t": "GPT-OSS 120B",
+    "role": "Deeper",
+    "line": "Checks a theme against all the evidence"
+   }
+  ],
+  "speech": [
+   {
+    "t": "Whisper Large v3 Turbo",
+    "role": "Transcribe",
+    "line": "Turns each recording into a transcript"
+   },
+   {
+    "t": "Deepgram Nova-3",
+    "role": "Speakers",
+    "line": "Labels who said what"
+   },
+   {
+    "t": "Deepgram Flux",
+    "role": "Live",
+    "line": "Captions while you talk"
+   },
+   {
+    "t": "Llama 3.3 70B Fast",
+    "role": "Structure",
+    "line": "Places quotes on themes and hypotheses"
+   }
+  ],
+  "research": [
+   {
+    "t": "Kimi K2.6",
+    "role": "Default",
+    "line": "Long sources, cited answers"
+   },
+   {
+    "t": "GPT-OSS 120B",
+    "role": "Deeper",
+    "line": "Weighs conflicting sources"
+   },
+   {
+    "t": "BGE-M3",
+    "role": "Search",
+    "line": "Finds the right records first"
+   },
+   {
+    "t": "BGE Reranker Base",
+    "role": "Rank",
+    "line": "Puts the most relevant on top"
+   }
+  ],
+  "reason": [
+   {
+    "t": "GPT-OSS 120B",
+    "role": "Default",
+    "line": "Tests a claim against its evidence"
+   },
+   {
+    "t": "DeepSeek V4 Pro",
+    "role": "Second view",
+    "line": "Reviews the first answer"
+   },
+   {
+    "t": "QwQ 32B",
+    "role": "Challenge",
+    "line": "Argues the other side"
+   }
+  ],
+  "vision": [
+   {
+    "t": "Gemma 4 26B",
+    "role": "Default",
+    "line": "Reads slides, charts and scans"
+   },
+   {
+    "t": "Llama 4 Scout",
+    "role": "Alternative",
+    "line": "Mixed text and images"
+   },
+   {
+    "t": "Moondream 3.1",
+    "role": "Extract",
+    "line": "Pulls figures out of images"
+   }
+  ],
+  "code": [
+   {
+    "t": "Kimi K2.7 Code",
+    "role": "Default",
+    "line": "Reads your repository and its changes"
+   },
+   {
+    "t": "Qwen2.5 Coder 32B",
+    "role": "Alternative",
+    "line": "Reviews and writes code"
+   }
+  ],
+  "numbers": [
+   {
+    "t": "DeepSeek V4 Pro",
+    "role": "Default",
+    "line": "Shows its working on every figure"
+   },
+   {
+    "t": "GPT-OSS 120B",
+    "role": "Alternative",
+    "line": "Explains what moved and why"
+   },
+   {
+    "t": "Granite 4.0 Micro",
+    "role": "Faster",
+    "line": "Reads figures out of documents"
+   }
+  ],
+  "write": [
+   {
+    "t": "Llama 3.3 70B Fast",
+    "role": "Default",
+    "line": "Drafts in your voice, cited"
+   },
+   {
+    "t": "Mistral Small 3.1 24B",
+    "role": "Polished",
+    "line": "Tighter, more formal drafts"
+   },
+   {
+    "t": "GLM-4.7 Flash",
+    "role": "Faster",
+    "line": "Short drafts and replies"
+   }
+  ],
+  "match": [
+   {
+    "t": "BGE-M3",
+    "role": "Match",
+    "line": "Finds people and firms that fit"
+   },
+   {
+    "t": "BGE Reranker Base",
+    "role": "Rank",
+    "line": "Orders them by fit"
+   },
+   {
+    "t": "Llama 3.3 70B Fast",
+    "role": "Draft",
+    "line": "Writes the introduction, for you to send"
+   }
+  ],
+  "plan": [
+   {
+    "t": "GLM-4.7 Flash",
+    "role": "Default",
+    "line": "Plans, lists and next steps"
+   },
+   {
+    "t": "GPT-OSS 20B",
+    "role": "Alternative",
+    "line": "Steady structured output"
+   },
+   {
+    "t": "GPT-OSS 120B",
+    "role": "Deeper",
+    "line": "Trade-offs and dependencies"
+   }
+  ],
+  "legal": [
+   {
+    "t": "DeepSeek V4 Pro",
+    "role": "Default",
+    "line": "Reads terms and filings closely"
+   },
+   {
+    "t": "GPT-OSS 120B",
+    "role": "Second view",
+    "line": "Checks the first reading"
+   }
+  ],
+  "multi": [
+   {
+    "t": "BGE-M3",
+    "role": "Search",
+    "line": "Finds sources in any language"
+   },
+   {
+    "t": "M2M100",
+    "role": "Translate",
+    "line": "Translates, keeping the original"
+   },
+   {
+    "t": "Mistral Small 3.1 24B",
+    "role": "European",
+    "line": "Reads European-language sources"
+   }
+  ],
+  "search": [
+   {
+    "t": "BGE-M3",
+    "role": "Index",
+    "line": "Makes every document searchable"
+   },
+   {
+    "t": "Qwen3 Embedding 0.6B",
+    "role": "Alternative",
+    "line": "A second index to compare"
+   },
+   {
+    "t": "Kimi K2.6",
+    "role": "Answer",
+    "line": "Answers from the documents, cited"
+   }
+  ]
+ },
+ "all_models": [
+  {
+   "group": "Conversation and writing",
+   "models": [
+    "GLM-4.7 Flash",
+    "GLM-5.3 Flash",
+    "Llama 3.3 70B Fast",
+    "Mistral Small 3.1 24B",
+    "GPT-OSS 20B",
+    "Qwen3 30B A3B",
+    "Llama 3.1 8B",
+    "Granite 4.0 Micro"
+   ]
+  },
+  {
+   "group": "Reasoning",
+   "models": [
+    "GPT-OSS 120B",
+    "DeepSeek V4 Pro",
+    "DeepSeek V4 Flash",
+    "GLM-5.3",
+    "Nemotron 3 120B",
+    "Qwen3.8 27B",
+    "QwQ 32B",
+    "Kimi K2.6"
+   ]
+  },
+  {
+   "group": "Code",
+   "models": [
+    "Kimi K2.7 Code",
+    "Qwen2.5 Coder 32B"
+   ]
+  },
+  {
+   "group": "Reading images and files",
+   "models": [
+    "Llama 4 Scout",
+    "Gemma 4 26B",
+    "Llama 3.2 11B Vision",
+    "Moondream 3.1"
+   ]
+  },
+  {
+   "group": "Search and ranking",
+   "models": [
+    "BGE-M3",
+    "Qwen3 Embedding 0.6B",
+    "BGE Base EN v1.5",
+    "BGE Reranker Base"
+   ]
+  },
+  {
+   "group": "Languages",
+   "models": [
+    "M2M100",
+    "IndicTrans2",
+    "SEA-LION v4 27B"
+   ]
+  },
+  {
+   "group": "Speech to text",
+   "models": [
+    "Whisper Large v3 Turbo",
+    "Whisper",
+    "Deepgram Nova-3",
+    "Deepgram Flux",
+    "Smart Turn v2"
+   ]
+  },
+  {
+   "group": "Voice",
+   "models": [
+    "Aura-2 EN",
+    "Aura-2 ES",
+    "MeloTTS"
+   ]
+  },
+  {
+   "group": "Images",
+   "models": [
+    "FLUX.2 Klein 9B",
+    "FLUX.2 Klein 4B",
+    "FLUX.2 Dev",
+    "FLUX.1 Schnell",
+    "Lucid Origin",
+    "Phoenix 1.0"
+   ]
+  },
+  {
+   "group": "Safety",
+   "models": [
+    "Llama Guard 3 8B"
+   ]
+  }
+ ],
+ "cost": {
+  "GLM-4.7 Flash": [
+   "t",
+   0.06,
+   0.4
+  ],
+  "GLM-5.3 Flash": [
+   "t",
+   0.15,
+   0.5,
+   0.03
+  ],
+  "GLM-5.3": [
+   "t",
+   1.4,
+   4.4,
+   0.26
+  ],
+  "Llama 3.3 70B Fast": [
+   "t",
+   0.293,
+   2.253
+  ],
+  "Llama 3.1 8B": [
+   "t",
+   0.152,
+   0.287
+  ],
+  "Llama 3.2 3B": [
+   "t",
+   0.051,
+   0.335
+  ],
+  "Llama 4 Scout": [
+   "t",
+   0.27,
+   0.85
+  ],
+  "Llama 3.2 11B Vision": [
+   "t",
+   0.049,
+   0.676
+  ],
+  "Llama Guard 3 8B": [
+   "t",
+   0.484,
+   0.03
+  ],
+  "Mistral Small 3.1 24B": [
+   "t",
+   0.351,
+   0.555
+  ],
+  "GPT-OSS 20B": [
+   "t",
+   0.2,
+   0.3
+  ],
+  "GPT-OSS 120B": [
+   "t",
+   0.35,
+   0.75
+  ],
+  "Granite 4.0 Micro": [
+   "t",
+   0.017,
+   0.112
+  ],
+  "Qwen3 30B A3B": [
+   "t",
+   0.051,
+   0.335
+  ],
+  "DeepSeek V4 Pro": [
+   "t",
+   1.32,
+   3.96,
+   0.044
+  ],
+  "DeepSeek V4 Flash": [
+   "t",
+   0.44,
+   1.32,
+   0.014
+  ],
+  "DeepSeek R1 Distill 32B": [
+   "t",
+   0.497,
+   4.881
+  ],
+  "QwQ 32B": [
+   "t",
+   0.66,
+   1
+  ],
+  "Qwen3.8 27B": [
+   "t",
+   0.45,
+   3.2
+  ],
+  "Nemotron 3 120B": [
+   "t",
+   0.5,
+   1.5
+  ],
+  "Kimi K2.6": [
+   "t",
+   0.95,
+   4,
+   0.16
+  ],
+  "Kimi K2.7 Code": [
+   "t",
+   0.95,
+   4,
+   0.19
+  ],
+  "Qwen2.5 Coder 32B": [
+   "t",
+   0.66,
+   1
+  ],
+  "Gemma 4 26B": [
+   "t",
+   0.1,
+   0.3
+  ],
+  "Gemma 3 12B": [
+   "t",
+   0.345,
+   0.556
+  ],
+  "Moondream 3.1": [
+   "t",
+   0.3,
+   1
+  ],
+  "SEA-LION v4 27B": [
+   "t",
+   0.351,
+   0.555
+  ],
+  "M2M100": [
+   "t",
+   0.342,
+   0.342
+  ],
+  "IndicTrans2": [
+   "t",
+   0.342,
+   0.342
+  ],
+  "BGE-M3": [
+   "e",
+   0.012
+  ],
+  "Qwen3 Embedding 0.6B": [
+   "e",
+   0.012
+  ],
+  "BGE Base EN v1.5": [
+   "e",
+   0.067
+  ],
+  "BGE Reranker Base": [
+   "e",
+   0.003
+  ],
+  "Whisper Large v3 Turbo": [
+   "m",
+   0.0005
+  ],
+  "Whisper": [
+   "m",
+   0.0005
+  ],
+  "Deepgram Flux": [
+   "m",
+   0.0077
+  ],
+  "Smart Turn v2": [
+   "m",
+   0.00033795
+  ],
+  "MeloTTS": [
+   "m",
+   0.0002
+  ],
+  "Deepgram Nova-3": [
+   "nova",
+   0.0052,
+   0.0092
+  ],
+  "Aura-2 EN": [
+   "c",
+   0.03
+  ],
+  "Aura-2 ES": [
+   "c",
+   0.03
+  ],
+  "FLUX.2 Klein 9B": [
+   "mp",
+   0.015,
+   0.002
+  ],
+  "FLUX.2 Klein 4B": [
+   "tile2",
+   5.9e-05,
+   0.000287
+  ],
+  "FLUX.2 Dev": [
+   "step2",
+   0.00021,
+   0.00041
+  ],
+  "FLUX.1 Schnell": [
+   "ts",
+   5.28e-05,
+   0.0001056
+  ],
+  "Lucid Origin": [
+   "ts",
+   0.006996,
+   0.000132
+  ],
+  "Phoenix 1.0": [
+   "ts",
+   0.00583,
+   0.00011
+  ]
+ },
+ "new_models": [
+  "GLM-5.3 Flash",
+  "GLM-5.3",
+  "Qwen3 30B A3B",
+  "Qwen3.8 27B",
+  "Nemotron 3 120B",
+  "BGE Base EN v1.5",
+  "IndicTrans2",
+  "SEA-LION v4 27B",
+  "Smart Turn v2",
+  "Aura-2 ES",
+  "FLUX.2 Klein 4B",
+  "FLUX.1 Schnell",
+  "Lucid Origin",
+  "Phoenix 1.0"
+ ]
+}

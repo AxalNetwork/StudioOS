@@ -22,7 +22,7 @@ import { ConnectorsView } from '../src/pages/account/AccountConnectors.jsx';
 import { ConnectorPageView } from '../src/pages/account/ConnectorPage.jsx';
 import { openingView } from '../src/pages/account/ConnectorSheet.jsx';
 import { MercuryEntitySheet } from '../src/pages/account/MercurySheet.jsx';
-import { ADMIN_ONLY, BRANCH_MANAGED, ENTITY_AUDIT_FOOT, FUND_NOTE, NOT_OFFERED, NOT_OFFERED_HQ_ONLY, isMercurySearch } from '../src/pages/account/mercuryModel.js';
+import { ADMIN_ONLY, BRANCH_MANAGED, ENTITY_AUDIT_FOOT, ENTITY_SHEET_AUDIT_FOOT, FUND_NOTE, NOT_OFFERED, NOT_OFFERED_HQ_ONLY, isMercurySearch } from '../src/pages/account/mercuryModel.js';
 
 const h = React.createElement;
 const html = (el, entry = '/account/connectors') => renderToStaticMarkup(h(MemoryRouter, { initialEntries: [entry] }, el));
@@ -174,7 +174,8 @@ test('the Super Admin: four entities in order, endings, the Fund note, the previ
     assert.match(t, /Savings ending 9002 Not in the bank-account registry/);
     assert.ok(t.includes(FUND_NOTE));
     assert.match(t, /Token …f1x2/);
-    assert.ok(t.includes(ENTITY_AUDIT_FOOT));
+    assert.ok(t.includes(ENTITY_SHEET_AUDIT_FOOT), 'the sheet says "sheet" (S1 on #1991)');
+    assert.ok(!t.includes(ENTITY_AUDIT_FOOT), 'never the page\'s sentence inside a sheet');
     for (const id of ['mercury-sync-holdings', 'mercury-replace-holdings', 'mercury-disconnect-holdings', 'mercury-connect-fund']) assert.ok(m.by(id), id);
     assert.equal(m.by('mercury-sync-fund'), undefined, 'no sync for an entity that is not connected');
     assert.equal(m.by('mercury-admin-only'), undefined);
@@ -318,4 +319,39 @@ test('no Mercury method names a money path, and no frontend file names Mercury\'
   const hosts = (src) => (src.toLowerCase().match(/[a-z0-9-]+(?:\.[a-z0-9-]+)+/g) || []);
   const isMercury = (host) => host === 'mercury.com' || host.endsWith('.mercury.com');
   for (const f of files) assert.ok(!hosts(readFileSync(f, 'utf8')).some(isMercury), f);
+});
+
+// ------------------------------------------------------------------ #1780's canvas PR: the hub
+
+test('#1780: the Fund administration group draws the entity row on Yours, on Discover and on a phone, with no read', async () => {
+  const f = mockFetch();
+  try {
+    for (const props of [{ initialTab: 'yours' }, { initialTab: 'discover' }, { phone: true }]) {
+      const page = html(h(ConnectorsView, { data: ready(), ...props }));
+      assert.match(page, /data-testid="fund-admin-group"/, JSON.stringify(props));
+      const group = page.slice(page.indexOf('data-testid="fund-admin-group"'));
+      assert.match(group, /Fund administration/);
+      assert.match(group, /data-testid="fund-admin-mercury"/);
+      assert.match(group, /href="\/account\/connectors\/mercury"/, 'the card opens Mercury\'s page');
+      const none = html(h(ConnectorsView, { data: ready(NO_MERCURY), ...props }));
+      assert.doesNotMatch(none, /fund-admin-group/, 'no entity row, no group');
+    }
+    const m = await mount(h(ConnectorsView, { data: ready(), initialTab: 'yours' }));
+    try { assert.equal(f.reads(), 0, 'the group reads nothing'); } finally { await m.unmount(); }
+  } finally { f.restore(); }
+});
+
+test('#1780: on Discover the entity card is badged "Entity connections"; no other card is', () => {
+  const page = html(h(ConnectorsView, { data: ready(), initialTab: 'discover' }));
+  const card = (key) => { const at = page.indexOf(`data-testid="connector-card-${key}"`); return page.slice(at, page.indexOf('</article>', at)); };
+  assert.match(card('mercury'), /data-testid="connector-entity-badge"[^]*Entity connections/);
+  assert.doesNotMatch(card('stripe'), /connector-entity-badge|Entity connections/);
+});
+
+test('#1780: a Yours search for "mercury" finds the entity row, so it never says "No connector called"', () => {
+  const page = flat(html(h(ConnectorsView, { data: ready(), initialTab: 'yours', initialQuery: 'mercury' })));
+  assert.doesNotMatch(page, /No connector called/);
+  assert.match(page, /Fund administration/);
+  const other = flat(html(h(ConnectorsView, { data: ready(), initialTab: 'yours', initialQuery: 'calendly' })));
+  assert.match(other, /No connector called .calendly./, 'a search for a connector you do not have still says so');
 });
