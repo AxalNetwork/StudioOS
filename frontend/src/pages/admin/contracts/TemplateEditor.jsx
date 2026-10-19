@@ -4,10 +4,12 @@ import { api } from '../../../lib/api';
 import { reportError } from '../../../lib/log';
 import { templateState } from '../../../lib/templateCatalogModel';
 import { mapOffset, pairAnchors, sourceAnchors } from '../../../lib/paneSync';
-import PaperPreview from '../../../components/PaperPreview';
+import PaperPreview, { paperRequest } from '../../../components/PaperPreview';
 import { Pill } from '../../../ui';
 import { input } from './parts';
 import PublishDialog, { PublishResult } from './PublishDialog';
+import DraftPages from './DraftPages';
+import VersionCompare from './VersionCompare';
 
 // D717 (#1852) — the template editor, in place inside the Templates tab (board
 // L9, frames "Editor" and "Publish confirmation and result"). Three panes: the
@@ -19,8 +21,9 @@ import PublishDialog, { PublishResult } from './PublishDialog';
 // AdminTemplates.jsx's modal.
 
 const MERGE_TOKEN = /(\{\{\s*[a-zA-Z0-9_.]+\s*\}\})/;
-const PARTY_LABEL = { management: 'Management', gp: 'GP', fund: 'GP for the Fund', holdings: 'Holdings', none: 'None' };
-const partyLabel = p => PARTY_LABEL[p] || p;
+// Exported so Compare versions (#1853) prints the same party names (#1853 decision 15).
+export const PARTY_LABEL = { management: 'Management', gp: 'GP', fund: 'GP for the Fund', holdings: 'Holdings', none: 'None' };
+export const partyLabel = p => PARTY_LABEL[p] || p;
 
 const muted = 'text-[#615c6e] dark:text-[#a29db0]';
 const paneCard = 'rounded-xl border border-[#ececf1] bg-white dark:border-[#2a2733] dark:bg-[#18161f]';
@@ -88,6 +91,10 @@ export default function TemplateEditor({ slug: openedSlug, isNew: openedNew, row
   const [pageSize, setPageSize] = useState('letter');
   const [cover, setCover] = useState('dark');
   const [fields, setFields] = useState(null);
+  // D717 (#1853): the middle pane shows the live paper or the draft's PDF pages,
+  // and Compare versions takes the place of the three panes.
+  const [paperView, setPaperView] = useState('live'); // 'live' | 'pages'
+  const [comparing, setComparing] = useState(false);
 
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -276,7 +283,8 @@ export default function TemplateEditor({ slug: openedSlug, isNew: openedNew, row
     const src = sourcePane.current, pap = paperPane.current, iframe = frame.current;
     const wide = typeof window !== 'undefined' && window.matchMedia?.('(min-width: 1024px)')?.matches;
     const doc = iframe?.contentDocument;
-    if (!src || !pap || !doc || viewVersion || !wide || typeof doc.querySelectorAll !== 'function') return;
+    // No sync while the Pages view or the compare shows: a PDF has no headings to align with.
+    if (!src || !pap || !doc || viewVersion || paperView !== 'live' || comparing || !wide || typeof doc.querySelectorAll !== 'function') return;
     const source = sourceAnchors(lines, lines.map((_, i) => rows.current[i]?.offsetTop));
     const top = (iframe.offsetTop || 0) - (doc.documentElement?.scrollTop || 0);
     const paper = [...doc.querySelectorAll('h2.article, h2.schedule, h3.section')]
@@ -284,7 +292,7 @@ export default function TemplateEditor({ slug: openedSlug, isNew: openedNew, row
     pairs.current = pairAnchors(source, paper, {
       sourceEnd: src.scrollHeight - src.clientHeight, paperEnd: pap.scrollHeight - pap.clientHeight,
     });
-  }, [lines, viewVersion]);
+  }, [lines, viewVersion, paperView, comparing]);
 
   useEffect(() => { recompute(); }, [recompute]);
   useEffect(() => {
@@ -334,6 +342,20 @@ export default function TemplateEditor({ slug: openedSlug, isNew: openedNew, row
 
   const crumbTitle = title || slug;
   const previewTitle = viewVersion ? viewVersion.title : title;
+  // One set of paper inputs for the live paper and the Pages view (#1853 decision 8).
+  const paperInputs = {
+    title: previewTitle,
+    body: viewVersion ? viewVersion.body_md : body,
+    resolveTokens,
+    version: viewVersion ? viewVersion.version : V,
+    docType: isNew ? slugInput : slug,
+    category: viewVersion?.category || category,
+    pageSize,
+    cover,
+    docKind: viewVersion ? viewVersion.doc_kind ?? null : (fixed || !options ? null : kind ?? null),
+    axalParty: viewVersion ? viewVersion.axal_party ?? null : (fixed || !options ? null : party ?? null),
+  };
+  const restoreBody = (text) => { setBody(text || ''); setComparing(false); edited(); };
 
   return (
     <div className="text-[#18181b] dark:text-[#f4f3f7]" data-testid="template-editor">
@@ -348,6 +370,9 @@ export default function TemplateEditor({ slug: openedSlug, isNew: openedNew, row
         <div className="flex flex-wrap items-center gap-1.5">
           {!isNew && (
             <button type="button" className={secondary} onClick={() => setShowVersions(s => !s)}>History{versions.length ? ` (${versions.length})` : ''}</button>
+          )}
+          {!isNew && (
+            <button type="button" className={secondary} aria-pressed={comparing} onClick={() => setComparing(c => !c)} data-testid="template-compare">Compare versions</button>
           )}
           {authoring && (
             <button type="button" className={secondary} onClick={save} disabled={saving || loading} data-testid="template-save">{saving ? 'Saving…' : 'Save draft'}</button>
@@ -419,8 +444,20 @@ export default function TemplateEditor({ slug: openedSlug, isNew: openedNew, row
         </div>
       )}
 
-      {/* D. Three panes */}
-      {loading ? (
+      {/* D. Three panes, or the compare in their place (#1853 decision 13) */}
+      {comparing && !loading && !isNew ? (
+        <div className="mt-3">
+          <VersionCompare
+            slug={slug}
+            draft={{ title, body_md: body, doc_kind: fixed || !options ? saved?.doc_kind ?? null : kind ?? null, axal_party: fixed || !options ? saved?.axal_party ?? null : party ?? null }}
+            draftChanged={unsaved}
+            derived={options?.derived || null}
+            partyLabel={partyLabel}
+            authoring={authoring}
+            onRestore={restoreBody}
+          />
+        </div>
+      ) : loading ? (
         <div className={`mt-3 flex items-center justify-center py-16 text-sm ${muted}`}><Loader2 size={16} className="mr-2 animate-spin" /> Loading…</div>
       ) : (
         <div className="mt-3 grid grid-cols-1 gap-3 lg:h-[calc(100vh-300px)] lg:min-h-[480px] lg:grid-cols-[minmax(0,1fr)_420px_230px]">
@@ -451,20 +488,17 @@ export default function TemplateEditor({ slug: openedSlug, isNew: openedNew, row
 
           {/* 2. The live paper — white in both themes, as the paper prints. dark-mode-exempt */}
           <div ref={paperPane} onScroll={follow('p')} className="relative min-h-[320px] overflow-y-auto rounded-xl border border-[#ececf1] bg-white lg:min-h-0 dark:border-[#2a2733]">
-            <PaperPreview
-              title={previewTitle}
-              body={viewVersion ? viewVersion.body_md : body}
-              resolveTokens={resolveTokens}
-              version={viewVersion ? viewVersion.version : V}
-              docType={isNew ? slugInput : slug}
-              category={viewVersion?.category || category}
-              pageSize={pageSize}
-              cover={cover}
-              docKind={viewVersion ? viewVersion.doc_kind ?? null : (fixed || !options ? null : kind ?? null)}
-              axalParty={viewVersion ? viewVersion.axal_party ?? null : (fixed || !options ? null : party ?? null)}
-              onDrawn={onDrawn}
-              onFrameLoad={onFrameLoad}
-            />
+            <div role="group" aria-label="Middle pane" className="sticky top-0 z-10 flex gap-1 border-b border-[#ececf1] bg-white p-1.5 dark:border-[#2a2733] dark:bg-[#18161f]">
+              {[['live', 'Live paper'], ['pages', 'Pages']].map(([key, text]) => (
+                <button key={key} type="button" aria-pressed={paperView === key} onClick={() => setPaperView(key)} data-testid={`template-view-${key}`}
+                  className={`rounded-[7px] px-[9px] py-1 text-[12px] font-semibold ${paperView === key ? 'bg-[#881337] text-white' : 'text-[#615c6e] dark:text-[#a29db0]'}`}>
+                  {text}
+                </button>
+              ))}
+            </div>
+            {paperView === 'pages'
+              ? <DraftPages request={paperRequest(paperInputs)} />
+              : <PaperPreview {...paperInputs} onDrawn={onDrawn} onFrameLoad={onFrameLoad} />}
           </div>
 
           {/* 3. The merge fields (decision 5): the render answer's, in its order */}

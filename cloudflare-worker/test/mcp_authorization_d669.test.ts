@@ -41,7 +41,9 @@ const checks:any = {
   async rpc(m:any) {
     const {env:interviewEnv,db}=world();
     const env={...fixture().env,...interviewEnv};
-    db.exec("ALTER TABLE users ADD COLUMN jwt_min_iat INTEGER; ALTER TABLE users ADD COLUMN deletion_requested_at TEXT; UPDATE users SET founder_id=9 WHERE id=10");
+    // D757: d667's world may already carry these (the Validate engine's re-scope reads them).
+    for(const col of ['jwt_min_iat INTEGER','deletion_requested_at TEXT']){try{db.exec(`ALTER TABLE users ADD COLUMN ${col}`);}catch{/* present */}}
+    db.exec("UPDATE users SET founder_id=9 WHERE id=10");
     const {token,clientId}=await connect(env,[7]);
     const provider=new OAuthProvider({...oauth.providerOptions(env),apiHandler:m.server.mcpApiHandler});
     async function invoke(name:string,args:any) {
@@ -197,7 +199,8 @@ const checks:any = {
     assert.deepEqual(codes,[[429,'60'],[429,'60']]);
   },
   async atomic(m:any) {
-    const {env,db}=world();for(let i=0;i<19;i++)await assistant.submitInterview(env,GRANT,ARGS());
+    // D757: a free founder stops at five interviews; this race is about the daily limit, so the member pays.
+    const {env,db}=world();db.prepare("UPDATE users SET subscription_tier='growth' WHERE id=?").run(GRANT.userId);for(let i=0;i<19;i++)await assistant.submitInterview(env,GRANT,ARGS());
     const out=await Promise.allSettled([m.assistant.submitInterview(env,GRANT,ARGS()),m.assistant.submitInterview(env,GRANT,ARGS())]);
     assert.deepEqual([out.filter((r:any)=>r.status==='fulfilled').length,count(db,'interview_sessions'),count(db,'discovery_interviews')],[1,20,22]);
   },

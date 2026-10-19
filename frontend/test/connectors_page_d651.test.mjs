@@ -94,6 +94,7 @@ test('the catalogue joins connections, the waitlist, the plan lock and the first
 
 test('status: the Worker’s error says why it needs attention, and only a real error does', () => {
   assert.equal(attentionReason({ status: 'active', last_error: null }), '');
+  assert.equal(attentionReason({ status: 'error', last_error: 'github_sign_in_expired: Sign in to GitHub again.' }), 'Sign-in expired');
   assert.equal(attentionReason({ status: 'error', last_error: 'invalid_grant: token expired' }), 'Sign-in expired');
   assert.equal(attentionReason({ status: 'error', last_error: 'HTTP 401 from provider' }), 'Sign-in expired');
   assert.equal(attentionReason({ status: 'active', last_error: 'rate_limited:1760000000000' }), 'Daily limit reached');

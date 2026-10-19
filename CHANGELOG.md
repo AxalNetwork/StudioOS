@@ -4,22 +4,21 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
-## Raise receipts on a founder's own Mercury (D752 §6, #1887)
+## One text per document: every sender reads its library row (D758, #1863, PR 1)
 
-- Migration 490 rebuilds `mercury_personal_matches` with two more target
-  kinds, `raise_prospect` and `deal_commitment`, keeping every row and both
-  partial unique indexes. Its trigger withdraws a raise receipt when the
-  prospect's amount or stage changes.
-- `GET/POST /api/mercury/personal/matches` take `target=raise|commitment` for
-  a founder (`raise_receipts`). Confirming an investor's wire marks the
-  prospect `wired`, or moves the commitment from `pending` to `confirmed`;
-  withdrawing undoes only the commitment.
-- A line is a receipt or revenue, never both: a receipt's line is refused
-  `raise_receipt` on the revenue import, a revenue line is never proposed, and
-  both checks sit inside each INSERT. The credits list carries
-  `fits_raise_target` as a hint.
-- Raise › Capital relationships reads "Committed · received <date>" from the
-  stored match only. An investor still reads just the commitment's status.
+- `services/legalDocTypes.ts` gains `LIBRARY_SLUG_FOR` / `librarySlugFor`
+  (seven spellings → their `legal_templates` row) and `BUNDLED_SENT_DIRECTLY`
+  (`partner_msa_v1`, until PR 2).
+- `templateBodyFor` and `createAndSendEnvelope` resolve the row by slug: an
+  envelope records, prints and dedupes under it (either spelling still
+  dedupes), and `envelope_created` adds `requested_as`.
+- The 3-way NDA and the deck-share NDA read their rows and refuse a field
+  left (409 `template_fields_unfilled`; deck-share 503
+  `template_unreadable`), with no free-text fallback.
+- Usage counts the store's own slugs, matches exactly first, folds spellings
+  through the same map, counts partner deals under `partner_services`, and
+  counts a relationship row and its envelope once. The drill-down uses the
+  same fold. `GET /templates/outside` lists `BUNDLED_SENT_DIRECTLY`.
 
 ## The LP's capital call opens on the amount, and the fee statement is on screen (D717, #1859)
 
@@ -31,6 +30,18 @@
 - "Management fee statements" lists the LP's issued statements under My
   commitment, newest open, drawn by `FeeStatementView` with no account digits.
   Frontend only: no route, migration or API method changes.
+
+## GitHub sign-ins renew themselves, and disconnecting revokes them (D655 follow-up, #1883)
+
+- GitHub user tokens renew 60 seconds before expiry. Rotated tokens are stored
+  with compare-and-swap so a concurrent reconnect is preserved. An exclusive
+  lease in D1 prevents duplicate renewals even if KV fails; lease losers
+  wait for the result and never renew on their own.
+- A refused refresh shows Reconnect and is not retried until sign-in. Temporary
+  failures leave credentials intact. Disconnect revokes the authorization best
+  effort; the App remains installed on the member's repositories.
+- No new routes, bindings or migrations. Expiry can be enabled by the owner
+  after this change merges; setup remains tracked in #1008 and #1885.
 
 ## Every connector's page, as data the Worker holds to its code (D753, #1875)
 
@@ -47,6 +58,24 @@
   Calendar, Microsoft 365) are gone until each live check is recorded with its
   date. Google's third permission now reads "Gmail (read-only) is asked for at
   sign-in; Axal VC does not read your Gmail."
+
+## The template editor's Pages view and Compare versions (D717, #1853)
+
+- **Pages.** The editor's middle pane switches between "Live paper" and
+  "Pages". Pages draws the unsaved draft's real PDF from
+  `POST /templates/render.pdf` one page at a time, with "Page X of Y",
+  Previous, Next and pinch-to-zoom on touch. It says when the fallback
+  renderer drew it, and when the draft has changed since. New:
+  `pages/admin/contracts/PdfPages.jsx` and `DraftPages.jsx`.
+- **Compare versions.** It sets any two saved versions, or one and the draft,
+  side by side, with deletions struck through and insertions underlined, and
+  lists title, kind and party changes. Restore copies a body only. New:
+  `pages/admin/contracts/VersionCompare.jsx` and `lib/templateVersions.js`.
+- One new dependency: `pdfjs-dist` pinned at exactly `6.4.299` (its legacy
+  build), loaded only when Pages opens. A guard test fails if the installed
+  bundles gain an eval path.
+- `lib/api.js` exports `rawRequestHeaders`; `contractsApi.renderPdfBlob` and
+  `PaperPreview`'s `paperRequest` are new. No Worker change, no migration.
 
 ## Signing in four steps, at every width (D717, #1857)
 
