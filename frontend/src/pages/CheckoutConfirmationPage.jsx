@@ -2,39 +2,71 @@
 //   Shows the order number, an itemized summary (from getOrder), a
 //   "Download Invoice PDF" action (authenticated fetch → blob via
 //   orderInvoiceBlob — NOT a plain <a href>), and "Go to Dashboard".
-// If the order param is missing/invalid → redirect to /products.
+// If the order param is missing/invalid → redirect to /plans-and-pricing.
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CheckCircle2, Download, LayoutDashboard, Loader2, AlertTriangle, Package } from 'lucide-react';
 import { api } from '../lib/api';
 import { formatMoney, formatDate } from '../components/products/productsShared';
+import { microMoney, purchaseState } from '../lib/aiTokens';
+
+// D755: only reads the owner's order. Every retry waits; unmount cancels timers
+// and ignores late replies. There is no credit/confirmation write here.
+export const ORDER_POLL_DELAYS = Object.freeze([1000, 2000, 4000, 8000, 15000, 30000, 30000, 30000]);
+export function watchOrder(orderRef, {
+  tokenPackHint = false, onOrder, onError, onNotFound, onExhausted,
+  load = api.getOrder, schedule = setTimeout, cancel = clearTimeout,
+} = {}) {
+  let stopped = false, timer = null, attempts = 0, knownPack = tokenPackHint;
+  const read = async () => {
+    attempts += 1;
+    try {
+      const result = await load(orderRef);
+      if (stopped) return;
+      if (!result?.order) { onNotFound(); return; }
+      const value = result.order;
+      knownPack ||= !!value.ai_topup;
+      onOrder(value);
+      onError(null);
+      const state = purchaseState(value.ai_topup);
+      if (!knownPack || ['credited', 'refunded', 'disputed'].includes(state)) return;
+    } catch (error) {
+      if (stopped) return;
+      if (error?.status === 404) { onNotFound(); return; }
+      onError(error?.message || 'Could not load your order.');
+      if (!knownPack) return;
+    }
+    if (attempts > ORDER_POLL_DELAYS.length) { onExhausted(); return; }
+    timer = schedule(read, ORDER_POLL_DELAYS[attempts - 1]);
+  };
+  void read();
+  return () => { stopped = true; if (timer !== null) cancel(timer); };
+}
+
+
 
 export default function CheckoutConfirmationPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const orderRef = params.get('order') || '';
+  // A navigation hint can keep a missing projection pending; it can never prove credit.
+  const tokenPackHint = params.has('token_pack');
 
+  const [pollingStopped, setPollingStopped] = useState(false);
   const [order, setOrder] = useState(null);   // null = loading
   const [error, setError] = useState(null);
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState(null);
 
   useEffect(() => {
-    if (!orderRef) { navigate('/products', { replace: true }); return; }
-    let cancelled = false;
-    api.getOrder(orderRef)
-      .then((r) => {
-        if (cancelled) return;
-        if (!r?.order) { navigate('/products', { replace: true }); return; }
-        setOrder(r.order);
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        if (e?.status === 404) { navigate('/products', { replace: true }); return; }
-        setError(e?.message || 'Could not load your order.');
-      });
-    return () => { cancelled = true; };
-  }, [orderRef, navigate]);
+    setOrder(null); setError(null); setPollingStopped(false);
+    if (!orderRef) { navigate('/plans-and-pricing', { replace: true }); return; }
+    return watchOrder(orderRef, {
+      tokenPackHint, onOrder: setOrder, onError: setError,
+      onNotFound: () => navigate('/plans-and-pricing', { replace: true }),
+      onExhausted: () => setPollingStopped(true),
+    });
+  }, [orderRef, tokenPackHint, navigate]);
 
   const downloadInvoice = useCallback(async () => {
     if (downloading) return;
@@ -57,7 +89,7 @@ export default function CheckoutConfirmationPage() {
     }
   }, [orderRef, downloading]);
 
-  if (error) {
+  if (error && order === null) {
     return (
       <div className="max-w-lg mx-auto py-16 text-center">
         <span className="inline-flex w-14 h-14 rounded-2xl bg-red-50 dark:bg-red-950/40 text-red-500 items-center justify-center mb-4">
@@ -65,7 +97,7 @@ export default function CheckoutConfirmationPage() {
         </span>
         <h1 className="text-lg font-bold text-gray-900 dark:text-gray-100">{error}</h1>
         <button onClick={() => navigate('/plans-and-pricing')} className="mt-4 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium">
-          Back to Products
+          Back to Plans &amp; Pricing
         </button>
       </div>
     );
@@ -80,6 +112,16 @@ export default function CheckoutConfirmationPage() {
   }
 
   const items = Array.isArray(order.items) ? order.items : [];
+  const topup = order.ai_topup;
+  const isPack = tokenPackHint || !!topup;
+  const state = purchaseState(topup);
+  const money = value => Number.isSafeInteger(value) && value >= 0 ? microMoney(value) : null;
+  const amount = money(topup?.amount_microusd)
+    ?? money(topup?.credit_microusd)
+    ?? (Number.isSafeInteger(order.subtotal) && order.subtotal >= 0 ? formatMoney(order.subtotal, order.currency) : null);
+  const title = !isPack ? (order.status === 'paid' ? 'Order confirmed' : 'Order received')
+    : state === 'credited' ? 'Tokens added' : state === 'refunded' ? 'Tokens refunded'
+      : state === 'disputed' ? 'Payment disputed' : 'Order received';
 
   return (
     <div className="max-w-2xl mx-auto space-y-6 py-4">
@@ -88,12 +130,21 @@ export default function CheckoutConfirmationPage() {
           <CheckCircle2 size={34} />
         </span>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-          {order.status === 'paid' ? 'Order confirmed' : 'Order received'}
+          {title}
         </h1>
         <p className="mt-1.5 text-sm text-gray-500 dark:text-gray-400">
           Thank you — your order number is <span className="font-mono font-semibold text-gray-700 dark:text-gray-200">{order.order_ref}</span>.
         </p>
       </div>
+
+      {isPack && <div className="text-center text-sm text-gray-600 dark:text-gray-300" role="status">
+        {state === 'credited' ? <p>New balance: {money(topup?.balance_microusd) ?? 'Unreadable'}</p>
+          : state === 'refunded' ? <p>This token-pack payment has a refund. Check Usage for the updated balance.</p>
+            : state === 'disputed' ? <p>This token-pack payment is disputed. Check Usage for the latest balance.</p>
+              : pollingStopped ? <p>{order.status === 'paid' ? 'The payment is recorded.' : 'Your order is recorded.'} Check Usage for the latest token balance.</p>
+                : <p>Adding {amount ?? 'tokens'} to your top-up balance. This page updates when Stripe confirms the payment.</p>}
+        {error && <p className="mt-2 text-red-600 dark:text-red-400">{error}</p>}
+      </div>}
 
       <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5">
         <div className="flex items-center gap-2 mb-3">
@@ -154,10 +205,10 @@ export default function CheckoutConfirmationPage() {
           Download Invoice PDF
         </button>
         <button
-          onClick={() => navigate('/dashboard')}
+          onClick={() => navigate(isPack ? '/account/usage#top-ups' : '/dashboard')}
           className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold"
         >
-          <LayoutDashboard size={15} /> Go to Dashboard
+          <LayoutDashboard size={15} /> {isPack ? 'See usage' : 'Go to Dashboard'}
         </button>
       </div>
     </div>

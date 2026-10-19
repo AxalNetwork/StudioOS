@@ -258,6 +258,19 @@ const BUDGET = {
   balance_microusd: 10_000_000, held_for_review: [],
 };
 const PRODUCT = { configured: true, state: 'ready', product: { price_id: 'price_abc123', currency: 'usd', unit_amount: 1000 } };
+// D755 (#1915): A10m's Plans rows are the public plans-and-packs read's.
+const ALLOW = (d, m) => ({ daily_microusd: d, monthly_microusd: m, source: 'environment' });
+const PLANS = {
+  plans: [
+    { family: 'founder', licence_key: 'founder:free', product_id: null, plan_name: null, free: true, prices: [], allowance: ALLOW(0, 0) },
+    { family: 'investor', licence_key: 'investor:free', product_id: null, plan_name: null, free: true, prices: [], allowance: ALLOW(0, 0) },
+    { family: 'other', licence_key: 'other', product_id: null, plan_name: null, free: true, prices: [], allowance: ALLOW(0, 0) },
+    { family: 'advisor', licence_key: 'advisor', product_id: 'prod_adv', plan_name: 'Advisor', free: false, prices: [{ price_id: 'price_adv', unit_amount: 4900, currency: 'usd', interval: 'month', interval_count: 1 }], allowance: ALLOW(500_000, 2_000_000) },
+    { family: 'founder', licence_key: 'founder:growth', product_id: 'prod_g', plan_name: 'Validate + Build', free: false, prices: [{ price_id: 'price_g', unit_amount: 2000, currency: 'usd', interval: 'month', interval_count: 1 }], allowance: ALLOW(1_000_000, 5_000_000) },
+    { family: 'partner', licence_key: 'partner', product_id: 'prod_p', plan_name: 'Operating Partner', free: false, prices: [{ price_id: 'price_p', unit_amount: 9900, currency: 'usd', interval: 'month', interval_count: 1 }], allowance: ALLOW(0, 3_000_000) },
+  ],
+  packs: [], covers: 'Covers Eadwyn.', resets: 'Resets at 00:00 UTC.',
+};
 const SPEND = {
   ok: true, recorded: true,
   month: { key: '2026-10', spend_usd: 0.91, cap_usd: 5, enforced_usd: null, calls: 9 },
@@ -303,7 +316,7 @@ test('5. A2m: Usage on a phone draws the canvas bar and its three sections, then
   assert.match(t, /This month Resets on the 1st at 00:00 UTC \$3\.10 of \$5\.00/);
   assert.match(t, /Held by runs in progress Returned if a run does not finish in 5 minutes \$0\.05/);
   assert.match(t, /Top-up balance Runs use your allowance first, then your top-up \$10\.00/);
-  assert.match(markup, /<a href="\/checkout\?ai_topup=1"[^>]*data-testid="usage-add-tokens">Add tokens<\/a>/);
+  assert.match(markup, /<a href="\/plans-and-pricing#token-packs"[^>]*data-testid="usage-add-tokens">Add tokens<\/a>/);
   assert.match(markup, /style="width:42%"/, 'Today\'s 7px bar');
   // Kept below, in today's form: the four cards the board does not draw.
   for (const card of ['usage-card-days', 'usage-card-where', 'usage-card-rates', 'usage-card-last-run']) assert.match(markup, new RegExp(`data-testid="${card}"`), card);
@@ -312,10 +325,43 @@ test('5. A2m: Usage on a phone draws the canvas bar and its three sections, then
   // Without a configured top-up there is no button, and the line says why.
   const off = text(html(h(UsagePhoneView, { ...usageProps, product: ready({ configured: false }) })));
   assert.doesNotMatch(off, /Add tokens/);
-  assert.match(off, /Top-ups are not available yet\. Runs use your included allowance only\./);
+  // D755 (#1916): one sentence, lib/aiTokens.js's.
+  assert.match(off, /Top-up isn't available yet\. Runs use your included allowance only\./);
   // A paused allowance still says so, above the figures.
   const paused = text(html(h(UsagePhoneView, { ...usageProps, budget: ready({ ...BUDGET, held_for_review: [{ id: 1 }] }) })));
   assert.match(paused, /AI allowance Runs paused A run cost more than it held\./);
+});
+
+test('5b. D751 (#1881): a suggested connector Axal cannot connect reads Not set up here, and a Super Admin\'s row goes to its keys', () => {
+  const P = (key, display_name, integration_type, status, extra = {}) => ({
+    key, display_name, integration_type, status, tier: 'free', auth_type: 'oauth2', description: `${display_name} description.`,
+    capabilities: [], has_implementation: true, locked_for_user: false, ...extra,
+  });
+  const catalogue = buildCatalogue({
+    providers: [P('github', 'GitHub', 'code', 'beta', { configured: false })],
+    items: [], waitlist: [], firstParty: { microsoft: { configured: false, connected: false } },
+  });
+  const data = { status: 'ready', catalogue, items: [], itemsFailed: false, reload: noop,
+    suggestions: [{ provider_key: 'github', reason: 'Build has no code yet.' }, { provider_key: 'microsoft', reason: 'No calendar yet.' }] };
+  // The row's element, from its opening tag to the first close of that tag, found by text, not a built pattern.
+  const row = (markup, key) => {
+    const i = markup.indexOf(` data-testid="connector-suggested-${key}"`);
+    if (i < 0) return '';
+    const start = markup.lastIndexOf('<', i);
+    const tag = /^<(a|div|button)\b/.exec(markup.slice(start))?.[1];
+    const end = tag ? markup.indexOf(`</${tag}>`, i) : -1;
+    return end < 0 ? '' : markup.slice(start, end + tag.length + 3);
+  };
+  const plain = html(h(ConnectorsPhoneView, { data }), '/account/connectors');
+  const gh = row(plain, 'github');
+  assert.match(text(gh), /GitHub .*Not set up here/, 'the reason first, as the card says it');
+  assert.doesNotMatch(text(gh), /Beta/);
+  assert.match(text(row(plain, 'microsoft')), /Not set up here/);
+  assert.doesNotMatch(plain, /Add its keys in Integration keys/);
+  const sup = html(h(ConnectorsPhoneView, { data, superAdmin: true }), '/account/connectors');
+  assert.match(row(sup, 'github'), /^<a[^>]*href="\/admin\?tab=integration-keys"/);
+  assert.match(text(row(sup, 'github')), /Add its keys in Integration keys\./);
+  assert.doesNotMatch(row(sup, 'microsoft'), /integration-keys/, 'a first-party client is not a console key yet');
 });
 
 test('5. A3m: Connectors on a phone draws the canvas bar, Yours and Suggested for you, then keeps Discover', () => {
@@ -490,7 +536,7 @@ const PHONE_VIEWS = {
   events: () => h(EventsPhoneView, { events: { status: 'ready', hosting: HOSTING, attending: TICKETS }, suggested: SUGGESTED, now: EV_NOW }),
   learning: () => h(LearningPhoneView, { gated: false, ...LEARN, now: Date.parse('2026-10-17T12:00:00Z') }),
   help: () => h(HelpPhoneView, { popular: POPULAR, areas: HELP_AREAS }),
-  pricing: () => h(PricingPhoneView, { role: 'founder', billing: ready(GROWTH), budget: ready(BUDGET), product: ready(PRODUCT) }),
+  pricing: () => h(PricingPhoneView, { pricing: ready(PLANS), budget: ready(BUDGET), product: ready(PRODUCT) }),
 };
 // Decision 10's departures in a section list, named rather than matched loosely.
 const DEPARTED_SECTIONS = {
@@ -544,7 +590,7 @@ test('5. at desktop width the pages draw no bar and keep their own heading', () 
   assert.match(docs, /\) : phone \? \(\s*<HelpPhoneHome[\s\S]*?\) : \(\s*<HelpHome/, 'only the home has a phone view; a guide page is unchanged');
   const products = read('frontend/src/pages/ProductsPage.jsx');
   assert.match(products, /\{!phone && \(\s*<>\s*<h1 [^>]*>\s*<Package size=\{26\}[^>]*\/> Plans &amp; Pricing/);
-  assert.match(products, /return phone \? <PricingPhone role=\{user\?\.role\}>\{page\}<\/PricingPhone> : page;/);
+  assert.match(products, /return phone \? <PricingPhone pricing=\{pricing\} budget=\{budget\}>\{page\}<\/PricingPhone> : page;/);
 });
 
 test('5. A4m–A10m: each section reads its values from the page\'s sources', () => {
@@ -591,14 +637,15 @@ test('5. A4m–A10m: each section reads its values from the page\'s sources', ()
   assert.match(html(PHONE_VIEWS.help()), /href="\/help\/tickets\?new=1"[^>]*>[\s\S]*?Open a ticket[\s\S]*?Replies appear in My tickets/);
 
   const pricing = text(html(PHONE_VIEWS.pricing()));
-  assert.match(pricing, /Plans Free Start validating one idea\. \$0 Validate \+ Build [^$]*· AI \$1\.00 a day, \$5\.00 a month \$20 \/ month Raise \+ Grow [^$]*\$100 \/ month Manage plan/);
+  // D755 §11: every family's plans, each with its price and its own allowance; the member's plan under "Your plan".
+  assert.match(pricing, /Plans Founder Free No AI allowance on this plan\. Runs use your top-up balance\. \$0 Founder · Validate \+ Build Your plan · \$1\.00 a day · \$5\.00 a month \$20 \/ month Investor Free [^$]*\$0 Advisor · Advisor \$0\.50 a day · \$2\.00 a month \$49 \/ month Operating Partner · Operating Partner \$3\.00 a month \$99 \/ month Exploring and other accounts [^$]*\$0 Manage plan/);
   assert.match(html(PHONE_VIEWS.pricing()), /href="\/account\/billing"[^>]*>Manage plan</);
   assert.ok(pricing.includes(`Tokens Past your allowance ${TOKENS_LINE} Add tokens`));
   assert.ok(CANVAS_PAGES.pricing.chunk.includes(TOKENS_LINE), 'the Tokens line is AMP\'s');
-  assert.match(html(PHONE_VIEWS.pricing()), /<a href="\/checkout\?ai_topup=1"[^>]*>[\s\S]*?Past your allowance/);
-  // No other role has a tier ladder, so it gets no Plans section.
-  assert.deepEqual(sectionTitles(html(h(PricingPhoneView, { role: 'advisor', billing: ready({}), budget: ready(BUDGET), product: ready(PRODUCT) }))), ['Tokens']);
-  assert.match(text(html(h(PricingPhoneView, { role: 'founder', billing: ready(GROWTH), budget: ready(BUDGET), product: ready({ configured: false }) }))), /Top-ups are not available yet\./);
+  assert.match(html(PHONE_VIEWS.pricing()), /<a href="\/plans-and-pricing#token-packs"[^>]*>[\s\S]*?Past your allowance/);
+  // D755 §11: every account type sees the Plans, the phone included.
+  assert.deepEqual(sectionTitles(html(h(PricingPhoneView, { pricing: ready(PLANS), budget: ready({ ...BUDGET, licence: 'advisor' }), product: ready(PRODUCT) }))), ['Plans', 'Tokens']);
+  assert.match(text(html(h(PricingPhoneView, { pricing: ready(PLANS), budget: ready(BUDGET), product: ready({ configured: false }) }))), /Top-up isn't available yet\. Runs use your included allowance only\./);
 });
 
 // --- 6. Member routes --------------------------------------------------------------
@@ -662,18 +709,21 @@ test('8. Help: Popular this week first, no For you now, and Email support says w
   assert.match(read('frontend/src/pages/docs/DocsLayout.jsx'), /\{!trimmedQuery && area && <AreaGuides area=\{area\} \/>\}/);
 });
 
-test('8. Plans: only the current plan\'s row carries the AI allowance', () => {
+test('8. Plans (D755 §11): every row carries its own allowance; the member\'s licence marks one row', () => {
   const markup = html(PHONE_VIEWS.pricing());
-  assert.equal([...text(markup).matchAll(/ a day/g)].length, 1);
-  assert.match(markup, /data-testid="pricing-phone-current"/);
+  assert.equal([...text(markup).matchAll(/ a day/g)].length, 2, 'Validate + Build and Advisor each say their day allowance');
   assert.equal([...markup.matchAll(/data-testid="pricing-phone-current"/g)].length, 1);
-  // While the plan is out, no row is current and none carries the line.
-  const loading = html(h(PricingPhoneView, { role: 'founder', billing: LOADING, budget: ready(BUDGET), product: ready(PRODUCT) }));
-  assert.doesNotMatch(text(loading), / a day/);
-  assert.doesNotMatch(loading, /pricing-phone-current/);
-  // An investor's current tier comes from their own status route.
-  const inv = text(html(h(PricingPhoneView, { role: 'investor', billing: ready({ tier: 'professional' }), budget: ready(BUDGET), product: ready(PRODUCT) })));
-  assert.match(inv, /Professional [^$]*· AI \$1\.00 a day/);
+  // While the member's allowance is out, no row is current; the allowances still show.
+  const noBudget = html(h(PricingPhoneView, { pricing: ready(PLANS), budget: LOADING, product: ready(PRODUCT) }));
+  assert.doesNotMatch(noBudget, /pricing-phone-current/);
+  assert.match(text(noBudget), /\$1\.00 a day · \$5\.00 a month/);
+  // While the read is out, no row and no "$0.00": the plans say they could not be read.
+  const out = html(h(PricingPhoneView, { pricing: UNREADABLE, budget: ready(BUDGET), product: ready(PRODUCT) }));
+  assert.doesNotMatch(out, /pricing-phone-(current|tier)/);
+  assert.doesNotMatch(text(out), /\$0\.00/);
+  // The current row follows the licence, not a role ladder.
+  const adv = text(html(h(PricingPhoneView, { pricing: ready(PLANS), budget: ready({ ...BUDGET, licence: 'advisor' }), product: ready(PRODUCT) })));
+  assert.match(adv, /Advisor · Advisor Your plan · \$0\.50 a day/);
 });
 
 test('8. a gated Learning draws the coming-soon line and Browse, Articles open, and reads none of the others', () => {
@@ -780,7 +830,9 @@ test('11. the A4m–A10m phone views pass no company or venture to a read', () =
   ];
   for (const b of blocks) assert.doesNotMatch(b, /ompany(Id|_id)|venture|useActiveCompany|getActiveCompanyId|X-Company-Id/);
   const pricing = read('frontend/src/pages/account/PricingPhone.jsx');
-  assert.match(pricing, /useBillingStatus\(role\)/);
+  // D755: the public read and the member's own allowance; no billing read, no ladder of typed prices.
+  assert.match(pricing, /publicPricingApi\.plansAndPacks\(\)/);
   assert.match(pricing, /aiBudgetApi\.mine\(\)/);
   assert.match(pricing, /aiBudgetApi\.topUp\(\)/);
+  assert.doesNotMatch(pricing, /from '[^']*data\/pricing'|TIER_PLANS|useBillingStatus/);
 });

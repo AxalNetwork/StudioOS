@@ -877,7 +877,8 @@ test('D685 §5.9: /finish counts the chunks; a late chunk queues the job; the jo
   const kinds = receipt.body.items.map((i: any) => i.kind);
   assert.ok(kinds.includes('final') && kinds.includes('summarised') && kinds.includes('structured'), kinds.join(','));
   // structureSession was the one that ran, with its own receipt.
-  assert.equal(f.db.prepare("SELECT COUNT(*) AS n FROM interview_structure_receipts WHERE session_id = ? AND step = 'structured'").get(sid).n, 1);
+  // D757 (#1923): one line per structure pass.
+  assert.equal(f.db.prepare("SELECT COUNT(*) AS n FROM interview_structure_receipts WHERE session_id = ? AND step = 'structured'").get(sid).n, 2);
 });
 
 test('D685 §5.9: a failed chunk fails the run with a sentence; a retry resumes without billing a chunk twice', async () => {

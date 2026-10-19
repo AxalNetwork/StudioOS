@@ -3,11 +3,11 @@
  * member's side. Pure, so the rules are tested without a screen.
  *
  * Two facts the copy must not blur (D684 §6, §11):
- *   · A reply is free-form only inside 24 hours. WhatsApp counts from the
- *     customer's last message; Telegram Business lets a bot act only in chats
- *     active in the last 24 hours. After that WhatsApp needs an approved
- *     template, which this phase does not send, so the composer says so and
- *     sends nothing.
+ *   · A reply is free-form only within 24 hours of the contact's last
+ *     message, on both channels (D756): Telegram Business lets a bot reply
+ *     only in chats with an incoming message in the last 24 hours. After that
+ *     WhatsApp needs an approved template, which this phase does not send, so
+ *     the composer says so and sends nothing.
  *   · Only WhatsApp reports delivery. Telegram says the message was accepted,
  *     so Telegram is "Sent", never "Delivered" or "Read".
  */
@@ -36,7 +36,7 @@ export function replyWindowCopy(thread) {
   if (thread.provider === 'whatsapp') {
     return { open: false, text: 'It has been more than 24 hours since your contact last wrote, so WhatsApp only allows an approved template message. Sending templates is not available yet, and nothing is sent from here.' };
   }
-  return { open: false, text: `It has been more than 24 hours since this chat was last active, so ${name} does not let StudioOS reply. Reply from ${name}, or wait for your contact to write.` };
+  return { open: false, text: `It has been more than 24 hours since your contact last wrote, so ${name} does not let Axal reply. Reply from ${name}, or wait for your contact to write.` };
 }
 
 /**

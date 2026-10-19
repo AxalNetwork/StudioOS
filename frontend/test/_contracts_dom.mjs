@@ -36,7 +36,12 @@ export function installDocument(search = '') {
     nodeType: 9, nodeName: '#document', activeElement: null, defaultView: globalThis,
     createElement(tag) { const n = makeNode(tag); n.ownerDocument = document; return n; },
     createElementNS(_ns, tag) { return document.createElement(tag); },
-    createTextNode(text) { const n = makeNode('#text'); n.textContent = String(text); n.ownerDocument = document; return n; },
+    // React updates a text node through `nodeValue`, so it reads and writes the same text.
+    createTextNode(text) {
+      const n = makeNode('#text'); n.textContent = String(text); n.ownerDocument = document;
+      Object.defineProperty(n, 'nodeValue', { configurable: true, get() { return this.textContent; }, set(v) { this.textContent = String(v); } });
+      return n;
+    },
     addEventListener() {}, removeEventListener() {},
   };
   document.documentElement = document.createElement('html');

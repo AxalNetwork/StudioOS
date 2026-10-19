@@ -15,7 +15,8 @@
  *              and that account's own `/confirm` plus the member's Confirm
  *              in Axal (within the original ten minutes) joins the two; a `business_connection` is recorded
  *              against that account
- *   talk       sendMessage (business and private), getFile + download, setWebhook
+ *   talk       sendMessage (business and private), getFile + download, setWebhook,
+ *              and getMe + getWebhookInfo for the Super Admin's health read (D756)
  *   consent    (D756 §1.5, #1977) the contact's own whole YES, NO or STOP —
  *              from the chat's own user, never a business bot or an offline
  *              auto-reply — is normalised as a `consent_reply` that keeps
@@ -23,10 +24,16 @@
  *              Axal's notice on the member's business connection. Whether an
  *              answer counts is consent.ts's, not this file's.
  *
- * Bot API facts relied on (core.telegram.org/bots/api, read 2026-10-13):
+ * Bot API facts relied on (core.telegram.org/bots/api, read 2026-10-13; the
+ * reply window, update ids and retry_after re-read against Bot API 10.3 on
+ * 2026-10-18, D756):
  *   - BusinessConnection: id, user, user_chat_id, date, is_enabled, and since
  *     Bot API 9.0 `rights` (BusinessBotRights) in place of `can_reply`. A bot
- *     may act only in chats active in the last 24 hours.
+ *     may reply only in private chats that had incoming messages in the last
+ *     24 hours (BusinessBotRights.can_reply).
+ *   - After a week with no updates, the next `update_id` is chosen at random,
+ *     so an update is claimed on its id plus a hash of its own ids (D756).
+ *   - A 429 carries `parameters.retry_after`, the seconds to wait.
  *   - business_message / edited_business_message are Messages carrying
  *     `business_connection_id`; deleted_business_messages is
  *     BusinessMessagesDeleted { business_connection_id, chat, message_ids }.
@@ -114,6 +121,47 @@ export function telegramBusinessConnectionId(update: unknown): string | null {
   return m ? idStr(m.business_connection_id) : null;
 }
 
+/** FNV-1a, 32 bits, as 8 hex characters: short, synchronous and stable. Not a secret, only a discriminator. */
+function fnv1a(text: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(16).padStart(8, '0');
+}
+
+/**
+ * The event key of an Update: `<update_id>:<hash of its own ids>` (D756). After
+ * a quiet week Telegram restarts `update_id` at random, and claims live 90 days,
+ * so a bare id could match a different, older update; a redelivery of the same
+ * update has the same ids and so the same key. Null when there is no update_id.
+ */
+export function telegramEventId(update: unknown): string | null {
+  const u = obj(update);
+  const updateId = idStr(u?.update_id);
+  if (!u || !updateId) return null;
+  const parts: string[] = [];
+  const pm = obj(u.message);
+  const bc = obj(u.business_connection);
+  const del = obj(u.deleted_business_messages);
+  const edited = obj(u.edited_business_message);
+  const msg = obj(u.business_message) ?? edited;
+  if (pm) parts.push('message', idStr(obj(pm.chat)?.id) ?? '', idStr(pm.message_id) ?? '');
+  else if (bc) parts.push('business_connection', idStr(bc.id) ?? '');
+  else if (del) {
+    const ids = Array.isArray(del.message_ids) ? del.message_ids.map(idStr).filter((x: string | null): x is string => !!x) : [];
+    parts.push('deleted_business_messages', idStr(del.business_connection_id) ?? '', idStr(obj(del.chat)?.id) ?? '', ids.join(','));
+  } else if (msg) {
+    parts.push(edited ? 'edited_business_message' : 'business_message', idStr(msg.business_connection_id) ?? '',
+      idStr(obj(msg.chat)?.id) ?? '', idStr(msg.message_id) ?? '', edited ? String(edited.edit_date ?? '') : '');
+  }
+  return `${updateId}:${fnv1a(parts.join('|'))}`;
+}
+
+/** Telegram's "manage this chat" button: `/start bizChat<chat id>` in the member's private chat with the bot. */
+const MANAGE_CHAT_RE = /^\/start(?:@[A-Za-z0-9_]+)?\s+bizChat\d{1,20}$/;
+
 /**
  * One Update as one InboundEvent.
  *
@@ -126,7 +174,7 @@ export function telegramBusinessConnectionId(update: unknown): string | null {
  */
 export function normaliseTelegramUpdate(update: unknown, ownerTelegramUserId: string | null = null): InboundEvent {
   const u = obj(update);
-  const eventId = idStr(u?.update_id) ?? '';
+  const eventId = telegramEventId(u) ?? '';
   const ignored = (reason: string): InboundEvent => ({ kind: 'ignored', provider: 'telegram', eventId, reason });
   if (!u || !eventId) return ignored('malformed');
 
@@ -137,9 +185,14 @@ export function normaliseTelegramUpdate(update: unknown, ownerTelegramUserId: st
     const from = obj(pm.from);
     if (!chat || chat.type !== 'private' || !from || from.is_bot) return ignored('not_a_private_message');
     const text = typeof pm.text === 'string' ? pm.text.trim() : '';
-    const start = /^\/start(?:@[A-Za-z0-9_]+)?\s+([A-Za-z0-9_-]{1,64})$/.exec(text);
     const tgUser = idStr(from.id);
     const chatId = idStr(chat.id);
+    // Before the link code: a real code never starts with `bizChat` (linkCodes.ts has no `i`),
+    // and this press must spend neither a code nor a link attempt (D756). The managed chat's id is not kept.
+    if (tgUser && chatId && MANAGE_CHAT_RE.test(text)) {
+      return { kind: 'manage_chat', provider: 'telegram', eventId, telegramUserId: tgUser, chatId };
+    }
+    const start = /^\/start(?:@[A-Za-z0-9_]+)?\s+([A-Za-z0-9_-]{1,64})$/.exec(text);
     if (tgUser && chatId && /^\/confirm(?:@[A-Za-z0-9_]+)?$/.test(text)) {
       return { kind: 'link_confirm', provider: 'telegram', eventId, telegramUserId: tgUser, chatId, displayName: displayName(from) };
     }
@@ -253,6 +306,28 @@ export async function businessConnectionOwner(env: Env, businessConnectionId: st
   const row = await env.DB.prepare('SELECT telegram_user_id FROM telegram_business_connections WHERE business_connection_id = ?')
     .bind(String(businessConnectionId)).first<{ telegram_user_id: string }>();
   return row ? String(row.telegram_user_id) : null;
+}
+
+/**
+ * The member's Telegram Business state (D756): `enabled` with the connection a
+ * reply goes out on (the same row `activeBusinessConnection` picks), `disabled`
+ * when every connection they have is switched off in Telegram, or `none`. The
+ * voice job and the reply route both read it, so a switched-off bot is honoured
+ * the same way everywhere.
+ */
+export type TelegramBusinessState =
+  | { state: 'enabled'; businessConnectionId: string; canReply: boolean }
+  | { state: 'disabled' }
+  | { state: 'none' };
+
+export async function telegramBusinessState(env: Env, userId: number): Promise<TelegramBusinessState> {
+  const row = await env.DB.prepare(
+    `SELECT business_connection_id, can_reply, is_enabled FROM telegram_business_connections
+      WHERE user_id = ? ORDER BY is_enabled DESC, updated_at DESC, id DESC LIMIT 1`,
+  ).bind(userId).first<{ business_connection_id: string; can_reply: number; is_enabled: number }>();
+  if (!row) return { state: 'none' };
+  if (!row.is_enabled) return { state: 'disabled' };
+  return { state: 'enabled', businessConnectionId: String(row.business_connection_id), canReply: !!row.can_reply };
 }
 
 /** The member's newest enabled business connection: the one a reply goes out on. */
@@ -444,6 +519,8 @@ export const TELEGRAM_COPY = {
   memberInactive: 'The Axal account behind that link is no longer active.',
   linkPrompt: 'Axal received your Telegram Business connection, but this Telegram account is not linked to an Axal account yet. In Axal, open Account › Connectors and press Link Telegram. Nothing from your chats is stored until you do.',
   test: 'This is a test message from Axal. Your Telegram account is connected.',
+  /** The answer to Telegram's "manage this chat" button (`/start bizChat<id>`), D756. */
+  manageChat: 'To manage this chat, open Axal › Interviews.',
   /**
    * D756 §1.7 — the consent notice v1, in the founder's voice (it is sent on
    * behalf of the business account). New words are a new version
@@ -464,7 +541,15 @@ export const TELEGRAM_COPY = {
 // Talking to Telegram
 // ---------------------------------------------------------------------------
 
-type CallResult = { ok: true; result: any } | { ok: false; code: string; retryable: boolean; status: number };
+type CallResult =
+  | { ok: true; result: any }
+  | { ok: false; code: string; retryable: boolean; status: number; retryAfterSec?: number };
+
+/** Bot API 10.3: a 429's `parameters.retry_after`, "the number of seconds left to wait". Only a positive finite number counts. */
+function retryAfter(data: any): { retryAfterSec?: number } {
+  const n = Number(data?.parameters?.retry_after);
+  return Number.isFinite(n) && n > 0 ? { retryAfterSec: n } : {};
+}
 
 function failure(status: number): { code: string; retryable: boolean } {
   if (status === 429) return { code: 'rate_limited', retryable: true };
@@ -497,11 +582,11 @@ async function call(env: Env, method: string, body: Record<string, unknown>): Pr
   const status = Number(data?.error_code) || res.status || 500;
   const f = failure(status);
   console.error(`[channels] telegram ${method} failed status=${status} code=${f.code}`);
-  return { ok: false, ...f, status };
+  return { ok: false, ...f, status, ...retryAfter(data) };
 }
 
 function sendResult(r: CallResult, chatId: string): SendResult {
-  if (!r.ok) return { ok: false, code: r.code, retryable: r.retryable };
+  if (!r.ok) return { ok: false, code: r.code, retryable: r.retryable, ...(r.retryAfterSec ? { retryAfterSec: r.retryAfterSec } : {}) };
   const id = idStr(r.result?.message_id);
   // Acceptance by Telegram, never delivery (outbound.ts).
   return id ? { ok: true, externalMessageId: telegramMessageRef(chatId, id) } : { ok: false, code: 'send_unknown', retryable: false };
@@ -547,12 +632,12 @@ export async function sendPrivateMessage(env: Env, chatId: string, text: string)
 
 export type AudioResult =
   | { ok: true; bytes: Uint8Array; mime: string }
-  | { ok: false; code: string; retryable: boolean };
+  | { ok: false; code: string; retryable: boolean; retryAfterSec?: number };
 
 /** A voice note's audio: getFile, then the file URL. Refused above 20 MB, before and after download. */
 export async function fetchTelegramVoice(env: Env, fileId: string, mimeHint: string | null = null): Promise<AudioResult> {
   const meta = await call(env, 'getFile', { file_id: fileId });
-  if (!meta.ok) return { ok: false, code: meta.code, retryable: meta.retryable };
+  if (!meta.ok) return { ok: false, code: meta.code, retryable: meta.retryable, ...(meta.retryAfterSec ? { retryAfterSec: meta.retryAfterSec } : {}) };
   const size = Number(meta.result?.file_size);
   if (Number.isFinite(size) && size > TELEGRAM_MAX_DOWNLOAD_BYTES) return { ok: false, code: 'too_large', retryable: false };
   const path = typeof meta.result?.file_path === 'string' ? meta.result.file_path : '';
@@ -592,4 +677,120 @@ export async function setTelegramWebhook(env: Env, url: string): Promise<{ ok: t
     url, secret_token: secret, allowed_updates: [...TELEGRAM_ALLOWED_UPDATES], drop_pending_updates: false,
   });
   return r.ok ? { ok: true } : { ok: false, code: r.code };
+}
+
+// ---------------------------------------------------------------------------
+// The Super Admin's health read (D756 §1.2)
+// ---------------------------------------------------------------------------
+
+/** Every code `readTelegramHealth` can raise, in the order it lists them. */
+export const TELEGRAM_HEALTH_ISSUES = [
+  'token_rejected', 'telegram_unreachable', 'business_mode_off', 'username_mismatch', 'same_bot_as_news',
+  'base_url_missing', 'webhook_unregistered', 'webhook_elsewhere', 'updates_stale', 'delivery_error',
+] as const;
+export type TelegramHealthIssue = typeof TELEGRAM_HEALTH_ISSUES[number];
+
+type Unreached = { reachable: false; error: 'token_rejected' | 'telegram_unreachable' };
+
+export interface TelegramHealth {
+  ready: boolean;
+  issues: TelegramHealthIssue[];
+  bot: { reachable: true; business_mode: boolean; username_matches: boolean; separate_from_news_bot: boolean } | Unreached;
+  webhook: {
+    reachable: true; registered: boolean; url_matches: boolean; pending_update_count: number;
+    last_error_at: string | null; last_error: string | null; allowed_updates_match: boolean;
+  } | Unreached;
+}
+
+/** A delivery error older than this is still shown, but does not block `ready`. */
+const DELIVERY_ERROR_RECENT_MS = 24 * 60 * 60 * 1000;
+const LAST_ERROR_MAX_CHARS = 200;
+
+/** 401, 404 or 403: Telegram refused the token. Anything else that failed: it did not answer usefully. */
+const unreached = (r: CallResult & { ok: false }): Unreached => ({
+  reachable: false,
+  error: r.status === 401 || r.status === 404 || r.status === 403 ? 'token_rejected' : 'telegram_unreachable',
+});
+
+/** A Telegram username, compared as Telegram does: no leading @, any case. */
+const usernameKey = (v: unknown) => String(v ?? '').trim().replace(/^@/, '').toLowerCase();
+
+/** The bot id in front of a token's `:`, or null. */
+const botIdOf = (token: unknown) => /^(\d+):/.exec(String(token ?? '').trim())?.[1] ?? null;
+
+/**
+ * Telegram's error text as safe to show: control characters removed, the bot
+ * tokens, the webhook secret and anything shaped like `bot<digits>:<token>`
+ * replaced by •••, then clipped. Null when there is no text.
+ */
+function scrubTelegramError(env: Env, text: unknown): string | null {
+  let out = String(text ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ');
+  for (const secret of [env.TELEGRAM_CHANNEL_BOT_TOKEN, env.TELEGRAM_CHANNEL_WEBHOOK_SECRET, env.TELEGRAM_BOT_TOKEN]) {
+    const v = String(secret ?? '').trim();
+    if (v) out = out.split(v).join('•••');
+  }
+  out = out.replace(/bot\d+:[A-Za-z0-9_-]+/g, '•••').replace(/\d{5,}:[A-Za-z0-9_-]{20,}/g, '•••').trim();
+  return out ? out.slice(0, LAST_ERROR_MAX_CHARS) : null;
+}
+
+/**
+ * Whether the interview bot and its webhook are set up as Axal needs them:
+ * `getMe` and `getWebhookInfo`, in parallel, through `call()` (10 s each).
+ * Returns codes and numbers only: never the token, the secret, the URL
+ * Telegram reports, either bot id or the bot's username. `expectedUrl` is the
+ * address the admin POST registers, or null when there is none.
+ */
+export async function readTelegramHealth(env: Env, expectedUrl: string | null, now = Date.now()): Promise<TelegramHealth> {
+  const [me, info] = await Promise.all([call(env, 'getMe', {}), call(env, 'getWebhookInfo', {})]);
+  const issues = new Set<TelegramHealthIssue>();
+
+  let bot: TelegramHealth['bot'];
+  if (!me.ok) {
+    bot = unreached(me);
+    issues.add(bot.error);
+  } else {
+    const newsBot = botIdOf(env.TELEGRAM_BOT_TOKEN);
+    bot = {
+      reachable: true,
+      business_mode: me.result?.can_connect_to_business === true,
+      username_matches: !!usernameKey(me.result?.username) && usernameKey(me.result?.username) === usernameKey(env.TELEGRAM_CHANNEL_BOT_USERNAME),
+      separate_from_news_bot: !newsBot || idStr(me.result?.id) !== newsBot,
+    };
+    if (!bot.business_mode) issues.add('business_mode_off');
+    if (!bot.username_matches) issues.add('username_mismatch');
+    if (!bot.separate_from_news_bot) issues.add('same_bot_as_news');
+  }
+
+  let webhook: TelegramHealth['webhook'];
+  if (!info.ok) {
+    webhook = unreached(info);
+    issues.add(webhook.error);
+  } else {
+    const r = obj(info.result) ?? {};
+    const url = typeof r.url === 'string' ? r.url.trim() : '';
+    const allowed = Array.isArray(r.allowed_updates) ? r.allowed_updates.map(String) : null;
+    const want = new Set<string>(TELEGRAM_ALLOWED_UPDATES);
+    // No list means Telegram's default, which leaves out types Axal does not
+    // read and includes ones it does not ask for: never a match.
+    const allowedMatch = !!allowed && allowed.length === want.size && new Set(allowed).size === want.size && allowed.every((t) => want.has(t));
+    const errorDate = Number(r.last_error_date);
+    const lastErrorAt = Number.isFinite(errorDate) && errorDate > 0 ? new Date(errorDate * 1000).toISOString() : null;
+    webhook = {
+      reachable: true,
+      registered: !!url,
+      url_matches: !!url && !!expectedUrl && url === expectedUrl,
+      pending_update_count: Number.isFinite(Number(r.pending_update_count)) ? Math.max(0, Math.trunc(Number(r.pending_update_count))) : 0,
+      last_error_at: lastErrorAt,
+      last_error: lastErrorAt ? scrubTelegramError(env, r.last_error_message) : null,
+      allowed_updates_match: allowedMatch,
+    };
+    if (!expectedUrl) issues.add('base_url_missing');
+    if (!url) issues.add('webhook_unregistered');
+    else if (expectedUrl && url !== expectedUrl) issues.add('webhook_elsewhere');
+    if (url && !allowedMatch) issues.add('updates_stale');
+    if (lastErrorAt && now - errorDate * 1000 < DELIVERY_ERROR_RECENT_MS) issues.add('delivery_error');
+  }
+
+  const list = TELEGRAM_HEALTH_ISSUES.filter((i) => issues.has(i));
+  return { ready: list.length === 0, issues: list, bot, webhook };
 }

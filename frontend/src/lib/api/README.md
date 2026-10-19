@@ -63,6 +63,10 @@ nothing) and `outside()` (the bundled documents not in the catalog). #1851 adds
 `{ blob, url }` (the caller revokes `url`), outside the typed drift surface like
 `preview.pdf`. The store's URL carries `?v=<version>`, because the image is cached
 privately for a day.
+D758 (#1864) adds `generated()` (the documents the platform builds in code, each
+with the library rows it reads and its `thumbnail_version`) and
+`generatedThumbnailBlob(key, version)`, its page 1 as a specimen PNG, binary like
+`thumbnailBlob`, with `?v=<thumbnail_version>` so a new library body draws a new image.
 D717 (#1853) adds `renderPdfBlob(body)`, the draft's PDF from
 `POST /templates/render.pdf` as `{ blob, renderer }`: a body over
 `RENDER_BODY_MAX` (256 KB) is refused before any request, and its raw `fetch`
@@ -122,6 +126,8 @@ Meet). Since D757 (#1926) it also reads the Calendar status
 the Meet transcript permission (`allowMeetTranscripts`, `POST
 /api/calendar/google/meet-transcripts/connect`), going only to Google's consent
 URL. Every path is written out in full so the drift check reads each one.
+D756 (#1895): its `channelsAdminApi` also calls `/api/admin/channels/telegram/webhook`
+(the interview bot's health, and registering its webhook), for Super Admins.
 
 D678 (#1552): `publicAiModels.js` reads `GET /api/public/ai-models`, the
 router's model table as the public Intelligence page shows it: one row per job,
@@ -197,7 +203,10 @@ D716 (#1781, #1866): `fundBooklets.js` calls the LP's own Subscription Booklet
 at `/api/fund-booklets/mine`: open (`POST`), read (`GET`), one part's paper
 (`GET /paper?part=n`), ticks (`PUT /answers`) and submit (`POST /submit` with
 the last view's digest). Every field id comes from the Worker's last view; the
-page builds none, and stores nothing in the browser.
+page builds none, and stores nothing in the browser. D759 (#1858) adds `sign`
+(`POST /mine/sign`), which sends the submitted booklet for the applicant's
+signature and answers the signing token; the page opens `/esign/<token>` with it
+at once and keeps it nowhere else.
 
 D722: `googleSignIn.js` calls `GET /api/auth/google/config` (whether this
 deployment opens Google's own window on /login, and the client to open it for;
@@ -208,3 +217,5 @@ attempt's state; the answer is `{ token, user, new_signup }`). The POST carries
 other origin can send. The redirect fallback stays `api.googleStartUrl`.
 
 D651 (#1463): `connectors.js` calls `/api/connectors`, the Connectors page's, its panel's and Build's 'Connect a tool' reads and writes. D753 (#1878) adds `page(key)` (`GET /api/connectors/directory/:key`), one connector's page.
+
+D755 (#1919, read by #1915): `publicPricing.js` reads `GET /api/public/plans-and-packs`, which needs no session: every plan with its price from the catalog mirror and its AI allowance, and the token packs on sale. `/plans-and-pricing` renders it through `../plansPricing.js`.
