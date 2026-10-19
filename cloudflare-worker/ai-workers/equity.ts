@@ -2,6 +2,7 @@
  * AI equity allocation recommender for spin-outs.
  * Inputs: contributors with role + impact tier. Output: percentage split summing to 100.
  */
+import { systemRun } from './systemRun';
 import type { Env } from '../src/types';
 
 export interface EquityContributor {
@@ -31,7 +32,7 @@ ${list}`;
 
   let parsed: any = {};
   try {
-    const resp: any = await (env as any).AI.run('@cf/meta/llama-3.1-8b-instruct', {
+    const resp: any = await systemRun(env, {
       messages: [
         { role: 'system', content: 'Strict JSON. Sum of pct must equal 100.' },
         { role: 'user', content: prompt },

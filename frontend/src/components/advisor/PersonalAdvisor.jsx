@@ -57,6 +57,7 @@ import { safeReadJSON, safeWriteJSON } from '../../lib/storage';
 import { reportError } from '../../lib/log';
 import { useAuth } from '../../hooks/useAuthSync';
 import { useEscapeClose } from '../useEscapeClose';
+import { useRailOption } from '../../ui/railCrumbs';
 import { predictTarget } from '../../lib/advisor/router';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import AdvisorProgressWidget from './AdvisorProgressWidget';
@@ -154,6 +155,8 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
   const [, setAnsweredIds] = useState([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
+  // D771 (#2097): an answer or a free-form message is at the model (Skip is not).
+  const [asking, setAsking] = useState(false);
   const [loadError, setLoadError] = useState(null);
   // Some environments (the dev FastAPI backend, older worker deploys)
   // don't expose /api/advisor at all. We hide the whole card on 404 so
@@ -200,6 +203,9 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
 
   // Tutor mode state.
   const [tutor, setTutor] = useState(null); // { topic, text, doc_anchor, page_target, streaming }
+  // D771 (#2097): while a message is at the model, or the tutor is open, the rail is that option's.
+  useRailOption(asking ? 'ask:studio' : null, 'Send');
+  useRailOption(tutor ? 'explain:question' : null, 'Explain');
   const tutorAbortRef = useRef(null);
   const scrollerRef = useRef(null);
   const isDesktop = useIsDesktop();
@@ -400,6 +406,7 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
       evidence = userText;
     }
     setBusy(true);
+    setAsking(true);
     // Optimistic transcript update + ring update.
     const qid = question.id;
     const qPrompt = question.prompt;
@@ -514,6 +521,7 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
       }
     } finally {
       setBusy(false);
+      setAsking(false);
     }
   }, [busy, conversationId, input, question, progress, refreshProgress, refreshLabState, pendingEvidence]);
 
@@ -634,6 +642,7 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
   // role='tool' message so <Bubble> renders inline CTA buttons.
   const submitToolAuto = useCallback(async (raw) => {
     setBusy(true);
+    setAsking(true);
     setMessages((m) => [...m, { role: 'user', content: raw }]);
     setInput('');
     try {
@@ -652,6 +661,7 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
       }]);
     } finally {
       setBusy(false);
+      setAsking(false);
     }
   }, []);
 
@@ -1741,6 +1751,8 @@ function Composer({ input, setInput, onSend, onSkip, busy, disabled, skipAllowed
     setInput((prev) => (prev && prev.trim() ? `${prev.replace(/\s+$/, '')} ${text}` : text));
   }, [setInput]);
   const mic = useMicRecorder(appendTranscript);
+  // D771 (#2097): recording or transcribing a voice answer is the rail's option.
+  useRailOption(mic.state === MIC.RECORDING || mic.state === MIC.TRANSCRIBING ? 'transcribe:voice-answer' : null, 'Record a voice answer');
   // Render the option chips for select/multiselect kinds.
   const showOptions = Array.isArray(options) && options.length > 0 && (inputKind === 'select' || inputKind === 'choice');
   return (

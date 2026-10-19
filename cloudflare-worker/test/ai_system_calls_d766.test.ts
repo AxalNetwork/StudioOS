@@ -85,7 +85,11 @@ test('monitoring: the summary runs as ops_summary, one row for user 0 on /monito
   // Mutations checked: userId 1 passed; the surface dropped; the output ignored.
   const ai = makeAI(() => reply('System nominal; 0 anomalies.'));
   const w = await world(ai);
-  const r = await call(w, 'GET', '/api/monitoring/anomalies');
+  // D765 (#2090): the GET the page polls is heuristic; the summary is the admin's press, POST.
+  const read = await call(w, 'GET', '/api/monitoring/anomalies');
+  assert.equal(read.body.ai_summary, 'System nominal. No anomalies detected in the last hour.');
+  assert.equal(ai.calls.length, 0, 'the GET runs no model');
+  const r = await call(w, 'POST', '/api/monitoring/anomalies');
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(r.body.ai_summary, 'System nominal; 0 anomalies.');
   assert.deepEqual(ai.calls.map((c) => c.model), [ROUTE.ops_summary.model]);
@@ -98,12 +102,12 @@ test('monitoring: a refused or failed run falls back to the heuristic text', asy
   // Mutation checked: a refused run's empty output kept as the summary.
   const ai = makeAI(() => { throw new Error('5007: model unavailable'); });
   const w = await world(ai);
-  const r = await call(w, 'GET', '/api/monitoring/anomalies');
+  const r = await call(w, 'POST', '/api/monitoring/anomalies');
   assert.equal(r.body.ai_summary, 'System nominal. No anomalies detected in the last hour.');
   const killed = await world(makeAI(() => reply('x')));
   const now = new Date();
   await killed.env.AI_SPEND.put(`ai_killswitch:org:${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`, '1');
-  const k = await call(killed, 'GET', '/api/monitoring/anomalies');
+  const k = await call(killed, 'POST', '/api/monitoring/anomalies');
   assert.equal(k.status, 200);
   assert.equal(k.body.ai_summary, 'System nominal. No anomalies detected in the last hour.', 'the org kill switch refuses a system run too');
   assert.deepEqual(rows(killed).map((x: any) => x.user_id), [0]);

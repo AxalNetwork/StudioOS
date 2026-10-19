@@ -307,7 +307,8 @@ networkfx.post('/syndicates/:id/close', async (c) => {
   return c.json({ ok: true, status: 'closed' });
 });
 
-networkfx.get('/syndicates/:id/recommendations', async (c) => {
+// D765 (#2090), D720 §9: a model call, so a press (POST), never a read.
+networkfx.post('/syndicates/:id/recommendations', async (c) => {
   const user = await requireAuth(c);
   await ensureSchema(c.env);
   const gate = await aiQuotaGate(c.env, user.id);
