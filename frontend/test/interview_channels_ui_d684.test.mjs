@@ -677,7 +677,9 @@ test('Schedule a call says what to fix before pressing, and repeats the Workerâ€
   const m = await mount(h(SchedulePanel, { interview: { id: 7 }, api, initialForm: form('google_meet') }));
   try {
     await m.flush();
-    assert.match(m.text(), /Axal cannot import Google Meet transcripts yet\. You can still hold the call/);
+    // An api without the Calendar status read says only the engine sentence about transcripts (D757, #1926).
+    assert.ok(m.byTestId('meet-transcripts-engine'));
+    assert.doesNotMatch(m.text(), /cannot import Google Meet transcripts/);
     assert.doesNotMatch(m.text(), /reconnect Google/i);
     await m.click('button-schedule-meeting');
     assert.ok(m.byTestId('schedule-notice'));

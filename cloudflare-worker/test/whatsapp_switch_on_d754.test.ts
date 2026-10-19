@@ -6,6 +6,7 @@ import { createHmac } from 'node:crypto';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
+import { consentGiven } from './_channels_fixture.ts';
 import { applyEngineSchema } from './_engine_schema.mjs';
 import { tableFromBaseline } from './_baseline.mjs';
 import { memKV } from './_mem_kv.mjs';
@@ -78,7 +79,9 @@ async function world(opts: { seed?: boolean; budget?: number } = {}) {
     '449_interview_channels.sql', '450_channel_events_delete_kind.sql', '451_channel_review_fixes.sql',
     // D685: openSession stores the call (call_provider), as production's 452 lets it.
     '452_record_session_setup.sql', '454_channel_voice_failures.sql',
-    '457_integrations_last_error_at.sql', '458_channel_link_consent.sql']) db.exec(mig(m));
+    '457_integrations_last_error_at.sql', '458_channel_link_consent.sql',
+    // D754 (#1893): the consent store, which assign and the voice job read.
+    '488_channel_consents.sql']) db.exec(mig(m));
   // D757: the Validate engine's schema (487, 465, 453 and the re-scope's columns).
   applyEngineSchema(db);
   db.exec(mig('492_whatsapp_sender_links.sql'));
@@ -311,6 +314,11 @@ async function incomingVoice(w: World, provider: Provider, days = 0) {
 async function assign(w: World, thread: string) {
   const result = await call(w.env, ME, 'POST', '/threads/' + thread + '/assign', { interview_id: INTERVIEW });
   assert.equal(result.status, 200);
+  // D754 (#1893): a WhatsApp chat waits for the interviewee's consent. These
+  // cases test what follows it, so the chat says yes (channel_consent_d754
+  // tests getting there).
+  const t = w.db.prepare('SELECT provider, consent_state FROM channel_threads WHERE uid = ?').get(thread) as any;
+  if (t?.provider === 'whatsapp' && t.consent_state !== 'given') await consentGiven(w.env, w.db, thread);
 }
 const hookText = (env: any, provider: Provider, id: string, admin = false) => provider === 'whatsapp'
   ? waHook(env, waText(admin ? PNID_ADMIN : PNID, id))
