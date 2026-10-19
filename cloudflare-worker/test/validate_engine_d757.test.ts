@@ -180,7 +180,7 @@ const chatLine = (text: string) => ({ start_ms: null, end_ms: null, speaker_raw:
 
 test('every trigger reaches the engine once: one summary, one structure run, done, naming its trigger', async () => {
   // Mutation checked: dropping a trigger from JOB_TRIGGERS fails its row here.
-  assert.deepEqual([...JOB_TRIGGERS].sort(), ['assistant_submitted', 'call_imported', 'chat_assigned', 'chat_pasted', 'chat_quiet',
+  assert.deepEqual([...JOB_TRIGGERS].sort(), ['assistant_submitted', 'call_imported', 'chat_assigned', 'chat_pasted', 'chat_quiet', 'chat_text_added',
     'consent_given', 'recording_processed', 'voice_note_added'], 'every trigger but manual rides the job');
 
   const expectOnce = (f: World, id: number, trigger: string) => {
@@ -192,12 +192,12 @@ test('every trigger reaches the engine once: one summary, one structure run, don
     assert.equal(s.digest_trigger, trigger);
   };
 
-  { // chat_assigned
+  for (const trigger of ['chat_assigned', 'chat_text_added'] as const) { // legacy and current chat jobs
     const f = world();
     const id = await assignedChat(f);
     assert.equal(f.ai.length, 0, 'assigning runs no model itself');
-    await drain(f);
-    expectOnce(f, id, 'chat_assigned');
+    await runSessionStructureJob(f.env, { session_id: id, user_id: ME, trigger });
+    expectOnce(f, id, trigger);
   }
   { // call_imported, through importMeetingRef with a stub fetcher
     const f = world();

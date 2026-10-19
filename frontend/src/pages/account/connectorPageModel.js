@@ -99,6 +99,41 @@ export function pageAction(p, { view = 'idle' } = {}) {
 }
 
 /**
+ * D753 F3 (#1956): "Manage ▾" on a connected row, in this order:
+ *   `sync`       — Sync now, when the connection is a registry row (it has a uid);
+ *   `replace`    — Replace key or Replace token, for a key provider;
+ *   `reconnect`  — Reconnect, for a sign-in provider;
+ *   `disconnect` — Disconnect, which asks first.
+ * When the connection needs attention, Reconnect (or Replace) is the band's
+ * primary action (`pageAction`), so Manage holds only the rest.
+ */
+export function manageItems(p) {
+  const conn = p?.connection;
+  if (!conn || isEntityRow(p)) return [];
+  const attention = !!connectionStatus(conn, p).why;
+  const items = [];
+  if (conn.uid) items.push({ id: 'sync', label: 'Sync now' });
+  if (!attention) {
+    if (keyPath(p)) { if (conn.uid) items.push({ id: 'replace', label: authKind(p) === 'key' ? 'Replace key' : 'Replace token' }); }
+    else items.push({ id: 'reconnect', label: 'Reconnect' });
+  }
+  items.push({ id: 'disconnect', label: 'Disconnect' });
+  return items;
+}
+
+/**
+ * Whether F1's interim panel is still mounted on a connected page: only
+ * where a later task takes it over (GitHub's repositories, F4; a member's
+ * Mercury, F5), or GitHub's sign-in landing on its repositories. The Axal
+ * entities' Mercury never: F5 (#1991) draws it on the page itself.
+ */
+export function interimPanel(p, view = 'idle') {
+  if (!p || isEntityRow(p)) return false;
+  if (view === 'sync') return true;
+  return !!p.connection && (p.key === 'github' || p.key === 'mercury');
+}
+
+/**
  * The split chevron's choices: the account kind the sign-in opens
  * (Salesforce, DocuSign) and the other way in (a personal access token, or
  * HubSpot's sign-in beside its Private App token). Empty when there is none.
