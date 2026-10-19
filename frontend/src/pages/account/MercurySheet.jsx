@@ -8,8 +8,8 @@ import { BTN, INPUT, LoadingRows } from './AccountCenter';
 import { Banner, Group, Row, Sheet } from './ConnectorSheet';
 import { agoLabel } from './connectorsModel';
 import {
-  ADMIN_ONLY, ATTESTATION_DOOR, BRANCH_MANAGED, DISCONNECT_REASON_MIN, ENTITY_AUDIT_FOOT, ENTITY_DISCONNECT_NOTE, ENTITY_FEEDS, MEMBER_GROUPS, OPEN_BANKING,
-  READS_ROW, TOKEN_HELP, confirmReadOnlyLabel, entityRows, landsWords, neverRows, retryAfterSentence, usesRows,
+  ADMIN_ONLY, BRANCH_MANAGED, DISCONNECT_REASON_MIN, ENTITY_AUDIT_FOOT, ENTITY_DISCONNECT_NOTE, ENTITY_FEEDS, MEMBER_GROUPS, OPEN_BANKING,
+  READS_ROW, TOKEN_HELP, USE_DOORS, confirmReadOnlyLabel, entityRows, landsWords, neverRows, retryAfterSentence, usesRows,
 } from './mercuryModel';
 import { mercuryPersonalApi } from '../../lib/api/mercuryPersonal';
 
@@ -279,8 +279,8 @@ export function MercuryEntityPanel({ p, onClose, eyebrow }) {
  * use the caller's profile holds, in decision 8's words. With none left it
  * reads Not recorded with its reason; a failed read is Unreadable, and the
  * never rows still draw, in the viewer's role's words (`neverRows(role)`,
- * D752). The rows link nothing until #1778's PR C mounts the screens where
- * each use happens; the canvas PR adds those doors.
+ * D752). Each row links the screen where that use happens (`USE_DOORS`,
+ * #1780's canvas PR, on #1778's screens); a use with no screen has no door.
  */
 export function MercuryUsesGroups({ api = mercuryPersonalApi, role = null }) {
   const [read, setRead] = useState({ status: 'loading', uses: null });
@@ -304,7 +304,10 @@ export function MercuryUsesGroups({ api = mercuryPersonalApi, role = null }) {
           </div>
         )}
         {read.status === 'ready' && (read.uses.rows.length
-          ? read.uses.rows.map((u) => <Row key={u.key} a={u.text} action={u.key === 'capital_attestation' ? <Link className={BTN.link} to={ATTESTATION_DOOR.href}>{ATTESTATION_DOOR.text}</Link> : null} />)
+          ? read.uses.rows.map((u) => {
+            const door = Object.hasOwn(USE_DOORS, u.key) ? USE_DOORS[u.key] : null;
+            return <Row key={u.key} a={u.text} action={door ? <Link className={BTN.link} to={door.href} data-testid={`mercury-door-${u.key}`}>{door.text}</Link> : null} />;
+          })
           : <Row a={<Unrecorded reason={read.uses.reason}>Not recorded</Unrecorded>} />)}
       </Group>
       <Group label={MEMBER_GROUPS.never}>

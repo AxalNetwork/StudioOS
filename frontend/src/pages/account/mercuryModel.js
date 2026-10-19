@@ -133,6 +133,22 @@ export const OPEN_BANKING = { text: 'Open Banking', href: '/admin/fund-admin?tab
 /** D752 (#1891): the `capital_attestation` use's door, to the LP workspace's proof of funds. */
 export const ATTESTATION_DOOR = { text: 'Show Axal you can fund this', href: '/spinout-lab/investor-workspace#proof-of-funds' };
 
+/**
+ * #1780 (canvas PR): each use row's door, to the screen where that use
+ * happens (#1778's screens, #1848). A use with no screen on `main` has no
+ * door: `raise_receipts` and `venture_spend` are matched and read from their
+ * own pages' panels, which this sheet does not link yet.
+ */
+export const USE_DOORS = {
+  venture_revenue: { text: 'Import from Mercury', href: '/spinout-lab/revenue' },
+  practice_income: { text: 'Match an invoice', href: '/partner/needs' },
+  partner_deals: { text: 'Match a payout or settlement', href: '/partner/earnings' },
+  capital_attestation: ATTESTATION_DOOR,
+};
+
+/** #1780 decision 2: the hub's group for the Axal entities' Mercury, and its Discover badge. */
+export const FUND_ADMIN_GROUP = { title: 'Fund administration', badge: 'Entity connections' };
+
 /** The Connect box's label: "This is a Read Only token from <entity>'s Mercury organization." */
 export function confirmReadOnlyLabel(entityName) {
   return `This is a Read Only token from ${entityName}'s Mercury organization.`;
