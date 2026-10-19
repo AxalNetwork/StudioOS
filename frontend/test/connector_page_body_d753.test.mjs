@@ -25,7 +25,7 @@ import {
 import { CATEGORY_ORDER, buildCatalogue, categoryOrderFrom, discoverChips } from '../src/pages/account/connectorsModel.js';
 
 const h = React.createElement;
-const flat = (s) => s.replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\s+/g, ' ');
+const flat = (s) => s.replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/\s+/g, ' ');
 const clone = (x) => JSON.parse(JSON.stringify(x));
 
 const FX = {
@@ -456,9 +456,11 @@ const section = (html, id) => {
   const start = html.lastIndexOf('<', at);
   const tag = html.slice(start + 1, html.indexOf(' ', start));
   let depth = 0;
-  const re = new RegExp(`<(/?)${tag}[\\s>]`, 'g');
+  // Every opening or closing tag, by a fixed pattern; only this element's name counts.
+  const re = /<(\/?)([a-zA-Z][\w-]*)[\s>]/g;
   re.lastIndex = start;
   for (let m; (m = re.exec(html));) {
+    if (m[2] !== tag) continue;
     depth += m[1] ? -1 : 1;
     if (!depth) return html.slice(start, re.lastIndex);
   }

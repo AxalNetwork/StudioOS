@@ -38,7 +38,7 @@ const mig = (name: string) => readFileSync(new URL(`../sql/migrations/${name}`, 
 const ZOOM_ENV = { ZOOM_CLIENT_ID: 'zoom-d757-id', ZOOM_CLIENT_SECRET: 'zoom-d757-secret', ZOOM_WEBHOOK_SECRET_TOKEN: 'zoom-d757-token' };
 const CHANNEL_ENV = {
   TELEGRAM_CHANNEL_BOT_TOKEN: '123456:tg-d757', TELEGRAM_CHANNEL_BOT_USERNAME: 'axal_d757_bot', TELEGRAM_CHANNEL_WEBHOOK_SECRET: 'tg_d757',
-  WHATSAPP_APP_ID: '424242', WHATSAPP_APP_SECRET: 'wa-d757', WHATSAPP_VERIFY_TOKEN: 'wa-verify-d757', WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID: '777888',
+  WHATSAPP_APP_ID: '424242', WHATSAPP_APP_SECRET: 'wa-d757', WHATSAPP_VERIFY_TOKEN: 'verify-d757', WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID: '777888',
   GOOGLE_CLIENT_ID: 'g-d757', GOOGLE_CLIENT_SECRET: 'g-d757-secret',
   // #1892's rollout, on: the venture check is what these cases hold.
   TELEGRAM_CHANNEL: 'on', WHATSAPP_CHANNEL: 'on',
