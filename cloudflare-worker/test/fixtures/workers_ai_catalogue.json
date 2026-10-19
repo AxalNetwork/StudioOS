@@ -1,0 +1,1950 @@
+{
+  "read_on": "2026-10-19",
+  "read_with": "Cloudflare Developer Platform connector, search_cloudflare_documentation (developers.cloudflare.com does not resolve from the build sandbox)",
+  "pricing_page": {
+    "url": "https://developers.cloudflare.com/workers-ai/platform/pricing/",
+    "last_updated": "2026-10-15",
+    "billed_in": "neurons",
+    "usd_per_1000_neurons": "0.011"
+  },
+  "models_page": {
+    "url": "https://developers.cloudflare.com/workers-ai/models/",
+    "last_updated": "2026-08-12",
+    "models_listed": 81
+  },
+  "paid_only_note": {
+    "url": "https://developers.cloudflare.com/workers-ai/platform/pricing/",
+    "models": [
+      "@cf/moonshotai/kimi-k2.6",
+      "@cf/moonshotai/kimi-k2.7-code",
+      "@cf/zai-org/glm-5.2",
+      "@cf/zai-org/glm-5.3",
+      "@cf/zai-org/glm-5.3-flash",
+      "@cf/deepseek-ai/deepseek-v4-flash-0731",
+      "@cf/deepseek-ai/deepseek-v4-pro-0813"
+    ]
+  },
+  "units": {
+    "tokens_in": "per 1,000,000 input tokens",
+    "tokens_cached": "per 1,000,000 cached input tokens",
+    "tokens_out": "per 1,000,000 output tokens",
+    "audio_minutes": "per audio minute",
+    "audio_minutes_websocket": "per audio minute over a WebSocket",
+    "characters": "per 1,000 characters input",
+    "images": "per 1,000,000 images",
+    "tiles": "per 512x512 tile",
+    "steps": "per step",
+    "input_tile_steps": "per input 512x512 tile, per step",
+    "output_tile_steps": "per output 512x512 tile, per step",
+    "input_tiles": "per input 512x512 tile",
+    "output_tiles": "per output 512x512 tile",
+    "first_megapixels": "per first MP (1024x1024)",
+    "subsequent_megapixels": "per subsequent MP",
+    "input_image_megapixels": "per input image MP"
+  },
+  "models": [
+    {
+      "id": "@cf/deepgram/aura-1",
+      "name": "aura-1",
+      "kind": "Text-to-Speech",
+      "capabilities": [
+        "Batch",
+        "Real-time"
+      ],
+      "context_window": null,
+      "status": "partner",
+      "paid_only": false,
+      "partner": true,
+      "prices": {
+        "characters": "0.015"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/aura-1/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/aura-1/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ]
+    },
+    {
+      "id": "@cf/deepgram/aura-2-en",
+      "name": "aura-2-en",
+      "kind": "Text-to-Speech",
+      "capabilities": [
+        "Batch",
+        "Real-time"
+      ],
+      "context_window": null,
+      "status": "partner",
+      "paid_only": false,
+      "partner": true,
+      "prices": {
+        "characters": "0.030"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/aura-2-en/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/aura-2-en/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ]
+    },
+    {
+      "id": "@cf/deepgram/aura-2-es",
+      "name": "aura-2-es",
+      "kind": "Text-to-Speech",
+      "capabilities": [
+        "Batch",
+        "Real-time"
+      ],
+      "context_window": null,
+      "status": "partner",
+      "paid_only": false,
+      "partner": true,
+      "prices": {
+        "characters": "0.030"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/aura-2-es/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/aura-2-es/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ]
+    },
+    {
+      "id": "@cf/facebook/bart-large-cnn",
+      "name": "bart-large-cnn",
+      "kind": "Summarization",
+      "capabilities": [],
+      "context_window": null,
+      "status": "deprecated",
+      "paid_only": false,
+      "partner": false,
+      "prices": {},
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/bart-large-cnn/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/bart-large-cnn/",
+        "https://developers.cloudflare.com/changelog/post/2026-05-08-planned-model-deprecations/"
+      ]
+    },
+    {
+      "id": "@cf/baai/bge-base-en-v1.5",
+      "name": "bge-base-en-v1.5",
+      "kind": "Text Embeddings",
+      "capabilities": [
+        "Batch"
+      ],
+      "context_window": null,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.067"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/bge-base-en-v1.5/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/bge-base-en-v1.5/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ]
+    },
+    {
+      "id": "@cf/baai/bge-large-en-v1.5",
+      "name": "bge-large-en-v1.5",
+      "kind": "Text Embeddings",
+      "capabilities": [
+        "Batch"
+      ],
+      "context_window": null,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.204"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/bge-large-en-v1.5/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/bge-large-en-v1.5/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ]
+    },
+    {
+      "id": "@cf/baai/bge-m3",
+      "name": "bge-m3",
+      "kind": "Text Embeddings",
+      "capabilities": [],
+      "context_window": null,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.012"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/bge-m3/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/bge-m3/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ]
+    },
+    {
+      "id": "@cf/baai/bge-reranker-base",
+      "name": "bge-reranker-base",
+      "kind": "Text Classification",
+      "capabilities": [],
+      "context_window": null,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.003"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/bge-reranker-base/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/bge-reranker-base/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ]
+    },
+    {
+      "id": "@cf/baai/bge-small-en-v1.5",
+      "name": "bge-small-en-v1.5",
+      "kind": "Text Embeddings",
+      "capabilities": [
+        "Batch"
+      ],
+      "context_window": null,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.020"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/bge-small-en-v1.5/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/bge-small-en-v1.5/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ]
+    },
+    {
+      "id": "@cf/cloudflare/clef",
+      "name": "clef",
+      "kind": "Text Generation",
+      "capabilities": [],
+      "context_window": null,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.240"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/clef/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/clef/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/",
+        "https://developers.cloudflare.com/changelog/post/2026-10-09-clef-omni-workers-ai/"
+      ],
+      "note": "not on the models page (updated 2026-08-12); has its own model page and a pricing row"
+    },
+    {
+      "id": "@cf/cloudflare/clef-flash",
+      "name": "clef-flash",
+      "kind": "Text Generation",
+      "capabilities": [],
+      "context_window": null,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.038"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/clef-flash/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/clef-flash/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/",
+        "https://developers.cloudflare.com/changelog/post/2026-10-09-clef-omni-workers-ai/"
+      ],
+      "note": "not on the models page (updated 2026-08-12); has its own model page and a pricing row"
+    },
+    {
+      "id": "@cf/cloudflare/clef-omni",
+      "name": "clef-omni",
+      "kind": "Text Generation",
+      "capabilities": [
+        "Vision"
+      ],
+      "context_window": 64000,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.150"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/clef-omni/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/clef-omni/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/",
+        "https://developers.cloudflare.com/changelog/post/2026-10-09-clef-omni-workers-ai/"
+      ],
+      "note": "not on the models page (updated 2026-08-12); has its own model page and a pricing row"
+    },
+    {
+      "id": "@cf/daily-co/phonellm-mini-alpha-2",
+      "name": "phonellm-mini-alpha-2",
+      "kind": "Text Generation",
+      "capabilities": [
+        "Function calling"
+      ],
+      "context_window": 262140,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.060",
+        "tokens_out": "0.240"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/phonellm-mini-alpha-2/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/phonellm-mini-alpha-2/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ],
+      "note": "not on the models page (updated 2026-08-12); has its own model page and a pricing row"
+    },
+    {
+      "id": "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
+      "name": "deepseek-r1-distill-qwen-32b",
+      "kind": "Text Generation",
+      "capabilities": [
+        "Reasoning"
+      ],
+      "context_window": null,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.497",
+        "tokens_out": "4.881"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/deepseek-r1-distill-qwen-32b/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/deepseek-r1-distill-qwen-32b/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ]
+    },
+    {
+      "id": "@cf/deepseek-ai/deepseek-v4-flash-0731",
+      "name": "deepseek-v4-flash-0731",
+      "kind": "Text Generation",
+      "capabilities": [
+        "Batch",
+        "Function calling",
+        "Reasoning"
+      ],
+      "context_window": 1048576,
+      "status": "ga",
+      "paid_only": true,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.440",
+        "tokens_cached": "0.014",
+        "tokens_out": "1.320"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/deepseek-v4-flash-0731/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/deepseek-v4-flash-0731/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/",
+        "https://developers.cloudflare.com/changelog/post/2026-08-14-deepseek-v4-workers-ai/"
+      ],
+      "note": "not on the models page (updated 2026-08-12); has its own model page and a pricing row"
+    },
+    {
+      "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+      "name": "deepseek-v4-pro-0813",
+      "kind": "Text Generation",
+      "capabilities": [
+        "Function calling",
+        "Reasoning"
+      ],
+      "context_window": 1048576,
+      "status": "ga",
+      "paid_only": true,
+      "partner": false,
+      "prices": {
+        "tokens_in": "1.320",
+        "tokens_cached": "0.044",
+        "tokens_out": "3.960"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/deepseek-v4-pro-0813/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/deepseek-v4-pro-0813/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/",
+        "https://developers.cloudflare.com/changelog/post/2026-08-14-deepseek-v4-workers-ai/"
+      ],
+      "note": "not on the models page (updated 2026-08-12); has its own model page and a pricing row"
+    },
+    {
+      "id": "@cf/facebook/detr-resnet-50",
+      "name": "detr-resnet-50",
+      "kind": "Object Detection",
+      "capabilities": [],
+      "context_window": null,
+      "status": "beta",
+      "paid_only": false,
+      "partner": false,
+      "prices": {},
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/detr-resnet-50/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/detr-resnet-50/"
+      ]
+    },
+    {
+      "id": "@cf/huggingface/distilbert-sst-2-int8",
+      "name": "distilbert-sst-2-int8",
+      "kind": "Text Classification",
+      "capabilities": [],
+      "context_window": null,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.026"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/distilbert-sst-2-int8/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/distilbert-sst-2-int8/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ]
+    },
+    {
+      "id": "@cf/lykon/dreamshaper-8-lcm",
+      "name": "dreamshaper-8-lcm",
+      "kind": "Text-to-Image",
+      "capabilities": [],
+      "context_window": null,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {},
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/dreamshaper-8-lcm/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/dreamshaper-8-lcm/"
+      ]
+    },
+    {
+      "id": "@cf/google/embeddinggemma-300m",
+      "name": "embeddinggemma-300m",
+      "kind": "Text Embeddings",
+      "capabilities": [],
+      "context_window": null,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {},
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/embeddinggemma-300m/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/embeddinggemma-300m/"
+      ]
+    },
+    {
+      "id": "@cf/deepgram/flux",
+      "name": "flux",
+      "kind": "Automatic Speech Recognition",
+      "capabilities": [
+        "Real-time"
+      ],
+      "context_window": null,
+      "status": "partner",
+      "paid_only": false,
+      "partner": true,
+      "prices": {
+        "audio_minutes_websocket": "0.0077"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/flux/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/flux/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ]
+    },
+    {
+      "id": "@cf/black-forest-labs/flux-1-schnell",
+      "name": "flux-1-schnell",
+      "kind": "Text-to-Image",
+      "capabilities": [],
+      "context_window": null,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tiles": "0.0000528",
+        "steps": "0.0001056"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/flux-1-schnell/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/flux-1-schnell/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ]
+    },
+    {
+      "id": "@cf/black-forest-labs/flux-2-dev",
+      "name": "flux-2-dev",
+      "kind": "Text-to-Image",
+      "capabilities": [],
+      "context_window": null,
+      "status": "partner",
+      "paid_only": false,
+      "partner": true,
+      "prices": {
+        "input_tile_steps": "0.00021",
+        "output_tile_steps": "0.00041"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/flux-2-dev/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/flux-2-dev/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ]
+    },
+    {
+      "id": "@cf/black-forest-labs/flux-2-klein-4b",
+      "name": "flux-2-klein-4b",
+      "kind": "Text-to-Image",
+      "capabilities": [],
+      "context_window": null,
+      "status": "partner",
+      "paid_only": false,
+      "partner": true,
+      "prices": {
+        "input_tiles": "0.000059",
+        "output_tiles": "0.000287"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/flux-2-klein-4b/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/flux-2-klein-4b/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ]
+    },
+    {
+      "id": "@cf/black-forest-labs/flux-2-klein-9b",
+      "name": "flux-2-klein-9b",
+      "kind": "Text-to-Image",
+      "capabilities": [],
+      "context_window": null,
+      "status": "partner",
+      "paid_only": false,
+      "partner": true,
+      "prices": {
+        "first_megapixels": "0.015",
+        "subsequent_megapixels": "0.002",
+        "input_image_megapixels": "0.002"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/flux-2-klein-9b/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/flux-2-klein-9b/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ]
+    },
+    {
+      "id": "@cf/google/gemma-2b-it-lora",
+      "name": "gemma-2b-it-lora",
+      "kind": "Text Generation",
+      "capabilities": [
+        "LoRA"
+      ],
+      "context_window": null,
+      "status": "beta",
+      "paid_only": false,
+      "partner": false,
+      "prices": {},
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/gemma-2b-it-lora/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/gemma-2b-it-lora/"
+      ]
+    },
+    {
+      "id": "@cf/google/gemma-3-12b-it",
+      "name": "gemma-3-12b-it",
+      "kind": "Text Generation",
+      "capabilities": [
+        "LoRA"
+      ],
+      "context_window": null,
+      "status": "deprecated",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.345",
+        "tokens_out": "0.556"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/gemma-3-12b-it/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/gemma-3-12b-it/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/",
+        "https://developers.cloudflare.com/changelog/post/2026-05-08-planned-model-deprecations/"
+      ]
+    },
+    {
+      "id": "@cf/google/gemma-4-26b-a4b-it",
+      "name": "gemma-4-26b-a4b-it",
+      "kind": "Text Generation",
+      "capabilities": [
+        "Batch",
+        "Function calling",
+        "Reasoning",
+        "Vision"
+      ],
+      "context_window": 256000,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.100",
+        "tokens_out": "0.300"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/gemma-4-26b-a4b-it/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/gemma-4-26b-a4b-it/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ]
+    },
+    {
+      "id": "@hf/google/gemma-7b-it",
+      "name": "gemma-7b-it",
+      "kind": "Text Generation",
+      "capabilities": [
+        "LoRA"
+      ],
+      "context_window": null,
+      "status": "deprecated",
+      "paid_only": false,
+      "partner": false,
+      "prices": {},
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/gemma-7b-it/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/gemma-7b-it/",
+        "https://developers.cloudflare.com/changelog/post/2026-05-08-planned-model-deprecations/"
+      ]
+    },
+    {
+      "id": "@cf/google/gemma-7b-it-lora",
+      "name": "gemma-7b-it-lora",
+      "kind": "Text Generation",
+      "capabilities": [
+        "LoRA"
+      ],
+      "context_window": null,
+      "status": "beta",
+      "paid_only": false,
+      "partner": false,
+      "prices": {},
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/gemma-7b-it-lora/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/gemma-7b-it-lora/"
+      ]
+    },
+    {
+      "id": "@cf/aisingapore/gemma-sea-lion-v4-27b-it",
+      "name": "gemma-sea-lion-v4-27b-it",
+      "kind": "Text Generation",
+      "capabilities": [],
+      "context_window": 128000,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.351",
+        "tokens_out": "0.555"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/gemma-sea-lion-v4-27b-it/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/gemma-sea-lion-v4-27b-it/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ]
+    },
+    {
+      "id": "@cf/zai-org/glm-4.7-flash",
+      "name": "glm-4.7-flash",
+      "kind": "Text Generation",
+      "capabilities": [
+        "Function calling",
+        "Reasoning"
+      ],
+      "context_window": 131072,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.060",
+        "tokens_out": "0.400"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/glm-4.7-flash/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/glm-4.7-flash/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ],
+      "model_page_prices": {
+        "tokens_in": "0.0605",
+        "tokens_out": "0.40"
+      }
+    },
+    {
+      "id": "@cf/zai-org/glm-5.2",
+      "name": "glm-5.2",
+      "kind": "Text Generation",
+      "capabilities": [
+        "Function calling",
+        "Reasoning"
+      ],
+      "context_window": 262144,
+      "status": "ga",
+      "paid_only": true,
+      "partner": false,
+      "prices": {
+        "tokens_in": "1.400",
+        "tokens_cached": "0.260",
+        "tokens_out": "4.400"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/glm-5.2/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/glm-5.2/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/",
+        "https://developers.cloudflare.com/changelog/post/2026-06-16-glm-5.2-workers-ai/"
+      ]
+    },
+    {
+      "id": "@cf/zai-org/glm-5.3",
+      "name": "glm-5.3",
+      "kind": "Text Generation",
+      "capabilities": [
+        "Function calling",
+        "Reasoning"
+      ],
+      "context_window": null,
+      "status": "ga",
+      "paid_only": true,
+      "partner": false,
+      "prices": {
+        "tokens_in": "1.400",
+        "tokens_cached": "0.260",
+        "tokens_out": "4.400"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/glm-5.3/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/glm-5.3/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ],
+      "note": "not on the models page (updated 2026-08-12); has its own model page and a pricing row"
+    },
+    {
+      "id": "@cf/zai-org/glm-5.3-flash",
+      "name": "glm-5.3-flash",
+      "kind": "Text Generation",
+      "capabilities": [
+        "Function calling",
+        "Reasoning",
+        "Vision"
+      ],
+      "context_window": 1048576,
+      "status": "ga",
+      "paid_only": true,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.150",
+        "tokens_cached": "0.030",
+        "tokens_out": "0.500"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/glm-5.3-flash/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/glm-5.3-flash/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/",
+        "https://developers.cloudflare.com/changelog/post/2026-08-26-glm-5.3-flash-workers-ai/"
+      ],
+      "note": "not on the models page (updated 2026-08-12); has its own model page and a pricing row"
+    },
+    {
+      "id": "@cf/openai/gpt-oss-120b",
+      "name": "gpt-oss-120b",
+      "kind": "Text Generation",
+      "capabilities": [
+        "Function calling",
+        "Reasoning"
+      ],
+      "context_window": 128000,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.350",
+        "tokens_out": "0.750"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/gpt-oss-120b/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/gpt-oss-120b/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/",
+        "https://developers.cloudflare.com/changelog/post/2026-08-26-new-workers-ai-models/"
+      ]
+    },
+    {
+      "id": "@cf/openai/gpt-oss-20b",
+      "name": "gpt-oss-20b",
+      "kind": "Text Generation",
+      "capabilities": [
+        "Function calling",
+        "Reasoning"
+      ],
+      "context_window": 128000,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.200",
+        "tokens_out": "0.300"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/gpt-oss-20b/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/gpt-oss-20b/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/",
+        "https://developers.cloudflare.com/changelog/post/2026-08-26-new-workers-ai-models/"
+      ]
+    },
+    {
+      "id": "@cf/ibm-granite/granite-4.0-h-micro",
+      "name": "granite-4.0-h-micro",
+      "kind": "Text Generation",
+      "capabilities": [
+        "Function calling"
+      ],
+      "context_window": null,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.017",
+        "tokens_out": "0.112"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/granite-4.0-h-micro/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/granite-4.0-h-micro/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ]
+    },
+    {
+      "id": "@hf/nousresearch/hermes-2-pro-mistral-7b",
+      "name": "hermes-2-pro-mistral-7b",
+      "kind": "Text Generation",
+      "capabilities": [
+        "Function calling"
+      ],
+      "context_window": null,
+      "status": "deprecated",
+      "paid_only": false,
+      "partner": false,
+      "prices": {},
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/hermes-2-pro-mistral-7b/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/hermes-2-pro-mistral-7b/",
+        "https://developers.cloudflare.com/changelog/post/2026-05-08-planned-model-deprecations/"
+      ]
+    },
+    {
+      "id": "@cf/ai4bharat/indictrans2-en-indic-1B",
+      "name": "indictrans2-en-indic-1B",
+      "kind": "Translation",
+      "capabilities": [],
+      "context_window": null,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.342",
+        "tokens_out": "0.342"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/indictrans2-en-indic-1B/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/indictrans2-en-indic-1B/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ]
+    },
+    {
+      "id": "@cf/moonshotai/kimi-k2.5",
+      "name": "kimi-k2.5",
+      "kind": "Text Generation",
+      "capabilities": [
+        "Function calling",
+        "Reasoning",
+        "Vision"
+      ],
+      "context_window": null,
+      "status": "deprecated",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.600",
+        "tokens_cached": "0.100",
+        "tokens_out": "3.000"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/kimi-k2.5/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/kimi-k2.5/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/",
+        "https://developers.cloudflare.com/changelog/post/2026-05-08-planned-model-deprecations/"
+      ]
+    },
+    {
+      "id": "@cf/moonshotai/kimi-k2.6",
+      "name": "kimi-k2.6",
+      "kind": "Text Generation",
+      "capabilities": [
+        "Function calling",
+        "Reasoning",
+        "Vision"
+      ],
+      "context_window": 262144,
+      "status": "ga",
+      "paid_only": true,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.950",
+        "tokens_cached": "0.160",
+        "tokens_out": "4.000"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/kimi-k2.6/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/kimi-k2.6/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ]
+    },
+    {
+      "id": "@cf/moonshotai/kimi-k2.7-code",
+      "name": "kimi-k2.7-code",
+      "kind": "Text Generation",
+      "capabilities": [
+        "Function calling",
+        "Reasoning",
+        "Vision"
+      ],
+      "context_window": 262144,
+      "status": "ga",
+      "paid_only": true,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.950",
+        "tokens_cached": "0.190",
+        "tokens_out": "4.000"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/kimi-k2.7-code/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/kimi-k2.7-code/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/",
+        "https://developers.cloudflare.com/changelog/post/2026-08-26-new-workers-ai-models/"
+      ]
+    },
+    {
+      "id": "@cf/meta/llama-2-7b-chat-fp16",
+      "name": "llama-2-7b-chat-fp16",
+      "kind": "Text Generation",
+      "capabilities": [],
+      "context_window": null,
+      "status": "deprecated",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.556",
+        "tokens_out": "6.667"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/llama-2-7b-chat-fp16/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/llama-2-7b-chat-fp16/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/",
+        "https://developers.cloudflare.com/changelog/post/2026-05-08-planned-model-deprecations/"
+      ]
+    },
+    {
+      "id": "@cf/meta-llama/llama-2-7b-chat-hf-lora",
+      "name": "llama-2-7b-chat-hf-lora",
+      "kind": "Text Generation",
+      "capabilities": [
+        "LoRA"
+      ],
+      "context_window": null,
+      "status": "beta",
+      "paid_only": false,
+      "partner": false,
+      "prices": {},
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/llama-2-7b-chat-hf-lora/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/llama-2-7b-chat-hf-lora/"
+      ]
+    },
+    {
+      "id": "@cf/meta/llama-2-7b-chat-int8",
+      "name": "llama-2-7b-chat-int8",
+      "kind": "Text Generation",
+      "capabilities": [],
+      "context_window": null,
+      "status": "deprecated",
+      "paid_only": false,
+      "partner": false,
+      "prices": {},
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/llama-2-7b-chat-int8/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/llama-2-7b-chat-int8/",
+        "https://developers.cloudflare.com/changelog/post/2026-05-08-planned-model-deprecations/"
+      ]
+    },
+    {
+      "id": "@cf/meta/llama-3-8b-instruct",
+      "name": "llama-3-8b-instruct",
+      "kind": "Text Generation",
+      "capabilities": [],
+      "context_window": null,
+      "status": "deprecated",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.282",
+        "tokens_out": "0.827"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/llama-3-8b-instruct/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/llama-3-8b-instruct/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/",
+        "https://developers.cloudflare.com/changelog/post/2026-05-08-planned-model-deprecations/"
+      ]
+    },
+    {
+      "id": "@cf/meta/llama-3-8b-instruct-awq",
+      "name": "llama-3-8b-instruct-awq",
+      "kind": "Text Generation",
+      "capabilities": [],
+      "context_window": null,
+      "status": "deprecated",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.123",
+        "tokens_out": "0.266"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/llama-3-8b-instruct-awq/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/llama-3-8b-instruct-awq/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/",
+        "https://developers.cloudflare.com/changelog/post/2026-05-08-planned-model-deprecations/"
+      ]
+    },
+    {
+      "id": "@cf/meta/llama-3.1-70b-instruct",
+      "name": "llama-3.1-70b-instruct",
+      "kind": "Text Generation",
+      "capabilities": [],
+      "context_window": null,
+      "status": "deprecated",
+      "paid_only": false,
+      "partner": false,
+      "prices": {},
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/llama-3.1-70b-instruct/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/llama-3.1-70b-instruct/",
+        "https://developers.cloudflare.com/changelog/post/2026-05-08-planned-model-deprecations/"
+      ]
+    },
+    {
+      "id": "@cf/meta/llama-3.1-70b-instruct-fp8-fast",
+      "name": "llama-3.1-70b-instruct-fp8-fast",
+      "kind": "Text Generation",
+      "capabilities": [],
+      "context_window": null,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.293",
+        "tokens_out": "2.253"
+      },
+      "docs_url": null,
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ],
+      "note": "a pricing-page row; not on the models page, and the connector returned no model page for it"
+    },
+    {
+      "id": "@cf/meta/llama-3.1-8b-instruct",
+      "name": "llama-3.1-8b-instruct",
+      "kind": "Text Generation",
+      "capabilities": [],
+      "context_window": null,
+      "status": "deprecated",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.282",
+        "tokens_out": "0.827"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/llama-3.1-8b-instruct/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/llama-3.1-8b-instruct/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/",
+        "https://developers.cloudflare.com/changelog/post/2026-05-08-planned-model-deprecations/"
+      ]
+    },
+    {
+      "id": "@cf/meta/llama-3.1-8b-instruct-awq",
+      "name": "llama-3.1-8b-instruct-awq",
+      "kind": "Text Generation",
+      "capabilities": [],
+      "context_window": null,
+      "status": "deprecated",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.123",
+        "tokens_out": "0.266"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/llama-3.1-8b-instruct-awq/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/llama-3.1-8b-instruct-awq/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/",
+        "https://developers.cloudflare.com/changelog/post/2026-05-08-planned-model-deprecations/"
+      ]
+    },
+    {
+      "id": "@cf/meta/llama-3.1-8b-instruct-fast",
+      "name": "llama-3.1-8b-instruct-fast",
+      "kind": "Text Generation",
+      "capabilities": [],
+      "context_window": null,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {},
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/llama-3.1-8b-instruct-fast/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/llama-3.1-8b-instruct-fast/"
+      ]
+    },
+    {
+      "id": "@cf/meta/llama-3.1-8b-instruct-fp8",
+      "name": "llama-3.1-8b-instruct-fp8",
+      "kind": "Text Generation",
+      "capabilities": [],
+      "context_window": 32000,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.152",
+        "tokens_out": "0.287"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/llama-3.1-8b-instruct-fp8/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/llama-3.1-8b-instruct-fp8/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ]
+    },
+    {
+      "id": "@cf/meta/llama-3.1-8b-instruct-fp8-fast",
+      "name": "llama-3.1-8b-instruct-fp8-fast",
+      "kind": "Text Generation",
+      "capabilities": [],
+      "context_window": null,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.045",
+        "tokens_out": "0.384"
+      },
+      "docs_url": null,
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ],
+      "note": "a pricing-page row; not on the models page, and the connector returned no model page for it"
+    },
+    {
+      "id": "@cf/meta/llama-3.2-11b-vision-instruct",
+      "name": "llama-3.2-11b-vision-instruct",
+      "kind": "Text Generation",
+      "capabilities": [
+        "LoRA",
+        "Vision"
+      ],
+      "context_window": 128000,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.049",
+        "tokens_out": "0.676"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/llama-3.2-11b-vision-instruct/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/llama-3.2-11b-vision-instruct/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ],
+      "model_page_prices": {
+        "tokens_in": "0.0485",
+        "tokens_out": "0.676"
+      }
+    },
+    {
+      "id": "@cf/meta/llama-3.2-1b-instruct",
+      "name": "llama-3.2-1b-instruct",
+      "kind": "Text Generation",
+      "capabilities": [],
+      "context_window": 60000,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.027",
+        "tokens_out": "0.201"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/llama-3.2-1b-instruct/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/llama-3.2-1b-instruct/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ]
+    },
+    {
+      "id": "@cf/meta/llama-3.2-3b-instruct",
+      "name": "llama-3.2-3b-instruct",
+      "kind": "Text Generation",
+      "capabilities": [
+        "LoRA"
+      ],
+      "context_window": 80000,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.051",
+        "tokens_out": "0.335"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/llama-3.2-3b-instruct/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/llama-3.2-3b-instruct/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ],
+      "model_page_prices": {
+        "tokens_in": "0.0509",
+        "tokens_out": "0.335"
+      }
+    },
+    {
+      "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+      "name": "llama-3.3-70b-instruct-fp8-fast",
+      "kind": "Text Generation",
+      "capabilities": [
+        "Batch",
+        "Function calling"
+      ],
+      "context_window": 24000,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.293",
+        "tokens_out": "2.253"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/llama-3.3-70b-instruct-fp8-fast/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/llama-3.3-70b-instruct-fp8-fast/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ]
+    },
+    {
+      "id": "@cf/meta/llama-4-scout-17b-16e-instruct",
+      "name": "llama-4-scout-17b-16e-instruct",
+      "kind": "Text Generation",
+      "capabilities": [
+        "Batch",
+        "Function calling",
+        "Vision"
+      ],
+      "context_window": null,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.270",
+        "tokens_out": "0.850"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/llama-4-scout-17b-16e-instruct/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/llama-4-scout-17b-16e-instruct/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ]
+    },
+    {
+      "id": "@cf/meta/llama-guard-3-8b",
+      "name": "llama-guard-3-8b",
+      "kind": "Text Generation",
+      "capabilities": [
+        "LoRA"
+      ],
+      "context_window": null,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.484",
+        "tokens_out": "0.030"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/llama-guard-3-8b/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/llama-guard-3-8b/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ]
+    },
+    {
+      "id": "@cf/llava-hf/llava-1.5-7b-hf",
+      "name": "llava-1.5-7b-hf",
+      "kind": "Image-to-Text",
+      "capabilities": [],
+      "context_window": null,
+      "status": "beta",
+      "paid_only": false,
+      "partner": false,
+      "prices": {},
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/llava-1.5-7b-hf/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/llava-1.5-7b-hf/"
+      ]
+    },
+    {
+      "id": "@cf/leonardo/lucid-origin",
+      "name": "lucid-origin",
+      "kind": "Text-to-Image",
+      "capabilities": [],
+      "context_window": null,
+      "status": "partner",
+      "paid_only": false,
+      "partner": true,
+      "prices": {
+        "tiles": "0.006996",
+        "steps": "0.000132"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/lucid-origin/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/lucid-origin/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ]
+    },
+    {
+      "id": "@cf/meta/m2m100-1.2b",
+      "name": "m2m100-1.2b",
+      "kind": "Translation",
+      "capabilities": [
+        "Batch"
+      ],
+      "context_window": null,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.342",
+        "tokens_out": "0.342"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/m2m100-1.2b/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/m2m100-1.2b/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ]
+    },
+    {
+      "id": "@cf/myshell-ai/melotts",
+      "name": "melotts",
+      "kind": "Text-to-Speech",
+      "capabilities": [],
+      "context_window": null,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "audio_minutes": "0.0002"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/melotts/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/melotts/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ]
+    },
+    {
+      "id": "@hf/meta-llama/meta-llama-3-8b-instruct",
+      "name": "meta-llama-3-8b-instruct",
+      "kind": "Text Generation",
+      "capabilities": [],
+      "context_window": null,
+      "status": "deprecated",
+      "paid_only": false,
+      "partner": false,
+      "prices": {},
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/meta-llama-3-8b-instruct/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/meta-llama-3-8b-instruct/",
+        "https://developers.cloudflare.com/changelog/post/2026-05-08-planned-model-deprecations/"
+      ]
+    },
+    {
+      "id": "@cf/mistral/mistral-7b-instruct-v0.1",
+      "name": "mistral-7b-instruct-v0.1",
+      "kind": "Text Generation",
+      "capabilities": [
+        "LoRA"
+      ],
+      "context_window": null,
+      "status": "deprecated",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.110",
+        "tokens_out": "0.190"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/mistral-7b-instruct-v0.1/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/mistral-7b-instruct-v0.1/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/",
+        "https://developers.cloudflare.com/changelog/post/2026-05-08-planned-model-deprecations/"
+      ]
+    },
+    {
+      "id": "@hf/mistral/mistral-7b-instruct-v0.2",
+      "name": "mistral-7b-instruct-v0.2",
+      "kind": "Text Generation",
+      "capabilities": [
+        "LoRA"
+      ],
+      "context_window": null,
+      "status": "deprecated",
+      "paid_only": false,
+      "partner": false,
+      "prices": {},
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/mistral-7b-instruct-v0.2/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/mistral-7b-instruct-v0.2/",
+        "https://developers.cloudflare.com/changelog/post/2026-05-08-planned-model-deprecations/"
+      ]
+    },
+    {
+      "id": "@cf/mistral/mistral-7b-instruct-v0.2-lora",
+      "name": "mistral-7b-instruct-v0.2-lora",
+      "kind": "Text Generation",
+      "capabilities": [
+        "LoRA"
+      ],
+      "context_window": null,
+      "status": "beta",
+      "paid_only": false,
+      "partner": false,
+      "prices": {},
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/mistral-7b-instruct-v0.2-lora/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/mistral-7b-instruct-v0.2-lora/"
+      ]
+    },
+    {
+      "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+      "name": "mistral-small-3.1-24b-instruct",
+      "kind": "Text Generation",
+      "capabilities": [
+        "Function calling"
+      ],
+      "context_window": null,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.351",
+        "tokens_out": "0.555"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/mistral-small-3.1-24b-instruct/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/mistral-small-3.1-24b-instruct/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ]
+    },
+    {
+      "id": "@cf/moondream/moondream3.1-9B-A2B",
+      "name": "moondream3.1-9B-A2B",
+      "kind": "Image-to-Text",
+      "capabilities": [
+        "Vision"
+      ],
+      "context_window": null,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.300",
+        "tokens_out": "1.000"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/moondream3.1-9B-A2B/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/moondream3.1-9B-A2B/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ]
+    },
+    {
+      "id": "@cf/nvidia/nemotron-3-120b-a12b",
+      "name": "nemotron-3-120b-a12b",
+      "kind": "Text Generation",
+      "capabilities": [
+        "Function calling",
+        "Reasoning"
+      ],
+      "context_window": null,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.500",
+        "tokens_out": "1.500"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/nemotron-3-120b-a12b/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/nemotron-3-120b-a12b/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ]
+    },
+    {
+      "id": "@cf/deepgram/nova-3",
+      "name": "nova-3",
+      "kind": "Automatic Speech Recognition",
+      "capabilities": [
+        "Batch",
+        "Real-time"
+      ],
+      "context_window": null,
+      "status": "partner",
+      "paid_only": false,
+      "partner": true,
+      "prices": {
+        "audio_minutes": "0.0052",
+        "audio_minutes_websocket": "0.0092"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/nova-3/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/nova-3/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ]
+    },
+    {
+      "id": "@cf/microsoft/phi-2",
+      "name": "phi-2",
+      "kind": "Text Generation",
+      "capabilities": [],
+      "context_window": null,
+      "status": "deprecated",
+      "paid_only": false,
+      "partner": false,
+      "prices": {},
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/phi-2/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/phi-2/",
+        "https://developers.cloudflare.com/changelog/post/2026-05-08-planned-model-deprecations/"
+      ]
+    },
+    {
+      "id": "@cf/leonardo/phoenix-1.0",
+      "name": "phoenix-1.0",
+      "kind": "Text-to-Image",
+      "capabilities": [],
+      "context_window": null,
+      "status": "partner",
+      "paid_only": false,
+      "partner": true,
+      "prices": {
+        "tiles": "0.005830",
+        "steps": "0.000110"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/phoenix-1.0/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/phoenix-1.0/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ]
+    },
+    {
+      "id": "@cf/pfnet/plamo-embedding-1b",
+      "name": "plamo-embedding-1b",
+      "kind": "Text Embeddings",
+      "capabilities": [],
+      "context_window": null,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.019"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/plamo-embedding-1b/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/plamo-embedding-1b/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ]
+    },
+    {
+      "id": "@cf/qwen/qwen2.5-coder-32b-instruct",
+      "name": "qwen2.5-coder-32b-instruct",
+      "kind": "Text Generation",
+      "capabilities": [
+        "LoRA"
+      ],
+      "context_window": null,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.660",
+        "tokens_out": "1.000"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/qwen2.5-coder-32b-instruct/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/qwen2.5-coder-32b-instruct/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ]
+    },
+    {
+      "id": "@cf/qwen/qwen3-30b-a3b-fp8",
+      "name": "qwen3-30b-a3b-fp8",
+      "kind": "Text Generation",
+      "capabilities": [
+        "Batch",
+        "Function calling",
+        "Reasoning"
+      ],
+      "context_window": 32000,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.051",
+        "tokens_out": "0.335"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/qwen3-30b-a3b-fp8/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/qwen3-30b-a3b-fp8/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/",
+        "https://developers.cloudflare.com/changelog/post/2026-04-09-new-workers-ai-models/"
+      ]
+    },
+    {
+      "id": "@cf/qwen/qwen3-embedding-0.6b",
+      "name": "qwen3-embedding-0.6b",
+      "kind": "Text Embeddings",
+      "capabilities": [],
+      "context_window": null,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.012"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/qwen3-embedding-0.6b/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/qwen3-embedding-0.6b/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ]
+    },
+    {
+      "id": "@cf/qwen/qwen3.8-27b",
+      "name": "qwen3.8-27b",
+      "kind": "Text Generation",
+      "capabilities": [
+        "Function calling",
+        "Reasoning",
+        "Vision"
+      ],
+      "context_window": 262144,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.450",
+        "tokens_out": "3.200"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/qwen3.8-27b/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/qwen3.8-27b/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/",
+        "https://developers.cloudflare.com/changelog/post/2026-08-17-qwen-3.8-27b-workers-ai/"
+      ],
+      "note": "not on the models page (updated 2026-08-12); has its own model page and a pricing row"
+    },
+    {
+      "id": "@cf/qwen/qwq-32b",
+      "name": "qwq-32b",
+      "kind": "Text Generation",
+      "capabilities": [
+        "LoRA",
+        "Reasoning"
+      ],
+      "context_window": null,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "tokens_in": "0.660",
+        "tokens_out": "1.000"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/qwq-32b/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/qwq-32b/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ]
+    },
+    {
+      "id": "@cf/microsoft/resnet-50",
+      "name": "resnet-50",
+      "kind": "Image Classification",
+      "capabilities": [],
+      "context_window": null,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "images": "2.51"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/resnet-50/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/resnet-50/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ]
+    },
+    {
+      "id": "@cf/pipecat-ai/smart-turn-v2",
+      "name": "smart-turn-v2",
+      "kind": "Voice Activity Detection",
+      "capabilities": [
+        "Batch",
+        "Real-time"
+      ],
+      "context_window": null,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "audio_minutes": "0.00033795"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/smart-turn-v2/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/smart-turn-v2/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ]
+    },
+    {
+      "id": "@cf/defog/sqlcoder-7b-2",
+      "name": "sqlcoder-7b-2",
+      "kind": "Text Generation",
+      "capabilities": [],
+      "context_window": null,
+      "status": "deprecated",
+      "paid_only": false,
+      "partner": false,
+      "prices": {},
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/sqlcoder-7b-2/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/sqlcoder-7b-2/",
+        "https://developers.cloudflare.com/changelog/post/2026-05-08-planned-model-deprecations/"
+      ]
+    },
+    {
+      "id": "@cf/runwayml/stable-diffusion-v1-5-img2img",
+      "name": "stable-diffusion-v1-5-img2img",
+      "kind": "Text-to-Image",
+      "capabilities": [],
+      "context_window": null,
+      "status": "beta",
+      "paid_only": false,
+      "partner": false,
+      "prices": {},
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/stable-diffusion-v1-5-img2img/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/stable-diffusion-v1-5-img2img/"
+      ]
+    },
+    {
+      "id": "@cf/runwayml/stable-diffusion-v1-5-inpainting",
+      "name": "stable-diffusion-v1-5-inpainting",
+      "kind": "Text-to-Image",
+      "capabilities": [],
+      "context_window": null,
+      "status": "beta",
+      "paid_only": false,
+      "partner": false,
+      "prices": {},
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/stable-diffusion-v1-5-inpainting/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/stable-diffusion-v1-5-inpainting/"
+      ]
+    },
+    {
+      "id": "@cf/stabilityai/stable-diffusion-xl-base-1.0",
+      "name": "stable-diffusion-xl-base-1.0",
+      "kind": "Text-to-Image",
+      "capabilities": [],
+      "context_window": null,
+      "status": "beta",
+      "paid_only": false,
+      "partner": false,
+      "prices": {},
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/stable-diffusion-xl-base-1.0/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/stable-diffusion-xl-base-1.0/"
+      ]
+    },
+    {
+      "id": "@cf/bytedance/stable-diffusion-xl-lightning",
+      "name": "stable-diffusion-xl-lightning",
+      "kind": "Text-to-Image",
+      "capabilities": [],
+      "context_window": null,
+      "status": "beta",
+      "paid_only": false,
+      "partner": false,
+      "prices": {},
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/stable-diffusion-xl-lightning/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/stable-diffusion-xl-lightning/"
+      ]
+    },
+    {
+      "id": "@cf/unum/uform-gen2-qwen-500m",
+      "name": "uform-gen2-qwen-500m",
+      "kind": "Image-to-Text",
+      "capabilities": [],
+      "context_window": null,
+      "status": "deprecated",
+      "paid_only": false,
+      "partner": false,
+      "prices": {},
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/uform-gen2-qwen-500m/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/uform-gen2-qwen-500m/",
+        "https://developers.cloudflare.com/changelog/post/2026-05-08-planned-model-deprecations/"
+      ]
+    },
+    {
+      "id": "@cf/openai/whisper",
+      "name": "whisper",
+      "kind": "Automatic Speech Recognition",
+      "capabilities": [],
+      "context_window": null,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "audio_minutes": "0.0005"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/whisper/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/whisper/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ]
+    },
+    {
+      "id": "@cf/openai/whisper-large-v3-turbo",
+      "name": "whisper-large-v3-turbo",
+      "kind": "Automatic Speech Recognition",
+      "capabilities": [
+        "Batch"
+      ],
+      "context_window": null,
+      "status": "ga",
+      "paid_only": false,
+      "partner": false,
+      "prices": {
+        "audio_minutes": "0.0005"
+      },
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/whisper-large-v3-turbo/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/whisper-large-v3-turbo/",
+        "https://developers.cloudflare.com/workers-ai/platform/pricing/"
+      ]
+    },
+    {
+      "id": "@cf/openai/whisper-tiny-en",
+      "name": "whisper-tiny-en",
+      "kind": "Automatic Speech Recognition",
+      "capabilities": [],
+      "context_window": null,
+      "status": "beta",
+      "paid_only": false,
+      "partner": false,
+      "prices": {},
+      "docs_url": "https://developers.cloudflare.com/workers-ai/models/whisper-tiny-en/",
+      "sources": [
+        "https://developers.cloudflare.com/workers-ai/models/",
+        "https://developers.cloudflare.com/workers-ai/models/whisper-tiny-en/"
+      ]
+    }
+  ]
+}

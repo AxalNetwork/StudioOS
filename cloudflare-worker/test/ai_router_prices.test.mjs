@@ -47,26 +47,21 @@ async function source() {
   return readFile(resolve(__dirname, '../src/services/aiRouter.ts'), 'utf8');
 }
 
-/** `'@cf/…': { in: N, out: N }` rows from the price table. */
-function pricesFrom(src) {
-  const start = src.indexOf('export const PRICE_USD_PER_1M_TOKENS');
-  assert.ok(start > 0, 'the price table is no longer exported under that name');
-  const body = src.slice(start, src.indexOf('};', start));
-  const out = new Map();
-  for (const m of body.matchAll(/'(@cf\/[^']+)':\s*\{\s*in:\s*([\d.]+),\s*out:\s*([\d.]+)/g)) {
-    out.set(m[1], { in: Number(m[2]), out: Number(m[3]) });
-  }
-  return out;
+/**
+ * D760 (#2017) — the two price tables are views of the catalogue now, so the
+ * prices are read from the module, not from source text: there is no literal
+ * left to parse. The ROUTE readers below still read the source.
+ */
+const router = await import('../src/services/aiRouter.ts');
+
+/** `model → { in, out }` from the token price table. */
+function pricesFrom(_src) {
+  return new Map(Object.entries(router.PRICE_USD_PER_1M_TOKENS));
 }
 
-/** `'@cf/…': N` rows from the per-audio-minute table. */
-function audioPricesFrom(src) {
-  const start = src.indexOf('export const PRICE_USD_PER_AUDIO_MINUTE');
-  if (start < 0) return new Map();
-  const body = src.slice(start, src.indexOf('};', start));
-  const out = new Map();
-  for (const m of body.matchAll(/'(@cf\/[^']+)':\s*([\d.]+)/g)) out.set(m[1], Number(m[2]));
-  return out;
+/** `model → USD per minute` from the per-audio-minute table. */
+function audioPricesFrom(_src) {
+  return new Map(Object.entries(router.PRICE_USD_PER_AUDIO_MINUTE));
 }
 
 /** Every model string named inside the ROUTE map, constants resolved. */

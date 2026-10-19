@@ -59,7 +59,7 @@ export function taskLabel(task: string | null | undefined): string | null {
     : null;
 }
 
-/** A readable name for every model either price table holds. */
+/** A readable name for every model the router's price tables hold (token, audio, WebSocket). */
 export const MODEL_NAMES: Record<string, string> = {
   '@cf/meta/llama-guard-3-8b': 'Llama Guard 3 8B',
   '@cf/meta/llama-3.1-8b-instruct': 'Llama 3.1 8B Instruct',
@@ -73,6 +73,8 @@ export const MODEL_NAMES: Record<string, string> = {
   '@cf/openai/whisper': 'Whisper',
   '@cf/openai/whisper-large-v3-turbo': 'Whisper Large v3 Turbo',
   '@cf/deepgram/nova-3': 'Nova-3',
+  // D760: on the rate card now that it carries WebSocket rates (live speech, D658).
+  '@cf/deepgram/flux': 'Flux',
 };
 
 /**

@@ -26,30 +26,14 @@ const read = (rel) => readFile(resolve(__dirname, rel), 'utf8');
 const router = () => read('../src/services/aiRouter.ts');
 const routes = () => read('../src/routes/founder_validate.ts');
 
-/** `estimateCostUsd` and its two tables, evaluated out of the source. */
+/**
+ * `estimateCostUsd` and its two tables. D760 (#2017): the tables are views of
+ * the catalogue, so there is no literal left to read out of the source; this
+ * imports the router and uses its real function, not a copy of it.
+ */
 async function costFn() {
-  const src = await router();
-  const tokenTable = src.slice(src.indexOf('export const PRICE_USD_PER_1M_TOKENS'));
-  const audioTable = src.slice(src.indexOf('export const PRICE_USD_PER_AUDIO_MINUTE'));
-  const tokens = {};
-  for (const m of tokenTable.slice(0, tokenTable.indexOf('};')).matchAll(
-    /'(@cf\/[^']+)':\s*\{\s*in:\s*([\d.]+),\s*out:\s*([\d.]+)/g)) {
-    tokens[m[1]] = { in: Number(m[2]), out: Number(m[3]) };
-  }
-  const audio = {};
-  for (const m of audioTable.slice(0, audioTable.indexOf('};')).matchAll(
-    /'(@cf\/[^']+)':\s*([\d.]+)/g)) {
-    audio[m[1]] = Number(m[2]);
-  }
-  // The function's own body, rebuilt from the two tables it reads.
-  const est = (model, pIn, pOut, minutes = 0) => {
-    const perMinute = audio[model];
-    if (perMinute != null) return Math.max(0, minutes) * perMinute;
-    const p = tokens[model];
-    if (!p) return 0;
-    return (pIn / 1e6) * p.in + (pOut / 1e6) * p.out;
-  };
-  return { est, tokens, audio };
+  const m = await import('../src/services/aiRouter.ts');
+  return { est: m.estimateCostUsd, tokens: m.PRICE_USD_PER_1M_TOKENS, audio: m.PRICE_USD_PER_AUDIO_MINUTE };
 }
 
 test('a transcription does not cost zero', async () => {

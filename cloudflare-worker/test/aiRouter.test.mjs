@@ -6,55 +6,25 @@
  *   2. budget exhaustion returns refusal
  *   3. embedding cache hit on second identical input
  *
- * Loads `cloudflare-worker/src/services/aiRouter.ts` through `_transpile-ts.mjs`
- * (same pattern as projects.test.mjs) so we exercise the exact source bytes
- * shipped to Cloudflare. Provides in-memory mocks for `env.AI` (Workers AI),
- * `env.AI_SPEND` (KV), and `env.DB` (D1).
+ * Imports `cloudflare-worker/src/services/aiRouter.ts` through `_ts-loader`, so
+ * we exercise the exact source shipped to Cloudflare. Provides in-memory mocks
+ * for `env.AI` (Workers AI), `env.AI_SPEND` (KV), and `env.DB` (D1).
  */
 import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
-import { readFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
-import { transpileTs } from './_transpile-ts.mjs';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
+/**
+ * D760 (#2017) — the router is imported as itself, through `_ts-loader` (the
+ * runner `npm run test:worker` uses), not rebuilt with `new Function` and an
+ * import stripper. Every runtime import it gains (`./ai/catalogue` here, the
+ * rest of `services/ai/*` after) then needs no edit to this file. Each case
+ * still calls `__resetForTest()` first, which is what kept them apart before.
+ */
 async function loadRouter() {
-  const srcPath = resolve(__dirname, '../src/services/aiRouter.ts');
-  const src = await readFile(srcPath, 'utf8');
-  // Strip the lone `import type { Env } from '../types';` — tests don't
-  // need the type and tsc's `module: None` won't resolve it. Also strip
-  // every `export ` keyword so transpilation doesn't emit CommonJS
-  // `exports.foo = foo` writes (no `exports` global in `new Function`).
-  //
-  // D261 — the router gained ONE runtime import, `branchOf`, for the gateway
-  // metadata. `new Function` cannot resolve an import, so that line is
-  // stripped and the REAL `branchOf` is passed in as a parameter: a stand-in
-  // here would be a second definition of what a branch code is. Any other
-  // runtime import fails loudly below rather than as a module-syntax error.
-  const BRANCH_IMPORT = /^import \{ branchOf \} from '\.\.\/util\/branch';\s*$/m;
-  const stripped = src
-    .replace(/^import type[^;]+;\s*$/m, '')
-    .replace(BRANCH_IMPORT, '')
-    .replace(/^import \* as aiBudget from '\.\/aiBudget';\s*$/m, '')
-    // D657 — the speech-to-text shapes, passed in as the real module below.
-    .replace(/^import \{ audioInputFor, parseAudioOutput, type SttTranscript \} from '\.\/sttFormats';\s*$/m, '')
-    // D761 — the request and response shapes, passed in as the real module below.
-    .replace(/^import \* as shapes from '\.\/ai\/shapes';\s*$/m, '')
-    .replace(/^export\s+(const|let|function|async\s+function|class|interface|type|enum)\b/gm, '$1')
-    .replace(/^export\s+\{[^}]*\};?\s*$/gm, '');
-  const unresolved = stripped.match(/^import\s[^;]*;/m);
-  if (unresolved) throw new Error(`aiRouter.ts has a runtime import this loader cannot pass in: ${unresolved[0]}`);
-  const { branchOf } = await import('../src/util/branch.ts');
-  const outputText = transpileTs(stripped);
-  // Re-export the public surface via an IIFE wrapper.
-  const wrapped = `${outputText}\nreturn { run, ROUTE, estimateCostUsd, loadAiUsageReport, aiOrgKillSwitchState, __resetForTest };`;
-  const aiBudget = await import('../src/services/aiBudget.ts');
-  const stt = await import('../src/services/sttFormats.ts');
-  const shapes = await import('../src/services/ai/shapes.ts');
-  return new Function('branchOf','aiBudget','audioInputFor','parseAudioOutput','shapes', wrapped)(branchOf,aiBudget,stt.audioInputFor,stt.parseAudioOutput,shapes);
+  const { run, ROUTE, estimateCostUsd, loadAiUsageReport, aiOrgKillSwitchState, __resetForTest } =
+    await import('../src/services/aiRouter.ts');
+  return { run, ROUTE, estimateCostUsd, loadAiUsageReport, aiOrgKillSwitchState, __resetForTest };
 }
 
 // --------------------------------------------------------------------------
