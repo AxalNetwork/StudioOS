@@ -21,13 +21,14 @@ import { NOTIFICATION_EVENTS, PARTNER_NOTIFICATION_EVENTS } from '../lib/notific
 // orders, and the two sections the page did not have (Following, Developer).
 import { AccountPhoneFrame, AccountPhoneIndex, AccountSectionNav, Outcome, Switch, accountRailCoverage, useAccountRead } from './account/AccountCenter';
 // D700 — the phone's `/account`: A1m's bar copy and the address rules.
-import { accountPathFor, accountViewFor } from './account/accountPhone';
+import { accountPathFor, accountViewFor, connectorKeyFor } from './account/accountPhone';
 import ProfileIdentityCanvas from './account/AccountProfile';
 import { PushDevices, SessionsCard } from './account/AccountDevices';
 import { Orders, PlanHeader, useBillingStatus } from './account/AccountBilling';
 import FollowingSection from './account/AccountFollowing';
 import UsageSection from './account/AccountUsage';
 import ConnectorsSection from './account/AccountConnectors';
+import ConnectorPage from './account/ConnectorPage';
 import DeveloperSection from './account/AccountDeveloper';
 import { channelOn } from './account/accountCenterModel';
 // Task #6 (IF) — Onboarding tab (checklist + tour re-run + reset).
@@ -254,6 +255,8 @@ export default function SettingsPage() {
   // `/account/:section` render this same component, so React kept the page
   // when the path moved between them and the pane did not follow.
   const active = accountViewFor({ pathname: location.pathname, hash: location.hash, phone });
+  // D753 — `/account/connectors/<key>` is that connector's page.
+  const connectorKey = active === 'connectors' ? connectorKeyFor(location.pathname) : null;
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -283,7 +286,7 @@ export default function SettingsPage() {
   // account recovery. A canonicalising hop must not eat the part of the link
   // that said why it was sent.
   useEffect(() => {
-    const want = accountPathFor({ section: active, phone });
+    const want = accountPathFor({ section: active, phone, key: connectorKey });
     if (location.pathname !== want && /^\/(?:account|settings)\b/.test(location.pathname)) {
       navigate({ pathname: want, search: location.search, hash: location.hash }, { replace: true });
     }
@@ -392,7 +395,7 @@ export default function SettingsPage() {
   const safeActive = allowedIds.has(active) ? active : 'account';
   const activeLabel = active === 'index' ? null : sections.find((s) => s.id === safeActive)?.label;
   const reloadAccount = () => api.getSettings().then(setData);
-  const paneProps = { data, setData, flash, patch, reloadAccount, profileRev, setProfileRev, onSelect: setActive, role, allowedIds };
+  const paneProps = { data, setData, flash, patch, reloadAccount, profileRev, setProfileRev, onSelect: setActive, role, allowedIds, connectorKey };
 
   const toastNote = toast && (
     <div className={`mb-4 rounded-lg px-4 py-2.5 text-sm flex items-center gap-2 ${
@@ -440,8 +443,11 @@ export default function SettingsPage() {
       />
     ) : (
     <div className="min-w-0" data-testid="settings-page" data-active-section={safeActive}>
-      <h1 className="mb-1 text-2xl font-extrabold tracking-axal-heading text-axal-ink dark:text-gray-100">Account</h1>
-      <p className="mb-6 text-[13.5px] leading-relaxed text-axal-muted dark:text-gray-400">Who you are on the platform, how it reaches you, how you sign in, what you pay for and who you follow.</p>
+      {/* D753 — on a connector's page its name is the one <h1>. */}
+      {!connectorKey && <>
+        <h1 className="mb-1 text-2xl font-extrabold tracking-axal-heading text-axal-ink dark:text-gray-100">Account</h1>
+        <p className="mb-6 text-[13.5px] leading-relaxed text-axal-muted dark:text-gray-400">Who you are on the platform, how it reaches you, how you sign in, what you pay for and who you follow.</p>
+      </>}
 
       {toastNote}
 
@@ -458,7 +464,7 @@ export default function SettingsPage() {
 }
 
 /** One section's pane: the same cards at every width. */
-function AccountPanes({ safeActive, data, setData, flash, patch, reloadAccount, profileRev, setProfileRev, onSelect, role, allowedIds }) {
+function AccountPanes({ safeActive, data, setData, flash, patch, reloadAccount, profileRev, setProfileRev, onSelect, role, allowedIds, connectorKey = null }) {
   return (
     <div className="min-w-0 space-y-6">
       {safeActive === 'account' && (
@@ -504,7 +510,7 @@ function AccountPanes({ safeActive, data, setData, flash, patch, reloadAccount, 
       {safeActive === 'usage' && <UsageSection role={role} />}
       {safeActive === 'developer' && allowedIds.has('developer') && <DeveloperSection role={data.role} />}
       {safeActive === 'onboarding' && <OnboardingSettingsTab />}
-      {safeActive === 'connectors' && <ConnectorsTab />}
+      {safeActive === 'connectors' && <ConnectorsTab connectorKey={connectorKey} />}
       {safeActive === 'billing' && allowedIds.has('billing') && <BillingTab data={data} flash={flash} />}
       {safeActive === 'appearance' && <AppearanceTab flash={flash} />}
       {safeActive === 'activity' && (
@@ -4518,7 +4524,12 @@ function MarketIntelContributionCard({ flash }) {
   );
 }
 
-function ConnectorsTab() {
+/** D753 — a connector's own page when the address names one, else the hub. */
+function ConnectorsTab({ connectorKey = null }) {
+  return connectorKey ? <ConnectorPage connectorKey={connectorKey} /> : <ConnectorsHubTab />;
+}
+
+function ConnectorsHubTab() {
   // D651 (#1463) — the Connectors section (AccountConnectors.jsx) replaces the
   // embedded Integrations marketplace. We still fetch the integration settings
   // for the API-keys card's server flag; the section owns its own reads.
