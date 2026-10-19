@@ -191,7 +191,7 @@ function ReadyPage({ p, back, phone, ret, moved, onChanged, children, connector 
   const keyOpen = (view === 'key' || view === 'badkey') && ['key', 'oauth', 'reconnect', 'status'].includes(action.kind);
   // D753 F5 (#1991): the Axal entities' Mercury is drawn on the page itself, never the interim panel.
   const entity = isEntityRow(p);
-  // F1's panel stays only where F4 (GitHub) takes it over; every other connection is "Your connection".
+  // Every connection is "Your connection" since F4 (#1957) and F5 (#1991); F1's panel stays only on a sign-in's sync landing.
   const panelShown = interimPanel(p, view);
   const role = auth?.user?.role ?? null;
   // A member's own Mercury says what it is for above the token form, as the sheet's first step did; the band connects.
