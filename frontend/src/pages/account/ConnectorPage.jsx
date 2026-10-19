@@ -13,6 +13,7 @@ import {
 import { isChannelKey } from './channelPageModel';
 import ChannelPage from './ChannelPage';
 import { notOfferedSentence } from './mercuryModel';
+import { MercuryEntityPageBody } from './MercurySheet';
 import { useAuth } from '../../hooks/useAuthSync';
 import { branchOfUser } from '../../lib/shellRole';
 import { ZOOM_DISCONNECT_NOTE, ZOOM_SECTIONS, usedByLinks, zoomHowItWorks, zoomNotices } from '../../lib/validateSourceWording';
@@ -43,6 +44,12 @@ import { ZOOM_DISCONNECT_NOTE, ZOOM_SECTIONS, usedByLinks, zoomHowItWorks, zoomN
  * Tools, Prompts, the trust notice and Details from it (`ConnectorBody`), and
  * the header's line becomes its tagline. Without `body` it draws F1's About
  * and Details from the catalogue row.
+ *
+ * MERCURY (#1991, F5). The Axal entities' row (`isEntityRow`, an admin on HQ)
+ * draws `MercuryEntityPageBody` in "Connect and manage": the entity
+ * connections, what they feed, Open Banking and the audit foot, with the one
+ * audited read on mount and no header action. A member's own Mercury stays in
+ * the interim panel until F3 (#1956) draws "Your connection".
  *
  * THE READ (#1955, part 2). Handed `readPage` (`connectorsApi.page`), the view
  * reads `GET /api/connectors/directory/<page_key>` once the connector is known,
@@ -224,6 +231,16 @@ function NotReady({ entry, connectorKey, data, branchAdmin }) {
  * panel's view resets when the connection appears or goes (the `key`).
  */
 function ConnectRegion({ p, ret, onChanged }) {
+  // D753 F5 (#1991): the Axal entities' Mercury is drawn on the page itself, never
+  // the interim panel. A sign-in return never names Mercury (`pageReturn`).
+  if (isEntityRow(p)) {
+    return (
+      <section aria-label="Connect and manage" data-testid="connector-page-connect" data-mode="entity">
+        <MercuryEntityPageBody p={p} />
+      </section>
+    );
+  }
+  // A member's own Mercury stays in the interim panel until F3 (#1956) gives the page "Your connection".
   const mode = interimMode(p, ret);
   return (
     <section aria-label="Connect and manage" data-testid="connector-page-connect" data-mode={mode}>
@@ -249,7 +266,7 @@ function InlinePanel({ p, ret, onChanged }) {
         setView={(view) => setState({ view, ret: {} })}
         onChanged={onChanged}
         onClose={reset}
-        eyebrow={isEntityRow(p) ? 'Fund administration' : 'Connect and manage'}
+        eyebrow="Connect and manage"
       />
     </SheetFrame.Provider>
   );
