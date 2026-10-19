@@ -176,7 +176,8 @@ test('the copy path: the member\'s own pasted notice records the request, withou
   const uid2 = await chat(env2);
   await hook(env2, msg({ from: OWNER, text: 'See https://axal.vc/privacy/interviews?n=2' }));
   assert.equal(row(db2, uid2), undefined);
-  // The answer to a pasted notice counts like one to Axal's.
+  // The answer to a pasted notice counts like one to Axal's, even after other messages.
+  await hook(env, msg({ text: 'One question first.' }));
   await hook(env, msg({ text: 'yes', replyTo: 5000 }));
   assert.equal(row(db, uid).status, 'given');
 });
@@ -228,6 +229,20 @@ test('YES on a pending chat waits on the thread and is copied to the session at 
   assert.equal(row(db, uid).session_id, a.body.session_id, 'the row takes its first session');
 });
 
+test('a request made while the chat was pending stays open at assignment, and its YES then counts', async () => {
+  const { env, db, queued } = await seeded();
+  const uid = await chat(env);
+  await hook(env, msg({ voice: VOICE }));
+  const notice = await ask(env, uid);
+  const a = await call(env, ME, 'POST', `/threads/${uid}/assign`, { interview_id: INTERVIEW });
+  const open = row(db, uid);
+  assert.deepEqual([open.status, open.session_id], ['requested', a.body.session_id], 'the request now belongs to this interview');
+  await hook(env, msg({ text: 'YES', replyTo: notice }));
+  assert.equal(row(db, uid).status, 'given');
+  await runConsentJobs(env, queued);
+  assert.equal(voiceJobs(queued).length, 1);
+});
+
 test('the first message after the notice counts without replying to it; after another contact message it does not', async () => {
   const { env, db } = await seeded();
   const uid = await chat(env);
@@ -248,6 +263,7 @@ test('the first message after the notice counts without replying to it; after an
 test('each rule failing once leaves the request open, and the message is kept as text', async () => {
   const cases: Array<[string, (n: number) => unknown]> = [
     ['the owner\'s own YES', (n) => msg({ from: OWNER, text: 'YES', replyTo: n })],
+    ['a YES from a user who is not the chat\'s', (n) => msg({ from: { id: 4242, is_bot: false, first_name: 'Other' }, text: 'YES', replyTo: n })],
     ['an offline auto-reply', (n) => msg({ text: 'YES', replyTo: n, offline: true })],
     ['a business bot', (n) => msg({ from: { id: 777, is_bot: true, first_name: 'Axal' }, bot: true, text: 'YES', replyTo: n })],
     ['"yes please"', (n) => msg({ text: 'yes please', replyTo: n })],

@@ -201,10 +201,11 @@ export async function markRequested(
 ): Promise<void> {
   const ref = externalMessageId ? await refKey(provider, externalMessageId) : null;
   await env.DB.batch([
+    // ISO, to the millisecond, as `last_inbound_at` is: Telegram's "first message after the notice" compares the two.
     env.DB.prepare(
-      `UPDATE channel_consents SET requested_at = datetime('now'), request_ref_hash = COALESCE(?, request_ref_hash),
+      `UPDATE channel_consents SET requested_at = ?, request_ref_hash = COALESCE(?, request_ref_hash),
               notice_version = ?, updated_at = datetime('now') WHERE id = ? AND status = 'requested'`,
-    ).bind(ref, CONSENT_NOTICE_VERSION, consentId),
+    ).bind(new Date().toISOString(), ref, CONSENT_NOTICE_VERSION, consentId),
     env.DB.prepare(
       `UPDATE channel_threads SET consent_state = 'awaiting', updated_at = datetime('now')
         WHERE id = ? AND (consent_state IS NULL OR consent_state <> 'given')`,
@@ -298,9 +299,9 @@ export async function recordReply(env: Env, thread: ThreadRow, reply: InboundCon
     if (!(row.status === 'given' && reply.answer === 'stop')) {
       if (Date.now() - askedAt > ANSWER_VALID_MS) return ignored('too_late');
       const toNotice = repliesToNotice || (!!contextRef && contextRef === row.request_ref_hash);
-      // `requested_at` is D1's, to the second: a contact message in that same second came before the notice.
+      // Both times are the Worker's, to the millisecond (`markRequested`, `bumpStatement`).
       const lastIn = ms(thread.last_inbound_at);
-      const first = !Number.isFinite(lastIn) || Math.floor(lastIn / 1000) * 1000 <= askedAt;
+      const first = !Number.isFinite(lastIn) || lastIn <= askedAt;
       if (!toNotice && !first) return ignored('not_a_reply_to_notice');
     }
   } else {
