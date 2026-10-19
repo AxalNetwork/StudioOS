@@ -44,6 +44,11 @@ call runs at boot.
   webhook secret, a write scope, an Axal entity's organization), and is read
   on demand by `cloudflare-worker/src/services/mercuryPersonal.ts`. Decision
   3's entity check lives here, so both share it.
+- D752 (#1886) — investors hold one too, on HQ only
+  (`personal_hq_only_roles`); off HQ the route answers 403
+  `purpose_not_allowed` before the provider, which refuses again. Connect
+  stores the capabilities of the caller's role's variant
+  (`personalMercuryFor`, `registry.ts`).
 
 ## Credential handling
 

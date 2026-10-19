@@ -21,7 +21,7 @@ import { buildCatalogue, cardAction, isEntityRow, toolDeepLink, toolGroups } fro
 import { ConnectorsView } from '../src/pages/account/AccountConnectors.jsx';
 import { openingView } from '../src/pages/account/ConnectorSheet.jsx';
 import { MercuryEntitySheet } from '../src/pages/account/MercurySheet.jsx';
-import { ADMIN_ONLY, BRANCH_MANAGED, ENTITY_AUDIT_FOOT, FUND_NOTE, NOT_OFFERED, isMercurySearch } from '../src/pages/account/mercuryModel.js';
+import { ADMIN_ONLY, BRANCH_MANAGED, ENTITY_AUDIT_FOOT, FUND_NOTE, NOT_OFFERED, NOT_OFFERED_HQ_ONLY, isMercurySearch } from '../src/pages/account/mercuryModel.js';
 
 const h = React.createElement;
 const html = (el, entry = '/account/connectors') => renderToStaticMarkup(h(MemoryRouter, { initialEntries: [entry] }, el));
@@ -284,6 +284,11 @@ test('a mercury search with no Mercury row says it is not offered, and offers no
   const disc = flat(html(h(ConnectorsView, { data: ready(NO_MERCURY), initialTab: 'discover', initialQuery: 'mercury' })));
   assert.ok(disc.includes(NOT_OFFERED));
   assert.doesNotMatch(disc, /Request it/);
+  // D752: an investor on a branch reads that Mercury is on HQ only.
+  const investor = flat(html(h(ConnectorsView, { data: ready(NO_MERCURY), initialQuery: 'mercury', role: 'investor', onBranch: true })));
+  assert.ok(investor.includes(NOT_OFFERED_HQ_ONLY));
+  assert.ok(!investor.includes(NOT_OFFERED));
+  assert.doesNotMatch(investor, /Request it/);
   // Any other unknown name still offers the request.
   assert.match(flat(html(h(ConnectorsView, { data: ready(NO_MERCURY), initialQuery: 'notion' }))), /No connector called ‘notion’\. Request it\./);
 });
