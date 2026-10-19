@@ -16,7 +16,7 @@ export function SheetRow({ title, description, right, mark, to, onClick, onClose
     : <button type="button" onClick={onClick} className={cls}>{children}</button>;
 }
 
-export function PhoneSheet({ label, title, onClose, opener, children }) {
+export function PhoneSheet({ label, title, onClose, opener, scrimClass = 'bg-[rgba(24,24,27,.42)]', children }) {
   const id = useId();
   const layer = useRef(null);
   const box = useRef(null);
@@ -41,7 +41,7 @@ export function PhoneSheet({ label, title, onClose, opener, children }) {
     if (next !== null) { event.preventDefault(); (targets[next] || box.current)?.focus(); }
   }
   return <div ref={layer} className="fixed inset-0 z-50 lg:hidden" role="presentation">
-    <div className="absolute inset-0 bg-[rgba(24,24,27,.42)]" onClick={onClose} aria-hidden="true" />
+    <div className={`absolute inset-0 ${scrimClass}`} onClick={onClose} aria-hidden="true" />
     <div ref={box} role="dialog" aria-modal="true" aria-label={title ? undefined : label} aria-labelledby={title ? id : undefined}
       tabIndex={-1} onKeyDown={onKeyDown} onTouchStart={e => { start.current = e.touches[0]?.clientY; }}
       onTouchEnd={e => { if (e.changedTouches[0]?.clientY - start.current > 60) onClose(); }}

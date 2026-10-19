@@ -10,9 +10,14 @@ import assert from 'node:assert/strict';
 import { createElement as h } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
-import { AiBudgetUsage, aiTopupState, usageMoney } from '../src/ui/AiBudgetUsage.jsx';
+import { AiBudgetUsage, usageMoney } from '../src/ui/AiBudgetUsage.jsx';
+import { aiTokenState } from '../src/lib/aiTokens.js';
+// D755 (#1916): the reader is lib/aiTokens.js's; `not_ready` is D750's "unavailable".
+const aiTopupState = (p, productError) => aiTokenState({ error: productError, data: p });
 import { RailUsage } from '../src/ui/WorkerRail.jsx';
-import { TOPUP_REASON_LINES, TopUpReadinessCard, topUpStatusLine } from '../src/pages/hq/PlatformAllowancesPage.jsx';
+import { TOPUP_REASON_LINES } from '../src/pages/hq/PlatformAllowancesPage.jsx';
+import { TokenPacksCard } from '../src/pages/hq/TokenPacks.jsx';
+import { packLine } from '../src/pages/hq/tokenPacksModel.js';
 
 const BUDGET = {
   licence: 'founder:growth', daily_microusd: 5000000, monthly_microusd: 50000000,
@@ -53,8 +58,8 @@ test('usageMoney rounds to the cent, says <$0.01 under half a cent, and keeps la
 
 test('the shared reader: ready only with a sellable price; not_ready and unset are unavailable; a failed read is unreadable', () => {
   assert.equal(aiTopupState(READY, false), 'ready');
-  assert.equal(aiTopupState({ configured: true, state: 'not_ready' }, false), 'unavailable');
-  assert.equal(aiTopupState({ configured: false }, false), 'unavailable');
+  assert.equal(aiTopupState({ configured: true, state: 'not_ready' }, false), 'not_ready');
+  assert.equal(aiTopupState({ configured: false }, false), 'not_ready');
   assert.equal(aiTopupState(READY, true), 'unreadable');
   assert.equal(aiTopupState(null, false), 'unreadable');
   assert.equal(aiTopupState({ configured: true, product: READY.product }, false), 'unreadable', 'no state is not on sale');
@@ -89,23 +94,25 @@ for (const [name, draw] of [['the rail', rail], ['the compact card', card]]) {
 }
 
 test('HQ readiness: one plain sentence per reason, the six-character suffix and the mode, never a key', () => {
+  // D755 (#1986): D750's single line is now the fallback's own line among the packs, said to come from STRIPE_PRICE_AI_TOPUP.
+  const fallback = (state, reason, suffix = '123abc', mode = 'live') => packLine({ origin: 'environment', uid: null, label: null, state, reason, price_id_suffix: suffix, adoptable: true }, mode);
   for (const reason of Object.keys(TOPUP_REASON_LINES)) {
-    const line = topUpStatusLine({ state: 'not_ready', reason, price_id_suffix: '123abc', mode: 'live' });
+    const line = fallback('not_ready', reason);
     assert.ok(line && line.tone === 'warning', reason);
-    assert.match(line.text, /Members are told it isn't available yet\.$/);
+    assert.match(line.text, /^From STRIPE_PRICE_AI_TOPUP: /);
+    assert.match(line.text, /Members don't see it\.$/);
   }
-  assert.equal(topUpStatusLine({ state: 'not_ready', reason: 'not_one_time', price_id_suffix: '123abc', mode: 'live' }).text,
-    "STRIPE_PRICE_AI_TOPUP names a recurring price. The top-up needs a one-time USD price. Price …123abc. Members are told it isn't available yet.");
-  assert.match(topUpStatusLine({ state: 'not_ready', reason: 'missing_from_catalog', price_id_suffix: '123abc', mode: 'live' }).text,
-    /^The price is not in the catalog mirror and Stripe does not know it in live mode\./);
-  assert.doesNotMatch(topUpStatusLine({ state: 'not_ready', reason: 'bad_config', price_id_suffix: null, mode: 'test' }).text, /Price …/);
-  assert.match(topUpStatusLine({ state: 'ready', reason: null, price_id_suffix: '123abc', mode: 'live' }).text, /on sale \(price …123abc\), live mode/);
-  assert.match(topUpStatusLine({ state: 'unset', reason: null, price_id_suffix: null, mode: 'live' }).text, /is not set/);
-  assert.equal(topUpStatusLine({ state: 'not_ready', reason: 'invented', mode: 'live' }), null, 'an unknown reason is not guessed');
-  assert.equal(topUpStatusLine(null), null);
-  const draw = (status) => renderToStaticMarkup(h(MemoryRouter, null, h(TopUpReadinessCard, { status: { reload: () => {}, ...status } })));
-  assert.match(draw({ status: 'ready', data: { state: 'ready', reason: null, price_id_suffix: '123abc', mode: 'live' } }), /data-testid="hq-topup-readiness-line"/);
+  assert.equal(fallback('not_ready', 'not_one_time').text,
+    "From STRIPE_PRICE_AI_TOPUP: STRIPE_PRICE_AI_TOPUP names a recurring price. The top-up needs a one-time USD price. Price …123abc. Members don't see it.");
+  assert.match(fallback('not_ready', 'missing_from_catalog').text, /^From STRIPE_PRICE_AI_TOPUP: The price is not in the catalog mirror and Stripe does not know it in live mode\./);
+  assert.doesNotMatch(fallback('not_ready', 'bad_config', null, 'test').text, /Price …/);
+  assert.match(fallback('ready', null).text, /on sale \(price …123abc\), live mode/);
+  assert.equal(fallback('not_ready', 'invented'), null, 'an unknown reason is not guessed');
+  assert.equal(packLine(null), null);
+  const draw = (status) => renderToStaticMarkup(h(MemoryRouter, null, h(TokenPacksCard, { status: { reload: () => {}, ...status } })));
+  assert.match(draw({ status: 'ready', data: { mode: 'live', packs: [{ origin: 'environment', uid: null, label: null, state: 'ready', reason: null, price_id_suffix: '123abc', adoptable: true }] } }), /data-testid="hq-pack-line"/);
+  assert.match(draw({ status: 'ready', data: { mode: 'live', packs: [] } }), /No token pack is on sale/, 'no fallback set: the unset sentence');
   assert.match(draw({ status: 'error' }), /Retry<\/button>/);
-  assert.match(draw({ status: 'ready', data: { state: 'not_ready', reason: 'invented' } }), /Retry<\/button>/);
-  assert.match(draw({ status: 'loading' }), /Reading the top-up/);
+  assert.match(draw({ status: 'ready', data: { mode: 'live', packs: [{ origin: 'environment', state: 'not_ready', reason: 'invented' }] } }), /Retry<\/button>/);
+  assert.match(draw({ status: 'loading' }), /Reading the token packs/);
 });

@@ -5,6 +5,7 @@ import { useBillingStatus } from './AccountBilling';
 import { AccountPhonePage, phonePending } from './AccountPhonePage';
 import { ACCOUNT_PHONE_PAGES, ACCOUNT_PHONE_COPY } from './accountPhone';
 import { budgetReadable, microUsd, topUpState } from './usageModel';
+import { ADD_TOKENS_PATH, TOKENS_LINE, TOPUP_UNAVAILABLE_RUNS } from '../../lib/aiTokens';
 
 /**
  * D700 (#1662) — A10m, `/plans-and-pricing` on a phone. It lives apart from
@@ -14,7 +15,8 @@ import { budgetReadable, microUsd, topUpState } from './usageModel';
 
 const TIERS_FOR = { founder: FOUNDER_TIERS, investor: INVESTOR_TIERS };
 const priceOf = (t) => (t.priceMonthly ? `$${t.priceMonthly} / month` : '$0');
-export const TOKENS_LINE = '$1 of tokens buys $1 of AI use. Tokens never expire.';
+// D755 (#1916): the tokens line, the sentence and the path live in lib/aiTokens.js.
+export { TOKENS_LINE } from '../../lib/aiTokens';
 
 /** " · AI $1.00 a day, $5.00 a month", from the member's own `/ai-budget/me`; '' when it says neither. */
 function aiLine(budget) {
@@ -52,8 +54,8 @@ export function pricingPhoneGroups({ role, billing, budget, product }) {
   }
   const topUp = product.status === 'ready' ? topUpState(product.data) : product.status;
   const tokens = { label: tokensTitle, testid: 'pricing-phone-tokens', rows: [{ title: 'Past your allowance', description: TOKENS_LINE, testid: 'pricing-phone-tokens-row' }] };
-  if (topUp === 'available') Object.assign(tokens.rows[0], { pill: { label: ACCOUNT_PHONE_COPY.addTokens, tone: 'info' }, href: '/checkout?ai_topup=1' });
-  else if (topUp === 'unavailable') tokens.note = 'Top-ups are not available yet. Runs use your included allowance only.';
+  if (topUp === 'available') Object.assign(tokens.rows[0], { pill: { label: ACCOUNT_PHONE_COPY.addTokens, tone: 'info' }, href: ADD_TOKENS_PATH });
+  else if (topUp === 'unavailable') tokens.note = TOPUP_UNAVAILABLE_RUNS;
   else tokens.note = phonePending(topUp === 'loading' ? 'loading' : 'unreadable', 'The top-up option', 'Your allowance is unaffected.', product.reload);
   groups.push(tokens);
   return groups;

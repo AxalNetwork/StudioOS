@@ -243,7 +243,7 @@ test('U1 renders loading, Unreadable (the others still load), ready, and each st
   const paused = html(h(AllowanceCard, { budget: ready({ ...BUDGET, held_for_review: [{ uid: 'r1' }] }), product: ready(PRODUCT) }));
   assert.match(paused, /role="alert" data-testid="usage-state-paused"[\s\S]*Runs paused[\s\S]*A run cost more than it held\. New runs wait while HQ checks the charge\./);
   const noTopUp = html(h(AllowanceCard, { budget: ready(BUDGET), product: ready({ configured: false, product: null }) }));
-  assert.match(noTopUp, /Top-ups are not available yet\. Runs use your included allowance only\./);
+  assert.match(noTopUp, /Top-up isn&#x27;t available yet\. Runs use your included allowance only\./);
   assert.doesNotMatch(noTopUp, /Add tokens/);
   const topUpBad = html(h(AllowanceCard, { budget: ready(BUDGET), product: UNREADABLE }));
   assert.match(topUpBad, /The top-up option could not be read\. Your balance above is unaffected\./);

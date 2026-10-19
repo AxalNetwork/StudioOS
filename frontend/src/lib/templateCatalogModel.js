@@ -14,6 +14,12 @@ export const LAYER_ORDER = Object.freeze(['gp', 'fund', 'portfolio', 'compliance
 /** The state filter's values, in the order the filter offers them. */
 export const STATE_FILTERS = Object.freeze(['all', 'has_body', 'stub', 'unpublished', 'published']);
 
+/**
+ * The kind filter (#1854): `'all'`, then the Worker's TEMPLATE_KINDS
+ * (`services/templateFormat.ts`) in its order. A test reads that list back.
+ */
+export const KIND_FILTERS = Object.freeze(['all', 'agreement', 'corporate', 'resolution', 'unilateral', 'policy', 'notice', 'booklet']);
+
 export function isStub(row) {
   return !!row?.is_stub || !String(row?.body_md ?? '').trim();
 }
@@ -52,10 +58,16 @@ function matchesQuery(row, q) {
   return [row?.title, row?.slug].some((v) => String(v || '').toLowerCase().includes(needle));
 }
 
-/** The rows that pass search, the layer filter (`'all'` or a layer key) and the state filter. */
-export function filterCatalog(rows, { q = '', layer = 'all', state = 'all' } = {}) {
+/** The rows that pass search, the layer filter (`'all'` or a layer key), the state filter and the kind filter. */
+export function filterCatalog(rows, { q = '', layer = 'all', state = 'all', kind = 'all' } = {}) {
   return (rows || []).filter((row) =>
-    matchesQuery(row, q) && (layer === 'all' || row?.layer === layer) && matchesStateFilter(row, state));
+    matchesQuery(row, q) && (layer === 'all' || row?.layer === layer) && matchesStateFilter(row, state)
+    && (kind === 'all' || row?.kind === kind));
+}
+
+/** How many of the three filters are not on `'all'` ("Filters · n"). */
+export function activeFilterCount({ layer = 'all', state = 'all', kind = 'all' } = {}) {
+  return [layer, state, kind].filter((v) => v !== 'all').length;
 }
 
 /**

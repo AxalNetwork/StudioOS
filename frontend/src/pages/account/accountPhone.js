@@ -152,6 +152,8 @@ export function accountViewFor({ pathname = '', hash = '', phone = false } = {})
 export function connectorKeyFor(pathname = '') {
   const m = String(pathname).match(/^\/account\/connectors\/([^/]+)\/?$/);
   if (!m) return null;
+  // D756 §1.11: Telegram's page is `telegram`; the decision's first slug lands there (replace, by the canonicalising effect).
+  if (m[1].toLowerCase() === 'telegram-business') return 'telegram';
   const k = codeWord(m[1].toLowerCase());
   return k && k.length <= 40 ? k : null;
 }

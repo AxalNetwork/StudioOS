@@ -10,6 +10,8 @@ import PaperPreview from '../../components/PaperPreview';
 import TemplateEditor from './contracts/TemplateEditor';
 import { useAuth } from '../../hooks/useAuthSync';
 import { branchOfUser } from '../../lib/shellRole';
+import { BELOW_MD_QUERY, usePhoneWidth } from '../../ui/phone/usePhoneWidth';
+import TemplateCatalogPhone from './contracts/TemplateCatalogPhone';
 
 // Task #8 — Markdown template editor + full template catalog.
 //
@@ -51,6 +53,8 @@ function detectMergeFields(body) {
 
 export default function AdminTemplates({ onOpenUsage, recordedPublication = false }) {
   const { user } = useAuth() || {};
+  // D717 (#1854): below `md` the Templates tab is the phone's read-only list.
+  const phone = usePhoneWidth(BELOW_MD_QUERY);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
@@ -108,6 +112,29 @@ export default function AdminTemplates({ onOpenUsage, recordedPublication = fals
         onChanged={reload}
         onDeleted={() => { setEditing(null); reload(); }}
       />
+    );
+  }
+
+  // D717 (#1854) decision 2: the phone list only while no editor is open, so an
+  // editor opened on a wider window keeps its draft when the window narrows.
+  if (recordedPublication && phone && !editing) {
+    return (
+      <div>
+        {err && <ConsoleUnreadable what="Templates" onRetry={reload} />}
+        {unavailable && (
+          <div className="bg-amber-50 border border-amber-200 text-amber-800 text-xs p-3 rounded-lg mb-3 flex items-start gap-2">
+            <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" />
+            <div>
+              The legal template store isn't available in this environment. Templates are managed by the production worker —
+              open the deployed app to view and edit them.
+            </div>
+          </div>
+        )}
+        {loading ? <p role="status" className="py-6 text-center text-sm text-gray-500 dark:text-gray-400">Loading…</p>
+          : err || unavailable ? null
+            : items.length === 0 ? <p className="py-6 text-center text-sm text-gray-500 dark:text-gray-400">No templates yet.</p>
+              : <TemplateCatalogPhone items={items} />}
+      </div>
     );
   }
 

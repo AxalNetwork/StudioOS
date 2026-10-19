@@ -16,6 +16,8 @@
  *   GET    /whatsapp/link           the newest claim ('•••• 1234') and the current link
  *   POST   /whatsapp/link/:uid/confirm  Axal's half: the claimed number becomes the member's link
  *   DELETE /whatsapp/link           unlink
+ *   GET    /whatsapp/captures       way B part 2 (#1938): what the member forwarded to Axal's number
+ *   POST   /whatsapp/captures/:uid/consent  { method: 'pre_agreed' | 'verbal' | 'written' } for a capture still waiting
  *   DELETE /:provider               disconnect (telegram | whatsapp)
  *   POST   /:provider/test          Telegram: a message in the member's own chat with the bot.
  *                                   WhatsApp: read the number with the member's token — a test
@@ -31,7 +33,8 @@
  *                                   presses it, inside the window, at most twice, 24 h apart
  *   POST   /threads/:uid/consent    { method }: the member's word, once the notice was delivered (D754 §4)
  *   POST   /threads/:uid/ignore     { ignored?: boolean } (default true)
- *   POST   /threads/:uid/reply      { text, client_key }: once per client_key, inside the 24 h window
+ *   POST   /threads/:uid/reply      { text, client_key }: once per client_key, within 24 h of the contact's
+ *                                   last message (D756); a 429 carries the provider's retry_after
  *   POST   /threads/:uid/voice/:message/retry  a waiting voice note again, once what stopped it allows (#1586)
  *
  * Public — each verified by its provider's own secret, outside requireAuth:
@@ -44,6 +47,8 @@
  * store nothing; Telegram checks its secret before even reading the body.
  *
  * Admin (`channelsAdmin`, super admin):
+ *   GET    /telegram/webhook        the interview bot's health (D756): getMe and getWebhookInfo, as codes;
+ *                                   503 not_configured with the missing secret NAMES when it is unset
  *   POST   /telegram/webhook        setWebhook with secret_token and the business update types
  *
  * A WEBHOOK PERSISTS, THEN ACKNOWLEDGES (D684 §11). Verify what a header can
@@ -65,6 +70,15 @@
  * Only the text is kept; the audio is never stored (D754: for WhatsApp,
  * until the S13 w3 voice-audio task lands).
  *
+ * AXAL'S OWN WHATSAPP NUMBER (way B, whatsappLink.ts) is answered before any
+ * member connection is looked for: `LINK <code>` records a claim and gets one
+ * reply; STOP from a linked sender unlinks with one reply; a linked sender's
+ * recordings wait, as encrypted media ids only, until the member says everyone
+ * recorded agreed (whatsappCapture.ts); an unlinked sender's messages are
+ * claimed by their hashed id and ignored, with no reply and no text kept. Every
+ * way-B route answers 503 until the owner sets all four WHATSAPP_AXAL_*
+ * settings, and until then the webhook ignores the number.
+ *
  * NOTHING FROM A CHAT IS KEPT BEFORE CONSENT where its provider asks for it
  * (D754, #1893; services/channels/consent.ts). Such a chat, assigned, links
  * and waits: its text stays pending and its voice notes are never fetched
@@ -77,13 +91,6 @@
  * text keeps D684's rule. The member may ask from Axal or paste the notice
  * themselves, the answer is also kept as chat text, the bot confirms a
  * counted answer in one line, and no member's word is taken.
- *
- * AXAL'S OWN WHATSAPP NUMBER (way B, whatsappLink.ts) is answered before any
- * member connection is looked for: `LINK <code>` records a claim and gets one
- * reply; STOP from a linked sender unlinks with one reply; anything else is
- * claimed by its hashed id and ignored, with no reply and no text kept. Every
- * way-B route answers 503 until the owner sets all four WHATSAPP_AXAL_*
- * settings, and until then the webhook ignores the number.
  *
  * A TELEGRAM LINK TAKES TWO MESSAGES: `/start <code>` names the Telegram
  * account, and that account's own `/confirm` plus the member's Confirm in Axal
@@ -110,7 +117,7 @@ import { createLinkCode, pendingLinkView } from '../services/channels/linkCodes'
 import { beginOutbound, finishOutbound, applyDeliveryStatus, type OutboundRow } from '../services/channels/outbound';
 import {
   admitConsentedThread, applyDelete, applyEdit, assignThread, forgetConnection, inInterview, intervieweeLabel, listThreads, noteVoiceTry,
-  queueVoiceTranscriptions, readThread, releaseVoiceNote, setThreadIgnored, storeInbound, storeMessage, storeVoiceNote,
+  queueVoiceTranscriptions, readThread, releaseVoiceNote, replyWindowOpen, setThreadIgnored, storeInbound, storeMessage, storeVoiceNote,
   storeVoiceTranscript, threadForChat, threadForReply, voiceNoteForJob, type AssignTarget, type ThreadRow,
 } from '../services/channels/threads';
 import {
@@ -125,13 +132,14 @@ import {
   VOICE_RETRY_DELAYS, VOICE_TRIES, channelTimestampMs as ms, retryVoiceNote, transcriptionFailures, voiceFetchBy,
 } from '../services/channels/voiceFailures';
 import {
-  CHANNEL_LIMITS, PROVIDER_LABEL, audioConsentRequired, consentAsked, consentRequired, memberAttestationAllowed,
-  type InboundConsentReply, type InboundEvent, type InboundLink,
-  type InboundLinkConfirm, type InboundMessage, type MessagingProvider, type SendResult,
+  PROVIDER_LABEL, audioConsentRequired, consentAsked, consentRequired, memberAttestationAllowed,
+  type InboundConsentReply, type InboundEvent, type InboundLink, type InboundLinkConfirm,
+  type InboundManageChat, type InboundMessage, type MessagingProvider, type SendResult,
 } from '../services/channels/types';
 import * as telegram from '../services/channels/telegram';
 import * as whatsapp from '../services/channels/whatsapp';
 import * as waLink from '../services/channels/whatsappLink';
+import * as capture from '../services/channels/whatsappCapture';
 
 const channels = new Hono<{ Bindings: Env }>();
 export const channelsAdmin = new Hono<{ Bindings: Env }>();
@@ -149,9 +157,10 @@ const SENTENCE: Record<string, string> = {
   identity_taken: 'This Telegram account is already linked to another Axal account. Disconnect it there first.',
   link_cancelled: 'This Telegram link was replaced or cancelled. Request a new link.',
   not_connected: 'Connect this account in Account › Connectors first.',
+  connection_disabled: 'The Axal bot is switched off for your Telegram Business account, so nothing was sent. Turn it back on in Telegram › Settings › Telegram Business › Chatbots.',
   unknown_provider: 'That is not a messaging channel Axal connects.',
   rate_limited: 'Too many attempts right now. Try again in a little while.',
-  window_closed: 'More than 24 hours have passed since this conversation was last active, so a free-form reply is closed. Templates are a later step; nothing was sent.',
+  window_closed: 'Your contact last wrote more than 24 hours ago, so a free-form reply is closed. Nothing was sent.',
   no_reply_right: 'The Axal bot is not allowed to reply on this Telegram Business account. Allow replies for the bot in Telegram › Settings › Telegram Business › Chatbots.',
   thread_ignored: 'This conversation is ignored. Stop ignoring it before replying.',
   text_required: 'Write a message first.',
@@ -171,6 +180,7 @@ const SENTENCE: Record<string, string> = {
   invalid_status: 'Choose pending, assigned or ignored.',
   axal_number: "This is Axal's own WhatsApp number. Connect your business's own number instead.",
   number_taken: 'This WhatsApp number is already connected to another Axal account.',
+  capture_not_waiting: 'That recording is not waiting for an answer: it was answered, removed or has expired.',
   number_not_in_waba: 'That number is not part of the WhatsApp Business account you connected.',
   choose_number: 'Your WhatsApp Business account has more than one number. Connect again and choose the number your customers write to.',
   code_exchange_failed: 'Meta did not accept the sign-up. Start the WhatsApp connection again.',
@@ -187,7 +197,6 @@ const SENTENCE: Record<string, string> = {
   notice_link_missing: 'The public base URL is not set, so Axal cannot link its notice. Nothing was sent.',
   // D756 (#1977) — consent in the Telegram chat.
   attestation_not_offered: 'In Telegram the interviewee agrees in the chat itself. Ask from Axal, or paste the notice into the chat yourself.',
-  connection_disabled: 'The Axal bot is switched off for your Telegram Business account, so nothing was sent. Turn it back on in Telegram › Settings › Telegram Business › Chatbots.',
   secret_format: 'TELEGRAM_CHANNEL_WEBHOOK_SECRET may use only letters, digits, _ and -, up to 256 characters.',
 };
 const sentence = (code: string) => SENTENCE[code] ?? 'That did not work. Try again.';
@@ -364,6 +373,25 @@ channels.post('/whatsapp/link/:uid/confirm', member(async (c, user) => {
 channels.delete('/whatsapp/link', member(async (c, user) => {
   if (!waLink.axalNumberReady(c.env)) return no(c, 503, 'not_available');
   return c.json({ ok: true, unlinked: await waLink.unlinkMember(c.env, user.id) });
+}));
+
+// D754 way B (#1938): what a linked member forwarded to Axal's number. No media ids leave the Worker.
+channels.get('/whatsapp/captures', member(async (c, user) => {
+  if (!waLink.axalNumberReady(c.env)) return no(c, 503, 'not_available');
+  await activeMember(c.env, user.id);
+  return c.json({ items: await capture.listCaptures(c.env, user.id) });
+}));
+
+/** "Agreed beforehand" (or the member's other word) for a capture still waiting, from Axal. */
+channels.post('/whatsapp/captures/:uid/consent', member(async (c, user) => {
+  if (!waLink.axalNumberReady(c.env) || !channelOpenTo(c.env, 'whatsapp', user)) return no(c, 503, 'not_available');
+  await activeMember(c.env, user.id);
+  const body = await c.req.json<Record<string, unknown>>().catch(() => ({} as Record<string, unknown>));
+  const method = String(body.method ?? '');
+  if (method !== 'pre_agreed' && method !== 'verbal' && method !== 'written') return no(c, 400, 'invalid_request');
+  const out = await capture.answerCapture(c.env, user.id, c.req.param('uid') ?? '', method);
+  if (out.done !== 'consented') return no(c, 404, 'capture_not_waiting');
+  return c.json({ ok: true, status: 'consented' });
 }));
 
 channels.post('/whatsapp/connect', member(async (c, user) => {
@@ -666,11 +694,9 @@ const outboundView = (r: OutboundRow & { created_at?: string }) => ({
   uid: r.uid, provider: r.provider, status: r.status, error_code: r.error_code, created_at: r.created_at ?? null,
 });
 
-/** Why a free-form reply may not go now, or null. Checked before any provider call. */
+/** Why a free-form reply may not go now, or null. Checked before any provider call. Both providers count from the contact's last message (D756). */
 function windowRefusal(thread: ThreadRow): string | null {
-  // WhatsApp counts from the customer's last message; Telegram from the chat's last activity.
-  const since = ms(thread.provider === 'whatsapp' ? thread.last_inbound_at : thread.last_message_at);
-  return Number.isFinite(since) && Date.now() - since < CHANNEL_LIMITS.replyWindowMs ? null : 'window_closed';
+  return replyWindowOpen(thread) ? null : 'window_closed';
 }
 
 channels.post('/threads/:uid/reply', member(async (c, user) => {
@@ -719,8 +745,10 @@ channels.post('/threads/:uid/reply', member(async (c, user) => {
   if (refusal) {
     result = { ok: false, code: refusal };
   } else if (thread.provider === 'telegram') {
-    const bc = await telegram.activeBusinessConnection(env, user.id);
-    result = !bc ? { ok: false, code: 'not_connected' }
+    // Connected but switched off in Telegram is not "not connected" (D756).
+    const bc = await telegram.telegramBusinessState(env, user.id);
+    result = bc.state === 'none' ? { ok: false, code: 'not_connected' }
+      : bc.state === 'disabled' ? { ok: false, code: 'connection_disabled' }
       : !bc.canReply ? { ok: false, code: 'no_reply_right' }
       : await telegram.sendBusinessMessage(env, bc.businessConnectionId, thread.external_chat_id, text);
   } else {
@@ -746,9 +774,12 @@ channels.post('/threads/:uid/reply', member(async (c, user) => {
   }
   if (!result.ok) {
     const code = result.code ?? 'rejected';
-    const status = ['window_closed', 'no_reply_right', 'not_connected', 'thread_ignored'].includes(code) ? 409
+    const status = ['window_closed', 'no_reply_right', 'not_connected', 'connection_disabled', 'thread_ignored'].includes(code) ? 409
       : code === 'rate_limited' ? 429 : result.retryable ? 503 : 502;
-    return no(c, status, code, { retryable: !!result.retryable });
+    // A 429 with the provider's wait: nothing is retried here, the member's client waits (D756).
+    const wait = status === 429 && result.retryAfterSec ? Math.ceil(result.retryAfterSec) : null;
+    if (wait) c.header('Retry-After', String(wait));
+    return no(c, status, code, { retryable: !!result.retryable, ...(wait ? { retry_after: wait } : {}) });
   }
 
   // Sent: the member's reply joins the thread (or the interview it is assigned to) as 'Me'.
@@ -791,8 +822,10 @@ function eventKind(ev: InboundEvent): EventKind {
     case 'delete': return 'delete';
     case 'status': return 'status';
     case 'link': case 'link_confirm': return 'link';
+    case 'manage_chat': return 'command';
     case 'connection': return 'connection';
     case 'consent_reply': return 'command';
+    case 'axal_message': return ev.button ? 'command' : ev.media ? 'voice' : 'message';
     default: return 'ignored';
   }
 }
@@ -849,10 +882,39 @@ async function handleLink(env: Env, claim: number, ev: InboundLink | InboundLink
     : out.reason === 'member_inactive' ? copy.memberInactive : copy.nothingToConfirm);
 }
 
+/**
+ * Telegram's "manage this chat" button (D756): one plain answer in the member's
+ * private chat, at most ten an hour per Telegram account on its own counter,
+ * so it never spends a link code or a link attempt. Over the limit, or on a D1
+ * error, nothing is sent.
+ */
+async function handleManageChat(env: Env, claim: number, ev: InboundManageChat): Promise<void> {
+  try {
+    if (await linkAttemptOverLimit(env, `manage:${ev.telegramUserId}`, 10)) {
+      await finishEvent(env, claim, 'ignored', { error: 'rate_limited' });
+      return;
+    }
+  } catch {
+    await finishEvent(env, claim, 'ignored', { error: 'link_limit_unavailable' });
+    return;
+  }
+  await finishEvent(env, claim, 'done');
+  await tell(env, ev.chatId, telegram.TELEGRAM_COPY.manageChat);
+}
+
 /** Wrong or repeated `LINK` codes a sender may send per hour, counted on a hash of the sender. */
 const WA_LINK_TRIES_PER_SENDER_HOUR = 5;
 
 /** One reply from Axal's number, once per client key, through the outbound ledger. A failure never fails the webhook. */
+/** The capture's consent question: reply buttons from Axal's number, once per client key. */
+async function axalAsk(env: Env, userId: number, clientKey: string, to: string, body: string, buttons: { id: string; title: string }[]): Promise<void> {
+  const { row, existing } = await beginOutbound(env, 'whatsapp', userId, null, clientKey);
+  if (existing) return;
+  const r = await whatsapp.sendAxalInteractive(env, to, { body, buttons }).catch(() => ({ ok: false, code: 'send_unknown' } as SendResult));
+  await finishOutbound(env, row.id, r);
+  if (!r.ok) console.error(`[channels] axal number question not sent code=${r.code ?? 'unknown'}`);
+}
+
 async function axalReply(env: Env, userId: number, clientKey: string, to: string, text: string): Promise<void> {
   const { row, existing } = await beginOutbound(env, 'whatsapp', userId, null, clientKey);
   if (existing) return;
@@ -862,12 +924,16 @@ async function axalReply(env: Env, userId: number, clientKey: string, to: string
 }
 
 /**
- * D754 way B (#1937): an event on Axal's own WhatsApp number. There is no
- * member connection here; who a message is from is the sender's link.
- *   LINK <code>  records the claim against the sender; one reply.
- *   STOP         from a linked sender: unlinks; one reply.
- *   anything else from a linked sender is part 2's (#1938): until then it
- *                counts as use and is ignored.
+ * D754 way B: an event on Axal's own WhatsApp number (whatsapp.ts
+ * `axalMessageEvent`). There is no member connection here; who a message is
+ * from is the sender's link.
+ *   LINK <code>  records the claim against the sender; one reply (#1937).
+ *   STOP         from a linked sender: unlinks, drops its unanswered
+ *                captures; one reply.
+ *   a recording  from a linked sender: joins a capture (whatsappCapture.ts);
+ *                a new capture asks once whether everyone recorded agreed.
+ *   a button     the member's answer for a capture (#1938).
+ *   anything else from a linked sender: one reply saying what Axal takes.
  *   anything from an unlinked sender: ignored, no reply, nothing kept but
  *                the event's hashed id.
  */
@@ -880,12 +946,9 @@ async function handleAxalNumber(
     const known = await applyDeliveryStatus(env, ev.externalMessageId, ev.status, ev.errorCode);
     return finish(known ? 'done' : 'ignored', { error: known ? null : 'not_ours' });
   }
-  // A typed YES, NO or STOP arrives as a consent reply (D754 §4); on Axal's
-  // number it is only the message it carries.
-  const msg = ev.kind === 'consent_reply' ? ev.fallback : ev.kind === 'message' ? ev : null;
-  if (!msg || msg.side !== 'contact') return finish('ignored', { error: 'unsupported' });
-  const sender = msg.externalChatId;
-  const code = waLink.linkCodeIn(msg.text);
+  if (ev.kind !== 'axal_message') return finish('ignored', { error: 'unsupported' });
+  const sender = ev.externalChatId;
+  const code = waLink.linkCodeIn(ev.text);
   if (code) {
     try {
       if (await linkAttemptOverLimit(env, `whatsapp_link:sender:${sender}`, WA_LINK_TRIES_PER_SENDER_HOUR)) {
@@ -902,11 +965,13 @@ async function handleAxalNumber(
   }
   const link = await waLink.linkedSender(env, sender);
   if (!link) return finish('ignored', { error: 'unlinked_sender' });
-  if (waLink.isStop(msg.text)) {
+  const userId = Number(link.user_id);
+  if (waLink.isStop(ev.text)) {
     spend();
     const unlinked = await waLink.unlinkSender(env, Number(link.id));
-    await finish(unlinked ? 'done' : 'ignored', { userId: Number(link.user_id), error: unlinked ? null : 'not_linked' });
-    if (unlinked) await axalReply(env, Number(link.user_id), `wbstop:${claim}`, sender, waLink.WHATSAPP_LINK_COPY.unlinked);
+    if (unlinked) await capture.dropWaitingCaptures(env, Number(link.id));
+    await finish(unlinked ? 'done' : 'ignored', { userId, error: unlinked ? null : 'not_linked' });
+    if (unlinked) await axalReply(env, userId, `wbstop:${claim}`, sender, waLink.WHATSAPP_LINK_COPY.unlinked);
     return;
   }
   // Management commands can finish in canary, as Telegram's do; captures cannot.
@@ -914,7 +979,32 @@ async function handleAxalNumber(
     return finish('ignored', { userId: Number(link.user_id), error: 'rollout' });
   }
   await waLink.touchLink(env, Number(link.id));
-  return finish('ignored', { userId: Number(link.user_id), error: 'capture_not_built' });
+  if (!(await memberStands(env, userId))) return finish('ignored', { userId, error: 'member_inactive' });
+
+  const press = capture.captureButton(ev.button);
+  if (press) {
+    spend();
+    const out = await capture.answerCapture(env, userId, press.uid, press.answer);
+    // The download and the draft interview follow #1896 (whatsappCapture.ts).
+    return finish(out.done === 'nothing' ? 'ignored' : 'done', { userId, error: out.done === 'nothing' ? 'capture_not_waiting' : null });
+  }
+  if (ev.media && capture.capturable(ev.media)) {
+    spend();
+    if (capture.declaredTooLarge(ev.media)) {
+      await finish('ignored', { userId, error: 'too_large' });
+      await axalReply(env, userId, `wbcapture-large:${claim}`, sender, capture.CAPTURE_COPY.tooLarge);
+      return;
+    }
+    const added = await capture.addToCapture(env, { id: Number(link.id), user_id: userId }, ev.media);
+    await finish('stored', { userId });
+    if (added.created) {
+      await axalAsk(env, userId, `wbcapture:${added.uid}`, sender, capture.CAPTURE_COPY.question, capture.captureButtons(added.uid));
+    }
+    return;
+  }
+  spend();
+  await finish('ignored', { userId, error: 'unsupported_type' });
+  await axalReply(env, userId, `wbunsupported:${claim}`, sender, capture.CAPTURE_COPY.unsupported);
 }
 
 function resolveConnection(env: Env, provider: MessagingProvider, ref: string): Promise<ChannelConnection | null> {
@@ -1036,6 +1126,12 @@ async function processEvent(env: Env, ev: InboundEvent): Promise<'ok' | 'retry'>
       // member asks for a new code.
       stored = true;
       await handleLink(env, claim, ev);
+      return 'ok';
+    }
+    if (ev.kind === 'manage_chat') {
+      // Marked stored before anything is sent, so a failure is never retried into a second reply.
+      stored = true;
+      await handleManageChat(env, claim, ev);
       return 'ok';
     }
     if (ev.kind === 'connection') {
@@ -1163,7 +1259,7 @@ channels.post('/whatsapp/webhook', async (c) => {
   // One POST may carry many events; each is claimed on its own, and one that
   // must be retried does not stop the rest (their claims make the retry a no-op).
   let retry = false;
-  for (const ev of whatsapp.normaliseWhatsAppPayload(body)) {
+  for (const ev of whatsapp.normaliseWhatsAppPayload(body, c.env.WHATSAPP_AXAL_PHONE_NUMBER_ID ?? null)) {
     if ((await processEvent(c.env, ev)) === 'retry') retry = true;
   }
   return retry ? c.json({ error: 'retry', code: 'retry' }, 500) : c.json({ ok: true });
@@ -1226,12 +1322,14 @@ export async function runVoiceFollowup(env: Env, p: ChannelJobPayload): Promise<
   // the note and tries again itself, VOICE_TRIES times in all, so the last
   // try is known and the member is told; until then the note says it is
   // still being tried.
-  const tryAgain = async (code: 'provider_unreachable' | 'transcription_unavailable') => {
+  // A provider's own wait (Telegram's retry_after, D756) stretches the next try, up to an hour.
+  const tryAgain = async (code: 'provider_unreachable' | 'transcription_unavailable', retryAfterSec?: number) => {
     const attempt = Math.max(1, Number(p.try) || 1);
     if (attempt >= VOICE_TRIES) return giveBack('failed', code);
     await noteVoiceTry(env, note.uid, job, code);
+    const scheduled = VOICE_RETRY_DELAYS[Math.min(attempt - 1, VOICE_RETRY_DELAYS.length - 1)];
     await enqueueChannelJob(env, 'channel_followup', provider, `${job}-try-${attempt + 1}`, { ...p, try: attempt + 1 }, {
-      delaySeconds: VOICE_RETRY_DELAYS[Math.min(attempt - 1, VOICE_RETRY_DELAYS.length - 1)],
+      delaySeconds: Math.min(3600, Math.max(scheduled, Math.ceil(Number(retryAfterSec) || 0))),
     });
   };
 
@@ -1241,6 +1339,10 @@ export async function runVoiceFollowup(env: Env, p: ChannelJobPayload): Promise<
   if (!(await channelOpenToMember(env, conn.provider, conn.userId))) return giveBack('ignored', 'rollout');
   // The member's chat may have left its interview since the job was queued.
   if (!inInterview(note.thread)) return giveBack('ignored', 'not_assigned');
+  // A bot the member switched off in Telegram fetches nothing, even for a note stored before (D756).
+  if (provider === 'telegram' && (await telegram.telegramBusinessState(env, conn.userId)).state !== 'enabled') {
+    return giveBack('failed', 'connection_disabled');
+  }
 
   const audio = provider === 'telegram'
     ? await telegram.fetchTelegramVoice(env, note.file, note.mime)
@@ -1248,7 +1350,7 @@ export async function runVoiceFollowup(env: Env, p: ChannelJobPayload): Promise<
   if (!audio.ok) {
     if (audio.retryable) {
       console.error(`[channels] voice download failed provider=${provider} code=${audio.code} try=${Number(p.try) || 1}`);
-      return tryAgain('provider_unreachable');
+      return tryAgain('provider_unreachable', audio.retryAfterSec);
     }
     const fetchBy = voiceFetchBy(provider, { awaiting_transcription: true, sent_at: note.sentAt });
     const expired = provider === 'whatsapp' && 'lookup' in audio && audio.lookup === true
@@ -1311,12 +1413,32 @@ registerChannelJob('channel_followup', 'whatsapp', runChannelFollowup);
 // Admin
 // ---------------------------------------------------------------------------
 
+/** The webhook's address on this deployment, or null when there is no https base. The POST registers it; the GET checks it. */
+function webhookUrl(env: Env): string | null {
+  const base = String(env.PUBLIC_BASE_URL || env.APP_URL || '').trim().replace(/\/+$/, '');
+  // Telegram delivers webhooks to HTTPS only.
+  return /^https:\/\/[^/]+$/.test(base) ? `${base}/api/channels/telegram/webhook` : null;
+}
+
+/**
+ * The interview bot's health (D756 §1.2), codes and numbers only. Unset
+ * secrets: 503 with their NAMES, and no Telegram call. Otherwise 200, even
+ * when Telegram does not answer: that half reads `reachable: false`.
+ */
+channelsAdmin.get('/telegram/webhook', async (c) => {
+  await requireSuperAdmin(c);
+  if (!providerAvailable(c.env, 'telegram')) {
+    const missing = availability(c.env).find((a) => a.provider === 'telegram')?.missing ?? [];
+    return no(c, 503, 'not_configured', { configured: false, missing });
+  }
+  const health = await telegram.readTelegramHealth(c.env, webhookUrl(c.env));
+  return c.json({ configured: true, ...health, checked_at: new Date().toISOString() });
+});
+
 channelsAdmin.post('/telegram/webhook', async (c) => {
   await requireSuperAdmin(c);
-  const base = String(c.env.PUBLIC_BASE_URL || c.env.APP_URL || '').trim().replace(/\/+$/, '');
-  // Telegram delivers webhooks to HTTPS only.
-  if (!/^https:\/\/[^/]+$/.test(base)) return no(c, 503, 'base_url_missing');
-  const url = `${base}/api/channels/telegram/webhook`;
+  const url = webhookUrl(c.env);
+  if (!url) return no(c, 503, 'base_url_missing');
   const r = await telegram.setTelegramWebhook(c.env, url);
   if (!r.ok) return no(c, r.code === 'not_configured' || r.code === 'secret_format' ? 503 : 502, r.code);
   return c.json({ ok: true, url, allowed_updates: [...telegram.TELEGRAM_ALLOWED_UPDATES] });

@@ -5,7 +5,7 @@ The corpus the first integration pass worked from. Sorted by one question:
 
 | Folder | Count | Meaning |
 | --- | --- | --- |
-| `integrated/` | 97 | A route is running on main. Graded `CURRENT`, `UPGRADE` or `RESKIN` — the surface exists, and for `UPGRADE`/`RESKIN` the canvas is a *diff against* something already live. |
+| `integrated/` | 98 | A route is running on main. Graded `CURRENT`, `UPGRADE` or `RESKIN` — the surface exists, and for `UPGRADE`/`RESKIN` the canvas is a *diff against* something already live. |
 | `backlog/` | 28 | Graded `NEW` or `DEFERRED`. No route yet. |
 | `out-of-scope/` | 26 | Deliberately not being built. The `ROUTE_MAP.md` row says why. |
 | `shared/` | 6 | The dc-runtime bundle every canvas loads, plus two standalone pitch-deck exports. Generated — both code scanners ignore this tree. Every canvas asks for it as `src="./support.js"`, which resolves next to the canvas and **not** to this folder, so opening one straight from `integrated/` in a browser gets a blank page: copy `shared/support.js` beside it first. Nothing runs these at runtime, so the reference is nominal — it is a convention marking "the shared runtime, not an inlined 69KB copy", and `scripts/read-canvas.mjs` reproduces it when it decodes a new export. |
@@ -414,3 +414,12 @@ cycle root is its One Next Thing, and each module, add form and cycle action
 is its own page; the phone record page follows in #1665's closing PR.
 **`integrated/` went 95 → 97.** The departures are in
 `documentation/architecture/decisions/D703.md`.
+
+**2026-10-19 (D717, #1854), one graduated.** `Legal Documents · Templates`
+moved from `design/incoming/` to `integrated/`, unedited, when #1854 closed
+#1782: the Templates tab (#1851, #1852, #1853, #1854), the entity and money
+map (#1855), the bank-account registry (#1856), signing (#1857) and the LP's
+wire details and fee statement (#1859) are built to it. The LP screens #1858,
+#1860 and #1866 and D758's library work keep their own issues.
+**`integrated/` went 97 → 98.** The departures are in
+`documentation/architecture/decisions/D717.md`.

@@ -122,6 +122,8 @@ Meet). Since D757 (#1926) it also reads the Calendar status
 the Meet transcript permission (`allowMeetTranscripts`, `POST
 /api/calendar/google/meet-transcripts/connect`), going only to Google's consent
 URL. Every path is written out in full so the drift check reads each one.
+D756 (#1895): its `channelsAdminApi` also calls `/api/admin/channels/telegram/webhook`
+(the interview bot's health, and registering its webhook), for Super Admins.
 
 D678 (#1552): `publicAiModels.js` reads `GET /api/public/ai-models`, the
 router's model table as the public Intelligence page shows it: one row per job,
@@ -206,3 +208,5 @@ and `POST /api/auth/google/popup` (the code that window returned, with the
 attempt's state; the answer is `{ token, user, new_signup }`). The POST carries
 `X-Requested-With: XmlHttpRequest`, which the Worker requires and which no
 other origin can send. The redirect fallback stays `api.googleStartUrl`.
+
+D651 (#1463): `connectors.js` calls `/api/connectors`, the Connectors page's, its panel's and Build's 'Connect a tool' reads and writes. D753 (#1878) adds `page(key)` (`GET /api/connectors/directory/:key`), one connector's page.
