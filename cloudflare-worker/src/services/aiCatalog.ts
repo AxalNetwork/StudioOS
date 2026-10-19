@@ -45,6 +45,9 @@ export const TASK_LABELS: Record<TaskClass, string> = {
   research_ask: 'Answer from your documents',
   structure_interview: 'Structure an interview',
   summarise_interview: 'Summarise an interview',
+  ops_summary: 'Summarise the site metrics',
+  image_screen: 'Screen an image',
+  image_alt_text: 'Describe an image',
   // D764 (#2089) — the rail's kinds of work, in the canvas's words.
   rail_chat: 'Chat on a page',
   rail_synth: 'Group notes into themes',

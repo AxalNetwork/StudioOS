@@ -32,6 +32,7 @@
 import type { Env } from '../../types';
 import type { Citation, FillClass, FillTarget } from './types';
 import { bindingKey } from '../../util/schemaBootstrap';
+import { neverFillMessage, neverFillReason } from './neverFill';
 
 export interface RecordFillInput {
   target: FillTarget;
@@ -100,6 +101,13 @@ export async function ensureFillProvenanceSchema(env: Env): Promise<void> {
  * edit, and calling it one would make every accept look corrected.
  */
 export async function recordFill(env: Env, input: RecordFillInput): Promise<number> {
+  // EVERY FILL PATH ENDS HERE, so the never-fill registry (D777) is enforced here
+  // as well as at propose and accept: a path added later that forgets those two
+  // still cannot file Eadwyn as the author of a signature or a payment amount.
+  // The accept path reverts on the throw; `recordCompositionFills` skips the row
+  // and keeps the member's own save.
+  const field = `${input.target.table}.${input.target.column}`;
+  if (neverFillReason(field)) throw new Error(neverFillMessage(field));
   await ensureFillProvenanceSchema(env);
   const proposed = String(input.proposedValue ?? '');
   const written = String(input.writtenValue ?? '');

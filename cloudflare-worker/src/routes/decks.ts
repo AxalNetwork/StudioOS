@@ -355,9 +355,8 @@ Startup data: ${JSON.stringify(ctx)}`;
       task: 'dd_synthesis',
       userId,
       surface: AI_SURFACE.raisePitch,
-      railPage: AI_SURFACE.raisePitch,
-      railOption: 'deck_draft',
-      recordRef: `project:${Number(p?.id) || 0}`,
+      // D765: the member's rail context; run() records it as D767's page, option and record.
+      rail: { page: AI_SURFACE.raisePitch, option: 'deck_draft', record: `project:${Number(p?.id) || 0}` },
       systemPrompt: 'You are a senior VC associate drafting concise pitch decks. Always return valid JSON.',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.5,

@@ -4,6 +4,7 @@ import { ArrowLeft, Save, FileDown, Image as ImageIcon, Table2, Send, ExternalLi
 import { publications } from '../../lib/api';
 import { useToast } from '../../components/useToast';
 import ToastMessage from '../../components/ToastMessage';
+import PublicationsFrame from './PublicationsFrame';
 
 export default function PublicationDetail() {
   const { id } = useParams();
@@ -92,6 +93,7 @@ export default function PublicationDetail() {
   const published = p.status === 'published';
 
   return (
+    <PublicationsFrame>
     <div className="max-w-4xl mx-auto px-6 py-8 dark:text-gray-100">
       <ToastMessage toast={current} onDismiss={dismissToast} />
       <button onClick={() => nav('/admin/publications')} className="text-sm text-gray-500 hover:text-violet-600 flex items-center gap-1 mb-4">
@@ -260,5 +262,6 @@ export default function PublicationDetail() {
         )}
       </section>
     </div>
+    </PublicationsFrame>
   );
 }
