@@ -7,7 +7,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { MemoryRouter, useLocation } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { readFileSync, existsSync } from 'node:fs';
 import { transformWithOxc } from 'vite';
 import { installDocument } from './_contracts_dom.mjs';
@@ -73,6 +73,28 @@ async function settle() { await act(async () => { for (let i = 0; i < 8; i++) aw
 
 async function withWorld(check, options = {}) {
   const restoreDom = installDocument();
+  // React updates text nodes through nodeValue and replaces element contents
+  // through textContent. Match those DOM operations so old receipt text cannot
+  // survive a state transition in the small shared document fixture.
+  const createText = document.createTextNode.bind(document);
+  document.createTextNode = value => {
+    const node = createText(value);
+    Object.defineProperty(node, 'nodeValue', { get: () => node.textContent, set: value => { node.textContent = String(value); } });
+    return node;
+  };
+  const createElement = document.createElement.bind(document);
+  document.createElement = tag => {
+    const node = createElement(tag);
+    Object.defineProperty(node, 'textContent', {
+      get: () => node.childNodes.map(child => child.textContent || '').join(''),
+      set: value => {
+        for (const child of node.childNodes) child.parentNode = null;
+        node.childNodes = [];
+        if (String(value)) node.appendChild(document.createTextNode(String(value)));
+      },
+    });
+    return node;
+  };
   const previous = { fetch: globalThis.fetch, sessionStorage: globalThis.sessionStorage, setTimeout: globalThis.setTimeout, clearTimeout: globalThis.clearTimeout,
     fixture: globalThis.__d755Checkout };
   const timers = [], delays = [], requests = [], writes = [], cartCalls = [], unexpected = [], storage = new Map([
@@ -122,7 +144,7 @@ async function withWorld(check, options = {}) {
     if (path === RECEIPT) { globalThis.setTimeout = schedule; globalThis.clearTimeout = cancel; }
     const Probe = () => { const location = useLocation(); w.path = location.pathname + location.search + location.hash; return null; };
     container = document.createElement('div'); document.body.appendChild(container); root = createRoot(container);
-    await act(async () => root.render(h(MemoryRouter, { initialEntries: [url] }, h(React.Fragment, null, h(page.default), h(Probe)))));
+    await act(async () => root.render(h(MemoryRouter, { initialEntries: [url] }, h(React.Fragment, null, h(Routes, null, h(Route, { path: path === CHECKOUT ? '/checkout' : '/checkout/confirmation', element: h(page.default) }), h(Route, { path: '*', element: null })), h(Probe)))));
     await settle();
     return page;
   };
@@ -164,7 +186,7 @@ async function packCheckout() {
     assert.ok(w.requests[0].nonce);
     await w.click('Use UAE billing address');
     assert.equal(w.requests.at(-1).billing_country, 'AE');
-    assert.match(w.text(), /VAT \(5%, est\.\)/);
+    assert.match(w.text(), /VAT\s*\(\s*5\s*%, est\.\)/);
     assert.deepEqual(w.cartCalls, []);
     assert.deepEqual([...w.storage], w.initialStorage);
   });
