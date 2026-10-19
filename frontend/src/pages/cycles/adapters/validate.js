@@ -285,6 +285,8 @@ const CONSENT = { agreed: ['Agreed', 'ok'], declined: ['Declined', 'bad'] };
 export const STATE = {
   failed: 'Failed',
   recording: 'Recording',
+  waiting_consent: 'Waiting for consent',
+  consent_declined: 'Declined in WhatsApp',
   waiting_messages: 'Waiting for messages',
   waiting_transcript: 'Waiting for the call transcript',
   processing: 'Processing',

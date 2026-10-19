@@ -13,10 +13,9 @@ export const TOPUP_UNAVAILABLE = "Top-up isn't available yet.";
 export const TOPUP_UNAVAILABLE_RUNS = `${TOPUP_UNAVAILABLE} Runs use your included allowance only.`;
 /** AMP's tokens line (account_phone_d700 pins it to the canvas). */
 export const TOKENS_LINE = '$1 of tokens buys $1 of AI use. Tokens never expire.';
-/** Where every Add tokens link goes. PR 2 moves it to `/plans-and-pricing#token-packs`. */
-export const ADD_TOKENS_PATH = '/checkout?ai_topup=1';
-/** The pricing page's Token packs section, where the retired `/checkout?ai_topup=1` now lands. */
+/** Every Add tokens link and the retired checkout redirect share this destination. */
 export const TOKEN_PACKS_PATH = '/plans-and-pricing#token-packs';
+export const ADD_TOKENS_PATH = TOKEN_PACKS_PATH;
 
 const integer = (n) => Number.isSafeInteger(n) && n >= 0;
 /** A price the checkout can sell: a Stripe price ID, USD, a whole positive amount in cents. */
@@ -30,9 +29,8 @@ export function sellableLine(line) {
  * pack on sale. Null when there is none.
  */
 export function topUpLine(data) {
-  if (sellableLine(data?.product)) return data.product;
-  const packs = Array.isArray(data?.packs) ? data.packs : [];
-  return packs.find(sellableLine) || null;
+  if (Array.isArray(data?.packs)) return data.packs.find(sellableLine) || null;
+  return sellableLine(data?.product) ? data.product : null;
 }
 
 /**
@@ -44,7 +42,7 @@ export function aiTokenState(reading) {
   if (loading) return 'loading';
   if (error || !data || typeof data !== 'object') return 'unreadable';
   // CR2 answers `unset`; D750 answers `{configured:false}`. Both: nothing is on sale.
-  if (data.state === 'unset' || data.configured === false || data.state === 'not_ready') return 'not_ready';
+  if (data.state === 'unset' || (!Array.isArray(data.packs) && data.configured === false) || data.state === 'not_ready') return 'not_ready';
   if (data.state !== 'ready') return 'unreadable';
   return topUpLine(data) ? 'ready' : 'unreadable';
 }

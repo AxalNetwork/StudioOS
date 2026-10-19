@@ -230,7 +230,7 @@ export function TokenPackCheckout({ uid }) {
     return () => { live = false; };
   }, [uid]);
   // CR7 consumes CR2's pack list, not D750's deprecated single-product fields.
-  const state = aiTokenState({ ...reading, data: reading.data && { state: reading.data.state, packs: reading.data.packs } });
+  const state = aiTokenState(reading);
   // The environment fallback has no pack uid; its advertised price id is its key.
   const pack = state === 'ready' && Array.isArray(reading.data?.packs)
     ? reading.data.packs.find(p => p.uid === uid || (p.uid == null && p.price_id === uid)) : null;

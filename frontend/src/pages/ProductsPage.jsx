@@ -28,6 +28,7 @@ import BillingCartBar from '../components/products/BillingCartBar';
 import CartDrawer from '../components/products/CartDrawer';
 import ProductCard from '../components/products/ProductCard';
 import BundleCard from '../components/products/BundleCard';
+import TokenPacksSection, { isPackProduct } from '../components/products/TokenPacksSection';
 import ProductSlideOver from '../components/products/ProductSlideOver';
 import {
   formatMoney, formatDate, AUDIENCE_FILTERS, priceCycle, isBundleProduct,
@@ -271,6 +272,7 @@ export default function ProductsPage() {
   const deepLinkCode = searchParams.get('code') || '';
 
   const cart = useCart();
+  const [tokenPacks, setTokenPacks] = useState([]);
   const [products, setProducts] = useState(null);   // null = loading
   const [catalogError, setCatalogError] = useState(null);
   const [unlocks, setUnlocks] = useState([]);
@@ -307,8 +309,8 @@ export default function ProductsPage() {
   // Deep-linked product for the slide-over. When /products/:productId is hit
   // directly, open the panel pre-open once the catalog resolves.
   const openProduct = useMemo(
-    () => (productId && products ? products.find((p) => p.id === productId) || null : null),
-    [productId, products],
+    () => (productId && products ? products.find((p) => p.id === productId && !isPackProduct(p, tokenPacks)) || null : null),
+    [productId, products, tokenPacks],
   );
 
   // How the product modal was opened: carries the bundle card's license
@@ -338,6 +340,7 @@ export default function ProductsPage() {
 
   // Add a one-time item to the cart.
   const addToCart = useCallback((product, price, qty = 1) => {
+    if (isPackProduct(product, tokenPacks)) return;
     cart.add({
       price_id: price.id,
       product_id: product.id,
@@ -347,7 +350,7 @@ export default function ProductsPage() {
       cycle: priceCycle(price),
     }, qty);
     showToast(`${product.name} added to your order`);
-  }, [cart, showToast]);
+  }, [cart, showToast, tokenPacks]);
 
   // Subscription one-click success (from the modal's embedded checkout).
   // Clear the modal intent so back/deep-link reopens never resume checkout.
@@ -377,8 +380,8 @@ export default function ProductsPage() {
     [products],
   );
   const addons = useMemo(
-    () => (products || []).filter((p) => !isBundleProduct(p)),
-    [products],
+    () => (products || []).filter((p) => !isBundleProduct(p) && !isPackProduct(p, tokenPacks)),
+    [products, tokenPacks],
   );
   const visibleAddons = useMemo(() => {
     if (audienceFilter === 'all') return addons;
@@ -502,6 +505,8 @@ export default function ProductsPage() {
           </div>
         </section>
       )}
+
+      <TokenPacksSection onPacksRead={setTokenPacks} />
 
       {(addons.length > 0 || (products !== null && products.length > 0)) && (
         <section>

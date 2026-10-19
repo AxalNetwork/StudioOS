@@ -14,16 +14,18 @@ import { installDocument } from './_contracts_dom.mjs';
 
 const CHECKOUT = '../src/pages/CheckoutPage.jsx';
 const RECEIPT = '../src/pages/CheckoutConfirmationPage.jsx';
+const PACKS = '../src/components/products/TokenPacksSection.jsx';
 const read = path => readFileSync(new URL(path, import.meta.url), 'utf8');
-const originalSources = { [CHECKOUT]: read(CHECKOUT), [RECEIPT]: read(RECEIPT) };
+const originalSources = { [CHECKOUT]: read(CHECKOUT), [RECEIPT]: read(RECEIPT), [PACKS]: read(PACKS) };
 let activeSources = originalSources, moduleId = 0;
 const h = React.createElement;
 const dataModule = source => 'data:text/javascript;base64,' + Buffer.from(source).toString('base64');
 const reactUrl = import.meta.resolve('react');
 const proxies = dataModule(
   'export const api = new Proxy({}, {get(_t,k){return globalThis.__d755Checkout.api[k]}});' +
+  'export const publicPricingApi={plansAndPacks(){return globalThis.__d755Checkout.publicPacks()}};' +
   'export const aiBudgetApi = {topUp(){return globalThis.__d755Checkout.topUp()}};' +
-  'export function useAuth(){return {user:{id:2,email:"member@example.test",name:"Fixture Member"}}}' +
+  'export function useAuth(){return {user:globalThis.__d755Checkout.visitor ? null : {id:2,email:"member@example.test",name:"Fixture Member"}}}' +
   'export function useSettings(){return {effectiveTheme:"light"}}' +
   'export function getStripe(){return Promise.resolve(globalThis.__d755Checkout.stripe)}' +
   'export function buildAppearance(){return {}}' +
@@ -38,6 +40,7 @@ const stripeModule = dataModule(
   'export const AddressElement=({onChange})=>React.createElement("button",{type:"button",onClick:()=>onChange({value:{address:{country:"AE"}}})},"Use UAE billing address");'
 );
 const mockedImports = {
+  '../../lib/api/publicPricing': proxies, '../../hooks/useAuthSync': proxies,
   '../lib/api': proxies, '../lib/api/aiBudget': proxies, '../hooks/useAuthSync': proxies,
   '../contexts/SettingsContext': proxies, '../lib/stripe': proxies,
   '../components/products/useCart': proxies, '@stripe/react-stripe-js': stripeModule,
@@ -107,6 +110,8 @@ async function withWorld(check, options = {}) {
   for (const key of ['add', 'clear', 'remove', 'changeQty', 'setPromo']) cart[key] = (...args) => cartCalls.push([key, ...args]);
   const w = {
     timers, delays, requests, writes, cartCalls, storage, initialStorage, cart, cartMounts: 0, path: '',
+    visitor: !!options.visitor,
+    publicPacks: async () => options.publicPacks ? options.publicPacks() : ({packs:[PACK,{...OTHER_PACK,uid:null}]}),
     topUp: async () => options.topUpError ? Promise.reject(new Error('fixture read failed')) : options.reading ?? READY,
     stripe: { confirmPayment: async body => {
       w.paymentArgs = body;
@@ -144,7 +149,7 @@ async function withWorld(check, options = {}) {
     if (path === RECEIPT) { globalThis.setTimeout = schedule; globalThis.clearTimeout = cancel; }
     const Probe = () => { const location = useLocation(); w.path = location.pathname + location.search + location.hash; return null; };
     container = document.createElement('div'); document.body.appendChild(container); root = createRoot(container);
-    await act(async () => root.render(h(MemoryRouter, { initialEntries: [url] }, h(React.Fragment, null, h(Routes, null, h(Route, { path: path === CHECKOUT ? '/checkout' : '/checkout/confirmation', element: h(page.default) }), h(Route, { path: '*', element: null })), h(Probe)))));
+    await act(async () => root.render(h(MemoryRouter, { initialEntries: [url] }, h(React.Fragment, null, h(Routes, null, h(Route, { path: path === CHECKOUT ? '/checkout' : path === PACKS ? '/plans-and-pricing' : '/checkout/confirmation', element: h(page.default) }), h(Route, { path: '*', element: null })), h(Probe)))));
     await settle();
     return page;
   };
@@ -330,11 +335,73 @@ async function incompleteProjection() {
     assert.match(w.text(), /Your order is recorded\. Check Usage/); assert.deepEqual(w.writes,[]);
   }, {order:{...ORDER,status:'pending'}});
 }
-const scenarios = [packCheckout, unavailable, unreadable, refusals, paymentFailure, paymentSuccess, retiredPath,
+async function pricingPacks() {
+  await withWorld(async w => {
+    const page = await w.mount(PACKS, '/plans-and-pricing#token-packs');
+    assert.ok(w.nodes().some(n => props(n).id === 'token-packs'));
+    const links = w.nodes().filter(n => n.tagName === 'A');
+    assert.deepEqual(links.map(n => [textOf(n),props(n).href]),
+      [['Buy','/checkout?token_pack=pack25'],['Buy','/checkout?token_pack=price_Pack50']]);
+    assert.match(w.text(), /\$25 of tokens/);
+    assert.match(w.text(), /\$1 of tokens buys \$1 of AI use\. Tokens never expire\./);
+    assert.match(w.text(), /Sold by Axal VC Management LLC\./);
+    assert.match(w.text(), /VAT, where it applies, is added at checkout and is not part of the tokens\./);
+    assert.equal(w.cartMounts,0); assert.deepEqual(w.cartCalls,[]);
+    assert.equal(page.isPackProduct({kind:'token_pack'}),true);
+    assert.equal(page.isPackProduct({metadata:{kind:'token_pack'}}),true);
+    assert.equal(page.isPackProduct({prices:[{id:PACK.price_id}]},[PACK]),true);
+    assert.equal(page.isPackProduct({kind:'alacarte',prices:[{id:'price_Other'}]},[PACK]),false);
+  });
+  const integration = read('../src/pages/ProductsPage.jsx');
+  assert.match(integration, /<TokenPacksSection onPacksRead=\{setTokenPacks\} \/>/);
+  assert.match(integration, /!isBundleProduct\(p\) && !isPackProduct\(p, tokenPacks\)/);
+}
+async function pricingReadStates() {
+  await withWorld(async w => {
+    await w.mount(PACKS, '/plans-and-pricing');
+    assert.match(w.text(), /Top-up isn't available yet\./);
+    assert.ok(!w.nodes().some(n => n.tagName==='A'));
+  },{publicPacks:async()=>({packs:[]})});
+  let n=0;
+  await withWorld(async w => {
+    await w.mount(PACKS, '/plans-and-pricing');
+    assert.match(w.text(), /Unreadable/); assert.ok(!w.nodes().some(n=>n.tagName==='A'));
+    await w.click('Retry');
+    assert.match(w.text(), /\$25 of tokens/);
+    assert.ok(w.nodes().some(n=>n.tagName==='A' && props(n).href==='/checkout?token_pack=pack25'));
+  },{publicPacks:async()=>{if(n++===0)throw new Error('unavailable');return {packs:[PACK]};}});
+  await withWorld(async w => {
+    await w.mount(PACKS, '/plans-and-pricing');
+    assert.match(w.text(), /Unreadable/); assert.ok(!w.nodes().some(n=>n.tagName==='A'));
+  },{publicPacks:async()=>({packs:[{...PACK,currency:'eur'}]})});
+}
+async function pricingVisitor() {
+  await withWorld(async w => {
+    await w.mount(PACKS, '/plans-and-pricing');
+    const links=w.nodes().filter(n=>n.tagName==='A');
+    assert.equal(links.length,2);
+    for(const link of links){
+      assert.equal(textOf(link),'Sign in to buy');
+      assert.equal(new URL(props(link).href,'https://example.test').searchParams.get('next'),'/plans-and-pricing#token-packs');
+    }
+    assert.equal(w.cartMounts,0);
+  },{visitor:true});
+}
+const scenarios = [pricingPacks, pricingReadStates, pricingVisitor, packCheckout, unavailable, unreadable, refusals, paymentFailure, paymentSuccess, retiredPath,
   ordinaryCheckout, receiptCredit, receiptTerminal, receiptBound, cancelledReads, ordinaryReceipt, incompleteProjection];
 for (const check of scenarios) test('D755 CR7: ' + check.name, check);
 
 const mutations = [
+  {name:"pack links lose their identifier",file:PACKS,before:"encodeURIComponent(pack.uid || pack.price_id)",after:"encodeURIComponent('wrong_pack')",check:pricingPacks},
+  {name:"pack price becomes hardcoded",file:PACKS,before:"packLabel(pack.unit_amount)",after:"'$5 of tokens'",check:pricingPacks},
+  {name:"pack price is admitted to the shared cart",file:PACKS,before:"packs.some(pack => pack.price_id === price.id)",after:"false",check:pricingPacks},
+  {name:"no packs are called unreadable",file:PACKS,before:"<p>{TOPUP_UNAVAILABLE}</p>",after:"<p>Unreadable</p>",check:pricingReadStates},
+  {name:"failed read is called empty",file:PACKS,before:"setReading({ status: 'unreadable', packs: [] });",after:"setReading({ status: 'ready', packs: [] });",check:pricingReadStates},
+  {name:"retry never retries",file:PACKS,before:"setAttempt(n => n + 1)",after:"setAttempt(n => n)",check:pricingReadStates},
+  {name:"visitor buys without signing in",file:PACKS,before:"href={user ?",after:"href={true ?",check:pricingVisitor},
+  {name:"seller disappears",file:PACKS,before:"Sold by Axal VC Management LLC.",after:"",check:pricingPacks},
+  {name:"tokens promise disappears",file:PACKS,before:"{TOKENS_LINE}",after:"{'Tokens'}",check:pricingPacks},
+
   {name:'unreadable pack is called unavailable',file:CHECKOUT,before:'The token pack could not be read. Refresh to retry.',after:"Top-up isn't available yet.",check:unreadable},
   {name:'ordinary promo lost',file:CHECKOUT,before:"if (!pack && appliedPromo?.code)",after:"if (false)",check:ordinaryCheckout},
   {name:'ordinary fulfilment confirmation lost',file:CHECKOUT,before:"if (paymentIntentId && !pack)",after:"if (false)",check:ordinaryCheckout},
@@ -344,7 +411,7 @@ const mutations = [
   {name:'a pack is added to the shared cart',file:CHECKOUT,
     before:"  const state = aiTokenState(",after:"  const shared = useCart(); shared.add(PACK_PLACEHOLDER, 1);\n  const state = aiTokenState(",check:packCheckout},
   {name:'wrong pack selected',file:CHECKOUT,before:"reading.data.packs.find(p => p.uid === uid || (p.uid == null && p.price_id === uid))",after:"reading.data.packs[0]",check:packCheckout},
-  {name:'deprecated configured=false hides ready packs',file:CHECKOUT,before:"{ ...reading, data: reading.data && { state: reading.data.state, packs: reading.data.packs } }",after:"reading",check:packCheckout},
+  {name:'ready packs are hidden',file:CHECKOUT,before:"const state = aiTokenState(reading)",after:"const state = 'not_ready'",check:packCheckout},
   {name:'pack quantity can double',file:CHECKOUT,before:"name: packLabel(pack.unit_amount), quantity: 1",after:"name: packLabel(pack.unit_amount), quantity: 2",check:packCheckout},
   {name:'pack has a promo box',file:CHECKOUT,before:"{!pack && <><div",after:"{true && <><div",check:packCheckout},
   {name:'pack has a stepper',file:CHECKOUT,before:'{!pack && <div className="inline-flex items-center border',after:'{true && <div className="inline-flex items-center border',check:packCheckout},

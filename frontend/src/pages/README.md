@@ -68,3 +68,5 @@ credit is reported only from `ai_topup.state`, with bounded backoff and cancelle
 reads on navigation. Missing balance data says Unreadable; nothing is credited
 from the browser. Stripe and the existing billing-country/VAT calculation stay
 on the existing checkout surface.
+
+`ProductsPage.jsx` mounts the public Token packs read after the plans on both desktop and phone; pack products are excluded from Add-ons, product details and the shared cart. The owner authorized this CR7 dependency under #1985; CR5 retains the plan-allowance and visitor-routing work.

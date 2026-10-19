@@ -56,6 +56,9 @@ test('aiTokenState: loading, unreadable, not_ready and ready, from both answers 
   }
   // CR2's shape (#1919).
   assert.equal(aiTokenState({ data: CR2_READY }), 'ready');
+  assert.equal(aiTokenState({ data: { ...CR2_READY, configured: false, product: null } }), 'ready', 'CR2 packs supersede the deprecated product switch');
+  assert.equal(topUpLine({ ...CR2_READY, product: PRICE }), CR2_READY.packs[0], 'the current pack list supersedes the legacy product');
+  assert.equal(aiTokenState({ data: { state: 'ready', packs: [], product: PRICE } }), 'unreadable', 'a stale legacy product cannot sell a pack');
   assert.equal(aiTokenState({ data: { state: 'unset', packs: [] } }), 'not_ready');
   assert.equal(aiTokenState({ data: { state: 'not_ready', packs: [] } }), 'not_ready');
   assert.equal(aiTokenState({ data: { state: 'ready', packs: [] } }), 'unreadable', 'ready with nothing sellable');
@@ -91,7 +94,7 @@ test('packLabel and the moved constants: the same strings, one home, re-exported
   assert.equal(card.usageMoney, usageMoney);
   assert.equal(microMoney(29536), '$0.029536');
   assert.equal(usageMoney(29536), '$0.03');
-  assert.equal(ADD_TOKENS_PATH, '/checkout?ai_topup=1', 'PR 1 keeps the path; PR 2 moves it to Token packs');
+  assert.equal(ADD_TOKENS_PATH, '/plans-and-pricing#token-packs');
 });
 
 test('one sentence: no file in frontend/src still says "Top-ups are not available yet" or types the sentence by hand', () => {
@@ -111,8 +114,7 @@ test('one path: every Add tokens link reads ADD_TOKENS_PATH, and no file but lib
     const rel = relative(SRC, file);
     if (rel === 'lib/aiTokens.js') continue;
     const text = readFileSync(file, 'utf8');
-    // The page path only: the admin API's `/admin/catalog/token-packs` routes are not a link.
-    if (/ai_topup=1|#token-packs/.test(text)) offenders.push(rel);
+    if (/\/plans-and-pricing#token-packs|\/checkout\?ai_topup=1/.test(text)) offenders.push(rel);
   }
   assert.deepEqual(offenders, []);
   const sites = { 'ui/WorkerRail.jsx': 1, 'ui/AiBudgetUsage.jsx': 1, 'pages/account/AccountUsage.jsx': 2, 'pages/account/PricingPhone.jsx': 1 };
@@ -170,4 +172,27 @@ test('D755 guards: aiTokens.js never calls the balance "credits", and holds no 1
   const strings = [...text.matchAll(/(['"`])((?:(?!\1)[^\\]|\\.)*)\1/g)].map(m => m[2]);
   assert.ok(!strings.some(s => /\bcredits?\b/i.test(s)), 'no member-facing string says credits');
   assert.doesNotMatch(text, /1\.25|markup/i);
+});
+
+test('CR7 shared-model mutations: current packs and the central purchase destination win, restored in both directions', async () => {
+  const original = read('lib/aiTokens.js');
+  let n = 0;
+  const load = async source => import('data:text/javascript;base64,' + Buffer.from(source + '\n// instance ' + n++).toString('base64'));
+  const check = model => {
+    assert.equal(model.ADD_TOKENS_PATH, '/plans-and-pricing#token-packs');
+    assert.equal(model.aiTokenState({data:{...CR2_READY,configured:false,product:null}}),'ready');
+    assert.equal(model.topUpLine({...CR2_READY,product:PRICE}).price_id,CR2_READY.packs[0].price_id);
+    assert.equal(model.topUpLine({...CR2_READY,packs:[],product:PRICE}),null);
+  };
+  for (const [before,after] of [
+    ["(!Array.isArray(data.packs) && data.configured === false)","data.configured === false"],
+    ["if (Array.isArray(data?.packs))","if (false)"],
+    ["export const ADD_TOKENS_PATH = TOKEN_PACKS_PATH;","export const ADD_TOKENS_PATH = '/checkout?ai_topup=1';"],
+  ]) {
+    assert.ok(original.includes(before),'mutation target exists');
+    check(await load(original));
+    const mutated = await load(original.replace(before,()=>after));
+    assert.throws(()=>check(mutated),{name:'AssertionError'});
+    check(await load(original));
+  }
 });

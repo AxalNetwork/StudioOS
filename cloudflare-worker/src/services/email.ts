@@ -993,7 +993,11 @@ export interface BrandedInvoiceOpts {
   paidAt?: Date | null;
   /** D755 (#1914): the legal seller, named in the footer when given. Without it the receipt is unchanged. */
   seller?: string | null;
+  /** D755 (#1914) §17: a token-pack order; says when the tokens land and links to Usage › Top-ups. */
+  topUp?: { usageUrl: string } | null;
 }
+
+export const TOKEN_PACK_EMAIL_NOTE = 'The tokens are added to your top-up balance once Stripe confirms the payment. You will see them in Usage › Top-ups.';
 
 /** The receipt's subject, HTML and text, pure (no Gmail), so a test can read them. */
 export function brandedInvoiceContent(opts: BrandedInvoiceOpts): { subject: string; html: string; text: string } {
@@ -1014,6 +1018,9 @@ export function brandedInvoiceContent(opts: BrandedInvoiceOpts): { subject: stri
     : '';
   const seller = opts.seller && opts.seller.trim() ? opts.seller.trim() : null;
   const sellerNote = seller ? `Sold by ${escapeHtml(seller)}. ` : '';
+  const topUpNote = opts.topUp
+    ? `<p style="font-size:13px;color:#374151;margin:14px 0 0;line-height:1.6;">${escapeHtml(TOKEN_PACK_EMAIL_NOTE)} <a href="${escapeHtml(opts.topUp.usageUrl)}" style="color:#6d28d9;">Open Usage › Top-ups</a></p>`
+    : '';
   const html = `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
 <body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
@@ -1047,7 +1054,7 @@ export function brandedInvoiceContent(opts: BrandedInvoiceOpts): { subject: stri
       <tr><td style="padding:10px 0 0;color:#111827;font-size:15px;font-weight:700;border-top:1px solid #e5e7eb;">Amount paid</td><td style="padding:10px 0 0;color:#111827;font-size:15px;font-weight:700;text-align:right;border-top:1px solid #e5e7eb;">${safeAmount}</td></tr>
     </table>
   </div>
-  ${pdfNote}
+  ${pdfNote}${topUpNote}
 </td></tr>
 ${hostedBtn}
 <tr><td style="padding:8px 32px 32px;">
@@ -1068,6 +1075,7 @@ ${hostedBtn}
     '',
     opts.hostedInvoiceUrl ? `View invoice online: ${opts.hostedInvoiceUrl}` : '',
     opts.pdfBytes ? `Your invoice PDF is attached.` : '',
+    opts.topUp ? `${TOKEN_PACK_EMAIL_NOTE} ${opts.topUp.usageUrl}` : '',
     seller ? `Sold by ${seller}.` : '',
   ].filter(Boolean);
   const text = textLines.join('\n');
