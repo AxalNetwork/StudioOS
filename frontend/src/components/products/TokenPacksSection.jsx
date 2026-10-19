@@ -1,42 +1,47 @@
-// D755 §3 and §10 (#1915) — the Token packs section of /plans-and-pricing,
-// `#token-packs`, after the plans. One card per pack on sale from the public
-// plans-and-packs read: "$25 of tokens", the tokens line, and Buy, which opens
-// the checkout for that pack. With none on sale: TOPUP_UNAVAILABLE, no Buy.
-import React from 'react';
-import { Link } from 'react-router-dom';
-import { Loader2 } from 'lucide-react';
-import { TOKEN_PACKS_ID, TOKEN_PACKS_TITLE, tokenPacks } from '../../lib/plansPricing';
+// D755 CR7: the public pack read is the only source of purchase links.
+import React, { useCallback, useEffect, useState } from 'react';
+import { publicPricingApi } from '../../lib/api/publicPricing';
+import { TOPUP_UNAVAILABLE, TOKENS_LINE, TOKEN_PACKS_PATH, packLabel, sellableLine, microMoney } from '../../lib/aiTokens';
+import { useAuth } from '../../hooks/useAuthSync';
 
-export default function TokenPacksSection({ reading }) {
-  const view = tokenPacks(reading);
-  return (
-    <section id={TOKEN_PACKS_ID} className="scroll-mt-24" data-testid="token-packs">
-      <div className="mb-3.5">
-        <h2 className="text-[19px] font-bold tracking-[-.01em] text-gray-900 dark:text-gray-100">{TOKEN_PACKS_TITLE}</h2>
-      </div>
-      {view.state === 'loading' && (
-        <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 py-6">
-          <Loader2 size={16} className="animate-spin" /> Loading token packs…
-        </div>
-      )}
-      {view.note && <p className="text-sm text-gray-600 dark:text-gray-400" data-testid="token-packs-note">{view.note}</p>}
-      {view.packs.length > 0 && (
-        <div className="grid gap-3.5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}>
-          {view.packs.map((p) => (
-            <div key={p.uid} className="flex flex-col bg-white dark:bg-gray-900 rounded-[16px] p-5 border border-gray-200 dark:border-gray-800 shadow-sm" data-testid={`token-pack-${p.uid}`}>
-              <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">{p.label}</h3>
-              <p className="mt-1.5 flex-1 text-[13px] leading-relaxed text-gray-600 dark:text-gray-400">{p.line}</p>
-              <Link
-                to={p.href}
-                className="mt-4 inline-flex h-10 items-center justify-center rounded-[10px] bg-violet-600 hover:bg-violet-700 text-white text-[13px] font-semibold"
-                data-testid={`token-pack-buy-${p.uid}`}
-              >
-                Buy
-              </Link>
-            </div>
-          ))}
-        </div>
-      )}
-    </section>
-  );
+/** Keep pack products, including the environment fallback, out of the shared cart. */
+export function isPackProduct(product, packs = []) {
+  return product?.kind === 'token_pack' || product?.metadata?.kind === 'token_pack'
+    || (product?.prices || []).some(price => packs.some(pack => pack.price_id === price.id));
+}
+
+export default function TokenPacksSection({ onPacksRead }) {
+  const { user } = useAuth();
+  const [reading, setReading] = useState({ status: 'loading', packs: [] });
+  const [attempt, setAttempt] = useState(0);
+  const retry = useCallback(() => setAttempt(n => n + 1), []);
+  useEffect(() => {
+    let stopped = false;
+    setReading({ status: 'loading', packs: [] });
+    publicPricingApi.plansAndPacks().then(data => {
+      if (stopped) return;
+      if (!Array.isArray(data?.packs) || data.packs.some(pack => !sellableLine(pack))) {
+        setReading({ status: 'unreadable', packs: [] }); return;
+      }
+      setReading({ status: 'ready', packs: data.packs });
+      onPacksRead?.(data.packs);
+    }).catch(() => { if (!stopped) setReading({ status: 'unreadable', packs: [] }); });
+    return () => { stopped = true; };
+  }, [attempt, onPacksRead]);
+  return <section id="token-packs" className="scroll-mt-6 space-y-3">
+    <h2 className="text-[19px] font-bold text-gray-900 dark:text-gray-100">Token packs</h2>
+    {reading.status === 'loading' ? <p role="status">Loading token packs…</p>
+      : reading.status === 'unreadable' ? <div role="alert">Unreadable · The token packs could not be read. <button type="button" onClick={retry}>Retry</button></div>
+      : reading.packs.length === 0 ? <p>{TOPUP_UNAVAILABLE}</p>
+      : <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{reading.packs.map(pack =>
+        <article key={pack.uid || pack.price_id} className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5 space-y-3">
+          <h3 className="font-semibold">{packLabel(pack.unit_amount)}</h3>
+          <p className="text-sm">{TOKENS_LINE}</p>
+          {pack.bonus_microusd > 0 && <p className="text-sm">Includes {microMoney(pack.bonus_microusd)} of bonus tokens.</p>}
+          <a className="inline-flex rounded-lg bg-violet-600 px-4 py-2 font-semibold text-white"
+            href={user ? '/checkout?token_pack=' + encodeURIComponent(pack.uid || pack.price_id)
+              : '/login?next=' + encodeURIComponent(TOKEN_PACKS_PATH)}>{user ? 'Buy' : 'Sign in to buy'}</a>
+        </article>)}</div>}
+    <p className="text-xs text-gray-500 dark:text-gray-400">Sold by Axal VC Management LLC. Paid by card through Stripe; Axal never stores your card details. VAT, where it applies, is added at checkout and is not part of the tokens.</p>
+  </section>;
 }

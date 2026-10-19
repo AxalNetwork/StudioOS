@@ -1,7 +1,7 @@
 // D755 (#1915, CR5 PR 2) — /plans-and-pricing: every plan family's card shows
-// its AI allowance from the public plans-and-packs read, a Token packs section
-// sells the packs on sale, the Add-ons grid leaves the packs out, and a read
-// that fails says Unreadable, never "$0.00".
+// its AI allowance from the public plans-and-packs read, the free plans get
+// cards, the phone lists every family, and a read that fails says Unreadable,
+// never "$0.00". The Token packs section is CR7's (checkout_token_pack_d755).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -11,14 +11,12 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import BundleCard from '../src/components/products/BundleCard.jsx';
 import FreePlanCard from '../src/components/products/FreePlanCard.jsx';
-import TokenPacksSection from '../src/components/products/TokenPacksSection.jsx';
 import { bundleContentFor, isBundleProduct } from '../src/components/products/productsShared.js';
 import {
-  allowanceLine, planAi, planOf, planForProduct, freePlans, tokenPacks, packPriceIds, isTokenPackProduct,
-  phonePlans, planPriceLabel, FAMILY_LABELS, NO_ALLOWANCE, MI_ALLOWANCE, ALLOWANCE_UNREADABLE, PRICING_FOOTER,
+  allowanceLine, planAi, planOf, planForProduct, freePlans,
+  phonePlans, planPriceLabel, FAMILY_LABELS, NO_ALLOWANCE, MI_ALLOWANCE, ALLOWANCE_UNREADABLE,
   TOP_UP_WITH_PACKS, YOUR_PLAN, TOKEN_PACKS_ID,
 } from '../src/lib/plansPricing.js';
-import { TOKENS_LINE, TOPUP_UNAVAILABLE } from '../src/lib/aiTokens.js';
 
 const h = React.createElement;
 const html = (el) => renderToStaticMarkup(h(MemoryRouter, null, el));
@@ -145,33 +143,6 @@ test('a read that fails says Unreadable on every card, never "$0.00"; while load
   assert.ok(!card(CATALOG.growth, LOADING).includes('AI allowance'));
 });
 
-test('Token packs: one card per pack, with the tokens line and Buy to that pack\'s checkout', () => {
-  const markup = html(h(TokenPacksSection, { reading: ready(READ) }));
-  assert.match(markup, /<section id="token-packs"/);
-  assert.equal(text(markup), `Token packs $10 of tokens ${TOKENS_LINE} Buy $25 of tokens ${TOKENS_LINE} Buy`);
-  assert.match(markup, /<a [^>]*href="\/checkout\?token_pack=pk_25"[^>]*>Buy<\/a>/);
-  assert.equal(TOKENS_LINE, '$1 of tokens buys $1 of AI use. Tokens never expire.');
-  // A pack the read sends malformed is not sold.
-  assert.equal(tokenPacks(ready({ ...READ, packs: [{ uid: 'x', unit_amount: 0, currency: 'usd' }, { uid: '', unit_amount: 1000, currency: 'usd' }] })).state, 'none');
-});
-
-test('no pack on sale: the unavailable sentence and no Buy; an unreadable read says so', () => {
-  const none = html(h(TokenPacksSection, { reading: ready({ ...READ, packs: [] }) }));
-  assert.equal(text(none), `Token packs ${TOPUP_UNAVAILABLE}`);
-  assert.doesNotMatch(none, /Buy|token_pack=/);
-  const out = text(html(h(TokenPacksSection, { reading: UNREADABLE })));
-  assert.match(out, /^Token packs Unreadable · The token packs/);
-});
-
-test('the Add-ons grid leaves out every token pack', () => {
-  const ids = packPriceIds(ready(READ));
-  assert.ok(isTokenPackProduct({ kind: 'token_pack', prices: [] }, ids));
-  assert.ok(isTokenPackProduct({ kind: 'one_time', prices: [{ id: 'price_pk25' }] }, ids), 'a product holding a pack\'s price');
-  assert.ok(!isTokenPackProduct({ kind: 'one_time', prices: [{ id: 'price_incorp' }] }, ids));
-  const page = read('frontend/src/pages/ProductsPage.jsx');
-  assert.match(page, /\.filter\(\(p\) => !isBundleProduct\(p\) && !isTokenPackProduct\(p, packPrices\)\)/);
-});
-
 test('card copy is keyed by the plan\'s metadata, so a renamed Stripe product keeps its features', () => {
   const renamed = product('prod_x', 'Founder Growth (2027)', { tier: 'growth' });
   assert.equal(bundleContentFor(renamed), bundleContentFor(CATALOG.growth));
@@ -179,16 +150,16 @@ test('card copy is keyed by the plan\'s metadata, so a renamed Stripe product ke
   assert.equal(bundleContentFor(product('prod_y', 'Something else', {})), null);
 });
 
-test('the page: the Token packs section after the plans, the footer, and one read for both widths', () => {
+test('the page: the plan cards, then CR7\'s Token packs section; one read for both widths', () => {
   const page = read('frontend/src/pages/ProductsPage.jsx');
   const plans = page.indexOf('Profile bundles');
-  const packs = page.indexOf('<TokenPacksSection reading={pricing} />');
-  const addons = page.indexOf('Add-ons &amp; services</h2>');
-  assert.ok(plans > 0 && packs > plans && addons > packs, 'plans, then Token packs, then add-ons');
-  assert.ok(page.includes('{PRICING_FOOTER}'));
-  assert.equal(PRICING_FOOTER, 'Sold by Axal VC Management LLC. Paid by card through Stripe; Axal never stores your card details. VAT, where it applies, is added at checkout and is not part of the tokens.');
+  const free = page.indexOf('<FreePlanCard');
+  const packs = page.indexOf('<TokenPacksSection onPacksRead={setTokenPacks} />');
+  assert.ok(plans > 0 && free > plans && packs > free, 'plans (free cards first), then Token packs');
+  assert.match(page, /ai=\{planAi\(plan, pricing, \{ licence \}\)\}/, 'every bundle card gets its AI');
   assert.match(page, /<PricingPhone pricing=\{pricing\} budget=\{budget\}>/);
   assert.match(read('frontend/src/pages/account/PricingPhone.jsx'), /publicPricingApi\.plansAndPacks\(\)/);
+  assert.equal(TOP_UP_WITH_PACKS.href, '#token-packs', 'the cards\' Top up line lands on CR7\'s section');
 });
 
 test('the phone lists every family in order, with each plan\'s price from the read', () => {

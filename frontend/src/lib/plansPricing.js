@@ -1,12 +1,12 @@
-// D755 (#1915, CR5 PR 2) — what /plans-and-pricing shows from
-// `GET /api/public/plans-and-packs` (CR2, #1919): every plan's AI allowance,
-// the token packs on sale, and the page's footer. Pure, so the desktop cards,
-// the phone rows and the tests read the same words.
+// D755 (#1915, CR5 PR 2) — every plan's AI allowance on /plans-and-pricing,
+// from `GET /api/public/plans-and-packs` (CR2, #1919). Pure, so the desktop
+// cards, the phone rows and the tests read the same words. The Token packs
+// section is CR7's (components/products/TokenPacksSection.jsx, #1985).
 //
 // `reading` is `{ status, data }` as `useAccountRead` answers it: `loading`,
 // `ready` or anything else (unreadable). Prices are the read's, which are the
 // Stripe catalog's D1 mirror; nothing here types a price.
-import { microMoney, packLabel, TOKENS_LINE, TOPUP_UNAVAILABLE } from './aiTokens.js';
+import { microMoney } from './aiTokens.js';
 
 export const TOKEN_PACKS_ID = 'token-packs';
 export const TOP_UP_WITH_PACKS = { label: 'Top up with token packs', href: `#${TOKEN_PACKS_ID}` };
@@ -14,10 +14,6 @@ export const YOUR_PLAN = 'Your plan';
 export const NO_ALLOWANCE = 'No AI allowance on this plan. Runs use your top-up balance.';
 export const MI_ALLOWANCE = 'Does not change your AI allowance.';
 export const ALLOWANCE_UNREADABLE = "Unreadable · The AI allowances · The plans' prices are unaffected.";
-export const PACKS_UNREADABLE = 'Unreadable · The token packs · Your allowance is unaffected.';
-export const PRICING_FOOTER = 'Sold by Axal VC Management LLC. Paid by card through Stripe; Axal never stores your card details. VAT, where it applies, is added at checkout and is not part of the tokens.';
-export const TOKEN_PACKS_TITLE = 'Token packs';
-export { TOKENS_LINE };
 
 /** The family names (§11): after the role, as on the rail. */
 export const FAMILY_LABELS = {
@@ -122,33 +118,4 @@ export function phonePlans(reading) {
     .map((p, i) => ({ ...p, i }))
     .sort((a, b) => rank(a) - rank(b) || (b.free === true) - (a.free === true) || a.i - b.i)
     .map((p) => ({ ...p, title: p.free ? FREE_TITLES[p.family] : `${FAMILY_LABELS[p.family]} · ${p.plan_name}`, price: planPriceLabel(p) }));
-}
-
-/** The checkout link for one pack (CR7 reads `?token_pack=`). */
-export const packHref = (uid) => `/checkout?token_pack=${encodeURIComponent(uid)}`;
-
-/**
- * The Token packs section (§10): `loading`, `unreadable`, `none` (nothing on
- * sale: TOPUP_UNAVAILABLE and no Buy) or `ready` with one card per pack.
- */
-export function tokenPacks(reading) {
-  if (reading?.status === 'loading') return { state: 'loading', packs: [], note: null };
-  if (reading?.status !== 'ready' || !reading.data || !Array.isArray(reading.data.packs)) return { state: 'unreadable', packs: [], note: PACKS_UNREADABLE };
-  const packs = reading.data.packs
-    .filter((p) => p && typeof p.uid === 'string' && p.uid && micro(p.unit_amount) && p.unit_amount > 0 && p.currency === 'usd')
-    .map((p) => ({ uid: p.uid, label: packLabel(p.unit_amount), line: TOKENS_LINE, href: packHref(p.uid) }));
-  return packs.length ? { state: 'ready', packs, note: null } : { state: 'none', packs: [], note: TOPUP_UNAVAILABLE };
-}
-
-/** The price ids of every pack on sale: the Add-ons grid leaves those out. */
-export function packPriceIds(reading) {
-  const packs = reading?.status === 'ready' && Array.isArray(reading.data?.packs) ? reading.data.packs : [];
-  return new Set(packs.map((p) => p?.price_id).filter((id) => typeof id === 'string'));
-}
-
-/** A catalog product the Add-ons grid must not draw: a token pack, or any product holding a pack's price. */
-export function isTokenPackProduct(product, priceIds = new Set()) {
-  if (product?.kind === 'token_pack' || product?.metadata?.kind === 'token_pack') return true;
-  const prices = Array.isArray(product?.prices) ? product.prices : [];
-  return prices.some((p) => priceIds.has(p?.id));
 }

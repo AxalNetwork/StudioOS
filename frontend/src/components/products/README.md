@@ -1,25 +1,34 @@
-# frontend/src/components/products — the Plans & Pricing storefront's pieces
+# frontend/src/components/products — the Plans and pricing storefront
 
-What `/plans-and-pricing` (`../../pages/ProductsPage.jsx`) draws: the plan
-cards, the Token packs, the add-on cards, the cart and the product slide-over.
-Prices always come from the live catalog (`GET /api/catalog/products`) or from
-the public plans-and-packs read; nothing here types a price.
+The pieces of `/plans-and-pricing` (`../../pages/ProductsPage.jsx`; `/products`
+redirects there): the catalogue's cards, the one-time cart and its drawer, the
+product modal with Stripe's embedded checkout, and the Token packs section.
+`../../pages/CheckoutPage.jsx` and `../../pages/CheckoutConfirmationPage.jsx`
+reuse the cart and the shared helpers.
 
-| File | What it is |
+| File | What it owns |
 | --- | --- |
-| `productsShared.js` | The pure helpers every piece shares: money and dates, the billing cycles, VAT, the audience filters, the role badges, and the plan cards' design copy, keyed by the plan's metadata (D755 §11) with the exact product name as the fallback. |
-| `BundleCard.jsx` | One subscription plan's card: the family badge, the catalog price, the features, the licence stepper, Subscribe, and its AI allowance (`PlanAi.jsx`). |
-| `FreePlanCard.jsx` | A plan with no Stripe product (Founder Free, Investor Free, Exploring and other accounts): $0 and its AI allowance (D755 §11). |
-| `PlanAi.jsx` | The AI part of a plan card, and "Your plan": the allowance, what it covers, when it resets, and Top up with token packs. Its words are `../../lib/plansPricing.js`'s. |
-| `TokenPacksSection.jsx` | The `#token-packs` section (D755 §3, §10): one card per pack on sale with Buy, or "Top-up isn't available yet." |
-| `ProductCard.jsx` | One add-on or service in the Add-ons grid. |
-| `ProductSlideOver.jsx` | The product modal behind `/plans-and-pricing/:productId`, with the embedded Stripe checkout for a subscription. |
-| `BillingCartBar.jsx` | The sticky billing-cycle toggle and cart bar. |
-| `CartDrawer.jsx` | The one-time cart drawer, with promo validation and the VAT estimate. |
-| `useCart.js` | The cart's state. |
+| `productsShared.js` | Money and date formatting, the VAT estimate, and the billing-cycle helpers that group a product's live prices by monthly, yearly and one-time; the plan cards' design copy, keyed by plan metadata with the exact product name as the fallback (D755 §11). Pure. |
+| `useCart.js` | The one-time cart: session state only, kept in `sessionStorage` for the tab. |
+| `BillingCartBar.jsx` | The page's Monthly / Yearly / One-time toggle, and the cart button with its count. |
+| `BundleCard.jsx` | A role bundle's card: live price, features, seats and Subscribe, and its AI allowance (`PlanAi.jsx`, D755 §11). |
+| `FreePlanCard.jsx` | D755 §11: a plan with no Stripe product (Founder Free, Investor Free, Exploring and other accounts): $0 and its AI allowance. |
+| `PlanAi.jsx` | D755 §11: the AI part of a plan card and "Your plan": the allowance, what it covers, when it resets, and Top up with token packs. Its words are `../../lib/plansPricing.js`'s. |
+| `ProductCard.jsx` | An add-on's card: Add to Order for a one-time price, Subscribe for a recurring one. |
+| `ProductSlideOver.jsx` | The product modal (the file keeps its old name), opened by a card or by `/plans-and-pricing/:productId`. |
+| `CartDrawer.jsx` | The cart drawer: lines, quantities, the promo field, and the totals. |
+| `TokenPacksSection.jsx` | D755: the Token packs section at `#token-packs` (`TOKEN_PACKS_PATH` in `../../lib/aiTokens.js`), and `isPackProduct`. |
 
-## The rule for adding here
+## Rules
 
-A piece belongs here when the storefront draws it. Words a test must read go in
-`../../lib/plansPricing.js` (or `../../lib/aiTokens.js` for the top-up), not in
-the component, so the desktop cards and the phone rows say the same thing.
+- **Every price comes from a live read.** Cards read the catalogue, and Token
+  packs read the public pack list. Nothing here types a price or works one out.
+  VAT is a display estimate; the server's figure is the one charged.
+- **The cart holds one-time items only.** A subscription opens the embedded
+  checkout instead, and a token pack never enters the cart (`isPackProduct`):
+  each pack links to its own checkout.
+- **A failed pack read says Unreadable**, with Retry. It never shows an empty
+  list or a zero, so nobody reads a failure as "nothing on sale".
+- **A failed allowance read says Unreadable** on every plan card, never "$0.00".
+- **Tests:** `checkout_token_pack_d755.test.mjs` covers the Token packs section
+  and its checkout; `plans_pricing_d755.test.mjs` covers the plan cards' AI.
