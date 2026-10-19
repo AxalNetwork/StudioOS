@@ -30,6 +30,7 @@ runs these directly against an in-process SQLite, with no request at all.
 | `supportQueues.ts` | HQ Support's three queues read from HQ's own records (D204). **One definition of an open ticket** — `OPEN_TICKET_STATUSES` and `ticketBacklog`, which HQ Home's Queue backlog reads too — and `personaOf`, which sorts each open ticket by its requester's standing NOW: no account, a closed account, bound in `licence_admins` (the binding beats the role), HQ staff, else an HQ-held user. The licence kind is never read. Every read answers for itself: a failed one is `available: false` with its reason, a read past its ceiling is `complete: false` and its count is withheld rather than shown as the length of a cut list. The GET never runs the sync bootstrap. |
 | `escalationConcerns.ts` | What a content escalation can name (D208): HQ's template library as pushed to the branch, and the branch's own newest hundred articles. **One label format**, `concernLabel`, builds both what the drawer lists and what the route stores and sends to HQ, so the two are the same bytes; a long title gives way before the slug does, and the whole fits the 300 characters both escalation tables keep. The list never throws — each source reads in its own try, and an unreadable one is its own state with its reason, never an empty list. A pick is read again at the raise (`resolveConcern`), never taken from the client, and one that no longer resolves is a typed refusal the route turns into a 400 or a 503 before HQ is called. A label names an item; it does not say the submission localises it, which is why HQ's Localised count stays unrecorded. |
 | `topology.ts` | What a Worker is, stated once per tier (D209, canvases H14 and S14): the bindings each tier declares and what each names (D681's OAuth namespace is HQ-only), both RPC entrypoints method for method with whether anything calls each and whether it takes a secret, what the shared Analytics Engine dataset carries and what it does not, who deploys what, which screens write Worker secrets, and where Cloudflare Access is mounted. **Structural facts are literals** held by `cloudflare-worker/test/topology_d209.test.ts` to the file that decides each — `wrangler.toml`, the RPC classes, the generator, the workflows, `index.ts` — because a deployed Worker carries none of them; **runtime facts** (which bindings are present, whether the SQL credentials are set, where a secret write would land) are read from `env` on the request. Pure over `env`, so it has no store to fail, and it never returns a secret value. Both `GET /api/admin/platform/topology` and `GET /api/branch/deployment` answer from it, so the two tiers cannot describe the architecture two ways. |
+| `aiCredits.ts` | D755: the AI top-up balance bought as token packs. `TOKEN_PACK_LIMITS` is §16's one constant block; `ledgerBalance` sums `ai_credit_ledger` (migration 486), which must equal `ai_topup_accounts.balance_microusd` for every member. Holds, releases and spends are written by 486's triggers on `ai_budget_reservations`, so `aiBudget.ts` writes no ledger row. Kept apart from Perk and Introduction credits: nothing here reads their ledgers. |
 | `approvalAssignments.ts` | Who is looking at a board item (D470, migration 341). One current reviewer per lane and item, and an event only when this write changes that person. A missing table stays unreadable — it is not "nobody assigned". A reviewer is an active admin. The write does not change a queue's status and does not open a thread. |
 | `activeAccounts.ts` | Active accounts per week, defined once for both tiers (D210): `ACTIVE_ACCOUNT_BASIS` (the sentence both pages print), `activityLogged` (which requests the middleware records — `observability.ts` imports it, so the rule and the log cannot drift), `aeLoggedRequestPredicate` (the Analytics Engine WHERE that mirrors it exactly), `ANALYTICS_RANGES`, `weekAxis`, `weeklyKpi` and `loadBranchWeeklyActives` (a branch's own `activity_logs`, grouped by Monday). A week it cannot count is `null` with one of four reasons, never zero, and each week carries its own reason (`gapNotes` names them once per chart). The KPI is the last complete week; its delta is given only when both weeks carry the same set of series and neither holds a series' first recorded request — `partialWeekReason`'s whole-week rule, which the benchmark median's input and a branch's own figure beside it also read (D211). |
 
@@ -158,7 +159,7 @@ D657: interview sessions, for `../routes/founder_validate_sessions.ts`.
   - `activeSessionOf`, the one-live-session-per-member check (assistant and channel sessions excluded).
 - `interviewProcessing.ts` (D685, #1584) runs a stopped recording to the review:
   - `finishSession` (`POST /sessions/:id/finish`) records the last sequence number and queues the `interview_process` job (a `JobType` that `queueWorker.ts`'s `handleJob` dispatches to `runInterviewProcessJob`); a chunk that arrives late is taken and the job picks it up;
-  - the job transcribes chunk by chunk into `interview_chunk_transcripts`, so a retry (`POST /sessions/:id/process`) resumes where it stopped, then summarises and places through `structureSession` (`trigger: 'recording_processed'`);
+  - the job transcribes chunk by chunk into `interview_chunk_transcripts`, so a retry (`POST /sessions/:id/process`) resumes where it stopped, then summarises and places through D757's engine (`digestSession`, `trigger: 'recording_processed'`, one stage per call);
   - the stage is `uploading`, `transcribing`, `summarising`, `placing`, `done` or `failed`, with `processing_error` in words; a run idle 15 minutes counts as stale and may be retried;
   - `summariseSession` keeps only sentences that cite a transcript segment, and writes a row to `interview_summary_receipts`.
 - `sessionSweeper.ts` (D685 §5.6, #1584) is the recording that outlives its tab, on the Worker:
@@ -195,7 +196,26 @@ held on its `interview_date`.
 `sessionAutoStructure.ts` runs D658's Structure without the button: when a
 call's transcript is imported, when a chat is assigned, and when an assigned
 chat goes quiet. Its findings are proposals for the founder to review. It keeps
-#1470's consent rule and the D640 budget, and re-runs at most every six hours.
+#1470's consent rule and the D640 budget, and re-runs at most every six hours,
+counting summary receipts and the engine's last attempt too (D757). Since D757
+its job is the engine's: `runSessionStructureJob` calls `digestSession` for
+every trigger in `JOB_TRIGGERS`, and `enqueueSessionStructure` is
+`enqueueDigest`.
+
+D757 (#1898): `validateEngine.ts` is the Validate engine's one entry. Every
+conversation reaches `digestSession`: the recorder's last two stages, a Zoom or
+Meet import, an assigned or quiet chat, the pasted chat and typed notes, consent
+recorded after an import, an assistant's submission (the summary only), and the
+Summarise and Structure buttons (`force`). The ingestion contract: final
+segments on a session scoped to the member, then `enqueueDigest`; no source
+calls a model. One transcript is digested once (a sha256 of the final
+transcript; a button always runs). An explicit Manual mode for `validate` in
+`ai_rail_preferences` skips automatic runs, and the stored model picks apply to
+them. An audio session needs consent `given`; `withdrawDigest` honours a
+withdrawal. Every outcome is a sentence on the session (`digest_status`,
+`digest_note`, migration 487). It writes only the session's summary and digest
+columns and pending `validate_proposals`, and every model call goes through
+`aiRouter.run`.
 
 D691 (#1696): Grow’s Durable card reads the production compliance calendar’s
 `due_date` and `completion_status` columns. Its existing next-90-days filter,

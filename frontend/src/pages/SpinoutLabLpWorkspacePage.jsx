@@ -52,6 +52,7 @@ import {
 import { onboardingStatus } from '../lib/lpCommitmentModel';
 import { MyCommitment, MessageGp } from './SpinoutLabLpCommitment';
 import { SubscriptionBooklet } from './SpinoutLabLpBooklet';
+import { FeeStatements } from './SpinoutLabLpFeeStatement';
 
 /* ---------------------------------------------------------------- primitives */
 
@@ -706,7 +707,10 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
           /lp-portal lands. Drawn for anyone with a holding, and when the read
           failed, so a failure is never mistaken for "no commitment". */}
       {(derived.holdings > 0 || (!portal && !!err)) && (
-        <MyCommitment portal={portal} failed={!portal && !!err} onReload={load} />
+        <>
+          <MyCommitment portal={portal} failed={!portal && !!err} onReload={load} />
+          <FeeStatements portal={portal} failed={!portal && !!err} onReload={load} />
+        </>
       )}
 
       {/* underwriting */}

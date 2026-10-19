@@ -60,6 +60,10 @@ D717 (#1782) adds `publishOne(slug, version)` and `withdraw(slug)` (one template
 publication), `push()` (the recorded publications to every branch, publishing
 nothing) and `outside()` (the bundled documents not in the catalog). The thumbnail
 and draft-PDF blobs come with PR 2's screens, outside the typed drift surface.
+D717 (#1853) adds `renderPdfBlob(body)`, the draft's PDF from
+`POST /templates/render.pdf` as `{ blob, renderer }`: a body over
+`RENDER_BODY_MAX` (256 KB) is refused before any request, and its raw `fetch`
+sends `request()`'s auth, CSRF and company headers through `rawRequestHeaders`.
 
 D652 (#1464): `eadwyn.js` calls `/api/eadwyn`, the Worker AI rail's conversations
 and the connectors in them. D701 (#1663) adds `conversationsMine`

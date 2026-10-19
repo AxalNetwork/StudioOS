@@ -551,6 +551,17 @@ export async function refusalError(res, fallback) {
   return e;
 }
 
+/**
+ * D717 (#1853) — the headers `request()` merges below: auth, CSRF and the
+ * active company. A `lib/api/` module that has to call `fetch` itself (a binary
+ * answer `request()` would parse as JSON) spreads these, so its call carries
+ * exactly what `request()` sends. A POST without the CSRF header is refused
+ * under cookie sign-in (`cloudflare-worker/src/middleware/csrf.ts`).
+ */
+export function rawRequestHeaders(method = 'GET') {
+  return { ...getAuthHeaders(), ...getCsrfHeader(method), ...getActiveCompanyHeader() };
+}
+
 export async function request(path, options = {}) {
   // Armed per attempt, never per call: the step-up retry below re-enters
   // `request()` after a modal the user may sit on for a minute, and that wait

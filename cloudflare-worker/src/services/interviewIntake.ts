@@ -24,6 +24,7 @@ import { loadSession, replaceWithFinal, type SessionRow, type StoredSegment } fr
 // (interviewSessions.ts already imports it the same way).
 import { CALL_PROVIDERS, markInterviewHeld } from './sessionSetup';
 import { PROVIDER_LABEL, type ChannelProvider, type ImportedSegment } from './channels/types';
+import { interviewCapRefusal } from '../middleware/requireTier';
 
 export class IntakeError extends Error {
   status: number;
@@ -98,6 +99,9 @@ export async function createInterview(
   if (!project || !canWrite(project, member as unknown as User)) {
     throw new IntakeError(404, 'project_not_found', 'That venture is not one you can add interviews to.');
   }
+  // D757 (#1898): the free tier's interview cap, the same check and body as POST /sessions.
+  const capped = await interviewCapRefusal(env, member.id, project.id);
+  if (capped) throw new IntakeError(402, 'tier_required', capped.message);
   const row = await env.DB.prepare(
     `INSERT INTO discovery_interviews (project_id, interviewee_name, interviewee_company, interview_date) VALUES (?, ?, ?, date('now')) RETURNING id`,
   ).bind(project.id, name, companyOf(intervieweeCompany)).first<{ id: number }>();
