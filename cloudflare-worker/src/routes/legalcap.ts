@@ -8,6 +8,9 @@ import { logActivity } from './partnernet';
 import { ensureWorkflowSchema } from '../services/workflowSchema';
 import { aiQuotaGate, recordSharedServiceAction } from '../services/aiQuota';
 import { bindingKey } from '../util/schemaBootstrap';
+import { run as runAI, type TaskClass } from '../services/aiRouter';
+import { AI_SURFACE } from '../services/aiSurfaces';
+import { railFor, refuseRun } from '../util/railContext';
 
 const legalcap = new Hono<{ Bindings: Env }>();
 
@@ -177,14 +180,22 @@ async function ensureSchema(env: Env) {
 function safeJson<T>(s: any, def: T): T { try { return s ? JSON.parse(s) : def; } catch { return def; } }
 const logAi = (env: Env, userId: number, kind: string, meta: any = {}) =>
   recordSharedServiceAction(env, 'ai_call', userId, { kind, ...meta });
-async function llm(env: Env, system: string, prompt: string, maxTokens = 400): Promise<string | null> {
-  if (!env.AI) return null;
-  try {
-    const out: any = await env.AI.run('@cf/meta/llama-3.1-8b-instruct-fp8', {
-      messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }], max_tokens: maxTokens,
-    });
-    return (out?.response || '').trim() || null;
-  } catch (e: any) { console.error('llm:', e?.message); return null; }
+/**
+ * D766 (#2094): a member's press through the router, so the member who pressed
+ * is held, guarded and charged, and the run is logged with its page, option and
+ * record (D765). `refused` is the answer to a run the router refused (the
+ * switch, the budget, the guard); `text` is null when the model could not be
+ * reached, and the press keeps its non-AI path.
+ */
+async function llm(c: any, userId: number, task: TaskClass, option: string, record: string, system: string, prompt: string, maxTokens = 400): Promise<{ text: string | null; model: string | null; refused: Response | null }> {
+  const r = await runAI(c.env, {
+    task, userId, maxTokens,
+    messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }],
+    surface: AI_SURFACE.legalCapital,
+    rail: railFor(c, { page: 'legal-capital', option }, record),
+  });
+  if (r.ok) return { text: (r.output || '').trim() || null, model: r.usage.model, refused: null };
+  return { text: null, model: null, refused: refuseRun(c, r) };
 }
 
 // ============================================================
@@ -352,15 +363,17 @@ legalcap.post('/legal/generate', async (c) => {
   let body = fillTemplate(TEMPLATES[type], vars);
 
   // AI-assisted recommendations / cleanup pass (optional, cheap)
-  const ai = await llm(c.env,
+  const ai = await llm(c, user.id, 'rail_legal', `draft:legal/${type}`, `deal:${dealId}`,
     'You are a startup-focused corporate attorney reviewing a draft document. Suggest 2-3 brief improvements as a markdown list. Do NOT rewrite the document.',
     `Document type: ${type}\nCompany: ${project.name}\nSector: ${project.sector || 'n/a'}\nDraft preview:\n${body.slice(0, 1500)}`,
     256);
-  if (ai) body += `\n\n---\n## AI-Generated Suggestions\n${ai}`;
+  if (ai.refused) return ai.refused;
   await logAi(c.env, user.id, 'legal_doc_generate', { type, deal_id: dealId });
 
-  // Sensitive content stored as JSON (template + filled vars + body) — no raw PII in logs
-  const contentJson = JSON.stringify({ template: type, vars, body, model: ai ? '@cf/meta/llama-3.1-8b-instruct-fp8' : 'template-only' });
+  // Sensitive content stored as JSON (template + filled vars + body) — no raw PII in logs.
+  // D766 (D720 §9): the AI's suggestions are kept beside the document, never
+  // written into its text; the member applies any of them themselves.
+  const contentJson = JSON.stringify({ template: type, vars, body, ...(ai.text ? { suggestions: ai.text } : {}), model: ai.model ?? 'template-only' });
 
   const doc: any = await c.env.DB.prepare(`INSERT INTO legal_documents (deal_id, type, status, content, generated_by) VALUES (?, ?, 'generated', ?, ?) RETURNING id, deal_id, type, status, generated_by, created_at`)
     .bind(dealId, type, contentJson, user.id).first();
@@ -579,14 +592,15 @@ legalcap.post('/diligence/review', async (c) => {
   // id instead of by name. Only `name` is read, so only `name` is selected.
   const [project] = await sql`SELECT name FROM projects WHERE id = ${dealId}`;
   await sql.end();
-  const ai = await llm(c.env,
+  const ai = await llm(c, user.id, 'rail_reason', `review:diligence/${type}`, `deal:${dealId}`,
     'You are a venture due-diligence analyst. Given a checklist with statuses, output a 2-3 sentence summary of risk + readiness.',
     `Project: ${project?.name || dealId}\nChecklist type: ${type}\nItems:\n${items.map((i: any) => `- [${i.status}] ${i.item}${i.notes ? ' — ' + i.notes : ''}`).join('\n')}`,
     256);
+  if (ai.refused) return ai.refused;
   const score = Math.max(0, Math.min(100, heuristic));
 
   const r: any = await c.env.DB.prepare(`INSERT INTO diligence_checklists (deal_id, checklist_type, items, ai_score, ai_summary, completed_by) VALUES (?, ?, ?, ?, ?, ?) RETURNING *`)
-    .bind(dealId, type, JSON.stringify(items), score, ai || `Heuristic only: ${done}/${total} complete, ${blocked} blocked.`, user.id).first();
+    .bind(dealId, type, JSON.stringify(items), score, ai.text || `Heuristic only: ${done}/${total} complete, ${blocked} blocked.`, user.id).first();
 
   await logAi(c.env, user.id, 'diligence_review', { deal_id: dealId, type });
   await logActivity(c.env, user.id, 'ai_scoring', { entityType: 'diligence', entityId: r.id, metadata: { deal_id: dealId, type, score } });
@@ -871,7 +885,9 @@ Stage: ${project.stage || 'unknown'}
 Studio score: ${project.score || 'n/a'}
 
 Reply with ONLY the JSON object, no commentary.`;
-    const raw = await llm(c.env, 'You are a venture-studio equity allocation expert. Reply with valid JSON only.', prompt, 200);
+    const ai = await llm(c, user.id, 'rail_numbers', 'propose:spinout/equity', `deal:${dealId}`, 'You are a venture-studio equity allocation expert. Reply with valid JSON only.', prompt, 200);
+    if (ai.refused) return ai.refused;
+    const raw = ai.text;
     await logAi(c.env, user.id, 'spinout_equity', { deal_id: dealId });
 
     if (raw) {
@@ -901,10 +917,15 @@ Reply with ONLY the JSON object, no commentary.`;
   if (cleaned.studio_pct < 5 || cleaned.studio_pct > 30) return c.json({ error: 'studio_pct out of policy range (5-30%)', allocation: cleaned }, 422);
   if (cleaned.founders_pct < 50 || cleaned.founders_pct > 85) return c.json({ error: 'founders_pct out of policy range (50-85%)', allocation: cleaned }, 422);
 
+  // D766 (D720 §9): asked without an allocation, the split is a proposal and
+  // nothing is written. The member's Save posts it back as `allocation`, which
+  // is the accept; `proposed` on that post says it began as the AI's.
+  if (!data?.allocation) return c.json({ ok: true, proposal: true, allocation: cleaned, ai_rationale: aiRationale, spinout_status: sub.spinout_status });
+
   const eqUpd = await c.env.DB.prepare(`UPDATE subsidiaries SET equity_allocation_json = ?, equity_allocated = ?, spinout_status = 'equity_allocated', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND spinout_status IN ('ip_transferred','equity_allocated')`)
     .bind(JSON.stringify(cleaned), JSON.stringify(cleaned), sub.id).run();
   if (!eqUpd.meta?.changes) return c.json({ error: 'Concurrent state change; refresh and retry' }, 409);
-  await logSpinoutEvent(c.env, sub.id, 'equity_allocation', { allocation: cleaned, ai_used: !data?.allocation }, user.id);
+  await logSpinoutEvent(c.env, sub.id, 'equity_allocation', { allocation: cleaned, ai_used: data?.proposed === true }, user.id);
 
   return c.json({ ok: true, allocation: cleaned, ai_rationale: aiRationale, spinout_status: 'equity_allocated' });
 });
