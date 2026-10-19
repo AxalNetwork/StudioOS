@@ -40,6 +40,10 @@ const CHANNEL_ENV = {
   TELEGRAM_CHANNEL_BOT_TOKEN: '123456:tg-d757', TELEGRAM_CHANNEL_BOT_USERNAME: 'axal_d757_bot', TELEGRAM_CHANNEL_WEBHOOK_SECRET: 'tg_d757',
   WHATSAPP_APP_ID: '424242', WHATSAPP_APP_SECRET: 'wa-d757', WHATSAPP_VERIFY_TOKEN: 'wa-verify-d757', WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID: '777888',
   GOOGLE_CLIENT_ID: 'g-d757', GOOGLE_CLIENT_SECRET: 'g-d757-secret',
+  // #1892's rollout, on: the venture check is what these cases hold.
+  TELEGRAM_CHANNEL: 'on', WHATSAPP_CHANNEL: 'on',
+  // D754 way B: Axal's own number, set up.
+  WHATSAPP_AXAL_ACCESS_TOKEN: 'wa-axal-d757', WHATSAPP_AXAL_PHONE_NUMBER_ID: '5550001', WHATSAPP_AXAL_WABA_ID: '5550002', WHATSAPP_AXAL_DISPLAY_NUMBER: '+1 555 0001',
 };
 
 // id → [role, founder_id, spinout_lab_active]
@@ -93,8 +97,21 @@ function fixture(extraEnv: Record<string, string> = {}) {
   }
   db.exec(mig('435_connector_companies.sql'));
   db.exec(tableFromBaseline(BASELINE, 'oauth_state_tokens'));
-  for (const m of ['449_interview_channels.sql', '450_channel_events_delete_kind.sql', '451_channel_review_fixes.sql',
-    '454_channel_voice_failures.sql', '458_channel_link_consent.sql']) db.exec(mig(m));
+  // The channel chain `_whatsapp_axal_fixture.ts` applies, then way B's links.
+  db.exec(`CREATE TABLE founders (id INTEGER PRIMARY KEY, user_id INTEGER);
+    CREATE TABLE discovery_interviews (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, interviewee_name TEXT NOT NULL, interviewee_role TEXT,
+      interview_date TEXT, notes TEXT, hypotheses_json TEXT, pains_json TEXT, icp_fit TEXT,
+      transcript TEXT, transcribed_at TEXT, transcribed_by_model TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);`);
+  for (const t of ['waitlist_signups', 'metric_targets', 'competitor_analyses', 'competitor_candidates',
+    'competitor_sources', 'competitor_signals']) db.exec(tableFromBaseline(BASELINE, t));
+  for (const m of ['106_pain_groups.sql', '211_founder_validate_evidence.sql', '214_validate_proposals.sql',
+    '246_fills_the_blanks_everywhere.sql', '438_interview_sessions.sql', '439_validate_proposals_structuring.sql',
+    '440_validate_cycle_stores.sql', '446_interview_structure_receipts.sql', '447_assistant_interviews.sql',
+    '449_interview_channels.sql', '450_channel_events_delete_kind.sql', '451_channel_review_fixes.sql',
+    '452_record_session_setup.sql', '454_channel_voice_failures.sql', '458_channel_link_consent.sql',
+    '488_channel_consents.sql', '492_whatsapp_sender_links.sql']) db.exec(mig(m));
   const env = { DB: d1Over(db), JWT_SECRET, ENVIRONMENT: 'development', ...ZOOM_ENV, ...CHANNEL_ENV, ...extraEnv } as any;
   const states = () => (db.prepare('SELECT COUNT(*) AS n FROM oauth_state_tokens').get() as any).n as number;
   return { db, env, states };
@@ -212,11 +229,24 @@ test('channels: a non-venture member is offered no channel and cannot link or co
       ['GET', '/api/channels/telegram/link', undefined],
       ['POST', '/api/channels/telegram/link/abc/confirm', undefined],
       ['POST', '/api/channels/whatsapp/connect', { code: 'X', waba_id: '1', phone_number_id: '2' }],
+      // D754 way B's link-code routes (#1937).
+      ['POST', '/api/channels/whatsapp/link', undefined],
+      ['GET', '/api/channels/whatsapp/link', undefined],
+      ['POST', '/api/channels/whatsapp/link/abc/confirm', undefined],
     ] as const) {
       const r = await call(f.env, who, method, path, body);
       assert.deepEqual([r.status, r.body.code], [404, 'unknown_provider'], `${who}: ${method} ${path}`);
     }
     assert.equal((f.db.prepare('SELECT COUNT(*) AS n FROM channel_link_codes').get() as any).n, 0, `${who}: no link code`);
+  }
+  // The channel pages on the connectors directory (D753 C1) follow the same rule.
+  // Mutation checked: no venture check on the channel branch of /directory/:key.
+  for (const who of CONNECTORS_NOT_VENTURE) for (const k of ['whatsapp', 'telegram']) {
+    const r = await call(f.env, who, 'GET', `/api/connectors/directory/${k}`);
+    assert.deepEqual([r.status, r.body.error], [404, 'unknown_provider'], `${who}: /directory/${k}`);
+  }
+  for (const who of CONNECTORS_VENTURE) for (const k of ['whatsapp', 'telegram']) {
+    assert.equal((await call(f.env, who, 'GET', `/api/connectors/directory/${k}`)).status, 200, `${who}: /directory/${k}`);
   }
   for (const who of VENTURE) {
     const list = await call(f.env, who, 'GET', '/api/channels');
@@ -237,6 +267,11 @@ test('channels: an investor with an existing Telegram connection still sees it a
   const r = await call(f.env, 'investor', 'DELETE', '/api/channels/telegram');
   assert.deepEqual([r.status, r.body.disconnected], [200, true]);
   assert.equal((f.db.prepare("SELECT status FROM integrations WHERE uid = 'tg-inv'").get() as any).status, 'disconnected');
+  // D754 way B: their WhatsApp linked through Axal's number unlinks too.
+  // Mutation checked: `venture(` on DELETE /whatsapp/link (404).
+  f.db.prepare("INSERT INTO integrations(uid, user_id, provider_key, auth_type, external_account_id) VALUES ('wal-inv', 3, 'whatsapp_link', 'webhook', 'hmac-inv')").run();
+  const un = await call(f.env, 'investor', 'DELETE', '/api/channels/whatsapp/link');
+  assert.deepEqual([un.status, un.body?.unlinked], [200, true], JSON.stringify(un.body));
 });
 
 // 7 ───────────────────────────────────────────────────────────────────────────

@@ -60,6 +60,53 @@ import { promoState } from '../services/promos';
 
 const r = new Hono<{ Bindings: Env }>();
 
+/**
+ * D762 (#2019): the token margin for a quarter, in micro-USD. Read apart from
+ * the cost, so a ledger that cannot be read marks only the margin unknown.
+ */
+async function tokenMargin(env: Env, quarter: { start: string; end: string }) {
+  try {
+    const runs = await env.DB.prepare(
+      `SELECT COUNT(*) AS runs,
+              SUM(CASE WHEN l.id IS NULL THEN 1 ELSE 0 END) AS not_recorded,
+              COALESCE(SUM(r.actual_included_microusd), 0) AS included,
+              COALESCE(SUM(CASE WHEN l.id IS NOT NULL THEN r.actual_topup_microusd ELSE 0 END), 0) AS topup_spend,
+              COALESCE(SUM(CASE WHEN l.id IS NOT NULL AND r.actual_included_microusd + r.actual_topup_microusd > 0
+                THEN l.est_cost_usd * 1000000.0 * r.actual_topup_microusd / (r.actual_included_microusd + r.actual_topup_microusd)
+                ELSE 0 END), 0) AS topup_cost
+         FROM ai_budget_reservations r
+         JOIN users u ON u.id = r.user_id AND u.role <> 'admin'
+         LEFT JOIN ai_usage_logs l ON l.reservation_uid = r.uid AND l.refusal IS NULL
+        WHERE r.status = 'settled' AND r.updated_at >= ? AND r.updated_at < ?`,
+    ).bind(quarter.start, quarter.end).first<Record<string, number>>();
+    const given = await env.DB.prepare(
+      `SELECT COALESCE(SUM(g.delta_microusd), 0) AS given
+         FROM ai_credit_ledger g JOIN users u ON u.id = g.user_id AND u.role <> 'admin'
+        WHERE g.kind IN ('bonus', 'adjustment') AND g.created_at >= ? AND g.created_at < ?`,
+    ).bind(quarter.start, quarter.end).first<{ given: number }>();
+    if (!runs || !given) throw new Error('token margin unreadable');
+    const n = (v: unknown) => Number(v) || 0;
+    const recorded = n(runs.runs) - n(runs.not_recorded);
+    const topupSpend = n(runs.topup_spend);
+    const topupCost = Math.round(n(runs.topup_cost));
+    const tokensGiven = n(given.given);
+    return {
+      billed_available: true,
+      member_runs: n(runs.runs),
+      // Holds settled before migration 493: "Not recorded", and outside the margin.
+      runs_not_recorded: n(runs.not_recorded),
+      included_in_plans_microusd: n(runs.included),
+      topup_spend_microusd: topupSpend,
+      topup_cost_microusd: topupCost,
+      tokens_given_microusd: tokensGiven,
+      // Null when every run this quarter predates migration 493: nothing to compute it from.
+      margin_microusd: recorded === 0 && n(runs.not_recorded) > 0 ? null : topupSpend - topupCost - tokensGiven,
+    };
+  } catch {
+    return { billed_available: false, billed_reason: 'The AI holds and token ledger could not be read, so the margin is not shown.' };
+  }
+}
+
 /** The calendar quarter `now` falls in, as ISO dates and a label. */
 export function quarterOf(now: Date): { start: string; end: string; label: string } {
   const y = now.getUTCFullYear();
@@ -115,9 +162,15 @@ r.get('/summary', async (c) => {
     licenceFees = { available: false, reason: 'The territory licence ledger could not be read.' };
   }
 
-  // ── Token cost ────────────────────────────────────────────────────────
-  // The cost side only. `est_cost_usd` is what the inference cost; nothing
-  // records what was charged for it, so no margin is derived here.
+  // ── Token cost and token margin ───────────────────────────────────────
+  // The cost is `est_cost_usd`, what the inference cost. D762 (#2019): the
+  // margin is what members paid from their tokens (the top-up part of each
+  // settled hold) less that part's share of the cost, less the tokens HQ gave
+  // away (D755's bonus and adjustment entries). Allowance draws are shown
+  // apart, as "Included in plans": the plan's price already pays for them.
+  // Admin-licence runs are left out of both. A hold settled before migration
+  // 493 names no log row, so its cost share is unknown: it is counted as not
+  // recorded and left out of the margin, never guessed.
   let tokenCost: unknown;
   try {
     const row = await env.DB.prepare(
@@ -130,12 +183,7 @@ r.get('/summary', async (c) => {
       currency: 'USD',
       calls: Number(row?.calls) || 0,
       cost_usd: Number(row?.usd) || 0,
-      // The half that does not exist, named rather than estimated.
-      billed_available: false,
-      billed_reason:
-        'What the platform charged for tokens is not stored anywhere: `ai_usage_logs` records the '
-        + 'cost of each call and no table records the price. The margin the canvas draws is the '
-        + 'difference between the two, so it is not shown rather than shown as the cost alone.',
+      ...(await tokenMargin(env, quarter)),
     };
   } catch {
     tokenCost = { available: false, reason: 'The AI usage log could not be read.' };

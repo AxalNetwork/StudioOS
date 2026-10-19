@@ -13,12 +13,13 @@ import GithubSyncSheet from './GithubSyncSheet';
 import { MercuryEntityPanel, MercuryLandsGroup, MercuryReadsGroup, MercuryUsesGroups } from './MercurySheet';
 import { MEMBER_REPLACE } from './mercuryModel';
 import { useAuth } from '../../hooks/useAuthSync';
+import { isSuperAdminUser } from '../../lib/shellRole';
 import { successBanner } from './githubSync';
 import {
   TIER_LABEL, agoLabel, authKind, buildCatalogue, companiesLabel, connectFailure, connectionStatus,
   disconnectNote, feedsLabel, flowBanner, lastSyncLabel, moduleLabel,
   keepBuildProject, coreSystemOffer, isEntityRow, isPersonalMercury,
-  FREE_KEEPS_CONNECTORS,
+  FREE_KEEPS_CONNECTORS, INTEGRATION_KEYS_HREF, adminKeysHref,
 } from './connectorsModel';
 import { cyclesWrite } from '../../lib/api/cycles';
 
@@ -28,6 +29,12 @@ import { cyclesWrite } from '../../lib/api/cycles';
  * `signin`, `key`, `connected`, `cancelled`, `refused`, `badkey`,
  * `overreach`, `pro`, `request`). The Connectors page and Build's "Connect a
  * tool" open the same panel, so a connector connects one way from either.
+ *
+ * D751 (#1879) adds three views for a failure on Axal's side, never the
+ * provider's, so none of them says "refused": `unconfigured` (Axal holds no
+ * client; a Super Admin also gets the Integration keys link), `company` (no
+ * company to write into) and `setup_unreadable` (Axal could not read its own
+ * setup; Try again can work there, so it is offered).
  *
  * Every registry read and write goes through `/api/connectors`
  * (`lib/api/connectors.js`, D650); the three first-party connectors keep
@@ -50,7 +57,7 @@ export function suggestionsNote(e) {
  * reads as `forbidden` with the Worker's own sentence: retrying cannot help.
  */
 export function useConnectors({ companyId = null } = {}) {
-  const [state, setState] = useState({ status: 'loading', message: '', providers: [], categoryOrder: null, items: null, waitlist: [], firstParty: {}, itemsFailed: false, companies: null, suggestions: null, suggestionsNote: '' });
+  const [state, setState] = useState({ status: 'loading', message: '', providers: [], items: null, waitlist: [], firstParty: {}, itemsFailed: false, companies: null, suggestions: null, suggestionsNote: '', categoryOrder: null });
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let live = true;
@@ -72,6 +79,7 @@ export function useConnectors({ companyId = null } = {}) {
         status: 'ready',
         message: '',
         providers: av?.providers || av?.items || [],
+        // D753 F6: the Worker's category order (#1878), when it serves one.
         categoryOrder: Array.isArray(av?.category_order) ? av.category_order : null,
         items: mine ? mine.items || [] : null,
         itemsFailed: !mine,
@@ -430,7 +438,11 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
   const opts = companyId ? { companyId } : undefined;
   const navigate = useNavigate();
   // D715 decision 8: a member's Mercury says where it lands in the viewer's role's words.
-  const viewerRole = useAuth()?.user?.role ?? null;
+  const auth = useAuth();
+  const viewerRole = auth?.user?.role ?? null;
+  // D751 decision 6: only a Super Admin can save a connector's keys, so only one sees the link.
+  const superAdmin = isSuperAdminUser(auth?.user);
+  const [adminHref, setAdminHref] = useState(INTEGRATION_KEYS_HREF);
   const personalMercury = isPersonalMercury(p);
   const conn = p.connection;
   const status = connectionStatus(conn, p);
@@ -517,6 +529,7 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
     } catch (e) {
       setBusy(false);
       setMessage(e?.message || '');
+      setAdminHref(adminKeysHref(e?.data));
       setView(connectFailure(e, { ...p, auth_type: 'oauth2', supports_pat: false }));
     }
   };
@@ -587,7 +600,7 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
     }
     body = (
       <>
-        {personalMercury ? <MercuryUsesGroups /> : <UsesGroups p={p} />}
+        {personalMercury ? <MercuryUsesGroups role={viewerRole} /> : <UsesGroups p={p} />}
         <PermissionsGroup p={p} />
         {personalMercury ? <MercuryLandsGroup role={viewerRole} /> : <CompaniesGroup conn={conn} onChanged={onChanged} />}
         {/* Decision 8: Now fed by is a founder's; a partner's Mercury feeds no module. */}
@@ -620,14 +633,14 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
     );
     footer = confirming ? (
       <>
-        <span className="mr-auto text-[12px] text-axal-muted dark:text-gray-400">Disconnect {name}? {disconnectNote(p)}</span>
+        <span className="mr-auto text-[12px] text-axal-muted dark:text-gray-400">Disconnect {name}? {disconnectNote(p, viewerRole)}</span>
         <button type="button" className={BTN.ghost} onClick={() => setConfirming(false)}>Keep it</button>
         <button type="button" className={BTN.dangerSolid} disabled={busy} onClick={doDisconnect} data-testid="button-confirm-disconnect">{busy ? 'Disconnecting…' : 'Disconnect'}</button>
       </>
     ) : (
       <>
         {backBtn}
-        <span className="mr-auto text-[11.5px] text-axal-muted dark:text-gray-400">On disconnect: {disconnectNote(p)}</span>
+        <span className="mr-auto text-[11.5px] text-axal-muted dark:text-gray-400">On disconnect: {disconnectNote(p, viewerRole)}</span>
         {status.why && <button type="button" className={BTN.primary} onClick={() => go('pre')}>Reconnect</button>}
         <button type="button" className={BTN.danger} onClick={() => setConfirming(true)} data-testid="button-disconnect">Disconnect</button>
       </>
@@ -635,7 +648,7 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
   } else if (view === 'pro') {
     sub = `by ${p.by || name}${p.status === 'beta' ? ' · Beta' : ''}`;
     banner = <Banner tone="neutral" data-testid="connector-pro">{`${name} is part of the ${TIER_LABEL[p.tier] || 'paid'} plan. ${FREE_KEEPS_CONNECTORS}${message ? ` ${message}` : ''}`}</Banner>;
-    body = personalMercury ? <MercuryUsesGroups /> : <UsesGroups p={p} />;
+    body = personalMercury ? <MercuryUsesGroups role={viewerRole} /> : <UsesGroups p={p} />;
     footer = <>{backBtn}<button type="button" className={BTN.ghost} onClick={onClose}>Close</button><Link className={BTN.primary} to="/account/billing" onClick={dismiss}>See plans</Link></>;
   } else if (view === 'pre' && teammate && !ownChosen) {
     title = `Connect ${name}`;
@@ -655,7 +668,7 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
         <Steps names={keySteps} at={0} />
         {personalMercury ? (
           <>
-            <MercuryUsesGroups />
+            <MercuryUsesGroups role={viewerRole} />
             <MercuryLandsGroup role={viewerRole} />
             <MercuryReadsGroup />
           </>
@@ -789,6 +802,34 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
       </>
     );
     footer = <button type="button" className={BTN.primary} onClick={() => { onChanged?.(); dismiss?.(); }} data-testid="button-connected-done">Done</button>;
+  } else if (view === 'unconfigured' || view === 'company') {
+    // D751: retrying cannot help, so no Try again; the Worker's sentence is not
+    // appended (it repeats the banner, and Google's names env vars).
+    title = `Connect ${name}`;
+    banner = <Banner tone={view === 'company' ? 'warn' : 'neutral'} data-testid={`connector-${view}`}>{flowBanner(view, name, ret)}</Banner>;
+    body = (
+      <>
+        <Steps names={keySteps} at={1} />
+        {view === 'unconfigured' && superAdmin && (
+          <div className="mx-5 mt-3 text-[12.5px]">
+            <Link to={adminHref} onClick={dismiss} className={BTN.link} data-testid="connector-unconfigured-admin-link">Set up {name} in Integration keys</Link>
+          </div>
+        )}
+      </>
+    );
+    footer = <>{backBtn}<button type="button" className={BTN.ghost} onClick={onClose}>Close</button></>;
+  } else if (view === 'setup_unreadable') {
+    // #1880's 503: the Worker's message is Axal's own sentence; a retry can work.
+    title = `Connect ${name}`;
+    banner = <Banner tone="neutral" data-testid="connector-setup-unreadable">{message || flowBanner(view, name, ret)}</Banner>;
+    body = <Steps names={keySteps} at={1} />;
+    footer = (
+      <>
+        {backBtn}
+        <button type="button" className={BTN.ghost} onClick={onClose}>Close</button>
+        <button type="button" className={BTN.primary} onClick={() => go('pre')}>Try again</button>
+      </>
+    );
   } else if (view === 'cancelled' || view === 'refused' || view === 'overreach') {
     title = `Connect ${name}`;
     banner = <Banner tone={view === 'cancelled' ? 'neutral' : 'danger'} data-testid={`connector-${view}`}>{flowBanner(view, name, ret)}{message && view === 'refused' && !ret.reason ? ` ${message}` : ''}</Banner>;
@@ -835,7 +876,7 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
 }
 
 /** The flow's views that connect something: none of them may act for a company the member cannot connect for. */
-const CONNECT_VIEWS = new Set(['pre', 'signin', 'key', 'badkey', 'cancelled', 'refused', 'overreach']);
+const CONNECT_VIEWS = new Set(['pre', 'signin', 'key', 'badkey', 'cancelled', 'refused', 'overreach', 'unconfigured', 'company', 'setup_unreadable']);
 
 /** The view a click on a connector opens: its sheet when connected, the plan when locked, else the flow's first step. */
 export function openingView(p) {

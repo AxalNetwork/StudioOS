@@ -35,9 +35,12 @@ import {
   CATEGORY_ORDER,
   FIRST_PARTY_CARDS,
   directoryKeyFor,
+  channelPage,
   type PageDescriptor,
   type IntegrationRow,
   audienceFor,
+  personalHqOnlyOffHq,
+  personalHqOnlySentence,
   ConnectRefusal,
   type ProviderDescriptor,
   type DescriptorViewer,
@@ -59,7 +62,7 @@ import { activeCompanyFor } from '../middleware/activeCompany';
 import { companyEnabled, enabledCompanyIds, projectEnabled, writesProjectData } from '../integrations/companyScope';
 import { hasScopeOverreach, validateConnectorSettings } from '../integrations/connectorRules';
 import { fedCounts } from '../integrations/fed';
-import { accessToken, accessibleRepositories, checkChoice, grantedPermissions, readProgress } from '../integrations/providers/github';
+import { accessToken, accessibleRepositories, checkChoice, grantedPermissions, githubInstallUrl, readProgress } from '../integrations/providers/github';
 
 const integrations = new Hono<{ Bindings: Env }>();
 
@@ -76,9 +79,11 @@ export function ensureRole(c: Context<{ Bindings: Env }>, user: User) {
 
 /**
  * D710 (#1775): how this caller may see a provider. A provider with no
- * audience fields is `open`, as before; Mercury is an `entity` connection for
- * an admin on HQ and `none` for everyone else, who is answered as if the key
- * did not exist.
+ * audience fields is `open`, as before. Mercury is an `entity` connection for
+ * an admin on HQ, `personal` for a founder or partner on either host and an
+ * investor on HQ (D713, D752), and `none` for everyone else, who is answered
+ * as if the key did not exist. An investor off HQ is `none` too, but
+ * `/connect` tells them it is HQ only (403 `purpose_not_allowed`, D752).
  */
 function audienceOf(c: Context<{ Bindings: Env }>, user: User, desc: ProviderDescriptor) {
   return audienceFor(desc, viewerOf(c, user));
@@ -427,6 +432,13 @@ integrations.get('/directory/:key', async (c) => {
     if (!page) return c.json({ error: 'unknown_provider' }, 404);
     return c.json({ ok: true, connector: { ...linkedinCard(viewer), ...pageBody(page) } });
   }
+  // D753 C1 (#1974): WhatsApp and Telegram are channel pages, not registry rows.
+  const channel = channelPage(k.key);
+  if (channel) {
+    // D757 §2.11: the channels are Validate sources, shown only to who can hold a venture.
+    if (!viewer.venture) return c.json({ error: 'unknown_provider' }, 404);
+    return c.json({ ok: true, connector: { key: k.key, ...pageFields(channel), ...pageBody(channel) } });
+  }
   const p = getDescriptor(k.key);
   if (!p || audienceOf(c, user, p) === 'none') return c.json({ error: 'unknown_provider' }, 404);
   const page = pageDescriptor(p, viewer);
@@ -575,6 +587,11 @@ integrations.post('/connect', async (c) => {
   if (!key) return c.json({ error: 'provider_key is required' }, 400);
 
   const desc = getDescriptor(key);
+  // D752: a member who followed a link learns why; every other route stays 404.
+  const viewer = viewerOf(c, user);
+  if (desc && personalHqOnlyOffHq(desc, viewer)) {
+    return refuse(c, 403, { code: 'purpose_not_allowed', message: personalHqOnlySentence(desc.display_name) });
+  }
   if (!desc || audienceOf(c, user, desc) === 'none') return c.json({ error: 'unknown_provider', provider_key: key }, 404);
   // D710: an entity connection is added in its own console, never here.
   if (audienceOf(c, user, desc) === 'entity') {
@@ -860,6 +877,8 @@ integrations.get('/:uid/repositories', async (c) => {
     return c.json({
       ok: true,
       available: await accessibleRepositories(token, granted.installations),
+      needs_install: granted.installations.length === 0,
+      install_url: githubInstallUrl(c.env),
       selected: Array.isArray(cfg.repositories) ? cfg.repositories : [],
       project_id: cfg.project_id ?? null,
     });

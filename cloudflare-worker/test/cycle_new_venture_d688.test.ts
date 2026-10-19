@@ -12,6 +12,7 @@ import { formFor } from '../../frontend/src/pages/cycles/forms.js';
 import { ensureProjectMetricsSchema } from '../src/routes/progress.ts';
 import { tableFromBaseline } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
+import { personalMatchTables } from './_mercury_d713.ts';
 import { figureValue } from '../../frontend/src/pages/cycles/cycleModel.js';
 
 const JWT_SECRET = 'x'.repeat(64); // synthetic test fixture
@@ -168,6 +169,7 @@ function raiseFixture() {
   db.exec(mig('249_project_metrics.sql'));
   db.exec(mig('442_raise_cycle_stores.sql'));
   db.exec(mig('463_raise_record_stores.sql'));
+  personalMatchTables(db); // D752: Capital relationships reads a raise receipt's posted date
   db.exec("INSERT INTO users(id, role, name, email, is_active, founder_id) VALUES (10, 'founder', 'Test Founder', 'founder@example.test', 1, 1001)");
   db.exec("INSERT INTO projects(id, name, founder_id) VALUES (1, 'Sample Venture', 1001)");
   return db;

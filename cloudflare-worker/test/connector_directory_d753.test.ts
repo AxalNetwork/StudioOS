@@ -18,6 +18,9 @@ import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import integrations from '../src/routes/integrations.ts';
+import crunchbase from '../src/routes/crunchbase.ts';
+import { CATALOG } from '../src/services/onboardingChecklist.ts';
+import { encryptCredentials } from '../src/integrations/secrets.ts';
 import * as registry from '../src/integrations/registry.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
@@ -36,11 +39,12 @@ import '../src/integrations/providers/slack.ts';
 import '../src/integrations/providers/stripe.ts';
 
 const {
-  REGISTRY, CATEGORY_ORDER, FIRST_PARTY_CARDS, FIRST_PARTY_PAGES, PERSONAL_MERCURY,
+  REGISTRY, CATEGORY_ORDER, CHANNEL_PAGES, FIRST_PARTY_CARDS, FIRST_PARTY_PAGES, PERSONAL_MERCURY,
   audienceFor, connectorPagePath, directoryKeyFor, getDescriptor, publicDescriptor,
 } = registry as any;
 
 const JWT_SECRET = 'y'.repeat(64); // synthetic fixture key
+const KEK = 'fixture-cipher-key-'.repeat(4); // synthetic fixture key
 const ROLES = ['admin', 'founder', 'partner', 'investor', 'advisor', 'operator', 'service_provider', 'exploring'];
 const ALLOWED = ROLES.filter((r) => r !== 'exploring');
 const SIGN_IN = ['oauth', 'oauth_or_key', 'key', 'first_party', 'entity'];
@@ -81,6 +85,7 @@ function fixture() {
 const app = new Hono<any>();
 app.route('/api/connectors', integrations);
 app.route('/api/integrations', integrations);
+app.route('/api/crunchbase', crunchbase);
 app.onError((e: any, c) => {
   const st = AUTH_ERROR_STATUSES[e?.message ?? ''];
   return st ? c.json({ detail: e.message }, st) : c.json({ error: e.message }, 500);
@@ -93,7 +98,7 @@ async function call(db: DatabaseSync, role: string, path: string, o: Opts = {}) 
     .sign(new TextEncoder().encode(JWT_SECRET));
   const base = d1Over(db);
   const DB = o.sql ? { ...base, prepare: (sql: string) => { o.sql!.push(sql); return base.prepare(sql); } } : base;
-  const env = { DB, JWT_SECRET, ENVIRONMENT: 'development', ...(o.branch ? { BRANCH_CODE: 'ldn' } : {}) } as any;
+  const env = { DB, JWT_SECRET, ENVIRONMENT: 'development', KEK_PII: KEK, ...(o.branch ? { BRANCH_CODE: 'ldn' } : {}) } as any;
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (o.token !== false) headers.Authorization = `Bearer ${token}`;
   if (o.company) headers['X-Company-Id'] = '10';
@@ -220,8 +225,9 @@ test('Mercury\'s page follows its audience; the entity variant reads no entity s
     if (none) assert.deepEqual([r.status, r.body], [404, { error: 'unknown_provider' }], `${role} ${branch}`);
     else assert.equal(r.status, 200, `${role} ${branch}`);
   }
-  // D752 changes this line in the PR that adds `investor` to `personal_roles`.
-  for (const branch of [false, true]) assert.equal((await call(db, 'investor', '/directory/mercury', { branch })).status, 404);
+  // D752 (#1886): an investor holds a personal Mercury on HQ only (`personal_hq_only_roles`).
+  assert.equal((await call(db, 'investor', '/directory/mercury')).status, 200);
+  assert.equal((await call(db, 'investor', '/directory/mercury', { branch: true })).status, 404);
   const sql: string[] = [];
   const admin = (await call(db, 'admin', '/directory/mercury', { sql })).body.connector;
   assert.deepEqual([admin.connection_source, admin.has_implementation, admin.sign_in.kind], ['mercury_entity_connections', false, 'entity']);
@@ -230,7 +236,9 @@ test('Mercury\'s page follows its audience; the entity variant reads no entity s
   assert.equal((await call(db, 'admin', '/directory/mercury', { branch: true })).status, 404);
   const founder = (await call(db, 'founder', '/directory/mercury')).body.connector;
   assert.deepEqual([founder.connection_source, founder.sign_in.kind], ['integrations', 'key']);
-  assert.equal(founder.description, PERSONAL_MERCURY.description);
+  // D752 (#1886): PERSONAL_MERCURY is keyed by role.
+  assert.equal(founder.description, PERSONAL_MERCURY.founder.description);
+  assert.equal((await call(db, 'investor', '/directory/mercury')).body.connector.description, PERSONAL_MERCURY.investor.description);
   assert.deepEqual(founder.feeds, ['revenue_and_traction']);
   assert.deepEqual((await call(db, 'partner', '/directory/mercury')).body.connector.feeds, []);
 });
@@ -249,10 +257,29 @@ test('page keys: google and microsoft answer their registry rows', async () => {
 // 9 ───────────────────────────────────────────────────────────────────────────
 test('unknown and malformed keys are 404 unknown_provider, never a lookup error', async () => {
   const db = fixture();
-  // whatsapp and telegram become pages with task C1 (channel pages).
-  for (const k of ['notion', 'GitHub', 'git-hub', 'a', 'w'.repeat(41), 'constructor', 'hasownproperty', '%5F%5Fproto%5F%5F', 'whatsapp', 'telegram']) {
+  for (const k of ['notion', 'GitHub', 'git-hub', 'a', 'w'.repeat(41), 'constructor', 'hasownproperty', '%5F%5Fproto%5F%5F', 'signal']) {
     const r = await call(db, 'founder', `/directory/${k}`);
     assert.deepEqual([r.status, r.body], [404, { error: 'unknown_provider' }], k);
+  }
+});
+
+// 9b ──────────────────────────────────────────────────────────────────────────
+test('whatsapp and telegram answer their channel pages (D753 C1), descriptive only', async () => {
+  // Mutations checked: no channelPage branch (404); spreading the page whole (`calls` served).
+  const db = fixture();
+  for (const k of ['whatsapp', 'telegram']) {
+    const sql: string[] = [];
+    const r = await call(db, 'founder', `/directory/${k}`, { sql });
+    assert.equal(r.status, 200, k);
+    const c = r.body.connector;
+    assert.equal(c.key, k);
+    assert.equal(c.page_href, connectorPagePath(k));
+    assert.equal(c.sign_in.kind, 'channel');
+    assert.deepEqual(c.long_description, CHANNEL_PAGES[k].long_description);
+    assert.deepEqual(c.tools.map((t: any) => t.name), CHANNEL_PAGES[k].tools.map((t: any) => t.name));
+    for (const t of c.tools) assert.deepEqual(Object.keys(t).sort(), ['access', 'label', 'lands_in', 'name', 'what']);
+    for (const bad of PRIVATE) assert.ok(!keysDeep(c).includes(bad), `${k}: ${bad}`);
+    assert.ok(!sql.some((s) => CONNECTION_STORES.test(s)), sql.join('\n'));
   }
 });
 
@@ -321,6 +348,36 @@ test('one readiness value: the page read serves the card\'s `configured`', async
     const c = (await call(db, 'admin', `/directory/${item.key}`)).body.connector;
     assert.equal('configured' in c, 'configured' in item, item.key);
     if ('configured' in item) assert.equal(c.configured, item.configured, item.key);
+  }
+});
+
+// 15 ──────────────────────────────────────────────────────────────────────────
+test('the Worker\'s links go to the connector pages', async () => {
+  // Mutants checked: `ef.plaid` back to the hub; the unauthorized 412's
+  // `connect_path` back to '/account/connectors' (the second request fails).
+  const route = (role: string, key: string) => (CATALOG as any)[role].find((i: any) => i.key === key)?.route;
+  assert.equal(route('existingFounder', 'ef.stripe'), '/account/connectors/stripe');
+  assert.equal(route('existingFounder', 'ef.plaid'), '/account/connectors/mercury');
+  assert.equal(route('investor', 'inv.crm'), '/account/connectors/hubspot');
+
+  const db = fixture();
+  const none = await call(db, 'founder', '/search?q=acme', { mount: '/api/crunchbase' });
+  assert.deepEqual([none.status, none.body.error, none.body.connect_path], [412, 'crunchbase_not_connected', '/account/connectors/crunchbase']);
+
+  const uid = 'cb-d753-fixture';
+  const enc = await encryptCredentials({ KEK_PII: KEK } as any, uid, { api_key: 'fixture-crunchbase-key' } as any);
+  db.prepare("INSERT INTO integrations(uid, user_id, provider_key, status, auth_type, credentials_enc) VALUES (?, ?, 'crunchbase', 'active', 'api_key', ?)")
+    .run(uid, ROLES.indexOf('founder') + 1, enc);
+  const real = globalThis.fetch;
+  globalThis.fetch = (async (input: any) => {
+    if (new URL(String(input?.url ?? input)).hostname === 'api.crunchbase.com') return new Response('{}', { status: 401 });
+    throw new Error('no other provider may be called');
+  }) as any;
+  try {
+    const bad = await call(db, 'founder', '/search?q=acme', { mount: '/api/crunchbase' });
+    assert.deepEqual([bad.status, bad.body.error, bad.body.connect_path], [412, 'crunchbase_unauthorized', '/account/connectors/crunchbase']);
+  } finally {
+    globalThis.fetch = real;
   }
 });
 

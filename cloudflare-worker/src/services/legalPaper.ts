@@ -193,6 +193,19 @@ export interface PaperPartInput {
   counterpartyName?: string | null;
   /** The footer's title on this part's pages. */
   footer: string;
+  /**
+   * D759 (#1858) — a signed booklet: the signature on the party with that
+   * `role`. The image prints only where it is given; a line signed in another
+   * stage's envelope prints its signed line and date with no image.
+   */
+  signed?: { counterparty?: PartSignature | null; axal?: PartSignature | null } | null;
+}
+
+/** D759 — one party's signature on a booklet part. */
+export interface PartSignature {
+  signedAt: string;
+  envelopeUuid: string;
+  imageDataUrl?: string | null;
 }
 
 export interface PaperPart {
@@ -415,7 +428,20 @@ export function paperModel(raw: PaperInput): PaperModel {
           id: `part-${pt.n}`,
           blocks: blocksOf,
           execution: base && base.parties.length
-            ? { recital: base.recital, parties: base.parties.map((p) => ({ ...p, signedLine: null, image: null, nested: !!p.through })) }
+            ? {
+                recital: base.recital,
+                parties: base.parties.map((p) => {
+                  // D759 — a signed booklet places each signature by the party's role.
+                  const sig = pt.signed?.[p.role] || null;
+                  if (!sig) return { ...p, signedLine: null, image: null, nested: !!p.through };
+                  return {
+                    ...withDate(p, sig.signedAt),
+                    signedLine: utcStamp(sig.signedAt) ? `Signed ${utcStamp(sig.signedAt)} · Envelope ${sig.envelopeUuid}` : null,
+                    image: safePngDataUrl(sig.imageDataUrl),
+                    nested: !!p.through,
+                  };
+                }),
+              }
             : null,
           footer: pt.footer,
         };
@@ -696,10 +722,13 @@ function structureHtml(st: NonNullable<PaperModel['structure']>): string {
     + `<p class="structure-note">${escapeHtml(st.note)}</p></section>`;
 }
 
+/** The certificate's eyebrow, which the generated documents' catalog also names it by (D758). */
+export const CERTIFICATE_HEADING = 'Certificate of completion';
+
 function certificateHtml(m: PaperModel): string {
   const c = m.certificate!;
   const rows = c.rows.map((r) => `<tr><td>${escapeHtml(r.label)}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.status)}</td><td class="mono">${escapeHtml(r.at)}</td></tr>`).join('');
-  return '<section class="certificate"><div class="eyebrow">Certificate of completion</div>'
+  return `<section class="certificate"><div class="eyebrow">${escapeHtml(CERTIFICATE_HEADING)}</div>`
     + `<h1 class="title">${escapeHtml(c.title)}</h1>`
     + '<table class="paper-table"><tbody>'
     + `<tr><td>Envelope</td><td colspan="3" class="mono">${escapeHtml(c.envelopeUuid)}</td></tr>`
@@ -722,6 +751,22 @@ export interface PaperHtmlOptions {
    */
   part?: 'all' | 'body' | 'front';
   tocPages?: (number | null)[] | null;
+  /**
+   * D758 — draw the state and that one section and nothing else: no cover,
+   * title, preamble, body or execution. The generated documents' thumbnails
+   * use it for the Structure of the Fund page and the certificate. A model
+   * without that section throws, so no blank page is ever drawn.
+   */
+  only?: 'structure' | 'certificate';
+}
+
+function onlyHtml(m: PaperModel, which: 'structure' | 'certificate'): string {
+  if (which === 'structure') {
+    if (!m.structure) throw new TypeError('paper_only_structure_missing');
+    return stateHtml(m.state, m) + structureHtml(m.structure);
+  }
+  if (!m.certificate) throw new TypeError('paper_only_certificate_missing');
+  return stateHtml(m.state, m) + certificateHtml(m);
 }
 
 const CSP = "default-src 'none'; style-src 'unsafe-inline'; font-src data:; img-src data:";
@@ -730,6 +775,7 @@ export function paperHtml(m: PaperModel, o: PaperHtmlOptions): string {
   const pageSize = assertPageSize(o.pageSize);
   const cover = assertCover(o.cover);
   const part = o.part || 'all';
+  const only = o.only ? onlyHtml(m, o.only) : null;
   const screen = o.medium === 'screen';
   const css = paperCss({
     pageSize, cover, medium: o.medium, footerLeft: m.footerLeft, auditLine: m.auditLine, frontMatter: part === 'front',
@@ -745,15 +791,16 @@ export function paperHtml(m: PaperModel, o: PaperHtmlOptions): string {
     : '';
 
   const parts: string[] = [];
-  if (part !== 'body' && m.cover) {
+  if (!only && part !== 'body' && m.cover) {
     parts.push(coverHtml(m, cover));
     // #1865 — no contents page without an article (a stub cover slug).
     if (m.articles.length) parts.push(contentsHtml(m, screen ? null : (o.tocPages ?? null), part === 'front'));
   }
-  if (part !== 'front' && m.parts) {
+  if (only) parts.push(only); else if (part !== 'front' && m.parts) {
     // D716 — a composite paper: each part on its own named page, its heading
     // the one link the body pass prints, so the contents finds its page.
-    if (m.state.kind === 'draft') parts.push(stateHtml(m.state, m));
+    // D758 — a specimen (the catalog's booklet) carries its diagonal as a draft does.
+    if (m.state.kind === 'draft' || m.state.kind === 'specimen') parts.push(stateHtml(m.state, m));
     for (const pt of m.parts.filter((x) => x.n > 1)) {
       const heading = part === 'body' ? `<a href="#${pt.id}">${escapeHtml(pt.title)}</a>` : escapeHtml(pt.title);
       parts.push(`<section class="booklet-part part-${pt.n}"><div class="eyebrow">Part ${pt.n}</div>`

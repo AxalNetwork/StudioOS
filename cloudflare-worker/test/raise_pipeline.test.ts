@@ -26,6 +26,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
+import { personalMatchTables } from './_mercury_d713.ts';
 import { SignJWT } from 'jose';
 import contacts from '../src/routes/contacts.ts';
 
@@ -213,6 +214,25 @@ test('GET /raise-round aggregates raised from committed prospects only', async (
   assert.equal(info.raised, 300000, 'only committed prospects count toward raised');
   assert.equal(info.committed_count, 1);
   assert.equal(info.round.target_amount, 2_000_000);
+});
+
+test('D752: a PUT that changes a committed prospect\'s amount or stage withdraws its raise receipt; the same values, or commit_status alone, keep it', async () => {
+  const alice = await mintToken(1);
+  personalMatchTables(db);
+  const jane = db.prepare(`SELECT id FROM raise_prospects WHERE email = 'jane@fund.vc'`).get() as any;
+  const receipt = (uid: string) => db.prepare(`INSERT INTO mercury_personal_matches (uid, user_id, integration_id, mercury_transaction_id, account_last_four, amount_cents, posted_on, target_kind, target_id)
+    VALUES (?, 1, 9, ?, '4242', 30000000, '2026-10-02', 'raise_prospect', ?)`).run(uid, `txn-${uid}`, jane.id);
+  const state = (uid: string) => (db.prepare('SELECT state, withdraw_reason FROM mercury_personal_matches WHERE uid = ?').get(uid) as any);
+  receipt('keep');
+  assert.equal((await call(alice, 'PUT', `/raise-prospects/${jane.id}`, { stage: 'committed', amount: 300000 })).status, 200);
+  assert.equal((await call(alice, 'PUT', `/raise-prospects/${jane.id}`, { commit_status: 'signed' })).status, 200);
+  assert.equal(state('keep').state, 'confirmed', 'the same values, then commit_status alone');
+  assert.equal((await call(alice, 'PUT', `/raise-prospects/${jane.id}`, { amount: 310000 })).status, 200);
+  assert.deepEqual({ ...state('keep') }, { state: 'withdrawn', withdraw_reason: "The prospect's amount or stage changed after the match (D752)." });
+  receipt('stage');
+  assert.equal((await call(alice, 'PUT', `/raise-prospects/${jane.id}`, { stage: 'diligence' })).status, 200);
+  assert.equal(state('stage').state, 'withdrawn');
+  assert.equal((await call(alice, 'PUT', `/raise-prospects/${jane.id}`, { stage: 'committed', amount: 300000 })).status, 200);
 });
 
 test('drawer detail joins the linked contact record', async () => {

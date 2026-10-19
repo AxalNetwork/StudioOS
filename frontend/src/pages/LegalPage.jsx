@@ -1,24 +1,13 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import PageExplainer from '../components/PageExplainer';
 import { api } from '../lib/api';
 import {
-  FileText, Plus, Building, Eye, ChevronDown, Shield, Users,
+  FileText, Send, Building, Eye, Shield, Users,
   Briefcase, Scale, AlertTriangle, BookOpen, Building2,
 } from 'lucide-react';
 import IncorporationStatusBadge from '../components/IncorporationStatusBadge';
 import DocumentBody from '../components/DocumentBody';
-
-function ModernSelect({ value, onChange, children, ...props }) {
-  return (
-    <div className="relative">
-      <select value={value} onChange={onChange} {...props}
-        className="w-full bg-white text-gray-900 border border-gray-300 rounded-lg px-4 py-2.5 text-sm appearance-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 focus:outline-none transition-all cursor-pointer hover:border-gray-400 dark:bg-gray-900 dark:text-gray-100 dark:border-gray-700">
-        {children}
-      </select>
-      <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 pointer-events-none" />
-    </div>
-  );
-}
 
 const LAYER_CONFIG = {
   gp: { icon: Users, color: 'text-violet-600', bg: 'bg-violet-50', border: 'border-violet-200', badge: 'bg-violet-100 text-violet-700' },
@@ -32,12 +21,6 @@ export default function LegalPage() {
   const [templates, setTemplates] = useState([]);
   const [entities, setEntities] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showGen, setShowGen] = useState(false);
-  // No `title`: the worker names the document from the template
-  // (legal.ts inserts `template.title`), so an editable title input here
-  // would be a control that silently does nothing.
-  const [genForm, setGenForm] = useState({ doc_type: '', project_id: '' });
-  const [projects, setProjects] = useState([]);
   const [viewDoc, setViewDoc] = useState(null);
   const [activeLayer, setActiveLayer] = useState('all');
   const [previewTemplate, setPreviewTemplate] = useState(null);
@@ -46,29 +29,17 @@ export default function LegalPage() {
   const load = () => {
     setLoading(true);
     Promise.all([
-      api.listDocuments(), api.listTemplates(), api.listEntities(), api.listProjects(),
+      api.listDocuments(), api.listTemplates(), api.listEntities(),
       api.legalIncorporationOrders().catch(() => ({ orders: [] })),
-    ]).then(([d, t, e, p, inc]) => {
-      setDocuments(d); setTemplates(t); setEntities(e); setProjects(p);
+    ]).then(([d, t, e, inc]) => {
+      // D758 — the library is an array of { key, title, layer, layer_label,
+      // has_body }, each title and text read from the store.
+      setDocuments(d); setTemplates(Array.isArray(t) ? t : []); setEntities(e);
       setIncorporationOrders(inc?.orders ?? []);
-      if (t.length > 0 && !genForm.doc_type) {
-        setGenForm(f => ({ ...f, doc_type: t[0].key }));
-      }
     }).catch(() => {}).finally(() => setLoading(false));
   };
 
   useEffect(load, []);
-
-  const generate = async () => {
-    try {
-      await api.generateDocument({
-        ...genForm,
-        project_id: genForm.project_id ? parseInt(genForm.project_id) : null,
-      });
-      setShowGen(false);
-      load();
-    } catch (e) { alert(e.message); }
-  };
 
   const groupedTemplates = templates.reduce((acc, t) => {
     if (!acc[t.layer]) acc[t.layer] = [];
@@ -93,9 +64,9 @@ export default function LegalPage() {
         <PageExplainer pageKey="legal_templates" />
           <p className="text-sm text-gray-600">VC legal stack — GP governance, fund formation, portfolio execution, and regulatory compliance</p>
         </div>
-        <button onClick={() => setShowGen(!showGen)} className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 rounded-lg text-sm font-medium text-white transition-colors">
-          <Plus size={14} /> Generate Document
-        </button>
+        <Link to="/legal/send" className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 rounded-lg text-sm font-medium text-white transition-colors">
+          <Send size={14} /> Send for signature
+        </Link>
       </div>
 
       {incorporationOrders.length > 0 && (
@@ -141,37 +112,6 @@ export default function LegalPage() {
             >
               + Start another incorporation
             </a>
-          </div>
-        </div>
-      )}
-
-      {showGen && (
-        <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6 dark:bg-gray-900 dark:border-gray-800">
-          <h2 className="font-semibold text-gray-900 text-sm mb-4 dark:text-gray-100">Generate Document from Template</h2>
-          <div className="grid md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs text-gray-600 mb-1 font-medium">Template</label>
-              <ModernSelect value={genForm.doc_type} onChange={e => setGenForm(f => ({ ...f, doc_type: e.target.value }))}>
-                {layers.map(layer => (
-                  <optgroup key={layer.key} label={layer.fullLabel}>
-                    {(groupedTemplates[layer.key] || []).map(t => (
-                      <option key={t.key} value={t.key}>{t.title}</option>
-                    ))}
-                  </optgroup>
-                ))}
-              </ModernSelect>
-            </div>
-            <div>
-              <label className="block text-xs text-gray-600 mb-1 font-medium">Startup</label>
-              <ModernSelect value={genForm.project_id} onChange={e => setGenForm(f => ({ ...f, project_id: e.target.value }))}>
-                <option value="">None (General)</option>
-                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </ModernSelect>
-            </div>
-          </div>
-          <div className="flex gap-3 mt-4">
-            <button onClick={generate} className="px-4 py-2 bg-violet-600 hover:bg-violet-700 rounded-lg text-sm text-white font-medium transition-colors">Generate</button>
-            <button onClick={() => setShowGen(false)} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-700 transition-colors dark:text-gray-300">Cancel</button>
           </div>
         </div>
       )}
@@ -224,7 +164,6 @@ export default function LegalPage() {
                       {layerTemplates.map(t => (
                         <TemplateRow key={t.key} template={t} config={config}
                           onPreview={() => setPreviewTemplate(t)}
-                          onGenerate={() => { setGenForm(f => ({ ...f, doc_type: t.key })); setShowGen(true); }}
                         />
                       ))}
                     </div>
@@ -236,7 +175,6 @@ export default function LegalPage() {
                   return (
                     <TemplateRow key={t.key} template={t} config={config}
                       onPreview={() => setPreviewTemplate(t)}
-                      onGenerate={() => { setGenForm(f => ({ ...f, doc_type: t.key })); setShowGen(true); }}
                     />
                   );
                 })
@@ -430,21 +368,36 @@ export default function LegalPage() {
         <TemplatePreviewModal
           template={previewTemplate}
           onClose={() => setPreviewTemplate(null)}
-          onGenerate={() => { setGenForm(f => ({ ...f, doc_type: previewTemplate.key })); setShowGen(true); setPreviewTemplate(null); }}
         />
       )}
     </div>
   );
 }
 
-function TemplatePreviewModal({ template, onClose, onGenerate }) {
-  const [content, setContent] = useState(null);
+/**
+ * D758 — a library document's text as the store holds it. A document with no
+ * body reads the canvas's stub line (boards L8 and L9), never a placeholder.
+ */
+export function TemplatePreviewBody({ body, hasBody }) {
+  if (!hasBody || !body) {
+    return <p className="text-sm text-gray-600 dark:text-gray-400">No body in the store yet</p>;
+  }
+  return (
+    <div className="bg-gray-50 rounded-lg p-4 border border-gray-200 dark:bg-gray-950 dark:border-gray-800">
+      <DocumentBody text={body} className="text-xs text-gray-700 font-mono leading-relaxed dark:text-gray-300" />
+    </div>
+  );
+}
+
+function TemplatePreviewModal({ template, onClose }) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
   const [loadingContent, setLoadingContent] = useState(true);
 
   useEffect(() => {
     api.getTemplateContent(template.key)
-      .then(data => setContent(data.content))
-      .catch(() => setContent('Failed to load template content.'))
+      .then(setData)
+      .catch((e) => setError(e?.message || 'The template could not be loaded.'))
       .finally(() => setLoadingContent(false));
   }, [template.key]);
 
@@ -460,20 +413,15 @@ function TemplatePreviewModal({ template, onClose, onGenerate }) {
               {template.layer_label}
             </span>
           </div>
-          <button
-            onClick={onGenerate}
-            className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-xs font-medium transition-colors flex items-center gap-1">
-            <Plus size={12} /> Generate
-          </button>
         </div>
         <div className="p-6 overflow-y-auto flex-1">
-          <p className="text-xs text-gray-500 mb-3">Template preview — fields marked with ____ will be filled when generating for a specific startup.</p>
+          <p className="text-xs text-gray-500 mb-3">The text this document carries in the library. Fields in double braces are filled when it is sent.</p>
           {loadingContent ? (
             <div className="text-center text-gray-500 text-sm py-8">Loading template...</div>
+          ) : error ? (
+            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
           ) : (
-            <div className="bg-gray-50 rounded-lg p-4 border border-gray-200 dark:border-gray-800">
-              <DocumentBody text={content} className="text-xs text-gray-700 font-mono leading-relaxed dark:text-gray-300" />
-            </div>
+            <TemplatePreviewBody body={data?.body} hasBody={!!data?.has_body} />
           )}
         </div>
         <div className="px-6 py-3 border-t border-gray-200 flex justify-end shrink-0 dark:border-gray-800">
@@ -484,7 +432,7 @@ function TemplatePreviewModal({ template, onClose, onGenerate }) {
   );
 }
 
-function TemplateRow({ template, config, onPreview, onGenerate }) {
+function TemplateRow({ template, config, onPreview }) {
   return (
     <div className="px-4 py-2.5 flex items-center gap-3 hover:bg-gray-50 transition-colors group">
       <div className={`w-8 h-8 rounded-lg ${config.bg} flex items-center justify-center shrink-0`}>
@@ -496,9 +444,6 @@ function TemplateRow({ template, config, onPreview, onGenerate }) {
       <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
         <button onClick={onPreview} className="text-gray-500 hover:text-gray-700 p-1" title="Preview">
           <Eye size={14} />
-        </button>
-        <button onClick={onGenerate} className="text-violet-600 hover:text-violet-700 px-2 py-1 text-xs font-medium rounded-md hover:bg-violet-50 transition-colors">
-          Generate
         </button>
       </div>
     </div>

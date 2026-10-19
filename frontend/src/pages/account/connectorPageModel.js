@@ -11,6 +11,7 @@
 import {
   REGISTRY_ALIAS, TIER_LABEL, authKind, cardAction, categoryOf, connectorPagePath, oauthReturn,
 } from './connectorsModel.js';
+import { channelEntry, isChannelKey } from './channelPageModel.js';
 
 export { connectorPagePath };
 
@@ -20,9 +21,12 @@ export const PAGE_ALIAS = REGISTRY_ALIAS;
 /**
  * What the page draws for a key: an alias to follow, a read state, the row,
  * Mercury withheld from this profile, or a key the catalogue does not hold.
+ * A channel key (`whatsapp`, `telegram`; C1) is read from `channels`, the
+ * `GET /api/channels` overview, and never from the catalogue.
  */
-export function pageEntry({ data, key } = {}) {
+export function pageEntry({ data, key, channels } = {}) {
   if (Object.hasOwn(PAGE_ALIAS, key)) return { state: 'alias', to: connectorPagePath(PAGE_ALIAS[key]) };
+  if (isChannelKey(key)) return channelEntry({ channels, key });
   const catalogue = Array.isArray(data?.catalogue) ? data.catalogue : [];
   if (data?.status === 'loading' && !catalogue.length) return { state: 'loading' };
   if (data?.status === 'forbidden') return { state: 'forbidden', message: data.message || 'Your role cannot manage connectors.' };
