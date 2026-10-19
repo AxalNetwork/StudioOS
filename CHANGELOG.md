@@ -4,29 +4,6 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
-## Mercury for investors on HQ, and the card's words by role (D752, #1886)
-
-- `integrations/registry.ts`: Mercury's `personal_roles` gains `investor`, and
-  `personal_hq_only_roles: ['investor']` makes the investor's card HQ only
-  (`audienceFor` answers `none` off HQ). `PERSONAL_MERCURY` is one variant per
-  role (`personalMercuryFor`); founder and partner keep D713's words. The
-  entity card gains "Members connect their own Mercury from their own
-  Connectors page; their accounts never appear here."
-- `routes/integrations.ts`: `POST /connect` answers an investor on a branch 403
-  `purpose_not_allowed` before its 404; every other route stays 404.
-  `providers/mercury.ts` refuses again and stores the caller's capabilities.
-- `services/mercuryPersonal.ts`: `capital_attestation` (an investor's, HQ
-  only; its routes come with #1888) and `HQ_ONLY_USES`, which `personalPolicy`
-  and `GET /api/mercury/personal/status` read in place of the single
-  `partner_deals` test.
-- `pages/account/mercuryModel.js`: the member words (never rows, where it
-  lands, the disconnect note, Yours' Feeds) are keyed by role, and the
-  not-offered sentence names each role's use, with an HQ-only sentence for an
-  investor on a branch. The role is passed through the sheet and the
-  Connectors page; no layout changes.
-- `documentation/architecture/decisions/D752.md`, with amendment lines in
-  D713 and D715.
-
 ## The LP's capital call opens on the amount, and the fee statement is on screen (D717, #1859)
 
 - An open Fund I line's panel on the LP workspace opens on "Amount due", the
