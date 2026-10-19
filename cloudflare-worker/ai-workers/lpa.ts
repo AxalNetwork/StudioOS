@@ -4,6 +4,7 @@
  * Falls back to a deterministic template if the AI call fails so a fund
  * always has SOME LPA on file.
  */
+import { systemRun } from './systemRun';
 import type { Env } from '../src/types';
 
 export interface LPAContext {
@@ -68,7 +69,7 @@ export async function aiGenerateLPA(env: Env, ctx: LPAContext): Promise<string> 
   const fallback = deterministicTemplate(ctx);
   const prompt = `Polish this LPA into a clean, professional, English legal document. Keep all numbers exactly. Return the body only.\n\n${fallback}`;
   try {
-    const resp: any = await (env as any).AI.run('@cf/meta/llama-3.1-8b-instruct', {
+    const resp: any = await systemRun(env, {
       messages: [
         { role: 'system', content: 'You are a venture-fund paralegal. Output a well-structured LPA body (no markdown fences, no preamble).' },
         { role: 'user', content: prompt },

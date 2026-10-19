@@ -257,6 +257,7 @@ test('Stop and process: stop, flush, finish with the last seq recorded, then the
   assert.equal(r.isCapturing(), true, 'still leaving this device: nothing may reload or log out yet');
   assert.equal(await pending, 'done');
   const calls = w.calls.map((c) => c.join(':')).filter((c) => !c.startsWith('chunk'));
+  // D765 (#2090): past Transcribing only because the member chose it on D770's Stop sheet.
   assert.deepEqual(calls.slice(0, 3), ['action:start', 'action:stop', 'finish:0:true'], 'finish names the last seq queued, after the flush');
   assert.ok(w.calls.findIndex((c) => c[0] === 'chunk') < w.calls.findIndex((c) => c[0] === 'finish'), 'the last slice is uploaded before finish');
   assert.equal(calls.filter((c) => c === 'get').length, 5, 'polled until done');
@@ -277,7 +278,7 @@ test('the client posts finish with last_seq and auto, process and summarise, to 
   assert.match(client, /summarise: \(id, model\) => request\(`\$\{P\}\/sessions\/\$\{enc\(id\)\}\/summarise`/);
   const worker = readFileSync('cloudflare-worker/src/routes/founder_validate_sessions.ts', 'utf8');
   for (const r of ['finish', 'process', 'summarise']) assert.match(worker, new RegExp(`sessions\\.post\\('/sessions/:id/${r}'`), r);
-  assert.match(worker, /body\?\.auto === true/, 'the Worker reads auto the same way');
+  assert.match(worker, /body\?\.auto === true/, 'the Worker reads auto the same way: only an explicit choice (D765, D770)');
 });
 
 test('the honest ring: a fraction only while uploading or transcribing, from the Worker\'s counts; none for summarising or placing', () => {

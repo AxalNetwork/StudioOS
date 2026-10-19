@@ -6,6 +6,7 @@ import { ReviewStep, TranscriptReview } from './InterviewSessionPage';
 import SessionSummary from './SessionSummary';
 import { REVIEWABLE, afterDelete, findPassages, pickSession, recordParts, sessionLabel, statusWord } from './interviewReviewModel';
 import { FOCUSABLE, tabTarget } from '../../ui/lightboxFocus.js';
+import { useRailOption } from '../../ui/railCrumbs';
 import { RecordActions, RecordActivity, RecordFacts, RecordSection } from '../cycles/RecordView';
 import { declaredActions, pillView, recordActionBody, recordFormFor, toneOf } from '../cycles/recordModel';
 import FormLightbox from '../cycles/FormLightbox';
@@ -194,6 +195,8 @@ export default function InterviewRecord({
   const [detail, setDetail] = useState(undefined);
   const [receipt, setReceipt] = useState(undefined);
   const [summarising, setSummarising] = useState({ busy: false, error: null });
+  // D771 (#2097): while the summary is written, the rail is that option's.
+  useRailOption(summarising.busy ? 'summarise:session' : null, 'Summarise');
   const [search, setSearch] = useState('');
   const [audioError, setAudioError] = useState('');
   const player = useRef(null);

@@ -152,11 +152,12 @@ test('railFor takes the browser\'s page and option, URI-decoded, else the route\
 const SYSTEM: Record<string, string> = {
   'services/advisor/guardrails.ts:safety': 'The legacy advisor guard: a check of a member\'s text inside a turn whose own run already carries the page, not assistance; refusing the check would only remove a safety layer.',
   'services/market_intel/extractors/index.ts:paraphrase': 'paraphraseForSnippet has no caller; a reducer sweep that used it would be a job no member started, a system call (D720 §6).',
-  // D766 (#2094): the system calls that left env.AI.run for the router, each a userId 0 run logged at cost and charged to no member.
-  'routes/monitoring.ts:ops_summary': 'The anomalies summary on HQ › Monitoring: the platform\'s own metrics summarised for operators, run as userId 0 and charged to no member (D766).',
-  'routes/admin_x.ts:image_screen': 'The screen of an image uploaded for an X post on HQ: a platform safety check on an admin upload, run as userId 0 and charged to no member (D766).',
-  'routes/admin_x.ts:image_alt_text': 'The alt text drafted for a stored X post image on HQ: platform content, run as userId 0 and charged to no member (D766).',
-  'services/vectorize.ts:embed': 'The axal-search index embeddings, written when a record is indexed: no member asked for them, so a system call (userId 0, D766).',
+  // D766 (#2094): calls that reached env.AI.run directly, now through the router
+  // as system calls (userId 0), logged at cost and charged to no member.
+  'routes/admin_x.ts:image_screen': 'The safety screen on an image an admin uploads for HQ\'s X account: a check, not assistance, run for no member; refusing it would only remove a safety layer.',
+  'routes/admin_x.ts:image_alt_text': 'Alt text for an image HQ posts to its own X account: a system call for no member\'s page, logged at cost and charged to no one.',
+  'routes/monitoring.ts:ops_summary': 'The site-metrics summary on HQ\'s monitoring page: about the platform, for no member\'s page, logged at cost and charged to no member.',
+  'services/vectorize.ts:embed': 'The search index\'s embeddings: retrieval for a lookup or an indexing job, not assistance, run for no member and charged to no one.',
 };
 
 function sources(dir: string, out: string[] = []): string[] {

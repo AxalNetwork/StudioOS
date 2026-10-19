@@ -12,6 +12,7 @@ import ReviewComments from '../../components/hqReview/ReviewComments';
 import { useAuth } from '../../hooks/useAuthSync';
 import { isSuperAdminUser } from '../../lib/shellRole';
 import { RailFrame, WorkerRail } from '../../ui';
+import useRecordCrumb from './useRecordCrumb';
 
 // Admin /admin/articles review queue — the single "Content Queue" (Task #3
 // merged the former News + Articles admin queues). /admin/news redirects here.
@@ -133,6 +134,8 @@ export default function ArticlesQueuePage() {
   const [detail, setDetail] = useState(null);
   // D634 — a failed article read is Unreadable, not "Select an article".
   const [detailFailed, setDetailFailed] = useState(false);
+  // D775 (#2101): the article under review is the rail's record.
+  useRecordCrumb(detail?.article?.title, 'article', detail?.article?.id);
   const [newComment, setNewComment] = useState('');
   const [prompt, setPrompt] = useState(null);
   const [busy, setBusy] = useState(false);
