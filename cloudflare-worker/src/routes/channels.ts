@@ -403,8 +403,10 @@ channels.post('/whatsapp/captures/:uid/consent', member(async (c, user) => {
   const body = await c.req.json<Record<string, unknown>>().catch(() => ({} as Record<string, unknown>));
   const method = String(body.method ?? '');
   if (method !== 'pre_agreed' && method !== 'verbal' && method !== 'written') return no(c, 400, 'invalid_request');
-  const out = await capture.answerCapture(c.env, user.id, c.req.param('uid') ?? '', method);
+  const uid = c.req.param('uid') ?? '';
+  const out = await capture.answerCapture(c.env, user.id, uid, method);
   if (out.done !== 'consented') return no(c, 404, 'capture_not_waiting');
+  await enqueueCaptureImport(c.env, uid);
   return c.json({ ok: true, status: 'consented' });
 }));
 
@@ -999,8 +1001,11 @@ async function handleAxalNumber(
   if (press) {
     spend();
     const out = await capture.answerCapture(env, userId, press.uid, press.answer);
-    // The download and the draft interview follow #1896 (whatsappCapture.ts).
-    return finish(out.done === 'nothing' ? 'ignored' : 'done', { userId, error: out.done === 'nothing' ? 'capture_not_waiting' : null });
+    await finish(out.done === 'nothing' ? 'ignored' : 'done', { userId, error: out.done === 'nothing' ? 'capture_not_waiting' : null });
+    // A yes queues the import (`runCaptureFollowup`); a no is answered once, and nothing was kept.
+    if (out.done === 'consented') await enqueueCaptureImport(env, press.uid);
+    if (out.done === 'deleted') await axalReply(env, userId, `wbcapture-no:${press.uid}`, sender, capture.CAPTURE_COPY.declined);
+    return;
   }
   if (ev.media && capture.capturable(ev.media)) {
     spend();
@@ -1414,9 +1419,46 @@ export async function runConsentFollowup(env: Env, p: ChannelJobPayload): Promis
   await admitConsentedThread(env, Number(thread.user_id), thread.id);
 }
 
+/** The import of a consented capture (D754 way B, #1938), queued once per capture. */
+async function enqueueCaptureImport(env: Env, uid: string): Promise<void> {
+  await enqueueChannelJob(env, 'channel_followup', 'whatsapp', `capture:${uid}`, { kind: 'capture', capture: uid, job: `capture:${uid}` });
+}
+
+/**
+ * `channel_followup` { kind: 'capture', capture, job }: a capture the member
+ * consented to becomes a draft interview (`whatsappCapture.importCapture`).
+ * Re-checked here: Axal's number configured, the member standing, the rollout
+ * open. A provider that does not answer is tried again by the job, VOICE_TRIES
+ * times in all; after that the capture keeps its code until it expires. One
+ * "Saved" reply from Axal's number when the import is done.
+ */
+export async function runCaptureFollowup(env: Env, p: ChannelJobPayload): Promise<void> {
+  const uid = String(p.capture ?? '');
+  const row = await env.DB.prepare('SELECT user_id, integration_id FROM whatsapp_captures WHERE uid = ?')
+    .bind(uid).first<{ user_id: number; integration_id: number }>();
+  if (!row || !waLink.axalNumberReady(env)) return;
+  const userId = Number(row.user_id);
+  if (!(await memberStands(env, userId)) || !(await channelOpenToMember(env, 'whatsapp', userId))) return;
+  const attempt = Math.max(1, Number(p.try) || 1);
+  const out = await capture.importCapture(env, uid, `${String(p.job ?? `capture:${uid}`)}#${attempt}`);
+  if (out.done === 'retry') {
+    if (attempt >= VOICE_TRIES) return;
+    const delay = VOICE_RETRY_DELAYS[Math.min(attempt - 1, VOICE_RETRY_DELAYS.length - 1)];
+    await enqueueChannelJob(env, 'channel_followup', 'whatsapp', `capture:${uid}-try-${attempt + 1}`, { ...p, try: attempt + 1 }, { delaySeconds: delay });
+    return;
+  }
+  if (out.done !== 'imported') return;
+  const link = await env.DB.prepare(
+    "SELECT uid, credentials_enc FROM integrations WHERE id = ? AND user_id = ? AND provider_key = 'whatsapp_link' AND status = 'active'",
+  ).bind(out.integrationId, userId).first<{ uid: string; credentials_enc: string | null }>();
+  const to = link ? await waLink.linkedWaId(env, link) : null;
+  if (to) await axalReply(env, userId, `wbcapture-saved:${uid}`, to, capture.CAPTURE_COPY.saved);
+}
+
 /** One `channel_followup` handler for both providers, by the payload's kind. */
 export async function runChannelFollowup(env: Env, p: ChannelJobPayload): Promise<void> {
   if (p.kind === 'consent') return runConsentFollowup(env, p);
+  if (p.kind === 'capture') return runCaptureFollowup(env, p);
   return runVoiceFollowup(env, p);
 }
 

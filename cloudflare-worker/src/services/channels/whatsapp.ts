@@ -44,6 +44,8 @@
  */
 import type { Env } from '../../types';
 import { providerJson } from './providerHttp';
+import { boundedDownload, type AudioContainer } from './providerHttp';
+import { CHANNEL_AUDIO_MAX_BYTES } from './channelAudio';
 import { constantTimeEqual, sha256Hex } from '../../rpc/secret';
 import { decryptCredentials, encryptCredentials } from '../../integrations/secrets';
 import type { ChannelConnection } from './connections';
@@ -388,6 +390,33 @@ export async function sendAxalInteractive(
   const token = String(env.WHATSAPP_AXAL_ACCESS_TOKEN ?? '').trim();
   const r = await sendInteractive(idStr(env.WHATSAPP_AXAL_PHONE_NUMBER_ID), token || null, to, msg);
   return r.code === 'not_connected' ? { ok: false, code: 'not_configured' } : r;
+}
+
+/**
+ * D754 way B (#1938): one file a linked member forwarded to AXAL'S OWN number,
+ * fetched with Axal's token once the member said everyone recorded agreed.
+ * `GET /{media-id}` gives its URL; a `file_size` over the recorder's 5 MB is
+ * refused before any download; the URL must be Meta's; the file comes through
+ * #1896's `boundedDownload` (one deadline, a running 5 MB cap). The URL, the
+ * token and the error's text never reach a log or the caller.
+ */
+export type AxalMediaResult =
+  | { ok: true; bytes: Uint8Array; container: AudioContainer }
+  | { ok: false; code: string; retryable: boolean };
+
+export async function fetchAxalMedia(env: Env, mediaId: string): Promise<AxalMediaResult> {
+  const token = String(env.WHATSAPP_AXAL_ACCESS_TOKEN ?? '').trim();
+  if (!token) return { ok: false, code: 'not_configured', retryable: false };
+  const meta = await graph('media', `${GRAPH_BASE}/${encodeURIComponent(mediaId)}`, { token });
+  if (!meta.ok) return { ok: false, code: meta.code, retryable: meta.retryable };
+  const size = Number(meta.data?.file_size);
+  if (Number.isFinite(size) && size > CHANNEL_AUDIO_MAX_BYTES) return { ok: false, code: 'too_large', retryable: false };
+  const url = typeof meta.data?.url === 'string' ? meta.data.url : '';
+  if (!mediaHostAllowed(url)) return { ok: false, code: 'media_host', retryable: false };
+  const d = await boundedDownload(url, { maxBytes: CHANNEL_AUDIO_MAX_BYTES, init: { headers: { authorization: `Bearer ${token}` } } });
+  if (d.ok) return { ok: true, bytes: d.bytes, container: d.container };
+  if (d.code === 'http') return { ok: false, ...graphFailure(d.status, null) };
+  return { ok: false, code: d.code, retryable: d.code === 'timeout' || d.code === 'network' };
 }
 
 async function sendInteractive(
