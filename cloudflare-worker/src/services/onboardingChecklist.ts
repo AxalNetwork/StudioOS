@@ -45,6 +45,7 @@
  */
 
 import type { Env } from '../types';
+import { connectorPagePath } from '../integrations/registry';
 
 export type ChecklistRole =
   | 'newFounder'
@@ -83,12 +84,12 @@ export const CATALOG: Record<ChecklistRole, ChecklistItem[]> = {
   ],
   existingFounder: [
     { key: 'ef.persona',    label: 'Complete persona chatbot',           route: '/onboarding/persona',         autoDetect: true },
-    // Connectors live at /account/connectors (D651); the old /integrations
-    // addresses only redirect there.
-    { key: 'ef.stripe',     label: 'Connect Stripe (verify MRR)',        route: '/account/connectors',        autoDetect: true },
+    // Each connector has its own page, /account/connectors/<key> (D753); the old
+    // /integrations addresses only redirect there.
+    { key: 'ef.stripe',     label: 'Connect Stripe (verify MRR)',        route: connectorPagePath('stripe'), autoDetect: true },
     // D713: the key stays `ef.plaid` so saved progress survives. It says
     // revenue, not cash: cash is not a permitted use of a personal Mercury.
-    { key: 'ef.plaid',      label: 'Connect Mercury (verify revenue)',   route: '/account/connectors',      autoDetect: true },
+    { key: 'ef.plaid',      label: 'Connect Mercury (verify revenue)',   route: connectorPagePath('mercury'), autoDetect: true },
     { key: 'ef.captable',   label: 'Connect or upload cap table',        route: '/build/captable',             autoDetect: true },
     { key: 'ef.financials', label: 'Populate financial model',           route: '/build/financials',           autoDetect: true },
     { key: 'ef.83b',        label: 'Confirm 83(b) status',               route: '/spinout-lab/83b',            autoDetect: true },
@@ -106,7 +107,7 @@ export const CATALOG: Record<ChecklistRole, ChecklistItem[]> = {
     { key: 'inv.kyc',       label: 'Complete KYC + Accreditation',       route: '/kyc',                        autoDetect: true },
     { key: 'inv.nda',       label: 'Sign Investor NDA with Axal',        route: '/trust',                      autoDetect: true },
     { key: 'inv.thesis',    label: 'Save your thesis + watchlist',       route: '/watchlist',                  autoDetect: true },
-    { key: 'inv.crm',       label: 'Connect Affinity / HubSpot (optional)', route: '/account/connectors',    autoDetect: true },
+    { key: 'inv.crm',       label: 'Connect Affinity / HubSpot (optional)', route: connectorPagePath('hubspot'), autoDetect: true },
     // 'inv.review' (Review 3 matched founders) and 'inv.intro' (Request your
     // first intro) both sent the investor to /matches, which was removed with
     // the AI Matching Engine. Nothing writes the deal-flow scores the first

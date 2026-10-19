@@ -31,6 +31,11 @@ import {
   getDescriptor,
   getProviderImpl,
   readinessOf,
+  pageDescriptor,
+  CATEGORY_ORDER,
+  FIRST_PARTY_CARDS,
+  directoryKeyFor,
+  type PageDescriptor,
   type IntegrationRow,
   audienceFor,
   personalHqOnlyOffHq,
@@ -137,6 +142,85 @@ async function loadRow(env: Env, uid: string, userId: number): Promise<Integrati
   return row || null;
 }
 
+// ─────────────────────────────────────────────── D753 W2 (#1878): connector pages
+
+/**
+ * The ten page fields every catalogue item carries (D753 W2 decision 2), each
+ * picked by name from `pageDescriptor`, never spread, so a field the page data
+ * gains later stays private until it is named here. `verified` is the page's
+ * record: a recorded live connect (D753 decision 7).
+ */
+function pageFields(page: PageDescriptor) {
+  return {
+    tagline: page.tagline,
+    made_by: { name: page.made_by.name },
+    service: { name: page.service.name, href: page.service.href },
+    sign_in: { kind: page.sign_in.kind, label: page.sign_in.label, key_help_href: page.sign_in.key_help_href },
+    added: page.added,
+    verified: page.verified_on !== null,
+    verified_on: page.verified_on,
+    read_only: page.trust.read_only,
+    page_key: page.page_key,
+    page_href: page.page_href,
+  };
+}
+
+/**
+ * The page body only `GET /directory/:key` serves (decision 4). Tools,
+ * prompts and the trust notice are rebuilt key by key: a tool's `calls` are
+ * source fragments the guard test checks, never published.
+ */
+function pageBody(page: PageDescriptor) {
+  return {
+    long_description: [...page.long_description],
+    tools: page.tools.map((t) => ({ name: t.name, label: t.label, access: t.access, what: t.what, lands_in: t.lands_in })),
+    prompts: page.prompts.map((x) => ({ name: x.name, ask: x.ask, proposes: x.proposes })),
+    prompts_reason: page.prompts_reason,
+    links: { help: page.links.help, developer_docs: page.links.developer_docs, support: page.links.support, privacy: page.links.privacy },
+    endpoints: { sign_in: page.endpoints.sign_in, api: page.endpoints.api },
+    trust: {
+      built_by: page.trust.built_by, reads: [...page.trust.reads], writes: [...page.trust.writes],
+      read_only: page.trust.read_only, moves_money: page.trust.moves_money, sentence: page.trust.sentence,
+    },
+  };
+}
+
+type Viewer = { role: string; hq: boolean };
+
+/**
+ * One catalogue entry, for `/available` and for the page read alike (decision
+ * 1): the public descriptor, the spec-named fields, D751's readiness, then the
+ * page fields, written last. No `already_connected`: that is the viewer's
+ * connection, which only `/available` reads.
+ */
+async function catalogueEntry(c: Context<{ Bindings: Env }>, user: User, p: ProviderDescriptor, viewer: Viewer) {
+  const lockedForUser = p.tier === 'free' ? false : !userMeetsTier(user, p.tier as 'growth' | 'studio');
+  // D751: whether Axal holds each OAuth connector's client; no field where it means nothing.
+  const r = await readinessOf(c.env, p);
+  const page = pageDescriptor(p, viewer);
+  if (!page) console.warn('[connectors] page_entry_missing', p.key);
+  return {
+    ...publicDescriptor(p, viewer),
+    // Spec-named fields (Task #8 / AN). Existing fields kept as
+    // back-compat aliases so the frontend keeps rendering during the
+    // FE migration window.
+    provider_name: p.key,
+    required_tier: p.tier,
+    icon_key: p.icon ?? null,
+    locked_for_user: lockedForUser,
+    // Legacy aliases — DO NOT remove until FE consumers migrate.
+    tier_locked: lockedForUser,
+    ...(r === undefined ? {} : { configured: r }),
+    ...(page ? pageFields(page) : {}),
+  };
+}
+
+/** LinkedIn's card: its facts (`FIRST_PARTY_CARDS`) and its page fields. Never in `items`. */
+function linkedinCard(viewer: Viewer) {
+  const page = pageDescriptor({ key: 'linkedin' }, viewer);
+  return { ...FIRST_PARTY_CARDS.linkedin, ...(page ? pageFields(page) : {}) };
+}
+
 function rowToPublic(row: IntegrationRow, credPreview: string | null, companyIds: number[] = []) {
   const desc = getDescriptor(row.provider_key);
   return {
@@ -232,34 +316,23 @@ integrations.get('/available', async (c) => {
   } catch { unreadableSources.push('microsoft_365'); }
   const viewer = { role: String(user.role || ''), hq: branchOf(c.env) === null };
   const listed = REGISTRY.filter(p => audienceOf(c, user, p) !== 'none');
-  // D751: whether Axal holds each OAuth connector's client; no field where it means nothing.
-  const readiness = await Promise.all(listed.map(p => readinessOf(c.env, p)));
-  const providers = listed.map((p, i) => {
-    const pub = publicDescriptor(p, viewer);
-    const r = readiness[i];
+  const providers = await Promise.all(listed.map(async (p) => {
     const entityOnly = audienceOf(c, user, p) === 'entity';
-    const lockedForUser = p.tier === 'free' ? false : !userMeetsTier(user, p.tier as 'growth' | 'studio');
     return {
-      ...pub,
-      // Spec-named fields (Task #8 / AN). Existing fields kept as
-      // back-compat aliases so the frontend keeps rendering during the
-      // FE migration window.
-      provider_name: p.key,
-      required_tier: p.tier,
-      icon_key: p.icon ?? null,
-      locked_for_user: lockedForUser,
+      ...(await catalogueEntry(c, user, p, viewer)),
       // An entity connection is read from its own store, never the caller's rows.
       already_connected: entityOnly ? false : p.key === 'google_calendar' || p.key === 'microsoft_365'
         ? unreadableSources.includes(p.key) ? null : connectedSet.has(p.key)
         : connectionsReadable ? connectedSet.has(p.key) : null,
-      // Legacy aliases — DO NOT remove until FE consumers migrate.
-      tier_locked: lockedForUser,
-      ...(r === undefined ? {} : { configured: r }),
     };
-  });
+  }));
   // Task #8 (AN) spec wants the catalogue under `items`. We also return
   // `providers` for back-compat with the frontend until it migrates.
-  return c.json({ ok: true, items: providers, providers, unreadable_sources: unreadableSources });
+  // D753 W2: the Discover order (the SPA counts each category itself) and LinkedIn's card.
+  return c.json({
+    ok: true, items: providers, providers, unreadable_sources: unreadableSources,
+    category_order: [...CATEGORY_ORDER], first_party: [linkedinCard(viewer)],
+  });
 });
 
 // ───────────────────────────────────────────────────────────────────── list mine
@@ -337,6 +410,25 @@ integrations.get('/suggestions', async (c) => {
   } catch {
     return c.json({ error: 'suggestions_unreadable', message: 'The module data could not be read.' }, 503);
   }
+});
+
+// D753 — one connector's page, descriptive only; above `/:key` with the other literal reads.
+integrations.get('/directory/:key', async (c) => {
+  const user = await requireAuth(c);
+  ensureRole(c, user);
+  const viewer = { role: String(user.role || ''), hq: branchOf(c.env) === null };
+  const k = directoryKeyFor(c.req.param('key'));
+  if (!k) return c.json({ error: 'unknown_provider' }, 404);
+  if (k.key === 'linkedin') {
+    const page = pageDescriptor({ key: 'linkedin' }, viewer);
+    if (!page) return c.json({ error: 'unknown_provider' }, 404);
+    return c.json({ ok: true, connector: { ...linkedinCard(viewer), ...pageBody(page) } });
+  }
+  const p = getDescriptor(k.key);
+  if (!p || audienceOf(c, user, p) === 'none') return c.json({ error: 'unknown_provider' }, 404);
+  const page = pageDescriptor(p, viewer);
+  if (!page) return c.json({ error: 'unknown_provider' }, 404);
+  return c.json({ ok: true, connector: { ...(await catalogueEntry(c, user, p, viewer)), ...pageBody(page) } });
 });
 
 integrations.post('/requests', async (c) => {

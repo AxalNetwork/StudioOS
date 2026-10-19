@@ -84,6 +84,10 @@
  * arrives on the signed webhook and is claimed as a 'command' event; on
  * 'given' a `channel_followup` { kind: 'consent' } job moves what waited,
  * never the webhook itself. Client keys under `consent:` are the server's.
+ * On Telegram (D756 §1.5, #1977) only the chat's NOTES wait for consent; its
+ * text keeps D684's rule. The member may ask from Axal or paste the notice
+ * themselves, the answer is also kept as chat text, the bot confirms a
+ * counted answer in one line, and no member's word is taken.
  *
  * A TELEGRAM LINK TAKES TWO MESSAGES: `/start <code>` names the Telegram
  * account, and that account's own `/confirm` plus the member's Confirm in Axal
@@ -125,7 +129,8 @@ import {
   VOICE_RETRY_DELAYS, VOICE_TRIES, channelTimestampMs as ms, retryVoiceNote, transcriptionFailures, voiceFetchBy,
 } from '../services/channels/voiceFailures';
 import {
-  CHANNEL_LIMITS, PROVIDER_LABEL, consentRequired, type InboundConsentReply, type InboundEvent, type InboundLink,
+  CHANNEL_LIMITS, PROVIDER_LABEL, audioConsentRequired, consentAsked, consentRequired, memberAttestationAllowed,
+  type InboundConsentReply, type InboundEvent, type InboundLink,
   type InboundLinkConfirm, type InboundMessage, type MessagingProvider, type SendResult,
 } from '../services/channels/types';
 import * as telegram from '../services/channels/telegram';
@@ -186,6 +191,9 @@ const SENTENCE: Record<string, string> = {
   consent_method_required: 'Say how the interviewee agreed: verbal, written or pre_agreed.',
   client_key_reserved: 'That client key is reserved for Axal\'s own messages.',
   notice_link_missing: 'The public base URL is not set, so Axal cannot link its notice. Nothing was sent.',
+  // D756 (#1977) — consent in the Telegram chat.
+  attestation_not_offered: 'In Telegram the interviewee agrees in the chat itself. Ask from Axal, or paste the notice into the chat yourself.',
+  connection_disabled: 'The Axal bot is switched off for your Telegram Business account, so nothing was sent. Turn it back on in Telegram › Settings › Telegram Business › Chatbots.',
   secret_format: 'TELEGRAM_CHANNEL_WEBHOOK_SECRET may use only letters, digits, _ and -, up to 256 characters.',
 };
 const sentence = (code: string) => SENTENCE[code] ?? 'That did not work. Try again.';
@@ -554,11 +562,14 @@ type AskOutcome =
   | { ok: false | null; status: number; code: string; extra?: Record<string, unknown> };
 
 /**
- * D754 §5 — Axal's notice, sent in the chat from the member's own number, with
- * a server-built client key. The caller has checked that the provider asks
- * for consent, the chat is linked and consent is not yet given. The window
- * and the cap are checked here too, before anything is sent; a key used
- * already answers its first outcome and sends nothing.
+ * D754 §5, D756 §1.5 (a) — Axal's notice, sent in the chat from the member's
+ * own account (WhatsApp: their number, as reply buttons; Telegram: their
+ * business connection, as text), with a server-built client key. The caller
+ * has checked that the provider asks for consent, that a WhatsApp chat is
+ * linked, and that consent is not yet given. The window and the cap are
+ * checked here too, before anything is sent; a key used already answers its
+ * first outcome and sends nothing. Telegram's notice is also kept as the
+ * member's message in the chat.
  */
 async function askForConsent(env: Env, userId: number, thread: ThreadRow): Promise<AskOutcome> {
   const conn = await memberConnection(env, userId, thread.provider);
@@ -575,7 +586,11 @@ async function askForConsent(env: Env, userId: number, thread: ThreadRow): Promi
       WHERE u.id = ?`,
   ).bind(thread.interview_id, userId).first<{ member_name: string | null; venture: string | null }>();
   const firstName = oneLine(who?.member_name, 200).split(' ')[0] || null;
-  const body = noticeText(CONSENT_NOTICE_VERSION, { firstName, venture: who?.venture ?? null, url });
+  const venture = oneLine(who?.venture, 80) || null;
+  // Telegram's notice is in the founder's voice, addressed to the interviewee by first name (D756 §1.7).
+  const body = thread.provider === 'telegram'
+    ? telegram.TELEGRAM_COPY.consentNotice(oneLine(await intervieweeLabel(env, thread), 200).split(' ')[0].slice(0, 40) || null, venture, url)
+    : noticeText(CONSENT_NOTICE_VERSION, { firstName, venture: who?.venture ?? null, url });
   if (!body) throw new Error('consent_notice_missing');
   const row: ConsentRow = await openRequest(env, thread, { interviewId: thread.interview_id, sessionId: thread.session_id });
 
@@ -599,29 +614,41 @@ async function askForConsent(env: Env, userId: number, thread: ThreadRow): Promi
         { id: `consent_no:${row.uid}`, title: CONSENT_BUTTONS.no },
       ],
     })
-    // Telegram's notice arrives with D756; until then its consent is not asked.
-    : { ok: false, code: 'consent_not_offered' };
+    : await telegram.sendConsentNotice(env, userId, thread.external_chat_id, body);
   try {
     await finishOutbound(env, claim.row.id, result);
-    if (result.ok || result.code === 'send_unknown') await markRequested(env, row.id, result.externalMessageId ?? null, thread.provider);
+    if (result.ok || result.code === 'send_unknown') {
+      await markRequested(env, row.id, result.externalMessageId ?? null, thread.provider, thread.id);
+    }
   } catch {
     console.error(`[channels] ${thread.provider} consent notice outcome not saved ok=${result.ok}`);
+  }
+  if (result.ok && thread.provider === 'telegram') {
+    // D756 §1.5: the notice is the member's own message in the chat.
+    await storeMessage(env, conn, {
+      externalChatId: thread.external_chat_id, externalMessageId: String(result.externalMessageId), side: 'me',
+      contactName: null, text: body, kind: 'text', sentAt: new Date().toISOString(), origin: 'axal',
+    }).catch((err) => console.error('[channels] telegram consent notice sent but not recorded', err instanceof IntakeError ? err.code : 'error'));
   }
   if (result.ok) return { ok: true, status: 200 };
   if (result.code === 'send_unknown') return { ok: null, status: 200, code: 'send_unknown' };
   const code = result.code ?? 'rejected';
-  const status = ['window_closed', 'not_connected', 'consent_not_offered'].includes(code) ? 409
+  const status = ['window_closed', 'not_connected', 'consent_not_offered', 'no_reply_right', 'connection_disabled'].includes(code) ? 409
     : code === 'rate_limited' ? 429 : result.retryable ? 503 : 502;
   return { ok: false, status, code, extra: { retryable: !!result.retryable } };
 }
 
 /** The checks both consent routes make first, in D754's order. Null when the chat may go on. */
 async function consentPreconditions(c: C, thread: ThreadRow, opts: { asking: boolean }): Promise<Response | null> {
-  if (!consentRequired(thread.provider)) return no(c, 409, 'consent_not_offered');
-  if (!opts.asking) return null;
+  if (!consentAsked(thread.provider)) return no(c, 409, 'consent_not_offered');
+  // D756 ruling 6: no member's word on Telegram; the interviewee answers in the chat.
+  if (!opts.asking) return memberAttestationAllowed(thread.provider) ? null : no(c, 409, 'attestation_not_offered');
   // An ignored chat is never linked; saying so is the more useful answer.
   if (thread.status === 'ignored') return no(c, 409, 'thread_ignored');
-  if (!(thread.status === 'assigned' && thread.interview_id && thread.session_id)) return no(c, 409, 'consent_needs_interview');
+  // WhatsApp's notice names the venture, so its chat is linked first; a Telegram chat may be asked while pending.
+  if (consentRequired(thread.provider) && !(thread.status === 'assigned' && thread.interview_id && thread.session_id)) {
+    return no(c, 409, 'consent_needs_interview');
+  }
   if (thread.consent_state === 'given') return no(c, 409, 'already_given');
   return null;
 }
@@ -987,13 +1014,58 @@ async function handleConsentReply(
     return 'ok';
   }
   markStored();
+  // D756 §1.5: on Telegram the answer is also the ordinary message it is.
+  if (ev.provider === 'telegram' && ev.fallback) await storeInbound(env, conn, ev.fallback);
   await finish('done', { userId: conn.userId, threadId: thread!.id, sessionId: out.consent.session_id });
   if (out.outcome === 'given') {
     await enqueueChannelJob(env, 'channel_followup', ev.provider, `consent:${out.consent.uid}`, {
       kind: 'consent', thread: thread!.uid, consent: out.consent.uid, event: claim,
     });
   }
+  if (ev.provider === 'telegram') await confirmAnswer(env, conn, thread!, out.consent, out.outcome);
   return 'ok';
+}
+
+/**
+ * D756 §1.7 — the bot's one line after a counted Telegram answer: at most one
+ * per answer (its own client key under `consent:`), and only with the reply
+ * right. A failure is logged and never fails the webhook.
+ */
+async function confirmAnswer(
+  env: Env, conn: ChannelConnection, thread: ThreadRow, row: ConsentRow, outcome: 'given' | 'declined' | 'withdrawn',
+): Promise<void> {
+  try {
+    const bc = await telegram.activeBusinessConnection(env, conn.userId);
+    if (!bc?.canReply) return;
+    const venture = row.interview_id
+      ? (await env.DB.prepare('SELECT p.name FROM discovery_interviews di JOIN projects p ON p.id = di.project_id WHERE di.id = ?')
+        .bind(row.interview_id).first<{ name: string | null }>())?.name ?? null
+      : null;
+    const copy = telegram.TELEGRAM_COPY;
+    const text = outcome === 'given' ? copy.consentYes(oneLine(venture, 80) || null) : outcome === 'declined' ? copy.consentNo : copy.consentStop;
+    const claim = await beginOutbound(env, 'telegram', conn.userId, thread.id, `${CONSENT_KEY_PREFIX}${thread.uid}:answer:${row.uid}:${outcome}`);
+    if (claim.existing) return;
+    const sent = await telegram.sendBusinessMessage(env, bc.businessConnectionId, thread.external_chat_id, text);
+    await finishOutbound(env, claim.row.id, sent);
+  } catch (err) {
+    console.error('[channels] telegram consent confirmation not sent', err instanceof Error ? err.name : 'error');
+  }
+}
+
+/** D756 §1.5 (b): the member's own message carrying the notice page's link, at the current version. */
+const PASTED_NOTICE = /\/privacy\/interviews\?n=(\d{1,3})\b/;
+
+/**
+ * The member pasted the notice into a Telegram chat themselves: that message
+ * is the request, with no reply right and outside the window. A chat whose
+ * consent is already given is left as it is.
+ */
+async function recordPastedNotice(env: Env, msg: InboundMessage, thread: ThreadRow | null): Promise<void> {
+  if (!thread || msg.provider !== 'telegram' || msg.side !== 'me' || thread.consent_state === 'given') return;
+  const m = PASTED_NOTICE.exec(String(msg.text ?? ''));
+  if (!m || Number(m[1]) !== CONSENT_NOTICE_VERSION) return;
+  const row = await openRequest(env, thread, { interviewId: thread.interview_id, sessionId: thread.session_id });
+  await markRequested(env, row.id, msg.externalMessageId, 'telegram', thread.id);
 }
 
 /** The member behind a connection must still stand; an inactive one is ignored, not retried. */
@@ -1092,6 +1164,9 @@ async function processEvent(env: Env, ev: InboundEvent): Promise<'ok' | 'retry'>
 
     const out = await storeInbound(env, conn, msg);
     stored = true;
+    if (msg.provider === 'telegram' && msg.side === 'me' && (out.stored === 'pending' || out.stored === 'session')) {
+      await recordPastedNotice(env, msg, out.thread);
+    }
     const kept = out.stored === 'pending' || out.stored === 'session';
     await finish(kept ? 'stored' : 'ignored', {
       userId: conn.userId, threadId: out.thread?.id ?? null,
@@ -1197,8 +1272,8 @@ export async function runVoiceFollowup(env: Env, p: ChannelJobPayload): Promise<
   const note = await voiceNoteForJob(env, String(p.message ?? ''), job);
   if (!note) return;
   const fields: EventFields = { userId: Number(note.thread.user_id), threadId: note.thread.id };
-  // D754 §4: no consent, no download and no model — before any other check.
-  if (consentRequired(provider) && note.thread.consent_state !== 'given') {
+  // D754 §4, D756 §1.5: no consent, no download and no model — before any other check.
+  if (audioConsentRequired(provider) && note.thread.consent_state !== 'given') {
     await releaseVoiceNote(env, note.uid, job, 'no_consent');
     await end('failed', { ...fields, error: 'no_consent' });
     return;

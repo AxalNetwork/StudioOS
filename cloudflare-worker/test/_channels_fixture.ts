@@ -252,21 +252,25 @@ export const waText = (pnid: string, wamid: string, text = 'Our month-end close 
 });
 
 /**
- * D754 (#1893): a WhatsApp chat keeps nothing until its consent is given. The
+ * D754 (#1893), D756 (#1977): a WhatsApp chat keeps nothing, and a Telegram
+ * chat fetches no note, until its consent is given. The
  * state the interviewee's Yes leaves (the row, the thread, the session), then
  * the follow-up job that moves what waited — for the cases here that test
  * what happens after it. channel_consent_d754.test.ts tests getting there.
  */
-export async function consentGiven(env: any, db: any, threadUid: string) {
-  const t = db.prepare('SELECT * FROM channel_threads WHERE uid = ?').get(threadUid);
+export async function consentGiven(env: any, _db: unknown, threadUid: string) {
+  const t: any = await env.DB.prepare('SELECT * FROM channel_threads WHERE uid = ?').bind(threadUid).first();
   const uid = crypto.randomUUID();
-  db.prepare(`INSERT INTO channel_consents (uid, user_id, provider, integration_id, thread_id, interview_id, session_id,
-                source, method, status, notice_version, answered_at)
-              VALUES (?, ?, 'whatsapp', ?, ?, ?, ?, 'interviewee_reply', 'chat_reply', 'given', 1, datetime('now'))`)
-    .run(uid, t.user_id, t.integration_id, t.id, t.interview_id, t.session_id);
-  db.prepare(`UPDATE channel_threads SET consent_state = 'given' WHERE id = ?`).run(t.id);
-  db.prepare(`UPDATE interview_sessions SET consent_status = 'given', consent_method = 'chat_reply', consent_at = datetime('now') WHERE id = ?`).run(t.session_id);
-  await runChannelJob(env, 'channel_followup', { provider: 'whatsapp', kind: 'consent', thread: threadUid, consent: uid });
+  await env.DB.prepare(`INSERT INTO channel_consents (uid, user_id, provider, integration_id, thread_id, interview_id, session_id,
+                source, method, status, notice_version, requested_at, answered_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, 'interviewee_reply', 'chat_reply', 'given', 1, datetime('now'), datetime('now'))`)
+    .bind(uid, t.user_id, t.provider, t.integration_id, t.id, t.interview_id, t.session_id).run();
+  await env.DB.prepare(`UPDATE channel_threads SET consent_state = 'given' WHERE id = ?`).bind(t.id).run();
+  if (t.session_id) {
+    await env.DB.prepare(`UPDATE interview_sessions SET consent_status = 'given', consent_method = 'chat_reply', consent_at = datetime('now') WHERE id = ?`)
+      .bind(t.session_id).run();
+  }
+  await runChannelJob(env, 'channel_followup', { provider: t.provider, kind: 'consent', thread: threadUid, consent: uid });
 }
 
 export function noSecretsSeen() {
