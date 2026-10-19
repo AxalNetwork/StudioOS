@@ -19,7 +19,7 @@ import { NONE_SHARED, NOT_ACCREDITATION, PROOF_CHIP, coverText, otherActiveText 
 
 const h = React.createElement;
 const html = (el) => renderToStaticMarkup(el);
-const text = (s) => s.replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\s+/g, ' ').trim();
+const text = (s) => s.replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
 
 const ACTIVE = {
   uid: 'pf-1', purpose: 'lp_application', target_id: 201, deal_id: null, fund_id: 7, investor_user_id: 30, investor_name: 'Investor', target_label: 'Fund I application',

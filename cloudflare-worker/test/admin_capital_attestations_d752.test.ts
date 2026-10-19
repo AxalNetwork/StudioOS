@@ -22,7 +22,7 @@ import { join } from 'node:path';
 import { tableFromBaseline } from './_baseline.mjs';
 import { mig } from './_mercury_d713.ts';
 import { codeOnly } from './_codeOnly.mjs';
-import { personalFixture, bank, req, count, day } from './_mercury_personal_d713.ts';
+import { personalFixture, bank, req, day } from './_mercury_personal_d713.ts';
 import { currentPerTarget, statementSentence } from '../src/services/capitalAttestationTerms.ts';
 
 async function setup() {
