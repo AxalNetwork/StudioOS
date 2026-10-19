@@ -560,6 +560,9 @@ export function isStale(session: SessionRow, now = Date.now()): boolean {
  * the same row at once. The resume is one UPDATE guarded on the stage, the
  * stage's time and the status the caller read, so only one of them queues a
  * run; the other is told the session is still being processed.
+ *
+ * A retry keeps the member's Stop choice. One that never recorded a choice
+ * (`processing_auto` NULL) is manual: it stops after Transcribing (D770, #2095).
  */
 export async function recoverSession(env: Env, session: SessionRow, userId: number, now = Date.now(), note: string | null = null): Promise<{ ok: true; stage: Stage } | { ok: false; detail: string; message: string }> {
   const legacyStuck = !session.processing_stage && session.status === 'transcribing';
@@ -579,7 +582,7 @@ export async function recoverSession(env: Env, session: SessionRow, userId: numb
   const resumeAt: Stage = !voiceNotes && (session.status === 'transcribed' || session.status === 'structured') ? 'summarising' : 'transcribing';
   const claimed = await env.DB.prepare(
     `UPDATE interview_sessions
-        SET expected_last_seq = ?, processing_auto = CASE WHEN ? = 1 THEN 0 ELSE COALESCE(processing_auto, 1) END,
+        SET expected_last_seq = ?, processing_auto = CASE WHEN ? = 1 THEN 0 ELSE COALESCE(processing_auto, 0) END,
             status = CASE WHEN status = 'transcribing' THEN 'stopped' ELSE status END,
             processing_stage = ?, processing_done = NULL, processing_total = NULL, processing_error = ?,
             processing_updated_at = datetime('now'), updated_at = datetime('now')

@@ -5,7 +5,7 @@ import { cyclesApi, cyclesWrite } from '../../lib/api/cycles';
 import { verdictApi } from '../../lib/api/verdict';
 import { WorkerRail, Unreadable } from '../../ui';
 import RailFrame from '../../ui/RailFrame';
-import { RailCrumbsProvider, useSetRailCrumbs } from '../../ui/railCrumbs';
+import { RailCrumbsProvider, useRailOption, useSetRailCrumbs } from '../../ui/railCrumbs';
 import { ASSIST_SURFACES } from '../../ui/eadwynConfig';
 import FillProposals from '../../workspaces/FillProposals';
 import ZoneDraft from '../../workspaces/ZoneDraft';
@@ -413,6 +413,8 @@ export function underModule(modules, path, cycle = 'validate', action = 'record'
  */
 export function RecordMount({ projectId, interviewId, onClose, onStarted, asPage }) {
   const { recorder } = useActiveRecording();
+  // D768: while Record a session is open, the rail is that option's (transcription).
+  useRailOption('transcribe:interview', 'Record a session');
   const [interview, setInterview] = useState(interviewId ? undefined : null);
   useEffect(() => {
     if (!interviewId) { setInterview(null); return undefined; }
@@ -605,12 +607,13 @@ function useRowRecordEdit(target) {
  * › record", while the record is drawn; leaving the record drops it. It sits
  * inside `RailCrumbsProvider`, whose setter it calls, and draws nothing.
  */
-function RecordCrumb({ title }) {
+function RecordCrumb({ title, type = null, id = null }) {
   const setCrumbs = useSetRailCrumbs();
   useEffect(() => {
-    setCrumbs({ record: title || null });
+    // D768: `ref` names the record a run on this page reads (D765's `record`).
+    setCrumbs({ record: title || null, ref: title && type && id != null ? { type, id } : null });
     return () => setCrumbs({ record: null });
-  }, [setCrumbs, title]);
+  }, [setCrumbs, title, type, id]);
   return null;
 }
 
@@ -957,7 +960,8 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
         search={q}
       >
         {fillKind && projectId && (
-          <FillProposals key={`${slug}-${fillKind}`} projectId={projectId} kind={fillKind} enabled={fillsOn} ai={ai} workspace={name} onApplied={() => setReload((n) => n + 1)} />
+          <FillProposals key={`${slug}-${fillKind}`} projectId={projectId} kind={fillKind} enabled={fillsOn} ai={ai} workspace={name} onApplied={() => setReload((n) => n + 1)}
+            railOption={cycle === 'validate' ? `fill:${fillKind}` : null} />
         )}
         {fillsOn && projectId ? drafts.map((draft) => (
           <ZoneDraft key={`${slug}-${draft.surface}`} {...draft} scopeKey={String(projectId)} ai={ai} accent="violet" />
@@ -1021,7 +1025,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
           onChanged={() => { dirty.current = true; }} />
       )}
       {dialog && !(phone && dialog.page) && dialog.element}
-      <RecordCrumb title={record && recordState.status === 'ready' ? recordState.data?.title : null} />
+      <RecordCrumb title={record && recordState.status === 'ready' ? recordState.data?.title : null} type={`${cycle}/${slug}`} id={recordId ?? null} />
     </RailFrame>
     </RailCrumbsProvider>
   );

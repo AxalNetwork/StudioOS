@@ -60,6 +60,7 @@ import useBranchDeployment from './hooks/useBranchDeployment';
 import { LensProvider, useLensLocation } from './workspaces/lens';
 import HqSubNavStrip, { StripLink } from './components/HqSubNavStrip';
 import { RailStripSlot } from './ui/RailFrame';
+import { RailPageProvider } from './ui/railCrumbs';
 import { MESSAGES_ROLES } from './lib/paletteIndex';
 import { stripFor } from './lib/hqStrips';
 import { clearSupportSession } from './lib/supportSession';
@@ -1410,11 +1411,14 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
                 happened to refetch. `savedCompanyId` is the id restored before
                 first render, so a reload that lands on the same company does
                 not remount once the switcher confirms it. */}
+            {/* D768 (#2092): every rail below reads its page key from the route (lib/railPages.js). */}
+            <RailPageProvider role={shellRole}>
             <RailStripSlot.Provider value={railStrip}>
               <div key={activeCompany?.id ?? savedCompanyId ?? 'none'} data-app-main className={`${flushSurface ? 'p-0 edge-to-edge-surface' : 'p-4 md:p-6'} ${fullWidthSurface ? '' : 'max-w-7xl mx-auto w-full'}${onboardingCanvas ? ' flex w-full min-h-full flex-1 flex-col' : ''}`}>
                 {children}
               </div>
             </RailStripSlot.Provider>
+            </RailPageProvider>
             {!onboardingCanvas && (
             <footer className="mt-auto shrink-0 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-4 md:px-6 py-4">
               <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-gray-400 dark:text-gray-500">
