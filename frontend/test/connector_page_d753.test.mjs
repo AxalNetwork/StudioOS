@@ -268,9 +268,11 @@ test('every return lands on its page; the hub sends a bookmarked one on; the pag
 
 // ================================================================ the page layout
 
-test('the page layout: no ×, no dialog, no Escape of its own, the panel title an h2; Build\'s lightbox keeps its ×', async () => {
+test('the page layout: no ×, no dialog, no Escape of its own, no interim panel, Your connection\'s title an h2; Build\'s lightbox keeps its ×', async () => {
   const f = mockFetch();
-  // D753 F3 (#1956): the inline panel stays only for a member's own Mercury (F5); GitHub is F4's section (#1957).
+  // D753 F3 (#1956): the inline panel stayed only for GitHub and a member's own
+  // Mercury. GitHub is F4's section (#1957) and Mercury F5's (#1991), so a
+  // connected page mounts no panel.
   const merc = buildCatalogue({ providers: [P('mercury', 'Mercury', { auth_type: 'api_key', category: 'Accounting and banking' })],
     items: [{ uid: 'u-merc', provider_key: 'mercury', status: 'active', last_synced_at: null, last_error: null, config: {}, company_ids: [] }],
     firstParty: { google: null, microsoft: null, linkedin: null } });
@@ -279,10 +281,10 @@ test('the page layout: no ×, no dialog, no Escape of its own, the panel title a
     assert.equal(m.by('sheet-close'), undefined);
     assert.ok(!m.all((n) => m.props(n).role === 'dialog').length);
     assert.equal(m.listeners(), 0, 'no keydown listener');
-    const panel = m.all((n) => m.props(n)['data-layout'] === 'page')[0];
-    assert.ok(panel, 'the panel is in the page layout');
-    const head = panel.childNodes[0];
-    assert.ok(m.all((n) => n.tagName === 'H2').some((n) => isInside(n, head)), 'the panel\'s title is an h2');
+    assert.equal(m.all((n) => m.props(n)['data-layout'] === 'page').length, 0, 'no interim panel: F5 draws a member\'s Mercury in Your connection');
+    const conn = m.by('connector-page-connection');
+    assert.ok(conn, 'Your connection');
+    assert.ok(m.all((n) => n.tagName === 'H2').some((n) => isInside(n, conn)), 'Your connection\'s title is an h2');
     assert.equal(m.all((n) => n.tagName === 'H1').length, 1, 'the name is the one h1');
   } finally { await m.unmount(); }
   const build = await mount(h(ConnectToolView, { data: ready(), onClose() {}, deepLink: '?tool=stripe' }), '/build/connect?tool=stripe');

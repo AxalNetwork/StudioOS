@@ -124,7 +124,7 @@ export function pageAction(p, { view = 'idle' } = {}) {
 /**
  * D753 F3 (#1956): "Manage ▾" on a connected row, in this order:
  *   `sync`       — Sync now, when the connection is a registry row (it has a uid);
- *   `replace`    — Replace key or Replace token, for a key provider;
+ *   `replace`    — Replace key, or Replace token (a token connector, and Mercury's Read Only token);
  *   `reconnect`  — Reconnect, for a sign-in provider;
  *   `disconnect` — Disconnect, which asks first.
  * When the connection needs attention, Reconnect (or Replace) is the band's
@@ -137,7 +137,7 @@ export function manageItems(p) {
   const items = [];
   if (conn.uid) items.push({ id: 'sync', label: 'Sync now' });
   if (!attention) {
-    if (keyPath(p)) { if (conn.uid) items.push({ id: 'replace', label: authKind(p) === 'key' ? 'Replace key' : 'Replace token' }); }
+    if (keyPath(p)) { if (conn.uid) items.push({ id: 'replace', label: authKind(p) === 'key' && p.key !== 'mercury' ? 'Replace key' : 'Replace token' }); }
     else items.push({ id: 'reconnect', label: 'Reconnect' });
   }
   items.push({ id: 'disconnect', label: 'Disconnect' });
@@ -146,15 +146,14 @@ export function manageItems(p) {
 
 /**
  * Whether F1's interim panel is still mounted on a connected page: only
- * where a later task takes it over (a member's Mercury, F5). GitHub's
- * repositories are its page's own section since F4 (#1957), and its sign-in
- * lands there (`pageLanding`), never on the sync view. The Axal entities'
- * Mercury never: F5 (#1991) draws it on the page itself.
+ * where a sign-in lands on the sync view. GitHub's repositories are its
+ * page's own section since F4 (#1957), and its sign-in lands there
+ * (`pageLanding`), never on the sync view. Mercury never: F5 (#1991) draws
+ * the Axal entities' rows and a member's own connection on the page itself.
  */
 export function interimPanel(p, view = 'idle') {
   if (!p || isEntityRow(p)) return false;
-  if (view === 'sync') return p.key !== 'github';
-  return !!p.connection && p.key === 'mercury';
+  return view === 'sync' && p.key !== 'github';
 }
 
 /**
