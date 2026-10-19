@@ -64,7 +64,7 @@ const blank = () => ({
   phase: 'idle', session: null, interview: null, callLabel: null, channel: null, points: [],
   cap: {}, confirm: false, drawer: false, toast: null, error: null, wake: null, refused: null,
   marksQueued: [], online: true, video: false, pointError: null, meetingUrl: null,
-  processing: null, stageAt: -1, stopStep: null, lastSeq: null, attach: null,
+  processing: null, stageAt: -1, stopStep: null, lastSeq: null, attach: null, finish: null,
 });
 
 /**
@@ -139,6 +139,30 @@ export function elapsedMs(session, now) {
   const base = Number(session.active_ms) || 0;
   const since = at(session.recording_since);
   return session.status === 'recording' && Number.isFinite(since) ? base + Math.max(0, now - since) : base;
+}
+
+/**
+ * The suggestions waiting in a placements read: the pending ones of the
+ * latest run of each source, as the session page lists them. Null when the
+ * read is not one.
+ */
+export function pendingSuggestions(read) {
+  if (!read || !Array.isArray(read.runs)) return null;
+  const latest = (src) => [...read.runs].reverse().find((r) => (r.source === 'assistant' ? 'assistant' : 'studioos') === src);
+  return [latest('assistant'), latest('studioos')].filter(Boolean)
+    .flatMap((r) => r.placements || []).filter((p) => p.status === 'pending').length;
+}
+
+/**
+ * D757 (#1927): where a recording ends when Axal drafted its summary:
+ * "Summary drafted · n suggestions to review", linking to the session.
+ * Null otherwise, and the ending stays Customer research's (D694).
+ */
+export function finishLine(st) {
+  if (st?.phase !== 'ready' || !st.finish?.drafted || st.session?.id == null) return null;
+  const n = st.finish.suggestions;
+  const count = Number.isInteger(n) ? ` · ${n} ${n === 1 ? 'suggestion' : 'suggestions'} to review` : '';
+  return { text: `Summary drafted${count}`, href: `/validate/session/${encodeURIComponent(st.session.id)}` };
 }
 
 /** Return to Customer research, keeping the recording's venture when known (D694). */
@@ -312,7 +336,15 @@ export function createRecorder({ api, browser = {}, queue = null, now = () => Da
         set({ session: r.session });
         showProcessing(p);
         if (p?.stage === 'done' || (!p && ['transcribed', 'structured', 'reviewed'].includes(r.session?.status))) {
-          set({ phase: 'ready' });
+          // D757 (#1927): with a summary drafted, the finish counts the suggestions waiting.
+          let finish = null;
+          if (r.digest) {
+            let suggestions = null;
+            try { suggestions = pendingSuggestions(await api.placements?.(id)); } catch { /* the count is left out, never guessed */ }
+            if (gen !== pollGen) return 'cancelled';
+            finish = { drafted: true, suggestions };
+          }
+          set({ phase: 'ready', finish });
           return 'done';
         }
         if (p?.stage === 'failed') return 'failed';
