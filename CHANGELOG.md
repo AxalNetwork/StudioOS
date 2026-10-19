@@ -20,19 +20,6 @@
   counts a relationship row and its envelope once. The drill-down uses the
   same fold. `GET /templates/outside` lists `BUNDLED_SENT_DIRECTLY`.
 
-## The Telegram Business runbook (D756, #1983)
-
-- `documentation/operations/TELEGRAM.md` is the owner's runbook: @BotFather
-  (a new bot, Business Mode on, groups off), the three secrets by name,
-  Register webhook, the health read, the Premium check, the ten-step live
-  check on a real device (link, chatbot, four kinds of message, assign,
-  consent, audio and speakers, STOP, disconnect, `bizChat`, the inline-button
-  probe), rotation, the `TELEGRAM_CHANNEL` rollout and the off switch. Parts
-  that wait on #1950, #1954, #1963 and D756's tasks say so.
-- `PRODUCTION.md` gains the Telegram rollout, health, rotation and off-switch
-  lines; the channels README a "Telegram after D756" section; `D684.md` an
-  amendment note for §6 step 4, §7 and §15.
-
 ## The LP's capital call opens on the amount, and the fee statement is on screen (D717, #1859)
 
 - An open Fund I line's panel on the LP workspace opens on "Amount due", the
