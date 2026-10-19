@@ -23,7 +23,10 @@ cohort (applications, timing, journey preview, and `SpinoutModerationPage.jsx`
 at `/admin/spinout-moderation`, which lists cases awaiting a decision apart
 from sanctions in force, D448), content (articles, publications,
 templates), the network (profiles, partners, referrals), and integrations
-(Telegram, X).
+(Telegram, X). On `/admin/telegram`, `TelegramBotHealth.jsx` (words in
+`telegramBotHealth.js`) shows Super Admins the Telegram Business interview
+bot's health from `GET /api/admin/channels/telegram/webhook`, above the news
+bot's tabs (D756).
 
 `HeldZone.jsx` and the five `Held*.jsx` landings are the Admin shell on
 accounts HQ holds directly (canvas S20, D286): `HeldAccounts.jsx` (embeds the
