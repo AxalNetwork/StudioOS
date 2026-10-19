@@ -41,7 +41,9 @@ test('the part draws each milestone as a group, with its target, and each item\'
   assert.match(out, /data-testid="github-group-0"/);
   assert.match(words(out), /v1\.0 Target 2026-11-30 · 2 items · 2 shipped/);
   assert.match(words(out), /Later No target: the milestone has no due date · 1 item/);
-  assert.match(out, new RegExp(`<a href="${V10.replace(/[./]/g, '\\$&')}" target="_blank" rel="noopener noreferrer"[^>]*data-testid="github-shipped-0-0">Shipped in v1\\.0</a>`));
+  const mark = out.slice(out.lastIndexOf('<a ', out.indexOf('data-testid="github-shipped-0-0"')), out.indexOf('</a>', out.indexOf('data-testid="github-shipped-0-0"')) + 4);
+  assert.ok(mark.startsWith(`<a href="${V10}" target="_blank" rel="noopener noreferrer"`), mark);
+  assert.ok(mark.endsWith('>Shipped in v1.0</a>'), mark);
   assert.match(out, /data-testid="github-shipped-0-1">Shipped in v1\.1</);
   assert.doesNotMatch(out, /github-shipped-1-0/, 'an unshipped item has no mark');
   assert.match(out, /<a [^>]*href="\/build\/product-roadmap\/1\?project_id=101"[^>]*>Export to CSV<\/a>/, 'the item opens its record');
@@ -52,7 +54,7 @@ test('the Releases strip: newest first, each linking to GitHub, with what it shi
   const out = draw(GITHUB);
   assert.match(out, /data-testid="github-releases-count">2 releases</);
   const first = out.slice(out.indexOf('github-release-0'), out.indexOf('github-release-1'));
-  assert.match(first, new RegExp(`href="${V11.replace(/[./]/g, '\\$&')}"`));
+  assert.ok(first.includes(`href="${V11}"`), 'the release links to its page');
   assert.match(words(first), /v1\.1 · Release v1\.1 2026-10-09 · acme\/app 2 items shipped Fix login · Faster import/);
   const second = out.slice(out.indexOf('github-release-1'));
   assert.match(words(second), /v1\.0 2026-10-02 · Pre-release · acme\/app 1 item shipped Export to CSV/, 'a name equal to the tag is not repeated');
