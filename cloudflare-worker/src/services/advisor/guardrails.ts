@@ -151,7 +151,8 @@ export async function classifyInput(env: Env, userId: number, text: string, surf
     } catch {
       return { blocked: true, unavailable: true, score: null, category: 'error' };
     }
-    if (!r.ok) return { blocked: true, unavailable: true, score: null, category: 'router_failed' };
+    // A spent budget is named as one, so the route can say so rather than blame the guard.
+    if (!r.ok) return { blocked: true, unavailable: true, score: null, category: r.refusal?.startsWith('budget_') ? r.refusal : 'router_failed' };
     const decided = decide(parseVerdict(r.output));
     if (decided.action === 'fail') return { blocked: true, unavailable: true, score: null, category: 'unreadable' };
     // D158: the S-code that fired names the rule, lower-cased as it always was.

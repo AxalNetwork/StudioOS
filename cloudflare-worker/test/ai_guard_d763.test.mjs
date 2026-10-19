@@ -223,6 +223,9 @@ test('the caller names the member\'s own text; the system prompt and gathered ro
     f.calls.guard.length = 0;
     await run(f.env, { task: 'advisor_turn', userId: 2, systemPrompt: 'Ours.', messages: [{ role: 'user', content: 'a' }, { role: 'assistant', content: 'b' }, { role: 'user', content: 'c' }] });
     assert.deepEqual(f.calls.guard.filter((c) => c.role === 'user').map((c) => c.content), ['a\n\nb\n\nc'], 'absent guardText checks every message but the system prompt');
+    f.calls.guard.length = 0;
+    await run(f.env, { task: 'advisor_turn', userId: 2, messages: [{ role: 'system', content: 'Ours, with rows.' }, { role: 'user', content: 'd' }] });
+    assert.deepEqual(f.calls.guard.filter((c) => c.role === 'user').map((c) => c.content), ['d'], 'a system message was checked as the member\'s');
   } finally { f.db.close(); }
 });
 
@@ -292,6 +295,16 @@ test('an unsafe output is withheld; the guard and the model both ran and are bot
     const [runRow, ...guardRows] = rows(f.db);
     assert.deepEqual([runRow.refusal, runRow.charged_microusd], ['guard_blocked_output', modelMicro]);
     assert.deepEqual(guardRows.map((g) => g.safety_score), [1, 0]);
+  } finally { f.db.close(); }
+});
+
+test('fails closed on the output side too: an unreadable verdict on the answer withholds it, and both are charged', async () => {
+  const f = world({ verdict: (_c, role) => (role === 'assistant' ? 'maybe?' : 'safe') });
+  try {
+    const r = await run(f.env, { task: 'advisor_turn', userId: 2, text: 'hello' });
+    assert.deepEqual([r.ok, r.refusal, r.output, r.error], [false, 'guard_unavailable', undefined, GUARD_COPY.unavailable]);
+    assert.equal(r.guard.output, 'fail');
+    assert.equal(settledAt(holds(f.db)[0]), modelMicro + guardMicro(2));
   } finally { f.db.close(); }
 });
 
@@ -489,6 +502,12 @@ test('classifyInput, for the one route no model run follows, checks in full and 
       assert.deepEqual([r.blocked, r.unavailable], [true, true], 'the guard failed open');
     } finally { g.db.close(); }
   }
+  const spent = world({ funded: false });
+  try {
+    const r = await classifyInput(spent.env, 2, 'hello', '/studio');
+    assert.deepEqual([r.blocked, r.unavailable], [true, true], 'a check that could not run let the text through');
+    assert.match(r.category, /^budget_user_/, 'a spent budget is named, so /answer says so');
+  } finally { spent.db.close(); }
   const h = world({ verdict: () => 'unsafe\nS6' });
   try {
     assert.deepEqual(await classifyInput(h.env, 2, 'my cap table', '/studio'), { blocked: false, unavailable: false, score: 0, category: 's6' });
@@ -501,7 +520,8 @@ test('the four routes call the guard once: three through run(), /answer through 
   assert.equal((advisor.match(/classifyInput\(c\.env/g) || []).length, 1, 'advisor calls classifyInput more than once');
   const answer = advisor.slice(advisor.indexOf("advisor.post('/answer'"), advisor.indexOf("advisor.post('/skip'"));
   assert.match(answer, /classifyInput\(c\.env, user\.id, valueStr/);
-  assert.match(answer, /if \(safety\.unavailable\)[\s\S]{0,700}reason: 'guard_unavailable' \}, 503\)/, '/answer fails open');
+  assert.match(answer, /if \(safety\.unavailable\)[\s\S]{0,1100}reason: 'guard_unavailable' \}, 503\)/, '/answer fails open');
+  assert.match(answer, /budgetRefusalMessage\(safety\.category\)[\s\S]{0,80}\}, 429\)/, 'a spent budget is blamed on the guard');
   const explain = advisor.slice(advisor.indexOf("advisor.post('/explain'"), advisor.indexOf("advisor.get('/tools'"));
   assert.doesNotMatch(explain, /classifyInput/);
   assert.match(explain, /guardText: topic,/);

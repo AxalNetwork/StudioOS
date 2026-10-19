@@ -101,7 +101,7 @@ import {
   TOOL_SCHEMAS,
   type ToolEnvelope,
 } from '../services/advisor/tools';
-import { run as aiRouterRun, audioMinutesFromBytes } from '../services/aiRouter';
+import { run as aiRouterRun, audioMinutesFromBytes, budgetRefusalMessage } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { GUARD_COPY } from '../services/ai/guard';
 // Advisor kill switch (Task #5 staged rollout retired in Task #7 — only
@@ -980,9 +980,12 @@ advisor.post('/answer', async (c) => {
       model: '@cf/meta/llama-guard-3-8b',
       promptHash: await promptHash(), toolCalls: [],
       aiSpendUsd: 0, safetyScore: safety.score, guardrailCategory: safety.category,
-      sanitisationActions: [], refusalReason: 'guard_unavailable',
+      sanitisationActions: [], refusalReason: safety.category.startsWith('budget_') ? safety.category : 'guard_unavailable',
       shadowFlagged: false,
     });
+    if (safety.category.startsWith('budget_')) {
+      return c.json({ error: budgetRefusalMessage(safety.category), status: 'refused', reason: safety.category }, 429);
+    }
     return c.json({ error: GUARD_COPY.unavailable, status: 'refused', reason: 'guard_unavailable' }, 503);
   }
   if (safety.blocked) {
