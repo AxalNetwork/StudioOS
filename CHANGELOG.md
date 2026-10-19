@@ -4,20 +4,6 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
-## Every connector has its own page (D753 F1, #1876)
-
-- `/account/connectors/:key` (`ConnectorPage.jsx`, `connectorPageModel.js`)
-  draws a connector inside the Account center: "← Connectors", a header band
-  with the tile, name and tagline, About and Details. Today's connect and
-  manage panel is mounted inline through `SheetFrame`'s new `page` layout, so
-  nothing is lost until F2 to F5 replace it.
-- Every Discover card, Yours row, phone row and Channels button links the page;
-  the hub no longer opens a right sheet (the request form stays until F8). The
-  hub's tab is in the address (`?tab=discover`).
-- A sign-in return lands on its connector's page (`connectorsRedirect`); a
-  Mercury return goes to the hub with its keys stripped (D715 decision 3).
-  No Worker change.
-
 ## One text per document: every sender reads its library row (D758, #1863, PR 1)
 
 - `services/legalDocTypes.ts` gains `LIBRARY_SLUG_FOR` / `librarySlugFor`
