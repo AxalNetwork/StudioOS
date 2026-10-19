@@ -2104,7 +2104,8 @@ export const api = {
     if (!res.ok) throw await refusalError(res, 'PDF generation failed');
     const blob = await res.blob();
     const filename = (res.headers.get('Content-Disposition') || '').match(/filename="?([^"]+)"?/)?.[1] || `${slug}-preview.pdf`;
-    return { blob, url: URL.createObjectURL(blob), filename };
+    // #1854: the renderer that drew it, so the phone preview can say when page breaks are the fallback's.
+    return { blob, url: URL.createObjectURL(blob), filename, renderer: res.headers.get('X-Axal-Renderer') };
   },
   // D711 — a template as Word, with a `docx_export` registry row (binary
   // endpoint, not typed drift).
