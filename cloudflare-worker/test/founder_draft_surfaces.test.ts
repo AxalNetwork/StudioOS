@@ -264,17 +264,17 @@ async function token(userId: number, role: string): Promise<string> {
  * outcome a refusal may have.
  */
 async function draft(
-  db: any, who: { user: number }, surface: string, scopeKey?: string, page?: unknown,
-): Promise<{ status: number; prompt: string | null }> {
+  db: any, who: { user: number }, surface: string, scopeKey?: string, page?: unknown, verdict?: (input: any) => string,
+): Promise<{ status: number; prompt: string | null; body: any }> {
   let prompt: string | null = null;
-  // D763: the guard answers free, so `prompt` is the drafting model's.
+  // D763: the guard answers free, so `prompt` is the drafting model's. `verdict` is the guard's answer (safe by default).
   const AI = withGuard({
     run: async (_model: string, payload: any) => {
       const messages = payload?.messages || [];
       prompt = String(messages[messages.length - 1]?.content ?? '');
       return { response: 'a drafted paragraph' };
     },
-  });
+  }, verdict);
   const res = await research.fetch(
     new Request('http://x/drafts', {
       method: 'POST',
@@ -290,7 +290,7 @@ async function draft(
     }),
     { JWT_SECRET, ENVIRONMENT: 'development', DB: makeD1(db), AI } as any,
   );
-  return { status: res.status, prompt };
+  return { status: res.status, prompt, body: await res.json().catch(() => null) };
 }
 /** The status alone, for the many cases where only the refusal matters. */
 const statusOf = async (...a: Parameters<typeof draft>) => (await draft(...a)).status;
@@ -633,4 +633,20 @@ test('D510: a refused draft never reaches the model, so it records no run', asyn
   const { status } = await draft(db, MINE, 'build/retro', String(THEIR_PROJECT), '/build');
   assert.equal(status, 409);
   assert.deepEqual(draftRuns(db), [], 'a refused draft was recorded as a run against the page');
+});
+
+test('D770 (#2095): a draft the guard withholds, or cannot check, is never stored; the guard\'s own words go back', async () => {
+  const { GUARD_COPY } = await import('../src/services/ai/guard.ts');
+  // The output check sees the model's paragraph; the input check never does.
+  const onOutput = (answer: string) => (input: any) => (JSON.stringify(input).includes('a drafted paragraph') ? answer : 'safe');
+  for (const [answer, code, words] of [['unsafe\nS1', 'guard_blocked_output', GUARD_COPY.output], ['not a verdict', 'guard_unavailable', GUARD_COPY.unavailable]] as const) {
+    const db = freshDb();
+    const { status, prompt, body } = await draft(db, MINE, 'build/retro', String(MY_PROJECT), '/build', onOutput(answer));
+    assert.ok(prompt, 'the model ran');
+    assert.equal(status, 503, code);
+    assert.equal(body.detail, code);
+    assert.equal(body.message, words, 'the guard\'s own words, not "unavailable"');
+    assert.ok(!JSON.stringify(body).includes('a drafted paragraph'), 'the withheld text is never sent');
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM research_zone_drafts').get().n, 0, 'and never stored');
+  }
 });

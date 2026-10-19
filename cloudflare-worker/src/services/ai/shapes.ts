@@ -87,7 +87,7 @@ export const VISION_MODELS: ReadonlySet<string> = new Set([
  * catalogue says them. Each one's request shape is its model page's
  * (`/workers-ai/models/<name>/`) and `@cloudflare/workers-types`.
  */
-export const INTERIM_KINDS: Readonly<Record<string, 'rerank' | 'embedding' | 'translation'>> = Object.freeze({
+export const INTERIM_KINDS: Readonly<Record<string, 'rerank' | 'embedding' | 'translation' | 'voice' | 'image'>> = Object.freeze({
   '@cf/baai/bge-reranker-base': 'rerank',
   '@cf/baai/bge-base-en-v1.5': 'embedding',
   '@cf/baai/bge-small-en-v1.5': 'embedding',
@@ -97,6 +97,18 @@ export const INTERIM_KINDS: Readonly<Record<string, 'rerank' | 'embedding' | 'tr
   '@cf/google/embeddinggemma-300m': 'embedding',
   '@cf/pfnet/plamo-embedding-1b': 'embedding',
   '@cf/meta/m2m100-1.2b': 'translation',
+  // PR 3: text to speech.
+  '@cf/deepgram/aura-1': 'voice',
+  '@cf/deepgram/aura-2-en': 'voice',
+  '@cf/deepgram/aura-2-es': 'voice',
+  '@cf/myshell-ai/melotts': 'voice',
+  // PR 4: text to image.
+  '@cf/black-forest-labs/flux-1-schnell': 'image',
+  '@cf/black-forest-labs/flux-2-dev': 'image',
+  '@cf/black-forest-labs/flux-2-klein-4b': 'image',
+  '@cf/black-forest-labs/flux-2-klein-9b': 'image',
+  '@cf/leonardo/lucid-origin': 'image',
+  '@cf/leonardo/phoenix-1.0': 'image',
 });
 
 const DEFAULT_FACTS: ModelFacts = Object.freeze({ kind: 'text', context_window: null, paid_only: false }) as ModelFacts;
@@ -130,7 +142,7 @@ export function factsFor(model: string): ModelFacts {
  * cannot serve it is skipped without a call, as a context overflow is: a
  * text-only model handed an image would answer as if there were none.
  */
-export type Need = 'chat' | 'vision' | 'rerank' | 'embedding' | 'translation';
+export type Need = 'chat' | 'vision' | 'rerank' | 'embedding' | 'translation' | 'voice' | 'image';
 
 export function canServe(facts: ModelFacts, need: Need): boolean {
   switch (need) {
@@ -138,6 +150,9 @@ export function canServe(facts: ModelFacts, need: Need): boolean {
     case 'rerank': return facts.kind === 'rerank';
     case 'embedding': return facts.kind === 'embedding';
     case 'translation': return facts.kind === 'translation';
+    // PR 3: Aura and MeloTTS. Aura is a partner model, which D760's gate refuses before the run (`modelRefusal`) until the switch offers it.
+    case 'voice': return facts.kind === 'voice';
+    case 'image': return facts.kind === 'image';
     default: return facts.kind === 'text' || facts.kind === 'reasoning';
   }
 }
@@ -153,6 +168,8 @@ export const LONG_CONTEXT_TOKENS = 32_000;
 export function timeoutClass(facts: ModelFacts, inputTokens: number): TimeoutClass {
   if (facts.kind === 'image') return 'image';
   if (facts.kind === 'reasoning') return 'reasoning';
+  // PR 3: speech is produced for the whole text before it returns, so it gets the long class.
+  if (facts.kind === 'voice') return 'long_context';
   if (inputTokens >= LONG_CONTEXT_TOKENS) return 'long_context';
   return 'chat';
 }
@@ -230,6 +247,17 @@ export interface Units {
   audio_minutes?: number;
   /** PR 2: images sent to a vision model, counted by the Worker. Billing stays in tokens. */
   images_in?: number;
+  /** PR 3: characters of text sent to a voice priced per 1k characters (Aura). */
+  characters?: number;
+  /** PR 3: minutes streamed over a WebSocket (Nova-3 and Flux live), on the Worker's clock. */
+  audio_minutes_websocket?: number;
+  /** PR 4: an image, in the units its model is billed in (`imageUnits`): 512 by 512 tiles and steps, tile-steps, tiles, or megapixels. */
+  tiles?: number;
+  steps?: number;
+  output_tile_steps?: number;
+  output_tiles?: number;
+  first_megapixels?: number;
+  subsequent_megapixels?: number;
 }
 
 const estTokens = (s: string): number => (s ? Math.max(1, Math.ceil(s.length / 4)) : 0);
@@ -467,4 +495,266 @@ export const SEARCH_INDEX_DIMENSIONS = 768;
 export function searchIndexAccepts(model: string, vector: unknown): boolean {
   return model === SEARCH_INDEX_MODEL && Array.isArray(vector) && vector.length === SEARCH_INDEX_DIMENSIONS
     && vector.every((x) => typeof x === 'number' && Number.isFinite(x));
+}
+
+// ─────────────────────────────────────────────────────────── speech and voice (PR 3)
+
+/**
+ * A live transcript's units: the minutes streamed over the WebSocket, as the
+ * Worker's clock measured them (`liveTranscription.settleStream`). Priced per
+ * WebSocket minute (`PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET`), apart from a
+ * file's `audio_minutes`.
+ */
+export const websocketUnits = (minutes: number): Units => ({ audio_minutes_websocket: Number.isFinite(minutes) && minutes > 0 ? minutes : 0 });
+
+export interface SpeakInput { voice?: string; lang?: string }
+/** One request's text, at most: Aura bills per 1k characters, and the router bounds what one press can cost. */
+export const MAX_SPEAK_CHARS = 2000;
+/** The largest audio a voice may return before it is not one sentence's speech. */
+export const MAX_SPEECH_BYTES = 10 * 1024 * 1024;
+
+/** Each Aura model's speakers, as its model page lists them. */
+export const AURA_SPEAKERS: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  '@cf/deepgram/aura-1': ['angus', 'asteria', 'arcas', 'orion', 'orpheus', 'athena', 'luna', 'zeus', 'perseus', 'helios', 'hera', 'stella'],
+  '@cf/deepgram/aura-2-en': ['amalthea', 'andromeda', 'apollo', 'arcas', 'aries', 'asteria', 'athena', 'atlas', 'aurora', 'callista', 'cora', 'cordelia', 'delia', 'draco', 'electra', 'harmonia', 'helena', 'hera', 'hermes', 'hyperion', 'iris', 'janus', 'juno', 'jupiter', 'luna', 'mars', 'minerva', 'neptune', 'odysseus', 'ophelia', 'orion', 'orpheus', 'pandora', 'phoebe', 'pluto', 'saturn', 'selene', 'thalia', 'theia', 'vesta', 'zeus'],
+  '@cf/deepgram/aura-2-es': ['sirio', 'nestor', 'carina', 'celeste', 'alvaro', 'diana', 'aquila', 'selena', 'estrella', 'javier'],
+});
+const VOICE_RE = /^[a-z]{2,20}$/;
+const LANG2_RE = /^[a-z]{2}$/;
+
+export function speakRefusal(s: SpeakInput | undefined, text: string | undefined): string | null {
+  if (!s || typeof s !== 'object') return 'a voice run needs its options';
+  if (typeof text !== 'string' || !text.trim()) return 'a voice run needs text';
+  if (text.length > MAX_SPEAK_CHARS) return `at most ${MAX_SPEAK_CHARS} characters`;
+  if (s.voice != null && (typeof s.voice !== 'string' || !VOICE_RE.test(s.voice))) return 'the voice is a speaker name';
+  if (s.lang != null && (typeof s.lang !== 'string' || !LANG2_RE.test(s.lang))) return 'the language is a two-letter code';
+  return null;
+}
+
+/**
+ * The request a voice takes: Aura's `{ text, speaker?, encoding: 'mp3' }`, or
+ * MeloTTS's `{ prompt, lang? }`. A speaker the model does not list is refused
+ * (null), so the chain moves on rather than speaking in another voice; MeloTTS
+ * has one voice per language and lists no speaker, so any named one is refused.
+ */
+export function speakRequest(model: string, text: string, s: SpeakInput): Record<string, unknown> | null {
+  const speakers = AURA_SPEAKERS[model];
+  if (speakers) {
+    if (s.voice != null && !speakers.includes(s.voice)) return null;
+    return { text, encoding: 'mp3', ...(s.voice ? { speaker: s.voice } : {}) };
+  }
+  if (s.voice != null) return null;
+  return { prompt: text, ...(s.lang ? { lang: s.lang } : {}) };
+}
+
+/** The mime type a voice's bytes are, from their first bytes: MP3 (ID3 or frame sync) or WAV; else MP3, which both models default to. */
+export function speechMime(bytes: Uint8Array): string {
+  if (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46) return 'audio/wav';
+  return 'audio/mpeg';
+}
+
+/**
+ * The audio a voice returned: a stream (Aura), bytes, or `{ audio: base64 }`
+ * (MeloTTS), flat or under `result`. Null when there is none, or when it is
+ * larger than `MAX_SPEECH_BYTES` (the stream is cancelled there).
+ */
+/** A voice's answer: its audio bytes and their mime type. */
+export interface SpeechAudio { bytes: Uint8Array; mime: string }
+
+export async function readSpeech(raw: unknown): Promise<SpeechAudio | null> {
+  const bytes = await readBytes(raw, 'audio', MAX_SPEECH_BYTES);
+  return bytes ? { bytes, mime: speechMime(bytes) } : null;
+}
+
+/**
+ * A model's binary answer: base64 under `field` (flat or under `result`), a
+ * stream, bytes or a buffer. Null when there is none, or when it is larger than
+ * `max` (a stream is cancelled there).
+ */
+async function readBytes(raw: unknown, field: 'audio' | 'image', max: number): Promise<Uint8Array | null> {
+  let bytes: Uint8Array | null = null;
+  const r = raw as Record<string, unknown> & { result?: Record<string, unknown> } | null;
+  const b64 = typeof r?.[field] === 'string' ? r[field] as string : typeof r?.result?.[field] === 'string' ? r.result[field] as string : null;
+  if (b64 != null) {
+    try {
+      const bin = atob(b64);
+      if (bin.length > max) return null;
+      bytes = Uint8Array.from(bin, (ch) => ch.charCodeAt(0));
+    } catch { return null; }
+  } else if (raw instanceof Uint8Array) {
+    bytes = raw;
+  } else if (raw instanceof ArrayBuffer) {
+    bytes = new Uint8Array(raw);
+  } else if (raw && typeof (raw as ReadableStream).getReader === 'function') {
+    const reader = (raw as ReadableStream<Uint8Array>).getReader();
+    const parts: Uint8Array[] = [];
+    let size = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > max) { reader.cancel().catch(() => {}); return null; }
+      parts.push(value);
+    }
+    bytes = new Uint8Array(size);
+    let at = 0;
+    for (const p of parts) { bytes.set(p, at); at += p.byteLength; }
+  }
+  if (!bytes || bytes.byteLength === 0 || bytes.byteLength > max) return null;
+  return bytes;
+}
+
+// ─────────────────────────────────────────────────────────── image generation (PR 4)
+
+export interface DrawInput { width?: number; height?: number; steps?: number; seed?: number; negativePrompt?: string }
+/** What an image model answered, with the size the Worker read from its bytes (or, unreadable, the size it asked for). */
+export interface GeneratedImage { bytes: Uint8Array; mime: string; width: number; height: number }
+
+/** The longest prompt sent: FLUX.1 Schnell's limit, the tightest one a page gives. */
+export const MAX_DRAW_PROMPT_CHARS = 2048;
+/** The largest image a model may return before it is not one image. */
+export const MAX_GENERATED_IMAGE_BYTES = 10 * 1024 * 1024;
+/** Cloudflare's billing tile: 512 by 512 pixels. */
+export const TILE_PX = 512;
+/** The smallest side the Worker asks for; a smaller image is not useful, and FLUX.2's pages start at 256. */
+export const MIN_SIDE_PX = 256;
+
+type Billing = 'tiles_steps' | 'tile_steps' | 'tiles' | 'megapixels';
+interface ImageSpec {
+  /** JSON, or the multipart form FLUX.2 takes even for a prompt alone. */
+  wire: 'json' | 'multipart';
+  /** The widest side the model's page allows; null where the model decides its size (FLUX.1 Schnell). */
+  maxSide: number | null;
+  /** The size the model draws when none is sent. */
+  defaultSize: { width: number; height: number };
+  /** Its step range and the default sent; null where the steps are fixed (FLUX.2 Klein: 4). */
+  steps: { min: number; max: number; def: number; key: 'steps' | 'num_steps' } | null;
+  fixedSteps?: number;
+  negativePrompt?: boolean;
+  billing: Billing;
+}
+
+/**
+ * Each image model, as its page gives it (`/workers-ai/models/<name>/`, and the
+ * FLUX.2 launch notes, through the Cloudflare docs connector, 2026-10-19).
+ * FLUX.2 [dev] gives no step range: 25 is its example's, 50 is the Worker's own bound.
+ * Lucid Origin gives no default step count, so the Worker sends 25.
+ */
+export const IMAGE_SPECS: Readonly<Record<string, ImageSpec>> = Object.freeze({
+  '@cf/black-forest-labs/flux-1-schnell': { wire: 'json', maxSide: null, defaultSize: { width: 1024, height: 1024 }, steps: { min: 1, max: 8, def: 4, key: 'steps' }, billing: 'tiles_steps' },
+  '@cf/black-forest-labs/flux-2-dev': { wire: 'multipart', maxSide: 1920, defaultSize: { width: 1024, height: 768 }, steps: { min: 1, max: 50, def: 25, key: 'steps' }, billing: 'tile_steps' },
+  '@cf/black-forest-labs/flux-2-klein-4b': { wire: 'multipart', maxSide: 1920, defaultSize: { width: 1024, height: 768 }, steps: null, fixedSteps: 4, billing: 'tiles' },
+  '@cf/black-forest-labs/flux-2-klein-9b': { wire: 'multipart', maxSide: 1920, defaultSize: { width: 1024, height: 768 }, steps: null, fixedSteps: 4, billing: 'megapixels' },
+  '@cf/leonardo/lucid-origin': { wire: 'json', maxSide: 2500, defaultSize: { width: 1120, height: 1120 }, steps: { min: 1, max: 40, def: 25, key: 'num_steps' }, billing: 'tiles_steps' },
+  '@cf/leonardo/phoenix-1.0': { wire: 'json', maxSide: 2048, defaultSize: { width: 1024, height: 1024 }, steps: { min: 1, max: 50, def: 25, key: 'num_steps' }, negativePrompt: true, billing: 'tiles_steps' },
+});
+
+const isWhole = (n: unknown, max: number): boolean => typeof n === 'number' && Number.isInteger(n) && n >= 0 && n <= max;
+
+export function drawRefusal(d: DrawInput | undefined, text: string | undefined): string | null {
+  if (!d || typeof d !== 'object') return 'an image run needs its options';
+  if (typeof text !== 'string' || !text.trim()) return 'an image run needs a prompt';
+  if (text.length > MAX_DRAW_PROMPT_CHARS) return `at most ${MAX_DRAW_PROMPT_CHARS} characters of prompt`;
+  for (const k of ['width', 'height', 'steps'] as const) {
+    if (d[k] != null && (!isWhole(d[k], 10_000) || d[k] === 0)) return `${k} is a whole number above 0`;
+  }
+  if (d.seed != null && !isWhole(d.seed, Number.MAX_SAFE_INTEGER)) return 'the seed is a whole number';
+  if (d.negativePrompt != null && (typeof d.negativePrompt !== 'string' || d.negativePrompt.length > MAX_DRAW_PROMPT_CHARS)) return 'the negative prompt is text';
+  return null;
+}
+
+const clamp = (n: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, n));
+
+/**
+ * What the Worker sends a model: the size clamped to the model's range (no size
+ * is sent to FLUX.1 Schnell, which takes none), the steps clamped to its range or
+ * fixed, and the fields as its page names them. `sent` is what the units and the
+ * quote are measured from.
+ */
+export function drawRequest(model: string, text: string, d: DrawInput): { wire: 'json' | 'multipart'; fields: Record<string, string | number>; sent: { width: number; height: number; steps: number } } | null {
+  const spec = IMAGE_SPECS[model];
+  if (!spec) return null;
+  const side = (asked: number | undefined, def: number): number => (spec.maxSide == null ? def : clamp(asked ?? def, MIN_SIDE_PX, spec.maxSide));
+  const width = side(d.width, spec.defaultSize.width);
+  const height = side(d.height, spec.defaultSize.height);
+  const steps = spec.steps ? clamp(d.steps ?? spec.steps.def, spec.steps.min, spec.steps.max) : spec.fixedSteps ?? 1;
+  const fields: Record<string, string | number> = { prompt: text };
+  if (spec.maxSide != null) { fields.width = width; fields.height = height; }
+  if (spec.steps) fields[spec.steps.key] = steps;
+  if (d.seed != null) fields.seed = d.seed;
+  if (spec.negativePrompt && d.negativePrompt) fields.negative_prompt = d.negativePrompt;
+  return { wire: spec.wire, fields, sent: { width, height, steps } };
+}
+
+/** 512 by 512 tiles covering an image, each side rounded up. */
+export const tilesOf = (width: number, height: number): number => Math.ceil(width / TILE_PX) * Math.ceil(height / TILE_PX);
+
+/**
+ * An image's units, in the units its model is billed in (D760's catalogue):
+ * tiles and steps (FLUX.1 Schnell, Lucid Origin, Phoenix), tile-steps (FLUX.2
+ * [dev]), tiles (FLUX.2 Klein 4B), or megapixels (FLUX.2 Klein 9B: the first,
+ * then each further one, rounded up). Output only: no input image is sent.
+ */
+export function imageUnits(model: string, width: number, height: number, steps: number): Units {
+  const spec = IMAGE_SPECS[model];
+  const tiles = tilesOf(width, height);
+  switch (spec?.billing) {
+    case 'tiles_steps': return { tiles, steps };
+    case 'tile_steps': return { output_tile_steps: tiles * steps };
+    case 'tiles': return { output_tiles: tiles };
+    case 'megapixels': {
+      const mp = (width * height) / 1_000_000;
+      return { first_megapixels: 1, subsequent_megapixels: Math.max(0, Math.ceil(mp - 1)) };
+    }
+    default: return {};
+  }
+}
+
+/** An image's type and size, read from its first bytes: PNG, JPEG or WebP (VP8X/VP8/VP8L). Null when unreadable. */
+export function imageInfo(b: Uint8Array): { mime: string; width: number; height: number } | null {
+  const u16be = (i: number) => (b[i] << 8) | b[i + 1];
+  const u24le = (i: number) => b[i] | (b[i + 1] << 8) | (b[i + 2] << 16);
+  if (b.length >= 24 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) {
+    const w = ((b[16] << 24) | (b[17] << 16) | (b[18] << 8) | b[19]) >>> 0;
+    const h = ((b[20] << 24) | (b[21] << 16) | (b[22] << 8) | b[23]) >>> 0;
+    return { mime: 'image/png', width: w, height: h };
+  }
+  if (b.length >= 4 && b[0] === 0xff && b[1] === 0xd8) {
+    let i = 2;
+    while (i + 9 < b.length) {
+      if (b[i] !== 0xff) { i += 1; continue; }
+      const marker = b[i + 1];
+      // A start-of-frame marker (C0–CF, except DHT C4, JPG C8 and DAC CC) carries the size.
+      if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+        return { mime: 'image/jpeg', width: u16be(i + 7), height: u16be(i + 5) };
+      }
+      i += 2 + u16be(i + 2);
+    }
+    return null;
+  }
+  if (b.length >= 30 && b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) {
+    const chunk = String.fromCharCode(b[12], b[13], b[14], b[15]);
+    if (chunk === 'VP8X') return { mime: 'image/webp', width: u24le(24) + 1, height: u24le(27) + 1 };
+    // Lossy: the frame header's start code (9d 01 2a) is followed by 14-bit width and height, little-endian.
+    if (chunk === 'VP8 ') return { mime: 'image/webp', width: (b[26] | (b[27] << 8)) & 0x3fff, height: (b[28] | (b[29] << 8)) & 0x3fff };
+    if (chunk === 'VP8L') {
+      const bits = b[21] | (b[22] << 8) | (b[23] << 16) | (b[24] << 24);
+      return { mime: 'image/webp', width: (bits & 0x3fff) + 1, height: ((bits >> 14) & 0x3fff) + 1 };
+    }
+  }
+  return null;
+}
+
+/**
+ * The image a model returned: `{ image: base64 }` (FLUX, Lucid Origin), flat or
+ * under `result`, or a stream of bytes (Phoenix). Its size is read from the
+ * bytes; where they cannot be read, it is the size that was sent. Null when there
+ * is no image, or it is larger than `MAX_GENERATED_IMAGE_BYTES`.
+ */
+export async function readImage(raw: unknown, sent: { width: number; height: number }): Promise<GeneratedImage | null> {
+  const bytes = await readBytes(raw, 'image', MAX_GENERATED_IMAGE_BYTES);
+  if (!bytes) return null;
+  const info = imageInfo(bytes);
+  const sized = info && info.width > 0 && info.height > 0;
+  return { bytes, mime: info?.mime ?? 'image/jpeg', width: sized ? info.width : sent.width, height: sized ? info.height : sent.height };
 }

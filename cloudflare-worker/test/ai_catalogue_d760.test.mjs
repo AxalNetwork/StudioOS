@@ -293,7 +293,9 @@ test('refusals: model_unpriced, and model_not_offered for a beta model', async (
   assert.equal(refusalFor('@cf/deepgram/aura-1', GATE_OFF), 'model_not_offered');
   assert.equal(refusalFor('@cf/deepgram/aura-1', GATE_ON), null);
   // Offered by the catalogue, but in none of the router's price views: unpriced here.
-  assert.equal(modelRefusal(GATE_ON, '@cf/deepgram/aura-1'), 'model_unpriced');
+  assert.equal(modelRefusal(GATE_ON, '@cf/meta/m2m100-1.2b'), 'model_unpriced');
+  // D761 PR 3 put Aura in the router's character view, so with the gate on it may run.
+  assert.equal(modelRefusal(GATE_ON, '@cf/deepgram/aura-1'), null);
 
   for (const [model, want] of [
     ['@cf/lykon/dreamshaper-8-lcm', 'model_unpriced'],

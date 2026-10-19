@@ -3694,6 +3694,11 @@ research.post('/drafts', async (c) => {
     return c.json({ detail: 'draft_unavailable' }, 503);
   }
   if (out.refusal === 'assist_off') return refuseAssistOff(c);
+  // D763, D770 (#2095): a withheld draft, or one the guard could not check, is
+  // never stored; the guard's own words go back instead of "unavailable".
+  if (!out.ok && (out.refusal === 'guard_blocked_output' || out.refusal === 'guard_unavailable')) {
+    return c.json({ detail: out.refusal, message: out.error, ...(out.guard?.refusal?.link ? { link: out.guard.refusal.link } : {}) }, 503);
+  }
   const drafted = out.ok && out.output ? out.output.trim() : '';
   if (!drafted) return c.json({ detail: 'draft_unavailable' }, 503);
   const text = spec.finish ? await spec.finish(c, user.id, scope, drafted) : drafted;
