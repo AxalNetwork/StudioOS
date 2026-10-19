@@ -118,7 +118,7 @@ test('every band on the founder\'s boards is listed, under the Worker\'s own nam
     ...Object.values(cycleFills(src, cycle)).map((kind) => `fill:${kind}`),
   ]);
   assert.ok(fromTables.length >= 13, `expected the cycles' bands; found ${fromTables.length}`);
-  const fromCycle = optionsAt(CYCLE_ROUTE).filter((o) => o.handler !== 'none').map((o) => o.key);
+  const fromCycle = optionsAt(CYCLE_ROUTE).filter((o) => /^(draft|fill):/.test(o.key)).map((o) => o.key);
   assert.deepEqual([...fromCycle].sort(), [...fromTables].sort(),
     'CycleRoute\'s bands and the founder options listed on it have diverged');
 
@@ -163,11 +163,23 @@ test('every founder page has an option or a reason it has none, never both', () 
  * each: the founder's options there are on the rail. A section joins this
  * list in the PR that wires it.
  */
-const WIRED = ['Studio'];
+const WIRED = ['Studio', 'Validate'];
 const sectionOf = (page) => page.split(' · ')[1];
 const routeOf = (route) => {
   const [path, query] = route.split('?');
   return { path, search: query ? `?${query}` : '' };
+};
+/**
+ * A fill band names itself through `FillProposals`' `railOption`, which
+ * `CycleRoute` builds as `fill:<kind>` (D768), on every cycle or on the ones
+ * its condition names.
+ */
+const fillNamed = (section) => {
+  const src = cycleRouteSource();
+  const passed = src.match(/railOption=\{([^}]*`fill:\$\{fillKind\}`[^}]*)\}/)?.[1];
+  if (!passed) return false;
+  const only = [...passed.matchAll(/cycle === '([a-z]+)'/g)].map((m) => m[1]);
+  return only.length === 0 || only.includes(section.toLowerCase());
 };
 const railKeys = (src) => [...src.matchAll(/useRailOption\(([^;]*?)\);/g)]
   .flatMap((m) => [...m[1].matchAll(/'([a-z]+:[a-z0-9_/-]+)'/g)].map((k) => k[1]));
@@ -185,14 +197,18 @@ test('on a wired section, each option is on its page and names itself to the rai
     assert.equal(pageKeyFor(path, 'founder', { search }), o.page,
       `${o.key}: D768's page map puts ${o.route} on another page`);
     if (o.handler === 'none') continue;
-    const named = o.at.some(([file]) => railKeys(codeOnly(read(file))).includes(o.key));
+    const named = o.key.startsWith('fill:')
+      ? fillNamed(sectionOf(o.page))
+      : (o.rail || [...new Set(o.at.map(([file]) => file))]).every((file) => railKeys(codeOnly(read(file))).includes(o.key));
     assert.ok(named, `${o.page} / ${o.key}: no useRailOption('${o.key}', …) where it lives`);
   }
   // And the other way: every option a wired file names is listed there.
-  const files = new Set(FOUNDER_OPTIONS.filter((x) => WIRED.includes(sectionOf(x.page))).flatMap((x) => x.at.map(([f]) => f)));
+  const wired = FOUNDER_OPTIONS.filter((x) => WIRED.includes(sectionOf(x.page)));
+  const files = new Set(wired.flatMap((x) => [...x.at.map(([f]) => f), ...(x.rail || [])]));
   for (const file of files) {
     for (const key of railKeys(codeOnly(read(file)))) {
-      assert.ok(optionsAt(file).some((o) => o.key === key), `${file} names ${key} to the rail, and no founder option lists it`);
+      assert.ok(wired.some((o) => o.key === key && (o.rail || o.at.map(([f]) => f)).includes(file)),
+        `${file} names ${key} to the rail, and no founder option lists it there`);
     }
   }
 });

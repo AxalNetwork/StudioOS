@@ -13,6 +13,7 @@ import { useToast } from '../../components/useToast';
 import {
   CIRCLE_TYPES, CIRCLE_TYPE_LABEL, ACCESS_TYPES, ACTIVITY_LEVELS,
 } from '../../data/network';
+import AdminBoardFrame from './AdminBoardFrame';
 
 const STATUS_TABS = [
   { id: '', label: 'All' },
@@ -62,7 +63,7 @@ function Field({ label, children }) {
   );
 }
 
-export default function AdminCirclesPage() {
+function AdminCirclesPageBody() {
   const { toast, showToast } = useToast();
   const [statusFilter, setStatusFilter] = useState('');
   const [rows, setRows] = useState([]);
@@ -383,5 +384,14 @@ export default function AdminCirclesPage() {
         </div>
       ) : null}
     </div>
+  );
+}
+
+// D774 (#2100): S17 drew no rail. The board's page, in the Admin boards' frame.
+export default function AdminCirclesPage() {
+  return (
+    <AdminBoardFrame workspace="Communities" note="Eadwyn reads the communities listed here. A community is approved or changed only when you do it." data-testid="admin-board-communities">
+      <AdminCirclesPageBody />
+    </AdminBoardFrame>
   );
 }

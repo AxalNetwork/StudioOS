@@ -329,6 +329,7 @@ export default function InvestorScreeningZone() {
 
           <ZoneDraft
             surface="deals/screening"
+            railOption="draft:screening-memo"
             label="Draft · screening memo against the rubric"
             accept="Accept the memo"
             run="Draft the memo"

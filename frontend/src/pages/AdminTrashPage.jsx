@@ -2,11 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { Trash2, RotateCcw, AlertTriangle } from 'lucide-react';
 import { api } from '../lib/api';
 import { useToast } from '../components/useToast';
+import AdminBoardFrame from './admin/AdminBoardFrame';
 
 // Task #7 (AM) — Admin > Trash. Lists soft-deleted projects with Restore +
 // Hard-delete actions. Soft-deleted rows are auto-purged 30 days after
 // `deleted_at` by the cron sweep in services/projectTrash.ts.
-export default function AdminTrashPage() {
+function AdminTrashPageBody() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -134,5 +135,14 @@ export default function AdminTrashPage() {
         </div>
       )}
     </div>
+  );
+}
+
+// D774 (#2100): S4 drew no rail. The board's page, in the Admin boards' frame.
+export default function AdminTrashPage() {
+  return (
+    <AdminBoardFrame workspace="Trash" note="Eadwyn reads what is in the trash. Nothing is restored or deleted for good until you do it." data-testid="admin-board-trash">
+      <AdminTrashPageBody />
+    </AdminBoardFrame>
   );
 }

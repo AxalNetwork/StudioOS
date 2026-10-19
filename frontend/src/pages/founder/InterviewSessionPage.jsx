@@ -13,6 +13,7 @@ import { engineState, isThread } from './sessionDigestModel.js';
 import { ChannelSessionPanel } from './InterviewChannels';
 import { clock } from './interviewReviewModel.js';
 import { chatConsentOf, consentLine } from './chatConsent.js';
+import { useRailOption } from '../../ui/railCrumbs';
 
 /**
  * Validate › an interview session (D660, #1473), at `/validate/session/:id`, to
@@ -217,6 +218,9 @@ export function ReviewStep({ api, sessionId, theme, receiptItems, onSpent, group
   const [st, setSt] = useState(REVIEW_INITIAL);
   const actions = React.useMemo(() => makeReviewActions({ api, sessionId, set: setSt, onSpent }), [api, sessionId, onSpent]);
   useEffect(() => { actions.reload(); }, [actions]);
+  // D771 (#2097): a structuring run or a question at the transcript is the rail's option while it runs.
+  useRailOption(st.running ? 'structure:transcript' : null, 'Structure the transcript');
+  useRailOption(st.ask?.busy ? 'ask:transcript' : null, 'Ask');
   if (st.read === undefined) return <p className="text-[13px] text-axal-faint">Reading the placements…</p>;
   if (st.read === null) return <p role="alert" className="text-[13px] text-red-700 dark:text-red-400">Unreadable: the placements could not be read.</p>;
   return (
@@ -293,6 +297,11 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
   const [busy, setBusy] = useState(false);
   const [digestBusy, setDigestBusy] = useState(false);
   const [digestError, setDigestError] = useState(null);
+  // D771 (#2097): Summarise and Transcribe run a model (Keep and Edit do not), so each names itself to the rail while it runs.
+  const [summarising, setSummarising] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  useRailOption(summarising ? 'summarise:session' : null, 'Summarise');
+  useRailOption(transcribing ? 'transcribe:recording' : null, 'Transcribe');
 
   const load = useCallback(() => api.get(id).then((r) => { setData(r); return r; }).catch((e) => { setError(e?.message || 'Unreadable'); setData(null); }), [api, id]);
   const loadReceipt = useCallback(() => api.receipt(id).then(setReceipt).catch(() => setReceipt(null)), [api, id]);
@@ -403,9 +412,9 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
     try { const r = await api.editDigest(session.id, edit); setData((d) => ({ ...d, digest: r.digest })); setDigestBusy(false); return true; } catch (e) { setDigestError(e?.data?.detail || e?.message || 'The edit could not be saved.'); setDigestBusy(false); return false; }
   };
   const summarise = async () => {
-    setDigestBusy(true); setDigestError(null);
+    setDigestBusy(true); setSummarising(true); setDigestError(null);
     try { await api.summarise(session.id); await load(); } catch (e) { setDigestError(e?.data?.detail || e?.message || 'The summary could not be written.'); }
-    setDigestBusy(false); loadReceipt();
+    setDigestBusy(false); setSummarising(false); loadReceipt();
   };
   const review = ['transcribed', 'structured', 'reviewed'].includes(session.status) && (
     <section data-testid="session-review" data-first={reviewFirst ? 'true' : 'false'} className="space-y-2">
@@ -464,7 +473,7 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
           <section className="space-y-3">
             <h2 className="text-[16px] font-bold">Transcript</h2>
             {session.status === 'stopped' && AUDIO.has(session.channel) && (
-              <button type="button" onClick={async () => { try { await api.transcribe(session.id, session.final_model); } catch (e) { setError(e?.message); } load(); loadReceipt(); }} className="rounded-md bg-violet-700 px-3 py-1.5 text-[12px] font-bold text-white">Transcribe</button>
+              <button type="button" onClick={async () => { setTranscribing(true); try { await api.transcribe(session.id, session.final_model); } catch (e) { setError(e?.message); } setTranscribing(false); load(); loadReceipt(); }} className="rounded-md bg-violet-700 px-3 py-1.5 text-[12px] font-bold text-white">Transcribe</button>
             )}
             {/* D668: a session an assistant submitted opens on the review step, above its transcript. */}
             {reviewFirst && review}
