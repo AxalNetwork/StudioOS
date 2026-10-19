@@ -37,6 +37,7 @@ import ToolsHistory from './ToolsHistory';
 import UpdatesHistory from './UpdatesHistory';
 import UpdateAskReplies from './UpdateAskReplies';
 import CallsHistory from './CallsHistory';
+import RaiseReceiptMatches from '../../components/RaiseReceiptMatches';
 import { InterviewsSection, PainThemesSection, HypothesesSection } from './ValidateSections';
 import FormLightbox from './FormLightbox';
 import { usePhoneWidth } from '../../ui/phone/usePhoneWidth';
@@ -141,8 +142,14 @@ const CYCLE_DEFS = {
     Mount: RaiseMount,
     action: (q, open) => ({ label: 'Call for Capital', href: `/raise/call${q}`, onOpen: open }),
     // D686 §5.6: Capital relationships' Calls history, anchored at #calls.
+    // D752 (#1989): then the founder's "Match to my Mercury" for committed prospects.
     parts: toFnMap({
-      'capital-relationships': (data) => <CallsHistory calls={data?.parts?.calls} />,
+      'capital-relationships': (data, ctx) => (
+        <>
+          <CallsHistory calls={data?.parts?.calls} />
+          <RaiseReceiptMatches role={ctx.role} onChanged={ctx.reload} />
+        </>
+      ),
     }),
     tools: toFnMap({
       'investor-narrative': () => ({ label: 'Open the positioning workspace', href: '/raise/pitch/positioning' }),
@@ -953,7 +960,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
         {fillsOn && projectId ? drafts.map((draft) => (
           <ZoneDraft key={`${slug}-${draft.surface}`} {...draft} scopeKey={String(projectId)} ai={ai} accent="violet" />
         )) : null}
-        {moduleStatus === 'ready' && fnOf(def.parts, slug)?.(module, { projectId, reload: () => setReload((n) => n + 1), openAction, query, openDialog })}
+        {moduleStatus === 'ready' && fnOf(def.parts, slug)?.(module, { projectId, reload: () => setReload((n) => n + 1), openAction, query, openDialog, role: user?.role ?? null })}
       </ModulePage>
     );
   }

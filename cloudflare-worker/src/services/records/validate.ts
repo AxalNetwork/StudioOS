@@ -14,9 +14,9 @@
 import { verdictSpec } from './verdict';
 import type { User } from '../../types';
 import { canWrite, ownsVenture } from '../../routes/_founder_validate_helpers';
-import { sessionAudioParts, sessionReceiptLines } from '../../routes/founder_validate_sessions';
+import { sessionAudioParts, sessionDigest, sessionReceiptLines } from '../../routes/founder_validate_sessions';
 import { sessionPlacementRows } from '../../routes/founder_validate_structure';
-import { loadSession } from '../interviewSessions';
+import { loadSession, type SessionRow } from '../interviewSessions';
 import {
   MODULES, QUOTE_WITHHELD, claimsOf, heldDate, interviewState, isHeld, loadInterviews,
   loadSegments, loadSeverities, segmentsOf, supportsByGroup, themesOf,
@@ -34,7 +34,9 @@ import {
   splitTheme, stopCompetitor, unlinkEvidence, updateCompetitor, updateDemandSignal, updateHypothesis, updateSegment,
   updateTheme,
 } from '../validateWriters';
-import type { ActionResult, ModuleSpec, RecordAction, RecordContent, RecordContext, RecordFact, Row, Store } from './types';
+import type { ActionResult, ModuleSpec, RecordAction, RecordContent, RecordContext, RecordFact, Row, SectionSpec, Store } from './types';
+import { acceptedPerModule, findingKindsOf, findingsFor } from '../interviewSuggestions';
+import type { FindingKind } from '../interviewFindings';
 
 type Any = Record<string, any>;
 type Body = Record<string, unknown> | FormData;
@@ -466,6 +468,34 @@ function placementTarget(kind: string, p: Any | null): string {
 }
 const PLACEMENT_STATUS: Record<string, [string, string]> = { pending: ['Pending', 'amb'], accepted: ['Accepted', 'ok'], discarded: ['Discarded', 'grey'] };
 
+/**
+ * D757 §2.6 (#1925): a module record's accepted interview findings
+ * (`interview_findings`), behind the Quotes rule, each linked to the
+ * interview it came from. `scope` names the interviews the record is about.
+ */
+function findingsSection(
+  key: string, title: string, kinds: readonly FindingKind[], empty: string,
+  scope: (ctx: RecordContext, id: string) => Promise<{ segmentId?: number; interviewId?: number } | null>,
+): SectionSpec {
+  return {
+    key, title, side: true,
+    read: async (ctx, id) => {
+      const where = await scope(ctx, id);
+      if (!where) return { rows: [], empty };
+      const found = await findingsFor(ctx.env, { projectId: ctx.projectId, kinds, writer: isWriter(ctx), ...where });
+      return {
+        rows: found.map((f) => ({
+          a: f.what,
+          b: joined(f.detail, f.quote == null ? null : f.quote === QUOTE_WITHHELD ? f.quote : `"${f.quote}"`),
+          c: f.interviewee ?? 'Interview', tone: 'vio',
+          href: `/validate/customer-research/${f.interview_id}?project=${ctx.projectId}`,
+        })),
+        empty,
+      };
+    },
+  };
+}
+
 const customerResearch: ModuleSpec = {
   read: 'read', write: 'write', store: 'discovery_interviews',
   activityType: 'validate.customer-research',
@@ -542,6 +572,29 @@ const customerResearch: ModuleSpec = {
       },
     },
     {
+      // D757 (#1924): the kept summary for every allowed reader; the draft for writers only.
+      key: 'summary', title: 'Summary',
+      read: async (ctx, id) => {
+        const d = await loadInterview(ctx, id);
+        if (!d.session) return { rows: [], empty: 'No session recorded.' };
+        const writer = isWriter(ctx);
+        const digest = await sessionDigest(ctx.env, d.session as SessionRow, { writer, quoteConsent: d.iv.quote_consent === 1 });
+        if (!digest) return { rows: [], empty: writer ? 'No summary yet.' : 'No summary kept yet.' };
+        return {
+          rows: [
+            ...(digest.kept ? [] : [{ a: `Draft · written by ${digest.model || 'a model not recorded'}`, tone: 'amb' }]),
+            ...digest.overview.map((o: Any) => ({ a: String(o.text) })),
+            ...digest.key_quotes.map((q: Any) => ({
+              a: q.quote === QUOTE_WITHHELD ? QUOTE_WITHHELD : `"${q.quote}"`,
+              b: joined(q.speaker, Number.isFinite(Number(q.start_ms)) ? hhmmss(q.start_ms) : null),
+            })),
+            ...digest.decisions.map((x: Any) => ({ a: String(x.text), c: 'Decision' })),
+            ...digest.next_steps.map((x: Any) => ({ a: String(x.text), c: x.who === 'me' ? 'Next step · you' : x.who === 'them' ? 'Next step · them' : 'Next step' })),
+          ],
+        };
+      },
+    },
+    {
       key: 'fed', title: 'What it fed', side: true,
       read: async (ctx, id) => {
         const d = await loadInterview(ctx, id);
@@ -563,11 +616,14 @@ const customerResearch: ModuleSpec = {
           }
         }
         const fit = d.iv.icp_fit ? FIT[String(d.iv.icp_fit)] : null;
+        // D757 §2.7 (#1925): the suggestions accepted from this interview, counted per module.
+        const fed = await acceptedPerModule(ctx.env, ctx.projectId, Number(d.iv.id));
         return {
           rows: [
             { a: 'Pain themes', b: String(groups.size) },
             { a: 'Hypotheses', b: `${supports} supports · ${contradicts} contradicts` },
             { a: 'ICP fit', b: fit ? joined(fit[0], d.segment) : 'Not recorded' },
+            ...fed.map((m) => ({ a: m.name, b: plural(m.count, 'accepted suggestion', 'accepted suggestions'), href: `/validate/${m.slug}?project=${ctx.projectId}` })),
           ],
         };
       },
@@ -739,6 +795,8 @@ const icp: ModuleSpec = {
       key: 'persona', title: 'Persona card', side: true,
       read: async () => ({ rows: [{ a: 'Export', b: 'PDF', action: 'export-persona' }] }),
     },
+    findingsSection('findings', 'From interviews', findingKindsOf('ideal-customer-profile'), 'No firmographic or job to be done accepted from its interviews yet.',
+      async (ctx, id) => ({ segmentId: Number((await loadSegment(ctx, id)).s.id) })),
   ],
   async actions(ctx, id): Promise<RecordAction[]> {
     const { s } = await loadSegment(ctx, id);
@@ -890,6 +948,10 @@ const market: ModuleSpec = {
         ] };
       },
     },
+    // The project's alternatives and market facts: an interview names them
+    // beside a competitor, never as one of its signals.
+    findingsSection('findings', 'From interviews', findingKindsOf('market-intelligence'), 'No alternative or market fact accepted from an interview yet.',
+      async (ctx, id) => { await loadCompetitor(ctx, id); return {}; }),
   ],
   async actions(ctx, id): Promise<RecordAction[]> {
     const { c, tracking, watch } = await loadCompetitor(ctx, id);
@@ -1119,6 +1181,11 @@ const demand: ModuleSpec = {
         return { rows: [{ a: String(d.row.name ?? 'A sign-up with no name'), b: 'Waitlist' }] };
       },
     },
+    findingsSection('findings', 'From the interview', findingKindsOf('demand-signals'), 'No budget, timing, urgency, trigger or objection accepted from its interview.',
+      async (ctx, id) => {
+        const d = await loadDemandRecord(ctx, id);
+        return d.prefix === 'signal' && d.row.interview_id != null ? { interviewId: Number(d.row.interview_id) } : null;
+      }),
   ],
   async actions(ctx, id): Promise<RecordAction[]> {
     const d = await loadDemandRecord(ctx, id);
