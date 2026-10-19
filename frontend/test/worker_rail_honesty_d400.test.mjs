@@ -78,11 +78,12 @@ test('WorkerRail: a failed usage read is Unreadable with a retry, never "Not rec
     'the usage block has no Unreadable with a retry');
 });
 
-test('WorkerRail: a failed pricing read draws the suggestions block, saying so', () => {
+test('WorkerRail: a failed read of the page\'s models draws the suggestions block, saying so', () => {
+  // D769 PR 2 (#2088): the models are the page's row, `GET /api/ai/rail`.
   const src = codeOnly(read(RAIL));
-  const gate = /\{sug\.unreadable \? \(\s*pricingError \? \(\s*<div[^>]*>\s*<Unreadable[\s\S]{0,200}?onRetry=\{reload\}/;
+  const gate = /\{rail\.state === 'unreadable' && \(\s*<div[^>]*>\s*<Unreadable[\s\S]{0,200}?onRetry=\{row\.reload\}/;
   assert.match(src, gate,
-    'a failed pricing read renders nothing — the model block vanishes and reads as "no model here"');
+    'a failed read renders nothing — the model block vanishes and reads as "no model here"');
 });
 
 test('WorkerRail: a failed allowance read is Unreadable with a retry, never a $0.00 bar', () => {

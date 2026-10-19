@@ -9,7 +9,8 @@
  * accepted."). The assertions on that card and on `railInheritance` went with
  * it; `airail_d698.test.mjs` pins that they are gone. What stays here is what
  * D402 established that still holds: a zone and its root share one stored key,
- * so the card and the run agree, and reading the path never throws.
+ * so the card and the run agree, and reading the path never throws. Since
+ * D769 PR 2 (#2088) that key is the page's (D768) in the Worker's matrix.
  *
  * Run with:
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/worker_rail_inherited_d402.test.mjs
@@ -27,14 +28,20 @@ const RAIL = 'frontend/src/ui/WorkerRail.jsx';
 
 test('a zone and its root read one stored pick, so the card and the run agree', () => {
   const src = codeOnly(read(RAIL));
-  // The cards are built from the same per-section, per-task picks the bands
-  // send (`railModelChoice.js`), on a zone as on the root (D402, kept by D698).
-  assert.match(src, /picks\[job\.task\] = readRailModel\(workspace, job\.task\)/,
-    'the cards are not the stored picks');
-  assert.match(src, /railSuggestions\(\{ section, module, pricing, picks \}\)/, 'the cards ignore the stored picks');
-  assert.match(src, /\{sug\.cards\.map\(\(card\) => \{/, 'a zone does not draw the cards in use');
-  assert.match(codeOnly(read('frontend/src/workspaces/FillProposals.jsx')), /readRailModel\(workspace, task\)/,
-    'the band reads a different store, so the card and the run can disagree');
+  // D769 PR 2 (#2088): the cards are the page's row, read by the shell's page
+  // key (D768), the same on a zone as on the root; the pick is stored per page
+  // and per open option.
+  assert.match(src, /const row = useRailRow\(pageKey, optionKey\);/, 'the cards are not the page\'s row');
+  assert.match(src, /railPrefsApi\.setPagePick\(pageKey, id, optionKey\)/, 'the pick is not stored per page');
+  assert.match(src, /\{rail\.cards\.map\(\(card\) => \{/, 'a zone does not draw the cards in use');
+  // The Worker reads the pick a rail run takes from the same rows the route
+  // writes: section = the page key lower-cased, task = the option or 'page'.
+  const ai = codeOnly(read('cloudflare-worker/src/routes/ai.ts'));
+  assert.match(ai, /const task = option \?\? 'page';/);
+  assert.match(ai, /writeRailPreference\(c\.env, Number\(user\.id\), railSectionOf\(row\), task,/);
+  const router = codeOnly(read('cloudflare-worker/src/services/aiRouter.ts'));
+  assert.match(router, /\.bind\(userId, page\.trim\(\)\.toLowerCase\(\), 'page', option \?\? 'page'\)/,
+    'the run reads a different store, so the card and the run can disagree');
 });
 
 test('reading the path never throws outside a router', () => {

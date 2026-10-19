@@ -6,18 +6,23 @@
  * the canvas's words and units (`priceText`, the canvas's `pr()`), and so does
  * the guard sentence.
  *
- * THE FIGURE IS THE WORKER'S, never typed or computed here. It is read from
- * `GET /api/ai/rates`, the router's own rate card (`railRates`):
- *   - the billed price, once the Worker reports `billing: 'billed'`;
- *   - else the cost, which is what a run is charged today.
+ * THE FIGURE IS THE WORKER'S, never typed or computed here:
+ *   - a card's price comes with its model in `GET /api/ai/rail` (D764, PR 2
+ *     of D769: `railModelPrice`);
+ *   - an All models row's and the guard's from `GET /api/ai/rates`, the
+ *     router's rate card (`railRates`).
+ * Both carry D760's `cost` and `billed`, and both say which one a run is
+ * settled at in `billing`: the billed price once the Worker reports
+ * `billing: 'billed'`, else the cost, which is what a run is charged. The
+ * owner set `AI_BILLING = "charged"` (#2123); the rail follows the Worker's
+ * `billing`, so it prints billed the deploy `billingMode` reads that switch
+ * (D762), and never a price the run is not settled at.
  * Nothing here multiplies by the margin. The canvas's `usd()` does, and
  * copying it would quote a price the member is not charged.
  *
  * NO PRICE, NO FIGURE. A model the Worker gives no price for prints "Not
  * available", as the canvas does. A read that failed prints "Unreadable",
  * never a zero, and one in flight prints an ellipsis.
- *
- * `ui/railModels.js` stays the copy table: names and sentences, no figure.
  */
 import { GUARD_MODEL } from './railModels';
 
@@ -130,16 +135,16 @@ export function modelPrice(rates, id, long) {
   return units ? priceText(units, long) : NOT_AVAILABLE;
 }
 
-/**
- * `railSuggestions`' answer with a price on each card (long) and each All
- * models row (short), from the same read.
- */
-export function priceSuggestions(sug, rates) {
-  return {
-    ...sug,
-    cards: sug.cards.map((c) => ({ ...c, price: modelPrice(rates, c.id, true) })),
-    groups: sug.groups.map((g) => ({ ...g, chips: g.chips.map((c) => ({ ...c, price: modelPrice(rates, c.id, false) })) })),
-  };
+/** A model's price from `GET /api/ai/rail`: its billed units once `billing` is 'billed', else its cost. */
+export function railModelPrice(model, billing, long) {
+  const p = model?.price;
+  const units = unitsOf(billing === 'billed' ? p?.billed : p?.cost);
+  return Object.keys(units).length ? priceText(units, long) : NOT_AVAILABLE;
+}
+
+/** All models' groups with each row's short price, from the rate card. */
+export function priceGroups(groups, rates) {
+  return groups.map((g) => ({ ...g, chips: g.chips.map((c) => ({ ...c, price: modelPrice(rates, c.id, false) })) }));
 }
 
 /**

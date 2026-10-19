@@ -13,9 +13,9 @@
  *      desks (D424). A switch on the others would be exactly the dead control
  *      D17 refused, one page over.
  *
- * And the money rule, which is the one worth failing loudly: every run spends
- * the founder's own budget against their own cap, so the mode is OFF until
- * they choose it — whatever the canvas draws.
+ * The money rule changed with D720 §6 (D769 PR 2, #2088): AI is on by default
+ * on every page, because nothing runs without a press, the Worker refuses a
+ * run on a page switched off (D765), and a recording's Stop asks first (D770).
  *
  * Run with:
  *   npx tsx --test frontend/test/validate_fills_the_blanks.test.mjs
@@ -38,25 +38,18 @@ const SECTIONS = 'frontend/src/pages/cycles/ValidateSections.jsx';
 const RECORD = 'frontend/src/pages/founder/InterviewReviewPage.jsx';
 const CFG = 'frontend/src/ui/eadwynConfig.js';
 
-test('a page with fills is off until the founder turns it on', () => {
-  // Every fill run spends their own budget against their own monthly cap. A
-  // mode that is on before they chose it spends money they did not agree to
-  // spend, and the canvas drawing the card selected is not a reason to.
-  //
-  // D769 (#2088; D720 §6): the switch is drawn on every page, and a page with
-  // no fills defaults to on, because nothing there runs without a press. The
-  // default is the host's, false unless it passes one; the rail passes on only
-  // where there are no fills; the server snapshot is that same default.
+test('every page is on until the member turns it off (D720 §6)', () => {
+  // D769 PR 2 (#2088): the switch is drawn on every page and AI is on by
+  // default everywhere, a page with fills included. A stored choice wins; the
+  // server snapshot is the default.
   const hook = codeOnly(read(HOOK));
-  assert.match(hook, /safeReadJSON\(key, false\)/, 'the stored default must be false');
-  assert.match(hook, /useAssistMode\(workspace, \{ defaultOn = false \} = \{\}\)/, 'the default default must be false');
+  assert.match(hook, /safeReadJSON\(key, false\)/, 'a stored value reads false when it is not a boolean');
+  assert.match(hook, /useAssistMode\(workspace, \{ defaultOn = true \} = \{\}\)/, 'the default default must be on');
   assert.match(hook, /\(\) => defaultOn === true,/, 'the server snapshot must be the page\'s default');
-  assert.doesNotMatch(hook, /safeReadJSON\(key, true\)|=> true,/,
-    'something defaults the mode to on');
+  assert.match(hook, /return chosen\.has\(key\) \? value : defaultOn === true;/, 'a stored choice must win over the default');
   const rail = codeOnly(read(RAIL));
-  assert.match(rail, /const modeChoice = surface\.mode\?\.kind === 'choice' && fills \? surface\.mode : null;/);
-  assert.match(rail, /useAssistMode\(workspace, \{ defaultOn: !modeChoice \}\)/,
-    'a page with fills must default to off');
+  assert.match(rail, /const \[aiOn, setAiOn\] = useAssistMode\(workspace\);/, 'the rail must take the default, on');
+  assert.doesNotMatch(rail, /modeChoice|defaultOn/, 'the rail picks its own default again');
 });
 
 test('the mode is remembered the way every other rail preference is', () => {
@@ -69,25 +62,13 @@ test('the mode is remembered the way every other rail preference is', () => {
   assert.match(hook, /const keyFor = \(workspace\)/);
 });
 
-test('the rail draws the switch only where flipping it does something', () => {
+test('the rail draws the switch on every page, and `fills` no longer decides anything', () => {
+  // D720 §6: on every page. `fills` decided only the default since D769 PR 1,
+  // and PR 2 retires it: hosts may still pass it, and the rail reads none of it.
   const rail = codeOnly(read(RAIL));
-  // `fills` is the host's answer to "does THIS workspace have any". The
-  // surface declares the capability; the page declares whether it applies.
-  assert.match(rail, /fills = false,/, 'the rail must default to no switch');
-  assert.match(rail, /surface\.mode\?\.kind === 'choice' && fills/,
-    'the switch must require BOTH a choice-declaring surface and a host that has work');
-  // The hosts that have proposal bands. The four desks joined in D424: their
-  // bands had been gated on the mode since they were mounted, and no rail on
-  // those desks drew a switch, so none of them could be reached. The four
-  // cycle pages that replaced them (D661) share one host, `CycleRoute.jsx`.
-  const hosts = [
-    CYCLE_ROUTE,
-    ...Object.values(DESKS).filter((d) => d.bands.length).map((d) => d.file),
-  ];
-  for (const h of hosts) {
-    assert.match(codeOnly(read(h)), /<WorkerRail[^>]*?\n\s*fills\n/,
-      `${h} has proposal bands and its rail draws no switch for them`);
-  }
+  assert.doesNotMatch(rail, /fills = false,|\bfills\b(?!')/, 'the rail reads `fills` again');
+  assert.match(rail, /RETIRED_RAIL_PROPS = \[[^\]]*'fills'\]/, '`fills` is a retired prop');
+  assert.match(rail, /data-testid="switch-worker-rail-ai-off"/);
 });
 
 /**

@@ -191,7 +191,15 @@ button.fwr-card:focus-visible { outline: 2px solid var(--fwr-accent); outline-of
 /* D769: the Worker's price, in the canvas's units. */
 .fwr-card-price { display: block; font-size: 11px; line-height: 1.4; margin-top: 3px; font-weight: 600; color: var(--d698-text); font-variant-numeric: tabular-nums; }
 p.fwr-models-note { margin: 0; font-size: 11px; line-height: 1.45; color: var(--d698-faint); }
-p.fwr-using { margin: 0; font-size: 12px; color: var(--fwr-accent); }
+/* D769 PR 2: "On this page", the page's options; the open one in the accent. */
+.fwr-options { display: flex; flex-direction: column; gap: 5px; }
+.fwr-option-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.fwr-option {
+  font-size: 12px; display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+  padding: 5px 8px; border-radius: 7px; color: var(--d698-ink);
+}
+.fwr-option-model { font-size: 11px; white-space: nowrap; color: var(--d698-muted); }
+.fwr-option[data-open="true"] { background: var(--fwr-accent-soft); color: var(--fwr-accent); }
 .fwr-all-toggle {
   font: inherit; font-size: 12px; font-weight: 700; text-align: left;
   min-height: 28px; display: flex; align-items: center;
@@ -318,8 +326,10 @@ button.fwr-add-tokens:disabled { cursor: not-allowed; opacity: .55; }
 .dark .fwr-card-line { color: var(--d698-muted); }
 .dark .fwr-card-price { color: var(--d698-text); }
 .dark p.fwr-models-note { color: var(--d698-faint); }
-.dark p.fwr-using { color: var(--fwr-accent); }
 .dark .fwr-all-toggle { color: var(--fwr-accent); }
+.dark .fwr-option { color: var(--d698-ink); }
+.dark .fwr-option-model { color: var(--d698-muted); }
+.dark .fwr-option[data-open="true"] { background: var(--fwr-accent-soft); color: var(--fwr-accent); }
 .dark .fwr-group-title { color: var(--d698-faint); }
 .dark .fwr-chip { background: transparent; color: var(--d698-ink); }
 .dark .fwr-chip[data-selected="true"] { background: var(--fwr-accent-soft); color: var(--fwr-accent); }
