@@ -5,11 +5,12 @@ import { BrandIcon, Pill, Unreadable } from '../../ui';
 import { BTN } from './AccountCenter';
 import {
   CARD_TITLE, CHANNELS_HREF, INBOX_HREF, MEETING_NOTES, PROVIDER_LABEL, TELEGRAM_LIMITS, WHATSAPP_CALLS, WHATSAPP_NOTES,
-  channelCard, disconnectNote, meetingCard, pendingLabel, pendingTotal, readOverview, telegramLinkView,
+  channelCard, disconnectNote, meetingCard, pendingLabel, pendingTotal, readOverview, shownChannels, telegramLinkView,
   telegramSteps, testOutcome, whatsappSignupConfig,
   telegramClaimView, telegramConfirmRefusal,
 } from './channelsModel';
 import { SignupError, loadFacebookSdk, runEmbeddedSignup } from './whatsappSignup';
+import { CHANNEL_WORDING } from '../../lib/validateSourceWording';
 
 /**
  * D684 (#1575, S02 #1578) — Connectors' "Customer conversations" group: a
@@ -66,7 +67,23 @@ function CardFrame({ card, children }) {
       {card.why && <p className={`text-[12.5px] leading-snug ${card.state === 'problem' ? 'text-amber-800 dark:text-amber-300' : 'text-axal-ink/80 dark:text-gray-300'}`}>{card.why}</p>}
       {card.note && <p className={NOTE}>{card.note}</p>}
       {children}
+      <ValidateLines provider={card.provider} />
     </article>
+  );
+}
+
+/** D757 §2.12 (#1929): what the channel is used by, and what the engine does with it. */
+export function ValidateLines({ provider }) {
+  const w = Object.hasOwn(CHANNEL_WORDING, provider) ? CHANNEL_WORDING[provider] : null;
+  if (!w) return null;
+  return (
+    <div className="flex flex-col gap-1 border-t border-axal-hairline pt-2 dark:border-gray-800" data-testid={`channel-validate-${provider}`}>
+      <p className={NOTE} data-testid={`channel-used-by-${provider}`}>
+        {'Used by: '}
+        {w.usedBy.map((u, i) => <span key={u.href}>{i > 0 && ' and '}<Link to={u.href} className="font-semibold text-axal-violet underline dark:text-violet-300">{u.label}</Link></span>)}
+      </p>
+      <p className={NOTE} data-testid={`channel-engine-${provider}`}>{w.engine}</p>
+    </div>
   );
 }
 
@@ -326,6 +343,8 @@ export function MeetingChannelCard({ card, onOpenConnector }) {
 /** The group, drawn from one read; exported so a test can hand it each state. */
 export function ChannelsGroup({ status, overview, catalogue = [], api = channelsApi, onChanged, onOpenConnector, sdk }) {
   const total = pendingTotal(overview);
+  const shown = new Set(shownChannels(overview));
+  if (overview && !shown.size) return null;
   return (
     <section className="flex min-w-0 flex-col gap-3" id="interview-channels" data-testid="connectors-section-Customer conversations">
       <div>
@@ -339,10 +358,10 @@ export function ChannelsGroup({ status, overview, catalogue = [], api = channels
       )}
       {overview && (
         <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-          <TelegramChannelCard card={channelCard('telegram', overview)} claim={overview.telegramLink ?? null} pending={overview.pending?.telegram ?? null} api={api} onChanged={onChanged} />
-          <WhatsAppChannelCard card={channelCard('whatsapp', overview)} overview={overview} pending={overview.pending?.whatsapp ?? null} api={api} onChanged={onChanged} sdk={sdk} />
-          <MeetingChannelCard card={meetingCard('zoom', overview, catalogue)} onOpenConnector={onOpenConnector} />
-          <MeetingChannelCard card={meetingCard('google_meet', overview, catalogue)} onOpenConnector={onOpenConnector} />
+          {shown.has('telegram') && <TelegramChannelCard card={channelCard('telegram', overview)} claim={overview.telegramLink ?? null} pending={overview.pending?.telegram ?? null} api={api} onChanged={onChanged} />}
+          {shown.has('whatsapp') && <WhatsAppChannelCard card={channelCard('whatsapp', overview)} overview={overview} pending={overview.pending?.whatsapp ?? null} api={api} onChanged={onChanged} sdk={sdk} />}
+          {shown.has('zoom') && <MeetingChannelCard card={meetingCard('zoom', overview, catalogue)} onOpenConnector={onOpenConnector} />}
+          {shown.has('google_meet') && <MeetingChannelCard card={meetingCard('google_meet', overview, catalogue)} onOpenConnector={onOpenConnector} />}
         </div>
       )}
     </section>
