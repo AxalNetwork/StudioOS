@@ -122,6 +122,8 @@ function fakeGithub(opts: { perms?: Record<string, string>; installations?: numb
       assert.equal(per, 100);
       return j(r[m[3] as keyof Repo].slice((page - 1) * per, page * per));
     }
+    // #2114: Solution design reads each repository first; these repositories are not served, so it reads nothing more.
+    if (/^\/repos\/[^/]+\/[^/]+$/.test(url.pathname)) return j({ message: 'Not Found' }, 404);
     throw new Error(`unexpected GET ${url.pathname}`);
   }) as any;
   return { calls, restore: () => { globalThis.fetch = real; } };
@@ -261,7 +263,7 @@ test('#1906 the sync lands issues on the roadmap and pull requests on must-haves
     const uid = await connected(w, { 'acme/app': repo });
     const r = await call(w.env, 'POST', `/api/integrations/${uid}/sync`, {});
     assert.equal(r.status, 200, JSON.stringify(r.body));
-    assert.deepEqual(r.body.counts, { issues: 2, pull_requests: 4, releases: 1, roadmap_items_created: 2, must_haves_created: 4 });
+    assert.deepEqual(r.body.counts, { issues: 2, pull_requests: 4, releases: 1, roadmap_items_created: 2, must_haves_created: 4, design_proposals: 0, stacks: 0 });
     assert.deepEqual(w.all('SELECT objective, kanban_status FROM roadmap_okrs ORDER BY id').map((x) => [x.objective, x.kanban_status]),
       [['Export to CSV', 'next'], ['Fix login', 'done']]);
     assert.deepEqual(w.all('SELECT title, delivery_status FROM mvp_features ORDER BY id').map((x) => [x.title, x.delivery_status]),
@@ -341,8 +343,9 @@ test('#1906 defect (b): each page costs a fetch, a ledger read and one batch, fa
     assert.equal(r.body.counts.issues, 1000);
     assert.equal(r.body.counts.partial, undefined);
     const fetches = gh.calls.length - fetchesBefore;
-    // Five full issue pages (MAX_PAGES stops there), and one empty page each of pulls and releases.
-    assert.equal(fetches, 2 * (5 + 1 + 1));
+    // Five full issue pages (MAX_PAGES stops there), one empty page each of pulls and releases,
+    // and Solution design's read of each repository (#2114).
+    assert.equal(fetches, 2 * (5 + 1 + 1 + 1));
     assert.equal(w.meter.batches, 10, 'one batch per page that has items');
     assert.ok(w.meter.d1 <= 2 * 10 + 15, `D1 subrequests per page are two, not one per item (${w.meter.d1})`);
     assert.ok(fetches + w.meter.d1 < SYNC_SUBREQUEST_BUDGET);

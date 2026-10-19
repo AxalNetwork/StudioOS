@@ -409,6 +409,7 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
     long_description: [
       'Read issues, pull requests and releases from the repositories you choose. Issues link to Product roadmap items and pull requests to Prototype / MVP must-haves. Read-only.',
       'In Build › Operating systems, GitHub is the Code system: its repositories, its last sync and what it fed. Each sync is a line in Tools. Releases are read and counted; they make no row yet.',
+      'In Build › Solution design, each repository\'s languages and topics show as Built with. Its architecture decision records, and the README and docs sections headed Architecture, Design or Decisions, arrive as proposals: nothing is written until you accept one.',
       'Axal VC connects as a GitHub App with read permissions only. If GitHub ever grants more than read, Axal VC revokes the grant and refuses the connection.',
     ],
     tools: [
@@ -420,6 +421,11 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
       tool('read_pull_requests', 'pull requests', 'read', 'Reads pull requests in the repositories you chose.', 'prototype_mvp', ['`${path}/pulls?state=all`']),
       tool('read_releases', 'releases', 'read', 'Reads releases in the repositories you chose. They are counted under Product roadmap; no row is made.', null,
         ['`${path}/releases`']),
+      tool('read_design_docs', 'README, docs and decision records', 'read',
+        'Reads the README and the Markdown in docs/, doc/ and adr/, at most 40 files and 200 KB per repository, newest first. Each decision record or Architecture, Design or Decisions section is proposed on Solution design; you accept or dismiss it.',
+        'solution_design', ['`${path}/readme`', '`${path}/contents/${', '`${path}/commits?path=${']),
+      tool('read_stack', 'languages and topics', 'read', 'Reads each repository\'s languages and topics, shown on Solution design as Built with.', 'solution_design',
+        ['`${path}/languages`', 'stackTopics(meta?.topics)']),
       tool('revoke_grant', 'the grant', 'account', 'Revokes the grant when you disconnect, and when GitHub grants more than read.', null,
         ['`${API}/applications/${encodeURIComponent(id)}/grant`']),
     ],

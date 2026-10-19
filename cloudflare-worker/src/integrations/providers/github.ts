@@ -46,6 +46,7 @@ import {
 } from '../registry';
 import { decryptCredentials, encryptCredentials, type CredentialBlob } from '../secrets';
 export { GITHUB_LANDINGS, GITHUB_READ_BY } from '../githubFeeds';
+import { syncSolutionDesign } from './github/solutionDesign';
 
 const PROVIDER_KEY = 'github';
 const API = 'https://api.github.com';
@@ -592,6 +593,8 @@ export async function syncGithub(env: Env, row: IntegrationRow, budget = SYNC_SU
         if (items.length < PER_PAGE) break;
       }
     }
+    // D782 (#2114): Solution design's files and stack, within what is left of the budget.
+    Object.assign(counts, await syncSolutionDesign(env, row.id, projectId, (p) => gh(token, p), repos, budget - used));
   } catch (e) {
     await writeProgress(env, row.uid, { state: 'failed', pct: pct(), reading: 'Stopped' });
     throw e;

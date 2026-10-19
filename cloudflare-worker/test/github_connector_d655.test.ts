@@ -106,7 +106,7 @@ test('the registry asks for read access only, and a write grant is overreach aga
   assert.equal(hasScopeOverreach(desc, ['contents:read', 'administration:read']), true, 'a permission never asked for is overreach too');
   const pub = publicDescriptor(desc);
   assert.equal(pub.permissions.length, desc.oauth_scopes!.length);
-  assert.deepEqual(pub.feeds, ['product_roadmap', 'prototype_mvp', 'operating_systems'], 'D782: Operating systems reads the connection as the Code system');
+  assert.deepEqual(pub.feeds, ['product_roadmap', 'prototype_mvp', 'operating_systems', 'solution_design'], 'D782: Operating systems reads the connection as the Code system; #2114: Solution design');
   assert.ok(getProviderImpl('github'), 'the provider registers itself');
 });
 
@@ -217,7 +217,7 @@ test('fed answers for every connector, and a connector with no ledger says Not r
     assert.match(m.reason, /^Not recorded/);
   }
   const empty = await call(env, 'GET', '/api/connectors/gh1/fed');
-  assert.deepEqual(empty.body.modules.map((m: any) => m.count), [0, 0, null], 'GitHub records its deliveries, so its zero is measured');
+  assert.deepEqual(empty.body.modules.map((m: any) => m.count), [0, 0, null, 0], 'GitHub records its deliveries, so its zero is measured');
   assert.match(empty.body.modules[2].reason, /^Read from the connection/, 'D782: Operating systems reads the connection, so it has no ledger zero');
   assert.equal((await call(env, 'GET', '/api/connectors/st1/fed', undefined, 10, 2)).status, 404);
 });
