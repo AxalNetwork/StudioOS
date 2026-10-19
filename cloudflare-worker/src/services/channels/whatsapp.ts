@@ -178,6 +178,49 @@ function messageEvent(m: unknown, phoneNumberId: string, side: MessageSide, name
   return message;
 }
 
+/**
+ * D754 way B (#1937, #1938): a message to Axal's own number, in its own shape
+ * (types.ts `InboundAxalMessage`). Read: text, a reply button's id, `audio`
+ * (a voice note or a file) and `document`; anything else is `unsupported`, so
+ * the capture can say once what Axal takes here.
+ */
+function axalMessageEvent(m: unknown, phoneNumberId: string): InboundEvent | null {
+  const msg = obj(m);
+  const id = idStr(msg?.id);
+  if (!msg || !id) return null;
+  if (msg.group_id != null) return { kind: 'ignored', provider: 'whatsapp', eventId: id, reason: 'not_a_private_chat' };
+  const from = idStr(msg.from);
+  if (!from) return { kind: 'ignored', provider: 'whatsapp', eventId: id, reason: 'malformed' };
+  const type = String(msg.type ?? '');
+  const out: InboundEvent = {
+    kind: 'axal_message', provider: 'whatsapp', eventId: id, connectionRef: phoneNumberId, externalChatId: from,
+    externalMessageId: id, text: null, media: null, button: null, unsupported: false, sentAt: isoFromUnix(msg.timestamp),
+  };
+  if (type === 'text') {
+    const text = String(obj(msg.text)?.body ?? '').trim().slice(0, CHANNEL_LIMITS.maxTextChars);
+    if (text) return { ...out, text };
+  } else if (type === 'interactive') {
+    const reply = obj(msg.interactive)?.type === 'button_reply' ? obj(obj(msg.interactive)?.button_reply) : null;
+    const button = idStr(reply?.id);
+    if (button) return { ...out, button };
+  } else if (type === 'audio' || type === 'voice' || type === 'document') {
+    const media = type === 'document' ? obj(msg.document) : obj(msg.audio) ?? obj(msg.voice);
+    const mediaId = idStr(media?.id);
+    const size = Number(media?.file_size);
+    if (mediaId) {
+      return {
+        ...out,
+        media: {
+          mediaId, type: type === 'document' ? 'document' : 'audio',
+          mime: typeof media?.mime_type === 'string' ? media.mime_type.slice(0, 100) : null,
+          sizeBytes: Number.isSafeInteger(size) && size >= 0 ? size : null,
+        },
+      };
+    }
+  }
+  return { ...out, unsupported: true };
+}
+
 const STATUSES = new Set(['sent', 'delivered', 'read', 'failed']);
 
 function statusEvent(s: unknown, phoneNumberId: string): InboundEvent | null {
@@ -200,7 +243,8 @@ function statusEvent(s: unknown, phoneNumberId: string): InboundEvent | null {
  * its own event, claimed on its own by the caller. Anything without a
  * provider id is dropped here: there is nothing to dedupe it by.
  */
-export function normaliseWhatsAppPayload(body: unknown): InboundEvent[] {
+export function normaliseWhatsAppPayload(body: unknown, axalPhoneNumberId: string | null = null): InboundEvent[] {
+  const axal = String(axalPhoneNumberId ?? '').trim();
   const b = obj(body);
   if (!b || b.object !== 'whatsapp_business_account') return [];
   const out: InboundEvent[] = [];
@@ -217,7 +261,11 @@ export function normaliseWhatsAppPayload(body: unknown): InboundEvent[] {
           const name = obj(obj(c)?.profile)?.name;
           if (wa && typeof name === 'string' && name.trim()) names.set(wa, name.trim());
         }
-        for (const m of arr(value.messages)) { const ev = messageEvent(m, pnid, 'contact', names); if (ev) out.push(ev); }
+        for (const m of arr(value.messages)) {
+          // Axal's own number is never a customer chat (way B): its messages have their own shape.
+          const ev = axal && pnid === axal ? axalMessageEvent(m, pnid) : messageEvent(m, pnid, 'contact', names);
+          if (ev) out.push(ev);
+        }
         for (const s of arr(value.statuses)) { const ev = statusEvent(s, pnid); if (ev) out.push(ev); }
       } else if (ch.field === 'smb_message_echoes') {
         // Unverified array name: coexistence echoes arrive as `message_echoes`.
@@ -300,6 +348,25 @@ export async function sendWhatsAppText(env: Env, conn: ChannelConnection, to: st
 }
 
 /**
+ * D754 way B (#1937): a text from Axal's OWN number (`WHATSAPP_AXAL_*`), with
+ * the system user's token — never a member's. Used only for the link's two
+ * replies, each inside the window the sender just opened. The token is read
+ * here and goes nowhere but the Authorization header.
+ */
+export async function sendAxalText(env: Env, to: string, text: string): Promise<SendResult> {
+  const pnid = idStr(env.WHATSAPP_AXAL_PHONE_NUMBER_ID);
+  const token = String(env.WHATSAPP_AXAL_ACCESS_TOKEN ?? '').trim();
+  if (!pnid || !token) return { ok: false, code: 'not_configured' };
+  const r = await graph('send', `${GRAPH_BASE}/${encodeURIComponent(pnid)}/messages`, {
+    method: 'POST', token,
+    json: { messaging_product: 'whatsapp', recipient_type: 'individual', to, type: 'text', text: { body: text, preview_url: false } },
+  });
+  if (!r.ok) return { ok: false, code: r.code, retryable: r.retryable };
+  const id = idStr(r.data?.messages?.[0]?.id);
+  return id ? { ok: true, externalMessageId: id } : { ok: false, code: 'send_unknown', retryable: false };
+}
+
+/**
  * D754 §5 — Meta's published limits for reply buttons (Interactive reply
  * buttons messages): a body of at most 1,024 characters, at most three
  * buttons, each title at most 20 characters and each id at most 256. A
@@ -316,6 +383,21 @@ export const INTERACTIVE_LIMITS = { bodyChars: 1024, buttons: 3, titleChars: 20,
 export async function sendWhatsAppInteractive(
   env: Env, conn: ChannelConnection, to: string, msg: { body: string; buttons: { id: string; title: string }[] },
 ): Promise<SendResult> {
+  return sendInteractive(phoneNumberIdOf(conn), await whatsappToken(env, conn), to, msg);
+}
+
+/** The same reply-button message from AXAL'S OWN number (way B, #1938), with Axal's token. */
+export async function sendAxalInteractive(
+  env: Env, to: string, msg: { body: string; buttons: { id: string; title: string }[] },
+): Promise<SendResult> {
+  const token = String(env.WHATSAPP_AXAL_ACCESS_TOKEN ?? '').trim();
+  const r = await sendInteractive(idStr(env.WHATSAPP_AXAL_PHONE_NUMBER_ID), token || null, to, msg);
+  return r.code === 'not_connected' ? { ok: false, code: 'not_configured' } : r;
+}
+
+async function sendInteractive(
+  pnid: string | null, token: string | null, to: string, msg: { body: string; buttons: { id: string; title: string }[] },
+): Promise<SendResult> {
   const body = String(msg.body ?? '').trim();
   const buttons = Array.isArray(msg.buttons) ? msg.buttons : [];
   if (!body) return { ok: false, code: 'text_required' };
@@ -324,8 +406,6 @@ export async function sendWhatsAppInteractive(
     || buttons.some((b) => !b.id || !b.title || b.id.length > INTERACTIVE_LIMITS.idChars || b.title.length > INTERACTIVE_LIMITS.titleChars)) {
     return { ok: false, code: 'invalid_buttons' };
   }
-  const pnid = phoneNumberIdOf(conn);
-  const token = await whatsappToken(env, conn);
   if (!pnid || !token) return { ok: false, code: 'not_connected' };
   const r = await graph('send', `${GRAPH_BASE}/${encodeURIComponent(pnid)}/messages`, {
     method: 'POST', token,
@@ -336,25 +416,6 @@ export async function sendWhatsAppInteractive(
         action: { buttons: buttons.map((b) => ({ type: 'reply', reply: { id: b.id, title: b.title } })) },
       },
     },
-  });
-  if (!r.ok) return { ok: false, code: r.code, retryable: r.retryable };
-  const id = idStr(r.data?.messages?.[0]?.id);
-  return id ? { ok: true, externalMessageId: id } : { ok: false, code: 'send_unknown', retryable: false };
-}
-
-/**
- * D754 way B (#1937): a text from Axal's OWN number (`WHATSAPP_AXAL_*`), with
- * the system user's token — never a member's. Used only for the link's two
- * replies, each inside the window the sender just opened. The token is read
- * here and goes nowhere but the Authorization header.
- */
-export async function sendAxalText(env: Env, to: string, text: string): Promise<SendResult> {
-  const pnid = idStr(env.WHATSAPP_AXAL_PHONE_NUMBER_ID);
-  const token = String(env.WHATSAPP_AXAL_ACCESS_TOKEN ?? '').trim();
-  if (!pnid || !token) return { ok: false, code: 'not_configured' };
-  const r = await graph('send', `${GRAPH_BASE}/${encodeURIComponent(pnid)}/messages`, {
-    method: 'POST', token,
-    json: { messaging_product: 'whatsapp', recipient_type: 'individual', to, type: 'text', text: { body: text, preview_url: false } },
   });
   if (!r.ok) return { ok: false, code: r.code, retryable: r.retryable };
   const id = idStr(r.data?.messages?.[0]?.id);

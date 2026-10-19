@@ -92,7 +92,7 @@ export async function world(opts: { seed?: boolean; budget?: number } = {}) {
     '452_record_session_setup.sql', '454_channel_voice_failures.sql',
     '457_integrations_last_error_at.sql', '458_channel_link_consent.sql',
     // D754 (#1893): the consent store and channel_threads.consent_state.
-    '488_channel_consents.sql']) db.exec(mig(m));
+    '488_channel_consents.sql', '492_whatsapp_sender_links.sql']) db.exec(mig(m));
   // D757: the Validate engine's schema (487, 465, 453 and the re-scope's columns).
   applyEngineSchema(db);
   if (opts.budget != null) {

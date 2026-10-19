@@ -56,7 +56,7 @@ import { normaliseWhatsAppPayload, maskNumber } from '../src/services/channels/w
 import { CHANNEL_LIMITS } from '../src/services/channels/types.ts';
 import {
   ADMIN, app, businessMessage, call, confirmUpdate, connectionUpdate, consentGiven, count, GONE, ids, INTERVIEW,
-  JWT_SECRET, linkTelegram, ME, mockFetch, nextUpdateId, noSecretsSeen, now, OTHER, OTHER_PROJECT, PNID, PNID_GONE,
+  JWT_SECRET, linkTelegram, ME, mockFetch, noSecretsSeen, now, OTHER, OTHER_PROJECT, PNID, PNID_GONE,
   PROJECT, ref, refCode, type Route, SECRETS, seen, send, sign, startUpdate, telegramApi, TG_ME, TG_NEW, TG_OTHER,
   tgHook, tgUser, WA_CUSTOMER, WA_TOKEN, waHook, waPayload, waText, world,
 } from './_channels_fixture.ts';
