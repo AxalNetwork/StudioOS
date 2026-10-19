@@ -4,6 +4,20 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## "Spending from Mercury" on the founder's revenue page, and "From Mercury" on saved rows (D752, #1988)
+
+- The revenue page gains a Mercury source card beside Stripe's, for the
+  startup's founder only. It opens "Spending from Mercury": each month's
+  operating in, financing in (not counted in burn), out and net burn, top
+  payees and the lines not counted; cash now and runway, or "Not burning";
+  Partial at the 1,000-line cap with no runway. Shown only to the founder.
+- Saving the last full month into Grow prints the Worker's visibility
+  sentence, keeps cash off unless ticked, and sends nothing until the founder
+  confirms. Refusals are printed as the Worker writes them.
+- Saved Mercury rows read "From Mercury" on the revenue log and on
+  `MetricsPage.jsx`, and offer delete only. `mercuryPersonalApi` gains
+  `spend` and `saveSpendSnapshot`; `lib/mercurySpend.js` holds the words.
+
 ## A founder's spending, burn, cash and runway from their own Mercury, and typed metrics can no longer claim Stripe or Mercury (D752, #1889)
 
 - `GET /api/revenue/projects/:projectId/mercury-spend?months=1..12`: the
