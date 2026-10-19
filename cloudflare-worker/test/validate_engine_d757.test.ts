@@ -178,7 +178,11 @@ const chatLine = (text: string) => ({ start_ms: null, end_ms: null, speaker_raw:
 
 // ── Every trigger, once ──────────────────────────────────────────────────────
 
-test('every trigger reaches the engine once: one summary, one structure run, done, naming its trigger', async () => {
+test('a chat\'s text and the quiet sweep queue a digest on their own; the other sources queue nothing (D765); each job runs once: one summary, one structure run, done', async () => {
+  // D765 (#2090), D720 §6, with the owner's exceptions (2026-10-19): a chat's
+  // final text, the quiet-chat sweep and a voice note still queue the engine.
+  // An import, consent and a paste store and transcribe and queue nothing; the
+  // job still digests once whatever press queues it (D770), so those rows run it by hand.
   // Mutation checked: dropping a trigger from JOB_TRIGGERS fails its row here.
   assert.deepEqual([...JOB_TRIGGERS].sort(), ['assistant_submitted', 'call_imported', 'chat_assigned', 'chat_pasted', 'chat_quiet', 'chat_text_added',
     'consent_given', 'recording_processed', 'voice_note_added'], 'every trigger but manual rides the job');
@@ -190,6 +194,12 @@ test('every trigger reaches the engine once: one summary, one structure run, don
     assert.ok(s.summary, `${trigger}: summarised`);
     assert.equal(s.digest_status, 'done', trigger);
     assert.equal(s.digest_trigger, trigger);
+  };
+  const expectNothing = (f: World, id: number, trigger: string) => {
+    assert.deepEqual(queued(f.db), [], `${trigger}: nothing is queued`);
+    assert.equal(summaryReceipts(f.db, id).length, 0, `${trigger}: no summary`);
+    assert.equal(structureRuns(f.db, id).length, 0, `${trigger}: no structure run`);
+    assert.equal(f.ai.length, 0, `${trigger}: no model`);
   };
 
   for (const trigger of ['chat_assigned', 'chat_text_added'] as const) { // legacy and current chat jobs
@@ -209,6 +219,8 @@ test('every trigger reaches the engine once: one summary, one structure run, don
     const out = await importMeetingRef(f.env, ref, async () => ({ kind: 'segments', segments: [{ speaker: 'Dana Ruiz', text: 'We reconcile invoices by hand every Friday.', startMs: 0, endMs: 1000 }] }));
     assert.equal(out.status, 'imported');
     await drain(f);
+    expectNothing(f, s.id, 'call_imported');
+    await runSessionStructureJob(f.env, { session_id: s.id, user_id: ME, trigger: 'call_imported' });
     expectOnce(f, s.id, 'call_imported');
   }
   { // chat_quiet
@@ -233,6 +245,8 @@ test('every trigger reaches the engine once: one summary, one structure run, don
     const r = await call(f.env, 'PATCH', `/sessions/${id}/consent`, { status: 'given', method: 'verbal' });
     assert.equal(r.status, 200, JSON.stringify(r.body));
     await drain(f);
+    expectNothing(f, id, 'consent_given');
+    await runSessionStructureJob(f.env, { session_id: id, user_id: ME, trigger: 'consent_given' });
     expectOnce(f, id, 'consent_given');
   }
   { // chat_pasted, through the setup route
@@ -243,6 +257,8 @@ test('every trigger reaches the engine once: one summary, one structure run, don
     assert.equal(r.status, 201, JSON.stringify(r.body));
     assert.equal(f.ai.length, 0, 'the paste itself runs no model');
     await drain(f);
+    expectNothing(f, r.body.session.id, 'chat_pasted');
+    await runSessionStructureJob(f.env, { session_id: r.body.session.id, user_id: ME, trigger: 'chat_pasted' });
     expectOnce(f, r.body.session.id, 'chat_pasted');
   }
   { // manual, through the two buttons
@@ -271,9 +287,9 @@ test('the same VTT imported twice bills once, and the session ends structured', 
   // The race the settled-ref check does not close: the ref read before the first import settled.
   f.db.exec("UPDATE interview_channel_refs SET status = 'transcript_ready' WHERE uid = 'ref-1'");
   await importMeetingRef(f.env, ref(), vtt);
-  // Both jobs land in the same minute, so the queue's own key folds them; run the second payload regardless.
-  const ran = new Set<number>();
-  const [first] = await drain(f, ran);
+  // D765 (#2090): an import queues nothing; the job is run twice by hand, as two presses would queue it.
+  assert.deepEqual(queued(f.db), [], 'an import queues no digest');
+  const first: any = await runSessionStructureJob(f.env, { session_id: s.id, user_id: ME, trigger: 'call_imported' });
   const second = await runSessionStructureJob(f.env, { session_id: s.id, user_id: ME, trigger: 'call_imported' });
   assert.equal(first.status, 'done');
   assert.deepEqual(second, { ok: true, status: 'unchanged' });
@@ -562,7 +578,8 @@ test('an assistant\'s submission gets StudioOS\'s summary only, never a second s
   assert.equal(n(f.db, 'SELECT COUNT(*) n FROM validate_proposals WHERE session_id = ?', id), 0);
   assert.equal(row(f.db, id).submitted_summary, 'Their own words.');
   const src = readFileSync(new URL('../src/services/assistantInterviews.ts', import.meta.url), 'utf8');
-  assert.match(src, /enqueueDigest\(env, sessionId!, grant\.userId, 'assistant_submitted'\)/);
+  // D765 (#2090), D720 §6: the submission queues nothing; the summary is the founder's press.
+  assert.doesNotMatch(src, /enqueueDigest\(/);
 });
 
 // ── Metering, claims and scope ───────────────────────────────────────────────

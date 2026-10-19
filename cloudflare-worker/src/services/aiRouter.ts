@@ -69,6 +69,10 @@ export type TaskClass =
   | 'structure_interview'
   // D685 §5.10 — StudioOS's own summary of a session, every sentence cited.
   | 'summarise_interview'
+  // D765 (#2090), D720 §6: a queue job no member started (deal scoring,
+  // traction review, valuation, buyer matching, LPA drafting, equity), run as
+  // a system call (userId 0): logged at cost and charged to no member.
+  | 'system_job'
   // D766 (#2094) — system calls that used to call env.AI.run directly: the
   // monitoring summary, and the X post image screen and alt text.
   | 'ops_summary'
@@ -787,6 +791,8 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   image_screen: { provider: 'workers-ai', model: VISION_SCOUT },
   image_alt_text: { provider: 'workers-ai', model: VISION_SCOUT },
   paraphrase:   { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
+  // D765: `ai-workers/` jobs, which called the deprecated 8B directly, unlogged.
+  system_job:   { provider: 'workers-ai', model: SMALL_LLAMA },
   // High-stakes synthesis (Task #2 AU admin publication summaries,
   // dd synthesis). Task #31: Anthropic removed from production. Both
   // task classes now route through Workers AI MID_LLAMA primary →

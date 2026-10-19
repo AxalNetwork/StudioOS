@@ -384,6 +384,12 @@ export default function MonitoringPage() {
     }
   };
 
+  const [summarising, setSummarising] = useState(false);
+  // D765 (#2090): the poll reads the heuristic summary; the AI one is this press.
+  const summariseAnomalies = async () => {
+    setSummarising(true);
+    try { setAnomalies(await api.monitoringAnomaliesSummary()); } catch {} finally { setSummarising(false); }
+  };
   const loadAnomalies = async () => {
     try { setAnomalies(await api.monitoringAnomalies()); } catch {}
   };
@@ -506,10 +512,14 @@ export default function MonitoringPage() {
       <div className="bg-gradient-to-br from-violet-50 to-indigo-50 border border-violet-200 rounded-xl p-5">
         <div className="flex items-center gap-2 mb-2">
           <Sparkles size={16} className="text-violet-700" />
-          <span className="text-sm font-semibold text-violet-900">AI Anomaly Detection</span>
+          <span className="text-sm font-semibold text-violet-900">Anomaly Detection</span>
           {anomalies?.generated_at && (
             <span className="text-xs text-violet-700/70 ml-auto">Updated {new Date(anomalies.generated_at).toLocaleTimeString()}</span>
           )}
+          <button type="button" onClick={summariseAnomalies} disabled={summarising} data-testid="monitoring-summarise"
+            className={`${anomalies?.generated_at ? '' : 'ml-auto '}rounded-md border border-violet-300 bg-white px-2.5 py-1 text-xs font-semibold text-violet-800 disabled:opacity-50 dark:border-violet-700 dark:bg-gray-900 dark:text-violet-200`}>
+            {summarising ? 'Summarising…' : 'Summarise with AI'}
+          </button>
         </div>
         <p className="text-sm text-gray-800 whitespace-pre-line dark:text-gray-200">{anomalies?.ai_summary || 'No analysis yet.'}</p>
         {anomalies?.anomalies?.length > 0 && (

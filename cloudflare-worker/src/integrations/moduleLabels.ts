@@ -1,6 +1,7 @@
 export const MODULE_LABELS: Record<string, string> = {
   product_roadmap: 'Product roadmap',
   prototype_mvp: 'Prototype / MVP',
+  solution_design: 'Solution design',
   capital_relationships: 'Capital relationships',
   network: 'Network',
   customer_research: 'Customer research',
@@ -23,6 +24,7 @@ export const MODULE_LABELS: Record<string, string> = {
 export const MODULE_HREFS: Record<string, string> = {
   product_roadmap: '/build/product-roadmap',
   prototype_mvp: '/build/prototype-mvp',
+  solution_design: '/build/solution-design',
   founding_team: '/build/founding-team',
   company_creation: '/build/company-creation',
   operating_systems: '/build/operating-systems',

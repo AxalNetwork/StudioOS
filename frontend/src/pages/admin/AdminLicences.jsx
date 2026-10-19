@@ -51,6 +51,7 @@ import { coverageCells, renewalPipeline, sortCells } from '../../lib/licenceCove
 import { DEPLOY_TIMELINE, deployProgress } from '../../lib/deployTimeline';
 import { reportError } from '../../lib/log';
 import { RailFrame, Unreadable, Unrecorded, WorkerRail } from '../../ui';
+import useRecordCrumb from './useRecordCrumb';
 
 const UNAVAILABLE = Symbol('unavailable');
 import {
@@ -2043,6 +2044,9 @@ export default function AdminLicences() {
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ licence_ref: '', legal_entity_name: '', brand_name: '', kind: 'subsidiary' });
   const [err, setErr] = useState('');
+  // D775 (#2101): the licence open in the detail pane is the rail's record.
+  const open = Array.isArray(data?.items) ? data.items.find((l) => l.uid === sel) : null;
+  useRecordCrumb(open ? (open.brand_name || open.licence_ref) : null, 'licence', open?.uid);
 
   const load = useCallback(() => {
     api.licences()

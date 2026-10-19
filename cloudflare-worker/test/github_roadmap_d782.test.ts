@@ -85,6 +85,8 @@ function fakeGithub(repo: Repo) {
     const url = new URL(String(input));
     calls.push(`${url.pathname}?${url.searchParams.get('state') ?? ''}`);
     const m = url.pathname.match(/^\/repos\/acme\/app\/(issues|pulls|releases|milestones)$/);
+    // #2114: Solution design reads each repository first; this one is not served, so it reads nothing more.
+    if (!m && url.pathname === '/repos/acme/app') return new Response(JSON.stringify({ message: 'Not Found' }), { status: 404, headers: { 'content-type': 'application/json' } });
     if (!m) throw new Error(`unexpected GET ${url.pathname}`);
     const page = Number(url.searchParams.get('page'));
     return new Response(JSON.stringify(repo[m[1] as keyof Repo].slice((page - 1) * 100, page * 100)), { status: 200, headers: { 'content-type': 'application/json' } });

@@ -13,6 +13,7 @@ import {
 } from 'recharts';
 import { adminEvents } from '../../lib/api';
 import { useToast } from '../../components/useToast';
+import AdminBoardFrame from './AdminBoardFrame';
 
 const STATUS_BADGE = {
   draft: 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-200',
@@ -72,7 +73,7 @@ function SummaryCard({ icon: Icon, label, value, tone = 'violet' }) {
   );
 }
 
-export default function AdminEventsPage() {
+function AdminEventsPageBody() {
   const [summary, setSummary] = useState(null);
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -422,5 +423,14 @@ export default function AdminEventsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+// D774 (#2100): S15 drew no rail. The board's page, in the Admin boards' frame.
+export default function AdminEventsPage() {
+  return (
+    <AdminBoardFrame workspace="Events" note="Eadwyn reads the events listed here. An event is approved or published only when you do it." data-testid="admin-board-events">
+      <AdminEventsPageBody />
+    </AdminBoardFrame>
   );
 }

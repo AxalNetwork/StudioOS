@@ -21,6 +21,7 @@ import ArchetypesTab from './ArchetypesTab';
 import BadgesTab from './BadgesTab';
 import PreviewTab from './PreviewTab';
 import AnalyticsTab from './AnalyticsTab';
+import AdminBoardFrame from '../AdminBoardFrame';
 
 const TABS = [
   { id: 'overview', label: 'Overview', scoped: true },
@@ -116,7 +117,7 @@ function CreateGameModal({ onClose, onCreated, toast }) {
   );
 }
 
-export default function AdminAssessmentPage() {
+function AdminAssessmentPageBody() {
   const toast = useToast();
   const [games, setGames] = useState([]);
   const [gamesErr, setGamesErr] = useState('');
@@ -305,5 +306,14 @@ export default function AdminAssessmentPage() {
 
       <ToastMessage toast={toast.toast} onDismiss={toast.dismissToast} />
     </div>
+  );
+}
+
+// D774 (#2100): S22 drew no rail. The board's page, in the Admin boards' frame.
+export default function AdminAssessmentPage() {
+  return (
+    <AdminBoardFrame workspace="Assessment runs" note="Eadwyn reads the assessments on this page. A change goes live only when you publish it." data-testid="admin-board-assessment-runs">
+      <AdminAssessmentPageBody />
+    </AdminBoardFrame>
   );
 }
