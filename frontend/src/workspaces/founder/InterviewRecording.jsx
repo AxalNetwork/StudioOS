@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { Mic, FileText } from 'lucide-react';
 import { api } from '../../lib/api';
 import { formatCost } from '../../ui/assistCost';
+import { useRailOption } from '../../ui/railCrumbs';
 
 /**
  * A recording on one interview, and the text it becomes.
@@ -58,6 +59,8 @@ function readDuration(file) {
 
 export default function InterviewRecording({ interview, fillsOn, onChanged }) {
   const [busy, setBusy] = useState('');
+  // D771 (#2097): while the recording is transcribed, the rail is that option's.
+  useRailOption(busy === 'transcribe' ? 'transcribe:recording' : null, 'Transcribe');
   const [note, setNote] = useState('');
   const [usage, setUsage] = useState(null);
   const inputRef = useRef(null);
