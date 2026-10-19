@@ -5,16 +5,25 @@
  * at the bottom. Tier data lives in `frontend/src/data/pricing.js` so
  * the in-app paywall and this page never drift. Schema.org Offer
  * markup is injected per tier so search engines can render rich pricing.
+ *
+ * D755 §13 (#1915): the paid tiers' prices come from the public read
+ * `GET /api/public/plans-and-packs`, the Stripe catalog's mirror, not from
+ * the figures typed in `data/pricing.js` (`pricedTier`, lib/plansPricing.js).
+ * Until it answers, or if it cannot, a paid tier says "—" and carries no
+ * Schema.org price.
  */
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Check, ArrowLeft, Sparkles } from 'lucide-react';
 import { FOUNDER_TIERS, INVESTOR_TIERS, PRICING_FAQ, tierSchemaOffer } from '../data/pricing';
 import { usePageMeta, injectJsonLd } from '../lib/seo';
+import { publicPricingApi } from '../lib/api/publicPricing';
+import { pricedTier } from '../lib/plansPricing';
 
 function TierCard({ tier, audience, billing }) {
   const price = billing === 'annual' ? tier.priceAnnual : tier.priceMonthly;
   const isFree = tier.priceMonthly === 0;
+  const shown = price == null ? '—' : `$${price}`;
   return (
     <div
       className={`relative rounded-2xl border p-5 sm:p-6 flex flex-col bg-white ${
@@ -39,7 +48,7 @@ function TierCard({ tier, audience, billing }) {
       <h3 className="text-lg sm:text-xl font-bold text-gray-900">{tier.name}</h3>
       <p className="mt-1 text-sm text-gray-600 sm:min-h-[40px]">{tier.tagline}</p>
       <div className="mt-4 sm:mt-5 flex items-baseline gap-1 flex-wrap">
-        <span className="text-3xl sm:text-4xl font-bold text-gray-900">${price}</span>
+        <span className="text-3xl sm:text-4xl font-bold text-gray-900" data-testid={`tier-price-${audience}-${tier.id}`}>{shown}</span>
         <span className="text-xs sm:text-sm text-gray-500">/{billing === 'annual' ? 'mo, billed annually' : 'month'}</span>
       </div>
       <Link
@@ -63,15 +72,40 @@ function TierCard({ tier, audience, billing }) {
         ))}
       </ul>
       {/* Hidden offer label for screen readers / crawlers when JSON-LD is unavailable */}
-      <span className="sr-only">
-        {tier.name} for {audience} — ${tier.priceMonthly}/month USD
-      </span>
+      {tier.priceMonthly != null && (
+        <span className="sr-only">
+          {tier.name} for {audience} — ${tier.priceMonthly}/month USD
+        </span>
+      )}
     </div>
   );
 }
 
+/** The page's view of the public read: `{ status, data }`. */
+export function usePublicPlans(read = publicPricingApi.plansAndPacks) {
+  const [reading, setReading] = useState({ status: 'loading', data: null });
+  useEffect(() => {
+    let live = true;
+    Promise.resolve().then(read).then(
+      (data) => { if (live) setReading({ status: 'ready', data }); },
+      () => { if (live) setReading({ status: 'unreadable', data: null }); },
+    );
+    return () => { live = false; };
+  }, [read]);
+  return reading;
+}
+
+/** The founder and investor tiers, priced from the read. */
+export function pricedTiers(reading) {
+  const founders = FOUNDER_TIERS.map((t) => pricedTier(t, 'founder', reading));
+  const investors = INVESTOR_TIERS.map((t) => pricedTier(t, 'investor', reading));
+  return { founders, investors };
+}
+
 export default function PricingPage() {
   const [billing, setBilling] = useState('monthly');
+  const reading = usePublicPlans();
+  const { founders, investors } = pricedTiers(reading);
 
   usePageMeta({
     title: 'Pricing',
@@ -86,12 +120,14 @@ export default function PricingPage() {
       name: 'Axal VC StudioOS',
       description: 'Venture studio operating system — intake to portfolio monitoring.',
       offers: [
-        ...FOUNDER_TIERS.map((t) => tierSchemaOffer(t, 'Founder')),
-        ...INVESTOR_TIERS.map((t) => tierSchemaOffer(t, 'Investor')),
+        ...founders.filter((t) => t.priceMonthly != null).map((t) => tierSchemaOffer(t, 'Founder')),
+        ...investors.filter((t) => t.priceMonthly != null).map((t) => tierSchemaOffer(t, 'Investor')),
       ],
     };
     return injectJsonLd('pricing-jsonld', payload);
-  }, []);
+    // The offers follow the read: re-inject once it answers.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reading]);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-violet-50/40 via-white to-white">
@@ -127,7 +163,7 @@ export default function PricingPage() {
           <h2 id="founder-tiers" className="text-xl sm:text-2xl font-bold text-gray-900 mb-1">For founders</h2>
           <p className="text-sm text-gray-600 mb-5 sm:mb-6">From your first cold validation to your Series A.</p>
           <div className="grid md:grid-cols-3 gap-8 sm:gap-6">
-            {FOUNDER_TIERS.map((t) => <TierCard key={t.id} tier={t} audience="Founder" billing={billing} />)}
+            {founders.map((t) => <TierCard key={t.id} tier={t} audience="Founder" billing={billing} />)}
           </div>
         </section>
 
@@ -135,7 +171,7 @@ export default function PricingPage() {
           <h2 id="investor-tiers" className="text-xl sm:text-2xl font-bold text-gray-900 mb-1">For investors</h2>
           <p className="text-sm text-gray-600 mb-5 sm:mb-6">Angels, emerging managers, and institutional funds.</p>
           <div className="grid md:grid-cols-3 gap-8 sm:gap-6">
-            {INVESTOR_TIERS.map((t) => <TierCard key={t.id} tier={t} audience="Investor" billing={billing} />)}
+            {investors.map((t) => <TierCard key={t.id} tier={t} audience="Investor" billing={billing} />)}
           </div>
         </section>
 

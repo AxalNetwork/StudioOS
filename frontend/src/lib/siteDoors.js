@@ -58,6 +58,10 @@ export const AI_TOKENS = {
     'Tokens you buy never expire.',
     'Your allowance, what you have used, and your token balance are shown in the product.',
   ],
+  // D755 §13 (#1915): the block links to the Token packs, which visitors can
+  // see. The path is `TOKEN_PACKS_PATH` (lib/aiTokens.js), written out so this
+  // file keeps no imports; plans_pricing_d755.test.mjs holds the two equal.
+  link: { label: 'See the token packs', href: '/plans-and-pricing#token-packs' },
 };
 
 export const DOORS = {
