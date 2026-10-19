@@ -370,3 +370,107 @@ test('generateIntroPropositions proposes consent-gated matches with reciprocal m
   assert.equal(notes[0].type, 'intro_proposition_received');
   assert.match(String(notes[0].link), /\/network\?tab=introductions&intro=/);
 });
+
+// ---------------------------------------------------------------------------
+// D755 (#1915). Introduction packs are no longer sold. Nothing offers one, the
+// intent route answers 410 before any Stripe call, and an intent minted before
+// the switch still grants through the webhook.
+// ---------------------------------------------------------------------------
+import { Hono } from 'hono';
+import { SignJWT } from 'jose';
+import introductionsRoute from '../src/routes/introductions.ts';
+import paymentsRoute from '../src/routes/payments.ts';
+import billingRoute from '../src/routes/billing.ts';
+import { INTRO_PACKS_ON_SALE } from '../src/services/introductions.ts';
+
+const D755_SECRET = ['d755', 'intro', 'packs', 'fixture'].join('-');
+const D755_WEBHOOK = ['d755', 'webhook', 'fixture'].join('-');
+
+function d755Env() {
+  const { env, raw } = makeEnv();
+  raw.exec('ALTER TABLE users ADD COLUMN jwt_min_iat INTEGER');
+  raw.prepare(`INSERT INTO users (id, uid, name, email, role) VALUES (1, 'u1', 'Ivy Investor', 'ivy@example.test', 'investor')`).run();
+  Object.assign(env as any, { JWT_SECRET: D755_SECRET, ENVIRONMENT: 'development', STRIPE_SECRET_KEY: 'sk_test_fixture', STRIPE_WEBHOOK_SECRET: D755_WEBHOOK });
+  const app = new Hono<any>();
+  app.route('/api/introductions', introductionsRoute);
+  app.route('/api/payments', paymentsRoute);
+  async function call(method: string, path: string, body?: unknown) {
+    const jwt = await new SignJWT({ user_id: 1 }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(D755_SECRET));
+    const res = await app.request(path, {
+      method, headers: { Authorization: `Bearer ${jwt}`, 'Content-Type': 'application/json' },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    }, env);
+    const text = await res.text();
+    let json: any = null; try { json = JSON.parse(text); } catch { json = text; }
+    return { status: res.status, body: json };
+  }
+  return { env, raw, call };
+}
+
+/** Fails the test if anything reaches Stripe (or anywhere). */
+async function withoutNetwork<T>(fn: () => Promise<T>): Promise<{ out: T; calls: number }> {
+  const real = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = (async () => { calls += 1; throw new Error('fetch must not be called'); }) as typeof fetch;
+  try { return { out: await fn(), calls }; } finally { globalThis.fetch = real; }
+}
+
+test('D755 an Introduction pack is no longer sold: the intent is 410 before Stripe, /packs is empty, /credits has no buy path', async () => {
+  assert.equal(INTRO_PACKS_ON_SALE, false);
+  const f = d755Env();
+  const { out: intent, calls } = await withoutNetwork(() => f.call('POST', '/api/payments/intro-credits/intent', { pack: 'intro_10' }));
+  assert.equal(intent.status, 410);
+  assert.equal(intent.body.error, 'intro_packs_retired');
+  assert.equal(intent.body.message, 'Introduction packs are no longer sold.');
+  assert.equal(calls, 0, 'nothing reached Stripe');
+  // Answered before any Stripe step: with no Stripe key at all it is still the 410, not stripe_not_configured.
+  delete (f.env as any).STRIPE_SECRET_KEY;
+  const unconfigured = await f.call('POST', '/api/payments/intro-credits/intent', { pack: 'intro_10' });
+  assert.equal(unconfigured.status, 410);
+  assert.equal(unconfigured.body.error, 'intro_packs_retired');
+
+  const packs = await f.call('GET', '/api/introductions/packs');
+  assert.equal(packs.status, 200);
+  assert.deepEqual(packs.body, { packs: [], on_sale: false });
+
+  const credits = await f.call('GET', '/api/introductions/credits');
+  assert.equal(credits.status, 200);
+  assert.ok(!('buy_path' in credits.body), 'no buy path');
+  assert.equal(credits.body.refer_path, '/account/referrals', 'Refer & earn stays');
+});
+
+test('D755 out of credits, the 402 offers no pack and no buy path, only referrals', async () => {
+  const f = d755Env();
+  const state = await getIntroCreditState(f.env, { id: 1, role: 'investor' } as any);
+  const spend = f.raw.prepare(`INSERT INTO intro_credit_ledger (user_id, delta, bucket, kind, source_ref, note) VALUES (1, -1, 'allowance', 'spend', ?, 'fixture')`);
+  for (let i = 0; i < state.balance; i++) spend.run(`fixture-spend-${i}`);
+  assert.equal((await getIntroCreditState(f.env, { id: 1, role: 'investor' } as any)).balance, 0);
+  f.raw.prepare(`INSERT INTO users (id, uid, name, role) VALUES (2, 'u2', 'Target', 'founder')`).run();
+  f.raw.prepare(`INSERT INTO intro_propositions (uid, user_id, target_user_id, status) VALUES ('prop-d755', 1, 2, 'pending')`).run();
+  const res = await f.call('POST', '/api/introductions/propositions/prop-d755/accept');
+  assert.equal(res.status, 402);
+  assert.equal(res.body.code, 'intro_credits_exhausted');
+  assert.ok(!('packs' in res.body), 'no packs');
+  assert.ok(!('buy_path' in res.body), 'no buy path');
+  assert.equal(res.body.refer_path, '/account/referrals');
+});
+
+test('D755 an introduction PaymentIntent minted before the switch still grants its credits through the webhook', async () => {
+  const f = d755Env();
+  const pi = {
+    id: 'pi_before_switch', object: 'payment_intent', status: 'succeeded', amount: 39_900, amount_received: 39_900, currency: 'usd',
+    metadata: { kind: 'intro_credits', user_id: '1', pack: 'intro_100', credits: '100' },
+  };
+  const body = JSON.stringify({ id: 'evt_before_switch', type: 'payment_intent.succeeded', data: { object: pi } });
+  const timestamp = Math.floor(Date.now() / 1000);
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(D755_WEBHOOK), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const signature = Array.from(new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${timestamp}.${body}`))))
+    .map((n) => n.toString(16).padStart(2, '0')).join('');
+  const { out: res } = await withoutNetwork(() => billingRoute.request('/stripe/webhook', {
+    method: 'POST', headers: { 'stripe-signature': `t=${timestamp},v1=${signature}`, 'content-type': 'application/json' }, body,
+  }, f.env));
+  assert.equal(res.status, 200, await res.text());
+  const state = await getIntroCreditState(f.env, { id: 1, role: 'investor' } as any);
+  assert.equal(state.purchased_remaining, 100, 'the purchased bucket is credited');
+  assert.equal(state.purchased_total, 100);
+});

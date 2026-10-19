@@ -16,7 +16,8 @@ Closes #<issue>
 
 ## Files changed
 
-<!-- The main files, one line each, with what changed in them. -->
+<!-- The main files, one line each, with what changed in them. Never CHANGELOG.md:
+it is Session 1's, and the CHANGELOG gate fails a PR that edits it (AGENTS.md). -->
 
 ## Testing
 

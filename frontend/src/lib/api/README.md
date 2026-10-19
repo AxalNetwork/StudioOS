@@ -167,6 +167,13 @@ corrects and exports, and a Super Admin issues. A draft's figures come only
 from `read` and `exportCsv`, which the Worker records before it answers; the
 list carries none.
 
+D716 (#1860): `fundNotices.js` calls the LP's own `GET /api/fund-notices/mine`
+(the list, with `call_number`, `due_date`, `superseded` and
+`instructions_changed`) and `GET /api/fund-notices/mine/:uid` (one notice's
+frozen, masked figures). `minePdfBlob` reads `GET /api/fund-notices/mine/:uid/pdf`
+as a Blob, outside the typed drift surface, only when the LP taps PDF. Nothing
+here returns a full account number.
+
 D717 (#1782) decision 11, #1855: `fundStructure.js` reads the entity and money
 map, `GET /api/admin/fund-structure`, for the "Structure of the Fund" sheet on
 the Contracts desk. HQ admins only. The Super Admin's answer lists each entity's
