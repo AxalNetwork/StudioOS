@@ -20,19 +20,6 @@
   counts a relationship row and its envelope once. The drill-down uses the
   same fold. `GET /templates/outside` lists `BUNDLED_SENT_DIRECTLY`.
 
-## Introduction packs are no longer sold (D755, #1915, PR 1)
-
-- `INTRO_PACKS_ON_SALE = false` (`services/introductions.ts`): the 402 and
-  `GET /api/introductions/credits` carry no buy path, `GET /packs` answers
-  `{ packs: [], on_sale: false }`, and `POST /api/payments/intro-credits/intent`
-  answers 410 `intro_packs_retired` before any Stripe call. A PaymentIntent
-  minted before the switch still grants through the webhook; bought credits
-  still spend and show in their history.
-- `/plans-and-pricing` is titled "Plans & Pricing" and drops its Introduction
-  packs section; the Introductions panel drops "Buy credits" and the pack
-  links, and keeps Refer & earn. `api.introPacks` and
-  `api.introCreditsIntent` are gone.
-
 ## The LP's capital call opens on the amount, and the fee statement is on screen (D717, #1859)
 
 - An open Fund I line's panel on the LP workspace opens on "Amount due", the
