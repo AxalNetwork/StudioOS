@@ -23,7 +23,7 @@ import { requireAuth } from '../auth';
 import { loadMyAiSpend, loadMyAiSpendForSurface } from '../services/aiSpend';
 import { AI_SURFACES } from '../services/aiSurfaces';
 import { refuse } from '../util/refusal';
-import { ROUTE, PRICE_USD_PER_1M_TOKENS, PRICE_USD_PER_AUDIO_MINUTE, PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET, run as aiRun, normaliseSurface } from '../services/aiRouter';
+import { ROUTE, PRICE_USD_PER_1M_TOKENS, PRICE_USD_PER_AUDIO_MINUTE, PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET, IMAGE_PRICED_MODELS, run as aiRun, normaliseSurface } from '../services/aiRouter';
 import { MODEL_NAMES, RETIRED_MODELS } from '../services/aiCatalog';
 import { CATALOGUE, isOffered, modelById } from '../services/ai/catalogue';
 import { billingMode, billedUnitPrice, multiplierFor, unitPrice } from '../services/ai/pricing';
@@ -166,6 +166,7 @@ export function routerRates(multiplier: number) {
     ...Object.keys(PRICE_USD_PER_1M_TOKENS),
     ...Object.keys(PRICE_USD_PER_AUDIO_MINUTE),
     ...Object.keys(PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET),
+    ...IMAGE_PRICED_MODELS,
   ]);
   return Object.fromEntries([...ids].map((id) => [id, unitPrices(id, multiplier)]));
 }
@@ -203,6 +204,9 @@ export function rateCard(licence = '') {
     ...Object.entries(PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET).filter(([id]) => !(id in PRICE_USD_PER_AUDIO_MINUTE)).map(([id, perMinute]) => ({
       ...row(id), per_audio_minute_websocket_usd: perMinute,
     })),
+    // D766: an image model (Build › Brand's logo, `brand_logo`) is priced by its
+    // size and steps (D761 PR 4); its `cost` and `billed` carry each unit.
+    ...[...IMAGE_PRICED_MODELS].map((id) => ({ ...row(id), image: true })),
   ];
 }
 

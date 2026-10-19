@@ -190,7 +190,7 @@ const EXPECTED: Record<string, string[]> = {
   // D684's voice-note call in routes/channels.ts is gone: since D756 (#1978) every
   // consented note is transcribed by interviewProcessing.ts's voice-note mode, above.
   'routes/research.ts': ['AI_SURFACE.researchAsk'],
-  'routes/brand.ts': ['AI_SURFACE.buildBrand', 'AI_SURFACE.buildBrand', 'AI_SURFACE.buildBrand'],
+  'routes/brand.ts': ['AI_SURFACE.buildBrand', 'AI_SURFACE.buildBrand', 'AI_SURFACE.buildBrand', 'AI_SURFACE.buildBrand'], // D766: + the logo
   'services/competitorAnalysis.ts': ['AI_SURFACE.researchCompanies'],
   'services/deckExtract.ts': ['AI_SURFACE.raisePitchReview', 'AI_SURFACE.raisePitchReview'],
   // D767 (#2096): the deck draft and the slide fill.
