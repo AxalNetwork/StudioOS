@@ -864,22 +864,22 @@ test('the normaliser: a consent button or a whole YES / NO / STOP from the conta
 // Telegram, while its switch is off
 // ---------------------------------------------------------------------------
 
-test('Telegram is unchanged: assign moves the text, the read says not required, both routes refuse, STOP is a message, Structure is not gated', async () => {
+test('Telegram\'s text keeps D684\'s rule: assign moves the text, no member\'s word, STOP before any notice is a message, Structure is not gated', async () => {
   const { env, db, queued } = await seeded();
   const f = mockFetch(telegramApi);
   try {
     await tgHook(env, businessMessage('BC-ME', { text: 'Invoices eat my Friday.' }));
     const t = (await call(env, ME, 'GET', '/threads')).body.items.find((x: any) => x.provider === 'telegram');
-    assert.equal(t.consent_status, null);
+    // D756 (#1977): Telegram's interviewee is asked too; only its notes wait.
+    assert.equal(t.consent_status, 'not_asked');
     const a = await call(env, ME, 'POST', `/threads/${t.uid}/assign`, { interview_id: INTERVIEW, consent: { ask: true } });
     assert.equal(a.status, 200, JSON.stringify(a.body));
     assert.equal(a.body.moved, 1);
     assert.equal(a.body.consent, undefined, 'Telegram\'s answer is unchanged');
     assert.equal(jobsOf(queued, 'session_structure').length, 1);
     const read = (await call(env, ME, 'GET', `/threads/${t.uid}`)).body;
-    assert.equal(read.consent.required, false);
-    assert.equal((await call(env, ME, 'POST', `/threads/${t.uid}/consent-request`)).body.code, 'consent_not_offered');
-    assert.equal((await call(env, ME, 'POST', `/threads/${t.uid}/consent`, { method: 'verbal' })).body.code, 'consent_not_offered');
+    assert.deepEqual([read.consent.required, read.consent.status], [true, 'not_asked']);
+    assert.equal((await call(env, ME, 'POST', `/threads/${t.uid}/consent`, { method: 'verbal' })).body.code, 'attestation_not_offered');
     await tgHook(env, businessMessage('BC-ME', { text: 'STOP' }));
     assert.equal(segs(db, a.body.session_id).at(-1), 'STOP');
     const { structureSession } = await import('../src/services/sessionAutoStructure.ts');
@@ -898,7 +898,7 @@ test('the store is provider-neutral: openRequest, recordReply, attest, withdraw 
     await call(env, ME, 'POST', `/threads/${t.uid}/assign`, { interview_id: INTERVIEW });
     thread = threadRow(db, t.uid);
   } finally { f.restore(); }
-  assert.deepEqual((await consentForThread(env, thread)).required, false);
+  assert.deepEqual((await consentForThread(env, thread)).required, true);
   const row = await openRequest(env, thread, { interviewId: thread.interview_id, sessionId: thread.session_id });
   assert.equal((await openRequest(env, thread, { interviewId: null, sessionId: null })).id, row.id, 'one open request');
   db.prepare(`INSERT INTO channel_outbound (uid, provider, user_id, thread_id, client_key, external_message_id, status)
@@ -915,10 +915,11 @@ test('the store is provider-neutral: openRequest, recordReply, attest, withdraw 
   assert.deepEqual(await recordReply(env, thread, reply), { outcome: 'ignored', reason: 'duplicate' });
   const fresh = threadRow(db, thread.uid);
   assert.equal(fresh.consent_state, 'given');
-  assert.deepEqual(await attest(env, ME, fresh, 'verbal'), { ok: false, code: 'consent_not_offered' }, 'Telegram takes no attestation while off');
+  assert.deepEqual(await attest(env, ME, fresh, 'verbal'), { ok: false, code: 'attestation_not_offered' }, 'no member\'s word on Telegram');
   const w = await withdraw(env, fresh, (given as any).consent, ref('telegram', '8001:79'));
   assert.equal(w.outcome, 'withdrawn');
-  assert.equal(threadRow(db, thread.uid).consent_state, 'withdrawn');
+  const after = threadRow(db, thread.uid);
+  assert.deepEqual([after.consent_state, after.status], ['withdrawn', 'assigned'], 'a Telegram STOP stops downloads, not the chat');
 });
 
 test('no response or log line carries a secret, a token or the contact\'s number', async () => {

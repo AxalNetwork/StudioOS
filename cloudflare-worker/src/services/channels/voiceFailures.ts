@@ -28,7 +28,7 @@ import type { Env } from '../../types';
 import { loadAiBudget } from '../aiBudget';
 import { IntakeError } from '../interviewIntake';
 import { inInterview, queueVoiceTranscriptions, threadForReply } from './threads';
-import { consentRequired, type MessagingProvider } from './types';
+import { audioConsentRequired, type MessagingProvider } from './types';
 
 /** How many times the follow-up tries a provider or transcription that does not answer, and the wait before each next try (seconds). */
 export const VOICE_TRIES = 4;
@@ -159,7 +159,7 @@ export async function retryVoiceNote(env: Env, userId: number, threadUid: string
   ).bind(messageUid, thread.id).first<{ transcribe_error: string | null; transcribe_job: string | null }>();
   if (!row) throw new IntakeError(404, 'voice_not_found', 'That voice note is not waiting on this conversation.');
   const reason = voiceReason(row.transcribe_error, row.transcribe_job != null);
-  if (reason === 'no_consent' || (consentRequired(thread.provider) && thread.consent_state !== 'given')) {
+  if (reason === 'no_consent' || (audioConsentRequired(thread.provider) && thread.consent_state !== 'given')) {
     throw new IntakeError(409, 'no_consent', 'This voice note waits until consent is given in the chat. Axal fetches it only then.');
   }
   if (!reason || !RETRYABLE.has(reason)) throw new IntakeError(409, 'voice_not_retryable', 'This voice note cannot be retried.');
