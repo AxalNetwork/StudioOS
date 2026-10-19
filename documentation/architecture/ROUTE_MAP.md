@@ -87,10 +87,10 @@ D751 (#1880), for all nine OAuth connectors (Calendly, Carta, DocuSign, GitHub, 
 The Subscription Booklet's store is mounted at `/api/fund-booklets` (`routes/fund_booklets.ts`, `services/subscriptionBooklet.ts`, migration 478).
 - **The applicant** (an approved Fund I `lp_applications` row; anyone else gets 404):
   - `POST /mine` opens the booklet, or returns the live one.
-  - `GET /mine` answers the parts, the fields with their ticks, `missing_parts` and the digest.
+  - `GET /mine` answers the parts, the fields with their ticks and `group` (the nearest counsel heading above each, for the screen only, never in the digest; #1866), `missing_parts` and the digest.
   - `PUT /mine/answers { answers: [{ field_id, checked }] }`: 400 `field_unknown`, 409 `booklet_not_open`.
   - `POST /mine/submit { digest }`: 409 `booklet_part_missing` (naming the parts) or `content_changed`.
-  - `GET /mine/paper` answers `{ html, digest, page_size }`: the booklet on #1776's paper, screen HTML with the faces inline, `no-store`. A submitted booklet prints its frozen text (D759).
+  - `GET /mine/paper` answers `{ html, digest, page_size }`: the booklet on #1776's paper, screen HTML with the faces inline, `no-store`. `?part=2..9` draws that one part alone, with no cover and no contents, and the whole booklet's digest; any other value is 400 `part_invalid` (#1866). A submitted booklet prints its frozen text (D759).
   - `GET /mine` and the Admin's `GET /:uid` carry `edition` (v[N]) and `signing: { state, signed_at, accepted_at }` (`not_sent`, `sent`, `awaiting_gp`, `accepted`, `void`); the Admin's read also `gp_sent` (D759).
   - `POST /mine/sign` (D759) sends the submitted booklet for the applicant's signature (Parts 3 to 8) and answers 201 `{ uid, stage: 'applicant', envelope_uuid, token }`, `no-store`; the token goes to the caller, its recipient, alone. Refusals in order: 404 `booklet_not_found`, 403 `support_session_refused`, 403 `hq_only`, 409 `booklet_not_submitted`, 409 `booklet_already_sent` (`state`), 409 `booklet_part_missing` (`parts`), 409 `booklet_text_changed`, 503 `booklet_send_failed`.
   - A support session cannot write.
