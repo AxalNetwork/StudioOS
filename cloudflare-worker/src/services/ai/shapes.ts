@@ -48,13 +48,6 @@ export interface ModelFacts {
   reasoning?: ReasoningControl;
   /** True for a text or reasoning model that takes images as content parts (PR 2). */
   vision?: boolean;
-  /**
-   * PR 3: a partner model (Workers AI's "Partner" flag: Deepgram's Aura). It
-   * runs only while D760's gate offers it (`offered: true`); until A1 installs
-   * its catalogue nothing offers one, so it is skipped uncalled.
-   */
-  partner?: boolean;
-  offered?: boolean;
 }
 
 /**
@@ -111,9 +104,6 @@ export const INTERIM_KINDS: Readonly<Record<string, 'rerank' | 'embedding' | 'tr
   '@cf/myshell-ai/melotts': 'voice',
 });
 
-/** PR 3: the models Workers AI flags "Partner" among these (each model page, 2026-10-19). */
-export const PARTNER_MODELS: ReadonlySet<string> = new Set(['@cf/deepgram/aura-1', '@cf/deepgram/aura-2-en', '@cf/deepgram/aura-2-es']);
-
 const DEFAULT_FACTS: ModelFacts = Object.freeze({ kind: 'text', context_window: null, paid_only: false }) as ModelFacts;
 
 function interimFacts(model: string): ModelFacts | null {
@@ -121,7 +111,7 @@ function interimFacts(model: string): ModelFacts | null {
   const vision = VISION_MODELS.has(model) ? { vision: true } : {};
   if (reasoning) return { kind: 'reasoning', context_window: null, paid_only: false, reasoning, ...vision };
   const kind = INTERIM_KINDS[model];
-  if (kind) return { kind, context_window: null, paid_only: false, ...(PARTNER_MODELS.has(model) ? { partner: true, offered: false } : {}) };
+  if (kind) return { kind, context_window: null, paid_only: false };
   return VISION_MODELS.has(model) ? { kind: 'text', context_window: null, paid_only: false, vision: true } : null;
 }
 
@@ -153,8 +143,8 @@ export function canServe(facts: ModelFacts, need: Need): boolean {
     case 'rerank': return facts.kind === 'rerank';
     case 'embedding': return facts.kind === 'embedding';
     case 'translation': return facts.kind === 'translation';
-    // PR 3: a partner voice runs only while the catalogue's gate offers it.
-    case 'voice': return facts.kind === 'voice' && (facts.partner !== true || facts.offered === true);
+    // PR 3: Aura and MeloTTS. Aura is a partner model, which D760's gate refuses before the run (`modelRefusal`) until the switch offers it.
+    case 'voice': return facts.kind === 'voice';
     default: return facts.kind === 'text' || facts.kind === 'reasoning';
   }
 }

@@ -17,7 +17,7 @@
  *
  * PR 3 — speech and voice:
  *   - Aura's and MeloTTS's requests, their audio, and their units (characters; minutes from the bytes);
- *   - a partner voice is skipped uncalled until D760 offers it; a voice the model lacks moves down the chain;
+ *   - Aura runs only with D760's partner switch on; a voice the model lacks moves down the chain;
  *   - a voice is held and charged on those units, and never cached;
  *   - a live stream's units are WebSocket minutes.
  *
@@ -29,7 +29,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { upsertEntity } from '../src/services/vectorize.ts';
 import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
-import { run, ROUTE, estimateCostUsd, __resetForTest } from '../src/services/aiRouter.ts';
+import { run, ROUTE, estimateCostUsd, PRICE_USD_PER_1K_CHARACTERS, PRICE_USD_PER_AUDIO_MINUTE, __resetForTest } from '../src/services/aiRouter.ts';
 import * as shapes from '../src/services/ai/shapes.ts';
 import { withGuard } from './_guard_stub.mjs';
 
@@ -429,9 +429,8 @@ const melo = () => ({ audio: Buffer.from(MELO_MP3).toString('base64') });
 const byteStream = (bytes, chunk = 4_096) => new ReadableStream({
   start(c) { for (let i = 0; i < bytes.length; i += chunk) c.enqueue(bytes.slice(i, i + chunk)); c.close(); },
 });
-/** D760's catalogue, as it will answer once it offers the partner voices. */
-const offered = (m) => (shapes.PARTNER_MODELS.has(m) ? { kind: 'voice', context_window: null, paid_only: false, partner: true, offered: true }
-  : m === MELO ? { kind: 'voice', context_window: null, paid_only: false } : null);
+/** D760's switch that offers the partner models (Aura). */
+const PARTNERS_ON = { AI_PARTNER_MODELS: 'on' };
 /** Route `paraphrase` to voices for one test. */
 function voiceRoute(t, model, fallbackChain, extra = {}) {
   const saved = ROUTE.paraphrase;
@@ -450,16 +449,14 @@ test('voice: MeloTTS takes { prompt, lang } and returns base64 audio, counted in
   assert.ok(Buffer.from(r.audio.bytes).equals(Buffer.from(MELO_MP3)));
   assert.deepEqual(r.units, { audio_minutes: 3 }, 'from the 500,000 bytes, not the 15 characters');
   assert.equal(r.output, '');
-  assert.equal(shapes.factsFor(MELO).kind, 'voice', 'the interim table, until D760');
-  assert.equal(shapes.factsFor(MELO).partner, undefined, 'MeloTTS is not a partner model');
+  assert.equal(shapes.factsFor(MELO).kind, 'voice', 'the interim table');
 });
 
 test('voice: an offered Aura takes { text, encoding, speaker } and streams audio, counted in characters', async (t) => {
   // Mutations checked: the speaker dropped; Aura's units in minutes; the stream read as empty.
-  shapes.setModelFactsSource(offered);
   voiceRoute(t, AURA2, []);
   const ai = makeAI(() => byteStream(MP3));
-  const r = await run(envWith(ai), { task: 'paraphrase', userId: 0, text: 'Who pays today?', speak: { voice: 'luna' } });
+  const r = await run(envWith(ai, PARTNERS_ON), { task: 'paraphrase', userId: 0, text: 'Who pays today?', speak: { voice: 'luna' } });
   assert.equal(r.ok, true);
   assert.deepEqual(ai.calls[0].payload, { text: 'Who pays today?', encoding: 'mp3', speaker: 'luna' });
   assert.equal(r.audio.bytes.byteLength, MP3.byteLength);
@@ -467,23 +464,33 @@ test('voice: an offered Aura takes { text, encoding, speaker } and streams audio
   assert.deepEqual(shapes.speakRequest(AURA1, 'x', {}), { text: 'x', encoding: 'mp3' }, 'no speaker: the model\'s default');
 });
 
-test('voice: a partner model is skipped uncalled until offered; a voice a model lacks moves down the chain', async (t) => {
-  // Mutations checked: canServe ignoring `offered`; a missing speaker sent anyway; MeloTTS speaking a named voice.
+test('voice: Aura is refused uncalled without the partner switch; a voice a model lacks moves down the chain', async (t) => {
+  // Mutations checked: Aura left out of the character prices; a missing speaker sent anyway; MeloTTS speaking a named voice.
   voiceRoute(t, AURA2, [MELO]);
   const ai = makeAI(() => melo());
   const r = await run(envWith(ai), { task: 'paraphrase', userId: 0, text: 'Hello.', speak: {} });
-  assert.equal(r.ok, true);
-  assert.deepEqual(ai.calls.map((c) => c.model), [MELO]);
-  assert.deepEqual(r.attempts.map((a) => [a.model, a.called, a.status]), [[AURA2, false, 422], [MELO, true, undefined]]);
-  assert.equal(shapes.factsFor(AURA2).offered, false, 'nothing offers a partner model before D760');
+  assert.equal(r.refusal, 'model_not_offered', 'D760 gates the partner models');
+  assert.equal(ai.calls.length, 0);
+  const on = makeAI(() => byteStream(MP3));
+  assert.equal((await run(envWith(on, PARTNERS_ON), { task: 'paraphrase', userId: 0, text: 'Hello.', speak: {} })).ok, true);
+  assert.deepEqual(on.calls.map((c) => c.model), [AURA2], 'priced and offered: it runs');
 
-  shapes.setModelFactsSource(offered);
   const lacks = makeAI(() => byteStream(MP3));
-  const r2 = await run(envWith(lacks), { task: 'paraphrase', userId: 0, text: 'Hello.', speak: { voice: 'sirio' } });
+  const r2 = await run(envWith(lacks, PARTNERS_ON), { task: 'paraphrase', userId: 0, text: 'Hello.', speak: { voice: 'sirio' } });
   assert.equal(r2.refusal, 'all_models_failed', 'aura-2-en has no "sirio", and MeloTTS names no speaker');
   assert.equal(lacks.calls.length, 0);
   assert.deepEqual(r2.attempts.map((a) => a.status), [400, 400]);
   assert.equal(shapes.speakRequest('@cf/deepgram/aura-2-es', 'Hola', { voice: 'sirio' }).speaker, 'sirio');
+});
+
+test('voice: a text model on the chain is skipped uncalled', async (t) => {
+  // Mutation checked: canServe letting a text model take a voice run.
+  voiceRoute(t, MID, [MELO]);
+  const ai = makeAI(() => melo());
+  const r = await run(envWith(ai), { task: 'paraphrase', userId: 0, text: 'Hello.', speak: {} });
+  assert.equal(r.ok, true);
+  assert.deepEqual(ai.calls.map((c) => c.model), [MELO]);
+  assert.deepEqual(r.attempts.map((a) => [a.model, a.called, a.status]), [[MID, false, 422], [MELO, true, undefined]]);
 });
 
 test('voice: malformed options are refused before any call; a voice run is one ask, never streamed, never a transcription', async () => {
@@ -509,19 +516,21 @@ test('voice: malformed options are refused before any call; a voice run is one a
 
 test('voice: priced per 1k characters (Aura) or per minute returned (MeloTTS); a member is held and charged on those units', async (t) => {
   // Mutations checked: the character price ignored; the quote without the voice's units; the charge from the token table.
-  assert.equal(estimateCostUsd(AURA1, 0, 0, 0, 1_000), 0.015);
-  assert.equal(estimateCostUsd(AURA2, 0, 0, 0, 2_000), 0.06);
-  assert.equal(estimateCostUsd(MELO, 0, 0, 2), 0.0004);
+  assert.equal(estimateCostUsd(AURA1, 0, 0, 0, 0, 1_000), PRICE_USD_PER_1K_CHARACTERS[AURA1]);
+  assert.equal(estimateCostUsd(AURA2, 0, 0, 0, 0, 2_000), 2 * PRICE_USD_PER_1K_CHARACTERS[AURA2]);
+  assert.equal(estimateCostUsd(MELO, 0, 0, 2), 2 * PRICE_USD_PER_AUDIO_MINUTE[MELO]);
+  // The catalogue's neuron prices (D760) for the printed $0.015 and $0.030 per 1k characters and $0.0002 per minute.
+  for (const [m, printed] of [[AURA1, 0.015], [AURA2, 0.030], ['@cf/deepgram/aura-2-es', 0.030]]) assert.ok(Math.abs(PRICE_USD_PER_1K_CHARACTERS[m] - printed) < 1e-6, m);
+  assert.ok(Math.abs(PRICE_USD_PER_AUDIO_MINUTE[MELO] - 0.0002) < 1e-5);
 
-  shapes.setModelFactsSource(offered);
   voiceRoute(t, AURA2, []);
-  const env = envWith(makeAI(() => byteStream(MP3)));
+  const env = envWith(makeAI(() => byteStream(MP3)), PARTNERS_ON);
   const text = 'a'.repeat(1_000);
   const r = await run(env, { task: 'paraphrase', userId: 42, text, speak: {} });
   assert.equal(r.ok, true);
   const row = env.DB._rows.find((x) => x.guard_for == null);
   assert.equal(row.model, AURA2);
-  assert.equal(row.charged_microusd, 30_000, '1,000 characters at $0.030 per 1k');
+  assert.equal(row.charged_microusd, 30_000, '1,000 characters at $0.030 per 1k, rounded up');
   assert.deepEqual(JSON.parse(row.units_json), { characters: 1_000, tokens_in: 0, tokens_out: 0 });
 
   voiceRoute(t, MELO, []);
@@ -529,9 +538,9 @@ test('voice: priced per 1k characters (Aura) or per minute returned (MeloTTS); a
   const env2 = { ...envWith(makeAI(() => melo())), DB };
   const r2 = await run(env2, { task: 'paraphrase', userId: 42, text: 'Hello.', speak: {} });
   assert.equal(r2.ok, true);
-  assert.equal(DB._rows.find((x) => x.guard_for == null).charged_microusd, 600, 'three minutes at $0.0002');
+  assert.equal(DB._rows.find((x) => x.guard_for == null).charged_microusd, 615, 'three minutes at the catalogue\'s $0.00020493, rounded up');
   const held = db.prepare('SELECT included_microusd + topup_microusd AS held FROM ai_budget_reservations WHERE user_id = 42').get().held;
-  assert.ok(held >= 44 * 200, `held ${held}: the most audio readSpeech accepts, 44 minutes, before the guard's share`);
+  assert.ok(held >= Math.ceil(44 * PRICE_USD_PER_AUDIO_MINUTE[MELO] * 1e6), `held ${held}: the most audio readSpeech accepts, 44 minutes, before the guard's share`);
 });
 
 test('voice: the audio is never cached; a live stream reports WebSocket minutes', async (t) => {

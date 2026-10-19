@@ -380,10 +380,12 @@ test('the model list carries the router’s prices, tags, and what can be chosen
   const m = listSttModels();
   const live = Object.fromEntries(m.live.map((x: any) => [x.model, x]));
   const fin = Object.fromEntries(m.final.map((x: any) => [x.model, x]));
-  assert.equal(live['@cf/deepgram/nova-3'].price_usd_per_minute, 0.0092);
+  // D760 (#2017): each rate is the model's neuron price (neurons × $0.011 / 1,000),
+  // not the pricing table's rounded dollars: 836.36, 700.00, 472.73 and 46.63 neurons a minute.
+  assert.equal(live['@cf/deepgram/nova-3'].price_usd_per_minute, 0.00919996);
   assert.equal(live['@cf/deepgram/flux'].price_usd_per_minute, 0.0077);
-  assert.equal(fin['@cf/deepgram/nova-3'].price_usd_per_minute, 0.0052);
-  assert.equal(fin['@cf/openai/whisper-large-v3-turbo'].price_usd_per_minute, 0.0005);
+  assert.equal(fin['@cf/deepgram/nova-3'].price_usd_per_minute, 0.00520003);
+  assert.equal(fin['@cf/openai/whisper-large-v3-turbo'].price_usd_per_minute, 0.00051293);
   assert.ok(fin['@cf/openai/whisper-large-v3-turbo'].tags.includes('Default'));
   assert.equal(fin['@cf/openai/whisper-tiny-en'].price_usd_per_minute, null);
   assert.equal(fin['@cf/openai/whisper-tiny-en'].choosable, false);
