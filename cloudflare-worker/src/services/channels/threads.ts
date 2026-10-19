@@ -782,15 +782,19 @@ export async function forgetConnection(env: Env, integrationId: number): Promise
  *             while the contact keeps writing.
  *   codes     spent link codes after a day; event ids after 90 days; the
  *             per-connection counters after two days.
+ *   links     D754 way B (#1937): a linked WhatsApp unused for
+ *             CHANNEL_LIMITS.senderLinkDays lapses — phone numbers are
+ *             reassigned. Its row stays, disconnected, with only the mask.
  */
 export async function purgeExpired(env: Env, now = new Date()): Promise<{
-  threads: number; messages: number; codes: number; events: number; counters: number;
+  threads: number; messages: number; codes: number; events: number; counters: number; lapsed: number;
 }> {
   const cutoff = new Date(now.getTime() - CHANNEL_LIMITS.pendingDays * 86_400_000).toISOString();
   const day = new Date(now.getTime() - 86_400_000).toISOString();
   const twoDays = new Date(now.getTime() - 2 * 86_400_000).toISOString();
   const events = new Date(now.getTime() - 90 * 86_400_000).toISOString();
-  const [msgs, threads, codes, evs, counters, linkAttempts] = await env.DB.batch([
+  const unused = new Date(now.getTime() - CHANNEL_LIMITS.senderLinkDays * 86_400_000).toISOString();
+  const [msgs, threads, codes, evs, counters, linkAttempts, lapsed] = await env.DB.batch([
     env.DB.prepare(`DELETE FROM channel_thread_messages WHERE datetime(sent_at) < datetime(?)`).bind(cutoff),
     env.DB.prepare(
       `DELETE FROM channel_threads WHERE status IN ('pending', 'ignored')
@@ -805,10 +809,16 @@ export async function purgeExpired(env: Env, now = new Date()): Promise<{
     env.DB.prepare(`DELETE FROM channel_events WHERE datetime(created_at) < datetime(?)`).bind(events),
     env.DB.prepare(`DELETE FROM channel_counters WHERE datetime(created_at) < datetime(?)`).bind(twoDays),
     env.DB.prepare(`DELETE FROM channel_link_attempts WHERE window_start < ?`).bind(twoDays),
+    env.DB.prepare(
+      `UPDATE integrations SET status = 'disconnected', credentials_enc = NULL, external_account_id = NULL, updated_at = CURRENT_TIMESTAMP
+        WHERE provider_key = 'whatsapp_link' AND status = 'active'
+          AND datetime(COALESCE(last_synced_at, updated_at, created_at)) < datetime(?)`,
+    ).bind(unused),
   ]);
   return {
     messages: Number(msgs.meta?.changes ?? 0), threads: Number(threads.meta?.changes ?? 0),
     codes: Number(codes.meta?.changes ?? 0), events: Number(evs.meta?.changes ?? 0),
     counters: Number(counters.meta?.changes ?? 0) + Number(linkAttempts.meta?.changes ?? 0),
+    lapsed: Number(lapsed.meta?.changes ?? 0),
   };
 }

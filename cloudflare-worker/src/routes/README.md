@@ -23,7 +23,7 @@ widened guard on this very sentence, which is the rule working.)
 ```
 /api/admin/partner-settlements → partner_settlements.ts (HQ drafts; Super Admin issue/void, D713)
 /api/partner-settlements → partner_settlements.ts (own non-draft settlements, D713)
-/api/mercury/personal → mercury_personal.ts (a member's own Mercury: status and payment matches, read-only, D713)
+/api/mercury/personal → mercury_personal.ts (a member's own Mercury (founders, partners, and investors on HQ): status and payment matches, read-only, D713, D752)
 /api/auth          → auth.ts
 /api/scoring       → scoring.ts
 /api/projects      → projects.ts
@@ -59,7 +59,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/fund-fees     → fund_fees.ts       (D709: the management fee's terms, admissions, net invested capital, offsets, and fee periods the GP previews and issues; moves no money)
 /api/fund-admin    → fund_admin.ts      (D714: GET /access, which fund acts this admin may take, from FUND_ACTS)
 /api/fund-reporting → fund_reporting.ts
-/api/fund-booklets → fund_booklets.ts (D716: the Subscription Booklet, the applicant's ticks, paper and submit, HQ's read, PDF and withdraw)
+/api/fund-booklets → fund_booklets.ts (D716: the Subscription Booklet, the applicant's ticks, paper and submit, HQ's read, PDF and withdraw; the e-sign send and the GP's acceptance (D759))
 /api/fund-notices  → fund_notices.ts    (D716: an Admin previews, the Super Admin issues, the LP reads their own; kept PDFs through Browser Run)
 /api/liquidity     → liquidity.ts
 /api/email         → email.ts

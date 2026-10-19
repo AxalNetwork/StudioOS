@@ -400,8 +400,10 @@ test('#1865 L6: every notice type prints its addressee, figures, warning above p
 
 // ---------------------------------------------------------------- the booklet
 
-const BOOKLET_SCHEMA = ['users', 'super_admins', 'user_sessions', 'activity_logs', 'admin_audit_log', 'lp_applications', 'legal_templates', 'legal_template_versions']
-  .map((t) => stripForeignKeys(tableFromBaseline(baseline, t))).join('\n') + '\n' + migration('478');
+// D759 (#1858): the e-sign tables and migration 485, which the booklet view reads for its signing state.
+const BOOKLET_SCHEMA = ['users', 'super_admins', 'user_sessions', 'activity_logs', 'admin_audit_log', 'lp_applications', 'legal_templates', 'legal_template_versions',
+  'esign_envelopes', 'esign_recipients']
+  .map((t) => stripForeignKeys(tableFromBaseline(baseline, t))).join('\n') + '\n' + migration('478') + '\n' + migration('485');
 const BOOKLET_BODIES: Record<string, string> = {
   subscription: '## Article 1 Subscription\nThe applicant subscribes.\n- [ ] I have read the Private Placement Memorandum.',
   lp_investor_questionnaire: '- [ ] I am an accredited investor.',
