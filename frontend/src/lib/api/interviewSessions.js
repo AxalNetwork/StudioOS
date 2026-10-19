@@ -82,8 +82,9 @@ export const interviewSessionsApi = {
   transcribe: (id, model) => request(`${P}/sessions/${enc(id)}/transcribe`, {
     method: 'POST', body: JSON.stringify(model ? { model } : {}),
   }),
-  finish: (id, lastSeq, auto = true) => request(`${P}/sessions/${enc(id)}/finish`, {
-    method: 'POST', body: JSON.stringify({ last_seq: lastSeq, auto: auto !== false }),
+  // D770 (#2095): `auto` is true only when the Stop sheet's choice is on.
+  finish: (id, lastSeq, auto = false) => request(`${P}/sessions/${enc(id)}/finish`, {
+    method: 'POST', body: JSON.stringify({ last_seq: lastSeq, auto: auto === true }),
   }),
   process: (id) => request(`${P}/sessions/${enc(id)}/process`, { method: 'POST', body: JSON.stringify({}) }),
   summarise: (id, model) => request(`${P}/sessions/${enc(id)}/summarise`, {
