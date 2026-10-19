@@ -50,7 +50,7 @@ export function suggestionsNote(e) {
  * reads as `forbidden` with the Worker's own sentence: retrying cannot help.
  */
 export function useConnectors({ companyId = null } = {}) {
-  const [state, setState] = useState({ status: 'loading', message: '', providers: [], items: null, waitlist: [], firstParty: {}, itemsFailed: false, companies: null, suggestions: null, suggestionsNote: '' });
+  const [state, setState] = useState({ status: 'loading', message: '', providers: [], categoryOrder: null, items: null, waitlist: [], firstParty: {}, itemsFailed: false, companies: null, suggestions: null, suggestionsNote: '' });
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let live = true;
@@ -72,6 +72,7 @@ export function useConnectors({ companyId = null } = {}) {
         status: 'ready',
         message: '',
         providers: av?.providers || av?.items || [],
+        categoryOrder: Array.isArray(av?.category_order) ? av.category_order : null,
         items: mine ? mine.items || [] : null,
         itemsFailed: !mine,
         waitlist: wl?.items || [],
@@ -100,6 +101,10 @@ export function useConnectors({ companyId = null } = {}) {
  * Escape of its own (the lightbox's), and its × is `onDismiss`, which closes
  * the whole lightbox, while the panel's own `onClose` steps back to the list.
  * With no frame, a `Sheet` is the Connectors page's side sheet, as before.
+ *
+ * D753 — `layout: 'page'` is a connector's own page (`ConnectorPage.jsx`): the
+ * sheet sits in the page's flow, with no overlay, no dialog role, no × and no
+ * Escape of its own. Its head stays an `<h2>`, under the page's `<h1>`.
  */
 export const SheetFrame = createContext(null);
 
@@ -117,10 +122,19 @@ export function Sheet({ eyebrow, title, sub, onClose, children, footer, provider
         <h2 className="flex items-center gap-2 text-lg font-extrabold tracking-axal-heading text-axal-ink dark:text-gray-100">{provider && <BrandIcon provider={provider} name={providerName} size={24} />}{title}</h2>
         {sub && <p className="mt-0.5 text-[12.5px] leading-snug text-axal-muted dark:text-gray-400">{sub}</p>}
       </div>
-      <button type="button" onClick={frame ? frame.onDismiss : onClose} aria-label="Close" data-testid="sheet-close" className="rounded p-1 text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100"><X size={18} /></button>
+      {frame?.layout !== 'page' && <button type="button" onClick={frame ? frame.onDismiss : onClose} aria-label="Close" data-testid="sheet-close" className="rounded p-1 text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100"><X size={18} /></button>}
     </div>
   );
   const foot = footer && <div className="flex flex-wrap items-center justify-end gap-2 border-t border-axal-hairline px-5 py-3 dark:border-gray-800">{footer}</div>;
+  if (frame?.layout === 'page') {
+    return (
+      <div className="rounded-axal-sm border border-axal-hairline bg-white pb-4 dark:border-gray-800 dark:bg-gray-900" data-testid={testId} data-layout="page">
+        {head}
+        <div>{children}</div>
+        {foot}
+      </div>
+    );
+  }
   if (frame) {
     return (
       <div className="flex h-full min-h-0 flex-col" data-testid={testId} data-layout="lightbox">
@@ -194,7 +208,7 @@ export function Steps({ names, at }) {
 const NR_REGISTRY = 'This connector is not in the connector registry, which is where what it does is described.';
 
 /** What a connector pulls in and sends out, from the registry's `pulls`/`sends`; its capabilities otherwise. */
-function UsesGroups({ p, read = 'What it pulls in', write = 'What it sends out' }) {
+export function UsesGroups({ p, read = 'What it pulls in', write = 'What it sends out' }) {
   if (Array.isArray(p.pulls) || Array.isArray(p.sends)) {
     return (
       <>
@@ -222,7 +236,7 @@ function UsesGroups({ p, read = 'What it pulls in', write = 'What it sends out' 
   );
 }
 
-function PermissionsGroup({ p }) {
+export function PermissionsGroup({ p }) {
   return (
     <Group label="Permissions">
       {Array.isArray(p.permissions) && p.permissions.length

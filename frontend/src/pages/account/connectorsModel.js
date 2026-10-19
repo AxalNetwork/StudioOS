@@ -32,12 +32,13 @@ export const PAGE_SIZE = 10;
 export const isPersonalMercury = (p) => p?.key === 'mercury' && !isEntityRow(p);
 const isMercuryConn = (conn) => conn?.provider_key === 'mercury';
 
+/** The chips' order until the Worker sends `category_order` (`categoryOrderFrom`, D753 #1955). */
 export const CATEGORY_ORDER = ['CRM', 'Payments', 'Accounting and banking', 'Calendar', 'Calendar and workspace', 'Messaging', 'Signing', 'Cap table', 'Data', 'Code', 'Design', 'Docs'];
 
 /**
  * Build's own group order (D686 §5.4): the canvas's Code, Design, Payments,
  * Accounting and banking, Payroll, CRM, Calendar and workspace, then the rest.
- * The Connectors page keeps `CATEGORY_ORDER` for its chips.
+ * The Connectors page orders its chips by the Worker's `category_order`.
  */
 export const BUILD_CATEGORY_ORDER = ['Code', 'Design', 'Payments', 'Accounting and banking', 'Payroll', 'CRM', 'Calendar and workspace', 'Calendar', 'Messaging', 'Signing', 'Cap table', 'Data', 'Docs'];
 
@@ -47,7 +48,11 @@ export const BUILD_CATEGORY_ORDER = ['Code', 'Design', 'Payments', 'Accounting a
  * first-party row, which keeps its own key, name, status and connection.
  */
 export const REGISTRY_ALIAS = Object.freeze({ google_calendar: 'google', microsoft_365: 'microsoft' });
-const ALIAS_FIELDS = ['category', 'verified', 'pulls', 'sends', 'feeds', 'feed_modules', 'permissions'];
+// D753 (#1955): plus the page fields `/available` sends (decision 4(a)).
+const ALIAS_FIELDS = [
+  'category', 'verified', 'pulls', 'sends', 'feeds', 'feed_modules', 'permissions',
+  'tagline', 'made_by', 'service', 'sign_in', 'added', 'verified_on', 'read_only', 'page_key', 'page_href', 'configured',
+];
 
 // The registry's `integration_type`, in the canvas's category words. Stripe is
 // a `data_feed` in the registry and Payments on the canvas; it is the one key
@@ -149,7 +154,8 @@ export function buildCatalogue({ providers = [], items = [], waitlist = [], firs
     seen.add(p.key);
     out.push({
       ...p,
-      by: p.by || p.display_name,
+      // D753 decision 7: Axal VC made every connector; the Worker says so in `made_by`.
+      by: p.made_by?.name || p.display_name,
       category: categoryOf(p),
       connection: byKey.get(p.key) || null,
       joined: joined.has(p.key),
@@ -353,10 +359,15 @@ export function pageOf(rows, page) {
 
 export const SUGGESTED = 'Suggested for you';
 
-/** The chips: All, Suggested for you, then each category the catalogue holds, in the canvas's order. */
-export function discoverChips(catalogue) {
+/** The Worker's `category_order` (D753 decision 4(a)) when it sends a list of words, else `CATEGORY_ORDER`. */
+export function categoryOrderFrom(order) {
+  return Array.isArray(order) && order.length && order.every((c) => typeof c === 'string' && c) ? order : CATEGORY_ORDER;
+}
+
+/** The chips: All, Suggested for you, then each category the catalogue holds, in the Worker's order. */
+export function discoverChips(catalogue, order) {
   const present = new Set((catalogue || []).map((p) => p.category).filter(Boolean));
-  return ['All', SUGGESTED, ...CATEGORY_ORDER.filter((c) => present.has(c))];
+  return ['All', SUGGESTED, ...categoryOrderFrom(order).filter((c) => present.has(c))];
 }
 
 /**
@@ -426,7 +437,18 @@ export function discoverSections(catalogue, chip = 'All', { q = '', suggestions 
  * sign-in went.
  */
 export function connectorsRedirect({ search = '', hash = '' } = {}) {
-  return { pathname: '/account/connectors', search, hash };
+  const ret = oauthReturn(search);
+  if (!ret) return { pathname: '/account/connectors', search, hash };
+  // D715 decision 3: Mercury has no sign-in. A return naming it is crafted and never reaches the Mercury page, whose mount makes the audited read.
+  if (ret.key === 'mercury') return { pathname: '/account/connectors', search: stripReturn(search, ret.strip), hash };
+  // D753 — a sign-in comes back to its own connector's page.
+  return { pathname: connectorPagePath(ret.key), search, hash };
+}
+
+/** D753 — a connector's own page, for a valid key; the hub otherwise. */
+export function connectorPagePath(key) {
+  const k = codeWord(String(key || '').toLowerCase());
+  return k && k.length <= 40 ? `/account/connectors/${k}` : '/account/connectors';
 }
 
 /** The once-only notice about the rename is remembered under this key. */
