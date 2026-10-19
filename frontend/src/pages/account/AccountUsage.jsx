@@ -451,7 +451,7 @@ export function TopUpsCard({ history, runs = false, onToggleRuns }) {
           ) : !rows.length ? (
             <div className="flex flex-col items-center gap-2">
               <EmptyState size="sm" data-testid="usage-top-ups-empty" title="No top-ups yet." />
-              <a href="/plans-and-pricing#token-packs" className={BTN.ghost} data-testid="usage-top-ups-add">Add tokens</a>
+              <a href={ADD_TOKENS_PATH} className={BTN.ghost} data-testid="usage-top-ups-add">Add tokens</a>
             </div>
           ) : (
             <ul className="divide-y divide-axal-hairline dark:divide-gray-800" data-testid="usage-top-ups-rows">

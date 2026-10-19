@@ -111,10 +111,11 @@ test('one path: every Add tokens link reads ADD_TOKENS_PATH, and no file but lib
     const rel = relative(SRC, file);
     if (rel === 'lib/aiTokens.js') continue;
     const text = readFileSync(file, 'utf8');
-    if (/ai_topup=1|token-packs/.test(text)) offenders.push(rel);
+    // The link fragment, not the admin API route `/admin/catalog/token-packs` (#1971).
+    if (/ai_topup=1|#token-packs/.test(text)) offenders.push(rel);
   }
   assert.deepEqual(offenders, []);
-  const sites = { 'ui/WorkerRail.jsx': 1, 'ui/AiBudgetUsage.jsx': 1, 'pages/account/AccountUsage.jsx': 2, 'pages/account/PricingPhone.jsx': 1 };
+  const sites = { 'ui/WorkerRail.jsx': 1, 'ui/AiBudgetUsage.jsx': 1, 'pages/account/AccountUsage.jsx': 3, 'pages/account/PricingPhone.jsx': 1 };
   for (const [rel, n] of Object.entries(sites)) {
     const uses = read(rel).match(/(href=\{|href: )ADD_TOKENS_PATH/g) || [];
     assert.equal(uses.length, n, `${rel} reads ADD_TOKENS_PATH at each of its ${n} Add tokens links`);

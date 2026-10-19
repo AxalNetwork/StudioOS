@@ -12,6 +12,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { TopUpsCard, UsagePhoneView, TOP_UPS_LIMIT } from '../src/pages/account/AccountUsage.jsx';
 import { topUpRows, signedMicroUsd } from '../src/pages/account/usageModel.js';
+import { ADD_TOKENS_PATH } from '../src/lib/aiTokens.js';
 
 const html = (el) => renderToStaticMarkup(h(MemoryRouter, { initialEntries: ['/account/usage'] }, el));
 const text = (s) => s.replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/\s+/g, ' ').trim();
@@ -72,10 +73,10 @@ test('D755 nothing in the browser adds up a balance', () => {
   assert.equal(signedMicroUsd(-1_234_560_000), '−$1,234.56');
 });
 
-test('D755 no top-ups: the empty state and Add tokens to the packs', () => {
+test('D755 no top-ups: the empty state and Add tokens on the one path', () => {
   const markup = html(h(TopUpsCard, { history: ready({ items: [], pending: [], next_before: null }) }));
   assert.match(text(markup), /No top-ups yet\./);
-  assert.match(markup, /<a href="\/plans-and-pricing#token-packs"[^>]*data-testid="usage-top-ups-add"[^>]*>Add tokens<\/a>/);
+  assert.match(markup, new RegExp(`<a href="${ADD_TOKENS_PATH.replace(/[?]/g, '\\?')}"[^>]*data-testid="usage-top-ups-add"[^>]*>Add tokens</a>`), 'the one Add tokens path (#1916)');
 });
 
 test('D755 an unreadable history blanks only this card, with Retry', () => {
