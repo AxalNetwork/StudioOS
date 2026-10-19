@@ -201,7 +201,7 @@ export async function digestSession(env: Env, opts: {
     ).bind(session.id, `-${MIN_HOURS_BETWEEN} hours`).first();
     if (recent) {
       await env.DB.prepare(
-        "UPDATE interview_sessions SET digest_status = 'queued', digest_note = ? WHERE id = ? AND digest_status IS NOT 'running' AND consent_status <> 'declined'",
+        "UPDATE interview_sessions SET digest_note = ? WHERE id = ? AND digest_status IS NOT 'running' AND consent_status <> 'declined'",
       ).bind(NOTES.chatQuiet, session.id).run();
       return { ok: false, status: 'skipped', reason: 'quiet_window', note: NOTES.chatQuiet };
     }

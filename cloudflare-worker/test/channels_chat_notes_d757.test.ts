@@ -225,7 +225,7 @@ test('a job already queued before the first digest cannot bill changed text agai
   const skipped: any = await runSessionStructureJob(f.env, jobs(f)[1].payload);
   assert.equal(skipped.reason, 'quiet_window'); assert.equal(f.modelCalls(), calls);
   const held = (await loadSession(f.env, f.sessionId))!;
-  assert.equal(held.digested_at, at); assert.equal(held.digest_status, 'queued'); assert.equal(held.digest_note, NOTES.chatQuiet);
+  assert.equal(held.digested_at, at); assert.equal(held.digest_status, 'done'); assert.equal(held.digest_note, NOTES.chatQuiet);
   f.db.prepare("UPDATE interview_sessions SET digested_at = datetime('now', '-7 hours') WHERE id = ?").run(f.sessionId);
   assert.equal((await runSessionStructureJob(f.env, jobs(f)[1].payload))?.status, 'done');
   assert.ok(f.modelCalls() > calls);
