@@ -19,7 +19,7 @@ import {
   TIER_LABEL, agoLabel, authKind, buildCatalogue, companiesLabel, connectFailure, connectionStatus,
   disconnectNote, feedsLabel, flowBanner, lastSyncLabel, moduleLabel,
   keepBuildProject, coreSystemOffer, isEntityRow, isPersonalMercury,
-  FREE_KEEPS_CONNECTORS, INTEGRATION_KEYS_HREF, adminKeysHref,
+  FREE_KEEPS_CONNECTORS, INTEGRATION_KEYS_HREF, adminKeysHref, patOnly,
 } from './connectorsModel';
 import { cyclesWrite } from '../../lib/api/cycles';
 
@@ -503,7 +503,9 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
   };
   const updating = !!conn && view === 'key';
   const name = p.display_name;
-  const keySteps = ['What it uses', kind === 'key' || kind === 'token_first' ? 'Key' : 'Sign in', 'Connected'];
+  // D751 (#1881): with no OAuth client, a token connector's only way in is its key.
+  const tokenOnly = patOnly(p);
+  const keySteps = ['What it uses', kind === 'key' || kind === 'token_first' || tokenOnly ? 'Key' : 'Sign in', 'Connected'];
 
   const go = (v) => { setMessage(''); setView(v); };
   const syncView = view === 'sync' && p.key === 'github' && !!conn?.uid;
@@ -559,7 +561,8 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
       setMessage(err?.message || '');
       // D715 decision 8: a refused Mercury token prints only the Worker's sentence, on the key form, with the token cleared.
       if (personalMercury && err?.status !== 402) { setApiKey(''); if (!err?.message) setMessage('Mercury could not be connected.'); }
-      else setView(connectFailure(err, p));
+      // The key form's refusal is about the key, so it reads `badkey`, never `refused` (D751 #1881).
+      else setView(connectFailure(err, { ...p, auth_type: 'api_key' }));
     } finally { setBusy(false); }
   };
 
@@ -696,14 +699,19 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
             </div>
           </Group>
         )}
-        {p.supports_pat && kind === 'oauth' && (
+        {p.supports_pat && kind === 'oauth' && !tokenOnly && (
           <p className="mx-5 mt-3 text-[12px] text-axal-muted dark:text-gray-400">
             Your workspace blocks outside apps? <button type="button" className={BTN.link} onClick={() => go('key')}>Use a personal access token instead</button>
           </p>
         )}
+        {tokenOnly && kind === 'oauth' && (
+          <p className="mx-5 mt-3 text-[12px] text-axal-muted dark:text-gray-400" data-testid="connector-pat-only">
+            Sign-in with {name} isn&apos;t set up on Axal yet, so {name} connects with a personal access token.
+          </p>
+        )}
       </>
     );
-    const cont = kind === 'key' || kind === 'token_first'
+    const cont = kind === 'key' || kind === 'token_first' || tokenOnly
       ? <button type="button" className={BTN.primary} onClick={() => go('key')} data-testid="button-connect-continue">Continue</button>
       : <button type="button" className={BTN.primary} disabled={busy} onClick={startOauth} data-testid="button-connect-continue">Continue to {name}</button>;
     footer = <>{backBtn}<button type="button" className={BTN.ghost} onClick={onClose}>Cancel</button>{cont}</>;
@@ -745,7 +753,7 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
             {p.docs_url && <> <a className={BTN.link} href={p.docs_url} target="_blank" rel="noreferrer">Where to find it <ExternalLink size={11} className="inline" /></a></>}
           </p>
         </div>
-        {kind === 'token_first' && !updating && (
+        {kind === 'token_first' && !updating && !p.oauthOff && (
           <p className="mx-5 mt-3 text-[12px] text-axal-muted dark:text-gray-400">
             Your portal is cleared for HubSpot's public app? <button type="button" className={BTN.link} onClick={startOauth}>Connect with OAuth instead</button>
           </p>
@@ -880,11 +888,17 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
 /** The flow's views that connect something: none of them may act for a company the member cannot connect for. */
 const CONNECT_VIEWS = new Set(['pre', 'signin', 'key', 'badkey', 'cancelled', 'refused', 'overreach', 'unconfigured', 'company', 'setup_unreadable']);
 
-/** The view a click on a connector opens: its sheet when connected, the plan when locked, else the flow's first step. */
+/**
+ * The view a click on a connector opens: its sheet when connected; #1879's
+ * `unconfigured` when Axal holds no OAuth client and there is no token to
+ * take its place (checked before the plan, so nothing sells a plan for what
+ * cannot connect, D751 #1881); the plan when locked; else the flow's first step.
+ */
 export function openingView(p) {
   // The entity row opens the entity sheet, so the `pre` view's teammate read never fires for it (D715).
   if (isEntityRow(p)) return 'entity';
   if (p.connection) return 'detail';
+  if (p.oauthOff && !p.supports_pat) return 'unconfigured';
   if (p.locked) return 'pro';
   return 'pre';
 }

@@ -124,6 +124,13 @@ export function firstPartyConnection(key, status) {
  * null. `firstPartyCards` is `/available`'s `first_party` (D753 W2): the
  * Worker's card for a first-party connector the registry does not list. A first-party connector whose status could not be read, or that is
  * not configured on this deployment, is still listed but cannot be connected.
+ *
+ * D751 (#1881): a registry OAuth connector whose client the Worker reports
+ * unset (`configured: false`) is `oauthOff`. It is listed but cannot be
+ * connected, unless it also takes a personal access token (Calendly,
+ * HubSpot), which then becomes its only way in (`patOnly`). `true`, `null`
+ * (unreadable) and a missing field keep today's behaviour, and an `api_key`
+ * connector is never `oauthOff`: the member brings that key.
  */
 export function buildCatalogue({ providers = [], items = [], waitlist = [], firstParty = {}, firstPartyCards = [], companies = null } = {}) {
   const byKey = new Map();
@@ -142,15 +149,17 @@ export function buildCatalogue({ providers = [], items = [], waitlist = [], firs
       continue;
     }
     seen.add(p.key);
+    const oauthOff = p.auth_type === 'oauth2' && p.configured === false;
     out.push({
       ...p,
+      oauthOff,
       // D753 decision 7: Axal VC made every connector; the Worker says so in `made_by`.
       by: p.made_by?.name || p.display_name,
       category: categoryOf(p),
       connection: byKey.get(p.key) || null,
       joined: joined.has(p.key),
       locked: !!(p.locked_for_user ?? p.tier_locked),
-      available: p.status !== 'coming_soon' && p.has_implementation !== false,
+      available: p.status !== 'coming_soon' && p.has_implementation !== false && !(oauthOff && !p.supports_pat),
     });
   }
   const cards = new Map((Array.isArray(firstPartyCards) ? firstPartyCards : []).filter((c) => c?.key).map((c) => [c.key, c]));
@@ -404,7 +413,8 @@ export function discoverSections(catalogue, chip = 'All', { q = '', suggestions 
     return [{ title: chip, cards }];
   }
   // A connector this deployment cannot connect (a first-party one with no
-  // OAuth app, or one whose status could not be read) stays in Top, with its
+  // OAuth app, a registry one whose OAuth client is unset (D751), or one whose
+  // status could not be read) stays in Top, with its
   // reason in the corner; only the registry's own coming_soon is "Coming soon".
   const top = list.filter((p) => p.status !== 'coming_soon');
   const soon = list.filter((p) => p.status === 'coming_soon');
@@ -636,6 +646,20 @@ export function isUnconfigured(code) {
 /** Where a Super Admin sets a connector's keys (D751 decision 6). */
 export const INTEGRATION_KEYS_HREF = '/admin?tab=integration-keys';
 
+/** D751 (#1881): Axal holds no OAuth client, but the connector takes a personal access token, so the token is its only way in. */
+export const patOnly = (p) => !!(p?.oauthOff && p?.supports_pat);
+
+/**
+ * D751 (#1881): the way to a connector's keys, for the one person who can set
+ * them. A fixed same-app path, never a value from the Worker; null for anyone
+ * who is not a Super Admin, a connector Axal is not missing a client for, a
+ * coming-soon one, or the Axal entities' Mercury row.
+ */
+export function keysHref(p, { superAdmin = false } = {}) {
+  if (!superAdmin || !p?.oauthOff || p.status === 'coming_soon' || isEntityRow(p)) return null;
+  return INTEGRATION_KEYS_HREF;
+}
+
 /**
  * The Integration keys link for an `unconfigured` failure: the Worker's
  * `admin_href` when it is one of this app's admin tabs, else the console. A
@@ -705,7 +729,11 @@ export function disconnectNote(p, role = null) {
 
 export const TOOL_FILTERS = ['All', 'Connected', 'Not connected', 'Failing'];
 
-/** A tool's state in Build's sheet: connected, failing, not connected, coming soon, or not set up here. */
+/**
+ * A tool's state in Build's sheet: connected, failing, not connected, coming
+ * soon, or not set up here (a first-party connector with no OAuth app, or a
+ * registry one whose OAuth client is unset, D751).
+ */
 export function toolState(p) {
   if (p.connection) return attentionReason(p.connection) ? 'failing' : 'connected';
   if (p.status === 'coming_soon') return 'soon';

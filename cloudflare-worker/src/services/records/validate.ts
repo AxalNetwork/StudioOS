@@ -398,7 +398,7 @@ const STATE_WORD: Record<string, [string, string]> = {
   booked: ['Booked', 'vio'], logged: ['Logged', 'grey'],
 };
 const CONSENT_WORD: Record<string, string> = {
-  verbal: 'Said yes out loud', written: 'In writing', in_app: 'In the app', pre_agreed: 'Agreed beforehand', chat_reply: 'Agreed in WhatsApp',
+  verbal: 'Said yes out loud', written: 'In writing', in_app: 'In the app', pre_agreed: 'Agreed beforehand', chat_reply: 'Agreed in the chat',
 };
 const IMPORTED: Record<string, string> = { whatsapp: 'WhatsApp', telegram: 'Telegram', zoom: 'Zoom', google_meet: 'Google Meet' };
 

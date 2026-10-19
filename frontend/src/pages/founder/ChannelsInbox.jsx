@@ -6,7 +6,7 @@ import { Unreadable } from '../../ui';
 import { useChannelsOverview } from '../account/ChannelsGroup';
 import { CHANNELS_HREF, MESSAGING_PROVIDERS } from '../account/channelsModel';
 import { ProviderTag } from './InterviewChannels';
-import { CHAT_CONSENT_METHODS, canAttest, chatConsentOf, consentLine, windowClosedSentence } from './chatConsent.js';
+import { CHAT_CONSENT_METHODS, canAttest, chatConsentOf, consentLine, noticeBlocked, windowClosedSentence } from './chatConsent.js';
 import {
   THREAD_TABS, assignedSentence, clientKeyFor, composerState, contactLabel, interviewOptions, keepKeyAfter, messageView,
   replyFailureText, replyOutcome, sessionHref, threadItems, threadRow,
@@ -242,10 +242,15 @@ export function AssignControls({ thread, venture, api = channelsApi, onAssigned,
  * consent" (Axal's notice in the chat, only while its 24-hour window is open
  * and the Worker allows another), and the member's word once the notice was
  * delivered. The Worker's refusals are shown in its words.
+ *
+ * Telegram (D756 §1.5, #1981): asked while pending too; without the bot's
+ * reply right or outside the window, the reason and "Copy the notice" (the
+ * Worker's text); never the member's word.
  */
 export function ThreadConsent({ thread, consent: raw, api = channelsApi, onChanged }) {
   const [state, setState] = useState({ busy: false, error: '', note: '' });
   const consent = chatConsentOf({ consent: raw });
+  const tg = thread.provider === 'telegram';
   if (!consent.required) return null;
   const name = (thread.interviewee_name || thread.contact_name || '').trim();
   const line = consentLine(consent, name, { provider: thread.provider });
@@ -257,18 +262,29 @@ export function ThreadConsent({ thread, consent: raw, api = channelsApi, onChang
     catch (e) { setState({ busy: false, error: e?.message || 'That could not be done. Try again.', note: '' }); }
   };
   const open = consent.status === 'not_asked' || consent.status === 'requested';
+  const blocked = tg ? noticeBlocked(thread, consent) : null;
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(consent.notice_text); setState({ busy: false, error: '', note: 'Copied. Paste it into the Telegram chat.' }); }
+    catch { setState({ busy: false, error: 'The notice could not be copied. Select it and copy it by hand.', note: '' }); }
+  };
   return (
     <div className="space-y-1.5 rounded-md border border-axal-hairline p-3 dark:border-gray-800" data-testid="thread-consent" data-status={consent.status}>
       <p className="m-0 text-[12.5px] font-semibold text-gray-900 dark:text-gray-100" data-testid="thread-consent-line">{line.text}</p>
-      {open && !linked && <p className={NOTE}>Add this chat to an interview first. Axal asks for consent once it is linked.</p>}
-      {open && linked && (
+      {open && !linked && !tg && <p className={NOTE}>Add this chat to an interview first. Axal asks for consent once it is linked.</p>}
+      {open && (linked || tg) && !blocked && (
         <div className="flex flex-wrap items-center gap-2">
           <button type="button" className={PRIMARY} disabled={state.busy || !consent.can_request || !consent.window_open}
-            onClick={() => act(() => api.requestConsent(thread.uid), 'Axal asked in the chat.')} data-testid="button-ask-consent">Ask for consent</button>
+            onClick={() => act(() => api.requestConsent(thread.uid), 'Axal asked in the chat.')} data-testid="button-ask-consent">{tg ? 'Ask for consent in Telegram' : 'Ask for consent'}</button>
         </div>
       )}
-      {open && !consent.window_open && <p className="m-0 text-[12px] text-amber-800 dark:text-amber-300" data-testid="thread-consent-window">{windowClosedSentence(name, thread.provider)}</p>}
-      {linked && canAttest(consent) && (
+      {open && !tg && !consent.window_open && <p className="m-0 text-[12px] text-amber-800 dark:text-amber-300" data-testid="thread-consent-window">{windowClosedSentence(name, thread.provider)}</p>}
+      {open && blocked && (
+        <div className="space-y-1" data-testid="thread-consent-copy">
+          <p className="m-0 text-[12px] text-amber-800 dark:text-amber-300" data-testid="thread-consent-copy-reason">{`${blocked}, so Axal cannot send the notice. Paste it into the chat yourself.`}</p>
+          {consent.notice_text && <button type="button" className={SMALL} onClick={copy} data-testid="button-copy-notice">Copy the notice</button>}
+        </div>
+      )}
+      {linked && canAttest(consent, thread.provider) && (
         <div className="space-y-1" data-testid="thread-consent-attest">
           <p className={NOTE}>{`${name || 'They'} already agreed? Say how:`}</p>
           <div className="flex flex-wrap gap-1.5">

@@ -11,6 +11,11 @@
 //   6. Active-licenses surface (PRESERVED).
 //   7. Admin-only "Add Product" button + modal (reuses adminCatalog create).
 //
+// D755 (#1915): each plan card also shows its AI allowance and the free plans
+// get cards of their own, from GET /public/plans-and-packs (lib/plansPricing.js).
+// The Token packs section, its footer and the pack filter are CR7's
+// (TokenPacksSection.jsx, #1985).
+//
 // Prices ALWAYS come from GET /catalog/products — never hardcoded, never
 // client-computed. Subscriptions bypass the cart (one-click Stripe via the
 // slide-over); one-time items go through the cart → /checkout.
@@ -22,16 +27,21 @@ import {
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import { usePhoneWidth } from '../ui';
-import PricingPhone from './account/PricingPhone';
+import PricingPhone, { usePricingReads } from './account/PricingPhone';
 import { useCart } from '../components/products/useCart';
 import BillingCartBar from '../components/products/BillingCartBar';
 import CartDrawer from '../components/products/CartDrawer';
 import ProductCard from '../components/products/ProductCard';
 import BundleCard from '../components/products/BundleCard';
+import FreePlanCard from '../components/products/FreePlanCard';
+import TokenPacksSection, { isPackProduct } from '../components/products/TokenPacksSection';
 import ProductSlideOver from '../components/products/ProductSlideOver';
 import {
   formatMoney, formatDate, AUDIENCE_FILTERS, priceCycle, isBundleProduct,
 } from '../components/products/productsShared';
+import {
+  planAi, planForProduct, planOf, freePlans,
+} from '../lib/plansPricing';
 
 const REDEEM_REASONS = {
   not_found: "That code isn't valid. Check for typos — codes look like AXAL-XXXX-XXXX.",
@@ -271,6 +281,11 @@ export default function ProductsPage() {
   const deepLinkCode = searchParams.get('code') || '';
 
   const cart = useCart();
+  const [tokenPacks, setTokenPacks] = useState([]);
+  // D755: the public plans-and-packs read and the member's own allowance (its licence names "Your plan").
+  const { pricing, budget } = usePricingReads();
+  const licence = budget.status === 'ready' && typeof budget.data?.licence === 'string' ? budget.data.licence : null;
+  const free = useMemo(() => freePlans(pricing), [pricing]);
   const [products, setProducts] = useState(null);   // null = loading
   const [catalogError, setCatalogError] = useState(null);
   const [unlocks, setUnlocks] = useState([]);
@@ -307,8 +322,8 @@ export default function ProductsPage() {
   // Deep-linked product for the slide-over. When /products/:productId is hit
   // directly, open the panel pre-open once the catalog resolves.
   const openProduct = useMemo(
-    () => (productId && products ? products.find((p) => p.id === productId) || null : null),
-    [productId, products],
+    () => (productId && products ? products.find((p) => p.id === productId && !isPackProduct(p, tokenPacks)) || null : null),
+    [productId, products, tokenPacks],
   );
 
   // How the product modal was opened: carries the bundle card's license
@@ -338,6 +353,7 @@ export default function ProductsPage() {
 
   // Add a one-time item to the cart.
   const addToCart = useCallback((product, price, qty = 1) => {
+    if (isPackProduct(product, tokenPacks)) return;
     cart.add({
       price_id: price.id,
       product_id: product.id,
@@ -347,7 +363,7 @@ export default function ProductsPage() {
       cycle: priceCycle(price),
     }, qty);
     showToast(`${product.name} added to your order`);
-  }, [cart, showToast]);
+  }, [cart, showToast, tokenPacks]);
 
   // Subscription one-click success (from the modal's embedded checkout).
   // Clear the modal intent so back/deep-link reopens never resume checkout.
@@ -377,8 +393,8 @@ export default function ProductsPage() {
     [products],
   );
   const addons = useMemo(
-    () => (products || []).filter((p) => !isBundleProduct(p)),
-    [products],
+    () => (products || []).filter((p) => !isBundleProduct(p) && !isPackProduct(p, tokenPacks)),
+    [products, tokenPacks],
   );
   const visibleAddons = useMemo(() => {
     if (audienceFilter === 'all') return addons;
@@ -481,7 +497,7 @@ export default function ProductsPage() {
       {loadingState}
       {emptyState}
 
-      {bundles.length > 0 && (
+      {(bundles.length > 0 || free.length > 0) && (
         <section>
           <div className="mb-3.5">
             <h2 className="text-[19px] font-bold tracking-[-.01em] text-gray-900 dark:text-gray-100">Profile bundles</h2>
@@ -490,18 +506,29 @@ export default function ProductsPage() {
             </p>
           </div>
           <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
-            {bundles.map((p) => (
-              <BundleCard
-                key={p.id}
-                product={p}
-                globalCycle={globalCycle}
-                onPreview={handlePreviewBundle}
-                onSubscribe={handleSubscribeBundle}
-              />
+            {free.map((plan) => (
+              <FreePlanCard key={plan.licence_key} plan={plan} ai={planAi(plan, pricing, { licence })} />
             ))}
+            {bundles.map((p) => {
+              // The read's row for this product; its metadata when the read is out, so the card still says Unreadable.
+              const plan = planForProduct(p, pricing) || planOf(p.metadata);
+              return (
+                <BundleCard
+                  key={p.id}
+                  product={p}
+                  globalCycle={globalCycle}
+                  onPreview={handlePreviewBundle}
+                  onSubscribe={handleSubscribeBundle}
+                  ai={planAi(plan, pricing, { licence })}
+                  family={plan?.family || null}
+                />
+              );
+            })}
           </div>
         </section>
       )}
+
+      <TokenPacksSection onPacksRead={setTokenPacks} />
 
       {(addons.length > 0 || (products !== null && products.length > 0)) && (
         <section>
@@ -586,5 +613,5 @@ export default function ProductsPage() {
     </div>
   );
 
-  return phone ? <PricingPhone role={user?.role}>{page}</PricingPhone> : page;
+  return phone ? <PricingPhone pricing={pricing} budget={budget}>{page}</PricingPhone> : page;
 }

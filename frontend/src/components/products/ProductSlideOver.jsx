@@ -15,7 +15,7 @@ import { X, Package, CheckCircle2 } from 'lucide-react';
 import AxalCheckout from '../AxalCheckout';
 import {
   formatMoney, availableCycles, pricesByCycle, cycleUnitLabel, productDescription,
-  priceCycle, profileForProduct, BUNDLE_CONTENT,
+  priceCycle, profileForProduct, bundleContentFor,
 } from './productsShared';
 
 const CYCLE_LABELS = { monthly: 'Monthly', yearly: 'Yearly', onetime: 'One-time' };
@@ -54,7 +54,7 @@ export default function ProductSlideOver({
   const isOneTime = price && priceCycle(price) === 'onetime';
 
   const profile = profileForProduct(product);
-  const content = BUNDLE_CONTENT[product.name];
+  const content = bundleContentFor(product);
   const metaFeatures = Array.isArray(product.metadata?.features)
     ? product.metadata.features
     : (typeof product.metadata?.features === 'string'

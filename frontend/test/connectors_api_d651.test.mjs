@@ -484,3 +484,54 @@ test('D751: HubSpot\'s token with no company chosen says to choose one, not that
     assert.doesNotMatch(m.text(), /That key is not valid/);
   } finally { await m.unmount(); f.restore(); }
 });
+
+// ============================================================== D751 (#1881)
+
+const OFF = (extra = {}) => ({ ...P('github', 'GitHub', 'code', 'beta', 'free', 'oauth2'), configured: false, ...extra });
+
+for (const [who, user, link] of [
+  ['a Super Admin', { id: 1, role: 'admin', is_super_admin: 1 }, true],
+  ['a plain Admin', { id: 2, role: 'admin', is_super_admin: 0 }, false],
+  ['a founder', { id: 3, role: 'founder' }, false],
+]) {
+  test(`D751: an unset GitHub reads Not set up here, and ${who} ${link ? 'gets' : 'gets no'} way to its keys`, async () => {
+    const f = mockFetch({ 'GET /connectors/available': [200, { providers: [OFF()] }], 'GET /auth/me': [200, user] });
+    const m = await mount(h(AuthProvider, null, h(ConnectorsSection)), '/account/connectors?tab=discover', { user });
+    try {
+      await m.flush();
+      assert.match(m.text(), /Not set up here/);
+      assert.equal(!!m.byTestId('connector-keys-link-github'), link);
+    } finally { await m.unmount(); f.restore(); }
+  });
+}
+
+test('D751: with no OAuth client, Calendly\'s Continue opens the token form and never starts a sign-in', async () => {
+  const [cal] = buildCatalogue({ providers: [{ ...P('calendly', 'Calendly', 'scheduling', 'live', 'free', 'oauth2', { supports_pat: true }), configured: false }], items: [], firstParty: {} });
+  const f = mockFetch({});
+  let view = 'pre';
+  const host = {};
+  const Host = () => { const [, tick] = useState(0); host.tick = tick; return h(ConnectorPanel, { p: cal, view, setView(v) { view = v; host.tick((n) => n + 1); }, onClose() {} }); };
+  const m = await mount(h(Host));
+  try {
+    await m.click('Continue');
+    await m.flush();
+    assert.ok(m.byId('connector-key-form'), 'the token form');
+    assert.equal(f.calls.filter((c) => c.path.startsWith('/connectors/oauth/')).length, 0, 'no sign-in was started');
+  } finally { await m.unmount(); f.restore(); }
+});
+
+test('D751: a rejected token from the key form is badkey, never refused', async () => {
+  const [cal] = buildCatalogue({ providers: [{ ...P('calendly', 'Calendly', 'scheduling', 'live', 'free', 'oauth2', { supports_pat: true }), configured: false }], items: [], firstParty: {} });
+  const f = mockFetch({ 'POST /connectors/connect': [400, { error: 'connect_failed' }] });
+  let view = 'key';
+  const host = {};
+  const Host = () => { const [, tick] = useState(0); host.tick = tick; return h(ConnectorPanel, { p: cal, view, setView(v) { view = v; host.tick((n) => n + 1); }, onClose() {} }); };
+  const m = await mount(h(Host));
+  try {
+    await act(async () => { await m.props(m.byId('connector-key-form')).onSubmit({ preventDefault() {} }); });
+    await m.flush();
+    assert.ok(m.byTestId('connector-sheet-badkey'), 'badkey');
+    assert.equal(m.byTestId('connector-sheet-refused'), undefined);
+    assert.match(m.text(), /That key is not valid\. Check it at Calendly and paste it again\./);
+  } finally { await m.unmount(); f.restore(); }
+});

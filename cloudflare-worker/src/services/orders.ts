@@ -72,6 +72,7 @@ export interface Order {
   total: number;
   promo_code: string | null;
   items: OrderLine[];
+  ai_topup?: Awaited<ReturnType<typeof import('./aiCredits').orderTopUp>>;
 }
 
 interface OrderRow {
@@ -304,7 +305,15 @@ export async function getOrderForUser(
 ): Promise<Order | null> {
   const row = await getOrderRow(env, orderRef);
   if (!row || row.user_id !== userId) return null;
-  return rowToOrder(row);
+  const order = rowToOrder(row);
+  const { isTokenPackPrice, orderTopUp } = await import('./aiCredits');
+  for (const line of order.items) {
+    if (line.kind === 'token_pack' || await isTokenPackPrice(env, line.price_id)) {
+      order.ai_topup = await orderTopUp(env, userId, orderRef);
+      break;
+    }
+  }
+  return order;
 }
 
 /** All of a user's orders, most recent first. */

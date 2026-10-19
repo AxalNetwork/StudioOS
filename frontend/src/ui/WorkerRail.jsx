@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { PanelRightClose, PanelRightOpen, X } from 'lucide-react';
 import { UNSAFE_LocationContext } from 'react-router-dom';
 import useAiBudget from '../hooks/useAiBudget';
-import { aiTopupState, microMoney, TOPUP_UNAVAILABLE, usageMoney } from './AiBudgetUsage';
+import { ADD_TOKENS_PATH, TOPUP_UNAVAILABLE, aiTokenState, microMoney, usageMoney } from '../lib/aiTokens';
 import useAiSpend from '../hooks/useAiSpend';
 import useAssistMode from '../hooks/useAssistMode';
 import { safeReadJSON, safeWriteJSON } from '../lib/storage';
@@ -301,8 +301,8 @@ export const NO_SWITCH_LINE = 'No switch here. Nothing on this page fills a blan
  */
 export const SAFETY_LINE = 'Eadwyn drafts; you send.';
 
-/** The top-up read as Add tokens draws it: `AiBudgetUsage.jsx`'s checks (D750 decision 3). */
-export const topUpState = aiTopupState;
+/** The top-up read as Add tokens draws it: `lib/aiTokens.js`'s one model (D755, #1916). */
+export const topUpState = (product, productError) => aiTokenState({ error: productError, data: product });
 
 /**
  * THE USAGE BOX (AIR:30-36), from `GET /api/ai-budget/me` and `/top-up`
@@ -360,9 +360,9 @@ export function RailUsage({ reading }) {
       </div>
       <p className="fwr-usage-note">Runs use your plan's allowance first, then your top-up balance.</p>
       {topUp === 'ready' && (
-        <a href="/checkout?ai_topup=1" className="fwr-add-tokens" data-testid="link-worker-rail-add-tokens">Add tokens</a>
+        <a href={ADD_TOKENS_PATH} className="fwr-add-tokens" data-testid="link-worker-rail-add-tokens">Add tokens</a>
       )}
-      {topUp === 'unavailable' && <p className="fwr-usage-note" data-testid="text-worker-rail-topup">{TOPUP_UNAVAILABLE}</p>}
+      {topUp === 'not_ready' && <p className="fwr-usage-note" data-testid="text-worker-rail-topup">{TOPUP_UNAVAILABLE}</p>}
       {topUp === 'unreadable' && (
         <div data-testid="text-worker-rail-topup">
           <Unreadable what="The AI top-up" claim="Retry to read the purchase option." onRetry={reading.reload} />

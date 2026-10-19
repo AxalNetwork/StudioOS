@@ -5,14 +5,20 @@
 // Prices come from the live catalog only. Subscriptions never enter the
 // one-time cart — Subscribe opens the product modal with the embedded
 // Stripe checkout started (quantity carries through as license seats).
+//
+// D755 §11 (#1915): `ai` is `planAi(...)` for this product from the public
+// plans-and-packs read: the allowance, what it covers, when it resets, Top up
+// with token packs, and "Your plan". `family` names the card after the role.
 import React, { useMemo, useState } from 'react';
 import { Check, ChevronDown } from 'lucide-react';
 import {
-  formatMoney, pricesByCycle, profileForProduct, BUNDLE_CONTENT, MOST_POPULAR_BUNDLE,
+  formatMoney, pricesByCycle, profileForProduct, bundleContentFor, isMostPopularBundle,
   productDescription,
 } from './productsShared';
+import PlanAi, { YourPlanBadge } from './PlanAi';
+import { FAMILY_LABELS } from '../../lib/plansPricing';
 
-export default function BundleCard({ product, globalCycle, onPreview, onSubscribe }) {
+export default function BundleCard({ product, globalCycle, onPreview, onSubscribe, ai = null, family = null }) {
   const [qty, setQty] = useState(1);
   const [expanded, setExpanded] = useState(false);
 
@@ -24,10 +30,10 @@ export default function BundleCard({ product, globalCycle, onPreview, onSubscrib
   const isYearly = wantYearly;
 
   const profile = profileForProduct(product);
-  const content = BUNDLE_CONTENT[product.name];
+  const content = bundleContentFor(product);
   const features = content?.features || [];
   const description = productDescription(product);
-  const popular = product.name === MOST_POPULAR_BUNDLE;
+  const popular = isMostPopularBundle(product);
 
   return (
     <div
@@ -44,11 +50,14 @@ export default function BundleCard({ product, globalCycle, onPreview, onSubscrib
         </span>
       )}
 
-      {profile && (
-        <span className={`self-start inline-block ${profile.bg} ${profile.text} text-[11.5px] font-bold tracking-[.02em] px-[11px] py-[5px] rounded-lg`}>
-          {profile.label}
-        </span>
-      )}
+      <div className="flex flex-wrap items-center gap-2">
+        {(profile || FAMILY_LABELS[family]) && (
+          <span className={`self-start inline-block ${profile?.bg || 'bg-violet-600/10'} ${profile?.text || 'text-violet-600 dark:text-violet-400'} text-[11.5px] font-bold tracking-[.02em] px-[11px] py-[5px] rounded-lg`}>
+            {FAMILY_LABELS[family] || profile.label}
+          </span>
+        )}
+        {ai?.current && <YourPlanBadge />}
+      </div>
       <h3 className="mt-3 text-lg font-bold text-gray-900 dark:text-gray-100">{product.name}</h3>
 
       <div className="mt-2.5 flex items-baseline gap-1.5">
@@ -60,6 +69,7 @@ export default function BundleCard({ product, globalCycle, onPreview, onSubscrib
       <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
         {isYearly ? 'Billed annually · Cancel anytime' : 'Billed monthly · Cancel anytime'}
       </p>
+      <PlanAi ai={ai} testid={`bundle-ai-${product.id}`} />
 
       <div className="h-px bg-gray-900/[.07] dark:bg-white/10 my-4" />
 
