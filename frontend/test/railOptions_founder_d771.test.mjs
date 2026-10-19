@@ -21,6 +21,7 @@ import { CYCLES, CYCLE_ROUTE, cycleBands, cycleFills, cycleRouteSource } from '.
 import {
   FOUNDER_HANDLERS, FOUNDER_KINDS, FOUNDER_OPTIONS, FOUNDER_QUIET_PAGES,
 } from '../src/lib/railOptions/founder.js';
+import { pageKeyFor } from '../src/lib/railPages.js';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const CANVAS = JSON.parse(read('design/incoming/airail-every-page-data/canvas.json'));
@@ -156,3 +157,43 @@ test('every founder page has an option or a reason it has none, never both', () 
     else assert.ok(runs.length, `${page} has no option and no reason`);
   }
 });
+
+/**
+ * The sections whose options call `useRailOption` (D768, #2092), one D771 PR
+ * each: the founder's options there are on the rail. A section joins this
+ * list in the PR that wires it.
+ */
+const WIRED = ['Studio'];
+const sectionOf = (page) => page.split(' · ')[1];
+const routeOf = (route) => {
+  const [path, query] = route.split('?');
+  return { path, search: query ? `?${query}` : '' };
+};
+const railKeys = (src) => [...src.matchAll(/useRailOption\(([^;]*?)\);/g)]
+  .flatMap((m) => [...m[1].matchAll(/'([a-z]+:[a-z0-9_/-]+)'/g)].map((k) => k[1]));
+
+test('every option names the address it is pressed on', () => {
+  for (const o of FOUNDER_OPTIONS) {
+    assert.match(o.route || '', /^\/[a-z0-9/_?=&-]*$/, `${o.page} / ${o.key}: no route`);
+  }
+});
+
+test('on a wired section, each option is on its page and names itself to the rail', () => {
+  assert.ok(WIRED.every((w) => Object.keys(CANVAS.profiles.Founder).includes(w)), 'a wired section is not the canvas\'s');
+  for (const o of FOUNDER_OPTIONS.filter((x) => WIRED.includes(sectionOf(x.page)))) {
+    const { path, search } = routeOf(o.route);
+    assert.equal(pageKeyFor(path, 'founder', { search }), o.page,
+      `${o.key}: D768's page map puts ${o.route} on another page`);
+    if (o.handler === 'none') continue;
+    const named = o.at.some(([file]) => railKeys(codeOnly(read(file))).includes(o.key));
+    assert.ok(named, `${o.page} / ${o.key}: no useRailOption('${o.key}', …) where it lives`);
+  }
+  // And the other way: every option a wired file names is listed there.
+  const files = new Set(FOUNDER_OPTIONS.filter((x) => WIRED.includes(sectionOf(x.page))).flatMap((x) => x.at.map(([f]) => f)));
+  for (const file of files) {
+    for (const key of railKeys(codeOnly(read(file)))) {
+      assert.ok(optionsAt(file).some((o) => o.key === key), `${file} names ${key} to the rail, and no founder option lists it`);
+    }
+  }
+});
+
