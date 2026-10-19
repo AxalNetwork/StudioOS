@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useContext, useEffect, useId, useReducer, useRef, useState } from 'react';
+import { NO_PLAN_LINE, dayCapped, noPlan } from '../lib/planAllowance';
 import { createPortal } from 'react-dom';
 import { PanelRightClose, PanelRightOpen, X } from 'lucide-react';
 import { UNSAFE_LocationContext } from 'react-router-dom';
@@ -357,9 +358,10 @@ export function RailUsage({ reading }) {
       </div>
     );
   }
+  // D783: a member has no daily limit, so the box shows the month only; with no plan, the no-plan line.
   const rows = [
-    { t: 'Today', spent: b.day_spend_microusd, cap: b.daily_microusd, reset: 'Resets at 00:00 UTC', id: 'today' },
-    { t: 'This month', spent: b.month_spend_microusd, cap: b.monthly_microusd, reset: 'Resets on the 1st', id: 'month' },
+    ...(dayCapped(b) ? [{ t: 'Today', spent: b.day_spend_microusd, cap: b.daily_microusd, reset: 'Resets at 00:00 UTC', id: 'today' }] : []),
+    ...(noPlan(b) ? [] : [{ t: 'This month', spent: b.month_spend_microusd, cap: b.monthly_microusd, reset: 'Resets on the 1st', id: 'month' }]),
   ];
   const topUp = topUpState(reading.product, reading.productError);
   return (
@@ -370,6 +372,7 @@ export function RailUsage({ reading }) {
           <span>A run cost more than it held. New runs wait while HQ checks the charge.</span>
         </div>
       )}
+      {noPlan(b) && <p className="fwr-usage-note" data-testid="text-worker-rail-no-plan">{NO_PLAN_LINE}</p>}
       {rows.map((r) => {
         const meter = r.cap > 0 ? spendMeter(r.spent, r.cap) : null;
         return (

@@ -19,7 +19,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
+import { aiBudgetFixture, setFixtureAllowance } from './_ai_budget_fixture.mjs';
 import { applyEngineSchema } from './_engine_schema.mjs';
 import { createJWT } from '../src/auth.ts';
 import {
@@ -672,7 +672,7 @@ test('a listed @cf/ model the task does not offer is 400; DeepSeek V4 Flash is o
 
 test('a spent budget is 402, for structure and for ask', async () => {
   const w = withSession(world(() => ({ response: REPLY })));
-  w.db.prepare("INSERT INTO ai_licence_caps(licence_key,daily_microusd,monthly_microusd,recorded_by) VALUES('founder:free',1000000,0,1)").run();
+  setFixtureAllowance(w.db, 0); // D783: no plan, and no tokens
   const s = await call(w.env, structure, 'POST', '/sessions/5/structure');
   assert.equal(s.status, 402, JSON.stringify(s.json));
   assert.equal(s.json.refusal, 'budget_user_month');

@@ -147,7 +147,7 @@ export function SessionRail({ session, models, receipt }) {
             <p className="flex justify-between"><span>This session</span><span className="tabular-nums">{usd(receipt.total_cost_microusd)}</span></p>
             {receipt.budget ? (
               <>
-                <p className="flex justify-between"><span>Left today</span><span className="tabular-nums">{usd(receipt.budget.day_left_microusd)}</span></p>
+                {receipt.budget.day_left_microusd != null && <p className="flex justify-between"><span>Left today</span><span className="tabular-nums">{usd(receipt.budget.day_left_microusd)}</span></p>}
                 <p className="flex justify-between"><span>Left this month</span><span className="tabular-nums">{usd(receipt.budget.month_left_microusd)}</span></p>
               </>
             ) : <p className="text-axal-faint" data-testid="meter-unreadable">{receipt.budget_error || 'Unreadable'}</p>}

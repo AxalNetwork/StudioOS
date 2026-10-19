@@ -15,7 +15,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SignJWT } from 'jose';
 import { Hono } from 'hono';
-import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
+import { aiBudgetFixture, setFixtureAllowance } from './_ai_budget_fixture.mjs';
 import { withGuard } from './_guard_stub.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { ROUTE, IMAGE_PRICED_MODELS, __resetForTest } from '../src/services/aiRouter.ts';
@@ -87,7 +87,7 @@ function makeAI(handler: (model: string, payload: any) => any) {
 async function logo(ai: any, balance = 5_000_000) {
   __resetForTest();
   const f = aiBudgetFixture();
-  f.db.prepare("INSERT INTO ai_licence_caps(licence_key,daily_microusd,monthly_microusd,recorded_by) VALUES('founder:free',0,0,1)").run();
+  setFixtureAllowance(f.db, 0); // D783: no plan, and no tokens
   f.db.prepare('INSERT INTO ai_topup_accounts(user_id,balance_microusd) VALUES(2,?)').run(balance);
   const env: any = { DB: f.DB, AI: withGuard(ai), JWT_SECRET: 'd766-fixture-only-secret', ENVIRONMENT: 'development' };
   const a = new Hono();

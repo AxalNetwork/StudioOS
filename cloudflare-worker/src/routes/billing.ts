@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
+import { markSubscriptionAmountCanceled, recordSubscriptionAmount } from '../services/planAllowance';
 import type { Env, User } from '../types';
 import { requireAuth, requireFactor, requireStepUp } from '../auth';
 import { ensureMiPaywallSchema, MI_PRO_PRODUCTS, userHasMiPro } from '../middleware/miAccess';
@@ -1530,6 +1531,9 @@ async function handleStripeEvent(
     }
     case 'customer.subscription.updated':
     case 'customer.subscription.created': {
+      // D783: what the member pays for this plan, for its AI allowance. Never fails the webhook.
+      try { await recordSubscriptionAmount(env, obj, { isPlan, isTier, isInvestor }); }
+      catch (e) { console.warn('[billing] subscription amount not recorded:', (e as Error).message); }
       const customer = obj.customer as string | null;
       const status = (obj.status as string) ?? 'active';
       const periodEnd = obj.current_period_end
@@ -1702,6 +1706,9 @@ async function handleStripeEvent(
       const customer = obj.customer as string | null;
       const subId = obj.id as string | null;
       if (!customer || !subId) return;
+      // D783: a canceled plan gives no allowance. Never fails the webhook.
+      try { await markSubscriptionAmountCanceled(env, subId); }
+      catch (e) { console.warn('[billing] subscription amount not canceled:', (e as Error).message); }
       // Disambiguate by subscription_id so a customer with multiple Stripe
       // subscriptions (e.g. MI Pro + Investor Pro on the same customer)
       // only loses the entitlement that was actually cancelled.

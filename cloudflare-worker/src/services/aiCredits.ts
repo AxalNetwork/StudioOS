@@ -406,7 +406,7 @@ export async function memberAccount(env: Env, userId: number, opts: { before?: s
   const shortfalls = await env.DB.prepare(`SELECT uid, kind, shortfall_microusd, source_ref, created_at FROM ai_credit_ledger
     WHERE user_id = ? AND shortfall_microusd > 0 ORDER BY created_at DESC, uid DESC LIMIT 100`).bind(userId).all<any>();
   if (shortfalls.success !== true) throw new Error('AI ledger unreadable');
-  return { member_id: userId, allowance: { licence_key: caps.licence, source: caps.source, daily_microusd: caps.daily_microusd, monthly_microusd: caps.monthly_microusd },
+  return { member_id: userId, allowance: { licence_key: caps.licence, source: caps.source, daily_capped: caps.daily_capped, daily_microusd: caps.daily_microusd, monthly_microusd: caps.monthly_microusd, plan: caps.plan },
     balance_microusd: bank.balance ?? 0, topup_held_microusd: bank.held, ledger_balance_microusd: await ledgerBalance(env, userId),
     on_hold: await packsOnHold(env, userId), ledger, purchases,
     shortfalls: (shortfalls.results ?? []).map((r: any) => ({ uid: r.uid, kind: r.kind, shortfall_microusd: r.shortfall_microusd, source_ref: r.source_ref, at: r.created_at })) };
@@ -495,7 +495,7 @@ export async function reconcile(env: Env) {
 }
 
 export const PLAN_COVERS = 'Covers Eadwyn and the AI tools on every page, Validate interview sessions and live transcription, at the rates on your Usage page.';
-export const PLAN_RESETS = 'Resets at 00:00 UTC each day and on the 1st each month.';
+export const PLAN_RESETS = 'Resets on the 1st of each month at 00:00 UTC.';
 export type PlanFamily = 'founder' | 'investor' | 'advisor' | 'partner' | 'market_intelligence' | 'other';
 /** A subscription product's family and licence key, from its metadata (§11). Null when the metadata names no plan: no card. */
 export function planOf(metadata: Record<string, string>): { family: PlanFamily; licence_key: string | null } | null {
@@ -512,9 +512,12 @@ export function planOf(metadata: Record<string, string>): { family: PlanFamily; 
  * no user id and no person's name.
  */
 export async function plansAndPacks(env: Env) {
-  const { listAiLicenceCaps } = await import('./aiBudget');
-  const caps = new Map((await listAiLicenceCaps(env)).map((c) => [c.licence_key, { daily_microusd: c.daily_microusd, monthly_microusd: c.monthly_microusd, source: c.source }]));
-  const allowance = (key: string | null) => (key === null ? null : caps.get(key as any) ?? null);
+  const { PLAN_AI_SHARE, allowanceFromCharge } = await import('./planAllowance');
+  // D783: no plan, no allowance. A paid plan includes 25% of its price each month: each price says what it gives,
+  // and the plan's figure is its headline price's (monthly first, else yearly), as the card shows the price.
+  const none = { share: PLAN_AI_SHARE, monthly_microusd: 0, source: 'none' };
+  const headline = (prices: Array<{ interval: string | null; interval_count: number | null; allowance_microusd: number }>) =>
+    prices.find((p) => p.interval === 'month' && (p.interval_count ?? 1) === 1) ?? prices.find((p) => p.interval === 'year' && (p.interval_count ?? 1) === 1) ?? prices[0];
   let rows: any[] = [];
   try {
     const res = await env.DB.prepare("SELECT id, name, active, metadata_json, prices_json FROM stripe_products WHERE kind = 'subscription' AND active = 1 ORDER BY name COLLATE NOCASE ASC, id").all<any>();
@@ -525,16 +528,18 @@ export async function plansAndPacks(env: Env) {
   }
   const plans: Record<string, unknown>[] = [];
   for (const [family, key] of [['founder', 'founder:free'], ['investor', 'investor:free'], ['other', 'other']] as const)
-    plans.push({ family, licence_key: key, product_id: null, plan_name: null, free: true, prices: [], allowance: allowance(key) });
+    plans.push({ family, licence_key: key, product_id: null, plan_name: null, free: true, prices: [], allowance: none });
   for (const row of rows) {
     let metadata: Record<string, string>, prices: any[];
     try { metadata = JSON.parse(row.metadata_json); prices = JSON.parse(row.prices_json); } catch { continue; }
     const plan = metadata && typeof metadata === 'object' ? planOf(metadata) : null;
     if (!plan || !Array.isArray(prices)) continue;
+    const priced = prices.filter((p) => p && p.active === true && Number.isSafeInteger(p.unit_amount)).map((p) => ({
+      price_id: p.id, unit_amount: p.unit_amount, currency: p.currency, interval: p.interval ?? null, interval_count: p.interval_count ?? null,
+      allowance_microusd: p.currency == null || String(p.currency).toLowerCase() === 'usd' ? allowanceFromCharge(p.unit_amount, p.interval, p.interval_count) : 0 }));
+    const top = headline(priced);
     plans.push({ family: plan.family, licence_key: plan.licence_key, product_id: row.id, plan_name: row.name, free: false,
-      prices: prices.filter((p) => p && p.active === true && Number.isSafeInteger(p.unit_amount)).map((p) => ({
-        price_id: p.id, unit_amount: p.unit_amount, currency: p.currency, interval: p.interval ?? null, interval_count: p.interval_count ?? null })),
-      allowance: allowance(plan.licence_key) });
+      prices: priced, allowance: top ? { share: PLAN_AI_SHARE, monthly_microusd: top.allowance_microusd, source: 'plan' } : null });
   }
   return { plans, packs: (await packsOnSale(env)).packs, covers: PLAN_COVERS, resets: PLAN_RESETS };
 }

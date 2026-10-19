@@ -21,7 +21,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
+import { aiBudgetFixture, setFixtureAllowance } from './_ai_budget_fixture.mjs';
 import { applyEngineSchema } from './_engine_schema.mjs';
 import { createJWT } from '../src/auth.ts';
 import { tableFromBaseline } from './_baseline.mjs';
@@ -496,7 +496,7 @@ test('structure_with_studioos: a spent budget is 402, a model not offered is 400
   const { env, db } = world(() => ({ response: STUDIO_REPLY }));
   const { session_id } = await submitInterview(env, GRANT, ARGS());
   await refused(structureWithStudioos(env, GRANT, { session_id, model: 'gpt-4o' }), 400, 'model_not_offered');
-  db.prepare("INSERT INTO ai_licence_caps (licence_key, daily_microusd, monthly_microusd, recorded_by) VALUES ('founder:free', 0, 0, 1)").run();
+  setFixtureAllowance(db, 0); // D783: no plan, and no tokens
   const e = await refused(structureWithStudioos(env, GRANT, { session_id }), 402);
   assert.match(e.code, /^budget_/);
   assert.equal(count(db, 'validate_proposals'), 0);
