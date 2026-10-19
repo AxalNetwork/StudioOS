@@ -35,6 +35,9 @@ import { tableFromBaseline, stripForeignKeys } from './_baseline.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import ai, { RAIL_PREFERENCE_CAP } from '../src/routes/ai.ts';
 import { resolveRail } from '../src/services/ai/railMatrix.ts';
+import { modelById } from '../src/services/ai/catalogue.ts';
+import { billingMode, multiplierFor } from '../src/services/ai/pricing.ts';
+import { unitPrices } from '../src/routes/ai.ts';
 
 const read = (p: string) => readFileSync(new URL(`../../${p}`, import.meta.url), 'utf8');
 const CANVAS = JSON.parse(read('design/incoming/airail-every-page-data/canvas.json'));
@@ -71,6 +74,15 @@ test('every canvas page has one row, keyed in the canvas\'s names, and Admin has
     const name = r.pageKey.split(' · ').at(-1)!;
     if (r.pageKey !== 'Admin · Home') assert.equal(r.kind, CANVAS.task_kind[name], `${r.pageKey}: its kind is the canvas's`);
     assert.equal(r.routeTask, `rail_${r.kind}`);
+  }
+});
+
+test('every matrix model is one D760\'s catalogue knows and prices', () => {
+  for (const id of new Set(ROWS.flatMap((r) => r.models.map((m) => m.id)))) {
+    const m = modelById(id);
+    assert.ok(m, `${id} is not in the catalogue`);
+    assert.ok(Object.keys(m.neurons ?? {}).length > 0, `${id}: the catalogue has no neuron price`);
+    assert.equal(m.paid_only, PRICING.paidOnly.has(id), `${id}: the catalogue and the pricing file disagree on paid-only`);
   }
 });
 
@@ -232,7 +244,7 @@ async function call(env: any, user: number | null, method: string, path: string,
 const q = (page: string, option?: string) => `/rail?page=${encodeURIComponent(page)}${option ? `&option=${encodeURIComponent(option)}` : ''}`;
 const MVP = 'Founder · Build · Prototype / MVP';
 
-test('GET /api/ai/rail answers a page\'s row, named and priced, with no pick, the mode, billing at cost and the guard', async () => {
+test('GET /api/ai/rail answers a page\'s row, named and priced by D760, with no pick, the mode, the billing mode and the guard', async () => {
   const { env } = world();
   const r = await call(env, A, 'GET', q('Founder · Validate'));
   assert.equal(r.status, 200, JSON.stringify(r.body));
@@ -242,17 +254,16 @@ test('GET /api/ai/rail answers a page\'s row, named and priced, with no pick, th
   assert.equal(r.body.kind, row.kind);
   assert.deepEqual(r.body.models.map((m: any) => [m.id, m.role, m.line]), row.models.map((m) => [m.id, m.role, m.line]));
   for (const m of r.body.models) {
-    assert.equal(m.name, MODEL_NAMES[m.id] ?? null);
-    const p = PRICE_USD_PER_1M_TOKENS[m.id];
-    assert.deepEqual(m.price, p ? { in_per_1m_usd: p.in, out_per_1m_usd: p.out } : (PRICE_USD_PER_AUDIO_MINUTE[m.id] != null ? { per_audio_minute_usd: PRICE_USD_PER_AUDIO_MINUTE[m.id] } : null));
+    assert.equal(m.name, MODEL_NAMES[m.id] ?? modelById(m.id)?.name ?? null);
+    // D760's unit prices for a founder's licence: what /ai/rates serves, never computed in the route.
+    assert.deepEqual(m.price, unitPrices(m.id, multiplierFor('founder')));
+    assert.ok(Object.keys(m.price.billed).length > 0, `${m.id}: the catalogue prices it`);
   }
   assert.deepEqual(r.body.options, []);
   assert.equal(r.body.pick, null);
   assert.equal(r.body.mode, null);
-  assert.equal(r.body.billing, 'cost');
+  assert.equal(r.body.billing, billingMode({}));
   assert.deepEqual(r.body.guard, { model: '@cf/meta/llama-guard-3-8b', every_run: true });
-  const charged = await call(world({ AI_BILLING: 'charged' }).env, A, 'GET', q('Founder · Validate'));
-  assert.equal(charged.body.billing, 'charged');
   const mvp = await call(env, A, 'GET', q(MVP.toLowerCase(), 'draft:build/mvp'));
   assert.equal(mvp.status, 200, 'a key with a slash, in any case');
   assert.deepEqual(mvp.body.crumbs, ['Founder', 'Build', 'Prototype / MVP', 'draft:build/mvp']);

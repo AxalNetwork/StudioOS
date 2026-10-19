@@ -423,14 +423,6 @@ function railOption(raw: unknown): string | null | undefined {
   return typeof raw === 'string' && RAIL_OPTION_RE.test(raw) ? raw : null;
 }
 
-/** The rate the router bills a model at today, or null when it has none (D760's billed price replaces it). */
-function railPrice(id: string) {
-  const t = PRICE_USD_PER_1M_TOKENS[id];
-  if (t) return { in_per_1m_usd: t.in, out_per_1m_usd: t.out };
-  const m = PRICE_USD_PER_AUDIO_MINUTE[id];
-  return m != null ? { per_audio_minute_usd: m } : null;
-}
-
 function refuseRailPage(c: any, page: unknown) {
   return refuse(c, 404, {
     code: 'unknown_page',
@@ -448,8 +440,10 @@ function refuseRailOption(c: any) {
 
 /**
  * GET /api/ai/rail?page=<key>[&option=<key>] — the page's models, each with
- * its name, role, line and today's rate; the member's pick and mode for the
- * page; whether runs are billed at cost; and that Llama Guard checks every run.
+ * its name, role, line and D760's unit prices (`cost`, and `billed` for the
+ * caller's licence, from `unitPrices`; the route computes none); the member's
+ * pick and mode for the page; the billing mode; and that Llama Guard checks
+ * every run.
  * `options` stays empty until D764 PR 3 adds option rows. A stored pick the
  * row no longer offers is cleared here and reads as no pick.
  */
@@ -461,6 +455,7 @@ ai.get('/rail', async (c) => {
   const option = railOption(c.req.query('option'));
   if (option === null) return refuseRailOption(c);
   const section = railSectionOf(row);
+  const multiplier = multiplierFor(aiLicenceKey(user));
   const rows = (await c.env.DB.prepare(
     'SELECT task, model, mode FROM ai_rail_preferences WHERE user_id = ?1 AND section = ?2',
   ).bind(user.id, section).all<{ task: string; model: string | null; mode: string | null }>()).results ?? [];
@@ -479,12 +474,13 @@ ai.get('/rail', async (c) => {
     page: row.pageKey,
     crumbs: option ? [...railCrumbs(row), option] : railCrumbs(row),
     kind: row.kind,
-    models: row.models.map((m) => ({ id: m.id, name: MODEL_NAMES[m.id] ?? null, role: m.role, line: m.line, price: railPrice(m.id) })),
+    models: row.models.map((m) => ({
+      id: m.id, name: MODEL_NAMES[m.id] ?? modelById(m.id)?.name ?? null, role: m.role, line: m.line, price: unitPrices(m.id, multiplier),
+    })),
     options: [],
     pick,
     mode: rows.find((r) => r.task === '')?.mode ?? null,
-    // D762: cost until the owner sets AI_BILLING = "charged" (#1008). D760 declares the var on Env.
-    billing: (c.env as { AI_BILLING?: string }).AI_BILLING === 'charged' ? 'charged' : 'cost',
+    billing: billingMode(c.env),
     guard: { model: ROUTE.safety.model, every_run: true },
   });
 });
