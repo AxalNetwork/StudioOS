@@ -49,7 +49,7 @@ runs these directly against an in-process SQLite, with no request at all.
 | `ai/` | D761: the AI router's request and response shapes, per-class timeouts, context-window and paid-only fallbacks, session affinity and the units each attempt used. Pure; `aiRouter.ts` calls it. |
 | `decks/` | Deck assembly and export. |
 | `email/` | Transactional mail. |
-| `fills/` | "AI fills the blanks" — the fill-kind registry and the provenance of an accepted fill. A `sourced` fill carries a citation or it is dropped. |
+| `fills/` | "AI fills the blanks" — the fill-kind registry and the provenance of an accepted fill. A `sourced` fill carries a citation or it is dropped. `neverFill.ts` lists the fields Eadwyn never fills (D777), mirrored by `frontend/src/lib/neverFill.js`; propose, accept and `recordFill` each refuse one. |
 | `market_intel/` | Sourcing, extraction and scoring for market intelligence. |
 | `mercury/` | D710: Mercury for fund administration, read-only. A GET-only client, the boundary parser that drops account numbers, the gates and read audit, the entity connections' store, the hourly sync and the reconciliation matches. Its README has the rules. |
 | `referrals/` | Referral submissions. |
