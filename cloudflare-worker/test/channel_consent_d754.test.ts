@@ -98,8 +98,8 @@ function graph(extra: Route = () => undefined) {
 
 async function seeded() {
   const w = await world({ seed: true });
-  // Discard (deleteSession) deletes the processing pipeline's tables too.
-  w.db.exec(readFileSync(new URL('../sql/migrations/453_interview_processing.sql', import.meta.url), 'utf8'));
+  // Discard (deleteSession) deletes the processing pipeline's tables too: the
+  // world's applyEngineSchema (D757) applies 453 already.
   w.db.prepare(`UPDATE users SET name = 'Dana Ruiz' WHERE id = ?`).run(ME);
   return w;
 }
@@ -582,7 +582,10 @@ test('STOP after consent withdraws it: nothing new is kept, quotes go off, Struc
   // A voice note held by a job when consent goes.
   await waHook(env, waVoice('wamid.VHELD', 'MEDIA-H'));
   const held = jobsOf(queued, 'channel_followup').filter((j) => j.payload.kind === 'voice').at(-1);
+  // A summary written while consent stood (D757's engine).
+  db.prepare(`UPDATE interview_sessions SET summary = 'They close the books by hand.', summarised_at = datetime('now') WHERE id = ?`).run(sid);
   await waHook(env, typed('wamid.STOP', 'STOP'));
+  assert.equal(sessionRow(db, sid).summary, null, 'withdrawDigest: the summary goes with the consent');
   await waHook(env, typed('wamid.STOP', 'STOP'));
   db.prepare(`DELETE FROM channel_events WHERE external_event_id = ?`).run(ref('whatsapp', 'wamid.STOP'));
   await waHook(env, typed('wamid.STOP', 'STOP'));

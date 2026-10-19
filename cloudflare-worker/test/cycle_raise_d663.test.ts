@@ -28,6 +28,7 @@ import { CARD_STATES } from '../src/services/cycleCards.ts';
 import { loadSpinoutDeckOverrides, saveSpinoutDeckOverrides } from '../src/services/decks/spinoutDeckOverrides.ts';
 import { tableFromBaseline } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
+import { personalMatchTables } from './_mercury_d713.ts';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const BASELINE = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
@@ -54,6 +55,7 @@ function fixture() {
   db.exec(sqlOf('249_project_metrics.sql'));
   db.exec(MIG442);
   db.exec(MIG463);
+  personalMatchTables(db); // D752: Capital relationships reads a raise receipt's posted date
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (?, ?, ?, ?, 1, ?)');
   u.run(FOUNDER, 'founder', 'Fay Founder', 'fay@example.test', 1001);
   u.run(OTHER, 'founder', 'Bo Other', 'bo@example.test', 1002);
@@ -315,6 +317,26 @@ test('per-slide time never exceeds the view\'s total', async () => {
 // ---------------------------------------------------------------------------
 // Capital relationships — last contact
 // ---------------------------------------------------------------------------
+
+test('D752: a confirmed raise receipt reads "Committed · received <date>" in the stage cell; a withdrawn one reads as today; the cards do not move', async () => {
+  const db = fixture();
+  db.exec(`INSERT INTO raise_prospects (id, uid, project_id, name, stage, amount, commit_status, updated_at) VALUES
+           (1, 'a', ${P}, 'Ann', 'committed', 2500, 'soft', '2026-10-08 12:00:00'),
+           (2, 'b', ${P}, 'Ben', 'committed', 4000, 'signed', '2026-10-08 12:00:00'),
+           (3, 'c', ${P}, 'Cy', 'committed', 1000, 'soft', '2026-10-08 12:00:00')`);
+  const before = card((await overview(db)).body, 'capital-relationships');
+  const ins = db.prepare(`INSERT INTO mercury_personal_matches (uid, user_id, integration_id, mercury_transaction_id, account_last_four, amount_cents, posted_on, target_kind, target_id, state, withdrawn_at, withdraw_reason)
+    VALUES (?, ${FOUNDER}, 9, ?, '4242', ?, ?, 'raise_prospect', ?, ?, ?, ?)`);
+  ins.run('m1', 'txn-1', 250000, '2026-10-02', 1, 'confirmed', null, null);
+  ins.run('m3', 'txn-3', 100000, '2026-10-03', 3, 'withdrawn', '2026-10-04 00:00:00', 'Wrong wire picked');
+  const rec = await moduleRead(db, 'capital-relationships', '&sort=name');
+  const by = Object.fromEntries(rec.body.records.rows.map((r: any) => [r.id, r.cells.stage]));
+  assert.deepEqual(by[1], { text: 'Committed · received 2026-10-02' }, 'the bank line outranks "soft"');
+  assert.equal(by[2], 'Committed');
+  assert.deepEqual(by[3], { text: 'Committed · soft', tone: 'warn' }, 'a withdrawn receipt reads as today');
+  assert.ok(!JSON.stringify(rec.body).includes('4242') && !JSON.stringify(rec.body).includes('txn-1'), 'no last four or transaction id');
+  assert.deepEqual(card((await overview(db)).body, 'capital-relationships'), before, 'the cards\' figures are unchanged');
+});
 
 test('a prospect\'s last contact comes from its stored contact, never from a guess', async () => {
   const db = fixture();

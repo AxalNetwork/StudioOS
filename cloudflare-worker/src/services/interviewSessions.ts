@@ -66,6 +66,10 @@ export interface SessionRow {
   processing_error?: string | null; processing_updated_at?: string | null; processing_auto?: number | null;
   expected_last_seq?: number | null;
   summary?: string | null; summary_model?: string | null; summarised_at?: string | null; summary_citations_json?: string | null;
+  // D757 (migration 487): the Validate engine's state (services/validateEngine.ts).
+  digest_status?: 'queued' | 'running' | 'done' | 'refused' | 'skipped' | null; digest_note?: string | null;
+  digest_hash?: string | null; digest_trigger?: string | null; digest_run_id?: string | null; digested_at?: string | null;
+  digest_json?: string | null; digest_kept_at?: string | null; digest_kept_by?: number | null;
 }
 
 export async function loadSession(env: Env, id: number): Promise<SessionRow | null> {

@@ -11,9 +11,10 @@
  *                       transcribes a bounded batch of chunks per message,
  *                       staging each chunk's segments so a retry never bills
  *                       a chunk twice; then assembles the final transcript
- *                       once; then summarises; then calls D684's
- *                       `structureSession` (trigger `recording_processed`).
- *                       It never re-implements structuring.
+ *                       once; then calls D757's engine (`digestSession`,
+ *                       trigger `recording_processed`) for its last two
+ *                       stages, summarising and placing. It never
+ *                       re-implements either.
  *   recoverSession      POST /sessions/:id/process: a failed or stale run, or
  *                       a session stuck in `transcribing` from before this
  *                       change, is resumed from the stage it reached.
@@ -34,8 +35,8 @@ import {
   type ChunkRow, type SessionRow, type StoredSegment,
 } from './interviewSessions';
 import { DEFAULT_FINAL_MODEL } from './sttModels';
+import type { DigestOutcome } from './validateEngine';
 import { summariseTranscript, toSegments, type ReceiptLine, type SegmentRow, type SummarySentence } from './interviewStructuring';
-import { structureSession } from './sessionAutoStructure';
 
 export const STAGES = ['uploading', 'transcribing', 'summarising', 'placing', 'done', 'failed'] as const;
 export type Stage = typeof STAGES[number];
@@ -349,20 +350,18 @@ export async function runInterviewProcessJob(env: Env, payload: unknown): Promis
       await setStage(env, session.id, 'summarising');
       session = (await loadSession(env, session.id))!;
     }
+    // D757: both stages are the engine's. Dynamic: validateEngine.ts imports this file.
     if (session.processing_stage === 'summarising') {
       // A refusal is a receipt line; the job moves on to the findings.
-      await summariseSession(env, session, userId);
+      const { digestSession } = await import('./validateEngine');
+      await digestSession(env, { sessionId: session.id, userId, trigger: 'recording_processed', stages: ['summarise'] });
       await setStage(env, session.id, 'placing');
       session = (await loadSession(env, session.id))!;
     }
     if (session.processing_stage === 'placing') {
-      const placed = await structureSession(env, { sessionId: session.id, userId, trigger: 'recording_processed' });
-      const error = placed.ok ? null
-        : placed.reason === 'refused' && String(placed.refusal || '').startsWith('budget')
-          ? `${budgetRefusalMessage(String(placed.refusal))} The transcript is ready; place the findings when the allowance allows.`
-          : placed.reason === 'refused'
-            ? 'The findings could not be placed. The transcript is ready; try Structure again.'
-            : null;
+      const { digestSession } = await import('./validateEngine');
+      const placed = await digestSession(env, { sessionId: session.id, userId, trigger: 'recording_processed', stages: ['structure'] });
+      const error = placingError(placed);
       await setStage(env, session.id, 'done', error ? { error } : doneNote(session));
       return 'done';
     }
@@ -372,6 +371,20 @@ export async function runInterviewProcessJob(env: Env, payload: unknown): Promis
     await failProcessing(env, session, 'Processing stopped unexpectedly. Nothing was lost; try again.');
     return 'failed';
   }
+}
+
+/**
+ * What the placing stage's outcome says, in the sentences the job has always
+ * used: the budget's, or "try Structure again". A conversation too long for
+ * one run says so instead (D7): Structure again cannot succeed for it.
+ */
+function placingError(placed: DigestOutcome): string | null {
+  if (placed.status !== 'refused' || placed.reason === 'consent_not_recorded') return null;
+  if (placed.reason === 'transcript_too_large') return placed.note;
+  if (String(placed.refusal || '').startsWith('budget')) {
+    return `${budgetRefusalMessage(String(placed.refusal))} The transcript is ready; place the findings when the allowance allows.`;
+  }
+  return 'The findings could not be placed. The transcript is ready; try Structure again.';
 }
 
 // ---------------------------------------------------------------------------
