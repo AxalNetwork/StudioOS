@@ -18,6 +18,7 @@ import { isSuperAdminUser } from '../../../lib/shellRole';
 import { drawsAccountControls } from '../../../lib/accountControls';
 import TrustScoreBadge from '../../../components/TrustScoreBadge';
 import { ROLE_BADGES, Field, ConsoleUnreadable, CONSOLE_LOADING } from './shared';
+import useRecordCrumb from '../useRecordCrumb';
 
 /**
  * D648 (#1448) — the Users console: the account directory, its role picker,
@@ -881,6 +882,8 @@ export default function UsersConsole({ onImpersonate }) {
 
 export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActive, showCredits = false }) {
   useEscapeClose(onClose);
+  // D775 (#2101): the open account is the rail's record while the drawer is shown.
+  useRecordCrumb(userRow?.name || userRow?.email || null, 'account', userRow?.id);
   const [data, setData] = useState(null);
   const [tab, setTab] = useState('profile');
   const [notes, setNotes] = useState('');
