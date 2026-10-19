@@ -153,7 +153,7 @@ test('an alias lands on its connector, keeping the query and hash; toString and 
   for (const k of ['toString', '__proto__', 'constructor', 'hasOwnProperty']) assert.equal(pageEntry({ data: ready(), key: k }).state, 'unknown', k);
 });
 
-test('an unknown key: its sentence, Request it inline in the page frame, and no read', async () => {
+test('an unknown key: its sentence, Request it in a centred dialog (D753 F3), and no read', async () => {
   const f = mockFetch();
   const m = await mount(page('notion'), '/account/connectors/notion');
   try {
@@ -162,9 +162,11 @@ test('an unknown key: its sentence, Request it inline in the page frame, and no 
     assert.equal(m.by('connector-page-connect'), undefined);
     assert.equal(f.calls.length, 0, 'no fetch');
     await m.click('connector-page-request');
-    const form = m.all((n) => m.props(n)['data-layout'] === 'page');
-    assert.ok(form.length, 'the request form is in the page frame');
-    assert.ok(!m.all((n) => m.props(n).role === 'dialog').length, 'no dialog');
+    // D753 F3 (#1956): the request form is a centred Lightbox, as the hub's Add menu opens it.
+    const dialog = m.by('connector-sheet-request');
+    assert.ok(dialog, 'the request form opens');
+    assert.equal(m.props(dialog).role, 'dialog');
+    assert.equal(m.props(dialog)['aria-modal'], 'true');
   } finally { await m.unmount(); f.restore(); }
   for (const k of ['__proto__', 'constructor']) {
     const out = flat(renderToStaticMarkup(h(MemoryRouter, { initialEntries: [`/account/connectors/${k}`] }, page(k))));
@@ -263,7 +265,8 @@ test('every return lands on its page; the hub sends a bookmarked one on; the pag
 
 test('the page layout: no ×, no dialog, no Escape of its own, the panel title an h2; Build\'s lightbox keeps its ×', async () => {
   const f = mockFetch();
-  const m = await mount(page('stripe'));
+  // D753 F3 (#1956): the inline panel stays only for GitHub (F4) and Mercury (F5); Stripe draws "Your connection".
+  const m = await mount(page('github'), '/account/connectors/github');
   try {
     assert.equal(m.by('sheet-close'), undefined);
     assert.ok(!m.all((n) => m.props(n).role === 'dialog').length);
