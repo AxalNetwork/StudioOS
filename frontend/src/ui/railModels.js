@@ -1,14 +1,16 @@
 /**
- * What to SAY about a model. Never what it costs.
+ * What to SAY about a model, and how to print the price the Worker gives.
  *
  * The split this file exists to keep is the one `DECISIONS` D13 and D16 are
  * both about: which models exist, which one a task runs by default and which
  * ones a caller may pick are **facts**, and come from `GET /api/ai/pricing`,
  * which reads the router's own tables; a model's **name and the sentence under
  * it are editorial**, and are written here. Nothing in this file is derivable,
- * and nothing derivable is in this file. Since D698 the rail draws no id, no
- * rate and no estimate (D16's averages and the receipts live on
- * `/account/usage`), so this file holds no figure of any kind.
+ * and nothing derivable is in this file.
+ *
+ * PRICES ARE NOT HERE (D769, #2088). D720 puts a price on every card and
+ * every All models row, and `ui/railPrices.js` prints them from the Worker's
+ * own rate card. This file stays the copy table: no figure, no rate field.
  *
  * THE CANVAS'S TABLES, AND WHY EVERY LINE IS CHECKED (D698, D-s). The AIRail
  * canvas (`design/canvases/integrated/AIRail.dc.html`) maps every page to one
@@ -59,12 +61,12 @@ export const MODEL_COPY = {
 const L70 = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 
 /**
- * Router models the catalogue never draws: the guard (the `safety` task) is
- * not a model a founder runs, and a retired model (`services/aiCatalog.ts`
- * `RETIRED_MODELS`) is priced only so past runs keep their cost.
+ * Router models the catalogue never draws: a retired model
+ * (`services/aiCatalog.ts` `RETIRED_MODELS`) is priced only so past runs keep
+ * their cost. The guard is drawn since D720: the canvas lists it under Safety,
+ * as a row no one picks.
  */
 export const NOT_IN_CATALOGUE = new Set([
-  '@cf/meta/llama-guard-3-8b',
   '@cf/meta/llama-3.1-8b-instruct',
 ]);
 
@@ -159,24 +161,65 @@ export const CANVAS_LINE_HOLDS = {
   'speech|Llama 3.3 70B Fast': ['structure_interview'],
 };
 
-/** The canvas's `ALL`: the catalogue's groups, in its order. */
+/**
+ * D720 §1 (D769, #2088): the All models groups, as the "AIRail · every page"
+ * canvas draws them (`design/incoming/airail-every-page-data/canvas.json`,
+ * `all_models`), in its order. Ten groups, Safety last.
+ */
 export const CATALOGUE_GROUPS = [
-  ['Conversation and writing', ['GLM-4.7 Flash', 'Llama 3.3 70B Fast', 'Mistral Small 3.1 24B', 'GPT-OSS 20B', 'Llama 3.1 8B', 'Granite 4.0 Micro']],
-  ['Reasoning', ['GPT-OSS 120B', 'DeepSeek V4 Pro', 'DeepSeek V4 Flash', 'Kimi K2.6', 'QwQ 32B']],
-  ['Documents and images', ['Gemma 4 26B', 'Llama 4 Scout', 'Moondream 3.1', 'Llama 3.2 11B Vision']],
+  ['Conversation and writing', ['GLM-4.7 Flash', 'GLM-5.3 Flash', 'Llama 3.3 70B Fast', 'Mistral Small 3.1 24B', 'GPT-OSS 20B', 'Qwen3 30B A3B', 'Llama 3.1 8B', 'Granite 4.0 Micro']],
+  ['Reasoning', ['GPT-OSS 120B', 'DeepSeek V4 Pro', 'DeepSeek V4 Flash', 'GLM-5.3', 'Nemotron 3 120B', 'Qwen3.8 27B', 'QwQ 32B', 'Kimi K2.6']],
   ['Code', ['Kimi K2.7 Code', 'Qwen2.5 Coder 32B']],
-  ['Search', ['BGE-M3', 'Qwen3 Embedding 0.6B', 'BGE Reranker Base']],
-  ['Speech and voice', ['Whisper Large v3 Turbo', 'Deepgram Nova-3', 'Deepgram Flux', 'Aura-2 EN', 'MeloTTS']],
-  ['Languages', ['M2M100', 'EuroLLM 9B']],
-  ['Images', ['FLUX.2 Klein 4B', 'FLUX.2 Dev']],
+  ['Reading images and files', ['Llama 4 Scout', 'Gemma 4 26B', 'Llama 3.2 11B Vision', 'Moondream 3.1']],
+  ['Search and ranking', ['BGE-M3', 'Qwen3 Embedding 0.6B', 'BGE Base EN v1.5', 'BGE Reranker Base']],
+  ['Languages', ['M2M100', 'IndicTrans2', 'SEA-LION v4 27B']],
+  ['Speech to text', ['Whisper Large v3 Turbo', 'Whisper', 'Deepgram Nova-3', 'Deepgram Flux', 'Smart Turn v2']],
+  ['Voice', ['Aura-2 EN', 'Aura-2 ES', 'MeloTTS']],
+  ['Images', ['FLUX.2 Klein 9B', 'FLUX.2 Klein 4B', 'FLUX.2 Dev', 'FLUX.1 Schnell', 'Lucid Origin', 'Phoenix 1.0']],
+  ['Safety', ['Llama Guard 3 8B']],
 ];
+
+/**
+ * Every All models name, to the router id it is, or null where the router
+ * cannot run it yet. Only a carried model is listed (D769 PR 1); D761 (#2018)
+ * adds the rest as their shapes land.
+ */
+export const ALL_MODEL_IDS = {
+  ...CANVAS_MODEL_IDS,
+  'GLM-5.3 Flash': null,
+  'Qwen3 30B A3B': null,
+  'GLM-5.3': null,
+  'Nemotron 3 120B': null,
+  'Qwen3.8 27B': null,
+  'BGE Base EN v1.5': '@cf/baai/bge-base-en-v1.5',
+  'IndicTrans2': null,
+  'SEA-LION v4 27B': null,
+  Whisper: '@cf/openai/whisper',
+  'Smart Turn v2': null,
+  'Aura-2 ES': null,
+  'FLUX.2 Klein 9B': null,
+  'FLUX.1 Schnell': null,
+  'Lucid Origin': null,
+  'Phoenix 1.0': null,
+  'Llama Guard 3 8B': '@cf/meta/llama-guard-3-8b',
+};
+
+/**
+ * The New badge: the canvas's `new_models`, less BGE Base EN v1.5 and FLUX.1
+ * Schnell, which already run in production (D720 §1).
+ */
+export const NEW_MODELS = new Set([
+  'GLM-5.3 Flash', 'GLM-5.3', 'Qwen3 30B A3B', 'Qwen3.8 27B', 'Nemotron 3 120B', 'IndicTrans2',
+  'SEA-LION v4 27B', 'Smart Turn v2', 'Aura-2 ES', 'FLUX.2 Klein 4B', 'Lucid Origin', 'Phoenix 1.0',
+]);
+
+/** The guard: listed under Safety, never picked. */
+export const GUARD_MODEL = '@cf/meta/llama-guard-3-8b';
 
 /** Router models the canvas does not name, each in its kind's group. */
 export const CATALOGUE_EXTRAS = {
   '@cf/meta/llama-3.2-3b-instruct': 'Conversation and writing',
   '@cf/meta/llama-3.1-8b-instruct-fp8-fast': 'Conversation and writing',
-  '@cf/openai/whisper': 'Speech and voice',
-  '@cf/baai/bge-base-en-v1.5': 'Search',
 };
 
 /**
@@ -295,7 +338,7 @@ const listedBy = (route) => [route.model, ...(route.fallback_chain || []), ...(r
  *   fallback    no canvas model is run here, so the one card is the router's
  *               primary for the page's first pickable job (else its first).
  *   offList     a stored pick that no card draws, { id, name }, or null.
- *   groups      [{ title, chips: [{ id, name, tasks, pickable, selected }] }],
+ *   groups      [{ title, chips: [{ id, name, tasks, pickable, selected, isNew }] }],
  *               the router's catalogue in the canvas's groups, empty ones out.
  *   pickable    whether any job on this page takes the rail's pick.
  */
@@ -318,7 +361,9 @@ export function railSuggestions({ section, module, pricing, picks = {} } = {}) {
   const current = pickJobs.length ? running(pickJobs[0]) : null;
   const card = (id, role, line) => {
     const tasks = tasksFor(id);
-    return { id, name: modelName(id) || id.split('/').pop(), role, line, tasks, pickable: tasks.length > 0, checked: id === current };
+    return {
+      id, name: modelName(id) || id.split('/').pop(), role, line, tasks, pickable: tasks.length > 0, checked: id === current,
+    };
   };
 
   const kind = kindFor(section, module);
@@ -352,15 +397,19 @@ export function railSuggestions({ section, module, pricing, picks = {} } = {}) {
   const carried = new Set();
   for (const route of Object.values(routes)) for (const id of listedBy(route || {})) carried.add(id);
   for (const id of NOT_IN_CATALOGUE) carried.delete(id);
+  const canvasName = new Map(Object.entries(ALL_MODEL_IDS).filter(([, id]) => id).map(([n, id]) => [id, n]));
   const chip = (id) => {
     const tasks = tasksFor(id);
-    return { id, name: modelName(id), tasks, pickable: tasks.length > 0, selected: id === (offList?.id || current) };
+    return {
+      id, name: modelName(id), tasks, pickable: tasks.length > 0 && id !== GUARD_MODEL, selected: id === (offList?.id || current),
+      isNew: NEW_MODELS.has(canvasName.get(id)),
+    };
   };
   const groups = [];
   for (const [title, names] of CATALOGUE_GROUPS) {
     const ids = [];
     for (const n of names) {
-      const id = CANVAS_MODEL_IDS[n];
+      const id = ALL_MODEL_IDS[n];
       if (id && carried.has(id) && !ids.includes(id)) ids.push(id);
     }
     for (const [id, group] of Object.entries(CATALOGUE_EXTRAS)) {

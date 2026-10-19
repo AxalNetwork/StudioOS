@@ -28,7 +28,7 @@ import { createRoot } from 'react-dom/client';
 import { codeOnly } from './_codeOnly.mjs';
 import { renderedText } from './_renderedText.mjs';
 import { installDocument } from './_contracts_dom.mjs';
-import WorkerRail, { MANUAL_LINE, NO_SWITCH_LINE, SAFETY_LINE, RailUsage } from '../src/ui/WorkerRail.jsx';
+import WorkerRail, { MANUAL_LINE, SAFETY_LINE, RailUsage } from '../src/ui/WorkerRail.jsx';
 import { railSuggestions, CANVAS_MODEL_IDS, CATALOGUE_EXTRAS, CATALOGUE_GROUPS, NOT_IN_CATALOGUE, SUGGESTED, TASK_KIND } from '../src/ui/railModels.js';
 import { RailCrumbsProvider, useRailCrumbs, useSetRailCrumbs } from '../src/ui/railCrumbs.js';
 import {
@@ -97,6 +97,17 @@ const BUDGET = {
 };
 const TOPUP = { configured: true, state: 'ready', product: { price_id: 'price_TestTopUp1', currency: 'usd', unit_amount: 1000 } };
 const SPEND = { recorded: true, month: { spend_usd: 3.1, calls: 12 }, by_task: [] };
+/** D769: a rate card as `GET /api/ai/rates` answers on `main`, before D760. */
+const RATES = {
+  ok: true,
+  models: [
+    { id: L70, name: 'Llama 3.3 70B', in_per_1m_usd: 0.293, out_per_1m_usd: 2.253 },
+    { id: L8, name: 'Llama 3.1 8B', in_per_1m_usd: 0.152, out_per_1m_usd: 0.287 },
+    { id: GUARD, name: 'Llama Guard 3 8B', in_per_1m_usd: 0.484, out_per_1m_usd: 0.03 },
+    { id: WHISPER, name: 'Whisper Large v3 Turbo', per_audio_minute_usd: 0.0005 },
+    { id: NOVA, name: 'Nova-3', per_audio_minute_usd: 0.0052 },
+  ],
+};
 
 /**
  * Replace every read the rail makes. `over` swaps one; each value is either a
@@ -106,13 +117,15 @@ function stubReads(over = {}) {
   const calls = { setMode: [], setModel: [], read: 0 };
   const answer = (v) => () => (v instanceof Error ? Promise.reject(v) : Promise.resolve(v));
   const real = {
-    myAiSpend: api.myAiSpend, aiPricing: api.aiPricing, mine: aiBudgetApi.mine, topUp: aiBudgetApi.topUp,
+    myAiSpend: api.myAiSpend, aiPricing: api.aiPricing, mine: aiBudgetApi.mine, topUp: aiBudgetApi.topUp, rates: aiBudgetApi.rates,
     read: railPrefsApi.read, setMode: railPrefsApi.setMode, setModel: railPrefsApi.setModel,
   };
   api.myAiSpend = answer('spend' in over ? over.spend : SPEND);
   api.aiPricing = answer('pricing' in over ? over.pricing : PRICING);
   aiBudgetApi.mine = answer('budget' in over ? over.budget : BUDGET);
   aiBudgetApi.topUp = answer('topUp' in over ? over.topUp : TOPUP);
+  // D769: the rail reads the rate card for its prices.
+  aiBudgetApi.rates = answer('rates' in over ? over.rates : RATES);
   railPrefsApi.read = () => { calls.read += 1; return answer('prefs' in over ? over.prefs : { ok: true, modes: {}, models: {} })(); };
   railPrefsApi.setMode = (section, mode) => { calls.setMode.push([section, mode]); return Promise.resolve({ ok: true }); };
   railPrefsApi.setModel = (section, task, model) => {
@@ -121,7 +134,7 @@ function stubReads(over = {}) {
   };
   calls.restore = () => {
     Object.assign(api, { myAiSpend: real.myAiSpend, aiPricing: real.aiPricing });
-    Object.assign(aiBudgetApi, { mine: real.mine, topUp: real.topUp });
+    Object.assign(aiBudgetApi, { mine: real.mine, topUp: real.topUp, rates: real.rates });
     Object.assign(railPrefsApi, { read: real.read, setMode: real.setMode, setModel: real.setModel });
   };
   return calls;
@@ -173,6 +186,8 @@ async function mount(el, { reads, storage = {} } = {}) {
   };
 }
 
+/** D769: where a test needs AI on for a page with fills, it stores the choice, as the switch would. */
+const ASSIST_KEY_VALIDATE = 'assist_mode:validate';
 const viewing = (shellRole, child) => h(ViewModeContext.Provider, { value: { shellRole } }, child);
 const ssr = (el) => renderToStaticMarkup(el);
 const deskNote = (name) => ASSIST_SURFACES.workspace.desks[name]?.fills;
@@ -187,17 +202,21 @@ test('16 · removed (PR 1): D402\'s inherited card and railInheritance.js are go
   assert.doesNotMatch(code, /INHERITED/, 'the rail still draws an INHERITED card');
 });
 
-test('16 · removed (PR 2): no rail draws an id, a rate, an estimate, a receipt or the old blocks', async () => {
-  const banned = /@cf\/|\/ M|≈|Last run|This page this month|Model · this page|INHERITED|Drafts only|per audio minute/;
+test('16 · removed (PR 2): no rail draws an id, an estimate, a receipt or the old blocks', async () => {
+  // D769 (D720 §1) reverses one half of this: the rail draws each model's
+  // price now (`airail_d720_rail.test.mjs`), so the rate patterns (`/ M`,
+  // `per audio minute`, a three-decimal dollar figure) are no longer banned.
+  // An id, an estimate, a receipt and the retired blocks still are.
+  const banned = /@cf\/|≈|Last run|This page this month|Model · this page|INHERITED|Drafts only/;
   // A server render, and a mounted rail with every read answered.
   assert.doesNotMatch(ssr(h(WorkerRail, { workspace: 'Validate', fills: true })), banned);
   const m = await mount(h(RailCrumbsProvider, { section: 'Validate', module: 'Problem discovery' },
-    h(WorkerRail, { workspace: 'Validate', fills: true, note: deskNote('Validate') })), { storage: { [railModelKey('Validate', 'validate_tag_pains')]: L8 } });
+    h(WorkerRail, { workspace: 'Validate', fills: true, note: deskNote('Validate') })),
+  { storage: { [railModelKey('Validate', 'validate_tag_pains')]: L8, [ASSIST_KEY_VALIDATE]: true } });
   try {
     const all = m.text();
     assert.match(all, /Suggested for this page/);
     assert.doesNotMatch(all, banned);
-    assert.doesNotMatch(all, /\$\d+\.\d{3}/, 'a per-token rate is drawn');
   } finally { await m.unmount(); }
 });
 
@@ -278,42 +297,48 @@ test('10 · without a provider the crumbs are the workspace alone, and the sette
 
 // ── 11 · The switch ───────────────────────────────────────────────────
 
-test('11 · with fills: a radiogroup, Manual checked by default, its sentence shown and the list dimmed', () => {
+// D769 (#2088; D720 §6) replaces D698's "Eadwyn | Manual" radiogroup, drawn
+// only with `fills`, with "Turn off AI assistance on this page" on every page.
+// A page with fills still starts off (Manual); every other page starts on.
+
+test('11 · with fills: the switch, AI off by default, its sentence shown and no suggestions', () => {
   resetStores();
   const html = ssr(h(WorkerRail, { workspace: 'Validate', fills: true, note: deskNote('Validate') }));
-  assert.match(html, /role="radiogroup" aria-label="Eadwyn on Validate"/);
-  assert.match(html, /role="radio" aria-checked="false"[^>]*data-testid="button-worker-rail-mode-eadwyn">Eadwyn</);
-  assert.match(html, /role="radio" aria-checked="true"[^>]*data-testid="button-worker-rail-mode-manual">Manual</);
+  assert.match(html, /role="switch" aria-checked="true"[^>]*data-testid="switch-worker-rail-ai-off"><span class="fwr-ai-switch-label">Turn off AI assistance on this page<\/span>/);
   assert.ok(html.includes(MANUAL_LINE));
-  assert.match(html, /data-dimmed="true" data-testid="worker-rail-suggestions"/);
+  assert.equal(MANUAL_LINE, 'Eadwyn won\u2019t suggest or draft on this page. Your work saves as usual.');
+  assert.match(html, /data-ai="off" data-testid="worker-rail-suggestions"/);
+  assert.doesNotMatch(html, /Suggested for this page|card-worker-rail-model/);
   // The checks `validate_fills_the_blanks` reads stay in the rail.
   const src = codeOnly(read(RAIL));
   assert.match(src, /fills = false,/);
   assert.match(src, /surface\.mode\?\.kind === 'choice' && fills/);
 });
 
-test('11 · choosing Eadwyn shows the desk\'s sentence, undims the list and writes the mode to the Worker', async () => {
+test('11 · turning AI on shows the desk\'s sentence and the suggestions, and writes the mode to the Worker', async () => {
   const m = await mount(h(WorkerRail, { workspace: 'Validate', fills: true, note: deskNote('Validate') }));
   try {
-    await m.click('button-worker-rail-mode-eadwyn');
+    await m.click('switch-worker-rail-ai-off');
     assert.equal(m.text(m.by('text-worker-rail-mode')), deskNote('Validate'));
-    assert.equal(m.pr(m.by('worker-rail-suggestions'))['data-dimmed'], 'false');
-    assert.equal(m.pr(m.by('button-worker-rail-mode-eadwyn'))['aria-checked'], true);
+    assert.equal(m.pr(m.by('worker-rail-suggestions'))['data-ai'], 'on');
+    assert.equal(m.pr(m.by('switch-worker-rail-ai-off'))['aria-checked'], false);
     assert.deepEqual(m.stub.setMode, [['validate', 'eadwyn']]);
-    await m.click('button-worker-rail-mode-manual');
+    await m.click('switch-worker-rail-ai-off');
     assert.deepEqual(m.stub.setMode.at(-1), ['validate', 'manual']);
     assert.equal(m.text(m.by('text-worker-rail-mode')), MANUAL_LINE);
   } finally { await m.unmount(); }
 });
 
-test('11 · without fills: no switch, the line in its place, and Research\'s own sentence on Research', () => {
+test('11 · without fills: the switch is drawn, AI is on, and no "no switch" line', () => {
+  resetStores();
   const build = ssr(h(WorkerRail, { workspace: 'Build' }));
-  assert.doesNotMatch(build, /button-worker-rail-mode-eadwyn|role="radiogroup" aria-label="Eadwyn on/);
-  assert.ok(build.includes(NO_SWITCH_LINE));
-  assert.match(build, /data-dimmed="false"/, 'a page with no switch dims its list');
+  assert.match(build, /role="switch" aria-checked="false"[^>]*data-testid="switch-worker-rail-ai-off"/);
+  assert.doesNotMatch(build, /No switch here|Nothing on this page fills a blank/);
+  assert.match(build, /data-ai="on"/, 'a page with no fills starts with AI off');
+  assert.ok(!build.includes(MANUAL_LINE));
   const research = ssr(h(WorkerRail, { workspace: 'Research' }));
-  assert.ok(research.includes(ASSIST_SURFACES.workspace.desks.Research.none));
-  assert.ok(!research.includes(NO_SWITCH_LINE));
+  assert.ok(!research.includes(ASSIST_SURFACES.workspace.desks.Research.none), 'the "no switch" desk sentence is back');
+  assert.match(research, /data-testid="switch-worker-rail-ai-off"/);
 });
 
 // ── 12 to 15 · Suggestions, fallback, off the list, all models ────────
@@ -321,7 +346,7 @@ test('11 · without fills: no switch, the line in its place, and Research\'s own
 const sug = (section, module, { pricing = PRICING, picks = {} } = {}) => railSuggestions({ section, module, pricing, picks });
 const cardsOf = (v) => v.cards.map((c) => [c.name, c.role, c.pickable]);
 
-test('the canvas tables are transcribed whole: 29 models, 14 kinds, eight groups', () => {
+test('the canvas tables are transcribed whole: 29 models, 14 kinds; All models is the new canvas\'s ten groups', () => {
   assert.equal(Object.keys(CANVAS_MODEL_IDS).length, 29);
   assert.equal(Object.values(CANVAS_MODEL_IDS).filter(Boolean).length, 6, 'the router carries six canvas models');
   assert.equal(CANVAS_MODEL_IDS['Deepgram Flux'], null);
@@ -329,7 +354,12 @@ test('the canvas tables are transcribed whole: 29 models, 14 kinds, eight groups
   assert.deepEqual([...new Set(Object.values(TASK_KIND))].sort(), Object.keys(SUGGESTED).sort());
   const canvas = read('design/canvases/integrated/AIRail.dc.html');
   for (const name of Object.keys(CANVAS_MODEL_IDS)) assert.ok(canvas.includes(`'${name}'`), `${name} is not on the canvas`);
-  for (const [title] of CATALOGUE_GROUPS) assert.ok(canvas.includes(`['${title}'`), `${title} is not a canvas group`);
+  // D769 (D720 §1): the groups are the "AIRail · every page" canvas's ten, as
+  // `canvas.json` records them, not the old canvas's eight.
+  const everyPage = read('design/incoming/AIRail · every page.dc.html');
+  const data = JSON.parse(read('design/incoming/airail-every-page-data/canvas.json'));
+  assert.deepEqual(CATALOGUE_GROUPS, data.all_models.map((g) => [g.group, g.models]));
+  for (const [title] of CATALOGUE_GROUPS) assert.ok(everyPage.includes(`['${title}'`), `${title} is not a canvas group`);
   for (const [kind, list] of Object.entries(SUGGESTED)) {
     for (const s of list) assert.ok(canvas.includes(`M('${s.name}', '${s.role}', '${s.line}')`), `${kind}: ${s.name} differs from the canvas`);
   }
@@ -422,7 +452,7 @@ test('14 · off the list: a stored 8B pick on Problem discovery says so and open
   assert.deepEqual(v.offList, { id: L8, name: 'Llama 3.1 8B' });
   assert.equal(v.cards[0].checked, false);
   const m = await mount(h(RailCrumbsProvider, { section: 'Validate', module: 'Problem discovery' },
-    h(WorkerRail, { workspace: 'Validate', fills: true })), { storage: { [railModelKey('Validate', 'validate_tag_pains')]: L8 } });
+    h(WorkerRail, { workspace: 'Validate', fills: true })), { storage: { [railModelKey('Validate', 'validate_tag_pains')]: L8, [ASSIST_KEY_VALIDATE]: true } });
   try {
     assert.equal(m.text(m.by('text-worker-rail-using')), 'Using Llama 3.1 8B on this page.');
     assert.equal(m.text(m.by('button-worker-rail-all-models')), 'Hide all models');
@@ -432,22 +462,26 @@ test('14 · off the list: a stored 8B pick on Problem discovery says so and open
   assert.equal(sug('Validate', 'Problem discovery', { picks: { validate_tag_pains: 'm/gone' } }).offList, null);
 });
 
-test('15 · all models: the canvas\'s groups in order, only the non-empty ones, no guard and no retired model', () => {
+test('15 · all models: the canvas\'s groups in order, only the non-empty ones, the guard under Safety, no retired model', () => {
   const v = sug('Validate', 'Problem discovery');
   const titles = v.groups.map((g) => g.title);
   const order = CATALOGUE_GROUPS.map(([t]) => t);
   assert.deepEqual(titles, order.filter((t) => titles.includes(t)), 'the groups are out of the canvas\'s order');
-  assert.deepEqual(titles, ['Conversation and writing', 'Reasoning', 'Code', 'Search', 'Speech and voice']);
+  // D769 (D720 §1): the new canvas's titles, and Safety, where it lists the guard.
+  assert.deepEqual(titles, ['Conversation and writing', 'Reasoning', 'Code', 'Search and ranking', 'Speech to text', 'Safety']);
   const chips = v.groups.flatMap((g) => g.chips);
-  assert.ok(!chips.some((c) => c.id === GUARD), 'Llama Guard is a chip');
-  assert.ok(!chips.some((c) => c.id === RETIRED), 'the retired 8B is a chip');
-  // Both are kept out twice: by name, and by having no group.
-  assert.ok(NOT_IN_CATALOGUE.has(GUARD) && NOT_IN_CATALOGUE.has(RETIRED));
+  const guard = chips.filter((c) => c.id === GUARD);
+  assert.equal(guard.length, 1, 'Llama Guard is not listed once, under Safety');
+  assert.equal(guard[0].pickable, false, 'the guard can be picked');
+  assert.deepEqual(v.groups.at(-1).chips.map((c) => c.id), [GUARD]);
+  assert.ok(!chips.some((c) => c.id === RETIRED), 'the retired 8B is a row');
+  // The retired 8B is kept out twice: by name, and by having no group.
+  assert.ok(NOT_IN_CATALOGUE.has(RETIRED) && !NOT_IN_CATALOGUE.has(GUARD));
   const grouped = [...Object.values(CANVAS_MODEL_IDS), ...Object.keys(CATALOGUE_EXTRAS)];
-  assert.ok(!grouped.includes(GUARD) && !grouped.includes(RETIRED), 'the guard or the retired 8B has a group');
-  assert.ok(chips.every((c) => c.name && !c.name.includes('@cf/')), 'a chip shows an id');
+  assert.ok(!grouped.includes(RETIRED), 'the retired 8B has a group');
+  assert.ok(chips.every((c) => c.name && !c.name.includes('@cf/')), 'a row shows an id');
   assert.deepEqual(v.groups[0].chips.map((c) => c.name), ['Llama 3.3 70B Fast', 'Llama 3.1 8B', 'Llama 3.2 3B', 'Llama 3.1 8B Fast']);
-  assert.deepEqual(v.groups.find((g) => g.title === 'Speech and voice').chips.map((c) => c.name), ['Whisper Large v3 Turbo', 'Deepgram Nova-3', 'Whisper']);
+  assert.deepEqual(v.groups.find((g) => g.title === 'Speech to text').chips.map((c) => c.name), ['Whisper Large v3 Turbo', 'Whisper', 'Deepgram Nova-3']);
   // On Problem discovery the 70B, 8B and 3B are buttons; on Customer research none is.
   assert.deepEqual(chips.filter((c) => c.pickable).map((c) => c.id), [L70, L8, L3]);
   assert.deepEqual(sug('Validate', 'Customer research').groups.flatMap((g) => g.chips).filter((c) => c.pickable), []);
@@ -463,20 +497,20 @@ test('11 · a pick and a mode set on another device are in place after a load: t
   try {
     assert.equal(m.stub.read, 1, 'the rail did not read the Worker\'s preferences');
     assert.equal(m.text(m.by('text-worker-rail-using')), 'Using Llama 3.1 8B on this page.');
-    assert.equal(m.pr(m.by('button-worker-rail-mode-eadwyn'))['aria-checked'], true, 'the stored mode did not reach the switch');
+    assert.equal(m.pr(m.by('switch-worker-rail-ai-off'))['aria-checked'], false, 'the stored mode did not reach the switch');
     assert.equal(m.text(m.by('text-worker-rail-mode')), deskNote('Validate'));
   } finally { await m.unmount(); }
 });
 
-test('Manual: the cards and chips cannot be picked, and the list is dimmed', async () => {
+test('AI off: no card or row is drawn to pick; turning AI on makes them buttons', async () => {
+  // D769 (D720 §6): D698 dimmed the list in Manual; with AI off the rail now
+  // draws no suggestions at all.
   const m = await mount(h(RailCrumbsProvider, { section: 'Validate', module: 'Problem discovery' },
     h(WorkerRail, { workspace: 'Validate', fills: true })), { storage: { [railModelKey('Validate', 'validate_tag_pains')]: L8 } });
   try {
-    const card = m.by('card-worker-rail-model-llama-3.3-70b-instruct-fp8-fast');
-    assert.equal(card.tagName, 'DIV', 'a card is a button in Manual');
-    assert.equal(m.pr(card)['aria-disabled'], 'true');
-    assert.ok(!m.nodes().some((n) => n.tagName === 'BUTTON' && String(m.pr(n)['data-testid']).startsWith('chip-')));
-    await m.click('button-worker-rail-mode-eadwyn');
+    assert.equal(m.by('card-worker-rail-model-llama-3.3-70b-instruct-fp8-fast'), undefined, 'a card is drawn with AI off');
+    assert.ok(!m.nodes().some((n) => String(m.pr(n)['data-testid']).startsWith('chip-')));
+    await m.click('switch-worker-rail-ai-off');
     assert.equal(m.by('card-worker-rail-model-llama-3.3-70b-instruct-fp8-fast').tagName, 'BUTTON');
     await m.click('card-worker-rail-model-llama-3.3-70b-instruct-fp8-fast');
     assert.equal(readRailModel('Validate', 'validate_tag_pains'), L70);
@@ -486,12 +520,15 @@ test('Manual: the cards and chips cannot be picked, and the list is dimmed', asy
 
 // ── 17 · Safety ───────────────────────────────────────────────────────
 
-test('17 · every rail reads "Eadwyn drafts; you send." and none names the guard', () => {
+test('17 · every rail ends its safety line with "Eadwyn drafts; you send.", after the guard sentence', () => {
+  // D769 (D720 §8): D763 part 2 made "Llama Guard 3 8B checks every run" true,
+  // so the rail draws it again; `airail_d720_rail.test.mjs` holds its price and
+  // its dependence on the Worker's `guard.every_run`.
   assert.equal(SAFETY_LINE, 'Eadwyn drafts; you send.');
   for (const ws of ['Validate', 'Build', 'Research', 'Deals', 'Learning']) {
     const html = ssr(h(WorkerRail, { workspace: ws }));
-    assert.match(html, /data-testid="text-worker-rail-safety">Eadwyn drafts; you send\.</);
-    assert.doesNotMatch(html, /Llama Guard|checks every run|screens|Screened/i);
+    assert.match(html, /data-testid="text-worker-rail-safety">Llama Guard 3 8B checks every run[^<]*\. Eadwyn drafts; you send\.</);
+    assert.doesNotMatch(html, /screens|Screened/i);
   }
   assert.doesNotMatch(codeOnly(read(RAIL)), /safetyNote|desks\?\.\[workspace\]\?\.safety/, 'a desk safety sentence is back on the rail');
 });
@@ -517,9 +554,12 @@ test('18 · Usage: today and this month, what runs hold, the balance, the senten
 
 test('18 · Usage: the top-up\'s three states, and every failed read is Unreadable, never $0.00', () => {
   // D750: unset and not_ready are configuration, so the line names no Retry.
+  // D769 (D720 §11): Add tokens is drawn in every state, disabled unless a
+  // pack is on sale.
   for (const product of [{ configured: false }, { configured: true, state: 'not_ready' }]) {
     assert.match(renderedText(usage({ product })), /Top-up isn't available yet\./);
-    assert.doesNotMatch(usage({ product }), /Add tokens|Retry|could not be read/);
+    assert.match(usage({ product }), /<button type="button" class="fwr-add-tokens" disabled=""[^>]*>Add tokens<\/button>/);
+    assert.doesNotMatch(usage({ product }), /href="\/plans-and-pricing|Retry|could not be read/);
   }
   assert.match(renderedText(usage({ productError: true })), /The AI top-up could not be read/);
   for (const bad of [{ budgetError: true }, { budget: null }, { budget: { ...BUDGET, held_for_review: undefined } }]) {
