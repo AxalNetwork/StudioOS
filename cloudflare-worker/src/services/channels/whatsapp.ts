@@ -47,7 +47,7 @@ import { decryptCredentials, encryptCredentials } from '../../integrations/secre
 import type { ChannelConnection } from './connections';
 import { forgetConnection } from './threads';
 import type { AudioResult, SecretCheck } from './telegram';
-import { CHANNEL_LIMITS, type InboundEvent, type InboundMessage, type MessageSide, type SendResult } from './types';
+import { CHANNEL_LIMITS, consentWord, type InboundEvent, type InboundMessage, type MessageSide, type SendResult } from './types';
 
 export const GRAPH_VERSION = 'v23.0';
 export const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_VERSION}`;
@@ -118,11 +118,6 @@ const isoFromUnix = (v: unknown): string => {
 /** A consent button's id: `consent_yes:<request uid>` or `consent_no:<request uid>` (consent.ts). */
 const CONSENT_BUTTON_ID = /^consent_(yes|no):([0-9a-f-]{36})$/;
 
-/** A whole message that may answer the notice: yes, no or stop, any case, closing `.` or `!` allowed. */
-export function consentWord(text: string | null | undefined): 'yes' | 'no' | 'stop' | null {
-  const w = String(text ?? '').trim().toLowerCase().replace(/[.!]+$/, '').trim();
-  return w === 'yes' || w === 'no' || w === 'stop' ? w : null;
-}
 
 function messageEvent(m: unknown, phoneNumberId: string, side: MessageSide, names: Map<string, string>): InboundEvent | null {
   const msg = obj(m);
