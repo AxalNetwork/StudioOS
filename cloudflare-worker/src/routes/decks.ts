@@ -15,7 +15,9 @@ import { ensureTier, tierCovers } from '../middleware/requireTier';
 import {
   DECK_METHODS, PREMIUM_METHOD_IDS, getMethod,
 } from '../services/decks/methods';
-import { autofillDeck, toEditorSlides } from '../services/decks/autofill';
+import { autofillDeck, toEditorSlides, parseJsonLoose } from '../services/decks/autofill';
+import { run as aiRouterRun } from '../services/aiRouter';
+import { AI_SURFACE } from '../services/aiSurfaces';
 import { formatUseOfFundsText } from '../util/useOfFunds';
 // Task #15 — Axal 28-day Spin-Out Lab demo day deck. Custom autofill
 // path that bypasses the generic field-source vocabulary in autofill.ts
@@ -310,9 +312,11 @@ function heuristicSlides(p: any, snap: any | null): any[] {
   ];
 }
 
-async function aiSlides(env: Env, p: any, snap: any | null): Promise<any[] | null> {
-  const key = (env as any).OPENAI_API_KEY;
-  if (!key) return null;
+// D767 (#2096): one router run (`dd_synthesis`, Workers AI), held, guarded and
+// charged to the founder who pressed, with the Raise › Pitch deck page and
+// option on its usage row. A refusal or a failed run returns null and the
+// heuristic deck is used, as a missing key used to.
+async function aiSlides(env: Env, p: any, snap: any | null, userId: number): Promise<any[] | null> {
   try {
     const ctx = {
       name: p.name, sector: p.sector, stage: p.stage,
@@ -335,25 +339,20 @@ Use exactly these slide titles in order: ${JSON.stringify(SLIDE_TITLES)}.
 \`body\` is a 1-2 sentence narrative paragraph (markdown allowed). \`bullets\` is 2-4 punchy bullets (≤18 words each).
 Use the scoring numbers in the Traction and Market slides where helpful.
 Startup data: ${JSON.stringify(ctx)}`;
-    // T7 — 45s timeout (longer than brand.ts because pitch decks are bigger
-    // outputs; still well under the 60s subrequest cap).
-    const r = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: 'You are a senior VC associate drafting concise pitch decks. Always return valid JSON.' },
-          { role: 'user', content: prompt },
-        ],
-        temperature: 0.5, max_tokens: 1800,
-        response_format: { type: 'json_object' },
-      }),
-      signal: AbortSignal.timeout(45_000),
+    const res = await aiRouterRun(env, {
+      task: 'dd_synthesis',
+      userId,
+      surface: AI_SURFACE.raisePitch,
+      railPage: AI_SURFACE.raisePitch,
+      railOption: 'deck_draft',
+      recordRef: `project:${Number(p?.id) || 0}`,
+      systemPrompt: 'You are a senior VC associate drafting concise pitch decks. Always return valid JSON.',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.5,
+      maxTokens: 1800,
     });
-    if (!r.ok) return null;
-    const j: any = await r.json();
-    const parsed = JSON.parse(j?.choices?.[0]?.message?.content || '{}');
+    if (!res.ok || !res.output) return null;
+    const parsed: any = parseJsonLoose<any>(res.output);
     const slides = Array.isArray(parsed?.slides) ? parsed.slides : null;
     return slides && slides.length >= 1 ? slides : null;
   } catch { return null; }
@@ -574,7 +573,7 @@ decks.post('/generate', async (c) => {
   await ensureSchema(c.env);
   const snap = await latestScore(c.env, pid);
   const fallback = heuristicSlides(p, snap);
-  const raw = (await aiSlides(c.env, p, snap)) || fallback;
+  const raw = (await aiSlides(c.env, p, snap, Number(user.id) || 0)) || fallback;
   const aligned = enforceTen(raw, fallback);
   const slides = sanitizeSlides(aligned);
   while (slides.length < 10) slides.push(fallback[slides.length]);
@@ -1642,7 +1641,7 @@ decks.post('/apply-method', async (c) => {
   // Run autofill, then convert to the editor slide JSON shape stored in
   // pitch_decks.slides. We also stash the method_id + spec_id on each
   // slide so the editor can re-render the right field controls.
-  const filled = await autofillDeck(c.env, method, pid);
+  const filled = await autofillDeck(c.env, method, pid, { userId: Number(user.id) || 0, railOption: 'deck_draft', projectId: pid });
   const editorSlides = toEditorSlides(method, filled);
   const wrapped = editorSlides.map((s) => ({
     title: s.title,
@@ -1748,7 +1747,7 @@ decks.post('/:id/autofill', async (c) => {
     });
   }
 
-  const filled = await autofillDeck(c.env, method, Number(row.project_id));
+  const filled = await autofillDeck(c.env, method, Number(row.project_id), { userId: Number(user.id) || 0, railOption: 'fill_from_project', projectId: Number(row.project_id) });
   const editorSlides = toEditorSlides(method, filled);
   const wrapped = editorSlides.map((s) => ({
     title: s.title,
