@@ -124,6 +124,8 @@ function fakeGithub(opts: { perms?: Record<string, string>; installations?: numb
     }
     // #2114: Solution design reads each repository first; these repositories are not served, so it reads nothing more.
     if (/^\/repos\/[^/]+\/[^/]+$/.test(url.pathname)) return j({ message: 'Not Found' }, 404);
+    // #2115: Founding team reads who commits; these repositories are not served, so it reads nothing more.
+    if (/^\/repos\/[^/]+\/[^/]+\/contributors$/.test(url.pathname)) return j({ message: 'Not Found' }, 404);
     throw new Error(`unexpected GET ${url.pathname}`);
   }) as any;
   return { calls, restore: () => { globalThis.fetch = real; } };
@@ -264,7 +266,7 @@ test('#1906 the sync lands issues on the roadmap and pull requests on must-haves
     const r = await call(w.env, 'POST', `/api/integrations/${uid}/sync`, {});
     assert.equal(r.status, 200, JSON.stringify(r.body));
     assert.deepEqual(r.body.counts, { issues: 2, pull_requests: 4, releases: 1, roadmap_items_created: 2, must_haves_created: 4,
-      milestones: 0, milestone_items: 0, release_rows_created: 1, items_shipped: 0, design_proposals: 0, stacks: 0 });
+      milestones: 0, milestone_items: 0, release_rows_created: 1, items_shipped: 0, design_proposals: 0, stacks: 0, contributors: 0, ip_proposals: 0 });
     assert.deepEqual(w.all('SELECT objective, kanban_status FROM roadmap_okrs ORDER BY id').map((x) => [x.objective, x.kanban_status]),
       [['Export to CSV', 'next'], ['Fix login', 'done']]);
     assert.deepEqual(w.all('SELECT title, delivery_status FROM mvp_features ORDER BY id').map((x) => [x.title, x.delivery_status]),
@@ -346,8 +348,9 @@ test('#1906 defect (b): each page costs a fetch, a ledger read and one batch, fa
     assert.equal(r.body.counts.partial, undefined);
     const fetches = gh.calls.length - fetchesBefore;
     // Five full issue pages (MAX_PAGES stops there), one empty page each of pulls and releases,
-    // D782's one empty page of milestones, and Solution design's read of each repository (#2114).
-    assert.equal(fetches, 2 * (5 + 1 + 1 + 1 + 1));
+    // D782's one empty page of milestones, Solution design's read of each repository (#2114), and
+    // Founding team's read of its contributors and Company creation's of its owner (#2115).
+    assert.equal(fetches, 2 * (5 + 1 + 1 + 1 + 1 + 1 + 1));
     // One batch per page that has items, and per repository D782's one statement clearing the
     // milestone group of issues in none (not one statement per issue).
     assert.equal(w.meter.batches, 10 + 2, 'one batch per page that has items, and one per repository for D782');

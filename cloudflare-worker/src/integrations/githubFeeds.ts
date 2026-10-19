@@ -31,6 +31,11 @@ export const GITHUB_LANDINGS = [
   // the sync's figure is what it proposed. The stack is a fact, one row per repository.
   { kind: 'design_note', count: 'design_proposals', one: 'architecture proposal', many: 'architecture proposals', what: 'Architecture notes and decisions', module: 'solution_design', store: 'solution_design_notes' },
   { kind: 'stack', count: 'stacks', one: 'repository stack', many: 'repository stacks', what: 'Languages and topics', module: 'solution_design', store: 'solution_design_stack' },
+  // #2115: a contributor's login and commits land for the founder to map to a founder;
+  // the ledger counts the mapped ones. Where the code sits proposes an IP step, which
+  // lands as a formation step when the founder accepts it.
+  { kind: 'contributor', count: 'contributors', one: 'contributor', many: 'contributors', what: 'Contributors and their commits', module: 'founding_team', store: 'github_contributors' },
+  { kind: 'ip_step', count: 'ip_proposals', one: 'IP step proposal', many: 'IP step proposals', what: 'Where the code sits and its licence', module: 'company_creation', store: 'formation_steps' },
 ] as const;
 
 /** The modules that read the connection itself rather than ledger rows: GitHub is Operating systems' Code system. */
