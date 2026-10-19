@@ -140,9 +140,10 @@ function resolveCaptableSource(expr: string, holders: Array<{ name: string; shar
 
 // ---------------------------------------------------------------------
 // AI fallback (single batched call). Best effort — returns a map of
-// hint → string|string[]. D767 (#2096): one router run (`dd_synthesis`,
-// Workers AI), held, guarded and charged to the founder who pressed, with the
-// Raise › Pitch deck page and option on its usage row. A refusal or a failed
+// hint → string|string[]. D767 (#2096): one router run on Workers AI, held,
+// guarded and charged to the founder who pressed, with the Raise › Pitch deck
+// page and option on its usage row. The task is that page's row in D764's
+// matrix (`ai/railMatrix.json`: kind vision, `rail_vision`). A refusal or a failed
 // run leaves the fields as placeholders, as a missing key used to.
 // ---------------------------------------------------------------------
 // A model's JSON answer, fences and prose around it tolerated (as `deckExtract.ts` reads one).
@@ -215,7 +216,7 @@ Hints: ${JSON.stringify(hints)}`;
 
   try {
     const res = await aiRun(env, {
-      task: 'dd_synthesis',
+      task: 'rail_vision',
       userId: who.userId,
       surface: AI_SURFACE.raisePitch,
       railPage: AI_SURFACE.raisePitch,
