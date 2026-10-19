@@ -4,6 +4,19 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## Telegram's consent in Record a Session, the inbox and the session page (D756, #1981, part 1)
+
+- A Telegram chat shows its consent as "Not asked yet", "Asked at <time>",
+  "YES at <time>", "NO" or "Stopped". "Ask for consent in Telegram" calls the
+  consent-request route (a pending chat may be asked); Start waits for the
+  interviewee's YES, and there is no "already agreed" (ruling 6).
+- Without the bot's reply right, or more than 24 hours after the person last
+  wrote, the reason is shown and "Copy the notice" puts the Worker's
+  `notice_text` on the clipboard; the frontend writes no notice of its own.
+- Customer research's `chat_reply` reads "Agreed in the chat"
+  (`services/records/validate.ts`).
+- Notes as recordings (labels, refusals, playback) follow #1978.
+
 ## Consent in Record a Session, the inbox and the session page (D754, #1980, part 1)
 
 - Record a Session › Text chat › WhatsApp: a chat that waits for consent
