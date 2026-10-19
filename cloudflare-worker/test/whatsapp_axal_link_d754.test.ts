@@ -480,8 +480,11 @@ test('DELETE unlinks, once', async () => {
   const g = mockGraph();
   try {
     await link(env);
+    await call(env, ME, 'POST', '/whatsapp/link');
     const r = await call(env, ME, 'DELETE', '/whatsapp/link');
     assert.deepEqual(r.body, { ok: true, unlinked: true });
+    assert.equal(count(db, `SELECT COUNT(*) AS n FROM channel_link_codes WHERE activated_at IS NULL AND cancelled_at IS NULL`), 0,
+      'a code still waiting is cancelled too');
     assert.equal(db.prepare(`SELECT status FROM integrations WHERE provider_key = 'whatsapp_link'`).get().status, 'disconnected');
     assert.deepEqual((await call(env, ME, 'DELETE', '/whatsapp/link')).body, { ok: true, unlinked: false });
     await waHook(env, waText('Here is the recording'));
@@ -553,5 +556,33 @@ test("a member's own business number is untouched by way B", async () => {
     assert.equal(lastEvent(db).error, 'unknown_connection', 'resolved as a member connection, not as Axal');
     assert.equal(count(db, 'SELECT COUNT(*) AS n FROM channel_link_codes WHERE used_at IS NOT NULL'), 0);
     assert.equal(g.sent.length, 0);
+  } finally { g.restore(); }
+});
+
+test("an echo on Axal's number is never a claim; a delivery report on Axal's reply is applied", async () => {
+  const { env, db } = world();
+  const g = mockGraph();
+  try {
+    const code = (await call(env, ME, 'POST', '/whatsapp/link')).body.code;
+    await waHook(env, {
+      object: 'whatsapp_business_account',
+      entry: [{ id: '3000002', changes: [{ field: 'smb_message_echoes', value: {
+        messaging_product: 'whatsapp', metadata: { display_phone_number: '15550009999', phone_number_id: AXAL_PNID },
+        message_echoes: [{ from: '15550009999', to: SENDER, id: 'wamid.ECHO1', timestamp: String(now()), type: 'text', text: { body: `LINK ${code}` } }],
+      } }] }],
+    });
+    assert.equal(lastEvent(db).error, 'unsupported');
+    assert.equal(count(db, 'SELECT COUNT(*) AS n FROM channel_link_codes WHERE used_at IS NOT NULL'), 0);
+
+    await waHook(env, waText(`LINK ${code}`));
+    assert.equal(g.sent.length, 1);
+    await waHook(env, {
+      object: 'whatsapp_business_account',
+      entry: [{ id: '3000002', changes: [{ field: 'messages', value: {
+        messaging_product: 'whatsapp', metadata: { display_phone_number: '15550009999', phone_number_id: AXAL_PNID },
+        statuses: [{ id: 'wamid.OUT1', status: 'delivered', timestamp: String(now()), recipient_id: SENDER }],
+      } }] }],
+    });
+    assert.equal(db.prepare('SELECT status FROM channel_outbound').get().status, 'delivered');
   } finally { g.restore(); }
 });
