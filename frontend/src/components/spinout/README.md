@@ -11,6 +11,7 @@ they share lives here, so a tool page and its admin preview draw the same thing.
 | `LabPageIcon.jsx` | The violet icon tile in that header. |
 | `RevenueLedger.jsx` | The Revenue page's per-customer entry ledger (D363): filters, investor view, manual entry, CSV import with column mapping, proof attachment, mix and confidence, over `/api/revenue`. Sums are integer cents via `../../lib/revenueLedger.js`. |
 | `MercuryCreditImport.jsx` | The ledger's "Import from Mercury" (D713): the founder's own Mercury credits, each with its checkbox or the Worker's reason, imported as Supported with the label and type the founder gives. |
+| `MercurySpend.jsx` | The revenue page's "Mercury" source card and its "Spending from Mercury" sheet (D752, #1988): the founder's own months, net burn, cash and runway, shown only to them, and the save into Grow after they confirm who reads it; plus `MercurySourceBadge`, the "From Mercury" badge on saved rows (delete only). Words in `../../lib/mercurySpend.js`. |
 | `CapTableShareModal.jsx` | The Cap Table page's share sheet (D364) over `/api/captable/scenarios/:uid/share`: audience, what it sees and hides (before minting), days and opens, the named holders' consent for an investor or full link, the one-time link, and the issued links with their view counts and revoke. Rules in `../../lib/capTableShare.js`. |
 | `EquityPlanCard.jsx` | The Cap Table page's option pools and vesting grants (D364) from `/api/captable/equity-plan` — the account's Carta sync, shown as Carta reported it; nothing recorded is Unrecorded with where the terms live instead. |
 | `LabBackLink.jsx` | "← Back to Workspace", the Lab's return control. |
@@ -29,5 +30,7 @@ they share lives here, so a tool page and its admin preview draw the same thing.
   `MercuryCreditImport` reads the founder’s credits only while the ledger’s
   import modal is mounted, imports through `mercuryPersonalApi`, and asks
   the ledger to reload after an import (D713). It never reads `/state`.
+  `MercurySpend`'s sheet reads the founder's spending only while it is open,
+  and saves only after the confirmation is ticked (D752, #1988).
 - **Absent is drawn as absent.** A date, name or count no row records is left
   out or said as not recorded — never filled from the canvas's sample.

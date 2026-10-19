@@ -750,8 +750,8 @@ type Mutation = {
 const mutations: Mutation[] = [
   ...['/whatsapp/link', '/whatsapp/link/:uid/confirm'].map((path): Mutation => ({
     name: 'Axal-number ' + path + ' bypasses canary', path: routePath,
-    before: `channels.post('${path}', member(async (c, user) => {\n  if (!waLink.axalNumberReady(c.env) || !channelOpenTo(c.env, 'whatsapp', user))`,
-    after: `channels.post('${path}', member(async (c, user) => {\n  if (!waLink.axalNumberReady(c.env))`, check: case14,
+    before: `channels.post('${path}', venture(async (c, user) => {\n  if (!waLink.axalNumberReady(c.env) || !channelOpenTo(c.env, 'whatsapp', user))`,
+    after: `channels.post('${path}', venture(async (c, user) => {\n  if (!waLink.axalNumberReady(c.env))`, check: case14,
   })),
   { name: 'Axal-number captures ignore canary', path: routePath,
     before: "if (!(await channelOpenToMember(env, 'whatsapp', Number(link.user_id)))) {", after: 'if (false) {', check: case14 },

@@ -12,6 +12,11 @@
  *          credit carries `fits_raise_target` (D752)
  *   POST   /projects/:projectId/entries/import-mercury   the credits the founder
  *          picked, re-read from Mercury, one `supported` entry each (D713, migration 477)
+ *   GET    /projects/:projectId/mercury-spend?months=1..12   the founder's own months,
+ *          net burn, cash and runway from their own Mercury, built per request (D752)
+ *   POST   /projects/:projectId/mercury-spend/snapshot   { include_cash, confirm_visible: true }
+ *          the last full month's burn (and cash, by choice) as one `mercury`
+ *          `project_metrics` row (D752)
  *   PATCH  /projects/:projectId/entries/:uid     edit an entry or attach its proof
  *   DELETE /projects/:projectId/entries/:uid     remove an entry
  *
@@ -53,6 +58,11 @@ import {
 import { namesAxalEntity } from '../integrations/providers/mercury';
 import { listLedgerChargesForUser } from '../integrations/providers/stripe';
 import { recomputeRevenueMovements } from '../services/revenueMovements';
+import { ensureProjectMetricsSchema } from './progress';
+import {
+  SPEND_VISIBILITY, bucketMonths, cashNow, lastFullMonthWindow, runwayFrom, snapshotFigures, spendMonths, spendWindow,
+  type SpendLine,
+} from '../services/mercurySpend';
 
 type Project = { id: number; name: string | null; founder_id: number | null; company_id: number | null };
 type Ctx = Context<{ Bindings: Env }>;
@@ -286,9 +296,10 @@ revenue.post('/projects/:projectId/entries/import-stripe', async (c) => {
 // the request's, and the customer is the label the founder typed.
 const MAX_MERCURY_IMPORT = 200;
 
-function mercuryOwnerOnly(c: Ctx, g: { user: User; project: Project }): Response | null {
+function mercuryOwnerOnly(c: Ctx, g: { user: User; project: Project },
+  sentence = 'Only the startup\'s founder can import its Mercury credits, from their own connected account.'): Response | null {
   if (g.project.founder_id == null || g.user.founder_id !== g.project.founder_id) {
-    return c.json({ error: 'mercury_owner_only', message: 'Only the startup\'s founder can import its Mercury credits, from their own connected account.' }, 403);
+    return c.json({ error: 'mercury_owner_only', message: sentence }, 403);
   }
   return null;
 }
@@ -453,6 +464,144 @@ revenue.post('/projects/:projectId/entries/import-mercury', async (c) => {
     await logPersonalRead(c.env, conn, g.user, 'mercury_credits_import', { lines: items.length, inserted }).catch(() => {});
   }
   return c.json({ ok: true, inserted, already_imported: already, refused, import_batch: inserted ? batch : null });
+});
+
+// ─────────────────────────────────────────────────────────── D752: the founder's spending
+
+// The project's own founder only, from their own connection: built per
+// request, nothing stored unless they save a snapshot. No account id, last
+// four, memo or transaction id is ever in a response; counterparty names and
+// categories go only to the founder and are never stored or logged.
+const SPEND_OWNER_ONLY = 'Only the startup\'s founder can read its spending, from their own connected Mercury.';
+
+/** The ids of lines the founder confirmed as raise receipts: financing, never income. */
+async function confirmedRaiseReceiptIds(_c: Ctx, _userId: number): Promise<Set<string>> {
+  // #1887 fills this from `mercury_personal_matches` when it merges second.
+  return new Set();
+}
+
+function toSpendLine(line: BankLine, receiptIds: Set<string>): SpendLine {
+  return {
+    transaction_id: line.transaction_id, amount_cents: line.amount_cents, posted_on: line.posted_on, created_on: line.created_on,
+    posted: line.posted, internal: line.internal, voided: line.voided, counterparty_name: line.counterparty_name,
+    category: line.category, financing: namesAxalEntity(line.counterparty_name) || receiptIds.has(line.transaction_id),
+  };
+}
+
+revenue.get('/projects/:projectId/mercury-spend', async (c) => {
+  const g = await gate(c, true);
+  if (g instanceof Response) return g;
+  const owner = mercuryOwnerOnly(c, g, SPEND_OWNER_ONLY);
+  if (owner) return owner;
+  const months = spendMonths(c.req.query('months'));
+  if (typeof months !== 'number') return c.json({ error: months.error, message: months.message }, 400);
+  const today = todayIso();
+  const span = spendWindow(months, today);
+  const window = readWindow(span.from, span.to, today);
+  if ('error' in window) return c.json({ error: window.error, message: window.message }, 400);
+  const conn = await personalConnection(c, g.user, 'venture_spend');
+  if (conn instanceof Response) return conn;
+  let read: { lines: BankLine[]; capped: boolean; refused: number };
+  try { read = await listOwnTransactions(conn, window); }
+  catch (e) { return readFailure(c, conn, e); }
+  const receipts = await confirmedRaiseReceiptIds(c, g.user.id);
+  const lines = read.lines.map((l) => toSpendLine(l, receipts));
+  const listed = bucketMonths(lines, span.listed, span.current);
+  const runwayRows = bucketMonths(lines, span.runwayMonths, span.current);
+  const cash = cashNow(conn.accounts);
+  const runway = runwayFrom(cash.cents, runwayRows, read.capped);
+  await logPersonalRead(c.env, conn, g.user, 'mercury_spend_read', {
+    lines: read.lines.length, months, capped: read.capped ? 1 : 0, unreadable: read.refused,
+  });
+  return c.json({
+    currency: 'USD',
+    window,
+    months: listed,
+    last_full_month: span.lastFullMonth,
+    cash: { cents: cash.cents, as_of: today, accounts_counted: cash.accounts_counted, accounts_unreadable: cash.accounts_unreadable },
+    runway,
+    partial: read.capped,
+    lines_read: read.lines.length,
+    unreadable_lines: read.refused,
+    save: { month: span.lastFullMonth, visibility: SPEND_VISIBILITY },
+  });
+});
+
+const SPEND_SNAPSHOT_UPSERT =
+  `INSERT INTO project_metrics (project_id, snapshot_date, net_burn, cash_balance, notes, source, created_by)
+   VALUES (?, ?, ?, ?, ?, 'mercury', ?)
+   ON CONFLICT(project_id, snapshot_date, source) DO UPDATE SET
+     net_burn = excluded.net_burn, cash_balance = excluded.cash_balance,
+     notes = excluded.notes, created_by = excluded.created_by`;
+
+const FED_SNAPSHOT_UPSERT =
+  `INSERT INTO connector_fed_items (integration_id, project_id, module, kind, external_id, local_table, local_id)
+   VALUES (?, ?, 'revenue_and_traction', 'metric_snapshot', ?, 'project_metrics', ?)
+   ON CONFLICT(integration_id, external_id) DO UPDATE SET project_id = excluded.project_id, local_table = excluded.local_table,
+     local_id = excluded.local_id, last_seen_at = CURRENT_TIMESTAMP`;
+
+revenue.post('/projects/:projectId/mercury-spend/snapshot', async (c) => {
+  const g = await gate(c, true);
+  if (g instanceof Response) return g;
+  const owner = mercuryOwnerOnly(c, g, SPEND_OWNER_ONLY);
+  if (owner) return owner;
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  // Checked before anything reaches Mercury.
+  if (body?.confirm_visible !== true) {
+    return c.json({
+      error: 'visibility_confirm_required',
+      message: 'Confirm who will see the saved figures before saving them.',
+      visibility: SPEND_VISIBILITY,
+    }, 400);
+  }
+  if ('include_cash' in body && typeof body.include_cash !== 'boolean') {
+    return c.json({ error: 'invalid_include_cash', message: 'Say whether to save your cash on hand as true or false.' }, 400);
+  }
+  const includeCash = body.include_cash === true;
+  const conn = await personalConnection(c, g.user, 'venture_spend');
+  if (conn instanceof Response) return conn;
+  const today = todayIso();
+  const last = lastFullMonthWindow(today);
+  const window = readWindow(last.from, last.to, today);
+  if ('error' in window) return c.json({ error: window.error, message: window.message }, 400);
+  let lines = 0, saved = 0;
+  try {
+    let read: { lines: BankLine[]; capped: boolean; refused: number };
+    try { read = await listOwnTransactions(conn, window); }
+    catch (e) { return readFailure(c, conn, e); }
+    lines = read.lines.length;
+    if (read.capped) {
+      return c.json({ error: 'spend_partial', message: 'Your Mercury holds more lines for that month than one read covers, so its burn cannot be saved. Nothing was saved.' }, 409);
+    }
+    const receipts = await confirmedRaiseReceiptIds(c, g.user.id);
+    const [row] = bucketMonths(read.lines.map((l) => toSpendLine(l, receipts)), [last.month]);
+    const figures = snapshotFigures(row, cashNow(conn.accounts).cents, includeCash, today);
+    if (!figures.ok) return c.json({ error: figures.code, message: figures.message }, 409);
+    let id: number | null = null;
+    try {
+      await ensureProjectMetricsSchema(c.env);
+      await c.env.DB.prepare(SPEND_SNAPSHOT_UPSERT)
+        .bind(g.project.id, today, figures.net_burn, figures.cash_balance, figures.notes, g.user.id).run();
+      const stored = await c.env.DB.prepare(
+        "SELECT id FROM project_metrics WHERE project_id = ? AND snapshot_date = ? AND source = 'mercury'",
+      ).bind(g.project.id, today).first<{ id: number }>();
+      id = stored ? Number(stored.id) : null;
+      await c.env.DB.prepare(FED_SNAPSHOT_UPSERT).bind(conn.row.id, g.project.id, `spend-${g.project.id}-${today}`, id).run();
+    } catch (err) {
+      return refuse(c, 500, {
+        code: 'snapshot_save_failed',
+        message: 'The figures were read but could not be saved. Save again; nothing is recorded twice.',
+        raw: err, audience: 'member',
+      });
+    }
+    saved = 1;
+    return c.json({
+      ok: true, id, snapshot_date: today, month: last.month,
+      net_burn: figures.net_burn, cash_balance: figures.cash_balance, source: 'mercury',
+    });
+  } finally {
+    await logPersonalRead(c.env, conn, g.user, 'mercury_spend_snapshot', { lines, saved, cash: includeCash ? 1 : 0 }).catch(() => {});
+  }
 });
 
 revenue.patch('/projects/:projectId/entries/:uid', async (c) => {

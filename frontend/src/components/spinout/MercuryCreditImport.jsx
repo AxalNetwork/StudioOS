@@ -6,7 +6,10 @@
 // Mercury's, re-read by the Worker on import, never sent from here.
 //
 // Drawn inside the ledger's own modal with its parts; the canvas PR lays it
-// out to board F28. Nothing here sends, transfers or requests money.
+// out to board F28. D752 (#1989): a matched raise receipt's line shows the
+// `raise_receipt` reason, and a credit that fits a raise commitment says "This
+// may be an investment" without blocking it. Nothing here sends, transfers or
+// requests money.
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
@@ -14,7 +17,7 @@ import { mercuryPersonalApi } from '../../lib/api/mercuryPersonal';
 import { reportError } from '../../lib/log';
 import { Unreadable, Unrecorded } from '../../ui';
 import {
-  LEDGER_TYPES, fmtLedgerCents, mercuryCreditReason, mercuryImportItems, mercuryImportLine, mercuryImportReady, mercuryReadOutcome,
+  FITS_RAISE_TARGET, FITS_RAISE_TARGET_NOTE, LEDGER_TYPES, fmtLedgerCents, mercuryCreditReason, mercuryImportItems, mercuryImportLine, mercuryImportReady, mercuryReadOutcome,
 } from '../../lib/revenueLedger';
 
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
@@ -70,6 +73,11 @@ export function MercuryCreditImportView({ state, on }) {
                     </span>
                     <span className="block text-[10.5px] text-gray-400 font-mono">{c.posted_on || 'Not recorded'} · ••{c.last_four || '—'}</span>
                     {!c.importable && <span className="block text-[10.5px] text-amber-700 dark:text-amber-300" data-testid={`mercury-reason-${c.transaction_id}`}>{mercuryCreditReason(c.reason)}</span>}
+                    {c.fits_raise_target === true && (
+                      <span className="block text-[10.5px] text-violet-700 dark:text-violet-300" title={FITS_RAISE_TARGET_NOTE} data-testid={`mercury-raise-hint-${c.transaction_id}`}>
+                        {FITS_RAISE_TARGET}. {FITS_RAISE_TARGET_NOTE}
+                      </span>
+                    )}
                   </span>
                 </label>
                 {c.importable && pick.on && (

@@ -610,19 +610,23 @@ const isOldRoute = (d: Pick<DecisionRow, 'state' | 'evidence_count'>) => d.state
  *   card's `next` records the decision for that hypothesis. Both are null
  *   when no deadline is ahead.
  */
-export async function verdictCard(ctx: Ctx): Promise<Card> {
-  return safeCard({ slug: 'verdict', name: 'Verdict', range: 'All time', caption: 'Every decision, oldest to newest, never overwritten.', source: 'Decisions' }, async () => {
+/** D757 §2.6 (#1925): the card's one read-only interview line; null when it cannot be read. */
+export type VerdictCard = Card & { interview_evidence?: { count: number; contradicting: number; text: string } | null };
+
+export async function verdictCard(ctx: Ctx): Promise<VerdictCard> {
+  return safeCard({ slug: 'verdict', name: 'Verdict', range: 'All time', caption: 'Every decision, oldest to newest, never overwritten.', source: 'Decisions' }, async (): Promise<Omit<VerdictCard, 'slug' | 'name' | 'range' | 'caption'>> => {
     const add = { text: 'Record a decision', href: `/validate/verdict/new?project=${ctx.projectId}` };
-    const [any, current] = await Promise.all([
+    const [any, current, interview_evidence] = await Promise.all([
       decisionsFor(ctx.env, ctx.projectId, { pageSize: 1 }),
       currentDecision(ctx.env, ctx.projectId, 'venture'),
+      interviewLine(ctx),
     ]);
     if (any.total === 0) {
-      return { state: 'empty', series: null, next: add, reason: 'No decision yet. Decisions appear here once evidence is in.' };
+      return { state: 'empty', series: null, next: add, reason: 'No decision yet. Decisions appear here once evidence is in.', interview_evidence };
     }
     if (!current) {
       return {
-        state: 'too_little', series: null, next: add,
+        state: 'too_little', series: null, next: add, interview_evidence,
         reason: 'No verdict for the venture yet. Withheld decisions and decisions on one hypothesis are in the table.',
       };
     }
@@ -647,8 +651,70 @@ export async function verdictCard(ctx: Ctx): Promise<Card> {
         }
         : null,
       reason: null,
+      interview_evidence,
     };
   });
+}
+
+/** A stored time as "YYYY-MM-DD HH:MM:SS", so SQLite's and ISO's compare. */
+const instant = (v: unknown) => String(v ?? '').replace('T', ' ').slice(0, 19);
+
+/**
+ * D757 §2.6 (#1925) — the interview evidence that arrived since the venture's
+ * last decision, of any scope or state: the interview items of `given` (the
+ * evidence a caller already read), else of `evidenceFor`, whose
+ * link (or, for a pain link, the later of the link and the interview) was
+ * created after it. With no decision yet, every interview item counts. It
+ * reads; nothing here or on its callers writes a decision.
+ */
+export async function interviewEvidenceSince(
+  env: Env, projectId: number, given?: ReadonlyArray<Pick<EvidenceItem, 'id' | 'kind' | 'direction'>>,
+): Promise<{ ids: string[]; contradicting: number; since: string | null }> {
+  const [last, items] = await Promise.all([
+    env.DB.prepare('SELECT MAX(decided_at) AS at FROM validation_decisions WHERE project_id = ?').bind(projectId).first<{ at: string | null }>(),
+    given ?? validateEvidenceFor({ env, projectId }),
+  ]);
+  const since = last?.at ? instant(last.at) : null;
+  const interview = items.filter((i) => i.kind === 'interview');
+  if (!interview.length) return { ids: [], contradicting: 0, since };
+  const [pains, evidence, ivs] = await Promise.all([
+    env.DB.prepare('SELECT l.id, l.created_at FROM hypothesis_pain_links l JOIN hypotheses h ON h.id = l.hypothesis_id WHERE h.project_id = ?')
+      .bind(projectId).all<{ id: number; created_at: string | null }>(),
+    env.DB.prepare("SELECT id, created_at FROM hypothesis_evidence_links WHERE project_id = ? AND kind = 'interview'")
+      .bind(projectId).all<{ id: number; created_at: string | null }>(),
+    env.DB.prepare('SELECT id, created_at FROM discovery_interviews WHERE project_id = ?')
+      .bind(projectId).all<{ id: number; created_at: string | null }>(),
+  ]);
+  const at = (rows: Array<{ id: number; created_at: string | null }> | undefined) => new Map((rows ?? []).map((r) => [Number(r.id), instant(r.created_at)]));
+  const painAt = at(pains.results); const evidenceAt = at(evidence.results); const ivAt = at(ivs.results);
+  const created = (item: Pick<EvidenceItem, 'id'>): string => {
+    const pain = /^pain-(\d+)-(\d+)$/.exec(item.id);
+    if (pain) {
+      const a = painAt.get(Number(pain[1])) ?? ''; const b = ivAt.get(Number(pain[2])) ?? '';
+      return a > b ? a : b;
+    }
+    const ev = /^evidence-(\d+)$/.exec(item.id);
+    return ev ? evidenceAt.get(Number(ev[1])) ?? '' : '';
+  };
+  const fresh = interview.filter((i) => since == null || created(i) > since);
+  return { ids: fresh.map((i) => i.id), contradicting: fresh.filter((i) => i.direction === 'contradicts').length, since };
+}
+
+/** The Verdict card's interview line, as D757 §2.6 words it. */
+export function interviewEvidenceLine(n: number, contradicting: number, since: string | null): string {
+  const pieces = `${n} ${since ? 'new ' : ''}${n === 1 ? 'piece' : 'pieces'} of interview evidence`;
+  return `${pieces} ${since ? 'since your last decision' : 'so far'}, ${contradicting} contradicting`;
+}
+
+/** The line, or null when its evidence cannot be read: the card still draws. */
+async function interviewLine(ctx: Ctx): Promise<VerdictCard['interview_evidence']> {
+  try {
+    const e = await interviewEvidenceSince(ctx.env, ctx.projectId);
+    return { count: e.ids.length, contradicting: e.contradicting, text: interviewEvidenceLine(e.ids.length, e.contradicting, e.since) };
+  } catch (err) {
+    console.warn('[verdict] interview evidence unreadable:', (err as Error)?.message);
+    return null;
+  }
 }
 
 /**

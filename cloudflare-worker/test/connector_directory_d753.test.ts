@@ -39,7 +39,7 @@ import '../src/integrations/providers/slack.ts';
 import '../src/integrations/providers/stripe.ts';
 
 const {
-  REGISTRY, CATEGORY_ORDER, FIRST_PARTY_CARDS, FIRST_PARTY_PAGES, PERSONAL_MERCURY,
+  REGISTRY, CATEGORY_ORDER, CHANNEL_PAGES, FIRST_PARTY_CARDS, FIRST_PARTY_PAGES, PERSONAL_MERCURY,
   audienceFor, connectorPagePath, directoryKeyFor, getDescriptor, publicDescriptor,
 } = registry as any;
 
@@ -257,10 +257,29 @@ test('page keys: google and microsoft answer their registry rows', async () => {
 // 9 ───────────────────────────────────────────────────────────────────────────
 test('unknown and malformed keys are 404 unknown_provider, never a lookup error', async () => {
   const db = fixture();
-  // whatsapp and telegram become pages with task C1 (channel pages).
-  for (const k of ['notion', 'GitHub', 'git-hub', 'a', 'w'.repeat(41), 'constructor', 'hasownproperty', '%5F%5Fproto%5F%5F', 'whatsapp', 'telegram']) {
+  for (const k of ['notion', 'GitHub', 'git-hub', 'a', 'w'.repeat(41), 'constructor', 'hasownproperty', '%5F%5Fproto%5F%5F', 'signal']) {
     const r = await call(db, 'founder', `/directory/${k}`);
     assert.deepEqual([r.status, r.body], [404, { error: 'unknown_provider' }], k);
+  }
+});
+
+// 9b ──────────────────────────────────────────────────────────────────────────
+test('whatsapp and telegram answer their channel pages (D753 C1), descriptive only', async () => {
+  // Mutations checked: no channelPage branch (404); spreading the page whole (`calls` served).
+  const db = fixture();
+  for (const k of ['whatsapp', 'telegram']) {
+    const sql: string[] = [];
+    const r = await call(db, 'founder', `/directory/${k}`, { sql });
+    assert.equal(r.status, 200, k);
+    const c = r.body.connector;
+    assert.equal(c.key, k);
+    assert.equal(c.page_href, connectorPagePath(k));
+    assert.equal(c.sign_in.kind, 'channel');
+    assert.deepEqual(c.long_description, CHANNEL_PAGES[k].long_description);
+    assert.deepEqual(c.tools.map((t: any) => t.name), CHANNEL_PAGES[k].tools.map((t: any) => t.name));
+    for (const t of c.tools) assert.deepEqual(Object.keys(t).sort(), ['access', 'label', 'lands_in', 'name', 'what']);
+    for (const bad of PRIVATE) assert.ok(!keysDeep(c).includes(bad), `${k}: ${bad}`);
+    assert.ok(!sql.some((s) => CONNECTION_STORES.test(s)), sql.join('\n'));
   }
 });
 
