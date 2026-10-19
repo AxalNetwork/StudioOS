@@ -118,6 +118,17 @@ function stubs(over = {}) {
         returnDraft: rec('returnDraft', async () => ({ ok: true })),
         issue: rec('issue', async () => ({ ok: true })),
       },
+      // D752 (#1890): the Calls tab's proofs of funds, read only on Show.
+      capitalAttestations: {
+        forFund: rec('forFund', async () => ({ ok: true, today: '2026-10-18', truncated: false, fund_id: 7, items: [
+          { uid: 'pf-1', purpose: 'lp_commitment', target_id: 301, deal_id: null, fund_id: 7, investor_user_id: 30, investor_name: 'LP One', target_label: 'Fund I commitment',
+            state: 'active', label: 'Active', expired: false, amount_floor_cents: 25000000, as_of: '2026-10-18', expires_on: '2026-11-17', holder_name: 'Own Practice LLC',
+            accounts_counted: 2, shared_on: '2026-10-18', statement: 'At least $250,000 available at Mercury on 2026-10-18, held by Own Practice LLC, across 2 accounts. Shared by the investor on 2026-10-18.',
+            other_active: [], other_active_count: 0 },
+          { uid: 'pf-2', purpose: 'lp_application', target_id: 202, deal_id: null, fund_id: 7, investor_user_id: 31, investor_name: 'LP Two', target_label: 'Fund I application',
+            state: 'revoked', label: 'Revoked', revoked_on: '2026-10-12', statement: 'Revoked by the investor on 2026-10-12.' },
+        ] })),
+      },
       funds: {
         distributions: rec('distributions', async () => ({ ok: true, items: [{ id: 91, lp_id: 1, lp_name: 'LP One', amount_cents: 450000, status: 'pending', distribution_type: 'exit_proceeds', created_at: '2026-10-01' }] })),
         execute: rec('execute', async () => ({ ok: true })),
@@ -184,16 +195,17 @@ test('each tab renders its fixture', async () => {
     overview: ['Axal Holdings', 'Operating · ending 9001', '$12,345.67', 'Example Fund I', '2 overdue', '2026Q3 · issued', '1 draft · 2 prepared', '3 proposed · 1 need review'],
     banking: ['Holdings Org', 'ending 9001', 'Current $12,345.67', 'Available Unreadable', 'Page 1 of 2', 'LP One'],
     reconciliation: ['$1,000.00 · Capital-call line #11', 'Fee period #41', 'needs_review'],
-    calls: ['Example Fund I · capital calls', '$100,000.00 of $500,000.00 committed', 'Open the call ledger', 'Open the books'],
+    calls: ['Example Fund I · capital calls', '$100,000.00 of $500,000.00 committed', 'Open the call ledger', 'Open the books', 'Proof of funds shared by LPs', 'Show proofs of funds'],
     distributions: ['Carry withheld', 'the job’s 20% default', '1 LP share rounded to zero', 'LP One · $4,500.00'],
     fees: ['2% a year from 2026-01-01', '1 LP has no admission date recorded', '2026Q3 · net $2,500.00', '2026Q4 · net $2,500.00'],
     reports: ['Q3 2026 · lp quarterly report', 'prepared', 'Opened, and recorded in the audit log'],
   };
   for (const [tab, words] of Object.entries(expect)) {
-    const { m } = await open(SUPER, tab);
+    const { m, s } = await open(SUPER, tab);
     const text = m.text();
     assert.ok(m.by(`fund-admin-panel-${tab}`), `${tab} panel`);
     for (const w of words) assert.ok(text.includes(w), `${tab}: missing "${w}" in: ${text.slice(0, 400)}`);
+    assert.ok(!s.calls.some(([n]) => n === 'forFund'), `${tab}: no proof of funds read before Show`);
     await m.unmount();
   }
   // Bank text is drawn as text: the counterparty's markup is never parsed.
@@ -348,6 +360,25 @@ test('the two shell rows lead to the route, which is guard([\'admin\']) and not 
   assert.match(line, /guard\(\['admin'\], <FundAdminConsole \/>\)/);
   assert.doesNotMatch(line, /hqOnly\(/);
   assert.match(APP, /lazy\(\(\) => import\('\.\/pages\/admin\/fundAdmin\/FundAdminConsole'\)\)/);
+});
+
+test('D752: the Calls tab reads the LPs\' proofs of funds only on Show; Hide then Show reads again', async () => {
+  const { m, s } = await open(ADMIN, 'calls');
+  try {
+    assert.ok(!m.by('calls-proofs-hide'));
+    await m.click('calls-proofs-show');
+    assert.deepEqual(s.calls.filter(([n]) => n === 'forFund'), [['forFund', 7]]);
+    const text = m.text();
+    assert.ok(text.includes('LP One · Fund I commitment') && text.includes('At least $250,000 available at Mercury'));
+    assert.ok(text.includes('Revoked by the investor on 2026-10-12.'));
+    assert.ok(text.includes("Compare with the LP's uncalled commitment on the call ledger."));
+    const revoked = text.slice(text.indexOf('LP Two'));
+    assert.ok(!/\$/.test(revoked.slice(0, revoked.indexOf('Revoked by the investor') + 40)), 'a revoked proof shows no amount');
+    await m.click('calls-proofs-hide');
+    assert.ok(m.by('calls-proofs-show'));
+    await m.click('calls-proofs-show');
+    assert.equal(s.calls.filter(([n]) => n === 'forFund').length, 2);
+  } finally { await m.unmount(); }
 });
 
 test('a branch admin sees the HQ-only notice and the console makes no read', async () => {

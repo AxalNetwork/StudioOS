@@ -130,6 +130,8 @@ export const ADMIN_ONLY = 'Only the Super Admin connects, replaces or disconnect
 export const BRANCH_MANAGED = 'Axal\'s entity accounts are managed from HQ.';
 export const TOKEN_HELP = 'How to create a Read Only token';
 export const OPEN_BANKING = { text: 'Open Banking', href: '/admin/fund-admin?tab=banking' };
+/** D752 (#1891): the `capital_attestation` use's door, to the LP workspace's proof of funds. */
+export const ATTESTATION_DOOR = { text: 'Show Axal you can fund this', href: '/spinout-lab/investor-workspace#proof-of-funds' };
 
 /** The Connect box's label: "This is a Read Only token from <entity>'s Mercury organization." */
 export function confirmReadOnlyLabel(entityName) {

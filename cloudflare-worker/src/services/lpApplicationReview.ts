@@ -188,6 +188,8 @@ export interface ReviewQueueRow {
   created_at: string;
   updated_at: string;
   age_days: number;
+  /** D752 (#1890): a state only, never a figure; null on a branch or in a support session. */
+  proof_of_funds?: 'none' | 'active' | 'expired' | 'revoked' | 'unreadable' | null;
 }
 
 const parseAreas = (raw: unknown): string[] => {

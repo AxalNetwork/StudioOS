@@ -8,6 +8,7 @@ import { storeReason } from './impersonationBar';
 // this file. See lib/api/README.md. scripts/check-api-drift.mjs fails if this
 // block does not name exactly the files in lib/api/.
 // api-modules:begin
+export * from './api/adminCapitalAttestations.js';
 export * from './api/adminIncorporations.js';
 export * from './api/adminLearning.js';
 export * from './api/adminMercury.js';
@@ -40,6 +41,7 @@ export * from './api/interviewSessions.js';
 export * from './api/labReportShares.js';
 export * from './api/learning.js';
 export * from './api/memberCredits.js';
+export * from './api/mercuryAttestations.js';
 export * from './api/mercuryPersonal.js';
 export * from './api/partnerSettlements.js';
 export * from './api/profile.js';
