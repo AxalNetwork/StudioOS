@@ -459,9 +459,10 @@ const section = (html, id) => {
   const start = html.lastIndexOf('<', at);
   const tag = html.slice(start + 1, html.indexOf(' ', start));
   let depth = 0;
-  const re = new RegExp(`<(/?)${tag}[\\s>]`, 'g');
+  const re = /<(\/?)([a-zA-Z][a-zA-Z0-9]*)[\s>]/g;
   re.lastIndex = start;
   for (let m; (m = re.exec(html));) {
+    if (m[2] !== tag) continue;
     depth += m[1] ? -1 : 1;
     if (!depth) return html.slice(start, re.lastIndex);
   }
@@ -596,7 +597,7 @@ test('Details: a missing value reads "Not recorded" with DETAIL_MISSING; an http
 
   const html = body(c);
   assert.ok(!/javascript:|http:\/\/example|data:text/.test(html), 'no unsafe link reaches the page');
-  assert.match(section(html, 'connector-page-details'), new RegExp(`title="${DETAIL_MISSING}">Not recorded`));
+  assert.ok(section(html, 'connector-page-details').includes(`title="${DETAIL_MISSING}">Not recorded`));
   assert.ok(html.includes('>Support ↗'));
 
   assert.equal(safeHref('https://example.test/x'), 'https://example.test/x');
@@ -632,7 +633,7 @@ const page = (props) => renderToStaticMarkup(h(MemoryRouter, { initialEntries: [
 
 test('The page: the body replaces F1\'s About and Details, the tagline comes from it, and the band and Connect stay', () => {
   const html = page({ body: { state: 'ready', connector: HUBSPOT } });
-  assert.match(section(html, 'connector-page-tagline'), new RegExp(HUBSPOT.tagline.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.ok(section(html, 'connector-page-tagline').includes(HUBSPOT.tagline));
   assert.ok(!html.includes('HubSpot card description.'));
   assert.equal((html.match(/data-testid="connector-page-about"/g) || []).length, 1);
   assert.ok(html.includes('data-testid="connector-page-body"'));
@@ -685,7 +686,7 @@ test('The read: one call on mount, by the row\'s page_key; the answer fills the 
   try {
     assert.deepEqual(r.calls, ['hubspot'], 'exactly one read on mount');
     assert.equal(m.text(m.by('connector-page-tagline')), HUBSPOT.tagline);
-    assert.match(m.text(m.by('connector-page-trust')), new RegExp(HUBSPOT.trust.sentence.slice(0, 30).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    assert.ok(m.text(m.by('connector-page-trust')).includes(HUBSPOT.trust.sentence.slice(0, 30)));
     await m.settle();
     assert.equal(r.calls.length, 1, 'no second read after the answer lands');
   } finally { await m.unmount(); }
