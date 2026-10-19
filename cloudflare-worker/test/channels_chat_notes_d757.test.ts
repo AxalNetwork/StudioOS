@@ -128,18 +128,21 @@ for (const provider of ['telegram', 'whatsapp'] as const) {
   });
 }
 
-test('Telegram: an unconsented voice note waits, but existing final text still reaches the engine', async t => {
-  const f = await fixture(t, 'telegram', false); await chunk(f);
+for (const provider of ['telegram', 'whatsapp'] as const) test(`${provider}: an unconsented voice note waits, but existing final text still reaches the engine`, async t => {
+  const f = await fixture(t, provider, provider === 'whatsapp');
+  f.db.prepare("UPDATE interview_sessions SET consent_status = 'not_recorded' WHERE id = ?").run(f.sessionId);
+  f.db.prepare("UPDATE channel_threads SET consent_state = 'awaiting' WHERE id = ?").run(f.thread.id);
+  await chunk(f);
   const session = (await loadSession(f.env, f.sessionId))!;
   assert.ok(await sessionConsentBlocks(f.env, session), 'transcription remains gated');
   assert.equal(await sessionDigestConsentBlocks(f.env, session), null, 'final text has its own gate');
-  const msg: any = { ...f.message('note'), provider: 'telegram', externalEventId: 'note', voice: { fileRef: 'never-download', mime: 'audio/ogg', durationSec: 2 }, text: null };
+  const msg: any = { ...f.message('note'), provider, externalEventId: 'note', voice: { fileRef: 'never-download', mime: 'audio/ogg', durationSec: 2 }, text: null };
   const stored: any = await storeVoiceNote(f.env, f.conn, msg);
   f.db.prepare('UPDATE channel_thread_messages SET transcribe_job = ? WHERE uid = ?').run('note-job', stored.messageUid);
   const real = globalThis.fetch; let fetched = 0;
   globalThis.fetch = (async () => { fetched++; throw new Error('no provider expected'); }) as any;
   t.after(() => { globalThis.fetch = real; });
-  await runVoiceFollowup(f.env, { provider: 'telegram', kind: 'voice', job: 'note-job', message: stored.messageUid });
+  await runVoiceFollowup(f.env, { provider, kind: 'voice', job: 'note-job', message: stored.messageUid });
   assert.equal(fetched, 0); assert.equal(f.modelCalls(), 0);
   assert.equal(f.db.prepare('SELECT transcribe_error FROM channel_thread_messages WHERE uid = ?').get(stored.messageUid)!.transcribe_error, 'no_consent');
   assert.equal((await runSessionStructureJob(f.env, jobs(f)[0].payload))?.status, 'done');

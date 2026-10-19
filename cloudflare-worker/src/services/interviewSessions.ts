@@ -124,7 +124,8 @@ export async function sessionConsentBlocks(env: Env, session: SessionRow): Promi
 }
 
 /** D757 (#1930): digest final text even when untranscribed audio waits on consent.
- * WhatsApp's admission gate still applies; an explicit decline/withdrawal stops every text run.
+ * Thread admission applies WhatsApp's consent rule before text is stored. An
+ * explicit decline/withdrawal stops every text run.
  * Transcription continues to use sessionConsentBlocks/consentBlocks, including the chunk probe.
  */
 export async function sessionDigestConsentBlocks(env: Env, session: SessionRow): Promise<ReturnType<typeof consentBlocks>> {
@@ -132,7 +133,7 @@ export async function sessionDigestConsentBlocks(env: Env, session: SessionRow):
   if (session.consent_status === 'declined') return {
     error: 'consent_not_recorded', message: 'The interviewee declined or withdrew consent, so Axal runs nothing on it.',
   };
-  return consentBlocks(session.channel, session.consent_status, { hasAudio: false, submittedVia: session.submitted_via ?? null });
+  return null;
 }
 
 /**
