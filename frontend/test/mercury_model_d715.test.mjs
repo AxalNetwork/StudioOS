@@ -16,9 +16,9 @@ import {
   ENTITY_KEYS, entityRow, entityRows, entityState, entityErrorWords, accountLine, UNREGISTERED_NOTE, FUND_NOTE,
   orgNameDiffersSentence, ENTITY_FEEDS, ENTITY_AUDIT_FOOT, ADMIN_ONLY, BRANCH_MANAGED, TOKEN_HELP, OPEN_BANKING,
   confirmReadOnlyLabel, DISCONNECT_REASON_MIN, ENTITY_DISCONNECT_NOTE, retryAfterSentence,
-  MEMBER_GROUPS, NEVER_ROWS, landsWords, READS_ROW, MEMBER_REPLACE, MEMBER_DISCONNECT_NOTE,
-  PERSONAL_DOES, PERSONAL_LAST_SYNC, PERSONAL_COMPANIES, PERSONAL_FEEDS_FALLBACK, personalAttention, personalToolBanner,
-  NOT_OFFERED, notOfferedSentence, USE_WORDS,
+  MEMBER_GROUPS, NEVER_ROWS, neverRows, landsWords, READS_ROW, MEMBER_REPLACE, MEMBER_DISCONNECT_NOTE, memberDisconnectNote,
+  PERSONAL_DOES, PERSONAL_LAST_SYNC, PERSONAL_COMPANIES, personalFeedsFallback, personalAttention, personalToolBanner,
+  NOT_OFFERED, NOT_OFFERED_HQ_ONLY, notOfferedSentence, USE_WORDS,
 } from '../src/pages/account/mercuryModel.js';
 
 const SRC = readFileSync('frontend/src/pages/account/mercuryModel.js', 'utf8');
@@ -127,24 +127,45 @@ test('decisions 5 and 7: Sync now\'s wait from Retry-After, and Disconnect\'s no
 
 test('decision 8: the member\'s groups, the three "never" rows, where it lands, how it reads, the banner and the disconnect note', () => {
   assert.deepEqual(MEMBER_GROUPS, { uses: 'What StudioOS uses it for', never: 'What it never does', lands: 'Where it lands', reads: 'How it reads' });
-  assert.deepEqual(NEVER_ROWS, [
+  const d713Never = [
     'It never sends, transfers or requests money, and never changes anything in Mercury.',
     'It is never used for fund administration and never shows an Axal entity\'s accounts. StudioOS refuses a token from an Axal entity\'s Mercury organization.',
     'It reads your Mercury only when you connect it and while you open an import or a match. It keeps only the lines you import or match, never your balance, memos or counterparty names.',
+  ];
+  assert.deepEqual(Object.keys(NEVER_ROWS).sort(), ['founder', 'investor', 'partner']);
+  assert.deepEqual(NEVER_ROWS.founder, d713Never);
+  assert.deepEqual(NEVER_ROWS.partner, d713Never);
+  // D752: the investor's three rows.
+  assert.deepEqual(NEVER_ROWS.investor, [
+    'It never sends, transfers or requests money, and never changes anything in Mercury.',
+    'It never shows Axal\'s own accounts. StudioOS refuses a token from an Axal entity\'s Mercury organization.',
+    'It reads your accounts only when you connect it and while you prepare a statement. It keeps only the statements you share: an amount you choose, the date and your organization\'s name. Never a balance, an account number, a transaction or a counterparty.',
   ]);
+  assert.deepEqual(neverRows('investor'), NEVER_ROWS.investor);
+  assert.deepEqual(neverRows('advisor'), d713Never, 'a role without its own rows reads the founder\'s');
+  assert.deepEqual(neverRows(null), d713Never);
   assert.equal(landsWords('founder'), 'Only the venture you import into');
   assert.equal(landsWords('partner'), 'Only your own invoices, payouts and settlements');
-  for (const role of ['investor', 'advisor', 'admin', 'constructor']) assert.equal(landsWords(role), null, role);
+  assert.equal(landsWords('investor'), 'Only the statements you choose to share with Axal\'s admins');
+  for (const role of ['advisor', 'admin', 'constructor']) assert.equal(landsWords(role), null, role);
   assert.equal(READS_ROW, 'Only when you ask. No scheduled sync.');
   assert.equal(MEMBER_REPLACE, 'Replace the token with a Read Only one from your own Mercury organization.');
-  assert.equal(MEMBER_DISCONNECT_NOTE, 'Revenue rows you imported and matches you confirmed stay. The stored token is deleted. Delete it in Mercury too.');
+  const d713Note = 'Revenue rows you imported and matches you confirmed stay. The stored token is deleted. Delete it in Mercury too.';
+  assert.equal(MEMBER_DISCONNECT_NOTE.founder, d713Note);
+  assert.equal(MEMBER_DISCONNECT_NOTE.partner, d713Note);
+  assert.equal(memberDisconnectNote('founder'), d713Note);
+  assert.equal(memberDisconnectNote(null), d713Note);
+  assert.match(memberDisconnectNote('investor'), /does not revoke/);
 });
 
 test('decision 9: the personal row\'s words, and the attention words matched on the code last_error starts with', () => {
   assert.equal(PERSONAL_DOES, 'Reads on request');
   assert.equal(PERSONAL_LAST_SYNC, 'Read on request');
   assert.equal(PERSONAL_COMPANIES, 'You');
-  assert.equal(PERSONAL_FEEDS_FALLBACK, 'Your own payments');
+  assert.equal(personalFeedsFallback('founder'), 'Your own payments');
+  assert.equal(personalFeedsFallback('partner'), 'Your own payments');
+  assert.equal(personalFeedsFallback(null), 'Your own payments');
+  assert.equal(personalFeedsFallback('investor'), 'Statements you share');
   assert.equal(personalAttention('mercury_entity_account: org belongs to an entity'), 'An Axal entity\'s Mercury');
   assert.equal(personalAttention('write_scope_refused'), 'Token can write');
   assert.equal(personalAttention('unauthorized'), 'Token refused');
@@ -154,11 +175,16 @@ test('decision 9: the personal row\'s words, and the attention words matched on 
   assert.equal(personalToolBanner('write_scope_refused'), 'Mercury needs attention: Token can write. Replace its token from its sheet.', 'not lower-cased');
 });
 
-test('decision 10: a "mercury" search with no row says it is not offered, and a branch admin reads the HQ sentence; neither is a request', () => {
-  assert.equal(NOT_OFFERED, 'Mercury is not offered to your profile. Axal\'s admins use it for fund administration, and founders and partners for their own revenue and partner deals.');
+test('decision 10 (D752): a "mercury" search with no row names each role\'s use, an investor on a branch reads HQ only, and a branch admin the HQ sentence; none is a request', () => {
+  assert.equal(NOT_OFFERED, 'Mercury is not offered to your profile. Axal\'s admins use it for fund administration, founders for their venture\'s revenue, partners for their invoices and partner deals, and investors on HQ to show Axal\'s admins they can fund a commitment.');
+  assert.equal(NOT_OFFERED_HQ_ONLY, 'Investors connect Mercury on HQ only, where Axal\'s admins review commitments.');
   assert.equal(notOfferedSentence(), NOT_OFFERED);
+  assert.equal(notOfferedSentence({ role: 'investor' }), NOT_OFFERED);
+  assert.equal(notOfferedSentence({ role: 'investor', onBranch: true }), NOT_OFFERED_HQ_ONLY);
+  assert.equal(notOfferedSentence({ role: 'advisor', onBranch: true }), NOT_OFFERED);
   assert.equal(notOfferedSentence({ branchAdmin: true }), BRANCH_MANAGED);
-  assert.doesNotMatch(NOT_OFFERED + BRANCH_MANAGED, /request/i);
+  assert.equal(notOfferedSentence({ branchAdmin: true, role: 'admin', onBranch: true }), BRANCH_MANAGED);
+  assert.doesNotMatch(NOT_OFFERED + NOT_OFFERED_HQ_ONLY + BRANCH_MANAGED, /request/i);
 });
 
 test('the model is pure and stands alone: no React, no fetch, no import of connectorsModel.js, and no use keys guessed', () => {
