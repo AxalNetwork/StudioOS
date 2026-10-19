@@ -166,18 +166,21 @@ test('each rail_<kind> task is a ROUTE key that names only its kind\'s models, p
   }
 });
 
-test('the rail_<kind> prices are Cloudflare\'s published rates', () => {
+test('the rail_<kind> prices are what Cloudflare bills: each published neuron rate × $0.011 per 1,000', () => {
+  // D760 (#2017) prices from the neuron column, not the table's rounded dollars
+  // (GLM-4.7 Flash: 5,500 neurons = $0.0605 per 1M input tokens, shown as $0.060).
   const md = read('design/incoming/airail-every-page-data/cloudflare-pricing-2026-10-15.md');
+  const usdOf = (neurons: number) => (neurons * 11) / 1_000_000;
   for (const kind of RAIL_KINDS) {
     const entry = (ROUTE as Record<string, any>)[`rail_${kind}`];
     for (const id of [entry.model, ...(entry.alternates ?? [])]) {
       const p = PRICE_USD_PER_1M_TOKENS[id];
       if (!p) continue;
       const line = md.split('\n').find((l) => l.startsWith(`| \`${id}\``))!;
-      const cells = line.split('|').map((c) => c.trim());
-      const usd = cells.filter((c) => c.startsWith('$')).map((c) => Number(c.slice(1)));
-      assert.equal(p.in, usd[0], `${id}: input rate`);
-      if (id !== '@cf/baai/bge-base-en-v1.5') assert.equal(p.out, usd.at(-1), `${id}: output rate`);
+      const cells = line.split('|').map((c) => c.trim()).filter(Boolean);
+      const neurons = cells.filter((c) => /^\d+(\.\d+)?$/.test(c)).map(Number);
+      assert.ok(Math.abs(p.in - usdOf(neurons[0])) < 1e-9, `${id}: input rate ${p.in} is not ${usdOf(neurons[0])}`);
+      if (id !== '@cf/baai/bge-base-en-v1.5') assert.ok(Math.abs(p.out - usdOf(neurons.at(-1)!)) < 1e-9, `${id}: output rate ${p.out} is not ${usdOf(neurons.at(-1)!)}`);
     }
   }
 });

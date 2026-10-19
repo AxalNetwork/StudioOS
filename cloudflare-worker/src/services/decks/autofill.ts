@@ -14,6 +14,8 @@
 import type { Env } from '../../types';
 import type { DeckMethodSpec, DeckSlideField } from './methods';
 import { formatUseOfFundsText } from '../../util/useOfFunds';
+import { run as aiRun } from '../aiRouter';
+import { AI_SURFACE } from '../aiSurfaces';
 
 export type FilledFieldValue =
   | { kind: 'title' | 'subtitle' | 'paragraph' | 'quote'; value: string; source: 'data' | 'ai' | 'placeholder' }
@@ -138,14 +140,54 @@ function resolveCaptableSource(expr: string, holders: Array<{ name: string; shar
 
 // ---------------------------------------------------------------------
 // AI fallback (single batched call). Best effort — returns a map of
-// hint → string|string[]. If OPENAI_API_KEY is not configured (or the
-// call times out) we just leave fields as placeholders.
+// hint → string|string[]. D767 (#2096): one router run (`dd_synthesis`,
+// Workers AI), held, guarded and charged to the founder who pressed, with the
+// Raise › Pitch deck page and option on its usage row. A refusal or a failed
+// run leaves the fields as placeholders, as a missing key used to.
 // ---------------------------------------------------------------------
+// A model's JSON answer, fences and prose around it tolerated (as `deckExtract.ts` reads one).
+export function parseJsonLoose<T>(raw: string | undefined): T | null {
+  if (!raw) return null;
+  let s = raw.trim().replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim();
+  const firstObj = s.indexOf('{');
+  const firstArr = s.indexOf('[');
+  let start = firstObj === -1 ? firstArr : firstArr === -1 ? firstObj : Math.min(firstObj, firstArr);
+  if (start === -1) return null;
+  const open = s[start];
+  const close = open === '{' ? '}' : ']';
+  let depth = 0;
+  let inStr = false;
+  let esc = false;
+  for (let i = start; i < s.length; i++) {
+    const ch = s[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === '\\') esc = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') inStr = true;
+    else if (ch === open) depth++;
+    else if (ch === close) {
+      depth--;
+      if (depth === 0) {
+        try {
+          return JSON.parse(s.slice(start, i + 1)) as T;
+        } catch {
+          return null;
+        }
+      }
+    }
+  }
+  return null;
+}
+/** Who asked for a fill, for the router's hold and its usage row (D767). */
+export interface DeckFillRun { userId: number; railOption: 'deck_draft' | 'fill_from_project'; projectId: number }
+
 async function aiBatchFill(
-  env: Env, project: any, hints: string[], aiHint: string,
+  env: Env, project: any, hints: string[], aiHint: string, who: DeckFillRun | null,
 ): Promise<Record<string, any>> {
-  const key = (env as any).OPENAI_API_KEY;
-  if (!key || hints.length === 0) return {};
+  if (!who || hints.length === 0) return {};
   const ctx = {
     name: project.name, sector: project.sector, stage: project.stage,
     description: project.description, problem: project.problem_statement,
@@ -172,24 +214,21 @@ Return ONLY valid JSON of the form: {"<hint>": <value>, ...}.
 Hints: ${JSON.stringify(hints)}`;
 
   try {
-    const r = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: 'You are a senior VC associate. Always return valid JSON.' },
-          { role: 'user', content: prompt },
-        ],
-        temperature: 0.5, max_tokens: 2200,
-        response_format: { type: 'json_object' },
-      }),
-      signal: AbortSignal.timeout(45_000),
+    const res = await aiRun(env, {
+      task: 'dd_synthesis',
+      userId: who.userId,
+      surface: AI_SURFACE.raisePitch,
+      railPage: AI_SURFACE.raisePitch,
+      railOption: who.railOption,
+      recordRef: `project:${who.projectId}`,
+      systemPrompt: 'You are a senior VC associate. Always return valid JSON.',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.5,
+      maxTokens: 2200,
     });
-    if (!r.ok) return {};
-    const j: any = await r.json();
-    const parsed = JSON.parse(j?.choices?.[0]?.message?.content || '{}');
-    return parsed && typeof parsed === 'object' ? parsed : {};
+    if (!res.ok || !res.output) return {};
+    const parsed = parseJsonLoose<Record<string, any>>(res.output);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
   } catch { return {}; }
 }
 
@@ -275,7 +314,7 @@ function resolveScalarField(
 // Public entry-point.
 // ---------------------------------------------------------------------
 export async function autofillDeck(
-  env: Env, method: DeckMethodSpec, projectId: number,
+  env: Env, method: DeckMethodSpec, projectId: number, who: DeckFillRun | null = null,
 ): Promise<FilledDeck> {
   // Load project + financials.computed_json + cap table holders.
   const project: any = await env.DB
@@ -320,7 +359,7 @@ export async function autofillDeck(
     }
   }
 
-  const aiOut = await aiBatchFill(env, project, Array.from(aiHints), method.ai_fill_hint);
+  const aiOut = await aiBatchFill(env, project, Array.from(aiHints), method.ai_fill_hint, who);
 
   // Second pass: build slides.
   const slides: FilledSlide[] = [];
