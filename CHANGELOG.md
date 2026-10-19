@@ -4,21 +4,6 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
-## Every connector's page is served by the Worker (D753 W2, #1878)
-
-- Each `GET /api/connectors/available` item gains its page fields: `tagline`,
-  `made_by`, `service`, `sign_in`, `added`, `verified` (a recorded live
-  connect), `verified_on`, `read_only`, `page_key` and `page_href`. The answer
-  carries `category_order` (the Discover order; the SPA counts) and
-  `first_party` (LinkedIn's card). Nothing that was there changes.
-- `GET /api/connectors/directory/:key` (and the `/api/integrations` alias)
-  answers one connector's page: the catalogue entry without the connection,
-  plus the long description, tools, prompts, links, endpoints and the trust
-  notice. It needs no active company, follows Mercury's audience, reads no
-  connection store and never publishes a tool's `calls`. `google`, `microsoft`
-  and `linkedin` are page keys; anything else is 404 `unknown_provider`.
-- `connectorsApi.page(key)` in `frontend/src/lib/api/connectors.js`.
-
 ## An OAuth connector Axal holds no client for says so, and its start writes nothing (D751, #1880)
 
 - `GET /api/connectors/available` gives each of the nine OAuth connectors
@@ -33,20 +18,6 @@
   client gone missing mid-flow as `reason=not_configured`.
 - `oauthCredsReady` (`services/providerOauthKeys.ts`) reads the cache
   `ensureCreds` reads; Zoom is set up only with all three of its secrets.
-
-## Every connector has its own page (D753 F1, #1876)
-
-- `/account/connectors/:key` (`ConnectorPage.jsx`, `connectorPageModel.js`)
-  draws a connector inside the Account center: "← Connectors", a header band
-  with the tile, name and tagline, About and Details. Today's connect and
-  manage panel is mounted inline through `SheetFrame`'s new `page` layout, so
-  nothing is lost until F2 to F5 replace it.
-- Every Discover card, Yours row, phone row and Channels button links the page;
-  the hub no longer opens a right sheet (the request form stays until F8). The
-  hub's tab is in the address (`?tab=discover`).
-- A sign-in return lands on its connector's page (`connectorsRedirect`); a
-  Mercury return goes to the hub with its keys stripped (D715 decision 3).
-  No Worker change.
 
 ## The LP's capital call opens on the amount, and the fee statement is on screen (D717, #1859)
 
