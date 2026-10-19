@@ -34,24 +34,28 @@ live in `../../routes/founder_validate_meetings.ts`.
 
 D756 (#1872) switches the Telegram Business bot on. The owner's steps, the
 real-device check, rotation and the off switch are in
-`documentation/operations/TELEGRAM.md`. As decided, and landing task by task
-(the runbook's table says which PR carries each):
+`documentation/operations/TELEGRAM.md`. What shipped, and what has not:
 
 - **Media.** The normaliser reads `voice`, `audio`, `video_note` and an audio
   `document`, carrying the kind, the declared size and the declared MIME type
   in the encrypted voice reference (no migration). A note over 5 MB, the
   recorder's chunk limit, is refused on its declared size before any download,
   through one bounded, streamed download helper in `providerHttp.ts`. Round
-  videos wait as placeholders and are not transcribed yet (#1896).
+  videos wait as placeholders and are not transcribed yet. On `main` (#2051,
+  for #1896).
 - **Consent.** No note of a chat is downloaded until the interviewee answers
   YES in the chat, through D754's provider-neutral consent store. Only the
   chat's own user counts, within 7 days of the notice; NO keeps the notes
   undownloaded, STOP stops later downloads. Telegram offers no member
-  attestation, because the member can always paste the notice (#1977).
+  attestation, because the member can always paste the notice. On `main`
+  (#1998, for #1977). The chat's text is not held: it goes into the session
+  when the chat is assigned, under D684's rule.
 - **Audio.** After YES, each note is stored like the recorder's audio, as a
   chunk under `validate-audio/`, transcribed once with its speaker taken from
-  the side, and kept until the member deletes the session (#1978). Until
-  then, D684's text-only behaviour stands.
+  the side, and kept until the member deletes the session. **Not merged:**
+  #1978 is open. Until it lands, a consented Telegram note is transcribed and
+  only its text is kept (D684's behaviour); WhatsApp's consented notes already
+  take this path (#2063, for #1935).
 
 ## Rules for adding here
 
