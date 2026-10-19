@@ -14,13 +14,15 @@ import {
 } from '../src/lib/bookletFormModel.js';
 import { BookletDesktop, BookletPhone, BookletRail, CheckRow, SubmitBlock } from '../src/pages/SpinoutLabLpBooklet.jsx';
 import { SUBSCRIPTION_BOOKLET_PARTS } from '../src/lib/legalDocFormat.js';
+import { renderedText } from './_renderedText.mjs';
 
 globalThis.localStorage ??= { getItem: () => null, setItem: () => {}, removeItem: () => {} };
 globalThis.document ??= { cookie: '' };
 
 const src = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
 const html = (el) => renderToStaticMarkup(el);
-const text = (h) => h.replace(/<[^>]*>/g, '').replace(/&#x27;/g, "'").replace(/&amp;/g, '&');
+// The shared character scan, not a tag regex (CodeQL: incomplete multi-character sanitization).
+const text = (h) => renderedText(h);
 
 const F = (id, part, t, group, checked = false) => ({ id, part, text: t, group, checked });
 const VIEW = {
