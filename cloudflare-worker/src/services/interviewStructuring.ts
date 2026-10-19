@@ -5,10 +5,12 @@
  *
  * What this file decides, as pure functions the routes call:
  *
- *   · THE KINDS. Seven placements, each with a payload schema, a key for
- *     merging duplicates, and whether a module writer exists. A kind with
- *     no store stays proposed-only (`writer: false`: market facts) and the
- *     review read says so.
+ *   · THE KINDS. Each placement has a payload schema, a key for merging
+ *     duplicates, whether a module writer exists, its MCP module string and
+ *     its cycle slug. A kind with no store would stay proposed-only
+ *     (`writer: false`) and the review read says so; since D757 (#1923)
+ *     every kind has one, the findings no module table holds landing in
+ *     `interview_findings` (`interviewFindings.ts`).
  *   · THE CITATION RULE. A placement must name the span it came from, as
  *     `cite: { from, to }` in milliseconds, inside the transcript it was
  *     given and overlapping at least one segment. One that does not is
@@ -27,6 +29,8 @@ import type { Env } from '../types';
 import { run as aiRun } from './aiRouter';
 import { AI_SURFACE } from './aiSurfaces';
 import { normPhrase } from './painGroups';
+import type { ModuleSlug } from './cycleValidate';
+import { FINDING_KINDS, norm, parseAmount, type FindingKind } from './interviewFindings';
 
 /** One transcript segment, as #1470 stores a `final` one. Offsets in ms. */
 export interface Segment {
@@ -43,7 +47,10 @@ export type PlacementKind =
   | 'demand_signal'
   | 'evidence'
   | 'competitor_mention'
-  | 'market_fact';
+  // D757 §2.6 (#1923): the findings no module table held, in `interview_findings`.
+  | FindingKind
+  | 'hypothesis_new'
+  | 'experiment_idea';
 
 /** What the run knows about the project, so a placement can name real rows. */
 export interface StructureContext {
@@ -83,12 +90,32 @@ interface KindSpec {
   key(p: Record<string, unknown>): string;
   /** A module writer exists on main, so accept can write it. */
   writer: boolean;
-  /** Which Validate module the placement belongs to, for the review read. */
+  /** Which Validate module the placement belongs to, as the MCP tool names it. Kept as is: assistants send it. */
   module: string;
+  /**
+   * D757 §2.6 — the cycle module it lands in (`cycleValidate.ts`'s MODULES).
+   * A kind that spans two names the second by `slugOf` (a firmographic role or
+   * company is the interview record's; the rest are the profile's).
+   */
+  slug: ModuleSlug;
+  slugOf?(p: Record<string, unknown>): ModuleSlug;
+}
+
+/** The cycle module a placement lands in, by its payload where its kind spans two. */
+export function placementSlug(kind: PlacementKind, payload: Record<string, unknown>): ModuleSlug {
+  const spec = PLACEMENT_KINDS[kind];
+  return spec.slugOf ? spec.slugOf(payload) : spec.slug;
+}
+
+/** A finding kind as a placement: its writer is `writeInterviewFinding`. */
+function finding(kind: FindingKind, slug: ModuleSlug): KindSpec {
+  const f = FINDING_KINDS[kind];
+  return { module: f.mcpModule, writer: true, slug, slugOf: (p) => f.slug(p), parse: (p) => f.parse(p), key: (p) => f.key(p) };
 }
 
 export const PLACEMENT_KINDS: Record<PlacementKind, KindSpec> = {
   pain_severity: {
+    slug: 'problem-discovery',
     module: 'problem_discovery',
     writer: true,
     parse: (p) => {
@@ -99,6 +126,7 @@ export const PLACEMENT_KINDS: Record<PlacementKind, KindSpec> = {
     key: (p) => `pain:${normPhrase(String(p.phrase))}`,
   },
   icp_fit: {
+    slug: 'ideal-customer-profile',
     module: 'customer_research',
     writer: true,
     parse: (p) => {
@@ -109,6 +137,7 @@ export const PLACEMENT_KINDS: Record<PlacementKind, KindSpec> = {
     key: () => 'icp_fit',
   },
   segment: {
+    slug: 'ideal-customer-profile',
     module: 'ideal_customer_profile',
     writer: true, // writeSegment + assignInterviewSegment (D659)
     parse: (p) => {
@@ -118,50 +147,92 @@ export const PLACEMENT_KINDS: Record<PlacementKind, KindSpec> = {
     key: (p) => `segment:${String(p.name).toLowerCase()}`,
   },
   demand_signal: {
+    slug: 'demand-signals',
     module: 'demand_signals',
-    writer: true, // writeDemandSignal, arriving to_confirm (D659)
+    // writeDemandSignal. D757: an accepted need_to_have or would_pay is
+    // confirmed (the founder's accept is the confirmation); loi and pre_sale
+    // stay to_confirm until a document or payment is attached.
+    writer: true,
     parse: (p) => {
       const signal = oneOf(p.signal, DEMAND_SIGNALS);
       const detail = p.detail == null ? null : str(p.detail, 200);
       if (!signal || (p.detail != null && !detail)) return null;
-      return { signal, detail };
+      // An amount is named by a price, a letter of intent or a pre-sale; a
+      // need-to-have names none (the writer refuses one, D690), so it is not kept.
+      const amount = signal === 'need_to_have' ? {} : parseAmount(p);
+      if (!amount) return null;
+      return { signal, detail, ...amount };
     },
     key: (p) => `demand:${p.signal}`,
   },
   evidence: {
+    slug: 'experiments',
     module: 'experiments',
     writer: true,
     parse: (p, ctx) => {
       const hypothesisId = posInt(p.hypothesis_id);
-      const painGroupId = posInt(p.pain_group_id);
+      // D757: the theme is optional. Without one, the interview itself is the evidence.
+      const painGroupId = p.pain_group_id == null ? null : posInt(p.pain_group_id);
       const direction = oneOf(p.direction, EVIDENCE_DIRECTIONS);
       const strength = oneOf(p.strength, EVIDENCE_STRENGTHS);
-      if (!hypothesisId || !painGroupId || !direction || !strength) return null;
+      if (!hypothesisId || (p.pain_group_id != null && !painGroupId) || !direction || !strength) return null;
       // Only rows this project has: the model cannot invent a hypothesis.
       if (!ctx.hypotheses.some((h) => h.id === hypothesisId)) return null;
-      if (!ctx.painGroups.some((g) => g.id === painGroupId)) return null;
-      return { hypothesis_id: hypothesisId, pain_group_id: painGroupId, direction, strength };
+      if (painGroupId && !ctx.painGroups.some((g) => g.id === painGroupId)) return null;
+      return { hypothesis_id: hypothesisId, ...(painGroupId ? { pain_group_id: painGroupId } : {}), direction, strength };
     },
-    key: (p) => `evidence:${p.hypothesis_id}:${p.pain_group_id}:${p.direction}`,
+    key: (p) => `evidence:${p.hypothesis_id}:${p.pain_group_id ?? 'interview'}:${p.direction}`,
   },
   competitor_mention: {
+    slug: 'market-intelligence',
     module: 'market_intelligence',
-    writer: true, // writeCompetitorMention, on the project's competitor list (D659)
+    // writeCompetitorMention, on the project's competitor list (D659). D757:
+    // a price makes it a `pricing` signal, and with no list yet Accept
+    // creates the manual one, with no crawl.
+    writer: true,
     parse: (p) => {
       const name = str(p.name, 120);
-      return name ? { name, context: str(p.context, 200) } : null;
+      const amount = parseAmount(p);
+      return name && amount ? { name, context: str(p.context, 200), ...amount } : null;
     },
     key: (p) => `competitor:${String(p.name).toLowerCase()}`,
   },
-  market_fact: {
-    module: 'market_intelligence',
-    writer: false, // no market-fact store yet
+  // D757 §2.6: a market fact now has a topic and a store. Its kind string is
+  // kept: the MCP tool and assistants depend on it.
+  market_fact: finding('market_fact', 'market-intelligence'),
+  firmographic: finding('firmographic', 'ideal-customer-profile'),
+  job_to_be_done: finding('job_to_be_done', 'ideal-customer-profile'),
+  alternative: finding('alternative', 'market-intelligence'),
+  budget: finding('budget', 'demand-signals'),
+  timing: finding('timing', 'demand-signals'),
+  urgency: finding('urgency', 'demand-signals'),
+  buying_trigger: finding('buying_trigger', 'demand-signals'),
+  objection: finding('objection', 'demand-signals'),
+  hypothesis_new: {
+    slug: 'experiments',
+    module: 'experiments',
+    writer: true, // createHypothesis
     parse: (p) => {
-      const fact = str(p.fact, 300);
-      const source = str(p.source, 200);
-      return fact && source ? { fact, source } : null;
+      const claim = str(p.claim, 500);
+      const disproof = p.disproof == null ? null : str(p.disproof, 500);
+      if (!claim || (p.disproof != null && !disproof)) return null;
+      return { claim, ...(disproof ? { disproof } : {}) };
     },
-    key: (p) => `fact:${String(p.fact).toLowerCase()}`,
+    key: (p) => `hypothesis:${norm(p.claim)}`,
+  },
+  experiment_idea: {
+    slug: 'experiments',
+    module: 'experiments',
+    writer: true, // addExperiment, on a hypothesis this project has
+    parse: (p, ctx) => {
+      const hypothesisId = posInt(p.hypothesis_id);
+      const title = str(p.title, 200);
+      const method = p.method == null ? null : str(p.method, 500);
+      if (!hypothesisId || !title || (p.method != null && !method)) return null;
+      if (!ctx.hypotheses.some((h) => h.id === hypothesisId)) return null;
+      return { hypothesis_id: hypothesisId, title, ...(method ? { method } : {}) };
+    },
+    key: (p) => `experiment:${p.hypothesis_id}:${norm(p.title)}`,
   },
 };
 
