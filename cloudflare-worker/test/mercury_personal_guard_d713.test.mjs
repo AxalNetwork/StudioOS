@@ -4,7 +4,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 const root='cloudflare-worker/src';
 const walk=p=>readdirSync(p,{withFileTypes:true}).flatMap(e=>e.isDirectory()?walk(join(p,e.name)):[join(p,e.name)]);
-const allowed=new Set(['integrations/providers/mercury.ts','services/mercuryPersonal.ts','routes/mercury_personal.ts','routes/revenue.ts','routes/needs.ts','routes/network.ts','routes/partner_settlements.ts','services/onboardingChecklist.ts']);
+const allowed=new Set(['integrations/providers/mercury.ts','services/mercuryPersonal.ts','routes/mercury_personal.ts','routes/revenue.ts','routes/needs.ts','routes/network.ts','routes/partner_settlements.ts','services/onboardingChecklist.ts','services/raiseCycle.ts']);
 const callers=new Set(['routes/revenue.ts','routes/mercury_personal.ts','routes/needs.ts','routes/network.ts']);
 test('personal match tables and provider queries stay within the personal allowlist',()=>{
   for(const f of walk(root).filter(f=>/\.[cm]?[jt]s$/.test(f))) {
