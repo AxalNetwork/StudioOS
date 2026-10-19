@@ -23,6 +23,7 @@ import { PHONE_QUERY } from '../workspaces/lens.jsx';
 import { useViewMode } from '../contexts/ViewModeContext';
 import { budgetReadable } from '../pages/account/usageModel';
 import './workerRail.css';
+import { clearRailPage, setRailPage } from '../lib/railPage.js';
 
 /**
  * The Eadwyn AI rail. One component, every licence.
@@ -497,6 +498,12 @@ export default function WorkerRail({
   }, []);
   const [allPref, setAllPref] = useState(null);
   const showAll = allPref ?? !!sug.offList;
+
+  // D765: the page every request names as the rail's, until D768's page map.
+  useEffect(() => {
+    const token = setRailPage(workspace);
+    return () => clearRailPage(token);
+  }, [workspace]);
 
   // Shared with the page, which decides whether to offer proposals, through a
   // module store rather than a provider — see hooks/useAssistMode.js. A page
