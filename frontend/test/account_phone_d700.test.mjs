@@ -540,7 +540,7 @@ test('5. at desktop width the pages draw no bar and keep their own heading', () 
   const docs = read('frontend/src/pages/docs/DocsLayout.jsx');
   assert.match(docs, /\) : phone \? \(\s*<HelpPhoneHome[\s\S]*?\) : \(\s*<HelpHome/, 'only the home has a phone view; a guide page is unchanged');
   const products = read('frontend/src/pages/ProductsPage.jsx');
-  assert.match(products, /\{!phone && \(\s*<>\s*<h1 [^>]*>\s*<Package size=\{26\}[^>]*\/> Products/);
+  assert.match(products, /\{!phone && \(\s*<>\s*<h1 [^>]*>\s*<Package size=\{26\}[^>]*\/> Plans &amp; Pricing/);
   assert.match(products, /return phone \? <PricingPhone role=\{user\?\.role\}>\{page\}<\/PricingPhone> : page;/);
 });
 
