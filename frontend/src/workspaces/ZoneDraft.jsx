@@ -3,6 +3,7 @@ import { Sparkles } from 'lucide-react';
 import { api } from '../lib/api';
 import { formatCost } from '../ui/assistCost';
 import RunEstimate from './RunEstimate';
+import { useRailOption } from '../ui/railCrumbs';
 
 /**
  * The band every artboard with an AI proposal closes with.
@@ -165,6 +166,9 @@ export default function ZoneDraft({
   const [busy, setBusy] = useState('');
   const [note, setNote] = useState('');
   const [editing, setEditing] = useState(null);
+  // D770 (#2095): while a draft runs or is shown, the rail's open option is this band's,
+  // under the registry's key (`draft:<surface>`, lib/railOptions), so its run names it.
+  useRailOption(busy === 'run' || item ? `draft:${surface}` : null, typeof label === 'string' ? label : null);
 
   const load = useCallback(async () => {
     try {

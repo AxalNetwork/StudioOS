@@ -244,6 +244,8 @@ export function railPageKey(value: unknown): string | null {
   return typeof value === 'string' && RAIL_PAGE_RE.test(value.trim()) ? value.trim() : null;
 }
 export function railOptionKey(value: unknown): string | null { return railKey(value); }
+/** D770 (#2095): a record ref (`type:id`) keeps D762's rule too. */
+export function railRecordKey(value: unknown): string | null { return railKey(value); }
 
 /** D765: the refusal's words, which every route answers with 403 `assist_off`. */
 export const ASSIST_OFF_MESSAGE = 'AI assistance is off on this page.';
