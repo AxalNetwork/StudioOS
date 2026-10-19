@@ -18,6 +18,7 @@ import { voiceFetchBy } from '../src/services/channels/voiceFailures.ts';
 import { callingEligibility, callingRecord, GRAPH_VERSION, unsubscribeApp } from '../src/services/channels/whatsapp.ts';
 import { memberConnection, channelOpenToMember } from '../src/services/channels/connections.ts';
 
+import { withGuard } from './_guard_stub.mjs';
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const mig = (name: string) => readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8');
 
@@ -99,7 +100,7 @@ async function world(opts: { seed?: boolean; budget?: number } = {}) {
     APP_URL: 'https://axal.vc', PUBLIC_BASE_URL: 'https://axal.vc',
     RATE_LIMITS: memKV(), USE_CF_QUEUE: 'true',
     JOB_QUEUE: { async send(body: any) { queued.push(body); } },
-    AI: { async run(model: string, input: any) { aiCalls.push({ model, input }); return { text: 'We lose a whole day every month to this.', transcription_info: { language: 'en' } }; } },
+    AI: withGuard({ async run(model: string, input: any) { aiCalls.push({ model, input }); return { text: 'We lose a whole day every month to this.', transcription_info: { language: 'en' } }; } }),
   };
   if (opts.seed) {
     const creds = await encryptCredentials(env, 'wa-me', { access_token: WA_TOKEN, token_type: 'bearer' });

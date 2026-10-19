@@ -565,7 +565,8 @@ test('every model call goes through aiRouter.run with the member\'s id; the engi
   const f = world();
   const id = await importedCall(f);
   await runSessionStructureJob(f.env, { session_id: id, user_id: ME, trigger: 'call_imported' });
-  const logs = f.db.prepare('SELECT user_id, surface FROM ai_usage_logs').all();
+  // D763: one row per model call; the guard's own rows (`guard_for` set) are its run's, on the same page.
+  const logs = f.db.prepare('SELECT user_id, surface FROM ai_usage_logs WHERE guard_for IS NULL').all();
   assert.equal(logs.length, f.ai.length, 'one usage row per model call');
   for (const l of logs) assert.deepEqual({ ...l }, { user_id: ME, surface: SURFACE });
   const src = readFileSync(new URL('../src/services/validateEngine.ts', import.meta.url), 'utf8');

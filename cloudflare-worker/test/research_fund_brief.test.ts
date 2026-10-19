@@ -20,6 +20,7 @@ import { d1Over } from './_d1_sqlite.mjs';
 
 import research from '../src/routes/research.ts';
 
+import { withGuard } from './_guard_stub.mjs';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const MIGRATIONS = resolve(ROOT, 'cloudflare-worker/sql/migrations');
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
@@ -64,13 +65,13 @@ async function token(userId: number): Promise<string> {
 }
 
 async function call(db: any, userId: number, method: string, path: string, body?: any, onPrompt?: (p: string) => void) {
-  const AI = {
+  const AI = withGuard({
     run: async (_model: string, payload: any) => {
       const messages = payload?.messages || [];
       onPrompt?.(String(messages[messages.length - 1]?.content ?? ''));
       return { response: 'Ask who will be in the room.' };
     },
-  };
+  });
   const headers: Record<string, string> = { Authorization: `Bearer ${await token(userId)}` };
   if (body !== undefined) headers['content-type'] = 'application/json';
   const res = await research.fetch(
