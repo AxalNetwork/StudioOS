@@ -194,6 +194,10 @@ const EXPECTED: Record<string, string[]> = {
   'services/competitorAnalysis.ts': ['AI_SURFACE.researchCompanies'],
   'services/deckExtract.ts': ['AI_SURFACE.raisePitchReview', 'AI_SURFACE.raisePitchReview'],
   'services/publications.ts': ['AI_SURFACE.adminPublications'],
+  // D766 (#2094) — system calls moved into the router.
+  'routes/monitoring.ts': ['AI_SURFACE.monitoring'],
+  'routes/admin_x.ts': ['AI_SURFACE.adminX', 'AI_SURFACE.adminX'],
+  'services/vectorize.ts': ['AI_SURFACE.searchIndex'],
   'services/updateShare.ts': ['AI_SURFACE.growUpdate'],
   'services/fills/citations.ts': ['AI_SURFACE.validate'],
   'services/interviewStructuring.ts': ['AI_SURFACE.validateInterviews', 'AI_SURFACE.validateInterviews', 'AI_SURFACE.validateInterviews'], // D658: structure, ask; D685: summarise

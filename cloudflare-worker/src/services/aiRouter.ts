@@ -66,7 +66,12 @@ export type TaskClass =
   | 'research_ask'
   | 'structure_interview'
   // D685 §5.10 — StudioOS's own summary of a session, every sentence cited.
-  | 'summarise_interview';
+  | 'summarise_interview'
+  // D766 (#2094) — system calls that used to call env.AI.run directly: the
+  // monitoring summary, and the X post image screen and alt text.
+  | 'ops_summary'
+  | 'image_screen'
+  | 'image_alt_text';
 
 export type RefusalReason =
   | 'budget_user_day'
@@ -348,6 +353,11 @@ export const PRICE_USD_PER_1M_TOKENS: Record<string, { in: number; out: number }
   // to — see SMALL_LLAMA below.
   '@cf/meta/llama-3.1-8b-instruct':           { in: 0.282, out: 0.827 },
   '@cf/meta/llama-3.1-8b-instruct-fp8':       { in: 0.152, out: 0.287 },
+  // D766 (#2094) — the X image screen and alt text, moved off llava-1.5-7b-hf,
+  // which Cloudflare's 2026-10-15 table no longer prices. Vision, and no
+  // license prompt to send first. Rate from that table
+  // (design/incoming/airail-every-page-data/cloudflare-pricing-2026-10-15.md).
+  '@cf/meta/llama-4-scout-17b-16e-instruct':  { in: 0.27,  out: 0.85 },
   '@cf/meta/llama-3.3-70b-instruct-fp8-fast': { in: 0.293, out: 2.253 },
   // Offered as a workspace_explain alternate: six times cheaper to prompt and
   // shallower, which is a trade a founder may reasonably want to make on a
@@ -443,6 +453,8 @@ export function audioMinutesFromBytes(bytes: number): number {
 // deliberate second step rather than a side effect of this one.
 const SMALL_LLAMA = '@cf/meta/llama-3.1-8b-instruct-fp8';
 const MID_LLAMA   = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+// D766 — the vision model for the system's image calls (D761 PR 2's content parts).
+const VISION_SCOUT = '@cf/meta/llama-4-scout-17b-16e-instruct';
 
 export const ROUTE: Record<TaskClass, RouteEntry> = {
   safety:       { provider: 'workers-ai', model: '@cf/meta/llama-guard-3-8b' },
@@ -628,6 +640,11 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   },
   sentiment:    { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA], cacheTtlSec: 30 * 86400 },
   embed:        { provider: 'workers-ai', model: '@cf/baai/bge-base-en-v1.5', isEmbed: true,  cacheTtlSec: 30 * 86400 },
+  // D766 (#2094) — system calls (userId 0): logged at cost, charged to no member.
+  // The monitoring summary keeps the model it called directly.
+  ops_summary:  { provider: 'workers-ai', model: SMALL_LLAMA },
+  image_screen: { provider: 'workers-ai', model: VISION_SCOUT },
+  image_alt_text: { provider: 'workers-ai', model: VISION_SCOUT },
   paraphrase:   { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
   // High-stakes synthesis (Task #2 AU admin publication summaries,
   // dd synthesis). Task #31: Anthropic removed from production. Both
