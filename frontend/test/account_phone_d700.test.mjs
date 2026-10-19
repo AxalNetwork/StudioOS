@@ -590,7 +590,8 @@ test('5. at desktop width the pages draw no bar and keep their own heading', () 
   assert.match(docs, /\) : phone \? \(\s*<HelpPhoneHome[\s\S]*?\) : \(\s*<HelpHome/, 'only the home has a phone view; a guide page is unchanged');
   const products = read('frontend/src/pages/ProductsPage.jsx');
   assert.match(products, /\{!phone && \(\s*<>\s*<h1 [^>]*>\s*<Package size=\{26\}[^>]*\/> Plans &amp; Pricing/);
-  assert.match(products, /return phone \? <PricingPhone pricing=\{pricing\} budget=\{budget\}>\{page\}<\/PricingPhone> : page;/);
+  // D755 §13: the phone's account bar is a member's; a visitor gets the page.
+  assert.match(products, /return phone && member \? <PricingPhone pricing=\{pricing\} budget=\{budget\}>\{page\}<\/PricingPhone> : page;/);
 });
 
 test('5. A4m–A10m: each section reads its values from the page\'s sources', () => {
@@ -653,7 +654,9 @@ test('5. A4m–A10m: each section reads its values from the page\'s sources', ()
 test('6. the member routes mount the pages that draw A7m and A10m; the public pages draw no account bar', () => {
   const app = read('frontend/src/App.jsx');
   assert.match(app, /<Route path="\/my\/events" element=\{guard\(\[[^\]]+\], <MyEventsPage \/>\)\} \/>/);
-  assert.match(app, /<Route path="\/plans-and-pricing" element=\{guard\(\[[^\]]+\], <ProductsPage \/>\)\} \/>/);
+  // D755 §13: /plans-and-pricing opens to visitors; a product's page still needs sign-in.
+  assert.match(app, /<Route path="\/plans-and-pricing" element=\{<ProductsPage \/>\} \/>/);
+  assert.match(app, /<Route path="\/plans-and-pricing\/:productId" element=\{guard\(\[[^\]]+\], <ProductsPage \/>\)\} \/>/);
   assert.match(read('frontend/src/pages/events/MyEventsPage.jsx'), /<EventsPhoneView /);
   assert.match(read('frontend/src/pages/account/PricingPhone.jsx'), /<AccountPhonePage pageKey="pricing"/);
   for (const f of ['frontend/src/pages/events/PublicEventsPage.jsx', 'frontend/src/pages/PricingPage.jsx']) {
