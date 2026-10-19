@@ -41,7 +41,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { register } from 'node:module';
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { RAIL_PAGES, pageKeyFor } from '../src/lib/railPages.js';
@@ -304,13 +304,15 @@ const SRC = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'src');
 function lazyModules() {
   const out = new Set();
   const walk = (dir) => {
-    for (const name of readdirSync(dir)) {
-      const p = resolve(dir, name);
-      if (statSync(p).isDirectory()) { walk(p); continue; }
-      if (!/\.(jsx?|tsx?)$/.test(name)) continue;
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const p = resolve(dir, entry.name);
+      if (entry.isDirectory()) { walk(p); continue; }
+      if (!entry.isFile() || !/\.(jsx?|tsx?)$/.test(entry.name)) continue;
       for (const m of readFileSync(p, 'utf8').matchAll(/import\(\s*['"](\.{1,2}\/[^'"]+)['"]\s*\)/g)) {
         const base = resolve(dirname(p), m[1]);
-        const hit = ['', '.jsx', '.js', '.tsx', '.ts', '/index.jsx', '/index.js'].map((e) => base + e).find((f) => existsSync(f) && statSync(f).isFile());
+        // Only named here; the import below opens it, and a file gone by then stays lazy.
+        const hit = ['', '.jsx', '.js', '.tsx', '.ts', '/index.jsx', '/index.js'].map((e) => base + e)
+          .find((f) => statSync(f, { throwIfNoEntry: false })?.isFile());
         if (hit) out.add(hit);
       }
     }

@@ -106,8 +106,6 @@ class Text extends Node {
   set data(v) { this._text = String(v ?? ''); }
 }
 
-const camel = (name) => name.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
-
 class Element extends Node {
   constructor(document, tag, namespaceURI = 'http://www.w3.org/1999/xhtml') {
     super(document, 1, String(tag).toUpperCase());
@@ -343,7 +341,6 @@ export function installAppDom({ fetch, url = 'http://localhost/' } = {}) {
   };
   const realSetTimeout = globalThis.setTimeout;
   const realClearTimeout = globalThis.clearTimeout;
-  const realSetInterval = globalThis.setInterval;
   const realClearInterval = globalThis.clearInterval;
   const live = new Set();
   let closed = false;
