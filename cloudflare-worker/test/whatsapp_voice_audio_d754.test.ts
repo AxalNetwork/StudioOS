@@ -21,7 +21,6 @@
  *     --test cloudflare-worker/test/whatsapp_voice_audio_d754.test.ts
  */
 import test from 'node:test';
-import { GUARD_MODEL } from './_guard_stub.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runChannelJob } from '../src/services/channels/jobs.ts';
@@ -29,6 +28,7 @@ import { deleteSession, loadSession } from '../src/services/interviewSessions.ts
 import { recoverSession, runInterviewProcessJob } from '../src/services/interviewProcessing.ts';
 import { sweepInterviewSessions } from '../src/services/sessionSweeper.ts';
 import { DEFAULT_FINAL_MODEL } from '../src/services/sttModels.ts';
+import { GUARD_MODEL } from './_guard_stub.mjs';
 import {
   AUDIO, call, consentGiven, count, INTERVIEW, ME, mockFetch, noSecretsSeen, now, PNID, type Route, seen,
   WA_CUSTOMER, waHook, waPayload, waText, world,
@@ -159,13 +159,16 @@ test('D754 W3 racing: two notes get two seq and two objects; one note\'s job twi
   await voiceNote(w, 'wamid.R3', 'MEDIA-R3');
   const job = lastVoiceJob(w.queued);
   // Both runs are held inside the model until both have arrived, so both pass every check before either appends.
+  // Llama Guard's own calls (D763, inside run()) pass straight through: only the transcription is counted and held.
   const run = w.env.AI.run;
   let arrived = 0;
   let release!: () => void;
   const both = new Promise<void>((resolve) => { release = resolve; });
   w.env.AI.run = async (model: string, input: any) => {
     if (model === GUARD_MODEL) return run(model, input);
-    if (++arrived === 2) release(); await both; return run(model, input);
+    if (++arrived === 2) release();
+    await both;
+    return run(model, input);
   };
   const g = mockFetch(graph({ 'MEDIA-R3': {} }));
   try {

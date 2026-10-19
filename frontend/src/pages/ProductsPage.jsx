@@ -34,6 +34,7 @@ import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import { usePhoneWidth } from '../ui';
 import PricingPhone, { usePricingReads } from './account/PricingPhone';
+import SitePage from '../components/site/SitePage';
 import { useCart } from '../components/products/useCart';
 import BillingCartBar from '../components/products/BillingCartBar';
 import CartDrawer from '../components/products/CartDrawer';
@@ -630,6 +631,9 @@ export default function ProductsPage() {
     </div>
   );
 
+  // A visitor reads the page in the public site's frame (its nav and footer,
+  // as /pricing does); a member reads it in the app's, which `guard` draws.
+  if (!member) return <SitePage title="Plans and pricing">{page}</SitePage>;
   // The phone's account bar (A10m) is a member's; a visitor gets the page itself.
   return phone && member ? <PricingPhone pricing={pricing} budget={budget}>{page}</PricingPhone> : page;
 }
