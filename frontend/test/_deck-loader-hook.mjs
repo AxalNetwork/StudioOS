@@ -70,6 +70,12 @@ export async function load(url, context, nextLoad) {
   if (url.startsWith('file://') && /\.css$/.test(new URL(url).pathname)) {
     return { format: 'module', source: 'export default {};', shortCircuit: true };
   }
+  // D764 (#2089): the rail's model matrix is a JSON module, the way wrangler
+  // bundles an imported `.json` (the worker's `_ts-loader-hook.mjs` does the
+  // same). A test that imports the AI router reaches it. Only that one file.
+  if (url.startsWith('file://') && new URL(url).pathname.endsWith('/services/ai/railMatrix.json')) {
+    return { format: 'module', source: `export default ${readFileSync(fileURLToPath(url), 'utf8')};`, shortCircuit: true };
+  }
   if (url.startsWith('file://') && TRANSFORM_EXTS.test(new URL(url).pathname)) {
     const filename = fileURLToPath(url);
     const source = readFileSync(filename, 'utf8');

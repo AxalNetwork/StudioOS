@@ -6,6 +6,7 @@ import {
 import { api } from '../lib/api';
 import { reportError } from '../lib/log';
 import PageExplainer from '../components/PageExplainer';
+import { useRailOption } from '../ui/railCrumbs';
 
 /**
  * Task #10 — Pitch Positioning Generator.
@@ -28,6 +29,8 @@ export default function PitchPositioningPage({ embedded = false }) {
   const [projectId, setProjectId] = useState('');
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [generating, setGenerating] = useState(false);
+  // D771 (#2097): while positioning is generated, the rail is that option's.
+  useRailOption(generating ? 'draft:positioning' : null, 'Generate positioning');
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const [aiUnavailable, setAiUnavailable] = useState(false);
