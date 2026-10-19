@@ -113,10 +113,11 @@ test('the e-sign route builds no regex of its own', () => {
     ESIGN_SRC.includes('new RegExp'), false,
     'a dynamic RegExp is back in esign.ts — merge expansion belongs to applyMergeFields',
   );
-  // And it reaches the shared resolver on BOTH branches, not just the D1 one.
+  // And it reaches the shared resolver. D758 deleted the legacy branch (its
+  // inline bodies), so the library branch is the only one left.
   assert.equal(
-    (ESIGN_SRC.match(/applyMergeFields\(/g) || []).length, 2,
-    'both the stored-template branch and the legacy branch must expand through applyMergeFields',
+    (ESIGN_SRC.match(/applyMergeFields\(/g) || []).length, 1,
+    'the library branch must expand through applyMergeFields',
   );
 });
 

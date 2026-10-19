@@ -181,7 +181,7 @@ export interface NotOfferedTemplate {
   instead?: { path: string; label: string };
 }
 
-const NO_BODY = 'Not wired to the signing engine: no template body is registered for it, so an envelope could not be rendered.';
+const NO_BODY = 'Not offered from this page: no text for it has been cleared for members to send for signature.';
 
 export const NOT_OFFERED: Record<string, ReadonlyArray<NotOfferedTemplate>> = {
   founder: [
