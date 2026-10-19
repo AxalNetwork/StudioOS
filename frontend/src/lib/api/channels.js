@@ -22,6 +22,8 @@
 //   cancelMeeting    DELETE /founder/validate/interviews/:id/meetings/:refUid
 //   importMeeting    POST   /founder/validate/interviews/:id/meetings/:refUid/import
 //   attachMeeting    POST   /founder/validate/interviews/:id/meetings  { attach: { join_url }, session_id, provider } (D685 §5.3.2, #1588)
+//   googleStatus     GET    /calendar/google/status        → { connected, meet_transcripts: 'granted' | 'available' | 'not_set_up', … } (D757, #1926)
+//   allowMeetTranscripts POST /calendar/google/meet-transcripts/connect?return_to=  then the page goes to Google's consent (D757, #1926)
 //
 // Every path is written out in full (no shared prefix constant) so the drift
 // check (scripts/check-api-drift.mjs) reads each one against the Worker.
@@ -38,6 +40,10 @@ function memberMethod(m) {
   if (!MEMBER_CONSENT_METHODS.includes(m)) throw new Error(`Unknown consent method: ${m}`);
   return m;
 }
+
+// Where Google sends the member back: Connectors (via /integrations) or Record a session.
+const MEET_RETURNS = new Set(['integrations', 'record']);
+const GOOGLE_CONSENT = /^https:\/\/accounts\.google\.com\//;
 
 function provider(p) {
   if (!PROVIDERS.has(p)) throw new Error(`Unknown channel provider: ${p}`);
@@ -72,6 +78,21 @@ function assignBody(target) {
   return body;
 }
 
+/**
+ * Ask Google for the Meet transcript permission (D757, #1926): the Worker
+ * answers with Google's consent URL, and the page goes there. A refusal
+ * (503 meet_transcripts_not_set_up while the owner has not switched it on)
+ * throws, as every other call here does; so does a URL that is not Google's.
+ */
+export async function allowMeetTranscripts(returnTo = 'integrations', assign = (url) => window.location.assign(url)) {
+  if (!MEET_RETURNS.has(returnTo)) throw new Error(`Unknown return: ${returnTo}`);
+  const r = await request(`/calendar/google/meet-transcripts/connect?return_to=${enc(returnTo)}`, { method: 'POST', body: JSON.stringify({}) });
+  const url = r?.redirect_url || r?.auth_url;
+  if (typeof url !== 'string' || !GOOGLE_CONSENT.test(url)) throw new Error('Google did not answer with its consent page. Try again in a moment.');
+  assign(url);
+  return url;
+}
+
 export const channelsApi = {
   overview: () => request('/channels'),
   linkTelegram: () => request('/channels/telegram/link', { method: 'POST', body: JSON.stringify({}) }),
@@ -97,6 +118,8 @@ export const channelsApi = {
   reply: (uid, text, clientKey) => request(`/channels/threads/${enc(uid)}/reply`, {
     method: 'POST', body: JSON.stringify({ text, client_key: clientKey }),
   }),
+  googleStatus: () => request('/calendar/google/status'),
+  allowMeetTranscripts,
   retryVoice: (threadUid, messageUid) => request(`/channels/threads/${enc(threadUid)}/voice/${enc(messageUid)}/retry`, {
     method: 'POST', body: JSON.stringify({}),
   }),
