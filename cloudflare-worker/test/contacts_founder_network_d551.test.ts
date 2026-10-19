@@ -26,6 +26,7 @@ import { SignJWT } from 'jose';
 import contacts, { contactProfilePatch } from '../src/routes/contacts.ts';
 import research from '../src/routes/research.ts';
 
+import { withGuard } from './_guard_stub.mjs';
 const here = dirname(fileURLToPath(import.meta.url));
 const migration = (f: string) => readFileSync(resolve(here, `../sql/migrations/${f}`), 'utf8');
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
@@ -215,13 +216,13 @@ test('the rollup is one statement, however many contacts there are', async () =>
 
 async function draft(db: any, who: { user: number }, surface: string, scopeKey?: string) {
   let prompt: string | null = null;
-  const AI = {
+  const AI = withGuard({
     run: async (_m: string, payload: any) => {
       const messages = payload?.messages || [];
       prompt = String(messages[messages.length - 1]?.content ?? '');
       return { response: 'a drafted paragraph' };
     },
-  };
+  });
   const res = await research.fetch(new Request('http://x/drafts', {
     method: 'POST',
     headers: { Authorization: `Bearer ${await token(who.user)}`, 'content-type': 'application/json' },

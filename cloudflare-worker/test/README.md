@@ -22,6 +22,9 @@ had already been caught reading a column name production does not use.
 `_engine_schema.mjs` (D757) gives a world whose sessions reach the Validate engine
 what it reads: migrations 453, 465 and 487, `queue_jobs`, and the member and venture
 columns `writableSession` checks.
+`_guard_stub.mjs` (D763) answers Llama Guard's calls on a stubbed `env.AI` and passes
+every other call through: the guard fails closed inside `run()`, so a stub that does not
+answer it refuses every member run. It answers free, so a test keeps its own run's figures.
 `schema_readiness.test.ts` runs the real bootstraps against two recording D1 stubs
 and asserts each database gets its own DDL — the half `scripts/check-schema-readiness.mjs`
 cannot see, since reading the source tells you a `WeakMap` is there but not that it

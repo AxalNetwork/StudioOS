@@ -40,6 +40,7 @@ import { refuseReason } from '../src/services/fills/types.ts';
 import { fillKind } from '../src/services/fills/registry.ts';
 import { searchSemantic, researchNamespace } from '../src/services/vectorize.ts';
 
+import { withGuard } from './_guard_stub.mjs';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const read = (p: string) => readFileSync(resolve(HERE, '..', p), 'utf8');
 
@@ -63,14 +64,14 @@ function fakeEnv(opts: {
 } = {}) {
   const calls: { vectorize: any[]; ai: any[] } = { vectorize: [], ai: [] };
   const env: any = {
-    AI: {
+    AI: withGuard({
       async run(model: string, args: any) {
         // `embedText` asks for a 768-wide vector and refuses anything else.
         if (String(model).includes('bge')) return { data: [new Array(768).fill(0.1)] };
         calls.ai.push({ model, args });
         return { response: opts.aiOutput ?? '' };
       },
-    },
+    }),
     VECTORIZE: {
       async query(_vector: number[], args: any) {
         calls.vectorize.push(args);
