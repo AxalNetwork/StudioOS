@@ -4,6 +4,7 @@ import { ArrowLeft, Sparkles, Loader2 } from 'lucide-react';
 import { publications } from '../../lib/api';
 import { useToast } from '../../components/useToast';
 import ToastMessage from '../../components/ToastMessage';
+import PublicationsFrame from './PublicationsFrame';
 
 const SECTIONS = [
   'sentiment', 'talc', 'demand_supply', 'sector_heat',
@@ -56,6 +57,7 @@ export default function PublicationNew() {
   };
 
   return (
+    <PublicationsFrame>
     <div className="max-w-2xl mx-auto px-6 py-8 dark:text-gray-100">
       <ToastMessage toast={toast} onDismiss={dismissToast} />
       <button onClick={() => nav('/admin/publications')} className="text-sm text-gray-500 hover:text-violet-600 flex items-center gap-1 mb-4">
@@ -149,5 +151,6 @@ export default function PublicationNew() {
         </div>
       </form>
     </div>
+    </PublicationsFrame>
   );
 }
