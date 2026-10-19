@@ -51,7 +51,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/monitoring    → monitoring.ts
 /api/ai-budget     → ai_budget.ts       (member allowance/held reads; Super Admin reviews and plan caps, D640)
 /api/usage         → usage.ts           (the caller's own stored files by area, across all their companies; never another member's, D642)
-/api/connectors    → integrations.ts    (canonical connection catalogue, company scope, requests, suggestions and logs; D650)
+/api/connectors    → integrations.ts    (canonical connection catalogue, company scope, requests, suggestions and logs; D650; connector pages (`GET /directory/:key`, D753))
 /api/integrations  → integrations.ts    (temporary alias to the same handlers; D650)
                                          (D655: GET /:uid/sync-status, GET /:uid/fed, GET|PUT /:uid/repositories for GitHub)
 /api/infra         → infra.ts
@@ -216,6 +216,8 @@ routes of their own. Two routes here changed:
 D666: `mcp_consent.ts` mounts `/api/mcp/consent` and `/api/connectors/assistants` (the latter before the connector router). They are the SPA's half of connecting an AI assistant: read, approve or deny a parked authorization request (single-use, ten minutes), list the caller's grants and revoke one. The MCP server and its OAuth endpoints are not routers here: `../index.ts`'s `fetch` sends `/api/mcp`, `/api/oauth/*` and the two `/.well-known/oauth-*` paths to `../mcp/oauth.ts` first. Everything is 404 with `MCP_SERVER_ENABLED` off.
 
 D686 (#1592): `integrations.ts` returns the signed OAuth destination `/build/connect`, exposes connector `feed_modules` and `last_error_at`, and keeps existing connections syncing on Free. Google Calendar, Microsoft and LinkedIn accept the literal Build return token in their existing callback flows.
+
+D753 (#1878): `catalogueEntry` builds each catalogue item for `/available` and for `GET /directory/:key`, the descriptive page read registered above `/:key`. The page fields come from `../integrations/connectorPages.ts` through the registry. `crunchbase.ts`'s `connect_path` and the onboarding checklist will link to `connectorPagePath(key)` once the connector-page route is on `main` (#1946).
 
 D691 (#1696): Grow obligation routes use the production `compliance_events`
 columns (`due_date`, `completion_status`), translate the existing API keys in

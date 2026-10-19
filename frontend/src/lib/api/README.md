@@ -182,3 +182,5 @@ and `POST /api/auth/google/popup` (the code that window returned, with the
 attempt's state; the answer is `{ token, user, new_signup }`). The POST carries
 `X-Requested-With: XmlHttpRequest`, which the Worker requires and which no
 other origin can send. The redirect fallback stays `api.googleStartUrl`.
+
+D651 (#1463): `connectors.js` calls `/api/connectors`, the Connectors page's, its panel's and Build's 'Connect a tool' reads and writes. D753 (#1878) adds `page(key)` (`GET /api/connectors/directory/:key`), one connector's page.

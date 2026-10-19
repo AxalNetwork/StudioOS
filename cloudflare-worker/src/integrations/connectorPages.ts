@@ -531,6 +531,24 @@ export const FIRST_PARTY_PAGES: { linkedin: ConnectorPage } = {
   },
 };
 
+/**
+ * LinkedIn's card facts (D753 W2, #1878): what the catalogue knows of a
+ * connector with no registry row. The values the SPA's `FIRST_PARTY` uses
+ * (`connectorsModel.js`); `users` holds the LinkedIn identity. No
+ * `has_implementation` (whether it can connect is `/api/linkedin/status`'s
+ * `configured`) and no `already_connected` (the SPA keeps reading that route).
+ */
+export interface FirstPartyCard {
+  key: 'linkedin'; display_name: string; category: ConnectorCategory; status: 'live'; tier: 'free';
+  auth_type: 'oauth2'; supports_pat: false; docs_url: null; first_party: true; connection_source: 'users';
+}
+export const FIRST_PARTY_CARDS: { readonly linkedin: Readonly<FirstPartyCard> } = Object.freeze({
+  linkedin: Object.freeze({
+    key: 'linkedin', display_name: 'LinkedIn', category: 'Data', status: 'live', tier: 'free',
+    auth_type: 'oauth2', supports_pat: false, docs_url: null, first_party: true, connection_source: 'users',
+  } as const),
+});
+
 /** The Discover order (D753 decision 13): the Connectors page's list, then Payroll. Every `ConnectorCategory` once. */
 export const CATEGORY_ORDER: readonly ConnectorCategory[] = Object.freeze([
   'CRM', 'Payments', 'Accounting and banking', 'Calendar', 'Calendar and workspace', 'Messaging', 'Signing', 'Cap table', 'Data', 'Code', 'Design', 'Docs', 'Payroll',
@@ -606,6 +624,18 @@ export function connectorPagePath(key: string): string {
   const pageKey = key === PAGE_ALIAS.google ? 'google' : key === PAGE_ALIAS.microsoft ? 'microsoft' : key;
   const known = Object.hasOwn(PAGE_ALIAS, pageKey) || pageKey === 'linkedin' || Object.hasOwn(CONNECTOR_PAGES, pageKey);
   return known ? `${HUB}/${pageKey}` : HUB;
+}
+
+/**
+ * The registry key and the page key a directory request names (D753 W2,
+ * #1878), or null for a key no page could have. Pure: whether the key exists
+ * is the route's to check. `google` and `microsoft` are page keys
+ * (`PAGE_ALIAS`, own properties only); every other key is its own page key.
+ */
+export function directoryKeyFor(raw: string): { key: string; page_key: string } | null {
+  if (typeof raw !== 'string' || !PAGE_KEY_RE.test(raw)) return null;
+  if (Object.hasOwn(PAGE_ALIAS, raw)) return { key: PAGE_ALIAS[raw as keyof typeof PAGE_ALIAS], page_key: raw };
+  return { key: raw, page_key: raw };
 }
 
 export type PageDescriptor = ConnectorPage & { key: string; page_key: string; page_href: string; trust: Trust };
