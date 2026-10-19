@@ -7,7 +7,7 @@ import { EmptyState, PhoneBar, PhoneRows, Pill, Unrecorded, Unreadable, usePhone
 import { BTN, Chips, INPUT, LoadingRows, PanelCard, useAccountRead } from './AccountCenter';
 import {
   NOT_COUNTED, allowanceView, dayAxis, dayBars, filterPages, modelRows, pageOf, pageRows,
-  rateRows, receiptView, storageView, STORAGE_AREAS, taskRows, topUpState,
+  rateRows, receiptView, storageView, STORAGE_AREAS, taskRows, topUpState, topUpRows,
 } from './usageModel';
 import { ACCOUNT_PHONE_COPY, ACCOUNT_PHONE_PAGES } from './accountPhone';
 
@@ -422,6 +422,65 @@ const phonePending = (status, what, claim, reload) => (status === 'loading'
   ? <LoadingRows lines={2} />
   : <Unreadable what={what} claim={claim} onRetry={reload} />);
 
+/**
+ * D755 §10 (#1984) — every movement of the member's top-up balance, from
+ * `/ai-budget/history`: its own read, so a failure blanks only this card.
+ * "Show AI runs" asks the Worker for each run's hold, release and spend too.
+ * Amounts are the Worker's; nothing here adds them up.
+ */
+export const TOP_UPS_LIMIT = 50;
+export function TopUpsCard({ history, runs = false, onToggleRuns }) {
+  const rows = history.status === 'ready' ? topUpRows(history.data) : null;
+  return (
+    <div id="top-ups">
+      <PanelCard title="Your top-ups" data-testid="usage-card-top-ups"
+        aside={(
+          <label className="flex items-center gap-1.5">
+            <input type="checkbox" checked={runs} onChange={onToggleRuns} data-testid="usage-top-ups-runs" />
+            Show AI runs
+          </label>
+        )}
+        footer={rows && history.data?.next_before ? `Showing the latest ${TOP_UPS_LIMIT}.` : null}>
+        {history.status === 'loading' ? <LoadingRows lines={3} />
+          : !rows ? (
+            <div data-testid="usage-top-ups-unreadable">
+              <Unreadable what="Your top-ups" claim="The balance above is unaffected." onRetry={history.reload} />
+            </div>
+          ) : !rows.length ? (
+            <div className="flex flex-col items-center gap-2">
+              <EmptyState size="sm" data-testid="usage-top-ups-empty" title="No top-ups yet." />
+              <a href="/plans-and-pricing#token-packs" className={BTN.ghost} data-testid="usage-top-ups-add">Add tokens</a>
+            </div>
+          ) : (
+            <ul className="divide-y divide-axal-hairline dark:divide-gray-800" data-testid="usage-top-ups-rows">
+              {rows.map((r) => (
+                <li key={r.key} className="flex flex-wrap items-baseline justify-between gap-2 py-2" data-testid={`usage-top-up-${r.kind}`}>
+                  <div className="flex min-w-0 flex-col gap-0.5">
+                    <span className="text-[13px] font-semibold text-axal-ink dark:text-gray-100">{r.label}</span>
+                    <Muted>{[r.when, r.order ? `order ${r.order}` : null].filter(Boolean).join(' · ')}</Muted>
+                    {r.note && r.kind !== 'pending' && <Muted className="leading-snug">{r.note}</Muted>}
+                  </div>
+                  <span className={`${MONO} text-sm`}>
+                    {r.amount ?? <Unrecorded reason="The amount was not recorded.">Not recorded</Unrecorded>}
+                    {r.kind === 'pending' && <Muted className="ml-1.5">{r.note}</Muted>}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+      </PanelCard>
+    </div>
+  );
+}
+
+/** The Top-ups card's read and its "Show AI runs" switch. */
+function useTopUps() {
+  const [runs, setRuns] = useState(false);
+  const history = useAccountRead(() => aiBudgetApi.history({ runs, limit: TOP_UPS_LIMIT }));
+  const onToggleRuns = () => { setRuns((r) => !r); history.reload(); };
+  return { history, runs, onToggleRuns };
+}
+
 /** A2m's AI allowance rows: the state lines first, then the periods, holds and balance. */
 export function allowanceGroup({ budget, product, now = new Date() }) {
   const v = budget.status === 'ready' ? allowanceView(budget.data, now) : null;
@@ -493,7 +552,7 @@ export function storageGroup({ storage }) {
  * sections come first; the cards it does not draw follow as they stack today
  * (D700 decision 9). No read takes a company.
  */
-export function UsagePhoneView({ budget, product, spend, rates, storage, now = new Date() }) {
+export function UsagePhoneView({ budget, product, topUps, spend, rates, storage, now = new Date() }) {
   const page = ACCOUNT_PHONE_PAGES.usage;
   return (
     <div className="flex flex-col gap-3" data-testid="usage-section" data-phone="true">
@@ -503,6 +562,7 @@ export function UsagePhoneView({ budget, product, spend, rates, storage, now = n
           <PhoneRows groups={[allowanceGroup({ budget, product, now }), modelsGroup({ spend, rates }), storageGroup({ storage })]} />
         </div>
       </div>
+      {topUps && <TopUpsCard {...topUps} />}
       <DaysCard spend={spend} />
       <WhereCard spend={spend} />
       <RatesCard rates={rates} />
@@ -518,6 +578,7 @@ export default function UsageSection({ role }) {
   const spend = useAccountRead(() => api.myAiSpend());
   const rates = useAccountRead(() => aiBudgetApi.rates());
   const storage = useAccountRead(() => usageApi.storage());
+  const topUps = useTopUps();
   // The canvas's anchors (#days, #where, #models, #last-run, #storage). Each
   // card draws its anchor in every state, so the scroll lands while it loads.
   const { hash } = useLocation();
@@ -526,7 +587,7 @@ export default function UsageSection({ role }) {
     if (id) document.getElementById(id)?.scrollIntoView?.({ block: 'start' });
   }, [hash]);
   const phone = usePhoneWidth();
-  if (phone) return <UsagePhoneView budget={budget} product={product} spend={spend} rates={rates} storage={storage} />;
+  if (phone) return <UsagePhoneView budget={budget} product={product} topUps={topUps} spend={spend} rates={rates} storage={storage} />;
   return (
     <div className="flex flex-col gap-3" data-testid="usage-section">
       <div>
@@ -534,6 +595,7 @@ export default function UsageSection({ role }) {
         <p className="text-[13px] text-axal-muted dark:text-gray-400">What you have used across all your companies.</p>
       </div>
       <AllowanceCard budget={budget} product={product} />
+      <TopUpsCard {...topUps} />
       <DaysCard spend={spend} />
       <WhereCard spend={spend} />
       <ModelsCard spend={spend} rates={rates} />

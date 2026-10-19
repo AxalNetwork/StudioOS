@@ -339,3 +339,59 @@ export function storageView(s) {
     empty: allRead && s.files === 0,
   };
 }
+
+/**
+ * D755 §10 (#1984) — the Top-ups card's rows, from `/ai-budget/history`.
+ * Newest first, as the Worker pages them; purchases paid but not yet credited
+ * lead as "being added". Every amount is the Worker's signed micro-USD figure
+ * for that row: nothing here sums a balance, and an adjustment's reason never
+ * reaches the member (the Worker does not send it, and this never reads it).
+ */
+const LEDGER_LABEL = {
+  purchase: (p) => p,
+  bonus: (p) => `Bonus on ${p}`,
+  refund: (p) => `Refund · ${p}`,
+  dispute: (p) => `Disputed · ${p}`,
+  dispute_won: (p) => `Dispute won · ${p}`,
+  adjustment: () => 'Adjustment',
+  hold: () => 'AI run · held',
+  release: () => 'AI run · released',
+  spend: () => 'AI run',
+};
+export const RUN_KINDS = Object.freeze(['hold', 'release', 'spend']);
+
+/** A signed micro-USD figure: "+$20.00", "−$4.50". */
+export function signedMicroUsd(n) {
+  if (!Number.isSafeInteger(n)) return null;
+  const abs = usd(Math.abs(n) / 1_000_000);
+  return n < 0 ? `−${abs}` : `+${abs}`;
+}
+
+export function topUpRows(h) {
+  if (!h || !Array.isArray(h.items)) return null;
+  const pack = (r) => r?.pack_label || 'Token pack';
+  const pending = (Array.isArray(h.pending) ? h.pending : []).map((p, i) => ({
+    key: `pending-${p.order_ref || i}`,
+    kind: 'pending',
+    label: pack(p),
+    amount: Number.isSafeInteger(p.amount_microusd) ? signedMicroUsd(p.amount_microusd) : null,
+    note: 'being added',
+    when: whenLabel(p.at),
+    order: p.order_ref || null,
+  }));
+  const rows = h.items.filter((r) => LEDGER_LABEL[r?.kind]).map((r) => {
+    const shortfall = r.kind === 'refund' && Number.isSafeInteger(r.shortfall_microusd) && r.shortfall_microusd > 0
+      ? `${microUsd(r.shortfall_microusd)} of these tokens had already been used.` : null;
+    return {
+      key: r.uid,
+      kind: r.kind,
+      label: LEDGER_LABEL[r.kind](pack(r)),
+      amount: signedMicroUsd(r.delta_microusd),
+      note: shortfall,
+      when: whenLabel(r.at),
+      order: r.order_ref || null,
+      run: RUN_KINDS.includes(r.kind),
+    };
+  });
+  return [...pending, ...rows];
+}
