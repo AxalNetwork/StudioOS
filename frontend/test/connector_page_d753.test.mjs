@@ -212,8 +212,9 @@ test('a Mercury return never reaches the Mercury page; the page\'s own mount is 
   const m = await mount(page('mercury'), '/account/connectors/mercury?oauth=ok&provider=mercury');
   try {
     assert.equal(reads(), 1, 'the page\'s mount');
-    const sheet = m.by('mercury-entity-sheet');
-    assert.ok(sheet && m.props(sheet)['data-layout'] === 'page', 'in the page layout');
+    // D753 F5 (#1991): the entity connections are the page's own body, not a sheet in the page layout.
+    assert.ok(m.by('mercury-entity-page'), 'drawn on the page');
+    assert.equal(m.by('mercury-entity-sheet'), undefined, 'no sheet');
     assert.equal(m.by('connector-sheet-connected'), undefined, 'no return view');
     assert.equal(seen.search, '', 'the query is stripped');
   } finally { await m.unmount(); f.restore(); }
@@ -223,13 +224,14 @@ test('a crafted return: another key\'s is ignored and stripped; Stripe\'s refusa
   const f = mockFetch();
   const other = await mount(page('stripe'), '/account/connectors/stripe?oauth=error&provider=hubspot&reason=x');
   try {
-    assert.equal(other.by('connector-sheet-refused'), undefined);
-    assert.ok(other.by('connector-page-connect'));
+    // D753 F2 (#1908): a return is said in the notice region; another key's says nothing.
+    assert.equal(other.by('connector-page-notice'), undefined);
+    assert.ok(other.by('connector-page-action'));
     assert.equal(seen.search, '');
   } finally { await other.unmount(); }
   const own = await mount(page('stripe'), '/account/connectors/stripe?oauth=error&provider=stripe&reason=Your+account+is+suspended');
   try {
-    assert.ok(own.by('connector-sheet-refused'));
+    assert.equal(own.props(own.by('connector-page-notice'))['data-kind'], 'refused');
     assert.match(own.text(), /Stripe refused access\. Ask your Stripe admin/);
     assert.doesNotMatch(own.text(), /suspended/);
   } finally { await own.unmount(); }
@@ -253,7 +255,7 @@ test('every return lands on its page; the hub sends a bookmarked one on; the pag
   const hub = await mount(h(ConnectorsView, { data: ready() }), '/account/connectors?oauth=ok&provider=stripe');
   try { assert.equal(`${seen.pathname}${seen.search}`, '/account/connectors/stripe?oauth=ok&provider=stripe'); } finally { await hub.unmount(); }
   const stripe = await mount(page('stripe'), '/account/connectors/stripe?oauth=ok&provider=stripe');
-  try { assert.ok(stripe.by('connector-sheet-connected')); } finally { await stripe.unmount(); }
+  try { assert.equal(stripe.props(stripe.by('connector-page-notice'))['data-kind'], 'connected'); } finally { await stripe.unmount(); }
   const gh = await mount(page('github'), '/account/connectors/github?oauth=ok&provider=github');
   try { assert.ok(gh.by('connector-sheet-sync'), 'GitHub\'s sign-in lands on its repositories'); } finally { await gh.unmount(); f.restore(); }
 });

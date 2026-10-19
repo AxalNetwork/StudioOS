@@ -37,10 +37,30 @@ import { IntakeError, activeMember } from '../interviewIntake';
 import { claimDetails, consumeLinkCodeRow, memberLinkClaim, type LinkClaim } from './linkCodes';
 import { maskNumber } from './whatsapp';
 
+/** The four settings Axal's number needs, by name. Names only: a value never leaves the Worker. */
+export const AXAL_NUMBER_SETTINGS = ['WHATSAPP_AXAL_ACCESS_TOKEN', 'WHATSAPP_AXAL_PHONE_NUMBER_ID', 'WHATSAPP_AXAL_WABA_ID', 'WHATSAPP_AXAL_DISPLAY_NUMBER'] as const;
+
+/** The names of the settings that are unset, in that order (#1939: for a Super Admin's 503 only). */
+export function axalNumberMissing(env: Env): string[] {
+  const vars = env as unknown as Record<string, unknown>;
+  return AXAL_NUMBER_SETTINGS.filter((name) => typeof vars[name] !== 'string' || (vars[name] as string).trim() === '');
+}
+
 /** Whether the owner has set Axal's number up: all four settings, or way B is off. */
 export function axalNumberReady(env: Env): boolean {
-  return [env.WHATSAPP_AXAL_ACCESS_TOKEN, env.WHATSAPP_AXAL_PHONE_NUMBER_ID, env.WHATSAPP_AXAL_WABA_ID, env.WHATSAPP_AXAL_DISPLAY_NUMBER]
-    .every((v) => typeof v === 'string' && v.trim() !== '');
+  return axalNumberMissing(env).length === 0;
+}
+
+/**
+ * Axal's public number, as the owner wrote it, and a plain `wa.me` link to it
+ * with no code (#1939: Record a Session's "From WhatsApp"). Empty while way B
+ * is not set up, so nothing is drawn.
+ */
+export function axalContact(env: Env): { axal_number?: string; axal_link?: string } {
+  if (!axalNumberReady(env)) return {};
+  const shown = String(env.WHATSAPP_AXAL_DISPLAY_NUMBER).trim();
+  const digits = shown.replace(/\D/g, '');
+  return digits ? { axal_number: shown, axal_link: `https://wa.me/${digits}` } : {};
 }
 
 /** Whether a webhook delivery is for Axal's own number. False while it is unset. */

@@ -1,20 +1,23 @@
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { connectorsApi } from '../../lib/api/connectors';
-import { Info } from 'lucide-react';
-import { BrandIcon, PhoneBar, Unrecorded, Unreadable, usePhoneWidth } from '../../ui';
+import { ChevronDown, Info } from 'lucide-react';
+import { BrandIcon, PhoneBar, Pill, Unrecorded, Unreadable, usePhoneWidth } from '../../ui';
 import { BTN } from './AccountCenter';
-import { ConnectorPanel, PermissionsGroup, SheetFrame, UsesGroups, openingView, useConnectors } from './ConnectorSheet';
+import { ConnectorPanel, KeyFields, PermissionsGroup, SheetFrame, UsesGroups, openingView, useConnectors } from './ConnectorSheet';
+import { useConnectFlow } from './useConnectFlow';
 import { RequestSheet, useMovedNotice } from './AccountConnectors';
-import { cardAction, isEntityRow, moduleLabel, stripReturn } from './connectorsModel';
+import { isEntityRow, isPersonalMercury, keysHref, moduleLabel, stripReturn } from './connectorsModel';
 import {
-  DETAIL_MISSING, backHrefFor, bodyDetailsRows, detailsRows, headerTagline, interimMode, modeLabel, pageEntry, pageReturn, pageTitle, toolGroups,
+  DETAIL_MISSING, backHrefFor, bodyDetailsRows, detailsRows, headerTagline, keyHelpOf, modeLabel, pageAction, pageChoices, pageEntry, pageNotice,
+  pageReturn, pageTitle, toolGroups,
 } from './connectorPageModel';
 import { isChannelKey } from './channelPageModel';
 import ChannelPage from './ChannelPage';
 import { notOfferedSentence } from './mercuryModel';
+import { MercuryEntityPageBody, MercuryLandsGroup, MercuryReadsGroup, MercuryUsesGroups } from './MercurySheet';
 import { useAuth } from '../../hooks/useAuthSync';
-import { branchOfUser } from '../../lib/shellRole';
+import { branchOfUser, isSuperAdminUser } from '../../lib/shellRole';
 import { ZOOM_DISCONNECT_NOTE, ZOOM_SECTIONS, usedByLinks, zoomHowItWorks, zoomNotices } from '../../lib/validateSourceWording';
 
 /**
@@ -24,16 +27,23 @@ import { ZOOM_DISCONNECT_NOTE, ZOOM_SECTIONS, usedByLinks, zoomHowItWorks, zoomN
  * Claude's own connector directory (screenshot C): the back link, the header
  * band (tile, name, tagline), a notice region, About and Details.
  *
- * NOTHING IS LOST WHILE THE WORK MOVES (decision 7). Until F2 to F5 replace
- * it, today's `ConnectorPanel` is mounted inline in "Connect and manage",
- * through `SheetFrame`'s `page` layout: in the page's flow, no overlay, no
- * dialog role, no × and no Escape of its own. Closing returns the region to
- * its opening view; it never leaves the page (decision 9).
+ * CONNECT FROM THE PAGE (#1908, F2; decision 6). The band carries one action
+ * (`pageAction`): "Connect to Axal VC" sends the browser to the service, or
+ * opens the key form inline under the band, through `useConnectFlow`, the
+ * same code as the side sheet and Build's lightbox. Its other ways in are on
+ * the split chevron (`pageChoices`). The notice region draws one notice at a
+ * time (`pageNotice`).
+ *
+ * NOTHING IS LOST WHILE THE WORK MOVES (decision 7). Until F3 to F5 replace
+ * it, the connected half of today's `ConnectorPanel` (companies, fed,
+ * settings, activity; GitHub's repositories) is mounted
+ * inline in "Connect and manage", through `SheetFrame`'s `page` layout: in
+ * the page's flow, no overlay, no dialog role, no × and no Escape of its own.
  *
  * A SIGN-IN COMES BACK HERE (decision 6). `connectorsRedirect` sends a return
  * naming this key to this page; the page reads it only when it names its own
- * key (never Mercury's, D715 decision 3), opens the panel on what happened,
- * and strips the query.
+ * key (never Mercury's, D715 decision 3), says what happened in the notice
+ * region, and strips the query.
  *
  * The name is the page's one `<h1>` (decision 10): on desktop `SettingsPage`
  * draws no "Account" heading here, and on a phone `PhoneBar` draws it.
@@ -43,6 +53,12 @@ import { ZOOM_DISCONNECT_NOTE, ZOOM_SECTIONS, usedByLinks, zoomHowItWorks, zoomN
  * Tools, Prompts, the trust notice and Details from it (`ConnectorBody`), and
  * the header's line becomes its tagline. Without `body` it draws F1's About
  * and Details from the catalogue row.
+ *
+ * MERCURY (#1991, F5). The Axal entities' row (`isEntityRow`, an admin on HQ)
+ * draws `MercuryEntityPageBody` in "Connect and manage": the entity
+ * connections, what they feed, Open Banking and the audit foot, with the one
+ * audited read on mount and no header action. A member's own Mercury stays in
+ * the interim panel until F3 (#1956) draws "Your connection".
  *
  * THE READ (#1955, part 2). Handed `readPage` (`connectorsApi.page`), the view
  * reads `GET /api/connectors/directory/<page_key>` once the connector is known,
@@ -120,26 +136,8 @@ export function ConnectorPageView({ data, connectorKey, phone = false, branchAdm
     );
   }
 
-  const tagline = headerTagline(p, shownBody?.state === 'ready' ? shownBody.connector : null);
   return (
-    <div className="flex min-w-0 flex-col gap-4" data-testid="connector-page" data-state="ready" data-key={p.key}>
-      {back}
-      <header data-testid="connector-page-band" className="flex min-w-0 items-center gap-4 rounded-axal-sm bg-axal-ground p-5 dark:bg-gray-800/60">
-        <BrandIcon provider={p.key} name={p.display_name} size={phone ? 48 : 56} />
-        <div className="min-w-0">
-          {!phone && <h1 className="text-2xl font-extrabold tracking-axal-heading text-axal-ink dark:text-gray-100">{p.display_name}</h1>}
-          {tagline && <p className="mt-0.5 min-w-0 break-words text-[13.5px] leading-snug text-axal-muted dark:text-gray-400" data-testid="connector-page-tagline">{tagline}</p>}
-        </div>
-        {/* F2 adds the band's action on this side. */}
-      </header>
-
-      {moved && (
-        <div data-testid="connector-page-notices">
-          <div className="rounded-[10px] border border-axal-violet/25 bg-axal-lavender px-3.5 py-2.5 text-[13px] text-axal-violet-deep dark:bg-violet-900/30 dark:text-violet-200" data-testid="connectors-moved">Integrations are now Connectors.</div>
-        </div>
-      )}
-
-      <ConnectRegion p={p} ret={returned?.ret || null} onChanged={data.reload} />
+    <ReadyPage key={p.key} p={p} back={back} phone={phone} ret={returned?.ret || null} moved={moved} onChanged={data.reload} connector={shownBody?.state === 'ready' ? shownBody.connector : null}>
       {p.key === 'zoom' && <ZoomValidate p={p} />}
       {shownBody
         ? <ConnectorBody state={shownBody.state} connector={shownBody.connector} p={p} onRetry={retryBody} />
@@ -149,6 +147,70 @@ export function ConnectorPageView({ data, connectorKey, phone = false, branchAdm
             <Details p={p} />
           </>
         )}
+    </ReadyPage>
+  );
+}
+
+/**
+ * The page once its connector is known: the band and its one action, the
+ * notice, the inline key form, the connected half, then `children` (the body).
+ */
+function ReadyPage({ p, back, phone, ret, moved, onChanged, children, connector = null }) {
+  const auth = useAuth();
+  const superAdmin = isSuperAdminUser(auth?.user);
+  // A return opens on what happened; GitHub's lands on choosing its repositories (the connected half).
+  const [view, setView] = useState(() => (ret ? ret.view : 'idle'));
+  const [flowRet, setFlowRet] = useState(ret || {});
+  const setFlowView = (v) => { setFlowRet({}); setView(v); };
+  const flow = useConnectFlow(p, { setView: setFlowView, onChanged });
+  const name = p.display_name;
+  const action = pageAction(p, { view });
+  const tagline = headerTagline(p, connector);
+  const notice = pageNotice({ view, ret: flowRet, message: flow.message, name, moved });
+  const keyOpen = (view === 'key' || view === 'badkey') && (action.kind === 'key' || action.kind === 'oauth' || action.kind === 'reconnect');
+  // The connected half stays inline until F3 to F5; a member's not-connected flow is the band's.
+  // D753 F5 (#1991): the Axal entities' Mercury is drawn on the page itself, never the interim panel.
+  const entity = isEntityRow(p);
+  const panelShown = !entity && (!!p.connection || view === 'sync');
+  // A member's own Mercury still says what it is for before the token is asked for, until F3 (#1956); the band connects.
+  const memberMercury = isPersonalMercury(p) && !p.connection && !panelShown;
+  return (
+    <div className="flex min-w-0 flex-col gap-4" data-testid="connector-page" data-state="ready" data-key={p.key}>
+      {back}
+      <header data-testid="connector-page-band" className="flex min-w-0 flex-wrap items-center gap-4 rounded-axal-sm bg-axal-ground p-5 dark:bg-gray-800/60">
+        <BrandIcon provider={p.key} name={p.display_name} size={phone ? 48 : 56} />
+        <div className="min-w-0 flex-1">
+          {!phone && <h1 className="text-2xl font-extrabold tracking-axal-heading text-axal-ink dark:text-gray-100">{p.display_name}</h1>}
+          {tagline && <p className="mt-0.5 min-w-0 break-words text-[13.5px] leading-snug text-axal-muted dark:text-gray-400" data-testid="connector-page-tagline">{tagline}</p>}
+        </div>
+        <BandAction p={p} action={action} flow={flow} phone={phone} superAdmin={superAdmin} onChanged={onChanged} />
+      </header>
+
+      {notice && (
+        <div data-testid="connector-page-notices">
+          <Notice notice={notice} name={name} adminHref={superAdmin ? flow.adminHref : null} />
+        </div>
+      )}
+
+      {entity && (
+        <section aria-label="Connect and manage" data-testid="connector-page-connect" data-mode="entity">
+          <MercuryEntityPageBody p={p} />
+        </section>
+      )}
+      {(keyOpen || panelShown || memberMercury) && (
+        <section aria-label="Connect and manage" data-testid="connector-page-connect" data-mode={keyOpen ? 'key' : panelShown ? 'panel' : 'mercury'}>
+          {memberMercury && (
+            <div className="-mx-5">
+              <MercuryUsesGroups role={auth?.user?.role ?? null} />
+              <MercuryLandsGroup role={auth?.user?.role ?? null} />
+              <MercuryReadsGroup />
+            </div>
+          )}
+          {keyOpen && <InlineKeyForm p={p} flow={flow} view={view} connector={connector} />}
+          {!keyOpen && panelShown && <InlinePanel key={`${p.key}:${p.connection ? 'c' : 'n'}`} p={p} ret={view === 'sync' ? { view: 'sync' } : null} onChanged={onChanged} />}
+        </section>
+      )}
+      {children}
     </div>
   );
 }
@@ -218,24 +280,183 @@ function NotReady({ entry, connectorKey, data, branchAdmin }) {
   );
 }
 
-/**
- * "Connect and manage" (decisions 7 to 9): today's panel, inline, until F2
- * to F5; a waitlist connector's button; or an unavailable one's words. The
- * panel's view resets when the connection appears or goes (the `key`).
- */
-function ConnectRegion({ p, ret, onChanged }) {
-  const mode = interimMode(p, ret);
+const NOTICE_CLS = {
+  ok: 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300',
+  warn: 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200',
+  danger: 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300',
+  neutral: 'border-axal-hairline bg-axal-ground text-axal-ink dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200',
+  info: 'border-axal-violet/25 bg-axal-lavender text-axal-violet-deep dark:bg-violet-900/30 dark:text-violet-200',
+};
+
+/** The notice region's one notice (`pageNotice`), with the way forward a view offers. */
+function Notice({ notice, name, adminHref }) {
+  const testid = notice.kind === 'moved' ? 'connectors-moved' : 'connector-page-notice';
   return (
-    <section aria-label="Connect and manage" data-testid="connector-page-connect" data-mode={mode}>
-      {mode === 'panel' && <InlinePanel key={`${p.key}:${p.connection ? 'c' : 'n'}`} p={p} ret={ret} onChanged={onChanged} />}
-      {mode === 'waitlist' && <Waitlist p={p} onChanged={onChanged} />}
-      {mode === 'unavailable' && (
-        <div className={BOX} data-testid="connector-page-unavailable">{p.unreadable ? 'Status unreadable' : 'Not set up here'}</div>
+    <div role={notice.tone === 'danger' ? 'alert' : undefined} data-testid={testid} data-kind={notice.kind}
+      className={`rounded-[10px] border px-3.5 py-2.5 text-[13px] ${NOTICE_CLS[notice.tone] || NOTICE_CLS.neutral}`}>
+      {notice.text}
+      {notice.kind === 'unconfigured' && adminHref && (
+        <> <Link to={adminHref} className={BTN.link} data-testid="connector-unconfigured-admin-link">Set up {name} in Integration keys</Link></>
       )}
-    </section>
+      {notice.kind === 'overreach' && <> <Link to="/help" className={BTN.link}>Report it</Link></>}
+    </div>
   );
 }
 
+/**
+ * The band's one action (`pageAction`, decision 6), and its split chevron:
+ * a menu on desktop, radios and links on a phone.
+ */
+function BandAction({ p, action, flow, phone, superAdmin, onChanged }) {
+  const choices = pageChoices(p);
+  const connects = action.kind === 'oauth' || action.kind === 'key' || action.kind === 'starting';
+  const hasChoices = connects && (choices.env || choices.alt.length > 0);
+  const press = () => {
+    if (action.kind === 'oauth' || (action.kind === 'reconnect' && action.via === 'oauth')) flow.startOauth();
+    else flow.go('key');
+  };
+  if (action.kind === 'none') return null;
+  if (action.kind === 'status') {
+    // F3 draws "Manage ▾" beside the pill.
+    return <div className="flex items-center gap-2" data-testid="connector-page-action" data-kind="status"><Pill tone={action.pill.tone}>{action.pill.label}</Pill></div>;
+  }
+  if (action.kind === 'waitlist') return <WaitlistAction p={p} action={action} onChanged={onChanged} />;
+  if (action.kind === 'plan') {
+    return (
+      <div className="flex items-center gap-2" data-testid="connector-page-action" data-kind="plan">
+        <Pill tone="info">{action.pill}</Pill>
+        <Link to={action.to} className={BTN.primary} data-testid="connector-page-plans">{action.label}</Link>
+      </div>
+    );
+  }
+  if (action.kind === 'unavailable') {
+    const keys = keysHref(p, { superAdmin });
+    return (
+      <div className="flex min-w-0 flex-col items-start gap-1.5 sm:items-end" data-testid="connector-page-action" data-kind="unavailable">
+        <button type="button" className={BTN.primary} disabled aria-describedby={`${p.key}-unavailable-note`} data-testid="connector-page-unavailable">{action.label}</button>
+        <p id={`${p.key}-unavailable-note`} className="max-w-[18rem] text-[12px] text-axal-muted dark:text-gray-400 sm:text-right">{action.note}</p>
+        {keys && <Link to={keys} className={`${BTN.link} text-[12px]`} data-testid={`connector-keys-link-${p.key}`}>Add its keys in Integration keys</Link>}
+      </div>
+    );
+  }
+  const starting = action.kind === 'starting';
+  return (
+    <div className="flex min-w-0 flex-col items-start gap-2 sm:items-end" data-testid="connector-page-action" data-kind={action.kind}>
+      <div className="flex items-stretch">
+        {action.kind === 'reconnect' && <span className="mr-2 self-center"><Pill tone={action.pill.tone}>{action.pill.label}</Pill></span>}
+        <button
+          type="button"
+          className={`${BTN.primary}${hasChoices && !phone ? ' rounded-r-none' : ''}`}
+          disabled={starting || flow.busy}
+          aria-busy={starting ? 'true' : undefined}
+          aria-label={action.aria}
+          onClick={press}
+          data-testid="connector-page-connect-button"
+        >
+          {action.label}
+        </button>
+        {hasChoices && !phone && <ChoicesMenu p={p} choices={choices} flow={flow} disabled={starting} />}
+      </div>
+      {hasChoices && phone && <ChoicesInline p={p} choices={choices} flow={flow} />}
+    </div>
+  );
+}
+
+/** Pick an account kind on the flow, or take the other way in. */
+function useChoices(p, flow) {
+  const envValue = p.key === 'salesforce' ? (flow.sfSandbox ? 'sandbox' : 'production') : p.key === 'docusign' ? (flow.dsDemo ? 'demo' : 'production') : null;
+  const pickEnv = (v) => {
+    if (p.key === 'salesforce') flow.setSfSandbox(v === 'sandbox');
+    if (p.key === 'docusign') flow.setDsDemo(v === 'demo');
+  };
+  const takeAlt = (id) => (id === 'pat' ? flow.go('key') : flow.startOauth());
+  return { envValue, pickEnv, takeAlt };
+}
+
+function ChoicesMenu({ p, choices, flow, disabled }) {
+  const [open, setOpen] = useState(false);
+  const wrap = useRef(null);
+  const { envValue, pickEnv, takeAlt } = useChoices(p, flow);
+  useEffect(() => {
+    if (!open || typeof document === 'undefined') return undefined;
+    const away = (e) => { if (wrap.current && !wrap.current.contains(e.target)) setOpen(false); };
+    const esc = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener?.('mousedown', away);
+    document.addEventListener?.('keydown', esc);
+    return () => { document.removeEventListener?.('mousedown', away); document.removeEventListener?.('keydown', esc); };
+  }, [open]);
+  return (
+    <div className="relative" ref={wrap}>
+      <button type="button" className={`${BTN.primary} rounded-l-none border-l border-white/30 px-2`} disabled={disabled}
+        aria-haspopup="menu" aria-expanded={open} aria-label={`More ways to connect ${p.display_name}`} onClick={() => setOpen((v) => !v)} data-testid="connector-page-choices">
+        <ChevronDown size={14} aria-hidden="true" />
+      </button>
+      {open && (
+        <div role="menu" aria-label={`Ways to connect ${p.display_name}`} data-testid="connector-page-choices-menu"
+          className="absolute right-0 z-20 mt-1 min-w-[14rem] rounded-axal-sm border border-axal-hairline bg-white py-1 text-[13px] shadow-lg dark:border-gray-700 dark:bg-gray-900">
+          {choices.env && (
+            <>
+              <div className="px-3 pb-1 pt-1.5 text-[10.5px] font-bold uppercase tracking-axal-label text-axal-muted dark:text-gray-400">{choices.env.label}</div>
+              {choices.env.options.map((o) => (
+                <button key={o.value} type="button" role="menuitemradio" aria-checked={envValue === o.value} data-testid={`connector-page-env-${o.value}`}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-axal-ground dark:hover:bg-gray-800" onClick={() => { pickEnv(o.value); setOpen(false); }}>
+                  <span aria-hidden="true" className="w-3">{envValue === o.value ? '✓' : ''}</span>{o.label}
+                </button>
+              ))}
+            </>
+          )}
+          {choices.alt.map((a) => (
+            <button key={a.id} type="button" role="menuitem" data-testid={`connector-page-alt-${a.id}`}
+              className="flex w-full px-3 py-1.5 text-left hover:bg-axal-ground dark:hover:bg-gray-800" onClick={() => { setOpen(false); takeAlt(a.id); }}>
+              {a.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ChoicesInline({ p, choices, flow }) {
+  const { envValue, pickEnv, takeAlt } = useChoices(p, flow);
+  return (
+    <div className="flex min-w-0 flex-col gap-1.5 text-[13px]" data-testid="connector-page-choices-inline">
+      {choices.env && (
+        <fieldset className="flex flex-wrap gap-3">
+          <legend className="sr-only">{choices.env.label}</legend>
+          {choices.env.options.map((o) => (
+            <label key={o.value} className="flex items-center gap-1.5">
+              <input type="radio" name={choices.env.name} checked={envValue === o.value} onChange={() => pickEnv(o.value)} data-testid={`connector-page-env-${o.value}`} /> {o.label}
+            </label>
+          ))}
+        </fieldset>
+      )}
+      {choices.alt.map((a) => (
+        <button key={a.id} type="button" className={`${BTN.link} self-start`} onClick={() => takeAlt(a.id)} data-testid={`connector-page-alt-${a.id}`}>{a.label}</button>
+      ))}
+    </div>
+  );
+}
+
+/** The key form, inline under the band, posting through the flow's `submitKey`. */
+function InlineKeyForm({ p, flow, view, connector }) {
+  const updating = !!p.connection;
+  const name = p.display_name;
+  return (
+    <form id="connector-page-key-form" onSubmit={flow.submitKey} data-testid="connector-page-key-form"
+      className="rounded-axal-sm border border-axal-hairline bg-white pb-4 dark:border-gray-800 dark:bg-gray-900">
+      <h2 className={`${H2} mx-5 mt-4`}>{updating ? `Replace the key for ${name}` : `Connect ${name} with a key`}</h2>
+      <KeyFields p={p} flow={flow} updating={updating} keyHelp={keyHelpOf(connector, p)} />
+      {flow.message && view !== 'badkey' && <p role="alert" className="mx-5 mt-3 text-[12.5px] text-red-700 dark:text-red-300">{flow.message}</p>}
+      <div className="mx-5 mt-4 flex justify-end gap-2">
+        <button type="button" className={BTN.ghost} onClick={() => flow.go('idle')}>Cancel</button>
+        <button type="submit" className={BTN.primary} disabled={flow.busy} data-testid="connector-page-key-submit">{flow.busy ? 'Connecting…' : updating ? 'Replace' : 'Connect'}</button>
+      </div>
+    </form>
+  );
+}
+
+/** The connected half of today's panel, inline, until F3 to F5 (decision 7). */
 function InlinePanel({ p, ret, onChanged }) {
   const [state, setState] = useState(() => ({ view: ret ? ret.view : openingView(p), ret: ret || {} }));
   const reset = () => setState({ view: openingView(p), ret: {} });
@@ -249,32 +470,31 @@ function InlinePanel({ p, ret, onChanged }) {
         setView={(view) => setState({ view, ret: {} })}
         onChanged={onChanged}
         onClose={reset}
-        eyebrow={isEntityRow(p) ? 'Fund administration' : 'Connect and manage'}
+        eyebrow="Connect and manage"
       />
     </SheetFrame.Provider>
   );
 }
 
 /** A Coming soon connector: Notify me, or We'll tell you, as its card offers. */
-function Waitlist({ p, onChanged }) {
-  const joined = cardAction(p) === 'joined';
+function WaitlistAction({ p, action, onChanged }) {
   const [state, setState] = useState({ busy: false, error: '' });
   const act = async () => {
     setState({ busy: true, error: '' });
     try {
-      if (joined) await connectorsApi.stopNotify(p.key);
+      if (action.joined) await connectorsApi.stopNotify(p.key);
       else await connectorsApi.notifyMe(p.key);
       onChanged?.();
       setState({ busy: false, error: '' });
     } catch (e) { setState({ busy: false, error: e?.message || 'That could not be saved.' }); }
   };
   return (
-    <div className={BOX} data-testid="connector-page-waitlist">
-      <span className="mr-2 text-axal-muted dark:text-gray-400">Coming soon.</span>
-      <button type="button" disabled={state.busy} onClick={act} className={BTN.link} title={joined ? 'Click to stop the notice' : undefined}>
-        {joined ? 'We’ll tell you' : 'Notify me'}
+    <div className="flex min-w-0 flex-col items-start gap-1 sm:items-end" data-testid="connector-page-waitlist">
+      <span className="text-[12px] text-axal-muted dark:text-gray-400">Coming soon</span>
+      <button type="button" disabled={state.busy} onClick={act} className={action.joined ? BTN.ghost : BTN.primary} title={action.joined ? 'Click to stop the notice' : undefined}>
+        {action.label}
       </button>
-      {state.error && <p role="alert" className="mt-2 text-[12px] text-red-700 dark:text-red-300">{state.error}</p>}
+      {state.error && <p role="alert" className="text-[12px] text-red-700 dark:text-red-300">{state.error}</p>}
     </div>
   );
 }

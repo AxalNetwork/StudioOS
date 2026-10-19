@@ -4,6 +4,7 @@ import { PhoneBar, PhoneRows, Unreadable } from '../../ui';
 import { CardBody } from './CycleOverview';
 import { recordHref, recordId, rowLinks } from './recordModel.js';
 import { cardView, cellView, cycleOf, isPlainClick, recordsCount, safeHref } from './cycleModel';
+import { verdictInterviewLine } from './validatePhone.js';
 
 /**
  * D703 (#1665) — a module as a pushed page on a phone (CMM:40, CO:259-261),
@@ -79,6 +80,7 @@ export default function PhoneModulePage({
   const cycleName = meta.name;
   const card = data?.card || null;
   const view = cardView(card);
+  const interviewLine = verdictInterviewLine(data);
   // A refused or unreadable read sends no card, so the cycle's own list names it (never its slug).
   const name = card?.name || data?.module?.name || moduleName || slug;
   const recs = records ?? data?.records;
@@ -142,6 +144,8 @@ export default function PhoneModulePage({
           {card?.range && <span className="text-[10.5px] text-gray-600 dark:text-gray-400">{card.range}</span>}
         </div>
         <CardBody card={card} onRetry={onRetry} search={search} />
+        {/* D757 §2.6 (#1928): Verdict's interview evidence since the last decision, writers only. */}
+        {interviewLine && <p className="m-0 mt-2.5 text-[13px] font-semibold text-gray-900 dark:text-gray-100" data-testid="verdict-interview-line">{interviewLine}</p>}
       </section>
 
       <div className="mt-[22px] flex flex-col gap-2" data-testid="phone-module-controls">

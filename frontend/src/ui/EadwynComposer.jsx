@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useInRouterContext } from 'react-router-dom';
 import { eadwynApi } from '../lib/api/eadwyn';
 import { safeReadJSON, safeWriteJSON } from '../lib/storage';
+import { connectorPagePath } from '../pages/account/connectorsModel';
 
 /**
  * D652 (#1464) — asking Eadwyn, with connectors. The canvas is
@@ -24,7 +25,10 @@ import { safeReadJSON, safeWriteJSON } from '../lib/storage';
  * card showed.
  */
 
+// D753 (#1992): Browse opens the hub's Discover tab, Manage the hub, and a
+// blocked row's reason links that connector's own page.
 const CONNECTORS_PAGE = '/account/connectors';
+const DISCOVER_PAGE = '/account/connectors?tab=discover';
 const MAX_FILE_CHARS = 8000;
 const FILE_TYPES = '.txt,.md,.csv,.json';
 
@@ -64,7 +68,7 @@ export function ConnectorList({ connectors, enabled, onToggle, busy = false, err
   return (
     <div className="ead-list" data-testid="eadwyn-connector-list">
       <div className="ead-list-head">
-        <RouteLink to={CONNECTORS_PAGE} data-testid="link-eadwyn-browse-connectors">Browse connectors</RouteLink>
+        <RouteLink to={DISCOVER_PAGE} data-testid="link-eadwyn-browse-connectors">Browse connectors</RouteLink>
         <RouteLink to={CONNECTORS_PAGE} data-testid="link-eadwyn-manage-connectors">Manage connectors</RouteLink>
       </div>
       {error && <p className="ead-note">{error}</p>}
@@ -80,7 +84,7 @@ export function ConnectorList({ connectors, enabled, onToggle, busy = false, err
               <span className="ead-conn-icon" aria-hidden="true">{initials(c.name)}</span>
               <span className="ead-conn-text">
                 <span>{c.name}</span>
-                {blocked && <span className="ead-conn-why">{c.reason}</span>}
+                {blocked && <RouteLink to={connectorPagePath(c.key)} className="ead-conn-why" data-testid={`link-eadwyn-connector-page-${c.key}`}>{c.reason}</RouteLink>}
               </span>
             </span>
             <button
