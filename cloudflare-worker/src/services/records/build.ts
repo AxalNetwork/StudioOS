@@ -826,8 +826,24 @@ const productRoadmap: ModuleSpec = {
       if (!issue) return notRecorded('No GitHub issue is synced to this item.');
       const label = ledgerLabel(issue.external_id) ?? 'issue';
       const synced = dateText(issue.last_seen_at);
+      // D782 (#2111): the issue's milestone and the release that shipped the item.
+      let gh: Any | null | undefined;
+      try {
+        gh = await ctx.env.DB.prepare(
+          `SELECT o.milestone_title, o.milestone_due, r.tag, r.published_at, r.url
+             FROM roadmap_okrs o LEFT JOIN roadmap_releases r ON r.id = o.shipped_release_id AND r.project_id = o.project_id
+            WHERE o.id = ? AND o.project_id = ?`,
+        ).bind(numericId(id), ctx.projectId).first<Any>();
+      } catch { gh = undefined; }
+      const due = dateText(gh?.milestone_due);
+      const shipped = dateText(gh?.published_at);
       return { rows: [{ a: label.replace(/^i/, 'I'), b: synced ? `synced ${synced}` : 'Not synced' },
-        { a: 'State', b: 'Not recorded: the sync stores no issue state.', tone: 'grey' }] };
+        { a: 'State', b: 'Not recorded: the sync stores no issue state.', tone: 'grey' },
+        gh === undefined ? { a: 'Milestone', b: 'Unreadable', tone: 'grey' }
+          : gh?.milestone_title ? { a: 'Milestone', b: due ? `${gh.milestone_title} · due ${due}` : gh.milestone_title } : { a: 'Milestone', b: 'In no milestone', tone: 'grey' },
+        gh === undefined ? { a: 'Shipped', b: 'Unreadable', tone: 'grey' }
+          : gh?.tag ? { a: 'Shipped', b: shipped ? `${gh.tag} · ${shipped}` : gh.tag, ...(gh.url ? { href: gh.url } : {}) }
+            : { a: 'Shipped', b: 'Not shipped: no release names it or closes it.', tone: 'grey' }] };
     } },
     { key: 'public', title: 'Public roadmap', side: true, async read() { return notRecorded('Ventures have no public roadmap page.'); } },
   ],

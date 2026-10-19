@@ -192,6 +192,7 @@ export default function InvestorPortfolioUpdates() {
           and no KPI ledger to accept INTO — so the label promises a read. */}
       <ZoneDraft
         surface="portfolio/updates"
+        railOption="draft:updates-read"
         label="Proposal · read the updates against the rule set"
         accept="Accept the read"
         run="Draft the read"

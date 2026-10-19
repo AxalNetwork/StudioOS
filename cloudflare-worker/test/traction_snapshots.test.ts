@@ -41,6 +41,8 @@ import {
   TRACTION_METRIC_COLUMNS,
 } from '../src/services/tractionSnapshots.ts';
 import { tableFromBaseline as readTable, stripForeignKeys, wordInText } from './_baseline.mjs';
+// D765 (#2090): the jobs run through the router now, so each run passes Llama Guard (D763).
+import { withGuard } from './_guard_stub.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '../..');
@@ -135,7 +137,7 @@ function addSnapshot(db: any, opts: {
 }
 
 /** A stub AI binding, so no test depends on a model being reachable. */
-const stubAI = (momentum: number, trend = 'up') => ({
+const stubAI = (momentum: number, trend = 'up') => withGuard({
   async run() {
     return { response: JSON.stringify({ momentum, trend, summary: 'Steady growth across the board.' }) };
   },
@@ -365,14 +367,14 @@ function valuationStub(usd: number) {
   const prompts: string[] = [];
   return {
     prompts,
-    AI: {
+    AI: withGuard({
       async run(_model: string, opts: any) {
         prompts.push(String(opts?.messages?.[1]?.content ?? ''));
         return {
           response: JSON.stringify({ valuation_usd: usd, confidence: 'medium', rationale: 'Stubbed.' }),
         };
       },
-    },
+    }),
   };
 }
 
