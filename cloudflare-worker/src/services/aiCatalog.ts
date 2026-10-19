@@ -90,6 +90,8 @@ export const MODEL_NAMES: Record<string, string> = {
   '@cf/deepgram/nova-3': 'Nova-3',
   // D760: on the rate card now that it carries WebSocket rates (live speech, D658).
   '@cf/deepgram/flux': 'Flux',
+  // D761 PR 3: priced by the minute it returns, so on the rate card.
+  '@cf/myshell-ai/melotts': 'MeloTTS',
   // D764 (#2089): the rail's models, by the canvas's names.
   '@cf/zai-org/glm-4.7-flash': 'GLM-4.7 Flash',
   '@cf/openai/gpt-oss-120b': 'GPT-OSS 120B',
