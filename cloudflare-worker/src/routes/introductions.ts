@@ -22,7 +22,7 @@
  *   POST /api/introductions/propositions/:uid/decline  free
  *   GET  /api/introductions/credits                 balance breakdown
  *   GET  /api/introductions/credits/history         append-only ledger
- *   GET  /api/introductions/packs                   { packs: [], on_sale: false } while INTRO_PACKS_ON_SALE is off (D755)
+ *   GET  /api/introductions/packs                   { packs: [], on_sale: false }: packs are retired (D755)
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
@@ -39,8 +39,6 @@ import {
   getIntroCreditState,
   generateIntroPropositions,
   pickSpendBucket,
-  INTRO_PACKS,
-  INTRO_PACKS_ON_SALE,
 } from '../services/introductions';
 import { hashEmail } from '../util/hashEmail';
 
@@ -343,10 +341,7 @@ introductions.post('/propositions/:uid/accept', async (c) => {
         code: 'intro_credits_exhausted',
         message: 'You are out of introduction credits for now.',
         credits: state,
-        // D755 — no pack is offered once they are retired.
-        ...(INTRO_PACKS_ON_SALE
-          ? { packs: Object.entries(INTRO_PACKS).map(([key, p]) => ({ key, ...p })), buy_path: '/products#introduction-packs' }
-          : {}),
+        // D755 — packs are retired, so none is offered (#2079 removed the branch).
         refer_path: '/account/referrals',
       },
       402,
@@ -561,7 +556,6 @@ introductions.get('/credits', async (c) => {
   const credits = await getIntroCreditState(c.env, user as any);
   return c.json({
     credits,
-    ...(INTRO_PACKS_ON_SALE ? { buy_path: '/products#introduction-packs' } : {}),
     refer_path: '/account/referrals',
   });
 });
@@ -580,15 +574,11 @@ introductions.get('/credits/history', async (c) => {
   return c.json({ history: rows.results || [] });
 });
 
-// GET /packs — purchasable intro-credit packs. D755: none while they are not
-// on sale, for tabs still on an older build.
+// GET /packs — intro-credit packs. D755: none are on sale; the route stays
+// for tabs still on an older build.
 introductions.get('/packs', async (c) => {
   await requireAuth(c);
-  if (!INTRO_PACKS_ON_SALE) return c.json({ packs: [], on_sale: false });
-  return c.json({
-    packs: Object.entries(INTRO_PACKS).map(([key, p]) => ({ key, ...p })),
-    on_sale: true,
-  });
+  return c.json({ packs: [], on_sale: false });
 });
 
 export default introductions;

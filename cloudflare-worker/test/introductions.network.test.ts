@@ -437,6 +437,8 @@ test('D755 an Introduction pack is no longer sold: the intent is 410 before Stri
   assert.equal(credits.status, 200);
   assert.ok(!('buy_path' in credits.body), 'no buy path');
   assert.equal(credits.body.refer_path, '/account/referrals', 'Refer & earn stays');
+  // #2079: the route answers the retired shape directly; exactly these keys.
+  assert.deepEqual(Object.keys(credits.body).sort(), ['credits', 'refer_path']);
 });
 
 test('D755 out of credits, the 402 offers no pack and no buy path, only referrals', async () => {
@@ -453,6 +455,8 @@ test('D755 out of credits, the 402 offers no pack and no buy path, only referral
   assert.ok(!('packs' in res.body), 'no packs');
   assert.ok(!('buy_path' in res.body), 'no buy path');
   assert.equal(res.body.refer_path, '/account/referrals');
+  // #2079: the 402 keeps exactly error, code, message, credits and refer_path.
+  assert.deepEqual(Object.keys(res.body).sort(), ['code', 'credits', 'error', 'message', 'refer_path']);
 });
 
 test('D755 an introduction PaymentIntent minted before the switch still grants its credits through the webhook', async () => {

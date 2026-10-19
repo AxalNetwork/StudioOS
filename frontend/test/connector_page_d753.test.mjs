@@ -153,7 +153,7 @@ test('an alias lands on its connector, keeping the query and hash; toString and 
   for (const k of ['toString', '__proto__', 'constructor', 'hasOwnProperty']) assert.equal(pageEntry({ data: ready(), key: k }).state, 'unknown', k);
 });
 
-test('an unknown key: its sentence, Request it inline in the page frame, and no read', async () => {
+test('an unknown key: its sentence, Request it in a centred dialog (D753 F3), and no read', async () => {
   const f = mockFetch();
   const m = await mount(page('notion'), '/account/connectors/notion');
   try {
@@ -162,9 +162,11 @@ test('an unknown key: its sentence, Request it inline in the page frame, and no 
     assert.equal(m.by('connector-page-connect'), undefined);
     assert.equal(f.calls.length, 0, 'no fetch');
     await m.click('connector-page-request');
-    const form = m.all((n) => m.props(n)['data-layout'] === 'page');
-    assert.ok(form.length, 'the request form is in the page frame');
-    assert.ok(!m.all((n) => m.props(n).role === 'dialog').length, 'no dialog');
+    // D753 F3 (#1956): the request form is a centred Lightbox, as the hub's Add menu opens it.
+    const dialog = m.by('connector-sheet-request');
+    assert.ok(dialog, 'the request form opens');
+    assert.equal(m.props(dialog).role, 'dialog');
+    assert.equal(m.props(dialog)['aria-modal'], 'true');
   } finally { await m.unmount(); f.restore(); }
   for (const k of ['__proto__', 'constructor']) {
     const out = flat(renderToStaticMarkup(h(MemoryRouter, { initialEntries: [`/account/connectors/${k}`] }, page(k))));
@@ -257,14 +259,22 @@ test('every return lands on its page; the hub sends a bookmarked one on; the pag
   const stripe = await mount(page('stripe'), '/account/connectors/stripe?oauth=ok&provider=stripe');
   try { assert.equal(stripe.props(stripe.by('connector-page-notice'))['data-kind'], 'connected'); } finally { await stripe.unmount(); }
   const gh = await mount(page('github'), '/account/connectors/github?oauth=ok&provider=github');
-  try { assert.ok(gh.by('connector-sheet-sync'), 'GitHub\'s sign-in lands on its repositories'); } finally { await gh.unmount(); f.restore(); }
+  try {
+    // D753 F4 (#1957): the page's own Repositories section, not the sync sheet.
+    assert.ok(gh.by('connector-page-repositories'), 'GitHub\'s sign-in lands on its repositories');
+    assert.ok(!gh.by('connector-sheet-sync'), 'no sync sheet');
+  } finally { await gh.unmount(); f.restore(); }
 });
 
 // ================================================================ the page layout
 
 test('the page layout: no ×, no dialog, no Escape of its own, the panel title an h2; Build\'s lightbox keeps its ×', async () => {
   const f = mockFetch();
-  const m = await mount(page('stripe'));
+  // D753 F3 (#1956): the inline panel stays only for a member's own Mercury (F5); GitHub is F4's section (#1957).
+  const merc = buildCatalogue({ providers: [P('mercury', 'Mercury', { auth_type: 'api_key', category: 'Accounting and banking' })],
+    items: [{ uid: 'u-merc', provider_key: 'mercury', status: 'active', last_synced_at: null, last_error: null, config: {}, company_ids: [] }],
+    firstParty: { google: null, microsoft: null, linkedin: null } });
+  const m = await mount(h(ConnectorPageView, { data: ready(merc), connectorKey: 'mercury' }), '/account/connectors/mercury');
   try {
     assert.equal(m.by('sheet-close'), undefined);
     assert.ok(!m.all((n) => m.props(n).role === 'dialog').length);

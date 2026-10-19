@@ -40,7 +40,12 @@
  * notes are queued only once its `consent_state` is 'given'. A consent given
  * while the chat is pending waits on the thread and is copied to the session
  * at assignment; a NO keeps the notes held, and a STOP stops further
- * downloads, without setting the chat aside.
+ * downloads, without setting the chat aside. D757 (#1930) additionally clears
+ * the digest on NO/STOP and stops new digest runs on the declined session; raw
+ * text is still kept, and initial audio consent never gates admitted final text.
+ *
+ * Final text queues D757's engine (chat_text_added); voice notes keep their own
+ * consent gate. Inbox reads show the linked digest state and pending suggestions.
  *
  * Every function that takes `userId` scopes by it; every write into an
  * interview goes through `interviewIntake.ts`, which re-checks the member and
@@ -57,7 +62,6 @@ import { refKey } from './events';
 import { enqueueChannelJob } from './jobs';
 import { isOurSend } from './outbound';
 import { expireCapturesStatements } from './whatsappCapture';
-import { enqueueSessionStructure } from '../sessionAutoStructure';
 import {
   CHANNEL_LIMITS, audioConsentRequired, consentAsked, consentRequired, consentRequiredProviders, type InboundDelete, type InboundEdit, type InboundMessage, type MessageSide,
   type MessagingProvider, type VoiceMedia,
@@ -271,6 +275,18 @@ async function insertPending(env: Env, thread: ThreadRow, p: NewPending): Promis
   return Number(ins?.meta?.changes ?? 0) > 0;
 }
 
+/** Final chat text reaches only the engine; withdrawal never queues a new run. */
+async function enqueueTextDigest(env: Env, sessionId: number, userId: number): Promise<void> {
+  try {
+    const { enqueueDigest } = await import('../validateEngine');
+    await enqueueDigest(env, sessionId, userId, 'chat_text_added');
+  } catch (err) {
+    // Final text is already committed. Keep the webhook successful so it is
+    // not appended again; the quiet sweep recovers the transcribed session.
+    console.error('[channels] chat digest not queued', err instanceof Error ? err.name : 'error');
+  }
+}
+
 /**
  * Store one message on the connection's thread for its chat. Tenancy is the
  * connection's (resolved by `connections.ts` from the webhook's connection id,
@@ -299,6 +315,7 @@ export async function storeMessage(env: Env, conn: ChannelConnection, m: ThreadM
         speaker_label: speaker(m.side, interview.interviewee_name, m.contactName ?? (await contactName(env, thread))),
       };
       await appendSegments(env, conn.userId, Number(thread.session_id), [seg], conn.provider, [bumpStatement(env, thread.id, m.side)]);
+      if (m.kind === 'text') await enqueueTextDigest(env, Number(thread.session_id), conn.userId);
       return { stored: 'session', thread, sessionId: Number(thread.session_id) };
     } catch (err) {
       // The interview or session went away, or the venture is no longer the
@@ -691,8 +708,9 @@ async function assignInto(env: Env, userId: number, threadUid: string, target: A
       const sessionId = Number(thread.session_id);
       // D754 decision 8: a chat waiting for consent is already linked here; the press opens nothing new.
       if (!inInterview(thread)) return { interviewId: scoped.interview.id, sessionId, moved: 0, queued: 0 };
-      // What this moves is new text on a session already structured once: the quiet-chat sweep takes it from here.
+      // A repeated assignment can recover text left pending by an interrupted move.
       const moved = await movePending(env, userId, thread, sessionId, scoped);
+      if (moved > 0) await enqueueTextDigest(env, sessionId, userId);
       return { interviewId: scoped.interview.id, sessionId, moved, queued: await queueAfterAssign(env, thread) };
     }
     refuseIfBusy(thread);
@@ -777,9 +795,8 @@ async function moveInto(
     }
     // Messages may land pending while the session opens; sweep until none are left.
     const moved = await movePending(env, userId, thread, session.id, scoped, [setSession]);
-    // The chat's text is in the interview: the Worker AI proposes its findings
-    // now; later messages are picked up by the quiet-chat sweep.
-    if (moved > 0) await enqueueSessionStructure(env, session.id, userId, 'chat_assigned');
+    // New final text queues the one engine entry; its hash and quiet bound govern re-runs.
+    if (moved > 0) await enqueueTextDigest(env, session.id, userId);
     const assigned: ThreadRow = {
       ...thread, status: 'assigned', interview_id: interviewId, session_id: session.id,
       consent_state: waits && consent && consent.state !== 'keep' ? consent.state : thread.consent_state,
@@ -834,7 +851,7 @@ export async function admitConsentedThread(
   const scoped = await writableInterview(env, userId, Number(thread.interview_id));
   const sessionId = Number(thread.session_id);
   const moved = await movePending(env, userId, thread, sessionId, scoped);
-  if (moved > 0) await enqueueSessionStructure(env, sessionId, userId, 'chat_assigned');
+  if (moved > 0) await enqueueTextDigest(env, sessionId, userId);
   return { moved, queued: await queueAfterAssign(env, thread) };
 }
 
@@ -869,9 +886,14 @@ export interface ThreadView {
    * the provider waits for consent, so the inbox can mark a waiting chat; null elsewhere.
    */
   consent_status: string | null;
+  /** D757 (#1930): the linked session's engine state and suggestions still awaiting review. */
+  digest_status: SessionRow['digest_status'] | null;
+  pending_suggestions: number;
 }
 
-async function view(env: Env, t: ThreadRow & { interviewee_name?: string | null }, canReply: boolean): Promise<ThreadView> {
+type ThreadRead = ThreadRow & { interviewee_name?: string | null; digest_status?: SessionRow['digest_status']; pending_suggestions?: number };
+
+async function view(env: Env, t: ThreadRead, canReply: boolean): Promise<ThreadView> {
   return {
     uid: t.uid, provider: t.provider, contact_name: await contactName(env, t), status: t.status,
     message_count: Number(t.message_count) || 0, last_message_at: t.last_message_at, last_inbound_at: t.last_inbound_at,
@@ -879,6 +901,7 @@ async function view(env: Env, t: ThreadRow & { interviewee_name?: string | null 
     can_reply: canReply,
     reply_window_open: canReply && replyWindowOpen(t),
     consent_status: consentAsked(t.provider) ? t.consent_state ?? 'not_asked' : null,
+    digest_status: t.digest_status ?? null, pending_suggestions: Number(t.pending_suggestions ?? 0),
   };
 }
 
@@ -896,12 +919,15 @@ export async function listThreads(
   const limit = Math.min(Math.max(Number(opts.limit) || 50, 1), 200);
   const status = opts.status ?? null;
   const rows = (await env.DB.prepare(
-    `SELECT t.*, di.interviewee_name FROM channel_threads t
+    `SELECT t.*, di.interviewee_name, s.digest_status,
+            (SELECT COUNT(*) FROM validate_proposals vp WHERE vp.session_id = s.id AND vp.status = 'pending') AS pending_suggestions
+       FROM channel_threads t
        JOIN integrations i ON i.id = t.integration_id AND i.status = 'active'
        LEFT JOIN discovery_interviews di ON di.id = t.interview_id
+       LEFT JOIN interview_sessions s ON s.id = t.session_id AND s.created_by_user_id = t.user_id AND s.interview_id = t.interview_id
       WHERE t.user_id = ? AND (? IS NULL OR t.status = ?)
       ORDER BY COALESCE(t.last_message_at, t.created_at) DESC, t.id DESC LIMIT ?`,
-  ).bind(userId, status, status, limit).all<ThreadRow & { interviewee_name: string | null }>()).results ?? [];
+  ).bind(userId, status, status, limit).all<ThreadRead>()).results ?? [];
   const rights = await replyRights(env, userId);
   return Promise.all(rows.map((t) => view(env, t, rights[t.provider])));
 }
@@ -923,6 +949,11 @@ export async function readThread(env: Env, userId: number, threadUid: string): P
   const interview = t.interview_id
     ? await env.DB.prepare('SELECT interviewee_name FROM discovery_interviews WHERE id = ?').bind(t.interview_id).first<{ interviewee_name: string }>()
     : null;
+  const digest = t.session_id ? await env.DB.prepare(
+    `SELECT s.digest_status,
+            (SELECT COUNT(*) FROM validate_proposals vp WHERE vp.session_id = s.id AND vp.status = 'pending') AS pending_suggestions
+       FROM interview_sessions s WHERE s.id = ? AND s.created_by_user_id = ? AND s.interview_id = ?`,
+  ).bind(t.session_id, userId, t.interview_id).first<Pick<ThreadRead, 'digest_status' | 'pending_suggestions'>>() : null;
   const rights = await replyRights(env, userId);
   const rows = (await env.DB.prepare(
     `SELECT id, uid, external_message_id, direction, kind, text_enc, sent_at, voice_ref_enc, duration_sec FROM channel_thread_messages
@@ -941,7 +972,7 @@ export async function readThread(env: Env, userId: number, threadUid: string): P
       duration_sec: r.duration_sec == null ? null : Number(r.duration_sec),
     };
   }));
-  return { thread: await view(env, { ...t, interviewee_name: interview?.interviewee_name ?? null }, rights[t.provider]), messages };
+  return { thread: await view(env, { ...t, ...digest, interviewee_name: interview?.interviewee_name ?? null }, rights[t.provider]), messages };
 }
 
 /** The member's thread for sending a reply, with the chat id the adapter needs. Internal: never returned to the browser. */

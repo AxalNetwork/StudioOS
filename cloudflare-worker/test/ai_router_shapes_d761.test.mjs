@@ -9,12 +9,19 @@
  *   - a context overflow skips a model without calling it;
  *   - `x-session-affinity` holds the user id and page key, never an email or name.
  *
+ * PR 2 — vision, rerank, embeddings and translation:
+ *   - each shape's request, its parsed answer and its units;
+ *   - a model that cannot serve the run is skipped uncalled; a malformed input is refused before any call;
+ *   - images, a rerank and a translation are part of the cache key; a rerank's texts reach the guard;
+ *   - only BGE Base EN v1.5's 768-dimension vectors may be written to `axal-search`.
+ *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/ai_router_shapes_d761.test.mjs
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { upsertEntity } from '../src/services/vectorize.ts';
 import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
 import { run, ROUTE, __resetForTest } from '../src/services/aiRouter.ts';
 import * as shapes from '../src/services/ai/shapes.ts';
@@ -235,4 +242,171 @@ test('the system embed task keeps BGE Base EN v1.5 for the 768-dimension index, 
   assert.equal(r.embedding.length, 768);
   assert.deepEqual(ai.calls[0].payload, { text: 'index me' });
   assert.deepEqual(r.units, { tokens_in: 7 });
+});
+
+// ─────────────────────────────────────────────────────────── PR 2: vision
+
+const PNG = `data:image/png;base64,${Buffer.from('a tiny png').toString('base64')}`;
+const JPEG = `data:image/jpeg;base64,${Buffer.from('a tiny jpeg').toString('base64')}`;
+const visionFacts = (m) => (m === MID ? { kind: 'text', context_window: null, paid_only: false, vision: true } : null);
+
+test('vision: the images ride on the last user message as content parts, and the attempt counts them', async () => {
+  // Mutation checked: images put on the first message; images_in dropped.
+  shapes.setModelFactsSource(visionFacts);
+  const ai = makeAI(() => ok('A whiteboard with three columns.', { prompt_tokens: 600, completion_tokens: 8 }));
+  const msgs = [{ role: 'user', content: 'Earlier.' }, { role: 'assistant', content: 'Yes.' }, { role: 'user', content: 'What is on this board?' }];
+  const r = await run(envWith(ai), { task: 'paraphrase', userId: 0, messages: msgs, images: [PNG, JPEG] });
+  assert.equal(r.ok, true);
+  assert.equal(r.output, 'A whiteboard with three columns.');
+  assert.deepEqual(ai.calls[0].payload.messages, [
+    { role: 'user', content: 'Earlier.' }, { role: 'assistant', content: 'Yes.' },
+    { role: 'user', content: [{ type: 'text', text: 'What is on this board?' }, { type: 'image_url', image_url: { url: PNG } }, { type: 'image_url', image_url: { url: JPEG } }] },
+  ]);
+  assert.deepEqual(r.units, { tokens_in: 600, tokens_out: 8, images_in: 2 });
+  assert.deepEqual(shapes.withImages([{ role: 'system', content: 'S' }], [PNG]), [{ role: 'system', content: 'S' }, { role: 'user', content: [{ type: 'image_url', image_url: { url: PNG } }] }]);
+});
+
+test('vision: a text-only model is skipped without a call, so no model answers as if there were no image', async () => {
+  // Mutation checked: the canServe skip removed (the 70b is called and answers blind).
+  const ai = makeAI(() => ok('I see nothing.'));
+  const r = await run(envWith(ai), { task: 'paraphrase', userId: 0, messages: ask, images: [PNG] });
+  assert.equal(r.ok, false);
+  assert.equal(r.refusal, 'all_models_failed');
+  assert.equal(ai.calls.length, 0, 'no model was called');
+  assert.deepEqual(r.attempts.map((a) => [a.model, a.called, a.status]), [[MID, false, 422], [SMALL, false, 422]]);
+  // The interim table: the four the catalogue named on 2026-10-17, Kimi K2.6 a reasoning model that also sees.
+  for (const m of ['@cf/google/gemma-4-26b-a4b-it', '@cf/meta/llama-4-scout-17b-16e-instruct', '@cf/meta/llama-3.2-11b-vision-instruct', '@cf/moonshotai/kimi-k2.6']) {
+    assert.equal(shapes.canServe(shapes.factsFor(m), 'vision'), true, m);
+  }
+  assert.equal(shapes.factsFor('@cf/moonshotai/kimi-k2.6').kind, 'reasoning');
+  assert.equal(shapes.canServe(shapes.factsFor(MID), 'vision'), false);
+  assert.equal(shapes.canServe(shapes.factsFor(MID), 'chat'), true);
+});
+
+test('vision: only data URIs of the four image types, at most 4, each at most 4 MB; refused before any call', async () => {
+  // Mutations checked: an https URL accepted; the count cap dropped; the size cap dropped.
+  shapes.setModelFactsSource(visionFacts);
+  const big = `data:image/png;base64,${'A'.repeat(Math.ceil((shapes.MAX_IMAGE_BYTES + 3) / 3) * 4)}`;
+  for (const [images, why] of [
+    [['https://example.test/a.png'], /data URI/], [['data:image/svg+xml;base64,PHN2Zz4='], /data URI/],
+    [[PNG, PNG, PNG, PNG, PNG], /at most 4 images/], [[big], /at most 4 MB/],
+  ]) {
+    const ai = makeAI(() => ok());
+    const r = await run(envWith(ai), { task: 'paraphrase', userId: 0, messages: ask, images });
+    assert.equal(r.refusal, 'invalid_input', String(images[0]).slice(0, 30));
+    assert.match(r.error, why);
+    assert.equal(ai.calls.length, 0);
+  }
+  assert.equal(shapes.imageBytes(PNG), Buffer.from('a tiny png').length);
+  assert.equal(shapes.imagesRefusal([PNG, PNG, PNG, PNG]), null);
+});
+
+// ─────────────────────────────────────────────────────────── PR 2: rerank
+
+const RERANK = '@cf/baai/bge-reranker-base';
+const rerankFacts = (m) => (m === MID ? { kind: 'rerank', context_window: null, paid_only: false } : null);
+
+test('rerank: query and contexts in, the stub\'s scores out, best first by each context\'s index', async () => {
+  // Mutations checked: contexts sent as bare strings; the sort dropped; an out-of-range id kept.
+  shapes.setModelFactsSource(rerankFacts);
+  const ai = makeAI(() => ({ response: [{ id: 0, score: 0.2 }, { id: 2, score: 0.9 }, { id: 1, score: 0.5 }, { id: 7, score: 1 }] }));
+  const rr = { query: 'Who pays today?', contexts: ['Interns', 'The ops lead', 'The CFO'], topK: 3 };
+  const r = await run(envWith(ai), { task: 'paraphrase', userId: 0, rerank: rr });
+  assert.equal(r.ok, true);
+  assert.deepEqual(ai.calls[0].payload, { query: 'Who pays today?', contexts: [{ text: 'Interns' }, { text: 'The ops lead' }, { text: 'The CFO' }], top_k: 3 });
+  assert.deepEqual(r.ranking, [{ index: 2, score: 0.9 }, { index: 1, score: 0.5 }, { index: 0, score: 0.2 }]);
+  const perPair = (c) => Math.ceil('Who pays today?'.length / 4) + Math.ceil(c.length / 4);
+  assert.deepEqual(r.units, { tokens_in: perPair('Interns') + perPair('The ops lead') + perPair('The CFO') }, 'input only: a reranker writes nothing');
+  assert.equal(shapes.canServe(shapes.factsFor(MID), 'rerank'), true);
+  shapes.setModelFactsSource(null);
+  assert.equal(shapes.factsFor(RERANK).kind, 'rerank', 'the interim table, until D760');
+});
+
+test('rerank: a chat model is skipped uncalled; an empty query or context is refused before any call', async () => {
+  // Mutation checked: rerankRefusal accepting an empty context.
+  const ai = makeAI(() => ok());
+  const r = await run(envWith(ai), { task: 'paraphrase', userId: 0, rerank: { query: 'q', contexts: ['a'] } });
+  assert.equal(r.refusal, 'all_models_failed');
+  assert.equal(ai.calls.length, 0);
+  for (const bad of [{ query: ' ', contexts: ['a'] }, { query: 'q', contexts: [] }, { query: 'q', contexts: ['a', ''] }, { query: 'q', contexts: ['a'], topK: 0 }]) {
+    const r2 = await run(envWith(makeAI(() => ok())), { task: 'paraphrase', userId: 0, rerank: bad });
+    assert.equal(r2.refusal, 'invalid_input', JSON.stringify(bad));
+  }
+  const both = await run(envWith(makeAI(() => ok())), { task: 'paraphrase', userId: 0, rerank: { query: 'q', contexts: ['a'] }, images: [PNG] });
+  assert.equal(both.refusal, 'invalid_input', 'one ask per run');
+});
+
+test('rerank: the query and every context reach the guard as the run\'s input', async () => {
+  // Mutation checked: guardInputFor ignoring the rerank.
+  const src = readFileSync('cloudflare-worker/src/services/aiRouter.ts', 'utf8');
+  const body = src.slice(src.indexOf('function guardInputFor('), src.indexOf('/** One guard call'));
+  assert.match(body, /if \(opts\.rerank\) return \[opts\.rerank\.query, \.\.\.\(opts\.rerank\.contexts \?\? \[\]\)\]\.join/);
+});
+
+// ─────────────────────────────────────────────────────────── PR 2: translation
+
+const M2M = '@cf/meta/m2m100-1.2b';
+const translationFacts = (m) => (m === MID ? { kind: 'translation', context_window: null, paid_only: false } : null);
+
+test('translation: m2m100\'s shape, codes only, and its units both ways', async () => {
+  // Mutations checked: source_lang sent when absent; a language name accepted.
+  shapes.setModelFactsSource(translationFacts);
+  const ai = makeAI(() => ({ translated_text: 'Qui paie aujourd\'hui ?' }));
+  const r = await run(envWith(ai), { task: 'paraphrase', userId: 0, text: 'Who pays today?', translate: { targetLang: 'fr' } });
+  assert.equal(r.ok, true);
+  assert.equal(r.output, 'Qui paie aujourd\'hui ?');
+  assert.deepEqual(ai.calls[0].payload, { text: 'Who pays today?', target_lang: 'fr' });
+  assert.deepEqual(r.units, { tokens_in: Math.ceil(15 / 4), tokens_out: Math.ceil('Qui paie aujourd\'hui ?'.length / 4) });
+  assert.deepEqual(shapes.translateRequest('x', { sourceLang: 'en', targetLang: 'pt-BR' }), { text: 'x', source_lang: 'en', target_lang: 'pt-BR' });
+  for (const t of [{ targetLang: 'french' }, { targetLang: 'fr', sourceLang: 'english' }, {}]) {
+    const bad = await run(envWith(makeAI(() => ok())), { task: 'paraphrase', userId: 0, text: 'x', translate: t });
+    assert.equal(bad.refusal, 'invalid_input', JSON.stringify(t));
+  }
+  shapes.setModelFactsSource(null);
+  assert.equal(shapes.factsFor(M2M).kind, 'translation', 'the interim table, until D760');
+});
+
+// ─────────────────────────────────────────────────────────── PR 2: the cache key
+
+test('images, a rerank and a translation are part of the cache key', async () => {
+  // Mutation checked: the extra seed dropped (the second image is answered from the first one's cache).
+  shapes.setModelFactsSource(visionFacts);
+  const env = envWith(makeAI((m, p, n) => ok(`answer ${n}`)));
+  const a = await run(env, { task: 'sentiment', userId: 0, messages: ask, images: [PNG] });
+  const b = await run(env, { task: 'sentiment', userId: 0, messages: ask, images: [JPEG] });
+  const again = await run(env, { task: 'sentiment', userId: 0, messages: ask, images: [PNG] });
+  assert.equal(a.output, 'answer 1');
+  assert.equal(b.output, 'answer 2', 'another image is another question');
+  assert.equal(again.usage.cached, true, 'the same image is a cache hit');
+  assert.equal(again.output, 'answer 1');
+});
+
+// ─────────────────────────────────────────────────────────── PR 2: rail embeddings and axal-search
+
+test('rail embeddings: every catalogue embedding model takes { text } and returns data[0]; none is ever written to axal-search', async () => {
+  // Mutations checked: searchIndexAccepts ignoring the model; upsertEntity skipping the check.
+  for (const m of ['@cf/baai/bge-m3', '@cf/qwen/qwen3-embedding-0.6b', '@cf/google/embeddinggemma-300m', '@cf/pfnet/plamo-embedding-1b', '@cf/baai/bge-large-en-v1.5']) {
+    assert.equal(shapes.factsFor(m).kind, 'embedding', m);
+    assert.equal(shapes.searchIndexAccepts(m, new Array(768).fill(0.1)), false, `${m} never writes the index, even at 768 dimensions`);
+  }
+  assert.equal(shapes.searchIndexAccepts(shapes.SEARCH_INDEX_MODEL, new Array(768).fill(0.1)), true);
+  assert.equal(shapes.searchIndexAccepts(shapes.SEARCH_INDEX_MODEL, new Array(1024).fill(0.1)), false);
+  assert.equal(ROUTE.embed.model, shapes.SEARCH_INDEX_MODEL, 'the system embed task is the index\'s model');
+
+  // The one writer of axal-search embeds with that model and nothing else.
+  const upserts = [];
+  const seen = [];
+  const env = {
+    AI: { async run(model, payload) { seen.push(model); return { data: [new Array(768).fill(0.2)] }; } },
+    VECTORIZE: { async upsert(v) { upserts.push(v); } },
+  };
+  assert.equal(await upsertEntity(env, { type: 'project', id: 1, text: 'A venture.', title: 'V', url: '/v' }), true);
+  assert.deepEqual(seen, [shapes.SEARCH_INDEX_MODEL]);
+  assert.equal(upserts.length, 1);
+  const wrongDims = { ...env, AI: { async run() { return { data: [new Array(1024).fill(0.2)] }; } } };
+  assert.equal(await upsertEntity(wrongDims, { type: 'project', id: 2, text: 'B', title: 'B', url: '/b' }), false);
+  assert.equal(upserts.length, 1, 'nothing else was written');
+  const writers = readFileSync('cloudflare-worker/src/services/vectorize.ts', 'utf8');
+  assert.match(writers, /if \(!vector \|\| !searchIndexAccepts\(EMBED_MODEL, vector\)\) return false;/);
+  assert.match(writers, /const EMBED_MODEL = SEARCH_INDEX_MODEL;/);
 });

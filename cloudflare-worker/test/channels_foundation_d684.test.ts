@@ -626,7 +626,7 @@ test('assigning a chat queues the Worker AI\'s Structure pass, and the pass prop
   await storeMessage(env, conn, msg({ externalMessageId: 'm1' }));
   const [t] = await listThreads(env, ME);
   const r = await assignThread(env, ME, t.uid, { interviewId: INTERVIEW });
-  assert.deepEqual(queued(db, 'session_structure'), [{ session_id: r.sessionId, user_id: ME, trigger: 'chat_assigned' }]);
+  assert.deepEqual(queued(db, 'session_structure'), [{ session_id: r.sessionId, user_id: ME, trigger: 'chat_text_added' }]);
   assert.equal(aiCalls.length, 0, 'the request itself runs no model');
 
   const out = await runSessionStructureJob(env, queued(db, 'session_structure')[0]);
