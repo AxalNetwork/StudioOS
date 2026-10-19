@@ -55,9 +55,11 @@ const REGISTRY = [
   { key: 'microsoft_365', display_name: 'Microsoft 365', status: 'live', tier: 'free', auth_type: 'oauth2', has_implementation: true,
     category: 'Calendar and workspace', verified: true, feeds: ['customer_research', 'operating_systems'], permissions: ['Confirm your Microsoft sign-in identity.'] },
 ];
+// `/available`'s `first_party` (D753 W2): LinkedIn's card, as `FIRST_PARTY_CARDS` holds it.
+const FIRST_CARDS = [{ key: 'linkedin', display_name: 'LinkedIn', category: 'Data', status: 'live', tier: 'free', auth_type: 'oauth2', supports_pat: false, docs_url: null, first_party: true, connection_source: 'users' }];
 
 test('one row each for Google Calendar and Microsoft 365: the registry entries merge into the first-party rows', () => {
-  const cat = buildCatalogue({ providers: REGISTRY, firstParty: { google: { configured: true, connected: true, google_email: 'a@b.example' }, microsoft: { configured: false, connected: false }, linkedin: null } });
+  const cat = buildCatalogue({ providers: REGISTRY, firstParty: { google: { configured: true, connected: true, google_email: 'a@b.example' }, microsoft: { configured: false, connected: false }, linkedin: null }, firstPartyCards: FIRST_CARDS });
   const keys = cat.map((p) => p.key);
   assert.equal(keys.filter((k) => k === 'google').length, 1);
   assert.equal(keys.filter((k) => k === 'microsoft').length, 1);
@@ -68,8 +70,9 @@ test('one row each for Google Calendar and Microsoft 365: the registry entries m
   assert.deepEqual(g.feeds, ['customer_research', 'operating_systems'], 'the registry\'s feeds merge in');
   assert.deepEqual(g.permissions, ['Create and update your calendar events.']);
   assert.equal(g.display_name, 'Google Calendar');
-  assert.match(g.description, /Continue with Google/, 'the first-party description stays');
-  assert.deepEqual(g.capabilities, ['Calendar', 'Gmail invites', 'Sign in with Google'], 'and its capabilities');
+  assert.equal(g.description, 'Calendar events and interview slots from your existing Google Calendar connection.', 'D753 (#1955): the registry\'s description, never one of the SPA\'s own');
+  assert.deepEqual(g.capabilities, ['Calendar events'], 'and its capabilities');
+  assert.equal(cat.find((p) => p.key === 'linkedin').category, 'Data', 'LinkedIn\'s category is its card\'s');
   assert.equal(g.first_party, true);
   assert.equal(g.connection.external_account_name, 'a@b.example', 'the connection is the first-party read');
   const m = cat.find((p) => p.key === 'microsoft');
@@ -82,10 +85,10 @@ test('one row each for Google Calendar and Microsoft 365: the registry entries m
   const exact = buildCatalogue({ providers: [...REGISTRY, { key: 'google', display_name: 'Google (registry)', status: 'live', has_implementation: true }], firstParty: {} });
   assert.equal(exact.filter((p) => p.key === 'google').length, 1);
   assert.equal(exact.find((p) => p.key === 'google').display_name, 'Google (registry)');
-  // A first-party row with no registry entry keeps its own category.
+  // D753 (#1955): a first-party row the Worker does not describe has no category of its own, and no words.
   const bare = buildCatalogue({ providers: [], firstParty: {} });
-  assert.equal(bare.find((p) => p.key === 'microsoft').category, 'Calendar and workspace');
-  assert.equal(bare.find((p) => p.key === 'google').category, 'Calendar and workspace');
+  assert.equal(bare.find((p) => p.key === 'microsoft').category, null);
+  assert.equal(bare.find((p) => p.key === 'google').description, null);
   assert.ok(CATEGORY_ORDER.includes('Calendar and workspace'), 'a Connectors chip for it');
   // D710 (#1775): Mercury's category gets a chip, right after Payments, as Build orders it.
   assert.equal(CATEGORY_ORDER.indexOf('Accounting and banking'), CATEGORY_ORDER.indexOf('Payments') + 1);
@@ -101,7 +104,7 @@ test('a sign-in return: the Worker\'s scope_overreach is the overreach view, and
 
 test('Build\'s group order and the pin; the feeds label from feed_modules first', () => {
   assert.deepEqual(BUILD_CATEGORY_ORDER.slice(0, 7), ['Code', 'Design', 'Payments', 'Accounting and banking', 'Payroll', 'CRM', 'Calendar and workspace']);
-  const cat = buildCatalogue({ providers: [...REGISTRY, { key: 'stripe', display_name: 'Stripe', category: 'Payments', status: 'live', has_implementation: true }, { key: 'zz', display_name: 'Zed', category: 'Oddities', status: 'live', has_implementation: true }], firstParty: {} });
+  const cat = buildCatalogue({ providers: [...REGISTRY, { key: 'stripe', display_name: 'Stripe', category: 'Payments', status: 'live', has_implementation: true }, { key: 'zz', display_name: 'Zed', category: 'Oddities', status: 'live', has_implementation: true }], firstParty: {}, firstPartyCards: FIRST_CARDS });
   assert.deepEqual(toolGroups(cat).groups.map((g) => g.label), ['Code', 'Payments', 'Calendar and workspace', 'Data', 'Other']);
   assert.deepEqual(toolGroups(cat, { pin: 'Calendar and workspace' }).groups.map((g) => g.label), ['Calendar and workspace', 'Code', 'Payments', 'Data', 'Other']);
   assert.deepEqual(toolGroups(cat, { pin: 'Other' }).groups.map((g) => g.label)[0], 'Other');

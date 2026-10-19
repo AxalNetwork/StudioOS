@@ -6,6 +6,7 @@ import { BTN } from './AccountCenter';
 import { SheetFrame } from './ConnectorSheet';
 import { RequestSheet, useMovedNotice } from './AccountConnectors';
 import { TelegramPageBody, WhatsAppConnectButton, WhatsAppPageBody, useChannelsOverview, useWhatsAppSignup } from './ChannelsGroup';
+import { WhatsAppWayB } from './WhatsAppWayB';
 import { CARD_TITLE, telegramPageState, whatsappPageState } from './channelsModel';
 import TelegramBotHealth from '../admin/TelegramBotHealth';
 import { useAuth } from '../../hooks/useAuthSync';
@@ -34,6 +35,9 @@ import { backHrefFor } from './connectorPageModel';
  * canary line and the missing secret names, Super Admins only) are drawn in
  * the notice region, and the band's action is the body's Connect: one signup
  * flow, which opens Meta's popup and never redirects.
+ *
+ * D754 way B (#1939): below it, "Send recordings from your WhatsApp"
+ * (`WhatsAppWayB.jsx`), which reads `GET /api/channels/whatsapp/link` itself.
  */
 
 const BOX = 'rounded-axal-sm border border-axal-hairline bg-white p-5 text-[13px] text-axal-ink dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200';
@@ -109,7 +113,7 @@ export function ChannelPageView({ channels, channelKey, phone = false, user = nu
 
       <section aria-label="Connect and manage" data-testid="connector-page-connect" data-mode="channel">
         {channelKey === 'whatsapp'
-          ? <WhatsAppPageBody view={wa} signup={signup} pending={overview.pending?.whatsapp ?? null} api={api} onChanged={channels.reload} />
+          ? <WhatsAppPageBody view={wa} signup={signup} pending={overview.pending?.whatsapp ?? null} api={api} onChanged={channels.reload} wayB={<WhatsAppWayB user={user} api={api} />} />
           : <TelegramPageBody view={tg} claim={overview.telegramLink ?? null} pending={overview.pending?.telegram ?? null} api={api} onChanged={channels.reload}
             health={tg.health ? <TelegramBotHealth {...(adminApi ? { api: adminApi } : {})} /> : null} />}
       </section>

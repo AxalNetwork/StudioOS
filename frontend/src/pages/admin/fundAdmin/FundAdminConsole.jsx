@@ -6,6 +6,7 @@ import { fundAdminApi } from '../../../lib/api/fundAdmin';
 import { adminMercuryApi } from '../../../lib/api/adminMercury';
 import { fundFeesApi } from '../../../lib/api/fundFees';
 import { fundReportingApi } from '../../../lib/api/fundReporting';
+import { adminCapitalAttestationsApi } from '../../../lib/api/adminCapitalAttestations';
 import { Banner } from '../../account/ConnectorSheet';
 import { HQ_ONLY, LAYOUT_NOTE, TABS, administeredFunds, pickFund, tabFrom } from './fundAdminModel';
 import { useRead } from './useRead';
@@ -33,6 +34,8 @@ export const DEFAULT_APIS = {
   mercury: adminMercuryApi,
   fees: fundFeesApi,
   reporting: fundReportingApi,
+  // D752 (#1890): the Calls tab's proofs of funds, read only on Show.
+  capitalAttestations: adminCapitalAttestationsApi,
   funds: {
     distributions: (fundId) => api.fundsDistributions(fundId),
     execute: (body) => api.fundsExecuteDistribution(body),

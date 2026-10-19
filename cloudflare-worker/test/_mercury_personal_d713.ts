@@ -22,6 +22,9 @@ import { encryptCredentials } from '../src/integrations/secrets.ts';
 import integrations from '../src/routes/integrations.ts';
 import revenue from '../src/routes/revenue.ts';
 import mercuryPersonal from '../src/routes/mercury_personal.ts';
+import mercuryAttestations from '../src/routes/mercury_attestations.ts';
+import adminCapitalAttestations from '../src/routes/admin_capital_attestations.ts';
+import adminLpApplications from '../src/routes/admin_lp_applications.ts';
 import '../src/integrations/providers/mercury.ts';
 
 export const TOKEN = 'fixture-not-a-token-3';
@@ -64,7 +67,9 @@ export interface BankState {
 }
 export interface BankCall { url: string; path: string; method: string; redirect?: string; body: boolean }
 
-export const account = (id: string, last4: string, kind = 'checking') => ({ id, kind, accountNumber: `****${last4}`, nickname: `Own ${kind}`, status: 'active' });
+/** D752 (#1888): `availableBalance`, in dollars as a JSON number, only when given. */
+export const account = (id: string, last4: string, kind = 'checking', availableBalance?: number) =>
+  ({ id, kind, accountNumber: `****${last4}`, nickname: `Own ${kind}`, status: 'active', ...(availableBalance === undefined ? {} : { availableBalance }) });
 export const credit = (n: number, amount: number, posted: string, counterpartyName = 'Customer Co', extra: Partial<Txn> = {}): Txn =>
   ({ id: tx(n), amount, postedAt: `${posted}T12:00:00Z`, createdAt: `${posted}T10:00:00Z`, status: 'sent', kind: 'externalTransfer', counterpartyName, ...extra });
 
@@ -110,11 +115,15 @@ const app = new Hono<any>();
 app.route('/api/connectors', integrations);
 app.route('/api/revenue', revenue);
 app.route('/api/mercury/personal', mercuryPersonal);
+app.route('/api/mercury/attestations', mercuryAttestations);
+// D752 (#1890): the admin read and the LP application queue.
+app.route('/api/admin/capital-attestations', adminCapitalAttestations);
+app.route('/api/admin/lp-applications', adminLpApplications);
 app.onError((e: any, c) => c.json({ detail: e.message }, AUTH_ERROR_STATUSES[e.message] || 500));
 
 export async function req(env: any, who: number, method: string, path: string, body?: unknown,
   opts: { impersonated?: boolean; branch?: boolean } = {}) {
-  const role = ({ 10: 'founder', 20: 'partner', 21: 'partner', 30: 'investor', 1: 'admin', 2: 'admin' } as any)[who];
+  const role = ({ 10: 'founder', 20: 'partner', 21: 'partner', 30: 'investor', 31: 'investor', 1: 'admin', 2: 'admin' } as any)[who];
   const jwt = await new SignJWT({ user_id: who, role, ...(opts.impersonated ? { impersonated_by: 1 } : {}) })
     .setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(env.JWT_SECRET));
   const e = opts.branch ? { ...env, BRANCH_CODE: 'ldn' } : env;

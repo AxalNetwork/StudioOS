@@ -6,6 +6,10 @@ import { parseDollarsToCents } from '../../investor/fundCallsModel';
 import { bpsPercent } from '../../../lib/bps';
 import { BTN, INPUT, LoadingRows } from '../../account/AccountCenter';
 import { Banner, Group, Row } from '../../account/ConnectorSheet';
+import { BrandIcon } from '../../../ui';
+import { ProofStatement } from '../../../components/ProofOfFunds';
+import { CALLS_COMPARE, PILL_TONE, VIEW_NOTE } from '../../../lib/proofOfFunds';
+import { reportError } from '../../../lib/log';
 import { NO_FUND, QUARTER_RE, REJECT_REASON_MIN, money, refusalText } from './fundAdminModel';
 import { useRead } from './useRead';
 
@@ -55,7 +59,47 @@ function FundFrame({ funds, fund, overview, onFund, children }) {
   );
 }
 
-export function CallsTab({ access, funds, fund, overview, onFund }) {
+/**
+ * D752 (#1890): the proofs of funds Fund I's LPs shared. Nothing is read until
+ * Show: each read is audited and counts a view for every LP shown, so opening
+ * the tab for its calls counts none. Hide folds it; each later Show reads again.
+ */
+function CallProofs({ apis, fund }) {
+  const [state, setState] = useState({ status: 'closed', data: null, error: null });
+  const show = async () => {
+    setState({ status: 'loading', data: null, error: null });
+    try {
+      setState({ status: 'ok', data: await apis.capitalAttestations.forFund(fund.id), error: null });
+    } catch (e) {
+      reportError('proof-of-funds:calls', e);
+      setState({ status: e?.status ? 'refused' : 'unreadable', data: null, error: e });
+    }
+  };
+  const items = state.data?.items || [];
+  return (
+    <Group label="Proof of funds shared by LPs">
+      <Row a="Proofs of funds" b={VIEW_NOTE}
+        action={state.status === 'closed' ? <button type="button" className={BTN.link} onClick={show} data-testid="calls-proofs-show">Show proofs of funds</button> : null} />
+      {state.status === 'loading' && <Busy />}
+      {state.status === 'unreadable' && <div className="px-3 py-2"><Unreadable what="The proofs of funds" claim="This is not a claim that none was shared." onRetry={show} /></div>}
+      {state.status === 'refused' && <Alert text={refusalText(state.error, 'The proofs of funds could not be read.')} />}
+      {state.status === 'ok' && (items.length === 0
+        ? <Row a={<Unrecorded>No LP has shared a proof of funds for this fund.</Unrecorded>} />
+        : items.map((i) => (
+          <Row key={i.uid} a={`${i.investor_name || `Investor #${i.investor_user_id}`} · ${i.target_label}`}
+            icon={i.state === 'active' ? <BrandIcon provider="mercury" name="Mercury" size={24} /> : null}
+            b={<ProofStatement item={i} mark={false} />}
+            pill={<Pill tone={PILL_TONE[i.label] || 'neutral'}>{i.label}</Pill>} />
+        )))}
+      {state.status !== 'closed' && state.status !== 'loading' && (
+        <Row a={state.data?.truncated ? 'Showing the first 500.' : ''} b={CALLS_COMPARE}
+          action={<button type="button" className={BTN.link} onClick={() => setState({ status: 'closed', data: null, error: null })} data-testid="calls-proofs-hide">Hide</button>} />
+      )}
+    </Group>
+  );
+}
+
+export function CallsTab({ access, funds, fund, overview, onFund, apis }) {
   const f = (overview.data?.funds?.items || []).find((x) => Number(x.fund_id) === Number(fund?.id));
   return (
     <FundFrame funds={funds} fund={fund} overview={overview} onFund={onFund}>
@@ -75,6 +119,7 @@ export function CallsTab({ access, funds, fund, overview, onFund }) {
           <Row a="The fund's books" b="Journal entries, statements and reconciled lines."
             action={<Link className={BTN.link} to={`/funds/ledger?fund=${fund.id}`} data-testid="open-fund-ledger">Open the books</Link>} />
         </Group>
+        {apis?.capitalAttestations && <CallProofs apis={apis} fund={fund} />}
       </div>}
     </FundFrame>
   );

@@ -157,6 +157,7 @@
     "scope.sql @ routes/spinout_lab.ts": 1,
     "scope.sql @ routes/trust.ts": 1,
     "scope.sql @ services/aiSpend.ts": 2,
+    "scope.sql @ services/capitalAttestations.ts": 1,
     "scope.sql @ services/fundGpAccess.ts": 1,
     "SEAT_FREE_PREDICATE @ routes/events.ts": 4,
     "SEAT_FREE_PREDICATE @ services/eventCapacity.ts": 1,

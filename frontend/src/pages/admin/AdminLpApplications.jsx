@@ -20,6 +20,14 @@
 // rather than the page asserting them. Shipping the design's sentence would
 // promise portfolio disclosure to someone who has signed nothing.
 //
+// D752 (#1890): PROOF OF FUNDS. A queue row carries `proof_of_funds` as a state
+// only (active, expired, revoked, none, unreadable; null on a branch or in a
+// support session), drawn as a chip beside the status. The detail's "Proof of
+// funds" row, under Accreditation, reads the statement itself once per
+// selection: an audited request that counts a view on the investor's own list.
+// A decision's reload keeps the same key, so it does not read again; `none`
+// says so and reads nothing. It is never evidence of accredited status.
+//
 // Not reproduced from the design: bulk approve/decline and side-by-side
 // comparison. Both are real conveniences, but a bulk decline cannot satisfy
 // the per-application reason the API (rightly) requires, and shipping a
@@ -30,6 +38,8 @@ import { AlertTriangle, Check, Loader2, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { titleCase } from '../../lib/absence';
+import { adminCapitalAttestationsApi } from '../../lib/api/adminCapitalAttestations';
+import { ProofChip, ProofOfFundsRow } from '../../components/ProofOfFunds';
 
 const CARD = 'rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700';
 const LBL = 'text-[10.5px] font-bold uppercase tracking-[0.11em] text-gray-400 dark:text-gray-500';
@@ -269,6 +279,7 @@ export default function AdminLpApplications() {
                       {a.firm || 'Independent'} · {titleCase(a.investor_type)}
                     </div>
                   </div>
+                  <ProofChip state={a.proof_of_funds} />
                   <StatusChip status={a.status} label={a.status_label} />
                 </div>
                 <div className="flex items-center gap-3 mt-2 flex-wrap">
@@ -314,6 +325,8 @@ export default function AdminLpApplications() {
                 ['Indicated commitment', money(sel.target_commitment)],
                 ['Preference areas', sel.preference_areas.length ? sel.preference_areas.map(titleCase).join(' · ') : '—'],
                 ['Accreditation', 'Self-certified at submission (Rule 501)'],
+                ...(sel.proof_of_funds != null ? [['Proof of funds', <ProofOfFundsRow key={sel.id} state={sel.proof_of_funds ?? null} figureDollars={sel.target_commitment}
+                  load={() => adminCapitalAttestationsApi.forTarget('lp_application', sel.id)} />]] : []),
                 ['Submitted', sel.created_at || '—'],
               ].map(([k, v]) => (
                 <div key={k} className="flex gap-4 px-5 py-2.5 border-b border-gray-100 dark:border-gray-800">

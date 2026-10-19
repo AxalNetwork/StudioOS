@@ -15,6 +15,13 @@
  * internal review notes, so it is admin-only by construction rather than by a
  * role check bolted on per handler.
  *
+ * D752 (#1890): each queue row, and the row `PATCH /:id` returns, carries
+ * `proof_of_funds`: `active`, `expired`, `revoked`, `none` or `unreadable` (never
+ * `none` when the statements could not be read), from the applicant's own
+ * statements on that application. A state only, with no amount, holder or date,
+ * so it writes no audit row and counts no view; the figure is read, audited, at
+ * /api/admin/capital-attestations. Null on a branch Worker or in a support session.
+ *
  * On approval and access — the one thing not to get wrong here: approving an
  * application does NOT grant LP reporting access. The access ladder derives
  * from `limited_partners`; see the long note at the top of
@@ -26,10 +33,38 @@ import { requireAdmin, requireBranchNotSuspended } from '../auth';
 import { lpSelfScope } from '../services/tenancyScope';
 import {
   validateTransition, presentQueueRow, summarize, downstreamEffects,
-  OPEN_STATUSES, isReviewStatus,
+  OPEN_STATUSES, isReviewStatus, type ReviewQueueRow,
 } from '../services/lpApplicationReview';
+import { isSupportSession } from '../services/fundAdminAccess';
+import { branchOf } from '../util/branch';
+import { proofState, todayUtc } from '../services/capitalAttestationTerms';
+import type { Context } from 'hono';
 
 const adminLpApplications = new Hono<{ Bindings: Env }>();
+
+const PROOF_BY_FUND = `SELECT ca.target_id, ca.state, ca.expires_on
+  FROM capital_attestations ca JOIN lp_applications a ON a.id = ca.target_id AND a.user_id = ca.user_id
+ WHERE ca.purpose = 'lp_application' AND ca.state IN ('active', 'revoked') AND a.fund_slug = ?`;
+const PROOF_BY_ID = `SELECT ca.target_id, ca.state, ca.expires_on
+  FROM capital_attestations ca JOIN lp_applications a ON a.id = ca.target_id AND a.user_id = ca.user_id
+ WHERE ca.purpose = 'lp_application' AND ca.state IN ('active', 'revoked') AND a.id = ?`;
+
+/**
+ * D752: each row's proof-of-funds state, from the applicant's own statements.
+ * A failed read makes every row `unreadable`, and the queue still answers.
+ */
+async function attachProofStates(c: Context<{ Bindings: Env }>, rows: ReviewQueueRow[], scope: { fundSlug: string } | { id: number }): Promise<ReviewQueueRow[]> {
+  if (branchOf(c.env) || await isSupportSession(c)) return rows.map((r) => ({ ...r, proof_of_funds: null }));
+  try {
+    const stmt = 'fundSlug' in scope ? c.env.DB.prepare(PROOF_BY_FUND).bind(scope.fundSlug) : c.env.DB.prepare(PROOF_BY_ID).bind(scope.id);
+    const found = (await stmt.all<{ target_id: number; state: 'active' | 'revoked'; expires_on: string }>()).results || [];
+    const today = todayUtc();
+    return rows.map((r) => ({ ...r, proof_of_funds: proofState(found.filter((f) => Number(f.target_id) === Number(r.id)), today) }));
+  } catch (e) {
+    console.error('[admin] lp-applications proof states unreadable:', (e as Error).message);
+    return rows.map((r) => ({ ...r, proof_of_funds: 'unreadable' as const }));
+  }
+}
 
 // The fund the LP workspace ships today. Kept as the DEFAULT rather than the
 // only value: `lp_applications.fund_slug` has always been per-fund (migration
@@ -96,9 +131,9 @@ adminLpApplications.get('/', async (c) => {
     ).bind(fundSlug).all();
 
     const now = Date.now();
-    const all = ((res && res.results) || [])
+    const all = await attachProofStates(c, ((res && res.results) || [])
       .map((row: any) => presentQueueRow(row, now))
-      .filter((r): r is NonNullable<typeof r> => r !== null);
+      .filter((r): r is NonNullable<typeof r> => r !== null), { fundSlug });
 
     // Counts are computed over EVERYTHING, before filtering — a tab showing
     // "Approved 12" must keep saying 12 while the GP is looking at "New".
@@ -221,9 +256,11 @@ adminLpApplications.patch('/:id', async (c) => {
       hasHolding = !!lp;
     } catch { /* table absent on a partial DB — absence is the safe answer */ }
 
+    const presented = presentQueueRow(row, Date.now());
+    const [application] = presented ? await attachProofStates(c, [presented], { id }) : [presented];
     return c.json({
       ok: true,
-      application: presentQueueRow(row, Date.now()),
+      application,
       downstream: downstreamEffects(check.status, hasHolding),
     });
   } catch (e) {

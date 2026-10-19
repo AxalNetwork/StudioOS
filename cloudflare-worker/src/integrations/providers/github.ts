@@ -28,7 +28,8 @@
  *   - a pull request becomes a Prototype / MVP must-have (`mvp_features`);
  *   - a release has no store in the founder workspace, so it is recorded as
  *     arrived with no local row, and the fed count says so.
- * A re-sync finds each item's row through the ledger and updates it.
+ * A re-sync finds each item's row through the ledger and updates it. A row the
+ * founder deleted stays deleted, and its ledger row is unlinked (#1906).
  *
  * IMPORTANT: imported once from index.ts so registerProvider() runs at boot.
  */
@@ -339,56 +340,91 @@ export function prDeliveryStatus(pr: any): string {
   return pr?.draft ? 'In Progress' : 'Review';
 }
 
-async function ledgerRow(env: Env, integrationId: number, externalId: string): Promise<{ local_id: number | null } | null> {
-  return await env.DB.prepare('SELECT local_id FROM connector_fed_items WHERE integration_id = ? AND external_id = ?')
-    .bind(integrationId, externalId).first<{ local_id: number | null }>() ?? null;
-}
-
-async function record(env: Env, row: IntegrationRow, projectId: number, module: string, kind: string, externalId: string,
-  localTable: string | null, localId: number | null): Promise<void> {
-  await env.DB.prepare(
-    `INSERT INTO connector_fed_items (integration_id, project_id, module, kind, external_id, local_table, local_id)
+// One page's D1 work is two subrequests: a read of its ledger rows, then one
+// batch of every write (#1906). A new row's ledger entry takes its id from
+// `last_insert_rowid()` in the statement after its INSERT, inside that batch.
+const LEDGER_OF_PAGE =
+  'SELECT external_id, local_id FROM connector_fed_items WHERE integration_id = ? AND external_id IN (SELECT value FROM json_each(?))';
+const LEDGER_TOUCH = `INSERT INTO connector_fed_items (integration_id, project_id, module, kind, external_id, local_table, local_id)
      VALUES (?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(integration_id, external_id) DO UPDATE SET last_seen_at = CURRENT_TIMESTAMP`,
-  ).bind(row.id, projectId, module, kind, externalId, localTable, localId).run();
+     ON CONFLICT(integration_id, external_id) DO UPDATE SET last_seen_at = CURRENT_TIMESTAMP`;
+const LEDGER_NEW_ROW = `INSERT INTO connector_fed_items (integration_id, project_id, module, kind, external_id, local_table, local_id)
+     VALUES (?, ?, ?, ?, ?, ?, last_insert_rowid())
+     ON CONFLICT(integration_id, external_id) DO UPDATE SET last_seen_at = CURRENT_TIMESTAMP`;
+// The founder deleted the row: their deletion stands, and the item no longer counts as linked.
+const UNLINK_DELETED_ISSUE = `UPDATE connector_fed_items SET local_id = NULL, local_table = NULL
+     WHERE integration_id = ? AND external_id = ? AND local_id IS NOT NULL
+       AND NOT EXISTS (SELECT 1 FROM roadmap_okrs WHERE id = ? AND project_id = ?)`;
+const UNLINK_DELETED_PULL = `UPDATE connector_fed_items SET local_id = NULL, local_table = NULL
+     WHERE integration_id = ? AND external_id = ? AND local_id IS NOT NULL
+       AND NOT EXISTS (SELECT 1 FROM mvp_features WHERE id = ? AND project_id = ?)`;
+
+type Ledger = Map<string, number | null>;
+
+async function ledgerOfPage(env: Env, integrationId: number, externalIds: string[]): Promise<Ledger> {
+  const rows = await env.DB.prepare(LEDGER_OF_PAGE).bind(integrationId, JSON.stringify(externalIds))
+    .all<{ external_id: string; local_id: number | null }>();
+  return new Map((rows.results || []).map((r) => [r.external_id, r.local_id ?? null]));
 }
 
-async function landIssue(env: Env, row: IntegrationRow, projectId: number, repo: string, issue: any): Promise<boolean> {
+/**
+ * An issue's statements. An item the ledger already holds is only updated:
+ * a deleted row is never re-created, and its ledger row is unlinked.
+ */
+function issueStatements(env: Env, row: IntegrationRow, projectId: number, repo: string, issue: any, ledger: Ledger): { stmts: D1PreparedStatement[]; created: boolean } {
   const externalId = `issue:${repo}#${issue.number}`;
   const title = String(issue.title || '').slice(0, 300) || `${repo}#${issue.number}`;
-  const prior = await ledgerRow(env, row.id, externalId);
-  if (prior?.local_id) {
-    // Only the title and a close are GitHub's; the founder's lane is theirs.
-    await env.DB.prepare(
-      `UPDATE roadmap_okrs SET objective = ?, kanban_status = CASE WHEN ? = 'closed' THEN 'done' ELSE kanban_status END,
-              updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?`,
-    ).bind(title, String(issue.state), prior.local_id, projectId).run();
-    await record(env, row, projectId, 'product_roadmap', 'issue', externalId, 'roadmap_okrs', prior.local_id);
-    return false;
+  const touch = env.DB.prepare(LEDGER_TOUCH);
+  if (ledger.has(externalId)) {
+    const localId = ledger.get(externalId);
+    if (!localId) return { stmts: [touch.bind(row.id, projectId, 'product_roadmap', 'issue', externalId, null, null)], created: false };
+    return {
+      stmts: [
+        // Only the title and a close are GitHub's; the founder's lane is theirs.
+        env.DB.prepare(
+          `UPDATE roadmap_okrs SET objective = ?, kanban_status = CASE WHEN ? = 'closed' THEN 'done' ELSE kanban_status END,
+                  updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?`,
+        ).bind(title, String(issue.state), localId, projectId),
+        touch.bind(row.id, projectId, 'product_roadmap', 'issue', externalId, 'roadmap_okrs', localId),
+        env.DB.prepare(UNLINK_DELETED_ISSUE).bind(row.id, externalId, localId, projectId),
+      ],
+      created: false,
+    };
   }
-  const ins = await env.DB.prepare(
-    'INSERT INTO roadmap_okrs (project_id, objective, kanban_status) VALUES (?, ?, ?)',
-  ).bind(projectId, title, issue.state === 'closed' ? 'done' : 'next').run();
-  await record(env, row, projectId, 'product_roadmap', 'issue', externalId, 'roadmap_okrs', Number(ins.meta?.last_row_id));
-  return true;
+  return {
+    stmts: [
+      env.DB.prepare('INSERT INTO roadmap_okrs (project_id, objective, kanban_status) VALUES (?, ?, ?)')
+        .bind(projectId, title, issue.state === 'closed' ? 'done' : 'next'),
+      env.DB.prepare(LEDGER_NEW_ROW).bind(row.id, projectId, 'product_roadmap', 'issue', externalId, 'roadmap_okrs'),
+    ],
+    created: true,
+  };
 }
 
-async function landPull(env: Env, row: IntegrationRow, projectId: number, repo: string, pr: any): Promise<boolean> {
+function pullStatements(env: Env, row: IntegrationRow, projectId: number, repo: string, pr: any, ledger: Ledger): { stmts: D1PreparedStatement[]; created: boolean } {
   const externalId = `pull:${repo}#${pr.number}`;
   const title = String(pr.title || '').slice(0, 300) || `${repo}#${pr.number}`;
-  const prior = await ledgerRow(env, row.id, externalId);
-  if (prior?.local_id) {
-    await env.DB.prepare(
-      'UPDATE mvp_features SET title = ?, delivery_status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?',
-    ).bind(title, prDeliveryStatus(pr), prior.local_id, projectId).run();
-    await record(env, row, projectId, 'prototype_mvp', 'pull_request', externalId, 'mvp_features', prior.local_id);
-    return false;
+  const touch = env.DB.prepare(LEDGER_TOUCH);
+  if (ledger.has(externalId)) {
+    const localId = ledger.get(externalId);
+    if (!localId) return { stmts: [touch.bind(row.id, projectId, 'prototype_mvp', 'pull_request', externalId, null, null)], created: false };
+    return {
+      stmts: [
+        env.DB.prepare('UPDATE mvp_features SET title = ?, delivery_status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?')
+          .bind(title, prDeliveryStatus(pr), localId, projectId),
+        touch.bind(row.id, projectId, 'prototype_mvp', 'pull_request', externalId, 'mvp_features', localId),
+        env.DB.prepare(UNLINK_DELETED_PULL).bind(row.id, externalId, localId, projectId),
+      ],
+      created: false,
+    };
   }
-  const ins = await env.DB.prepare(
-    'INSERT INTO mvp_features (project_id, title, delivery_status) VALUES (?, ?, ?)',
-  ).bind(projectId, title, prDeliveryStatus(pr)).run();
-  await record(env, row, projectId, 'prototype_mvp', 'pull_request', externalId, 'mvp_features', Number(ins.meta?.last_row_id));
-  return true;
+  return {
+    stmts: [
+      env.DB.prepare('INSERT INTO mvp_features (project_id, title, delivery_status) VALUES (?, ?, ?)').bind(projectId, title, prDeliveryStatus(pr)),
+      env.DB.prepare(LEDGER_NEW_ROW).bind(row.id, projectId, 'prototype_mvp', 'pull_request', externalId, 'mvp_features'),
+    ],
+    created: true,
+  };
 }
 
 // ───────────────────────────────────────────────────────────── impl
@@ -451,7 +487,41 @@ async function buildAuthorizeUrl(c: Context<{ Bindings: Env }>, _user: User, sta
   return `https://github.com/login/oauth/authorize?${q}`;
 }
 
-export async function syncGithub(env: Env, row: IntegrationRow): Promise<SyncResult> {
+/**
+ * Each D1 query, KV call and `fetch` is a Worker subrequest (Workers Paid: 10,000
+ * per invocation). A sync counts its own and stops before this budget, leaving
+ * room for the route's writes; the worst case under the caps (50 repositories,
+ * 3 endpoints, 5 pages) is about 2,400. `SYNC_SETUP_COST` covers the reads
+ * before the loop (the project check, the token, the cursor) and the route's
+ * writes after it.
+ */
+export const SYNC_SUBREQUEST_BUDGET = 8000;
+const SYNC_SETUP_COST = 16;
+// A page: its fetch, its ledger read and its batch, plus one progress write.
+const PAGE_COST = 4;
+const STEP_KINDS = ['issues', 'pulls', 'releases'] as const;
+const PARTLY_SYNCED = 'Partly synced: run Sync again to continue';
+
+/** Where a partly synced run stopped, for this exact repository list. */
+interface SyncCursor { repos: string; step: number; page: number }
+const cursorKey = (uid: string) => `connector-sync-cursor:${uid}`;
+
+async function readCursor(env: Env, uid: string, repos: string): Promise<SyncCursor | null> {
+  try {
+    const raw = await env.RATE_LIMITS.get(cursorKey(uid));
+    const c = raw ? JSON.parse(raw) as SyncCursor : null;
+    return c && c.repos === repos && Number.isSafeInteger(c.step) && Number.isSafeInteger(c.page) ? c : null;
+  } catch { return null; }
+}
+
+async function writeCursor(env: Env, uid: string, c: SyncCursor | null): Promise<void> {
+  try {
+    if (c) await env.RATE_LIMITS.put(cursorKey(uid), JSON.stringify(c), { expirationTtl: 86_400 });
+    else await env.RATE_LIMITS.delete(cursorKey(uid));
+  } catch { /* without the cursor the next run starts over; landed items are only updated */ }
+}
+
+export async function syncGithub(env: Env, row: IntegrationRow, budget = SYNC_SUBREQUEST_BUDGET): Promise<SyncResult> {
   const cfg = (() => { try { return JSON.parse(row.config_json || '{}'); } catch { return {}; } })();
   const repos: string[] = Array.isArray(cfg.repositories) ? cfg.repositories.filter((r: unknown) => typeof r === 'string') : [];
   const projectId = Number(cfg.project_id);
@@ -460,37 +530,70 @@ export async function syncGithub(env: Env, row: IntegrationRow): Promise<SyncRes
     throw new Error('github_project_not_enabled: choose a project in a company this connection is enabled for.');
   }
   const token = await accessToken(env, row);
-  const counts = { issues: 0, pull_requests: 0, releases: 0, roadmap_items_created: 0, must_haves_created: 0 };
-  const steps = repos.length * 3;
-  let done = 0;
-  const step = async (reading: string) => {
-    await writeProgress(env, row.uid, { state: 'running', pct: Math.round((done / steps) * 100), reading });
-    done += 1;
-  };
+  const counts: Record<string, number | boolean> = { issues: 0, pull_requests: 0, releases: 0, roadmap_items_created: 0, must_haves_created: 0 };
+  const signature = repos.join('\n');
+  const resume = await readCursor(env, row.uid, signature);
+  const steps = repos.length * STEP_KINDS.length;
+  let used = SYNC_SETUP_COST;
+  let step = resume?.step ?? 0;
+  const pct = () => Math.round((step / steps) * 100);
   try {
-    for (const repo of repos) {
+    for (; step < steps; step += 1) {
+      const repo = repos[Math.floor(step / STEP_KINDS.length)];
+      const kind = STEP_KINDS[step % STEP_KINDS.length];
       const path = `/repos/${repo.split('/').map(encodeURIComponent).join('/')}`;
-      await step(`Issues in ${repo}`);
-      for (const issue of await ghPages<any>(token, `${path}/issues?state=all`)) {
-        if (issue?.pull_request) continue; // the issues endpoint lists pull requests too
-        counts.issues += 1;
-        if (await landIssue(env, row, projectId, repo, issue)) counts.roadmap_items_created += 1;
-      }
-      await step(`Pull requests in ${repo}`);
-      for (const pr of await ghPages<any>(token, `${path}/pulls?state=all`)) {
-        counts.pull_requests += 1;
-        if (await landPull(env, row, projectId, repo, pr)) counts.must_haves_created += 1;
-      }
-      await step(`Releases in ${repo}`);
-      for (const rel of await ghPages<any>(token, `${path}/releases`)) {
-        counts.releases += 1;
-        await record(env, row, projectId, 'product_roadmap', 'release', `release:${repo}@${rel.id}`, null, null);
+      await writeProgress(env, row.uid, { state: 'running', pct: pct(), reading: `${kind === 'issues' ? 'Issues' : kind === 'pulls' ? 'Pull requests' : 'Releases'} in ${repo}` });
+      used += 1;
+      const first = resume && step === resume.step ? resume.page : 1;
+      for (let page = first; page <= MAX_PAGES; page += 1) {
+        if (used + PAGE_COST > budget) {
+          await writeCursor(env, row.uid, { repos: signature, step, page });
+          await writeProgress(env, row.uid, { state: 'done', pct: pct(), reading: PARTLY_SYNCED });
+          counts.partial = true;
+          return {
+            summary: `${PARTLY_SYNCED}. Synced ${counts.issues} issues, ${counts.pull_requests} pull requests and ${counts.releases} releases so far.`,
+            counts,
+          };
+        }
+        // The three list reads, as the connector page names them (D753).
+        const list = kind === 'issues' ? `${path}/issues?state=all` : kind === 'pulls' ? `${path}/pulls?state=all` : `${path}/releases`;
+        const items: any[] = (await ghJson<any>(token, `${list}${list.includes('?') ? '&' : '?'}per_page=${PER_PAGE}&page=${page}`)) || [];
+        used += 1;
+        const stmts: D1PreparedStatement[] = [];
+        if (kind === 'releases') {
+          for (const rel of items) {
+            counts.releases = Number(counts.releases) + 1;
+            stmts.push(env.DB.prepare(LEDGER_TOUCH).bind(row.id, projectId, 'product_roadmap', 'release', `release:${repo}@${rel.id}`, null, null));
+          }
+        } else {
+          // The issues endpoint lists pull requests too; they land from the pulls endpoint.
+          const landed = kind === 'issues' ? items.filter((i) => !i?.pull_request) : items;
+          const ids = landed.map((i) => `${kind === 'issues' ? 'issue' : 'pull'}:${repo}#${i.number}`);
+          const ledger = ids.length ? await ledgerOfPage(env, row.id, ids) : new Map();
+          if (ids.length) used += 1;
+          for (const item of landed) {
+            const out = kind === 'issues'
+              ? issueStatements(env, row, projectId, repo, item, ledger)
+              : pullStatements(env, row, projectId, repo, item, ledger);
+            stmts.push(...out.stmts);
+            if (kind === 'issues') {
+              counts.issues = Number(counts.issues) + 1;
+              if (out.created) counts.roadmap_items_created = Number(counts.roadmap_items_created) + 1;
+            } else {
+              counts.pull_requests = Number(counts.pull_requests) + 1;
+              if (out.created) counts.must_haves_created = Number(counts.must_haves_created) + 1;
+            }
+          }
+        }
+        if (stmts.length) { await env.DB.batch(stmts); used += 1; }
+        if (items.length < PER_PAGE) break;
       }
     }
   } catch (e) {
-    await writeProgress(env, row.uid, { state: 'failed', pct: Math.round((done / steps) * 100), reading: 'Stopped' });
+    await writeProgress(env, row.uid, { state: 'failed', pct: pct(), reading: 'Stopped' });
     throw e;
   }
+  if (resume) await writeCursor(env, row.uid, null);
   await writeProgress(env, row.uid, { state: 'done', pct: 100, reading: 'Done' });
   return {
     summary: `Synced ${counts.issues} issues, ${counts.pull_requests} pull requests and ${counts.releases} releases from ${repos.length} repositories.`,

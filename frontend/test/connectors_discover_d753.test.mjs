@@ -54,7 +54,9 @@ const ITEMS = [
   { uid: 'u-slack', provider_key: 'slack', status: 'active', last_synced_at: null, last_error: null, config: {} },
 ];
 const FIRST = { google: { configured: true, connected: true, google_email: 'me@example.test' }, microsoft: { configured: false, connected: false }, linkedin: null };
-const D651 = buildCatalogue({ providers: PROVIDERS, items: ITEMS, waitlist: [{ provider_key: 'affinity' }], firstParty: FIRST });
+// D753 (#1955): the first-party rows' categories come from the Worker, not `FIRST_PARTY`.
+const FIRST_CARDS = [{ key: 'google', category: 'Calendar and workspace' }, { key: 'microsoft', category: 'Calendar and workspace' }, { key: 'linkedin', category: 'Data' }];
+const D651 = buildCatalogue({ providers: PROVIDERS, items: ITEMS, waitlist: [{ provider_key: 'affinity' }], firstParty: FIRST, firstPartyCards: FIRST_CARDS });
 
 // Rows shaped like #1878's fields.
 const EXTRA = [
@@ -63,7 +65,7 @@ const EXTRA = [
   P('docsend', 'DocSend', 'custom', 'beta', 'free', 'oauth2', { category: 'Docs', feed_modules: [{ key: 'dr', href: '/raise/data-room' }], trust: { read_only: true }, verified: true, verified_on: '2026-10-12', tagline: 'Share your deck with a link.' }),
   P('notion', 'Notion', 'custom', 'live', 'free', 'oauth2', { category: 'Docs', verified: true, added: '2026-09' }),
 ];
-const CAT = buildCatalogue({ providers: [...PROVIDERS, ...EXTRA], items: ITEMS, waitlist: [{ provider_key: 'affinity' }], firstParty: FIRST });
+const CAT = buildCatalogue({ providers: [...PROVIDERS, ...EXTRA], items: ITEMS, waitlist: [{ provider_key: 'affinity' }], firstParty: FIRST, firstPartyCards: FIRST_CARDS });
 const SUGG = [{ provider_key: 'calendly', reason: 'Customer research has no recorded interviews yet.' }, { key: 'crunchbase' }, { provider_key: 'calendly' }];
 const keys = (list) => list.map((p) => p.key);
 const facetsFor = (cat, opts = {}) => discoverFacets(cat, opts.suggestions === undefined ? SUGG : opts.suggestions, { now: NOW, ...opts });
