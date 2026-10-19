@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { aiBudgetApi } from '../../lib/api/aiBudget';
 import { usageApi } from '../../lib/api/usage';
 import { EmptyState, PhoneBar, PhoneRows, Pill, Unrecorded, Unreadable, usePhoneWidth } from '../../ui';
 import { BTN, Chips, INPUT, LoadingRows, PanelCard, useAccountRead } from './AccountCenter';
 import {
-  NOT_COUNTED, allowanceView, dayAxis, dayBars, filterPages, modelRows, pageOf, pageRows,
+  NOT_COUNTED, allowanceView, chargedPages, dayAxis, dayBars, filterPages, modelRows, pageOf, pageRows,
   rateRows, receiptView, storageView, STORAGE_AREAS, taskRows, topUpState, topUpRows, purchaseLine,
 } from './usageModel';
 import { ACCOUNT_PHONE_COPY, ACCOUNT_PHONE_PAGES } from './accountPhone';
@@ -217,9 +217,56 @@ function FigureHead({ first }) {
   );
 }
 
-/** U3 — where it went this month, by page (with search and pages) or by task. */
+/**
+ * D776 (#2093) — what the member was charged this month, by the rail's page and
+ * option within it, from `GET /ai-budget/runs?group=option`. Each page says how
+ * much came from the allowance and how much from tokens. "Not recorded" is a
+ * charge or a page the run log did not keep, never $0.00.
+ */
+export function ChargedView({ runs }) {
+  if (runs.status === 'loading') return <LoadingRows lines={4} />;
+  const view = runs.status === 'ready' ? chargedPages(runs.data) : null;
+  if (!view) return <Unreadable what="What you were charged" claim="This is not a claim that you were charged nothing." onRetry={runs.reload} />;
+  if (!view.pages.length) return <EmptyState size="sm" data-testid="usage-charged-empty" title="No AI runs yet this month." />;
+  const nr = <Unrecorded reason="These runs were logged before charges were recorded, or are held for a check.">Not recorded</Unrecorded>;
+  return (
+    <div data-testid="usage-charged">
+      <div className="grid grid-cols-[minmax(0,1fr)_70px_100px] gap-3 border-b border-axal-hairline pb-2 font-mono text-[10.5px] font-semibold uppercase tracking-[0.06em] text-axal-muted dark:border-gray-800 dark:text-gray-400">
+        <span>Page and option</span><span className="text-right">Runs</span><span className="text-right">Charged</span>
+      </div>
+      {view.pages.map((p) => (
+        <div key={p.key} className="border-b border-axal-ground py-2 last:border-0 dark:border-gray-800" data-testid={p.noPage ? 'usage-charged-nopage' : 'usage-charged-page'}>
+          <div className="grid grid-cols-[minmax(0,1fr)_70px_100px] items-center gap-3 text-[13px]">
+            <span className="min-w-0 truncate font-semibold">
+              {p.noPage ? <Pill tone="neutral" className="border-dashed font-medium">Not recorded</Pill>
+                : p.href ? <Link to={p.href} className="text-axal-violet hover:underline" data-testid="usage-charged-link">{p.label}</Link>
+                  : p.label}
+            </span>
+            <span className={`${MONO} text-right text-[12.5px]`}>{p.runs}</span>
+            <span className={`${MONO} text-right text-[12.5px]`}>{p.charged ?? nr}</span>
+          </div>
+          {p.chargedMicro != null && (
+            <Muted className={MONO} data-testid="usage-charged-split">From your allowance {p.allowance} · from tokens {p.tokens}</Muted>
+          )}
+          {!p.noPage && p.options.map((o) => (
+            <div key={o.key} className="grid grid-cols-[minmax(0,1fr)_70px_100px] items-center gap-3 pl-4 pt-1 text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="usage-charged-option">
+              <span className="min-w-0 truncate">{o.noOption ? 'No option recorded' : o.label}</span>
+              <span className={`${MONO} text-right`}>{o.runs}</span>
+              <span className={`${MONO} text-right`}>{o.charged ?? nr}</span>
+            </div>
+          ))}
+        </div>
+      ))}
+      {view.truncated && <Muted data-testid="usage-charged-truncated">Only the 200 largest are listed.</Muted>}
+    </div>
+  );
+}
+
+/** U3 — where it went this month, by page (with search and pages), by task, or charged (D776). */
 export function WhereCard({ spend, initialTab = 'page' }) {
   const [tab, setTab] = useState(initialTab);
+  // D776: read only once the member opens the Charged view.
+  const runs = useAccountRead(() => aiBudgetApi.runs({ group: 'option' }), { enabled: tab === 'charged' });
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
   const st = spendFor(spend, tab === 'page' ? 'by_surface_recorded' : 'by_task_recorded');
@@ -237,12 +284,15 @@ export function WhereCard({ spend, initialTab = 'page' }) {
         <Chips label="Split" items={[
           { key: 'page', label: 'By page', active: tab === 'page', onSelect: () => setTab('page'), testid: 'usage-tab-page' },
           { key: 'task', label: 'By task', active: tab === 'task', onSelect: () => setTab('task'), testid: 'usage-tab-task' },
+          { key: 'charged', label: 'Charged', active: tab === 'charged', onSelect: () => setTab('charged'), testid: 'usage-tab-charged' },
         ]} />
       )}
-      footer={ready && !empty ? 'Estimated from the run log. Runs still in progress are not in these figures yet.' : null}
+      footer={tab === 'charged' ? 'What you paid for each run, as its hold settled. Runs still in progress are not in these figures yet.'
+        : ready && !empty ? 'Estimated from the run log. Runs still in progress are not in these figures yet.' : null}
     >
       <div id="where" className="scroll-mt-24" />
-      {st === 'loading' ? <LoadingRows lines={4} />
+      {tab === 'charged' ? <ChargedView runs={runs} />
+        : st === 'loading' ? <LoadingRows lines={4} />
         : !ready ? <Unreadable what="Where it went" claim="This is not a claim that you ran nothing." onRetry={spend.reload} />
           : empty ? <EmptyState size="sm" data-testid="usage-where-empty" title="No AI runs yet this month." />
             : tab === 'page' ? (
