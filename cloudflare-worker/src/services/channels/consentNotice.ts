@@ -1,32 +1,27 @@
 /**
- * D756 §1.7 (#1894) — the interviewee recording notice: one version, one page.
+ * D756 §1.7 (#1894), D754 §5 (#1893) — the version of what an interviewee is
+ * told, and the page that tells them.
  *
- * WHAT THE VERSION COVERS. `CONSENT_NOTICE_VERSION` names the words of the
- * page at `/privacy/interviews` AND the words of every in-chat consent notice
- * that links to it (D754 W2's WhatsApp text, D756's Telegram text). A change
- * to any of them is a new version, and every consent row stores the version
- * its person was shown. The SPA's `frontend/src/lib/interviewNotice.js` keeps
- * the same number, and `frontend/test/interview_notice_d756.test.mjs` fails
- * when the two drift.
+ * ONE VERSION COVERS EVERY WORD AN INTERVIEWEE READS: the recording-notice
+ * page at /privacy/interviews and every in-chat notice that links to it
+ * (WhatsApp's in `consent.ts`, Telegram's from D756). A change to any of them
+ * is a new version, and every consent row stores the version it was asked
+ * under (`channel_consents.notice_version`).
  *
- * THE LINK CARRIES ONLY THE VERSION. No thread, name or token: the page
- * learns nothing about who opened it, and a forwarded link gives nothing away.
+ * The link carries the version only — never a thread, a name or a token — so
+ * the page learns nothing about who opened it.
  *
- * A SENDER MUST REFUSE when `consentNoticeUrl` answers null, rather than send
- * a notice without its link: a notice the person cannot read in full is not a
- * notice.
+ * A SENDER MUST REFUSE TO SEND A NOTICE WHEN `consentNoticeUrl` IS NULL, rather
+ * than send one without the link.
  */
 import type { Env } from '../../types';
 
 export const CONSENT_NOTICE_VERSION = 1;
 export const CONSENT_NOTICE_PATH = '/privacy/interviews';
 
-/**
- * The notice's absolute URL, from the same base the webhook route reads
- * (`routes/channels.ts`), or null unless that base is `https://<host>`.
- */
+/** The page's address for the current version, or null unless the base is `https://<host>`. */
 export function consentNoticeUrl(env: Pick<Env, 'PUBLIC_BASE_URL' | 'APP_URL'>): string | null {
   const base = String(env.PUBLIC_BASE_URL || env.APP_URL || '').trim().replace(/\/+$/, '');
-  if (!/^https:\/\/[a-z0-9.-]+(?::\d+)?$/i.test(base)) return null;
+  if (!/^https:\/\/[^/]+$/.test(base)) return null;
   return `${base}${CONSENT_NOTICE_PATH}?n=${CONSENT_NOTICE_VERSION}`;
 }
