@@ -306,6 +306,20 @@ async function purchasesOf(env: Env, userId: number, where = '', binds: unknown[
   return (res.results ?? []).map(purchaseView);
 }
 
+/** Owner-scoped checkout receipt projection. Reads existing webhook records only. */
+export async function orderTopUp(env: Env, userId: number, orderRef: string) {
+  const purchases = await purchasesOf(env, userId, 'AND p.order_ref = ?', [orderRef], 1);
+  const purchase = purchases[0];
+  if (!purchase) throw new Error('AI top-up purchase unreadable');
+  const account = await env.DB.prepare('SELECT balance_microusd FROM ai_topup_accounts WHERE user_id = ?')
+    .bind(userId).first<{ balance_microusd: number }>();
+  const balance = account?.balance_microusd ?? 0;
+  if (!Number.isSafeInteger(balance) || balance < 0) throw new Error('AI top-up balance unreadable');
+  return { state: purchase.state, amount_microusd: purchase.amount_microusd,
+    credit_microusd: purchase.credit_microusd, bonus_microusd: purchase.bonus_microusd,
+    balance_microusd: balance, at: purchase.at };
+}
+
 /** `GET /api/ai-budget/top-up`'s D755 part: the packs on sale, the hold, and the latest purchase in 24 hours. Never a reason. */
 export async function memberTopUp(env: Env, userId: number) {
   const sale = await packsOnSale(env);

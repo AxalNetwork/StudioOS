@@ -71,7 +71,7 @@ test('the shared reader: ready only with a sellable price; not_ready and unset a
 for (const [name, draw] of [['the rail', rail], ['the compact card', card]]) {
   test(`${name}: Add tokens when ready, "isn't available yet" with no Retry when not ready or unset, Unreadable with Retry on a failed read`, () => {
     const ready = draw(CASES.ready);
-    assert.match(ready, /href="\/checkout\?ai_topup=1"[^>]*>Add tokens</);
+    assert.match(ready, /href="\/plans-and-pricing#token-packs"[^>]*>Add tokens</);
     assert.doesNotMatch(words(ready), /isn't available|could not be read/);
     for (const c of ['not_ready', 'unset']) {
       const html = draw(CASES[c]);

@@ -100,12 +100,11 @@ export interface BundledSentDirectly {
 
 /**
  * D758 decision 3: the bundled keys a sender still sends as the bundled file,
- * not as its library row. Partner onboarding sends `partner_msa_v2.md` until
- * D758 PR 2 moves it to the Partner Services row; then this list is empty.
+ * not as its library row. Empty since D758 PR 2 (#1863), when partner
+ * onboarding moved to the Partner Services row. A future sender of a bundled
+ * file lists itself here, with a test.
  */
-export const BUNDLED_SENT_DIRECTLY: ReadonlyArray<BundledSentDirectly> = Object.freeze([
-  { key: 'partner_msa_v1', title: 'Partner Master Services Agreement', sender: 'routes/partner_onboarding.ts' },
-]);
+export const BUNDLED_SENT_DIRECTLY: ReadonlyArray<BundledSentDirectly> = Object.freeze([]);
 
 export function sentAsBundledFile(docType: string | null | undefined): boolean {
   return !!docType && BUNDLED_SENT_DIRECTLY.some((e) => e.key === docType);

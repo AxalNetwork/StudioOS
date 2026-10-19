@@ -26,6 +26,7 @@ import { speakerLabel, type SttSegment } from './sttFormats';
 import { markInterviewHeld } from './sessionSetup';
 import { closeAttachedRefs } from './channels/meetings';
 import { consentRequired } from './channels/types';
+import { presentTables } from './interviewFindings';
 
 export const CHANNELS = ['in_person', 'video', 'phone', 'text', 'manual'] as const;
 export type Channel = typeof CHANNELS[number];
@@ -301,7 +302,13 @@ export async function deleteSession(env: Env, session: SessionRow, actorUserId: 
             (SELECT COUNT(*) FROM interview_session_marks WHERE session_id = ?) AS marks,
             (SELECT COALESCE(SUM(cost_microusd), 0) FROM interview_session_receipts WHERE session_id = ?) AS cost_microusd`,
   ).bind(session.id, session.id, session.id).first<{ segments: number; marks: number; cost_microusd: number }>();
+  // D757 §2.13 (#1923) — the findings this session's suggestions became keep
+  // their row (the founder accepted them) and lose the interviewee's words.
+  const findings = (await presentTables(env, ['interview_findings'])).has('interview_findings')
+    ? [env.DB.prepare('UPDATE interview_findings SET quote = NULL, cite_from = NULL, cite_to = NULL WHERE session_id = ?').bind(session.id)]
+    : [];
   await env.DB.batch([
+    ...findings,
     // D667 — the session's PENDING proposals go with it, whoever proposed
     // them (StudioOS or an assistant): each carries a quote of a transcript
     // that is being deleted. A decided proposal stays, as the record of what

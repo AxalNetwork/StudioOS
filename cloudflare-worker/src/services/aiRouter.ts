@@ -1316,9 +1316,12 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
     cached: false,
     safety_score: safetyScore,
   });
-  // D762: the units a run is settled on, as the log row records them. Tokens
-  // and audio minutes until D761's `units` land; every figure is the Worker's.
+  // D762: the units a run is settled on, as the log row records them: the
+  // answering attempt's D761 `units` (cached input among them), with the token
+  // counts the run was settled on, which for a stream are the ones read when
+  // it ended. Every figure is the Worker's.
   const unitsFor = (u: UsageMeta): Record<string, number> => ({
+    ...(attempt.units ?? {}),
     tokens_in: u.prompt_tokens, tokens_out: u.completion_tokens, ...(audioMinutes > 0 ? { audio_minutes: audioMinutes } : {}),
   });
   /**
