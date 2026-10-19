@@ -4,22 +4,6 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
-## The AI token-pack runbook, the route map, and a read-only live check (D755, #1987)
-
-- `documentation/operations/AI_TOKEN_PACKS.md`: creating, adopting and
-  archiving packs; refunds and disputes under the owner's "take back"; an
-  overdue credit (resend the event: HQ never credits); adjustments and their
-  bounds; reconcile; and the owner's $10 purchase-and-refund check.
-  `documentation/operations/README.md` now lists every runbook.
-- `ROUTE_MAP.md` gains the D755 Worker contract, and `PRODUCTION.md` the AI
-  token packs lines: `STRIPE_PRICE_AI_TOPUP` is an optional fallback, and the
-  webhook endpoint sends four events. Names only, never values.
-- `D629.md` and `D750.md` carry "Amended by D755" lines.
-- `scripts/check-ai-credits-live.mjs` (rules in `lib/aiCreditsLive.mjs`) reads
-  the public plans-and-packs read and `/plans-and-pricing` after each deploy,
-  as a warning step in `post-deploy-smoke.yml`. It never signs in, buys or
-  calls Stripe.
-
 ## Refunds and disputes take a token pack's tokens back (D755, #1920)
 
 - The Stripe webhook handles `charge.refunded`, `charge.dispute.created` and
