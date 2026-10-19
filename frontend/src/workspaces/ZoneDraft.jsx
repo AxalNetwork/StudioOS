@@ -3,6 +3,7 @@ import { Sparkles } from 'lucide-react';
 import { api } from '../lib/api';
 import { formatCost } from '../ui/assistCost';
 import RunEstimate from './RunEstimate';
+import { useRailOption } from '../ui/railCrumbs';
 
 /**
  * The band every artboard with an AI proposal closes with.
@@ -157,6 +158,9 @@ export default function ZoneDraft({
   // front and the sentence is shown beside it. Left out — every other mount —
   // the button is enabled as before, and a refusal is learnt from the 409.
   blocked = null,
+  // D771 (#2097): the band's rail option, `draft:<surface>`. A host opts in;
+  // left out, the band names nothing (D768's `useRailOption`).
+  railOption = null,
 }) {
   const skin = ACCENTS[accent] || ACCENTS.amber;
   const bodyClass = BODY_TONES[tone] || BODY_PLAIN;
@@ -165,6 +169,8 @@ export default function ZoneDraft({
   const [busy, setBusy] = useState('');
   const [note, setNote] = useState('');
   const [editing, setEditing] = useState(null);
+  // While a draft is written, or one waits on Accept, the rail is this band's option.
+  useRailOption(railOption && (busy === 'run' || (item && !item.accepted)) ? railOption : null, run);
 
   const load = useCallback(async () => {
     try {
