@@ -4,6 +4,7 @@ import RingViz from '../../components/discovery/RingViz';
 import { NO_SOUND_MS } from '../../lib/interviewCapture';
 import { STAGES, elapsedMs, processingProgress, stageIndex } from '../../lib/activeRecording';
 import { FOCUSABLE, tabTarget } from '../../ui/lightboxFocus.js';
+import { useRailOption } from '../../ui/railCrumbs';
 
 /**
  * The Recording View (D685 §5.7, #1588), full screen at `/validate/record/live`,
@@ -265,6 +266,8 @@ export default function RecordingView({ st, now = Date.now(), theme = 'light', r
   const progress = l.stopping ? processingProgress(st?.processing) : null;
   const pct = progress == null ? null : Math.round(progress * 100);
   const stageAt = l.stopping ? stageIndex(st?.processing, st?.stageAt ?? -1) : -1;
+  // D771 (#2097): while the stopped recording is transcribed, summarised and placed, the rail is that option's.
+  useRailOption(l.stopping ? 'transcribe:session' : null, 'Stop and process');
 
   // Focus moves into the view when it opens; the caller returns it on exit.
   useEffect(() => { exitRef.current?.focus?.(); }, []);
