@@ -62,7 +62,11 @@ nothing) and `outside()` (the bundled documents not in the catalog). #1851 adds
 `thumbnailBlob(slug, version)` and `outsideThumbnailBlob(key)`: page 1 as a PNG,
 `{ blob, url }` (the caller revokes `url`), outside the typed drift surface like
 `preview.pdf`. The store's URL carries `?v=<version>`, because the image is cached
-privately for a day. The draft PDF is #1853's.
+privately for a day.
+D717 (#1853) adds `renderPdfBlob(body)`, the draft's PDF from
+`POST /templates/render.pdf` as `{ blob, renderer }`: a body over
+`RENDER_BODY_MAX` (256 KB) is refused before any request, and its raw `fetch`
+sends `request()`'s auth, CSRF and company headers through `rawRequestHeaders`.
 
 D652 (#1464): `eadwyn.js` calls `/api/eadwyn`, the Worker AI rail's conversations
 and the connectors in them. D701 (#1663) adds `conversationsMine`
@@ -165,6 +169,13 @@ reporting queue: drafts an Admin builds, reads, prepares, returns, rebuilds,
 corrects and exports, and a Super Admin issues. A draft's figures come only
 from `read` and `exportCsv`, which the Worker records before it answers; the
 list carries none.
+
+D716 (#1860): `fundNotices.js` calls the LP's own `GET /api/fund-notices/mine`
+(the list, with `call_number`, `due_date`, `superseded` and
+`instructions_changed`) and `GET /api/fund-notices/mine/:uid` (one notice's
+frozen, masked figures). `minePdfBlob` reads `GET /api/fund-notices/mine/:uid/pdf`
+as a Blob, outside the typed drift surface, only when the LP taps PDF. Nothing
+here returns a full account number.
 
 D717 (#1782) decision 11, #1855: `fundStructure.js` reads the entity and money
 map, `GET /api/admin/fund-structure`, for the "Structure of the Fund" sheet on

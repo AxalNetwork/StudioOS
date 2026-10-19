@@ -1,0 +1,46 @@
+name: CHANGELOG gate
+
+# CHANGELOG.md is Session 1's (AGENTS.md; the owner, 2026-10-19). Every task PR
+# that added an entry at the top of the file conflicted with every other open
+# PR on the same lines. scripts/changelog-gate.mjs holds the check; this file
+# only decides WHEN it runs and WHAT it compares against.
+#
+# Every pull request is checked, whatever its base, so a PR stacked on another
+# PR's branch is held to the same rule. The `labeled` and `unlabeled` types
+# re-run the check when Session 1 adds or removes the `changelog` label, the
+# only way a PR may edit the file.
+#
+# WHY fetch-depth 0. The check is a diff from the merge base of the base branch
+# and HEAD, and a depth-1 clone has no merge base.
+#
+# Every value reaches the script through `env:`, never `${{ }}` inside `run:`,
+# so nothing a PR controls is ever parsed as shell.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: changelog-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: CHANGELOG.md untouched
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: The PR leaves CHANGELOG.md alone unless it is labelled changelog
+        env:
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+          CHANGELOG_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'changelog') }}
+        run: node scripts/changelog-gate.mjs

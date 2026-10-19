@@ -33,3 +33,12 @@ time, `frontend/src/lib/thumbnailQueue.js`) and the "Not in the catalog" group.
 `FundIDocumentsPanel.jsx` is the Fund I documents panel, in signing order.
 `PushResults.jsx` reports Push to branches per branch: Reached, Failed or Not
 reached. On a branch Worker the tab is read-only.
+
+D717 (#1853): `PdfPages.jsx` is the page viewer: a PDF drawn one page at a time on
+a canvas with pdf.js (pinned `pdfjs-dist`, legacy build, loaded only when it
+mounts), "Page X of Y", Previous and Next, and pinch-to-zoom on touch; the only
+file that names `pdfjs-dist`. `DraftPages.jsx` is the editor's Pages pane: the
+unsaved draft's PDF from `render.pdf`, drawn on opening and on Redraw pages,
+never per keystroke. `VersionCompare.jsx` is Compare versions: any two versions,
+or one and the draft, as Markdown text with `<del>` and `<ins>`; Restore copies
+a body into the draft and saves nothing, and is hidden on a branch.

@@ -495,7 +495,11 @@ export async function fulfilOrder(env: Env, orderRef: string): Promise<Order | n
   if (wasPending) {
     // Step 2 — grant user_products (one row per line). Deterministic id per
     // (order_ref + price_id) so a defensive re-run can't duplicate.
+    // D755 §6: a token pack is a balance, not a licence, so its line grants no
+    // row; the payment webhook alone credits it.
+    const { isTokenPackPrice } = await import('./aiCredits');
     for (const line of items) {
+      if (await isTokenPackPrice(env, line.price_id)) continue;
       const upId = await sha1Hex(`${orderRef}:${line.price_id}`);
       await env.DB.prepare(
         `INSERT OR IGNORE INTO user_products
