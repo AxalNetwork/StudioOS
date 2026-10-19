@@ -26,30 +26,14 @@ const read = (rel) => readFile(resolve(__dirname, rel), 'utf8');
 const router = () => read('../src/services/aiRouter.ts');
 const routes = () => read('../src/routes/founder_validate.ts');
 
-/** `estimateCostUsd` and its two tables, evaluated out of the source. */
+/**
+ * `estimateCostUsd` and its two tables. D760 (#2017): the tables are views of
+ * the catalogue, so there is no literal left to read out of the source; this
+ * imports the router and uses its real function, not a copy of it.
+ */
 async function costFn() {
-  const src = await router();
-  const tokenTable = src.slice(src.indexOf('export const PRICE_USD_PER_1M_TOKENS'));
-  const audioTable = src.slice(src.indexOf('export const PRICE_USD_PER_AUDIO_MINUTE'));
-  const tokens = {};
-  for (const m of tokenTable.slice(0, tokenTable.indexOf('};')).matchAll(
-    /'(@cf\/[^']+)':\s*\{\s*in:\s*([\d.]+),\s*out:\s*([\d.]+)/g)) {
-    tokens[m[1]] = { in: Number(m[2]), out: Number(m[3]) };
-  }
-  const audio = {};
-  for (const m of audioTable.slice(0, audioTable.indexOf('};')).matchAll(
-    /'(@cf\/[^']+)':\s*([\d.]+)/g)) {
-    audio[m[1]] = Number(m[2]);
-  }
-  // The function's own body, rebuilt from the two tables it reads.
-  const est = (model, pIn, pOut, minutes = 0) => {
-    const perMinute = audio[model];
-    if (perMinute != null) return Math.max(0, minutes) * perMinute;
-    const p = tokens[model];
-    if (!p) return 0;
-    return (pIn / 1e6) * p.in + (pOut / 1e6) * p.out;
-  };
-  return { est, tokens, audio };
+  const m = await import('../src/services/aiRouter.ts');
+  return { est: m.estimateCostUsd, tokens: m.PRICE_USD_PER_1M_TOKENS, audio: m.PRICE_USD_PER_AUDIO_MINUTE };
 }
 
 test('a transcription does not cost zero', async () => {
@@ -60,8 +44,11 @@ test('a transcription does not cost zero', async () => {
   // 44-minute interview — and a cap counting zero never trips.
   assert.equal(est(model, 0, 0, 0), 0, 'no audio is no cost');
   assert.ok(est(model, 0, 0, 44) > 0, 'a 44-minute clip must cost something');
-  assert.ok(Math.abs(est(model, 0, 0, 44) - 0.022) < 1e-9,
-    `44 minutes at $0.0005 is $0.022, got ${est(model, 0, 0, 44)}`);
+  // D760: billed in neurons. 46.63 neurons a minute × $0.000011 is
+  // $0.00051293 a minute (the page rounds it to $0.0005), so 44 minutes is
+  // $0.02256892.
+  assert.ok(Math.abs(est(model, 0, 0, 44) - 0.02256892) < 1e-12,
+    `44 minutes at $0.00051293 is $0.02256892, got ${est(model, 0, 0, 44)}`);
 });
 
 test('the audio table does not disturb token pricing', async () => {
@@ -78,8 +65,10 @@ test('both Whisper models are priced, at the rate Cloudflare publishes', async (
   // The base model is priced because `routes/advisor.ts`'s composer mic has
   // been calling it directly since that feature shipped; runs already recorded
   // against it still have to cost what they cost.
-  assert.equal(audio['@cf/openai/whisper'], 0.0005);
-  assert.equal(audio['@cf/openai/whisper-large-v3-turbo'], 0.0005);
+  // D760: from the neuron column (41.14 and 46.63 a minute × $0.000011); the
+  // page's dollar column rounds both to $0.0005.
+  assert.equal(audio['@cf/openai/whisper'], 0.00045254);
+  assert.equal(audio['@cf/openai/whisper-large-v3-turbo'], 0.00051293);
 });
 
 test('minutes come from the bytes, never from the request', async () => {

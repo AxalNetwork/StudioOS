@@ -5,6 +5,7 @@ import { formatCost } from '../ui/assistCost';
 import RunEstimate from './RunEstimate';
 import { readRailModel, writeRailModel } from '../ui/railModelChoice';
 import { isNeverFill, neverFillMessage } from '../lib/neverFill';
+import { useRailOption } from '../ui/railCrumbs';
 
 /**
  * What Eadwyn suggested, and the THREE decisions a founder makes about each one.
@@ -124,7 +125,7 @@ function Citation({ citation }) {
   );
 }
 
-export default function FillProposals({ projectId, kind, enabled, onApplied, ai, workspace = 'Validate' }) {
+export default function FillProposals({ projectId, kind, enabled, onApplied, ai, workspace = 'Validate', railOption = null }) {
   const [items, setItems] = useState([]);
   const [kinds, setKinds] = useState(null);
   const [busy, setBusy] = useState('');
@@ -210,6 +211,10 @@ export default function FillProposals({ projectId, kind, enabled, onApplied, ai,
     // records it as the model's own words rather than as a correction.
     decide(p.id, 'accept', next === readable(p.kind, p.payload).trim() ? undefined : next);
   };
+
+  // D768: while the band is at work (a run, or proposals waiting), the rail is
+  // this option's, named by the registry's heading; a page opts in with `railOption`.
+  useRailOption(railOption && enabled && (busy === 'run' || items.length > 0) ? railOption : null, kinds?.[kind]?.copy?.heading || null);
 
   // The registry's own words for this kind. `null` while the first list is in
   // flight and for a kind the server does not offer — in both cases the band

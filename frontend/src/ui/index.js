@@ -65,6 +65,7 @@ export { default as RailFrame, RailStripSlot } from './RailFrame';
 export { EadwynPanel, EadwynButton } from './EadwynPanel.jsx';
 export { openEadwynPanel, closeEadwynPanel, useEadwynPanel, useEadwynTrigger } from './eadwynPanel.js';
 export { RailCrumbsProvider, useRailCrumbs, useSetRailCrumbs } from './railCrumbs.js';
+export { RailPageProvider, useRailOption, useRailPage } from './railCrumbs.js';
 export { formatCost, formatSpend, runCost, batchCost, spendMeter } from './assistCost';
 export { eadwynConfig, observedRunCost, ASSIST_SURFACES, EADWYN_GUARDRAIL } from './eadwynConfig';
 

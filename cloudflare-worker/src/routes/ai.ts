@@ -23,8 +23,12 @@ import { requireAuth } from '../auth';
 import { loadMyAiSpend, loadMyAiSpendForSurface } from '../services/aiSpend';
 import { AI_SURFACES } from '../services/aiSurfaces';
 import { refuse } from '../util/refusal';
-import { ROUTE, PRICE_USD_PER_1M_TOKENS, PRICE_USD_PER_AUDIO_MINUTE, run as aiRun, normaliseSurface } from '../services/aiRouter';
+import { ROUTE, PRICE_USD_PER_1M_TOKENS, PRICE_USD_PER_AUDIO_MINUTE, PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET, run as aiRun, normaliseSurface } from '../services/aiRouter';
 import { MODEL_NAMES, RETIRED_MODELS } from '../services/aiCatalog';
+import { CATALOGUE, isOffered, modelById } from '../services/ai/catalogue';
+import { billingMode, billedUnitPrice, multiplierFor, unitPrice } from '../services/ai/pricing';
+import type { PriceUnit } from '../services/ai/catalogue';
+import { aiLicenceKey } from '../services/aiBudget';
 import { ensureAdminAuditLogTable } from './admin';
 import { BRANCH_CODE_RE } from '../util/branch';
 
@@ -100,7 +104,7 @@ ai.get('/me/spend', async (c) => {
  * standard — `cloudflare-worker/test/ai_router_prices.test.mjs` pins them.
  */
 ai.get('/pricing', async (c) => {
-  await requireAuth(c);
+  const user = await requireAuth(c);
   const routes: Record<string, {
     model: string;
     fallback_chain: string[];
@@ -128,8 +132,41 @@ ai.get('/pricing', async (c) => {
     // one the receipt is computed from, never a typed copy.
     audio_prices: PRICE_USD_PER_AUDIO_MINUTE,
     routes,
+    // D760: every unit, websocket rates included, at cost and billed for the
+    // caller's licence; `billing` says which one a run is settled at.
+    billing: billingMode(c.env),
+    rates: routerRates(multiplierFor(aiLicenceKey(user))),
   });
 });
+
+/**
+ * D760 (#2017) — a model's unit prices as the Worker serves them: `cost`, its
+ * neuron price (`unitPrice`: neurons × $0.011 / 1000, what Cloudflare bills)
+ * as a number, and `billed`, that figure times the licence's multiplier,
+ * multiplied exactly (`billedUnitPrice`). The frontend never multiplies. An
+ * empty object for a model the catalogue cannot price.
+ */
+export function unitPrices(id: string, multiplier: number): { cost: Record<string, number>; billed: Record<string, number> } {
+  const cost: Record<string, number> = {};
+  const billed: Record<string, number> = {};
+  for (const unit of Object.keys(modelById(id)?.neurons ?? {}) as PriceUnit[]) {
+    const price = unitPrice(id, unit);
+    if (price == null) continue;
+    cost[unit] = Number(price);
+    billed[unit] = billedUnitPrice(price, multiplier);
+  }
+  return { cost, billed };
+}
+
+/** Every model the router's three price views hold, priced in every unit it is billed in. */
+export function routerRates(multiplier: number) {
+  const ids = new Set([
+    ...Object.keys(PRICE_USD_PER_1M_TOKENS),
+    ...Object.keys(PRICE_USD_PER_AUDIO_MINUTE),
+    ...Object.keys(PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET),
+  ]);
+  return Object.fromEntries([...ids].map((id) => [id, unitPrices(id, multiplier)]));
+}
 
 /**
  * D641 (#1434) — GET /api/ai/rates: the rate card the Usage page draws.
@@ -143,22 +180,72 @@ ai.get('/pricing', async (c) => {
  * The figures are read from `PRICE_USD_PER_1M_TOKENS` and
  * `PRICE_USD_PER_AUDIO_MINUTE` on every request, never copied, so the card
  * cannot quote a price the receipt is not computed from. Any signed-in member.
+ *
+ * D760 (#2017): each row also carries `cost` and `billed` in every unit the
+ * model is billed in, for the caller's licence, and a model priced only over a
+ * WebSocket (Flux) has its own row with `per_audio_minute_websocket_usd`.
  */
-export function rateCard() {
-  const row = (id: string) => ({ id, name: MODEL_NAMES[id] ?? id, ...(RETIRED_MODELS.has(id) ? { retired: true } : {}) });
+export function rateCard(licence = '') {
+  const multiplier = multiplierFor(licence);
+  const row = (id: string) => ({
+    id, name: MODEL_NAMES[id] ?? id, ...(RETIRED_MODELS.has(id) ? { retired: true } : {}), ...unitPrices(id, multiplier),
+  });
   return [
     ...Object.entries(PRICE_USD_PER_1M_TOKENS).map(([id, p]) => ({
       ...row(id), in_per_1m_usd: p.in, out_per_1m_usd: p.out,
     })),
     ...Object.entries(PRICE_USD_PER_AUDIO_MINUTE).map(([id, perMinute]) => ({
       ...row(id), per_audio_minute_usd: perMinute,
+      ...(id in PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET ? { per_audio_minute_websocket_usd: PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET[id] } : {}),
+    })),
+    ...Object.entries(PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET).filter(([id]) => !(id in PRICE_USD_PER_AUDIO_MINUTE)).map(([id, perMinute]) => ({
+      ...row(id), per_audio_minute_websocket_usd: perMinute,
     })),
   ];
 }
 
 ai.get('/rates', async (c) => {
-  await requireAuth(c);
-  return c.json({ ok: true, models: rateCard() });
+  const user = await requireAuth(c);
+  return c.json({ ok: true, billing: billingMode(c.env), models: rateCard(aiLicenceKey(user)) });
+});
+
+/**
+ * D760 (#2017) — GET /api/ai/catalogue: the models Workers AI offers today.
+ *
+ * Offered means status `ga` or `partner`, with a price, past the partner gate
+ * (`services/ai/catalogue.ts`). Each model carries its kind, status, paid-only
+ * and partner flags, context window, and its unit prices at `cost` and
+ * `billed` for the caller's licence (the `admin` licence pays cost). `billing`
+ * says which a run is settled at ('cost' until D762); `guard.every_run` is
+ * false until D763 runs the guard on every run.
+ *
+ * Ordered by kind, with the router's safety model last. No groups: the
+ * canvas's groups come with D764 or D769. Any signed-in member; no per-user
+ * data beyond the caller's own licence.
+ */
+const KIND_ORDER = [
+  'Text Generation', 'Image-to-Text', 'Text Embeddings', 'Text Classification', 'Translation', 'Summarization',
+  'Automatic Speech Recognition', 'Text-to-Speech', 'Voice Activity Detection', 'Text-to-Image',
+  'Image Classification', 'Object Detection',
+];
+
+export function catalogueFor(env: Env, licence: string) {
+  const multiplier = multiplierFor(licence);
+  const safety = ROUTE.safety.model;
+  const rank = (id: string, kind: string) => (id === safety ? KIND_ORDER.length + 1 : (KIND_ORDER.indexOf(kind) + 1 || KIND_ORDER.length));
+  const models = CATALOGUE.filter((m) => isOffered(m, env))
+    .map((m, i) => ({ m, i }))
+    .sort((a, b) => rank(a.m.id, a.m.kind) - rank(b.m.id, b.m.kind) || a.i - b.i)
+    .map(({ m }) => ({
+      id: m.id, name: m.name, kind: m.kind, status: m.status, paid_only: m.paid_only, partner: m.partner,
+      context_window: m.context_window, ...unitPrices(m.id, multiplier),
+    }));
+  return { billing: billingMode(env), guard: { every_run: false }, models };
+}
+
+ai.get('/catalogue', async (c) => {
+  const user = await requireAuth(c);
+  return c.json({ ok: true, ...catalogueFor(c.env, aiLicenceKey(user)) });
 });
 
 /**

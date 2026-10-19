@@ -259,23 +259,32 @@ test('every return lands on its page; the hub sends a bookmarked one on; the pag
   const stripe = await mount(page('stripe'), '/account/connectors/stripe?oauth=ok&provider=stripe');
   try { assert.equal(stripe.props(stripe.by('connector-page-notice'))['data-kind'], 'connected'); } finally { await stripe.unmount(); }
   const gh = await mount(page('github'), '/account/connectors/github?oauth=ok&provider=github');
-  try { assert.ok(gh.by('connector-sheet-sync'), 'GitHub\'s sign-in lands on its repositories'); } finally { await gh.unmount(); f.restore(); }
+  try {
+    // D753 F4 (#1957): the page's own Repositories section, not the sync sheet.
+    assert.ok(gh.by('connector-page-repositories'), 'GitHub\'s sign-in lands on its repositories');
+    assert.ok(!gh.by('connector-sheet-sync'), 'no sync sheet');
+  } finally { await gh.unmount(); f.restore(); }
 });
 
 // ================================================================ the page layout
 
-test('the page layout: no ×, no dialog, no Escape of its own, the panel title an h2; Build\'s lightbox keeps its ×', async () => {
+test('the page layout: no ×, no dialog, no Escape of its own, no interim panel, Your connection\'s title an h2; Build\'s lightbox keeps its ×', async () => {
   const f = mockFetch();
-  // D753 F3 (#1956): the inline panel stays only for GitHub (F4) and Mercury (F5); Stripe draws "Your connection".
-  const m = await mount(page('github'), '/account/connectors/github');
+  // D753 F3 (#1956): the inline panel stayed only for GitHub and a member's own
+  // Mercury. GitHub is F4's section (#1957) and Mercury F5's (#1991), so a
+  // connected page mounts no panel.
+  const merc = buildCatalogue({ providers: [P('mercury', 'Mercury', { auth_type: 'api_key', category: 'Accounting and banking' })],
+    items: [{ uid: 'u-merc', provider_key: 'mercury', status: 'active', last_synced_at: null, last_error: null, config: {}, company_ids: [] }],
+    firstParty: { google: null, microsoft: null, linkedin: null } });
+  const m = await mount(h(ConnectorPageView, { data: ready(merc), connectorKey: 'mercury' }), '/account/connectors/mercury');
   try {
     assert.equal(m.by('sheet-close'), undefined);
     assert.ok(!m.all((n) => m.props(n).role === 'dialog').length);
     assert.equal(m.listeners(), 0, 'no keydown listener');
-    const panel = m.all((n) => m.props(n)['data-layout'] === 'page')[0];
-    assert.ok(panel, 'the panel is in the page layout');
-    const head = panel.childNodes[0];
-    assert.ok(m.all((n) => n.tagName === 'H2').some((n) => isInside(n, head)), 'the panel\'s title is an h2');
+    assert.equal(m.all((n) => m.props(n)['data-layout'] === 'page').length, 0, 'no interim panel: F5 draws a member\'s Mercury in Your connection');
+    const conn = m.by('connector-page-connection');
+    assert.ok(conn, 'Your connection');
+    assert.ok(m.all((n) => n.tagName === 'H2').some((n) => isInside(n, conn)), 'Your connection\'s title is an h2');
     assert.equal(m.all((n) => n.tagName === 'H1').length, 1, 'the name is the one h1');
   } finally { await m.unmount(); }
   const build = await mount(h(ConnectToolView, { data: ready(), onClose() {}, deepLink: '?tool=stripe' }), '/build/connect?tool=stripe');
