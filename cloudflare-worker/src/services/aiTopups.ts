@@ -1,7 +1,6 @@
 /** D629: authoritative checkout quote and payment-webhook-only credit. */
 import type { Env } from '../types';
 import { AI_USD_SCALE } from './aiBudget';
-import type { PricedCart } from './orders';
 
 export function aiTopupPriceId(env:Env):string|null {
   const value=(env as any).STRIPE_PRICE_AI_TOPUP;
@@ -27,7 +26,8 @@ const lastMirrorFetch = new Map<string,number>();
 /** Tests only: forget the window, as a fresh isolate does. */
 export function resetAiTopupMirrorWindow():void { lastMirrorFetch.clear(); }
 
-function judge(id:string,found:{product:{id:string;name:string;active:boolean};price:{active:boolean;type:string;currency:string;unit_amount:number|null}}):AiTopupReading {
+/** D750's rule for a sellable price; D755's packOnSale reuses it (services/aiCredits.ts). */
+export function judge(id:string,found:{product:{id:string;name:string;active:boolean};price:{active:boolean;type:string;currency:string;unit_amount:number|null}}):AiTopupReading {
   if (!found.product.active || !found.price.active) return {configured:true,state:'not_ready',reason:'inactive'};
   if (found.price.type !== 'one_time') return {configured:true,state:'not_ready',reason:'not_one_time'};
   if (found.price.currency !== 'usd') return {configured:true,state:'not_ready',reason:'not_usd'};
@@ -77,29 +77,19 @@ export async function aiTopupStatus(env:Env) {
     mode: stripeMode(env),
   };
 }
-/** Discount is allocated proportionally, rounded UP for this line: never over-credit a mixed cart. */
-export function aiTopupCreditQuote(env:Env,cart:PricedCart,discountCents:number): {priceId:string;creditMicrousd:number}|null {
-  const priceId=aiTopupPriceId(env);
-  if (!priceId) return null;
-  const lines=cart.lines.filter(l=>l.price_id===priceId);
-  if (!lines.length) return null;
-  if (cart.currency !== 'usd' || !Number.isSafeInteger(cart.subtotal) || cart.subtotal<=0
-    || !Number.isSafeInteger(discountCents) || discountCents<0 || discountCents>cart.subtotal) throw new Error('AI top-up quote unreadable');
-  const gross=lines.reduce((n,l)=>n+l.line_total,0);
-  if (!Number.isSafeInteger(gross) || gross<0 || gross>cart.subtotal) throw new Error('AI top-up quote unreadable');
-  const discount=Number((BigInt(discountCents)*BigInt(gross)+BigInt(cart.subtotal)-1n)/BigInt(cart.subtotal));
-  const creditMicrousd=(gross-discount)* (AI_USD_SCALE/100);
-  if (!Number.isSafeInteger(creditMicrousd) || creditMicrousd<0) throw new Error('AI top-up quote unreadable');
-  return creditMicrousd>0 ? {priceId,creditMicrousd} : null;
-}
-export async function recordAiTopupPurchase(env:Env,input:{paymentIntentId:string;orderRef:string;userId:number;totalCents:number;currency:string;quote:{priceId:string;creditMicrousd:number}|null}) {
+/** D755: a pack's quote, from tokenPackQuote (services/aiCredits.ts). A pack is never discounted. */
+export type AiTopupQuote = {priceId:string;creditMicrousd:number;packUid?:string|null;bonusMicrousd?:number};
+export async function recordAiTopupPurchase(env:Env,input:{paymentIntentId:string;orderRef:string;userId:number;totalCents:number;currency:string;quote:AiTopupQuote|null}) {
   if (!input.quote) return;
   if (!/^pi_[A-Za-z0-9]+$/.test(input.paymentIntentId) || !Number.isSafeInteger(input.totalCents) || input.totalCents<=0 || input.currency !== 'usd') throw new Error('AI top-up payment unreadable');
-  const result=await env.DB.prepare(`INSERT OR IGNORE INTO ai_topup_purchases(payment_intent_id,order_ref,user_id,price_id,credit_microusd,expected_total_cents,currency)
-    VALUES(?,?,?,?,?,?,'usd')`).bind(input.paymentIntentId,input.orderRef,input.userId,input.quote.priceId,input.quote.creditMicrousd,input.totalCents).run();
+  const packUid=input.quote.packUid ?? null, bonus=input.quote.bonusMicrousd ?? 0;
+  if (!Number.isSafeInteger(bonus) || bonus<0) throw new Error('AI top-up payment unreadable');
+  const result=await env.DB.prepare(`INSERT OR IGNORE INTO ai_topup_purchases(payment_intent_id,order_ref,user_id,price_id,credit_microusd,expected_total_cents,currency,pack_uid,bonus_microusd)
+    VALUES(?,?,?,?,?,?,'usd',?,?)`).bind(input.paymentIntentId,input.orderRef,input.userId,input.quote.priceId,input.quote.creditMicrousd,input.totalCents,packUid,bonus).run();
   if (result.success !== true) throw new Error('AI top-up purchase unreadable');
   const row=await env.DB.prepare('SELECT * FROM ai_topup_purchases WHERE payment_intent_id=?').bind(input.paymentIntentId).first<any>();
-  if (!row || row.order_ref!==input.orderRef || row.user_id!==input.userId || row.price_id!==input.quote.priceId || row.credit_microusd!==input.quote.creditMicrousd || row.expected_total_cents!==input.totalCents) throw new Error('AI top-up quote changed');
+  if (!row || row.order_ref!==input.orderRef || row.user_id!==input.userId || row.price_id!==input.quote.priceId || row.credit_microusd!==input.quote.creditMicrousd || row.expected_total_cents!==input.totalCents
+    || row.pack_uid!==packUid || row.bonus_microusd!==bonus) throw new Error('AI top-up quote changed');
 }
 /** Called only from the verified payment_intent.succeeded webhook, never fulfilOrder or /confirm. */
 export async function creditAiTopupFromPayment(env:Env,pi:any):Promise<boolean> {
@@ -111,20 +101,37 @@ export async function creditAiTopupFromPayment(env:Env,pi:any):Promise<boolean> 
   if (!env.STRIPE_WEBHOOK_SECRET) throw new Error('AI top-up webhook is not configured');
   if (pi.status !== 'succeeded' || pi.currency !== row.currency || pi.amount_received !== row.expected_total_cents
     || meta.order_ref !== row.order_ref || Number(meta.user_id)!==row.user_id) throw new Error('AI top-up payment does not match its quote');
+  // D755: the purchase and its bonus go to ai_credit_ledger, written only when the purchase row is new.
+  // No ai_topup_ledger row: that would fire migration 486's mirror trigger.
   const uid=crypto.randomUUID();
   const results=await env.DB.batch([
     env.DB.prepare('INSERT OR IGNORE INTO ai_topup_accounts(user_id) VALUES(?)').bind(row.user_id),
-    env.DB.prepare(`INSERT OR IGNORE INTO ai_topup_ledger(uid,user_id,kind,amount_microusd,payment_intent_id,actor)
-      SELECT ?,user_id,'credit',credit_microusd,payment_intent_id,'payment_webhook' FROM ai_topup_purchases
+    env.DB.prepare(`INSERT OR IGNORE INTO ai_credit_ledger(uid,user_id,kind,delta_microusd,source_ref,payment_intent_id,pack_uid,actor)
+      SELECT ?,user_id,'purchase',credit_microusd,'pi:'||payment_intent_id,payment_intent_id,pack_uid,'payment_webhook' FROM ai_topup_purchases
       WHERE payment_intent_id=? AND credited_at IS NULL`).bind(uid,pi.id),
+    env.DB.prepare(`INSERT OR IGNORE INTO ai_credit_ledger(user_id,kind,delta_microusd,source_ref,payment_intent_id,pack_uid,actor)
+      SELECT user_id,'bonus',bonus_microusd,'pi:'||payment_intent_id,payment_intent_id,pack_uid,'payment_webhook' FROM ai_topup_purchases
+      WHERE payment_intent_id=? AND bonus_microusd>0 AND EXISTS(SELECT 1 FROM ai_credit_ledger WHERE uid=?)`).bind(pi.id,uid),
     env.DB.prepare(`UPDATE ai_topup_accounts SET balance_microusd=balance_microusd+?,updated_at=datetime('now')
-      WHERE user_id=? AND EXISTS(SELECT 1 FROM ai_topup_ledger WHERE uid=?)`).bind(row.credit_microusd,row.user_id,uid),
+      WHERE user_id=? AND EXISTS(SELECT 1 FROM ai_credit_ledger WHERE uid=?)`).bind(row.credit_microusd+row.bonus_microusd,row.user_id,uid),
     env.DB.prepare(`UPDATE ai_topup_purchases SET credited_at=datetime('now'),updated_at=datetime('now')
-      WHERE payment_intent_id=? AND credited_at IS NULL AND EXISTS(SELECT 1 FROM ai_topup_ledger WHERE payment_intent_id=?)`).bind(pi.id,pi.id),
+      WHERE payment_intent_id=? AND credited_at IS NULL AND EXISTS(SELECT 1 FROM ai_credit_ledger WHERE uid=?)`).bind(pi.id,uid),
     env.DB.prepare(`INSERT INTO activity_logs(action,details,actor,user_id)
-      SELECT 'ai_topup_credited',?,'payment_webhook',? WHERE EXISTS(SELECT 1 FROM ai_topup_ledger WHERE uid=?)`)
-      .bind(JSON.stringify({payment_intent_id:pi.id,order_ref:row.order_ref,credit_microusd:row.credit_microusd}),row.user_id,uid),
+      SELECT 'ai_topup_credited',?,'payment_webhook',? WHERE EXISTS(SELECT 1 FROM ai_credit_ledger WHERE uid=?)`)
+      .bind(JSON.stringify({payment_intent_id:pi.id,order_ref:row.order_ref,credit_microusd:row.credit_microusd,
+        bonus_microusd:row.bonus_microusd,pack_uid:row.pack_uid}),row.user_id,uid),
   ]);
-  if (results.length!==5 || results.some(r=>r.success!==true)) throw new Error('AI top-up credit unreadable');
-  return Number(results[1].meta.changes)>0;
+  if (results.length!==6 || results.some(r=>r.success!==true)) throw new Error('AI top-up credit unreadable');
+  const credited=Number(results[1].meta.changes)>0;
+  if (credited) {
+    // Best-effort, once: only the delivery that wrote the purchase row sends it.
+    try {
+      const {notify}=await import('./notify');
+      const added=`$${((row.credit_microusd+row.bonus_microusd)/AI_USD_SCALE).toFixed(2)}`;
+      await notify(env,{userId:row.user_id,type:'ai_tokens_added',category:'billing',title:`Tokens added: ${added}`,
+        body:`${added} was added to your AI top-up balance.`,link:'/account/usage#top-ups',
+        payload:{payment_intent_id:pi.id,pack_uid:row.pack_uid},channels:['in_app']});
+    } catch { /* best-effort */ }
+  }
+  return credited;
 }

@@ -171,17 +171,26 @@ A grant older than a raised session floor is also refused on every tool call (`g
 - [ ] `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET` – the GitHub connector (D655): the StudioOS GitHub App's client, with read-only issues, pull requests, contents and metadata permissions. Also settable in Admin → Integration Keys.
 - [ ] `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN` – outbound email.
 - [ ] `STRIPE_ATLAS_API_KEY`, `STRIPE_WEBHOOK_SECRET` – spin-out incorporation.
-- [ ] `STRIPE_PRICE_AI_TOPUP` – the AI top-up's price (D629, D750): the ID
-      (`price_…`) of an **active, one-time, USD** price with a fixed amount, in
-      the same Stripe mode as `STRIPE_SECRET_KEY` (a live key needs a live
-      price). One US dollar paid buys one dollar of AI balance, credited only
-      by the `payment_intent.succeeded` webhook, so `STRIPE_WEBHOOK_SECRET`
-      must be set too. A price created after the last **Sync from Stripe** is
-      fetched into the catalog mirror on first read (at most once per 10
-      minutes per isolate); pressing Sync also clears it. Unset, or set to an
-      unusable price, members see "Top-up isn't available yet." and the
-      Super Admin's AI allowances screen (`GET /api/ai-budget/top-up/status`)
-      says why in one sentence.
+- [ ] AI token packs (D755). Packs are made on HQ, never as a variable:
+      the Super Admin presses **New pack** on HQ › AI allowances › Token
+      packs, and the Worker creates the Stripe product and its one-time USD
+      price with its own `STRIPE_SECRET_KEY`. A pack is credited only by the
+      verified webhook, so `STRIPE_WEBHOOK_SECRET` must be set, in the same
+      Stripe mode as the key. The runbook is
+      `documentation/operations/AI_TOKEN_PACKS.md`.
+  - **The webhook endpoint** `https://axal.vc/api/billing/stripe/webhook`
+    sends four events for packs: `payment_intent.succeeded` (the credit),
+    `charge.refunded`, `charge.dispute.created` and `charge.dispute.closed`
+    (taking tokens back). Its signing secret is `STRIPE_WEBHOOK_SECRET`.
+  - `STRIPE_PRICE_AI_TOPUP` is now an **optional fallback**: the ID
+    (`price_…`) of an active, one-time, USD price with a fixed amount, in the
+    same Stripe mode as `STRIPE_SECRET_KEY`. Set and not already a pack, it
+    is offered as one more pack with no bonus, under D750's rules; HQ can
+    Adopt it, after which the variable can be removed. A price created after
+    the last **Sync from Stripe** is fetched into the catalog mirror on first
+    read (at most once per 10 minutes per isolate). With no pack on sale,
+    members see "Top-up isn't available yet." and HQ's AI allowances screen
+    (`GET /api/ai-budget/top-up/status`) says why, one line per pack.
 - [ ] `SUMSUB_APP_TOKEN`, `SUMSUB_SECRET_KEY`, `SUMSUB_WEBHOOK_SECRET` – KYC.
 - [ ] `OPENAI_API_KEY` – AI scoring fallback (Workers AI is the primary).
 - [ ] `TURNSTILE_SECRET_KEY` – bot protection on register / login.
@@ -189,14 +198,21 @@ A grant older than a raised session floor is also refused on every tool call (`g
   - `GOOGLE_SIGNIN_POPUP` is a wrangler **var**, not a secret, in both `[vars]` and `[env.production.vars]`: `"on"` lets /login open Google's own window for everyone, `"canary"` only for `/login?google_window=1`, and anything else keeps every click on the redirect and closes `POST /api/auth/google/popup` (503 `popup_off`). It ships `"off"`. After the JavaScript origins above are registered (Google says up to a few hours to take effect), set both blocks to `"canary"` in one PR, check both hosts with `?google_window=1` on Mac Safari, iPhone Safari and Chrome, then set both to `"on"`. Rollback is `"off"` and a deploy. To find the client in the Console, look for the Web client whose redirect URIs include `https://app.axal.vc/api/auth/google/callback`; Cloudflare never shows the secret's value.
 - [ ] Interview channels (D684). Each provider reports itself unavailable until all of its secrets are set; none is ever committed.
   - `TELEGRAM_CHANNEL_BOT_TOKEN`, `TELEGRAM_CHANNEL_BOT_USERNAME`, `TELEGRAM_CHANNEL_WEBHOOK_SECRET` – the Telegram Business bot. It is a separate bot from `TELEGRAM_BOT_TOKEN`, and needs Business Mode switched on in @BotFather.
-  - `WHATSAPP_APP_ID`, `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID` – the Meta app (Tech Provider) for Embedded Signup and the Cloud API webhook.
+  - `WHATSAPP_APP_ID`, `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID` – the Meta app (Tech Provider) for Embedded Signup and the Cloud API webhook (way A, the member's own business number).
+  - `WHATSAPP_AXAL_ACCESS_TOKEN`, `WHATSAPP_AXAL_PHONE_NUMBER_ID`, `WHATSAPP_AXAL_WABA_ID` – Axal's own number, for way B ("Send to Axal", D754 §1). Set them only if the owner said yes to way B; until all three are set, way B is absent. `WHATSAPP_AXAL_DISPLAY_NUMBER` is its public E.164 number, a wrangler **var** in `[vars]` and `[env.production.vars]`, not a secret; it ships `""`.
+  - **WhatsApp rollout (D754).** `WHATSAPP_CHANNEL` is a wrangler **var**, not a secret, in both `[vars]` and `[env.production.vars]`: `"off"`, `"canary"` or `"on"`; absent or anything else means `"canary"`. It ships `"canary"`: only Super Admins can connect or link, and members see "Not available yet". After the owner's live check (`documentation/operations/WHATSAPP.md` §3) passes, set both blocks to `"on"` in one PR. Rollback is `"off"` and a deploy: members read "Axal has switched this off for now…", and the webhook still verifies and acknowledges but stores nothing. The Worker reads the var since #1950 (D754 `w1_switch_on`); do not set the secrets before #1954 (consent) is on `main`. `TELEGRAM_CHANNEL` works the same way for Telegram.
   - `ZOOM_CLIENT_ID`, `ZOOM_CLIENT_SECRET`, `ZOOM_WEBHOOK_SECRET_TOKEN` – the Zoom General app.
   - Google Meet uses the existing Google Calendar client (`GOOGLE_CAL_CLIENT_*`, else `GOOGLE_CLIENT_*`).
   - **Provider setup, owner-run, once each.** None of these is done by a deploy:
-    - **Telegram.** `TELEGRAM_CHANNEL_WEBHOOK_SECRET` may use only `A–Z a–z 0–9 _ -`, up to 256 characters (Telegram's rule). With the three secrets set, a super admin calls `POST /api/admin/channels/telegram/webhook` once to register the webhook.
-    - **Meta app.** Callback `https://axal.vc/api/channels/whatsapp/webhook`, with `WHATSAPP_VERIFY_TOKEN` as the verify token. Subscribe the fields `messages` and `smb_message_echoes`.
+    - **Telegram.** `TELEGRAM_CHANNEL_WEBHOOK_SECRET` may use only `A–Z a–z 0–9 _ -`, up to 256 characters (Telegram's rule). With the three secrets set, a super admin calls `POST /api/admin/channels/telegram/webhook` once to register the webhook. After registering, a Super Admin reads `GET /api/admin/channels/telegram/webhook`, drawn as "Telegram Business bot (interviews)" on `/admin/telegram`. It should say ready: Business Mode on, the username matching, the webhook at axal.vc, the update list current and no recent delivery error. Press Register webhook again whenever `TELEGRAM_ALLOWED_UPDATES` changes. The read never shows the token or the secret (D756).
+    - **Meta app.** Set the four WhatsApp secrets **before** saving the webhook: Meta checks the verify token when you save, and without it the Worker answers 503. Callback `https://axal.vc/api/channels/whatsapp/webhook`, with `WHATSAPP_VERIFY_TOKEN` as the verify token. Subscribe the fields `messages` and `smb_message_echoes` only: not `calls` (WhatsApp calls do not reach Axal, D754 §3) and no template fields. No message template is needed: Axal only replies inside the 24-hour window the contact opened. The full owner steps, the live check and the rollback are in `documentation/operations/WHATSAPP.md`; `scripts/check-spa-live.mjs` checks on every smoke run that an unsigned POST to the webhook is refused.
     - **Zoom app.** Redirect `<callback base>/api/integrations/oauth/zoom/callback`. Event endpoint `/api/channels/zoom/webhook`, for the events `meeting.ended` and `recording.transcript_completed`. The scopes are exactly the registry's three; the callback refuses a wider grant.
     - **Google Meet transcripts.** They need `meetings.space.readonly`, which no member's grant carries yet (#1577 follow-up). Scheduling a Meet call works without it.
+  - **Telegram: rollout, rotation and the off switch (D756).** The full owner steps, the real-device check and these switches are in `documentation/operations/TELEGRAM.md`.
+    - `TELEGRAM_CHANNEL` is a wrangler **var**, not a secret, in both `[vars]` and `[env.production.vars]`: `"off"`, `"canary"` or `"on"`; absent or anything else means `"canary"`. It ships `"canary"`: only Super Admins can link or connect. After the owner's live check passes, set both blocks to `"on"` in one PR. Rollback is `"off"` and a deploy: connected members read "Axal has switched this off for now…", and the webhook still checks its secret and acknowledges, but stores nothing. The Worker reads the var since #1950; do not set the three secrets before #1954 (consent) is on `main`.
+    - Health: after registering, the "Telegram Business bot (interviews)" section on `/admin/telegram` (`GET /api/admin/channels/telegram/webhook`, #1963) should say ready. Register the webhook again after any change to `TELEGRAM_ALLOWED_UPDATES`; the section reports the mismatch until you do.
+    - Rotation: put the new `TELEGRAM_CHANNEL_WEBHOOK_SECRET`, then Register webhook at once (updates answer 401 in between, and Telegram retries). For the token, `/revoke` in @BotFather, put the new `TELEGRAM_CHANNEL_BOT_TOKEN`, then Register webhook.
+    - Off without a deploy: delete `TELEGRAM_CHANNEL_WEBHOOK_SECRET`; the webhook then answers 503.
 
 ### GitHub Actions secrets
 - [ ] `CLOUDFLARE_API_TOKEN` – scoped: `Workers Scripts:Edit`, `Workers KV:Edit`, `Workers AI:Read`.

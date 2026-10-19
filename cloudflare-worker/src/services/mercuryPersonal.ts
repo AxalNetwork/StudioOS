@@ -8,11 +8,11 @@
  *   venture_revenue   a founder, for a project they found    own credits              revenue rows they pick
  *   practice_income   a partner, for their own invoices      own credits              a match; issued → paid
  *   partner_deals     a partner: own payouts and settlements own credits and debits   a match
- *   capital_attestation  an investor, on HQ: proof of funds  own accounts (#1888)    a statement (#1888)
- *   venture_spend     a founder, for a project they found    own credits, debits and balances   the snapshot they save
  *   raise_receipts    a founder, for a project they found    own credits              a match; a prospect's
  *                                                                                    `commit_status` becomes `wired`,
  *                                                                                    a commitment becomes `confirmed` (D752)
+ *   capital_attestation  an investor, on HQ: proof of funds  own accounts (#1888)    a statement (#1888)
+ *   venture_spend     a founder, for a project they found    own credits, debits and balances   the snapshot they save
  *
  * Any other pairing is 403 `purpose_not_allowed`. The uses in `HQ_ONLY_USES`
  * are HQ only (403 `hq_only`): only Management's payments are matched, and only
@@ -46,11 +46,11 @@ type C = Context<{ Bindings: Env }>;
 
 export type PersonalMatchTarget = 'engagement_invoice' | 'payout' | 'partner_deal_settlement' | 'raise_prospect' | 'deal_commitment';
 export type BankMatch = { posted_on: string; last_four: string };
-export type PersonalUse = 'venture_revenue' | 'practice_income' | 'partner_deals' | 'capital_attestation' | 'venture_spend' | 'raise_receipts';
+export type PersonalUse = 'venture_revenue' | 'practice_income' | 'partner_deals' | 'raise_receipts' | 'capital_attestation' | 'venture_spend';
 
 /** Decision 4's table, by role. A role absent here holds no personal connection. */
 export const PERSONAL_USES: Readonly<Record<string, readonly PersonalUse[]>> = Object.freeze({
-  founder: ['venture_revenue', 'venture_spend', 'raise_receipts'],
+  founder: ['venture_revenue', 'raise_receipts', 'venture_spend'],
   partner: ['practice_income', 'partner_deals'],
   investor: ['capital_attestation'],
 });

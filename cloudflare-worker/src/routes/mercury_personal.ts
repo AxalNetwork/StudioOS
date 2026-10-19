@@ -15,9 +15,9 @@
  *   venture_spend     founder   spending, burn, cash and runway, at /api/revenue/projects/:id/mercury-spend
  *   practice_income   partner   target=invoice: their own engagement invoices
  *   partner_deals     partner   target=payout and target=settlement; HQ only
- *   capital_attestation  investor  the proof of funds (D752; its routes come with #1888); HQ only
  *   raise_receipts    founder   target=raise and target=commitment: their own committed prospects
  *                               and pending deal commitments (D752)
+ *   capital_attestation  investor  the proof of funds (D752; its routes come with #1888); HQ only
  *
  * Every route checks the caller's use, branch and support session first
  * (`personalPolicy`), and each value in a request is checked before anything

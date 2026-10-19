@@ -157,16 +157,16 @@ test('GET /status names the use keys for each role, marks partner_deals and capi
     assert.equal(p.body.connected, true);
     assert.deepEqual(p.body.connection, { uid: 'mp-20', status: 'active', account_name: 'Own Practice LLC', read_only: 'confirmed' });
     const avail = (r: any) => Object.fromEntries(r.body.uses.map((u: any) => [u.key, [u.available, u.reason]]));
-    assert.deepEqual(avail(p), { venture_revenue: [false, 'purpose_not_allowed'], venture_spend: [false, 'purpose_not_allowed'], raise_receipts: [false, 'purpose_not_allowed'], practice_income: [true, null], partner_deals: [true, null], capital_attestation: [false, 'purpose_not_allowed'] });
+    assert.deepEqual(avail(p), { venture_revenue: [false, 'purpose_not_allowed'], raise_receipts: [false, 'purpose_not_allowed'], venture_spend: [false, 'purpose_not_allowed'], practice_income: [true, null], partner_deals: [true, null], capital_attestation: [false, 'purpose_not_allowed'] });
     const branch = await req(env, 20, 'GET', '/api/mercury/personal/status', undefined, { branch: true });
     assert.deepEqual(avail(branch).partner_deals, [false, 'hq_only']);
     const f = await req(env, 10, 'GET', '/api/mercury/personal/status');
-    assert.deepEqual([f.body.connected, avail(f)], [false, { venture_revenue: [true, null], venture_spend: [true, null], raise_receipts: [true, null], practice_income: [false, 'purpose_not_allowed'], partner_deals: [false, 'purpose_not_allowed'], capital_attestation: [false, 'purpose_not_allowed'] }]);
+    assert.deepEqual([f.body.connected, avail(f)], [false, { venture_revenue: [true, null], raise_receipts: [true, null], venture_spend: [true, null], practice_income: [false, 'purpose_not_allowed'], partner_deals: [false, 'purpose_not_allowed'], capital_attestation: [false, 'purpose_not_allowed'] }]);
     // D752 (#1889): spending is the founder's on a branch too.
     const fb = await req(env, 10, 'GET', '/api/mercury/personal/status', undefined, { branch: true });
     assert.deepEqual([avail(fb).venture_revenue, avail(fb).venture_spend], [[true, null], [true, null]]);
     const i = await req(env, 30, 'GET', '/api/mercury/personal/status');
-    assert.deepEqual(avail(i), { venture_revenue: [false, 'purpose_not_allowed'], venture_spend: [false, 'purpose_not_allowed'], raise_receipts: [false, 'purpose_not_allowed'], practice_income: [false, 'purpose_not_allowed'], partner_deals: [false, 'purpose_not_allowed'], capital_attestation: [true, null] });
+    assert.deepEqual(avail(i), { venture_revenue: [false, 'purpose_not_allowed'], raise_receipts: [false, 'purpose_not_allowed'], venture_spend: [false, 'purpose_not_allowed'], practice_income: [false, 'purpose_not_allowed'], partner_deals: [false, 'purpose_not_allowed'], capital_attestation: [true, null] });
     const ib = await req(env, 30, 'GET', '/api/mercury/personal/status', undefined, { branch: true });
     assert.deepEqual(avail(ib).capital_attestation, [false, 'hq_only']);
     assert.equal(b.calls.length, 0);

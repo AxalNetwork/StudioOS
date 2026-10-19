@@ -91,6 +91,8 @@ test('MONEY_KINDS is exactly decision 2\'s eleven rows, and every Stripe kind pa
     mi: 'platform_plan', tier: 'platform_plan', plan: 'platform_plan', investor: 'investor_tier',
     advisor_session: 'partner_service', alacarte: 'marketplace', intro_credits: 'marketplace', cart_order: 'marketplace',
     incorporation: 'marketplace', event_ticket: 'marketplace', expert_booking: 'marketplace',
+    // D755: a token pack's product kind; the pack sells as a cart_order.
+    token_pack: 'marketplace',
   });
 });
 

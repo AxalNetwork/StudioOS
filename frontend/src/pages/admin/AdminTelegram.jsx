@@ -9,6 +9,9 @@ import { toLocalInput, scheduledNote, failedNote } from '../../lib/scheduledPost
 import { useToast } from '../../components/useToast';
 import ToastMessage from '../../components/ToastMessage';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
+import { useAuth } from '../../hooks/useAuthSync';
+import { isSuperAdminUser } from '../../lib/shellRole';
+import TelegramBotHealth from './TelegramBotHealth';
 
 const AUDIENCES = ['public', 'founders', 'investors', 'advisors', 'partners', 'alumni'];
 const TABS = [
@@ -922,6 +925,8 @@ export default function AdminTelegram() {
   const [channels, setChannels] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const toast = useToast();
+  // D756: the interview bot's health is the Super Admin's; a plain admin sees the page as before.
+  const superAdmin = isSuperAdminUser(useAuth()?.user);
 
   const refresh = useCallback(async () => {
     try {
@@ -946,6 +951,8 @@ export default function AdminTelegram() {
           All sends are admin-gated and audited; the PII linter blocks leaky drafts.
         </p>
       </header>
+
+      {superAdmin && <TelegramBotHealth />}
 
       <nav className="border-b border-slate-200 dark:border-slate-700 flex gap-1">
         {TABS.map((t) => (

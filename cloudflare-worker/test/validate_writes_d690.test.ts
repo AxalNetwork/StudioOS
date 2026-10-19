@@ -532,7 +532,8 @@ test('2 (routes): another venture\'s record id with ?project=A answers 404 on ev
 
 function session(db: DatabaseSync, interviewId: number, chunks: number[]) {
   const sid = Number((db.prepare(
-    "INSERT INTO interview_sessions (uid, interview_id, project_id, created_by_user_id, channel, status) VALUES (?, ?, (SELECT project_id FROM discovery_interviews WHERE id = ?), ?, 'in_person', 'stopped') RETURNING id",
+    // A recording that holds audio was started with consent (D754: Open recording refuses one without it).
+    "INSERT INTO interview_sessions (uid, interview_id, project_id, created_by_user_id, channel, status, consent_status, consent_method) VALUES (?, ?, (SELECT project_id FROM discovery_interviews WHERE id = ?), ?, 'in_person', 'stopped', 'given', 'verbal') RETURNING id",
   ).get(`sess-${interviewId}-${chunks.length}`, interviewId, interviewId, FOUNDER) as any).id);
   for (const seq of chunks) {
     db.prepare("INSERT INTO interview_session_chunks (session_id, seq, r2_key, mime, size_bytes, start_ms) VALUES (?, ?, ?, 'audio/webm', 100, ?)")

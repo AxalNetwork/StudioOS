@@ -1,5 +1,43 @@
 // D647: mounted admin_contracts routes. Auth and step-up use the shared client.
-import { request } from '../api.js';
+import { request, refusalError, rawRequestHeaders, armDeadline, timeoutError, DEFAULT_TIMEOUT_MS } from '../api.js';
+// D717 (#1853): the largest body render.pdf draws. Mirrors admin_contracts.ts's
+// 256 KB limit, so an over-long draft is refused here without a request.
+export const RENDER_BODY_MAX = 256 * 1024;
+const BODY_TOO_LARGE = 'The body is over 256 KB, so it cannot be previewed.';
+
+/**
+ * The draft's real PDF from POST /templates/render.pdf, for the editor's Pages
+ * view. Binary, so outside the typed drift surface (ROUTE_MAP.md); a raw
+ * `fetch` that sends `request()`'s headers through `rawRequestHeaders`.
+ * Resolves to `{ blob, renderer }`; no object URL is made.
+ */
+async function renderPdfBlob(body, { signal } = {}) {
+  if (new TextEncoder().encode(body?.body || '').length > RENDER_BODY_MAX) {
+    const e = new Error(BODY_TOO_LARGE);
+    e.status = 413;
+    e.code = 'body_too_large';
+    throw e;
+  }
+  const path = '/api/admin/contracts/templates/render.pdf';
+  const deadline = armDeadline(DEFAULT_TIMEOUT_MS, signal);
+  try {
+    const res = await fetch(path, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...rawRequestHeaders('POST') },
+      body: JSON.stringify(body),
+      signal: deadline.signal,
+    });
+    if (!res.ok) throw await refusalError(res, 'The pages could not be drawn.');
+    return { blob: await res.blob(), renderer: res.headers.get('X-Axal-Renderer') };
+  } catch (e) {
+    if (deadline.timedOut()) throw timeoutError(path, DEFAULT_TIMEOUT_MS, 'POST');
+    throw e;
+  } finally {
+    deadline.cleanup();
+  }
+}
+
 const query = params => new URLSearchParams(Object.entries(params || {}).filter(([, value]) => value !== '' && value != null)).toString();
 export const contractsApi = {
   templates: () => request('/admin/contracts/templates/store?recorded=true'),
@@ -17,6 +55,9 @@ export const contractsApi = {
   // D711 (#1776): the envelope's recorded files; the template paper as HTML; its faces.
   files: uid => request(`/admin/contracts/${encodeURIComponent(uid)}/files`),
   renderPaper: body => request('/admin/contracts/templates/render', { method: 'POST', body: JSON.stringify(body) }),
+  // D717 (#1853): the same draft as a PDF, for the editor's Pages view. Binary,
+  // outside the typed drift surface (ROUTE_MAP.md); size-checked before any request.
+  renderPdfBlob,
   paperFonts: () => request('/admin/contracts/templates/paper-fonts'),
   // D717 (#1782): publish one template at the version the editor saved, withdraw
   // its publication, push the recorded publications to every branch, and the
@@ -25,4 +66,23 @@ export const contractsApi = {
   withdraw: slug => request(`/admin/contracts/published-templates/${encodeURIComponent(slug)}/withdraw`, { method: 'POST', body: JSON.stringify({}) }),
   push: () => request('/admin/contracts/published-templates/push', { method: 'POST', body: JSON.stringify({}) }),
   outside: () => request('/admin/contracts/templates/outside'),
+  // D758 (#1864): the documents the platform builds in code, each with the
+  // library rows it reads and the thumbnail version its image is named by.
+  generated: () => request('/admin/contracts/templates/generated'),
+  // D717 PR 2b: page 1 as a PNG (binary, outside the typed drift surface, like
+  // preview.pdf). The URL names the version: the image is cached privately for a
+  // day, so a save must change the URL. The route ignores the query.
+  thumbnailBlob: (slug, version) => pngBlob(`/api/admin/contracts/templates/store/${encodeURIComponent(slug)}/thumbnail.png?v=${encodeURIComponent(version ?? '')}`),
+  outsideThumbnailBlob: key => pngBlob(`/api/admin/contracts/templates/outside/${encodeURIComponent(key)}/thumbnail.png`),
+  // D758 (#1864): a generated document's page 1 as a specimen. The URL carries
+  // the list's `thumbnail_version`, so a new library body draws a new image.
+  generatedThumbnailBlob: (key, version) => pngBlob(`/api/admin/contracts/templates/generated/${encodeURIComponent(key)}/thumbnail.png?v=${encodeURIComponent(version ?? '')}`),
 };
+// A refusal keeps its `code` and the Worker's sentence. The caller revokes `url`.
+async function pngBlob(path) {
+  const token = localStorage.getItem('token');
+  const res = await fetch(path, { credentials: 'include', headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (!res.ok) throw await refusalError(res, 'Thumbnail not drawn.');
+  const blob = await res.blob();
+  return { blob, url: URL.createObjectURL(blob) };
+}

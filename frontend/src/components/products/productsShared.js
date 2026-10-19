@@ -198,12 +198,38 @@ export const BUNDLE_CONTENT = {
 
 export const MOST_POPULAR_BUNDLE = 'Investor — Professional';
 
-// A "profile bundle" is a role subscription (Founder/Investor/Advisor/Partner
-// tiers). Detected from catalog metadata (tier markers) or by having design
-// copy above; every other product renders in "Add-ons & services".
+// D755 §11 (#1915): the card copy above is keyed by the plan's metadata, so a
+// renamed Stripe product keeps its features. The exact name is the fallback.
+const CONTENT_BY_METADATA = [
+  [(m) => m.tier === 'growth', 'Founder — Growth'],
+  [(m) => m.tier === 'studio', 'Founder — Studio'],
+  [(m) => m.investor_tier === 'professional', 'Investor — Professional'],
+  [(m) => m.investor_tier === 'institutional', 'Investor — Institutional'],
+  [(m) => m.plan_group === 'advisor', 'Advisor'],
+  [(m) => m.plan_group === 'partner', 'Service Partner'],
+];
+function contentKey(product) {
+  const meta = product?.metadata || {};
+  const hit = CONTENT_BY_METADATA.find(([match]) => match(meta));
+  return hit ? hit[1] : product?.name;
+}
+/** The design copy for a plan card: by metadata, else by exact product name. */
+export function bundleContentFor(product) {
+  return BUNDLE_CONTENT[contentKey(product)] || null;
+}
+/** The highlighted card, by the same key. */
+export function isMostPopularBundle(product) {
+  return contentKey(product) === MOST_POPULAR_BUNDLE;
+}
+
+// A "profile bundle" is a role subscription: a Founder or Investor tier, an
+// Advisor or Operating Partner plan, or Market Intelligence Pro (D755 §11).
+// Detected from catalog metadata, or by having design copy above; every other
+// product renders in "Add-ons & services".
 export function isBundleProduct(product) {
   const meta = product?.metadata || {};
   const kind = product?.kind || meta.kind;
   if (kind !== 'subscription') return false;
-  return Boolean(meta.tier || meta.investor_tier || BUNDLE_CONTENT[product?.name]);
+  return Boolean(meta.tier || meta.investor_tier || meta.plan_group === 'advisor' || meta.plan_group === 'partner'
+    || meta.plan === 'mi_pro' || BUNDLE_CONTENT[product?.name]);
 }

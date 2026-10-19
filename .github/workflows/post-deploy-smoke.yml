@@ -67,3 +67,11 @@ jobs:
           SMOKE_API_PROBE: ${{ github.event.inputs.api_probe }}
           SMOKE_API_PROBE_LIMITED: ${{ github.event.inputs.api_probe_limited }}
         run: node scripts/check-spa-live.mjs
+      # D755 (#1987): the public plans-and-packs read and /plans-and-pricing,
+      # read-only (no sign-in, no purchase, no Stripe). A warning step: a red
+      # here never fails the smoke, and a route not deployed yet only warns.
+      - name: AI credits live check (warning)
+        continue-on-error: true
+        env:
+          SMOKE_HOSTS: ${{ github.event.inputs.hosts }}
+        run: node scripts/check-ai-credits-live.mjs

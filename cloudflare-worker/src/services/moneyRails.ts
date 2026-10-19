@@ -119,6 +119,9 @@ export const MONEY_KIND_FOR_STRIPE_METADATA: Readonly<Record<string, StripeMoney
   incorporation: 'marketplace',
   event_ticket: 'marketplace',
   expert_booking: 'marketplace',
+  // D755 §17: a token pack's product carries `kind: token_pack`; its sale is the
+  // order intent's `cart_order`, Management's marketplace money.
+  token_pack: 'marketplace',
 });
 
 /**

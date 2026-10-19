@@ -27,8 +27,10 @@ export * from './api/cycleWrites.js';
 export * from './api/cycles.js';
 export * from './api/eadwyn.js';
 export * from './api/fundAdmin.js';
+export * from './api/fundBooklets.js';
 export * from './api/fundFees.js';
 export * from './api/fundLedger.js';
+export * from './api/fundNotices.js';
 export * from './api/fundPerformance.js';
 export * from './api/fundReporting.js';
 export * from './api/fundReports.js';
@@ -43,6 +45,7 @@ export * from './api/mercuryPersonal.js';
 export * from './api/partnerSettlements.js';
 export * from './api/profile.js';
 export * from './api/publicAiModels.js';
+export * from './api/publicPricing.js';
 export * from './api/railPrefs.js';
 export * from './api/researchCompanies.js';
 export * from './api/researchFunds.js';
@@ -54,6 +57,7 @@ export * from './api/safeIssuances.js';
 export * from './api/section83bReview.js';
 export * from './api/shareUpdate.js';
 export * from './api/ticketReviews.js';
+export * from './api/tokenPacks.js';
 export * from './api/usage.js';
 export * from './api/verdict.js';
 // api-modules:end
@@ -209,6 +213,9 @@ export function isPublicPath(pathname) {
     || currentPath === '/intelligence'
     || currentPath === '/resources'
     || currentPath === '/contact'
+    // D756 (#1894) — an interviewee reaches these from a chat link and has no account here.
+    || currentPath === '/privacy'
+    || currentPath === '/privacy/interviews'
     // Task #5 — /articles is the public Articles hub (Browse tab is the
     // default, anonymous-visible surface). Keep it reachable for signed-
     // out visitors when a background fetch (settings/me) 401s. The
@@ -352,7 +359,6 @@ export const SLOW_PATHS = [
   /^\/deck-reviewer\/[^/]+\/regenerate$/,
   /^\/decks\/generate$/,
   /^\/funds\/[^/]+\/regenerate-lpa$/,
-  /^\/legal\/templates\/[^/]+\/generate$/,
   /^\/legalcap\/legal\/generate$/,
   /^\/profiling\/chat$/,                 // onboarding chat
   /^\/references\/[^/]+\/(transcribe|summarize)$/,
@@ -549,6 +555,17 @@ export async function refusalError(res, fallback) {
   e.status = res.status;
   if (code) e.code = code;
   return e;
+}
+
+/**
+ * D717 (#1853) — the headers `request()` merges below: auth, CSRF and the
+ * active company. A `lib/api/` module that has to call `fetch` itself (a binary
+ * answer `request()` would parse as JSON) spreads these, so its call carries
+ * exactly what `request()` sends. A POST without the CSRF header is refused
+ * under cookie sign-in (`cloudflare-worker/src/middleware/csrf.ts`).
+ */
+export function rawRequestHeaders(method = 'GET') {
+  return { ...getAuthHeaders(), ...getCsrfHeader(method), ...getActiveCompanyHeader() };
 }
 
 export async function request(path, options = {}) {
@@ -979,22 +996,6 @@ export const api = {
 
   listTemplates: () => request('/legal/templates'),
   getTemplateContent: (key) => request(`/legal/templates/${key}`),
-  // The worker takes the template key in the PATH (legal.ts:784
-  // `POST /legal/templates/:key/generate`); there is no
-  // `/legal/documents/generate` and there never was, so every call from
-  // LegalPage's generate dialog hit a route the worker does not mount. The
-  // form's `doc_type` IS the template key, so it moves into the path and the
-  // rest of the form travels as the body.
-  //
-  // Two worker behaviours the caller should expect: the document title comes
-  // from the template, not from `title` in the body; and a contract-type
-  // template returns 409 {code:'use_esign_envelope'} because contracts must be
-  // issued through POST /legal/esign/send rather than minted as a documents row.
-  generateDocument: ({ doc_type, ...fields }) =>
-    request(`/legal/templates/${encodeURIComponent(doc_type)}/generate`, {
-      method: 'POST',
-      body: JSON.stringify(fields),
-    }),
   listDocuments: (projectId) => request(`/legal/documents${projectId ? `?project_id=${projectId}` : ''}`),
   getDocument: (id) => request(`/legal/documents/${id}`),
   incorporateProject: (projectId) => request(`/legal/incorporate?project_id=${projectId}`, { method: 'POST' }),
@@ -2104,7 +2105,8 @@ export const api = {
     if (!res.ok) throw await refusalError(res, 'PDF generation failed');
     const blob = await res.blob();
     const filename = (res.headers.get('Content-Disposition') || '').match(/filename="?([^"]+)"?/)?.[1] || `${slug}-preview.pdf`;
-    return { blob, url: URL.createObjectURL(blob), filename };
+    // #1854: the renderer that drew it, so the phone preview can say when page breaks are the fallback's.
+    return { blob, url: URL.createObjectURL(blob), filename, renderer: res.headers.get('X-Axal-Renderer') };
   },
   // D711 — a template as Word, with a `docx_export` registry row (binary
   // endpoint, not typed drift).
@@ -3934,15 +3936,9 @@ export const api = {
     request(`/introductions/propositions/${encodeURIComponent(uid)}/decline`, { method: 'POST' }),
   introCredits: () => request('/introductions/credits'),
   introCreditHistory: () => request('/introductions/credits/history'),
-  introPacks: () => request('/introductions/packs'),
-  // Mint the PaymentIntent for a credit pack (10 / 100 / 1000); the returned
-  // client_secret feeds <AxalCheckout clientSecret={…}>. Fulfilment happens
-  // via the Stripe webhook, idempotent on the intent id.
-  introCreditsIntent: (pack, nonce) =>
-    request('/payments/intro-credits/intent', {
-      method: 'POST',
-      body: JSON.stringify({ pack, nonce }),
-    }),
+  // D755 (#1915): intro credit packs are no longer sold, so `introPacks` and
+  // `introCreditsIntent` are gone. Credits already bought still spend and show
+  // in `introCreditHistory`.
 
   // The Secure Introductions (Task #12) family that used to sit here — a
   // privacy-preserving flow under its own `/network-introductions/*` prefix —

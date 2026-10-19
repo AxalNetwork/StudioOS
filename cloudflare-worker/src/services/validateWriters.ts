@@ -32,6 +32,7 @@ import { mintDownloadToken } from './signedDownload';
 import { insertManualCandidate } from '../routes/_competitor_writes';
 import { ensureCompetitorSchema } from './competitorSchema';
 import type { AnalysisInputs } from './competitorAnalysis';
+import { FINDING_KINDS, isFindingKind } from './interviewFindings';
 
 /**
  * A refusal a route can return as-is. `sentence` is always one this file
@@ -444,6 +445,12 @@ export type CompetitorMentionInput = {
   /** D690 (#1692) — a funding round's amount, in cents, with its currency (migration 460). */
   amount_cents?: unknown;
   currency?: unknown;
+  /**
+   * D757 (#1923) — the founder's Accept of an interview's competitor: with no
+   * list yet, create the manual one (no discovery, no crawl) instead of
+   * refusing. Only the accept path sets it; the fill still refuses.
+   */
+  createList?: boolean;
 };
 
 /**
@@ -479,9 +486,11 @@ export async function writeCompetitorMention(
   if (currency != null && !/^[a-z]{3}$/.test(currency)) throw new WriterError(400, 'currency must be a three-letter code');
 
   await ensureCompetitorSchema(env);
-  const analysis = await env.DB.prepare(
-    `SELECT id, inputs_json FROM competitor_analyses WHERE project_id = ? ORDER BY updated_at DESC LIMIT 1`,
-  ).bind(input.projectId).first<{ id: string; inputs_json: string | null }>();
+  const analysis = input.createList && input.userId != null
+    ? await analysisFor(env, input.projectId, input.userId)
+    : await env.DB.prepare(
+      `SELECT id, inputs_json FROM competitor_analyses WHERE project_id = ? ORDER BY updated_at DESC LIMIT 1`,
+    ).bind(input.projectId).first<{ id: string; inputs_json: string | null }>();
   if (!analysis) throw new WriterError(409, 'This project has no competitor list yet. Start one from Market › Competitors.');
 
   const found = await env.DB.prepare(
@@ -1530,4 +1539,67 @@ export async function setExperimentStatus(
   await env.DB.prepare("UPDATE hypothesis_experiments SET status = ?, result = ?, updated_at = datetime('now') WHERE id = ? AND project_id = ?")
     .bind(status, input.result === undefined ? ex.result : trimOrNull(input.result, 1000), ex.id, input.projectId).run();
   await recordActor(env, input.userId, input.projectId, 'experiments', input.hypothesisId, 'experiment_status_set', `${ex.code} experiment ${status}`);
+}
+
+// ---------------------------------------------------------------------------
+// Interview findings (D757 §2.6 and §2.16-B, #1923; migration 489)
+// ---------------------------------------------------------------------------
+
+export type InterviewFindingInput = {
+  projectId: number;
+  userId: number | null;
+  interviewId: number;
+  kind: unknown;
+  payload: unknown;
+  sessionId?: number | null;
+  proposalId?: number | null;
+  quote?: unknown;
+  citeFrom?: unknown;
+  citeTo?: unknown;
+};
+
+const citeMs = (v: unknown): number | null => (typeof v === 'number' && Number.isInteger(v) && v >= 0 ? v : null);
+
+/**
+ * One finding no module table holds, accepted from an interview: validated by
+ * its kind's own rule (`interviewFindings.ts`, the rule the structure step
+ * parsed it by), upserted on `(interview_id, kind, key_norm)` so a retried
+ * accept is the same row, and logged with its module's slug. Its quote is the
+ * interviewee's words, kept so the finding links back to its passage; it goes
+ * with the session (§2.13). The log row names the kind, never the words.
+ */
+export async function writeInterviewFinding(env: Env, input: InterviewFindingInput): Promise<{ id: number; module: string; created: boolean }> {
+  if (!isFindingKind(input.kind)) throw new WriterError(400, `kind must be one of ${Object.keys(FINDING_KINDS).join(', ')}`);
+  const spec = FINDING_KINDS[input.kind];
+  const payload = input.payload && typeof input.payload === 'object' && !Array.isArray(input.payload)
+    ? spec.parse(input.payload as Record<string, unknown>) : null;
+  if (!payload) throw new WriterError(400, 'That is not a valid value for this finding');
+  const module = spec.slug(payload);
+  const iv = await env.DB.prepare('SELECT id FROM discovery_interviews WHERE id = ? AND project_id = ?')
+    .bind(input.interviewId, input.projectId).first<{ id: number }>();
+  if (!iv) throw new WriterError(404, 'Interview not found on this project');
+  const quote = typeof input.quote === 'string' && input.quote.trim() ? input.quote.trim().slice(0, 400) : null;
+  const key = spec.key(payload);
+  const prior = await env.DB.prepare('SELECT id FROM interview_findings WHERE interview_id = ? AND kind = ? AND key_norm = ?')
+    .bind(input.interviewId, input.kind, key).first<{ id: number }>();
+  const row = await env.DB.prepare(
+    `INSERT INTO interview_findings
+       (uid, project_id, interview_id, session_id, proposal_id, module, kind, key_norm, payload_json, quote, cite_from, cite_to, created_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(interview_id, kind, key_norm) DO UPDATE SET
+       payload_json = excluded.payload_json,
+       session_id = COALESCE(excluded.session_id, session_id),
+       proposal_id = COALESCE(excluded.proposal_id, proposal_id),
+       quote = COALESCE(excluded.quote, quote),
+       cite_from = COALESCE(excluded.cite_from, cite_from),
+       cite_to = COALESCE(excluded.cite_to, cite_to)
+     RETURNING id`,
+  ).bind(
+    crypto.randomUUID(), input.projectId, input.interviewId, input.sessionId ?? null, input.proposalId ?? null,
+    module, input.kind, key, JSON.stringify(payload), quote, citeMs(input.citeFrom), citeMs(input.citeTo), input.userId,
+  ).first<{ id: number }>();
+  if (!row) throw new WriterError(500, 'The finding was not written');
+  await recordActor(env, input.userId, input.projectId, module as ModuleSlug, null, 'interview_finding_written',
+    `${prior ? 'Updated' : 'Added'} a ${input.kind.replace(/_/g, ' ')} from interview ${input.interviewId}`);
+  return { id: Number(row.id), module, created: !prior };
 }

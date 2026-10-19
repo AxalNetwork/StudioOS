@@ -1,0 +1,216 @@
+/**
+ * D754 (#1980) — a WhatsApp chat's recording consent where the founder sees
+ * it: the rules (`chatConsent.js`), the session page's consent line and its
+ * discard, and the inbox's Ask for consent and the member's word. Record a
+ * Session's own gate is in `record_lightbox_d685.test.mjs`. No test calls
+ * the network: every API is a stub.
+ *
+ *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/record_consent_d754.test.mjs
+ */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import React, { act } from 'react';
+import { createRoot } from 'react-dom/client';
+import { MemoryRouter } from 'react-router-dom';
+import { installDocument } from './_contracts_dom.mjs';
+
+import {
+  CHAT_CONSENT_METHODS, canAttest, chatConsentBlock, chatConsentOf, consentChoices, consentLine, consentTarget, windowClosedSentence,
+} from '../src/pages/founder/chatConsent.js';
+import { assignTarget } from '../src/pages/founder/recordSetup.js';
+import { MEMBER_CONSENT_METHODS } from '../src/lib/api/channels.js';
+import { ChatConsentLine } from '../src/pages/founder/InterviewSessionPage.jsx';
+import { ThreadConsent } from '../src/pages/founder/ChannelsInbox.jsx';
+
+const h = React.createElement;
+const AT = '2026-10-18T14:05:00.000Z';
+const when = (iso) => `@${iso.slice(11, 16)}`;
+const view = (over = {}) => ({
+  required: true, status: 'not_asked', source: null, method: null, notice_version: null,
+  requested_at: null, delivered_at: null, answered_at: null, withdrawn_at: null, notice_status: null,
+  window_open: true, can_request: true, next_request_at: null, notices_left: 2, ...over,
+});
+const NOT_REQUIRED = { required: false, status: null, window_open: false, can_request: false };
+
+async function mount(element) {
+  const restore = installDocument();
+  const container = document.createElement('div'); document.body.appendChild(container);
+  const root = createRoot(container);
+  await act(async () => { root.render(h(MemoryRouter, null, element)); });
+  const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
+  const pr = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
+  const by = (id) => walk(container).find((n) => pr(n)['data-testid'] === id);
+  const text = (n) => (!n ? '' : n.nodeType === 3 ? n.textContent || '' : n.childNodes?.length ? n.childNodes.map(text).join(' ') : n.textContent || '');
+  return {
+    by, pr, text: (n) => text(n === undefined ? container : n).replace(/\s+/g, ' ').trim(),
+    async click(id) { const n = by(id); if (!n) throw new Error(`Missing ${id}`); await act(async () => { await pr(n).onClick?.({ preventDefault() {}, stopPropagation() {} }); }); },
+    async unmount() { await act(async () => root.unmount()); restore(); },
+  };
+}
+
+// ---------------------------------------------------------------- the rules
+
+test('the member\'s word is the Worker\'s three methods, and the assign body carries Ask or a method', () => {
+  assert.deepEqual(CHAT_CONSENT_METHODS.map(([k]) => k), MEMBER_CONSENT_METHODS, 'the same three as channels.js');
+  assert.deepEqual(consentTarget('ask'), { ask: true });
+  assert.deepEqual(consentTarget('written'), { method: 'written' });
+  for (const bad of ['in_app', '', null, '__proto__', 'toString']) assert.equal(consentTarget(bad), null, String(bad));
+  const target = assignTarget({ name: 'Dana', company: '', consent: null, chatConsent: 'ask' }, { projectId: 3 });
+  assert.deepEqual(target, { create: { interviewee_name: 'Dana', interviewee_company: null, project_id: 3 }, consent: { ask: true } });
+  assert.equal('consent' in assignTarget({ name: 'Dana', consent: null }, { projectId: 3 }), false, 'no choice: no consent');
+  const c = consentChoices('Dana');
+  assert.equal(c.ask.label, 'Ask Dana in WhatsApp');
+  assert.equal(c.agreed.label, 'Dana already agreed');
+});
+
+test('Start stays disabled until consent is asked or attested; Ask needs the window open', () => {
+  const open = chatConsentOf({ consent_status: 'not_asked', reply_window_open: true });
+  assert.equal(chatConsentBlock(open, null, 'Dana'), 'Ask Dana in WhatsApp, or say they already agreed.');
+  assert.equal(chatConsentBlock(open, 'ask', 'Dana'), null);
+  assert.equal(chatConsentBlock(open, 'verbal', 'Dana'), null);
+  const closed = chatConsentOf({ consent_status: 'not_asked', reply_window_open: false });
+  assert.equal(chatConsentBlock(closed, 'ask', 'Dana'), windowClosedSentence('Dana'));
+  assert.equal(chatConsentBlock(closed, 'written', 'Dana'), null, 'the member\'s word needs no window');
+  assert.equal(windowClosedSentence('Dana'), 'Dana last wrote more than 24 hours ago, and WhatsApp only lets Axal write within 24 hours of their last message. Ask Dana to send you a message from your WhatsApp Business app, then ask again.');
+  assert.equal(chatConsentBlock(chatConsentOf({ consent_status: 'given' }), null, 'Dana'), null, 'given: nothing to choose');
+  assert.equal(chatConsentBlock(chatConsentOf({ consent_status: 'declined' }), 'ask', 'Dana'), 'Dana declined. Nothing from this chat was kept.');
+  assert.match(chatConsentBlock(chatConsentOf({ consent_status: 'withdrawn' }), 'ask', 'Dana'), /^Dana withdrew consent/);
+});
+
+test('a Telegram thread (required false) is unchanged: no block, no line', () => {
+  for (const t of [{ consent_status: null }, { consent: NOT_REQUIRED }, {}]) {
+    const c = chatConsentOf(t);
+    assert.deepEqual(c, { required: false });
+    assert.equal(chatConsentBlock(c, null, 'Tom', 'telegram'), null);
+    assert.equal(consentLine(c, 'Tom'), null);
+  }
+});
+
+test('each consent line\'s words', () => {
+  const line = (over, name = 'Dana') => consentLine(chatConsentOf({ consent: view(over) }), name, { when });
+  assert.deepEqual(line({ status: 'not_asked' }), { kind: 'waiting', text: 'Waiting for Dana to agree' });
+  assert.deepEqual(line({ status: 'requested', delivered_at: AT }), { kind: 'waiting', text: 'Waiting for Dana to agree' });
+  assert.deepEqual(line({ status: 'given', source: 'interviewee_reply', method: 'chat_reply', answered_at: AT }), { kind: 'given', text: 'Agreed in WhatsApp at @14:05' });
+  assert.deepEqual(line({ status: 'given', source: 'member_attested', method: 'written', answered_at: AT }), { kind: 'given', text: 'Dana already agreed: In writing, recorded at @14:05' });
+  assert.deepEqual(line({ status: 'declined' }), { kind: 'declined', text: 'Declined in WhatsApp' });
+  assert.deepEqual(line({ status: 'withdrawn', withdrawn_at: AT }), { kind: 'withdrawn', text: 'Dana withdrew consent' });
+  assert.deepEqual(line({ status: 'withdrawn' }, ''), { kind: 'withdrawn', text: 'Your contact withdrew consent' }, 'no name: no guess');
+  assert.deepEqual(line({ status: 'brand_new' }), { kind: 'waiting', text: 'Waiting for Dana to agree' }, 'an unknown status is not called given');
+});
+
+test('the member\'s word is offered only once the notice was delivered', () => {
+  assert.equal(canAttest(chatConsentOf({ consent: view({ status: 'requested', delivered_at: AT }) })), true);
+  assert.equal(canAttest(chatConsentOf({ consent: view({ status: 'requested' }) })), false, 'sent, not delivered');
+  assert.equal(canAttest(chatConsentOf({ consent: view({ status: 'not_asked' }) })), false);
+  assert.equal(canAttest(chatConsentOf({ consent: view({ status: 'given', delivered_at: AT }) })), false);
+});
+
+// ---------------------------------------------------------------- the session page
+
+test('the session page: the line, and a withdrawn chat\'s discard calls DELETE /sessions/:id once, after a confirm', async () => {
+  const removed = [];
+  const onDiscard = async () => { removed.push(1); };
+  const m = await mount(h(ChatConsentLine, { consent: view({ status: 'withdrawn' }), name: 'Dana', provider: 'whatsapp', onDiscard, when }));
+  try {
+    assert.equal(m.text(m.by('chat-consent-line')), 'Dana withdrew consent');
+    assert.equal(m.pr(m.by('chat-consent')).role, 'status');
+    await m.click('button-discard-chat');
+    assert.deepEqual(removed, [], 'the first press only asks');
+    await m.click('button-confirm-discard-chat');
+    await m.click('button-confirm-discard-chat');
+    assert.deepEqual(removed, [1], 'discarded once');
+  } finally { await m.unmount(); }
+
+  const failing = await mount(h(ChatConsentLine, { consent: view({ status: 'withdrawn' }), name: 'Dana', onDiscard: async () => { throw new Error('SENTINEL-WORKER'); } }));
+  try {
+    await failing.click('button-discard-chat');
+    await failing.click('button-confirm-discard-chat');
+    assert.match(failing.text(), /SENTINEL-WORKER/, 'the Worker\'s words');
+  } finally { await failing.unmount(); }
+
+  for (const [over, text] of [[{ status: 'given', source: 'interviewee_reply', answered_at: AT }, 'Agreed in WhatsApp at @14:05'], [{ status: 'declined' }, 'Declined in WhatsApp'], [{ status: 'not_asked' }, 'Waiting for Dana to agree']]) {
+    const v = await mount(h(ChatConsentLine, { consent: view(over), name: 'Dana', onDiscard: async () => {}, when }));
+    try {
+      assert.equal(v.text(v.by('chat-consent-line')), text);
+      assert.equal(v.by('button-discard-chat'), undefined, 'discard only for a withdrawn chat');
+    } finally { await v.unmount(); }
+  }
+  const none = await mount(h(ChatConsentLine, { consent: NOT_REQUIRED, name: 'Tom', onDiscard: async () => {} }));
+  try { assert.equal(none.by('chat-consent'), undefined, 'Telegram: nothing'); } finally { await none.unmount(); }
+});
+
+test('the session page reads channel_consent and discards through the sessions API', () => {
+  const src = readFileSync('frontend/src/pages/founder/InterviewSessionPage.jsx', 'utf8');
+  assert.match(src, /data\.channel_consent\?\.required && \(\s*<ChatConsentLine consent=\{data\.channel_consent\}/);
+  assert.match(src, /onDiscard=\{async \(\) => \{ await api\.remove\(session\.id\);/);
+  // §11: a channel session never opens the Recording View (#1933's `imported`).
+  assert.match(src, /const handOver = inFlight && !recordingOther && !imported;/);
+});
+
+// ---------------------------------------------------------------- the inbox
+
+const THREAD = { uid: 'wa-1', provider: 'whatsapp', contact_name: 'Dana Ruiz', interviewee_name: 'Dana', status: 'assigned', interview_id: 7, session_id: 9 };
+const stubApi = (over = {}) => {
+  const calls = [];
+  return {
+    calls,
+    api: {
+      requestConsent: async (uid) => { calls.push(['ask', uid]); return { ok: true }; },
+      attestConsent: async (uid, method) => { calls.push(['attest', uid, method]); return { ok: true }; },
+      ...over,
+    },
+  };
+};
+
+test('the inbox: the state, Ask for consent once, and the member\'s word after delivery', async () => {
+  const s = stubApi();
+  let changed = 0;
+  const m = await mount(h(ThreadConsent, { thread: THREAD, consent: view(), api: s.api, onChanged: () => { changed += 1; } }));
+  try {
+    assert.equal(m.text(m.by('thread-consent-line')), 'Waiting for Dana to agree');
+    assert.equal(m.by('thread-consent-attest'), undefined, 'no word before the notice is delivered');
+    await m.click('button-ask-consent');
+    assert.deepEqual(s.calls, [['ask', 'wa-1']]);
+    assert.equal(changed, 1, 'the thread is read again');
+  } finally { await m.unmount(); }
+
+  const s2 = stubApi();
+  const m2 = await mount(h(ThreadConsent, { thread: THREAD, consent: view({ status: 'requested', delivered_at: AT, can_request: false }), api: s2.api }));
+  try {
+    assert.equal(m2.pr(m2.by('button-ask-consent')).disabled, true, 'the Worker allows no other notice yet');
+    await m2.click('button-attest-verbal');
+    assert.deepEqual(s2.calls, [['attest', 'wa-1', 'verbal']]);
+  } finally { await m2.unmount(); }
+});
+
+test('the inbox: a closed window disables Ask with D754\'s sentence; a refusal shows the Worker\'s words; a pending chat is linked first', async () => {
+  const s = stubApi();
+  const m = await mount(h(ThreadConsent, { thread: THREAD, consent: view({ window_open: false }), api: s.api }));
+  try {
+    assert.equal(m.pr(m.by('button-ask-consent')).disabled, true);
+    assert.equal(m.text(m.by('thread-consent-window')), windowClosedSentence('Dana'));
+  } finally { await m.unmount(); }
+
+  const s2 = stubApi({ requestConsent: async () => { throw Object.assign(new Error('SENTINEL-TOO-SOON'), { code: 'too_soon' }); } });
+  const m2 = await mount(h(ThreadConsent, { thread: THREAD, consent: view(), api: s2.api }));
+  try {
+    await m2.click('button-ask-consent');
+    assert.match(m2.text(), /SENTINEL-TOO-SOON/);
+  } finally { await m2.unmount(); }
+
+  const m3 = await mount(h(ThreadConsent, { thread: { ...THREAD, status: 'pending', interview_id: null, session_id: null }, consent: view({ can_request: false }), api: stubApi().api }));
+  try {
+    assert.equal(m3.by('button-ask-consent'), undefined);
+    assert.match(m3.text(), /Add this chat to an interview first\./);
+  } finally { await m3.unmount(); }
+
+  const m4 = await mount(h(ThreadConsent, { thread: { ...THREAD, provider: 'telegram' }, consent: NOT_REQUIRED, api: stubApi().api }));
+  try { assert.equal(m4.by('thread-consent'), undefined, 'Telegram: unchanged'); } finally { await m4.unmount(); }
+});
+
+test('the inbox panel reads the thread\'s consent and draws it above the messages', () => {
+  const src = readFileSync('frontend/src/pages/founder/ChannelsInbox.jsx', 'utf8');
+  assert.match(src, /consent: r\.consent \?\? null/);
+  assert.match(src, /<ThreadConsent thread=\{thread\} consent=\{data\.consent\}/);
+});

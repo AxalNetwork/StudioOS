@@ -11,29 +11,37 @@
 //   6. Active-licenses surface (PRESERVED).
 //   7. Admin-only "Add Product" button + modal (reuses adminCatalog create).
 //
+// D755 (#1915): each plan card also shows its AI allowance and the free plans
+// get cards of their own, from GET /public/plans-and-packs (lib/plansPricing.js).
+// The Token packs section, its footer and the pack filter are CR7's
+// (TokenPacksSection.jsx, #1985).
+//
 // Prices ALWAYS come from GET /catalog/products — never hardcoded, never
 // client-computed. Subscriptions bypass the cart (one-click Stripe via the
 // slide-over); one-time items go through the cart → /checkout.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams, useNavigate, useParams } from 'react-router-dom';
 import {
-  Package, Ticket, CheckCircle2, AlertTriangle, Loader2, X, BadgeCheck, Receipt,
-  Sparkles, Plus,
+  Package, Ticket, CheckCircle2, AlertTriangle, Loader2, X, BadgeCheck, Receipt, Plus,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import { usePhoneWidth } from '../ui';
-import PricingPhone from './account/PricingPhone';
-import AxalCheckout from '../components/AxalCheckout';
+import PricingPhone, { usePricingReads } from './account/PricingPhone';
 import { useCart } from '../components/products/useCart';
 import BillingCartBar from '../components/products/BillingCartBar';
 import CartDrawer from '../components/products/CartDrawer';
 import ProductCard from '../components/products/ProductCard';
 import BundleCard from '../components/products/BundleCard';
+import FreePlanCard from '../components/products/FreePlanCard';
+import TokenPacksSection, { isPackProduct } from '../components/products/TokenPacksSection';
 import ProductSlideOver from '../components/products/ProductSlideOver';
 import {
   formatMoney, formatDate, AUDIENCE_FILTERS, priceCycle, isBundleProduct,
 } from '../components/products/productsShared';
+import {
+  planAi, planForProduct, planOf, freePlans,
+} from '../lib/plansPricing';
 
 const REDEEM_REASONS = {
   not_found: "That code isn't valid. Check for typos — codes look like AXAL-XXXX-XXXX.",
@@ -179,124 +187,6 @@ function PromoRedeemCard({ initialCode, onRedeemed }) {
   );
 }
 
-// ------- Introduction packs (PRESERVED) -------
-// Prices come exclusively from GET /network/intro-packs — no client-side
-// fallback amounts. If the endpoint is unavailable the section says so
-// instead of showing stale numbers.
-function IntroPacksSection({ onReceipt }) {
-  const [packs, setPacks] = useState(null); // null = loading, [] = unavailable
-  const [buying, setBuying] = useState(null);
-  const [pendingKey, setPendingKey] = useState(null);
-  const [error, setError] = useState(null);
-
-  useEffect(() => {
-    api.introPacks()
-      .then((r) => setPacks(Array.isArray(r?.packs) ? r.packs : []))
-      .catch(() => setPacks([]));
-  }, []);
-
-  const buy = useCallback(async (pack) => {
-    setError(null);
-    setPendingKey(pack.key);
-    try {
-      const r = await api.introCreditsIntent(pack.key);
-      if (!r?.client_secret) throw new Error('Checkout is unavailable right now.');
-      setBuying({ pack, clientSecret: r.client_secret });
-    } catch (e) {
-      setError(e?.message || 'Could not start checkout.');
-    } finally {
-      setPendingKey(null);
-    }
-  }, []);
-
-  return (
-    <section>
-      <div className="mb-3.5">
-        <h2 className="text-[19px] font-bold tracking-[-.01em] text-gray-900 dark:text-gray-100">Introduction packs</h2>
-        <p className="mt-0.5 text-[13px] text-gray-500 dark:text-gray-400">
-          Top up your Network › Introductions balance. Purchased credits never expire and stack on
-          your monthly allowance.
-        </p>
-      </div>
-      {packs === null && (
-        <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 py-6">
-          <Loader2 size={15} className="animate-spin" /> Loading packs…
-        </div>
-      )}
-      {packs !== null && packs.length === 0 && (
-        <p className="text-sm text-gray-500 dark:text-gray-400 py-6">
-          Introduction packs are unavailable right now — check back soon.
-        </p>
-      )}
-      <div className="grid gap-3.5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
-        {(packs || []).map((p) => (
-          <div key={p.key} className="flex flex-col bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-[14px] p-[18px] shadow-sm transition-shadow hover:shadow-md">
-            <div className="flex items-start gap-[11px]">
-              <span className="flex-shrink-0 inline-flex w-9 h-9 rounded-[10px] bg-violet-600/[.09] text-violet-600 dark:text-violet-400 items-center justify-center">
-                <Sparkles size={17} />
-              </span>
-              <div>
-                <div className="text-[14.5px] font-bold text-gray-900 dark:text-gray-100">{p.label}</div>
-                <p className="mt-1 text-[12.5px] leading-[1.4] text-gray-500 dark:text-gray-400">{p.blurb}</p>
-              </div>
-            </div>
-            <div className="mt-auto pt-4 flex items-center justify-between gap-2.5">
-              <div className="flex items-baseline gap-1">
-                <span className="tabular-nums text-xl font-extrabold tracking-[-.02em] text-gray-900 dark:text-gray-100">
-                  {formatMoney(p.amount_cents, p.currency)}
-                </span>
-                <span className="text-xs text-gray-400 dark:text-gray-500">one-time</span>
-              </div>
-              <button
-                onClick={() => buy(p)}
-                disabled={pendingKey === p.key}
-                className="h-9 px-[15px] rounded-[9px] bg-violet-600 hover:bg-violet-700 text-white text-[12.5px] font-semibold disabled:opacity-50"
-                data-testid={`intro-pack-buy-${p.key}`}
-              >
-                {pendingKey === p.key ? <Loader2 size={12} className="inline animate-spin" /> : 'Buy'}
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-      {error && (
-        <p className="mt-2 text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
-          <AlertTriangle size={12} /> {error}
-        </p>
-      )}
-      {buying && (
-        <div className="mt-4 rounded-[14px] border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
-          <div className="flex items-center justify-between gap-2 mb-3">
-            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-              Checkout — {buying.pack.label}
-            </h3>
-            <button onClick={() => setBuying(null)} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200" title="Cancel checkout">
-              <X size={16} />
-            </button>
-          </div>
-          <AxalCheckout
-            clientSecret={buying.clientSecret}
-            description={`Introduction credits: ${buying.pack.label}`}
-            submitLabel="Pay now"
-            onSuccess={() => {
-              onReceipt({
-                product_name: `Introduction credits — ${buying.pack.label}`,
-                amount_cents: buying.pack.amount_cents,
-                currency: buying.pack.currency,
-                when: new Date().toISOString(),
-                free: false,
-                note: 'Payment confirmed. Your credits are being added to Network › Introductions now.',
-              });
-              setBuying(null);
-            }}
-            onError={() => { /* AxalCheckout renders its own inline error state */ }}
-          />
-        </div>
-      )}
-    </section>
-  );
-}
-
 // ------- Admin "Add Product" modal (reuses adminCatalog create) -------
 function AddProductModal({ onClose, onCreated }) {
   const [form, setForm] = useState({ name: '', kind: 'subscription', description: '' });
@@ -391,6 +281,11 @@ export default function ProductsPage() {
   const deepLinkCode = searchParams.get('code') || '';
 
   const cart = useCart();
+  const [tokenPacks, setTokenPacks] = useState([]);
+  // D755: the public plans-and-packs read and the member's own allowance (its licence names "Your plan").
+  const { pricing, budget } = usePricingReads();
+  const licence = budget.status === 'ready' && typeof budget.data?.licence === 'string' ? budget.data.licence : null;
+  const free = useMemo(() => freePlans(pricing), [pricing]);
   const [products, setProducts] = useState(null);   // null = loading
   const [catalogError, setCatalogError] = useState(null);
   const [unlocks, setUnlocks] = useState([]);
@@ -427,8 +322,8 @@ export default function ProductsPage() {
   // Deep-linked product for the slide-over. When /products/:productId is hit
   // directly, open the panel pre-open once the catalog resolves.
   const openProduct = useMemo(
-    () => (productId && products ? products.find((p) => p.id === productId) || null : null),
-    [productId, products],
+    () => (productId && products ? products.find((p) => p.id === productId && !isPackProduct(p, tokenPacks)) || null : null),
+    [productId, products, tokenPacks],
   );
 
   // How the product modal was opened: carries the bundle card's license
@@ -458,6 +353,7 @@ export default function ProductsPage() {
 
   // Add a one-time item to the cart.
   const addToCart = useCallback((product, price, qty = 1) => {
+    if (isPackProduct(product, tokenPacks)) return;
     cart.add({
       price_id: price.id,
       product_id: product.id,
@@ -467,7 +363,7 @@ export default function ProductsPage() {
       cycle: priceCycle(price),
     }, qty);
     showToast(`${product.name} added to your order`);
-  }, [cart, showToast]);
+  }, [cart, showToast, tokenPacks]);
 
   // Subscription one-click success (from the modal's embedded checkout).
   // Clear the modal intent so back/deep-link reopens never resume checkout.
@@ -497,8 +393,8 @@ export default function ProductsPage() {
     [products],
   );
   const addons = useMemo(
-    () => (products || []).filter((p) => !isBundleProduct(p)),
-    [products],
+    () => (products || []).filter((p) => !isBundleProduct(p) && !isPackProduct(p, tokenPacks)),
+    [products, tokenPacks],
   );
   const visibleAddons = useMemo(() => {
     if (audienceFilter === 'all') return addons;
@@ -554,11 +450,11 @@ export default function ProductsPage() {
           {!phone && (
             <>
               <h1 className="text-[32px] leading-tight font-extrabold tracking-[-.02em] text-gray-900 dark:text-gray-100 flex items-center gap-2.5">
-                <Package size={26} className="text-violet-600 dark:text-violet-400" /> Products
+                <Package size={26} className="text-violet-600 dark:text-violet-400" /> Plans &amp; Pricing
               </h1>
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-1.5 max-w-2xl">
-                One clear catalog — profile bundles, introduction packs, and add-ons. Purchased
-                in-app, or unlocked with a promo code.
+                One clear catalog — plans, token packs, and add-ons. Purchased in-app, or unlocked
+                with a promo code.
               </p>
             </>
           )}
@@ -601,7 +497,7 @@ export default function ProductsPage() {
       {loadingState}
       {emptyState}
 
-      {bundles.length > 0 && (
+      {(bundles.length > 0 || free.length > 0) && (
         <section>
           <div className="mb-3.5">
             <h2 className="text-[19px] font-bold tracking-[-.01em] text-gray-900 dark:text-gray-100">Profile bundles</h2>
@@ -610,20 +506,29 @@ export default function ProductsPage() {
             </p>
           </div>
           <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
-            {bundles.map((p) => (
-              <BundleCard
-                key={p.id}
-                product={p}
-                globalCycle={globalCycle}
-                onPreview={handlePreviewBundle}
-                onSubscribe={handleSubscribeBundle}
-              />
+            {free.map((plan) => (
+              <FreePlanCard key={plan.licence_key} plan={plan} ai={planAi(plan, pricing, { licence })} />
             ))}
+            {bundles.map((p) => {
+              // The read's row for this product; its metadata when the read is out, so the card still says Unreadable.
+              const plan = planForProduct(p, pricing) || planOf(p.metadata);
+              return (
+                <BundleCard
+                  key={p.id}
+                  product={p}
+                  globalCycle={globalCycle}
+                  onPreview={handlePreviewBundle}
+                  onSubscribe={handleSubscribeBundle}
+                  ai={planAi(plan, pricing, { licence })}
+                  family={plan?.family || null}
+                />
+              );
+            })}
           </div>
         </section>
       )}
 
-      <IntroPacksSection onReceipt={(r) => setPaidReceipt(r)} />
+      <TokenPacksSection onPacksRead={setTokenPacks} />
 
       {(addons.length > 0 || (products !== null && products.length > 0)) && (
         <section>
@@ -708,5 +613,5 @@ export default function ProductsPage() {
     </div>
   );
 
-  return phone ? <PricingPhone role={user?.role}>{page}</PricingPhone> : page;
+  return phone ? <PricingPhone pricing={pricing} budget={budget}>{page}</PricingPhone> : page;
 }

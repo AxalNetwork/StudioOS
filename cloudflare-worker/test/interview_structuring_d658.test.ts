@@ -20,6 +20,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
+import { applyEngineSchema } from './_engine_schema.mjs';
 import { createJWT } from '../src/auth.ts';
 import {
   chunkSegments,
@@ -87,6 +88,8 @@ function world(reply: (model: string, input: any) => any = () => ({ response: '{
     '453_interview_processing.sql']) {
     db.exec(mig(m));
   }
+  // D757: the Validate engine's schema (487, 465, 453 and the re-scope's columns).
+  applyEngineSchema(db);
   db.exec(`
     INSERT INTO hypotheses (id, project_id, code, claim) VALUES (31, ${PROJECT}, 'H1', 'Finance leads reconcile by hand');
     INSERT INTO pain_groups (id, project_id, title) VALUES (41, ${PROJECT}, 'Manual reconciliation'), (42, ${PROJECT}, 'Cost');
@@ -190,8 +193,10 @@ test('a long transcript is split on segment boundaries, every segment once, and 
   assert.equal(out.ok, true);
   if (!out.ok) return;
   assert.equal(out.parts, parts.length, 'the founder is not told the transcript was read in parts');
-  assert.equal(seen.length, parts.length);
+  // D757 (#1923): each part is read once per pass.
+  assert.equal(seen.length, parts.length * 2);
   assert.match(seen[0], new RegExp(`^Part 1 of ${parts.length}`));
+  assert.match(seen[parts.length], new RegExp(`^Part 1 of ${parts.length}`), 'pass B reads the transcript from its first part');
   assert.equal(out.placements.filter((p) => p.kind === 'competitor_mention').length, 1, 'one competitor named in every part was kept once per part');
   assert.equal(out.placements.filter((p) => p.kind === 'segment').length, parts.length);
 });
@@ -207,8 +212,9 @@ test('the receipt names the model that answered, and the fallback when the first
   });
   const out = await structureTranscript(env, { userId: ME, segments: SEGMENTS, context: CTX, step: 'structured' });
   assert.equal(out.ok, true);
-  assert.deepEqual(calls, [MID, SMALL]);
-  assert.equal(out.receipt.length, 1);
+  // D757 (#1923): one call per pass, each falling back the same way.
+  assert.deepEqual(calls, [MID, SMALL, MID, SMALL]);
+  assert.equal(out.receipt.length, 2);
   assert.equal(out.receipt[0].model, SMALL, 'the receipt names the model that was asked, not the one that answered');
   assert.equal(out.receipt[0].fallback_used, true, 'the receipt does not say the fallback answered');
   assert.equal(out.receipt[0].step, 'structured');
@@ -326,16 +332,17 @@ test('a discarded placement writes nothing to any module', async () => {
 
 // ── proposed-only kinds, ownership, the Lab ─────────────────────────────────
 
-test('a market fact has no store: it stays proposed, and the review read says so', async () => {
+test('a market fact has a store since D757: it is accepted into interview_findings, and the review read says so', async () => {
   const w = withSession(world());
+  w.db.exec(readFileSync(new URL('../sql/migrations/489_interview_findings.sql', import.meta.url), 'utf8'));
   await seed(w.env, [{ kind: 'market_fact', payload: { fact: 'Ledgerly costs too much', source: 'the interviewee' }, cite: { from: 12000, to: 20000 }, quote: 'We looked at Ledgerly but it was too expensive.' }]);
   const id = rowsOf(w.db, 'validate_proposals', 'id')[0].id;
-  const r = await call(w.env, structure, 'POST', `/placements/${id}/accept`);
-  assert.equal(r.status, 409);
-  assert.equal(r.json.error, 'writer_not_available');
-  assert.equal(w.db.prepare('SELECT status FROM validate_proposals WHERE id = ?').get(id).status, 'pending');
   const read = await call(w.env, structure, 'GET', '/sessions/5/placements');
-  assert.equal(read.json.runs[0].placements[0].can_accept, false, 'a proposed-only kind is not marked as such for the page');
+  assert.equal(read.json.runs[0].placements[0].can_accept, true, 'every kind has a writer now');
+  const r = await call(w.env, structure, 'POST', `/placements/${id}/accept`);
+  assert.equal(r.status, 200, JSON.stringify(r.json));
+  const f = w.db.prepare('SELECT module, kind, payload_json FROM interview_findings').get();
+  assert.deepEqual([f.module, f.kind, JSON.parse(f.payload_json).topic], ['market-intelligence', 'market_fact', 'other'], 'a fact with no topic is "other"');
 });
 
 test('segment, demand signal and competitor accept through #1472\'s writers', async () => {
@@ -355,20 +362,16 @@ test('segment, demand signal and competitor accept through #1472\'s writers', as
 
   assert.equal((await call(w.env, structure, 'POST', `/placements/${demand}/accept`)).status, 200);
   const sig = w.db.prepare('SELECT kind, status, source_kind, interview_id, session_id, note FROM demand_signals').get();
-  assert.deepEqual({ ...sig }, { kind: 'would_pay', status: 'to_confirm', source_kind: 'session', interview_id: 101, session_id: 5, note: 'Would pay tomorrow' },
-    'a proposed demand signal was counted before the founder confirmed it');
+  // D757 §2.6 (#1923): a would-pay is confirmed by the founder's Accept itself.
+  assert.deepEqual({ ...sig }, { kind: 'would_pay', status: 'confirmed', source_kind: 'session', interview_id: 101, session_id: 5, note: 'Would pay tomorrow' },
+    'an accepted would-pay is the founder\'s confirmation');
 
-  // No competitor list on the project: D659's writer refuses, and the
-  // placement stays proposed rather than being marked accepted.
-  const refused = await call(w.env, structure, 'POST', `/placements/${comp}/accept`);
-  assert.equal(refused.status, 409);
-  assert.equal(refused.json.error, 'writer_refused');
-  assert.equal(w.db.prepare('SELECT status FROM validate_proposals WHERE id = ?').get(comp).status, 'pending');
-
-  w.db.prepare(`INSERT INTO competitor_analyses (id, project_id, user_id, inputs_json, status, created_at, updated_at)
-                VALUES ('an-1', ${PROJECT}, ${ME}, '{}', 'ready', datetime('now'), datetime('now'))`).run();
+  // D757 §2.6 (#1923): with no competitor list on the project, Accept creates
+  // the manual one (no discovery, no crawl) instead of refusing.
+  assert.equal(w.db.prepare('SELECT COUNT(*) n FROM competitor_analyses').get().n, 0);
   const ok = await call(w.env, structure, 'POST', `/placements/${comp}/accept`);
   assert.equal(ok.status, 200, JSON.stringify(ok.json));
+  assert.equal(w.db.prepare('SELECT COUNT(*) n FROM competitor_analyses WHERE project_id = ?').get(PROJECT).n, 1);
   assert.equal(w.db.prepare("SELECT COUNT(*) n FROM competitor_candidates WHERE name = 'Ledgerly'").get().n, 1);
   const cs = w.db.prepare('SELECT project_id, source_kind, signal_type FROM competitor_signals').get();
   assert.deepEqual({ ...cs }, { project_id: PROJECT, source_kind: 'session', signal_type: 'mention' });
@@ -446,7 +449,7 @@ test('segment, demand signal and competitor: an accepted placement writes the ro
   assert.equal(seg.status, 201, JSON.stringify(seg.json));
   assert.equal((await call(b.env, cycleValidate, 'PUT', `/interviews/101/segment${q}`, { segment_id: seg.json.id })).status, 200);
   assert.equal((await call(b.env, cycleValidate, 'POST', `/demand-signals${q}`,
-    { kind: 'would_pay', interview_id: 101, note: 'Would pay tomorrow', status: 'to_confirm' })).status, 201);
+    { kind: 'would_pay', interview_id: 101, note: 'Would pay tomorrow', status: 'confirmed' })).status, 201);
   assert.equal((await call(b.env, cycleValidate, 'POST', `/competitor-mentions${q}`,
     { name: 'Ledgerly', detail: 'Too expensive', signal_type: 'mention' })).status, 201);
 
@@ -518,7 +521,8 @@ test('structure: one run over the final transcript stores the cited placements a
   ]);
   assert.equal(w.db.prepare('SELECT status FROM interview_sessions WHERE id = 5').get().status, 'structured');
   const receipt = rowsOf(w.db, 'interview_structure_receipts', 'step, model, fallback_used, outcome, run_id');
-  assert.deepEqual(receipt.map((x: any) => [x.step, x.model, x.fallback_used, x.outcome, x.run_id]), [['structured', MID, 0, 'ok', r.json.run_id]]);
+  // D757 (#1923): one receipt line per pass, both on the run.
+  assert.deepEqual(receipt.map((x: any) => [x.step, x.model, x.fallback_used, x.outcome, x.run_id]), [['structured', MID, 0, 'ok', r.json.run_id], ['structured', MID, 0, 'ok', r.json.run_id]]);
 });
 
 test('compare: a second run is a re-structure with its own run_id, and the read aligns the two by module', async () => {
@@ -543,7 +547,7 @@ test('compare: a second run is a re-structure with its own run_id, and the read 
   assert.equal(comp.can_accept, true, 'a kind with a writer is marked proposed-only');
   assert.equal(comp.cite.quote, SEGMENTS[2].text);
   const steps = rowsOf(w.db, 'interview_structure_receipts', 'step').map((x: any) => x.step);
-  assert.deepEqual(steps, ['structured', 're_structured']);
+  assert.deepEqual(steps, ['structured', 'structured', 're_structured', 're_structured'], 'one line per pass, in each run');
 });
 
 test('the session receipt names the fallback model when the first choice fails, beside the transcription lines', async () => {
@@ -558,6 +562,7 @@ test('the session receipt names the fallback model when the first choice fails, 
   assert.equal(r.status, 200, JSON.stringify(r.json));
   assert.deepEqual(r.json.items.map((x: any) => [x.kind, x.model, x.fallback_used]), [
     ['final', '@cf/openai/whisper-large-v3-turbo', 0],
+    ['structured', SMALL, 1],
     ['structured', SMALL, 1],
   ], 'the receipt does not name the fallback model, or misses the transcription line');
 });
@@ -649,7 +654,7 @@ test('a model that is given but not recognised is refused with 400 and nothing r
   // Absent, null or blank is the default, not a refusal.
   const w = withSession(world(() => ({ response: REPLY })));
   assert.equal((await call(w.env, structure, 'POST', '/sessions/5/structure', { model: '' })).status, 201);
-  assert.deepEqual(w.calls, [MID]);
+  assert.deepEqual(w.calls, [MID, MID], 'the default, once per pass (D757)');
 });
 
 test('a listed @cf/ model the task does not offer is 400; DeepSeek V4 Flash is offered and named on the receipt', async () => {

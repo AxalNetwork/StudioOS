@@ -79,12 +79,30 @@ function redirectUri(env: Env): string {
   return `${callbackBase(env)}/api/integrations/oauth/${PROVIDER_KEY}/callback`;
 }
 
-function clientCreds(env: Env): { id: string; secret: string } {
+/** The trimmed client pair, or null when either half is unset. */
+function readClientCreds(env: Env): { id: string; secret: string } | null {
   const id = String(env.ZOOM_CLIENT_ID ?? '').trim();
   const secret = String(env.ZOOM_CLIENT_SECRET ?? '').trim();
+  return id && secret ? { id, secret } : null;
+}
+
+function clientCreds(env: Env): { id: string; secret: string } {
+  const creds = readClientCreds(env);
   // The route layer turns `<provider>_oauth_unconfigured` into a 503 the page can show.
-  if (!id || !secret) throw new Error('zoom_oauth_unconfigured: set ZOOM_CLIENT_ID and ZOOM_CLIENT_SECRET on the worker.');
-  return { id, secret };
+  if (!creds) throw new Error('zoom_oauth_unconfigured: set ZOOM_CLIENT_ID and ZOOM_CLIENT_SECRET on the worker.');
+  return creds;
+}
+
+/**
+ * D751 — the names an admin sets for Zoom, env only (the Integration keys
+ * console cannot hold them). Three, not two: without the webhook token no
+ * transcript arrives (D757), so Zoom is set up only with all three (#1899).
+ */
+export const ZOOM_CLIENT_ENV_VARS = ['ZOOM_CLIENT_ID', 'ZOOM_CLIENT_SECRET', 'ZOOM_WEBHOOK_SECRET_TOKEN'];
+
+/** D751 — whether Zoom is set up here: the Channels card's own three-secret check. */
+export function zoomConfigured(env: Env): boolean {
+  return providerAvailable(env, 'zoom');
 }
 
 function basicAuth(env: Env): string {
@@ -227,6 +245,7 @@ registerProvider({
   key: PROVIDER_KEY,
   connect,
   buildAuthorizeUrl,
+  ready: async (env) => zoomConfigured(env),
   async revokeGranted(env, result) {
     await revokeGrant(env, result.credentials);
   },

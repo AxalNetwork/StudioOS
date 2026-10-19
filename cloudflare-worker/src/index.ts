@@ -637,6 +637,9 @@ const COOL_OFF_PREFIXES = [
   // D716 — fund notices ask an LP or an entity for money. Pause them for a
   // freshly-recovered account.
   '/api/fund-notices',
+  // D755 — the catalog's writes, token packs included, sell what members pay
+  // for and can mint a pack. Same class as promos.
+  '/api/admin/catalog',
 ];
 for (const p of COOL_OFF_PREFIXES) {
   app.use(p, recoveryCoolOff);
@@ -704,6 +707,10 @@ const COOL_OFF_ROUTES = [
   '/api/funds/:id/capital-call',
   '/api/funds/distributions/execute',
   '/api/fund-ledger/:id/administrator',
+  // D755 — a Super Admin's adjustment of one member's AI top-up balance: money
+  // added or taken on someone else's behalf. The member-account read beside it
+  // stays open.
+  '/api/ai-budget/members/:userId/adjustments',
 ];
 for (const p of COOL_OFF_ROUTES) app.use(p, recoveryCoolOff);
 // Task #6 — Stripe billing surface (tier checkout/portal/webhook + MI Pro).

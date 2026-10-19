@@ -23,8 +23,10 @@
  * writer in `_founder_validate_writes.ts` — the function the manual route
  * calls — so an accepted placement and a hand-typed value are the same row.
  * Segment, demand signal and competitor accept through #1472's (D659)
- * writers in `services/validateWriters.ts`; a market fact has no store and
- * is refused with `writer_not_available`, staying proposed.
+ * writers in `services/validateWriters.ts`. Since D757 (#1923) every kind has
+ * a writer: a new hypothesis and an experiment idea through Experiments' own,
+ * a firmographic role or company into the interview's empty field, and the
+ * findings no module table holds through `writeInterviewFinding`.
  */
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
@@ -34,20 +36,25 @@ import { insertHypothesisLink, setInterviewIcpFit, upsertPainSeverity } from './
 import { normPhrase } from '../services/painGroups';
 import {
   WriterError,
+  addEvidence,
+  addExperiment,
   assignInterviewSegment,
+  createHypothesis,
   setEvidenceStrength,
   writeCompetitorMention,
   writeDemandSignal,
+  writeInterviewFinding,
   writeSegment,
 } from '../services/validateWriters';
+import { updateInterviewDetails } from '../services/interviewWriters';
+import { INTERVIEW_FIELDS, isFindingKind } from '../services/interviewFindings';
 import { budgetRefusalMessage } from '../services/aiRouter';
-import { consentBlocks, loadSession, type SessionRow } from '../services/interviewSessions';
+import { consentBlocks, loadSession, sessionHasAudio, type SessionRow } from '../services/interviewSessions';
 import {
   PLACEMENT_KINDS,
   alignRuns,
   askTranscript,
   isPlacementKind,
-  structureTranscript,
   toSegments,
   type Placement,
   type PlacementKind,
@@ -71,6 +78,17 @@ interface PlacementRow {
   run_id: string | null;
   target_ref: string | null;
   session_id: number | null;
+  cite_from?: number | null;
+  cite_to?: number | null;
+  citation_json?: string | null;
+}
+
+/** The quote a placement carries in its citation, for the finding it becomes; null when none. */
+function quoteOf(row: PlacementRow): string | null {
+  try {
+    const c = row.citation_json ? JSON.parse(row.citation_json) : null;
+    return c && typeof c.quote === 'string' && c.quote ? c.quote : null;
+  } catch { return null; }
 }
 
 /** The interview a placement is about, from its `target_ref` ("interview:<id>"). */
@@ -95,6 +113,12 @@ export async function loadStructureContext(env: Env, projectId: number): Promise
  * a cited span by construction (`parsePlacements` drops the rest), and the
  * passage rides in `citation_json` so the review can show it without
  * re-reading the transcript.
+ *
+ * D757 — `dedupe` (automatic runs): a placement whose kind and D658 key
+ * (`KindSpec.key`) match any earlier proposal on the same interview, in any
+ * status and from any proposer, is not stored again, so a re-run never brings
+ * back a finding the founder already accepted or discarded. A founder's run
+ * keeps every placement, so Compare still works.
  */
 export async function storePlacements(
   env: Env,
@@ -106,10 +130,27 @@ export async function storePlacements(
     userId: number;
     model: string;
     placements: readonly Placement[];
+    dedupe?: boolean;
   },
-): Promise<number> {
-  if (!opts.placements.length) return 0;
-  await env.DB.batch(opts.placements.map((p) => env.DB.prepare(
+): Promise<{ stored: number; deduped: number }> {
+  let placements = opts.placements;
+  if (opts.dedupe && placements.length) {
+    const prior = (await env.DB.prepare(
+      'SELECT kind, payload_json, edited_payload_json FROM validate_proposals WHERE target_ref = ? AND run_id IS NOT NULL',
+    ).bind(`interview:${opts.interviewId}`).all<{ kind: string; payload_json: string | null; edited_payload_json: string | null }>()).results ?? [];
+    const seen = new Set<string>();
+    for (const row of prior) {
+      if (!isPlacementKind(row.kind)) continue;
+      for (const raw of [row.payload_json, row.edited_payload_json]) {
+        if (!raw) continue;
+        try { seen.add(`${row.kind}|${PLACEMENT_KINDS[row.kind].key(JSON.parse(raw))}`); } catch { /* an unreadable payload names nothing */ }
+      }
+    }
+    placements = placements.filter((p) => !seen.has(`${p.kind}|${PLACEMENT_KINDS[p.kind].key(p.payload)}`));
+  }
+  const deduped = opts.placements.length - placements.length;
+  if (!placements.length) return { stored: 0, deduped };
+  await env.DB.batch(placements.map((p) => env.DB.prepare(
     `INSERT INTO validate_proposals
        (project_id, kind, payload_json, model, task, created_by, surface, fill_class,
         citation_json, target_ref, session_id, cite_from, cite_to, run_id)
@@ -119,13 +160,14 @@ export async function storePlacements(
     JSON.stringify({ kind: 'transcript', session_id: opts.sessionId, from: p.cite.from, to: p.cite.to, quote: p.quote }),
     `interview:${opts.interviewId}`, opts.sessionId, p.cite.from, p.cite.to, opts.runId,
   )));
-  return opts.placements.length;
+  return { stored: placements.length, deduped };
 }
 
 async function loadPlacement(env: Env, id: number): Promise<PlacementRow | null> {
   if (!Number.isInteger(id) || id <= 0) return null;
   return (await env.DB.prepare(
-    `SELECT id, project_id, kind, payload_json, edited_payload_json, status, run_id, target_ref, session_id
+    `SELECT id, project_id, kind, payload_json, edited_payload_json, status, run_id, target_ref, session_id,
+            cite_from, cite_to, citation_json
        FROM validate_proposals WHERE id = ? AND run_id IS NOT NULL`,
   ).bind(id).first<PlacementRow>()) || null;
 }
@@ -168,6 +210,15 @@ async function applyPlacement(
       await setInterviewIcpFit(env, await ownInterview(), String(payload.fit));
       return;
     case 'evidence': {
+      // D757: without a theme, the interview itself is the evidence (§2.6).
+      if (payload.pain_group_id == null) {
+        await addEvidence(env, {
+          projectId: row.project_id, userId: user.id, hypothesisId: Number(payload.hypothesis_id), kind: 'interview',
+          ref_id: String(await ownInterview()), direction: payload.direction === 'refutes' ? 'contradicts' : 'supports',
+          strength: payload.strength,
+        });
+        return;
+      }
       const prior = await env.DB.prepare(
         'SELECT strength FROM hypothesis_pain_links WHERE hypothesis_id = ? AND pain_group_id = ? AND direction = ?',
       ).bind(Number(payload.hypothesis_id), Number(payload.pain_group_id), payload.direction === 'refutes' ? 'contradicts' : 'supports')
@@ -196,21 +247,53 @@ async function applyPlacement(
       return;
     }
     case 'demand_signal':
-      // Arrives `to_confirm`, as D659's writer sets it for a non-manual
-      // source: a proposal is not counted until the founder confirms it.
+      // D757 §2.6: a need-to-have or a would-pay is `confirmed` by the
+      // founder's Accept; a letter of intent or a pre-sale stays `to_confirm`
+      // until its document or payment is attached.
       await writeDemandSignal(env, {
         projectId: row.project_id, userId: user.id, kind: payload.signal, note: payload.detail ?? null,
+        status: payload.signal === 'need_to_have' || payload.signal === 'would_pay' ? 'confirmed' : 'to_confirm',
+        amount_cents: payload.amount_cents ?? null, currency: payload.currency ?? null, period: payload.period ?? null,
         source_kind: sessionId ? 'session' : 'interview', interview_id: await ownInterview(), session_id: sessionId,
       });
       return;
-    case 'competitor_mention':
+    case 'competitor_mention': {
+      // D757: a price makes it a pricing signal; with no list yet, Accept
+      // creates the manual one, with no crawl.
+      const priced = payload.amount_cents != null;
+      const context = payload.context == null ? null : String(payload.context);
       await writeCompetitorMention(env, {
-        projectId: row.project_id, userId: user.id, name: payload.name, detail: payload.context ?? null,
-        signal_type: 'mention', source_kind: sessionId ? 'session' : 'interview',
+        projectId: row.project_id, userId: user.id, name: payload.name,
+        detail: priced && payload.period ? [context, `per ${payload.period}`].filter(Boolean).join(' · ') : context,
+        signal_type: priced ? 'pricing' : 'mention', source_kind: sessionId ? 'session' : 'interview',
+        amount_cents: payload.amount_cents ?? null, currency: payload.currency ?? null, createList: true,
+      });
+      return;
+    }
+    case 'hypothesis_new':
+      await createHypothesis(env, { projectId: row.project_id, userId: user.id, claim: payload.claim, disproof: payload.disproof ?? null });
+      return;
+    case 'experiment_idea':
+      await addExperiment(env, {
+        projectId: row.project_id, userId: user.id, hypothesisId: Number(payload.hypothesis_id),
+        title: payload.title, method: payload.method ?? null,
       });
       return;
     default:
-      throw new Error('writer_not_available');
+      if (!isFindingKind(kind)) throw new Error('writer_not_available');
+      // A firmographic role or company is the interview record's own field,
+      // written only where it is empty; every other finding is a row of its own.
+      if (kind === 'firmographic' && (INTERVIEW_FIELDS as readonly string[]).includes(String(payload.attribute))) {
+        await updateInterviewDetails(env, {
+          projectId: row.project_id, userId: user.id, interviewId: await ownInterview(), fillEmpty: true,
+          ...(payload.attribute === 'role' ? { interviewee_role: payload.value } : { interviewee_company: payload.value }),
+        });
+        return;
+      }
+      await writeInterviewFinding(env, {
+        projectId: row.project_id, userId: user.id, interviewId: await ownInterview(), kind, payload,
+        sessionId, proposalId: row.id, quote: quoteOf(row), citeFrom: row.cite_from ?? null, citeTo: row.cite_to ?? null,
+      });
   }
 }
 
@@ -304,10 +387,6 @@ export async function finalSegments(env: Env, sessionId: number) {
   return toSegments(rows.results ?? []);
 }
 
-function newRunId(): string {
-  return Array.from(crypto.getRandomValues(new Uint8Array(12))).map((b) => b.toString(16).padStart(2, '0')).join('');
-}
-
 const micro = (usd: number) => Math.max(0, Math.round((usd || 0) * 1_000_000));
 
 /** One receipt row per model call, refused or not. */
@@ -362,15 +441,18 @@ export function modelFrom(v: unknown): { model: string | undefined } | { refused
 
 /** #1470's rule, the same 409 its start, resume and live routes give: no consent, no AI over the recording. */
 // D685: shared with the summary route and the processing job.
-export function consentRefusal(session: SessionRow) {
-  const blocked = consentBlocks(session.channel, session.consent_status);
+// D754 (#1893): it also refuses a session holding audio, and a chat waiting for the interviewee's consent.
+export async function consentRefusal(env: Env, session: SessionRow) {
+  const blocked = consentBlocks(session.channel, session.consent_status, {
+    hasAudio: await sessionHasAudio(env, session.id), submittedVia: session.submitted_via ?? null,
+  });
   return blocked ? json(blocked, 409) : null;
 }
 
 structure.post('/sessions/:id/structure', async (c) => {
   const s = await scopeSession(c);
   if (s instanceof Response) return s;
-  const blocked = consentRefusal(s.session);
+  const blocked = await consentRefusal(c.env, s.session);
   if (blocked) return blocked;
   // D685 §5.9 — never two writers: the pipeline places findings itself.
   const busy = processingBusy(s.session);
@@ -378,39 +460,30 @@ structure.post('/sessions/:id/structure', async (c) => {
   const body = await c.req.json<{ model?: string }>().catch(() => ({} as { model?: string }));
   const picked = modelFrom(body?.model);
   if ('refused' in picked) return json(refusedBody('model_not_offered'), 400);
-  const segments = await finalSegments(c.env, s.session.id);
-  if (!segments.length) {
+  // D757: the run is the engine's, forced (a button always runs) and never deduped (Compare).
+  const { digestSession } = await import('../services/validateEngine');
+  const out = await digestSession(c.env, {
+    sessionId: s.session.id, userId: s.user.id, trigger: 'manual', stages: ['structure'], force: true, model: picked.model,
+  });
+  if (out.status === 'not_writable') return json({ detail: 'Forbidden' }, 403);
+  if (out.status === 'skipped') {
     return json({ error: 'no_final_transcript', detail: 'This session has no final transcript to structure yet.' }, 409);
   }
-  const prior = await c.env.DB.prepare('SELECT COUNT(DISTINCT run_id) AS n FROM validate_proposals WHERE session_id = ?')
-    .bind(s.session.id).first<{ n: number }>();
-  const step = Number(prior?.n || 0) > 0 ? 're_structured' : 'structured';
-  const runId = newRunId();
-  const context = await loadStructureContext(c.env, s.session.project_id);
-  const out = await structureTranscript(c.env, {
-    userId: s.user.id, model: picked.model, segments, context, step,
-  });
-  for (let i = 0; i < out.receipt.length; i += 1) {
-    const refusedHere = !out.ok && i === out.receipt.length - 1;
-    await recordStructureReceipt(c.env, s.session.id, runId, out.receipt[i], refusedHere ? 'refused' : 'ok', refusedHere ? (out as any).refusal ?? null : null);
+  if (out.status === 'refused') {
+    if (out.reason === 'busy') return json({ error: 'digest_running', detail: out.note }, 409);
+    if (out.reason === 'consent_not_recorded') return (await consentRefusal(c.env, (await loadSession(c.env, s.session.id))!)) ?? json({ error: 'consent_not_recorded' }, 409);
+    return json(refusedBody(out.refusal), refusedStatus(out.refusal));
   }
-  if (!out.ok) return json(refusedBody(out.refusal), refusedStatus(out.refusal));
-
-  await storePlacements(c.env, {
-    projectId: s.session.project_id, sessionId: s.session.id, interviewId: s.session.interview_id,
-    runId, userId: s.user.id, model: out.receipt[out.receipt.length - 1]?.model || '', placements: out.placements,
-  });
-  await c.env.DB.prepare(
-    "UPDATE interview_sessions SET status = 'structured', updated_at = datetime('now') WHERE id = ? AND status = 'transcribed'",
-  ).bind(s.session.id).run();
+  const placed = out.status === 'done' && out.structure?.ok ? out.structure : null;
+  if (!placed) return json(refusedBody(null), refusedStatus(null));
   return json({
     ok: true,
-    run_id: runId,
-    step,
-    stored: out.placements.length,
-    dropped: out.dropped,
-    parts: out.parts,
-    receipt: out.receipt,
+    run_id: placed.runId,
+    step: placed.step,
+    stored: placed.stored,
+    dropped: placed.dropped,
+    parts: placed.parts,
+    receipt: placed.receipt,
   }, 201);
 });
 
@@ -476,7 +549,7 @@ structure.get('/sessions/:id/placements', async (c) => {
 structure.post('/sessions/:id/ask', async (c) => {
   const s = await scopeSession(c);
   if (s instanceof Response) return s;
-  const blocked = consentRefusal(s.session);
+  const blocked = await consentRefusal(c.env, s.session);
   if (blocked) return blocked;
   const body = await c.req.json<{ question?: string; model?: string }>().catch(() => ({} as { question?: string; model?: string }));
   const picked = modelFrom(body?.model);

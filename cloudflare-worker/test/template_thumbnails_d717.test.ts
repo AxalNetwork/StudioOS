@@ -78,23 +78,13 @@ async function call(db: DatabaseSync, path: string, o: { who?: number | null; me
   return res;
 }
 
-test('D717 /templates/outside lists exactly the five keys, each with the row it counts under', async () => {
+test('D717/D758 /templates/outside lists exactly the bundled keys still sent as the file: none since D758 PR 2', async () => {
   const db = fixture();
   const r = await get(db, '/templates/outside');
   assert.equal(r.status, 200);
-  assert.deepEqual(r.body.items.map((i: any) => [i.key, i.counted_under.slug]), [
-    ['investor_nda_v1', 'investor_nda_axal'],
-    ['mentor_nda_v1', 'mentor_nda_axal'],
-    ['mentor_disclaimer_v1', 'mentor_engagement_disclaimer'],
-    ['partner_msa_v1', 'partner_services'],
-    ['nda_3way_founder_investor_axal_v1', 'nda_3way_founder_investor_axal'],
-  ]);
-  for (const i of r.body.items) {
-    const row = db.prepare('SELECT title FROM legal_templates WHERE slug = ? AND is_active = 1').get(i.counted_under.slug) as any;
-    assert.equal(i.counted_under.title, row?.title ?? null, i.key);
-    assert.ok(i.title.length > 5, i.key);
-  }
-  assert.ok(r.body.items.some((i: any) => i.counted_under.title), 'at least one row is in the seed catalog');
+  // D758 PR 2: partner onboarding sends the Partner Services row, so no sender
+  // sends a bundled file and the Templates tab draws no "Not in the catalog".
+  assert.deepEqual(r.body, { items: [] });
   assert.equal((await get(db, '/templates/outside', null)).status, 401);
   assert.equal((await get(db, '/templates/outside', 3)).status, 403);
 });
@@ -181,18 +171,16 @@ test('D717 a stub\'s thumbnail reads "No body in the store yet.", and a counsel-
   assert.ok(!house.includes('counsel to draft'));
 });
 
-test('D717 an outside key draws its bundled body; a catalog key and an unknown key are 404', async () => {
+test('D717/D758 every outside key is 404 since D758 PR 2: the five bundled keys, a catalog key and an unknown key, and none draws', async () => {
   const db = fixture();
   const browser = fakeBrowser();
   const r2 = fakeR2();
-  const res = await call(db, '/templates/outside/investor_nda_v1/thumbnail.png', { browser, r2 });
-  assert.equal(res.status, 200);
-  assert.equal(browser.calls.length, 1);
-  assert.ok(browser.calls[0].options.html.includes('Investor NDA (Axal) v1'));
-  assert.match([...r2.objects.keys()][0], /^legal\/thumbnails\/outside\/[0-9a-f]{64}\/[0-9a-f]{16}-[0-9a-f]{16}\.png$/);
-  assert.equal((await call(db, '/templates/outside/tos_v1/thumbnail.png', { browser, r2 })).status, 404);
-  assert.equal((await call(db, '/templates/outside/nope/thumbnail.png', { browser, r2 })).status, 404);
-  assert.equal((await call(db, '/templates/outside/investor_nda_v1/thumbnail.png', { browser, r2, who: 3 })).status, 403);
+  for (const key of ['partner_msa_v1', 'investor_nda_v1', 'mentor_nda_v1', 'mentor_disclaimer_v1', 'nda_3way_founder_investor_axal_v1', 'tos_v1', 'nope']) {
+    assert.equal((await call(db, `/templates/outside/${key}/thumbnail.png`, { browser, r2 })).status, 404, key);
+  }
+  assert.equal(browser.calls.length, 0, 'a 404 never draws');
+  assert.equal(r2.objects.size, 0, 'and writes nothing to FILES');
+  assert.equal((await call(db, '/templates/outside/partner_msa_v1/thumbnail.png', { browser, r2, who: 3 })).status, 403);
   assert.equal(browser.fetches(), 0);
 });
 
@@ -247,4 +235,204 @@ test('D717 the render route takes the unsaved kind and party, checks them as a s
   const mismatch = await render({ doc_kind: 'policy', axal_party: 'gp' });
   assert.equal(mismatch.status, 400);
   assert.equal(mismatch.body.error, 'kind_party_mismatch');
+});
+
+// ─────────────────────────────────────────── D758 (#1864): the generated documents
+
+import { escapeHtml, paperHtml, paperModel } from '../src/services/legalPaper.ts';
+import { PAY_WARNING } from '../src/services/payInstructions.ts';
+import { RECEIVING_BRACKET } from '../src/services/fundStructure.ts';
+
+const GENERATED_KEYS = [
+  'capital_call_notice', 'distribution_notice', 'default_notice', 'management_fee_statement', 'management_fee_invoice',
+  'platform_licence_fee_invoice', 'payment_instructions_letter', 'subscription_booklet', 'structure_of_the_fund', 'certificate_of_completion',
+];
+/** 468's Fund I catalog and 478's securities_legend stub, over the D717 fixture. */
+function generatedFixture() {
+  const db = fixture();
+  db.exec(readFileSync(`${MIGRATIONS}/468_legal_catalog_fund_i.sql`, 'utf8'));
+  db.exec(`INSERT OR IGNORE INTO legal_templates (slug, title, category, body_md, merge_fields, version, is_active, is_stub)
+    SELECT 'securities_legend', 'Securities Legend — Fund I Offering Documents', 'fund', '', '[]', 1, 1, 1
+     WHERE NOT EXISTS (SELECT 1 FROM legal_templates t WHERE t.slug = 'securities_legend')`);
+  return db;
+}
+/** The fixture's D1, recording every SQL string it prepares. */
+function recordingCall(db: DatabaseSync, seen: string[]) {
+  return async (path: string, o: { browser?: ReturnType<typeof fakeBrowser>; r2?: ReturnType<typeof fakeR2> } = {}) => {
+    const d1: any = d1Over(db);
+    const prepare = d1.prepare.bind(d1);
+    d1.prepare = (sql: string) => { seen.push(sql); return prepare(sql); };
+    const res = await app.request(`/contracts${path}`, { headers: await auth(1) },
+      { JWT_SECRET: SECRET, ENVIRONMENT: 'development', DB: d1, BROWSER: o.browser?.binding, FILES: o.r2?.bucket });
+    return res;
+  };
+}
+
+test('D758 /templates/generated lists the ten, with their kinds, party lines, library rows, refusals and versions', async () => {
+  const db = generatedFixture();
+  const r = await get(db, '/templates/generated');
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const items = r.body.items;
+  assert.deepEqual(items.map((i: any) => i.key), GENERATED_KEYS);
+  assert.deepEqual(items.map((i: any) => [i.title, i.kind, i.party_line]), [
+    ['Capital Call Notice', 'notice', 'Axal VC GP LLC (for the Fund)'],
+    ['Distribution Notice', 'notice', 'Axal VC GP LLC (for the Fund)'],
+    ['Notice of Default', 'notice', 'Axal VC GP LLC (for the Fund)'],
+    ['Management Fee Statement', 'notice', 'Axal VC GP LLC (for the Fund), to each limited partner'],
+    ['Management Fee Invoice', 'notice', 'Axal VC GP LLC, to the Fund'],
+    ['Platform Licence Fee Invoice', 'notice', 'Axal VC Holdings LLC, to its licensee'],
+    ['Payment Instructions', 'notice', 'Issued per entity'],
+    ['Subscription Booklet', 'booklet', 'Axal VC GP LLC (for the Fund)'],
+    ['Structure of the Fund', 'page', 'carried by the PPM, the Subscription Booklet and the Compliance Manual'],
+    ['Certificate of completion', 'page', 'appended to every signed copy'],
+  ]);
+  const by = Object.fromEntries(items.map((i: any) => [i.key, i]));
+  const call0 = by.capital_call_notice;
+  assert.deepEqual(call0.prose.map((p: any) => [p.slug, p.has_body, p.counsel_draft, p.missing]), [['capital_call_notice', false, true, false]]);
+  assert.deepEqual(call0.refusal, { code: 'notice_body_missing', message: 'Counsel has not written this notice yet, so it cannot issue.' });
+  for (const k of ['management_fee_statement', 'management_fee_invoice', 'platform_licence_fee_invoice', 'payment_instructions_letter',
+    'structure_of_the_fund', 'certificate_of_completion']) {
+    assert.deepEqual([by[k].prose, by[k].refusal], [[], null], k);
+  }
+  const booklet = by.subscription_booklet;
+  assert.deepEqual(booklet.prose.map((p: any) => [p.part, p.slug]), [
+    [1, 'securities_legend'], [3, 'subscription'], [4, 'lp_investor_questionnaire'], [5, 'lp_aml_kyc_certification'],
+    [6, 'lp_tax_status_certification'], [7, 'lp_electronic_delivery_consent'], [9, 'gp_closing_certificate'],
+  ]);
+  const missingParts = booklet.prose.filter((p: any) => !p.has_body).map((p: any) => p.part);
+  assert.equal(booklet.refusal.code, 'booklet_part_missing');
+  assert.deepEqual(booklet.refusal.parts, missingParts);
+  assert.equal(booklet.refusal.message, `The booklet cannot be submitted yet: Part ${missingParts.join(', Part ')} has no text from counsel.`);
+  for (const i of items) assert.match(i.thumbnail_version, /^[0-9a-f]{16}$/, i.key);
+  // Counsel writes the three notices: they read a body and no refusal.
+  db.exec("UPDATE legal_templates SET is_stub = 0, body_md = 'The notice text for {{lp.name}}.' WHERE slug IN ('capital_call_notice','distribution_notice','default_notice')");
+  const after = Object.fromEntries((await get(db, '/templates/generated')).body.items.map((i: any) => [i.key, i]));
+  for (const k of ['capital_call_notice', 'distribution_notice', 'default_notice']) {
+    assert.deepEqual([after[k].prose[0].has_body, after[k].refusal], [true, null], k);
+  }
+  assert.notEqual(after.capital_call_notice.thumbnail_version, call0.thumbnail_version, 'a new body is a new version');
+  assert.equal((await get(db, '/templates/generated', null)).status, 401);
+  assert.equal((await get(db, '/templates/generated', 3)).status, 403);
+});
+
+test('D758 the list answers 503 generated_unreadable when the library cannot be read', async () => {
+  const db = generatedFixture();
+  // requireAdmin reads the user first, so the D1 fails only on the library.
+  const failing: any = d1Over(db);
+  const prep = failing.prepare.bind(failing);
+  failing.prepare = (sql: string) => { if (/legal_templates/.test(sql)) throw new Error('no such table: legal_templates'); return prep(sql); };
+  const r = await app.request('/contracts/templates/generated', { headers: await auth(1) }, { JWT_SECRET: SECRET, ENVIRONMENT: 'development', DB: failing });
+  assert.equal(r.status, 503);
+  const body = await r.json() as any;
+  assert.deepEqual([body.error, body.message], ['generated_unreadable', 'Generated documents are unreadable. Try again.']);
+});
+
+test('D758 a notice\'s thumbnail is its specimen: brackets, the warning, no figure, no Draft; drawn once; a new body redraws it', async () => {
+  const db = generatedFixture();
+  const browser = fakeBrowser();
+  const r2 = fakeR2();
+  const first = await call(db, '/templates/generated/capital_call_notice/thumbnail.png', { browser, r2 });
+  assert.equal(first.status, 200);
+  assert.equal(first.headers.get('Content-Type'), 'image/png');
+  assert.equal(browser.calls.length, 1);
+  assert.equal(browser.calls[0].action, 'screenshot');
+  assert.deepEqual(browser.calls[0].options.viewport, { width: 816, height: 1056, deviceScaleFactor: 0.5 });
+  const html = browser.calls[0].options.html as string;
+  for (const s of ['Capital Call Notice', 'SPECIMEN', 'Stub — counsel to draft', escapeHtml(PAY_WARNING), escapeHtml(RECEIVING_BRACKET)]) {
+    assert.ok(html.includes(s), s);
+  }
+  for (const label of ['Notice date', 'Call number', 'Amount due', 'Due date']) assert.ok(html.includes(`[${label}]`), label);
+  assert.doesNotMatch(html, /\$\d/);
+  assert.doesNotMatch(html, /<div class="state-banner|DRAFT — for counsel review|class="diagonal draft"/);
+  const keys = [...r2.objects.keys()];
+  assert.equal(keys.length, 1);
+  assert.match(keys[0], /^legal\/thumbnails\/generated\/[0-9a-f]{64}\/[0-9a-f]{16}-[0-9a-f]{16}\.png$/);
+  assert.equal(first.headers.get('ETag'), `"${keys[0]}"`);
+  const list = (await get(db, '/templates/generated')).body.items.find((i: any) => i.key === 'capital_call_notice');
+  assert.ok(keys[0].includes(`/${list.thumbnail_version}-`), 'the list names the image');
+  assert.equal((await call(db, '/templates/generated/capital_call_notice/thumbnail.png', { browser, r2 })).status, 200);
+  assert.equal(browser.calls.length, 1, 'a hit draws nothing');
+  assert.equal((await call(db, '/templates/generated/capital_call_notice/thumbnail.png', { browser, r2, headers: { 'If-None-Match': `"${keys[0]}"` } })).status, 304);
+  db.exec("UPDATE legal_templates SET is_stub = 0, body_md = 'Pay {{call.amount}} by {{call.due_date}}.' WHERE slug = 'capital_call_notice'");
+  const redrawn = await call(db, '/templates/generated/capital_call_notice/thumbnail.png', { browser, r2 });
+  assert.equal(redrawn.status, 200);
+  assert.equal(browser.calls.length, 2, 'a new body draws once more');
+  assert.equal(r2.objects.size, 2);
+  const next = browser.calls[1].options.html as string;
+  assert.ok(next.includes('Pay [') && !next.includes('Stub — counsel to draft'), 'the body, with bracket labels');
+  assert.equal(browser.fetches(), 0);
+});
+
+test('D758 no specimen reads a record or an account: the list and all ten thumbnails touch the library only', async () => {
+  const db = generatedFixture();
+  const seen: string[] = [];
+  const req = recordingCall(db, seen);
+  const browser = fakeBrowser();
+  assert.equal((await req('/templates/generated')).status, 200);
+  for (const k of GENERATED_KEYS) assert.equal((await req(`/templates/generated/${k}/thumbnail.png`, { browser, r2: fakeR2() })).status, 200, k);
+  assert.ok(seen.some((q) => /legal_templates/.test(q)), 'the library was read');
+  for (const q of seen) {
+    assert.doesNotMatch(q, /entity_bank_accounts|limited_partners|capital_calls|legal_notices|lp_applications|\bfund_|mercury_/, q);
+  }
+  assert.equal(browser.fetches(), 0);
+});
+
+test('D758 the booklet draws its cover, the structure page and the certificate draw alone', async () => {
+  const db = generatedFixture();
+  const browser = fakeBrowser();
+  for (const k of ['subscription_booklet', 'structure_of_the_fund', 'certificate_of_completion']) {
+    assert.equal((await call(db, `/templates/generated/${k}/thumbnail.png`, { browser, r2: fakeR2() })).status, 200, k);
+  }
+  const [booklet, structure, cert] = browser.calls.map((c) => c.options.html as string);
+  assert.match(booklet, /class="cover/);
+  for (const [k, h] of [['booklet', booklet], ['structure', structure], ['certificate', cert]]) {
+    assert.ok(h.includes('class="diagonal specimen"') && !h.includes('DRAFT — for counsel review'), `${k}: a specimen, never a Draft`);
+  }
+  assert.ok(booklet.includes('Subscription Booklet'));
+  assert.match(structure, /structure-page/);
+  assert.ok(structure.includes(escapeHtml(RECEIVING_BRACKET)));
+  assert.doesNotMatch(structure, /class="cover|class="preamble"/);
+  assert.ok(cert.includes('Certificate of completion') && cert.includes('[envelope id]'));
+  assert.doesNotMatch(cert, /class="execution/);
+  assert.throws(() => paperHtml(paperModel({ title: 'T', body: 'B', bodySha256: 'f'.repeat(64), state: { kind: 'specimen' } }),
+    { pageSize: 'letter', cover: 'dark', medium: 'screen', fonts: 'omit', only: 'certificate' }), TypeError);
+  assert.throws(() => paperHtml(paperModel({ title: 'T', body: 'B', bodySha256: 'f'.repeat(64), state: { kind: 'specimen' } }),
+    { pageSize: 'letter', cover: 'dark', medium: 'screen', fonts: 'omit', only: 'structure' }), TypeError);
+});
+
+test('D758 a generated thumbnail that cannot be drawn answers 503 and writes nothing; an unknown key is 404', async () => {
+  const db = generatedFixture();
+  const answers: Array<[string, ReturnType<typeof fakeBrowser> | undefined]> = [
+    ['throw', fakeBrowser(() => { throw new Error('down'); })],
+    ['not png', fakeBrowser(() => new Response('%PDF-1.7 not an image', { status: 200 }))],
+    ['too large', fakeBrowser(() => { const b = new Uint8Array(2 * 1024 * 1024); b.set(PNG); return new Response(b, { status: 200 }); })],
+    ['status', fakeBrowser(() => new Response('no', { status: 500 }))],
+    ['unbound', undefined],
+  ];
+  for (const [label, browser] of answers) {
+    const r2 = fakeR2();
+    const res = await call(db, '/templates/generated/default_notice/thumbnail.png', { browser, r2 });
+    assert.equal(res.status, 503, label);
+    const body = await res.json() as any;
+    assert.deepEqual([body.error, body.message], ['thumbnail_unavailable', 'Thumbnail not drawn: the page renderer did not answer.'], label);
+    assert.equal(r2.objects.size, 0, label);
+    if (browser) assert.equal(browser.fetches(), 0, label);
+  }
+  // A specimen that cannot be built: the library cannot be read.
+  const failing: any = d1Over(db);
+  const prep = failing.prepare.bind(failing);
+  failing.prepare = (sql: string) => { if (/legal_templates/.test(sql)) throw new Error('no such table: legal_templates'); return prep(sql); };
+  const browser = fakeBrowser();
+  const r2 = fakeR2();
+  const res = await app.request('/contracts/templates/generated/default_notice/thumbnail.png', { headers: await auth(1) },
+    { JWT_SECRET: SECRET, ENVIRONMENT: 'development', DB: failing, BROWSER: browser.binding, FILES: r2.bucket });
+  assert.equal(res.status, 503);
+  assert.equal((await res.json() as any).error, 'thumbnail_unavailable');
+  assert.equal(browser.calls.length, 0);
+  assert.equal(r2.objects.size, 0);
+  const b2 = fakeBrowser();
+  assert.equal((await call(db, '/templates/generated/nope/thumbnail.png', { browser: b2 })).status, 404);
+  assert.equal((await call(db, '/templates/generated/default_notice/thumbnail.png', { browser: b2, who: 3 })).status, 403);
+  assert.equal((await call(db, '/templates/generated/default_notice/thumbnail.png', { browser: b2, who: null })).status, 401);
+  assert.equal(b2.calls.length, 0);
 });

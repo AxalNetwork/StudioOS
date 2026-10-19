@@ -1,19 +1,25 @@
 # documentation/operations — runbooks
 
-How to change, recover or check production. A runbook says what to run and
-what to expect, never what the numbers are: every figure comes from a command
-or a screen at the time it is run. Never put a token, a password or personal
-data in one; the repository is public.
+**A runbook is the steps an operator follows to change or recover production.**
+Each file here answers one "how do I…" question, and is kept true as the system
+changes. What production *is* lives in `documentation/architecture/`; these
+files say how to act on it.
 
-| File | When |
+| File | Use it to |
 | --- | --- |
-| `DEPLOY.md` | Shipping the Worker to production. |
-| `D1_RECOVERY.md` | The data is wrong and a rollback will not help. |
-| `INCIDENT_RESPONSE.md` | Something is on fire. |
-| `CLAUDE_REVIEW.md` | The advisory pull-request review on the Anthropic API: its settings and its cost. |
-| `TICKET_GITHUB_SYNC.md` | Support tickets saved in D1 but missing from GitHub. |
-| `MERCURY_MEMBER_CHECKS.md` | D752's read-only live checks: four Mercury field names for S02 or S03, and the owner's walk-through with a test investor and founder (#1008 item 34). |
-| `S1_HANDOFF_2026-10-18.md` | The S1 coordinator handoff of 2026-10-18, true on its date. |
+| `DEPLOY.md` | Ship the Worker and the SPA to production, and roll a deploy back. |
+| `D1_RECOVERY.md` | Recover D1 when the data is wrong and a Worker rollback will not help. |
+| `INCIDENT_RESPONSE.md` | Respond to an incident: severities, response times and who is paged. |
+| `CLAUDE_REVIEW.md` | Run, tune and cost the advisory pull-request review on the Anthropic API. |
+| `TICKET_GITHUB_SYNC.md` | Recover support tickets that were saved in D1 but never reached GitHub. |
+| `TELEGRAM.md` | Set up the Telegram Business interview bot, check it on a real phone, rotate its secrets and switch it off (D756). |
+| `WHATSAPP.md` | Switch WhatsApp Business on, check it on a real phone and roll it back (D754). |
+| `AI_TOKEN_PACKS.md` | Run AI token packs (D755): create, adopt and archive packs, handle refunds and disputes, an overdue credit, adjustments and reconcile, and run the live purchase-and-refund check. |
+| `MERCURY_MEMBER_CHECKS.md` | Run D752's read-only live checks: four Mercury field names for S02 or S03, and the owner's walk-through with a test investor and founder (#1008 item 34). |
+| `S1_HANDOFF_2026-10-18.md` | Take over S1, the coordinator session. A dated handoff, true on its date. |
 
-**Adding one.** A new runbook gets a row here, says who may run it, and names
-the test or guard that covers the same ground in CI.
+## Adding one
+
+Name the system and the action in the title. Give secret and variable names
+only: no value belongs in a runbook, in the repo or in an issue. Add a row here
+and a link in `documentation/README.md`.
