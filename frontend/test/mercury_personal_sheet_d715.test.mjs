@@ -129,7 +129,7 @@ test('the personal row\'s words in Yours and Build; every other row keeps today\
   const failing = catalogue(conn('mercury', { status: 'error', last_error: 'write_scope_refused' }));
   const r = toolRow(row('mercury', failing));
   assert.deepEqual([r.action, r.actionLabel, r.detail], ['reconnect', 'Reconnect', 'Token can write']);
-  assert.equal(toolBanner([row('mercury', failing)]).text, 'Mercury needs attention: Token can write. Replace its token from its sheet.');
+  assert.equal(toolBanner([row('mercury', failing)]).text, 'Mercury needs attention: Token can write. Replace its token from its page.');
   assert.match(toolRow(m).detail, /read on request$/);
   // Unchanged: Stripe and Crunchbase.
   const s = row('stripe', cat), c = row('crunchbase', cat);
@@ -257,7 +257,7 @@ test('Build: the failing Mercury row reconnects and syncs nothing; its lightbox 
   const cat = catalogue(conn('mercury', { status: 'error', last_error: 'unauthorized' }));
   const m = await mount(h(ConnectToolView, { data: { status: 'ready', catalogue: cat, reload() {} }, onClose() {} }), { user: FOUNDER, url: '/build/connect' });
   try {
-    assert.match(m.text(), /Mercury needs attention: Token refused\. Replace its token from its sheet\./);
+    assert.match(m.text(), /Mercury needs attention: Token refused\. Replace its token from its page\./);
     assert.equal(m.text(m.by('tool-action-mercury')), 'Reconnect');
     await m.click('tool-action-mercury');
     assert.deepEqual(calls, [], 'no sync is called');
