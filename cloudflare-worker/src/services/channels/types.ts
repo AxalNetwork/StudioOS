@@ -41,6 +41,37 @@ export function consentRequired(provider: string | null | undefined): boolean {
 export const consentRequiredProviders = (): MessagingProvider[] =>
   MESSAGING_PROVIDERS.filter((p) => CONSENT_REQUIRED[p]);
 
+/**
+ * D756 §1.5 (#1977) — the providers whose interviewees are asked in the chat
+ * (consent.ts). For both, no voice note, audio file or video of a chat is
+ * downloaded or transcribed until its consent is `given`
+ * (`audioConsentRequired`). Telegram's TEXT keeps D684's rule
+ * (`consentRequired('telegram')` stays false): only its audio waits.
+ */
+export const CONSENT_ASKED: Record<MessagingProvider, boolean> = { whatsapp: true, telegram: true };
+
+export function consentAsked(provider: string | null | undefined): boolean {
+  return Object.prototype.hasOwnProperty.call(CONSENT_ASKED, String(provider ?? ''))
+    && CONSENT_ASKED[provider as MessagingProvider] === true;
+}
+
+/** Whether a chat's notes may be fetched only once its consent is `given`. */
+export const audioConsentRequired = consentAsked;
+
+/** D756 ruling 6, §2 (m): the member's word stands in for the interviewee's on WhatsApp only. */
+export function memberAttestationAllowed(provider: string | null | undefined): boolean {
+  return provider === 'whatsapp';
+}
+
+/**
+ * A whole message that may answer the consent notice, for every provider:
+ * yes, no or stop, any case, trimmed, with one optional closing `.` or `!`.
+ */
+export function consentWord(text: string | null | undefined): 'yes' | 'no' | 'stop' | null {
+  const w = String(text ?? '').trim().toLowerCase().replace(/[.!]$/, '').trim();
+  return w === 'yes' || w === 'no' || w === 'stop' ? w : null;
+}
+
 /** The `submitted_via_name` an intake session shows, and the badge the UI draws. */
 export const PROVIDER_LABEL: Record<ChannelProvider, string> = {
   telegram: 'Telegram',

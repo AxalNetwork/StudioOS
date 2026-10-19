@@ -7,6 +7,7 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
 import { consentGiven } from './_channels_fixture.ts';
+import { audioConsentRequired } from '../src/services/channels/types.ts';
 import { applyEngineSchema } from './_engine_schema.mjs';
 import { tableFromBaseline } from './_baseline.mjs';
 import { memKV } from './_mem_kv.mjs';
@@ -314,11 +315,11 @@ async function incomingVoice(w: World, provider: Provider, days = 0) {
 async function assign(w: World, thread: string) {
   const result = await call(w.env, ME, 'POST', '/threads/' + thread + '/assign', { interview_id: INTERVIEW });
   assert.equal(result.status, 200);
-  // D754 (#1893): a WhatsApp chat waits for the interviewee's consent. These
-  // cases test what follows it, so the chat says yes (channel_consent_d754
-  // tests getting there).
+  // D754 (#1893), D756 (#1977): a chat whose notes wait for consent waits for the
+  // interviewee's. These cases test what follows it, so the chat says yes
+  // (channel_consent_d754 tests getting there).
   const t = w.db.prepare('SELECT provider, consent_state FROM channel_threads WHERE uid = ?').get(thread) as any;
-  if (t?.provider === 'whatsapp' && t.consent_state !== 'given') await consentGiven(w.env, w.db, thread);
+  if (audioConsentRequired(t?.provider) && t.consent_state !== 'given') await consentGiven(w.env, w.db, thread);
 }
 const hookText = (env: any, provider: Provider, id: string, admin = false) => provider === 'whatsapp'
   ? waHook(env, waText(admin ? PNID_ADMIN : PNID, id))
