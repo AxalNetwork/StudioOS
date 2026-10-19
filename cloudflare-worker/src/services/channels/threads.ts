@@ -50,6 +50,7 @@ import type { ChannelConnection } from './connections';
 import { refKey } from './events';
 import { enqueueChannelJob } from './jobs';
 import { isOurSend } from './outbound';
+import { expireCapturesStatements } from './whatsappCapture';
 import { enqueueSessionStructure } from '../sessionAutoStructure';
 import {
   CHANNEL_LIMITS, consentRequired, consentRequiredProviders, type InboundDelete, type InboundEdit, type InboundMessage, type MessageSide,
@@ -962,22 +963,24 @@ export async function forgetConnection(env: Env, integrationId: number): Promise
  *             while the contact keeps writing.
  *   codes     spent link codes after a day; event ids after 90 days; the
  *             per-connection counters after two days.
- *   drafts    (D754 §7) a draft session a chat waiting for consent left
- *             empty for that long, with the interview made for it
- *             (`dropEmptyDrafts`), after the messages above are gone.
  *   links     D754 way B (#1937): a linked WhatsApp unused for
  *             CHANNEL_LIMITS.senderLinkDays lapses — phone numbers are
  *             reassigned. Its row stays, disconnected, with only the mask.
+ *   captures  (#1938) forwarded recordings not imported by their `fetch_by`,
+ *             with their consent rows (whatsappCapture.ts).
+ *   drafts    (D754 §7) a draft session a chat waiting for consent left
+ *             empty for that long, with the interview made for it
+ *             (`dropEmptyDrafts`), after the messages above are gone.
  */
 export async function purgeExpired(env: Env, now = new Date()): Promise<{
-  threads: number; messages: number; codes: number; events: number; counters: number; drafts: number; lapsed: number;
+  threads: number; messages: number; codes: number; events: number; counters: number; drafts: number; lapsed: number; captures: number;
 }> {
   const cutoff = new Date(now.getTime() - CHANNEL_LIMITS.pendingDays * 86_400_000).toISOString();
   const day = new Date(now.getTime() - 86_400_000).toISOString();
   const twoDays = new Date(now.getTime() - 2 * 86_400_000).toISOString();
   const events = new Date(now.getTime() - 90 * 86_400_000).toISOString();
   const unused = new Date(now.getTime() - CHANNEL_LIMITS.senderLinkDays * 86_400_000).toISOString();
-  const [msgs, threads, codes, evs, counters, linkAttempts, lapsed] = await env.DB.batch([
+  const [msgs, threads, codes, evs, counters, linkAttempts, lapsed, , captures] = await env.DB.batch([
     env.DB.prepare(`DELETE FROM channel_thread_messages WHERE datetime(sent_at) < datetime(?)`).bind(cutoff),
     env.DB.prepare(
       `DELETE FROM channel_threads WHERE status IN ('pending', 'ignored')
@@ -997,6 +1000,7 @@ export async function purgeExpired(env: Env, now = new Date()): Promise<{
         WHERE provider_key = 'whatsapp_link' AND status = 'active'
           AND datetime(COALESCE(last_synced_at, updated_at, created_at)) < datetime(?)`,
     ).bind(unused),
+    ...expireCapturesStatements(env, now),
   ]);
   const drafts = await dropEmptyDrafts(env, { before: cutoff });
   return {
@@ -1005,5 +1009,6 @@ export async function purgeExpired(env: Env, now = new Date()): Promise<{
     codes: Number(codes.meta?.changes ?? 0), events: Number(evs.meta?.changes ?? 0),
     counters: Number(counters.meta?.changes ?? 0) + Number(linkAttempts.meta?.changes ?? 0),
     lapsed: Number(lapsed.meta?.changes ?? 0),
+    captures: Number(captures.meta?.changes ?? 0),
   };
 }

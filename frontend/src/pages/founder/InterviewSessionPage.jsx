@@ -11,6 +11,7 @@ import InterviewReview from './InterviewReview';
 import SessionSummary from './SessionSummary';
 import { ChannelSessionPanel } from './InterviewChannels';
 import { clock } from './interviewReviewModel.js';
+import { chatConsentOf, consentLine } from './chatConsent.js';
 
 /**
  * Validate › an interview session (D660, #1473), at `/validate/session/:id`, to
@@ -28,6 +29,10 @@ import { clock } from './interviewReviewModel.js';
  * failed, opened here after a reload, is handed to it and shown in the live
  * view, from the Worker's processing state. `Transcribe` stays for a stopped
  * session that never reached `finish`.
+ *
+ * A CHAT'S CONSENT (D754, #1980). A session made from a chat that waits for
+ * consent carries `channel_consent`; the page says how consent stands, and a
+ * withdrawn one offers "Discard this chat's recording" (`DELETE /sessions/:id`).
  */
 
 const POLL_MS = 3000;
@@ -222,6 +227,42 @@ function useDarkTheme() {
   return dark ? 'dark' : 'light';
 }
 
+/**
+ * D754 §4, §11: "Waiting for <Name> to agree", "Agreed in WhatsApp at <time>",
+ * "Declined in WhatsApp" or "<Name> withdrew consent", with the discard.
+ */
+export function ChatConsentLine({ consent, name, provider, onDiscard, when }) {
+  const [confirm, setConfirm] = useState(false);
+  const [state, setState] = useState({ busy: false, error: null });
+  const line = consentLine(chatConsentOf({ consent }), name, { provider, ...(when ? { when } : {}) });
+  if (!line) return null;
+  const discard = async () => {
+    if (state.busy) return;
+    setState({ busy: true, error: null });
+    try { await onDiscard(); } catch (e) { setState({ busy: false, error: e?.message || 'The recording could not be discarded.' }); }
+  };
+  const tone = line.kind === 'given' ? 'text-emerald-800 dark:text-emerald-300' : line.kind === 'waiting' ? 'text-amber-800 dark:text-amber-300' : 'text-red-700 dark:text-red-300';
+  return (
+    <section role="status" className="rounded-2xl border border-axal-hairline p-4 text-[13px] dark:border-gray-800" data-testid="chat-consent" data-kind={line.kind}>
+      <p className={`m-0 font-semibold ${tone}`} data-testid="chat-consent-line">{line.text}</p>
+      {line.kind === 'withdrawn' && (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {!confirm
+            ? <button type="button" onClick={() => setConfirm(true)} className="text-[12.5px] font-semibold text-red-700 underline dark:text-red-300" data-testid="button-discard-chat">Discard this chat's recording</button>
+            : (
+              <>
+                <span className="text-[12.5px] text-gray-700 dark:text-gray-300">This deletes the session and its transcript.</span>
+                <button type="button" onClick={discard} disabled={state.busy} className="rounded-md bg-red-600 px-3 py-1.5 text-[12.5px] font-bold text-white hover:bg-red-700 disabled:opacity-50 dark:bg-red-500 dark:hover:bg-red-600" data-testid="button-confirm-discard-chat">{state.busy ? 'Discarding…' : 'Discard'}</button>
+                <button type="button" onClick={() => setConfirm(false)} disabled={state.busy} className="text-[12.5px] font-semibold text-axal-muted underline dark:text-gray-400">Keep</button>
+              </>
+            )}
+        </div>
+      )}
+      {state.error && <p role="alert" className="m-0 mt-1 text-[12.5px] font-semibold text-red-700 dark:text-red-400">{state.error}</p>}
+    </section>
+  );
+}
+
 export default function InterviewSessionPage({ api = interviewSessionsApi }) {
   const { id } = useParams();
   const location = useLocation();
@@ -346,6 +387,10 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
       <main className="min-w-0 space-y-4">
         <nav className="flex items-center gap-2 text-[12px]"><Link to={`/validate/customer-research?project_id=${session.project_id}`} className="text-axal-muted underline dark:text-gray-400">Customer research</Link><AssistantBadge session={session} /><ChannelOriginBadge session={session} /></nav>
         {error && <p role="alert" className="text-[13px] font-semibold text-red-700 dark:text-red-400">{error}</p>}
+        {data.channel_consent?.required && (
+          <ChatConsentLine consent={data.channel_consent} name={intervieweeName} provider={session.submitted_via}
+            onDiscard={async () => { await api.remove(session.id); navigate(`/validate/customer-research?project_id=${session.project_id}`, { replace: true }); }} />
+        )}
         {session.status === 'draft' && (waiting
           ? <ChannelSessionPanel session={session} onChanged={() => { load(); loadReceipt(); }} />
           : <StartPanel session={session} error={startError} liveHref={startLive} busy={busy} onStart={start} onConsent={consent} />)}

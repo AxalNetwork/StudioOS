@@ -9,12 +9,12 @@ These components follow `design/canvases/integrated/Cycle Overview.dc.html` belo
 | --- | --- |
 | `PhoneBar.jsx` | Back row, title, subheading, and D698's `EadwynButton` from `eadwynLabel` (or `action` in its place). D703's `back.onClick` makes Back a button that calls it, for a page whose Back closes a form or an action. |
 | `PhoneRows.jsx` | Group headings and 56px linked or button rows. D700's optional parts: a group's right `action`, `cta` and `note`; a row's `pill` (a `ui/Pill` tone), 7px `bar`, `icon`, `href` and the Not recorded chip's `notRecordedReason`. A row with no link or handler is a plain row with no ›. |
-| `PhoneSheet.jsx` | Modal bottom sheet, focus and scroll management, and 52px rows. |
+| `PhoneSheet.jsx` | Modal bottom sheet, focus and scroll management, and 52px rows. An optional `scrimClass` replaces the 42% scrim (the Templates filter sheet passes the canvas's 35%, D717 #1854). |
 | `CompanySheet.jsx` | Member company choice, creation and visit display. `CompanyVisits` records the last opened cycle per company (`visitToRecord`). |
 | `AccountSheet.jsx` | Identity, member account doors and sign out. |
 | `PhoneHeader.jsx` | The founder's 52px band: logo, company pill, Studio glyph, bell and initials. The pill opens `CompanySheet`, the initials `AccountSheet`. |
 | `PhoneHeader.jsx` — `HeaderForWidth` | Mounts the band for a founder below 1024px and the shell's own header otherwise, never both. |
-| `usePhoneWidth.js` | One hook for the shared 1024px width rule. |
+| `usePhoneWidth.js` | One hook for the shared 1024px width rule. It takes an optional query; `BELOW_MD_QUERY`, `(max-width: 767px)`, is the Templates tab's `md` rule (D717, #1854). |
 
 The band is the same in light and dark mode: white type on the Lab band
 illustration under the canvas's gradient (D699 decision 8).
