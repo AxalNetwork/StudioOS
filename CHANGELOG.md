@@ -4,6 +4,23 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## The WhatsApp runbook, and a smoke check that the webhook refuses an unsigned body (D754, #1982)
+
+- `documentation/operations/WHATSAPP.md` is the owner's runbook: the Meta steps
+  in order (secrets before the webhook; fields `messages` and
+  `smb_message_echoes`, not `calls`; no template), the live check on a real
+  phone for way A and way B, what a member sees in each D754 §11 state, and the
+  rollback. Parts that wait on #1950, #1954 and way B say so.
+- `PRODUCTION.md`'s interview channels block names way B's secrets and
+  `WHATSAPP_AXAL_DISPLAY_NUMBER`, and the `WHATSAPP_CHANNEL` rollout
+  (`canary`, the owner's check, `on`; rollback `off`). `GOTCHAS.md` gains a
+  WhatsApp section: 7-day media ids, the 24-hour window, coexistence and
+  calls, the 5 MB limit, and consent counting only from the contact.
+- `scripts/check-spa-live.mjs` POSTs an unsigned body to
+  `/api/channels/whatsapp/webhook` on each host and fails only on a 2xx; 401,
+  403 and 503 pass. No Meta call, no secret. The verdict is
+  `scripts/lib/webhookGuard.mjs`, tested in `webhookGuard.test.mjs`.
+
 ## The LP's capital call opens on the amount, and the fee statement is on screen (D717, #1859)
 
 - An open Fund I line's panel on the LP workspace opens on "Amount due", the
