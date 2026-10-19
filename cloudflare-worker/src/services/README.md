@@ -41,6 +41,7 @@ runs these directly against an in-process SQLite, with no request at all.
 | `advisor/` | The advisor state machine and its question banks. |
 | `calendar/` | Calendar sync. |
 | `channels/` | D684: business Telegram and WhatsApp conversations, and Zoom and Google Meet calls, reaching Validate › Interviews. The contract, event dedupe, connection tenancy, link codes, outbound tracking and the pending-thread store. Its README has the rules. |
+| `ai/` | D761: the AI router's request and response shapes, per-class timeouts, context-window and paid-only fallbacks, session affinity and the units each attempt used. Pure; `aiRouter.ts` calls it. |
 | `decks/` | Deck assembly and export. |
 | `email/` | Transactional mail. |
 | `fills/` | "AI fills the blanks" — the fill-kind registry and the provenance of an accepted fill. A `sourced` fill carries a citation or it is dropped. |
