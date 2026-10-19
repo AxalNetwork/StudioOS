@@ -113,11 +113,13 @@ export function cronEntries(indexText = readFileSync(at('index.ts'), 'utf8')) {
   }
   const body = indexText.slice(i, end);
   const entries = new Set([at('queue-consumer.ts')]);
+  // Every whole identifier the handler names, by one fixed pattern: a name counts when it is one of them.
+  const used = new Set(body.match(/[\w$]+/g) || []);
   for (const m of indexText.matchAll(/import\s+(?:type\s+)?([^;]*?)\s+from\s*['"]([^'"]+)['"]/g)) {
     const file = resolveImport(at('index.ts'), m[2]);
     if (!file) continue;
     const names = m[1].replace(/[{}]/g, ',').split(',').map((s) => s.trim().replace(/^\*\s+as\s+/, '').split(/\s+as\s+/).pop().trim()).filter((n) => /^[\w$]+$/.test(n));
-    if (names.some((n) => new RegExp(`(^|[^\\w$])${n.replace(/\$/g, '\\$')}([^\\w$]|$)`).test(body))) entries.add(file);
+    if (names.some((n) => used.has(n))) entries.add(file);
   }
   for (const m of body.matchAll(/import\(\s*['"]([^'"]+)['"]\s*\)/g)) {
     const file = resolveImport(at('index.ts'), m[1]);
