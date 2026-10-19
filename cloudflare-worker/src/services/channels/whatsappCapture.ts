@@ -16,21 +16,33 @@
  *   answer    "Yes, out loud" / "Yes, in writing" write a `channel_consents`
  *             row (source 'member_attested', method 'verbal' | 'written',
  *             capture_id set) and mark the capture 'consented', in one batch.
- *             "No" deletes the capture. Axal's "Agreed beforehand"
+ *             "No" deletes the capture, and is answered once
+ *             (CAPTURE_COPY.declined). Axal's "Agreed beforehand"
  *             (`POST /whatsapp/captures/:uid/consent`) is the same answer
  *             with method 'pre_agreed'.
+ *   import    On a yes, a `channel_followup` { kind: 'capture' } job
+ *             (`importCapture`): each file is downloaded with Axal's token
+ *             through #1896's `boundedDownload` and admitted with
+ *             `admitAudio`, one at a time, into a new draft interview in the
+ *             capture's venture (`project_id`), with one `in_person` session
+ *             (`submitted_via 'whatsapp'`, the member's consent on it). Each
+ *             file is a chunk (`putChunk`, `seq` its place in the capture);
+ *             then the recorder's own `finishSession` runs the pipeline,
+ *             which reaches D757's engine. No model is called here. The
+ *             member gets one "Saved" reply.
  *   expiry    A capture not imported by `fetch_by` (the first file plus
  *             CAPTURE_LIMITS.fetchDays, WhatsApp's media lifetime) is deleted
  *             with its consent rows in the channel purge (threads.ts).
- *
- * THE IMPORT IS NOT HERE YET. Downloading a consented capture's files and
- * opening the draft interview waits for #1896's bounded download
- * (`boundedDownload`, `channelAudio.ts`); until it lands a consented capture
- * waits, and expires at `fetch_by` like any other.
  */
 import type { Env } from '../../types';
 import { decryptColumn, encryptColumn } from '../columnCipher';
-import { CHUNK_MIME, MAX_CHUNK_BYTES } from '../interviewSessions';
+import {
+  CHUNK_MIME, MAX_CHUNK_BYTES, deleteSession, dropInterviewMadeFor, loadSession, putChunk, type SessionRow,
+} from '../interviewSessions';
+import { finishSession } from '../interviewProcessing';
+import { IntakeError, createInterview, openSession, writableInterview } from '../interviewIntake';
+import { admitAudio, audioMimeAdmitted } from './channelAudio';
+import { fetchAxalMedia } from './whatsapp';
 import type { InboundAxalMessage } from './types';
 
 export const CAPTURE_LIMITS = {
@@ -39,6 +51,8 @@ export const CAPTURE_LIMITS = {
   windowMinutes: 30,
   /** WhatsApp keeps a media id downloadable for about this long. */
   fetchDays: 7,
+  /** An import claim older than this was left by a run that died, and is taken over. */
+  claimStaleMinutes: 30,
 } as const;
 
 /** The words Axal's number sends about a capture. */
@@ -47,7 +61,13 @@ export const CAPTURE_COPY = {
   buttons: { verbal: 'Yes, out loud', written: 'Yes, in writing', no: 'No' },
   unsupported: 'Axal takes voice notes and audio files here.',
   tooLarge: 'This recording is larger than Axal can take from WhatsApp (5 MB). Record it with the in-app recorder instead.',
+  // S1 on #1938 (09:28Z): "No" deletes the capture before anything was downloaded.
+  declined: 'Understood. Axal has not kept that recording.',
+  saved: 'Saved. Open it in Axal › Customer research.',
 } as const;
+
+/** The interviewee's name on the draft until the member names them on review. */
+export const CAPTURE_INTERVIEWEE = 'Recording from WhatsApp';
 
 export type CaptureAnswer = 'verbal' | 'written' | 'no';
 const BUTTON_ID = /^capture_(verbal|written|no):([0-9a-f-]{36})$/;
@@ -84,6 +104,8 @@ export interface CaptureRow {
   id: number; uid: string; user_id: number; integration_id: number; media_refs_enc: string | null; item_count: number;
   status: 'waiting' | 'consented' | 'imported' | 'declined' | 'expired'; fetch_by: string | null;
   consent_id: number | null; session_id: number | null; created_at: string; updated_at: string;
+  // Migration 497 (#1938).
+  project_id?: number | null; import_job?: string | null; import_error?: string | null;
 }
 
 async function readItems(env: Env, row: Pick<CaptureRow, 'uid' | 'media_refs_enc'>): Promise<CaptureItem[] | null> {
@@ -125,10 +147,15 @@ export async function addToCapture(
     const uid = crypto.randomUUID();
     const enc = await encryptColumn(env, 'whatsapp_captures', 'media_refs_enc', uid, JSON.stringify([item]));
     const fetchBy = new Date(now.getTime() + CAPTURE_LIMITS.fetchDays * 86_400_000).toISOString();
+    // The venture the draft opens in, fixed now (S1 on #1938): where the member
+    // pointed when they sent it, even if they change the picker later. Until
+    // #1939 records a choice on the link, their most recently updated venture.
     await env.DB.prepare(
-      `INSERT INTO whatsapp_captures (uid, user_id, integration_id, media_refs_enc, item_count, status, fetch_by, created_at)
-       VALUES (?, ?, ?, ?, 1, 'waiting', ?, ?)`,
-    ).bind(uid, link.user_id, link.id, enc, fetchBy, now.toISOString()).run();
+      `INSERT INTO whatsapp_captures (uid, user_id, integration_id, media_refs_enc, item_count, status, fetch_by, created_at, project_id)
+       VALUES (?, ?, ?, ?, 1, 'waiting', ?, ?,
+         (SELECT p.id FROM projects p JOIN users u ON u.id = ? AND u.founder_id IS NOT NULL AND p.founder_id = u.founder_id
+           WHERE p.deleted_at IS NULL ORDER BY p.updated_at DESC, p.id DESC LIMIT 1))`,
+    ).bind(uid, link.user_id, link.id, enc, fetchBy, now.toISOString(), link.user_id).run();
     return { uid, created: true };
   }
   throw new Error('capture_contended');
@@ -175,6 +202,112 @@ export async function answerCapture(env: Env, userId: number, uid: string, answe
   if (!Number(ins.meta?.changes ?? 0) || !Number(upd.meta?.changes ?? 0)) return { done: 'nothing' };
   const consent = await env.DB.prepare('SELECT id FROM channel_consents WHERE uid = ?').bind(consentUid).first<{ id: number }>();
   return { done: 'consented', captureId: row.id, consentId: Number(consent?.id) };
+}
+
+export type CaptureImportOutcome =
+  | { done: 'imported'; userId: number; integrationId: number; sessionId: number }
+  | { done: 'refused'; userId: number; code: string }
+  | { done: 'retry'; code: string }
+  | { done: 'nothing' };
+
+/**
+ * A consented capture becomes a draft interview (#1938, step 4). Only the run
+ * that claims it (`import_job`) goes on, so two deliveries never import twice;
+ * a later try takes up where the last stopped, on the same session, and
+ * `putChunk` stores nothing twice. The consent row must still be
+ * `given`, and the capture inside `fetch_by`.
+ *
+ * Files are downloaded one at a time and stored at once, so at most one 5 MB
+ * file is in memory. A declared size over 5 MB, or a declared type the
+ * recorder does not take, is refused before any call. A refusal (`refused`)
+ * removes the draft and every stored chunk, keeps the capture `consented`
+ * with its `import_error` until it expires, and is never retried; a provider
+ * that did not answer (`retry`) keeps what is stored for the next try.
+ */
+export async function importCapture(env: Env, uid: string, job: string, now = new Date()): Promise<CaptureImportOutcome> {
+  // One holder at a time. A claim left by a run that died is taken over once stale.
+  const claimed = await env.DB.prepare(
+    `UPDATE whatsapp_captures SET import_job = ?, updated_at = datetime('now')
+      WHERE uid = ? AND status = 'consented' AND fetch_by > ?
+        AND (import_job IS NULL OR datetime(updated_at) <= datetime('now', ?))`,
+  ).bind(job, uid, now.toISOString(), `-${CAPTURE_LIMITS.claimStaleMinutes} minutes`).run();
+  if (!Number(claimed.meta?.changes ?? 0)) return { done: 'nothing' };
+  const row = await env.DB.prepare('SELECT * FROM whatsapp_captures WHERE uid = ?').bind(uid).first<CaptureRow>();
+  if (!row) return { done: 'nothing' };
+  const userId = Number(row.user_id);
+  const consent = await env.DB.prepare(
+    "SELECT method FROM channel_consents WHERE id = ? AND capture_id = ? AND status = 'given'",
+  ).bind(row.consent_id, row.id).first<{ method: string }>();
+  if (!consent) return release(env, row, null, { done: 'nothing' });
+
+  const stop = async (code: string): Promise<CaptureImportOutcome> => {
+    const session = row.session_id ? await loadSession(env, Number(row.session_id)) : null;
+    if (session) {
+      await deleteSession(env, session, userId);
+      await dropInterviewMadeFor(env, Number(session.interview_id), session.created_at);
+    }
+    return release(env, row, code, { done: 'refused', userId, code }, true);
+  };
+
+  const items = await readItems(env, row);
+  if (!items?.length) return stop('unreadable');
+  // Refused before any call: a size or a type the recorder cannot take.
+  if (items.some((it) => it.size != null && it.size > MAX_CHUNK_BYTES)) return stop('too_large');
+  if (items.some((it) => it.type === 'document' && !audioMimeAdmitted(it.mime))) return stop('unsupported_format');
+  if (!row.project_id) return stop('no_venture');
+
+  let session: SessionRow | null = row.session_id ? await loadSession(env, Number(row.session_id)) : null;
+  if (!session) {
+    try {
+      const interviewId = await createInterview(env, userId, Number(row.project_id), CAPTURE_INTERVIEWEE);
+      const scoped = await writableInterview(env, userId, interviewId);
+      session = await openSession(env, scoped, 'whatsapp', 'in_person', { method: consent.method });
+    } catch (e) {
+      if (e instanceof IntakeError) return stop(e.code);
+      throw e;
+    }
+    // A recording that has stopped, as the recorder's is before its chunks are processed.
+    await env.DB.batch([
+      env.DB.prepare(
+        `UPDATE interview_sessions SET status = 'stopped', started_at = datetime('now'), stopped_at = datetime('now'), updated_at = datetime('now')
+          WHERE id = ? AND status = 'draft'`,
+      ).bind(session.id),
+      env.DB.prepare('UPDATE whatsapp_captures SET session_id = ? WHERE id = ? AND session_id IS NULL').bind(session.id, row.id),
+    ]);
+    row.session_id = session.id;
+  }
+
+  for (const [seq, item] of items.entries()) {
+    if (await env.DB.prepare('SELECT 1 AS hit FROM interview_session_chunks WHERE session_id = ? AND seq = ?').bind(session.id, seq).first()) continue;
+    const got = await fetchAxalMedia(env, item.id);
+    if (!got.ok) {
+      if (got.retryable) return release(env, row, got.code, { done: 'retry', code: got.code });
+      return stop(got.code);
+    }
+    const admitted = admitAudio(item.mime, got.container);
+    if (!admitted.ok) return stop(admitted.code);
+    const bytes = got.bytes.buffer.slice(got.bytes.byteOffset, got.bytes.byteOffset + got.bytes.byteLength) as ArrayBuffer;
+    await putChunk(env, session, userId, seq, admitted.mime, bytes, null);
+  }
+  await finishSession(env, session, userId, items.length - 1, true);
+  // The media ids are no longer needed: the audio is the session's now.
+  await env.DB.prepare(
+    `UPDATE whatsapp_captures SET status = 'imported', media_refs_enc = NULL, import_job = NULL, import_error = NULL,
+            updated_at = datetime('now') WHERE id = ? AND status = 'consented'`,
+  ).bind(row.id).run();
+  return { done: 'imported', userId, integrationId: Number(row.integration_id), sessionId: session.id };
+}
+
+/** The claim let go, with a code for the `fb` screens; a refusal also forgets the session it removed. */
+async function release<T>(env: Env, row: CaptureRow, code: string | null, out: T, dropSession = false): Promise<T> {
+  await (dropSession
+    ? env.DB.prepare(
+      `UPDATE whatsapp_captures SET import_job = NULL, import_error = ?, session_id = NULL, updated_at = datetime('now') WHERE id = ?`,
+    )
+    : env.DB.prepare(
+      `UPDATE whatsapp_captures SET import_job = NULL, import_error = ?, updated_at = datetime('now') WHERE id = ?`,
+    )).bind(code, row.id).run();
+  return out;
 }
 
 /** A link's captures still waiting for an answer go when the link does. */
