@@ -86,6 +86,7 @@
     "mph @ services/introductions.ts": 1,
     "MVP_SELECT @ routes/progress.ts": 3,
     "name @ routes/decks.ts": 1,
+    "names.map(() => '?').join(', ') @ services/interviewFindings.ts": 1,
     "OKR_SELECT @ routes/progress.ts": 4,
     "order @ routes/events_public.ts": 1,
     "OWED_CENTS_SQL @ services/fundCallLedger.ts": 5,
