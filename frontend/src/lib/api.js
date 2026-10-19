@@ -1,6 +1,7 @@
 import { reportError } from './log';
 import { csrfCookieNameFor } from './branchHost';
 import { storeReason } from './impersonationBar';
+import { railPageHeaders } from './railPage.js';
 
 // D527 — API domain modules. A new API domain goes in its own file,
 // lib/api/<domain>.js, and is re-exported here with ONE line, kept in
@@ -569,7 +570,7 @@ export async function refusalError(res, fallback) {
  * under cookie sign-in (`cloudflare-worker/src/middleware/csrf.ts`).
  */
 export function rawRequestHeaders(method = 'GET') {
-  return { ...getAuthHeaders(), ...getCsrfHeader(method), ...getActiveCompanyHeader() };
+  return { ...getAuthHeaders(), ...getCsrfHeader(method), ...getActiveCompanyHeader(), ...railPageHeaders() };
 }
 
 export async function request(path, options = {}) {
@@ -584,9 +585,11 @@ export async function request(path, options = {}) {
     const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
     const csrfHeader = getCsrfHeader(options.method);
     const companyHeader = getActiveCompanyHeader();
+    // D765: the rail's page (and option), so the Worker records and switches each run by it.
+    const railHeader = railPageHeaders();
     const baseHeaders = isFormData
-      ? { ...getAuthHeaders(), ...csrfHeader, ...companyHeader, ...options.headers }
-      : { 'Content-Type': 'application/json', ...getAuthHeaders(), ...csrfHeader, ...companyHeader, ...options.headers };
+      ? { ...getAuthHeaders(), ...csrfHeader, ...companyHeader, ...railHeader, ...options.headers }
+      : { 'Content-Type': 'application/json', ...getAuthHeaders(), ...csrfHeader, ...companyHeader, ...railHeader, ...options.headers };
     const res = await fetch(`${BASE}${path}`, {
       // T6 — `credentials: 'include'` makes the browser attach the
       // `studioos_auth` httpOnly cookie set by /api/auth/login. Same-origin

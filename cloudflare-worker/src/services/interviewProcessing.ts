@@ -123,6 +123,8 @@ export async function transcribeChunk(env: Env, opts: {
     task: 'transcribe',
     userId: opts.userId,
     surface: AI_SURFACE.validateInterviews,
+    // D765: saving, which the switch never refuses; recorded with its page.
+    rail: { page: 'validate', option: 'transcribe:interview' },
     model: opts.model,
     audio: new Uint8Array(await obj.arrayBuffer()),
     audioMime: opts.chunk.mime,

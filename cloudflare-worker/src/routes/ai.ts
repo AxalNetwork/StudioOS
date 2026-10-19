@@ -27,6 +27,7 @@ import { ROUTE, PRICE_USD_PER_1M_TOKENS, PRICE_USD_PER_AUDIO_MINUTE, run as aiRu
 import { MODEL_NAMES, RETIRED_MODELS } from '../services/aiCatalog';
 import { ensureAdminAuditLogTable } from './admin';
 import { BRANCH_CODE_RE } from '../util/branch';
+import { railFor, refuseAssistOff } from '../util/railContext';
 
 const ai = new Hono<{ Bindings: Env }>();
 
@@ -450,6 +451,8 @@ ai.post('/workspace/explain', async (c) => {
     userId: user.id,
     model,
     surface: page,
+    // D765: the rail's page and option; the switch is the workspace's.
+    rail: railFor(c, { page: workspace, option: 'explain:zone' }),
     systemPrompt: WORKSPACE_EXPLAIN_PROMPT,
     messages: [{ role: 'user', content: `Page: ${subject}\n\nWhat the page is showing:\n${facts}` }],
     maxTokens: 320,
@@ -458,6 +461,7 @@ ai.post('/workspace/explain', async (c) => {
     role: user.role,
   });
 
+  if (r.refusal === 'assist_off') return refuseAssistOff(c);
   // D763: a block keeps this route's answer to it, whoever checks.
   if (r.refusal === 'guard_blocked') {
     return c.json({

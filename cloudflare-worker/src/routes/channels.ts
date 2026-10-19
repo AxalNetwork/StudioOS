@@ -1429,6 +1429,8 @@ export async function runVoiceFollowup(env: Env, p: ChannelJobPayload): Promise<
 
   const r = await aiRun(env, {
     task: 'transcribe', userId: conn.userId, surface: AI_SURFACE.validateInterviews,
+    // D765: the member's own note, sent from their chat: saving, which the switch never refuses.
+    rail: { page: 'validate', option: 'transcribe:channel' },
     audio: audio.bytes, audioMime: audio.mime, audioMinutes: audioMinutesFromBytes(audio.bytes.byteLength),
   });
   if (!r.ok) {

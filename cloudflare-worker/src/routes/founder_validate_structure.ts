@@ -64,9 +64,10 @@ import {
 } from '../services/validateWriters';
 import { addInterviewPain, updateInterviewDetails } from '../services/interviewWriters';
 import { INTERVIEW_FIELDS, isFindingKind } from '../services/interviewFindings';
-import { budgetRefusalMessage } from '../services/aiRouter';
+import { ASSIST_OFF_MESSAGE, budgetRefusalMessage } from '../services/aiRouter';
 import { MODULES } from '../services/cycleValidate';
 import { consentBlocks, loadSession, sessionHasAudio, type SessionRow } from '../services/interviewSessions';
+import { railFor } from '../util/railContext';
 import {
   PLACEMENT_KINDS,
   alignRuns,
@@ -547,7 +548,10 @@ export function refusedBody(refusal: string | null) {
       ? budgetRefusalMessage(refusal)
       : refusal === 'model_not_offered'
         ? 'That model is not offered for structuring. Nothing was run.'
-        : 'The model could not be reached. Nothing was stored.',
+        // D765: the member turned AI assistance off on Validate.
+        : refusal === 'assist_off'
+          ? ASSIST_OFF_MESSAGE
+          : 'The model could not be reached. Nothing was stored.',
   };
 }
 
@@ -557,9 +561,10 @@ export function refusedBody(refusal: string | null) {
  * them apart by `refusal`, not by the status (`InterviewReview.jsx`).
  */
 // D685: shared with the summary route and the processing job.
-export function refusedStatus(refusal: string | null): 400 | 402 | 503 {
+export function refusedStatus(refusal: string | null): 400 | 402 | 403 | 503 {
   if (refusal === 'budget_user_day' || refusal === 'budget_user_month' || refusal === 'budget_review') return 402;
   if (refusal === 'model_not_offered') return 400;
+  if (refusal === 'assist_off') return 403;
   return 503;
 }
 
@@ -707,7 +712,7 @@ structure.post('/sessions/:id/ask', async (c) => {
   if (!segments.length) {
     return json({ error: 'no_final_transcript', detail: 'This session has no final transcript to ask about yet.' }, 409);
   }
-  const out = await askTranscript(c.env, { userId: s.user.id, model: picked.model, segments, question });
+  const out = await askTranscript(c.env, { userId: s.user.id, model: picked.model, segments, question, rail: railFor(c, { page: 'validate', option: 'ask:transcript' }) });
   for (let i = 0; i < out.receipt.length; i += 1) {
     const refusedHere = !out.ok && out.reason === 'refused' && i === out.receipt.length - 1;
     await recordStructureReceipt(c.env, s.session.id, null, out.receipt[i], refusedHere ? 'refused' : 'ok', refusedHere ? out.refusal : null);
