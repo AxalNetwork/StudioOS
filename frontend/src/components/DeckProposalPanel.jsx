@@ -30,7 +30,7 @@ export default function DeckProposalPanel({ proposal, currentSlides, onKeep, onD
             onClick={() => onDiscard(proposal)}
             disabled={busy}
             data-testid="button-deck-proposal-discard"
-            className="flex min-h-[36px] items-center gap-1.5 rounded border border-gray-300 bg-white px-3 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+            className="flex min-h-[36px] items-center gap-1.5 rounded border border-gray-300 bg-white px-3 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
           >
             <Trash2 className="h-4 w-4" aria-hidden="true" /> {T.discard}
           </button>
