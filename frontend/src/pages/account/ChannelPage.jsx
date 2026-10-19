@@ -5,9 +5,10 @@ import { BrandIcon, PhoneBar, Unrecorded, Unreadable, usePhoneWidth } from '../.
 import { BTN } from './AccountCenter';
 import { SheetFrame } from './ConnectorSheet';
 import { RequestSheet, useMovedNotice } from './AccountConnectors';
-import { TelegramChannelCard, WhatsAppConnectButton, WhatsAppPageBody, useChannelsOverview, useWhatsAppSignup } from './ChannelsGroup';
+import { TelegramPageBody, WhatsAppConnectButton, WhatsAppPageBody, useChannelsOverview, useWhatsAppSignup } from './ChannelsGroup';
 import { WhatsAppWayB } from './WhatsAppWayB';
-import { CARD_TITLE, channelCard, whatsappPageState } from './channelsModel';
+import { CARD_TITLE, telegramPageState, whatsappPageState } from './channelsModel';
+import TelegramBotHealth from '../admin/TelegramBotHealth';
 import { useAuth } from '../../hooks/useAuthSync';
 import { CHANNEL_PAGE_TEXT, channelDetailsRows, channelEntry, channelPageTitle } from './channelPageModel';
 import { backHrefFor } from './connectorPageModel';
@@ -21,9 +22,13 @@ import { backHrefFor } from './connectorPageModel';
  *
  * The channels are not registry rows, so this page reads `GET /api/channels`
  * (`useChannelsOverview`) and never the connectors catalogue. "Connect and
- * manage" mounts Telegram's card, `TelegramChannelCard`, whose
- * `ConnectedActions` are its Manage; D756's page task draws Telegram's
- * own states in this frame.
+ * manage" mounts each channel's page body.
+ *
+ * D756 §1.11 (#1979): Telegram's is `TelegramPageBody`, in every state for
+ * this viewer (`telegramPageState`), with the card's own parts. A Super Admin
+ * also gets the interview bot's health and Register webhook (#1895's
+ * `TelegramBotHealth`), and the canary line and missing secret names in the
+ * notice region; a member never does.
  *
  * D754 f1 (#1959): WhatsApp's "Connect and manage" is `WhatsAppPageBody`, in
  * every D754 §11 state for this viewer (`whatsappPageState`). Its notices (the
@@ -46,7 +51,7 @@ export default function ChannelPage({ channelKey }) {
 }
 
 /** The page, drawn from one `useChannelsOverview()` read; exported so a test can hand it each state. */
-export function ChannelPageView({ channels, channelKey, phone = false, user = null, api = channelsApi, sdk }) {
+export function ChannelPageView({ channels, channelKey, phone = false, user = null, api = channelsApi, sdk, adminApi }) {
   const location = useLocation();
   const moved = useMovedNotice(location);
   // One signup flow for the band and the body; on Telegram's page it is never offered.
@@ -82,9 +87,9 @@ export function ChannelPageView({ channels, channelKey, phone = false, user = nu
 
   const overview = channels.overview;
   const text = CHANNEL_PAGE_TEXT[channelKey];
-  const card = channelCard(channelKey, overview);
   const wa = channelKey === 'whatsapp' ? whatsappPageState(overview, user) : null;
-  const notices = wa?.notices ?? [];
+  const tg = channelKey === 'telegram' ? telegramPageState(overview, user) : null;
+  const notices = (wa ?? tg)?.notices ?? [];
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="connector-page" data-state="ready" data-key={channelKey} data-channel="true">
       {back}
@@ -101,7 +106,7 @@ export function ChannelPageView({ channels, channelKey, phone = false, user = nu
         <div className="flex flex-col gap-2" data-testid="connector-page-notices">
           {moved && <div className="rounded-[10px] border border-axal-violet/25 bg-axal-lavender px-3.5 py-2.5 text-[13px] text-axal-violet-deep dark:bg-violet-900/30 dark:text-violet-200" data-testid="connectors-moved">Integrations are now Connectors.</div>}
           {notices.map((n, i) => (
-            <div key={n} className="rounded-[10px] border border-amber-300/60 bg-amber-50 px-3.5 py-2.5 text-[13px] text-amber-900 dark:border-amber-700/50 dark:bg-amber-900/20 dark:text-amber-200" data-testid={`whatsapp-notice-${i}`}>{n}</div>
+            <div key={n} className="rounded-[10px] border border-amber-300/60 bg-amber-50 px-3.5 py-2.5 text-[13px] text-amber-900 dark:border-amber-700/50 dark:bg-amber-900/20 dark:text-amber-200" data-testid={`${channelKey}-notice-${i}`}>{n}</div>
           ))}
         </div>
       )}
@@ -109,7 +114,8 @@ export function ChannelPageView({ channels, channelKey, phone = false, user = nu
       <section aria-label="Connect and manage" data-testid="connector-page-connect" data-mode="channel">
         {channelKey === 'whatsapp'
           ? <WhatsAppPageBody view={wa} signup={signup} pending={overview.pending?.whatsapp ?? null} api={api} onChanged={channels.reload} wayB={<WhatsAppWayB user={user} api={api} />} />
-          : <TelegramChannelCard card={card} claim={overview.telegramLink ?? null} pending={overview.pending?.telegram ?? null} api={api} onChanged={channels.reload} />}
+          : <TelegramPageBody view={tg} claim={overview.telegramLink ?? null} pending={overview.pending?.telegram ?? null} api={api} onChanged={channels.reload}
+            health={tg.health ? <TelegramBotHealth {...(adminApi ? { api: adminApi } : {})} /> : null} />}
       </section>
 
       <section data-testid="connector-page-about" className="flex min-w-0 flex-col gap-2">

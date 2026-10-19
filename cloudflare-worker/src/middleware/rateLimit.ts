@@ -221,6 +221,16 @@ const BUCKETS: Bucket[] = [
     scope: 'user',
     failClosed: true,
   },
+  // D755 (#1919) — the public plans-and-packs read, like the other public
+  // reads: per IP, fail-open (a read must not go away with KV), and tighter than
+  // the general 200/min/IP bucket because it reads D1 on every edge miss.
+  {
+    name: 'public_plans',
+    limit: 60,
+    windowSec: 60,
+    test: (p, m) => m === 'GET' && p === '/api/public/plans-and-packs',
+    scope: 'ip',
+  },
   // 60 requests/min per user — default
   {
     name: 'user',

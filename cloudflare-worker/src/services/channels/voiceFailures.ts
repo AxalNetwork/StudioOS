@@ -14,10 +14,15 @@
  *   unreadable    the file could not be fetched or read
  *   expired       WhatsApp refused an old media id at lookup; never queued again
  *   reconnect     the account's connection had expired
+ *   bot_off       the Axal bot is switched off for the member's Telegram
+ *                 Business account (D756)
  *   unreachable   Telegram or Meta did not answer, after every try
  *   not_transcribed  transcription did not answer, after every try
  *   retrying      Telegram, Meta or transcription did not answer yet; the job
  *                 still holds the note and tries again
+ *   no_consent    the chat waits for the interviewee's consent (D754, #1893):
+ *                 nothing is fetched until it is given, and then the note is
+ *                 queued by itself, so no retry is offered
  *
  * Nothing here returns message text, provider text, a file id or a phone
  * number: a code, our sentence, and whether a retry is offered.
@@ -26,7 +31,7 @@ import type { Env } from '../../types';
 import { loadAiBudget } from '../aiBudget';
 import { IntakeError } from '../interviewIntake';
 import { inInterview, queueVoiceTranscriptions, threadForReply } from './threads';
-import type { MessagingProvider } from './types';
+import { audioConsentRequired, type MessagingProvider } from './types';
 
 /** How many times the follow-up tries a provider or transcription that does not answer, and the wait before each next try (seconds). */
 export const VOICE_TRIES = 4;
@@ -37,7 +42,7 @@ export const STILL_TRYING = new Set(['provider_unreachable', 'transcription_unav
 
 export type VoiceReason =
   | 'budget' | 'ai_off' | 'daily_cap' | 'too_large' | 'unreadable' | 'reconnect'
-  | 'unreachable' | 'not_transcribed' | 'retrying' | 'expired';
+  | 'unreachable' | 'not_transcribed' | 'retrying' | 'bot_off' | 'no_consent' | 'expired';
 
 const PROVIDER_NAME: Record<MessagingProvider, string> = { telegram: 'Telegram', whatsapp: 'WhatsApp' };
 const PROVIDER_HOST: Record<MessagingProvider, string> = { telegram: 'Telegram', whatsapp: 'Meta' };
@@ -54,8 +59,10 @@ export function voiceReason(error: string | null, held: boolean): VoiceReason | 
   if (code === 'too_large') return 'too_large';
   if (code === 'expired') return 'expired';
   if (code === 'token_invalid' || code === 'not_connected') return 'reconnect';
+  if (code === 'connection_disabled') return 'bot_off';
   if (code === 'provider_unreachable') return 'unreachable';
   if (code === 'transcription_unavailable') return 'not_transcribed';
+  if (code === 'no_consent') return 'no_consent';
   return 'unreadable';
 }
 
@@ -74,11 +81,16 @@ export function voiceSentence(reason: VoiceReason, provider: MessagingProvider):
     case 'unreachable': return `${host} could not be reached to fetch this voice note, after several tries.`;
     case 'not_transcribed': return 'Transcription did not answer, after several tries, so this voice note was not transcribed.';
     case 'retrying': return 'This voice note could not be transcribed yet. Axal tries again in a few minutes.';
+    case 'bot_off': return 'The Axal bot is switched off for your Telegram Business account, so this voice note was not fetched. Turn it back on in Telegram › Settings › Telegram Business › Chatbots, then retry.';
+    case 'no_consent': return 'This voice note waits until consent is given in the chat. Axal fetches it only then.';
   }
 }
 
-/** The reasons a member can retry: the budget (checked first), the kill switch (likewise), and the day's cap (the job checks it). */
-const RETRYABLE = new Set<VoiceReason>(['budget', 'ai_off', 'daily_cap', 'unreachable', 'not_transcribed']);
+/**
+ * The reasons a member can retry: the budget (checked first), the kill switch
+ * (likewise), the day's cap and the switched-off bot (the job checks each).
+ */
+const RETRYABLE = new Set<VoiceReason>(['budget', 'ai_off', 'daily_cap', 'unreachable', 'not_transcribed', 'bot_off']);
 const NEEDS_BUDGET = new Set<VoiceReason>(['budget', 'ai_off']);
 
 /**
@@ -157,6 +169,9 @@ export async function retryVoiceNote(env: Env, userId: number, threadUid: string
   ).bind(messageUid, thread.id).first<{ transcribe_error: string | null; transcribe_job: string | null }>();
   if (!row) throw new IntakeError(404, 'voice_not_found', 'That voice note is not waiting on this conversation.');
   const reason = voiceReason(row.transcribe_error, row.transcribe_job != null);
+  if (reason === 'no_consent' || (audioConsentRequired(thread.provider) && thread.consent_state !== 'given')) {
+    throw new IntakeError(409, 'no_consent', 'This voice note waits until consent is given in the chat. Axal fetches it only then.');
+  }
   if (!reason || !RETRYABLE.has(reason)) throw new IntakeError(409, 'voice_not_retryable', 'This voice note cannot be retried.');
   if (!inInterview(thread)) {
     throw new IntakeError(409, 'voice_not_assigned', 'Assign this conversation to an interview first; its voice notes are transcribed then.');

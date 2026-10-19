@@ -32,7 +32,7 @@
  */
 import type { Env } from '../types';
 import { callLabel } from './sessionSetup';
-import { AUDIO_CHANNELS, consentBlocks, deleteSession, type SessionRow } from './interviewSessions';
+import { AUDIO_CHANNELS, deleteSession, dropInterviewMadeFor, sessionConsentBlocks, type SessionRow } from './interviewSessions';
 import {
   enqueueProcess, failProcessing, NO_CONSENT_SENTENCE, processingOf, recoverSession, RESTARTED_NOTE, STALE_MINUTES, STALLED_TWICE,
 } from './interviewProcessing';
@@ -100,12 +100,7 @@ export async function sweepInterviewSessions(env: Env, now = new Date()): Promis
   ).bind(at(DRAFT_HOURS * 3_600_000), BATCH).all<SessionRow>();
   for (const s of drafts.results || []) {
     await deleteSession(env, s, s.created_by_user_id);
-    await env.DB.prepare(
-      `DELETE FROM discovery_interviews
-        WHERE id = ? AND stage = 'booked' AND transcript IS NULL
-          AND ABS(julianday(created_at) - julianday(?)) * 86400 <= 5
-          AND NOT EXISTS (SELECT 1 FROM interview_sessions WHERE interview_id = discovery_interviews.id)`,
-    ).bind(s.interview_id, s.created_at).run();
+    await dropInterviewMadeFor(env, s.interview_id, s.created_at);
     result.drafts++;
   }
 
@@ -172,7 +167,7 @@ export async function sweepInterviewSessions(env: Env, now = new Date()): Promis
       ORDER BY id LIMIT ?`,
   ).bind(staleAt, staleAt, JSON.stringify(audio), BATCH).all<SessionRow>();
   for (const s of stale.results || []) {
-    if (consentBlocks(s.channel, s.consent_status)) {
+    if (await sessionConsentBlocks(env, s)) {
       await failProcessing(env, s, NO_CONSENT_SENTENCE);
       continue;
     }

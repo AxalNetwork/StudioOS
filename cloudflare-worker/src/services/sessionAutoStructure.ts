@@ -44,10 +44,10 @@
  * reach it through `digestSession`.
  */
 import type { Env } from '../types';
-import { consentBlocks } from './interviewSessions';
+import { sessionConsentBlocks } from './interviewSessions';
 import { IntakeError, writableSession } from './interviewIntake';
 import { structureTranscript, toSegments, type ReceiptLine, type SegmentRow } from './interviewStructuring';
-import { MESSAGING_PROVIDERS } from './channels/types';
+import { MESSAGING_PROVIDERS, consentRequiredProviders } from './channels/types';
 import { loadStructureContext, recordStructureReceipt, storePlacements } from '../routes/founder_validate_structure';
 
 export type StructureTrigger =
@@ -66,7 +66,9 @@ export const QUIET_MINUTES = 30;
 export const MIN_HOURS_BETWEEN = 6;
 
 export type StructureOutcome =
-  | { ok: true; runId: string; step: 'structured' | 're_structured'; stored: number; dropped: number; parts: number; receipt: ReceiptLine[] }
+  | { ok: true; runId: string; step: 'structured' | 're_structured'; stored: number; dropped: number; parts: number; receipt: ReceiptLine[];
+      /** Pass B was refused (D757): pass A's suggestions are stored, and this is why demand and evidence are missing. */
+      passBRefusal?: string | null }
   | { ok: false; reason: 'consent_not_recorded' | 'no_final_transcript' | 'not_writable' | 'refused'; refusal?: string | null };
 
 function newRunId(): string {
@@ -90,7 +92,7 @@ export async function structureSession(
     if (err instanceof IntakeError) return { ok: false, reason: 'not_writable' };
     throw err;
   }
-  if (consentBlocks(session.channel, session.consent_status)) return { ok: false, reason: 'consent_not_recorded' };
+  if (await sessionConsentBlocks(env, session)) return { ok: false, reason: 'consent_not_recorded' };
 
   const rows = await env.DB.prepare(
     `SELECT start_ms, end_ms, speaker_label, text FROM interview_transcript_segments
@@ -106,12 +108,14 @@ export async function structureSession(
   const out = await structureTranscript(env, {
     userId: opts.userId, model: opts.model, segments, context: await loadStructureContext(env, session.project_id), step,
   });
+  // The last receipt line is the refused call: the run's, or pass B's (D757: pass A's placements stand).
+  const lastRefusal = !out.ok ? out.refusal ?? null : out.passBRefusal !== undefined ? out.passBRefusal ?? null : undefined;
   for (let i = 0; i < out.receipt.length; i += 1) {
-    const refusedHere = !out.ok && i === out.receipt.length - 1;
+    const refusedHere = lastRefusal !== undefined && i === out.receipt.length - 1;
     await recordStructureReceipt(env, session.id, runId, out.receipt[i], refusedHere ? 'refused' : 'ok',
-      refusedHere ? (out as { refusal?: string | null }).refusal ?? null : null);
+      refusedHere ? lastRefusal : null);
   }
-  if (!out.ok) return { ok: false, reason: 'refused', refusal: (out as { refusal?: string | null }).refusal ?? null };
+  if (!out.ok) return { ok: false, reason: 'refused', refusal: out.refusal ?? null };
 
   const { stored } = await storePlacements(env, {
     projectId: session.project_id, sessionId: session.id, interviewId: session.interview_id, runId,
@@ -121,7 +125,10 @@ export async function structureSession(
   await env.DB.prepare(
     "UPDATE interview_sessions SET status = 'structured', updated_at = datetime('now') WHERE id = ? AND status = 'transcribed'",
   ).bind(session.id).run();
-  return { ok: true, runId, step, stored, dropped: out.dropped, parts: out.parts, receipt: out.receipt };
+  return {
+    ok: true, runId, step, stored, dropped: out.dropped, parts: out.parts, receipt: out.receipt,
+    ...(out.passBRefusal !== undefined ? { passBRefusal: out.passBRefusal ?? null } : {}),
+  };
 }
 
 /**
@@ -155,7 +162,8 @@ export async function runSessionStructureJob(env: Env, payload: unknown) {
  * The quiet-chat sweep: assigned chat sessions with new text since their last
  * run, quiet for QUIET_MINUTES, and not structured, summarised or attempted
  * (refused runs included, `digested_at`) in the last MIN_HOURS_BETWEEN. A
- * bounded batch per tick.
+ * bounded batch per tick. A chat whose provider waits for consent is skipped
+ * until its consent is `given` (D754): the gate would refuse the run.
  */
 export async function sweepQuietChats(env: Env, now: Date): Promise<number> {
   const quietBefore = new Date(now.getTime() - QUIET_MINUTES * 60_000).toISOString();
@@ -163,6 +171,7 @@ export async function sweepQuietChats(env: Env, now: Date): Promise<number> {
   const due = (await env.DB.prepare(
     `SELECT s.id, s.created_by_user_id AS user_id FROM interview_sessions s
       WHERE s.submitted_via IN (SELECT value FROM json_each(?)) AND s.status = 'transcribed'
+        AND (s.submitted_via NOT IN (SELECT value FROM json_each(?)) OR s.consent_status = 'given')
         AND datetime(s.updated_at) < datetime(?)
         AND NOT EXISTS (SELECT 1 FROM interview_structure_receipts r
                          WHERE r.session_id = s.id AND datetime(r.created_at) >= datetime(?))
@@ -170,7 +179,8 @@ export async function sweepQuietChats(env: Env, now: Date): Promise<number> {
                          WHERE r2.session_id = s.id AND datetime(r2.created_at) >= datetime(?))
         AND (s.digested_at IS NULL OR datetime(s.digested_at) < datetime(?))
       ORDER BY s.updated_at LIMIT 20`,
-  ).bind(JSON.stringify(MESSAGING_PROVIDERS), quietBefore, lastRunBefore, lastRunBefore, lastRunBefore).all<{ id: number; user_id: number }>()).results ?? [];
+  ).bind(JSON.stringify(MESSAGING_PROVIDERS), JSON.stringify(consentRequiredProviders()), quietBefore, lastRunBefore, lastRunBefore, lastRunBefore)
+    .all<{ id: number; user_id: number }>()).results ?? [];
   for (const row of due) await enqueueSessionStructure(env, Number(row.id), Number(row.user_id), 'chat_quiet');
   return due.length;
 }

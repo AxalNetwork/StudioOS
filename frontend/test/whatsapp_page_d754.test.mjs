@@ -243,9 +243,9 @@ test('/account/connectors/whatsapp draws the body in the frame, the notices in t
   assert.equal(member.includes(WHATSAPP_PAGE.canary), false);
   assert.equal(member.includes('button-band-connect-whatsapp'), false);
   assert.equal(member.includes('button-connect-whatsapp'), false);
-  // Telegram's page keeps its card and draws no WhatsApp body.
+  // Telegram's page draws its own body (D756, #1979) and no WhatsApp body.
   const tg = renderToStaticMarkup(h(MemoryRouter, null, h(ChannelPageView, { channels: { status: 'ready', overview: o, reload() {} }, channelKey: 'telegram', user: SUPER })));
-  assert.ok(tg.includes('data-testid="channel-card-telegram"'));
+  assert.ok(tg.includes('data-testid="telegram-page-body"'));
   assert.equal(tg.includes('whatsapp-page-body'), false);
   assert.equal(tg.includes('button-band-connect-whatsapp'), false);
 });

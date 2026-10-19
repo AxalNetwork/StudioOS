@@ -3,21 +3,23 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Check, ChevronDown, Plus } from 'lucide-react';
 import { api } from '../../lib/api';
 import { connectorsApi } from '../../lib/api/connectors';
-import { BrandIcon, PhoneBar, PhoneRows, Pill, Unrecorded, Unreadable, usePhoneWidth } from '../../ui';
+import { BrandIcon, PhoneBar, PhoneRows, Pill, Unrecorded, Unreadable, VerifiedBadge, usePhoneWidth } from '../../ui';
 import { BTN, INPUT } from './AccountCenter';
 import { Banner, Group, Sheet, useConnectors } from './ConnectorSheet';
 import { AssistantsSection } from './AssistantsGroup';
 import { ChannelsSection } from './ChannelsGroup';
 import {
-  MOVED_SEEN_KEY, YOURS_FILTERS, YOURS_SORTS, cardAction, cardPill, companiesLabel, connectorPagePath, discoverChips,
-  discoverSections, doesLabel, isPersonalMercury, lastSyncLabel, matchesQuery, oauthReturn, pageOf, stripReturn, yoursFeedsLabel, yoursRows,
+  MOVED_SEEN_KEY, YOURS_FILTERS, YOURS_SORTS, cardAction, cardPill, companiesLabel, connectorPagePath,
+  discoverSections, doesLabel, isPersonalMercury, keysHref, lastSyncLabel, matchesQuery, oauthReturn, pageOf, stripReturn, yoursFeedsLabel, yoursRows,
   SUGGESTED,
 } from './connectorsModel';
 import { ACCOUNT_PHONE_COPY, ACCOUNT_PHONE_PAGES } from './accountPhone';
 import { hubSearchFor, hubTabFor } from './connectorPageModel';
+import { NO_FILTER, activeFilters, discoverFacets, discoverGrid, filterCatalogue, isVerified, makerLine, topSlice } from './discoverModel';
+import { ActiveFilters, ConnectorFilterMenu } from './ConnectorFilterMenu';
 import { isMercurySearch, notOfferedSentence } from './mercuryModel';
 import { useAuth } from '../../hooks/useAuthSync';
-import { branchOfUser } from '../../lib/shellRole';
+import { branchOfUser, isSuperAdminUser } from '../../lib/shellRole';
 
 /**
  * D651 (#1463) — the Account center's Connectors section, `/account/connectors`,
@@ -31,7 +33,12 @@ import { branchOfUser } from '../../lib/shellRole';
  * return naming a connector goes on to that connector's own page
  * (`ConnectorPage.jsx`), and every card, row and phone row links its page;
  * nothing here opens a right sheet but the request form (until F8). The tab
- * lives in the address (`?tab=discover`).
+ * lives in the address (`?tab=discover`). Discover's filter is D753 F6's menu
+ * (`ConnectorFilterMenu.jsx`), with every count from `discoverModel.js`.
+ *
+ * D751 (#1881): a connector Axal holds no OAuth client for reads "Not set up
+ * here" with no +, on the card and the phone row alike, and a Super Admin
+ * also gets "Add its keys in Integration keys" (`keysHref`).
  *
  * A CONNECTOR BELONGS TO THE MEMBER, and serves the companies its sheet
  * ticks. Two reads are the active company's: "Suggested for you" (its empty
@@ -75,7 +82,7 @@ export function YoursTable({ rows, role = null }) {
             <BrandIcon provider={p.key} name={p.display_name} />
             <span className="flex min-w-0 flex-col">
               <span className="truncate font-bold text-axal-ink dark:text-gray-100">{p.display_name}</span>
-              <span className="truncate text-[11.5px] text-axal-muted dark:text-gray-400">by {p.by}</span>
+              {makerLine(p) && <span className="truncate text-[11.5px] text-axal-muted dark:text-gray-400">{makerLine(p)}</span>}
             </span>
           </span>
           <span className="hidden text-axal-muted md:block dark:text-gray-400">{p.category || <NR />}</span>
@@ -93,34 +100,43 @@ export function YoursTable({ rows, role = null }) {
   );
 }
 
-export function ConnectorCard({ p, onNotify, onUnnotify, busy }) {
+/**
+ * D753 F6 decision 9: a Discover card is a link to its connector's page. One
+ * stretched link on the name covers the card, so "+" opens the page and never
+ * starts a sign-in from the grid. The corner tiles are decoration (the link
+ * says the state); Notify me and the badge are lifted above the link layer.
+ */
+export function ConnectorCard({ p, onNotify, onUnnotify, busy, keysHref: keys = null }) {
   const act = cardAction(p);
   const pill = cardPill(p);
-  let button = null;
-  // D753 — "+" opens the page, never a sign-in: the reader sees what a connector reads before connecting it.
   const to = connectorPagePath(p.key);
   const state = { connectorsTab: 'discover' };
-  if (act === 'add') button = <Link to={to} state={state} aria-label={`Open ${p.display_name} to connect`} data-testid={`connector-open-${p.key}`} className="grid h-[26px] w-[26px] place-items-center rounded-full border border-axal-hairline font-bold text-axal-ink hover:border-axal-violet/50 dark:border-gray-700 dark:text-gray-100"><Plus size={14} /></Link>;
-  if (act === 'connected') button = <Link to={to} state={state} aria-label={`${p.display_name} is connected. Open its page`} data-testid={`connector-open-${p.key}`} className="grid h-[26px] w-[26px] place-items-center rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"><Check size={14} /></Link>;
-  if (act === 'notify') button = <button type="button" disabled={busy} onClick={() => onNotify(p)} className={BTN.link}>Notify me</button>;
-  if (act === 'joined') button = <button type="button" disabled={busy} onClick={() => onUnnotify(p)} className={BTN.link} title="Click to stop the notice">We&apos;ll tell you</button>;
-  if (act === 'unavailable') button = <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{p.unreadable ? 'Status unreadable' : 'Not set up here'}</span>;
+  const maker = makerLine(p);
+  let corner = null;
+  if (act === 'add') corner = <span aria-hidden="true" className="grid h-[26px] w-[26px] place-items-center rounded-[8px] border border-axal-hairline text-axal-ink dark:border-gray-700 dark:text-gray-100"><Plus size={14} /></span>;
+  if (act === 'connected') corner = <span aria-hidden="true" className="grid h-[26px] w-[26px] place-items-center rounded-[8px] bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"><Check size={14} /></span>;
+  if (act === 'notify') corner = <button type="button" disabled={busy} onClick={() => onNotify(p)} className={`${BTN.link} relative z-10`}>Notify me</button>;
+  if (act === 'joined') corner = <button type="button" disabled={busy} onClick={() => onUnnotify(p)} className={`${BTN.link} relative z-10`} title="Click to stop the notice">We&apos;ll tell you</button>;
+  if (act === 'unavailable') corner = <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{p.unreadable ? 'Status unreadable' : 'Not set up here'}</span>;
   // D715: the Axal entities' Mercury opens its page, whatever else the row says.
-  if (act === 'entity') button = <Link to={to} state={state} aria-label={`Open ${p.display_name}`} className={BTN.link} data-testid={`connector-open-${p.key}`}>Open</Link>;
+  if (act === 'entity') corner = <span aria-hidden="true" className={BTN.link}>Open</span>;
   return (
-    <div className={`${TONE_CLS} relative flex flex-col gap-2 p-3.5`} data-testid={`connector-card-${p.key}`} data-action={act}>
-      <div className="flex items-start justify-between"><BrandIcon provider={p.key} name={p.display_name} />{button}</div>
-      <span className="flex items-center gap-1.5 text-sm font-bold text-axal-ink dark:text-gray-100">
-        <Link to={to} state={state} className="hover:underline" data-testid={`connector-name-${p.key}`}>{p.display_name}</Link>
-        {p.verified && <span role="img" title="Built and verified by Axal" aria-label="Verified by Axal" className="grid h-3.5 w-3.5 place-items-center rounded-full bg-axal-violet text-[9px] text-white">✓</span>}
-      </span>
-      <span className="text-[12.5px] leading-snug text-axal-ink/80 dark:text-gray-300">{p.description}</span>
+    <article className={`${TONE_CLS} relative flex h-full flex-col gap-2 p-3.5 focus-within:ring-2 focus-within:ring-axal-violet/40`} data-testid={`connector-card-${p.key}`} data-action={act}>
+      <div className="flex items-start justify-between"><BrandIcon provider={p.key} name={p.display_name} />{corner}</div>
+      <h4 className="flex items-center gap-1.5 text-sm font-bold text-axal-ink dark:text-gray-100">
+        <Link to={to} state={state} data-testid={`connector-open-${p.key}`} className="after:absolute after:inset-0 after:rounded-axal-sm focus:outline-none focus-visible:underline">
+          {p.display_name}{act === 'connected' && <span className="sr-only"> · Connected</span>}
+        </Link>
+        {isVerified(p) && <span className="relative z-10"><VerifiedBadge on={p.verified_on} /></span>}
+      </h4>
+      <span className="line-clamp-2 text-[12.5px] leading-snug text-axal-ink/80 dark:text-gray-300">{p.tagline || p.description}</span>
       <div className="mt-auto flex items-center justify-between gap-1.5">
-        <span className="text-[11.5px] text-axal-muted dark:text-gray-400">by {p.by}</span>
+        {maker ? <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{maker}</span> : <span />}
         {pill && <Pill tone={pill.tone}>{pill.label}</Pill>}
       </div>
       {p.why && <span className="text-[11.5px] leading-snug text-axal-violet-deep dark:text-violet-300">{p.why}</span>}
-    </div>
+      {keys && <Link to={keys} className={`${BTN.link} relative z-10 self-start text-[11.5px]`} data-testid={`connector-keys-link-${p.key}`}>Add its keys in Integration keys</Link>}
+    </article>
   );
 }
 
@@ -143,7 +159,7 @@ function TelegramCard() {
     }
   };
   return (
-    <div className={`${TONE_CLS} flex flex-col gap-2 p-3.5`} data-testid="connector-card-telegram">
+    <div className={`${TONE_CLS} flex flex-col gap-2 p-3.5`} data-testid="connector-community-telegram">
       <span className="flex items-center gap-2.5">
         <BrandIcon provider="telegram" name="Telegram" />
         <span className="text-sm font-bold text-axal-ink dark:text-gray-100">Telegram · Axal VC channels</span>
@@ -218,7 +234,7 @@ export function AddMenu({ onBrowse, onRequest, initialOpen = false }) {
   const item = 'flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] font-medium text-axal-ink hover:bg-axal-ground disabled:cursor-not-allowed disabled:opacity-60 dark:text-gray-100 dark:hover:bg-gray-800';
   return (
     <div className="relative" ref={ref}>
-      <button type="button" className={BTN.primary} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((v) => !v)} data-testid="button-connectors-add">Add <ChevronDown size={13} /></button>
+      <button type="button" className={BTN.primary} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((v) => !v)} data-testid="button-connectors-add"><Plus size={13} aria-hidden="true" />Add <ChevronDown size={13} /></button>
       {open && (
         <div role="menu" className="absolute right-0 top-10 z-20 flex w-60 flex-col rounded-xl border border-axal-hairline bg-white p-1.5 shadow-xl dark:border-gray-700 dark:bg-gray-900" data-testid="connectors-add-menu">
           <button type="button" role="menuitem" className={item} onClick={() => { setOpen(false); onBrowse(); }}>Browse connectors</button>
@@ -239,7 +255,8 @@ export default function ConnectorsSection() {
   const user = useAuth()?.user ?? null;
   // Decision 10's branch sentence: an admin on a branch. It chooses words only; the Worker serves the rows.
   const branchAdmin = user?.role === 'admin' && !!branchOfUser(user);
-  return <ConnectorsView data={data} phone={phone} branchAdmin={branchAdmin} role={user?.role ?? null} onBranch={!!branchOfUser(user)} />;
+  // D751 (#1881): only a Super Admin can save a connector's keys, so only one is shown the way there.
+  return <ConnectorsView data={data} phone={phone} branchAdmin={branchAdmin} role={user?.role ?? null} onBranch={!!branchOfUser(user)} superAdmin={isSuperAdminUser(user)} />;
 }
 
 // ---------------------------------------------------------------------------
@@ -302,7 +319,7 @@ export function yoursGroup({ data, rows, paged, setPage = () => {}, label = ACCO
  * builds them, each with its card's pill or corner action. The read is the
  * active company's, made without a company parameter, as on desktop.
  */
-export function suggestedGroup({ data, q = '', label = ACCOUNT_PHONE_PAGES.connectors.sections[1], onNotify, onBrowse }) {
+export function suggestedGroup({ data, q = '', label = ACCOUNT_PHONE_PAGES.connectors.sections[1], onNotify, onBrowse, superAdmin = false }) {
   const group = { label, rows: [], testid: 'connectors-phone-suggested' };
   const pending = catalogueNote(data);
   if (pending) return { ...group, note: data.status === 'loading' ? 'Loading suggestions…' : null };
@@ -315,13 +332,16 @@ export function suggestedGroup({ data, q = '', label = ACCOUNT_PHONE_PAGES.conne
   if (!section.cards.length) return { ...group, note: 'Nothing to suggest: every module a connector could feed already has data.' };
   group.rows = section.cards.map((p) => {
     const act = cardAction(p);
+    // D751 (#1881): a row that cannot be connected says so first, as its card does, not "Beta".
+    const pill = act === 'unavailable' ? actionPill(p, act) : cardPill(p) || actionPill(p, act);
+    const keys = keysHref(p, { superAdmin });
     return {
       key: p.key,
       icon: <BrandIcon provider={p.key} name={p.display_name} />,
       title: p.display_name,
-      description: p.why || p.description,
-      pill: cardPill(p) || actionPill(p, act),
-      ...(act === 'notify' ? { onClick: () => onNotify(p, true) } : act === 'joined' ? { onClick: () => onNotify(p, false) } : { to: connectorPagePath(p.key) }),
+      description: keys ? 'Add its keys in Integration keys.' : p.why || p.description,
+      pill,
+      ...(keys ? { to: keys } : act === 'notify' ? { onClick: () => onNotify(p, true) } : act === 'joined' ? { onClick: () => onNotify(p, false) } : { to: connectorPagePath(p.key) }),
       testid: `connector-suggested-${p.key}`,
     };
   });
@@ -334,7 +354,7 @@ export function ConnectorsPhoneView(props) {
 }
 
 /** The section, drawn from one `useConnectors()` read; exported so a test can hand it each state. */
-export function ConnectorsView({ data, initialTab = 'yours', initialChip = 'All', initialQuery = '', phone = false, branchAdmin = false, role = null, onBranch = false }) {
+export function ConnectorsView({ data, initialTab = 'yours', initialFilter = NO_FILTER, initialQuery = '', phone = false, branchAdmin = false, role = null, onBranch = false, superAdmin = false }) {
   const location = useLocation();
   const navigate = useNavigate();
   const moved = useMovedNotice(location);
@@ -344,7 +364,9 @@ export function ConnectorsView({ data, initialTab = 'yours', initialChip = 'All'
   const [filter, setFilter] = useState('all');
   const [sort, setSort] = useState('name');
   const [page, setPage] = useState(1);
-  const [chip, setChip] = useState(initialChip);
+  const [sel, setSel] = useState(initialFilter);
+  const [showAll, setShowAll] = useState(false);
+  useEffect(() => { setShowAll(false); }, [sel, q]);
   const [requesting, setRequesting] = useState(null);
   const [waitBusy, setWaitBusy] = useState(false);
   const [waitError, setWaitError] = useState('');
@@ -369,8 +391,15 @@ export function ConnectorsView({ data, initialTab = 'yours', initialChip = 'All'
 
   const rows = useMemo(() => yoursRows(data.catalogue, { q, filter, sort }), [data.catalogue, q, filter, sort]);
   const paged = pageOf(rows, page);
-  const sections = useMemo(() => discoverSections(data.catalogue, chip, { q, suggestions: data.suggestions ?? null }), [data.catalogue, chip, q, data.suggestions]);
-  const chips = useMemo(() => discoverChips(data.catalogue), [data.catalogue]);
+  // D753 F6: the menu's counts and the grid's cards both come from `filterCatalogue`, so they cannot differ.
+  const facets = useMemo(() => discoverFacets(data.catalogue, data.suggestions ?? null, {
+    q, ...sel, categoryOrder: data.categoryOrder ?? null, connectionsRead: !data.itemsFailed, suggestionsNote: data.suggestionsNote || '',
+  }), [data.catalogue, data.suggestions, data.categoryOrder, data.itemsFailed, data.suggestionsNote, q, sel]);
+  const sections = useMemo(() => discoverGrid(data.catalogue, { q, ...sel, suggestions: data.suggestions ?? null, phone }), [data.catalogue, data.suggestions, q, sel, phone]);
+  const shown = useMemo(() => filterCatalogue(data.catalogue, { q, ...sel, suggestions: data.suggestions ?? null }).length, [data.catalogue, data.suggestions, q, sel]);
+  const chips = activeFilters(sel, facets);
+  const clearChip = (group) => setSel(group === 'all' ? NO_FILTER : { ...sel, [group]: 'all' });
+  const noFilter = sel.where === 'all' && sel.type === 'all';
   const anyConnected = data.catalogue.some((p) => p.connection);
   // One search rule (`matchesQuery`) for the lists and for "No connector
   // called…": on Yours the question is your connectors, on Discover the catalogue.
@@ -390,37 +419,47 @@ export function ConnectorsView({ data, initialTab = 'yours', initialChip = 'All'
   };
 
   // Discover: the desktop's second tab, and on a phone the list kept below A3m's sections.
+  const cardOf = (p) => <ConnectorCard key={p.key} p={p} onNotify={(x) => notify(x, true)} onUnnotify={(x) => notify(x, false)} busy={waitBusy} keysHref={keysHref(p, { superAdmin })} />;
   const discover = (
     <>
-      <div className="flex gap-1.5 overflow-x-auto pb-1 md:flex-wrap" role="tablist" aria-label="Categories" data-testid="connectors-chips">
-        {chips.map((c) => (
-          <button key={c} type="button" role="tab" aria-selected={c === chip} onClick={() => setChip(c)}
-            className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-[12px] font-semibold ${c === chip ? 'border-axal-violet/30 bg-axal-lavender text-axal-violet-deep dark:bg-violet-900/30 dark:text-violet-300' : 'border-axal-hairline bg-white text-axal-ink/80 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300'}`}>
-            {c}
-          </button>
-        ))}
-      </div>
       {waitError && <p role="alert" className="text-[12px] text-red-700 dark:text-red-300">{waitError}</p>}
-      {sections.map((s) => (
-        <section key={s.title} className="flex flex-col gap-2.5" data-testid={`connectors-section-${s.title}`}>
-          <h3 className="text-[15px] font-bold text-axal-ink dark:text-gray-100">{s.title} {Array.isArray(s.cards) && <span className="font-mono text-[12px] font-medium text-axal-muted dark:text-gray-400">{s.cards.length}</span>}</h3>
-          {s.cards === null && (
-            <div className={`${TONE_CLS} p-4 text-[13px]`} data-testid="connectors-suggestions-none">
-              <NR reason={data.suggestionsNote || 'Suggestions could not be read.'} /> <span className="text-axal-muted dark:text-gray-400">· {data.suggestionsNote || 'Suggestions could not be read.'}</span>
+      {sections.map((s) => {
+        const top = s.id === 'top';
+        const slice = top ? topSlice(s.cards) : { cards: s.cards, more: 0 };
+        const cards = top && showAll ? s.cards : slice.cards;
+        const gridId = `connectors-grid-${s.id}`;
+        return (
+          <section key={s.id} className="flex flex-col gap-2.5" data-testid={`connectors-section-${s.title}`}>
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="flex items-center gap-2 text-[15px] font-bold text-axal-ink dark:text-gray-100">{s.title} {Array.isArray(s.cards) && <Pill tone="neutral">{s.cards.length}</Pill>}</h3>
+              {top && slice.more > 0 && (
+                <button type="button" className={BTN.link} aria-expanded={showAll} aria-controls={gridId} onClick={() => setShowAll((v) => !v)} data-testid="button-connectors-show-all">
+                  {showAll ? 'Show fewer' : 'Show all →'}
+                </button>
+              )}
             </div>
-          )}
-          {Array.isArray(s.cards) && !s.cards.length && <p className="text-[13px] text-axal-muted dark:text-gray-400">{s.title === 'Suggested for you' ? 'Nothing to suggest: every module a connector could feed already has data.' : 'No connector here yet.'}</p>}
-          {Array.isArray(s.cards) && s.cards.length > 0 && (
-            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
-              {s.cards.map((p) => <ConnectorCard key={p.key} p={p} onNotify={(x) => notify(x, true)} onUnnotify={(x) => notify(x, false)} busy={waitBusy} />)}
-            </div>
-          )}
-        </section>
-      ))}
-      {chip === 'All' && (
+            {s.cards === null && (
+              <div className={`${TONE_CLS} p-4 text-[13px]`} data-testid="connectors-suggestions-none">
+                <NR reason={data.suggestionsNote || 'Suggestions could not be read.'} /> <span className="text-axal-muted dark:text-gray-400">· {data.suggestionsNote || 'Suggestions could not be read.'}</span>
+              </div>
+            )}
+            {Array.isArray(s.cards) && !s.cards.length && (
+              sel.type === 'suggested' && !q.trim()
+                ? <p className="text-[13px] text-axal-muted dark:text-gray-400">Nothing to suggest: every module a connector could feed already has data.</p>
+                : !noFilter && q.trim()
+                  ? <p className="text-[13px] text-axal-muted dark:text-gray-400" data-testid="connectors-choice-empty">No {s.title} connector matches &lsquo;{q.trim()}&rsquo;. <button type="button" className={`${BTN.link} font-bold`} onClick={() => setSel(NO_FILTER)}>Clear filters</button></p>
+                  : <p className="text-[13px] text-axal-muted dark:text-gray-400">No connector here yet.</p>
+            )}
+            {Array.isArray(s.cards) && s.cards.length > 0 && (
+              <div id={gridId} className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">{cards.map(cardOf)}</div>
+            )}
+          </section>
+        );
+      })}
+      {noFilter && (
         <section className="flex flex-col gap-2.5">
           <h3 className="text-[15px] font-bold text-axal-ink dark:text-gray-100">Community</h3>
-          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3"><TelegramCard /></div>
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2"><TelegramCard /></div>
         </section>
       )}
     </>
@@ -480,22 +519,38 @@ export function ConnectorsView({ data, initialTab = 'yours', initialChip = 'All'
   // On a phone Discover is not a tab: it is kept below A3m's sections, and
   // "Browse connectors" scrolls to it in place.
   const browse = phone
-    ? () => { setChip('All'); document.getElementById('connectors-discover')?.scrollIntoView?.({ block: 'start' }); }
-    : () => { chooseTab('discover'); setChip('All'); };
+    ? () => { setSel(NO_FILTER); document.getElementById('connectors-discover')?.scrollIntoView?.({ block: 'start' }); }
+    : () => { chooseTab('discover'); setSel(NO_FILTER); };
+  const tabs = (
+    <div className="flex rounded-[10px] border border-axal-hairline bg-white p-[3px] dark:border-gray-700 dark:bg-gray-900" role="tablist" aria-label="Connectors">
+      {[['yours', 'Yours'], ['discover', 'Discover']].map(([id, label]) => (
+        <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => { chooseTab(id); setPage(1); }} data-testid={`tab-connectors-${id}`}
+          className={`rounded-lg px-3.5 py-1.5 text-[12.5px] font-semibold ${tab === id ? 'bg-axal-lavender text-axal-violet-deep dark:bg-violet-900/30 dark:text-violet-300' : 'text-axal-muted dark:text-gray-400'}`}>
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+  const onDiscover = phone || tab === 'discover';
   const toolbar = (
-    <div className="flex flex-wrap items-center gap-2">
-      <input type="search" aria-label="Search connectors" placeholder="Search connectors…" className={`${INPUT} min-w-[200px] flex-1`} value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} data-testid="input-connectors-search" />
-      {tab === 'yours' && (
-        <>
-          <select aria-label="Filter" className={SELECT} value={filter} onChange={(e) => { setFilter(e.target.value); setPage(1); }}>
-            {YOURS_FILTERS.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
-          </select>
-          <select aria-label="Sort" className={SELECT} value={sort} onChange={(e) => setSort(e.target.value)}>
-            {YOURS_SORTS.map((s) => <option key={s.id} value={s.id}>Sort: {s.label}</option>)}
-          </select>
-        </>
-      )}
-      <AddMenu onBrowse={browse} onRequest={() => setRequesting('')} />
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        {!phone && tabs}
+        <input type="search" aria-label="Search connectors" placeholder="Search connectors…" className={`${INPUT} min-w-[180px] flex-1`} value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} data-testid="input-connectors-search" />
+        {tab === 'yours' && (
+          <>
+            <select aria-label="Filter" className={SELECT} value={filter} onChange={(e) => { setFilter(e.target.value); setPage(1); }}>
+              {YOURS_FILTERS.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
+            </select>
+            <select aria-label="Sort" className={SELECT} value={sort} onChange={(e) => setSort(e.target.value)}>
+              {YOURS_SORTS.map((s) => <option key={s.id} value={s.id}>Sort: {s.label}</option>)}
+            </select>
+          </>
+        )}
+        {onDiscover && <ConnectorFilterMenu facets={facets} value={sel} onChange={setSel} phone={phone} shown={shown} />}
+        <AddMenu onBrowse={browse} onRequest={() => setRequesting('')} />
+      </div>
+      {onDiscover && <ActiveFilters chips={chips} onClear={clearChip} />}
     </div>
   );
   const extras = (
@@ -520,7 +575,7 @@ export function ConnectorsView({ data, initialTab = 'yours', initialChip = 'All'
           <div className="pt-[18px]">
             <PhoneRows groups={[
               yoursGroup({ data, rows, paged, setPage, label: page.sections[0], role }),
-              suggestedGroup({ data, q, label: page.sections[1], onNotify: notify, onBrowse: browse }),
+              suggestedGroup({ data, q, label: page.sections[1], onNotify: notify, onBrowse: browse, superAdmin }),
             ]} />
           </div>
         </div>
@@ -545,14 +600,6 @@ export function ConnectorsView({ data, initialTab = 'yours', initialChip = 'All'
         <div>
           <h2 className="text-2xl font-extrabold tracking-axal-heading text-axal-ink dark:text-gray-100">Connectors</h2>
           <p className="mt-1 text-[13.5px] text-axal-muted dark:text-gray-400">Bring your tools into StudioOS, and send your work back to them.</p>
-        </div>
-        <div className="flex rounded-[10px] border border-axal-hairline bg-white p-[3px] dark:border-gray-700 dark:bg-gray-900" role="tablist" aria-label="Connectors">
-          {[['yours', 'Yours'], ['discover', 'Discover']].map(([id, label]) => (
-            <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => { chooseTab(id); setPage(1); }} data-testid={`tab-connectors-${id}`}
-              className={`rounded-lg px-3.5 py-1.5 text-[12.5px] font-semibold ${tab === id ? 'bg-axal-lavender text-axal-violet-deep dark:bg-violet-900/30 dark:text-violet-300' : 'text-axal-muted dark:text-gray-400'}`}>
-              {label}
-            </button>
-          ))}
         </div>
       </div>
 

@@ -3,13 +3,15 @@ import { FileText, X, Plus, Save, Trash2, History, Loader2, AlertTriangle, Refre
 import { api } from '../../lib/api';
 import { contractsApi } from '../../lib/api/contracts';
 import { ConsoleUnreadable } from './consoles/shared';
-import { Recorded, Pagination, input as contractInput, button as contractButton } from './contracts/parts';
+import TemplateCatalog from './contracts/TemplateCatalog';
 import { reportError } from '../../lib/log';
 import { useEscapeClose } from '../../components/useEscapeClose';
 import PaperPreview from '../../components/PaperPreview';
 import TemplateEditor from './contracts/TemplateEditor';
 import { useAuth } from '../../hooks/useAuthSync';
 import { branchOfUser } from '../../lib/shellRole';
+import { BELOW_MD_QUERY, usePhoneWidth } from '../../ui/phone/usePhoneWidth';
+import TemplateCatalogPhone from './contracts/TemplateCatalogPhone';
 
 // Task #8 — Markdown template editor + full template catalog.
 //
@@ -51,6 +53,8 @@ function detectMergeFields(body) {
 
 export default function AdminTemplates({ onOpenUsage, recordedPublication = false }) {
   const { user } = useAuth() || {};
+  // D717 (#1854): below `md` the Templates tab is the phone's read-only list.
+  const phone = usePhoneWidth(BELOW_MD_QUERY);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
@@ -62,13 +66,6 @@ export default function AdminTemplates({ onOpenUsage, recordedPublication = fals
   const [publishing, setPublishing] = useState(false);
   const [publishResult, setPublishResult] = useState(null);
   const [publishErr, setPublishErr] = useState('');
-  const [confirmPublish, setConfirmPublish] = useState(false);
-  const [search, setSearch] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('');
-  const [offset, setOffset] = useState(0);
-  const matching = useMemo(() => items.filter(t => (!categoryFilter || t.category === categoryFilter)
-    && `${t.title} ${t.slug}`.toLowerCase().includes(search.toLowerCase())).sort((a, b) =>
-      String(b.updated_at || '').localeCompare(String(a.updated_at || '')) || a.slug.localeCompare(b.slug)), [items, search, categoryFilter]);
 
   const reload = async () => {
     setLoading(true);
@@ -118,6 +115,29 @@ export default function AdminTemplates({ onOpenUsage, recordedPublication = fals
     );
   }
 
+  // D717 (#1854) decision 2: the phone list only while no editor is open, so an
+  // editor opened on a wider window keeps its draft when the window narrows.
+  if (recordedPublication && phone && !editing) {
+    return (
+      <div>
+        {err && <ConsoleUnreadable what="Templates" onRetry={reload} />}
+        {unavailable && (
+          <div className="bg-amber-50 border border-amber-200 text-amber-800 text-xs p-3 rounded-lg mb-3 flex items-start gap-2">
+            <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" />
+            <div>
+              The legal template store isn't available in this environment. Templates are managed by the production worker —
+              open the deployed app to view and edit them.
+            </div>
+          </div>
+        )}
+        {loading ? <p role="status" className="py-6 text-center text-sm text-gray-500 dark:text-gray-400">Loading…</p>
+          : err || unavailable ? null
+            : items.length === 0 ? <p className="py-6 text-center text-sm text-gray-500 dark:text-gray-400">No templates yet.</p>
+              : <TemplateCatalogPhone items={items} />}
+      </div>
+    );
+  }
+
   // THE PUSH IS THE WHOLE LIBRARY, AND IT IS REPORTED PER BRANCH. A failure to
   // reach one branch is not a failure of the push — HQ's library is HQ's
   // either way — so nothing here throws the operator back to an error page
@@ -128,12 +148,11 @@ export default function AdminTemplates({ onOpenUsage, recordedPublication = fals
     setPublishing(true);
     setPublishErr('');
     try {
-      setPublishResult(await (recordedPublication ? contractsApi.publish() : api.adminTemplatesPublish()));
-      setConfirmPublish(false);
+      setPublishResult(await api.adminTemplatesPublish());
     } catch (e) {
       // The library is untouched: this only failed to SEND. Saying which is the
       // difference between "retry" and "check what you just saved".
-      setPublishErr(recordedPublication ? 'Publication could not be confirmed. Reload the published versions before retrying.' : (e.message || 'The library could not be sent. Nothing in it changed.'));
+      setPublishErr(e.message || 'The library could not be sent. Nothing in it changed.');
       reportError('AdminTemplates:publish', e);
     } finally {
       setPublishing(false);
@@ -142,7 +161,9 @@ export default function AdminTemplates({ onOpenUsage, recordedPublication = fals
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
+      {/* D717 (#1851): on the Contracts desk the catalog's toolbar replaces this
+          header, and #1852's Publish v[N] the library-wide Publish. */}
+      {!recordedPublication && <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
         <div className="text-xs text-gray-500">
           {unavailable ? 'Template store is worker-only.' : `${items.length} template${items.length === 1 ? '' : 's'} in the catalog`}
         </div>
@@ -152,12 +173,12 @@ export default function AdminTemplates({ onOpenUsage, recordedPublication = fals
           </button>
           <button
             type="button"
-            onClick={recordedPublication ? () => setConfirmPublish(true) : publish}
+            onClick={publish}
             disabled={unavailable || publishing || !items.length}
             data-testid="template-publish"
             title="Send this library to every branch Worker bound to HQ"
             className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:border-violet-400 disabled:opacity-50 font-medium flex items-center gap-1 dark:border-gray-800 dark:text-gray-200">
-            <Send size={12} /> {publishing ? 'Publishing…' : recordedPublication ? 'Publish' : 'Publish to branches'}
+            <Send size={12} /> {publishing ? 'Publishing…' : 'Publish to branches'}
           </button>
           <button
             onClick={() => setEditing({ isNew: true })}
@@ -167,16 +188,9 @@ export default function AdminTemplates({ onOpenUsage, recordedPublication = fals
             <Plus size={12} /> New template
           </button>
         </div>
-      </div>
+      </div>}
 
       {err && <ConsoleUnreadable what="Templates" onRetry={reload} />}
-      {recordedPublication && !loading && !err && <p className="mb-3 text-xs text-gray-600 dark:text-gray-400">{items.filter(t => t.has_unpublished_changes).length} templates have unpublished changes. Publishing offers the latest saved versions to New envelope.</p>}
-      {confirmPublish && <div role="dialog" aria-modal="true" aria-label="Publish templates" className="rounded-xl border border-violet-200 bg-violet-50 p-4 dark:border-violet-900 dark:bg-violet-950/30">
-        <h3 className="font-semibold">Publish templates</h3><p>Publishing makes these versions the versions New envelope offers. Saved drafts stop changing that body until you publish again. Archived or blank templates are withdrawn; agreements already sent keep their copy. The catalogue is also sent to bound branches.</p>
-        <ul>{items.filter(t => !t.is_stub && t.body_md?.trim()).map(t => <li key={t.slug}>{t.title} · v{t.version}</li>)}</ul>
-        <ul>{items.filter(t => t.published_version != null && (t.is_stub || !t.body_md?.trim())).map(t => <li key={t.slug}>Withdraw {t.title} · published v{t.published_version}</li>)}</ul>
-        <button type="button" onClick={publish} disabled={publishing}>Confirm publish</button>{' '}<button type="button" onClick={() => setConfirmPublish(false)} disabled={publishing}>Cancel</button>
-      </div>}
 
       {publishErr && (
         <div
@@ -191,7 +205,7 @@ export default function AdminTemplates({ onOpenUsage, recordedPublication = fals
           data-testid="template-publish-result"
           className="bg-gray-50 border border-gray-200 text-xs p-3 rounded-lg mb-3 dark:bg-gray-900 dark:border-gray-800">
           <div className="font-semibold text-gray-900 dark:text-gray-100">
-            {publishResult.template_count} template{publishResult.template_count === 1 ? '' : 's'} {recordedPublication ? 'published' : 'sent'}
+            {publishResult.template_count} template{publishResult.template_count === 1 ? '' : 's'} sent
             {' · '}
             {publishResult.answered} of {publishResult.total} branch{publishResult.total === 1 ? '' : 'es'} answered
           </div>
@@ -233,15 +247,14 @@ export default function AdminTemplates({ onOpenUsage, recordedPublication = fals
         <div className="bg-white border border-gray-200 rounded-xl p-10 text-center text-gray-500 text-sm dark:bg-gray-900 dark:border-gray-800">
           No templates yet. Click <span className="font-semibold">New template</span> to add one.
         </div>
-      ) : recordedPublication ? <section className="rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-        <div className="flex flex-wrap gap-3 p-3"><label className="flex-1">Search templates<input className={contractInput} value={search} onChange={e => { setSearch(e.target.value); setOffset(0); }} /></label><label>Layer<select className={contractInput} value={categoryFilter} onChange={e => { setCategoryFilter(e.target.value); setOffset(0); }}><option value="">Every layer</option>{CATEGORY_ORDER.map(id => <option key={id} value={id}>{CATEGORY_META[id].label}</option>)}</select></label><span className="self-end text-xs text-gray-500">Last edited, newest</span></div>
-        <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-left text-xs"><thead><tr>{['Template', 'Version', 'Last edited', 'Usage'].map(label => <th className="p-3" key={label}>{label}</th>)}</tr></thead><tbody>{matching.slice(offset, offset + 25).map(t => <tr className="border-t border-gray-200 dark:border-gray-800" key={t.slug}>
-          <td className="p-3"><button type="button" className="font-semibold" data-testid={`template-card-${t.slug}`} onClick={() => setEditing({ slug: t.slug })}>{t.title}</button><p className="font-mono text-gray-500">{t.slug}</p></td>
-          <td className="p-3">v{t.version}<p>{t.published_version == null ? 'Unpublished' : `Published v${t.published_version}`}{t.has_unpublished_changes ? ' · pending changes' : ''}</p></td>
-          <td className="p-3"><Recorded value={fmtDate(t.updated_at)} reason="No edit date was recorded." /><p>{t.updated_by != null ? `Admin #${t.updated_by}` : 'Not recorded: imported before editors were recorded.'}</p></td>
-          <td className="p-3"><button type="button" className={contractButton} onClick={() => onOpenUsage?.(t.slug, t)}>{t.usage_count} uses</button></td>
-        </tr>)}</tbody></table></div>{!matching.length && <p className="p-4">No template matches these filters.</p>}<Pagination data={{ total: matching.length, items: matching.slice(offset, offset + 25) }} offset={offset} onPage={setOffset} />
-      </section> : (
+      ) : recordedPublication ? (
+        <TemplateCatalog
+          items={items}
+          authoring={!branchOfUser(user)}
+          onOpen={(slug, opts) => setEditing({ slug, focus: opts?.focus })}
+          onNew={() => setEditing({ isNew: true })}
+          onOpenUsage={onOpenUsage} />
+      ) : (
         <div className="space-y-6">
           {CATEGORY_ORDER.filter(cat => (grouped[cat] || []).length).map(cat => (
             <section key={cat}>

@@ -9,8 +9,9 @@
  *     connections: { telegram?, whatsapp? }, pending: { telegram, whatsapp } }
  * The shape is read defensively — a field that is absent is unknown, never a
  * zero and never a crash. `missing` names platform secrets: the Worker sends
- * it to admins, and only WhatsApp's is kept, for its page to draw to a Super
- * Admin (D754 §11, `whatsappPageState`); every other provider's is dropped. `rollout` (D754 w1, #1950: `off`, `canary` or
+ * it to admins, and only WhatsApp's and Telegram's are kept, for their pages
+ * to draw to a Super Admin (D754 §11, D756 §1.11: `whatsappPageState`,
+ * `telegramPageState`); every other provider's is dropped. `rollout` (D754 w1, #1950: `off`, `canary` or
  * `on`) also reaches Super Admins only. No WhatsApp phone number id, WABA id
  * or anything else the provider uses to address the member's account is ever
  * drawn.
@@ -61,8 +62,8 @@ export function readOverview(raw) {
     providers[key] = {
       available: typeof p.available === 'boolean' ? p.available : null,
       signup: isObj(p.signup) ? p.signup : null,
-      // D754 §11: only WhatsApp's page draws its missing secret names, to a Super Admin. Every other provider's are dropped.
-      missing: key === 'whatsapp' && Array.isArray(p.missing) ? p.missing.map(str).filter((m) => /^[A-Z][A-Z0-9_]{1,63}$/.test(m)) : [],
+      // D754 §11, D756 §1.11: only the chat channels' pages draw their missing secret names, to a Super Admin. Every other provider's are dropped.
+      missing: MESSAGING_PROVIDERS.includes(key) && Array.isArray(p.missing) ? p.missing.map(str).filter((m) => /^[A-Z][A-Z0-9_]{1,63}$/.test(m)) : [],
       rollout: ROLLOUTS.includes(p.rollout) ? p.rollout : null,
     };
   }
@@ -432,6 +433,72 @@ export function whatsappPageState(overview, user) {
   return out('not_connected', { canConnect: true });
 }
 
+// ---------- Telegram's own page: D756 §1.11 --------------------------------
+
+/** D756 §1.11's words for Telegram's page, as written there. */
+export const TELEGRAM_PAGE = Object.freeze({
+  canary: 'Only Super Admins can connect while Telegram is in canary.',
+  missing: 'Not set on this deployment:',
+  linked: 'Your Telegram account is linked. Add the Axal bot in Telegram Business to start receiving chats.',
+  cannotReply: 'The bot can read the chats you chose but not reply. To reply or send the recording notice from Axal, allow replies in Telegram › Settings › Telegram Business › Chatbots. You can still paste the notice yourself.',
+});
+
+const TELEGRAM_PILL = {
+  unreadable: { label: 'Status unreadable', tone: 'neutral' },
+  unavailable: { label: 'Not available yet', tone: 'neutral' },
+  not_connected: { label: 'Not connected', tone: 'neutral' },
+  linking: null,
+  linked: { label: 'One step left', tone: 'info' },
+  connected: { label: 'Connected', tone: 'ok' },
+  problem: null,
+};
+
+/**
+ * Which of D756 §1.11's states Telegram's page draws, for this viewer:
+ *   unreadable     the read failed;
+ *   unavailable    not switched on for this viewer: secrets unset, or canary
+ *                  or off for a member;
+ *   not_connected  Link Telegram and the five steps;
+ *   linking        a claim still open, with its ten-minute clock;
+ *   linked         the account is linked, the bot not yet added;
+ *   connected      @username, chats waiting, Test, Disconnect, and the
+ *                  reply-right note when the bot cannot reply;
+ *   problem        a connection kept while Axal has it off, or one that needs
+ *                  the member.
+ * `pill` is null where §1.11 draws none. `notices` are the canary line and the
+ * missing secret names, and `health` whether the bot's health is drawn: a
+ * Super Admin's only. `flow` is the state the card's own parts read.
+ */
+export function telegramPageState(overview, user) {
+  const superAdmin = isSuperAdminUser(user);
+  const out = (state, extra = {}) => ({
+    state, pill: TELEGRAM_PILL[state], why: '', account: '', note: '', notices: [], missing: [], health: superAdmin, flow: state, ...extra,
+  });
+  if (!overview) return out('unreadable', { why: 'Your connection could not be read. This is not a claim that you have none.' });
+  const p = overview.providers?.telegram || null;
+  const conn = overview.connections?.telegram || null;
+  const rollout = superAdmin ? p?.rollout ?? null : null;
+  // The Worker answers `available: false` to a member in canary; a rollout a member somehow holds closes it too.
+  const open = p?.available === true && (superAdmin || !ROLLOUTS.includes(p?.rollout) || p.rollout === 'on');
+  const missing = superAdmin ? [...(p?.missing ?? [])] : [];
+  const notices = [];
+  if (superAdmin && rollout === 'canary') notices.push(TELEGRAM_PAGE.canary);
+  if (missing.length) notices.push(`${TELEGRAM_PAGE.missing} ${missing.join(', ')}`);
+  const base = { notices, missing };
+  if (conn) {
+    const account = accountName(conn);
+    if (!open) return out('problem', { ...base, account, why: SWITCHED_OFF_WHY });
+    const problem = connectionProblem('telegram', conn);
+    if (problem) return out('problem', { ...base, account, why: problem });
+    if (telegramBusinessMissing(conn)) return out('linked', { ...base, account, why: TELEGRAM_PAGE.linked });
+    return out('connected', { ...base, account, note: telegramCannotReply(conn) ? TELEGRAM_PAGE.cannotReply : '' });
+  }
+  if (!open) return out('unavailable', { ...base, why: UNAVAILABLE_WHY });
+  const claim = telegramClaimView(overview.telegramLink ?? null);
+  if (claim && !claim.stale) return out('linking', { ...base, flow: 'not_connected' });
+  return out('not_connected', base);
+}
+
 // ---------- Zoom and Google Meet -------------------------------------------
 
 /**
@@ -471,3 +538,54 @@ export const MEETING_NOTES = {
   zoom: 'Schedule a Zoom call from an interview with Record in the cloud turned on, and its transcript comes in when the call ends. Transcripts need a paid Zoom plan with cloud recording and audio transcripts turned on; without a cloud recording, Zoom makes none.',
   google_meet: 'Schedule a Meet call from an interview; a transcript comes in after the call only if someone turned on transcription in it. Transcripts need a Google Workspace edition that includes Meet transcription.',
 };
+
+// ---------- Meet transcripts (D757 §2.12, #1926) ---------------------------
+
+/**
+ * Whether Axal may import this member's Meet transcripts, from the Calendar
+ * status read (`GET /api/calendar/google/status`, `meet_transcripts`):
+ *   granted     — their Google grant holds the transcript permission;
+ *   available   — the owner has switched import on, and they have not granted it;
+ *   not_set_up  — the owner has not (MEET_TRANSCRIPTS_ENABLED), so nothing can be granted.
+ * Anything else is null: unread, never a "no".
+ */
+export const MEET_TRANSCRIPT_STATES = ['granted', 'available', 'not_set_up'];
+
+export function meetTranscriptsState(status) {
+  const v = status?.meet_transcripts;
+  return MEET_TRANSCRIPT_STATES.includes(v) ? v : null;
+}
+
+export const MEET_ENGINE_LINE = 'Eadwyn writes a draft summary and suggests findings for your Validate modules; you accept each one.';
+
+export const MEET_TRANSCRIPT_COPY = {
+  not_set_up: "Importing Meet transcripts isn't set up on Axal yet. You can still hold the call: use the recorder in Axal during it, or paste the conversation afterwards.",
+  available: 'Google Meet calls are scheduled on your Google Calendar connection. Needs a Google Workspace plan with Meet transcripts, and transcripts turned on in the call.',
+  granted: 'Meet transcripts are imported into the interview after the call.',
+};
+
+export const ALLOW_MEET_LABEL = 'Allow transcript import';
+
+/** What a Meet surface says for a state, and whether it offers the button (only when `available`). */
+export function meetTranscriptsCopy(state) {
+  return { line: MEET_TRANSCRIPT_COPY[state] || '', engine: MEET_ENGINE_LINE, button: state === 'available' };
+}
+
+export const MEET_RETURN_WORDS = {
+  ok: 'Meet transcripts can now be imported.',
+  meet_scope_missing: 'Google did not grant transcript access. Try again, and tick the transcript permission.',
+};
+
+/**
+ * The banner after Google's round trip: the callback adds `meet=granted` to
+ * a transcript grant's `?google=connected`, and refuses one without the
+ * permission as `?google=error&reason=meet_scope_missing`. '' otherwise, so an
+ * ordinary Google connect never reads as a transcript grant.
+ */
+export function meetTranscriptsReturn(search) {
+  let q;
+  try { q = new URLSearchParams(typeof search === 'string' ? search : ''); } catch { return ''; }
+  if (q.get('google') === 'connected' && q.get('meet') === 'granted') return MEET_RETURN_WORDS.ok;
+  if (q.get('google') === 'error' && q.get('reason') === 'meet_scope_missing') return MEET_RETURN_WORDS.meet_scope_missing;
+  return '';
+}

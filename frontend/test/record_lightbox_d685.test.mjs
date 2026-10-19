@@ -620,6 +620,128 @@ test('Text chat imports a waiting WhatsApp chat in place: chosen, assigned from 
   } finally { await m4.unmount(); }
 });
 
+// D754 (#1980): a WhatsApp chat that waits for consent starts only once it is asked for, or the member gives their word.
+const CONSENT_THREADS = (windowOpen) => ({ items: [
+  { uid: 'wa-1', provider: 'whatsapp', contact_name: 'Dana Ruiz', message_count: 2, last_message_at: null, status: 'pending', consent_status: 'not_asked', reply_window_open: windowOpen },
+  { uid: 'tg-1', provider: 'telegram', contact_name: 'Tele Tom', message_count: 1, last_message_at: null, status: 'pending', consent_status: null, reply_window_open: true },
+] });
+
+test('a WhatsApp chat that waits for consent: Start waits for Ask or the member\'s word, and the assign carries it', async () => {
+  const s = spies();
+  s.props.channelsSource.threads = async () => CONSENT_THREADS(true);
+  const m = await mount({ ...s.props, channels: CONNECTED });
+  try {
+    await m.type('record-name', 'Dana');
+    await m.click('record-mode-text');
+    await m.click('record-thread-wa-1');
+    assert.ok(m.by('record-chat-consent'));
+    assert.equal(m.text(m.by('record-chat-consents-ask')), 'Ask Dana in WhatsApp');
+    assert.equal(m.text(m.by('record-chat-consents-written')), 'Dana already agreed: In writing');
+    assert.equal(m.by('record-chat-consents-in_app'), undefined, '"In the app" is not the member\'s word');
+    assert.equal(m.pr(m.by('record-start'))['aria-disabled'], true, 'Start waits');
+    assert.equal(m.text(m.by('record-start-reason')), 'Ask Dana in WhatsApp, or say they already agreed.');
+    await m.click('record-chat-consents-ask');
+    assert.equal(m.pr(m.by('record-start'))['aria-disabled'], undefined, 'asked: Start may go');
+    await m.click('record-start');
+    assert.deepEqual(s.calls.assign, [['wa-1', { create: { interviewee_name: 'Dana', interviewee_company: null, project_id: 3 }, consent: { ask: true } }]]);
+  } finally { await m.unmount(); }
+
+  const s2 = spies();
+  s2.props.channelsSource.threads = async () => CONSENT_THREADS(true);
+  const m2 = await mount({ ...s2.props, channels: CONNECTED, interview: { id: 7, interviewee_name: 'Ana' } });
+  try {
+    await m2.click('record-mode-text');
+    await m2.click('record-thread-wa-1');
+    await m2.click('record-chat-consents-pre_agreed');
+    await m2.click('record-start');
+    assert.deepEqual(s2.calls.assign, [['wa-1', { interview_id: 7, consent: { method: 'pre_agreed' } }]], 'the member\'s word');
+  } finally { await m2.unmount(); }
+});
+
+test('the window closed: Ask is disabled and says D754\'s sentence; a Telegram chat (required false) is unchanged', async () => {
+  const s = spies();
+  s.props.channelsSource.threads = async () => CONSENT_THREADS(false);
+  const m = await mount({ ...s.props, channels: CONNECTED, interview: { id: 7, interviewee_name: 'Ana' } });
+  try {
+    await m.click('record-mode-text');
+    await m.click('record-thread-wa-1');
+    assert.equal(m.pr(m.by('record-chat-consents-ask')).disabled, true);
+    assert.equal(m.text(m.by('record-chat-window')), 'Ana last wrote more than 24 hours ago, and WhatsApp only lets Axal write within 24 hours of their last message. Ask Ana to send you a message from your WhatsApp Business app, then ask again.');
+    await m.click('record-chat-consents-ask');
+    assert.equal(m.pr(m.by('record-start'))['aria-disabled'], true, 'a disabled Ask cannot be chosen');
+    assert.equal(s.calls.assign.length, 0);
+  } finally { await m.unmount(); }
+
+  const s2 = spies();
+  s2.props.channelsSource.threads = async () => CONSENT_THREADS(true);
+  const m2 = await mount({ ...s2.props, channels: { ...CONNECTED, connections: { telegram: { status: 'active' } } }, interview: { id: 7, interviewee_name: 'Ana' } });
+  try {
+    await m2.click('record-mode-text');
+    await m2.click('record-provider-telegram');
+    await m2.click('record-thread-tg-1');
+    assert.equal(m2.by('record-chat-consent'), undefined, 'no consent block for Telegram');
+    await m2.click('record-start');
+    assert.deepEqual(s2.calls.assign, [['tg-1', { interview_id: 7 }]], 'no consent in the body');
+  } finally { await m2.unmount(); }
+});
+
+// D756 (#1981): a Telegram chat's consent is the interviewee's own YES, asked before the import.
+const TG = (over = {}) => ({ items: [
+  { uid: 'tg-9', provider: 'telegram', contact_name: 'Tele Tom', message_count: 1, last_message_at: null, status: 'pending', consent_status: 'not_asked', reply_window_open: true, can_reply: true, ...over },
+] });
+const TG_CHANNELS = { ...CONNECTED, connections: { telegram: { status: 'active' } } };
+const tgView = (over = {}) => ({ required: true, status: 'requested', source: null, method: null, requested_at: '2026-10-18T14:05:00.000Z', delivered_at: null, answered_at: null, withdrawn_at: null, window_open: true, can_request: false, notice_text: null, ...over });
+
+test('Telegram: Start waits for a YES; "Ask for consent in Telegram" asks once; no "already agreed"', async () => {
+  const s = spies();
+  const asked = [];
+  s.props.channelsSource.threads = async () => TG();
+  s.props.channelsSource.requestConsent = async (uid) => { asked.push(uid); return { ok: true, consent: tgView() }; };
+  const m = await mount({ ...s.props, channels: TG_CHANNELS, interview: { id: 7, interviewee_name: 'Tom' } });
+  try {
+    await m.click('record-mode-text');
+    await m.click('record-provider-telegram');
+    await m.click('record-thread-tg-9');
+    assert.equal(m.text(m.by('record-telegram-consent-state')), 'Not asked yet');
+    assert.equal(m.by('record-chat-consents'), undefined, 'no "already agreed" for Telegram');
+    assert.equal(m.pr(m.by('record-start'))['aria-disabled'], true);
+    assert.equal(m.text(m.by('record-start-reason')), 'Ask Tom for consent in Telegram first.');
+    await m.click('record-telegram-ask');
+    assert.deepEqual(asked, ['tg-9']);
+    assert.match(m.text(m.by('record-telegram-consent-state')), /^Asked at /);
+    assert.equal(m.text(m.by('record-start-reason')), "Start waits for Tom's YES in Telegram.");
+    assert.equal(m.pr(m.by('record-start'))['aria-disabled'], true, 'asked is not agreed');
+  } finally { await m.unmount(); }
+
+  const s2 = spies();
+  s2.props.channelsSource.threads = async () => TG({ consent_status: 'given' });
+  const m2 = await mount({ ...s2.props, channels: TG_CHANNELS, interview: { id: 7, interviewee_name: 'Tom' } });
+  try {
+    await m2.click('record-mode-text');
+    await m2.click('record-provider-telegram');
+    await m2.click('record-thread-tg-9');
+    assert.equal(m2.by('record-telegram-consent'), undefined, 'given: nothing to ask');
+    await m2.click('record-start');
+    assert.deepEqual(s2.calls.assign, [['tg-9', { interview_id: 7 }]], 'the assign carries no consent for Telegram');
+  } finally { await m2.unmount(); }
+});
+
+test('Telegram: without the reply right, or outside 24 hours, the reason and "Copy the notice" (the Worker\'s text)', async () => {
+  for (const [over, reason] of [[{ can_reply: false }, "The bot isn't allowed to reply in this chat"], [{ reply_window_open: false }, 'The person last wrote more than 24 hours ago']]) {
+    const s = spies();
+    s.props.channelsSource.threads = async () => TG(over);
+    const m = await mount({ ...s.props, channels: TG_CHANNELS, interview: { id: 7, interviewee_name: 'Tom' } });
+    try {
+      await m.click('record-mode-text');
+      await m.click('record-provider-telegram');
+      await m.click('record-thread-tg-9');
+      assert.equal(m.by('record-telegram-ask'), undefined, 'Axal cannot send it');
+      assert.equal(m.text(m.by('record-telegram-copy-reason')), `${reason}, so Axal cannot send the notice. Paste it into the chat yourself.`);
+      assert.equal(m.by('record-telegram-copy-button'), undefined, 'no notice text from the Worker: nothing to copy, nothing written here');
+    } finally { await m.unmount(); }
+  }
+});
+
 test('"Schedule the call for later" for a new person adds them to the pipeline, booked, then opens the scheduler', async () => {
   const prevFetch = globalThis.fetch;
   globalThis.fetch = async () => new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });

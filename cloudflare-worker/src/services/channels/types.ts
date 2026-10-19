@@ -22,6 +22,56 @@ export type MessagingProvider = typeof MESSAGING_PROVIDERS[number];
 export const MEETING_PROVIDERS = ['zoom', 'google_meet'] as const;
 export type MeetingProvider = typeof MEETING_PROVIDERS[number];
 
+/**
+ * D754 §4 (#1893) — whether a chat on this provider keeps nothing until the
+ * interviewee's consent is `given` (services/channels/consent.ts). Telegram
+ * keeps D684's behaviour until D756 adds its own in-chat request and turns
+ * this on. Lives here, in a file that imports nothing, so the session gate
+ * and Customer research can read it without an import cycle.
+ */
+export const CONSENT_REQUIRED: Record<MessagingProvider, boolean> = { whatsapp: true, telegram: false };
+
+/** False for anything that is not a messaging provider: a meeting, an assistant's client id, null. */
+export function consentRequired(provider: string | null | undefined): boolean {
+  return Object.prototype.hasOwnProperty.call(CONSENT_REQUIRED, String(provider ?? ''))
+    && CONSENT_REQUIRED[provider as MessagingProvider] === true;
+}
+
+/** The providers whose chats wait for consent, for SQL (`json_each`). */
+export const consentRequiredProviders = (): MessagingProvider[] =>
+  MESSAGING_PROVIDERS.filter((p) => CONSENT_REQUIRED[p]);
+
+/**
+ * D756 §1.5 (#1977) — the providers whose interviewees are asked in the chat
+ * (consent.ts). For both, no voice note, audio file or video of a chat is
+ * downloaded or transcribed until its consent is `given`
+ * (`audioConsentRequired`). Telegram's TEXT keeps D684's rule
+ * (`consentRequired('telegram')` stays false): only its audio waits.
+ */
+export const CONSENT_ASKED: Record<MessagingProvider, boolean> = { whatsapp: true, telegram: true };
+
+export function consentAsked(provider: string | null | undefined): boolean {
+  return Object.prototype.hasOwnProperty.call(CONSENT_ASKED, String(provider ?? ''))
+    && CONSENT_ASKED[provider as MessagingProvider] === true;
+}
+
+/** Whether a chat's notes may be fetched only once its consent is `given`. */
+export const audioConsentRequired = consentAsked;
+
+/** D756 ruling 6, §2 (m): the member's word stands in for the interviewee's on WhatsApp only. */
+export function memberAttestationAllowed(provider: string | null | undefined): boolean {
+  return provider === 'whatsapp';
+}
+
+/**
+ * A whole message that may answer the consent notice, for every provider:
+ * yes, no or stop, any case, trimmed, with one optional closing `.` or `!`.
+ */
+export function consentWord(text: string | null | undefined): 'yes' | 'no' | 'stop' | null {
+  const w = String(text ?? '').trim().toLowerCase().replace(/[.!]$/, '').trim();
+  return w === 'yes' || w === 'no' || w === 'stop' ? w : null;
+}
+
 /** The `submitted_via_name` an intake session shows, and the badge the UI draws. */
 export const PROVIDER_LABEL: Record<ChannelProvider, string> = {
   telegram: 'Telegram',
@@ -59,9 +109,11 @@ export const CHANNEL_LIMITS = {
    */
   transcriptionsPerDay: 50,
   /**
-   * Free-form reply window, ms. WhatsApp: since the customer's last message
-   * (after it, only an approved template). Telegram Business: the bot may act
-   * only in chats active in the last 24 hours (BusinessConnection.can_reply).
+   * Free-form reply window, ms, counted for both providers from the contact's
+   * last message (`last_inbound_at`, `replyWindowOpen` in threads.ts, D756).
+   * WhatsApp: after it, only an approved template. Telegram Business: the bot
+   * may reply only in chats that had incoming messages in the last 24 hours
+   * (Bot API 10.3, BusinessBotRights.can_reply).
    */
   replyWindowMs: 24 * 60 * 60 * 1000,
 } as const;
@@ -181,6 +233,19 @@ export interface InboundLinkConfirm {
   displayName: string | null;
 }
 
+/**
+ * Telegram: the "manage this chat" button, `/start bizChat<chat id>`, in the
+ * member's private chat with the bot (D756). `chatId` is that private chat, to
+ * answer in; the managed chat's id is not carried.
+ */
+export interface InboundManageChat {
+  kind: 'manage_chat';
+  provider: 'telegram';
+  eventId: string;
+  telegramUserId: string;
+  chatId: string;
+}
+
 /** Anything verified but not acted on (unsupported update types, groups, bots). */
 export interface InboundIgnored {
   kind: 'ignored';
@@ -189,9 +254,60 @@ export interface InboundIgnored {
   reason: string;
 }
 
+/**
+ * D754 §4 (#1893): what may be the interviewee's answer to Axal's consent
+ * notice — a reply button ('button'), or a whole message that is YES, NO or
+ * STOP ('text'). Only the contact's side is ever one. Whether it counts is
+ * decided by `consent.ts`, against the thread's open request and its notices;
+ * a typed word that does not count is stored as the ordinary message it is
+ * (`fallback`).
+ */
+export interface InboundConsentReply {
+  kind: 'consent_reply';
+  provider: MessagingProvider;
+  eventId: string;
+  connectionRef: string;
+  externalChatId: string;
+  externalMessageId: string;
+  side: 'contact';
+  answer: 'yes' | 'no' | 'stop';
+  via: 'button' | 'text';
+  /** The request uid a button carries; null for a typed word. */
+  requestUid: string | null;
+  /** The provider id of the message this one replies to (WhatsApp `context.id`). */
+  contextMessageId: string | null;
+  /** The typed message, as an ordinary message, for when the word does not count. Null for a button. */
+  fallback: InboundMessage | null;
+  sentAt: string;
+}
+
+/**
+ * D754 way B (#1937, #1938): a message to AXAL'S OWN WhatsApp number. It is
+ * never a customer chat: the sender is a member (or someone trying to be one),
+ * so it has its own shape and never becomes an InboundMessage or a consent
+ * reply. Exactly one of `text`, `media` and `button` is set, unless
+ * `unsupported` (a sticker, an image, a video, any other interactive message).
+ */
+export interface InboundAxalMessage {
+  kind: 'axal_message';
+  provider: 'whatsapp';
+  eventId: string;
+  connectionRef: string;
+  /** The sender's wa_id. */
+  externalChatId: string;
+  externalMessageId: string;
+  text: string | null;
+  /** `audio` is a voice note or an audio file; a `document`'s type is checked by the capture. */
+  media: { mediaId: string; mime: string | null; sizeBytes: number | null; type: 'audio' | 'document' } | null;
+  /** A reply button's id. */
+  button: string | null;
+  unsupported: boolean;
+  sentAt: string;
+}
+
 export type InboundEvent =
   | InboundMessage | InboundEdit | InboundDelete | InboundStatus
-  | InboundConnection | InboundLink | InboundLinkConfirm | InboundIgnored;
+  | InboundConnection | InboundLink | InboundLinkConfirm | InboundManageChat | InboundConsentReply | InboundAxalMessage | InboundIgnored;
 
 /** What a send returns. `submitted` is acceptance by the provider, never delivery. */
 export interface SendResult {
@@ -201,6 +317,8 @@ export interface SendResult {
   code?: string;
   /** True when retrying later may succeed (429, 5xx, network). */
   retryable?: boolean;
+  /** A 429's wait, in seconds, when the provider gave one (Telegram's `retry_after`, D756). */
+  retryAfterSec?: number;
 }
 
 /**

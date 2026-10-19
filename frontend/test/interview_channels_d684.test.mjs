@@ -157,8 +157,16 @@ test('every request in the module is written as a literal path the drift check c
   assert.deepEqual(calls.sort(), [
     // D754 way B (#1939): the member's own WhatsApp through Axal's number (wb1, #1937) is the four `/channels/whatsapp/link` rows.
     'DELETE /channels/:p', 'DELETE /channels/whatsapp/link', 'DELETE /founder/validate/interviews/:p/meetings/:p',
+    // D756 (#1895): the Super Admin's interview-bot health read, and the existing register route.
+    'GET /admin/channels/telegram/webhook',
+    // D757 (#1926): the Calendar status read for meet_transcripts, and the Meet transcript consent.
+    'GET /calendar/google/status',
     'GET /channels', 'GET /channels/telegram/link', 'GET /channels/threads', 'GET /channels/threads/:p', 'GET /channels/whatsapp/link', 'GET /founder/validate/interviews/:p/meetings',
-    'POST /channels/:p/test', 'POST /channels/telegram/link', 'POST /channels/telegram/link/:p/confirm', 'POST /channels/threads/:p/assign', 'POST /channels/threads/:p/ignore',
+    'POST /admin/channels/telegram/webhook',
+    'POST /calendar/google/meet-transcripts/connect',
+    'POST /channels/:p/test', 'POST /channels/telegram/link', 'POST /channels/telegram/link/:p/confirm', 'POST /channels/threads/:p/assign',
+    // D754 (#1893): the consent notice and the member's word.
+    'POST /channels/threads/:p/consent', 'POST /channels/threads/:p/consent-request', 'POST /channels/threads/:p/ignore',
     'POST /channels/threads/:p/reply', 'POST /channels/threads/:p/voice/:p/retry', 'POST /channels/whatsapp/connect', 'POST /channels/whatsapp/link', 'POST /channels/whatsapp/link/:p/confirm', 'POST /founder/validate/interviews/:p/meetings',
     // #1588: attach by link posts to the same route as scheduling (D685 §5.3.2).
     'POST /founder/validate/interviews/:p/meetings',
@@ -472,7 +480,7 @@ test('the composer: open inside the window, closed with the provider’s own rul
   assert.equal(wa.enabled, false);
   assert.match(wa.reason, /WhatsApp only allows a free reply within 24 hours of the customer’s last message/);
   const tg = composerState({ ...THREAD, provider: 'telegram', reply_window_open: false });
-  assert.match(tg.reason, /Telegram only lets the bot reply in chats active in the last 24 hours/);
+  assert.match(tg.reason, /Telegram only lets the bot reply within 24 hours of your contact’s last message/);
   const rights = composerState({ ...THREAD, provider: 'telegram', can_reply: false, reply_window_open: false });
   assert.match(rights.reason, /not allowed to reply[^]*Settings › Telegram Business › Chatbots/);
   assert.match(composerState({ ...THREAD, status: 'ignored' }).reason, /Stop ignoring it to reply/);
@@ -683,8 +691,8 @@ test('the schedule form: local time to UTC, a future time, a duration; the refus
     { provider: 'google_meet', available: true, connected: true, transcript_access: 'missing' },
   ] });
   assert.equal(providerNote('zoom', ps.zoom), 'Connect Zoom in Account › Connectors first.');
-  assert.equal(providerNote('google_meet', ps.google_meet), 'Axal cannot import Google Meet transcripts yet. You can still hold the call: use the recorder in Axal during it, or paste the conversation afterwards.');
-  assert.doesNotMatch(providerNote('google_meet', ps.google_meet), /reconnect/i, 'a reconnect cannot help');
+  // Meet's transcript permission is MeetTranscripts' to say, from the Calendar status read (D757, #1926).
+  assert.equal(providerNote('google_meet', ps.google_meet), '');
   assert.equal(providerNote('zoom', meetingProviders(null).zoom), '', 'an unread provider is not a "no"');
   assert.match(providerNote('zoom', { available: false }), /not set up on Axal yet/);
   const notice = 'Google Meet transcripts are not available on Axal yet, so this call’s transcript will not be imported. You can still hold the call: use the recorder in Axal during it, or paste the conversation afterwards.';
