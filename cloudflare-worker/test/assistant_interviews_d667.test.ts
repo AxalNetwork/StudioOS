@@ -372,7 +372,7 @@ test('an accepted assistant placement writes the row the hand-entry form writes'
   assert.equal(seg.status, 201, JSON.stringify(seg.json));
   assert.equal((await call(b.env, cycleValidate, 'PUT', `/interviews/${ivB}/segment${q}`, { segment_id: seg.json.id })).status, 200);
   assert.equal((await call(b.env, cycleValidate, 'POST', `/demand-signals${q}`,
-    { kind: 'would_pay', interview_id: ivB, note: 'Would pay tomorrow', status: 'to_confirm' })).status, 201);
+    { kind: 'would_pay', interview_id: ivB, note: 'Would pay tomorrow', status: 'confirmed' })).status, 201);
   assert.equal((await call(b.env, cycleValidate, 'POST', `/competitor-mentions${q}`,
     { name: 'Ledgerly', detail: 'Too expensive', signal_type: 'mention' })).status, 201);
   b.db.prepare("INSERT INTO interview_pain_severities (interview_id, phrase_norm, severity) VALUES (?, 'reconcile by hand', 'real')").run(ivB);
@@ -387,8 +387,9 @@ test('an accepted assistant placement writes the row the hand-entry form writes'
   same('SELECT phrase_norm, severity FROM interview_pain_severities', 'SELECT phrase_norm, severity FROM interview_pain_severities', [], 'an accepted severity is not the stored row');
 });
 
-test('a market fact from an assistant stays proposed: accept is refused and the row stays pending', async () => {
+test('a market fact from an assistant is accepted into interview_findings (D757: it has a store now)', async () => {
   const { env, db } = world();
+  db.exec(mig('489_interview_findings.sql'));
   const { session_id } = await submitInterview(env, GRANT, ARGS());
   const out = await proposePlacements(env, GRANT, { session_id, placements: [
     { module: 'market_intelligence', kind: 'market_fact', payload: { fact: 'Ledgerly is too expensive for small teams.', source: 'the interviewee' },
@@ -396,12 +397,12 @@ test('a market fact from an assistant stays proposed: accept is refused and the 
   ] });
   assert.equal(out.stored, 1);
   const { id } = db.prepare('SELECT id FROM validate_proposals').get() as any;
-  const r = await call(env, structure, 'POST', `/placements/${id}/accept`);
-  assert.equal(r.status, 409);
-  assert.equal(r.json.error, 'writer_not_available');
-  assert.equal((db.prepare('SELECT status FROM validate_proposals WHERE id = ?').get(id) as any).status, 'pending');
   const read = await call(env, structure, 'GET', `/sessions/${session_id}/placements`);
-  assert.equal(read.json.runs[0].placements[0].can_accept, false);
+  assert.equal(read.json.runs[0].placements[0].can_accept, true);
+  const r = await call(env, structure, 'POST', `/placements/${id}/accept`);
+  assert.equal(r.status, 200, JSON.stringify(r.json));
+  assert.equal((db.prepare('SELECT status FROM validate_proposals WHERE id = ?').get(id) as any).status, 'accepted');
+  assert.equal((db.prepare("SELECT COUNT(*) n FROM interview_findings WHERE kind = 'market_fact'").get() as any).n, 1);
 });
 
 test('deleting a submitted session deletes its pending proposals, whoever proposed them, and the decided ones lose their quote', async () => {

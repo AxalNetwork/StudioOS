@@ -41,6 +41,7 @@
 import type { Env } from '../types';
 import { budgetRefusalMessage } from './aiRouter';
 import { loadSession, sessionConsentBlocks } from './interviewSessions';
+import { presentTables } from './interviewFindings';
 import { IntakeError, writableSession } from './interviewIntake';
 import { summariseSession, type SummaryResult } from './interviewProcessing';
 import { enqueueJob } from './queue';
@@ -273,7 +274,13 @@ export async function withdrawDigest(env: Env, sessionId: number, actorUserId: n
        FROM validate_proposals WHERE session_id = ?`,
   ).bind(sessionId).first<{ pending: number | null; decided: number | null }>();
   const out = { pending_deleted: Number(counts?.pending || 0), decided_unquoted: Number(counts?.decided || 0) };
+  // D757 §2.13 (#1923) — the findings already accepted from this session stay
+  // the founder's, without the interviewee's words.
+  const findings = (await presentTables(env, ['interview_findings'])).has('interview_findings')
+    ? [env.DB.prepare('UPDATE interview_findings SET quote = NULL, cite_from = NULL, cite_to = NULL WHERE session_id = ?').bind(sessionId)]
+    : [];
   await env.DB.batch([
+    ...findings,
     env.DB.prepare(
       `UPDATE interview_sessions
           SET summary = NULL, summary_model = NULL, summarised_at = NULL, summary_citations_json = NULL,
