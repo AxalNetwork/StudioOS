@@ -4,26 +4,6 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
-## Send recordings from your WhatsApp, on WhatsApp's page and in Record a Session (D754 fb part 1, #1939)
-
-- WhatsApp's page draws "Send recordings from your WhatsApp" below way A
-  (`WhatsAppWayB.jsx`, rules in `whatsappWayB.js`), over wb1's
-  `/channels/whatsapp/link` routes: **Link your WhatsApp**; the one-time code,
-  **Open WhatsApp** (the Worker's `wa.me` link with `LINK <code>` typed) and
-  "Expires in 10 minutes", re-read when the tab regains focus; "Is •••• 1234
-  your number? **Confirm**"; and once linked, the masked number, the last
-  recording, the line on what Axal sends, and **Unlink**.
-- While Axal's number is not set up (every wb1 route answers 503
-  `not_available`) the section is not drawn. A Super Admin sees the four
-  `WHATSAPP_AXAL_*` names, never a value.
-- Record a Session gets "Send it from WhatsApp" beside "Send it from your AI
-  assistant": three steps, the 5 MB limit and "Everyone you recorded must
-  have agreed before you recorded.". It reads the link only once opened.
-- `channelsApi` gains `whatsappLink`, `whatsappLinkView`,
-  `confirmWhatsAppLink` and `unlinkWhatsApp` (D527).
-- Not yet: the "Recordings go to" venture picker, Axal's number in the entry,
-  and "Agreed beforehand" (wb2). Frontend only.
-
 ## WhatsApp's page says where WhatsApp stands, in every D754 state (D754 f1, #1959)
 
 - `/account/connectors/whatsapp` draws `WhatsAppPageBody` (`ChannelsGroup.jsx`)
@@ -68,29 +48,6 @@
 - A sign-in return lands on its connector's page (`connectorsRedirect`); a
   Mercury return goes to the hub with its keys stripped (D715 decision 3).
   No Worker change.
-
-## Send to Axal, part 1: linking a member's own WhatsApp through Axal's number (D754 way B, #1937)
-
-- `cloudflare-worker/src/services/channels/whatsappLink.ts` and four routes in
-  `routes/channels.ts`: `POST /api/channels/whatsapp/link` gives a one-time
-  code and a `wa.me` link that types `LINK <code>` to Axal's number;
-  `GET /whatsapp/link` shows the claim as `•••• 1234`;
-  `POST /whatsapp/link/:uid/confirm` is Axal's half; `DELETE /whatsapp/link`
-  unlinks. The webhook answers Axal's number before any member connection:
-  `LINK <code>` records the claim with one reply ("Confirm in Axal to finish
-  linking this WhatsApp."), STOP from a linked sender unlinks with one reply,
-  and anything else gets no reply and keeps no text. Replies go through the
-  outbound ledger (`wblink:<code uid>`) with Axal's own token.
-- Migration 492 rebuilds `channel_link_codes` so `provider` admits
-  `whatsapp_link`, adds the one-member-per-number index on active
-  `whatsapp_link` integrations, and creates `whatsapp_captures` for part 2.
-- No number is stored in clear: an HMAC for lookups, the id encrypted, the
-  mask for show. Sender tries (5) and member codes (10) are limited per hour
-  on hashed subjects. A link unused for 180 days lapses in the channel purge.
-- Inert until the owner sets `WHATSAPP_AXAL_ACCESS_TOKEN`,
-  `WHATSAPP_AXAL_PHONE_NUMBER_ID`, `WHATSAPP_AXAL_WABA_ID` and
-  `WHATSAPP_AXAL_DISPLAY_NUMBER`: until then every way-B route is 503.
-- `test/whatsapp_axal_link_d754.test.ts` (19 tests), with Graph mocked.
 
 ## The LP's capital call opens on the amount, and the fee statement is on screen (D717, #1859)
 
