@@ -24,6 +24,7 @@ import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { encryptCredentials } from '../src/integrations/secrets.ts';
 import { runChannelJob } from '../src/services/channels/jobs.ts';
 
+import { withGuard } from './_guard_stub.mjs';
 /** Provider ids are stored hashed (events.ts `refKey`); the tests look them up the same way. */
 export const refCode = (code: string) => createHash('sha256').update(code).digest('hex');
 export const ref = (provider: string, id: string) => createHash('sha256').update(`${provider}:${id}`).digest('hex');
@@ -106,13 +107,14 @@ export async function world(opts: { seed?: boolean; budget?: number } = {}) {
   /** Each JOB_QUEUE.send's options (delaySeconds), in order (D756). */
   const queuedOpts: any[] = [];
   const aiCalls: any[] = [];
+  const r2 = memR2();
   const env: any = {
-    DB, ENVIRONMENT: 'development', JWT_SECRET, KEK_PII: 'k'.repeat(48), ...SECRETS,
+    DB, ENVIRONMENT: 'development', JWT_SECRET, KEK_PII: 'k'.repeat(48), ...SECRETS, FILES: r2,
     WHATSAPP_CHANNEL: 'on', TELEGRAM_CHANNEL: 'on',
     APP_URL: 'https://axal.vc', PUBLIC_BASE_URL: 'https://axal.vc',
     RATE_LIMITS: memKV(), USE_CF_QUEUE: 'true',
     JOB_QUEUE: { async send(body: any, opts?: any) { queued.push(body); queuedOpts.push(opts ?? null); } },
-    AI: { async run(model: string, input: any) { aiCalls.push({ model, input }); return { text: 'We lose a whole day every month to this.', transcription_info: { language: 'en' } }; } },
+    AI: withGuard({ async run(model: string, input: any) { aiCalls.push({ model, input }); return { text: 'We lose a whole day every month to this.', transcription_info: { language: 'en' } }; } }),
   };
   if (opts.seed) {
     const creds = await encryptCredentials(env, 'wa-me', { access_token: WA_TOKEN, token_type: 'bearer' });
@@ -126,7 +128,7 @@ export async function world(opts: { seed?: boolean; budget?: number } = {}) {
     db.exec(`INSERT INTO telegram_business_connections (uid, business_connection_id, telegram_user_id, user_id, is_enabled, can_reply)
              VALUES ('bc-1', 'BC-ME', '${TG_ME}', ${ME}, 1, 1)`);
   }
-  return { env, db, queued, queuedOpts, aiCalls };
+  return { env, db, queued, queuedOpts, aiCalls, r2 };
 }
 
 // ---------------------------------------------------------------------------
@@ -164,6 +166,26 @@ export async function call(env: any, user: number, method: string, path: string,
   const headers: Record<string, string> = { authorization: `Bearer ${tok}` };
   if (body !== undefined) headers['content-type'] = 'application/json';
   return send(env, `/api/channels${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+}
+
+/** D754 W3 (#1935): the FILES bucket, in memory, with the metadata `putChunk` writes. */
+export function memR2() {
+  const objects = new Map<string, { bytes: Uint8Array; customMetadata: Record<string, string>; contentType: string | null }>();
+  return {
+    objects,
+    async put(key: string, value: ArrayBuffer, opts: any = {}) {
+      objects.set(key, { bytes: new Uint8Array(value.slice(0)), customMetadata: { ...(opts.customMetadata ?? {}) }, contentType: opts.httpMetadata?.contentType ?? null });
+    },
+    async get(key: string) {
+      const o = objects.get(key);
+      return o ? { customMetadata: o.customMetadata, arrayBuffer: async () => o.bytes.slice().buffer } : null;
+    },
+    async head(key: string) { const o = objects.get(key); return o ? { customMetadata: o.customMetadata } : null; },
+    async delete(keys: string | string[]) { for (const k of [keys].flat()) objects.delete(k); },
+    async list(opts: { prefix?: string; cursor?: string } = {}) {
+      return { objects: [...objects.keys()].filter((k) => k.startsWith(opts.prefix ?? '')).map((key) => ({ key })), truncated: false };
+    },
+  };
 }
 
 export function tgHook(env: any, update: unknown, secret: string | null = SECRETS.TELEGRAM_CHANNEL_WEBHOOK_SECRET) {

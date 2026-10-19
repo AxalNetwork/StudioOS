@@ -212,8 +212,9 @@ test('a Mercury return never reaches the Mercury page; the page\'s own mount is 
   const m = await mount(page('mercury'), '/account/connectors/mercury?oauth=ok&provider=mercury');
   try {
     assert.equal(reads(), 1, 'the page\'s mount');
-    const sheet = m.by('mercury-entity-sheet');
-    assert.ok(sheet && m.props(sheet)['data-layout'] === 'page', 'in the page layout');
+    // D753 F5 (#1991): the entity connections are the page's own body, not a sheet in the page layout.
+    assert.ok(m.by('mercury-entity-page'), 'drawn on the page');
+    assert.equal(m.by('mercury-entity-sheet'), undefined, 'no sheet');
     assert.equal(m.by('connector-sheet-connected'), undefined, 'no return view');
     assert.equal(seen.search, '', 'the query is stripped');
   } finally { await m.unmount(); f.restore(); }

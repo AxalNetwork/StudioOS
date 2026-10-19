@@ -97,7 +97,7 @@ function fixture({ dayMicro = 50_000_000, monthMicro = 500_000_000 } = {}) {
         { word: 'me', punctuated_word: 'me.', start: 1.4, end: 1.8, speaker: 1 }] }] }] } }
     : { text: 'We lose a day a week to invoicing.', transcription_info: { language: 'en' },
         segments: [{ start: 0, end: 2.5, text: 'We lose a day a week to invoicing.' }] };
-  const AI = { async run(model: string, input: any) { aiCalls.push({ model, input }); return aiReply(model, input); } };
+  const AI = withGuard({ async run(model: string, input: any) { aiCalls.push({ model, input }); return aiReply(model, input); } });
   const env = { DB: f.DB, JWT_SECRET, ENVIRONMENT: 'development', FILES, AI } as any;
   return { db, env, objects, r2Calls, aiCalls, setAi: (fn: typeof aiReply) => { aiReply = fn; } };
 }
@@ -803,6 +803,7 @@ test('D685 §5.11: deleting an interview deletes its sessions the way DELETE /se
 import { runInterviewProcessJob, isStale, recoverSession, NO_CONSENT_SENTENCE, RESTARTED_NOTE, STALLED_TWICE } from '../src/services/interviewProcessing.ts';
 import { checkSummary } from '../src/services/interviewStructuring.ts';
 
+import { withGuard } from './_guard_stub.mjs';
 /** A recorded, stopped session with `n` chunks, the queue captured. */
 async function recordedForProcessing(f: any, n: number, opts: { consent?: boolean } = {}) {
   // structureSession re-checks the member's account (D684's writableSession).

@@ -232,7 +232,32 @@ export function MercuryEntitySheet({ p, superAdmin = false, branch = null, api =
   );
 }
 
-/** The sheet as `ConnectorPanel` opens it: the viewer's flags from the session, the real API. */
+/**
+ * D753 (#1991, F5) — the entity row on its own page, `/account/connectors/mercury`:
+ * the sheet's body in the page's flow, with no frame, no × and no header
+ * action. Its one audited read happens when the page mounts it; a branch
+ * admin's makes none. The viewer's flags come from the session, as the
+ * panel's do; `api` is for a test.
+ */
+export function MercuryEntityPageBody({ p, api = adminMercuryApi }) {
+  const user = useAuth()?.user ?? null;
+  const branch = branchOfUser(user);
+  return (
+    <section data-testid="mercury-entity-page" aria-label="Axal entities" className="flex min-w-0 flex-col rounded-axal-sm border border-axal-hairline bg-white pb-4 dark:border-gray-800 dark:bg-gray-900">
+      <div className="px-5 pt-4">
+        <h2 className="text-[15px] font-bold text-axal-ink dark:text-gray-100">Axal entities</h2>
+        <p className="mt-0.5 text-[12.5px] text-axal-muted dark:text-gray-400">The four Axal entities&rsquo; Mercury organizations.</p>
+      </div>
+      <MercuryEntityConnections superAdmin={isSuperAdminUser(user)} branch={branch} api={api} docsUrl={p?.docs_url || null} />
+      {!branch && <p className="mx-5 mt-4 text-[12px] leading-relaxed text-axal-muted dark:text-gray-400" data-testid="mercury-feeds">{ENTITY_FEEDS}</p>}
+      {!branch && <Link className={`${BTN.link} mx-5 mt-2 self-start`} to={OPEN_BANKING.href} data-testid="mercury-open-banking">{OPEN_BANKING.text}</Link>}
+      {/* A branch admin's page reads nothing, so it records nothing. */}
+      {!branch && <p className="mx-5 mt-4 text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="mercury-audit-foot">{ENTITY_AUDIT_FOOT}</p>}
+    </section>
+  );
+}
+
+/** The sheet as `ConnectorPanel` opens it (Build's lightbox): the viewer's flags from the session, the real API. */
 export function MercuryEntityPanel({ p, onClose, eyebrow }) {
   const user = useAuth()?.user ?? null;
   return (

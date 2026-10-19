@@ -21,12 +21,14 @@
  *                           + users.advisor_locked column.
  *
  * The route layer wires these in: /start + /answer + /explain call
- * checkKillSwitch first; /answer + /explain call classifyInput; /explain
- * uses ADVISOR_SYSTEM_PROMPT instead of an inline string and runs the
- * completion through stripVerbatimLeak before persisting.
+ * checkKillSwitch first; /answer calls classifyInput; /explain is checked by
+ * the guard inside `aiRouter.run` (D763), uses ADVISOR_SYSTEM_PROMPT instead of
+ * an inline string and runs the completion through stripVerbatimLeak before
+ * persisting.
  */
 import type { Env, User } from '../../types';
 import * as aiRouter from '../aiRouter';
+import { decide, parseVerdict, sliceForGuard, type GuardCode } from '../ai/guard';
 import { bindingKey } from '../../util/schemaBootstrap';
 import { advisorKillState, ADVISOR_DISABLED_MESSAGE } from './rollout';
 
@@ -115,11 +117,24 @@ export function stripVerbatimLeak(out: string): { text: string; leaked: boolean 
 // ---------------------------------------------------------------------------
 export interface SafetyResult {
   blocked: boolean;
+  // D763: the guard could not answer, so the text was not let through. A
+  // route says the check is unavailable rather than that the text was unsafe.
+  unavailable: boolean;
   score: number | null;
   category: string;
 }
 
 /**
+ * The guard on a text that no model run follows: Personal Advisor's `/answer`
+ * stores the member's typed value without calling a model, so `run()`'s own
+ * input check (D763) never sees it. Every other route is checked inside
+ * `aiRouter.run`, once, and does not call this.
+ *
+ * D763: the text is checked in full, slice by slice, under the category
+ * policy (`../ai/guard.ts`), and the check FAILS CLOSED: a guard that cannot
+ * be reached, throws, refuses to run, or answers anything but a verdict
+ * blocks the text, as `unavailable`. S6 and S7 are logged, not blocked.
+ *
  * `surface` is the page the screened message was sent from (D552), recorded on
  * the safety run's own usage row so the guard's cost lands on that page rather
  * than in the month's unattributed group. Required, not optional: a new caller
@@ -127,24 +142,26 @@ export interface SafetyResult {
  */
 export async function classifyInput(env: Env, userId: number, text: string, surface: string | undefined): Promise<SafetyResult> {
   const trimmed = (text || '').trim();
-  if (!trimmed) return { blocked: false, score: null, category: 'empty' };
-  try {
-    const r = await aiRouter.run(env, {
-      task: 'safety',
-      userId,
-      surface,
-      text: trimmed.slice(0, 4000),
-    });
-    if (!r.ok) return { blocked: false, score: null, category: 'router_failed' };
-    const out = (r.output || '').toLowerCase().trim();
-    // Llama-Guard returns "safe" or "unsafe\nS<n>" where S<n> is the
-    // violated category. Anything starting with "unsafe" is a block.
-    const unsafe = out.startsWith('unsafe') || out.includes('\nunsafe');
-    const cat = unsafe ? (out.split('\n')[1] || 'unsafe').trim() : 'safe';
-    return { blocked: unsafe, score: r.usage.safety_score, category: cat };
-  } catch {
-    return { blocked: false, score: null, category: 'error' };
+  if (!trimmed) return { blocked: false, unavailable: false, score: null, category: 'empty' };
+  const logged: GuardCode[] = [];
+  for (const slice of sliceForGuard(trimmed)) {
+    let r: aiRouter.RunResult;
+    try {
+      r = await aiRouter.run(env, { task: 'safety', userId, surface, text: slice });
+    } catch {
+      return { blocked: true, unavailable: true, score: null, category: 'error' };
+    }
+    // A spent budget is named as one, so the route can say so rather than blame the guard.
+    if (!r.ok) return { blocked: true, unavailable: true, score: null, category: r.refusal?.startsWith('budget_') ? r.refusal : 'router_failed' };
+    const decided = decide(parseVerdict(r.output));
+    if (decided.action === 'fail') return { blocked: true, unavailable: true, score: null, category: 'unreadable' };
+    // D158: the S-code that fired names the rule, lower-cased as it always was.
+    if (decided.action === 'block') return { blocked: true, unavailable: false, score: 0, category: (decided.codes[0] ?? 'unsafe').toLowerCase() };
+    if (decided.action === 'log') logged.push(...decided.codes);
   }
+  return logged.length
+    ? { blocked: false, unavailable: false, score: 0, category: logged[0].toLowerCase() }
+    : { blocked: false, unavailable: false, score: 1, category: 'safe' };
 }
 
 // ---------------------------------------------------------------------------

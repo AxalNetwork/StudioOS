@@ -153,7 +153,9 @@ test('Connectors makes no entity read on load or on a sign-in return; one when t
   const page = await mount(h(ConnectorPageView, { data: ready(), connectorKey: 'mercury' }), '/account/connectors/mercury');
   try {
     assert.equal(f.reads(), 1, 'mounting the Mercury page is the one read');
-    assert.ok(page.by('mercury-entity-sheet'));
+    // D753 F5 (#1991): drawn on the page itself, not as a sheet.
+    assert.ok(page.by('mercury-entity-page'));
+    assert.equal(page.by('mercury-entity-sheet'), undefined);
   } finally { await page.unmount(); f.restore(); }
 });
 
