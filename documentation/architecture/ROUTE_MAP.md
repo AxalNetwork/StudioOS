@@ -537,6 +537,14 @@ D685 S03-A (#1583, migration 452) adds the Worker half of "Record a session" set
 - `POST /sessions/:id/transcribe` produces the final transcript, chunk by chunk, after a budget hold for the whole job. `PATCH /sessions/:id/segments/:segId` assigns a speaker.
 - `GET /sessions/:id/receipt` returns each job's cost and the budget left. `DELETE /sessions/:id` deletes the session, its R2 audio, and writes an audit row.
 
+### Interview calls and accepted suggestions (D757)
+
+How Zoom and Google Meet transcripts are switched on, and what each refusal means, is in `documentation/operations/ZOOM_AND_MEET_TRANSCRIPTS.md`. These are the routes it names.
+- **Accept all (#1925).** `POST /api/founder/validate/sessions/:id/placements/accept` (`founder_validate_structure.ts`) takes `{ slug }` (one module's pending placements) or `{ ids }`, never both, at most 50. Each placement runs its own claim and writer, so one a writer refuses goes back to pending while the rest land. It answers `{ results: [{ id, ok, error?, detail? }], accepted, remaining }`; 400 `invalid_body`, `invalid_ids`, `too_many` or `unknown_module`; 404 for a session the caller cannot write.
+- **Meet transcript state (#1926).** `GET /api/calendar/google/status` carries `meet_transcripts`: `granted` (the stored grant holds `meetings.space.readonly`), `available` (`MEET_TRANSCRIPTS_ENABLED` is `"on"`, so "Allow transcript import" is offered) or `not_set_up`.
+- **Meet transcript consent (#1926).** `POST /api/calendar/google/meet-transcripts/connect` starts Google's incremental consent for that scope. While `MEET_TRANSCRIPTS_ENABLED` is not `"on"` it answers 503 `meet_transcripts_not_set_up`, "Importing Meet transcripts isn't set up on Axal yet.", before any state is written. A callback whose grant lacks the scope returns `meet_scope_missing`; one that holds it returns `meet=granted`.
+- **The Zoom webhook (D684, D757 §2.1).** `POST /api/channels/zoom/webhook`, outside `requireAuth`: `meeting.ended`, `recording.transcript_completed` and `app_deauthorized`, each signed with `ZOOM_WEBHOOK_SECRET_TOKEN`. Its answers are listed in the runbook's §4.
+
 ### Studio on a phone (D701, #1663)
 
 The founder's `/studio` carries Eadwyn's panel tab in `?tab=` (`tasks`, `tickets`; anything else is Conversation) at every width, and Open a ticket is a route, `/studio/tickets/new` (`?type=task` opens it on Task). Both keep the page's `project_id`. One read lists the caller's conversations across the rail's store and the profiling store, for the phone page's Conversations list. Below 1024px the founder's `/studio` is the phone page (boards S1m–S5m: the Eadwyn bar, the drawer, Conversations, Tasks, My tickets and the ticket card); at 1024px and up it is D564's page. See `decisions/D701.md`.

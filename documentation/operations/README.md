@@ -14,6 +14,7 @@ files say how to act on it.
 | `TICKET_GITHUB_SYNC.md` | Recover support tickets that were saved in D1 but never reached GitHub. |
 | `TELEGRAM.md` | Set up the Telegram Business interview bot, check it on a real phone, rotate its secrets and switch it off (D756). |
 | `WHATSAPP.md` | Switch WhatsApp Business on, check it on a real phone and roll it back (D754). |
+| `ZOOM_AND_MEET_TRANSCRIPTS.md` | Create and share the Zoom app, switch on Google Meet transcript import, run the live check, read each refusal and roll back (D757). |
 | `AI_TOKEN_PACKS.md` | Run AI token packs (D755): create, adopt and archive packs, handle refunds and disputes, an overdue credit, adjustments and reconcile, and run the live purchase-and-refund check. |
 | `S1_HANDOFF_2026-10-18.md` | Take over S1, the coordinator session. A dated handoff, true on its date. |
 
