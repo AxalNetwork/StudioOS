@@ -46,6 +46,7 @@ import { createHash, createHmac } from 'node:crypto';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
+import { applyEngineSchema } from './_engine_schema.mjs';
 import { tableFromBaseline } from './_baseline.mjs';
 import { memKV } from './_mem_kv.mjs';
 import channels, { channelsAdmin } from '../src/routes/channels.ts';
@@ -127,6 +128,8 @@ async function world(opts: { seed?: boolean; budget?: number } = {}) {
     // D685: openSession stores the call (call_provider), as production's 452 lets it.
     '452_record_session_setup.sql', '454_channel_voice_failures.sql',
     '457_integrations_last_error_at.sql', '458_channel_link_consent.sql']) db.exec(mig(m));
+  // D757: the Validate engine's schema (487, 465, 453 and the re-scope's columns).
+  applyEngineSchema(db);
   if (opts.budget != null) {
     for (const key of ['founder:free', 'other']) {
       db.prepare('INSERT INTO ai_licence_caps(licence_key, daily_microusd, monthly_microusd, recorded_by) VALUES (?, ?, ?, 1)').run(key, opts.budget, opts.budget);
@@ -136,6 +139,7 @@ async function world(opts: { seed?: boolean; budget?: number } = {}) {
   const aiCalls: any[] = [];
   const env: any = {
     DB, ENVIRONMENT: 'development', JWT_SECRET, KEK_PII: 'k'.repeat(48), ...SECRETS,
+    WHATSAPP_CHANNEL: 'on', TELEGRAM_CHANNEL: 'on',
     APP_URL: 'https://axal.vc', PUBLIC_BASE_URL: 'https://axal.vc',
     RATE_LIMITS: memKV(), USE_CF_QUEUE: 'true',
     JOB_QUEUE: { async send(body: any) { queued.push(body); } },
@@ -1108,7 +1112,7 @@ test('Availability names missing secrets to admins only, hands the browser the s
   const tg = forMember.body.providers.find((p: any) => p.provider === 'telegram');
   assert.deepEqual([tg.available, tg.missing], [false, []]);
   const wa = forMember.body.providers.find((p: any) => p.provider === 'whatsapp');
-  assert.deepEqual(wa.signup, { app_id: SECRETS.WHATSAPP_APP_ID, config_id: SECRETS.WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID });
+  assert.deepEqual(wa.signup, { app_id: SECRETS.WHATSAPP_APP_ID, config_id: SECRETS.WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID, graph_version: 'v23.0' });
   assert.deepEqual(forMember.body.providers.map((p: any) => p.provider), ['telegram', 'whatsapp', 'zoom', 'google_meet']);
   assert.equal(forMember.body.providers.find((p: any) => p.provider === 'zoom').available, false);
   assert.deepEqual(Object.keys(forMember.body.connections.whatsapp).sort(), ['calls', 'can_reply', 'connected_at', 'external_account_name', 'status'], 'calls: the Calling eligibility read (#1586)');
@@ -1898,8 +1902,8 @@ test('#1602 mutation tripwires: claim ownership, cancellation, encrypted names a
   const store = await import('../src/services/channels/linkCodes.ts');
   assert.equal(await store.memberLinkClaim(env, OTHER, uid), null);
   const unscoped = await deadlineMutant('../src/services/channels/linkCodes.ts',
-    "SELECT * FROM channel_link_codes WHERE user_id = ? AND provider = 'telegram' AND uid = ?",
-    "SELECT * FROM channel_link_codes WHERE ? IS NOT NULL AND provider = 'telegram' AND uid = ?");
+    'SELECT * FROM channel_link_codes WHERE user_id = ? AND provider = ? AND uid = ?',
+    'SELECT * FROM channel_link_codes WHERE ? IS NOT NULL AND provider = ? AND uid = ?');
   const stolen = await unscoped.memberLinkClaim(env, OTHER, uid);
   assert.throws(() => assert.equal(stolen, null), { name: 'AssertionError' });
 

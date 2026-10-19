@@ -271,6 +271,7 @@ async function loadRouter({ documents = [], esign = [], pairwise = [], partner =
       "spa: { title: 'Stock Purchase Agreement (SPA)', layer: 'portfolio' }," +
       "partner_equity: { title: 'Partner Equity Deal', layer: 'gp' }," +
       "partner_custom: { title: 'Partner Custom Deal', layer: 'gp' }," +
+      "partner_services: { title: 'Partner Services Agreement', layer: 'gp' }," +
       "nda_3way_founder_investor_axal: { title: '3-Way NDA', layer: 'portfolio' }," +
     "};",
     sliceFn('partyRolesFor'),
@@ -284,6 +285,8 @@ async function loadRouter({ documents = [], esign = [], pairwise = [], partner =
     sliceFn('mapPairwiseStatus'),
     sliceFn('loadPairwiseNdaContracts'),
     sliceFn('mapPartnerDealStatus'),
+    src.match(/const PARTNER_DEAL_DOC_TYPE = [^;]+;/)[0],
+    sliceFn('partnerDealTitle'),
     sliceFn('loadPartnerDealContracts'),
     sliceFn('loadAllContracts'),
   ].join('\n');
@@ -318,8 +321,8 @@ test('loadAllContracts unions all 4 sources and preserves source discriminator',
       party_a_email: 'a@x.com', party_b_email: 'b@x.com',
     }],
     partner: [{
-      id: 31, partner_user_id: 9, deal_type: 'equity', term_months: 12,
-      granted_tiers: '[]', status: 'active',
+      id: 31, partner_user_id: 9, deal_type: 'equity_partnership', term_months: 12,
+      granted_tiers: '[]', status: 'active', envelope_uuid: 'env-pd-1',
       created_at: '2026-04-05T00:00:00Z', updated_at: '2026-04-05T00:00:00Z',
       partner_email: 'p@x.com', partner_name: 'Partner Co',
     }],
@@ -347,8 +350,13 @@ test('loadAllContracts unions all 4 sources and preserves source discriminator',
   assert.equal(bySource.pairwise_nda.status, 'signed');
   assert.equal(bySource.partner_deal.status, 'signed');
 
-  // doc_type_label decoration applied to the new sources too.
-  assert.equal(bySource.partner_deal.doc_type_label, 'Partner Equity Deal');
+  // doc_type_label decoration applied to the new sources too. D758: every
+  // partner deal is sent from, and counted under, the Partner Services row.
+  assert.equal(bySource.partner_deal.doc_type, 'partner_services');
+  assert.equal(bySource.partner_deal.doc_type_label, 'Partner Services Agreement');
+  assert.equal(bySource.partner_deal.title, 'Partner Services Agreement — equity partnership — p@x.com');
+  assert.equal(bySource.partner_deal.envelope_uuid, 'env-pd-1');
+  assert.equal(bySource.pairwise_nda.envelope_uuid, 'env-pw-1');
 });
 
 test('loadAllContracts tolerates missing pairwise_ndas / partner_deals tables', async () => {

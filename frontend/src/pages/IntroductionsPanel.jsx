@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   Sparkles, Loader2, ExternalLink, RefreshCw, AlertTriangle,
-  Wallet, Gift, Package, History, ChevronDown, ChevronUp, Handshake, Scale,
+  Wallet, Gift, History, ChevronDown, ChevronUp, Handshake, Scale,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { bpsPercent } from '../lib/bps';
@@ -85,12 +85,6 @@ function CreditSummary({ credits, onHistoryToggle, historyOpen }) {
         </div>
         <div className="flex flex-col items-stretch gap-2">
           <Link
-            to="/plans-and-pricing#introduction-packs"
-            className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium"
-          >
-            <Package size={14} /> Buy credits
-          </Link>
-          <Link
             to="/account/referrals"
             className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg border border-violet-300 dark:border-violet-800 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-950/40 text-sm font-medium"
           >
@@ -103,7 +97,7 @@ function CreditSummary({ credits, onHistoryToggle, historyOpen }) {
           <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
           <span>
             You're out of introduction credits. Your allowance of {credits.monthly_allowance} replenishes
-            next month — or top up now with a credit pack, or earn one credit per referred member.
+            next month — or earn one credit per referred member.
           </span>
         </div>
       )}
@@ -356,7 +350,7 @@ export default function IntroductionsPanel({ zoneActions, zoneFilters = null, ro
       setHistory(null); // ledger changed — refetch on next open
     } catch (e) {
       if (e?.status === 402 || e?.data?.code === 'intro_credits_exhausted') {
-        setOutOfCredits(e?.data || { packs: [] });
+        setOutOfCredits(e?.data || {});
         if (e?.data?.credits) setData((d) => d && ({ ...d, credits: e.data.credits }));
       } else if (e?.status === 409) {
         load(); // someone/something already resolved it — resync
@@ -498,19 +492,10 @@ export default function IntroductionsPanel({ zoneActions, zoneFilters = null, ro
             <AlertTriangle size={15} /> Out of introduction credits
           </div>
           <p className="mt-1 text-xs text-amber-800/80 dark:text-amber-200/80">
-            Your monthly allowance replenishes automatically. To keep going now, pick up a credit
-            pack — or earn one credit for every member you refer.
+            Your monthly allowance replenishes automatically. To keep going now, earn one credit for
+            every member you refer.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
-            {(outOfCredits.packs || []).map((p) => (
-              <Link
-                key={p.key}
-                to="/plans-and-pricing#introduction-packs"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-medium"
-              >
-                <Package size={12} /> {p.label} — ${(p.amount_cents / 100).toLocaleString()}
-              </Link>
-            ))}
             <Link
               to="/account/referrals"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-200 text-xs font-medium hover:bg-amber-100 dark:hover:bg-amber-900/40"

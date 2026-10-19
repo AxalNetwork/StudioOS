@@ -4,35 +4,21 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
-## Every connector's page is served by the Worker (D753 W2, #1878)
+## One text per document: every sender reads its library row (D758, #1863, PR 1)
 
-- Each `GET /api/connectors/available` item gains its page fields: `tagline`,
-  `made_by`, `service`, `sign_in`, `added`, `verified` (a recorded live
-  connect), `verified_on`, `read_only`, `page_key` and `page_href`. The answer
-  carries `category_order` (the Discover order; the SPA counts) and
-  `first_party` (LinkedIn's card). Nothing that was there changes.
-- `GET /api/connectors/directory/:key` (and the `/api/integrations` alias)
-  answers one connector's page: the catalogue entry without the connection,
-  plus the long description, tools, prompts, links, endpoints and the trust
-  notice. It needs no active company, follows Mercury's audience, reads no
-  connection store and never publishes a tool's `calls`. `google`, `microsoft`
-  and `linkedin` are page keys; anything else is 404 `unknown_provider`.
-- `connectorsApi.page(key)` in `frontend/src/lib/api/connectors.js`.
-
-## An OAuth connector Axal holds no client for says so, and its start writes nothing (D751, #1880)
-
-- `GET /api/connectors/available` gives each of the nine OAuth connectors
-  with an implementation `configured: true | false | null` (Axal holds its
-  client, does not, or the key store could not be read). No other row
-  carries it.
-- `GET /oauth/:provider/start` refuses an unset client before any
-  `oauth_state_tokens` row: 503 `oauth_unconfigured` with a true sentence
-  ("GitHub isn't set up on Axal yet…"), plus `env_vars` and `admin_href`
-  for an admin; 503 `oauth_setup_unreadable` when the store cannot be read;
-  and `coming_soon` as `POST /connect` refuses it. The callback reports a
-  client gone missing mid-flow as `reason=not_configured`.
-- `oauthCredsReady` (`services/providerOauthKeys.ts`) reads the cache
-  `ensureCreds` reads; Zoom is set up only with all three of its secrets.
+- `services/legalDocTypes.ts` gains `LIBRARY_SLUG_FOR` / `librarySlugFor`
+  (seven spellings → their `legal_templates` row) and `BUNDLED_SENT_DIRECTLY`
+  (`partner_msa_v1`, until PR 2).
+- `templateBodyFor` and `createAndSendEnvelope` resolve the row by slug: an
+  envelope records, prints and dedupes under it (either spelling still
+  dedupes), and `envelope_created` adds `requested_as`.
+- The 3-way NDA and the deck-share NDA read their rows and refuse a field
+  left (409 `template_fields_unfilled`; deck-share 503
+  `template_unreadable`), with no free-text fallback.
+- Usage counts the store's own slugs, matches exactly first, folds spellings
+  through the same map, counts partner deals under `partner_services`, and
+  counts a relationship row and its envelope once. The drill-down uses the
+  same fold. `GET /templates/outside` lists `BUNDLED_SENT_DIRECTLY`.
 
 ## The LP's capital call opens on the amount, and the fee statement is on screen (D717, #1859)
 
@@ -44,6 +30,18 @@
 - "Management fee statements" lists the LP's issued statements under My
   commitment, newest open, drawn by `FeeStatementView` with no account digits.
   Frontend only: no route, migration or API method changes.
+
+## GitHub sign-ins renew themselves, and disconnecting revokes them (D655 follow-up, #1883)
+
+- GitHub user tokens renew 60 seconds before expiry. Rotated tokens are stored
+  with compare-and-swap so a concurrent reconnect is preserved. An exclusive
+  lease in D1 prevents duplicate renewals even if KV fails; lease losers
+  wait for the result and never renew on their own.
+- A refused refresh shows Reconnect and is not retried until sign-in. Temporary
+  failures leave credentials intact. Disconnect revokes the authorization best
+  effort; the App remains installed on the member's repositories.
+- No new routes, bindings or migrations. Expiry can be enabled by the owner
+  after this change merges; setup remains tracked in #1008 and #1885.
 
 ## Every connector's page, as data the Worker holds to its code (D753, #1875)
 
@@ -60,6 +58,24 @@
   Calendar, Microsoft 365) are gone until each live check is recorded with its
   date. Google's third permission now reads "Gmail (read-only) is asked for at
   sign-in; Axal VC does not read your Gmail."
+
+## The template editor's Pages view and Compare versions (D717, #1853)
+
+- **Pages.** The editor's middle pane switches between "Live paper" and
+  "Pages". Pages draws the unsaved draft's real PDF from
+  `POST /templates/render.pdf` one page at a time, with "Page X of Y",
+  Previous, Next and pinch-to-zoom on touch. It says when the fallback
+  renderer drew it, and when the draft has changed since. New:
+  `pages/admin/contracts/PdfPages.jsx` and `DraftPages.jsx`.
+- **Compare versions.** It sets any two saved versions, or one and the draft,
+  side by side, with deletions struck through and insertions underlined, and
+  lists title, kind and party changes. Restore copies a body only. New:
+  `pages/admin/contracts/VersionCompare.jsx` and `lib/templateVersions.js`.
+- One new dependency: `pdfjs-dist` pinned at exactly `6.4.299` (its legacy
+  build), loaded only when Pages opens. A guard test fails if the installed
+  bundles gain an eval path.
+- `lib/api.js` exports `rawRequestHeaders`; `contractsApi.renderPdfBlob` and
+  `PaperPreview`'s `paperRequest` are new. No Worker change, no migration.
 
 ## Signing in four steps, at every width (D717, #1857)
 
