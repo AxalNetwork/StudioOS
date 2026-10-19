@@ -18,7 +18,8 @@ import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 
 import { FundAdminConsoleView } from '../src/pages/admin/fundAdmin/FundAdminConsole.jsx';
-import { TABS, tabFrom, HQ_ONLY, PAYMENT_INSTRUCTIONS_ADMIN } from '../src/pages/admin/fundAdmin/fundAdminModel.js';
+import { TABS, tabFrom, tabFlags, HQ_ONLY, PAYMENT_INSTRUCTIONS_ADMIN } from '../src/pages/admin/fundAdmin/fundAdminModel.js';
+import { Table } from '../src/pages/admin/fundAdmin/parts.jsx';
 import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
 
 const h = React.createElement;
@@ -192,11 +193,11 @@ test('the tabs are decision 7\'s, in order, and ?tab= picks one', () => {
 
 test('each tab renders its fixture', async () => {
   const expect = {
-    overview: ['Axal Holdings', 'Operating · ending 9001', '$12,345.67', 'Example Fund I', '2 overdue', '2026Q3 · issued', '1 draft · 2 prepared', '3 proposed · 1 need review'],
+    overview: ['Axal Holdings', 'Checking · ending 9001 · Operating', '$12,345.67', 'Example Fund I', '2 overdue', '2026Q3 · issued', '1 draft · 2 prepared', '3 proposed · 1 need review'],
     banking: ['Holdings Org', 'ending 9001', 'Current $12,345.67', 'Available Unreadable', 'Page 1 of 2', 'LP One'],
-    reconciliation: ['$1,000.00 · Capital-call line #11', 'Fee period #41', 'needs_review'],
+    reconciliation: ['$1,000.00 · Capital-call line #11', 'Fee period #41', 'Needs review'],
     calls: ['Example Fund I · capital calls', '$100,000.00 of $500,000.00 committed', 'Open the call ledger', 'Open the books', 'Proof of funds shared by LPs', 'Show proofs of funds'],
-    distributions: ['Carry withheld', 'the job’s 20% default', '1 LP share rounded to zero', 'LP One · $4,500.00'],
+    distributions: ['Carry withheld', 'the job’s 20% default', '1 LP share rounded to zero', 'LP One', '$4,500.00'],
     fees: ['2% a year from 2026-01-01', '1 LP has no admission date recorded', '2026Q3 · net $2,500.00', '2026Q4 · net $2,500.00'],
     reports: ['Q3 2026 · lp quarterly report', 'prepared', 'Opened, and recorded in the audit log'],
   };
@@ -310,7 +311,7 @@ test('the empty states render', async () => {
     overview: async () => ({ ...OVERVIEW(), funds: { state: 'ok', items: [] } }),
   });
   const rec = await mount(ADMIN, s.apis, '/admin/fund-admin?tab=reconciliation');
-  assert.ok(rec.text().includes('No match in this state'));
+  assert.ok(rec.text().includes('No match yet'));
   await rec.unmount();
   for (const tab of ['calls', 'distributions', 'fees', 'reports']) {
     const m = await mount(ADMIN, s.apis, `/admin/fund-admin?tab=${tab}`);
@@ -488,4 +489,119 @@ test('D749: the Transactions pill reads the mark for a marked line', async () =>
   assert.ok(m.text().includes('Not ours · Belongs to another entity'));
   assert.ok(m.text().includes('Unmatched'));
   await m.unmount();
+});
+
+// ------------------------------------------------------------------ the canvas PR's layout (S1's brief, 2026-10-18)
+
+test('canvas: the chrome names the viewer\'s profile and the overview\'s date, with no "laid out from existing parts" note', async () => {
+  for (const [user, role] of [[ADMIN, 'Admin'], [SUPER, 'Super Admin']]) {
+    const { m } = await open(user, 'overview');
+    assert.equal(m.text(m.by('fund-admin-role')), role);
+    assert.equal(m.text(m.by('fund-admin-as-of')), 'As of 2026-10-18');
+    assert.ok(!m.by('fund-admin-layout-note'));
+    assert.doesNotMatch(m.text(), /laid out from existing parts/);
+    await m.unmount();
+  }
+  const s = stubs({ access: async () => { throw new Error('down'); } });
+  const m = await mount(ADMIN, s.apis);
+  assert.ok(!m.by('fund-admin-role'), 'no profile is claimed when the act table could not be read');
+  await m.unmount();
+});
+
+test('canvas: the tabs carry the amber count flags from the overview, and a block that is not ok flags nothing', async () => {
+  assert.deepEqual(tabFlags(OVERVIEW()), { calls: 2, reconciliation: 4, reports: 2 });
+  const bad = { ...OVERVIEW(), funds: { state: 'unreadable', items: [{ fund_id: 7, overdue_lines: 9 }] }, matches: { state: 'unreadable', items: [{ fund_id: 7, proposed: 5, needs_review: 0 }] } };
+  assert.deepEqual(tabFlags(bad), { calls: 0, reconciliation: 0, reports: 2 });
+  assert.deepEqual(tabFlags(null), { calls: 0, reconciliation: 0, reports: 0 });
+  const { m } = await open(ADMIN, 'overview');
+  assert.equal(m.text(m.by('fund-admin-flag-reconciliation')), '4');
+  assert.equal(m.text(m.by('fund-admin-flag-calls')), '2');
+  assert.equal(m.text(m.by('fund-admin-flag-reports')), '2');
+  assert.ok(!m.by('fund-admin-flag-fees') && !m.by('fund-admin-flag-banking'));
+  await m.unmount();
+});
+
+test('canvas Overview: each entity card names its Mercury state, and each fund row carries its fee period, drafts and matches', async () => {
+  const { m } = await open(ADMIN, 'overview');
+  assert.ok(m.text(m.by('overview-entity-holdings')).includes('Connected'));
+  assert.ok(m.text(m.by('overview-entity-fund')).includes('Not connected'));
+  assert.ok(m.text(m.by('overview-entity-no-account-fund')).includes('No bank account yet'));
+  const row = m.text(m.by('overview-fund-7'));
+  for (const w of ['$500,000.00', '$100,000.00', '$75,000.00', '$25,000.00', '2 overdue', '2026-11-01', '2026Q3 · issued · net $2,500.00', '1 draft · 2 prepared', '3 proposed · 1 need review']) {
+    assert.ok(row.includes(w), `fund 7 row lacks "${w}": ${row}`);
+  }
+  const other = m.text(m.by('overview-fund-8'));
+  assert.ok(other.includes('No fee period yet') && other.includes('No line due'), other);
+  await m.click('overview-open-7');
+  assert.ok(m.by('fund-admin-panel-calls'), 'a fund opens on its Capital calls');
+  await m.unmount();
+  const s = stubs({ overview: async () => ({ ...OVERVIEW(), fees: { state: 'unreadable', items: [] } }) });
+  const u = await mount(ADMIN, s.apis);
+  assert.ok(m.text !== undefined && u.by('overview-fees-unreadable'));
+  assert.ok(u.text(u.by('overview-fund-7')).includes('Unreadable'), 'the failed block\'s column says so');
+  assert.ok(u.text(u.by('overview-fund-7')).includes('1 draft · 2 prepared'), 'the other blocks still draw');
+  await u.unmount();
+  const e = stubs({ overview: async () => ({ ...OVERVIEW(), entities: { state: 'ok', items: [{ ...OVERVIEW().entities.items[0], connection: { status: 'error', org_name: 'Holdings Org', last_synced_at: null, last_error: 'unauthorized' } }] } }) });
+  const n = await mount(ADMIN, e.apis);
+  assert.ok(n.text(n.by('overview-entity-holdings')).includes('Needs attention'));
+  assert.ok(n.text(n.by('overview-entity-error-holdings')).includes('Mercury refused the token'));
+  await n.unmount();
+});
+
+test('canvas Reconciliation: matches sit in the brief\'s groups by state, each with its count', async () => {
+  const s = stubs({ matches: async () => ({ ok: true, items: [...MATCHES().items, { uid: 'm-ok', target_kind: 'capital_call_line', target_id: 12, state: 'confirmed', amount_cents: 5000, posted_on: '2026-10-01', counterparty_name: 'LP Two', entity_key: 'fund', last_four: '9004' }] }) });
+  const { m } = await open(ADMIN, 'reconciliation', s);
+  assert.ok(m.by('matches-proposed') && m.text(m.by('matches-proposed')).includes('Proposed · 1'));
+  assert.ok(m.text(m.by('matches-proposed')).includes('Capital-call line #11'));
+  assert.ok(m.text(m.by('matches-needs_review')).includes('Fee period #41'));
+  assert.ok(m.text(m.by('matches-confirmed')).includes('Capital-call line #12'));
+  assert.ok(m.text(m.by('matches-rejected')).includes('None rejected.'));
+  assert.deepEqual(s.calls.filter(([n]) => n === 'matches').map(([, q]) => q), [{}], 'one read of every state');
+  await m.unmount();
+});
+
+test('canvas Not ours: the action opens a dialog, and the dialog is the shared Lightbox', async () => {
+  const s = notOursStubs();
+  const m = await mount(ADMIN, s.apis, '/admin/fund-admin?tab=reconciliation');
+  assert.ok(!m.by('not-ours-dialog-tc-1'));
+  await m.click('not-ours-tc-1');
+  const dialog = m.by('not-ours-dialog-tc-1');
+  assert.ok(dialog, 'a dialog');
+  assert.equal(dialog.getAttribute?.('role') ?? Object.entries(dialog).find(([k]) => k.startsWith('__reactProps$'))?.[1]?.role, 'dialog');
+  assert.ok(m.text(dialog).includes('$2,500.00 from Unknown <i>Sender</i>'), 'the credit, as text');
+  await m.click('not-ours-dialog-tc-1-close');
+  assert.ok(!m.by('not-ours-dialog-tc-1'), 'Close takes it away and marks nothing');
+  assert.ok(!s.calls.some(([n]) => n === 'markNotOurs'));
+  await m.unmount();
+});
+
+test('canvas Distributions: the proceeds card holds Execute, and the per-LP total is the sum of the lines', async () => {
+  const { m } = await open(SUPER, 'distributions');
+  const preview = m.text(m.by('distribution-preview'));
+  for (const w of ['Where every cent goes', 'Proceeds', 'Basis returned', 'Profit', 'Carry withheld', 'To the LPs', 'No line received', 'Per-LP distribution preview']) {
+    assert.ok(preview.includes(w), `missing "${w}"`);
+  }
+  // 1000.00 proceeds: carry $100.00, one line of $899.99, one cent unallocated.
+  assert.ok(m.text(m.by('distribution-line-1')).includes('$899.99'));
+  assert.match(preview, /Total \$899\.99/);
+  assert.ok(m.by('distribution-execute'));
+  await m.unmount();
+  // A preview without its rate says so; it never prints NaN.
+  const r = stubs({ distributionPreview: async (fundId, cents) => ({ ok: true, fund_id: fundId, proceeds_cents: cents, distributable: false, lines: [], unallocated_cents: 0 }) });
+  const { m: n } = await open(SUPER, 'distributions', r);
+  assert.ok(n.text(n.by('distribution-preview')).includes('The rate is not recorded in this preview.'));
+  assert.doesNotMatch(n.text(), /NaN/);
+  await n.unmount();
+});
+
+test('canvas phone: every table stacks below sm, each cell carrying its column\'s label', async () => {
+  const { renderToStaticMarkup } = await import('react-dom/server');
+  const html = renderToStaticMarkup(h(Table, {
+    cols: [{ key: 'a', label: 'Fund', cell: (r) => r.a }, { key: 'b', label: 'Called', align: 'right', mono: true, cell: (r) => r.b }],
+    rows: [{ a: 'Fund I', b: '$1.00' }], rowKey: (r) => r.a, template: '1fr 1fr',
+  }));
+  assert.match(html, /class="[^"]*\bhidden sm:grid\b/, 'the header row is desktop only');
+  assert.match(html, /<span class="[^"]*sm:hidden[^"]*">Called<\/span>/, 'a stacked cell names its column');
+  assert.doesNotMatch(html, /<span class="[^"]*sm:hidden[^"]*">Fund<\/span>/, 'the first cell is the row\'s own name');
+  assert.match(html, /grid-cols-1/, 'one column on a phone');
 });

@@ -532,6 +532,8 @@ founderValidate.patch('/interviews/:id/evidence', async (c) => {
  * or orphaned, and orphaned is the honest state — the view joins on the phrase,
  * so an orphan simply stops counting and comes back if the wording does.
  * Rejecting the write instead would make the order of two edits matter.
+ * An accepted placement writes its mention in the same batch as its severity
+ * (D757, #1897), so only a hand-set severity can still be an orphan.
  */
 founderValidate.put('/interviews/:id/pain-severity', async (c) => {
   const id = Number(c.req.param('id'));
