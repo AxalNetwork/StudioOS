@@ -47,7 +47,9 @@ const sections = {
 const filters = (slug) => adaptRecords('validate', slug, { cols: ['Name'], rows: [] });
 const option = (slug, key, value) => filters(slug).filters.find((f) => f.key === key)?.options.some((o) => o.value === value) === true;
 const writers = read('cloudflare-worker/src/services/validateWriters.ts');
-const writer = (name) => new RegExp(`export async function ${name}\\b`).test(writers);
+// The writer names, read once with a literal pattern; a census row looks its name up.
+const WRITERS = new Set([...writers.matchAll(/export async function (\w+)\b/g)].map((m) => m[1]));
+const writer = (name) => WRITERS.has(name);
 const record = read('frontend/src/pages/founder/InterviewReviewPage.jsx');
 const model = read('frontend/src/pages/founder/interviewReviewModel.js');
 const sectionsSrc = read('frontend/src/pages/cycles/ValidateSections.jsx');
