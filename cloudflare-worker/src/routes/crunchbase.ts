@@ -30,6 +30,7 @@ import {
   type CrunchbaseSnapshot,
 } from '../integrations/providers/crunchbase';
 import { refuse } from '../util/refusal';
+import { connectorPagePath } from '../integrations/registry';
 
 const crunchbase = new Hono<{ Bindings: Env }>();
 
@@ -44,7 +45,7 @@ async function withConn<T>(c: Context<{ Bindings: Env }>, user: User, fn: (apiKe
     return c.json({
       error: 'crunchbase_not_connected',
       message: 'Connect Crunchbase from Account → Connectors to enable enrichment.',
-      connect_path: '/account/connectors',
+      connect_path: connectorPagePath('crunchbase'),
     }, 412);
   }
   try {
@@ -73,7 +74,7 @@ async function withConn<T>(c: Context<{ Bindings: Env }>, user: User, fn: (apiKe
       return c.json({
         error: 'crunchbase_unauthorized',
         message: 'Crunchbase rejected the stored API key — reconnect from Account → Connectors.',
-        connect_path: '/account/connectors',
+        connect_path: connectorPagePath('crunchbase'),
       }, 412);
     }
     return refuse(c, 502, { code: 'crunchbase_failed', message: 'Crunchbase could not be read just now. Try again in a moment.', raw: e });

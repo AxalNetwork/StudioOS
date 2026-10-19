@@ -353,7 +353,9 @@ test('replacing a Crunchbase key always takes a new one', () => {
 test('nothing points a member at the old Integrations address any more', async () => {
   const cb = read('cloudflare-worker/src/routes/crunchbase.ts');
   assert.doesNotMatch(cb, /connect_path: '\/account\/integrations'/);
-  assert.equal((cb.match(/connect_path: '\/account\/connectors'/g) || []).length, 2);
+  // D753 (#1878): both 412s link to Crunchbase's own page.
+  assert.equal((cb.match(/connect_path: connectorPagePath\('crunchbase'\)/g) || []).length, 2);
+  assert.doesNotMatch(cb, /connect_path: '\/account\/connectors'/);
   assert.doesNotMatch(cb, /Settings → Integrations/);
   assert.doesNotMatch(read('cloudflare-worker/src/services/onboardingChecklist.ts'), /route: '\/(?:account\/)?integrations'/);
   const { HELP_SURFACES, GUIDE_PLACEMENT } = await import('../src/pages/docs/guidePlacement.js');
