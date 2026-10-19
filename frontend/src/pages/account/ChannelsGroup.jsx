@@ -10,6 +10,7 @@ import {
   telegramClaimView, telegramConfirmRefusal,
 } from './channelsModel';
 import { SignupError, loadFacebookSdk, runEmbeddedSignup } from './whatsappSignup';
+import { connectorPagePath } from './connectorsModel';
 
 /**
  * D684 (#1575, S02 #1578) — Connectors' "Customer conversations" group: a
@@ -24,6 +25,11 @@ import { SignupError, loadFacebookSdk, runEmbeddedSignup } from './whatsappSignu
  *
  * The rules (states, words, the Telegram link, WhatsApp's signup config) are
  * `channelsModel.js`; Meta's Embedded Signup is `whatsappSignup.js`.
+ *
+ * D753 C1 (#1958): on the hub, the Telegram and WhatsApp cards' titles link
+ * to their own pages (`/account/connectors/telegram`, `/whatsapp`), which
+ * mount the same cards in the connector page frame (`ChannelPage.jsx`). An
+ * interview's Connect panel passes no `pageHref`, so its cards stay inline.
  */
 
 const TONE = 'rounded-axal-sm border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
@@ -49,7 +55,7 @@ function Outcome({ outcome }) {
   return <p role={bad ? 'alert' : 'status'} className={`text-[12px] ${bad ? 'text-red-700 dark:text-red-300' : 'text-emerald-700 dark:text-emerald-300'}`}>{outcome.text}</p>;
 }
 
-function CardFrame({ card, children }) {
+function CardFrame({ card, pageHref = null, children }) {
   return (
     <article className={`${TONE} flex min-w-0 flex-col gap-2.5 p-4`} data-testid={`channel-card-${card.provider}`} data-state={card.state}>
       <div className="flex items-start justify-between gap-2">
@@ -57,7 +63,11 @@ function CardFrame({ card, children }) {
           {/* D687: Google Meet draws its own mark, though it connects through the Google connection. */}
           <BrandIcon provider={card.provider} name={CARD_TITLE[card.provider]} />
           <div className="min-w-0">
-            <h4 className="text-[14px] font-bold text-axal-ink dark:text-gray-100">{CARD_TITLE[card.provider]}</h4>
+            <h4 className="text-[14px] font-bold text-axal-ink dark:text-gray-100">
+              {pageHref
+                ? <Link to={pageHref} className="hover:underline" data-testid={`channel-page-link-${card.provider}`}>{CARD_TITLE[card.provider]}</Link>
+                : CARD_TITLE[card.provider]}
+            </h4>
             {card.account && <p className="truncate text-[12px] text-axal-muted dark:text-gray-400" data-testid={`channel-account-${card.provider}`}>{card.account}</p>}
           </div>
         </div>
@@ -185,7 +195,7 @@ export function TelegramClaim({ view, api = channelsApi, onChanged, onAgain, bus
   );
 }
 
-export function TelegramChannelCard({ card, claim = null, pending = null, api = channelsApi, onChanged, initialLink = null, now }) {
+export function TelegramChannelCard({ card, claim = null, pending = null, api = channelsApi, onChanged, initialLink = null, now, pageHref = null }) {
   // A claim still open is drawn whatever the card says (a re-link while
   // connected); an expired or cancelled one only while nothing is connected.
   const view = telegramClaimView(claim);
@@ -208,7 +218,7 @@ export function TelegramChannelCard({ card, claim = null, pending = null, api = 
     finally { setBusy(false); }
   };
   return (
-    <CardFrame card={card}>
+    <CardFrame card={card} pageHref={pageHref}>
       {claimed && <TelegramClaim view={claimed} api={api} onChanged={onChanged} onAgain={() => { setLink(null); makeLink(); }} busyAgain={busy} />}
       {card.state === 'not_connected' && !link && !claimed && (
         <button type="button" className={`${BTN.primary} self-start`} disabled={busy} onClick={makeLink} data-testid="button-link-telegram">{busy ? 'Making a link…' : 'Link Telegram'}</button>
@@ -243,7 +253,7 @@ const SDK = { load: loadFacebookSdk, run: runEmbeddedSignup };
  * Meta's window must open straight from a click, or the browser blocks it, so
  * a first load ends on "Continue with Facebook" and that second click opens it.
  */
-export function WhatsAppChannelCard({ card, overview, pending = null, api = channelsApi, onChanged, sdk = SDK }) {
+export function WhatsAppChannelCard({ card, overview, pending = null, api = channelsApi, onChanged, sdk = SDK, pageHref = null }) {
   const config = whatsappSignupConfig(overview);
   const fb = useRef(null);
   const [phase, setPhase] = useState('idle'); // idle | loading | ready | signing | connecting
@@ -280,7 +290,7 @@ export function WhatsAppChannelCard({ card, overview, pending = null, api = chan
   const busy = phase === 'loading' || phase === 'signing' || phase === 'connecting';
   const label = { loading: 'Opening Meta…', signing: 'Finish in Meta’s window…', connecting: 'Connecting…', ready: 'Continue with Facebook' }[phase] || 'Connect WhatsApp Business';
   return (
-    <CardFrame card={card}>
+    <CardFrame card={card} pageHref={pageHref}>
       {card.state === 'not_connected' && (
         <div className="flex flex-col items-start gap-1.5">
           <button type="button" className={BTN.primary} disabled={!config || busy} onClick={start} data-testid="button-connect-whatsapp">{label}</button>
@@ -379,8 +389,8 @@ export function ChannelsGroup({ status, overview, catalogue = [], api = channels
       )}
       {overview && (
         <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-          <TelegramChannelCard card={channelCard('telegram', overview)} claim={overview.telegramLink ?? null} pending={overview.pending?.telegram ?? null} api={api} onChanged={onChanged} />
-          <WhatsAppChannelCard card={channelCard('whatsapp', overview)} overview={overview} pending={overview.pending?.whatsapp ?? null} api={api} onChanged={onChanged} sdk={sdk} />
+          <TelegramChannelCard card={channelCard('telegram', overview)} claim={overview.telegramLink ?? null} pending={overview.pending?.telegram ?? null} api={api} onChanged={onChanged} pageHref={connectorPagePath('telegram')} />
+          <WhatsAppChannelCard card={channelCard('whatsapp', overview)} overview={overview} pending={overview.pending?.whatsapp ?? null} api={api} onChanged={onChanged} sdk={sdk} pageHref={connectorPagePath('whatsapp')} />
           <MeetingChannelCard card={meetingCard('zoom', overview, catalogue)} onOpenConnector={onOpenConnector} />
           <MeetingChannelCard card={meetingCard('google_meet', overview, catalogue)} onOpenConnector={onOpenConnector} api={api} />
         </div>
