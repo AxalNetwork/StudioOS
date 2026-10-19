@@ -200,7 +200,7 @@ test('the new tasks are routed and priced, and llava is gone from these files', 
   for (const t of ['ops_summary', 'image_screen', 'image_alt_text'] as const) {
     assert.ok(PRICE_USD_PER_1M_TOKENS[ROUTE[t].model], `${t} bills as zero`);
   }
-  assert.deepEqual(PRICE_USD_PER_1M_TOKENS[SCOUT], { in: 0.27, out: 0.85 });
+  assert.deepEqual(PRICE_USD_PER_1M_TOKENS[SCOUT], { in: 0.269995, out: 0.850003 }, 'the catalogue\'s neuron price (D760)');
   for (const f of ['routes/monitoring.ts', 'routes/admin_x.ts', 'services/vectorize.ts']) {
     const src = readFileSync(join('cloudflare-worker/src', f), 'utf8');
     assert.doesNotMatch(src, /\benv\.AI\.run\(/, `${f} still calls env.AI.run`);

@@ -163,6 +163,7 @@ test('12. a record adds its title to the rail\'s crumbs, and leaving it drops th
 
 test('12. the crumb is set inside the provider, from the record\'s own title, and cleared on leave', () => {
   const src = codeOnly(read('frontend/src/pages/cycles/CycleRoute.jsx'));
-  assert.match(src, /<RecordCrumb title=\{record && recordState\.status === 'ready' \? recordState\.data\?\.title : null\} \/>\s*<\/RailFrame>\s*<\/RailCrumbsProvider>/);
-  assert.match(src, /setCrumbs\(\{ record: title \|\| null \}\);\s*return \(\) => setCrumbs\(\{ record: null \}\);/);
+  // D768 adds the record's `type` and `id`, which name it for the run (`ref`).
+  assert.match(src, /<RecordCrumb title=\{record && recordState\.status === 'ready' \? recordState\.data\?\.title : null\} type=\{`\$\{cycle\}\/\$\{slug\}`\} id=\{recordId \?\? null\} \/>\s*<\/RailFrame>\s*<\/RailCrumbsProvider>/);
+  assert.match(src, /setCrumbs\(\{ record: title \|\| null, ref: title && type && id != null \? \{ type, id \} : null \}\);\s*return \(\) => setCrumbs\(\{ record: null \}\);/);
 });

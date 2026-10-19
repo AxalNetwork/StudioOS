@@ -3,7 +3,7 @@ import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-route
 import { useActiveRecording, useNow } from '../../contexts/ActiveRecordingContext';
 import { finishLine, pillVariant, recovering, reviewPath } from '../../lib/activeRecording';
 import { useAuth } from '../../hooks/useAuthSync';
-import useAssistMode from '../../hooks/useAssistMode';
+import useAiSpend from '../../hooks/useAiSpend';
 import { prefersReducedMotion } from '../../components/discovery/RingViz';
 import RecordingView, { useDarkTheme } from './RecordingView';
 import { focusPillOnShow } from './RecordingPill';
@@ -40,9 +40,10 @@ export default function RecordLivePage() {
   const { user } = useAuth() || {};
   const theme = useDarkTheme();
   const now = useNow(state.phase === 'recording');
-  // The rail's Manual mode (off by default) stops the Worker after Transcribing (§5.9, `auto: false`).
-  const [auto] = useAssistMode('Validate');
-  const actions = useMemo(() => Object.assign(Object.create(recorder), { confirmStop: () => recorder.confirmStop({ auto }) }), [recorder, auto]);
+  // D770 (#2095): `auto` is the Stop sheet's choice, never the rail's mode. The spend read is the sheet's
+  // quote, made only while the sheet is open.
+  const actions = useMemo(() => Object.assign(Object.create(recorder), { confirmStop: (opts) => recorder.confirmStop({ auto: opts?.auto === true }) }), [recorder]);
+  const ai = useAiSpend({ enabled: !!state.confirm });
   // A reload: the recording comes back once recovery has run (§5.6.7). Until
   // then there is no session to show and none to leave for (#1588).
   if (!state.session && params.get('session') && recovering(state)) {
@@ -62,6 +63,6 @@ export default function RecordLivePage() {
 
   return (
     <RecordingView st={state} now={now} theme={theme} reduced={prefersReducedMotion()} you={user?.name || user?.full_name || ''}
-      onExit={exit} onOpen={(href) => navigate(href, { replace: true })} actions={actions} />
+      onExit={exit} onOpen={(href) => navigate(href, { replace: true })} actions={actions} ai={ai} />
   );
 }

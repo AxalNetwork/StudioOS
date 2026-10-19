@@ -189,6 +189,15 @@ ROUND_CALLS_ENABLED = "false"
 # Authorized JavaScript origins on the GOOGLE_AUTH_CLIENT_ID client: first
 # "canary", checked on both hosts, then "on". Rollback: "off" and deploy.
 GOOGLE_SIGNIN_POPUP = "off"
+# D720 §3 / D762 — what members pay for an AI run. "charged": Cloudflare's
+# cost × AI_MARKUP (1.25, services/ai/pricing.ts); unset, "cost" or anything
+# else: cost. The owner chose "charged" on 2026-10-19 (#1008 item 41). The
+# switch takes effect when D760's billingMode (#2017) reads it; from that
+# deploy every quote, hold, settlement and receipt uses the billed price, and
+# allowances count in billed dollars. The admin licence always pays cost.
+# Change BOTH this block and the production vars block below, in one PR.
+# Rollback: "cost" and deploy.
+AI_BILLING = "charged"
 # D754 / D756 — who may use the interview chat channels once their platform
 # secrets are set (services/channels/connections.ts). "on": every member;
 # "canary": Super Admins only, so the owner can connect and check a channel
@@ -551,6 +560,8 @@ ENVIRONMENT       = "production"
 ROUND_CALLS_ENABLED = "false"
 # D722 — see top-level [vars]. Mirrored because env tables don't inherit.
 GOOGLE_SIGNIN_POPUP = "off"
+# D720 §3 / D762 — see top-level [vars]. Mirrored because env tables don't inherit.
+AI_BILLING = "charged"
 # D754 / D756 / D757 — see top-level [vars]. Mirrored because env tables
 # don't inherit.
 WHATSAPP_CHANNEL = "canary"
