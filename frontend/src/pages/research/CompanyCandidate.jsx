@@ -5,6 +5,7 @@ import { api } from '../../lib/api';
 import WorkspaceShell from '../../workspaces/WorkspaceShell';
 import { StatedLimit } from '../advisor/expertise/kit';
 import { companyHref } from '../../lib/companyDirectoryView.js';
+import { useRailOption } from '../../ui/railCrumbs';
 import {
   categoryLabel,
   detailRows,
@@ -136,6 +137,9 @@ export default function CompanyCandidate({ role = 'founder' }) {
   const [preview, setPreview] = useState('');
   const [removing, setRemoving] = useState(false);
   const [busy, setBusy] = useState(false);
+  // D771 (#2097): while the site is crawled and read, the rail is that option's.
+  const [crawling, setCrawling] = useState(false);
+  useRailOption(crawling ? 'extract:site' : null, 'Crawl site');
 
   const adopt = useCallback((full) => {
     const cand = (full?.candidates || []).find((c) => c.id === candidateId);
@@ -330,7 +334,7 @@ export default function CompanyCandidate({ role = 'founder' }) {
                       type="button"
                       className={ghostBtn}
                       disabled={busy}
-                      onClick={() => run(() => api.competitors.crawlCandidate(analysisId, candidateId))}
+                      onClick={async () => { setCrawling(true); await run(() => api.competitors.crawlCandidate(analysisId, candidateId)); setCrawling(false); }}
                     >
                       Crawl site
                     </button>

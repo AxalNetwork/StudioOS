@@ -9,6 +9,7 @@ import {
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../workspaces/ZoneDraft';
 import { Eyebrow, Instrument, MeteredNote } from '../../workspaces/canvasKit';
+import { useRailOption } from '../../ui/railCrumbs';
 
 /**
  * Research · Ask — answers drawn only from your own library, or no answer.
@@ -124,6 +125,8 @@ const scopeFor = (view) => (view === 'discarded' ? 'all' : SCOPES.has(view) ? vi
 export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) {
   const [question, setQuestion] = useState('');
   const [busy, setBusy] = useState(false);
+  // D771 (#2097): `busy` is the question at the model, so the rail names that option while it runs.
+  useRailOption(busy ? 'ask:library' : null, 'Ask');
   const [error, setError] = useState('');
   const [lib, setLib] = useState({ loading: true, error: '', payload: null });
   const [view, setView] = useState('session');
@@ -449,6 +452,7 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
 
         <ZoneDraft
           surface="research/ask"
+          railOption="draft:research/ask"
           scopeKey={sessionUid}
           label="Draft · session brief"
           accept="Accept brief"

@@ -163,7 +163,7 @@ test('every founder page has an option or a reason it has none, never both', () 
  * each: the founder's options there are on the rail. A section joins this
  * list in the PR that wires it.
  */
-const WIRED = ['Studio', 'Validate', 'Build', 'Raise', 'Grow'];
+const WIRED = ['Studio', 'Validate', 'Build', 'Raise', 'Grow', 'Research'];
 const sectionOf = (page) => page.split(' · ')[1];
 const routeOf = (route) => {
   const [path, query] = route.split('?');
@@ -188,8 +188,11 @@ const fillNamed = (section) => {
 const cycleDraft = (o) => o.key.startsWith('draft:') && o.at.some(([file]) => file === CYCLE_ROUTE);
 const draftNamed = () => /<ZoneDraft key=\{`\$\{slug\}-\$\{draft\.surface\}`\} \{\.\.\.draft\}[^>]*railOption=\{`draft:\$\{draft\.surface\}`\}/.test(cycleRouteSource())
   && /useRailOption\(railOption && \(busy === 'run' \|\| \(item && !item\.accepted\)\) \? railOption : null, run\)/.test(codeOnly(read('frontend/src/workspaces/ZoneDraft.jsx')));
-const railKeys = (src) => [...src.matchAll(/useRailOption\(([^;]*?)\);/g)]
-  .flatMap((m) => [...m[1].matchAll(/'([a-z]+:[a-z0-9_/-]+)'/g)].map((k) => k[1]));
+/** The keys a file names to the rail: its `useRailOption('<key>', …)` calls, and a `ZoneDraft`'s `railOption="<key>"`. */
+const railKeys = (src) => [
+  ...[...src.matchAll(/useRailOption\(([^;]*?)\);/g)].flatMap((m) => [...m[1].matchAll(/'([a-z]+:[a-z0-9_/-]+)'/g)].map((k) => k[1])),
+  ...[...src.matchAll(/railOption="([a-z]+:[a-z0-9_/-]+)"/g)].map((m) => m[1]),
+];
 
 test('every option names the address it is pressed on', () => {
   for (const o of FOUNDER_OPTIONS) {
