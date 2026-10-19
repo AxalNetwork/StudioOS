@@ -28,7 +28,7 @@ still waits is marked here and where it is used:
 | Consent in the chat, the member's word, and the gate | #1954 (D754 `w2_consent`, #1893), **on `main`** |
 | Consent in Record a Session; the WhatsApp connector page | #2001 (#1980) and #1993 (#1959), **on `main`** |
 | Consented voice notes stored as recorder audio in the chat's session, transcribed there, then the engine; **Open recording** plays them | #2063 (#1935, D754 W3), **on `main`** |
-| Way B: linking Axal's number, and forwarded recordings waiting for consent | #2005 (#1937), #2006 (#1938) and #2052 (#1939 part 1), **on `main`** |
+| Way B: linking Axal's number, forwarded recordings waiting for consent, **Agreed beforehand** in Axal, and a Super Admin's unset settings | #2005 (#1937), #2006 (#1938), #2052 and #2056 (#1939 parts 1 and 2), **on `main`** |
 | Way B: a consented recording imported as a draft interview, and the "Saved" reply | The rest of #1939, **not on `main`**: a consented capture waits, and is purged 7 days after its first file |
 | Unsigned webhook refused, checked on every smoke run | #1999 (`scripts/check-spa-live.mjs`), **on `main`** |
 
@@ -194,8 +194,9 @@ test business number, phone 2 plays the interviewee.
 3. Forward a voice note to Axal's number. See in WhatsApp, once per batch (up
    to 20 files within 30 minutes): "Before Axal transcribes this: did everyone
    in the recording agree to be recorded and transcribed before it started?",
-   with **Yes, out loud**, **Yes, in writing** and **No**. Tap **Yes, out
-   loud**.
+   with **Yes, out loud**, **Yes, in writing** and **No**. In Axal, the
+   recording is listed as "Waiting for consent" with **Agreed beforehand**.
+   Tap **Yes, out loud** in WhatsApp.
 4. *With the rest of #1939 only:* "Saved to Axal" with a link, and the draft in
    Customer research as "Imported from WhatsApp", with its transcript. Until
    then nothing more is sent and the consented recording waits.
@@ -217,10 +218,11 @@ both vars blocks of `wrangler.toml`, in one PR. It ships on the next deploy.
 | A, not connected | **Your business number**, with **Connect WhatsApp Business** | — |
 | A, connected | The business name or `•••• 1234`, **Connected**, "N conversations waiting · Open the inbox" (when any wait), **Test the connection**, **Disconnect** | — |
 | A, needs attention | "WhatsApp stopped accepting Axal’s access. Connect again." The page draws it, but the Worker does not yet mark a WhatsApp connection revoked, so no live data reaches it. | — |
-| B, Axal's number unset | The section is hidden | "Send to Axal is off on this deployment. It needs all four of these settings, and at least one is not set:", then the four names |
+| B, Axal's number unset | The section is hidden | "Send to Axal is off on this deployment. These settings are not set:", then only the unset names; with all four set and WhatsApp off, "Send to Axal is off on this deployment." |
 | B, not linked | **Send recordings from your WhatsApp**, with **Link your WhatsApp** | — |
 | B, linking | "Send this code to Axal on WhatsApp: `LINK <code>`", **Open WhatsApp**, "Expires in 10 minutes.", then "Is •••• 1234 your number?" **Confirm** | — |
 | B, linked | `•••• 1234`, "Last recording <date>." or "No recording sent yet." (the date moves on any message from the number), then **Unlink** | — |
+| B, a recording waiting | Each waiting capture as "N recordings, <date>" with "Waiting for consent" and **Agreed beforehand** (#2056) | — |
 | Calls line | "Calls: not yet. WhatsApp calls do not reach Axal; record a call with the in-app recorder instead." With a number connected, its own "Calls: not yet, because …" replaces the first sentence. | — |
 
 On the session page a chat reads "Waiting for <Name> to agree", "Agreed in
