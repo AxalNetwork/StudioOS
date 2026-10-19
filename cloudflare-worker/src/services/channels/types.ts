@@ -235,9 +235,33 @@ export interface InboundConsentReply {
   sentAt: string;
 }
 
+/**
+ * D754 way B (#1937, #1938): a message to AXAL'S OWN WhatsApp number. It is
+ * never a customer chat: the sender is a member (or someone trying to be one),
+ * so it has its own shape and never becomes an InboundMessage or a consent
+ * reply. Exactly one of `text`, `media` and `button` is set, unless
+ * `unsupported` (a sticker, an image, a video, any other interactive message).
+ */
+export interface InboundAxalMessage {
+  kind: 'axal_message';
+  provider: 'whatsapp';
+  eventId: string;
+  connectionRef: string;
+  /** The sender's wa_id. */
+  externalChatId: string;
+  externalMessageId: string;
+  text: string | null;
+  /** `audio` is a voice note or an audio file; a `document`'s type is checked by the capture. */
+  media: { mediaId: string; mime: string | null; sizeBytes: number | null; type: 'audio' | 'document' } | null;
+  /** A reply button's id. */
+  button: string | null;
+  unsupported: boolean;
+  sentAt: string;
+}
+
 export type InboundEvent =
   | InboundMessage | InboundEdit | InboundDelete | InboundStatus
-  | InboundConnection | InboundLink | InboundLinkConfirm | InboundConsentReply | InboundIgnored;
+  | InboundConnection | InboundLink | InboundLinkConfirm | InboundConsentReply | InboundAxalMessage | InboundIgnored;
 
 /** What a send returns. `submitted` is acceptance by the provider, never delivery. */
 export interface SendResult {

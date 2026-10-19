@@ -620,6 +620,71 @@ test('Text chat imports a waiting WhatsApp chat in place: chosen, assigned from 
   } finally { await m4.unmount(); }
 });
 
+// D754 (#1980): a WhatsApp chat that waits for consent starts only once it is asked for, or the member gives their word.
+const CONSENT_THREADS = (windowOpen) => ({ items: [
+  { uid: 'wa-1', provider: 'whatsapp', contact_name: 'Dana Ruiz', message_count: 2, last_message_at: null, status: 'pending', consent_status: 'not_asked', reply_window_open: windowOpen },
+  { uid: 'tg-1', provider: 'telegram', contact_name: 'Tele Tom', message_count: 1, last_message_at: null, status: 'pending', consent_status: null, reply_window_open: true },
+] });
+
+test('a WhatsApp chat that waits for consent: Start waits for Ask or the member\'s word, and the assign carries it', async () => {
+  const s = spies();
+  s.props.channelsSource.threads = async () => CONSENT_THREADS(true);
+  const m = await mount({ ...s.props, channels: CONNECTED });
+  try {
+    await m.type('record-name', 'Dana');
+    await m.click('record-mode-text');
+    await m.click('record-thread-wa-1');
+    assert.ok(m.by('record-chat-consent'));
+    assert.equal(m.text(m.by('record-chat-consents-ask')), 'Ask Dana in WhatsApp');
+    assert.equal(m.text(m.by('record-chat-consents-written')), 'Dana already agreed: In writing');
+    assert.equal(m.by('record-chat-consents-in_app'), undefined, '"In the app" is not the member\'s word');
+    assert.equal(m.pr(m.by('record-start'))['aria-disabled'], true, 'Start waits');
+    assert.equal(m.text(m.by('record-start-reason')), 'Ask Dana in WhatsApp, or say they already agreed.');
+    await m.click('record-chat-consents-ask');
+    assert.equal(m.pr(m.by('record-start'))['aria-disabled'], undefined, 'asked: Start may go');
+    await m.click('record-start');
+    assert.deepEqual(s.calls.assign, [['wa-1', { create: { interviewee_name: 'Dana', interviewee_company: null, project_id: 3 }, consent: { ask: true } }]]);
+  } finally { await m.unmount(); }
+
+  const s2 = spies();
+  s2.props.channelsSource.threads = async () => CONSENT_THREADS(true);
+  const m2 = await mount({ ...s2.props, channels: CONNECTED, interview: { id: 7, interviewee_name: 'Ana' } });
+  try {
+    await m2.click('record-mode-text');
+    await m2.click('record-thread-wa-1');
+    await m2.click('record-chat-consents-pre_agreed');
+    await m2.click('record-start');
+    assert.deepEqual(s2.calls.assign, [['wa-1', { interview_id: 7, consent: { method: 'pre_agreed' } }]], 'the member\'s word');
+  } finally { await m2.unmount(); }
+});
+
+test('the window closed: Ask is disabled and says D754\'s sentence; a Telegram chat (required false) is unchanged', async () => {
+  const s = spies();
+  s.props.channelsSource.threads = async () => CONSENT_THREADS(false);
+  const m = await mount({ ...s.props, channels: CONNECTED, interview: { id: 7, interviewee_name: 'Ana' } });
+  try {
+    await m.click('record-mode-text');
+    await m.click('record-thread-wa-1');
+    assert.equal(m.pr(m.by('record-chat-consents-ask')).disabled, true);
+    assert.equal(m.text(m.by('record-chat-window')), 'Ana last wrote more than 24 hours ago, and WhatsApp only lets Axal write within 24 hours of their last message. Ask Ana to send you a message from your WhatsApp Business app, then ask again.');
+    await m.click('record-chat-consents-ask');
+    assert.equal(m.pr(m.by('record-start'))['aria-disabled'], true, 'a disabled Ask cannot be chosen');
+    assert.equal(s.calls.assign.length, 0);
+  } finally { await m.unmount(); }
+
+  const s2 = spies();
+  s2.props.channelsSource.threads = async () => CONSENT_THREADS(true);
+  const m2 = await mount({ ...s2.props, channels: { ...CONNECTED, connections: { telegram: { status: 'active' } } }, interview: { id: 7, interviewee_name: 'Ana' } });
+  try {
+    await m2.click('record-mode-text');
+    await m2.click('record-provider-telegram');
+    await m2.click('record-thread-tg-1');
+    assert.equal(m2.by('record-chat-consent'), undefined, 'no consent block for Telegram');
+    await m2.click('record-start');
+    assert.deepEqual(s2.calls.assign, [['tg-1', { interview_id: 7 }]], 'no consent in the body');
+  } finally { await m2.unmount(); }
+});
+
 test('"Schedule the call for later" for a new person adds them to the pipeline, booked, then opens the scheduler', async () => {
   const prevFetch = globalThis.fetch;
   globalThis.fetch = async () => new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
