@@ -19,13 +19,21 @@
  * `services/trust.ts:activatePairwiseNda(env, envelope_uuid)` which
  * flips the matching `pairwise_ndas` row to `status='active'` and
  * stamps a 12-month `valid_until`.
+ *
+ * D758 (#1863): the body is the library row `nda_3way_founder_investor_axal`
+ * (`templateBodyFor`), with the bundled file only as its fallback, and the
+ * envelope records that slug. A merged body that still holds a `{{token}}`
+ * throws `unfilled_fields` before anything is written.
  */
 import type { Env } from '../types';
 import { sendAgreementAssignedEmail } from './email';
 import { sha256Hex } from './pdf';
-import { renderLegalTemplate, getLegalTemplateBody } from './legalTemplates';
+import { applyMergeFields, mergeTokensIn } from './mergeFields';
 
 const TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** D758: the library row the 3-way NDA is sent from, and the type its envelope records. */
+export const THREE_WAY_NDA_SLUG = 'nda_3way_founder_investor_axal';
 
 function genToken(): string {
   const bytes = new Uint8Array(32);
@@ -61,7 +69,10 @@ export async function createThreeWayNdaEnvelope(
 ): Promise<ThreeWayResult> {
   const counterEmail = env.AXAL_COUNTERSIGNER_EMAIL || 'legal@axal.vc';
   const envelopeUuid = crypto.randomUUID();
-  const tplBody = await renderLegalTemplate('nda_3way_founder_investor_axal_v1', {
+  const { templateBodyFor, UnfilledFieldsError } = await import('../routes/esign');
+  const source = await templateBodyFor(env, THREE_WAY_NDA_SLUG);
+  if (!source) throw new Error('template_unreadable');
+  const tplBody = applyMergeFields(source.body, {
     founder_name: opts.founder.name,
     founder_email: opts.founder.email,
     investor_name: opts.investor.name,
@@ -69,6 +80,8 @@ export async function createThreeWayNdaEnvelope(
     axal_signer_email: counterEmail,
     effective_date: new Date().toISOString().slice(0, 10),
   });
+  const left = [...mergeTokensIn(tplBody)];
+  if (left.length) throw new UnfilledFieldsError(left);
   const tplTitle = '3-Way Mutual NDA — Founder · Investor · Axal';
   const bodySha = await sha256Hex(tplBody);
 
@@ -97,13 +110,14 @@ export async function createThreeWayNdaEnvelope(
   ]) { try { await env.DB.prepare(s).run(); } catch {} }
 
   // The 3-way envelope is keyed off the founder's user_id (so admin
-  // queries by user surface it), uses a stable document_type so X-1
-  // can dedupe by it, and persists the rendered body for audit.
+  // queries by user surface it), records its library row's slug (D758;
+  // envelopes sent before it say `nda_3way_v1`, and the completion hook
+  // reads both), and persists the rendered body for audit.
   const ins: any = await env.DB.prepare(
     `INSERT INTO esign_envelopes (envelope_uuid, user_id, document_type, document_title, document_body, body_sha256, status, created_by, audit_log)
-     VALUES (?, ?, 'nda_3way_v1', ?, ?, ?, 'sent', ?, '[]')
+     VALUES (?, ?, ?, ?, ?, ?, 'sent', ?, '[]')
      RETURNING id`,
-  ).bind(envelopeUuid, opts.founder.user_id, tplTitle, tplBody, bodySha, opts.investor.user_id).first();
+  ).bind(envelopeUuid, opts.founder.user_id, THREE_WAY_NDA_SLUG, tplTitle, tplBody, bodySha, opts.investor.user_id).first();
   if (!ins?.id) throw new Error('envelope_insert_failed');
   const envelopeId = ins.id as number;
 
@@ -144,6 +158,3 @@ export async function createThreeWayNdaEnvelope(
     },
   };
 }
-
-// Re-export for tests / direct access from cron.
-export { getLegalTemplateBody };
