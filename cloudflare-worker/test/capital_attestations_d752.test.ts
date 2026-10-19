@@ -42,7 +42,8 @@ function richBank() {
 async function setup(opts: { connect?: boolean } = {}) {
   const { db, env } = await personalFixture();
   const baseline = readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8');
-  for (const t of ['deals', 'commitments', 'deal_invitations', 'lp_applications']) db.exec(tableFromBaseline(baseline, t));
+  // deals, commitments and deal_invitations come from the shared world (`_mercury_d713.ts`, since #1887).
+  db.exec(tableFromBaseline(baseline, 'lp_applications'));
   db.exec(mig('491_mercury_capital_attestations.sql'));
   db.exec(`INSERT INTO users (id, role, name, email) VALUES (31, 'investor', 'Second', 'second@example.test');
     INSERT INTO vc_funds (id, name, slug) VALUES (1, 'Axal Spin-Out Fund I', 'spinout-fund-i'), (2, 'Outside Fund', 'outside-fund');
