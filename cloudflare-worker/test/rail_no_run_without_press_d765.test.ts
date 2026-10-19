@@ -69,13 +69,23 @@ test('the advisor ranks only on a press: GET /next-question and /start take the 
   assert.match(advisor, /advisor\.get\('\/next-question', \(c\) => nextQuestion\(c, false\)\);/);
   assert.match(advisor, /advisor\.post\('\/next-question', \(c\) => nextQuestion\(c, true\)\);/);
   assert.match(advisor, /pinnedId: conv\.current_question_id, rerank: false,\n/, '/start, which the page calls on mount');
-  // Without `rerank: true` no model is asked, whatever the bank holds.
-  let calls = 0;
-  const env: any = { AI: { run: async () => { calls += 1; return { response: '{"id":"q2"}' }; } } };
-  const q = (id: string) => ({ id, persona: 'founder', prompt: id, input_kind: 'short' }) as any;
-  const picked = await pickNextQuestion(env, 2, 1, [q('q1'), q('q2'), q('q3')], new Set(['q1']));
-  assert.equal(picked?.id, 'q2', 'the first unanswered, in bank order');
-  assert.equal(calls, 0);
+  // Without `rerank: true` no model is asked, whatever the bank holds. With it,
+  // on a member who can pay, the model's pick (q3) wins over the bank's order.
+  __resetForTest();
+  const f = aiBudgetFixture();
+  try {
+    f.db.prepare("INSERT INTO ai_licence_caps(licence_key,daily_microusd,monthly_microusd,recorded_by) VALUES('founder:free',0,0,1)").run();
+    f.db.prepare('INSERT INTO ai_topup_accounts(user_id,balance_microusd) VALUES(2,5000000)').run();
+    const models: string[] = [];
+    const env: any = { DB: f.DB, ENVIRONMENT: 'development', AI: withGuard({ run: async (m: string) => { models.push(m); return { response: '{"id":"q3"}', usage: { prompt_tokens: 10, completion_tokens: 2 } }; } }) };
+    const q = (id: string) => ({ id, persona: 'founder', prompt: id, input_kind: 'short' }) as any;
+    const bank = [q('q1'), q('q2'), q('q3')];
+    assert.equal((await pickNextQuestion(env, 2, 1, bank, new Set(['q1'])))?.id, 'q2', 'the first unanswered, in bank order');
+    assert.equal((await pickNextQuestion(env, 2, 1, bank, new Set(['q1']), { rerank: false }))?.id, 'q2');
+    assert.deepEqual(models, [], 'no model was asked');
+    assert.equal((await pickNextQuestion(env, 2, 1, bank, new Set(['q1']), { rerank: true }))?.id, 'q3', 'a press lets the model rank');
+    assert.deepEqual(models, [ROUTE.rerank.model]);
+  } finally { f.db.close(); }
 });
 
 test('the syndicate rationale and the monitoring AI summary are presses (POST); their reads call no model', () => {

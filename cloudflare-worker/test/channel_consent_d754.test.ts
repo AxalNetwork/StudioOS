@@ -40,7 +40,6 @@ import {
 } from '../src/services/channels/consent.ts';
 import { CONSENT_NOTICE_VERSION, consentNoticeUrl } from '../src/services/channels/consentNotice.ts';
 import { consentBlocks } from '../src/services/interviewSessions.ts';
-import { sweepQuietChats } from '../src/services/sessionAutoStructure.ts';
 import { normaliseWhatsAppPayload, GRAPH_BASE } from '../src/services/channels/whatsapp.ts';
 import {
   INTERVIEW, JWT_SECRET, ME, OTHER, PNID, PNID_GONE, PROJECT, SECRET_VALUES, SECRETS, WA_CUSTOMER, WA_TOKEN,
@@ -360,7 +359,7 @@ test('a browser reply under a consent: key is refused, so it can never stand in 
 // The interviewee's answer
 // ---------------------------------------------------------------------------
 
-test('the interviewee\'s Yes button gives consent; the follow-up moves what waited, queues the voice note once and Structure', async () => {
+test('the interviewee\'s Yes button gives consent; the follow-up moves what waited and queues the voice note once, and no Structure (D765)', async () => {
   const { env, db, queued } = await seeded();
   const uid = await waChat(env);
   await waHook(env, waVoice('wamid.V1'));
@@ -380,7 +379,8 @@ test('the interviewee\'s Yes button gives consent; the follow-up moves what wait
   await runConsentJobs(env, queued);
   assert.deepEqual(segs(db, a.body.session_id), ['One.', 'Two.', 'Three.']);
   assert.equal(jobsOf(queued, 'channel_followup').filter((j) => j.payload.kind === 'voice').length, 1);
-  assert.deepEqual(jobsOf(queued, 'session_structure').map((j) => j.payload.trigger), ['chat_assigned']);
+  // D765 (#2090): moving the chat in queues no Structure; the founder presses it.
+  assert.deepEqual(jobsOf(queued, 'session_structure').map((j) => j.payload.trigger), []);
   await runConsentJobs(env, queued);
   assert.equal(segs(db, a.body.session_id).length, 3, 'a second run moves nothing');
   assert.equal(jobsOf(queued, 'channel_followup').filter((j) => j.payload.kind === 'voice').length, 1, 'the note is queued once');
@@ -808,15 +808,7 @@ test('the gate on Validate: a text session holding one chunk is refused for Stru
   assert.equal(files.length, 1);
 });
 
-test('the quiet-chat sweep does not queue a chat waiting for consent', async () => {
-  const { env, db, queued } = await seeded();
-  db.prepare(`INSERT INTO interview_sessions (uid, interview_id, project_id, created_by_user_id, channel, status, consent_status, submitted_via, updated_at)
-              VALUES ('q-1', ${INTERVIEW}, ${PROJECT}, ${ME}, 'text', 'transcribed', 'not_recorded', 'whatsapp', datetime('now', '-2 hours')),
-                     ('q-2', ${INTERVIEW}, ${PROJECT}, ${ME}, 'text', 'transcribed', 'given', 'whatsapp', datetime('now', '-2 hours'))`).run();
-  assert.equal(await sweepQuietChats(env, new Date()), 1);
-  assert.deepEqual(jobsOf(queued, 'session_structure').map((j) => j.payload.session_id),
-    [db.prepare(`SELECT id FROM interview_sessions WHERE uid = 'q-2'`).get().id]);
-});
+// D765 (#2090): the quiet-chat sweep is gone, so it queues no chat at all.
 
 // ---------------------------------------------------------------------------
 // Voice reasons
@@ -879,7 +871,7 @@ test('Telegram\'s text keeps D684\'s rule: assign moves the text, no member\'s w
     assert.equal(a.status, 200, JSON.stringify(a.body));
     assert.equal(a.body.moved, 1);
     assert.equal(a.body.consent, undefined, 'Telegram\'s answer is unchanged');
-    assert.equal(jobsOf(queued, 'session_structure').length, 1);
+    assert.equal(jobsOf(queued, 'session_structure').length, 0, 'D765: assigning queues no Structure');
     const read = (await call(env, ME, 'GET', `/threads/${t.uid}`)).body;
     assert.deepEqual([read.consent.required, read.consent.status], [true, 'not_asked']);
     assert.equal((await call(env, ME, 'POST', `/threads/${t.uid}/consent`, { method: 'verbal' })).body.code, 'attestation_not_offered');

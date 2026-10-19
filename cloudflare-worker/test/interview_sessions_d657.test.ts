@@ -852,7 +852,8 @@ test('D685 §5.9: /finish counts the chunks; a late chunk queues the job; the jo
   llmAi(f);
   const { sid, sent } = await recordedForProcessing(f, 2);
   // Three chunks expected, two stored: uploading 2 of 3, nothing queued.
-  const fin = await call(f.env, FOUNDER, 'POST', `/sessions/${sid}/finish`, { last_seq: 2 });
+  // D765 (#2090): the member chose "Summarise and place" at Stop (`auto: true`).
+  const fin = await call(f.env, FOUNDER, 'POST', `/sessions/${sid}/finish`, { last_seq: 2, auto: true });
   assert.equal(fin.status, 202);
   assert.deepEqual([fin.body.processing.stage, fin.body.processing.done, fin.body.processing.total], ['uploading', 2, 3]);
   assert.equal(sent.length, 0);
@@ -1135,7 +1136,8 @@ test('D685 §5.9.3: the sweeper resumes runs that stopped moving, and fails the 
   const tr = (await recordedForProcessing(f, 2)).sid;
   await call(f.env, FOUNDER, 'POST', `/sessions/${tr}/finish`, { last_seq: 1 });
   const pl = (await recordedForProcessing(f, 1)).sid;
-  await call(f.env, FOUNDER, 'POST', `/sessions/${pl}/finish`, { last_seq: 0 });
+  // D765 (#2090): this member chose "Summarise and place" at Stop, so its resume may reach the summary.
+  await call(f.env, FOUNDER, 'POST', `/sessions/${pl}/finish`, { last_seq: 0, auto: true });
   assert.equal(await job(f, pl), 'done');
   const recorded = async (extra = '') => {
     const id = await sessionIn(f, 'stopped', extra);

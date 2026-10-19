@@ -60,7 +60,7 @@ import {
 } from '../src/services/interviewIntake.ts';
 import { CHANNEL_LIMITS } from '../src/services/channels/types.ts';
 import { registerChannelJob, runChannelJob, registerChannelSweep, runChannelSweeps } from '../src/services/channels/jobs.ts';
-import { runSessionStructureJob, structureSession, sweepQuietChats } from '../src/services/sessionAutoStructure.ts';
+import { runSessionStructureJob, structureSession } from '../src/services/sessionAutoStructure.ts';
 import { callRefusal } from '../src/services/sessionSetup.ts';
 
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
@@ -620,16 +620,17 @@ test('a channel job reaches its provider handler; a provider without one fails l
 const queued = (db: any, type: string) =>
   db.prepare('SELECT payload FROM queue_jobs WHERE job_type = ? ORDER BY id').all(type).map((r: any) => JSON.parse(r.payload));
 
-test('assigning a chat queues the Worker AI\'s Structure pass, and the pass proposes the pain point for review', async () => {
+test('assigning a chat queues nothing (D765); the Structure pass, once pressed, proposes the pain point for review', async () => {
   const { env, db, aiCalls } = world();
   const conn = (await connectionForTelegram(env, 'BC-ME'))!;
   await storeMessage(env, conn, msg({ externalMessageId: 'm1' }));
   const [t] = await listThreads(env, ME);
   const r = await assignThread(env, ME, t.uid, { interviewId: INTERVIEW });
-  assert.deepEqual(queued(db, 'session_structure'), [{ session_id: r.sessionId, user_id: ME, trigger: 'chat_assigned' }]);
+  // D765 (#2090), D720 §6: no run starts without a press, so assigning queues nothing.
+  assert.deepEqual(queued(db, 'session_structure'), []);
   assert.equal(aiCalls.length, 0, 'the request itself runs no model');
 
-  const out = await runSessionStructureJob(env, queued(db, 'session_structure')[0]);
+  const out = await runSessionStructureJob(env, { session_id: r.sessionId, user_id: ME, trigger: 'chat_assigned' });
   assert.equal(out?.ok, true);
   const p = db.prepare('SELECT kind, payload_json, status, session_id, target_ref, created_by FROM validate_proposals').all();
   assert.equal(p.length, 1);
@@ -665,24 +666,7 @@ test('a member who lost the venture, or a malformed job, runs nothing', async ()
   assert.equal(aiCalls.length, 0);
 });
 
-test('the quiet-chat sweep re-structures a chat with new text once it is quiet, at most every six hours', async () => {
-  const { env, db } = world();
-  const scoped = await writableInterview(env, ME, INTERVIEW);
-  // D754 (#1893): a WhatsApp chat is structured only once its consent is given; without it the sweep skips it.
-  const quiet = await openSession(env, scoped, 'whatsapp', 'text', { method: 'chat_reply' });
-  const waiting = await openSession(env, scoped, 'whatsapp', 'text');
-  const busy = await openSession(env, scoped, 'telegram', 'text');
-  const recent = await openSession(env, scoped, 'telegram', 'text');
-  const call = await openSession(env, scoped, 'zoom', 'video', { method: 'verbal' });
-  db.exec(`UPDATE interview_sessions SET status = 'transcribed', updated_at = datetime('now', '-2 hours')`);
-  db.exec(`UPDATE interview_sessions SET updated_at = datetime('now', '-5 minutes') WHERE id = ${busy.id}`);
-  db.exec(`INSERT INTO interview_structure_receipts (session_id, run_id, step, model, prompt_tokens, completion_tokens, cost_microusd, outcome, created_at)
-           VALUES (${recent.id}, 'r1', 'structured', 'm', 0, 0, 0, 'refused', datetime('now', '-1 hour'))`);
-  assert.equal(await sweepQuietChats(env, new Date()), 1);
-  assert.deepEqual(queued(db, 'session_structure'), [{ session_id: quiet.id, user_id: ME, trigger: 'chat_quiet' }],
-    'not the busy chat, not one run (or refused) within six hours, not a call, not a chat waiting for consent');
-  void call; void waiting;
-});
+// D765 (#2090): the quiet-chat sweep is gone; a chat is summarised on the founder's press.
 
 // ===========================================================================
 // D685 §5.1 (#1583) — the intake records how the call is held, and the
