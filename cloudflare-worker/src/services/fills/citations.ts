@@ -156,7 +156,8 @@ export async function citeFromResearch(
   try {
     // Recorded against Validate (D552): the fill registry is this function's
     // only caller, and Validate's proposals are the only fills it runs.
-    out = await runAI(env, { task: 'research_ask', userId, surface: AI_SURFACE.validate, text: prompt, maxTokens: 400 });
+    // D765: part of a fill's press on Validate; off there, no citation is drafted.
+    out = await runAI(env, { task: 'research_ask', userId, surface: AI_SURFACE.validate, rail: { page: 'validate', option: 'cite:research' }, text: prompt, maxTokens: 400 });
   } catch (e) {
     console.error('[fills] citeFromResearch:', (e as Error).message);
     return { citation: null, model: null };

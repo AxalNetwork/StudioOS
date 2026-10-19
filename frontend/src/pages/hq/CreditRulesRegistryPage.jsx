@@ -4,7 +4,7 @@ import { Coins, RefreshCw } from 'lucide-react';
 import { creditRulesApi } from '../../lib/api/creditRules.js';
 import { reportError } from '../../lib/log';
 import { CREDIT_RULES_LINE } from './tokenPacksModel';
-import { Card, Unrecorded } from '../../ui';
+import { Card, RailFrame, Unrecorded, WorkerRail } from '../../ui';
 import {
   GRANT_SOURCES, GRANT_STATES, REASON_MIN, RULE_KINDS, editHint, filterGrants, filterRules, grantState,
   grantStateText, kindLabel, kindNotesFor, pageOf, reasonReady, revokeNotice, ruleAmount, ruleChanges, ruleNotice,
@@ -324,7 +324,10 @@ export default function CreditRulesPage() {
     setRules((r) => ({ ...r, data: { rules: (r.data?.rules || []).map((x) => (x.key === rule.key ? rule : x)) } }));
   };
   const grantsChanged = (said) => { setNotice(said || null); reloadGrants(); };
+  // D775 (#2101): H31 drew no rail. The page is HQ-only (`hqOnly`), so the rail is HQ's.
+  const rail = <WorkerRail workspace="Credit rules" role="super_admin" note="Eadwyn reads the rules and grants on this page. Every change and every grant taken back is yours, with its reason." data-testid="hq-credit-rules-rail" />;
   return (
+    <RailFrame rail={rail} data-testid="hq-credit-rules-frame">
     <div className="space-y-4" data-testid="credit-rules-page">
       <header>
         <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
@@ -345,5 +348,6 @@ export default function CreditRulesPage() {
       <RulesTable read={rules} onRetry={reloadRules} onSaved={savedRule} />
       <GrantsTable read={grants} onRetry={reloadGrants} onChanged={grantsChanged} />
     </div>
+    </RailFrame>
   );
 }

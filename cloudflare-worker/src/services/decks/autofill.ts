@@ -218,9 +218,8 @@ Hints: ${JSON.stringify(hints)}`;
       task: 'dd_synthesis',
       userId: who.userId,
       surface: AI_SURFACE.raisePitch,
-      railPage: AI_SURFACE.raisePitch,
-      railOption: who.railOption,
-      recordRef: `project:${who.projectId}`,
+      // D765: the member's rail context; run() records it as D767's page, option and record.
+      rail: { page: AI_SURFACE.raisePitch, option: who.railOption, record: `project:${who.projectId}` },
       systemPrompt: 'You are a senior VC associate. Always return valid JSON.',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.5,
