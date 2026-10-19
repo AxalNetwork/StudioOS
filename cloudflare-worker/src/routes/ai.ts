@@ -27,6 +27,7 @@ import { ROUTE, PRICE_USD_PER_1M_TOKENS, PRICE_USD_PER_AUDIO_MINUTE, run as aiRu
 import { MODEL_NAMES, RETIRED_MODELS } from '../services/aiCatalog';
 import { ensureAdminAuditLogTable } from './admin';
 import { BRANCH_CODE_RE } from '../util/branch';
+import { railCrumbs, railSectionOf, resolveRail, rowOffers, type RailRow } from '../services/ai/railMatrix';
 
 const ai = new Hono<{ Bindings: Env }>();
 
@@ -173,7 +174,9 @@ ai.get('/rates', async (c) => {
  * display preference, like `worker_rail_collapsed`, not a venture write, so no
  * `activity_logs` row is written.
  */
-export const RAIL_PREFERENCE_CAP = 200;
+// D764 (#2089): 1,000, so a member can hold a pick and a mode on each of the
+// matrix's pages and their options (D720 §6). It was 200 for D698's sections.
+export const RAIL_PREFERENCE_CAP = 1000;
 const RAIL_SECTION_RE = /^[\p{L}\p{N} &·_-]+$/u;
 const RAIL_MODES = new Set(['eadwyn', 'manual']);
 
@@ -311,6 +314,136 @@ ai.put('/rail-preferences/:section/:task', async (c) => {
   const ok = await writeRailPreference(c.env, Number(user.id), section, task, { model: model as string | null, mode: null }, model === null);
   if (!ok) return refuseCap(c);
   return c.json({ ok: true, section, task, model });
+});
+
+// ---------------------------------------------------------------------------
+// D764 (#2089) — the rail asks the Worker for a page's models.
+//
+// A page is a matrix row (`services/ai/railMatrix.ts`), keyed in the canvas's
+// names, for example "Founder · Build · Prototype / MVP". Keys can hold a `/`,
+// so the page travels in the query or the body, never in the path, and it is
+// accepted only when the matrix has a row for it: no other string becomes a
+// stored section. Picks and the mode reuse migration 465's table (D720 §6):
+// `section` is the page key lower-cased, `task` the option key or `page`, and
+// the `''` row the page's mode. Caller only, like the routes above.
+// ---------------------------------------------------------------------------
+
+/** An option key, `<verb>:<object>` (D720 §5): lower-case letters, digits, `_`, `-` and `/`. */
+const RAIL_OPTION_RE = /^[a-z]{1,24}:[a-z0-9_/-]{1,80}$/;
+
+function railOption(raw: unknown): string | null | undefined {
+  if (raw === undefined || raw === null || raw === '') return undefined;
+  return typeof raw === 'string' && RAIL_OPTION_RE.test(raw) ? raw : null;
+}
+
+/** The rate the router bills a model at today, or null when it has none (D760's billed price replaces it). */
+function railPrice(id: string) {
+  const t = PRICE_USD_PER_1M_TOKENS[id];
+  if (t) return { in_per_1m_usd: t.in, out_per_1m_usd: t.out };
+  const m = PRICE_USD_PER_AUDIO_MINUTE[id];
+  return m != null ? { per_audio_minute_usd: m } : null;
+}
+
+function refuseRailPage(c: any, page: unknown) {
+  return refuse(c, 404, {
+    code: 'unknown_page',
+    message: 'The rail has no models for that page.',
+    extra: { page: typeof page === 'string' ? page.slice(0, 200) : null },
+  });
+}
+
+function refuseRailOption(c: any) {
+  return refuse(c, 400, {
+    code: 'invalid_option',
+    message: 'An option key is a verb and an object, such as fill:pain_tag.',
+  });
+}
+
+/**
+ * GET /api/ai/rail?page=<key>[&option=<key>] — the page's models, each with
+ * its name, role, line and today's rate; the member's pick and mode for the
+ * page; whether runs are billed at cost; and that Llama Guard checks every run.
+ * `options` stays empty until D764 PR 3 adds option rows. A stored pick the
+ * row no longer offers is cleared here and reads as no pick.
+ */
+ai.get('/rail', async (c) => {
+  const user = await requireAuth(c);
+  const page = c.req.query('page');
+  const row = resolveRail(page);
+  if (!row) return refuseRailPage(c, page);
+  const option = railOption(c.req.query('option'));
+  if (option === null) return refuseRailOption(c);
+  const section = railSectionOf(row);
+  const rows = (await c.env.DB.prepare(
+    'SELECT task, model, mode FROM ai_rail_preferences WHERE user_id = ?1 AND section = ?2',
+  ).bind(user.id, section).all<{ task: string; model: string | null; mode: string | null }>()).results ?? [];
+  const stored = (task: string) => rows.find((r) => r.task === task)?.model ?? null;
+  let pick: string | null = null;
+  for (const task of option ? [option, 'page'] : ['page']) {
+    const model = stored(task);
+    if (!model) continue;
+    if (rowOffers(row, model)) { pick = model; break; }
+    await c.env.DB.prepare(
+      'DELETE FROM ai_rail_preferences WHERE user_id = ?1 AND section = ?2 AND task = ?3',
+    ).bind(user.id, section, task).run();
+  }
+  return c.json({
+    ok: true,
+    page: row.pageKey,
+    crumbs: option ? [...railCrumbs(row), option] : railCrumbs(row),
+    kind: row.kind,
+    models: row.models.map((m) => ({ id: m.id, name: MODEL_NAMES[m.id] ?? null, role: m.role, line: m.line, price: railPrice(m.id) })),
+    options: [],
+    pick,
+    mode: rows.find((r) => r.task === '')?.mode ?? null,
+    // D762: cost until the owner sets AI_BILLING = "charged" (#1008). D760 declares the var on Env.
+    billing: (c.env as { AI_BILLING?: string }).AI_BILLING === 'charged' ? 'charged' : 'cost',
+    guard: { model: ROUTE.safety.model, every_run: true },
+  });
+});
+
+async function railBody(c: any): Promise<{ row: RailRow; body: Record<string, unknown> } | Response> {
+  const body = await readBody(c);
+  const row = resolveRail(body.page as string);
+  if (!row) return refuseRailPage(c, body.page);
+  return { row, body };
+}
+
+/** PUT /api/ai/rail/pick — `{ page, option?, model: <id> | null }`. The model must be one the page's row offers. */
+ai.put('/rail/pick', async (c) => {
+  const user = await requireAuth(c);
+  const got = await railBody(c);
+  if (got instanceof Response) return got;
+  const { row, body } = got;
+  const option = railOption(body.option);
+  if (option === null) return refuseRailOption(c);
+  const model = body.model;
+  if (model !== null && !(typeof model === 'string' && rowOffers(row, model))) {
+    return refuse(c, 400, {
+      code: 'model_not_offered',
+      message: 'That model is not offered on this page.',
+      extra: { models: row.models.map((m) => m.id) },
+    });
+  }
+  const task = option ?? 'page';
+  const ok = await writeRailPreference(c.env, Number(user.id), railSectionOf(row), task, { model: model as string | null, mode: null }, model === null);
+  if (!ok) return refuseCap(c);
+  return c.json({ ok: true, page: row.pageKey, option: option ?? null, model });
+});
+
+/** PUT /api/ai/rail/mode — `{ page, mode: 'eadwyn' | 'manual' | null }`, the page's switch. */
+ai.put('/rail/mode', async (c) => {
+  const user = await requireAuth(c);
+  const got = await railBody(c);
+  if (got instanceof Response) return got;
+  const { row, body } = got;
+  const mode = body.mode;
+  if (mode !== null && !(typeof mode === 'string' && RAIL_MODES.has(mode))) {
+    return refuse(c, 400, { code: 'invalid_mode', message: 'The mode is "eadwyn", "manual" or null.' });
+  }
+  const ok = await writeRailPreference(c.env, Number(user.id), railSectionOf(row), '', { model: null, mode: mode as string | null }, mode === null);
+  if (!ok) return refuseCap(c);
+  return c.json({ ok: true, page: row.pageKey, mode });
 });
 
 /**

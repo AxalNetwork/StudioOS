@@ -12,6 +12,9 @@
  *   · the voice rule holds on every role and line;
  *   · every row's routeTask is a ROUTE key, and each rail_<kind> entry names
  *     only its kind's models, priced and named.
+ * PR 2: `GET /api/ai/rail` and the per-page pick and switch, on migration
+ * 465's table, for the caller only; a stale pick is refused and cleared; the
+ * cap is 1,000.
  * No model is called: nothing here reaches `env.AI`.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
@@ -25,6 +28,13 @@ import {
 } from '../../scripts/build-rail-matrix.mjs';
 import { PRICE_USD_PER_1M_TOKENS, PRICE_USD_PER_AUDIO_MINUTE, RAIL_KINDS, ROUTE } from '../src/services/aiRouter.ts';
 import { MODEL_NAMES, TASK_LABELS } from '../src/services/aiCatalog.ts';
+import { Hono } from 'hono';
+import { SignJWT } from 'jose';
+import { makeD1 } from './_d1_sqlite.mjs';
+import { tableFromBaseline, stripForeignKeys } from './_baseline.mjs';
+import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
+import ai, { RAIL_PREFERENCE_CAP } from '../src/routes/ai.ts';
+import { resolveRail } from '../src/services/ai/railMatrix.ts';
 
 const read = (p: string) => readFileSync(new URL(`../../${p}`, import.meta.url), 'utf8');
 const CANVAS = JSON.parse(read('design/incoming/airail-every-page-data/canvas.json'));
@@ -170,4 +180,145 @@ test('the rail_<kind> prices are Cloudflare\'s published rates', () => {
       if (id !== '@cf/baai/bge-base-en-v1.5') assert.equal(p.out, usd.at(-1), `${id}: output rate`);
     }
   }
+});
+
+// ─────────────────────────────────────────────── PR 2: the read, the pick, the switch
+
+const JWT_SECRET = 'd764-s17-fixture-only-signing-secret-0123456789';
+const A = 2, B = 3;
+const BASELINE = read('cloudflare-worker/sql/schema_baseline.sql');
+
+function world(extraEnv: Record<string, unknown> = {}) {
+  const { DB, db } = makeD1('PRAGMA foreign_keys=ON;' + stripForeignKeys(tableFromBaseline(BASELINE, 'users')) + ';');
+  db.exec(read('cloudflare-worker/sql/migrations/465_ai_rail_preferences.sql'));
+  const add = db.prepare('INSERT INTO users (id, email, name, role) VALUES (?, ?, ?, ?)');
+  add.run(A, 'ana.founder@example.test', 'Ana Founder', 'founder');
+  add.run(B, 'ben.founder@example.test', 'Ben Founder', 'founder');
+  const env: any = { DB, ENVIRONMENT: 'development', JWT_SECRET, ...extraEnv };
+  const prefs = (user: number) => db.prepare(
+    'SELECT section, task, model, mode FROM ai_rail_preferences WHERE user_id = ? ORDER BY section, task',
+  ).all(user).map((r: any) => ({ ...r }));
+  return { env, db, prefs };
+}
+
+const app = (() => {
+  const a = new Hono();
+  a.route('/api/ai', ai as any);
+  a.onError((err: any, c) => {
+    const st = AUTH_ERROR_STATUSES[err?.message ?? ''];
+    if (st) return c.json({ detail: err.message }, st);
+    console.error(err);
+    return c.json({ detail: 'Internal server error' }, 500);
+  });
+  return a;
+})();
+
+async function call(env: any, user: number | null, method: string, path: string, body?: unknown) {
+  const headers: Record<string, string> = {};
+  if (user !== null) {
+    const tok = await new SignJWT({ user_id: user, role: 'founder' }).setProtectedHeader({ alg: 'HS256' })
+      .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+    headers.Authorization = `Bearer ${tok}`;
+  }
+  if (body !== undefined) headers['content-type'] = 'application/json';
+  const res = await app.fetch(new Request(`http://x/api/ai${path}`, {
+    method, headers, body: body === undefined ? undefined : JSON.stringify(body),
+  }), env);
+  return { status: res.status, body: await res.json().catch(() => null) as any };
+}
+const q = (page: string, option?: string) => `/rail?page=${encodeURIComponent(page)}${option ? `&option=${encodeURIComponent(option)}` : ''}`;
+const MVP = 'Founder · Build · Prototype / MVP';
+
+test('GET /api/ai/rail answers a page\'s row, named and priced, with no pick, the mode, billing at cost and the guard', async () => {
+  const { env } = world();
+  const r = await call(env, A, 'GET', q('Founder · Validate'));
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const row = resolveRail('Founder · Validate')!;
+  assert.equal(r.body.page, 'Founder · Validate');
+  assert.deepEqual(r.body.crumbs, ['Founder', 'Validate']);
+  assert.equal(r.body.kind, row.kind);
+  assert.deepEqual(r.body.models.map((m: any) => [m.id, m.role, m.line]), row.models.map((m) => [m.id, m.role, m.line]));
+  for (const m of r.body.models) {
+    assert.equal(m.name, MODEL_NAMES[m.id] ?? null);
+    const p = PRICE_USD_PER_1M_TOKENS[m.id];
+    assert.deepEqual(m.price, p ? { in_per_1m_usd: p.in, out_per_1m_usd: p.out } : (PRICE_USD_PER_AUDIO_MINUTE[m.id] != null ? { per_audio_minute_usd: PRICE_USD_PER_AUDIO_MINUTE[m.id] } : null));
+  }
+  assert.deepEqual(r.body.options, []);
+  assert.equal(r.body.pick, null);
+  assert.equal(r.body.mode, null);
+  assert.equal(r.body.billing, 'cost');
+  assert.deepEqual(r.body.guard, { model: '@cf/meta/llama-guard-3-8b', every_run: true });
+  const charged = await call(world({ AI_BILLING: 'charged' }).env, A, 'GET', q('Founder · Validate'));
+  assert.equal(charged.body.billing, 'charged');
+  const mvp = await call(env, A, 'GET', q(MVP.toLowerCase(), 'draft:build/mvp'));
+  assert.equal(mvp.status, 200, 'a key with a slash, in any case');
+  assert.deepEqual(mvp.body.crumbs, ['Founder', 'Build', 'Prototype / MVP', 'draft:build/mvp']);
+});
+
+test('an unknown page is 404 with its key, a malformed option is 400, and no session is 401', async () => {
+  const { env } = world();
+  const r = await call(env, A, 'GET', q('Founder · Nowhere'));
+  assert.equal(r.status, 404);
+  assert.equal(r.body.error, 'unknown_page');
+  assert.equal(r.body.page, 'Founder · Nowhere');
+  assert.equal((await call(env, A, 'GET', '/rail')).status, 404);
+  assert.equal((await call(env, A, 'GET', q('Founder · Validate', 'DROP TABLE'))).status, 400);
+  assert.equal((await call(env, null, 'GET', q('Founder · Validate'))).status, 401);
+  assert.equal((await call(env, A, 'PUT', '/rail/pick', { page: '../etc', model: null })).status, 404);
+  assert.equal((await call(env, A, 'PUT', '/rail/mode', { page: 'Founder · Nowhere', mode: 'manual' })).status, 404);
+});
+
+test('a pick and the switch round-trip per page and option, for the caller only', async () => {
+  const { env, prefs } = world();
+  const row = resolveRail(MVP)!;
+  const [first, second] = row.models.map((m) => m.id);
+  assert.equal((await call(env, A, 'PUT', '/rail/pick', { page: MVP, model: second })).status, 200);
+  assert.equal((await call(env, A, 'PUT', '/rail/pick', { page: MVP, option: 'draft:build/mvp', model: first })).status, 200);
+  assert.equal((await call(env, A, 'PUT', '/rail/mode', { page: MVP, mode: 'manual' })).status, 200);
+  assert.deepEqual(prefs(A), [
+    { section: MVP.toLowerCase(), task: '', model: null, mode: 'manual' },
+    { section: MVP.toLowerCase(), task: 'draft:build/mvp', model: first, mode: null },
+    { section: MVP.toLowerCase(), task: 'page', model: second, mode: null },
+  ]);
+  let r = await call(env, A, 'GET', q(MVP));
+  assert.equal(r.body.pick, second);
+  assert.equal(r.body.mode, 'manual');
+  r = await call(env, A, 'GET', q(MVP, 'draft:build/mvp'));
+  assert.equal(r.body.pick, first, 'an option\'s own pick wins');
+  r = await call(env, A, 'GET', q(MVP, 'fill:other'));
+  assert.equal(r.body.pick, second, 'an option with no pick takes the page\'s');
+  const ben = await call(env, B, 'GET', q(MVP));
+  assert.equal(ben.body.pick, null, 'another member\'s read sees none of it');
+  assert.equal(ben.body.mode, null);
+  assert.equal((await call(env, A, 'PUT', '/rail/pick', { page: MVP, model: null })).status, 200);
+  assert.equal((await call(env, A, 'PUT', '/rail/mode', { page: MVP, mode: null })).status, 200);
+  assert.deepEqual(prefs(A).map((p: any) => p.task), ['draft:build/mvp'], 'a null clears its row');
+});
+
+test('a model the page does not offer is refused, and a stale stored pick is cleared by the read', async () => {
+  const { env, db, prefs } = world();
+  const bad = await call(env, A, 'PUT', '/rail/pick', { page: 'Founder · Validate', model: '@cf/qwen/qwen2.5-coder-32b-instruct' });
+  assert.equal(bad.status, 400);
+  assert.equal(bad.body.error, 'model_not_offered');
+  assert.deepEqual(bad.body.models, resolveRail('Founder · Validate')!.models.map((m) => m.id));
+  assert.equal((await call(env, A, 'PUT', '/rail/mode', { page: 'Founder · Validate', mode: 'auto' })).status, 400);
+  assert.deepEqual(prefs(A), [], 'a refused write stores nothing');
+  db.prepare("INSERT INTO ai_rail_preferences (uid, user_id, section, task, model) VALUES ('u1', ?, 'founder · validate', 'page', '@cf/retired/model')").run(A);
+  const r = await call(env, A, 'GET', q('Founder · Validate'));
+  assert.equal(r.body.pick, null, 'a model the row no longer offers is no pick');
+  assert.deepEqual(prefs(A), [], 'and the read cleared it');
+});
+
+test('the cap is 1,000 rows a member: a new page pick past it is 409, an existing one still updates', async () => {
+  assert.equal(RAIL_PREFERENCE_CAP, 1000);
+  const { env, db, prefs } = world();
+  const ins = db.prepare("INSERT INTO ai_rail_preferences (uid, user_id, section, task, mode) VALUES (?, ?, ?, '', 'manual')");
+  for (let i = 0; i < RAIL_PREFERENCE_CAP - 1; i += 1) ins.run(crypto.randomUUID(), A, `section ${i}`);
+  const model = resolveRail(MVP)!.models[0].id;
+  assert.equal((await call(env, A, 'PUT', '/rail/pick', { page: MVP, model })).status, 200, 'the 1,000th row lands');
+  const full = await call(env, A, 'PUT', '/rail/mode', { page: MVP, mode: 'manual' });
+  assert.equal(full.status, 409);
+  assert.equal(full.body.error, 'too_many_preferences');
+  assert.equal(prefs(A).length, 1000);
+  assert.equal((await call(env, A, 'PUT', '/rail/pick', { page: MVP, model: resolveRail(MVP)!.models[1].id })).status, 200, 'an existing key updates');
 });
