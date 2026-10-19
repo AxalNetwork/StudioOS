@@ -1,11 +1,12 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import LegalDocument from './site/LegalDocument';
 
 /**
  * `/privacy` — the Privacy Policy, in the owner's canvas legal layout (D680).
  *
  * The text is the page's own, as it read before D680 (option A on #1554):
- * sections 0 to 8, their headings in sentence case, and its date as "Last
+ * sections 0 to 9, their headings in sentence case, and its date as "Last
  * updated". The canvas's policy waits on the owner and counsel; see
  * LegalDocument. Section 7 still describes four cookie categories; the
  * preferences dialog now draws only the ones the site sets (D680), and the
@@ -137,6 +138,15 @@ const SECTIONS = [
   },
   {
     n: '08',
+    h: 'Interviews recorded by founders',
+    body: (
+      <>
+        <p>Founders who use the Platform can record interviews with people who have no Axal VC account. <Link to="/privacy/interviews">When a founder records you</Link> says what is kept, who can read it, for how long, and how to say no or ask for deletion.</p>
+      </>
+    ),
+  },
+  {
+    n: '09',
     h: 'Contact us',
     body: (
       <>

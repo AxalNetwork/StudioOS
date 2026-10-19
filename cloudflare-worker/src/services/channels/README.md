@@ -120,3 +120,17 @@ nothing here pretends to.
   can start 1,000 conversations a day, and WhatsApp Calling needs at least
   2,000; …". A number connected before #1586 says it has not been checked
   until its next Test. D754 adds `inbound` and `outbound` reason lists; region restrictions apply to outbound only, and both sides remain unavailable.
+
+  **D754 adds a reason no number can get past (#1871).** Every member number
+  is onboarded in coexistence mode, and calls on a coexistence number are
+  reported to stay in the WhatsApp Business app, so none reaches the Calling
+  API. The webhook therefore never subscribes `calls`.
+
+## Switching WhatsApp on
+
+The owner's steps, the live check on a real phone, what members see in each
+state and the rollback are in `documentation/operations/WHATSAPP.md`; the
+secrets and the `WHATSAPP_CHANNEL` rollout var are listed in
+`documentation/architecture/PRODUCTION.md`. The live smoke
+(`scripts/check-spa-live.mjs`) fails if the WhatsApp webhook ever accepts an
+unsigned POST.

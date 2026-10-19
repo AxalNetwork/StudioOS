@@ -176,9 +176,9 @@ export default {
       overview:
         "The Legal Templates library covers the documents most spin-outs need: SAFE, term sheet, stock purchase agreement, bylaws, founder equity split, IP assignment, voting rights, and 83(b) election letter. All are starting points and your spin-out includes attorney review.",
       howto: [
-        'Open Legal → Templates.',
-        'Pick the template you need; the wizard pre-fills from your startup data.',
-        'Review and edit; route to the partner attorney for review before signing.',
+        'Open Legal.',
+        'Preview the text of the document you need.',
+        'Send it for signature from Send for signature, after attorney review.',
       ],
       tips: [
         'Never sign a template without attorney review for anything money-related.',

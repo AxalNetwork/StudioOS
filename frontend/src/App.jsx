@@ -318,6 +318,7 @@ const JoinBranchPage = lazy(() => import('./pages/JoinBranchPage'));
 const ContactPage = lazy(() => import('./pages/ContactPage'));
 const TeamPage = lazy(() => import('./pages/TeamPage'));
 const PrivacyPage = lazy(() => import('./pages/PrivacyPage'));
+const InterviewNoticePage = lazy(() => import('./pages/InterviewNoticePage'));
 const RiskDisclosuresPage = lazy(() => import('./pages/RiskDisclosuresPage'));
 // Task #5 — Public event surface.
 const PublicEventsPage = lazy(() => import('./pages/events/PublicEventsPage'));
@@ -3589,6 +3590,7 @@ function AppInner() {
       <Route path="/methodology" element={<MethodologyPage />} />
       <Route path="/intelligence" element={<IntelligencePage />} />
       <Route path="/privacy" element={<PrivacyPage />} />
+      <Route path="/privacy/interviews" element={<InterviewNoticePage />} />
       <Route path="/risk-disclosures" element={<RiskDisclosuresPage />} />
       {/* Task #4 (ID) — Public marketing surfaces. No auth. */}
       <Route path="/pricing" element={<PricingPage />} />

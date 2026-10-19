@@ -3,7 +3,7 @@ import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAdmin, requireAuth } from '../auth';
 import { notifyOnboardingChat } from '../services/realtime';
-import { createAndSendEnvelope } from './esign';
+import { createAndSendEnvelope, templateBodyRefusal } from './esign';
 import { hashEmail } from '../util/hashEmail';
 import { PARTNER_SENSITIVE, type PartnerSensitive, maskPartnerProfile } from '../services/sensitiveFields';
 import { run as aiRouterRun } from '../services/aiRouter';
@@ -577,6 +577,9 @@ profiling.post('/admin/:email/verify', async (c) => {
   // from deal@axal.vc. Idempotent — skip if a non-final envelope already
   // exists for this (user, agreement_type) pair.
   let esignResult: { envelope_id: number; envelope_uuid: string; signing_url: string; email_sent: boolean; provider?: string } | null = null;
+  // D758 — a refused send (no body in the library, or an unreadable store)
+  // is told to the admin, never swallowed. The profile's new status stands.
+  let esignRefusal: { code: string; message: string } | null = null;
   if (newStatus === 'verified' && agreement_type) {
     try {
       const existing: any = await c.env.DB.prepare(
@@ -622,11 +625,13 @@ profiling.post('/admin/:email/verify', async (c) => {
         esignResult = { envelope_id: existing.id, envelope_uuid: '', signing_url: '', email_sent: false };
       }
     } catch (e: any) {
-      console.error('[profiling/verify] eSign envelope creation failed', e?.message || e);
+      const refusal = templateBodyRefusal(e, 'admin');
+      if (refusal) esignRefusal = { code: refusal.code, message: refusal.message };
+      else console.error('[profiling/verify] eSign envelope creation failed', e?.message || e);
     }
   }
 
-  return c.json({ updated: true, status: newStatus, agreement_type, admin_notes, esign: esignResult });
+  return c.json({ updated: true, status: newStatus, agreement_type, admin_notes, esign: esignResult, esign_refusal: esignRefusal });
 });
 
 export default profiling;
