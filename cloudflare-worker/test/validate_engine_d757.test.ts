@@ -38,7 +38,8 @@ const PROJECT = 7, OTHER_PROJECT = 8;
 const INTERVIEW = 101, SECOND = 102;
 const TG_INT = 11;
 const SURFACE = '/validate/customer-research';
-const SUMMARY_MARK = 'Summarise one customer interview';
+// Both the call and the thread prompt (#1924) open with these words.
+const SUMMARY_MARK = 'Summarise one customer';
 
 const PAIN = (phrase = 'Manual invoice reconciliation') => JSON.stringify({ placements: [
   { kind: 'pain_severity', payload: { phrase, severity: 'severe' }, cite: { from: 0, to: 1000 }, quote: 'We reconcile invoices by hand every Friday.' },
@@ -497,7 +498,8 @@ test('a conversation too long for one run is refused with the engine\'s sentence
   const f = world();
   const scoped = await writableInterview(f.env, ME, INTERVIEW);
   const s = await openSession(f.env, scoped, 'telegram', 'text');
-  await appendSegments(f.env, ME, s.id, Array.from({ length: 60 }, (_, i) => chatLine(`${i} ${'x'.repeat(2000)}`)), 'telegram');
+  // Over the summary's parts bound (#1924: MAX_DIGEST_PARTS of 24 000 characters), so nothing runs at all.
+  await appendSegments(f.env, ME, s.id, Array.from({ length: 150 }, (_, i) => chatLine(`${i} ${'x'.repeat(2000)}`)), 'telegram');
   const out: any = await digestSession(f.env, { sessionId: s.id, userId: ME, trigger: 'chat_quiet' });
   assert.deepEqual([out.status, out.reason, out.note], ['refused', 'transcript_too_large', NOTES.tooLarge]);
   assert.equal(f.ai.length, 0);

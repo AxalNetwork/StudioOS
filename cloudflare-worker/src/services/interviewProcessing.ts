@@ -36,7 +36,7 @@ import {
 } from './interviewSessions';
 import { DEFAULT_FINAL_MODEL } from './sttModels';
 import type { DigestOutcome } from './validateEngine';
-import { summariseTranscript, toSegments, type ReceiptLine, type SegmentRow, type SummarySentence } from './interviewStructuring';
+import { summariseTranscript, toSegments, type DigestSections, type ReceiptLine, type SegmentRow, type SummarySentence } from './interviewStructuring';
 
 export const STAGES = ['uploading', 'transcribing', 'summarising', 'placing', 'done', 'failed'] as const;
 export type Stage = typeof STAGES[number];
@@ -146,29 +146,57 @@ export async function recordSummaryReceipt(env: Env, sessionId: number, line: Re
 }
 
 export type SummaryResult =
-  | { ok: true; sentences: SummarySentence[]; model: string }
+  | { ok: true; sentences: SummarySentence[]; model: string; digest: DigestSections }
   | { ok: false; reason: 'no_final_transcript' | 'no_citation' | 'refused'; refusal: string | null };
 
-/** Summarise the session's final transcript and store it. Never the live draft. */
+/**
+ * Summarise the session's final transcript and store it. Never the live draft.
+ *
+ * D757 (#1924): the summary is the digest — an overview, key quotes with
+ * speaker and time, decisions and next steps — written to `digest_json` as a
+ * draft. `summary` and `summary_citations_json` are written from its overview,
+ * so `summaryOf` and the session page read as before. A new run clears
+ * `digest_kept_at` and `digest_kept_by`: a new draft must be kept again.
+ */
 export async function summariseSession(env: Env, session: SessionRow, userId: number, model?: string): Promise<SummaryResult> {
   const rows = await env.DB.prepare(
-    `SELECT start_ms, end_ms, speaker_label, text FROM interview_transcript_segments
+    `SELECT id, start_ms, end_ms, speaker_label, text FROM interview_transcript_segments
       WHERE session_id = ? AND source = 'final' ORDER BY COALESCE(start_ms, 0), id`,
   ).bind(session.id).all<SegmentRow>();
   const segments = toSegments(rows.results ?? []);
   if (!segments.length) return { ok: false, reason: 'no_final_transcript', refusal: null };
-  const out = await summariseTranscript(env, { userId, model, segments, step: session.summary ? 're_summarised' : 'summarised' });
+  const out = await summariseTranscript(env, {
+    userId, model, segments, step: session.summary ? 're_summarised' : 'summarised',
+    mode: session.channel === 'text' ? 'thread' : 'call',
+  });
   for (let i = 0; i < out.receipt.length; i += 1) {
     const refusedHere = !out.ok && out.reason === 'refused' && i === out.receipt.length - 1;
     await recordSummaryReceipt(env, session.id, out.receipt[i], refusedHere ? 'refused' : 'ok', refusedHere ? out.refusal : null);
   }
   if (!out.ok) return { ok: false, reason: out.reason, refusal: out.refusal };
   const usedModel = out.receipt[out.receipt.length - 1]?.model || '';
+  // Dynamic: validateEngine.ts imports this file.
+  const { transcriptHash } = await import('./validateEngine');
+  const digest = {
+    v: 1,
+    source: session.submitted_via || (AUDIO_CHANNELS.has(session.channel) ? 'recorder' : session.channel),
+    kind: session.channel,
+    hash: await transcriptHash(segments),
+    model: usedModel,
+    written_at: new Date().toISOString(),
+    parts: out.parts,
+    // The engine names the structure run beside it once that run lands (validateEngine.ts).
+    run_id: null,
+    overview: out.digest.overview.map((o) => ({ text: o.text, cite: o.cites[0] })),
+    key_quotes: out.digest.key_quotes,
+    decisions: out.digest.decisions.map((d) => ({ text: d.text, cite: d.cites[0] })),
+    next_steps: out.digest.next_steps.map((n) => ({ text: n.text, who: n.who, cite: n.cites[0] })),
+  };
   await env.DB.prepare(
     `UPDATE interview_sessions SET summary = ?, summary_model = ?, summarised_at = datetime('now'), summary_citations_json = ?,
-            updated_at = datetime('now') WHERE id = ?`,
-  ).bind(out.sentences.map((s) => s.text).join(' '), usedModel, JSON.stringify(out.sentences), session.id).run();
-  return { ok: true, sentences: out.sentences, model: usedModel };
+            digest_json = ?, digest_kept_at = NULL, digest_kept_by = NULL, updated_at = datetime('now') WHERE id = ?`,
+  ).bind(out.sentences.map((s) => s.text).join(' '), usedModel, JSON.stringify(out.sentences), JSON.stringify(digest), session.id).run();
+  return { ok: true, sentences: out.sentences, model: usedModel, digest: out.digest };
 }
 
 /** The summary as a read shows it: its sentences with their citations, or null. */

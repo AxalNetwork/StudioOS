@@ -14,9 +14,9 @@
 import { verdictSpec } from './verdict';
 import type { User } from '../../types';
 import { canWrite, ownsVenture } from '../../routes/_founder_validate_helpers';
-import { sessionAudioParts, sessionReceiptLines } from '../../routes/founder_validate_sessions';
+import { sessionAudioParts, sessionDigest, sessionReceiptLines } from '../../routes/founder_validate_sessions';
 import { sessionPlacementRows } from '../../routes/founder_validate_structure';
-import { loadSession } from '../interviewSessions';
+import { loadSession, type SessionRow } from '../interviewSessions';
 import {
   MODULES, QUOTE_WITHHELD, claimsOf, heldDate, interviewState, isHeld, loadInterviews,
   loadSegments, loadSeverities, segmentsOf, supportsByGroup, themesOf,
@@ -534,6 +534,29 @@ const customerResearch: ModuleSpec = {
             };
           }),
           empty: 'Eadwyn has placed nothing from this session.',
+        };
+      },
+    },
+    {
+      // D757 (#1924): the kept summary for every allowed reader; the draft for writers only.
+      key: 'summary', title: 'Summary',
+      read: async (ctx, id) => {
+        const d = await loadInterview(ctx, id);
+        if (!d.session) return { rows: [], empty: 'No session recorded.' };
+        const writer = isWriter(ctx);
+        const digest = await sessionDigest(ctx.env, d.session as SessionRow, { writer, quoteConsent: d.iv.quote_consent === 1 });
+        if (!digest) return { rows: [], empty: writer ? 'No summary yet.' : 'No summary kept yet.' };
+        return {
+          rows: [
+            ...(digest.kept ? [] : [{ a: `Draft · written by ${digest.model || 'a model not recorded'}`, tone: 'amb' }]),
+            ...digest.overview.map((o: Any) => ({ a: String(o.text) })),
+            ...digest.key_quotes.map((q: Any) => ({
+              a: q.quote === QUOTE_WITHHELD ? QUOTE_WITHHELD : `"${q.quote}"`,
+              b: joined(q.speaker, Number.isFinite(Number(q.start_ms)) ? hhmmss(q.start_ms) : null),
+            })),
+            ...digest.decisions.map((x: Any) => ({ a: String(x.text), c: 'Decision' })),
+            ...digest.next_steps.map((x: Any) => ({ a: String(x.text), c: x.who === 'me' ? 'Next step · you' : x.who === 'them' ? 'Next step · them' : 'Next step' })),
+          ],
         };
       },
     },

@@ -4,6 +4,23 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## The Otter-like summary for every source, a draft until the founder keeps it (D757, #1924)
+
+- `summariseTranscript` now returns the digest: an overview, key quotes with
+  speaker and time, decisions and next steps. Every quote must be in the
+  transcript word for word, and its speaker, time and segment are read from
+  the stored segments, never from the model; an uncited sentence is dropped.
+  A chat thread is read as notes over days.
+- Long transcripts are summarised in parts (up to `MAX_DIGEST_PARTS`, five
+  overview sentences a part, twelve in all), one receipt line per part; a
+  longer one is refused before any call, with #1898's note.
+- `summariseSession` writes `digest_json` beside `summary`, and a new run
+  clears Keep. `GET /sessions/:id` carries `digest`, its sections grouped from
+  the same structure run's proposals; `POST /sessions/:id/digest/keep` and
+  `PATCH /sessions/:id/digest` keep it (a quote may be removed, never
+  rewritten). The Customer research record gains a Summary section: the kept
+  digest for every allowed reader, the labelled draft for writers.
+
 ## Every conversation reaches one Validate engine (D757, #1898)
 
 - `cloudflare-worker/src/services/validateEngine.ts` is the one entry that

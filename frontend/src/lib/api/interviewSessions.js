@@ -19,6 +19,8 @@
 //   finish           POST   /sessions/:id/finish        { last_seq, auto } → { processing, queued }
 //   process          POST   /sessions/:id/process       retry a failed or stale run → { processing }
 //   summarise        POST   /sessions/:id/summarise     { model? } → { summary }
+//   keepDigest       POST   /sessions/:id/digest/keep   keep the summary draft as it stands → { digest } (D757, #1924)
+//   editDigest       PATCH  /sessions/:id/digest        { overview?, next_steps?, key_quotes? } → { digest }; a quote is removed, never rewritten
 //   setSpeaker       PATCH  /sessions/:id/segments/:segId
 //   sessionReceipt   GET    /sessions/:id/receipt
 //   deleteSession    DELETE /sessions/:id
@@ -85,6 +87,8 @@ export const interviewSessionsApi = {
   summarise: (id, model) => request(`${P}/sessions/${enc(id)}/summarise`, {
     method: 'POST', body: JSON.stringify(model ? { model } : {}),
   }),
+  keepDigest: (id) => request(`${P}/sessions/${enc(id)}/digest/keep`, { method: 'POST', body: JSON.stringify({}) }),
+  editDigest: (id, edit) => request(`${P}/sessions/${enc(id)}/digest`, { method: 'PATCH', body: JSON.stringify(edit || {}) }),
   setSpeaker: (id, segmentId, speakerLabel) => request(`${P}/sessions/${enc(id)}/segments/${enc(segmentId)}`, {
     method: 'PATCH', body: JSON.stringify({ speaker_label: speakerLabel }),
   }),
