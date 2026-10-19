@@ -199,7 +199,7 @@ const LEGAL = [
     first: ['01', 'Definitions & parties'],
     own: ['Axal VC Management LLC is not a registered investment adviser or broker-dealer.',
       'These Terms and your use of the Platform are governed by the laws of the State of Delaware'] },
-  { file: 'PrivacyPage', title: 'Privacy Policy', updated: 'March 31, 2026', email: 'privacy@axal.vc', sections: 9,
+  { file: 'PrivacyPage', title: 'Privacy Policy', updated: 'March 31, 2026', email: 'privacy@axal.vc', sections: 10,
     first: ['00', 'Who we are'],
     own: ['in compliance with the Gramm-Leach-Bliley Act (GLBA), SEC Regulation S-P',
       'typically 7 years after the dissolution of a fund or termination of a relationship'] },

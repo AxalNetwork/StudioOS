@@ -981,41 +981,47 @@ function formatMoney(amountCents: number, currency: string): string {
   return `${amt.toFixed(2)} ${cur}`;
 }
 
-export async function sendBrandedInvoiceEmail(
-  env: Env,
-  opts: {
-    to: string;
-    name?: string | null;
-    amountCents: number;
-    currency: string;
-    description?: string | null;
-    invoiceNumber?: string | null;
-    hostedInvoiceUrl?: string | null;
-    pdfBytes?: Uint8Array | null;
-    paidAt?: Date | null;
-  },
-): Promise<{ ok: boolean; error?: string }> {
-  if (!env.GMAIL_CLIENT_ID || !env.GMAIL_REFRESH_TOKEN) {
-    return { ok: false, error: 'Gmail not configured on this environment' };
-  }
-  try {
-    const accessToken = await getGmailAccessToken(env);
-    const greet = (opts.name && opts.name.trim()) ? opts.name.trim() : (opts.to.split('@')[0] || 'there');
-    const safeGreet = escapeHtml(greet);
-    const safeAmount = escapeHtml(formatMoney(opts.amountCents, opts.currency));
-    const safeDesc = escapeHtml((opts.description && opts.description.trim()) || 'Axal StudioOS');
-    const d = opts.paidAt || new Date();
-    const dateStr = `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
-    const numberRow = opts.invoiceNumber
-      ? `<tr><td style="padding:6px 0;color:#6b7280;font-size:13px;">Receipt</td><td style="padding:6px 0;color:#111827;font-size:13px;font-weight:600;text-align:right;">${escapeHtml(opts.invoiceNumber)}</td></tr>`
-      : '';
-    const hostedBtn = opts.hostedInvoiceUrl
-      ? `<tr><td style="padding:8px 32px 4px;"><a href="${escapeHtml(opts.hostedInvoiceUrl)}" style="display:inline-block;background:#111827;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:11px 20px;border-radius:10px;">View invoice online</a></td></tr>`
-      : '';
-    const pdfNote = opts.pdfBytes
-      ? `<p style="font-size:13px;color:#6b7280;margin:14px 0 0;line-height:1.6;">Your invoice PDF is attached to this email.</p>`
-      : '';
-    const html = `<!DOCTYPE html>
+export interface BrandedInvoiceOpts {
+  to: string;
+  name?: string | null;
+  amountCents: number;
+  currency: string;
+  description?: string | null;
+  invoiceNumber?: string | null;
+  hostedInvoiceUrl?: string | null;
+  pdfBytes?: Uint8Array | null;
+  paidAt?: Date | null;
+  /** D755 (#1914): the legal seller, named in the footer when given. Without it the receipt is unchanged. */
+  seller?: string | null;
+  /** D755 (#1914) §17: a token-pack order; says when the tokens land and links to Usage › Top-ups. */
+  topUp?: { usageUrl: string } | null;
+}
+
+export const TOKEN_PACK_EMAIL_NOTE = 'The tokens are added to your top-up balance once Stripe confirms the payment. You will see them in Usage › Top-ups.';
+
+/** The receipt's subject, HTML and text, pure (no Gmail), so a test can read them. */
+export function brandedInvoiceContent(opts: BrandedInvoiceOpts): { subject: string; html: string; text: string } {
+  const greet = (opts.name && opts.name.trim()) ? opts.name.trim() : (opts.to.split('@')[0] || 'there');
+  const safeGreet = escapeHtml(greet);
+  const safeAmount = escapeHtml(formatMoney(opts.amountCents, opts.currency));
+  const safeDesc = escapeHtml((opts.description && opts.description.trim()) || 'Axal StudioOS');
+  const d = opts.paidAt || new Date();
+  const dateStr = `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
+  const numberRow = opts.invoiceNumber
+    ? `<tr><td style="padding:6px 0;color:#6b7280;font-size:13px;">Receipt</td><td style="padding:6px 0;color:#111827;font-size:13px;font-weight:600;text-align:right;">${escapeHtml(opts.invoiceNumber)}</td></tr>`
+    : '';
+  const hostedBtn = opts.hostedInvoiceUrl
+    ? `<tr><td style="padding:8px 32px 4px;"><a href="${escapeHtml(opts.hostedInvoiceUrl)}" style="display:inline-block;background:#111827;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:11px 20px;border-radius:10px;">View invoice online</a></td></tr>`
+    : '';
+  const pdfNote = opts.pdfBytes
+    ? `<p style="font-size:13px;color:#6b7280;margin:14px 0 0;line-height:1.6;">Your invoice PDF is attached to this email.</p>`
+    : '';
+  const seller = opts.seller && opts.seller.trim() ? opts.seller.trim() : null;
+  const sellerNote = seller ? `Sold by ${escapeHtml(seller)}. ` : '';
+  const topUpNote = opts.topUp
+    ? `<p style="font-size:13px;color:#374151;margin:14px 0 0;line-height:1.6;">${escapeHtml(TOKEN_PACK_EMAIL_NOTE)} <a href="${escapeHtml(opts.topUp.usageUrl)}" style="color:#6d28d9;">Open Usage › Top-ups</a></p>`
+    : '';
+  const html = `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
 <body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;padding:40px 20px;">
@@ -1048,30 +1054,45 @@ export async function sendBrandedInvoiceEmail(
       <tr><td style="padding:10px 0 0;color:#111827;font-size:15px;font-weight:700;border-top:1px solid #e5e7eb;">Amount paid</td><td style="padding:10px 0 0;color:#111827;font-size:15px;font-weight:700;text-align:right;border-top:1px solid #e5e7eb;">${safeAmount}</td></tr>
     </table>
   </div>
-  ${pdfNote}
+  ${pdfNote}${topUpNote}
 </td></tr>
 ${hostedBtn}
 <tr><td style="padding:8px 32px 32px;">
   <p style="font-size:11px;color:#9ca3af;margin:20px 0 0;line-height:1.6;">
-    This receipt was sent by Axal StudioOS. If you have any questions about this charge, just reply to this email.
+    ${sellerNote}This receipt was sent by Axal StudioOS. If you have any questions about this charge, just reply to this email.
   </p>
 </td></tr>
 </table></td></tr></table></body></html>`;
-    const textLines = [
-      `Hi ${greet},`,
-      '',
-      `We've received your payment. Here's your receipt for your records.`,
-      '',
-      `Description: ${(opts.description && opts.description.trim()) || 'Axal StudioOS'}`,
-      opts.invoiceNumber ? `Receipt: ${opts.invoiceNumber}` : '',
-      `Date: ${dateStr}`,
-      `Amount paid: ${formatMoney(opts.amountCents, opts.currency)}`,
-      '',
-      opts.hostedInvoiceUrl ? `View invoice online: ${opts.hostedInvoiceUrl}` : '',
-      opts.pdfBytes ? `Your invoice PDF is attached.` : '',
-    ].filter(Boolean);
-    const text = textLines.join('\n');
-    const subject = `Your Axal receipt${opts.invoiceNumber ? ` — ${opts.invoiceNumber}` : ''}`;
+  const textLines = [
+    `Hi ${greet},`,
+    '',
+    `We've received your payment. Here's your receipt for your records.`,
+    '',
+    `Description: ${(opts.description && opts.description.trim()) || 'Axal StudioOS'}`,
+    opts.invoiceNumber ? `Receipt: ${opts.invoiceNumber}` : '',
+    `Date: ${dateStr}`,
+    `Amount paid: ${formatMoney(opts.amountCents, opts.currency)}`,
+    '',
+    opts.hostedInvoiceUrl ? `View invoice online: ${opts.hostedInvoiceUrl}` : '',
+    opts.pdfBytes ? `Your invoice PDF is attached.` : '',
+    opts.topUp ? `${TOKEN_PACK_EMAIL_NOTE} ${opts.topUp.usageUrl}` : '',
+    seller ? `Sold by ${seller}.` : '',
+  ].filter(Boolean);
+  const text = textLines.join('\n');
+  const subject = `Your Axal receipt${opts.invoiceNumber ? ` — ${opts.invoiceNumber}` : ''}`;
+  return { subject, html, text };
+}
+
+export async function sendBrandedInvoiceEmail(
+  env: Env,
+  opts: BrandedInvoiceOpts,
+): Promise<{ ok: boolean; error?: string }> {
+  if (!env.GMAIL_CLIENT_ID || !env.GMAIL_REFRESH_TOKEN) {
+    return { ok: false, error: 'Gmail not configured on this environment' };
+  }
+  try {
+    const accessToken = await getGmailAccessToken(env);
+    const { subject, html, text } = brandedInvoiceContent(opts);
     const from = 'Axal VC <billing@axal.vc>';
     const rawEmail = opts.pdfBytes
       ? buildRawEmailWithAttachment(

@@ -346,6 +346,9 @@ test('5. A3m: Connectors on a phone draws the canvas bar, Yours and Suggested fo
   assert.match(markup, /id="connectors-discover"/, 'Discover is kept below');
   assert.ok(markup.indexOf('connectors-phone-suggested') < markup.indexOf('connectors-discover'));
   assert.doesNotMatch(markup, /role="tablist" aria-label="Connectors"/, 'no Yours/Discover tabs on a phone');
+  // D753 F6 (#1877): the phone's Discover filters through the bottom-sheet menu, not a sideways chip strip.
+  assert.match(markup, /data-testid="button-connectors-filter"[^>]*aria-haspopup="dialog"|aria-haspopup="dialog"[^>]*data-testid="button-connectors-filter"/);
+  assert.doesNotMatch(markup, /connectors-chips/);
   // A failed suggestions read keeps today's reason, never an empty list.
   const none = text(html(h(ConnectorsPhoneView, { data: { ...data, suggestions: null, suggestionsNote: 'Choose a company in the sidebar to see what its empty modules could be fed by.' } })));
   assert.match(none, /Suggested for you Browse connectors Not recorded · Choose a company in the sidebar/, 'the CTA, then the note, in the canvas\'s order');

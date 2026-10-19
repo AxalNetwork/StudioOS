@@ -41,6 +41,8 @@ async function loadRouter() {
     .replace(/^import \* as aiBudget from '\.\/aiBudget';\s*$/m, '')
     // D657 — the speech-to-text shapes, passed in as the real module below.
     .replace(/^import \{ audioInputFor, parseAudioOutput, type SttTranscript \} from '\.\/sttFormats';\s*$/m, '')
+    // D761 — the request and response shapes, passed in as the real module below.
+    .replace(/^import \* as shapes from '\.\/ai\/shapes';\s*$/m, '')
     .replace(/^export\s+(const|let|function|async\s+function|class|interface|type|enum)\b/gm, '$1')
     .replace(/^export\s+\{[^}]*\};?\s*$/gm, '');
   const unresolved = stripped.match(/^import\s[^;]*;/m);
@@ -51,7 +53,8 @@ async function loadRouter() {
   const wrapped = `${outputText}\nreturn { run, ROUTE, estimateCostUsd, loadAiUsageReport, aiOrgKillSwitchState, __resetForTest };`;
   const aiBudget = await import('../src/services/aiBudget.ts');
   const stt = await import('../src/services/sttFormats.ts');
-  return new Function('branchOf','aiBudget','audioInputFor','parseAudioOutput', wrapped)(branchOf,aiBudget,stt.audioInputFor,stt.parseAudioOutput);
+  const shapes = await import('../src/services/ai/shapes.ts');
+  return new Function('branchOf','aiBudget','audioInputFor','parseAudioOutput','shapes', wrapped)(branchOf,aiBudget,stt.audioInputFor,stt.parseAudioOutput,shapes);
 }
 
 // --------------------------------------------------------------------------

@@ -29,7 +29,7 @@ call runs at boot.
 - Task #7 — `docusign.ts`
 - Task #8 — `crunchbase.ts`
 - Task #9 — `affinity.ts`
-- D655 (#1467) — `github.ts`: a GitHub App's read-only user authorization; issues to Product roadmap, pull requests to Prototype / MVP, releases recorded with no store. Its first ledger writer (`connector_fed_items`, migration 445). `accessToken` renews the user token under an exclusive encrypted D1 lease, with a KV hint and compare-and-swap writes; `disconnect` revokes the grant (#1883).
+- D655 (#1467) — `github.ts`: a GitHub App's read-only user authorization; issues to Product roadmap, pull requests to Prototype / MVP, releases recorded with no store. Its first ledger writer (`connector_fed_items`, migration 445). `accessToken` renews the user token under an exclusive encrypted D1 lease, with a KV hint and compare-and-swap writes; `disconnect` revokes the grant (#1883). The install link reads the non-secret `GITHUB_APP_SLUG` (#1884), with no guessed default.
 - D684 (#1577) — Zoom is a registry provider (`zoom`) whose implementation is
   NOT in this folder: it lives with the other interview channels in
   `cloudflare-worker/src/services/channels/zoom.ts`, which calls
