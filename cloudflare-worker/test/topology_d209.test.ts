@@ -391,12 +391,11 @@ test('two task classes route through the gateway, each call naming its branch, a
   assert.match(optionFor, /return \{ gateway: \{ id: slug, metadata \} \};/);
   // The call site passes the caller's own user id.
   assert.match(router, /gatewayOptionFor\(env, opts\.task, opts\.userId\)/);
-  // aiClient keeps no gateway path, so runAdvisorTurn gaining a caller could
-  // not add unlabelled gateway traffic.
+  // aiClient's gateway builder was deleted (D261), and D766 deleted the
+  // uncalled client itself, which called the binding directly: no second
+  // path can add unlabelled gateway traffic.
   assert.deepEqual(callSites('advisorGatewayOption'), [], 'aiClient\'s deleted gateway builder is back');
-  const client = CODE.find((f) => f.file === 'services/advisor/aiClient.ts')!.code;
-  assert.match(client, /ai\.run\(model, payload\)/);
-  assert.doesNotMatch(client, /CF_AI_GATEWAY_SLUG_ADVISOR/, 'aiClient reads the gateway slug again');
+  assert.equal(CODE.find((f) => f.file === 'services/advisor/aiClient.ts'), undefined, 'the uncalled advisor client is back');
 
   const routes = describeTopology({} as never).ai_gateway.routes;
   assert.deepEqual(routes.map((r) => r.id), [...GATEWAY_TASKS]);
