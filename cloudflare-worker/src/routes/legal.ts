@@ -6,7 +6,7 @@ import { activeCompanyFor } from '../middleware/activeCompany';
 import { projectInActiveCompany } from '../services/tenancyScope';
 import { seedStandardEventsForJurisdiction } from './compliance';
 import { CONTRACT_DOC_TYPES } from './admin_contracts';
-import { getActiveTemplateBody } from '../services/legalTemplateStore';
+import { getActiveTemplateBody, getTemplate } from '../services/legalTemplateStore';
 import { applyMergeFields } from '../services/mergeFields';
 import { checkCompanyName } from '../services/nameCheck';
 import { stripeCall } from './billing';
@@ -52,26 +52,29 @@ const TEMPLATE_LAYERS: Record<string, { label: string; description: string }> = 
   compliance: { label: 'Compliance & Regulatory', description: 'SEC filings, AML/KYC, and tax elections' },
 };
 
-const TEMPLATES: Record<string, { title: string; layer: string; content: string }> = {
-  operating_agreement: { title: 'Operating Agreement (LLC)', layer: 'gp', content: 'OPERATING AGREEMENT OF {company_name} LLC...' },
-  carried_interest: { title: 'Carried Interest / Partnership Agreement', layer: 'gp', content: 'CARRIED INTEREST VESTING AGREEMENT...' },
-  ic_charter: { title: 'Investment Committee Charter', layer: 'gp', content: 'INVESTMENT COMMITTEE CHARTER...' },
-  service_agreement: { title: 'Partner Service Agreement', layer: 'gp', content: 'PARTNER SERVICE AGREEMENT...' },
-  lpa: { title: 'Limited Partnership Agreement (LPA)', layer: 'fund', content: 'LIMITED PARTNERSHIP AGREEMENT...' },
-  ppm: { title: 'Private Placement Memorandum (PPM)', layer: 'fund', content: 'CONFIDENTIAL PRIVATE PLACEMENT MEMORANDUM...' },
-  subscription: { title: 'Subscription Agreement', layer: 'fund', content: 'SUBSCRIPTION AGREEMENT...' },
-  mgmt_company: { title: 'Management Company Agreement', layer: 'fund', content: 'MANAGEMENT COMPANY AGREEMENT...' },
-  safe: { title: 'SAFE Agreement', layer: 'portfolio', content: 'SIMPLE AGREEMENT FOR FUTURE EQUITY (SAFE)...' },
-  term_sheet: { title: 'Term Sheet', layer: 'portfolio', content: 'TERM SHEET — NON-BINDING...' },
-  bylaws: { title: 'Corporate Bylaws', layer: 'portfolio', content: 'BYLAWS OF {company_name}...' },
-  equity_split: { title: 'Equity Split Agreement', layer: 'portfolio', content: 'EQUITY ALLOCATION AGREEMENT...' },
-  ip_license: { title: 'IP License Agreement', layer: 'portfolio', content: 'INTELLECTUAL PROPERTY LICENSE AGREEMENT...' },
-  spa: { title: 'Stock Purchase Agreement (SPA)', layer: 'portfolio', content: 'STOCK PURCHASE AGREEMENT...' },
-  voting_rights: { title: "Voting & Investors' Rights Agreement", layer: 'portfolio', content: "INVESTORS' RIGHTS AGREEMENT..." },
-  form_adv: { title: 'Form ADV / Investment Adviser Registration', layer: 'compliance', content: 'FORM ADV — INVESTMENT ADVISER REGISTRATION...' },
-  aml_kyc: { title: 'AML/KYC Policy', layer: 'compliance', content: 'ANTI-MONEY LAUNDERING AND KNOW YOUR CUSTOMER POLICY...' },
-  section_83b: { title: 'Section 83(b) Election', layer: 'compliance', content: 'SECTION 83(b) ELECTION...' },
-};
+// The 18 documents the /legal page lists, in its order, with their layers
+// (D758). Title and text are read from the library (legal_templates); there
+// is no inline copy, so the page shows what a send would carry.
+const LEGAL_PAGE_DOCUMENTS: ReadonlyArray<{ key: string; layer: string }> = [
+  { key: 'operating_agreement', layer: 'gp' },
+  { key: 'carried_interest', layer: 'gp' },
+  { key: 'ic_charter', layer: 'gp' },
+  { key: 'service_agreement', layer: 'gp' },
+  { key: 'lpa', layer: 'fund' },
+  { key: 'ppm', layer: 'fund' },
+  { key: 'subscription', layer: 'fund' },
+  { key: 'mgmt_company', layer: 'fund' },
+  { key: 'safe', layer: 'portfolio' },
+  { key: 'term_sheet', layer: 'portfolio' },
+  { key: 'bylaws', layer: 'portfolio' },
+  { key: 'equity_split', layer: 'portfolio' },
+  { key: 'ip_license', layer: 'portfolio' },
+  { key: 'spa', layer: 'portfolio' },
+  { key: 'voting_rights', layer: 'portfolio' },
+  { key: 'form_adv', layer: 'compliance' },
+  { key: 'aml_kyc', layer: 'compliance' },
+  { key: 'section_83b', layer: 'compliance' },
+];
 
 // Task #30 — Jurisdiction wizard (worker parity).
 // Read-only catalogue endpoint. Doc generation + entity creation stays
@@ -240,9 +243,6 @@ legal.post('/incorporate/wizard', async (c) => {
     registered_agent_name: body.registered_agent_name || '[Registered Agent]',
     registered_agent_address: body.registered_agent_address || '[Registered Agent Address]',
   };
-  const fillContent = (s: string) =>
-    s.replace(/\{(company_name|jurisdiction|incorporation_date|registered_agent_name|registered_agent_address)\}/g,
-      (_m, k) => (fill as any)[k] ?? '');
 
   const generated: Array<{ id: number; title: string; doc_type: string; reused: boolean }> = [];
   // Task #2 — Contract doc_types are tracked separately so the wizard
@@ -251,8 +251,11 @@ legal.post('/incorporate/wizard', async (c) => {
   // (esign_envelopes is the single source of truth for active contracts.)
   const pendingEsign: Array<{ template_key: string; title: string; doc_type: string; reason: string }> = [];
   const pendingCounsel: Array<{ template_key: string; title: string; reason: string }> = [];
+  // D758 — a non-contract kit item with no body in the library is listed,
+  // never written as a placeholder document.
+  const pendingBody: Array<{ template_key: string; title: string; reason: 'template_has_no_body' }> = [];
   for (const tkey of j.templates) {
-    const meta = JURISDICTION_TEMPLATES[tkey] || (TEMPLATES as any)[tkey];
+    const meta = JURISDICTION_TEMPLATES[tkey];
     if (!meta) continue;
     // Task #2 — Skip contract doc_types entirely. We surface them in the
     // response under `pending_esign` so the frontend can prompt the
@@ -272,17 +275,18 @@ legal.post('/incorporate/wizard', async (c) => {
       continue;
     }
     const docType = _ALLOWED_DOC_TYPES.has(tkey) ? tkey : 'other';
-    // Task #8 — prefer the canonical D1 store body (with {{merge}} tokens)
-    // over the inline stub; fall back to fillContent for the legacy
-    // single-brace inline bodies.
+    // The document's text is the library's (D758): the canonical D1 store
+    // body, with its {{merge}} tokens filled. No body, no document.
     const d1Body = await getActiveTemplateBody(c.env, tkey);
     if (!d1Body && COUNSEL_REQUIRED_TEMPLATES.has(tkey)) {
       pendingCounsel.push({ template_key: tkey, title: meta.title, reason: 'counsel_approval_pending' });
       continue;
     }
-    const content = d1Body
-      ? applyMergeFields(d1Body, fill)
-      : fillContent((TEMPLATES as any)[tkey]?.content || `${meta.title}\n\nCompany: ${fill.company_name}\nJurisdiction: ${fill.jurisdiction}\nDate: ${fill.incorporation_date}\n\n[Counsel-reviewed body managed in the FastAPI backend.]`);
+    if (!d1Body) {
+      pendingBody.push({ template_key: tkey, title: meta.title, reason: 'template_has_no_body' });
+      continue;
+    }
+    const content = applyMergeFields(d1Body, fill);
     const inserted = await sql`
       INSERT INTO documents (project_id, title, doc_type, status, content, template_name)
       VALUES (${project.id}, ${meta.title}, ${docType}, 'generated', ${content}, ${tkey})
@@ -365,6 +369,7 @@ legal.post('/incorporate/wizard', async (c) => {
     documents: generated,
     pending_esign: pendingEsign,
     pending_counsel: pendingCounsel,
+    pending_body: pendingBody,
     seeded_compliance: seededCompliance,
     handoff,
   });
@@ -859,78 +864,52 @@ legal.post('/incorporate/dev-complete', async (c) => {
   return c.json({ ok: true, incorporation_id: id, status: 'paid' });
 });
 
+// D758 — the /legal page's library: its 18 documents, titled and read from
+// the store. Full template text is served, so only the page's own audience
+// (admins and founders) may read it.
+const LEGAL_LIBRARY_ROLES = new Set(['admin', 'founder']);
+async function legalLibraryRow(env: Env, doc: { key: string; layer: string }) {
+  const row = await getTemplate(env, doc.key);
+  if (!row) return null;
+  const body = Number(row.is_stub) === 0 && String(row.body_md || '').trim() ? row.body_md : null;
+  return {
+    key: doc.key,
+    title: row.title,
+    layer: doc.layer,
+    layer_label: TEMPLATE_LAYERS[doc.layer]?.label ?? doc.layer,
+    has_body: body != null,
+    body,
+  };
+}
+
 legal.get('/templates', async (c) => {
-  await requireAuth(c);
-  const layers = Object.entries(TEMPLATE_LAYERS).map(([key, val]) => ({
-    layer_key: key, ...val,
-    templates: Object.entries(TEMPLATES).filter(([, t]) => t.layer === key).map(([k, t]) => ({ key: k, title: t.title })),
-  }));
-  return c.json({ layers, total_templates: Object.keys(TEMPLATES).length });
+  const user = await requireAuth(c);
+  if (!LEGAL_LIBRARY_ROLES.has(String(user.role))) {
+    return refuse(c, 403, { code: 'legal_library_forbidden', message: 'The legal library is for founders and admins.' });
+  }
+  try {
+    const rows = await Promise.all(LEGAL_PAGE_DOCUMENTS.map((d) => legalLibraryRow(c.env, d)));
+    return c.json(rows.filter((r) => r != null).map(({ body: _body, ...r }) => r));
+  } catch (e) {
+    return refuse(c, 503, { code: 'template_unreadable', message: 'The legal library could not be read. Try again in a moment.', raw: e });
+  }
 });
 
 legal.get('/templates/:key', async (c) => {
-  await requireAuth(c);
-  const key = c.req.param('key');
-  const template = TEMPLATES[key];
-  if (!template) return c.json({ error: 'Template not found' }, 404);
-  return c.json({ key, ...template, layer_info: TEMPLATE_LAYERS[template.layer] });
-});
-
-legal.post('/templates/:key/generate', async (c) => {
   const user = await requireAuth(c);
-  const key = c.req.param('key');
-  const template = TEMPLATES[key];
-  if (!template) return c.json({ error: 'Template not found' }, 404);
-
-  const body = await c.req.json();
-  const sql = getSQL(c.env);
-  // D639 — the one document access rule, `canAccessFounderResource`, the same
-  // as `GET /documents/:id`: admins and partners for any project, a founder
-  // for their own. An unattached document (no project_id) has no owner, so
-  // only admins and partners generate one. Investors used to pass a role list
-  // here; they get no unmasked founder data through this predicate.
-  let ownerFounderId: number | null = null;
-  if (body.project_id) {
-    const p = await sql`SELECT founder_id FROM projects WHERE id = ${body.project_id}`;
-    if (p.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
-    ownerFounderId = (p[0] as any).founder_id ?? null;
+  if (!LEGAL_LIBRARY_ROLES.has(String(user.role))) {
+    return refuse(c, 403, { code: 'legal_library_forbidden', message: 'The legal library is for founders and admins.' });
   }
-  if (!canAccessFounderResource(user, ownerFounderId)) {
-    await sql.end();
-    return c.json({
-      error: 'forbidden',
-      message: body.project_id
-        ? 'You can only generate documents for your own project.'
-        : 'Only an admin or a partner can generate a document that belongs to no project.',
-    }, 403);
+  const doc = LEGAL_PAGE_DOCUMENTS.find((d) => d.key === c.req.param('key'));
+  if (!doc) return refuse(c, 404, { code: 'template_not_found', message: 'That document is not in the legal library.' });
+  let row: Awaited<ReturnType<typeof legalLibraryRow>>;
+  try {
+    row = await legalLibraryRow(c.env, doc);
+  } catch (e) {
+    return refuse(c, 503, { code: 'template_unreadable', message: 'The legal library could not be read. Try again in a moment.', raw: e });
   }
-  // Task #2 — esign_envelopes is the single source of truth for actual
-  // contracts. Refuse to mint a NEW contract-type row in `documents`;
-  // callers must use POST /api/legal/esign/send to issue an envelope.
-  // Non-contract templates (memos, internal docs) are still generatable.
-  if (CONTRACT_DOC_TYPES.has(String(key).toLowerCase())) {
-    await sql.end();
-    return c.json({
-      error: 'This template is a contract doc_type — use the e-sign envelope flow (POST /api/legal/esign/send) instead.',
-      code: 'use_esign_envelope',
-    }, 409);
-  }
-  // Task #8 — prefer the canonical D1 store body over the inline stub. D1
-  // bodies carry {{merge}} tokens (applyMergeFields); the legacy inline
-  // stubs use {single} braces and remain the fallback path.
-  const d1Body = await getActiveTemplateBody(c.env, key);
-  let content: string;
-  if (d1Body) {
-    content = applyMergeFields(d1Body, { ...body, company_name: body.company_name, project_id: body.project_id });
-  } else {
-    content = template.content;
-    if (body.company_name) content = content.replace(/\{company_name\}/g, body.company_name);
-    if (body.project_id) content = content.replace(/\{project_id\}/g, body.project_id);
-  }
-
-  const [doc] = await sql`INSERT INTO documents (project_id, title, doc_type, status, content, template_name) VALUES (${body.project_id || null}, ${template.title}, ${key}, 'generated', ${content}, ${key}) RETURNING *`;
-  await sql.end();
-  return c.json(safeDoc(doc), 201);
+  if (!row) return refuse(c, 404, { code: 'template_not_found', message: 'That document is not in the legal library.' });
+  return c.json(row);
 });
 
 legal.get('/documents', async (c) => {

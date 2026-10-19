@@ -32,7 +32,10 @@ their connecting user; company links control writes into project-backed data.
 `GET /suggestions` reads empty module stores, `POST /requests` records a tool
 request, and Super Admin `GET /requests` lists them. `GET /:uid/logs` searches
 and pages activity. Every company ID supplied by a request is checked against
-`user_company_links` before use.
+`user_company_links` before use. D751 (#1880): every OAuth connector with an
+implementation also carries `configured` — `true` when Axal holds its client,
+`false` when it does not, `null` when the key store could not be read — and no
+other row carries the field.
 Mercury (D710, #1775; D713, #1778; D752, #1886): an admin on HQ gets the
 entity row, read from `/api/admin/mercury`, and `POST /connect` answers 409
 `entity_connection_only`. A founder or partner, on either host, and an investor
@@ -42,6 +45,8 @@ An investor on a branch gets no row, and `POST /connect` answers 403
 Everyone else, and an admin on a branch, is answered as before: `GET
 /available` omits it and `POST /connect`, `GET /:key` and the waitlist and
 notify-me routes answer 404 as if the key did not exist.
+D752 (#1887): `GET/POST /api/mercury/personal/matches` take `target=raise|commitment` for a founder (`raise_receipts`): their own committed raise prospects and pending deal commitments. Confirming sets the prospect's `commit_status` to `wired`, or the commitment to `confirmed`.
+`GET /api/revenue/projects/:projectId/mercury-credits` items carry `fits_raise_target`, and a confirmed raise receipt's line is refused `raise_receipt`.
 D749 (#1838): `POST /api/admin/mercury/transactions/:uid/not-ours` `{ reason, note }` marks a posted credit Not ours (201), and `POST /api/admin/mercury/not-ours/:uid/withdraw` `{ reason }` withdraws the mark. Both are an Admin's on HQ, under the `mercury.reconcile` act.
 `GET /api/admin/mercury/transactions?match=none` leaves out a line with an active mark (and `direction=credit|debit`, D717 #1856, keeps only credits or debits), `match=not_ours` lists the marked lines, and each item carries `not_ours`. The monthly cash summary and the quarterly report's `unmatched_count` leave active marks out.
 
@@ -74,6 +79,8 @@ Every admin act leaves one `fund_admin.<act>` row in `admin_audit_log`. `COOL_OF
 The `github` provider is a GitHub App's read-only user authorization. `GET /:uid/repositories` lists what its installations reach and what is chosen; `PUT /:uid/repositories` saves a choice and a project, after re-reading the grant and refusing any permission beyond the registry's four read scopes (`write_scope_refused`). Both need the active company enabled for the connection, and the project must be in it. `POST /:uid/sync` lands issues on `roadmap_okrs` and pull requests on `mvp_features`, linked through `connector_fed_items` (migration 445) so a re-sync updates; releases are recorded with no store. `GET /:uid/sync-status` returns the running sync's percentage and what it is reading. `GET /:uid/fed` returns, for every connector, a count per module it feeds; a connector that does not record deliveries says Not recorded, never 0.
 
 `DELETE /:uid` on a GitHub connection also revokes the grant on GitHub, best effort. Its user token is renewed 60 s before it expires, and a refused renewal sets the connection to `error` with `github_sign_in_expired`.
+
+D751 (#1880), for all nine OAuth connectors (Calendly, Carta, DocuSign, GitHub, HubSpot, Salesforce, Slack, Stripe, Zoom): `GET /oauth/:provider/start` checks readiness before it writes any state. An unset client is 503 `oauth_unconfigured` ("<Name> isn't set up on Axal yet…"), and an admin's body adds `env_vars` and, except for Zoom, `admin_href: '/admin?tab=integration-keys'`; an unreadable key store is 503 `oauth_setup_unreadable` with `Retry-After: 60`; a `coming_soon` connector is 503 `coming_soon`, the same body as `POST /connect`. None of them writes an `oauth_state_tokens` row. A client that goes missing mid-flow reaches the page as `reason=not_configured`. See `decisions/D751.md`.
 
 ### Fund notices and booklets Worker contract (D716, #1781)
 
@@ -172,7 +179,7 @@ Under `/api/admin/contracts` (`admin_contracts.ts`). Each template's kind and Ax
 
 Behind `requireHqAuthoring`: `POST /published-templates/:slug/publish` `{ version }` snapshots that one row with both columns and writes `contract_template_published` (409 `published_version_changed` or `template_has_no_body`; 404 `template_not_found`); `POST /published-templates/:slug/withdraw` removes that publication and writes `contract_template_withdrawn` (404 `not_published`); `POST /published-templates/push` sends the recorded publications to every branch and writes none, answering one row per branch with its state. The library-wide `POST /published-templates/publish` keeps working with no screen caller. `GET /templates/outside` (`requireAdmin`) lists the bundled keys a sender still sends as the bundled file (`BUNDLED_SENT_DIRECTLY`), each with the row it counts under; empty since D758 PR 2.
 
-`preview.pdf` and `POST /envelopes/preview` print the effective pair. A send records the pair on `esign_envelopes`, the publication's for the contract send and the active row's otherwise, and signing and the DocuSign source read the envelope's values. PR 2a added the `contracts.js` methods. Since #1852 the template editor (`contracts/TemplateEditor.jsx`) calls `POST /templates/render` with the draft's pair, `publishOne` and `withdraw`.
+`preview.pdf` and `POST /envelopes/preview` print the effective pair. A send records the pair on `esign_envelopes`, the publication's for the contract send and the active row's otherwise, and signing and the DocuSign source read the envelope's values. PR 2a added the `contracts.js` methods. Since #1852 the template editor (`contracts/TemplateEditor.jsx`) calls `POST /templates/render` with the draft's pair, `publishOne` and `withdraw`. #1851 adds `counsel_draft` to the store list, and `pushed_at` and, on a branch that hit the deadline, `timed_out: true` to the push. The Templates tab (`contracts/TemplateCatalog.jsx`, mounted by `AdminTemplates.jsx` on `/admin/contracts?tab=templates`) reads `templates` (the store list), `outside()` and both thumbnails (`thumbnailBlob`, `outsideThumbnailBlob`), and calls `push()`.
 
 PR 1b, behind `requireAdmin`:
 - `GET /templates/store/:slug/thumbnail.png` and `GET /templates/outside/:key/thumbnail.png`: page 1 as a PNG drawn once per version by Browser Run's screenshot and kept in `FILES`; `private, max-age=86400`, the key as the ETag, 304 on a match; 503 `thumbnail_unavailable` when it cannot be drawn, writing nothing. Binary, outside the typed drift surface.
@@ -185,7 +192,7 @@ The canvas is `design/incoming/Legal Documents · Templates.dc.html` (#1850). Wh
 
 | Canvas | Live route | Component and Worker | Status |
 | --- | --- | --- | --- |
-| L9 "The Templates tab · desktop": `catalog` ("Catalog · light"), `catalog-dark` ("Catalog · dark (the paper stays white)"), `push` ("Push to branches"); L8 thumbnails and "Not in the catalog" | `/admin/contracts?tab=templates` · Admin and Super Admin; a branch reads only | `AdminTemplates.jsx` (`recordedPublication`, from `ContractsDesk.jsx:52`); `admin_contracts.ts` | UPGRADE: #1851 |
+| L9 "The Templates tab · desktop": `catalog` ("Catalog · light"), `catalog-dark` ("Catalog · dark (the paper stays white)"), `push` ("Push to branches"); L8 thumbnails and "Not in the catalog" | `/admin/contracts?tab=templates` · Admin and Super Admin; a branch reads only | `AdminTemplates.jsx` (`recordedPublication`, from `ContractsDesk.jsx:52`) mounts `pages/admin/contracts/TemplateCatalog.jsx`, `FundIDocumentsPanel.jsx` and `PushResults.jsx` (#1851; D717 "PR 2b"); `admin_contracts.ts` | CURRENT |
 | L9 `editor` ("Editor"), `publish` ("Publish confirmation and result") | the same: an open template replaces the tab on the Contracts desk | `pages/admin/contracts/TemplateEditor.jsx`, `PublishDialog.jsx` (#1852, merged as #1918; D717 "PR 2c"); the legacy console keeps `TemplateEditorModal` | CURRENT |
 | L9 the editor's Pages view, `history` ("Version history") | the same | none yet | UPGRADE: #1853 |
 | L10 "The entity and money map": "Entity and money map · admin", "The four entities", "The accounts · masked to the last four" | a sheet over `/admin/contracts` (`?sheet=structure`), opened from the Contracts desk header; and from the Bank accounts console's header (#1856) | `pages/admin/contracts/FundStructureSheet.jsx`, `FundStructureMap.jsx`; `admin_fund_structure.ts` | CURRENT |
@@ -739,7 +746,7 @@ path with no worker handler, already recorded in `scripts/api-drift-baseline.jso
 | Network workspace (`/advisor/network/*`) | `/api/network-introductions/*`, `/api/organizations*` | The Network surface every role's sidebar links to. A second, working Network lives at `/network`. |
 | Trust Center (`/trust`) | 9 routes: `/trust/kyb/status`, `/kyb/submit`, `/accreditation/*` (5), `/nda/status`, `/nda/:p/preview`, `/nda/sign` | The editable KYB / Accreditation / NDA cards. Trust Center v2 converts exactly these to read-only, so v2 is the fix, not merely a redesign. |
 | Marketplace (`/marketplace`) | all 11 `api.marketplace*` calls | The whole page. Implemented only in the dev-only FastAPI. |
-| Legal (`/legal`) | `POST /legal/documents/generate` | Document generation. The worker has `POST /templates/:key/generate` and `POST /documents` under different paths. |
+| Legal (`/legal`) | none since D758 (#1862) | The page reads `GET /legal/templates` and `GET /legal/templates/:key` from the template store (admins and founders) and has no generate call: `generateDocument` and `POST /legal/templates/:key/generate` are deleted. |
 
 Separately, **two code comments block a feature on a premise that is no longer
 true**: `SpinoutLabCofounderAgreementPage.jsx:35` and
