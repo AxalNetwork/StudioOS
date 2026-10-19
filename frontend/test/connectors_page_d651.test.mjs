@@ -193,7 +193,7 @@ test('a provider’s sign-in return: which sheet opens, on which view, and what 
   assert.equal(stripReturn('?oauth=ok&provider=stripe', ['oauth', 'provider']), '');
 });
 
-test('THE REDIRECT KEEPS OAUTH RETURNS WORKING: /integrations?… lands on Connectors with its query, and opens the sheet', () => {
+test('THE REDIRECT KEEPS OAUTH RETURNS WORKING: /integrations?… lands on its connector\'s page with its query (D753)', () => {
   // Every place a provider's sign-in returns to, as the Worker writes it.
   // D686 (#1592): the connector callback returns through one destination,
   // read from the signed state. It is still /integrations unless that state
@@ -224,9 +224,10 @@ test('THE REDIRECT KEEPS OAUTH RETURNS WORKING: /integrations?… lands on Conne
   const linkedin = read('cloudflare-worker/src/routes/linkedin.ts');
   assert.match(linkedin, /returnTo === 'integrations' \? '\/integrations'/);
   assert.match(linkedin, /kind === 'build' \? '\/build\/connect'/);
-  for (const search of ['?oauth=ok&provider=stripe', '?google=connected', '?microsoft=connected', '?linkedin=connected']) {
+  for (const [search, key] of [['?oauth=ok&provider=stripe', 'stripe'], ['?google=connected', 'google'], ['?microsoft=connected', 'microsoft'], ['?linkedin=connected', 'linkedin']]) {
     const to = connectorsRedirect({ search, hash: '#x' });
-    assert.deepEqual(to, { pathname: '/account/connectors', search, hash: '#x' });
+    // D753 decision 6: each return goes to its own connector's page.
+    assert.deepEqual(to, { pathname: `/account/connectors/${key}`, search, hash: '#x' });
     assert.equal(oauthReturn(to.search).view, 'connected', `${search} still opens the connected view`);
   }
   // Both old addresses route through it, and ask for the once-only notice.
@@ -238,6 +239,8 @@ test('THE REDIRECT KEEPS OAUTH RETURNS WORKING: /integrations?… lands on Conne
   const section = read('frontend/src/pages/account/AccountConnectors.jsx');
   assert.match(section, /const \[ret\] = useState\(\(\) => oauthReturn\(location\.search\)\);/);
   assert.match(section, /search: stripReturn\(location\.search, ret\.strip\)/);
+  // D753 — any other return goes on to its connector's page.
+  assert.match(section, /navigate\(\{ pathname: connectorPagePath\(ret\.key\), search: location\.search, hash: location\.hash \}, \{ replace: true, state: location\.state \}\)/);
 });
 
 test('the connect flow: how each connector connects, where a failure lands, and what each state says', () => {
@@ -439,8 +442,10 @@ test('the doors: the user menu under Usage, the Account section after Usage, and
   const settings = read('frontend/src/pages/SettingsPage.jsx');
   assert.match(settings, /\{ id: 'usage', label: 'Usage' \},\n(?:\s*\/\/[^\n]*\n)*\s*\{ id: 'connectors', label: 'Connectors' \},/);
   assert.doesNotMatch(settings, /id: 'integrations'/, 'Integrations left the section list');
-  assert.match(settings, /\{safeActive === 'connectors' && <ConnectorsTab \/>\}/);
-  assert.match(settings, /function ConnectorsTab\(\) \{[\s\S]*?<ConnectorsSection \/>\s*<Card title="API keys"/);
+  // D753 — a connector's key opens its page; the hub keeps the section and the API-keys card.
+  assert.match(settings, /\{safeActive === 'connectors' && <ConnectorsTab connectorKey=\{connectorKey\} \/>\}/);
+  assert.match(settings, /function ConnectorsTab\(\{ connectorKey = null \}\) \{\s*return connectorKey \? <ConnectorPage connectorKey=\{connectorKey\} \/> : <ConnectorsHubTab \/>;/);
+  assert.match(settings, /function ConnectorsHubTab\(\) \{[\s\S]*?<ConnectorsSection \/>\s*<Card title="API keys"/);
   // Build's header is the Build cycle overview's primary action since the A3
   // desk retired (D661, #1474): "Connect a tool" opens the same sheet, now at
   // /build/connect over the page (D686 §5.1), mounted by the one lightbox mount.
