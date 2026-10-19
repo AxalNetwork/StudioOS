@@ -47,10 +47,29 @@ export interface Env {
   /** The hub.verify_token Meta's subscription GET must echo. */
   WHATSAPP_VERIFY_TOKEN?: string;
   WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID?: string;
+  // D754 / D756 — wrangler vars, not secrets: "on", "canary" (Super Admins
+  // only) or "off" per chat channel. Absent or unknown reads as "canary".
+  WHATSAPP_CHANNEL?: string;
+  TELEGRAM_CHANNEL?: string;
+  // D754 — Axal's own WhatsApp number and its WhatsApp Business Account. Ids,
+  // not secrets; once set, Embedded Signup refuses them, so no member can
+  // claim Axal's number. Unset, the guard does nothing.
+  WHATSAPP_AXAL_PHONE_NUMBER_ID?: string;
+  WHATSAPP_AXAL_WABA_ID?: string;
+  // D754 way B ("Send to Axal", the owner's yes on 2026-10-18): the system
+  // user's token for Axal's own number (a secret), and that number in E.164 for
+  // the wa.me link members open (a public wrangler var). Way B stays hidden and
+  // its webhook branch ignores everything until the three Axal secrets are set.
+  WHATSAPP_AXAL_ACCESS_TOKEN?: string;
+  WHATSAPP_AXAL_DISPLAY_NUMBER?: string;
   /** Zoom General app (user-managed OAuth) and its webhook secret token. */
   ZOOM_CLIENT_ID?: string;
   ZOOM_CLIENT_SECRET?: string;
   ZOOM_WEBHOOK_SECRET_TOKEN?: string;
+  // D757 — wrangler vars. Who can authorize the Zoom app: "own_account" (the
+  // default), "beta" or "public". Meet transcript import: "on", else off.
+  ZOOM_APP_AUDIENCE?: string;
+  MEET_TRANSCRIPTS_ENABLED?: string;
   // Task #4 — X (Twitter) admin broadcaster. OAuth 2.0 PKCE client
   // credentials. Provisioned via
   //   wrangler secret put X_CLIENT_ID     --env production

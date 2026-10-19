@@ -66,7 +66,10 @@ function stripeReached(start: string): string[] {
   const out: string[] = [];
   for (const [file, chain] of reach(start)) {
     const r = rel(file);
-    const touchesApi = r !== 'middleware/securityHeaders.ts' && readFileSync(file, 'utf8').split(STRIPE_API_TEXT).length > 1;
+    // Two files name the host as text, not code: the CSP, and D753's connector pages (`endpoints.api`), which
+    // `connector_pages_d753.test.ts` holds to calling nothing (no `fetch(`, no provider import).
+    const touchesApi = r !== 'middleware/securityHeaders.ts' && r !== 'integrations/connectorPages.ts'
+      && readFileSync(file, 'utf8').split(STRIPE_API_TEXT).length > 1;
     if (STRIPE_FILES.has(r) || touchesApi) out.push(chain.join(' → '));
   }
   return out;
