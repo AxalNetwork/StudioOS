@@ -29,6 +29,7 @@
  * has no catalogue entry and shows no plans. `meta` is the door's key in
  * `data/productPages.js`, which holds its title and description.
  */
+import { TOKEN_PACKS_PATH } from './aiTokens.js';
 
 export const DOOR_ORDER = ['founders', 'investors', 'partners', 'advisors'];
 
@@ -58,6 +59,8 @@ export const AI_TOKENS = {
     'Tokens you buy never expire.',
     'Your allowance, what you have used, and your token balance are shown in the product.',
   ],
+  // D755 §13 (#1915): the block links to the Token packs, which visitors can see.
+  link: { label: 'See the token packs', href: TOKEN_PACKS_PATH },
 };
 
 export const DOORS = {

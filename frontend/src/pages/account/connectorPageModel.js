@@ -114,3 +114,88 @@ export function detailsRows(p) {
 export function pageTitle(entry) {
   return entry?.state === 'ready' && entry.p?.display_name ? `${entry.p.display_name} · Connectors · Axal VC` : 'Connectors · Axal VC';
 }
+
+// ---------- The body (D753 #1955, F7) ---------------------------------------
+//
+// About, Tools, Prompts, the trust notice and Details, drawn from the
+// connector object the Worker describes (D753 decision 4(b)). Every sentence
+// comes from that object; a field it does not carry reads "Not recorded" with
+// `DETAIL_MISSING`, never a guess. `capabilities` is never read here: some
+// claim more than the code does (decision 5).
+
+/** A link the page may draw: an absolute `https:` URL, else null. */
+export function safeHref(u) {
+  if (typeof u !== 'string' || !u) return null;
+  try { return new URL(u).protocol === 'https:' ? u : null; } catch { return null; }
+}
+
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+/** `added` (`YYYY-MM`) as "October 2026"; null for anything else. */
+export function addedLabel(added) {
+  const m = typeof added === 'string' ? /^(\d{4})-(\d{2})$/.exec(added) : null;
+  const month = m ? Number(m[2]) : 0;
+  return month >= 1 && month <= 12 ? `${MONTHS[month - 1]} ${m[1]}` : null;
+}
+
+/** "Automatically" or "Asks first". A pull has no mode: Axal VC reads it on every sync. */
+export const modeLabel = (x) => (x?.default_mode === 'ask' ? 'Asks first' : 'Automatically');
+
+export const TOOL_GROUPS = [
+  { access: 'read', label: 'Reads' },
+  { access: 'write', label: 'Writes' },
+  { access: 'account', label: 'Keeps the connection working' },
+  { access: 'inbound', label: 'Calls Axal VC' },
+];
+
+/** The tools by access, in decision 3's order; empty groups and unknown access values are left out. */
+export function toolGroups(tools) {
+  const list = Array.isArray(tools) ? tools.filter((t) => t && typeof t.label === 'string' && t.label) : [];
+  return TOOL_GROUPS
+    .map((g) => ({ ...g, tools: list.filter((t) => t.access === g.access) }))
+    .filter((g) => g.tools.length);
+}
+
+/** The sign-in kinds that open the service's own sign-in page, so SIGN-IN URL is drawn. */
+const SIGNS_IN = new Set(['oauth', 'oauth_or_token', 'oauth_or_key', 'first_party']);
+
+/**
+ * Details (decision 3 item 10): MADE BY, SERVICE, CATEGORY, SIGN-IN,
+ * CONNECTOR URL (and SIGN-IN URL for a sign-in connector), ADDED, STATUS,
+ * PLAN and MORE INFO. Each row is `{ label, value, reason, kind, href?, links? }`.
+ * STATUS and PLAN are F1's, from the catalogue row `p`.
+ */
+export function bodyDetailsRows(connector, p) {
+  const c = connector || {};
+  const v = (value, extra = {}) => (value ? { value, reason: null, ...extra } : { value: null, reason: DETAIL_MISSING, ...extra });
+  const f1 = Object.fromEntries(detailsRows(p).map((r) => [r.label, r]));
+  const endpoints = c.endpoints || {};
+  const links = c.links || {};
+  const more = [
+    { label: 'Documentation', href: safeHref(links.help) || safeHref(links.developer_docs) },
+    { label: 'Support', href: safeHref(links.support) },
+    { label: 'Privacy Policy', href: safeHref(links.privacy) },
+  ].filter((l) => l.href);
+  const rows = [
+    { label: 'Made by', ...v(c.made_by?.name || null) },
+    { label: 'Service', ...v(c.service?.name || null, { href: safeHref(c.service?.href) }) },
+    { label: 'Category', ...v(c.category || categoryOf(p), { kind: 'chip' }) },
+    { label: 'Sign-in', ...v(c.sign_in?.label || null) },
+    { label: 'Connector URL', ...v(typeof endpoints.api === 'string' ? endpoints.api : null, { kind: 'mono' }) },
+  ];
+  if (SIGNS_IN.has(c.sign_in?.kind)) {
+    rows.push({ label: 'Sign-in URL', ...v(typeof endpoints.sign_in === 'string' ? endpoints.sign_in : null, { kind: 'mono' }) });
+  }
+  rows.push(
+    { label: 'Added', ...v(addedLabel(c.added)) },
+    { label: 'Status', value: f1.Status.value, reason: f1.Status.reason },
+    { label: 'Plan', value: f1.Plan.value, reason: f1.Plan.reason },
+    { label: 'More info', ...v(more.length ? more.map((l) => l.label).join(', ') : null, { kind: 'links', links: more }) },
+  );
+  return rows;
+}
+
+/** The header's line: the body's tagline when it has one, else F1's (the catalogue description). */
+export function headerTagline(p, connector) {
+  return (typeof connector?.tagline === 'string' && connector.tagline) || p?.description || '';
+}

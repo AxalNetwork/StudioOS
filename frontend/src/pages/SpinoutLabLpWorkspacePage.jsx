@@ -51,6 +51,8 @@ import {
 } from '../lib/quarterlyReportViewModel';
 import { onboardingStatus } from '../lib/lpCommitmentModel';
 import { MyCommitment, MessageGp } from './SpinoutLabLpCommitment';
+import { ProofDoor, ProofOfFundsSheet, SharedProofOfFunds, useProofTargets } from './investor/ProofOfFunds';
+import { showsProof } from './investor/proofOfFundsModel';
 import { SubscriptionBooklet } from './SpinoutLabLpBooklet';
 import { FeeStatements } from './SpinoutLabLpFeeStatement';
 import { MyNotices } from './SpinoutLabLpNotices';
@@ -186,6 +188,15 @@ const EXTERNAL_DOCS = [
 export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
+  // D752 (#1891): an investor on HQ only; never enabled for an admin, so a preview reads nothing.
+  const proofOn = showsProof(user);
+  const proofTargets = useProofTargets({ enabled: proofOn });
+  const [proofSheet, setProofSheet] = useState(null);
+  const [proofKey, setProofKey] = useState(0);
+  const openProof = (target) => setProofSheet(target);
+  const lpApplicationTarget = proofTargets.status === 'ready'
+    ? (proofTargets.read?.targets || []).find((t) => t.purpose === 'lp_application') ?? null
+    : null;
 
   const [portal, setPortal] = useState(null);
   // GET /spinout-lab/fund-metrics — live program track record + raise
@@ -697,6 +708,7 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
                 <span className="font-semibold">Note from the fund team:</span> {application.review_note}
               </div>
             )}
+            {proofOn && <ProofDoor target={lpApplicationTarget} onShare={openProof} />}
           </div>
         </div>
       )}
@@ -709,11 +721,21 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
           failed, so a failure is never mistaken for "no commitment". */}
       {(derived.holdings > 0 || (!portal && !!err)) && (
         <>
-          <MyCommitment portal={portal} failed={!portal && !!err} onReload={load} />
+          <MyCommitment portal={portal} failed={!portal && !!err} onReload={load}
+            proof={proofOn && proofTargets.status === 'ready' ? { targets: proofTargets.read, onShare: openProof } : null} />
           <FeeStatements portal={portal} failed={!portal && !!err} onReload={load} />
         </>
       )}
       {(derived.holdings > 0 || (!portal && !!err)) && <MyNotices portal={portal} />}
+
+      {/* D752 (#1891) · the proof of funds this investor shared, with views and Revoke. */}
+      {proofOn && <SharedProofOfFunds key={proofKey} targetsState={proofTargets} onChanged={proofTargets.reload} />}
+      {proofOn && proofSheet && (
+        <ProofOfFundsSheet target={proofSheet} consent={proofTargets.read?.consent} minimumCents={proofTargets.read?.minimum_cents}
+          onClose={() => setProofSheet(null)}
+          onShared={() => { setProofKey((k) => k + 1); proofTargets.reload(); }}
+          onTargetsChanged={proofTargets.reload} />
+      )}
 
       {/* underwriting */}
       <div>

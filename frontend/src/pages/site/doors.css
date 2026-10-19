@@ -162,6 +162,7 @@
 }
 .ax-door .ax-door-tokens-t { margin: 10px 0 0; font-size: 26px; line-height: 1.15; font-weight: 900; letter-spacing: -.028em; text-wrap: balance; }
 .ax-door .ax-door-tokens-list { display: flex; flex-direction: column; gap: 10px; }
+.ax-door .ax-door-tokens-link { display: inline-block; margin-top: 14px; font-size: 14.5px; font-weight: 700; color: var(--door-accent); text-decoration: underline; text-underline-offset: 3px; }
 
 /* The aside */
 .ax-door-aside { padding-top: 16px; padding-bottom: 72px; }

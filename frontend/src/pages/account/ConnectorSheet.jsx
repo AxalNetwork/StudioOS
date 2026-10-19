@@ -57,7 +57,7 @@ export function suggestionsNote(e) {
  * reads as `forbidden` with the Worker's own sentence: retrying cannot help.
  */
 export function useConnectors({ companyId = null } = {}) {
-  const [state, setState] = useState({ status: 'loading', message: '', providers: [], items: null, waitlist: [], firstParty: {}, itemsFailed: false, companies: null, suggestions: null, suggestionsNote: '', categoryOrder: null });
+  const [state, setState] = useState({ status: 'loading', message: '', providers: [], items: null, waitlist: [], firstParty: {}, firstPartyCards: [], itemsFailed: false, companies: null, suggestions: null, suggestionsNote: '', categoryOrder: null });
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let live = true;
@@ -85,6 +85,8 @@ export function useConnectors({ companyId = null } = {}) {
         itemsFailed: !mine,
         waitlist: wl?.items || [],
         firstParty: { google, microsoft, linkedin },
+        // D753 W2: the Worker's card for each first-party connector it describes (LinkedIn's).
+        firstPartyCards: Array.isArray(av?.first_party) ? av.first_party : [],
         companies: Array.isArray(companies) ? companies : null,
         suggestions: sug.ok ? (sug.v?.items || []) : null,
         suggestionsNote: sug.ok ? '' : suggestionsNote(sug.e),
@@ -96,7 +98,7 @@ export function useConnectors({ companyId = null } = {}) {
   }, [attempt, companyId]);
   const reload = useCallback(() => setAttempt((n) => n + 1), []);
   const catalogue = state.status === 'ready'
-    ? buildCatalogue({ providers: state.providers, items: state.items || [], waitlist: state.waitlist, firstParty: state.firstParty, companies: state.companies })
+    ? buildCatalogue({ providers: state.providers, items: state.items || [], waitlist: state.waitlist, firstParty: state.firstParty, firstPartyCards: state.firstPartyCards, companies: state.companies })
     : [];
   return { ...state, catalogue, reload };
 }
