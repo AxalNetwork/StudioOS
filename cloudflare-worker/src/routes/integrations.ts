@@ -35,6 +35,7 @@ import {
   CATEGORY_ORDER,
   FIRST_PARTY_CARDS,
   directoryKeyFor,
+  channelPage,
   type PageDescriptor,
   type IntegrationRow,
   audienceFor,
@@ -431,6 +432,9 @@ integrations.get('/directory/:key', async (c) => {
     if (!page) return c.json({ error: 'unknown_provider' }, 404);
     return c.json({ ok: true, connector: { ...linkedinCard(viewer), ...pageBody(page) } });
   }
+  // D753 C1 (#1974): WhatsApp and Telegram are channel pages, not registry rows.
+  const channel = channelPage(k.key);
+  if (channel) return c.json({ ok: true, connector: { key: k.key, ...pageFields(channel), ...pageBody(channel) } });
   const p = getDescriptor(k.key);
   if (!p || audienceOf(c, user, p) === 'none') return c.json({ error: 'unknown_provider' }, 404);
   const page = pageDescriptor(p, viewer);
