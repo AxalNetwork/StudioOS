@@ -9,8 +9,15 @@
  *
  * Signed in (requireAuth in every handler):
  *   GET    /                        availability per provider, the member's connections, pending counts
- *   POST   /telegram/link           a one-time code and its t.me link
+ *   POST   /telegram/link           a one-time code and its t.me link (rollout gated)
  *   POST   /whatsapp/connect        finish Embedded Signup: { code, waba_id, phone_number_id }
+ *   POST   /whatsapp/link           D754 way B (#1937): a one-time code, and the wa.me link that
+ *                                   sends `LINK <code>` to Axal's own number
+ *   GET    /whatsapp/link           the newest claim ('•••• 1234') and the current link
+ *   POST   /whatsapp/link/:uid/confirm  Axal's half: the claimed number becomes the member's link
+ *   DELETE /whatsapp/link           unlink
+ *   GET    /whatsapp/captures       way B part 2 (#1938): what the member forwarded to Axal's number
+ *   POST   /whatsapp/captures/:uid/consent  { method: 'pre_agreed' | 'verbal' | 'written' } for a capture still waiting
  *   DELETE /:provider               disconnect (telegram | whatsapp)
  *   POST   /:provider/test          Telegram: a message in the member's own chat with the bot.
  *                                   WhatsApp: read the number with the member's token — a test
@@ -18,8 +25,13 @@
  *   GET    /threads?status=         the member's conversations
  *   GET    /threads/:uid            one conversation; its pending messages, decrypted for the member only;
  *                                   a waiting voice note carries `transcription_failure` (#1586)
+ *                                   and WhatsApp's derived `voice_fetch_by` (D754)
  *   POST   /threads/:uid/assign     { interview_id } | { create: { interviewee_name, interviewee_company?, project_id } },
- *                                   and quote_consent?: true (D685 §5.1.4)
+ *                                   and quote_consent?: true (D685 §5.1.4), and consent?: { ask: true } | { method }
+ *                                   (D754: a chat that waits for consent links and waits; `ask` sends the notice)
+ *   POST   /threads/:uid/consent-request  Axal's consent notice in the chat (D754 §5): only when the member
+ *                                   presses it, inside the window, at most twice, 24 h apart
+ *   POST   /threads/:uid/consent    { method }: the member's word, once the notice was delivered (D754 §4)
  *   POST   /threads/:uid/ignore     { ignored?: boolean } (default true)
  *   POST   /threads/:uid/reply      { text, client_key }: once per client_key, inside the 24 h window
  *   POST   /threads/:uid/voice/:message/retry  a waiting voice note again, once what stopped it allows (#1586)
@@ -28,6 +40,10 @@
  *   POST   /telegram/webhook        X-Telegram-Bot-Api-Secret-Token
  *   GET    /whatsapp/webhook        hub.verify_token challenge
  *   POST   /whatsapp/webhook        X-Hub-Signature-256 over the raw body
+ *
+ * D754 / D756: WHATSAPP_CHANNEL and TELEGRAM_CHANNEL default to canary,
+ * Super Admins only. In off, webhooks verify then acknowledge rollout_off and
+ * store nothing; Telegram checks its secret before even reading the body.
  *
  * Admin (`channelsAdmin`, super admin):
  *   POST   /telegram/webhook        setWebhook with secret_token and the business update types
@@ -48,7 +64,30 @@
  * chat's notes are queued when the member assigns it. The job below
  * transcribes with the interview sessions' own speech-to-text, under the
  * connection's daily cap (D1, fails closed) and the member's AI budget (D640).
- * Only the text is kept; the audio is never stored.
+ * Only the text is kept; the audio is never stored (D754: for WhatsApp,
+ * until the S13 w3 voice-audio task lands).
+ *
+ * AXAL'S OWN WHATSAPP NUMBER (way B, whatsappLink.ts) is answered before any
+ * member connection is looked for: `LINK <code>` records a claim and gets one
+ * reply; STOP from a linked sender unlinks with one reply; a linked sender's
+ * recordings wait, as encrypted media ids only, until the member says everyone
+ * recorded agreed (whatsappCapture.ts); an unlinked sender's messages are
+ * claimed by their hashed id and ignored, with no reply and no text kept. Every
+ * way-B route answers 503 until the owner sets all four WHATSAPP_AXAL_*
+ * settings, and until then the webhook ignores the number.
+ *
+ * NOTHING FROM A CHAT IS KEPT BEFORE CONSENT where its provider asks for it
+ * (D754, #1893; services/channels/consent.ts). Such a chat, assigned, links
+ * and waits: its text stays pending and its voice notes are never fetched
+ * until the interviewee taps Yes on Axal's notice, or replies YES to it, or
+ * the member confirms once the notice was delivered. The interviewee's answer
+ * arrives on the signed webhook and is claimed as a 'command' event; on
+ * 'given' a `channel_followup` { kind: 'consent' } job moves what waited,
+ * never the webhook itself. Client keys under `consent:` are the server's.
+ * On Telegram (D756 §1.5, #1977) only the chat's NOTES wait for consent; its
+ * text keeps D684's rule. The member may ask from Axal or paste the notice
+ * themselves, the answer is also kept as chat text, the bot confirms a
+ * counted answer in one line, and no member's word is taken.
  *
  * A TELEGRAM LINK TAKES TWO MESSAGES: `/start <code>` names the Telegram
  * account, and that account's own `/confirm` plus the member's Confirm in Axal
@@ -59,7 +98,7 @@
  */
 import { Hono, type Context } from 'hono';
 import type { Env, User } from '../types';
-import { requireAuth, requireSuperAdmin } from '../auth';
+import { requireAuth, requireSuperAdmin, isSuperAdmin } from '../auth';
 import { refuse } from '../util/refusal';
 import { run as aiRun, audioMinutesFromBytes } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
@@ -69,27 +108,35 @@ import {
   type EventFields, type EventKind, type EventStatus,
 } from '../services/channels/events';
 import {
-  availability, connectionForTelegram, connectionForWhatsApp, memberConnection, providerAvailable, type ChannelConnection,
+  availability, channelRollout, channelOpenTo, channelOpenToMember, connectionForTelegram, connectionForWhatsApp, memberConnection, providerAvailable, type ChannelConnection,
 } from '../services/channels/connections';
 import { createLinkCode, pendingLinkView } from '../services/channels/linkCodes';
 import { beginOutbound, finishOutbound, applyDeliveryStatus, type OutboundRow } from '../services/channels/outbound';
 import {
-  applyDelete, applyEdit, assignThread, forgetConnection, inInterview, listThreads, noteVoiceTry, queueVoiceTranscriptions, readThread,
-  releaseVoiceNote, setThreadIgnored, storeInbound, storeMessage, storeVoiceNote, storeVoiceTranscript, threadForReply,
-  voiceNoteForJob, type AssignTarget, type ThreadRow,
+  admitConsentedThread, applyDelete, applyEdit, assignThread, forgetConnection, inInterview, intervieweeLabel, listThreads, noteVoiceTry,
+  queueVoiceTranscriptions, readThread, releaseVoiceNote, setThreadIgnored, storeInbound, storeMessage, storeVoiceNote,
+  storeVoiceTranscript, threadForChat, threadForReply, voiceNoteForJob, type AssignTarget, type ThreadRow,
 } from '../services/channels/threads';
+import {
+  CONSENT_BUTTONS, CONSENT_KEY_PREFIX, MEMBER_METHODS, attest, consentForThread, markDelivered, markRequested, noticeRefusal,
+  noticeState, noticeText, oneLine, openRequest, recordReply, type ConsentRow, type MemberMethod,
+} from '../services/channels/consent';
+import { CONSENT_NOTICE_VERSION, consentNoticeUrl } from '../services/channels/consentNotice';
 import { enqueueChannelJob, registerChannelJob, type ChannelJobPayload } from '../services/channels/jobs';
 import * as zoom from '../services/channels/zoom';
 import * as meet from '../services/channels/googleMeet';
 import {
-  VOICE_RETRY_DELAYS, VOICE_TRIES, retryVoiceNote, transcriptionFailures,
+  VOICE_RETRY_DELAYS, VOICE_TRIES, channelTimestampMs as ms, retryVoiceNote, transcriptionFailures, voiceFetchBy,
 } from '../services/channels/voiceFailures';
 import {
-  CHANNEL_LIMITS, type InboundEvent, type InboundLink, type InboundLinkConfirm, type InboundMessage, type MessagingProvider,
-  type SendResult,
+  CHANNEL_LIMITS, PROVIDER_LABEL, audioConsentRequired, consentAsked, consentRequired, memberAttestationAllowed,
+  type InboundConsentReply, type InboundEvent, type InboundLink,
+  type InboundLinkConfirm, type InboundMessage, type MessagingProvider, type SendResult,
 } from '../services/channels/types';
 import * as telegram from '../services/channels/telegram';
 import * as whatsapp from '../services/channels/whatsapp';
+import * as waLink from '../services/channels/whatsappLink';
+import * as capture from '../services/channels/whatsappCapture';
 
 const channels = new Hono<{ Bindings: Env }>();
 export const channelsAdmin = new Hono<{ Bindings: Env }>();
@@ -127,7 +174,9 @@ const SENTENCE: Record<string, string> = {
   unexpected_response: 'The provider answered in a way Axal did not expect. Nothing was recorded.',
   invalid_request: 'The request is missing a field it needs.',
   invalid_status: 'Choose pending, assigned or ignored.',
+  axal_number: "This is Axal's own WhatsApp number. Connect your business's own number instead.",
   number_taken: 'This WhatsApp number is already connected to another Axal account.',
+  capture_not_waiting: 'That recording is not waiting for an answer: it was answered, removed or has expired.',
   number_not_in_waba: 'That number is not part of the WhatsApp Business account you connected.',
   choose_number: 'Your WhatsApp Business account has more than one number. Connect again and choose the number your customers write to.',
   code_exchange_failed: 'Meta did not accept the sign-up. Start the WhatsApp connection again.',
@@ -135,9 +184,43 @@ const SENTENCE: Record<string, string> = {
   subscribe_failed: 'Axal could not subscribe to your WhatsApp Business account. Try again.',
   not_stored: 'The connection could not be saved. Try again.',
   base_url_missing: 'The public base URL is not set, so there is no webhook address to register.',
+  // D754 (#1893) — consent in the chat.
+  consent_not_offered: 'Axal does not ask for consent in this channel yet.',
+  consent_needs_interview: 'Add this chat to an interview first: Axal\'s notice names the venture it is for.',
+  already_given: 'Consent is already given in this chat.',
+  consent_method_required: 'Say how the interviewee agreed: verbal, written or pre_agreed.',
+  client_key_reserved: 'That client key is reserved for Axal\'s own messages.',
+  notice_link_missing: 'The public base URL is not set, so Axal cannot link its notice. Nothing was sent.',
+  // D756 (#1977) — consent in the Telegram chat.
+  attestation_not_offered: 'In Telegram the interviewee agrees in the chat itself. Ask from Axal, or paste the notice into the chat yourself.',
+  connection_disabled: 'The Axal bot is switched off for your Telegram Business account, so nothing was sent. Turn it back on in Telegram › Settings › Telegram Business › Chatbots.',
   secret_format: 'TELEGRAM_CHANNEL_WEBHOOK_SECRET may use only letters, digits, _ and -, up to 256 characters.',
 };
 const sentence = (code: string) => SENTENCE[code] ?? 'That did not work. Try again.';
+
+/** D754: the consent sentences that name the interviewee. `name` null reads "This contact". */
+function consentSentence(code: string, name: string | null, provider: MessagingProvider): string {
+  const who = name || 'This contact';
+  const them = name || 'them';
+  const app = PROVIDER_LABEL[provider];
+  switch (code) {
+    case 'window_closed': return `${who} last wrote more than 24 hours ago, and ${app} only lets Axal write within 24 hours of their last message. Ask ${them} to send you a message from your ${app} Business app, then ask again.`;
+    case 'too_soon': return `Axal asked ${them} less than 24 hours ago. You can ask once more after that.`;
+    case 'asked_twice': return `Axal has asked ${them} twice. Ask them in your own words, then confirm here once they agree.`;
+    case 'notice_not_delivered': return `Axal's notice has not reached ${them} yet. Ask in ${app} first, and confirm once ${app} shows it delivered.`;
+    case 'interviewee_declined': return `${who} declined in ${app}. Only their own Yes on Axal's notice can change that.`;
+    case 'consent_withdrawn': return `${who} withdrew consent in ${app}. Only their own Yes on Axal's notice can change that.`;
+    default: return sentence(code);
+  }
+}
+
+const CONSENT_NAMED = new Set(['window_closed', 'too_soon', 'asked_twice', 'notice_not_delivered', 'interviewee_declined', 'consent_withdrawn']);
+
+/** A consent refusal; a code that names the interviewee carries our sentence with their name. */
+async function noConsent(c: C, status: number, code: string, thread: ThreadRow, extra: Record<string, unknown> = {}): Promise<Response> {
+  const message = CONSENT_NAMED.has(code) ? consentSentence(code, await intervieweeLabel(c.env, thread), thread.provider) : sentence(code);
+  return refuse(c, status, { code, message, extra: { code, ...extra } });
+}
 
 /** A refusal with our sentence; `code` travels on `error` and `code` both. */
 function no(c: C, status: number, code: string, extra: Record<string, unknown> = {}): Response {
@@ -171,9 +254,6 @@ const parseJson = (s: string | null): Record<string, unknown> => {
   try { const v = JSON.parse(s); return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; } catch { return {}; }
 };
 
-/** A D1 or ISO timestamp, in ms; NaN when unreadable. */
-const ms = (s: string | null | undefined) => (s ? Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? s : `${s.replace(' ', 'T')}Z`) : NaN);
-
 // ---------------------------------------------------------------------------
 // Availability and connections
 // ---------------------------------------------------------------------------
@@ -182,15 +262,19 @@ channels.get('/', member(async (c, user) => {
   const env = c.env;
   // Secret NAMES help an admin set a deployment up; a member learns only "not available".
   const admin = String(user.role ?? '').toLowerCase() === 'admin';
-  const providers = availability(env).map((a) => ({
-    provider: a.provider,
-    available: a.available,
-    missing: admin ? a.missing : [],
-    // Public identifiers Meta's JS SDK needs in the browser to open Embedded Signup.
-    ...(a.provider === 'whatsapp' && a.available
-      ? { signup: { app_id: env.WHATSAPP_APP_ID, config_id: env.WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID } }
-      : {}),
-  }));
+  const providers = availability(env).map((a) => {
+    const chat = a.provider === 'whatsapp' || a.provider === 'telegram';
+    const available = a.available && (!chat || channelOpenTo(env, a.provider as MessagingProvider, user));
+    return {
+      provider: a.provider, available,
+      missing: admin ? a.missing : [],
+      ...(chat && isSuperAdmin(user) ? { rollout: channelRollout(env, a.provider as MessagingProvider) } : {}),
+      // Public identifiers Meta's JS SDK needs in the browser to open Embedded Signup.
+      ...(a.provider === 'whatsapp' && available
+        ? { signup: { app_id: env.WHATSAPP_APP_ID, config_id: env.WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID, graph_version: whatsapp.GRAPH_VERSION } }
+        : {}),
+    };
+  });
 
   const rows = (await env.DB.prepare(
     `SELECT provider_key, status, external_account_name, config_json, created_at FROM integrations
@@ -232,7 +316,7 @@ channels.get('/', member(async (c, user) => {
 }));
 
 channels.post('/telegram/link', member(async (c, user) => {
-  if (!providerAvailable(c.env, 'telegram')) return no(c, 503, 'not_available');
+  if (!providerAvailable(c.env, 'telegram') || !channelOpenTo(c.env, 'telegram', user)) return no(c, 503, 'not_available');
   const ip = c.req.header('cf-connecting-ip') || (c.req.header('x-forwarded-for') || '').split(',')[0].trim() || 'unknown';
   await activeMember(c.env, user.id);
   try {
@@ -257,8 +341,58 @@ channels.post('/telegram/link/:uid/confirm', member(async (c, user) => {
   return c.json({ ok: true, linked: out.linked, claim: await pendingLinkView(c.env, user.id, c.req.param('uid') ?? '') });
 }));
 
+// D754 way B (#1937): the member's own WhatsApp, linked through Axal's number.
+// Codes per member per hour are counted on a hashed subject (events.ts).
+const WA_LINK_CODES_PER_HOUR = 10;
+
+channels.post('/whatsapp/link', member(async (c, user) => {
+  if (!waLink.axalNumberReady(c.env) || !channelOpenTo(c.env, 'whatsapp', user)) return no(c, 503, 'not_available');
+  await activeMember(c.env, user.id);
+  try {
+    if (await linkAttemptOverLimit(c.env, `whatsapp_link:member:${user.id}`, WA_LINK_CODES_PER_HOUR)) return no(c, 429, 'rate_limited');
+  } catch { return no(c, 503, 'link_limit_unavailable'); }
+  const { code, expiresAt } = await createLinkCode(c.env, user.id, 'whatsapp_link');
+  return c.json({ code, wa_link: waLink.waLink(c.env, code), expires_at: expiresAt });
+}));
+
+channels.get('/whatsapp/link', member(async (c, user) => {
+  if (!waLink.axalNumberReady(c.env)) return no(c, 503, 'not_available');
+  await activeMember(c.env, user.id);
+  return c.json(await waLink.whatsappLinkView(c.env, user.id));
+}));
+
+channels.post('/whatsapp/link/:uid/confirm', member(async (c, user) => {
+  if (!waLink.axalNumberReady(c.env) || !channelOpenTo(c.env, 'whatsapp', user)) return no(c, 503, 'not_available');
+  await waLink.confirmWhatsAppLink(c.env, user.id, c.req.param('uid') ?? '');
+  return c.json({ ok: true, linked: true, ...(await waLink.whatsappLinkView(c.env, user.id)) });
+}));
+
+channels.delete('/whatsapp/link', member(async (c, user) => {
+  if (!waLink.axalNumberReady(c.env)) return no(c, 503, 'not_available');
+  return c.json({ ok: true, unlinked: await waLink.unlinkMember(c.env, user.id) });
+}));
+
+// D754 way B (#1938): what a linked member forwarded to Axal's number. No media ids leave the Worker.
+channels.get('/whatsapp/captures', member(async (c, user) => {
+  if (!waLink.axalNumberReady(c.env)) return no(c, 503, 'not_available');
+  await activeMember(c.env, user.id);
+  return c.json({ items: await capture.listCaptures(c.env, user.id) });
+}));
+
+/** "Agreed beforehand" (or the member's other word) for a capture still waiting, from Axal. */
+channels.post('/whatsapp/captures/:uid/consent', member(async (c, user) => {
+  if (!waLink.axalNumberReady(c.env) || !channelOpenTo(c.env, 'whatsapp', user)) return no(c, 503, 'not_available');
+  await activeMember(c.env, user.id);
+  const body = await c.req.json<Record<string, unknown>>().catch(() => ({} as Record<string, unknown>));
+  const method = String(body.method ?? '');
+  if (method !== 'pre_agreed' && method !== 'verbal' && method !== 'written') return no(c, 400, 'invalid_request');
+  const out = await capture.answerCapture(c.env, user.id, c.req.param('uid') ?? '', method);
+  if (out.done !== 'consented') return no(c, 404, 'capture_not_waiting');
+  return c.json({ ok: true, status: 'consented' });
+}));
+
 channels.post('/whatsapp/connect', member(async (c, user) => {
-  if (!providerAvailable(c.env, 'whatsapp')) return no(c, 503, 'not_available');
+  if (!providerAvailable(c.env, 'whatsapp') || !channelOpenTo(c.env, 'whatsapp', user)) return no(c, 503, 'not_available');
   const body = await c.req.json<Record<string, unknown>>().catch(() => ({} as Record<string, unknown>));
   const code = typeof body.code === 'string' ? body.code.trim() : '';
   const wabaId = String(body.waba_id ?? '').trim();
@@ -307,6 +441,7 @@ channels.delete('/:provider', member(async (c, user) => {
 channels.post('/:provider/test', member(async (c, user) => {
   const provider = c.req.param('provider') ?? '';
   if (!MESSAGING.has(provider)) return no(c, 404, 'unknown_provider');
+  if (!providerAvailable(c.env, provider as MessagingProvider) || !channelOpenTo(c.env, provider as MessagingProvider, user)) return no(c, 503, 'not_available');
   const conn = await memberConnection(c.env, user.id, provider as MessagingProvider);
   if (!conn) return no(c, 409, 'not_connected');
   if (provider === 'whatsapp') {
@@ -339,7 +474,9 @@ channels.get('/threads/:uid', member(async (c, user) => {
   // #1586: a waiting voice note that could not be transcribed says why, in our
   // words, with no message or provider text (services/channels/voiceFailures.ts).
   const failures = await transcriptionFailures(c.env, user.id, uid);
-  return c.json({ ...read, messages: read.messages.map((m) => ({ ...m, transcription_failure: failures.get(m.uid) ?? null })) });
+  // D754: the chat's consent, for the member. No hash and no provider id.
+  const consent = await consentForThread(c.env, await threadForReply(c.env, user.id, uid));
+  return c.json({ ...read, consent, messages: read.messages.map((m) => ({ ...m, transcription_failure: failures.get(m.uid) ?? null, voice_fetch_by: voiceFetchBy(read.thread.provider, m) })) });
 }));
 
 /** #1586: transcribe a waiting voice note again, once what stopped it allows (the budget is checked first). */
@@ -362,8 +499,185 @@ channels.post('/threads/:uid/assign', member(async (c, user) => {
   } else return no(c, 400, 'invalid_request');
   // Quote consent (D685 §5.1.4): only the literal true sets it.
   if (body.quote_consent != null && typeof body.quote_consent !== 'boolean') return no(c, 400, 'invalid_request');
-  const r = await assignThread(c.env, user.id, c.req.param('uid') ?? '', target, { quoteConsent: body.quote_consent === true });
-  return c.json({ ok: true, interview_id: r.interviewId, session_id: r.sessionId, moved: r.moved, voice_queued: r.queued });
+  // D754: { ask: true } sends Axal's notice once linked; { method } is the member's word.
+  const consentAsk = body.consent;
+  let ask = false;
+  let method: MemberMethod | null = null;
+  if (consentAsk != null) {
+    const keys = consentAsk && typeof consentAsk === 'object' && !Array.isArray(consentAsk) ? Object.keys(consentAsk) : null;
+    if (keys?.length === 1 && consentAsk.ask === true) ask = true;
+    else if (keys?.length === 1 && typeof consentAsk.method === 'string') {
+      if (!(MEMBER_METHODS as readonly string[]).includes(consentAsk.method)) {
+        return no(c, 400, 'consent_method_required', { accepted: MEMBER_METHODS });
+      }
+      method = consentAsk.method as MemberMethod;
+    } else return no(c, 400, 'invalid_request');
+  }
+  const uid = c.req.param('uid') ?? '';
+  const before = await threadForReply(c.env, user.id, uid);
+  const waits = consentRequired(before.provider);
+  if (waits && before.consent_state !== 'given') {
+    // Checked before the claim, so a refusal links nothing.
+    if (ask) {
+      const refusal = noticeRefusal(before, await noticeState(c.env, before));
+      if (refusal) return noConsent(c, 409, refusal.code, before, refusal.next_at ? { next_at: refusal.next_at } : {});
+    } else if (method) {
+      const pre = await memberWordRefusal(c.env, before);
+      if (pre) return noConsent(c, 409, pre, before);
+    }
+  }
+  const r = await assignThread(c.env, user.id, uid, target, { quoteConsent: body.quote_consent === true });
+  const out: Record<string, unknown> = { ok: true, interview_id: r.interviewId, session_id: r.sessionId, moved: r.moved, voice_queued: r.queued };
+  if (!waits) return c.json(out);
+  let thread = await threadForReply(c.env, user.id, uid);
+  if (thread.consent_state !== 'given' && ask) {
+    const sent = await askForConsent(c.env, user.id, thread);
+    out.consent_request = sent.ok === true ? { ok: true } : { ok: sent.ok, code: sent.code };
+  } else if (thread.consent_state !== 'given' && method) {
+    const a = await attest(c.env, user.id, thread, method);
+    if (a.ok) {
+      const admitted = await admitConsentedThread(c.env, user.id, thread.id);
+      out.moved = admitted.moved;
+      out.voice_queued = admitted.queued;
+    } else out.consent_request = { ok: false, code: a.code };
+  }
+  thread = await threadForReply(c.env, user.id, uid);
+  return c.json({ ...out, consent: await consentForThread(c.env, thread) });
+}));
+
+/** Why the member's word may not be taken on this chat now, before any link changes: the interviewee's answer wins. */
+async function memberWordRefusal(env: Env, thread: ThreadRow): Promise<string | null> {
+  const answered = await env.DB.prepare(
+    `SELECT MAX(CASE WHEN status = 'declined' THEN 1 ELSE 0 END) AS declined, MAX(CASE WHEN status = 'withdrawn' THEN 1 ELSE 0 END) AS withdrawn
+       FROM channel_consents WHERE thread_id = ?`,
+  ).bind(thread.id).first<{ declined: number | null; withdrawn: number | null }>();
+  if (Number(answered?.withdrawn)) return 'consent_withdrawn';
+  if (Number(answered?.declined)) return 'interviewee_declined';
+  if (!(await noticeState(env, thread)).delivered) return 'notice_not_delivered';
+  return null;
+}
+
+type AskOutcome =
+  | { ok: true; status: 200 }
+  | { ok: false | null; status: number; code: string; extra?: Record<string, unknown> };
+
+/**
+ * D754 §5, D756 §1.5 (a) — Axal's notice, sent in the chat from the member's
+ * own account (WhatsApp: their number, as reply buttons; Telegram: their
+ * business connection, as text), with a server-built client key. The caller
+ * has checked that the provider asks for consent, that a WhatsApp chat is
+ * linked, and that consent is not yet given. The window and the cap are
+ * checked here too, before anything is sent; a key used already answers its
+ * first outcome and sends nothing. Telegram's notice is also kept as the
+ * member's message in the chat.
+ */
+async function askForConsent(env: Env, userId: number, thread: ThreadRow): Promise<AskOutcome> {
+  const conn = await memberConnection(env, userId, thread.provider);
+  if (!conn || conn.integrationId !== Number(thread.integration_id)) return { ok: false, status: 409, code: 'not_connected' };
+  const notices = await noticeState(env, thread);
+  const refusal = noticeRefusal(thread, notices);
+  if (refusal) return { ok: false, status: 409, code: refusal.code, extra: refusal.next_at ? { next_at: refusal.next_at } : {} };
+  const url = consentNoticeUrl(env);
+  if (!url) return { ok: false, status: 503, code: 'base_url_missing' };
+  const who = await env.DB.prepare(
+    `SELECT u.name AS member_name, p.name AS venture FROM users u
+       LEFT JOIN discovery_interviews di ON di.id = ?
+       LEFT JOIN projects p ON p.id = di.project_id
+      WHERE u.id = ?`,
+  ).bind(thread.interview_id, userId).first<{ member_name: string | null; venture: string | null }>();
+  const firstName = oneLine(who?.member_name, 200).split(' ')[0] || null;
+  const venture = oneLine(who?.venture, 80) || null;
+  // Telegram's notice is in the founder's voice, addressed to the interviewee by first name (D756 §1.7).
+  const body = thread.provider === 'telegram'
+    ? telegram.TELEGRAM_COPY.consentNotice(oneLine(await intervieweeLabel(env, thread), 200).split(' ')[0].slice(0, 40) || null, venture, url)
+    : noticeText(CONSENT_NOTICE_VERSION, { firstName, venture: who?.venture ?? null, url });
+  if (!body) throw new Error('consent_notice_missing');
+  const row: ConsentRow = await openRequest(env, thread, { interviewId: thread.interview_id, sessionId: thread.session_id });
+
+  let claim: { row: OutboundRow; existing: boolean };
+  try {
+    claim = await beginOutbound(env, thread.provider, userId, thread.id, notices.nextKey!);
+  } catch (err) {
+    if (err instanceof Error && err.message === 'client_key_conflict') return { ok: false, status: 409, code: 'client_key_conflict' };
+    throw err;
+  }
+  // A concurrent press already holds this notice: its outcome, and nothing sent now.
+  if (claim.existing) {
+    if (claim.row.status === 'failed') return { ok: false, status: 409, code: claim.row.error_code ?? 'rejected' };
+    return claim.row.status === 'pending' ? { ok: null, status: 200, code: 'send_in_flight' } : { ok: true, status: 200 };
+  }
+  const result: SendResult = thread.provider === 'whatsapp'
+    ? await whatsapp.sendWhatsAppInteractive(env, conn, thread.external_chat_id, {
+      body,
+      buttons: [
+        { id: `consent_yes:${row.uid}`, title: CONSENT_BUTTONS.yes },
+        { id: `consent_no:${row.uid}`, title: CONSENT_BUTTONS.no },
+      ],
+    })
+    : await telegram.sendConsentNotice(env, userId, thread.external_chat_id, body);
+  try {
+    await finishOutbound(env, claim.row.id, result);
+    if (result.ok || result.code === 'send_unknown') {
+      await markRequested(env, row.id, result.externalMessageId ?? null, thread.provider, thread.id);
+    }
+  } catch {
+    console.error(`[channels] ${thread.provider} consent notice outcome not saved ok=${result.ok}`);
+  }
+  if (result.ok && thread.provider === 'telegram') {
+    // D756 §1.5: the notice is the member's own message in the chat.
+    await storeMessage(env, conn, {
+      externalChatId: thread.external_chat_id, externalMessageId: String(result.externalMessageId), side: 'me',
+      contactName: null, text: body, kind: 'text', sentAt: new Date().toISOString(), origin: 'axal',
+    }).catch((err) => console.error('[channels] telegram consent notice sent but not recorded', err instanceof IntakeError ? err.code : 'error'));
+  }
+  if (result.ok) return { ok: true, status: 200 };
+  if (result.code === 'send_unknown') return { ok: null, status: 200, code: 'send_unknown' };
+  const code = result.code ?? 'rejected';
+  const status = ['window_closed', 'not_connected', 'consent_not_offered', 'no_reply_right', 'connection_disabled'].includes(code) ? 409
+    : code === 'rate_limited' ? 429 : result.retryable ? 503 : 502;
+  return { ok: false, status, code, extra: { retryable: !!result.retryable } };
+}
+
+/** The checks both consent routes make first, in D754's order. Null when the chat may go on. */
+async function consentPreconditions(c: C, thread: ThreadRow, opts: { asking: boolean }): Promise<Response | null> {
+  if (!consentAsked(thread.provider)) return no(c, 409, 'consent_not_offered');
+  // D756 ruling 6: no member's word on Telegram; the interviewee answers in the chat.
+  if (!opts.asking) return memberAttestationAllowed(thread.provider) ? null : no(c, 409, 'attestation_not_offered');
+  // An ignored chat is never linked; saying so is the more useful answer.
+  if (thread.status === 'ignored') return no(c, 409, 'thread_ignored');
+  // WhatsApp's notice names the venture, so its chat is linked first; a Telegram chat may be asked while pending.
+  if (consentRequired(thread.provider) && !(thread.status === 'assigned' && thread.interview_id && thread.session_id)) {
+    return no(c, 409, 'consent_needs_interview');
+  }
+  if (thread.consent_state === 'given') return no(c, 409, 'already_given');
+  return null;
+}
+
+channels.post('/threads/:uid/consent-request', member(async (c, user) => {
+  const thread = await threadForReply(c.env, user.id, c.req.param('uid') ?? '');
+  const pre = await consentPreconditions(c, thread, { asking: true });
+  if (pre) return pre;
+  const sent = await askForConsent(c.env, user.id, thread);
+  const consent = await consentForThread(c.env, await threadForReply(c.env, user.id, thread.uid));
+  if (sent.ok === true) return c.json({ ok: true, consent });
+  if (sent.ok === null) return c.json({ ok: null, pending: true, code: sent.code, message: sentence(sent.code), consent });
+  if (sent.code === 'base_url_missing') return no(c, 503, 'notice_link_missing', { code: 'base_url_missing' });
+  return noConsent(c, sent.status, sent.code, thread, { ...(sent.extra ?? {}), consent });
+}));
+
+channels.post('/threads/:uid/consent', member(async (c, user) => {
+  const body = await c.req.json<Record<string, unknown>>().catch(() => ({} as Record<string, unknown>));
+  const thread = await threadForReply(c.env, user.id, c.req.param('uid') ?? '');
+  const pre = await consentPreconditions(c, thread, { asking: false });
+  if (pre) return pre;
+  const method = typeof body.method === 'string' ? body.method : '';
+  if (!(MEMBER_METHODS as readonly string[]).includes(method)) return no(c, 400, 'consent_method_required', { accepted: MEMBER_METHODS });
+  const a = await attest(c.env, user.id, thread, method as MemberMethod);
+  if (!a.ok) return noConsent(c, 409, a.code, thread);
+  // Given already: nothing changes. Otherwise what waited moves now, as an assignment does.
+  const admitted = a.changed ? await admitConsentedThread(c.env, user.id, thread.id) : { moved: 0, queued: 0 };
+  const consent = await consentForThread(c.env, await threadForReply(c.env, user.id, thread.uid));
+  return c.json({ ok: true, consent, moved: admitted.moved, voice_queued: admitted.queued });
 }));
 
 channels.post('/threads/:uid/ignore', member(async (c, user) => {
@@ -391,8 +705,12 @@ channels.post('/threads/:uid/reply', member(async (c, user) => {
   const clientKey = typeof body.client_key === 'string' ? body.client_key.trim() : '';
   if (!text) return no(c, 400, 'text_required');
   if (!clientKey || clientKey.length > 100) return no(c, 400, 'client_key_required');
+  // D754 §4: `consent:` keys are the server's notices. A reply under one would block
+  // the real notice, and its delivery report would unlock the member's word.
+  if (clientKey.startsWith(CONSENT_KEY_PREFIX)) return no(c, 400, 'client_key_reserved');
   // Another member's thread is not there (404, from threads.ts).
   const thread = await threadForReply(env, user.id, c.req.param('uid') ?? '');
+  if (!providerAvailable(env, thread.provider) || !channelOpenTo(env, thread.provider, user)) return no(c, 503, 'not_available');
   const max = thread.provider === 'telegram' ? telegram.TELEGRAM_MAX_TEXT : whatsapp.WHATSAPP_MAX_TEXT;
   if (text.length > max) return no(c, 400, 'text_too_long', { max_chars: max });
   const conn = await memberConnection(env, user.id, thread.provider);
@@ -499,6 +817,8 @@ function eventKind(ev: InboundEvent): EventKind {
     case 'status': return 'status';
     case 'link': case 'link_confirm': return 'link';
     case 'connection': return 'connection';
+    case 'consent_reply': return 'command';
+    case 'axal_message': return ev.button ? 'command' : ev.media ? 'voice' : 'message';
     default: return 'ignored';
   }
 }
@@ -555,8 +875,197 @@ async function handleLink(env: Env, claim: number, ev: InboundLink | InboundLink
     : out.reason === 'member_inactive' ? copy.memberInactive : copy.nothingToConfirm);
 }
 
+/** Wrong or repeated `LINK` codes a sender may send per hour, counted on a hash of the sender. */
+const WA_LINK_TRIES_PER_SENDER_HOUR = 5;
+
+/** One reply from Axal's number, once per client key, through the outbound ledger. A failure never fails the webhook. */
+/** The capture's consent question: reply buttons from Axal's number, once per client key. */
+async function axalAsk(env: Env, userId: number, clientKey: string, to: string, body: string, buttons: { id: string; title: string }[]): Promise<void> {
+  const { row, existing } = await beginOutbound(env, 'whatsapp', userId, null, clientKey);
+  if (existing) return;
+  const r = await whatsapp.sendAxalInteractive(env, to, { body, buttons }).catch(() => ({ ok: false, code: 'send_unknown' } as SendResult));
+  await finishOutbound(env, row.id, r);
+  if (!r.ok) console.error(`[channels] axal number question not sent code=${r.code ?? 'unknown'}`);
+}
+
+async function axalReply(env: Env, userId: number, clientKey: string, to: string, text: string): Promise<void> {
+  const { row, existing } = await beginOutbound(env, 'whatsapp', userId, null, clientKey);
+  if (existing) return;
+  const r = await whatsapp.sendAxalText(env, to, text).catch(() => ({ ok: false, code: 'send_unknown' } as SendResult));
+  await finishOutbound(env, row.id, r);
+  if (!r.ok) console.error(`[channels] axal number reply not sent code=${r.code ?? 'unknown'}`);
+}
+
+/**
+ * D754 way B: an event on Axal's own WhatsApp number (whatsapp.ts
+ * `axalMessageEvent`). There is no member connection here; who a message is
+ * from is the sender's link.
+ *   LINK <code>  records the claim against the sender; one reply (#1937).
+ *   STOP         from a linked sender: unlinks, drops its unanswered
+ *                captures; one reply.
+ *   a recording  from a linked sender: joins a capture (whatsappCapture.ts);
+ *                a new capture asks once whether everyone recorded agreed.
+ *   a button     the member's answer for a capture (#1938).
+ *   anything else from a linked sender: one reply saying what Axal takes.
+ *   anything from an unlinked sender: ignored, no reply, nothing kept but
+ *                the event's hashed id.
+ */
+async function handleAxalNumber(
+  env: Env, claim: number, ev: InboundEvent, spend: () => void,
+  finish: (status: EventStatus, fields?: EventFields) => Promise<void>,
+): Promise<void> {
+  if (!waLink.axalNumberReady(env)) return finish('ignored', { error: 'not_available' });
+  if (ev.kind === 'status') {
+    const known = await applyDeliveryStatus(env, ev.externalMessageId, ev.status, ev.errorCode);
+    return finish(known ? 'done' : 'ignored', { error: known ? null : 'not_ours' });
+  }
+  if (ev.kind !== 'axal_message') return finish('ignored', { error: 'unsupported' });
+  const sender = ev.externalChatId;
+  const code = waLink.linkCodeIn(ev.text);
+  if (code) {
+    try {
+      if (await linkAttemptOverLimit(env, `whatsapp_link:sender:${sender}`, WA_LINK_TRIES_PER_SENDER_HOUR)) {
+        return finish('ignored', { error: 'rate_limited' });
+      }
+    } catch { return finish('ignored', { error: 'link_limit_unavailable' }); }
+    // The code is spent by its first attempt: from here a failure is not retried.
+    spend();
+    const out = await waLink.claimWhatsAppLink(env, code, sender);
+    if (!out.claimed) return finish('ignored', { error: out.reason });
+    await finish('done', { userId: out.userId });
+    await axalReply(env, out.userId, `wblink:${out.codeUid}`, sender, waLink.WHATSAPP_LINK_COPY.claimed);
+    return;
+  }
+  const link = await waLink.linkedSender(env, sender);
+  if (!link) return finish('ignored', { error: 'unlinked_sender' });
+  const userId = Number(link.user_id);
+  if (waLink.isStop(ev.text)) {
+    spend();
+    const unlinked = await waLink.unlinkSender(env, Number(link.id));
+    if (unlinked) await capture.dropWaitingCaptures(env, Number(link.id));
+    await finish(unlinked ? 'done' : 'ignored', { userId, error: unlinked ? null : 'not_linked' });
+    if (unlinked) await axalReply(env, userId, `wbstop:${claim}`, sender, waLink.WHATSAPP_LINK_COPY.unlinked);
+    return;
+  }
+  // Management commands can finish in canary, as Telegram's do; captures cannot.
+  if (!(await channelOpenToMember(env, 'whatsapp', Number(link.user_id)))) {
+    return finish('ignored', { userId: Number(link.user_id), error: 'rollout' });
+  }
+  await waLink.touchLink(env, Number(link.id));
+  if (!(await memberStands(env, userId))) return finish('ignored', { userId, error: 'member_inactive' });
+
+  const press = capture.captureButton(ev.button);
+  if (press) {
+    spend();
+    const out = await capture.answerCapture(env, userId, press.uid, press.answer);
+    // The download and the draft interview follow #1896 (whatsappCapture.ts).
+    return finish(out.done === 'nothing' ? 'ignored' : 'done', { userId, error: out.done === 'nothing' ? 'capture_not_waiting' : null });
+  }
+  if (ev.media && capture.capturable(ev.media)) {
+    spend();
+    if (capture.declaredTooLarge(ev.media)) {
+      await finish('ignored', { userId, error: 'too_large' });
+      await axalReply(env, userId, `wbcapture-large:${claim}`, sender, capture.CAPTURE_COPY.tooLarge);
+      return;
+    }
+    const added = await capture.addToCapture(env, { id: Number(link.id), user_id: userId }, ev.media);
+    await finish('stored', { userId });
+    if (added.created) {
+      await axalAsk(env, userId, `wbcapture:${added.uid}`, sender, capture.CAPTURE_COPY.question, capture.captureButtons(added.uid));
+    }
+    return;
+  }
+  spend();
+  await finish('ignored', { userId, error: 'unsupported_type' });
+  await axalReply(env, userId, `wbunsupported:${claim}`, sender, capture.CAPTURE_COPY.unsupported);
+}
+
 function resolveConnection(env: Env, provider: MessagingProvider, ref: string): Promise<ChannelConnection | null> {
   return provider === 'telegram' ? connectionForTelegram(env, ref) : connectionForWhatsApp(env, ref);
+}
+
+/**
+ * D754 §4 — what may be the interviewee's answer. The thread is looked up,
+ * never created. An answer that counts is applied by consent.ts; one that does
+ * not is stored as the ordinary message it is (`fallback`), so a typed word is
+ * never lost. On 'given' a follow-up job moves what waited — ids only, never
+ * text on the webhook path.
+ */
+async function handleConsentReply(
+  env: Env, conn: ChannelConnection, ev: InboundConsentReply, claim: number,
+  finish: (status: EventStatus, fields?: EventFields) => Promise<void>, markStored: () => void,
+): Promise<'ok'> {
+  const thread = await threadForChat(env, conn, ev.externalChatId);
+  const out = thread ? await recordReply(env, thread, ev) : { outcome: 'ignored' as const, reason: 'no_notice' as const };
+  if (out.outcome === 'ignored') {
+    // A duplicate was an answer once already: it is not a message now.
+    if (!ev.fallback || out.reason === 'duplicate') {
+      await finish('ignored', { userId: conn.userId, threadId: thread?.id ?? null, error: out.reason });
+      return 'ok';
+    }
+    const kept = await storeInbound(env, conn, ev.fallback);
+    markStored();
+    const ok = kept.stored === 'pending' || kept.stored === 'session';
+    await finish(ok ? 'stored' : 'ignored', {
+      userId: conn.userId, threadId: kept.thread?.id ?? null,
+      sessionId: kept.stored === 'session' ? kept.sessionId : null,
+      error: ok ? null : kept.stored === 'ignored' ? 'thread_ignored' : kept.stored,
+    });
+    return 'ok';
+  }
+  markStored();
+  // D756 §1.5: on Telegram the answer is also the ordinary message it is.
+  if (ev.provider === 'telegram' && ev.fallback) await storeInbound(env, conn, ev.fallback);
+  await finish('done', { userId: conn.userId, threadId: thread!.id, sessionId: out.consent.session_id });
+  if (out.outcome === 'given') {
+    await enqueueChannelJob(env, 'channel_followup', ev.provider, `consent:${out.consent.uid}`, {
+      kind: 'consent', thread: thread!.uid, consent: out.consent.uid, event: claim,
+    });
+  }
+  if (ev.provider === 'telegram') await confirmAnswer(env, conn, thread!, out.consent, out.outcome);
+  return 'ok';
+}
+
+/**
+ * D756 §1.7 — the bot's one line after a counted Telegram answer: at most one
+ * per answer (its own client key under `consent:`), and only with the reply
+ * right. A failure is logged and never fails the webhook.
+ */
+async function confirmAnswer(
+  env: Env, conn: ChannelConnection, thread: ThreadRow, row: ConsentRow, outcome: 'given' | 'declined' | 'withdrawn',
+): Promise<void> {
+  try {
+    const bc = await telegram.activeBusinessConnection(env, conn.userId);
+    if (!bc?.canReply) return;
+    const venture = row.interview_id
+      ? (await env.DB.prepare('SELECT p.name FROM discovery_interviews di JOIN projects p ON p.id = di.project_id WHERE di.id = ?')
+        .bind(row.interview_id).first<{ name: string | null }>())?.name ?? null
+      : null;
+    const copy = telegram.TELEGRAM_COPY;
+    const text = outcome === 'given' ? copy.consentYes(oneLine(venture, 80) || null) : outcome === 'declined' ? copy.consentNo : copy.consentStop;
+    const claim = await beginOutbound(env, 'telegram', conn.userId, thread.id, `${CONSENT_KEY_PREFIX}${thread.uid}:answer:${row.uid}:${outcome}`);
+    if (claim.existing) return;
+    const sent = await telegram.sendBusinessMessage(env, bc.businessConnectionId, thread.external_chat_id, text);
+    await finishOutbound(env, claim.row.id, sent);
+  } catch (err) {
+    console.error('[channels] telegram consent confirmation not sent', err instanceof Error ? err.name : 'error');
+  }
+}
+
+/** D756 §1.5 (b): the member's own message carrying the notice page's link, at the current version. */
+const PASTED_NOTICE = /\/privacy\/interviews\?n=(\d{1,3})\b/;
+
+/**
+ * The member pasted the notice into a Telegram chat themselves: that message
+ * is the request, with no reply right and outside the window. A chat whose
+ * consent is already given is left as it is.
+ */
+async function recordPastedNotice(env: Env, msg: InboundMessage, thread: ThreadRow | null): Promise<void> {
+  if (!thread || msg.provider !== 'telegram' || msg.side !== 'me' || thread.consent_state === 'given') return;
+  const m = PASTED_NOTICE.exec(String(msg.text ?? ''));
+  if (!m || Number(m[1]) !== CONSENT_NOTICE_VERSION) return;
+  const row = await openRequest(env, thread, { interviewId: thread.interview_id, sessionId: thread.session_id });
+  await markRequested(env, row.id, msg.externalMessageId, 'telegram', thread.id);
 }
 
 /** The member behind a connection must still stand; an inactive one is ignored, not retried. */
@@ -600,9 +1109,18 @@ async function processEvent(env: Env, ev: InboundEvent): Promise<'ok' | 'retry'>
       return 'ok';
     }
 
+    if (ev.provider === 'whatsapp' && waLink.isAxalNumber(env, ev.connectionRef)) {
+      await handleAxalNumber(env, claim, ev, () => { stored = true; }, finish);
+      return 'ok';
+    }
+
     const conn = await resolveConnection(env, ev.provider as MessagingProvider, ev.connectionRef);
     if (!conn) { await finish('ignored', { error: 'unknown_connection' }); return 'ok'; }
     if (!(await memberStands(env, conn.userId))) { await finish('ignored', { userId: conn.userId, error: 'member_inactive' }); return 'ok'; }
+    if (!(await channelOpenToMember(env, conn.provider, conn.userId))) {
+      await finish('ignored', { userId: conn.userId, error: 'rollout' });
+      return 'ok';
+    }
     if (await connectionOverLimit(env, conn.integrationId)) {
       await finish('ignored', { userId: conn.userId, error: 'rate_limited' });
       return 'ok';
@@ -610,9 +1128,12 @@ async function processEvent(env: Env, ev: InboundEvent): Promise<'ok' | 'retry'>
 
     if (ev.kind === 'status') {
       const known = await applyDeliveryStatus(env, ev.externalMessageId, ev.status, ev.errorCode);
+      // D754: a notice delivered or read unlocks the member's word on its request.
+      if (known) await markDelivered(env, ev.externalMessageId, ev.status);
       await finish(known ? 'done' : 'ignored', { userId: conn.userId, error: known ? null : 'not_ours' });
       return 'ok';
     }
+    if (ev.kind === 'consent_reply') return await handleConsentReply(env, conn, ev, claim, finish, () => { stored = true; });
     if (ev.kind === 'edit') {
       const changed = await applyEdit(env, conn, ev);
       await finish(changed ? 'done' : 'ignored', { userId: conn.userId, error: changed ? null : 'no_pending_copy' });
@@ -643,6 +1164,9 @@ async function processEvent(env: Env, ev: InboundEvent): Promise<'ok' | 'retry'>
 
     const out = await storeInbound(env, conn, msg);
     stored = true;
+    if (msg.provider === 'telegram' && msg.side === 'me' && (out.stored === 'pending' || out.stored === 'session')) {
+      await recordPastedNotice(env, msg, out.thread);
+    }
     const kept = out.stored === 'pending' || out.stored === 'session';
     await finish(kept ? 'stored' : 'ignored', {
       userId: conn.userId, threadId: out.thread?.id ?? null,
@@ -671,6 +1195,7 @@ channels.post('/telegram/webhook', async (c) => {
   const check = await telegram.verifyTelegramSecret(c.env, c.req.header('X-Telegram-Bot-Api-Secret-Token'));
   if (check === 'unconfigured') return c.json({ error: 'not_configured', code: 'not_configured' }, 503);
   if (check !== 'ok') return c.json({ error: 'unauthorized', code: 'unauthorized' }, 401);
+  if (channelRollout(c.env, 'telegram') === 'off') return c.json({ ok: true, ignored: 'rollout_off' });
   const raw = await cappedBody(c);
   if (raw instanceof Response) return raw;
   const update = parseBody(raw);
@@ -697,10 +1222,11 @@ channels.post('/whatsapp/webhook', async (c) => {
   if (check !== 'ok') return c.json({ error: 'unauthorized', code: 'unauthorized' }, 401);
   const body = parseBody(raw);
   if (body === undefined) return c.json({ error: 'malformed', code: 'malformed' }, 400);
+  if (channelRollout(c.env, 'whatsapp') === 'off') return c.json({ ok: true, ignored: 'rollout_off' });
   // One POST may carry many events; each is claimed on its own, and one that
   // must be retried does not stop the rest (their claims make the retry a no-op).
   let retry = false;
-  for (const ev of whatsapp.normaliseWhatsAppPayload(body)) {
+  for (const ev of whatsapp.normaliseWhatsAppPayload(body, c.env.WHATSAPP_AXAL_PHONE_NUMBER_ID ?? null)) {
     if ((await processEvent(c.env, ev)) === 'retry') retry = true;
   }
   return retry ? c.json({ error: 'retry', code: 'retry' }, 500) : c.json({ ok: true });
@@ -746,6 +1272,12 @@ export async function runVoiceFollowup(env: Env, p: ChannelJobPayload): Promise<
   const note = await voiceNoteForJob(env, String(p.message ?? ''), job);
   if (!note) return;
   const fields: EventFields = { userId: Number(note.thread.user_id), threadId: note.thread.id };
+  // D754 §4, D756 §1.5: no consent, no download and no model — before any other check.
+  if (audioConsentRequired(provider) && note.thread.consent_state !== 'given') {
+    await releaseVoiceNote(env, note.uid, job, 'no_consent');
+    await end('failed', { ...fields, error: 'no_consent' });
+    return;
+  }
   const giveBack = async (status: EventStatus, error: string) => {
     // A failure keeps its code on the note, so the thread can say why (#1586);
     // an 'ignored' give-back (the chat left its interview, the member left) is
@@ -769,6 +1301,7 @@ export async function runVoiceFollowup(env: Env, p: ChannelJobPayload): Promise<
   const conn = await memberConnection(env, Number(note.thread.user_id), provider);
   if (!conn || conn.integrationId !== Number(note.thread.integration_id)) return giveBack('ignored', 'unknown_connection');
   if (!(await memberStands(env, conn.userId))) return giveBack('ignored', 'member_inactive');
+  if (!(await channelOpenToMember(env, conn.provider, conn.userId))) return giveBack('ignored', 'rollout');
   // The member's chat may have left its interview since the job was queued.
   if (!inInterview(note.thread)) return giveBack('ignored', 'not_assigned');
 
@@ -780,7 +1313,13 @@ export async function runVoiceFollowup(env: Env, p: ChannelJobPayload): Promise<
       console.error(`[channels] voice download failed provider=${provider} code=${audio.code} try=${Number(p.try) || 1}`);
       return tryAgain('provider_unreachable');
     }
-    return giveBack('failed', audio.code);
+    const fetchBy = voiceFetchBy(provider, { awaiting_transcription: true, sent_at: note.sentAt });
+    const expired = provider === 'whatsapp' && 'lookup' in audio && audio.lookup === true
+      && !['token_invalid', 'forbidden', 'not_connected'].includes(audio.code)
+      && fetchBy !== null && Date.now() >= Date.parse(fetchBy);
+    const code = expired ? 'expired' : audio.code;
+    console.error('[channels] voice download refused provider=%s code=%s', provider, code);
+    return giveBack('failed', code);
   }
   if (!(await reserveTranscription(env, conn.integrationId))) return giveBack('failed', 'transcription_cap');
 
@@ -804,10 +1343,32 @@ export async function runVoiceFollowup(env: Env, p: ChannelJobPayload): Promise<
   if (out === 'gone') await end('ignored', { ...fields, error: 'voice_gone' });
 }
 
+/**
+ * `channel_followup` { kind: 'consent', thread, consent }: consent was given
+ * in the chat (D754). Re-checked here — the row and the thread still 'given',
+ * the member standing, the connection active and the thread's — then what
+ * waited moves (`admitConsentedThread`, idempotent).
+ */
+export async function runConsentFollowup(env: Env, p: ChannelJobPayload): Promise<void> {
+  const row = await env.DB.prepare('SELECT * FROM channel_consents WHERE uid = ?').bind(String(p.consent ?? '')).first<ConsentRow>();
+  const thread = await env.DB.prepare('SELECT * FROM channel_threads WHERE uid = ?').bind(String(p.thread ?? '')).first<ThreadRow>();
+  if (!row || !thread || row.status !== 'given' || thread.consent_state !== 'given' || Number(row.thread_id) !== Number(thread.id)) return;
+  if (!(await memberStands(env, Number(thread.user_id)))) return;
+  const conn = await memberConnection(env, Number(thread.user_id), thread.provider);
+  if (!conn || conn.integrationId !== Number(thread.integration_id)) return;
+  await admitConsentedThread(env, Number(thread.user_id), thread.id);
+}
+
+/** One `channel_followup` handler for both providers, by the payload's kind. */
+export async function runChannelFollowup(env: Env, p: ChannelJobPayload): Promise<void> {
+  if (p.kind === 'consent') return runConsentFollowup(env, p);
+  return runVoiceFollowup(env, p);
+}
+
 // Registered at module load: index.ts imports this file, so the handlers exist
 // before the queue delivers anything (services/channels/jobs.ts).
-registerChannelJob('channel_followup', 'telegram', runVoiceFollowup);
-registerChannelJob('channel_followup', 'whatsapp', runVoiceFollowup);
+registerChannelJob('channel_followup', 'telegram', runChannelFollowup);
+registerChannelJob('channel_followup', 'whatsapp', runChannelFollowup);
 
 // ---------------------------------------------------------------------------
 // Admin

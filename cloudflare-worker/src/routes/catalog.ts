@@ -18,10 +18,18 @@
  *   POST /api/admin/catalog/products/:id/prices         add price + re-sync
  *   PATCH /api/admin/catalog/prices/:priceId            update price nickname/metadata
  *   POST /api/admin/catalog/prices/:priceId/archive     set price active=false + re-sync
+ *
+ * D755 token packs (requireSuperAdmin, #1919):
+ *   POST  /api/admin/catalog/token-packs                {amount_usd, idempotency_key}  create product + price + row
+ *   POST  /api/admin/catalog/token-packs/adopt          {price_id}                      record an existing price
+ *   PATCH /api/admin/catalog/token-packs/:uid           {on_sale?, bonus_usd?, sort?}
+ *   POST  /api/admin/catalog/token-packs/:uid/archive   on_sale=0, archived_at, archive the Stripe price
+ * The generic writes above refuse a pack, its product or its price with 409
+ * `token_pack_managed_on_hq`.
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAuth, requireAdmin } from '../auth';
+import { requireAuth, requireAdmin, requireSuperAdmin } from '../auth';
 import {
   getCatalog,
   syncCatalog,
@@ -37,11 +45,14 @@ import {
   createPrice,
   updatePrice,
   archivePrice,
+  findCatalogProductByPriceId,
+  fetchAndMirrorPrice,
   type ProductKind,
   type UpdateProductBody,
   type CreatePriceBody,
 } from '../services/catalog';
 import { ensureAdminAuditLogTable } from './admin';
+import { isTokenPackPrice, isTokenPackProduct, packLabel, TOKEN_PACK_LIMITS } from '../services/aiCredits';
 import { refuse } from '../util/refusal';
 
 // ---------- public read ----------
@@ -89,6 +100,18 @@ async function writeAdminAudit(
 
 // ---------- admin routes ----------
 const adminCatalog = new Hono<{ Bindings: Env }>();
+
+/**
+ * D755 §4: a token pack is made, adopted, changed and archived only on HQ's
+ * token-pack routes below. The generic writes refuse a pack's product or price,
+ * and a product of kind `token_pack`, so no Admin can mint or reprice one.
+ */
+const PACK_MANAGED = { error: 'token_pack_managed_on_hq', message: 'Token packs are managed on HQ › AI allowances › Token packs.' } as const;
+async function productIsPack(env: Env, productId: string): Promise<boolean> {
+  if (await isTokenPackProduct(env, productId)) return true;
+  const mirrored = await getCatalog(env).then((ps) => ps.find((p) => p.id === productId));
+  return mirrored?.kind === 'token_pack';
+}
 
 adminCatalog.post('/sync', async (c) => {
   const admin = await requireAdmin(c);
@@ -138,6 +161,7 @@ adminCatalog.post('/products', async (c) => {
     return c.json({ error: 'invalid_kind', allowed: [...PRODUCT_KINDS] }, 400);
   }
   const kind = body.kind as ProductKind;
+  if (kind === 'token_pack') return c.json(PACK_MANAGED, 409);
 
   const metadata: Record<string, string> = {};
   if (body.metadata && typeof body.metadata === 'object') {
@@ -146,6 +170,7 @@ adminCatalog.post('/products', async (c) => {
     }
   }
 
+  if (metadata.kind === 'token_pack') return c.json(PACK_MANAGED, 409);
   const metaErrors = validateProductMetadata(kind, metadata);
   if (metaErrors.length) {
     return c.json({ error: 'invalid_metadata', details: metaErrors }, 400);
@@ -172,12 +197,16 @@ adminCatalog.patch('/products/:id', async (c) => {
   const admin = await requireAdmin(c);
   if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
   const id = c.req.param('id');
+  if (await productIsPack(c.env, id)) return c.json(PACK_MANAGED, 409);
 
   let body: Record<string, unknown> = {};
   try {
     body = await c.req.json();
   } catch {
     /* empty body → no-op */
+  }
+  if (body.kind === 'token_pack' || (body.metadata && typeof body.metadata === 'object' && (body.metadata as Record<string, unknown>).kind === 'token_pack')) {
+    return c.json(PACK_MANAGED, 409);
   }
 
   const update: UpdateProductBody = {};
@@ -222,6 +251,7 @@ adminCatalog.post('/products/:id/archive', async (c) => {
   const admin = await requireAdmin(c);
   if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
   const id = c.req.param('id');
+  if (await productIsPack(c.env, id)) return c.json(PACK_MANAGED, 409);
   try {
     await archiveProduct(c.env, id);
     await writeAdminAudit(c.env, admin.id, 'catalog_product_archive', { product_id: id });
@@ -236,6 +266,7 @@ adminCatalog.post('/products/:id/prices', async (c) => {
   const admin = await requireAdmin(c);
   if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
   const productId = c.req.param('id');
+  if (await productIsPack(c.env, productId)) return c.json(PACK_MANAGED, 409);
 
   let body: Record<string, unknown> = {};
   try {
@@ -284,6 +315,7 @@ adminCatalog.patch('/prices/:priceId', async (c) => {
   const admin = await requireAdmin(c);
   if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
   const priceId = c.req.param('priceId');
+  if (await isTokenPackPrice(c.env, priceId)) return c.json(PACK_MANAGED, 409);
 
   let body: Record<string, unknown> = {};
   try {
@@ -314,12 +346,137 @@ adminCatalog.post('/prices/:priceId/archive', async (c) => {
   const admin = await requireAdmin(c);
   if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
   const priceId = c.req.param('priceId');
+  if (await isTokenPackPrice(c.env, priceId)) return c.json(PACK_MANAGED, 409);
   try {
     await archivePrice(c.env, priceId);
     await writeAdminAudit(c.env, admin.id, 'catalog_price_archive', { price_id: priceId });
     return c.json({ ok: true });
   } catch (e) {
     return refuse(c, 502, { code: 'archive_price_failed', message: 'The price could not be archived in Stripe. Nothing changed; try again in a moment.', raw: e, audience: 'admin' });
+  }
+});
+
+// ---------- D755 token packs (Super Admin only; #1919) ----------
+const IDEM_KEY = /^[A-Za-z0-9_-]{8,64}$/;
+const PRICE_ID = /^price_[A-Za-z0-9]+$/;
+async function packRowByUid(env: Env, uid: string) {
+  return env.DB.prepare('SELECT * FROM ai_token_packs WHERE uid = ?').bind(uid).first<any>();
+}
+function packView(row: any) {
+  return { uid: row.uid, label: packLabel(row.face_cents), price_id: row.price_id, product_id: row.product_id, face_cents: row.face_cents,
+    bonus_microusd: row.bonus_microusd, on_sale: row.on_sale === 1, sort: row.sort, origin: row.origin, archived_at: row.archived_at };
+}
+const wholeDollarsInRange = (cents: number) =>
+  Number.isSafeInteger(cents) && cents % 100 === 0 && cents >= TOKEN_PACK_LIMITS.minFaceCents && cents <= TOKEN_PACK_LIMITS.maxFaceCents;
+const PACK_AMOUNT = { error: 'token_pack_amount_invalid', message: 'A pack is whole dollars from $5 to $500.' } as const;
+
+// POST /token-packs — §4: the Worker creates the product and its one-time USD
+// price with its own key, each with an Idempotency-Key, so a retried press
+// gives one product, one price and one row.
+adminCatalog.post('/token-packs', async (c) => {
+  const admin = await requireSuperAdmin(c);
+  const body = (await c.req.json().catch(() => ({}))) as { amount_usd?: unknown; idempotency_key?: unknown };
+  const amount = body.amount_usd;
+  if (typeof amount !== 'number' || !Number.isInteger(amount) || !wholeDollarsInRange(amount * 100)) return c.json(PACK_AMOUNT, 400);
+  const key = body.idempotency_key;
+  if (typeof key !== 'string' || !IDEM_KEY.test(key)) return c.json({ error: 'idempotency_key_required', message: 'Send an idempotency key of 8 to 64 letters, digits, - or _.' }, 400);
+  if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
+  const faceCents = amount * 100;
+  try {
+    const product = await createProduct(c.env, { name: packLabel(faceCents), kind: 'token_pack',
+      metadata: { kind: 'token_pack', decision: 'D755', seller: 'management' } }, { idempotencyKey: `token_pack:${key}:product` });
+    const price = await createPrice(c.env, product.id, { currency: 'usd', unit_amount: faceCents, type: 'one_time' }, { idempotencyKey: `token_pack:${key}:price` });
+    if (price.type !== 'one_time' || price.currency !== 'usd' || price.unit_amount !== faceCents) throw new Error('stripe price does not match the pack');
+    await c.env.DB.prepare(`INSERT OR IGNORE INTO ai_token_packs(price_id, product_id, face_cents, on_sale, origin, created_by)
+      VALUES (?, ?, ?, 0, 'created', ?)`).bind(price.id, product.id, faceCents, admin.id).run();
+    const row = await c.env.DB.prepare('SELECT * FROM ai_token_packs WHERE price_id = ?').bind(price.id).first<any>();
+    if (!row || row.product_id !== product.id || row.face_cents !== faceCents) throw new Error('token pack row unreadable');
+    await writeAdminAudit(c.env, admin.id, 'token_pack_create', { uid: row.uid, price_id: price.id, product_id: product.id, face_cents: faceCents, idempotency_key: key });
+    return c.json({ ok: true, pack: packView(row) });
+  } catch (e) {
+    return refuse(c, 502, { code: 'token_pack_create_failed', message: 'The token pack could not be created in Stripe. Pressing Create again with the same key is safe.', raw: e, audience: 'admin' });
+  }
+});
+
+// POST /token-packs/adopt — record an existing one-time USD price of whole dollars from $5 to $500, after D750's judge.
+adminCatalog.post('/token-packs/adopt', async (c) => {
+  const admin = await requireSuperAdmin(c);
+  const body = (await c.req.json().catch(() => ({}))) as { price_id?: unknown };
+  const priceId = body.price_id;
+  if (typeof priceId !== 'string' || !PRICE_ID.test(priceId)) return c.json({ error: 'invalid_price', message: 'Give a Stripe price ID (price_…).' }, 400);
+  try {
+    const existing = await c.env.DB.prepare('SELECT * FROM ai_token_packs WHERE price_id = ?').bind(priceId).first<any>();
+    if (existing) return c.json({ ok: true, already: true, pack: packView(existing) });
+    const { judge } = await import('../services/aiTopups');
+    let found = await findCatalogProductByPriceId(c.env, priceId);
+    if (!found) {
+      const fetched = await fetchAndMirrorPrice(c.env, priceId);
+      if (fetched.state !== 'mirrored') return c.json({ error: 'token_pack_not_adoptable', reason: fetched.state === 'mode_mismatch' ? 'mode_mismatch' : 'missing_from_catalog' }, 400);
+      found = { product: fetched.product, price: fetched.price };
+    }
+    const r = judge(priceId, found as any);
+    if (!r.configured || r.state !== 'ready') return c.json({ error: 'token_pack_not_adoptable', reason: r.configured && r.state === 'not_ready' ? r.reason : 'bad_config' }, 400);
+    if (!wholeDollarsInRange(r.product.unit_amount)) return c.json({ error: 'token_pack_not_adoptable', reason: 'bad_amount', message: PACK_AMOUNT.message }, 400);
+    await c.env.DB.prepare(`INSERT OR IGNORE INTO ai_token_packs(price_id, product_id, face_cents, on_sale, origin, created_by)
+      VALUES (?, ?, ?, 0, 'adopted', ?)`).bind(priceId, r.product.product_id, r.product.unit_amount, admin.id).run();
+    const row = await c.env.DB.prepare('SELECT * FROM ai_token_packs WHERE price_id = ?').bind(priceId).first<any>();
+    if (!row) throw new Error('token pack row unreadable');
+    await writeAdminAudit(c.env, admin.id, 'token_pack_adopt', { uid: row.uid, price_id: priceId, face_cents: row.face_cents });
+    return c.json({ ok: true, already: false, pack: packView(row) });
+  } catch (e) {
+    return refuse(c, 502, { code: 'token_pack_adopt_failed', message: 'The price could not be adopted. Nothing changed; try again in a moment.', raw: e, audience: 'admin' });
+  }
+});
+
+// PATCH /token-packs/:uid — on sale, bonus (0–10% of face) and sort. An amount never changes: a new amount is a new pack.
+adminCatalog.patch('/token-packs/:uid', async (c) => {
+  const admin = await requireSuperAdmin(c);
+  const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
+  if (!body || typeof body !== 'object') return c.json({ error: 'invalid_request' }, 400);
+  if ('amount_usd' in body || 'face_cents' in body || 'unit_amount' in body || 'price_id' in body)
+    return c.json({ error: 'token_pack_amount_fixed', message: 'A pack\'s amount never changes. Create a new pack for a new amount.' }, 400);
+  try {
+    const row = await packRowByUid(c.env, c.req.param('uid'));
+    if (!row) return c.json({ error: 'token_pack_not_found' }, 404);
+    if (row.archived_at) return c.json({ error: 'token_pack_archived', message: 'This pack is archived.' }, 409);
+    let onSale = row.on_sale, bonus = row.bonus_microusd, sort = row.sort;
+    if ('on_sale' in body) { if (typeof body.on_sale !== 'boolean') return c.json({ error: 'invalid_on_sale' }, 400); onSale = body.on_sale ? 1 : 0; }
+    if ('bonus_usd' in body) {
+      const b = body.bonus_usd;
+      const micro = typeof b === 'number' && Number.isFinite(b) ? Math.round(b * 1_000_000) : NaN;
+      if (!Number.isSafeInteger(micro) || micro < 0 || micro > row.face_cents * 100 * TOKEN_PACK_LIMITS.maxBonusPercent)
+        return c.json({ error: 'token_pack_bonus_invalid', message: 'A bonus is 0 to 10% of the pack\'s face value.' }, 400);
+      bonus = micro;
+    }
+    if ('sort' in body) { if (typeof body.sort !== 'number' || !Number.isSafeInteger(body.sort)) return c.json({ error: 'invalid_sort' }, 400); sort = body.sort; }
+    await c.env.DB.prepare(`UPDATE ai_token_packs SET on_sale = ?, bonus_microusd = ?, sort = ?, updated_at = datetime('now')
+      WHERE uid = ? AND archived_at IS NULL`).bind(onSale, bonus, sort, row.uid).run();
+    const next = await packRowByUid(c.env, row.uid);
+    await writeAdminAudit(c.env, admin.id, 'token_pack_update', { uid: row.uid, on_sale: onSale === 1, bonus_microusd: bonus, sort,
+      was: { on_sale: row.on_sale === 1, bonus_microusd: row.bonus_microusd, sort: row.sort } });
+    return c.json({ ok: true, pack: packView(next) });
+  } catch (e) {
+    return refuse(c, 503, { code: 'token_pack_update_failed', message: 'The token pack was not changed.', raw: e, audience: 'admin' });
+  }
+});
+
+// POST /token-packs/:uid/archive — off sale for good, and the Stripe price archived.
+adminCatalog.post('/token-packs/:uid/archive', async (c) => {
+  const admin = await requireSuperAdmin(c);
+  try {
+    const row = await packRowByUid(c.env, c.req.param('uid'));
+    if (!row) return c.json({ error: 'token_pack_not_found' }, 404);
+    if (row.archived_at) return c.json({ ok: true, already: true, pack: packView(row) });
+    if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
+    // Off sale first, so a Stripe failure below leaves the pack unsellable rather than half archived.
+    await c.env.DB.prepare(`UPDATE ai_token_packs SET on_sale = 0, updated_at = datetime('now') WHERE uid = ?`).bind(row.uid).run();
+    await archivePrice(c.env, row.price_id);
+    await c.env.DB.prepare(`UPDATE ai_token_packs SET archived_at = datetime('now'), updated_at = datetime('now') WHERE uid = ? AND archived_at IS NULL`).bind(row.uid).run();
+    const next = await packRowByUid(c.env, row.uid);
+    await writeAdminAudit(c.env, admin.id, 'token_pack_archive', { uid: row.uid, price_id: row.price_id });
+    return c.json({ ok: true, already: false, pack: packView(next) });
+  } catch (e) {
+    return refuse(c, 502, { code: 'token_pack_archive_failed', message: 'The token pack is off sale, but its Stripe price could not be archived. Try Archive again.', raw: e, audience: 'admin' });
   }
 });
 

@@ -8,14 +8,19 @@
  *   { providers: [{ provider, available, missing, signup? }],
  *     connections: { telegram?, whatsapp? }, pending: { telegram, whatsapp } }
  * The shape is read defensively — a field that is absent is unknown, never a
- * zero and never a crash. `missing` names platform secrets: it is for an
- * admin and is never drawn. Neither is a WhatsApp phone number id, a WABA id
- * or anything else the provider uses to address the member's account.
+ * zero and never a crash. `missing` names platform secrets: the Worker sends
+ * it to admins, and only WhatsApp's is kept, for its page to draw to a Super
+ * Admin (D754 §11, `whatsappPageState`); every other provider's is dropped. `rollout` (D754 w1, #1950: `off`, `canary` or
+ * `on`) also reaches Super Admins only. No WhatsApp phone number id, WABA id
+ * or anything else the provider uses to address the member's account is ever
+ * drawn.
  *
  * Zoom connects through the Connectors registry (OAuth) and Google Meet rides
  * on the member's Google Calendar connection, so those two cards read the
  * connectors catalogue as well, and connect through the existing sheet.
  */
+
+import { isSuperAdminUser } from '../../lib/shellRole.js';
 
 export const CHANNEL_PROVIDERS = ['telegram', 'whatsapp', 'zoom', 'google_meet'];
 export const MESSAGING_PROVIDERS = ['telegram', 'whatsapp'];
@@ -30,6 +35,9 @@ export const CARD_TITLE = { telegram: 'Telegram Business', whatsapp: 'WhatsApp B
 export const CHANNELS_HREF = '/account/connectors#interview-channels';
 /** The inbox of conversations waiting for an interview. */
 export const INBOX_HREF = '/validate/inbox';
+
+/** D754 w1's rollout switch, `WHATSAPP_CHANNEL` / `TELEGRAM_CHANNEL` (#1950). */
+export const ROLLOUTS = ['off', 'canary', 'on'];
 
 const isObj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const str = (v) => (typeof v === 'string' ? v.trim() : '');
@@ -53,6 +61,9 @@ export function readOverview(raw) {
     providers[key] = {
       available: typeof p.available === 'boolean' ? p.available : null,
       signup: isObj(p.signup) ? p.signup : null,
+      // D754 §11: only WhatsApp's page draws its missing secret names, to a Super Admin. Every other provider's are dropped.
+      missing: key === 'whatsapp' && Array.isArray(p.missing) ? p.missing.map(str).filter((m) => /^[A-Z][A-Z0-9_]{1,63}$/.test(m)) : [],
+      rollout: ROLLOUTS.includes(p.rollout) ? p.rollout : null,
     };
   }
   const connections = {};
@@ -206,6 +217,9 @@ const WORDS = {
 /** The sentence for a provider Axal has not switched on: plain words, no secret names. */
 export const UNAVAILABLE_WHY = 'Axal has not switched this on yet. There is nothing for you to set up until it does.';
 
+/** A connection kept while Axal has the provider switched off. */
+export const SWITCHED_OFF_WHY = 'Axal has switched this off for now. Your connection is kept, but nothing new arrives until it is back.';
+
 /**
  * One messaging card's state: `unreadable` (the read failed), `unavailable`
  * (not set up on this platform yet), `not_connected`, `linked` (Telegram:
@@ -219,7 +233,7 @@ export function channelCard(provider, overview) {
   const available = overview.providers?.[provider]?.available ?? null;
   if (conn) {
     const account = accountName(conn);
-    if (available === false) return out('problem', { account, why: 'Axal has switched this off for now. Your connection is kept, but nothing new arrives until it is back.' });
+    if (available === false) return out('problem', { account, why: SWITCHED_OFF_WHY });
     const problem = connectionProblem(provider, conn);
     if (problem) return out('problem', { account, why: problem, calls: callsLine(provider, conn) });
     if (provider === 'telegram' && telegramBusinessMissing(conn)) {
@@ -343,6 +357,9 @@ export const WHATSAPP_NOTES = [
   'Meta asks you to log in with Facebook and choose the business and the number. Only chats with your customers reach Axal, and nothing reaches an interview until you assign it.',
 ];
 
+/** Meta's sign-up ids are missing or malformed on the Worker. */
+export const WHATSAPP_SIGNUP_NOT_CONFIGURED = 'Not set up yet: Meta’s sign-up is not configured on Axal.';
+
 /** WhatsApp calls are a later phase (D684 §6): the card says so. */
 export const WHATSAPP_CALLS = 'Calls: not yet';
 
@@ -355,6 +372,64 @@ export function callsLine(provider, conn) {
   if (provider !== 'whatsapp') return '';
   const line = conn?.calls?.sentence;
   return typeof line === 'string' && /^Calls: not yet/.test(line) ? line : '';
+}
+
+// ---------- WhatsApp's own page: D754 §11, way A ---------------------------
+
+/** D754 §11's words for WhatsApp's page, as written there. */
+export const WHATSAPP_PAGE = Object.freeze({
+  heading: 'Your business number',
+  connect: 'Connect WhatsApp Business',
+  canary: 'Only Super Admins can connect while WhatsApp is in canary.',
+  missing: 'Not set on this deployment:',
+  needsAttention: 'WhatsApp stopped accepting Axal’s access. Connect again.',
+});
+
+/** The access itself is gone (token revoked or expired, or the app unsubscribed), as against a failed attempt. */
+const ACCESS_GONE = /expired|revoked|invalid_token|unauthori[sz]ed|unsubscribed|\b401\b|oauth/i;
+
+/**
+ * Which of D754 §11's way-A states WhatsApp's page draws, for this viewer:
+ *   unreadable             the read failed;
+ *   unavailable            not switched on for this viewer: secrets unset, or
+ *                          canary or off for a member;
+ *   off_with_connection    a connection kept while Axal has it off;
+ *   signup_not_configured  Meta's sign-up ids are missing or malformed;
+ *   not_connected          Your business number, with Connect;
+ *   connected              the masked number, status, chats waiting, Test, Disconnect;
+ *   needs_attention        the access stopped working: Connect again.
+ * `notices` are the canary line and the missing secret names, for a Super
+ * Admin only, in §11's order. `canConnect` is whether Connect is offered.
+ */
+export function whatsappPageState(overview, user) {
+  const superAdmin = isSuperAdminUser(user);
+  const base = { state: 'unreadable', why: '', account: '', calls: '', notices: [], missing: [], canConnect: false };
+  if (!overview) return { ...base, why: 'Your connection could not be read. This is not a claim that you have none.' };
+  const p = overview.providers?.whatsapp || null;
+  const conn = overview.connections?.whatsapp || null;
+  const rollout = superAdmin ? p?.rollout ?? null : null;
+  // The Worker answers `available: false` to a member in canary; a rollout a member somehow holds closes it too.
+  const open = p?.available === true && (superAdmin || !ROLLOUTS.includes(p?.rollout) || p.rollout === 'on');
+  const missing = superAdmin ? [...(p?.missing ?? [])] : [];
+  const notices = [];
+  if (superAdmin && rollout === 'canary') notices.push(WHATSAPP_PAGE.canary);
+  if (missing.length) notices.push(`${WHATSAPP_PAGE.missing} ${missing.join(', ')}`);
+  const out = (state, extra = {}) => ({ ...base, notices, missing, ...extra, state });
+  const signup = open && !!whatsappSignupConfig(overview);
+  if (conn) {
+    const account = accountName(conn);
+    const calls = callsLine('whatsapp', conn);
+    if (!open) return out('off_with_connection', { account, why: SWITCHED_OFF_WHY });
+    const problem = connectionProblem('whatsapp', conn);
+    if (problem) {
+      const gone = ACCESS_GONE.test(str(conn.last_error)) || ['revoked', 'expired', 'needs_reconnect'].includes(str(conn.status).toLowerCase());
+      return out('needs_attention', { account, calls, why: gone ? WHATSAPP_PAGE.needsAttention : problem, canConnect: signup });
+    }
+    return out('connected', { account, calls });
+  }
+  if (!open) return out('unavailable', { why: UNAVAILABLE_WHY });
+  if (!signup) return out('signup_not_configured', { why: WHATSAPP_SIGNUP_NOT_CONFIGURED });
+  return out('not_connected', { canConnect: true });
 }
 
 // ---------- Zoom and Google Meet -------------------------------------------
@@ -396,3 +471,54 @@ export const MEETING_NOTES = {
   zoom: 'Schedule a Zoom call from an interview with Record in the cloud turned on, and its transcript comes in when the call ends. Transcripts need a paid Zoom plan with cloud recording and audio transcripts turned on; without a cloud recording, Zoom makes none.',
   google_meet: 'Schedule a Meet call from an interview; a transcript comes in after the call only if someone turned on transcription in it. Transcripts need a Google Workspace edition that includes Meet transcription.',
 };
+
+// ---------- Meet transcripts (D757 §2.12, #1926) ---------------------------
+
+/**
+ * Whether Axal may import this member's Meet transcripts, from the Calendar
+ * status read (`GET /api/calendar/google/status`, `meet_transcripts`):
+ *   granted     — their Google grant holds the transcript permission;
+ *   available   — the owner has switched import on, and they have not granted it;
+ *   not_set_up  — the owner has not (MEET_TRANSCRIPTS_ENABLED), so nothing can be granted.
+ * Anything else is null: unread, never a "no".
+ */
+export const MEET_TRANSCRIPT_STATES = ['granted', 'available', 'not_set_up'];
+
+export function meetTranscriptsState(status) {
+  const v = status?.meet_transcripts;
+  return MEET_TRANSCRIPT_STATES.includes(v) ? v : null;
+}
+
+export const MEET_ENGINE_LINE = 'Eadwyn writes a draft summary and suggests findings for your Validate modules; you accept each one.';
+
+export const MEET_TRANSCRIPT_COPY = {
+  not_set_up: "Importing Meet transcripts isn't set up on Axal yet. You can still hold the call: use the recorder in Axal during it, or paste the conversation afterwards.",
+  available: 'Google Meet calls are scheduled on your Google Calendar connection. Needs a Google Workspace plan with Meet transcripts, and transcripts turned on in the call.',
+  granted: 'Meet transcripts are imported into the interview after the call.',
+};
+
+export const ALLOW_MEET_LABEL = 'Allow transcript import';
+
+/** What a Meet surface says for a state, and whether it offers the button (only when `available`). */
+export function meetTranscriptsCopy(state) {
+  return { line: MEET_TRANSCRIPT_COPY[state] || '', engine: MEET_ENGINE_LINE, button: state === 'available' };
+}
+
+export const MEET_RETURN_WORDS = {
+  ok: 'Meet transcripts can now be imported.',
+  meet_scope_missing: 'Google did not grant transcript access. Try again, and tick the transcript permission.',
+};
+
+/**
+ * The banner after Google's round trip: the callback adds `meet=granted` to
+ * a transcript grant's `?google=connected`, and refuses one without the
+ * permission as `?google=error&reason=meet_scope_missing`. '' otherwise, so an
+ * ordinary Google connect never reads as a transcript grant.
+ */
+export function meetTranscriptsReturn(search) {
+  let q;
+  try { q = new URLSearchParams(typeof search === 'string' ? search : ''); } catch { return ''; }
+  if (q.get('google') === 'connected' && q.get('meet') === 'granted') return MEET_RETURN_WORDS.ok;
+  if (q.get('google') === 'error' && q.get('reason') === 'meet_scope_missing') return MEET_RETURN_WORDS.meet_scope_missing;
+  return '';
+}

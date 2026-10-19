@@ -14,6 +14,7 @@ import { readFileSync } from 'node:fs';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
+import { applyEngineSchema } from './_engine_schema.mjs';
 import sessions, { markCeiling } from '../src/routes/founder_validate_sessions.ts';
 import { sweepInterviewSessions, missingLine } from '../src/services/sessionSweeper.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
@@ -57,7 +58,9 @@ function fixture({ dayMicro = 50_000_000, monthMicro = 500_000_000 } = {}) {
   db.exec(readFileSync(new URL('../sql/migrations/453_interview_processing.sql', import.meta.url), 'utf8'));
   // 449's call refs: every stop closes the ones attached to its session (#1583).
   db.exec(readFileSync(new URL('../sql/migrations/449_interview_channels.sql', import.meta.url), 'utf8')
-    .split(';').filter((sql) => /interview_channel_refs/.test(sql) && /CREATE TABLE/.test(sql)).map((sql) => `${sql};`).join('\n'));
+    .split(';').filter((sql) => /interview_channel_refs|channel_threads \(/.test(sql) && /CREATE TABLE/.test(sql)).map((sql) => `${sql};`).join('\n'));
+  // D754 (#1893): deleteSession also deletes the session's chat consents and frees the chat that pointed at it.
+  db.exec(readFileSync(new URL('../sql/migrations/488_channel_consents.sql', import.meta.url), 'utf8'));
   // D658 (#1471): the receipt read also lists the structuring lines, which
   // live in `interview_structure_receipts`, beside 439's columns on 214/246's
   // `validate_proposals`, as they will in production.
@@ -69,6 +72,8 @@ function fixture({ dayMicro = 50_000_000, monthMicro = 500_000_000 } = {}) {
   db.prepare("UPDATE users SET founder_id = 400, role = 'exploring', spinout_lab_active = 1 WHERE id = 4").run();
   db.exec(`INSERT INTO projects VALUES (10, 'Venture', 100), (20, 'Lab venture', 400);
            INSERT INTO discovery_interviews (id, project_id, interviewee_name) VALUES (1, 10, 'Dana'), (2, 20, 'Sam');`);
+  // D757: the Validate engine's schema (487, 465, 453 and the re-scope's columns).
+  applyEngineSchema(db);
   for (const key of ['founder:free', 'other']) {
     db.prepare('INSERT INTO ai_licence_caps(licence_key, daily_microusd, monthly_microusd, recorded_by) VALUES (?, ?, ?, 1)')
       .run(key, dayMicro, monthMicro);

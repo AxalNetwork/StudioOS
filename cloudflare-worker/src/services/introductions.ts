@@ -127,6 +127,15 @@ export const INTRO_PACKS: Record<string, IntroPack> = {
     blurb: 'Firm-scale allocation for teams and funds.',
   },
 };
+/**
+ * D755 (#1915) — Introduction packs are no longer sold. With this off, nothing
+ * offers a pack: the 402 and `GET /credits` carry no buy path, `GET /packs`
+ * answers none, and the intent route answers 410 before any Stripe call.
+ * `INTRO_PACKS` and `isIntroPackKey` stay, because they label history, and a
+ * PaymentIntent minted before the switch still grants through the webhook.
+ */
+export const INTRO_PACKS_ON_SALE = false;
+
 export function isIntroPackKey(v: unknown): v is keyof typeof INTRO_PACKS {
   return typeof v === 'string' && Object.prototype.hasOwnProperty.call(INTRO_PACKS, v);
 }

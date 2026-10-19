@@ -28,6 +28,8 @@ export const connectorsApi = {
   // whether a teammate already connected this provider for that company.
   suggestions: (opts) => request('/connectors/suggestions', co(opts)),
   teammate: (key, opts) => request(`/connectors/${enc(key)}`, co(opts)),
+  // D753: one connector's page (description, tools, prompts, trust, details). Descriptive only; no connection.
+  page: (key) => request(`/connectors/directory/${enc(key)}`),
   sendRequest: (tool, use) => request('/connectors/requests', { method: 'POST', body: JSON.stringify({ tool, use }) }),
   connect: (data, opts) => request('/connectors/connect', { method: 'POST', body: JSON.stringify(data), inlinePaywall: true, ...co(opts) }),
   // The company is sealed into the sign-in's state at start, so a Build start sends the project's.

@@ -30,6 +30,12 @@ import {
   ensureIntegrationsSchema,
   getDescriptor,
   getProviderImpl,
+  readinessOf,
+  pageDescriptor,
+  CATEGORY_ORDER,
+  FIRST_PARTY_CARDS,
+  directoryKeyFor,
+  type PageDescriptor,
   type IntegrationRow,
   audienceFor,
   personalHqOnlyOffHq,
@@ -48,11 +54,12 @@ import {
 } from '../integrations/secrets';
 import { buildPkce, issueOauthState, consumeOauthState } from '../integrations/oauth';
 import { refuse } from '../util/refusal';
+import { MANAGED_PROVIDERS, PROVIDER_ENV_VARS, type ManagedProviderKey } from '../services/providerOauthKeys';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import { companyEnabled, enabledCompanyIds, projectEnabled, writesProjectData } from '../integrations/companyScope';
 import { hasScopeOverreach, validateConnectorSettings } from '../integrations/connectorRules';
 import { fedCounts } from '../integrations/fed';
-import { accessToken, accessibleRepositories, checkChoice, grantedPermissions, readProgress } from '../integrations/providers/github';
+import { accessToken, accessibleRepositories, checkChoice, grantedPermissions, githubInstallUrl, readProgress } from '../integrations/providers/github';
 
 const integrations = new Hono<{ Bindings: Env }>();
 
@@ -133,6 +140,85 @@ async function loadRow(env: Env, uid: string, userId: number): Promise<Integrati
   const row = await env.DB.prepare('SELECT * FROM integrations WHERE uid = ? AND user_id = ?')
     .bind(uid, userId).first<IntegrationRow>();
   return row || null;
+}
+
+// ─────────────────────────────────────────────── D753 W2 (#1878): connector pages
+
+/**
+ * The ten page fields every catalogue item carries (D753 W2 decision 2), each
+ * picked by name from `pageDescriptor`, never spread, so a field the page data
+ * gains later stays private until it is named here. `verified` is the page's
+ * record: a recorded live connect (D753 decision 7).
+ */
+function pageFields(page: PageDescriptor) {
+  return {
+    tagline: page.tagline,
+    made_by: { name: page.made_by.name },
+    service: { name: page.service.name, href: page.service.href },
+    sign_in: { kind: page.sign_in.kind, label: page.sign_in.label, key_help_href: page.sign_in.key_help_href },
+    added: page.added,
+    verified: page.verified_on !== null,
+    verified_on: page.verified_on,
+    read_only: page.trust.read_only,
+    page_key: page.page_key,
+    page_href: page.page_href,
+  };
+}
+
+/**
+ * The page body only `GET /directory/:key` serves (decision 4). Tools,
+ * prompts and the trust notice are rebuilt key by key: a tool's `calls` are
+ * source fragments the guard test checks, never published.
+ */
+function pageBody(page: PageDescriptor) {
+  return {
+    long_description: [...page.long_description],
+    tools: page.tools.map((t) => ({ name: t.name, label: t.label, access: t.access, what: t.what, lands_in: t.lands_in })),
+    prompts: page.prompts.map((x) => ({ name: x.name, ask: x.ask, proposes: x.proposes })),
+    prompts_reason: page.prompts_reason,
+    links: { help: page.links.help, developer_docs: page.links.developer_docs, support: page.links.support, privacy: page.links.privacy },
+    endpoints: { sign_in: page.endpoints.sign_in, api: page.endpoints.api },
+    trust: {
+      built_by: page.trust.built_by, reads: [...page.trust.reads], writes: [...page.trust.writes],
+      read_only: page.trust.read_only, moves_money: page.trust.moves_money, sentence: page.trust.sentence,
+    },
+  };
+}
+
+type Viewer = { role: string; hq: boolean };
+
+/**
+ * One catalogue entry, for `/available` and for the page read alike (decision
+ * 1): the public descriptor, the spec-named fields, D751's readiness, then the
+ * page fields, written last. No `already_connected`: that is the viewer's
+ * connection, which only `/available` reads.
+ */
+async function catalogueEntry(c: Context<{ Bindings: Env }>, user: User, p: ProviderDescriptor, viewer: Viewer) {
+  const lockedForUser = p.tier === 'free' ? false : !userMeetsTier(user, p.tier as 'growth' | 'studio');
+  // D751: whether Axal holds each OAuth connector's client; no field where it means nothing.
+  const r = await readinessOf(c.env, p);
+  const page = pageDescriptor(p, viewer);
+  if (!page) console.warn('[connectors] page_entry_missing', p.key);
+  return {
+    ...publicDescriptor(p, viewer),
+    // Spec-named fields (Task #8 / AN). Existing fields kept as
+    // back-compat aliases so the frontend keeps rendering during the
+    // FE migration window.
+    provider_name: p.key,
+    required_tier: p.tier,
+    icon_key: p.icon ?? null,
+    locked_for_user: lockedForUser,
+    // Legacy aliases — DO NOT remove until FE consumers migrate.
+    tier_locked: lockedForUser,
+    ...(r === undefined ? {} : { configured: r }),
+    ...(page ? pageFields(page) : {}),
+  };
+}
+
+/** LinkedIn's card: its facts (`FIRST_PARTY_CARDS`) and its page fields. Never in `items`. */
+function linkedinCard(viewer: Viewer) {
+  const page = pageDescriptor({ key: 'linkedin' }, viewer);
+  return { ...FIRST_PARTY_CARDS.linkedin, ...(page ? pageFields(page) : {}) };
 }
 
 function rowToPublic(row: IntegrationRow, credPreview: string | null, companyIds: number[] = []) {
@@ -229,30 +315,24 @@ integrations.get('/available', async (c) => {
     if (await c.env.DB.prepare('SELECT 1 AS connected FROM microsoft_oauth_tokens WHERE user_id = ?').bind(user.id).first()) connectedSet.add('microsoft_365');
   } catch { unreadableSources.push('microsoft_365'); }
   const viewer = { role: String(user.role || ''), hq: branchOf(c.env) === null };
-  const providers = REGISTRY.filter(p => audienceOf(c, user, p) !== 'none').map(p => {
-    const pub = publicDescriptor(p, viewer);
+  const listed = REGISTRY.filter(p => audienceOf(c, user, p) !== 'none');
+  const providers = await Promise.all(listed.map(async (p) => {
     const entityOnly = audienceOf(c, user, p) === 'entity';
-    const lockedForUser = p.tier === 'free' ? false : !userMeetsTier(user, p.tier as 'growth' | 'studio');
     return {
-      ...pub,
-      // Spec-named fields (Task #8 / AN). Existing fields kept as
-      // back-compat aliases so the frontend keeps rendering during the
-      // FE migration window.
-      provider_name: p.key,
-      required_tier: p.tier,
-      icon_key: p.icon ?? null,
-      locked_for_user: lockedForUser,
+      ...(await catalogueEntry(c, user, p, viewer)),
       // An entity connection is read from its own store, never the caller's rows.
       already_connected: entityOnly ? false : p.key === 'google_calendar' || p.key === 'microsoft_365'
         ? unreadableSources.includes(p.key) ? null : connectedSet.has(p.key)
         : connectionsReadable ? connectedSet.has(p.key) : null,
-      // Legacy aliases — DO NOT remove until FE consumers migrate.
-      tier_locked: lockedForUser,
     };
-  });
+  }));
   // Task #8 (AN) spec wants the catalogue under `items`. We also return
   // `providers` for back-compat with the frontend until it migrates.
-  return c.json({ ok: true, items: providers, providers, unreadable_sources: unreadableSources });
+  // D753 W2: the Discover order (the SPA counts each category itself) and LinkedIn's card.
+  return c.json({
+    ok: true, items: providers, providers, unreadable_sources: unreadableSources,
+    category_order: [...CATEGORY_ORDER], first_party: [linkedinCard(viewer)],
+  });
 });
 
 // ───────────────────────────────────────────────────────────────────── list mine
@@ -330,6 +410,25 @@ integrations.get('/suggestions', async (c) => {
   } catch {
     return c.json({ error: 'suggestions_unreadable', message: 'The module data could not be read.' }, 503);
   }
+});
+
+// D753 — one connector's page, descriptive only; above `/:key` with the other literal reads.
+integrations.get('/directory/:key', async (c) => {
+  const user = await requireAuth(c);
+  ensureRole(c, user);
+  const viewer = { role: String(user.role || ''), hq: branchOf(c.env) === null };
+  const k = directoryKeyFor(c.req.param('key'));
+  if (!k) return c.json({ error: 'unknown_provider' }, 404);
+  if (k.key === 'linkedin') {
+    const page = pageDescriptor({ key: 'linkedin' }, viewer);
+    if (!page) return c.json({ error: 'unknown_provider' }, 404);
+    return c.json({ ok: true, connector: { ...linkedinCard(viewer), ...pageBody(page) } });
+  }
+  const p = getDescriptor(k.key);
+  if (!p || audienceOf(c, user, p) === 'none') return c.json({ error: 'unknown_provider' }, 404);
+  const page = pageDescriptor(p, viewer);
+  if (!page) return c.json({ error: 'unknown_provider' }, 404);
+  return c.json({ ok: true, connector: { ...(await catalogueEntry(c, user, p, viewer)), ...pageBody(page) } });
 });
 
 integrations.post('/requests', async (c) => {
@@ -429,6 +528,40 @@ interface ConnectBody {
   oauth_state?: string;
 }
 
+/** The `coming_soon` refusal, the same from `/connect` and the OAuth start (D751). */
+function comingSoonBody(desc: ProviderDescriptor) {
+  return {
+    error: 'coming_soon',
+    message: `${desc.display_name} isn't available yet — join the waitlist to be notified.`,
+    notify_me_url: `/api/integrations/${desc.key}/notify-me`,
+  };
+}
+
+/**
+ * D751 — an OAuth connector Axal holds no client for. The sentence is true
+ * for everyone; an admin also gets the names the keys go under and, where
+ * the Integration keys console can hold them, where. Never a value.
+ */
+async function unconfiguredRefusal(c: Context<{ Bindings: Env }>, user: User, desc: ProviderDescriptor, raw?: unknown): Promise<Response> {
+  const name = desc.display_name;
+  const managed = (MANAGED_PROVIDERS as string[]).includes(desc.key);
+  const vars = managed ? PROVIDER_ENV_VARS[desc.key as ManagedProviderKey] : null;
+  // Zoom's names live with Zoom (env only); loaded here so this route does not register it.
+  const envVars = vars ? [vars.id, vars.secret]
+    : desc.key === 'zoom' ? [...(await import('../services/channels/zoom')).ZOOM_CLIENT_ENV_VARS] : null;
+  const extra: Record<string, unknown> = { provider: desc.key };
+  if (user.role === 'admin') {
+    if (managed) extra.admin_href = '/admin?tab=integration-keys';
+    if (envVars) extra.env_vars = envVars;
+  }
+  return refuse(c, 503, {
+    code: 'oauth_unconfigured',
+    message: `${name} isn't set up on Axal yet, so it can't be connected. Nothing was sent to ${name}.`,
+    raw,
+    extra,
+  });
+}
+
 integrations.post('/connect', async (c) => {
   await ensureIntegrationsSchema(c.env);
   const user = await requireAuth(c);
@@ -456,11 +589,7 @@ integrations.post('/connect', async (c) => {
     // Spec contract (Task #8 / AN): 503 + coming_soon + provider-scoped
     // notify_me_url. The 409 we used to return was wrong because the
     // resource isn't in conflict — it just isn't available yet.
-    return c.json({
-      error: 'coming_soon',
-      message: `${desc.display_name} isn't available yet — join the waitlist to be notified.`,
-      notify_me_url: `/api/integrations/${key}/notify-me`,
-    }, 503, { 'Retry-After': '86400' });
+    return c.json(comingSoonBody(desc), 503, { 'Retry-After': '86400' });
   }
 
   // Tier gate (founders only; admin/partner/investor/advisor bypass).
@@ -733,6 +862,8 @@ integrations.get('/:uid/repositories', async (c) => {
     return c.json({
       ok: true,
       available: await accessibleRepositories(token, granted.installations),
+      needs_install: granted.installations.length === 0,
+      install_url: githubInstallUrl(c.env),
       selected: Array.isArray(cfg.repositories) ? cfg.repositories : [],
       project_id: cfg.project_id ?? null,
     });
@@ -1255,6 +1386,8 @@ integrations.get('/oauth/:provider/start', async (c) => {
   if (!desc || desc.auth_type !== 'oauth2') return c.json({ error: 'oauth_not_supported' }, 404);
   const selectedCompany = await activeCompanyFor(c, user);
   if (!selectedCompany && writesProjectData(provider)) return c.json({ error: 'active_company_required' }, 400);
+  // D751: refused as /connect refuses it, before the plan gate and any state.
+  if (desc.status === 'coming_soon') return c.json(comingSoonBody(desc), 503, { 'Retry-After': '86400' });
   if (desc.tier !== 'free' && !userMeetsTier(user, desc.tier as 'growth' | 'studio')) {
     return c.json(tierUpsell(desc.tier as 'growth' | 'studio'), 402);
   }
@@ -1265,6 +1398,18 @@ integrations.get('/oauth/:provider/start', async (c) => {
       message: `${desc.display_name} OAuth flow is rolling out — please check back shortly.`,
       retry_after_seconds: 86400,
     }, 503, { 'Retry-After': '86400' });
+  }
+  // D751: an unset (or unreadable) client is refused before any sign-in state
+  // is written, so no state row is left that nobody can consume.
+  const ready = await readinessOf(c.env, desc);
+  if (ready === false) return await unconfiguredRefusal(c, user, desc);
+  if (ready === null) {
+    c.header('Retry-After', '60');
+    return refuse(c, 503, {
+      code: 'oauth_setup_unreadable',
+      message: `Axal couldn't check whether ${desc.display_name} is set up, so it can't be connected right now. Nothing was sent to ${desc.display_name}. Try again in a minute.`,
+      extra: { provider },
+    });
   }
   // PKCE + signed state. The state token is bound to (user, provider) and
   // single-use; we hand it to the provider as the OAuth `state` param so
@@ -1306,9 +1451,8 @@ integrations.get('/oauth/:provider/start', async (c) => {
     url = await impl.buildAuthorizeUrl(c, user, state);
   } catch (e) {
     const msg = (e as Error).message || '';
-    if (/_oauth_unconfigured/.test(msg)) {
-      return c.json({ error: 'oauth_unconfigured', provider, message: 'This integration is not yet configured on the server. Please contact your administrator.' }, 503);
-    }
+    // D751's backstop: `ready` said true and the client went missing since.
+    if (/_oauth_unconfigured/.test(msg)) return await unconfiguredRefusal(c, user, desc, msg);
     throw e;
   }
   return c.json({ ok: true, authorize_url: url, state, pkce_method: pkce.method });
@@ -1464,9 +1608,11 @@ integrations.get('/oauth/:provider/callback', async (c) => {
     // could otherwise reflect attacker-controlled content back into the
     // UI's query string.
     const rawMsg = (e as Error).message || 'callback_failed';
-    const code = /^[a-z0-9_]+$/i.test(rawMsg.split(/[:\s]/)[0])
-      ? rawMsg.split(/[:\s]/)[0].slice(0, 64)
-      : 'callback_failed';
+    // D751: a client that went missing mid-flow reads as not configured, not refused.
+    const code = /_oauth_unconfigured/.test(rawMsg) ? 'not_configured'
+      : /^[a-z0-9_]+$/i.test(rawMsg.split(/[:\s]/)[0])
+        ? rawMsg.split(/[:\s]/)[0].slice(0, 64)
+        : 'callback_failed';
     return c.redirect(returnQuery(consumed?.extra, `oauth=error&provider=${encodeURIComponent(provider)}&reason=${encodeURIComponent(code)}`));
   }
 });

@@ -260,6 +260,8 @@ export interface Env {
   // D655 — the StudioOS GitHub App user-authorization client (Connectors).
   GITHUB_APP_CLIENT_ID?: string;
   GITHUB_APP_CLIENT_SECRET?: string;
+  // D655 follow-up (#1884): public App slug; empty or invalid means no install link.
+  GITHUB_APP_SLUG?: string;
   // D542 — GitHub logins whose bounty labels the webhook acts on (services/bugBounties.ts).
   BOUNTY_GRANTERS?: string;
   PERSONA_API_KEY?: string;

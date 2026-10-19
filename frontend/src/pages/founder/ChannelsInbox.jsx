@@ -6,6 +6,7 @@ import { Unreadable } from '../../ui';
 import { useChannelsOverview } from '../account/ChannelsGroup';
 import { CHANNELS_HREF, MESSAGING_PROVIDERS } from '../account/channelsModel';
 import { ProviderTag } from './InterviewChannels';
+import { CHAT_CONSENT_METHODS, canAttest, chatConsentOf, consentLine, windowClosedSentence } from './chatConsent.js';
 import {
   THREAD_TABS, assignedSentence, clientKeyFor, composerState, contactLabel, interviewOptions, keepKeyAfter, messageView,
   replyFailureText, replyOutcome, sessionHref, threadItems, threadRow,
@@ -236,6 +237,54 @@ export function AssignControls({ thread, venture, api = channelsApi, onAssigned,
   );
 }
 
+/**
+ * D754 (#1980) §4, §5: a chat that waits for consent. Its state, "Ask for
+ * consent" (Axal's notice in the chat, only while its 24-hour window is open
+ * and the Worker allows another), and the member's word once the notice was
+ * delivered. The Worker's refusals are shown in its words.
+ */
+export function ThreadConsent({ thread, consent: raw, api = channelsApi, onChanged }) {
+  const [state, setState] = useState({ busy: false, error: '', note: '' });
+  const consent = chatConsentOf({ consent: raw });
+  if (!consent.required) return null;
+  const name = (thread.interviewee_name || thread.contact_name || '').trim();
+  const line = consentLine(consent, name, { provider: thread.provider });
+  const linked = thread.status === 'assigned';
+  const act = async (fn, note) => {
+    if (state.busy) return;
+    setState({ busy: true, error: '', note: '' });
+    try { const r = await fn(); setState({ busy: false, error: '', note: r?.ok === null ? (r.message || '') : note }); onChanged?.(); }
+    catch (e) { setState({ busy: false, error: e?.message || 'That could not be done. Try again.', note: '' }); }
+  };
+  const open = consent.status === 'not_asked' || consent.status === 'requested';
+  return (
+    <div className="space-y-1.5 rounded-md border border-axal-hairline p-3 dark:border-gray-800" data-testid="thread-consent" data-status={consent.status}>
+      <p className="m-0 text-[12.5px] font-semibold text-gray-900 dark:text-gray-100" data-testid="thread-consent-line">{line.text}</p>
+      {open && !linked && <p className={NOTE}>Add this chat to an interview first. Axal asks for consent once it is linked.</p>}
+      {open && linked && (
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" className={PRIMARY} disabled={state.busy || !consent.can_request || !consent.window_open}
+            onClick={() => act(() => api.requestConsent(thread.uid), 'Axal asked in the chat.')} data-testid="button-ask-consent">Ask for consent</button>
+        </div>
+      )}
+      {open && !consent.window_open && <p className="m-0 text-[12px] text-amber-800 dark:text-amber-300" data-testid="thread-consent-window">{windowClosedSentence(name, thread.provider)}</p>}
+      {linked && canAttest(consent) && (
+        <div className="space-y-1" data-testid="thread-consent-attest">
+          <p className={NOTE}>{`${name || 'They'} already agreed? Say how:`}</p>
+          <div className="flex flex-wrap gap-1.5">
+            {CHAT_CONSENT_METHODS.map(([method, label]) => (
+              <button key={method} type="button" className={SMALL} disabled={state.busy}
+                onClick={() => act(() => api.attestConsent(thread.uid, method), 'Consent recorded.')} data-testid={`button-attest-${method}`}>{label}</button>
+            ))}
+          </div>
+        </div>
+      )}
+      {state.note && <p role="status" className="m-0 text-[12px] text-emerald-700 dark:text-emerald-300">{state.note}</p>}
+      {state.error && <p role="alert" className="m-0 text-[12px] font-semibold text-red-700 dark:text-red-400">{state.error}</p>}
+    </div>
+  );
+}
+
 /** One conversation: its messages, what can be done with it, and the reply box. */
 export function ThreadPanel({ uid, api = channelsApi, venture, onChanged, makeKey }) {
   const [data, setData] = useState(undefined);
@@ -243,7 +292,7 @@ export function ThreadPanel({ uid, api = channelsApi, venture, onChanged, makeKe
   const [error, setError] = useState('');
   const [assigned, setAssigned] = useState(null);
   const load = useCallback(() => {
-    api.thread(uid).then((r) => setData(r?.thread ? { thread: r.thread, messages: Array.isArray(r.messages) ? r.messages : [] } : null), () => setData(null));
+    api.thread(uid).then((r) => setData(r?.thread ? { thread: r.thread, messages: Array.isArray(r.messages) ? r.messages : [], consent: r.consent ?? null } : null), () => setData(null));
   }, [api, uid]);
   useEffect(() => { setData(undefined); setAssigned(null); setError(''); load(); }, [load]);
   if (data === undefined) return <div className={`${TONE} p-4 ${NOTE}`}>Reading the conversation…</div>;
@@ -281,6 +330,7 @@ export function ThreadPanel({ uid, api = channelsApi, venture, onChanged, makeKe
           {href && <Link to={href} state={{ interview: { id: assigned.interview_id, interviewee_name: assigned.label } }} className="font-semibold underline">Open the session</Link>}
         </p>
       )}
+      {thread.status !== 'ignored' && <ThreadConsent thread={thread} consent={data.consent} api={api} onChanged={load} />}
       {thread.status === 'pending' && !messages.length && <p className={NOTE}>No message is waiting in this conversation.</p>}
       <MessageList messages={messages} contact={thread.contact_name} threadUid={thread.uid} api={api} onRetried={load} />
       {thread.status !== 'ignored' && venture && (

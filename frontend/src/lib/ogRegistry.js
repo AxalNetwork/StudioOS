@@ -328,6 +328,14 @@ const ROUTES = [
     section: 'company',
   },
   {
+    path: '/privacy/interviews',
+    title: 'When a founder records you',
+    description:
+      'What is kept when a founder using Axal VC records an interview with you, why, who can read it, how long it is kept, and how to say no or ask for deletion.',
+    type: 'website',
+    section: 'company',
+  },
+  {
     path: '/risk-disclosures',
     title: 'Risk Disclosures & Disclaimers',
     description:
