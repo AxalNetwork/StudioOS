@@ -63,9 +63,11 @@ import {
   MAX_PROPOSALS_PER_RUN, listPending, priorPayloads, type ProposalKind,
 } from './_founder_validate_proposals';
 import { refuseReason } from '../services/fills/types';
+import { neverFillReason, neverFillMessage } from '../services/fills/neverFill';
 import { run as aiRun, audioMinutesFromBytes } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { currentDecision } from '../services/verdict';
+import { pageFromPath, railFor, refuseAssistOff } from '../util/railContext';
 
 const founderValidate = new Hono<{ Bindings: Env }>();
 
@@ -650,12 +652,15 @@ founderValidate.post('/propose/:projectId', async (c) => {
     userId: s.user.id,
     model,
     surface: AI_SURFACE.validate,
+    // D765: the fill's page (its surface's workspace) and the fill as the option.
+    rail: railFor(c, { page: pageFromPath(spec.surface, 'validate'), option: `fill:${kind}` }, `project:${s.project.id}`),
     systemPrompt: spec.prompt,
     messages: [{ role: 'user', content: gathered.facts }],
     maxTokens: 500,
     temperature: 0.3,
   });
 
+  if (r.refusal === 'assist_off') return refuseAssistOff(c);
   // `run` never throws — a spent budget and an unreachable model both arrive
   // as refusals with their reason intact, and both must keep it.
   if (!r.ok) {
@@ -683,6 +688,11 @@ founderValidate.post('/propose/:projectId', async (c) => {
     // must not be able to hold any of those, whatever a parser was written to do.
     const why = refuseReason(spec, p);
     if (why) { refused.push(why); continue; }
+    // THE NEVER-FILL REGISTRY (D777). A proposal aimed at a signature, a payment
+    // amount, an identity number or an attestation is not stored at all, so no
+    // band can ever draw an Accept button over one.
+    const t = spec.target(p.payload, p.targetRef, ctx);
+    if (neverFillReason(`${t.table}.${t.column}`)) { refused.push('a field Eadwyn never fills'); continue; }
     const ins = await c.env.DB.prepare(
       `INSERT INTO validate_proposals
          (project_id, kind, payload_json, model, task, created_by,
@@ -723,6 +733,16 @@ founderValidate.get('/proposals/:projectId', async (c) => {
   const s = await scope(c, Number(c.req.param('projectId')), canReadBoard);
   if (s instanceof Response) return s;
   const rows = await listPending(c.env, s.project.id);
+  // The field each proposal would fill, as `table.column` (D777), so the band
+  // can check it against the SPA's never-fill registry before it draws Accept.
+  // Null for a kind that has left the registry.
+  const fieldOf = (p: { id: number; kind: string; payload: any }): string | null => {
+    const spec = fillKind(p.kind);
+    if (!spec) return null;
+    const ref = String(rows.find((r) => r.id === p.id)?.target_ref || '');
+    const t = spec.target(p.payload, ref, { env: c.env, user: s.user, projectId: s.project.id });
+    return `${t.table}.${t.column}`;
+  };
   return json({
     proposals: rows.map((row) => ({
       id: row.id,
@@ -737,7 +757,7 @@ founderValidate.get('/proposals/:projectId', async (c) => {
         try { return row.citation_json ? JSON.parse(row.citation_json) : null; } catch { return null; }
       })(),
       payload: (() => { try { return JSON.parse(row.payload_json); } catch { return null; } })(),
-    })).filter((p) => p.payload !== null),
+    })).filter((p) => p.payload !== null).map((p) => ({ ...p, field: fieldOf(p) })),
     // THE BAND'S COPY COMES FROM THE REGISTRY, with the list that needs it.
     //
     // `ValidateProposals.jsx` held its own `COPY` map, hardcoded to the two kinds,
@@ -855,6 +875,21 @@ founderValidate.post('/proposals/:id/accept', async (c) => {
   const applyPayload = editedValue && spec.editableField
     ? { ...payload, [spec.editableField]: editedValue }
     : payload;
+
+  // THE NEVER-FILL REGISTRY, AGAIN, BEFORE ANYTHING IS WRITTEN (D777). The
+  // propose route already refuses to store such a proposal; this catches one
+  // stored before the registry listed its field, and refuses rather than reverts
+  // to pending, because it can never become acceptable.
+  const fixed = spec.target(applyPayload, String(row.target_ref || ''), {
+    env: c.env, user: s.user, projectId: row.project_id,
+  });
+  const field = `${fixed.table}.${fixed.column}`;
+  if (neverFillReason(field)) {
+    await c.env.DB.prepare(
+      "UPDATE validate_proposals SET status = 'discarded' WHERE id = ?",
+    ).bind(id).run();
+    return json({ refusal: 'never_fill', detail: neverFillMessage(field) }, 422);
+  }
 
   try {
     const applied = await spec.apply(
@@ -1068,6 +1103,8 @@ founderValidate.post('/interviews/:id/transcribe', async (c) => {
     task: 'transcribe',
     userId: s.user.id,
     surface: AI_SURFACE.validateInterviews,
+    // D765: saving, which the switch never refuses; recorded with its page and interview.
+    rail: railFor(c, { page: 'validate', option: 'transcribe:interview' }, `interview:${id}`),
     audio: bytes,
     // From the BYTES, not from the duration the client reported.
     audioMinutes: audioMinutesFromBytes(Number(row.recording_size_bytes || bytes.byteLength)),

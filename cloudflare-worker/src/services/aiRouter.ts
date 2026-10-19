@@ -69,6 +69,11 @@ export type TaskClass =
   | 'structure_interview'
   // D685 §5.10 — StudioOS's own summary of a session, every sentence cited.
   | 'summarise_interview'
+  // D766 (#2094) — system calls that used to call env.AI.run directly: the
+  // monitoring summary, and the X post image screen and alt text.
+  | 'ops_summary'
+  | 'image_screen'
+  | 'image_alt_text'
   // D764 (#2089) — the rail's fourteen kinds of work, one task each. The
   // page's row in `ai/railMatrix.json` names the models a member may pick;
   // the entries below are each kind's default and its alternates.
@@ -110,7 +115,22 @@ export type RefusalReason =
   // D761 PR 2: the run's images, rerank or translation are malformed (too
   // many images, a URL instead of a data URI, no target language). Refused
   // before the guard, the hold or any model; nothing is charged.
-  | 'invalid_input';
+  | 'invalid_input'
+  // D765 (#2090): the member turned AI assistance off on the page the run was
+  // asked from. Refused before the hold, with no usage row: nothing ran.
+  | 'assist_off';
+
+/**
+ * D765 (#2090) — where a member's run was asked from: the rail's page (D768's
+ * page key; until it lands, the rail's workspace), the option on it, and the
+ * record it is about (`type:id`). `run()` writes them to the log row and
+ * checks the page's switch against them.
+ */
+export interface RailContext {
+  page: string;
+  option?: string | null;
+  record?: string | null;
+}
 
 export interface RunOptions {
   task: TaskClass;
@@ -181,6 +201,11 @@ export interface RunOptions {
   // D761 PR 4: an image drawn from `text` (the prompt) by an image model; the
   // result carries `image`. The size and steps are clamped to the model's range.
   draw?: shapes.DrawInput;
+  // D765 (#2090): the rail context of a MEMBER's run. `run()` copies it into
+  // `railPage`, `railOption` and `recordRef`, and refuses `assist_off` when the
+  // member turned AI assistance off on that page. Every member call passes it
+  // (rail_run_path_d765.test.ts lists them); a system call does not.
+  rail?: RailContext;
   // D763 (#2020): the text the MEMBER typed or supplied for this run (typed
   // text, the page's text, an upload's text), which the guard checks in full
   // before the model is called. Absent, it is every message the run sends
@@ -214,6 +239,39 @@ export function normaliseSurface(value: unknown): string | null {
 const RAIL_KEY_RE = /^[A-Za-z0-9/_.:-]{1,160}$/;
 function railKey(value: unknown): string | null {
   return typeof value === 'string' && RAIL_KEY_RE.test(value.trim()) ? value.trim() : null;
+}
+/**
+ * D765: a rail PAGE may also hold spaces, `&` and `·`, because the rail's
+ * workspaces ("Perks & Products") and D720's page keys ("Founder · Validate")
+ * do. Option and record keys keep `RAIL_KEY_RE`.
+ */
+const RAIL_PAGE_RE = /^[\p{L}\p{N} &·/_.:-]{1,160}$/u;
+export function railPageKey(value: unknown): string | null {
+  return typeof value === 'string' && RAIL_PAGE_RE.test(value.trim()) ? value.trim() : null;
+}
+export function railOptionKey(value: unknown): string | null { return railKey(value); }
+
+/** D765: the refusal's words, which every route answers with 403 `assist_off`. */
+export const ASSIST_OFF_MESSAGE = 'AI assistance is off on this page.';
+
+/**
+ * D765: whether the member turned AI assistance off on `page`: migration
+ * 465's mode row (`task = ''`) for the page, lower-cased as the rail writes
+ * it, holds 'manual'. No row is on (D720 §6). A database without the table
+ * (a dev or test database before 465) has no switch to read, so it is on;
+ * any other read failure throws, and `run()` refuses rather than guess.
+ */
+export async function assistOff(env: Env, userId: number, page: string): Promise<boolean> {
+  const section = page.trim().toLowerCase();
+  try {
+    const row = await env.DB.prepare(
+      "SELECT mode FROM ai_rail_preferences WHERE user_id = ? AND section = ? AND task = '' LIMIT 1",
+    ).bind(userId, section).first<{ mode: string | null }>();
+    return row?.mode === 'manual';
+  } catch (e) {
+    if (/no such table/i.test(String((e as Error)?.message ?? e))) return false;
+    throw e;
+  }
 }
 
 /**
@@ -534,6 +592,8 @@ export function audioMinutesFromBytes(bytes: number): number {
 // deliberate second step rather than a side effect of this one.
 const SMALL_LLAMA = '@cf/meta/llama-3.1-8b-instruct-fp8';
 const MID_LLAMA   = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+// D766 — the vision model for the system's image calls (D761 PR 2's content parts).
+const VISION_SCOUT = '@cf/meta/llama-4-scout-17b-16e-instruct';
 
 export const ROUTE: Record<TaskClass, RouteEntry> = {
   safety:       { provider: 'workers-ai', model: '@cf/meta/llama-guard-3-8b' },
@@ -719,6 +779,11 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   },
   sentiment:    { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA], cacheTtlSec: 30 * 86400 },
   embed:        { provider: 'workers-ai', model: '@cf/baai/bge-base-en-v1.5', isEmbed: true,  cacheTtlSec: 30 * 86400 },
+  // D766 (#2094) — system calls (userId 0): logged at cost, charged to no member.
+  // The monitoring summary keeps the model it called directly.
+  ops_summary:  { provider: 'workers-ai', model: SMALL_LLAMA },
+  image_screen: { provider: 'workers-ai', model: VISION_SCOUT },
+  image_alt_text: { provider: 'workers-ai', model: VISION_SCOUT },
   paraphrase:   { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
   // High-stakes synthesis (Task #2 AU admin publication summaries,
   // dd synthesis). Task #31: Anthropic removed from production. Both
@@ -1050,7 +1115,7 @@ async function recordUsage(env: Env, who: UsageWho, usage: UsageMeta, refusal: R
     refusal,
     charged,
     charge.reservationUid ?? null,
-    railKey(who.railPage),
+    railPageKey(who.railPage),
     railKey(who.railOption),
     railKey(who.recordRef),
     charge.units ? JSON.stringify(charge.units) : null,
@@ -1496,7 +1561,11 @@ export function budgetRefusalMessage(refusal: string): string {
     : 'The included AI allowance and top-up balance cannot cover this run. Add tokens to continue.';
 }
 
-export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
+export async function run(env: Env, input: RunOptions): Promise<RunResult> {
+  // D765: a member's rail context is what the log row records.
+  const opts: RunOptions = input.rail
+    ? { ...input, railPage: input.rail.page, railOption: input.rail.option ?? undefined, recordRef: input.rail.record ?? undefined }
+    : input;
   const route = ROUTE[opts.task];
   const startedAt = Date.now();
 
@@ -1523,6 +1592,31 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
   // list months later would otherwise run as something else and report
   // success, and they would read a rate on screen for a model that did not
   // run. A refusal names the problem and the rail clears the preference.
+  // ---- The page's switch (D765, D720 §6) -------------------------------
+  // Before the cache, the hold and the guard, and with no usage row: nothing
+  // ran and nothing is held or charged. Transcribing a member's own recording
+  // is saving ("Your work saves as usual"), so the switch never refuses it.
+  if (opts.rail && !route.isAudio) {
+    let off: boolean;
+    try { off = await assistOff(env, opts.userId, opts.rail.page); }
+    catch {
+      const usage: UsageMeta = {
+        task: opts.task, model: route.model, latency_ms: 0,
+        prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0,
+        fallback_used: false, cached: false, safety_score: null,
+      };
+      return { ok: false, refusal: 'misconfigured', error: 'Unreadable: whether AI assistance is on for this page could not be checked. Nothing was run.', usage };
+    }
+    if (off) {
+      const usage: UsageMeta = {
+        task: opts.task, model: route.model, latency_ms: 0,
+        prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0,
+        fallback_used: false, cached: false, safety_score: null,
+      };
+      return { ok: false, refusal: 'assist_off', error: ASSIST_OFF_MESSAGE, usage };
+    }
+  }
+
   const offered = route.alternates ?? [];
   if (opts.model && !offered.includes(opts.model)) {
     const usage: UsageMeta = {

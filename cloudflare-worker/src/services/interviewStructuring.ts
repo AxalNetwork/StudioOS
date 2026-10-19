@@ -30,7 +30,7 @@
  * level itself.
  */
 import type { Env } from '../types';
-import { run as aiRun } from './aiRouter';
+import { run as aiRun, type RailContext } from './aiRouter';
 import { AI_SURFACE } from './aiSurfaces';
 import { normPhrase } from './painGroups';
 import type { ModuleSlug } from './cycleValidate';
@@ -522,6 +522,8 @@ export async function structureTranscript(
     context: StructureContext;
     step: 'structured' | 're_structured';
     maxChars?: number;
+    // D765: the press's page, option and record; Validate's placing when absent.
+    rail?: RailContext;
   },
 ): Promise<StructureOutcome> {
   const parts = chunkSegments(opts.segments, opts.maxChars);
@@ -540,6 +542,7 @@ export async function structureTranscript(
         model: opts.model,
         // Every structuring run is asked from Validate's interviews (D552).
         surface: AI_SURFACE.validateInterviews,
+        rail: opts.rail ?? { page: 'validate', option: 'place:interview' },
         systemPrompt: `${passPrompt(pass)}\n\n${contextLines(opts.context)}`,
         messages: [{
           role: 'user',
@@ -679,7 +682,7 @@ export type AskOutcome =
  */
 export async function askTranscript(
   env: Env,
-  opts: { userId: number; model?: string; segments: readonly Segment[]; question: string; maxChars?: number },
+  opts: { userId: number; model?: string; segments: readonly Segment[]; question: string; maxChars?: number; rail?: RailContext },
 ): Promise<AskOutcome> {
   const parts = chunkSegments(opts.segments, opts.maxChars ?? 24000);
   const refused = transcriptLimit(opts.segments, parts.length);
@@ -693,6 +696,7 @@ export async function askTranscript(
       userId: opts.userId,
       model: opts.model,
       surface: AI_SURFACE.validateInterviews,
+      rail: opts.rail ?? { page: 'validate', option: 'ask:transcript' },
       systemPrompt: ASK_PROMPT,
       messages: [{
         role: 'user',
@@ -880,6 +884,7 @@ export async function summariseTranscript(
   opts: {
     userId: number; model?: string; segments: readonly Segment[]; step: 'summarised' | 're_summarised';
     maxChars?: number; mode?: 'call' | 'thread';
+    rail?: RailContext;
   },
 ): Promise<SummaryOutcome> {
   const parts = chunkSegments(opts.segments, opts.maxChars ?? 24000);
@@ -893,6 +898,7 @@ export async function summariseTranscript(
       userId: opts.userId,
       model: opts.model,
       surface: AI_SURFACE.validateInterviews,
+      rail: opts.rail ?? { page: 'validate', option: 'summarise:interview' },
       systemPrompt: opts.mode === 'thread' ? THREAD_SUMMARY_PROMPT : SUMMARY_PROMPT,
       messages: [{
         role: 'user',

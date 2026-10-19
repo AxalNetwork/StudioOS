@@ -14,6 +14,8 @@
  */
 import type { Env } from '../types';
 import { SEARCH_INDEX_MODEL, searchIndexAccepts } from './ai/shapes';
+import { run as aiRun } from './aiRouter';
+import { AI_SURFACE } from './aiSurfaces';
 
 // D761 PR 2: the one model whose vectors `axal-search` holds. A rail's
 // embedding (bge-m3, EmbeddingGemma, …) is never written here: the index
@@ -71,10 +73,13 @@ export async function embedText(env: Env, text: string): Promise<number[] | null
   const input = clampText(text);
   if (!input) return null;
   try {
-    const out: any = await env.AI.run(EMBED_MODEL, { text: [input] });
-    const v = out?.data?.[0];
-    if (!Array.isArray(v) || v.length !== 768) {
-      console.error('embedText: unexpected vector shape', { len: v?.length });
+    // D766 (#2094): through the router as a system call (userId 0), so the
+    // embedding is logged at cost and cached; charged to no member. The `embed`
+    // task's model is the index's, and a vector from any other is refused.
+    const out = await aiRun(env, { task: 'embed', userId: 0, text: input, surface: AI_SURFACE.searchIndex });
+    const v = out.ok ? out.embedding : null;
+    if (!v || !searchIndexAccepts(out.usage.model, v)) {
+      console.error('embedText: unexpected vector shape', { len: Array.isArray(v) ? v.length : null });
       return null;
     }
     return v;

@@ -26,11 +26,12 @@ import { requireAuth } from '../auth';
 import { recordCompositionFills } from '../services/fills/provenance';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import { projectInActiveCompany } from '../services/tenancyScope';
-import { run as aiRouterRun } from '../services/aiRouter';
+import { run as aiRouterRun, type RailContext } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { ingestContact } from './contacts';
 import { bindingKey } from '../util/schemaBootstrap';
 import { refuse } from '../util/refusal';
+import { railFor } from '../util/railContext';
 
 const brand = new Hono<{ Bindings: Env }>();
 
@@ -435,6 +436,7 @@ async function aiTemplateContent(
   name: string,
   sector: string | null,
   description: string,
+  rail?: RailContext,
 ): Promise<{
   name: string; cta_text: string; headline: string; subheadline: string;
   tagline: string; content: Record<string, any>;
@@ -462,6 +464,8 @@ async function aiTemplateContent(
       task: 'brand_autofill',
       userId: userId || 0,
       surface: AI_SURFACE.buildBrand,
+      // D765: off on this page, the run is refused and the heuristic answers.
+      rail,
       systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
       temperature: 0.7,
@@ -1119,7 +1123,7 @@ function heuristicTaglines(name: string, description: string, audience: string, 
   return bank.map((s) => s.replace(/\$\{name\}/g, name).replace(/\$\{description\}/g, d));
 }
 
-async function aiPalette(env: Env, userId: number, description: string, sector: string | null, seedColor?: string | null): Promise<Record<string, string> | null> {
+async function aiPalette(env: Env, userId: number, description: string, sector: string | null, seedColor?: string | null, rail?: RailContext): Promise<Record<string, string> | null> {
   try {
     const systemPrompt = 'You are a colour strategist. Always return ONLY valid minified JSON, no prose, no markdown fences.';
     const userPrompt = `Suggest a 5-colour palette for a startup.
@@ -1133,6 +1137,7 @@ Rules: all values must be hex; background must be light enough for dark text; in
       task: 'brand_palette',
       userId: userId || 0,
       surface: AI_SURFACE.buildBrand,
+      rail,
       systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
       temperature: 0.8,
@@ -1152,7 +1157,7 @@ Rules: all values must be hex; background must be light enough for dark text; in
   }
 }
 
-async function aiTaglines(env: Env, userId: number, name: string, description: string, audience: string, tone: string, marketAngle: string): Promise<string[] | null> {
+async function aiTaglines(env: Env, userId: number, name: string, description: string, audience: string, tone: string, marketAngle: string, rail?: RailContext): Promise<string[] | null> {
   try {
     const systemPrompt = 'You are a startup copywriter. Always return ONLY valid minified JSON, no prose, no markdown fences.';
     const userPrompt = `Write 6 tagline candidates for a startup.
@@ -1168,6 +1173,7 @@ Rules: each tagline <= 12 words; varied angles; no emojis.`;
       task: 'brand_taglines',
       userId: userId || 0,
       surface: AI_SURFACE.buildBrand,
+      rail,
       systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
       temperature: 0.9,
@@ -1195,7 +1201,7 @@ brand.post('/landing/autofill', async (c) => {
   const sector = body?.sector ? String(body.sector) : null;
   const requested = String(body?.template || '').trim();
   const key = (TEMPLATE_KEYS as readonly string[]).includes(requested) ? (requested as TemplateKey) : 'minimal';
-  const ai = await aiTemplateContent(c.env, user.id, key, name, sector, description);
+  const ai = await aiTemplateContent(c.env, user.id, key, name, sector, description, railFor(c, { page: 'build', option: 'fill:brand/landing' }));
   if (ai) return c.json({ ...ai, ai_generated: true });
   const hero = heuristicHeroCopy(name, sector, description);
   return c.json({
@@ -1279,7 +1285,7 @@ brand.post('/palette/suggest', async (c) => {
   if (description.length < 4) return c.json({ error: 'description too short' }, 400);
   const sector = body?.sector ? String(body.sector) : null;
   const seed = cleanHex(body?.seed_color);
-  const ai = await aiPalette(c.env, user.id, description, sector, seed);
+  const ai = await aiPalette(c.env, user.id, description, sector, seed, railFor(c, { page: 'build', option: 'draft:brand/palette' }));
   const palette = ai || heuristicPalette(description, seed);
   const warnings: string[] = [];
   if (contrastRatio(palette.ink, palette.background) < 4.5) {
@@ -1314,7 +1320,7 @@ brand.post('/tagline/suggest', async (c) => {
   const tone = String(body?.tone || '').trim();
   const marketAngle = String(body?.market_angle || '').trim();
   if (!audience || !tone || !marketAngle) return c.json({ error: 'audience, tone, and market_angle required' }, 400);
-  const ai = await aiTaglines(c.env, user.id, name, description, audience, tone, marketAngle);
+  const ai = await aiTaglines(c.env, user.id, name, description, audience, tone, marketAngle, railFor(c, { page: 'build', option: 'draft:brand/taglines' }));
   const taglines = ai || heuristicTaglines(name, description, audience, tone, marketAngle);
   return c.json({ taglines: taglines.slice(0, 6), ai_generated: !!ai });
 });
