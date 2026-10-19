@@ -13,10 +13,18 @@
  * Consent comes one of two ways (D754 §4): the interviewee's own Yes on
  * Axal's notice, asked in the chat, or the member's word, which the Worker
  * accepts only once the notice reached the chat.
+ *
+ * TELEGRAM (D756 §1.5, #1981). Only the interviewee's own YES counts: there
+ * is no member's word (ruling 6). The member asks from Axal, which needs the
+ * bot's reply right and the 24-hour window, or copies the notice into the
+ * chat themselves; the Worker builds that notice (`notice_text`), never this file.
  */
 
 const APP = { whatsapp: 'WhatsApp', telegram: 'Telegram' };
 export const appName = (provider) => APP[provider] || 'the chat';
+
+/** D756 ruling 6: the member's word stands in for the interviewee's on WhatsApp only. */
+export const memberWordAllowed = (provider) => provider === 'whatsapp';
 
 /** The member's word: the recorder's methods without "In the app" (`MEMBER_CONSENT_METHODS`). */
 export const CHAT_CONSENT_METHODS = [
@@ -45,6 +53,9 @@ export function chatConsentOf(thread) {
       delivered_at: c.delivered_at || null,
       answered_at: c.answered_at || null,
       withdrawn_at: c.withdrawn_at || null,
+      requested_at: c.requested_at || null,
+      // D756 §1.5 (b): the notice the member may paste, as the Worker wrote it; null when it sends none.
+      notice_text: typeof c.notice_text === 'string' && c.notice_text.trim() ? c.notice_text : null,
     };
   }
   if (thread?.consent_status == null) return { required: false };
@@ -53,6 +64,7 @@ export function chatConsentOf(thread) {
   return {
     required: true, status: STATUSES.has(s) ? s : 'not_asked', window_open: thread.reply_window_open === true,
     can_request: false, method: null, source: null, delivered_at: null, answered_at: null, withdrawn_at: null,
+    requested_at: null, notice_text: null,
   };
 }
 
@@ -64,13 +76,27 @@ export function windowClosedSentence(name, provider = 'whatsapp') {
   return `${who} last wrote more than 24 hours ago, and ${app} only lets Axal write within 24 hours of their last message. Ask ${them} to send you a message from your ${app} Business app, then ask again.`;
 }
 
-/** The two ways in Record a Session, with their words. `ask` is offered only with the window open. */
+/**
+ * The two ways in Record a Session, with their words. `ask` is offered only
+ * with the window open. Telegram has no "already agreed" (ruling 6).
+ */
 export function consentChoices(name, provider = 'whatsapp') {
   const who = String(name || '').trim() || 'They';
+  if (provider === 'telegram') return { ask: { value: 'ask', label: 'Ask for consent in Telegram' }, agreed: null };
   return {
     ask: { value: 'ask', label: `Ask ${String(name || '').trim() || 'them'} in ${appName(provider)}` },
     agreed: { label: `${who} already agreed`, methods: CHAT_CONSENT_METHODS.map(([value, label]) => ({ value, label })) },
   };
+}
+
+/**
+ * D756 §1.5: why Axal cannot send its notice in a Telegram chat now, so the
+ * member copies it instead. Null when it can.
+ */
+export function noticeBlocked(thread, consent) {
+  if (thread?.can_reply === false) return "The bot isn't allowed to reply in this chat";
+  if (!consent?.window_open) return 'The person last wrote more than 24 hours ago';
+  return null;
 }
 
 /** What the assign body carries for a choice (`channelsApi.assign`'s `consent`); null for none. */
@@ -86,6 +112,13 @@ export function consentTarget(choice) {
  */
 export function chatConsentBlock(consent, choice, name, provider = 'whatsapp') {
   if (!consent?.required || consent.status === 'given') return null;
+  if (provider === 'telegram') {
+    // D756 §1.5: Start waits for the interviewee's own YES in the chat; nothing else stands in for it.
+    const who = String(name || '').trim() || 'your contact';
+    if (consent.status === 'declined') return `${who[0].toUpperCase()}${who.slice(1)} said NO in Telegram, so their notes are not recorded.`;
+    if (consent.status === 'withdrawn') return `${who[0].toUpperCase()}${who.slice(1)} replied STOP in Telegram.`;
+    return consent.status === 'requested' ? `Start waits for ${who}'s YES in Telegram.` : `Ask ${who} for consent in Telegram first.`;
+  }
   if (consent.status === 'declined') return `${String(name || '').trim() || 'Your contact'} declined. Nothing from this chat was kept.`;
   if (consent.status === 'withdrawn') return `${String(name || '').trim() || 'Your contact'} withdrew consent in ${appName(provider)}.`;
   if (choice === 'ask') return consent.window_open ? null : windowClosedSentence(name, provider);
@@ -102,6 +135,17 @@ export function consentLine(consent, name, { provider = 'whatsapp', when = short
   if (!consent?.required) return null;
   const who = String(name || '').trim() || 'Your contact';
   const app = appName(provider);
+  if (provider === 'telegram') {
+    // D756 §1.5's five states: not asked, asked at <time>, YES at <time>, NO, or stopped.
+    const at = (iso) => (iso ? when(iso) : null);
+    switch (consent.status) {
+      case 'given': return { kind: 'given', text: at(consent.answered_at) ? `YES at ${at(consent.answered_at)}` : 'YES' };
+      case 'declined': return { kind: 'declined', text: 'NO' };
+      case 'withdrawn': return { kind: 'withdrawn', text: 'Stopped' };
+      case 'requested': return { kind: 'waiting', text: at(consent.requested_at) ? `Asked at ${at(consent.requested_at)}` : 'Asked' };
+      default: return { kind: 'waiting', text: 'Not asked yet' };
+    }
+  }
   switch (consent.status) {
     case 'given': {
       const at = consent.answered_at ? when(consent.answered_at) : null;
@@ -117,7 +161,8 @@ export function consentLine(consent, name, { provider = 'whatsapp', when = short
 }
 
 /** The member's word may be given once Axal's notice reached the chat (D754 §4). */
-export const canAttest = (consent) => !!consent?.required && consent.status === 'requested' && !!consent.delivered_at;
+export const canAttest = (consent, provider = 'whatsapp') =>
+  memberWordAllowed(provider) && !!consent?.required && consent.status === 'requested' && !!consent.delivered_at;
 
 /** "18 Oct, 14:05": the day and the time, in the reader's own zone. */
 export function shortTime(iso) {
