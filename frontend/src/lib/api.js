@@ -208,6 +208,9 @@ export function isPublicPath(pathname) {
     || currentPath === '/intelligence'
     || currentPath === '/resources'
     || currentPath === '/contact'
+    // D756 (#1894) — an interviewee reaches these from a chat link and has no account here.
+    || currentPath === '/privacy'
+    || currentPath === '/privacy/interviews'
     // Task #5 — /articles is the public Articles hub (Browse tab is the
     // default, anonymous-visible surface). Keep it reachable for signed-
     // out visitors when a background fetch (settings/me) 401s. The

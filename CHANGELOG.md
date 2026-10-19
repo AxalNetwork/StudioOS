@@ -4,6 +4,22 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## The interviewee recording notice at /privacy/interviews (D756, #1894)
+
+- A public page, `/privacy/interviews`, tells a person a founder records
+  through Axal VC what is kept, why, who can read it, for how long, and how to
+  say no or ask for deletion. It reads no API and needs no sign-in, and shows
+  "Notice version <n>"; `?n=` shows an earlier published version, and nothing
+  else in the query is read. The words are a draft until the owner and counsel
+  approve them, and a test freezes version 1's text by hash.
+- `services/channels/consentNotice.ts` holds `CONSENT_NOTICE_VERSION` and
+  `consentNoticeUrl`, for the WhatsApp and Telegram consent notices to link
+  here; a test holds the Worker's version and the page's equal.
+- The Privacy Policy gains section 08, "Interviews recorded by founders",
+  linking to the page; "Contact us" becomes 09. `/privacy` and
+  `/privacy/interviews` are public paths for the 401 handler, and the page has
+  an OG entry, a sitemap entry and a live-smoke route.
+
 ## One text per document: every sender reads its library row (D758, #1863, PR 1)
 
 - `services/legalDocTypes.ts` gains `LIBRARY_SLUG_FOR` / `librarySlugFor`

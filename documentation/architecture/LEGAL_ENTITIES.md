@@ -88,6 +88,7 @@ Axal VC GP LLC is the General Partner that manages the Fund's investors, and the
 | Terms of Service (signable template)        | `cloudflare-worker/src/templates/legal/tos_v1.md`                     |
 | Privacy Policy (user-facing)                | `frontend/src/pages/PrivacyPage.jsx`                                  |
 | Privacy Policy (signable template)          | `cloudflare-worker/src/templates/legal/privacy_v1.md`                 |
+| Interview recording notice (interviewees)   | `frontend/src/pages/InterviewNoticePage.jsx`                          |
 | Risk Disclosures (user-facing)              | `frontend/src/pages/RiskDisclosuresPage.jsx`                          |
 | Founder / Investor / Mentor mutual NDAs     | `cloudflare-worker/src/templates/legal/{founder,investor,mentor}_nda_v1.md` |
 | Three-way founder ↔ investor ↔ Axal NDA     | `cloudflare-worker/src/templates/legal/nda_3way_founder_investor_axal_v1.md` |
