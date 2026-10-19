@@ -160,8 +160,8 @@ function NetworkSections({ data, loading, state, fillsOn = false, ai = null }) {
         <p className="a6-note">Going cold means more than {COLD_AFTER_DAYS} days since the last recorded activity. Strength and organization are set on a contact in Relationships; a contact nobody has scored reads Not recorded.</p>
         {fillsOn && coldScope ? <ZoneDraft
           surface="network/re-engagement"
-          railOption="draft:network/re-engagement"
           scopeKey={coldScope}
+          railOption="draft:network/re-engagement"
           ai={ai}
           accent="violet"
           label="Proposal · re-engagement"
