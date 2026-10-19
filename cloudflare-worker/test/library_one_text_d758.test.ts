@@ -81,7 +81,7 @@ test('D758 the spelling map: seven spellings fold to their rows, anything else i
 
 test('D758 templateBodyFor reads the row under every spelling, and the bundled file only for a row with no body', async () => {
   const { db, e } = await setup();
-  for (const [slug, key] of Object.entries(ROWS)) {
+  for (const slug of Object.keys(ROWS)) {
     for (const spelling of spellingsOf(slug)) {
       // PR 2: every spelling reads its row, `partner_msa_v1` included. #1862: a
       // store row also answers its title, which names the envelope.
