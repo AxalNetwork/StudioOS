@@ -43,7 +43,8 @@
  * errors are codes.
  */
 import type { Env } from '../../types';
-import { providerJson } from './providerHttp';
+import { PROVIDER_DOWNLOAD_MS, boundedDownload, providerJson } from './providerHttp';
+import { CHANNEL_AUDIO_MAX_BYTES } from './channelAudio';
 import { constantTimeEqual, sha256Hex } from '../../rpc/secret';
 import { decryptCredentials, encryptCredentials } from '../../integrations/secrets';
 import type { ChannelConnection } from './connections';
@@ -57,7 +58,10 @@ export const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_VERSION}`;
 /** A text message body takes up to 4096 characters. */
 export const WHATSAPP_MAX_TEXT = 4096;
 
-/** The Cloud API's own ceiling for audio media. */
+/**
+ * The Cloud API's own ceiling for audio media. Axal takes at most the
+ * recorder's chunk, `CHANNEL_AUDIO_MAX_BYTES` (5 MB), D754 §6 / #1935.
+ */
 export const WHATSAPP_MAX_AUDIO_BYTES = 16 * 1024 * 1024;
 
 /**
@@ -426,7 +430,14 @@ function mediaHostAllowed(raw: string): boolean {
   }
 }
 
-/** A voice note's audio: `GET /{media-id}` for its URL, then the URL, both with the member's token. */
+/**
+ * A voice note's audio: `GET /{media-id}` for its URL, then the URL, both with
+ * the member's token. Since D754 W3 (#1935): Graph's `file_size` over 5 MB is
+ * refused before the download, the URL must be Meta's before the token is
+ * sent, and the file comes through `boundedDownload` (one deadline, a running
+ * 5 MB cap). `mime` is the declared type (the message's, else Graph's); the
+ * caller checks it against the file's own bytes (`channelAudio.ts`).
+ */
 export type WhatsAppAudioResult = AudioResult & { lookup?: boolean };
 export async function fetchWhatsAppMedia(env: Env, conn: ChannelConnection, mediaId: string, mimeHint: string | null = null): Promise<WhatsAppAudioResult> {
   const token = await whatsappToken(env, conn);
@@ -434,27 +445,21 @@ export async function fetchWhatsAppMedia(env: Env, conn: ChannelConnection, medi
   const meta = await graph('media', `${GRAPH_BASE}/${encodeURIComponent(mediaId)}`, { token });
   if (!meta.ok) return { ok: false, code: meta.code, retryable: meta.retryable, lookup: true };
   const size = Number(meta.data?.file_size);
-  if (Number.isFinite(size) && size > WHATSAPP_MAX_AUDIO_BYTES) return { ok: false, code: 'too_large', retryable: false };
+  if (Number.isFinite(size) && size > CHANNEL_AUDIO_MAX_BYTES) return { ok: false, code: 'too_large', retryable: false };
   const url = typeof meta.data?.url === 'string' ? meta.data.url : '';
   if (!mediaHostAllowed(url)) return { ok: false, code: 'media_host', retryable: false };
-  let res: Response;
-  try {
-    res = await fetch(url, { headers: { authorization: `Bearer ${token}` } });
-  } catch {
-    console.error('[channels] whatsapp media download network_error');
+  const file = await boundedDownload(url, {
+    maxBytes: CHANNEL_AUDIO_MAX_BYTES, deadlineMs: PROVIDER_DOWNLOAD_MS, init: { headers: { authorization: `Bearer ${token}` } },
+  });
+  if (!file.ok) {
+    console.error(`[channels] whatsapp media download failed code=${file.code} status=${file.status}`);
+    if (file.code === 'too_large' || file.code === 'empty_file') return { ok: false, code: file.code, retryable: false };
+    if (file.code === 'http') return { ok: false, ...graphFailure(file.status, null) };
+    if (file.code === 'bad_url') return { ok: false, code: 'media_host', retryable: false };
     return { ok: false, code: 'network', retryable: true };
   }
-  if (!res.ok) {
-    const f = graphFailure(res.status, null);
-    console.error(`[channels] whatsapp media download failed status=${res.status}`);
-    return { ok: false, ...f };
-  }
-  if (Number(res.headers.get('content-length') || 0) > WHATSAPP_MAX_AUDIO_BYTES) return { ok: false, code: 'too_large', retryable: false };
-  const bytes = new Uint8Array(await res.arrayBuffer());
-  if (bytes.byteLength > WHATSAPP_MAX_AUDIO_BYTES) return { ok: false, code: 'too_large', retryable: false };
-  if (!bytes.byteLength) return { ok: false, code: 'empty_file', retryable: false };
-  const mime = String(mimeHint || meta.data?.mime_type || 'audio/ogg').split(';')[0].trim() || 'audio/ogg';
-  return { ok: true, bytes, mime };
+  const declared = typeof mimeHint === 'string' && mimeHint ? mimeHint : typeof meta.data?.mime_type === 'string' ? meta.data.mime_type : null;
+  return { ok: true, bytes: file.bytes, mime: declared ?? '' };
 }
 
 /** The test: read the number with the member's token. Sends nothing to anyone. */
