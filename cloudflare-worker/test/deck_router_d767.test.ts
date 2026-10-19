@@ -144,6 +144,31 @@ test('the deck draft is one router run with option deck_draft', async () => {
   } finally { restore(); f.db.close(); }
 });
 
+test('"Fill from project" through its route is one run with option fill_from_project, charged to who pressed', async () => {
+  const f = fixture();
+  f.db.prepare("INSERT INTO users(id,email,name,role,subscription_tier) VALUES(500,'admin.d767@example.test','Admin','admin','studio')").run();
+  f.db.prepare('INSERT INTO ai_topup_accounts(user_id,balance_microusd) VALUES(500,5000000)').run();
+  f.db.prepare("INSERT INTO ai_licence_caps(licence_key,daily_microusd,monthly_microusd,recorded_by) VALUES('admin:free',0,0,1)").run();
+  const restore = noNetwork();
+  try {
+    const app = new Hono<any>();
+    app.route('/api/decks', decks);
+    const jwt = await new SignJWT({ user_id: 500, role: 'admin' }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
+      .sign(new TextEncoder().encode(JWT_SECRET));
+    const headers = { Authorization: `Bearer ${jwt}`, 'content-type': 'application/json' };
+    // A deck on the yc_seed template (its slides carry the method stamp the fill reads).
+    await app.request('/api/decks/by-project/1', { headers }, f.env); // creates the deck tables
+    f.db.prepare(`INSERT INTO pitch_decks (id, project_id, version, slides, title, is_current, created_by) VALUES (10, 1, 1, ?, 'Seed deck', 1, 500)`)
+      .run(JSON.stringify([{ title: 'Problem', method_id: 'yc_seed', spec_id: 'problem', fields: [] }]));
+    const res = await app.request('/api/decks/10/autofill', { method: 'POST', headers, body: '{}' }, f.env);
+    assert.equal(res.status, 200, await res.text());
+    const rows = f.rows();
+    assert.equal(rows.length, 1, `one usage row: ${JSON.stringify(rows)}`);
+    const { charged_microusd, ...who } = rows[0];
+    assert.deepEqual(who, { ...ROW('fill_from_project'), user_id: 500 });
+  } finally { restore(); f.db.close(); }
+});
+
 test('neither path reaches OpenAI', () => {
   const autofill = readFileSync(resolve(ROOT, 'cloudflare-worker/src/services/decks/autofill.ts'), 'utf8');
   assert.doesNotMatch(autofill, /api\.openai\.com|OPENAI_API_KEY/);
