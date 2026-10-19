@@ -13,6 +13,7 @@ import TemplateContentEditor from '../components/brand/TemplateContentEditor.jsx
 import TemplateEditorPreview from '../components/brand/TemplateEditorPreview.jsx';
 import { suggestAudienceAndGoal, getRecommendedTemplatesForAudience, generateInitialBrandKit } from '../lib/brand/flow.js';
 import { AssistLayout } from '../ui';
+import { useRailOption } from '../ui/railCrumbs';
 
 // Task #24 — Brand & landing page generator.
 // Task #2 — Reworked into the audience-first flow:
@@ -81,6 +82,11 @@ export default function BrandBuilderPage() {
   const [taglineCandidates, setTaglineCandidates] = useState([]);
   const [taglineInputs, setTaglineInputs] = useState({ audience: '', tone: 'bold', marketAngle: 'innovation' });
   const [uploadBusy, setUploadBusy] = useState(false);
+  // D771 (#2097): each press that runs a model names itself to the rail while it runs.
+  useRailOption(autofillBusy ? 'form:landing' : null, 'Auto-fill with AI');
+  useRailOption(logoBusy ? 'draft:logo' : null, 'Regenerate logo');
+  useRailOption(paletteBusy ? 'form:palette' : null, 'Suggest AI palette');
+  useRailOption(taglineBusy ? 'draft:taglines' : null, 'Iterate');
   // Audience labels/colors for the waitlist-signup badges.
   const AUDIENCE_LABELS = { customer: 'Customer discovery', partner: 'Partner', investor: 'Investor', advisor: 'Advisor', mentor: 'Mentor', cofounder: 'Co-founder' };
   const AUDIENCE_COLORS = { customer: 'bg-violet-100 text-violet-700', partner: 'bg-indigo-100 text-indigo-700', investor: 'bg-emerald-100 text-emerald-700', advisor: 'bg-amber-100 text-amber-700', mentor: 'bg-sky-100 text-sky-700', cofounder: 'bg-rose-100 text-rose-700' };

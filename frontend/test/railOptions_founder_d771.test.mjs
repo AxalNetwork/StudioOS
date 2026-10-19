@@ -163,7 +163,7 @@ test('every founder page has an option or a reason it has none, never both', () 
  * each: the founder's options there are on the rail. A section joins this
  * list in the PR that wires it.
  */
-const WIRED = ['Studio', 'Validate', 'Build', 'Raise'];
+const WIRED = ['Studio', 'Validate', 'Build', 'Raise', 'Grow'];
 const sectionOf = (page) => page.split(' · ')[1];
 const routeOf = (route) => {
   const [path, query] = route.split('?');
