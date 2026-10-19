@@ -68,7 +68,8 @@
  * transcribes with the interview sessions' own speech-to-text, under the
  * connection's daily cap (D1, fails closed) and the member's AI budget (D640).
  * Only the text is kept; the audio is never stored (D754: for WhatsApp,
- * until the S13 w3 voice-audio task lands).
+ * until the S13 w3 voice-audio task lands). No note over 5 MB, the recorder's
+ * chunk, reaches a model from either provider (D756, #1896).
  *
  * AXAL'S OWN WHATSAPP NUMBER (way B, whatsappLink.ts) is answered before any
  * member connection is looked for: `LINK <code>` records a claim and gets one
@@ -106,6 +107,7 @@ import { refuse } from '../util/refusal';
 import { run as aiRun, audioMinutesFromBytes } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { IntakeError, activeMember } from '../services/interviewIntake';
+import { MAX_CHUNK_BYTES } from '../services/interviewSessions';
 import {
   claimEvent, connectionOverLimit, linkAttemptOverLimit, finishEvent, finishEventStatement, readCappedBody, releaseEvent, reserveTranscription,
   type EventFields, type EventKind, type EventStatus,
@@ -1345,7 +1347,7 @@ export async function runVoiceFollowup(env: Env, p: ChannelJobPayload): Promise<
   }
 
   const audio = provider === 'telegram'
-    ? await telegram.fetchTelegramVoice(env, note.file, note.mime)
+    ? await telegram.fetchTelegramVoice(env, note)
     : await whatsapp.fetchWhatsAppMedia(env, conn, note.file, note.mime);
   if (!audio.ok) {
     if (audio.retryable) {
@@ -1360,6 +1362,8 @@ export async function runVoiceFollowup(env: Env, p: ChannelJobPayload): Promise<
     console.error('[channels] voice download refused provider=%s code=%s', provider, code);
     return giveBack('failed', code);
   }
+  // D756 (#1896): the recorder's chunk is the memory bound; nothing larger reaches a model, or the day's cap.
+  if (audio.bytes.byteLength > MAX_CHUNK_BYTES) return giveBack('failed', 'too_large');
   if (!(await reserveTranscription(env, conn.integrationId))) return giveBack('failed', 'transcription_cap');
 
   const r = await aiRun(env, {

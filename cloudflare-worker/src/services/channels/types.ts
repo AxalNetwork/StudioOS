@@ -127,6 +127,9 @@ export const CHANNEL_LIMITS = {
 export type MessageSide = 'contact' | 'me';
 
 /** One normalised message from a messaging provider. */
+/** D756 (#1896): what kind of recording a note is. */
+export type VoiceMedia = 'voice' | 'audio' | 'video_note';
+
 export interface InboundMessage {
   kind: 'message';
   provider: MessagingProvider;
@@ -151,8 +154,12 @@ export interface InboundMessage {
   /**
    * A voice note to transcribe, when there is one. `fileRef` is what the
    * adapter's `fetchMedia` takes back (Telegram file_id, WhatsApp media id).
+   * Since D756 (#1896) Telegram's note may also be an audio file, an audio
+   * document or a round video (`media`), with the size the message declares;
+   * an absent `media` means 'voice'. `mime` is the type declared on the
+   * message, never the download's.
    */
-  voice: { fileRef: string; mime: string | null; durationSec: number | null } | null;
+  voice: { fileRef: string; mime: string | null; durationSec: number | null; media?: VoiceMedia; sizeBytes?: number | null } | null;
   /** When the provider says it was sent (ISO). */
   sentAt: string;
 }

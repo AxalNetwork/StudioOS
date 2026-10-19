@@ -10,7 +10,10 @@
  *   budget        the member's AI budget (D640) was spent
  *   ai_off        AI was switched off on Axal (the org kill switch)
  *   daily_cap     the connection's daily transcription cap was reached
- *   too_large     the file is over the provider's cap
+ *   too_large     the file is over 5 MB, the recorder's chunk (D756)
+ *   unsupported_format  the file is not MP3, M4A, OGG, WAV or WebM audio, or
+ *                 its bytes do not match the type it declares (D756)
+ *   video_note_unsupported  a round video message: not transcribed yet (D756)
  *   unreadable    the file could not be fetched or read
  *   expired       WhatsApp refused an old media id at lookup; never queued again
  *   reconnect     the account's connection had expired
@@ -42,11 +45,16 @@ export const STILL_TRYING = new Set(['provider_unreachable', 'transcription_unav
 
 export type VoiceReason =
   | 'budget' | 'ai_off' | 'daily_cap' | 'too_large' | 'unreadable' | 'reconnect'
-  | 'unreachable' | 'not_transcribed' | 'retrying' | 'bot_off' | 'no_consent' | 'expired';
+  | 'unreachable' | 'not_transcribed' | 'retrying' | 'bot_off' | 'no_consent' | 'expired'
+  | 'unsupported_format' | 'video_note_unsupported';
 
 const PROVIDER_NAME: Record<MessagingProvider, string> = { telegram: 'Telegram', whatsapp: 'WhatsApp' };
 const PROVIDER_HOST: Record<MessagingProvider, string> = { telegram: 'Telegram', whatsapp: 'Meta' };
-const CAP: Record<MessagingProvider, string> = { telegram: '20 MB', whatsapp: '16 MB' };
+/** D756 (#1896): Telegram's, and D754 §6's own words for WhatsApp. */
+const TOO_LARGE: Record<MessagingProvider, string> = {
+  telegram: 'This file is over 5 MB. Axal takes up to 5 MB per note from Telegram for now.',
+  whatsapp: 'This recording is larger than Axal can take from WhatsApp (5 MB). Record it with the in-app recorder instead.',
+};
 
 /** The reason for a note's code; `held` is whether a job still holds the note. Null when there is nothing to say. */
 export function voiceReason(error: string | null, held: boolean): VoiceReason | null {
@@ -63,6 +71,8 @@ export function voiceReason(error: string | null, held: boolean): VoiceReason | 
   if (code === 'provider_unreachable') return 'unreachable';
   if (code === 'transcription_unavailable') return 'not_transcribed';
   if (code === 'no_consent') return 'no_consent';
+  if (code === 'unsupported_format') return 'unsupported_format';
+  if (code === 'video_note_unsupported') return 'video_note_unsupported';
   return 'unreadable';
 }
 
@@ -74,7 +84,7 @@ export function voiceSentence(reason: VoiceReason, provider: MessagingProvider):
     case 'budget': return 'Your AI budget was spent, so this voice note was not transcribed.';
     case 'ai_off': return 'AI transcription was switched off on Axal, so this voice note was not transcribed.';
     case 'daily_cap': return `This ${name} account reached its voice notes for today, so this one waits. Retry it tomorrow.`;
-    case 'too_large': return `This voice note is larger than Axal can transcribe from ${name} (${CAP[provider] ?? 'the limit'}).`;
+    case 'too_large': return TOO_LARGE[provider] ?? 'This file is over 5 MB, so it was not transcribed.';
     case 'expired': return 'WhatsApp keeps a voice note for 7 days; this one can no longer be fetched.';
     case 'unreadable': return 'The audio could not be read, so this voice note was not transcribed.';
     case 'reconnect': return `The connection to your ${name} account had expired, so the voice note could not be fetched. Connect it again in Account › Connectors.`;
@@ -83,6 +93,8 @@ export function voiceSentence(reason: VoiceReason, provider: MessagingProvider):
     case 'retrying': return 'This voice note could not be transcribed yet. Axal tries again in a few minutes.';
     case 'bot_off': return 'The Axal bot is switched off for your Telegram Business account, so this voice note was not fetched. Turn it back on in Telegram › Settings › Telegram Business › Chatbots, then retry.';
     case 'no_consent': return 'This voice note waits until consent is given in the chat. Axal fetches it only then.';
+    case 'unsupported_format': return 'Axal can transcribe MP3, M4A, OGG, WAV and WebM audio only, so this file was not transcribed.';
+    case 'video_note_unsupported': return "Round video messages can't be transcribed yet.";
   }
 }
 
