@@ -597,6 +597,8 @@ structure.get('/sessions/:id/placements', async (c) => {
     id: r.id,
     kind: r.kind,
     module: isPlacementKind(r.kind) ? PLACEMENT_KINDS[r.kind as PlacementKind].module : 'other',
+    // D757 (#1927): the Validate module it lands in, which the session page groups by.
+    slug: isPlacementKind(r.kind) ? placementSlug(r.kind as PlacementKind, parse(r.edited_payload_json) ?? parse(r.payload_json) ?? {}) : null,
     payload: parse(r.payload_json),
     evidence_context: r.kind === 'evidence' ? {
       hypothesis: context.hypotheses.find((h) => h.id === Number((parse(r.edited_payload_json) ?? parse(r.payload_json))?.hypothesis_id)) ?? null,
