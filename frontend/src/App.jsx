@@ -541,6 +541,13 @@ export { ParamRedirect };
 // closing PR on the three addresses.
 export { ValidateZoneRedirect };
 
+// D755 §13 (#1915): /products keeps its query and its hash, so an old
+// /products#token-packs link still lands on the Token packs.
+function ProductsRedirect() {
+  const loc = useLocation();
+  return <Navigate to={{ pathname: '/plans-and-pricing', search: loc.search, hash: loc.hash }} replace />;
+}
+
 function DashboardRedirect() {
   const loc = useLocation();
   return <Navigate to={{ pathname: '/studio', search: loc.search, hash: loc.hash }} replace />;
@@ -3025,12 +3032,14 @@ function AppInner() {
       <Route path="/support" element={<SupportRedirect />} />
       {/* Products — catalog + checkout + explorer promo redemption. Open to
           every signed-in role incl. 'exploring' (that's where the Personal
-          Advisor's one-time 30-day-license codes get redeemed). */}
-      <Route path="/plans-and-pricing" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <ProductsPage />)} />
+          Advisor's one-time 30-day-license codes get redeemed). D755 §13
+          (#1915): visitors see it too — the plans and the Token packs, with
+          Sign in to buy; the page leaves out what only a member has. */}
+      <Route path="/plans-and-pricing" element={<ProductsPage />} />
       {/* Product slide-over deep link — same page, pre-opens the detail panel. */}
       <Route path="/plans-and-pricing/:productId" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <ProductsPage />)} />
       {/* Legacy /products redirects — keep for any saved links or external references. */}
-      <Route path="/products" element={<Navigate to="/plans-and-pricing" replace />} />
+      <Route path="/products" element={<ProductsRedirect />} />
       <Route path="/products/:productId" element={<Navigate to="/plans-and-pricing" replace />} />
       {/* One-time cart checkout + post-checkout confirmation (auth-protected). */}
       <Route path="/checkout" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CheckoutPage />)} />

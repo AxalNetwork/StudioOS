@@ -19,6 +19,19 @@ lives in `providers/`.
 | `autopush.ts` | Background pushes started outside the connector routes (a deal's stage change, a new project), logged to `integration_logs` like a user's own push. |
 | `refreshLease.ts` | `acquireRefreshLease` and `REFRESH_LEASE_TTL_S`: the KV lease on `<provider>:refresh:<uid>` that serializes one connection's OAuth token refresh, shared by HubSpot, Calendly, Carta, DocuSign and Salesforce (#1903). `release()` deletes the key only for the caller that acquired it. Best-effort: KV is eventually consistent, so the providers keep their D1 re-checks. |
 
+## GitHub's sync (D655, #1906)
+
+`providers/github.ts` lands issues on `roadmap_okrs` and pull requests on
+`mvp_features`, each through its `connector_fed_items` row. **A founder's
+deletion stands**: a re-sync never re-creates a deleted row, and unlinks its
+ledger row (`local_id` NULL), so `fed.ts` counts the item as arrived but not
+linked. **A large sync continues on the next run**: each page is one ledger
+read and one D1 batch, the run counts its subrequests against
+`SYNC_SUBREQUEST_BUDGET` (8,000 of the Worker's 10,000), and at the budget it
+stops "Partly synced", keeping a KV cursor so the next Sync starts where it
+stopped. `cloudflare-worker/test/github_connector_flow_d751.test.ts` drives the
+whole flow against a stubbed GitHub.
+
 ## Subfolders
 
 - `providers/` — one file per provider implementation; see its README.
