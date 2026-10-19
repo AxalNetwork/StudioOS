@@ -54,9 +54,6 @@ type Row = {
   status: RailProposalStatus; decided_payload_json: string | null; decided_at: string | null; created_at: string;
 };
 
-const COLUMNS = `uid, rail_page, rail_option, record_ref, kind, payload_json, model, usage_log_id,
-  status, decided_payload_json, decided_at, created_at`;
-
 const parse = (s: string | null): Record<string, unknown> | null => {
   if (!s) return null;
   try { const v = JSON.parse(s); return v && typeof v === 'object' ? v : null; } catch { return null; }
@@ -112,14 +109,19 @@ export async function proposeRail(env: Env, input: ProposeInput): Promise<RailPr
     input.record != null ? railRecordKey(input.record) : null, input.kind,
     JSON.stringify(input.payload), input.model ?? null, input.usageLogId ?? null,
   ).run();
-  const row = await env.DB.prepare(`SELECT ${COLUMNS} FROM ai_rail_proposals WHERE uid = ?`).bind(uid).first<Row>();
+  const row = await getRail(env, input.userId, uid);
   if (!row) throw new Error('ai_rail_proposals: the row could not be read back');
-  return toProposal(row);
+  return row;
 }
 
 /** One of the member's own proposals, by uid, or null. */
 export async function getRail(env: Env, userId: number, uid: string): Promise<RailProposal | null> {
-  const row = await env.DB.prepare(`SELECT ${COLUMNS} FROM ai_rail_proposals WHERE uid = ? AND user_id = ?`).bind(uid, userId).first<Row>();
+  // Literal SQL throughout this file, so the schema guards can read every statement.
+  const row = await env.DB.prepare(
+    `SELECT uid, rail_page, rail_option, record_ref, kind, payload_json, model, usage_log_id,
+            status, decided_payload_json, decided_at, created_at
+       FROM ai_rail_proposals WHERE uid = ? AND user_id = ?`,
+  ).bind(uid, userId).first<Row>();
   return row ? toProposal(row) : null;
 }
 
@@ -127,17 +129,18 @@ export async function getRail(env: Env, userId: number, uid: string): Promise<Ra
 export async function listRail(env: Env, userId: number, q: { option: string; record?: string | null; status?: RailProposalStatus | null }): Promise<RailProposal[]> {
   const option = railOptionKey(q.option);
   if (!option) return [];
-  const where = ['user_id = ?', 'rail_option = ?'];
-  const binds: unknown[] = [userId, option];
-  if (q.record != null) {
-    const record = railRecordKey(q.record);
-    if (!record) return [];
-    where.push('record_ref = ?'); binds.push(record);
-  }
-  if (q.status) { where.push('status = ?'); binds.push(q.status); }
+  const record = q.record != null ? railRecordKey(q.record) : null;
+  if (q.record != null && !record) return [];
+  // A null filter matches every row: `? IS NULL OR column = ?`, bound twice.
   const r = await env.DB.prepare(
-    `SELECT ${COLUMNS} FROM ai_rail_proposals WHERE ${where.join(' AND ')} ORDER BY id DESC LIMIT 50`,
-  ).bind(...binds).all<Row>();
+    `SELECT uid, rail_page, rail_option, record_ref, kind, payload_json, model, usage_log_id,
+            status, decided_payload_json, decided_at, created_at
+       FROM ai_rail_proposals
+      WHERE user_id = ? AND rail_option = ?
+        AND (? IS NULL OR record_ref = ?)
+        AND (? IS NULL OR status = ?)
+      ORDER BY id DESC LIMIT 50`,
+  ).bind(userId, option, record, record, q.status || null, q.status || null).all<Row>();
   return (r.results || []).map(toProposal);
 }
 
@@ -156,8 +159,7 @@ export async function decideRail(env: Env, userId: number, uid: string, decision
       WHERE uid = ? AND user_id = ? AND status = 'proposed'`,
   ).bind(status, status === 'edited' ? JSON.stringify(edited) : null, uid, userId).run();
   if (!res.meta?.changes) return null;
-  const row = await env.DB.prepare(`SELECT ${COLUMNS} FROM ai_rail_proposals WHERE uid = ? AND user_id = ?`).bind(uid, userId).first<Row>();
-  return row ? toProposal(row) : null;
+  return getRail(env, userId, uid);
 }
 
 /** The platform takes back a member's open proposals on a record that moved on. Returns how many. */
