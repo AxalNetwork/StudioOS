@@ -169,8 +169,8 @@ const UPSERT_STACK = `INSERT INTO solution_design_stack (integration_id, project
      ON CONFLICT(integration_id, project_id, repository) DO UPDATE SET
        languages_json = excluded.languages_json, topics_json = excluded.topics_json, updated_at = CURRENT_TIMESTAMP`;
 const LEDGER_STACK = `INSERT INTO connector_fed_items (integration_id, project_id, module, kind, external_id, local_table, local_id)
-     SELECT ?, ?, 'solution_design', 'stack', ?, 'solution_design_stack', id
-       FROM solution_design_stack WHERE integration_id = ? AND project_id = ? AND repository = ?
+     VALUES (?, ?, 'solution_design', 'stack', ?, 'solution_design_stack',
+       (SELECT id FROM solution_design_stack WHERE integration_id = ? AND project_id = ? AND repository = ?))
      ON CONFLICT(integration_id, external_id) DO UPDATE SET
        last_seen_at = CURRENT_TIMESTAMP, local_table = excluded.local_table, local_id = excluded.local_id`;
 const PROPOSALS_OF_REPO =
@@ -349,11 +349,11 @@ export async function acceptDesignProposal(env: Env, projectId: number, id: numb
           SELECT project_id, id, title, extract, url, repository || '/' || path, ? FROM solution_design_proposals WHERE id = ?`).bind(userId, id),
       env.DB.prepare('UPDATE solution_design_proposals SET note_id = last_insert_rowid() WHERE id = ?').bind(id),
       env.DB.prepare(`INSERT INTO connector_fed_items (integration_id, project_id, module, kind, external_id, local_table, local_id)
-          SELECT integration_id, project_id, 'solution_design', 'design_note', 'design_note:' || project_id || ':' || source_key || '@' || substr(fingerprint, 1, 16),
-                 'solution_design_notes', note_id
-            FROM solution_design_proposals WHERE id = ?
+          VALUES ((SELECT integration_id FROM solution_design_proposals WHERE id = ?), ?, 'solution_design', 'design_note',
+                  (SELECT 'design_note:' || project_id || ':' || source_key || '@' || substr(fingerprint, 1, 16) FROM solution_design_proposals WHERE id = ?),
+                  'solution_design_notes', (SELECT note_id FROM solution_design_proposals WHERE id = ?))
           ON CONFLICT(integration_id, external_id) DO UPDATE SET
-            last_seen_at = CURRENT_TIMESTAMP, local_table = excluded.local_table, local_id = excluded.local_id`).bind(id),
+            last_seen_at = CURRENT_TIMESTAMP, local_table = excluded.local_table, local_id = excluded.local_id`).bind(id, projectId, id, id),
       ...extra,
     ]);
   } catch (e) {
