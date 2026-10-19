@@ -231,7 +231,9 @@ test('Mercury\'s page follows its audience; the entity variant reads no entity s
   assert.equal((await call(db, 'admin', '/directory/mercury', { branch: true })).status, 404);
   const founder = (await call(db, 'founder', '/directory/mercury')).body.connector;
   assert.deepEqual([founder.connection_source, founder.sign_in.kind], ['integrations', 'key']);
-  assert.equal(founder.description, PERSONAL_MERCURY.description);
+  // D752 (#1886): PERSONAL_MERCURY is keyed by role.
+  assert.equal(founder.description, PERSONAL_MERCURY.founder.description);
+  assert.equal((await call(db, 'investor', '/directory/mercury')).body.connector.description, PERSONAL_MERCURY.investor.description);
   assert.deepEqual(founder.feeds, ['revenue_and_traction']);
   assert.deepEqual((await call(db, 'partner', '/directory/mercury')).body.connector.feeds, []);
 });
