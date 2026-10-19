@@ -6,6 +6,7 @@ import {
   Clipboard, ShieldCheck,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { useRailOption } from '../ui/railCrumbs';
 import { AssistLayout } from '../ui';
 
 // Pitch Deck Reviewer — upload a PDF/DOC/DOCX/PPTX, extract text via Cloudflare
@@ -88,6 +89,11 @@ export default function DeckReviewerPage({ embedded = false }) {
   const [pasteText, setPasteText] = useState('');
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
+  // D771 (#2097): which review is at the model, so the rail names that option: a file, pasted text, or a regeneration.
+  const [running, setRunning] = useState(null);
+  useRailOption(running === 'file' ? 'review:deck-file' : null, 'Drop your deck here or click to browse');
+  useRailOption(running === 'text' ? 'review:deck-text' : null, 'Review pasted text');
+  useRailOption(running === 'again' ? 'review:deck-again' : null, 'Regenerate review');
 
   useEffect(() => {
     let alive = true;
@@ -122,7 +128,7 @@ export default function DeckReviewerPage({ embedded = false }) {
     const v = validate(file);
     if (v) { setError(v); return; }
     setError(''); setStatus(''); setReview(null);
-    setPhase('uploading'); setProgress(0);
+    setPhase('uploading'); setProgress(0); setRunning('file');
     try {
       const fd = new FormData();
       fd.append('file', file);
@@ -143,13 +149,13 @@ export default function DeckReviewerPage({ embedded = false }) {
     } catch (e) {
       setError(e.message || 'Upload failed.');
     } finally {
-      setPhase('idle'); setProgress(0);
+      setPhase('idle'); setProgress(0); setRunning(null);
     }
   }
 
   async function handlePaste() {
     if (!pasteText.trim()) { setError('Paste some deck text first.'); return; }
-    setError(''); setStatus(''); setPhase('processing');
+    setError(''); setStatus(''); setPhase('processing'); setRunning('text');
     try {
       const result = await api.deckReviewer.paste({ text: pasteText, project_id: projectId || undefined, filename: 'Pasted deck' });
       setReview(result);
@@ -161,7 +167,7 @@ export default function DeckReviewerPage({ embedded = false }) {
     } catch (e) {
       setError(e.message || 'Could not process pasted text.');
     } finally {
-      setPhase('idle');
+      setPhase('idle'); setRunning(null);
     }
   }
 
@@ -187,12 +193,12 @@ export default function DeckReviewerPage({ embedded = false }) {
 
   async function onRegenerate() {
     if (!review) return;
-    setPhase('processing'); setError('');
+    setPhase('processing'); setError(''); setRunning('again');
     try {
       const full = await api.deckReviewer.regenerate(review.id);
       setReview(full); setDirty(false); setStatus('Review regenerated.');
     } catch (e) { setError(e.message || 'Regenerate failed.'); }
-    finally { setPhase('idle'); }
+    finally { setPhase('idle'); setRunning(null); }
   }
 
   async function onPurgeRaw() {

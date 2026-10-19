@@ -18,6 +18,7 @@ import UseOfFundsEditor from '../components/UseOfFundsEditor';
 import SpinoutSlideEditor from '../components/SpinoutSlideEditor';
 import { useToast } from '../components/useToast';
 import { useEscapeClose } from '../components/useEscapeClose';
+import { useRailOption } from '../ui/railCrumbs';
 import { spinoutPreviewMeta as computeSpinoutPreviewMeta } from './spinoutPreview';
 
 /**
@@ -45,6 +46,10 @@ export default function PitchDeckPage({ embedded = false, initialProjects = [], 
   const [deck, setDeck] = useState(null);
   const [activeIdx, setActiveIdx] = useState(0);
   const [busy, setBusy] = useState(false);
+  // D771 (#2097): which fill is at the model, so the rail names that option.
+  const [running, setRunning] = useState(null);
+  useRailOption(running === 'autofill' ? 'form:deck' : null, 'Fill from project');
+  useRailOption(running === 'method' ? 'form:deck-template' : null, 'Use this template');
   const [savingState, setSavingState] = useState('idle'); // idle | saving | saved
 
   // Method-picker + recommendation state.
@@ -348,7 +353,7 @@ export default function PitchDeckPage({ embedded = false, initialProjects = [], 
   // ---------------- method picker actions ----------------
   const applyMethod = async (methodId) => {
     if (!projectId) { addToast('Pick a project first', 'error'); return; }
-    setPickerOpen(false); setBusy(true);
+    setPickerOpen(false); setBusy(true); setRunning('method');
     try {
       const r = await api.deckApplyMethod(projectId, methodId);
       setDeck(r?.deck || r);
@@ -364,7 +369,7 @@ export default function PitchDeckPage({ embedded = false, initialProjects = [], 
       } else {
         setError(e.message || 'Failed to apply method'); reportError('PitchDeckPage:applyMethod', e);
       }
-    } finally { setBusy(false); }
+    } finally { setBusy(false); setRunning(null); }
   };
 
   // ---------------- Task #14 — Fill from project ----------------
@@ -374,7 +379,7 @@ export default function PitchDeckPage({ embedded = false, initialProjects = [], 
   // bleed across deck swaps.
   const fillFromProject = async () => {
     if (!deck?.id) { addToast('No deck loaded', 'error'); return; }
-    setBusy(true);
+    setBusy(true); setRunning('autofill');
     try {
       const r = await api.deckAutofill(deck.id);
       setDeck(r?.deck || deck);
@@ -392,7 +397,7 @@ export default function PitchDeckPage({ embedded = false, initialProjects = [], 
       } else {
         setError(e.message || 'Refill failed'); reportError('PitchDeckPage:refill', e);
       }
-    } finally { setBusy(false); }
+    } finally { setBusy(false); setRunning(null); }
   };
 
   // ---------------- export ----------------
