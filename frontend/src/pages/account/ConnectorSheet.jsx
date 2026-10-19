@@ -573,7 +573,7 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
     }
     body = (
       <>
-        {personalMercury ? <MercuryUsesGroups /> : <UsesGroups p={p} />}
+        {personalMercury ? <MercuryUsesGroups role={viewerRole} /> : <UsesGroups p={p} />}
         <PermissionsGroup p={p} />
         {personalMercury ? <MercuryLandsGroup role={viewerRole} /> : <CompaniesGroup conn={conn} onChanged={onChanged} />}
         {/* Decision 8: Now fed by is a founder's; a partner's Mercury feeds no module. */}
@@ -606,14 +606,14 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
     );
     footer = confirming ? (
       <>
-        <span className="mr-auto text-[12px] text-axal-muted dark:text-gray-400">Disconnect {name}? {disconnectNote(p)}</span>
+        <span className="mr-auto text-[12px] text-axal-muted dark:text-gray-400">Disconnect {name}? {disconnectNote(p, viewerRole)}</span>
         <button type="button" className={BTN.ghost} onClick={() => setConfirming(false)}>Keep it</button>
         <button type="button" className={BTN.dangerSolid} disabled={busy} onClick={doDisconnect} data-testid="button-confirm-disconnect">{busy ? 'Disconnecting…' : 'Disconnect'}</button>
       </>
     ) : (
       <>
         {backBtn}
-        <span className="mr-auto text-[11.5px] text-axal-muted dark:text-gray-400">On disconnect: {disconnectNote(p)}</span>
+        <span className="mr-auto text-[11.5px] text-axal-muted dark:text-gray-400">On disconnect: {disconnectNote(p, viewerRole)}</span>
         {status.why && <button type="button" className={BTN.primary} onClick={() => go('pre')}>Reconnect</button>}
         <button type="button" className={BTN.danger} onClick={() => setConfirming(true)} data-testid="button-disconnect">Disconnect</button>
       </>
@@ -621,7 +621,7 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
   } else if (view === 'pro') {
     sub = `by ${p.by || name}${p.status === 'beta' ? ' · Beta' : ''}`;
     banner = <Banner tone="neutral" data-testid="connector-pro">{`${name} is part of the ${TIER_LABEL[p.tier] || 'paid'} plan. ${FREE_KEEPS_CONNECTORS}${message ? ` ${message}` : ''}`}</Banner>;
-    body = personalMercury ? <MercuryUsesGroups /> : <UsesGroups p={p} />;
+    body = personalMercury ? <MercuryUsesGroups role={viewerRole} /> : <UsesGroups p={p} />;
     footer = <>{backBtn}<button type="button" className={BTN.ghost} onClick={onClose}>Close</button><Link className={BTN.primary} to="/account/billing" onClick={dismiss}>See plans</Link></>;
   } else if (view === 'pre' && teammate && !ownChosen) {
     title = `Connect ${name}`;
@@ -641,7 +641,7 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
         <Steps names={keySteps} at={0} />
         {personalMercury ? (
           <>
-            <MercuryUsesGroups />
+            <MercuryUsesGroups role={viewerRole} />
             <MercuryLandsGroup role={viewerRole} />
             <MercuryReadsGroup />
           </>

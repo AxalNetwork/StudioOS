@@ -16,6 +16,24 @@ export function withPaperFonts(html, css) {
 }
 
 /**
+ * D717 (#1853) — the one request body for a draft's paper. The live paper
+ * (POST /templates/render) and the editor's Pages view (POST
+ * /templates/render.pdf) both build it here, so the two never draw a
+ * different page size, cover or Kind and party. `docKind`/`axalParty` left
+ * undefined send no key; `null` is "from the slug". The live paper adds
+ * `fonts: 'omit'` itself: render.pdf embeds its faces.
+ */
+export function paperRequest({ title, body, docType = '', category = null, version = null, resolveTokens = true, pageSize = 'letter', cover = 'dark', docKind, axalParty }) {
+  return {
+    title: title || '', body: body || '', slug: docType || '', category,
+    version: Number.isInteger(version) ? version : null,
+    resolve: resolveTokens ? 'brackets' : 'raw', page_size: pageSize, cover,
+    ...(docKind !== undefined ? { doc_kind: docKind } : {}),
+    ...(axalParty !== undefined ? { axal_party: axalParty } : {}),
+  };
+}
+
+/**
  * The paper in a frame that runs no script: the sandbox is `allow-same-origin`
  * only, so the parent can read the frame's height, and the paper's own CSP
  * forbids scripts too. `onFrameLoad(iframe)` lets the template editor read the
@@ -77,11 +95,8 @@ export default function PaperPreview({
       setDrawing(true);
       try {
         const drawn = await contractsApi.renderPaper({
-          title: title || '', body: body || '', slug: docType || '', category,
-          version: Number.isInteger(version) ? version : null,
-          resolve: resolveTokens ? 'brackets' : 'raw', page_size: pageSize, cover, fonts: 'omit',
-          ...(docKind !== undefined ? { doc_kind: docKind } : {}),
-          ...(axalParty !== undefined ? { axal_party: axalParty } : {}),
+          ...paperRequest({ title, body, docType, category, version, resolveTokens, pageSize, cover, docKind, axalParty }),
+          fonts: 'omit',
         });
         if (ask !== latest.current) return;
         setPaper(drawn);
