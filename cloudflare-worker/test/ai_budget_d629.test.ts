@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { SignJWT } from 'jose';
 import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
 import { aiLicenceKey, environmentAiCaps, resolveAiCaps, loadAiBudget, reserveAiBudget, settleAiReservation, usdToMicro } from '../src/services/aiBudget.ts';
-import { aiTopupPriceId, aiTopupCreditQuote, recordAiTopupPurchase, creditAiTopupFromPayment } from '../src/services/aiTopups.ts';
+import { aiTopupPriceId, recordAiTopupPurchase, creditAiTopupFromPayment } from '../src/services/aiTopups.ts';
 import { run, __resetForTest, ROUTE, estimateCostUsd } from '../src/services/aiRouter.ts';
 import budgetRoute from '../src/routes/ai_budget.ts';
 import billingRoute from '../src/routes/billing.ts';
@@ -17,6 +17,8 @@ const now=new Date('2026-10-07T12:00:00Z');
 const fixture=()=>{const f=aiBudgetFixture();return {...f,env:{DB:f.DB,JWT_SECRET:'d629-fixture-only-signing-secret',STRIPE_WEBHOOK_SECRET:'d629-fixture-only-webhook-secret',ENVIRONMENT:'development'} as any};};
 const caps=(db:any,day=1000000,month=3000000)=>db.prepare("INSERT INTO ai_licence_caps(licence_key,daily_microusd,monthly_microusd,recorded_by) VALUES('founder:free',?,?,1)").run(day,month);
 const count=(db:any,table:string)=>db.prepare(`SELECT COUNT(*) n FROM ${table}`).get().n;
+// D755: a webhook credit is one ai_credit_ledger purchase row; ai_topup_ledger is no longer written.
+const purchases=(db:any)=>db.prepare("SELECT COUNT(*) n FROM ai_credit_ledger WHERE kind='purchase'").get().n;
 async function buy(f:any,amount=10000000,id='pi_topup',user=2) {
  await recordAiTopupPurchase(f.env,{paymentIntentId:id,orderRef:'order1',userId:user,totalCents:amount/10000,currency:'usd',quote:{priceId:'price_owner',creditMicrousd:amount}});
  return {id,status:'succeeded',currency:'usd',amount_received:amount/10000,metadata:{kind:'cart_order',order_ref:'order1',user_id:String(user)}};
@@ -82,7 +84,7 @@ test('failed model and expired holds return allowance and paid balance, includin
   const next=await loadAiBudget(f.env,2,new Date('2026-11-01T12:00:00Z'));
   assert.equal(next.balance_microusd,1000000);assert.equal(next.day_spend_microusd,0);assert.equal(next.month_spend_microusd,0);
   assert.equal(f.db.prepare('SELECT status FROM ai_budget_reservations WHERE uid=?').get(pending.reservation.uid).status,'refunded');
-  assert.equal(count(f.db,'ai_topup_ledger'),1);
+  assert.equal(purchases(f.db),1);
  }finally{f.db.close();}
 });
 test('existing spend seeds allowance once, then paid usage cannot consume the included allowance again',async()=>{
@@ -141,8 +143,8 @@ test('webhook credits exactly once, validates all payment fields, and ignores or
   assert.equal(await creditAiTopupFromPayment(f.env,pi),true);
   assert.equal(await creditAiTopupFromPayment(f.env,pi),false);
   assert.equal((await loadAiBudget(f.env,2,now)).balance_microusd,12340000);
-  assert.equal(count(f.db,'ai_topup_ledger'),1);assert.equal(count(f.db,'activity_logs'),1);
-  assert.equal(f.db.prepare('SELECT actor FROM ai_topup_ledger').get().actor,'payment_webhook');
+  assert.equal(purchases(f.db),1);assert.equal(count(f.db,'activity_logs'),1);
+  assert.equal(f.db.prepare("SELECT actor FROM ai_credit_ledger WHERE kind='purchase'").get().actor,'payment_webhook');
   assert.equal(await creditAiTopupFromPayment(f.env,{...pi,id:'pi_ordinary'}),false);
   assert.equal((await loadAiBudget(f.env,3,now)).balance_microusd,0);
   assert.ok(f.db.prepare('SELECT credited_at FROM ai_topup_purchases').get().credited_at);
@@ -152,7 +154,7 @@ test('credit audit failure rolls back balance, ledger and credited state; retry 
  const f=fixture();try{
   const pi=await buy(f);f.db.exec("DROP TABLE activity_logs; CREATE TABLE activity_logs(action TEXT CHECK(action!='ai_topup_credited'),details TEXT,actor TEXT,user_id INTEGER)");
   await assert.rejects(()=>creditAiTopupFromPayment(f.env,pi));
-  assert.equal(count(f.db,'ai_topup_ledger'),0);assert.equal(f.db.prepare('SELECT credited_at FROM ai_topup_purchases').get().credited_at,null);
+  assert.equal(purchases(f.db),0);assert.equal(f.db.prepare('SELECT credited_at FROM ai_topup_purchases').get().credited_at,null);
   assert.equal(count(f.db,'ai_topup_accounts'),0);
   f.db.exec('DROP TABLE activity_logs; CREATE TABLE activity_logs(action TEXT,details TEXT,actor TEXT,user_id INTEGER)');
   assert.equal(await creditAiTopupFromPayment(f.env,pi),true);assert.equal((await loadAiBudget(f.env,2,now)).balance_microusd,10000000);
@@ -165,7 +167,7 @@ test('a confirmed signed webhook credits a persisted checkout quote once; unsign
   f.db.prepare("INSERT INTO orders(id,order_ref,user_id,status,payment_intent_id,items_json) VALUES('order-id','order1',2,'paid','pi_topup','[]')").run();
   const body=JSON.stringify({id:'evt_topup',type:'payment_intent.succeeded',data:{object:pi}});
   assert.equal((await billingRoute.request('/stripe/webhook',{method:'POST',body},f.env)).status,400);
-  assert.equal(count(f.db,'ai_topup_ledger'),0);
+  assert.equal(purchases(f.db),0);
   const timestamp=Math.floor(Date.now()/1000);
   const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(f.env.STRIPE_WEBHOOK_SECRET),{name:'HMAC',hash:'SHA-256'},false,['sign']);
   const signature=Array.from(new Uint8Array(await crypto.subtle.sign('HMAC',key,new TextEncoder().encode(`${timestamp}.${body}`)))).map(n=>n.toString(16).padStart(2,'0')).join('');
@@ -174,7 +176,7 @@ test('a confirmed signed webhook credits a persisted checkout quote once; unsign
   assert.equal(response.status,200,await response.text());
   assert.equal((await billingRoute.request('/stripe/webhook',{method:'POST',headers,body},f.env)).status,200);
   assert.equal((await loadAiBudget(f.env,2,now)).balance_microusd,10000000);
-  assert.equal(count(f.db,'ai_topup_ledger'),1);
+  assert.equal(purchases(f.db),1);
  }finally{f.db.close();}
 });
 test('cap writes are Super Admin only, audited atomically, and self reads ignore another requested account',async()=>{
@@ -208,10 +210,10 @@ test('checkout confirmation never credits AI balance even when a paid top-up pur
   globalThis.fetch=async()=>new Response(JSON.stringify(pi),{headers:{'content-type':'application/json'}});
   const token=await new SignJWT({user_id:2}).setProtectedHeader({alg:'HS256'}).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(f.env.JWT_SECRET));
   const response=await ordersRoute.request('/confirm',{method:'POST',headers:{Authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify({payment_intent_id:pi.id})},f.env);
-  assert.equal(response.status,200,await response.text());assert.equal(count(f.db,'ai_topup_ledger'),0);
+  assert.equal(response.status,200,await response.text());assert.equal(purchases(f.db),0);
   assert.equal((await loadAiBudget(f.env,2,now)).balance_microusd,0);
   delete f.env.STRIPE_WEBHOOK_SECRET;await assert.rejects(()=>creditAiTopupFromPayment(f.env,pi),/not configured/);
-  assert.equal(count(f.db,'ai_topup_ledger'),0);
+  assert.equal(purchases(f.db),0);
  }finally{globalThis.fetch=fetchBefore;f.db.close();}
 });
 test('configured price must be an active one-time USD product; absent makes no provider request',async()=>{
@@ -252,15 +254,11 @@ test('the exact micro-USD unit is money and the guard rejects noninteger declara
  assert.equal(nonIntegerCents(new Map([['ai_topup_accounts.balance_microusd',[{type:'TEXT',rel:'fixture',line:1}]]])).length,1);
  assert.equal(nonIntegerCents(new Map([['ai_topup_accounts.balance_microusd',[{type:'INTEGER',rel:'fixture',line:1}]]])).length,0);
 });
-test('owner price and authoritative mixed-cart promo determine credit, not tax or client metadata',()=>{
- const env={STRIPE_PRICE_AI_TOPUP:'price_owner'} as any;
- const cart={currency:'usd',subtotal:3000,lines:[{price_id:'price_owner',line_total:1000},{price_id:'price_other',line_total:2000}]} as any;
+// D755: the mixed-cart promo split (aiTopupCreditQuote) is gone. A pack is bought alone at face value,
+// with no promo; ai_credits_d755.test.ts holds those rules.
+test('the owner price variable is read strictly',()=>{
  assert.equal(aiTopupPriceId({} as any),null);assert.throws(()=>aiTopupPriceId({STRIPE_PRICE_AI_TOPUP:'../bad'} as any),/unreadable/);
- assert.deepEqual(aiTopupCreditQuote(env,cart,100),{priceId:'price_owner',creditMicrousd:9660000});
- assert.equal(aiTopupCreditQuote(env,cart,3000),null);assert.equal(aiTopupCreditQuote({} as any,cart,0),null);
- assert.equal(aiTopupCreditQuote(env,{...cart,lines:[]},0),null);
- assert.throws(()=>aiTopupCreditQuote(env,{...cart,currency:'eur'},0),/unreadable/);
- assert.throws(()=>aiTopupCreditQuote(env,cart,-1),/unreadable/);
+ assert.equal(aiTopupPriceId({STRIPE_PRICE_AI_TOPUP:'price_owner'} as any),'price_owner');
 });
 test('router charges its real estimated cost, releases failed models, preserves cache and org kill',async()=>{
  __resetForTest();const f=fixture();try{
