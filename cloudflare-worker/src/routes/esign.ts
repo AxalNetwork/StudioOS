@@ -56,6 +56,7 @@ import { PDFDocument } from 'pdf-lib';
 import { bindingKey } from '../util/schemaBootstrap';
 import { clientIp } from '../util/clientIp';
 import { refuse } from '../util/refusal';
+import { librarySlugFor, sentAsBundledFile } from '../services/legalDocTypes';
 
 const esign = new Hono<{ Bindings: Env }>();
 
@@ -262,17 +263,34 @@ function buildTemplateBody(agreementType: string, recipientName: string, recipie
 // ---------------------------------------------------------------------------
 // The template body a doc type sends, BEFORE any merge — one resolver for the
 // send and the preview (D411), so what a sender reads on the page is what the
-// envelope hashes. Order: the editable D1 store (active, non-stub) keyed by
-// document_type, then the bundled markdown template. Null means neither knows
-// the doc type, and createAndSendEnvelope falls back to buildTemplateBody.
+// envelope hashes.
+//
+// D758 (#1863): THE LIBRARY ROW IS THE DOCUMENT. A spelling is first resolved
+// to its row's slug (`librarySlugFor`), so `investor_nda_v1` reads the
+// `investor_nda_axal` row, never the bundled file while the row has a body.
+// Order: the editable D1 store (active, non-stub) under that slug, then the
+// bundled markdown file for that slug, which is the row's fallback. A key in
+// `BUNDLED_SENT_DIRECTLY` is still sent as its bundled file, as its sender
+// does today. Null means neither knows the doc type, and createAndSendEnvelope
+// falls back to buildTemplateBody.
 // ---------------------------------------------------------------------------
 export async function templateBodyFor(env: Env, docType: string): Promise<{ body: string; source: 'store' | 'template' } | null> {
   const { templateKeyForDocType, getLegalTemplateBody } = await import('../services/legalTemplates');
   const { getActiveTemplateBody } = await import('../services/legalTemplateStore');
-  const stored = await getActiveTemplateBody(env, docType);
+  if (sentAsBundledFile(docType)) {
+    const key = templateKeyForDocType(docType);
+    return key ? { body: getLegalTemplateBody(key), source: 'template' } : null;
+  }
+  const slug = librarySlugFor(docType);
+  const stored = await getActiveTemplateBody(env, slug);
   if (stored) return { body: stored, source: 'store' };
-  const key = templateKeyForDocType(docType);
+  const key = templateKeyForDocType(slug);
   return key ? { body: getLegalTemplateBody(key), source: 'template' } : null;
+}
+
+/** D758: the 3-way NDA under either spelling, the old envelope one and the row's slug. */
+export function isThreeWayNdaType(t: string | null | undefined): boolean {
+  return t === 'nda_3way_v1' || t === 'nda_3way_founder_investor_axal';
 }
 
 /**
@@ -385,6 +403,11 @@ export async function createAndSendEnvelope(
   }
 ): Promise<{ envelope_id: number; envelope_uuid: string; signing_url: string; email_sent: boolean; provider?: string; already_pending?: boolean } | null> {
   await ensureSchema(env);
+  // D758: the envelope records, prints and dedupes under the library row's
+  // slug, so `mentor_disclaimer_v1` is sent as `mentor_engagement_disclaimer`.
+  // A key still sent as its bundled file keeps its own spelling.
+  const documentType = sentAsBundledFile(opts.documentType) ? opts.documentType : librarySlugFor(opts.documentType);
+  const requestedAs = documentType === opts.documentType ? {} : { requested_as: opts.documentType };
 
   // Task #5 (Z) v3 — Prefer the Y-1 markdown templates when the
   // `document_type` maps to a known LegalTemplateKey
@@ -408,7 +431,7 @@ export async function createAndSendEnvelope(
       throw new RenderedBodyError('merge_fields_with_rendered_body');
     }
   }
-  const source = rendered ? null : await templateBodyFor(env, opts.documentType);
+  const source = rendered ? null : await templateBodyFor(env, documentType);
   let tpl: AgreementTemplate;
   const appliedMergeKeys: string[] = [];
   if (rendered) {
@@ -489,12 +512,12 @@ export async function createAndSendEnvelope(
     // would later be read against.
     const tokens = mergeTokensIn(source.body);
     const body = applyMergeFields(source.body, merge);
-    tpl = { title: originatorName(opts.documentType) ?? opts.documentType, body };
+    tpl = { title: originatorName(documentType) ?? documentType, body };
     if (opts.mergeFields) {
       appliedMergeKeys.push(...Object.keys(opts.mergeFields).filter((k) => tokens.has(k)));
     }
   } else {
-    tpl = buildTemplateBody(opts.documentType, opts.recipientName, opts.recipientEmail);
+    tpl = buildTemplateBody(documentType, opts.recipientName, opts.recipientEmail);
     // ONE SHARED RESOLVER, NOT A REGEX PER KEY. This branch used to compile
     // `new RegExp('\\{\\{\\s*' + escape(key) + '\\s*\\}\\}')` for every
     // submitted key, and the escape was mis-nested — its character class closed
@@ -553,7 +576,7 @@ export async function createAndSendEnvelope(
   const recipientKey = (opts.recipientUserId ?? -1);
   const dealKey = opts.dealId ?? null;
   const SAME_PENDING_SEND = `
-        x.document_type = ?
+        x.document_type IN (?, ?)
     AND x.created_by = ?
     AND COALESCE(x.user_id, -1) = ?
     AND COALESCE(x.deal_id, -2) = COALESCE(?, -2)
@@ -564,8 +587,8 @@ export async function createAndSendEnvelope(
        OR (x.user_id IS NOT NULL
            AND NOT EXISTS (SELECT 1 FROM esign_recipients rr WHERE rr.envelope_id = x.id))
     )`;
-  const sameSendBinds = [opts.documentType, opts.adminUserId, recipientKey, dealKey, opts.recipientEmail];
-  const format = opts.format ?? await templateFormatFor(env, opts.documentType);
+  const sameSendBinds = [documentType, opts.documentType, opts.adminUserId, recipientKey, dealKey, opts.recipientEmail];
+  const format = opts.format ?? await templateFormatFor(env, documentType);
   const insertEnvelope = env.DB.prepare(
     `INSERT INTO esign_envelopes (envelope_uuid, user_id, deal_id, document_type, document_title, document_body, body_sha256, status, created_by, audit_log,
                                   page_size, cover, template_version, doc_kind, axal_party)
@@ -573,7 +596,7 @@ export async function createAndSendEnvelope(
       WHERE NOT EXISTS (SELECT 1 FROM esign_envelopes x WHERE ${SAME_PENDING_SEND})
      RETURNING id`
   ).bind(
-    envelopeUuid, opts.recipientUserId, opts.dealId || null, opts.documentType, tpl.title, tpl.body, bodySha, opts.adminUserId,
+    envelopeUuid, opts.recipientUserId, opts.dealId || null, documentType, tpl.title, tpl.body, bodySha, opts.adminUserId,
     pageSize, cover, templateVersion, format.kind, format.party,
     ...sameSendBinds,
   );
@@ -644,7 +667,7 @@ export async function createAndSendEnvelope(
         const ds = await sendDocusignEnvelope(env, dsRow, {
           documentTitle: tpl.title,
           documentBody: tpl.body,
-          documentType: opts.documentType,
+          documentType,
           ...renderFormat(format),
           templateVersion,
           envelopeUuid,
@@ -667,7 +690,7 @@ export async function createAndSendEnvelope(
             uid: newFileUid(),
             kind: 'docusign_source',
             envelopeId,
-            templateSlug: opts.documentType,
+            templateSlug: documentType,
             templateVersion,
             bodySha256: bodySha,
             fileSha256: ds.source.sha256,
@@ -685,7 +708,7 @@ export async function createAndSendEnvelope(
           signer_email: null,
           action: 'envelope_created',
           ip: opts.actorIp || 'admin',
-          meta: { sender: opts.adminName, document_type: opts.documentType, recipient: opts.recipientEmail, provider: 'docusign', docusign_envelope_id: ds.docusign_envelope_id, body_source: rendered ? 'rendered' : 'template' },
+          meta: { sender: opts.adminName, document_type: documentType, ...requestedAs, recipient: opts.recipientEmail, provider: 'docusign', docusign_envelope_id: ds.docusign_envelope_id, body_source: rendered ? 'rendered' : 'template' },
         });
         return {
           envelope_id: envelopeId,
@@ -731,7 +754,7 @@ export async function createAndSendEnvelope(
     // D416 — which path produced the body, because "rendered by the caller"
     // and "rendered here from the template" are different claims about who
     // decided the document's words.
-    meta: { sender: opts.adminName, document_type: opts.documentType, recipient: opts.recipientEmail, body_source: rendered ? 'rendered' : 'template' },
+    meta: { sender: opts.adminName, document_type: documentType, ...requestedAs, recipient: opts.recipientEmail, body_source: rendered ? 'rendered' : 'template' },
   });
 
   const emailSent = await sendAgreementAssignedEmail(
@@ -1499,7 +1522,7 @@ esign.post('/sign/:token', async (c) => {
       // row to `active` and stamp a 12-month `valid_until`. Without this,
       // the maskFounderForInvestor gate would keep returning masked rows
       // forever even though all three parties have signed.
-      if (envelopeRow?.document_type === 'nda_3way_v1' && envelopeRow.envelope_uuid) {
+      if (isThreeWayNdaType(envelopeRow?.document_type) && envelopeRow?.envelope_uuid) {
         try {
           const { activatePairwiseNda } = await import('../services/trust');
           await activatePairwiseNda(c.env, envelopeRow.envelope_uuid);
