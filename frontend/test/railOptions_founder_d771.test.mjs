@@ -187,7 +187,7 @@ const fillNamed = (section) => {
  */
 const cycleDraft = (o) => o.key.startsWith('draft:') && o.at.some(([file]) => file === CYCLE_ROUTE);
 const draftNamed = () => /<ZoneDraft key=\{`\$\{slug\}-\$\{draft\.surface\}`\} \{\.\.\.draft\}[^>]*railOption=\{`draft:\$\{draft\.surface\}`\}/.test(cycleRouteSource())
-  && /useRailOption\(railOption && \(busy === 'run' \|\| \(item && !item\.accepted\)\) \? railOption : null, run\)/.test(codeOnly(read('frontend/src/workspaces/ZoneDraft.jsx')));
+  && /useRailOption\(busy === 'run' \|\| item \? railOption \|\| `draft:\$\{surface\}` : null,/.test(codeOnly(read('frontend/src/workspaces/ZoneDraft.jsx')));
 const railKeys = (src) => [...src.matchAll(/useRailOption\(([^;]*?)\);/g)]
   .flatMap((m) => [...m[1].matchAll(/'([a-z]+:[a-z0-9_/-]+)'/g)].map((k) => k[1]));
 

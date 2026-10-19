@@ -417,3 +417,14 @@ test('nothing is spent to be told there is nothing to work from', async () => {
   assert.match(body, /message: gathered\.emptyReason \|\|/,
     'the empty reason is dropped, so the page has to invent one');
 });
+
+test('D770 (#2095): a run whose proposals the guard withheld, or could not check, answers in the guard\'s own words', async () => {
+  // D763's guard checks the output inside `run()`; its refusal carries its own sentence (`r.error`) and
+  // a link for a founder or an admin. Saying "the model could not be reached" for it would be untrue.
+  const body = handler(await routeSrc(), "founderValidate.post('/propose/:projectId'");
+  const refusal = body.slice(body.indexOf('if (!r.ok) {'), body.indexOf('}, 503);', body.indexOf('if (!r.ok) {')));
+  assert.match(refusal, /r\.refusal === 'guard_blocked_output' \|\| r\.refusal === 'guard_unavailable'\s*\? r\.error/);
+  assert.ok(refusal.indexOf("'guard_blocked_output'") < refusal.indexOf("'The model could not be reached."), 'the guard\'s words come before the fallback');
+  assert.match(refusal, /\.\.\.\(r\.guard\?\.refusal\?\.link \? \{ link: r\.guard\.refusal\.link \} : \{\}\)/);
+  assert.ok(body.indexOf('if (!r.ok) {') < body.indexOf('await spec.parse('), 'nothing withheld is parsed or stored');
+});

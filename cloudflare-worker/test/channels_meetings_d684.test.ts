@@ -352,17 +352,16 @@ test('transcript_completed queues one import; the job imports the VTT with speak
   assert.deepEqual({ ...session }, { status: 'transcribed', final_model: 'zoom_transcript', submitted_via: 'zoom', channel: 'video' });
   assert.match(f.db.prepare('SELECT transcript FROM discovery_interviews WHERE id = ?').get(INTERVIEW).transcript, /reconciling invoices/);
   assert.deepEqual({ ...f.db.prepare('SELECT status, last_error FROM interview_channel_refs WHERE uid = ?').get(uid) }, { status: 'imported', last_error: null });
-  // The transcript is in, so the Worker AI's Structure pass is queued for this session, as its member.
-  assert.equal(f.jobs.length, 2);
-  assert.deepEqual((f.jobs[1] as any).payload, { session_id: sessionId, user_id: ME, trigger: 'call_imported' });
-  assert.equal((f.jobs[1] as any).job_type, 'session_structure');
+  // D765 (#2090), D720 §6: the transcript is in, and no Structure pass is queued; the founder presses it.
+  assert.equal(f.jobs.length, 1);
+  assert.equal(f.jobs.some((j: any) => j.job_type === 'session_structure'), false);
   assert.equal(logged.join('\n').includes('invoices'), false, 'no transcript text in the logs');
   const events = JSON.stringify(f.db.prepare('SELECT * FROM channel_events').all());
   assert.equal(events.includes('invoices'), false);
 
   // The same instance redelivered after the import is still the duplicate it was.
   assert.deepEqual((await zoomPost(f.env, transcriptEvent())).body, { ok: true, duplicate: true });
-  assert.equal(f.jobs.length, 2, 'nothing more is queued for the same instance');
+  assert.equal(f.jobs.length, 1, 'nothing more is queued for the same instance');
 });
 
 // ── Zoom: a call ended and started again on its link ─────────────────────────
@@ -413,7 +412,7 @@ test('a restarted Zoom call: the later instance is imported into a session of it
     id: sessions[1].id, channel: 'video', status: 'transcribed', submitted_via: 'zoom', consent_status: 'given', consent_method: 'verbal',
   }, 'the later instance carries the call’s consent');
   assert.deepEqual(sessionTexts(f, sessions[1].id), ['After the restart: month-end close is the worst part.']);
-  assert.ok(f.jobs.some((j: any) => j.job_type === 'session_structure' && j.payload.session_id === sessions[1].id));
+  assert.equal(f.jobs.some((j: any) => j.job_type === 'session_structure'), false, 'D765: no Structure is queued');
   const listed = await call(f.env, ME, 'GET', `/interviews/${INTERVIEW}/meetings`);
   assert.deepEqual(listed.body.meetings.map((m: any) => [m.session_id, m.status]).sort(), [[sessionId, 'imported'], [sessions[1].id, 'imported']].sort(),
     'the call, and its later part beside it');

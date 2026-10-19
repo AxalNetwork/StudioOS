@@ -177,6 +177,8 @@ export async function mapSections(env: Env, userId: number, markdown: string, ch
       task: 'dd_synthesis',
       userId,
       surface: AI_SURFACE.raisePitchReview,
+      // D765: the deck review's page; off there, the heuristic sections stand.
+      rail: { page: 'raise', option: 'review:pitch-deck' },
       systemPrompt: system,
       messages: [{ role: 'user', content: user }],
       maxTokens: 1800,
@@ -246,6 +248,8 @@ export async function generateReview(env: Env, userId: number, sections: DeckSec
       task: 'dd_synthesis',
       userId,
       surface: AI_SURFACE.raisePitchReview,
+      // D765: the deck review's page; off there, the heuristic sections stand.
+      rail: { page: 'raise', option: 'review:pitch-deck' },
       systemPrompt: system,
       messages: [{ role: 'user', content: user }],
       maxTokens: 1800,

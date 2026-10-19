@@ -108,6 +108,9 @@ export function makeCycleWrites(request) {
       // Each kind's choices: the caller's own connections enabled for the
       // project's company whose category fits it.
       systemChoices: (projectId) => request(`/cycles/build/systems/choices?${q(projectId)}`),
+      // D782 (#2114): the founder's decision on an architecture note GitHub proposed.
+      acceptDesignProposal: (projectId, id) => request(`/cycles/build/solution-design/proposals/${seg(id)}/accept?${q(projectId)}`, { method: 'POST' }),
+      dismissDesignProposal: (projectId, id) => request(`/cycles/build/solution-design/proposals/${seg(id)}/dismiss?${q(projectId)}`, { method: 'POST' }),
     },
   };
 }

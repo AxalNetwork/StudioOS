@@ -160,6 +160,8 @@ async function runJson<T>(
       task: 'dd_synthesis',
       userId,
       surface: AI_SURFACE.researchCompanies,
+      // D765: the analysis's page; off there, nothing is synthesised.
+      rail: { page: 'research', option: 'scan:competitors' },
       systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
       maxTokens,

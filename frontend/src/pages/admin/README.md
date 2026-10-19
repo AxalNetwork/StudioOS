@@ -28,6 +28,15 @@ templates), the network (profiles, partners, referrals), and integrations
 bot's health from `GET /api/admin/channels/telegram/webhook`, above the news
 bot's tabs (D756).
 
+The AI rail (D775, #2101). Every screen here that is a Super Admin board sits in
+`RailFrame` with `WorkerRail`, as `contracts/ContractsDesk.jsx` does. Where a
+plain admin also reaches the screen, the rail takes the viewer's tier.
+`PublicationsFrame.jsx` is the one frame the three Publications routes share,
+because they are one board. Which board each screen is, and the options it
+offers, are listed in `frontend/src/lib/railOptions/superAdmin.js`.
+A record view names its record as the rail's last crumb with
+`useRecordCrumb.js` (D768's contract, as a hook).
+
 `HeldZone.jsx` and the five `Held*.jsx` landings are the Admin shell on
 accounts HQ holds directly (canvas S20, D286): `HeldAccounts.jsx` (embeds the
 console's Users panel; links Exploring, Personas, Trash), `HeldApprovals.jsx`
@@ -41,6 +50,12 @@ a prefix of their own so none can collide with an HQ console such as
 `frontend/test/admin_route_reachability.test.mjs` reads navigation syntax,
 and `HeldZone` carries the always-visible scope sentence and the shell's one
 Worker AI rail mount.
+
+`AdminBoardFrame.jsx` is the rail on the Admin boards that drew none (D774,
+#2100): each wraps its whole page in it, named for its board, and the rail
+takes the viewer's tier (HQ's for a Super Admin, the admin's otherwise; none
+outside the admin tier). `../../lib/railOptions/admin.js` lists the Admin's
+boards, S1–S39, with the file that mounts each one's rail.
 
 `AdminCommissions.jsx` is `/admin/commissions` (D569, D572): the commission
 rules (edited through D572's route, never created), every commission, the payout queue with

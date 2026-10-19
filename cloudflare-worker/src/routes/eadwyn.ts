@@ -45,6 +45,7 @@ import {
 } from '../integrations/registry';
 import { ensureRole, logEvent, pushScopeRefusal } from './integrations';
 import { CONNECTOR_READERS } from '../services/eadwynReaders';
+import { pageFromPath, railFor, refuseAssistOff } from '../util/railContext';
 import {
   SEND_TARGETS,
   actionEnvelope,
@@ -514,6 +515,8 @@ eadwyn.post('/conversations/:uid/ask', async (c) => {
     userId: user.id,
     model,
     surface: page,
+    // D765: the rail's page, else the page's workspace; asking Eadwyn is the option.
+    rail: railFor(c, { page: pageFromPath(page, 'eadwyn'), option: 'ask:eadwyn' }),
     systemPrompt: `${ASK_PROMPT}\n\n${context}`,
     messages: [...turns.map((t) => ({ role: t.role, content: t.content })), { role: 'user' as const, content: question }],
     maxTokens: 600,
@@ -525,6 +528,7 @@ eadwyn.post('/conversations/:uid/ask', async (c) => {
     role: user.role,
   });
 
+  if (r.refusal === 'assist_off') return refuseAssistOff(c);
   if (r.refusal === 'guard_blocked') {
     return c.json({ error: 'safety_block', message: 'That question could not be sent.', category: r.guard?.codes[0]?.toLowerCase() ?? 'unsafe' }, 422);
   }

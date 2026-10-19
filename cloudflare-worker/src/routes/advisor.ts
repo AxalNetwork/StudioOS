@@ -118,6 +118,7 @@ import {
 import { enqueueJob } from '../services/queue';
 import { notifyAdvisorPageFill, notifyAdvisorProgress } from '../services/realtime';
 import { bindingKey } from '../util/schemaBootstrap';
+import { pageFromPath, railFor, refuseAssistOff } from '../util/railContext';
 
 const advisor = new Hono<{ Bindings: Env }>();
 
@@ -747,8 +748,9 @@ advisor.post('/start', async (c) => {
   const rankBank = applyAdaptiveProfiling(reask.bank, answered, {
     keepIds: conv.current_question_id ? new Set([conv.current_question_id]) : undefined,
   });
+  // D765 (#2090): /start runs on mount, so it never ranks with the model.
   const next = await pickNextQuestion(c.env, user.id, conv.id, rankBank, reask.answered, {
-    pinnedId: conv.current_question_id,
+    pinnedId: conv.current_question_id, rerank: false,
   });
 
   // Refresh counts now that hydration may have inserted new rows.
@@ -1823,8 +1825,15 @@ advisor.get('/admin-posture', async (c) => {
 // question pinned to a section (BUILD/CAPITAL/LEGAL/NETWORK or any
 // persona-defined section). Used by the per-page progress rail's
 // "drill in" affordance.
+//
+// D765 (#2090), D720 §6: a GET never calls a model, so it answers in the
+// deterministic order. POST /next-question is the member's press ("drill
+// in"), and only it lets the reranker run.
 // ---------------------------------------------------------------------------
-advisor.get('/next-question', async (c) => {
+advisor.get('/next-question', (c) => nextQuestion(c, false));
+advisor.post('/next-question', (c) => nextQuestion(c, true));
+
+async function nextQuestion(c: any, rerank: boolean) {
   const user = await advisorUser(c);
   const blocked = await applyAdvisorGate(c, user);
   if (blocked) return blocked;
@@ -1852,7 +1861,7 @@ advisor.get('/next-question', async (c) => {
     keepIds: conv.current_question_id ? new Set([conv.current_question_id]) : undefined,
   });
   const next = await pickNextQuestion(c.env, user.id, conv.id, rankBank, reask.answered, {
-    pinnedId: conv.current_question_id,
+    pinnedId: conv.current_question_id, rerank,
   });
   return c.json({
     persona: personaFor(user),
@@ -1861,7 +1870,7 @@ advisor.get('/next-question', async (c) => {
     next_question: publicQuestion(next),
     complete: !next,
   });
-});
+}
 
 // ---------------------------------------------------------------------------
 // GET /progress  —  per-page + per-section + overall completion.
@@ -2257,6 +2266,7 @@ advisor.post('/explain', async (c) => {
     task: 'advisor_explain',
     userId: user.id,
     surface: AI_SURFACE.studio,
+    rail: railFor(c, { page: pageFromPath(AI_SURFACE.studio, 'studio'), option: 'explain:advisor' }),
     systemPrompt: systemPromptText,
     messages: [{ role: 'user', content: safeTopic }],
     maxTokens: EXPLAIN_MAX_TOKENS,
@@ -2269,6 +2279,8 @@ advisor.post('/explain', async (c) => {
     score: !ai.guard || ai.guard.input === 'none' || ai.guard.input === 'fail' ? null : ai.guard.input === 'pass' ? 1 : 0,
     category: ai.guard?.codes[0]?.toLowerCase() ?? (ai.guard?.input === 'pass' ? 'safe' : null),
   };
+  // D765: AI assistance is off on this page; nothing ran.
+  if (ai.refusal === 'assist_off') return refuseAssistOff(c);
   if (ai.refusal === 'guard_blocked') {
     await writeTurnAudit(c.env, {
       userId: user.id, conversationId,
@@ -2588,11 +2600,14 @@ advisor.post('/tool/auto', async (c) => {
       task: 'tool_call',
       userId: user.id,
       surface: AI_SURFACE.studio,
+      rail: railFor(c, { page: pageFromPath(AI_SURFACE.studio, 'studio'), option: 'tool:advisor' }),
       systemPrompt: TOOL_CALL_SYSTEM_PROMPT,
       messages: [{ role: 'user', content: message }],
       maxTokens: 256,
       temperature: 0,
     });
+    // D765: off on this page, so no tool is picked or run.
+    if (r.refusal === 'assist_off') return refuseAssistOff(c);
     if (!r.ok) {
       llmRefusal = r.refusal || 'router_failed';
     } else {
@@ -2892,6 +2907,8 @@ advisor.post('/transcribe', async (c) => {
     task: 'transcribe',
     userId: user.id,
     surface: AI_SURFACE.studio,
+    // D765: recorded with its page; a transcription is saving, so the switch never refuses it.
+    rail: railFor(c, { page: pageFromPath(AI_SURFACE.studio, 'studio'), option: 'transcribe:voice' }),
     audio: bytes,
     audioMinutes: audioMinutesFromBytes(bytes.byteLength),
   });
