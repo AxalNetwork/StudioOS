@@ -45,6 +45,7 @@ import {
   type SyncResult,
 } from '../registry';
 import { decryptCredentials, encryptCredentials, type CredentialBlob } from '../secrets';
+export { GITHUB_LANDINGS, GITHUB_READ_BY } from '../githubFeeds';
 
 const PROVIDER_KEY = 'github';
 const API = 'https://api.github.com';
@@ -54,6 +55,7 @@ export const MAX_REPOSITORIES = 50;
 
 export interface GithubRepository { full_name: string; private: boolean; updated_at: string | null; installation_id: number }
 export interface SyncProgress { state: 'running' | 'done' | 'failed'; pct: number; reading: string; updated_at: string }
+
 
 /** The callback URL registered with the provider; Admin → Integration keys shows the same (D751). */
 export function redirectUri(env: Env): string {
@@ -553,7 +555,7 @@ export async function syncGithub(env: Env, row: IntegrationRow, budget = SYNC_SU
           counts.partial = true;
           return {
             summary: `${PARTLY_SYNCED}. Synced ${counts.issues} issues, ${counts.pull_requests} pull requests and ${counts.releases} releases so far.`,
-            counts,
+            counts, repositories: repos,
           };
         }
         // The three list reads, as the connector page names them (D753).
@@ -598,7 +600,7 @@ export async function syncGithub(env: Env, row: IntegrationRow, budget = SYNC_SU
   await writeProgress(env, row.uid, { state: 'done', pct: 100, reading: 'Done' });
   return {
     summary: `Synced ${counts.issues} issues, ${counts.pull_requests} pull requests and ${counts.releases} releases from ${repos.length} repositories.`,
-    counts,
+    counts, repositories: repos,
   };
 }
 

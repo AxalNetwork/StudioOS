@@ -7,7 +7,7 @@
  * that fit its work, and the list the per-section PRs wire `useRailOption`
  * from. `frontend/test/rail_options_super_admin_d775.test.mjs` checks it
  * against the code both ways: every listed board and option exists, and every
- * upload or draft control in a board's files is listed.
+ * model-running control in a board's files is a row.
  *
  * BOARDS. `id`, `section` and `module` are the canvas's (`module` is null on a
  * section board). `route` is where the board is drawn today; D720 §11's table
@@ -16,20 +16,18 @@
  * that mounts the board's `<WorkerRail>`, which may be a parent's, or null with
  * `railPending` saying why there is none yet.
  *
- * OPTIONS, in #2097's shape:
- *   page     the board id
- *   key      `<verb>:<object>`, unique per page
- *   label    what the control says
- *   kind     one of the canvas's fourteen kinds of work (`task_kind`)
- *   handler  form, upload, draft, transcribe or none. `none` is a control
- *            that runs no model today: the rail does not list it and the page
- *            calls nothing, but it stays here so D764 sees the whole board.
- *   file     the component the control is in
- *   anchor   a string unique to that control in `file`, which the test finds
+ * OPTIONS follow this folder's rules (`README.md`): one row per control that
+ * runs a model, in the siblings' shape: `page` (the canvas board, "Super
+ * Admin · <section>[ · <module>]"), `key` (`<verb>:<object>`), `label`, `kind`
+ * (one of the canvas's fourteen) and `handler`. `source` is `file` (under
+ * `frontend/src/`) and `match`, the call the parity test finds.
  *
- * Only one option on these 37 boards runs a model: H20's "Draft with AI".
- * Monitoring's anomaly panel (H33) calls a model on mount, not on a member's
- * press, so it is not an option; D780 (#2105) moves it onto the run path.
+ * One control on these 37 boards runs a model: H20's "Draft with AI". The
+ * uploads (H1's brand mark, the photos on H23 and H25, H34's post media, H37's
+ * headshot and LinkedIn PDF, which a deterministic parser reads) only store a
+ * file, so they are not rows. Monitoring's anomaly panel (H33) calls a model on
+ * mount, not on a member's press, so it is not an option; D780 (#2105) moves
+ * it onto the run path.
  */
 
 export const SUPER_ADMIN_PROFILE = 'Super Admin';
@@ -76,17 +74,12 @@ export const SUPER_ADMIN_BOARDS = [
   { id: 'H37', section: 'Settings', module: null, route: '/account', files: ['pages/SettingsPage.jsx'], rail: 'pages/SettingsPage.jsx' },
 ];
 
-export const SUPER_ADMIN_OPTIONS = [
-  { page: 'H1', key: 'upload:licence/brand-mark', label: 'Upload brand mark', kind: 'vision', handler: 'none', file: 'pages/admin/AdminLicences.jsx', anchor: 'accept="image/png,image/jpeg,image/svg+xml"' },
-  { page: 'H20', key: 'draft:publication/summary', label: 'Draft with AI', kind: 'write', handler: 'draft', file: 'pages/admin/PublicationNew.jsx', anchor: 'publications.draft(' },
-  { page: 'H23', key: 'upload:network-profile/photo', label: 'Upload photo', kind: 'vision', handler: 'none', file: 'pages/admin/AdminNetworkProfiles.jsx', anchor: 'type="file"' },
-  { page: 'H25', key: 'upload:team-member/photo', label: 'Upload photo', kind: 'vision', handler: 'none', file: 'pages/admin/AdminTeam.jsx', anchor: 'onChange={onPhotoPick}' },
-  { page: 'H34', key: 'upload:telegram-post/media', label: 'Attach', kind: 'vision', handler: 'none', file: 'pages/admin/AdminTelegram.jsx', anchor: 'onChange={(e) => uploadMedia(e.target.files?.[0])}' },
-  { page: 'H37', key: 'upload:account/headshot', label: 'Change headshot', kind: 'vision', handler: 'none', file: 'pages/SettingsPage.jsx', anchor: 'accept="image/jpeg,image/png,image/webp"' },
-  { page: 'H37', key: 'upload:account/linkedin-pdf', label: 'Upload LinkedIn PDF', kind: 'vision', handler: 'none', file: 'pages/SettingsPage.jsx', anchor: 'accept="application/pdf,.pdf"' },
-];
-
-/** The options the rail lists on a board: the ones that run a model. */
-export function railOptionsFor(boardId) {
-  return SUPER_ADMIN_OPTIONS.filter((o) => o.page === boardId && o.handler !== 'none');
+/** The canvas board name a row's `page` carries. */
+export function boardPage(board) {
+  return [SUPER_ADMIN_PROFILE, board.section, board.module].filter(Boolean).join(' · ');
 }
+
+export const SUPER_ADMIN_RAIL_OPTIONS = Object.freeze([
+  { page: 'Super Admin · Content · Publications', key: 'draft:publication-summary', label: 'Draft with AI', kind: 'write', handler: 'draft',
+    source: { file: 'pages/admin/PublicationNew.jsx', match: 'publications.draft(' } },
+]);

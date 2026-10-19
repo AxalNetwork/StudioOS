@@ -8,9 +8,9 @@
  *   · every board's files exist, and its rail file mounts a `<WorkerRail>`;
  *     a board with no rail yet says why, and really has none;
  *   · the seven rails this PR adds sit in `RailFrame`, named for their board;
- *   · every option exists where it says, in the shape #2097 gives;
- *   · every upload or draft control in a board's files is listed, so a new
- *     control fails here until D764 is told about it.
+ *   · every option exists where it says, in the folder's shape;
+ *   · every model-running control in a board's files is a row, so a new one
+ *     fails here until D764 is told about it.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -18,7 +18,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
 import {
-  SUPER_ADMIN_BOARDS, SUPER_ADMIN_OPTIONS, SUPER_ADMIN_PROFILE, railOptionsFor,
+  SUPER_ADMIN_BOARDS, SUPER_ADMIN_PROFILE, SUPER_ADMIN_RAIL_OPTIONS, boardPage,
 } from '../src/lib/railOptions/superAdmin.js';
 
 const ROOT = process.cwd();
@@ -35,12 +35,6 @@ function railMounts(file) {
     tag: m[0],
     workspace: /\sworkspace="([^"]+)"/.exec(m[1])?.[1] ?? null,
   }));
-}
-
-/** The 1-based line of each match of `re` in a file's raw text. */
-function linesOf(file, re) {
-  const text = read(file);
-  return [...text.matchAll(re)].map((m) => text.slice(0, m.index).split('\n').length);
 }
 
 test('the boards are the canvas\'s H1–H37, in its order and under its names', () => {
@@ -90,45 +84,41 @@ test('the seven rails this PR adds sit in RailFrame, named for their board', () 
   }
 });
 
-test('every option is in #2097\'s shape and exists where it says', () => {
+test('every row is in the folder\'s shape and exists where it says', () => {
+  const pages = new Map(SUPER_ADMIN_BOARDS.map((b) => [boardPage(b), b]));
   const seen = new Set();
-  for (const o of SUPER_ADMIN_OPTIONS) {
-    const board = SUPER_ADMIN_BOARDS.find((b) => b.id === o.page);
-    assert.ok(board, `${o.key}: no board ${o.page}`);
-    assert.match(o.key, /^[a-z]+:[a-z0-9-]+(\/[a-z0-9-]+)*$/, `${o.key} is not <verb>:<object>`);
+  for (const o of SUPER_ADMIN_RAIL_OPTIONS) {
+    const board = pages.get(o.page);
+    assert.ok(board, `${o.key}: "${o.page}" is not a Super Admin board`);
+    assert.match(o.key, /^[a-z]+:[a-z0-9]+(?:-[a-z0-9]+)*$/, `${o.key} is not <verb>:<object>`);
     assert.ok(!seen.has(`${o.page} ${o.key}`), `${o.key} twice on ${o.page}`);
     seen.add(`${o.page} ${o.key}`);
     assert.ok(o.label && o.label.trim() === o.label, `${o.key} has no label`);
     assert.ok(KINDS.has(o.kind), `${o.key}: "${o.kind}" is not one of the canvas's fourteen kinds`);
-    assert.ok(HANDLERS.has(o.handler), `${o.key}: handler "${o.handler}"`);
-    assert.ok(board.files.includes(o.file), `${o.key}: ${o.file} is not one of ${o.page}'s files`);
-    assert.equal(read(o.file).split(o.anchor).length - 1, 1, `${o.key}: its anchor is not exactly once in ${o.file}`);
+    assert.ok(HANDLERS.has(o.handler) && o.handler !== 'none', `${o.key}: handler "${o.handler}"`);
+    assert.ok(board.files.includes(o.source.file), `${o.key}: ${o.source.file} is not one of ${board.id}'s files`);
+    assert.equal(read(o.source.file).split(o.source.match).length - 1, 1, `${o.key}: ${o.source.match} is not exactly once in ${o.source.file}`);
   }
   assert.equal(KINDS.size, 14, 'the canvas no longer has fourteen kinds');
 });
 
-test('every upload or draft control in a board\'s files is listed', () => {
-  // A control is a file input or a draft call. Each is matched to the option
-  // whose anchor sits within a few lines of it, once.
-  const CONTROL = /type="file"|\bpublications\.draft\(|\.draft\(\{/g;
+test('every model-running control on a Super Admin board is a row', () => {
+  // A control that runs a model is a draft band or a draft call. Uploads that
+  // only store a file are not rows (the folder's rule), so they are not found.
   const files = [...new Set(SUPER_ADMIN_BOARDS.flatMap((b) => b.files))];
-  const unlisted = [];
-  const matched = new Set();
+  const listed = new Set(SUPER_ADMIN_RAIL_OPTIONS.map((o) => `${o.source.file}|${o.source.match}`));
+  const found = [];
   for (const f of files) {
-    const options = SUPER_ADMIN_OPTIONS.filter((o) => o.file === f).map((o) => ({ o, line: linesOf(f, new RegExp(o.anchor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'))[0] }));
-    for (const line of [...new Set(linesOf(f, CONTROL))]) {
-      const hit = options.find(({ line: at }) => Math.abs(at - line) <= 6);
-      if (hit) matched.add(hit.o.key); else unlisted.push(`${f}:${line}`);
-    }
+    const code = codeOnly(read(f));
+    for (const m of code.matchAll(/<ZoneDraft\b[^>]*?\bsurface="([^"]+)"/gs)) found.push(`${f}|surface="${m[1]}"`);
+    for (const m of code.matchAll(/\b([A-Za-z_$][\w$]*\.draft)\(/g)) found.push(`${f}|${m[1]}(`);
   }
-  assert.deepEqual(unlisted, [], 'these controls are on a Super Admin board and not in railOptions/superAdmin.js');
-  assert.deepEqual(SUPER_ADMIN_OPTIONS.map((o) => o.key).filter((k) => !matched.has(k)), [], 'these options match no control');
+  assert.deepEqual(found.filter((k) => !listed.has(k)), [], 'these model-running controls are on a Super Admin board and not in railOptions/superAdmin.js');
+  assert.deepEqual([...listed].filter((k) => !found.includes(k)), [], 'these rows match no control');
 });
 
-test('the rail lists only the options that run a model', () => {
-  assert.deepEqual(railOptionsFor('H20').map((o) => o.key), ['draft:publication/summary']);
-  for (const b of SUPER_ADMIN_BOARDS.filter((x) => x.id !== 'H20')) assert.deepEqual(railOptionsFor(b.id), [], `${b.id} lists an option`);
-  // H20's draft really reaches the model: the worker route runs the router.
+test('the one row reaches the model: the worker route runs the router', () => {
+  assert.deepEqual(SUPER_ADMIN_RAIL_OPTIONS.map((o) => `${o.page} ${o.key}`), ['Super Admin · Content · Publications draft:publication-summary']);
   const route = readFileSync(resolve(ROOT, 'cloudflare-worker/src/routes/admin_publications.ts'), 'utf8');
   assert.match(route, /draftSummary/, 'the publications draft no longer calls draftSummary');
 });

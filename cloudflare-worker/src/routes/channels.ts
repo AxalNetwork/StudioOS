@@ -68,11 +68,11 @@
  * chat's notes are queued when the member assigns it. The job below
  * transcribes with the interview sessions' own speech-to-text, under the
  * connection's daily cap (D1, fails closed) and the member's AI budget (D640).
- * For Telegram only the text is kept; the audio is never stored (until
- * D756's audio task, #1978). A consented WhatsApp note is kept and
- * transcribed as the recorder's audio is (D754 W3, #1935): a chunk under
+ * A consented note, from WhatsApp (D754 W3, #1935) or Telegram (D756,
+ * #1978), is kept and transcribed as the recorder's audio is: a chunk under
  * `validate-audio/`, the recorder's per-chunk stage and receipt, appended to
- * the chat's session, then the engine (`ingestChannelAudio`). No note over
+ * the chat's session under its side's speaker, then the engine
+ * (`ingestChannelAudio`). It stays until the session is deleted. No note over
  * 5 MB, the recorder's chunk, reaches a model from either provider (D756,
  * #1896).
  *
@@ -110,8 +110,6 @@ import type { Env, User } from '../types';
 import { requireAuth, requireSuperAdmin, isSuperAdmin } from '../auth';
 import { canHoldValidateSource } from './_founder_validate_helpers';
 import { refuse } from '../util/refusal';
-import { run as aiRun, audioMinutesFromBytes } from '../services/aiRouter';
-import { AI_SURFACE } from '../services/aiSurfaces';
 import { IntakeError, activeMember } from '../services/interviewIntake';
 import { MAX_CHUNK_BYTES } from '../services/interviewSessions';
 import { admitAudio, audioMimeAdmitted, ingestChannelAudio } from '../services/channels/channelAudio';
@@ -128,7 +126,7 @@ import { beginOutbound, finishOutbound, applyDeliveryStatus, type OutboundRow } 
 import {
   admitConsentedThread, applyDelete, applyEdit, assignThread, forgetConnection, inInterview, intervieweeLabel, listThreads, noteVoiceTry,
   queueVoiceTranscriptions, readThread, releaseVoiceNote, replyWindowOpen, setThreadIgnored, storeInbound, storeMessage, storeVoiceNote,
-  storeVoiceTranscript, threadForChat, threadForReply, voiceNoteForJob, type AssignTarget, type ThreadRow,
+  threadForChat, threadForReply, voiceNoteForJob, type AssignTarget, type ThreadRow,
 } from '../services/channels/threads';
 import {
   CONSENT_BUTTONS, CONSENT_KEY_PREFIX, MEMBER_METHODS, attest, consentForThread, markDelivered, markRequested, noticeRefusal,
@@ -419,8 +417,10 @@ channels.post('/whatsapp/captures/:uid/consent', member(async (c, user) => {
   const body = await c.req.json<Record<string, unknown>>().catch(() => ({} as Record<string, unknown>));
   const method = String(body.method ?? '');
   if (method !== 'pre_agreed' && method !== 'verbal' && method !== 'written') return no(c, 400, 'invalid_request');
-  const out = await capture.answerCapture(c.env, user.id, c.req.param('uid') ?? '', method);
+  const uid = c.req.param('uid') ?? '';
+  const out = await capture.answerCapture(c.env, user.id, uid, method);
   if (out.done !== 'consented') return no(c, 404, 'capture_not_waiting');
+  await enqueueCaptureImport(c.env, uid);
   return c.json({ ok: true, status: 'consented' });
 }));
 
@@ -1015,8 +1015,11 @@ async function handleAxalNumber(
   if (press) {
     spend();
     const out = await capture.answerCapture(env, userId, press.uid, press.answer);
-    // The download and the draft interview follow #1896 (whatsappCapture.ts).
-    return finish(out.done === 'nothing' ? 'ignored' : 'done', { userId, error: out.done === 'nothing' ? 'capture_not_waiting' : null });
+    await finish(out.done === 'nothing' ? 'ignored' : 'done', { userId, error: out.done === 'nothing' ? 'capture_not_waiting' : null });
+    // A yes queues the import (`runCaptureFollowup`); a no is answered once, and nothing was kept.
+    if (out.done === 'consented') await enqueueCaptureImport(env, press.uid);
+    if (out.done === 'deleted') await axalReply(env, userId, `wbcapture-no:${press.uid}`, sender, capture.CAPTURE_COPY.declined);
+    return;
   }
   if (ev.media && capture.capturable(ev.media)) {
     spend();
@@ -1304,25 +1307,28 @@ const FINAL_REFUSAL = /^(budget_|kill_switch|model_not_offered)/;
 
 /**
  * `channel_followup` { kind: 'voice', message, job, event? }: one waiting
- * voice note (threads.ts). Fetch the audio, transcribe it with the interview
- * sessions' speech-to-text (aiRouter task `transcribe`, the default final
- * model, billed to the member — a spent budget is refused there and nothing
- * runs), and store only the text.
+ * voice note (threads.ts). Fetch the audio and keep it as the recorder's
+ * (`ingestChannelAudio`: a chunk of the chat's session, the recorder's
+ * per-chunk transcription on the session's final model, billed to the member
+ * — a spent budget is refused there and nothing runs — one appended segment,
+ * then the engine). Never a direct model call.
  *
  * What it spends, and when:
- *   - only a note on a chat in an interview — the member chose the chat;
+ *   - only a note on a chat in an interview — the member chose the chat —
+ *     and only after the interviewee's consent in the chat;
  *   - only while this job holds the note (`transcribe_job`), and only once:
- *     the transcript and the deletion of the placeholder are one batch, with
- *     the event's record, so a retry after it finds nothing to do;
+ *     the appended segment, its staged transcript and the deletion of the
+ *     placeholder are one batch, with the event's record, so a retry after it
+ *     finds nothing to do;
  *   - under the connection's daily cap, held in D1 and checked before the
  *     model runs — a D1 error throws, so it fails closed.
- * A note deleted at the source is gone before the download or before the
- * store, and nothing is kept. A refusal (the cap, the budget, a download the
- * provider refuses) gives the note back for the next assignment to queue,
- * with its code kept on the note for the thread read (#1586). A provider or
- * transcription that does not answer is tried again by the job itself,
- * VOICE_TRIES times in all (#1586); anything else that throws is left to the
- * queue's own retries.
+ * A note deleted at the source before its download is gone, and nothing is
+ * kept; one already kept stays with the session. A refusal (the cap, the
+ * budget, a download the provider refuses) gives the note back for the next
+ * assignment to queue, with its code kept on the note for the thread read
+ * (#1586). A provider or transcription that does not answer is tried again by
+ * the job itself, VOICE_TRIES times in all (#1586); anything else that throws
+ * is left to the queue's own retries.
  */
 export async function runVoiceFollowup(env: Env, p: ChannelJobPayload): Promise<void> {
   if (p.kind !== 'voice') throw new Error(`unknown channel_followup kind for ${p.provider}`);
@@ -1375,7 +1381,8 @@ export async function runVoiceFollowup(env: Env, p: ChannelJobPayload): Promise<
   }
 
   // D754 W3 (#1935): a declared type the recorder does not take is never downloaded.
-  if (provider === 'whatsapp' && note.mime && !audioMimeAdmitted(note.mime)) return giveBack('failed', 'unsupported_format');
+  // A round video keeps its own reason (Telegram's fetch, D756 §1.4).
+  if (note.media !== 'video_note' && note.mime && !audioMimeAdmitted(note.mime)) return giveBack('failed', 'unsupported_format');
   const audio = provider === 'telegram'
     ? await telegram.fetchTelegramVoice(env, note)
     : await whatsapp.fetchWhatsAppMedia(env, conn, note.file, note.mime);
@@ -1395,56 +1402,36 @@ export async function runVoiceFollowup(env: Env, p: ChannelJobPayload): Promise<
   // D756 (#1896): the recorder's chunk is the memory bound; nothing larger reaches a model, or the day's cap.
   if (audio.bytes.byteLength > MAX_CHUNK_BYTES) return giveBack('failed', 'too_large');
   // D754 W3 (#1935): a file the recorder would not take spends nothing either.
-  if (provider === 'whatsapp' && !admitAudio(audio.mime || null, sniffAudioContainer(audio.bytes)).ok) {
+  if (!admitAudio(audio.mime || null, sniffAudioContainer(audio.bytes)).ok) {
     return giveBack('failed', 'unsupported_format');
   }
   if (!(await reserveTranscription(env, conn.integrationId))) return giveBack('failed', 'transcription_cap');
 
-  if (provider === 'whatsapp') {
-    // D754 W3 (#1935): kept as recorder audio, transcribed by the recorder's
-    // stage, appended, then the engine. The placeholder and the event's record
-    // go in the append's batch, so a retry finds no note and does nothing.
-    const record = event ? [finishEventStatement(env, event, 'done', fields)] : [];
-    let kept: Awaited<ReturnType<typeof ingestChannelAudio>>;
-    try {
-      kept = await ingestChannelAudio(env, {
-        sessionId: Number(note.thread.session_id), userId: conn.userId, seq: note.id, bytes: audio.bytes,
-        declaredMime: audio.mime || null, mediaKind: note.media, side: note.side, provider,
-        speakerLabel: note.side === 'me' ? 'Me' : (await intervieweeLabel(env, note.thread)) || 'Interviewee',
-        alongside: [env.DB.prepare('DELETE FROM channel_thread_messages WHERE id = ? AND uid = ?').bind(note.id, note.uid), ...record],
-      });
-    } catch (err) {
-      // The chat's interview or session went away while the note waited.
-      if (err instanceof IntakeError && err.status === 404) return giveBack('ignored', 'not_assigned');
-      throw err;
-    }
-    if (kept.ok) return;
-    if (kept.reason !== 'transcription') return giveBack('failed', kept.reason);
-    if (!kept.budget && !FINAL_REFUSAL.test(kept.refusal)) {
-      console.error(`[channels] voice transcription failed provider=${provider} refusal=${kept.refusal} try=${Number(p.try) || 1}`);
-      return tryAgain('transcription_unavailable');
-    }
-    return giveBack('failed', kept.refusal);
+  // D754 W3 (#1935), D756 (#1978): both providers' notes are kept as recorder
+  // audio, transcribed by the recorder's stage, appended, then the engine.
+  // The placeholder and the event's record go in the append's batch, so a
+  // retry finds no note and does nothing.
+  const record = event ? [finishEventStatement(env, event, 'done', fields)] : [];
+  let kept: Awaited<ReturnType<typeof ingestChannelAudio>>;
+  try {
+    kept = await ingestChannelAudio(env, {
+      sessionId: Number(note.thread.session_id), userId: conn.userId, seq: note.id, bytes: audio.bytes,
+      declaredMime: audio.mime || null, mediaKind: note.media, side: note.side, provider,
+      speakerLabel: note.side === 'me' ? 'Me' : (await intervieweeLabel(env, note.thread)) || 'Interviewee',
+      alongside: [env.DB.prepare('DELETE FROM channel_thread_messages WHERE id = ? AND uid = ?').bind(note.id, note.uid), ...record],
+    });
+  } catch (err) {
+    // The chat's interview or session went away while the note waited.
+    if (err instanceof IntakeError && err.status === 404) return giveBack('ignored', 'not_assigned');
+    throw err;
   }
-
-  const r = await aiRun(env, {
-    task: 'transcribe', userId: conn.userId, surface: AI_SURFACE.validateInterviews,
-    audio: audio.bytes, audioMime: audio.mime, audioMinutes: audioMinutesFromBytes(audio.bytes.byteLength),
-  });
-  if (!r.ok) {
-    const refusal = String(r.refusal || 'all_models_failed');
-    if (!FINAL_REFUSAL.test(refusal)) {
-      console.error(`[channels] voice transcription failed provider=${provider} refusal=${refusal} try=${Number(p.try) || 1}`);
-      return tryAgain('transcription_unavailable');
-    }
-    return giveBack('failed', refusal);
+  if (kept.ok) return;
+  if (kept.reason !== 'transcription') return giveBack('failed', kept.reason);
+  if (!kept.budget && !FINAL_REFUSAL.test(kept.refusal)) {
+    console.error(`[channels] voice transcription failed provider=${provider} refusal=${kept.refusal} try=${Number(p.try) || 1}`);
+    return tryAgain('transcription_unavailable');
   }
-  const text = String(r.transcript?.text ?? r.output ?? '').trim();
-  const record = event
-    ? [finishEventStatement(env, event, text ? 'done' : 'ignored', { ...fields, error: text ? null : 'empty_transcript' })]
-    : [];
-  const out = await storeVoiceTranscript(env, conn, note, text, record);
-  if (out === 'gone') await end('ignored', { ...fields, error: 'voice_gone' });
+  return giveBack('failed', kept.refusal);
 }
 
 /**
@@ -1463,9 +1450,46 @@ export async function runConsentFollowup(env: Env, p: ChannelJobPayload): Promis
   await admitConsentedThread(env, Number(thread.user_id), thread.id);
 }
 
+/** The import of a consented capture (D754 way B, #1938), queued once per capture. */
+async function enqueueCaptureImport(env: Env, uid: string): Promise<void> {
+  await enqueueChannelJob(env, 'channel_followup', 'whatsapp', `capture:${uid}`, { kind: 'capture', capture: uid, job: `capture:${uid}` });
+}
+
+/**
+ * `channel_followup` { kind: 'capture', capture, job }: a capture the member
+ * consented to becomes a draft interview (`whatsappCapture.importCapture`).
+ * Re-checked here: Axal's number configured, the member standing, the rollout
+ * open. A provider that does not answer is tried again by the job, VOICE_TRIES
+ * times in all; after that the capture keeps its code until it expires. One
+ * "Saved" reply from Axal's number when the import is done.
+ */
+export async function runCaptureFollowup(env: Env, p: ChannelJobPayload): Promise<void> {
+  const uid = String(p.capture ?? '');
+  const row = await env.DB.prepare('SELECT user_id, integration_id FROM whatsapp_captures WHERE uid = ?')
+    .bind(uid).first<{ user_id: number; integration_id: number }>();
+  if (!row || !waLink.axalNumberReady(env)) return;
+  const userId = Number(row.user_id);
+  if (!(await memberStands(env, userId)) || !(await channelOpenToMember(env, 'whatsapp', userId))) return;
+  const attempt = Math.max(1, Number(p.try) || 1);
+  const out = await capture.importCapture(env, uid, `${String(p.job ?? `capture:${uid}`)}#${attempt}`);
+  if (out.done === 'retry') {
+    if (attempt >= VOICE_TRIES) return;
+    const delay = VOICE_RETRY_DELAYS[Math.min(attempt - 1, VOICE_RETRY_DELAYS.length - 1)];
+    await enqueueChannelJob(env, 'channel_followup', 'whatsapp', `capture:${uid}-try-${attempt + 1}`, { ...p, try: attempt + 1 }, { delaySeconds: delay });
+    return;
+  }
+  if (out.done !== 'imported') return;
+  const link = await env.DB.prepare(
+    "SELECT uid, credentials_enc FROM integrations WHERE id = ? AND user_id = ? AND provider_key = 'whatsapp_link' AND status = 'active'",
+  ).bind(out.integrationId, userId).first<{ uid: string; credentials_enc: string | null }>();
+  const to = link ? await waLink.linkedWaId(env, link) : null;
+  if (to) await axalReply(env, userId, `wbcapture-saved:${uid}`, to, capture.CAPTURE_COPY.saved);
+}
+
 /** One `channel_followup` handler for both providers, by the payload's kind. */
 export async function runChannelFollowup(env: Env, p: ChannelJobPayload): Promise<void> {
   if (p.kind === 'consent') return runConsentFollowup(env, p);
+  if (p.kind === 'capture') return runCaptureFollowup(env, p);
   return runVoiceFollowup(env, p);
 }
 
