@@ -11,7 +11,7 @@
  *    answers 403 to keep and discard alike.
  *
  * The real `decks.ts` router over HTTP, against node:sqlite tables sliced from
- * `schema_baseline.sql` plus migration 497. No model is reached: with no
+ * `schema_baseline.sql` plus migration 498. No model is reached: with no
  * OPENAI_API_KEY the fill's AI hints are skipped, and `fetch` throws if called.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
@@ -32,7 +32,7 @@ import { tableFromBaseline, stripForeignKeys } from './_baseline.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const BASELINE = readFileSync(resolve(ROOT, 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
-const MIGRATION = readFileSync(resolve(ROOT, 'cloudflare-worker/sql/migrations/497_pitch_deck_proposals.sql'), 'utf8');
+const MIGRATION = readFileSync(resolve(ROOT, 'cloudflare-worker/sql/migrations/498_pitch_deck_proposals.sql'), 'utf8');
 const JWT_SECRET = 'unit-test-jwt-secret-d767-0123456789-abcdef';
 const TABLES = ['users', 'projects', 'pitch_decks', 'financial_models', 'cap_table_holders', 'landing_pages'];
 

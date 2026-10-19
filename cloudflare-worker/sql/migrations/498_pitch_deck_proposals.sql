@@ -1,4 +1,4 @@
--- 497 — D767 (#2096): "Fill from project" proposes a deck version instead of
+-- 498 — D767 (#2096): "Fill from project" proposes a deck version instead of
 -- overwriting one.
 --
 -- A fill writes one row here and nothing in pitch_decks. The founder sees it

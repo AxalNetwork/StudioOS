@@ -52,7 +52,7 @@ async function ensureSchema(env: Env): Promise<void> {
      )`,
     `CREATE INDEX IF NOT EXISTS idx_decks_project ON pitch_decks(project_id, version)`,
     `CREATE INDEX IF NOT EXISTS idx_decks_current ON pitch_decks(project_id, is_current)`,
-    // Migration 497 (D767): a "Fill from project" proposal, never a version until kept.
+    // Migration 498 (D767): a "Fill from project" proposal, never a version until kept.
     `CREATE TABLE IF NOT EXISTS pitch_deck_proposals (
        id INTEGER PRIMARY KEY AUTOINCREMENT,
        project_id INTEGER NOT NULL,
