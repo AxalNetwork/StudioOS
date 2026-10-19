@@ -6,7 +6,8 @@
  * grants write. A GitHub App's permissions are fine-grained, so the App is
  * registered with issues, pull requests, contents (releases) and metadata, all
  * `read`. The member installs it on the repositories GitHub lets them pick, and
- * then chooses, inside StudioOS, which of those to sync.
+ * then chooses, inside StudioOS, which of those to sync. The repository read
+ * reports no installation and offers githubInstallUrl’s configured install page.
  *
  * WHAT IS GRANTED IS READ, NOT ASSUMED. A user token carries no scope string,
  * so `grantedPermissions` reads each installation's `permissions` and returns
@@ -62,6 +63,13 @@ async function ensureCreds(env: Env): Promise<{ id: string; secret: string }> {
   const c = await loadOauthCreds(env, 'github');
   if (!c) throw new Error('github_oauth_unconfigured: set GITHUB_APP_CLIENT_ID/GITHUB_APP_CLIENT_SECRET, or configure them in Admin → Integration Keys.');
   return c;
+}
+
+const APP_SLUG = /^[a-z0-9][a-z0-9-]{0,99}$/;
+/** The configured App's install page; never infer a slug from a client id. */
+export function githubInstallUrl(env: Env): string | null {
+  const slug = String(env.GITHUB_APP_SLUG ?? '').trim();
+  return APP_SLUG.test(slug) ? `https://github.com/apps/${slug}/installations/new` : null;
 }
 
 async function gh(token: string, path: string): Promise<Response> {

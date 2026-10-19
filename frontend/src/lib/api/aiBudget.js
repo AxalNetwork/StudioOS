@@ -8,7 +8,17 @@ const body = (b) => JSON.stringify(b ?? {});
 
 export const aiBudgetApi = {
   mine: () => request('/ai-budget/me'),
+  // D755 — the packs on sale, the hold and the latest purchase; D750's `configured`/`product` stay until CR4 and CR7.
   topUp: () => request('/ai-budget/top-up'),
+  // D755 — the member's own top-up history, newest first; `runs` adds each run's hold, release and spend.
+  history: ({ before, limit, runs } = {}) => {
+    const q = new URLSearchParams();
+    if (before) q.set('before', before);
+    if (limit) q.set('limit', String(limit));
+    if (runs) q.set('runs', '1');
+    const s = q.toString();
+    return request(`/ai-budget/history${s ? `?${s}` : ''}`);
+  },
   // D750 — Super Admin: why the top-up is or is not offered.
   topUpStatus: () => request('/ai-budget/top-up/status'),
   // D641 — every model the router can price, read from its own tables.
