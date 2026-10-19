@@ -18,6 +18,7 @@ conversation reaches Validate › Interviews. Read
 | `telegram.ts` | The Telegram Business adapter (S19): the webhook's secret header, Updates normalised (message ids as `<chat>:<message_id>`, unique across chats), `/start <code>`, `/confirm` and Axal Confirm linking (the Telegram account's owner agrees, told which Axal account is asking) and `business_connection` rows, `sendMessage`, `getFile` (≤ 20 MB) and `setWebhook`. The bot is `TELEGRAM_CHANNEL_BOT_TOKEN`, never the news bot. |
 | `whatsapp.ts` | The WhatsApp Business adapter (S19): the GET challenge and the POST `X-Hub-Signature-256` over the raw body, `messages` / `statuses` / `smb_message_echoes` normalised, Embedded Signup (code → token encrypted with `../../integrations/secrets.ts`, number checked against the WABA, app subscribed), text sends and media downloads on Graph API `v23.0`. Axal’s own number and WABA cannot be claimed; its WABA is never unsubscribed by a member. Disconnecting another WABA unsubscribes only when no other member’s number is in it. The Worker hands `GRAPH_VERSION` to the browser. |
 | `voiceFailures.ts` | A voice note that was not transcribed, told on its thread (#1586): why (the budget, AI switched off, the day's cap, too large, unreadable, an expired connection, the provider unreachable after `VOICE_TRIES`, or still trying), in our words, kept as a code on its waiting placeholder (`channel_thread_messages.transcribe_error`, migration 454), the WhatsApp-only `voice_fetch_by` deadline and non-retryable `expired` reason, and the retry, which re-queues the note through `threads.ts` once the budget allows. |
+| `consentNotice.ts` | D756 §1.7 / D754 §5: the one notice version every consent row stores, and the link to the interviewee's notice page (`/privacy/interviews?n=<version>`), null without an https base URL. |
 | `meetings.ts` | A Zoom or Meet call an interview scheduled (`interview_channel_refs`), from creation to imported transcript (S18): the ref's states, `MEETING_ERRORS` (the plain sentence `last_error` holds, and its code), and `importMeetingRef`, the one import path both providers' `meeting_import` jobs and the retry route run — through `../interviewIntake.ts`'s `importTranscript`. |
 | `zoom.ts` | The Zoom adapter (S18): the `zoom` Connectors-registry OAuth provider (PKCE, tokens encrypted by the route layer, refresh under a KV lease), `createMeeting` / `cancelMeeting` on the member's account, the webhook (url_validation, `x-zm-signature` over `v0:{ts}:{raw body}` within five minutes), `parseVtt`, the transcript fetch with the member's token, and a daily sweep for calls that sent no transcript event. |
 | `googleMeet.ts` | The Google Meet adapter (S18): a Calendar event with a Meet conference on the member's existing Google connection (`../calendar.ts`'s token store, no second one), Meet REST v2 conference records, transcripts and entries, and the sweep that polls ended calls (Meet has no push). Reading transcripts needs `meetings.space.readonly`; without it the ref says Google must be reconnected. |
@@ -113,3 +114,17 @@ nothing here pretends to.
   can start 1,000 conversations a day, and WhatsApp Calling needs at least
   2,000; …". A number connected before #1586 says it has not been checked
   until its next Test. D754 adds `inbound` and `outbound` reason lists; region restrictions apply to outbound only, and both sides remain unavailable.
+
+  **D754 adds a reason no number can get past (#1871).** Every member number
+  is onboarded in coexistence mode, and calls on a coexistence number are
+  reported to stay in the WhatsApp Business app, so none reaches the Calling
+  API. The webhook therefore never subscribes `calls`.
+
+## Switching WhatsApp on
+
+The owner's steps, the live check on a real phone, what members see in each
+state and the rollback are in `documentation/operations/WHATSAPP.md`; the
+secrets and the `WHATSAPP_CHANNEL` rollout var are listed in
+`documentation/architecture/PRODUCTION.md`. The live smoke
+(`scripts/check-spa-live.mjs`) fails if the WhatsApp webhook ever accepts an
+unsigned POST.

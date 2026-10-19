@@ -76,3 +76,10 @@ module's `form-options` reply, and checks their client writes.
 `cloudflare-worker/test/cycle_forms_raise_grow_d695.test.ts` sends Raise's
 bodies through the real routes.
 Registry and routing integration cases follow when their dependencies merge.
+
+D755 CR7 (#1985): `checkout_token_pack_d755.test.mjs` mounts the checkout and
+confirmation with stubbed API/Stripe modules, drives billing country, payment,
+redirects and bounded polling, and checks 14 scenarios against 31 isolated
+source mutations. Every mutant must fail its scenario and the restored source
+must pass. No real payment or credit write runs. `ai_topup_cart_d629.test.mjs`
+keeps the ordinary cart regression; the top-up cart path is retired.

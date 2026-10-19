@@ -58,3 +58,13 @@ Naming follows the surface, not the persona: `PortfolioHealthPage`,
 `SettingsPage.jsx` offers Light/Dark theme selection and explainer restoration.
 Density and sidebar-start preferences are retired. The sidebar still has its
 normal manual controls; the mobile drawer starts closed.
+
+## Checkout
+
+D755 CR7 (#1985): `CheckoutPage.jsx` buys a token pack as its own one-line order,
+without mounting or clearing the shared cart. The retired top-up URL redirects
+to Plans & Pricing. `CheckoutConfirmationPage.jsx` only reads the owner's order:
+credit is reported only from `ai_topup.state`, with bounded backoff and cancelled
+reads on navigation. Missing balance data says Unreadable; nothing is credited
+from the browser. Stripe and the existing billing-country/VAT calculation stay
+on the existing checkout surface.

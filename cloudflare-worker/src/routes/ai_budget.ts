@@ -4,6 +4,8 @@ import { requireAuth, requireSuperAdmin } from '../auth';
 import { AI_LICENCE_KEYS, AiBudgetReviewConflict, AiBudgetReviewNotFound, listAiBudgetReviews,
   listAiLicenceCaps, loadAiBudget, settleAiBudgetReview, usdToMicro } from '../services/aiBudget';
 import { aiTopupStatus, memberTopupReading, readAiTopupProduct } from '../services/aiTopups';
+import { HISTORY_MAX, ledgerBalance, memberAccount, memberHistory, memberTopUp, packLines, packLabel, reconcile, recordAdjustment } from '../services/aiCredits';
+import { logAdminAction } from '../services/adminAudit';
 import { refuse } from '../util/refusal';
 import { AUTH_ERROR_STATUSES } from '../util/authErrors';
 
@@ -18,15 +20,38 @@ r.get('/me',async c=>{
   try { return c.json(await loadAiBudget(c.env,user.id)); }
   catch(error) { return refuse(c,503,{code:'ai_budget_unreadable',message:'Unreadable: your AI allowance and top-up balance could not be read.',raw:error,audience:'member'}); }
 });
+/**
+ * D755 (#1919): the packs on sale, the hold and the latest purchase, with the
+ * state and never the reason (D750 decision 3). `configured` and `product` are
+ * D750's single-price fields, DEPRECATED: kept until CR4 PR 2 and CR7 merge.
+ */
 r.get('/top-up',async c=>{
-  await requireAuth(c);
-  try { return c.json(memberTopupReading(await readAiTopupProduct(c.env))); }
+  const user=await requireAuth(c);
+  try { return c.json({...memberTopupReading(await readAiTopupProduct(c.env)),...await memberTopUp(c.env,user.id)}); }
   catch(error) { return refuse(c,503,{code:'ai_topup_unreadable',message:'Unreadable: the AI top-up could not be read.',raw:error,audience:'member'}); }
 });
-// D750: why the top-up is or is not offered, for the Super Admin only.
+// D755: the member's own top-up history, newest first; `runs=1` adds each run's hold, release and spend.
+r.get('/history',async c=>{
+  const user=await requireAuth(c);
+  const limit=c.req.query('limit')===undefined?20:Number(c.req.query('limit'));
+  if (!Number.isInteger(limit) || limit<1 || limit>HISTORY_MAX) return c.json({error:'invalid_limit',message:`Ask for 1 to ${HISTORY_MAX} rows.`},400);
+  try { return c.json(await memberHistory(c.env,user.id,{before:c.req.query('before'),limit,runs:c.req.query('runs')==='1'})); }
+  catch(error) {
+    if (error instanceof RangeError) return c.json({error:'invalid_cursor',message:'That page cursor is not one this list gave.'},400);
+    return refuse(c,503,{code:'ai_history_unreadable',message:'Unreadable: your top-up history could not be read.',raw:error,audience:'member'});
+  }
+});
+// D750, then D755 §14: why each pack is or is not offered, for the Super Admin only. The top-level
+// fields are D750's single-price line, DEPRECATED until CR8 draws `packs`.
 r.get('/top-up/status',async c=>{
   await requireSuperAdmin(c);
-  try { return c.json(await aiTopupStatus(c.env)); }
+  try {
+    const {stripeMode}=await import('../services/catalog');
+    const lines=await packLines(c.env);
+    return c.json({...await aiTopupStatus(c.env),mode:stripeMode(c.env),packs:lines.map(l=>({uid:l.uid,origin:l.origin,
+      label:l.face_cents===null?null:packLabel(l.face_cents),state:l.state,reason:l.reason,price_id_suffix:l.price_id?l.price_id.slice(-6):null,
+      on_sale:l.on_sale,bonus_microusd:l.bonus_microusd,sort:l.origin==='environment'?null:l.sort,adoptable:l.adoptable}))});
+  }
   catch(error) { return refuse(c,503,{code:'ai_topup_unreadable',message:'Unreadable: the AI top-up could not be read.',raw:error}); }
 });
 r.get('/caps',async c=>{
@@ -73,5 +98,53 @@ r.put('/caps/:licence',async c=>{
     if (results.length!==2 || results.some(x=>x.success!==true)) throw new Error('AI caps unreadable');
     return c.json({licence_key:key,daily_microusd:day,monthly_microusd:month});
   } catch(error) { return refuse(c,503,{code:'ai_caps_not_saved',message:'The AI caps were not saved.',raw:error}); }
+});
+// ---------------------------------------------------------------------------
+// D755 §14 (#1919): one member's AI account, adjustments and reconcile. Super Admin only.
+// ---------------------------------------------------------------------------
+async function memberOf(c:any):Promise<number|null> {
+  const id=Number(c.req.param('userId'));
+  if (!Number.isSafeInteger(id) || id<=0) return null;
+  const row=await c.env.DB.prepare('SELECT id FROM users WHERE id=?').bind(id).first();
+  return row?id:null;
+}
+r.get('/members/:userId',async c=>{
+  const actor=await requireSuperAdmin(c);
+  const limit=c.req.query('limit')===undefined?20:Number(c.req.query('limit'));
+  if (!Number.isInteger(limit) || limit<1 || limit>HISTORY_MAX) return c.json({error:'invalid_limit',message:`Ask for 1 to ${HISTORY_MAX} rows.`},400);
+  try {
+    const id=await memberOf(c);
+    if (id===null) return refuse(c,404,{code:'ai_member_not_found',message:'No member has that ID.'});
+    const account=await memberAccount(c.env,id,{before:c.req.query('before'),limit});
+    await logAdminAction(c.env,actor.id,(actor as any).email ?? '','ai_member_account_read',{member_id:id});
+    return c.json(account);
+  } catch(error) {
+    if (error instanceof RangeError) return c.json({error:'invalid_cursor',message:'That page cursor is not one this list gave.'},400);
+    return refuse(c,503,{code:'ai_member_account_unreadable',message:'Unreadable: this member\'s AI account could not be read.',raw:error});
+  }
+});
+r.post('/members/:userId/adjustments',async c=>{
+  const actor=await requireSuperAdmin(c);
+  const body=await c.req.json().catch(()=>null) as any;
+  const amount=body?.amount_usd, reason=typeof body?.reason==='string'?body.reason.trim():'', key=body?.idempotency_key;
+  if (typeof key!=='string' || !/^[A-Za-z0-9_-]{8,64}$/.test(key))
+    return c.json({error:'idempotency_key_required',message:'Send an idempotency key of 8 to 64 letters, digits, - or _.'},400);
+  // The bounds and the reason's length are recordAdjustment's (§16), checked there once.
+  const delta=typeof amount==='number' && Number.isFinite(amount) ? Math.sign(amount)*Math.round(Math.abs(amount)*1_000_000) : NaN;
+  if (!Number.isSafeInteger(delta))
+    return c.json({error:'ai_adjustment_out_of_bounds',message:'An adjustment moves at most $100 either way, and never $0.'},400);
+  try {
+    const id=await memberOf(c);
+    if (id===null) return refuse(c,404,{code:'ai_member_not_found',message:'No member has that ID.'});
+    const out=await recordAdjustment(c.env,{userId:id,actorId:actor.id,deltaMicrousd:delta,reason,key});
+    if (!out.ok) return c.json({error:out.error,message:out.detail},out.error==='idempotency_key_reused'?409:400);
+    return c.json({uid:out.uid,already_recorded:out.already,delta_microusd:out.delta_microusd,balance_microusd:out.balance_microusd,
+      ledger_balance_microusd:await ledgerBalance(c.env,id)});
+  } catch(error) { return refuse(c,503,{code:'ai_adjustment_not_recorded',message:'The adjustment was not recorded. Nothing changed.',raw:error}); }
+});
+r.get('/reconcile',async c=>{
+  await requireSuperAdmin(c);
+  try { return c.json(await reconcile(c.env)); }
+  catch(error) { return refuse(c,503,{code:'ai_reconcile_unreadable',message:'Unreadable: the AI balances could not be reconciled.',raw:error}); }
 });
 export default r;

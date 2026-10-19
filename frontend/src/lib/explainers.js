@@ -154,7 +154,7 @@ export const EXPLAINERS = {
   },
   legal_templates: {
     title: 'Legal templates library',
-    body: 'Vetted starter templates — NDAs, advisory agreements, term sheets — with merge fields auto-filled from your profile and entity.',
+    body: 'The legal documents Axal VC uses, with the text each one carries in the library. Send one for signature from Send for signature.',
     docPath: 'legal/templates',
   },
   marketplace: {

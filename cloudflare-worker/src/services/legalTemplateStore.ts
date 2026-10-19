@@ -195,6 +195,21 @@ export async function getActiveTemplateBody(env: Env, slug: string): Promise<str
   }
 }
 
+// D758 — the active, non-stub row a send reads: its title and body, or null
+// when there is none. Unlike getActiveTemplateBody it does NOT swallow a read
+// failure: a send must tell "no body" (refused, 409) from "could not read the
+// store" (503), so the caller gets the throw.
+export async function activeTemplate(env: Env, slug: string): Promise<{ title: string; body: string } | null> {
+  await ensureLegalTemplatesSchema(env);
+  const r = await env.DB.prepare(
+    `SELECT title, body_md FROM legal_templates
+      WHERE slug = ? AND is_active = 1 AND is_stub = 0 AND length(trim(body_md)) > 0`,
+  )
+    .bind(slug)
+    .first<{ title: string; body_md: string }>();
+  return r ? { title: r.title, body: r.body_md } : null;
+}
+
 export async function listVersions(
   env: Env,
   slug: string,
