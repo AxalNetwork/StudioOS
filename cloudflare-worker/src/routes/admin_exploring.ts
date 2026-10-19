@@ -22,7 +22,8 @@ import type { Env } from '../types';
 import { requireAdmin } from '../auth';
 import { getSQL } from '../db';
 import { logAdminAction } from '../services/adminAudit';
-import { createAndSendEnvelope } from './esign';
+import { createAndSendEnvelope, templateBodyRefusal } from './esign';
+import { refuse } from '../util/refusal';
 import { ensureExploringSchema } from '../services/exploringSchema';
 import { clampLimit } from '../util/pagination';
 
@@ -159,16 +160,25 @@ adminExploring.post('/users/:id/binding', async (c) => {
     return c.json({ error: 'User is not in the exploring holding state' }, 409);
   }
 
-  const sent = await createAndSendEnvelope(c.env, {
-    adminUserId: admin.id,
-    adminName: admin.name || admin.email,
-    recipientUserId: target.id,
-    recipientEmail: target.email,
-    recipientName: target.name || target.email,
-    documentType,
-    appUrl: appUrl(c.env),
-    viaProvider,
-  });
+  let sent: Awaited<ReturnType<typeof createAndSendEnvelope>>;
+  try {
+    sent = await createAndSendEnvelope(c.env, {
+      adminUserId: admin.id,
+      adminName: admin.name || admin.email,
+      recipientUserId: target.id,
+      recipientEmail: target.email,
+      recipientName: target.name || target.email,
+      documentType,
+      appUrl: appUrl(c.env),
+      viaProvider,
+    });
+  } catch (e) {
+    // D758 — no body in the library (or an unreadable store): nothing was
+    // sent, and nothing is written to user_role_review.
+    const r = templateBodyRefusal(e, 'admin');
+    if (r) return refuse(c, r.status, { code: r.code, message: r.message });
+    throw e;
+  }
   if (!sent) return c.json({ error: 'Failed to create/send the binding envelope' }, 502);
 
   try {

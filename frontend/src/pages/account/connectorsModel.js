@@ -353,12 +353,6 @@ export function pageOf(rows, page) {
 
 export const SUGGESTED = 'Suggested for you';
 
-/** The chips: All, Suggested for you, then each category the catalogue holds, in the canvas's order. */
-export function discoverChips(catalogue) {
-  const present = new Set((catalogue || []).map((p) => p.category).filter(Boolean));
-  return ['All', SUGGESTED, ...CATEGORY_ORDER.filter((c) => present.has(c))];
-}
-
 /**
  * D715 (#1780): the Axal entities' Mercury row, which the Worker serves an
  * admin on HQ only (`connection_source`, #1775). It is never a member's own
@@ -426,7 +420,18 @@ export function discoverSections(catalogue, chip = 'All', { q = '', suggestions 
  * sign-in went.
  */
 export function connectorsRedirect({ search = '', hash = '' } = {}) {
-  return { pathname: '/account/connectors', search, hash };
+  const ret = oauthReturn(search);
+  if (!ret) return { pathname: '/account/connectors', search, hash };
+  // D715 decision 3: Mercury has no sign-in. A return naming it is crafted and never reaches the Mercury page, whose mount makes the audited read.
+  if (ret.key === 'mercury') return { pathname: '/account/connectors', search: stripReturn(search, ret.strip), hash };
+  // D753 — a sign-in comes back to its own connector's page.
+  return { pathname: connectorPagePath(ret.key), search, hash };
+}
+
+/** D753 — a connector's own page, for a valid key; the hub otherwise. */
+export function connectorPagePath(key) {
+  const k = codeWord(String(key || '').toLowerCase());
+  return k && k.length <= 40 ? `/account/connectors/${k}` : '/account/connectors';
 }
 
 /** The once-only notice about the rename is remembered under this key. */

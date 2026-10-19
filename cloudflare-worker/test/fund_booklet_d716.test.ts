@@ -15,7 +15,8 @@ import { SignJWT } from 'jose';
 import { makeD1 } from './_d1_sqlite.mjs';
 import { tableFromBaseline, stripForeignKeys } from './_baseline.mjs';
 import booklets from '../src/routes/fund_booklets.ts';
-import { bookletFields } from '../src/services/subscriptionBooklet.ts';
+import { bookletFields, bookletMissingSentence, bookletPaperInput, bookletSpecimenInput } from '../src/services/subscriptionBooklet.ts';
+import { paperHtml, paperModel } from '../src/services/legalPaper.ts';
 import { PDFDocument, PDFName } from 'pdf-lib';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 
@@ -66,7 +67,7 @@ function fixture() {
     return { status: res.status, body: json };
   }
   const one = (sql: string, ...a: unknown[]) => ({ ...(db.prepare(sql).get(...a) as any) });
-  return { db, call, one };
+  return { db, env, call, one };
 }
 
 const fillLegend = (f: ReturnType<typeof fixture>) =>
@@ -346,4 +347,30 @@ test('D716 #1866 ?part=N prints that one part alone, with the same digest; any o
     assert.deepEqual([b.status, b.body.error], [400, 'part_invalid'], `part=${bad}`);
   }
   for (const who of [PENDING, STRANGER, ADMIN]) assert.equal((await f.call(who, 'GET', '/mine/paper?part=4')).status, 404, `user ${who}`);
+});
+
+test('D758 the booklet\'s specimen is its real paper with no booklet: the same parts, no ticks, no applicant, no copy number', async () => {
+  const f = fixture();
+  const stub = await f.call(APPLICANT, 'POST', '/mine/submit', { digest: (await f.call(APPLICANT, 'POST', '/mine')).body.digest });
+  assert.equal(stub.body.message, bookletMissingSentence([1]), 'submit keeps its sentence');
+  const withStub = await bookletSpecimenInput(f.env);
+  assert.equal(withStub.state?.kind, 'specimen', 'a part with no text keeps the specimen state');
+  const stubHtml = paperHtml(paperModel(withStub), { pageSize: 'letter', cover: 'light', medium: 'screen', fonts: 'omit' });
+  assert.ok(stubHtml.includes('SPECIMEN') && !stubHtml.includes('DRAFT — for counsel review'));
+
+  fillLegend(f);
+  const row = f.one('SELECT * FROM fund_subscription_booklets');
+  const real = await bookletPaperInput(f.env, row);
+  const spec = await bookletSpecimenInput(f.env);
+  const part = (p: any) => ({ n: p.n, title: p.title, body: p.body, missing: p.missing, block: p.block, footer: p.footer });
+  assert.deepEqual(spec.parts!.map(part), real.parts!.map(part), 'the same nine parts, titles, bodies, blocks and footers');
+  assert.equal(spec.parts!.length, 9);
+  assert.ok(spec.parts!.every((p) => p.counterpartyName === null), 'no applicant');
+  assert.ok(real.parts!.every((p) => p.counterpartyName === 'Ivy Applicant'));
+  assert.deepEqual([spec.title, spec.body, spec.slug, spec.bodySha256], [real.title, real.body, real.slug, real.bodySha256], 'an open booklet with no ticks has its digest');
+  assert.deepEqual([spec.copyNumber, spec.offeree, spec.effectiveDate, spec.state?.kind], [null, null, null, 'specimen']);
+  assert.deepEqual([real.copyNumber, real.offeree, real.state?.kind], [row.uid, 'Ivy Applicant', 'issued']);
+  const html = paperHtml(paperModel(spec), { pageSize: 'letter', cover: 'light', medium: 'screen', fonts: 'omit' });
+  assert.ok(!html.includes('Ivy Applicant') && !html.includes(row.uid), 'no applicant and no booklet id');
+  assert.ok(html.includes('THESE INTERESTS HAVE NOT BEEN REGISTERED.'), 'the cover carries the legend');
 });

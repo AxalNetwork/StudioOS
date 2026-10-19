@@ -25,6 +25,9 @@
  *     outage.
  *   - `not_deployed` — HQ has a licence and a registry row but no binding yet.
  *     Structurally different from a failure and must not share its colour.
+ *   An `unreadable` result that hit the deadline also carries `timed_out`,
+ *   because "did not answer" and "answered with an error" are different facts
+ *   on a push screen (D717).
  *
  * WHY THE BINDINGS ARE DISCOVERED AND NOT LISTED. `wrangler.toml` gains a
  * `[[services]]` entry per branch at provisioning time (D.7), so the env is
@@ -32,7 +35,7 @@
  * The prefix is `BRANCH_`, which is why no other binding may use it.
  */
 import type { Env } from '../types';
-import { withDeadline } from '../util/deadline';
+import { withDeadline, DeadlineExceeded } from '../util/deadline';
 import { BRANCH_CODE_RE } from '../util/branch';
 
 /**
@@ -58,6 +61,8 @@ export type BranchResult<T> = {
   data?: T;
   as_of?: string;
   reason?: string;
+  /** Set on an `unreadable` result whose call hit the deadline (D717). */
+  timed_out?: true;
   /**
    * The licence this deployment belongs to, when HQ holds a row saying so
    * (D150). It is the ONLY key a caller can join a branch read to a licence on:
@@ -234,6 +239,7 @@ async function runTargets<T>(
       status: 'unreadable' as const,
       // The message, never the stack, and bounded: this reaches a screen.
       reason: String((r.reason as Error)?.message || r.reason || 'unknown').slice(0, 300),
+      ...(r.reason instanceof DeadlineExceeded ? { timed_out: true as const } : {}),
     };
   });
 }

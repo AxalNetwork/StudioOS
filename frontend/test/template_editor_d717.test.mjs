@@ -30,7 +30,7 @@ const OPTIONS = (derived, entity) => ({
   partyless_kinds: ['unilateral', 'corporate', 'policy'],
   derived, entity,
 });
-const base = { category: 'gp', doc_kind: null, axal_party: null, format_fixed: false, usage_count: 0, published_version: null, is_stub: 0 };
+const base = { category: 'gp', layer: 'gp', layer_label: 'Internal Management (GP Level)', doc_kind: null, axal_party: null, format_fixed: false, usage_count: 0, published_version: null, is_stub: 0 };
 const ROWS = {
   agree: { ...base, slug: 'd717_test_agreement', title: 'Test Agreement', version: 3, body_md: '# Test Agreement\n## One {{a.b}}\nText', kind: 'agreement', party: 'gp', usage_count: 3, format_options: OPTIONS({ kind: 'agreement', party: 'gp' }, 'gp') },
   policy: { ...base, slug: 'd717_test_policy', title: 'Test Policy', version: 1, body_md: 'Policy text', kind: 'policy', party: 'none', format_options: OPTIONS({ kind: 'policy', party: 'none' }, 'management') },
@@ -72,6 +72,8 @@ async function open(rowKey, { who = user, ...opts } = {}) {
   const calls = setup(opts);
   const view = await mountContracts(React.createElement(AuthProvider, null, React.createElement(Desk)), '/admin/contracts?tab=templates', who);
   await view.flush();
+  // #1851: the catalog shows four cards a layer under "Layer · All"; selecting the layer lists them all.
+  await view.fill('Layer', ROWS[rowKey].category);
   await view.click(ROWS[rowKey].title);
   await view.flush();
   await settle();
