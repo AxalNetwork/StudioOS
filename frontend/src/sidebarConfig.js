@@ -744,6 +744,9 @@ export const SHARED_FULL_BLEED = [
   // SpinoutLabInvestorPage.jsx had to be given some in the same commit, because
   // it had none and was relying on the shell's.
   '/spinout-lab',
+  // `/trust` — the Trust Center fills the main column for every role, with its
+  // own `p-6` as the gutter (#2060); its blocks keep their own caps where needed.
+  '/trust',
   ...ONBOARDING_CANVAS_PATHS,
 ];
 

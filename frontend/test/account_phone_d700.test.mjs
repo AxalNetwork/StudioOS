@@ -585,7 +585,7 @@ test('5. at desktop width the pages draw no bar and keep their own heading', () 
   // before its desktop return, which keeps its heading.
   const trust = read('frontend/src/pages/TrustCenterPage.jsx');
   assert.match(trust, /const phone = usePhoneWidth\(\) && !chromeless;/, 'the investor workspace keeps its chromeless frame');
-  assert.match(trust, /if \(phone\) \{\s*return \(\s*<TrustPhoneView[\s\S]*?\n  return \(\s*<div className="p-6 max-w-5xl mx-auto">[\s\S]*?<ShieldCheck className="w-7 h-7 text-emerald-600" \/> Trust Center/);
+  assert.match(trust, /if \(phone\) \{\s*return \(\s*<TrustPhoneView[\s\S]*?\n  return \(\s*<div className="p-6">[\s\S]*?<ShieldCheck className="w-7 h-7 text-emerald-600" \/> Trust Center/);
   const docs = read('frontend/src/pages/docs/DocsLayout.jsx');
   assert.match(docs, /\) : phone \? \(\s*<HelpPhoneHome[\s\S]*?\) : \(\s*<HelpHome/, 'only the home has a phone view; a guide page is unchanged');
   const products = read('frontend/src/pages/ProductsPage.jsx');
