@@ -157,3 +157,28 @@ secrets and the `WHATSAPP_CHANNEL` rollout var are listed in
 `documentation/architecture/PRODUCTION.md`. The live smoke
 (`scripts/check-spa-live.mjs`) fails if the WhatsApp webhook ever accepts an
 unsigned POST.
+
+## D757 chat notes (#1930, text half)
+
+Assignment, consent admission and new final text enqueue `validateEngine.enqueueDigest`
+with `chat_text_added`. The engine applies its transcript hash and a six-hour
+quiet bound; messages inside that bound do not move `digested_at`, and the quiet
+sweep later picks up changed text. A failed queue send does not fail the already
+committed message: the sweep recovers it. Ingestion calls no model.
+
+The engine's text-only consent check leaves waiting audio untranscribed.
+Manual Summary and Structure use that same gate; Ask keeps its existing gate. WhatsApp's
+admission rule and both providers' audio-download gates still apply. A decline or
+withdrawal clears the digest and pending suggestions; decided suggestions and
+accepted module rows keep content without quotes. Consent and cleanup commit in one batch: a cleanup failure rolls consent back
+for an identical reply to retry, and an older unrevoked session is preserved.
+Late summary/proposal/outcome writes check stored consent, so an in-flight model
+result cannot restore withdrawn content. Replay keeps the original cleanup time
+and audit row.
+D757 extends Telegram NO/STOP to engine output while retaining raw text; declined
+text sessions enqueue no digest and the quiet sweep excludes them. Thread list/detail reads add `digest_status` (null without a linked
+session) and `pending_suggestions` (only pending rows on that member's session).
+
+WhatsApp voice ingestion and its `voice_note_added` handoff (#1935, PR #2063)
+are inherited from main. Telegram's corresponding audio work remains on #1978;
+the combined voice follow-up is not part of this text PR.
