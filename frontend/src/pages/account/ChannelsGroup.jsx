@@ -4,9 +4,9 @@ import { channelsApi } from '../../lib/api/channels.js';
 import { BrandIcon, Pill, Unreadable } from '../../ui';
 import { BTN } from './AccountCenter';
 import {
-  CARD_TITLE, CHANNELS_HREF, INBOX_HREF, MEETING_NOTES, PROVIDER_LABEL, TELEGRAM_LIMITS, WHATSAPP_CALLS, WHATSAPP_NOTES,
+  ALLOW_MEET_LABEL, CARD_TITLE, CHANNELS_HREF, INBOX_HREF, MEETING_NOTES, PROVIDER_LABEL, TELEGRAM_LIMITS, WHATSAPP_CALLS, WHATSAPP_NOTES,
   WHATSAPP_PAGE, WHATSAPP_SIGNUP_NOT_CONFIGURED, whatsappPageState,
-  channelCard, disconnectNote, meetingCard, pendingLabel, pendingTotal, readOverview, telegramLinkView,
+  channelCard, disconnectNote, meetingCard, meetTranscriptsCopy, meetTranscriptsReturn, meetTranscriptsState, pendingLabel, pendingTotal, readOverview, telegramLinkView,
   telegramSteps, testOutcome, whatsappSignupConfig,
   telegramClaimView, telegramConfirmRefusal,
 } from './channelsModel';
@@ -445,6 +445,45 @@ export function WhatsAppPageBody({ view, signup, pending = null, api = channelsA
   );
 }
 
+const currentSearch = () => (typeof window !== 'undefined' && window.location ? window.location.search : '');
+
+/**
+ * D757 §2.12 (#1926) — what Axal can do with a member's Meet transcripts, from
+ * the Calendar status read, and "Allow transcript import" only when the owner
+ * has switched it on and the member has not yet granted it. Drawn on the
+ * Google Meet card and on Record a session's Schedule panel; `returnTo` is
+ * where Google sends the member back, and that page's `?google=` return is
+ * the banner. An unread status says nothing about transcripts but the engine.
+ */
+export function MeetTranscripts({ api = channelsApi, returnTo = 'integrations', search = currentSearch() }) {
+  const [state, setState] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    let live = true;
+    if (typeof api.googleStatus !== 'function') return undefined;
+    api.googleStatus().then((r) => { if (live) setState(meetTranscriptsState(r)); }, () => {});
+    return () => { live = false; };
+  }, [api]);
+  const copy = meetTranscriptsCopy(state);
+  const banner = meetTranscriptsReturn(search);
+  const allow = async () => {
+    setBusy(true); setError('');
+    try { await api.allowMeetTranscripts(returnTo); } catch (e) { setError(e?.message || 'Google could not be reached. Try again in a moment.'); setBusy(false); }
+  };
+  return (
+    <div className="space-y-1" data-testid="meet-transcripts">
+      {banner && <p role="status" className="text-[12px] font-semibold text-emerald-700 dark:text-emerald-300" data-testid="meet-transcripts-return">{banner}</p>}
+      {copy.line && <p className={NOTE} data-testid={`meet-transcripts-${state}`}>{copy.line}</p>}
+      <p className={NOTE} data-testid="meet-transcripts-engine">{copy.engine}</p>
+      {copy.button && (
+        <button type="button" className={`${SMALL} self-start`} disabled={busy} onClick={allow} data-testid="button-allow-meet-transcripts">{busy ? 'Opening Google…' : ALLOW_MEET_LABEL}</button>
+      )}
+      {error && <p role="alert" className="text-[12px] text-red-700 dark:text-red-300" data-testid="meet-transcripts-error">{error}</p>}
+    </div>
+  );
+}
+
 /** The view and the signup flow for WhatsApp's page, from one overview read. */
 export function useWhatsAppPage({ overview, user, api = channelsApi, onChanged, sdk = SDK }) {
   const view = whatsappPageState(overview, user);
@@ -453,7 +492,7 @@ export function useWhatsAppPage({ overview, user, api = channelsApi, onChanged, 
 }
 
 /** Zoom and Google Meet: connected through the existing connector sheet, scheduled from an interview. */
-export function MeetingChannelCard({ card, onOpenConnector }) {
+export function MeetingChannelCard({ card, onOpenConnector, api = channelsApi }) {
   const name = PROVIDER_LABEL[card.provider];
   const via = card.provider === 'google_meet' ? 'Google Calendar' : 'Zoom';
   return (
@@ -467,6 +506,7 @@ export function MeetingChannelCard({ card, onOpenConnector }) {
         <button type="button" className={`${BTN.ghost} self-start`} onClick={() => onOpenConnector(card.connectorKey)} data-testid={`button-manage-${card.provider}`}>{`Manage or disconnect ${via}`}</button>
       )}
       <p className={NOTE}>{MEETING_NOTES[card.provider]}</p>
+      {card.provider === 'google_meet' && card.state !== 'unavailable' && card.state !== 'unreadable' && <MeetTranscripts api={api} returnTo="integrations" />}
       {card.state === 'connected' && <p className={NOTE}>Test it by scheduling a {name} call from an interview.</p>}
     </CardFrame>
   );
@@ -491,7 +531,7 @@ export function ChannelsGroup({ status, overview, catalogue = [], api = channels
           <TelegramChannelCard card={channelCard('telegram', overview)} claim={overview.telegramLink ?? null} pending={overview.pending?.telegram ?? null} api={api} onChanged={onChanged} pageHref={connectorPagePath('telegram')} />
           <WhatsAppChannelCard card={channelCard('whatsapp', overview)} overview={overview} pending={overview.pending?.whatsapp ?? null} api={api} onChanged={onChanged} sdk={sdk} pageHref={connectorPagePath('whatsapp')} />
           <MeetingChannelCard card={meetingCard('zoom', overview, catalogue)} onOpenConnector={onOpenConnector} />
-          <MeetingChannelCard card={meetingCard('google_meet', overview, catalogue)} onOpenConnector={onOpenConnector} />
+          <MeetingChannelCard card={meetingCard('google_meet', overview, catalogue)} onOpenConnector={onOpenConnector} api={api} />
         </div>
       )}
     </section>

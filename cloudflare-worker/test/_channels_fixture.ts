@@ -1,14 +1,14 @@
 /**
- * The D684 channel tests' shared harness, moved out of
- * `channels_messaging_d684.test.ts` unchanged (D756, #1895) so the readiness
- * tests (`channels_readiness_d756.test.ts`) and D754's tasks reuse it: the
- * SQLite D1 world, the Hono app with both routers, the signed `call`, the
- * webhook senders, the provider `mockFetch` (an unexpected URL fails the
- * test), the Telegram Bot API stub and the update builders. Every secret is a
- * fake fixture value.
+ * The D684 channel harness (#1576), shared by the channel tests: the SQLite
+ * D1 world with the channel migrations, the member and webhook callers, and a
+ * mocked `globalThis.fetch` whose unexpected URL fails the test, so nothing
+ * reaches a real provider. Moved here unchanged from
+ * channels_messaging_d684.test.ts for D754 (#1893), which shares it.
  *
- * Two additions only: `send` also returns the response headers, and the fake
- * `JOB_QUEUE.send` also records its options (`queuedOpts`).
+ * D756 (#1895) adds two things for the readiness tests
+ * (`channels_readiness_d756.test.ts`): `send` also returns the response
+ * headers, and the fake `JOB_QUEUE.send` also records its options
+ * (`queuedOpts`). Every secret is a fake fixture value.
  */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -22,6 +22,7 @@ import { memKV } from './_mem_kv.mjs';
 import channels, { channelsAdmin } from '../src/routes/channels.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { encryptCredentials } from '../src/integrations/secrets.ts';
+import { runChannelJob } from '../src/services/channels/jobs.ts';
 
 /** Provider ids are stored hashed (events.ts `refKey`); the tests look them up the same way. */
 export const refCode = (code: string) => createHash('sha256').update(code).digest('hex');
@@ -89,7 +90,9 @@ export async function world(opts: { seed?: boolean; budget?: number } = {}) {
     '449_interview_channels.sql', '450_channel_events_delete_kind.sql', '451_channel_review_fixes.sql',
     // D685: openSession stores the call (call_provider), as production's 452 lets it.
     '452_record_session_setup.sql', '454_channel_voice_failures.sql',
-    '457_integrations_last_error_at.sql', '458_channel_link_consent.sql']) db.exec(mig(m));
+    '457_integrations_last_error_at.sql', '458_channel_link_consent.sql',
+    // D754 (#1893): the consent store and channel_threads.consent_state.
+    '488_channel_consents.sql']) db.exec(mig(m));
   // D757: the Validate engine's schema (487, 465, 453 and the re-scope's columns).
   applyEngineSchema(db);
   if (opts.budget != null) {
@@ -211,18 +214,18 @@ export const telegramApi: Route = (url) => {
 export const count = (db: any, sql: string, ...args: unknown[]) => Number(db.prepare(sql).get(...args)?.n ?? 0);
 export const now = () => Math.floor(Date.now() / 1000);
 
-export let updateId = 100;
-/** The next update id, for a test that builds its own update (an imported `let` cannot be bumped by its importer). */
-export const nextUpdateId = () => ++updateId;
-export let tgMessageId = 500;
+/** Telegram update and message ids, counted up by every builder (and by a test that builds its own). */
+export const ids = { update: 100, message: 500 };
+/** The next update id, for a test that builds its own update (D756). */
+export const nextUpdateId = () => ++ids.update;
 export const tgUser = (id: string, extra: Record<string, unknown> = {}) => ({ id: Number(id), is_bot: false, first_name: 'Dana', username: 'dana_biz', ...extra });
 
 export const startUpdate = (code: string, tg = TG_ME) => ({
-  update_id: ++updateId,
+  update_id: ++ids.update,
   message: { message_id: 1, date: now(), chat: { id: Number(tg), type: 'private' }, from: tgUser(tg), text: `/start ${code}` },
 });
 export const confirmUpdate = (tg = TG_ME) => ({
-  update_id: ++updateId,
+  update_id: ++ids.update,
   message: { message_id: 2, date: now(), chat: { id: Number(tg), type: 'private' }, from: tgUser(tg), text: '/confirm' },
 });
 /** Both steps of linking: the code, then the Telegram account's own /confirm. */
@@ -234,13 +237,13 @@ export async function linkTelegram(env: any, code: string, tg = TG_ME) {
   return call(env, owner, 'POST', `/telegram/link/${claim.uid}/confirm`);
 }
 export const connectionUpdate = (bc: string, tg: string, extra: Record<string, unknown> = { rights: { can_reply: true, can_read_messages: true } }, enabled = true) => ({
-  update_id: ++updateId,
+  update_id: ++ids.update,
   business_connection: { id: bc, user: tgUser(tg), user_chat_id: Number(tg), date: now(), is_enabled: enabled, ...extra },
 });
 export const businessMessage = (bc: string, o: { chat?: number; from?: number; id?: number; text?: string; voice?: unknown; key?: string } = {}) => ({
-  update_id: ++updateId,
+  update_id: ++ids.update,
   [o.key ?? 'business_message']: {
-    message_id: o.id ?? ++tgMessageId, business_connection_id: bc, date: now(),
+    message_id: o.id ?? ++ids.message, business_connection_id: bc, date: now(),
     chat: { id: o.chat ?? 8001, type: 'private', first_name: 'Sam' },
     from: { id: o.from ?? o.chat ?? 8001, is_bot: false, first_name: 'Sam', last_name: 'Okafor' },
     ...(o.voice ? { voice: o.voice } : { text: o.text ?? 'We reconcile invoices by hand every Friday.' }),
@@ -256,6 +259,24 @@ export const waText = (pnid: string, wamid: string, text = 'Our month-end close 
   contacts: [{ profile: { name: 'Priya Shah' }, wa_id: from }],
   messages: [{ from, id: wamid, timestamp: String(now()), type: 'text', text: { body: text } }],
 });
+
+/**
+ * D754 (#1893): a WhatsApp chat keeps nothing until its consent is given. The
+ * state the interviewee's Yes leaves (the row, the thread, the session), then
+ * the follow-up job that moves what waited — for the cases here that test
+ * what happens after it. channel_consent_d754.test.ts tests getting there.
+ */
+export async function consentGiven(env: any, db: any, threadUid: string) {
+  const t = db.prepare('SELECT * FROM channel_threads WHERE uid = ?').get(threadUid);
+  const uid = crypto.randomUUID();
+  db.prepare(`INSERT INTO channel_consents (uid, user_id, provider, integration_id, thread_id, interview_id, session_id,
+                source, method, status, notice_version, answered_at)
+              VALUES (?, ?, 'whatsapp', ?, ?, ?, ?, 'interviewee_reply', 'chat_reply', 'given', 1, datetime('now'))`)
+    .run(uid, t.user_id, t.integration_id, t.id, t.interview_id, t.session_id);
+  db.prepare(`UPDATE channel_threads SET consent_state = 'given' WHERE id = ?`).run(t.id);
+  db.prepare(`UPDATE interview_sessions SET consent_status = 'given', consent_method = 'chat_reply', consent_at = datetime('now') WHERE id = ?`).run(t.session_id);
+  await runChannelJob(env, 'channel_followup', { provider: 'whatsapp', kind: 'consent', thread: threadUid, consent: uid });
+}
 
 export function noSecretsSeen() {
   const all = seen.join('\n');

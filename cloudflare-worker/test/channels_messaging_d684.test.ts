@@ -54,9 +54,11 @@ import { createLinkCode } from '../src/services/channels/linkCodes.ts';
 import { normaliseTelegramUpdate } from '../src/services/channels/telegram.ts';
 import { normaliseWhatsAppPayload, maskNumber } from '../src/services/channels/whatsapp.ts';
 import { CHANNEL_LIMITS } from '../src/services/channels/types.ts';
-
 import {
-  ADMIN, GONE, INTERVIEW, JWT_SECRET, ME, OTHER, OTHER_PROJECT, PNID, PNID_GONE, PROJECT, SECRETS, TG_ME, TG_NEW, TG_OTHER, WA_CUSTOMER, WA_TOKEN, app, businessMessage, call, confirmUpdate, connectionUpdate, count, linkTelegram, mockFetch, nextUpdateId, noSecretsSeen, now, ref, refCode, seen, send, sign, startUpdate, telegramApi, tgHook, tgUser, waHook, waPayload, waText, world,
+  ADMIN, app, businessMessage, call, confirmUpdate, connectionUpdate, consentGiven, count, GONE, ids, INTERVIEW,
+  JWT_SECRET, linkTelegram, ME, mockFetch, nextUpdateId, noSecretsSeen, now, OTHER, OTHER_PROJECT, PNID, PNID_GONE,
+  PROJECT, ref, refCode, type Route, SECRETS, seen, send, sign, startUpdate, telegramApi, TG_ME, TG_NEW, TG_OTHER,
+  tgHook, tgUser, WA_CUSTOMER, WA_TOKEN, waHook, waPayload, waText, world,
 } from './_channels_fixture.ts';
 
 test.afterEach(() => { noSecretsSeen(); seen.length = 0; });
@@ -303,7 +305,7 @@ test("Telegram: the owner's messages are 'Me', edits and deletions change pendin
     assert.deepEqual((await call(env, ME, 'GET', `/threads/${t.uid}`)).body.messages.map((m: any) => [m.side, m.text]),
       [['contact', 'fixed text'], ['me', 'How often does that happen?']]);
 
-    await tgHook(env, { update_id: nextUpdateId(), deleted_business_messages: { business_connection_id: 'BC-ME', chat: { id: 8001, type: 'private' }, message_ids: [12] } });
+    await tgHook(env, { update_id: ++ids.update, deleted_business_messages: { business_connection_id: 'BC-ME', chat: { id: 8001, type: 'private' }, message_ids: [12] } });
     assert.equal(count(db, 'SELECT COUNT(*) n FROM channel_thread_messages'), 1);
     assert.equal(f.calls.length, 0, 'receiving sends nothing');
   } finally { f.restore(); }
@@ -317,8 +319,8 @@ test('Telegram: a disabled connection is updated and its messages are nobody’s
     const bc = db.prepare(`SELECT is_enabled, can_reply FROM telegram_business_connections WHERE business_connection_id = 'BC-ME'`).get();
     assert.deepEqual([bc.is_enabled, bc.can_reply], [0, 0]);
     await tgHook(env, businessMessage('BC-ME'));
-    await tgHook(env, { update_id: nextUpdateId(), channel_post: { message_id: 1, chat: { id: -100, type: 'channel' }, text: 'x' } });
-    await tgHook(env, { update_id: nextUpdateId(), message: { message_id: 2, chat: { id: -5, type: 'group' }, from: tgUser('9'), text: '/start abc' } });
+    await tgHook(env, { update_id: ++ids.update, channel_post: { message_id: 1, chat: { id: -100, type: 'channel' }, text: 'x' } });
+    await tgHook(env, { update_id: ++ids.update, message: { message_id: 2, chat: { id: -5, type: 'group' }, from: tgUser('9'), text: '/start abc' } });
     assert.equal(count(db, 'SELECT COUNT(*) n FROM channel_threads'), 0);
     assert.equal(f.calls.length, 0, 'a disabled connection prompts nobody');
   } finally { f.restore(); }
@@ -417,7 +419,7 @@ test('Telegram: a voice note deleted at the source while its job waits is never 
     const { sessionId } = await assignedTelegramChat(env);
     await tgHook(env, businessMessage('BC-ME', { id: 777, voice: { file_id: 'VOICE-3', duration: 4 } }));
     const [job] = voiceJobs(queued);
-    await tgHook(env, { update_id: nextUpdateId(), deleted_business_messages: { business_connection_id: 'BC-ME', chat: { id: 8001, type: 'private' }, message_ids: [777] } });
+    await tgHook(env, { update_id: ++ids.update, deleted_business_messages: { business_connection_id: 'BC-ME', chat: { id: 8001, type: 'private' }, message_ids: [777] } });
     assert.equal(count(db, 'SELECT COUNT(*) n FROM channel_thread_messages'), 0, 'the placeholder went with the deletion');
     const calls = f.calls.length;
     await runChannelJob(env, 'channel_followup', job.payload);
@@ -623,7 +625,11 @@ test('WhatsApp: one POST with several messages claims each; a voice note waits f
   assert.equal(queued.length, 0, 'a pending chat’s voice note is not queued');
   const [t] = (await call(env, ME, 'GET', '/threads')).body.items;
   const a = await call(env, ME, 'POST', `/threads/${t.uid}/assign`, { interview_id: INTERVIEW });
-  assert.deepEqual([a.body.moved, a.body.voice_queued], [1, 1]);
+  // D754 (#1893): a WhatsApp chat links and waits for the interviewee's consent.
+  assert.deepEqual([a.body.moved, a.body.voice_queued], [0, 0]);
+  assert.equal(queued.length, 0, 'nothing is queued before consent');
+  await consentGiven(env, db, t.uid);
+  assert.equal(segments(db, a.body.session_id).length, 1, 'the text moved once consent was given');
   const [job] = voiceJobs(queued);
   // Review finding 5: a wamid is the customer's number in base64. Neither it,
   // the number nor the media id rides in the job or in its idempotency key.
@@ -1132,6 +1138,7 @@ test('#1586 voice: the daily cap, too large, unreadable and an expired connectio
   await waHook(env, waPayload(PNID, { messages: [{ from: WA_CUSTOMER, id: 'wamid.T', timestamp: String(now()), type: 'text', text: { body: 'Hi' } }] }));
   const wa = (await call(env, ME, 'GET', '/threads')).body.items.find((t: any) => t.provider === 'whatsapp');
   assert.equal((await call(env, ME, 'POST', `/threads/${wa.uid}/assign`, { interview_id: INTERVIEW })).status, 200);
+  await consentGiven(env, db, wa.uid);
   await waHook(env, waPayload(PNID, { messages: [{ from: WA_CUSTOMER, id: 'wamid.EXP', timestamp: String(now()), type: 'audio', audio: { id: 'MEDIA-EXP' } }] }));
   const g = mockFetch((url) => (url.pathname === '/v23.0/MEDIA-EXP' ? { status: 401, json: { error: { code: 190, message: 'Session has expired for +447700900123' } } } : undefined));
   try { const jobs = voiceJobs(queued); await runChannelJob(env, 'channel_followup', jobs[jobs.length - 1].payload); } finally { g.restore(); }
