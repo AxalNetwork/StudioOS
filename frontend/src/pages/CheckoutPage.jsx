@@ -11,6 +11,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import useAiTopupCart from '../hooks/useAiTopupCart';
+import { TOPUP_UNAVAILABLE } from '../lib/aiTokens';
 import { Elements, PaymentElement, AddressElement, useElements, useStripe } from '@stripe/react-stripe-js';
 import { Loader2, Lock, AlertTriangle, ArrowLeft, ShoppingCart, CheckCircle2 } from 'lucide-react';
 import { api } from '../lib/api';
@@ -325,7 +326,7 @@ export default function CheckoutPage() {
 
   if (wantsAiTopup && ['loading','not-configured','unreadable'].includes(aiTopupState)) {
     return <div className="max-w-lg mx-auto py-16 text-center text-gray-700 dark:text-gray-300" aria-busy={aiTopupState==='loading'}>
-      <h1 className="text-lg font-bold">{aiTopupState==='loading'?'Loading AI top-up…':aiTopupState==='not-configured'?"Top-up isn't available yet.":'Unreadable'}</h1>
+      <h1 className="text-lg font-bold">{aiTopupState==='loading'?'Loading AI top-up…':aiTopupState==='not-configured'?TOPUP_UNAVAILABLE:'Unreadable'}</h1>
       {aiTopupState==='unreadable' && <p>The AI top-up could not be read. Refresh to retry.</p>}
     </div>;
   }
