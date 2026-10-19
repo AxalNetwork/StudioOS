@@ -640,6 +640,7 @@ p.fwr-usage-note { margin: 0; font-size: 11px; line-height: 1.45; color: var(--d
 .fwr .ead-conn-name { display: flex; gap: 8px; align-items: center; min-width: 0; font-size: 13px; font-weight: 600; }
 .fwr .ead-conn-text { display: flex; flex-direction: column; min-width: 0; }
 .fwr .ead-conn-why { font-size: 11px; font-weight: 400; color: #92400e; }
+.fwr a.ead-conn-why { text-decoration: underline; }
 .fwr .ead-conn-icon {
   flex: none; width: 24px; height: 24px; border-radius: 6px; display: grid; place-items: center;
   font-size: 10px; font-weight: 800; background: var(--fwr-accent-soft); color: var(--fwr-accent);
