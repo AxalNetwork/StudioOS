@@ -49,6 +49,23 @@
   Mercury return goes to the hub with its keys stripped (D715 decision 3).
   No Worker change.
 
+## The Telegram interview bot, ready to switch on (D756, #1895)
+
+- `/admin/telegram` shows Super Admins a "Telegram Business bot (interviews)"
+  section: whether the secrets are set (names only), Business Mode, the
+  username, the webhook URL, pending updates and the last delivery error,
+  read by `GET /api/admin/channels/telegram/webhook` and drawn as sentences.
+  Register webhook calls the existing POST.
+- `/start bizChat…` deep links answer with where to manage the chat; event
+  ids now hash the update's kind, so an edit and a message with one id no
+  longer collide.
+- Replies respect Telegram's 24-hour window from the contact's last message
+  (`window_closed`), refuse with `connection_disabled` when the member turned
+  the bot off, and pass Telegram's `retry_after` on as `Retry-After`; voice
+  jobs wait at least that long and stop when the bot is off (`bot_off`).
+- `test/_channels_fixture.ts` holds the D684 test world, shared by
+  `channels_readiness_d756.test.ts`. No test calls Telegram.
+
 ## The LP's capital call opens on the amount, and the fee statement is on screen (D717, #1859)
 
 - An open Fund I line's panel on the LP workspace opens on "Amount due", the

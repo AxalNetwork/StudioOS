@@ -156,7 +156,10 @@ test('every request in the module is written as a literal path the drift check c
   const calls = extractClientCalls(readFileSync('frontend/src/lib/api/channels.js', 'utf8')).map((c) => `${c.method} ${normalizePath(c.path)}`);
   assert.deepEqual(calls.sort(), [
     'DELETE /channels/:p', 'DELETE /founder/validate/interviews/:p/meetings/:p',
+    // D756 (#1895): the Super Admin's interview-bot health read, and the existing register route.
+    'GET /admin/channels/telegram/webhook',
     'GET /channels', 'GET /channels/telegram/link', 'GET /channels/threads', 'GET /channels/threads/:p', 'GET /founder/validate/interviews/:p/meetings',
+    'POST /admin/channels/telegram/webhook',
     'POST /channels/:p/test', 'POST /channels/telegram/link', 'POST /channels/telegram/link/:p/confirm', 'POST /channels/threads/:p/assign', 'POST /channels/threads/:p/ignore',
     'POST /channels/threads/:p/reply', 'POST /channels/threads/:p/voice/:p/retry', 'POST /channels/whatsapp/connect', 'POST /founder/validate/interviews/:p/meetings',
     // #1588: attach by link posts to the same route as scheduling (D685 §5.3.2).
@@ -471,7 +474,7 @@ test('the composer: open inside the window, closed with the provider’s own rul
   assert.equal(wa.enabled, false);
   assert.match(wa.reason, /WhatsApp only allows a free reply within 24 hours of the customer’s last message/);
   const tg = composerState({ ...THREAD, provider: 'telegram', reply_window_open: false });
-  assert.match(tg.reason, /Telegram only lets the bot reply in chats active in the last 24 hours/);
+  assert.match(tg.reason, /Telegram only lets the bot reply within 24 hours of your contact’s last message/);
   const rights = composerState({ ...THREAD, provider: 'telegram', can_reply: false, reply_window_open: false });
   assert.match(rights.reason, /not allowed to reply[^]*Settings › Telegram Business › Chatbots/);
   assert.match(composerState({ ...THREAD, status: 'ignored' }).reason, /Stop ignoring it to reply/);

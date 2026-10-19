@@ -120,7 +120,7 @@ export function composerState(thread) {
       enabled: false,
       reason: p === 'whatsapp'
         ? 'WhatsApp only allows a free reply within 24 hours of the customer’s last message. Reply from the WhatsApp Business app instead; template messages are a later step.'
-        : 'Telegram only lets the bot reply in chats active in the last 24 hours. Reply from Telegram instead.',
+        : 'Telegram only lets the bot reply within 24 hours of your contact’s last message. Reply from Telegram instead.',
     };
   }
   return { enabled: true, reason: '' };
