@@ -1,6 +1,8 @@
 // D716 (#1866) — the LP's Subscription Booklet on the LP workspace. An approved
 // Fund I applicant opens it, reads each part on the paper, ticks what applies
-// and submits it; submitting freezes it under its digest. Signing it is #1858's.
+// and submits it; submitting freezes it under its digest. D759 (#1858): a
+// submitted booklet offers Sign the booklet, then says where the signing stands
+// (`lib/bookletSigning.js`); the signing token is held in memory only.
 //
 // L7 draws the desktop form (a rail of Parts 2 to 9 beside one part's boxes and
 // paper); L12 draws the phone's Read and Check steps. `usePhoneWidth()` picks
@@ -10,6 +12,7 @@
 // drawn as text. Every rule is `lib/bookletFormModel.js`'s. The Done marks, the
 // tick queue and the papers live in React state; nothing is stored in the browser.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { reportError } from '../lib/log';
 import { fundBookletsApi } from '../lib/api/fundBooklets.js';
 import { PaperFrame } from '../components/PaperPreview.jsx';
@@ -18,6 +21,7 @@ import {
   BOOKLET_COPY as T, PART_STUB, answersOf, canSubmit, formParts, missingLine, phoneSteps,
   queueTick, railRow, submitDigest, submittedLine, tickCounts, withQueued,
 } from '../lib/bookletFormModel.js';
+import { ACCOUNT_DOCUMENTS, SIGN_BOOKLET, canSignBooklet, signingLine } from '../lib/bookletSigning.js';
 
 const CARD = 'rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900';
 const MUTED = 'text-[#615c6e] dark:text-gray-400';
@@ -112,13 +116,44 @@ export function SubmitBlock({ view, enabled, submitting = false, onSubmit, inFoo
   );
 }
 
-/** The submitted state's pill and line. */
-function SubmittedNote({ view }) {
+/**
+ * D759 (#1858): where the signing stands. `not_sent` offers Sign the booklet
+ * (the canvas's `big(t, ind)`: indigo `#4f46e5`, 50 px); every other state is
+ * a line; `accepted` adds Open my documents. A refusal shows the Worker's
+ * sentence.
+ */
+export function BookletSigning({ view, sign }) {
+  const line = signingLine(view?.signing);
+  return (
+    <div className="mt-2 space-y-2">
+      {canSignBooklet(view) && (
+        <button
+          type="button"
+          onClick={sign?.onSign}
+          disabled={!!sign?.busy}
+          className="min-h-[50px] w-full rounded-[14px] bg-[#4f46e5] text-[15px] font-bold text-white hover:bg-indigo-700 disabled:opacity-60"
+          data-testid="booklet-sign"
+        >
+          {SIGN_BOOKLET}
+        </button>
+      )}
+      {line && <div className="text-gray-700 dark:text-gray-300" data-testid="booklet-signing-line">{line}</div>}
+      {view?.signing?.state === 'accepted' && (
+        <a href={ACCOUNT_DOCUMENTS.href} className="inline-block font-semibold text-indigo-700 underline dark:text-indigo-300">{ACCOUNT_DOCUMENTS.label}</a>
+      )}
+      {sign?.error && <div className="text-red-700 dark:text-red-400" role="alert">{sign.error}</div>}
+    </div>
+  );
+}
+
+/** The submitted state's pill and line, then the signing. */
+function SubmittedNote({ view, sign }) {
   return (
     <div className="space-y-1 text-[12px]">
       <span className="inline-block rounded-full border border-[#a7f3d0] bg-[#ecfdf5] px-2 py-0.5 text-[11px] font-bold text-[#047857] dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">{T.submittedPill}</span>
       <div className={`font-mono text-[11.5px] ${MUTED}`}>{submittedLine(view)}</div>
       <div className={MUTED}>{T.frozenLine}</div>
+      <BookletSigning view={view} sign={sign} />
     </div>
   );
 }
@@ -187,7 +222,7 @@ export function BookletDesktop({ view, current, done, onPick, onToggle, paperPro
   return (
     <div className="grid grid-cols-[200px_1fr] overflow-hidden rounded-xl border border-[#dcd9e3] bg-gray-50 dark:border-gray-700 dark:bg-gray-900/60">
       <BookletRail parts={parts} current={part.n} done={done} submitted={submitted} onPick={onPick}>
-        {submitted ? <SubmittedNote view={view} /> : <SubmitBlock view={view} {...submit} />}
+        {submitted ? <SubmittedNote view={view} sign={submit.sign} /> : <SubmitBlock view={view} {...submit} />}
       </BookletRail>
       <BookletPartForm
         part={part}
@@ -269,7 +304,7 @@ export function BookletPhone({ view, step, onStep, onClose, onToggle, paperProps
           })}
         </div>
         <div className="mt-4">
-          {submitted ? <SubmittedNote view={view} /> : <SubmitBlock view={view} {...submit} inFooter />}
+          {submitted ? <SubmittedNote view={view} sign={submit.sign} /> : <SubmitBlock view={view} {...submit} inFooter />}
         </div>
       </>
     );
@@ -318,6 +353,9 @@ export function SubscriptionBooklet() {
   const [phoneOpen, setPhoneOpen] = useState(false);
   const [step, setStep] = useState(0);
   const opener = useRef(null);
+  const navigate = useNavigate();
+  const [signBusy, setSignBusy] = useState(false);
+  const [signError, setSignError] = useState('');
 
   const load = useCallback(() => fundBookletsApi.mine().then(
     (v) => { setView(v); setState('ready'); setRefused(false); setError(''); },
@@ -404,7 +442,20 @@ export function SubscriptionBooklet() {
   };
   const closePhone = useCallback(() => { setPhoneOpen(false); opener.current?.focus?.(); }, []);
 
-  const submitProps = { enabled: canSubmit({ view, queued, inFlight, refused }), submitting, onSubmit: submit, notice };
+  // D759: the token goes from the answer straight to the signing page; it is
+  // never kept in state, storage or any other page's address.
+  const sign = () => {
+    setSignBusy(true); setSignError('');
+    fundBookletsApi.sign().then(
+      (r) => { if (r?.token) navigate(`/esign/${encodeURIComponent(r.token)}`); else load(); },
+      (e) => { setSignError(messageOf(e, T.unreadable)); load(); },
+    ).finally(() => setSignBusy(false));
+  };
+
+  const submitProps = {
+    enabled: canSubmit({ view, queued, inFlight, refused }), submitting, onSubmit: submit, notice,
+    sign: { onSign: sign, busy: signBusy, error: signError },
+  };
 
   let content;
   if (state === 'loading') content = <p className={`text-[12.5px] ${MUTED}`}>{T.loading}</p>;
@@ -430,7 +481,7 @@ export function SubscriptionBooklet() {
     content = (
       <div className="space-y-2 text-[12.5px]">
         {notice && !phoneOpen && <p className="text-red-700 dark:text-red-400" role="alert">{notice}</p>}
-        {submitted ? <SubmittedNote view={shown} /> : (
+        {submitted ? <SubmittedNote view={shown} sign={submitProps.sign} /> : (
           <>
             <p className="text-gray-700 dark:text-gray-300">{c.total ? T.boxesTicked(c.ticked, c.total) : T.noBoxesYet}</p>
             {missing && <p className="text-amber-800 dark:text-amber-300">{missing}</p>}
