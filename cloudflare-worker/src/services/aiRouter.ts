@@ -34,7 +34,7 @@ import * as aiBudget from './aiBudget';
 import { audioInputFor, parseAudioOutput, type SttTranscript } from './sttFormats';
 import * as shapes from './ai/shapes';
 import * as catalogue from './ai/catalogue';
-import { unitPrice } from './ai/pricing';
+import { costMicro, unitPrice } from './ai/pricing';
 import * as guard from './ai/guard';
 
 // ---------------------------------------------------------------------------
@@ -69,6 +69,11 @@ export type TaskClass =
   | 'structure_interview'
   // D685 §5.10 — StudioOS's own summary of a session, every sentence cited.
   | 'summarise_interview'
+  // D766 (#2094) — system calls that used to call env.AI.run directly: the
+  // monitoring summary, and the X post image screen and alt text.
+  | 'ops_summary'
+  | 'image_screen'
+  | 'image_alt_text'
   // D764 (#2089) — the rail's fourteen kinds of work, one task each. The
   // page's row in `ai/railMatrix.json` names the models a member may pick;
   // the entries below are each kind's default and its alternates.
@@ -110,7 +115,22 @@ export type RefusalReason =
   // D761 PR 2: the run's images, rerank or translation are malformed (too
   // many images, a URL instead of a data URI, no target language). Refused
   // before the guard, the hold or any model; nothing is charged.
-  | 'invalid_input';
+  | 'invalid_input'
+  // D765 (#2090): the member turned AI assistance off on the page the run was
+  // asked from. Refused before the hold, with no usage row: nothing ran.
+  | 'assist_off';
+
+/**
+ * D765 (#2090) — where a member's run was asked from: the rail's page (D768's
+ * page key; until it lands, the rail's workspace), the option on it, and the
+ * record it is about (`type:id`). `run()` writes them to the log row and
+ * checks the page's switch against them.
+ */
+export interface RailContext {
+  page: string;
+  option?: string | null;
+  record?: string | null;
+}
 
 export interface RunOptions {
   task: TaskClass;
@@ -175,6 +195,17 @@ export interface RunOptions {
   rerank?: shapes.RerankInput;
   // D761 PR 2: a translation of `text` for a translation model (m2m100).
   translate?: shapes.TranslateInput;
+  // D761 PR 3: `text` spoken by a voice model (Aura, MeloTTS); the result
+  // carries `audio`. A partner voice runs only once D760's gate offers it.
+  speak?: shapes.SpeakInput;
+  // D761 PR 4: an image drawn from `text` (the prompt) by an image model; the
+  // result carries `image`. The size and steps are clamped to the model's range.
+  draw?: shapes.DrawInput;
+  // D765 (#2090): the rail context of a MEMBER's run. `run()` copies it into
+  // `railPage`, `railOption` and `recordRef`, and refuses `assist_off` when the
+  // member turned AI assistance off on that page. Every member call passes it
+  // (rail_run_path_d765.test.ts lists them); a system call does not.
+  rail?: RailContext;
   // D763 (#2020): the text the MEMBER typed or supplied for this run (typed
   // text, the page's text, an upload's text), which the guard checks in full
   // before the model is called. Absent, it is every message the run sends
@@ -208,6 +239,41 @@ export function normaliseSurface(value: unknown): string | null {
 const RAIL_KEY_RE = /^[A-Za-z0-9/_.:-]{1,160}$/;
 function railKey(value: unknown): string | null {
   return typeof value === 'string' && RAIL_KEY_RE.test(value.trim()) ? value.trim() : null;
+}
+/**
+ * D765: a rail PAGE may also hold spaces, `&` and `·`, because the rail's
+ * workspaces ("Perks & Products") and D720's page keys ("Founder · Validate")
+ * do. Option and record keys keep `RAIL_KEY_RE`.
+ */
+const RAIL_PAGE_RE = /^[\p{L}\p{N} &·/_.:-]{1,160}$/u;
+export function railPageKey(value: unknown): string | null {
+  return typeof value === 'string' && RAIL_PAGE_RE.test(value.trim()) ? value.trim() : null;
+}
+export function railOptionKey(value: unknown): string | null { return railKey(value); }
+/** D770 (#2095): a record ref (`type:id`) keeps D762's rule too. */
+export function railRecordKey(value: unknown): string | null { return railKey(value); }
+
+/** D765: the refusal's words, which every route answers with 403 `assist_off`. */
+export const ASSIST_OFF_MESSAGE = 'AI assistance is off on this page.';
+
+/**
+ * D765: whether the member turned AI assistance off on `page`: migration
+ * 465's mode row (`task = ''`) for the page, lower-cased as the rail writes
+ * it, holds 'manual'. No row is on (D720 §6). A database without the table
+ * (a dev or test database before 465) has no switch to read, so it is on;
+ * any other read failure throws, and `run()` refuses rather than guess.
+ */
+export async function assistOff(env: Env, userId: number, page: string): Promise<boolean> {
+  const section = page.trim().toLowerCase();
+  try {
+    const row = await env.DB.prepare(
+      "SELECT mode FROM ai_rail_preferences WHERE user_id = ? AND section = ? AND task = '' LIMIT 1",
+    ).bind(userId, section).first<{ mode: string | null }>();
+    return row?.mode === 'manual';
+  } catch (e) {
+    if (/no such table/i.test(String((e as Error)?.message ?? e))) return false;
+    throw e;
+  }
 }
 
 /**
@@ -260,6 +326,10 @@ export interface RunResult {
   embedding?: number[];        // populated for task='embed'
   // D761 PR 2: a rerank's contexts, best first, by their index in the request.
   ranking?: shapes.RankedContext[];
+  // D761 PR 3: a voice run's audio.
+  audio?: shapes.SpeechAudio;
+  // D761 PR 4: an image run's image, with the size the Worker measured.
+  image?: shapes.GeneratedImage;
   stream?: ReadableStream;     // populated only when opts.stream === true
   // A speech-to-text run's passages, language and speaker labels (D657).
   transcript?: SttTranscript;
@@ -437,7 +507,39 @@ export const PRICE_USD_PER_AUDIO_MINUTE: Record<string, number> = minutePriceVie
   // D657 — Nova-3 over plain HTTP (batch). Its WebSocket rate is different and
   // lives in the table below.
   '@cf/deepgram/nova-3',
+  // D761 PR 3 — MeloTTS is billed per minute of audio it RETURNS, measured
+  // from its output bytes (`audioMinutesFromBytes`).
+  '@cf/myshell-ai/melotts',
 ], 'audio_minutes');
+
+/**
+ * D761 PR 3 — Deepgram's Aura voices are billed per 1,000 characters of the
+ * text they speak, which neither table above can express. A view of the
+ * catalogue's `characters` price, as the two tables above are of theirs.
+ */
+export const PRICE_USD_PER_1K_CHARACTERS: Record<string, number> = Object.fromEntries([
+  '@cf/deepgram/aura-1',
+  '@cf/deepgram/aura-2-en',
+  '@cf/deepgram/aura-2-es',
+].map((id) => {
+  const raw = unitPrice(id, 'characters');
+  if (!raw) throw new Error(`${id} has no characters price in the catalogue`);
+  return [id, Number(raw)];
+}));
+
+/**
+ * D761 PR 4 — the image models, priced in the units each is billed in (tiles
+ * and steps, tile-steps, tiles or megapixels), which no table above can
+ * express. Their cost is the catalogue's own (`costMicro` over the run's
+ * `shapes.imageUnits`); this set names which of them the router prices, and
+ * fails at load if the catalogue cannot price one in its billing unit.
+ */
+export const IMAGE_PRICED_MODELS: ReadonlySet<string> = new Set(Object.keys(shapes.IMAGE_SPECS).map((id) => {
+  for (const unit of Object.keys(shapes.imageUnits(id, 1024, 1024, 4)) as Array<'tiles' | 'steps' | 'output_tile_steps' | 'output_tiles' | 'first_megapixels' | 'subsequent_megapixels'>) {
+    if (!unitPrice(id, unit)) throw new Error(`${id} has no ${unit} price in the catalogue`);
+  }
+  return id;
+}));
 
 /**
  * Live speech-to-text over a WebSocket is billed at its own rate, per minute
@@ -492,6 +594,8 @@ export function audioMinutesFromBytes(bytes: number): number {
 // deliberate second step rather than a side effect of this one.
 const SMALL_LLAMA = '@cf/meta/llama-3.1-8b-instruct-fp8';
 const MID_LLAMA   = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+// D766 — the vision model for the system's image calls (D761 PR 2's content parts).
+const VISION_SCOUT = '@cf/meta/llama-4-scout-17b-16e-instruct';
 
 export const ROUTE: Record<TaskClass, RouteEntry> = {
   safety:       { provider: 'workers-ai', model: '@cf/meta/llama-guard-3-8b' },
@@ -677,6 +781,11 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   },
   sentiment:    { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA], cacheTtlSec: 30 * 86400 },
   embed:        { provider: 'workers-ai', model: '@cf/baai/bge-base-en-v1.5', isEmbed: true,  cacheTtlSec: 30 * 86400 },
+  // D766 (#2094) — system calls (userId 0): logged at cost, charged to no member.
+  // The monitoring summary keeps the model it called directly.
+  ops_summary:  { provider: 'workers-ai', model: SMALL_LLAMA },
+  image_screen: { provider: 'workers-ai', model: VISION_SCOUT },
+  image_alt_text: { provider: 'workers-ai', model: VISION_SCOUT },
   paraphrase:   { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
   // High-stakes synthesis (Task #2 AU admin publication summaries,
   // dd synthesis). Task #31: Anthropic removed from production. Both
@@ -842,8 +951,16 @@ async function setKillSwitch(store: MinimalKV, ttlSec: number): Promise<void> {
 // Cost helper
 // ---------------------------------------------------------------------------
 export function estimateCostUsd(
-  model: string, promptTok: number, completionTok: number, audioMinutes = 0, cachedTok = 0,
+  model: string, promptTok: number, completionTok: number, audioMinutes = 0, cachedTok = 0, characters = 0, image: shapes.Units = {},
 ): number {
+  // D761 PR 4: an image model is priced on its image units, at the catalogue's figure.
+  if (IMAGE_PRICED_MODELS.has(model)) {
+    const { tiles, steps, output_tile_steps, output_tiles, first_megapixels, subsequent_megapixels } = image;
+    return costMicro(model, { tiles, steps, output_tile_steps, output_tiles, first_megapixels, subsequent_megapixels }) / 1_000_000;
+  }
+  // D761 PR 3: a voice priced by the character has no token rate either.
+  const perK = PRICE_USD_PER_1K_CHARACTERS[model];
+  if (perK != null) return (Math.max(0, characters) / 1000) * perK;
   // Audio first: a model priced by the minute has no token rate, and asking
   // the token table for one would answer 0.
   const perMinute = PRICE_USD_PER_AUDIO_MINUTE[model];
@@ -873,7 +990,7 @@ export function estimateCostUsd(
 export function modelRefusal(env: Env, model: string): 'model_unpriced' | 'model_not_offered' | null {
   const refusal = catalogue.refusalFor(model, env);
   if (refusal) return refusal;
-  return model in PRICE_USD_PER_1M_TOKENS || model in PRICE_USD_PER_AUDIO_MINUTE ? null : 'model_unpriced';
+  return model in PRICE_USD_PER_1M_TOKENS || model in PRICE_USD_PER_AUDIO_MINUTE || model in PRICE_USD_PER_1K_CHARACTERS || IMAGE_PRICED_MODELS.has(model) ? null : 'model_unpriced';
 }
 
 // Crude token estimator — ≈ 4 chars/token for English. Good enough for
@@ -904,7 +1021,8 @@ function defaultContentBlob(opts: RunOptions): string {
 
 async function cacheKeyFor(opts: RunOptions, model: string): Promise<string | null> {
   const route = ROUTE[opts.task];
-  if (!route.cacheTtlSec) return null;
+  // D761 PR 3 and 4: a voice's audio and an image are not cached; the KV entry holds text only.
+  if (!route.cacheTtlSec || opts.speak || opts.draw) return null;
   const base = opts.contentHash
     || (opts.task === 'explain' && opts.topic ? `topic:${opts.topic}` : null)
     || defaultContentBlob(opts);
@@ -999,7 +1117,7 @@ async function recordUsage(env: Env, who: UsageWho, usage: UsageMeta, refusal: R
     refusal,
     charged,
     charge.reservationUid ?? null,
-    railKey(who.railPage),
+    railPageKey(who.railPage),
     railKey(who.railOption),
     railKey(who.recordRef),
     charge.units ? JSON.stringify(charge.units) : null,
@@ -1033,6 +1151,8 @@ interface ProviderResult {
   output?: string;
   embedding?: number[];
   ranking?: shapes.RankedContext[];
+  audio?: shapes.SpeechAudio;
+  image?: shapes.GeneratedImage;
   stream?: ReadableStream;
   transcript?: SttTranscript;
   prompt_tokens?: number;
@@ -1146,6 +1266,36 @@ async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed:
       if (!ranking) return { ok: false, status: 502, error: 'unexpected rerank response', units };
       return { ok: true, output: '', ranking, prompt_tokens: units.tokens_in ?? 0, completion_tokens: 0, units };
     }
+    // D761 PR 3: a voice. Aura is counted in the characters it speaks;
+    // MeloTTS in the minutes of audio it returns, measured from the bytes.
+    if (opts.speak) {
+      const text = opts.text ?? '';
+      const request = shapes.speakRequest(model, text, opts.speak);
+      if (!request) return { ok: false, status: 400, error: `${model} has no voice "${opts.speak.voice}"` };
+      const audio = await shapes.readSpeech(await ai.run(model, request, runOpt));
+      if (!audio) return { ok: false, status: 502, error: 'unexpected speech response' };
+      const units: shapes.Units = shapes.AURA_SPEAKERS[model]
+        ? { characters: text.length }
+        : { audio_minutes: audioMinutesFromBytes(audio.bytes.byteLength) };
+      return { ok: true, output: '', audio, prompt_tokens: 0, completion_tokens: 0, units };
+    }
+    // D761 PR 4: an image, sent as JSON or as FLUX.2's multipart form, and
+    // counted in its model's billing units from the size it came back at.
+    if (opts.draw) {
+      const req = shapes.drawRequest(model, opts.text ?? '', opts.draw);
+      if (!req) return { ok: false, status: 400, error: `${model} draws no image` };
+      let input: unknown = req.fields;
+      if (req.wire === 'multipart') {
+        const form = new FormData();
+        for (const [k, v] of Object.entries(req.fields)) form.append(k, String(v));
+        const body = new Response(form);
+        input = { multipart: { body: body.body, contentType: body.headers.get('content-type') } };
+      }
+      const image = await shapes.readImage(await ai.run(model, input, runOpt), req.sent);
+      if (!image) return { ok: false, status: 502, error: 'unexpected image response' };
+      const units = shapes.imageUnits(model, image.width, image.height, req.sent.steps);
+      return { ok: true, output: '', image, prompt_tokens: 0, completion_tokens: 0, units };
+    }
     if (opts.translate) {
       const source = opts.text ?? '';
       const out = await ai.run(model, shapes.translateRequest(source, opts.translate), runOpt);
@@ -1210,6 +1360,8 @@ async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed:
 function needOf(opts: RunOptions): shapes.Need {
   if (opts.rerank) return 'rerank';
   if (opts.translate) return 'translation';
+  if (opts.speak) return 'voice';
+  if (opts.draw) return 'image';
   if (ROUTE[opts.task]?.isEmbed) return 'embedding';
   if (opts.images?.length) return 'vision';
   return 'chat';
@@ -1217,11 +1369,15 @@ function needOf(opts: RunOptions): shapes.Need {
 
 /** D761 PR 2: why a run's own inputs cannot be sent to any model, or null. Checked before any call. */
 function inputRefusal(opts: RunOptions): string | null {
-  const asks = [opts.rerank != null, opts.translate != null, (opts.images?.length ?? 0) > 0].filter(Boolean).length;
-  if (asks > 1) return 'a run is one of: images, a rerank or a translation';
+  const asks = [opts.rerank != null, opts.translate != null, opts.speak != null, opts.draw != null, (opts.images?.length ?? 0) > 0].filter(Boolean).length;
+  if (asks > 1) return 'a run is one of: images, a rerank, a translation, a voice or a drawing';
+  if ((opts.speak != null || opts.draw != null) && opts.stream) return 'a voice or image run is not streamed';
+  if ((opts.speak != null || opts.draw != null) && ROUTE[opts.task]?.isAudio) return 'a voice or image run is not a transcription';
   if (opts.images?.length) return shapes.imagesRefusal(opts.images);
   if (opts.rerank) return shapes.rerankRefusal(opts.rerank);
   if (opts.translate) return shapes.translateRefusal(opts.translate, opts.text);
+  if (opts.speak != null) return shapes.speakRefusal(opts.speak, opts.text);
+  if (opts.draw != null) return shapes.drawRefusal(opts.draw, opts.text);
   return null;
 }
 
@@ -1407,7 +1563,11 @@ export function budgetRefusalMessage(refusal: string): string {
     : 'The included AI allowance and top-up balance cannot cover this run. Add tokens to continue.';
 }
 
-export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
+export async function run(env: Env, input: RunOptions): Promise<RunResult> {
+  // D765: a member's rail context is what the log row records.
+  const opts: RunOptions = input.rail
+    ? { ...input, railPage: input.rail.page, railOption: input.rail.option ?? undefined, recordRef: input.rail.record ?? undefined }
+    : input;
   const route = ROUTE[opts.task];
   const startedAt = Date.now();
 
@@ -1434,6 +1594,31 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
   // list months later would otherwise run as something else and report
   // success, and they would read a rate on screen for a model that did not
   // run. A refusal names the problem and the rail clears the preference.
+  // ---- The page's switch (D765, D720 §6) -------------------------------
+  // Before the cache, the hold and the guard, and with no usage row: nothing
+  // ran and nothing is held or charged. Transcribing a member's own recording
+  // is saving ("Your work saves as usual"), so the switch never refuses it.
+  if (opts.rail && !route.isAudio) {
+    let off: boolean;
+    try { off = await assistOff(env, opts.userId, opts.rail.page); }
+    catch {
+      const usage: UsageMeta = {
+        task: opts.task, model: route.model, latency_ms: 0,
+        prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0,
+        fallback_used: false, cached: false, safety_score: null,
+      };
+      return { ok: false, refusal: 'misconfigured', error: 'Unreadable: whether AI assistance is on for this page could not be checked. Nothing was run.', usage };
+    }
+    if (off) {
+      const usage: UsageMeta = {
+        task: opts.task, model: route.model, latency_ms: 0,
+        prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0,
+        fallback_used: false, cached: false, safety_score: null,
+      };
+      return { ok: false, refusal: 'assist_off', error: ASSIST_OFF_MESSAGE, usage };
+    }
+  }
+
   const offered = route.alternates ?? [];
   if (opts.model && !offered.includes(opts.model)) {
     const usage: UsageMeta = {
@@ -1580,10 +1765,19 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
         .map((m) => shapes.maxTokensFor(shapes.factsFor(m), opts.maxTokens, route.reasoningMaxTokens)));
       if (!Number.isSafeInteger(outputBound) || outputBound < 1 || !Number.isFinite(opts.audioMinutes || 0) || (opts.audioMinutes || 0)<0) throw new Error('AI estimate unreadable');
       const models = [primaryModel,...(route.fallbackChain || [])];
-      const quote = Math.max(...models.map(model=>estimateCostUsd(model,promptBound,outputBound,opts.audioMinutes || 0)));
+      // D761 PR 3: a voice is held for its text's characters (Aura) and for the
+      // most audio `readSpeech` accepts (MeloTTS), which bounds what it returns.
+      const quoteMinutes = opts.speak ? audioMinutesFromBytes(shapes.MAX_SPEECH_BYTES) : opts.audioMinutes || 0;
+      const quoteChars = opts.speak ? (opts.text ?? '').length : 0;
+      // D761 PR 4: an image is held for the size and steps sent to each model.
+      const quoteImage = (model: string): shapes.Units => {
+        const req = opts.draw ? shapes.drawRequest(model, opts.text ?? '', opts.draw) : null;
+        return req ? shapes.imageUnits(model, req.sent.width, req.sent.height, req.sent.steps) : {};
+      };
+      const quote = Math.max(...models.map(model=>estimateCostUsd(model,promptBound,outputBound,quoteMinutes,0,quoteChars,quoteImage(model))));
       // D763: the guard is held inside this hold, never in one of its own: every
       // input slice, and every output slice the run's maximum output allows.
-      const outputChars = !guardOn || route.isEmbed ? 0
+      const outputChars = !guardOn || route.isEmbed || opts.speak || opts.draw ? 0
         : route.isAudio ? Math.ceil((opts.audioMinutes || 0) * TRANSCRIPT_CHARS_PER_MINUTE)
           : outputBound * GUARD_CHARS_PER_OUTPUT_TOKEN;
       const guardQuote = guardOn ? guardQuoteMicro(guardInput, outputChars) : 0;
@@ -1775,13 +1969,14 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
   }
 
   const audioMinutes = opts.audioMinutes || 0;
+  // D761 PR 3: a voice's minutes and characters are the answering attempt's, as the Worker measured them.
   const usageFor = (promptTok: number, completionTok: number, safetyScore: number | null): UsageMeta => ({
     task: opts.task,
     model: modelUsed,
     latency_ms: Date.now() - startedAt,
     prompt_tokens: promptTok,
     completion_tokens: completionTok,
-    est_cost_usd: estimateCostUsd(modelUsed, promptTok, completionTok, audioMinutes, attempt.units?.tokens_cached ?? 0),
+    est_cost_usd: estimateCostUsd(modelUsed, promptTok, completionTok, audioMinutes || attempt.units?.audio_minutes || 0, attempt.units?.tokens_cached ?? 0, attempt.units?.characters ?? 0, attempt.units ?? {}),
     fallback_used: fallbackUsed,
     cached: false,
     safety_score: safetyScore,
@@ -1934,6 +2129,8 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
     output: attempt.output,
     embedding: attempt.embedding,
     ...(attempt.ranking ? { ranking: attempt.ranking } : {}),
+    ...(attempt.audio ? { audio: attempt.audio } : {}),
+    ...(attempt.image ? { image: attempt.image } : {}),
     stream: attempt.stream,
     transcript: attempt.transcript,
     usage,

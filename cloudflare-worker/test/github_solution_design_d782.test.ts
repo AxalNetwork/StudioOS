@@ -79,7 +79,7 @@ function fixture() {
     INSERT INTO projects(id, founder_id, company_id) VALUES (101, 11, 10), (202, 22, 20);
     INSERT INTO user_company_links VALUES (1, 10), (2, 20);
   `);
-  for (const m of ['441_build_cycle_stores.sql', '445_connector_fed_items.sql', '455_core_systems_workspace.sql', '459_cycle_activity_convention.sql', '461_build_record_stores.sql', '499_github_solution_design.sql']) db.exec(mig(m));
+  for (const m of ['441_build_cycle_stores.sql', '445_connector_fed_items.sql', '455_core_systems_workspace.sql', '459_cycle_activity_convention.sql', '461_build_record_stores.sql', '500_github_solution_design.sql']) db.exec(mig(m));
   db.exec(`INSERT INTO integrations(id, uid, user_id, provider_key, status, auth_type, config_json)
       VALUES (31, 'gh-one', 1, 'github', 'active', 'oauth2', '${JSON.stringify({ repositories: ['acme/app'], project_id: 101 })}');
     INSERT INTO integration_companies(integration_id, company_id, enabled) VALUES (31, 10, 1);`);
@@ -377,7 +377,7 @@ test('the GitHub sync runs Solution design after the issues, pull requests and r
   const real = globalThis.fetch;
   globalThis.fetch = (async (input: any) => {
     const u = new URL(String(input));
-    if (/\/(issues|pulls|releases)$/.test(u.pathname)) return new Response('[]', { status: 200 });
+    if (/\/(issues|pulls|releases|milestones)$/.test(u.pathname)) return new Response('[]', { status: 200 }); // and D782 (#2111)'s milestones
     return gh.get(`${u.pathname}${u.search}`);
   }) as any;
   try {

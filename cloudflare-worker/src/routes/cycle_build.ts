@@ -295,7 +295,64 @@ async function roadmap(env: Env, p: Project): Promise<ModuleRead> {
     rows: itemRows,
     list: { filters: [{ key: 'column', label: 'Column', options: options(Object.entries(COLUMN_LABEL)) }, { key: 'theme', label: 'Theme', options: optionsOf(itemRows, 'theme') }, { key: 'kpi', label: 'KPI', options: optionsOf(itemRows, 'kpi') }],
       sort: { key: 'column', label: 'Column' }, orders: { column: ['now', 'next', 'later', 'done'] } },
-    facts: { items: items.length, shipped_this_month: months.get(thisMonth)?.size ?? 0 } };
+    facts: { items: items.length, shipped_this_month: months.get(thisMonth)?.size ?? 0 },
+    parts: { github: await roadmapGithub(env, p) } };
+}
+
+/** How many releases the strip shows, newest first; `releases_total` gives the rest's count. */
+export const RELEASES_SHOWN = 12;
+/** Items named under one release in the strip; `shipped` gives the full count. */
+const SHIPPED_NAMED = 10;
+
+/**
+ * D782 (#2111): Product roadmap's "From GitHub" part, from what the GitHub sync
+ * wrote (`integrations/providers/github/roadmap.ts`):
+ *   - `groups`: each milestone title its items carry, with the milestone's due
+ *     date as the group's target, soonest first, and each item's Shipped mark;
+ *   - `releases`: the release rows, newest first, each with the items it shipped.
+ * Its own read: a store this part cannot read makes the part Unreadable and
+ * leaves the roadmap's table as it is.
+ */
+async function roadmapGithub(env: Env, p: Project) {
+  try {
+    const marked = rows(await env.DB.prepare(
+      `SELECT o.id, o.objective, o.kanban_status, o.milestone_title, o.milestone_due, o.shipped_release_id,
+              r.tag AS shipped_tag, r.url AS shipped_url
+         FROM roadmap_okrs o LEFT JOIN roadmap_releases r ON r.id = o.shipped_release_id AND r.project_id = o.project_id
+        WHERE o.project_id = ? AND (o.milestone_title IS NOT NULL OR o.shipped_release_id IS NOT NULL)
+        ORDER BY o.sort_order, o.id`,
+    ).bind(p.id).all<any>());
+    const releases = rows(await env.DB.prepare(
+      `SELECT id, repository, tag, name, published_at, url, prerelease FROM roadmap_releases WHERE project_id = ?
+        ORDER BY published_at IS NULL, published_at DESC, id DESC LIMIT ?`,
+    ).bind(p.id, RELEASES_SHOWN).all<any>());
+    const total = number((await env.DB.prepare('SELECT COUNT(*) AS n FROM roadmap_releases WHERE project_id = ?').bind(p.id).first<{ n: number }>())?.n);
+    const item = (o: any) => ({
+      id: o.id, title: o.objective, column: COLUMN_LABEL[o.kanban_status] ?? null,
+      shipped: o.shipped_release_id != null && o.shipped_tag ? { tag: o.shipped_tag, url: o.shipped_url ?? null } : null,
+    });
+    const byTitle = new Map<string, { title: string; due: string | null; items: ReturnType<typeof item>[] }>();
+    for (const o of marked) {
+      if (!o.milestone_title) continue;
+      if (!byTitle.has(o.milestone_title)) byTitle.set(o.milestone_title, { title: o.milestone_title, due: null, items: [] });
+      const g = byTitle.get(o.milestone_title)!;
+      if (!g.due && o.milestone_due) g.due = o.milestone_due;
+      g.items.push(item(o));
+    }
+    const groups = [...byTitle.values()].sort((a, b) => (a.due ?? '9999').localeCompare(b.due ?? '9999') || a.title.localeCompare(b.title))
+      .map(g => ({ ...g, shipped: g.items.filter(i => i.shipped).length }));
+    const strip = releases.map(r => {
+      const shipped = marked.filter(o => o.shipped_release_id === r.id);
+      return { id: r.id, repository: r.repository, tag: r.tag, name: r.name ?? null, published_at: r.published_at ?? null, url: r.url ?? null,
+        prerelease: r.prerelease === 1, shipped: shipped.length, items: shipped.slice(0, SHIPPED_NAMED).map(o => ({ id: o.id, title: o.objective })) };
+    });
+    const empty = !groups.length && !total;
+    return { state: empty ? 'empty' : 'ok', groups, releases: strip, releases_total: total,
+      reason: empty ? 'No milestone or release from GitHub yet. Connect GitHub and sync to bring them in.' : null };
+  } catch (error) {
+    console.error('[cycle_build] roadmap_releases read failed', error);
+    return { state: 'unreadable', groups: [], releases: [], releases_total: null, reason: 'GitHub\'s milestones and releases could not be read.' };
+  }
 }
 
 /**

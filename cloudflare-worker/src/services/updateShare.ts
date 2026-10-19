@@ -207,7 +207,8 @@ export async function draftLines(env: Env, userId: number, facts: Fact[]) {
     '',
     ...facts.map((f, i) => `${i}. ${f.text} (source: ${f.source.label})`),
   ].join('\n');
-  const out = await runAI(env, { task: 'publication', userId, surface: AI_SURFACE.growUpdate, text: prompt, maxTokens: 500 });
+  // D765: the founder's press on Grow's update sheet.
+  const out = await runAI(env, { task: 'publication', userId, surface: AI_SURFACE.growUpdate, rail: { page: 'grow', option: 'draft:update' }, text: prompt, maxTokens: 500 });
   if (!out?.ok || !out.output) return { status: 'unavailable' as const, highlights: [], lowlights: [], reason: 'Eadwyn could not draft this time. Write the lines by hand.' };
   return { status: 'drafted' as const, ...parseDraft(String(out.output), facts) };
 }

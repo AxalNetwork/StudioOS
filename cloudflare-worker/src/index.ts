@@ -425,7 +425,7 @@ app.use(
     // alongside the `studioos_csrf` cookie on cookie-authenticated mutating
     // requests. Without it in the allowlist, the browser preflight blocks
     // every POST/PUT/PATCH/DELETE from the SPA in production.
-    allowHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
+    allowHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'X-Rail-Page', 'X-Rail-Option', 'X-Rail-Record'],
   }),
 );
 

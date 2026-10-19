@@ -173,6 +173,8 @@ export type StoredProposal = {
   /** Migration 246. Null on a row written before it, and on an unmigrated dev db. */
   fill_class: string | null;
   citation_json: string | null;
+  /** Migration 246, like the two above. Read so the list can name each proposal's field (D777). */
+  target_ref: string | null;
 };
 
 /** One project's pending proposals, newest first. */
@@ -183,7 +185,7 @@ export async function listPending(env: Env, projectId: number): Promise<StoredPr
     // label. Migration 246 added them; a database that has not applied it returns
     // them as null, which the band reads as "no citation".
     `SELECT id, kind, payload_json, model, task, status, created_at,
-            fill_class, citation_json
+            fill_class, citation_json, target_ref
        FROM validate_proposals
       WHERE project_id = ? AND status = 'pending' AND run_id IS NULL
       ORDER BY id DESC

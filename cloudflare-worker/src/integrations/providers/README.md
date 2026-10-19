@@ -19,6 +19,10 @@ One file per provider. Each module:
    `CALLBACK_URL` lists it, so Admin → Integration keys shows the URL the
    provider sends. `tsc` enforces the list for managed keys (D751, #1882).
 
+GitHub's per-module feeds (D782, #2110) live in `github/`, one file per
+part, each called by one line from `github.ts`'s sync: `github/roadmap.ts`
+gives Product roadmap its milestones, release rows and Shipped marks (#2111).
+
 The module is then imported once from the worker entry point
 (`cloudflare-worker/src/index.ts`) so its top-level `registerProvider`
 call runs at boot.

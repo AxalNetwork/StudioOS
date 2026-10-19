@@ -118,6 +118,7 @@ import {
 import { enqueueJob } from '../services/queue';
 import { notifyAdvisorPageFill, notifyAdvisorProgress } from '../services/realtime';
 import { bindingKey } from '../util/schemaBootstrap';
+import { pageFromPath, railFor, refuseAssistOff } from '../util/railContext';
 
 const advisor = new Hono<{ Bindings: Env }>();
 
@@ -2257,6 +2258,7 @@ advisor.post('/explain', async (c) => {
     task: 'advisor_explain',
     userId: user.id,
     surface: AI_SURFACE.studio,
+    rail: railFor(c, { page: pageFromPath(AI_SURFACE.studio, 'studio'), option: 'explain:advisor' }),
     systemPrompt: systemPromptText,
     messages: [{ role: 'user', content: safeTopic }],
     maxTokens: EXPLAIN_MAX_TOKENS,
@@ -2269,6 +2271,8 @@ advisor.post('/explain', async (c) => {
     score: !ai.guard || ai.guard.input === 'none' || ai.guard.input === 'fail' ? null : ai.guard.input === 'pass' ? 1 : 0,
     category: ai.guard?.codes[0]?.toLowerCase() ?? (ai.guard?.input === 'pass' ? 'safe' : null),
   };
+  // D765: AI assistance is off on this page; nothing ran.
+  if (ai.refusal === 'assist_off') return refuseAssistOff(c);
   if (ai.refusal === 'guard_blocked') {
     await writeTurnAudit(c.env, {
       userId: user.id, conversationId,
@@ -2588,11 +2592,14 @@ advisor.post('/tool/auto', async (c) => {
       task: 'tool_call',
       userId: user.id,
       surface: AI_SURFACE.studio,
+      rail: railFor(c, { page: pageFromPath(AI_SURFACE.studio, 'studio'), option: 'tool:advisor' }),
       systemPrompt: TOOL_CALL_SYSTEM_PROMPT,
       messages: [{ role: 'user', content: message }],
       maxTokens: 256,
       temperature: 0,
     });
+    // D765: off on this page, so no tool is picked or run.
+    if (r.refusal === 'assist_off') return refuseAssistOff(c);
     if (!r.ok) {
       llmRefusal = r.refusal || 'router_failed';
     } else {
@@ -2892,6 +2899,8 @@ advisor.post('/transcribe', async (c) => {
     task: 'transcribe',
     userId: user.id,
     surface: AI_SURFACE.studio,
+    // D765: recorded with its page; a transcription is saving, so the switch never refuses it.
+    rail: railFor(c, { page: pageFromPath(AI_SURFACE.studio, 'studio'), option: 'transcribe:voice' }),
     audio: bytes,
     audioMinutes: audioMinutesFromBytes(bytes.byteLength),
   });
