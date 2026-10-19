@@ -196,11 +196,18 @@ export function TelegramClaim({ view, api = channelsApi, onChanged, onAgain, bus
   );
 }
 
-export function TelegramChannelCard({ card, claim = null, pending = null, api = channelsApi, onChanged, initialLink = null, now, pageHref = null }) {
+/**
+ * The Telegram card's own parts, in one place: the open claim, Link Telegram
+ * and its steps, the linked state's steps 3 to 5 and "Check again", chats
+ * waiting, Test and Disconnect. `state` is the card's (`channelCard`), or the
+ * page's `flow` (`telegramPageState`). The hub card and Telegram's page
+ * (D756 §1.11, #1979) both draw it, so neither copies the other.
+ */
+export function TelegramFlow({ state, claim = null, pending = null, api = channelsApi, onChanged, initialLink = null, now, previewSteps = false }) {
   // A claim still open is drawn whatever the card says (a re-link while
   // connected); an expired or cancelled one only while nothing is connected.
   const view = telegramClaimView(claim);
-  const claimed = view && (!view.stale || card.state === 'not_connected') ? view : null;
+  const claimed = view && (!view.stale || state === 'not_connected') ? view : null;
   const [link, setLink] = useState(initialLink);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -219,31 +226,84 @@ export function TelegramChannelCard({ card, claim = null, pending = null, api = 
     finally { setBusy(false); }
   };
   return (
-    <CardFrame card={card} pageHref={pageHref}>
+    <>
       {claimed && <TelegramClaim view={claimed} api={api} onChanged={onChanged} onAgain={() => { setLink(null); makeLink(); }} busyAgain={busy} />}
-      {card.state === 'not_connected' && !link && !claimed && (
-        <button type="button" className={`${BTN.primary} self-start`} disabled={busy} onClick={makeLink} data-testid="button-link-telegram">{busy ? 'Making a link…' : 'Link Telegram'}</button>
+      {state === 'not_connected' && !link && !claimed && (
+        <>
+          <button type="button" className={`${BTN.primary} self-start`} disabled={busy} onClick={makeLink} data-testid="button-link-telegram">{busy ? 'Making a link…' : 'Link Telegram'}</button>
+          {previewSteps && (
+            <ol className="list-decimal space-y-1 pl-4 text-[12.5px] leading-relaxed text-axal-ink/90 dark:text-gray-300" data-testid="telegram-steps">
+              {telegramSteps(null).map((st) => <li key={st}>{st}</li>)}
+            </ol>
+          )}
+        </>
       )}
-      {card.state === 'not_connected' && link && !claimed && <TelegramLinkSteps link={link} now={now} onCheck={onChanged} onAgain={makeLink} />}
-      {card.state === 'linked' && (
+      {state === 'not_connected' && link && !claimed && <TelegramLinkSteps link={link} now={now} onCheck={onChanged} onAgain={makeLink} />}
+      {state === 'linked' && (
         <>
           <ol className="list-decimal space-y-1 pl-4 text-[12.5px] leading-relaxed text-axal-ink/90 dark:text-gray-300">
-            {telegramSteps(null).slice(2).map((s) => <li key={s}>{s}</li>)}
+            {telegramSteps(null).slice(2).map((st) => <li key={st}>{st}</li>)}
           </ol>
           {onChanged && <button type="button" className={`${SMALL} self-start`} onClick={onChanged} data-testid="button-telegram-check">I’ve done this. Check again</button>}
         </>
       )}
-      {(card.state === 'connected' || card.state === 'linked' || card.state === 'problem') && (
+      {(state === 'connected' || state === 'linked' || state === 'problem') && (
         <>
           <PendingLink n={pending} />
           <ConnectedActions provider="telegram" api={api} onChanged={onChanged} />
         </>
       )}
       {error && <p role="alert" className="text-[12px] text-red-700 dark:text-red-300">{error}</p>}
-      <ul className="space-y-0.5 text-[11.5px] leading-snug text-axal-muted dark:text-gray-400" data-testid="telegram-limits">
-        {TELEGRAM_LIMITS.map((s) => <li key={s}>{s}</li>)}
-      </ul>
+    </>
+  );
+}
+
+function TelegramLimits() {
+  return (
+    <ul className="space-y-0.5 text-[11.5px] leading-snug text-axal-muted dark:text-gray-400" data-testid="telegram-limits">
+      {TELEGRAM_LIMITS.map((s) => <li key={s}>{s}</li>)}
+    </ul>
+  );
+}
+
+export function TelegramChannelCard({ card, claim = null, pending = null, api = channelsApi, onChanged, initialLink = null, now, pageHref = null }) {
+  return (
+    <CardFrame card={card} pageHref={pageHref}>
+      <TelegramFlow state={card.state} claim={claim} pending={pending} api={api} onChanged={onChanged} initialLink={initialLink} now={now} />
+      <TelegramLimits />
     </CardFrame>
+  );
+}
+
+/**
+ * D756 §1.11 (#1979) — Telegram's own page body, at `/account/connectors/telegram`
+ * in D753's frame (`ChannelPage.jsx`): every state from `telegramPageState`,
+ * drawn with the card's own parts (`TelegramFlow`). A Super Admin also gets
+ * the bot's health and Register webhook (`health`, #1895's section); the
+ * page draws `view.notices` in its notice region.
+ */
+export function TelegramPageBody({ view, claim = null, pending = null, api = channelsApi, onChanged, health = null, initialLink = null, now }) {
+  const tone = view.pill?.tone === 'ok' ? 'ok' : view.state === 'problem' ? 'warn' : 'neutral';
+  return (
+    <div className="flex min-w-0 flex-col gap-3" data-testid="telegram-page-body" data-state={view.state}>
+      <article className={`${TONE} flex min-w-0 flex-col gap-2.5 p-4`} data-testid="telegram-connection">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <h3 className="text-[14px] font-bold text-axal-ink dark:text-gray-100">{CARD_TITLE.telegram}</h3>
+            {view.account && <p className="truncate text-[12px] text-axal-muted dark:text-gray-400" data-testid="channel-account-telegram">{view.account}</p>}
+          </div>
+          {view.pill && <Pill tone={view.pill.tone}>{view.pill.label}</Pill>}
+        </div>
+        {view.why && <p className={`text-[12.5px] leading-snug ${tone === 'warn' ? 'text-amber-800 dark:text-amber-300' : 'text-axal-ink/80 dark:text-gray-300'}`} data-testid="telegram-why">{view.why}</p>}
+        {view.note && <p className={NOTE} data-testid="telegram-reply-note">{view.note}</p>}
+        {view.state === 'unreadable' && onChanged && <button type="button" className={`${BTN.ghost} self-start`} onClick={onChanged}>Retry</button>}
+        {view.state !== 'unreadable' && view.state !== 'unavailable' && (
+          <TelegramFlow state={view.flow} claim={claim} pending={pending} api={api} onChanged={onChanged} initialLink={initialLink} now={now} previewSteps />
+        )}
+        <TelegramLimits />
+      </article>
+      {view.health && health && <div data-testid="telegram-page-health">{health}</div>}
+    </div>
   );
 }
 

@@ -4,6 +4,29 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## Telegram's page says where Telegram stands, in every D756 state (D756 §1.11, #1979)
+
+- `/account/connectors/telegram` draws `TelegramPageBody` (`ChannelsGroup.jsx`)
+  in the connector page frame, in each of D756 §1.11's states
+  (`telegramPageState`, `channelsModel.js`):
+  - unreadable;
+  - not available yet;
+  - not connected (Link Telegram and the five steps);
+  - linking (the two-sided claim);
+  - linked (steps 3 to 5);
+  - connected (with the reply-right note when the bot cannot reply);
+  - problem.
+- The card's parts (claim, Link Telegram, steps, Test and Disconnect) move
+  into `TelegramFlow`, which the hub card and the page share.
+- A Super Admin also sees, and a member never does:
+  - the canary line;
+  - the missing secret names;
+  - #1895's bot health with Register webhook (`TelegramBotHealth`).
+- About carries D756's four lines (reads, sends, cannot do, costs and the
+  Premium line), in the Worker's `CHANNEL_PAGES` and the page alike.
+- `/account/connectors/telegram-business` lands on `telegram`, with replace.
+- The news-bot card stays a hub card.
+
 ## WhatsApp's page says where WhatsApp stands, in every D754 state (D754 f1, #1959)
 
 - `/account/connectors/whatsapp` draws `WhatsAppPageBody` (`ChannelsGroup.jsx`)

@@ -572,9 +572,10 @@ export const CHANNEL_PAGES: { whatsapp: ConnectorPage; telegram: ConnectorPage }
   telegram: {
     tagline: 'Telegram Business: the customer chats you choose, and their voice notes, into Validate.',
     long_description: [
-      'Only the chats you choose in Telegram Business, each waiting in Interviews until you add it to an interview.',
-      'Axal sends only what you send from Axal, within 24 hours of the person’s last message.',
-      'It cannot make or receive calls, or read group chats.',
+      'What it reads: only the chats you choose in Telegram Business, each waiting in Interviews until you add it to an interview. Voice notes and audio files are taken in only after the person replies YES to the recording notice, and are kept until you delete them.',
+      'What it sends: only what you send from Axal (replies and the notice), plus one line confirming YES, NO or STOP, within 24 hours of the person’s last message.',
+      'What it can’t do: calls, group chats, files over 5 MB, round videos for now.',
+      'Costs: transcription is billed to your AI budget, up to 50 notes a day. Needs Telegram Premium: chatbots are part of Telegram Business.',
     ],
     tools: [
       tool('download_voice_note', 'voice notes', 'read', 'Downloads a voice note from a chat you added to an interview, to transcribe it.', 'customer_research',
