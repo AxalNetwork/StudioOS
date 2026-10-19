@@ -26,10 +26,12 @@ const rowsOf = (section) => INVESTOR_RAIL_OPTIONS.filter((o) => o.page === `Inve
 /** Each draft row's band in its file carries the row's key as `railOption`, beside the row's surface. */
 function assertBandsNamed(rows) {
   for (const o of rows.filter((r) => r.handler === 'draft')) {
+    // Each `<ZoneDraft … />` opening tag, found by plain string search (no regex is built from data).
     const src = read(o.source.file);
-    const band = src.match(new RegExp(`<ZoneDraft\\b[^>]*?${o.source.match.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^>]*?>`, 's'));
+    const bands = src.split('<ZoneDraft').slice(1).map((rest) => rest.slice(0, rest.indexOf('>')));
+    const band = bands.find((b) => b.includes(o.source.match));
     assert.ok(band, `${o.page}: no band ${o.source.match}`);
-    assert.match(band[0], new RegExp(`railOption="${o.key}"`), `${o.page}: the band does not name ${o.key}`);
+    assert.ok(band.includes(`railOption="${o.key}"`), `${o.page}: the band does not name ${o.key}`);
   }
 }
 
