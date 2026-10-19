@@ -409,7 +409,7 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
     long_description: [
       'Read issues, milestones, pull requests and releases from the repositories you choose. Issues link to Product roadmap items and pull requests to Prototype / MVP must-haves. Read-only. In Prototype / MVP, a must-have follows its pull request: draft is Planned, open is In progress, asked for review or approved is In review, merged is Built, and closed unmerged is Dropped, which you undo by marking it a must-have again. Each release records, on each must-have, whether it is in that release or was still open when it was published.',
       'In Product roadmap, a milestone groups its issues’ items and gives them its due date as their target. Each release is a row there, and marks Shipped the items it closed: an issue its notes name, or one a pull request merged before it closed.',
-      'In Build › Operating systems, GitHub is the Code system: its repositories, its last sync and what it fed. Each sync is a line in Tools. In Build › Solution design, each repository\'s languages and topics show as Built with. Its architecture decision records, and the README and docs sections headed Architecture, Design or Decisions, arrive as proposals: nothing is written until you accept one.',
+      'In Build › Operating systems, GitHub is the Code system: its repositories, its last sync and what it fed. Each sync is a line in Tools. In Build › Solution design, each repository\'s languages and topics show as Built with. Its architecture decision records, and the README and docs sections headed Architecture, Design or Decisions, arrive as proposals: nothing is written until you accept one. In Build › Founding team, each repository\'s contributors and their commits in the last 90 days arrive for you to match: you map each GitHub login to a founder once, and Axal VC never guesses it from a name or an email. Only your project\'s members see the logins. In Build › Company creation, a repository a personal account owns brings a proposed step, moving the code into the company\'s GitHub organisation, which you accept or dismiss; one an organisation owns is recorded as evidence on your IP assignment step. A repository with no licence file says so.',
       'Axal VC connects as a GitHub App with read permissions only. If GitHub ever grants more than read, Axal VC revokes the grant and refuses the connection.',
     ],
     tools: [
@@ -430,6 +430,12 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
         'solution_design', ['`${path}/readme`', '`${path}/contents/${', '`${path}/commits?path=${']),
       tool('read_stack', 'languages and topics', 'read', 'Reads each repository\'s languages and topics, shown on Solution design as Built with.', 'solution_design',
         ['`${path}/languages`', 'stackTopics(meta?.topics)']),
+      tool('read_contributors', 'contributors and recent commits', 'read',
+        'Reads each repository\'s contributors and its last 90 days of commits, at most 500 per repository, for you to map each login to a founder on Founding team. Bots are left out.',
+        'founding_team', ['`${path}/contributors?per_page=${PER_PAGE}`', '`${path}/commits?since=${']),
+      tool('read_ownership', 'owner and licence', 'read',
+        'Reads who owns each repository and its licence. A personal account proposes a step on Company creation, to move the code into the company\'s organisation; you accept or dismiss it.',
+        'company_creation', ['repoFacts(await res.json())']),
       tool('revoke_grant', 'the grant', 'account', 'Revokes the grant when you disconnect, and when GitHub grants more than read.', null,
         ['`${API}/applications/${encodeURIComponent(id)}/grant`']),
     ],

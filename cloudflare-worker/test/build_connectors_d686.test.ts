@@ -88,7 +88,7 @@ const checks:Check[]=[
  {name:'Recorded feed counts include the same module doors',module:'fed',before:"href: moduleHref(m), count,",after:"href: null, count,",run:async m=>{
  const {db,env}=fixture();db.exec("CREATE TABLE connector_fed_items(integration_id INTEGER,module TEXT,local_id INTEGER); INSERT INTO connector_fed_items VALUES(11,'product_roadmap',7),(11,'product_roadmap',NULL)");
  snap((await m.fed.fedCounts(env,11,'github')).map(x=>[x.module,x.href,x.count,x.linked,x.unlanded]),
- [['product_roadmap','/build/product-roadmap',2,1,1],['prototype_mvp','/build/prototype-mvp',0,0,0],['operating_systems','/build/operating-systems',null,null,null],['solution_design','/build/solution-design',0,0,0]]);db.close();}},
+ [['product_roadmap','/build/product-roadmap',2,1,1],['prototype_mvp','/build/prototype-mvp',0,0,0],['operating_systems','/build/operating-systems',null,null,null],['solution_design','/build/solution-design',0,0,0],['founding_team','/build/founding-team',0,0,0],['company_creation','/build/company-creation',0,0,0]]);db.close();}},
  {name:'Stripe cron records failure time and clears it after recovery',module:'stripe',before:"await env.DB.prepare('UPDATE integrations SET last_error = ?, last_error_at = CURRENT_TIMESTAMP WHERE id = ?').bind(msg, row.id).run();\n      } catch",after:"await env.DB.prepare('UPDATE integrations SET last_error = ? WHERE id = ?').bind(msg, row.id).run();\n      } catch",run:async m=>{
  const {db,env}=fixture();const enc=await encryptCredentials(env,'cron-fixture',{access_token:'fixture-token'});
  db.prepare("INSERT INTO integrations(id,uid,user_id,provider_key,auth_type,credentials_enc) VALUES(11,'cron-fixture',1,'stripe','oauth2',?)").run(enc);
@@ -132,7 +132,7 @@ const checks:Check[]=[
  ['Microsoft 365','Calendar and workspace',['customer_research','operating_systems'],['/validate/customer-research','/build/operating-systems']]]);}},
  {name:'feed_modules is beside unchanged string feeds',module:'reg',before:"feed_modules: feeds.map",after:"wrong_modules: feeds.map",run:async m=>{
  const p:any=m.reg.publicDescriptor(m.reg.getDescriptor('github')!);snap([p.feeds,p.feed_modules],
- [['product_roadmap','prototype_mvp','operating_systems','solution_design'],[{key:'product_roadmap',label:'Product roadmap',href:'/build/product-roadmap'},{key:'prototype_mvp',label:'Prototype / MVP',href:'/build/prototype-mvp'},{key:'operating_systems',label:'Operating systems',href:'/build/operating-systems'},{key:'solution_design',label:'Solution design',href:'/build/solution-design'}]]);}},
+ [['product_roadmap','prototype_mvp','operating_systems','solution_design','founding_team','company_creation'],[{key:'product_roadmap',label:'Product roadmap',href:'/build/product-roadmap'},{key:'prototype_mvp',label:'Prototype / MVP',href:'/build/prototype-mvp'},{key:'operating_systems',label:'Operating systems',href:'/build/operating-systems'},{key:'solution_design',label:'Solution design',href:'/build/solution-design'},{key:'founding_team',label:'Founding team',href:'/build/founding-team'},{key:'company_creation',label:'Company creation',href:'/build/company-creation'}]]);}},
  {name:'Unknown keys including inherited properties have no href',module:'labels',before:"Object.hasOwn(MODULE_HREFS, key)",after:"true",run:async m=>{
  snap(['unknown','__proto__','constructor'].map(k=>m.labels.moduleHref(k)),[null,null,null]);}},
  {name:'Unrecorded feed counts still include module doors',module:'fed',before:"href: moduleHref(m)",after:"href: null",run:async m=>{

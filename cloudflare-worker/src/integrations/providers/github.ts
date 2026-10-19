@@ -52,6 +52,8 @@ export { GITHUB_LANDINGS, GITHUB_READ_BY } from '../githubFeeds';
 import { roadmapRun } from './github/roadmap';
 import { mvpRun } from './github/mvp';
 import { syncSolutionDesign } from './github/solutionDesign';
+import { deleteContributorsOf, syncTeam } from './github/team';
+import { deleteFactsOf, syncCompany } from './github/company';
 
 const PROVIDER_KEY = 'github';
 const API = 'https://api.github.com';
@@ -511,6 +513,10 @@ const SYNC_SETUP_COST = 16;
 // A page: its fetch, its ledger read and its batch, plus one progress write.
 const PAGE_COST = 4;
 const STEP_KINDS = ['issues', 'pulls', 'releases'] as const;
+// D782 (#2115): the most a repository costs Founding team (its contributors, five
+// commit pages, the read and the batch) and Company creation (its read and batch).
+const TEAM_REPO_COST = 8;
+const COMPANY_REPO_COST = 2;
 const PARTLY_SYNCED = 'Partly synced: run Sync again to continue';
 
 /** Where a partly synced run stopped, for this exact repository list. */
@@ -602,11 +608,18 @@ export async function syncGithub(env: Env, row: IntegrationRow, budget = SYNC_SU
         if (items.length < PER_PAGE) break;
       }
     }
-    // D782 (#2111, #2112, #2114): Product roadmap's milestones, release rows and Shipped, then
-    // Prototype / MVP's states and release checks (after the release rows they point at), then
-    // Solution design's files and stack. Each counts its own subrequests and reports none,
-    // so what is left of the budget is shared: none spends it twice.
-    const left = budget - used;
+    // D782 (#2111, #2112, #2114, #2115): Founding team's contributors and Company creation's
+    // facts first, each within its own small share; then Product roadmap's milestones,
+    // release rows and Shipped, then Prototype / MVP's states and release checks,
+    // then Solution design's files and stack. Each counts its
+    // own subrequests and reports none, so what is left of the budget is shared: no two
+    // spend it twice.
+    const before = budget - used;
+    const teamShare = Math.min(Math.floor(before / 8), repos.length * TEAM_REPO_COST);
+    const companyShare = Math.min(Math.floor(before / 8), repos.length * COMPANY_REPO_COST + 1);
+    Object.assign(counts, await syncTeam(env, row.id, projectId, (p) => gh(token, p), repos, teamShare));
+    Object.assign(counts, await syncCompany(env, row.id, projectId, (p) => gh(token, p), repos, companyShare));
+    const left = before - teamShare - companyShare;
     const roadmapShare = Math.ceil(left / 3);
     const mvpShare = Math.ceil((left - roadmapShare) / 2);
     Object.assign(counts, await roadmap.finish((p) => gh(token, p), repos, roadmapShare));
@@ -630,7 +643,14 @@ registerProvider({
   ready: async (env) => (await import('../../services/providerOauthKeys')).oauthCredsReady(env, 'github'),
   connect,
   revokeGranted,
-  disconnect: async (c, _user, row) => revokeGrant(c.env, await accessToken(c.env, row)),
+  // D782 (#2115): a connection's contributor logins and repository facts are personal
+  // data that go with it, whether or not the grant can still be revoked. A failed delete
+  // never blocks the revoke: the rows also cascade with the connection's row.
+  disconnect: async (c, _user, row) => {
+    const local = await Promise.allSettled([deleteContributorsOf(c.env, row.id), deleteFactsOf(c.env, row.id)]);
+    if (local.some((r) => r.status === 'rejected')) console.warn('[github] disconnect: the local GitHub rows were not deleted here; they cascade with the connection');
+    await revokeGrant(c.env, await accessToken(c.env, row));
+  },
   buildAuthorizeUrl,
   sync: (c, _user, row) => syncGithub(c.env, row),
   // The repository choice has its own route (`PUT /:uid/repositories`), which
