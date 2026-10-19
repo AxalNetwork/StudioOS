@@ -15,7 +15,8 @@ import { SignJWT } from 'jose';
 import { applyEngineSchema } from './_engine_schema.mjs';
 import { tableFromBaseline } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
-import { PLACEMENT_KINDS, parsePlacements, placementSlug, type Segment } from '../src/services/interviewStructuring.ts';
+import { PASS_MAX_TOKENS, PLACEMENT_KINDS, STRUCTURE_PASSES, parsePlacements, placementSlug, structureTranscript, type Segment } from '../src/services/interviewStructuring.ts';
+import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
 import { FINDING_KINDS } from '../src/services/interviewFindings.ts';
 import structure, { storePlacements } from '../src/routes/founder_validate_structure.ts';
 import { writeInterviewFinding } from '../src/services/validateWriters.ts';
@@ -352,4 +353,75 @@ test('propose_placements takes every new kind with its module, and its descripti
   assert.equal(PLACEMENT_KINDS.market_fact.module, 'market_intelligence');
   assert.equal(PLACEMENT_KINDS.pain_severity.module, 'problem_discovery');
   assert.match(TOOLS.propose_placements.description, /module_mismatch/);
+});
+
+// ── 8. two structure passes (PR 2) ──────────────────────────────────────────
+
+/** A router world: the AI budget tables and a Workers AI stub that answers by pass. */
+function routerWorld(answer: (pass: 'A' | 'B', input: any) => unknown) {
+  const { DB } = aiBudgetFixture();
+  const calls: { pass: 'A' | 'B'; max_tokens: number; system: string }[] = [];
+  const env: any = {
+    DB, ENVIRONMENT: 'development',
+    AI: {
+      run: async (model: string, input: any) => {
+        if (/guard/.test(model)) return { response: 'safe' };
+        const system = String(input.messages?.[0]?.content ?? '');
+        const pass = /This pass reads for demand and evidence/.test(system) ? 'B' : 'A';
+        calls.push({ pass, max_tokens: input.max_tokens, system });
+        return answer(pass, input);
+      },
+    },
+  };
+  return { env, calls };
+}
+const A_REPLY = JSON.stringify({ placements: [
+  { kind: 'pain_severity', payload: { phrase: 'Reconcile by hand', severity: 'severe' }, ...Q.hand },
+  { kind: 'competitor_mention', payload: { name: 'Ledgerly' }, ...Q.ledgerly },
+  // Pass B's kind, answered in pass A: skipped, not counted as dropped.
+  { kind: 'timing', payload: { when: 'tomorrow' }, ...Q.pay },
+] });
+const B_REPLY = JSON.stringify({ placements: [
+  { kind: 'demand_signal', payload: { signal: 'would_pay', detail: 'Tomorrow' }, ...Q.pay },
+  { kind: 'urgency', payload: { level: 'high' }, ...Q.hand },
+  // Pass A's kind, answered in pass B: skipped.
+  { kind: 'pain_severity', payload: { phrase: 'Reconcile by hand', severity: 'severe' }, ...Q.hand },
+] });
+
+test('every kind is in exactly one pass, and each pass\'s prompt lists only its own', () => {
+  const all = STRUCTURE_PASSES.flatMap((p) => [...p.kinds]);
+  assert.deepEqual([...all].sort(), Object.keys(PLACEMENT_KINDS).sort(), 'a kind is in no pass, or in two');
+  assert.equal(new Set(all).size, all.length);
+});
+
+test('a stubbed router sees two calls, each with the raised maxTokens and its own pass; the placements merge', async () => {
+  const { env, calls } = routerWorld((pass) => ({ response: pass === 'A' ? A_REPLY : B_REPLY }));
+  const out = await structureTranscript(env, { userId: ME, segments: SEGMENTS, context: CTX, step: 'structured' });
+  assert.equal(out.ok, true);
+  if (!out.ok) return;
+  assert.deepEqual(calls.map((c) => c.pass), ['A', 'B']);
+  assert.ok(PASS_MAX_TOKENS > 1500, 'raised from one pass\'s 1500');
+  assert.deepEqual(calls.map((c) => c.max_tokens), [PASS_MAX_TOKENS, PASS_MAX_TOKENS]);
+  assert.match(calls[0].system, /- pain_severity:/);
+  assert.doesNotMatch(calls[0].system, /- demand_signal:/);
+  assert.match(calls[1].system, /- demand_signal:/);
+  assert.doesNotMatch(calls[1].system, /- pain_severity:/);
+  assert.deepEqual(out.placements.map((p) => p.kind), ['pain_severity', 'competitor_mention', 'demand_signal', 'urgency']);
+  assert.equal(out.dropped, 0, 'a kind answered in the other pass is not a placement without a passage');
+  assert.equal(out.receipt.length, 2);
+  assert.equal(out.passBRefusal, undefined);
+});
+
+test('pass B refused keeps pass A\'s placements whole and says why; pass A refused stores nothing', async () => {
+  const b = routerWorld((pass) => { if (pass === 'B') throw new Error('capacity'); return { response: A_REPLY }; });
+  const out = await structureTranscript(b.env, { userId: ME, segments: SEGMENTS, context: CTX, step: 'structured' });
+  assert.equal(out.ok, true);
+  if (!out.ok) return;
+  assert.deepEqual(out.placements.map((p) => p.kind), ['pain_severity', 'competitor_mention']);
+  assert.notEqual(out.passBRefusal, undefined, 'the refusal travels beside pass A');
+  assert.ok(out.receipt.length >= 2);
+  const a = routerWorld((pass) => { if (pass === 'A') throw new Error('capacity'); return { response: B_REPLY }; });
+  const refused = await structureTranscript(a.env, { userId: ME, segments: SEGMENTS, context: CTX, step: 'structured' });
+  assert.equal(refused.ok, false);
+  assert.ok(a.calls.every((c) => c.pass === 'A'), 'pass B never runs after pass A is refused');
 });

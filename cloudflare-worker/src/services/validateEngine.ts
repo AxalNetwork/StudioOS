@@ -78,6 +78,7 @@ export const NOTES = {
   tooLarge: 'This conversation is longer than Axal can summarise in one run yet, so nothing was run and nothing was charged.',
   budgetTail: ' The transcript is kept; summarise it when the allowance allows.',
   withdrawn: 'The interviewee withdrew consent, so the summary and its suggestions were removed. Decisions you already made are kept, without the quote.',
+  passB: 'Axal suggested what it heard about the problem, the person and the market, but not yet about demand and evidence:',
 } as const;
 
 /** The sentence a refusal code reads as. Never the code itself. */
@@ -219,6 +220,8 @@ export async function digestSession(env: Env, opts: {
         sessionId: session.id, userId: opts.userId, trigger: opts.trigger, model: prefs.models.structure, dedupe: !force,
       });
       if (!structure.ok && refusal === undefined) refusal = structure.reason === 'refused' ? structure.refusal ?? null : null;
+      // D757 (#1923): pass B refused keeps pass A's suggestions; the note says what is missing and why.
+      if (structure.ok && structure.passBRefusal !== undefined) notes.push(`${NOTES.passB} ${refusalNote(structure.passBRefusal)}`);
     }
   } catch (err) {
     // Release the claim so a retry is not told it is busy; the error is the caller's.

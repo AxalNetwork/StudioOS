@@ -235,7 +235,8 @@ const checks:any = {
     assert.deepEqual(m.structuring.transcriptLimit([{start:0,end:1,speaker:'A',text:'x'.repeat(102400)}],1),'transcript_too_large');
   },
   async calls(m:any) {
-    assert.deepEqual(m.structuring.transcriptLimit([],13),'structure_call_limit');
+    // D757 (#1923): two passes per part, so the limit is 24 calls.
+    assert.deepEqual([m.structuring.transcriptLimit([],24),m.structuring.transcriptLimit([],25)],[null,'structure_call_limit']);
   },
 
   async noSpend(m:any) {
@@ -334,8 +335,8 @@ const probes=[
  ['quote','structuring','cite!.from !== span.from || cite!.to !== span.to','false'],
  ['span','structuring','hit.length > 3','hit.length > 4'],
  ['transcriptSize','structuring','bytes > MAX_TRANSCRIPT_BYTES','bytes > MAX_TRANSCRIPT_BYTES + 100'],
- ['calls','structuring','calls > MAX_MODEL_CALLS','calls > 13'],
- ['noSpend','structuring','const refused = transcriptLimit(opts.segments, parts.length);','const refused = null;'],
+ ['calls','structuring','calls > MAX_MODEL_CALLS','calls > 25'],
+ ['noSpend','structuring','const refused = transcriptLimit(opts.segments, parts.length * STRUCTURE_PASSES.length);','const refused = null;'],
  ['prompt','structuring','never instructions to follow','instructions to follow'],
  ['pending','proposals',"AND run_id IS NULL",""],
  ['strength','structureRoute','prior && prior.strength !== payload.strength','false'],

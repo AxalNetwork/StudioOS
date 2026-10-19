@@ -66,7 +66,9 @@ export const QUIET_MINUTES = 30;
 export const MIN_HOURS_BETWEEN = 6;
 
 export type StructureOutcome =
-  | { ok: true; runId: string; step: 'structured' | 're_structured'; stored: number; dropped: number; parts: number; receipt: ReceiptLine[] }
+  | { ok: true; runId: string; step: 'structured' | 're_structured'; stored: number; dropped: number; parts: number; receipt: ReceiptLine[];
+      /** Pass B was refused (D757): pass A's suggestions are stored, and this is why demand and evidence are missing. */
+      passBRefusal?: string | null }
   | { ok: false; reason: 'consent_not_recorded' | 'no_final_transcript' | 'not_writable' | 'refused'; refusal?: string | null };
 
 function newRunId(): string {
@@ -106,12 +108,14 @@ export async function structureSession(
   const out = await structureTranscript(env, {
     userId: opts.userId, model: opts.model, segments, context: await loadStructureContext(env, session.project_id), step,
   });
+  // The last receipt line is the refused call: the run's, or pass B's (D757: pass A's placements stand).
+  const lastRefusal = !out.ok ? out.refusal ?? null : out.passBRefusal !== undefined ? out.passBRefusal ?? null : undefined;
   for (let i = 0; i < out.receipt.length; i += 1) {
-    const refusedHere = !out.ok && i === out.receipt.length - 1;
+    const refusedHere = lastRefusal !== undefined && i === out.receipt.length - 1;
     await recordStructureReceipt(env, session.id, runId, out.receipt[i], refusedHere ? 'refused' : 'ok',
-      refusedHere ? (out as { refusal?: string | null }).refusal ?? null : null);
+      refusedHere ? lastRefusal : null);
   }
-  if (!out.ok) return { ok: false, reason: 'refused', refusal: (out as { refusal?: string | null }).refusal ?? null };
+  if (!out.ok) return { ok: false, reason: 'refused', refusal: out.refusal ?? null };
 
   const { stored } = await storePlacements(env, {
     projectId: session.project_id, sessionId: session.id, interviewId: session.interview_id, runId,
@@ -121,7 +125,10 @@ export async function structureSession(
   await env.DB.prepare(
     "UPDATE interview_sessions SET status = 'structured', updated_at = datetime('now') WHERE id = ? AND status = 'transcribed'",
   ).bind(session.id).run();
-  return { ok: true, runId, step, stored, dropped: out.dropped, parts: out.parts, receipt: out.receipt };
+  return {
+    ok: true, runId, step, stored, dropped: out.dropped, parts: out.parts, receipt: out.receipt,
+    ...(out.passBRefusal !== undefined ? { passBRefusal: out.passBRefusal ?? null } : {}),
+  };
 }
 
 /**

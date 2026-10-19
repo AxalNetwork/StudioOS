@@ -193,8 +193,10 @@ test('a long transcript is split on segment boundaries, every segment once, and 
   assert.equal(out.ok, true);
   if (!out.ok) return;
   assert.equal(out.parts, parts.length, 'the founder is not told the transcript was read in parts');
-  assert.equal(seen.length, parts.length);
+  // D757 (#1923): each part is read once per pass.
+  assert.equal(seen.length, parts.length * 2);
   assert.match(seen[0], new RegExp(`^Part 1 of ${parts.length}`));
+  assert.match(seen[parts.length], new RegExp(`^Part 1 of ${parts.length}`), 'pass B reads the transcript from its first part');
   assert.equal(out.placements.filter((p) => p.kind === 'competitor_mention').length, 1, 'one competitor named in every part was kept once per part');
   assert.equal(out.placements.filter((p) => p.kind === 'segment').length, parts.length);
 });
@@ -210,8 +212,9 @@ test('the receipt names the model that answered, and the fallback when the first
   });
   const out = await structureTranscript(env, { userId: ME, segments: SEGMENTS, context: CTX, step: 'structured' });
   assert.equal(out.ok, true);
-  assert.deepEqual(calls, [MID, SMALL]);
-  assert.equal(out.receipt.length, 1);
+  // D757 (#1923): one call per pass, each falling back the same way.
+  assert.deepEqual(calls, [MID, SMALL, MID, SMALL]);
+  assert.equal(out.receipt.length, 2);
   assert.equal(out.receipt[0].model, SMALL, 'the receipt names the model that was asked, not the one that answered');
   assert.equal(out.receipt[0].fallback_used, true, 'the receipt does not say the fallback answered');
   assert.equal(out.receipt[0].step, 'structured');
@@ -518,7 +521,8 @@ test('structure: one run over the final transcript stores the cited placements a
   ]);
   assert.equal(w.db.prepare('SELECT status FROM interview_sessions WHERE id = 5').get().status, 'structured');
   const receipt = rowsOf(w.db, 'interview_structure_receipts', 'step, model, fallback_used, outcome, run_id');
-  assert.deepEqual(receipt.map((x: any) => [x.step, x.model, x.fallback_used, x.outcome, x.run_id]), [['structured', MID, 0, 'ok', r.json.run_id]]);
+  // D757 (#1923): one receipt line per pass, both on the run.
+  assert.deepEqual(receipt.map((x: any) => [x.step, x.model, x.fallback_used, x.outcome, x.run_id]), [['structured', MID, 0, 'ok', r.json.run_id], ['structured', MID, 0, 'ok', r.json.run_id]]);
 });
 
 test('compare: a second run is a re-structure with its own run_id, and the read aligns the two by module', async () => {
@@ -543,7 +547,7 @@ test('compare: a second run is a re-structure with its own run_id, and the read 
   assert.equal(comp.can_accept, true, 'a kind with a writer is marked proposed-only');
   assert.equal(comp.cite.quote, SEGMENTS[2].text);
   const steps = rowsOf(w.db, 'interview_structure_receipts', 'step').map((x: any) => x.step);
-  assert.deepEqual(steps, ['structured', 're_structured']);
+  assert.deepEqual(steps, ['structured', 'structured', 're_structured', 're_structured'], 'one line per pass, in each run');
 });
 
 test('the session receipt names the fallback model when the first choice fails, beside the transcription lines', async () => {
@@ -558,6 +562,7 @@ test('the session receipt names the fallback model when the first choice fails, 
   assert.equal(r.status, 200, JSON.stringify(r.json));
   assert.deepEqual(r.json.items.map((x: any) => [x.kind, x.model, x.fallback_used]), [
     ['final', '@cf/openai/whisper-large-v3-turbo', 0],
+    ['structured', SMALL, 1],
     ['structured', SMALL, 1],
   ], 'the receipt does not name the fallback model, or misses the transcription line');
 });
@@ -649,7 +654,7 @@ test('a model that is given but not recognised is refused with 400 and nothing r
   // Absent, null or blank is the default, not a refusal.
   const w = withSession(world(() => ({ response: REPLY })));
   assert.equal((await call(w.env, structure, 'POST', '/sessions/5/structure', { model: '' })).status, 201);
-  assert.deepEqual(w.calls, [MID]);
+  assert.deepEqual(w.calls, [MID, MID], 'the default, once per pass (D757)');
 });
 
 test('a listed @cf/ model the task does not offer is 400; DeepSeek V4 Flash is offered and named on the receipt', async () => {
