@@ -1,4 +1,4 @@
--- 501 — GitHub feeds Founding team and Company creation (D782, #2115).
+-- 502 — GitHub feeds Founding team and Company creation (D782, #2115).
 --
 -- Four new tables, no change to an existing one.
 --
