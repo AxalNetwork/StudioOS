@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, Loader2, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
+import { RailFrame, WorkerRail } from '../../ui';
+import useRecordCrumb from '../admin/useRecordCrumb';
 import {
   DISPUTE, DISPUTE_STATUS, disputeMoney, disputeReadFailure, stripeDate,
 } from '../../components/hqReview/hqReviewCopy';
@@ -32,7 +34,11 @@ export default function DisputePage() {
     }
   }, [disputeId]);
   useEffect(() => { load(); }, [load]);
-  return <DisputeView disputeId={disputeId} state={state} onRetry={load} />;
+  // D775 (#2101): a dispute's own page is H14's record view (D768 maps it to
+  // Revenue › Disputes). It drew no rail; it draws HQ's, and the dispute it read is the record.
+  useRecordCrumb(state.dispute ? `Dispute ${disputeId}` : null, 'dispute', disputeId);
+  const rail = <WorkerRail workspace="Disputes" role="super_admin" note="Eadwyn reads the dispute on this page. Evidence is filed only when you submit it, on the Billing tab." data-testid="hq-dispute-rail" />;
+  return <RailFrame rail={rail} data-testid="hq-dispute-frame"><DisputeView disputeId={disputeId} state={state} onRetry={load} /></RailFrame>;
 }
 
 function Fact({ label, children }) {
