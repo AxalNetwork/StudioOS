@@ -193,6 +193,9 @@ const EXPECTED: Record<string, string[]> = {
   'routes/brand.ts': ['AI_SURFACE.buildBrand', 'AI_SURFACE.buildBrand', 'AI_SURFACE.buildBrand'],
   'services/competitorAnalysis.ts': ['AI_SURFACE.researchCompanies'],
   'services/deckExtract.ts': ['AI_SURFACE.raisePitchReview', 'AI_SURFACE.raisePitchReview'],
+  // D767 (#2096): the deck draft and the slide fill.
+  'routes/decks.ts': ['AI_SURFACE.raisePitch'],
+  'services/decks/autofill.ts': ['AI_SURFACE.raisePitch'],
   'services/publications.ts': ['AI_SURFACE.adminPublications'],
   'services/updateShare.ts': ['AI_SURFACE.growUpdate'],
   'services/fills/citations.ts': ['AI_SURFACE.validate'],
