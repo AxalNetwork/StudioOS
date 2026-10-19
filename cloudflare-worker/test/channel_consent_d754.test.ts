@@ -195,7 +195,7 @@ test('a WhatsApp chat added to an interview keeps nothing there before consent: 
     ['POST', `/sessions/${sid}/summarise`, {}], ['POST', `/sessions/${sid}/process`, {}],
   ] as const) {
     const r = await vcall(env, method, path, body);
-    assert.deepEqual([r.status, r.body.error], [409, 'consent_not_recorded'], path);
+    assert.deepEqual([r.status, r.body.error], [409, /\/(structure|summarise)$/.test(path) ? 'no_final_transcript' : 'consent_not_recorded'], path);
   }
   assert.equal(aiCalls.length, 0);
   const read = await call(env, ME, 'GET', `/threads/${uid}`);
@@ -787,7 +787,7 @@ test('the gate: a session holding audio is gated whatever its channel; consentBl
   assert.match(readFileSync(new URL('services/sessionSweeper.ts', root), 'utf8'), /await sessionConsentBlocks\(env, s(ession)?\)/);
 });
 
-test('the gate on Validate: a text session holding one chunk is refused for Structure and the audio route; a recorder session withdrawn while paused is refused playback, and Discard still works', async () => {
+test('the gate on Validate: a text session holding one chunk can be structured while its audio route is refused; a recorder session withdrawn while paused is refused playback, and Discard still works', async () => {
   const { env, db } = await seeded();
   db.prepare(`INSERT INTO interview_sessions (id, uid, interview_id, project_id, created_by_user_id, channel, status, consent_status)
               VALUES (900, 's-900', ${INTERVIEW}, ${PROJECT}, ${ME}, 'text', 'transcribed', 'not_recorded'),
@@ -796,7 +796,7 @@ test('the gate on Validate: a text session holding one chunk is refused for Stru
   for (const sid of [900, 901]) {
     db.prepare(`INSERT INTO interview_session_chunks (session_id, seq, r2_key, mime, size_bytes) VALUES (?, 0, 'validate-audio/2/sessions/s/000000.webm', 'audio/webm', 10)`).run(sid);
   }
-  assert.equal((await vcall(env, 'POST', '/sessions/900/structure', {})).status, 409);
+  assert.equal((await vcall(env, 'POST', '/sessions/900/structure', {})).status, 201);
   assert.equal((await vcall(env, 'GET', '/sessions/900/audio')).status, 409);
   assert.equal((await vcall(env, 'GET', '/sessions/901/audio')).status, 409);
   const { structureSession } = await import('../src/services/sessionAutoStructure.ts');

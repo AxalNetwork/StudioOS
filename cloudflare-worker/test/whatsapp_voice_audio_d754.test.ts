@@ -21,6 +21,7 @@
  *     --test cloudflare-worker/test/whatsapp_voice_audio_d754.test.ts
  */
 import test from 'node:test';
+import { GUARD_MODEL } from './_guard_stub.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runChannelJob } from '../src/services/channels/jobs.ts';
@@ -162,7 +163,10 @@ test('D754 W3 racing: two notes get two seq and two objects; one note\'s job twi
   let arrived = 0;
   let release!: () => void;
   const both = new Promise<void>((resolve) => { release = resolve; });
-  w.env.AI.run = async (model: string, input: any) => { if (++arrived === 2) release(); await both; return run(model, input); };
+  w.env.AI.run = async (model: string, input: any) => {
+    if (model === GUARD_MODEL) return run(model, input);
+    if (++arrived === 2) release(); await both; return run(model, input);
+  };
   const g = mockFetch(graph({ 'MEDIA-R3': {} }));
   try {
     await Promise.all([runChannelJob(w.env, 'channel_followup', job.payload), runChannelJob(w.env, 'channel_followup', job.payload)]);

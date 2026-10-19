@@ -54,7 +54,7 @@ import { updateInterviewDetails } from '../services/interviewWriters';
 import { INTERVIEW_FIELDS, isFindingKind } from '../services/interviewFindings';
 import { budgetRefusalMessage } from '../services/aiRouter';
 import { MODULES } from '../services/cycleValidate';
-import { consentBlocks, loadSession, sessionHasAudio, type SessionRow } from '../services/interviewSessions';
+import { consentBlocks, loadSession, sessionHasAudio, sessionDigestConsentBlocks, type SessionRow } from '../services/interviewSessions';
 import {
   PLACEMENT_KINDS,
   alignRuns,
@@ -533,10 +533,16 @@ export async function consentRefusal(env: Env, session: SessionRow) {
   return blocked ? json(blocked, 409) : null;
 }
 
+/** D757 #1930: explicit engine buttons have the same final-text gate as queued runs. */
+export async function digestConsentRefusal(env: Env, session: SessionRow) {
+  const blocked = await sessionDigestConsentBlocks(env, session);
+  return blocked ? json(blocked, 409) : null;
+}
+
 structure.post('/sessions/:id/structure', async (c) => {
   const s = await scopeSession(c);
   if (s instanceof Response) return s;
-  const blocked = await consentRefusal(c.env, s.session);
+  const blocked = await digestConsentRefusal(c.env, s.session);
   if (blocked) return blocked;
   // D685 §5.9 — never two writers: the pipeline places findings itself.
   const busy = processingBusy(s.session);
@@ -555,7 +561,7 @@ structure.post('/sessions/:id/structure', async (c) => {
   }
   if (out.status === 'refused') {
     if (out.reason === 'busy') return json({ error: 'digest_running', detail: out.note }, 409);
-    if (out.reason === 'consent_not_recorded') return (await consentRefusal(c.env, (await loadSession(c.env, s.session.id))!)) ?? json({ error: 'consent_not_recorded' }, 409);
+    if (out.reason === 'consent_not_recorded') return (await digestConsentRefusal(c.env, (await loadSession(c.env, s.session.id))!)) ?? json({ error: 'consent_not_recorded' }, 409);
     return json(refusedBody(out.refusal), refusedStatus(out.refusal));
   }
   const placed = out.status === 'done' && out.structure?.ok ? out.structure : null;

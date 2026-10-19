@@ -146,7 +146,8 @@ quiet bound; messages inside that bound do not move `digested_at`, and the quiet
 sweep later picks up changed text. A failed queue send does not fail the already
 committed message: the sweep recovers it. Ingestion calls no model.
 
-The engine's text-only consent check leaves waiting audio untranscribed. WhatsApp's
+The engine's text-only consent check leaves waiting audio untranscribed.
+Manual Summary and Structure use that same gate; Ask keeps its existing gate. WhatsApp's
 admission rule and both providers' audio-download gates still apply. A decline or
 withdrawal clears the digest and pending suggestions; decided suggestions and
 accepted module rows keep content without quotes. Consent and cleanup commit in one batch: a cleanup failure rolls consent back
@@ -158,5 +159,6 @@ D757 extends Telegram NO/STOP to engine output while retaining raw text; decline
 text sessions enqueue no digest and the quiet sweep excludes them. Thread list/detail reads add `digest_status` (null without a linked
 session) and `pending_suggestions` (only pending rows on that member's session).
 
-Voice ingestion remains with #1935 and #1978. Their direct-model retirement and
-`voice_note_added` handoff are not part of this text PR.
+WhatsApp voice ingestion and its `voice_note_added` handoff (#1935, PR #2063)
+are inherited from main. Telegram's corresponding audio work remains on #1978;
+the combined voice follow-up is not part of this text PR.

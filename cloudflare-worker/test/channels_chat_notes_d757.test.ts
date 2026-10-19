@@ -3,8 +3,12 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { Hono } from 'hono';
+import { SignJWT } from 'jose';
+import sessionsRoutes from '../src/routes/founder_validate_sessions.ts';
+import structureRoutes from '../src/routes/founder_validate_structure.ts';
 import { readFileSync } from 'node:fs';
-import { world, call, consentGiven, ME, OTHER, INTERVIEW, PROJECT, seen, noSecretsSeen } from './_channels_fixture.ts';
+import { world, call, consentGiven, ME, OTHER, INTERVIEW, PROJECT, JWT_SECRET, seen, noSecretsSeen } from './_channels_fixture.ts';
 import { memberConnection } from '../src/services/channels/connections.ts';
 import { assignThread, storeMessage, storeVoiceNote, listThreads, readThread, threadForChat } from '../src/services/channels/threads.ts';
 import { withdraw, recordReply } from '../src/services/channels/consent.ts';
@@ -354,4 +358,22 @@ test('replayed withdrawal preserves the original cleanup timestamp and writes no
   const session = (await loadSession(f.env, f.sessionId))!;
   assert.equal(session.digested_at, '2000-01-01 00:00:00'); assert.equal(session.updated_at, '2000-01-01 00:00:00');
   assert.equal(f.db.prepare("SELECT COUNT(*) n FROM activity_logs WHERE action = 'interview_consent_withdrawn'").get()!.n, audits);
+});
+
+test('Manual mode can force text Summary and Structure while voice audio waits, but withdrawal refuses both', async t => {
+  const f = await fixture(t, 'telegram', false); await chunk(f);
+  f.db.prepare("INSERT INTO ai_rail_preferences(uid, user_id, section, task, mode) VALUES ('manual-fixture', ?, 'validate', '', 'manual')").run(ME);
+  assert.equal((await runSessionStructureJob(f.env, jobs(f)[0].payload))?.status, 'skipped');
+  assert.equal(f.modelCalls(), 0);
+  const app = new Hono<any>(); app.route('/api/founder/validate', sessionsRoutes); app.route('/api/founder/validate', structureRoutes);
+  const token = await new SignJWT({ user_id: ME, role: 'founder' }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
+    .sign(new TextEncoder().encode(JWT_SECRET));
+  const request = (action: string) => app.request(`/api/founder/validate/sessions/${f.sessionId}/${action}`,
+    { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: '{}' }, f.env);
+  for (const action of ['summarise', 'structure']) { const r = await request(action); assert.equal(r.status, 201, await r.text()); }
+  assert.ok(f.modelCalls() > 0);
+  f.db.prepare("UPDATE interview_sessions SET consent_status = 'declined' WHERE id = ?").run(f.sessionId);
+  const calls = f.modelCalls();
+  for (const action of ['summarise', 'structure']) assert.equal((await request(action)).status, 409);
+  assert.equal(f.modelCalls(), calls);
 });
