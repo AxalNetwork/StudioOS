@@ -335,6 +335,7 @@ export default function InvestorPipelineZone() {
 
           <ZoneDraft
             surface="deals/pipeline"
+            railOption="draft:stale-deal-notes"
             label={`Draft · ${amber.length} stale-deal note${amber.length === 1 ? '' : 's'}`}
             accept="Accept the notes"
             run="Draft the notes"

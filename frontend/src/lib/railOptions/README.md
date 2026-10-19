@@ -19,5 +19,8 @@ the canvas's fourteen task `kind`s, its `handler` (`form`, `upload`, `draft`,
   row, and every row's control must exist.
 - **An option that runs no model is not a row:** a CRUD write, a client-side
   CSV export, a heuristic the Worker computes.
-- **Nothing here calls the rail.** The `useRailOption` calls arrive with D768's
-  page map (#2092), one PR per section.
+- **Nothing here calls the rail.** Each row's control calls `useRailOption`
+  (D768, #2092) while the member has it open: a draft band through
+  `ZoneDraft`'s `railOption` prop, set to the row's key. Each profile's
+  rollout adds those calls one section at a time; its test is
+  `frontend/test/rail_pages_investor_d772.test.mjs` for the investor.
