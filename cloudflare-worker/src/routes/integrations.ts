@@ -803,7 +803,7 @@ integrations.post('/:uid/sync', async (c) => {
       integration_id: row.id, user_id: user.id, provider_key: row.provider_key,
       direction: 'outbound', event_type: 'sync', status: 'ok',
       response_summary: out.summary, external_id: out.external_id ?? null,
-      payload: out.counts,
+      payload: syncLogPayload(out),
     });
     return c.json({ ok: true, summary: out.summary, counts: out.counts ?? {} });
   } catch (e) {
@@ -816,6 +816,25 @@ integrations.post('/:uid/sync', async (c) => {
     return refuse(c, 502, { code: 'sync_failed', message: 'The sync did not complete. Check the connection and try again.', raw: msg, audience: 'owner' });
   }
 });
+
+/**
+ * D782: a sync's log row keeps its counts and the repositories it read, for
+ * Operating systems' sync lines. `logEvent` cuts the JSON at 4000 characters,
+ * which would leave it unreadable, so the list stops well short of that and
+ * `repositories_more` says how many were left out.
+ */
+export const SYNC_LOG_REPOSITORY_CHARS = 2500;
+export function syncLogPayload(out: { counts?: Record<string, number | boolean>; repositories?: string[] }): Record<string, unknown> | undefined {
+  if (!out.repositories) return out.counts;
+  const kept: string[] = [];
+  let used = 0;
+  for (const r of out.repositories) {
+    if (used + r.length + 3 > SYNC_LOG_REPOSITORY_CHARS) break;
+    kept.push(r); used += r.length + 3;
+  }
+  const more = out.repositories.length - kept.length;
+  return { ...(out.counts ?? {}), repositories: kept, ...(more > 0 ? { repositories_more: more } : {}) };
+}
 
 // ─────────────────────────────────────────────── D655: progress, fed, repositories
 
