@@ -7,6 +7,8 @@ import { ConnectorPanel, PermissionsGroup, SheetFrame, UsesGroups, openingView, 
 import { RequestSheet, useMovedNotice } from './AccountConnectors';
 import { cardAction, isEntityRow, stripReturn } from './connectorsModel';
 import { backHrefFor, detailsRows, interimMode, pageEntry, pageReturn, pageTitle } from './connectorPageModel';
+import { isChannelKey } from './channelPageModel';
+import ChannelPage from './ChannelPage';
 import { notOfferedSentence } from './mercuryModel';
 import { useAuth } from '../../hooks/useAuthSync';
 import { branchOfUser } from '../../lib/shellRole';
@@ -37,6 +39,12 @@ const BOX = 'rounded-axal-sm border border-axal-hairline bg-white p-5 text-[13px
 const H2 = 'text-[15px] font-bold text-axal-ink dark:text-gray-100';
 
 export default function ConnectorPage({ connectorKey }) {
+  // C1: a channel's page reads GET /api/channels, never the catalogue.
+  if (isChannelKey(connectorKey)) return <ChannelPage channelKey={connectorKey} />;
+  return <CataloguePage connectorKey={connectorKey} />;
+}
+
+function CataloguePage({ connectorKey }) {
   const data = useConnectors();
   const phone = usePhoneWidth();
   const user = useAuth()?.user ?? null;

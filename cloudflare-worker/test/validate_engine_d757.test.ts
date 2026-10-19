@@ -83,7 +83,9 @@ function world() {
     '440_validate_cycle_stores.sql', '446_interview_structure_receipts.sql', '447_assistant_interviews.sql',
     '449_interview_channels.sql', '450_channel_events_delete_kind.sql', '451_channel_review_fixes.sql',
     '452_record_session_setup.sql', '453_interview_processing.sql', '454_channel_voice_failures.sql',
-    '457_integrations_last_error_at.sql', '458_channel_link_consent.sql']) db.exec(mig(m));
+    '457_integrations_last_error_at.sql', '458_channel_link_consent.sql',
+    // D754 (#1893): the consent store, which assign and the voice job now read.
+    '488_channel_consents.sql']) db.exec(mig(m));
   applyEngineSchema(db);
   db.exec(`INSERT INTO telegram_business_connections (uid, business_connection_id, telegram_user_id, user_id, is_enabled, can_reply)
            VALUES ('bc-1', 'BC-ME', '555001', ${ME}, 1, 1)`);
@@ -460,7 +462,8 @@ test('the quiet sweep counts summary receipts and the engine\'s own last attempt
              VALUES (${summarised.id}, 'summarised', 'm', 0, 0, 0, 'ok', datetime('now', '-1 hour')),
                     (${old.id}, 'summarised', 'm', 0, 0, 0, 'ok', datetime('now', '-7 hours'))`);
   f.db.exec(`UPDATE interview_sessions SET digested_at = datetime('now', '-1 hour'), digest_status = 'refused' WHERE id = ${attempted.id}`);
-  f.db.exec(`UPDATE interview_sessions SET digested_at = datetime('now', '-7 hours') WHERE id = ${old.id}`);
+  // D754 (#1893): a WhatsApp chat is swept only once its consent is given.
+  f.db.exec(`UPDATE interview_sessions SET digested_at = datetime('now', '-7 hours'), consent_status = 'given' WHERE id = ${old.id}`);
   assert.equal(await sweepQuietChats(f.env, new Date()), 1);
   assert.deepEqual(queued(f.db).map((q: any) => q.session_id), [old.id]);
 });

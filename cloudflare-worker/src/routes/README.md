@@ -49,7 +49,9 @@ widened guard on this very sentence, which is the rule working.)
 /api/admin         → admin.ts
 /api/private-data  → private-data.ts
 /api/monitoring    → monitoring.ts
-/api/ai-budget     → ai_budget.ts       (member allowance/held reads; Super Admin reviews and plan caps, D640)
+/api/ai-budget     → ai_budget.ts       (member allowance/held reads; Super Admin reviews and plan caps, D640; D755: GET /top-up packs and latest purchase, GET /history, and the Super Admin's /members/:userId, /members/:userId/adjustments and /reconcile)
+/api/admin/catalog/token-packs → catalog.ts (D755: the Super Admin creates, adopts, changes and archives token packs; the generic catalog writes refuse a pack)
+/api/public/plans-and-packs → public.ts (D755: every plan's price and AI allowance and the packs on sale; D1 only, no session)
 /api/usage         → usage.ts           (the caller's own stored files by area, across all their companies; never another member's, D642)
 /api/connectors    → integrations.ts    (canonical connection catalogue, company scope, requests, suggestions and logs; D650; connector pages (`GET /directory/:key`, D753))
 /api/integrations  → integrations.ts    (temporary alias to the same handlers; D650)
@@ -84,7 +86,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/ai           → ai.ts              (the caller's own AI spend, by task, page, model and day; the rate card at /rates, D641)
 /api/founder/validate → founder_validate_structure.ts (structure a session's transcript, compare two runs, ask it; accept, edit then accept or discard each placement; D658)
 /api/founder/validate → founder_validate_meetings.ts (D684: schedule, list, cancel and import a Zoom or Google Meet call on an interview)
-/api/channels         → founder_validate_meetings.ts `zoomWebhook` (the public Zoom webhook, mounted first), then channels.ts (D684: Telegram and WhatsApp connections, the conversation inbox, replies, and their public webhooks)
+/api/channels         → founder_validate_meetings.ts `zoomWebhook` (the public Zoom webhook, mounted first), then channels.ts (D684: Telegram and WhatsApp connections, the conversation inbox, replies, and their public webhooks; D754: consent requests in the chat and the member's word)
 /api/admin/channels   → channels.ts `channelsAdmin` (D684: the channels bot's setWebhook; super admin)
 /api/admin/bank-accounts → admin_bank_accounts.ts (D708: each Axal entity's bank accounts, masked, with add, relabel, purposes, retire and a recorded reveal; Super Admin, HQ only; mounted beside /api/admin/stripe, before the /api/admin catch-all)
 /api/admin/fund-structure → admin_fund_structure.ts (D717: the entity and money map, read-only; masked accounts for the Super Admin, and each entity's active accounts masked (#1855); #1773's sentence for a plain Admin; HQ only; mounted beside /api/admin/bank-accounts, before the /api/admin catch-all)
@@ -217,7 +219,7 @@ D666: `mcp_consent.ts` mounts `/api/mcp/consent` and `/api/connectors/assistants
 
 D686 (#1592): `integrations.ts` returns the signed OAuth destination `/build/connect`, exposes connector `feed_modules` and `last_error_at`, and keeps existing connections syncing on Free. Google Calendar, Microsoft and LinkedIn accept the literal Build return token in their existing callback flows.
 
-D753 (#1878): `catalogueEntry` builds each catalogue item for `/available` and for `GET /directory/:key`, the descriptive page read registered above `/:key`. The page fields come from `../integrations/connectorPages.ts` through the registry. `crunchbase.ts`'s `connect_path` and the onboarding checklist will link to `connectorPagePath(key)` once the connector-page route is on `main` (#1946).
+D753 (#1878): `catalogueEntry` builds each catalogue item for `/available` and for `GET /directory/:key`, the descriptive page read registered above `/:key`. The page fields come from `../integrations/connectorPages.ts` through the registry. `crunchbase.ts`'s `connect_path` and the onboarding checklist's `ef.stripe`, `ef.plaid` and `inv.crm` steps link to `connectorPagePath(key)`, the connector's own page (#1946).
 
 D691 (#1696): Grow obligation routes use the production `compliance_events`
 columns (`due_date`, `completion_status`), translate the existing API keys in

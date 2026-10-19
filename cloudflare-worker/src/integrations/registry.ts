@@ -723,4 +723,4 @@ export function publicDescriptor(p: ProviderDescriptor, viewer?: DescriptorViewe
 }
 
 // D753 (#1875): each connector's page data, re-exported by name (a test loads this file with only named re-exports rewritten). Last, apart from D751's and D752's lines.
-export { type ConnectorPage, type PageDescriptor, type PagePrompt, type PageTool, type SignInKind, type ToolAccess, type Trust, type VariantPages, type FirstPartyCard, CATEGORY_ORDER, CONNECTOR_PAGES, FIRST_PARTY_CARDS, FIRST_PARTY_PAGES, MONEY_MOVERS, PAGE_ALIAS, connectorPagePath, directoryKeyFor, pageDescriptor, trustFor } from './connectorPages';
+export { type ConnectorPage, type PageDescriptor, type PagePrompt, type PageTool, type SignInKind, type ToolAccess, type Trust, type VariantPages, type FirstPartyCard, CATEGORY_ORDER, CHANNEL_PAGES, CONNECTOR_PAGES, FIRST_PARTY_CARDS, FIRST_PARTY_PAGES, MONEY_MOVERS, PAGE_ALIAS, channelPage, connectorPagePath, directoryKeyFor, pageDescriptor, trustFor } from './connectorPages';

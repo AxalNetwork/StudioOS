@@ -26,6 +26,7 @@ export * from './api/cycleWrites.js';
 export * from './api/cycles.js';
 export * from './api/eadwyn.js';
 export * from './api/fundAdmin.js';
+export * from './api/fundBooklets.js';
 export * from './api/fundFees.js';
 export * from './api/fundLedger.js';
 export * from './api/fundNotices.js';
@@ -43,6 +44,7 @@ export * from './api/mercuryPersonal.js';
 export * from './api/partnerSettlements.js';
 export * from './api/profile.js';
 export * from './api/publicAiModels.js';
+export * from './api/publicPricing.js';
 export * from './api/railPrefs.js';
 export * from './api/researchCompanies.js';
 export * from './api/researchFunds.js';
@@ -54,6 +56,7 @@ export * from './api/safeIssuances.js';
 export * from './api/section83bReview.js';
 export * from './api/shareUpdate.js';
 export * from './api/ticketReviews.js';
+export * from './api/tokenPacks.js';
 export * from './api/usage.js';
 export * from './api/verdict.js';
 // api-modules:end
@@ -209,6 +212,9 @@ export function isPublicPath(pathname) {
     || currentPath === '/intelligence'
     || currentPath === '/resources'
     || currentPath === '/contact'
+    // D756 (#1894) — an interviewee reaches these from a chat link and has no account here.
+    || currentPath === '/privacy'
+    || currentPath === '/privacy/interviews'
     // Task #5 — /articles is the public Articles hub (Browse tab is the
     // default, anonymous-visible surface). Keep it reachable for signed-
     // out visitors when a background fetch (settings/me) 401s. The
@@ -2098,7 +2104,8 @@ export const api = {
     if (!res.ok) throw await refusalError(res, 'PDF generation failed');
     const blob = await res.blob();
     const filename = (res.headers.get('Content-Disposition') || '').match(/filename="?([^"]+)"?/)?.[1] || `${slug}-preview.pdf`;
-    return { blob, url: URL.createObjectURL(blob), filename };
+    // #1854: the renderer that drew it, so the phone preview can say when page breaks are the fallback's.
+    return { blob, url: URL.createObjectURL(blob), filename, renderer: res.headers.get('X-Axal-Renderer') };
   },
   // D711 — a template as Word, with a `docx_export` registry row (binary
   // endpoint, not typed drift).

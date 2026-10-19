@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Coins, RefreshCw } from 'lucide-react';
 import { creditRulesApi } from '../../lib/api/creditRules.js';
 import { reportError } from '../../lib/log';
+import { CREDIT_RULES_LINE } from './tokenPacksModel';
 import { Card, Unrecorded } from '../../ui';
 import {
   GRANT_SOURCES, GRANT_STATES, REASON_MIN, RULE_KINDS, editHint, filterGrants, filterRules, grantState,
@@ -334,6 +335,10 @@ export default function CreditRulesPage() {
           Every credit amount lives here, never in code. 1 credit = US$1 of perk value. Each change and each grant taken
           back is kept in the audit log with its reason.{' '}
           <Link to="/hq/review" className="font-semibold text-axal-violet-deep hover:underline dark:text-violet-300">Review queue</Link>
+        </p>
+        <p className="mt-1 max-w-[720px] text-[13px] leading-relaxed text-axal-muted dark:text-gray-400" data-testid="credit-rules-ai-tokens">
+          {CREDIT_RULES_LINE}{' '}
+          <Link to="/admin/platform/allowances" className="font-semibold text-axal-violet-deep hover:underline dark:text-violet-300">Open AI allowances</Link>
         </p>
       </header>
       <Notice text={notice} />

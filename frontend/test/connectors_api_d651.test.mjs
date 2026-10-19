@@ -17,7 +17,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { act, createElement as h } from 'react';
+import { act, createElement as h, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
@@ -28,6 +28,8 @@ import {
 } from '../src/pages/account/connectorsModel.js';
 import ConnectorsSection, { ConnectorsView, RequestSheet } from '../src/pages/account/AccountConnectors.jsx';
 import { ConnectorPanel, suggestionsNote } from '../src/pages/account/ConnectorSheet.jsx';
+import { ConnectorPageView } from '../src/pages/account/ConnectorPage.jsx';
+import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const html = (el, entry = '/account/connectors') => renderToStaticMarkup(h(MemoryRouter, { initialEntries: [entry] }, el));
@@ -69,9 +71,10 @@ function mockFetch(routes) {
   return { calls, restore() { globalThis.fetch = orig; } };
 }
 
-/** Mount with real effects; capture the window keydown listeners so Escape can be pressed. */
-async function mount(element, url = '/account/connectors') {
+/** Mount with real effects; capture the window keydown listeners so Escape can be pressed. `user` is the signed-in user `AuthProvider` reads. */
+async function mount(element, url = '/account/connectors', { user = null } = {}) {
   const restoreDoc = installDocument();
+  if (user) localStorage.setItem('user', JSON.stringify(user));
   const keyListeners = new Set();
   globalThis.addEventListener = (type, fn) => { if (type === 'keydown') keyListeners.add(fn); };
   globalThis.removeEventListener = (type, fn) => { if (type === 'keydown') keyListeners.delete(fn); };
@@ -351,7 +354,9 @@ test('replacing a Crunchbase key always takes a new one', () => {
 test('nothing points a member at the old Integrations address any more', async () => {
   const cb = read('cloudflare-worker/src/routes/crunchbase.ts');
   assert.doesNotMatch(cb, /connect_path: '\/account\/integrations'/);
-  assert.equal((cb.match(/connect_path: '\/account\/connectors'/g) || []).length, 2);
+  // D753 (#1878): both 412s link to Crunchbase's own page.
+  assert.equal((cb.match(/connect_path: connectorPagePath\('crunchbase'\)/g) || []).length, 2);
+  assert.doesNotMatch(cb, /connect_path: '\/account\/connectors'/);
   assert.doesNotMatch(cb, /Settings → Integrations/);
   assert.doesNotMatch(read('cloudflare-worker/src/services/onboardingChecklist.ts'), /route: '\/(?:account\/)?integrations'/);
   const { HELP_SURFACES, GUIDE_PLACEMENT } = await import('../src/pages/docs/guidePlacement.js');
@@ -371,5 +376,111 @@ test('the shared read: a 403 on the catalogue is "forbidden" with the Worker’s
     assert.ok(m.byTestId('connectors-forbidden'));
     assert.match(m.text(), /Your role cannot manage integrations\./);
     assert.equal(m.byTestId('connectors-unreadable'), undefined);
+  } finally { await m.unmount(); f.restore(); }
+});
+
+// ============================================================== D751 (#1879)
+// A sign-in that fails on Axal's side says so, never "refused". GitHub joins
+// the catalogue for these tests only, so the shared PROVIDERS keep their counts.
+
+const GH_CAT = buildCatalogue({ providers: [...PROVIDERS, P('github', 'GitHub', 'code', 'beta', 'free', 'oauth2')], items: ITEMS, companies: COMPANIES, firstParty: {} });
+const gh = () => GH_CAT.find((p) => p.key === 'github');
+// The Worker's exact 503 (integrations.ts, `oauth_unconfigured`).
+const UNCONFIGURED_503 = { error: 'oauth_unconfigured', provider: 'github', message: 'This integration is not yet configured on the server. Please contact your administrator.' };
+
+for (const reason of ['github_oauth_unconfigured', 'not_configured']) {
+  test(`D751: a return with reason=${reason} lands on "not set up on Axal yet", with no Try again`, async () => {
+    const m = await mount(h(ConnectorPageView, { data: ready({ catalogue: GH_CAT }), connectorKey: 'github' }), `/account/connectors/github?oauth=error&provider=github&reason=${reason}`);
+    try {
+      await m.flush();
+      assert.ok(m.byTestId('connector-sheet-unconfigured'), 'the unconfigured view');
+      assert.match(m.text(), /GitHub isn't set up on Axal yet, so it can't be connected\. Nothing was connected\./);
+      assert.doesNotMatch(m.text(), /refused|Try again|Ask your/);
+    } finally { await m.unmount(); }
+  });
+}
+
+test('D751: a return with reason=company_not_linked says to choose a company', async () => {
+  const m = await mount(h(ConnectorPageView, { data: ready({ catalogue: GH_CAT }), connectorKey: 'stripe' }), '/account/connectors/stripe?oauth=error&provider=stripe&reason=company_not_linked');
+  try {
+    await m.flush();
+    assert.ok(m.byTestId('connector-sheet-company'));
+    assert.doesNotMatch(m.text(), /refused|Try again/);
+  } finally { await m.unmount(); }
+});
+
+/** GitHub's panel on `pre`, its start answering `startAnswer`, after a click on Continue. */
+async function pressGithub(startAnswer, user = null) {
+  const f = mockFetch({ 'GET /connectors/oauth/github/start': startAnswer });
+  let view = 'pre';
+  let m;
+  const draw = () => h(ConnectorPanel, { p: gh(), view, setView(v) { view = v; m?.rerender(); }, onClose() {} });
+  const Host = () => { const [, tick] = useState(0); host.tick = tick; return draw(); };
+  const host = {};
+  m = await mount(user ? h(AuthProvider, null, h(Host)) : h(Host), '/account/connectors/github', { user });
+  m.rerender = () => host.tick((n) => n + 1);
+  await m.click('Continue to GitHub');
+  await m.flush();
+  return { m, f };
+}
+
+test('D751: pressing Continue on an unset GitHub says it is not set up, never "refused" or the Worker\'s sentence', async () => {
+  const { m, f } = await pressGithub([503, UNCONFIGURED_503]);
+  try {
+    assert.ok(m.byTestId('connector-sheet-unconfigured'), 'the unconfigured view');
+    assert.match(m.text(), /GitHub isn't set up on Axal yet, so it can't be connected\. Nothing was sent to GitHub\./);
+    assert.doesNotMatch(m.text(), /not yet configured on the server|refused|Try again/);
+    assert.equal(m.byTestId('connector-unconfigured-admin-link'), undefined, 'no link for a member who cannot save a key');
+  } finally { await m.unmount(); f.restore(); }
+});
+
+test('D751: a Super Admin also gets the Integration keys link, and a crafted admin_href never becomes it', async () => {
+  const SUPER = { id: 1, role: 'admin', is_super_admin: 1 };
+  for (const [body, want] of [
+    [UNCONFIGURED_503, '/admin?tab=integration-keys'],
+    [{ ...UNCONFIGURED_503, admin_href: '/admin?tab=integration-keys' }, '/admin?tab=integration-keys'],
+    [{ ...UNCONFIGURED_503, admin_href: '/admin?tab=keys-github' }, '/admin?tab=keys-github'],
+    [{ ...UNCONFIGURED_503, admin_href: 'https://evil.test/' }, '/admin?tab=integration-keys'],
+  ]) {
+    const { m, f } = await pressGithub([503, body], SUPER);
+    try {
+      const link = m.byTestId('connector-unconfigured-admin-link');
+      assert.ok(link, `the link (${body.admin_href || 'no admin_href'})`);
+      assert.equal(m.props(link).href, want);
+      assert.match(m.text(), /Set up GitHub in Integration keys/);
+    } finally { await m.unmount(); f.restore(); }
+  }
+  const { m, f } = await pressGithub([503, UNCONFIGURED_503], { id: 2, role: 'admin', is_super_admin: 0 });
+  try {
+    assert.ok(m.byTestId('connector-sheet-unconfigured'));
+    assert.equal(m.byTestId('connector-unconfigured-admin-link'), undefined, 'a plain Admin cannot save a key, so gets no link');
+  } finally { await m.unmount(); f.restore(); }
+});
+
+test('D751: Axal unable to read its own setup offers Try again, in its own words', async () => {
+  const { m, f } = await pressGithub([503, { error: 'oauth_setup_unreadable', message: "Axal couldn't check whether GitHub is set up. Nothing was sent to GitHub. Try again in a minute." }]);
+  try {
+    assert.ok(m.byTestId('connector-sheet-setup_unreadable'));
+    assert.match(m.text(), /Axal couldn't check whether GitHub is set up/);
+    assert.ok([...m.text().matchAll(/Try again/g)].length >= 2, 'the sentence and the button');
+    assert.doesNotMatch(m.text(), /refused/);
+  } finally { await m.unmount(); f.restore(); }
+});
+
+test('D751: HubSpot\'s token with no company chosen says to choose one, not that the key is invalid', async () => {
+  const f = mockFetch({ 'POST /connectors/connect': [400, { error: 'active_company_required' }] });
+  let view = 'key';
+  const host = {};
+  const Host = () => { const [, tick] = useState(0); host.tick = tick; return h(ConnectorPanel, { p: byKey('hubspot'), view, setView(v) { view = v; host.tick((n) => n + 1); }, onClose() {} }); };
+  const m = await mount(h(Host));
+  try {
+    // The Worker refuses before reading any key, so the form is submitted as it stands.
+    const form = m.byId('connector-key-form');
+    assert.ok(form, 'the key form');
+    await act(async () => { await m.props(form).onSubmit({ preventDefault() {} }); });
+    await m.flush();
+    assert.ok(m.byTestId('connector-sheet-company'), 'the company view');
+    assert.equal(m.byTestId('connector-sheet-badkey'), undefined);
+    assert.doesNotMatch(m.text(), /That key is not valid/);
   } finally { await m.unmount(); f.restore(); }
 });

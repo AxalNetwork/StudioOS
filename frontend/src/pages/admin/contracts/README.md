@@ -42,3 +42,11 @@ unsaved draft's PDF from `render.pdf`, drawn on opening and on Redraw pages,
 never per keystroke. `VersionCompare.jsx` is Compare versions: any two versions,
 or one and the draft, as Markdown text with `<del>` and `<ins>`; Restore copies
 a body into the draft and saves nothing, and is hidden on a branch.
+
+D717 (#1854): below `md` the Templates tab is the phone's read-only list.
+`TemplateCatalogPhone.jsx` draws the templates by layer, each row with its
+page-1 thumbnail, kind and state, and opens `?preview=<slug>`.
+`FilterSheet.jsx` is its Layer, State and Kind sheet, a draft until "Show [n]
+templates". `TemplatePreviewPhone.jsx` shows the saved version's PDF one page
+at a time through `PdfPages.jsx`, read-only. `TemplateThumbnail.jsx` is the
+page-1 thumbnail and its queue of four, shared with `TemplateCatalog.jsx`.

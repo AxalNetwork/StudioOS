@@ -21,6 +21,7 @@
  * the test holds the two equal).
  */
 import type { Env } from '../types';
+import { consentRequired } from './channels/types';
 import {
   safeCard, safeFigure, seriesState, countState, PAGE_SIZE, pageNumber,
   type Card, type CardState, type Figure,
@@ -1186,13 +1187,13 @@ async function problemRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
  * rules are the frontend's `openingStep(session) === 'channel'`.
  */
 export const INTERVIEW_STATES = [
-  'failed', 'recording', 'waiting_messages', 'waiting_transcript', 'processing',
+  'failed', 'recording', 'waiting_consent', 'consent_declined', 'waiting_messages', 'waiting_transcript', 'processing',
   'ready', 'reviewed', 'lead', 'invited', 'booked', 'logged',
 ] as const;
 export type InterviewState = (typeof INTERVIEW_STATES)[number];
 
 export function interviewState(
-  session: { status: string | null; submitted_via: string | null; processing_stage: string | null } | null,
+  session: { status: string | null; submitted_via: string | null; processing_stage: string | null; consent_status?: string | null } | null,
   stage: string | null,
 ): InterviewState {
   const st = session?.status ?? null;
@@ -1201,6 +1202,9 @@ export function interviewState(
   if (session) {
     if (proc === 'failed') return 'failed';
     if (st === 'recording' || st === 'paused') return 'recording';
+    // D754 (#1893): a chat draft whose provider waits for the interviewee's consent.
+    if (st === 'draft' && consentRequired(via) && session.consent_status === 'declined') return 'consent_declined';
+    if (st === 'draft' && consentRequired(via) && session.consent_status !== 'given') return 'waiting_consent';
     if (st === 'draft' && (via === 'telegram' || via === 'whatsapp')) return 'waiting_messages';
     if (st === 'draft' && (via === 'zoom' || via === 'google_meet')) return 'waiting_transcript';
     if (proc === 'uploading' || proc === 'transcribing' || proc === 'summarising' || proc === 'placing'
@@ -1248,7 +1252,7 @@ async function researchRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
             i.recording_duration_sec,
             json_array_length(CASE WHEN json_valid(i.pains_json) THEN i.pains_json ELSE '[]' END) AS pains,
             COALESCE(substr(i.done_at, 1, 10), NULLIF(trim(i.interview_date), ''), substr(i.created_at, 1, 10)) AS d,
-            s.id AS session_id, s.status AS session_status, s.submitted_via, s.processing_stage, s.active_ms
+            s.id AS session_id, s.status AS session_status, s.submitted_via, s.processing_stage, s.active_ms, s.consent_status
        FROM discovery_interviews i
        LEFT JOIN interview_sessions s
          ON s.id = (SELECT MAX(x.id) FROM interview_sessions x WHERE x.interview_id = i.id AND x.project_id = i.project_id)
@@ -1285,7 +1289,7 @@ async function researchRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
       channel: r.channel ?? null, stage: r.stage ?? 'done',
       pains: Number(r.pains ?? 0),
       duration_min: durationMin(r.active_ms ?? null, r.recording_duration_sec ?? null),
-      state: interviewState(r.session_id == null ? null : { status: r.session_status, submitted_via: r.submitted_via, processing_stage: r.processing_stage }, r.stage ?? null),
+      state: interviewState(r.session_id == null ? null : { status: r.session_status, submitted_via: r.submitted_via, processing_stage: r.processing_stage, consent_status: r.consent_status }, r.stage ?? null),
       // The session itself is the writer's (decision 2); its state is everyone's.
       session_id: writer && r.session_id != null ? Number(r.session_id) : null,
     })),

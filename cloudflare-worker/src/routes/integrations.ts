@@ -61,7 +61,7 @@ import { activeCompanyFor } from '../middleware/activeCompany';
 import { companyEnabled, enabledCompanyIds, projectEnabled, writesProjectData } from '../integrations/companyScope';
 import { hasScopeOverreach, validateConnectorSettings } from '../integrations/connectorRules';
 import { fedCounts } from '../integrations/fed';
-import { accessToken, accessibleRepositories, checkChoice, grantedPermissions, readProgress } from '../integrations/providers/github';
+import { accessToken, accessibleRepositories, checkChoice, grantedPermissions, githubInstallUrl, readProgress } from '../integrations/providers/github';
 
 const integrations = new Hono<{ Bindings: Env }>();
 
@@ -869,6 +869,8 @@ integrations.get('/:uid/repositories', async (c) => {
     return c.json({
       ok: true,
       available: await accessibleRepositories(token, granted.installations),
+      needs_install: granted.installations.length === 0,
+      install_url: githubInstallUrl(c.env),
       selected: Array.isArray(cfg.repositories) ? cfg.repositories : [],
       project_id: cfg.project_id ?? null,
     });
