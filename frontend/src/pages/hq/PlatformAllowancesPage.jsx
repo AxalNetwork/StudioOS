@@ -2,10 +2,13 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { aiBudgetApi } from '../../lib/api/aiBudget';
+import { tokenPacksApi } from '../../lib/api/tokenPacks';
 import { reportError } from '../../lib/log';
 import { Card, EmptyState, Pill, RailFrame, Unrecorded, Unreadable, WorkerRail } from '../../ui';
 import { useAccountRead } from '../account/AccountCenter';
 import { microUsd, planLabel, whenLabel } from '../account/usageModel';
+import { MemberAccountCard, ReconcileCard, TokenPacksCard } from './TokenPacks';
+import { REASON_MIN } from './tokenPacksModel';
 
 /**
  * HQ · Platform → AI allowances (D642, #1435) — U7 of the Usage canvas
@@ -22,9 +25,14 @@ import { microUsd, planLabel, whenLabel } from '../account/usageModel';
  *   - Charge the hold / Refund the hold → `POST /api/ai-budget/reviews/:uid/
  *     charge|refund`, each with a reason of at least 10 characters. The
  *     member is never charged more than the hold; the Worker enforces it.
+ *
+ * D755 (#1986, CR8) adds three cards from `TokenPacks.jsx`: Token packs (one
+ * line per pack, replacing D750's single top-up line, with New pack, Adopt,
+ * On sale, Bonus and Archive), one member's AI account with Adjust balance,
+ * and Reconcile. HQ never credits a purchase.
  */
 
-export const REASON_MIN = 10;
+export { REASON_MIN };
 
 /** A USD field as typed: a number, 0 or more, at most six decimals. */
 export function parseUsd(text) {
@@ -200,47 +208,14 @@ export function HeldCard({ reviews, onSettled }) {
   );
 }
 
-/**
- * D750 (#1841) — one plain sentence per top-up state, from
- * `GET /api/ai-budget/top-up/status`. The ID shows as its last six characters
- * only; the reading never carries a key.
- */
-export const TOPUP_REASON_LINES = {
-  missing_from_catalog: (mode) => `The price is not in the catalog mirror and Stripe does not know it in ${mode} mode.`,
-  inactive: () => 'The price or its product is archived in Stripe. The top-up needs an active price.',
-  not_one_time: () => 'STRIPE_PRICE_AI_TOPUP names a recurring price. The top-up needs a one-time USD price.',
-  not_usd: () => 'STRIPE_PRICE_AI_TOPUP names a price that is not in US dollars. The top-up needs a one-time USD price.',
-  bad_amount: () => 'The price has no whole, positive amount. The top-up needs a fixed amount in cents.',
-  bad_config: () => 'STRIPE_PRICE_AI_TOPUP does not look like a Stripe price ID (price_…).',
-  mode_mismatch: (mode) => `STRIPE_PRICE_AI_TOPUP is a price from the other Stripe mode; the secret key is ${mode} mode.`,
-};
-export function topUpStatusLine(s) {
-  if (!s || typeof s.state !== 'string') return null;
-  const mode = s.mode === 'live' ? 'live' : 'test';
-  const suffix = typeof s.price_id_suffix === 'string' ? s.price_id_suffix : null;
-  if (s.state === 'unset') return { tone: 'neutral', text: 'STRIPE_PRICE_AI_TOPUP is not set, so members are told the top-up isn\'t available yet.' };
-  if (s.state === 'ready') return { tone: 'success', text: `The top-up is on sale${suffix ? ` (price …${suffix})` : ''}, ${mode} mode. Members see Add tokens.` };
-  const line = TOPUP_REASON_LINES[s.reason];
-  return s.state === 'not_ready' && line ? { tone: 'warning', text: `${line(mode)}${suffix ? ` Price …${suffix}.` : ''} Members are told it isn't available yet.` } : null;
-}
-export function TopUpReadinessCard({ status }) {
-  const line = status.status === 'ready' ? topUpStatusLine(status.data) : null;
-  return (
-    <Card padding="none" className="overflow-hidden" data-testid="hq-topup-readiness">
-      <div className="border-b border-axal-hairline px-4 py-3 text-sm font-bold dark:border-gray-800">AI top-up</div>
-      <div className="px-4 py-3 text-[12.5px]">
-        {status.status === 'loading' ? <p className="text-axal-muted">Reading the top-up…</p>
-          : !line ? <Unreadable what="The AI top-up" claim="Nothing about the top-up has changed." onRetry={status.reload} />
-            : <p data-testid="hq-topup-readiness-line" data-tone={line.tone}>{line.text}</p>}
-      </div>
-    </Card>
-  );
-}
+// D750's reason lines live in tokenPacksModel.js now, beside the pack lines that replaced its single top-up line.
+export { TOPUP_REASON_LINES } from './tokenPacksModel';
 
 export default function PlatformAllowancesPage() {
   const caps = useAccountRead(() => aiBudgetApi.caps());
   const reviews = useAccountRead(() => aiBudgetApi.reviews());
-  const topUpStatus = useAccountRead(() => aiBudgetApi.topUpStatus());
+  const packs = useAccountRead(() => tokenPacksApi.status());
+  const reconcile = useAccountRead(() => tokenPacksApi.reconcile());
   const [editing, setEditing] = useState(null);
   const [done, setDone] = useState(null);
   const plans = caps.status === 'ready' && Array.isArray(caps.data?.plans) ? caps.data.plans : [];
@@ -260,7 +235,7 @@ export default function PlatformAllowancesPage() {
           workspace="AI allowances"
           role="super_admin"
           stance="Sets each plan's AI allowance"
-          note="This rail reads back the plans' allowances and the runs held for a check. It changes nothing; Edit, Charge and Refund on the page do, and the Worker records who and why."
+          note="This rail reads back the plans' allowances and the runs held for a check. It changes nothing; Edit, Charge, Refund, the pack controls and Adjust balance on the page do, and the Worker records who and why. Nothing here credits a purchase."
           coverage={coverage}
           coverageNote={coverage.length ? undefined : 'The allowances could not be read, so there is nothing to read back.'}
           data-testid="hq-allowances-rail"
@@ -273,7 +248,7 @@ export default function PlatformAllowancesPage() {
             <ArrowLeft size={13} /> Platform
           </Link>
           <h1 className="mt-1 text-2xl font-extrabold tracking-axal-heading text-axal-ink dark:text-gray-100">AI allowances</h1>
-          <p className="mt-1 text-[13px] text-axal-muted dark:text-gray-400">The daily and monthly AI allowance each plan includes, and runs held for a check.</p>
+          <p className="mt-1 text-[13px] text-axal-muted dark:text-gray-400">The daily and monthly AI allowance each plan includes, runs held for a check, the token packs members can buy, one member's AI account, and what needs reconciling.</p>
         </div>
         {done && <p role="status" className="rounded-lg border border-axal-hairline bg-axal-ground px-3 py-2 text-[12px] dark:border-gray-800 dark:bg-gray-800/40" data-testid="hq-allowances-done">{done}</p>}
         <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1.8fr)_minmax(0,1fr)]">
@@ -284,8 +259,12 @@ export default function PlatformAllowancesPage() {
                 onSaved={(msg) => { setEditing(null); setDone(msg); caps.reload(); }} />
             )}
             <HeldCard reviews={reviews} onSettled={(msg) => { setDone(msg); reviews.reload(); }} />
-            <TopUpReadinessCard status={topUpStatus} />
+            <TokenPacksCard status={packs} onChanged={(msg) => { setDone(msg); packs.reload(); }} />
           </div>
+        </div>
+        <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1.8fr)_minmax(0,1fr)]">
+          <MemberAccountCard />
+          <ReconcileCard reconcile={reconcile} />
         </div>
       </div>
     </RailFrame>

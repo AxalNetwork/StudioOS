@@ -17,13 +17,13 @@ import { MemoryRouter } from 'react-router-dom';
 
 import {
   agoLabel, attentionReason, authKind, buildCatalogue, cardAction, cardPill, categoryOf, companiesLabel,
-  connectFailure, connectionStatus, connectorsRedirect, discoverSections, disconnectNote, doesLabel,
+  INTEGRATION_KEYS_HREF, adminKeysHref, keysHref, patOnly, toolDeepLink, toolRow, connectFailure, connectionStatus, connectorsRedirect, isUnconfigured, discoverSections, disconnectNote, doesLabel,
   feedsLabel, firstPartyConnection, flowBanner, lastSyncLabel, oauthReturn, pageOf, stripReturn, toolBanner,
   toolGroups, toolState, yoursRows,
 } from '../src/pages/account/connectorsModel.js';
 import { ConnectorsView, AddMenu, RequestSheet } from '../src/pages/account/AccountConnectors.jsx';
 import { discoverFacets } from '../src/pages/account/discoverModel.js';
-import { ConnectorPanel } from '../src/pages/account/ConnectorSheet.jsx';
+import { ConnectorPanel, SheetFrame, openingView } from '../src/pages/account/ConnectorSheet.jsx';
 import { ConnectToolView } from '../src/pages/account/ConnectToolSheet.jsx';
 
 const read = (f) => readFileSync(resolve(process.cwd(), f), 'utf8');
@@ -478,4 +478,157 @@ test('a connector belongs to the member: no connectors read takes a company', ()
   for (const f of ['AccountConnectors.jsx', 'ConnectorSheet.jsx', 'ConnectToolSheet.jsx', 'connectorsModel.js', 'discoverModel.js', 'ConnectorFilterMenu.jsx']) {
     assert.doesNotMatch(read(`frontend/src/pages/account/${f}`), /activeCompany|company_id=|useActiveCompany/, f);
   }
+});
+
+// ============================================================== D751 (#1879)
+
+test('D751: a connector Axal has not set up says so, and a company refusal says to choose one', () => {
+  const stripe = byKey('stripe');
+  const hubspot = byKey('hubspot');
+  // The press: the code decides, never the status.
+  assert.equal(connectFailure({ status: 503, code: 'oauth_unconfigured' }, stripe), 'unconfigured');
+  assert.equal(connectFailure({ status: 503, code: 'github_oauth_unconfigured' }, stripe), 'unconfigured');
+  assert.equal(connectFailure({ status: 500, code: 'oauth_config_missing' }, byKey('google')), 'unconfigured');
+  assert.equal(connectFailure({ status: 400, code: 'active_company_required' }, stripe), 'company');
+  assert.equal(connectFailure({ status: 400, code: 'active_company_required' }, hubspot), 'company', 'HubSpot\'s token path never says a key it did not check is invalid');
+  assert.equal(connectFailure({ status: 503, code: 'oauth_setup_unreadable' }, stripe), 'setup_unreadable');
+  assert.equal(connectFailure({ status: 503, code: 'provider_rolling_out' }, stripe), 'refused');
+  // The anchors: a code that only contains the word is not one.
+  assert.equal(connectFailure({ status: 503, code: 'oauth_unconfigured_later' }, stripe), 'refused');
+  assert.equal(connectFailure({ status: 503, code: 'github_oauth_unconfigured_later' }, stripe), 'refused');
+  assert.equal(isUnconfigured('not_configured'), true);
+  assert.equal(isUnconfigured(''), false);
+  assert.equal(isUnconfigured(undefined), false);
+
+  // The return.
+  assert.equal(oauthReturn('?oauth=error&provider=github&reason=github_oauth_unconfigured').view, 'unconfigured');
+  assert.equal(oauthReturn('?oauth=error&provider=github&reason=not_configured').view, 'unconfigured');
+  assert.equal(oauthReturn('?oauth=error&provider=stripe&reason=company_not_linked').view, 'company');
+  assert.equal(oauthReturn('?linkedin=error&linkedin_error=not_configured').view, 'unconfigured');
+  assert.equal(oauthReturn('?oauth=error&provider=github&reason=server_error').view, 'refused');
+
+  // The words: never "refused", never the provider's admin, never the code.
+  const press = 'GitHub isn\'t set up on Axal yet, so it can\'t be connected. Nothing was sent to GitHub.';
+  const back = 'GitHub isn\'t set up on Axal yet, so it can\'t be connected. Nothing was connected.';
+  const company = 'GitHub connects for one company. Choose a company in the sidebar, then connect again. Nothing was connected.';
+  assert.equal(flowBanner('unconfigured', 'GitHub'), press);
+  assert.equal(flowBanner('unconfigured', 'GitHub', { reason: 'not_configured' }), back);
+  assert.equal(flowBanner('company', 'GitHub'), company);
+  for (const s of [press, back, company, flowBanner('setup_unreadable', 'GitHub')]) assert.doesNotMatch(s, /refused|Ask your|_configured|_unconfigured/);
+
+  // The Integration keys link: only this app's admin tabs.
+  assert.equal(INTEGRATION_KEYS_HREF, '/admin?tab=integration-keys');
+  assert.equal(adminKeysHref({ admin_href: '/admin?tab=integration-keys' }), '/admin?tab=integration-keys');
+  for (const bad of ['https://evil.test/', '/admin?tab=x" onclick="y', '//evil.test', '/admin?tab=', 7]) {
+    assert.equal(adminKeysHref({ admin_href: bad }), INTEGRATION_KEYS_HREF, String(bad));
+  }
+  assert.equal(adminKeysHref(undefined), INTEGRATION_KEYS_HREF);
+
+  // The sheet, as raw markup so the testids stay.
+  const [github] = buildCatalogue({ providers: [P('github', 'GitHub', 'code', 'beta', 'free', 'oauth2')], items: [], firstParty: {} });
+  const sheet = (p, view, extra = {}) => html(h(ConnectorPanel, { p, view, setView() {}, onClose() {}, ...extra }));
+  const un = sheet(github, 'unconfigured');
+  assert.match(un, /data-testid="connector-sheet-unconfigured"/);
+  assert.match(un, /data-testid="connector-unconfigured"/);
+  assert.match(text(un), /GitHub isn't set up on Axal yet/);
+  assert.match(un, />Close</);
+  assert.doesNotMatch(un, /Try again|refused/);
+  assert.doesNotMatch(un, /connector-unconfigured-admin-link/, 'no Super Admin is signed in');
+  const co = sheet(stripe, 'company');
+  assert.match(co, /data-testid="connector-sheet-company"/);
+  assert.doesNotMatch(co, /Try again|refused/);
+  const su = sheet(stripe, 'setup_unreadable');
+  assert.match(su, /data-testid="connector-sheet-setup_unreadable"/);
+  assert.match(su, />Try again<\/button>/);
+  assert.doesNotMatch(su, /refused/);
+  // A blocked Build project offers only Close in each of them.
+  for (const v of ['unconfigured', 'company', 'setup_unreadable']) {
+    const b = sheet(stripe, v, { blocked: true });
+    assert.match(b, /data-testid="button-blocked-close"/, v);
+    assert.doesNotMatch(b, />Try again<\/button>/, v);
+  }
+  // D753's page draws the view inline, too.
+  const page = html(h(SheetFrame.Provider, { value: { layout: 'page', onDismiss() {} } }, h(ConnectorPanel, { p: github, view: 'unconfigured', setView() {}, onClose() {} })));
+  assert.match(page, /data-testid="connector-sheet-unconfigured"[^>]*data-layout="page"|data-layout="page"[^>]*data-testid="connector-sheet-unconfigured"/);
+  assert.doesNotMatch(page, /refused/);
+});
+
+// ============================================================== D751 (#1881)
+
+test('D751: a connector Axal has no client for reads Not set up here, and a Super Admin gets the keys', () => {
+  // A catalogue for this test only: the shared PROVIDERS and every count above stay as they are.
+  const cat = buildCatalogue({
+    providers: [
+      P('github', 'GitHub', 'code', 'beta', 'free', 'oauth2', { category: 'Code', configured: false }),
+      P('calendly', 'Calendly', 'scheduling', 'live', 'free', 'oauth2', { supports_pat: true, configured: false }),
+      P('hubspot', 'HubSpot', 'crm', 'live', 'growth', 'oauth2', { supports_pat: true, configured: false }),
+      P('carta', 'Carta', 'cap_table', 'beta', 'studio', 'oauth2', { locked_for_user: true, configured: false }),
+      P('figma', 'Figma', 'data_feed', 'coming_soon', 'free', 'oauth2', { configured: false }),
+      P('slack', 'Slack', 'messaging', 'beta', 'free', 'oauth2', { configured: null }),
+      P('stripe', 'Stripe', 'data_feed', 'live', 'growth', 'oauth2', { configured: true }),
+      P('crunchbase', 'Crunchbase', 'data_feed', 'beta', 'growth', 'api_key', { configured: false }),
+    ],
+    items: [], firstParty: {},
+  });
+  const k = (key) => cat.find((p) => p.key === key);
+
+  // The rules.
+  assert.equal(k('github').available, false);
+  assert.equal(k('github').oauthOff, true);
+  assert.equal(cardAction(k('github')), 'unavailable');
+  for (const key of ['calendly', 'hubspot']) {
+    assert.equal(k(key).available, true, key);
+    assert.equal(k(key).oauthOff, true, key);
+    assert.equal(patOnly(k(key)), true, key);
+  }
+  assert.equal(cardAction(k('calendly')), 'add', 'the token keeps its +');
+  for (const key of ['slack', 'stripe', 'crunchbase']) {
+    assert.equal(k(key).available, true, key);
+    assert.equal(k(key).oauthOff, false, `${key}: only a strict false on an OAuth row is "not set up"`);
+  }
+  assert.equal(cardAction(k('figma')), 'notify');
+  assert.ok(discoverSections(cat, 'All')[0].cards.some((p) => p.key === 'github'), 'GitHub stays in Top connectors, with its reason');
+
+  // The card, for anyone but a Super Admin.
+  const plain = html(h(ConnectorsView, { data: ready(cat), initialTab: 'discover' }), '/account/connectors?tab=discover');
+  assert.match(plain, /data-testid="connector-card-github" data-action="unavailable"/);
+  assert.match(text(plain), /GitHub[^]*?Not set up here|Not set up here[^]*?GitHub/);
+  assert.doesNotMatch(plain, /Connect GitHub|connector-keys-link-/);
+
+  // A Super Admin.
+  const sup = html(h(ConnectorsView, { data: ready(cat), initialTab: 'discover', superAdmin: true }), '/account/connectors?tab=discover');
+  // One fixed pattern; the testid is matched as text, so no pattern is built from a key.
+  const link = (key) => (sup.match(/<a\b[^>]*>[^<]*<\/a>/g) || []).find((t) => t.includes(` data-testid="connector-keys-link-${key}"`)) || null;
+  assert.match(link('github') || '', /href="\/admin\?tab=integration-keys"/);
+  assert.match(link('github') || '', />Add its keys in Integration keys</);
+  assert.ok(link('calendly'), 'Calendly gets the way to its keys');
+  assert.match(sup, /data-testid="connector-card-calendly" data-action="add"/, 'and keeps its +');
+  for (const key of ['figma', 'slack', 'stripe', 'crunchbase']) assert.equal(link(key), null, key);
+  assert.equal(keysHref(k('github'), { superAdmin: false }), null);
+  assert.equal(keysHref(k('github'), { superAdmin: true }), INTEGRATION_KEYS_HREF);
+
+  // Build's row and its deep link.
+  const row = toolRow(k('github'));
+  assert.equal(row.state, 'unavailable');
+  assert.deepEqual(row.pill, ['Not set up here', 'neutral']);
+  assert.equal(row.action, null);
+  const build = html(h(ConnectToolView, { data: ready(cat), onClose() {} }));
+  assert.match(text(build), /GitHub .*?Not set up here/);
+  assert.doesNotMatch(build, /data-testid="tool-action-github"/);
+  assert.deepEqual(toolDeepLink('?tool=github', cat), { panel: null, strip: ['tool'] });
+
+  // No door opens a sign-in that can only fail, nor sells a plan for it.
+  assert.equal(openingView(k('github')), 'unconfigured');
+  assert.equal(openingView(k('carta')), 'unconfigured', 'not set up beats locked');
+  assert.equal(openingView({ ...k('github'), connection: { uid: 'u-gh', status: 'active' } }), 'detail');
+  assert.equal(openingView(k('calendly')), 'pre');
+
+  // The token is Calendly's only way in, and HubSpot offers no OAuth.
+  const cal = panel('calendly', 'pre', { p: k('calendly') });
+  assert.match(cal, /1 · What it uses 2 · Key 3 · Connected/);
+  assert.match(cal, /Sign-in with Calendly isn't set up on Axal yet, so Calendly connects with a personal access token\./);
+  assert.match(cal, /Cancel Continue/);
+  assert.doesNotMatch(cal, /Continue to Calendly|Use a personal access token instead/);
+  assert.doesNotMatch(panel('hubspot', 'key', { p: k('hubspot') }), /Connect with OAuth instead/);
+  assert.match(panel('hubspot', 'key', { p: { ...byKey('hubspot'), connection: null } }), /Connect with OAuth instead/, 'with no `configured`, an unconnected HubSpot still offers it');
 });
