@@ -41,6 +41,19 @@ Zoom also carries `used_by`, `suggests` (Validate module keys, each in
 `moduleLabels.ts`) and `distribution`, read from `ZOOM_APP_AUDIENCE` by
 `zoomDistribution` (absent, empty or unknown is `own_account`).
 
+## GitHub's sync (D655, #1906)
+
+`providers/github.ts` lands issues on `roadmap_okrs` and pull requests on
+`mvp_features`, each through its `connector_fed_items` row. **A founder's
+deletion stands**: a re-sync never re-creates a deleted row, and unlinks its
+ledger row (`local_id` NULL), so `fed.ts` counts the item as arrived but not
+linked. **A large sync continues on the next run**: each page is one ledger
+read and one D1 batch, the run counts its subrequests against
+`SYNC_SUBREQUEST_BUDGET` (8,000 of the Worker's 10,000), and at the budget it
+stops "Partly synced", keeping a KV cursor so the next Sync starts where it
+stopped. `cloudflare-worker/test/github_connector_flow_d751.test.ts` drives the
+whole flow against a stubbed GitHub.
+
 ## Subfolders
 
 - `providers/` — one file per provider implementation; see its README.

@@ -149,7 +149,8 @@ export class ConnectRefusal extends Error {
 
 export interface SyncResult {
   summary: string;
-  counts?: Record<string, number>;
+  /** Figures, plus `partial: true` when a sync stopped at its budget (#1906). */
+  counts?: Record<string, number | boolean>;
   external_id?: string | null;
 }
 
