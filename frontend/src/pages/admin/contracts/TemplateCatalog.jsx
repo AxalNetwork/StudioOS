@@ -8,6 +8,7 @@ import { card, button, input } from './parts';
 import FundIDocumentsPanel from './FundIDocumentsPanel';
 import PushResults from './PushResults';
 import { Thumbnail, useThumbnails } from './TemplateThumbnail';
+import GeneratedDocuments from './GeneratedDocuments';
 
 // D717 (#1851) — the Templates tab's catalog (board L9, "Catalog · light" and
 // "Catalog · dark (the paper stays white)"; board L8's thumbnail and "Not in
@@ -167,5 +168,7 @@ export default function TemplateCatalog({ items, authoring, onOpen, onNew, onOpe
     }) : <p className="p-4 text-sm">No template matches these filters.</p>}
 
     <OutsideGroup thumbs={thumbs} />
+
+    <GeneratedDocuments q={q} layer={layer} state={stateFilter} onOpen={onOpen} thumbs={thumbs} />
   </div>;
 }
