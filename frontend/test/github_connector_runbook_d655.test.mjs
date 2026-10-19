@@ -63,7 +63,7 @@ test('the callback is the one the Worker sends, in the runbook and in PRODUCTION
   // github.ts builds its redirect URI with the shared helper (D751), which
   // appends the path to callbackBase.
   assert.match(GITHUB, /function redirectUri\(env: Env\): string \{\s*return oauthCallbackUrl\(env, PROVIDER_KEY\);/);
-  assert.ok(raw('cloudflare-worker/src/util/url.ts').includes('return `${callbackBase(env)}/api/integrations/oauth/${key}/callback`;'));
+  assert.match(raw('cloudflare-worker/src/util/url.ts'), /return `\$\{callbackBase\(env\)\}\/api\/integrations\/oauth\/\$\{key\}\/callback`;/);
   const callback = `${prod}/api/integrations/oauth/${key}/callback`;
   assert.ok(RUNBOOK.includes(`exactly \`${callback}\``), `the runbook registers ${callback}`);
   assert.ok(PRODUCTION.includes(`Callback \`${callback}\``), `PRODUCTION.md registers ${callback}`);
