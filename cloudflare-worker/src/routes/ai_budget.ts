@@ -1,12 +1,12 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAuth, requireSuperAdmin } from '../auth';
+import { requireAuth, requireHqAdmin, requireSuperAdmin } from '../auth';
 import { AI_LICENCE_KEYS, AiBudgetReviewConflict, AiBudgetReviewNotFound, listAiBudgetReviews,
   listAiLicenceCaps, loadAiBudget, settleAiBudgetReview, usdToMicro } from '../services/aiBudget';
 import { aiTopupStatus, memberTopupReading, readAiTopupProduct } from '../services/aiTopups';
 import { HISTORY_MAX, ledgerBalance, memberAccount, memberHistory, memberTopUp, packLines, packLabel, reconcile, recordAdjustment } from '../services/aiCredits';
 import { logAdminAction } from '../services/adminAudit';
-import { CONSUMPTION_GROUPS, memberConsumption, monthBounds, monthKey, type ConsumptionGroup } from '../services/aiConsumption';
+import { CONSUMPTION_GROUPS, memberConsumption, memberMonth, monthBounds, monthKey, type ConsumptionGroup } from '../services/aiConsumption';
 import { refuse } from '../util/refusal';
 import { AUTH_ERROR_STATUSES } from '../util/authErrors';
 
@@ -156,6 +156,28 @@ r.post('/members/:userId/adjustments',async c=>{
     return c.json({uid:out.uid,already_recorded:out.already,delta_microusd:out.delta_microusd,balance_microusd:out.balance_microusd,
       ledger_balance_microusd:await ledgerBalance(c.env,id)});
   } catch(error) { return refuse(c,503,{code:'ai_adjustment_not_recorded',message:'The adjustment was not recorded. Nothing changed.',raw:error}); }
+});
+// ---------------------------------------------------------------------------
+// D776 PR 2 (#2093): HQ › AI allowances, read-only. HQ's Admin and Super Admin.
+// ---------------------------------------------------------------------------
+/**
+ * One member's month: their runs by option within a page, with the charge and
+ * the allowance and token split (the member's own grouped read, scoped by
+ * user_id), and each run with its cost, charge and model. Each read is
+ * audited, as D755's member account read is; the audit line names the member's
+ * id and the month, never a figure.
+ */
+r.get('/members/:userId/runs',async c=>{
+  const actor=await requireHqAdmin(c);
+  const month=c.req.query('month')??monthKey(new Date());
+  if (!monthBounds(month)) return c.json({error:'invalid_month',message:'Give the month as YYYY-MM.'},400);
+  try {
+    const id=await memberOf(c);
+    if (id===null) return refuse(c,404,{code:'ai_member_not_found',message:'No member has that ID.'});
+    const out=await memberMonth(c.env,id,month);
+    await logAdminAction(c.env,actor.id,(actor as any).email ?? '','ai_member_runs_read',{member_id:id,month});
+    return c.json(out);
+  } catch(error) { return refuse(c,503,{code:'ai_member_runs_unreadable',message:'Unreadable: where this member\'s AI spend went could not be read.',raw:error}); }
 });
 r.get('/reconcile',async c=>{
   await requireSuperAdmin(c);
