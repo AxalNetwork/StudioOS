@@ -47,7 +47,6 @@ import {
   alignRuns,
   askTranscript,
   isPlacementKind,
-  structureTranscript,
   toSegments,
   type Placement,
   type PlacementKind,
@@ -95,6 +94,12 @@ export async function loadStructureContext(env: Env, projectId: number): Promise
  * a cited span by construction (`parsePlacements` drops the rest), and the
  * passage rides in `citation_json` so the review can show it without
  * re-reading the transcript.
+ *
+ * D757 — `dedupe` (automatic runs): a placement whose kind and D658 key
+ * (`KindSpec.key`) match any earlier proposal on the same interview, in any
+ * status and from any proposer, is not stored again, so a re-run never brings
+ * back a finding the founder already accepted or discarded. A founder's run
+ * keeps every placement, so Compare still works.
  */
 export async function storePlacements(
   env: Env,
@@ -106,10 +111,27 @@ export async function storePlacements(
     userId: number;
     model: string;
     placements: readonly Placement[];
+    dedupe?: boolean;
   },
-): Promise<number> {
-  if (!opts.placements.length) return 0;
-  await env.DB.batch(opts.placements.map((p) => env.DB.prepare(
+): Promise<{ stored: number; deduped: number }> {
+  let placements = opts.placements;
+  if (opts.dedupe && placements.length) {
+    const prior = (await env.DB.prepare(
+      'SELECT kind, payload_json, edited_payload_json FROM validate_proposals WHERE target_ref = ? AND run_id IS NOT NULL',
+    ).bind(`interview:${opts.interviewId}`).all<{ kind: string; payload_json: string | null; edited_payload_json: string | null }>()).results ?? [];
+    const seen = new Set<string>();
+    for (const row of prior) {
+      if (!isPlacementKind(row.kind)) continue;
+      for (const raw of [row.payload_json, row.edited_payload_json]) {
+        if (!raw) continue;
+        try { seen.add(`${row.kind}|${PLACEMENT_KINDS[row.kind].key(JSON.parse(raw))}`); } catch { /* an unreadable payload names nothing */ }
+      }
+    }
+    placements = placements.filter((p) => !seen.has(`${p.kind}|${PLACEMENT_KINDS[p.kind].key(p.payload)}`));
+  }
+  const deduped = opts.placements.length - placements.length;
+  if (!placements.length) return { stored: 0, deduped };
+  await env.DB.batch(placements.map((p) => env.DB.prepare(
     `INSERT INTO validate_proposals
        (project_id, kind, payload_json, model, task, created_by, surface, fill_class,
         citation_json, target_ref, session_id, cite_from, cite_to, run_id)
@@ -119,7 +141,7 @@ export async function storePlacements(
     JSON.stringify({ kind: 'transcript', session_id: opts.sessionId, from: p.cite.from, to: p.cite.to, quote: p.quote }),
     `interview:${opts.interviewId}`, opts.sessionId, p.cite.from, p.cite.to, opts.runId,
   )));
-  return opts.placements.length;
+  return { stored: placements.length, deduped };
 }
 
 async function loadPlacement(env: Env, id: number): Promise<PlacementRow | null> {
@@ -304,10 +326,6 @@ export async function finalSegments(env: Env, sessionId: number) {
   return toSegments(rows.results ?? []);
 }
 
-function newRunId(): string {
-  return Array.from(crypto.getRandomValues(new Uint8Array(12))).map((b) => b.toString(16).padStart(2, '0')).join('');
-}
-
 const micro = (usd: number) => Math.max(0, Math.round((usd || 0) * 1_000_000));
 
 /** One receipt row per model call, refused or not. */
@@ -381,39 +399,30 @@ structure.post('/sessions/:id/structure', async (c) => {
   const body = await c.req.json<{ model?: string }>().catch(() => ({} as { model?: string }));
   const picked = modelFrom(body?.model);
   if ('refused' in picked) return json(refusedBody('model_not_offered'), 400);
-  const segments = await finalSegments(c.env, s.session.id);
-  if (!segments.length) {
+  // D757: the run is the engine's, forced (a button always runs) and never deduped (Compare).
+  const { digestSession } = await import('../services/validateEngine');
+  const out = await digestSession(c.env, {
+    sessionId: s.session.id, userId: s.user.id, trigger: 'manual', stages: ['structure'], force: true, model: picked.model,
+  });
+  if (out.status === 'not_writable') return json({ detail: 'Forbidden' }, 403);
+  if (out.status === 'skipped') {
     return json({ error: 'no_final_transcript', detail: 'This session has no final transcript to structure yet.' }, 409);
   }
-  const prior = await c.env.DB.prepare('SELECT COUNT(DISTINCT run_id) AS n FROM validate_proposals WHERE session_id = ?')
-    .bind(s.session.id).first<{ n: number }>();
-  const step = Number(prior?.n || 0) > 0 ? 're_structured' : 'structured';
-  const runId = newRunId();
-  const context = await loadStructureContext(c.env, s.session.project_id);
-  const out = await structureTranscript(c.env, {
-    userId: s.user.id, model: picked.model, segments, context, step,
-  });
-  for (let i = 0; i < out.receipt.length; i += 1) {
-    const refusedHere = !out.ok && i === out.receipt.length - 1;
-    await recordStructureReceipt(c.env, s.session.id, runId, out.receipt[i], refusedHere ? 'refused' : 'ok', refusedHere ? (out as any).refusal ?? null : null);
+  if (out.status === 'refused') {
+    if (out.reason === 'busy') return json({ error: 'digest_running', detail: out.note }, 409);
+    if (out.reason === 'consent_not_recorded') return (await consentRefusal(c.env, (await loadSession(c.env, s.session.id))!)) ?? json({ error: 'consent_not_recorded' }, 409);
+    return json(refusedBody(out.refusal), refusedStatus(out.refusal));
   }
-  if (!out.ok) return json(refusedBody(out.refusal), refusedStatus(out.refusal));
-
-  await storePlacements(c.env, {
-    projectId: s.session.project_id, sessionId: s.session.id, interviewId: s.session.interview_id,
-    runId, userId: s.user.id, model: out.receipt[out.receipt.length - 1]?.model || '', placements: out.placements,
-  });
-  await c.env.DB.prepare(
-    "UPDATE interview_sessions SET status = 'structured', updated_at = datetime('now') WHERE id = ? AND status = 'transcribed'",
-  ).bind(s.session.id).run();
+  const placed = out.status === 'done' && out.structure?.ok ? out.structure : null;
+  if (!placed) return json(refusedBody(null), refusedStatus(null));
   return json({
     ok: true,
-    run_id: runId,
-    step,
-    stored: out.placements.length,
-    dropped: out.dropped,
-    parts: out.parts,
-    receipt: out.receipt,
+    run_id: placed.runId,
+    step: placed.step,
+    stored: placed.stored,
+    dropped: placed.dropped,
+    parts: placed.parts,
+    receipt: placed.receipt,
   }, 201);
 });
 

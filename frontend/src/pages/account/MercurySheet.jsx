@@ -8,8 +8,8 @@ import { BTN, INPUT, LoadingRows } from './AccountCenter';
 import { Banner, Group, Row, Sheet } from './ConnectorSheet';
 import { agoLabel } from './connectorsModel';
 import {
-  ADMIN_ONLY, BRANCH_MANAGED, DISCONNECT_REASON_MIN, ENTITY_AUDIT_FOOT, ENTITY_DISCONNECT_NOTE, ENTITY_FEEDS, MEMBER_GROUPS, NEVER_ROWS, OPEN_BANKING,
-  READS_ROW, TOKEN_HELP, confirmReadOnlyLabel, entityRows, landsWords, retryAfterSentence, usesRows,
+  ADMIN_ONLY, BRANCH_MANAGED, DISCONNECT_REASON_MIN, ENTITY_AUDIT_FOOT, ENTITY_DISCONNECT_NOTE, ENTITY_FEEDS, MEMBER_GROUPS, OPEN_BANKING,
+  READS_ROW, TOKEN_HELP, confirmReadOnlyLabel, entityRows, landsWords, neverRows, retryAfterSentence, usesRows,
 } from './mercuryModel';
 import { mercuryPersonalApi } from '../../lib/api/mercuryPersonal';
 
@@ -253,10 +253,11 @@ export function MercuryEntityPanel({ p, onClose, eyebrow }) {
  * from one `GET /api/mercury/personal/status` when the group mounts: a row per
  * use the caller's profile holds, in decision 8's words. With none left it
  * reads Not recorded with its reason; a failed read is Unreadable, and the
- * never rows still draw. The rows link nothing until #1778's PR C mounts the
- * screens where each use happens; the canvas PR adds those doors.
+ * never rows still draw, in the viewer's role's words (`neverRows(role)`,
+ * D752). The rows link nothing until #1778's PR C mounts the screens where
+ * each use happens; the canvas PR adds those doors.
  */
-export function MercuryUsesGroups({ api = mercuryPersonalApi }) {
+export function MercuryUsesGroups({ api = mercuryPersonalApi, role = null }) {
   const [read, setRead] = useState({ status: 'loading', uses: null });
   const load = useCallback(() => {
     let live = true;
@@ -282,7 +283,7 @@ export function MercuryUsesGroups({ api = mercuryPersonalApi }) {
           : <Row a={<Unrecorded reason={read.uses.reason}>Not recorded</Unrecorded>} />)}
       </Group>
       <Group label={MEMBER_GROUPS.never}>
-        {NEVER_ROWS.map((t) => <Row key={t} a={t} />)}
+        {neverRows(role).map((t) => <Row key={t} a={t} />)}
       </Group>
     </>
   );
