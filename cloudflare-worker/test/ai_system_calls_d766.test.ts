@@ -11,7 +11,7 @@
 //     --test cloudflare-worker/test/ai_system_calls_d766.test.ts
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { SignJWT } from 'jose';
 import { Hono } from 'hono';
