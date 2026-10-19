@@ -28,7 +28,7 @@ import {
 import { FIRST_PARTY, buildCatalogue } from '../src/pages/account/connectorsModel.js';
 
 const h = React.createElement;
-const flat = (s) => s.replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\s+/g, ' ');
+const flat = (s) => s.replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/\s+/g, ' ');
 const clone = (x) => JSON.parse(JSON.stringify(x));
 
 const FX = {
