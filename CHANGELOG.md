@@ -4,20 +4,6 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
-## No free text on any send path (D758, #1862)
-
-- `buildTemplateBody` is deleted: a send's body is the library row's or a
-  bundled `.md`, nothing else. A document with no body is refused before
-  anything is written (409 `template_has_no_body`), and an unreadable store
-  is 503 `template_unreadable` (`activeTemplate`, `TemplateBodyError`,
-  `templateBodyRefusal` in `routes/esign.ts`). Every caller shows the
-  sentence; profiling verify returns it as `esign_refusal`.
-- An envelope sent from a store row is titled with the row's title.
-- `/legal` lists its 18 documents from the store (admins and founders) and
-  previews their library text; `POST /legal/templates/:key/generate` and
-  `api.generateDocument` are deleted. The incorporate wizard lists a kit item
-  with no body under `pending_body` instead of writing a placeholder.
-
 ## The LP's capital call opens on the amount, and the fee statement is on screen (D717, #1859)
 
 - An open Fund I line's panel on the LP workspace opens on "Amount due", the
