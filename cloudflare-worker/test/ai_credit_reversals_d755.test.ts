@@ -109,7 +109,10 @@ test('two partial refunds racing take each share once: the share is read inside 
     const [a, b] = await Promise.all([refund(f, 1000), refund(f, 2500)]);
     assert.deepEqual([a.status, b.status], [200, 200]);
     assert.equal(purchase(f).reversed_microusd, 27500000, 'never more than the pack');
-    assert.deepEqual(rows(f).map((r: any) => r.shortfall_microusd), [0, 0]);
+    // `amount_refunded` is cumulative: when the full refund lands first, the
+    // partial one has no share left and writes no row. Either order, no shortfall.
+    assert.ok([1, 2].includes(rows(f).length), `one or two rows, by arrival order (${rows(f).length})`);
+    assert.ok(rows(f).every((r: any) => r.shortfall_microusd === 0), 'nothing was spent, so no shortfall');
     assert.equal(rows(f).reduce((n: number, r: any) => n + r.delta_microusd, 0), -27500000);
     assert.equal(balance(f), 0);
     await invariant(f);
