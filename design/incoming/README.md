@@ -10,11 +10,11 @@ material. The app never reads it at runtime.
 ## Where the existing canvases live
 
 The triaged canvases live in `design/canvases/`, sorted by whether a live route
-exists for each — not by how far each has been built. Counts as of 2026-10-17:
+exists for each — not by how far each has been built. Counts as of 2026-10-19:
 
 | Folder | Meaning |
 | --- | --- |
-| `canvases/integrated/` | 97 — a live route exists for this canvas. **Not "it is finished"** — most are `UPGRADE`, meaning the route runs and the canvas asks for more than it does. `design/canvases/README.md` has a section on exactly this misreading; the gloss here read "the canvas is built" until 2026-09-07, which is what caused it. |
+| `canvases/integrated/` | 98 — a live route exists for this canvas. **Not "it is finished"** — most are `UPGRADE`, meaning the route runs and the canvas asks for more than it does. `design/canvases/README.md` has a section on exactly this misreading; the gloss here read "the canvas is built" until 2026-09-07, which is what caused it. |
 | `canvases/backlog/` | 28 — graded `NEW` or `DEFERRED`: no route yet. |
 | `canvases/out-of-scope/` | 26 — deliberately not being built. |
 
@@ -51,7 +51,9 @@ until `Studio · Mobile` and `Studio Mobile Page` followed the same day, with
 the four profile pages and the archetype card's phone layout built (D702),
 and 95 / 28 / 26 until `Cycle Overviews · Mobile` and `Cycle Modules · Mobile`
 moved there on 2026-10-17, with the cycle roots, module pages, add pages and
-action pages built on a phone (D703).
+action pages built on a phone (D703), and 97 / 28 / 26 until
+`Legal Documents · Templates` moved there on 2026-10-19, with D717's screens
+built (#1782).
 **If you move a file, move the number.**)
 
 **A canvas whose bodies are built does not belong in this folder.** Move it to
@@ -887,6 +889,8 @@ Move each new file to `canvases/integrated/` once its bodies are built.
 ## Landed 2026-10-18 — Legal Documents · Templates (D717, #1782)
 
 The owner approved the Claude Design canvas "Legal Documents · Templates" (artifact `VfkEZzQ8npTgCiQuKJu1MA`) for #1782's screens and the paper they print. #1850 lands it here so that every slot can read it: a slot on another account cannot open the artifact link.
+
+**Moved 2026-10-19 (#1854).** With D717's screens built (#1851 to #1857 and #1859), the file moved, unedited, to `design/canvases/integrated/Legal Documents · Templates.dc.html` when #1854 closed #1782. The record below keeps its history.
 
 **How it was made.** The Artifact tool read version `1792327281-a3b9` of the artifact, the version S1 read. `scripts/read-canvas.mjs` decoded it and exited 1, naming exactly the two content scripts the template loads by asset id. A one-off script outside the repository inlined both as plain `<script>` blocks, in the template's order, and checked that neither contains `</script`:
 

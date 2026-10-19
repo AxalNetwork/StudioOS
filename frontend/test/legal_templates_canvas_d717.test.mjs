@@ -1,6 +1,7 @@
 /**
  * D717 (#1782), intake #1850 — the "Legal Documents · Templates" canvas lands
- * in design/incoming, triaged.
+ * in design/incoming, triaged; #1854 moved it to design/canvases/integrated
+ * when it closed #1782 (2026-10-19).
  *
  * Sixteen tasks across S07 to S14 build its boards, and a slot on another
  * account cannot open the artifact link, so the canvas has to be a file here
@@ -16,12 +17,19 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const at = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const FILE = 'Legal Documents · Templates.dc.html';
-const html = at(`design/incoming/${FILE}`);
+const html = at(`design/canvases/integrated/${FILE}`);
+
+test('D717 the canvas graduated: in integrated/, gone from incoming/, and both READMEs count the folder', () => {
+  assert.ok(!existsSync(resolve(process.cwd(), `design/incoming/${FILE}`)), 'no longer in design/incoming/');
+  const integrated = readdirSync(resolve(process.cwd(), 'design/canvases/integrated')).filter((f) => f.endsWith('.dc.html')).length;
+  assert.ok(at('design/canvases/README.md').includes(`| \`integrated/\` | ${integrated} |`), `design/canvases/README.md says integrated/ holds ${integrated}`);
+  assert.ok(at('design/incoming/README.md').includes(`| \`canvases/integrated/\` | ${integrated} — `), `design/incoming/README.md says integrated/ holds ${integrated}`);
+});
 
 test('D717 the canvas is committed in the processed format', () => {
   assert.equal(/<script src="([^"]*)"/.exec(html)?.[1], './support.js', 'the first script is the shared runtime');
@@ -79,7 +87,7 @@ test('D717 ROUTE_MAP triages L9 to L12: L9\'s editor and catalog, L10 and L11 ar
   const end = map.indexOf('\n### ', start + 1);
   assert.ok(start > 0 && end > start);
   const section = map.slice(start, end);
-  assert.ok(section.includes(`\`design/incoming/${FILE}\``), 'the section names the file');
+  assert.ok(section.includes(`\`design/canvases/integrated/${FILE}\``), 'the section names the file where it lives');
   const rows = section.split('\n').filter((l) => l.startsWith('| L'));
   // L9's editor and publish frames shipped in #1918 (#1852) and its catalog in #1851; its Pages and History (#1853) have not.
   const editor = (l) => l.startsWith('| L9 `editor`');
