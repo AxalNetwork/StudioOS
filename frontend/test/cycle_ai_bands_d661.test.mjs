@@ -94,7 +94,8 @@ test('every band a desk mounted is on the cycle module page whose read it explai
 });
 
 test('a band is drawn only with the switch on and a venture chosen, and spends nothing to be looked at', () => {
-  assert.match(route, /\{fillsOn && projectId \? drafts\.map\(\(draft\) => \(\s*<ZoneDraft key=\{`\$\{slug\}-\$\{draft\.surface\}`\} \{\.\.\.draft\} scopeKey=\{String\(projectId\)\} ai=\{ai\} accent="violet" \/>/,
+  // D771 (#2097): the band also names its rail option, `draft:<surface>`.
+  assert.match(route, /\{fillsOn && projectId \? drafts\.map\(\(draft\) => \(\s*<ZoneDraft key=\{`\$\{slug\}-\$\{draft\.surface\}`\} \{\.\.\.draft\} scopeKey=\{String\(projectId\)\} ai=\{ai\} accent="violet" railOption=\{`draft:\$\{draft\.surface\}`\} \/>/,
     'a band is drawn without the switch, without a venture, or without its scope');
   // The cost read (D424) waits for the switch and for a band to show it on,
   // and every band, draft or fill, quotes its cost from it before its run.

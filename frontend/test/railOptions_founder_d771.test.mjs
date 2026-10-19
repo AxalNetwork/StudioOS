@@ -163,7 +163,7 @@ test('every founder page has an option or a reason it has none, never both', () 
  * each: the founder's options there are on the rail. A section joins this
  * list in the PR that wires it.
  */
-const WIRED = ['Studio', 'Validate'];
+const WIRED = ['Studio', 'Validate', 'Build', 'Raise', 'Grow', 'Research'];
 const sectionOf = (page) => page.split(' · ')[1];
 const routeOf = (route) => {
   const [path, query] = route.split('?');
@@ -181,8 +181,18 @@ const fillNamed = (section) => {
   const only = [...passed.matchAll(/cycle === '([a-z]+)'/g)].map((m) => m[1]);
   return only.length === 0 || only.includes(section.toLowerCase());
 };
-const railKeys = (src) => [...src.matchAll(/useRailOption\(([^;]*?)\);/g)]
-  .flatMap((m) => [...m[1].matchAll(/'([a-z]+:[a-z0-9_/-]+)'/g)].map((k) => k[1]));
+/**
+ * A cycle page's draft band names itself through `ZoneDraft`'s `railOption`,
+ * which `CycleRoute` builds as `draft:<surface>` for every band in its table.
+ */
+const cycleDraft = (o) => o.key.startsWith('draft:') && o.at.some(([file]) => file === CYCLE_ROUTE);
+const draftNamed = () => /<ZoneDraft key=\{`\$\{slug\}-\$\{draft\.surface\}`\} \{\.\.\.draft\}[^>]*railOption=\{`draft:\$\{draft\.surface\}`\}/.test(cycleRouteSource())
+  && /useRailOption\(busy === 'run' \|\| item \? railOption \|\| `draft:\$\{surface\}` : null,/.test(codeOnly(read('frontend/src/workspaces/ZoneDraft.jsx')));
+/** The keys a file names to the rail: its `useRailOption('<key>', …)` calls, and a `ZoneDraft`'s `railOption="<key>"`. */
+const railKeys = (src) => [
+  ...[...src.matchAll(/useRailOption\(([^;]*?)\);/g)].flatMap((m) => [...m[1].matchAll(/'([a-z]+:[a-z0-9_/-]+)'/g)].map((k) => k[1])),
+  ...[...src.matchAll(/railOption="([a-z]+:[a-z0-9_/-]+)"/g)].map((m) => m[1]),
+];
 
 test('every option names the address it is pressed on', () => {
   for (const o of FOUNDER_OPTIONS) {
@@ -197,8 +207,8 @@ test('on a wired section, each option is on its page and names itself to the rai
     assert.equal(pageKeyFor(path, 'founder', { search }), o.page,
       `${o.key}: D768's page map puts ${o.route} on another page`);
     if (o.handler === 'none') continue;
-    const named = o.key.startsWith('fill:')
-      ? fillNamed(sectionOf(o.page))
+    const named = o.key.startsWith('fill:') ? fillNamed(sectionOf(o.page))
+      : cycleDraft(o) ? draftNamed()
       : (o.rail || [...new Set(o.at.map(([file]) => file))]).every((file) => railKeys(codeOnly(read(file))).includes(o.key));
     assert.ok(named, `${o.page} / ${o.key}: no useRailOption('${o.key}', …) where it lives`);
   }

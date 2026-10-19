@@ -40,6 +40,7 @@ import { Inbox, Loader2 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { Card, RailFrame, WorkerRail, Unrecorded, Unreadable } from '../../ui';
+import useRecordCrumb from '../admin/useRecordCrumb';
 
 const UNAVAILABLE = Symbol('unavailable');
 
@@ -220,6 +221,9 @@ export function QueueCard({
  * `{ openUid, onToggle(uid), panelFor(item) }`. Without it the rows are plain
  * text, which is how the queue renders on its own.
  */
+/** An escalation as its card and the rail's record name it: branch · subject, or its kind. */
+export const escalationTitle = (x) => `${x.branch_code} · ${x.subject || String(x.kind || '').replace(/_/g, ' ')}`;
+
 export function escalationCardProps(data, failed, decide) {
   const base = {
     queue: 'escalations',
@@ -239,7 +243,7 @@ export function escalationCardProps(data, failed, decide) {
       const open = Boolean(decide) && decide.openUid === x.uid;
       return {
         key: x.uid,
-        title: `${x.branch_code} · ${x.subject || String(x.kind || '').replace(/_/g, ' ')}`,
+        title: escalationTitle(x),
         meta: `${String(x.kind || '').replace(/_/g, ' ')}${x.raised_by_name ? ` · raised by ${x.raised_by_name}` : ''}`,
         age_hours: x.age_hours,
         band: x.sla,
@@ -407,6 +411,8 @@ export function EscalationDecisionView({
 
 /** The panel's state and its one write. */
 export function EscalationDecision({ item, onRecorded, onReload }) {
+  // D775 (#2101): the escalation being answered is the rail's record while its panel is open.
+  useRecordCrumb(escalationTitle(item), 'escalation', item.uid);
   const [outcome, setOutcome] = useState('');
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);

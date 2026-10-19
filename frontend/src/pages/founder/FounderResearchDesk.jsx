@@ -8,6 +8,7 @@ import { zonePillClass } from './deskZoneNav';
 import ResearchOverviewPanel from '../research/ResearchOverviewPanel';
 import './founderResearchDesk.css';
 import { LensNavLink } from '../../workspaces/lens';
+import { useRailOption } from '../../ui/railCrumbs';
 
 export const asList = (value, key) => Array.isArray(value) ? value : (Array.isArray(value?.[key]) ? value[key] : []);
 const firstText = (...values) => values.find((value) => value !== null && value !== undefined && String(value).trim() !== '');
@@ -54,6 +55,8 @@ export default function FounderResearchDesk() {
   // citations, cost_usd, indexed_documents }` as `/research/ask` returns it.
   const [asked, setAsked] = useState(null);
   const [asking, setAsking] = useState(false);
+  // D771 (#2097): while a question is at the model, the rail is that option's.
+  useRailOption(asking ? 'ask:research' : null, 'Ask');
   const [askError, setAskError] = useState('');
   const [loading, setLoading] = useState(!seed);
   const [error, setError] = useState('');

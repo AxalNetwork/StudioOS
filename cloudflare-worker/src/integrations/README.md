@@ -56,7 +56,9 @@ stopped. `cloudflare-worker/test/github_connector_flow_d751.test.ts` drives the
 whole flow against a stubbed GitHub. After the loop, `providers/github/roadmap.ts`
 gives Product roadmap its milestone groups and targets, one `roadmap_releases`
 row per release through the same ledger, and Shipped marks on evidence only
-(D782, #2111).
+(D782, #2111). Then `providers/github/mvp.ts` makes each fed must-have follow
+its pull request, written only when GitHub's state moves, and records each
+release's checks on the must-haves through the ledger (D782, #2112).
 
 ## Subfolders
 

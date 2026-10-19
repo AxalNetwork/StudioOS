@@ -153,6 +153,7 @@ export default function InvestorPortfolioPositions() {
           is the history the ops row above used to say did not exist. */}
       <ZoneDraft
         surface="portfolio/positions"
+        railOption="draft:multiple-narrative"
         label="Proposal · explain the multiple’s move"
         accept="Accept narrative"
         run="Draft the narrative"

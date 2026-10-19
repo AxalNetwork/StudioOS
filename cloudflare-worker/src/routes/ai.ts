@@ -23,7 +23,7 @@ import { requireAuth } from '../auth';
 import { loadMyAiSpend, loadMyAiSpendForSurface } from '../services/aiSpend';
 import { AI_SURFACES } from '../services/aiSurfaces';
 import { refuse } from '../util/refusal';
-import { ROUTE, PRICE_USD_PER_1M_TOKENS, PRICE_USD_PER_AUDIO_MINUTE, PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET, run as aiRun, normaliseSurface } from '../services/aiRouter';
+import { ROUTE, PRICE_USD_PER_1M_TOKENS, PRICE_USD_PER_AUDIO_MINUTE, PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET, IMAGE_PRICED_MODELS, run as aiRun, normaliseSurface } from '../services/aiRouter';
 import { MODEL_NAMES, RETIRED_MODELS } from '../services/aiCatalog';
 import { CATALOGUE, isOffered, modelById } from '../services/ai/catalogue';
 import { billingMode, billedUnitPrice, multiplierFor, unitPrice } from '../services/ai/pricing';
@@ -31,7 +31,7 @@ import type { PriceUnit } from '../services/ai/catalogue';
 import { aiLicenceKey } from '../services/aiBudget';
 import { ensureAdminAuditLogTable } from './admin';
 import { BRANCH_CODE_RE } from '../util/branch';
-import { railCrumbs, railSectionOf, resolveRail, rowOffers, type RailRow } from '../services/ai/railMatrix';
+import { railCrumbs, railOptionsOn, railSectionOf, resolveRail, resolveRailOption, rowOffers, type RailRow } from '../services/ai/railMatrix';
 import { railFor, refuseAssistOff } from '../util/railContext';
 
 const ai = new Hono<{ Bindings: Env }>();
@@ -166,6 +166,7 @@ export function routerRates(multiplier: number) {
     ...Object.keys(PRICE_USD_PER_1M_TOKENS),
     ...Object.keys(PRICE_USD_PER_AUDIO_MINUTE),
     ...Object.keys(PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET),
+    ...IMAGE_PRICED_MODELS,
   ]);
   return Object.fromEntries([...ids].map((id) => [id, unitPrices(id, multiplier)]));
 }
@@ -203,6 +204,9 @@ export function rateCard(licence = '') {
     ...Object.entries(PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET).filter(([id]) => !(id in PRICE_USD_PER_AUDIO_MINUTE)).map(([id, perMinute]) => ({
       ...row(id), per_audio_minute_websocket_usd: perMinute,
     })),
+    // D766: an image model (Build › Brand's logo, `brand_logo`) is priced by its
+    // size and steps (D761 PR 4); its `cost` and `billed` carry each unit.
+    ...[...IMAGE_PRICED_MODELS].map((id) => ({ ...row(id), image: true })),
   ];
 }
 
@@ -455,17 +459,33 @@ ai.get('/rail', async (c) => {
   if (!row) return refuseRailPage(c, page);
   const option = railOption(c.req.query('option'));
   if (option === null) return refuseRailOption(c);
+  // PR 3: a registered option answers its own row; any other option key
+  // reads the page's row, so a page that has not listed it yet still works.
+  const optionRow = option ? resolveRailOption(row.pageKey, option) : null;
+  const active: RailRow = optionRow ?? row;
   const section = railSectionOf(row);
   const multiplier = multiplierFor(aiLicenceKey(user));
   const rows = (await c.env.DB.prepare(
     'SELECT task, model, mode FROM ai_rail_preferences WHERE user_id = ?1 AND section = ?2',
   ).bind(user.id, section).all<{ task: string; model: string | null; mode: string | null }>()).results ?? [];
-  const stored = (task: string) => rows.find((r) => r.task === task)?.model ?? null;
-  let pick: string | null = null;
-  for (const task of option ? [option, 'page'] : ['page']) {
-    const model = stored(task);
-    if (!model) continue;
-    if (rowOffers(row, model)) { pick = model; break; }
+  const stale = new Set<string>();
+  // A stored pick the row it was made on no longer offers is no pick, and is cleared.
+  const pickFor = (task: string, on: RailRow): string | null => {
+    const model = rows.find((r) => r.task === task)?.model ?? null;
+    if (!model) return null;
+    if (rowOffers(on, model)) return model;
+    stale.add(task);
+    return null;
+  };
+  const pagePick = pickFor('page', row);
+  const pick = (option ? pickFor(option, active) : null) ?? (rowOffers(active, pagePick ?? '') ? pagePick : null);
+  const view = (r: RailRow) => r.models.map((m) => ({
+    id: m.id, name: MODEL_NAMES[m.id] ?? modelById(m.id)?.name ?? null, role: m.role, line: m.line, price: unitPrices(m.id, multiplier),
+  }));
+  const options = railOptionsOn(row.pageKey).map((o) => ({
+    key: o.optionKey, label: o.optionLabel, kind: o.kind, handler: o.handler, models: view(o), pick: pickFor(o.optionKey, o),
+  }));
+  for (const task of stale) {
     await c.env.DB.prepare(
       'DELETE FROM ai_rail_preferences WHERE user_id = ?1 AND section = ?2 AND task = ?3',
     ).bind(user.id, section, task).run();
@@ -473,12 +493,10 @@ ai.get('/rail', async (c) => {
   return c.json({
     ok: true,
     page: row.pageKey,
-    crumbs: option ? [...railCrumbs(row), option] : railCrumbs(row),
-    kind: row.kind,
-    models: row.models.map((m) => ({
-      id: m.id, name: MODEL_NAMES[m.id] ?? modelById(m.id)?.name ?? null, role: m.role, line: m.line, price: unitPrices(m.id, multiplier),
-    })),
-    options: [],
+    crumbs: option ? [...railCrumbs(row), optionRow?.optionLabel ?? option] : railCrumbs(row),
+    kind: active.kind,
+    models: view(active),
+    options,
     pick,
     mode: rows.find((r) => r.task === '')?.mode ?? null,
     billing: billingMode(c.env),
@@ -501,12 +519,14 @@ ai.put('/rail/pick', async (c) => {
   const { row, body } = got;
   const option = railOption(body.option);
   if (option === null) return refuseRailOption(c);
+  // PR 3: a registered option's pick is checked against its own row.
+  const on = (option ? resolveRailOption(row.pageKey, option) : null) ?? row;
   const model = body.model;
-  if (model !== null && !(typeof model === 'string' && rowOffers(row, model))) {
+  if (model !== null && !(typeof model === 'string' && rowOffers(on, model))) {
     return refuse(c, 400, {
       code: 'model_not_offered',
       message: 'That model is not offered on this page.',
-      extra: { models: row.models.map((m) => m.id) },
+      extra: { models: on.models.map((m) => m.id) },
     });
   }
   const task = option ?? 'page';

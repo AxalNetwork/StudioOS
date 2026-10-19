@@ -184,6 +184,9 @@ test('U2–U5: days, pages, tasks, models and the receipt never turn a missing f
   assert.deepEqual(rates[0], { id: LLAMA, name: 'Llama 3.3 70B', pin: '$0.29', pout: '$2.25', unit: 'per million tokens', retired: false });
   assert.equal(rates[1].retired, true);
   assert.deepEqual([rates[2].pin, rates[2].pout, rates[2].unit], ['$0.0005', null, 'per audio minute']);
+  // D766: an image model has no single rate; it is priced by size and steps.
+  assert.deepEqual(rateRows({ models: [{ id: '@cf/black-forest-labs/flux-1-schnell', name: 'FLUX.1 Schnell', image: true, cost: { tiles: 0.0000528 } }] })[0],
+    { id: '@cf/black-forest-labs/flux-1-schnell', name: 'FLUX.1 Schnell', pin: null, pout: null, unit: 'per image, by its size and steps', retired: false });
 
   const r = receiptView(SPEND.last_run, RATES);
   assert.deepEqual(r.flags.map((f) => f.t), ['Fallback', 'Not cached']);

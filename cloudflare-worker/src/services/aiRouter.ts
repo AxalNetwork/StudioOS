@@ -36,6 +36,7 @@ import * as shapes from './ai/shapes';
 import * as catalogue from './ai/catalogue';
 import { costMicro, unitPrice } from './ai/pricing';
 import * as guard from './ai/guard';
+import { resolveRail, resolveRailChain, resolveRailOption } from './ai/railMatrix';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -78,6 +79,9 @@ export type TaskClass =
   | 'ops_summary'
   | 'image_screen'
   | 'image_alt_text'
+  // D766 (#2094) PR 3 — Build › Brand's logo, which called FLUX.1 Schnell
+  // directly. Now a member's press, drawn through D761's image shape.
+  | 'brand_logo'
   // D764 (#2089) — the rail's fourteen kinds of work, one task each. The
   // page's row in `ai/railMatrix.json` names the models a member may pick;
   // the entries below are each kind's default and its alternates.
@@ -256,6 +260,26 @@ export function railPageKey(value: unknown): string | null {
 export function railOptionKey(value: unknown): string | null { return railKey(value); }
 /** D770 (#2095): a record ref (`type:id`) keeps D762's rule too. */
 export function railRecordKey(value: unknown): string | null { return railKey(value); }
+
+/**
+ * D764 PR 3 (#2089): the member's stored picks for a rail page and option
+ * (migration 465, section = the page key lower-cased). A missing table or row
+ * is no pick; a read that fails for another reason throws, as `assistOff` does.
+ */
+export async function railPicks(env: Env, userId: number, page: string, option: string | null): Promise<{ page: string | null; option: string | null }> {
+  try {
+    const rows = (await env.DB.prepare(
+      'SELECT task, model FROM ai_rail_preferences WHERE user_id = ? AND section = ? AND task IN (?, ?)',
+    ).bind(userId, page.trim().toLowerCase(), 'page', option ?? 'page').all<{ task: string; model: string | null }>()).results ?? [];
+    return {
+      page: rows.find((r) => r.task === 'page')?.model ?? null,
+      option: option ? rows.find((r) => r.task === option)?.model ?? null : null,
+    };
+  } catch (e) {
+    if (/no such table/i.test(String((e as Error)?.message ?? e))) return { page: null, option: null };
+    throw e;
+  }
+}
 
 /** D765: the refusal's words, which every route answers with 403 `assist_off`. */
 export const ASSIST_OFF_MESSAGE = 'AI assistance is off on this page.';
@@ -790,6 +814,7 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   ops_summary:  { provider: 'workers-ai', model: SMALL_LLAMA },
   image_screen: { provider: 'workers-ai', model: VISION_SCOUT },
   image_alt_text: { provider: 'workers-ai', model: VISION_SCOUT },
+  brand_logo:   { provider: 'workers-ai', model: '@cf/black-forest-labs/flux-1-schnell' },
   paraphrase:   { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
   // D765: `ai-workers/` jobs, which called the deprecated 8B directly, unlogged.
   system_job:   { provider: 'workers-ai', model: SMALL_LLAMA },
@@ -1625,8 +1650,47 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
     }
   }
 
+  // ---- D764 PR 3: a rail run's models come from its page's row ------------
+  // A text run (or a vision run) with rail context whose page, or option, has
+  // a matrix row: the caller's model when it can do the work, else the
+  // member's pick, else the row's default; the chain is the row's other models
+  // of the same shape (`resolveRailChain`). Audio, embeddings, rerank,
+  // translation, voice and images keep their route: their shapes are the
+  // task's, and only bge-base writes axal-search. A row with no model for the
+  // run leaves the route in charge too.
+  let railed: { primary: string; chain: string[] } | null = null;
+  const railShaped = !route.isAudio && !route.isEmbed && !opts.rerank && !opts.translate && !opts.speak && !opts.draw;
+  const railRow = opts.rail && railShaped
+    ? resolveRailOption(opts.rail.page, opts.rail.option ?? null) ?? resolveRail(opts.rail.page)
+    : null;
+  if (opts.rail && railRow) {
+    let picks: { page: string | null; option: string | null };
+    try { picks = await railPicks(env, opts.userId, railRow.pageKey, opts.rail.option ?? null); }
+    catch {
+      const usage: UsageMeta = {
+        task: opts.task, model: route.model, latency_ms: 0,
+        prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0,
+        fallback_used: false, cached: false, safety_score: null,
+      };
+      return { ok: false, refusal: 'misconfigured', error: 'Unreadable: your model picks for this page could not be read. Nothing was run.', usage };
+    }
+    const resolved = resolveRailChain(railRow, { vision: (opts.images?.length ?? 0) > 0 }, env as catalogue.CatalogueSwitches, {
+      caller: opts.model ?? null, option: picks.option, page: picks.page,
+    });
+    if (resolved && !resolved.ok) {
+      const usage: UsageMeta = {
+        task: opts.task, model: route.model, latency_ms: 0,
+        prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0,
+        fallback_used: false, cached: false, safety_score: null,
+      };
+      await recordUsage(env, opts, usage, 'model_not_offered');
+      return { ok: false, refusal: 'model_not_offered', error: `${resolved.model} cannot do this page's work`, usage };
+    }
+    if (resolved) railed = { primary: resolved.primary, chain: resolved.chain };
+  }
+
   const offered = route.alternates ?? [];
-  if (opts.model && !offered.includes(opts.model)) {
+  if (!railed && opts.model && !offered.includes(opts.model)) {
     const usage: UsageMeta = {
       task: opts.task, model: route.model, latency_ms: 0,
       prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0,
@@ -1640,7 +1704,9 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
       usage,
     };
   }
-  const primaryModel = opts.model || route.model;
+  const primaryModel = railed ? railed.primary : opts.model || route.model;
+  // The models a failure falls back to: the rail row's, or the route's.
+  const fallbacks = railed ? railed.chain : route.fallbackChain ?? [];
 
   // D761 PR 2: a run whose own inputs no model could take is refused here.
   const badInput = inputRefusal(opts);
@@ -1658,7 +1724,7 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
   // Checked before the cache, the budget and the call, for the primary and each
   // fallback: a fallback that answered at no price would be the free run this
   // guards against, only later.
-  for (const model of [primaryModel, ...(route.fallbackChain ?? [])]) {
+  for (const model of [primaryModel, ...fallbacks]) {
     const refusal = modelRefusal(env, model);
     if (!refusal) continue;
     const usage: UsageMeta = {
@@ -1767,10 +1833,10 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
       const inputBytes = new TextEncoder().encode(defaultContentBlob(opts)+(opts.systemPrompt || '')).byteLength;
       const promptBound = inputBytes + 4096 + (opts.messages?.length || 1) * 64;
       // D761: a reasoning model's output budget is its task's, not 512.
-      const outputBound = Math.max(...[primaryModel, ...(route.fallbackChain || [])]
+      const outputBound = Math.max(...[primaryModel, ...fallbacks]
         .map((m) => shapes.maxTokensFor(shapes.factsFor(m), opts.maxTokens, route.reasoningMaxTokens)));
       if (!Number.isSafeInteger(outputBound) || outputBound < 1 || !Number.isFinite(opts.audioMinutes || 0) || (opts.audioMinutes || 0)<0) throw new Error('AI estimate unreadable');
-      const models = [primaryModel,...(route.fallbackChain || [])];
+      const models = [primaryModel, ...fallbacks];
       // D761 PR 3: a voice is held for its text's characters (Aura) and for the
       // most audio `readSpeech` accepts (MeloTTS), which bounds what it returns.
       const quoteMinutes = opts.speak ? audioMinutesFromBytes(shapes.MAX_SPEECH_BYTES) : opts.audioMinutes || 0;
@@ -1959,7 +2025,7 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
   // own primary, so this only bites once a caller can PICK one: a founder who
   // chose the 8b would otherwise have the router answer its failure by calling
   // the 8b again, wait out a second timeout, and report the same error.
-  const chain = (route.fallbackChain ?? []).filter((m) => m !== primaryModel);
+  const chain = fallbacks.filter((m) => m !== primaryModel);
   if (!attempt.ok && chain.length) {
     for (const sibling of chain) {
       const next = await callWai(sibling);

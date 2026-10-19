@@ -102,9 +102,10 @@ const BUCKETS: Bucket[] = [
     // AI per request — matched no AI bucket and fell through to the generic
     // `user` bucket: 60/min, and fail-OPEN, so a KV outage removed even that.
     //
-    // aiClient.ts's daily cap (WORKERS_AI_ADVISOR_BUDGET_USD_DAY, default 100
-    // turns/user/day) bounds total spend, but at 60/min a full day's budget is
-    // exhaustible in under two minutes. This is the missing per-window guard.
+    // The router's per-member allowance bounds total spend (D629, D762), but at
+    // 60/min a day's allowance is exhaustible in minutes. This is the missing
+    // per-window guard. (aiClient.ts's daily turn cap never had a caller; D766
+    // deleted it.)
     //
     // Scoped to /explain deliberately: /answer, /skip, /next-question and
     // /progress advance the state machine without calling the model, and

@@ -23,6 +23,7 @@ const m001 = readFileSync('cloudflare-worker/sql/migrations/001_progress_tables.
 const m153 = readFileSync('cloudflare-worker/sql/migrations/153_mvp_features.sql', 'utf8');
 const m499 = readFileSync('cloudflare-worker/sql/migrations/499_github_roadmap.sql', 'utf8');
 import { d1Over } from './_d1_sqlite.mjs';
+import { addMvpStores } from './_github_mvp_stores.mjs';
 
 function kv() {
   const m = new Map<string, string>();
@@ -51,7 +52,7 @@ async function fixture() {
     INSERT INTO company_profiles VALUES (10), (20);
     INSERT INTO user_company_links VALUES (1, 10), (1, 20), (2, 10);
     INSERT INTO projects VALUES (100, 10, NULL), (200, 20, NULL);`);
-  db.exec(m435); db.exec(m445); db.exec(m001); db.exec(m153); db.exec(m499);
+  db.exec(m435); db.exec(m445); db.exec(m001); db.exec(m153); db.exec(m499); addMvpStores(db);
   const KV = kv();
   const env = { DB: d1Over(db), JWT_SECRET, ENVIRONMENT: 'development', RATE_LIMITS: KV, GITHUB_APP_CLIENT_ID: 'Iv1.fixture', GITHUB_APP_CLIENT_SECRET: 'fixture' } as any;
   const enc = await encryptCredentials(env, 'gh1', { access_token: 'ghu_fixture' });
@@ -78,6 +79,7 @@ function fakeGithub(opts: { perms?: Record<string, string>; issues?: any[]; pull
     if (url.pathname === '/repos/acme/app/pulls') return j(opts.pulls ?? []);
     if (url.pathname === '/repos/acme/app/releases') return j(opts.releases ?? []);
     if (url.pathname === '/repos/acme/app/milestones') return j([]);
+    if (/^\/repos\/acme\/app\/pulls\/\d+\/reviews$/.test(url.pathname)) return j([]);
     return new Response('{}', { status: 404 });
   }) as any;
   return { calls, restore: () => { globalThis.fetch = real; } };
@@ -108,7 +110,8 @@ test('the registry asks for read access only, and a write grant is overreach aga
   assert.equal(hasScopeOverreach(desc, ['contents:read', 'administration:read']), true, 'a permission never asked for is overreach too');
   const pub = publicDescriptor(desc);
   assert.equal(pub.permissions.length, desc.oauth_scopes!.length);
-  assert.deepEqual(pub.feeds, ['product_roadmap', 'prototype_mvp', 'operating_systems', 'solution_design'], 'D782: Operating systems reads the connection as the Code system; #2114: Solution design');
+  assert.deepEqual(pub.feeds, ['product_roadmap', 'prototype_mvp', 'operating_systems', 'solution_design', 'founding_team', 'company_creation'],
+    'D782: Operating systems reads the connection as the Code system; #2114: Solution design; #2115: Founding team and Company creation');
   assert.ok(getProviderImpl('github'), 'the provider registers itself');
 });
 
@@ -172,7 +175,8 @@ test('sync lands issues on the roadmap and pull requests on must-haves, once; pr
     assert.deepEqual(db.prepare('SELECT objective, kanban_status FROM roadmap_okrs WHERE project_id = 100 ORDER BY id').all().map((x: any) => [x.objective, x.kanban_status]),
       [['Export to CSV', 'next'], ['Fix login', 'done']]);
     assert.deepEqual(db.prepare('SELECT title, delivery_status FROM mvp_features WHERE project_id = 100 ORDER BY id').all().map((x: any) => [x.title, x.delivery_status]),
-      [['Add export', 'Review'], ['Login fix', 'Done']]);
+      // D782 (#2112): an open pull request no one was asked to review, and no one approved, is In progress.
+      [['Add export', 'In Progress'], ['Login fix', 'Done']]);
     const status = await call(env, 'GET', '/api/connectors/gh1/sync-status');
     assert.equal(status.body.state, 'done');
     assert.equal(status.body.pct, 100);
@@ -220,7 +224,7 @@ test('fed answers for every connector, and a connector with no ledger says Not r
     assert.match(m.reason, /^Not recorded/);
   }
   const empty = await call(env, 'GET', '/api/connectors/gh1/fed');
-  assert.deepEqual(empty.body.modules.map((m: any) => m.count), [0, 0, null, 0], 'GitHub records its deliveries, so its zero is measured');
+  assert.deepEqual(empty.body.modules.map((m: any) => m.count), [0, 0, null, 0, 0, 0], 'GitHub records its deliveries, so its zero is measured');
   assert.match(empty.body.modules[2].reason, /^Read from the connection/, 'D782: Operating systems reads the connection, so it has no ledger zero');
   assert.equal((await call(env, 'GET', '/api/connectors/st1/fed', undefined, 10, 2)).status, 404);
 });

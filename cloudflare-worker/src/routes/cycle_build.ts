@@ -6,8 +6,10 @@ import { CONNECTOR_METADATA, getDescriptor } from '../integrations/registry';
 import { MODULE_LABELS, fedCounts } from '../integrations/fed';
 import { syncArrivals, syncArrivalsText, syncErrorWords } from '../integrations/githubFeeds';
 import { acceptDesignProposal, dismissDesignProposal, solutionDesignFromCode } from '../integrations/providers/github/solutionDesign';
+import { foundingTeamFromCode, mapLogin, unmapLogin } from '../integrations/providers/github/team';
+import { acceptCompanyProposal, companyFromCode, dismissCompanyProposal } from '../integrations/providers/github/company';
 import { validateConnectorSettings } from '../integrations/connectorRules';
-import { canReadBoard, canWrite } from './_founder_validate_helpers';
+import { canReadBoard, canWrite, ownsVenture } from './_founder_validate_helpers';
 import type { Card } from '../services/cycleCards';
 import { buildPhone } from '../services/cycleFocus';
 import { addHolder, updateHolder, HolderError } from '../services/capTableWrites';
@@ -258,7 +260,60 @@ async function prototype(env: Env, p: Project): Promise<ModuleRead> {
     list: { filters: [{ key: 'state', label: 'State', options: options(Object.entries(MUST_LABEL)) },
       { key: 'hypothesis', label: 'Hypothesis', options: optionsOf(mustRows, 'hypothesis', id => id === 'none' ? 'No hypothesis' : tests.get(id) ?? id) }],
     sort: { key: 'state', label: 'State' }, orders: { state: ['blocked', 'in_progress', 'not_started', 'done'] } },
-    facts: { done: done.length, total: must.length, target_date: p.mvp_target_date } };
+    facts: { done: done.length, total: must.length, target_date: p.mvp_target_date },
+    parts: { github: await prototypeGithub(env, p) } };
+}
+
+/** GitHub's state for a fed must-have, in the module's words (D782, #2112). */
+const PR_STATE_LABEL: Record<string, string> = { planned: 'Planned', in_progress: 'In progress', in_review: 'In review', built: 'Built', dropped: 'Dropped' };
+/** How many releases' checks the module lists, newest first; `releases_total` gives the rest's count. */
+export const RELEASE_CHECKS_SHOWN = 12;
+
+/**
+ * D782 (#2112): Prototype / MVP's "From GitHub" part, from what the GitHub sync
+ * wrote (`integrations/providers/github/mvp.ts`):
+ *   - `must_haves`: each fed must-have with GitHub's state and its pull request
+ *     link, a Dropped one included (it has left the must-haves; marking it a
+ *     must-have again undoes that);
+ *   - `releases`: each release's checks, newest first: the must-haves in it,
+ *     then those not in it.
+ * Its own read: a store this part cannot read makes the part Unreadable and
+ * leaves the must-haves' table as it is.
+ */
+async function prototypeGithub(env: Env, p: Project) {
+  try {
+    const fed = rows(await env.DB.prepare(
+      `SELECT id, title, pr_state, pr_url, is_must_have FROM mvp_features
+        WHERE project_id = ? AND pr_state IS NOT NULL ORDER BY sort_order, id`,
+    ).bind(p.id).all<any>());
+    const checks = rows(await env.DB.prepare(
+      `SELECT r.id AS release_id, r.repository, r.tag, r.name, r.published_at, r.url, k.in_release, f.id AS feature_id, f.title
+         FROM mvp_release_checks k
+         JOIN mvp_features f ON f.id = k.feature_id AND f.project_id = ?
+         JOIN roadmap_releases r ON r.id = k.release_id AND r.project_id = f.project_id
+        WHERE k.in_release IS NOT NULL
+        ORDER BY r.published_at IS NULL, r.published_at DESC, r.id DESC, f.sort_order, f.id`,
+    ).bind(p.id).all<any>());
+    const byRelease = new Map<number, any>();
+    for (const c of checks) {
+      if (!byRelease.has(c.release_id)) {
+        byRelease.set(c.release_id, { id: c.release_id, repository: c.repository, tag: c.tag, name: c.name ?? null, published_at: c.published_at ?? null,
+          url: c.url ?? null, in: [] as Array<{ id: number; title: string }>, not_in: [] as Array<{ id: number; title: string }> });
+      }
+      byRelease.get(c.release_id)[number(c.in_release) === 1 ? 'in' : 'not_in'].push({ id: c.feature_id, title: c.title });
+    }
+    const releases = [...byRelease.values()];
+    const empty = !fed.length && !releases.length;
+    return {
+      state: empty ? 'empty' : 'ok',
+      must_haves: fed.map(f => ({ id: f.id, title: f.title, state: f.pr_state, label: PR_STATE_LABEL[f.pr_state] ?? null, url: f.pr_url ?? null, must_have: number(f.is_must_have) === 1 })),
+      releases: releases.slice(0, RELEASE_CHECKS_SHOWN), releases_total: releases.length,
+      reason: empty ? 'No pull request or release from GitHub yet. Connect GitHub and sync to bring them in.' : null,
+    };
+  } catch (error) {
+    console.error('[cycle_build] mvp pull request state read failed', error);
+    return { state: 'unreadable', must_haves: [], releases: [], releases_total: null, reason: 'GitHub\'s pull requests and release checks could not be read.' };
+  }
 }
 
 async function roadmap(env: Env, p: Project): Promise<ModuleRead> {
@@ -370,7 +425,7 @@ async function optionPool(env: Env, p: Project): Promise<number | null> {
   return pool == null || pool === '' || !Number.isFinite(Number(pool)) ? null : Number(pool);
 }
 
-async function founding(env: Env, p: Project): Promise<ModuleRead> {
+async function founding(env: Env, p: Project, viewer: Viewer): Promise<ModuleRead> {
   // Vesting belongs to a holder, but its own row is user-keyed. Both keys
   // must agree; a founder's other company's schedule must never be joined.
   const holders = rows(await env.DB.prepare(
@@ -406,10 +461,32 @@ async function founding(env: Env, p: Project): Promise<ModuleRead> {
     rows: holderRows,
     list: { filters: [{ key: 'role', label: 'Role', options: optionsOf(holderRows, 'role') }], sort: { key: '-equity', label: 'Equity' } },
     facts: { cofounder_decision: p.cofounder_decision_meta ? JSON.parse(p.cofounder_decision_meta) : null, option_pool_pct: await optionPool(env, p),
-      agreement_reason: 'The latest document status for a founder is recorded; individual signing status is not.' } };
+      agreement_reason: 'The latest document status for a founder is recorded; individual signing status is not.' },
+    parts: { github: await fromGithub('founding_team', async () => foundingTeamFromCode(env, p.id, await projectMember(env, p, viewer),
+      founderRows.map(h => ({ id: Number(h.id), name: h.name ?? null })))) } };
 }
 
-async function company(env: Env, p: Project): Promise<ModuleRead> {
+/**
+ * D782 (#2115): who may read a contributor's login, its commit count, or an
+ * owner's login: the venture's own founders and the company's members. An
+ * admin or a partner reads the board, but not these: they are personal data.
+ */
+async function projectMember(env: Env, p: Project, viewer: Viewer): Promise<boolean> {
+  if (ownsVenture(p, viewer as any)) return true;
+  return p.company_id != null && !!await env.DB.prepare('SELECT 1 FROM user_company_links WHERE user_id = ? AND company_id = ?')
+    .bind(viewer.id, p.company_id).first();
+}
+
+/** D782 (#2115): a module's part from GitHub. Its own failure leaves the module readable, and never names a login. */
+async function fromGithub(module: 'founding_team' | 'company_creation', read: () => Promise<Record<string, unknown>>) {
+  try { return { state: 'ok', ...(await read()) }; }
+  catch (error) {
+    console.error('[cycle_build] github %s read failed', module, (error as Error)?.message);
+    return { state: 'unreadable', reason: 'What GitHub brought could not be read.' };
+  }
+}
+
+async function company(env: Env, p: Project, viewer: Viewer): Promise<ModuleRead> {
   const steps = rows(await env.DB.prepare(
     'SELECT id, title, due_date, state, proof_file_key, kind, jurisdiction, for_holder_id FROM formation_steps WHERE project_id = ? ORDER BY sort_order, id',
   ).bind(p.id).all<any>());
@@ -452,7 +529,8 @@ async function company(env: Env, p: Project): Promise<ModuleRead> {
     list: { filters: [{ key: 'state', label: 'State', options: options(Object.entries(FILING_LABEL)) },
       { key: 'due_window', label: 'Due', options: options([['overdue', 'Overdue'], ['next_30', 'Next 30 days'], ['later', 'Later'], ['none', 'No date']]) }],
     sort: { key: 'due', label: 'Due' }, orders: { state: ['overdue', 'due_soon', 'upcoming', 'filed'] } },
-    facts: { ip: p.spinout_ip_meta ? JSON.parse(p.spinout_ip_meta) : null, incorporation: p.incorporation_meta ? JSON.parse(p.incorporation_meta) : null } };
+    facts: { ip: p.spinout_ip_meta ? JSON.parse(p.spinout_ip_meta) : null, incorporation: p.incorporation_meta ? JSON.parse(p.incorporation_meta) : null },
+    parts: { github: await fromGithub('company_creation', async () => companyFromCode(env, p.id, await projectMember(env, p, viewer))) } };
 }
 
 const SYSTEM_KINDS = ['bank', 'accounting', 'payroll', 'crm', 'workspace'] as const;
@@ -905,6 +983,56 @@ app.post('/solution-design/proposals/:id/dismiss', async c => {
   const out = await dismissDesignProposal(c.env, ctx.project.id, id, ctx.user.id, [logCycleWriteStatement(c.env, {
     projectId: ctx.project.id, userId: ctx.user.id, cycle: 'build', module: 'solution-design', entityId: null,
     action: 'build_design_proposal_dismissed', summary: 'Architecture proposal from GitHub dismissed' })]);
+  if (out !== 'ok') return c.json({ detail: DECIDED[out][1] }, DECIDED[out][0]);
+  return c.json({ ok: true });
+});
+
+// D782 (#2115): the founder maps a GitHub login to a founder, once; it is never guessed.
+// The activity line never names the login: it is personal data.
+const LOGIN_OUTCOME = {
+  unknown_login: [404, 'That login has not arrived from GitHub for this venture.'],
+  unknown_founder: [404, 'That founder is not on this venture’s cap table.'],
+  not_mapped: [404, 'That login is not matched to a founder.'],
+} as const;
+
+app.post('/founding-team/github-logins', async c => {
+  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  const body = await jsonBody(c);
+  const holderId = positiveId(body?.holder_id);
+  if (!holderId || typeof body?.login !== 'string') return c.json({ detail: 'login and holder_id required' }, 400);
+  const out = await mapLogin(c.env, ctx.project.id, body.login, holderId, ctx.user.id, [logCycleWriteStatement(c.env, {
+    projectId: ctx.project.id, userId: ctx.user.id, cycle: 'build', module: 'founding-team', entityId: `h-${holderId}`,
+    action: 'build_github_login_matched', summary: 'A GitHub login matched to a founder' })]);
+  if (out !== 'ok') return c.json({ detail: LOGIN_OUTCOME[out][1] }, LOGIN_OUTCOME[out][0]);
+  return c.json({ ok: true });
+});
+
+app.delete('/founding-team/github-logins/:login', async c => {
+  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  const out = await unmapLogin(c.env, ctx.project.id, c.req.param('login'), [logCycleWriteStatement(c.env, {
+    projectId: ctx.project.id, userId: ctx.user.id, cycle: 'build', module: 'founding-team', entityId: null,
+    action: 'build_github_login_unmatched', summary: 'A GitHub login unmatched from its founder' })]);
+  if (out !== 'ok') return c.json({ detail: LOGIN_OUTCOME[out][1] }, LOGIN_OUTCOME[out][0]);
+  return c.json({ ok: true });
+});
+
+// D782 (#2115): the founder's decision on the IP step GitHub proposed. Nothing is written without Accept.
+app.post('/company-creation/proposals/:id/accept', async c => {
+  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  const id = proposalId(c); if (id == null) return c.json({ detail: 'Proposal not found' }, 404);
+  const out = await acceptCompanyProposal(c.env, ctx.project.id, id, ctx.user.id, [logCycleWriteStatement(c.env, {
+    projectId: ctx.project.id, userId: ctx.user.id, cycle: 'build', module: 'company-creation', entityId: null,
+    action: 'build_ip_step_accepted', summary: 'Filing added from GitHub: move the code into the company’s organisation' })]);
+  if (out !== 'ok') return c.json({ detail: DECIDED[out][1] }, DECIDED[out][0]);
+  return c.json({ ok: true });
+});
+
+app.post('/company-creation/proposals/:id/dismiss', async c => {
+  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  const id = proposalId(c); if (id == null) return c.json({ detail: 'Proposal not found' }, 404);
+  const out = await dismissCompanyProposal(c.env, ctx.project.id, id, ctx.user.id, [logCycleWriteStatement(c.env, {
+    projectId: ctx.project.id, userId: ctx.user.id, cycle: 'build', module: 'company-creation', entityId: null,
+    action: 'build_ip_step_dismissed', summary: 'Proposed filing from GitHub dismissed' })]);
   if (out !== 'ok') return c.json({ detail: DECIDED[out][1] }, DECIDED[out][0]);
   return c.json({ ok: true });
 });

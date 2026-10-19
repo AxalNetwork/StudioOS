@@ -286,6 +286,7 @@ export function LineTable({ lines, showCall, receipt, setReceipt, onOpen, onSave
         <ZoneDraft
           surface="funds/calls"
           scopeKey={String(line.id)}
+          railOption="draft:lp-reminder"
           label="Proposal · a reminder to this LP"
           accept="Accept draft"
           run="Draft the reminder"

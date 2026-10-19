@@ -35,7 +35,10 @@ import PhoneModulePage, { CycleBar, PHONE_GUTTER } from './PhoneModulePage';
 import DurabilityChecklist from './DurabilityChecklist';
 import ToolsHistory from './ToolsHistory';
 import SolutionDesignFromCode from './SolutionDesignFromCode';
+import FoundingTeamFromCode from './FoundingTeamFromCode';
+import CompanyFromCode from './CompanyFromCode';
 import RoadmapFromGithub from './RoadmapFromGithub';
+import MvpFromGithub from './MvpFromGithub';
 import UpdatesHistory from './UpdatesHistory';
 import UpdateAskReplies from './UpdateAskReplies';
 import CallsHistory from './CallsHistory';
@@ -286,9 +289,14 @@ const CYCLE_DEFS = {
     // D782 (#2114): Solution design's From GitHub (Built with, proposals, notes), anchored at #from-github.
     parts: toFnMap({
       'solution-design': (data, ctx) => <SolutionDesignFromCode part={data?.parts?.from_code} projectId={ctx.projectId} reload={ctx.reload} />,
+      // D782 (#2112): Prototype / MVP's pull request states and release checks, anchored at #from-github.
+      'prototype-mvp': (data) => <MvpFromGithub github={data?.parts?.github} />,
       // D782 (#2111): Product roadmap's milestones and releases from GitHub, anchored at #from-github.
       'product-roadmap': (data) => <RoadmapFromGithub github={data?.parts?.github} />,
       'operating-systems': (data) => <ToolsHistory tools={data?.parts?.tools} />,
+      // D782 (#2115): who builds (the founder matches each login) and where the code sits, anchored at #from-github.
+      'founding-team': (data, ctx) => <FoundingTeamFromCode part={data?.parts?.github} projectId={ctx.projectId} reload={ctx.reload} />,
+      'company-creation': (data, ctx) => <CompanyFromCode part={data?.parts?.github} projectId={ctx.projectId} reload={ctx.reload} />,
     }),
     tools: toFnMap({
       'product-roadmap': (q) => ({ label: 'Open the roadmap: Now, Next and Later', href: `/build/roadmap${q}` }),
@@ -967,10 +975,10 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
       >
         {fillKind && projectId && (
           <FillProposals key={`${slug}-${fillKind}`} projectId={projectId} kind={fillKind} enabled={fillsOn} ai={ai} workspace={name} onApplied={() => setReload((n) => n + 1)}
-            railOption={cycle === 'validate' ? `fill:${fillKind}` : null} />
+            railOption={`fill:${fillKind}`} />
         )}
         {fillsOn && projectId ? drafts.map((draft) => (
-          <ZoneDraft key={`${slug}-${draft.surface}`} {...draft} scopeKey={String(projectId)} ai={ai} accent="violet" />
+          <ZoneDraft key={`${slug}-${draft.surface}`} {...draft} scopeKey={String(projectId)} ai={ai} accent="violet" railOption={`draft:${draft.surface}`} />
         )) : null}
         {/* D757 §2.7 (#1928): each Validate module's interview suggestions, writers only. Verdict takes none. */}
         {moduleStatus === 'ready' && cycle === 'validate' && slug !== 'verdict' && (
