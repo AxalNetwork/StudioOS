@@ -1,38 +1,13 @@
 import React, { useEffect } from 'react';
 import useAiBudget from '../hooks/useAiBudget';
 import { Unreadable } from './Honesty';
+import { ADD_TOKENS_PATH, TOPUP_UNAVAILABLE, aiTokenState, microMoney, usageMoney } from '../lib/aiTokens';
 
-const money=n=>{
-  const micro=BigInt(n);
-  const fraction=(micro%1000000n).toString().padStart(6,'0').replace(/0+$/,'').padEnd(2,'0');
-  return `$${(micro/1000000n).toLocaleString('en-US')}.${fraction}`;
-};
-export const microMoney=money;
+// D755 (#1916): the formatters, the top-up state and its sentence live in
+// lib/aiTokens.js; re-exported here so no importer changes.
+export { microMoney, usageMoney, TOPUP_UNAVAILABLE } from '../lib/aiTokens';
+const money=microMoney;
 const integer=n=>Number.isSafeInteger(n)&&n>=0;
-/**
- * D750 (#1841) — a spend to the cent, for the rail and this card: rounded half
- * up, and "<$0.01" for a spend above zero that rounds to nothing. The exact
- * figure stays on `/account/usage` and in the element's `title`.
- */
-export function usageMoney(n){
-  const micro=BigInt(n);
-  if (micro>0n && micro<5000n) return '<$0.01';
-  const cents=(micro+5000n)/10000n;
-  return `$${(cents/100n).toLocaleString('en-US')}.${(cents%100n).toString().padStart(2,'0')}`;
-}
-/**
- * The top-up as Add tokens draws it (D750 decision 3): `ready` with a sellable
- * price, `unavailable` when it is unset or `not_ready` (configuration a retry
- * cannot fix, so no Retry), and `unreadable` only when the read failed.
- */
-export function aiTopupState(p,productError){
-  if (productError || !p || typeof p.configured!=='boolean') return 'unreadable';
-  if (!p.configured || p.state==='not_ready') return 'unavailable';
-  const pr=p.product;
-  if (p.state!=='ready' || !pr || !/^price_[A-Za-z0-9]+$/.test(pr.price_id) || pr.currency!=='usd' || !integer(pr.unit_amount) || pr.unit_amount===0) return 'unreadable';
-  return 'ready';
-}
-export const TOPUP_UNAVAILABLE="Top-up isn't available yet.";
 const BUDGET_KEYS=['daily_microusd','monthly_microusd','day_spend_microusd','month_spend_microusd','balance_microusd','day_reserved_microusd','month_reserved_microusd','topup_reserved_microusd'];
 const budgetKnown=(b,budgetError)=>!!b && !budgetError && typeof b.licence==='string' && BUDGET_KEYS.every(key=>integer(b[key]));
 /** The month's allowance, spent and cap in micro-USD, or null when unread (the Worker AI rail's Usage card). */
@@ -44,7 +19,7 @@ export function AiBudgetUsage({reading}) {
   const known=budgetKnown(b,budgetError);
   if (loading) return <div aria-busy="true" className="text-xs text-gray-500 dark:text-gray-400">Loading AI allowance…</div>;
   if (!known) return <Unreadable what="Unreadable: your AI allowance and top-up balance" claim="Retry to read the recorded figures." onRetry={reload} />;
-  const topUp=aiTopupState(p,productError);
+  const topUp=aiTokenState({error:productError,data:p});
   const held=b.day_reserved_microusd+b.month_reserved_microusd+b.topup_reserved_microusd>0;
   return <div className="space-y-2 text-xs text-gray-700 dark:text-gray-300" data-testid="ai-budget-usage">
     <p className="font-semibold">Included allowance · {b.licence.replace(':',' / ')}</p>
@@ -60,7 +35,7 @@ export function AiBudgetUsage({reading}) {
     {topUp==='unreadable'
       ? <Unreadable what="Unreadable: the AI top-up" claim="Retry to read the purchase option." onRetry={reload} />
       : topUp==='ready'
-        ? <a href="/checkout?ai_topup=1" className="inline-block underline font-semibold text-violet-700 dark:text-violet-300">Add tokens</a>
+        ? <a href={ADD_TOKENS_PATH} className="inline-block underline font-semibold text-violet-700 dark:text-violet-300">Add tokens</a>
         : <p data-testid="ai-budget-topup-unavailable">{TOPUP_UNAVAILABLE}</p>}
   </div>;
 }

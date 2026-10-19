@@ -11,6 +11,7 @@
  *   - nothing is split by company: every read is the caller's own, across all
  *     their companies, and nothing below takes a company.
  */
+import { aiTokenState } from '../../lib/aiTokens';
 
 export const NOT_COUNTED = 'Not counted';
 
@@ -148,18 +149,13 @@ export function allowanceView(b, now = new Date()) {
 }
 
 /**
- * The top-up purchase option, from `/ai-budget/top-up` (D750): `available`
- * (state `ready` with a sellable price), `unavailable` (unset, or `not_ready`:
- * a configuration HQ must fix, which a retry cannot) or `unreadable`.
+ * The top-up purchase option in this page's words: `available`, `unavailable`
+ * (nothing is on sale, which a retry cannot change) or `unreadable`. The
+ * decision is `aiTokenState`'s (lib/aiTokens.js, D755 #1916).
  */
 export function topUpState(p) {
-  if (!p || typeof p.configured !== 'boolean') return 'unreadable';
-  if (!p.configured || p.state === 'not_ready') return 'unavailable';
-  if (p.state !== 'ready') return 'unreadable';
-  const pr = p.product;
-  const ok = pr && /^price_[A-Za-z0-9]+$/.test(pr.price_id) && pr.currency === 'usd'
-    && isCount(pr.unit_amount) && pr.unit_amount > 0;
-  return ok ? 'available' : 'unreadable';
+  const state = aiTokenState({ data: p });
+  return state === 'ready' ? 'available' : state === 'not_ready' ? 'unavailable' : 'unreadable';
 }
 
 /** Model id → its display name and rates, from `/ai/rates`. */

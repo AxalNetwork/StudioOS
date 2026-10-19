@@ -312,7 +312,8 @@ test('5. A2m: Usage on a phone draws the canvas bar and its three sections, then
   // Without a configured top-up there is no button, and the line says why.
   const off = text(html(h(UsagePhoneView, { ...usageProps, product: ready({ configured: false }) })));
   assert.doesNotMatch(off, /Add tokens/);
-  assert.match(off, /Top-ups are not available yet\. Runs use your included allowance only\./);
+  // D755 (#1916): one sentence, lib/aiTokens.js's.
+  assert.match(off, /Top-up isn't available yet\. Runs use your included allowance only\./);
   // A paused allowance still says so, above the figures.
   const paused = text(html(h(UsagePhoneView, { ...usageProps, budget: ready({ ...BUDGET, held_for_review: [{ id: 1 }] }) })));
   assert.match(paused, /AI allowance Runs paused A run cost more than it held\./);
@@ -595,7 +596,7 @@ test('5. A4m–A10m: each section reads its values from the page\'s sources', ()
   assert.match(html(PHONE_VIEWS.pricing()), /<a href="\/checkout\?ai_topup=1"[^>]*>[\s\S]*?Past your allowance/);
   // No other role has a tier ladder, so it gets no Plans section.
   assert.deepEqual(sectionTitles(html(h(PricingPhoneView, { role: 'advisor', billing: ready({}), budget: ready(BUDGET), product: ready(PRODUCT) }))), ['Tokens']);
-  assert.match(text(html(h(PricingPhoneView, { role: 'founder', billing: ready(GROWTH), budget: ready(BUDGET), product: ready({ configured: false }) }))), /Top-ups are not available yet\./);
+  assert.match(text(html(h(PricingPhoneView, { role: 'founder', billing: ready(GROWTH), budget: ready(BUDGET), product: ready({ configured: false }) }))), /Top-up isn't available yet\. Runs use your included allowance only\./);
 });
 
 // --- 6. Member routes --------------------------------------------------------------
