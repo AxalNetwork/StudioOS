@@ -66,8 +66,8 @@ import { ZOOM_DISCONNECT_NOTE, ZOOM_SECTIONS, usedByLinks, zoomHowItWorks, zoomN
  * MERCURY (#1991, F5). The Axal entities' row (`isEntityRow`, an admin on HQ)
  * draws `MercuryEntityPageBody` in "Connect and manage": the entity
  * connections, what they feed, Open Banking and the audit foot, with the one
- * audited read on mount and no header action. A member's own Mercury stays in
- * the interim panel until F3 (#1956) draws "Your connection".
+ * audited read on mount and no header action. A member's connected Mercury
+ * stays in the interim panel (`interimPanel`) until F5 lays it out.
  *
  * THE READ (#1955, part 2). Handed `readPage` (`connectorsApi.page`), the view
  * reads `GET /api/connectors/directory/<page_key>` once the connector is known,
@@ -181,7 +181,7 @@ function ReadyPage({ p, back, phone, ret, moved, onChanged, children, connector 
   // D753 F5 (#1991): the Axal entities' Mercury is drawn on the page itself, never the interim panel.
   const entity = isEntityRow(p);
   // F1's panel stays only where F4 (GitHub) and F5 (Mercury) take it over; every other connection is "Your connection".
-  const panelShown = !entity && interimPanel(p, view);
+  const panelShown = interimPanel(p, view);
   const role = auth?.user?.role ?? null;
   // A member's own Mercury still says what it is for before the token is asked for, until F5; the band connects.
   const memberMercury = isPersonalMercury(p) && !p.connection && !panelShown;
@@ -194,7 +194,7 @@ function ReadyPage({ p, back, phone, ret, moved, onChanged, children, connector 
           {!phone && <h1 className="text-2xl font-extrabold tracking-axal-heading text-axal-ink dark:text-gray-100">{p.display_name}</h1>}
           {tagline && <p className="mt-0.5 min-w-0 break-words text-[13.5px] leading-snug text-axal-muted dark:text-gray-400" data-testid="connector-page-tagline">{tagline}</p>}
         </div>
-        <BandAction p={p} action={action} flow={flow} phone={phone} superAdmin={superAdmin} onChanged={onChanged} manage={panelShown ? [] : manageItems(p)} />
+        <BandAction p={p} action={action} flow={flow} phone={phone} superAdmin={superAdmin} onChanged={onChanged} manage={panelShown || entity ? [] : manageItems(p)} />
       </header>
 
       {notice && (

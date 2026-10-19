@@ -68,12 +68,14 @@ test('manageItems: Sync now, Replace key or Reconnect, Disconnect; Reconnect lea
   assert.deepEqual(manageItems({ ...row('stripe'), connection: null }), []);
 });
 
-test('interimPanel: only GitHub, Mercury, the entity row and GitHub\'s sign-in landing keep F1\'s panel', () => {
+test('interimPanel: only GitHub, a member\'s Mercury and GitHub\'s sign-in landing keep F1\'s panel; never the entity row', () => {
   for (const key of ['stripe', 'hubspot', 'crunchbase', 'slack', 'google']) assert.equal(interimPanel(row(key)), false, key);
   assert.equal(interimPanel(row('github')), true);
   assert.equal(interimPanel(row('mercury')), true);
   assert.equal(interimPanel({ ...row('stripe'), connection: null }, 'sync'), true);
   assert.equal(interimPanel({ ...row('github'), connection: null }), false);
+  assert.equal(interimPanel({ ...row('mercury'), connection_source: 'mercury_entity_connections' }), false, 'F5 draws the entities\' Mercury itself');
+  assert.equal(interimPanel({ ...row('mercury'), connection_source: 'mercury_entity_connections' }, 'sync'), false);
 });
 
 // ---------------------------------------------------------------- the page

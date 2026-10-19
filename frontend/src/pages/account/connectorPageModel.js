@@ -123,12 +123,13 @@ export function manageItems(p) {
 
 /**
  * Whether F1's interim panel is still mounted on a connected page: only
- * where a later task takes it over (GitHub's repositories, F4; Mercury, F5),
- * the Axal entities' Mercury, or GitHub's sign-in landing on its repositories.
+ * where a later task takes it over (GitHub's repositories, F4; a member's
+ * Mercury, F5), or GitHub's sign-in landing on its repositories. The Axal
+ * entities' Mercury never: F5 (#1991) draws it on the page itself.
  */
 export function interimPanel(p, view = 'idle') {
-  if (!p) return false;
-  if (isEntityRow(p) || view === 'sync') return true;
+  if (!p || isEntityRow(p)) return false;
+  if (view === 'sync') return true;
   return !!p.connection && (p.key === 'github' || p.key === 'mercury');
 }
 
