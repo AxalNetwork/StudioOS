@@ -12,7 +12,12 @@
  *
  * Behaviour:
  *   - ROUTE map picks the model per task class.
- *   - Non-2xx or >8 s latency on a Workers AI primary → smaller WAI sibling.
+ *   - Any failure on a Workers AI attempt → the next model in the chain.
+ *     D761: each attempt's timeout is its class's (chat 8 s, reasoning and
+ *     long context 30 s, images 60 s; a stream's first chunk the same); a
+ *     model whose context window the input overflows is skipped uncalled;
+ *     the request and response shapes, and each attempt's units, are
+ *     `./ai/shapes.ts`'s.
  *   - Chain exhausted → refusal (`all_models_failed`).
  *   - Per-user $/day + $/month KV caps; org-wide kill switch on monthly cap.
  *   - embed/explain/sentiment results cached by content-hash (30d / 7d / 30d).
@@ -27,6 +32,7 @@ import type { Env } from '../types';
 import { branchOf } from '../util/branch';
 import * as aiBudget from './aiBudget';
 import { audioInputFor, parseAudioOutput, type SttTranscript } from './sttFormats';
+import * as shapes from './ai/shapes';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -149,6 +155,22 @@ export interface UsageMeta {
   safety_score: number | null;
 }
 
+/**
+ * D761: one model the router tried. `called: false` is a model skipped for
+ * its context window, which cost nothing. `units` are what the attempt used,
+ * measured by the Worker (`./ai/shapes.ts`); absent when the provider gave
+ * nothing to count, never zero-filled.
+ */
+export interface AttemptRecord {
+  model: string;
+  ok: boolean;
+  called: boolean;
+  status?: number;
+  code?: number | null;
+  timeout_ms?: number;
+  units?: shapes.Units;
+}
+
 export interface RunResult {
   ok: boolean;
   output?: string;             // assistant text or stringified JSON for tool_call
@@ -159,6 +181,9 @@ export interface RunResult {
   refusal?: RefusalReason;
   error?: string;
   usage: UsageMeta;
+  // D761: the answering attempt's units, and every attempt in order. A3 (D762) settles on them.
+  units?: shapes.Units;
+  attempts?: AttemptRecord[];
 }
 
 // ---------------------------------------------------------------------------
@@ -196,6 +221,9 @@ interface RouteEntry {
   // shape: Workers AI takes `{ audio: number[] }` and answers `{ text }`,
   // which shares nothing with either the chat or the embed path.
   isAudio?: boolean;
+  // D761: the output budget a reasoning model gets on this task when the caller
+  // names a smaller one (`shapes.REASONING_MAX_TOKENS` when absent).
+  reasoningMaxTokens?: number;
 }
 
 /**
@@ -537,8 +565,8 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   brand_taglines: { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
 };
 
-// Latency budget per primary attempt before we fall back.
-const PRIMARY_TIMEOUT_MS = 8_000;
+// D761: the latency budget is per attempt and per class (`shapes.TIMEOUT_MS`),
+// read through `shapes.timeoutMs` in `run`. The old flat 8 s is the chat class.
 
 // ---------------------------------------------------------------------------
 // Budget defaults (overridable via env vars)
@@ -776,6 +804,9 @@ interface ProviderResult {
   prompt_tokens?: number;
   completion_tokens?: number;
   error?: string;
+  // D761: Workers AI's numeric error code, when the failure carried one.
+  code?: number | null;
+  units?: shapes.Units;
 }
 
 /** The slice of workers-types' `GatewayOptions` this router sends (D261). */
@@ -785,7 +816,7 @@ interface WorkersAIBinding {
   run(
     model: string,
     payload: unknown,
-    options?: { gateway?: { id: string; skipCache?: boolean; cacheTtl?: number; metadata?: Record<string, string> } },
+    options?: { gateway?: { id: string; skipCache?: boolean; cacheTtl?: number; metadata?: Record<string, string> }; extraHeaders?: Record<string, string> },
   ): Promise<unknown>;
 }
 
@@ -848,12 +879,17 @@ function isGatewayRouted(env: Env, task: TaskClass): boolean {
 // toggled on, a hostile rate-limit/cache rule) can no longer dead-end the
 // onboarding chat — we lose only the separate advisor analytics namespace,
 // not the conversation itself.
-async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed: boolean, bypassGateway = false): Promise<ProviderResult> {
+async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed: boolean, bypassGateway = false, limitMs: number = shapes.TIMEOUT_MS.chat): Promise<ProviderResult> {
   const ai = (env as unknown as { AI?: WorkersAIBinding }).AI;
   if (!ai || typeof ai.run !== 'function') {
     return { ok: false, status: 0, error: 'AI binding not configured' };
   }
   const gatewayOpt = bypassGateway ? undefined : gatewayOptionFor(env, opts.task, opts.userId);
+  // D761: cache affinity, so a member's next turn on the same page earns cached
+  // input. The member's id and the page key only, never an email or a name.
+  const affinity = shapes.sessionAffinity(opts.userId, normaliseSurface(opts.surface) ?? opts.task);
+  const runOpt = affinity ? { ...(gatewayOpt ?? {}), extraHeaders: { 'x-session-affinity': affinity } } : gatewayOpt;
+  const facts = shapes.factsFor(model);
   try {
     if (ROUTE[opts.task]?.isAudio) {
       // `Array.from` on the bytes is what the binding expects, and it is also
@@ -862,20 +898,19 @@ async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed:
       // See `MAX_RECORDING_BYTES` in `routes/founder_validate.ts`.
       const bytes = opts.audio;
       if (!bytes || !bytes.byteLength) return { ok: false, status: 400, error: 'no audio' };
-      const out = await ai.run(model, audioInputFor(model, bytes, opts.audioMime || '', opts.language ?? null), gatewayOpt);
+      const out = await ai.run(model, audioInputFor(model, bytes, opts.audioMime || '', opts.language ?? null), runOpt);
       // Silence and non-speech transcribe to an empty string. That is an
       // answer, not a failure: the clip contained no words, and reporting it
       // as an error would have the caller retry and pay again.
       const transcript = parseAudioOutput(model, out);
-      return { ok: true, output: transcript.text, transcript, prompt_tokens: 0, completion_tokens: 0 };
+      return { ok: true, output: transcript.text, transcript, prompt_tokens: 0, completion_tokens: 0, units: shapes.audioUnits(opts.audioMinutes) };
     }
     if (isEmbed) {
       const text = opts.text ?? defaultContentBlob(opts);
-      const out = await ai.run(model, { text }, gatewayOpt) as { data?: number[][]; shape?: number[] } | unknown;
-      const data = (out as { data?: number[][] })?.data;
-      const vec = Array.isArray(data) && Array.isArray(data[0]) ? data[0] : null;
-      if (!vec) return { ok: false, status: 502, error: 'unexpected embed response' };
-      return { ok: true, output: '', embedding: vec, prompt_tokens: estTokens(text), completion_tokens: 0 };
+      const out = await ai.run(model, shapes.embedRequest(text), runOpt);
+      const { vector, units } = shapes.parseEmbed(out, text);
+      if (!vector) return { ok: false, status: 502, error: 'unexpected embed response' };
+      return { ok: true, output: '', embedding: vector, prompt_tokens: units.tokens_in ?? 0, completion_tokens: 0, units };
     }
     // When the caller supplies `messages`, honor them — but still
     // inject `systemPrompt` as a leading system message unless the
@@ -884,30 +919,25 @@ async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed:
     // would silently drop ADVISOR_SYSTEM_PROMPT + persona context on
     // the Workers AI path while keeping it on the Anthropic path,
     // producing diverging guardrail behavior across providers.
-    const messages = opts.messages?.length
-      ? (
-          opts.systemPrompt && !opts.messages.some((m) => m.role === 'system')
-            ? [{ role: 'system' as const, content: opts.systemPrompt }, ...opts.messages]
-            : opts.messages
-        )
-      : [
-          ...(opts.systemPrompt ? [{ role: 'system' as const, content: opts.systemPrompt }] : []),
-          { role: 'user' as const, content: opts.text || '' },
-        ];
-    const payload: Record<string, unknown> = {
-      messages,
-      max_tokens: opts.maxTokens || 512,
-    };
-    if (opts.temperature != null) payload.temperature = opts.temperature;
-    if (opts.stream) payload.stream = true;
-    const raw = await ai.run(model, payload, gatewayOpt);
+    const messages = chatMessagesFor(opts);
+    // D761: the shape is the model's — a reasoning model gets its task's output
+    // budget and its control as its model page gives it (`./ai/shapes.ts`).
+    const payload = shapes.chatRequest(facts, messages, {
+      maxTokens: shapes.maxTokensFor(facts, opts.maxTokens, ROUTE[opts.task]?.reasoningMaxTokens),
+      temperature: opts.temperature,
+      stream: opts.stream,
+    });
+    const raw = await ai.run(model, payload, runOpt);
     // Streaming pass-through: Workers AI returns a ReadableStream of
     // SSE-formatted chunks when stream:true is set. We forward it
-    // verbatim to the caller; cost accounting falls back to estimated
-    // prompt tokens only since we don't see the completion side.
+    // verbatim to the caller once its first chunk arrives within the class's
+    // limit (D761); cost accounting falls back to estimated prompt tokens only
+    // since we don't see the completion side.
     if (opts.stream && raw && typeof (raw as ReadableStream).getReader === 'function') {
-      const promptTok = estTokens(messages.map(m => m.content).join('\n'));
-      return { ok: true, stream: raw as ReadableStream, prompt_tokens: promptTok, completion_tokens: 0 };
+      const units = shapes.streamOpenUnits(messages);
+      const opened = await shapes.firstChunkWithin(raw as ReadableStream, limitMs);
+      if (!opened) return { ok: false, status: 504, error: `no first chunk within ${limitMs}ms`, units };
+      return { ok: true, stream: opened, prompt_tokens: units.tokens_in ?? 0, completion_tokens: 0, units };
     }
     // Workers AI chat models return { response: string } or
     // { choices: [{ message: { content } }] } depending on model. Some
@@ -916,22 +946,27 @@ async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed:
     // nested shapes too so a valid reply is never silently dropped as empty,
     // which previously surfaced to the onboarding user as the degraded
     // "had trouble processing that" fallback even though the model answered.
-    type ChatShape = {
-      response?: string;
-      choices?: Array<{ message?: { content?: string } }>;
-      usage?: { prompt_tokens?: number; completion_tokens?: number };
-    };
-    const r = raw as ChatShape & { result?: ChatShape };
-    const pickText = (s?: ChatShape): string | undefined =>
-      s?.response ?? s?.choices?.[0]?.message?.content ?? undefined;
-    const text = pickText(r) ?? pickText(r.result) ?? '';
-    const usageObj = r.usage ?? r.result?.usage;
-    const promptTok = usageObj?.prompt_tokens ?? estTokens(messages.map(m => m.content).join('\n'));
-    const completionTok = usageObj?.completion_tokens ?? estTokens(text);
-    return { ok: true, output: String(text || ''), prompt_tokens: promptTok, completion_tokens: completionTok };
+    // D761: `reasoning_content` is never the answer (`shapes.parseChat`).
+    const { text, units } = shapes.parseChat(raw, facts, messages);
+    return { ok: true, output: text, prompt_tokens: units.tokens_in ?? 0, completion_tokens: units.tokens_out ?? 0, units };
   } catch (e) {
-    return { ok: false, status: 500, error: (e as Error).message };
+    const f = shapes.failureOf(e);
+    return { ok: false, status: f.status, code: f.code, error: (e as Error).message };
   }
+}
+
+/** The chat messages a run sends: the caller's, with `systemPrompt` leading unless they brought their own system message. */
+function chatMessagesFor(opts: RunOptions): shapes.ChatMessage[] {
+  return opts.messages?.length
+    ? (
+        opts.systemPrompt && !opts.messages.some((m) => m.role === 'system')
+          ? [{ role: 'system' as const, content: opts.systemPrompt }, ...opts.messages]
+          : opts.messages
+      )
+    : [
+        ...(opts.systemPrompt ? [{ role: 'system' as const, content: opts.systemPrompt }] : []),
+        { role: 'user' as const, content: opts.text || '' },
+      ];
 }
 
 // Task #31 — non-WAI providers removed from the production worker.
@@ -942,8 +977,14 @@ async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed:
 // on timeout so the caller can fall back to the smaller sibling.
 function withTimeout(p: Promise<ProviderResult>, ms: number): Promise<ProviderResult> {
   return new Promise((resolve) => {
-    const timer = setTimeout(() => resolve({ ok: false, status: 504, error: `timeout >${ms}ms` }), ms);
-    p.then((r) => { clearTimeout(timer); resolve(r); }, (e) => {
+    let late = false;
+    const timer = setTimeout(() => { late = true; resolve({ ok: false, status: 504, error: `timeout >${ms}ms` }); }, ms);
+    p.then((r) => {
+      clearTimeout(timer);
+      // D761: a stream that opens after its limit was already given up on is cancelled, not leaked.
+      if (late && r.stream) r.stream.cancel().catch(() => {});
+      resolve(r);
+    }, (e) => {
       clearTimeout(timer);
       resolve({ ok: false, status: 500, error: (e as Error).message });
     });
@@ -1093,7 +1134,9 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
       // Reserve the most expensive offered fallback, refund to the actual logged estimate.
       const inputBytes = new TextEncoder().encode(defaultContentBlob(opts)+(opts.systemPrompt || '')).byteLength;
       const promptBound = inputBytes + 4096 + (opts.messages?.length || 1) * 64;
-      const outputBound = opts.maxTokens || 512;
+      // D761: a reasoning model's output budget is its task's, not 512.
+      const outputBound = Math.max(...[primaryModel, ...(route.fallbackChain || [])]
+        .map((m) => shapes.maxTokensFor(shapes.factsFor(m), opts.maxTokens, route.reasoningMaxTokens)));
       if (!Number.isSafeInteger(outputBound) || outputBound < 1 || !Number.isFinite(opts.audioMinutes || 0) || (opts.audioMinutes || 0)<0) throw new Error('AI estimate unreadable');
       const models = [primaryModel,...(route.fallbackChain || [])];
       const quote = Math.max(...models.map(model=>estimateCostUsd(model,promptBound,outputBound,opts.audioMinutes || 0)));
@@ -1112,14 +1155,16 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
   }
 
   // ---- Primary call + fallback chain ----------------------------------
-  // Streaming bypasses the latency timeout (the stream opens fast but the
-  // body may legitimately exceed 8 s). Latency budget still applies to
-  // the synchronous Workers AI handshake before the stream opens because
-  // ai.run() resolves only once the upstream accepts the request.
+  // D761: each attempt's limit is its class's (`shapes.timeoutMs`: chat 8 s,
+  // reasoning and long context 30 s, images 60 s). A streamed run gets the
+  // same limit for the handshake and its first chunk; the body after that
+  // may legitimately run longer, so it is not timed.
   const gatewayRouted = isGatewayRouted(env, opts.task);
+  const inputTokens = route.isAudio ? 0 : estTokens(route.isEmbed ? (opts.text ?? defaultContentBlob(opts)) : chatMessagesFor(opts).map((m) => m.content).join('\n'));
+  const limitFor = (model: string): number => shapes.timeoutMs(shapes.factsFor(model), inputTokens);
   const callWaiRaw = (model: string, bypassGateway: boolean): Promise<ProviderResult> => {
-    if (opts.stream) return callWorkersAI(env, model, opts, !!route.isEmbed, bypassGateway);
-    return withTimeout(callWorkersAI(env, model, opts, !!route.isEmbed, bypassGateway), PRIMARY_TIMEOUT_MS);
+    const ms = limitFor(model);
+    return withTimeout(callWorkersAI(env, model, opts, !!route.isEmbed, bypassGateway, ms), ms);
   };
   // Task #50 — gateway-resilient call. For gateway-routed advisor tasks we
   // first hit the gatewayed path (keeps advisor analytics/cache/RL). If that
@@ -1128,7 +1173,26 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
   // before declaring the model dead. So a single shared-gateway outage can no
   // longer take onboarding down. Non-gateway tasks are unaffected (the first
   // call is already un-gatewayed, so no extra call is made).
+  const attempts: AttemptRecord[] = [];
+  const record = (model: string, r: ProviderResult, called = true): ProviderResult => {
+    attempts.push({
+      model, ok: r.ok, called,
+      ...(r.ok ? {} : { status: r.status, code: r.code ?? null }),
+      ...(called ? { timeout_ms: limitFor(model) } : {}),
+      ...(r.units ? { units: r.units } : {}),
+    });
+    return r;
+  };
   const callWai = async (model: string): Promise<ProviderResult> => {
+    // D761: an input the model's context window cannot hold skips the model
+    // without calling it. An unknown window always fits.
+    const facts = shapes.factsFor(model);
+    if (!route.isAudio && !shapes.fitsContext(facts, inputTokens, shapes.maxTokensFor(facts, opts.maxTokens, route.reasoningMaxTokens))) {
+      return record(model, { ok: false, status: 413, error: `input does not fit ${model}'s context window` }, false);
+    }
+    return record(model, await callWaiCalled(model));
+  };
+  const callWaiCalled = async (model: string): Promise<ProviderResult> => {
     const first = await callWaiRaw(model, false);
     if (first.ok || !gatewayRouted) return first;
     const retry = await callWaiRaw(model, true);
@@ -1150,6 +1214,10 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
 
   // Workers AI multi-hop fallback chain (spec: tool_call → advisor_turn →
   // role_detect, i.e. qwen32b → llama-70b → llama-8b).
+  //
+  // D761: every failure moves down the chain, a paid-only model's 429, or 403
+  // with code 5035, included (#1874 §7): the plan the account is on cannot run
+  // it, and a sibling may well answer.
   //
   // The chain skips the model that just failed. It never contained the route's
   // own primary, so this only bites once a caller can PICK one: a founder who
@@ -1210,7 +1278,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
 
   if (!attempt.ok) {
     await recordUsage(env, opts.userId, usage, 'all_models_failed', opts.surface);
-    return { ok: false, refusal: 'all_models_failed', error: lastError || 'provider failed', usage };
+    return { ok: false, refusal: 'all_models_failed', error: lastError || 'provider failed', usage, attempts };
   }
 
   // ---- Bump KV spend buckets ------------------------------------------
@@ -1263,6 +1331,8 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
     stream: attempt.stream,
     transcript: attempt.transcript,
     usage,
+    units: attempt.units,
+    attempts,
   };
 }
 

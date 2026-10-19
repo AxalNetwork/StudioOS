@@ -8,7 +8,9 @@
 // - **A field** is a Markdown task item (`- [ ]`) in a part's store body. Its
 //   id is `<slug>:<n>:<hash>`: the item's place among that body's task items,
 //   and the first 12 hex of the SHA-256 of its text. A reworded item gets a
-//   new id, so an old tick never lands on new words.
+//   new id, so an old tick never lands on new words. Its `group` is the text
+//   of the nearest Markdown heading above it (#1866): for the screen only,
+//   never in the digest or the frozen answers.
 // - **The digest** covers what the applicant sees: each part's slug, version
 //   and body hash, and the ticks, in canonical JSON. Submit freezes that same
 //   object under that digest; a body or tick that changed since is 409
@@ -41,7 +43,7 @@ import type { PaperInput, PaperPartInput } from './legalPaper';
 export const BOOKLET_FUND_SLUG = 'spinout-fund-i';
 
 /** Parts whose store body the booklet prints: the cover's legend, Parts 3 to 7, and Part 9. */
-const READ_PARTS = new Set([1, 3, 4, 5, 6, 7, 9]);
+export const READ_PARTS: ReadonlySet<number> = new Set([1, 3, 4, 5, 6, 7, 9]);
 /** Parts whose task items are the applicant's fields: Parts 3 to 7. Part 8 prints no LPA body. */
 const FIELD_PARTS = new Set([3, 4, 5, 6, 7]);
 
@@ -63,6 +65,8 @@ export interface BookletField {
   id: string;
   part: number;
   text: string;
+  /** #1866: the nearest heading above the item in the same body, or null. Screen only. */
+  group: string | null;
 }
 
 export interface ResolvedPart {
@@ -92,17 +96,21 @@ export function canonicalJson(v: unknown): string {
 }
 
 const TASK_ITEM = /^\s*[-*+]\s+\[[ xX]\]\s+(.*\S)\s*$/;
+const HEADING = /^\s{0,3}#{1,6}\s+(.*?)\s*#*\s*$/;
 
 /** The task items of one part's body, as fields with stable ids. */
 export async function bookletFields(slug: string, body: string, part = 0): Promise<BookletField[]> {
   const out: BookletField[] = [];
   let n = 0;
+  let group: string | null = null;
   for (const line of String(body || '').replace(/\r\n?/g, '\n').split('\n')) {
+    const h = line.match(HEADING);
+    if (h) { group = h[1].trim() || null; continue; }
     const m = line.match(TASK_ITEM);
     if (!m) continue;
     n++;
     const text = m[1];
-    out.push({ id: `${slug}:${n}:${(await sha256Hex(text)).slice(0, 12)}`, part, text });
+    out.push({ id: `${slug}:${n}:${(await sha256Hex(text)).slice(0, 12)}`, part, text, group });
   }
   return out;
 }
@@ -328,6 +336,11 @@ export async function answerBooklet(env: Env, booklet: BookletRow, userId: numbe
   ).bind(booklet.id, a.field_id, a.checked ? 1 : 0, userId)));
 }
 
+/** Submit's refusal sentence while parts have no text from counsel (also the catalog's, D758). */
+export function bookletMissingSentence(parts: number[]): string {
+  return `The booklet cannot be submitted yet: Part ${parts.join(', Part ')} has no text from counsel.`;
+}
+
 /** Freeze the booklet under the digest the applicant saw. */
 export async function submitBooklet(env: Env, booklet: BookletRow, digest: unknown): Promise<{ digest: string; submitted_at: string }> {
   if (booklet.status !== 'open') throw new BookletRefusal(409, 'booklet_not_open', 'This booklet is no longer open, so it cannot be submitted again.');
@@ -337,8 +350,7 @@ export async function submitBooklet(env: Env, booklet: BookletRow, digest: unkno
   const parts = await resolveParts(env);
   const missing = parts.filter((p) => p.missing).map((p) => p.part);
   if (missing.length) {
-    throw new BookletRefusal(409, 'booklet_part_missing',
-      `The booklet cannot be submitted yet: Part ${missing.join(', Part ')} has no text from counsel.`, { parts: missing });
+    throw new BookletRefusal(409, 'booklet_part_missing', bookletMissingSentence(missing), { parts: missing });
   }
   const frozen = frozenOf(parts, await ticksOf(env, booklet.id));
   const current = await sha256Hex(canonicalJson(frozen));
@@ -505,6 +517,19 @@ export function bookletParts(opts: {
 }
 
 /**
+ * The nine parts from a resolved view, unsigned: an applicant's booklet's
+ * shape, and the catalog's specimen (D758). One assembly, `bookletParts`.
+ */
+export function bookletPaperParts(resolvedParts: ReadonlyArray<Pick<ResolvedPart, 'part' | 'missing'>>, bodies: ReadonlyMap<number, string>,
+  applicant: string | null): PaperPartInput[] {
+  return bookletParts({
+    bodies: new Map(bodies),
+    missing: (n) => !!resolvedParts.find((x) => x.part === n)?.missing,
+    applicant,
+  });
+}
+
+/**
  * The booklet as #1776's paper reads it: the cover's legend as the body, and
  * the nine parts. A part with no text from counsel prints the stub sentence,
  * and the paper is then a Draft. A submitted booklet prints its frozen text
@@ -548,5 +573,35 @@ export async function bookletPaperInput(env: Env, booklet: BookletRow, signed?: 
       ? `Booklet ${booklet.uid} · digest ${booklet.digest.slice(0, 12)}`
       : `Booklet ${booklet.uid} · digest assigned when submitted`,
     parts,
+  };
+}
+
+/**
+ * D758 — the booklet's real paper with no booklet, for the Templates catalog:
+ * the shared part assembly with no ticks and no applicant, no copy number, in
+ * the specimen state. It reads the library rows the booklet prints and nothing
+ * else: no application, no booklet, no account. Page 1 is its cover.
+ */
+export async function bookletSpecimenInput(env: Env): Promise<PaperInput> {
+  const resolved = await resolveParts(env);
+  const none = new Map<string, boolean>();
+  const bodies = new Map<number, string>();
+  for (const p of resolved) {
+    if (!p.slug || p.missing || !READ_PARTS.has(p.part)) continue;
+    const tpl = await getTemplate(env, p.slug);
+    bodies.set(p.part, await tickedBody(p.slug, String(tpl?.body_md || ''), none));
+  }
+  return {
+    title: BOOKLET_TITLE,
+    body: bodies.get(1) ?? '',
+    slug: 'subscription_booklet',
+    bodySha256: await sha256Hex(canonicalJson(frozenOf(resolved, none))),
+    merge: 'brackets',
+    state: { kind: 'specimen' },
+    copyNumber: null,
+    offeree: null,
+    effectiveDate: null,
+    audit: 'Booklet id and digest assigned when submitted',
+    parts: bookletPaperParts(resolved, bodies, null),
   };
 }
