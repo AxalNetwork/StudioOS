@@ -47,14 +47,19 @@ export function pinchScale(startScale, startDistance, distance) {
   return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, (startScale * distance) / startDistance));
 }
 
-const FALLBACK_NOTE = 'These page breaks come from the fallback renderer. A sent copy may break differently.';
+export const FALLBACK_NOTE = 'These page breaks come from the fallback renderer. A sent copy may break differently.';
 const FAILED = 'The pages could not be drawn. Try again.';
 const pagerButton = 'text-[14px] font-bold disabled:cursor-default disabled:text-[#a29db0] dark:disabled:text-[#615c6e]';
 
 const isCancel = e => e?.name === 'RenderingCancelledException';
 const coarsePointer = () => typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)')?.matches;
 
-export default function PdfPages({ blob, renderer = null, title = 'Document', load = pdfjsSource.load }) {
+/**
+ * `controls({ page, pages, prev, next })` (#1854) replaces the pager and the
+ * pinch hint, for a host that places them itself; without it the viewer draws
+ * its own, as before.
+ */
+export default function PdfPages({ blob, renderer = null, title = 'Document', load = pdfjsSource.load, controls }) {
   const [doc, setDoc] = useState(null);
   const [pages, setPages] = useState(0);
   const [page, setPage] = useState(1);
@@ -199,14 +204,19 @@ export default function PdfPages({ blob, renderer = null, title = 'Document', lo
           style={pinch != null ? { transform: `scale(${pinch})`, transformOrigin: 'top center' } : undefined}
         />
       </div>
-      {doc && (
+      {doc && controls && controls({
+        page, pages,
+        prev: () => setPage(n => Math.max(1, n - 1)),
+        next: () => setPage(n => Math.min(pages, n + 1)),
+      })}
+      {doc && !controls && (
         <div className="flex items-center justify-between gap-3 px-3 py-2">
           <button type="button" className={`${pagerButton} text-[#18181b] dark:text-[#f4f3f7]`} disabled={page <= 1} onClick={() => setPage(n => Math.max(1, n - 1))}>‹ Previous</button>
           <span role="status" className="text-[14px] font-bold">{`Page ${page} of ${pages}`}</span>
           <button type="button" className={`${pagerButton} text-[#881337] dark:text-rose-300`} disabled={page >= pages} onClick={() => setPage(n => Math.min(pages, n + 1))}>Next ›</button>
         </div>
       )}
-      {doc && coarsePointer() && <p className="pb-2 text-center text-[11.5px] text-gray-500 dark:text-gray-400">Pinch to zoom</p>}
+      {doc && !controls && coarsePointer() && <p className="pb-2 text-center text-[11.5px] text-gray-500 dark:text-gray-400">Pinch to zoom</p>}
     </div>
   );
 }

@@ -22,11 +22,12 @@ can be read to find out what a rule actually is.
 | `secEdgarCompanies.mjs` | What a SEC EDGAR company row carries and how a migration is written from EDGAR's company_tickers_exchange.json: one row per CIK, the first listing as its ticker, nothing EDGAR does not record, every row citing its source and licence, `INSERT OR IGNORE` in batches of 100. The header number is the leading digits of `--out` (404 created the table; 412 holds the rows). Owned by `../import-sec-edgar.mjs` (D595). |
 | `claudeReview.mjs` | The advisory Claude review's rules: its settings and their bounds, which pull requests may be reviewed (never a fork or Dependabot), the diff parse, which files are sent and in what order, the prompt with its nonce-fenced untrusted data, the output schema and the validation of every finding against the diff, the cost estimate and the per-review and monthly caps, the artifact-name ledger, and the escaped summary and annotations. Owned by `../claude-review/review.mjs`. |
 | `claudeReviewRun.mjs` | The whole review run with git, the GitHub API and the Anthropic client handed in, so a missing secret, a fork, an empty or oversized diff, a repeat, a budget refusal, an API failure, a refusal and a malformed answer are all tested with fakes. |
+| `webhookGuard.mjs` | Whether the WhatsApp webhook refuses an unsigned POST (D754): any 2xx fails, 401 or 403 passes as guarded, 503 passes as not configured yet, and any other answer or an unreachable host is not this check's business. The probe takes `fetch` handed in, so it is tested with fakes; it never calls Meta and needs no secret. Owned by `../check-spa-live.mjs`. |
 
 ## Tests
 
-`npm run test:retention` runs every `*.test.mjs` in this folder. Thirteen of the
-fourteen modules are covered here; `migrationPlan.mjs` is the exception, and
+`npm run test:retention` runs every `*.test.mjs` in this folder. Fourteen of the
+fifteen modules are covered here; `migrationPlan.mjs` is the exception, and
 deliberately so — its behaviour is pinned against a real SQLite database by
 `cloudflare-worker/test/migrate_d1_plan.test.ts` and
 `cloudflare-worker/test/migrations_fresh_build.test.ts`, which run the actual

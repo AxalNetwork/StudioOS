@@ -26,6 +26,14 @@ fills each, Kind and Axal VC party, Save draft and Publish v[N]. It is
 read-only on a branch Worker. `PublishDialog.jsx` asks before publishing one
 template or withdrawing a stub's publication, and prints the Worker's refusal.
 
+D717 (#1851): Templates (`?tab=templates`) is the L9 catalog.
+`TemplateCatalog.jsx` draws the toolbar (search, layer, the five state
+segments), the layer sections of cards with their page-1 thumbnails (four at a
+time, `frontend/src/lib/thumbnailQueue.js`) and the "Not in the catalog" group.
+`FundIDocumentsPanel.jsx` is the Fund I documents panel, in signing order.
+`PushResults.jsx` reports Push to branches per branch: Reached, Failed or Not
+reached. On a branch Worker the tab is read-only.
+
 D717 (#1853): `PdfPages.jsx` is the page viewer: a PDF drawn one page at a time on
 a canvas with pdf.js (pinned `pdfjs-dist`, legacy build, loaded only when it
 mounts), "Page X of Y", Previous and Next, and pinch-to-zoom on touch; the only
@@ -34,3 +42,11 @@ unsaved draft's PDF from `render.pdf`, drawn on opening and on Redraw pages,
 never per keystroke. `VersionCompare.jsx` is Compare versions: any two versions,
 or one and the draft, as Markdown text with `<del>` and `<ins>`; Restore copies
 a body into the draft and saves nothing, and is hidden on a branch.
+
+D717 (#1854): below `md` the Templates tab is the phone's read-only list.
+`TemplateCatalogPhone.jsx` draws the templates by layer, each row with its
+page-1 thumbnail, kind and state, and opens `?preview=<slug>`.
+`FilterSheet.jsx` is its Layer, State and Kind sheet, a draft until "Show [n]
+templates". `TemplatePreviewPhone.jsx` shows the saved version's PDF one page
+at a time through `PdfPages.jsx`, read-only. `TemplateThumbnail.jsx` is the
+page-1 thumbnail and its queue of four, shared with `TemplateCatalog.jsx`.

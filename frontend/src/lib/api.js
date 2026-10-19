@@ -26,6 +26,7 @@ export * from './api/cycleWrites.js';
 export * from './api/cycles.js';
 export * from './api/eadwyn.js';
 export * from './api/fundAdmin.js';
+export * from './api/fundBooklets.js';
 export * from './api/fundFees.js';
 export * from './api/fundLedger.js';
 export * from './api/fundNotices.js';
@@ -211,6 +212,9 @@ export function isPublicPath(pathname) {
     || currentPath === '/intelligence'
     || currentPath === '/resources'
     || currentPath === '/contact'
+    // D756 (#1894) — an interviewee reaches these from a chat link and has no account here.
+    || currentPath === '/privacy'
+    || currentPath === '/privacy/interviews'
     // Task #5 — /articles is the public Articles hub (Browse tab is the
     // default, anonymous-visible surface). Keep it reachable for signed-
     // out visitors when a background fetch (settings/me) 401s. The
@@ -354,7 +358,6 @@ export const SLOW_PATHS = [
   /^\/deck-reviewer\/[^/]+\/regenerate$/,
   /^\/decks\/generate$/,
   /^\/funds\/[^/]+\/regenerate-lpa$/,
-  /^\/legal\/templates\/[^/]+\/generate$/,
   /^\/legalcap\/legal\/generate$/,
   /^\/profiling\/chat$/,                 // onboarding chat
   /^\/references\/[^/]+\/(transcribe|summarize)$/,
@@ -992,22 +995,6 @@ export const api = {
 
   listTemplates: () => request('/legal/templates'),
   getTemplateContent: (key) => request(`/legal/templates/${key}`),
-  // The worker takes the template key in the PATH (legal.ts:784
-  // `POST /legal/templates/:key/generate`); there is no
-  // `/legal/documents/generate` and there never was, so every call from
-  // LegalPage's generate dialog hit a route the worker does not mount. The
-  // form's `doc_type` IS the template key, so it moves into the path and the
-  // rest of the form travels as the body.
-  //
-  // Two worker behaviours the caller should expect: the document title comes
-  // from the template, not from `title` in the body; and a contract-type
-  // template returns 409 {code:'use_esign_envelope'} because contracts must be
-  // issued through POST /legal/esign/send rather than minted as a documents row.
-  generateDocument: ({ doc_type, ...fields }) =>
-    request(`/legal/templates/${encodeURIComponent(doc_type)}/generate`, {
-      method: 'POST',
-      body: JSON.stringify(fields),
-    }),
   listDocuments: (projectId) => request(`/legal/documents${projectId ? `?project_id=${projectId}` : ''}`),
   getDocument: (id) => request(`/legal/documents/${id}`),
   incorporateProject: (projectId) => request(`/legal/incorporate?project_id=${projectId}`, { method: 'POST' }),
@@ -2117,7 +2104,8 @@ export const api = {
     if (!res.ok) throw await refusalError(res, 'PDF generation failed');
     const blob = await res.blob();
     const filename = (res.headers.get('Content-Disposition') || '').match(/filename="?([^"]+)"?/)?.[1] || `${slug}-preview.pdf`;
-    return { blob, url: URL.createObjectURL(blob), filename };
+    // #1854: the renderer that drew it, so the phone preview can say when page breaks are the fallback's.
+    return { blob, url: URL.createObjectURL(blob), filename, renderer: res.headers.get('X-Axal-Renderer') };
   },
   // D711 — a template as Word, with a `docx_export` registry row (binary
   // endpoint, not typed drift).

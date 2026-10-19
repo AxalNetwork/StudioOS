@@ -1,6 +1,7 @@
 /**
  * D717 (#1782), intake #1850 — the "Legal Documents · Templates" canvas lands
- * in design/incoming, triaged.
+ * in design/incoming, triaged; #1854 moved it to design/canvases/integrated
+ * when it closed #1782 (2026-10-19).
  *
  * Sixteen tasks across S07 to S14 build its boards, and a slot on another
  * account cannot open the artifact link, so the canvas has to be a file here
@@ -16,12 +17,19 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const at = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const FILE = 'Legal Documents · Templates.dc.html';
-const html = at(`design/incoming/${FILE}`);
+const html = at(`design/canvases/integrated/${FILE}`);
+
+test('D717 the canvas graduated: in integrated/, gone from incoming/, and both READMEs count the folder', () => {
+  assert.ok(!existsSync(resolve(process.cwd(), `design/incoming/${FILE}`)), 'no longer in design/incoming/');
+  const integrated = readdirSync(resolve(process.cwd(), 'design/canvases/integrated')).filter((f) => f.endsWith('.dc.html')).length;
+  assert.ok(at('design/canvases/README.md').includes(`| \`integrated/\` | ${integrated} |`), `design/canvases/README.md says integrated/ holds ${integrated}`);
+  assert.ok(at('design/incoming/README.md').includes(`| \`canvases/integrated/\` | ${integrated} — `), `design/incoming/README.md says integrated/ holds ${integrated}`);
+});
 
 test('D717 the canvas is committed in the processed format', () => {
   assert.equal(/<script src="([^"]*)"/.exec(html)?.[1], './support.js', 'the first script is the shared runtime');
@@ -73,21 +81,25 @@ test('D717 the README row names the four routes, the grade and #1782, and says t
   assert.ok(row.includes('there is no L13'));
 });
 
-test('D717 ROUTE_MAP triages L9 to L12: L9\'s editor, L10 and L11 are CURRENT; L9\'s other rows and L12 wait on their PRs', () => {
+test('D717 ROUTE_MAP triages L9 to L12: L9\'s editor and catalog, L10 and L11 are CURRENT; L9\'s other rows and L12 wait on their PRs', () => {
   const map = at('documentation/architecture/ROUTE_MAP.md');
   const start = map.indexOf('### Legal templates Worker contract (D717, #1782)');
   const end = map.indexOf('\n### ', start + 1);
   assert.ok(start > 0 && end > start);
   const section = map.slice(start, end);
-  assert.ok(section.includes(`\`design/incoming/${FILE}\``), 'the section names the file');
+  assert.ok(section.includes(`\`design/canvases/integrated/${FILE}\``), 'the section names the file where it lives');
   const rows = section.split('\n').filter((l) => l.startsWith('| L'));
-  // L9's editor and publish frames shipped in #1918 (#1852); its catalog (#1851) and Pages and History (#1853) have not.
+  // L9's editor and publish frames shipped in #1918 (#1852) and its catalog in #1851; its Pages and History (#1853) have not.
   const editor = (l) => l.startsWith('| L9 `editor`');
+  const catalog = (l) => l.startsWith('| L9 "The Templates tab · desktop"');
+  const l9Catalog = rows.filter(catalog);
+  assert.equal(l9Catalog.length, 1, 'a row for L9\'s catalog');
+  assert.ok(/\| CURRENT \|/.test(l9Catalog[0]), 'L9\'s catalog is CURRENT: #1851 merged');
   const l9Editor = rows.filter(editor);
   assert.equal(l9Editor.length, 1, 'a row for L9\'s editor');
   assert.ok(/\| CURRENT \|/.test(l9Editor[0]), 'L9\'s editor is CURRENT: #1918 merged');
   for (const board of ['L9', 'L12']) {
-    const own = rows.filter((l) => l.startsWith(`| ${board} `) && !editor(l));
+    const own = rows.filter((l) => l.startsWith(`| ${board} `) && !editor(l) && !catalog(l));
     assert.ok(own.length, `a row for ${board}`);
     for (const l of own) assert.ok(!/\| CURRENT \|/.test(l), `${board} is not CURRENT`);
   }

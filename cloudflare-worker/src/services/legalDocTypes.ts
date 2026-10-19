@@ -56,10 +56,10 @@ const DOC_TYPE_TO_TEMPLATE_KEY: Record<string, LegalTemplateKey> = {
 };
 
 /**
- * Returns null when no Y-1 template matches; callers should fall back to the
- * legacy `buildTemplateBody` path in that case (e.g. legacy
- * `Subscription Booklet & LPA` style document_type values used by the older
- * profile flows).
+ * Returns null when no Y-1 template matches. A send then has only the store
+ * row to draw from (e.g. `Subscription Booklet & LPA` style document_type
+ * values used by the older profile flows), and is refused when that row has
+ * no body (D758).
  */
 export function templateKeyForDocType(docType: string | null | undefined): LegalTemplateKey | null {
   if (!docType) return null;

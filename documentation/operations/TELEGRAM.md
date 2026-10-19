@@ -21,7 +21,7 @@ Each part says what it waits on:
 | Part | Lands with |
 | --- | --- |
 | The bot's health on `/admin/telegram` and **Register webhook** there; the 24-hour window from the contact's last message; the `bizChat` button's answer | #1963 (D756 `S10-ready`, #1895) |
-| `TELEGRAM_CHANNEL` read by the Worker (`off` / `canary` / `on`) | #1950 (D754 `w1_switch_on`, #1892), which gates both providers |
+| `TELEGRAM_CHANNEL` read by the Worker (`off` / `canary` / `on`) | #1950 (D754 `w1_switch_on`, #1892), which gates both providers; **on `main`** since 2026-10-19 |
 | D754's consent store and gate, which hold every voice note until consent | #1954 (D754 `w2_consent`, #1893) |
 | The recording notice page, `/privacy/interviews` | #1894 (D756 `S11-notice`) |
 | Voice notes, audio files and round videos read, with the 5 MB cap | #1896 (D756 `S13-media`) |
@@ -31,11 +31,10 @@ Each part says what it waits on:
 | Consent state and notes in Record a Session and the inbox | #1981 (D756 `S11-validate`) |
 | Yes/No buttons on the notice | D756's buttons task, not filed: it waits on step 7's probe |
 
-**Do not set the three secrets before #1950 and #1954 have merged.** Until
-#1950 is on `main` the Worker does not read `TELEGRAM_CHANNEL`, so the secrets
-alone would show Telegram to every member; until #1954 is on `main`, an
-assigned chat's voice notes would be transcribed without the interviewee's
-consent, which is D684's old behaviour.
+**Do not set the three secrets before #1954 has merged.** #1950 is on `main`,
+so `TELEGRAM_CHANNEL` (shipped `canary`) already keeps Telegram from members;
+but until #1954 is on `main`, an assigned chat's voice notes would be
+transcribed without the interviewee's consent, which is D684's old behaviour.
 
 ## 1. Owner steps, in order
 

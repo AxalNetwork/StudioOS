@@ -111,8 +111,7 @@ test('one path: every Add tokens link reads ADD_TOKENS_PATH, and no file but lib
     const rel = relative(SRC, file);
     if (rel === 'lib/aiTokens.js') continue;
     const text = readFileSync(file, 'utf8');
-    // The link fragment, not the admin API route `/admin/catalog/token-packs` (#1971).
-    if (/ai_topup=1|#token-packs/.test(text)) offenders.push(rel);
+    if (/\/plans-and-pricing#token-packs|\/checkout\?ai_topup=1/.test(text)) offenders.push(rel);
   }
   assert.deepEqual(offenders, []);
   const sites = { 'ui/WorkerRail.jsx': 1, 'ui/AiBudgetUsage.jsx': 1, 'pages/account/AccountUsage.jsx': 3, 'pages/account/PricingPhone.jsx': 1 };

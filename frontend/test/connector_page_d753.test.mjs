@@ -294,7 +294,8 @@ test('every card, row and phone row links its page; nothing on the hub opens a s
   assert.equal(hrefOf(discover, 'connector-open-calendly'), '/account/connectors/calendly', 'the "+"');
   assert.equal(hrefOf(discover, 'connector-open-stripe'), '/account/connectors/stripe', 'the check');
   assert.equal(hrefOf(discover, 'connector-open-mercury'), '/account/connectors/mercury', 'the entity Open');
-  for (const k of ['calendly', 'stripe', 'salesforce', 'crunchbase']) assert.equal(hrefOf(discover, `connector-name-${k}`), `/account/connectors/${k}`, k);
+  // D753 F6 (#1877): one stretched link per card, `connector-open-<key>`, covers the whole card.
+  for (const k of ['calendly', 'stripe', 'salesforce', 'crunchbase']) assert.equal(hrefOf(discover, `connector-open-${k}`), `/account/connectors/${k}`, k);
   assert.match(discover, /data-testid="connector-card-salesforce" data-action="notify"/);
   const yours = renderToStaticMarkup(h(MemoryRouter, { initialEntries: ['/account/connectors'] }, h(ConnectorsView, { data: ready() })));
   assert.equal(hrefOf(yours, 'connector-row-stripe'), '/account/connectors/stripe');
