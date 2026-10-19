@@ -779,7 +779,8 @@ sessions.post('/sessions/:id/finish', async (c) => {
   const body = await c.req.json<any>().catch(() => ({}));
   const lastSeq = Number(body?.last_seq);
   if (!Number.isSafeInteger(lastSeq) || lastSeq < 0 || lastSeq >= MAX_CHUNKS) return json({ detail: 'invalid_last_seq', max: MAX_CHUNKS - 1 }, 400);
-  const out = await finishSession(c.env, s.session, s.user.id, lastSeq, body?.auto !== false);
+  // D770 (#2095): only the Stop sheet's "Summarise and place with Eadwyn" sends `auto: true`; anything else is manual.
+  const out = await finishSession(c.env, s.session, s.user.id, lastSeq, body?.auto === true);
   return json({ ok: true, processing: { stage: out.stage, done: out.done, total: out.total, error: null }, queued: out.queued }, 202);
 });
 
