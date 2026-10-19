@@ -9,6 +9,7 @@ import { liveRefusal } from '../../lib/activeRecording.js';
 import { cycleValidateApi } from '../../lib/api/cycleValidate.js';
 import { useActiveCompany } from '../../contexts/ActiveCompanyContext';
 import { AssistantEntry } from './AssistantEntry';
+import { WhatsAppEntry, useWhatsAppLink } from '../account/WhatsAppWayB';
 import { SchedulePanel } from './InterviewChannels';
 import { assignedSentence, threadRow } from './channelThreads.js';
 import { recordSourceLine } from '../../lib/validateSourceWording.js';
@@ -197,6 +198,9 @@ export default function RecordLightbox({
   const [board, setBoard] = useState(initialBoard);
   const [selected, setSelected] = useState(null); // null: the defaults (the first two), until the founder toggles one
   const [assistant, setAssistant] = useState(false);
+  // D754 way B (#1939): "From WhatsApp", read only once the founder opens it.
+  const [fromWhatsApp, setFromWhatsApp] = useState(false);
+  const whatsappLink = useWhatsAppLink(channelsSource, { enabled: fromWhatsApp });
   // Who, picked from the recruiting pipeline (§5.1.7): booked first. Closed until asked for.
   const [picked, setPicked] = useState(null);
   const [pipeline, setPipeline] = useState({ open: false, status: 'idle', rows: [] });
@@ -508,10 +512,12 @@ export default function RecordLightbox({
           )}
           <div className="flex flex-wrap gap-x-4 gap-y-1 pt-0.5">
             <button type="button" aria-expanded={assistant} aria-controls="record-assistant" onClick={() => setAssistant((v) => !v)} className="text-[12px] font-semibold text-axal-violet underline dark:text-violet-300" data-testid="record-assistant-link">Send it from your AI assistant</button>
+            <button type="button" aria-expanded={fromWhatsApp} aria-controls="record-whatsapp" onClick={() => setFromWhatsApp((v) => !v)} className="text-[12px] font-semibold text-axal-violet underline dark:text-violet-300" data-testid="record-whatsapp-link">Send it from WhatsApp</button>
             <button type="button" aria-expanded={scheduleLater} aria-controls="record-schedule" onClick={scheduleCall} disabled={planning.busy} className="text-[12px] font-semibold text-axal-violet underline dark:text-violet-300" data-testid="record-schedule-link">{planning.busy ? 'Adding them to your pipeline…' : 'Schedule the call for later'}</button>
           </div>
           {planning.error && <p role="alert" className="m-0 text-[12px] font-semibold text-red-700 dark:text-red-400" data-testid="record-schedule-error">{planning.error}</p>}
           {assistant && <div id="record-assistant" className="-mx-1"><AssistantEntry companyName={active?.company_name || ''} /></div>}
+          {fromWhatsApp && <div id="record-whatsapp" className="-mx-1"><WhatsAppEntry read={whatsappLink.read} /></div>}
           {who && scheduleLater && <div id="record-schedule" className="-mx-1"><SchedulePanel interview={who} /></div>}
         </Section>
 

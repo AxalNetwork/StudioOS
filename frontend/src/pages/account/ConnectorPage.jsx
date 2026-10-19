@@ -42,8 +42,13 @@ import { ZOOM_DISCONNECT_NOTE, ZOOM_SECTIONS, usedByLinks, zoomHowItWorks, zoomN
  * description of the connector, D753 decision 4(b)), the page draws About,
  * Tools, Prompts, the trust notice and Details from it (`ConnectorBody`), and
  * the header's line becomes its tagline. Without `body` it draws F1's About
- * and Details from the catalogue row. The read that fills `body`
- * (`connectorsApi.page`) comes with its route (W2, #1878).
+ * and Details from the catalogue row.
+ *
+ * THE READ (#1955, part 2). Handed `readPage` (`connectorsApi.page`), the view
+ * reads `GET /api/connectors/directory/<page_key>` once the connector is known,
+ * and again only on Retry. Only `{ ok: true, connector }` fills the body;
+ * anything else is unreadable, section by section, while the band and Connect
+ * keep working from the catalogue.
  */
 
 const BOX = 'rounded-axal-sm border border-axal-hairline bg-white p-5 text-[13px] text-axal-ink dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200';
@@ -61,11 +66,11 @@ function CataloguePage({ connectorKey }) {
   const user = useAuth()?.user ?? null;
   // Decision 3's not-offered words for an admin on a branch, computed as the hub does.
   const branchAdmin = user?.role === 'admin' && !!branchOfUser(user);
-  return <ConnectorPageView data={data} connectorKey={connectorKey} phone={phone} branchAdmin={branchAdmin} />;
+  return <ConnectorPageView data={data} connectorKey={connectorKey} phone={phone} branchAdmin={branchAdmin} readPage={connectorsApi.page} />;
 }
 
 /** The page, drawn from one `useConnectors()` read; exported so a test can hand it each state. */
-export function ConnectorPageView({ data, connectorKey, phone = false, branchAdmin = false, body = null, onBodyRetry }) {
+export function ConnectorPageView({ data, connectorKey, phone = false, branchAdmin = false, body = null, onBodyRetry, readPage = null }) {
   const location = useLocation();
   const navigate = useNavigate();
   const entry = pageEntry({ data, key: connectorKey });
@@ -90,6 +95,10 @@ export function ConnectorPageView({ data, connectorKey, phone = false, branchAdm
     return () => { document.title = previous; };
   }, [title]);
 
+  const read = usePageRead(readPage, body ? null : p?.page_key || p?.key || null);
+  const shownBody = body || read.body;
+  const retryBody = body ? onBodyRetry : read.retry;
+
   if (entry.state === 'alias') {
     return <Navigate to={{ pathname: entry.to, search: location.search, hash: location.hash }} state={location.state} replace />;
   }
@@ -111,7 +120,7 @@ export function ConnectorPageView({ data, connectorKey, phone = false, branchAdm
     );
   }
 
-  const tagline = headerTagline(p, body?.state === 'ready' ? body.connector : null);
+  const tagline = headerTagline(p, shownBody?.state === 'ready' ? shownBody.connector : null);
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="connector-page" data-state="ready" data-key={p.key}>
       {back}
@@ -132,8 +141,8 @@ export function ConnectorPageView({ data, connectorKey, phone = false, branchAdm
 
       <ConnectRegion p={p} ret={returned?.ret || null} onChanged={data.reload} />
       {p.key === 'zoom' && <ZoomValidate p={p} />}
-      {body
-        ? <ConnectorBody state={body.state} connector={body.connector} p={p} onRetry={onBodyRetry} />
+      {shownBody
+        ? <ConnectorBody state={shownBody.state} connector={shownBody.connector} p={p} onRetry={retryBody} />
         : (
           <>
             <About p={p} />
@@ -309,6 +318,30 @@ function Details({ p }) {
 }
 
 // ---------- The body (#1955, F7) -------------------------------------------
+
+/**
+ * The page's own read: once per key, again on `retry`. `body` is null while
+ * there is nothing to read (no `readPage`, or no key yet).
+ */
+function usePageRead(readPage, key) {
+  const [attempt, setAttempt] = useState(0);
+  const [got, setGot] = useState({ key: null, state: 'loading', connector: null });
+  useEffect(() => {
+    if (!readPage || !key) return undefined;
+    let live = true;
+    setGot({ key, state: 'loading', connector: null });
+    Promise.resolve()
+      .then(() => readPage(key))
+      .then((r) => {
+        if (!live) return;
+        const ok = r?.ok === true && r.connector && typeof r.connector === 'object';
+        setGot({ key, state: ok ? 'ready' : 'unreadable', connector: ok ? r.connector : null });
+      }, () => { if (live) setGot({ key, state: 'unreadable', connector: null }); });
+    return () => { live = false; };
+  }, [readPage, key, attempt]);
+  if (!readPage || !key) return { body: null, retry: undefined };
+  return { body: got.key === key ? got : { key, state: 'loading', connector: null }, retry: () => setAttempt((n) => n + 1) };
+}
 
 const CHIP = 'rounded-full border border-axal-hairline bg-axal-ground px-2.5 py-1 text-[12px] text-axal-ink dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200';
 const TOOL = 'min-w-0 break-words rounded-axal-sm border border-axal-hairline bg-axal-ground px-2.5 py-1.5 text-[12.5px] text-axal-ink dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200';

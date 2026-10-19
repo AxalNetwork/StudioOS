@@ -1,8 +1,9 @@
 /**
- * D753 (#1955, F7, part 1) — a connector's page body, drawn from the
- * Worker's description of it: About, Tools, Prompts, the trust notice and
- * Details (D753 decision 3, items 5 to 10), the header's tagline, and the
- * catalogue's new page fields. No test calls the network.
+ * D753 (#1955, F7) — a connector's page body, drawn from the Worker's
+ * description of it: About, Tools, Prompts, the trust notice and Details
+ * (D753 decision 3, items 5 to 10), the header's tagline, the catalogue's new
+ * page fields, and the page's own read of it (part 2, through a stubbed
+ * `readPage`). No test calls the network.
  *
  * The fixtures are W1's own descriptors for GitHub, HubSpot and Figma
  * (`pageDescriptor` in `cloudflare-worker/src/integrations/connectorPages.ts`
@@ -14,15 +15,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import React from 'react';
+import React, { act } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
+import { installDocument } from './_contracts_dom.mjs';
 
 import { ConnectorBody, ConnectorPageView } from '../src/pages/account/ConnectorPage.jsx';
 import {
   DETAIL_MISSING, addedLabel, bodyDetailsRows, headerTagline, safeHref, toolGroups,
 } from '../src/pages/account/connectorPageModel.js';
-import { CATEGORY_ORDER, buildCatalogue, categoryOrderFrom, discoverChips } from '../src/pages/account/connectorsModel.js';
+import { FIRST_PARTY, buildCatalogue } from '../src/pages/account/connectorsModel.js';
 
 const h = React.createElement;
 const flat = (s) => s.replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/\s+/g, ' ');
@@ -456,8 +459,7 @@ const section = (html, id) => {
   const start = html.lastIndexOf('<', at);
   const tag = html.slice(start + 1, html.indexOf(' ', start));
   let depth = 0;
-  // Every opening or closing tag, by a fixed pattern; only this element's name counts.
-  const re = /<(\/?)([a-zA-Z][\w-]*)[\s>]/g;
+  const re = /<(\/?)([a-zA-Z][a-zA-Z0-9]*)[\s>]/g;
   re.lastIndex = start;
   for (let m; (m = re.exec(html));) {
     if (m[2] !== tag) continue;
@@ -595,7 +597,7 @@ test('Details: a missing value reads "Not recorded" with DETAIL_MISSING; an http
 
   const html = body(c);
   assert.ok(!/javascript:|http:\/\/example|data:text/.test(html), 'no unsafe link reaches the page');
-  assert.match(section(html, 'connector-page-details'), new RegExp(`title="${DETAIL_MISSING}">Not recorded`));
+  assert.ok(section(html, 'connector-page-details').includes(`title="${DETAIL_MISSING}">Not recorded`));
   assert.ok(html.includes('>Support ↗'));
 
   assert.equal(safeHref('https://example.test/x'), 'https://example.test/x');
@@ -631,7 +633,7 @@ const page = (props) => renderToStaticMarkup(h(MemoryRouter, { initialEntries: [
 
 test('The page: the body replaces F1\'s About and Details, the tagline comes from it, and the band and Connect stay', () => {
   const html = page({ body: { state: 'ready', connector: HUBSPOT } });
-  assert.match(section(html, 'connector-page-tagline'), new RegExp(HUBSPOT.tagline.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.ok(section(html, 'connector-page-tagline').includes(HUBSPOT.tagline));
   assert.ok(!html.includes('HubSpot card description.'));
   assert.equal((html.match(/data-testid="connector-page-about"/g) || []).length, 1);
   assert.ok(html.includes('data-testid="connector-page-body"'));
@@ -648,9 +650,96 @@ test('The page: the body replaces F1\'s About and Details, the tagline comes fro
   assert.equal(headerTagline({ description: 'card' }, { tagline: 'body' }), 'body');
 });
 
+// ---------------------------------------------------------------- the read (part 2)
+
+async function mountPage(props, url = '/account/connectors/hubspot') {
+  const restoreDoc = installDocument();
+  if (!document.documentElement?.classList) document.documentElement = { ...(document.documentElement || {}), classList: { contains: () => false } };
+  globalThis.addEventListener = () => {};
+  globalThis.removeEventListener = () => {};
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  const settle = () => act(async () => { for (let i = 0; i < 4; i += 1) await new Promise((r) => setTimeout(r, 0)); });
+  await act(async () => { root.render(h(MemoryRouter, { initialEntries: [url] }, h(ConnectorPageView, props))); });
+  await settle();
+  const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
+  const textOf = (n) => (!n ? '' : n.nodeType === 3 ? n.textContent || '' : n.childNodes?.length ? n.childNodes.map(textOf).join(' ') : n.textContent || '');
+  const pr = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
+  const by = (id) => walk(container).find((n) => pr(n)['data-testid'] === id);
+  const text = (n = container) => textOf(n).replace(/\s+/g, ' ').trim();
+  const buttons = (n = container) => walk(n).filter((x) => x.tagName === 'BUTTON' || x.nodeName === 'BUTTON');
+  return {
+    by, text, buttons, settle,
+    async press(node) { await act(async () => { await pr(node).onClick?.({ preventDefault() {}, stopPropagation() {} }); }); await settle(); },
+    async unmount() { await act(async () => root.unmount()); restoreDoc(); },
+  };
+}
+const reader = (answers) => {
+  const calls = [];
+  return { calls, readPage: async (key) => { calls.push(key); const a = answers[Math.min(calls.length - 1, answers.length - 1)]; if (a instanceof Error) throw a; return a; } };
+};
+
+test('The read: one call on mount, by the row\'s page_key; the answer fills the body and the tagline', async () => {
+  const r = reader([{ ok: true, connector: HUBSPOT }]);
+  const m = await mountPage({ data: pageData(ROW(HUBSPOT, { page_key: 'hubspot' })), connectorKey: 'hubspot', readPage: r.readPage });
+  try {
+    assert.deepEqual(r.calls, ['hubspot'], 'exactly one read on mount');
+    assert.equal(m.text(m.by('connector-page-tagline')), HUBSPOT.tagline);
+    assert.ok(m.text(m.by('connector-page-trust')).includes(HUBSPOT.trust.sentence.slice(0, 30)));
+    await m.settle();
+    assert.equal(r.calls.length, 1, 'no second read after the answer lands');
+  } finally { await m.unmount(); }
+
+  const alias = reader([{ ok: true, connector: HUBSPOT }]);
+  const a = await mountPage({ data: pageData(ROW(HUBSPOT, { page_key: 'hubspot-directory' })), connectorKey: 'hubspot', readPage: alias.readPage });
+  try { assert.deepEqual(alias.calls, ['hubspot-directory'], 'the Worker\'s page_key, not the row key'); } finally { await a.unmount(); }
+});
+
+test('The read: a refused or malformed answer makes each section unreadable with Retry; the band and Connect keep working; Retry reads once more', async () => {
+  for (const bad of [new Error('network'), { ok: false, error: 'nope' }, { ok: false, connector: HUBSPOT }, { ok: 'true', connector: HUBSPOT }, { ok: true }, { ok: true, connector: 'text' }, null]) {
+    const r = reader([bad, { ok: true, connector: HUBSPOT }]);
+    const m = await mountPage({ data: pageData(ROW(HUBSPOT, { available: true })), connectorKey: 'hubspot', readPage: r.readPage });
+    try {
+      assert.deepEqual(r.calls, ['hubspot']);
+      const about = m.by('connector-page-about');
+      const tools = m.by('connector-page-tools');
+      const details = m.by('connector-page-details');
+      for (const sec of [about, tools, details]) {
+        assert.match(m.text(sec), /This connector’s description could not be read\. Retry/, String(bad?.message ?? JSON.stringify(bad)));
+      }
+      assert.equal(m.by('connector-page-trust'), undefined, 'no trust sentence without the Worker\'s');
+      assert.equal(m.text(m.by('connector-page-tagline')), 'HubSpot card description.', 'the band keeps the catalogue\'s line');
+      const connect = m.by('connector-page-connect');
+      assert.ok(connect && m.buttons(connect).length > 0, 'Connect keeps its buttons');
+      assert.ok(m.buttons(connect).every((b) => !b.disabled), 'and they are live');
+
+      const retry = m.buttons(about).find((b) => /Retry/.test(m.text(b)));
+      await m.press(retry);
+      assert.deepEqual(r.calls, ['hubspot', 'hubspot'], 'Retry reads exactly once more');
+      assert.equal(m.text(m.by('connector-page-tagline')), HUBSPOT.tagline, 'and its answer fills the page');
+      assert.doesNotMatch(m.text(), /could not be read/);
+    } finally { await m.unmount(); }
+  }
+});
+
+test('The read: none without readPage, none while the connector is unknown, and a handed body wins', async () => {
+  const r = reader([{ ok: true, connector: HUBSPOT }]);
+  const loading = await mountPage({ data: { status: 'loading', catalogue: [], items: [], reload() {} }, connectorKey: 'hubspot', readPage: r.readPage });
+  try { assert.equal(r.calls.length, 0, 'nothing to read until the row is known'); } finally { await loading.unmount(); }
+  const handed = await mountPage({ data: pageData(ROW(HUBSPOT)), connectorKey: 'hubspot', readPage: r.readPage, body: { state: 'ready', connector: GITHUB } });
+  try {
+    assert.equal(r.calls.length, 0, 'a body handed in is not read again');
+    assert.equal(m_text(handed), GITHUB.tagline);
+  } finally { await handed.unmount(); }
+  const src = readFileSync('frontend/src/pages/account/ConnectorPage.jsx', 'utf8');
+  assert.match(src, /readPage=\{connectorsApi\.page\}/, 'the routed page reads through connectorsApi.page');
+});
+const m_text = (m) => m.text(m.by('connector-page-tagline'));
+
 // ---------------------------------------------------------------- the catalogue
 
-test('The catalogue: the page fields reach the first-party rows, Made by is Axal VC, and the chips follow category_order', () => {
+test('The catalogue: the page fields reach the first-party rows, and Made by is Axal VC', () => {
   const page = { tagline: 'Calendar line.', made_by: { name: 'Axal VC' }, service: { name: 'Google', href: 'https://google.com' }, sign_in: { kind: 'first_party', label: 'Sign in with Google', key_help_href: null }, added: '2026-03', verified_on: '2026-10-01', read_only: false, page_key: 'google', page_href: '/account/connectors/google', configured: true };
   const cat = buildCatalogue({
     providers: [
@@ -664,11 +753,17 @@ test('The catalogue: the page fields reach the first-party rows, Made by is Axal
   assert.equal(cat.find((p) => p.key === 'hubspot').by, 'Axal VC');
   assert.equal(cat.find((p) => p.key === 'figma').by, 'Figma', 'no made_by: the name, as before');
 
-  assert.deepEqual(discoverChips(cat).slice(2), ['CRM', 'Calendar and workspace', 'Data', 'Design'], 'no order sent: today\'s');
-  assert.deepEqual(discoverChips(cat, ['Design', 'Data', 'CRM', 'Calendar and workspace']).slice(2), ['Design', 'Data', 'CRM', 'Calendar and workspace']);
-  assert.equal(categoryOrderFrom(null), CATEGORY_ORDER);
-  assert.equal(categoryOrderFrom([]), CATEGORY_ORDER);
-  assert.equal(categoryOrderFrom(['CRM', 7]), CATEGORY_ORDER);
+  // FIRST_PARTY holds identity only; LinkedIn's words are its `first_party` card's (W2).
+  for (const fp of FIRST_PARTY) assert.deepEqual(Object.keys(fp).sort(), ['auth_type', 'display_name', 'first_party', 'key', 'status', 'tier'], fp.key);
+  const card = { key: 'linkedin', display_name: 'LinkedIn (card)', category: 'Data', first_party: true, tagline: 'LinkedIn card line.', made_by: { name: 'Axal VC' }, page_key: 'linkedin' };
+  const li = buildCatalogue({ providers: [], firstPartyCards: [card, { display_name: 'no key' }] }).find((p) => p.key === 'linkedin');
+  assert.equal(li.category, 'Data');
+  assert.equal(li.by, 'Axal VC');
+  assert.equal(li.description, 'LinkedIn card line.', 'a card with no description reads its tagline');
+  assert.equal(li.page_key, 'linkedin');
+  assert.equal(li.display_name, 'LinkedIn', 'identity stays FIRST_PARTY\'s');
+  assert.equal(buildCatalogue({ providers: [] }).find((p) => p.key === 'linkedin').by, 'LinkedIn', 'no card: the name');
+
 });
 
 test('No HTML is built from the Worker\'s words, and the body holds no descriptive copy', () => {

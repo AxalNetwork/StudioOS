@@ -162,6 +162,8 @@ export const FUND_MODULES: readonly string[] = Object.freeze([
   'routes/fund_simulator.ts',
   'routes/funds.ts',
   'routes/lp_reports.ts',
+  'services/capitalAttestationTerms.ts',
+  'services/capitalAttestations.ts',
   'services/fundAdminAccess.ts',
   'services/fundAdminOverview.ts',
   'services/fundCallLedger.ts',

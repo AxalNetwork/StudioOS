@@ -16,6 +16,8 @@ import { commitmentsByFund, commitmentBar } from '../lib/lpCommitmentModel';
 import { PHONE_CHECK, initialWire, revealWire, showsInstructions, wireReducer } from '../lib/lpWireGate';
 import { formatCents } from './investor/fundCallsModel';
 import { LPADrawer } from './FundsPage';
+import { ProofDoor } from './investor/ProofOfFunds';
+import { targetOf } from './investor/proofOfFundsModel';
 
 const CARD = 'rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900';
 const LBL = 'text-[11px] font-bold uppercase tracking-[0.08em] text-gray-400 dark:text-gray-500';
@@ -183,7 +185,9 @@ export function WireDetails({ fundId, line }) {
 }
 
 /** The whole section: an anchor `/lp-portal` redirects to, and one card per fund. */
-export function MyCommitment({ portal, failed, onReload }) {
+// D752 (#1891): `proof` ({ targets, onShare }), an HQ investor's proof-of-funds
+// doors, one per Fund I card whose lp_id is a target. Without it, nothing changes.
+export function MyCommitment({ portal, failed, onReload, proof = null }) {
   const rows = useMemo(() => commitmentsByFund(portal), [portal]);
   const [lpaFor, setLpaFor] = useState(null);
   const [signing, setSigning] = useState(null);
@@ -222,6 +226,7 @@ export function MyCommitment({ portal, failed, onReload }) {
               onSign={() => sign(row)}
               signing={signing === row.lp_id}
               onRetry={onReload}
+              proof={proof}
             />
           ))}
           {signErr && <p className="text-[11.5px] text-red-600 dark:text-red-400" role="alert">{signErr}</p>}
@@ -259,7 +264,7 @@ function Totals({ rows }) {
   );
 }
 
-function FundCommitment({ row, onViewLpa, onSign, signing, onRetry }) {
+function FundCommitment({ row, onViewLpa, onSign, signing, onRetry, proof = null }) {
   const bar = commitmentBar(row);
   return (
     <div className={`${CARD} p-5`} data-testid={`commitment-fund-${row.fund_id}`}>
@@ -295,6 +300,7 @@ function FundCommitment({ row, onViewLpa, onSign, signing, onRetry }) {
             <span><span className="text-amber-500">■</span> {money(row.due_cents)} due{row.next_due ? ` · next ${row.next_due}` : ''}</span>
             <span>{row.uncalled_cents == null ? 'Uncalled not recorded' : `${money(row.uncalled_cents)} uncalled`}</span>
           </div>
+          {proof && <ProofDoor target={targetOf(proof.targets, 'lp_commitment', row.lp_id)} onShare={proof.onShare} />}
           {row.over_called && (
             <p className="mt-1.5 text-[11px] text-amber-700 dark:text-amber-400">
               More has been called than the register records as your commitment. Ask the GP which figure is right.

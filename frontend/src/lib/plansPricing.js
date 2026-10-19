@@ -119,3 +119,61 @@ export function phonePlans(reading) {
     .sort((a, b) => rank(a) - rank(b) || (b.free === true) - (a.free === true) || a.i - b.i)
     .map((p) => ({ ...p, title: p.free ? FREE_TITLES[p.family] : `${FAMILY_LABELS[p.family]} · ${p.plan_name}`, price: planPriceLabel(p) }));
 }
+
+// D755 §13 (#1915): a visitor cannot read the catalog (`/api/catalog/products`
+// needs a session), so their plan cards come from the public read. Each paid
+// plan becomes the product shape BundleCard reads: the plan's metadata rebuilt
+// from its licence key (planOf's inverse), its prices as the catalog spells them.
+const METADATA_FOR = {
+  'founder:growth': { tier: 'growth' },
+  'founder:studio': { tier: 'studio' },
+  'investor:professional': { investor_tier: 'professional' },
+  'investor:institutional': { investor_tier: 'institutional' },
+  advisor: { plan_group: 'advisor' },
+  partner: { plan_group: 'partner' },
+};
+const CATEGORY_FOR = { founder: 'founders', investor: 'investors_lps', advisor: 'advisors', partner: 'service_partners' };
+
+/** The read's paid plans as catalog-shaped products, in the read's order. */
+export function visitorPlanProducts(reading) {
+  const plans = plansOf(reading) || [];
+  return plans
+    .filter((p) => p && p.free !== true && typeof p.product_id === 'string' && p.product_id && FAMILY_LABELS[p.family])
+    .map((p) => ({
+      id: p.product_id,
+      name: p.plan_name || FAMILY_LABELS[p.family],
+      kind: 'subscription',
+      active: true,
+      metadata: p.family === 'market_intelligence' ? { plan: 'mi_pro' } : { ...(METADATA_FOR[p.licence_key] || {}) },
+      categories: CATEGORY_FOR[p.family] ? [CATEGORY_FOR[p.family]] : [],
+      prices: (Array.isArray(p.prices) ? p.prices : []).filter((x) => x && typeof x.price_id === 'string').map((x) => ({
+        id: x.price_id, active: true, type: x.interval ? 'recurring' : 'one_time',
+        interval: x.interval || null, unit_amount: x.unit_amount, currency: x.currency,
+      })),
+    }));
+}
+
+/** Where a visitor's Subscribe goes: sign in, then back to the plans. */
+export const VISITOR_SIGN_IN = `/login?next=${encodeURIComponent('/plans-and-pricing')}`;
+
+/**
+ * D755 §13 (#1915): a tier of the public /pricing page with its prices from
+ * the read, never from `data/pricing.js`'s typed figures. A free tier stays $0.
+ * A paid tier the read does not price has `priceMonthly: null`: the page says
+ * "—" and offers no Schema.org price for it.
+ */
+export function pricedTier(tier, family, reading) {
+  if (tier?.priceMonthly === 0) return { ...tier, priceMonthly: 0, priceAnnual: 0 };
+  const plans = plansOf(reading) || [];
+  const plan = plans.find((p) => p && p.licence_key === `${family}:${tier?.id}`);
+  const prices = Array.isArray(plan?.prices) ? plan.prices.filter((p) => p && micro(p.unit_amount) && p.currency === 'usd') : [];
+  const monthly = prices.find((p) => p.interval === 'month' && (p.interval_count ?? 1) === 1);
+  const yearly = prices.find((p) => p.interval === 'year' && (p.interval_count ?? 1) === 1);
+  const dollars = (cents) => Math.round(cents) / 100;
+  return {
+    ...tier,
+    priceMonthly: monthly ? dollars(monthly.unit_amount) : null,
+    // The page shows annual billing per month, as `data/pricing.js` always did.
+    priceAnnual: yearly ? Math.round(yearly.unit_amount / 12) / 100 : null,
+  };
+}

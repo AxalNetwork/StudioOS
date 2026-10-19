@@ -32,13 +32,12 @@ export const PAGE_SIZE = 10;
 export const isPersonalMercury = (p) => p?.key === 'mercury' && !isEntityRow(p);
 const isMercuryConn = (conn) => conn?.provider_key === 'mercury';
 
-/** The chips' order until the Worker sends `category_order` (`categoryOrderFrom`, D753 #1955). */
 export const CATEGORY_ORDER = ['CRM', 'Payments', 'Accounting and banking', 'Calendar', 'Calendar and workspace', 'Messaging', 'Signing', 'Cap table', 'Data', 'Code', 'Design', 'Docs'];
 
 /**
  * Build's own group order (D686 §5.4): the canvas's Code, Design, Payments,
  * Accounting and banking, Payroll, CRM, Calendar and workspace, then the rest.
- * The Connectors page orders its chips by the Worker's `category_order`.
+ * The Connectors page keeps `CATEGORY_ORDER` for its chips.
  */
 export const BUILD_CATEGORY_ORDER = ['Code', 'Design', 'Payments', 'Accounting and banking', 'Payroll', 'CRM', 'Calendar and workspace', 'Calendar', 'Messaging', 'Signing', 'Cap table', 'Data', 'Docs'];
 
@@ -48,9 +47,10 @@ export const BUILD_CATEGORY_ORDER = ['Code', 'Design', 'Payments', 'Accounting a
  * first-party row, which keeps its own key, name, status and connection.
  */
 export const REGISTRY_ALIAS = Object.freeze({ google_calendar: 'google', microsoft_365: 'microsoft' });
-// D753 (#1955): plus the page fields `/available` sends (decision 4(a)).
+// D753 (#1955): plus the page fields `/available` sends (decision 4(a)), and
+// the words the first-party rows no longer carry.
 const ALIAS_FIELDS = [
-  'category', 'verified', 'pulls', 'sends', 'feeds', 'feed_modules', 'permissions',
+  'description', 'capabilities', 'category', 'verified', 'pulls', 'sends', 'feeds', 'feed_modules', 'permissions',
   'tagline', 'made_by', 'service', 'sign_in', 'added', 'verified_on', 'read_only', 'page_key', 'page_href', 'configured',
 ];
 
@@ -71,26 +71,15 @@ export function categoryOf(p) {
  * its own first-party route (`/api/calendar/google`, `/api/calendar/microsoft`,
  * `/api/linkedin`), whose token store stays the only one (D650 reads it rather
  * than copying it). They are drawn as connectors with the same row and sheet.
+ *
+ * D753 (#1955): identity only. Their words come from the Worker: Google's and
+ * Microsoft's from the registry rows aliased into them (`REGISTRY_ALIAS`),
+ * LinkedIn's from `/available`'s `first_party` cards.
  */
 export const FIRST_PARTY = [
-  {
-    key: 'google', display_name: 'Google Calendar', by: 'Google', category: 'Calendar and workspace',
-    description: 'Your Google Calendar and Gmail invites, and "Continue with Google" sign-in.',
-    capabilities: ['Calendar', 'Gmail invites', 'Sign in with Google'],
-    status: 'live', tier: 'free', auth_type: 'oauth2', has_implementation: true, first_party: true,
-  },
-  {
-    key: 'microsoft', display_name: 'Microsoft 365', by: 'Microsoft', category: 'Calendar and workspace',
-    description: 'Two-way sync with your Outlook calendar, so sessions land on your work calendar.',
-    capabilities: ['Calendar', 'Two-way sync'],
-    status: 'live', tier: 'free', auth_type: 'oauth2', has_implementation: true, first_party: true,
-  },
-  {
-    key: 'linkedin', display_name: 'LinkedIn', by: 'LinkedIn', category: 'Data',
-    description: 'Sign in with LinkedIn to confirm who you are, then import your connections for referrals.',
-    capabilities: ['Sign in with LinkedIn', 'Import connections (CSV)'],
-    status: 'live', tier: 'free', auth_type: 'oauth2', has_implementation: true, first_party: true,
-  },
+  { key: 'google', display_name: 'Google Calendar', first_party: true, auth_type: 'oauth2', status: 'live', tier: 'free' },
+  { key: 'microsoft', display_name: 'Microsoft 365', first_party: true, auth_type: 'oauth2', status: 'live', tier: 'free' },
+  { key: 'linkedin', display_name: 'LinkedIn', first_party: true, auth_type: 'oauth2', status: 'live', tier: 'free' },
 ];
 
 const FIRST_PARTY_EMAIL = { google: 'google_email', microsoft: 'microsoft_email', linkedin: 'linkedin_email' };
@@ -132,7 +121,8 @@ export function firstPartyConnection(key, status) {
  * told when it ships, and whether their plan locks it.
  *
  * `firstParty` is `{ google, microsoft, linkedin }`, each a status read or
- * null. A first-party connector whose status could not be read, or that is
+ * null. `firstPartyCards` is `/available`'s `first_party` (D753 W2): the
+ * Worker's card for a first-party connector the registry does not list. A first-party connector whose status could not be read, or that is
  * not configured on this deployment, is still listed but cannot be connected.
  *
  * D751 (#1881): a registry OAuth connector whose client the Worker reports
@@ -142,7 +132,7 @@ export function firstPartyConnection(key, status) {
  * (unreadable) and a missing field keep today's behaviour, and an `api_key`
  * connector is never `oauthOff`: the member brings that key.
  */
-export function buildCatalogue({ providers = [], items = [], waitlist = [], firstParty = {}, companies = null } = {}) {
+export function buildCatalogue({ providers = [], items = [], waitlist = [], firstParty = {}, firstPartyCards = [], companies = null } = {}) {
   const byKey = new Map();
   for (const it of items || []) if (it && !byKey.has(it.provider_key)) byKey.set(it.provider_key, withCompanies(it, companies));
   const joined = new Set((waitlist || []).map((w) => w.provider_key));
@@ -172,12 +162,18 @@ export function buildCatalogue({ providers = [], items = [], waitlist = [], firs
       available: p.status !== 'coming_soon' && p.has_implementation !== false && !(oauthOff && !p.supports_pat),
     });
   }
+  const cards = new Map((Array.isArray(firstPartyCards) ? firstPartyCards : []).filter((c) => c?.key).map((c) => [c.key, c]));
   for (const fp of FIRST_PARTY) {
     if (seen.has(fp.key)) continue;
     const status = firstParty[fp.key];
+    const words = { ...(cards.get(fp.key) || {}), ...(aliased[fp.key] || {}) };
+    const row = { ...words, ...fp };
     out.push({
-      ...fp,
-      ...(aliased[fp.key] || {}),
+      ...row,
+      // A card with no description of its own reads its tagline, the Worker's line too.
+      description: words.description ?? words.tagline ?? null,
+      by: words.made_by?.name || fp.display_name,
+      category: categoryOf(row),
       connection: firstPartyConnection(fp.key, status),
       joined: false,
       locked: false,
@@ -367,17 +363,6 @@ export function pageOf(rows, page) {
 // ---------- Discover -------------------------------------------------------
 
 export const SUGGESTED = 'Suggested for you';
-
-/** The Worker's `category_order` (D753 decision 4(a)) when it sends a list of words, else `CATEGORY_ORDER`. */
-export function categoryOrderFrom(order) {
-  return Array.isArray(order) && order.length && order.every((c) => typeof c === 'string' && c) ? order : CATEGORY_ORDER;
-}
-
-/** The chips: All, Suggested for you, then each category the catalogue holds, in the Worker's order. */
-export function discoverChips(catalogue, order) {
-  const present = new Set((catalogue || []).map((p) => p.category).filter(Boolean));
-  return ['All', SUGGESTED, ...categoryOrderFrom(order).filter((c) => present.has(c))];
-}
 
 /**
  * D715 (#1780): the Axal entities' Mercury row, which the Worker serves an
