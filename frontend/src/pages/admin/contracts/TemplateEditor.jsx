@@ -7,6 +7,7 @@ import { mapOffset, pairAnchors, sourceAnchors } from '../../../lib/paneSync';
 import PaperPreview, { paperRequest } from '../../../components/PaperPreview';
 import { Pill } from '../../../ui';
 import { input } from './parts';
+import useRecordCrumb from '../useRecordCrumb';
 import PublishDialog, { PublishResult } from './PublishDialog';
 import DraftPages from './DraftPages';
 import VersionCompare from './VersionCompare';
@@ -105,6 +106,8 @@ export default function TemplateEditor({ slug: openedSlug, isNew: openedNew, row
   const [dialog, setDialog] = useState(null); // 'publish' | 'withdraw' | null
   const [result, setResult] = useState(null); // { mode, publication }
   const [publishedOverride, setPublishedOverride] = useState(undefined);
+  // D775 (#2101): a stored template is the rail's record; a new one is not, until it is saved.
+  useRecordCrumb(saved ? (saved.title || slug) : null, 'template', saved ? slug : null);
 
   const take = useCallback((t) => {
     setSaved(t);
