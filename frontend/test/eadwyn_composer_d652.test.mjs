@@ -1,8 +1,9 @@
 /**
  * D652 (#1464) — the Eadwyn composer in the Worker AI rail.
  *
- *   · the "+" menu: "Add a file" and "Connectors ›"; the list links to
- *     /account/connectors twice, as Browse and Manage;
+ *   · the "+" menu: "Add a file" and "Connectors ›"; the list links Browse
+ *     to the hub's Discover tab and Manage to the hub, and (D753, #1992) a
+ *     blocked row's reason to that connector's page;
  *   · a connector that needs attention is greyed, says why, and its switch is
  *     disabled; a switch is on only when the conversation turned it on;
  *   · an answer that used a connector names it and its freshness;
@@ -64,7 +65,11 @@ test('the connector list: switches follow the conversation, a connector needing 
   const html = renderToStaticMarkup(h(ConnectorList, { connectors: CONNECTORS, enabled: ['stripe', 'hubspot'], onToggle: noop }));
   assert.match(html, />Browse connectors</);
   assert.match(html, />Manage connectors</);
-  assert.equal((html.match(/href="\/account\/connectors[^"]*"/g) || []).length, 2, 'Browse and Manage do not both open /account/connectors');
+  // D753 (#1992): Browse opens the hub's Discover tab, Manage the hub, and the blocked row's reason its own page.
+  assert.deepEqual(html.match(/href="\/account\/connectors[^"]*"/g), [
+    'href="/account/connectors?tab=discover"', 'href="/account/connectors"', 'href="/account/connectors/hubspot"',
+  ]);
+  assert.match(html, /<a [^>]*href="\/account\/connectors\/hubspot"[^>]*>Sign-in expired<\/a>/, 'the reason links the connector\'s page');
 
   assert.match(switchOf(html, 'stripe'), /aria-checked="true"/);
   assert.match(switchOf(html, 'calendly'), /aria-checked="false"/, 'a switch the conversation did not turn on is on');
