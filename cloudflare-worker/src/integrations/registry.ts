@@ -522,9 +522,12 @@ const FOUNDER_PARTNER_PERMISSIONS = ['Read your Mercury account names, last four
  * updates that role's variant.
  */
 export const PERSONAL_MERCURY: Readonly<Record<PersonalMercuryRole, Readonly<PersonalMercuryVariant>>> = Object.freeze({
+  // D752 (#1889): the founder also reads their venture's spending, burn, cash and runway.
   founder: Object.freeze({
-    description: FOUNDER_PARTNER_DESCRIPTION, capabilities: FOUNDER_PARTNER_CAPABILITIES,
-    permissions: FOUNDER_PARTNER_PERMISSIONS, feeds: ['revenue_and_traction'],
+    description: 'Your own Mercury account, read-only: import the credits you choose as venture revenue, and see each month\'s spending, burn, cash on hand and runway. Only the figures you choose are saved.',
+    capabilities: ['Revenue import', 'Payment matching', 'Spending and runway'],
+    permissions: ['Read your Mercury account names, last four digits, available balances and the transactions you review; it never sends, transfers or requests money.'],
+    feeds: ['revenue_and_traction'],
   }),
   partner: Object.freeze({
     description: FOUNDER_PARTNER_DESCRIPTION, capabilities: FOUNDER_PARTNER_CAPABILITIES,
