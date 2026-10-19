@@ -4,23 +4,6 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
-## Raise receipts on a founder's own Mercury (D752 §6, #1887)
-
-- Migration 490 rebuilds `mercury_personal_matches` with two more target
-  kinds, `raise_prospect` and `deal_commitment`, keeping every row and both
-  partial unique indexes. Its trigger withdraws a raise receipt when the
-  prospect's amount or stage changes.
-- `GET/POST /api/mercury/personal/matches` take `target=raise|commitment` for
-  a founder (`raise_receipts`). Confirming an investor's wire marks the
-  prospect `wired`, or moves the commitment from `pending` to `confirmed`;
-  withdrawing undoes only the commitment.
-- A line is a receipt or revenue, never both: a receipt's line is refused
-  `raise_receipt` on the revenue import, a revenue line is never proposed, and
-  both checks sit inside each INSERT. The credits list carries
-  `fits_raise_target` as a hint.
-- Raise › Capital relationships reads "Committed · received <date>" from the
-  stored match only. An investor still reads just the commitment's status.
-
 ## The LP's capital call opens on the amount, and the fee statement is on screen (D717, #1859)
 
 - An open Fund I line's panel on the LP workspace opens on "Amount due", the
