@@ -337,7 +337,7 @@ const setMode = (db: any, mode: string) => db.prepare(
 const setPick = (db: any, task: string, model: string) => db.prepare(
   "INSERT INTO ai_rail_preferences (uid, user_id, section, task, model) VALUES (?, ?, 'validate', ?, ?)").run(crypto.randomUUID(), ME, task, model);
 
-test('Manual mode stops automatic runs, with its sentence; Eadwyn or no row runs; buttons and the recorder still run', async () => {
+test('Manual mode stops automatic runs, with its sentence; Eadwyn or no row runs; since D765 the buttons and the recorder\'s summary obey it too', async () => {
   // Mutation checked: ignoring the manual row lets call_imported bill.
   for (const trigger of ['call_imported', 'chat_assigned'] as const) {
     const f = world();
@@ -348,11 +348,18 @@ test('Manual mode stops automatic runs, with its sentence; Eadwyn or no row runs
     assert.equal(f.ai.length, 0, `${trigger}: no model`);
     assert.equal(row(f.db, id).digest_status, 'skipped');
     assert.equal(row(f.db, id).digest_note, NOTES.manual);
-    // The founder's buttons ignore the mode.
-    assert.equal((await call(f.env, 'POST', `/sessions/${id}/summarise`, {})).status, 201);
-    assert.equal((await call(f.env, 'POST', `/sessions/${id}/structure`, {})).status, 201);
-    // The recorder's own processing_auto already decided for its session.
-    assert.equal((await digestSession(f.env, { sessionId: id, userId: ME, trigger: 'recording_processed' })).status, 'done');
+    // D765 (#2090), D720 §6: the mode row is the page's AI switch, enforced in
+    // run(). Summarising and placing are assistance, so the founder's buttons
+    // and the recorder's own summary are refused assist_off, and no model runs.
+    for (const step of ['summarise', 'structure']) {
+      const res = await call(f.env, 'POST', `/sessions/${id}/${step}`, {});
+      assert.equal(res.status, 403, step);
+      assert.deepEqual(res.body, { ok: false, refusal: 'assist_off', message: 'AI assistance is off on this page.' });
+    }
+    const recorded = await digestSession(f.env, { sessionId: id, userId: ME, trigger: 'recording_processed' });
+    assert.equal(recorded.status, 'refused');
+    assert.equal((recorded as any).refusal, 'assist_off');
+    assert.equal(f.ai.length, 0, `${trigger}: still no model`);
   }
   for (const mode of [null, 'eadwyn']) {
     const f = world();
