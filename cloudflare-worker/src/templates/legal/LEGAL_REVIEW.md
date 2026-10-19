@@ -122,8 +122,9 @@ a new `_v2` file and a new store version, never an edit of the `_v1` file.
 
 ## Red flags for counsel — highest priority first
 
-1. **Broker-dealer exposure.** The platform sells intro credit packs,
-   holds a `finders_fee_intro_agreement_v1`, and seeds referral
+1. **Broker-dealer exposure.** The platform sold intro credit packs
+   until 2026-10-18, when they were retired (D755, #1915; credits already
+   bought still spend), holds a `finders_fee_intro_agreement_v1`, and seeds referral
    commission rules that include a percentage of deal funding
    (`routes/network.ts:76-80` — e.g. 2% of deal funding, 1% of a
    spin-out raise). Transaction-based compensation tied to securities

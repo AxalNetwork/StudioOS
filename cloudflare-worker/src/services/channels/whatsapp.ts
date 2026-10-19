@@ -12,17 +12,26 @@
  *              POST's X-Hub-Signature-256 over the RAW body. The GET challenge
  *              never stands in for the signature.
  *   normalise  entry[].changes[]: `messages` (text, voice; `statuses`) and
- *              `smb_message_echoes` (what the member sent from the app)
+ *              `smb_message_echoes` (what the member sent from the app). A
+ *              contact's reply button on Axal's consent notice
+ *              (`consent_yes:<uid>` / `consent_no:<uid>`), and a contact's
+ *              whole message YES, NO or STOP, become a `consent_reply`
+ *              (D754 §4, #1893); `consent.ts` decides whether it counts. An
+ *              echo — the member's own side — never does.
  *   connect    Embedded Signup's code → business token (encrypted in
  *              integrations.credentials_enc), the number checked against the
  *              WABA, the app subscribed to the WABA
- *   talk       send text, download media, read the number for the test
+ *   talk       send text, send the consent notice as an interactive message
+ *              with two reply buttons (D754 §5), download media, read the
+ *              number for the test
  *
  * GRAPH API VERSION. Pinned at v23.0 (released 2025-05-29). Meta supports a
  * Graph version for at least two years after the next one ships, so v23.0 is
  * served into 2027. It is the newest version this adapter's request and
  * response shapes were checked against; the owner bumps it here, once, after
- * reading developers.facebook.com/docs/graph-api/changelog. Network access to
+ * reading developers.facebook.com/docs/graph-api/changelog. GET /api/channels
+ * hands this same version to the browser; Axal's own number/WABA cannot be
+ * claimed through Embedded Signup or unsubscribed by a member (D754). Network access to
  * Meta's docs was not available when this was written (2026-10-13), so a newer
  * version may exist.
  *
@@ -40,7 +49,7 @@ import { decryptCredentials, encryptCredentials } from '../../integrations/secre
 import type { ChannelConnection } from './connections';
 import { forgetConnection } from './threads';
 import type { AudioResult, SecretCheck } from './telegram';
-import { CHANNEL_LIMITS, type InboundEvent, type MessageSide, type SendResult } from './types';
+import { CHANNEL_LIMITS, type InboundEvent, type InboundMessage, type MessageSide, type SendResult } from './types';
 
 export const GRAPH_VERSION = 'v23.0';
 export const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_VERSION}`;
@@ -108,6 +117,15 @@ const isoFromUnix = (v: unknown): string => {
   return Number.isFinite(n) && n > 0 ? new Date(n * 1000).toISOString() : new Date().toISOString();
 };
 
+/** A consent button's id: `consent_yes:<request uid>` or `consent_no:<request uid>` (consent.ts). */
+const CONSENT_BUTTON_ID = /^consent_(yes|no):([0-9a-f-]{36})$/;
+
+/** A whole message that may answer the notice: yes, no or stop, any case, closing `.` or `!` allowed. */
+export function consentWord(text: string | null | undefined): 'yes' | 'no' | 'stop' | null {
+  const w = String(text ?? '').trim().toLowerCase().replace(/[.!]+$/, '').trim();
+  return w === 'yes' || w === 'no' || w === 'stop' ? w : null;
+}
+
 function messageEvent(m: unknown, phoneNumberId: string, side: MessageSide, names: Map<string, string>): InboundEvent | null {
   const msg = obj(m);
   const id = idStr(msg?.id);
@@ -120,13 +138,26 @@ function messageEvent(m: unknown, phoneNumberId: string, side: MessageSide, name
   const chat = idStr(side === 'contact' ? msg.from : msg.to);
   if (!chat) return ignored('malformed');
   const type = String(msg.type ?? '');
+  const contextId = idStr(obj(msg.context)?.id);
+  // D754 §4: a reply button on Axal's consent notice. Only the contact's own;
+  // any other interactive message stays unsupported.
+  if (type === 'interactive') {
+    const reply = obj(msg.interactive)?.type === 'button_reply' ? obj(obj(msg.interactive)?.button_reply) : null;
+    const button = side === 'contact' ? CONSENT_BUTTON_ID.exec(String(reply?.id ?? '')) : null;
+    if (!button) return ignored('unsupported_type');
+    return {
+      kind: 'consent_reply', provider: 'whatsapp', eventId: id, connectionRef: phoneNumberId, externalChatId: chat,
+      externalMessageId: id, side: 'contact', answer: button[1] as 'yes' | 'no', via: 'button', requestUid: button[2],
+      contextMessageId: contextId, fallback: null, sentAt: isoFromUnix(msg.timestamp),
+    };
+  }
   const text = type === 'text' ? String(obj(msg.text)?.body ?? '').trim().slice(0, CHANNEL_LIMITS.maxTextChars) : '';
   // Voice notes are `audio` with `voice: true`; older payloads used type `voice`.
   const media = type === 'audio' || type === 'voice' ? obj(msg.audio) ?? obj(msg.voice) : null;
   const mediaId = idStr(media?.id);
   if (!text && !mediaId) return ignored('unsupported_type');
   const name = side === 'contact' ? names.get(chat) ?? null : null;
-  return {
+  const message: InboundMessage = {
     kind: 'message', provider: 'whatsapp', eventId: id, connectionRef: phoneNumberId, externalChatId: chat,
     externalMessageId: id, side,
     contactName: name ? name.slice(0, CHANNEL_LIMITS.maxNameChars) : null,
@@ -134,6 +165,60 @@ function messageEvent(m: unknown, phoneNumberId: string, side: MessageSide, name
     voice: !text && mediaId ? { fileRef: mediaId, mime: typeof media?.mime_type === 'string' ? media.mime_type : null, durationSec: null } : null,
     sentAt: isoFromUnix(msg.timestamp),
   };
+  // D754 §4: a contact's whole YES, NO or STOP may answer the notice. It keeps
+  // the message it is, for consent.ts to store when it does not count.
+  const word = side === 'contact' && type === 'text' ? consentWord(text) : null;
+  if (word) {
+    return {
+      kind: 'consent_reply', provider: 'whatsapp', eventId: id, connectionRef: phoneNumberId, externalChatId: chat,
+      externalMessageId: id, side: 'contact', answer: word, via: 'text', requestUid: null,
+      contextMessageId: contextId, fallback: message, sentAt: message.sentAt,
+    };
+  }
+  return message;
+}
+
+/**
+ * D754 way B (#1937, #1938): a message to Axal's own number, in its own shape
+ * (types.ts `InboundAxalMessage`). Read: text, a reply button's id, `audio`
+ * (a voice note or a file) and `document`; anything else is `unsupported`, so
+ * the capture can say once what Axal takes here.
+ */
+function axalMessageEvent(m: unknown, phoneNumberId: string): InboundEvent | null {
+  const msg = obj(m);
+  const id = idStr(msg?.id);
+  if (!msg || !id) return null;
+  if (msg.group_id != null) return { kind: 'ignored', provider: 'whatsapp', eventId: id, reason: 'not_a_private_chat' };
+  const from = idStr(msg.from);
+  if (!from) return { kind: 'ignored', provider: 'whatsapp', eventId: id, reason: 'malformed' };
+  const type = String(msg.type ?? '');
+  const out: InboundEvent = {
+    kind: 'axal_message', provider: 'whatsapp', eventId: id, connectionRef: phoneNumberId, externalChatId: from,
+    externalMessageId: id, text: null, media: null, button: null, unsupported: false, sentAt: isoFromUnix(msg.timestamp),
+  };
+  if (type === 'text') {
+    const text = String(obj(msg.text)?.body ?? '').trim().slice(0, CHANNEL_LIMITS.maxTextChars);
+    if (text) return { ...out, text };
+  } else if (type === 'interactive') {
+    const reply = obj(msg.interactive)?.type === 'button_reply' ? obj(obj(msg.interactive)?.button_reply) : null;
+    const button = idStr(reply?.id);
+    if (button) return { ...out, button };
+  } else if (type === 'audio' || type === 'voice' || type === 'document') {
+    const media = type === 'document' ? obj(msg.document) : obj(msg.audio) ?? obj(msg.voice);
+    const mediaId = idStr(media?.id);
+    const size = Number(media?.file_size);
+    if (mediaId) {
+      return {
+        ...out,
+        media: {
+          mediaId, type: type === 'document' ? 'document' : 'audio',
+          mime: typeof media?.mime_type === 'string' ? media.mime_type.slice(0, 100) : null,
+          sizeBytes: Number.isSafeInteger(size) && size >= 0 ? size : null,
+        },
+      };
+    }
+  }
+  return { ...out, unsupported: true };
 }
 
 const STATUSES = new Set(['sent', 'delivered', 'read', 'failed']);
@@ -158,7 +243,8 @@ function statusEvent(s: unknown, phoneNumberId: string): InboundEvent | null {
  * its own event, claimed on its own by the caller. Anything without a
  * provider id is dropped here: there is nothing to dedupe it by.
  */
-export function normaliseWhatsAppPayload(body: unknown): InboundEvent[] {
+export function normaliseWhatsAppPayload(body: unknown, axalPhoneNumberId: string | null = null): InboundEvent[] {
+  const axal = String(axalPhoneNumberId ?? '').trim();
   const b = obj(body);
   if (!b || b.object !== 'whatsapp_business_account') return [];
   const out: InboundEvent[] = [];
@@ -175,7 +261,11 @@ export function normaliseWhatsAppPayload(body: unknown): InboundEvent[] {
           const name = obj(obj(c)?.profile)?.name;
           if (wa && typeof name === 'string' && name.trim()) names.set(wa, name.trim());
         }
-        for (const m of arr(value.messages)) { const ev = messageEvent(m, pnid, 'contact', names); if (ev) out.push(ev); }
+        for (const m of arr(value.messages)) {
+          // Axal's own number is never a customer chat (way B): its messages have their own shape.
+          const ev = axal && pnid === axal ? axalMessageEvent(m, pnid) : messageEvent(m, pnid, 'contact', names);
+          if (ev) out.push(ev);
+        }
         for (const s of arr(value.statuses)) { const ev = statusEvent(s, pnid); if (ev) out.push(ev); }
       } else if (ch.field === 'smb_message_echoes') {
         // Unverified array name: coexistence echoes arrive as `message_echoes`.
@@ -257,6 +347,81 @@ export async function sendWhatsAppText(env: Env, conn: ChannelConnection, to: st
   return id ? { ok: true, externalMessageId: id } : { ok: false, code: 'send_unknown', retryable: false };
 }
 
+/**
+ * D754 way B (#1937): a text from Axal's OWN number (`WHATSAPP_AXAL_*`), with
+ * the system user's token — never a member's. Used only for the link's two
+ * replies, each inside the window the sender just opened. The token is read
+ * here and goes nowhere but the Authorization header.
+ */
+export async function sendAxalText(env: Env, to: string, text: string): Promise<SendResult> {
+  const pnid = idStr(env.WHATSAPP_AXAL_PHONE_NUMBER_ID);
+  const token = String(env.WHATSAPP_AXAL_ACCESS_TOKEN ?? '').trim();
+  if (!pnid || !token) return { ok: false, code: 'not_configured' };
+  const r = await graph('send', `${GRAPH_BASE}/${encodeURIComponent(pnid)}/messages`, {
+    method: 'POST', token,
+    json: { messaging_product: 'whatsapp', recipient_type: 'individual', to, type: 'text', text: { body: text, preview_url: false } },
+  });
+  if (!r.ok) return { ok: false, code: r.code, retryable: r.retryable };
+  const id = idStr(r.data?.messages?.[0]?.id);
+  return id ? { ok: true, externalMessageId: id } : { ok: false, code: 'send_unknown', retryable: false };
+}
+
+/**
+ * D754 §5 — Meta's published limits for reply buttons (Interactive reply
+ * buttons messages): a body of at most 1,024 characters, at most three
+ * buttons, each title at most 20 characters and each id at most 256. A
+ * message over any of them is refused here, before any call.
+ */
+export const INTERACTIVE_LIMITS = { bodyChars: 1024, buttons: 3, titleChars: 20, idChars: 256 } as const;
+
+/**
+ * An interactive message with reply buttons, from the member's own number with
+ * the member's token — the consent notice (consent.ts). Like a text, Meta
+ * takes it only within 24 hours of the contact's last message (131047 is
+ * `window_closed`), and a lost answer stays `send_unknown`.
+ */
+export async function sendWhatsAppInteractive(
+  env: Env, conn: ChannelConnection, to: string, msg: { body: string; buttons: { id: string; title: string }[] },
+): Promise<SendResult> {
+  return sendInteractive(phoneNumberIdOf(conn), await whatsappToken(env, conn), to, msg);
+}
+
+/** The same reply-button message from AXAL'S OWN number (way B, #1938), with Axal's token. */
+export async function sendAxalInteractive(
+  env: Env, to: string, msg: { body: string; buttons: { id: string; title: string }[] },
+): Promise<SendResult> {
+  const token = String(env.WHATSAPP_AXAL_ACCESS_TOKEN ?? '').trim();
+  const r = await sendInteractive(idStr(env.WHATSAPP_AXAL_PHONE_NUMBER_ID), token || null, to, msg);
+  return r.code === 'not_connected' ? { ok: false, code: 'not_configured' } : r;
+}
+
+async function sendInteractive(
+  pnid: string | null, token: string | null, to: string, msg: { body: string; buttons: { id: string; title: string }[] },
+): Promise<SendResult> {
+  const body = String(msg.body ?? '').trim();
+  const buttons = Array.isArray(msg.buttons) ? msg.buttons : [];
+  if (!body) return { ok: false, code: 'text_required' };
+  if (body.length > INTERACTIVE_LIMITS.bodyChars) return { ok: false, code: 'text_too_long' };
+  if (!buttons.length || buttons.length > INTERACTIVE_LIMITS.buttons
+    || buttons.some((b) => !b.id || !b.title || b.id.length > INTERACTIVE_LIMITS.idChars || b.title.length > INTERACTIVE_LIMITS.titleChars)) {
+    return { ok: false, code: 'invalid_buttons' };
+  }
+  if (!pnid || !token) return { ok: false, code: 'not_connected' };
+  const r = await graph('send', `${GRAPH_BASE}/${encodeURIComponent(pnid)}/messages`, {
+    method: 'POST', token,
+    json: {
+      messaging_product: 'whatsapp', recipient_type: 'individual', to, type: 'interactive',
+      interactive: {
+        type: 'button', body: { text: body },
+        action: { buttons: buttons.map((b) => ({ type: 'reply', reply: { id: b.id, title: b.title } })) },
+      },
+    },
+  });
+  if (!r.ok) return { ok: false, code: r.code, retryable: r.retryable };
+  const id = idStr(r.data?.messages?.[0]?.id);
+  return id ? { ok: true, externalMessageId: id } : { ok: false, code: 'send_unknown', retryable: false };
+}
+
 function mediaHostAllowed(raw: string): boolean {
   try {
     const u = new URL(raw);
@@ -267,11 +432,12 @@ function mediaHostAllowed(raw: string): boolean {
 }
 
 /** A voice note's audio: `GET /{media-id}` for its URL, then the URL, both with the member's token. */
-export async function fetchWhatsAppMedia(env: Env, conn: ChannelConnection, mediaId: string, mimeHint: string | null = null): Promise<AudioResult> {
+export type WhatsAppAudioResult = AudioResult & { lookup?: boolean };
+export async function fetchWhatsAppMedia(env: Env, conn: ChannelConnection, mediaId: string, mimeHint: string | null = null): Promise<WhatsAppAudioResult> {
   const token = await whatsappToken(env, conn);
   if (!token) return { ok: false, code: 'not_connected', retryable: false };
   const meta = await graph('media', `${GRAPH_BASE}/${encodeURIComponent(mediaId)}`, { token });
-  if (!meta.ok) return { ok: false, code: meta.code, retryable: meta.retryable };
+  if (!meta.ok) return { ok: false, code: meta.code, retryable: meta.retryable, lookup: true };
   const size = Number(meta.data?.file_size);
   if (Number.isFinite(size) && size > WHATSAPP_MAX_AUDIO_BYTES) return { ok: false, code: 'too_large', retryable: false };
   const url = typeof meta.data?.url === 'string' ? meta.data.url : '';
@@ -338,6 +504,8 @@ export async function unsubscribeApp(
   conn: Pick<ChannelConnection, 'integrationId' | 'integrationUid' | 'credentialsEnc' | 'config'> & { phoneNumberId: string | null },
 ): Promise<UnsubscribeOutcome> {
   const waba = idStr(conn.config?.waba_id);
+  // Axal's shared number is never unsubscribed by a member's disconnect.
+  if (waba && waba === String(env.WHATSAPP_AXAL_WABA_ID ?? '').trim()) return 'shared';
   const own = idStr(conn.phoneNumberId);
   const token = await whatsappToken(env, conn);
   if (!waba || !own || !token) return 'unverified';
@@ -414,7 +582,14 @@ export function callingRecord(number: Record<string, unknown> | null | undefined
   return { tier, region: callingRegion(number?.display_phone_number), checked_at: now.toISOString() };
 }
 
+export interface CallingSide {
+  available: false;
+  reasons: { code: string; sentence: string }[];
+}
+
 export interface CallingEligibility {
+  inbound: CallingSide;
+  outbound: CallingSide;
   available: false;
   reasons: { code: string; sentence: string }[];
   sentence: string;
@@ -429,20 +604,26 @@ export interface CallingEligibility {
 export function callingEligibility(config: Record<string, unknown> | null | undefined): CallingEligibility {
   const rec = config?.calling && typeof config.calling === 'object' ? config.calling as Partial<CallingRecord> : null;
   // Each reason is a clause, so the card's line reads as one sentence.
-  const clauses: [string, string][] = [['not_built', 'Axal does not answer or place WhatsApp calls yet']];
+  const clauses: [string, string, 'both' | 'outbound'][] = [['not_built', 'Axal does not answer or place WhatsApp calls yet', 'both']];
   if (!rec) {
-    clauses.push(['not_checked', 'this number has not been checked yet (test the connection to check it)']);
+    clauses.push(['not_checked', 'this number has not been checked yet (test the connection to check it)', 'both']);
   } else {
     const limit = rec.tier ? TIER_LIMIT[rec.tier] : undefined;
-    if (limit === undefined) clauses.push(['tier_unknown', 'this number\'s messaging limit could not be read']);
+    if (limit === undefined) clauses.push(['tier_unknown', 'this number\'s messaging limit could not be read', 'both']);
     else if (limit < CALLING_MIN_LIMIT) {
-      clauses.push(['tier_low', `this number can start ${limit.toLocaleString('en-US')} conversations a day, and WhatsApp Calling needs at least ${CALLING_MIN_LIMIT.toLocaleString('en-US')}`]);
+      clauses.push(['tier_low', `this number can start ${limit.toLocaleString('en-US')} conversations a day, and WhatsApp Calling needs at least ${CALLING_MIN_LIMIT.toLocaleString('en-US')}`, 'both']);
     }
     const region = RESTRICTED_CALLING_CODES.find(([, key]) => key === rec.region);
-    if (region) clauses.push(['region', `Meta does not offer business-initiated calls for numbers in ${region[2]}`]);
-    else if (rec.region == null) clauses.push(['region_unknown', 'this number\'s country could not be read']);
+    if (region) clauses.push(['region', `Meta does not offer business-initiated calls for numbers in ${region[2]}`, 'outbound']);
+    else if (rec.region == null) clauses.push(['region_unknown', 'this number\'s country could not be read', 'outbound']);
   }
+  const reasons = (side: 'inbound' | 'outbound'): CallingSide => ({
+    available: false,
+    reasons: clauses.filter(([, , audience]) => side === 'outbound' || audience === 'both')
+      .map(([code, clause]) => ({ code, sentence: `${clause.charAt(0).toUpperCase()}${clause.slice(1)}.` })),
+  });
   return {
+    inbound: reasons('inbound'), outbound: reasons('outbound'),
     available: false,
     reasons: clauses.map(([code, clause]) => ({ code, sentence: `${clause.charAt(0).toUpperCase()}${clause.slice(1)}.` })),
     sentence: `Calls: not yet, because ${clauses.map(([, clause]) => clause).join('; ')}.`,
@@ -481,6 +662,11 @@ export async function completeEmbeddedSignup(env: Env, userId: number, input: Si
   const appSecret = String(env.WHATSAPP_APP_SECRET ?? '').trim();
   if (!appId || !appSecret) return { ok: false, status: 503, code: 'not_configured' };
 
+  const axalNumber = String(env.WHATSAPP_AXAL_PHONE_NUMBER_ID ?? '').trim();
+  const axalWaba = String(env.WHATSAPP_AXAL_WABA_ID ?? '').trim();
+  const isAxal = () => !!((axalNumber && input.phoneNumberId === axalNumber) || (axalWaba && input.wabaId === axalWaba));
+  if (isAxal()) return { ok: false, status: 409, code: 'axal_number' };
+
   const isTaken = async (phoneNumberId: string) => !!(await env.DB.prepare(
     `SELECT 1 AS t FROM integrations WHERE provider_key = 'whatsapp' AND external_account_id = ? AND status = 'active' AND user_id != ?`,
   ).bind(phoneNumberId, userId).first<{ t: number }>());
@@ -502,6 +688,7 @@ export async function completeEmbeddedSignup(env: Env, userId: number, input: Si
   if (!input.phoneNumberId) {
     if (listed.length !== 1) return { ok: false, status: listed.length ? 409 : 400, code: listed.length ? 'choose_number' : 'number_not_in_waba' };
     input = { ...input, phoneNumberId: idStr(listed[0]!.id) ?? '' };
+    if (isAxal()) return { ok: false, status: 409, code: 'axal_number' };
     if (await isTaken(input.phoneNumberId)) return { ok: false, status: 409, code: 'number_taken' };
   }
   const number = listed.find((n) => idStr(n?.id) === input.phoneNumberId);

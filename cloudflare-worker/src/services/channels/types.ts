@@ -22,6 +22,25 @@ export type MessagingProvider = typeof MESSAGING_PROVIDERS[number];
 export const MEETING_PROVIDERS = ['zoom', 'google_meet'] as const;
 export type MeetingProvider = typeof MEETING_PROVIDERS[number];
 
+/**
+ * D754 §4 (#1893) — whether a chat on this provider keeps nothing until the
+ * interviewee's consent is `given` (services/channels/consent.ts). Telegram
+ * keeps D684's behaviour until D756 adds its own in-chat request and turns
+ * this on. Lives here, in a file that imports nothing, so the session gate
+ * and Customer research can read it without an import cycle.
+ */
+export const CONSENT_REQUIRED: Record<MessagingProvider, boolean> = { whatsapp: true, telegram: false };
+
+/** False for anything that is not a messaging provider: a meeting, an assistant's client id, null. */
+export function consentRequired(provider: string | null | undefined): boolean {
+  return Object.prototype.hasOwnProperty.call(CONSENT_REQUIRED, String(provider ?? ''))
+    && CONSENT_REQUIRED[provider as MessagingProvider] === true;
+}
+
+/** The providers whose chats wait for consent, for SQL (`json_each`). */
+export const consentRequiredProviders = (): MessagingProvider[] =>
+  MESSAGING_PROVIDERS.filter((p) => CONSENT_REQUIRED[p]);
+
 /** The `submitted_via_name` an intake session shows, and the badge the UI draws. */
 export const PROVIDER_LABEL: Record<ChannelProvider, string> = {
   telegram: 'Telegram',
@@ -42,6 +61,11 @@ export const CHANNEL_LIMITS = {
   pendingDays: 30,
   /** A link code lives this long. */
   linkCodeMinutes: 10,
+  /**
+   * D754 way B (#1937): a member's linked WhatsApp lapses after this many
+   * days without use, because phone numbers are reassigned (threads.ts purge).
+   */
+  senderLinkDays: 180,
   /**
    * Webhook events a single connection may deliver per minute, counted in D1
    * (`events.ts`; KV's one write per key per second could never reach it).
@@ -184,9 +208,60 @@ export interface InboundIgnored {
   reason: string;
 }
 
+/**
+ * D754 §4 (#1893): what may be the interviewee's answer to Axal's consent
+ * notice — a reply button ('button'), or a whole message that is YES, NO or
+ * STOP ('text'). Only the contact's side is ever one. Whether it counts is
+ * decided by `consent.ts`, against the thread's open request and its notices;
+ * a typed word that does not count is stored as the ordinary message it is
+ * (`fallback`).
+ */
+export interface InboundConsentReply {
+  kind: 'consent_reply';
+  provider: MessagingProvider;
+  eventId: string;
+  connectionRef: string;
+  externalChatId: string;
+  externalMessageId: string;
+  side: 'contact';
+  answer: 'yes' | 'no' | 'stop';
+  via: 'button' | 'text';
+  /** The request uid a button carries; null for a typed word. */
+  requestUid: string | null;
+  /** The provider id of the message this one replies to (WhatsApp `context.id`). */
+  contextMessageId: string | null;
+  /** The typed message, as an ordinary message, for when the word does not count. Null for a button. */
+  fallback: InboundMessage | null;
+  sentAt: string;
+}
+
+/**
+ * D754 way B (#1937, #1938): a message to AXAL'S OWN WhatsApp number. It is
+ * never a customer chat: the sender is a member (or someone trying to be one),
+ * so it has its own shape and never becomes an InboundMessage or a consent
+ * reply. Exactly one of `text`, `media` and `button` is set, unless
+ * `unsupported` (a sticker, an image, a video, any other interactive message).
+ */
+export interface InboundAxalMessage {
+  kind: 'axal_message';
+  provider: 'whatsapp';
+  eventId: string;
+  connectionRef: string;
+  /** The sender's wa_id. */
+  externalChatId: string;
+  externalMessageId: string;
+  text: string | null;
+  /** `audio` is a voice note or an audio file; a `document`'s type is checked by the capture. */
+  media: { mediaId: string; mime: string | null; sizeBytes: number | null; type: 'audio' | 'document' } | null;
+  /** A reply button's id. */
+  button: string | null;
+  unsupported: boolean;
+  sentAt: string;
+}
+
 export type InboundEvent =
   | InboundMessage | InboundEdit | InboundDelete | InboundStatus
-  | InboundConnection | InboundLink | InboundLinkConfirm | InboundIgnored;
+  | InboundConnection | InboundLink | InboundLinkConfirm | InboundConsentReply | InboundAxalMessage | InboundIgnored;
 
 /** What a send returns. `submitted` is acceptance by the provider, never delivery. */
 export interface SendResult {

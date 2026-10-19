@@ -8,7 +8,9 @@
 // - **A field** is a Markdown task item (`- [ ]`) in a part's store body. Its
 //   id is `<slug>:<n>:<hash>`: the item's place among that body's task items,
 //   and the first 12 hex of the SHA-256 of its text. A reworded item gets a
-//   new id, so an old tick never lands on new words.
+//   new id, so an old tick never lands on new words. Its `group` is the text
+//   of the nearest Markdown heading above it (#1866): for the screen only,
+//   never in the digest or the frozen answers.
 // - **The digest** covers what the applicant sees: each part's slug, version
 //   and body hash, and the ticks, in canonical JSON. Submit freezes that same
 //   object under that digest; a body or tick that changed since is 409
@@ -21,6 +23,14 @@
 //   the cover with Part 1's legend, the contents, then Parts 2 to 9, each on
 //   its own named page with its own block. A part's ticks print in its body
 //   as checked or empty squares, by field id.
+// - **Signing** (D759, #1858; services/bookletSigning.ts sends it). A
+//   submitted booklet prints its FROZEN text: each part at the version frozen
+//   at submit (`bodyAtVersion`), hash-checked, with the frozen ticks, so what
+//   the applicant rereads is what they sign. `bookletSigning` reads the state
+//   from migration 485's links to the two envelopes; the paper names the
+//   receiving accounts only once the General Partner has accepted
+//   (`bookletAudience`). An accepted booklet cannot be withdrawn, and a
+//   withdrawal voids the booklet's pending envelopes in its own batch.
 //
 // NOTE: authored to load under `node --experimental-strip-types` (the worker
 // test gate) — no `enum`s, no TS parameter properties.
@@ -33,7 +43,7 @@ import type { PaperInput, PaperPartInput } from './legalPaper';
 export const BOOKLET_FUND_SLUG = 'spinout-fund-i';
 
 /** Parts whose store body the booklet prints: the cover's legend, Parts 3 to 7, and Part 9. */
-const READ_PARTS = new Set([1, 3, 4, 5, 6, 7, 9]);
+export const READ_PARTS: ReadonlySet<number> = new Set([1, 3, 4, 5, 6, 7, 9]);
 /** Parts whose task items are the applicant's fields: Parts 3 to 7. Part 8 prints no LPA body. */
 const FIELD_PARTS = new Set([3, 4, 5, 6, 7]);
 
@@ -55,6 +65,8 @@ export interface BookletField {
   id: string;
   part: number;
   text: string;
+  /** #1866: the nearest heading above the item in the same body, or null. Screen only. */
+  group: string | null;
 }
 
 export interface ResolvedPart {
@@ -84,17 +96,21 @@ export function canonicalJson(v: unknown): string {
 }
 
 const TASK_ITEM = /^\s*[-*+]\s+\[[ xX]\]\s+(.*\S)\s*$/;
+const HEADING = /^\s{0,3}#{1,6}\s+(.*?)\s*#*\s*$/;
 
 /** The task items of one part's body, as fields with stable ids. */
 export async function bookletFields(slug: string, body: string, part = 0): Promise<BookletField[]> {
   const out: BookletField[] = [];
   let n = 0;
+  let group: string | null = null;
   for (const line of String(body || '').replace(/\r\n?/g, '\n').split('\n')) {
+    const h = line.match(HEADING);
+    if (h) { group = h[1].trim() || null; continue; }
     const m = line.match(TASK_ITEM);
     if (!m) continue;
     n++;
     const text = m[1];
-    out.push({ id: `${slug}:${n}:${(await sha256Hex(text)).slice(0, 12)}`, part, text });
+    out.push({ id: `${slug}:${n}:${(await sha256Hex(text)).slice(0, 12)}`, part, text, group });
   }
   return out;
 }
@@ -208,6 +224,64 @@ export interface BookletView {
   digest: string;
   parts: Array<Omit<ResolvedPart, 'fields'> & { fields: Array<BookletField & { checked: boolean }> }>;
   missing_parts: number[];
+  /** D759 — v[N]: this booklet's place among its application's booklets. */
+  edition: number;
+  signing: { state: SigningState; signed_at: string | null; accepted_at: string | null };
+}
+
+// ── Signing (D759) ──────────────────────────────────────────────────────────
+
+export type SigningState = 'not_sent' | 'sent' | 'awaiting_gp' | 'accepted' | 'void';
+
+export interface BookletStageRow {
+  stage: 'applicant' | 'gp';
+  envelope_uuid: string;
+  envelope_id: number | null;
+  status: string | null;
+  signed_at: string | null;
+}
+
+/** The booklet's envelope links (migration 485), each with its envelope's state. */
+export async function bookletStages(env: Env, bookletId: number): Promise<BookletStageRow[]> {
+  const rows = await env.DB.prepare(
+    `SELECT f.stage, f.envelope_uuid, e.id AS envelope_id, e.status,
+            (SELECT MAX(r.signed_at) FROM esign_recipients r WHERE r.envelope_id = e.id AND r.status = 'signed') AS signed_at
+       FROM fund_booklet_envelopes f LEFT JOIN esign_envelopes e ON e.envelope_uuid = f.envelope_uuid
+      WHERE f.booklet_id = ? ORDER BY f.id`,
+  ).bind(bookletId).all<BookletStageRow>();
+  return rows.results || [];
+}
+
+const isVoid = (status: string | null) => status === 'void' || status === 'voided';
+
+/** Decision 9's state: not_sent, sent, awaiting_gp, accepted or void. */
+export async function bookletSigning(env: Env, booklet: BookletRow): Promise<BookletView['signing'] & { gp_sent: boolean }> {
+  const stages = await bookletStages(env, booklet.id);
+  const applicant = stages.find((s) => s.stage === 'applicant') || null;
+  const gp = stages.find((s) => s.stage === 'gp') || null;
+  const signedAt = applicant?.status === 'completed' ? applicant.signed_at : null;
+  const acceptedAt = gp?.status === 'completed' ? gp.signed_at : null;
+  let state: SigningState;
+  if (stages.some((s) => isVoid(s.status))) state = 'void';
+  else if (!applicant) state = 'not_sent';
+  else if (applicant.status !== 'completed') state = 'sent';
+  else if (gp?.status === 'completed') state = 'accepted';
+  else state = 'awaiting_gp';
+  return { state, signed_at: signedAt, accepted_at: acceptedAt, gp_sent: !!gp };
+}
+
+/** Decision 3's v[N]: booklets are never deleted, so the count is stable. */
+export async function bookletEdition(env: Env, booklet: BookletRow): Promise<number> {
+  const row = await env.DB.prepare(
+    'SELECT COUNT(*) AS n FROM fund_subscription_booklets WHERE application_id = ? AND id <= ?',
+  ).bind(booklet.application_id, booklet.id).first<{ n: number }>();
+  return Number(row?.n || 1);
+}
+
+/** The map's audience (decision 4): the receiving accounts print only once the General Partner has accepted. */
+export async function bookletAudience(env: Env, booklet: BookletRow): Promise<'issued' | 'preview'> {
+  if (booklet.status !== 'submitted') return 'preview';
+  return (await bookletSigning(env, booklet)).state === 'accepted' ? 'issued' : 'preview';
 }
 
 /** The booklet as the applicant (or an admin) reads it, with the digest of what it shows. */
@@ -217,6 +291,7 @@ export async function bookletView(env: Env, booklet: BookletRow): Promise<Bookle
   const digest = booklet.status === 'submitted' && booklet.digest
     ? booklet.digest
     : await sha256Hex(canonicalJson(frozenOf(parts, ticks)));
+  const { state, signed_at, accepted_at } = await bookletSigning(env, booklet);
   return {
     uid: booklet.uid,
     status: booklet.status,
@@ -224,6 +299,8 @@ export async function bookletView(env: Env, booklet: BookletRow): Promise<Bookle
     digest,
     parts: parts.map((p) => ({ ...p, fields: p.fields.map((f) => ({ ...f, checked: ticks.get(f.id) === true })) })),
     missing_parts: parts.filter((p) => p.missing).map((p) => p.part),
+    edition: await bookletEdition(env, booklet),
+    signing: { state, signed_at, accepted_at },
   };
 }
 
@@ -259,6 +336,11 @@ export async function answerBooklet(env: Env, booklet: BookletRow, userId: numbe
   ).bind(booklet.id, a.field_id, a.checked ? 1 : 0, userId)));
 }
 
+/** Submit's refusal sentence while parts have no text from counsel (also the catalog's, D758). */
+export function bookletMissingSentence(parts: number[]): string {
+  return `The booklet cannot be submitted yet: Part ${parts.join(', Part ')} has no text from counsel.`;
+}
+
 /** Freeze the booklet under the digest the applicant saw. */
 export async function submitBooklet(env: Env, booklet: BookletRow, digest: unknown): Promise<{ digest: string; submitted_at: string }> {
   if (booklet.status !== 'open') throw new BookletRefusal(409, 'booklet_not_open', 'This booklet is no longer open, so it cannot be submitted again.');
@@ -268,8 +350,7 @@ export async function submitBooklet(env: Env, booklet: BookletRow, digest: unkno
   const parts = await resolveParts(env);
   const missing = parts.filter((p) => p.missing).map((p) => p.part);
   if (missing.length) {
-    throw new BookletRefusal(409, 'booklet_part_missing',
-      `The booklet cannot be submitted yet: Part ${missing.join(', Part ')} has no text from counsel.`, { parts: missing });
+    throw new BookletRefusal(409, 'booklet_part_missing', bookletMissingSentence(missing), { parts: missing });
   }
   const frozen = frozenOf(parts, await ticksOf(env, booklet.id));
   const current = await sha256Hex(canonicalJson(frozen));
@@ -304,11 +385,31 @@ export async function withdrawBooklet(env: Env, booklet: BookletRow, adminId: nu
     throw new BookletRefusal(400, 'reason_invalid', 'Give a reason of 10 to 200 characters for the withdrawal.');
   }
   if (booklet.status === 'withdrawn') throw new BookletRefusal(409, 'booklet_withdrawn', 'This booklet is already withdrawn.');
-  const res = await env.DB.prepare(
-    `UPDATE fund_subscription_booklets SET status = 'withdrawn', withdrawn_by = ?, withdrawn_reason = ?, updated_at = datetime('now')
-      WHERE id = ? AND status <> 'withdrawn'`,
-  ).bind(adminId, text, booklet.id).run();
-  if (!(res.meta?.changes && res.meta.changes > 0)) throw new BookletRefusal(409, 'booklet_withdrawn', 'This booklet is already withdrawn.');
+  const accepted = () => new BookletRefusal(409, 'booklet_accepted', 'This booklet is accepted by the General Partner, so it cannot be withdrawn.');
+  if ((await bookletSigning(env, booklet)).state === 'accepted') throw accepted();
+  // D759 — one batch: the withdrawal (never of an accepted booklet, checked in
+  // the statement itself, so a GP signature landing meanwhile wins) and the
+  // voiding of the booklet's PENDING envelopes, so the next booklet's send
+  // does not meet D410's one-pending key. A completed envelope is evidence
+  // and is never touched.
+  const [res] = await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE fund_subscription_booklets SET status = 'withdrawn', withdrawn_by = ?, withdrawn_reason = ?, updated_at = datetime('now')
+        WHERE id = ? AND status <> 'withdrawn'
+          AND NOT EXISTS (SELECT 1 FROM fund_booklet_envelopes f JOIN esign_envelopes e ON e.envelope_uuid = f.envelope_uuid
+                           WHERE f.booklet_id = ? AND f.stage = 'gp' AND e.status = 'completed')`,
+    ).bind(adminId, text, booklet.id, booklet.id),
+    env.DB.prepare(
+      `UPDATE esign_envelopes SET status = 'void'
+        WHERE status IN ('sent', 'partially_signed')
+          AND envelope_uuid IN (SELECT envelope_uuid FROM fund_booklet_envelopes WHERE booklet_id = ?)
+          AND EXISTS (SELECT 1 FROM fund_subscription_booklets WHERE id = ? AND status = 'withdrawn')`,
+    ).bind(booklet.id, booklet.id),
+  ]);
+  if (!(res.meta?.changes && res.meta.changes > 0)) {
+    if ((await bookletSigning(env, booklet)).state === 'accepted') throw accepted();
+    throw new BookletRefusal(409, 'booklet_withdrawn', 'This booklet is already withdrawn.');
+  }
 }
 
 
@@ -339,7 +440,7 @@ function partTwoBody(): string {
 }
 
 /** The applicant's printed name: the legal name they recorded, else their account name. */
-async function applicantName(env: Env, applicationId: number): Promise<string | null> {
+export async function applicantName(env: Env, applicationId: number): Promise<string | null> {
   const row = await env.DB.prepare(
     'SELECT u.full_legal_name, u.name FROM lp_applications a JOIN users u ON u.id = a.user_id WHERE a.id = ?',
   ).bind(applicationId).first<{ full_legal_name: string | null; name: string | null }>();
@@ -348,45 +449,159 @@ async function applicantName(env: Env, applicationId: number): Promise<string | 
 }
 
 /**
+ * D759 — a part's body at the version frozen at submit: the live row when its
+ * version is that one, else the snapshot an edit took before bumping it
+ * (`legal_template_versions`, legalTemplateStore.ts). Null when neither has it.
+ */
+export async function bodyAtVersion(env: Env, slug: string, version: number): Promise<string | null> {
+  const live = await getTemplate(env, slug);
+  if (live && Number(live.version) === Number(version)) return String(live.body_md || '');
+  const old = await env.DB.prepare(
+    'SELECT body_md FROM legal_template_versions WHERE slug = ? AND version = ? ORDER BY id DESC LIMIT 1',
+  ).bind(slug, version).first<{ body_md: string }>();
+  return old ? String(old.body_md) : null;
+}
+
+const textChanged = (parts: number[]) => new BookletRefusal(409, 'booklet_text_changed',
+  'The text you submitted can no longer be rebuilt exactly, so it cannot be signed. Ask Axal VC to withdraw the booklet so you can open a new one.',
+  { parts });
+
+/**
+ * D759 — a submitted booklet's bodies as frozen: each part the booklet reads,
+ * at its frozen version, whose SHA-256 must be the frozen hash, ticked with
+ * the frozen ticks. A missing version or a different hash is 409
+ * `booklet_text_changed`, naming the parts.
+ */
+export async function frozenBodies(env: Env, booklet: BookletRow): Promise<Map<number, string>> {
+  const frozen = JSON.parse(String(booklet.frozen_json || '{}')) as {
+    parts?: Array<{ part: number; slug: string | null; version: number | null; body_sha256: string | null }>;
+    ticks?: Array<[string, boolean]>;
+  };
+  const ticks = new Map((frozen.ticks || []).map(([id, checked]) => [id, checked === true] as [string, boolean]));
+  const bodies = new Map<number, string>();
+  const changed: number[] = [];
+  for (const p of frozen.parts || []) {
+    if (!p.slug || !READ_PARTS.has(p.part) || !p.body_sha256 || p.version == null) continue;
+    const body = await bodyAtVersion(env, p.slug, p.version);
+    if (body === null || await sha256Hex(body) !== p.body_sha256) { changed.push(p.part); continue; }
+    bodies.set(p.part, await tickedBody(p.slug, body, ticks));
+  }
+  if (changed.length) throw textChanged(changed);
+  return bodies;
+}
+
+/** Signatures on a booklet's parts, by the party's role (D759). */
+export type BookletSignatures = NonNullable<PaperPartInput['signed']>;
+
+/**
+ * The one part assembly both papers share: the nine parts in order, each
+ * with its body, its stub flag and its own block, and the signatures when the
+ * paper is a signed one.
+ */
+export function bookletParts(opts: {
+  bodies: Map<number, string>;
+  missing: (part: number) => boolean;
+  applicant: string | null;
+  signed?: BookletSignatures | null;
+}): PaperPartInput[] {
+  return (SUBSCRIPTION_BOOKLET_PARTS as readonly BookletPart[]).map((p) => ({
+    n: p.part,
+    title: p.title,
+    body: p.part === 2 ? partTwoBody() : opts.bodies.get(p.part) ?? null,
+    missing: READ_PARTS.has(p.part) && p.part !== 1 && opts.missing(p.part),
+    block: p.block ? { kind: p.block.kind, axalEntityKey: p.block.axalEntityKey } : null,
+    counterpartyName: opts.applicant,
+    footer: `${BOOKLET_TITLE} · Part ${p.part}`,
+    ...(opts.signed && p.block ? { signed: opts.signed } : {}),
+  }));
+}
+
+/**
+ * The nine parts from a resolved view, unsigned: an applicant's booklet's
+ * shape, and the catalog's specimen (D758). One assembly, `bookletParts`.
+ */
+export function bookletPaperParts(resolvedParts: ReadonlyArray<Pick<ResolvedPart, 'part' | 'missing'>>, bodies: ReadonlyMap<number, string>,
+  applicant: string | null): PaperPartInput[] {
+  return bookletParts({
+    bodies: new Map(bodies),
+    missing: (n) => !!resolvedParts.find((x) => x.part === n)?.missing,
+    applicant,
+  });
+}
+
+/**
  * The booklet as #1776's paper reads it: the cover's legend as the body, and
  * the nine parts. A part with no text from counsel prints the stub sentence,
- * and the paper is then a Draft.
+ * and the paper is then a Draft. A submitted booklet prints its frozen text
+ * (D759), so the paper never drifts from what the applicant ticked.
  */
-export async function bookletPaperInput(env: Env, booklet: BookletRow): Promise<PaperInput> {
-  const view = await bookletView(env, booklet);
-  const ticks = new Map(view.parts.flatMap((p) => p.fields.map((f) => [f.id, f.checked] as [string, boolean])));
+export async function bookletPaperInput(env: Env, booklet: BookletRow, signed?: BookletSignatures | null): Promise<PaperInput> {
   const applicant = await applicantName(env, booklet.application_id);
-  const bodies = new Map<number, string>();
-  for (const p of view.parts) {
-    if (!p.slug || p.missing || !READ_PARTS.has(p.part)) continue;
-    const tpl = await getTemplate(env, p.slug);
-    bodies.set(p.part, await tickedBody(p.slug, String(tpl?.body_md || ''), ticks));
+  // Frozen at submit (a withdrawn booklet keeps its frozen copy, which its completed envelopes print).
+  const frozen = !!booklet.frozen_json && !!booklet.digest;
+  let bodies: Map<number, string>;
+  let missing: number[];
+  let digest: string;
+  if (frozen) {
+    bodies = await frozenBodies(env, booklet);
+    missing = [];
+    digest = booklet.digest as string;
+  } else {
+    const view = await bookletView(env, booklet);
+    const ticks = new Map(view.parts.flatMap((p) => p.fields.map((f) => [f.id, f.checked] as [string, boolean])));
+    bodies = new Map<number, string>();
+    for (const p of view.parts) {
+      if (!p.slug || p.missing || !READ_PARTS.has(p.part)) continue;
+      const tpl = await getTemplate(env, p.slug);
+      bodies.set(p.part, await tickedBody(p.slug, String(tpl?.body_md || ''), ticks));
+    }
+    missing = view.missing_parts;
+    digest = view.digest;
   }
-  const parts: PaperPartInput[] = (SUBSCRIPTION_BOOKLET_PARTS as readonly BookletPart[]).map((p) => {
-    const resolved = view.parts.find((x) => x.part === p.part);
-    return {
-      n: p.part,
-      title: p.title,
-      body: p.part === 2 ? partTwoBody() : bodies.get(p.part) ?? null,
-      missing: READ_PARTS.has(p.part) && p.part !== 1 && !!resolved?.missing,
-      block: p.block ? { kind: p.block.kind, axalEntityKey: p.block.axalEntityKey } : null,
-      counterpartyName: applicant,
-      footer: `${BOOKLET_TITLE} · Part ${p.part}`,
-    };
-  });
+  const parts = bookletParts({ bodies, missing: (n) => missing.includes(n), applicant, signed });
   const date = (booklet.submitted_at || new Date().toISOString()).slice(0, 10);
   return {
     title: BOOKLET_TITLE,
     body: bodies.get(1) ?? '',
     slug: 'subscription_booklet',
-    bodySha256: view.digest,
-    state: { kind: view.missing_parts.length ? 'draft' : 'issued' },
+    bodySha256: digest,
+    state: { kind: missing.length ? 'draft' : 'issued' },
     copyNumber: booklet.uid,
     offeree: applicant,
     effectiveDate: date,
-    audit: booklet.status === 'submitted' && booklet.digest
+    audit: frozen && booklet.digest
       ? `Booklet ${booklet.uid} · digest ${booklet.digest.slice(0, 12)}`
       : `Booklet ${booklet.uid} · digest assigned when submitted`,
     parts,
+  };
+}
+
+/**
+ * D758 — the booklet's real paper with no booklet, for the Templates catalog:
+ * the shared part assembly with no ticks and no applicant, no copy number, in
+ * the specimen state. It reads the library rows the booklet prints and nothing
+ * else: no application, no booklet, no account. Page 1 is its cover.
+ */
+export async function bookletSpecimenInput(env: Env): Promise<PaperInput> {
+  const resolved = await resolveParts(env);
+  const none = new Map<string, boolean>();
+  const bodies = new Map<number, string>();
+  for (const p of resolved) {
+    if (!p.slug || p.missing || !READ_PARTS.has(p.part)) continue;
+    const tpl = await getTemplate(env, p.slug);
+    bodies.set(p.part, await tickedBody(p.slug, String(tpl?.body_md || ''), none));
+  }
+  return {
+    title: BOOKLET_TITLE,
+    body: bodies.get(1) ?? '',
+    slug: 'subscription_booklet',
+    bodySha256: await sha256Hex(canonicalJson(frozenOf(resolved, none))),
+    merge: 'brackets',
+    state: { kind: 'specimen' },
+    copyNumber: null,
+    offeree: null,
+    effectiveDate: null,
+    audit: 'Booklet id and digest assigned when submitted',
+    parts: bookletPaperParts(resolved, bodies, null),
   };
 }

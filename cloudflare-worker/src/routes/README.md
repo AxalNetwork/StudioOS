@@ -23,7 +23,7 @@ widened guard on this very sentence, which is the rule working.)
 ```
 /api/admin/partner-settlements → partner_settlements.ts (HQ drafts; Super Admin issue/void, D713)
 /api/partner-settlements → partner_settlements.ts (own non-draft settlements, D713)
-/api/mercury/personal → mercury_personal.ts (a member's own Mercury: status and payment matches, read-only, D713)
+/api/mercury/personal → mercury_personal.ts (a member's own Mercury (founders, partners, and investors on HQ): status, payment matches and raise receipts, read-only, D713, D752)
 /api/auth          → auth.ts
 /api/scoring       → scoring.ts
 /api/projects      → projects.ts
@@ -49,7 +49,9 @@ widened guard on this very sentence, which is the rule working.)
 /api/admin         → admin.ts
 /api/private-data  → private-data.ts
 /api/monitoring    → monitoring.ts
-/api/ai-budget     → ai_budget.ts       (member allowance/held reads; Super Admin reviews and plan caps, D640)
+/api/ai-budget     → ai_budget.ts       (member allowance/held reads; Super Admin reviews and plan caps, D640; D755: GET /top-up packs and latest purchase, GET /history, and the Super Admin's /members/:userId, /members/:userId/adjustments and /reconcile)
+/api/admin/catalog/token-packs → catalog.ts (D755: the Super Admin creates, adopts, changes and archives token packs; the generic catalog writes refuse a pack)
+/api/public/plans-and-packs → public.ts (D755: every plan's price and AI allowance and the packs on sale; D1 only, no session)
 /api/usage         → usage.ts           (the caller's own stored files by area, across all their companies; never another member's, D642)
 /api/connectors    → integrations.ts    (canonical connection catalogue, company scope, requests, suggestions and logs; D650)
 /api/integrations  → integrations.ts    (temporary alias to the same handlers; D650)
@@ -59,7 +61,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/fund-fees     → fund_fees.ts       (D709: the management fee's terms, admissions, net invested capital, offsets, and fee periods the GP previews and issues; moves no money)
 /api/fund-admin    → fund_admin.ts      (D714: GET /access, which fund acts this admin may take, from FUND_ACTS)
 /api/fund-reporting → fund_reporting.ts
-/api/fund-booklets → fund_booklets.ts (D716: the Subscription Booklet, the applicant's ticks, paper and submit, HQ's read, PDF and withdraw)
+/api/fund-booklets → fund_booklets.ts (D716: the Subscription Booklet, the applicant's ticks, paper and submit, HQ's read, PDF and withdraw; the e-sign send and the GP's acceptance (D759))
 /api/fund-notices  → fund_notices.ts    (D716: an Admin previews, the Super Admin issues, the LP reads their own; kept PDFs through Browser Run)
 /api/liquidity     → liquidity.ts
 /api/email         → email.ts
@@ -84,7 +86,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/ai           → ai.ts              (the caller's own AI spend, by task, page, model and day; the rate card at /rates, D641)
 /api/founder/validate → founder_validate_structure.ts (structure a session's transcript, compare two runs, ask it; accept, edit then accept or discard each placement; D658)
 /api/founder/validate → founder_validate_meetings.ts (D684: schedule, list, cancel and import a Zoom or Google Meet call on an interview)
-/api/channels         → founder_validate_meetings.ts `zoomWebhook` (the public Zoom webhook, mounted first), then channels.ts (D684: Telegram and WhatsApp connections, the conversation inbox, replies, and their public webhooks)
+/api/channels         → founder_validate_meetings.ts `zoomWebhook` (the public Zoom webhook, mounted first), then channels.ts (D684: Telegram and WhatsApp connections, the conversation inbox, replies, and their public webhooks; D754: consent requests in the chat and the member's word)
 /api/admin/channels   → channels.ts `channelsAdmin` (D684: the channels bot's setWebhook; super admin)
 /api/admin/bank-accounts → admin_bank_accounts.ts (D708: each Axal entity's bank accounts, masked, with add, relabel, purposes, retire and a recorded reveal; Super Admin, HQ only; mounted beside /api/admin/stripe, before the /api/admin catch-all)
 /api/admin/fund-structure → admin_fund_structure.ts (D717: the entity and money map, read-only; masked accounts for the Super Admin, and each entity's active accounts masked (#1855); #1773's sentence for a plain Admin; HQ only; mounted beside /api/admin/bank-accounts, before the /api/admin catch-all)

@@ -29,7 +29,9 @@ import { AI_USD_SCALE } from './aiBudget';
 
 type Purchase = { payment_intent_id: string; user_id: number; credited_at: string | null };
 const money = (micro: number) => `$${(micro / AI_USD_SCALE).toFixed(2)}`;
-const safeId = (v: unknown, prefix: string) => typeof v === 'string' && new RegExp(`^${prefix}_[A-Za-z0-9]+$`).test(v) ? v : null;
+// Stripe ids by prefix, as literal patterns: a charge (`ch_`, or `py_` for some payment methods) or a dispute (`dp_`, or `du_`).
+const STRIPE_ID = { ch: /^ch_[A-Za-z0-9]+$/, py: /^py_[A-Za-z0-9]+$/, dp: /^dp_[A-Za-z0-9]+$/, du: /^du_[A-Za-z0-9]+$/ } as const;
+const safeId = (v: unknown, prefix: keyof typeof STRIPE_ID) => typeof v === 'string' && STRIPE_ID[prefix].test(v) ? v : null;
 const cents = (v: unknown) => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 ? v : null;
 
 /** The purchase a charge or dispute belongs to, or null when it is not a token pack's. Throws while it cannot act yet. */

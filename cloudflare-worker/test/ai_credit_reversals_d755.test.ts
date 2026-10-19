@@ -76,6 +76,18 @@ test('a full refund with nothing spent takes the pack and its bonus back, once',
   } finally { f.db.close(); }
 });
 
+test('a refund or dispute whose Stripe id is not one reverses nothing', async () => {
+  const f = await world();
+  try {
+    await credit(f);
+    for (const id of ['ch_pack25;drop', 'ch_', 'xch_pack25', 'ch_pack 25', 'pi_pack25']) await refund(f, 2500, { id });
+    for (const id of ['dp_pack25!', 'dp_']) await dispute(f, 'charge.dispute.created', 'needs_response', { id });
+    assert.deepEqual(rows(f), [], 'a malformed id reached the ledger');
+    assert.equal(balance(f), 27500000);
+    await invariant(f);
+  } finally { f.db.close(); }
+});
+
 test('two partial refunds are two rows that add up; replaying either changes nothing', async () => {
   const f = await world();
   try {

@@ -318,6 +318,7 @@ const JoinBranchPage = lazy(() => import('./pages/JoinBranchPage'));
 const ContactPage = lazy(() => import('./pages/ContactPage'));
 const TeamPage = lazy(() => import('./pages/TeamPage'));
 const PrivacyPage = lazy(() => import('./pages/PrivacyPage'));
+const InterviewNoticePage = lazy(() => import('./pages/InterviewNoticePage'));
 const RiskDisclosuresPage = lazy(() => import('./pages/RiskDisclosuresPage'));
 // Task #5 — Public event surface.
 const PublicEventsPage = lazy(() => import('./pages/events/PublicEventsPage'));
@@ -2477,6 +2478,8 @@ function AppInner() {
           its address carries the same gate. The static path outranks
           `:section` below; the page also lists the section for admins only. */}
       <Route path="/account/developer" element={guard(['admin'], <SettingsPage />)} />
+      {/* D753 — a connector's own page, inside the Account center. */}
+      <Route path="/account/connectors/:key" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
       <Route path="/account/:section" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
       <Route path="/settings/:section" element={<SettingsSectionRedirect />} />
 
@@ -3587,6 +3590,7 @@ function AppInner() {
       <Route path="/methodology" element={<MethodologyPage />} />
       <Route path="/intelligence" element={<IntelligencePage />} />
       <Route path="/privacy" element={<PrivacyPage />} />
+      <Route path="/privacy/interviews" element={<InterviewNoticePage />} />
       <Route path="/risk-disclosures" element={<RiskDisclosuresPage />} />
       {/* Task #4 (ID) — Public marketing surfaces. No auth. */}
       <Route path="/pricing" element={<PricingPage />} />

@@ -163,3 +163,22 @@ export const FREE_TIER_LIMITS = {
   discoveryInterviews: 5,
   roadmapOkrs: 3,
 } as const;
+
+/**
+ * D757 (#1898) — the free tier's interview cap, one check for every creator:
+ * the 402 body when `userId` is a founder below Growth whose venture already
+ * holds FREE_TIER_LIMITS.discoveryInterviews interviews, else null. The rule
+ * and the body are the ones `POST /sessions` has always applied; the channel
+ * intake's "Create interview from this chat" and an assistant's submission
+ * reach it too.
+ */
+export async function interviewCapRefusal(env: Env, userId: number, projectId: number): Promise<ReturnType<typeof tierUpsell> | null> {
+  await ensureTierSchema(env);
+  const user = await env.DB.prepare(
+    'SELECT id, role, subscription_tier, subscription_status, subscription_renews_at FROM users WHERE id = ?',
+  ).bind(userId).first<TierUser>();
+  if (!user || user.role !== 'founder' || userMeetsTier(user, 'growth')) return null;
+  const existing = await env.DB.prepare('SELECT COUNT(*) AS n FROM discovery_interviews WHERE project_id = ?')
+    .bind(projectId).first<{ n: number }>();
+  return Number(existing?.n ?? 0) >= FREE_TIER_LIMITS.discoveryInterviews ? tierUpsell('growth') : null;
+}

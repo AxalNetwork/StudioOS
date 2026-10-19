@@ -508,14 +508,21 @@ payments.get('/alacarte/unlocks', async (c) => {
 // carries metadata.kind='intro_credits' + credits; the billing webhook
 // (payment_intent.succeeded) grants the purchased-bucket ledger rows
 // idempotently on the PI id.
+//
+// D755 (#1915): packs are no longer sold. While INTRO_PACKS_ON_SALE is off the
+// route answers 410 `intro_packs_retired` before any Stripe call; an intent
+// minted before the switch still grants through the webhook.
 // ---------------------------------------------------------------------------
 payments.post('/intro-credits/intent', async (c) => {
   const user = (await requireAuth(c)) as TierUser;
+  const { INTRO_PACKS, INTRO_PACKS_ON_SALE, isIntroPackKey } = await import('../services/introductions');
+  if (!INTRO_PACKS_ON_SALE) {
+    return refuse(c, 410, { code: 'intro_packs_retired', message: 'Introduction packs are no longer sold.', audience: 'member' });
+  }
   await ensureTierSchema(c.env);
   if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
 
   const body = (await c.req.json().catch(() => ({}))) as { pack?: string; nonce?: string };
-  const { INTRO_PACKS, isIntroPackKey } = await import('../services/introductions');
   if (!isIntroPackKey(body.pack)) return c.json({ error: 'invalid_pack' }, 400);
   const pack = INTRO_PACKS[body.pack];
 

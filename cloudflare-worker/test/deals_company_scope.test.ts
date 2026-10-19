@@ -24,6 +24,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { SignJWT } from 'jose';
 
 import deals from '../src/routes/deals.ts';
+import { personalMatchTables } from './_mercury_d713.ts';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 
@@ -197,4 +198,23 @@ test('the founder branch narrows by the project company', async () => {
 
 test('admin is unscoped', async () => {
   assert.deepEqual(ids(await list(admin, FUND_A)), [DEAL_A, DEAL_B, DEAL_OPEN]);
+});
+
+test('D752: after a founder confirms a deal commitment\'s receipt, the invited investor reads its status, never the bank evidence', async () => {
+  const db = freshDb();
+  db.exec('CREATE TABLE raise_prospects (id INTEGER PRIMARY KEY, project_id INTEGER, amount REAL, stage TEXT, commit_status TEXT, updated_at TEXT)');
+  personalMatchTables(db);
+  const id = Number((db.prepare('SELECT id FROM commitments WHERE deal_id = ?').get(DEAL_A) as any).id);
+  const before = await (await deals.request(`/${DEAL_A}/commitments`, { headers: { Authorization: `Bearer ${await token(INVESTOR, 'investor')}`, 'X-Company-Id': String(FUND_A) } }, env(db))).json() as any[];
+  db.prepare(`INSERT INTO mercury_personal_matches (uid, user_id, integration_id, mercury_transaction_id, account_last_four, amount_cents, posted_on, target_kind, target_id)
+              VALUES ('m-dc', ?, 9, 'txn-dc-0001', '4242', 100000, '2026-10-02', 'deal_commitment', ?)`).run(FOUNDER.user, id);
+  db.prepare("UPDATE commitments SET status = 'confirmed' WHERE id = ?").run(id);
+  const res = await deals.request(`/${DEAL_A}/commitments`, { headers: { Authorization: `Bearer ${await token(INVESTOR, 'investor')}`, 'X-Company-Id': String(FUND_A) } }, env(db));
+  assert.equal(res.status, 200);
+  const rows = await res.json() as any[];
+  const row = rows.find((r) => Number(r.id) === id);
+  assert.equal(row.status, 'confirmed');
+  assert.deepEqual(Object.keys(row).sort(), Object.keys(before.find((r) => Number(r.id) === id)).sort(), 'exactly the keys it returned before');
+  const text = JSON.stringify(rows);
+  for (const k of ['posted_on', 'last_four', 'account_last_four', 'mercury_transaction_id', '4242', 'txn-dc-0001', '2026-10-02']) assert.ok(!text.includes(k), k);
 });

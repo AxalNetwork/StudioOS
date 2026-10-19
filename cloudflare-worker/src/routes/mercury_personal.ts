@@ -3,7 +3,7 @@
  * NOTHING HERE MOVES MONEY: every bank read goes through #1775's GET-only client.
  *
  *   GET  /status                       the caller's connection and the uses their role holds
- *   GET  /matches?target=invoice|payout|settlement
+ *   GET  /matches?target=invoice|payout|settlement|raise|commitment
  *                                      their open targets of that kind, each with the bank
  *                                      lines that fit it, and their confirmed matches
  *   POST /matches                      { target_kind, target_id, transaction_id } — confirm one
@@ -14,6 +14,9 @@
  *   venture_revenue   founder   the revenue import, at /api/revenue/projects/:id/mercury-credits
  *   practice_income   partner   target=invoice: their own engagement invoices
  *   partner_deals     partner   target=payout and target=settlement; HQ only
+ *   raise_receipts    founder   target=raise and target=commitment: their own committed prospects
+ *                               and pending deal commitments (D752)
+ *   capital_attestation  investor  the proof of funds (D752; its routes come with #1888); HQ only
  *
  * Every route checks the caller's use, branch and support session first
  * (`personalPolicy`), and each value in a request is checked before anything
@@ -27,7 +30,7 @@ import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { branchOf } from '../util/branch';
 import {
-  PERSONAL_USES, TARGET_WORDS, USE_OF_TARGET, UUID_RE, WITHDRAW_REASON_MIN,
+  HQ_ONLY_USES, PERSONAL_USES, TARGET_WORDS, USE_OF_TARGET, UUID_RE, WITHDRAW_REASON_MIN,
   confirmMatch, logPersonalRead, matchDto, matchUse, ownTargets, personalConnection, personalPolicy,
   proposals, readFailure, usesFor, withdrawMatch,
   type MatchRow, type PersonalMatchTarget, type PersonalUse,
@@ -38,7 +41,7 @@ const mercuryPersonal = new Hono<{ Bindings: Env }>();
 
 const ALL_USES: PersonalUse[] = [...new Set(Object.values(PERSONAL_USES).flat())];
 
-/** `invoice`, `payout`, `settlement`, or the stored kind itself. */
+/** `invoice`, `payout`, `settlement`, `raise`, `commitment`, or the stored kind itself. */
 function targetKind(v: unknown): PersonalMatchTarget | null {
   const s = String(v ?? '');
   if (TARGET_WORDS[s]) return TARGET_WORDS[s];
@@ -62,8 +65,8 @@ mercuryPersonal.get('/status', async (c) => {
     connection: row ? { uid: row.uid, status: row.status, account_name: row.external_account_name, read_only: readOnly } : null,
     uses: ALL_USES.map((key) => ({
       key,
-      available: held.includes(key) && (key !== 'partner_deals' || hq),
-      reason: !held.includes(key) ? 'purpose_not_allowed' : key === 'partner_deals' && !hq ? 'hq_only' : null,
+      available: held.includes(key) && (!HQ_ONLY_USES.includes(key) || hq),
+      reason: !held.includes(key) ? 'purpose_not_allowed' : HQ_ONLY_USES.includes(key) && !hq ? 'hq_only' : null,
     })),
   });
 });
@@ -78,7 +81,7 @@ async function confirmedMatches(c: C, user: User, kind: PersonalMatchTarget) {
 mercuryPersonal.get('/matches', async (c) => {
   const user = await requireAuth(c);
   const kind = targetKind(c.req.query('target'));
-  if (!kind) return c.json({ error: 'invalid_target', message: 'Choose invoice, payout or settlement.' }, 400);
+  if (!kind) return c.json({ error: 'invalid_target', message: 'Choose invoice, payout, settlement, raise or commitment.' }, 400);
   const conn = await personalConnection(c, user, USE_OF_TARGET[kind]);
   if (conn instanceof Response) return conn;
   const targets = await ownTargets(c.env, user, kind);
@@ -93,8 +96,8 @@ mercuryPersonal.post('/matches', async (c) => {
   const user = await requireAuth(c);
   const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
   const kind = targetKind(b.target_kind);
-  if (!kind) return c.json({ error: 'invalid_target', message: 'Choose invoice, payout or settlement.' }, 400);
-  if (!positiveId(b.target_id)) return c.json({ error: 'invalid_target_id', message: 'Name the invoice, payout or settlement by its id.' }, 400);
+  if (!kind) return c.json({ error: 'invalid_target', message: 'Choose invoice, payout, settlement, raise or commitment.' }, 400);
+  if (!positiveId(b.target_id)) return c.json({ error: 'invalid_target_id', message: 'Name the target by its id.' }, 400);
   const txId = typeof b.transaction_id === 'string' ? b.transaction_id.toLowerCase() : '';
   if (!UUID_RE.test(txId)) return c.json({ error: 'invalid_transaction_id', message: 'Name the bank line by its Mercury transaction id.' }, 400);
   const conn = await personalConnection(c, user, USE_OF_TARGET[kind]);

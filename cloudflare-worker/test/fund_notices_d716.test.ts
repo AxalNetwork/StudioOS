@@ -16,8 +16,12 @@ import { makeD1 } from './_d1_sqlite.mjs';
 import { tableFromBaseline, stripForeignKeys } from './_baseline.mjs';
 import notices from '../src/routes/fund_notices.ts';
 import { PAY_WARNING } from '../src/services/payInstructions.ts';
+import { noticeListFacts } from '../src/services/fundNotices.ts';
 import { encryptColumn } from '../src/services/columnCipher.ts';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
+import { NOTICE_TYPES, noticeSpecimen } from '../src/services/fundNotices.ts';
+import { RECEIVING_BRACKET } from '../src/services/fundStructure.ts';
+import { AXAL_ENTITIES } from '../src/services/legalDocFormat.ts';
 
 const baseline = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const mig = (f: string) => readFileSync(new URL(`../sql/migrations/${f}`, import.meta.url), 'utf8');
@@ -316,6 +320,34 @@ test('D716 reads: an LP lists only their own notices; anyone else gets 404; a br
   assert.deepEqual([supportRead.status, supportRead.body.error], [403, 'support_session_refused'], 'a support session reads no notice either');
 });
 
+test('#1860 /mine and /mine/:uid carry call_number and due_date, computed on read; the admin list keeps its shape', async () => {
+  const f = fixture();
+  await account(f);
+  writeBody(f, 'capital_call_notice', BODY);
+  writeBody(f, 'default_notice', 'Dear {{lp.name}}: cure {{default.amount}} by {{default.cure_date}}.');
+  const call = (await issue(f, CALL_LINE)).body.notice;
+  const def = (await issue(f, { type: 'default_notice', source: { line_id: 11 }, inputs: { cure_date: FUTURE, lpa_section: 'Section 3.4' } })).body.notice;
+  const dist = (await issue(f, { type: 'distribution_notice', source: { distribution_id: 41 }, inputs: { tax_character: 'long_term_capital_gain' } })).body.notice;
+  assert.ok(call?.uid && def?.uid && dist?.uid, 'all three issued');
+  const mine = await f.call(LP_A, 'GET', '/mine');
+  const by = Object.fromEntries(mine.body.notices.map((x: any) => [x.uid, x]));
+  assert.deepEqual([by[call.uid].call_number, by[call.uid].due_date], ['1', PAST]);
+  assert.deepEqual([by[def.uid].call_number, by[def.uid].due_date], ['1', FUTURE], 'a default notice gives its cure date');
+  assert.deepEqual([by[dist.uid].call_number, by[dist.uid].due_date], [null, null]);
+  for (const n of [call, def, dist]) {
+    const one = await f.call(LP_A, 'GET', `/mine/${n.uid}`);
+    assert.deepEqual([one.body.call_number, one.body.due_date], [by[n.uid].call_number, by[n.uid].due_date]);
+    assert.ok(!one.text.includes(FUND_NUMBER), 'a full account number leaked');
+  }
+  assert.ok(!mine.text.includes(FUND_NUMBER), 'a full account number leaked');
+  const notSet = { type: 'capital_call_notice', key_figures: [{ label: 'Call number', value: '2' }, { label: 'Due date', value: 'Not set' }] } as any;
+  assert.deepEqual(noticeListFacts(notSet), { call_number: '2', due_date: null });
+  const adminList = await f.call(ADMIN, 'GET', '');
+  assert.equal(adminList.status, 200, adminList.text);
+  assert.ok(adminList.body.notices.length >= 3);
+  for (const n of adminList.body.notices) assert.equal('due_date' in n, false, 'noticeSummary is unchanged');
+});
+
 test('D716 files: drawn once through Browser Run and kept; a failure keeps nothing; a superseded notice keeps a second file', async () => {
   const f = fixture();
   await account(f);
@@ -431,4 +463,60 @@ test('D716 the fee invoice: the GP to the Fund, the period\'s lines and remittan
   assert.equal(done.status, 201, done.text);
   assert.equal(f.one("SELECT reference FROM legal_notices").reference, 'AXAL-MF-2026Q3-F10');
   assert.equal((await issue(f, INVOICE)).body.already_issued, true);
+});
+
+// D758 (#1864): the catalog's thumbnail of each type is its specimen. It must
+// print what the builder prints, with brackets where the builder prints a figure.
+const OPTIONAL_LINES = new Set(['Alternate routing number', 'SWIFT', 'Intermediary SWIFT']);
+function noticeShape(f: any) {
+  return {
+    title: f.title, sender: f.sender, payee: f.payee, purpose: f.purpose,
+    key_figures: f.key_figures.map((k: any) => [k.label, !!k.mono]),
+    tables: f.tables.map((t: any) => ({ title: t.title ?? null, columns: t.columns, total: !!t.total })),
+    warning: f.warning,
+    payment: f.payment ? f.payment.lines.filter((l: any) => !OPTIONAL_LINES.has(l.label)).map((l: any) => [l.label, !!l.mono]) : null,
+    reference: f.reference != null,
+    prose: f.prose ? f.prose.slug : null,
+    closing: f.closing.length,
+  };
+}
+
+test('D758 each type\'s specimen prints what its builder prints, in brackets, and no figure', async () => {
+  const f = fixture();
+  seedFees(f);
+  await account(f);
+  await account(f, { entity: 'gp', beneficiary: AXAL_ENTITIES.gp.name, purposes: ['management_fee'] });
+  await account(f, { entity: 'holdings', beneficiary: AXAL_ENTITIES.holdings.name, purposes: ['platform_licence_fee'] });
+  const REAL: Record<string, Record<string, unknown>> = {
+    capital_call_notice: CALL_LINE,
+    distribution_notice: { type: 'distribution_notice', source: { distribution_id: 41 }, inputs: { tax_character: 'long_term_capital_gain' } },
+    default_notice: { type: 'default_notice', source: { line_id: 11 }, inputs: { cure_date: FUTURE, lpa_section: 'Section 3.4' } },
+    management_fee_statement: STATEMENT,
+    management_fee_invoice: INVOICE,
+    platform_licence_fee_invoice: { type: 'platform_licence_fee_invoice', inputs: { licensee: 'gp', period_start: '2026-10-01', period_end: '2026-12-31', amount_cents: 100000, due_date: FUTURE } },
+    payment_instructions_letter: { type: 'payment_instructions_letter', inputs: { purpose: 'capital_contribution', to: 'Lena LP' } },
+  };
+  assert.deepEqual(Object.keys(REAL).sort(), NOTICE_TYPES.map((t) => t.type).sort(), 'every type is held to a real build');
+  const bracket = /^\[[^\]\d]+\]$/;
+  for (const [type, req] of Object.entries(REAL)) {
+    const real = await preview(f, req);
+    assert.equal(real.status, 200, `${type}: ${real.text}`);
+    assert.ok(real.body.figures.payment === null || real.body.figures.payment.lines, `${type}: the real build has its block`);
+    const spec = await noticeSpecimen(f.env, type);
+    assert.deepEqual(noticeShape(spec), noticeShape(real.body.figures), type);
+    for (const k of spec.key_figures) assert.match(k.value, bracket, `${type}: ${k.label}`);
+    for (const t of spec.tables) {
+      for (const row of t.rows) for (const cell of row) assert.ok(cell === 'Total' || cell === '' || bracket.test(cell), `${type}: ${cell}`);
+      if (t.total) assert.equal(t.rows[t.rows.length - 1][0], 'Total', `${type}: the total row`);
+    }
+    for (const l of spec.payment?.lines ?? []) {
+      assert.ok(bracket.test(l.value) || l.value === RECEIVING_BRACKET || l.label === 'Full account number', `${type}: ${l.label}`);
+    }
+    if (spec.reference !== null) assert.equal(spec.reference, '[Reference]');
+    assert.ok(spec.addressee.includes('To: [Addressee]'), `${type}: the addressee`);
+    if (real.body.figures.addressee[0].startsWith('From:')) assert.equal(spec.addressee[0], real.body.figures.addressee[0], `${type}: the sender line`);
+    assert.deepEqual([spec.fund_id, spec.limited_partner_id, spec.amount_cents], [null, null, null], type);
+    const text = JSON.stringify(spec);
+    assert.doesNotMatch(text, /\$\d|ending \d|4400556677|6677|121145433|L101/, `${type}: no figure, no account`);
+  }
 });

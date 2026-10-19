@@ -7,7 +7,9 @@
  *   POST   /projects/:projectId/entries/import-stripe   the founder's own Stripe
  *          charges, one verified entry each (D587, migration 400)
  *   GET    /projects/:projectId/mercury-credits?from&to   the founder's own Mercury
- *          credits, each importable or listed with its reason (D713); writes no row
+ *          credits, each importable or listed with its reason (D713); writes no row.
+ *          A confirmed raise receipt's line is refused `raise_receipt`, and each other
+ *          credit carries `fits_raise_target` (D752)
  *   POST   /projects/:projectId/entries/import-mercury   the credits the founder
  *          picked, re-read from Mercury, one `supported` entry each (D713, migration 477)
  *   PATCH  /projects/:projectId/entries/:uid     edit an entry or attach its proof
@@ -45,7 +47,7 @@ import {
   type LedgerRow,
 } from '../services/revenueLedger';
 import {
-  UUID_RE, listOwnTransactions, logPersonalRead, personalConnection, readFailure, readOwnTransaction, readWindow,
+  UUID_RE, lineFits, listOwnTransactions, logPersonalRead, openRaiseTargets, personalConnection, raiseReceiptIds, readFailure, readOwnTransaction, readWindow,
   type BankLine,
 } from '../services/mercuryPersonal';
 import { namesAxalEntity } from '../integrations/providers/mercury';
@@ -311,13 +313,13 @@ async function importedProjects(c: Ctx, ids: string[]): Promise<Map<string, numb
   return out;
 }
 
-function creditFor(line: BankLine, projectId: number, imported: Map<string, number>, stripe: boolean) {
+function creditFor(line: BankLine, projectId: number, imported: Map<string, number>, stripe: boolean, receipts: Set<string>) {
   const at = imported.get(line.transaction_id);
   return mercuryCreditToEntry({
     transaction_id: line.transaction_id, amount_cents: line.amount_cents, posted_on: line.posted_on,
     posted: line.posted, internal: line.internal, voided: line.voided,
     axal_counterparty: namesAxalEntity(line.counterparty_name), stripe_counterparty: namesStripe(line.counterparty_name),
-  }, { stripeActive: stripe, importedHere: at === projectId, importedElsewhere: at != null && at !== projectId });
+  }, { stripeActive: stripe, importedHere: at === projectId, importedElsewhere: at != null && at !== projectId, raiseReceipt: receipts.has(line.transaction_id) });
 }
 
 revenue.get('/projects/:projectId/mercury-credits', async (c) => {
@@ -332,26 +334,41 @@ revenue.get('/projects/:projectId/mercury-credits', async (c) => {
   let read: { lines: BankLine[]; capped: boolean };
   try { read = await listOwnTransactions(conn, window); }
   catch (e) { return readFailure(c, conn, e); }
-  const imported = await importedProjects(c, read.lines.map((l) => l.transaction_id));
+  const ids = read.lines.map((l) => l.transaction_id);
+  const imported = await importedProjects(c, ids);
   const stripe = await stripeActive(c, g.project.id, g.user.id);
+  // D752: database reads only, no second bank read.
+  const receipts = await raiseReceiptIds(c.env, g.user.id, ids);
+  const raiseTargets = await openRaiseTargets(c.env, g.user);
   const credits = [];
   for (const l of read.lines) {
-    const out = creditFor(l, g.project.id, imported, stripe);
+    const out = creditFor(l, g.project.id, imported, stripe, receipts);
     if (out.kind === 'skip') continue;
+    const receipt = out.kind === 'refuse' && out.reason === 'raise_receipt';
     credits.push({
       transaction_id: l.transaction_id, posted_on: l.posted_on ?? l.created_on, amount_cents: l.amount_cents,
       last_four: l.last_four, counterparty_name: l.counterparty_name,
       importable: out.kind === 'entry', reason: out.kind === 'refuse' ? out.reason : null,
+      // A hint, never a refusal: a customer can pay an amount equal to a commitment.
+      fits_raise_target: !receipt && raiseTargets.some((t) => lineFits(t, l)),
     });
   }
   await logPersonalRead(c.env, conn, g.user, 'mercury_credits_read', { lines: read.lines.length, credits: credits.length });
   return c.json({ currency: LEDGER_CURRENCY, window, credits, lines_read: read.lines.length, capped: read.capped });
 });
 
-const MERCURY_INSERT =
+/**
+ * D752 decision 10: a line confirmed as a raise receipt is never written as
+ * revenue, checked inside the INSERT so a confirmation racing the import
+ * cannot leave the line as both. The SELECT carries a WHERE, as SQLite's
+ * upsert rule requires of INSERT … SELECT … ON CONFLICT.
+ */
+export const MERCURY_INSERT =
   'INSERT INTO revenue_entries (uid, project_id, customer, amount_cents, currency, revenue_type, received_on, '
   + 'source, source_ref, verification, import_batch, created_by) '
-  + "VALUES (?, ?, ?, ?, ?, ?, ?, 'mercury', ?, ?, ?, ?) "
+  + "SELECT ?, ?, ?, ?, ?, ?, ?, 'mercury', ?, ?, ?, ? "
+  + 'WHERE NOT EXISTS (SELECT 1 FROM mercury_personal_matches m WHERE m.mercury_transaction_id = ? '
+  + "AND m.state = 'confirmed' AND m.target_kind IN ('raise_prospect', 'deal_commitment')) "
   + "ON CONFLICT (source_ref) WHERE source = 'mercury' DO NOTHING";
 
 const FED_UPSERT =
@@ -394,6 +411,7 @@ revenue.post('/projects/:projectId/entries/import-mercury', async (c) => {
   } catch (e) { return readFailure(c, conn, e); }
   const imported = await importedProjects(c, items.map((it) => it.transaction_id));
   const stripe = await stripeActive(c, g.project.id, g.user.id);
+  const receipts = await raiseReceiptIds(c.env, g.user.id, items.map((it) => it.transaction_id));
   const verification = verificationFor({ source: 'mercury', proof_document_id: null });
   const batch = crypto.randomUUID();
   const refused: { transaction_id: string; reason: string }[] = [];
@@ -402,7 +420,7 @@ revenue.post('/projects/:projectId/entries/import-mercury', async (c) => {
     for (const it of items) {
       const line = lines.get(it.transaction_id);
       if (!line) { refused.push({ transaction_id: it.transaction_id, reason: 'transaction_not_found' }); continue; }
-      const out = creditFor(line, g.project.id, imported, stripe);
+      const out = creditFor(line, g.project.id, imported, stripe, receipts);
       if (out.kind === 'skip') { refused.push({ transaction_id: it.transaction_id, reason: 'not_a_credit' }); continue; }
       if (out.kind === 'refuse') {
         if (out.reason === 'already_imported') already += 1;
@@ -412,12 +430,13 @@ revenue.post('/projects/:projectId/entries/import-mercury', async (c) => {
       const e = out.entry;
       const uid = crypto.randomUUID();
       const r = await c.env.DB.prepare(MERCURY_INSERT).bind(uid, g.project.id, it.customer, e.amount_cents, LEDGER_CURRENCY,
-        it.revenue_type, e.received_on, e.source_ref, verification, batch, g.user.id).run();
+        it.revenue_type, e.received_on, e.source_ref, verification, batch, g.user.id, e.source_ref).run();
       if (!Number(r.meta?.changes ?? 0)) {
-        // Another import wrote this line between the read and the insert.
+        // Another import wrote this line between the read and the insert, or a
+        // raise receipt was confirmed on it (D752): then it is on no ledger.
         const at = (await importedProjects(c, [e.source_ref])).get(e.source_ref);
         if (at === g.project.id) already += 1;
-        else refused.push({ transaction_id: it.transaction_id, reason: 'imported_elsewhere' });
+        else refused.push({ transaction_id: it.transaction_id, reason: at == null ? 'raise_receipt' : 'imported_elsewhere' });
         continue;
       }
       const row = await c.env.DB.prepare('SELECT id FROM revenue_entries WHERE uid = ?').bind(uid).first<{ id: number }>();
