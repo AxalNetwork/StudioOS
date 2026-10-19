@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Save, FileDown, Image as ImageIcon, Table2, Send, ExternalLink, Loader2 } from 'lucide-react';
-import { publications, railProposalsApi } from '../../lib/api';
+import { publications } from '../../lib/api';
+import { railProposalsApi } from '../../lib/api/railProposals.js';
 import { useToast } from '../../components/useToast';
 import ToastMessage from '../../components/ToastMessage';
 import PublicationsFrame from './PublicationsFrame';

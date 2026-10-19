@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Scale, Banknote, ClipboardCheck, Plus, Loader2, X, FileText, Sparkles, ShieldCheck, Send, CheckCircle2, AlertTriangle, Rocket } from 'lucide-react';
-import { api, railProposalsApi } from '../lib/api';
+import { api } from '../lib/api';
+import { railProposalsApi } from '../lib/api/railProposals.js';
 import { useAuth } from '../hooks/useAuthSync';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import SpinoutWizard from '../components/SpinoutWizard';
