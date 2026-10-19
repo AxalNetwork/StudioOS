@@ -14,7 +14,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   ENTITY_KEYS, entityRow, entityRows, entityState, entityErrorWords, accountLine, UNREGISTERED_NOTE, FUND_NOTE,
-  orgNameDiffersSentence, ENTITY_FEEDS, ENTITY_AUDIT_FOOT, ADMIN_ONLY, BRANCH_MANAGED, TOKEN_HELP, OPEN_BANKING,
+  orgNameDiffersSentence, ENTITY_FEEDS, ENTITY_AUDIT_FOOT, ENTITY_SHEET_AUDIT_FOOT, ADMIN_ONLY, BRANCH_MANAGED, TOKEN_HELP, OPEN_BANKING,
   confirmReadOnlyLabel, DISCONNECT_REASON_MIN, ENTITY_DISCONNECT_NOTE, retryAfterSentence,
   MEMBER_GROUPS, NEVER_ROWS, neverRows, landsWords, READS_ROW, MEMBER_REPLACE, MEMBER_DISCONNECT_NOTE, memberDisconnectNote,
   PERSONAL_DOES, PERSONAL_LAST_SYNC, PERSONAL_COMPANIES, personalFeedsFallback, personalAttention, personalToolBanner,
@@ -109,6 +109,7 @@ test('decision 4 and 6: the Fund\'s note, the org-name sentence, and the fixed s
   assert.equal(entityRow('gp', conn()).orgNameDiffers, null);
   assert.equal(ENTITY_FEEDS, 'What it feeds: balances and transactions for reconciliation, and the monthly cash and reconciliation drafts. Drafts wait in the review queue. Nothing reaches an LP from here.');
   assert.equal(ENTITY_AUDIT_FOOT, 'Opening this page is recorded in the admin audit log.');
+  assert.equal(ENTITY_SHEET_AUDIT_FOOT, 'Opening this sheet is recorded in the admin audit log.');
   assert.equal(ADMIN_ONLY, 'Only the Super Admin connects, replaces or disconnects an entity\'s Mercury.');
   assert.equal(BRANCH_MANAGED, 'Axal\'s entity accounts are managed from HQ.');
   assert.equal(TOKEN_HELP, 'How to create a Read Only token');

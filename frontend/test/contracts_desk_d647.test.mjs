@@ -27,7 +27,11 @@ const tabReads = [
   ['partner-deals', 'adminListPartnerDeals', null, 'partner deals', 'No partner deal'],
   ['templates', null, 'templates', '', 'No templates'],
   ['forms', 'adminListForms', null, 'forms', 'No form'],
-  ['document-types', 'adminContractRegistryHub', null, 'doc-type registry', 'No'],
+  // D769 (#2088): this row expected 'No', which only the rail's retired line
+  // "No switch here. Nothing on this page fills a blank for you." ever matched;
+  // the registry draws no empty sentence of its own. It now reads what the
+  // registry does draw on a successful empty read.
+  ['document-types', 'adminContractRegistryHub', null, 'doc-type registry', 'registered types across the code layers'],
 ];
 for (const [tab, legacy, domain, loading, emptyText] of tabReads) {
   test(`D647 ${tab}: renders loading, successful empty and failed reads with retry`, async () => {

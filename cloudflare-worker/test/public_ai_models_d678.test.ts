@@ -26,7 +26,8 @@ const SAFE = ['feature', 'model', 'name', 'provider'];
 
 test('one row per router task, read from the router and the catalog', () => {
   const rows = publicAiModels();
-  const tasks = Object.keys(ROUTE);
+  // D764: the rail_<kind> tasks have no fixed model, so the public list leaves them out (D761).
+  const tasks = Object.keys(ROUTE).filter((t) => !t.startsWith('rail_'));
   assert.equal(rows.length, tasks.length, 'every task the router runs has a row');
   tasks.forEach((task, i) => {
     const entry = ROUTE[task as keyof typeof ROUTE];
@@ -58,7 +59,8 @@ test('GET /ai-models answers without a session, with the safe fields only, cache
   assert.match(res.headers.get('cache-control') || '', /^public, max-age=300, s-maxage=300$/);
   const body = await res.json() as { ok: boolean; models: Record<string, unknown>[] };
   assert.equal(body.ok, true);
-  assert.equal(body.models.length, Object.keys(ROUTE).length);
+  assert.equal(body.models.length, Object.keys(ROUTE).filter((t) => !t.startsWith('rail_')).length);
+  assert.ok(!body.models.some((r) => /rail_/.test(String(r.feature))), 'no rail_<kind> task reaches the public list');
   for (const row of body.models) {
     assert.deepEqual(Object.keys(row).sort(), [...SAFE].sort(), 'no price, chain, alternates or cache field leaks');
   }

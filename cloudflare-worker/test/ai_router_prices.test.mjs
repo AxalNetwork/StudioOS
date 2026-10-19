@@ -47,26 +47,21 @@ async function source() {
   return readFile(resolve(__dirname, '../src/services/aiRouter.ts'), 'utf8');
 }
 
-/** `'@cf/…': { in: N, out: N }` rows from the price table. */
-function pricesFrom(src) {
-  const start = src.indexOf('export const PRICE_USD_PER_1M_TOKENS');
-  assert.ok(start > 0, 'the price table is no longer exported under that name');
-  const body = src.slice(start, src.indexOf('};', start));
-  const out = new Map();
-  for (const m of body.matchAll(/'(@cf\/[^']+)':\s*\{\s*in:\s*([\d.]+),\s*out:\s*([\d.]+)/g)) {
-    out.set(m[1], { in: Number(m[2]), out: Number(m[3]) });
-  }
-  return out;
+/**
+ * D760 (#2017) — the two price tables are views of the catalogue now, so the
+ * prices are read from the module, not from source text: there is no literal
+ * left to parse. The ROUTE readers below still read the source.
+ */
+const router = await import('../src/services/aiRouter.ts');
+
+/** `model → { in, out }` from the token price table. */
+function pricesFrom(_src) {
+  return new Map(Object.entries(router.PRICE_USD_PER_1M_TOKENS));
 }
 
-/** `'@cf/…': N` rows from the per-audio-minute table. */
-function audioPricesFrom(src) {
-  const start = src.indexOf('export const PRICE_USD_PER_AUDIO_MINUTE');
-  if (start < 0) return new Map();
-  const body = src.slice(start, src.indexOf('};', start));
-  const out = new Map();
-  for (const m of body.matchAll(/'(@cf\/[^']+)':\s*([\d.]+)/g)) out.set(m[1], Number(m[2]));
-  return out;
+/** `model → USD per minute` from the per-audio-minute table. */
+function audioPricesFrom(_src) {
+  return new Map(Object.entries(router.PRICE_USD_PER_AUDIO_MINUTE));
 }
 
 /** Every model string named inside the ROUTE map, constants resolved. */
@@ -131,17 +126,22 @@ const DEPRECATED = new Set([
 ]);
 
 /** Cloudflare's published rates, per 1M tokens, read 2026-09-06. */
-const PUBLISHED = {
-  '@cf/meta/llama-guard-3-8b':                { in: 0.484, out: 0.030 },
-  '@cf/meta/llama-3.1-8b-instruct':           { in: 0.282, out: 0.827 },
-  '@cf/meta/llama-3.1-8b-instruct-fp8':       { in: 0.152, out: 0.287 },
-  '@cf/meta/llama-3.3-70b-instruct-fp8-fast': { in: 0.293, out: 2.253 },
-  '@cf/qwen/qwen2.5-coder-32b-instruct':      { in: 0.660, out: 1.000 },
-  '@cf/meta/llama-3.2-3b-instruct':           { in: 0.051, out: 0.335 },
+// D760 (#2017; S1, 2026-10-19): Workers AI bills NEURONS, at $0.011 per 1,000.
+// The pricing page prints the neuron column beside its rounded dollar column,
+// and the dollar column is a rounding of neurons × 0.000011. These are the
+// neuron figures per 1M tokens as printed (read 2026-10-19), and the price
+// each must come to is that product, exactly.
+const PUBLISHED_NEURONS = {
+  '@cf/meta/llama-guard-3-8b':                { in: 44003, out: 2730,   in_usd: 0.484033, out_usd: 0.03003 },
+  '@cf/meta/llama-3.1-8b-instruct':           { in: 25608, out: 75147,  in_usd: 0.281688, out_usd: 0.826617 },
+  '@cf/meta/llama-3.1-8b-instruct-fp8':       { in: 13778, out: 26128,  in_usd: 0.151558, out_usd: 0.287408 },
+  '@cf/meta/llama-3.3-70b-instruct-fp8-fast': { in: 26668, out: 204805, in_usd: 0.293348, out_usd: 2.252855 },
+  '@cf/qwen/qwen2.5-coder-32b-instruct':      { in: 60000, out: 90909,  in_usd: 0.66,     out_usd: 0.999999 },
+  '@cf/meta/llama-3.2-3b-instruct':           { in: 4625,  out: 30475,  in_usd: 0.050875, out_usd: 0.335225 },
   // D658: quoted in aiRouter.ts's SMALL_LLAMA note from the same reading.
-  '@cf/meta/llama-3.1-8b-instruct-fp8-fast':  { in: 0.045, out: 0.384 },
+  '@cf/meta/llama-3.1-8b-instruct-fp8-fast':  { in: 4119,  out: 34868,  in_usd: 0.045309, out_usd: 0.383548 },
   // D658: Cloudflare's model page and pricing table, read 2026-10-09.
-  '@cf/deepseek-ai/deepseek-v4-flash-0731':   { in: 0.44,  out: 1.32 },
+  '@cf/deepseek-ai/deepseek-v4-flash-0731':   { in: 40000, out: 120000, in_usd: 0.44,     out_usd: 1.32 },
 };
 
 test('every model the router routes to has a price', async () => {
@@ -193,14 +193,16 @@ test('the router routes to no deprecated model', async () => {
 test('every price matches what Cloudflare publishes', async () => {
   const prices = pricesFrom(await source());
   let checked = 0;
-  for (const [model, want] of Object.entries(PUBLISHED)) {
+  for (const [model, want] of Object.entries(PUBLISHED_NEURONS)) {
     const got = prices.get(model);
     assert.ok(got, `${model} has no row in the price table`);
-    assert.equal(got.in, want.in, `${model} input price is ${got.in}, Cloudflare publishes ${want.in}`);
-    assert.equal(got.out, want.out, `${model} output price is ${got.out}, Cloudflare publishes ${want.out}`);
+    // The figure is neurons × $0.000011, to the last digit, not the rounded dollar column.
+    assert.equal(got.in, want.in_usd, `${model} input price is ${got.in}; ${want.in} neurons is ${want.in_usd}`);
+    assert.equal(got.out, want.out_usd, `${model} output price is ${got.out}; ${want.out} neurons is ${want.out_usd}`);
+    assert.ok(Math.abs(want.in * 0.000011 - want.in_usd) < 1e-12 && Math.abs(want.out * 0.000011 - want.out_usd) < 1e-12, model);
     checked += 1;
   }
-  assert.equal(checked, Object.keys(PUBLISHED).length);
+  assert.equal(checked, Object.keys(PUBLISHED_NEURONS).length);
 });
 
 test('input and output prices are not assumed symmetric', async () => {
