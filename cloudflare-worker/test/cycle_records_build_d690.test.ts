@@ -487,7 +487,9 @@ test('test 1: each of the six records returns its canvas title, sub, four facts 
     ['Waits on Pricing page', 'Next', 'Open'], ['Blocks Approval rules v1', 'Later', undefined]]);
   assert.deepEqual(section(item, 'feedback').rows, [{ a: '“Please add more banks”', b: `A customer · ${new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(new Date())}`, c: 'Coverage', tone: 'vio' }]);
   assert.doesNotMatch(JSON.stringify(item), /customer@example\.test/, 'never the sender\'s email');
-  assert.deepEqual(section(item, 'github').rows.map((r: any) => [r.a, r.b]), [['Issue #7', 'synced 12 Oct 2026'], ['State', 'Not recorded: the sync stores no issue state.']]);
+  // D782 (#2111): the panel also names the issue's milestone and the release that shipped the item.
+  assert.deepEqual(section(item, 'github').rows.map((r: any) => [r.a, r.b]), [['Issue #7', 'synced 12 Oct 2026'], ['State', 'Not recorded: the sync stores no issue state.'],
+    ['Milestone', 'In no milestone'], ['Shipped', 'Not shipped: no release names it or closes it.']]);
   assert.equal(section(item, 'public').rows[0].a, 'Not recorded');
   db.close();
 });
