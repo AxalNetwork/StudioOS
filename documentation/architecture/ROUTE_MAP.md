@@ -69,6 +69,8 @@ Every admin act leaves one `fund_admin.<act>` row in `admin_audit_log`. `COOL_OF
 
 The `github` provider is a GitHub App's read-only user authorization. `GET /:uid/repositories` lists what its installations reach and what is chosen; `PUT /:uid/repositories` saves a choice and a project, after re-reading the grant and refusing any permission beyond the registry's four read scopes (`write_scope_refused`). Both need the active company enabled for the connection, and the project must be in it. `POST /:uid/sync` lands issues on `roadmap_okrs` and pull requests on `mvp_features`, linked through `connector_fed_items` (migration 445) so a re-sync updates; releases are recorded with no store. `GET /:uid/sync-status` returns the running sync's percentage and what it is reading. `GET /:uid/fed` returns, for every connector, a count per module it feeds; a connector that does not record deliveries says Not recorded, never 0.
 
+`DELETE /:uid` on a GitHub connection also revokes the grant on GitHub, best effort. Its user token is renewed 60 s before it expires, and a refused renewal sets the connection to `error` with `github_sign_in_expired`.
+
 ### Fund notices and booklets Worker contract (D716, #1781)
 
 The Subscription Booklet's store is mounted at `/api/fund-booklets` (`routes/fund_booklets.ts`, `services/subscriptionBooklet.ts`, migration 478).

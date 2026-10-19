@@ -31,6 +31,18 @@
   commitment, newest open, drawn by `FeeStatementView` with no account digits.
   Frontend only: no route, migration or API method changes.
 
+## GitHub sign-ins renew themselves, and disconnecting revokes them (D655 follow-up, #1883)
+
+- GitHub user tokens renew 60 seconds before expiry. Rotated tokens are stored
+  with compare-and-swap so a concurrent reconnect is preserved. An exclusive
+  lease in D1 prevents duplicate renewals even if KV fails; lease losers
+  wait for the result and never renew on their own.
+- A refused refresh shows Reconnect and is not retried until sign-in. Temporary
+  failures leave credentials intact. Disconnect revokes the authorization best
+  effort; the App remains installed on the member's repositories.
+- No new routes, bindings or migrations. Expiry can be enabled by the owner
+  after this change merges; setup remains tracked in #1008 and #1885.
+
 ## Every connector's page, as data the Worker holds to its code (D753, #1875)
 
 - `cloudflare-worker/src/integrations/connectorPages.ts` describes each
