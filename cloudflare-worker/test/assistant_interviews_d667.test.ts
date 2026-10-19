@@ -309,6 +309,19 @@ test('a quote not in the stored transcript is dropped and reported, never stored
   assert.doesNotMatch(JSON.stringify(rows), /pricey/);
 });
 
+test('D757 (#1923): a new kind is taken through the same PLACEMENT_KINDS, and refused under another module', async () => {
+  const { env, db } = world();
+  const { session_id } = await submitInterview(env, GRANT, ARGS());
+  const out = await proposePlacements(env, GRANT, { session_id, placements: [
+    { module: 'demand_signals', kind: 'urgency', payload: { level: 'high', reason: 'Every Friday' }, quote: 'By hand, every Friday. It takes my whole afternoon' },
+    { module: 'experiments', kind: 'urgency', payload: { level: 'high' }, quote: 'By hand, every Friday. It takes my whole afternoon' },
+    { module: 'ideal_customer_profile', kind: 'firmographic', payload: { attribute: 'favourite_colour', value: 'blue' }, quote: 'By hand, every Friday. It takes my whole afternoon' },
+  ] });
+  assert.equal(out.stored, 1);
+  assert.deepEqual(out.dropped, [{ index: 1, reason: 'module_mismatch' }, { index: 2, reason: 'invalid_payload' }]);
+  assert.equal((db.prepare('SELECT kind FROM validate_proposals').get() as any).kind, 'urgency');
+});
+
 test('quoteSpan: verbatim after whitespace, and only the segments the quote falls in', () => {
   const segs = [
     { start: 0, end: 10, speaker: 'A', text: 'one  two' },
