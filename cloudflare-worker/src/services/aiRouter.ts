@@ -170,6 +170,9 @@ export interface RunOptions {
   rerank?: shapes.RerankInput;
   // D761 PR 2: a translation of `text` for a translation model (m2m100).
   translate?: shapes.TranslateInput;
+  // D761 PR 3: `text` spoken by a voice model (Aura, MeloTTS); the result
+  // carries `audio`. A partner voice runs only once D760's gate offers it.
+  speak?: shapes.SpeakInput;
   // D763 (#2020): the text the MEMBER typed or supplied for this run (typed
   // text, the page's text, an upload's text), which the guard checks in full
   // before the model is called. Absent, it is every message the run sends
@@ -255,6 +258,8 @@ export interface RunResult {
   embedding?: number[];        // populated for task='embed'
   // D761 PR 2: a rerank's contexts, best first, by their index in the request.
   ranking?: shapes.RankedContext[];
+  // D761 PR 3: a voice run's audio.
+  audio?: shapes.SpeechAudio;
   stream?: ReadableStream;     // populated only when opts.stream === true
   // A speech-to-text run's passages, language and speaker labels (D657).
   transcript?: SttTranscript;
@@ -415,6 +420,21 @@ export const PRICE_USD_PER_AUDIO_MINUTE: Record<string, number> = {
   // D657 — Nova-3 over plain HTTP (batch). Its WebSocket rate is different and
   // lives in the table below. Read from Cloudflare's pricing page, 2026-10-09.
   '@cf/deepgram/nova-3': 0.0052,
+  // D761 PR 3 — MeloTTS is billed per minute of audio it RETURNS, measured
+  // from its output bytes (`audioMinutesFromBytes`). Read 2026-10-19.
+  '@cf/myshell-ai/melotts': 0.0002,
+};
+
+/**
+ * D761 PR 3 — Deepgram's Aura voices are billed per 1,000 characters of the
+ * text they speak, which neither table above can express. Read from each
+ * model's Workers AI page on 2026-10-19. D760 (A1) owns the prices; these sit
+ * here until its catalogue does.
+ */
+export const PRICE_USD_PER_1K_CHARACTERS: Record<string, number> = {
+  '@cf/deepgram/aura-1': 0.015,
+  '@cf/deepgram/aura-2-en': 0.030,
+  '@cf/deepgram/aura-2-es': 0.030,
 };
 
 /**
@@ -821,8 +841,11 @@ async function setKillSwitch(store: MinimalKV, ttlSec: number): Promise<void> {
 // Cost helper
 // ---------------------------------------------------------------------------
 export function estimateCostUsd(
-  model: string, promptTok: number, completionTok: number, audioMinutes = 0,
+  model: string, promptTok: number, completionTok: number, audioMinutes = 0, characters = 0,
 ): number {
+  // D761 PR 3: a voice priced by the character has no token rate either.
+  const perK = PRICE_USD_PER_1K_CHARACTERS[model];
+  if (perK != null) return (Math.max(0, characters) / 1000) * perK;
   // Audio first: a model priced by the minute has no token rate, and asking
   // the token table for one would answer 0.
   const perMinute = PRICE_USD_PER_AUDIO_MINUTE[model];
@@ -860,7 +883,8 @@ function defaultContentBlob(opts: RunOptions): string {
 
 async function cacheKeyFor(opts: RunOptions, model: string): Promise<string | null> {
   const route = ROUTE[opts.task];
-  if (!route.cacheTtlSec) return null;
+  // D761 PR 3: a voice's audio is not cached; the KV entry holds text only.
+  if (!route.cacheTtlSec || opts.speak) return null;
   const base = opts.contentHash
     || (opts.task === 'explain' && opts.topic ? `topic:${opts.topic}` : null)
     || defaultContentBlob(opts);
@@ -989,6 +1013,7 @@ interface ProviderResult {
   output?: string;
   embedding?: number[];
   ranking?: shapes.RankedContext[];
+  audio?: shapes.SpeechAudio;
   stream?: ReadableStream;
   transcript?: SttTranscript;
   prompt_tokens?: number;
@@ -1102,6 +1127,19 @@ async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed:
       if (!ranking) return { ok: false, status: 502, error: 'unexpected rerank response', units };
       return { ok: true, output: '', ranking, prompt_tokens: units.tokens_in ?? 0, completion_tokens: 0, units };
     }
+    // D761 PR 3: a voice. Aura is counted in the characters it speaks;
+    // MeloTTS in the minutes of audio it returns, measured from the bytes.
+    if (opts.speak) {
+      const text = opts.text ?? '';
+      const request = shapes.speakRequest(model, text, opts.speak);
+      if (!request) return { ok: false, status: 400, error: `${model} has no voice "${opts.speak.voice}"` };
+      const audio = await shapes.readSpeech(await ai.run(model, request, runOpt));
+      if (!audio) return { ok: false, status: 502, error: 'unexpected speech response' };
+      const units: shapes.Units = shapes.AURA_SPEAKERS[model]
+        ? { characters: text.length }
+        : { audio_minutes: audioMinutesFromBytes(audio.bytes.byteLength) };
+      return { ok: true, output: '', audio, prompt_tokens: 0, completion_tokens: 0, units };
+    }
     if (opts.translate) {
       const source = opts.text ?? '';
       const out = await ai.run(model, shapes.translateRequest(source, opts.translate), runOpt);
@@ -1166,6 +1204,7 @@ async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed:
 function needOf(opts: RunOptions): shapes.Need {
   if (opts.rerank) return 'rerank';
   if (opts.translate) return 'translation';
+  if (opts.speak) return 'voice';
   if (ROUTE[opts.task]?.isEmbed) return 'embedding';
   if (opts.images?.length) return 'vision';
   return 'chat';
@@ -1173,11 +1212,14 @@ function needOf(opts: RunOptions): shapes.Need {
 
 /** D761 PR 2: why a run's own inputs cannot be sent to any model, or null. Checked before any call. */
 function inputRefusal(opts: RunOptions): string | null {
-  const asks = [opts.rerank != null, opts.translate != null, (opts.images?.length ?? 0) > 0].filter(Boolean).length;
-  if (asks > 1) return 'a run is one of: images, a rerank or a translation';
+  const asks = [opts.rerank != null, opts.translate != null, opts.speak != null, (opts.images?.length ?? 0) > 0].filter(Boolean).length;
+  if (asks > 1) return 'a run is one of: images, a rerank, a translation or a voice';
+  if (opts.speak != null && opts.stream) return 'a voice run is not streamed';
+  if (opts.speak != null && ROUTE[opts.task]?.isAudio) return 'a voice run is not a transcription';
   if (opts.images?.length) return shapes.imagesRefusal(opts.images);
   if (opts.rerank) return shapes.rerankRefusal(opts.rerank);
   if (opts.translate) return shapes.translateRefusal(opts.translate, opts.text);
+  if (opts.speak != null) return shapes.speakRefusal(opts.speak, opts.text);
   return null;
 }
 
@@ -1520,10 +1562,14 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
         .map((m) => shapes.maxTokensFor(shapes.factsFor(m), opts.maxTokens, route.reasoningMaxTokens)));
       if (!Number.isSafeInteger(outputBound) || outputBound < 1 || !Number.isFinite(opts.audioMinutes || 0) || (opts.audioMinutes || 0)<0) throw new Error('AI estimate unreadable');
       const models = [primaryModel,...(route.fallbackChain || [])];
-      const quote = Math.max(...models.map(model=>estimateCostUsd(model,promptBound,outputBound,opts.audioMinutes || 0)));
+      // D761 PR 3: a voice is held for its text's characters (Aura) and for the
+      // most audio `readSpeech` accepts (MeloTTS), which bounds what it returns.
+      const quoteMinutes = opts.speak ? audioMinutesFromBytes(shapes.MAX_SPEECH_BYTES) : opts.audioMinutes || 0;
+      const quoteChars = opts.speak ? (opts.text ?? '').length : 0;
+      const quote = Math.max(...models.map(model=>estimateCostUsd(model,promptBound,outputBound,quoteMinutes,quoteChars)));
       // D763: the guard is held inside this hold, never in one of its own: every
       // input slice, and every output slice the run's maximum output allows.
-      const outputChars = !guardOn || route.isEmbed ? 0
+      const outputChars = !guardOn || route.isEmbed || opts.speak ? 0
         : route.isAudio ? Math.ceil((opts.audioMinutes || 0) * TRANSCRIPT_CHARS_PER_MINUTE)
           : outputBound * GUARD_CHARS_PER_OUTPUT_TOKEN;
       const guardQuote = guardOn ? guardQuoteMicro(guardInput, outputChars) : 0;
@@ -1715,13 +1761,14 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
   }
 
   const audioMinutes = opts.audioMinutes || 0;
+  // D761 PR 3: a voice's minutes and characters are the answering attempt's, as the Worker measured them.
   const usageFor = (promptTok: number, completionTok: number, safetyScore: number | null): UsageMeta => ({
     task: opts.task,
     model: modelUsed,
     latency_ms: Date.now() - startedAt,
     prompt_tokens: promptTok,
     completion_tokens: completionTok,
-    est_cost_usd: estimateCostUsd(modelUsed, promptTok, completionTok, audioMinutes),
+    est_cost_usd: estimateCostUsd(modelUsed, promptTok, completionTok, audioMinutes || attempt.units?.audio_minutes || 0, attempt.units?.characters || 0),
     fallback_used: fallbackUsed,
     cached: false,
     safety_score: safetyScore,
@@ -1874,6 +1921,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
     output: attempt.output,
     embedding: attempt.embedding,
     ...(attempt.ranking ? { ranking: attempt.ranking } : {}),
+    ...(attempt.audio ? { audio: attempt.audio } : {}),
     stream: attempt.stream,
     transcript: attempt.transcript,
     usage,

@@ -48,6 +48,13 @@ export interface ModelFacts {
   reasoning?: ReasoningControl;
   /** True for a text or reasoning model that takes images as content parts (PR 2). */
   vision?: boolean;
+  /**
+   * PR 3: a partner model (Workers AI's "Partner" flag: Deepgram's Aura). It
+   * runs only while D760's gate offers it (`offered: true`); until A1 installs
+   * its catalogue nothing offers one, so it is skipped uncalled.
+   */
+  partner?: boolean;
+  offered?: boolean;
 }
 
 /**
@@ -87,7 +94,7 @@ export const VISION_MODELS: ReadonlySet<string> = new Set([
  * catalogue says them. Each one's request shape is its model page's
  * (`/workers-ai/models/<name>/`) and `@cloudflare/workers-types`.
  */
-export const INTERIM_KINDS: Readonly<Record<string, 'rerank' | 'embedding' | 'translation'>> = Object.freeze({
+export const INTERIM_KINDS: Readonly<Record<string, 'rerank' | 'embedding' | 'translation' | 'voice'>> = Object.freeze({
   '@cf/baai/bge-reranker-base': 'rerank',
   '@cf/baai/bge-base-en-v1.5': 'embedding',
   '@cf/baai/bge-small-en-v1.5': 'embedding',
@@ -97,7 +104,15 @@ export const INTERIM_KINDS: Readonly<Record<string, 'rerank' | 'embedding' | 'tr
   '@cf/google/embeddinggemma-300m': 'embedding',
   '@cf/pfnet/plamo-embedding-1b': 'embedding',
   '@cf/meta/m2m100-1.2b': 'translation',
+  // PR 3: text to speech.
+  '@cf/deepgram/aura-1': 'voice',
+  '@cf/deepgram/aura-2-en': 'voice',
+  '@cf/deepgram/aura-2-es': 'voice',
+  '@cf/myshell-ai/melotts': 'voice',
 });
+
+/** PR 3: the models Workers AI flags "Partner" among these (each model page, 2026-10-19). */
+export const PARTNER_MODELS: ReadonlySet<string> = new Set(['@cf/deepgram/aura-1', '@cf/deepgram/aura-2-en', '@cf/deepgram/aura-2-es']);
 
 const DEFAULT_FACTS: ModelFacts = Object.freeze({ kind: 'text', context_window: null, paid_only: false }) as ModelFacts;
 
@@ -106,7 +121,7 @@ function interimFacts(model: string): ModelFacts | null {
   const vision = VISION_MODELS.has(model) ? { vision: true } : {};
   if (reasoning) return { kind: 'reasoning', context_window: null, paid_only: false, reasoning, ...vision };
   const kind = INTERIM_KINDS[model];
-  if (kind) return { kind, context_window: null, paid_only: false };
+  if (kind) return { kind, context_window: null, paid_only: false, ...(PARTNER_MODELS.has(model) ? { partner: true, offered: false } : {}) };
   return VISION_MODELS.has(model) ? { kind: 'text', context_window: null, paid_only: false, vision: true } : null;
 }
 
@@ -130,7 +145,7 @@ export function factsFor(model: string): ModelFacts {
  * cannot serve it is skipped without a call, as a context overflow is: a
  * text-only model handed an image would answer as if there were none.
  */
-export type Need = 'chat' | 'vision' | 'rerank' | 'embedding' | 'translation';
+export type Need = 'chat' | 'vision' | 'rerank' | 'embedding' | 'translation' | 'voice';
 
 export function canServe(facts: ModelFacts, need: Need): boolean {
   switch (need) {
@@ -138,6 +153,8 @@ export function canServe(facts: ModelFacts, need: Need): boolean {
     case 'rerank': return facts.kind === 'rerank';
     case 'embedding': return facts.kind === 'embedding';
     case 'translation': return facts.kind === 'translation';
+    // PR 3: a partner voice runs only while the catalogue's gate offers it.
+    case 'voice': return facts.kind === 'voice' && (facts.partner !== true || facts.offered === true);
     default: return facts.kind === 'text' || facts.kind === 'reasoning';
   }
 }
@@ -153,6 +170,8 @@ export const LONG_CONTEXT_TOKENS = 32_000;
 export function timeoutClass(facts: ModelFacts, inputTokens: number): TimeoutClass {
   if (facts.kind === 'image') return 'image';
   if (facts.kind === 'reasoning') return 'reasoning';
+  // PR 3: speech is produced for the whole text before it returns, so it gets the long class.
+  if (facts.kind === 'voice') return 'long_context';
   if (inputTokens >= LONG_CONTEXT_TOKENS) return 'long_context';
   return 'chat';
 }
@@ -230,6 +249,10 @@ export interface Units {
   audio_minutes?: number;
   /** PR 2: images sent to a vision model, counted by the Worker. Billing stays in tokens. */
   images_in?: number;
+  /** PR 3: characters of text sent to a voice priced per 1k characters (Aura). */
+  characters?: number;
+  /** PR 3: minutes streamed over a WebSocket (Nova-3 and Flux live), on the Worker's clock. */
+  audio_minutes_websocket?: number;
 }
 
 const estTokens = (s: string): number => (s ? Math.max(1, Math.ceil(s.length / 4)) : 0);
@@ -467,4 +490,101 @@ export const SEARCH_INDEX_DIMENSIONS = 768;
 export function searchIndexAccepts(model: string, vector: unknown): boolean {
   return model === SEARCH_INDEX_MODEL && Array.isArray(vector) && vector.length === SEARCH_INDEX_DIMENSIONS
     && vector.every((x) => typeof x === 'number' && Number.isFinite(x));
+}
+
+// ─────────────────────────────────────────────────────────── speech and voice (PR 3)
+
+/**
+ * A live transcript's units: the minutes streamed over the WebSocket, as the
+ * Worker's clock measured them (`liveTranscription.settleStream`). Priced per
+ * WebSocket minute (`PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET`), apart from a
+ * file's `audio_minutes`.
+ */
+export const websocketUnits = (minutes: number): Units => ({ audio_minutes_websocket: Number.isFinite(minutes) && minutes > 0 ? minutes : 0 });
+
+export interface SpeakInput { voice?: string; lang?: string }
+/** One request's text, at most: Aura bills per 1k characters, and the router bounds what one press can cost. */
+export const MAX_SPEAK_CHARS = 2000;
+/** The largest audio a voice may return before it is not one sentence's speech. */
+export const MAX_SPEECH_BYTES = 10 * 1024 * 1024;
+
+/** Each Aura model's speakers, as its model page lists them. */
+export const AURA_SPEAKERS: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  '@cf/deepgram/aura-1': ['angus', 'asteria', 'arcas', 'orion', 'orpheus', 'athena', 'luna', 'zeus', 'perseus', 'helios', 'hera', 'stella'],
+  '@cf/deepgram/aura-2-en': ['amalthea', 'andromeda', 'apollo', 'arcas', 'aries', 'asteria', 'athena', 'atlas', 'aurora', 'callista', 'cora', 'cordelia', 'delia', 'draco', 'electra', 'harmonia', 'helena', 'hera', 'hermes', 'hyperion', 'iris', 'janus', 'juno', 'jupiter', 'luna', 'mars', 'minerva', 'neptune', 'odysseus', 'ophelia', 'orion', 'orpheus', 'pandora', 'phoebe', 'pluto', 'saturn', 'selene', 'thalia', 'theia', 'vesta', 'zeus'],
+  '@cf/deepgram/aura-2-es': ['sirio', 'nestor', 'carina', 'celeste', 'alvaro', 'diana', 'aquila', 'selena', 'estrella', 'javier'],
+});
+const VOICE_RE = /^[a-z]{2,20}$/;
+const LANG2_RE = /^[a-z]{2}$/;
+
+export function speakRefusal(s: SpeakInput | undefined, text: string | undefined): string | null {
+  if (!s || typeof s !== 'object') return 'a voice run needs its options';
+  if (typeof text !== 'string' || !text.trim()) return 'a voice run needs text';
+  if (text.length > MAX_SPEAK_CHARS) return `at most ${MAX_SPEAK_CHARS} characters`;
+  if (s.voice != null && (typeof s.voice !== 'string' || !VOICE_RE.test(s.voice))) return 'the voice is a speaker name';
+  if (s.lang != null && (typeof s.lang !== 'string' || !LANG2_RE.test(s.lang))) return 'the language is a two-letter code';
+  return null;
+}
+
+/**
+ * The request a voice takes: Aura's `{ text, speaker?, encoding: 'mp3' }`, or
+ * MeloTTS's `{ prompt, lang? }`. A speaker the model does not list is refused
+ * (null), so the chain moves on rather than speaking in another voice; MeloTTS
+ * has one voice per language and lists no speaker, so any named one is refused.
+ */
+export function speakRequest(model: string, text: string, s: SpeakInput): Record<string, unknown> | null {
+  const speakers = AURA_SPEAKERS[model];
+  if (speakers) {
+    if (s.voice != null && !speakers.includes(s.voice)) return null;
+    return { text, encoding: 'mp3', ...(s.voice ? { speaker: s.voice } : {}) };
+  }
+  if (s.voice != null) return null;
+  return { prompt: text, ...(s.lang ? { lang: s.lang } : {}) };
+}
+
+/** The mime type a voice's bytes are, from their first bytes: MP3 (ID3 or frame sync) or WAV; else MP3, which both models default to. */
+export function speechMime(bytes: Uint8Array): string {
+  if (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46) return 'audio/wav';
+  return 'audio/mpeg';
+}
+
+/**
+ * The audio a voice returned: a stream (Aura), bytes, or `{ audio: base64 }`
+ * (MeloTTS), flat or under `result`. Null when there is none, or when it is
+ * larger than `MAX_SPEECH_BYTES` (the stream is cancelled there).
+ */
+/** A voice's answer: its audio bytes and their mime type. */
+export interface SpeechAudio { bytes: Uint8Array; mime: string }
+
+export async function readSpeech(raw: unknown): Promise<SpeechAudio | null> {
+  let bytes: Uint8Array | null = null;
+  const r = raw as { audio?: unknown; result?: { audio?: unknown } } | null;
+  const b64 = typeof r?.audio === 'string' ? r.audio : typeof r?.result?.audio === 'string' ? r.result.audio : null;
+  if (b64 != null) {
+    try {
+      const bin = atob(b64);
+      if (bin.length > MAX_SPEECH_BYTES) return null;
+      bytes = Uint8Array.from(bin, (ch) => ch.charCodeAt(0));
+    } catch { return null; }
+  } else if (raw instanceof Uint8Array) {
+    bytes = raw;
+  } else if (raw instanceof ArrayBuffer) {
+    bytes = new Uint8Array(raw);
+  } else if (raw && typeof (raw as ReadableStream).getReader === 'function') {
+    const reader = (raw as ReadableStream<Uint8Array>).getReader();
+    const parts: Uint8Array[] = [];
+    let size = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > MAX_SPEECH_BYTES) { reader.cancel().catch(() => {}); return null; }
+      parts.push(value);
+    }
+    bytes = new Uint8Array(size);
+    let at = 0;
+    for (const p of parts) { bytes.set(p, at); at += p.byteLength; }
+  }
+  if (!bytes || bytes.byteLength === 0 || bytes.byteLength > MAX_SPEECH_BYTES) return null;
+  return { bytes, mime: speechMime(bytes) };
 }
