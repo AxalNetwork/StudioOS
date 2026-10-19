@@ -10,7 +10,7 @@
 // summary is a live preview only.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, useNavigate, useLocation } from 'react-router-dom';
-import { TOPUP_UNAVAILABLE, aiTokenState, packLabel, sellableLine } from '../lib/aiTokens';
+import { TOKEN_PACKS_PATH, TOPUP_UNAVAILABLE, aiTokenState, packLabel, sellableLine } from '../lib/aiTokens';
 import { aiBudgetApi } from '../lib/api/aiBudget';
 import { Elements, PaymentElement, AddressElement, useElements, useStripe } from '@stripe/react-stripe-js';
 import { Loader2, Lock, AlertTriangle, ArrowLeft, ShoppingCart, CheckCircle2 } from 'lucide-react';
@@ -210,7 +210,7 @@ function PaymentForm({ email, fullName, onCountryChange, onPay, submitting, erro
 export default function CheckoutPage() {
   const location = useLocation();
   const params = new URLSearchParams(location.search);
-  if (params.get('ai_topup') === '1') return <Navigate to="/plans-and-pricing#token-packs" replace />;
+  if (params.get('ai_topup') === '1') return <Navigate to={TOKEN_PACKS_PATH} replace />;
   if (params.has('token_pack')) return <TokenPackCheckout key={params.get('token_pack')} uid={params.get('token_pack')} />;
   return <CartCheckout />;
 }

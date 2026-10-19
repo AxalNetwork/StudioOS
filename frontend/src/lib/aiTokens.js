@@ -15,6 +15,8 @@ export const TOPUP_UNAVAILABLE_RUNS = `${TOPUP_UNAVAILABLE} Runs use your includ
 export const TOKENS_LINE = '$1 of tokens buys $1 of AI use. Tokens never expire.';
 /** Where every Add tokens link goes. PR 2 moves it to `/plans-and-pricing#token-packs`. */
 export const ADD_TOKENS_PATH = '/checkout?ai_topup=1';
+/** The pricing page's Token packs section, where the retired `/checkout?ai_topup=1` now lands. */
+export const TOKEN_PACKS_PATH = '/plans-and-pricing#token-packs';
 
 const integer = (n) => Number.isSafeInteger(n) && n >= 0;
 /** A price the checkout can sell: a Stripe price ID, USD, a whole positive amount in cents. */

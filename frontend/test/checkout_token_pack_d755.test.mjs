@@ -357,7 +357,7 @@ const mutations = [
   {name:'failed payment says nothing about tokens',file:CHECKOUT,before:"The payment did not go through, so no tokens were added.",after:"Payment failed.",all:true,check:paymentFailure},
   {name:'pack clears the existing cart',file:CHECKOUT,before:"    if (!pack) cart.clear();",after:"    if (pack) useCart().clear(); else cart.clear();",check:paymentSuccess},
   {name:'pack confirms outside the webhook',file:CHECKOUT,before:"paymentIntentId && !pack",after:"paymentIntentId",check:paymentSuccess},
-  {name:'retired URL points to products',file:CHECKOUT,before:'to="/plans-and-pricing#token-packs"',after:'to="/products"',check:retiredPath},
+  {name:'retired URL points to products',file:CHECKOUT,before:'to={TOKEN_PACKS_PATH}',after:'to="/products"',check:retiredPath},
   {name:'waiting is shown as credited',file:RECEIPT,before:"state === 'credited' ? 'Tokens added'",after:"(state === 'credited' || state === 'waiting') ? 'Tokens added'",check:receiptCredit},
   {name:'paid order stops waiting for credit',file:RECEIPT,before:"if (!knownPack || ['credited',",after:"if (!knownPack || value.status === 'paid' || ['credited',",check:receiptCredit},
   {name:'refund keeps polling',file:RECEIPT,before:"['credited', 'refunded', 'disputed'].includes(state)",after:"['credited'].includes(state)",check:receiptTerminal},
