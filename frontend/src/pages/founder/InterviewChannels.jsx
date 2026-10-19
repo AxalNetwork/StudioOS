@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { channelsApi } from '../../lib/api/channels.js';
 import { BrandIcon, Unreadable } from '../../ui';
-import { TelegramChannelCard, WhatsAppChannelCard, useChannelsOverview } from '../account/ChannelsGroup';
+import { MeetTranscripts, TelegramChannelCard, WhatsAppChannelCard, useChannelsOverview } from '../account/ChannelsGroup';
 import { CHANNELS_HREF, INBOX_HREF, MESSAGING_PROVIDERS, channelCard } from '../account/channelsModel';
 import { channelOf } from './assistantSession.js';
 import {
@@ -281,6 +281,7 @@ export function SchedulePanel({ interview, api = channelsApi, now, initialForm }
           <p className={NOTE}>Zoom starts recording to your Zoom cloud when the call starts, and Zoom’s own recording notice tells everyone on the call that it is being recorded. Cloud recording needs a paid Zoom plan.</p>
         </div>
       )}
+      {form.provider === 'google_meet' && available('google_meet') && <MeetTranscripts api={api} returnTo="record" />}
       {note && (
         <p className="text-[12px] text-amber-800 dark:text-amber-300" data-testid="schedule-provider-note">
           {note}{refs.providers[form.provider]?.available !== false && <> <Link to={CHANNELS_HREF} className="underline">Open Connectors</Link></>}

@@ -396,3 +396,54 @@ export const MEETING_NOTES = {
   zoom: 'Schedule a Zoom call from an interview with Record in the cloud turned on, and its transcript comes in when the call ends. Transcripts need a paid Zoom plan with cloud recording and audio transcripts turned on; without a cloud recording, Zoom makes none.',
   google_meet: 'Schedule a Meet call from an interview; a transcript comes in after the call only if someone turned on transcription in it. Transcripts need a Google Workspace edition that includes Meet transcription.',
 };
+
+// ---------- Meet transcripts (D757 §2.12, #1926) ---------------------------
+
+/**
+ * Whether Axal may import this member's Meet transcripts, from the Calendar
+ * status read (`GET /api/calendar/google/status`, `meet_transcripts`):
+ *   granted     — their Google grant holds the transcript permission;
+ *   available   — the owner has switched import on, and they have not granted it;
+ *   not_set_up  — the owner has not (MEET_TRANSCRIPTS_ENABLED), so nothing can be granted.
+ * Anything else is null: unread, never a "no".
+ */
+export const MEET_TRANSCRIPT_STATES = ['granted', 'available', 'not_set_up'];
+
+export function meetTranscriptsState(status) {
+  const v = status?.meet_transcripts;
+  return MEET_TRANSCRIPT_STATES.includes(v) ? v : null;
+}
+
+export const MEET_ENGINE_LINE = 'Eadwyn writes a draft summary and suggests findings for your Validate modules; you accept each one.';
+
+export const MEET_TRANSCRIPT_COPY = {
+  not_set_up: "Importing Meet transcripts isn't set up on Axal yet. You can still hold the call: use the recorder in Axal during it, or paste the conversation afterwards.",
+  available: 'Google Meet calls are scheduled on your Google Calendar connection. Needs a Google Workspace plan with Meet transcripts, and transcripts turned on in the call.',
+  granted: 'Meet transcripts are imported into the interview after the call.',
+};
+
+export const ALLOW_MEET_LABEL = 'Allow transcript import';
+
+/** What a Meet surface says for a state, and whether it offers the button (only when `available`). */
+export function meetTranscriptsCopy(state) {
+  return { line: MEET_TRANSCRIPT_COPY[state] || '', engine: MEET_ENGINE_LINE, button: state === 'available' };
+}
+
+export const MEET_RETURN_WORDS = {
+  ok: 'Meet transcripts can now be imported.',
+  meet_scope_missing: 'Google did not grant transcript access. Try again, and tick the transcript permission.',
+};
+
+/**
+ * The banner after Google's round trip: the callback adds `meet=granted` to
+ * a transcript grant's `?google=connected`, and refuses one without the
+ * permission as `?google=error&reason=meet_scope_missing`. '' otherwise, so an
+ * ordinary Google connect never reads as a transcript grant.
+ */
+export function meetTranscriptsReturn(search) {
+  let q;
+  try { q = new URLSearchParams(typeof search === 'string' ? search : ''); } catch { return ''; }
+  if (q.get('google') === 'connected' && q.get('meet') === 'granted') return MEET_RETURN_WORDS.ok;
+  if (q.get('google') === 'error' && q.get('reason') === 'meet_scope_missing') return MEET_RETURN_WORDS.meet_scope_missing;
+  return '';
+}
