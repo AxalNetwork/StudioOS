@@ -231,6 +231,12 @@ test('a firmographic role or company fills only an empty field on the interview'
   assert.equal(status(db, company), 'pending');
   assert.equal(db.prepare('SELECT interviewee_company FROM discovery_interviews WHERE id = ?').get(IV).interviewee_company, 'Typed by the founder', 'never overwritten');
   assert.equal(db.prepare('SELECT interviewee_name FROM discovery_interviews WHERE id = ?').get(IV).interviewee_name, 'Interviewee A', 'the name is untouched');
+  // A second role suggestion meets the role the first one filled: refused, never overwritten.
+  const [second] = await propose(env, db, [{ kind: 'firmographic', payload: { attribute: 'role', value: 'Controller' }, ...Q.pay }]);
+  const again = await accept(env, second);
+  assert.equal(again.status, 409);
+  assert.match(again.json.detail, /already has a role/);
+  assert.equal(db.prepare('SELECT interviewee_role FROM discovery_interviews WHERE id = ?').get(IV).interviewee_role, 'Finance lead');
 });
 
 // ── 4. competitor_mention with a price and no list ─────────────────────────
