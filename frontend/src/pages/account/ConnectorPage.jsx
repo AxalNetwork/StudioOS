@@ -8,10 +8,11 @@ import { ConnectorPanel, PermissionsGroup, SheetFrame, UsesGroups, openingView, 
 import { RequestSheet, useMovedNotice } from './AccountConnectors';
 import { cardAction, isEntityRow, moduleLabel, stripReturn } from './connectorsModel';
 import {
-  DETAIL_MISSING, backHrefFor, bodyDetailsRows, detailsRows, headerTagline, interimMode, modeLabel, pageEntry, pageReturn, pageTitle, toolGroups,
+  DETAIL_MISSING, backHrefFor, bodyDetailsRows, detailsRows, headerTagline, interimMode, modeLabel, pageEntry, pageLanding, pageTitle, toolGroups,
 } from './connectorPageModel';
 import { isChannelKey } from './channelPageModel';
 import ChannelPage from './ChannelPage';
+import GithubRepositoriesSection, { REPOSITORIES_ID } from './GithubRepositoriesSection';
 import { notOfferedSentence } from './mercuryModel';
 import { MercuryEntityPageBody } from './MercurySheet';
 import { useAuth } from '../../hooks/useAuthSync';
@@ -35,6 +36,12 @@ import { ZOOM_DISCONNECT_NOTE, ZOOM_SECTIONS, usedByLinks, zoomHowItWorks, zoomN
  * naming this key to this page; the page reads it only when it names its own
  * key (never Mercury's, D715 decision 3), opens the panel on what happened,
  * and strips the query.
+ *
+ * GITHUB'S REPOSITORIES (#1957, F4). GitHub's page draws its repositories as
+ * its own Repositories section (`GithubRepositoriesSection`), beside "Connect
+ * and manage", never the panel's sync view. Its sign-in and the GitHub App's
+ * Setup URL land on that section (`pageLanding`); the Setup URL's
+ * `installation_id` and `setup_action` are stripped and never drawn.
  *
  * The name is the page's one `<h1>` (decision 10): on desktop `SettingsPage`
  * draws no "Account" heading here, and on a phone `PhoneBar` draws it.
@@ -87,7 +94,8 @@ export function ConnectorPageView({ data, connectorKey, phone = false, branchAdm
 
   // The sign-in return, read once at mount, then stripped from the address.
   // An alias page reads nothing: the redirect carries the query to the real key's page.
-  const [returned] = useState(() => (entry.state === 'alias' ? null : pageReturn(location.search, connectorKey)));
+  // GitHub's return lands on its Repositories section, with the App's Setup URL query stripped too (#1957).
+  const [returned] = useState(() => (entry.state === 'alias' ? null : pageLanding(location.search, connectorKey)));
   useEffect(() => {
     if (!returned) return;
     navigate({ pathname: location.pathname, search: stripReturn(location.search, returned.strip), hash: location.hash }, { replace: true, state: location.state });
@@ -147,6 +155,7 @@ export function ConnectorPageView({ data, connectorKey, phone = false, branchAdm
       )}
 
       <ConnectRegion p={p} ret={returned?.ret || null} onChanged={data.reload} />
+      {p.key === 'github' && <GithubRepositoriesSection p={p} focus={!!returned?.repositories} onChanged={data.reload} />}
       {p.key === 'zoom' && <ZoomValidate p={p} />}
       {shownBody
         ? <ConnectorBody state={shownBody.state} connector={shownBody.connector} p={p} onRetry={retryBody} />
@@ -263,13 +272,20 @@ function InlinePanel({ p, ret, onChanged }) {
         p={p}
         view={state.view}
         ret={state.ret}
-        setView={(view) => setState({ view, ret: {} })}
+        // D753 F4 (#1957): GitHub's repositories are the page's own section, never the sync view.
+        setView={(view) => (p.key === 'github' && view === 'sync' ? toRepositories() : setState({ view, ret: {} }))}
         onChanged={onChanged}
         onClose={reset}
         eyebrow="Connect and manage"
       />
     </SheetFrame.Provider>
   );
+}
+
+/** The Repositories section's heading takes focus, which scrolls it into view. */
+function toRepositories() {
+  if (typeof document === 'undefined') return;
+  document.getElementById(REPOSITORIES_ID)?.querySelector?.('h2')?.focus?.();
 }
 
 /** A Coming soon connector: Notify me, or We'll tell you, as its card offers. */

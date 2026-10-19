@@ -256,7 +256,11 @@ test('every return lands on its page; the hub sends a bookmarked one on; the pag
   const stripe = await mount(page('stripe'), '/account/connectors/stripe?oauth=ok&provider=stripe');
   try { assert.ok(stripe.by('connector-sheet-connected')); } finally { await stripe.unmount(); }
   const gh = await mount(page('github'), '/account/connectors/github?oauth=ok&provider=github');
-  try { assert.ok(gh.by('connector-sheet-sync'), 'GitHub\'s sign-in lands on its repositories'); } finally { await gh.unmount(); f.restore(); }
+  try {
+    // D753 F4 (#1957): the page's own Repositories section, not the sync sheet.
+    assert.ok(gh.by('connector-page-repositories'), 'GitHub\'s sign-in lands on its repositories');
+    assert.ok(!gh.by('connector-sheet-sync'), 'no sync sheet');
+  } finally { await gh.unmount(); f.restore(); }
 });
 
 // ================================================================ the page layout
