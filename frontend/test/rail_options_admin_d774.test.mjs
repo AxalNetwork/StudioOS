@@ -9,9 +9,10 @@
  *     a board with no rail yet says why, and really has none;
  *   · the boards this PR frames sit in `AdminBoardFrame` under their name,
  *     and that frame is a `RailFrame` with the viewer's tier;
- *   · every option exists where it says, in the shape #2097 gives;
- *   · every upload, draft or report control in a board's files is listed,
- *     so a new control fails here until D764 is told about it.
+ *   · every option exists where it says, in the shape #2097 gives, and a
+ *     control that runs no model is a quiet control with its reason;
+ *   · every upload, draft or report control in a board's files is in one
+ *     list or the other, so a new control fails here until D764 is told.
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/rail_options_admin_d774.test.mjs
  */
@@ -20,14 +21,14 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
-import { ADMIN_BOARDS, ADMIN_OPTIONS, ADMIN_PROFILE, railOptionsFor } from '../src/lib/railOptions/admin.js';
+import { ADMIN_BOARDS, ADMIN_OPTIONS, ADMIN_PROFILE, ADMIN_QUIET_CONTROLS, railOptionsFor } from '../src/lib/railOptions/admin.js';
 
 const ROOT = process.cwd();
 const src = (p) => resolve(ROOT, 'frontend/src', p);
 const read = (p) => readFileSync(src(p), 'utf8');
 const CANVAS = JSON.parse(readFileSync(resolve(ROOT, 'design/incoming/airail-every-page-data/canvas.json'), 'utf8'));
 const KINDS = new Set(Object.values(CANVAS.task_kind));
-const HANDLERS = new Set(['form', 'upload', 'draft', 'transcribe', 'none']);
+const HANDLERS = new Set(['form', 'upload', 'draft', 'transcribe']);
 const FRAME = 'pages/admin/AdminBoardFrame.jsx';
 
 /** The `<WorkerRail …/>` tags in a file's code. */
@@ -128,6 +129,14 @@ test('every option is in #2097\'s shape and exists where it says', () => {
     assert.ok(linesOf(o.file, o.label).length >= 1 || o.key.startsWith('upload:'), `${o.key}: "${o.label}" is not on the page`);
   }
   assert.equal(KINDS.size, 14, 'the canvas no longer has fourteen kinds');
+  for (const q of ADMIN_QUIET_CONTROLS) {
+    const board = byId(q.page);
+    assert.ok(board && !board.alias, `${q.label}: no owning board ${q.page}`);
+    assert.ok(board.files.includes(q.file), `${q.label}: ${q.file} is not one of ${q.page}'s files`);
+    assert.equal(linesOf(q.file, q.anchor).length, 1, `${q.label}: its anchor is not exactly once in ${q.file}`);
+    assert.ok(linesOf(q.file, q.label).length >= 1 || /upload/i.test(q.label), `${q.label} is not on the page`);
+    assert.ok(typeof q.why === 'string' && q.why.length > 20, `${q.label} says not why it runs no model`);
+  }
 });
 
 test('every upload, draft or report control in a board\'s files is listed', () => {
@@ -138,22 +147,23 @@ test('every upload, draft or report control in a board\'s files is listed', () =
   const unlisted = [];
   const matched = new Set();
   for (const f of files) {
-    const options = ADMIN_OPTIONS.filter((o) => o.file === f).map((o) => ({ o, line: linesOf(f, o.anchor)[0] }));
+    const options = [...ADMIN_OPTIONS, ...ADMIN_QUIET_CONTROLS].filter((o) => o.file === f).map((o) => ({ o, line: linesOf(f, o.anchor)[0] }));
     const lines = [...new Set(CONTROLS.flatMap((c) => linesOf(f, c)))];
     for (const line of lines) {
       const hit = options.find(({ line: at }) => Math.abs(at - line) <= 6);
-      if (hit) matched.add(hit.o.key); else unlisted.push(`${f}:${line}`);
+      if (hit) matched.add(hit.o); else unlisted.push(`${f}:${line}`);
     }
   }
   assert.deepEqual(unlisted, [], 'these controls are on an Admin board and not in railOptions/admin.js');
-  assert.deepEqual(ADMIN_OPTIONS.map((o) => o.key).filter((k) => !matched.has(k)), [], 'these options match no control');
+  assert.deepEqual([...ADMIN_OPTIONS, ...ADMIN_QUIET_CONTROLS].filter((o) => !matched.has(o)).map((o) => o.key || o.label), [], 'these rows match no control');
 });
 
 test('the rail lists no option, because none of them runs a model today', () => {
+  assert.deepEqual(ADMIN_OPTIONS, []);
   for (const b of ADMIN_BOARDS) assert.deepEqual(railOptionsFor(b.id), [], `${b.id} lists an option`);
   // Due diligence's report is read from the case's recorded sections and findings, not written by a model.
   const dd = readFileSync(resolve(ROOT, 'cloudflare-worker/src/routes/dd.ts'), 'utf8');
   const report = dd.slice(dd.indexOf("dd.post('/cases/:uid/report'"), dd.indexOf("dd.post('/cases/:uid/report/share'"));
   assert.ok(report.length > 0, 'the report route moved');
-  assert.doesNotMatch(report, /\.run\(|env\.AI\b|aiRun|runModel/, 'the report route now calls a model: list it as a draft');
+  assert.doesNotMatch(report, /\.run\(|env\.AI\b|aiRun|runModel/, 'the report route now calls a model: make it an option');
 });

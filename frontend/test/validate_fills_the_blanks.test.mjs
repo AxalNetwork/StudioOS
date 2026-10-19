@@ -38,15 +38,25 @@ const SECTIONS = 'frontend/src/pages/cycles/ValidateSections.jsx';
 const RECORD = 'frontend/src/pages/founder/InterviewReviewPage.jsx';
 const CFG = 'frontend/src/ui/eadwynConfig.js';
 
-test('the mode is off until the founder turns it on', () => {
-  // Every run spends their own budget against their own monthly cap. A mode
-  // that is on before they chose it spends money they did not agree to spend,
-  // and the canvas drawing the card selected is not a reason to.
+test('a page with fills is off until the founder turns it on', () => {
+  // Every fill run spends their own budget against their own monthly cap. A
+  // mode that is on before they chose it spends money they did not agree to
+  // spend, and the canvas drawing the card selected is not a reason to.
+  //
+  // D769 (#2088; D720 §6): the switch is drawn on every page, and a page with
+  // no fills defaults to on, because nothing there runs without a press. The
+  // default is the host's, false unless it passes one; the rail passes on only
+  // where there are no fills; the server snapshot is that same default.
   const hook = codeOnly(read(HOOK));
   assert.match(hook, /safeReadJSON\(key, false\)/, 'the stored default must be false');
-  assert.match(hook, /\(\) => false,/, 'the server snapshot must be false');
+  assert.match(hook, /useAssistMode\(workspace, \{ defaultOn = false \} = \{\}\)/, 'the default default must be false');
+  assert.match(hook, /\(\) => defaultOn === true,/, 'the server snapshot must be the page\'s default');
   assert.doesNotMatch(hook, /safeReadJSON\(key, true\)|=> true,/,
     'something defaults the mode to on');
+  const rail = codeOnly(read(RAIL));
+  assert.match(rail, /const modeChoice = surface\.mode\?\.kind === 'choice' && fills \? surface\.mode : null;/);
+  assert.match(rail, /useAssistMode\(workspace, \{ defaultOn: !modeChoice \}\)/,
+    'a page with fills must default to off');
 });
 
 test('the mode is remembered the way every other rail preference is', () => {
@@ -439,6 +449,6 @@ test('the band and the rail read one mode, not two copies of one', () => {
   assert.match(hook, /const listeners = new Set\(\)/);
   assert.match(hook, /for \(const l of listeners\) l\(\);/,
     'a write that notifies nobody is per-component state with extra steps');
-  assert.match(codeOnly(read(RAIL)), /useAssistMode\(workspace\)/);
+  assert.match(codeOnly(read(RAIL)), /useAssistMode\(workspace[,)]/);
   assert.match(codeOnly(read(RECORD)), /useAssistMode\('Validate'\)/);
 });

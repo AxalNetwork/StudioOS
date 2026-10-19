@@ -3,6 +3,8 @@ import { Landmark, LockKeyhole, RefreshCw } from 'lucide-react';
 import SpinoutLabLpWorkspacePage from '../SpinoutLabLpWorkspacePage';
 import InvestorDealsWorkspace from './InvestorDealsWorkspace';
 import { useLocation } from 'react-router-dom';
+import RailFrame from '../../ui/RailFrame';
+import WorkerRail from '../../ui/WorkerRail';
 import './investorWorkspace.css';
 
 const COPY = {
@@ -98,7 +100,7 @@ export default function InvestorWorkspacePage({ page = 'deals', children, fundUn
       <InvestorDealsWorkspace />
     </main>
   );
-  return (
+  const chrome = (
     <main className="investor-workspace" data-testid={`investor-workspace-${key}`}>
       <div className="investor-frame">
         <header className="investor-head">
@@ -127,5 +129,15 @@ export default function InvestorWorkspacePage({ page = 'deals', children, fundUn
         </footer>
       </div>
     </main>
+  );
+  // D772 (#2098): Axal VC Fund (I11) is the investor board with no page of
+  // its own and no rail; it gets the investor's rail in the shared frame. The
+  // other keys this chrome frames (a locked Fund notice, Trust) are not boards.
+  if (key !== 'axal-vc-fund') return chrome;
+  return (
+    <RailFrame data-testid="axal-vc-fund-frame" rail={(
+      <WorkerRail workspace="Axal VC Fund" role="investor"
+        note="Your LP relationship with Axal VC, scoped to your own records. Nothing here is filled in by a model." />
+    )}>{chrome}</RailFrame>
   );
 }

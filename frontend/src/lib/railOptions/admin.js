@@ -18,20 +18,15 @@
  * a shared route (D720 §11: the board the canvas lists first), whose rail and
  * name this one shows.
  *
- * OPTIONS, in #2097's shape:
- *   page     the board id
- *   key      `<verb>:<object>`, unique per page
- *   label    what the control says
- *   kind     one of the canvas's fourteen kinds of work (`task_kind`)
- *   handler  form, upload, draft, transcribe or none. `none` is a control
- *            that runs no model today: the rail does not list it and the page
- *            calls nothing, but it stays here so D764 sees the whole board.
- *   file     the component the control is in
- *   anchor   a string unique to that control in `file`, which the test finds
+ * OPTIONS are the controls that run a model, in #2097's shape (`page`, `key`
+ * as `<verb>:<object>`, `label`, one of the canvas's fourteen `kind`s,
+ * `handler`, plus the `file` it is in and an `anchor` unique to it there).
+ * An option that runs no model is not a row (`railOptions/README.md`).
  *
- * No option on these 39 boards runs a model today. Due diligence's report is
- * assembled from the case's recorded sections and findings (`routes/dd.ts`,
- * `POST /cases/:uid/report`), and both uploads store a file.
+ * No control on these 39 boards runs a model today, so `ADMIN_OPTIONS` is
+ * empty. The upload and report controls the boards do have are
+ * `ADMIN_QUIET_CONTROLS`, each with why it runs none, so the test can still
+ * hold every control in the boards' files to one list or the other.
  */
 
 export const ADMIN_PROFILE = 'Admin';
@@ -85,13 +80,15 @@ export const ADMIN_BOARDS = [
   { id: 'S39', section: 'Settings', module: null, route: '/admin/my-licence', files: ['pages/subsidiary/MyLicencePage.jsx'], rail: FRAME },
 ];
 
-export const ADMIN_OPTIONS = [
-  { page: 'S11', key: 'upload:dd-case/nda', label: 'Upload signed NDA', kind: 'vision', handler: 'none', file: 'pages/AdminDueDiligenceCasePage.jsx', anchor: 'accept="application/pdf,image/*"' },
-  { page: 'S11', key: 'draft:dd-case/report', label: 'Generate report', kind: 'write', handler: 'none', file: 'pages/AdminDueDiligenceCasePage.jsx', anchor: 'await dd.generateReport(uid)' },
-  { page: 'S29', key: 'upload:network-profile/photo', label: 'Upload photo', kind: 'vision', handler: 'none', file: 'pages/admin/AdminNetworkProfiles.jsx', anchor: 'onChange={(e) => submitPhoto(e.target.files?.[0])}' },
+export const ADMIN_OPTIONS = [];
+
+export const ADMIN_QUIET_CONTROLS = [
+  { page: 'S11', label: 'Upload signed NDA', file: 'pages/AdminDueDiligenceCasePage.jsx', anchor: 'accept="application/pdf,image/*"', why: 'Stores the reviewer\'s signed NDA; no model reads it.' },
+  { page: 'S11', label: 'Generate report', file: 'pages/AdminDueDiligenceCasePage.jsx', anchor: 'await dd.generateReport(uid)', why: 'The Worker assembles the report from the case\'s recorded sections and findings (routes/dd.ts, POST /cases/:uid/report); no model writes it.' },
+  { page: 'S29', label: 'Upload photo', file: 'pages/admin/AdminNetworkProfiles.jsx', anchor: 'onChange={(e) => submitPhoto(e.target.files?.[0])}', why: 'Stores the profile photo; no model reads it.' },
 ];
 
-/** The options the rail lists on a board: the ones that run a model. */
+/** The options the rail lists on a board. */
 export function railOptionsFor(boardId) {
-  return ADMIN_OPTIONS.filter((o) => o.page === boardId && o.handler !== 'none');
+  return ADMIN_OPTIONS.filter((o) => o.page === boardId);
 }
