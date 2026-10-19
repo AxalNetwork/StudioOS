@@ -4,26 +4,6 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
-## A token pack is bought alone and credited once by the payment webhook (D755, #1905, PR 2 of 2)
-
-- `POST /api/orders/intent`: when a line is a token pack (a row of
-  `ai_token_packs`, or the `STRIPE_PRICE_AI_TOPUP` fallback),
-  `tokenPackQuote` (`services/aiCredits.ts`) runs before the promo, so a pack
-  never takes the free path. It answers 400 with `token_pack_alone`,
-  `promo_not_for_token_packs`, `token_pack_not_on_sale`,
-  `token_pack_daily_limit`, `token_balance_ceiling` or `token_packs_on_hold`.
-  A pack is credited at face value; VAT is never part of the tokens. The
-  promo split `aiTopupCreditQuote` is gone.
-- `creditAiTopupFromPayment` (`services/aiTopups.ts`) writes the `purchase`
-  and, when the pack has one, the `bonus` row of `ai_credit_ledger` in one
-  batch, raises the balance by both, and sends one "Tokens added" notice. It
-  writes no `ai_topup_ledger` row. Every existing payment check stays.
-- `fulfilOrder` grants no `user_products` row for a pack line.
-- `POST /api/payments/intent`, `/alacarte/intent`, `/promo/validate` and
-  `/api/billing/subscription/swap/preview` and `/confirm` refuse a pack price
-  with `token_pack_checkout_only` before any Stripe call, and
-  `validatePromoForProduct` refuses a pack's product.
-
 ## The AI credit ledger and the token-pack store (D755, #1905, PR 1 of 2)
 
 - Migration `486_ai_credits_token_packs.sql` adds `ai_token_packs` (the list
