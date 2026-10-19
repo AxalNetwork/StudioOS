@@ -11,9 +11,11 @@
  *   raise_receipts    a founder, for a project they found    own credits              a match; a prospect's
  *                                                                                    `commit_status` becomes `wired`,
  *                                                                                    a commitment becomes `confirmed` (D752)
+ *   capital_attestation  an investor, on HQ: proof of funds  own accounts (#1888)    a statement (#1888)
  *
- * Any other pairing is 403 `purpose_not_allowed`. `partner_deals` is HQ only
- * (403 `hq_only`): only Management's payments are matched. A support session
+ * Any other pairing is 403 `purpose_not_allowed`. The uses in `HQ_ONLY_USES`
+ * are HQ only (403 `hq_only`): only Management's payments are matched, and only
+ * HQ's admins read a proof of funds (D752). A support session
  * is refused on every read and write (`support_session_refused`); disconnect
  * stays with the generic route.
  *
@@ -43,13 +45,20 @@ type C = Context<{ Bindings: Env }>;
 
 export type PersonalMatchTarget = 'engagement_invoice' | 'payout' | 'partner_deal_settlement' | 'raise_prospect' | 'deal_commitment';
 export type BankMatch = { posted_on: string; last_four: string };
-export type PersonalUse = 'venture_revenue' | 'practice_income' | 'partner_deals' | 'raise_receipts';
+export type PersonalUse = 'venture_revenue' | 'practice_income' | 'partner_deals' | 'raise_receipts' | 'capital_attestation';
 
 /** Decision 4's table, by role. A role absent here holds no personal connection. */
 export const PERSONAL_USES: Readonly<Record<string, readonly PersonalUse[]>> = Object.freeze({
   founder: ['venture_revenue', 'raise_receipts'],
   partner: ['practice_income', 'partner_deals'],
+  investor: ['capital_attestation'],
 });
+/**
+ * D752: the uses that serve Axal's own administration, on HQ only. A personal
+ * role whose every use is here sees no Mercury off HQ (the registry's
+ * `personal_hq_only_roles`).
+ */
+export const HQ_ONLY_USES: readonly PersonalUse[] = Object.freeze(['partner_deals', 'capital_attestation'] as const);
 export const USE_OF_TARGET: Readonly<Record<PersonalMatchTarget, PersonalUse>> = Object.freeze({
   engagement_invoice: 'practice_income',
   payout: 'partner_deals',
@@ -122,7 +131,7 @@ function refused(c: C, status: number, code: string, message: string): Response 
 export async function personalPolicy(c: C, user: User, use: PersonalUse): Promise<Response | null> {
   if (await isSupportSession(c)) return refused(c, 403, 'support_session_refused', 'A support session cannot read or change a member\'s bank account.');
   if (!usesFor(user.role).includes(use)) return refused(c, 403, 'purpose_not_allowed', 'Your Mercury connection cannot be used for this.');
-  if (use === 'partner_deals' && branchOf(c.env)) return refused(c, 403, 'hq_only', HQ_ONLY);
+  if (HQ_ONLY_USES.includes(use) && branchOf(c.env)) return refused(c, 403, 'hq_only', HQ_ONLY);
   return null;
 }
 

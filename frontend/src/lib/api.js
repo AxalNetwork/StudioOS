@@ -28,6 +28,7 @@ export * from './api/eadwyn.js';
 export * from './api/fundAdmin.js';
 export * from './api/fundFees.js';
 export * from './api/fundLedger.js';
+export * from './api/fundNotices.js';
 export * from './api/fundPerformance.js';
 export * from './api/fundReporting.js';
 export * from './api/fundReports.js';
@@ -548,6 +549,17 @@ export async function refusalError(res, fallback) {
   e.status = res.status;
   if (code) e.code = code;
   return e;
+}
+
+/**
+ * D717 (#1853) — the headers `request()` merges below: auth, CSRF and the
+ * active company. A `lib/api/` module that has to call `fetch` itself (a binary
+ * answer `request()` would parse as JSON) spreads these, so its call carries
+ * exactly what `request()` sends. A POST without the CSRF header is refused
+ * under cookie sign-in (`cloudflare-worker/src/middleware/csrf.ts`).
+ */
+export function rawRequestHeaders(method = 'GET') {
+  return { ...getAuthHeaders(), ...getCsrfHeader(method), ...getActiveCompanyHeader() };
 }
 
 export async function request(path, options = {}) {

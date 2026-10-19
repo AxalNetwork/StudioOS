@@ -4,6 +4,9 @@
  *  - A founder or partner connects a Read Only token. Only GETs reach Mercury,
  *    the token is stored encrypted, and the row keeps the organization's id
  *    and name and whether read-only was reported or confirmed.
+ *  - D752 (#1886): an investor connects on HQ, and the row stores the
+ *    investor's capabilities; on a branch, 403 `purpose_not_allowed`, nothing
+ *    reaches Mercury and nothing is stored.
  *  - Each refusal keeps its own status and code (decisions 2 and 3) and stores
  *    nothing: a support session, a webhook secret, no token, a token Mercury
  *    rejects, a permission above read-only, an unconfirmed one, an Axal
@@ -45,6 +48,25 @@ test('a founder and a partner connect a Read Only token: GETs only, the token en
     assert.ok(b.calls.length >= 4);
     for (const c of b.calls) { assert.equal(c.method, 'GET'); assert.equal(c.redirect, 'manual'); assert.equal(c.body, false); }
     assert.deepEqual([...new Set(b.calls.map((c) => c.path))].sort(), ['/accounts', '/organization']);
+    assert.deepEqual(JSON.parse((db.prepare('SELECT capabilities_json FROM integrations WHERE user_id = 20').get() as any).capabilities_json),
+      ['Revenue import', 'Payment matching']);
+  } finally { b.restore(); }
+});
+
+test('D752: an investor connects on HQ with the investor\'s capabilities; on a branch it is 403 on HQ only, reaches no bank and stores nothing', async () => {
+  const { db, env } = await personalFixture();
+  const b = bank({ ...defaultBank(), org: { id: 'org-own', legalBusinessName: 'Own Holdings LLC', permissions: ['read-only'] } });
+  try {
+    const off = await connect(env, 30, {}, { branch: true });
+    assert.deepEqual([off.status, off.body.error, off.body.message], [403, 'purpose_not_allowed', 'Mercury is offered to your profile on HQ only.'], off.text);
+    assert.equal(b.calls.length, 0, 'nothing reached Mercury');
+    assert.equal(stored(db), 0);
+    const hq = await connect(env, 30);
+    assert.equal(hq.status, 200, hq.text);
+    const row: any = db.prepare("SELECT * FROM integrations WHERE user_id = 30 AND provider_key = 'mercury'").get();
+    assert.deepEqual(JSON.parse(row.capabilities_json), ['Proof of funds']);
+    assert.equal(row.external_account_name, 'Own Holdings LLC');
+    for (const c of b.calls) assert.equal(c.method, 'GET');
   } finally { b.restore(); }
 });
 
@@ -71,8 +93,7 @@ test('decision 2: each refusal keeps its status and code, and nothing is stored'
     const rejected = await connect(env, 10);
     assert.deepEqual([rejected.status, rejected.body.error], [400, 'token_rejected']);
     assert.equal(stored(db), 0);
-    // Investors get no card; an admin keeps #1775's entity console.
-    assert.deepEqual([(await connect(env, 30)).status], [404]);
+    // An admin keeps #1775's entity console.
     const admin = await connect(env, 2);
     assert.deepEqual([admin.status, admin.body.error], [409, 'entity_connection_only']);
     assert.equal(stored(db), 0);
@@ -126,7 +147,7 @@ test('POST /webhook/mercury/:uid is 404 for a real uid and a made-up one, and wr
   assert.equal(count(db, 'SELECT COUNT(*) AS n FROM integration_logs'), 0);
 });
 
-test('GET /status names the use keys for each role, marks partner_deals HQ only, and reads no bank', async () => {
+test('GET /status names the use keys for each role, marks partner_deals and capital_attestation HQ only, and reads no bank', async () => {
   const { db, env } = await personalFixture();
   await connected(db, env, 20);
   const b = bank();
@@ -136,11 +157,15 @@ test('GET /status names the use keys for each role, marks partner_deals HQ only,
     assert.equal(p.body.connected, true);
     assert.deepEqual(p.body.connection, { uid: 'mp-20', status: 'active', account_name: 'Own Practice LLC', read_only: 'confirmed' });
     const avail = (r: any) => Object.fromEntries(r.body.uses.map((u: any) => [u.key, [u.available, u.reason]]));
-    assert.deepEqual(avail(p), { venture_revenue: [false, 'purpose_not_allowed'], raise_receipts: [false, 'purpose_not_allowed'], practice_income: [true, null], partner_deals: [true, null] });
+    assert.deepEqual(avail(p), { venture_revenue: [false, 'purpose_not_allowed'], raise_receipts: [false, 'purpose_not_allowed'], practice_income: [true, null], partner_deals: [true, null], capital_attestation: [false, 'purpose_not_allowed'] });
     const branch = await req(env, 20, 'GET', '/api/mercury/personal/status', undefined, { branch: true });
     assert.deepEqual(avail(branch).partner_deals, [false, 'hq_only']);
     const f = await req(env, 10, 'GET', '/api/mercury/personal/status');
-    assert.deepEqual([f.body.connected, avail(f)], [false, { venture_revenue: [true, null], raise_receipts: [true, null], practice_income: [false, 'purpose_not_allowed'], partner_deals: [false, 'purpose_not_allowed'] }]);
+    assert.deepEqual([f.body.connected, avail(f)], [false, { venture_revenue: [true, null], raise_receipts: [true, null], practice_income: [false, 'purpose_not_allowed'], partner_deals: [false, 'purpose_not_allowed'], capital_attestation: [false, 'purpose_not_allowed'] }]);
+    const i = await req(env, 30, 'GET', '/api/mercury/personal/status');
+    assert.deepEqual(avail(i), { venture_revenue: [false, 'purpose_not_allowed'], raise_receipts: [false, 'purpose_not_allowed'], practice_income: [false, 'purpose_not_allowed'], partner_deals: [false, 'purpose_not_allowed'], capital_attestation: [true, null] });
+    const ib = await req(env, 30, 'GET', '/api/mercury/personal/status', undefined, { branch: true });
+    assert.deepEqual(avail(ib).capital_attestation, [false, 'hq_only']);
     assert.equal(b.calls.length, 0);
   } finally { b.restore(); }
 });
