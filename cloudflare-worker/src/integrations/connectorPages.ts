@@ -38,7 +38,7 @@ export interface PagePrompt {
   proposes: 'project_id' | 'deal_id' | null;
 }
 
-export type SignInKind = 'oauth' | 'oauth_or_key' | 'key' | 'first_party' | 'entity';
+export type SignInKind = 'oauth' | 'oauth_or_key' | 'key' | 'first_party' | 'entity' | 'channel';
 
 export interface ConnectorPage {
   /** At most 120 characters. */
@@ -543,6 +543,74 @@ export const FIRST_PARTY_PAGES: { linkedin: ConnectorPage } = {
   },
 };
 
+/**
+ * The interview channels (D753 task C1): pages for the keys `GET /api/channels`
+ * reports, which are not registry rows. The words are D754 §11's and D756
+ * §1.11's; the tools are read off `services/channels/`. Neither is connectable
+ * on production yet, so `added` is null.
+ */
+export const CHANNEL_PAGES: { whatsapp: ConnectorPage; telegram: ConnectorPage } = {
+  whatsapp: {
+    tagline: 'Customers’ chats with your business number wait here for 30 days. Add one to an interview.',
+    long_description: [
+      'Customers’ chats with your business number wait here for 30 days. Add one to an interview, and Axal asks the customer for consent in the chat before anything is recorded.',
+      'Axal sends only what you ask it to, and only within 24 hours of the customer’s last message. Messages are billed by Meta to your WhatsApp Business Account after 1,000 a month.',
+      'Calls: not yet. WhatsApp calls do not reach Axal; record a call with the in-app recorder instead.',
+    ],
+    tools: [
+      tool('list_numbers', 'your business account’s numbers', 'read', 'Lists the numbers in your WhatsApp Business Account, to confirm the one you signed up is yours, and again before you disconnect.', null,
+        ['/phone_numbers?fields=id,display_phone_number,verified_name,messaging_limit_tier`', '/phone_numbers?fields=id&limit=100`']),
+      tool('read_number', 'your number’s name and quality', 'read', 'Reads your number’s name, quality rating and messaging limit, when you test the connection.', null,
+        ['?fields=verified_name,quality_rating,messaging_limit_tier,display_phone_number`']),
+      tool('download_voice_note', 'voice notes', 'read', 'Downloads a voice note from a chat you added to an interview, to transcribe it.', 'customer_research',
+        ['export async function fetchWhatsAppMedia(', "graph('media',"]),
+      tool('send_message', 'messages you send', 'write', 'Sends a text to a customer, when you send it from Axal, within 24 hours of their last message.', null,
+        ['`${GRAPH_BASE}/${encodeURIComponent(pnid)}/messages`']),
+      tool('subscribe_app', 'your business account’s webhooks', 'account', 'Subscribes Axal to your WhatsApp Business Account’s webhooks, when you connect.', null, ["graph('subscribe',"]),
+      tool('unsubscribe_app', 'your business account’s webhooks', 'account', 'Removes that subscription when you disconnect, unless another Axal member still uses a number in the account.', null, ["graph('unsubscribe',"]),
+      tool('receive_messages', 'customer messages', 'inbound', 'WhatsApp tells Axal when a customer writes to your number.', null, ['export function normaliseWhatsAppPayload(']),
+      tool('receive_delivery_status', 'delivery status', 'inbound', 'WhatsApp tells Axal when a message Axal sent is delivered or fails.', null, ['export async function applyDeliveryStatus(']),
+    ],
+    prompts: [],
+    prompts_reason: notRead('WhatsApp'),
+    made_by: AXAL,
+    service: { name: 'WhatsApp', href: null },
+    sign_in: { kind: 'channel', label: 'Meta sign-up', key_help_href: null },
+    endpoints: { sign_in: null, api: 'https://graph.facebook.com/v23.0' },
+    added: null,
+    links: { ...NO_LINKS, developer_docs: 'https://developers.facebook.com/docs/whatsapp/cloud-api' },
+    verified_on: null,
+  },
+  telegram: {
+    tagline: 'Telegram Business: the customer chats you choose, and their voice notes, into Validate.',
+    long_description: [
+      'Only the chats you choose in Telegram Business, each waiting in Interviews until you add it to an interview.',
+      'Axal sends only what you send from Axal, within 24 hours of the person’s last message.',
+      'It cannot make or receive calls, or read group chats.',
+    ],
+    tools: [
+      tool('download_voice_note', 'voice notes', 'read', 'Downloads a voice note from a chat you added to an interview, to transcribe it.', 'customer_research',
+        ["call(env, 'getFile', { file_id: fileId })", '`${TELEGRAM_API}/file/bot${token}/${path}`']),
+      tool('send_reply', 'replies you send', 'write', 'Sends a reply in a customer chat, when you send it from Axal, within 24 hours of their last message.', null,
+        ['export async function sendBusinessMessage(', '`${TELEGRAM_API}/bot${token}/${method}`']),
+      tool('send_private_message', 'messages to you', 'write', 'Sends you the link prompts, confirmations and the test, in your own chat with the Axal bot.', null,
+        ['export async function sendPrivateMessage(', '`${TELEGRAM_API}/bot${token}/${method}`']),
+      tool('set_webhook', 'the bot’s webhook', 'account', 'Points the Axal bot’s updates at Axal, when a Super Admin registers the webhook.', null, ["call(env, 'setWebhook', {"]),
+      tool('receive_updates', 'chats you choose', 'inbound', 'Telegram tells Axal about messages in the chats you chose, and when you connect or change the bot.', null,
+        ['export function normaliseTelegramUpdate(']),
+    ],
+    prompts: [],
+    prompts_reason: notRead('Telegram'),
+    made_by: AXAL,
+    service: { name: 'Telegram', href: null },
+    sign_in: { kind: 'channel', label: 'Telegram bot link', key_help_href: null },
+    endpoints: { sign_in: null, api: 'https://api.telegram.org' },
+    added: null,
+    links: { ...NO_LINKS, developer_docs: 'https://core.telegram.org/bots/api' },
+    verified_on: null,
+  },
+};
+
 /** The Discover order (D753 decision 13): the Connectors page's list, then Payroll. Every `ConnectorCategory` once. */
 export const CATEGORY_ORDER: readonly ConnectorCategory[] = Object.freeze([
   'CRM', 'Payments', 'Accounting and banking', 'Calendar', 'Calendar and workspace', 'Messaging', 'Signing', 'Cap table', 'Data', 'Code', 'Design', 'Docs', 'Payroll',
@@ -569,6 +637,7 @@ const isVariant = (e: ConnectorPage | VariantPages | undefined): e is VariantPag
 function pageFor(key: string, variant?: string): ConnectorPage | null {
   const k = Object.hasOwn(PAGE_ALIAS, key) ? PAGE_ALIAS[key as keyof typeof PAGE_ALIAS] : key;
   if (k === 'linkedin') return FIRST_PARTY_PAGES.linkedin;
+  if (Object.hasOwn(CHANNEL_PAGES, k)) return CHANNEL_PAGES[k as keyof typeof CHANNEL_PAGES];
   if (!Object.hasOwn(CONNECTOR_PAGES, k)) return null;
   const entry = CONNECTOR_PAGES[k];
   if (!isVariant(entry)) return entry;
@@ -616,7 +685,7 @@ const HUB = '/account/connectors';
 export function connectorPagePath(key: string): string {
   if (typeof key !== 'string' || !PAGE_KEY_RE.test(key)) return HUB;
   const pageKey = key === PAGE_ALIAS.google ? 'google' : key === PAGE_ALIAS.microsoft ? 'microsoft' : key;
-  const known = Object.hasOwn(PAGE_ALIAS, pageKey) || pageKey === 'linkedin' || Object.hasOwn(CONNECTOR_PAGES, pageKey);
+  const known = Object.hasOwn(PAGE_ALIAS, pageKey) || pageKey === 'linkedin' || Object.hasOwn(CHANNEL_PAGES, pageKey) || Object.hasOwn(CONNECTOR_PAGES, pageKey);
   return known ? `${HUB}/${pageKey}` : HUB;
 }
 
@@ -634,6 +703,8 @@ export function pageDescriptor(p: { key: string } & Partial<ProviderDescriptor>,
   let page: ConnectorPage | null = null;
   if (key === 'linkedin') {
     page = FIRST_PARTY_PAGES.linkedin;
+  } else if (Object.hasOwn(CHANNEL_PAGES, key)) {
+    page = CHANNEL_PAGES[key as keyof typeof CHANNEL_PAGES];
   } else if (Object.hasOwn(CONNECTOR_PAGES, key)) {
     const entry = CONNECTOR_PAGES[key];
     const audience = viewer && (p.entity_roles || p.personal_roles) ? audienceFor(p as ProviderDescriptor, viewer) : 'open';
@@ -655,4 +726,13 @@ export function pageDescriptor(p: { key: string } & Partial<ProviderDescriptor>,
     page_href,
     trust: trustFor(key, variant)!,
   };
+}
+
+/**
+ * A channel's page (`whatsapp`, `telegram`), or null for any other key. For
+ * `GET /api/connectors/directory/:key` (#1878), which answers the channel keys
+ * from here because they are not registry rows.
+ */
+export function channelPage(key: string): PageDescriptor | null {
+  return typeof key === 'string' && Object.hasOwn(CHANNEL_PAGES, key) ? pageDescriptor({ key }) : null;
 }
