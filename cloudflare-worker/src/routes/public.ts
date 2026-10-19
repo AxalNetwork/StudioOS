@@ -132,7 +132,9 @@ export type PublicAiModel = { feature: string; model: string; name: string; prov
 let aiModelsL1: PublicAiModel[] | null = null;
 
 export function publicAiModels(): PublicAiModel[] {
-  return (Object.keys(ROUTE) as TaskClass[]).map((task) => {
+  // D761 / D764: the rail_<kind> tasks have no fixed model (a page's row picks
+  // it), so a fixed row for them would name a default the page may not use.
+  return (Object.keys(ROUTE) as TaskClass[]).filter((task) => !task.startsWith('rail_')).map((task) => {
     const entry = ROUTE[task];
     return {
       feature: TASK_LABELS[task] ?? task,
