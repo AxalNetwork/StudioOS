@@ -457,9 +457,9 @@ test('D757: a free founder\'s sixth interview is refused 402 tier_required and n
     w.db.exec(`UPDATE users SET ${change} WHERE id = ${ME}`);
     const out = await submitInterview(w.env, GRANT, ARGS());
     assert.ok(out.session_id, change);
-    // StudioOS's summary is queued for the engine (assistant_submitted), never run inline.
+    // D765 (#2090), D720 §6: StudioOS's summary is the founder's press, so nothing is queued or run.
     const jobs = w.db.prepare("SELECT payload FROM queue_jobs WHERE job_type = 'session_structure'").all().map((r: any) => JSON.parse(r.payload));
-    assert.deepEqual(jobs, [{ session_id: out.session_id, user_id: ME, trigger: 'assistant_submitted' }]);
+    assert.deepEqual(jobs, []);
   }
 });
 

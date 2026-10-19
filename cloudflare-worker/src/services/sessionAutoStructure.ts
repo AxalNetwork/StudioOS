@@ -3,6 +3,15 @@
  * every run goes through the Validate engine (`validateEngine.ts`), which runs
  * the summary as well as this file's structure pass.
  *
+ * D765 (#2090), D720 §6: NO DIGEST STARTS WITHOUT A PRESS, with the owner's
+ * two exceptions (2026-10-19): a chat's final text (`chat_text_added`, and the
+ * quiet-chat sweep's `chat_quiet`) and a consented voice note
+ * (`voice_note_added`) still queue the engine on their own. The other
+ * triggers that fired on their own (an imported call, consent given after a
+ * call, a pasted chat, an assistant's submission) queue nothing, and the
+ * recorder's `processing_auto` is set only by the member's explicit choice
+ * at Stop. What follows is D684's history.
+ *
  * The goal is the owner's: a call or a customer chat is transcribed, the
  * Worker AI finds the pain points, and the other Validate modules fill in. The
  * finding step already exists — D658's Structure, which proposes seven kinds of
