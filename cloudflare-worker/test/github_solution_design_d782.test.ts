@@ -192,6 +192,8 @@ test('an ADR is one proposal; only Architecture, Design and Decisions sections a
   assert.deepEqual(designProposals('docs/howto.md', '# How to\n\n## Setup\n\nText.\n', false), [], 'a file with no such section proposes nothing');
   assert.equal(headingAnchor('Design & Decisions (v2)'), 'design--decisions-v2');
   assert.equal(firstParagraph('\n\n## Heading\n\nFirst line\nsecond line\n\nNext.'), 'First line second line');
+  // Mutation checked: skip only one-line comments → the hidden lines become the extract.
+  assert.equal(firstParagraph('<!-- one line -->\n<!--\nhidden\nlines\n-->\nShown prose.'), 'Shown prose.', 'an HTML comment, one line or many, is not prose');
   assert.ok(firstParagraph('x '.repeat(400)).length <= 400);
 });
 

@@ -75,16 +75,23 @@ export function markdownSections(md: string): Section[] {
   });
 }
 
-/** The first paragraph of prose: no heading, no fence, no HTML comment; whitespace collapsed; cut at EXTRACT_CHARS. */
+/**
+ * The first paragraph of prose: no heading, no fence, no HTML comment (one
+ * line or many); whitespace collapsed; cut at EXTRACT_CHARS. The result is
+ * drawn as text, never HTML: comments are skipped so they are not shown as
+ * prose, not to sanitise anything.
+ */
 export function firstParagraph(text: string): string {
   const out: string[] = [];
-  let fence = false;
+  let fence = false, comment = false;
   for (const raw of String(text ?? '').replace(/\r\n?/g, '\n').split('\n')) {
     const line = raw.trim();
+    if (comment) { if (line.includes('-->')) comment = false; continue; }
     if (/^(`{3,}|~{3,})/.test(line)) { if (out.length) break; fence = !fence; continue; }
     if (fence) continue;
     if (!line) { if (out.length) break; continue; }
-    if (/^#{1,6}\s/.test(line) || /^<!--.*-->$/.test(line) || /^(-{3,}|\*{3,}|_{3,})$/.test(line)) { if (out.length) break; continue; }
+    if (line.startsWith('<!--')) { comment = !line.includes('-->', 4); if (out.length) break; continue; }
+    if (/^#{1,6}\s/.test(line) || /^(-{3,}|\*{3,}|_{3,})$/.test(line)) { if (out.length) break; continue; }
     out.push(line);
   }
   const words = out.join(' ').replace(/\s+/g, ' ').trim();

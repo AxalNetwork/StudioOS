@@ -56,7 +56,7 @@ test('the part draws Built with, each proposal with Accept and Dismiss, and the 
   assert.match(out, /acme\/app\/docs\/adr\/0001-ledger\.md · Proposed by GitHub/);
   assert.match(out, /href="https:\/\/github\.com\/acme\/app\/blob\/main\/docs\/adr\/0001-ledger\.md"/);
   assert.doesNotMatch(out, /javascript:/, 'a link that is not GitHub\'s is not drawn');
-  assert.doesNotMatch(out, /<script>|<img/, 'repository text is drawn as text');
+  assert.doesNotMatch(out, /<script\b|<img\b/i, 'repository text is drawn as text');
   assert.match(out, /&lt;script&gt;x&lt;\/script&gt;/);
   assert.match(out, /data-testid="design-note-3"/);
   assert.match(out, /Queues over cron/);
