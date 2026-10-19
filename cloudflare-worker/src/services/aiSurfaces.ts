@@ -60,6 +60,12 @@ export const AI_SURFACE = {
   adminX: '/admin/x',
   /** HQ · Platform — the `axal-search` index's embeddings: upserts, the hourly re-embed and query embeddings, system calls (D766). */
   searchIndex: '/admin/platform',
+  /** Legal & Capital — the legal document's suggestions, the diligence summary and the spin-out's proposed equity split (`/api/legalcap/*`), member presses (D766). */
+  legalCapital: '/legal-capital',
+  /** Pipeline — the decision gate's recommendation (`/api/pipeline/decision-gate/review`), a member press (D766). */
+  pipeline: '/pipeline',
+  /** Network Effects — the syndicate's recommendations and the marketplace match (`/api/networkfx/*`), member presses (D766). */
+  networkEffects: '/network-effects',
 } as const;
 
 export type AiSurface = (typeof AI_SURFACE)[keyof typeof AI_SURFACE];
