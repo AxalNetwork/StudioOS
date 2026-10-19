@@ -7,6 +7,9 @@ import { ensureWorkflowSchema } from '../services/workflowSchema';
 import { aiQuotaGate, recordSharedServiceAction } from '../services/aiQuota';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import { bindingKey } from '../util/schemaBootstrap';
+import { run as runAI } from '../services/aiRouter';
+import { AI_SURFACE } from '../services/aiSurfaces';
+import { railFor, refuseRun } from '../util/railContext';
 
 const pipeline = new Hono<{ Bindings: Env }>();
 
@@ -88,14 +91,21 @@ async function ensureSchema(env: Env) {
 function safeJson<T>(s: any, def: T): T { try { return s ? JSON.parse(s) : def; } catch { return def; } }
 const logAction = (env: Env, actionType: string, performedBy: number | null, details: any = {}) =>
   recordSharedServiceAction(env, actionType, performedBy, details);
-async function llmText(env: Env, system: string, prompt: string): Promise<string | null> {
-  if (!env.AI) return null;
-  try {
-    const out: any = await env.AI.run('@cf/meta/llama-3.1-8b-instruct-fp8', {
-      messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }], max_tokens: 400,
-    });
-    return (out?.response || '').trim() || null;
-  } catch { return null; }
+/**
+ * D766 (#2094): the decision gate's recommendation as the pressing member's
+ * run (D765's page, option and record), held, guarded and charged. `refused`
+ * answers a run the router refused; `text` is null when the model could not be
+ * reached, and the gate keeps its rule-based recommendation.
+ */
+async function llmText(c: any, userId: number, dealId: number, system: string, prompt: string): Promise<{ text: string | null; refused: Response | null }> {
+  const r = await runAI(c.env, {
+    task: 'rail_reason', userId, maxTokens: 400,
+    messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }],
+    surface: AI_SURFACE.pipeline,
+    rail: railFor(c, { page: 'pipeline', option: 'review:decision-gate' }, `deal:${dealId}`),
+  });
+  if (r.ok) return { text: (r.output || '').trim() || null, refused: null };
+  return { text: null, refused: refuseRun(c, r) };
 }
 
 async function getCurrentStage(env: Env, dealId: number): Promise<string | null> {
@@ -400,9 +410,11 @@ pipeline.post('/decision-gate/review', async (c) => {
   else if (traction >= 40) ruleRec = 'continue';
   else ruleRec = 'iterate';
 
-  const ai = await llmText(c.env,
+  const out = await llmText(c, user.id, dealId,
     'You are a venture-studio decision-gate analyst. Given a project and its latest traction metrics, recommend exactly one of: SPIN-OUT READY, CONTINUE, or ITERATE. Return JSON: {"recommendation":"spinout_ready|continue|iterate","explanation":"2-3 sentences"}.',
     `Project: ${project.name}\nSector: ${project.sector || 'n/a'}\nStage: ${project.stage}\nTraction Score: ${traction}/100\nLatest Metrics: ${JSON.stringify(km)}\nProblem: ${(project.problem_statement || '').slice(0, 500)}\nSolution: ${(project.solution || '').slice(0, 500)}`);
+  if (out.refused) return out.refused;
+  const ai = out.text;
 
   let aiRec = ruleRec;
   let aiExp = `Rule-based: traction score ${traction}/100 → ${ruleRec.replace('_', ' ')}.`;

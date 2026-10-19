@@ -46,14 +46,15 @@ export default function SpinoutWizard({ deal, onClose, onComplete }) {
 
   const askAI = async () => {
     setBusy(true); setErr(''); setAiRecommended(false);
-    try { const r = await api.spinoutEquity({ deal_id: deal.id }); setAllocation(r.allocation); setAiRecommended(true); await reload(); }
+    // D766: the AI's split is a proposal; nothing is saved until Save posts it back.
+    try { const r = await api.spinoutEquity({ deal_id: deal.id }); setAllocation(r.allocation); setAiRecommended(true); }
     catch (e) { setErr(e.message); }
     finally { setBusy(false); }
   };
 
   const saveEquity = async () => {
     setBusy(true); setErr('');
-    try { await api.spinoutEquity({ deal_id: deal.id, allocation }); await reload(); }
+    try { await api.spinoutEquity({ deal_id: deal.id, allocation, proposed: aiRecommended }); await reload(); }
     catch (e) { setErr(e.message); }
     finally { setBusy(false); }
   };
@@ -152,7 +153,7 @@ export default function SpinoutWizard({ deal, onClose, onComplete }) {
                   <button onClick={askAI} disabled={busy} className="bg-violet-100 hover:bg-violet-200 text-violet-700 text-xs font-medium px-2 py-1 rounded flex items-center gap-1">
                     {busy ? <Loader2 className="animate-spin" size={11} /> : <Sparkles size={11} />} AI Recommend
                   </button>
-                  {aiRecommended && <span className="text-[10px] text-emerald-600">✓ AI-recommended</span>}
+                  {aiRecommended && <span className="text-[10px] text-emerald-600" data-testid="spinout-ai-proposal">✓ AI-recommended · not saved until you press Save Allocation</span>}
                 </div>
                 <div className="grid grid-cols-2 gap-3 mb-3">
                   {[
