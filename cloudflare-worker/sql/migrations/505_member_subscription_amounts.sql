@@ -1,4 +1,4 @@
--- 503 — what each member pays for each subscription (D783, #2124).
+-- 505 — what each member pays for each subscription (D783, #2124).
 --
 -- A plan includes 25% of its price as AI allowance each month. The price that
 -- counts is the one on the member's own subscription, so a discounted or

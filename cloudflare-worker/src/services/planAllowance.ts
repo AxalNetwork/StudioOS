@@ -7,9 +7,9 @@
  * monthly share, 25% of the yearly price ÷ 12. There is no daily limit.
  *
  * THE PRICE THAT COUNTS IS THE MEMBER'S OWN. `member_subscription_amounts`
- * (migration 503) records each member plan's amount from the subscription
+ * (migration 505) records each member plan's amount from the subscription
  * webhook, so a discounted or grandfathered price counts as paid. A
- * subscriber with no recorded row yet (subscribed before migration 503) falls
+ * subscriber with no recorded row yet (subscribed before migration 505) falls
  * back to the catalogue's current price for the plan the mirrors say they
  * hold, and says so (`source: 'catalogue'`).
  *

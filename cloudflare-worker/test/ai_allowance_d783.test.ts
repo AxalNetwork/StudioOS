@@ -2,7 +2,7 @@
  * D783 (#2124): a plan includes 25% of its price as AI allowance each month.
  *
  * - The allowance is computed from what the member pays: the subscription
- *   webhook records each member plan's amount (migration 503), a yearly price
+ *   webhook records each member plan's amount (migration 505), a yearly price
  *   counts ÷ 12, and two plans add up. A subscriber with no recorded row yet
  *   reads the catalogue's current price.
  * - No paid plan, no allowance: every run draws tokens, or is refused.

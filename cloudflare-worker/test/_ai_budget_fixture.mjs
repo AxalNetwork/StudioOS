@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { makeD1 } from './_d1_sqlite.mjs';
 export const AI_BUDGET_REVIEW_MIGRATION=readFileSync(new URL('../sql/migrations/430_ai_budget_review_cost.sql',import.meta.url),'utf8');
 export const AI_CREDITS_MIGRATION=readFileSync(new URL('../sql/migrations/486_ai_credits_token_packs.sql',import.meta.url),'utf8');
-export const AI_PLAN_MIGRATION=readFileSync(new URL('../sql/migrations/503_member_subscription_amounts.sql',import.meta.url),'utf8');
+export const AI_PLAN_MIGRATION=readFileSync(new URL('../sql/migrations/505_member_subscription_amounts.sql',import.meta.url),'utf8');
 /**
  * D783: a member's allowance is 25% of the plans they pay, and no plan means none.
  * Every fixture user (ids 1 to 1000) pays one $200-a-month plan, so a member's
