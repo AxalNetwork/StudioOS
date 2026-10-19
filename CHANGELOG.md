@@ -4,6 +4,18 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## The five outside rows lose their seed header (D758, #1863, migration 496)
+
+- `496_strip_outside_template_headers.sql` removes migration 085's header
+  block (title, "Subject to legal review" banner, version line, parties
+  lines) from `nda_3way_founder_investor_axal`, `investor_nda_axal`,
+  `mentor_nda_axal`, `mentor_engagement_disclaimer` and `partner_services`,
+  in a new version with the old body kept in `legal_template_versions`.
+- It matches each header exactly as the body's prefix, leaves an edited row
+  alone, and changes nothing on a second run.
+- Since #1911 these rows are what the 3-way NDA, the deck-share NDA and Admin
+  sends of the bundled spellings print.
+
 ## One text per document: every sender reads its library row (D758, #1863, PR 1)
 
 - `services/legalDocTypes.ts` gains `LIBRARY_SLUG_FOR` / `librarySlugFor`
