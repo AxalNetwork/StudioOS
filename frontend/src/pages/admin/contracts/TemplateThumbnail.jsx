@@ -34,7 +34,7 @@ export function useThumbnails() {
 }
 
 let thumbSeq = 0;
-export default function TemplateThumbnail({ thumbs, load, version, stub, title, source = 'TemplateCatalog:thumbnail' }) {
+export default function TemplateThumbnail({ thumbs, load, version, stub, title }) {
   const frame = useRef(null);
   const [state, setState] = useState({ url: null, error: null });
   const [attempt, setAttempt] = useState(0);
@@ -50,7 +50,7 @@ export default function TemplateThumbnail({ thumbs, load, version, stub, title, 
         setState({ url, error: null });
       }, e => {
         if (!active) return;
-        reportError(source, e);
+        reportError('TemplateCatalog:thumbnail', e);
         setState(s => ({ ...s, error: e?.code ? e.message : THUMB_NOT_DRAWN }));
       });
     });

@@ -37,7 +37,7 @@ function ProseRow({ row, onOpen }) {
 
 function GeneratedCard({ item, thumbs, onOpen }) {
   return <div data-testid={`generated-card-${item.key}`} className={`${card} flex gap-2.5 p-2.5 dark:border-[#2a2733] dark:bg-[#18161f]`}>
-    <Thumbnail thumbs={thumbs} version={item.thumbnail_version} stub={false} title={item.title} source="GeneratedDocuments:thumbnail"
+    <Thumbnail thumbs={thumbs} version={item.thumbnail_version} stub={false} title={item.title}
       load={() => contractsApi.generatedThumbnailBlob(item.key, item.thumbnail_version)} />
     <div className="flex min-w-0 flex-1 flex-col gap-1">
       <p className="line-clamp-2 text-[12.5px] font-bold leading-[1.3]">{item.title}</p>
