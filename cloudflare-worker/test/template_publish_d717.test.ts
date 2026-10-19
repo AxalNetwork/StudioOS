@@ -12,6 +12,7 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import contracts from '../src/routes/admin_contracts.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
+import { DeadlineExceeded } from '../src/util/deadline.ts';
 import { tableFromBaseline } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { PDFDocument, PDFArray, PDFName, PDFRawStream, decodePDFRawStream } from 'pdf-lib';
@@ -123,7 +124,7 @@ test('D717 push sends the recorded publications as they stand, writes none, and 
   const branches = {
     BRANCH_FR: { publishTemplate: async (payload: any) => { sent.push(payload); return { stored: 1, withdrawn: 0 }; } },
     BRANCH_DE: { publishTemplate: async () => { throw new Error('branch said no'); } },
-    BRANCH_IT: {},
+    BRANCH_IT: { publishTemplate: async () => { throw new DeadlineExceeded('BRANCH_IT.publishTemplate', 2000); } },
   };
   const before = JSON.stringify(pubs(db));
   const logsBefore = Number((db.prepare('SELECT COUNT(*) AS n FROM activity_logs').get() as any).n);
@@ -138,7 +139,10 @@ test('D717 push sends the recorded publications as they stand, writes none, and 
   const byCode = Object.fromEntries(r.body.branches.map((b: any) => [b.code, b]));
   assert.deepEqual(byCode.fr, { code: 'fr', status: 'ok', stored: 1, withdrawn: 0 });
   assert.deepEqual([byCode.de.status, byCode.de.reason], ['unreadable', 'branch said no']);
-  assert.equal(byCode.it.status, 'unreadable');
+  assert.equal(byCode.de.timed_out, undefined, 'an answer with an error is not a timeout');
+  assert.deepEqual([byCode.it.status, byCode.it.timed_out], ['unreadable', true], 'a branch that hit the deadline is "not reached"');
+  assert.match(r.body.pushed_at, /^\d{4}-\d\d-\d\dT/);
+  assert.equal(r.body.pushed_at, sent[0].pushed_at, 'the header names the push the branches received');
   const none = await call(db, '/published-templates/push');
   assert.deepEqual(none.body.branches, []);
   assert.match(none.body.branches_reason, /No branch Worker is bound/);

@@ -36,6 +36,8 @@ export { default as Lightbox, LightboxBarProvider, useLightboxPage } from './Lig
 // D686 — Cycle Action's lightbox body: header, step pills, banner, scrolling body, footer; shared button classes. See ActionSheet.jsx.
 // D687 — every service's mark, coded once (Simple Icons 16.35.0, CC0), with initials where no mark is cleared. See BrandIcon.jsx.
 export { default as BrandIcon, BRAND_MARKS, BRAND_GENERIC, BRAND_MONOGRAM, BRAND_ALIAS, resolveBrand, TILE_HEX } from './BrandIcon';
+// D753 — the one Verified mark, drawn only with a recorded check date. See VerifiedBadge.jsx.
+export { default as VerifiedBadge, verifiedDay } from './VerifiedBadge';
 export { default as ActionSheet, primary as actionPrimary, ghost as actionGhost, danger as actionDanger } from './ActionSheet';
 
 // The AI control rail — eight canvases, one component. Not navigation: see

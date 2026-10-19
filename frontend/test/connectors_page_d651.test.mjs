@@ -17,11 +17,12 @@ import { MemoryRouter } from 'react-router-dom';
 
 import {
   agoLabel, attentionReason, authKind, buildCatalogue, cardAction, cardPill, categoryOf, companiesLabel,
-  connectFailure, connectionStatus, connectorsRedirect, discoverChips, discoverSections, disconnectNote, doesLabel,
+  connectFailure, connectionStatus, connectorsRedirect, discoverSections, disconnectNote, doesLabel,
   feedsLabel, firstPartyConnection, flowBanner, lastSyncLabel, oauthReturn, pageOf, stripReturn, toolBanner,
   toolGroups, toolState, yoursRows,
 } from '../src/pages/account/connectorsModel.js';
 import { ConnectorsView, AddMenu, RequestSheet } from '../src/pages/account/AccountConnectors.jsx';
+import { discoverFacets } from '../src/pages/account/discoverModel.js';
 import { ConnectorPanel } from '../src/pages/account/ConnectorSheet.jsx';
 import { ConnectToolView } from '../src/pages/account/ConnectToolSheet.jsx';
 
@@ -149,8 +150,8 @@ test('Yours: search, filter, sort, and a count with pages', () => {
   assert.equal(pageOf([], 1).count, '0 of 0');
 });
 
-test('Discover: the chips, the sections, and each card’s corner and pill', () => {
-  assert.deepEqual(discoverChips(CAT), ['All', 'Suggested for you', 'CRM', 'Payments', 'Calendar', 'Calendar and workspace', 'Messaging', 'Cap table', 'Data'], 'Google Calendar and Microsoft 365 sit in Calendar and workspace (D686 §3.1 item 6)');
+test('Discover: the categories, the sections, and each card’s corner and pill', () => {
+  assert.deepEqual(discoverFacets(CAT, []).categories.map((r) => r.label), ['CRM', 'Payments', 'Calendar', 'Calendar and workspace', 'Messaging', 'Cap table', 'Data'], 'Google Calendar and Microsoft 365 sit in Calendar and workspace (D686 §3.1 item 6)');
   const all = discoverSections(CAT, 'All');
   assert.deepEqual(all.map((s) => s.title), ['Top connectors', 'Coming soon']);
   assert.deepEqual(all[1].cards.map((p) => p.key), ['salesforce', 'affinity']);
@@ -294,8 +295,10 @@ test('yours: the table with every column, a Needs-attention reason, and the coun
   assert.match(out, /data-tab="yours"/);
   assert.match(t, /Connector Category Does Feeds Companies Last sync Status/);
   assert.match(out, /data-testid="connector-row-hubspot"/);
-  assert.match(t, /HubSpot by HubSpot CRM Not recorded Not recorded Not recorded \d+ days? ago Needs attention Sign-in expired/);
-  assert.match(t, /Slack by Slack Messaging Not recorded Not recorded Not recorded Not recorded · never ran Beta/);
+  // D753 F6: the grey line names who made it only when the Worker says so (`made_by`), never "by <the provider>".
+  assert.match(t, /HubSpot CRM Not recorded Not recorded Not recorded \d+ days? ago Needs attention Sign-in expired/);
+  assert.match(t, /Slack Messaging Not recorded Not recorded Not recorded Not recorded · never ran Beta/);
+  assert.doesNotMatch(t, /HubSpot by HubSpot|Slack by Slack/);
   assert.match(t, /1–4 of 4/);
   assert.doesNotMatch(out, /connector-row-calendly/, 'only the member’s connectors are listed');
   assert.match(t, /Bring your tools into StudioOS, and send your work back to them\./);
@@ -310,28 +313,32 @@ test('yoursEmpty, loading, unreadable, noresults and an unread connection list e
   assert.match(text(html(h(ConnectorsView, { data: ready(CAT, { itemsFailed: true }) }))), /Your connections could not be read\. This is not a claim that you have none\./);
 });
 
-test('discover and discoverCat: chips, sections, corners, the Notify-me state and the Coming-soon pill', () => {
+test('discover and discoverCat: the filter, sections, corners, the Notify-me state and the Coming-soon pill', () => {
   const out = html(h(ConnectorsView, { data: ready(), initialTab: 'discover' }));
   const t = text(out);
-  assert.match(t, /All Suggested for you CRM Payments Calendar Calendar and workspace Messaging Cap table Data/);
+  assert.match(out, /data-testid="button-connectors-filter"/);
+  assert.doesNotMatch(out, /connectors-chips/);
   assert.match(t, /Top connectors \d+[\s\S]*Coming soon 2/);
   assert.match(out, /data-testid="connector-card-calendly" data-action="add"/);
   assert.match(out, /data-testid="connector-card-stripe" data-action="connected"/);
   assert.match(out, /data-testid="connector-card-salesforce" data-action="notify"[\s\S]*?Notify me/);
   assert.match(out, /data-testid="connector-card-affinity" data-action="joined"[\s\S]*?We&#x27;ll tell you/);
   assert.match(out, /data-testid="connector-card-microsoft" data-action="unavailable"[\s\S]*?Not set up here/);
-  assert.match(out, /data-testid="connector-card-telegram"/);
-  const crm = text(html(h(ConnectorsView, { data: ready(), initialTab: 'discover', initialChip: 'CRM' })));
+  assert.match(out, /data-testid="connector-card-microsoft"/, 'Microsoft, the 8th of 9 Top cards, is shown before Show all');
+  assert.doesNotMatch(out, /data-testid="connector-card-linkedin"/, 'the 9th waits for Show all');
+  assert.match(out, /data-testid="button-connectors-show-all"[^>]*>Show all →/);
+  assert.match(out, /data-testid="connector-community-telegram"/);
+  const crm = text(html(h(ConnectorsView, { data: ready(), initialTab: 'discover', initialFilter: { where: 'category:CRM', type: 'all' } })));
   assert.match(crm, /CRM 3/);
   assert.doesNotMatch(crm, /Stripe/);
-  const sug = text(html(h(ConnectorsView, { data: ready(), initialTab: 'discover', initialChip: 'Suggested for you' })));
+  const sug = text(html(h(ConnectorsView, { data: ready(), initialTab: 'discover', initialFilter: { where: 'all', type: 'suggested' } })));
   assert.match(sug, /Not recorded · Suggestions could not be read\./, 'no suggestion is invented when the read fails');
-  const none = text(html(h(ConnectorsView, { data: { ...ready(), suggestions: null, suggestionsNote: 'Choose a company in the sidebar to see what its empty modules could be fed by.' }, initialTab: 'discover', initialChip: 'Suggested for you' })));
+  const none = text(html(h(ConnectorsView, { data: { ...ready(), suggestions: null, suggestionsNote: 'Choose a company in the sidebar to see what its empty modules could be fed by.' }, initialTab: 'discover', initialFilter: { where: 'all', type: 'suggested' } })));
   assert.match(none, /Not recorded · Choose a company in the sidebar/);
-  const got = html(h(ConnectorsView, { data: { ...ready(), suggestions: [{ provider_key: 'calendly', module: 'customer_research', reason: 'Customer research has no recorded interviews yet.' }] }, initialTab: 'discover', initialChip: 'Suggested for you' }));
+  const got = html(h(ConnectorsView, { data: { ...ready(), suggestions: [{ provider_key: 'calendly', module: 'customer_research', reason: 'Customer research has no recorded interviews yet.' }] }, initialTab: 'discover', initialFilter: { where: 'all', type: 'suggested' } }));
   assert.match(got, /data-testid="connector-card-calendly"/);
   assert.match(text(got), /Suggested for you 1 .*Customer research has no recorded interviews yet\./);
-  assert.match(text(html(h(ConnectorsView, { data: { ...ready(), suggestions: [] }, initialTab: 'discover', initialChip: 'Suggested for you' }))), /Nothing to suggest/);
+  assert.match(text(html(h(ConnectorsView, { data: { ...ready(), suggestions: [] }, initialTab: 'discover', initialFilter: { where: 'all', type: 'suggested' } }))), /Nothing to suggest/);
 });
 
 test('moved: the notice shows on an arrival from Integrations, and not otherwise', () => {
@@ -468,7 +475,7 @@ test('IntegrationsPage.jsx is retired, and nothing in the app links to the old a
 });
 
 test('a connector belongs to the member: no connectors read takes a company', () => {
-  for (const f of ['AccountConnectors.jsx', 'ConnectorSheet.jsx', 'ConnectToolSheet.jsx', 'connectorsModel.js']) {
+  for (const f of ['AccountConnectors.jsx', 'ConnectorSheet.jsx', 'ConnectToolSheet.jsx', 'connectorsModel.js', 'discoverModel.js', 'ConnectorFilterMenu.jsx']) {
     assert.doesNotMatch(read(`frontend/src/pages/account/${f}`), /activeCompany|company_id=|useActiveCompany/, f);
   }
 });
