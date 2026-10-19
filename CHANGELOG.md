@@ -4,33 +4,6 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
-## Discover's filter has real counts (D753 F6, #1877)
-
-- Discover's category chips are replaced by a filter menu (desktop) and a
-  bottom sheet (phone): All categories, each category, Cycle ›, Sign-in ›,
-  then Type, each with a count that equals the cards it shows
-  (`pages/account/discoverModel.js`, `ConnectorFilterMenu.jsx`). An unknown
-  count reads "Not recorded", never 0.
-- Every card is one link to its connector's page; "+" opens the page, never a
-  sign-in. "Top connectors" shows 8 with "Show all →", in two columns at most.
-- "Verified" (`ui/VerifiedBadge.jsx`) shows only with a recorded check date.
-- Cards and the Yours table no longer say "by <the provider>": the maker line
-  appears only when the Worker names one (`made_by`).
-
-## Every connector has its own page (D753 F1, #1876)
-
-- `/account/connectors/:key` (`ConnectorPage.jsx`, `connectorPageModel.js`)
-  draws a connector inside the Account center: "← Connectors", a header band
-  with the tile, name and tagline, About and Details. Today's connect and
-  manage panel is mounted inline through `SheetFrame`'s new `page` layout, so
-  nothing is lost until F2 to F5 replace it.
-- Every Discover card, Yours row, phone row and Channels button links the page;
-  the hub no longer opens a right sheet (the request form stays until F8). The
-  hub's tab is in the address (`?tab=discover`).
-- A sign-in return lands on its connector's page (`connectorsRedirect`); a
-  Mercury return goes to the hub with its keys stripped (D715 decision 3).
-  No Worker change.
-
 ## The LP's capital call opens on the amount, and the fee statement is on screen (D717, #1859)
 
 - An open Fund I line's panel on the LP workspace opens on "Amount due", the
