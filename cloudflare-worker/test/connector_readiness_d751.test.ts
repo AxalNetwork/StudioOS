@@ -11,7 +11,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
@@ -33,9 +33,9 @@ const m435 = readFileSync('cloudflare-worker/sql/migrations/435_connector_compan
 function registeringFiles(): string[] {
   const out: string[] = [];
   const walk = (dir: string) => {
-    for (const name of readdirSync(dir)) {
-      const p = join(dir, name);
-      if (statSync(p).isDirectory()) walk(p);
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, entry.name);
+      if (entry.isDirectory()) walk(p);
       else if (p.endsWith('.ts') && /^registerProvider\(/m.test(readFileSync(p, 'utf8'))) out.push(p);
     }
   };
