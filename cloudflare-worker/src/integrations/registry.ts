@@ -30,6 +30,10 @@ export interface ConnectorMetadata {
   sends: Array<{ what: string; target: string; default_mode: 'auto' | 'ask' }>;
   feeds: string[];
   permissions: string[];
+  /** D757 §2.12: where in Axal this connector is used, for D753's page (F7). */
+  used_by?: Array<{ label: string; href: string }>;
+  /** D757 §2.12: the Validate modules its transcripts suggest into (`moduleLabels.ts` keys). */
+  suggests?: string[];
 }
 
 export interface ProviderDescriptor {
@@ -66,6 +70,12 @@ export interface ProviderDescriptor {
    * Like the two fields above, it is never served.
    */
   personal_hq_only_roles?: string[];
+  /**
+   * D757 §2.11: `venture` makes the provider founder-facing — `personal` for a
+   * viewer who can hold a venture (`canHoldValidateSource`), `none` for
+   * everyone else. It overrides the role lists.
+   */
+  audience_rule?: 'venture';
 }
 
 /**
@@ -424,6 +434,8 @@ export const REGISTRY: ProviderDescriptor[] = [
     capabilities: ['Schedule interview calls', 'Import cloud transcripts'],
     docs_url: 'https://developers.zoom.us/docs/integrations/oauth/',
     icon: 'Video',
+    // D757 §2.11: founder-facing, a Validate source.
+    audience_rule: 'venture',
     oauth_scopes: ['meeting:write:meeting', 'meeting:delete:meeting', 'cloud_recording:read:list_recording_files',
       'meeting:read:meeting', 'meeting:read:list_past_instances', 'user:read:user'],
   },
@@ -481,7 +493,7 @@ export const CONNECTOR_METADATA: Record<string, ConnectorMetadata> = {
   stripe: { category: 'Payments', verified: false, pulls: [{ what: 'Payments and subscriptions', module: 'revenue_and_traction' }], sends: [], feeds: ['revenue_and_traction', 'customers'], permissions: ['Read charges and subscriptions from your Stripe account.'] },
   affinity: { category: 'CRM', verified: false, pulls: [], sends: [], feeds: [], permissions: ['Read relationship data from your Affinity account.'] },
   github: { category: 'Code', verified: false, pulls: [{ what: 'Issues', module: 'product_roadmap' }, { what: 'Pull requests', module: 'prototype_mvp' }, { what: 'Releases', module: 'product_roadmap' }], sends: [], feeds: ['product_roadmap', 'prototype_mvp'], permissions: ['Read issues in the repositories you choose.', 'Read pull requests in the repositories you choose.', 'Read releases in the repositories you choose.', 'Read repository names and visibility.'] },
-  zoom: { category: 'Messaging', verified: false, pulls: [{ what: 'Call transcripts', module: 'customer_research' }], sends: [{ what: 'Interview calls you schedule', target: 'Zoom meeting', default_mode: 'ask' }], feeds: ['customer_research'], permissions: ['Create Zoom meetings for the interview calls you schedule.', 'Delete a Zoom meeting when you cancel its interview call.', 'Read your meetings’ cloud recording files, to download their transcripts.', 'Read a pasted meeting to confirm you host it.', 'List your past meeting instances to recover restarted calls.', 'Read your Zoom user id to identify the connection when you disconnect it.'] },
+  zoom: { category: 'Messaging', verified: false, pulls: [{ what: 'Call transcripts', module: 'customer_research' }], sends: [{ what: 'Interview calls you schedule', target: 'Zoom meeting', default_mode: 'ask' }], feeds: ['customer_research'], used_by: [{ label: 'Validate › Record a session', href: '/validate/record' }], suggests: ['problem_discovery', 'customer_research', 'ideal_customer_profile', 'market_intelligence', 'demand_signals', 'experiments'], permissions: ['Create Zoom meetings for the interview calls you schedule.', 'Delete a Zoom meeting when you cancel its interview call.', 'Read your meetings’ cloud recording files, to download their transcripts.', 'Read a pasted meeting to confirm you host it.', 'List your past meeting instances to recover restarted calls.', 'Read your Zoom user id to identify the connection when you disconnect it.'] },
   google_calendar: { category: 'Calendar and workspace', verified: false, pulls: [{ what: 'Events', module: 'customer_research' }], sends: [{ what: 'Calendar events', target: 'Google Calendar', default_mode: 'ask' }], feeds: ['customer_research', 'operating_systems'], permissions: ['Create and update your calendar events.', 'Read your calendar events.', 'Gmail (read-only) is asked for at sign-in; Axal VC does not read your Gmail.', 'Read your account email address.', 'Read your public account profile.', 'Confirm your Google sign-in identity.'] },
   mercury: { category: 'Accounting and banking', verified: false, pulls: [], sends: [], feeds: [], permissions: ['Read balances and transactions of the Axal entity accounts a Super Admin connects.'] },
   microsoft_365: { category: 'Calendar and workspace', verified: false, pulls: [{ what: 'Events', module: 'customer_research' }], sends: [{ what: 'Calendar events', target: 'Microsoft 365', default_mode: 'ask' }], feeds: ['customer_research', 'operating_systems'], permissions: ['Confirm your Microsoft sign-in identity.', 'Read your public Microsoft profile.', 'Read your account email address.', 'Keep the connection active.', 'Read and update calendar events.', 'Read your basic account profile.'] },
@@ -631,22 +643,38 @@ export async function ensureIntegrationsSchema(env: Env): Promise<void> {
 }
 
 /** Public-safe view of a registry entry (no secrets, no impl ref). */
-/** Who is asking, for a provider whose audience depends on it (D710). */
-export interface DescriptorViewer { role: string; hq: boolean }
+/**
+ * Who is asking, for a provider whose audience depends on it (D710). `venture`
+ * is `canHoldValidateSource` (D757 §2.11); every builder of a viewer sets it.
+ */
+export interface DescriptorViewer { role: string; hq: boolean; venture: boolean }
 
 /**
  * D710: how a viewer may see a provider. `open` for a provider with no
  * audience fields (today's behaviour); `entity` for an HQ entity connection;
  * `personal` for the viewer's own; `none` when it is not theirs to see. On a
- * branch, only `personal_roles` count, never `entity_roles`.
+ * branch, only `personal_roles` count, never `entity_roles`. A provider with
+ * `audience_rule: 'venture'` (D757) reads only `viewer.venture`.
  */
 export function audienceFor(p: ProviderDescriptor, viewer: DescriptorViewer): 'open' | 'entity' | 'personal' | 'none' {
+  if (p.audience_rule === 'venture') return viewer.venture === true ? 'personal' : 'none';
   if (!p.entity_roles && !p.personal_roles) return 'open';
   const role = String(viewer.role || '').toLowerCase();
   if (viewer.hq && (p.entity_roles ?? []).includes(role)) return 'entity';
   // D752: a personal role whose every use is HQ-only sees nothing off HQ.
   if ((p.personal_roles ?? []).includes(role)) return personalHqOnlyOffHq(p, viewer) ? 'none' : 'personal';
   return 'none';
+}
+
+/**
+ * D757 §2.1: how far Zoom has approved the app, from `ZOOM_APP_AUDIENCE`
+ * (#1902), trimmed and lower-cased. Absent, empty or unknown is the narrowest,
+ * `own_account`: a page must never promise more members than can connect.
+ */
+export type ZoomDistribution = 'own_account' | 'beta' | 'public';
+export function zoomDistribution(raw: unknown): ZoomDistribution {
+  const v = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  return v === 'beta' || v === 'public' ? v : 'own_account';
 }
 
 /**
@@ -666,7 +694,7 @@ export function personalHqOnlySentence(name: string): string {
   return `${name} is offered to your profile on HQ only.`;
 }
 
-export function publicDescriptor(p: ProviderDescriptor, viewer?: DescriptorViewer) {
+export function publicDescriptor(p: ProviderDescriptor, viewer?: DescriptorViewer, env?: Pick<Env, 'ZOOM_APP_AUDIENCE'>) {
   const audience = viewer ? audienceFor(p, viewer) : 'open';
   // D713, D752: a founder, partner or investor reads their role's Mercury variant.
   const variant = p.key === 'mercury' && audience === 'personal' ? personalMercuryFor(viewer!.role) : null;
@@ -687,6 +715,7 @@ export function publicDescriptor(p: ProviderDescriptor, viewer?: DescriptorViewe
     has_implementation: PROVIDER_IMPLS.has(p.key) && !(p.key === 'mercury' && audience !== 'personal'),
     ...CONNECTOR_METADATA[p.key],
     ...(variant ? { permissions: [...variant.permissions] } : {}),
+    ...(p.key === 'zoom' ? { distribution: zoomDistribution(env?.ZOOM_APP_AUDIENCE) } : {}),
     feeds,
     feed_modules: feeds.map(key => ({ key, label: MODULE_LABELS[key] ?? key, href: moduleHref(key) })),
     connection_source: p.key === 'google_calendar' ? 'google_oauth_tokens' : p.key === 'microsoft_365' ? 'microsoft_oauth_tokens'

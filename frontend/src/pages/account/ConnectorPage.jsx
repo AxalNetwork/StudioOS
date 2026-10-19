@@ -15,6 +15,7 @@ import ChannelPage from './ChannelPage';
 import { notOfferedSentence } from './mercuryModel';
 import { useAuth } from '../../hooks/useAuthSync';
 import { branchOfUser } from '../../lib/shellRole';
+import { ZOOM_DISCONNECT_NOTE, ZOOM_SECTIONS, usedByLinks, zoomHowItWorks, zoomNotices } from '../../lib/validateSourceWording';
 
 /**
  * D753 (#1876, F1) — a connector's own page, `/account/connectors/<key>`,
@@ -139,6 +140,7 @@ export function ConnectorPageView({ data, connectorKey, phone = false, branchAdm
       )}
 
       <ConnectRegion p={p} ret={returned?.ret || null} onChanged={data.reload} />
+      {p.key === 'zoom' && <ZoomValidate p={p} />}
       {shownBody
         ? <ConnectorBody state={shownBody.state} connector={shownBody.connector} p={p} onRetry={retryBody} />
         : (
@@ -148,6 +150,47 @@ export function ConnectorPageView({ data, connectorKey, phone = false, branchAdm
           </>
         )}
     </div>
+  );
+}
+
+/**
+ * D757 §2.12 (#1929): what Zoom feeds and needs, in D757's words, from the
+ * catalogue row's `used_by`, `suggests`, `distribution` and `configured`
+ * (#1922, D751), so it draws with or without F7's body.
+ */
+export function ZoomValidate({ p }) {
+  const notices = zoomNotices(p);
+  const usedBy = usedByLinks(p?.used_by);
+  return (
+    <section data-testid="connector-page-validate" className="flex min-w-0 flex-col gap-3">
+      {notices.map((n) => (
+        <div key={n.key} role="note" data-testid={`zoom-notice-${n.key}`} className="flex items-start gap-2 rounded-axal-sm border border-axal-hairline bg-axal-ground px-3.5 py-2.5 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-800/60 dark:text-gray-200">
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-axal-muted dark:text-gray-400" aria-hidden="true" />
+          <span className="min-w-0">{n.text}</span>
+        </div>
+      ))}
+      {(p?.connection || p?.already_connected === true) && <p className="text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="zoom-disconnect-note">{ZOOM_DISCONNECT_NOTE}</p>}
+      {usedBy.length > 0 && (
+        <div className="min-w-0" data-testid="zoom-used-by">
+          <h2 className={H2}>Used by</h2>
+          <ul className="mt-1 flex flex-wrap gap-2">
+            {usedBy.map((u) => <li key={u.href}><Link to={u.href} className={`${BTN.link} text-[13px]`}>{u.label}</Link></li>)}
+          </ul>
+        </div>
+      )}
+      <div className="min-w-0" data-testid="zoom-how">
+        <h2 className={H2}>How it works</h2>
+        <ol className="mt-1 list-decimal pl-5 text-[13px] leading-relaxed text-axal-ink dark:text-gray-200">
+          {zoomHowItWorks(p?.suggests).map((t) => <li key={t}>{t}</li>)}
+        </ol>
+      </div>
+      {ZOOM_SECTIONS.map((x) => (
+        <div key={x.key} className="min-w-0" data-testid={`zoom-${x.key}`}>
+          <h2 className={H2}>{x.title}</h2>
+          <p className="mt-1 text-[13px] leading-relaxed text-axal-ink dark:text-gray-200">{x.text}</p>
+        </div>
+      ))}
+    </section>
   );
 }
 
