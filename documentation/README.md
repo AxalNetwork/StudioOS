@@ -16,7 +16,7 @@ nothing here is served.
 | --- | --- |
 | `architecture/` | How the system is actually put together, and the decisions behind it. Start with `architecture/CODEBASE_MAP.md`. |
 | `audits/` | Point-in-time findings. Each one is true *as of its date* and is not maintained afterwards. |
-| `operations/` | Runbooks. [`DEPLOY.md`](operations/DEPLOY.md) to ship production; [`D1_RECOVERY.md`](operations/D1_RECOVERY.md) when the data is wrong and a rollback will not help; [`INCIDENT_RESPONSE.md`](operations/INCIDENT_RESPONSE.md) when something is on fire; [`CLAUDE_REVIEW.md`](operations/CLAUDE_REVIEW.md) for the advisory pull-request review on the Anthropic API, its settings and its cost. |
+| `operations/` | Runbooks. [`DEPLOY.md`](operations/DEPLOY.md) to ship production; [`D1_RECOVERY.md`](operations/D1_RECOVERY.md) when the data is wrong and a rollback will not help; [`INCIDENT_RESPONSE.md`](operations/INCIDENT_RESPONSE.md) when something is on fire; [`CLAUDE_REVIEW.md`](operations/CLAUDE_REVIEW.md) for the advisory pull-request review on the Anthropic API, its settings and its cost. [`AI_TOKEN_PACKS.md`](operations/AI_TOKEN_PACKS.md) for AI token packs: creating them, refunds and disputes, an overdue credit, adjustments and the live check. [`README.md`](operations/README.md) lists every runbook. |
 | `product/` | Positioning and feature notes. |
 
 ## The five that answer most questions
