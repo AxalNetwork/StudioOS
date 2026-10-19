@@ -121,7 +121,11 @@ D684 (#1578): `channels.js` calls `/api/channels` (a member's business
 Telegram and WhatsApp: availability, link, connect, disconnect, test, and the
 conversation threads with assign, ignore and reply) and the interview meeting
 routes under `/api/founder/validate/interviews/:id/meetings` (Zoom and Google
-Meet). Every path is written out in full so the drift check reads each one.
+Meet). Since D757 (#1926) it also reads the Calendar status
+(`GET /api/calendar/google/status`, for `meet_transcripts`) and asks Google for
+the Meet transcript permission (`allowMeetTranscripts`, `POST
+/api/calendar/google/meet-transcripts/connect`), going only to Google's consent
+URL. Every path is written out in full so the drift check reads each one.
 
 D678 (#1552): `publicAiModels.js` reads `GET /api/public/ai-models`, the
 router's model table as the public Intelligence page shows it: one row per job,
@@ -192,6 +196,12 @@ writes nothing. `fundFees.js` calls `/api/fund-fees/:fundId` (D709, #1774): the
 fee state, terms and their confirmation, admissions, net invested, offsets, a
 period's preview, issue and funding call, and one LP's statement. The Worker
 decides each act: confirm and issue are the Super Admin's.
+
+D716 (#1781, #1866): `fundBooklets.js` calls the LP's own Subscription Booklet
+at `/api/fund-booklets/mine`: open (`POST`), read (`GET`), one part's paper
+(`GET /paper?part=n`), ticks (`PUT /answers`) and submit (`POST /submit` with
+the last view's digest). Every field id comes from the Worker's last view; the
+page builds none, and stores nothing in the browser.
 
 D722: `googleSignIn.js` calls `GET /api/auth/google/config` (whether this
 deployment opens Google's own window on /login, and the client to open it for;

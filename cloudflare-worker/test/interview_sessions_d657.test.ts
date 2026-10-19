@@ -58,7 +58,9 @@ function fixture({ dayMicro = 50_000_000, monthMicro = 500_000_000 } = {}) {
   db.exec(readFileSync(new URL('../sql/migrations/453_interview_processing.sql', import.meta.url), 'utf8'));
   // 449's call refs: every stop closes the ones attached to its session (#1583).
   db.exec(readFileSync(new URL('../sql/migrations/449_interview_channels.sql', import.meta.url), 'utf8')
-    .split(';').filter((sql) => /interview_channel_refs/.test(sql) && /CREATE TABLE/.test(sql)).map((sql) => `${sql};`).join('\n'));
+    .split(';').filter((sql) => /interview_channel_refs|channel_threads \(/.test(sql) && /CREATE TABLE/.test(sql)).map((sql) => `${sql};`).join('\n'));
+  // D754 (#1893): deleteSession also deletes the session's chat consents and frees the chat that pointed at it.
+  db.exec(readFileSync(new URL('../sql/migrations/488_channel_consents.sql', import.meta.url), 'utf8'));
   // D658 (#1471): the receipt read also lists the structuring lines, which
   // live in `interview_structure_receipts`, beside 439's columns on 214/246's
   // `validate_proposals`, as they will in production.

@@ -39,9 +39,8 @@ after the layers and "Not in the catalog": the ten documents the platform builds
 in code, each card read-only, with its page-1 specimen, the library rows it reads
 (each opens in the editor) and the Worker's refusal. It shows only under "Layer ·
 All" and the state "All" (`frontend/src/lib/generatedDocuments.js`); a failed read
-draws its header, the Worker's sentence and Retry. `TemplateThumbnail.jsx` is the
-card thumbnail all three groups share, one queue of four for the tab, lifted out
-of `TemplateCatalog.jsx`.
+draws its header, the Worker's sentence and Retry. Its cards use #1854's
+`TemplateThumbnail.jsx`, so all three groups share the tab's one queue of four.
 
 D717 (#1853): `PdfPages.jsx` is the page viewer: a PDF drawn one page at a time on
 a canvas with pdf.js (pinned `pdfjs-dist`, legacy build, loaded only when it
@@ -51,3 +50,11 @@ unsaved draft's PDF from `render.pdf`, drawn on opening and on Redraw pages,
 never per keystroke. `VersionCompare.jsx` is Compare versions: any two versions,
 or one and the draft, as Markdown text with `<del>` and `<ins>`; Restore copies
 a body into the draft and saves nothing, and is hidden on a branch.
+
+D717 (#1854): below `md` the Templates tab is the phone's read-only list.
+`TemplateCatalogPhone.jsx` draws the templates by layer, each row with its
+page-1 thumbnail, kind and state, and opens `?preview=<slug>`.
+`FilterSheet.jsx` is its Layer, State and Kind sheet, a draft until "Show [n]
+templates". `TemplatePreviewPhone.jsx` shows the saved version's PDF one page
+at a time through `PdfPages.jsx`, read-only. `TemplateThumbnail.jsx` is the
+page-1 thumbnail and its queue of four, shared with `TemplateCatalog.jsx`.

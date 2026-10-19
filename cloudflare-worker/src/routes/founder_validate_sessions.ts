@@ -38,7 +38,7 @@ import { audioMinutesFromBytes, budgetRefusalMessage, estimateCostUsd } from '..
 import * as aiBudget from '../services/aiBudget';
 import {
   AUDIO_CHANNELS, AUDIO_PREFIX, CHANNELS, CHUNK_MIME, CONSENT, CONSENT_METHODS, MAX_CHUNK_BYTES, MAX_CHUNKS,
-  TRANSITIONS, consentBlocks, deleteSession, listChunks, loadSession, putChunk, recordReceipt,
+  TRANSITIONS, consentBlocks, deleteSession, listChunks, loadSession, putChunk, recordReceipt, sessionHasAudio,
   replaceWithFinal, transition, type SessionRow, type StoredSegment,
 } from '../services/interviewSessions';
 import { DEFAULT_FINAL_MODEL, DEFAULT_LIVE_MODEL, isChoosable, listSttModels } from '../services/sttModels';
@@ -57,6 +57,7 @@ import { digestSession, enqueueDigest, withdrawDigest } from '../services/valida
 import { activeSessionsOf } from '../services/sessionSweeper';
 import { interviewCapRefusal } from '../middleware/requireTier';
 import { mintDownloadToken } from '../services/signedDownload';
+import { consentForSession } from '../services/channels/consent';
 
 const sessions = new Hono<{ Bindings: Env }>();
 
@@ -378,6 +379,8 @@ sessions.get('/sessions/:id', async (c) => {
   return json({
     session: s.session,
     ...(await sessionExtras(c.env, s.session)),
+    // D754 (#1893): the chat's consent record, for the session page; null for any other session.
+    channel_consent: await consentForSession(c.env, s.session.id),
     processing: processingOf(s.session),
     summary: summaryOf(s.session),
     segments: segments.results || [],
@@ -464,7 +467,9 @@ for (const action of Object.keys(TRANSITIONS) as (keyof typeof TRANSITIONS)[]) {
     if (!AUDIO_CHANNELS.has(s.session.channel)) return json({ detail: 'no_audio_on_this_channel' }, 400);
     // THE WORKER ENFORCES CONSENT. A page that hides the button is not the gate.
     if (action === 'start' || action === 'resume') {
-      const blocked = consentBlocks(s.session.channel, s.session.consent_status);
+      const blocked = consentBlocks(s.session.channel, s.session.consent_status, {
+        hasAudio: await sessionHasAudio(c.env, s.session.id), submittedVia: s.session.submitted_via ?? null,
+      });
       if (blocked) return json(blocked, 409);
     }
     // D685 §5.1 — one live session per member: a second Start refuses.
@@ -484,7 +489,9 @@ sessions.put('/sessions/:id/chunks/:seq', async (c) => {
   if (s instanceof Response) return s;
   if (!c.env.FILES) return json({ detail: 'storage_not_configured' }, 503);
   if (!AUDIO_CHANNELS.has(s.session.channel)) return json({ detail: 'no_audio_on_this_channel' }, 400);
-  const blocked = consentBlocks(s.session.channel, s.session.consent_status);
+  const blocked = consentBlocks(s.session.channel, s.session.consent_status, {
+    hasAudio: await sessionHasAudio(c.env, s.session.id), submittedVia: s.session.submitted_via ?? null,
+  });
   if (blocked) return json(blocked, 409);
   if (!['recording', 'paused', 'stopped'].includes(s.session.status)) {
     return json({ detail: 'not_recording', status: s.session.status }, 409);
@@ -562,7 +569,9 @@ sessions.get('/sessions/:id/live', async (c) => {
   if (s instanceof Response) return s;
   if (String(c.req.header('upgrade') || '').toLowerCase() !== 'websocket') return json({ detail: 'websocket_required' }, 426);
   if (!s.session.live_model) return json({ detail: 'live_off', message: 'Live transcript is off for this session.' }, 409);
-  const blocked = consentBlocks(s.session.channel, s.session.consent_status);
+  const blocked = consentBlocks(s.session.channel, s.session.consent_status, {
+    hasAudio: await sessionHasAudio(c.env, s.session.id), submittedVia: s.session.submitted_via ?? null,
+  });
   if (blocked) return json(blocked, 409);
   if (s.session.status !== 'recording') return json({ detail: 'not_recording', status: s.session.status }, 409);
   const first = await holdBlock(c.env, s.user.id, s.session.live_model);
@@ -594,7 +603,7 @@ sessions.post('/sessions/:id/finish', async (c) => {
   const s = await scopeSession(c);
   if (s instanceof Response) return s;
   if (!AUDIO_CHANNELS.has(s.session.channel)) return json({ detail: 'no_audio_on_this_channel' }, 400);
-  const blocked = consentRefusal(s.session);
+  const blocked = await consentRefusal(c.env, s.session);
   if (blocked) return blocked;
   if (s.session.status !== 'stopped') return json({ detail: 'stop_first', status: s.session.status }, 409);
   const busy = processingBusy(s.session);
@@ -610,7 +619,7 @@ sessions.post('/sessions/:id/finish', async (c) => {
 sessions.post('/sessions/:id/process', async (c) => {
   const s = await scopeSession(c);
   if (s instanceof Response) return s;
-  const blocked = consentRefusal(s.session);
+  const blocked = await consentRefusal(c.env, s.session);
   if (blocked) return blocked;
   const out = await recoverSession(c.env, s.session, s.user.id);
   if (!out.ok) return json({ detail: out.detail, message: out.message }, 409);
@@ -624,7 +633,7 @@ sessions.post('/sessions/:id/process', async (c) => {
 sessions.post('/sessions/:id/summarise', async (c) => {
   const s = await scopeSession(c);
   if (s instanceof Response) return s;
-  const blocked = consentRefusal(s.session);
+  const blocked = await consentRefusal(c.env, s.session);
   if (blocked) return blocked;
   const busy = processingBusy(s.session);
   if (busy) return busy;
@@ -639,7 +648,7 @@ sessions.post('/sessions/:id/summarise', async (c) => {
   if (out.status === 'skipped') return json({ error: 'no_final_transcript', detail: 'This session has no final transcript to summarise yet.' }, 409);
   if (out.status === 'refused') {
     if (out.reason === 'busy') return json({ error: 'digest_running', detail: out.note }, 409);
-    if (out.reason === 'consent_not_recorded') return consentRefusal((await loadSession(c.env, s.session.id))!) ?? json({ error: 'consent_not_recorded' }, 409);
+    if (out.reason === 'consent_not_recorded') return (await consentRefusal(c.env, (await loadSession(c.env, s.session.id))!)) ?? json({ error: 'consent_not_recorded' }, 409);
     return json(refusedBody(out.refusal), refusedStatus(out.refusal));
   }
   if (out.status === 'done' && out.summary && !out.summary.ok && out.summary.reason === 'no_citation') {
@@ -832,6 +841,11 @@ export async function sessionAudioParts(env: Env, session: SessionRow, userId: n
 sessions.get('/sessions/:id/audio', async (c) => {
   const s = await scopeSession(c);
   if (s instanceof Response) return s;
+  // D754 (#1893): audio is played back only while consent stands — not on a
+  // session whose consent was withdrawn, nor on a chat that never had it.
+  // Discard (DELETE) still works.
+  const blocked = await consentRefusal(c.env, s.session);
+  if (blocked) return blocked;
   try {
     const parts = await sessionAudioParts(c.env, s.session, Number(s.user.id));
     if (!parts) return json({ detail: 'This session has no recorded audio.' }, 404);

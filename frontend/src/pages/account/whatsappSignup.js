@@ -23,8 +23,9 @@
  * (see `frontend/public/_headers`), so neither the script from
  * connect.facebook.net nor Meta's window is blocked. If a CSP is ever added
  * there, it must allow `https://connect.facebook.net` (script) and
- * `https://www.facebook.com` (frame and window) on /account/connectors and the
- * interview pages, or this button stops working.
+ * `https://www.facebook.com` (frame and window) on /account/connectors/* (the
+ * hub and WhatsApp's own page, D753 C1) and the interview pages, or this
+ * button stops working.
  */
 
 export const SDK_URL = 'https://connect.facebook.net/en_US/sdk.js';

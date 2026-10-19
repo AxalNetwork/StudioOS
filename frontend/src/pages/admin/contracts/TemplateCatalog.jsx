@@ -7,7 +7,7 @@ import { reportError } from '../../../lib/log';
 import { card, button, input } from './parts';
 import FundIDocumentsPanel from './FundIDocumentsPanel';
 import PushResults from './PushResults';
-import Thumbnail, { useThumbnails } from './TemplateThumbnail';
+import { Thumbnail, useThumbnails } from './TemplateThumbnail';
 import GeneratedDocuments from './GeneratedDocuments';
 
 // D717 (#1851) — the Templates tab's catalog (board L9, "Catalog · light" and

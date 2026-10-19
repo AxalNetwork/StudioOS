@@ -44,10 +44,10 @@
  * reach it through `digestSession`.
  */
 import type { Env } from '../types';
-import { consentBlocks } from './interviewSessions';
+import { sessionConsentBlocks } from './interviewSessions';
 import { IntakeError, writableSession } from './interviewIntake';
 import { structureTranscript, toSegments, type ReceiptLine, type SegmentRow } from './interviewStructuring';
-import { MESSAGING_PROVIDERS } from './channels/types';
+import { MESSAGING_PROVIDERS, consentRequiredProviders } from './channels/types';
 import { loadStructureContext, recordStructureReceipt, storePlacements } from '../routes/founder_validate_structure';
 
 export type StructureTrigger =
@@ -90,7 +90,7 @@ export async function structureSession(
     if (err instanceof IntakeError) return { ok: false, reason: 'not_writable' };
     throw err;
   }
-  if (consentBlocks(session.channel, session.consent_status)) return { ok: false, reason: 'consent_not_recorded' };
+  if (await sessionConsentBlocks(env, session)) return { ok: false, reason: 'consent_not_recorded' };
 
   const rows = await env.DB.prepare(
     `SELECT start_ms, end_ms, speaker_label, text FROM interview_transcript_segments
@@ -155,7 +155,8 @@ export async function runSessionStructureJob(env: Env, payload: unknown) {
  * The quiet-chat sweep: assigned chat sessions with new text since their last
  * run, quiet for QUIET_MINUTES, and not structured, summarised or attempted
  * (refused runs included, `digested_at`) in the last MIN_HOURS_BETWEEN. A
- * bounded batch per tick.
+ * bounded batch per tick. A chat whose provider waits for consent is skipped
+ * until its consent is `given` (D754): the gate would refuse the run.
  */
 export async function sweepQuietChats(env: Env, now: Date): Promise<number> {
   const quietBefore = new Date(now.getTime() - QUIET_MINUTES * 60_000).toISOString();
@@ -163,6 +164,7 @@ export async function sweepQuietChats(env: Env, now: Date): Promise<number> {
   const due = (await env.DB.prepare(
     `SELECT s.id, s.created_by_user_id AS user_id FROM interview_sessions s
       WHERE s.submitted_via IN (SELECT value FROM json_each(?)) AND s.status = 'transcribed'
+        AND (s.submitted_via NOT IN (SELECT value FROM json_each(?)) OR s.consent_status = 'given')
         AND datetime(s.updated_at) < datetime(?)
         AND NOT EXISTS (SELECT 1 FROM interview_structure_receipts r
                          WHERE r.session_id = s.id AND datetime(r.created_at) >= datetime(?))
@@ -170,7 +172,8 @@ export async function sweepQuietChats(env: Env, now: Date): Promise<number> {
                          WHERE r2.session_id = s.id AND datetime(r2.created_at) >= datetime(?))
         AND (s.digested_at IS NULL OR datetime(s.digested_at) < datetime(?))
       ORDER BY s.updated_at LIMIT 20`,
-  ).bind(JSON.stringify(MESSAGING_PROVIDERS), quietBefore, lastRunBefore, lastRunBefore, lastRunBefore).all<{ id: number; user_id: number }>()).results ?? [];
+  ).bind(JSON.stringify(MESSAGING_PROVIDERS), JSON.stringify(consentRequiredProviders()), quietBefore, lastRunBefore, lastRunBefore, lastRunBefore)
+    .all<{ id: number; user_id: number }>()).results ?? [];
   for (const row of due) await enqueueSessionStructure(env, Number(row.id), Number(row.user_id), 'chat_quiet');
   return due.length;
 }
