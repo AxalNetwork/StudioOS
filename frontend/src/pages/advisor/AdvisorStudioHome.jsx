@@ -198,13 +198,13 @@ export default function AdvisorStudioHome({
     <RailFrame
       rail={(
         <WorkerRail
-          workspace="Advisor Studio"
+          workspace="Studio"
           role="advisor"
           stance="Read across your practice record"
           note="Eadwyn reads an interview answer, a voice note or an explain request only when you send it. Every tile reads your stored practice record and writes nothing."
           coverage={[
             'Today — your sessions and open slots',
-            'Storefront — your advisor profile',
+            'Storefront — your public profile',
             'Engagements — sessions booked with you',
             'Earnings — your payout account and commissions',
           ]}
