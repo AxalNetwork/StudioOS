@@ -29,6 +29,12 @@ caller's connections with their enabled company IDs. `PUT /:uid/companies`
 changes those links; `GET /:key` reports a teammate's connection by name only.
 Credentials and personal Calendly, Carta and calendar records remain owned by
 their connecting user; company links control writes into project-backed data.
+D753: each `GET /available` item also carries `tagline`, `made_by`, `service`, `sign_in`,
+`added`, `verified` (a recorded check, D753 decision 7), `verified_on`, `read_only`,
+`page_key` and `page_href`. The answer carries `category_order` and `first_party`
+(LinkedIn's card). `GET /directory/:key` answers one connector's page, descriptive
+only: no connection, no `calls`. It answers 404 `unknown_provider` like `/:key`, and
+needs no active company.
 `GET /suggestions` reads empty module stores, `POST /requests` records a tool
 request, and Super Admin `GET /requests` lists them. `GET /:uid/logs` searches
 and pages activity. Every company ID supplied by a request is checked against

@@ -17,6 +17,12 @@
  *              against that account
  *   talk       sendMessage (business and private), getFile + download, setWebhook,
  *              and getMe + getWebhookInfo for the Super Admin's health read (D756)
+ *   consent    (D756 §1.5, #1977) the contact's own whole YES, NO or STOP —
+ *              from the chat's own user, never a business bot or an offline
+ *              auto-reply — is normalised as a `consent_reply` that keeps
+ *              the ordinary message it also is; `sendConsentNotice` sends
+ *              Axal's notice on the member's business connection. Whether an
+ *              answer counts is consent.ts's, not this file's.
  *
  * Bot API facts relied on (core.telegram.org/bots/api, read 2026-10-13; the
  * reply window, update ids and retry_after re-read against Bot API 10.3 on
@@ -49,7 +55,8 @@ import { IntakeError, activeMember } from '../interviewIntake';
 import { claimDetails, confirmLinkClaim, consumeLinkCode, memberLinkClaim, type LinkClaim } from './linkCodes';
 
 import {
-  CHANNEL_LIMITS, type InboundConnection, type InboundEvent, type InboundLink, type InboundLinkConfirm, type SendResult,
+  CHANNEL_LIMITS, consentWord, type InboundConnection, type InboundEvent, type InboundLink, type InboundLinkConfirm,
+  type InboundMessage, type SendResult,
 } from './types';
 
 export const TELEGRAM_API = 'https://api.telegram.org';
@@ -262,7 +269,7 @@ export function normaliseTelegramUpdate(update: unknown, ownerTelegramUserId: st
   const voice = obj(message.voice);
   const fileId = idStr(voice?.file_id);
   if (!text && !fileId) return ignored('unsupported_type');
-  return {
+  const msg: InboundMessage = {
     kind: 'message', provider: 'telegram', eventId, connectionRef: conn, externalChatId: chatId,
     externalMessageId: ref, side,
     // The chat's own user is the contact; their name is the thread's label.
@@ -275,6 +282,19 @@ export function normaliseTelegramUpdate(update: unknown, ownerTelegramUserId: st
     } : null,
     sentAt: isoFromUnix(message.date),
   };
+  // D756 §1.5: a possible answer to the consent notice — the chat's own user,
+  // never a business bot or an offline auto-reply. It keeps the message it is.
+  const word = side === 'contact' && fromId === chatId && !byBusinessBot && message.is_from_offline !== true
+    ? consentWord(text) : null;
+  if (word) {
+    const replyTo = idStr(obj(message.reply_to_message)?.message_id);
+    return {
+      kind: 'consent_reply', provider: 'telegram', eventId, connectionRef: conn, externalChatId: chatId,
+      externalMessageId: ref, side: 'contact', answer: word, via: 'text', requestUid: null,
+      contextMessageId: replyTo ? telegramMessageRef(chatId, replyTo) : null, fallback: msg, sentAt: msg.sentAt,
+    };
+  }
+  return msg;
 }
 
 // ---------------------------------------------------------------------------
@@ -501,6 +521,20 @@ export const TELEGRAM_COPY = {
   test: 'This is a test message from Axal. Your Telegram account is connected.',
   /** The answer to Telegram's "manage this chat" button (`/start bizChat<id>`), D756. */
   manageChat: 'To manage this chat, open Axal › Interviews.',
+  /**
+   * D756 §1.7 — the consent notice v1, in the founder's voice (it is sent on
+   * behalf of the business account). New words are a new version
+   * (consentNotice.ts). `name` is the interviewee's first name.
+   */
+  consentNotice: (name: string | null, venture: string | null, url: string) => `Hi ${name || 'there'}. `
+    + `I'd like to record this chat for my customer research at ${venture || 'my venture'}. `
+    + 'Your messages here, and the voice notes, audio files and round videos you have sent or send here, '
+    + 'will be saved and transcribed in Axal VC, the platform I use, and kept until I delete them. '
+    + `How it works: ${url} — Reply YES to agree or NO to decline. You can reply STOP at any time.`,
+  /** The one line each counted answer gets, only with the reply right (§1.7). */
+  consentYes: (venture: string | null) => `Thank you. This chat is now recorded for ${venture ? `${venture}'s` : 'my venture\'s'} research. Reply STOP at any time.`,
+  consentNo: 'Understood. Nothing from this chat will be recorded.',
+  consentStop: 'Understood. Recording has stopped for this chat. To have what was already recorded deleted, just ask me.',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -571,6 +605,23 @@ export async function sendBusinessMessage(env: Env, businessConnectionId: string
     link_preview_options: { is_disabled: true },
   });
   return sendResult(r, chatId);
+}
+
+/**
+ * D756 §1.5 (a) — Axal's consent notice in a customer chat, on the member's
+ * business connection. Refused before any call when the bot is switched off
+ * for the account (`connection_disabled`), there is none (`not_connected`),
+ * or it may not reply (`no_reply_right`). The window and the cap are the
+ * caller's (consent.ts).
+ */
+export async function sendConsentNotice(env: Env, userId: number, chatId: string, text: string): Promise<SendResult> {
+  const bc = await activeBusinessConnection(env, userId);
+  if (!bc) {
+    const any = await env.DB.prepare('SELECT 1 AS hit FROM telegram_business_connections WHERE user_id = ? LIMIT 1').bind(userId).first();
+    return { ok: false, code: any ? 'connection_disabled' : 'not_connected' };
+  }
+  if (!bc.canReply) return { ok: false, code: 'no_reply_right' };
+  return sendBusinessMessage(env, bc.businessConnectionId, chatId, text);
 }
 
 /** A message in the member's own private chat with the bot (link prompts, confirmations, the test). */

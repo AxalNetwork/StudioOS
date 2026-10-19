@@ -332,6 +332,8 @@ async function assignedTelegramChat(env: any, chat = 8001) {
   const [t] = (await call(env, ME, 'GET', '/threads?status=pending')).body.items;
   const a = await call(env, ME, 'POST', `/threads/${t.uid}/assign`, { interview_id: INTERVIEW });
   assert.equal(a.status, 200);
+  // D756 (#1977): a Telegram chat's notes are fetched only after the interviewee's YES.
+  await consentGiven(env, null, t.uid);
   return { uid: t.uid as string, sessionId: Number(a.body.session_id) };
 }
 const voiceJobs = (queued: any[]) => queued.filter((j) => j.job_type === 'channel_followup');
@@ -358,7 +360,10 @@ test('Telegram: a voice note on a pending chat runs no model and waits, with no 
       [['voice', null, true, 9], ['voice', null, true, 9], ['voice', null, true, 9]]);
     assert.equal(JSON.stringify(read.body).includes('VOICE-1'), false, 'the file ref never leaves the Worker');
 
-    // The member assigns the chat: now, and only now, the notes are queued — ids only.
+    // D756 (#1977): the interviewee's YES on the pending chat waits on the thread...
+    await consentGiven(env, db, t.uid);
+    assert.equal(queued.length, 0, 'a pending chat queues nothing, consent or not');
+    // ...and the member assigns the chat: now, and only now, the notes are queued — ids only.
     const a = await call(env, ME, 'POST', `/threads/${t.uid}/assign`, { interview_id: INTERVIEW });
     assert.deepEqual([a.status, a.body.moved, a.body.voice_queued], [200, 0, 3]);
     const jobs = voiceJobs(queued);

@@ -44,9 +44,14 @@ import type { Env } from '../../types';
 import { refKey } from './events';
 import { CONSENT_NOTICE_VERSION } from './consentNotice';
 import { replyWindowOpen, setAsideStatements, type ThreadRow } from './threads';
-import { consentRequired, type InboundConsentReply, type MessagingProvider } from './types';
+import {
+  consentAsked, consentRequired, memberAttestationAllowed, type InboundConsentReply, type MessagingProvider,
+} from './types';
 
 export { consentRequired } from './types';
+
+/** D756 §1.5: a typed Telegram answer counts only within this long of the notice. */
+export const ANSWER_VALID_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** How a chat's consent was given. `chat_reply` is never one of the recorder's CONSENT_METHODS. */
 export const CHANNEL_CONSENT_METHODS = ['chat_reply', 'verbal', 'written', 'pre_agreed'] as const;
@@ -186,13 +191,26 @@ export async function openRequest(
   return row;
 }
 
-/** A notice went (or its send is unknown): the request records when, and which message it was. */
-export async function markRequested(env: Env, consentId: number, externalMessageId: string | null, provider: MessagingProvider): Promise<void> {
+/**
+ * A notice went (or its send is unknown), or the member pasted it themselves
+ * (D756 §1.5 (b)): the request records when, and which message it was, and
+ * the thread reads 'awaiting' unless consent is already given.
+ */
+export async function markRequested(
+  env: Env, consentId: number, externalMessageId: string | null, provider: MessagingProvider, threadId: number,
+): Promise<void> {
   const ref = externalMessageId ? await refKey(provider, externalMessageId) : null;
-  await env.DB.prepare(
-    `UPDATE channel_consents SET requested_at = datetime('now'), request_ref_hash = COALESCE(?, request_ref_hash),
-            notice_version = ?, updated_at = datetime('now') WHERE id = ? AND status = 'requested'`,
-  ).bind(ref, CONSENT_NOTICE_VERSION, consentId).run();
+  await env.DB.batch([
+    // ISO, to the millisecond, as `last_inbound_at` is: Telegram's "first message after the notice" compares the two.
+    env.DB.prepare(
+      `UPDATE channel_consents SET requested_at = ?, request_ref_hash = COALESCE(?, request_ref_hash),
+              notice_version = ?, updated_at = datetime('now') WHERE id = ? AND status = 'requested'`,
+    ).bind(new Date().toISOString(), ref, CONSENT_NOTICE_VERSION, consentId),
+    env.DB.prepare(
+      `UPDATE channel_threads SET consent_state = 'awaiting', updated_at = datetime('now')
+        WHERE id = ? AND (consent_state IS NULL OR consent_state <> 'given')`,
+    ).bind(threadId),
+  ]);
 }
 
 /**
@@ -215,7 +233,7 @@ export async function markDelivered(env: Env, externalMessageId: string, status:
 
 export type ReplyOutcome =
   | { outcome: 'given' | 'declined' | 'withdrawn'; consent: ConsentRow }
-  | { outcome: 'ignored'; reason: 'not_from_contact' | 'request_mismatch' | 'request_closed' | 'not_a_reply_to_notice' | 'no_notice' | 'duplicate' };
+  | { outcome: 'ignored'; reason: 'not_from_contact' | 'request_mismatch' | 'request_closed' | 'not_a_reply_to_notice' | 'no_notice' | 'too_late' | 'duplicate' };
 
 const ignored = (reason: Extract<ReplyOutcome, { outcome: 'ignored' }>['reason']): ReplyOutcome => ({ outcome: 'ignored', reason });
 
@@ -224,6 +242,16 @@ const ignored = (reason: Extract<ReplyOutcome, { outcome: 'ignored' }>['reason']
  * out in each: EXISTS (the row, with this reply's ref and its new status). The
  * row took this answer, or none of the batch applies.
  */
+
+/** The thread's `consent_state` only, under the same guard (a chat that is not set aside). */
+function stateStatement(
+  env: Env, threadId: number, state: 'declined' | 'withdrawn', guard: { consentId: number; replyRef: string },
+): D1PreparedStatement {
+  return env.DB.prepare(
+    `UPDATE channel_threads SET consent_state = ?, updated_at = datetime('now')
+      WHERE id = ? AND EXISTS (SELECT 1 FROM channel_consents WHERE id = ? AND reply_ref_hash = ? AND status = ?)`,
+  ).bind(state, threadId, guard.consentId, guard.replyRef, state);
+}
 
 function isUnique(err: unknown): boolean {
   return /UNIQUE constraint failed/i.test(err instanceof Error ? err.message : '');
@@ -257,6 +285,25 @@ export async function recordReply(env: Env, thread: ThreadRow, reply: InboundCon
     if (!row || Number(row.thread_id) !== Number(thread.id)) return ignored('request_mismatch');
     if (row.status !== 'requested' && row.status !== 'given') return ignored('request_closed');
     if (!repliesToNotice) return ignored('not_a_reply_to_notice');
+  } else if (reply.provider === 'telegram') {
+    // D756 §1.5: the request may be Axal's notice or the member's own pasted
+    // copy (its ref is on the row). A YES or NO counts as a reply to it, or as
+    // the contact's first message after it, within 7 days; a STOP after a YES
+    // counts anywhere.
+    row = await env.DB.prepare(
+      `SELECT * FROM channel_consents WHERE thread_id = ? AND status IN ('requested', 'given') ORDER BY id DESC LIMIT 1`,
+    ).bind(thread.id).first<ConsentRow>();
+    if (!row) return ignored('request_closed');
+    const askedAt = ms(row.requested_at);
+    if (!Number.isFinite(askedAt)) return ignored('no_notice');
+    if (!(row.status === 'given' && reply.answer === 'stop')) {
+      if (Date.now() - askedAt > ANSWER_VALID_MS) return ignored('too_late');
+      const toNotice = repliesToNotice || (!!contextRef && contextRef === row.request_ref_hash);
+      // Both times are the Worker's, to the millisecond (`markRequested`, `bumpStatement`).
+      const lastIn = ms(thread.last_inbound_at);
+      const first = !Number.isFinite(lastIn) || lastIn <= askedAt;
+      if (!toNotice && !first) return ignored('not_a_reply_to_notice');
+    }
   } else {
     if (!notices.went) return ignored('no_notice');
     row = await env.DB.prepare(
@@ -297,10 +344,18 @@ async function give(env: Env, thread: ThreadRow, row: ConsentRow, replyRef: stri
   return { outcome: 'given', consent: (await env.DB.prepare('SELECT * FROM channel_consents WHERE id = ?').bind(row.id).first<ConsentRow>())! };
 }
 
-/** A "No" or STOP while the request is open: what waited is deleted and the chat set aside. */
+/**
+ * A "No" or STOP while the request is open. Where the whole chat waits for
+ * consent (WhatsApp), what waited is deleted and the chat set aside. Where
+ * only its notes wait (Telegram, D756 §1.5), the notes stay undownloaded until
+ * the 30-day purge and the text is untouched.
+ */
 async function decline(env: Env, thread: ThreadRow, row: ConsentRow, replyRef: string): Promise<ReplyOutcome> {
   const sessionId = thread.session_id ?? row.session_id;
   const guard = { consentId: row.id, replyRef };
+  const aside = consentRequired(thread.provider)
+    ? setAsideStatements(env, thread.id, 'declined', guard)
+    : [stateStatement(env, thread.id, 'declined', guard)];
   try {
     const [res] = await env.DB.batch([
       env.DB.prepare(
@@ -312,7 +367,7 @@ async function decline(env: Env, thread: ThreadRow, row: ConsentRow, replyRef: s
         `UPDATE interview_sessions SET consent_status = 'declined', consent_method = NULL, consent_at = NULL,
                 updated_at = datetime('now') WHERE id = ? AND EXISTS (SELECT 1 FROM channel_consents WHERE id = ? AND reply_ref_hash = ? AND status = ?)`,
       ).bind(sessionId, row.id, replyRef, 'declined'),
-      ...setAsideStatements(env, thread.id, 'declined', guard),
+      ...aside,
     ]);
     if (!Number(res?.meta?.changes ?? 0)) return ignored('duplicate');
   } catch (err) {
@@ -331,6 +386,15 @@ async function decline(env: Env, thread: ThreadRow, row: ConsentRow, replyRef: s
  */
 export async function withdraw(env: Env, thread: ThreadRow, row: ConsentRow, replyRef: string): Promise<ReplyOutcome> {
   const guard = { consentId: row.id, replyRef };
+  // Telegram (D756 §1.5): STOP stops further downloads; the chat's text and quotes keep D684's rule.
+  const whole = consentRequired(thread.provider);
+  const tail = whole
+    ? [
+      env.DB.prepare(`UPDATE discovery_interviews SET quote_consent = 0 WHERE id IN (?, ?) AND EXISTS (SELECT 1 FROM channel_consents WHERE id = ? AND reply_ref_hash = ? AND status = ?)`)
+        .bind(row.interview_id, thread.interview_id, row.id, replyRef, 'withdrawn'),
+      ...setAsideStatements(env, thread.id, 'withdrawn', guard),
+    ]
+    : [stateStatement(env, thread.id, 'withdrawn', guard)];
   try {
     const [res] = await env.DB.batch([
       env.DB.prepare(
@@ -341,9 +405,7 @@ export async function withdraw(env: Env, thread: ThreadRow, row: ConsentRow, rep
         `UPDATE interview_sessions SET consent_status = 'declined', consent_method = NULL, consent_at = NULL,
                 updated_at = datetime('now') WHERE id IN (?, ?) AND EXISTS (SELECT 1 FROM channel_consents WHERE id = ? AND reply_ref_hash = ? AND status = ?)`,
       ).bind(row.session_id, thread.session_id, row.id, replyRef, 'withdrawn'),
-      env.DB.prepare(`UPDATE discovery_interviews SET quote_consent = 0 WHERE id IN (?, ?) AND EXISTS (SELECT 1 FROM channel_consents WHERE id = ? AND reply_ref_hash = ? AND status = ?)`)
-        .bind(row.interview_id, thread.interview_id, row.id, replyRef, 'withdrawn'),
-      ...setAsideStatements(env, thread.id, 'withdrawn', guard),
+      ...tail,
     ]);
     if (!Number(res?.meta?.changes ?? 0)) return ignored('duplicate');
   } catch (err) {
@@ -361,7 +423,7 @@ export async function withdraw(env: Env, thread: ThreadRow, row: ConsentRow, rep
 
 export type AttestOutcome =
   | { ok: true; changed: boolean }
-  | { ok: false; code: 'consent_not_offered' | 'consent_needs_interview' | 'notice_not_delivered' | 'interviewee_declined' | 'consent_withdrawn' };
+  | { ok: false; code: 'consent_not_offered' | 'attestation_not_offered' | 'consent_needs_interview' | 'notice_not_delivered' | 'interviewee_declined' | 'consent_withdrawn' };
 
 /**
  * The member's word (`verbal`, `written` or `pre_agreed`), accepted only once
@@ -369,7 +431,9 @@ export type AttestOutcome =
  * and never after the interviewee declined or withdrew on this chat.
  */
 export async function attest(env: Env, userId: number, thread: ThreadRow, method: MemberMethod): Promise<AttestOutcome> {
-  if (!consentRequired(thread.provider)) return { ok: false, code: 'consent_not_offered' };
+  if (!consentAsked(thread.provider)) return { ok: false, code: 'consent_not_offered' };
+  // D756 ruling 6: on Telegram only the interviewee's own answer gives consent.
+  if (!memberAttestationAllowed(thread.provider)) return { ok: false, code: 'attestation_not_offered' };
   if (thread.consent_state === 'given') return { ok: true, changed: false };
   const answered = await env.DB.prepare(
     `SELECT MAX(CASE WHEN status = 'declined' THEN 1 ELSE 0 END) AS declined, MAX(CASE WHEN status = 'withdrawn' THEN 1 ELSE 0 END) AS withdrawn
@@ -424,7 +488,7 @@ function viewOf(row: ConsentRow | null, status: ConsentView['status'], extra: Pa
 
 /** The thread's consent, for the member. No hash and no provider id leave here. */
 export async function consentForThread(env: Env, thread: ThreadRow, now = Date.now()): Promise<ConsentView> {
-  if (!consentRequired(thread.provider)) return NOT_REQUIRED;
+  if (!consentAsked(thread.provider)) return NOT_REQUIRED;
   const row = await env.DB.prepare(
     `SELECT * FROM channel_consents WHERE thread_id = ? AND status <> 'expired' ORDER BY id DESC LIMIT 1`,
   ).bind(thread.id).first<ConsentRow>();
@@ -438,7 +502,8 @@ export async function consentForThread(env: Env, thread: ThreadRow, now = Date.n
   return viewOf(shown, status, {
     notice_status: notices.latestStatus,
     window_open: replyWindowOpen(thread, now),
-    can_request: isLinked && status !== 'given' && !refusal,
+    // A WhatsApp chat is asked once linked (its notice names the venture); a Telegram chat may be asked while pending (D756 §1.5).
+    can_request: (isLinked || !consentRequired(thread.provider)) && thread.status !== 'ignored' && status !== 'given' && !refusal,
     next_request_at: refusal?.code === 'too_soon' ? refusal.next_at ?? null : null,
     notices_left: Math.max(0, NOTICES_PER_VERSION - notices.used),
   });
@@ -448,7 +513,7 @@ export async function consentForThread(env: Env, thread: ThreadRow, now = Date.n
 export async function consentForSession(env: Env, sessionId: number): Promise<ConsentView | null> {
   const s = await env.DB.prepare('SELECT submitted_via, consent_status FROM interview_sessions WHERE id = ?').bind(sessionId)
     .first<{ submitted_via: string | null; consent_status: string }>();
-  if (!s || !consentRequired(s.submitted_via)) return null;
+  if (!s || !consentAsked(s.submitted_via)) return null;
   const thread = await env.DB.prepare('SELECT * FROM channel_threads WHERE session_id = ?').bind(sessionId).first<ThreadRow>();
   if (thread) return consentForThread(env, thread);
   const row = await env.DB.prepare(

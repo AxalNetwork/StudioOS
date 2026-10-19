@@ -23,7 +23,7 @@ import { createLinkCode } from '../src/services/channels/linkCodes.ts';
 import { normaliseTelegramUpdate, telegramEventId, TELEGRAM_COPY } from '../src/services/channels/telegram.ts';
 import {
   ADMIN, INTERVIEW, JWT_SECRET, ME, SECRETS, SECRET_VALUES, TG_ME, businessMessage, call, connectionUpdate, count, linkTelegram,
-  mockFetch, nextUpdateId, noSecretsSeen, now, seen, send, telegramApi, tgHook, tgUser, world,
+  consentGiven, mockFetch, nextUpdateId, noSecretsSeen, now, seen, send, telegramApi, tgHook, tgUser, world,
 } from './_channels_fixture.ts';
 
 test.afterEach(() => { noSecretsSeen(); seen.length = 0; });
@@ -305,12 +305,17 @@ async function assignedTelegramChat(env: any, chat = 8001) {
 }
 const voiceJobs = (queued: any[]) => queued.filter((j) => j.job_type === 'channel_followup');
 
-/** A voice note on an assigned chat, with its job queued (the fetch mock is the plain Bot API). */
+/**
+ * A voice note on an assigned chat, with its job queued (the fetch mock is the
+ * plain Bot API). The chat has consent: since D756 §1.5 (#1977) a Telegram
+ * voice note waits for it, and these cases are about fetching one.
+ */
 async function queuedVoiceNote(env: any, queued: any[]) {
   const f = mockFetch(telegramApi);
   let uid = '';
   try {
     ({ uid } = await assignedTelegramChat(env));
+    await consentGiven(env, null, uid);
     await tgHook(env, businessMessage('BC-ME', { voice: { file_id: 'VOICE-1', duration: 4 } }));
   } finally { f.restore(); }
   const jobs = voiceJobs(queued);
