@@ -159,7 +159,7 @@ test('D754 W3 racing: two notes get two seq and two objects; one note\'s job twi
   await voiceNote(w, 'wamid.R3', 'MEDIA-R3');
   const job = lastVoiceJob(w.queued);
   // Both runs are held inside the model until both have arrived, so both pass every check before either appends.
-  // D763's Llama Guard check also goes through `AI.run`; only the transcription is counted and held.
+  // Llama Guard's own calls (D763, inside run()) pass straight through: only the transcription is counted and held.
   const run = w.env.AI.run;
   let arrived = 0;
   let release!: () => void;

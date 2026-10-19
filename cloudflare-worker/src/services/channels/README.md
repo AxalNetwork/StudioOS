@@ -11,7 +11,7 @@ conversation reaches Validate › Interviews. Read
 | `events.ts` | Every webhook event once. `claimEvent` is the idempotency boundary for all four providers; `releaseEvent` lets a retry through when nothing was stored. Also hashed-subject/hour link-attempt counters (migration 458), which fail closed and are purged after two days, and the per-connection counters, held in D1 (`channel_counters`, migration 451): the per-minute webhook limit, which fails open, and the daily voice-transcription cap, which fails closed. |
 | `connections.ts` | Who an event belongs to, from the connection it arrived on and nothing else; whether a provider’s platform secrets exist (names only); and independent chat rollout checks through `channelRollout`, `channelOpenTo` and `channelOpenToMember` (D754/D756). |
 | `linkCodes.ts` | One-time codes proving a Telegram account is the member's. SHA-256 only, ten minutes, once. Redeeming one records the Telegram account that sent it; that account's own `/confirm` and the signed-in Axal member's confirmation must both arrive within the original ten minutes. Pending identity details are encrypted, read only by the issuing member; migration 458. D754 way B reuses it for `whatsapp_link` codes (migration 492), where the claimant is an HMAC of the sender's WhatsApp id. |
-| `whatsappLink.ts` | D754 way B, "Send to Axal" (#1937): a member's own WhatsApp linked through **Axal's own number**. `LINK <code>` from their WhatsApp proves the number, Axal's Confirm proves the account, both inside the code's ten minutes; then an `integrations` row `whatsapp_link` holds an HMAC of the number (`external_account_id`, one member per number by migration 492's index), the number encrypted (`credentials_enc`) and `•••• 1234`. STOP from the number or DELETE in Axal unlinks; a link unused for 180 days lapses in the purge. Every route is 503 and the webhook ignores Axal's number until all four `WHATSAPP_AXAL_*` settings are set. What a linked member forwards is part 2's (#1938, `whatsapp_captures`). |
+| `whatsappLink.ts` | D754 way B, "Send to Axal" (#1937): a member's own WhatsApp linked through **Axal's own number**. `LINK <code>` from their WhatsApp proves the number, Axal's Confirm proves the account, both inside the code's ten minutes; then an `integrations` row `whatsapp_link` holds an HMAC of the number (`external_account_id`, one member per number by migration 492's index), the number encrypted (`credentials_enc`) and `•••• 1234`. STOP from the number or DELETE in Axal unlinks; a link unused for 180 days lapses in the purge. Every route is 503 and the webhook ignores Axal's number until all four `WHATSAPP_AXAL_*` settings are set; a Super Admin's 503 names the unset ones (`axalNumberMissing`, names only), and `GET /whatsapp/link` carries Axal's public number with a plain `wa.me` link (`axalContact`, #1939). What a linked member forwards is part 2's (#1938, `whatsapp_captures`). |
 | `whatsappCapture.ts` | D754 way B part 2 (#1938): recordings a linked member forwards to Axal's number. An `audio` message or an audio `document` joins the member's open capture (`whatsapp_captures`, migration 492: media ids encrypted, at most 20 files in 30 minutes, `fetch_by` the first file plus 7 days); a new capture asks once, with reply buttons, whether everyone recorded agreed. "Yes, out loud" / "Yes, in writing" (or "Agreed beforehand" in Axal) write a `member_attested` `channel_consents` row; "No" deletes the capture and is answered once; `fetch_by` expires it in the purge. Nothing is downloaded before a yes. On a yes, a `channel_followup` { kind: 'capture' } job (`importCapture`, migration 497's `project_id`, `import_job` and `import_error`) fetches each file with Axal's token (`whatsapp.ts` `fetchAxalMedia`, #1896's `boundedDownload`), admits it with `channelAudio.ts` `admitAudio`, stores it as a chunk of one new `in_person` session in a draft interview in the capture's venture, and hands off to the recorder's `finishSession`; one "Saved" reply. No model is called here. Messages to Axal's number have their own shape (`whatsapp.ts` `axalMessageEvent`), so a YES there is never a consent reply. |
 | `providerHttp.ts` | Ten-second provider header/JSON deadline (`../../util/deadline.ts`), with an abort signal; a lost send response means unknown acceptance. D756 (#1896): `boundedDownload`, one 30-second deadline over a file's headers and streamed body with a running byte cap, https only, never logging or returning the URL; and `sniffAudioContainer`, the container (Ogg, MPEG, WAV, MP4, WebM) from a file's first bytes. |
 | `channelAudio.ts` | D756 (#1896): the shared acceptance rule for a recording from a chat — at most 5 MB (`MAX_CHUNK_BYTES`), a declared type the recorder admits (`CHUNK_MIME`, normalised: `audio/x-m4a` → `audio/mp4`, `audio/mp3` → `audio/mpeg`), and bytes whose container matches it. Pure, provider-neutral; D754 W3 extends it for WhatsApp. D754 W3 (#1935): `ingestChannelAudio`, the one step that keeps a consented note as recorder audio — a chunk of the chat's session (`putChunk`, its `seq` the note's message id), the recorder's voice-note mode (`transcribeVoiceNote` in `../interviewProcessing.ts`: the per-chunk stage, a receipt, one appended segment), then `enqueueDigest`. |
@@ -34,24 +34,28 @@ live in `../../routes/founder_validate_meetings.ts`.
 
 D756 (#1872) switches the Telegram Business bot on. The owner's steps, the
 real-device check, rotation and the off switch are in
-`documentation/operations/TELEGRAM.md`. As decided, and landing task by task
-(the runbook's table says which PR carries each):
+`documentation/operations/TELEGRAM.md`. What shipped, and what has not:
 
 - **Media.** The normaliser reads `voice`, `audio`, `video_note` and an audio
   `document`, carrying the kind, the declared size and the declared MIME type
   in the encrypted voice reference (no migration). A note over 5 MB, the
   recorder's chunk limit, is refused on its declared size before any download,
   through one bounded, streamed download helper in `providerHttp.ts`. Round
-  videos wait as placeholders and are not transcribed yet (#1896).
+  videos wait as placeholders and are not transcribed yet. On `main` (#2051,
+  for #1896).
 - **Consent.** No note of a chat is downloaded until the interviewee answers
   YES in the chat, through D754's provider-neutral consent store. Only the
   chat's own user counts, within 7 days of the notice; NO keeps the notes
   undownloaded, STOP stops later downloads. Telegram offers no member
-  attestation, because the member can always paste the notice (#1977).
+  attestation, because the member can always paste the notice. On `main`
+  (#1998, for #1977). The chat's text is not held: it goes into the session
+  when the chat is assigned, under D684's rule.
 - **Audio.** After YES, each note is stored like the recorder's audio, as a
   chunk under `validate-audio/`, transcribed once with its speaker taken from
-  the side, and kept until the member deletes the session (#1978). Until
-  then, D684's text-only behaviour stands.
+  the side, and kept until the member deletes the session. **Not merged:**
+  #1978 is open. Until it lands, a consented Telegram note is transcribed and
+  only its text is kept (D684's behaviour); WhatsApp's consented notes already
+  take this path (#2063, for #1935).
 
 ## Rules for adding here
 

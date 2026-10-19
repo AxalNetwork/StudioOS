@@ -132,12 +132,11 @@ const REPO_BLOB = 'https://github.com/AxalNetwork/StudioOS/blob/main/';
 
 /**
  * Setup steps that exist, by key, as repository paths (the repository is
- * public). GitHub's points at PRODUCTION.md, which names its two variables,
- * until #1885's runbook (`documentation/operations/GITHUB_CONNECTOR_APP.md`)
- * lands; whichever of the two merges second points it at the runbook.
+ * public). GitHub's is its App runbook (#1885); Zoom's steps are in
+ * PRODUCTION.md's Provider setup list.
  */
 export const SETUP_GUIDES: Readonly<Record<string, string>> = Object.freeze({
-  github: 'documentation/architecture/PRODUCTION.md',
+  github: 'documentation/operations/GITHUB_CONNECTOR_APP.md',
   zoom: 'documentation/architecture/PRODUCTION.md',
 });
 

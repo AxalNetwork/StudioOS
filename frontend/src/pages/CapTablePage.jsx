@@ -944,7 +944,7 @@ function LiveCapTablePanel({ live, loading, error, onRefresh }) {
             </div>
           </div>
           <a
-            href="/account/connectors"
+            href="/account/connectors/carta"
             className="text-xs text-violet-700 hover:underline inline-flex items-center gap-1"
           >
             Connect Carta <ExternalLink size={12} />
@@ -989,7 +989,7 @@ function LiveCapTablePanel({ live, loading, error, onRefresh }) {
             <RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> Refresh
           </button>
           <a
-            href="/account/connectors"
+            href="/account/connectors/carta"
             className="text-xs px-2 py-1 bg-white border border-gray-300 rounded hover:bg-gray-50 dark:hover:bg-gray-800 inline-flex items-center gap-1 dark:bg-gray-900 dark:border-gray-700"
           >
             Manage <ExternalLink size={12} />

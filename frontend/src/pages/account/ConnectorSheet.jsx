@@ -1,11 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { ExternalLink, X } from 'lucide-react';
 import { api } from '../../lib/api';
 import { connectorsApi } from '../../lib/api/connectors';
 import { useEscapeClose } from '../../components/useEscapeClose';
-import { safeWriteJSON } from '../../lib/storage';
-import { PENDING_LINKEDIN_IMPORT_KEY } from '../../lib/linkedinCsv';
 import { BrandIcon, Pill, Unrecorded, Unreadable } from '../../ui';
 import { BTN, INPUT, LoadingRows } from './AccountCenter';
 import { HubspotConfigModal, LinkedInCsvImportModal, SalesforceConfigModal } from './connectorTools';
@@ -14,12 +12,12 @@ import { MercuryEntityPanel, MercuryLandsGroup, MercuryReadsGroup, MercuryUsesGr
 import { MEMBER_REPLACE } from './mercuryModel';
 import { useAuth } from '../../hooks/useAuthSync';
 import { isSuperAdminUser } from '../../lib/shellRole';
-import { successBanner } from './githubSync';
+import { disconnect, startFirstParty, useConnectFlow } from './useConnectFlow';
 import {
-  TIER_LABEL, agoLabel, authKind, buildCatalogue, companiesLabel, connectFailure, connectionStatus,
+  TIER_LABEL, agoLabel, authKind, buildCatalogue, companiesLabel, connectionStatus,
   disconnectNote, feedsLabel, flowBanner, lastSyncLabel, moduleLabel,
-  keepBuildProject, coreSystemOffer, isEntityRow, isPersonalMercury,
-  FREE_KEEPS_CONNECTORS, INTEGRATION_KEYS_HREF, adminKeysHref, patOnly,
+  coreSystemOffer, isEntityRow, isPersonalMercury,
+  FREE_KEEPS_CONNECTORS, patOnly,
 } from './connectorsModel';
 import { cyclesWrite } from '../../lib/api/cycles';
 
@@ -389,31 +387,8 @@ function whenLabel(iso) {
   return `${d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} · ${d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`;
 }
 
-/** Google, Microsoft or LinkedIn's own sign-in; it returns to `returnTo` (Build's lightbox, or the Connectors page). */
-export async function startFirstParty(key, returnTo = 'integrations', client = api, projectId = null) {
-  const return_to = returnTo === 'build' ? 'build' : 'integrations';
-  // From Build, the venture rides in the signed state, so the return names it on any host (#1597).
-  const id = Number(projectId);
-  const venture = return_to === 'build' && Number.isSafeInteger(id) && id > 0 ? { project_id: id } : {};
-  if (key === 'google') {
-    const r = await client.googleCalConnect({ return_to, ...venture });
-    return r?.redirect_url || r?.auth_url;
-  }
-  if (key === 'microsoft') {
-    const r = await client.microsoftCalConnect({ return_to, ...venture });
-    return r?.redirect_url || r?.auth_url || r?.authorize_url;
-  }
-  const r = await client.linkedinOAuthStart({ return_to, ...venture });
-  return r?.authorize_url;
-}
-
-/** Disconnect a connector through its own route: the first-party three, or the registry's. */
-export async function disconnect(p) {
-  if (p.key === 'google') return api.googleCalDisconnect();
-  if (p.key === 'microsoft') return api.microsoftCalDisconnect();
-  if (p.key === 'linkedin') return api.linkedinDisconnect();
-  return connectorsApi.disconnect(p.connection.uid);
-}
+// D753 (#1908): the connect flow's two route helpers live with `useConnectFlow`; kept importable from here.
+export { disconnect, startFirstParty };
 
 /**
  * The key field's label. Crunchbase checks every key it is given with a live
@@ -438,30 +413,21 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
   const dismiss = useContext(SheetFrame)?.onDismiss || onClose;
   // Build acts for its project's company (D686 §5.4); elsewhere, the active one.
   const opts = companyId ? { companyId } : undefined;
-  const navigate = useNavigate();
   // D715 decision 8: a member's Mercury says where it lands in the viewer's role's words.
   const auth = useAuth();
   const viewerRole = auth?.user?.role ?? null;
   // D751 decision 6: only a Super Admin can save a connector's keys, so only one sees the link.
   const superAdmin = isSuperAdminUser(auth?.user);
-  const [adminHref, setAdminHref] = useState(INTEGRATION_KEYS_HREF);
   const personalMercury = isPersonalMercury(p);
   const conn = p.connection;
   const status = connectionStatus(conn, p);
   const kind = authKind(p);
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState('');
-  const [confirming, setConfirming] = useState(false);
-  const [syncing, setSyncing] = useState(false);
-  const [syncNote, setSyncNote] = useState('');
-  const [confirmReadOnly, setConfirmReadOnly] = useState(false);
-  const [apiKey, setApiKey] = useState('');
-  const [webhookSecret, setWebhookSecret] = useState('');
-  const [configText, setConfigText] = useState(conn?.config && !conn.first_party ? JSON.stringify(conn.config, null, 2) : '');
-  const [advanced, setAdvanced] = useState(false);
-  const [sfSandbox, setSfSandbox] = useState(false);
-  const [dsDemo, setDsDemo] = useState(true);
-  const [tool, setTool] = useState(null);
+  // D753 (#1908): the flow's state and actions are `useConnectFlow`'s, shared with the connector's page.
+  const flow = useConnectFlow(p, { setView, onChanged, onClose, returnTo, projectId, companyId, blocked });
+  const {
+    busy, message, adminHref, go, startOauth, submitKey, syncNow, doDisconnect, onCsvImported,
+    confirming, setConfirming, syncing, syncNote, tool, setTool, sfSandbox, setSfSandbox, dsDemo, setDsDemo,
+  } = flow;
   // A teammate who already connected this provider for the active company
   // (`GET /:key`): read once, when the flow starts on a registry connector.
   const [teammate, setTeammate] = useState(null);
@@ -507,85 +473,7 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
   const tokenOnly = patOnly(p);
   const keySteps = ['What it uses', kind === 'key' || kind === 'token_first' || tokenOnly ? 'Key' : 'Sign in', 'Connected'];
 
-  const go = (v) => { setMessage(''); setView(v); };
   const syncView = view === 'sync' && p.key === 'github' && !!conn?.uid;
-
-  const startOauth = async () => {
-    if (blocked) return;
-    setBusy(true); setMessage('');
-    setView('signin');
-    try {
-      let url;
-      // From Build, the sign-in comes back to /build/connect: the venture is kept for it (D686 §5.4).
-      if (returnTo === 'build') keepBuildProject(projectId);
-      if (kind === 'first_party') {
-        url = await startFirstParty(p.key, returnTo || 'integrations', api, projectId);
-      } else {
-        const params = returnTo === 'build' ? { return_to: 'build', ...(Number(projectId) > 0 ? { project_id: String(Number(projectId)) } : {}) } : {};
-        if (p.key === 'salesforce') params.sandbox = sfSandbox ? '1' : '';
-        // Always demo=0|1: a missing query makes the Worker default to demo.
-        if (p.key === 'docusign') params.demo = dsDemo ? '1' : '0';
-        const r = await connectorsApi.oauthStart(p.key, params, opts);
-        url = r?.authorize_url;
-      }
-      if (!url) throw Object.assign(new Error(`${name} did not return a sign-in address.`), { status: 0 });
-      window.location.assign(url);
-    } catch (e) {
-      setBusy(false);
-      setMessage(e?.message || '');
-      setAdminHref(adminKeysHref(e?.data));
-      setView(connectFailure(e, { ...p, auth_type: 'oauth2', supports_pat: false }));
-    }
-  };
-
-  const submitKey = async (e) => {
-    e?.preventDefault?.();
-    if (blocked) return;
-    setMessage('');
-    let config;
-    // D715: Mercury draws no settings field, so a stored config never rides along unseen.
-    if (configText.trim() && p.key !== 'mercury') {
-      try { config = JSON.parse(configText); } catch { setMessage('Settings must be valid JSON.'); return; }
-    }
-    if (p.key === 'mercury') {
-      if (!confirmReadOnly) { setMessage('Confirm this is a Read Only token.'); return; }
-      config = { confirm_read_only: true };
-    }
-    setBusy(true);
-    try {
-      await connectorsApi.connect({ provider_key: p.key, display_name: conn?.display_name || name, api_key: apiKey || undefined, webhook_secret: p.key === 'mercury' ? undefined : webhookSecret || undefined, config }, opts);
-      setApiKey(''); setWebhookSecret('');
-      setView('connected');
-      onChanged?.();
-    } catch (err) {
-      setMessage(err?.message || '');
-      // D715 decision 8: a refused Mercury token prints only the Worker's sentence, on the key form, with the token cleared.
-      if (personalMercury && err?.status !== 402) { setApiKey(''); if (!err?.message) setMessage('Mercury could not be connected.'); }
-      // The key form's refusal is about the key, so it reads `badkey`, never `refused` (D751 #1881).
-      else setView(connectFailure(err, { ...p, auth_type: 'api_key' }));
-    } finally { setBusy(false); }
-  };
-
-  const syncNow = async () => {
-    setSyncing(true); setSyncNote('');
-    // The Worker's own words for what the sync did, when it says (#1597).
-    try { const r = await connectorsApi.sync(conn.uid, opts); setSyncNote(successBanner(p.key, r) || 'Synced.'); onChanged?.(); }
-    catch (e) { setSyncNote(e?.message || 'The sync failed.'); }
-    finally { setSyncing(false); }
-  };
-
-  const doDisconnect = async () => {
-    setBusy(true); setMessage('');
-    try { await disconnect(p); onChanged?.(); onClose?.(); }
-    catch (e) { setMessage(e?.message || 'The connector could not be disconnected.'); }
-    finally { setBusy(false); setConfirming(false); }
-  };
-
-  const onCsvImported = (rows) => {
-    safeWriteJSON(PENDING_LINKEDIN_IMPORT_KEY, { rows, at: Date.now() });
-    setTool(null);
-    navigate('/refer');
-  };
 
   const backBtn = back ? <button type="button" className={BTN.ghost} onClick={back}>Back</button> : null;
   let sub = '';
@@ -726,55 +614,7 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
     body = (
       <form id="connector-key-form" onSubmit={submitKey}>
         {!updating && <Steps names={keySteps} at={1} />}
-        {p.key === 'mercury' && <>
-          <Banner tone="neutral">Create a <strong>Read Only</strong> API token in your own Mercury organization, never Read and Write.</Banner>
-          <label className="mx-5 mt-4 flex items-center gap-2 text-sm">
-            <input type="checkbox" required checked={confirmReadOnly} onChange={(e) => setConfirmReadOnly(e.target.checked)} />
-            This is a Read Only token
-          </label>
-        </>}
-        {p.key === 'crunchbase' && !updating && (
-          <Banner tone="neutral">
-            <span className="font-semibold">Crunchbase Basic user key.</span> Create one at data.crunchbase.com → API and paste the user_key below. Connect runs a live search to check it before saving. Daily Basic quota is 200 calls.
-          </Banner>
-        )}
-        {p.key === 'hubspot' && !updating && (
-          <Banner tone="neutral">
-            In HubSpot: Settings → Integrations → Private Apps → Create private app. It needs crm.objects.deals.read and write, and crm.objects.contacts.read.
-          </Banner>
-        )}
-        <div className="mx-5 mt-4 space-y-1">
-          <label htmlFor="connector-key" className="text-[12px] font-semibold text-axal-muted dark:text-gray-400">{keyLabel(p, updating)}</label>
-          <input id="connector-key" type="password" autoComplete="off" className={INPUT} value={apiKey} onChange={(e) => setApiKey(e.target.value)}
-            placeholder={conn?.api_key_preview ? `Ends ${conn.api_key_preview}` : ''} required={!updating || p.key === 'crunchbase'}
-            data-testid={p.key === 'crunchbase' ? 'crunchbase-user-key' : 'connector-key'} />
-          <p className="text-[11.5px] text-axal-muted dark:text-gray-400">
-            Stored encrypted. StudioOS never shows it again.
-            {p.docs_url && <> <a className={BTN.link} href={p.docs_url} target="_blank" rel="noreferrer">Where to find it <ExternalLink size={11} className="inline" /></a></>}
-          </p>
-        </div>
-        {kind === 'token_first' && !updating && !p.oauthOff && (
-          <p className="mx-5 mt-3 text-[12px] text-axal-muted dark:text-gray-400">
-            Your portal is cleared for HubSpot's public app? <button type="button" className={BTN.link} onClick={startOauth}>Connect with OAuth instead</button>
-          </p>
-        )}
-        {/* D715 decision 8: no Advanced for Mercury, so no settings field that could carry a confirmation the box did not give. */}
-        {p.key !== 'mercury' && <div className="mx-5 mt-4">
-          <button type="button" className={BTN.link} onClick={() => setAdvanced((v) => !v)} aria-expanded={advanced}>{advanced ? 'Hide advanced' : 'Advanced'}</button>
-          {advanced && (
-            <div className="mt-2 space-y-3">
-              <div className="space-y-1">
-                <label htmlFor="connector-webhook" className="text-[12px] font-semibold text-axal-muted dark:text-gray-400">Webhook secret (optional)</label>
-                <input id="connector-webhook" type="password" className={INPUT} value={webhookSecret} onChange={(e) => setWebhookSecret(e.target.value)} placeholder={conn?.has_webhook_secret ? '••••••••' : ''} />
-                <p className="text-[11.5px] text-axal-muted dark:text-gray-400">Webhooks sent to /api/integrations/webhook/{p.key}/&lt;uid&gt; are checked against this secret (HMAC-SHA256 in the X-Axal-Signature header, or the signature the provider adds). Without one, the connection takes no webhooks and updates when it syncs. HubSpot checks its own signature and needs none.</p>
-              </div>
-              <div className="space-y-1">
-                <label htmlFor="connector-config" className="text-[12px] font-semibold text-axal-muted dark:text-gray-400">Settings (JSON, optional)</label>
-                <textarea id="connector-config" rows={4} className={`${INPUT} font-mono text-xs`} value={configText} onChange={(e) => setConfigText(e.target.value)} />
-              </div>
-            </div>
-          )}
-        </div>}
+        <KeyFields p={p} flow={flow} updating={updating} />
         {message && view !== 'badkey' && <Banner tone="danger">{message}</Banner>}
       </form>
     );
@@ -882,6 +722,76 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
       {tool === 'salesforce' && <SalesforceConfigModal integration={conn} onClose={() => setTool(null)} onSaved={() => { setTool(null); onChanged?.(); }} />}
       {tool === 'csv' && <LinkedInCsvImportModal onClose={() => setTool(null)} onImported={onCsvImported} />}
     </Sheet>
+  );
+}
+
+/**
+ * D753 (#1908): the key form's fields, drawn by the sheet's key view and by
+ * the connector page's inline form alike, from `useConnectFlow`'s state.
+ * `keyHelp` (`{ href, label }`) is the page's "Get one at <Service>" link,
+ * from the Worker's `sign_in.key_help_href`; without it, the registry's docs.
+ */
+export function KeyFields({ p, flow, updating = false, keyHelp = null }) {
+  const conn = p.connection;
+  const kind = authKind(p);
+  const {
+    startOauth, apiKey, setApiKey, webhookSecret, setWebhookSecret, configText, setConfigText,
+    advanced, setAdvanced, confirmReadOnly, setConfirmReadOnly,
+  } = flow;
+  return (
+    <>
+      {p.key === 'mercury' && <>
+        <Banner tone="neutral">Create a <strong>Read Only</strong> API token in your own Mercury organization, never Read and Write.</Banner>
+        <label className="mx-5 mt-4 flex items-center gap-2 text-sm">
+          <input type="checkbox" required checked={confirmReadOnly} onChange={(e) => setConfirmReadOnly(e.target.checked)} />
+          This is a Read Only token
+        </label>
+      </>}
+      {p.key === 'crunchbase' && !updating && (
+        <Banner tone="neutral">
+          <span className="font-semibold">Crunchbase Basic user key.</span> Create one at data.crunchbase.com → API and paste the user_key below. Connect runs a live search to check it before saving. Daily Basic quota is 200 calls.
+        </Banner>
+      )}
+      {p.key === 'hubspot' && !updating && (
+        <Banner tone="neutral">
+          In HubSpot: Settings → Integrations → Private Apps → Create private app. It needs crm.objects.deals.read and write, and crm.objects.contacts.read.
+        </Banner>
+      )}
+      <div className="mx-5 mt-4 space-y-1">
+        <label htmlFor="connector-key" className="text-[12px] font-semibold text-axal-muted dark:text-gray-400">{keyLabel(p, updating)}</label>
+        <input id="connector-key" type="password" autoComplete="off" className={INPUT} value={apiKey} onChange={(e) => setApiKey(e.target.value)}
+          placeholder={conn?.api_key_preview ? `Ends ${conn.api_key_preview}` : ''} required={!updating || p.key === 'crunchbase'}
+          data-testid={p.key === 'crunchbase' ? 'crunchbase-user-key' : 'connector-key'} />
+        <p className="text-[11.5px] text-axal-muted dark:text-gray-400">
+          Stored encrypted. StudioOS never shows it again.
+          {keyHelp
+            ? <> <a className={BTN.link} href={keyHelp.href} target="_blank" rel="noreferrer" data-testid="connector-key-help">{keyHelp.label} <ExternalLink size={11} className="inline" /></a></>
+            : p.docs_url && <> <a className={BTN.link} href={p.docs_url} target="_blank" rel="noreferrer">Where to find it <ExternalLink size={11} className="inline" /></a></>}
+        </p>
+      </div>
+      {kind === 'token_first' && !updating && !p.oauthOff && (
+        <p className="mx-5 mt-3 text-[12px] text-axal-muted dark:text-gray-400">
+          Your portal is cleared for HubSpot's public app? <button type="button" className={BTN.link} onClick={startOauth}>Connect with OAuth instead</button>
+        </p>
+      )}
+      {/* D715 decision 8: no Advanced for Mercury, so no settings field that could carry a confirmation the box did not give. */}
+      {p.key !== 'mercury' && <div className="mx-5 mt-4">
+        <button type="button" className={BTN.link} onClick={() => setAdvanced((v) => !v)} aria-expanded={advanced}>{advanced ? 'Hide advanced' : 'Advanced'}</button>
+        {advanced && (
+          <div className="mt-2 space-y-3">
+            <div className="space-y-1">
+              <label htmlFor="connector-webhook" className="text-[12px] font-semibold text-axal-muted dark:text-gray-400">Webhook secret (optional)</label>
+              <input id="connector-webhook" type="password" className={INPUT} value={webhookSecret} onChange={(e) => setWebhookSecret(e.target.value)} placeholder={conn?.has_webhook_secret ? '••••••••' : ''} />
+              <p className="text-[11.5px] text-axal-muted dark:text-gray-400">Webhooks sent to /api/integrations/webhook/{p.key}/&lt;uid&gt; are checked against this secret (HMAC-SHA256 in the X-Axal-Signature header, or the signature the provider adds). Without one, the connection takes no webhooks and updates when it syncs. HubSpot checks its own signature and needs none.</p>
+            </div>
+            <div className="space-y-1">
+              <label htmlFor="connector-config" className="text-[12px] font-semibold text-axal-muted dark:text-gray-400">Settings (JSON, optional)</label>
+              <textarea id="connector-config" rows={4} className={`${INPUT} font-mono text-xs`} value={configText} onChange={(e) => setConfigText(e.target.value)} />
+            </div>
+          </div>
+        )}
+      </div>}
+    </>
   );
 }
 

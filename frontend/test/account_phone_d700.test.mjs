@@ -585,7 +585,7 @@ test('5. at desktop width the pages draw no bar and keep their own heading', () 
   // before its desktop return, which keeps its heading.
   const trust = read('frontend/src/pages/TrustCenterPage.jsx');
   assert.match(trust, /const phone = usePhoneWidth\(\) && !chromeless;/, 'the investor workspace keeps its chromeless frame');
-  assert.match(trust, /if \(phone\) \{\s*return \(\s*<TrustPhoneView[\s\S]*?\n  return \(\s*<div className="p-6 max-w-5xl mx-auto">[\s\S]*?<ShieldCheck className="w-7 h-7 text-emerald-600" \/> Trust Center/);
+  assert.match(trust, /if \(phone\) \{\s*return \(\s*<TrustPhoneView[\s\S]*?\n  return \(\s*<div className="p-6">[\s\S]*?<ShieldCheck className="w-7 h-7 text-emerald-600" \/> Trust Center/);
   const docs = read('frontend/src/pages/docs/DocsLayout.jsx');
   assert.match(docs, /\) : phone \? \(\s*<HelpPhoneHome[\s\S]*?\) : \(\s*<HelpHome/, 'only the home has a phone view; a guide page is unchanged');
   const products = read('frontend/src/pages/ProductsPage.jsx');
@@ -655,7 +655,7 @@ test('6. the member routes mount the pages that draw A7m and A10m; the public pa
   const app = read('frontend/src/App.jsx');
   assert.match(app, /<Route path="\/my\/events" element=\{guard\(\[[^\]]+\], <MyEventsPage \/>\)\} \/>/);
   // D755 §13: /plans-and-pricing opens to visitors; a product's page still needs sign-in.
-  assert.match(app, /<Route path="\/plans-and-pricing" element=\{<ProductsPage \/>\} \/>/);
+  assert.match(app, /<Route path="\/plans-and-pricing" element=\{user \? guard\(\[[^\]]+\], <ProductsPage \/>\) : <ProductsPage \/>\} \/>/);
   assert.match(app, /<Route path="\/plans-and-pricing\/:productId" element=\{guard\(\[[^\]]+\], <ProductsPage \/>\)\} \/>/);
   assert.match(read('frontend/src/pages/events/MyEventsPage.jsx'), /<EventsPhoneView /);
   assert.match(read('frontend/src/pages/account/PricingPhone.jsx'), /<AccountPhonePage pageKey="pricing"/);
