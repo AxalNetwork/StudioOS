@@ -4585,8 +4585,8 @@
   },
   {
    "pageKey": "Founder · Validate · Customer research",
-   "optionKey": "transcribe:live",
-   "optionLabel": "Start recording",
+   "optionKey": "transcribe:interview",
+   "optionLabel": "Record a session",
    "kind": "speech",
    "handler": "transcribe",
    "routeTask": "rail_speech",
