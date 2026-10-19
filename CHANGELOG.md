@@ -18,6 +18,22 @@
   Mercury return goes to the hub with its keys stripped (D715 decision 3).
   No Worker change.
 
+## One text per document: every sender reads its library row (D758, #1863, PR 1)
+
+- `services/legalDocTypes.ts` gains `LIBRARY_SLUG_FOR` / `librarySlugFor`
+  (seven spellings → their `legal_templates` row) and `BUNDLED_SENT_DIRECTLY`
+  (`partner_msa_v1`, until PR 2).
+- `templateBodyFor` and `createAndSendEnvelope` resolve the row by slug: an
+  envelope records, prints and dedupes under it (either spelling still
+  dedupes), and `envelope_created` adds `requested_as`.
+- The 3-way NDA and the deck-share NDA read their rows and refuse a field
+  left (409 `template_fields_unfilled`; deck-share 503
+  `template_unreadable`), with no free-text fallback.
+- Usage counts the store's own slugs, matches exactly first, folds spellings
+  through the same map, counts partner deals under `partner_services`, and
+  counts a relationship row and its envelope once. The drill-down uses the
+  same fold. `GET /templates/outside` lists `BUNDLED_SENT_DIRECTLY`.
+
 ## The LP's capital call opens on the amount, and the fee statement is on screen (D717, #1859)
 
 - An open Fund I line's panel on the LP workspace opens on "Amount due", the
@@ -28,6 +44,18 @@
 - "Management fee statements" lists the LP's issued statements under My
   commitment, newest open, drawn by `FeeStatementView` with no account digits.
   Frontend only: no route, migration or API method changes.
+
+## GitHub sign-ins renew themselves, and disconnecting revokes them (D655 follow-up, #1883)
+
+- GitHub user tokens renew 60 seconds before expiry. Rotated tokens are stored
+  with compare-and-swap so a concurrent reconnect is preserved. An exclusive
+  lease in D1 prevents duplicate renewals even if KV fails; lease losers
+  wait for the result and never renew on their own.
+- A refused refresh shows Reconnect and is not retried until sign-in. Temporary
+  failures leave credentials intact. Disconnect revokes the authorization best
+  effort; the App remains installed on the member's repositories.
+- No new routes, bindings or migrations. Expiry can be enabled by the owner
+  after this change merges; setup remains tracked in #1008 and #1885.
 
 ## Every connector's page, as data the Worker holds to its code (D753, #1875)
 
