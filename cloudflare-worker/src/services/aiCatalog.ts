@@ -45,6 +45,10 @@ export const TASK_LABELS: Record<TaskClass, string> = {
   research_ask: 'Answer from your documents',
   structure_interview: 'Structure an interview',
   summarise_interview: 'Summarise an interview',
+  system_job: 'Background job (no member)',
+  ops_summary: 'Summarise the site metrics',
+  image_screen: 'Screen an image',
+  image_alt_text: 'Describe an image',
   // D764 (#2089) — the rail's kinds of work, in the canvas's words.
   rail_chat: 'Chat on a page',
   rail_synth: 'Group notes into themes',
@@ -90,6 +94,8 @@ export const MODEL_NAMES: Record<string, string> = {
   '@cf/deepgram/nova-3': 'Nova-3',
   // D760: on the rate card now that it carries WebSocket rates (live speech, D658).
   '@cf/deepgram/flux': 'Flux',
+  // D761 PR 3: priced by the minute it returns, so on the rate card.
+  '@cf/myshell-ai/melotts': 'MeloTTS',
   // D764 (#2089): the rail's models, by the canvas's names.
   '@cf/zai-org/glm-4.7-flash': 'GLM-4.7 Flash',
   '@cf/openai/gpt-oss-120b': 'GPT-OSS 120B',

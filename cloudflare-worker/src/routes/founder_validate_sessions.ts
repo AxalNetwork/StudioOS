@@ -52,8 +52,8 @@ import { setInterviewStage } from '../services/validateWriters';
 import {
   afterChunkStored, finishSession, isStale, processingOf, recoverSession, summaryOf, transcribeChunk,
 } from '../services/interviewProcessing';
-import { consentRefusal, digestConsentRefusal, finalSegments, modelFrom, processingBusy, refusedBody, refusedStatus } from './founder_validate_structure';
-import { digestSession, enqueueDigest, withdrawDigest } from '../services/validateEngine';
+import { consentRefusal, digestConsentRefusal, modelFrom, processingBusy, refusedBody, refusedStatus } from './founder_validate_structure';
+import { digestSession, withdrawDigest } from '../services/validateEngine';
 import { activeSessionsOf } from '../services/sessionSweeper';
 import { interviewCapRefusal } from '../middleware/requireTier';
 import { logCycleWriteStatement } from '../services/cycleActivity';
@@ -248,8 +248,7 @@ async function openOn(env: Env, user: User, interview: { id: number | null; proj
     await replaceWithFinal(env, session, plan.messages, plan.channel === 'text' ? 'text_chat' : 'manual_entry', null);
     // A text session is held the moment its chat is in.
     await markInterviewHeld(env, session, user.id);
-    // D757: the pasted chat and typed notes reach the engine like every other source.
-    await enqueueDigest(env, session.id, user.id, 'chat_pasted');
+    // D765 (#2090), D720 §6: the chat is stored; Summarise and Structure are the founder's press.
   }
   return (await loadSession(env, session.id))!;
 }
@@ -616,11 +615,8 @@ sessions.patch('/sessions/:id/consent', async (c) => {
   ).bind(status, method || null, status, s.session.id).run();
   // A paused recording whose consent is withdrawn is stopped, not resumed.
   if (status !== 'given' && s.session.status === 'paused') await transition(c.env, s.session, 'stop');
-  if (after && status === 'declined') {
-    await withdrawDigest(c.env, s.session.id, s.user.id);
-  } else if (status === 'given' && (await finalSegments(c.env, s.session.id)).length) {
-    await enqueueDigest(c.env, s.session.id, s.user.id, 'consent_given');
-  }
+  // D765 (#2090): consent given no longer starts a summary; the founder presses Summarise.
+  if (after && status === 'declined') await withdrawDigest(c.env, s.session.id, s.user.id);
   return json({ session: await loadSession(c.env, s.session.id) });
 });
 
@@ -779,7 +775,7 @@ sessions.post('/sessions/:id/finish', async (c) => {
   const body = await c.req.json<any>().catch(() => ({}));
   const lastSeq = Number(body?.last_seq);
   if (!Number.isSafeInteger(lastSeq) || lastSeq < 0 || lastSeq >= MAX_CHUNKS) return json({ detail: 'invalid_last_seq', max: MAX_CHUNKS - 1 }, 400);
-  // D770 (#2095): only the Stop sheet's "Summarise and place with Eadwyn" sends `auto: true`; anything else is manual.
+  // D770 (#2095): only the Stop sheet's "Summarise and place with Eadwyn" sends `auto: true`; anything else is transcribe only (D765, #2090).
   const out = await finishSession(c.env, s.session, s.user.id, lastSeq, body?.auto === true);
   return json({ ok: true, processing: { stage: out.stage, done: out.done, total: out.total, error: null }, queued: out.queued }, 202);
 });

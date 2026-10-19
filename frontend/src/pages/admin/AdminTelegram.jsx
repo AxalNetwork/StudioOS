@@ -11,6 +11,7 @@ import ToastMessage from '../../components/ToastMessage';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 import { useAuth } from '../../hooks/useAuthSync';
 import { isSuperAdminUser } from '../../lib/shellRole';
+import { RailFrame, WorkerRail } from '../../ui';
 import TelegramBotHealth from './TelegramBotHealth';
 
 const AUDIENCES = ['public', 'founders', 'investors', 'advisors', 'partners', 'alumni'];
@@ -939,7 +940,12 @@ export default function AdminTelegram() {
 
   useEffect(() => { refresh(); }, [refresh]);
 
+  // D775 (#2101): H34 drew no rail. The rail takes the viewer's tier, as ContractsDesk does.
+  const railProps = { note: 'Eadwyn reads the channels, drafts and history on this page. A post goes out only when you send or schedule it.' };
+  const rail = superAdmin ? <WorkerRail {...railProps} workspace="Telegram channels" role="super_admin" data-testid="hq-telegram-rail" /> : <WorkerRail {...railProps} workspace="Telegram channels" role="admin" data-testid="admin-telegram-rail" />;
+
   return (
+    <RailFrame rail={rail} data-testid="telegram-frame">
     <div className="max-w-6xl mx-auto p-6 space-y-4">
       <ToastMessage toast={toast.toast} onDismiss={toast.dismissToast} />
       <header>
@@ -986,5 +992,6 @@ export default function AdminTelegram() {
       )}
       {tab === 'history' && <HistoryTab toast={toast} />}
     </div>
+    </RailFrame>
   );
 }

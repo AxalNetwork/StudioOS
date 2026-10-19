@@ -187,7 +187,7 @@ test('the rail docs no longer claim what the code disproves', () => {
   const union = router.slice(router.indexOf('export type TaskClass'));
   const n = (union.slice(0, union.indexOf(';')).match(/\| '/g) || []).length;
   assert.ok(n >= 20, `TaskClass union not parsed (${n})`);
-  const WORDS = { 23: 'twenty-three', 24: 'twenty-four', 25: 'twenty-five', 26: 'twenty-six' };
+  const WORDS = { 23: 'twenty-three', 24: 'twenty-four', 25: 'twenty-five', 26: 'twenty-six', 27: 'twenty-seven', 29: 'twenty-nine', 30: 'thirty' };
   assert.ok(WORDS[n], `the union has ${n} members; teach this test the word and update the prose`);
   assert.match(assist, new RegExp(`${WORDS[n]} task classes`), 'AssistRail\'s task-class count is stale');
   assert.match(read('cloudflare-worker/src/services/aiSpend.ts'), new RegExp(`${WORDS[n]} task classes`),
