@@ -388,6 +388,9 @@ export async function validatePromoForProduct(
   if (allow.ids.length > 0 && !allow.ids.includes(productId)) {
     return { ok: false, reason: 'product_not_eligible' };
   }
+  // D755 §5: a token pack is never discounted.
+  const { isTokenPackProduct } = await import('./aiCredits');
+  if (await isTokenPackProduct(env, productId)) return { ok: false, reason: 'product_not_eligible' };
   if (promo.max_redemptions != null) {
     const used = await totalRedeemed(env, promo);
     if (used >= promo.max_redemptions) return { ok: false, reason: 'usage_limit_reached' };

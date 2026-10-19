@@ -19,6 +19,7 @@ import { installDocument } from './_contracts_dom.mjs';
 
 import { buildCatalogue, cardAction, isEntityRow, toolDeepLink, toolGroups } from '../src/pages/account/connectorsModel.js';
 import { ConnectorsView } from '../src/pages/account/AccountConnectors.jsx';
+import { ConnectorPageView } from '../src/pages/account/ConnectorPage.jsx';
 import { openingView } from '../src/pages/account/ConnectorSheet.jsx';
 import { MercuryEntitySheet } from '../src/pages/account/MercurySheet.jsx';
 import { ADMIN_ONLY, BRANCH_MANAGED, ENTITY_AUDIT_FOOT, FUND_NOTE, NOT_OFFERED, NOT_OFFERED_HQ_ONLY, isMercurySearch } from '../src/pages/account/mercuryModel.js';
@@ -133,21 +134,27 @@ test('the entity row opens its own sheet, is never in Build, and a return naming
 
 // ------------------------------------------------------------------ the page's reads
 
-test('Connectors makes no entity read on load or on a sign-in return; one when the card is opened', async () => {
+test('Connectors makes no entity read on load or on a sign-in return; one when the card is opened (D715 decision 3, on D753\'s page)', async () => {
   const f = mockFetch();
-  const page = await mount(h(ConnectorsView, { data: ready(), initialTab: 'discover' }));
+  const hub = await mount(h(ConnectorsView, { data: ready(), initialTab: 'discover' }));
   try {
     assert.equal(f.reads(), 0, 'a visit reads nothing');
-    assert.ok(page.by('connector-open-mercury'), 'the card shows Open');
-    await page.click('connector-open-mercury');
-    assert.equal(f.reads(), 1, 'opening the sheet is the one read');
-    assert.ok(page.by('mercury-entity-sheet'));
-  } finally { await page.unmount(); }
+    const open = hub.by('connector-open-mercury');
+    assert.ok(open, 'the card shows Open');
+    assert.equal(hub.pr(open).href, '/account/connectors/mercury', 'Open links the Mercury page');
+    await hub.click('connector-open-mercury');
+    assert.equal(f.reads(), 0, 'following the link is not a read on the hub');
+  } finally { await hub.unmount(); }
   const back = await mount(h(ConnectorsView, { data: ready() }), '/account/connectors?oauth=ok&provider=mercury');
   try {
-    assert.equal(f.reads(), 1, 'a crafted return opens nothing and reads nothing');
+    assert.equal(f.reads(), 0, 'a crafted return on the hub reads nothing');
     assert.equal(back.by('mercury-entity-sheet'), undefined);
-  } finally { await back.unmount(); f.restore(); }
+  } finally { await back.unmount(); }
+  const page = await mount(h(ConnectorPageView, { data: ready(), connectorKey: 'mercury' }), '/account/connectors/mercury');
+  try {
+    assert.equal(f.reads(), 1, 'mounting the Mercury page is the one read');
+    assert.ok(page.by('mercury-entity-sheet'));
+  } finally { await page.unmount(); f.restore(); }
 });
 
 // ------------------------------------------------------------------ who sees what

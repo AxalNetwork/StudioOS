@@ -29,7 +29,9 @@
  * Graph version for at least two years after the next one ships, so v23.0 is
  * served into 2027. It is the newest version this adapter's request and
  * response shapes were checked against; the owner bumps it here, once, after
- * reading developers.facebook.com/docs/graph-api/changelog. Network access to
+ * reading developers.facebook.com/docs/graph-api/changelog. GET /api/channels
+ * hands this same version to the browser; Axal's own number/WABA cannot be
+ * claimed through Embedded Signup or unsubscribed by a member (D754). Network access to
  * Meta's docs was not available when this was written (2026-10-13), so a newer
  * version may exist.
  *
@@ -369,11 +371,12 @@ function mediaHostAllowed(raw: string): boolean {
 }
 
 /** A voice note's audio: `GET /{media-id}` for its URL, then the URL, both with the member's token. */
-export async function fetchWhatsAppMedia(env: Env, conn: ChannelConnection, mediaId: string, mimeHint: string | null = null): Promise<AudioResult> {
+export type WhatsAppAudioResult = AudioResult & { lookup?: boolean };
+export async function fetchWhatsAppMedia(env: Env, conn: ChannelConnection, mediaId: string, mimeHint: string | null = null): Promise<WhatsAppAudioResult> {
   const token = await whatsappToken(env, conn);
   if (!token) return { ok: false, code: 'not_connected', retryable: false };
   const meta = await graph('media', `${GRAPH_BASE}/${encodeURIComponent(mediaId)}`, { token });
-  if (!meta.ok) return { ok: false, code: meta.code, retryable: meta.retryable };
+  if (!meta.ok) return { ok: false, code: meta.code, retryable: meta.retryable, lookup: true };
   const size = Number(meta.data?.file_size);
   if (Number.isFinite(size) && size > WHATSAPP_MAX_AUDIO_BYTES) return { ok: false, code: 'too_large', retryable: false };
   const url = typeof meta.data?.url === 'string' ? meta.data.url : '';
@@ -440,6 +443,8 @@ export async function unsubscribeApp(
   conn: Pick<ChannelConnection, 'integrationId' | 'integrationUid' | 'credentialsEnc' | 'config'> & { phoneNumberId: string | null },
 ): Promise<UnsubscribeOutcome> {
   const waba = idStr(conn.config?.waba_id);
+  // Axal's shared number is never unsubscribed by a member's disconnect.
+  if (waba && waba === String(env.WHATSAPP_AXAL_WABA_ID ?? '').trim()) return 'shared';
   const own = idStr(conn.phoneNumberId);
   const token = await whatsappToken(env, conn);
   if (!waba || !own || !token) return 'unverified';
@@ -516,7 +521,14 @@ export function callingRecord(number: Record<string, unknown> | null | undefined
   return { tier, region: callingRegion(number?.display_phone_number), checked_at: now.toISOString() };
 }
 
+export interface CallingSide {
+  available: false;
+  reasons: { code: string; sentence: string }[];
+}
+
 export interface CallingEligibility {
+  inbound: CallingSide;
+  outbound: CallingSide;
   available: false;
   reasons: { code: string; sentence: string }[];
   sentence: string;
@@ -531,20 +543,26 @@ export interface CallingEligibility {
 export function callingEligibility(config: Record<string, unknown> | null | undefined): CallingEligibility {
   const rec = config?.calling && typeof config.calling === 'object' ? config.calling as Partial<CallingRecord> : null;
   // Each reason is a clause, so the card's line reads as one sentence.
-  const clauses: [string, string][] = [['not_built', 'Axal does not answer or place WhatsApp calls yet']];
+  const clauses: [string, string, 'both' | 'outbound'][] = [['not_built', 'Axal does not answer or place WhatsApp calls yet', 'both']];
   if (!rec) {
-    clauses.push(['not_checked', 'this number has not been checked yet (test the connection to check it)']);
+    clauses.push(['not_checked', 'this number has not been checked yet (test the connection to check it)', 'both']);
   } else {
     const limit = rec.tier ? TIER_LIMIT[rec.tier] : undefined;
-    if (limit === undefined) clauses.push(['tier_unknown', 'this number\'s messaging limit could not be read']);
+    if (limit === undefined) clauses.push(['tier_unknown', 'this number\'s messaging limit could not be read', 'both']);
     else if (limit < CALLING_MIN_LIMIT) {
-      clauses.push(['tier_low', `this number can start ${limit.toLocaleString('en-US')} conversations a day, and WhatsApp Calling needs at least ${CALLING_MIN_LIMIT.toLocaleString('en-US')}`]);
+      clauses.push(['tier_low', `this number can start ${limit.toLocaleString('en-US')} conversations a day, and WhatsApp Calling needs at least ${CALLING_MIN_LIMIT.toLocaleString('en-US')}`, 'both']);
     }
     const region = RESTRICTED_CALLING_CODES.find(([, key]) => key === rec.region);
-    if (region) clauses.push(['region', `Meta does not offer business-initiated calls for numbers in ${region[2]}`]);
-    else if (rec.region == null) clauses.push(['region_unknown', 'this number\'s country could not be read']);
+    if (region) clauses.push(['region', `Meta does not offer business-initiated calls for numbers in ${region[2]}`, 'outbound']);
+    else if (rec.region == null) clauses.push(['region_unknown', 'this number\'s country could not be read', 'outbound']);
   }
+  const reasons = (side: 'inbound' | 'outbound'): CallingSide => ({
+    available: false,
+    reasons: clauses.filter(([, , audience]) => side === 'outbound' || audience === 'both')
+      .map(([code, clause]) => ({ code, sentence: `${clause.charAt(0).toUpperCase()}${clause.slice(1)}.` })),
+  });
   return {
+    inbound: reasons('inbound'), outbound: reasons('outbound'),
     available: false,
     reasons: clauses.map(([code, clause]) => ({ code, sentence: `${clause.charAt(0).toUpperCase()}${clause.slice(1)}.` })),
     sentence: `Calls: not yet, because ${clauses.map(([, clause]) => clause).join('; ')}.`,
@@ -583,6 +601,11 @@ export async function completeEmbeddedSignup(env: Env, userId: number, input: Si
   const appSecret = String(env.WHATSAPP_APP_SECRET ?? '').trim();
   if (!appId || !appSecret) return { ok: false, status: 503, code: 'not_configured' };
 
+  const axalNumber = String(env.WHATSAPP_AXAL_PHONE_NUMBER_ID ?? '').trim();
+  const axalWaba = String(env.WHATSAPP_AXAL_WABA_ID ?? '').trim();
+  const isAxal = () => !!((axalNumber && input.phoneNumberId === axalNumber) || (axalWaba && input.wabaId === axalWaba));
+  if (isAxal()) return { ok: false, status: 409, code: 'axal_number' };
+
   const isTaken = async (phoneNumberId: string) => !!(await env.DB.prepare(
     `SELECT 1 AS t FROM integrations WHERE provider_key = 'whatsapp' AND external_account_id = ? AND status = 'active' AND user_id != ?`,
   ).bind(phoneNumberId, userId).first<{ t: number }>());
@@ -604,6 +627,7 @@ export async function completeEmbeddedSignup(env: Env, userId: number, input: Si
   if (!input.phoneNumberId) {
     if (listed.length !== 1) return { ok: false, status: listed.length ? 409 : 400, code: listed.length ? 'choose_number' : 'number_not_in_waba' };
     input = { ...input, phoneNumberId: idStr(listed[0]!.id) ?? '' };
+    if (isAxal()) return { ok: false, status: 409, code: 'axal_number' };
     if (await isTaken(input.phoneNumberId)) return { ok: false, status: 409, code: 'number_taken' };
   }
   const number = listed.find((n) => idStr(n?.id) === input.phoneNumberId);
