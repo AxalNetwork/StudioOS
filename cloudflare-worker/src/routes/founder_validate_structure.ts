@@ -169,13 +169,11 @@ export async function storePlacements(
   return { stored: placements.length, deduped };
 }
 
-const PLACEMENT_COLUMNS = `id, project_id, kind, payload_json, edited_payload_json, status, run_id, target_ref, session_id,
-            cite_from, cite_to, citation_json`;
-
 async function loadPlacement(env: Env, id: number): Promise<PlacementRow | null> {
   if (!Number.isInteger(id) || id <= 0) return null;
   return (await env.DB.prepare(
-    `SELECT ${PLACEMENT_COLUMNS} FROM validate_proposals WHERE id = ? AND run_id IS NOT NULL`,
+    `SELECT id, project_id, kind, payload_json, edited_payload_json, status, run_id, target_ref, session_id,
+            cite_from, cite_to, citation_json FROM validate_proposals WHERE id = ? AND run_id IS NOT NULL`,
   ).bind(id).first<PlacementRow>()) || null;
 }
 
@@ -433,7 +431,8 @@ structure.post('/sessions/:id/placements/accept', async (c) => {
     const ids = [...new Set(rawIds as number[])];
     if (ids.length > MAX_ACCEPT_ALL) return json({ error: 'too_many', detail: `Accept at most ${MAX_ACCEPT_ALL} placements at a time.` }, 400);
     rows = (await c.env.DB.prepare(
-      `SELECT ${PLACEMENT_COLUMNS} FROM validate_proposals
+      `SELECT id, project_id, kind, payload_json, edited_payload_json, status, run_id, target_ref, session_id,
+            cite_from, cite_to, citation_json FROM validate_proposals
         WHERE session_id = ? AND project_id = ? AND run_id IS NOT NULL AND id IN (${ids.map(() => '?').join(', ')}) ORDER BY id`,
     ).bind(session.id, session.project_id, ...ids).all<PlacementRow>()).results ?? [];
     const found = new Set(rows.map((r) => Number(r.id)));
@@ -441,7 +440,8 @@ structure.post('/sessions/:id/placements/accept', async (c) => {
   } else {
     if (!MODULES.some((m) => m.slug === slug)) return json({ error: 'unknown_module', detail: 'No such module.' }, 400);
     const pending = ((await c.env.DB.prepare(
-      `SELECT ${PLACEMENT_COLUMNS} FROM validate_proposals
+      `SELECT id, project_id, kind, payload_json, edited_payload_json, status, run_id, target_ref, session_id,
+            cite_from, cite_to, citation_json FROM validate_proposals
         WHERE session_id = ? AND project_id = ? AND run_id IS NOT NULL AND status = 'pending' ORDER BY id`,
     ).bind(session.id, session.project_id).all<PlacementRow>()).results ?? []).filter((r) => {
       if (!isPlacementKind(r.kind)) return false;

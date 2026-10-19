@@ -111,7 +111,6 @@
     "ph @ services/matchingVectors.ts": 2,
     "ph @ services/signals/engine.ts": 2,
     "kinds.map(() => '?').join(',') @ services/aiCredits.ts": 1,
-    "PLACEMENT_COLUMNS @ routes/founder_validate_structure.ts": 3,
     "PURCHASE_SELECT @ services/aiCredits.ts": 3,
     "placeholders @ models/jobs.ts": 1,
     "where @ services/aiCredits.ts": 1,
