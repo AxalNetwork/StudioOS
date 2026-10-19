@@ -188,7 +188,9 @@ test('D261: the bypass retry after a gateway failure still carries no gateway op
   assert.equal(r.ok, true);
   assert.equal(ai.calls.length, 2);
   assert.deepEqual(ai.calls[0].options?.gateway?.metadata, { branch: 'fr', account: 'fr:7', task: 'advisor_turn' });
-  assert.equal(ai.calls[1].options, undefined, 'the un-gatewayed retry sent an options object');
+  // D761: the retry carries the session-affinity header, and still no gateway.
+  assert.equal(ai.calls[1].options?.gateway, undefined, 'the un-gatewayed retry sent a gateway option');
+  assert.deepEqual((ai.calls[1].options as any)?.extraHeaders, { 'x-session-affinity': 'u7:advisor_turn' });
 });
 
 test('D261: onboarding_chat is unchanged — no gateway option and so no metadata, on a branch with a slug set', async () => {
@@ -196,14 +198,14 @@ test('D261: onboarding_chat is unchanged — no gateway option and so no metadat
   const ai = makeAI(ok);
   await run(envWith(ai, makeKV(), makeDB(), FR), { task: 'onboarding_chat', userId: 42, messages: ask });
   assert.equal(ai.calls.length, 1);
-  assert.equal(ai.calls[0].options, undefined);
+  assert.equal(ai.calls[0].options?.gateway, undefined);
 });
 
 test('D261: with no slug set, a gatewayed task class sends no option, so no metadata', async () => {
   __resetForTest();
   const ai = makeAI(ok);
   await run(envWith(ai, makeKV(), makeDB(), { BRANCH_CODE: 'fr' }), { task: 'advisor_explain', userId: 42, messages: ask });
-  assert.equal(ai.calls[0].options, undefined);
+  assert.equal(ai.calls[0].options?.gateway, undefined);
 });
 
 test('D261: every gatewayed call carries at most five keys, none reserved (cf.*), in the exported order', async () => {

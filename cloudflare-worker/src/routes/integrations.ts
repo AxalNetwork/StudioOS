@@ -35,6 +35,7 @@ import {
   CATEGORY_ORDER,
   FIRST_PARTY_CARDS,
   directoryKeyFor,
+  channelPage,
   type PageDescriptor,
   type IntegrationRow,
   audienceFor,
@@ -59,7 +60,7 @@ import { activeCompanyFor } from '../middleware/activeCompany';
 import { companyEnabled, enabledCompanyIds, projectEnabled, writesProjectData } from '../integrations/companyScope';
 import { hasScopeOverreach, validateConnectorSettings } from '../integrations/connectorRules';
 import { fedCounts } from '../integrations/fed';
-import { accessToken, accessibleRepositories, checkChoice, grantedPermissions, readProgress } from '../integrations/providers/github';
+import { accessToken, accessibleRepositories, checkChoice, grantedPermissions, githubInstallUrl, readProgress } from '../integrations/providers/github';
 
 const integrations = new Hono<{ Bindings: Env }>();
 
@@ -424,6 +425,9 @@ integrations.get('/directory/:key', async (c) => {
     if (!page) return c.json({ error: 'unknown_provider' }, 404);
     return c.json({ ok: true, connector: { ...linkedinCard(viewer), ...pageBody(page) } });
   }
+  // D753 C1 (#1974): WhatsApp and Telegram are channel pages, not registry rows.
+  const channel = channelPage(k.key);
+  if (channel) return c.json({ ok: true, connector: { key: k.key, ...pageFields(channel), ...pageBody(channel) } });
   const p = getDescriptor(k.key);
   if (!p || audienceOf(c, user, p) === 'none') return c.json({ error: 'unknown_provider' }, 404);
   const page = pageDescriptor(p, viewer);
@@ -862,6 +866,8 @@ integrations.get('/:uid/repositories', async (c) => {
     return c.json({
       ok: true,
       available: await accessibleRepositories(token, granted.installations),
+      needs_install: granted.installations.length === 0,
+      install_url: githubInstallUrl(c.env),
       selected: Array.isArray(cfg.repositories) ? cfg.repositories : [],
       project_id: cfg.project_id ?? null,
     });
