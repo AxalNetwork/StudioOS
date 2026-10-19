@@ -4,19 +4,6 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
-## Telegram's consent in Record a Session, the inbox and the session page (D756, #1981, part 1)
-
-- A Telegram chat shows its consent as "Not asked yet", "Asked at <time>",
-  "YES at <time>", "NO" or "Stopped". "Ask for consent in Telegram" calls the
-  consent-request route (a pending chat may be asked); Start waits for the
-  interviewee's YES, and there is no "already agreed" (ruling 6).
-- Without the bot's reply right, or more than 24 hours after the person last
-  wrote, the reason is shown and "Copy the notice" puts the Worker's
-  `notice_text` on the clipboard; the frontend writes no notice of its own.
-- Customer research's `chat_reply` reads "Agreed in the chat"
-  (`services/records/validate.ts`).
-- Notes as recordings (labels, refusals, playback) follow #1978.
-
 ## Consent in Record a Session, the inbox and the session page (D754, #1980, part 1)
 
 - Record a Session › Text chat › WhatsApp: a chat that waits for consent
@@ -30,20 +17,6 @@
   member's word once Axal's notice was delivered. Rules in
   `frontend/src/pages/founder/chatConsent.js`. Telegram is unchanged.
 - The voice-note parts (the keep-by line, playback) follow #1935.
-
-## Consent in the Telegram chat before a note is fetched (D756, #1977)
-
-- Telegram's interviewee is asked through D754's consent store: from Axal
-  (`POST /api/channels/threads/:uid/consent-request`, the notice from the
-  member's business connection, with the reply right and inside the window),
-  or by the member pasting the notice into the chat themselves.
-- A YES, NO or STOP counts only from the chat's own user (never the owner, an
-  offline auto-reply or a business bot), as a reply to the notice or the
-  contact's first message after it, within 7 days. It is also kept as chat
-  text, and the bot confirms it in one line when it may reply.
-- No voice note of a Telegram chat is downloaded before its YES; a NO keeps
-  the notes held, and a STOP stops new downloads. Its text keeps D684's rule,
-  and no member's word is taken for Telegram. No migration.
 
 ## Consent before anything from a WhatsApp chat is kept (D754, #1893)
 
