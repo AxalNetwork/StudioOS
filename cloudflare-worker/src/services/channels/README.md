@@ -85,6 +85,22 @@ real-device check, rotation and the off switch are in
 - A provider capability Axal cannot use (Telegram calls, WhatsApp Calling
   before its gates are met) is stated as unavailable, never simulated.
 
+## The engine hand-off (D757)
+
+Every source here ends in the Validate engine's one entry, `enqueueDigest`
+(`../validateEngine.ts`), through `enqueueSessionStructure`
+(`../sessionAutoStructure.ts`):
+
+- an imported call, Zoom or Meet, from `meetings.ts` (`call_imported`);
+- a chat assigned to an interview, from `threads.ts` (`chat_assigned`);
+- a chat that has gone quiet, from the sweep in `../sessionAutoStructure.ts`
+  (`chat_quiet`).
+
+**No adapter calls a model.** Nothing in this folder imports the AI router or
+reaches the Workers AI binding: the engine writes the summary and the pending
+suggestions, metered as the member, and the founder accepts each one. A new
+adapter hands its session to `enqueueSessionStructure` and stops there.
+
 ## Calls
 
 Neither messaging channel brings calls into an interview in this phase, and
