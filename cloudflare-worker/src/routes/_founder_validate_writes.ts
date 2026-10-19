@@ -166,11 +166,8 @@ export async function upsertPainAlias(
  */
 export type PainsGuard = { interviewId: number; projectId: number; painsJson: string | null };
 
-const PAINS_GUARD_SQL =
-  'EXISTS (SELECT 1 FROM discovery_interviews WHERE id = ? AND project_id = ? AND pains_json IS ?)';
-
 /**
- * The alias upsert as one statement. The `pain_groups` join keeps the tenancy
+ * The alias upsert as one statement. The `pain_groups` check keeps the tenancy
  * rule inside the statement: a group that is not `projectId`'s writes nothing.
  * Null for an empty phrase.
  */
@@ -181,18 +178,29 @@ export function upsertPainAliasStatement(
   const norm = normPhrase(display);
   if (!display || !norm) return null;
   const now = new Date().toISOString();
-  const binds: unknown[] = [projectId, norm, display, now, now, groupId, projectId];
-  if (guard) binds.push(guard.interviewId, guard.projectId, guard.painsJson);
+  if (!guard) {
+    return env.DB.prepare(
+      `INSERT INTO pain_group_aliases
+         (project_id, group_id, phrase_norm, display_phrase, created_at, updated_at)
+       SELECT ?, ?, ?, ?, ?, ?
+        WHERE EXISTS (SELECT 1 FROM pain_groups WHERE id = ? AND project_id = ?)
+       ON CONFLICT(project_id, phrase_norm)
+         DO UPDATE SET group_id = excluded.group_id,
+                       display_phrase = excluded.display_phrase,
+                       updated_at = excluded.updated_at`,
+    ).bind(projectId, groupId, norm, display, now, now, groupId, projectId);
+  }
   return env.DB.prepare(
     `INSERT INTO pain_group_aliases
        (project_id, group_id, phrase_norm, display_phrase, created_at, updated_at)
-     SELECT ?, g.id, ?, ?, ?, ?
-       FROM pain_groups g WHERE g.id = ? AND g.project_id = ?${guard ? ` AND ${PAINS_GUARD_SQL}` : ''}
+     SELECT ?, ?, ?, ?, ?, ?
+      WHERE EXISTS (SELECT 1 FROM pain_groups WHERE id = ? AND project_id = ?)
+        AND EXISTS (SELECT 1 FROM discovery_interviews WHERE id = ? AND project_id = ? AND pains_json IS ?)
      ON CONFLICT(project_id, phrase_norm)
        DO UPDATE SET group_id = excluded.group_id,
                      display_phrase = excluded.display_phrase,
                      updated_at = excluded.updated_at`,
-  ).bind(...binds);
+  ).bind(projectId, groupId, norm, display, now, now, groupId, projectId, guard.interviewId, guard.projectId, guard.painsJson);
 }
 
 // ---------------------------------------------------------------------------
@@ -237,7 +245,8 @@ export function upsertPainSeverityStatement(
   }
   return env.DB.prepare(
     `INSERT INTO interview_pain_severities (interview_id, phrase_norm, severity)
-     SELECT ?, ?, ? WHERE ${PAINS_GUARD_SQL}
+     SELECT ?, ?, ?
+      WHERE EXISTS (SELECT 1 FROM discovery_interviews WHERE id = ? AND project_id = ? AND pains_json IS ?)
      ON CONFLICT(interview_id, phrase_norm)
      DO UPDATE SET severity = excluded.severity, updated_at = datetime('now')`,
   ).bind(interviewId, phraseNorm, severity, guard.interviewId, guard.projectId, guard.painsJson);
