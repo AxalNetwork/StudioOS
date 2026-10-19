@@ -17,13 +17,18 @@ import type { Env } from '../types';
 import { stripeCall } from '../routes/billing';
 import { bindingKey } from '../util/schemaBootstrap';
 
-export type ProductKind = 'subscription' | 'incorporation' | 'session' | 'alacarte';
+// D755 §3: `token_pack` names a token pack's product. Which prices are packs is
+// D1's `ai_token_packs`, never this kind or any other Stripe metadata; the kind
+// only lets kind lists tell packs apart. Packs are made on HQ, never through the
+// generic catalog writes (routes/catalog.ts refuses them).
+export type ProductKind = 'subscription' | 'incorporation' | 'session' | 'alacarte' | 'token_pack';
 
 export const PRODUCT_KINDS: ReadonlySet<ProductKind> = new Set<ProductKind>([
   'subscription',
   'incorporation',
   'session',
   'alacarte',
+  'token_pack',
 ]);
 
 export function isProductKind(v: unknown): v is ProductKind {
@@ -761,15 +766,19 @@ interface StripeProductRawResp {
   metadata: Record<string, string>;
 }
 
-/** Create a Stripe Product, then re-sync the D1 mirror. */
-export async function createProduct(env: Env, body: CreateProductBody): Promise<CatalogProduct> {
+/**
+ * Create a Stripe Product, then re-sync the D1 mirror. `idempotencyKey` (D755)
+ * is sent as Stripe's Idempotency-Key, so a retried create returns the same
+ * product; existing callers pass none.
+ */
+export async function createProduct(env: Env, body: CreateProductBody, opts: { idempotencyKey?: string } = {}): Promise<CatalogProduct> {
   const form: Record<string, string> = {
     name: body.name.trim(),
     ...metadataParams(body.metadata),
   };
   if (body.description) form.description = body.description;
 
-  const prod = await stripeCall<StripeProductRawResp>(env, '/products', form);
+  const prod = await stripeCall<StripeProductRawResp>(env, '/products', form, { idempotencyKey: opts.idempotencyKey });
   await syncCatalog(env);
 
   // Return the freshly synced mirror row (carries derived prices = [] initially).
@@ -805,11 +814,12 @@ export async function archiveProduct(env: Env, id: string): Promise<void> {
   await syncCatalog(env);
 }
 
-/** Create a Stripe Price on an existing Product, then re-sync. */
+/** Create a Stripe Price on an existing Product, then re-sync. `idempotencyKey` as for createProduct. */
 export async function createPrice(
   env: Env,
   productId: string,
   body: CreatePriceBody,
+  opts: { idempotencyKey?: string } = {},
 ): Promise<CatalogPrice> {
   const form: Record<string, string> = {
     product: productId,
@@ -832,7 +842,7 @@ export async function createPrice(
     nickname: string | null;
     active: boolean;
   }
-  const price = await stripeCall<StripePriceResp>(env, '/prices', form);
+  const price = await stripeCall<StripePriceResp>(env, '/prices', form, { idempotencyKey: opts.idempotencyKey });
   await syncCatalog(env);
   return {
     id: price.id,
