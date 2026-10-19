@@ -17,7 +17,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { hashEmail } from '../util/hashEmail';
-import { createAndSendEnvelope, templateBodyRefusal } from './esign';
+import { createAndSendEnvelope, templateBodyRefusal, UnfilledFieldsError } from './esign';
 import { refuse } from '../util/refusal';
 import {
   buildProposals, ALL_PARTNER_DEAL_TYPES,
@@ -303,6 +303,10 @@ onboard.post('/:token/select', async (c) => {
 
 // ---------- POST /:token/finalize ----------
 
+// D758 (#1863) — the Partner Services row still holds a field this route
+// cannot fill. PartnerOnboardPage prints the Worker's message.
+const AGREEMENT_NOT_READY = 'This agreement is not ready to send yet: Axal VC still has to complete it. Nothing was sent, and the proposal you chose is kept.';
+
 onboard.post('/:token/finalize', async (c) => {
   const inv = await loadInvitation(c.env, c.req.param('token'));
   const gate = gateInvitation(inv);
@@ -335,10 +339,14 @@ onboard.post('/:token/finalize', async (c) => {
       recipientUserId: null,
       recipientEmail: gate.inv.recipient_email,
       recipientName: profile?.full_name || gate.inv.recipient_name || gate.inv.recipient_email,
-      documentType: 'partner_msa_v1',
+      // D758 — the Partner Services row is the agreement; partner_msa_v2.md is
+      // only its fallback while the row has no body.
+      documentType: 'partner_services',
       // Required: partitions the createAndSendEnvelope dedupe key so two
-      // different partner invitations don't collide on (partner_msa_v1, user_id=null).
+      // different partner invitations don't collide on (partner_services, user_id=null).
       dealId: deal.id,
+      // A field this route cannot fill is refused, never signed blank.
+      refuseUnfilled: true,
       appUrl: c.env.APP_URL || 'https://axal.vc',
       mergeFields: {
         partner_name: profile?.full_name || gate.inv.recipient_name || gate.inv.recipient_email,
@@ -349,8 +357,13 @@ onboard.post('/:token/finalize', async (c) => {
       },
     });
   } catch (e) {
-    // D758 — no body in the library (or an unreadable store): nothing was
-    // sent, so the deal and the invitation are not updated.
+    // D758 — no body in the library (or an unreadable store), or a field the
+    // row needs that no partner record holds: nothing was sent, so the deal
+    // and the invitation are not updated. The audit names the fields only.
+    if (e instanceof UnfilledFieldsError) {
+      await audit(c.env, gate.inv, 'partner_envelope_refused', { code: 'template_fields_unfilled', fields: e.fields });
+      return refuse(c, 409, { code: 'template_fields_unfilled', message: AGREEMENT_NOT_READY });
+    }
     const r = templateBodyRefusal(e, 'member');
     if (r) return refuse(c, r.status, { code: r.code, message: r.message });
     throw e;
