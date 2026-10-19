@@ -41,7 +41,7 @@ import {
   writeSegment,
 } from '../services/validateWriters';
 import { budgetRefusalMessage } from '../services/aiRouter';
-import { consentBlocks, loadSession, type SessionRow } from '../services/interviewSessions';
+import { consentBlocks, loadSession, sessionHasAudio, type SessionRow } from '../services/interviewSessions';
 import {
   PLACEMENT_KINDS,
   alignRuns,
@@ -362,15 +362,18 @@ export function modelFrom(v: unknown): { model: string | undefined } | { refused
 
 /** #1470's rule, the same 409 its start, resume and live routes give: no consent, no AI over the recording. */
 // D685: shared with the summary route and the processing job.
-export function consentRefusal(session: SessionRow) {
-  const blocked = consentBlocks(session.channel, session.consent_status);
+// D754 (#1893): it also refuses a session holding audio, and a chat waiting for the interviewee's consent.
+export async function consentRefusal(env: Env, session: SessionRow) {
+  const blocked = consentBlocks(session.channel, session.consent_status, {
+    hasAudio: await sessionHasAudio(env, session.id), submittedVia: session.submitted_via ?? null,
+  });
   return blocked ? json(blocked, 409) : null;
 }
 
 structure.post('/sessions/:id/structure', async (c) => {
   const s = await scopeSession(c);
   if (s instanceof Response) return s;
-  const blocked = consentRefusal(s.session);
+  const blocked = await consentRefusal(c.env, s.session);
   if (blocked) return blocked;
   // D685 §5.9 — never two writers: the pipeline places findings itself.
   const busy = processingBusy(s.session);
@@ -476,7 +479,7 @@ structure.get('/sessions/:id/placements', async (c) => {
 structure.post('/sessions/:id/ask', async (c) => {
   const s = await scopeSession(c);
   if (s instanceof Response) return s;
-  const blocked = consentRefusal(s.session);
+  const blocked = await consentRefusal(c.env, s.session);
   if (blocked) return blocked;
   const body = await c.req.json<{ question?: string; model?: string }>().catch(() => ({} as { question?: string; model?: string }));
   const picked = modelFrom(body?.model);

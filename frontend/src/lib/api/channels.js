@@ -11,7 +11,9 @@
 //   test             POST   /channels/:provider/test
 //   threads          GET    /channels/threads?status=      → { items: ThreadView[] }
 //   thread           GET    /channels/threads/:uid         → { thread, messages }
-//   assign           POST   /channels/threads/:uid/assign  { interview_id } | { create: { interviewee_name, interviewee_company?, project_id } }, quote_consent?
+//   assign           POST   /channels/threads/:uid/assign  { interview_id } | { create: { interviewee_name, interviewee_company?, project_id } }, quote_consent?, consent?
+//   requestConsent   POST   /channels/threads/:uid/consent-request  Axal's consent notice in the chat (D754 §5) → { ok, consent }
+//   attestConsent    POST   /channels/threads/:uid/consent  { method }: the member's word, once the notice was delivered (D754 §4)
 //   ignore           POST   /channels/threads/:uid/ignore  { ignored }
 //   reply            POST   /channels/threads/:uid/reply   { text, client_key }
 //   retryVoice       POST   /channels/threads/:uid/voice/:message/retry  a voice note that was not transcribed, again (#1586) → { ok, queued }
@@ -29,6 +31,13 @@ const enc = encodeURIComponent;
 const PROVIDERS = new Set(['telegram', 'whatsapp', 'zoom', 'google_meet']);
 const THREAD_STATUSES = new Set(['pending', 'assigned', 'ignored']);
 const MEETING_PROVIDERS = new Set(['zoom', 'google_meet']);
+/** D754: how a member says the interviewee agreed — the recorder's methods without `in_app`. */
+export const MEMBER_CONSENT_METHODS = ['verbal', 'written', 'pre_agreed'];
+
+function memberMethod(m) {
+  if (!MEMBER_CONSENT_METHODS.includes(m)) throw new Error(`Unknown consent method: ${m}`);
+  return m;
+}
 
 function provider(p) {
   if (!PROVIDERS.has(p)) throw new Error(`Unknown channel provider: ${p}`);
@@ -45,7 +54,7 @@ function threadsQuery(status) {
 /**
  * The assignment body: an interview the member already has, or one made from
  * this chat (with Who's company, D685 §5.3). Quote consent (§5.1.4) is sent
- * only as the literal true.
+ * only as the literal true. `consent` (D754) is `{ ask: true }` or `{ method }`.
  */
 function assignBody(target) {
   const body = target && target.create
@@ -57,6 +66,9 @@ function assignBody(target) {
     } }
     : { interview_id: Number(target?.interview_id) };
   if (target?.quote_consent === true) body.quote_consent = true;
+  // D754: ask in the chat once linked, or the member's word.
+  if (target?.consent?.ask === true) body.consent = { ask: true };
+  else if (target?.consent?.method) body.consent = { method: memberMethod(target.consent.method) };
   return body;
 }
 
@@ -77,6 +89,10 @@ export const channelsApi = {
   }),
   ignore: (uid, ignored = true) => request(`/channels/threads/${enc(uid)}/ignore`, {
     method: 'POST', body: JSON.stringify({ ignored: !!ignored }),
+  }),
+  requestConsent: (uid) => request(`/channels/threads/${enc(uid)}/consent-request`, { method: 'POST', body: JSON.stringify({}) }),
+  attestConsent: (uid, method) => request(`/channels/threads/${enc(uid)}/consent`, {
+    method: 'POST', body: JSON.stringify({ method: memberMethod(method) }),
   }),
   reply: (uid, text, clientKey) => request(`/channels/threads/${enc(uid)}/reply`, {
     method: 'POST', body: JSON.stringify({ text, client_key: clientKey }),
