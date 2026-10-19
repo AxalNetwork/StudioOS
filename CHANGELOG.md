@@ -4,6 +4,23 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## WhatsApp's page says where WhatsApp stands, in every D754 state (D754 f1, #1959)
+
+- `/account/connectors/whatsapp` draws `WhatsAppPageBody` (`ChannelsGroup.jsx`)
+  in the connector page frame: "Your business number" in each of D754 §11's
+  way-A states (`whatsappPageState`, `channelsModel.js`). These are: not
+  available yet, off with a connection kept, sign-up not configured, not
+  connected, connected (number, chats waiting, Test, Disconnect) and needs
+  attention, each with the calls line.
+- A Super Admin also sees "Only Super Admins can connect while WhatsApp is in
+  canary." and the missing secret names, in the page's notice region. A member
+  never does, and has no Connect in canary.
+- Connect opens Meta's popup (`useWhatsAppSignup`, shared with the hub card)
+  and never redirects; the band's action is the same Connect.
+- `readOverview` keeps `rollout` (#1950) and WhatsApp's own `missing` names.
+  Every other provider's are still dropped.
+- Frontend only.
+
 ## WhatsApp Business and Telegram Business get their own pages (D753 C1, #1958)
 
 - Worker: `CHANNEL_PAGES` in `connectorPages.ts` describes both channels, with
