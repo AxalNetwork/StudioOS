@@ -103,6 +103,7 @@
 import { Hono, type Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth, requireSuperAdmin, isSuperAdmin } from '../auth';
+import { canHoldValidateSource } from './_founder_validate_helpers';
 import { refuse } from '../util/refusal';
 import { run as aiRun, audioMinutesFromBytes } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
@@ -254,6 +255,16 @@ function member(handler: (c: C, user: User) => Promise<Response>) {
   };
 }
 
+/**
+ * D757 §2.11: every channel here (Telegram, WhatsApp, Zoom, Meet transcripts)
+ * is a Validate source, listed and connectable only by a member who can hold a
+ * venture. Anyone else is answered as if the channel did not exist. An
+ * existing connection keeps Disconnect, its test and its threads.
+ */
+function venture(handler: (c: C, user: User) => Promise<Response>) {
+  return member(async (c, user) => (canHoldValidateSource(user) ? handler(c, user) : no(c, 404, 'unknown_provider')));
+}
+
 const parseJson = (s: string | null): Record<string, unknown> => {
   if (!s) return {};
   try { const v = JSON.parse(s); return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; } catch { return {}; }
@@ -267,7 +278,8 @@ channels.get('/', member(async (c, user) => {
   const env = c.env;
   // Secret NAMES help an admin set a deployment up; a member learns only "not available".
   const admin = String(user.role ?? '').toLowerCase() === 'admin';
-  const providers = availability(env).map((a) => {
+  // D757 §2.11: no channel is offered to a member who cannot hold a venture.
+  const providers = (canHoldValidateSource(user) ? availability(env) : []).map((a) => {
     const chat = a.provider === 'whatsapp' || a.provider === 'telegram';
     const available = a.available && (!chat || channelOpenTo(env, a.provider as MessagingProvider, user));
     return {
@@ -320,7 +332,7 @@ channels.get('/', member(async (c, user) => {
   return c.json({ providers, connections, pending, telegram_link: await pendingLinkView(env, user.id) });
 }));
 
-channels.post('/telegram/link', member(async (c, user) => {
+channels.post('/telegram/link', venture(async (c, user) => {
   if (!providerAvailable(c.env, 'telegram') || !channelOpenTo(c.env, 'telegram', user)) return no(c, 503, 'not_available');
   const ip = c.req.header('cf-connecting-ip') || (c.req.header('x-forwarded-for') || '').split(',')[0].trim() || 'unknown';
   await activeMember(c.env, user.id);
@@ -333,12 +345,12 @@ channels.post('/telegram/link', member(async (c, user) => {
 }));
 
 
-channels.get('/telegram/link', member(async (c, user) => {
+channels.get('/telegram/link', venture(async (c, user) => {
   await activeMember(c.env, user.id);
   return c.json({ claim: await pendingLinkView(c.env, user.id) });
 }));
 
-channels.post('/telegram/link/:uid/confirm', member(async (c, user) => {
+channels.post('/telegram/link/:uid/confirm', venture(async (c, user) => {
   const out = await telegram.confirmAxalTelegramLink(c.env, user.id, c.req.param('uid') ?? '');
   if (!out.linked && out.reason === 'member_inactive') return no(c, 403, 'member_inactive');
   if (!out.linked && out.reason === 'identity_taken') return no(c, 409, 'identity_taken');
@@ -350,7 +362,7 @@ channels.post('/telegram/link/:uid/confirm', member(async (c, user) => {
 // Codes per member per hour are counted on a hashed subject (events.ts).
 const WA_LINK_CODES_PER_HOUR = 10;
 
-channels.post('/whatsapp/link', member(async (c, user) => {
+channels.post('/whatsapp/link', venture(async (c, user) => {
   if (!waLink.axalNumberReady(c.env) || !channelOpenTo(c.env, 'whatsapp', user)) return no(c, 503, 'not_available');
   await activeMember(c.env, user.id);
   try {
@@ -360,13 +372,13 @@ channels.post('/whatsapp/link', member(async (c, user) => {
   return c.json({ code, wa_link: waLink.waLink(c.env, code), expires_at: expiresAt });
 }));
 
-channels.get('/whatsapp/link', member(async (c, user) => {
+channels.get('/whatsapp/link', venture(async (c, user) => {
   if (!waLink.axalNumberReady(c.env)) return no(c, 503, 'not_available');
   await activeMember(c.env, user.id);
   return c.json(await waLink.whatsappLinkView(c.env, user.id));
 }));
 
-channels.post('/whatsapp/link/:uid/confirm', member(async (c, user) => {
+channels.post('/whatsapp/link/:uid/confirm', venture(async (c, user) => {
   if (!waLink.axalNumberReady(c.env) || !channelOpenTo(c.env, 'whatsapp', user)) return no(c, 503, 'not_available');
   await waLink.confirmWhatsAppLink(c.env, user.id, c.req.param('uid') ?? '');
   return c.json({ ok: true, linked: true, ...(await waLink.whatsappLinkView(c.env, user.id)) });
@@ -396,7 +408,7 @@ channels.post('/whatsapp/captures/:uid/consent', member(async (c, user) => {
   return c.json({ ok: true, status: 'consented' });
 }));
 
-channels.post('/whatsapp/connect', member(async (c, user) => {
+channels.post('/whatsapp/connect', venture(async (c, user) => {
   if (!providerAvailable(c.env, 'whatsapp') || !channelOpenTo(c.env, 'whatsapp', user)) return no(c, 503, 'not_available');
   const body = await c.req.json<Record<string, unknown>>().catch(() => ({} as Record<string, unknown>));
   const code = typeof body.code === 'string' ? body.code.trim() : '';

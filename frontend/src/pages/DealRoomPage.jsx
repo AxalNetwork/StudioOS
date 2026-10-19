@@ -16,6 +16,7 @@ import DealInvitationsTab from '../components/deals/DealInvitationsTab';
 import DealTransfersTab from '../components/deals/DealTransfersTab';
 import DealReferencesTab from '../components/deals/DealReferencesTab';
 import DealSyndicates from '../components/deals/DealSyndicates';
+import MercuryMatch from '../components/MercuryMatch';
 import {
   ArrowLeft, Download, FileText, Loader2, X, DollarSign, Send, Check,
   Users, Clock, ThumbsUp, ThumbsDown,
@@ -174,7 +175,7 @@ export default function DealRoomPage() {
         </>
       )}
       {tab === 'Documents' && <DocumentsTab dealId={deal.id} />}
-      {tab === 'Commitments' && <CommitmentsTab key={proofKey} dealId={deal.id} proof={isAdmin && !branchOfUser(user)} user={user} onShare={openProof} />}
+      {tab === 'Commitments' && <CommitmentsTab key={proofKey} dealId={deal.id} proof={isAdmin && !branchOfUser(user)} user={user} onShare={openProof} founderMatch={isDealFounder(role, user, deal)} />}
       {tab === 'Activity' && <ActivityTab dealId={deal.id} />}
       {tab === 'Invitations' && tabs.includes('Invitations') && (
         <DealInvitationsTab dealId={deal.id} onInvite={canInvite ? () => setInviteOpen(true) : undefined} />
@@ -290,11 +291,24 @@ function DocumentsTab({ dealId }) {
   );
 }
 
+/**
+ * D752 (#1989): the deal's own founder, the only viewer offered "Match to my
+ * Mercury" on its commitments. An investor, an admin or a partner sees each
+ * commitment's status only, never the bank line behind it.
+ */
+export function isDealFounder(role, user, deal) {
+  return role === 'founder' && user?.founder_id != null && deal?.project_founder_id != null
+    && Number(user.founder_id) === Number(deal.project_founder_id);
+}
+
+/** D752: a pending commitment can be matched; a confirmed one keeps its door so the founder can withdraw. */
+export const COMMITMENT_MATCH_STATUSES = Object.freeze(['pending', 'confirmed']);
+
 // D752 (#1890): an admin on HQ (`proof`) also reads each commitment's shared
 // proof of funds, once, after the commitments load: an audited request that
 // counts a view. It comes from its own route, never from `dealCommitments`,
 // which other invited investors read. Every other viewer makes no proof read.
-export function CommitmentsTab({ dealId, proof = false, user = null, onShare }) {
+export function CommitmentsTab({ dealId, proof = false, user = null, onShare, founderMatch = false }) {
   // D752 (#1891): an investor on HQ sees a door on their own row only.
   const own = useProofTargets({ enabled: showsProof(user) });
   const [items, setItems] = useState(null);
@@ -343,6 +357,9 @@ export function CommitmentsTab({ dealId, proof = false, user = null, onShare }) 
           <div className="flex-none text-right">
             <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{fmtMoney(c.amount)}</div>
             <div className="text-xs text-gray-500 capitalize">{c.status}</div>
+            {founderMatch && COMMITMENT_MATCH_STATUSES.includes(c.status) && (
+              <div className="mt-1"><MercuryMatch target="commitment" targetId={c.id} matched={c.status === 'confirmed' ? {} : null} onChanged={load} /></div>
+            )}
             {own.status === 'ready' && <ProofDoor target={ownDealTarget(own.read, c, user)} onShare={(t) => onShare?.(t, own.read)} />}
           </div>
         </div>

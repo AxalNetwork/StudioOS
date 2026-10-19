@@ -56,6 +56,8 @@ import { consentRefusal, finalSegments, modelFrom, processingBusy, refusedBody, 
 import { digestSession, enqueueDigest, withdrawDigest } from '../services/validateEngine';
 import { activeSessionsOf } from '../services/sessionSweeper';
 import { interviewCapRefusal } from '../middleware/requireTier';
+import { logCycleWriteStatement } from '../services/cycleActivity';
+import { QUOTE_WITHHELD } from '../services/cycleValidate';
 import { mintDownloadToken } from '../services/signedDownload';
 import { consentForSession } from '../services/channels/consent';
 
@@ -376,6 +378,8 @@ sessions.get('/sessions/:id', async (c) => {
       .bind(s.session.id).all(),
     listChunks(c.env, s.session.id),
   ]);
+  const quoteConsent = await c.env.DB.prepare('SELECT quote_consent FROM discovery_interviews WHERE id = ?')
+    .bind(s.session.interview_id).first() as { quote_consent: number | null } | null;
   return json({
     session: s.session,
     ...(await sessionExtras(c.env, s.session)),
@@ -383,10 +387,173 @@ sessions.get('/sessions/:id', async (c) => {
     channel_consent: await consentForSession(c.env, s.session.id),
     processing: processingOf(s.session),
     summary: summaryOf(s.session),
+    // D757 (#1924): this route admits writers only (scopeInterview), so it always reads the draft.
+    digest: await sessionDigest(c.env, s.session, { writer: true, quoteConsent: quoteConsent?.quote_consent === 1 }),
     segments: segments.results || [],
     marks: marks.results || [],
     chunks: chunks.map((ch) => ({ seq: ch.seq, size_bytes: ch.size_bytes, start_ms: ch.start_ms })),
   });
+});
+
+// ---------------------------------------------------------------------------
+// D757 (#1924) — the digest: read, Keep and Edit
+// ---------------------------------------------------------------------------
+
+/**
+ * The digest's typed sections, grouped from the proposals of the structure
+ * run beside it (`digest_run_id`), so the summary and the suggestions never
+ * disagree. Kinds D757's finding-kinds task adds are named here already, so
+ * they land in their section without a change to this read.
+ */
+export const DIGEST_SECTIONS: Record<string, (kind: string, payload: Record<string, unknown>) => boolean> = {
+  pain_points: (k) => k === 'pain_severity' || k === 'pain_point',
+  jobs_to_be_done: (k) => k === 'job_to_be_done',
+  objections: (k) => k === 'objection',
+  willingness_to_pay: (k, p) => k === 'willingness_to_pay' || k === 'budget'
+    || (k === 'demand_signal' && ['would_pay', 'loi', 'pre_sale'].includes(String(p.signal))),
+  competitors: (k) => k === 'competitor_mention' || k === 'alternative',
+  next_steps: (k) => k === 'next_step',
+};
+
+const parseObj = (raw: unknown): Record<string, any> | null => {
+  try { const v = raw ? JSON.parse(String(raw)) : null; return v && typeof v === 'object' && !Array.isArray(v) ? v : null; } catch { return null; }
+};
+
+/**
+ * The session's digest as a reader may see it. A writer sees the draft
+ * (`kept: false`) or the kept digest; every other reader allowed the
+ * transcript sees the kept digest only, or null. A quote is withheld from a
+ * reader who is not a writer unless the interviewee consented to be quoted
+ * (`QUOTE_WITHHELD`, as the Customer research record withholds it).
+ */
+export async function sessionDigest(env: Env, session: SessionRow, opts: { writer: boolean; quoteConsent: boolean }) {
+  const d = parseObj(session.digest_json);
+  if (!d) return null;
+  const kept = !!session.digest_kept_at;
+  if (!opts.writer && !kept) return null;
+  const quote = (q: unknown) => (opts.writer || opts.quoteConsent ? (typeof q === 'string' ? q : null) : QUOTE_WITHHELD);
+  const sections: Record<string, any[]> = Object.fromEntries(Object.keys(DIGEST_SECTIONS).map((k) => [k, []]));
+  const runId = session.digest_run_id ?? d.run_id ?? null;
+  if (runId) {
+    const rows = (await env.DB.prepare(
+      `SELECT id, kind, status, payload_json, edited_payload_json, citation_json FROM validate_proposals
+        WHERE session_id = ? AND run_id = ? ORDER BY id`,
+    ).bind(session.id, runId).all<any>()).results ?? [];
+    for (const r of rows) {
+      const payload = parseObj(r.edited_payload_json) ?? parseObj(r.payload_json) ?? {};
+      for (const [key, test] of Object.entries(DIGEST_SECTIONS)) {
+        if (!test(String(r.kind), payload)) continue;
+        sections[key].push({ proposal_id: r.id, kind: r.kind, status: r.status, payload, quote: quote(parseObj(r.citation_json)?.quote ?? null) });
+        break;
+      }
+    }
+  }
+  return {
+    kept,
+    kept_at: session.digest_kept_at ?? null,
+    kept_by: session.digest_kept_by ?? null,
+    model: d.model ?? null,
+    written_at: d.written_at ?? null,
+    parts: d.parts ?? null,
+    source: d.source ?? null,
+    overview: Array.isArray(d.overview) ? d.overview : [],
+    key_quotes: (Array.isArray(d.key_quotes) ? d.key_quotes : []).map((k: any) => ({ ...k, quote: quote(k?.quote) })),
+    decisions: Array.isArray(d.decisions) ? d.decisions : [],
+    next_steps: Array.isArray(d.next_steps) ? d.next_steps : [],
+    sections,
+  };
+}
+
+const MAX_DIGEST_TEXT = 400;
+const digestText = (v: unknown): string | null => {
+  const t = typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : '';
+  return t && t.length <= MAX_DIGEST_TEXT ? t : null;
+};
+
+async function keepDigest(env: Env, session: SessionRow, user: User, digestJson: string, action: 'interview_digest_kept' | 'interview_digest_edited', summary?: { text: string; citations: string }) {
+  await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE interview_sessions SET digest_json = ?, digest_kept_at = datetime('now'), digest_kept_by = ?,
+              summary = COALESCE(?, summary), summary_citations_json = COALESCE(?, summary_citations_json), updated_at = datetime('now')
+        WHERE id = ?`,
+    ).bind(digestJson, user.id, summary?.text ?? null, summary?.citations ?? null, session.id),
+    logCycleWriteStatement(env, {
+      projectId: session.project_id, userId: user.id, cycle: 'validate', module: 'customer-research',
+      entityId: session.interview_id, action,
+      summary: action === 'interview_digest_kept' ? `Interview ${session.interview_id} summary kept` : `Interview ${session.interview_id} summary edited and kept`,
+    }),
+  ]);
+}
+
+/** Keep the draft as it stands: a writer's own record from now on. */
+sessions.post('/sessions/:id/digest/keep', async (c) => {
+  const s = await scopeSession(c);
+  if (s instanceof Response) return s;
+  if (!parseObj(s.session.digest_json)) return json({ error: 'no_digest', detail: 'This session has no summary to keep yet.' }, 409);
+  await keepDigest(c.env, s.session, s.user, String(s.session.digest_json), 'interview_digest_kept');
+  const session = (await loadSession(c.env, s.session.id))!;
+  return json({ ok: true, digest: await sessionDigest(c.env, session, { writer: true, quoteConsent: false }) });
+});
+
+/**
+ * Edit, then keep. The overview's sentences and the next steps may be
+ * reworded or removed (`{ index, text }`, each index one the draft holds; a
+ * next step may also be added, without a citation). A key quote may only be
+ * removed: every quote sent must be one the digest already holds, word for
+ * word, or nothing is saved. Decisions are kept as written.
+ */
+sessions.patch('/sessions/:id/digest', async (c) => {
+  const s = await scopeSession(c);
+  if (s instanceof Response) return s;
+  const d = parseObj(s.session.digest_json);
+  if (!d) return json({ error: 'no_digest', detail: 'This session has no summary to edit yet.' }, 409);
+  const body = await c.req.json<any>().catch(() => ({}));
+  const bad = (detail: string) => json({ error: 'invalid_digest_edit', detail }, 400);
+  const next = { ...d };
+  const overview: any[] = Array.isArray(d.overview) ? d.overview : [];
+  if (body?.overview !== undefined) {
+    if (!Array.isArray(body.overview) || !body.overview.length) return bad('Keep at least one overview sentence.');
+    const out: any[] = [];
+    for (const item of body.overview) {
+      const at = Number(item?.index);
+      const text = digestText(item?.text);
+      if (!Number.isInteger(at) || !overview[at] || !text) return bad('Each overview sentence names one the summary holds, with 1 to 400 characters.');
+      out.push({ ...overview[at], text });
+    }
+    next.overview = out;
+  }
+  if (body?.next_steps !== undefined) {
+    const steps: any[] = Array.isArray(d.next_steps) ? d.next_steps : [];
+    if (!Array.isArray(body.next_steps)) return bad('next_steps is a list.');
+    const out: any[] = [];
+    for (const item of body.next_steps) {
+      const text = digestText(item?.text);
+      const who = item?.who === 'me' || item?.who === 'them' ? item.who : null;
+      if (!text) return bad('Each next step has 1 to 400 characters.');
+      if (item?.index === undefined || item?.index === null) { out.push({ text, who, cite: null }); continue; }
+      const at = Number(item.index);
+      if (!Number.isInteger(at) || !steps[at]) return bad('Each next step names one the summary holds, or none to add one.');
+      out.push({ ...steps[at], text, who });
+    }
+    next.next_steps = out;
+  }
+  if (body?.key_quotes !== undefined) {
+    const quotes: any[] = Array.isArray(d.key_quotes) ? d.key_quotes : [];
+    if (!Array.isArray(body.key_quotes)) return bad('key_quotes is a list.');
+    const out: any[] = [];
+    for (const q of body.key_quotes) {
+      const held = quotes.find((k) => typeof q === 'string' && k?.quote === q);
+      if (!held) return json({ error: 'quote_rewrite_refused', detail: 'A key quote can be removed, never rewritten. Nothing was saved.' }, 400);
+      if (!out.includes(held)) out.push(held);
+    }
+    next.key_quotes = out;
+  }
+  const sentences = (next.overview as any[]).map((o) => ({ text: o.text, cites: o.cite ? [o.cite] : [] }));
+  await keepDigest(c.env, s.session, s.user, JSON.stringify(next), 'interview_digest_edited', {
+    text: sentences.map((x) => x.text).join(' '), citations: JSON.stringify(sentences),
+  });
+  const session = (await loadSession(c.env, s.session.id))!;
+  return json({ ok: true, digest: await sessionDigest(c.env, session, { writer: true, quoteConsent: false }) });
 });
 
 /**

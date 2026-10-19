@@ -12,6 +12,7 @@ import { AssistantEntry } from './AssistantEntry';
 import { WhatsAppEntry, useWhatsAppLink } from '../account/WhatsAppWayB';
 import { SchedulePanel } from './InterviewChannels';
 import { assignedSentence, threadRow } from './channelThreads.js';
+import { recordSourceLine } from '../../lib/validateSourceWording.js';
 import { chatConsentBlock, chatConsentOf, consentChoices, consentLine, noticeBlocked, windowClosedSentence } from './chatConsent.js';
 import {
   CONSENTS, DURATIONS, MODES, NOT_STORED, PROVIDERS, SETUP_FIELDS, STAGE_WORD, assignTarget, callLabel, chipStatus, consentNote,
@@ -460,6 +461,7 @@ export default function RecordLightbox({
           <Radios label="How" options={modeOptions} value={mode} onChange={pickMode} testId="record-mode"
             className="grid grid-cols-2 gap-1.5 sm:grid-cols-4" style={tile} />
           <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400" data-testid="record-mode-note">{modeNote(mode, recorder ? recorder.canShareTab !== false : true)}</p>
+          {recordSourceLine(mode, provider) && <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400" data-testid="record-source-note">{recordSourceLine(mode, provider)}</p>}
           {chips.length > 0 && (
             <Radios label="Provider" testId="record-provider" value={provider} onChange={setProvider}
               options={chips.map((c) => { const st = chipStatus(mode, c, channels); return { value: c.value, label: `${c.label} · ${st.word}`, disabled: st.disabled, title: st.disabled ? 'Not available yet' : undefined,

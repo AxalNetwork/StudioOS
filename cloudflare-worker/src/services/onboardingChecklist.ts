@@ -88,7 +88,7 @@ export const CATALOG: Record<ChecklistRole, ChecklistItem[]> = {
     // /integrations addresses only redirect there.
     { key: 'ef.stripe',     label: 'Connect Stripe (verify MRR)',        route: connectorPagePath('stripe'), autoDetect: true },
     // D713: the key stays `ef.plaid` so saved progress survives. It says
-    // revenue, not cash: cash is not a permitted use of a personal Mercury.
+    // revenue, its first use; D752 adds spending (`venture_spend`).
     { key: 'ef.plaid',      label: 'Connect Mercury (verify revenue)',   route: connectorPagePath('mercury'), autoDetect: true },
     { key: 'ef.captable',   label: 'Connect or upload cap table',        route: '/build/captable',             autoDetect: true },
     { key: 'ef.financials', label: 'Populate financial model',           route: '/build/financials',           autoDetect: true },

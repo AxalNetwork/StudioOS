@@ -38,6 +38,10 @@ function fixture() {
   db.exec(migration('460_validate_record_stores.sql'));
   db.exec(migration('439_validate_proposals_structuring.sql'));
   db.exec(migration('446_interview_structure_receipts.sql'));
+  // D757 (#1925): "What it fed" reads a proposal's interview (246's
+  // `target_ref`), and the ICP, Market and Demand records read the findings store.
+  db.exec(migration('246_fills_the_blanks_everywhere.sql'));
+  db.exec(migration('489_interview_findings.sql'));
   db.exec(migration('228_research_company_directory.sql'));
   db.exec(migration('249_project_metrics.sql'));
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id, spinout_lab_active) VALUES (?, ?, ?, ?, 1, ?, ?)');
@@ -378,10 +382,11 @@ function seeded() {
 
 const RECORDS: Record<string, { a: string; b: string; main: string[]; side: string[] }> = {
   'problem-discovery': { a: '11', b: '22', main: ['Quotes', 'Hypotheses it feeds'], side: ['Segments'] },
-  'customer-research': { a: '1', b: '22', main: ['Transcript', 'Eadwyn’s placements'], side: ['What it fed', 'Cost', 'Session'] },
-  'ideal-customer-profile': { a: '3', b: '22', main: ['Five steps', 'Interviews scored against it'], side: ['Pain themes', 'Persona card'] },
-  'market-intelligence': { a: 'candidate1', b: 'candidate22', main: ['Signals', 'Positioning'], side: ['Research › Companies', 'Watching for'] },
-  'demand-signals': { a: 'signal-7', b: 'signal-22', main: ['Evidence', 'Feeds'], side: ['Who'] },
+  // D757 (#1924) adds Summary after the placements.
+  'customer-research': { a: '1', b: '22', main: ['Transcript', 'Eadwyn’s placements', 'Summary'], side: ['What it fed', 'Cost', 'Session'] },
+  'ideal-customer-profile': { a: '3', b: '22', main: ['Five steps', 'Interviews scored against it'], side: ['Pain themes', 'Persona card', 'From interviews'] },
+  'market-intelligence': { a: 'candidate1', b: 'candidate22', main: ['Signals', 'Positioning'], side: ['Research › Companies', 'Watching for', 'From interviews'] },
+  'demand-signals': { a: 'signal-7', b: 'signal-22', main: ['Evidence', 'Feeds'], side: ['Who', 'From the interview'] },
   experiments: { a: '5', b: '22', main: ['Evidence', 'Experiments'], side: ['Pain themes', 'What would prove this wrong'] },
 };
 const real = (db: DatabaseSync, who: number, method: string, path: string, body?: unknown) =>
@@ -435,7 +440,8 @@ test('#1692 test 4: a partner gets no session section, no withheld quote and no 
   const founder = await real(db, 10, 'GET', rec('customer-research', '1'));
   const partner = await real(db, 40, 'GET', rec('customer-research', '1'));
   assert.deepEqual(founder.body.side.map((s: any) => s.key), ['fed', 'cost', 'session']);
-  assert.deepEqual(partner.body.main, []);
+  // D757 (#1924): a partner sees the Summary section, empty until a writer keeps one.
+  assert.deepEqual(partner.body.main.map((s: any) => [s.key, s.rows.length, s.empty]), [['summary', 0, 'No summary kept yet.']]);
   assert.deepEqual(partner.body.side.map((s: any) => s.key), ['fed']);
   assert.deepEqual(partner.body.facts, founder.body.facts);
   assert.equal(JSON.stringify(partner.body).includes('We miss jobs'), false);

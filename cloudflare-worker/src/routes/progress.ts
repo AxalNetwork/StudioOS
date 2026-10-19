@@ -1969,6 +1969,15 @@ function serializeSnap(s: MetricsSnapshot): SerializedSnap {
   };
 }
 
+/**
+ * D691 (`services/growKpis.ts`): a typed figure is never stored under a
+ * connected source's name. D752: those names are `stripe` and `mercury`, each
+ * written only by its own import, compared trimmed and lower-cased.
+ */
+export const CONNECTED_METRIC_SOURCES = Object.freeze(['stripe', 'mercury']);
+export const isConnectedSource = (v: unknown): boolean =>
+  typeof v === 'string' && CONNECTED_METRIC_SOURCES.includes(v.trim().toLowerCase());
+
 function numOrNull(v: unknown): number | null {
   if (v == null || v === '') return null;
   // AN ARRAY OR AN OBJECT IS NEVER A NUMBER A CALLER MEANT, and `Number()`
@@ -2031,6 +2040,10 @@ progress.post('/metrics/:projectId', async (c) => {
   ensureCanEdit(project, user);
   await ensureProjectMetricsSchema(c.env);
   const body: Record<string, unknown> = await c.req.json().catch(() => ({}));
+  // D752: a typed snapshot cannot claim Stripe or Mercury.
+  if (isConnectedSource(body?.source)) {
+    return c.json({ detail: { code: 'source_reserved', message: 'Stripe and Mercury figures come only from their own imports. Save this one without a source and it is recorded as typed. Nothing was saved.' } }, 400);
+  }
   // D367 — THE DATE IS THE CALLER'S, NEVER TODAY BY DEFAULT. A snapshot's
   // date is the period its figures describe. Defaulting a missing one to
   // today stamped a period nobody chose (the Build desk sent none), so a
@@ -2093,8 +2106,8 @@ progress.put('/metrics/snapshot/:id', async (c) => {
   const id = Number(c.req.param('id'));
   if (!Number.isFinite(id)) return c.json({ detail: 'Invalid id' }, 400);
   await ensureProjectMetricsSchema(c.env);
-  const existing = await c.env.DB.prepare('SELECT id, project_id FROM project_metrics WHERE id = ?')
-    .bind(id).first<{ id: number; project_id: number }>();
+  const existing = await c.env.DB.prepare('SELECT id, project_id, source FROM project_metrics WHERE id = ?')
+    .bind(id).first<{ id: number; project_id: number; source: string | null }>();
   if (!existing) return c.json({ detail: 'Snapshot not found' }, 404);
   const project = await loadProject(c, existing.project_id, user);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
@@ -2116,6 +2129,12 @@ progress.put('/metrics/snapshot/:id', async (c) => {
     ['paying_accounts', body.paying_accounts !== undefined ? numOrNull(body.paying_accounts) : undefined],
     ['notes', body.notes !== undefined ? (body.notes ? String(body.notes).slice(0, 4000) : null) : undefined],
   ];
+  // D752: a Mercury row's date and figures are what the founder's Mercury read
+  // gave; only its notes change. Delete it and save again to correct it.
+  if (String(existing.source ?? '').trim().toLowerCase() === 'mercury'
+    && fields.some(([k, v]) => k !== 'notes' && v !== undefined)) {
+    return c.json({ detail: { code: 'mercury_figure_locked', message: 'This snapshot was read from your Mercury, so its date and figures cannot be edited. Delete it and save a new one. Nothing was changed.' } }, 409);
+  }
   const sets: string[] = [];
   const binds: unknown[] = [];
   for (const [k, v] of fields) {
