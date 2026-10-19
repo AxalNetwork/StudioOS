@@ -231,8 +231,10 @@ test('closing one option leaves another opened since, and outside the shell the 
     React.createElement(Probe, { seen }));
   const m = await mount(tree(true, false), '/validate');
   try {
+    assert.equal(last(seen).crumbs.record, 'A', 'with no page provider below, the shell names the option');
     await m.render(tree(true, true));
     assert.equal(last(seen).option, 'transcribe:interview');
+    assert.deepEqual(last(seen).crumbs, { section: 'Validate', module: null, record: 'Record a session' });
     await m.render(tree(false, true));
     assert.equal(last(seen).option, 'transcribe:interview', 'the first closing does not clear the second');
   } finally { await m.done(); }

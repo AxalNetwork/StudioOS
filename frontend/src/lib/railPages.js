@@ -423,23 +423,16 @@ const parsed = (route) => {
 
 /**
  * How well an entry's route answers the location, or -1. Every route segment must
- * match in order (a `:param` matches any one); a tab or an anchor in the
- * route must be the location's. More literal segments, then a tab or an
- * anchor, win.
+ * match in order; a tab or an anchor in the route must be the location's.
+ * More segments, then a tab or an anchor, win.
  */
 function score(entry, path, tab, hash) {
   const r = parsed(entry.route);
   if (r.segments.length > path.length || (entry.exact && r.segments.length !== path.length)) return -1;
-  let literal = 0;
-  for (let i = 0; i < r.segments.length; i += 1) {
-    const s = r.segments[i];
-    if (s.startsWith(':')) continue;
-    if (s !== path[i]) return -1;
-    literal += 1;
-  }
+  for (let i = 0; i < r.segments.length; i += 1) if (r.segments[i] !== path[i]) return -1;
   if (r.tab && r.tab !== tab) return -1;
   if (r.hash && r.hash !== hash) return -1;
-  return literal * 10 + (r.tab || r.hash ? 5 : 0);
+  return r.segments.length * 10 + (r.tab || r.hash ? 5 : 0);
 }
 
 function best(pages, path, tab, hash) {
