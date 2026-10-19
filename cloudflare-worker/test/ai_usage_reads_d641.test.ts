@@ -20,7 +20,7 @@ import { makeD1 } from './_d1_sqlite.mjs';
 import { AI_USERS_SCHEMA, AI_BUDGET_MIGRATION } from './_ai_budget_fixture.mjs';
 import { loadMyAiSpend, lastDays, SPEND_DAYS } from '../src/services/aiSpend.ts';
 import { TASK_LABELS, MODEL_NAMES, RETIRED_MODELS, taskLabel } from '../src/services/aiCatalog.ts';
-import { ROUTE, PRICE_USD_PER_1M_TOKENS, PRICE_USD_PER_AUDIO_MINUTE, PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET } from '../src/services/aiRouter.ts';
+import { ROUTE, PRICE_USD_PER_1M_TOKENS, PRICE_USD_PER_AUDIO_MINUTE, PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET, IMAGE_PRICED_MODELS } from '../src/services/aiRouter.ts';
 import ai, { rateCard } from '../src/routes/ai.ts';
 import { createJWT } from '../src/auth.ts';
 
@@ -215,7 +215,8 @@ test('the rate card covers every model ROUTE can use, priced from the router\'s 
   // Every priced model is on the card once, with the table's own figures. D760:
   // a model priced only over a WebSocket (Flux) has a row too.
   const wsOnly = Object.keys(PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET).filter((id) => !(id in PRICE_USD_PER_AUDIO_MINUTE));
-  assert.equal(card.length, Object.keys(PRICE_USD_PER_1M_TOKENS).length + Object.keys(PRICE_USD_PER_AUDIO_MINUTE).length + wsOnly.length);
+  // D766: and each image model the router prices, by its size and steps.
+  assert.equal(card.length, Object.keys(PRICE_USD_PER_1M_TOKENS).length + Object.keys(PRICE_USD_PER_AUDIO_MINUTE).length + wsOnly.length + IMAGE_PRICED_MODELS.size);
   assert.equal(byId.size, card.length, 'a model is listed twice');
   for (const [id, p] of Object.entries(PRICE_USD_PER_1M_TOKENS)) {
     assert.deepEqual(
@@ -233,6 +234,7 @@ test('the rate card covers every model ROUTE can use, priced from the router\'s 
     assert.equal(byId.get(id).per_audio_minute_websocket_usd, perMinute, id);
   }
   for (const m of card as any[]) {
+    if (m.image === true) { assert.ok(Object.values(m.cost).length > 0 && Object.values(m.cost).every((v: any) => v > 0), `${m.id} has an image price of 0`); continue; }
     if (m.per_audio_minute_usd !== undefined) { assert.ok(m.per_audio_minute_usd > 0, m.id); continue; }
     if (m.per_audio_minute_websocket_usd !== undefined) { assert.ok(m.per_audio_minute_websocket_usd > 0, m.id); continue; }
     assert.ok(m.in_per_1m_usd > 0, `${m.id} has an input price of 0`);

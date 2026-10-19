@@ -230,6 +230,8 @@ export interface Env {
   // spec — the value is a TURN count, not a dollar amount — but we
   // keep the spec name verbatim and accept the legacy
   // `WORKERS_AI_ADVISOR_BUDGET_PER_DAY` alias for back-compat.
+  // D766: read by nothing since the uncalled `services/advisor/aiClient.ts`
+  // was deleted; kept so a deployment that still sets them type-checks.
   WORKERS_AI_ADVISOR_BUDGET_USD_DAY?: string;
   WORKERS_AI_ADVISOR_BUDGET_PER_DAY?: string;
   // Global advisor kill switch (Task #4 AW + Task #5). When either name
