@@ -72,17 +72,40 @@ export function threadEngineLine(t) {
   return `Summary drafted · ${n} ${n === 1 ? 'suggestion' : 'suggestions'}`;
 }
 
-/** One message in the thread view: who wrote it, and a voice note said as one. */
+/** D756 §1.12: a note's kind from the thread read's `media`, in words. Anything else is a voice note. */
+const NOTE_KIND = { voice: 'Voice note', audio: 'Audio file', video_note: 'Round video' };
+export const noteKind = (m) => NOTE_KIND[m?.media] || 'Voice note';
+
+/** One message in the thread view: who wrote it, and a note said as the kind it is. */
 export function messageView(m, contact) {
   const failure = m?.kind === 'voice' ? voiceFailure(m) : null;
+  const note = noteKind(m);
   return {
     uid: m?.uid,
     mine: m?.side === 'me',
     who: m?.side === 'me' ? 'You' : (str(contact) || 'Contact'),
-    label: m?.kind !== 'voice' ? '' : failure ? 'Voice note' : m?.awaiting_transcription === true ? 'Voice note, transcribed when you add this chat to an interview' : 'Voice note (transcribed)',
+    label: m?.kind !== 'voice' ? '' : failure ? note : m?.awaiting_transcription === true ? `${note}, transcribed when you add this chat to an interview` : `${note} (transcribed)`,
     text: typeof m?.text === 'string' && m.text ? m.text : null,
     failure,
   };
+}
+
+/**
+ * D754 §6: "Add this chat to an interview by <date> to keep its voice notes",
+ * from the thread read's `voice_fetch_by` — WhatsApp's 7-day rule. The Worker
+ * sends none for Telegram, whose files have no documented expiry (D756
+ * §1.12), so no line is drawn there. Null when there is no date.
+ */
+export function keepByLine(m, when = keepByDay) {
+  if (m?.kind !== 'voice' || m?.awaiting_transcription !== true || !m?.voice_fetch_by) return null;
+  const day = when(m.voice_fetch_by);
+  return day ? `Add this chat to an interview by ${day} to keep its voice notes` : null;
+}
+
+/** "26 Oct": the day, in the reader's own zone. */
+function keepByDay(iso) {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 }
 
 /** Where a spent AI allowance is read, until #1916 gives the top-up its own path. */

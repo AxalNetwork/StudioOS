@@ -30,6 +30,7 @@ import { runChannelJob } from '../src/services/channels/jobs.ts';
 import { CHANNEL_LIMITS } from '../src/services/channels/types.ts';
 import { deleteSession, loadSession } from '../src/services/interviewSessions.ts';
 import { DEFAULT_FINAL_MODEL } from '../src/services/sttModels.ts';
+import { callLabel } from '../src/services/sessionSetup.ts';
 import {
   AUDIO, businessMessage, call, consentGiven, count, ids, INTERVIEW, ME, mockFetch, noSecretsSeen, now, OTHER, type Route, seen,
   telegramApi, TG_ME, TG_OTHER, tgHook, world,
@@ -250,4 +251,38 @@ test('D756 #1978 source: one path for both providers, no direct model call, no W
   const audio = read('../src/services/channels/channelAudio.ts');
   assert.equal(/'whatsapp'|'telegram'/.test(audio.slice(audio.indexOf('export async function ingestChannelAudio('))), false, 'the shared step names no provider');
   assert.equal(/never stored/.test(route.slice(0, route.indexOf('import '))), false, 'the header no longer says the audio is never stored');
+});
+
+test('D756 #1981 the thread read says which note each waiting note is (voice note, audio file, round video), and nothing of its file', async () => {
+  const w: any = await world({ seed: true });
+  await tgHook(w.env, businessMessage('BC-ME', { text: 'Hello.' }));
+  await tgHook(w.env, businessMessage('BC-ME', { voice: { file_id: 'V', mime_type: 'audio/ogg', duration: 4 } }));
+  await tgHook(w.env, businessMessage('BC-ME', { audio: { file_id: 'A', mime_type: 'audio/mpeg', duration: 9 } }));
+  await tgHook(w.env, businessMessage('BC-ME', { video_note: { file_id: 'R', duration: 8, length: 384 } }));
+  const [t] = (await call(w.env, ME, 'GET', '/threads?status=pending')).body.items;
+  const r = await call(w.env, ME, 'GET', `/threads/${t.uid}`);
+  assert.deepEqual(r.body.messages.map((m: any) => [m.kind, m.media]), [['text', null], ['voice', 'voice'], ['voice', 'audio'], ['voice', 'video_note']]);
+  for (const id of ['"V"', '"A"', '"R"', 'audio/mpeg']) assert.ok(!JSON.stringify(r.body).includes(id), `${id} stays in the Worker`);
+  // A note stored before its kind was recorded reads as a voice note.
+  const first = w.db.prepare(`SELECT uid FROM channel_thread_messages WHERE kind = 'voice' ORDER BY id LIMIT 1`).get().uid;
+  const { encryptColumn } = await import('../src/services/columnCipher.ts');
+  const old = await encryptColumn(w.env, 'channel_thread_messages', 'voice_ref_enc', first, JSON.stringify({ file: 'OLD', mime: 'audio/ogg' }));
+  w.db.prepare('UPDATE channel_thread_messages SET voice_ref_enc = ? WHERE uid = ?').run(old, first);
+  const again = await call(w.env, ME, 'GET', `/threads/${t.uid}`);
+  assert.equal(again.body.messages.find((m: any) => m.uid === first).media, 'voice');
+});
+
+test('D756 #1981 a Telegram chat\'s session, notes and all, is a text chat, never "Telegram call"', async () => {
+  const w: any = await world({ seed: true });
+  const { sessionId } = await consentedChat(w);
+  const f = mockFetch(files({ V: {} }));
+  try {
+    await tgHook(w.env, businessMessage('BC-ME', { voice: { file_id: 'V', mime_type: 'audio/ogg', duration: 4 } }));
+    await run(w);
+  } finally { f.restore(); }
+  const s = w.db.prepare('SELECT channel, call_provider, submitted_via FROM interview_sessions WHERE id = ?').get(sessionId);
+  assert.equal(chunkRows(w.db, sessionId).length, 1, 'the note is stored as recorder audio');
+  assert.equal(s.submitted_via, 'telegram', 'Customer research reads it as "Imported from Telegram"');
+  assert.equal(callLabel(s.channel, s.call_provider), 'Text chat · Telegram');
+  assert.equal(callLabel('phone', 'telegram'), 'Audio call · Telegram call', 'only a phone session is a call');
 });
