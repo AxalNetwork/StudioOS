@@ -72,7 +72,7 @@ test('Sign in round-trips: Subscribe returns to the plans, Buy returns to the To
 
 test('the page opens without sign-in; a product\'s page and the checkout still need it', async () => {
   const app = read('frontend/src/App.jsx');
-  assert.match(app, /<Route path="\/plans-and-pricing" element=\{<ProductsPage \/>\} \/>/);
+  assert.match(app, /<Route path="\/plans-and-pricing" element=\{user \? guard\(\[[^\]]+\], <ProductsPage \/>\) : <ProductsPage \/>\} \/>/);
   for (const path of ['/plans-and-pricing/:productId', '/checkout', '/checkout/confirmation']) {
     assert.match(app, new RegExp(`<Route path="${path.replace(/[/:]/g, (c) => `\\${c}`)}" element=\\{guard\\(\\[`), `${path} stays guarded`);
   }
@@ -81,6 +81,17 @@ test('the page opens without sign-in; a product\'s page and the checkout still n
   assert.equal(isPublicPath('/plans-and-pricing/'), true);
   assert.equal(isPublicPath('/plans-and-pricing/prod_1'), false);
   assert.equal(isPublicPath('/checkout'), false);
+});
+
+test('each reader keeps a frame: a member the app\'s header, sidebar and footer, a visitor the public site\'s', () => {
+  const app = read('frontend/src/App.jsx');
+  // `guard` wraps RequireAuth, which draws ProtectedLayout: the member's branch must go through it.
+  assert.match(app, /const guard = \(roles, component\) => \(\s*<RequireAuth /);
+  assert.match(app, /path="\/plans-and-pricing" element=\{user \? guard\(/, 'a signed-in reader gets the app frame');
+  const page = read('frontend/src/pages/ProductsPage.jsx');
+  assert.match(page, /import SitePage from '\.\.\/components\/site\/SitePage';/);
+  assert.match(page, /if \(!member\) return <SitePage title="Plans and pricing">\{page\}<\/SitePage>;/, 'a visitor gets the site nav and footer');
+  assert.match(read('frontend/src/components/site/SitePage.jsx'), /<PublicNav \/>[\s\S]*<PublicFooter \/>/);
 });
 
 test('/products keeps its query and its hash when it redirects', () => {
