@@ -4,6 +4,20 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## Consent in Record a Session, the inbox and the session page (D754, #1980, part 1)
+
+- Record a Session › Text chat › WhatsApp: a chat that waits for consent
+  offers "Ask <Name> in WhatsApp" (only while its 24-hour window is open,
+  else D754's sentence) or "<Name> already agreed" with the member's three
+  methods. Start waits for one, and the assign body carries `consent`.
+- The session page says "Waiting for <Name> to agree", "Agreed in WhatsApp
+  at <time>", "Declined in WhatsApp" or "<Name> withdrew consent", the last
+  with "Discard this chat's recording" (`DELETE /sessions/:id`, after a confirm).
+- The inbox's thread view shows the consent state, Ask for consent, and the
+  member's word once Axal's notice was delivered. Rules in
+  `frontend/src/pages/founder/chatConsent.js`. Telegram is unchanged.
+- The voice-note parts (the keep-by line, playback) follow #1935.
+
 ## Consent before anything from a WhatsApp chat is kept (D754, #1893)
 
 - Migration 488: `channel_consents`, one row per consent request on a chat
