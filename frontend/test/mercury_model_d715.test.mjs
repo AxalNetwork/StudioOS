@@ -108,7 +108,7 @@ test('decision 4 and 6: the Fund\'s note, the org-name sentence, and the fixed s
   assert.equal(orgNameDiffersSentence('Fixture Org', 'Axal VC GP LLC'), 'Mercury names this organization Fixture Org. StudioOS matched it to Axal VC GP LLC by its account endings.');
   assert.equal(entityRow('gp', conn()).orgNameDiffers, null);
   assert.equal(ENTITY_FEEDS, 'What it feeds: balances and transactions for reconciliation, and the monthly cash and reconciliation drafts. Drafts wait in the review queue. Nothing reaches an LP from here.');
-  assert.equal(ENTITY_AUDIT_FOOT, 'Opening this sheet is recorded in the admin audit log.');
+  assert.equal(ENTITY_AUDIT_FOOT, 'Opening this page is recorded in the admin audit log.');
   assert.equal(ADMIN_ONLY, 'Only the Super Admin connects, replaces or disconnects an entity\'s Mercury.');
   assert.equal(BRANCH_MANAGED, 'Axal\'s entity accounts are managed from HQ.');
   assert.equal(TOKEN_HELP, 'How to create a Read Only token');
@@ -176,7 +176,7 @@ test('decision 9: the personal row\'s words, and the attention words matched on 
   assert.equal(personalAttention('401 from Mercury'), 'Token refused');
   assert.equal(personalAttention('timeout'), 'Last read failed');
   assert.equal(personalAttention(null), 'Last read failed');
-  assert.equal(personalToolBanner('write_scope_refused'), 'Mercury needs attention: Token can write. Replace its token from its sheet.', 'not lower-cased');
+  assert.equal(personalToolBanner('write_scope_refused'), 'Mercury needs attention: Token can write. Replace its token from its page.', 'not lower-cased');
 });
 
 test('decision 10 (D752): a "mercury" search with no row names each role\'s use, an investor on a branch reads HQ only, and a branch admin the HQ sentence; none is a request', () => {

@@ -125,7 +125,7 @@ export function entityRows(read) {
 // ── The entity sheet's fixed sentences (decisions 4 to 7, 12) ─────────────────
 
 export const ENTITY_FEEDS = 'What it feeds: balances and transactions for reconciliation, and the monthly cash and reconciliation drafts. Drafts wait in the review queue. Nothing reaches an LP from here.';
-export const ENTITY_AUDIT_FOOT = 'Opening this sheet is recorded in the admin audit log.';
+export const ENTITY_AUDIT_FOOT = 'Opening this page is recorded in the admin audit log.';
 export const ADMIN_ONLY = 'Only the Super Admin connects, replaces or disconnects an entity\'s Mercury.';
 export const BRANCH_MANAGED = 'Axal\'s entity accounts are managed from HQ.';
 export const TOKEN_HELP = 'How to create a Read Only token';
@@ -265,7 +265,7 @@ export function personalAttention(lastError) {
 
 /** Build's failing-row banner, the attention words as written (not lower-cased). */
 export function personalToolBanner(lastError) {
-  return `Mercury needs attention: ${personalAttention(lastError)}. Replace its token from its sheet.`;
+  return `Mercury needs attention: ${personalAttention(lastError)}. Replace its token from its page.`;
 }
 
 // ── Not offered (decision 10) ─────────────────────────────────────────────────

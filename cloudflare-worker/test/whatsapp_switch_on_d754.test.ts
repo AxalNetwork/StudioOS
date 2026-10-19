@@ -6,7 +6,7 @@ import { createHmac } from 'node:crypto';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
-import { consentGiven } from './_channels_fixture.ts';
+import { consentGiven, memR2 } from './_channels_fixture.ts';
 import { audioConsentRequired } from '../src/services/channels/types.ts';
 import { applyEngineSchema } from './_engine_schema.mjs';
 import { tableFromBaseline } from './_baseline.mjs';
@@ -96,6 +96,8 @@ async function world(opts: { seed?: boolean; budget?: number } = {}) {
   const queued: any[] = [];
   const aiCalls: any[] = [];
   const env: any = {
+    // D754 W3 (#1935): a consented WhatsApp note is kept as recorder audio.
+    FILES: memR2(),
     DB, ENVIRONMENT: 'development', JWT_SECRET, KEK_PII: 'k'.repeat(48), ...SECRETS,
     APP_URL: 'https://axal.vc', PUBLIC_BASE_URL: 'https://axal.vc',
     RATE_LIMITS: memKV(), USE_CF_QUEUE: 'true',
@@ -272,7 +274,7 @@ function graphStub(numbers = ['3000002']): Route {
   return (url, init) => {
     const tg = telegramApi(url, init);
     if (tg) return tg;
-    if (url.hostname === 'lookaside.fbsbx.com') return { body: new Uint8Array(4000).fill(7), headers: { 'content-type': 'audio/ogg' } };
+    if (url.hostname === 'lookaside.fbsbx.com') return { body: OGG_FILE, headers: { 'content-type': 'application/octet-stream' } };
     if (url.hostname !== 'graph.facebook.com') return undefined;
     if (url.pathname.endsWith('/oauth/access_token')) return { json: { access_token: newToken } };
     if (url.pathname.endsWith('/phone_numbers')) return { json: { data: numbers.map((id) => ({ id, display_phone_number: '15550001234', verified_name: 'Example business', messaging_limit_tier: 'TIER_10K' })) } };
