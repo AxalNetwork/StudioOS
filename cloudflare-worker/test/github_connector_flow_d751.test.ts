@@ -28,7 +28,7 @@ const CLIENT_ID = 'Iv1.flow-fixture';
 const CLIENT_SECRET = 'flow-fixture-secret';
 const READ = { issues: 'read', pull_requests: 'read', contents: 'read', metadata: 'read' };
 const baseline = readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8');
-const MIGRATIONS = ['001_progress_tables.sql', '153_mvp_features.sql', '435_connector_companies.sql', '445_connector_fed_items.sql']
+const MIGRATIONS = ['001_progress_tables.sql', '153_mvp_features.sql', '435_connector_companies.sql', '445_connector_fed_items.sql', '499_github_roadmap.sql']
   .map((m) => readFileSync(`cloudflare-worker/sql/migrations/${m}`, 'utf8'));
 
 function kv() {
@@ -86,7 +86,7 @@ function world() {
   return { db, env, KV, meter, one, all };
 }
 
-type Repo = { issues: any[]; pulls: any[]; releases: any[] };
+type Repo = { issues: any[]; pulls: any[]; releases: any[]; milestones?: any[] };
 /** A GitHub that answers from tables, pages them, and records every call. A URL it does not know throws. */
 function fakeGithub(opts: { perms?: Record<string, string>; installations?: number; repos?: Record<string, Repo>; reach?: string[] } = {}) {
   const calls: string[] = [];
@@ -112,7 +112,7 @@ function fakeGithub(opts: { perms?: Record<string, string>; installations?: numb
     if (url.pathname === '/user/installations/7/repositories') {
       return j({ repositories: reach.map((full_name) => ({ full_name, private: true, updated_at: '2026-10-12T00:00:00Z' })) });
     }
-    const m = url.pathname.match(/^\/repos\/([^/]+)\/([^/]+)\/(issues|pulls|releases)$/);
+    const m = url.pathname.match(/^\/repos\/([^/]+)\/([^/]+)\/(issues|pulls|releases|milestones)$/);
     if (m) {
       const r = repos[`${m[1]}/${m[2]}`];
       if (!r) return j({ message: 'Not Found' }, 404);
@@ -120,7 +120,7 @@ function fakeGithub(opts: { perms?: Record<string, string>; installations?: numb
       const page = Number(url.searchParams.get('page'));
       if (m[3] !== 'releases') assert.equal(url.searchParams.get('state'), 'all');
       assert.equal(per, 100);
-      return j(r[m[3] as keyof Repo].slice((page - 1) * per, page * per));
+      return j((r[m[3] as keyof Repo] ?? []).slice((page - 1) * per, page * per));
     }
     throw new Error(`unexpected GET ${url.pathname}`);
   }) as any;
@@ -261,7 +261,8 @@ test('#1906 the sync lands issues on the roadmap and pull requests on must-haves
     const uid = await connected(w, { 'acme/app': repo });
     const r = await call(w.env, 'POST', `/api/integrations/${uid}/sync`, {});
     assert.equal(r.status, 200, JSON.stringify(r.body));
-    assert.deepEqual(r.body.counts, { issues: 2, pull_requests: 4, releases: 1, roadmap_items_created: 2, must_haves_created: 4 });
+    assert.deepEqual(r.body.counts, { issues: 2, pull_requests: 4, releases: 1, roadmap_items_created: 2, must_haves_created: 4,
+      milestones: 0, milestone_items: 0, release_rows_created: 1, items_shipped: 0 });
     assert.deepEqual(w.all('SELECT objective, kanban_status FROM roadmap_okrs ORDER BY id').map((x) => [x.objective, x.kanban_status]),
       [['Export to CSV', 'next'], ['Fix login', 'done']]);
     assert.deepEqual(w.all('SELECT title, delivery_status FROM mvp_features ORDER BY id').map((x) => [x.title, x.delivery_status]),
@@ -273,7 +274,8 @@ test('#1906 the sync lands issues on the roadmap and pull requests on must-haves
       assert.equal(w.one(`SELECT COUNT(*) AS n FROM ${l.local_table} WHERE id = ?`, l.local_id).n, 1, 'every ledger row points at its landed row');
     }
     const fed = await fedOf(w, uid);
-    assert.deepEqual([fed.product_roadmap.count, fed.product_roadmap.linked, fed.prototype_mvp.count, fed.prototype_mvp.linked], [3, 2, 4, 4]);
+    // D782 (#2111): the release is a Product roadmap row now, so all three are linked.
+    assert.deepEqual([fed.product_roadmap.count, fed.product_roadmap.linked, fed.prototype_mvp.count, fed.prototype_mvp.linked], [3, 3, 4, 4]);
 
     // The founder moves "Export to CSV" to their own lane; GitHub renames it, and closes nothing it owns.
     w.db.exec("UPDATE roadmap_okrs SET kanban_status = 'now' WHERE objective = 'Export to CSV'");
@@ -341,9 +343,12 @@ test('#1906 defect (b): each page costs a fetch, a ledger read and one batch, fa
     assert.equal(r.body.counts.issues, 1000);
     assert.equal(r.body.counts.partial, undefined);
     const fetches = gh.calls.length - fetchesBefore;
-    // Five full issue pages (MAX_PAGES stops there), and one empty page each of pulls and releases.
-    assert.equal(fetches, 2 * (5 + 1 + 1));
-    assert.equal(w.meter.batches, 10, 'one batch per page that has items');
+    // Five full issue pages (MAX_PAGES stops there), one empty page each of pulls and releases, and
+    // D782's one empty page of milestones.
+    assert.equal(fetches, 2 * (5 + 1 + 1 + 1));
+    // One batch per page that has items, and per repository D782's one statement clearing the
+    // milestone group of issues in none (not one statement per issue).
+    assert.equal(w.meter.batches, 10 + 2, 'one batch per page that has items, and one per repository for D782');
     assert.ok(w.meter.d1 <= 2 * 10 + 15, `D1 subrequests per page are two, not one per item (${w.meter.d1})`);
     assert.ok(fetches + w.meter.d1 < SYNC_SUBREQUEST_BUDGET);
     assert.equal(w.one('SELECT COUNT(*) AS n FROM roadmap_okrs').n, 1000);
