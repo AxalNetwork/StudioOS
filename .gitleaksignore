@@ -53,3 +53,10 @@ ea14fa69b6089abb2615fd3805541846acab1160:cloudflare-worker/test/cycle_records_va
 # key-shaped fixtures; this entry covers only that one finding in the pushed
 # commit.
 3c4069358e16313a0a163b0275eb0d2d9c7e4919:cloudflare-worker/test/ai_topup_ready_d750.test.ts:generic-api-key:192
+# D751 (#1880): three synthetic fixture strings in the readiness test's first
+# commit: the GitHub fixture secret, a base64 blob that decrypts to nothing,
+# and the Zoom fixture triple. They configure an in-memory database only and
+# were never credentials. Scoped to the three findings, as D334's entry is.
+14c9eeed0c67d66d19934e90cb4434ec6d9be28d:cloudflare-worker/test/connector_readiness_d751.test.ts:generic-api-key:28
+14c9eeed0c67d66d19934e90cb4434ec6d9be28d:cloudflare-worker/test/connector_readiness_d751.test.ts:generic-api-key:154
+14c9eeed0c67d66d19934e90cb4434ec6d9be28d:cloudflare-worker/test/connector_readiness_d751.test.ts:generic-api-key:239
