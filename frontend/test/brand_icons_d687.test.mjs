@@ -97,6 +97,23 @@ test('1. every key the app draws is classified, exactly once', () => {
   for (const [k, icon] of Object.entries(GENERIC)) assert.equal(BRAND_GENERIC[k].Icon.displayName, icon, `${k} draws lucide ${icon}`);
 });
 
+test('D752 (#1907): Mercury stays the monogram, never lucide Landmark and never the canvas placeholder #5b6cff', () => {
+  assert.ok(Object.hasOwn(BRAND_MONOGRAM, 'mercury'), 'mercury is a monogram entry');
+  assert.ok(!Object.hasOwn(BRAND_MARKS, 'mercury') && !Object.hasOwn(BRAND_GENERIC, 'mercury'), 'and in no other table');
+  assert.equal(resolveBrand('mercury').kind, 'monogram');
+  assert.match(BRAND_MONOGRAM.mercury.reason, /re-checked 2026-10-18/);
+  for (const variant of ['tile', 'bare']) {
+    const out = html(h(BrandIcon, { provider: 'mercury', name: 'Mercury', variant }));
+    assert.match(out, /data-brand="monogram"[^>]*data-provider="mercury"[^>]*>M</, variant);
+    assert.doesNotMatch(out, /lucide|landmark|<svg/i, `${variant}: no lucide glyph`);
+    assert.doesNotMatch(out, /5b6cff/i, `${variant}: never the placeholder colour`);
+  }
+  assert.doesNotMatch(JSON.stringify(BRAND_MONOGRAM.mercury), /5b6cff/i);
+  const src = read('frontend/src/ui/BrandIcon.jsx');
+  assert.doesNotMatch(src, /5b6cff/i, 'BrandIcon.jsx never names the placeholder colour');
+  assert.doesNotMatch(/import \{([^}]*)\} from 'lucide-react'/.exec(src)[1], /\bLandmark\b/, 'BrandIcon.jsx imports no lucide Landmark');
+});
+
 // ── 2. No orphans, no duplicates ────────────────────────────────────────────
 
 test('2. no table entry or alias without a source, and no key in two tables', () => {

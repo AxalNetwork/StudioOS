@@ -333,7 +333,8 @@ trust.get('/agreements/:envelope_uuid/history', async (c) => {
 //   1. Caller must be an investor (admins permitted for testing).
 //   2. If a valid pairwise NDA already exists -> return it.
 //   3. Otherwise create a 3-way envelope (Founder + Investor + Axal
-//      counter-signer) using the nda_3way_v1 template, persist a row in
+//      counter-signer) from the nda_3way_founder_investor_axal library row
+//      (D758), persist a row in
 //      `pairwise_ndas`, and return the envelope_uuid so the UI can
 //      route to the signing pages.
 //
@@ -453,6 +454,19 @@ export async function requestIntroLogic(
       appUrl: env.APP_URL || 'https://axal.vc',
     });
   } catch (e) {
+    // D758 — the library row still has a field nobody filled. Compared by
+    // message, not instanceof: trust_intro.test.mjs runs this function sliced
+    // out of the source.
+    if ((e as Error)?.message === 'unfilled_fields') {
+      return {
+        status: 409,
+        body: refusalBody({
+          code: 'template_fields_unfilled',
+          message: 'The NDA is not ready to send yet: Axal VC still has to complete it. Nothing was sent.',
+          raw: e,
+        }),
+      };
+    }
     // D278 — DocuSign's text goes to the log; the member reads our sentence.
     return {
       status: 500,
