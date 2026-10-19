@@ -168,6 +168,30 @@ Changed routes:
 The Usage page work in #1430 uses the mounted `ai_budget.ts` routes. `GET /api/ai-budget/me` returns the caller's allowance and paid balance with `held_for_review` (UID, time, held micro-USD and recorded cost); a review hold blocks new runs without hiding that read. Super Admin routes `GET /api/ai-budget/reviews` and `POST /api/ai-budget/reviews/:uid/charge|refund` list and settle those holds with a recorded reason and actor. `GET /api/ai-budget/caps` lists all ten plan keys, their effective daily/monthly allowances and whether each value is recorded or from the environment; `PUT /api/ai-budget/caps/:licence` remains the audited write. Since D750 (#1841), `GET /api/ai-budget/top-up` answers `{configured:false}`, `{configured:true,state:'ready',product}` or `{configured:true,state:'not_ready'}` (503 only when D1 or Stripe cannot be read), and the Super Admin route `GET /api/ai-budget/top-up/status` returns `{state, reason, price_id_suffix, mode}` for the AI allowances screen. These are Worker routes for #1435's screens (moved from S09), not frontend API methods added by this issue.
 
 
+### AI credits and token packs Worker contract (D755, #1870)
+
+D755 sells the AI top-up balance as token packs (`ai_token_packs`, migration 486) and records every movement of it in the append-only `ai_credit_ledger`. The routes below are Worker routes; the screens that draw them are CR4–CR8.
+
+| Route | Who | What it answers |
+| --- | --- | --- |
+| `GET /api/ai-budget/top-up` | signed in | `state` (`unset`, `not_ready`, `ready`), `packs` on sale, `on_hold`, and `latest` (the last purchase in 24 hours: `waiting`, `overdue`, `credited`, `refunded` or `disputed`). D750's `configured` and `product` stay, deprecated. Never a reason. |
+| `GET /api/ai-budget/history?before=&limit=&runs=1` | signed in | The member's own ledger, newest first, paged on `(created_at, uid)`, with `pending` purchases on the first page. `runs=1` adds hold, release and spend. Never an adjustment's reason. |
+| `GET /api/ai-budget/top-up/status` | Super Admin | D750's single line, plus `packs`: one line per pack with its state, reason, the last six characters of its price ID, and `adoptable` for the `STRIPE_PRICE_AI_TOPUP` fallback. |
+| `GET /api/ai-budget/members/:userId` | Super Admin | One member's allowance, balance, held top-up, ledger (with reasons), purchases and shortfalls. Each read is logged. |
+| `POST /api/ai-budget/members/:userId/adjustments` | Super Admin | `{amount_usd, reason, idempotency_key}`: at most $100 either way, at most $250 added in 30 days, never below zero, a reason of 10–500 characters. In the D248 cool-off list. |
+| `GET /api/ai-budget/reconcile` | Super Admin | Balances that differ from their ledger, purchases paid over an hour ago and not credited, and open disputes. It credits nothing. |
+| `POST /api/admin/catalog/token-packs` | Super Admin | `{amount_usd, idempotency_key}`: the Worker creates the product and its one-time USD price in Stripe with Idempotency-Keys, then the pack row, off sale. |
+| `POST /api/admin/catalog/token-packs/adopt` | Super Admin | `{price_id}`: records an existing one-time USD price of whole dollars from $5 to $500. |
+| `PATCH /api/admin/catalog/token-packs/:uid` | Super Admin | `on_sale`, `bonus_usd` (0–10% of face) and `sort`. The amount never changes. |
+| `POST /api/admin/catalog/token-packs/:uid/archive` | Super Admin | Off sale for good, and the Stripe price archived. |
+| `GET /api/public/plans-and-packs` | anyone | Every plan with its price and AI allowance, the packs on sale, `covers` and `resets`. D1 only, cached 60 seconds, its own rate-limit bucket, no person named. |
+
+A pack is bought only through `POST /api/orders/intent`, alone, at face value, with no promo code. `POST /api/payments/intent`, `/api/payments/alacarte/intent`, `/api/payments/promo/validate` and `/api/billing/subscription/swap/preview|confirm` answer 400 `token_pack_checkout_only` for a pack price, and the generic `/api/admin/catalog` writes answer 409 `token_pack_managed_on_hq`. `/api/admin/catalog` is in the cool-off prefixes.
+
+The Stripe webhook (`POST /api/billing/stripe/webhook`) credits a pack only on `payment_intent.succeeded`, once, with its bonus. Three new events take tokens back (`services/aiCreditReversals.ts`): `charge.refunded`, `charge.dispute.created` and `charge.dispute.closed`. Each acts only on a token pack's charge.
+
+Introduction packs retire with CR5 (#1915): `POST /api/payments/intro-credits/intent` answers 410 `intro_packs_retired`, and `GET /api/introductions/packs` answers `{packs: [], on_sale: false}`. Credits already bought still spend.
+
 ### Bank accounts Worker contract (D708, #1773)
 
 `/api/admin/bank-accounts` (`admin_bank_accounts.ts`) is the Super Admin's registry of each Axal entity's bank accounts, on HQ only; a branch refuses. `GET /` needs `requireSuperAdmin` and returns every account masked (`••••NNNN`), `coverage` (the resolver's answer per payment purpose), `fund_i` (the fund carrying the `spinout-fund-i` slug, or null) and `refusals` (D717, #1856: `{ code, message }` for the four refusals the console explains, each in the resolver's own sentence). Each write and the reveal first refuse an admin without the elevation with 403 `super_admin_required`, then take `requireSuperAdminWriteBar`: `POST /` adds (201), `PATCH /:uid` takes `label` and `purposes` only (anything else is 409 `instructions_immutable`), `POST /:uid/retire` takes a reason, and `POST /:uid/reveal` takes a reason, writes `entity_bank_account_reveals` first and answers one number with `Cache-Control: no-store`. Migration 472 holds the number only as `v1.` ciphertext, and its triggers refuse any change in place.
