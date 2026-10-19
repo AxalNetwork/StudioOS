@@ -77,7 +77,7 @@ export function world(opts: { axal?: Partial<typeof AXAL>; upTo492?: boolean } =
   for (const m of CHANNEL_MIGRATIONS) db.exec(mig(m));
   if (opts.upTo492 !== false) db.exec(mig('492_whatsapp_sender_links.sql'));
   const env: any = {
-    DB, ENVIRONMENT: 'development', JWT_SECRET, KEK_PII: 'k'.repeat(48), ...SECRETS, ...AXAL, ...(opts.axal ?? {}),
+    DB, WHATSAPP_CHANNEL: 'on', ENVIRONMENT: 'development', JWT_SECRET, KEK_PII: 'k'.repeat(48), ...SECRETS, ...AXAL, ...(opts.axal ?? {}),
     APP_URL: 'https://axal.vc', PUBLIC_BASE_URL: 'https://axal.vc',
   };
   return { env, db };

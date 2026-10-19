@@ -4,6 +4,7 @@ import { requireAuth } from '../auth';
 import { stripeCall } from './billing';
 import { ensureTierSchema, type TierUser } from '../middleware/requireTier';
 import { findCatalogPriceById, findCatalogProductByPriceId } from '../services/catalog';
+import { isTokenPackPrice } from '../services/aiCredits';
 import { ensureFeatureUnlockSchema, listActiveUnlocks } from '../services/featureUnlocks';
 import {
   validatePromoForProduct,
@@ -92,6 +93,8 @@ payments.post('/intent', async (c) => {
   if (!body.price_id) {
     return refuse(c, 400, { code: 'money_kind_required', message: 'A charge needs a priced product. Choose one from the catalog.', audience: 'member' });
   }
+  // D755 §9: a token pack is bought only through the order intent, which credits it.
+  if (await isTokenPackPrice(c.env, body.price_id)) return c.json({ error: 'token_pack_checkout_only' }, 400);
   const quantity = Number.isFinite(body.quantity) && (body.quantity as number) > 0
     ? Math.floor(body.quantity as number)
     : 1;
@@ -289,6 +292,7 @@ payments.post('/promo/validate', async (c) => {
   const code = typeof body.code === 'string' ? body.code.trim() : '';
   if (!code) return c.json({ valid: false, reason: 'not_found' });
   if (!body.price_id) return c.json({ error: 'price_id_required' }, 400);
+  if (await isTokenPackPrice(c.env, body.price_id)) return c.json({ error: 'token_pack_checkout_only' }, 400);
   const found = await findCatalogProductByPriceId(c.env, body.price_id);
   if (!found || !found.price.active || !found.product.active) {
     return c.json({ error: 'invalid_price' }, 400);
@@ -420,6 +424,7 @@ payments.post('/alacarte/intent', async (c) => {
     promo_code?: string;
   };
   if (!body.price_id) return c.json({ error: 'price_id_required' }, 400);
+  if (await isTokenPackPrice(c.env, body.price_id)) return c.json({ error: 'token_pack_checkout_only' }, 400);
 
   const found = await findCatalogProductByPriceId(c.env, body.price_id);
   if (!found || !found.price.active || !found.product.active) {
@@ -503,14 +508,21 @@ payments.get('/alacarte/unlocks', async (c) => {
 // carries metadata.kind='intro_credits' + credits; the billing webhook
 // (payment_intent.succeeded) grants the purchased-bucket ledger rows
 // idempotently on the PI id.
+//
+// D755 (#1915): packs are no longer sold. While INTRO_PACKS_ON_SALE is off the
+// route answers 410 `intro_packs_retired` before any Stripe call; an intent
+// minted before the switch still grants through the webhook.
 // ---------------------------------------------------------------------------
 payments.post('/intro-credits/intent', async (c) => {
   const user = (await requireAuth(c)) as TierUser;
+  const { INTRO_PACKS, INTRO_PACKS_ON_SALE, isIntroPackKey } = await import('../services/introductions');
+  if (!INTRO_PACKS_ON_SALE) {
+    return refuse(c, 410, { code: 'intro_packs_retired', message: 'Introduction packs are no longer sold.', audience: 'member' });
+  }
   await ensureTierSchema(c.env);
   if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
 
   const body = (await c.req.json().catch(() => ({}))) as { pack?: string; nonce?: string };
-  const { INTRO_PACKS, isIntroPackKey } = await import('../services/introductions');
   if (!isIntroPackKey(body.pack)) return c.json({ error: 'invalid_pack' }, 400);
   const pack = INTRO_PACKS[body.pack];
 

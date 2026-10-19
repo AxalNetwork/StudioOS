@@ -74,6 +74,10 @@ test('mercuryCreditToEntry: debits and void lines are no candidates; each other 
   assert.equal(mercuryCreditToEntry(facts({ stripe_counterparty: true }), ctx()).kind, 'entry', 'a Stripe payout counts only when Stripe already feeds the ledger');
   assert.equal(reason({}, { importedHere: true }), 'already_imported');
   assert.equal(reason({}, { importedElsewhere: true }), 'imported_elsewhere');
+  // D752: a confirmed raise receipt is financing, refused after internal_transfer and before axal_entity.
+  assert.equal(reason({}, { raiseReceipt: true }), 'raise_receipt');
+  assert.equal(reason({ internal: true }, { raiseReceipt: true }), 'internal_transfer');
+  assert.equal(reason({ axal_counterparty: true }, { raiseReceipt: true }), 'raise_receipt');
   assert.equal(reason({ amount_cents: 1.5 }, {}), 'invalid_amount');
   assert.ok(namesStripe('STRIPE TRANSFER') && namesStripe('Stripe, Inc.') && !namesStripe('Stripes Bakery'));
 });
@@ -121,6 +125,34 @@ test('GET mercury-credits: the founder only; the window is checked before Mercur
     assert.equal(logs.length, 2);
     assert.deepEqual([logs[0].event_type, logs[0].response_summary, logs[0].payload_json], ['mercury_credits_read', 'use=venture_revenue lines=8 credits=6', null]);
     assert.ok(b.calls.every((c) => c.method === 'GET'));
+  } finally { b.restore(); }
+});
+
+test('D752: a confirmed raise receipt\'s line is listed with raise_receipt and refused on import; fits_raise_target marks a credit that fits an open committed prospect', async () => {
+  const { db, env } = await personalFixture();
+  await connected(db, env, 10);
+  const b = bank();
+  const created = `${day(-10)} 09:00:00`;
+  db.prepare("INSERT INTO raise_prospects (uid, project_id, name, stage, amount, created_at) VALUES ('rp-open', 1, 'Ana Angel', 'committed', 2500, ?), ('rp-paid', 1, 'Ben Backer', 'committed', 4000, ?)").run(created, created);
+  b.state.txns[ACC_A] = [
+    credit(1, 2500, day(-2), 'Ana Angel'),     // fits the open prospect
+    credit(2, 2500.01, day(-2)),               // one cent off
+    credit(3, 2500, day(-60)),                 // outside the window
+    credit(4, 4000, day(-1), 'Ben Holdings'),  // the paid prospect's receipt
+  ];
+  try {
+    const paid = Number((db.prepare("SELECT id FROM raise_prospects WHERE uid = 'rp-paid'").get() as any).id);
+    const ok = await req(env, 10, 'POST', '/api/mercury/personal/matches', { target_kind: 'raise', target_id: paid, transaction_id: tx(4) });
+    assert.equal(ok.status, 201, ok.text);
+    const r = await req(env, 10, 'GET', `/api/revenue/projects/1/mercury-credits?from=${day(-90)}&to=${day(0)}`);
+    assert.equal(r.status, 200, r.text);
+    const by = Object.fromEntries(r.body.credits.map((c: any) => [c.transaction_id, [c.importable, c.reason, c.fits_raise_target]]));
+    assert.deepEqual(by, {
+      [tx(1)]: [true, null, true], [tx(2)]: [true, null, false], [tx(3)]: [true, null, false], [tx(4)]: [false, 'raise_receipt', false],
+    });
+    const imp = await req(env, 10, 'POST', '/api/revenue/projects/1/entries/import-mercury', { items: [{ transaction_id: tx(4), customer: 'Ben', revenue_type: 'one_time' }] });
+    assert.deepEqual([imp.body.inserted, imp.body.refused], [0, [{ transaction_id: tx(4), reason: 'raise_receipt' }]]);
+    assert.equal(count(db, 'SELECT COUNT(*) AS n FROM revenue_entries'), 0);
   } finally { b.restore(); }
 });
 

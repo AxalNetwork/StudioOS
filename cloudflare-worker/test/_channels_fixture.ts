@@ -99,6 +99,7 @@ export async function world(opts: { seed?: boolean; budget?: number } = {}) {
   const aiCalls: any[] = [];
   const env: any = {
     DB, ENVIRONMENT: 'development', JWT_SECRET, KEK_PII: 'k'.repeat(48), ...SECRETS,
+    WHATSAPP_CHANNEL: 'on', TELEGRAM_CHANNEL: 'on',
     APP_URL: 'https://axal.vc', PUBLIC_BASE_URL: 'https://axal.vc',
     RATE_LIMITS: memKV(), USE_CF_QUEUE: 'true',
     JOB_QUEUE: { async send(body: any) { queued.push(body); } },

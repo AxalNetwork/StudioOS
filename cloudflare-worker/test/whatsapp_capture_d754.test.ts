@@ -284,3 +284,21 @@ test('YES and NO typed to Axal\'s number are never consent replies: a linked mem
     assert.equal(consents(db).length, 0);
   } finally { g.restore(); }
 });
+
+test("in canary a member's capture answer is refused and a forward is ignored; the list still reads", async () => {
+  const { env, db } = world();
+  const g = mockGraph();
+  try {
+    await link(env);
+    await waHook(env, voice('MEDIA-1'));
+    const uid = captures(db)[0].uid;
+    env.WHATSAPP_CHANNEL = 'canary';
+    const r = await call(env, ME, 'POST', `/whatsapp/captures/${uid}/consent`, { method: 'pre_agreed' });
+    assert.deepEqual([r.status, r.body.code], [503, 'not_available']);
+    assert.equal(captures(db)[0].status, 'waiting');
+    await waHook(env, voice('MEDIA-2'));
+    assert.equal(lastEvent(db).error, 'rollout');
+    assert.equal(captures(db)[0].item_count, 1);
+    assert.equal((await call(env, ME, 'GET', '/whatsapp/captures')).status, 200);
+  } finally { g.restore(); }
+});

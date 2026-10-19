@@ -19,7 +19,7 @@
  * with `agoLabel`.
  *
  * The member's use words are keyed exactly as `GET /api/mercury/personal/status`
- * names its uses (`routes/mercury_personal.ts`, D713): `venture_revenue`,
+ * names its uses (`routes/mercury_personal.ts`, D713): `venture_revenue` and `raise_receipts` (D752),
  * `practice_income` and `partner_deals` (PR 3b), and `capital_attestation`
  * (D752). The member words below are keyed by role (D752): a role without its
  * own entry reads the founder's.
@@ -161,6 +161,8 @@ export const USE_WORDS = {
   venture_revenue: 'Your venture\'s revenue. StudioOS lists the credits in your own Mercury account, and you pick the ones that are customer revenue. Only those become rows on your revenue ledger, marked Supported, with Mercury\'s amount and date.',
   practice_income: 'Your practice income. Match an engagement invoice you issued to the credit that paid it.',
   partner_deals: 'Your deals with Axal VC Management LLC. Match a payout or a partner-deal settlement to the bank line that settled it.',
+  // D752 (#1887): the Worker serves this key now; task raise-match-screens draws its match panel.
+  raise_receipts: 'Your venture\'s raise. Match an investor\'s wire to a committed prospect in your raise pipeline, or to a pending commitment on one of your deals.',
   capital_attestation: 'Proof of funds for a commitment you made: a deal commitment, your Fund I application or your Fund I commitment. When you ask, StudioOS checks the checking and savings accounts you pick and shares one dated statement with Axal\'s admins, "at least" an amount you choose. You can revoke it. Your balance is never stored or shown.',
 };
 
