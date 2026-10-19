@@ -38,7 +38,8 @@ const PROJECT = 7, OTHER_PROJECT = 8;
 const INTERVIEW = 101, SECOND = 102;
 const TG_INT = 11;
 const SURFACE = '/validate/customer-research';
-const SUMMARY_MARK = 'Summarise one customer interview';
+// Both the call and the thread prompt (#1924) open with these words.
+const SUMMARY_MARK = 'Summarise one customer';
 
 const PAIN = (phrase = 'Manual invoice reconciliation') => JSON.stringify({ placements: [
   { kind: 'pain_severity', payload: { phrase, severity: 'severe' }, cite: { from: 0, to: 1000 }, quote: 'We reconcile invoices by hand every Friday.' },
@@ -501,7 +502,8 @@ test('a conversation too long for one run is refused with the engine\'s sentence
   const f = world();
   const scoped = await writableInterview(f.env, ME, INTERVIEW);
   const s = await openSession(f.env, scoped, 'telegram', 'text');
-  await appendSegments(f.env, ME, s.id, Array.from({ length: 60 }, (_, i) => chatLine(`${i} ${'x'.repeat(2000)}`)), 'telegram');
+  // Over the summary's parts bound (#1924: MAX_DIGEST_PARTS of 24 000 characters), so nothing runs at all.
+  await appendSegments(f.env, ME, s.id, Array.from({ length: 150 }, (_, i) => chatLine(`${i} ${'x'.repeat(2000)}`)), 'telegram');
   const out: any = await digestSession(f.env, { sessionId: s.id, userId: ME, trigger: 'chat_quiet' });
   assert.deepEqual([out.status, out.reason, out.note], ['refused', 'transcript_too_large', NOTES.tooLarge]);
   assert.equal(f.ai.length, 0);
@@ -563,7 +565,8 @@ test('every model call goes through aiRouter.run with the member\'s id; the engi
   const f = world();
   const id = await importedCall(f);
   await runSessionStructureJob(f.env, { session_id: id, user_id: ME, trigger: 'call_imported' });
-  const logs = f.db.prepare('SELECT user_id, surface FROM ai_usage_logs').all();
+  // D763: one row per model call; the guard's own rows (`guard_for` set) are its run's, on the same page.
+  const logs = f.db.prepare('SELECT user_id, surface FROM ai_usage_logs WHERE guard_for IS NULL').all();
   assert.equal(logs.length, f.ai.length, 'one usage row per model call');
   for (const l of logs) assert.deepEqual({ ...l }, { user_id: ME, surface: SURFACE });
   const src = readFileSync(new URL('../src/services/validateEngine.ts', import.meta.url), 'utf8');

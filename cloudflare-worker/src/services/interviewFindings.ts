@@ -177,6 +177,38 @@ export function isFindingKind(k: unknown): k is FindingKind {
   return typeof k === 'string' && Object.prototype.hasOwnProperty.call(FINDING_KINDS, k);
 }
 
+const ATTRIBUTE_WORD: Record<string, string> = {
+  role: 'Role', company: 'Company', company_size: 'Company size', industry: 'Industry', geography: 'Geography', stage: 'Stage', tools: 'Tools',
+};
+const KIND_WORD: Record<string, string> = { workaround: 'Workaround', status_quo: 'Status quo', in_house: 'Built in-house' };
+const capital = (s: string) => (s ? `${s[0].toUpperCase()}${s.slice(1).replace(/_/g, ' ')}` : s);
+/** "1,200 USD / month", or null when the finding names no amount. */
+export function amountWord(p: Record<string, unknown>): string | null {
+  const cents = posInt(p.amount_cents);
+  if (!cents) return null;
+  const period = p.period === 'month' ? ' / month' : p.period === 'year' ? ' / year' : '';
+  return `${(cents / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })} ${String(p.currency || 'usd').toUpperCase()}${period}`;
+}
+
+/**
+ * D757 (#1925) — a finding in one line, as a module record lists it: what it
+ * is and what was said, from its stored payload. The quote is never part of
+ * it: the record draws that behind its own gate.
+ */
+export function findingLine(kind: FindingKind, p: Record<string, unknown>): { what: string; detail: string } {
+  switch (kind) {
+    case 'firmographic': return { what: ATTRIBUTE_WORD[String(p.attribute)] ?? 'Firmographic', detail: String(p.value ?? '') };
+    case 'job_to_be_done': return { what: 'Job to be done', detail: String(p.job ?? '') };
+    case 'market_fact': return { what: `Market fact · ${capital(String(p.topic ?? 'other'))}`, detail: String(p.fact ?? '') };
+    case 'alternative': return { what: `Alternative · ${KIND_WORD[String(p.kind)] ?? 'Other'}`, detail: String(p.name ?? '') };
+    case 'budget': return { what: 'Budget', detail: [p.detail, amountWord(p)].filter(Boolean).join(' · ') };
+    case 'timing': return { what: 'Timing', detail: String(p.when ?? '') };
+    case 'urgency': return { what: `Urgency · ${capital(String(p.level ?? ''))}`, detail: String(p.reason ?? '') };
+    case 'buying_trigger': return { what: 'Buying trigger', detail: String(p.trigger ?? '') };
+    case 'objection': return { what: `Objection · ${capital(String(p.about ?? 'other'))}`, detail: String(p.detail ?? '') };
+  }
+}
+
 /**
  * Which of these tables the database has. The privacy statements that clear or
  * delete findings and evidence links run in the same batch as the session's or

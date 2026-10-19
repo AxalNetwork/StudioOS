@@ -37,7 +37,12 @@ building blocks.
   invoices, payouts or settlements. It reads the member's bank only when they
   press it, and confirms or withdraws a match through
   `/api/mercury/personal/matches`. `NeedsBoardPage.jsx`'s invoice and the
-  partner's Earnings page both mount it; nothing in it moves money.
+  partner's Earnings page both mount it; nothing in it moves money. D752
+  (#1989) adds the founder's `raise` and `commitment` targets: the deal
+  room's Commitments tab mounts it for the deal's founder.
+- `RaiseReceiptMatches.jsx` (D752, #1989) — "Investor wires" on Raise ›
+  Capital relationships, for a founder only: one `/matches?target=raise` read
+  on press, each committed prospect drawn with `MercuryMatchView`.
 - `MobileTabBar.jsx` (D425) — the phone's four tabs and More sheet below
   1024px, founder first, from `../lib/mobileTabs.js`. `mobileTabBar.css` holds its
   safe-area insets and `--mobile-tabbar-h`, which pads the page's content while

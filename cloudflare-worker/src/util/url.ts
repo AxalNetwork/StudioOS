@@ -34,3 +34,13 @@ export function stripTrailingSlashes(s: string): string {
 export function callbackBase(env: { OAUTH_CALLBACK_BASE_URL?: string; APP_URL?: string }): string {
   return stripTrailingSlashes(env.OAUTH_CALLBACK_BASE_URL || env.APP_URL || 'https://app.axal.vc');
 }
+
+/**
+ * D751 (#1899 ruling 3): the one place a connector's OAuth callback URL is
+ * built, `<callbackBase>/api/integrations/oauth/<key>/callback`. Each
+ * provider's `redirectUri` returns it, and Admin → Integration keys shows the
+ * same value, so the URL an owner registers is the one the provider sends.
+ */
+export function oauthCallbackUrl(env: { OAUTH_CALLBACK_BASE_URL?: string; APP_URL?: string }, key: string): string {
+  return `${callbackBase(env)}/api/integrations/oauth/${key}/callback`;
+}

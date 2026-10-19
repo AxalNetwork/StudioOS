@@ -12,7 +12,7 @@
 import { canReadDecision, canWrite, ownsVenture } from '../../routes/_founder_validate_helpers';
 import type { User } from '../../types';
 import {
-  addCommitment, completeCommitment, decisionById, earlierGivenInScope, evidenceFor, openCommitments,
+  addCommitment, completeCommitment, decisionById, earlierGivenInScope, evidenceFor, interviewEvidenceSince, openCommitments,
   DECISION_EVIDENCE_BAR, NO_EVIDENCE_REASON, VerdictError, type DecisionKind, type EvidenceSource,
 } from '../verdict';
 import type { ModuleSpec, RecordAction, RecordContent, RecordContext } from './types';
@@ -232,6 +232,12 @@ export function verdictSpec({ evidenceSource = evidenceFor }: { evidenceSource?:
         ).bind(ctx.projectId).all<Claim>(),
         evidenceSource(ctx.env, ctx.projectId),
       ]);
+      // D757 §2.6 (#1925): of the evidence offered, the interview items since
+      // the last decision, which the form preselects. The founder still chooses.
+      const fresh = await interviewEvidenceSince(ctx.env, ctx.projectId, evidence).catch((e) => {
+        console.warn('[verdict] interview evidence unreadable:', (e as Error)?.message);
+        return null;
+      });
       return {
         for: {
           options: [
@@ -244,6 +250,7 @@ export function verdictSpec({ evidenceSource = evidenceFor }: { evidenceSource?:
           options: evidence.map((e) => ({
             value: e.id, label: joined(e.label, strengthWord(e.strength)), meta: dMon(e.date), hypothesis_id: e.hypothesis_id ?? null,
           })),
+          suggested_evidence: fresh ? fresh.ids : null,
         },
       };
     },

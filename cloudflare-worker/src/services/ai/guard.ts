@@ -176,3 +176,11 @@ export function refusalFor(where: 'input' | 'output' | 'unavailable', codes: rea
   }
   return { message: GUARD_COPY[where], link: null };
 }
+
+/**
+ * What `GET /api/ai/catalogue` reports about the guard (D763 §12), so the
+ * rail's guard sentence (D769) cannot ship before the code that makes it true.
+ * D760 (#2017) owns that route and serves this constant; part 2 of D763 set
+ * it true when the guard began checking every run inside `run()`.
+ */
+export const GUARD_CATALOGUE = { every_run: true } as const;
