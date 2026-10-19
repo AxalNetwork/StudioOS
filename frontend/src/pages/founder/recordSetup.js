@@ -17,6 +17,7 @@
  */
 
 import { MEETING_PROVIDERS, safeJoinUrl } from './channelThreads.js';
+import { consentTarget } from './chatConsent.js';
 
 export const SETUP_FIELDS = Object.freeze({
   points: true, // §5.2: interview_session_points (migration 452, #1591)
@@ -350,10 +351,13 @@ export function threadsFor(read, provider) {
  * the interview Who names, or one made from Who. A consent pick is quote
  * consent (§5.1.4), sent only as the literal true.
  */
-export function assignTarget({ name, company, consent }, { projectId, interview = null }) {
+export function assignTarget({ name, company, consent, chatConsent = null }, { projectId, interview = null }) {
   const target = interview?.id != null
     ? { interview_id: Number(interview.id) }
     : { create: { interviewee_name: String(name || '').trim(), interviewee_company: String(company || '').trim() || null, project_id: Number(projectId) } };
   if (CONSENTS.some(([k]) => k === consent)) target.quote_consent = true;
+  // D754 (#1980): a chat that waits for consent — Ask in the chat, or the member's word.
+  const asked = consentTarget(chatConsent);
+  if (asked) target.consent = asked;
   return target;
 }

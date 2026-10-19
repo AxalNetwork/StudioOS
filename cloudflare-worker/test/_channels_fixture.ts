@@ -4,6 +4,11 @@
  * mocked `globalThis.fetch` whose unexpected URL fails the test, so nothing
  * reaches a real provider. Moved here unchanged from
  * channels_messaging_d684.test.ts for D754 (#1893), which shares it.
+ *
+ * D756 (#1895) adds two things for the readiness tests
+ * (`channels_readiness_d756.test.ts`): `send` also returns the response
+ * headers, and the fake `JOB_QUEUE.send` also records its options
+ * (`queuedOpts`). Every secret is a fake fixture value.
  */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -87,7 +92,7 @@ export async function world(opts: { seed?: boolean; budget?: number } = {}) {
     '452_record_session_setup.sql', '454_channel_voice_failures.sql',
     '457_integrations_last_error_at.sql', '458_channel_link_consent.sql',
     // D754 (#1893): the consent store and channel_threads.consent_state.
-    '488_channel_consents.sql']) db.exec(mig(m));
+    '488_channel_consents.sql', '492_whatsapp_sender_links.sql']) db.exec(mig(m));
   // D757: the Validate engine's schema (487, 465, 453 and the re-scope's columns).
   applyEngineSchema(db);
   if (opts.budget != null) {
@@ -96,13 +101,15 @@ export async function world(opts: { seed?: boolean; budget?: number } = {}) {
     }
   }
   const queued: any[] = [];
+  /** Each JOB_QUEUE.send's options (delaySeconds), in order (D756). */
+  const queuedOpts: any[] = [];
   const aiCalls: any[] = [];
   const env: any = {
     DB, ENVIRONMENT: 'development', JWT_SECRET, KEK_PII: 'k'.repeat(48), ...SECRETS,
     WHATSAPP_CHANNEL: 'on', TELEGRAM_CHANNEL: 'on',
     APP_URL: 'https://axal.vc', PUBLIC_BASE_URL: 'https://axal.vc',
     RATE_LIMITS: memKV(), USE_CF_QUEUE: 'true',
-    JOB_QUEUE: { async send(body: any) { queued.push(body); } },
+    JOB_QUEUE: { async send(body: any, opts?: any) { queued.push(body); queuedOpts.push(opts ?? null); } },
     AI: { async run(model: string, input: any) { aiCalls.push({ model, input }); return { text: 'We lose a whole day every month to this.', transcription_info: { language: 'en' } }; } },
   };
   if (opts.seed) {
@@ -117,7 +124,7 @@ export async function world(opts: { seed?: boolean; budget?: number } = {}) {
     db.exec(`INSERT INTO telegram_business_connections (uid, business_connection_id, telegram_user_id, user_id, is_enabled, can_reply)
              VALUES ('bc-1', 'BC-ME', '${TG_ME}', ${ME}, 1, 1)`);
   }
-  return { env, db, queued, aiCalls };
+  return { env, db, queued, queuedOpts, aiCalls };
 }
 
 // ---------------------------------------------------------------------------
@@ -146,7 +153,7 @@ export async function send(env: any, path: string, init: RequestInit) {
   seen.push(text);
   let body: any = null;
   try { body = JSON.parse(text); } catch { body = text; }
-  return { status: res.status, body };
+  return { status: res.status, body, headers: res.headers };
 }
 
 export async function call(env: any, user: number, method: string, path: string, body?: unknown, role = 'founder') {
@@ -209,6 +216,8 @@ export const now = () => Math.floor(Date.now() / 1000);
 
 /** Telegram update and message ids, counted up by every builder (and by a test that builds its own). */
 export const ids = { update: 100, message: 500 };
+/** The next update id, for a test that builds its own update (D756). */
+export const nextUpdateId = () => ++ids.update;
 export const tgUser = (id: string, extra: Record<string, unknown> = {}) => ({ id: Number(id), is_bot: false, first_name: 'Dana', username: 'dana_biz', ...extra });
 
 export const startUpdate = (code: string, tg = TG_ME) => ({
@@ -252,21 +261,25 @@ export const waText = (pnid: string, wamid: string, text = 'Our month-end close 
 });
 
 /**
- * D754 (#1893): a WhatsApp chat keeps nothing until its consent is given. The
+ * D754 (#1893), D756 (#1977): a WhatsApp chat keeps nothing, and a Telegram
+ * chat fetches no note, until its consent is given. The
  * state the interviewee's Yes leaves (the row, the thread, the session), then
  * the follow-up job that moves what waited — for the cases here that test
  * what happens after it. channel_consent_d754.test.ts tests getting there.
  */
-export async function consentGiven(env: any, db: any, threadUid: string) {
-  const t = db.prepare('SELECT * FROM channel_threads WHERE uid = ?').get(threadUid);
+export async function consentGiven(env: any, _db: unknown, threadUid: string) {
+  const t: any = await env.DB.prepare('SELECT * FROM channel_threads WHERE uid = ?').bind(threadUid).first();
   const uid = crypto.randomUUID();
-  db.prepare(`INSERT INTO channel_consents (uid, user_id, provider, integration_id, thread_id, interview_id, session_id,
-                source, method, status, notice_version, answered_at)
-              VALUES (?, ?, 'whatsapp', ?, ?, ?, ?, 'interviewee_reply', 'chat_reply', 'given', 1, datetime('now'))`)
-    .run(uid, t.user_id, t.integration_id, t.id, t.interview_id, t.session_id);
-  db.prepare(`UPDATE channel_threads SET consent_state = 'given' WHERE id = ?`).run(t.id);
-  db.prepare(`UPDATE interview_sessions SET consent_status = 'given', consent_method = 'chat_reply', consent_at = datetime('now') WHERE id = ?`).run(t.session_id);
-  await runChannelJob(env, 'channel_followup', { provider: 'whatsapp', kind: 'consent', thread: threadUid, consent: uid });
+  await env.DB.prepare(`INSERT INTO channel_consents (uid, user_id, provider, integration_id, thread_id, interview_id, session_id,
+                source, method, status, notice_version, requested_at, answered_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, 'interviewee_reply', 'chat_reply', 'given', 1, datetime('now'), datetime('now'))`)
+    .bind(uid, t.user_id, t.provider, t.integration_id, t.id, t.interview_id, t.session_id).run();
+  await env.DB.prepare(`UPDATE channel_threads SET consent_state = 'given' WHERE id = ?`).bind(t.id).run();
+  if (t.session_id) {
+    await env.DB.prepare(`UPDATE interview_sessions SET consent_status = 'given', consent_method = 'chat_reply', consent_at = datetime('now') WHERE id = ?`)
+      .bind(t.session_id).run();
+  }
+  await runChannelJob(env, 'channel_followup', { provider: t.provider, kind: 'consent', thread: threadUid, consent: uid });
 }
 
 export function noSecretsSeen() {
