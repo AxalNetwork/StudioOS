@@ -45,7 +45,7 @@
  */
 import type { Context } from 'hono';
 import type { Env, User } from '../../types';
-import { callbackBase } from '../../util/url';
+import { oauthCallbackUrl } from '../../util/url';
 import { withDeadline } from '../../util/deadline';
 import {
   getDescriptor, registerProvider, type ConnectInput, type ConnectResult, type IntegrationRow,
@@ -75,8 +75,9 @@ const QUIET_AFTER_END_MS = 24 * 60 * 60 * 1000;
 
 // ───────────────────────────────────────────────────────────── OAuth
 
-function redirectUri(env: Env): string {
-  return `${callbackBase(env)}/api/integrations/oauth/${PROVIDER_KEY}/callback`;
+/** The callback URL registered with Zoom; Admin → Integration keys shows the same (D751). */
+export function redirectUri(env: Env): string {
+  return oauthCallbackUrl(env, PROVIDER_KEY);
 }
 
 /** The trimmed client pair, or null when either half is unset. */
