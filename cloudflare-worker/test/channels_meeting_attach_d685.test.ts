@@ -275,6 +275,8 @@ test('Meet transcript scope is requested only by incremental consent, and missin
 
 test('explicit Meet consent callback stores the grant and returns to Record', async (t) => {
   const f = world();
+  // D757 (#1926): the route is offered only once the owner has switched it on.
+  (f.env as any).MEET_TRANSCRIPTS_ENABLED = 'on';
   await meetConnected(f, 'https://www.googleapis.com/auth/calendar.events');
   const start = await app.fetch(new Request('http://x/api/calendar/google/meet-transcripts/connect?return_to=record', {
     method: 'POST', headers: await auth(),
