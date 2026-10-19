@@ -5,6 +5,7 @@ import { CardBody, CycleHeader } from './CycleOverview';
 import { recordHref, recordId, rowLinks } from './recordModel.js';
 import { MODULE_LINK_CLASS } from './founderToolNavigation.js';
 import { cardView, cellView, cycleOf, isPlainClick, pageButtons, recordsCount, safeHref } from './cycleModel';
+import { verdictInterviewLine } from './validatePhone.js';
 
 /**
  * D661 (#1474) — one module page for all 26 modules, drawn to
@@ -180,6 +181,7 @@ export default function CycleModulePage({
   if (!meta) return null;
   const card = data?.card || null;
   const view = cardView(card);
+  const interviewLine = verdictInterviewLine(data);
   // A refused or unreadable read sends no card, so the cycle's own list names it (never its slug).
   const name = card?.name || data?.module?.name || moduleName || slug;
   const toolLinks = [tool, ...tools].filter((item) => safeHref(item?.href));
@@ -204,6 +206,8 @@ export default function CycleModulePage({
             </div>
             <CardBody card={card} onRetry={onRetry} search={search} />
             {view.state === 'ok' && card.caption && <span className="text-[12.5px] leading-relaxed text-axal-ink/80 dark:text-gray-300">{card.caption}</span>}
+            {/* D757 §2.6 (#1928): Verdict's interview evidence since the last decision, writers only. */}
+            {interviewLine && <p className="m-0 text-[12.5px] font-semibold text-axal-ink dark:text-gray-100" data-testid="verdict-interview-line">{interviewLine}</p>}
 
           </section>
           {toolLinks.map((item) => (

@@ -14,6 +14,10 @@ One file per provider. Each module:
    fails until every request that writes is named by a tool (D753).
 5. An OAuth provider implements `ready(env)`; `connector_readiness_d751.test.ts`
    fails otherwise (D751).
+6. An OAuth provider exports its `redirectUri(env)`, built with
+   `oauthCallbackUrl` (`../../util/url.ts`), and `../../routes/admin_integration_keys.ts`'s
+   `CALLBACK_URL` lists it, so Admin → Integration keys shows the URL the
+   provider sends. `tsc` enforces the list for managed keys (D751, #1882).
 
 The module is then imported once from the worker entry point
 (`cloudflare-worker/src/index.ts`) so its top-level `registerProvider`
