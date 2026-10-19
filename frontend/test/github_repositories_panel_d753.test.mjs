@@ -186,7 +186,11 @@ test('GitHub\'s page draws #repositories for a connected row, reads them on moun
     assert.ok(m.text().includes('acme/app Private · updated 3 Oct Selected'), m.text());
     assert.ok(m.text().includes(FOOTER_LINE) && m.by('button-sync-selected'), 'Sync, with its footer');
     assert.ok(!m.by('connector-sheet-sync'), 'no sync sheet');
-    assert.ok(m.by('connector-page-connect'), 'Connect and manage stays beside it');
+    assert.ok(!m.by('connector-page-connect'), 'no interim panel: the section is GitHub\'s own (F4)');
+    const yours = m.by('connector-page-connection');
+    assert.ok(yours, 'Your connection');
+    const inside = (n, root) => { for (let x = n; x; x = x.parentNode) if (x === root) return true; return false; };
+    assert.ok(inside(sec, yours), 'in Your connection\'s provider slot (F3, #1956)');
   } finally { await m.unmount(); }
   // Not connected: nothing to read, no section. Another connector: no section.
   const off = await mountPage(ready([]), '/account/connectors/github');
@@ -204,7 +208,7 @@ test('a return from GitHub\'s sign-in focuses #repositories, not the sync view, 
     assert.ok(!m.by('connector-sheet-sync'), 'the sign-in never opens the sync view on the page');
     // Booleans and strings only: a failing compare of two DOM nodes prints their whole React tree.
     const heading = m.active();
-    assert.equal(heading?.tagName ?? null, 'H2');
+    assert.equal(heading?.tagName ?? null, 'H3', 'an h3 under Your connection\'s h2');
     assert.ok(heading.parentNode === m.by('connector-page-repositories'), 'the section\'s heading has focus');
     assert.equal(m.pr(heading).tabIndex, -1);
     assert.equal(seen.search, '?tab=x', 'the return is stripped; the rest kept');
@@ -233,9 +237,9 @@ test('the App\'s Setup URL lands on #repositories; installation_id and setup_act
   assert.equal(pageLanding('?tab=discover', 'github'), null);
 });
 
-test('the page\'s panel has no GitHub sync view: Choose goes to the section', () => {
+test('the page has no GitHub sync view: the section sits in Your connection\'s provider slot', () => {
   const page = readFileSync('frontend/src/pages/account/ConnectorPage.jsx', 'utf8');
-  assert.match(page, /\{p\.key === 'github' && <GithubRepositoriesSection p=\{p\} focus=\{!!returned\?\.repositories\} onChanged=\{data\.reload\} \/>\}/);
-  assert.match(page, /setView=\{\(view\) => \(p\.key === 'github' && view === 'sync' \? toRepositories\(\) : setState\(\{ view, ret: \{\} \}\)\)\}/);
+  assert.match(page, /\{p\.key === 'github' && <GithubRepositoriesSection p=\{p\} focus=\{repositories\} onChanged=\{onChanged\} \/>\}/);
+  assert.match(page, /repositories=\{!!returned\?\.repositories\}/);
   assert.doesNotMatch(page, /GithubSyncSheet/, 'the page never draws the sync sheet');
 });

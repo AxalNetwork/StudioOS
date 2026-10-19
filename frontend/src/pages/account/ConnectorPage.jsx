@@ -4,22 +4,26 @@ import { connectorsApi } from '../../lib/api/connectors';
 import { ChevronDown, Info } from 'lucide-react';
 import { BrandIcon, PhoneBar, Pill, Unrecorded, Unreadable, usePhoneWidth } from '../../ui';
 import { BTN } from './AccountCenter';
-import { ConnectorPanel, KeyFields, PermissionsGroup, SheetFrame, UsesGroups, openingView, useConnectors } from './ConnectorSheet';
+import {
+  ActivityGroup, CompaniesGroup, ConnectorPanel, FedGroup, Group, KeyFields, PermissionsGroup, Row, SettingsGroup, SheetFrame, ToolModals,
+  UsesGroups, openingView, useConnectors,
+} from './ConnectorSheet';
+import Lightbox from '../../ui/Lightbox';
 import { useConnectFlow } from './useConnectFlow';
 import { RequestSheet, useMovedNotice } from './AccountConnectors';
-import { isEntityRow, isPersonalMercury, keysHref, moduleLabel, stripReturn } from './connectorsModel';
+import { connectionStatus, disconnectNote, isEntityRow, isPersonalMercury, keysHref, lastSyncLabel, moduleLabel, stripReturn } from './connectorsModel';
 import {
-  DETAIL_MISSING, backHrefFor, bodyDetailsRows, detailsRows, headerTagline, keyHelpOf, modeLabel, pageAction, pageChoices, pageEntry, pageNotice,
-  pageLanding, pageTitle, toolGroups,
+  DETAIL_MISSING, backHrefFor, bodyDetailsRows, detailsRows, headerTagline, interimPanel, keyHelpOf, keyPath, manageItems, modeLabel, pageAction,
+  pageChoices, pageEntry, pageNotice, pageLanding, pageTitle, toolGroups,
 } from './connectorPageModel';
 import { isChannelKey } from './channelPageModel';
 import ChannelPage from './ChannelPage';
-import GithubRepositoriesSection, { REPOSITORIES_ID } from './GithubRepositoriesSection';
+import GithubRepositoriesSection from './GithubRepositoriesSection';
 import { notOfferedSentence } from './mercuryModel';
 import { MercuryEntityPageBody, MercuryLandsGroup, MercuryReadsGroup, MercuryUsesGroups } from './MercurySheet';
 import { useAuth } from '../../hooks/useAuthSync';
 import { branchOfUser, isSuperAdminUser } from '../../lib/shellRole';
-import { ZOOM_DISCONNECT_NOTE, ZOOM_SECTIONS, usedByLinks, zoomHowItWorks, zoomNotices } from '../../lib/validateSourceWording';
+import { ZOOM_DISCONNECT_NOTE, ZOOM_SECTIONS, zoomHowItWorks, zoomNotices } from '../../lib/validateSourceWording';
 
 /**
  * D753 (#1876, F1) — a connector's own page, `/account/connectors/<key>`,
@@ -35,11 +39,16 @@ import { ZOOM_DISCONNECT_NOTE, ZOOM_SECTIONS, usedByLinks, zoomHowItWorks, zoomN
  * the split chevron (`pageChoices`). The notice region draws one notice at a
  * time (`pageNotice`).
  *
- * NOTHING IS LOST WHILE THE WORK MOVES (decision 7). Until F3 to F5 replace
- * it, the connected half of today's `ConnectorPanel` (companies, fed,
- * settings, activity; GitHub's repositories) is mounted
- * inline in "Connect and manage", through `SheetFrame`'s `page` layout: in
- * the page's flow, no overlay, no dialog role, no × and no Escape of its own.
+ * YOUR CONNECTION (#1956, F3; decision 3, item 4). A connected row draws its
+ * account, status, last sync and Sync now, then Companies, Now fed by,
+ * Settings and Activity (the sheet's own groups, shared), and the band adds
+ * "Manage ▾" (`manageItems`): Sync now, Replace key or Reconnect, and
+ * Disconnect, which asks first in a centred dialog.
+ *
+ * NOTHING IS LOST WHILE THE WORK MOVES (decision 7). Until F5 takes it
+ * over, today's `ConnectorPanel` stays inline only for a member's own
+ * Mercury (`interimPanel`), through `SheetFrame`'s `page` layout: in the
+ * page's flow, no overlay, no dialog role, no × and no Escape of its own.
  *
  * A SIGN-IN COMES BACK HERE (decision 6). `connectorsRedirect` sends a return
  * naming this key to this page; the page reads it only when it names its own
@@ -47,8 +56,8 @@ import { ZOOM_DISCONNECT_NOTE, ZOOM_SECTIONS, usedByLinks, zoomHowItWorks, zoomN
  * region, and strips the query.
  *
  * GITHUB'S REPOSITORIES (#1957, F4). GitHub's page draws its repositories as
- * its own Repositories section (`GithubRepositoriesSection`), beside "Connect
- * and manage", never the panel's sync view. Its sign-in and the GitHub App's
+ * its own Repositories section (`GithubRepositoriesSection`), in Your
+ * connection's provider slot, never the panel's sync view. Its sign-in and the GitHub App's
  * Setup URL land on that section (`pageLanding`); the Setup URL's
  * `installation_id` and `setup_action` are stripped and never drawn.
  *
@@ -64,8 +73,8 @@ import { ZOOM_DISCONNECT_NOTE, ZOOM_SECTIONS, usedByLinks, zoomHowItWorks, zoomN
  * MERCURY (#1991, F5). The Axal entities' row (`isEntityRow`, an admin on HQ)
  * draws `MercuryEntityPageBody` in "Connect and manage": the entity
  * connections, what they feed, Open Banking and the audit foot, with the one
- * audited read on mount and no header action. A member's own Mercury stays in
- * the interim panel until F3 (#1956) draws "Your connection".
+ * audited read on mount and no header action. A member's connected Mercury
+ * stays in the interim panel (`interimPanel`) until F5 lays it out.
  *
  * THE READ (#1955, part 2). Handed `readPage` (`connectorsApi.page`), the view
  * reads `GET /api/connectors/directory/<page_key>` once the connector is known,
@@ -145,8 +154,7 @@ export function ConnectorPageView({ data, connectorKey, phone = false, branchAdm
   }
 
   return (
-    <ReadyPage key={p.key} p={p} back={back} phone={phone} ret={returned?.ret || null} moved={moved} onChanged={data.reload} connector={shownBody?.state === 'ready' ? shownBody.connector : null}>
-      {p.key === 'github' && <GithubRepositoriesSection p={p} focus={!!returned?.repositories} onChanged={data.reload} />}
+    <ReadyPage key={p.key} p={p} back={back} phone={phone} ret={returned?.ret || null} repositories={!!returned?.repositories} moved={moved} onChanged={data.reload} connector={shownBody?.state === 'ready' ? shownBody.connector : null}>
       {p.key === 'zoom' && <ZoomValidate p={p} />}
       {shownBody
         ? <ConnectorBody state={shownBody.state} connector={shownBody.connector} p={p} onRetry={retryBody} />
@@ -164,7 +172,7 @@ export function ConnectorPageView({ data, connectorKey, phone = false, branchAdm
  * The page once its connector is known: the band and its one action, the
  * notice, the inline key form, the connected half, then `children` (the body).
  */
-function ReadyPage({ p, back, phone, ret, moved, onChanged, children, connector = null }) {
+function ReadyPage({ p, back, phone, ret, moved, onChanged, children, connector = null, repositories = false }) {
   const auth = useAuth();
   const superAdmin = isSuperAdminUser(auth?.user);
   // A return opens on what happened. GitHub's lands on its Repositories section instead (`pageLanding`, #1957).
@@ -176,12 +184,14 @@ function ReadyPage({ p, back, phone, ret, moved, onChanged, children, connector 
   const action = pageAction(p, { view });
   const tagline = headerTagline(p, connector);
   const notice = pageNotice({ view, ret: flowRet, message: flow.message, name, moved });
-  const keyOpen = (view === 'key' || view === 'badkey') && (action.kind === 'key' || action.kind === 'oauth' || action.kind === 'reconnect');
-  // The connected half stays inline until F3 to F5; a member's not-connected flow is the band's.
+  // Connect by key, Reconnect by key, or Manage's Replace key on a connected row.
+  const keyOpen = (view === 'key' || view === 'badkey') && ['key', 'oauth', 'reconnect', 'status'].includes(action.kind);
   // D753 F5 (#1991): the Axal entities' Mercury is drawn on the page itself, never the interim panel.
   const entity = isEntityRow(p);
-  const panelShown = !entity && (!!p.connection || view === 'sync');
-  // A member's own Mercury still says what it is for before the token is asked for, until F3 (#1956); the band connects.
+  // F1's panel stays only where F4 (GitHub) and F5 (Mercury) take it over; every other connection is "Your connection".
+  const panelShown = interimPanel(p, view);
+  const role = auth?.user?.role ?? null;
+  // A member's own Mercury still says what it is for before the token is asked for, until F5; the band connects.
   const memberMercury = isPersonalMercury(p) && !p.connection && !panelShown;
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="connector-page" data-state="ready" data-key={p.key}>
@@ -192,7 +202,7 @@ function ReadyPage({ p, back, phone, ret, moved, onChanged, children, connector 
           {!phone && <h1 className="text-2xl font-extrabold tracking-axal-heading text-axal-ink dark:text-gray-100">{p.display_name}</h1>}
           {tagline && <p className="mt-0.5 min-w-0 break-words text-[13.5px] leading-snug text-axal-muted dark:text-gray-400" data-testid="connector-page-tagline">{tagline}</p>}
         </div>
-        <BandAction p={p} action={action} flow={flow} phone={phone} superAdmin={superAdmin} onChanged={onChanged} />
+        <BandAction p={p} action={action} flow={flow} phone={phone} superAdmin={superAdmin} onChanged={onChanged} manage={panelShown || entity ? [] : manageItems(p)} />
       </header>
 
       {notice && (
@@ -210,8 +220,8 @@ function ReadyPage({ p, back, phone, ret, moved, onChanged, children, connector 
         <section aria-label="Connect and manage" data-testid="connector-page-connect" data-mode={keyOpen ? 'key' : panelShown ? 'panel' : 'mercury'}>
           {memberMercury && (
             <div className="-mx-5">
-              <MercuryUsesGroups role={auth?.user?.role ?? null} />
-              <MercuryLandsGroup role={auth?.user?.role ?? null} />
+              <MercuryUsesGroups role={role} />
+              <MercuryLandsGroup role={role} />
               <MercuryReadsGroup />
             </div>
           )}
@@ -219,19 +229,79 @@ function ReadyPage({ p, back, phone, ret, moved, onChanged, children, connector 
           {!keyOpen && panelShown && <InlinePanel key={`${p.key}:${p.connection ? 'c' : 'n'}`} p={p} ret={view === 'sync' ? { view: 'sync' } : null} onChanged={onChanged} />}
         </section>
       )}
+      {p.connection && !panelShown && !entity && <YourConnection p={p} flow={flow} onChanged={onChanged} repositories={repositories} />}
+      {flow.confirming && (
+        <Lightbox label={`Disconnect ${name}?`} title={`Disconnect ${name}?`} onClose={() => flow.setConfirming(false)} width={440} testId="connector-page-disconnect-dialog"
+          footer={(
+            <>
+              <button type="button" className={BTN.ghost} onClick={() => flow.setConfirming(false)}>Cancel</button>
+              <button type="button" className={BTN.dangerSolid} disabled={flow.busy} onClick={flow.doDisconnect} data-testid="connector-page-confirm-disconnect">{flow.busy ? 'Disconnecting…' : 'Disconnect'}</button>
+            </>
+          )}>
+          <p className="px-5 py-4 text-[13px] text-axal-ink dark:text-gray-200" data-testid="connector-page-disconnect-note">{disconnectNote(p, role)}</p>
+          {flow.message && <p role="alert" className="px-5 pb-4 text-[12.5px] text-red-700 dark:text-red-300">{flow.message}</p>}
+        </Lightbox>
+      )}
       {children}
     </div>
   );
 }
 
+const ACCOUNT_MISSING = 'The service did not name the account this connection signed in as.';
+
+/**
+ * "Your connection" (decision 3, item 4): the first row, a slot for the
+ * provider's own section, then the sheet's Companies, Now fed by, Settings
+ * and Activity groups, which Build's lightbox draws too.
+ */
+function YourConnection({ p, flow, onChanged, repositories = false }) {
+  const conn = p.connection;
+  const status = connectionStatus(conn, p);
+  return (
+    <section data-testid="connector-page-connection" className="flex min-w-0 flex-col gap-2">
+      <h2 className={H2}>Your connection</h2>
+      <div data-testid="connector-page-connection-row" className={`${BOX} flex flex-wrap items-center gap-x-5 gap-y-2`}>
+        <div className="min-w-0">
+          <div className="text-[10.5px] font-bold uppercase tracking-axal-label text-axal-muted dark:text-gray-400">Account</div>
+          <div className="min-w-0 break-words" data-testid="connector-page-account">
+            {conn.external_account_name || <Unrecorded reason={ACCOUNT_MISSING}>Not recorded</Unrecorded>}
+          </div>
+        </div>
+        <Pill tone={status.tone}>{status.label}</Pill>
+        <div className="min-w-0">
+          <div className="text-[10.5px] font-bold uppercase tracking-axal-label text-axal-muted dark:text-gray-400">Last sync</div>
+          <div data-testid="connector-page-last-sync">{flow.syncNote || lastSyncLabel(conn)}</div>
+        </div>
+        {conn.uid && (
+          <button type="button" className={`${BTN.ghost} sm:ml-auto`} disabled={flow.syncing} onClick={flow.syncNow} data-testid="connector-page-sync">
+            {flow.syncing ? 'Syncing…' : 'Sync now'}
+          </button>
+        )}
+        {status.why && <p className="w-full text-[12.5px] text-amber-800 dark:text-amber-200" data-testid="connector-page-attention">{status.why}.</p>}
+      </div>
+      {/* The provider's own section goes here: GitHub's repositories (F4, #1957), Mercury (F5), the channel cards (C1). */}
+      {p.key === 'github' && <GithubRepositoriesSection p={p} focus={repositories} onChanged={onChanged} />}
+      <div className="-mx-5">
+        <CompaniesGroup conn={conn} onChanged={onChanged} />
+        <FedGroup conn={conn} name={p.display_name} />
+        <SettingsGroup p={p} onTool={flow.setTool} onReplace={() => flow.go('key')} />
+        {conn.uid
+          ? <ActivityGroup conn={conn} />
+          : <Group label="Activity"><Row a={<Unrecorded reason={`${p.display_name} keeps no activity log in StudioOS.`}>Not recorded</Unrecorded>} /></Group>}
+      </div>
+      <ToolModals conn={conn} flow={flow} onChanged={onChanged} />
+    </section>
+  );
+}
+
 /**
  * D757 §2.12 (#1929): what Zoom feeds and needs, in D757's words, from the
- * catalogue row's `used_by`, `suggests`, `distribution` and `configured`
- * (#1922, D751), so it draws with or without F7's body.
+ * catalogue row's `suggests`, `distribution` and `configured` (#1922, D751),
+ * so it draws with or without F7's body. No Used by links: every profile sees
+ * this page, and Validate is the founder's (validateSourceWording.js).
  */
 export function ZoomValidate({ p }) {
   const notices = zoomNotices(p);
-  const usedBy = usedByLinks(p?.used_by);
   return (
     <section data-testid="connector-page-validate" className="flex min-w-0 flex-col gap-3">
       {notices.map((n) => (
@@ -241,14 +311,6 @@ export function ZoomValidate({ p }) {
         </div>
       ))}
       {(p?.connection || p?.already_connected === true) && <p className="text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="zoom-disconnect-note">{ZOOM_DISCONNECT_NOTE}</p>}
-      {usedBy.length > 0 && (
-        <div className="min-w-0" data-testid="zoom-used-by">
-          <h2 className={H2}>Used by</h2>
-          <ul className="mt-1 flex flex-wrap gap-2">
-            {usedBy.map((u) => <li key={u.href}><Link to={u.href} className={`${BTN.link} text-[13px]`}>{u.label}</Link></li>)}
-          </ul>
-        </div>
-      )}
       <div className="min-w-0" data-testid="zoom-how">
         <h2 className={H2}>How it works</h2>
         <ol className="mt-1 list-decimal pl-5 text-[13px] leading-relaxed text-axal-ink dark:text-gray-200">
@@ -280,11 +342,7 @@ function NotReady({ entry, connectorKey, data, branchAdmin }) {
         No connector called &ldquo;{connectorKey}&rdquo;.{' '}
         <button type="button" className={`${BTN.link} font-bold`} onClick={() => setRequesting(true)} data-testid="connector-page-request">Request it.</button>
       </div>
-      {requesting && (
-        <SheetFrame.Provider value={{ layout: 'page', onDismiss: () => setRequesting(false) }}>
-          <RequestSheet tool={connectorKey} onClose={() => setRequesting(false)} />
-        </SheetFrame.Provider>
-      )}
+      {requesting && <RequestSheet tool={connectorKey} onClose={() => setRequesting(false)} />}
     </>
   );
 }
@@ -316,7 +374,7 @@ function Notice({ notice, name, adminHref }) {
  * The band's one action (`pageAction`, decision 6), and its split chevron:
  * a menu on desktop, radios and links on a phone.
  */
-function BandAction({ p, action, flow, phone, superAdmin, onChanged }) {
+function BandAction({ p, action, flow, phone, superAdmin, onChanged, manage = [] }) {
   const choices = pageChoices(p);
   const connects = action.kind === 'oauth' || action.kind === 'key' || action.kind === 'starting';
   const hasChoices = connects && (choices.env || choices.alt.length > 0);
@@ -326,8 +384,15 @@ function BandAction({ p, action, flow, phone, superAdmin, onChanged }) {
   };
   if (action.kind === 'none') return null;
   if (action.kind === 'status') {
-    // F3 draws "Manage ▾" beside the pill.
-    return <div className="flex items-center gap-2" data-testid="connector-page-action" data-kind="status"><Pill tone={action.pill.tone}>{action.pill.label}</Pill></div>;
+    return (
+      <div className="flex min-w-0 flex-col items-start gap-2 sm:items-end" data-testid="connector-page-action" data-kind="status">
+        <div className="flex items-center gap-2">
+          <Pill tone={action.pill.tone}>{action.pill.label}</Pill>
+          {manage.length > 0 && !phone && <ManageMenu p={p} items={manage} flow={flow} />}
+        </div>
+        {manage.length > 0 && phone && <ManageRows p={p} items={manage} flow={flow} />}
+      </div>
+    );
   }
   if (action.kind === 'waitlist') return <WaitlistAction p={p} action={action} onChanged={onChanged} />;
   if (action.kind === 'plan') {
@@ -365,8 +430,64 @@ function BandAction({ p, action, flow, phone, superAdmin, onChanged }) {
           {action.label}
         </button>
         {hasChoices && !phone && <ChoicesMenu p={p} choices={choices} flow={flow} disabled={starting} />}
+        {action.kind === 'reconnect' && manage.length > 0 && !phone && <span className="ml-2"><ManageMenu p={p} items={manage} flow={flow} /></span>}
       </div>
       {hasChoices && phone && <ChoicesInline p={p} choices={choices} flow={flow} />}
+      {action.kind === 'reconnect' && manage.length > 0 && phone && <ManageRows p={p} items={manage} flow={flow} />}
+    </div>
+  );
+}
+
+/** What a Manage item does, through the flow. */
+function manageAct(p, flow, id) {
+  if (id === 'sync') return flow.syncNow();
+  if (id === 'replace') return flow.go('key');
+  if (id === 'reconnect') return keyPath(p) ? flow.go('key') : flow.startOauth();
+  return flow.setConfirming(true);
+}
+
+/** "Manage ▾" on desktop: a menu of `manageItems`. */
+function ManageMenu({ p, items, flow }) {
+  const [open, setOpen] = useState(false);
+  const wrap = useRef(null);
+  useEffect(() => {
+    if (!open || typeof document === 'undefined') return undefined;
+    const away = (e) => { if (wrap.current && !wrap.current.contains(e.target)) setOpen(false); };
+    const esc = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener?.('mousedown', away);
+    document.addEventListener?.('keydown', esc);
+    return () => { document.removeEventListener?.('mousedown', away); document.removeEventListener?.('keydown', esc); };
+  }, [open]);
+  return (
+    <div className="relative" ref={wrap}>
+      <button type="button" className={BTN.ghost} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((v) => !v)} data-testid="connector-page-manage">
+        Manage <ChevronDown size={14} aria-hidden="true" />
+      </button>
+      {open && (
+        <div role="menu" aria-label={`Manage ${p.display_name}`} data-testid="connector-page-manage-menu"
+          className="absolute right-0 z-20 mt-1 min-w-[12rem] rounded-axal-sm border border-axal-hairline bg-white py-1 text-[13px] shadow-lg dark:border-gray-700 dark:bg-gray-900">
+          {items.map((it) => (
+            <button key={it.id} type="button" role="menuitem" data-testid={`connector-page-manage-${it.id}`}
+              className={`flex w-full px-3 py-1.5 text-left hover:bg-axal-ground dark:hover:bg-gray-800${it.id === 'disconnect' ? ' text-red-700 dark:text-red-300' : ''}`}
+              onClick={() => { setOpen(false); manageAct(p, flow, it.id); }}>
+              {it.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Manage on a phone: the same items as action rows under the band. */
+function ManageRows({ p, items, flow }) {
+  return (
+    <div className="flex flex-wrap gap-2" data-testid="connector-page-manage-rows">
+      {items.map((it) => (
+        <button key={it.id} type="button" className={it.id === 'disconnect' ? BTN.danger : BTN.ghost} onClick={() => manageAct(p, flow, it.id)} data-testid={`connector-page-manage-${it.id}`}>
+          {it.label}
+        </button>
+      ))}
     </div>
   );
 }
@@ -476,20 +597,13 @@ function InlinePanel({ p, ret, onChanged }) {
         p={p}
         view={state.view}
         ret={state.ret}
-        // D753 F4 (#1957): GitHub's repositories are the page's own section, never the sync view.
-        setView={(view) => (p.key === 'github' && view === 'sync' ? toRepositories() : setState({ view, ret: {} }))}
+        setView={(view) => setState({ view, ret: {} })}
         onChanged={onChanged}
         onClose={reset}
         eyebrow="Connect and manage"
       />
     </SheetFrame.Provider>
   );
-}
-
-/** The Repositories section's heading takes focus, which scrolls it into view. */
-function toRepositories() {
-  if (typeof document === 'undefined') return;
-  document.getElementById(REPOSITORIES_ID)?.querySelector?.('h2')?.focus?.();
 }
 
 /** A Coming soon connector: Notify me, or We'll tell you, as its card offers. */

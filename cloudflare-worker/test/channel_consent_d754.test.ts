@@ -195,7 +195,7 @@ test('a WhatsApp chat added to an interview keeps nothing there before consent: 
     ['POST', `/sessions/${sid}/summarise`, {}], ['POST', `/sessions/${sid}/process`, {}],
   ] as const) {
     const r = await vcall(env, method, path, body);
-    assert.deepEqual([r.status, r.body.error], [409, 'consent_not_recorded'], path);
+    assert.deepEqual([r.status, r.body.error], [409, /\/(structure|summarise)$/.test(path) ? 'no_final_transcript' : 'consent_not_recorded'], path);
   }
   assert.equal(aiCalls.length, 0);
   const read = await call(env, ME, 'GET', `/threads/${uid}`);
@@ -380,7 +380,7 @@ test('the interviewee\'s Yes button gives consent; the follow-up moves what wait
   await runConsentJobs(env, queued);
   assert.deepEqual(segs(db, a.body.session_id), ['One.', 'Two.', 'Three.']);
   assert.equal(jobsOf(queued, 'channel_followup').filter((j) => j.payload.kind === 'voice').length, 1);
-  assert.deepEqual(jobsOf(queued, 'session_structure').map((j) => j.payload.trigger), ['chat_assigned']);
+  assert.deepEqual(jobsOf(queued, 'session_structure').map((j) => j.payload.trigger), ['chat_text_added']);
   await runConsentJobs(env, queued);
   assert.equal(segs(db, a.body.session_id).length, 3, 'a second run moves nothing');
   assert.equal(jobsOf(queued, 'channel_followup').filter((j) => j.payload.kind === 'voice').length, 1, 'the note is queued once');
@@ -783,12 +783,11 @@ test('the gate: a session holding audio is gated whatever its channel; consentBl
   // Six callers pass the options themselves; Structure and the stale-run sweep go through
   // `sessionConsentBlocks`, which reads them from the stored session.
   assert.ok(calls >= 6, `found ${calls} calls`);
-  for (const f of ['services/sessionAutoStructure.ts', 'services/sessionSweeper.ts']) {
-    assert.match(readFileSync(new URL(f, root), 'utf8'), /await sessionConsentBlocks\(env, s(ession)?\)/, f);
-  }
+  assert.match(readFileSync(new URL('services/sessionAutoStructure.ts', root), 'utf8'), /await sessionDigestConsentBlocks\(env, session\)/);
+  assert.match(readFileSync(new URL('services/sessionSweeper.ts', root), 'utf8'), /await sessionConsentBlocks\(env, s(ession)?\)/);
 });
 
-test('the gate on Validate: a text session holding one chunk is refused for Structure and the audio route; a recorder session withdrawn while paused is refused playback, and Discard still works', async () => {
+test('the gate on Validate: a text session holding one chunk can be structured while its audio route is refused; a recorder session withdrawn while paused is refused playback, and Discard still works', async () => {
   const { env, db } = await seeded();
   db.prepare(`INSERT INTO interview_sessions (id, uid, interview_id, project_id, created_by_user_id, channel, status, consent_status)
               VALUES (900, 's-900', ${INTERVIEW}, ${PROJECT}, ${ME}, 'text', 'transcribed', 'not_recorded'),
@@ -797,11 +796,12 @@ test('the gate on Validate: a text session holding one chunk is refused for Stru
   for (const sid of [900, 901]) {
     db.prepare(`INSERT INTO interview_session_chunks (session_id, seq, r2_key, mime, size_bytes) VALUES (?, 0, 'validate-audio/2/sessions/s/000000.webm', 'audio/webm', 10)`).run(sid);
   }
-  assert.equal((await vcall(env, 'POST', '/sessions/900/structure', {})).status, 409);
+  assert.equal((await vcall(env, 'POST', '/sessions/900/structure', {})).status, 201);
   assert.equal((await vcall(env, 'GET', '/sessions/900/audio')).status, 409);
   assert.equal((await vcall(env, 'GET', '/sessions/901/audio')).status, 409);
   const { structureSession } = await import('../src/services/sessionAutoStructure.ts');
-  assert.deepEqual(await structureSession(env, { sessionId: 900, userId: ME, trigger: 'chat_quiet' }), { ok: false, reason: 'consent_not_recorded' });
+  assert.equal((await structureSession(env, { sessionId: 900, userId: ME, trigger: 'chat_quiet' })).ok, true,
+    'D757 #1930: the engine stage digests final text while the audio route remains gated');
   const files: string[] = [];
   env.FILES = { async delete(keys: string[]) { files.push(...keys); } };
   assert.equal((await vcall(env, 'DELETE', '/sessions/901')).status, 200, 'Discard still works');

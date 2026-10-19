@@ -11,7 +11,8 @@ import GithubRepositoriesPanel from './GithubRepositoriesPanel';
  * section's heading takes focus, which scrolls it into view. Done starts the
  * section over, with a fresh read.
  *
- * When F3 (#1956) lands, this moves into its provider slot of Your connection.
+ * It is drawn in F3's provider slot of Your connection (#1956), so its heading
+ * is an h3 under that section's h2.
  */
 export const REPOSITORIES_ID = 'repositories';
 
@@ -30,7 +31,7 @@ export default function GithubRepositoriesSection({ p, focus = false, onChanged,
   if (wait) panel.wait = wait;
   return (
     <section id={REPOSITORIES_ID} aria-label="Repositories" data-testid="connector-page-repositories" className="scroll-mt-6 flex min-w-0 flex-col gap-2">
-      <h2 ref={heading} tabIndex={-1} className="text-[15px] font-bold text-axal-ink outline-none dark:text-gray-100">Repositories</h2>
+      <h3 ref={heading} tabIndex={-1} className="text-[13.5px] font-bold text-axal-ink outline-none dark:text-gray-100">Repositories</h3>
       <div className="-mx-5">
         <GithubRepositoriesPanel key={round} {...panel} />
       </div>
