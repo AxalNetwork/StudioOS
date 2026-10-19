@@ -74,11 +74,19 @@ async function signedInWithCatalogue(page) {
   });
 }
 
+// No sideways scroll, and nothing in <main> running past the right edge: a
+// parent that clips its overflow hides the scroll but still cuts the content off.
 async function hasNoHorizontalScroll(page) {
-  const { scrollW, clientW } = await page.evaluate(() => ({
-    scrollW: document.documentElement.scrollWidth, clientW: document.documentElement.clientWidth,
-  }));
+  const { scrollW, clientW, past } = await page.evaluate(() => {
+    const clientW = document.documentElement.clientWidth;
+    const past = [...document.querySelectorAll('main *')]
+      .filter((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && r.right > clientW + 1; })
+      .map((e) => e.getAttribute('data-testid') || e.tagName.toLowerCase())
+      .slice(0, 5);
+    return { scrollW: document.documentElement.scrollWidth, clientW, past };
+  });
   expect(scrollW, `the page scrolls sideways: ${scrollW}px in a ${clientW}px viewport`).toBeLessThanOrEqual(clientW);
+  expect(past, 'these run past the right edge').toEqual([]);
 }
 
 test.describe('Connectors: the hub, the filter menu and a connector\'s page (D753)', () => {
