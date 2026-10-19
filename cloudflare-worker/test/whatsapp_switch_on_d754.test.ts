@@ -6,7 +6,7 @@ import { createHmac } from 'node:crypto';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
-import { consentGiven } from './_channels_fixture.ts';
+import { consentGiven, memR2 } from './_channels_fixture.ts';
 import { audioConsentRequired } from '../src/services/channels/types.ts';
 import { applyEngineSchema } from './_engine_schema.mjs';
 import { tableFromBaseline } from './_baseline.mjs';
@@ -18,6 +18,7 @@ import { voiceFetchBy } from '../src/services/channels/voiceFailures.ts';
 import { callingEligibility, callingRecord, GRAPH_VERSION, unsubscribeApp } from '../src/services/channels/whatsapp.ts';
 import { memberConnection, channelOpenToMember } from '../src/services/channels/connections.ts';
 
+import { withGuard } from './_guard_stub.mjs';
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const mig = (name: string) => readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8');
 
@@ -95,11 +96,13 @@ async function world(opts: { seed?: boolean; budget?: number } = {}) {
   const queued: any[] = [];
   const aiCalls: any[] = [];
   const env: any = {
+    // D754 W3 (#1935): a consented WhatsApp note is kept as recorder audio.
+    FILES: memR2(),
     DB, ENVIRONMENT: 'development', JWT_SECRET, KEK_PII: 'k'.repeat(48), ...SECRETS,
     APP_URL: 'https://axal.vc', PUBLIC_BASE_URL: 'https://axal.vc',
     RATE_LIMITS: memKV(), USE_CF_QUEUE: 'true',
     JOB_QUEUE: { async send(body: any) { queued.push(body); } },
-    AI: { async run(model: string, input: any) { aiCalls.push({ model, input }); return { text: 'We lose a whole day every month to this.', transcription_info: { language: 'en' } }; } },
+    AI: withGuard({ async run(model: string, input: any) { aiCalls.push({ model, input }); return { text: 'We lose a whole day every month to this.', transcription_info: { language: 'en' } }; } }),
   };
   if (opts.seed) {
     const creds = await encryptCredentials(env, 'wa-me', { access_token: WA_TOKEN, token_type: 'bearer' });
@@ -271,7 +274,7 @@ function graphStub(numbers = ['3000002']): Route {
   return (url, init) => {
     const tg = telegramApi(url, init);
     if (tg) return tg;
-    if (url.hostname === 'lookaside.fbsbx.com') return { body: new Uint8Array(4000).fill(7), headers: { 'content-type': 'audio/ogg' } };
+    if (url.hostname === 'lookaside.fbsbx.com') return { body: OGG_FILE, headers: { 'content-type': 'application/octet-stream' } };
     if (url.hostname !== 'graph.facebook.com') return undefined;
     if (url.pathname.endsWith('/oauth/access_token')) return { json: { access_token: newToken } };
     if (url.pathname.endsWith('/phone_numbers')) return { json: { data: numbers.map((id) => ({ id, display_phone_number: '15550001234', verified_name: 'Example business', messaging_limit_tier: 'TIER_10K' })) } };
@@ -748,8 +751,8 @@ type Mutation = {
 const mutations: Mutation[] = [
   ...['/whatsapp/link', '/whatsapp/link/:uid/confirm'].map((path): Mutation => ({
     name: 'Axal-number ' + path + ' bypasses canary', path: routePath,
-    before: `channels.post('${path}', member(async (c, user) => {\n  if (!waLink.axalNumberReady(c.env) || !channelOpenTo(c.env, 'whatsapp', user))`,
-    after: `channels.post('${path}', member(async (c, user) => {\n  if (!waLink.axalNumberReady(c.env))`, check: case14,
+    before: `channels.post('${path}', venture(async (c, user) => {\n  if (!waLink.axalNumberReady(c.env) || !channelOpenTo(c.env, 'whatsapp', user))`,
+    after: `channels.post('${path}', venture(async (c, user) => {\n  if (!waLink.axalNumberReady(c.env))`, check: case14,
   })),
   { name: 'Axal-number captures ignore canary', path: routePath,
     before: "if (!(await channelOpenToMember(env, 'whatsapp', Number(link.user_id)))) {", after: 'if (false) {', check: case14 },

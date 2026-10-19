@@ -15,6 +15,10 @@
 //     source badges (stripe/manual), manual logging, and deletion. The
 //     snapshot form also records net burn and cash balance, which the Use
 //     of Funds runway reads (D360) instead of a modeled burn.
+//   - Mercury (D752, #1988): the founder's own spending, burn, cash and
+//     runway, in components/spinout/MercurySpend.jsx, shown only to them; a
+//     saved month is a `mercury` snapshot badged "From Mercury", locked by
+//     the Worker, so its row offers delete only.
 //   - Stripe sync: Worker-only POST /progress/metrics/:id/import-stripe.
 //     ONLY a 404 means "not in this environment" (dev) — other failures
 //     (stripe_not_connected, sync errors) are shown honestly.
@@ -41,6 +45,8 @@ import { pickLabProject } from './SpinoutLabStartupPage';
 import LabPageHeader, { labBtn, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
 import LabPageShell from '../components/spinout/LabPageShell';
 import RevenueLedger from '../components/spinout/RevenueLedger';
+import MercurySpendCard, { MercurySourceBadge } from '../components/spinout/MercurySpend';
+import { isMercuryRow } from '../lib/mercurySpend';
 import { reportError } from '../lib/log';
 import { Unreadable, Unrecorded } from '../ui';
 
@@ -167,7 +173,8 @@ export default function SpinoutLabRevenuePage() {
     () => [...rows].sort((a, b) => String(b.snapshot_date || '').localeCompare(String(a.snapshot_date || ''))),
     [rows],
   );
-  const visible = filter === 'all' ? sorted : sorted.filter((s) => (filter === 'stripe' ? s.source === 'stripe' : s.source !== 'stripe'));
+  // D752 (#1988): a Mercury snapshot is neither Stripe-synced nor manual.
+  const visible = filter === 'all' ? sorted : sorted.filter((s) => (filter === 'stripe' ? s.source === 'stripe' : filter === 'mercury' ? isMercuryRow(s) : s.source !== 'stripe' && !isMercuryRow(s)));
   const latest = sorted[0] || null;
   const lastStripe = sorted.find((s) => s.source === 'stripe') || null;
 
@@ -434,7 +441,7 @@ export default function SpinoutLabRevenuePage() {
       {/* Add a revenue source */}
       <div>
         <div className={`${LBL} mb-2`}>Add a revenue source</div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className={`grid grid-cols-1 gap-3 ${canEdit ? 'md:grid-cols-2 xl:grid-cols-4' : 'md:grid-cols-3'}`}>
           <div className={`${CARD} !p-4`} data-testid="source-stripe">
             <div className="flex items-center justify-between mb-1">
               <CreditCard size={16} className="text-teal-500" />
@@ -459,6 +466,9 @@ export default function SpinoutLabRevenuePage() {
             </button>
             {stripeState.error && <div className="text-[11px] text-rose-600 dark:text-rose-400 mt-2" data-testid="stripe-error">{stripeState.error}</div>}
           </div>
+
+          {/* D752 (#1988): the founder's own spending, shown only to them. */}
+          {canEdit && <MercurySpendCard projectId={project.id} onSaved={() => loadSnapshots(project.id)} />}
 
           <div className={`${CARD} !p-4`} data-testid="source-manual">
             <Plus size={16} className="text-teal-500 mb-1" />
@@ -503,10 +513,10 @@ export default function SpinoutLabRevenuePage() {
             <div className="flex flex-wrap items-center gap-2 mb-3">
               <div>
                 <div className="text-[13.5px] font-bold text-gray-900 dark:text-gray-50">Revenue log</div>
-                <div className="text-[11px] text-gray-400 dark:text-gray-500">Metric snapshots with their source — Stripe-synced or manual.</div>
+                <div className="text-[11px] text-gray-400 dark:text-gray-500">Metric snapshots with their source — Stripe-synced, from Mercury, or manual.</div>
               </div>
               <div className="ml-auto flex gap-1">
-                {[['all', 'All'], ['stripe', 'Stripe-synced'], ['manual', 'Manual']].map(([k, label]) => (
+                {[['all', 'All'], ['stripe', 'Stripe-synced'], ['mercury', 'From Mercury'], ['manual', 'Manual']].map(([k, label]) => (
                   <button
                     key={k}
                     type="button"
@@ -564,9 +574,11 @@ export default function SpinoutLabRevenuePage() {
                         <td className="py-2 pr-3 text-[12px] tabular-nums text-gray-500 dark:text-gray-400">{fmtMoney(s.arr)}</td>
                         <td className="py-2 pr-3 text-[12px] tabular-nums text-gray-500 dark:text-gray-400">{num(s.active_users) ?? '—'}</td>
                         <td className="py-2 pr-3">
-                          <span className={`text-[10px] font-bold uppercase tracking-wider rounded-full px-2 py-0.5 ${s.source === 'stripe' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-amber-50 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'}`}>
-                            {s.source === 'stripe' ? 'Synced · Stripe' : 'Manual'}
-                          </span>
+                          {isMercuryRow(s) ? <MercurySourceBadge /> : (
+                            <span className={`text-[10px] font-bold uppercase tracking-wider rounded-full px-2 py-0.5 ${s.source === 'stripe' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-amber-50 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'}`}>
+                              {s.source === 'stripe' ? 'Synced · Stripe' : 'Manual'}
+                            </span>
+                          )}
                         </td>
                         <td className="py-2 pr-3 text-[11.5px] text-gray-500 dark:text-gray-400 max-w-[160px] truncate">{s.notes || '—'}</td>
                         <td className="py-2 text-right">

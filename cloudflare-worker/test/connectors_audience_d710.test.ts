@@ -79,7 +79,8 @@ test('on HQ, /available lists mercury to an admin as an entity connection and to
     const r = await call(db, role, 'GET', '/available');
     assert.equal(r.status, 200, role);
     const keys = r.body.items.map((p: any) => p.key);
-    assert.deepEqual(keys.filter((k: string) => k !== 'mercury'), OTHERS, `${role}: the other providers, in order`);
+    // D757 §2.11: Zoom is a Validate source, listed only to who can hold a venture.
+    assert.deepEqual(keys.filter((k: string) => k !== 'mercury'), OTHERS.filter((k) => k !== 'zoom' || role === 'admin' || role === 'founder'), `${role}: the other providers, in order`);
     assert.equal(keys.includes('mercury'), role === 'admin' || PERSONAL.includes(role), role);
     for (const p of r.body.items.filter((x: any) => x.key !== 'mercury')) {
       const desc = REGISTRY.find((d) => d.key === p.key)!;
@@ -97,13 +98,15 @@ test('on HQ, /available lists mercury to an admin as an entity connection and to
   for (const role of PERSONAL) {
     const own = (await call(db, role, 'GET', '/available')).body.items.find((p: any) => p.key === 'mercury');
     assert.deepEqual([own.connection_source, own.has_implementation, own.status, own.auth_type], ['integrations', true, 'beta', 'api_key'], role);
-    assert.deepEqual(own.capabilities, role === 'investor' ? ['Proof of funds'] : ['Revenue import', 'Payment matching'], role);
+    assert.deepEqual(own.capabilities, role === 'investor' ? ['Proof of funds'] : role === 'founder' ? ['Revenue import', 'Payment matching', 'Spending and runway'] : ['Revenue import', 'Payment matching'], role);
     assert.equal(own.permissions.length, 1, role);
     assert.match(own.permissions[0], /never sends, transfers or requests money/);
     assert.deepEqual(own.feeds, role === 'founder' ? ['revenue_and_traction'] : []);
     if (role === 'investor') {
       assert.match(own.description, /^Your own Mercury account, read-only: show Axal's admins/);
       assert.match(own.permissions[0], /never stores or shows a balance/);
+    } else if (role === 'founder') {
+      assert.match(own.description, /venture revenue, and see each month's spending, burn, cash on hand and runway/);
     } else {
       assert.match(own.description, /venture revenue \(founders\)/, role);
     }

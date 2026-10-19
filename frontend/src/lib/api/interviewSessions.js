@@ -19,6 +19,8 @@
 //   finish           POST   /sessions/:id/finish        { last_seq, auto } → { processing, queued }
 //   process          POST   /sessions/:id/process       retry a failed or stale run → { processing }
 //   summarise        POST   /sessions/:id/summarise     { model? } → { summary }
+//   keepDigest       POST   /sessions/:id/digest/keep   keep the summary draft as it stands → { digest } (D757, #1924)
+//   editDigest       PATCH  /sessions/:id/digest        { overview?, next_steps?, key_quotes? } → { digest }; a quote is removed, never rewritten
 //   setSpeaker       PATCH  /sessions/:id/segments/:segId
 //   sessionReceipt   GET    /sessions/:id/receipt
 //   deleteSession    DELETE /sessions/:id
@@ -30,6 +32,8 @@
 //   askTranscript    POST   /sessions/:id/ask           { question } → an answer with cites, or 422 no_citation
 //   acceptPlacement  POST   /placements/:id/accept      { payload? } (an edit, then accept)
 //   discardPlacement POST   /placements/:id/discard
+// D757 (#1925), Accept all:
+//   acceptAll        POST   /sessions/:id/placements/accept  { slug } or { ids } (at most 50) → { results: [{ id, ok, error? }], accepted, remaining }
 import { request } from '../api.js';
 
 const enc = encodeURIComponent;
@@ -85,6 +89,8 @@ export const interviewSessionsApi = {
   summarise: (id, model) => request(`${P}/sessions/${enc(id)}/summarise`, {
     method: 'POST', body: JSON.stringify(model ? { model } : {}),
   }),
+  keepDigest: (id) => request(`${P}/sessions/${enc(id)}/digest/keep`, { method: 'POST', body: JSON.stringify({}) }),
+  editDigest: (id, edit) => request(`${P}/sessions/${enc(id)}/digest`, { method: 'PATCH', body: JSON.stringify(edit || {}) }),
   setSpeaker: (id, segmentId, speakerLabel) => request(`${P}/sessions/${enc(id)}/segments/${enc(segmentId)}`, {
     method: 'PATCH', body: JSON.stringify({ speaker_label: speakerLabel }),
   }),
@@ -103,4 +109,8 @@ export const interviewSessionsApi = {
     method: 'POST', body: JSON.stringify(payload ? { payload } : {}),
   }),
   discard: (placementId) => request(`${P}/placements/${enc(placementId)}/discard`, { method: 'POST' }),
+  /** Each placement's own Accept, one by one: `target` is a module slug or a list of placement ids. */
+  acceptAll: (id, target) => request(`${P}/sessions/${enc(id)}/placements/accept`, {
+    method: 'POST', body: JSON.stringify(Array.isArray(target) ? { ids: target } : { slug: target }),
+  }),
 };

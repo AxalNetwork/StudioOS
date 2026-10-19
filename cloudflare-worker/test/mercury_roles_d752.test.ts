@@ -45,6 +45,9 @@ const AUDIENCE: Record<string, [string, string]> = {
 
 const D713_DESCRIPTION = 'Your own Mercury account, read-only: import the credits you choose as venture revenue (founders), and match your invoices, payouts and partner-deal settlements to your own bank lines (partners).';
 const D713_PERMISSION = 'Read your Mercury account names, last four digits and the transactions you review; it never sends, transfers or requests money.';
+// D752 (#1889): the founder's words, now that a founder also reads spending.
+const FOUNDER_DESCRIPTION = 'Your own Mercury account, read-only: import the credits you choose as venture revenue, and see each month\'s spending, burn, cash on hand and runway. Only the figures you choose are saved.';
+const FOUNDER_PERMISSION = 'Read your Mercury account names, last four digits, available balances and the transactions you review; it never sends, transfers or requests money.';
 
 const sorted = (xs: Iterable<string>) => [...xs].sort();
 
@@ -58,7 +61,7 @@ test('audienceFor: every role on HQ and on a branch, as D752 section 1\'s table 
   assert.equal(audienceFor(mercury, { role: 'INVESTOR', hq: false }), 'none', 'the role is compared lower-cased');
 });
 
-test('the registry, the uses and the variants agree, and founder and partner keep D713\'s words', () => {
+test('the registry, the uses and the variants agree; the partner keeps D713\'s words and the founder has D752\'s', () => {
   assert.deepEqual(sorted(mercury.personal_roles!), sorted(Object.keys(PERSONAL_USES)));
   assert.deepEqual(sorted(mercury.personal_roles!), sorted(Object.keys(PERSONAL_MERCURY)));
   const hqOnly = Object.entries(PERSONAL_USES).filter(([, uses]) => uses.every((u) => HQ_ONLY_USES.includes(u))).map(([r]) => r);
@@ -69,11 +72,12 @@ test('the registry, the uses and the variants agree, and founder and partner kee
     assert.match(v.permissions[0], /never sends, transfers or requests money/, role);
     assert.ok(v.description.trim() && v.capabilities.length, role);
   }
-  for (const role of ['founder', 'partner'] as const) {
-    assert.equal(PERSONAL_MERCURY[role].description, D713_DESCRIPTION, role);
-    assert.deepEqual(PERSONAL_MERCURY[role].capabilities, ['Revenue import', 'Payment matching'], role);
-    assert.deepEqual(PERSONAL_MERCURY[role].permissions, [D713_PERMISSION], role);
-  }
+  assert.equal(PERSONAL_MERCURY.partner.description, D713_DESCRIPTION);
+  assert.deepEqual(PERSONAL_MERCURY.partner.capabilities, ['Revenue import', 'Payment matching']);
+  assert.deepEqual(PERSONAL_MERCURY.partner.permissions, [D713_PERMISSION]);
+  assert.equal(PERSONAL_MERCURY.founder.description, FOUNDER_DESCRIPTION);
+  assert.deepEqual(PERSONAL_MERCURY.founder.capabilities, ['Revenue import', 'Payment matching', 'Spending and runway']);
+  assert.deepEqual(PERSONAL_MERCURY.founder.permissions, [FOUNDER_PERMISSION]);
   assert.deepEqual(PERSONAL_MERCURY.investor.capabilities, ['Proof of funds']);
   assert.equal(personalMercuryFor('advisor'), null);
   assert.equal(personalMercuryFor('Investor'), PERSONAL_MERCURY.investor);
@@ -88,7 +92,7 @@ test('publicDescriptor serves the investor\'s variant on HQ and never the audien
   assert.equal(own.has_implementation, true);
   for (const field of ['entity_roles', 'personal_roles', 'personal_hq_only_roles']) assert.ok(!(field in own), field);
   const founder = publicDescriptor(mercury, { role: 'founder', hq: false }) as any;
-  assert.equal(founder.description, D713_DESCRIPTION);
+  assert.equal(founder.description, FOUNDER_DESCRIPTION);
   assert.deepEqual(founder.feeds, ['revenue_and_traction']);
   assert.deepEqual(connectorFeeds('mercury', 'investor'), []);
   assert.deepEqual(connectorFeeds('mercury', 'founder'), ['revenue_and_traction']);

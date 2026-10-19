@@ -11,11 +11,24 @@
  *             with that type; with no declared type, the container names it.
  *             A download's `content-type` is never trusted.
  *
- * Pure, with no provider names. D754 W3 extends this file for WhatsApp; it
- * does not write a second table.
+ * The rules are pure, with no provider names. D754 W3 (#1935) adds the one
+ * shared step that keeps a consented note as recorder audio:
+ *
+ *   ingestChannelAudio  admit the file (the rules above), store it as a chunk
+ *             of the chat's session (`putChunk`, `validate-audio/…`), mark the
+ *             session for the recorder's voice-note mode, transcribe it there
+ *             (`transcribeVoiceNote`: the per-chunk stage, a receipt line, the
+ *             segments APPENDED under the note's speaker), then hand the
+ *             session to the engine (`enqueueDigest`, 'voice_note_added').
+ *             The chunk's `seq` is the note's own message id: unique within
+ *             the session and the same on every retry, so two jobs never
+ *             share an R2 key and a retry stores nothing twice. Never a
+ *             direct model call, `structureSession` or `summariseSession`.
  */
-import { CHUNK_MIME, MAX_CHUNK_BYTES } from '../interviewSessions';
-import type { AudioContainer } from './providerHttp';
+import type { Env } from '../../types';
+import { CHUNK_MIME, MAX_CHUNK_BYTES, putChunk } from '../interviewSessions';
+import { sniffAudioContainer, type AudioContainer } from './providerHttp';
+import type { ChannelProvider, MessageSide, VoiceMedia } from './types';
 
 export const CHANNEL_AUDIO_MAX_BYTES = MAX_CHUNK_BYTES;
 
@@ -53,4 +66,52 @@ export function admitAudio(declared: string | null, container: AudioContainer):
   if (type === null) return { ok: true, mime: types[0] };
   if (!audioMimeAdmitted(type) || !types.includes(type)) return { ok: false, code: 'unsupported_format' };
   return { ok: true, mime: type };
+}
+
+export type IngestResult =
+  | { ok: true; appended: number; already: boolean }
+  | { ok: false; reason: 'too_large' | 'unsupported_format' }
+  | { ok: false; reason: 'transcription'; refusal: string; budget: boolean };
+
+/**
+ * One consented note, kept and transcribed as the recorder's audio is. A
+ * refusal is a code (a `VoiceReason`, or the transcription's refusal), never a
+ * throw; a session the member can no longer write throws `IntakeError` 404,
+ * as every intake write does. `alongside` runs in the append's batch.
+ */
+export async function ingestChannelAudio(env: Env, opts: {
+  sessionId: number; userId: number; seq: number; bytes: Uint8Array; declaredMime: string | null;
+  mediaKind: VoiceMedia; side: MessageSide; speakerLabel: string; provider: ChannelProvider;
+  alongside?: D1PreparedStatement[];
+}): Promise<IngestResult> {
+  if (opts.bytes.byteLength > CHANNEL_AUDIO_MAX_BYTES) return { ok: false, reason: 'too_large' };
+  const admitted = admitAudio(opts.declaredMime, sniffAudioContainer(opts.bytes));
+  if (!admitted.ok) return { ok: false, reason: 'unsupported_format' };
+  // Dynamic: the adapters import the rules above, and must not load the intake and the pipeline with them.
+  const [{ writableSession }, { transcribeVoiceNote }] = await Promise.all([import('../interviewIntake'), import('../interviewProcessing')]);
+  const { session } = await writableSession(env, opts.userId, opts.sessionId);
+  const body = opts.bytes.slice().buffer as ArrayBuffer;
+  await putChunk(env, session, opts.userId, opts.seq, admitted.mime, body, null, { side: opts.side, media: opts.mediaKind });
+  // The recorder's pipeline never structures a chat per note (D757 ruling 7);
+  // a run that stops here is resumed in voice-note mode by the sweeper.
+  await env.DB.prepare(
+    `UPDATE interview_sessions
+        SET processing_auto = 0, processing_stage = 'transcribing', processing_error = NULL,
+            expected_last_seq = MAX(COALESCE(expected_last_seq, -1), ?),
+            processing_updated_at = datetime('now'), updated_at = datetime('now')
+      WHERE id = ?`,
+  ).bind(opts.seq, session.id).run();
+  const r = await transcribeVoiceNote(env, {
+    session, userId: opts.userId, seq: opts.seq, speakerLabel: opts.speakerLabel, provider: opts.provider, alongside: opts.alongside,
+  });
+  if (!r.ok) return { ok: false, reason: 'transcription', refusal: r.refusal, budget: r.budget };
+  await env.DB.prepare(
+    `UPDATE interview_sessions SET processing_stage = 'done', processing_updated_at = datetime('now')
+      WHERE id = ? AND processing_stage = 'transcribing'
+        AND NOT EXISTS (SELECT 1 FROM interview_session_chunks c WHERE c.session_id = interview_sessions.id
+                          AND NOT EXISTS (SELECT 1 FROM interview_chunk_transcripts t WHERE t.session_id = c.session_id AND t.seq = c.seq))`,
+  ).bind(session.id).run();
+  const { enqueueDigest } = await import('../validateEngine');
+  await enqueueDigest(env, session.id, opts.userId, 'voice_note_added');
+  return r;
 }

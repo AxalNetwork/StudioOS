@@ -10,6 +10,12 @@ export const MODULE_LABELS: Record<string, string> = {
   revenue_and_traction: 'Revenue and traction',
   customers: 'Customers',
   operating_systems: 'Operating systems',
+  // D757 §2.12: the Validate modules a Zoom transcript suggests into; names as `cycleValidate.ts` MODULES.
+  problem_discovery: 'Problem discovery',
+  ideal_customer_profile: 'Ideal customer profile',
+  demand_signals: 'Demand and urgency signals',
+  experiments: 'Experiments and evidence',
+  verdict: 'Verdict',
 };
 
 
@@ -23,6 +29,11 @@ export const MODULE_HREFS: Record<string, string> = {
   capital_relationships: '/raise/capital-relationships',
   customer_research: '/validate/customer-research',
   market_intelligence: '/validate/market-intelligence',
+  problem_discovery: '/validate/problem-discovery',
+  ideal_customer_profile: '/validate/ideal-customer-profile',
+  demand_signals: '/validate/demand-signals',
+  experiments: '/validate/experiments',
+  verdict: '/validate/verdict',
   revenue_and_traction: '/grow/revenue-and-traction',
   customers: '/grow/customers',
   network: '/network',

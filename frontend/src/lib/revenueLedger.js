@@ -185,7 +185,17 @@ export const MERCURY_CREDIT_REASON_TEXT = {
   invalid_amount: 'The amount could not be read exactly',
   transaction_not_found: 'Not found in your Mercury account',
   not_a_credit: 'Not a credit to your account',
+  // D752 (#1989): a line the founder matched to an investor's commitment.
+  raise_receipt: 'Matched as an investor\'s wire to your raise, so it is not revenue',
 };
+
+/**
+ * D752 (#1989): the Worker's `fits_raise_target` hint, a credit whose amount and
+ * date fit one of the founder's committed prospects or pending commitments. It
+ * never blocks the import: a customer can pay an amount equal to a commitment.
+ */
+export const FITS_RAISE_TARGET = 'This may be an investment';
+export const FITS_RAISE_TARGET_NOTE = 'Its amount and date fit a commitment in your raise. If it is an investor\'s wire, match it there instead of importing it as revenue.';
 
 export function mercuryCreditReason(code) {
   return Object.hasOwn(MERCURY_CREDIT_REASON_TEXT, code) ? MERCURY_CREDIT_REASON_TEXT[code] : 'Cannot be imported (reason not recognised)';

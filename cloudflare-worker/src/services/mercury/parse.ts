@@ -19,7 +19,8 @@
  *    an `organization` key;
  *  - transaction: `id`, `amount` (signed dollars), `counterpartyName`,
  *    `createdAt`, `postedAt`, `status`, `kind`, `externalMemo` (the memo),
- *    and `currency` when present;
+ *    and `currency` when present; a category as `mercuryCategory`, else
+ *    `categoryData.name` (D752, #1889);
  *  - lists: `accounts` and `transactions` arrays, and `total`.
  */
 
@@ -53,6 +54,8 @@ export interface ParsedTransaction {
   memo: string | null;
   status: string | null;
   kind: string | null;
+  /** D752: the category Mercury reports, when it reports one (UNVERIFIED name). */
+  category: string | null;
 }
 
 const obj = (v: unknown): Record<string, unknown> | null =>
@@ -155,6 +158,7 @@ export function parseTransactions(body: unknown): { transactions: ParsedTransact
       memo: maskMemo(t.externalMemo),
       status: text(t.status, 40),
       kind: text(t.kind, 60),
+      category: text(t.mercuryCategory, 60) ?? text(obj(t.categoryData)?.name, 60),
     });
   }
   const total = typeof root?.total === 'number' && Number.isSafeInteger(root.total) ? root.total : null;
