@@ -2719,12 +2719,15 @@ export const api = {
   deckRecommend: (projectId) => request(`/decks/recommend?project_id=${projectId}`),
   deckApplyMethod: (projectId, methodId) =>
     request('/decks/apply-method', { method: 'POST', body: JSON.stringify({ project_id: projectId, method_id: methodId }) }),
-  // Task #14 — re-runs autofill against the deck's existing method_id and
-  // overwrites the current version's slides in place. Returns the deck
-  // plus a per-slide `slide_confidence[]` array for the editor's confidence
-  // rail. 409 `no_method_id` means the deck was created before the new
-  // fielded editor; client should direct the user to /apply-method first.
+  // Task #14 — re-runs autofill against the deck's existing method_id.
+  // D767 (#2096): it PROPOSES the result and changes no version: the answer
+  // is `{ proposal }` plus a per-slide `slide_confidence[]`. 409
+  // `no_method_id` means the deck was created before the fielded editor;
+  // the client directs the user to /apply-method first.
   deckAutofill: (id) => request(`/decks/${id}/autofill`, { method: 'POST', body: '{}' }),
+  // D767 — keep the proposal as the new current version, or discard it (only it).
+  deckKeepProposal: (proposalId) => request(`/decks/proposals/${proposalId}/keep`, { method: 'POST', body: '{}' }),
+  deckDiscardProposal: (proposalId) => request(`/decks/proposals/${proposalId}`, { method: 'DELETE' }),
   // Task #10 — one-click positioning: pulls the project's team, traction and
   // updates, returns { one_liner, elevator_pitch, positioning_lines[],
   // sourced_from }. 503 `ai_unavailable` when no AI provider is configured

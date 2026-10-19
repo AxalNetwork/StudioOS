@@ -19,6 +19,12 @@ export const aiBudgetApi = {
     const s = q.toString();
     return request(`/ai-budget/history${s ? `?${s}` : ''}`);
   },
+  // D776 — the member's own runs this month (or `month` YYYY-MM), grouped by page, option or record, with charge and split.
+  runs: ({ group = 'page', month } = {}) => {
+    const q = new URLSearchParams({ group });
+    if (month) q.set('month', month);
+    return request(`/ai-budget/runs?${q}`);
+  },
   // D750 — Super Admin: why the top-up is or is not offered.
   topUpStatus: () => request('/ai-budget/top-up/status'),
   // D641 — every model the router can price, read from its own tables.

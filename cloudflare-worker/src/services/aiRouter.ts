@@ -33,6 +33,8 @@ import { branchOf } from '../util/branch';
 import * as aiBudget from './aiBudget';
 import { audioInputFor, parseAudioOutput, type SttTranscript } from './sttFormats';
 import * as shapes from './ai/shapes';
+import * as catalogue from './ai/catalogue';
+import { unitPrice } from './ai/pricing';
 import * as guard from './ai/guard';
 
 // ---------------------------------------------------------------------------
@@ -66,7 +68,19 @@ export type TaskClass =
   | 'research_ask'
   | 'structure_interview'
   // D685 §5.10 — StudioOS's own summary of a session, every sentence cited.
-  | 'summarise_interview';
+  | 'summarise_interview'
+  // D764 (#2089) — the rail's fourteen kinds of work, one task each. The
+  // page's row in `ai/railMatrix.json` names the models a member may pick;
+  // the entries below are each kind's default and its alternates.
+  | RailTask;
+
+/** The canvas's fourteen kinds of work (D720 §1), in its order. */
+export const RAIL_KINDS = [
+  'chat', 'synth', 'speech', 'research', 'reason', 'vision', 'code',
+  'numbers', 'write', 'match', 'plan', 'legal', 'multi', 'search',
+] as const;
+export type RailKind = (typeof RAIL_KINDS)[number];
+export type RailTask = `rail_${RailKind}`;
 
 export type RefusalReason =
   | 'budget_user_day'
@@ -81,6 +95,9 @@ export type RefusalReason =
   // saved preference in someone's browser, not a coding error, and the caller
   // is expected to clear it and re-run on the primary.
   | 'model_not_offered'
+  // D760: a model the catalogue cannot price. Refused before it runs, because
+  // a run billed at zero trips no cap.
+  | 'model_unpriced'
   | 'all_models_failed'
   // D763: the guard could not be reached, threw, or answered something it is
   // not allowed to answer. Nothing runs (or, on the output side, nothing the
@@ -313,8 +330,8 @@ interface RouteEntry {
 }
 
 /**
- * Per-1M-token USD prices, taken from Cloudflare's published Workers AI
- * pricing table.
+ * Per-1M-token USD prices, read from the catalogue (D760), which holds
+ * Cloudflare's published Workers AI pricing table.
  *
  * THIS COMMENT USED TO SAY THE NUMBERS DID NOT HAVE TO BE PERFECT — "we just
  * need them to be stable so caps trip in roughly the right place". That stopped
@@ -337,68 +354,100 @@ interface RouteEntry {
  * A table that set them equal mispriced every task in the same direction as the
  * traffic — long prompts, short answers — and understated the total.
  *
- * Stored separately so test harnesses can swap them, and pinned by
- * `cloudflare-worker/test/ai_router_prices.test.mjs` so a future edit has to
- * mean it.
+ * Pinned by `cloudflare-worker/test/ai_router_prices.test.mjs`, and every
+ * catalogue price by `ai_catalogue_d760.test.mjs` against what was read, so a
+ * future edit has to mean it.
  */
-export const PRICE_USD_PER_1M_TOKENS: Record<string, { in: number; out: number }> = {
-  '@cf/meta/llama-guard-3-8b':                { in: 0.484, out: 0.030 },
+export const PRICE_USD_PER_1M_TOKENS: Record<string, { in: number; out: number }> = tokenPriceView([
+  '@cf/meta/llama-guard-3-8b',
   // Kept for callers that still name it, and for accounting on runs already
   // recorded against it. It is DEPRECATED (5/30/2026) and is no longer routed
   // to — see SMALL_LLAMA below.
-  '@cf/meta/llama-3.1-8b-instruct':           { in: 0.282, out: 0.827 },
-  '@cf/meta/llama-3.1-8b-instruct-fp8':       { in: 0.152, out: 0.287 },
-  '@cf/meta/llama-3.3-70b-instruct-fp8-fast': { in: 0.293, out: 2.253 },
+  '@cf/meta/llama-3.1-8b-instruct',
+  '@cf/meta/llama-3.1-8b-instruct-fp8',
+  '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
   // Offered as a workspace_explain alternate: six times cheaper to prompt and
   // shallower, which is a trade a founder may reasonably want to make on a
   // read-back. Priced here because an alternate with no row would bill as zero.
-  '@cf/meta/llama-3.2-3b-instruct':            { in: 0.051, out: 0.335 },
+  '@cf/meta/llama-3.2-3b-instruct',
   // D658 — a structure_interview alternate: cheaper to prompt than the fp8 8B
   // and dearer to answer, the trade the SMALL_LLAMA comment below describes.
-  // Rate from the same reading of Cloudflare's table (2026-09-06).
-  '@cf/meta/llama-3.1-8b-instruct-fp8-fast':  { in: 0.045, out: 0.384 },
-  // D658 — the third structure_interview model. Cloudflare's model page and
-  // Workers AI pricing table, read 2026-10-09: $0.44 in, $1.32 out per 1M.
-  // Cached input ($0.014) has no column here, so it bills at the full input
-  // rate: an over-count, the safe direction for the D640 budget. "Paid access
-  // required": refused on a free plan, the fallback answers and the receipt
-  // says so.
-  '@cf/deepseek-ai/deepseek-v4-flash-0731':   { in: 0.44,  out: 1.32 },
-  '@cf/qwen/qwen2.5-coder-32b-instruct':      { in: 0.660, out: 1.000 },
-  '@cf/baai/bge-base-en-v1.5':                { in: 0.05,  out: 0.00 },
-};
+  '@cf/meta/llama-3.1-8b-instruct-fp8-fast',
+  // D658 — the third structure_interview model. "Paid access required":
+  // refused on a free plan, the fallback answers and the receipt says so. Its
+  // cached input has its own rate (D760), billed in `estimateCostUsd` only
+  // when the provider reports cached tokens.
+  '@cf/deepseek-ai/deepseek-v4-flash-0731',
+  '@cf/qwen/qwen2.5-coder-32b-instruct',
+  // D760: moved from 0.05 to its neuron price, 6058 neurons: 0.066638.
+  '@cf/baai/bge-base-en-v1.5',
+  // D764 (#2089): the models the rail_<kind> tasks route to. Their prices are the catalogue's, as every row here.
+  '@cf/zai-org/glm-4.7-flash',
+  '@cf/openai/gpt-oss-120b',
+  '@cf/openai/gpt-oss-20b',
+  '@cf/moonshotai/kimi-k2.6',
+  '@cf/moonshotai/kimi-k2.7-code',
+  '@cf/deepseek-ai/deepseek-v4-pro-0813',
+  '@cf/qwen/qwq-32b',
+  '@cf/google/gemma-4-26b-a4b-it',
+  '@cf/meta/llama-4-scout-17b-16e-instruct',
+  '@cf/mistralai/mistral-small-3.1-24b-instruct',
+  '@cf/ibm-granite/granite-4.0-h-micro',
+]);
+
+/**
+ * D760 (#2017) — the three tables above and below are VIEWS of the catalogue
+ * (`services/ai/catalogue.ts`): this file names which models it prices, and
+ * every figure is the catalogue's neuron price (`pricing.ts` `unitPrice`:
+ * neurons × $0.011 / 1000, what Cloudflare bills), read as a number. One
+ * source of prices, so the rate the rail shows, the quote the hold reserves and
+ * the receipt all come from the same figure. A model the catalogue cannot
+ * price fails here, at load, rather than billing as zero.
+ */
+function tokenPriceView(ids: string[]): Record<string, { in: number; out: number }> {
+  return Object.fromEntries(ids.map((id) => {
+    const pin = unitPrice(id, 'tokens_in');
+    if (!pin) throw new Error(`${id} has no token price in the catalogue`);
+    return [id, { in: Number(pin), out: Number(unitPrice(id, 'tokens_out') ?? '0') }];
+  }));
+}
+
+function minutePriceView(ids: string[], unit: 'audio_minutes' | 'audio_minutes_websocket'): Record<string, number> {
+  return Object.fromEntries(ids.map((id) => {
+    const raw = unitPrice(id, unit);
+    if (!raw) throw new Error(`${id} has no ${unit} price in the catalogue`);
+    return [id, Number(raw)];
+  }));
+}
 
 /**
  * Audio models are billed by the MINUTE, not by the token, and the table above
  * cannot express that.
  *
- * This is not a stylistic split. `estimateCostUsd` returns 0 for a model with
- * no row, and `ai_router_prices.test.mjs` exists because of what that costs:
+ * This is not a stylistic split. A model with no token row would bill as zero,
+ * and `ai_router_prices.test.mjs` exists because of what that costs:
  * "a model in ROUTE with no price row bills as zero, and a spend cap that
  * counts zero never trips". Whisper has no token price anywhere, so folding it
  * into the token table would mean either a fabricated per-token rate or a
  * transcription that is free until the invoice arrives.
- *
- * Read from Cloudflare's audio pricing table on 2026-09-06.
  */
-export const PRICE_USD_PER_AUDIO_MINUTE: Record<string, number> = {
-  '@cf/openai/whisper': 0.0005,
-  '@cf/openai/whisper-large-v3-turbo': 0.0005,
+export const PRICE_USD_PER_AUDIO_MINUTE: Record<string, number> = minutePriceView([
+  '@cf/openai/whisper',
+  '@cf/openai/whisper-large-v3-turbo',
   // D657 — Nova-3 over plain HTTP (batch). Its WebSocket rate is different and
-  // lives in the table below. Read from Cloudflare's pricing page, 2026-10-09.
-  '@cf/deepgram/nova-3': 0.0052,
-};
+  // lives in the table below.
+  '@cf/deepgram/nova-3',
+], 'audio_minutes');
 
 /**
  * Live speech-to-text over a WebSocket is billed at its own rate, per minute
  * of audio streamed. A separate table because one model (Nova-3) has both a
  * batch and a WebSocket price, and Flux is WebSocket only.
- * Read from Cloudflare's Workers AI pricing page on 2026-10-09.
  */
-export const PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET: Record<string, number> = {
-  '@cf/deepgram/nova-3': 0.0092,
-  '@cf/deepgram/flux': 0.0077,
-};
+export const PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET: Record<string, number> = minutePriceView([
+  '@cf/deepgram/nova-3',
+  '@cf/deepgram/flux',
+], 'audio_minutes_websocket');
 
 /**
  * Minutes of audio in a clip, from its byte length.
@@ -649,6 +698,28 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   // MID_LLAMA primary → SMALL_LLAMA fallback. Fallback chain failure returns
   // null to the route, which lands on the deterministic template bank.
   brand_taglines: { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
+  // D764 (#2089) — the rail's kinds of work. Each primary is its kind's first
+  // model on the canvas that a free plan can run (D720 §5's paid-only
+  // demotion); `alternates` are the kind's models of the same shape, so a
+  // member's pick from the row is accepted; the chain keeps only models a
+  // free plan can run. A page's own models come from `ai/railMatrix.json`
+  // (`rail_matrix_d764.test.ts` holds these entries to it). rail_search has
+  // only Kimi K2.6 to answer with, which needs a paid plan: the canvas pairs
+  // the index with no other answer model.
+  rail_chat:     { provider: 'workers-ai', model: '@cf/zai-org/glm-4.7-flash', fallbackChain: [MID_LLAMA, '@cf/openai/gpt-oss-120b'], alternates: ['@cf/zai-org/glm-4.7-flash', MID_LLAMA, '@cf/openai/gpt-oss-120b'] },
+  rail_synth:    { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: ['@cf/zai-org/glm-4.7-flash', '@cf/openai/gpt-oss-120b'], alternates: [MID_LLAMA, '@cf/zai-org/glm-4.7-flash', '@cf/openai/gpt-oss-120b'] },
+  rail_speech:   { provider: 'workers-ai', model: '@cf/openai/whisper-large-v3-turbo', isAudio: true, alternates: ['@cf/openai/whisper-large-v3-turbo'] },
+  rail_research: { provider: 'workers-ai', model: '@cf/openai/gpt-oss-120b', alternates: ['@cf/openai/gpt-oss-120b', '@cf/moonshotai/kimi-k2.6'] },
+  rail_reason:   { provider: 'workers-ai', model: '@cf/openai/gpt-oss-120b', fallbackChain: ['@cf/qwen/qwq-32b'], alternates: ['@cf/openai/gpt-oss-120b', '@cf/deepseek-ai/deepseek-v4-pro-0813', '@cf/qwen/qwq-32b'] },
+  rail_vision:   { provider: 'workers-ai', model: '@cf/google/gemma-4-26b-a4b-it', fallbackChain: ['@cf/meta/llama-4-scout-17b-16e-instruct'], alternates: ['@cf/google/gemma-4-26b-a4b-it', '@cf/meta/llama-4-scout-17b-16e-instruct'] },
+  rail_code:     { provider: 'workers-ai', model: '@cf/qwen/qwen2.5-coder-32b-instruct', alternates: ['@cf/qwen/qwen2.5-coder-32b-instruct', '@cf/moonshotai/kimi-k2.7-code'] },
+  rail_numbers:  { provider: 'workers-ai', model: '@cf/openai/gpt-oss-120b', fallbackChain: ['@cf/ibm-granite/granite-4.0-h-micro'], alternates: ['@cf/openai/gpt-oss-120b', '@cf/deepseek-ai/deepseek-v4-pro-0813', '@cf/ibm-granite/granite-4.0-h-micro'] },
+  rail_write:    { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: ['@cf/mistralai/mistral-small-3.1-24b-instruct', '@cf/zai-org/glm-4.7-flash'], alternates: [MID_LLAMA, '@cf/mistralai/mistral-small-3.1-24b-instruct', '@cf/zai-org/glm-4.7-flash'] },
+  rail_match:    { provider: 'workers-ai', model: MID_LLAMA, alternates: [MID_LLAMA] },
+  rail_plan:     { provider: 'workers-ai', model: '@cf/zai-org/glm-4.7-flash', fallbackChain: ['@cf/openai/gpt-oss-20b', '@cf/openai/gpt-oss-120b'], alternates: ['@cf/zai-org/glm-4.7-flash', '@cf/openai/gpt-oss-20b', '@cf/openai/gpt-oss-120b'] },
+  rail_legal:    { provider: 'workers-ai', model: '@cf/openai/gpt-oss-120b', alternates: ['@cf/openai/gpt-oss-120b', '@cf/deepseek-ai/deepseek-v4-pro-0813'] },
+  rail_multi:    { provider: 'workers-ai', model: '@cf/mistralai/mistral-small-3.1-24b-instruct', alternates: ['@cf/mistralai/mistral-small-3.1-24b-instruct'] },
+  rail_search:   { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.6', alternates: ['@cf/moonshotai/kimi-k2.6'] },
 };
 
 // D761: the latency budget is per attempt and per class (`shapes.TIMEOUT_MS`),
@@ -771,15 +842,38 @@ async function setKillSwitch(store: MinimalKV, ttlSec: number): Promise<void> {
 // Cost helper
 // ---------------------------------------------------------------------------
 export function estimateCostUsd(
-  model: string, promptTok: number, completionTok: number, audioMinutes = 0,
+  model: string, promptTok: number, completionTok: number, audioMinutes = 0, cachedTok = 0,
 ): number {
   // Audio first: a model priced by the minute has no token rate, and asking
   // the token table for one would answer 0.
   const perMinute = PRICE_USD_PER_AUDIO_MINUTE[model];
   if (perMinute != null) return Math.max(0, audioMinutes) * perMinute;
   const p = PRICE_USD_PER_1M_TOKENS[model];
-  if (!p) return 0;
-  return (promptTok / 1_000_000) * p.in + (completionTok / 1_000_000) * p.out;
+  // D760: there is no zero path. `run()` refuses a model with no row before it
+  // is called (`model_unpriced`), so arriving here without one is a coding
+  // error, and a free run would trip no cap.
+  if (!p) throw new Error(`model_unpriced: ${model}`);
+  // D760: cached input at its own rate, only when the provider reported cached
+  // tokens and the model prints a cached rate; otherwise every input token is
+  // billed at the input rate. `promptTok` is the provider's whole input count.
+  const cachedRaw = unitPrice(model, 'tokens_cached');
+  const cached = cachedRaw ? Math.min(Math.max(0, cachedTok), promptTok) : 0;
+  return ((promptTok - cached) / 1_000_000) * p.in
+    + (cached / 1_000_000) * (cachedRaw ? Number(cachedRaw) : 0)
+    + (completionTok / 1_000_000) * p.out;
+}
+
+/**
+ * D760: why a run may not reach this model, or null when it may. The catalogue
+ * refuses a model it cannot price (`model_unpriced`) or does not offer (a beta
+ * or retired model, or a gated partner: `model_not_offered`); a model it offers
+ * but neither of this file's price views holds is unpriced here too, because
+ * its receipt would have nothing to be computed from.
+ */
+export function modelRefusal(env: Env, model: string): 'model_unpriced' | 'model_not_offered' | null {
+  const refusal = catalogue.refusalFor(model, env);
+  if (refusal) return refusal;
+  return model in PRICE_USD_PER_1M_TOKENS || model in PRICE_USD_PER_AUDIO_MINUTE ? null : 'model_unpriced';
 }
 
 // Crude token estimator — ≈ 4 chars/token for English. Good enough for
@@ -1369,6 +1463,22 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
     return { ok: false, refusal: 'invalid_input', error: badInput, usage };
   }
 
+  // ---- D760: every model this run can reach is priced and offered ----------
+  // Checked before the cache, the budget and the call, for the primary and each
+  // fallback: a fallback that answered at no price would be the free run this
+  // guards against, only later.
+  for (const model of [primaryModel, ...(route.fallbackChain ?? [])]) {
+    const refusal = modelRefusal(env, model);
+    if (!refusal) continue;
+    const usage: UsageMeta = {
+      task: opts.task, model, latency_ms: 0,
+      prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0,
+      fallback_used: false, cached: false, safety_score: null,
+    };
+    await recordUsage(env, opts, usage, refusal);
+    return { ok: false, refusal, error: `${model} ${refusal === 'model_unpriced' ? 'has no price' : 'is not offered'}`, usage };
+  }
+
   const store = kv(env);
   const caps = budgetCaps(env);
   // D763: whether the guard checks this run, and the input it checks.
@@ -1671,7 +1781,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
     latency_ms: Date.now() - startedAt,
     prompt_tokens: promptTok,
     completion_tokens: completionTok,
-    est_cost_usd: estimateCostUsd(modelUsed, promptTok, completionTok, audioMinutes),
+    est_cost_usd: estimateCostUsd(modelUsed, promptTok, completionTok, audioMinutes, attempt.units?.tokens_cached ?? 0),
     fallback_used: fallbackUsed,
     cached: false,
     safety_score: safetyScore,
