@@ -158,8 +158,8 @@ const UNLINK_DELETED_RELEASE = `UPDATE connector_fed_items SET local_id = NULL
        AND NOT EXISTS (SELECT 1 FROM roadmap_releases WHERE id = ? AND project_id = ?)`;
 const LEDGER_OF = `SELECT external_id, local_table, local_id FROM connector_fed_items
      WHERE integration_id = ? AND external_id IN (SELECT value FROM json_each(?))`;
-const ITEM_OF = `(SELECT local_id FROM connector_fed_items WHERE integration_id = ? AND external_id = ? AND local_table = 'roadmap_okrs')`;
-const RELEASE_OF = `(SELECT local_id FROM connector_fed_items WHERE integration_id = ? AND external_id = ? AND local_table = 'roadmap_releases')`;
+// The item and the release rows are found through the ledger, written out in
+// each statement so the SQL guards read it whole (no interpolation).
 
 /** One sync's roadmap work: `saw` during the loop, `finish` once after it. */
 export function roadmapRun(env: Env, integrationId: number, projectId: number) {
@@ -205,7 +205,7 @@ export function roadmapRun(env: Env, integrationId: number, projectId: number) {
           counts.milestone_items = Number(counts.milestone_items) + 1;
           stmts.push([env.DB.prepare(
             `UPDATE roadmap_okrs SET milestone_title = ?, milestone_due = ?, target_date = COALESCE(?, target_date)
-              WHERE project_id = ? AND id = ${ITEM_OF}`,
+              WHERE project_id = ? AND id = (SELECT local_id FROM connector_fed_items WHERE integration_id = ? AND external_id = ? AND local_table = 'roadmap_okrs')`,
           ).bind(m.title, m.due, m.due, projectId, integrationId, issueExternalId(repo, issue.number))]);
         }
         if (outside.length) {
@@ -259,8 +259,9 @@ export function roadmapRun(env: Env, integrationId: number, projectId: number) {
         for (const mark of shippedBy(repo, s.issues, s.pulls, releases)) {
           counts.items_shipped = Number(counts.items_shipped) + 1;
           stmts.push([env.DB.prepare(
-            `UPDATE roadmap_okrs SET shipped_release_id = ${RELEASE_OF}
-              WHERE project_id = ? AND id = ${ITEM_OF} AND shipped_release_id IS NULL AND ${RELEASE_OF} IS NOT NULL`,
+            `UPDATE roadmap_okrs SET shipped_release_id = (SELECT local_id FROM connector_fed_items WHERE integration_id = ? AND external_id = ? AND local_table = 'roadmap_releases')
+              WHERE project_id = ? AND id = (SELECT local_id FROM connector_fed_items WHERE integration_id = ? AND external_id = ? AND local_table = 'roadmap_okrs')
+                AND shipped_release_id IS NULL AND (SELECT local_id FROM connector_fed_items WHERE integration_id = ? AND external_id = ? AND local_table = 'roadmap_releases') IS NOT NULL`,
           ).bind(integrationId, mark.release, projectId, integrationId, issueExternalId(repo, mark.issue), integrationId, mark.release)]);
         }
 
