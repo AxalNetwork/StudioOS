@@ -408,6 +408,7 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
     tagline: 'Issues, pull requests and releases from the repositories you choose. Read-only.',
     long_description: [
       'Read issues, pull requests and releases from the repositories you choose. Issues link to Product roadmap items and pull requests to Prototype / MVP must-haves. Read-only.',
+      'In Build › Operating systems, GitHub is the Code system: its repositories, its last sync and what it fed. Each sync is a line in Tools. Releases are read and counted; they make no row yet.',
       'Axal VC connects as a GitHub App with read permissions only. If GitHub ever grants more than read, Axal VC revokes the grant and refuses the connection.',
     ],
     tools: [

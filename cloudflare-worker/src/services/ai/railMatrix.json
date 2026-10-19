@@ -1,0 +1,4480 @@
+{
+ "_generated": "by scripts/build-rail-matrix.mjs from design/incoming/airail-every-page-data/canvas.json and scripts/lib/railMatrixOverrides.json. Do not edit by hand (D764).",
+ "rows": [
+  {
+   "pageKey": "Founder · Studio",
+   "kind": "chat",
+   "routeTask": "rail_chat",
+   "models": [
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Default",
+     "line": "Fast replies that can use your workspace"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Longer",
+     "line": "Fuller answers and drafts"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Hard questions that need reasoning"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Validate",
+   "kind": "synth",
+   "routeTask": "rail_synth",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Groups notes and quotes into themes"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Quick tagging at a lower cost"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Checks a theme against all the evidence"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Validate · Problem discovery",
+   "kind": "synth",
+   "routeTask": "rail_synth",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Groups notes and quotes into themes"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Quick tagging at a lower cost"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Checks a theme against all the evidence"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Validate · Customer research",
+   "kind": "speech",
+   "routeTask": "rail_speech",
+   "models": [
+    {
+     "id": "@cf/openai/whisper-large-v3-turbo",
+     "role": "Default",
+     "line": "Turns each recording into a transcript"
+    },
+    {
+     "id": "@cf/deepgram/nova-3",
+     "role": "Speakers",
+     "line": "Labels who said what"
+    },
+    {
+     "id": "@cf/deepgram/flux",
+     "role": "Live",
+     "line": "Captions while you talk"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Structure",
+     "line": "Places quotes on themes and hypotheses"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Validate · Ideal customer profile",
+   "kind": "synth",
+   "routeTask": "rail_synth",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Groups notes and quotes into themes"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Quick tagging at a lower cost"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Checks a theme against all the evidence"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Validate · Market intelligence",
+   "kind": "research",
+   "routeTask": "rail_research",
+   "models": [
+    {
+     "id": "@cf/moonshotai/kimi-k2.6",
+     "role": "Default",
+     "line": "Long sources, cited answers"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Weighs conflicting sources"
+    },
+    {
+     "id": "@cf/baai/bge-base-en-v1.5",
+     "role": "Search",
+     "line": "Finds the right records first"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Puts the most relevant on top"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Validate · Demand and urgency signals",
+   "kind": "numbers",
+   "routeTask": "rail_numbers",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Shows its working on every figure"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Alternative",
+     "line": "Explains what moved and why"
+    },
+    {
+     "id": "@cf/ibm-granite/granite-4.0-h-micro",
+     "role": "Faster",
+     "line": "Reads figures out of documents"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Validate · Experiments and evidence",
+   "kind": "reason",
+   "routeTask": "rail_reason",
+   "models": [
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Default",
+     "line": "Tests a claim against its evidence"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Second view",
+     "line": "Reviews the first answer"
+    },
+    {
+     "id": "@cf/qwen/qwq-32b",
+     "role": "Challenge",
+     "line": "Argues the other side"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Validate · Verdict",
+   "kind": "reason",
+   "routeTask": "rail_reason",
+   "models": [
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Default",
+     "line": "Tests a claim against its evidence"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Second view",
+     "line": "Reviews the first answer"
+    },
+    {
+     "id": "@cf/qwen/qwq-32b",
+     "role": "Challenge",
+     "line": "Argues the other side"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Build",
+   "kind": "plan",
+   "routeTask": "rail_plan",
+   "models": [
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Default",
+     "line": "Plans, lists and next steps"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-20b",
+     "role": "Alternative",
+     "line": "Steady structured output"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Trade-offs and dependencies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Build · Solution design",
+   "kind": "plan",
+   "routeTask": "rail_plan",
+   "models": [
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Default",
+     "line": "Plans, lists and next steps"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-20b",
+     "role": "Alternative",
+     "line": "Steady structured output"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Trade-offs and dependencies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Build · Prototype / MVP",
+   "kind": "code",
+   "routeTask": "rail_code",
+   "models": [
+    {
+     "id": "@cf/moonshotai/kimi-k2.7-code",
+     "role": "Default",
+     "line": "Reads your repository and its changes"
+    },
+    {
+     "id": "@cf/qwen/qwen2.5-coder-32b-instruct",
+     "role": "Alternative",
+     "line": "Reviews and writes code"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Build · Product roadmap",
+   "kind": "plan",
+   "routeTask": "rail_plan",
+   "models": [
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Default",
+     "line": "Plans, lists and next steps"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-20b",
+     "role": "Alternative",
+     "line": "Steady structured output"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Trade-offs and dependencies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Build · Founding team",
+   "kind": "plan",
+   "routeTask": "rail_plan",
+   "models": [
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Default",
+     "line": "Plans, lists and next steps"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-20b",
+     "role": "Alternative",
+     "line": "Steady structured output"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Trade-offs and dependencies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Build · Company creation",
+   "kind": "legal",
+   "routeTask": "rail_legal",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Reads terms and filings closely"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Second view",
+     "line": "Checks the first reading"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Build · Operating systems",
+   "kind": "plan",
+   "routeTask": "rail_plan",
+   "models": [
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Default",
+     "line": "Plans, lists and next steps"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-20b",
+     "role": "Alternative",
+     "line": "Steady structured output"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Trade-offs and dependencies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Raise",
+   "kind": "reason",
+   "routeTask": "rail_reason",
+   "models": [
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Default",
+     "line": "Tests a claim against its evidence"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Second view",
+     "line": "Reviews the first answer"
+    },
+    {
+     "id": "@cf/qwen/qwq-32b",
+     "role": "Challenge",
+     "line": "Argues the other side"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Raise · Fundraising readiness",
+   "kind": "reason",
+   "routeTask": "rail_reason",
+   "models": [
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Default",
+     "line": "Tests a claim against its evidence"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Second view",
+     "line": "Reviews the first answer"
+    },
+    {
+     "id": "@cf/qwen/qwq-32b",
+     "role": "Challenge",
+     "line": "Argues the other side"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Raise · Investor narrative",
+   "kind": "write",
+   "routeTask": "rail_write",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Drafts in your voice, cited"
+    },
+    {
+     "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+     "role": "Polished",
+     "line": "Tighter, more formal drafts"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Short drafts and replies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Raise · Pitch deck",
+   "kind": "vision",
+   "routeTask": "rail_vision",
+   "models": [
+    {
+     "id": "@cf/google/gemma-4-26b-a4b-it",
+     "role": "Default",
+     "line": "Reads slides, charts and scans"
+    },
+    {
+     "id": "@cf/meta/llama-4-scout-17b-16e-instruct",
+     "role": "Alternative",
+     "line": "Mixed text and images"
+    },
+    {
+     "id": "@cf/moondream/moondream3.1-9B-A2B",
+     "role": "Extract",
+     "line": "Pulls figures out of images"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Raise · Data room",
+   "kind": "vision",
+   "routeTask": "rail_vision",
+   "models": [
+    {
+     "id": "@cf/google/gemma-4-26b-a4b-it",
+     "role": "Default",
+     "line": "Reads slides, charts and scans"
+    },
+    {
+     "id": "@cf/meta/llama-4-scout-17b-16e-instruct",
+     "role": "Alternative",
+     "line": "Mixed text and images"
+    },
+    {
+     "id": "@cf/moondream/moondream3.1-9B-A2B",
+     "role": "Extract",
+     "line": "Pulls figures out of images"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Raise · Cap table",
+   "kind": "numbers",
+   "routeTask": "rail_numbers",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Shows its working on every figure"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Alternative",
+     "line": "Explains what moved and why"
+    },
+    {
+     "id": "@cf/ibm-granite/granite-4.0-h-micro",
+     "role": "Faster",
+     "line": "Reads figures out of documents"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Raise · Use of funds",
+   "kind": "numbers",
+   "routeTask": "rail_numbers",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Shows its working on every figure"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Alternative",
+     "line": "Explains what moved and why"
+    },
+    {
+     "id": "@cf/ibm-granite/granite-4.0-h-micro",
+     "role": "Faster",
+     "line": "Reads figures out of documents"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Raise · Capital relationships",
+   "kind": "match",
+   "routeTask": "rail_match",
+   "models": [
+    {
+     "id": "@cf/baai/bge-m3",
+     "role": "Default",
+     "line": "Finds people and firms that fit"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Orders them by fit"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Draft",
+     "line": "Writes the introduction, for you to send"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Grow",
+   "kind": "plan",
+   "routeTask": "rail_plan",
+   "models": [
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Default",
+     "line": "Plans, lists and next steps"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-20b",
+     "role": "Alternative",
+     "line": "Steady structured output"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Trade-offs and dependencies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Grow · Product improvement",
+   "kind": "synth",
+   "routeTask": "rail_synth",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Groups notes and quotes into themes"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Quick tagging at a lower cost"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Checks a theme against all the evidence"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Grow · Distribution",
+   "kind": "write",
+   "routeTask": "rail_write",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Drafts in your voice, cited"
+    },
+    {
+     "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+     "role": "Polished",
+     "line": "Tighter, more formal drafts"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Short drafts and replies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Grow · Revenue and traction",
+   "kind": "numbers",
+   "routeTask": "rail_numbers",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Shows its working on every figure"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Alternative",
+     "line": "Explains what moved and why"
+    },
+    {
+     "id": "@cf/ibm-granite/granite-4.0-h-micro",
+     "role": "Faster",
+     "line": "Reads figures out of documents"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Grow · Team expansion",
+   "kind": "plan",
+   "routeTask": "rail_plan",
+   "models": [
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Default",
+     "line": "Plans, lists and next steps"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-20b",
+     "role": "Alternative",
+     "line": "Steady structured output"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Trade-offs and dependencies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Grow · Partner network",
+   "kind": "match",
+   "routeTask": "rail_match",
+   "models": [
+    {
+     "id": "@cf/baai/bge-m3",
+     "role": "Default",
+     "line": "Finds people and firms that fit"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Orders them by fit"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Draft",
+     "line": "Writes the introduction, for you to send"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Grow · Market expansion",
+   "kind": "multi",
+   "routeTask": "rail_multi",
+   "models": [
+    {
+     "id": "@cf/baai/bge-m3",
+     "role": "Default",
+     "line": "Finds sources in any language"
+    },
+    {
+     "id": "@cf/meta/m2m100-1.2b",
+     "role": "Translate",
+     "line": "Translates, keeping the original"
+    },
+    {
+     "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+     "role": "European",
+     "line": "Reads European-language sources"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Grow · Durable company-building",
+   "kind": "legal",
+   "routeTask": "rail_legal",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Reads terms and filings closely"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Second view",
+     "line": "Checks the first reading"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Network",
+   "kind": "match",
+   "routeTask": "rail_match",
+   "models": [
+    {
+     "id": "@cf/baai/bge-m3",
+     "role": "Default",
+     "line": "Finds people and firms that fit"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Orders them by fit"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Draft",
+     "line": "Writes the introduction, for you to send"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Network · Relationships",
+   "kind": "match",
+   "routeTask": "rail_match",
+   "models": [
+    {
+     "id": "@cf/baai/bge-m3",
+     "role": "Default",
+     "line": "Finds people and firms that fit"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Orders them by fit"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Draft",
+     "line": "Writes the introduction, for you to send"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Network · Introductions",
+   "kind": "match",
+   "routeTask": "rail_match",
+   "models": [
+    {
+     "id": "@cf/baai/bge-m3",
+     "role": "Default",
+     "line": "Finds people and firms that fit"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Orders them by fit"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Draft",
+     "line": "Writes the introduction, for you to send"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Network · Organizations",
+   "kind": "match",
+   "routeTask": "rail_match",
+   "models": [
+    {
+     "id": "@cf/baai/bge-m3",
+     "role": "Default",
+     "line": "Finds people and firms that fit"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Orders them by fit"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Draft",
+     "line": "Writes the introduction, for you to send"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Research",
+   "kind": "research",
+   "routeTask": "rail_research",
+   "models": [
+    {
+     "id": "@cf/moonshotai/kimi-k2.6",
+     "role": "Default",
+     "line": "Long sources, cited answers"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Weighs conflicting sources"
+    },
+    {
+     "id": "@cf/baai/bge-base-en-v1.5",
+     "role": "Search",
+     "line": "Finds the right records first"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Puts the most relevant on top"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Research · Ask",
+   "kind": "research",
+   "routeTask": "rail_research",
+   "models": [
+    {
+     "id": "@cf/moonshotai/kimi-k2.6",
+     "role": "Default",
+     "line": "Long sources, cited answers"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Weighs conflicting sources"
+    },
+    {
+     "id": "@cf/baai/bge-base-en-v1.5",
+     "role": "Search",
+     "line": "Finds the right records first"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Puts the most relevant on top"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Research · Markets",
+   "kind": "research",
+   "routeTask": "rail_research",
+   "models": [
+    {
+     "id": "@cf/moonshotai/kimi-k2.6",
+     "role": "Default",
+     "line": "Long sources, cited answers"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Weighs conflicting sources"
+    },
+    {
+     "id": "@cf/baai/bge-base-en-v1.5",
+     "role": "Search",
+     "line": "Finds the right records first"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Puts the most relevant on top"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Research · Geographies",
+   "kind": "multi",
+   "routeTask": "rail_multi",
+   "models": [
+    {
+     "id": "@cf/baai/bge-m3",
+     "role": "Default",
+     "line": "Finds sources in any language"
+    },
+    {
+     "id": "@cf/meta/m2m100-1.2b",
+     "role": "Translate",
+     "line": "Translates, keeping the original"
+    },
+    {
+     "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+     "role": "European",
+     "line": "Reads European-language sources"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Research · Companies",
+   "kind": "research",
+   "routeTask": "rail_research",
+   "models": [
+    {
+     "id": "@cf/moonshotai/kimi-k2.6",
+     "role": "Default",
+     "line": "Long sources, cited answers"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Weighs conflicting sources"
+    },
+    {
+     "id": "@cf/baai/bge-base-en-v1.5",
+     "role": "Search",
+     "line": "Finds the right records first"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Puts the most relevant on top"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Research · Funds",
+   "kind": "research",
+   "routeTask": "rail_research",
+   "models": [
+    {
+     "id": "@cf/moonshotai/kimi-k2.6",
+     "role": "Default",
+     "line": "Long sources, cited answers"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Weighs conflicting sources"
+    },
+    {
+     "id": "@cf/baai/bge-base-en-v1.5",
+     "role": "Search",
+     "line": "Finds the right records first"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Puts the most relevant on top"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Research · Library",
+   "kind": "search",
+   "routeTask": "rail_search",
+   "models": [
+    {
+     "id": "@cf/baai/bge-base-en-v1.5",
+     "role": "Default",
+     "line": "Makes every document searchable"
+    },
+    {
+     "id": "@cf/moonshotai/kimi-k2.6",
+     "role": "Answer",
+     "line": "Answers from the documents, cited"
+    }
+   ]
+  },
+  {
+   "pageKey": "Investor · Home",
+   "kind": "chat",
+   "routeTask": "rail_chat",
+   "models": [
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Default",
+     "line": "Fast replies that can use your workspace"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Longer",
+     "line": "Fuller answers and drafts"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Hard questions that need reasoning"
+    }
+   ]
+  },
+  {
+   "pageKey": "Investor · Deals",
+   "kind": "reason",
+   "routeTask": "rail_reason",
+   "models": [
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Default",
+     "line": "Tests a claim against its evidence"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Second view",
+     "line": "Reviews the first answer"
+    },
+    {
+     "id": "@cf/qwen/qwq-32b",
+     "role": "Challenge",
+     "line": "Argues the other side"
+    }
+   ]
+  },
+  {
+   "pageKey": "Investor · Deals · Pipeline",
+   "kind": "match",
+   "routeTask": "rail_match",
+   "models": [
+    {
+     "id": "@cf/baai/bge-m3",
+     "role": "Default",
+     "line": "Finds people and firms that fit"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Orders them by fit"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Draft",
+     "line": "Writes the introduction, for you to send"
+    }
+   ]
+  },
+  {
+   "pageKey": "Investor · Deals · Screening",
+   "kind": "reason",
+   "routeTask": "rail_reason",
+   "models": [
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Default",
+     "line": "Tests a claim against its evidence"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Second view",
+     "line": "Reviews the first answer"
+    },
+    {
+     "id": "@cf/qwen/qwq-32b",
+     "role": "Challenge",
+     "line": "Argues the other side"
+    }
+   ]
+  },
+  {
+   "pageKey": "Investor · Deals · Commit",
+   "kind": "reason",
+   "routeTask": "rail_reason",
+   "models": [
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Default",
+     "line": "Tests a claim against its evidence"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Second view",
+     "line": "Reviews the first answer"
+    },
+    {
+     "id": "@cf/qwen/qwq-32b",
+     "role": "Challenge",
+     "line": "Argues the other side"
+    }
+   ]
+  },
+  {
+   "pageKey": "Investor · Deals · Closing",
+   "kind": "legal",
+   "routeTask": "rail_legal",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Reads terms and filings closely"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Second view",
+     "line": "Checks the first reading"
+    }
+   ]
+  },
+  {
+   "pageKey": "Investor · Portfolio",
+   "kind": "numbers",
+   "routeTask": "rail_numbers",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Shows its working on every figure"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Alternative",
+     "line": "Explains what moved and why"
+    },
+    {
+     "id": "@cf/ibm-granite/granite-4.0-h-micro",
+     "role": "Faster",
+     "line": "Reads figures out of documents"
+    }
+   ]
+  },
+  {
+   "pageKey": "Investor · Portfolio · Positions",
+   "kind": "numbers",
+   "routeTask": "rail_numbers",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Shows its working on every figure"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Alternative",
+     "line": "Explains what moved and why"
+    },
+    {
+     "id": "@cf/ibm-granite/granite-4.0-h-micro",
+     "role": "Faster",
+     "line": "Reads figures out of documents"
+    }
+   ]
+  },
+  {
+   "pageKey": "Investor · Portfolio · Performance",
+   "kind": "numbers",
+   "routeTask": "rail_numbers",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Shows its working on every figure"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Alternative",
+     "line": "Explains what moved and why"
+    },
+    {
+     "id": "@cf/ibm-granite/granite-4.0-h-micro",
+     "role": "Faster",
+     "line": "Reads figures out of documents"
+    }
+   ]
+  },
+  {
+   "pageKey": "Investor · Portfolio · Updates",
+   "kind": "synth",
+   "routeTask": "rail_synth",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Groups notes and quotes into themes"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Quick tagging at a lower cost"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Checks a theme against all the evidence"
+    }
+   ]
+  },
+  {
+   "pageKey": "Investor · Portfolio · Value-add",
+   "kind": "match",
+   "routeTask": "rail_match",
+   "models": [
+    {
+     "id": "@cf/baai/bge-m3",
+     "role": "Default",
+     "line": "Finds people and firms that fit"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Orders them by fit"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Draft",
+     "line": "Writes the introduction, for you to send"
+    }
+   ]
+  },
+  {
+   "pageKey": "Investor · Axal VC Fund",
+   "kind": "research",
+   "routeTask": "rail_research",
+   "models": [
+    {
+     "id": "@cf/moonshotai/kimi-k2.6",
+     "role": "Default",
+     "line": "Long sources, cited answers"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Weighs conflicting sources"
+    },
+    {
+     "id": "@cf/baai/bge-base-en-v1.5",
+     "role": "Search",
+     "line": "Finds the right records first"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Puts the most relevant on top"
+    }
+   ]
+  },
+  {
+   "pageKey": "Investor · Fund",
+   "kind": "numbers",
+   "routeTask": "rail_numbers",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Shows its working on every figure"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Alternative",
+     "line": "Explains what moved and why"
+    },
+    {
+     "id": "@cf/ibm-granite/granite-4.0-h-micro",
+     "role": "Faster",
+     "line": "Reads figures out of documents"
+    }
+   ]
+  },
+  {
+   "pageKey": "Investor · Fund · Overview",
+   "kind": "numbers",
+   "routeTask": "rail_numbers",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Shows its working on every figure"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Alternative",
+     "line": "Explains what moved and why"
+    },
+    {
+     "id": "@cf/ibm-granite/granite-4.0-h-micro",
+     "role": "Faster",
+     "line": "Reads figures out of documents"
+    }
+   ]
+  },
+  {
+   "pageKey": "Investor · Fund · LPs",
+   "kind": "match",
+   "routeTask": "rail_match",
+   "models": [
+    {
+     "id": "@cf/baai/bge-m3",
+     "role": "Default",
+     "line": "Finds people and firms that fit"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Orders them by fit"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Draft",
+     "line": "Writes the introduction, for you to send"
+    }
+   ]
+  },
+  {
+   "pageKey": "Investor · Fund · Capital calls",
+   "kind": "numbers",
+   "routeTask": "rail_numbers",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Shows its working on every figure"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Alternative",
+     "line": "Explains what moved and why"
+    },
+    {
+     "id": "@cf/ibm-granite/granite-4.0-h-micro",
+     "role": "Faster",
+     "line": "Reads figures out of documents"
+    }
+   ]
+  },
+  {
+   "pageKey": "Investor · Fund · Distributions",
+   "kind": "numbers",
+   "routeTask": "rail_numbers",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Shows its working on every figure"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Alternative",
+     "line": "Explains what moved and why"
+    },
+    {
+     "id": "@cf/ibm-granite/granite-4.0-h-micro",
+     "role": "Faster",
+     "line": "Reads figures out of documents"
+    }
+   ]
+  },
+  {
+   "pageKey": "Investor · Fund · Reporting",
+   "kind": "write",
+   "routeTask": "rail_write",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Drafts in your voice, cited"
+    },
+    {
+     "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+     "role": "Polished",
+     "line": "Tighter, more formal drafts"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Short drafts and replies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Investor · Network",
+   "kind": "match",
+   "routeTask": "rail_match",
+   "models": [
+    {
+     "id": "@cf/baai/bge-m3",
+     "role": "Default",
+     "line": "Finds people and firms that fit"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Orders them by fit"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Draft",
+     "line": "Writes the introduction, for you to send"
+    }
+   ]
+  },
+  {
+   "pageKey": "Investor · Network · Relationships",
+   "kind": "match",
+   "routeTask": "rail_match",
+   "models": [
+    {
+     "id": "@cf/baai/bge-m3",
+     "role": "Default",
+     "line": "Finds people and firms that fit"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Orders them by fit"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Draft",
+     "line": "Writes the introduction, for you to send"
+    }
+   ]
+  },
+  {
+   "pageKey": "Investor · Network · Introductions",
+   "kind": "match",
+   "routeTask": "rail_match",
+   "models": [
+    {
+     "id": "@cf/baai/bge-m3",
+     "role": "Default",
+     "line": "Finds people and firms that fit"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Orders them by fit"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Draft",
+     "line": "Writes the introduction, for you to send"
+    }
+   ]
+  },
+  {
+   "pageKey": "Investor · Network · Organizations",
+   "kind": "match",
+   "routeTask": "rail_match",
+   "models": [
+    {
+     "id": "@cf/baai/bge-m3",
+     "role": "Default",
+     "line": "Finds people and firms that fit"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Orders them by fit"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Draft",
+     "line": "Writes the introduction, for you to send"
+    }
+   ]
+  },
+  {
+   "pageKey": "Investor · Research",
+   "kind": "research",
+   "routeTask": "rail_research",
+   "models": [
+    {
+     "id": "@cf/moonshotai/kimi-k2.6",
+     "role": "Default",
+     "line": "Long sources, cited answers"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Weighs conflicting sources"
+    },
+    {
+     "id": "@cf/baai/bge-base-en-v1.5",
+     "role": "Search",
+     "line": "Finds the right records first"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Puts the most relevant on top"
+    }
+   ]
+  },
+  {
+   "pageKey": "Investor · Research · Ask",
+   "kind": "research",
+   "routeTask": "rail_research",
+   "models": [
+    {
+     "id": "@cf/moonshotai/kimi-k2.6",
+     "role": "Default",
+     "line": "Long sources, cited answers"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Weighs conflicting sources"
+    },
+    {
+     "id": "@cf/baai/bge-base-en-v1.5",
+     "role": "Search",
+     "line": "Finds the right records first"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Puts the most relevant on top"
+    }
+   ]
+  },
+  {
+   "pageKey": "Investor · Research · Diligence",
+   "kind": "vision",
+   "routeTask": "rail_vision",
+   "models": [
+    {
+     "id": "@cf/google/gemma-4-26b-a4b-it",
+     "role": "Default",
+     "line": "Reads slides, charts and scans"
+    },
+    {
+     "id": "@cf/meta/llama-4-scout-17b-16e-instruct",
+     "role": "Alternative",
+     "line": "Mixed text and images"
+    },
+    {
+     "id": "@cf/moondream/moondream3.1-9B-A2B",
+     "role": "Extract",
+     "line": "Pulls figures out of images"
+    }
+   ]
+  },
+  {
+   "pageKey": "Investor · Research · Benchmarking",
+   "kind": "numbers",
+   "routeTask": "rail_numbers",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Shows its working on every figure"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Alternative",
+     "line": "Explains what moved and why"
+    },
+    {
+     "id": "@cf/ibm-granite/granite-4.0-h-micro",
+     "role": "Faster",
+     "line": "Reads figures out of documents"
+    }
+   ]
+  },
+  {
+   "pageKey": "Investor · Research · Markets",
+   "kind": "research",
+   "routeTask": "rail_research",
+   "models": [
+    {
+     "id": "@cf/moonshotai/kimi-k2.6",
+     "role": "Default",
+     "line": "Long sources, cited answers"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Weighs conflicting sources"
+    },
+    {
+     "id": "@cf/baai/bge-base-en-v1.5",
+     "role": "Search",
+     "line": "Finds the right records first"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Puts the most relevant on top"
+    }
+   ]
+  },
+  {
+   "pageKey": "Investor · Research · Library",
+   "kind": "search",
+   "routeTask": "rail_search",
+   "models": [
+    {
+     "id": "@cf/baai/bge-base-en-v1.5",
+     "role": "Default",
+     "line": "Makes every document searchable"
+    },
+    {
+     "id": "@cf/moonshotai/kimi-k2.6",
+     "role": "Answer",
+     "line": "Answers from the documents, cited"
+    }
+   ]
+  },
+  {
+   "pageKey": "Advisor · Home",
+   "kind": "chat",
+   "routeTask": "rail_chat",
+   "models": [
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Default",
+     "line": "Fast replies that can use your workspace"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Longer",
+     "line": "Fuller answers and drafts"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Hard questions that need reasoning"
+    }
+   ]
+  },
+  {
+   "pageKey": "Advisor · Practice",
+   "kind": "plan",
+   "routeTask": "rail_plan",
+   "models": [
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Default",
+     "line": "Plans, lists and next steps"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-20b",
+     "role": "Alternative",
+     "line": "Steady structured output"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Trade-offs and dependencies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Advisor · Practice · Opportunities",
+   "kind": "match",
+   "routeTask": "rail_match",
+   "models": [
+    {
+     "id": "@cf/baai/bge-m3",
+     "role": "Default",
+     "line": "Finds people and firms that fit"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Orders them by fit"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Draft",
+     "line": "Writes the introduction, for you to send"
+    }
+   ]
+  },
+  {
+   "pageKey": "Advisor · Practice · Engagements",
+   "kind": "plan",
+   "routeTask": "rail_plan",
+   "models": [
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Default",
+     "line": "Plans, lists and next steps"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-20b",
+     "role": "Alternative",
+     "line": "Steady structured output"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Trade-offs and dependencies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Advisor · Practice · Delivery",
+   "kind": "plan",
+   "routeTask": "rail_plan",
+   "models": [
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Default",
+     "line": "Plans, lists and next steps"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-20b",
+     "role": "Alternative",
+     "line": "Steady structured output"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Trade-offs and dependencies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Advisor · Practice · Sessions",
+   "kind": "speech",
+   "routeTask": "rail_speech",
+   "models": [
+    {
+     "id": "@cf/openai/whisper-large-v3-turbo",
+     "role": "Default",
+     "line": "Turns each recording into a transcript"
+    },
+    {
+     "id": "@cf/deepgram/nova-3",
+     "role": "Speakers",
+     "line": "Labels who said what"
+    },
+    {
+     "id": "@cf/deepgram/flux",
+     "role": "Live",
+     "line": "Captions while you talk"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Structure",
+     "line": "Places quotes on themes and hypotheses"
+    }
+   ]
+  },
+  {
+   "pageKey": "Advisor · Practice · Earnings",
+   "kind": "numbers",
+   "routeTask": "rail_numbers",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Shows its working on every figure"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Alternative",
+     "line": "Explains what moved and why"
+    },
+    {
+     "id": "@cf/ibm-granite/granite-4.0-h-micro",
+     "role": "Faster",
+     "line": "Reads figures out of documents"
+    }
+   ]
+  },
+  {
+   "pageKey": "Advisor · Cohorts",
+   "kind": "synth",
+   "routeTask": "rail_synth",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Groups notes and quotes into themes"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Quick tagging at a lower cost"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Checks a theme against all the evidence"
+    }
+   ]
+  },
+  {
+   "pageKey": "Advisor · Cohorts · Founders",
+   "kind": "match",
+   "routeTask": "rail_match",
+   "models": [
+    {
+     "id": "@cf/baai/bge-m3",
+     "role": "Default",
+     "line": "Finds people and firms that fit"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Orders them by fit"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Draft",
+     "line": "Writes the introduction, for you to send"
+    }
+   ]
+  },
+  {
+   "pageKey": "Advisor · Cohorts · Guidance",
+   "kind": "write",
+   "routeTask": "rail_write",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Drafts in your voice, cited"
+    },
+    {
+     "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+     "role": "Polished",
+     "line": "Tighter, more formal drafts"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Short drafts and replies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Advisor · Cohorts · This week",
+   "kind": "plan",
+   "routeTask": "rail_plan",
+   "models": [
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Default",
+     "line": "Plans, lists and next steps"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-20b",
+     "role": "Alternative",
+     "line": "Steady structured output"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Trade-offs and dependencies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Advisor · Cohorts · Calendar",
+   "kind": "plan",
+   "routeTask": "rail_plan",
+   "models": [
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Default",
+     "line": "Plans, lists and next steps"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-20b",
+     "role": "Alternative",
+     "line": "Steady structured output"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Trade-offs and dependencies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Advisor · Cohorts · Outcomes",
+   "kind": "synth",
+   "routeTask": "rail_synth",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Groups notes and quotes into themes"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Quick tagging at a lower cost"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Checks a theme against all the evidence"
+    }
+   ]
+  },
+  {
+   "pageKey": "Advisor · Expertise",
+   "kind": "write",
+   "routeTask": "rail_write",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Drafts in your voice, cited"
+    },
+    {
+     "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+     "role": "Polished",
+     "line": "Tighter, more formal drafts"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Short drafts and replies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Advisor · Expertise · Profile",
+   "kind": "write",
+   "routeTask": "rail_write",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Drafts in your voice, cited"
+    },
+    {
+     "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+     "role": "Polished",
+     "line": "Tighter, more formal drafts"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Short drafts and replies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Advisor · Expertise · Services",
+   "kind": "write",
+   "routeTask": "rail_write",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Drafts in your voice, cited"
+    },
+    {
+     "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+     "role": "Polished",
+     "line": "Tighter, more formal drafts"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Short drafts and replies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Advisor · Expertise · Proof",
+   "kind": "synth",
+   "routeTask": "rail_synth",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Groups notes and quotes into themes"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Quick tagging at a lower cost"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Checks a theme against all the evidence"
+    }
+   ]
+  },
+  {
+   "pageKey": "Advisor · Expertise · Thinking",
+   "kind": "write",
+   "routeTask": "rail_write",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Drafts in your voice, cited"
+    },
+    {
+     "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+     "role": "Polished",
+     "line": "Tighter, more formal drafts"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Short drafts and replies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Advisor · Expertise · Visibility",
+   "kind": "match",
+   "routeTask": "rail_match",
+   "models": [
+    {
+     "id": "@cf/baai/bge-m3",
+     "role": "Default",
+     "line": "Finds people and firms that fit"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Orders them by fit"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Draft",
+     "line": "Writes the introduction, for you to send"
+    }
+   ]
+  },
+  {
+   "pageKey": "Advisor · Network",
+   "kind": "match",
+   "routeTask": "rail_match",
+   "models": [
+    {
+     "id": "@cf/baai/bge-m3",
+     "role": "Default",
+     "line": "Finds people and firms that fit"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Orders them by fit"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Draft",
+     "line": "Writes the introduction, for you to send"
+    }
+   ]
+  },
+  {
+   "pageKey": "Advisor · Network · Relationships",
+   "kind": "match",
+   "routeTask": "rail_match",
+   "models": [
+    {
+     "id": "@cf/baai/bge-m3",
+     "role": "Default",
+     "line": "Finds people and firms that fit"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Orders them by fit"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Draft",
+     "line": "Writes the introduction, for you to send"
+    }
+   ]
+  },
+  {
+   "pageKey": "Advisor · Network · Introductions",
+   "kind": "match",
+   "routeTask": "rail_match",
+   "models": [
+    {
+     "id": "@cf/baai/bge-m3",
+     "role": "Default",
+     "line": "Finds people and firms that fit"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Orders them by fit"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Draft",
+     "line": "Writes the introduction, for you to send"
+    }
+   ]
+  },
+  {
+   "pageKey": "Advisor · Network · Organizations",
+   "kind": "match",
+   "routeTask": "rail_match",
+   "models": [
+    {
+     "id": "@cf/baai/bge-m3",
+     "role": "Default",
+     "line": "Finds people and firms that fit"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Orders them by fit"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Draft",
+     "line": "Writes the introduction, for you to send"
+    }
+   ]
+  },
+  {
+   "pageKey": "Advisor · Research",
+   "kind": "research",
+   "routeTask": "rail_research",
+   "models": [
+    {
+     "id": "@cf/moonshotai/kimi-k2.6",
+     "role": "Default",
+     "line": "Long sources, cited answers"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Weighs conflicting sources"
+    },
+    {
+     "id": "@cf/baai/bge-base-en-v1.5",
+     "role": "Search",
+     "line": "Finds the right records first"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Puts the most relevant on top"
+    }
+   ]
+  },
+  {
+   "pageKey": "Advisor · Research · Ask",
+   "kind": "research",
+   "routeTask": "rail_research",
+   "models": [
+    {
+     "id": "@cf/moonshotai/kimi-k2.6",
+     "role": "Default",
+     "line": "Long sources, cited answers"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Weighs conflicting sources"
+    },
+    {
+     "id": "@cf/baai/bge-base-en-v1.5",
+     "role": "Search",
+     "line": "Finds the right records first"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Puts the most relevant on top"
+    }
+   ]
+  },
+  {
+   "pageKey": "Advisor · Research · Client prep",
+   "kind": "research",
+   "routeTask": "rail_research",
+   "models": [
+    {
+     "id": "@cf/moonshotai/kimi-k2.6",
+     "role": "Default",
+     "line": "Long sources, cited answers"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Weighs conflicting sources"
+    },
+    {
+     "id": "@cf/baai/bge-base-en-v1.5",
+     "role": "Search",
+     "line": "Finds the right records first"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Puts the most relevant on top"
+    }
+   ]
+  },
+  {
+   "pageKey": "Advisor · Research · Markets",
+   "kind": "research",
+   "routeTask": "rail_research",
+   "models": [
+    {
+     "id": "@cf/moonshotai/kimi-k2.6",
+     "role": "Default",
+     "line": "Long sources, cited answers"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Weighs conflicting sources"
+    },
+    {
+     "id": "@cf/baai/bge-base-en-v1.5",
+     "role": "Search",
+     "line": "Finds the right records first"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Puts the most relevant on top"
+    }
+   ]
+  },
+  {
+   "pageKey": "Advisor · Research · Companies",
+   "kind": "research",
+   "routeTask": "rail_research",
+   "models": [
+    {
+     "id": "@cf/moonshotai/kimi-k2.6",
+     "role": "Default",
+     "line": "Long sources, cited answers"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Weighs conflicting sources"
+    },
+    {
+     "id": "@cf/baai/bge-base-en-v1.5",
+     "role": "Search",
+     "line": "Finds the right records first"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Puts the most relevant on top"
+    }
+   ]
+  },
+  {
+   "pageKey": "Advisor · Research · Library",
+   "kind": "search",
+   "routeTask": "rail_search",
+   "models": [
+    {
+     "id": "@cf/baai/bge-base-en-v1.5",
+     "role": "Default",
+     "line": "Makes every document searchable"
+    },
+    {
+     "id": "@cf/moonshotai/kimi-k2.6",
+     "role": "Answer",
+     "line": "Answers from the documents, cited"
+    }
+   ]
+  },
+  {
+   "pageKey": "Operating Partner · Home",
+   "kind": "chat",
+   "routeTask": "rail_chat",
+   "models": [
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Default",
+     "line": "Fast replies that can use your workspace"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Longer",
+     "line": "Fuller answers and drafts"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Hard questions that need reasoning"
+    }
+   ]
+  },
+  {
+   "pageKey": "Operating Partner · Pipeline",
+   "kind": "match",
+   "routeTask": "rail_match",
+   "models": [
+    {
+     "id": "@cf/baai/bge-m3",
+     "role": "Default",
+     "line": "Finds people and firms that fit"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Orders them by fit"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Draft",
+     "line": "Writes the introduction, for you to send"
+    }
+   ]
+  },
+  {
+   "pageKey": "Operating Partner · Pipeline · Leads",
+   "kind": "match",
+   "routeTask": "rail_match",
+   "models": [
+    {
+     "id": "@cf/baai/bge-m3",
+     "role": "Default",
+     "line": "Finds people and firms that fit"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Orders them by fit"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Draft",
+     "line": "Writes the introduction, for you to send"
+    }
+   ]
+  },
+  {
+   "pageKey": "Operating Partner · Pipeline · Proposals",
+   "kind": "write",
+   "routeTask": "rail_write",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Drafts in your voice, cited"
+    },
+    {
+     "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+     "role": "Polished",
+     "line": "Tighter, more formal drafts"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Short drafts and replies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Operating Partner · Pipeline · Negotiations",
+   "kind": "legal",
+   "routeTask": "rail_legal",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Reads terms and filings closely"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Second view",
+     "line": "Checks the first reading"
+    }
+   ]
+  },
+  {
+   "pageKey": "Operating Partner · Pipeline · Retainers",
+   "kind": "numbers",
+   "routeTask": "rail_numbers",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Shows its working on every figure"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Alternative",
+     "line": "Explains what moved and why"
+    },
+    {
+     "id": "@cf/ibm-granite/granite-4.0-h-micro",
+     "role": "Faster",
+     "line": "Reads figures out of documents"
+    }
+   ]
+  },
+  {
+   "pageKey": "Operating Partner · Pipeline · Analytics",
+   "kind": "numbers",
+   "routeTask": "rail_numbers",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Shows its working on every figure"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Alternative",
+     "line": "Explains what moved and why"
+    },
+    {
+     "id": "@cf/ibm-granite/granite-4.0-h-micro",
+     "role": "Faster",
+     "line": "Reads figures out of documents"
+    }
+   ]
+  },
+  {
+   "pageKey": "Operating Partner · Delivery",
+   "kind": "plan",
+   "routeTask": "rail_plan",
+   "models": [
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Default",
+     "line": "Plans, lists and next steps"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-20b",
+     "role": "Alternative",
+     "line": "Steady structured output"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Trade-offs and dependencies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Operating Partner · Delivery · Engagements",
+   "kind": "plan",
+   "routeTask": "rail_plan",
+   "models": [
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Default",
+     "line": "Plans, lists and next steps"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-20b",
+     "role": "Alternative",
+     "line": "Steady structured output"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Trade-offs and dependencies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Operating Partner · Delivery · Deliverables",
+   "kind": "write",
+   "routeTask": "rail_write",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Drafts in your voice, cited"
+    },
+    {
+     "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+     "role": "Polished",
+     "line": "Tighter, more formal drafts"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Short drafts and replies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Operating Partner · Delivery · Capacity",
+   "kind": "plan",
+   "routeTask": "rail_plan",
+   "models": [
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Default",
+     "line": "Plans, lists and next steps"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-20b",
+     "role": "Alternative",
+     "line": "Steady structured output"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Trade-offs and dependencies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Operating Partner · Delivery · Reporting",
+   "kind": "write",
+   "routeTask": "rail_write",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Drafts in your voice, cited"
+    },
+    {
+     "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+     "role": "Polished",
+     "line": "Tighter, more formal drafts"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Short drafts and replies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Operating Partner · Delivery · Health",
+   "kind": "synth",
+   "routeTask": "rail_synth",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Groups notes and quotes into themes"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Quick tagging at a lower cost"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Checks a theme against all the evidence"
+    }
+   ]
+  },
+  {
+   "pageKey": "Operating Partner · Offers",
+   "kind": "write",
+   "routeTask": "rail_write",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Drafts in your voice, cited"
+    },
+    {
+     "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+     "role": "Polished",
+     "line": "Tighter, more formal drafts"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Short drafts and replies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Operating Partner · Offers · Catalog",
+   "kind": "write",
+   "routeTask": "rail_write",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Drafts in your voice, cited"
+    },
+    {
+     "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+     "role": "Polished",
+     "line": "Tighter, more formal drafts"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Short drafts and replies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Operating Partner · Offers · Perk deals",
+   "kind": "write",
+   "routeTask": "rail_write",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Drafts in your voice, cited"
+    },
+    {
+     "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+     "role": "Polished",
+     "line": "Tighter, more formal drafts"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Short drafts and replies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Operating Partner · Offers · Visibility",
+   "kind": "match",
+   "routeTask": "rail_match",
+   "models": [
+    {
+     "id": "@cf/baai/bge-m3",
+     "role": "Default",
+     "line": "Finds people and firms that fit"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Orders them by fit"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Draft",
+     "line": "Writes the introduction, for you to send"
+    }
+   ]
+  },
+  {
+   "pageKey": "Operating Partner · Offers · Proof",
+   "kind": "synth",
+   "routeTask": "rail_synth",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Groups notes and quotes into themes"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Quick tagging at a lower cost"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Checks a theme against all the evidence"
+    }
+   ]
+  },
+  {
+   "pageKey": "Operating Partner · Offers · Audience fit",
+   "kind": "match",
+   "routeTask": "rail_match",
+   "models": [
+    {
+     "id": "@cf/baai/bge-m3",
+     "role": "Default",
+     "line": "Finds people and firms that fit"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Orders them by fit"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Draft",
+     "line": "Writes the introduction, for you to send"
+    }
+   ]
+  },
+  {
+   "pageKey": "Operating Partner · Network",
+   "kind": "match",
+   "routeTask": "rail_match",
+   "models": [
+    {
+     "id": "@cf/baai/bge-m3",
+     "role": "Default",
+     "line": "Finds people and firms that fit"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Orders them by fit"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Draft",
+     "line": "Writes the introduction, for you to send"
+    }
+   ]
+  },
+  {
+   "pageKey": "Operating Partner · Network · Relationships",
+   "kind": "match",
+   "routeTask": "rail_match",
+   "models": [
+    {
+     "id": "@cf/baai/bge-m3",
+     "role": "Default",
+     "line": "Finds people and firms that fit"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Orders them by fit"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Draft",
+     "line": "Writes the introduction, for you to send"
+    }
+   ]
+  },
+  {
+   "pageKey": "Operating Partner · Network · Introductions",
+   "kind": "match",
+   "routeTask": "rail_match",
+   "models": [
+    {
+     "id": "@cf/baai/bge-m3",
+     "role": "Default",
+     "line": "Finds people and firms that fit"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Orders them by fit"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Draft",
+     "line": "Writes the introduction, for you to send"
+    }
+   ]
+  },
+  {
+   "pageKey": "Operating Partner · Network · Organizations",
+   "kind": "match",
+   "routeTask": "rail_match",
+   "models": [
+    {
+     "id": "@cf/baai/bge-m3",
+     "role": "Default",
+     "line": "Finds people and firms that fit"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Orders them by fit"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Draft",
+     "line": "Writes the introduction, for you to send"
+    }
+   ]
+  },
+  {
+   "pageKey": "Operating Partner · Research",
+   "kind": "research",
+   "routeTask": "rail_research",
+   "models": [
+    {
+     "id": "@cf/moonshotai/kimi-k2.6",
+     "role": "Default",
+     "line": "Long sources, cited answers"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Weighs conflicting sources"
+    },
+    {
+     "id": "@cf/baai/bge-base-en-v1.5",
+     "role": "Search",
+     "line": "Finds the right records first"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Puts the most relevant on top"
+    }
+   ]
+  },
+  {
+   "pageKey": "Operating Partner · Research · Ask",
+   "kind": "research",
+   "routeTask": "rail_research",
+   "models": [
+    {
+     "id": "@cf/moonshotai/kimi-k2.6",
+     "role": "Default",
+     "line": "Long sources, cited answers"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Weighs conflicting sources"
+    },
+    {
+     "id": "@cf/baai/bge-base-en-v1.5",
+     "role": "Search",
+     "line": "Finds the right records first"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Puts the most relevant on top"
+    }
+   ]
+  },
+  {
+   "pageKey": "Operating Partner · Research · Client prep",
+   "kind": "research",
+   "routeTask": "rail_research",
+   "models": [
+    {
+     "id": "@cf/moonshotai/kimi-k2.6",
+     "role": "Default",
+     "line": "Long sources, cited answers"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Weighs conflicting sources"
+    },
+    {
+     "id": "@cf/baai/bge-base-en-v1.5",
+     "role": "Search",
+     "line": "Finds the right records first"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Puts the most relevant on top"
+    }
+   ]
+  },
+  {
+   "pageKey": "Operating Partner · Research · Market",
+   "kind": "research",
+   "routeTask": "rail_research",
+   "models": [
+    {
+     "id": "@cf/moonshotai/kimi-k2.6",
+     "role": "Default",
+     "line": "Long sources, cited answers"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Weighs conflicting sources"
+    },
+    {
+     "id": "@cf/baai/bge-base-en-v1.5",
+     "role": "Search",
+     "line": "Finds the right records first"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Puts the most relevant on top"
+    }
+   ]
+  },
+  {
+   "pageKey": "Operating Partner · Research · Library",
+   "kind": "search",
+   "routeTask": "rail_search",
+   "models": [
+    {
+     "id": "@cf/baai/bge-base-en-v1.5",
+     "role": "Default",
+     "line": "Makes every document searchable"
+    },
+    {
+     "id": "@cf/moonshotai/kimi-k2.6",
+     "role": "Answer",
+     "line": "Answers from the documents, cited"
+    }
+   ]
+  },
+  {
+   "pageKey": "Admin · Accounts",
+   "kind": "match",
+   "routeTask": "rail_match",
+   "models": [
+    {
+     "id": "@cf/baai/bge-m3",
+     "role": "Default",
+     "line": "Finds people and firms that fit"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Orders them by fit"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Draft",
+     "line": "Writes the introduction, for you to send"
+    }
+   ]
+  },
+  {
+   "pageKey": "Admin · Accounts · Users",
+   "kind": "match",
+   "routeTask": "rail_match",
+   "models": [
+    {
+     "id": "@cf/baai/bge-m3",
+     "role": "Default",
+     "line": "Finds people and firms that fit"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Orders them by fit"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Draft",
+     "line": "Writes the introduction, for you to send"
+    }
+   ]
+  },
+  {
+   "pageKey": "Admin · Accounts · Exploring members",
+   "kind": "match",
+   "routeTask": "rail_match",
+   "models": [
+    {
+     "id": "@cf/baai/bge-m3",
+     "role": "Default",
+     "line": "Finds people and firms that fit"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Orders them by fit"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Draft",
+     "line": "Writes the introduction, for you to send"
+    }
+   ]
+  },
+  {
+   "pageKey": "Admin · Accounts · Trash",
+   "kind": "plan",
+   "routeTask": "rail_plan",
+   "models": [
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Default",
+     "line": "Plans, lists and next steps"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-20b",
+     "role": "Alternative",
+     "line": "Steady structured output"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Trade-offs and dependencies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Admin · Approvals",
+   "kind": "reason",
+   "routeTask": "rail_reason",
+   "models": [
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Default",
+     "line": "Tests a claim against its evidence"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Second view",
+     "line": "Reviews the first answer"
+    },
+    {
+     "id": "@cf/qwen/qwq-32b",
+     "role": "Challenge",
+     "line": "Argues the other side"
+    }
+   ]
+  },
+  {
+   "pageKey": "Admin · Approvals · Identity checks",
+   "kind": "vision",
+   "routeTask": "rail_vision",
+   "models": [
+    {
+     "id": "@cf/google/gemma-4-26b-a4b-it",
+     "role": "Default",
+     "line": "Reads slides, charts and scans"
+    },
+    {
+     "id": "@cf/meta/llama-4-scout-17b-16e-instruct",
+     "role": "Alternative",
+     "line": "Mixed text and images"
+    },
+    {
+     "id": "@cf/moondream/moondream3.1-9B-A2B",
+     "role": "Extract",
+     "line": "Pulls figures out of images"
+    }
+   ]
+  },
+  {
+   "pageKey": "Admin · Approvals · Entity profiles",
+   "kind": "vision",
+   "routeTask": "rail_vision",
+   "models": [
+    {
+     "id": "@cf/google/gemma-4-26b-a4b-it",
+     "role": "Default",
+     "line": "Reads slides, charts and scans"
+    },
+    {
+     "id": "@cf/meta/llama-4-scout-17b-16e-instruct",
+     "role": "Alternative",
+     "line": "Mixed text and images"
+    },
+    {
+     "id": "@cf/moondream/moondream3.1-9B-A2B",
+     "role": "Extract",
+     "line": "Pulls figures out of images"
+    }
+   ]
+  },
+  {
+   "pageKey": "Admin · Approvals · LP applications",
+   "kind": "reason",
+   "routeTask": "rail_reason",
+   "models": [
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Default",
+     "line": "Tests a claim against its evidence"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Second view",
+     "line": "Reviews the first answer"
+    },
+    {
+     "id": "@cf/qwen/qwq-32b",
+     "role": "Challenge",
+     "line": "Argues the other side"
+    }
+   ]
+  },
+  {
+   "pageKey": "Admin · Approvals · Referrals",
+   "kind": "match",
+   "routeTask": "rail_match",
+   "models": [
+    {
+     "id": "@cf/baai/bge-m3",
+     "role": "Default",
+     "line": "Finds people and firms that fit"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Orders them by fit"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Draft",
+     "line": "Writes the introduction, for you to send"
+    }
+   ]
+  },
+  {
+   "pageKey": "Admin · Approvals · Best fit",
+   "kind": "match",
+   "routeTask": "rail_match",
+   "models": [
+    {
+     "id": "@cf/baai/bge-m3",
+     "role": "Default",
+     "line": "Finds people and firms that fit"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Orders them by fit"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Draft",
+     "line": "Writes the introduction, for you to send"
+    }
+   ]
+  },
+  {
+   "pageKey": "Admin · Approvals · Due diligence",
+   "kind": "vision",
+   "routeTask": "rail_vision",
+   "models": [
+    {
+     "id": "@cf/google/gemma-4-26b-a4b-it",
+     "role": "Default",
+     "line": "Reads slides, charts and scans"
+    },
+    {
+     "id": "@cf/meta/llama-4-scout-17b-16e-instruct",
+     "role": "Alternative",
+     "line": "Mixed text and images"
+    },
+    {
+     "id": "@cf/moondream/moondream3.1-9B-A2B",
+     "role": "Extract",
+     "line": "Pulls figures out of images"
+    }
+   ]
+  },
+  {
+   "pageKey": "Admin · Approvals · Spin-Out applications",
+   "kind": "reason",
+   "routeTask": "rail_reason",
+   "models": [
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Default",
+     "line": "Tests a claim against its evidence"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Second view",
+     "line": "Reviews the first answer"
+    },
+    {
+     "id": "@cf/qwen/qwq-32b",
+     "role": "Challenge",
+     "line": "Argues the other side"
+    }
+   ]
+  },
+  {
+   "pageKey": "Admin · Approvals · Spin-Out moderation",
+   "kind": "reason",
+   "routeTask": "rail_reason",
+   "models": [
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Default",
+     "line": "Tests a claim against its evidence"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Second view",
+     "line": "Reviews the first answer"
+    },
+    {
+     "id": "@cf/qwen/qwq-32b",
+     "role": "Challenge",
+     "line": "Argues the other side"
+    }
+   ]
+  },
+  {
+   "pageKey": "Admin · Approvals · Exploring members",
+   "kind": "match",
+   "routeTask": "rail_match",
+   "models": [
+    {
+     "id": "@cf/baai/bge-m3",
+     "role": "Default",
+     "line": "Finds people and firms that fit"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Orders them by fit"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Draft",
+     "line": "Writes the introduction, for you to send"
+    }
+   ]
+  },
+  {
+   "pageKey": "Admin · Approvals · Events",
+   "kind": "plan",
+   "routeTask": "rail_plan",
+   "models": [
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Default",
+     "line": "Plans, lists and next steps"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-20b",
+     "role": "Alternative",
+     "line": "Steady structured output"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Trade-offs and dependencies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Admin · Approvals · Jobs",
+   "kind": "write",
+   "routeTask": "rail_write",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Drafts in your voice, cited"
+    },
+    {
+     "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+     "role": "Polished",
+     "line": "Tighter, more formal drafts"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Short drafts and replies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Admin · Approvals · Communities",
+   "kind": "write",
+   "routeTask": "rail_write",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Drafts in your voice, cited"
+    },
+    {
+     "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+     "role": "Polished",
+     "line": "Tighter, more formal drafts"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Short drafts and replies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Admin · Approvals · Advisor cohort access",
+   "kind": "plan",
+   "routeTask": "rail_plan",
+   "models": [
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Default",
+     "line": "Plans, lists and next steps"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-20b",
+     "role": "Alternative",
+     "line": "Steady structured output"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Trade-offs and dependencies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Admin · Programs",
+   "kind": "plan",
+   "routeTask": "rail_plan",
+   "models": [
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Default",
+     "line": "Plans, lists and next steps"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-20b",
+     "role": "Alternative",
+     "line": "Steady structured output"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Trade-offs and dependencies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Admin · Programs · Spin-Out Lab",
+   "kind": "plan",
+   "routeTask": "rail_plan",
+   "models": [
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Default",
+     "line": "Plans, lists and next steps"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-20b",
+     "role": "Alternative",
+     "line": "Steady structured output"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Trade-offs and dependencies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Admin · Programs · Advisor cohorts",
+   "kind": "plan",
+   "routeTask": "rail_plan",
+   "models": [
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Default",
+     "line": "Plans, lists and next steps"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-20b",
+     "role": "Alternative",
+     "line": "Steady structured output"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Trade-offs and dependencies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Admin · Programs · Assessment runs",
+   "kind": "synth",
+   "routeTask": "rail_synth",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Groups notes and quotes into themes"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Quick tagging at a lower cost"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Checks a theme against all the evidence"
+    }
+   ]
+  },
+  {
+   "pageKey": "Admin · Programs · Profiling trends",
+   "kind": "numbers",
+   "routeTask": "rail_numbers",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Shows its working on every figure"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Alternative",
+     "line": "Explains what moved and why"
+    },
+    {
+     "id": "@cf/ibm-granite/granite-4.0-h-micro",
+     "role": "Faster",
+     "line": "Reads figures out of documents"
+    }
+   ]
+  },
+  {
+   "pageKey": "Admin · Community",
+   "kind": "write",
+   "routeTask": "rail_write",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Drafts in your voice, cited"
+    },
+    {
+     "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+     "role": "Polished",
+     "line": "Tighter, more formal drafts"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Short drafts and replies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Admin · Community · Events",
+   "kind": "plan",
+   "routeTask": "rail_plan",
+   "models": [
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Default",
+     "line": "Plans, lists and next steps"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-20b",
+     "role": "Alternative",
+     "line": "Steady structured output"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Trade-offs and dependencies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Admin · Community · Jobs",
+   "kind": "write",
+   "routeTask": "rail_write",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Drafts in your voice, cited"
+    },
+    {
+     "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+     "role": "Polished",
+     "line": "Tighter, more formal drafts"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Short drafts and replies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Admin · Community · Communities",
+   "kind": "write",
+   "routeTask": "rail_write",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Drafts in your voice, cited"
+    },
+    {
+     "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+     "role": "Polished",
+     "line": "Tighter, more formal drafts"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Short drafts and replies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Admin · Community · Wellbeing experts",
+   "kind": "match",
+   "routeTask": "rail_match",
+   "models": [
+    {
+     "id": "@cf/baai/bge-m3",
+     "role": "Default",
+     "line": "Finds people and firms that fit"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Orders them by fit"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Draft",
+     "line": "Writes the introduction, for you to send"
+    }
+   ]
+  },
+  {
+   "pageKey": "Admin · Community · Advisors and partners",
+   "kind": "match",
+   "routeTask": "rail_match",
+   "models": [
+    {
+     "id": "@cf/baai/bge-m3",
+     "role": "Default",
+     "line": "Finds people and firms that fit"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Orders them by fit"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Draft",
+     "line": "Writes the introduction, for you to send"
+    }
+   ]
+  },
+  {
+   "pageKey": "Admin · Community · Directory",
+   "kind": "match",
+   "routeTask": "rail_match",
+   "models": [
+    {
+     "id": "@cf/baai/bge-m3",
+     "role": "Default",
+     "line": "Finds people and firms that fit"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Orders them by fit"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Draft",
+     "line": "Writes the introduction, for you to send"
+    }
+   ]
+  },
+  {
+   "pageKey": "Admin · Community · Partner invitations",
+   "kind": "write",
+   "routeTask": "rail_write",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Drafts in your voice, cited"
+    },
+    {
+     "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+     "role": "Polished",
+     "line": "Tighter, more formal drafts"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Short drafts and replies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Admin · Contracts",
+   "kind": "legal",
+   "routeTask": "rail_legal",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Reads terms and filings closely"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Second view",
+     "line": "Checks the first reading"
+    }
+   ]
+  },
+  {
+   "pageKey": "Admin · Contracts · Agreements",
+   "kind": "legal",
+   "routeTask": "rail_legal",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Reads terms and filings closely"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Second view",
+     "line": "Checks the first reading"
+    }
+   ]
+  },
+  {
+   "pageKey": "Admin · Contracts · NDAs",
+   "kind": "legal",
+   "routeTask": "rail_legal",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Reads terms and filings closely"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Second view",
+     "line": "Checks the first reading"
+    }
+   ]
+  },
+  {
+   "pageKey": "Admin · Contracts · Partner deals",
+   "kind": "legal",
+   "routeTask": "rail_legal",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Reads terms and filings closely"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Second view",
+     "line": "Checks the first reading"
+    }
+   ]
+  },
+  {
+   "pageKey": "Admin · Contracts · Templates",
+   "kind": "legal",
+   "routeTask": "rail_legal",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Reads terms and filings closely"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Second view",
+     "line": "Checks the first reading"
+    }
+   ]
+  },
+  {
+   "pageKey": "Admin · Contracts · Forms",
+   "kind": "legal",
+   "routeTask": "rail_legal",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Reads terms and filings closely"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Second view",
+     "line": "Checks the first reading"
+    }
+   ]
+  },
+  {
+   "pageKey": "Admin · Insights",
+   "kind": "numbers",
+   "routeTask": "rail_numbers",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Shows its working on every figure"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Alternative",
+     "line": "Explains what moved and why"
+    },
+    {
+     "id": "@cf/ibm-granite/granite-4.0-h-micro",
+     "role": "Faster",
+     "line": "Reads figures out of documents"
+    }
+   ]
+  },
+  {
+   "pageKey": "Admin · Settings",
+   "kind": "plan",
+   "routeTask": "rail_plan",
+   "models": [
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Default",
+     "line": "Plans, lists and next steps"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-20b",
+     "role": "Alternative",
+     "line": "Steady structured output"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Trade-offs and dependencies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Super Admin · Licences",
+   "kind": "legal",
+   "routeTask": "rail_legal",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Reads terms and filings closely"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Second view",
+     "line": "Checks the first reading"
+    }
+   ]
+  },
+  {
+   "pageKey": "Super Admin · Funds",
+   "kind": "research",
+   "routeTask": "rail_research",
+   "models": [
+    {
+     "id": "@cf/moonshotai/kimi-k2.6",
+     "role": "Default",
+     "line": "Long sources, cited answers"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Weighs conflicting sources"
+    },
+    {
+     "id": "@cf/baai/bge-base-en-v1.5",
+     "role": "Search",
+     "line": "Finds the right records first"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Puts the most relevant on top"
+    }
+   ]
+  },
+  {
+   "pageKey": "Super Admin · Contracts",
+   "kind": "legal",
+   "routeTask": "rail_legal",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Reads terms and filings closely"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Second view",
+     "line": "Checks the first reading"
+    }
+   ]
+  },
+  {
+   "pageKey": "Super Admin · Contracts · Agreements",
+   "kind": "legal",
+   "routeTask": "rail_legal",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Reads terms and filings closely"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Second view",
+     "line": "Checks the first reading"
+    }
+   ]
+  },
+  {
+   "pageKey": "Super Admin · Contracts · NDAs",
+   "kind": "legal",
+   "routeTask": "rail_legal",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Reads terms and filings closely"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Second view",
+     "line": "Checks the first reading"
+    }
+   ]
+  },
+  {
+   "pageKey": "Super Admin · Contracts · Partner deals",
+   "kind": "legal",
+   "routeTask": "rail_legal",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Reads terms and filings closely"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Second view",
+     "line": "Checks the first reading"
+    }
+   ]
+  },
+  {
+   "pageKey": "Super Admin · Contracts · Templates",
+   "kind": "legal",
+   "routeTask": "rail_legal",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Reads terms and filings closely"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Second view",
+     "line": "Checks the first reading"
+    }
+   ]
+  },
+  {
+   "pageKey": "Super Admin · Contracts · Forms",
+   "kind": "legal",
+   "routeTask": "rail_legal",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Reads terms and filings closely"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Second view",
+     "line": "Checks the first reading"
+    }
+   ]
+  },
+  {
+   "pageKey": "Super Admin · Contracts · Document types",
+   "kind": "legal",
+   "routeTask": "rail_legal",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Reads terms and filings closely"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Second view",
+     "line": "Checks the first reading"
+    }
+   ]
+  },
+  {
+   "pageKey": "Super Admin · Team",
+   "kind": "match",
+   "routeTask": "rail_match",
+   "models": [
+    {
+     "id": "@cf/baai/bge-m3",
+     "role": "Default",
+     "line": "Finds people and firms that fit"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Orders them by fit"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Draft",
+     "line": "Writes the introduction, for you to send"
+    }
+   ]
+  },
+  {
+   "pageKey": "Super Admin · Team · Users",
+   "kind": "match",
+   "routeTask": "rail_match",
+   "models": [
+    {
+     "id": "@cf/baai/bge-m3",
+     "role": "Default",
+     "line": "Finds people and firms that fit"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Orders them by fit"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Draft",
+     "line": "Writes the introduction, for you to send"
+    }
+   ]
+  },
+  {
+   "pageKey": "Super Admin · Revenue",
+   "kind": "numbers",
+   "routeTask": "rail_numbers",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Shows its working on every figure"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Alternative",
+     "line": "Explains what moved and why"
+    },
+    {
+     "id": "@cf/ibm-granite/granite-4.0-h-micro",
+     "role": "Faster",
+     "line": "Reads figures out of documents"
+    }
+   ]
+  },
+  {
+   "pageKey": "Super Admin · Revenue · Overview",
+   "kind": "numbers",
+   "routeTask": "rail_numbers",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Shows its working on every figure"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Alternative",
+     "line": "Explains what moved and why"
+    },
+    {
+     "id": "@cf/ibm-granite/granite-4.0-h-micro",
+     "role": "Faster",
+     "line": "Reads figures out of documents"
+    }
+   ]
+  },
+  {
+   "pageKey": "Super Admin · Revenue · Disputes",
+   "kind": "legal",
+   "routeTask": "rail_legal",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Reads terms and filings closely"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Second view",
+     "line": "Checks the first reading"
+    }
+   ]
+  },
+  {
+   "pageKey": "Super Admin · Revenue · Refunds",
+   "kind": "numbers",
+   "routeTask": "rail_numbers",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Shows its working on every figure"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Alternative",
+     "line": "Explains what moved and why"
+    },
+    {
+     "id": "@cf/ibm-granite/granite-4.0-h-micro",
+     "role": "Faster",
+     "line": "Reads figures out of documents"
+    }
+   ]
+  },
+  {
+   "pageKey": "Super Admin · Revenue · Statements",
+   "kind": "numbers",
+   "routeTask": "rail_numbers",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Shows its working on every figure"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Alternative",
+     "line": "Explains what moved and why"
+    },
+    {
+     "id": "@cf/ibm-granite/granite-4.0-h-micro",
+     "role": "Faster",
+     "line": "Reads figures out of documents"
+    }
+   ]
+  },
+  {
+   "pageKey": "Super Admin · Revenue · Promotions",
+   "kind": "write",
+   "routeTask": "rail_write",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Drafts in your voice, cited"
+    },
+    {
+     "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+     "role": "Polished",
+     "line": "Tighter, more formal drafts"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Short drafts and replies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Super Admin · Content",
+   "kind": "write",
+   "routeTask": "rail_write",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Drafts in your voice, cited"
+    },
+    {
+     "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+     "role": "Polished",
+     "line": "Tighter, more formal drafts"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Short drafts and replies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Super Admin · Content · Content queue",
+   "kind": "write",
+   "routeTask": "rail_write",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Drafts in your voice, cited"
+    },
+    {
+     "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+     "role": "Polished",
+     "line": "Tighter, more formal drafts"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Short drafts and replies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Super Admin · Content · Publications",
+   "kind": "write",
+   "routeTask": "rail_write",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Drafts in your voice, cited"
+    },
+    {
+     "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+     "role": "Polished",
+     "line": "Tighter, more formal drafts"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Short drafts and replies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Super Admin · Content · Assessment Studio",
+   "kind": "write",
+   "routeTask": "rail_write",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Drafts in your voice, cited"
+    },
+    {
+     "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+     "role": "Polished",
+     "line": "Tighter, more formal drafts"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Short drafts and replies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Super Admin · Content · Personas",
+   "kind": "synth",
+   "routeTask": "rail_synth",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Groups notes and quotes into themes"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Quick tagging at a lower cost"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Checks a theme against all the evidence"
+    }
+   ]
+  },
+  {
+   "pageKey": "Super Admin · Content · Advisors and partners",
+   "kind": "match",
+   "routeTask": "rail_match",
+   "models": [
+    {
+     "id": "@cf/baai/bge-m3",
+     "role": "Default",
+     "line": "Finds people and firms that fit"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Orders them by fit"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Draft",
+     "line": "Writes the introduction, for you to send"
+    }
+   ]
+  },
+  {
+   "pageKey": "Super Admin · Content · Directory",
+   "kind": "match",
+   "routeTask": "rail_match",
+   "models": [
+    {
+     "id": "@cf/baai/bge-m3",
+     "role": "Default",
+     "line": "Finds people and firms that fit"
+    },
+    {
+     "id": "@cf/baai/bge-reranker-base",
+     "role": "Rank",
+     "line": "Orders them by fit"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Draft",
+     "line": "Writes the introduction, for you to send"
+    }
+   ]
+  },
+  {
+   "pageKey": "Super Admin · Content · Public team page",
+   "kind": "write",
+   "routeTask": "rail_write",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Drafts in your voice, cited"
+    },
+    {
+     "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+     "role": "Polished",
+     "line": "Tighter, more formal drafts"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Short drafts and replies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Super Admin · Platform",
+   "kind": "code",
+   "routeTask": "rail_code",
+   "models": [
+    {
+     "id": "@cf/moonshotai/kimi-k2.7-code",
+     "role": "Default",
+     "line": "Reads your repository and its changes"
+    },
+    {
+     "id": "@cf/qwen/qwen2.5-coder-32b-instruct",
+     "role": "Alternative",
+     "line": "Reviews and writes code"
+    }
+   ]
+  },
+  {
+   "pageKey": "Super Admin · Platform · Integration keys",
+   "kind": "code",
+   "routeTask": "rail_code",
+   "models": [
+    {
+     "id": "@cf/moonshotai/kimi-k2.7-code",
+     "role": "Default",
+     "line": "Reads your repository and its changes"
+    },
+    {
+     "id": "@cf/qwen/qwen2.5-coder-32b-instruct",
+     "role": "Alternative",
+     "line": "Reviews and writes code"
+    }
+   ]
+  },
+  {
+   "pageKey": "Super Admin · Platform · GitHub sync",
+   "kind": "code",
+   "routeTask": "rail_code",
+   "models": [
+    {
+     "id": "@cf/moonshotai/kimi-k2.7-code",
+     "role": "Default",
+     "line": "Reads your repository and its changes"
+    },
+    {
+     "id": "@cf/qwen/qwen2.5-coder-32b-instruct",
+     "role": "Alternative",
+     "line": "Reviews and writes code"
+    }
+   ]
+  },
+  {
+   "pageKey": "Super Admin · Platform · Payments catalogue",
+   "kind": "numbers",
+   "routeTask": "rail_numbers",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Shows its working on every figure"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Alternative",
+     "line": "Explains what moved and why"
+    },
+    {
+     "id": "@cf/ibm-granite/granite-4.0-h-micro",
+     "role": "Faster",
+     "line": "Reads figures out of documents"
+    }
+   ]
+  },
+  {
+   "pageKey": "Super Admin · Platform · Promo codes",
+   "kind": "numbers",
+   "routeTask": "rail_numbers",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Shows its working on every figure"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Alternative",
+     "line": "Explains what moved and why"
+    },
+    {
+     "id": "@cf/ibm-granite/granite-4.0-h-micro",
+     "role": "Faster",
+     "line": "Reads figures out of documents"
+    }
+   ]
+  },
+  {
+   "pageKey": "Super Admin · Platform · Credit rules",
+   "kind": "numbers",
+   "routeTask": "rail_numbers",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Shows its working on every figure"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Alternative",
+     "line": "Explains what moved and why"
+    },
+    {
+     "id": "@cf/ibm-granite/granite-4.0-h-micro",
+     "role": "Faster",
+     "line": "Reads figures out of documents"
+    }
+   ]
+  },
+  {
+   "pageKey": "Super Admin · Platform · AI allowances",
+   "kind": "numbers",
+   "routeTask": "rail_numbers",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Shows its working on every figure"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Alternative",
+     "line": "Explains what moved and why"
+    },
+    {
+     "id": "@cf/ibm-granite/granite-4.0-h-micro",
+     "role": "Faster",
+     "line": "Reads figures out of documents"
+    }
+   ]
+  },
+  {
+   "pageKey": "Super Admin · Platform · Monitoring",
+   "kind": "code",
+   "routeTask": "rail_code",
+   "models": [
+    {
+     "id": "@cf/moonshotai/kimi-k2.7-code",
+     "role": "Default",
+     "line": "Reads your repository and its changes"
+    },
+    {
+     "id": "@cf/qwen/qwen2.5-coder-32b-instruct",
+     "role": "Alternative",
+     "line": "Reviews and writes code"
+    }
+   ]
+  },
+  {
+   "pageKey": "Super Admin · Platform · Telegram channels",
+   "kind": "write",
+   "routeTask": "rail_write",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Drafts in your voice, cited"
+    },
+    {
+     "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+     "role": "Polished",
+     "line": "Tighter, more formal drafts"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Short drafts and replies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Super Admin · Support",
+   "kind": "write",
+   "routeTask": "rail_write",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Drafts in your voice, cited"
+    },
+    {
+     "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+     "role": "Polished",
+     "line": "Tighter, more formal drafts"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Short drafts and replies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Super Admin · Security",
+   "kind": "legal",
+   "routeTask": "rail_legal",
+   "models": [
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Default",
+     "line": "Reads terms and filings closely"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Second view",
+     "line": "Checks the first reading"
+    }
+   ]
+  },
+  {
+   "pageKey": "Super Admin · Settings",
+   "kind": "plan",
+   "routeTask": "rail_plan",
+   "models": [
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Default",
+     "line": "Plans, lists and next steps"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-20b",
+     "role": "Alternative",
+     "line": "Steady structured output"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Trade-offs and dependencies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Admin · Home",
+   "kind": "chat",
+   "routeTask": "rail_chat",
+   "models": [
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Default",
+     "line": "Fast replies that can use your workspace"
+    },
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Longer",
+     "line": "Fuller answers and drafts"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Hard questions that need reasoning"
+    }
+   ]
+  }
+ ]
+}

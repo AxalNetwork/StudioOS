@@ -5,7 +5,8 @@ import { api } from '../../lib/api';
 import { connectorsApi } from '../../lib/api/connectors';
 import { BrandIcon, PhoneBar, PhoneRows, Pill, Unrecorded, Unreadable, VerifiedBadge, usePhoneWidth } from '../../ui';
 import { BTN, INPUT } from './AccountCenter';
-import { Banner, Group, Sheet, useConnectors } from './ConnectorSheet';
+import { Banner, Group, useConnectors } from './ConnectorSheet';
+import Lightbox from '../../ui/Lightbox';
 import { AssistantsSection } from './AssistantsGroup';
 import { ChannelsSection } from './ChannelsGroup';
 import {
@@ -224,7 +225,8 @@ export function RequestSheet({ onClose, tool: initial = '' }) {
     }
   };
   return (
-    <Sheet eyebrow="Connector" title="Request a connector" sub="Tell us which tool you need." onClose={onClose} data-testid="connector-sheet-request"
+    // D753 F3 (#1956): a centred dialog, as the Settings tools are; the hub's Add menu and a page's "Request it." open the same one.
+    <Lightbox label="Request a connector" eyebrow="Connector" title="Request a connector" sub="Tell us which tool you need." onClose={onClose} width={512} testId="connector-sheet-request"
       footer={state.sent
         ? <button type="button" className={BTN.primary} onClick={onClose}>Done</button>
         : <><button type="button" className={BTN.ghost} onClick={onClose}>Cancel</button><button type="button" className={BTN.primary} disabled={!ready || state.busy} onClick={send} data-testid="button-send-request">{state.busy ? 'Sending…' : 'Send request'}</button></>}>
@@ -240,7 +242,7 @@ export function RequestSheet({ onClose, tool: initial = '' }) {
       </Group>
       {state.sent && <Banner tone="ok" data-testid="request-sent">Requested. The studio reads every request; nothing is promised about when a connector ships.</Banner>}
       {state.error && <Banner tone="danger" data-testid="request-error">{state.error}</Banner>}
-    </Sheet>
+    </Lightbox>
   );
 }
 

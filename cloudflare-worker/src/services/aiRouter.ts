@@ -68,7 +68,19 @@ export type TaskClass =
   | 'research_ask'
   | 'structure_interview'
   // D685 §5.10 — StudioOS's own summary of a session, every sentence cited.
-  | 'summarise_interview';
+  | 'summarise_interview'
+  // D764 (#2089) — the rail's fourteen kinds of work, one task each. The
+  // page's row in `ai/railMatrix.json` names the models a member may pick;
+  // the entries below are each kind's default and its alternates.
+  | RailTask;
+
+/** The canvas's fourteen kinds of work (D720 §1), in its order. */
+export const RAIL_KINDS = [
+  'chat', 'synth', 'speech', 'research', 'reason', 'vision', 'code',
+  'numbers', 'write', 'match', 'plan', 'legal', 'multi', 'search',
+] as const;
+export type RailKind = (typeof RAIL_KINDS)[number];
+export type RailTask = `rail_${RailKind}`;
 
 export type RefusalReason =
   | 'budget_user_day'
@@ -369,6 +381,18 @@ export const PRICE_USD_PER_1M_TOKENS: Record<string, { in: number; out: number }
   '@cf/qwen/qwen2.5-coder-32b-instruct',
   // D760: moved from 0.05 to its neuron price, 6058 neurons: 0.066638.
   '@cf/baai/bge-base-en-v1.5',
+  // D764 (#2089): the models the rail_<kind> tasks route to. Their prices are the catalogue's, as every row here.
+  '@cf/zai-org/glm-4.7-flash',
+  '@cf/openai/gpt-oss-120b',
+  '@cf/openai/gpt-oss-20b',
+  '@cf/moonshotai/kimi-k2.6',
+  '@cf/moonshotai/kimi-k2.7-code',
+  '@cf/deepseek-ai/deepseek-v4-pro-0813',
+  '@cf/qwen/qwq-32b',
+  '@cf/google/gemma-4-26b-a4b-it',
+  '@cf/meta/llama-4-scout-17b-16e-instruct',
+  '@cf/mistralai/mistral-small-3.1-24b-instruct',
+  '@cf/ibm-granite/granite-4.0-h-micro',
 ]);
 
 /**
@@ -674,6 +698,28 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   // MID_LLAMA primary → SMALL_LLAMA fallback. Fallback chain failure returns
   // null to the route, which lands on the deterministic template bank.
   brand_taglines: { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
+  // D764 (#2089) — the rail's kinds of work. Each primary is its kind's first
+  // model on the canvas that a free plan can run (D720 §5's paid-only
+  // demotion); `alternates` are the kind's models of the same shape, so a
+  // member's pick from the row is accepted; the chain keeps only models a
+  // free plan can run. A page's own models come from `ai/railMatrix.json`
+  // (`rail_matrix_d764.test.ts` holds these entries to it). rail_search has
+  // only Kimi K2.6 to answer with, which needs a paid plan: the canvas pairs
+  // the index with no other answer model.
+  rail_chat:     { provider: 'workers-ai', model: '@cf/zai-org/glm-4.7-flash', fallbackChain: [MID_LLAMA, '@cf/openai/gpt-oss-120b'], alternates: ['@cf/zai-org/glm-4.7-flash', MID_LLAMA, '@cf/openai/gpt-oss-120b'] },
+  rail_synth:    { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: ['@cf/zai-org/glm-4.7-flash', '@cf/openai/gpt-oss-120b'], alternates: [MID_LLAMA, '@cf/zai-org/glm-4.7-flash', '@cf/openai/gpt-oss-120b'] },
+  rail_speech:   { provider: 'workers-ai', model: '@cf/openai/whisper-large-v3-turbo', isAudio: true, alternates: ['@cf/openai/whisper-large-v3-turbo'] },
+  rail_research: { provider: 'workers-ai', model: '@cf/openai/gpt-oss-120b', alternates: ['@cf/openai/gpt-oss-120b', '@cf/moonshotai/kimi-k2.6'] },
+  rail_reason:   { provider: 'workers-ai', model: '@cf/openai/gpt-oss-120b', fallbackChain: ['@cf/qwen/qwq-32b'], alternates: ['@cf/openai/gpt-oss-120b', '@cf/deepseek-ai/deepseek-v4-pro-0813', '@cf/qwen/qwq-32b'] },
+  rail_vision:   { provider: 'workers-ai', model: '@cf/google/gemma-4-26b-a4b-it', fallbackChain: ['@cf/meta/llama-4-scout-17b-16e-instruct'], alternates: ['@cf/google/gemma-4-26b-a4b-it', '@cf/meta/llama-4-scout-17b-16e-instruct'] },
+  rail_code:     { provider: 'workers-ai', model: '@cf/qwen/qwen2.5-coder-32b-instruct', alternates: ['@cf/qwen/qwen2.5-coder-32b-instruct', '@cf/moonshotai/kimi-k2.7-code'] },
+  rail_numbers:  { provider: 'workers-ai', model: '@cf/openai/gpt-oss-120b', fallbackChain: ['@cf/ibm-granite/granite-4.0-h-micro'], alternates: ['@cf/openai/gpt-oss-120b', '@cf/deepseek-ai/deepseek-v4-pro-0813', '@cf/ibm-granite/granite-4.0-h-micro'] },
+  rail_write:    { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: ['@cf/mistralai/mistral-small-3.1-24b-instruct', '@cf/zai-org/glm-4.7-flash'], alternates: [MID_LLAMA, '@cf/mistralai/mistral-small-3.1-24b-instruct', '@cf/zai-org/glm-4.7-flash'] },
+  rail_match:    { provider: 'workers-ai', model: MID_LLAMA, alternates: [MID_LLAMA] },
+  rail_plan:     { provider: 'workers-ai', model: '@cf/zai-org/glm-4.7-flash', fallbackChain: ['@cf/openai/gpt-oss-20b', '@cf/openai/gpt-oss-120b'], alternates: ['@cf/zai-org/glm-4.7-flash', '@cf/openai/gpt-oss-20b', '@cf/openai/gpt-oss-120b'] },
+  rail_legal:    { provider: 'workers-ai', model: '@cf/openai/gpt-oss-120b', alternates: ['@cf/openai/gpt-oss-120b', '@cf/deepseek-ai/deepseek-v4-pro-0813'] },
+  rail_multi:    { provider: 'workers-ai', model: '@cf/mistralai/mistral-small-3.1-24b-instruct', alternates: ['@cf/mistralai/mistral-small-3.1-24b-instruct'] },
+  rail_search:   { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.6', alternates: ['@cf/moonshotai/kimi-k2.6'] },
 };
 
 // D761: the latency budget is per attempt and per class (`shapes.TIMEOUT_MS`),

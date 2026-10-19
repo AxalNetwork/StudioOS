@@ -45,6 +45,21 @@ export const TASK_LABELS: Record<TaskClass, string> = {
   research_ask: 'Answer from your documents',
   structure_interview: 'Structure an interview',
   summarise_interview: 'Summarise an interview',
+  // D764 (#2089) — the rail's kinds of work, in the canvas's words.
+  rail_chat: 'Chat on a page',
+  rail_synth: 'Group notes into themes',
+  rail_speech: 'Transcribe a recording',
+  rail_research: 'Research with cited sources',
+  rail_reason: 'Test a claim against evidence',
+  rail_vision: 'Read slides, charts and scans',
+  rail_code: 'Read and write code',
+  rail_numbers: 'Work through figures',
+  rail_write: 'Draft text',
+  rail_match: 'Find people and firms that fit',
+  rail_plan: 'Plan next steps',
+  rail_legal: 'Read terms and filings',
+  rail_multi: 'Read sources in any language',
+  rail_search: 'Answer from your documents',
 };
 
 /**
@@ -75,6 +90,18 @@ export const MODEL_NAMES: Record<string, string> = {
   '@cf/deepgram/nova-3': 'Nova-3',
   // D760: on the rate card now that it carries WebSocket rates (live speech, D658).
   '@cf/deepgram/flux': 'Flux',
+  // D764 (#2089): the rail's models, by the canvas's names.
+  '@cf/zai-org/glm-4.7-flash': 'GLM-4.7 Flash',
+  '@cf/openai/gpt-oss-120b': 'GPT-OSS 120B',
+  '@cf/openai/gpt-oss-20b': 'GPT-OSS 20B',
+  '@cf/moonshotai/kimi-k2.6': 'Kimi K2.6',
+  '@cf/moonshotai/kimi-k2.7-code': 'Kimi K2.7 Code',
+  '@cf/deepseek-ai/deepseek-v4-pro-0813': 'DeepSeek V4 Pro',
+  '@cf/qwen/qwq-32b': 'QwQ 32B',
+  '@cf/google/gemma-4-26b-a4b-it': 'Gemma 4 26B',
+  '@cf/meta/llama-4-scout-17b-16e-instruct': 'Llama 4 Scout',
+  '@cf/mistralai/mistral-small-3.1-24b-instruct': 'Mistral Small 3.1 24B',
+  '@cf/ibm-granite/granite-4.0-h-micro': 'Granite 4.0 Micro',
 };
 
 /**
