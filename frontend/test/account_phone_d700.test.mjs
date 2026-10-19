@@ -329,7 +329,15 @@ test('5b. D751 (#1881): a suggested connector Axal cannot connect reads Not set 
   });
   const data = { status: 'ready', catalogue, items: [], itemsFailed: false, reload: noop,
     suggestions: [{ provider_key: 'github', reason: 'Build has no code yet.' }, { provider_key: 'microsoft', reason: 'No calendar yet.' }] };
-  const row = (markup, key) => markup.match(new RegExp(`<(a|div|button)[^>]*data-testid="connector-suggested-${key}"[^>]*>[^]*?</\\1>`))?.[0] || '';
+  // The row's element, from its opening tag to the first close of that tag, found by text, not a built pattern.
+  const row = (markup, key) => {
+    const i = markup.indexOf(` data-testid="connector-suggested-${key}"`);
+    if (i < 0) return '';
+    const start = markup.lastIndexOf('<', i);
+    const tag = /^<(a|div|button)\b/.exec(markup.slice(start))?.[1];
+    const end = tag ? markup.indexOf(`</${tag}>`, i) : -1;
+    return end < 0 ? '' : markup.slice(start, end + tag.length + 3);
+  };
   const plain = html(h(ConnectorsPhoneView, { data }), '/account/connectors');
   const gh = row(plain, 'github');
   assert.match(text(gh), /GitHub .*Not set up here/, 'the reason first, as the card says it');

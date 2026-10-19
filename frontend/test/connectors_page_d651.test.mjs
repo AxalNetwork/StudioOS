@@ -597,7 +597,8 @@ test('D751: a connector Axal has no client for reads Not set up here, and a Supe
 
   // A Super Admin.
   const sup = html(h(ConnectorsView, { data: ready(cat), initialTab: 'discover', superAdmin: true }), '/account/connectors?tab=discover');
-  const link = (key) => sup.match(new RegExp(`<a[^>]*data-testid="connector-keys-link-${key}"[^>]*>([^<]*)</a>`))?.[0] || null;
+  // One fixed pattern; the testid is matched as text, so no pattern is built from a key.
+  const link = (key) => (sup.match(/<a\b[^>]*>[^<]*<\/a>/g) || []).find((t) => t.includes(` data-testid="connector-keys-link-${key}"`)) || null;
   assert.match(link('github') || '', /href="\/admin\?tab=integration-keys"/);
   assert.match(link('github') || '', />Add its keys in Integration keys</);
   assert.ok(link('calendly'), 'Calendly gets the way to its keys');
