@@ -3,6 +3,7 @@ import { Sparkles } from 'lucide-react';
 import { api } from '../lib/api';
 import { formatCost } from '../ui/assistCost';
 import RunEstimate from './RunEstimate';
+import { CHECKING, guardRefusal } from './draftCheck';
 
 /**
  * The band every artboard with an AI proposal closes with.
@@ -164,6 +165,8 @@ export default function ZoneDraft({
   const [item, setItem] = useState(null);
   const [busy, setBusy] = useState('');
   const [note, setNote] = useState('');
+  // D770 (#2095): the guard's link (S11 for a founder or an admin) beside its words.
+  const [guardLink, setGuardLink] = useState(null);
   const [editing, setEditing] = useState(null);
 
   const load = useCallback(async () => {
@@ -183,7 +186,7 @@ export default function ZoneDraft({
 
   const doRun = async () => {
     if (blocked) return;
-    setBusy('run'); setNote('');
+    setBusy('run'); setNote(''); setGuardLink(null);
     try {
       const r = await api.research.zoneDraftRun(surface, scopeKey, bandPage());
       setItem(r?.item || null);
@@ -193,9 +196,12 @@ export default function ZoneDraft({
       // to draft over, and the worker declines rather than letting the model
       // write from its own knowledge in the voice of a grounded draft.
       // D258 — the refusal's code travels on `e.code`, compared whole.
+      // D770 (#2095): a withheld draft is never drawn; the guard's own words are.
+      const guard = guardRefusal(e);
+      setGuardLink(guard?.link || null);
       setNote(e?.code === 'nothing_to_draft'
         ? (nothingToDraft || 'There is nothing on this page to draft over yet.')
-        : 'That draft could not be written right now.');
+        : guard?.message || 'That draft could not be written right now.');
     } finally { setBusy(''); }
   };
 
@@ -302,7 +308,13 @@ export default function ZoneDraft({
         </>
       )}
 
-      {note ? <p className="mt-2 text-[11px] text-gray-700 dark:text-gray-300">{note}</p> : null}
+      {busy === 'run' ? <p role="status" data-testid="zone-draft-checking" className="mt-2 text-[11px] text-gray-700 dark:text-gray-300">{CHECKING}</p> : null}
+      {note ? (
+        <p className="mt-2 text-[11px] text-gray-700 dark:text-gray-300" data-testid="zone-draft-note">
+          {note}
+          {guardLink ? <> <a href={guardLink.href} className="font-semibold underline">{guardLink.label}</a></> : null}
+        </p>
+      ) : null}
     </div>
   );
 }

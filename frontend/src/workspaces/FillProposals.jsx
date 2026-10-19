@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import { formatCost } from '../ui/assistCost';
 import RunEstimate from './RunEstimate';
 import { readRailModel, writeRailModel } from '../ui/railModelChoice';
+import { CHECKING, guardRefusal } from './draftCheck';
 
 /**
  * What Eadwyn suggested, and the THREE decisions a founder makes about each one.
@@ -120,6 +121,8 @@ export default function FillProposals({ projectId, kind, enabled, onApplied, ai,
   const [items, setItems] = useState([]);
   const [kinds, setKinds] = useState(null);
   const [busy, setBusy] = useState('');
+  // D770 (#2095): the guard's link (S11 for a founder or an admin) beside its words.
+  const [guardLink, setGuardLink] = useState(null);
   const [note, setNote] = useState('');
   const [receipt, setReceipt] = useState(null);
   // { id, value } while a proposal is being edited. One at a time, because the
@@ -142,7 +145,7 @@ export default function FillProposals({ projectId, kind, enabled, onApplied, ai,
   useEffect(() => { load(); }, [load]);
 
   const propose = async () => {
-    setBusy('run'); setNote(''); setReceipt(null);
+    setBusy('run'); setNote(''); setReceipt(null); setGuardLink(null);
     try {
       const task = kinds?.[kind]?.task;
       const model = task ? readRailModel(workspace, task) : null;
@@ -160,6 +163,8 @@ export default function FillProposals({ projectId, kind, enabled, onApplied, ai,
       if (e?.data?.refusal === 'model_not_offered' && kinds?.[kind]?.task) {
         writeRailModel(workspace, kinds[kind].task, null);
       }
+      // D770 (#2095): a withheld run's proposals are never drawn; the guard's words (`e.message`) are.
+      setGuardLink(guardRefusal(e)?.link || null);
       setNote(e?.message || 'That could not be run. Nothing was charged.');
     } finally {
       setBusy('');
@@ -275,11 +280,12 @@ export default function FillProposals({ projectId, kind, enabled, onApplied, ai,
               )}
 
               <div className="mt-2 flex flex-wrap items-center gap-2">
+                {/* D770 (#2095): Accept waits while a run's draft is being checked. */}
                 <button
                   type="button"
                   className={ACCENT}
                   onClick={() => (open ? saveEdit(p) : decide(p.id, 'accept'))}
-                  disabled={busy === `accept-${p.id}`}
+                  disabled={busy === 'run' || busy === `accept-${p.id}`}
                   data-testid={`action-accept-${p.id}`}
                 >
                   {open ? 'Save and add' : copy.accept}
@@ -330,9 +336,15 @@ export default function FillProposals({ projectId, kind, enabled, onApplied, ai,
           {receipt.fallback_used ? ' · the model was busy, a smaller one answered' : ''}
         </p>
       )}
+      {busy === 'run' && (
+        <p role="status" className="mt-2 text-[11.5px] text-gray-600 dark:text-gray-400" data-testid={`proposals-checking-${kind}`}>
+          {CHECKING}
+        </p>
+      )}
       {note && (
         <p className="mt-2 text-[11.5px] text-gray-600 dark:text-gray-400" data-testid={`proposals-note-${kind}`}>
           {note}
+          {guardLink && <> <a href={guardLink.href} className="font-semibold underline">{guardLink.label}</a></>}
         </p>
       )}
     </section>
