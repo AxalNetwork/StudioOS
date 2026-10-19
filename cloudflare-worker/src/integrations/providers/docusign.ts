@@ -38,7 +38,7 @@
  * IMPORTANT: imported once from index.ts so registerProvider() runs at boot.
  */
 import type { Context } from 'hono';
-import { stripTrailingSlashes, callbackBase } from '../../util/url';
+import { stripTrailingSlashes, callbackBase, oauthCallbackUrl } from '../../util/url';
 import type { Env, User } from '../../types';
 import { scheduledConnectorEnabled } from '../companyScope';
 import {
@@ -72,9 +72,9 @@ const DEMO_AUTH_HOST = 'https://account-d.docusign.com';
 
 function authHost(isDemo: boolean): string { return isDemo ? DEMO_AUTH_HOST : PROD_AUTH_HOST; }
 
-function redirectUri(env: Env): string {
-  const base = callbackBase(env);
-  return `${base}/api/integrations/oauth/${PROVIDER_KEY}/callback`;
+/** The callback URL registered with the provider; Admin → Integration keys shows the same (D751). */
+export function redirectUri(env: Env): string {
+  return oauthCallbackUrl(env, PROVIDER_KEY);
 }
 
 async function ensureCreds(env: Env): Promise<{ id: string; secret: string }> {

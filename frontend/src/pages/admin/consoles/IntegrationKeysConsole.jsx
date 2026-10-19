@@ -12,6 +12,10 @@ import { isSuperAdminUser } from '../../../lib/shellRole';
 import SecretWriteGate from '../../../components/SecretWriteGate';
 // D227 — Integration keys' actions and wording follow where a key lives.
 import { keyActionsFor, keyStateBadge, connectedUsersLine, removeConfirmText, SAVE_EFFECT } from '../../../lib/integrationKeys';
+// D751 (#1882) — what to register for each OAuth client, and where.
+import {
+  envNamesFor, membersSeeLine, wranglerPutLine, safeGuideHref, ENV_ONLY_NOTE, CALLBACK_COPY,
+} from '../../../lib/integrationKeys';
 import { ConsoleUnreadable } from './shared';
 
 /**
@@ -50,6 +54,7 @@ const PROVIDER_HINTS = {
   calendly: 'Get Client ID + Client Secret from calendly.com → Integrations → OAuth applications.',
   stripe: 'Connect Client ID is the ca_… from Stripe Dashboard → Connect → Settings. Secret Key is the sk_live_… (or sk_test_…) from API keys.',
   carta: 'Get Client ID + Client Secret from your Carta Developer Portal app.',
+  github: 'From github.com → AxalNetwork → Settings → Developer settings → GitHub Apps → Axal StudioOS: copy the Client ID (it starts with Iv, and is not the numeric App ID), then press Generate a new client secret. The App needs exactly four repository permissions, all Read-only: Contents, Issues, Metadata and Pull requests. Any other permission makes every connect fail.',
   crunchbase: 'API key — paste a label (e.g. "default") into Client ID and the user_key into Secret. Provision the key at data.crunchbase.com.',
   affinity: 'API key — put your team subdomain (e.g. "acme") into Client ID and the Affinity API key into Secret. Generate at affinity.co → Settings → API.',
   telegram: 'Bot token — put the bot username (e.g. "axalvc_bot") into Client ID and the BotFather token into Secret. Get the token from @BotFather on Telegram.',
@@ -65,6 +70,7 @@ const PROVIDER_ENV_NAMES = {
   calendly: ['CALENDLY_CLIENT_ID', 'CALENDLY_CLIENT_SECRET'],
   stripe: ['STRIPE_CONNECT_CLIENT_ID', 'STRIPE_SECRET_KEY'],
   carta: ['CARTA_CLIENT_ID', 'CARTA_CLIENT_SECRET'],
+  github: ['GITHUB_APP_CLIENT_ID', 'GITHUB_APP_CLIENT_SECRET'],
   crunchbase: ['CRUNCHBASE_USER_KEY_ID', 'CRUNCHBASE_API_KEY'],
   affinity: ['AFFINITY_TEAM_DOMAIN', 'AFFINITY_API_KEY'],
   telegram: ['TELEGRAM_BOT_USERNAME', 'TELEGRAM_BOT_TOKEN'],
@@ -102,12 +108,15 @@ export function IntegrationKeysPanel() {
   const [unreadableReason, setUnreadableReason] = useState(null);
   // D648 — a failed read is said, never drawn as an empty list.
   const [failed, setFailed] = useState(false);
+  // D751 — the OAuth clients set only at deploy; an older Worker sends none.
+  const [envOnly, setEnvOnly] = useState([]);
 
   const refresh = async () => {
     setLoading(true);
     try {
       const r = await api.adminListIntegrationKeys();
       setRows(r.providers || []);
+      setEnvOnly(Array.isArray(r.other_oauth) ? r.other_oauth : []);
       setUnreadableReason(r.db_readable === false ? (r.unreadable_reason || 'The key table could not be read.') : null);
       setFailed(false);
     } catch (e) {
@@ -175,7 +184,7 @@ export function IntegrationKeysPanel() {
         <div className="grid gap-4 md:grid-cols-2">
           {rows.map((row) => {
             const label = PROVIDER_LABELS[row.provider_key] || row.provider_key;
-            const envNames = PROVIDER_ENV_NAMES[row.provider_key] || [];
+            const envNames = envNamesFor(row, PROVIDER_ENV_NAMES);
             // D227 — the worker's state, not `source`: `unreadable` is not
             // `unconfigured`, and a key saved here lives in `env`.
             const state = row.state;
@@ -213,7 +222,14 @@ export function IntegrationKeysPanel() {
                   </div>
                 )}
                 {state === 'unset' && (
-                  <div className="text-xs text-gray-600 dark:text-gray-400 mb-3">{PROVIDER_HINTS[row.provider_key]}</div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400 mb-3">
+                    {PROVIDER_HINTS[row.provider_key]}
+                    {envNames.length === 2 && (
+                      <span data-testid={`integration-key-env-names-${row.provider_key}`}>
+                        {PROVIDER_HINTS[row.provider_key] ? ' ' : ''}Or set them as the Worker secrets <code>{envNames[0]}</code> and <code>{envNames[1]}</code>.
+                      </span>
+                    )}
+                  </div>
                 )}
                 {state === 'unreadable' && (
                   <div className="text-xs text-gray-600 dark:text-gray-400 mb-3" data-testid="integration-key-unknown">
@@ -221,10 +237,12 @@ export function IntegrationKeysPanel() {
                     {' '}— no Worker secret is set, and the database could not be read to say whether a key is kept there.
                   </div>
                 )}
+                <SetupLines name={label} callbackUrl={row.callback_url} membersLine={membersSeeLine({ connector: row.connector, unset: state === 'unset' })}
+                  guideHref={row.guide_href} testKey={row.provider_key} />
                 <div className="flex gap-2 flex-wrap">
                   {holdsSecretWrites && actions.configure && (
                     <button
-                      onClick={() => setEditing({ provider: row.provider_key, mode: 'configure' })}
+                      onClick={() => setEditing({ provider: row.provider_key, mode: 'configure', callbackUrl: row.callback_url })}
                       className="px-3 py-1.5 text-xs font-medium rounded-lg bg-violet-600 text-white hover:bg-violet-700">
                       Configure
                     </button>
@@ -259,10 +277,21 @@ export function IntegrationKeysPanel() {
         </div>
       )}
 
+      {!loading && !failed && envOnly.length > 0 && (
+        <section className="mt-8" data-testid="integration-keys-env-only">
+          <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">Set at deploy only</h3>
+          <p className="mt-1 mb-4 text-xs text-gray-600 dark:text-gray-400">{ENV_ONLY_NOTE}</p>
+          <div className="grid gap-4 md:grid-cols-2">
+            {envOnly.map((o) => <EnvOnlyOauthCard key={o.key} row={o} />)}
+          </div>
+        </section>
+      )}
+
       {editing && (
         <IntegrationKeysEditModal
           provider={editing.provider}
           mode={editing.mode}
+          callbackUrl={editing.callbackUrl}
           onClose={() => setEditing(null)}
           onSaved={() => { setEditing(null); refresh(); showToast({ kind: 'ok', msg: editing.mode === 'rotate' ? 'Secret rotated.' : 'Keys saved.' }); }}
           onError={(msg) => showToast({ kind: 'err', msg })}
@@ -272,7 +301,7 @@ export function IntegrationKeysPanel() {
   );
 }
 
-function IntegrationKeysEditModal({ provider, mode = 'configure', onClose, onSaved, onError }) {
+function IntegrationKeysEditModal({ provider, mode = 'configure', callbackUrl = null, onClose, onSaved, onError }) {
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
   const [saving, setSaving] = useState(false);
@@ -320,6 +349,11 @@ function IntegrationKeysEditModal({ provider, mode = 'configure', onClose, onSav
             ? 'Paste the new client secret issued by the provider. The Client ID stays the same — only the secret is rotated in place.'
             : PROVIDER_HINTS[provider]}
         </p>
+        {!isRotate && callbackUrl && (
+          <div className="mb-4">
+            <CallbackUrlField url={callbackUrl} name={label} testid={`integration-key-dialog-callback-${provider}`} copyTestid={`integration-key-dialog-callback-copy-${provider}`} />
+          </div>
+        )}
         {!isRotate && (
           <>
             <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Client ID</label>
@@ -359,6 +393,90 @@ function IntegrationKeysEditModal({ provider, mode = 'configure', onClose, onSav
           </button>
         </div>
       </form>
+    </div>
+  );
+}
+
+/**
+ * D751 — the callback URL to register with the provider, as the Worker sends
+ * it (the provider's own function builds it), with Copy.
+ */
+export function CallbackUrlField({ url, name, testid, copyTestid }) {
+  const [copy, setCopy] = useState('idle');
+  const onCopy = async () => {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
+      await navigator.clipboard.writeText(url);
+      setCopy('done');
+      setTimeout(() => setCopy('idle'), 1600);
+    } catch (e) {
+      reportError('IntegrationKeys:copyCallback', e);
+      setCopy('failed');
+    }
+  };
+  return (
+    <div className="text-xs" data-testid={testid}>
+      <div className="font-medium text-gray-700 dark:text-gray-300 mb-1">Callback URL to register with {name}</div>
+      <div className="flex items-start gap-2">
+        <code className="min-w-0 flex-1 break-all rounded bg-gray-50 dark:bg-gray-900 px-2 py-1 text-gray-800 dark:text-gray-200">{url}</code>
+        <button type="button" onClick={onCopy} data-testid={copyTestid}
+          className="shrink-0 px-2 py-1 text-[11px] font-medium rounded border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/70">
+          {copy === 'done' ? CALLBACK_COPY.done : CALLBACK_COPY.idle}
+        </button>
+      </div>
+      {copy === 'failed' && <p role="alert" className="mt-1 text-[11px] text-red-700 dark:text-red-300">{CALLBACK_COPY.failed}</p>}
+    </div>
+  );
+}
+
+/** D751 — the callback with Copy, what members see while the key is missing, and the setup guide. */
+function SetupLines({ name, callbackUrl, membersLine, guideHref, testKey }) {
+  const guide = safeGuideHref(guideHref);
+  if (!callbackUrl && !membersLine && !guide) return null;
+  return (
+    <div className="mb-3 flex flex-col gap-2">
+      {callbackUrl && <CallbackUrlField url={callbackUrl} name={name} testid={`integration-key-callback-${testKey}`} copyTestid={`integration-key-callback-copy-${testKey}`} />}
+      {membersLine && <p className="text-xs text-amber-800 dark:text-amber-300" data-testid={`integration-key-members-${testKey}`}>{membersLine}</p>}
+      {guide && (
+        <a href={guide} target="_blank" rel="noopener noreferrer" data-testid={`integration-key-guide-${testKey}`}
+          className="self-start text-xs font-medium text-violet-700 dark:text-violet-300 underline">Setup guide</a>
+      )}
+    </div>
+  );
+}
+
+/**
+ * D751 — one OAuth client set only at deploy (Zoom, Google Calendar,
+ * Microsoft 365): whether it is set up, the commands that set it, its
+ * fallback names, its callback, what members see and its guide. Read-only:
+ * no Configure, Rotate, Remove or Test, and never a value.
+ */
+export function EnvOnlyOauthCard({ row }) {
+  const name = row?.connector?.display_name || row?.key;
+  const badge = keyStateBadge(row?.configured ? 'env' : 'unset');
+  const names = Array.isArray(row?.env_vars) ? row.env_vars.filter((n) => typeof n === 'string' && n) : [];
+  const fallback = Array.isArray(row?.fallback_env_vars) ? row.fallback_env_vars.filter((n) => typeof n === 'string' && n) : [];
+  return (
+    <div data-card data-testid={`integration-key-env-only-${row?.key}`} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5">
+      <div className="flex items-center gap-2 mb-3">
+        <BrandIcon provider={row?.key} name={name} size={24} />
+        <h4 className="text-base font-bold text-gray-900 dark:text-gray-100">{name}</h4>
+        <span className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full font-semibold ${badge.cls}`}>{badge.text}</span>
+      </div>
+      <ul className="mb-3 flex flex-col gap-1">
+        {names.map((n) => (
+          <li key={n} className="text-xs">
+            <code className="block break-all rounded bg-gray-50 dark:bg-gray-900 px-2 py-1 text-gray-800 dark:text-gray-200">{wranglerPutLine(n)}</code>
+          </li>
+        ))}
+      </ul>
+      {fallback.length > 0 && (
+        <p className="mb-3 text-xs text-gray-600 dark:text-gray-400" data-testid={`integration-key-fallback-${row?.key}`}>
+          If these are unset, {fallback.map((n, i) => <React.Fragment key={n}>{i > 0 && ' and '}<code>{n}</code></React.Fragment>)} are read instead.
+        </p>
+      )}
+      <SetupLines name={name} callbackUrl={row?.callback_url} membersLine={membersSeeLine({ connector: row?.connector, unset: row?.configured === false })}
+        guideHref={row?.guide_href} testKey={row?.key} />
     </div>
   );
 }

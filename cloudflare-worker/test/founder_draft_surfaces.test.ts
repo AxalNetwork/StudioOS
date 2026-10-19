@@ -1,5 +1,6 @@
 import {AI_LOG_SCHEMA,AI_BUDGET_MIGRATION} from './_ai_budget_fixture.mjs';
 import {d1Over} from './_d1_sqlite.mjs';
+import { withGuard } from './_guard_stub.mjs';
 /**
  * The founder draft surfaces, and the one thing standing between them.
  *
@@ -266,13 +267,14 @@ async function draft(
   db: any, who: { user: number }, surface: string, scopeKey?: string, page?: unknown,
 ): Promise<{ status: number; prompt: string | null }> {
   let prompt: string | null = null;
-  const AI = {
+  // D763: the guard answers free, so `prompt` is the drafting model's.
+  const AI = withGuard({
     run: async (_model: string, payload: any) => {
       const messages = payload?.messages || [];
       prompt = String(messages[messages.length - 1]?.content ?? '');
       return { response: 'a drafted paragraph' };
     },
-  };
+  });
   const res = await research.fetch(
     new Request('http://x/drafts', {
       method: 'POST',

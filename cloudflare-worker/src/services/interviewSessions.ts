@@ -194,6 +194,7 @@ export function chunkKey(ownerUserId: number, sessionUid: string, seq: number, e
  */
 export async function putChunk(
   env: Env, session: SessionRow, ownerUserId: number, seq: number, mime: string, bytes: ArrayBuffer, startMs: number | null,
+  meta: Record<string, string> = {},
 ): Promise<{ duplicate: boolean; objectPath: string }> {
   const existing = await env.DB.prepare(
     'SELECT r2_key FROM interview_session_chunks WHERE session_id = ? AND seq = ?',
@@ -202,7 +203,7 @@ export async function putChunk(
   const objectPath = chunkKey(ownerUserId, session.uid, seq, CHUNK_MIME[mime]);
   await env.FILES!.put(objectPath, bytes, {
     httpMetadata: { contentType: mime },
-    customMetadata: { session_id: String(session.id), seq: String(seq), owner_user_id: String(ownerUserId) },
+    customMetadata: { ...meta, session_id: String(session.id), seq: String(seq), owner_user_id: String(ownerUserId) },
   });
   const ins = await env.DB.prepare(
     `INSERT OR IGNORE INTO interview_session_chunks (session_id, seq, r2_key, mime, size_bytes, start_ms)

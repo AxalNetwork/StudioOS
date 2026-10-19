@@ -25,6 +25,7 @@ import { d1Over } from './_d1_sqlite.mjs';
 
 import research from '../src/routes/research.ts';
 
+import { withGuard } from './_guard_stub.mjs';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const MIGRATION_221 = readdirSync(resolve(ROOT, 'cloudflare-worker/sql/migrations')).find((f) => f.startsWith('221_')) as string;
 const BASELINE = readFileSync(resolve(ROOT, 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
@@ -251,13 +252,13 @@ test('a real file uid from another room is not in this one', async () => {
  */
 async function draftRoom(db: any, userId: number, scopeKey: string): Promise<{ status: number; body: any; prompt: string | null }> {
   let prompt: string | null = null;
-  const AI = {
+  const AI = withGuard({
     run: async (_model: string, payload: any) => {
       const messages = payload?.messages || [];
       prompt = String(messages[messages.length - 1]?.content ?? '');
       return { response: 'a drafted memo' };
     },
-  };
+  });
   const res = await research.fetch(
     new Request('http://x/drafts', {
       method: 'POST',

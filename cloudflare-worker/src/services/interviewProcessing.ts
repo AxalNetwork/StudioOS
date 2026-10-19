@@ -18,6 +18,18 @@
  *   recoverSession      POST /sessions/:id/process: a failed or stale run, or
  *                       a session stuck in `transcribing` from before this
  *                       change, is resumed from the stage it reached.
+ *   transcribeVoiceNote D754 (#1935): the voice-note mode of the per-chunk
+ *                       stage, for a chat's session (channel 'text'). One
+ *                       chunk is transcribed exactly as a recording's is, and
+ *                       its segments are APPENDED (`appendSegments`), never
+ *                       written over the chat (`replaceWithFinal`). The
+ *                       staged transcript is inserted in the append's own
+ *                       batch, so a chunk is appended once: a second run's
+ *                       batch fails on the staged row's key and rolls back.
+ *                       The job's voice-note branch resumes a chat session's
+ *                       untranscribed chunks the same way, then hands the
+ *                       session to the engine (`enqueueDigest`); it never
+ *                       structures or summarises per note.
  *
  * Every AI step reserves and settles the member's D640 budget through the
  * router and leaves receipt lines; a refusal is recorded and shown in the
@@ -35,6 +47,8 @@ import {
   type ChunkRow, type SessionRow, type StoredSegment,
 } from './interviewSessions';
 import { DEFAULT_FINAL_MODEL } from './sttModels';
+import { appendSegments } from './interviewIntake';
+import type { ChannelProvider } from './channels/types';
 import type { DigestOutcome } from './validateEngine';
 import { summariseTranscript, toSegments, type DigestSections, type ReceiptLine, type SegmentRow, type SummarySentence } from './interviewStructuring';
 
@@ -130,6 +144,113 @@ export async function transcribeChunk(env: Env, opts: {
     fallback: !!r.usage.fallback_used,
     costMicro: aiBudget.usdToMicro(r.usage.est_cost_usd),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Voice-note mode (D754, #1935): a chat's voice note, appended to its session
+// ---------------------------------------------------------------------------
+
+/** A chat session's final model is the channel's marker (`channel:<provider>`); its notes use the recorder's default. */
+export function voiceNoteModel(session: Pick<SessionRow, 'final_model'>): string {
+  const m = String(session.final_model || '');
+  return m && !m.startsWith('channel:') ? m : DEFAULT_FINAL_MODEL;
+}
+
+export type VoiceNoteTranscript =
+  | { ok: true; appended: number; already: boolean }
+  | { ok: false; refusal: string; message: string; budget: boolean };
+
+const isKeyConflict = (e: unknown) => /UNIQUE|PRIMARY KEY|constraint/i.test(String((e as Error)?.message ?? e));
+
+/**
+ * One stored chunk of a chat session, transcribed by the recorder's per-chunk
+ * stage on the session's final model, with a receipt line, and appended under
+ * `speakerLabel`. `alongside` runs in the append's batch (the note's
+ * placeholder, the webhook event's record). A chunk already appended answers
+ * `already: true` and appends nothing.
+ */
+export async function transcribeVoiceNote(env: Env, opts: {
+  session: SessionRow; userId: number; seq: number; speakerLabel: string; provider: ChannelProvider;
+  alongside?: D1PreparedStatement[];
+}): Promise<VoiceNoteTranscript> {
+  const { session, userId, seq } = opts;
+  const staged = await env.DB.prepare('SELECT 1 AS hit FROM interview_chunk_transcripts WHERE session_id = ? AND seq = ?').bind(session.id, seq).first();
+  if (staged) {
+    if (opts.alongside?.length) await env.DB.batch(opts.alongside);
+    return { ok: true, appended: 0, already: true };
+  }
+  const chunk = (await listChunks(env, session.id)).find((c) => c.seq === seq);
+  if (!chunk || !chunk.r2_key.startsWith(AUDIO_PREFIX)) {
+    return { ok: false, refusal: 'chunk_missing', message: 'The voice note could not be read. Nothing was stored.', budget: false };
+  }
+  const model = voiceNoteModel(session);
+  const r = await transcribeChunk(env, { session, userId, chunk, model, intervieweeName: null, offsetMs: 0 });
+  if (!r.ok) {
+    await recordReceipt(env, session.id, {
+      kind: 'final', model, requested_model: model, fallback_used: false,
+      audio_minutes: audioMinutesFromBytes(chunk.size_bytes), cost_microusd: 0,
+      outcome: r.budget ? 'refused' : 'failed', refusal: r.refusal,
+    });
+    return r;
+  }
+  // D754 §6: one `final` segment per note, under the side's label, beside the chat's own lines.
+  const text = r.segments.map((x) => String(x.text ?? '').trim()).filter(Boolean).join(' ');
+  const segments: StoredSegment[] = text ? [{ start_ms: null, end_ms: null, speaker_label: opts.speakerLabel, speaker_raw: null, text }] : [];
+  // A plain INSERT, not OR IGNORE: a chunk staged by another run fails the whole batch, so nothing is appended twice.
+  const stage = env.DB.prepare(
+    `INSERT INTO interview_chunk_transcripts (session_id, seq, model, language, segments_json, cost_microusd, fallback_used)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(session.id, seq, r.model, r.language, JSON.stringify(segments), r.costMicro, r.fallback ? 1 : 0);
+  let appended = 0;
+  try {
+    appended = await appendSegments(env, userId, session.id, segments, opts.provider, [stage, ...(opts.alongside ?? [])]);
+  } catch (e) {
+    if (!isKeyConflict(e)) throw e;
+    return { ok: true, appended: 0, already: true };
+  }
+  await recordReceipt(env, session.id, {
+    kind: 'final', model: r.model, requested_model: model, fallback_used: r.fallback,
+    audio_minutes: audioMinutesFromBytes(chunk.size_bytes), cost_microusd: r.costMicro, outcome: 'ok',
+  });
+  return { ok: true, appended, already: false };
+}
+
+/** The speaker of a stored channel chunk, from the side its R2 object records: 'Me', else the interviewee. */
+async function chunkSpeaker(env: Env, chunk: ChunkRow, intervieweeName: string | null): Promise<string> {
+  const head = env.FILES ? await env.FILES.head(chunk.r2_key).catch(() => null) : null;
+  const side = head?.customMetadata?.side ?? null;
+  return side === 'me' ? 'Me' : (String(intervieweeName ?? '').trim().slice(0, 80) || 'Interviewee');
+}
+
+/**
+ * The job's voice-note branch: every chunk of a chat session not yet staged
+ * (a note whose own job stopped), a bounded batch at a time, appended; the
+ * note's placeholder goes in the same batch. Then the engine, once.
+ */
+async function transcribeVoiceNotes(env: Env, session: SessionRow, userId: number, intervieweeName: string | null): Promise<Stage> {
+  const staged = await env.DB.prepare('SELECT seq FROM interview_chunk_transcripts WHERE session_id = ?').bind(session.id).all<{ seq: number }>();
+  const have = new Set((staged.results || []).map((r) => r.seq));
+  const todo = (await listChunks(env, session.id)).filter((c) => !have.has(c.seq));
+  const provider = String(session.submitted_via || '') as ChannelProvider;
+  for (const ch of todo.slice(0, CHUNKS_PER_MESSAGE)) {
+    const r = await transcribeVoiceNote(env, {
+      session, userId, seq: ch.seq, provider, speakerLabel: await chunkSpeaker(env, ch, intervieweeName),
+      alongside: [env.DB.prepare('DELETE FROM channel_thread_messages WHERE id = ? AND voice_ref_enc IS NOT NULL').bind(ch.seq)],
+    });
+    if (!r.ok) {
+      await failProcessing(env, session, r.message);
+      return 'failed';
+    }
+  }
+  if (todo.length > CHUNKS_PER_MESSAGE) {
+    await setStage(env, session.id, 'transcribing');
+    await enqueueProcess(env, session.id, userId);
+    return 'transcribing';
+  }
+  await setStage(env, session.id, 'done');
+  const { enqueueDigest } = await import('./validateEngine');
+  await enqueueDigest(env, session.id, userId, 'voice_note_added');
+  return 'done';
 }
 
 // ---------------------------------------------------------------------------
@@ -357,6 +478,8 @@ export async function runInterviewProcessJob(env: Env, payload: unknown): Promis
   const interview = await env.DB.prepare('SELECT interviewee_name FROM discovery_interviews WHERE id = ?')
     .bind(session.interview_id).first<{ interviewee_name: string | null }>();
   try {
+    // D754 (#1935): a chat's session holds voice notes, not a recording: append, never assemble.
+    if (!AUDIO_CHANNELS.has(session.channel)) return await transcribeVoiceNotes(env, session, userId, interview?.interviewee_name ?? null);
     if (session.processing_stage === 'uploading' || session.processing_stage === 'transcribing') {
       if (session.processing_stage === 'uploading') {
         const total = (session.expected_last_seq ?? -1) + 1;
@@ -441,7 +564,9 @@ export async function recoverSession(env: Env, session: SessionRow, userId: numb
   if (!legacyStuck && session.processing_stage !== 'failed' && !isStale(session, now)) {
     return { ok: false, detail: 'not_retryable', message: session.processing_stage ? 'This session is still being processed.' : 'Finish the recording first.' };
   }
-  if (!AUDIO_CHANNELS.has(session.channel)) return { ok: false, detail: 'no_audio_on_this_channel', message: 'This session has no recording to process.' };
+  // D754 (#1935): a chat's session that holds voice notes resumes them too.
+  const voiceNotes = !AUDIO_CHANNELS.has(session.channel);
+  if (voiceNotes && !(await sessionHasAudio(env, session.id))) return { ok: false, detail: 'no_audio_on_this_channel', message: 'This session has no recording to process.' };
   let lastSeq = session.expected_last_seq;
   if (lastSeq == null) {
     const max = await env.DB.prepare('SELECT MAX(seq) AS m FROM interview_session_chunks WHERE session_id = ?').bind(session.id).first<{ m: number | null }>();
@@ -449,15 +574,15 @@ export async function recoverSession(env: Env, session: SessionRow, userId: numb
   }
   if (lastSeq == null) return { ok: false, detail: 'no_audio', message: 'This session has no recorded audio yet.' };
   // Resume where it stopped: a transcript already in skips straight to the summary.
-  const resumeAt: Stage = session.status === 'transcribed' || session.status === 'structured' ? 'summarising' : 'transcribing';
+  const resumeAt: Stage = !voiceNotes && (session.status === 'transcribed' || session.status === 'structured') ? 'summarising' : 'transcribing';
   const claimed = await env.DB.prepare(
     `UPDATE interview_sessions
-        SET expected_last_seq = ?, processing_auto = COALESCE(processing_auto, 1),
+        SET expected_last_seq = ?, processing_auto = CASE WHEN ? = 1 THEN 0 ELSE COALESCE(processing_auto, 1) END,
             status = CASE WHEN status = 'transcribing' THEN 'stopped' ELSE status END,
             processing_stage = ?, processing_done = NULL, processing_total = NULL, processing_error = ?,
             processing_updated_at = datetime('now'), updated_at = datetime('now')
       WHERE id = ? AND processing_stage IS ? AND processing_updated_at IS ? AND status = ?`,
-  ).bind(lastSeq, resumeAt, note, session.id, session.processing_stage ?? null, session.processing_updated_at ?? null, session.status).run();
+  ).bind(lastSeq, voiceNotes ? 1 : 0, resumeAt, note, session.id, session.processing_stage ?? null, session.processing_updated_at ?? null, session.status).run();
   if (Number(claimed.meta?.changes || 0) !== 1) {
     return { ok: false, detail: 'not_retryable', message: 'This session is still being processed.' };
   }

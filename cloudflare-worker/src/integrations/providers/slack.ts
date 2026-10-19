@@ -17,7 +17,7 @@
  * IMPORTANT: imported once from index.ts so registerProvider() runs at boot.
  */
 import type { Context } from 'hono';
-import { callbackBase } from '../../util/url';
+import { oauthCallbackUrl } from '../../util/url';
 import type { Env, User } from '../../types';
 import {
   registerProvider,
@@ -32,9 +32,9 @@ const PROVIDER_KEY = 'slack';
 const AUTH_HOST = 'https://slack.com';
 const SCOPES = ['incoming-webhook'];
 
-function redirectUri(env: Env): string {
-  const base = callbackBase(env);
-  return `${base}/api/integrations/oauth/${PROVIDER_KEY}/callback`;
+/** The callback URL registered with the provider; Admin → Integration keys shows the same (D751). */
+export function redirectUri(env: Env): string {
+  return oauthCallbackUrl(env, PROVIDER_KEY);
 }
 
 // Task #7 — env-var FIRST, admin-managed DB row as fallback. Same

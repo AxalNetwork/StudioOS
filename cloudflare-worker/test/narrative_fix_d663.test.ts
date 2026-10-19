@@ -29,6 +29,7 @@ import research from '../src/routes/research.ts';
 import { finishNarrativeFix, unfoundFigures, NARRATIVE_FIX_INSTRUCTION } from '../src/services/narrativeFix.ts';
 import type { Mismatch } from '../src/services/raiseCycle.ts';
 
+import { withGuard } from './_guard_stub.mjs';
 const BASELINE = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
 const MIG442 = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/442_raise_cycle_stores.sql'), 'utf8');
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
@@ -88,13 +89,13 @@ async function token(userId: number): Promise<string> {
 
 async function draft(db: any, who: { user: number }, scopeKey: string, answer = 'Change the narrative to the stored figure, or correct the stored metric.') {
   let prompt: string | null = null;
-  const AI = {
+  const AI = withGuard({
     run: async (_model: string, payload: any) => {
       const messages = payload?.messages || [];
       prompt = String(messages[messages.length - 1]?.content ?? '');
       return { response: answer };
     },
-  };
+  });
   const res = await research.fetch(
     new Request('http://x/drafts', {
       method: 'POST',
