@@ -647,7 +647,7 @@ test('WhatsApp: one POST with several messages claims each; a voice note waits f
     if (url.hostname === 'graph.facebook.com' && url.pathname === '/v23.0/MEDIA-9') {
       return { json: { url: 'https://lookaside.fbsbx.com/whatsapp_business/attachments/?mid=MEDIA-9', mime_type: 'audio/ogg', file_size: 3000, id: 'MEDIA-9' } };
     }
-    if (url.hostname === 'lookaside.fbsbx.com') return { body: new Uint8Array(3000).fill(1), headers: { 'content-type': 'audio/ogg' } };
+    if (url.hostname === 'lookaside.fbsbx.com') return { body: AUDIO.OGG, headers: { 'content-type': 'application/octet-stream' } };
     return undefined;
   });
   try {

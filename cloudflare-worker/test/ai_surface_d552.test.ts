@@ -39,6 +39,7 @@ import { draftSummary } from '../src/services/publications.ts';
 import ai, { isSpendSurface } from '../src/routes/ai.ts';
 import { createJWT } from '../src/auth.ts';
 
+import { withGuard } from './_guard_stub.mjs';
 const SRC = resolve(process.cwd(), 'cloudflare-worker/src');
 
 // ---------------------------------------------------------------------------
@@ -267,11 +268,13 @@ function routerEnv() {
   const { DB, db } = aiBudgetFixture();
   const env: any = {
     DB,
-    AI: { run: async () => ({ response: '{"source": null, "quote": null}', usage: { prompt_tokens: 5, completion_tokens: 1 } }) },
+    AI: withGuard({ run: async () => ({ response: '{"source": null, "quote": null}', usage: { prompt_tokens: 5, completion_tokens: 1 } }) }),
   };
-  const surfaces = () => (db.prepare('SELECT task, surface FROM ai_usage_logs ORDER BY id').all() as any[])
+  // D763: the runs' own rows. The guard's rows (`guard_for` set) carry their run's page, `guardPages`.
+  const surfaces = () => (db.prepare('SELECT task, surface FROM ai_usage_logs WHERE guard_for IS NULL ORDER BY id').all() as any[])
     .map((r) => `${r.task}@${r.surface}`);
-  return { env, surfaces };
+  const guardPages = () => [...new Set((db.prepare('SELECT surface FROM ai_usage_logs WHERE guard_for IS NOT NULL').all() as any[]).map((r) => r.surface))];
+  return { env, surfaces, guardPages };
 }
 
 test('the safety pass is recorded on the page that sent the message', async () => {
@@ -282,10 +285,11 @@ test('the safety pass is recorded on the page that sent the message', async () =
 });
 
 test('the deck reviewer records Raise · Pitch · Review on both of its runs', async () => {
-  const { env, surfaces } = routerEnv();
+  const { env, surfaces, guardPages } = routerEnv();
   await mapSections(env, 7, '# Problem\nfoo', []);
   await generateReview(env, 7, []);
   assert.deepEqual(surfaces(), ['dd_synthesis@/raise/pitch/review', 'dd_synthesis@/raise/pitch/review']);
+  assert.deepEqual(guardPages(), ['/raise/pitch/review'], 'the guard\'s cost lands on its run\'s page');
 });
 
 test('a researched citation is recorded on Validate', async () => {
