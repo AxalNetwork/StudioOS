@@ -179,7 +179,7 @@ test('Capital relationships: Calls for Capital, on, off, unreadable and empty', 
   assert.match(callLine({ ...ITEM, responded: 0 }), /0 responses$/);
   assert.match(callLine({ ...ITEM, responded: 1 }), /· 1 response$/);
   const route = readFileSync('frontend/src/pages/cycles/CycleRoute.jsx', 'utf8');
-  assert.match(route, /'capital-relationships': \(data\) => <CallsHistory calls=\{data\?\.parts\?\.calls\} \/>/);
+  assert.match(route, /'capital-relationships': \(data, ctx\) => \(\s*<>\s*<CallsHistory calls=\{data\?\.parts\?\.calls\} \/>/);
 });
 
 test('Preview reads the structured terms as an investor sees them, else the free text', () => {

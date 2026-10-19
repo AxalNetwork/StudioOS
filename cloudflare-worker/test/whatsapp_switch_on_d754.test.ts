@@ -195,12 +195,15 @@ function mockFetch(route: Route) {
   return { calls, restore: () => { globalThis.fetch = original; assert.deepEqual(unexpected, [], 'every provider URL must be stubbed'); } };
 }
 
+const OGG_FILE = (() => { const b = new Uint8Array(4000).fill(7); b.set([0x4f, 0x67, 0x67, 0x53]); return b; })();
+
 /** Telegram's Bot API, as far as these tests use it. */
 const telegramApi: Route = (url) => {
   if (url.hostname !== 'api.telegram.org') return undefined;
   if (url.pathname.endsWith('/sendMessage')) return { json: { ok: true, result: { message_id: 9001, date: 1 } } };
   if (url.pathname.endsWith('/getFile')) return { json: { ok: true, result: { file_id: 'VOICE-1', file_size: 4000, file_path: 'voice/file_7.oga' } } };
-  if (url.pathname.startsWith('/file/bot')) return { body: new Uint8Array(4000).fill(7), headers: { 'content-type': 'audio/ogg' } };
+  // D756 (#1896): the file's own bytes must name its container, so the fake is a real Ogg header.
+  if (url.pathname.startsWith('/file/bot')) return { body: OGG_FILE, headers: { 'content-type': 'application/octet-stream' } };
   if (url.pathname.endsWith('/setWebhook')) return { json: { ok: true, result: true } };
   return undefined;
 };
@@ -745,8 +748,8 @@ type Mutation = {
 const mutations: Mutation[] = [
   ...['/whatsapp/link', '/whatsapp/link/:uid/confirm'].map((path): Mutation => ({
     name: 'Axal-number ' + path + ' bypasses canary', path: routePath,
-    before: `channels.post('${path}', member(async (c, user) => {\n  if (!waLink.axalNumberReady(c.env) || !channelOpenTo(c.env, 'whatsapp', user))`,
-    after: `channels.post('${path}', member(async (c, user) => {\n  if (!waLink.axalNumberReady(c.env))`, check: case14,
+    before: `channels.post('${path}', venture(async (c, user) => {\n  if (!waLink.axalNumberReady(c.env) || !channelOpenTo(c.env, 'whatsapp', user))`,
+    after: `channels.post('${path}', venture(async (c, user) => {\n  if (!waLink.axalNumberReady(c.env))`, check: case14,
   })),
   { name: 'Axal-number captures ignore canary', path: routePath,
     before: "if (!(await channelOpenToMember(env, 'whatsapp', Number(link.user_id)))) {", after: 'if (false) {', check: case14 },

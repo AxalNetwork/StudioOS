@@ -880,10 +880,12 @@ test('14: form-options lists The venture then the open hypotheses, and each evid
     { value: 'evidence-7', label: 'Pilot invoice · H1 · Measured', meta: '12 Oct', hypothesis_id: h1 },
     { value: 'pain-3-9', label: 'Interview · H1 · Strength not recorded', meta: null, hypothesis_id: null },
   ]);
+  // D757 §2.6 (#1925): with no decision yet, every interview item is preselected; the others never are.
+  assert.deepEqual(r.body.evidence.suggested_evidence, ['pain-3-9']);
   const empty = await rec(db, OTHER, 'GET', `/form-options?project=${P_LAB}`, undefined, []);
   assert.equal(empty.status, 403);
   const lab = await rec(db, LAB, 'GET', `/form-options?project=${P_LAB}`, undefined, []);
-  assert.deepEqual(lab.body, { for: { options: [{ value: 'venture', label: 'The venture' }] }, evidence: { bar: 5, options: [] } });
+  assert.deepEqual(lab.body, { for: { options: [{ value: 'venture', label: 'The venture' }] }, evidence: { bar: 5, options: [], suggested_evidence: [] } });
 });
 
 // ---------------------------------------------------------------------------
@@ -906,11 +908,13 @@ async function decide(db: any, o: { decision?: string; for?: 'venture' | number;
 test('12: the card is empty with no decision, too little without a venture verdict, and keeps the eight keys', async () => {
   const db = fixture();
   let c = await verdictCard(ctxOf(db));
-  assert.deepEqual(Object.keys(c).sort(), ['caption', 'name', 'next', 'range', 'reason', 'series', 'slug', 'state']);
+  // D757 §2.6 (#1925): the eight keys and the interview line.
+  assert.deepEqual(Object.keys(c).sort(), ['caption', 'interview_evidence', 'name', 'next', 'range', 'reason', 'series', 'slug', 'state']);
   assert.deepEqual(c, {
     slug: 'verdict', name: 'Verdict', range: 'All time', caption: 'Every decision, oldest to newest, never overwritten.',
     state: 'empty', series: null, reason: 'No decision yet. Decisions appear here once evidence is in.',
     next: { text: 'Record a decision', href: `/validate/verdict/new?project=${P}` },
+    interview_evidence: { count: 0, contradicting: 0, text: '0 pieces of interview evidence so far, 0 contradicting' },
   });
   // A withheld venture decision and a given decision on one hypothesis: no verdict for the venture.
   const h1 = hypothesis(db, P, 'H1');

@@ -60,3 +60,9 @@ ea14fa69b6089abb2615fd3805541846acab1160:cloudflare-worker/test/cycle_records_va
 14c9eeed0c67d66d19934e90cb4434ec6d9be28d:cloudflare-worker/test/connector_readiness_d751.test.ts:generic-api-key:28
 14c9eeed0c67d66d19934e90cb4434ec6d9be28d:cloudflare-worker/test/connector_readiness_d751.test.ts:generic-api-key:154
 14c9eeed0c67d66d19934e90cb4434ec6d9be28d:cloudflare-worker/test/connector_readiness_d751.test.ts:generic-api-key:239
+# D757 (#1922): a synthetic WhatsApp webhook verify token among the placeholder
+# values of the Validate sources audience test's environment, in that test's
+# first commit. It was never a credential. The next commit uses a lower-entropy
+# placeholder, so no later commit carries it. Scoped to the one finding, as
+# D334's entry is.
+fe8fe20055a0ccb2a32530287fbf08aab27420f1:cloudflare-worker/test/validate_sources_audience_d757.test.ts:generic-api-key:41

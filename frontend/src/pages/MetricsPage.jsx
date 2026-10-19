@@ -4,6 +4,8 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { Plus, Trash2, AlertCircle, Save, X, Download, TrendingUp, FolderPlus, Send } from 'lucide-react';
 import { api } from '../lib/api';
+import { MercurySourceBadge } from '../components/spinout/MercurySpend';
+import { isMercuryRow } from '../lib/mercurySpend';
 
 const FIELDS = [
   { key: 'mrr', label: 'MRR', unit: '$' },
@@ -306,9 +308,12 @@ export default function MetricsPage() {
                 <tr key={s.id} className="border-t border-gray-100">
                   <td className="py-2 px-4 font-medium text-gray-900 dark:text-gray-100">{s.snapshot_date}</td>
                   <td className="py-2 px-3">
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full ${s.source === 'stripe' ? 'bg-violet-50 text-violet-700' : 'bg-gray-100 text-gray-600'}`}>
-                      {s.source}
-                    </span>
+                    {/* D752 (#1988): a Mercury row is locked by the Worker; it offers delete only. */}
+                    {isMercuryRow(s) ? <MercurySourceBadge /> : (
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full ${s.source === 'stripe' ? 'bg-violet-50 text-violet-700' : 'bg-gray-100 text-gray-600'}`}>
+                        {s.source}
+                      </span>
+                    )}
                   </td>
                   {FIELDS.map((f) => <td key={f.key} className="text-right py-2 px-3 tabular-nums text-gray-700 dark:text-gray-300">{fmt(s[f.key], f.unit)}</td>)}
                   <td className="px-3">
