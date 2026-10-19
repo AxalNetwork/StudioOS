@@ -4,6 +4,7 @@ import { Card, Pill, Unreadable, Unrecorded, WorkerRail } from '../../ui';
 import { api } from '../../lib/api';
 import WorkspaceShell from '../../workspaces/WorkspaceShell';
 import { StatedLimit } from '../advisor/expertise/kit';
+import useRecordCrumb from '../admin/useRecordCrumb';
 import { day, fileSize, when } from './diligenceRead';
 
 /**
@@ -80,6 +81,8 @@ export default function DiligenceFile({ role = 'investor' }) {
   const projectName = roomRef?.project_name || null;
   // Never the file's name unless the worker sent one.
   const title = file ? file.name : (projectName ? `${projectName} · document` : 'Document');
+  // D772 (#2098): the document is the rail's record, once the worker has named it.
+  useRecordCrumb(file?.name || null, 'diligence-file', fileUid);
 
   return (
     <WorkspaceShell

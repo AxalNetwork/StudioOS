@@ -4,6 +4,7 @@ import { Card, Pill, Unreadable, Unrecorded, WorkerRail } from '../../ui';
 import { api } from '../../lib/api';
 import WorkspaceShell from '../../workspaces/WorkspaceShell';
 import { StatedLimit } from '../advisor/expertise/kit';
+import useRecordCrumb from '../admin/useRecordCrumb';
 import { benchmarkTiles, editorFields, editorPatch, readingDraft } from './benchmarkRead';
 
 /**
@@ -109,6 +110,8 @@ export default function BenchmarkDetail({ role = 'investor' }) {
   const draft = readingDraft(item, { thin });
   const wantsPeer = Boolean(form?.peer_value?.trim());
   const cons = detail?.constituents || [];
+  // D772 (#2098): the benchmark is the rail's record.
+  useRecordCrumb(item?.metric || null, 'benchmark', item ? uid : null);
 
   return (
     <WorkspaceShell

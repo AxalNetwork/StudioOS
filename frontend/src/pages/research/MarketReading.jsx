@@ -6,6 +6,7 @@ import WorkspaceShell from '../../workspaces/WorkspaceShell';
 import { ACCENT } from '../../workspaces/shellConfig';
 import { NotRecorded } from '../../workspaces/canvasKit';
 import { StatedLimit } from '../advisor/expertise/kit';
+import useRecordCrumb from '../admin/useRecordCrumb';
 import { AGE_AT, STALE_AT, ageBand, daysSince } from './MarketZone';
 import {
   ATTACH_COPY,
@@ -544,6 +545,8 @@ export default function MarketReading({ role = 'founder' }) {
 
   const item = payload?.item || null;
   const stale = item ? ageBand(daysSince(item.ran_at)) === 'stale' : false;
+  // D772 (#2098): the reading is the rail's record.
+  useRecordCrumb(item?.metric || null, 'market-reading', item ? uid : null);
 
   const save = async (e) => {
     e.preventDefault();
