@@ -162,7 +162,11 @@ test('D754 W3 racing: two notes get two seq and two objects; one note\'s job twi
   let arrived = 0;
   let release!: () => void;
   const both = new Promise<void>((resolve) => { release = resolve; });
-  w.env.AI.run = async (model: string, input: any) => { if (++arrived === 2) release(); await both; return run(model, input); };
+  // Only the transcription is held: since D763 the router also runs its guard model, which is not part of the race.
+  w.env.AI.run = async (model: string, input: any) => {
+    if (model === DEFAULT_FINAL_MODEL) { if (++arrived === 2) release(); await both; }
+    return run(model, input);
+  };
   const g = mockFetch(graph({ 'MEDIA-R3': {} }));
   try {
     await Promise.all([runChannelJob(w.env, 'channel_followup', job.payload), runChannelJob(w.env, 'channel_followup', job.payload)]);
