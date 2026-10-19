@@ -9,7 +9,7 @@ import { ProviderTag } from './InterviewChannels';
 import { CHAT_CONSENT_METHODS, canAttest, chatConsentOf, consentLine, noticeBlocked, windowClosedSentence } from './chatConsent.js';
 import {
   THREAD_TABS, assignedSentence, clientKeyFor, composerState, contactLabel, interviewOptions, keepKeyAfter, messageView,
-  replyFailureText, replyOutcome, sessionHref, threadItems, threadRow,
+  replyFailureText, replyOutcome, sessionHref, threadEngineLine, threadItems, threadRow,
 } from './channelThreads.js';
 
 /**
@@ -72,6 +72,7 @@ export function ThreadList({ items, selected, onSelect, now }) {
               <span className="flex items-center gap-1.5 text-[13px] font-semibold text-gray-900 dark:text-gray-100"><span className="truncate">{row.name}</span><ProviderTag provider={t.provider} /></span>
               <span className={NOTE}>{row.count} · {row.when}</span>
               {row.interviewee && <span className="text-[11.5px] text-violet-800 dark:text-violet-200">In the interview with {row.interviewee}</span>}
+              {threadEngineLine(t) && <span className="text-[11.5px] font-semibold text-emerald-800 dark:text-emerald-300" data-testid={`thread-engine-${t.uid}`}>{threadEngineLine(t)}</span>}
             </button>
           </li>
         );

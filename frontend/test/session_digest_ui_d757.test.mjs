@@ -321,3 +321,20 @@ test('a recording ends on "Summary drafted · n suggestions to review", linking 
   const pill = readFileSync('frontend/src/pages/founder/RecordingPill.jsx', 'utf8');
   assert.match(pill, /\{finish \? finish\.text : 'Ready · see it in Interviews'\}/);
 });
+
+// ── Validate › Inbox: a chat's row says what the engine made of it ──────────
+
+test('an assigned chat\'s Inbox row says "Summary drafted · n suggestions", from the thread read (#1930)', async () => {
+  const { threadEngineLine } = await import('../src/pages/founder/channelThreads.js');
+  const t = (extra) => ({ uid: 'th1', status: 'assigned', ...extra });
+  assert.equal(threadEngineLine(t({ digest_status: 'done', pending_suggestions: 3 })), 'Summary drafted · 3 suggestions');
+  assert.equal(threadEngineLine(t({ digest_status: 'done', pending_suggestions: 1 })), 'Summary drafted · 1 suggestion');
+  assert.equal(threadEngineLine(t({ digest_status: 'done', pending_suggestions: 0 })), 'Summary drafted · 0 suggestions');
+  assert.equal(threadEngineLine(t({ digest_status: 'done' })), 'Summary drafted', 'a count the read did not send is left out');
+  for (const s of ['queued', 'running']) assert.equal(threadEngineLine(t({ digest_status: s })), 'Summarising…', s);
+  for (const s of ['refused', 'skipped', null]) assert.equal(threadEngineLine(t({ digest_status: s, pending_suggestions: 2 })), null, String(s));
+  assert.equal(threadEngineLine({ uid: 'th1', status: 'pending', digest_status: 'done', pending_suggestions: 2 }), null, 'only an assigned chat has a summary');
+  const { ThreadList } = await import('../src/pages/founder/ChannelsInbox.jsx');
+  const out = html(React.createElement(ThreadList, { items: [t({ provider: 'whatsapp', contact_name: 'Dana Example', message_count: 4, digest_status: 'done', pending_suggestions: 2 })], onSelect: () => {} }));
+  assert.match(out, /data-testid="thread-engine-th1">Summary drafted · 2 suggestions</);
+});
