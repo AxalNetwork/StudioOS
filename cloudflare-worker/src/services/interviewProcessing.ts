@@ -27,9 +27,9 @@
  *                       batch, so a chunk is appended once: a second run's
  *                       batch fails on the staged row's key and rolls back.
  *                       The job's voice-note branch resumes a chat session's
- *                       untranscribed chunks the same way, then hands the
- *                       session to the engine (`enqueueDigest`); it never
- *                       structures or summarises per note.
+ *                       untranscribed chunks the same way. Since D765
+ *                       (#2090) that is all: it never summarises or
+ *                       structures, per note or after (D720 §6).
  *
  * Every AI step reserves and settles the member's D640 budget through the
  * router and leaves receipt lines; a refusal is recorded and shown in the
@@ -249,9 +249,8 @@ async function transcribeVoiceNotes(env: Env, session: SessionRow, userId: numbe
     await enqueueProcess(env, session.id, userId);
     return 'transcribing';
   }
+  // D765 (#2090), D720 §6: the note is transcribed (saving); no summary starts without a press.
   await setStage(env, session.id, 'done');
-  const { enqueueDigest } = await import('./validateEngine');
-  await enqueueDigest(env, session.id, userId, 'voice_note_added');
   return 'done';
 }
 
@@ -575,11 +574,15 @@ export async function recoverSession(env: Env, session: SessionRow, userId: numb
     lastSeq = max?.m ?? null;
   }
   if (lastSeq == null) return { ok: false, detail: 'no_audio', message: 'This session has no recorded audio yet.' };
-  // Resume where it stopped: a transcript already in skips straight to the summary.
-  const resumeAt: Stage = !voiceNotes && (session.status === 'transcribed' || session.status === 'structured') ? 'summarising' : 'transcribing';
+  // Resume where it stopped. D765 (#2090), D720 §6: a transcript already in
+  // goes on to the summary only when the member chose it at Stop
+  // (`processing_auto = 1`); otherwise, and for a row that never recorded a
+  // choice, a retry is transcribe only and there is nothing left to run.
+  const transcribed = !voiceNotes && (session.status === 'transcribed' || session.status === 'structured');
+  const resumeAt: Stage = !transcribed ? 'transcribing' : session.processing_auto === 1 ? 'summarising' : 'done';
   const claimed = await env.DB.prepare(
     `UPDATE interview_sessions
-        SET expected_last_seq = ?, processing_auto = CASE WHEN ? = 1 THEN 0 ELSE COALESCE(processing_auto, 1) END,
+        SET expected_last_seq = ?, processing_auto = CASE WHEN ? = 1 THEN 0 ELSE COALESCE(processing_auto, 0) END,
             status = CASE WHEN status = 'transcribing' THEN 'stopped' ELSE status END,
             processing_stage = ?, processing_done = NULL, processing_total = NULL, processing_error = ?,
             processing_updated_at = datetime('now'), updated_at = datetime('now')
@@ -588,7 +591,7 @@ export async function recoverSession(env: Env, session: SessionRow, userId: numb
   if (Number(claimed.meta?.changes || 0) !== 1) {
     return { ok: false, detail: 'not_retryable', message: 'This session is still being processed.' };
   }
-  await enqueueProcess(env, session.id, userId);
+  if (resumeAt !== 'done') await enqueueProcess(env, session.id, userId);
   return { ok: true, stage: resumeAt };
 }
 

@@ -163,8 +163,13 @@ monitoring.get('/errors', async (c) => {
 });
 
 // ---------- /anomalies ----------
-// Replit AI-powered summary of the last hour's metrics.
-monitoring.get('/anomalies', async (c) => {
+// The last hour's anomalies, with a heuristic summary. D765 (#2090), D720 §6:
+// a GET (the page loads it and polls it every minute) never calls a model;
+// the Workers AI summary runs only on the admin's press, POST /anomalies.
+monitoring.get('/anomalies', (c) => anomalies(c, false));
+monitoring.post('/anomalies', (c) => anomalies(c, true));
+
+async function anomalies(c: any, withAi: boolean) {
   await requireAdmin(c);
   const sql = getSQL(c.env);
   const since = new Date(Date.now() - 60 * 60 * 1000).toISOString().replace('T', ' ').slice(0, 19);
@@ -213,7 +218,7 @@ monitoring.get('/anomalies', async (c) => {
   // AI summary (Workers AI). Falls back to heuristic text if AI is unavailable.
   let aiSummary = '';
   try {
-    if (c.env.AI) {
+    if (withAi && c.env.AI) {
       const prompt = `You are a site-reliability engineer. Summarise the following metrics from the last hour in 2-3 short bullet points. Be concrete, mention numbers, and flag anything unusual.
 
 Top endpoints (last hour):
@@ -249,7 +254,7 @@ Detected anomalies: ${anomalies.length === 0 ? 'none' : anomalies.map(a => `${a.
     anomalies,
     ai_summary: aiSummary,
   });
-});
+}
 
 // ---------- /throughput (operator-visible limited stats) ----------
 //

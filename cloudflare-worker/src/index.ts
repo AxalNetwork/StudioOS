@@ -1814,10 +1814,7 @@ export default {
           try {
             const { runChannelSweeps } = await import('./services/channels/jobs');
             await runChannelSweeps(env, now);
-            // Assigned chats that gained messages and went quiet are
-            // structured again (at most every six hours each).
-            const { sweepQuietChats } = await import('./services/sessionAutoStructure');
-            await sweepQuietChats(env, now);
+            // D765 (#2090): no quiet-chat sweep. A chat is summarised on the founder's press.
           } catch (e) {
             console.error('[cron] channel sweeps failed', e instanceof Error ? e.message : 'error');
           }

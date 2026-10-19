@@ -205,16 +205,20 @@ chat goes quiet. Its findings are proposals for the founder to review. It keeps
 #1470's consent rule and the D640 budget, and re-runs at most every six hours,
 counting summary receipts and the engine's last attempt too (D757). Since D757
 its job is the engine's: `runSessionStructureJob` calls `digestSession` for
-every trigger in `JOB_TRIGGERS`, and `enqueueSessionStructure` is
-`enqueueDigest`.
+every trigger in `JOB_TRIGGERS`. **Since D765 (#2090) nothing queues it on its
+own** (D720 §6): an import, an assigned or quiet chat, consent, a pasted chat, a
+voice note and an assistant's submission store and transcribe, and the founder
+presses Summarise or Structure. The quiet-chat sweep and
+`enqueueSessionStructure` are gone; the job remains for what a press queues.
 
 D757 (#1898): `validateEngine.ts` is the Validate engine's one entry. Every
 conversation reaches `digestSession`: the recorder's last two stages, a Zoom or
 Meet import, an assigned or quiet chat, the pasted chat and typed notes, consent
 recorded after an import, an assistant's submission (the summary only), and the
-Summarise and Structure buttons (`force`). The ingestion contract: final
-segments on a session scoped to the member, then `enqueueDigest`; no source
-calls a model. One transcript is digested once (a sha256 of the final
+Summarise and Structure buttons (`force`). Since D765 (#2090) only the buttons
+and the recorder's own stages reach it, the recorder's only when the member
+chose it at Stop: no source queues a digest on its own, and no source calls a
+model. One transcript is digested once (a sha256 of the final
 transcript; a button always runs). An explicit Manual mode for `validate` in
 `ai_rail_preferences` skips automatic runs, and the stored model picks apply to
 them. An audio session needs consent `given`; `withdrawDigest` honours a

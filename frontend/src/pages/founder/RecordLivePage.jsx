@@ -3,7 +3,6 @@ import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-route
 import { useActiveRecording, useNow } from '../../contexts/ActiveRecordingContext';
 import { pillVariant, recovering, reviewPath } from '../../lib/activeRecording';
 import { useAuth } from '../../hooks/useAuthSync';
-import useAssistMode from '../../hooks/useAssistMode';
 import { prefersReducedMotion } from '../../components/discovery/RingViz';
 import RecordingView, { useDarkTheme } from './RecordingView';
 import { focusPillOnShow } from './RecordingPill';
@@ -39,9 +38,9 @@ export default function RecordLivePage() {
   const { user } = useAuth() || {};
   const theme = useDarkTheme();
   const now = useNow(state.phase === 'recording');
-  // The rail's Manual mode (off by default) stops the Worker after Transcribing (§5.9, `auto: false`).
-  const [auto] = useAssistMode('Validate');
-  const actions = useMemo(() => Object.assign(Object.create(recorder), { confirmStop: () => recorder.confirmStop({ auto }) }), [recorder, auto]);
+  // D765 (#2090), D720 §6: Stop transcribes only. Summarising and placing
+  // come from the member's choice on D770's Stop sheet, never the page's mode.
+  const actions = useMemo(() => Object.assign(Object.create(recorder), { confirmStop: () => recorder.confirmStop({ auto: false }) }), [recorder]);
   // A reload: the recording comes back once recovery has run (§5.6.7). Until
   // then there is no session to show and none to leave for (#1588).
   if (!state.session && params.get('session') && recovering(state)) {

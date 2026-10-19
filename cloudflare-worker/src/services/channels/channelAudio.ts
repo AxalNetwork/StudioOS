@@ -18,8 +18,8 @@
  *             of the chat's session (`putChunk`, `validate-audio/…`), mark the
  *             session for the recorder's voice-note mode, transcribe it there
  *             (`transcribeVoiceNote`: the per-chunk stage, a receipt line, the
- *             segments APPENDED under the note's speaker), then hand the
- *             session to the engine (`enqueueDigest`, 'voice_note_added').
+ *             segments APPENDED under the note's speaker). Since D765 (#2090)
+ *             no summary follows: the founder presses Summarise (D720 §6).
  *             The chunk's `seq` is the note's own message id: unique within
  *             the session and the same on every retry, so two jobs never
  *             share an R2 key and a retry stores nothing twice. Never a
@@ -111,7 +111,6 @@ export async function ingestChannelAudio(env: Env, opts: {
         AND NOT EXISTS (SELECT 1 FROM interview_session_chunks c WHERE c.session_id = interview_sessions.id
                           AND NOT EXISTS (SELECT 1 FROM interview_chunk_transcripts t WHERE t.session_id = c.session_id AND t.seq = c.seq))`,
   ).bind(session.id).run();
-  const { enqueueDigest } = await import('../validateEngine');
-  await enqueueDigest(env, session.id, opts.userId, 'voice_note_added');
+  // D765 (#2090), D720 §6: transcribed (saving); no summary starts without the founder's press.
   return r;
 }

@@ -490,16 +490,18 @@ export function createRecorder({ api, browser = {}, queue = null, now = () => Da
     cancelStop() { set({ confirm: false }); },
 
     /**
-     * Stop and process. `auto: false` is the rail's Manual mode: the Worker
-     * stops after Transcribing and the review offers Summarise and Structure.
+     * Stop and process. D765 (#2090), D720 §6: the Worker transcribes, and
+     * summarises and places only on the member's explicit `auto: true` (D770's
+     * Stop sheet, off by default), never from the page's mode. Otherwise the
+     * review offers Summarise and Structure.
      * Nobody is navigated from here; the live view goes to the review when it
      * is open, and the pill says "Ready to review" when it is not.
      */
-    async confirmStop({ auto = true } = {}) {
-      set({ confirm: false, phase: 'stopping', error: null, auto: auto !== false, stopStep: null, lastSeq: null,
+    async confirmStop({ auto = false } = {}) {
+      set({ confirm: false, phase: 'stopping', error: null, auto: auto === true, stopStep: null, lastSeq: null,
         processing: { stage: 'uploading', done: null, total: null, error: null }, stageAt: 0 });
       dropLock(); // nothing is captured from here: another tab may follow the processing
-      try { return await process(auto !== false); } catch (e) {
+      try { return await process(auto === true); } catch (e) {
         failWith(e?.message || 'Processing could not start. Nothing was lost; try again.');
         return 'failed';
       }
@@ -509,7 +511,7 @@ export function createRecorder({ api, browser = {}, queue = null, now = () => Da
       const s = state.session;
       set((x) => ({ processing: { ...(x.processing || {}), stage: x.stageAt >= 0 ? STAGE_KEYS[Math.min(x.stageAt, STAGE_KEYS.length - 1)] : 'uploading', error: null } }));
       try {
-        if (state.stopStep !== 'finished') return await process(state.auto !== false);
+        if (state.stopStep !== 'finished') return await process(state.auto === true);
         const r = await api.process(s.id);
         showProcessing(r?.processing || null);
         return await follow(s.id);

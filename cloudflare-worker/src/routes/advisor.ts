@@ -748,8 +748,9 @@ advisor.post('/start', async (c) => {
   const rankBank = applyAdaptiveProfiling(reask.bank, answered, {
     keepIds: conv.current_question_id ? new Set([conv.current_question_id]) : undefined,
   });
+  // D765 (#2090): /start runs on mount, so it never ranks with the model.
   const next = await pickNextQuestion(c.env, user.id, conv.id, rankBank, reask.answered, {
-    pinnedId: conv.current_question_id,
+    pinnedId: conv.current_question_id, rerank: false,
   });
 
   // Refresh counts now that hydration may have inserted new rows.
@@ -1824,8 +1825,15 @@ advisor.get('/admin-posture', async (c) => {
 // question pinned to a section (BUILD/CAPITAL/LEGAL/NETWORK or any
 // persona-defined section). Used by the per-page progress rail's
 // "drill in" affordance.
+//
+// D765 (#2090), D720 §6: a GET never calls a model, so it answers in the
+// deterministic order. POST /next-question is the member's press ("drill
+// in"), and only it lets the reranker run.
 // ---------------------------------------------------------------------------
-advisor.get('/next-question', async (c) => {
+advisor.get('/next-question', (c) => nextQuestion(c, false));
+advisor.post('/next-question', (c) => nextQuestion(c, true));
+
+async function nextQuestion(c: any, rerank: boolean) {
   const user = await advisorUser(c);
   const blocked = await applyAdvisorGate(c, user);
   if (blocked) return blocked;
@@ -1853,7 +1861,7 @@ advisor.get('/next-question', async (c) => {
     keepIds: conv.current_question_id ? new Set([conv.current_question_id]) : undefined,
   });
   const next = await pickNextQuestion(c.env, user.id, conv.id, rankBank, reask.answered, {
-    pinnedId: conv.current_question_id,
+    pinnedId: conv.current_question_id, rerank,
   });
   return c.json({
     persona: personaFor(user),
@@ -1862,7 +1870,7 @@ advisor.get('/next-question', async (c) => {
     next_question: publicQuestion(next),
     complete: !next,
   });
-});
+}
 
 // ---------------------------------------------------------------------------
 // GET /progress  —  per-page + per-section + overall completion.

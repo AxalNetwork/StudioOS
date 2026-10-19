@@ -45,6 +45,7 @@ export const TASK_LABELS: Record<TaskClass, string> = {
   research_ask: 'Answer from your documents',
   structure_interview: 'Structure an interview',
   summarise_interview: 'Summarise an interview',
+  system_job: 'Background job (no member)',
 };
 
 /**

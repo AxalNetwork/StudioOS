@@ -66,7 +66,11 @@ export type TaskClass =
   | 'research_ask'
   | 'structure_interview'
   // D685 §5.10 — StudioOS's own summary of a session, every sentence cited.
-  | 'summarise_interview';
+  | 'summarise_interview'
+  // D765 (#2090), D720 §6: a queue job no member started (deal scoring,
+  // traction review, valuation, buyer matching, LPA drafting, equity), run as
+  // a system call (userId 0): logged at cost and charged to no member.
+  | 'system_job';
 
 export type RefusalReason =
   | 'budget_user_day'
@@ -667,6 +671,8 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   sentiment:    { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA], cacheTtlSec: 30 * 86400 },
   embed:        { provider: 'workers-ai', model: '@cf/baai/bge-base-en-v1.5', isEmbed: true,  cacheTtlSec: 30 * 86400 },
   paraphrase:   { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
+  // D765: `ai-workers/` jobs, which called the deprecated 8B directly, unlogged.
+  system_job:   { provider: 'workers-ai', model: SMALL_LLAMA },
   // High-stakes synthesis (Task #2 AU admin publication summaries,
   // dd synthesis). Task #31: Anthropic removed from production. Both
   // task classes now route through Workers AI MID_LLAMA primary →

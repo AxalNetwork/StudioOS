@@ -57,7 +57,6 @@ import { refKey } from './events';
 import { enqueueChannelJob } from './jobs';
 import { isOurSend } from './outbound';
 import { expireCapturesStatements } from './whatsappCapture';
-import { enqueueSessionStructure } from '../sessionAutoStructure';
 import {
   CHANNEL_LIMITS, audioConsentRequired, consentAsked, consentRequired, consentRequiredProviders, type InboundDelete, type InboundEdit, type InboundMessage, type MessageSide,
   type MessagingProvider, type VoiceMedia,
@@ -777,9 +776,8 @@ async function moveInto(
     }
     // Messages may land pending while the session opens; sweep until none are left.
     const moved = await movePending(env, userId, thread, session.id, scoped, [setSession]);
-    // The chat's text is in the interview: the Worker AI proposes its findings
-    // now; later messages are picked up by the quiet-chat sweep.
-    if (moved > 0) await enqueueSessionStructure(env, session.id, userId, 'chat_assigned');
+    // D765 (#2090), D720 §6: the chat's text is in the interview; the founder
+    // presses Summarise or Structure.
     const assigned: ThreadRow = {
       ...thread, status: 'assigned', interview_id: interviewId, session_id: session.id,
       consent_state: waits && consent && consent.state !== 'keep' ? consent.state : thread.consent_state,
@@ -834,7 +832,6 @@ export async function admitConsentedThread(
   const scoped = await writableInterview(env, userId, Number(thread.interview_id));
   const sessionId = Number(thread.session_id);
   const moved = await movePending(env, userId, thread, sessionId, scoped);
-  if (moved > 0) await enqueueSessionStructure(env, sessionId, userId, 'chat_assigned');
   return { moved, queued: await queueAfterAssign(env, thread) };
 }
 
