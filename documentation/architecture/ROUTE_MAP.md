@@ -33,11 +33,15 @@ their connecting user; company links control writes into project-backed data.
 request, and Super Admin `GET /requests` lists them. `GET /:uid/logs` searches
 and pages activity. Every company ID supplied by a request is checked against
 `user_company_links` before use.
-Mercury (D710, #1775) is listed only to an admin on HQ, as an entity
-connection read from `/api/admin/mercury`; to every other caller, and on a
-branch, `GET /available` omits it and `POST /connect`, `GET /:key` and the
-waitlist and notify-me routes answer 404 as if the key did not exist, while an
-HQ admin's `POST /connect` gets 409 `entity_connection_only`.
+Mercury (D710, #1775; D713, #1778; D752, #1886): an admin on HQ gets the
+entity row, read from `/api/admin/mercury`, and `POST /connect` answers 409
+`entity_connection_only`. A founder or partner, on either host, and an investor
+on HQ get their own row, in their role's words, and connect a Read Only token.
+An investor on a branch gets no row, and `POST /connect` answers 403
+`purpose_not_allowed` ("Mercury is offered to your profile on HQ only.").
+Everyone else, and an admin on a branch, is answered as before: `GET
+/available` omits it and `POST /connect`, `GET /:key` and the waitlist and
+notify-me routes answer 404 as if the key did not exist.
 D749 (#1838): `POST /api/admin/mercury/transactions/:uid/not-ours` `{ reason, note }` marks a posted credit Not ours (201), and `POST /api/admin/mercury/not-ours/:uid/withdraw` `{ reason }` withdraws the mark. Both are an Admin's on HQ, under the `mercury.reconcile` act.
 `GET /api/admin/mercury/transactions?match=none` leaves out a line with an active mark (and `direction=credit|debit`, D717 #1856, keeps only credits or debits), `match=not_ours` lists the marked lines, and each item carries `not_ours`. The monthly cash summary and the quarterly report's `unmatched_count` leave active marks out.
 
@@ -168,7 +172,7 @@ Behind `requireHqAuthoring`: `POST /published-templates/:slug/publish` `{ versio
 
 PR 1b, behind `requireAdmin`:
 - `GET /templates/store/:slug/thumbnail.png` and `GET /templates/outside/:key/thumbnail.png`: page 1 as a PNG drawn once per version by Browser Run's screenshot and kept in `FILES`; `private, max-age=86400`, the key as the ETag, 304 on a match; 503 `thumbnail_unavailable` when it cannot be drawn, writing nothing. Binary, outside the typed drift surface.
-- `POST /templates/render` also takes `doc_kind` and `axal_party` (a present key wins, `null` is from the slug; the checks and codes of a save) and answers `fields: [{ key, filled_by }]` (`send` or `sender`). `POST /templates/render.pdf` takes the same body and answers the draft's PDF with `X-Axal-Renderer` and `no-store`; 413 `body_too_large` over 256 KB. Binary, outside the typed drift surface.
+- `POST /templates/render` also takes `doc_kind` and `axal_party` (a present key wins, `null` is from the slug; the checks and codes of a save) and answers `fields: [{ key, filled_by }]` (`send` or `sender`). `POST /templates/render.pdf` takes the same body and answers the draft's PDF with `X-Axal-Renderer` and `no-store`; 413 `body_too_large` over 256 KB. Binary, outside the typed drift surface. Since #1853 its caller is the template editor's Pages view (`contracts/DraftPages.jsx`, through `contractsApi.renderPdfBlob`).
 - `ppm`, `subscription_booklet` and `compliance_manual_code_of_ethics` print the Structure of the Fund page wherever they are drawn: bracketed accounts on a preview, masked accounts on an issued copy.
 
 `GET /api/admin/fund-structure` (`admin_fund_structure.ts`, `requireAdmin`, HQ only): the entity and money map (`services/fundStructure.ts`). A Super Admin's carries each receiving account masked or the resolver's sentence; a plain Admin's carries "Only the Super Admin can see or change payment instructions." and reads no account. #1855: the model also carries the eight numbered `rows`, the `map` both drawings print, `signing` and `rails`, and, for the Super Admin only, `accounts` (each entity's active accounts masked to the last four, from the registry's list; null if it cannot be read). `no-store`; 503 `fund_structure_unreadable`. Its screen caller is the "Structure of the Fund" sheet on `/admin/contracts` (`?sheet=structure`, `pages/admin/contracts/FundStructureSheet.jsx`): a door in the desk header on every tab, read only once open, absent on a branch, with a "Bank accounts" link for the Super Admin.
@@ -467,7 +471,8 @@ D685 S03-A (#1583, migration 452) adds the Worker half of "Record a session" set
 - Deleting an interview (`DELETE /api/progress/discovery/interview/:id`) now deletes each session's audio, rows and pending proposals.
 - `GET /sessions/models` lists the live and final speech-to-text models, priced from the router's own tables, with their tags.
 - `POST /interviews/:id/sessions` opens a session (channel, consent to record, models). `GET /interviews/:id/sessions` lists them, and `GET /sessions/:id` returns segments, marks and chunks.
-- `PATCH /sessions/:id/consent`, then `POST /sessions/:id/{start,pause,resume,stop}`. Starting an audio channel without consent `given` is 409 `consent_not_recorded`.
+- `PATCH /sessions/:id/consent`, then `POST /sessions/:id/{start,pause,resume,stop}`. Starting an audio channel without consent `given` is 409 `consent_not_recorded`. After a recording (D757, #1898) consent takes exactly two changes: `not_recorded → given` with a method, on an imported call (it queues the digest, `consent_given`), and `given | not_recorded → declined`, a withdrawal that removes the summary and the pending suggestions and keeps decided ones without their quote. Anything else is 409 `consent_locked`; a declined session stays declined.
+- `POST /sessions/:id/summarise` and `POST /sessions/:id/structure` run through the Validate engine (`services/validateEngine.ts`): forced, so a button always runs. Either answers 409 `digest_running` while an automatic digest holds the session.
 - `PUT /sessions/:id/chunks/:seq` stores one audio chunk, idempotent by sequence number. `POST /sessions/:id/marks` marks a moment.
 - `GET /sessions/:id/live` is the WebSocket for the live transcript (Nova-3 or Flux). It is 409 `live_off` when live is off.
 - `POST /sessions/:id/transcribe` produces the final transcript, chunk by chunk, after a budget hold for the whole job. `PATCH /sessions/:id/segments/:segId` assigns a speaker.

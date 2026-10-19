@@ -46,6 +46,7 @@ import { createHash, createHmac } from 'node:crypto';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
+import { applyEngineSchema } from './_engine_schema.mjs';
 import { tableFromBaseline } from './_baseline.mjs';
 import { memKV } from './_mem_kv.mjs';
 import channels, { channelsAdmin } from '../src/routes/channels.ts';
@@ -125,6 +126,8 @@ async function world(opts: { seed?: boolean; budget?: number } = {}) {
     // D685: openSession stores the call (call_provider), as production's 452 lets it.
     '452_record_session_setup.sql', '454_channel_voice_failures.sql',
     '457_integrations_last_error_at.sql', '458_channel_link_consent.sql']) db.exec(mig(m));
+  // D757: the Validate engine's schema (487, 465, 453 and the re-scope's columns).
+  applyEngineSchema(db);
   if (opts.budget != null) {
     for (const key of ['founder:free', 'other']) {
       db.prepare('INSERT INTO ai_licence_caps(licence_key, daily_microusd, monthly_microusd, recorded_by) VALUES (?, ?, ?, 1)').run(key, opts.budget, opts.budget);
@@ -1897,8 +1900,8 @@ test('#1602 mutation tripwires: claim ownership, cancellation, encrypted names a
   const store = await import('../src/services/channels/linkCodes.ts');
   assert.equal(await store.memberLinkClaim(env, OTHER, uid), null);
   const unscoped = await deadlineMutant('../src/services/channels/linkCodes.ts',
-    "SELECT * FROM channel_link_codes WHERE user_id = ? AND provider = 'telegram' AND uid = ?",
-    "SELECT * FROM channel_link_codes WHERE ? IS NOT NULL AND provider = 'telegram' AND uid = ?");
+    'SELECT * FROM channel_link_codes WHERE user_id = ? AND provider = ? AND uid = ?',
+    'SELECT * FROM channel_link_codes WHERE ? IS NOT NULL AND provider = ? AND uid = ?');
   const stolen = await unscoped.memberLinkClaim(env, OTHER, uid);
   assert.throws(() => assert.equal(stolen, null), { name: 'AssertionError' });
 

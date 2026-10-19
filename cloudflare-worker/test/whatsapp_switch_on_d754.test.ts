@@ -6,6 +6,7 @@ import { createHmac } from 'node:crypto';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
+import { applyEngineSchema } from './_engine_schema.mjs';
 import { tableFromBaseline } from './_baseline.mjs';
 import { memKV } from './_mem_kv.mjs';
 import channels, { channelsAdmin, runVoiceFollowup as originalVoiceJob } from '../src/routes/channels.ts';
@@ -78,6 +79,8 @@ async function world(opts: { seed?: boolean; budget?: number } = {}) {
     // D685: openSession stores the call (call_provider), as production's 452 lets it.
     '452_record_session_setup.sql', '454_channel_voice_failures.sql',
     '457_integrations_last_error_at.sql', '458_channel_link_consent.sql']) db.exec(mig(m));
+  // D757: the Validate engine's schema (487, 465, 453 and the re-scope's columns).
+  applyEngineSchema(db);
   db.exec("UPDATE users SET role = 'admin', is_super_admin = 1 WHERE id = 5");
   if (opts.budget != null) {
     for (const key of ['founder:free', 'other']) {
