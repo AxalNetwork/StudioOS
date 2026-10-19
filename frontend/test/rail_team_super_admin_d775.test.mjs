@@ -6,9 +6,9 @@
  * below the roster: the open account is the rail's last crumb and the run's
  * record, through `useRecordCrumb` (whose contract
  * `rail_content_super_admin_d775.test.mjs` renders). The roster's own expanded
- * row is an action form, not a record. H11 Users is an `/admin` tab whose frame
- * waits on S1's answer about `AdminPage.jsx`; the same drawer names its account
- * there once a rail reads it. Team offers no option that runs a model.
+ * row is an action form, not a record. H11 Users is an `/admin` tab in D774's
+ * frame (#2100), where the same drawer names its account. Team offers no option
+ * that runs a model.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

@@ -23,6 +23,10 @@ import { WellbeingExpertsPanel } from './admin/consoles/WellbeingConsole';
 // /admin/network-profiles route stays wired for direct deep-links.
 import AdminNetworkProfiles from './admin/AdminNetworkProfiles';
 import AdminSpinoutLab from './admin/AdminSpinoutLab';
+import AdminBoardFrame from './admin/AdminBoardFrame';
+import { useAuth } from '../hooks/useAuthSync';
+import { isSuperAdminUser } from '../lib/shellRole';
+import { crumbsOfKey, pageKeyFor } from '../lib/railPages';
 
 // The Legal console's panel. Contracts (`pages/hq/ContractsPage.jsx`, D647)
 // renders its own desk, `pages/admin/contracts/ContractsDesk.jsx`, not this,
@@ -151,6 +155,36 @@ function AdminSectionNav({ value, onChange, badges }) {
   );
 }
 
+/**
+ * D774 (#2100) — the one rail on `/admin`. Every tab of this shell is a board
+ * of the Admin profile (Users, Identity checks, Entity profiles, Wellbeing
+ * experts, Advisors and partners, Directory) or of the Super Admin's (Users,
+ * Personas, Advisors and partners, Directory, Integration keys, GitHub sync,
+ * Payments catalogue, Promo codes), so the frame is drawn here, once, around
+ * the whole page, and the tab names the board. The name is the page key
+ * D768's map (`lib/railPages.js`) gives `/admin?tab=<tab>` for the viewer's
+ * profile, its module or its section; a tab no canvas board names (Billing,
+ * Bank accounts) takes the map's `Admin console`.
+ *
+ * The Spin-Out Lab tab draws no rail: D317 keeps Eadwyn out of the Lab
+ * (`workspace_frame_contract.test.mjs`), so the frame is drawn there with
+ * `rail={false}`, which keeps the page's tree, and the open dropdown, as it is.
+ */
+export function adminTabBoard(tab, role) {
+  const { section, module } = crumbsOfKey(pageKeyFor('/admin', role, { search: `?tab=${tab}` }));
+  return module || section;
+}
+
+function AdminConsoleFrame({ tab, children }) {
+  const user = useAuth()?.user ?? null;
+  const workspace = adminTabBoard(tab, isSuperAdminUser(user) ? 'super_admin' : 'admin');
+  return (
+    <AdminBoardFrame workspace={workspace} rail={tab !== 'lab-applications'} data-testid="admin-console-frame">
+      {children}
+    </AdminBoardFrame>
+  );
+}
+
 // `section` locks the console to one tab and drops its own header and section
 // nav, so a hosting page can compose one console under a header of its own.
 // Since D648 each console is its own component and reads only its own data;
@@ -188,7 +222,7 @@ export default function AdminPage({ onImpersonate, section = null }) {
   const [pendingProfiles, setPendingProfiles] = useState(0);
   const [pendingKyc, setPendingKyc] = useState(0);
 
-  return (
+  const panel = (
     <div>
       {!section && (
         <>
@@ -233,4 +267,8 @@ export default function AdminPage({ onImpersonate, section = null }) {
       {tab === 'kyc' && <KycConsole onPendingCount={setPendingKyc} />}
     </div>
   );
+  // A host that locks the console to one section composes it under a page,
+  // and a rail, of its own.
+  if (section) return panel;
+  return <AdminConsoleFrame tab={tab}>{panel}</AdminConsoleFrame>;
 }

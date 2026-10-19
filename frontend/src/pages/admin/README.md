@@ -54,8 +54,11 @@ Worker AI rail mount.
 `AdminBoardFrame.jsx` is the rail on the Admin boards that drew none (D774,
 #2100): each wraps its whole page in it, named for its board, and the rail
 takes the viewer's tier (HQ's for a Super Admin, the admin's otherwise; none
-outside the admin tier). `../../lib/railOptions/admin.js` lists the Admin's
-boards, S1–S39, with the file that mounts each one's rail.
+outside the admin tier). `../AdminPage.jsx` draws it once around `/admin`, named
+for the open tab's board from D768's page map, for both profiles' tab boards;
+its Spin-Out Lab tab, like the Lab's own consoles, draws none (D317).
+`../../lib/railOptions/admin.js` lists the Admin's boards, S1–S39, with the
+file that mounts each one's rail.
 
 `AdminCommissions.jsx` is `/admin/commissions` (D569, D572): the commission
 rules (edited through D572's route, never created), every commission, the payout queue with

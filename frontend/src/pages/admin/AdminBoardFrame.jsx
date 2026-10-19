@@ -21,11 +21,16 @@ import { RailFrame, WorkerRail } from '../../ui';
  *
  * `workspace` is the board's name on the canvas (`lib/railOptions/admin.js`
  * lists them), and `note` is the board's own sentence under the switch.
+ * `rail={false}` draws the frame with no rail, for a board D317 keeps
+ * rail-less inside a page that frames its other boards (`/admin`'s Spin-Out
+ * Lab tab).
  */
-export default function AdminBoardFrame({ workspace, note, children, 'data-testid': testId }) {
+export default function AdminBoardFrame({ workspace, note, rail: drawRail = true, children, 'data-testid': testId }) {
   const user = useAuth()?.user ?? null;
   let rail = null;
-  if (isSuperAdminUser(user)) {
+  if (!drawRail) {
+    // The page alone (D317).
+  } else if (isSuperAdminUser(user)) {
     rail = <WorkerRail workspace={workspace} note={note} role="super_admin" data-testid="hq-board-rail" />;
   } else if (user?.role === 'admin') {
     rail = <WorkerRail workspace={workspace} note={note} role="admin" data-testid="admin-board-rail" />;
