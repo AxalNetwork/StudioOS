@@ -108,10 +108,11 @@ test('D717 the DocuSign source receives the envelope\'s pair', async () => {
   const parties = await Promise.all(sent.map(async (p) =>
     partyIn((await pageTexts(Uint8Array.from(Buffer.from(p.documents[0].documentBase64, 'base64')))).join('\n'))));
   assert.deepEqual(parties, [['holdings'], ['management']]);
-  // createAndSendEnvelope hands DocuSign the same pair it writes on the envelope.
+  // createAndSendEnvelope hands DocuSign the same pair it writes on the
+  // envelope, and (D758) the same library slug it records.
   const esign = readFileSync('cloudflare-worker/src/routes/esign.ts', 'utf8');
   const call = esign.slice(esign.indexOf('sendDocusignEnvelope(env, dsRow, {'));
-  assert.match(call.slice(0, call.indexOf('});')), /documentType: opts\.documentType,\s*\.\.\.renderFormat\(format\),/);
+  assert.match(call.slice(0, call.indexOf('});')), /\bdocumentType,\s*\.\.\.renderFormat\(format\),/);
 });
 
 test('D717 the signer\'s paper prints the envelope\'s pair, not the template\'s later edit', async () => {
