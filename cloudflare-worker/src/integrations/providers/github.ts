@@ -555,8 +555,9 @@ export async function syncGithub(env: Env, row: IntegrationRow, budget = SYNC_SU
             counts,
           };
         }
-        const query = kind === 'issues' ? `${path}/issues?state=all&` : kind === 'pulls' ? `${path}/pulls?state=all&` : `${path}/releases?`;
-        const items: any[] = (await ghJson<any>(token, `${query}per_page=${PER_PAGE}&page=${page}`)) || [];
+        // The three list reads, as the connector page names them (D753).
+        const list = kind === 'issues' ? `${path}/issues?state=all` : kind === 'pulls' ? `${path}/pulls?state=all` : `${path}/releases`;
+        const items: any[] = (await ghJson<any>(token, `${list}${list.includes('?') ? '&' : '?'}per_page=${PER_PAGE}&page=${page}`)) || [];
         used += 1;
         const stmts: D1PreparedStatement[] = [];
         if (kind === 'releases') {
