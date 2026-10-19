@@ -252,7 +252,7 @@ export function ChatConsentLine({ consent, name, provider, onDiscard, when }) {
             : (
               <>
                 <span className="text-[12.5px] text-gray-700 dark:text-gray-300">This deletes the session and its transcript.</span>
-                <button type="button" onClick={discard} disabled={state.busy} className="rounded-md bg-red-600 px-3 py-1.5 text-[12.5px] font-bold text-white hover:bg-red-700 disabled:opacity-50 dark:bg-red-500" data-testid="button-confirm-discard-chat">{state.busy ? 'Discarding…' : 'Discard'}</button>
+                <button type="button" onClick={discard} disabled={state.busy} className="rounded-md bg-red-600 px-3 py-1.5 text-[12.5px] font-bold text-white hover:bg-red-700 disabled:opacity-50 dark:bg-red-500 dark:hover:bg-red-600" data-testid="button-confirm-discard-chat">{state.busy ? 'Discarding…' : 'Discard'}</button>
                 <button type="button" onClick={() => setConfirm(false)} disabled={state.busy} className="text-[12.5px] font-semibold text-axal-muted underline dark:text-gray-400">Keep</button>
               </>
             )}
