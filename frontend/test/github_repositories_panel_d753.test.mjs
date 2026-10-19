@@ -1,7 +1,7 @@
 // D753 F4 (#1957), part 1 — GitHub's repositories move into
 // GithubRepositoriesPanel, which draws no Sheet; GithubSyncSheet becomes its
 // frame and renders exactly what it did. The panel's empty row keeps today's
-// words and draws `emptySlot` after them (D751 T6, #1884, fills it).
+// words and draws `emptySlot` after them.
 //
 // Part 2 — GitHub's page draws the panel as its Repositories section, never
 // the sync sheet; a return from GitHub's sign-in or the App's Setup URL lands
@@ -122,7 +122,7 @@ test('the move keeps the rules in the panel and the Sheets in the frame', () => 
   assert.match(panel, /api\.setRepositories\(uid, \[\.\.\.chosen\], project, opts\)/);
   assert.match(sheet, /<GithubRepositoriesPanel/);
   assert.doesNotMatch(sheet, /api\.repositories|api\.sync\(/, 'the frame reads nothing itself');
-  // D751's install words are #1884's: nothing here writes them.
+  // #1884's install words are githubSync.js's (`githubLink`, `emptyRepoSentence`): neither file writes them.
   assert.doesNotMatch(panel + sheet, /[Ii]nstall the/);
 });
 
