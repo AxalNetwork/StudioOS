@@ -172,6 +172,9 @@ OAUTH_CALLBACK_BASE_URL = "https://app.axal.vc"
 PUBLIC_MARKETING_URL = "https://axal.vc"
 GITHUB_REPO_OWNER = "AxalNetwork"
 GITHUB_REPO_NAME  = "StudioOS"
+# D655 follow-up (#1884): public GitHub App slug, not a secret. Empty means
+# no install link. Set BOTH this value and [env.production.vars] in one PR.
+GITHUB_APP_SLUG = ""
 # D542 — the GitHub logins whose bounty labels the webhook acts on. Comma
 # separated; empty means nobody's. Session 1 labels as the owner account.
 BOUNTY_GRANTERS = "guillaumelauzier"
@@ -539,6 +542,8 @@ OAUTH_CALLBACK_BASE_URL = "https://app.axal.vc"
 PUBLIC_MARKETING_URL = "https://axal.vc"
 GITHUB_REPO_OWNER = "AxalNetwork"
 GITHUB_REPO_NAME  = "StudioOS"
+# D655 follow-up (#1884): mirrored from [vars]; environment vars do not inherit.
+GITHUB_APP_SLUG = ""
 # D542 — redeclared here: an env table does not inherit the top-level vars.
 BOUNTY_GRANTERS = "guillaumelauzier"
 ENVIRONMENT       = "production"
