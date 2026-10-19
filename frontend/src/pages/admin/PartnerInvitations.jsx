@@ -6,6 +6,7 @@ import {
 import { api } from '../../lib/api';
 import { useToast } from '../../components/useToast';
 import { useEscapeClose } from '../../components/useEscapeClose';
+import AdminBoardFrame from './AdminBoardFrame';
 
 const ALL_DEAL_TYPES = [
   { value: 'equity_partnership', label: 'Equity Partnership' },
@@ -41,7 +42,7 @@ function fmtDate(s) {
   try { return new Date(s).toLocaleDateString(); } catch { return s; }
 }
 
-export default function PartnerInvitations() {
+function PartnerInvitationsBody() {
   const [tab, setTab] = useState('invitations');
   const [invitations, setInvitations] = useState([]);
   const [deals, setDeals] = useState([]);
@@ -961,5 +962,14 @@ function RedemptionsModal({ deal, onClose, onError }) {
         </div>
       </div>
     </div>
+  );
+}
+
+// D774 (#2100): S31 drew no rail. The board's page, in the Admin boards' frame.
+export default function PartnerInvitations() {
+  return (
+    <AdminBoardFrame workspace="Partner invitations" note="Eadwyn reads the invitations listed here. An invitation goes out only when you send it." data-testid="admin-board-partner-invitations">
+      <PartnerInvitationsBody />
+    </AdminBoardFrame>
   );
 }

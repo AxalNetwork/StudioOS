@@ -14,6 +14,7 @@ import {
 import { adminExploring as api } from '../../lib/api';
 import { useToast } from '../../components/useToast';
 import ToastMessage from '../../components/ToastMessage';
+import AdminBoardFrame from './AdminBoardFrame';
 
 const ASSIGNABLE_ROLES = ['founder', 'investor', 'partner', 'advisor'];
 
@@ -164,7 +165,7 @@ function Row({ u, onSendBinding, onAssign, busy }) {
   );
 }
 
-export default function AdminExploring() {
+function AdminExploringBody() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -283,5 +284,14 @@ export default function AdminExploring() {
         )}
       </div>
     </div>
+  );
+}
+
+// D774 (#2100): S3 drew no rail. The board's page, in the Admin boards' frame.
+export default function AdminExploring() {
+  return (
+    <AdminBoardFrame workspace="Exploring members" note="Eadwyn reads the exploring members listed here. Nobody is admitted or removed until you do it." data-testid="admin-board-exploring-members">
+      <AdminExploringBody />
+    </AdminBoardFrame>
   );
 }

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../../lib/api';
 import { Card, Pill } from '../../ui';
+import AdminBoardFrame from './AdminBoardFrame';
 
 /**
  * Admin — which advisor may read which Lab cohort's founders.
@@ -35,7 +36,7 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'];
 const cycleLabel = (c) => `${MONTHS[Number(c.month) - 1] || `Month ${c.month}`} ${c.year}`;
 
-export default function AdvisorCohortAssignments() {
+function AdvisorCohortAssignmentsBody() {
   const [rows, setRows] = useState({ loading: true, error: '', items: [] });
   const [advisors, setAdvisors] = useState({ loading: true, error: '', items: [] });
   const [cycles, setCycles] = useState({ loading: true, error: '', items: [] });
@@ -249,5 +250,14 @@ export default function AdvisorCohortAssignments() {
         cohort’s founders, and when — which is the question it exists for.
       </p>
     </div>
+  );
+}
+
+// D774 (#2100): S18 drew no rail. The board's page, in the Admin boards' frame.
+export default function AdvisorCohortAssignments() {
+  return (
+    <AdminBoardFrame workspace="Advisor cohort access" note="Eadwyn reads the advisors and cohorts on this page. Access changes only when you save it." data-testid="admin-board-advisor-cohort-access">
+      <AdvisorCohortAssignmentsBody />
+    </AdminBoardFrame>
   );
 }

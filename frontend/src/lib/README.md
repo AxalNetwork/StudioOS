@@ -84,6 +84,7 @@ The API client, formatters and helpers. Nothing here renders.
 | `api/` | One file per new API domain, each re-exported by `api.js` in one alphabetical block (D527). See its README. |
 | `brand/` | Brand template content model. |
 | `docs/` | Help Center search index. |
+| `railOptions/` | One file per canvas profile: its AIRail boards and the options each offers, with the kind of work and the handler, for D764's option rows (D720 §11). `admin.js` is D774's (#2100). |
 | `spinout/` | Spin-Out Lab client logic. |
 
 ## The drift rule

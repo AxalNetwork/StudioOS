@@ -42,6 +42,12 @@ a prefix of their own so none can collide with an HQ console such as
 and `HeldZone` carries the always-visible scope sentence and the shell's one
 Worker AI rail mount.
 
+`AdminBoardFrame.jsx` is the rail on the Admin boards that drew none (D774,
+#2100): each wraps its whole page in it, named for its board, and the rail
+takes the viewer's tier (HQ's for a Super Admin, the admin's otherwise; none
+outside the admin tier). `../../lib/railOptions/admin.js` lists the Admin's
+boards, S1–S39, with the file that mounts each one's rail.
+
 `AdminCommissions.jsx` is `/admin/commissions` (D569, D572): the commission
 rules (edited through D572's route, never created), every commission, the payout queue with
 its confirmed process actions, and the HQ take rate for the super admin. It is
