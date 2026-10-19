@@ -1,17 +1,21 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { connectorsApi } from '../../lib/api/connectors';
+import { Info } from 'lucide-react';
 import { BrandIcon, PhoneBar, Unrecorded, Unreadable, usePhoneWidth } from '../../ui';
 import { BTN } from './AccountCenter';
 import { ConnectorPanel, PermissionsGroup, SheetFrame, UsesGroups, openingView, useConnectors } from './ConnectorSheet';
 import { RequestSheet, useMovedNotice } from './AccountConnectors';
-import { cardAction, isEntityRow, stripReturn } from './connectorsModel';
-import { backHrefFor, detailsRows, interimMode, pageEntry, pageReturn, pageTitle } from './connectorPageModel';
+import { cardAction, isEntityRow, moduleLabel, stripReturn } from './connectorsModel';
+import {
+  DETAIL_MISSING, backHrefFor, bodyDetailsRows, detailsRows, headerTagline, interimMode, modeLabel, pageEntry, pageReturn, pageTitle, toolGroups,
+} from './connectorPageModel';
 import { isChannelKey } from './channelPageModel';
 import ChannelPage from './ChannelPage';
 import { notOfferedSentence } from './mercuryModel';
 import { useAuth } from '../../hooks/useAuthSync';
 import { branchOfUser } from '../../lib/shellRole';
+import { ZOOM_DISCONNECT_NOTE, ZOOM_SECTIONS, usedByLinks, zoomHowItWorks, zoomNotices } from '../../lib/validateSourceWording';
 
 /**
  * D753 (#1876, F1) — a connector's own page, `/account/connectors/<key>`,
@@ -33,6 +37,13 @@ import { branchOfUser } from '../../lib/shellRole';
  *
  * The name is the page's one `<h1>` (decision 10): on desktop `SettingsPage`
  * draws no "Account" heading here, and on a phone `PhoneBar` draws it.
+ *
+ * THE BODY (#1955, F7). Handed `body` (`{ state, connector }`, the Worker's
+ * description of the connector, D753 decision 4(b)), the page draws About,
+ * Tools, Prompts, the trust notice and Details from it (`ConnectorBody`), and
+ * the header's line becomes its tagline. Without `body` it draws F1's About
+ * and Details from the catalogue row. The read that fills `body`
+ * (`connectorsApi.page`) comes with its route (W2, #1878).
  */
 
 const BOX = 'rounded-axal-sm border border-axal-hairline bg-white p-5 text-[13px] text-axal-ink dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200';
@@ -54,7 +65,7 @@ function CataloguePage({ connectorKey }) {
 }
 
 /** The page, drawn from one `useConnectors()` read; exported so a test can hand it each state. */
-export function ConnectorPageView({ data, connectorKey, phone = false, branchAdmin = false }) {
+export function ConnectorPageView({ data, connectorKey, phone = false, branchAdmin = false, body = null, onBodyRetry }) {
   const location = useLocation();
   const navigate = useNavigate();
   const entry = pageEntry({ data, key: connectorKey });
@@ -100,6 +111,7 @@ export function ConnectorPageView({ data, connectorKey, phone = false, branchAdm
     );
   }
 
+  const tagline = headerTagline(p, body?.state === 'ready' ? body.connector : null);
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="connector-page" data-state="ready" data-key={p.key}>
       {back}
@@ -107,7 +119,7 @@ export function ConnectorPageView({ data, connectorKey, phone = false, branchAdm
         <BrandIcon provider={p.key} name={p.display_name} size={phone ? 48 : 56} />
         <div className="min-w-0">
           {!phone && <h1 className="text-2xl font-extrabold tracking-axal-heading text-axal-ink dark:text-gray-100">{p.display_name}</h1>}
-          {p.description && <p className="mt-0.5 min-w-0 break-words text-[13.5px] leading-snug text-axal-muted dark:text-gray-400">{p.description}</p>}
+          {tagline && <p className="mt-0.5 min-w-0 break-words text-[13.5px] leading-snug text-axal-muted dark:text-gray-400" data-testid="connector-page-tagline">{tagline}</p>}
         </div>
         {/* F2 adds the band's action on this side. */}
       </header>
@@ -119,9 +131,57 @@ export function ConnectorPageView({ data, connectorKey, phone = false, branchAdm
       )}
 
       <ConnectRegion p={p} ret={returned?.ret || null} onChanged={data.reload} />
-      <About p={p} />
-      <Details p={p} />
+      {p.key === 'zoom' && <ZoomValidate p={p} />}
+      {body
+        ? <ConnectorBody state={body.state} connector={body.connector} p={p} onRetry={onBodyRetry} />
+        : (
+          <>
+            <About p={p} />
+            <Details p={p} />
+          </>
+        )}
     </div>
+  );
+}
+
+/**
+ * D757 §2.12 (#1929): what Zoom feeds and needs, in D757's words, from the
+ * catalogue row's `used_by`, `suggests`, `distribution` and `configured`
+ * (#1922, D751), so it draws with or without F7's body.
+ */
+export function ZoomValidate({ p }) {
+  const notices = zoomNotices(p);
+  const usedBy = usedByLinks(p?.used_by);
+  return (
+    <section data-testid="connector-page-validate" className="flex min-w-0 flex-col gap-3">
+      {notices.map((n) => (
+        <div key={n.key} role="note" data-testid={`zoom-notice-${n.key}`} className="flex items-start gap-2 rounded-axal-sm border border-axal-hairline bg-axal-ground px-3.5 py-2.5 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-800/60 dark:text-gray-200">
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-axal-muted dark:text-gray-400" aria-hidden="true" />
+          <span className="min-w-0">{n.text}</span>
+        </div>
+      ))}
+      {(p?.connection || p?.already_connected === true) && <p className="text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="zoom-disconnect-note">{ZOOM_DISCONNECT_NOTE}</p>}
+      {usedBy.length > 0 && (
+        <div className="min-w-0" data-testid="zoom-used-by">
+          <h2 className={H2}>Used by</h2>
+          <ul className="mt-1 flex flex-wrap gap-2">
+            {usedBy.map((u) => <li key={u.href}><Link to={u.href} className={`${BTN.link} text-[13px]`}>{u.label}</Link></li>)}
+          </ul>
+        </div>
+      )}
+      <div className="min-w-0" data-testid="zoom-how">
+        <h2 className={H2}>How it works</h2>
+        <ol className="mt-1 list-decimal pl-5 text-[13px] leading-relaxed text-axal-ink dark:text-gray-200">
+          {zoomHowItWorks(p?.suggests).map((t) => <li key={t}>{t}</li>)}
+        </ol>
+      </div>
+      {ZOOM_SECTIONS.map((x) => (
+        <div key={x.key} className="min-w-0" data-testid={`zoom-${x.key}`}>
+          <h2 className={H2}>{x.title}</h2>
+          <p className="mt-1 text-[13px] leading-relaxed text-axal-ink dark:text-gray-200">{x.text}</p>
+        </div>
+      ))}
+    </section>
   );
 }
 
@@ -245,5 +305,154 @@ function Details({ p }) {
         ))}
       </dl>
     </section>
+  );
+}
+
+// ---------- The body (#1955, F7) -------------------------------------------
+
+const CHIP = 'rounded-full border border-axal-hairline bg-axal-ground px-2.5 py-1 text-[12px] text-axal-ink dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200';
+const TOOL = 'min-w-0 break-words rounded-axal-sm border border-axal-hairline bg-axal-ground px-2.5 py-1.5 text-[12.5px] text-axal-ink dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200';
+const LABEL = 'text-[10.5px] font-bold uppercase tracking-axal-label text-axal-muted dark:text-gray-400';
+const missing = <Unrecorded reason={DETAIL_MISSING}>Not recorded</Unrecorded>;
+
+/**
+ * About, Tools, Prompts, the trust notice, a divider and Details (D753
+ * decision 3, items 5 to 10), from the Worker's `connector`. `state` is
+ * `ready`, `loading` or `unreadable`; an unreadable read gives each section
+ * its own Retry, and the rest of the page keeps working from the catalogue.
+ */
+export function ConnectorBody({ state = 'ready', connector, p, onRetry }) {
+  const c = state === 'ready' && connector && typeof connector === 'object' ? connector : null;
+  const name = c?.display_name || p?.display_name || 'this connector';
+  const hold = c ? null : <BodyHold state={state} onRetry={onRetry} />;
+  return (
+    <div className="flex min-w-0 flex-col gap-5" data-testid="connector-page-body" data-state={c ? 'ready' : state}>
+      <section data-testid="connector-page-about" className="flex min-w-0 flex-col gap-3">
+        <h2 className={H2}>About</h2>
+        {hold || <BodyAbout c={c} />}
+      </section>
+      <section data-testid="connector-page-tools" className="flex min-w-0 flex-col gap-2">
+        <h2 className={H2}>Tools</h2>
+        {hold || <BodyTools tools={c.tools} name={name} />}
+      </section>
+      {c && Array.isArray(c.prompts) && c.prompts.length > 0 && (
+        <section data-testid="connector-page-prompts" className="flex min-w-0 flex-col gap-2">
+          <h2 className={H2}>Prompts</h2>
+          <ul className="flex flex-wrap gap-2">
+            {c.prompts.filter((x) => x && typeof x.ask === 'string').map((x) => <li key={x.name || x.ask} className={CHIP}>{x.ask}</li>)}
+          </ul>
+        </section>
+      )}
+      {c && (
+        <div role="note" data-testid="connector-page-trust" className="flex items-start gap-2 rounded-axal-sm border border-axal-hairline bg-axal-ground px-3.5 py-2.5 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-800/60 dark:text-gray-200">
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-axal-muted dark:text-gray-400" aria-hidden="true" />
+          <span className="min-w-0">{typeof c.trust?.sentence === 'string' && c.trust.sentence ? c.trust.sentence : missing}</span>
+        </div>
+      )}
+      <hr className="border-axal-hairline dark:border-gray-800" />
+      <section data-testid="connector-page-details" className="flex min-w-0 flex-col gap-2">
+        <h2 className={H2}>Details</h2>
+        {hold || <BodyDetails c={c} p={p} />}
+      </section>
+    </div>
+  );
+}
+
+function BodyHold({ state, onRetry }) {
+  if (state === 'loading') return <p className="text-[13px] text-axal-muted dark:text-gray-400">Loading…</p>;
+  return <Unreadable what="This connector’s description" claim="" onRetry={onRetry} />;
+}
+
+function BodyAbout({ c }) {
+  const paras = Array.isArray(c.long_description) ? c.long_description.filter((x) => typeof x === 'string' && x) : [];
+  const uses = (label, list, b) => (
+    <div className="min-w-0">
+      <h3 className={`${LABEL} mb-1`}>{label}</h3>
+      {!Array.isArray(list)
+        ? <p className="text-[13px]">{missing}</p>
+        : list.length
+          ? (
+            <ul className="flex flex-col gap-1">
+              {list.map((x) => (
+                <li key={`${x.what}:${b(x) || ''}`} className="flex flex-wrap items-baseline gap-x-2 text-[13px] text-axal-ink dark:text-gray-200">
+                  <span>{x.what}</span>
+                  {b(x) && <span className="text-[12px] text-axal-muted dark:text-gray-400">→ {b(x)}</span>}
+                  <span className="text-[11.5px] font-semibold text-axal-muted dark:text-gray-400">{modeLabel(x)}</span>
+                </li>
+              ))}
+            </ul>
+          )
+          : <p className="text-[13px] text-axal-muted dark:text-gray-400">Nothing</p>}
+    </div>
+  );
+  return (
+    <>
+      {paras.length
+        ? paras.map((t, i) => <p key={i} className="text-[13.5px] leading-relaxed text-axal-ink dark:text-gray-200">{t}</p>)
+        : <p className="text-[13px]">{missing}</p>}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {uses('It reads', c.pulls, (x) => (x.module ? moduleLabel(c, x.module) : null))}
+        {uses('It writes', c.sends, (x) => x.target || null)}
+      </div>
+      <div className="min-w-0">
+        <h3 className={`${LABEL} mb-1`}>What Axal VC can access</h3>
+        {Array.isArray(c.permissions) && c.permissions.length
+          ? <ul className="list-disc pl-5 text-[13px] text-axal-ink dark:text-gray-200">{c.permissions.map((x) => <li key={x}>{x}</li>)}</ul>
+          : <p className="text-[13px]">{missing}</p>}
+      </div>
+    </>
+  );
+}
+
+function BodyTools({ tools, name }) {
+  const groups = toolGroups(tools);
+  if (!groups.length) return <p className="text-[13px] text-axal-muted dark:text-gray-400">Axal VC has no tools for {name} yet.</p>;
+  return groups.map((g) => (
+    <div key={g.access} className="min-w-0">
+      <h3 className={`${LABEL} mb-1.5`}>{g.label}</h3>
+      <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {g.tools.map((t) => <ToolChip key={t.name || t.label} tool={t} />)}
+      </ul>
+    </div>
+  ));
+}
+
+function ToolChip({ tool }) {
+  const id = useId();
+  const what = typeof tool.what === 'string' && tool.what ? tool.what : null;
+  return (
+    <li className={TOOL} aria-describedby={what ? id : undefined} title={what || undefined}>
+      {tool.label}
+      {what && <span id={id} hidden>{what}</span>}
+    </li>
+  );
+}
+
+function BodyDetails({ c, p }) {
+  const rows = bodyDetailsRows(c, p);
+  const ext = (href, label) => (
+    <a key={href} href={href} target="_blank" rel="noopener noreferrer" className={BTN.link}>
+      {label} ↗<span className="sr-only"> (opens in a new tab)</span>
+    </a>
+  );
+  return (
+    <dl className="grid grid-cols-1 gap-x-6 gap-y-2.5 sm:grid-cols-2">
+      {rows.map((r) => (
+        <div key={r.label} className="min-w-0">
+          <dt className={LABEL}>{r.label}</dt>
+          <dd className="min-w-0 break-words text-[13px] text-axal-ink dark:text-gray-200">
+            {r.value === null
+              ? <Unrecorded reason={r.reason}>Not recorded</Unrecorded>
+              : r.kind === 'links'
+                ? <span className="flex flex-wrap gap-x-3">{r.links.map((l) => ext(l.href, l.label))}</span>
+                : r.kind === 'chip'
+                  ? <span className={CHIP}>{r.value}</span>
+                  : r.kind === 'mono'
+                    ? <span className="break-all font-mono text-[12px]">{r.value}</span>
+                    : r.href ? ext(r.href, r.value) : r.value}
+          </dd>
+        </div>
+      ))}
+    </dl>
   );
 }
