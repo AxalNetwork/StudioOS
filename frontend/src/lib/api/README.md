@@ -193,7 +193,10 @@ D716 (#1781, #1866): `fundBooklets.js` calls the LP's own Subscription Booklet
 at `/api/fund-booklets/mine`: open (`POST`), read (`GET`), one part's paper
 (`GET /paper?part=n`), ticks (`PUT /answers`) and submit (`POST /submit` with
 the last view's digest). Every field id comes from the Worker's last view; the
-page builds none, and stores nothing in the browser.
+page builds none, and stores nothing in the browser. D759 (#1858) adds `sign`
+(`POST /mine/sign`), which sends the submitted booklet for the applicant's
+signature and answers the signing token; the page opens `/esign/<token>` with it
+at once and keeps it nowhere else.
 
 D722: `googleSignIn.js` calls `GET /api/auth/google/config` (whether this
 deployment opens Google's own window on /login, and the client to open it for;
