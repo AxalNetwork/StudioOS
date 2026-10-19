@@ -4,6 +4,20 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+
+## One top-up state model, one sentence, one Add tokens path (D755, #1916 PR 1)
+
+- `frontend/src/lib/aiTokens.js` decides the AI top-up's state
+  (`aiTokenState`: loading, unreadable, not_ready or ready) from D750's or
+  CR2's answer, and `purchaseState` reads CR2's `latest`. The rail, the
+  Assist card, the Usage page, the phone pricing screen and checkout all read
+  it; `AiBudgetUsage.jsx`'s own reader is gone.
+- "Top-up isn't available yet." is the one sentence; "Top-ups are not
+  available yet." is retired. Every Add tokens link reads `ADD_TOKENS_PATH`
+  (still `/checkout?ai_topup=1` until PR 2).
+- With nothing on sale, the Usage banners say "Runs wait until your allowance
+  resets." instead of "Runs use your top-up balance", and draw no Add tokens.
+
 ## One text per document: every sender reads its library row (D758, #1863, PR 1)
 
 - `services/legalDocTypes.ts` gains `LIBRARY_SLUG_FOR` / `librarySlugFor`
