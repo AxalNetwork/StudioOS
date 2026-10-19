@@ -71,7 +71,7 @@ function fixture() {
     INSERT INTO projects(id, founder_id, company_id) VALUES (101, 11, 10), (202, 22, 20);
     INSERT INTO user_company_links VALUES (1, 10), (2, 20);
   `);
-  for (const m of ['441_build_cycle_stores.sql', '445_connector_fed_items.sql', '459_cycle_activity_convention.sql', '461_build_record_stores.sql', '501_github_team_company.sql']) db.exec(mig(m));
+  for (const m of ['441_build_cycle_stores.sql', '445_connector_fed_items.sql', '459_cycle_activity_convention.sql', '461_build_record_stores.sql', '502_github_team_company.sql']) db.exec(mig(m));
   db.exec(`INSERT INTO integrations(id, uid, user_id, provider_key, status, auth_type, config_json)
       VALUES (31, 'gh-one', 1, 'github', 'active', 'oauth2', '${JSON.stringify({ repositories: ['acme/app'], project_id: 101 })}');
     INSERT INTO integration_companies(integration_id, company_id, enabled) VALUES (31, 10, 1);
@@ -289,6 +289,6 @@ test('disconnecting deletes the connection\'s logins and owner facts, and the lo
   assert.match(src, /await Promise\.allSettled\(\[deleteContributorsOf\(c\.env, row\.id\), deleteFactsOf\(c\.env, row\.id\)\]\);/);
   assert.equal((src.match(/await syncTeam\(/g) || []).length, 1, 'one call in the sync');
   assert.equal((src.match(/await syncCompany\(/g) || []).length, 1, 'one call in the sync');
-  const sql = readFileSync('cloudflare-worker/sql/migrations/501_github_team_company.sql', 'utf8');
+  const sql = readFileSync('cloudflare-worker/sql/migrations/502_github_team_company.sql', 'utf8');
   assert.match(sql, /github_contributors \([\s\S]*?integration_id INTEGER NOT NULL REFERENCES integrations\(id\) ON DELETE CASCADE/);
 });
