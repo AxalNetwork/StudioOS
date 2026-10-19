@@ -637,11 +637,12 @@ test('The page: the body replaces F1\'s About and Details, the tagline comes fro
   assert.ok(!html.includes('HubSpot card description.'));
   assert.equal((html.match(/data-testid="connector-page-about"/g) || []).length, 1);
   assert.ok(html.includes('data-testid="connector-page-body"'));
-  assert.ok(html.includes('data-testid="connector-page-band"') && html.includes('data-testid="connector-page-connect"'));
+  // D753 F2 (#1908): Connect is the band's action now.
+  assert.ok(html.includes('data-testid="connector-page-band"') && html.includes('data-testid="connector-page-action"'));
 
   const failed = page({ body: { state: 'unreadable', connector: null } });
   assert.ok(failed.includes('HubSpot card description.'), 'an unreadable body keeps F1\'s line');
-  assert.ok(failed.includes('data-testid="connector-page-connect"'), 'Connect keeps working from the catalogue');
+  assert.ok(failed.includes('data-testid="connector-page-action"'), 'Connect keeps working from the catalogue');
 
   const f1 = page({});
   assert.ok(!f1.includes('connector-page-body'), 'without a body the page is F1\'s');
@@ -710,7 +711,7 @@ test('The read: a refused or malformed answer makes each section unreadable with
       }
       assert.equal(m.by('connector-page-trust'), undefined, 'no trust sentence without the Worker\'s');
       assert.equal(m.text(m.by('connector-page-tagline')), 'HubSpot card description.', 'the band keeps the catalogue\'s line');
-      const connect = m.by('connector-page-connect');
+      const connect = m.by('connector-page-action');
       assert.ok(connect && m.buttons(connect).length > 0, 'Connect keeps its buttons');
       assert.ok(m.buttons(connect).every((b) => !b.disabled), 'and they are live');
 
