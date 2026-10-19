@@ -4,27 +4,6 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
-## Send to Axal, part 2: forwarded recordings wait for the member's consent (D754 way B, #1938, first half)
-
-- `cloudflare-worker/src/services/channels/whatsappCapture.ts`. A linked
-  member's voice note, audio file or audio document sent to Axal's number
-  joins a capture (`whatsapp_captures`: encrypted media ids only, 20 files in
-  30 minutes, `fetch_by` seven days on). Axal asks once, with three reply
-  buttons, whether everyone recorded agreed before it started. "Yes, out loud"
-  or "Yes, in writing" writes a `member_attested` `channel_consents` row
-  (`verbal` / `written`) and marks the capture consented; "No" deletes it;
-  `fetch_by` expires it, with its consent rows, in the channel purge; STOP
-  drops the captures still waiting. A file declared over 5 MB, and anything
-  that is not audio, gets one reply.
-- `GET /api/channels/whatsapp/captures` and
-  `POST /api/channels/whatsapp/captures/:uid/consent { method: 'pre_agreed' }`.
-- Messages to Axal's number have their own event shape (`axal_message`), so a
-  YES, NO or STOP there is never read as a customer's consent reply.
-- Nothing is downloaded yet: the import (bounded download, draft interview,
-  `finishSession`) follows #1896.
-- `test/whatsapp_capture_d754.test.ts` (11 tests); the shared way-B harness
-  moved to `test/_whatsapp_axal_fixture.ts`.
-
 ## Send to Axal, part 1: linking a member's own WhatsApp through Axal's number (D754 way B, #1937)
 
 - `cloudflare-worker/src/services/channels/whatsappLink.ts` and four routes in
@@ -48,27 +27,6 @@
   `WHATSAPP_AXAL_DISPLAY_NUMBER`: until then every way-B route is 503.
 - `test/whatsapp_axal_link_d754.test.ts` (19 tests), with Graph mocked.
 
-## Consent before anything from a WhatsApp chat is kept (D754, #1893)
-
-- Migration 488: `channel_consents`, one row per consent request on a chat
-  (the notice's version, when it was asked and delivered, the answer and its
-  source), and `channel_threads.consent_state`, which the gate reads.
-- A WhatsApp chat added to an interview now links and waits: its text stays
-  pending, its voice notes are never fetched, and Structure, Ask, the summary,
-  finish and process refuse, until the interviewee taps "Yes, I agree" on
-  Axal's notice or replies YES to it, or the member confirms once WhatsApp
-  reported the notice delivered. A "No" deletes what waited; a STOP or a later
-  "No" withdraws consent, sets the chat aside and switches quotes off.
-- `POST /api/channels/threads/:uid/consent-request` sends the notice (reply
-  buttons, from the member's number, inside the 24-hour window, at most twice
-  and 24 hours apart, linking `/privacy/interviews?n=1`);
-  `POST /api/channels/threads/:uid/consent` takes the member's word; assign
-  takes `consent: { ask: true } | { method }`. The reply route refuses
-  `consent:` client keys.
-- The session gate (`consentBlocks`) also refuses any session holding audio,
-  and Open recording refuses without consent. Customer research reads
-  "Waiting for consent" or "Declined in WhatsApp". Telegram is unchanged
-  (`consentRequired('telegram')` stays false until D756).
 ## The LP's capital call opens on the amount, and the fee statement is on screen (D717, #1859)
 
 - An open Fund I line's panel on the LP workspace opens on "Amount due", the
