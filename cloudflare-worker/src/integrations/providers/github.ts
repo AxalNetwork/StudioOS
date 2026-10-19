@@ -48,6 +48,7 @@ import {
 import { decryptCredentials, encryptCredentials, type CredentialBlob } from '../secrets';
 export { GITHUB_LANDINGS, GITHUB_READ_BY } from '../githubFeeds';
 import { roadmapRun } from './github/roadmap';
+import { syncSolutionDesign } from './github/solutionDesign';
 
 const PROVIDER_KEY = 'github';
 const API = 'https://api.github.com';
@@ -594,8 +595,13 @@ export async function syncGithub(env: Env, row: IntegrationRow, budget = SYNC_SU
         if (items.length < PER_PAGE) break;
       }
     }
-    // D782 (#2111): Product roadmap's milestones, release rows and Shipped, within what is left of the budget.
-    Object.assign(counts, await roadmap.finish((p) => gh(token, p), repos, budget - used));
+    // D782 (#2111, #2114): Product roadmap's milestones, release rows and Shipped, then
+    // Solution design's files and stack. Each counts its own subrequests and reports none,
+    // so what is left of the budget is shared: the two never spend it twice.
+    const left = budget - used;
+    const roadmapShare = Math.ceil(left / 2);
+    Object.assign(counts, await roadmap.finish((p) => gh(token, p), repos, roadmapShare));
+    Object.assign(counts, await syncSolutionDesign(env, row.id, projectId, (p) => gh(token, p), repos, left - roadmapShare));
   } catch (e) {
     await writeProgress(env, row.uid, { state: 'failed', pct: pct(), reading: 'Stopped' });
     throw e;

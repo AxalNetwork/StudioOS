@@ -230,13 +230,14 @@ test('the connector page claims only the feeds the code builds', () => {
   const page = CONNECTOR_PAGES.github as any;
   for (const t of page.tools.filter((x: any) => x.lands_in)) assert.ok(githubFedModules().includes(t.lands_in), `${t.name} → ${t.lands_in}`);
   const toolFor = (name: string) => page.tools.find((x: any) => x.name === name)?.lands_in ?? null;
-  assert.deepEqual([toolFor('read_issues'), toolFor('read_pull_requests'), toolFor('read_releases'), toolFor('read_milestones')], GITHUB_LANDINGS.map((l) => l.store === null ? null : l.module));
+  // #2114: decision records and docs land as Solution design's notes, languages and topics as its stack.
+  assert.deepEqual([toolFor('read_issues'), toolFor('read_pull_requests'), toolFor('read_releases'), toolFor('read_milestones'), toolFor('read_design_docs'), toolFor('read_stack')], GITHUB_LANDINGS.map((l) => l.store === null ? null : l.module));
   // The long description names every built module.
   const words = page.long_description.join(' ');
   for (const m of githubFedModules()) assert.ok(words.includes(MODULE_LABELS[m]), `the page names ${MODULE_LABELS[m]}`);
   // And the sync writes each stored landing into its store, through the ledger.
-  // D782 (#2111): the sync is github.ts and the feed files it calls.
-  const src = ['github.ts', 'github/roadmap.ts'].map((f) => readFileSync(`cloudflare-worker/src/integrations/providers/${f}`, 'utf8')).join('\n');
+  // D782 (#2111, #2114): the sync is github.ts and the feed files it calls.
+  const src = ['github.ts', 'github/roadmap.ts', 'github/solutionDesign.ts'].map((f) => readFileSync(`cloudflare-worker/src/integrations/providers/${f}`, 'utf8')).join('\n');
   for (const l of GITHUB_LANDINGS) {
     // A kind that writes onto another kind's rows (a milestone) has no ledger rows of its own.
     if ('ledger' in l && l.ledger === false) assert.ok(src.includes(`UPDATE ${l.store} SET milestone_title`), `the sync writes ${l.kind} onto ${l.store}`);

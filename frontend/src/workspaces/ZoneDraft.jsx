@@ -159,6 +159,10 @@ export default function ZoneDraft({
   // front and the sentence is shown beside it. Left out — every other mount —
   // the button is enabled as before, and a refusal is learnt from the 409.
   blocked = null,
+  // D771–D775 (D720 §11): the option's `<verb>:<object>` key on its page, from
+  // the profile's list in `lib/railOptions/`, where it differs from the
+  // registry's `draft:<surface>`. Left out, the band names that key (D770).
+  railOption = null,
 }) {
   const skin = ACCENTS[accent] || ACCENTS.amber;
   const bodyClass = BODY_TONES[tone] || BODY_PLAIN;
@@ -171,7 +175,8 @@ export default function ZoneDraft({
   const [editing, setEditing] = useState(null);
   // D770 (#2095): while a draft runs or is shown, the rail's open option is this band's,
   // under the registry's key (`draft:<surface>`, lib/railOptions), so its run names it.
-  useRailOption(busy === 'run' || item ? `draft:${surface}` : null, typeof label === 'string' ? label : null);
+  // D772: a band whose profile keys it otherwise passes that key as `railOption`.
+  useRailOption(busy === 'run' || item ? railOption || `draft:${surface}` : null, typeof label === 'string' ? label : null);
 
   const load = useCallback(async () => {
     try {

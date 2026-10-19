@@ -5,6 +5,7 @@ import { requireAuth } from '../auth';
 import { CONNECTOR_METADATA, getDescriptor } from '../integrations/registry';
 import { MODULE_LABELS, fedCounts } from '../integrations/fed';
 import { syncArrivals, syncArrivalsText, syncErrorWords } from '../integrations/githubFeeds';
+import { acceptDesignProposal, dismissDesignProposal, solutionDesignFromCode } from '../integrations/providers/github/solutionDesign';
 import { validateConnectorSettings } from '../integrations/connectorRules';
 import { canReadBoard, canWrite } from './_founder_validate_helpers';
 import type { Card } from '../services/cycleCards';
@@ -205,7 +206,20 @@ async function solution(env: Env, p: Project): Promise<ModuleRead> {
     cols: [['feature', 'Feature'], ['pain_theme', 'Pain theme'], ['hypothesis', 'Hypothesis'], ['impact', 'Impact'], ['effort', 'Effort']].map(([key, label]) => ({ key, label })), rows: featureRows,
     list: { filters: [{ key: 'linked', label: 'Linked', options: options([['yes', 'Linked'], ['no', 'Unlinked']]) }, { key: 'impact', label: 'Impact', options: levels }, { key: 'effort', label: 'Effort', options: levels }],
       sort: { key: 'impact', label: 'Impact' }, orders: { impact: ['high', 'medium', 'low'], effort: ['low', 'medium', 'high'] } },
-    facts: { features: features.length, risks } };
+    facts: { features: features.length, risks }, parts: { from_code: await fromCode(env, p.id) } };
+}
+
+/**
+ * D782 (#2114): what GitHub brought to Solution design — Built with, the
+ * proposals waiting for Accept or Dismiss, and the accepted notes. Its own
+ * failure leaves the features and risks readable.
+ */
+async function fromCode(env: Env, projectId: number) {
+  try { return { state: 'ok', ...(await solutionDesignFromCode(env, projectId)) }; }
+  catch (error) {
+    console.error('[cycle_build] solution_design_* read failed', error);
+    return { state: 'unreadable', reason: 'What GitHub proposed could not be read.' };
+  }
 }
 
 async function prototype(env: Env, p: Project): Promise<ModuleRead> {
@@ -866,6 +880,33 @@ app.post('/features', async c => {
   ]);
   const row = await c.env.DB.prepare('SELECT MAX(id) AS id FROM mvp_features WHERE project_id = ?').bind(ctx.project.id).first<{ id: number }>();
   return c.json({ id: Number(row?.id) }, 201);
+});
+
+// D782 (#2114): the founder's decision on a proposal GitHub made. Nothing is written without Accept.
+function proposalId(c: any): number | null {
+  const raw = c.req.param('id');
+  return /^[1-9][0-9]{0,15}$/.test(raw) && Number.isSafeInteger(Number(raw)) ? Number(raw) : null;
+}
+const DECIDED = { not_found: [404, 'Proposal not found'], decided: [409, 'That proposal was already accepted or dismissed.'] } as const;
+
+app.post('/solution-design/proposals/:id/accept', async c => {
+  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  const id = proposalId(c); if (id == null) return c.json({ detail: 'Proposal not found' }, 404);
+  const out = await acceptDesignProposal(c.env, ctx.project.id, id, ctx.user.id, [logCycleWriteStatement(c.env, {
+    projectId: ctx.project.id, userId: ctx.user.id, cycle: 'build', module: 'solution-design', entityId: null,
+    action: 'build_design_note_accepted', summary: 'Architecture note accepted from GitHub' })]);
+  if (out !== 'ok') return c.json({ detail: DECIDED[out][1] }, DECIDED[out][0]);
+  return c.json({ ok: true });
+});
+
+app.post('/solution-design/proposals/:id/dismiss', async c => {
+  const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
+  const id = proposalId(c); if (id == null) return c.json({ detail: 'Proposal not found' }, 404);
+  const out = await dismissDesignProposal(c.env, ctx.project.id, id, ctx.user.id, [logCycleWriteStatement(c.env, {
+    projectId: ctx.project.id, userId: ctx.user.id, cycle: 'build', module: 'solution-design', entityId: null,
+    action: 'build_design_proposal_dismissed', summary: 'Architecture proposal from GitHub dismissed' })]);
+  if (out !== 'ok') return c.json({ detail: DECIDED[out][1] }, DECIDED[out][0]);
+  return c.json({ ok: true });
 });
 
 app.post('/must-haves', async c => {

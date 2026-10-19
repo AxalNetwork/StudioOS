@@ -14,6 +14,7 @@ import {
 import { api } from '../../lib/api';
 import SkillRadar from '../../components/play/SkillRadar';
 import { archetypeMeta, iconFor, valueLabel, skillLabel, humanize } from '../../lib/assessmentMeta';
+import AdminBoardFrame from './AdminBoardFrame';
 
 const STATUSES = ['requested', 'confirmed', 'completed', 'cancelled'];
 const STATUS_CLS = {
@@ -427,7 +428,7 @@ function ReportViewer({ userId }) {
   );
 }
 
-export default function AdminBestFitPage() {
+function AdminBestFitPageBody() {
   const [selectedUserId, setSelectedUserId] = useState(null);
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-5">
@@ -447,5 +448,14 @@ export default function AdminBestFitPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// D774 (#2100): S10 drew no rail. The board's page, in the Admin boards' frame.
+export default function AdminBestFitPage() {
+  return (
+    <AdminBoardFrame workspace="Best fit" note="Eadwyn reads the matches on this page. A match is sent only when you send it." data-testid="admin-board-best-fit">
+      <AdminBestFitPageBody />
+    </AdminBoardFrame>
   );
 }

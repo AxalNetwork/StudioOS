@@ -15,6 +15,7 @@ the canvas's fourteen task `kind`s, its `handler` (`form`, `upload`, `draft`,
 | `advisor.js` | Advisor (D773, #2099). Its parity test is `frontend/test/rail_options_d773.test.mjs`. |
 | `partner.js` | Operating partner (D773, #2099). Its parity test is `frontend/test/rail_options_d773.test.mjs`. |
 | `superAdmin.js` | Super Admin, the 37 boards H1–H37 (D775, #2101), with `SUPER_ADMIN_BOARDS`: each board's route, files and rail file, or why it has no rail yet. Its parity test is `frontend/test/rail_options_super_admin_d775.test.mjs`. |
+| `admin.js` | Admin, the 39 boards S1–S39 with their routes and rails (D774, #2100). No control on them runs a model, so it has no option row; `ADMIN_QUIET_CONTROLS` names the uploads and the report and why. Its parity test is `frontend/test/rail_options_admin_d774.test.mjs`. |
 
 ## Rules
 
@@ -23,5 +24,8 @@ the canvas's fourteen task `kind`s, its `handler` (`form`, `upload`, `draft`,
   row, and every row's control must exist.
 - **An option that runs no model is not a row:** a CRUD write, a client-side
   CSV export, a heuristic the Worker computes.
-- **Nothing here calls the rail.** The `useRailOption` calls arrive with D768's
-  page map (#2092), one PR per section.
+- **Nothing here calls the rail.** Each row's control calls `useRailOption`
+  (D768, #2092) while the member has it open: a draft band through
+  `ZoneDraft`'s `railOption` prop, set to the row's key. Each profile's
+  rollout adds those calls one section at a time; its test is
+  `frontend/test/rail_pages_investor_d772.test.mjs` for the investor.

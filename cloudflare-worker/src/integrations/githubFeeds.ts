@@ -27,6 +27,10 @@ export const GITHUB_LANDINGS = [
   { kind: 'release', count: 'releases', one: 'release', many: 'releases', what: 'Releases', module: 'product_roadmap', store: 'roadmap_releases' },
   // D782 (#2111): a milestone gives its issues' items their group and target.
   { kind: 'milestone', count: 'milestones', one: 'milestone', many: 'milestones', what: 'Milestones', module: 'product_roadmap', store: 'roadmap_okrs', ledger: false },
+  // #2114: an architecture note is proposed by the sync and lands as a note when the founder accepts it;
+  // the sync's figure is what it proposed. The stack is a fact, one row per repository.
+  { kind: 'design_note', count: 'design_proposals', one: 'architecture proposal', many: 'architecture proposals', what: 'Architecture notes and decisions', module: 'solution_design', store: 'solution_design_notes' },
+  { kind: 'stack', count: 'stacks', one: 'repository stack', many: 'repository stacks', what: 'Languages and topics', module: 'solution_design', store: 'solution_design_stack' },
 ] as const;
 
 /** The modules that read the connection itself rather than ledger rows: GitHub is Operating systems' Code system. */

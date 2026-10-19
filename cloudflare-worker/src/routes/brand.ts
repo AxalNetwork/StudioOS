@@ -31,7 +31,7 @@ import { AI_SURFACE } from '../services/aiSurfaces';
 import { ingestContact } from './contacts';
 import { bindingKey } from '../util/schemaBootstrap';
 import { refuse } from '../util/refusal';
-import { railFor } from '../util/railContext';
+import { railFor, refuseRun } from '../util/railContext';
 
 const brand = new Hono<{ Bindings: Env }>();
 
@@ -499,26 +499,28 @@ async function aiTemplateContent(
   }
 }
 
-// Logo via Workers AI text-to-image (flux schnell). Returns a self-contained
-// data URL (base64) so it slots into the existing logo_url handling with no
-// storage plumbing. Returns null on any failure so the caller falls back to
-// the inline SVG. Wrapped in a hard timeout so a slow image gen can't pin the
-// isolate to its CPU cap.
-async function aiLogo(env: Env, prompt: string): Promise<string | null> {
-  const ai = (env as any).AI;
-  if (!ai || typeof ai.run !== 'function') return null;
+// Logo via Workers AI text-to-image (FLUX.1 Schnell, the `brand_logo` task).
+// Returns a self-contained data URL (base64) so it slots into the existing
+// logo_url handling with no storage plumbing. `url` is null when the run did
+// not answer, and the caller falls back to the inline SVG; `refusal` is the
+// router's reason, which the route answers (D766). The router's image class
+// (60 seconds) bounds a slow generation.
+async function aiLogo(env: Env, userId: number, prompt: string, rail: RailContext): Promise<{ url: string | null; refusal?: string | null; error?: string }> {
   const fullPrompt = `${prompt}. Flat minimalist vector logo, single centered mark, solid background, no text, no lettering, high contrast.`;
   try {
-    const raw: any = await Promise.race([
-      ai.run('@cf/black-forest-labs/flux-1-schnell', { prompt: fullPrompt.slice(0, 2048) }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('logo_timeout')), 30_000)),
-    ]);
-    // flux schnell returns { image: "<base64 jpeg>" }.
-    const b64 = typeof raw?.image === 'string' ? raw.image : null;
-    if (!b64) return null;
-    return `data:image/jpeg;base64,${b64}`;
+    // D766 (#2094) PR 3: the member's press through the router (D761's image
+    // shape, 60-second class), held, guarded and charged, with its page.
+    const r = await aiRouterRun(env, {
+      task: 'brand_logo', userId, text: fullPrompt.slice(0, 2048), draw: {},
+      surface: AI_SURFACE.buildBrand,
+      rail,
+    });
+    if (!r.ok || !r.image) return { url: null, refusal: r.refusal ?? null, error: r.error };
+    let binary = '';
+    for (let i = 0; i < r.image.bytes.length; i += 8192) binary += String.fromCharCode(...r.image.bytes.subarray(i, i + 8192));
+    return { url: `data:${r.image.mime};base64,${btoa(binary)}` };
   } catch {
-    return null;
+    return { url: null };
   }
 }
 
@@ -1214,11 +1216,13 @@ brand.post('/landing/autofill', async (c) => {
 });
 
 brand.post('/logo', async (c) => {
-  await requireAuth(c);
+  const user = await requireAuth(c);
   const body = await c.req.json().catch(() => ({} as any));
   const prompt = String(body?.prompt || '').trim();
   if (prompt.length < 4) return c.json({ error: 'prompt too short' }, 400);
-  const url = await aiLogo(c.env, prompt);
+  const { url, refusal, error } = await aiLogo(c.env, user.id, prompt, railFor(c, { page: 'build', option: 'draw:brand/logo' }));
+  const refused = refuseRun(c, { refusal, error });
+  if (refused) return refused;
   if (url) return c.json({ url, svg: null, source: 'workers-ai' });
   return c.json({ url: null, svg: svgLogo(body?.name || 'A', body?.color || '#7c3aed'), source: 'svg' });
 });

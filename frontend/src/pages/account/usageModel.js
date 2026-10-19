@@ -169,6 +169,8 @@ export function rateRows(rates) {
   const list = Array.isArray(rates?.models) ? rates.models : null;
   if (!list) return null;
   return list.filter((m) => m && typeof m.id === 'string').map((m) => {
+    // D766: an image model has no single rate; it is priced by size and steps.
+    if (m.image === true) return { id: m.id, name: m.name || m.id, pin: null, pout: null, unit: 'per image, by its size and steps', retired: m.retired === true };
     const audio = isNum(m.per_audio_minute_usd);
     return {
       id: m.id,
