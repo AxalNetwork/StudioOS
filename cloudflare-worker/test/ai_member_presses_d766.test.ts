@@ -5,8 +5,9 @@
 // Each run is the pressing member's: held, guarded and charged, and logged with
 // D765's page, option and record. The switch answers 403, a budget stop 402 in
 // the budget's words, and a model that could not be reached keeps the route's
-// non-AI path. The AI's equity split is a proposal (D720 §9), and its document
-// suggestions sit beside the document, never in it. Real SQLite
+// non-AI path. The AI's equity split is a proposal (D720 §9), and Eadwyn's
+// notes on a legal draft are a proposal in `ai_rail_proposals` (D780), never in
+// the document. Real SQLite
 // (`_ai_budget_fixture.mjs`); env.AI is stubbed with the guard stub. Each case
 // names the mutations it was checked against.
 //
@@ -26,6 +27,7 @@ import pipeline from '../src/routes/pipeline.ts';
 import networkfx from '../src/routes/networkfx.ts';
 
 const RAIL_PREFS = readFileSync(new URL('../sql/migrations/465_ai_rail_preferences.sql', import.meta.url), 'utf8');
+const RAIL_PROPOSALS = readFileSync(new URL('../sql/migrations/503_ai_rail_proposals.sql', import.meta.url), 'utf8');
 const MEMBER = 2;
 
 function makeAI(handler: (model: string, payload: any) => any) {
@@ -38,6 +40,7 @@ function world(ai: any, { balance = 5_000_000 } = {}) {
   __resetForTest();
   const f = aiBudgetFixture();
   f.db.exec(RAIL_PREFS);
+  f.db.exec(RAIL_PROPOSALS);
   f.db.exec(`CREATE TABLE projects(id INTEGER PRIMARY KEY, name TEXT, sector TEXT, stage TEXT, problem_statement TEXT, solution TEXT, score REAL, founder_id INTEGER, company_id INTEGER);
              INSERT INTO projects(id,name,sector,stage) VALUES(7,'Harbour','logistics','mvp');`);
   f.db.prepare("UPDATE users SET role = 'partner' WHERE id = ?").run(MEMBER);
@@ -123,17 +126,29 @@ test('a budget stop answers 402 in the budget\'s words; a model that cannot be r
 });
 
 // 4 ───────────────────────────────────────────────────────────────────────────
-test('legal documents: the AI\'s suggestions are kept beside the document, never written into its text', async () => {
-  // Mutations checked: the suggestions appended to the body again; the record dropped from the rail.
+test('legal documents: the document is the filled template; Eadwyn\'s notes are a note in ai_rail_proposals, naming its run', async () => {
+  // D780 (#2105). Mutations checked: the notes written into the content again;
+  // the notes appended to the body; the note stored without its usage row; the
+  // note filed against the deal instead of the document.
   const ai = makeAI(() => reply('- Add a pro-rata side letter.'));
   const w = world(ai);
   const r = await call(w, 'POST', '/api/legalcap/legal/generate', { deal_id: 7, type: 'SAFE' });
   assert.equal(r.status, 201, JSON.stringify(r.body));
-  const doc = JSON.parse(w.f.db.prepare('SELECT content FROM legal_documents').get().content);
-  assert.equal(doc.suggestions, '- Add a pro-rata side letter.');
-  assert.doesNotMatch(doc.body, /pro-rata side letter|AI-Generated Suggestions/);
-  assert.equal(doc.model, ROUTE.rail_legal.model);
-  assert.deepEqual(rows(w).map((x: any) => [x.task, x.rail_page, x.rail_option, x.record_ref]), [['rail_legal', 'legal-capital', 'draft:legal/SAFE', 'deal:7']]);
+  const stored = w.f.db.prepare('SELECT id, content FROM legal_documents').get();
+  const doc = JSON.parse(stored.content);
+  assert.deepEqual(Object.keys(doc).sort(), ['body', 'template', 'vars'], 'the document holds the filled template and nothing else');
+  assert.doesNotMatch(stored.content, /pro-rata side letter|AI-Generated Suggestions/);
+  assert.deepEqual(rows(w).map((x: any) => [x.task, x.rail_page, x.rail_option, x.record_ref]), [['rail_legal', 'legal-capital', 'draft:legal/notes', 'deal:7']]);
+  const run = w.f.db.prepare('SELECT id FROM ai_usage_logs WHERE guard_for IS NULL').get();
+  const note = w.f.db.prepare('SELECT * FROM ai_rail_proposals').get();
+  assert.equal(note.user_id, MEMBER);
+  assert.equal(note.kind, 'note');
+  assert.equal(note.status, 'proposed');
+  assert.deepEqual([note.rail_page, note.rail_option, note.record_ref], ['legal-capital', 'draft:legal/notes', `legal_doc:${stored.id}`]);
+  assert.deepEqual(JSON.parse(note.payload_json), { text: '- Add a pro-rata side letter.', type: 'SAFE' });
+  assert.equal(note.model, ROUTE.rail_legal.model);
+  assert.equal(note.usage_log_id, run.id, 'the note names the run that wrote it');
+  assert.equal(r.body.notes.uid, note.uid);
 });
 
 // 5 ───────────────────────────────────────────────────────────────────────────

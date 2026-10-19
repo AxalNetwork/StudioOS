@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Scale, Banknote, ClipboardCheck, Plus, Loader2, X, FileText, Sparkles, ShieldCheck, Send, CheckCircle2, AlertTriangle, Rocket } from 'lucide-react';
-import { api } from '../lib/api';
+import { api, railProposalsApi } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import SpinoutWizard from '../components/SpinoutWizard';
@@ -430,11 +430,57 @@ function LPPortalTab() {
 
 // ============== modals ==============
 
+/** D780: the rail option Eadwyn's notes on a legal draft are stored under. */
+const LEGAL_NOTES_OPTION = 'draft:legal/notes';
+
+/**
+ * Eadwyn's notes on this document (D780, D720 §9). They live in
+ * `ai_rail_proposals`, beside the document and never in it: the document is the
+ * template the member filled. Keep and Dismiss decide the note; neither writes
+ * the document.
+ */
+function LegalNotes({ docId }) {
+  const [notes, setNotes] = useState(null);
+  const [err, setErr] = useState('');
+  useEffect(() => {
+    let live = true;
+    railProposalsApi.list({ option: LEGAL_NOTES_OPTION, record: `legal_doc:${docId}` })
+      .then((r) => { if (live) setNotes((r?.proposals || []).filter((n) => n.status === 'proposed' || n.status === 'accepted')); })
+      .catch(() => { if (live) setErr('Eadwyn\'s notes could not be read just now.'); });
+    return () => { live = false; };
+  }, [docId]);
+  const decide = async (uid, decision) => {
+    try {
+      const r = await railProposalsApi.decide(uid, decision);
+      setNotes((prev) => (prev || []).map((n) => (n.uid === uid ? r.proposal : n)).filter((n) => n.status !== 'discarded'));
+    } catch (e) { setErr(e.message || 'That could not be saved.'); }
+  };
+  if (err) return <div className="mt-3 text-xs text-gray-600 dark:text-gray-400">{err}</div>;
+  if (!notes || notes.length === 0) return null;
+  return (
+    <div className="mt-3 rounded-lg border border-violet-200 bg-violet-50/60 p-3 dark:border-violet-900 dark:bg-violet-950/25" data-testid="legal-notes">
+      <div className="text-xs font-semibold text-violet-800 dark:text-violet-300">Eadwyn&rsquo;s notes · not part of the document</div>
+      {notes.map((n) => (
+        <div key={n.uid} className="mt-2">
+          <pre className="whitespace-pre-wrap text-xs text-gray-800 dark:text-gray-200">{String(n.payload?.text || '')}</pre>
+          {n.status === 'proposed' ? (
+            <div className="mt-1 flex gap-2">
+              <button type="button" onClick={() => decide(n.uid, 'accept')} className="rounded bg-violet-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-violet-700">Keep</button>
+              <button type="button" onClick={() => decide(n.uid, 'discard')} className="rounded border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-medium text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">Dismiss</button>
+            </div>
+          ) : <div className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">Kept</div>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function DocViewerModal({ doc, onClose }) {
   return (
     <Modal onClose={onClose} title={`${DOC_TYPES.find(t => t.id === doc.type)?.label || doc.type}`} wide>
       <div className="text-[10px] text-gray-500 mb-2">v{doc.version} • {doc.status} • {new Date(doc.created_at).toLocaleString()}</div>
       <pre className="bg-gray-50 border border-gray-200 rounded p-4 text-xs whitespace-pre-wrap font-mono max-h-[60vh] overflow-y-auto dark:border-gray-800">{doc.body}</pre>
+      {doc.id ? <LegalNotes docId={doc.id} /> : null}
     </Modal>
   );
 }
