@@ -137,3 +137,21 @@ secrets and the `WHATSAPP_CHANNEL` rollout var are listed in
 `documentation/architecture/PRODUCTION.md`. The live smoke
 (`scripts/check-spa-live.mjs`) fails if the WhatsApp webhook ever accepts an
 unsigned POST.
+
+## D757 chat notes (#1930, text half)
+
+Assignment, consent admission and new final text enqueue `validateEngine.enqueueDigest`
+with `chat_text_added`. The engine applies its transcript hash and a six-hour
+quiet bound; messages inside that bound do not move `digested_at`, and the quiet
+sweep later picks up changed text. A failed queue send does not fail the already
+committed message: the sweep recovers it. Ingestion calls no model.
+
+The engine's text-only consent check leaves waiting audio untranscribed. WhatsApp's
+admission rule and both providers' audio-download gates still apply. A decline or
+withdrawal clears the digest and pending suggestions; decided suggestions and
+accepted module rows keep content without quotes. Declined text sessions enqueue
+no new digest. Thread list/detail reads add `digest_status` (null without a linked
+session) and `pending_suggestions` (only pending rows on that member's session).
+
+Voice ingestion remains with #1935 and #1978. Their direct-model retirement and
+`voice_note_added` handoff are not part of this text PR.

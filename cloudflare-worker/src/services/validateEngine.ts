@@ -40,12 +40,12 @@
  */
 import type { Env } from '../types';
 import { budgetRefusalMessage } from './aiRouter';
-import { loadSession, sessionConsentBlocks } from './interviewSessions';
+import { loadSession, sessionDigestConsentBlocks } from './interviewSessions';
 import { presentTables } from './interviewFindings';
 import { IntakeError, writableSession } from './interviewIntake';
 import { summariseSession, type SummaryResult } from './interviewProcessing';
 import { enqueueJob } from './queue';
-import { structureSession, type StructureOutcome, type StructureTrigger } from './sessionAutoStructure';
+import { MIN_HOURS_BETWEEN, structureSession, type StructureOutcome, type StructureTrigger } from './sessionAutoStructure';
 import type { Segment } from './interviewStructuring';
 import { finalSegments, refusedBody } from '../routes/founder_validate_structure';
 
@@ -54,7 +54,7 @@ export type DigestStage = 'summarise' | 'structure';
 export type DigestOutcome =
   | { ok: true; status: 'done'; summary: SummaryResult | null; structure: StructureOutcome | null; note: string | null }
   | { ok: true; status: 'unchanged' }
-  | { ok: false; status: 'skipped'; reason: 'manual_mode' | 'no_final_transcript'; note: string }
+  | { ok: false; status: 'skipped'; reason: 'manual_mode' | 'no_final_transcript' | 'quiet_window'; note: string }
   | {
     ok: false; status: 'refused'; reason: 'consent_not_recorded' | 'transcript_too_large' | 'refused' | 'busy';
     refusal: string | null; note: string;
@@ -72,6 +72,7 @@ const TOO_LARGE = new Set(['transcript_too_large', 'structure_call_limit']);
 export const NOTES = {
   manual: 'Manual mode is on for Validate, so Axal did not summarise or structure this. Use Summarise and Structure on the session.',
   noTranscript: 'There is no transcript to summarise yet.',
+  chatQuiet: 'This conversation has new text. Axal will digest it after the six-hour quiet window.',
   busy: 'This conversation is already being summarised. It will be ready in a minute.',
   noCitation: 'The summary could not be tied to the transcript, so none is stored.',
   modelDropped: 'Your saved model for this is no longer offered, so the default ran.',
@@ -154,7 +155,7 @@ export async function digestSession(env: Env, opts: {
     throw err;
   }
 
-  const blocked = await sessionConsentBlocks(env, session);
+  const blocked = await sessionDigestConsentBlocks(env, session);
   if (blocked) {
     // A withdrawal's own sentence stays: it says more than the consent rule does.
     if (!(session.consent_status === 'declined' && session.digest_status === 'skipped')) {
@@ -190,6 +191,20 @@ export async function digestSession(env: Env, opts: {
     ]);
     console.log('[validateEngine] unchanged', session.id, opts.trigger);
     return { ok: true, status: 'unchanged' };
+  }
+
+  // A job queued before an earlier run started may arrive after more text.
+  // Re-check the bound at execution too; the unchanged hash above remains free.
+  if (!force && opts.trigger === 'chat_text_added') {
+    const recent = await env.DB.prepare(
+      `SELECT 1 AS hit FROM interview_sessions WHERE id = ? AND datetime(digested_at) > datetime('now', ?)`,
+    ).bind(session.id, `-${MIN_HOURS_BETWEEN} hours`).first();
+    if (recent) {
+      await env.DB.prepare(
+        "UPDATE interview_sessions SET digest_status = 'queued', digest_note = ? WHERE id = ? AND digest_status IS NOT 'running'",
+      ).bind(NOTES.chatQuiet, session.id).run();
+      return { ok: false, status: 'skipped', reason: 'quiet_window', note: NOTES.chatQuiet };
+    }
   }
 
   // Two triggers (an import and a button) never bill the same transcript twice
@@ -257,6 +272,15 @@ export async function digestSession(env: Env, opts: {
 
 /** Queue a digest (`session_structure`). One per session and trigger moment. */
 export async function enqueueDigest(env: Env, sessionId: number, userId: number, trigger: StructureTrigger) {
+  // D757 (#1930): frequent chat messages must not bypass the quiet sweep's
+  // six-hour bound. Do not slide digested_at or overwrite a withdrawal's state.
+  if (trigger === 'chat_text_added') {
+    const session = await env.DB.prepare(
+      `SELECT consent_status, datetime(digested_at) > datetime('now', ?) AS recent
+         FROM interview_sessions WHERE id = ? AND created_by_user_id = ?`,
+    ).bind(`-${MIN_HOURS_BETWEEN} hours`, sessionId, userId).first<{ consent_status: string; recent: number | null }>();
+    if (!session || session.consent_status === 'declined' || session.recent) return null;
+  }
   await env.DB.prepare(
     "UPDATE interview_sessions SET digest_status = 'queued', digest_trigger = ? WHERE id = ? AND digest_status IS NOT 'running'",
   ).bind(trigger, sessionId).run();

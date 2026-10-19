@@ -374,6 +374,11 @@ async function decline(env: Env, thread: ThreadRow, row: ConsentRow, replyRef: s
     if (isUnique(err)) return ignored('duplicate');
     throw err;
   }
+  // D757 (#1930): a decline also clears any digest already written for the chat.
+  const { withdrawDigest } = await import('../validateEngine');
+  for (const id of new Set([row.session_id, thread.session_id].filter((v): v is number => v != null))) {
+    await withdrawDigest(env, Number(id), Number(thread.user_id));
+  }
   return { outcome: 'declined', consent: (await env.DB.prepare('SELECT * FROM channel_consents WHERE id = ?').bind(row.id).first<ConsentRow>())! };
 }
 
