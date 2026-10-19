@@ -8,7 +8,8 @@ name: PR preview
 # kept in one sticky comment on the PR. Same-repository PRs only — secrets are
 # not available to forks — and never for Dependabot. After the deploy, the
 # `login-e2e` job runs frontend/tests/e2e/google_popup_signin.spec.js (D722)
-# against that preview in Playwright's Chromium.
+# and frontend/tests/e2e/integrations.spec.js (D753, #1992) against that
+# preview in Playwright's Chromium; both stub every /api/* call they make.
 #
 # Why not Workers preview URLs or Workers Builds: Cloudflare generates none
 # for a Worker that implements a Durable Object, and `studioos` implements
@@ -153,6 +154,12 @@ jobs:
       - name: Run the D722 spec against the preview
         working-directory: frontend
         run: npx --no-install playwright test tests/e2e/google_popup_signin.spec.js
+
+      # D753 (#1992): the Connectors hub, its filter menu, one connector's page
+      # and the 390px check. Every /api/* call is stubbed in the spec.
+      - name: Run the D753 Connectors spec against the preview
+        working-directory: frontend
+        run: npx --no-install playwright test tests/e2e/integrations.spec.js
 
   delete:
     name: delete the preview Worker

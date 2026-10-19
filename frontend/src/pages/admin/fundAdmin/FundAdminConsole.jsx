@@ -8,7 +8,8 @@ import { fundFeesApi } from '../../../lib/api/fundFees';
 import { fundReportingApi } from '../../../lib/api/fundReporting';
 import { adminCapitalAttestationsApi } from '../../../lib/api/adminCapitalAttestations';
 import { Banner } from '../../account/ConnectorSheet';
-import { HQ_ONLY, LAYOUT_NOTE, TABS, administeredFunds, pickFund, tabFrom } from './fundAdminModel';
+import { Landmark, LayoutDashboard, Scale, HandCoins, ArrowRightLeft, Percent, FileText } from 'lucide-react';
+import { HQ_ONLY, TABS, administeredFunds, pickFund, tabFlags, tabFrom } from './fundAdminModel';
 import { useRead } from './useRead';
 import { OverviewTab } from './OverviewTab';
 import { BankingTab, ReconciliationTab } from './BankingTabs';
@@ -18,10 +19,11 @@ import { CallsTab, DistributionsTab, FeesTab, ReportsTab } from './FundTabs';
  * D714 (#1779) PR 4a — the fund administration console at `/admin/fund-admin`,
  * for the Super Admin and every Admin on HQ (decision 7).
  *
- * NO CANVAS COVERS IT YET. It is drawn only from parts already on `main`: the
- * Connectors sheet's `Group`, `Row` and `Banner`, the Account center's buttons
- * and fields, `Unreadable` and `Unrecorded`, and #1834's
- * `MercuryEntityConnections`. The canvas PR lays it out.
+ * THE CANVAS PR lays it out to S1's brief for "Fund Administration · Admin"
+ * (2026-10-18), in the August canvas "Fund Administration"'s visual system:
+ * its chrome (the violet mark, the title, the as-of chip and the icon tabs
+ * with their amber count flags), and the parts in `parts.jsx`. Every read,
+ * act and sentence is PR 4a's; only the layout changed.
  *
  * THE WORKER DECIDES. `GET /api/fund-admin/access` names each act this viewer
  * may take; an act it may not take is one sentence, never a disabled button
@@ -52,9 +54,9 @@ export function FundAdminConsoleView({ user, apis = DEFAULT_APIS }) {
 
   if (branch) {
     return (
-      <main className="mx-auto max-w-5xl py-6" data-testid="fund-admin-console">
-        <h1 className="px-5 text-xl font-extrabold tracking-axal-heading text-axal-ink dark:text-gray-100">Fund administration</h1>
-        <Banner tone="neutral" data-testid="fund-admin-branch">{HQ_ONLY}</Banner>
+      <main className="mx-auto max-w-[1440px] pb-16" data-testid="fund-admin-console">
+        <Chrome sub="Axal’s entities and administered funds" />
+        <div className="mx-4 mt-5 sm:mx-6"><Banner tone="neutral" data-testid="fund-admin-branch">{HQ_ONLY}</Banner></div>
       </main>
     );
   }
@@ -68,42 +70,77 @@ export function FundAdminConsoleView({ user, apis = DEFAULT_APIS }) {
     setParams(p, { replace: true });
   };
   const fundProps = { apis, access: acts, funds, fund, overview, onFund: (id) => go({ fund: id }) };
+  const flags = tabFlags(overview.status === 'ready' ? overview.data : null);
+  const asOf = overview.status === 'ready' && overview.data?.as_of ? `As of ${overview.data.as_of}` : null;
+  const role = acts ? (acts.super_admin === true ? 'Super Admin' : 'Admin') : null;
 
   return (
-    <main className="mx-auto max-w-5xl py-6" data-testid="fund-admin-console">
-      <header className="px-5">
-        <h1 className="text-xl font-extrabold tracking-axal-heading text-axal-ink dark:text-gray-100">Fund administration</h1>
-        <p className="mt-0.5 text-[12.5px] text-axal-muted dark:text-gray-400">
-          Capital calls, distributions, management fees, reconciliation, bank accounts and LP reports for Axal’s entities and administered funds.
-        </p>
-        <p className="mt-1 text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="fund-admin-layout-note">{LAYOUT_NOTE}</p>
-      </header>
+    <main className="mx-auto max-w-[1440px] pb-16" data-testid="fund-admin-console">
+      <Chrome sub="Capital calls, distributions, management fees, reconciliation, bank accounts and LP reports for Axal’s entities and administered funds."
+        chips={<>
+          {role && <span className={CHIP} data-testid="fund-admin-role">{role}</span>}
+          {asOf && <span className={CHIP} data-testid="fund-admin-as-of">{asOf}</span>}
+        </>}>
+        <nav className="-mb-px mt-3.5 flex gap-5 overflow-x-auto" aria-label="Fund administration">
+          {TABS.map((t) => {
+            const Icon = ICONS[t.key];
+            const on = t.key === tab;
+            return (
+              <button key={t.key} type="button" onClick={() => go({ tab: t.key })} aria-current={on ? 'page' : undefined}
+                data-testid={`fund-admin-tab-${t.key}`}
+                className={`flex shrink-0 items-center gap-[7px] border-b-2 pb-[11px] text-[13px] ${on
+                  ? 'border-axal-violet font-bold text-axal-violet-deep dark:text-violet-300'
+                  : 'border-transparent font-semibold text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100'}`}>
+                <Icon aria-hidden="true" className="h-3.5 w-3.5" />
+                <span>{t.label}</span>
+                {flags[t.key] > 0 && (
+                  <span data-testid={`fund-admin-flag-${t.key}`} className={`inline-flex h-4 min-w-4 items-center justify-center rounded-axal-pill px-1 text-[9px] font-extrabold ${on
+                    ? 'bg-axal-violet text-white' : 'bg-amber-700/15 text-amber-700 dark:text-amber-300'}`}>{flags[t.key]}</span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+      </Chrome>
       {access.status === 'unreadable' && (
-        <Banner tone="warn" data-testid="fund-admin-access-unreadable">
-          Which acts you may take could not be read, so every control is shown. The Worker still refuses an act you may not take.
-        </Banner>
+        <div className="mx-4 mt-4 sm:mx-6">
+          <Banner tone="warn" data-testid="fund-admin-access-unreadable">
+            Which acts you may take could not be read, so every control is shown. The Worker still refuses an act you may not take.
+          </Banner>
+        </div>
       )}
-      <nav className="mx-5 mt-4 flex flex-wrap gap-1 border-b border-axal-hairline dark:border-gray-800" aria-label="Fund administration">
-        {TABS.map((t) => (
-          <button key={t.key} type="button" onClick={() => go({ tab: t.key })} aria-current={t.key === tab ? 'page' : undefined}
-            data-testid={`fund-admin-tab-${t.key}`}
-            className={`-mb-px border-b-2 px-3 py-2 text-[12.5px] font-semibold ${t.key === tab
-              ? 'border-axal-violet text-axal-ink dark:text-gray-100'
-              : 'border-transparent text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100'}`}>
-            {t.label}
-          </button>
-        ))}
-      </nav>
-      <section data-testid={`fund-admin-panel-${tab}`}>
-        {tab === 'overview' && <OverviewTab overview={overview} />}
+      <div data-testid={`fund-admin-panel-${tab}`}>
+        {tab === 'overview' && <OverviewTab overview={overview} onOpen={(next) => go(next)} />}
         {tab === 'banking' && <BankingTab apis={apis} access={acts} />}
         {tab === 'reconciliation' && <ReconciliationTab apis={apis} access={acts} />}
         {tab === 'calls' && <CallsTab {...fundProps} />}
         {tab === 'distributions' && <DistributionsTab {...fundProps} />}
         {tab === 'fees' && <FeesTab {...fundProps} />}
         {tab === 'reports' && <ReportsTab {...fundProps} />}
-      </section>
+      </div>
     </main>
+  );
+}
+
+const ICONS = { overview: LayoutDashboard, banking: Landmark, reconciliation: Scale, calls: HandCoins, distributions: ArrowRightLeft, fees: Percent, reports: FileText };
+const CHIP = 'inline-flex items-center rounded-axal-sm border border-axal-hairline px-2.5 py-1.5 text-[11.5px] font-semibold text-axal-muted dark:border-gray-700 dark:text-gray-400';
+
+/** The canvas's chrome: the violet mark, the title and its sub, the chips, then the tabs. */
+function Chrome({ sub, chips = null, children = null }) {
+  return (
+    <header className="sticky top-0 z-30 border-b border-axal-hairline bg-white px-4 pt-3.5 sm:px-6 dark:border-gray-800 dark:bg-gray-900">
+      <div className="flex flex-wrap items-center justify-between gap-3.5 pb-px">
+        <div className="flex min-w-0 items-center gap-[11px]">
+          <span className="flex h-[29px] w-[29px] flex-none items-center justify-center rounded-axal-sm bg-axal-violet text-white"><Landmark aria-hidden="true" className="h-[15px] w-[15px]" /></span>
+          <div className="min-w-0">
+            <h1 className="text-[15.5px] font-extrabold tracking-[-.015em] text-axal-ink dark:text-gray-100">Fund Administration</h1>
+            <p className="mt-px text-[11.5px] text-axal-muted dark:text-gray-400">{sub}</p>
+          </div>
+        </div>
+        {chips && <div className="flex flex-wrap items-center gap-2">{chips}</div>}
+      </div>
+      {children || <div className="h-3.5" />}
+    </header>
   );
 }
 
