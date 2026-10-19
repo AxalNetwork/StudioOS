@@ -26,8 +26,9 @@
  * WHERE THE DATA LANDS (`connector_fed_items`, migration 445):
  *   - an issue becomes a Product roadmap item (`roadmap_okrs`);
  *   - a pull request becomes a Prototype / MVP must-have (`mvp_features`);
- *   - a release has no store in the founder workspace, so it is recorded as
- *     arrived with no local row, and the fed count says so.
+ *   - a release becomes a Product roadmap release row (`roadmap_releases`),
+ *     and an issue's milestone its item's group and target, in
+ *     `github/roadmap.ts` after the loop (D782, #2111).
  * A re-sync finds each item's row through the ledger and updates it. A row the
  * founder deleted stays deleted, and its ledger row is unlinked (#1906).
  *
@@ -46,6 +47,7 @@ import {
 } from '../registry';
 import { decryptCredentials, encryptCredentials, type CredentialBlob } from '../secrets';
 export { GITHUB_LANDINGS, GITHUB_READ_BY } from '../githubFeeds';
+import { roadmapRun } from './github/roadmap';
 
 const PROVIDER_KEY = 'github';
 const API = 'https://api.github.com';
@@ -534,6 +536,7 @@ export async function syncGithub(env: Env, row: IntegrationRow, budget = SYNC_SU
   }
   const token = await accessToken(env, row);
   const counts: Record<string, number | boolean> = { issues: 0, pull_requests: 0, releases: 0, roadmap_items_created: 0, must_haves_created: 0 };
+  const roadmap = roadmapRun(env, row.id, projectId);
   const signature = repos.join('\n');
   const resume = await readCursor(env, row.uid, signature);
   const steps = repos.length * STEP_KINDS.length;
@@ -562,12 +565,11 @@ export async function syncGithub(env: Env, row: IntegrationRow, budget = SYNC_SU
         const list = kind === 'issues' ? `${path}/issues?state=all` : kind === 'pulls' ? `${path}/pulls?state=all` : `${path}/releases`;
         const items: any[] = (await ghJson<any>(token, `${list}${list.includes('?') ? '&' : '?'}per_page=${PER_PAGE}&page=${page}`)) || [];
         used += 1;
+        roadmap.saw(repo, kind, items);
         const stmts: D1PreparedStatement[] = [];
+        // D782 (#2111): a release lands as a row in `github/roadmap.ts`, after the loop.
         if (kind === 'releases') {
-          for (const rel of items) {
-            counts.releases = Number(counts.releases) + 1;
-            stmts.push(env.DB.prepare(LEDGER_TOUCH).bind(row.id, projectId, 'product_roadmap', 'release', `release:${repo}@${rel.id}`, null, null));
-          }
+          counts.releases = Number(counts.releases) + items.length;
         } else {
           // The issues endpoint lists pull requests too; they land from the pulls endpoint.
           const landed = kind === 'issues' ? items.filter((i) => !i?.pull_request) : items;
@@ -592,6 +594,8 @@ export async function syncGithub(env: Env, row: IntegrationRow, budget = SYNC_SU
         if (items.length < PER_PAGE) break;
       }
     }
+    // D782 (#2111): Product roadmap's milestones, release rows and Shipped, within what is left of the budget.
+    Object.assign(counts, await roadmap.finish((p) => gh(token, p), repos, budget - used));
   } catch (e) {
     await writeProgress(env, row.uid, { state: 'failed', pct: pct(), reading: 'Stopped' });
     throw e;

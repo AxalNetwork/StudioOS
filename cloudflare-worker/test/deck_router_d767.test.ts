@@ -4,7 +4,7 @@
  * pressed, with Raise › Pitch deck's page and option on the usage row. Neither
  * reaches OpenAI.
  *
- *  - A fill makes one `dd_synthesis` run and writes one usage row naming the
+ *  - A fill makes one `rail_vision` run and writes one usage row naming the
  *    founder, `/raise/pitch` (surface and rail page), the option and the
  *    project; its answer fills the AI-only fields.
  *  - The draft does the same with option `deck_draft`.
@@ -76,7 +76,7 @@ function noNetwork() {
   return () => { globalThis.fetch = real; };
 }
 
-const ROW = (option: string) => ({ user_id: 2, task: 'dd_synthesis', surface: '/raise/pitch', rail_page: '/raise/pitch', rail_option: option, record_ref: 'project:1' });
+const ROW = (option: string) => ({ user_id: 2, task: 'rail_vision', surface: '/raise/pitch', rail_page: '/raise/pitch', rail_option: option, record_ref: 'project:1' });
 
 test('a fill is one router run, charged to the founder, with the page and the option on its one usage row', async () => {
   const f = fixture();
@@ -169,6 +169,18 @@ test('"Fill from project" through its route is one run with option fill_from_pro
   } finally { restore(); f.db.close(); }
 });
 
+test('both runs use Raise › Pitch deck\'s row in D764\'s matrix', () => {
+  const matrix = JSON.parse(readFileSync(resolve(ROOT, 'cloudflare-worker/src/services/ai/railMatrix.json'), 'utf8'));
+  const row = matrix.rows.find((r: any) => r.pageKey === 'Founder · Raise · Pitch deck');
+  assert.ok(row, 'the matrix has the page\'s row');
+  assert.deepEqual([row.kind, row.routeTask], ['vision', 'rail_vision']);
+  for (const f of ['cloudflare-worker/src/routes/decks.ts', 'cloudflare-worker/src/services/decks/autofill.ts']) {
+    const src = readFileSync(resolve(ROOT, f), 'utf8');
+    assert.equal((src.match(new RegExp(`task: '${row.routeTask}'`, 'g')) || []).length, 1, `${f} runs the row's task`);
+    assert.doesNotMatch(src, /task: 'dd_synthesis'/, f);
+  }
+});
+
 test('neither path reaches OpenAI', () => {
   const autofill = readFileSync(resolve(ROOT, 'cloudflare-worker/src/services/decks/autofill.ts'), 'utf8');
   assert.doesNotMatch(autofill, /api\.openai\.com|OPENAI_API_KEY/);
@@ -176,5 +188,5 @@ test('neither path reaches OpenAI', () => {
   const draft = route.slice(route.indexOf('async function aiSlides('), route.indexOf('function enforceTen('));
   assert.ok(draft.length > 100);
   assert.doesNotMatch(draft, /api\.openai\.com|OPENAI_API_KEY/);
-  assert.match(draft, /aiRouterRun\(env, \{\s*task: 'dd_synthesis'/);
+  assert.match(draft, /aiRouterRun\(env, \{\s*task: 'rail_vision'/);
 });

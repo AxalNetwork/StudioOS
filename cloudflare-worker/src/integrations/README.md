@@ -53,7 +53,10 @@ read and one D1 batch, the run counts its subrequests against
 `SYNC_SUBREQUEST_BUDGET` (8,000 of the Worker's 10,000), and at the budget it
 stops "Partly synced", keeping a KV cursor so the next Sync starts where it
 stopped. `cloudflare-worker/test/github_connector_flow_d751.test.ts` drives the
-whole flow against a stubbed GitHub.
+whole flow against a stubbed GitHub. After the loop, `providers/github/roadmap.ts`
+gives Product roadmap its milestone groups and targets, one `roadmap_releases`
+row per release through the same ledger, and Shipped marks on evidence only
+(D782, #2111).
 
 ## Subfolders
 

@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import { formatCost } from '../ui/assistCost';
 import RunEstimate from './RunEstimate';
 import { readRailModel, writeRailModel } from '../ui/railModelChoice';
+import { isNeverFill, neverFillMessage } from '../lib/neverFill';
 import { useRailOption } from '../ui/railCrumbs';
 
 /**
@@ -54,6 +55,13 @@ import { useRailOption } from '../ui/railCrumbs';
  * it. No pick sends no model and the router runs its default. A refusal of
  * the pick (`model_not_offered`) clears it, so the next press runs the default
  * rather than failing the same way.
+ *
+ * A FIELD EADWYN NEVER FILLS IS NEVER OFFERED (D777). Each proposal arrives
+ * naming the field it would fill (`field`, as `table.column`), and one that
+ * `lib/neverFill.js` lists — a signature, a payment amount, an identity number,
+ * an attestation — is held back with the registry's sentence instead of drawn
+ * with an Accept button. The Worker refuses to store or apply one too; this is
+ * the check that does not depend on it.
  */
 
 const BAND = 'rounded-[10px] border border-violet-200 bg-violet-50/60 p-3 '
@@ -131,7 +139,10 @@ export default function FillProposals({ projectId, kind, enabled, onApplied, ai,
     if (!projectId || !enabled) { setItems([]); return; }
     try {
       const r = await api.listValidateProposals(projectId);
-      setItems((r?.proposals || []).filter((p) => p.kind === kind));
+      const mine = (r?.proposals || []).filter((p) => p.kind === kind);
+      const held = mine.find((p) => isNeverFill(p.field));
+      setItems(mine.filter((p) => !isNeverFill(p.field)));
+      if (held) setNote(neverFillMessage(held.field));
       if (r?.kinds) setKinds(r.kinds);
     } catch {
       // A failed read is not "no proposals". Leaving the list alone keeps a
@@ -176,6 +187,8 @@ export default function FillProposals({ projectId, kind, enabled, onApplied, ai,
    * and a table where everything is marked edited says nothing about anything.
    */
   const decide = async (id, how, value) => {
+    const field = items.find((p) => p.id === id)?.field;
+    if (how === 'accept' && isNeverFill(field)) { setNote(neverFillMessage(field)); return; }
     setBusy(`${how}-${id}`); setNote('');
     try {
       if (how === 'accept') await api.acceptValidateProposal(id, value ? { value } : undefined);

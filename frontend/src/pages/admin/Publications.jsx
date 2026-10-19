@@ -4,6 +4,7 @@ import { FileText, Plus, ExternalLink, RefreshCw, Loader2 } from 'lucide-react';
 import { publications } from '../../lib/api';
 import { useToast } from '../../components/useToast';
 import ToastMessage from '../../components/ToastMessage';
+import PublicationsFrame from './PublicationsFrame';
 
 const AUDIENCE_BADGE = {
   internal: 'bg-gray-200 text-gray-700',
@@ -32,6 +33,7 @@ export default function AdminPublications() {
   useEffect(() => { load(); }, [load]);
 
   return (
+    <PublicationsFrame>
     <div className="max-w-6xl mx-auto px-6 py-8 dark:text-gray-100">
       <ToastMessage toast={toast} onDismiss={dismissToast} />
       <header className="flex items-center justify-between mb-6">
@@ -122,5 +124,6 @@ export default function AdminPublications() {
         )}
       </div>
     </div>
+    </PublicationsFrame>
   );
 }
