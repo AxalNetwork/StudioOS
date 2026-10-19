@@ -67,18 +67,58 @@ export interface ConsumptionTotals {
   not_recorded: number;
 }
 
-const SECOND: Record<ConsumptionGroup, string | null> = { page: null, option: 'rail_option', record: 'record_ref' };
-
-const SUMS = `SUM(CASE WHEN l.guard_for IS NULL THEN 1 ELSE 0 END) AS runs,
+// Each query is written out whole, so the schema guards (`scripts/check-sqlite-columns.mjs`,
+// `schema_guards.test.mjs`) read every column it names. The four share their sums and their FROM.
+const BY_PAGE = `SELECT l.rail_page AS page,
+       SUM(CASE WHEN l.guard_for IS NULL THEN 1 ELSE 0 END) AS runs,
        COUNT(l.charged_microusd) AS recorded,
        SUM(CASE WHEN l.charged_microusd IS NULL THEN 1 ELSE 0 END) AS not_recorded,
        COALESCE(SUM(l.charged_microusd), 0) AS charged_microusd,
        COALESCE(SUM(CASE WHEN l.guard_for IS NULL THEN r.actual_included_microusd END), 0) AS allowance_microusd,
-       COALESCE(SUM(CASE WHEN l.guard_for IS NULL THEN r.actual_topup_microusd END), 0) AS tokens_microusd`;
+       COALESCE(SUM(CASE WHEN l.guard_for IS NULL THEN r.actual_topup_microusd END), 0) AS tokens_microusd
+  FROM ai_usage_logs l
+  LEFT JOIN ai_budget_reservations r ON r.uid = l.reservation_uid AND r.user_id = l.user_id
+ WHERE l.user_id = ? AND l.created_at >= ? AND l.created_at < ?
+ GROUP BY l.rail_page
+ ORDER BY charged_microusd DESC, runs DESC LIMIT ?`;
 
-const FROM = `FROM ai_usage_logs l
+const BY_OPTION = `SELECT l.rail_page AS page, l.rail_option AS second,
+       SUM(CASE WHEN l.guard_for IS NULL THEN 1 ELSE 0 END) AS runs,
+       COUNT(l.charged_microusd) AS recorded,
+       SUM(CASE WHEN l.charged_microusd IS NULL THEN 1 ELSE 0 END) AS not_recorded,
+       COALESCE(SUM(l.charged_microusd), 0) AS charged_microusd,
+       COALESCE(SUM(CASE WHEN l.guard_for IS NULL THEN r.actual_included_microusd END), 0) AS allowance_microusd,
+       COALESCE(SUM(CASE WHEN l.guard_for IS NULL THEN r.actual_topup_microusd END), 0) AS tokens_microusd
+  FROM ai_usage_logs l
+  LEFT JOIN ai_budget_reservations r ON r.uid = l.reservation_uid AND r.user_id = l.user_id
+ WHERE l.user_id = ? AND l.created_at >= ? AND l.created_at < ?
+ GROUP BY l.rail_page, l.rail_option
+ ORDER BY charged_microusd DESC, runs DESC LIMIT ?`;
+
+const BY_RECORD = `SELECT l.rail_page AS page, l.record_ref AS second,
+       SUM(CASE WHEN l.guard_for IS NULL THEN 1 ELSE 0 END) AS runs,
+       COUNT(l.charged_microusd) AS recorded,
+       SUM(CASE WHEN l.charged_microusd IS NULL THEN 1 ELSE 0 END) AS not_recorded,
+       COALESCE(SUM(l.charged_microusd), 0) AS charged_microusd,
+       COALESCE(SUM(CASE WHEN l.guard_for IS NULL THEN r.actual_included_microusd END), 0) AS allowance_microusd,
+       COALESCE(SUM(CASE WHEN l.guard_for IS NULL THEN r.actual_topup_microusd END), 0) AS tokens_microusd
+  FROM ai_usage_logs l
+  LEFT JOIN ai_budget_reservations r ON r.uid = l.reservation_uid AND r.user_id = l.user_id
+ WHERE l.user_id = ? AND l.created_at >= ? AND l.created_at < ?
+ GROUP BY l.rail_page, l.record_ref
+ ORDER BY charged_microusd DESC, runs DESC LIMIT ?`;
+
+const TOTALS = `SELECT SUM(CASE WHEN l.guard_for IS NULL THEN 1 ELSE 0 END) AS runs,
+       COUNT(l.charged_microusd) AS recorded,
+       SUM(CASE WHEN l.charged_microusd IS NULL THEN 1 ELSE 0 END) AS not_recorded,
+       COALESCE(SUM(l.charged_microusd), 0) AS charged_microusd,
+       COALESCE(SUM(CASE WHEN l.guard_for IS NULL THEN r.actual_included_microusd END), 0) AS allowance_microusd,
+       COALESCE(SUM(CASE WHEN l.guard_for IS NULL THEN r.actual_topup_microusd END), 0) AS tokens_microusd
+  FROM ai_usage_logs l
   LEFT JOIN ai_budget_reservations r ON r.uid = l.reservation_uid AND r.user_id = l.user_id
  WHERE l.user_id = ? AND l.created_at >= ? AND l.created_at < ?`;
+
+const GROUPED: Record<ConsumptionGroup, string> = { page: BY_PAGE, option: BY_OPTION, record: BY_RECORD };
 
 type SumRow = { runs: number | null; recorded: number; not_recorded: number | null; charged_microusd: number; allowance_microusd: number; tokens_microusd: number };
 
@@ -98,14 +138,10 @@ function sums(row: SumRow): Omit<ConsumptionTotals, never> {
 export async function memberConsumption(env: Env, userId: number, group: ConsumptionGroup, month: string) {
   const bounds = monthBounds(month);
   if (!bounds) throw new RangeError('month');
-  const second = SECOND[group];
-  const cols = second ? `l.rail_page AS page, l.${second} AS second` : 'l.rail_page AS page';
-  const by = second ? `l.rail_page, l.${second}` : 'l.rail_page';
   const binds = [userId, bounds.from, bounds.to];
   const [grouped, total] = await Promise.all([
-    env.DB.prepare(`SELECT ${cols}, ${SUMS} ${FROM} GROUP BY ${by} ORDER BY charged_microusd DESC, runs DESC LIMIT ?`)
-      .bind(...binds, MAX_CONSUMPTION_ROWS + 1).all<SumRow & { page: string | null; second?: string | null }>(),
-    env.DB.prepare(`SELECT ${SUMS} ${FROM}`).bind(...binds).first<SumRow>(),
+    env.DB.prepare(GROUPED[group]).bind(...binds, MAX_CONSUMPTION_ROWS + 1).all<SumRow & { page: string | null; second?: string | null }>(),
+    env.DB.prepare(TOTALS).bind(...binds).first<SumRow>(),
   ]);
   const all = grouped.results ?? [];
   const rows: ConsumptionRow[] = all.slice(0, MAX_CONSUMPTION_ROWS).map((r) => ({
