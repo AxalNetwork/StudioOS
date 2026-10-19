@@ -1535,7 +1535,11 @@ export default function TrustCenterPage({ chromeless = false }) {
 
   const panels = (
     <>
-      <div id="trust-tabs" className="border-b border-slate-200 dark:border-slate-700 mb-6 flex gap-1 overflow-x-auto" data-testid="trust-center-page">
+      {/* The baseline is an inset shadow, not a border: the tabs then fit the
+          strip's box, so `overflow-x-auto` (which makes overflow-y auto too)
+          never draws a vertical scroll bar, and each tab's own 2px underline
+          paints over the line (#2060). */}
+      <div id="trust-tabs" className="shadow-[inset_0_-1px_0_#e2e8f0] dark:shadow-[inset_0_-1px_0_#334155] mb-6 flex gap-1 overflow-x-auto" data-testid="trust-center-page">
         {tabs.map(t => {
           const Icon = t.icon;
           const active = tab === t.key;
@@ -1544,7 +1548,7 @@ export default function TrustCenterPage({ chromeless = false }) {
               key={t.key}
               data-testid={`trust-tab-${t.key}`}
               onClick={() => setTab(t.key)}
-              className={`inline-flex items-center gap-2 px-3 py-2 text-sm border-b-2 -mb-px ${active
+              className={`inline-flex items-center gap-2 px-3 py-2 text-sm border-b-2 ${active
                 ? 'border-violet-600 text-violet-700 dark:text-violet-300 font-medium'
                 : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'}`}
             >
@@ -1587,7 +1591,7 @@ export default function TrustCenterPage({ chromeless = false }) {
   }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="p-6">
       <div className="mb-6 flex items-center justify-between gap-4 flex-wrap">
         {chromeless ? <div /> : (
           <div>

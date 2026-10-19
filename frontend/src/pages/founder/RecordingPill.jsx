@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useActiveRecording, useNow } from '../../contexts/ActiveRecordingContext';
-import { elapsedMs, pillLabel, pillVariant, reviewPath } from '../../lib/activeRecording';
+import { elapsedMs, finishLine, pillLabel, pillVariant, reviewPath } from '../../lib/activeRecording';
 import RingViz, { prefersReducedMotion } from '../../components/discovery/RingViz';
 import { clock, useDarkTheme } from './RecordingView';
 
@@ -10,7 +10,8 @@ import { clock, useDarkTheme } from './RecordingView';
  * "Recording · tap to expand", on every signed-in route while a session is
  * recording, paused or processing. A real button: click, Enter or Space opens
  * `/validate/record/live`. Processing that finishes while minimised never
- * moves the founder: the ready pill links to Customer research (D694).
+ * moves the founder: the ready pill links to Customer research (D694), or,
+ * once Axal drafted the summary, to the session (D757, #1927).
  *
  * Placed bottom-right, 300px in from the right at 1024px and wider so the
  * Worker AI rail stays readable; below that, full width above the phone tab bar
@@ -59,10 +60,12 @@ export default function RecordingPill() {
     </span>
   );
   if (variant === 'ready') {
+    // D757 (#1927): a drafted summary ends on its session, with the suggestions to review.
+    const finish = finishLine(state);
     return (
-      <Link ref={self} to={reviewPath(state.session)} onClick={() => recorder.clear()} aria-label={label} data-testid="recording-pill" data-variant={variant} className={box}>
+      <Link ref={self} to={finish ? finish.href : reviewPath(state.session)} onClick={() => recorder.clear()} aria-label={finish ? finish.text : label} data-testid="recording-pill" data-variant={variant} className={box}>
         {ring}
-        <span className="inline-flex items-center gap-1.5 text-[13px] font-bold"><span className={`h-2 w-2 rounded-full ${DOT.ready}`} />Ready · see it in Interviews</span>
+        <span className="inline-flex items-center gap-1.5 text-[13px] font-bold" data-testid="recording-pill-ready"><span className={`h-2 w-2 rounded-full ${DOT.ready}`} />{finish ? finish.text : 'Ready · see it in Interviews'}</span>
       </Link>
     );
   }
