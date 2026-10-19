@@ -79,17 +79,23 @@ const notRead = (name: string) => `Eadwyn does not read ${name} yet.`;
 const MERCURY_API = 'https://api.mercury.com/api/v1';
 const MERCURY_DOCS = 'https://docs.mercury.com';
 
-function mercuryTools(variant: 'entity' | 'founder' | 'partner'): PageTool[] {
+type MercuryVariant = 'entity' | 'founder' | 'partner' | 'investor';
+
+function mercuryTools(variant: MercuryVariant): PageTool[] {
   const tools = [
     tool('read_organization', 'your organization', 'read', 'Reads the organization’s id and legal name, to match it to the right owner.', null, ["read(token, '/organization'"]),
     tool('list_accounts', 'account names and last four digits', 'read', 'Lists the organization’s accounts by name, kind and last four digits.', null, ["read(token, '/accounts'"]),
+  ];
+  // D752: an investor's proof of funds reads accounts only, never a transaction.
+  if (variant === 'investor') return tools;
+  tools.push(
     tool('list_transactions', 'transactions', 'read',
       variant === 'entity' ? 'Reads each account’s transactions every hour, for reconciliation against capital calls and fees.'
         : variant === 'founder' ? 'Lists the credits in your account. Only the ones you import become revenue rows.'
           : 'Lists your account’s transactions so you can pick the one that settled an invoice, payout or deal.',
       variant === 'founder' ? 'revenue_and_traction' : null,
       ['`/account/${accountId}/transactions`']),
-  ];
+  );
   if (variant !== 'entity') {
     tools.push(tool('read_transaction', 'the transaction you pick', 'read', 'Reads the one transaction you picked, to confirm it before it is used.', null,
       ['`/account/${accountId}/transaction/${transactionId}`']));
@@ -97,12 +103,13 @@ function mercuryTools(variant: 'entity' | 'founder' | 'partner'): PageTool[] {
   return tools;
 }
 
-function mercuryPage(variant: 'entity' | 'founder' | 'partner'): ConnectorPage {
+function mercuryPage(variant: MercuryVariant): ConnectorPage {
   const entity = variant === 'entity';
   return {
     tagline: entity ? 'Balances and transactions of the Axal entity accounts, for fund administration. Read-only.'
       : variant === 'founder' ? 'Credits from your own Mercury account, imported as venture revenue. Read-only.'
-        : 'Your invoices, payouts and settlements matched to your own Mercury lines. Read-only.',
+        : variant === 'investor' ? 'Proof of funds for a commitment you made, shared with Axal’s admins. Read-only, never a balance.'
+          : 'Your invoices, payouts and settlements matched to your own Mercury lines. Read-only.',
     long_description: entity
       ? [
         'Read balances and transactions of the Axal entity accounts for fund administration. Read-only: nothing here can move money.',
@@ -113,7 +120,12 @@ function mercuryPage(variant: 'entity' | 'founder' | 'partner'): ConnectorPage {
           'Your own Mercury account, read-only.',
           'Axal VC lists the credits in your account. Only the credits you choose to import become rows in Revenue and traction. It never sends, transfers or requests money.',
         ]
-        : [
+        : variant === 'investor'
+          ? [
+            'Your own Mercury account, read-only, on HQ only (D752).',
+            'Axal VC reads your accounts’ names, kinds and last four digits, so you can pick the ones a proof of funds counts. Axal’s admins see only a dated statement of at least an amount you choose, never a balance. It never sends, transfers or requests money.',
+          ]
+          : [
           'Your own Mercury account, read-only.',
           'Axal VC lists your transactions so you can match an invoice, a payout or a partner-deal settlement to the line that settled it. It never sends, transfers or requests money.',
         ],
@@ -407,7 +419,7 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
       tool('read_pull_requests', 'pull requests', 'read', 'Reads pull requests in the repositories you chose.', 'prototype_mvp', ['`${path}/pulls?state=all`']),
       tool('read_releases', 'releases', 'read', 'Reads releases in the repositories you chose. They are counted under Product roadmap; no row is made.', null,
         ['`${path}/releases`']),
-      tool('revoke_grant', 'the grant', 'account', 'Revokes the grant when GitHub grants more than read.', null,
+      tool('revoke_grant', 'the grant', 'account', 'Revokes the grant when you disconnect, and when GitHub grants more than read.', null,
         ['`${API}/applications/${encodeURIComponent(id)}/grant`']),
     ],
     prompts: [
@@ -504,7 +516,7 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
   },
   mercury: {
     entity: mercuryPage('entity'),
-    personal: { founder: mercuryPage('founder'), partner: mercuryPage('partner') },
+    personal: { founder: mercuryPage('founder'), partner: mercuryPage('partner'), investor: mercuryPage('investor') },
   },
 };
 

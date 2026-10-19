@@ -11,6 +11,11 @@
  *   GET    /                        availability per provider, the member's connections, pending counts
  *   POST   /telegram/link           a one-time code and its t.me link
  *   POST   /whatsapp/connect        finish Embedded Signup: { code, waba_id, phone_number_id }
+ *   POST   /whatsapp/link           D754 way B (#1937): a one-time code, and the wa.me link that
+ *                                   sends `LINK <code>` to Axal's own number
+ *   GET    /whatsapp/link           the newest claim ('•••• 1234') and the current link
+ *   POST   /whatsapp/link/:uid/confirm  Axal's half: the claimed number becomes the member's link
+ *   DELETE /whatsapp/link           unlink
  *   DELETE /:provider               disconnect (telegram | whatsapp)
  *   POST   /:provider/test          Telegram: a message in the member's own chat with the bot.
  *                                   WhatsApp: read the number with the member's token — a test
@@ -53,6 +58,13 @@
  * connection's daily cap (D1, fails closed) and the member's AI budget (D640).
  * Only the text is kept; the audio is never stored.
  *
+ * AXAL'S OWN WHATSAPP NUMBER (way B, whatsappLink.ts) is answered before any
+ * member connection is looked for: `LINK <code>` records a claim and gets one
+ * reply; STOP from a linked sender unlinks with one reply; anything else is
+ * claimed by its hashed id and ignored, with no reply and no text kept. Every
+ * way-B route answers 503 until the owner sets all four WHATSAPP_AXAL_*
+ * settings, and until then the webhook ignores the number.
+ *
  * A TELEGRAM LINK TAKES TWO MESSAGES: `/start <code>` names the Telegram
  * account, and that account's own `/confirm` plus the member's Confirm in Axal
  * must both arrive within the original ten-minute code lifetime.
@@ -93,6 +105,7 @@ import {
 } from '../services/channels/types';
 import * as telegram from '../services/channels/telegram';
 import * as whatsapp from '../services/channels/whatsapp';
+import * as waLink from '../services/channels/whatsappLink';
 
 const channels = new Hono<{ Bindings: Env }>();
 export const channelsAdmin = new Hono<{ Bindings: Env }>();
@@ -259,6 +272,37 @@ channels.post('/telegram/link/:uid/confirm', member(async (c, user) => {
   if (!out.linked && out.reason === 'identity_taken') return no(c, 409, 'identity_taken');
   if (!out.linked && out.reason === 'nothing_to_confirm') return no(c, 409, 'link_cancelled');
   return c.json({ ok: true, linked: out.linked, claim: await pendingLinkView(c.env, user.id, c.req.param('uid') ?? '') });
+}));
+
+// D754 way B (#1937): the member's own WhatsApp, linked through Axal's number.
+// Codes per member per hour are counted on a hashed subject (events.ts).
+const WA_LINK_CODES_PER_HOUR = 10;
+
+channels.post('/whatsapp/link', member(async (c, user) => {
+  if (!waLink.axalNumberReady(c.env)) return no(c, 503, 'not_available');
+  await activeMember(c.env, user.id);
+  try {
+    if (await linkAttemptOverLimit(c.env, `whatsapp_link:member:${user.id}`, WA_LINK_CODES_PER_HOUR)) return no(c, 429, 'rate_limited');
+  } catch { return no(c, 503, 'link_limit_unavailable'); }
+  const { code, expiresAt } = await createLinkCode(c.env, user.id, 'whatsapp_link');
+  return c.json({ code, wa_link: waLink.waLink(c.env, code), expires_at: expiresAt });
+}));
+
+channels.get('/whatsapp/link', member(async (c, user) => {
+  if (!waLink.axalNumberReady(c.env)) return no(c, 503, 'not_available');
+  await activeMember(c.env, user.id);
+  return c.json(await waLink.whatsappLinkView(c.env, user.id));
+}));
+
+channels.post('/whatsapp/link/:uid/confirm', member(async (c, user) => {
+  if (!waLink.axalNumberReady(c.env)) return no(c, 503, 'not_available');
+  await waLink.confirmWhatsAppLink(c.env, user.id, c.req.param('uid') ?? '');
+  return c.json({ ok: true, linked: true, ...(await waLink.whatsappLinkView(c.env, user.id)) });
+}));
+
+channels.delete('/whatsapp/link', member(async (c, user) => {
+  if (!waLink.axalNumberReady(c.env)) return no(c, 503, 'not_available');
+  return c.json({ ok: true, unlinked: await waLink.unlinkMember(c.env, user.id) });
 }));
 
 channels.post('/whatsapp/connect', member(async (c, user) => {
@@ -583,6 +627,67 @@ async function handleManageChat(env: Env, claim: number, ev: InboundManageChat):
   await tell(env, ev.chatId, telegram.TELEGRAM_COPY.manageChat);
 }
 
+/** Wrong or repeated `LINK` codes a sender may send per hour, counted on a hash of the sender. */
+const WA_LINK_TRIES_PER_SENDER_HOUR = 5;
+
+/** One reply from Axal's number, once per client key, through the outbound ledger. A failure never fails the webhook. */
+async function axalReply(env: Env, userId: number, clientKey: string, to: string, text: string): Promise<void> {
+  const { row, existing } = await beginOutbound(env, 'whatsapp', userId, null, clientKey);
+  if (existing) return;
+  const r = await whatsapp.sendAxalText(env, to, text).catch(() => ({ ok: false, code: 'send_unknown' } as SendResult));
+  await finishOutbound(env, row.id, r);
+  if (!r.ok) console.error(`[channels] axal number reply not sent code=${r.code ?? 'unknown'}`);
+}
+
+/**
+ * D754 way B (#1937): an event on Axal's own WhatsApp number. There is no
+ * member connection here; who a message is from is the sender's link.
+ *   LINK <code>  records the claim against the sender; one reply.
+ *   STOP         from a linked sender: unlinks; one reply.
+ *   anything else from a linked sender is part 2's (#1938): until then it
+ *                counts as use and is ignored.
+ *   anything from an unlinked sender: ignored, no reply, nothing kept but
+ *                the event's hashed id.
+ */
+async function handleAxalNumber(
+  env: Env, claim: number, ev: InboundEvent, spend: () => void,
+  finish: (status: EventStatus, fields?: EventFields) => Promise<void>,
+): Promise<void> {
+  if (!waLink.axalNumberReady(env)) return finish('ignored', { error: 'not_available' });
+  if (ev.kind === 'status') {
+    const known = await applyDeliveryStatus(env, ev.externalMessageId, ev.status, ev.errorCode);
+    return finish(known ? 'done' : 'ignored', { error: known ? null : 'not_ours' });
+  }
+  if (ev.kind !== 'message' || ev.side !== 'contact') return finish('ignored', { error: 'unsupported' });
+  const sender = ev.externalChatId;
+  const code = waLink.linkCodeIn(ev.text);
+  if (code) {
+    try {
+      if (await linkAttemptOverLimit(env, `whatsapp_link:sender:${sender}`, WA_LINK_TRIES_PER_SENDER_HOUR)) {
+        return finish('ignored', { error: 'rate_limited' });
+      }
+    } catch { return finish('ignored', { error: 'link_limit_unavailable' }); }
+    // The code is spent by its first attempt: from here a failure is not retried.
+    spend();
+    const out = await waLink.claimWhatsAppLink(env, code, sender);
+    if (!out.claimed) return finish('ignored', { error: out.reason });
+    await finish('done', { userId: out.userId });
+    await axalReply(env, out.userId, `wblink:${out.codeUid}`, sender, waLink.WHATSAPP_LINK_COPY.claimed);
+    return;
+  }
+  const link = await waLink.linkedSender(env, sender);
+  if (!link) return finish('ignored', { error: 'unlinked_sender' });
+  if (waLink.isStop(ev.text)) {
+    spend();
+    const unlinked = await waLink.unlinkSender(env, Number(link.id));
+    await finish(unlinked ? 'done' : 'ignored', { userId: Number(link.user_id), error: unlinked ? null : 'not_linked' });
+    if (unlinked) await axalReply(env, Number(link.user_id), `wbstop:${claim}`, sender, waLink.WHATSAPP_LINK_COPY.unlinked);
+    return;
+  }
+  await waLink.touchLink(env, Number(link.id));
+  return finish('ignored', { userId: Number(link.user_id), error: 'capture_not_built' });
+}
+
 function resolveConnection(env: Env, provider: MessagingProvider, ref: string): Promise<ChannelConnection | null> {
   return provider === 'telegram' ? connectionForTelegram(env, ref) : connectionForWhatsApp(env, ref);
 }
@@ -631,6 +736,11 @@ async function processEvent(env: Env, ev: InboundEvent): Promise<'ok' | 'retry'>
       await finish('stored', { userId });
       // Not linked yet: tell them how. Nothing else from the connection is kept.
       if (ev.isEnabled && !userId) await tell(env, ev.userChatId, telegram.TELEGRAM_COPY.linkPrompt);
+      return 'ok';
+    }
+
+    if (ev.provider === 'whatsapp' && waLink.isAxalNumber(env, ev.connectionRef)) {
+      await handleAxalNumber(env, claim, ev, () => { stored = true; }, finish);
       return 'ok';
     }
 
