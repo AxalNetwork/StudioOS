@@ -859,6 +859,7 @@ export default function InvestorClosingZone() {
 
           <ZoneDraft
             surface="deals/closing"
+            railOption="draft:closing-cover-note"
             label="Proposal · closing packet cover note"
             accept="Open the note"
             run="Draft the note"

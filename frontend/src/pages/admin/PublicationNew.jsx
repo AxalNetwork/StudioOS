@@ -5,6 +5,7 @@ import { publications } from '../../lib/api';
 import { useToast } from '../../components/useToast';
 import ToastMessage from '../../components/ToastMessage';
 import PublicationsFrame from './PublicationsFrame';
+import { useRailOption } from '../../ui/railCrumbs.js';
 
 const SECTIONS = [
   'sentiment', 'talc', 'demand_supply', 'sector_heat',
@@ -25,6 +26,9 @@ export default function PublicationNew() {
     period_to: '',
   });
   const [drafting, setDrafting] = useState(false);
+  // D775 (#2101): this page is H20's one option, Draft with AI
+  // (`railOptions/superAdmin.js`), so a pick on the rail applies before the press.
+  useRailOption('draft:publication-summary', 'Draft with AI');
 
   const submit = async (e) => {
     e.preventDefault();

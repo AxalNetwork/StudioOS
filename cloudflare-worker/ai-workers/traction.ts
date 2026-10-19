@@ -2,6 +2,7 @@
  * AI traction review: takes recent metrics_snapshots for a project and
  * returns a 1-paragraph health assessment + a numeric momentum score.
  */
+import { systemRun } from './systemRun';
 import type { Env } from '../src/types';
 
 export interface TractionInput {
@@ -27,7 +28,7 @@ export async function aiTractionReview(env: Env, input: TractionInput): Promise<
 ${lines}`;
   let parsed: any = {};
   try {
-    const resp: any = await (env as any).AI.run('@cf/meta/llama-3.1-8b-instruct', {
+    const resp: any = await systemRun(env, {
       messages: [
         { role: 'system', content: 'Strict JSON only.' },
         { role: 'user', content: prompt },

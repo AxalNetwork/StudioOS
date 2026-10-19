@@ -6,6 +6,7 @@ import { reportError } from '../lib/log';
 import { useToast } from '../components/useToast';
 import ToastMessage from '../components/ToastMessage';
 import { useEscapeClose } from '../components/useEscapeClose';
+import AdminBoardFrame from './admin/AdminBoardFrame';
 
 const BAND_STYLES = {
   green: 'bg-emerald-100 text-emerald-700 border-emerald-200',
@@ -20,7 +21,7 @@ const STATUS_STYLES = {
   archived: 'bg-gray-50 text-gray-500',
 };
 
-export default function AdminDueDiligencePage() {
+function AdminDueDiligencePageBody() {
   const [cases, setCases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [unavailable, setUnavailable] = useState(false);
@@ -296,5 +297,14 @@ function NewCaseModal({ onClose, onCreated }) {
         </div>
       </form>
     </div>
+  );
+}
+
+// D774 (#2100): S11 drew no rail. The board's page, in the Admin boards' frame.
+export default function AdminDueDiligencePage() {
+  return (
+    <AdminBoardFrame workspace="Due diligence" note="Eadwyn reads the cases listed here. A verdict is recorded only when you record it." data-testid="admin-board-due-diligence">
+      <AdminDueDiligencePageBody />
+    </AdminBoardFrame>
   );
 }

@@ -21,6 +21,12 @@
  *   - a voice is held and charged on those units, and never cached;
  *   - a live stream's units are WebSocket minutes.
  *
+ * PR 4 — image generation:
+ *   - each model's request (JSON, or FLUX.2's multipart form), the size and steps clamped to its range;
+ *   - the image read back, its size measured from its bytes, and its units in its model's billing unit;
+ *   - malformed draws refused before any call; partner image models gated by D760;
+ *   - a member held and charged at the catalogue's price; an image never cached.
+ *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/ai_router_shapes_d761.test.mjs
  */
@@ -29,7 +35,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { upsertEntity } from '../src/services/vectorize.ts';
 import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
-import { run, ROUTE, estimateCostUsd, PRICE_USD_PER_1K_CHARACTERS, PRICE_USD_PER_AUDIO_MINUTE, __resetForTest } from '../src/services/aiRouter.ts';
+import { run, ROUTE, estimateCostUsd, PRICE_USD_PER_1K_CHARACTERS, PRICE_USD_PER_AUDIO_MINUTE, IMAGE_PRICED_MODELS, __resetForTest } from '../src/services/aiRouter.ts';
+import { costMicro } from '../src/services/ai/pricing.ts';
 import * as shapes from '../src/services/ai/shapes.ts';
 import { withGuard } from './_guard_stub.mjs';
 
@@ -573,4 +580,161 @@ test('readSpeech: base64 flat or under result, bytes, a buffer or a stream; WAV 
   assert.equal(await shapes.readSpeech(huge), null);
   assert.equal(cancelled, true, 'the stream is cancelled at the cap');
   for (const none of [null, {}, { audio: '' }, new Uint8Array(0), 'text']) assert.equal(await shapes.readSpeech(none), null);
+});
+
+// ─────────────────────────────────────────────────────────── PR 4: image generation
+
+const SCHNELL = '@cf/black-forest-labs/flux-1-schnell';
+const FLUX2 = '@cf/black-forest-labs/flux-2-dev';
+const KLEIN4 = '@cf/black-forest-labs/flux-2-klein-4b';
+const KLEIN9 = '@cf/black-forest-labs/flux-2-klein-9b';
+const LUCID = '@cf/leonardo/lucid-origin';
+const PHOENIX = '@cf/leonardo/phoenix-1.0';
+
+/** A PNG's first 24 bytes, enough for its size, then filler. */
+function png(w, h) {
+  const b = new Uint8Array(64);
+  b.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52]);
+  b.set([w >>> 24, (w >>> 16) & 255, (w >>> 8) & 255, w & 255, h >>> 24, (h >>> 16) & 255, (h >>> 8) & 255, h & 255], 16);
+  return b;
+}
+/**
+ * A JPEG with an APP0 segment and then its start-of-frame (SOF0) carrying the
+ * size. The APP0 payload holds bytes that look like a 1 by 1 frame, so a reader
+ * that does not skip whole segments reads the wrong size.
+ */
+function jpeg(w, h) {
+  return new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 11, 0xff, 0xc2, 0, 11, 8, 0, 1, 0, 1, 0xff, 0xc0, 0, 11, 8, h >> 8, h & 255, w >> 8, w & 255, 3, 0, 0, 0, 0xff, 0xd9]);
+}
+const b64 = (bytes) => Buffer.from(bytes).toString('base64');
+/** The multipart form the stub was sent, read back. */
+async function formOf(payload) {
+  const fd = await new Response(payload.multipart.body, { headers: { 'content-type': payload.multipart.contentType } }).formData();
+  return Object.fromEntries([...fd.entries()]);
+}
+function imageRoute(t, model, fallbackChain = [], extra = {}) {
+  const saved = ROUTE.paraphrase;
+  ROUTE.paraphrase = { ...saved, model, fallbackChain, ...extra };
+  t.after(() => { ROUTE.paraphrase = saved; });
+}
+
+test('image: FLUX.1 Schnell takes { prompt, steps, seed }, steps clamped to 8, no size; units in tiles and steps from the size it returned', async (t) => {
+  // Mutations checked: steps sent unclamped; a size sent to Schnell; the units from the default instead of the returned size.
+  imageRoute(t, SCHNELL);
+  const ai = makeAI(() => ({ image: b64(jpeg(1024, 1536)) }));
+  const r = await run(envWith(ai), { task: 'paraphrase', userId: 0, text: 'A lighthouse at dusk.', draw: { steps: 20, seed: 7, width: 640 } });
+  assert.equal(r.ok, true);
+  assert.deepEqual(ai.calls[0].payload, { prompt: 'A lighthouse at dusk.', steps: 8, seed: 7 });
+  assert.deepEqual({ mime: r.image.mime, width: r.image.width, height: r.image.height }, { mime: 'image/jpeg', width: 1024, height: 1536 });
+  assert.deepEqual(r.units, { tiles: 2 * 3, steps: 8 });
+  assert.equal(r.output, '');
+  assert.equal(shapes.factsFor(SCHNELL).kind, 'image');
+  assert.equal(shapes.timeoutMs(shapes.factsFor(SCHNELL), 10), shapes.TIMEOUT_MS.image, 'the image class, 60 seconds');
+});
+
+test('image: FLUX.2 [dev] takes a multipart form even for a prompt; size clamped to 1920; units in output tile-steps', async (t) => {
+  // Mutations checked: FLUX.2 sent JSON; the size unclamped; tile-steps as tiles alone.
+  imageRoute(t, FLUX2);
+  const ai = makeAI(() => ({ image: b64(png(1920, 768)) }));
+  const r = await run(envWith(ai, PARTNERS_ON), { task: 'paraphrase', userId: 0, text: 'A harbour map.', draw: { width: 4000 } });
+  assert.equal(r.ok, true);
+  assert.match(ai.calls[0].payload.multipart.contentType, /^multipart\/form-data; boundary=/);
+  assert.deepEqual(await formOf(ai.calls[0].payload), { prompt: 'A harbour map.', width: '1920', height: '768', steps: '25' });
+  assert.equal(r.image.mime, 'image/png');
+  assert.deepEqual(r.units, { output_tile_steps: 4 * 2 * 25 });
+});
+
+test('image: FLUX.2 Klein sends no steps (fixed at 4); 4B is billed in output tiles, 9B in megapixels, the first and each further one', async (t) => {
+  // Mutations checked: steps sent to Klein; the further megapixels rounded down.
+  imageRoute(t, KLEIN4);
+  const ai = makeAI(() => ({ result: { image: b64(png(1024, 768)) } }));
+  const r = await run(envWith(ai, PARTNERS_ON), { task: 'paraphrase', userId: 0, text: 'A logo.', draw: { steps: 30 } });
+  assert.equal(r.ok, true, 'the image under `result` is read too');
+  assert.deepEqual(await formOf(ai.calls[0].payload), { prompt: 'A logo.', width: '1024', height: '768' });
+  assert.deepEqual(r.units, { output_tiles: 2 * 2 });
+  assert.deepEqual(shapes.imageUnits(KLEIN9, 1920, 1920, 4), { first_megapixels: 1, subsequent_megapixels: 3 }, '3.69 MP: the first, then three');
+  assert.deepEqual(shapes.imageUnits(KLEIN9, 1024, 768, 4), { first_megapixels: 1, subsequent_megapixels: 0 });
+});
+
+test('image: Phoenix streams its bytes and takes num_steps and a negative prompt; Lucid Origin is sent 25 steps and no negative prompt', async (t) => {
+  // Mutations checked: Phoenix's steps sent as `steps`; the negative prompt sent to Lucid; the stream read as empty.
+  imageRoute(t, PHOENIX);
+  const ai = makeAI(() => new ReadableStream({ start(c) { c.enqueue(jpeg(1024, 1024)); c.close(); } }));
+  const r = await run(envWith(ai, PARTNERS_ON), { task: 'paraphrase', userId: 0, text: 'A poster.', draw: { steps: 80, negativePrompt: 'blur' } });
+  assert.equal(r.ok, true);
+  assert.deepEqual(ai.calls[0].payload, { prompt: 'A poster.', width: 1024, height: 1024, num_steps: 50, negative_prompt: 'blur' });
+  assert.deepEqual(r.units, { tiles: 4, steps: 50 });
+  assert.deepEqual(shapes.drawRequest(LUCID, 'A poster.', { negativePrompt: 'blur', width: 100 }).fields,
+    { prompt: 'A poster.', width: 256, height: 1120, num_steps: 25 }, 'the smallest side is 256');
+});
+
+test('image: the size is measured from the bytes; unreadable bytes are counted at the size sent', async () => {
+  // Mutations checked: the JPEG frame read past APP segments wrongly; unreadable bytes counted as 0 by 0.
+  assert.deepEqual(shapes.imageInfo(jpeg(800, 600)), { mime: 'image/jpeg', width: 800, height: 600 });
+  assert.deepEqual(shapes.imageInfo(png(3, 5)), { mime: 'image/png', width: 3, height: 5 });
+  const vp8x = new Uint8Array(30); vp8x.set([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50, 0x56, 0x50, 0x38, 0x58]); vp8x.set([0xff, 0x03, 0, 0xff, 0x02, 0], 24);
+  assert.deepEqual(shapes.imageInfo(vp8x), { mime: 'image/webp', width: 1024, height: 768 });
+  const junk = new Uint8Array([1, 2, 3, 4]);
+  assert.equal(shapes.imageInfo(junk), null);
+  const read = await shapes.readImage({ image: b64(junk) }, { width: 1024, height: 768 });
+  assert.deepEqual({ mime: read.mime, width: read.width, height: read.height }, { mime: 'image/jpeg', width: 1024, height: 768 });
+  assert.equal(await shapes.readImage({ image: '' }, { width: 1, height: 1 }), null);
+  assert.equal(await shapes.readImage(new ReadableStream({ pull(c) { c.enqueue(new Uint8Array(1024 * 1024)); } }), { width: 1, height: 1 }), null, 'past the cap');
+  assert.equal(shapes.tilesOf(513, 512), 2);
+});
+
+test('image: malformed draws are refused before any call; partner image models are D760\'s to offer; a text model is skipped', async (t) => {
+  // Mutations checked: a fractional width accepted; a draw with a voice accepted; a streamed draw accepted.
+  const cases = [
+    { text: '', draw: {} },
+    { text: 'x'.repeat(shapes.MAX_DRAW_PROMPT_CHARS + 1), draw: {} },
+    { text: 'A', draw: { width: 0 } },
+    { text: 'A', draw: { width: 1.5 } },
+    { text: 'A', draw: { steps: -1 } },
+    { text: 'A', draw: { seed: 'x' } },
+    { text: 'A', draw: { negativePrompt: 3 } },
+    { text: 'A', draw: {}, speak: {} },
+    { text: 'A', draw: {}, stream: true },
+  ];
+  for (const c of cases) {
+    const ai = makeAI(() => ({ image: b64(png(8, 8)) }));
+    const r = await run(envWith(ai), { task: 'paraphrase', userId: 0, ...c });
+    assert.equal(r.refusal, 'invalid_input', JSON.stringify({ ...c, text: c.text.length }));
+    assert.equal(ai.calls.length, 0);
+  }
+  assert.equal((await run(envWith(makeAI(() => ({}))), { task: 'transcribe', userId: 0, text: 'A', draw: {} })).refusal, 'invalid_input');
+
+  imageRoute(t, FLUX2, [SCHNELL]);
+  const gated = makeAI(() => ({ image: b64(png(8, 8)) }));
+  assert.equal((await run(envWith(gated), { task: 'paraphrase', userId: 0, text: 'A', draw: {} })).refusal, 'model_not_offered');
+  assert.equal(gated.calls.length, 0);
+
+  imageRoute(t, MID, [SCHNELL]);
+  const ai = makeAI(() => ({ image: b64(jpeg(1024, 1024)) }));
+  const r = await run(envWith(ai), { task: 'paraphrase', userId: 0, text: 'A', draw: {} });
+  assert.deepEqual(r.attempts.map((a) => [a.model, a.called, a.status]), [[MID, false, 422], [SCHNELL, true, undefined]]);
+});
+
+test('image: priced at the catalogue\'s figure in each model\'s unit; a member is held for what was sent and charged on what came back; never cached', async (t) => {
+  // Mutations checked: the image units ignored by the price; the quote without them; the image cached.
+  assert.deepEqual([...IMAGE_PRICED_MODELS].sort(), [SCHNELL, FLUX2, KLEIN4, KLEIN9, LUCID, PHOENIX].sort());
+  assert.equal(estimateCostUsd(SCHNELL, 0, 0, 0, 0, 0, { tiles: 4, steps: 4 }), costMicro(SCHNELL, { tiles: 4, steps: 4 }) / 1e6);
+  assert.equal(costMicro(SCHNELL, { tiles: 4, steps: 4 }), 634, '4 × $0.0000528 + 4 × $0.0001056, rounded up');
+  // $0.015 for the first megapixel and $0.002 for each further one, at the catalogue's neuron prices, rounded up once.
+  assert.equal(estimateCostUsd(KLEIN9, 0, 0, 0, 0, 0, { first_megapixels: 1, subsequent_megapixels: 3 }), 0.021001);
+
+  imageRoute(t, SCHNELL, [], { cacheTtlSec: 3_600 });
+  const { DB, db } = aiBudgetFixture();
+  const ai = makeAI(() => ({ image: b64(jpeg(1024, 1024)) }));
+  const env = { ...envWith(ai), DB };
+  const r = await run(env, { task: 'paraphrase', userId: 42, text: 'A lighthouse.', draw: {} });
+  assert.equal(r.ok, true);
+  const row = DB._rows.find((x) => x.guard_for == null);
+  assert.equal(row.charged_microusd, 634);
+  assert.deepEqual(JSON.parse(row.units_json), { tiles: 4, steps: 4, tokens_in: 0, tokens_out: 0 });
+  const held = db.prepare('SELECT included_microusd + topup_microusd AS held FROM ai_budget_reservations WHERE user_id = 42').get().held;
+  assert.ok(held >= 634, `held ${held}: at least the image's own cost, before the guard's share`);
+  const again = await run(env, { task: 'paraphrase', userId: 42, text: 'A lighthouse.', draw: {} });
+  assert.equal(ai.calls.length, 2, 'the second image is drawn again');
+  assert.equal(again.usage.cached, false);
 });

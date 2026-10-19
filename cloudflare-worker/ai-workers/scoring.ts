@@ -2,6 +2,7 @@
  * AI deal-flow scoring. Pure prompt → JSON.
  * Falls back to a deterministic stub if env.AI is unavailable.
  */
+import { systemRun } from './systemRun';
 import type { Env } from '../src/types';
 
 export interface ScoringInput {
@@ -41,7 +42,7 @@ function safeParse(text: string): Partial<ScoringOutput> {
 export async function aiScoreDeal(env: Env, input: ScoringInput): Promise<ScoringOutput> {
   let parsed: Partial<ScoringOutput> = {};
   try {
-    const resp: any = await (env as any).AI.run('@cf/meta/llama-3.1-8b-instruct', {
+    const resp: any = await systemRun(env, {
       messages: [
         { role: 'system', content: 'Output strict JSON. No markdown.' },
         { role: 'user', content: SCORING_PROMPT(input) },
