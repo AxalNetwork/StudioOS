@@ -10,7 +10,10 @@ the canvas's fourteen task `kind`s, its `handler` (`form`, `upload`, `draft`,
 
 | File | Profile |
 | --- | --- |
+| `founder.js` | Founder (D771, #2097). Its parity test is `frontend/test/railOptions_founder_d771.test.mjs`. |
 | `investor.js` | Investor, the 27 boards I1–I27 (D772, #2098). Its parity test is `frontend/test/rail_options_investor_d772.test.mjs`. |
+| `advisor.js` | Advisor (D773, #2099). Its parity test is `frontend/test/rail_options_d773.test.mjs`. |
+| `partner.js` | Operating partner (D773, #2099). Its parity test is `frontend/test/rail_options_d773.test.mjs`. |
 
 ## Rules
 

@@ -14,10 +14,11 @@ import { RequestSheet, useMovedNotice } from './AccountConnectors';
 import { connectionStatus, disconnectNote, isEntityRow, isPersonalMercury, keysHref, lastSyncLabel, moduleLabel, stripReturn } from './connectorsModel';
 import {
   DETAIL_MISSING, backHrefFor, bodyDetailsRows, detailsRows, headerTagline, interimPanel, keyHelpOf, keyPath, manageItems, modeLabel, pageAction,
-  pageChoices, pageEntry, pageNotice, pageReturn, pageTitle, toolGroups,
+  pageChoices, pageEntry, pageNotice, pageLanding, pageTitle, toolGroups,
 } from './connectorPageModel';
 import { isChannelKey } from './channelPageModel';
 import ChannelPage from './ChannelPage';
+import GithubRepositoriesSection from './GithubRepositoriesSection';
 import { notOfferedSentence } from './mercuryModel';
 import { MercuryEntityPageBody, MercuryLandsGroup, MercuryReadsGroup, MercuryUsesGroups } from './MercurySheet';
 import { useAuth } from '../../hooks/useAuthSync';
@@ -44,15 +45,21 @@ import { ZOOM_DISCONNECT_NOTE, ZOOM_SECTIONS, zoomHowItWorks, zoomNotices } from
  * "Manage ▾" (`manageItems`): Sync now, Replace key or Reconnect, and
  * Disconnect, which asks first in a centred dialog.
  *
- * NOTHING IS LOST WHILE THE WORK MOVES (decision 7). Until F4 and F5 take them
- * over, today's `ConnectorPanel` stays inline only for GitHub's repositories
- * and a member's own Mercury (`interimPanel`), through `SheetFrame`'s `page` layout: in the
+ * NOTHING IS LOST WHILE THE WORK MOVES (decision 7). Until F5 takes it
+ * over, today's `ConnectorPanel` stays inline only for a member's own
+ * Mercury (`interimPanel`), through `SheetFrame`'s `page` layout: in the
  * page's flow, no overlay, no dialog role, no × and no Escape of its own.
  *
  * A SIGN-IN COMES BACK HERE (decision 6). `connectorsRedirect` sends a return
  * naming this key to this page; the page reads it only when it names its own
  * key (never Mercury's, D715 decision 3), says what happened in the notice
  * region, and strips the query.
+ *
+ * GITHUB'S REPOSITORIES (#1957, F4). GitHub's page draws its repositories as
+ * its own Repositories section (`GithubRepositoriesSection`), in Your
+ * connection's provider slot, never the panel's sync view. Its sign-in and the GitHub App's
+ * Setup URL land on that section (`pageLanding`); the Setup URL's
+ * `installation_id` and `setup_action` are stripped and never drawn.
  *
  * The name is the page's one `<h1>` (decision 10): on desktop `SettingsPage`
  * draws no "Account" heading here, and on a phone `PhoneBar` draws it.
@@ -105,7 +112,8 @@ export function ConnectorPageView({ data, connectorKey, phone = false, branchAdm
 
   // The sign-in return, read once at mount, then stripped from the address.
   // An alias page reads nothing: the redirect carries the query to the real key's page.
-  const [returned] = useState(() => (entry.state === 'alias' ? null : pageReturn(location.search, connectorKey)));
+  // GitHub's return lands on its Repositories section, with the App's Setup URL query stripped too (#1957).
+  const [returned] = useState(() => (entry.state === 'alias' ? null : pageLanding(location.search, connectorKey)));
   useEffect(() => {
     if (!returned) return;
     navigate({ pathname: location.pathname, search: stripReturn(location.search, returned.strip), hash: location.hash }, { replace: true, state: location.state });
@@ -146,7 +154,7 @@ export function ConnectorPageView({ data, connectorKey, phone = false, branchAdm
   }
 
   return (
-    <ReadyPage key={p.key} p={p} back={back} phone={phone} ret={returned?.ret || null} moved={moved} onChanged={data.reload} connector={shownBody?.state === 'ready' ? shownBody.connector : null}>
+    <ReadyPage key={p.key} p={p} back={back} phone={phone} ret={returned?.ret || null} repositories={!!returned?.repositories} moved={moved} onChanged={data.reload} connector={shownBody?.state === 'ready' ? shownBody.connector : null}>
       {p.key === 'zoom' && <ZoomValidate p={p} />}
       {shownBody
         ? <ConnectorBody state={shownBody.state} connector={shownBody.connector} p={p} onRetry={retryBody} />
@@ -164,10 +172,10 @@ export function ConnectorPageView({ data, connectorKey, phone = false, branchAdm
  * The page once its connector is known: the band and its one action, the
  * notice, the inline key form, the connected half, then `children` (the body).
  */
-function ReadyPage({ p, back, phone, ret, moved, onChanged, children, connector = null }) {
+function ReadyPage({ p, back, phone, ret, moved, onChanged, children, connector = null, repositories = false }) {
   const auth = useAuth();
   const superAdmin = isSuperAdminUser(auth?.user);
-  // A return opens on what happened; GitHub's lands on choosing its repositories (the connected half).
+  // A return opens on what happened. GitHub's lands on its Repositories section instead (`pageLanding`, #1957).
   const [view, setView] = useState(() => (ret ? ret.view : 'idle'));
   const [flowRet, setFlowRet] = useState(ret || {});
   const setFlowView = (v) => { setFlowRet({}); setView(v); };
@@ -221,7 +229,7 @@ function ReadyPage({ p, back, phone, ret, moved, onChanged, children, connector 
           {!keyOpen && panelShown && <InlinePanel key={`${p.key}:${p.connection ? 'c' : 'n'}`} p={p} ret={view === 'sync' ? { view: 'sync' } : null} onChanged={onChanged} />}
         </section>
       )}
-      {p.connection && !panelShown && !entity && <YourConnection p={p} flow={flow} onChanged={onChanged} />}
+      {p.connection && !panelShown && !entity && <YourConnection p={p} flow={flow} onChanged={onChanged} repositories={repositories} />}
       {flow.confirming && (
         <Lightbox label={`Disconnect ${name}?`} title={`Disconnect ${name}?`} onClose={() => flow.setConfirming(false)} width={440} testId="connector-page-disconnect-dialog"
           footer={(
@@ -246,7 +254,7 @@ const ACCOUNT_MISSING = 'The service did not name the account this connection si
  * provider's own section, then the sheet's Companies, Now fed by, Settings
  * and Activity groups, which Build's lightbox draws too.
  */
-function YourConnection({ p, flow, onChanged }) {
+function YourConnection({ p, flow, onChanged, repositories = false }) {
   const conn = p.connection;
   const status = connectionStatus(conn, p);
   return (
@@ -271,7 +279,8 @@ function YourConnection({ p, flow, onChanged }) {
         )}
         {status.why && <p className="w-full text-[12.5px] text-amber-800 dark:text-amber-200" data-testid="connector-page-attention">{status.why}.</p>}
       </div>
-      {/* The provider's own section goes here: GitHub's repositories (F4), Mercury (F5), the channel cards (C1). */}
+      {/* The provider's own section goes here: GitHub's repositories (F4, #1957), Mercury (F5), the channel cards (C1). */}
+      {p.key === 'github' && <GithubRepositoriesSection p={p} focus={repositories} onChanged={onChanged} />}
       <div className="-mx-5">
         <CompaniesGroup conn={conn} onChanged={onChanged} />
         <FedGroup conn={conn} name={p.display_name} />
