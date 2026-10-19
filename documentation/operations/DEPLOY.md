@@ -282,6 +282,16 @@ to re-run it alone:
 npm run verify:live      # = node scripts/check-spa-live.mjs
 ```
 
+**A `WARN … OAuth connectors no client: …` line is not a failed deploy** (D751
+T9, #1921). Each host's `/api/health` lists every catalogue OAuth connector as
+`connectors_oauth: { <key>: true | false | null }`, and the smoke names each
+`false` (no client) or `null` (the readiness read failed) key in one WARN line
+and in the run summary. A connector named there cannot be connected until its
+client is set: the fix is the owner's keys, in the Integration keys admin page
+or as the env pair (for GitHub, #1008 item 33). The run fails only when the
+block is missing or malformed, or when it was dispatched with
+`connectors_strict` (`SMOKE_CONNECTORS_STRICT=1`).
+
 **`SKIP_LIVE_SMOKE=1` throws away the only evidence the deploy worked.** It
 exists for hosts with no network route to production. If you set it, the deploy
 is unverified until you check by other means — say so rather than reporting a

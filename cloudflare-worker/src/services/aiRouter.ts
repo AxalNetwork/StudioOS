@@ -34,6 +34,7 @@ import * as aiBudget from './aiBudget';
 import { audioInputFor, parseAudioOutput, type SttTranscript } from './sttFormats';
 import * as shapes from './ai/shapes';
 import * as catalogue from './ai/catalogue';
+import * as guard from './ai/guard';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -84,7 +85,15 @@ export type RefusalReason =
   // D760: a model the catalogue cannot price. Refused before it runs, because
   // a run billed at zero trips no cap.
   | 'model_unpriced'
-  | 'all_models_failed';
+  | 'all_models_failed'
+  // D763: the guard could not be reached, threw, or answered something it is
+  // not allowed to answer. Nothing runs (or, on the output side, nothing the
+  // model wrote is returned), and the hold is released.
+  | 'guard_unavailable'
+  // D763: the member's input is unsafe under the category policy.
+  | 'guard_blocked'
+  // D763: the model's output is unsafe; it is withheld.
+  | 'guard_blocked_output';
 
 export interface RunOptions {
   task: TaskClass;
@@ -140,6 +149,21 @@ export interface RunOptions {
   railPage?: string;
   railOption?: string;
   recordRef?: string;
+  // D763 (#2020): the text the MEMBER typed or supplied for this run (typed
+  // text, the page's text, an upload's text), which the guard checks in full
+  // before the model is called. Absent, it is every message the run sends
+  // except the system prompt (or `text`). A handler that puts rows gathered
+  // from the member's own store into the prompt passes only the member's
+  // words here, so those rows are not checked again; '' checks nothing.
+  guardText?: string;
+  // D763: 'mark' for the member's own material, such as a transcript or an
+  // upload's extracted text: an unsafe output verdict is logged and the text
+  // kept, and any run that later uses it is checked again on its input.
+  // Default 'withhold'. A transcription run is always 'mark'.
+  guardOutput?: 'withhold' | 'mark';
+  // D763: the member's role, so an S11 refusal links to Wellbeing only for a
+  // role that page opens for (`guard.refusalFor`).
+  role?: string | null;
 }
 
 /**
@@ -171,6 +195,8 @@ interface RunCharge {
   charged: number | null;
   reservationUid?: string | null;
   units?: Record<string, number> | null;
+  // D763: a guard row's run, `ai_usage_logs.guard_for`.
+  guardFor?: number | null;
 }
 const NOTHING_CHARGED: RunCharge = { charged: 0 };
 
@@ -215,6 +241,24 @@ export interface RunResult {
   // D761: the answering attempt's units, and every attempt in order. A3 (D762) settles on them.
   units?: shapes.Units;
   attempts?: AttemptRecord[];
+  // D763: what the guard decided. Absent on a run the guard skips.
+  guard?: GuardReport;
+}
+
+/**
+ * D763: the guard's part in one run. `input` and `output` are each side's
+ * combined decision (`none` where there was no text to check, or the run never
+ * got that far; `marked` is an unsafe verdict on the member's own material,
+ * kept). `codes` are the S-codes behind a block, a log or a mark, for the
+ * logs; `refusal` is the member's words when the run was refused, and never
+ * names a code.
+ */
+export interface GuardReport {
+  input: 'pass' | 'log' | 'block' | 'fail' | 'none';
+  output: 'pass' | 'log' | 'block' | 'fail' | 'none' | 'marked';
+  codes: guard.GuardCode[];
+  calls: number;
+  refusal?: guard.GuardRefusal;
 }
 
 // ---------------------------------------------------------------------------
@@ -863,14 +907,14 @@ async function addLogColumns493(env: Env): Promise<void> {
 }
 
 type UsageWho = Pick<RunOptions, 'userId' | 'surface' | 'railPage' | 'railOption' | 'recordRef'>;
-async function recordUsage(env: Env, who: UsageWho, usage: UsageMeta, refusal: RefusalReason | null, charge: RunCharge = NOTHING_CHARGED): Promise<void> {
+async function recordUsage(env: Env, who: UsageWho, usage: UsageMeta, refusal: RefusalReason | null, charge: RunCharge = NOTHING_CHARGED): Promise<number | null> {
   await ensureLogSchema(env);
   const charged = charge.charged == null ? null : Math.max(0, Math.round(charge.charged));
   // `surface` stays the last column bound, as it was before migration 493.
   const insert = () => env.DB.prepare(
     `INSERT INTO ai_usage_logs (user_id, task, model, latency_ms, prompt_tokens, completion_tokens, est_cost_usd, safety_score, fallback_used, cached, refusal,
-       charged_microusd, reservation_uid, rail_page, rail_option, record_ref, units_json, surface)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       charged_microusd, reservation_uid, rail_page, rail_option, record_ref, units_json, guard_for, surface)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).bind(
     who.userId,
     usage.task,
@@ -889,17 +933,24 @@ async function recordUsage(env: Env, who: UsageWho, usage: UsageMeta, refusal: R
     railKey(who.railOption),
     railKey(who.recordRef),
     charge.units ? JSON.stringify(charge.units) : null,
+    charge.guardFor ?? null,
     normaliseSurface(who.surface),
   ).run();
+  // The row's id, which a guard row names in `guard_for` (D763); null when it could not be written.
+  const idOf = (r: unknown): number | null => {
+    const id = Number((r as { meta?: { last_row_id?: unknown } } | null)?.meta?.last_row_id);
+    return Number.isSafeInteger(id) && id > 0 ? id : null;
+  };
   try {
-    try { await insert(); }
+    try { return idOf(await insert()); }
     catch (e) {
       if (!/no column named|no such column/i.test((e as Error).message)) throw e;
       await addLogColumns493(env);
-      await insert();
+      return idOf(await insert());
     }
   } catch (e) {
     console.warn('[aiRouter] recordUsage:', (e as Error).message);
+    return null;
   }
 }
 
@@ -1104,6 +1155,136 @@ function withTimeout(p: Promise<ProviderResult>, ms: number): Promise<ProviderRe
 }
 
 // ---------------------------------------------------------------------------
+// D763 (#2020): the guard inside a run
+// ---------------------------------------------------------------------------
+// Llama Guard 3 8B checks a run's input and output in full, slice by slice
+// (`./ai/guard.ts` holds the rules). It runs inside the run's own hold and
+// settles there: it never takes a hold of its own, and each call is logged as
+// a `safety` row whose `guard_for` is the run's row. A guard that cannot be
+// reached, throws, or answers anything but a verdict FAILS CLOSED.
+const GUARD_MODEL = '@cf/meta/llama-guard-3-8b';
+// Its answer is "safe", or "unsafe" and a line of codes.
+const GUARD_MAX_TOKENS = 16;
+// The quote's bounds. Each slice is wrapped in Llama Guard's own template
+// (the category list), which the provider counts as input; a token is at
+// least one character; the quote's output allowance per call is four times
+// what the call asks for, and an output token is taken as at most eight
+// characters. A guard that somehow used more than the quote leaves the run
+// for a Super Admin's review, like any other overrun (D640).
+const GUARD_TEMPLATE_TOKENS = 1_024;
+const GUARD_QUOTE_OUT_TOKENS = 4 * GUARD_MAX_TOKENS;
+const GUARD_CHARS_PER_OUTPUT_TOKEN = 8;
+// A transcript's length bound, for the quote of a transcription's output check.
+const TRANSCRIPT_CHARS_PER_MINUTE = 2_000;
+// How many slices are checked at once.
+const GUARD_CONCURRENCY = 4;
+// The user turn an output slice is checked under, so Llama Guard reads the
+// slice as the agent's reply.
+const GUARD_OUTPUT_TURN = 'Answer the member.';
+
+/** Whether the guard checks this run. It skips its own run, and system embeddings. */
+function guarded(opts: RunOptions): boolean {
+  if (opts.task === 'safety') return false;
+  return !(opts.userId <= 0 && opts.task === 'embed');
+}
+
+/** The input the guard checks: the caller's `guardText`, else every message the run sends but the system prompt. */
+function guardInputFor(opts: RunOptions): string {
+  if (opts.guardText != null) return String(opts.guardText);
+  if (ROUTE[opts.task]?.isAudio) return '';
+  if (opts.messages?.length) return opts.messages.filter((m) => m.role !== 'system').map((m) => m.content).join('\n\n');
+  return opts.text ?? '';
+}
+
+/** One guard call, as the run records it. `micro` is what it charges, 0 when it did not complete. */
+interface GuardCall { usage: UsageMeta; decision: guard.GuardDecision; micro: number }
+
+async function guardSlice(env: Env, opts: RunOptions, slice: string, side: 'input' | 'output'): Promise<GuardCall> {
+  const startedAt = Date.now();
+  const messages: shapes.ChatMessage[] = side === 'input'
+    ? [{ role: 'user', content: slice }]
+    : [{ role: 'user', content: GUARD_OUTPUT_TURN }, { role: 'assistant', content: slice }];
+  const ms = shapes.TIMEOUT_MS.chat;
+  const r = await withTimeout(callWorkersAI(env, GUARD_MODEL, {
+    task: 'safety', userId: opts.userId, surface: opts.surface, messages, maxTokens: GUARD_MAX_TOKENS, temperature: 0,
+  }, false, false, ms), ms);
+  const verdict = r.ok ? guard.parseVerdict(r.output) : { verdict: 'unreadable' as const };
+  const prompt = r.ok ? r.prompt_tokens || 0 : 0;
+  const completion = r.ok ? r.completion_tokens || 0 : 0;
+  const cost = r.ok ? estimateCostUsd(GUARD_MODEL, prompt, completion) : 0;
+  return {
+    usage: {
+      task: 'safety', model: GUARD_MODEL, latency_ms: Date.now() - startedAt,
+      prompt_tokens: prompt, completion_tokens: completion, est_cost_usd: cost,
+      fallback_used: false, cached: false,
+      safety_score: verdict.verdict === 'safe' ? 1 : verdict.verdict === 'unsafe' ? 0 : null,
+    },
+    // A call that did not complete is the guard failing, never a pass.
+    decision: r.ok ? guard.decide(verdict) : { action: 'fail' },
+    micro: r.ok ? aiBudget.usdToMicro(cost) : 0,
+  };
+}
+
+/**
+ * Check one text in full, `GUARD_CONCURRENCY` slices at a time, and stop at
+ * the first batch that blocks or fails. Every call is pushed onto `calls`.
+ */
+async function guardCheck(env: Env, opts: RunOptions, text: string, side: 'input' | 'output', calls: GuardCall[]): Promise<guard.GuardDecision> {
+  const slices = guard.sliceForGuard(text);
+  const decisions: guard.GuardDecision[] = [];
+  for (let i = 0; i < slices.length; i += GUARD_CONCURRENCY) {
+    const batch = await Promise.all(slices.slice(i, i + GUARD_CONCURRENCY).map((s) => guardSlice(env, opts, s, side)));
+    calls.push(...batch);
+    decisions.push(...batch.map((b) => b.decision));
+    const so = guard.combine(decisions);
+    if (so.action === 'fail' || so.action === 'block') return so;
+  }
+  return guard.combine(decisions);
+}
+
+/** The most slices `sliceForGuard` cuts from `chars` characters: two consecutive slices always cover a full window. */
+function guardSliceBound(chars: number): number {
+  return chars > 0 ? 2 * Math.ceil(chars / guard.GUARD_SLICE_CHARS) + 1 : 0;
+}
+
+/**
+ * The guard's share of a run's quote, in micro-USD: every input slice, and
+ * every output slice the run's maximum output allows, at the guard's rate
+ * (D762's: cost while `AI_BILLING` is unset). One micro-USD per call covers
+ * each call's own rounding up.
+ */
+export function guardQuoteMicro(inputText: string, maxOutputChars: number): number {
+  const inputSlices = guard.sliceForGuard(inputText);
+  const outputSlices = guardSliceBound(maxOutputChars);
+  const calls = inputSlices.length + outputSlices;
+  if (!calls) return 0;
+  const tokensIn = inputText.length + maxOutputChars + calls * GUARD_TEMPLATE_TOKENS;
+  return aiBudget.usdToMicro(estimateCostUsd(GUARD_MODEL, tokensIn, calls * GUARD_QUOTE_OUT_TOKENS)) + calls;
+}
+
+/** The guard rows, written after the run's own row so each names it in `guard_for`. */
+async function recordGuardCalls(env: Env, opts: RunOptions, calls: GuardCall[], runRowId: number | null, reservationUid: string | null): Promise<void> {
+  for (const call of calls) {
+    await recordUsage(env, opts, call.usage, null, {
+      charged: reservationUid ? call.micro : 0, reservationUid, guardFor: runRowId,
+      units: { tokens_in: call.usage.prompt_tokens, tokens_out: call.usage.completion_tokens },
+    });
+  }
+}
+
+/** The report a run returns, and the member's words when it was refused. */
+function guardReport(
+  input: GuardReport['input'], output: GuardReport['output'], decisions: guard.GuardDecision[], calls: number,
+  refused?: { where: 'input' | 'output' | 'unavailable'; role: string | null | undefined },
+): GuardReport {
+  const codes = [...new Set(decisions.flatMap((d) => ('codes' in d ? d.codes : [])))];
+  return {
+    input, output, codes, calls,
+    ...(refused ? { refusal: guard.refusalFor(refused.where, codes, refused.role) } : {}),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Public: run()
 // ---------------------------------------------------------------------------
 /**
@@ -1179,30 +1360,40 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
 
   const store = kv(env);
   const caps = budgetCaps(env);
+  // D763: whether the guard checks this run, and the input it checks.
+  const guardOn = guarded(opts);
+  const guardInput = guardOn ? guardInputFor(opts) : '';
 
   // ---- Cache lookup ----------------------------------------------------
   // Streaming requests bypass the cache (caching a stream would require
   // buffering the entire response, defeating the latency benefit).
-  if (store && route.cacheTtlSec && !opts.stream) {
+  //
+  // D763: a guarded run looks in the cache only after its input has passed
+  // the guard (below), so a cached answer never skips the input check. What
+  // the cache holds was checked on its output before it was written.
+  const cacheHit = async (): Promise<{ output?: string; embedding?: number[] } | null> => {
+    if (!store || !route.cacheTtlSec || opts.stream) return null;
     const ck = await cacheKeyFor(opts, primaryModel);
-    if (ck) {
-      try {
-        const hit = await store.get(ck, 'json') as { output?: string; embedding?: number[] } | null;
-        if (hit) {
-          const usage: UsageMeta = {
-            task: opts.task, model: primaryModel, latency_ms: Date.now() - startedAt,
-            prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0,
-            fallback_used: false, cached: true, safety_score: null,
-          };
-          await recordUsage(env, opts, usage, null);
-          return {
-            ok: true,
-            output: hit.output ?? '',
-            embedding: hit.embedding,
-            usage,
-          };
-        }
-      } catch { /* fall through to fresh call */ }
+    if (!ck) return null;
+    try { return await store.get(ck, 'json') as { output?: string; embedding?: number[] } | null; }
+    catch { return null; /* fall through to fresh call */ }
+  };
+  const cachedUsage = (): UsageMeta => ({
+    task: opts.task, model: primaryModel, latency_ms: Date.now() - startedAt,
+    prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0,
+    fallback_used: false, cached: true, safety_score: null,
+  });
+  if (!guardOn) {
+    const hit = await cacheHit();
+    if (hit) {
+      const usage = cachedUsage();
+      await recordUsage(env, opts, usage, null);
+      return {
+        ok: true,
+        output: hit.output ?? '',
+        embedding: hit.embedding,
+        usage,
+      };
     }
   }
 
@@ -1268,7 +1459,13 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
       if (!Number.isSafeInteger(outputBound) || outputBound < 1 || !Number.isFinite(opts.audioMinutes || 0) || (opts.audioMinutes || 0)<0) throw new Error('AI estimate unreadable');
       const models = [primaryModel,...(route.fallbackChain || [])];
       const quote = Math.max(...models.map(model=>estimateCostUsd(model,promptBound,outputBound,opts.audioMinutes || 0)));
-      const held = await aiBudget.reserveAiBudget(env,opts.userId,aiBudget.usdToMicro(quote));
+      // D763: the guard is held inside this hold, never in one of its own: every
+      // input slice, and every output slice the run's maximum output allows.
+      const outputChars = !guardOn || route.isEmbed ? 0
+        : route.isAudio ? Math.ceil((opts.audioMinutes || 0) * TRANSCRIPT_CHARS_PER_MINUTE)
+          : outputBound * GUARD_CHARS_PER_OUTPUT_TOKEN;
+      const guardQuote = guardOn ? guardQuoteMicro(guardInput, outputChars) : 0;
+      const held = await aiBudget.reserveAiBudget(env,opts.userId,aiBudget.usdToMicro(quote) + guardQuote);
       if (!held.ok) {
         const usage:UsageMeta={task:opts.task,model:primaryModel,latency_ms:0,prompt_tokens:0,completion_tokens:0,est_cost_usd:0,fallback_used:false,cached:false,safety_score:null};
         await recordUsage(env, opts, usage, held.refusal);
@@ -1279,6 +1476,86 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
       const usage:UsageMeta={task:opts.task,model:primaryModel,latency_ms:0,prompt_tokens:0,completion_tokens:0,est_cost_usd:0,fallback_used:false,cached:false,safety_score:null};
       await recordUsage(env, opts, usage, 'misconfigured');
       return {ok:false,refusal:'misconfigured',error:'Unreadable: your AI allowance and top-up balance could not be checked.',usage};
+    }
+  }
+
+  // ---- Settlement -----------------------------------------------------
+  // D763: every guard call that completed is charged under this run's hold,
+  // whatever the run's outcome; the guard rows are written after the run's own
+  // row, so each names it in `guard_for`.
+  const guardCalls: GuardCall[] = [];
+  const guardDecisions: guard.GuardDecision[] = [];
+  const guardMicro = () => guardCalls.reduce((s, c) => s + c.micro, 0);
+  const guardUsd = () => guardCalls.reduce((s, c) => s + c.usage.est_cost_usd, 0);
+  /**
+   * Settle the hold at `micro` and bump the KV spend buckets by `usd`. The hold
+   * and the buckets are both on cost while billing is (D762 §2). A hold that
+   * charged nothing for a run that did not answer is released as a refund.
+   * False when the settlement could not be written.
+   */
+  const settleHold = async (micro: number, usd: number, answered: boolean): Promise<boolean> => {
+    if (reservation) {
+      try { await aiBudget.settleAiReservation(env, reservation, micro, !answered && micro === 0); }
+      catch { return false; }
+    }
+    // ---- Bump KV spend buckets ------------------------------------------
+    // Post-bump: if the org monthly bucket just crossed the hard cap, flip
+    // the kill switch in the same code path so the overshoot window is at
+    // most one in-flight request per concurrent caller. The pre-check at
+    // the top of the next call will then refuse before invoking any model.
+    if (store && usd > 0) {
+      const dayKey    = `user:${opts.userId}:${todayKey()}`;
+      const monthKey_ = `user:${opts.userId}:${monthKey()}`;
+      const orgKey    = `org:${monthKey()}`;
+      const [, , orgTotal] = await Promise.all([
+        bumpSpend(store, dayKey,    usd, 2 * 86400),
+        bumpSpend(store, monthKey_, usd, 35 * 86400),
+        bumpSpend(store, orgKey,    usd, 35 * 86400),
+      ]);
+      if (orgTotal >= caps.orgMonth) {
+        await setKillSwitch(store, 35 * 86400);
+      }
+    }
+    return true;
+  };
+  const writeGuardRows = (runRowId: number | null) => recordGuardCalls(env, opts, guardCalls, runRowId, reservation?.uid ?? null);
+
+  // ---- D763: the input check ------------------------------------------
+  // After the hold, so a budget refusal is answered before `guard_unavailable`
+  // can be; before the model, so an unsafe or unchecked input runs nothing.
+  let inputAction: GuardReport['input'] = 'none';
+  if (guardOn && guardInput) {
+    const decided = await guardCheck(env, opts, guardInput, 'input', guardCalls);
+    guardDecisions.push(decided);
+    inputAction = decided.action;
+    if (decided.action === 'fail' || decided.action === 'block') {
+      const refusal: RefusalReason = decided.action === 'fail' ? 'guard_unavailable' : 'guard_blocked';
+      const report = guardReport(inputAction, 'none', guardDecisions, guardCalls.length,
+        { where: decided.action === 'fail' ? 'unavailable' : 'input', role: opts.role });
+      const usage: UsageMeta = {
+        task: opts.task, model: primaryModel, latency_ms: Date.now() - startedAt,
+        prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0,
+        fallback_used: false, cached: false, safety_score: null,
+      };
+      const settled = await settleHold(guardMicro(), guardUsd(), false);
+      const id = await recordUsage(env, opts, usage, settled ? refusal : 'misconfigured',
+        { charged: settled ? 0 : null, reservationUid: reservation?.uid ?? null });
+      await writeGuardRows(id);
+      if (!settled) return { ok: false, refusal: 'misconfigured', error: 'Unreadable: the AI allowance and top-up draw could not be recorded.', usage, guard: report };
+      return { ok: false, refusal, error: report.refusal?.message, usage, guard: report };
+    }
+  }
+  if (guardOn) {
+    const hit = await cacheHit();
+    if (hit) {
+      const usage = cachedUsage();
+      const settled = await settleHold(guardMicro(), guardUsd(), true);
+      const id = await recordUsage(env, opts, usage, settled ? null : 'misconfigured',
+        { charged: settled ? 0 : null, reservationUid: reservation?.uid ?? null });
+      await writeGuardRows(id);
+      const report = guardReport(inputAction, 'none', guardDecisions, guardCalls.length);
+      if (!settled) return { ok: false, refusal: 'misconfigured', error: 'Unreadable: the AI allowance and top-up draw could not be recorded.', usage, guard: report };
+      return { ok: true, output: hit.output ?? '', embedding: hit.embedding, usage, guard: report };
     }
   }
 
@@ -1387,40 +1664,23 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
     tokens_in: u.prompt_tokens, tokens_out: u.completion_tokens, ...(audioMinutes > 0 ? { audio_minutes: audioMinutes } : {}),
   });
   /**
-   * Settle the hold at the run's cost and bump the KV spend buckets. The hold
-   * and the buckets are both on cost while billing is (D762 §2). Returns what
-   * the log row records, or null when the settlement could not be written.
+   * Settle the hold at the run's cost and the guard's (D763), and bump the KV
+   * spend buckets. Returns what the run's own row records (the model's share;
+   * each guard row records its own), or null when the settlement could not be
+   * written.
    */
   const settle = async (u: UsageMeta, ok: boolean): Promise<RunCharge | null> => {
     const charged = ok ? aiBudget.usdToMicro(u.est_cost_usd) : 0;
-    if (reservation) {
-      try { await aiBudget.settleAiReservation(env, reservation, charged, !ok); }
-      catch { return null; }
-    }
-    // ---- Bump KV spend buckets ------------------------------------------
-    // Post-bump: if the org monthly bucket just crossed the hard cap, flip
-    // the kill switch in the same code path so the overshoot window is at
-    // most one in-flight request per concurrent caller. The pre-check at
-    // the top of the next call will then refuse before invoking any model.
-    if (ok && store && u.est_cost_usd > 0) {
-      const dayKey    = `user:${opts.userId}:${todayKey()}`;
-      const monthKey_ = `user:${opts.userId}:${monthKey()}`;
-      const orgKey    = `org:${monthKey()}`;
-      const [, , orgTotal] = await Promise.all([
-        bumpSpend(store, dayKey,    u.est_cost_usd, 2 * 86400),
-        bumpSpend(store, monthKey_, u.est_cost_usd, 35 * 86400),
-        bumpSpend(store, orgKey,    u.est_cost_usd, 35 * 86400),
-      ]);
-      if (orgTotal >= caps.orgMonth) {
-        await setKillSwitch(store, 35 * 86400);
-      }
-    }
+    if (!await settleHold(charged + guardMicro(), (ok ? u.est_cost_usd : 0) + guardUsd(), ok)) return null;
     // A run with no hold (a system run) charged nobody.
     return { charged: reservation ? charged : 0, reservationUid: reservation?.uid ?? null, units: unitsFor(u) };
   };
   // Settlement failed: a run that cost more than its hold now waits for a
   // Super Admin's decision, so what it charged is not known yet.
   const unsettled = (u: UsageMeta): RunCharge => ({ charged: null, reservationUid: reservation?.uid ?? null, units: unitsFor(u) });
+  // D763: an unsafe verdict on the member's own material marks it and is
+  // logged, and the text is kept; so is a guard that could not read it.
+  const marksOutput = opts.guardOutput === 'mark' || !!route.isAudio;
 
   // ---- A streamed run settles when its stream ends ----------------------
   // D762 §3: on the provider's final usage where the last chunk carries it,
@@ -1429,13 +1689,37 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
   // they were sent.
   if (attempt.ok && attempt.stream) {
     const promptEstimate = attempt.prompt_tokens || 0;
-    const metered = meterStream(attempt.stream, async (counted) => {
+    if (!guardOn) {
+      const metered = meterStream(attempt.stream, async (counted) => {
+        const u = usageFor(counted.prompt_tokens ?? promptEstimate, counted.completion_tokens, null);
+        const charge = await settle(u, true);
+        if (!charge) await recordUsage(env, opts, u, 'misconfigured', unsettled(u));
+        else await recordUsage(env, opts, u, null, charge);
+      });
+      return { ok: true, stream: metered, usage: usageFor(promptEstimate, 0, null), units: attempt.units, attempts };
+    }
+    // D763: the Worker releases the text one checked slice at a time, so no
+    // unchecked text reaches the reader and "withheld" is true. The model's
+    // whole output is metered, released or not: the model ran.
+    let counted: MeteredUsage = { completion_tokens: 0, source: 'counted' };
+    const metered = meterStream(attempt.stream, async (c) => { counted = c; });
+    const released = releaseChecked(metered, async (slice) => {
+      const decided = await guardCheck(env, opts, slice, 'output', guardCalls);
+      guardDecisions.push(decided);
+      if (marksOutput && decided.action === 'block') return { action: 'log', codes: decided.codes };
+      return marksOutput && decided.action === 'fail' ? { action: 'pass' } : decided;
+    }, async (end) => {
       const u = usageFor(counted.prompt_tokens ?? promptEstimate, counted.completion_tokens, null);
       const charge = await settle(u, true);
-      if (!charge) await recordUsage(env, opts, u, 'misconfigured', unsettled(u));
-      else await recordUsage(env, opts, u, null, charge);
-    });
-    return { ok: true, stream: metered, usage: usageFor(promptEstimate, 0, null), units: attempt.units, attempts };
+      const refusal: RefusalReason | null = end === 'block' ? 'guard_blocked_output' : end === 'fail' ? 'guard_unavailable' : null;
+      const id = !charge ? await recordUsage(env, opts, u, 'misconfigured', unsettled(u)) : await recordUsage(env, opts, u, refusal, charge);
+      await writeGuardRows(id);
+    }, (end) => guard.refusalFor(end === 'block' ? 'output' : 'unavailable',
+      [...new Set(guardDecisions.flatMap((d) => ('codes' in d ? d.codes : [])))], opts.role));
+    return {
+      ok: true, stream: released, usage: usageFor(promptEstimate, 0, null), units: attempt.units, attempts,
+      guard: guardReport(inputAction, 'none', guardDecisions, guardCalls.length),
+    };
   }
 
   const promptTok = attempt.prompt_tokens || 0;
@@ -1454,17 +1738,40 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
     else if (firstLine === 'unsafe') safetyScore = 0;
   }
 
+  // ---- D763: the output check -----------------------------------------
+  // Every text output, in full, before it is returned or stored. An embedding
+  // has no text to check; an image run's text output is checked, and its image
+  // is not (D763.md: a text guard cannot read an image).
+  let outputAction: GuardReport['output'] = 'none';
+  if (guardOn && attempt.ok && !route.isEmbed && attempt.output) {
+    const decided = await guardCheck(env, opts, attempt.output, 'output', guardCalls);
+    guardDecisions.push(decided);
+    outputAction = marksOutput && decided.action === 'block' ? 'marked' : decided.action;
+  }
+  const withheld = outputAction === 'block' || (outputAction === 'fail' && !marksOutput);
+
   const usage = usageFor(promptTok, completionTok, safetyScore);
 
   const charge = await settle(usage, attempt.ok);
+  const report = guardOn
+    ? guardReport(inputAction, outputAction, guardDecisions, guardCalls.length,
+      withheld ? { where: outputAction === 'block' ? 'output' : 'unavailable', role: opts.role } : undefined)
+    : undefined;
   if (!charge) {
-    await recordUsage(env, opts, usage, 'misconfigured', unsettled(usage));
-    return {ok:false,refusal:'misconfigured',error:'Unreadable: the AI allowance and top-up draw could not be recorded.',usage};
+    await writeGuardRows(await recordUsage(env, opts, usage, 'misconfigured', unsettled(usage)));
+    return {ok:false,refusal:'misconfigured',error:'Unreadable: the AI allowance and top-up draw could not be recorded.',usage, ...(report ? { guard: report } : {})};
   }
 
   if (!attempt.ok) {
-    await recordUsage(env, opts, usage, 'all_models_failed', charge);
-    return { ok: false, refusal: 'all_models_failed', error: lastError || 'provider failed', usage, attempts };
+    await writeGuardRows(await recordUsage(env, opts, usage, 'all_models_failed', charge));
+    return { ok: false, refusal: 'all_models_failed', error: lastError || 'provider failed', usage, attempts, ...(report ? { guard: report } : {}) };
+  }
+
+  // D763: the output is withheld. The guard and the model both ran, and both are charged.
+  if (withheld) {
+    const refusal: RefusalReason = outputAction === 'block' ? 'guard_blocked_output' : 'guard_unavailable';
+    await writeGuardRows(await recordUsage(env, opts, usage, refusal, charge));
+    return { ok: false, refusal, error: report?.refusal?.message, usage, units: attempt.units, attempts, guard: report };
   }
 
   // ---- Cache write -----------------------------------------------------
@@ -1489,7 +1796,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
     }
   }
 
-  await recordUsage(env, opts, usage, null, charge);
+  await writeGuardRows(await recordUsage(env, opts, usage, null, charge));
 
   return {
     ok: true,
@@ -1500,6 +1807,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
     usage,
     units: attempt.units,
     attempts,
+    ...(report ? { guard: report } : {}),
   };
 }
 
@@ -1574,6 +1882,108 @@ export function meterStream(source: ReadableStream, onDone: (u: MeteredUsage) =>
       feed(undefined, true);
       await finish();
       await reader.cancel(reason);
+    },
+  });
+}
+
+/** How a checked stream ended: its last slice released, a slice refused, or the reader gone. */
+export type CheckedStreamEnd = 'pass' | 'block' | 'fail' | 'cancelled' | 'error';
+
+/**
+ * D763: release a Workers AI SSE stream one CHECKED slice at a time. The
+ * source's `response` text is gathered; each slice `guard.sliceForGuard` cuts
+ * from it is released, as one `data: {"response": …}` event, only after
+ * `check` has passed or logged it; text after the last full slice waits for
+ * the source to end. A slice that blocks or fails ends the stream with one
+ * `data: {"refusal": …, "message": …}` event and `[DONE]`, the source is
+ * cancelled, and nothing after the refused slice is ever sent. Unchecked text
+ * never reaches the reader.
+ *
+ * `onEnd` runs once, when the stream ends for any reason, after the source
+ * has finished (so a metered source has counted what it read) and before the
+ * stream closes. A failure in it is logged, never thrown at the reader.
+ *
+ * The Worker reads ahead of the reader by up to a slice, to check it, so a
+ * run whose reader stops early is settled on what the model produced and the
+ * Worker read: the model ran that far, and Workers AI charged for it.
+ */
+export function releaseChecked(
+  source: ReadableStream,
+  check: (slice: string) => Promise<guard.GuardDecision>,
+  onEnd: (end: CheckedStreamEnd) => Promise<void>,
+  refusal: (end: 'block' | 'fail') => guard.GuardRefusal,
+): ReadableStream {
+  const reader = source.getReader();
+  const decoder = new TextDecoder();
+  const encoder = new TextEncoder();
+  let lines = '';
+  let pending = '';
+  let sourceDone = false;
+  let ended = false;
+  const event = (data: unknown) => encoder.encode(`data: ${typeof data === 'string' ? data : JSON.stringify(data)}\n\n`);
+  const readLines = (chunk: string, last: boolean) => {
+    lines += chunk;
+    const parts = lines.split('\n');
+    lines = last ? '' : parts.pop() ?? '';
+    for (const line of parts) {
+      const m = /^data:\s*(.*)$/.exec(line.trim());
+      if (!m || m[1] === '[DONE]') continue;
+      try {
+        const chunk = JSON.parse(m[1]) as { response?: unknown };
+        if (typeof chunk.response === 'string') pending += chunk.response;
+      } catch { /* a line that is not JSON carries no text */ }
+    }
+  };
+  const end = async (how: CheckedStreamEnd) => {
+    if (ended) return;
+    ended = true;
+    try { await onEnd(how); }
+    catch (e) { console.warn('[aiRouter] checked stream settlement:', (e as Error).message); }
+  };
+  return new ReadableStream({
+    async pull(controller) {
+      for (;;) {
+        // The slices ready to check: every full one while the source runs, all of it once it has ended.
+        const cut = pending ? guard.sliceForGuard(pending) : [];
+        const ready = sourceDone ? cut : pending.length > guard.GUARD_SLICE_CHARS ? cut.slice(0, -1) : [];
+        if (ready.length) {
+          for (const slice of ready) {
+            const decided = await check(slice);
+            if (decided.action === 'block' || decided.action === 'fail') {
+              const r = refusal(decided.action);
+              controller.enqueue(event({ refusal: decided.action === 'block' ? 'guard_blocked_output' : 'guard_unavailable', message: r.message, link: r.link }));
+              controller.enqueue(event('[DONE]'));
+              if (!sourceDone) await reader.cancel().catch(() => {});
+              // Settled before the stream closes, as `meterStream` does.
+              await end(decided.action);
+              controller.close();
+              return;
+            }
+            pending = pending.slice(slice.length);
+            controller.enqueue(event({ response: slice }));
+          }
+          return;
+        }
+        if (sourceDone) {
+          controller.enqueue(event('[DONE]'));
+          await end('pass');
+          controller.close();
+          return;
+        }
+        let next: ReadableStreamReadResult<Uint8Array>;
+        try { next = await reader.read(); }
+        catch (e) { await end('error'); controller.error(e); return; }
+        if (next.done) {
+          readLines(decoder.decode(), true);
+          sourceDone = true;
+          continue;
+        }
+        readLines(decoder.decode(next.value, { stream: true }), false);
+      }
+    },
+    async cancel(reason) {
+      if (!sourceDone) await reader.cancel(reason).catch(() => {});
+      await end('cancelled');
     },
   });
 }
@@ -1684,7 +2094,30 @@ export type GuardrailCounters = {
       unclassified: number;
     }
     | { available: false; reason: string };
+  /**
+   * D763: the guard inside `run()`, per page (`rail_page`) and for today. A
+   * verdict is a guard row (`guard_for` set); what it caused is its run's
+   * refusal. `page` is '' for a run asked from no rail page.
+   */
+  guard:
+    | {
+      available: true;
+      today: GuardCounts;
+      by_page: Array<GuardCounts & { page: string }>;
+    }
+    | { available: false; reason: string };
 };
+
+/** The guard's verdicts, and what they caused, over a set of runs (D763). */
+export interface GuardCounts {
+  checks: number;
+  safe: number;
+  unsafe: number;
+  unreadable: number;
+  blocked_input: number;
+  withheld_output: number;
+  unavailable: number;
+}
 
 export async function loadGuardrailCounters(env: Env, days = 7): Promise<GuardrailCounters> {
   await ensureLogSchema(env);
@@ -1732,6 +2165,35 @@ export async function loadGuardrailCounters(env: Env, days = 7): Promise<Guardra
     turns: Number(r.turns || 0),
   }));
 
+  // D763: one pass over the window, grouped by page; `today` is the same sums
+  // over today's rows. A guard row is a verdict; a run row's refusal is what
+  // it caused.
+  const guardRows = await env.DB.prepare(
+    `SELECT COALESCE(rail_page, '') AS page, (created_at >= ?) AS today,
+        SUM(CASE WHEN guard_for IS NOT NULL THEN 1 ELSE 0 END) AS checks,
+        SUM(CASE WHEN guard_for IS NOT NULL AND safety_score >= 0.5 THEN 1 ELSE 0 END) AS safe,
+        SUM(CASE WHEN guard_for IS NOT NULL AND safety_score < 0.5 THEN 1 ELSE 0 END) AS unsafe,
+        SUM(CASE WHEN guard_for IS NOT NULL AND safety_score IS NULL THEN 1 ELSE 0 END) AS unreadable,
+        SUM(CASE WHEN refusal = 'guard_blocked' THEN 1 ELSE 0 END) AS blocked_input,
+        SUM(CASE WHEN refusal = 'guard_blocked_output' THEN 1 ELSE 0 END) AS withheld_output,
+        SUM(CASE WHEN refusal = 'guard_unavailable' THEN 1 ELSE 0 END) AS unavailable
+       FROM ai_usage_logs
+      WHERE created_at >= ? AND (guard_for IS NOT NULL OR refusal IN ('guard_blocked', 'guard_blocked_output', 'guard_unavailable'))
+      GROUP BY COALESCE(rail_page, ''), (created_at >= ?)`,
+  ).bind(todayStart(), since, todayStart()).all<Record<string, unknown>>()
+    .catch(() => undefined);
+  const GUARD_KEYS = ['checks', 'safe', 'unsafe', 'unreadable', 'blocked_input', 'withheld_output', 'unavailable'] as const;
+  const zero = (): GuardCounts => ({ checks: 0, safe: 0, unsafe: 0, unreadable: 0, blocked_input: 0, withheld_output: 0, unavailable: 0 });
+  const add = (into: GuardCounts, r: Record<string, unknown>) => { for (const k of GUARD_KEYS) into[k] += Number(r[k] || 0); };
+  const today = zero();
+  const pages = new Map<string, GuardCounts>();
+  for (const r of guardRows?.results ?? []) {
+    const page = String(r.page ?? '');
+    if (!pages.has(page)) pages.set(page, zero());
+    add(pages.get(page)!, r);
+    if (Number(r.today) === 1) add(today, r);
+  }
+
   const evaluated = Number(safety?.evaluated || 0);
   return {
     window_days: win,
@@ -1763,7 +2225,25 @@ export async function loadGuardrailCounters(env: Env, days = 7): Promise<Guardra
         states: catRows.filter((r) => r.category !== '' && !isRule(r.category)),
         unclassified: catRows.find((r) => r.category === '')?.turns ?? 0,
       },
+    guard: guardRows === undefined
+      ? {
+        available: false,
+        reason: 'The guard rollup over `ai_usage_logs` did not complete (migration 493). That is not '
+          + 'the same as no run having been checked.',
+      }
+      : {
+        available: true,
+        today,
+        by_page: [...pages.entries()]
+          .map(([page, counts]) => ({ page, ...counts }))
+          .sort((a, b) => b.checks - a.checks || a.page.localeCompare(b.page)),
+      },
   };
+}
+
+/** The start of today (UTC), in `ai_usage_logs.created_at`'s own format. */
+function todayStart(): string {
+  return `${todayKey()} 00:00:00`;
 }
 
 export async function loadAiUsageReport(env: Env, days = 7): Promise<AiUsageReport> {

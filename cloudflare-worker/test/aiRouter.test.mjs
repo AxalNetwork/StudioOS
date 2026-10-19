@@ -13,6 +13,7 @@
 import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
+import { withGuard } from './_guard_stub.mjs';
 
 /**
  * D760 (#2017) — the router is imported as itself, through `_ts-loader` (the
@@ -52,6 +53,8 @@ function makeKV() {
 // In-memory D1 stub — only handles the statements aiRouter.ts emits.
 // --------------------------------------------------------------------------
 function makeDB() { return aiBudgetFixture().DB; }
+// D763: the run's own rows, without the guard's (`task = 'safety'`, written after them).
+const runRows = (db) => db._rows.filter((r) => r.task !== 'safety');
 
 // --------------------------------------------------------------------------
 // Workers AI stub. `responses` is an array of { fn(model, payload) → result }.
@@ -72,9 +75,11 @@ function makeAI(responses) {
   };
 }
 
-function baseEnv({ ai, kv, db, budgets = {} }) {
+// D763: the guard checks every member run and fails closed, so the stub
+// answers it (free) unless a test says `guard: false` to see every call itself.
+function baseEnv({ ai, kv, db, budgets = {}, guard = true }) {
   return {
-    AI: ai,
+    AI: guard && ai ? withGuard(ai) : ai,
     AI_SPEND: kv,
     DB: db,
     WORKERS_AI_BUDGET_USD_DAY: budgets.day,
@@ -122,9 +127,9 @@ test('primary 5xx triggers smaller-model fallback (one hop)', async () => {
   assert.equal(ai.calls[0].model, '@cf/qwen/qwen2.5-coder-32b-instruct');
   assert.equal(ai.calls[1].model, '@cf/meta/llama-3.3-70b-instruct-fp8-fast');
   assert.equal(result.output, 'fallback answer');
-  assert.equal(db._rows.length, 1);
-  assert.equal(db._rows[0].fallback_used, 1);
-  assert.equal(db._rows[0].refusal, null);
+  assert.equal(runRows(db).length, 1);
+  assert.equal(runRows(db)[0].fallback_used, 1);
+  assert.equal(runRows(db)[0].refusal, null);
 });
 
 // Spec step 3: multi-hop fallback "tool_call → advisor_turn → role_detect"
@@ -193,8 +198,8 @@ test('advisor_turn retries un-gatewayed when the advisor gateway is broken', asy
   assert.equal(ai.calls[0].gatewayed, true);
   assert.equal(ai.calls[1].gatewayed, false);
   assert.equal(ai.calls[0].model, ai.calls[1].model);
-  assert.equal(db._rows.length, 1);
-  assert.equal(db._rows[0].refusal, null);
+  assert.equal(runRows(db).length, 1);
+  assert.equal(runRows(db)[0].refusal, null);
 });
 
 test('advisor_turn uses the gateway and does NOT double-call when it is healthy', async () => {
@@ -236,8 +241,8 @@ test('budget exhaustion returns refusal without calling model', async () => {
   assert.equal(result.refusal, 'budget_user_day');
   assert.equal(ai.calls.length, 0, 'model must not be invoked when over budget');
   // refusal is logged
-  assert.equal(db._rows.length, 1);
-  assert.equal(db._rows[0].refusal, 'budget_user_day');
+  assert.equal(runRows(db).length, 1);
+  assert.equal(runRows(db)[0].refusal, 'budget_user_day');
 });
 
 // --------------------------------------------------------------------------
@@ -268,9 +273,9 @@ test('embedding cache hit on second identical input', async () => {
   assert.equal(ai.calls.length, 1, 'embed must not re-call the model on cache hit');
 
   // Two log rows: one fresh, one cached.
-  assert.equal(db._rows.length, 2);
-  assert.equal(db._rows[0].cached, 0);
-  assert.equal(db._rows[1].cached, 1);
+  assert.equal(runRows(db).length, 2);
+  assert.equal(runRows(db)[0].cached, 0);
+  assert.equal(runRows(db)[1].cached, 1);
 });
 
 // --------------------------------------------------------------------------
@@ -309,7 +314,7 @@ test('a model on the task\'s list is the one that runs', async () => {
   const expected = (9 / 1e6) * 0.051 + (3 / 1e6) * 0.335;
   assert.ok(Math.abs(r.usage.est_cost_usd - expected) < 1e-12,
     `cost ${r.usage.est_cost_usd} is not the 3b's rate (${expected})`);
-  assert.equal(db._rows[0].model, '@cf/meta/llama-3.2-3b-instruct');
+  assert.equal(runRows(db)[0].model, '@cf/meta/llama-3.2-3b-instruct');
 });
 
 test('a model NOT on the list never reaches env.AI.run', async () => {
@@ -333,9 +338,9 @@ test('a model NOT on the list never reaches env.AI.run', async () => {
   // would return ok:true here, and a founder would read the 3b's rate beside a
   // 70b's answer.
   assert.ok(!r.output, 'a refusal must carry no output');
-  assert.equal(db._rows.length, 1, 'a refusal is still a recorded event');
-  assert.equal(db._rows[0].refusal, 'model_not_offered');
-  assert.equal(db._rows[0].est_cost_usd, 0);
+  assert.equal(runRows(db).length, 1, 'a refusal is still a recorded event');
+  assert.equal(runRows(db)[0].refusal, 'model_not_offered');
+  assert.equal(runRows(db)[0].est_cost_usd, 0);
 });
 
 test('safety cannot be routed off the guard model, by any request', async () => {
@@ -350,7 +355,7 @@ test('safety cannot be routed off the guard model, by any request', async () => 
   ]) {
     __resetForTest();
     const ai = makeAI([() => ({ response: 'safe', usage: {} })]);
-    const env = baseEnv({ ai, kv: makeKV(), db: makeDB() });
+    const env = baseEnv({ ai, kv: makeKV(), db: makeDB(), guard: false });
     const r = await run(env, { task: 'safety', userId: 1, model: attempt, text: 'check me' });
     assert.equal(r.refusal, 'model_not_offered', `${attempt} was accepted for task=safety`);
     assert.equal(ai.calls.length, 0);
@@ -360,7 +365,7 @@ test('safety cannot be routed off the guard model, by any request', async () => 
   // "no override", not "no safety calls".
   __resetForTest();
   const ai = makeAI([() => ({ response: 'safe', usage: { prompt_tokens: 4, completion_tokens: 1 } })]);
-  const env = baseEnv({ ai, kv: makeKV(), db: makeDB() });
+  const env = baseEnv({ ai, kv: makeKV(), db: makeDB(), guard: false });
   const ok = await run(env, { task: 'safety', userId: 1, text: 'check me' });
   assert.equal(ok.ok, true);
   assert.equal(ai.calls[0].model, '@cf/meta/llama-guard-3-8b');

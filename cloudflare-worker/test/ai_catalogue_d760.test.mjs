@@ -29,6 +29,7 @@ import {
 import ai, { rateCard } from '../src/routes/ai.ts';
 import { createJWT } from '../src/auth.ts';
 import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
+import { withGuard } from './_guard_stub.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURE = JSON.parse(readFileSync(resolve(__dirname, 'fixtures/workers_ai_catalogue.json'), 'utf8'));
@@ -219,9 +220,10 @@ test('every model ROUTE can reach is priced and offered with no owner switch set
 function routerEnv(ai) {
   return { AI: ai, DB: aiBudgetFixture().DB };
 }
+/** A Workers AI stub that records the models called; D763's guard answers safe and is not recorded. */
 function makeAI() {
   const calls = [];
-  return { calls, async run(model) { calls.push(model); return { response: 'ok', usage: { prompt_tokens: 1, completion_tokens: 1 } }; } };
+  return withGuard({ calls, async run(model) { calls.push(model); return { response: 'ok', usage: { prompt_tokens: 1, completion_tokens: 1 } }; } });
 }
 
 /** Run `tool_call` with its fallback chain swapped for one model, then put it back. */

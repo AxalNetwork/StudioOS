@@ -18,6 +18,7 @@ import { readFileSync } from 'node:fs';
 import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
 import { run, ROUTE, __resetForTest } from '../src/services/aiRouter.ts';
 import * as shapes from '../src/services/ai/shapes.ts';
+import { withGuard } from './_guard_stub.mjs';
 
 const MID = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 const SMALL = '@cf/meta/llama-3.1-8b-instruct-fp8';
@@ -39,7 +40,8 @@ function makeAI(handler) {
     async run(model, payload, options) { calls.push({ model, payload, options }); return handler(model, payload, calls.length); },
   };
 }
-const envWith = (ai, extra = {}) => ({ AI: ai, AI_SPEND: makeKV(), DB: aiBudgetFixture().DB, ...extra });
+// D763: the guard answers free, so `ai.calls` stays the router's own attempts.
+const envWith = (ai, extra = {}) => ({ AI: withGuard(ai), AI_SPEND: makeKV(), DB: aiBudgetFixture().DB, ...extra });
 const ok = (text = 'An answer.', usage = { prompt_tokens: 11, completion_tokens: 5 }) => ({ response: text, usage });
 const failWith = (message, status) => { const e = new Error(message); if (status) e.status = status; throw e; };
 /** Let pending promise work run between mocked-timer ticks. */
@@ -156,7 +158,7 @@ test('a streamed run gets the same limit for its first chunk, and falls back whe
   t.mock.timers.enable({ apis: ['setTimeout'] });
   let cancelled = false;
   const silent = () => new ReadableStream({ pull() { return new Promise(() => {}); }, cancel() { cancelled = true; } });
-  const talks = () => new ReadableStream({ start(c) { c.enqueue(new TextEncoder().encode('data: hi\n\n')); c.close(); } });
+  const talks = () => new ReadableStream({ start(c) { c.enqueue(new TextEncoder().encode('data: {"response":"hi"}\n\n')); c.close(); } });
   const ai = makeAI((model) => (model === MID ? silent() : talks()));
   const pending = run(envWith(ai), { task: 'paraphrase', userId: 0, messages: ask, stream: true });
   await flush(); t.mock.timers.tick(8_000); await flush();
@@ -166,7 +168,8 @@ test('a streamed run gets the same limit for its first chunk, and falls back whe
   assert.equal(r.attempts[0].status, 504);
   assert.equal(cancelled, true, 'the silent stream was cancelled');
   const text = await new Response(r.stream).text();
-  assert.equal(text, 'data: hi\n\n', 'the first chunk is replayed, then the rest');
+  // D763: the text is released once the guard has checked it, as Workers AI's own event shape.
+  assert.equal(text, 'data: {"response":"hi"}\n\ndata: [DONE]\n\n', 'the first chunk is replayed, then the rest');
 });
 
 // ─────────────────────────────────────────────────────────── fallbacks
