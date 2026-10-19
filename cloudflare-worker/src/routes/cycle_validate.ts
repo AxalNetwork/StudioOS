@@ -11,6 +11,8 @@
  *     → { module, card: Card, records: { cols, rows, total, page, page_size, filters, sorts, linkable }, parts }
  *       (D690 decisions 10 and 16: the canvas's filters and sorts, and `parts`,
  *       what the bottom sections draw, each part under its own store's gate)
+ *       `parts.suggestions` (D757 §2.7, #1925): a writer's pending interview
+ *       suggestions for this module, each linked to its line on the session page
  *
  * The reads are `services/cycleValidate.ts`; the shapes and the five states
  * are `services/cycleCards.ts`. Every write below calls the one writer in
@@ -44,6 +46,7 @@ import {
   createHypothesis, updateHypothesis,
 } from '../services/validateWriters';
 import { ownedRow } from '../services/records/owned';
+import { moduleSuggestions } from '../services/interviewSuggestions';
 import type { Store } from '../services/records/types';
 
 const cycleValidate = new Hono<{ Bindings: Env }>();
@@ -133,6 +136,17 @@ cycleValidate.get('/modules/:slug', async (c) => {
   } catch (e) {
     console.warn('[cycle_validate] records unreadable:', slug, (e as Error)?.message);
     records = { state: 'unreadable', reason: `${mod.name} records could not be read`, cols: [], rows: [], total: null, page: rq.page, page_size: null };
+  }
+  // D757 §2.7 (#1925): the module's pending interview suggestions, for
+  // writers only; a reader gets no `suggestions` key at all. Unreadable is
+  // null, never an empty list.
+  if (writer) {
+    try {
+      parts = { ...parts, suggestions: await moduleSuggestions(c.env, s.projectId, slug) };
+    } catch (e) {
+      console.warn('[cycle_validate] suggestions unreadable:', slug, (e as Error)?.message);
+      parts = { ...parts, suggestions: null };
+    }
   }
   return c.json({ module: { slug: mod.slug, name: mod.name, records_title: (mod as { records_title?: string }).records_title ?? null }, card,
     records: { ...records, linkable: hasRecords('validate') }, parts: { can_write: writer, ...parts },

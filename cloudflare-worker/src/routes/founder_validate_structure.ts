@@ -11,6 +11,10 @@
  *                                   every answer citing its passage
  *   POST /placements/:id/accept     accept, or edit then accept ({ payload })
  *   POST /placements/:id/discard    discard; nothing is written anywhere
+ *   POST /sessions/:id/placements/accept
+ *                                   Accept all ({ slug } or { ids }, at most
+ *                                   50): each placement's own claim and writer,
+ *                                   every outcome reported (D757 §2.7)
  *
  * Every model call reserves and settles the D640 budget inside `aiRouter.run`
  * and leaves one line in `interview_structure_receipts`, which
@@ -49,12 +53,14 @@ import {
 import { updateInterviewDetails } from '../services/interviewWriters';
 import { INTERVIEW_FIELDS, isFindingKind } from '../services/interviewFindings';
 import { budgetRefusalMessage } from '../services/aiRouter';
+import { MODULES } from '../services/cycleValidate';
 import { consentBlocks, loadSession, sessionHasAudio, type SessionRow } from '../services/interviewSessions';
 import {
   PLACEMENT_KINDS,
   alignRuns,
   askTranscript,
   isPlacementKind,
+  placementSlug,
   toSegments,
   type Placement,
   type PlacementKind,
@@ -163,12 +169,13 @@ export async function storePlacements(
   return { stored: placements.length, deduped };
 }
 
+const PLACEMENT_COLUMNS = `id, project_id, kind, payload_json, edited_payload_json, status, run_id, target_ref, session_id,
+            cite_from, cite_to, citation_json`;
+
 async function loadPlacement(env: Env, id: number): Promise<PlacementRow | null> {
   if (!Number.isInteger(id) || id <= 0) return null;
   return (await env.DB.prepare(
-    `SELECT id, project_id, kind, payload_json, edited_payload_json, status, run_id, target_ref, session_id,
-            cite_from, cite_to, citation_json
-       FROM validate_proposals WHERE id = ? AND run_id IS NOT NULL`,
+    `SELECT ${PLACEMENT_COLUMNS} FROM validate_proposals WHERE id = ? AND run_id IS NOT NULL`,
   ).bind(id).first<PlacementRow>()) || null;
 }
 
@@ -297,56 +304,70 @@ async function applyPlacement(
   }
 }
 
+/**
+ * Accept one placement: its claim (`WHERE id = ? AND status = 'pending'`),
+ * then its module's writer; a failure puts it back to pending. `edit` is the
+ * founder's edited payload, validated as strictly as the model's own. The one
+ * code path for Accept and for Accept all (D757 §2.7): what it returns is the
+ * single route's status and body.
+ */
+async function acceptPlacement(
+  env: Env, user: User, row: PlacementRow, edit: unknown,
+): Promise<{ status: number; body: Record<string, unknown> }> {
+  if (!isPlacementKind(row.kind)) return { status: 409, body: { error: 'unknown_kind', detail: 'This placement can no longer be applied.' } };
+  const kind = row.kind;
+  const spec = PLACEMENT_KINDS[kind];
+  if (!spec.writer) {
+    return {
+      status: 409,
+      body: { error: 'writer_not_available', detail: 'This module cannot take a placement yet. It stays proposed until its store is built.' },
+    };
+  }
+  if (row.status !== 'pending') return { status: 409, body: { error: 'not_pending', detail: 'This placement was already decided.' } };
+
+  // EDIT THEN ACCEPT. The edit is validated as strictly as the model's own
+  // payload was, against this project's rows; the model's payload is kept.
+  let edited: Record<string, unknown> | null = null;
+  if (edit && typeof edit === 'object') {
+    edited = spec.parse(edit as Record<string, unknown>, await loadStructureContext(env, row.project_id));
+    if (!edited) return { status: 422, body: { error: 'invalid_edit', detail: 'That edit is not a valid value for this module.' } };
+  }
+  let payload: Record<string, unknown>;
+  try { payload = edited ?? JSON.parse(row.payload_json); } catch {
+    return { status: 422, body: { error: 'unreadable', detail: 'This placement could not be read.' } };
+  }
+
+  const claim = await env.DB.prepare(
+    `UPDATE validate_proposals SET status = 'accepted', decided_by = ?, decided_at = datetime('now'), edited_payload_json = ?
+      WHERE id = ? AND status = 'pending'`,
+  ).bind(user.id, edited ? JSON.stringify(edited) : null, row.id).run();
+  if (!claim.meta?.changes) return { status: 409, body: { error: 'not_pending', detail: 'This placement was already decided.' } };
+
+  try {
+    await applyPlacement(env, user, row, kind, payload);
+  } catch (e) {
+    await env.DB.prepare(
+      `UPDATE validate_proposals SET status = 'pending', decided_by = NULL, decided_at = NULL, edited_payload_json = NULL WHERE id = ?`,
+    ).bind(row.id).run();
+    // A module writer's own refusal (D659), e.g. no competitor list yet,
+    // travels with its status and sentence; the placement stays proposed.
+    if (e instanceof WriterError) return { status: e.status, body: { error: 'writer_refused', detail: e.sentence } };
+    const msg = (e as Error).message;
+    if (msg === 'not_this_project') return { status: 409, body: { error: 'not_this_project', detail: 'The row this names is no longer on this project.' } };
+    console.error('[validate/placements] accept failed', msg);
+    return { status: 500, body: { error: 'apply_failed', detail: 'The placement could not be written. It is still proposed.' } };
+  }
+  return { status: 200, body: { ok: true, id: row.id, kind, edited: !!edited, payload } };
+}
+
 structure.post('/placements/:id/accept', async (c) => {
   const row = await loadPlacement(c.env, Number(c.req.param('id')));
   if (!row) return json({ detail: 'Placement not found' }, 404);
   const user = await authorise(c, row);
   if (user instanceof Response) return user;
-  if (!isPlacementKind(row.kind)) return json({ error: 'unknown_kind', detail: 'This placement can no longer be applied.' }, 409);
-  const kind = row.kind;
-  const spec = PLACEMENT_KINDS[kind];
-  if (!spec.writer) {
-    return json({
-      error: 'writer_not_available',
-      detail: 'This module cannot take a placement yet. It stays proposed until its store is built.',
-    }, 409);
-  }
-  if (row.status !== 'pending') return json({ error: 'not_pending', detail: 'This placement was already decided.' }, 409);
-
-  // EDIT THEN ACCEPT. The edit is validated as strictly as the model's own
-  // payload was, against this project's rows; the model's payload is kept.
   const body = await c.req.json().catch(() => ({} as Record<string, unknown>)) as Record<string, unknown>;
-  let edited: Record<string, unknown> | null = null;
-  if (body && body.payload && typeof body.payload === 'object') {
-    edited = spec.parse(body.payload as Record<string, unknown>, await loadStructureContext(c.env, row.project_id));
-    if (!edited) return json({ error: 'invalid_edit', detail: 'That edit is not a valid value for this module.' }, 422);
-  }
-  let payload: Record<string, unknown>;
-  try { payload = edited ?? JSON.parse(row.payload_json); } catch {
-    return json({ error: 'unreadable', detail: 'This placement could not be read.' }, 422);
-  }
-
-  const claim = await c.env.DB.prepare(
-    `UPDATE validate_proposals SET status = 'accepted', decided_by = ?, decided_at = datetime('now'), edited_payload_json = ?
-      WHERE id = ? AND status = 'pending'`,
-  ).bind(user.id, edited ? JSON.stringify(edited) : null, row.id).run();
-  if (!claim.meta?.changes) return json({ error: 'not_pending', detail: 'This placement was already decided.' }, 409);
-
-  try {
-    await applyPlacement(c.env, user, row, kind, payload);
-  } catch (e) {
-    await c.env.DB.prepare(
-      `UPDATE validate_proposals SET status = 'pending', decided_by = NULL, decided_at = NULL, edited_payload_json = NULL WHERE id = ?`,
-    ).bind(row.id).run();
-    // A module writer's own refusal (D659), e.g. no competitor list yet,
-    // travels with its status and sentence; the placement stays proposed.
-    if (e instanceof WriterError) return json({ error: 'writer_refused', detail: e.sentence }, e.status);
-    const msg = (e as Error).message;
-    if (msg === 'not_this_project') return json({ error: 'not_this_project', detail: 'The row this names is no longer on this project.' }, 409);
-    console.error('[validate/placements] accept failed', msg);
-    return json({ error: 'apply_failed', detail: 'The placement could not be written. It is still proposed.' }, 500);
-  }
-  return json({ ok: true, id: row.id, kind, edited: !!edited, payload });
+  const out = await acceptPlacement(c.env, user, row, body?.payload);
+  return json(out.body, out.status);
 });
 
 structure.post('/placements/:id/discard', async (c) => {
@@ -377,6 +398,68 @@ async function scopeSession(c: any): Promise<{ user: User; session: SessionRow }
   if (!canWrite(project, user)) return json({ detail: 'Forbidden' }, 403);
   return { user, session };
 }
+
+/** At most this many placements are accepted by one Accept all. */
+export const MAX_ACCEPT_ALL = 50;
+
+/**
+ * D757 §2.7 (#1925) — Accept all, for one module (`{ slug }`) or for chosen
+ * placements (`{ ids }`, at most 50). Each placement runs `acceptPlacement`,
+ * its own claim and writer, one after another: there is no batch write, so a
+ * placement a writer refuses goes back to pending while the rest land, and a
+ * replay finds nothing pending to accept twice. Every outcome is reported.
+ * Re-scoped to the session's project; a session the caller cannot write is
+ * not found.
+ */
+structure.post('/sessions/:id/placements/accept', async (c) => {
+  const session = await loadSession(c.env, Number(c.req.param('id')));
+  const user = (await requireAuth(c)) as User;
+  if (!session) return json({ detail: 'Session not found' }, 404);
+  const project = await c.env.DB.prepare('SELECT id, founder_id FROM projects WHERE id = ?')
+    .bind(session.project_id).first() as { id: number; founder_id: number | null } | null;
+  if (!project || !canWrite(project, user)) return json({ detail: 'Session not found' }, 404);
+
+  const body = await c.req.json().catch(() => ({} as Record<string, unknown>)) as Record<string, unknown>;
+  const slug = typeof body?.slug === 'string' ? body.slug : null;
+  const rawIds = Array.isArray(body?.ids) ? body.ids : null;
+  if ((slug == null) === (rawIds == null)) return json({ error: 'invalid_body', detail: 'Send a module slug or a list of placement ids.' }, 400);
+  let rows: PlacementRow[];
+  let remaining = 0;
+  let missing: number[] = [];
+  if (rawIds) {
+    if (!rawIds.length || !rawIds.every((v) => Number.isInteger(v) && (v as number) > 0)) {
+      return json({ error: 'invalid_ids', detail: 'Placement ids are positive whole numbers.' }, 400);
+    }
+    const ids = [...new Set(rawIds as number[])];
+    if (ids.length > MAX_ACCEPT_ALL) return json({ error: 'too_many', detail: `Accept at most ${MAX_ACCEPT_ALL} placements at a time.` }, 400);
+    rows = (await c.env.DB.prepare(
+      `SELECT ${PLACEMENT_COLUMNS} FROM validate_proposals
+        WHERE session_id = ? AND project_id = ? AND run_id IS NOT NULL AND id IN (${ids.map(() => '?').join(', ')}) ORDER BY id`,
+    ).bind(session.id, session.project_id, ...ids).all<PlacementRow>()).results ?? [];
+    const found = new Set(rows.map((r) => Number(r.id)));
+    missing = ids.filter((id) => !found.has(id));
+  } else {
+    if (!MODULES.some((m) => m.slug === slug)) return json({ error: 'unknown_module', detail: 'No such module.' }, 400);
+    const pending = ((await c.env.DB.prepare(
+      `SELECT ${PLACEMENT_COLUMNS} FROM validate_proposals
+        WHERE session_id = ? AND project_id = ? AND run_id IS NOT NULL AND status = 'pending' ORDER BY id`,
+    ).bind(session.id, session.project_id).all<PlacementRow>()).results ?? []).filter((r) => {
+      if (!isPlacementKind(r.kind)) return false;
+      try { return placementSlug(r.kind, JSON.parse(r.edited_payload_json ?? r.payload_json)) === slug; } catch { return false; }
+    });
+    rows = pending.slice(0, MAX_ACCEPT_ALL);
+    remaining = pending.length - rows.length;
+  }
+
+  const results: Array<{ id: number; ok: boolean; error?: string; detail?: string }> = [];
+  for (const row of rows) {
+    const out = await acceptPlacement(c.env, user, row, null);
+    results.push(out.status === 200 ? { id: row.id, ok: true }
+      : { id: row.id, ok: false, error: String(out.body.error ?? 'refused'), detail: String(out.body.detail ?? '') });
+  }
+  for (const id of missing) results.push({ id, ok: false, error: 'not_found', detail: 'This placement is not in this session.' });
+  return json({ results, accepted: results.filter((r) => r.ok).length, remaining });
+});
 
 // D685: shared with the summary route and the processing job.
 export async function finalSegments(env: Env, sessionId: number) {
