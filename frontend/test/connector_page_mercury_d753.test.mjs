@@ -2,8 +2,9 @@
  * D753 (#1991, F5) — Mercury on its own page, `/account/connectors/mercury`,
  * under D715's rules: an admin on HQ gets the four Axal entities' connections
  * as the page's body, with one audited read on mount and no header action; a
- * branch admin gets one sentence and no read; a founder's own Mercury keeps
- * its groups (the interim panel, until F3 #1956 draws "Your connection").
+ * branch admin gets one sentence and no read; a founder's or a partner's own
+ * Mercury draws its groups above the token form, then, once connected, in
+ * "Your connection" (part 2, on F3 #1956), never in the interim panel.
  *
  * Every account ending and token here is invented.
  *
@@ -16,10 +17,11 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 
-import { buildCatalogue } from '../src/pages/account/connectorsModel.js';
+import { buildCatalogue, connectionStatus } from '../src/pages/account/connectorsModel.js';
+import { manageItems } from '../src/pages/account/connectorPageModel.js';
 import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import { ConnectorPageView } from '../src/pages/account/ConnectorPage.jsx';
-import { ADMIN_ONLY, BRANCH_MANAGED, ENTITY_AUDIT_FOOT, ENTITY_FEEDS, MEMBER_GROUPS } from '../src/pages/account/mercuryModel.js';
+import { ADMIN_ONLY, BRANCH_MANAGED, ENTITY_AUDIT_FOOT, ENTITY_FEEDS, MEMBER_GROUPS, MEMBER_REPLACE } from '../src/pages/account/mercuryModel.js';
 import { mercuryPersonalApi } from '../src/lib/api/mercuryPersonal.js';
 
 const h = React.createElement;
@@ -52,6 +54,14 @@ const HQ_ADMIN = { id: 1, role: 'admin', name: 'HQ Admin', is_super_admin: 0, br
 const SUPER_ADMIN = { ...HQ_ADMIN, id: 2, is_super_admin: 1 };
 const BRANCH_ADMIN = { id: 3, role: 'admin', name: 'Branch Admin', is_super_admin: 0, branch: { code: 'ldn', name: 'London' } };
 const FOUNDER = { id: 41, role: 'founder', name: 'Ana Wren' };
+const PARTNER = { id: 42, role: 'partner', name: 'Bo Lind' };
+
+/** A member's own Mercury, connected (`GET /api/connectors` items). */
+const MERC = (extra = {}) => ({
+  uid: 'u-merc', provider_key: 'mercury', status: 'active', last_synced_at: null, last_error: null, config: {},
+  external_account_name: 'Wren Studio', companies: [{ company_id: 10, name: 'Acme', enabled: true }], ...extra,
+});
+const connected = (item) => ({ ...ready([PERSONAL]), catalogue: buildCatalogue({ providers: [PERSONAL], items: [item], companies: [{ id: 10, company_name: 'Acme' }], firstParty: {} }) });
 
 /** Mount the page as `user`, counting the entity reads the page makes. */
 async function mount(el, user) {
@@ -137,4 +147,53 @@ test('a founder\'s own Mercury: their groups, no entity body and no entity read'
     const t = m.text(m.by('connector-page-connect'));
     for (const label of [MEMBER_GROUPS.uses, MEMBER_GROUPS.never]) assert.ok(t.includes(label), label);
   } finally { await m.unmount(); mercuryPersonalApi.status = saved; }
+});
+
+/** Stub the member's status read (`GET /api/mercury/personal/status`), counting it. */
+function stubStatus() {
+  const saved = mercuryPersonalApi.status;
+  const s = { reads: 0, restore() { mercuryPersonalApi.status = saved; } };
+  mercuryPersonalApi.status = async () => { s.reads += 1; return { connected: true, connection: null, uses: [] }; };
+  return s;
+}
+
+test('a founder\'s connected Mercury: Your connection with its groups, no interim panel, one status read', async () => {
+  const st = stubStatus();
+  const m = await mount(page(connected(MERC())), FOUNDER);
+  try {
+    assert.equal(m.by('connector-page-connect'), undefined, 'no interim panel, no Connect and manage');
+    const yours = m.by('connector-page-connection');
+    assert.ok(yours, 'Your connection');
+    assert.equal(m.text(m.by('connector-page-account')), 'Wren Studio');
+    assert.ok(m.by('connector-page-sync'), 'Sync now');
+    const groups = m.text(m.by('connector-page-mercury'));
+    for (const label of [MEMBER_GROUPS.uses, MEMBER_GROUPS.never]) assert.ok(groups.includes(label), label);
+    assert.equal(m.by('connector-company-10'), undefined, 'where it lands, not Companies (D715 decision 8)');
+    assert.ok(m.text(yours).includes('Now fed by Mercury'), 'a founder\'s Mercury says what it feeds');
+    assert.equal(st.reads, 1, 'the groups read the status once, on the page');
+    assert.equal(m.reads(), 0, 'and never the entities');
+    assert.deepEqual(manageItems(connected(MERC()).catalogue[0]).map((i) => i.label), ['Sync now', 'Replace token', 'Disconnect']);
+  } finally { await m.unmount(); st.restore(); }
+});
+
+test('a partner\'s connected Mercury feeds no module, so it draws no Now fed by', async () => {
+  const st = stubStatus();
+  const m = await mount(page(connected(MERC())), PARTNER);
+  try {
+    assert.ok(m.by('connector-page-mercury'));
+    assert.ok(!m.text(m.by('connector-page-connection')).includes('Now fed by'));
+  } finally { await m.unmount(); st.restore(); }
+});
+
+test('a member\'s Mercury needing attention says how to fix it, never the raw error', async () => {
+  const st = stubStatus();
+  const item = MERC({ status: 'error', last_error: 'unauthorized: raw provider words' });
+  const data = connected(item);
+  const m = await mount(page(data), FOUNDER);
+  try {
+    const why = connectionStatus(data.catalogue[0].connection, data.catalogue[0]).why;
+    assert.ok(why, 'the row needs attention');
+    assert.equal(m.text(m.by('connector-page-attention')), `${why}. ${MEMBER_REPLACE}`);
+    assert.ok(!m.text().includes('raw provider words'));
+  } finally { await m.unmount(); st.restore(); }
 });
