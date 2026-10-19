@@ -115,16 +115,20 @@ test('Keep makes the proposal the new current version; the first stays as it was
   } finally { restore(); }
 });
 
-test('Discard deletes only the proposal', async () => {
+test('Discard deletes only the proposal: not an older version, not another project\'s proposal', async () => {
   const f = fixture();
+  // An older, non-current version of this deck, and another project's unkept proposal.
+  f.db.prepare(`INSERT INTO pitch_decks (id, project_id, version, slides, title, is_current, created_by) VALUES (9, 1, 0, '[]', 'Older', 0, 1)`).run();
+  f.db.prepare(`INSERT INTO projects (id, name) VALUES (2, 'Other venture')`).run();
+  f.db.prepare(`INSERT INTO pitch_deck_proposals (id, project_id, base_deck_id, slides) VALUES (500, 2, 99, '[]')`).run();
   const restore = noNetwork();
   try {
     const before = decksOf(f.db);
     const { body } = await call(f, 1, 'admin', 'POST', '/10/autofill');
     const d = await call(f, 1, 'admin', 'DELETE', `/proposals/${body.proposal.id}`);
     assert.equal(d.status, 200, d.text);
-    assert.deepEqual(decksOf(f.db), before);
-    assert.equal(proposalsOf(f.db).length, 0);
+    assert.deepEqual(decksOf(f.db), before, 'every version, current or older, is untouched');
+    assert.deepEqual(proposalsOf(f.db).map((p: any) => p.id), [500], 'only the discarded proposal is gone');
   } finally { restore(); }
 });
 
