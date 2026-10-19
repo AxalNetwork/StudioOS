@@ -43,6 +43,18 @@ export function ownsVenture(project: ProjectRef, user: User): boolean {
 }
 
 /**
+ * D757 §2.11: may this person hold a Validate source (Zoom, Meet transcripts,
+ * WhatsApp, Telegram)? `ownsVenture`'s rule without a project: an admin, a
+ * `founder`, or an active Lab member with a `founder_id` — the last whatever
+ * their role says, for the reason above (a Lab founder may be `exploring`).
+ */
+export function canHoldValidateSource(user: Pick<User, 'role' | 'founder_id' | 'spinout_lab_active'>): boolean {
+  const role = String(user.role ?? '').toLowerCase();
+  if (role === 'admin' || role === 'founder') return true;
+  return Number(user.spinout_lab_active ?? 0) === 1 && user.founder_id != null;
+}
+
+/**
  * The hypothesis board and the validation summary.
  *
  * Same audience as the interviews they are derived from — admin and partner

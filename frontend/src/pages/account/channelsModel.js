@@ -78,7 +78,19 @@ export function readOverview(raw) {
   // on the provider entry (`signup`) or beside it (`whatsapp`).
   if (providers.whatsapp && !providers.whatsapp.signup && isObj(raw.whatsapp)) providers.whatsapp.signup = raw.whatsapp;
   if (!providers.whatsapp && isObj(raw.whatsapp)) providers.whatsapp = { available: null, signup: raw.whatsapp };
-  return { providers, connections, pending, telegramLink: telegramClaim(raw.telegram_link) };
+  // D757 §2.11 (#1922): an empty list, not an absent one, is the Worker offering no channel.
+  const offered = !(Array.isArray(raw.providers) && raw.providers.length === 0);
+  return { providers, connections, pending, telegramLink: telegramClaim(raw.telegram_link), offered };
+}
+
+/**
+ * The cards to draw. The Worker offers no channel to a member who cannot hold
+ * a venture (D757 §2.11); then only a card with a connection is drawn, so it
+ * keeps Disconnect, and with none the group is not drawn at all.
+ */
+export function shownChannels(overview) {
+  if (!overview || overview.offered !== false) return CHANNEL_PROVIDERS;
+  return CHANNEL_PROVIDERS.filter((k) => !!overview.connections?.[k]);
 }
 
 // ---------- Telegram: the two-sided link (#1625, migration 458) ------------

@@ -74,9 +74,12 @@ export default function PricingPhone({ pricing, budget, children = null }) {
   return <PricingPhoneView pricing={pricing} budget={budget} product={product}>{children}</PricingPhoneView>;
 }
 
-/** The two reads ProductsPage hands this view and its own cards. */
-export function usePricingReads() {
+/**
+ * The two reads ProductsPage hands this view and its own cards. A visitor
+ * (D755 §13) makes only the public one: `/ai-budget/me` needs a session.
+ */
+export function usePricingReads({ member = true } = {}) {
   const pricing = useAccountRead(() => publicPricingApi.plansAndPacks());
-  const budget = useAccountRead(() => aiBudgetApi.mine());
+  const budget = useAccountRead(() => aiBudgetApi.mine(), { enabled: member });
   return { pricing, budget };
 }

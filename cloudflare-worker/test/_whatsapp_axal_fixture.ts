@@ -53,6 +53,8 @@ export function world(opts: { axal?: Partial<typeof AXAL>; upTo492?: boolean } =
     ALTER TABLE users ADD COLUMN deletion_requested_at TEXT;
     ALTER TABLE users ADD COLUMN jwt_min_iat INTEGER;
     UPDATE users SET is_active = 0 WHERE id = ${GONE};
+    -- D757 §2.11: OTHER is a second member who may hold a channel (an investor may not).
+    UPDATE users SET role = 'founder' WHERE id = ${OTHER};
     CREATE TABLE founders (id INTEGER PRIMARY KEY, user_id INTEGER);
     CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT, founder_id INTEGER, company_id INTEGER, deleted_at TEXT);
     CREATE TABLE discovery_interviews (

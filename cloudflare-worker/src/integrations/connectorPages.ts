@@ -609,7 +609,7 @@ export const CHANNEL_PAGES: { whatsapp: ConnectorPage; telegram: ConnectorPage }
     ],
     tools: [
       tool('download_voice_note', 'voice notes', 'read', 'Downloads a voice note from a chat you added to an interview, to transcribe it.', 'customer_research',
-        ["call(env, 'getFile', { file_id: fileId })", '`${TELEGRAM_API}/file/bot${token}/${path}`']),
+        ["call(env, 'getFile', { file_id: note.file })", '`${TELEGRAM_API}/file/bot${token}/${path}`']),
       tool('send_reply', 'replies you send', 'write', 'Sends a reply in a customer chat, when you send it from Axal, within 24 hours of their last message.', null,
         ['export async function sendBusinessMessage(', '`${TELEGRAM_API}/bot${token}/${method}`']),
       tool('send_private_message', 'messages to you', 'write', 'Sends you the link prompts, confirmations and the test, in your own chat with the Axal bot.', null,
@@ -738,7 +738,7 @@ export function pageDescriptor(p: { key: string } & Partial<ProviderDescriptor>,
     page = CHANNEL_PAGES[key as keyof typeof CHANNEL_PAGES];
   } else if (Object.hasOwn(CONNECTOR_PAGES, key)) {
     const entry = CONNECTOR_PAGES[key];
-    const audience = viewer && (p.entity_roles || p.personal_roles) ? audienceFor(p as ProviderDescriptor, viewer) : 'open';
+    const audience = viewer && (p.entity_roles || p.personal_roles || p.audience_rule) ? audienceFor(p as ProviderDescriptor, viewer) : 'open';
     if (audience === 'none') return null;
     if (isVariant(entry)) {
       if (audience === 'entity') page = entry.entity;
