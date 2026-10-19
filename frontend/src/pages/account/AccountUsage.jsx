@@ -10,6 +10,7 @@ import {
   rateRows, receiptView, storageView, STORAGE_AREAS, taskRows, topUpState,
 } from './usageModel';
 import { ACCOUNT_PHONE_COPY, ACCOUNT_PHONE_PAGES } from './accountPhone';
+import { ADD_TOKENS_PATH, TOPUP_UNAVAILABLE_RUNS, pastAllowanceLine } from '../../lib/aiTokens';
 
 /**
  * D642 (#1435) — the Account center's Usage section, `/account/usage`, built
@@ -63,9 +64,10 @@ function Period({ title, period, nrReason, testid }) {
 }
 
 const STATE_COPY = {
-  no_allowance: { t: 'No allowance on this plan', d: () => 'Runs use your top-up balance.', tone: 'plain', topUp: true },
-  day_used_up: { t: 'Today’s allowance is used up', d: (v) => `It resets at 00:00 UTC, ${v.resetIn}. Runs use your top-up balance until then.`, tone: 'warn', topUp: true },
-  month_used_up: { t: 'This month’s allowance is used up', d: () => 'It resets on the 1st at 00:00 UTC. Runs use your top-up balance until then.', tone: 'warn', topUp: true },
+  // D755 (#1916): with nothing on sale, runs wait for the reset (pastAllowanceLine).
+  no_allowance: { t: 'No allowance on this plan', d: (v, none) => pastAllowanceLine(none), tone: 'plain', topUp: true },
+  day_used_up: { t: 'Today’s allowance is used up', d: (v, none) => `It resets at 00:00 UTC, ${v.resetIn}. ${pastAllowanceLine(none, { untilThen: true })}`, tone: 'warn', topUp: true },
+  month_used_up: { t: 'This month’s allowance is used up', d: (v, none) => `It resets on the 1st at 00:00 UTC. ${pastAllowanceLine(none, { untilThen: true })}`, tone: 'warn', topUp: true },
   paused: { t: 'Runs paused', d: () => 'A run cost more than it held. New runs wait while HQ checks the charge.', tone: 'danger', topUp: false },
 };
 const TONE = {
@@ -76,7 +78,7 @@ const TONE = {
 
 function AddTokens({ topUp }) {
   if (topUp !== 'available') return null;
-  return <a href="/checkout?ai_topup=1" className={BTN.ghost} data-testid="usage-add-tokens">Add tokens</a>;
+  return <a href={ADD_TOKENS_PATH} className={BTN.ghost} data-testid="usage-add-tokens">Add tokens</a>;
 }
 
 /** U1 — the allowance. */
@@ -99,7 +101,7 @@ export function AllowanceCard({ budget, product, now = new Date() }) {
                   className={`flex flex-wrap items-center justify-between gap-2 rounded-axal-lg border px-3.5 py-3 ${TONE[c.tone]}`}>
                   <div className="flex flex-col gap-0.5">
                     <span className="text-[13px] font-bold">{c.t}</span>
-                    <span className="text-[12.5px] leading-relaxed">{c.d(v)}</span>
+                    <span className="text-[12.5px] leading-relaxed">{c.d(v, topUp === 'unavailable')}</span>
                   </div>
                   {c.topUp && <AddTokens topUp={topUp} />}
                 </div>
@@ -107,8 +109,8 @@ export function AllowanceCard({ budget, product, now = new Date() }) {
             })}
             {!v.noAllowance && (
               <div className="grid gap-4 sm:grid-cols-2">
-                <Period title="Today" period={v.today} testid="usage-today" nrReason="The plan sets no daily allowance. Runs use your top-up balance." />
-                <Period title="This month" period={v.month} testid="usage-month" nrReason="The plan sets no monthly allowance. Runs use your top-up balance." />
+                <Period title="Today" period={v.today} testid="usage-today" nrReason={`The plan sets no daily allowance. ${pastAllowanceLine(topUp === 'unavailable')}`} />
+                <Period title="This month" period={v.month} testid="usage-month" nrReason={`The plan sets no monthly allowance. ${pastAllowanceLine(topUp === 'unavailable')}`} />
               </div>
             )}
             <div className="grid gap-2.5 sm:grid-cols-2">
@@ -124,7 +126,7 @@ export function AllowanceCard({ budget, product, now = new Date() }) {
                 </div>
                 <span className={`${MONO} text-base`}>{v.balance}</span>
                 {topUp === 'unavailable' ? (
-                  <Muted className="leading-snug" data-testid="usage-topup-unavailable">Top-ups are not available yet. Runs use your included allowance only.</Muted>
+                  <Muted className="leading-snug" data-testid="usage-topup-unavailable">{TOPUP_UNAVAILABLE_RUNS}</Muted>
                 ) : topUp === 'unreadable' ? (
                   <Unreadable what="The top-up option" claim="Your balance above is unaffected." onRetry={product.reload} />
                 ) : (
@@ -431,19 +433,19 @@ export function allowanceGroup({ budget, product, now = new Date() }) {
   // A paused or used-up allowance still says so, above the figures.
   for (const k of v.states) {
     const c = STATE_COPY[k];
-    group.rows.push({ key: k, title: c.t, description: c.d(v), testid: `usage-state-${k}`, pill: k === 'paused' ? { label: 'Paused', tone: 'danger' } : null });
+    group.rows.push({ key: k, title: c.t, description: c.d(v, topUp === 'unavailable'), testid: `usage-state-${k}`, pill: k === 'paused' ? { label: 'Paused', tone: 'danger' } : null });
   }
   if (!v.noAllowance) {
     const period = (title, p, reason) => (p
       ? { title, description: p.reset, value: `${p.used} of ${p.of}`, bar: p.pct }
       : { title, description: reason, notRecorded: true, notRecordedReason: reason });
-    group.rows.push(period('Today', v.today, 'The plan sets no daily allowance. Runs use your top-up balance.'));
-    group.rows.push(period('This month', v.month, 'The plan sets no monthly allowance. Runs use your top-up balance.'));
+    group.rows.push(period('Today', v.today, `The plan sets no daily allowance. ${pastAllowanceLine(topUp === 'unavailable')}`));
+    group.rows.push(period('This month', v.month, `The plan sets no monthly allowance. ${pastAllowanceLine(topUp === 'unavailable')}`));
   }
   group.rows.push({ title: ACCOUNT_PHONE_COPY.heldTitle, description: ACCOUNT_PHONE_COPY.heldDescription, value: v.held });
   group.rows.push({ title: ACCOUNT_PHONE_COPY.topUpTitle, description: ACCOUNT_PHONE_COPY.topUpDescription, value: v.balance });
-  if (topUp === 'available') group.cta = { label: ACCOUNT_PHONE_COPY.addTokens, href: '/checkout?ai_topup=1', testid: 'usage-add-tokens' };
-  else if (topUp === 'unavailable') group.note = <span data-testid="usage-topup-unavailable">Top-ups are not available yet. Runs use your included allowance only.</span>;
+  if (topUp === 'available') group.cta = { label: ACCOUNT_PHONE_COPY.addTokens, href: ADD_TOKENS_PATH, testid: 'usage-add-tokens' };
+  else if (topUp === 'unavailable') group.note = <span data-testid="usage-topup-unavailable">{TOPUP_UNAVAILABLE_RUNS}</span>;
   else if (topUp === 'unreadable') group.note = <Unreadable what="The top-up option" claim="Your balance above is unaffected." onRetry={product.reload} />;
   return group;
 }

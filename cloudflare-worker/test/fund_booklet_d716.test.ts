@@ -15,14 +15,18 @@ import { SignJWT } from 'jose';
 import { makeD1 } from './_d1_sqlite.mjs';
 import { tableFromBaseline, stripForeignKeys } from './_baseline.mjs';
 import booklets from '../src/routes/fund_booklets.ts';
-import { bookletFields } from '../src/services/subscriptionBooklet.ts';
+import { bookletFields, bookletMissingSentence, bookletPaperInput, bookletSpecimenInput } from '../src/services/subscriptionBooklet.ts';
+import { paperHtml, paperModel } from '../src/services/legalPaper.ts';
 import { PDFDocument, PDFName } from 'pdf-lib';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 
 const baseline = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
-const TABLES = ['users', 'super_admins', 'user_sessions', 'activity_logs', 'admin_audit_log', 'lp_applications', 'legal_templates', 'legal_template_versions'];
+// D759 (#1858): the e-sign tables and migration 485, which the booklet view reads for its signing state.
+const TABLES = ['users', 'super_admins', 'user_sessions', 'activity_logs', 'admin_audit_log', 'lp_applications', 'legal_templates', 'legal_template_versions',
+  'esign_envelopes', 'esign_recipients'];
 const SCHEMA = TABLES.map((t) => stripForeignKeys(tableFromBaseline(baseline, t))).join('\n')
-  + '\n' + readFileSync(new URL('../sql/migrations/478_fund_notices_booklets.sql', import.meta.url), 'utf8');
+  + '\n' + readFileSync(new URL('../sql/migrations/478_fund_notices_booklets.sql', import.meta.url), 'utf8')
+  + '\n' + readFileSync(new URL('../sql/migrations/485_fund_booklet_envelopes.sql', import.meta.url), 'utf8');
 const SECRET = ['d716', 'booklet', 'fixture', 'secret'].join('-');
 
 const ADMIN = 1, APPLICANT = 2, PENDING = 3, STRANGER = 4, FOUNDER = 5;
@@ -63,7 +67,7 @@ function fixture() {
     return { status: res.status, body: json };
   }
   const one = (sql: string, ...a: unknown[]) => ({ ...(db.prepare(sql).get(...a) as any) });
-  return { db, call, one };
+  return { db, env, call, one };
 }
 
 const fillLegend = (f: ReturnType<typeof fixture>) =>
@@ -296,4 +300,77 @@ test('D716 the admin PDF prints in two passes, its contents from each part\'s pa
   const unbound = await f.call(ADMIN, 'GET', `/${opened.uid}/pdf`);
   assert.deepEqual([unbound.status, unbound.body.error], [503, 'booklet_render_unavailable'], 'no binding is never the pdf-lib fallback');
   assert.equal((await f.call(APPLICANT, 'GET', `/${opened.uid}/pdf`, undefined, { envExtra: { BROWSER } })).status, 403);
+});
+
+// ── The booklet on screen (#1866) ───────────────────────────────────────────
+
+test('D716 #1866 a field carries the nearest heading above it as its group; the ids ignore the headings', async () => {
+  const body = '## Accredited investor\n- [ ] A\n- [ ] B\n### ERISA\n- [ ] C\nPlain line.\n- [ ] D';
+  const grouped = await bookletFields('lp_investor_questionnaire', body);
+  assert.deepEqual(grouped.map((x) => x.group), ['Accredited investor', 'Accredited investor', 'ERISA', 'ERISA']);
+  const bare = await bookletFields('lp_investor_questionnaire', '- [ ] A\n- [ ] B\n- [ ] C\nPlain line.\n- [ ] D');
+  assert.deepEqual(grouped.map((x) => x.id), bare.map((x) => x.id), 'a heading never changes an id');
+  assert.deepEqual(bare.map((x) => x.group), [null, null, null, null]);
+});
+
+test('D716 #1866 the view carries each field\'s group, and the frozen record carries none', async () => {
+  const f = fixture();
+  fillLegend(f);
+  const opened = (await f.call(APPLICANT, 'POST', '/mine')).body;
+  const part = (n: number) => opened.parts.find((p: any) => p.part === n).fields;
+  assert.deepEqual(part(3).map((x: any) => x.group), ['Article 1 Subscription', 'Article 1 Subscription']);
+  assert.deepEqual(part(4).map((x: any) => x.group), [null, null]);
+  const done = await f.call(APPLICANT, 'POST', '/mine/submit', { digest: opened.digest });
+  assert.equal(done.status, 200, JSON.stringify(done.body));
+  const frozen = f.one('SELECT frozen_json FROM fund_subscription_booklets').frozen_json as string;
+  assert.ok(!frozen.includes('"group"') && !frozen.includes('Article 1 Subscription'), 'no group in the frozen record');
+  assert.ok(!frozen.includes('I subscribe for the amount below.'), 'and no field text');
+  assert.equal(done.body.digest, (await f.call(APPLICANT, 'GET', '/mine')).body.digest);
+});
+
+test('D716 #1866 ?part=N prints that one part alone, with the same digest; any other value is 400', async () => {
+  const f = fixture();
+  fillLegend(f);
+  const opened = (await f.call(APPLICANT, 'POST', '/mine')).body;
+  const q = opened.parts.find((p: any) => p.part === 4).fields;
+  await f.call(APPLICANT, 'PUT', '/mine/answers', { answers: [{ field_id: q[0].id, checked: true }] });
+  const r = await f.call(APPLICANT, 'GET', '/mine/paper?part=4');
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const html: string = r.body.html;
+  assert.deepEqual([...html.matchAll(/<section class="booklet-part part-(\d+)">/g)].map((m) => m[1]), ['4']);
+  assert.ok(!html.includes('class="cover') && !html.includes('class="contents'), 'no cover and no contents');
+  const boxes = [...sections(html).get(4)!.matchAll(/<div class="check"><span class="box( x)?"><\/span><span>([^<]*)<\/span>/g)].map((m) => [m[2], !!m[1]]);
+  assert.deepEqual(boxes, [['I am an accredited investor.', true], ['I am a qualified purchaser.', false]]);
+  assert.equal(r.body.digest, (await f.call(APPLICANT, 'GET', '/mine')).body.digest);
+  for (const bad of ['1', '10', 'x', '']) {
+    const b = await f.call(APPLICANT, 'GET', `/mine/paper?part=${bad}`);
+    assert.deepEqual([b.status, b.body.error], [400, 'part_invalid'], `part=${bad}`);
+  }
+  for (const who of [PENDING, STRANGER, ADMIN]) assert.equal((await f.call(who, 'GET', '/mine/paper?part=4')).status, 404, `user ${who}`);
+});
+
+test('D758 the booklet\'s specimen is its real paper with no booklet: the same parts, no ticks, no applicant, no copy number', async () => {
+  const f = fixture();
+  const stub = await f.call(APPLICANT, 'POST', '/mine/submit', { digest: (await f.call(APPLICANT, 'POST', '/mine')).body.digest });
+  assert.equal(stub.body.message, bookletMissingSentence([1]), 'submit keeps its sentence');
+  const withStub = await bookletSpecimenInput(f.env);
+  assert.equal(withStub.state?.kind, 'specimen', 'a part with no text keeps the specimen state');
+  const stubHtml = paperHtml(paperModel(withStub), { pageSize: 'letter', cover: 'light', medium: 'screen', fonts: 'omit' });
+  assert.ok(stubHtml.includes('SPECIMEN') && !stubHtml.includes('DRAFT — for counsel review'));
+
+  fillLegend(f);
+  const row = f.one('SELECT * FROM fund_subscription_booklets');
+  const real = await bookletPaperInput(f.env, row);
+  const spec = await bookletSpecimenInput(f.env);
+  const part = (p: any) => ({ n: p.n, title: p.title, body: p.body, missing: p.missing, block: p.block, footer: p.footer });
+  assert.deepEqual(spec.parts!.map(part), real.parts!.map(part), 'the same nine parts, titles, bodies, blocks and footers');
+  assert.equal(spec.parts!.length, 9);
+  assert.ok(spec.parts!.every((p) => p.counterpartyName === null), 'no applicant');
+  assert.ok(real.parts!.every((p) => p.counterpartyName === 'Ivy Applicant'));
+  assert.deepEqual([spec.title, spec.body, spec.slug, spec.bodySha256], [real.title, real.body, real.slug, real.bodySha256], 'an open booklet with no ticks has its digest');
+  assert.deepEqual([spec.copyNumber, spec.offeree, spec.effectiveDate, spec.state?.kind], [null, null, null, 'specimen']);
+  assert.deepEqual([real.copyNumber, real.offeree, real.state?.kind], [row.uid, 'Ivy Applicant', 'issued']);
+  const html = paperHtml(paperModel(spec), { pageSize: 'letter', cover: 'light', medium: 'screen', fonts: 'omit' });
+  assert.ok(!html.includes('Ivy Applicant') && !html.includes(row.uid), 'no applicant and no booklet id');
+  assert.ok(html.includes('THESE INTERESTS HAVE NOT BEEN REGISTERED.'), 'the cover carries the legend');
 });

@@ -675,6 +675,18 @@ async function ensureCalendarOAuthSchema(env: Env): Promise<void> {
 // ===========================================================================
 // Google
 // ===========================================================================
+// D757 (#1926) — Meet transcript import is offered only once the owner has
+// switched it on: "on" (trimmed, any case) is on, anything else is off.
+export function meetTranscriptsEnabled(env: Env): boolean {
+  return String(env.MEET_TRANSCRIPTS_ENABLED ?? '').trim().toLowerCase() === 'on';
+}
+
+/** 'granted' when the stored grant holds the Meet scope; else the flag decides. */
+export function meetTranscriptsState(env: Env, scope: string | null | undefined): 'granted' | 'available' | 'not_set_up' {
+  if (String(scope || '').split(/[\s,]+/).includes(GOOGLE_MEET_TRANSCRIPT_SCOPE)) return 'granted';
+  return meetTranscriptsEnabled(env) ? 'available' : 'not_set_up';
+}
+
 calendar.get('/google/status', safe('g_status', 'Could not load Google status', async (c) => {
   const user = await requireAuth(c);
   await ensureCalendarOAuthSchema(c.env);
@@ -690,6 +702,7 @@ calendar.get('/google/status', safe('g_status', 'Could not load Google status', 
     google_email: row?.google_email || null,
     last_synced_at: row?.last_synced_at || null,
     scope: row?.scope || null,
+    meet_transcripts: meetTranscriptsState(c.env, row?.scope),
   });
 }));
 
@@ -809,8 +822,14 @@ calendar.post('/google/connect', safe('g_connect', 'Could not start Google OAuth
 calendar.get('/google/start',    safe('g_start',   'Could not start Google OAuth', startGoogleOAuth));
 calendar.post('/google/start',   safe('g_start',   'Could not start Google OAuth', startGoogleOAuth));
 // Explicit opt-in. A normal Calendar connection never asks to read Meet transcripts.
+// Until the owner switches it on (D757, #1926) it refuses before any state is written.
 calendar.post('/google/meet-transcripts/connect', safe('g_meet_consent', 'Could not start Meet transcript consent',
-  (c) => startGoogleOAuth(c, true)));
+  async (c) => {
+    if (!meetTranscriptsEnabled(c.env)) {
+      return c.json({ error: 'meet_transcripts_not_set_up', message: "Importing Meet transcripts isn't set up on Axal yet." }, 503);
+    }
+    return startGoogleOAuth(c, true);
+  }));
 
 /**
  * Task #1 — pure persistence step of /google/callback, extracted for
@@ -1033,6 +1052,8 @@ calendar.get('/google/callback', async (c) => {
       return failureRedirect(c.env, 'google', persist.reason, returnTo);
     }
     const extra: Record<string, string> = {};
+    // The return banner tells a transcript grant from an ordinary connect (#1926).
+    if (meetTranscripts) extra.meet = 'granted';
     if (persist.warn) {
       extra.warn = persist.warn;
       if (persist.warnEmail) extra.google_email = persist.warnEmail;

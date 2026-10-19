@@ -84,7 +84,9 @@ function world() {
     '440_validate_cycle_stores.sql', '446_interview_structure_receipts.sql', '447_assistant_interviews.sql',
     '449_interview_channels.sql', '450_channel_events_delete_kind.sql', '451_channel_review_fixes.sql',
     '452_record_session_setup.sql', '453_interview_processing.sql', '454_channel_voice_failures.sql',
-    '457_integrations_last_error_at.sql', '458_channel_link_consent.sql']) db.exec(mig(m));
+    '457_integrations_last_error_at.sql', '458_channel_link_consent.sql',
+    // D754 (#1893): the consent store, which assign and the voice job now read.
+    '488_channel_consents.sql']) db.exec(mig(m));
   applyEngineSchema(db);
   db.exec(`INSERT INTO telegram_business_connections (uid, business_connection_id, telegram_user_id, user_id, is_enabled, can_reply)
            VALUES ('bc-1', 'BC-ME', '555001', ${ME}, 1, 1)`);
@@ -275,7 +277,8 @@ test('the same VTT imported twice bills once, and the session ends structured', 
   const second = await runSessionStructureJob(f.env, { session_id: s.id, user_id: ME, trigger: 'call_imported' });
   assert.equal(first.status, 'done');
   assert.deepEqual(second, { ok: true, status: 'unchanged' });
-  assert.equal(f.ai.length, 2, 'once per task');
+  // D757 (#1923): one summary call, and one structure call per pass.
+  assert.equal(f.ai.length, 3, 'once per task, structure in its two passes');
   assert.equal(summaryReceipts(f.db, s.id).length, 1);
   assert.equal(structureRuns(f.db, s.id).length, 1);
   assert.equal(row(f.db, s.id).status, 'structured', 'not left transcribed for the quiet sweep');
@@ -288,7 +291,7 @@ test('the same VTT imported twice bills once, and the session ends structured', 
   f.db.exec(`UPDATE interview_sessions SET status = 'transcribed' WHERE id = ${s.id}`);
   assert.deepEqual(await runSessionStructureJob(f.env, { session_id: s.id, user_id: ME, trigger: 'call_imported' }), { ok: true, status: 'unchanged' });
   assert.deepEqual([row(f.db, s.id).status, row(f.db, s.id).digest_status], ['structured', 'done']);
-  assert.equal(f.ai.length, 2);
+  assert.equal(f.ai.length, 3);
 });
 
 test('a button always runs (re_summarised, re_structured), and never moves the automatic hash', async () => {
@@ -461,7 +464,8 @@ test('the quiet sweep counts summary receipts and the engine\'s own last attempt
              VALUES (${summarised.id}, 'summarised', 'm', 0, 0, 0, 'ok', datetime('now', '-1 hour')),
                     (${old.id}, 'summarised', 'm', 0, 0, 0, 'ok', datetime('now', '-7 hours'))`);
   f.db.exec(`UPDATE interview_sessions SET digested_at = datetime('now', '-1 hour'), digest_status = 'refused' WHERE id = ${attempted.id}`);
-  f.db.exec(`UPDATE interview_sessions SET digested_at = datetime('now', '-7 hours') WHERE id = ${old.id}`);
+  // D754 (#1893): a WhatsApp chat is swept only once its consent is given.
+  f.db.exec(`UPDATE interview_sessions SET digested_at = datetime('now', '-7 hours'), consent_status = 'given' WHERE id = ${old.id}`);
   assert.equal(await sweepQuietChats(f.env, new Date()), 1);
   assert.deepEqual(queued(f.db).map((q: any) => q.session_id), [old.id]);
 });
@@ -588,7 +592,7 @@ test('busy: a running claim refuses a second run until it is stale', async () =>
   const both = await Promise.all([1, 2].map(() => digestSession(g.env, { sessionId: gid, userId: ME, trigger: 'call_imported' })));
   const said = both.map((o: any) => o.reason ?? o.status).sort();
   assert.ok(said.includes('done') && (said.includes('busy') || said.includes('unchanged')), said.join());
-  assert.equal(g.ai.length, 2, 'one run\'s calls');
+  assert.equal(g.ai.length, 3, 'one run\'s calls: the summary, and structure\'s two passes');
 });
 
 test('a member who lost the venture gets not_writable, and nothing is written or run', async () => {
@@ -663,4 +667,22 @@ test('every interview creator reads the one constant', () => {
   assert.match(read('services/assistantInterviews.ts'), /interviewCapRefusal\(env, grant\.userId, project\.id\)/);
   assert.match(read('routes/progress.ts'), /FREE_TIER_LIMITS\.discoveryInterviews/);
   assert.match(read('routes/contacts.ts'), /FREE_TIER_LIMITS\.discoveryInterviews/);
+});
+
+test('D757 (#1923): pass B refused keeps pass A\'s suggestions, records its refusal, and says so in the note', async () => {
+  const f = world();
+  const run = f.env.AI.run;
+  // The summary and pass A answer; every model asked for pass B fails.
+  f.env.AI.run = async (model: string, input: any) => {
+    if (/This pass reads for demand and evidence/.test(JSON.stringify(input))) throw new Error('capacity');
+    return run(model, input);
+  };
+  const id = await importedCall(f);
+  const out = await runSessionStructureJob(f.env, { session_id: id, user_id: ME, trigger: 'call_imported' });
+  assert.equal(out.status, 'done');
+  assert.ok(f.db.prepare('SELECT COUNT(*) n FROM validate_proposals WHERE session_id = ?').get(id).n > 0, 'pass A\'s suggestions are stored');
+  const lines = f.db.prepare('SELECT outcome FROM interview_structure_receipts WHERE session_id = ? ORDER BY id').all(id).map((r: any) => r.outcome);
+  assert.equal(lines.at(-1), 'refused', 'pass B\'s refusal is on the receipt');
+  assert.ok(lines.slice(0, -1).every((o: string) => o === 'ok'));
+  assert.match(row(f.db, id).digest_note, /^Axal suggested what it heard about the problem, the person and the market, but not yet about demand and evidence: /);
 });

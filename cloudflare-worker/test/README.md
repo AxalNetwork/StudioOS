@@ -56,3 +56,11 @@ D691: `compliance_events_columns_d691.test.ts` builds the full baseline and ever
 post-cutoff migration with foreign keys on. It checks Grow obligation writes,
 API state mappings, seeded compliance events and calendar reads, and bans SQL
 references to the absent migration-034 columns throughout Worker source.
+
+D754: `whatsapp_switch_on_d754.test.ts` holds the two independent chat rollout
+switches, authenticated off acknowledgements, hydrated canary membership, Axal’s
+own-number guards, WhatsApp media deadlines/expiry and split calling reasons to
+real SQLite fixtures with every provider stubbed. Its in-process mutation checks
+run the same positive scenarios before restoring ordinary modules.
+
+D755 CR7: `checkout_order_topup_d755.test.ts` reads an owner's pack order in each webhook state, verifies the current account balance and VAT exclusion, rejects other members and failed reads, and leaves ordinary orders unchanged. It covers authentication and embeds nine mutations, with the restored scenario checked before and after each mutant. Providers are forbidden.

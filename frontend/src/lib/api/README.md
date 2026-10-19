@@ -58,8 +58,15 @@ template paper as HTML, faces omitted) and `paperFonts` (its faces, once per
 `paper_sha256`).
 D717 (#1782) adds `publishOne(slug, version)` and `withdraw(slug)` (one template's
 publication), `push()` (the recorded publications to every branch, publishing
-nothing) and `outside()` (the bundled documents not in the catalog). The thumbnail
-and draft-PDF blobs come with PR 2's screens, outside the typed drift surface.
+nothing) and `outside()` (the bundled documents not in the catalog). #1851 adds
+`thumbnailBlob(slug, version)` and `outsideThumbnailBlob(key)`: page 1 as a PNG,
+`{ blob, url }` (the caller revokes `url`), outside the typed drift surface like
+`preview.pdf`. The store's URL carries `?v=<version>`, because the image is cached
+privately for a day.
+D758 (#1864) adds `generated()` (the documents the platform builds in code, each
+with the library rows it reads and its `thumbnail_version`) and
+`generatedThumbnailBlob(key, version)`, its page 1 as a specimen PNG, binary like
+`thumbnailBlob`, with `?v=<thumbnail_version>` so a new library body draws a new image.
 D717 (#1853) adds `renderPdfBlob(body)`, the draft's PDF from
 `POST /templates/render.pdf` as `{ blob, renderer }`: a body over
 `RENDER_BODY_MAX` (256 KB) is refused before any request, and its raw `fetch`
@@ -114,7 +121,13 @@ D684 (#1578): `channels.js` calls `/api/channels` (a member's business
 Telegram and WhatsApp: availability, link, connect, disconnect, test, and the
 conversation threads with assign, ignore and reply) and the interview meeting
 routes under `/api/founder/validate/interviews/:id/meetings` (Zoom and Google
-Meet). Every path is written out in full so the drift check reads each one.
+Meet). Since D757 (#1926) it also reads the Calendar status
+(`GET /api/calendar/google/status`, for `meet_transcripts`) and asks Google for
+the Meet transcript permission (`allowMeetTranscripts`, `POST
+/api/calendar/google/meet-transcripts/connect`), going only to Google's consent
+URL. Every path is written out in full so the drift check reads each one.
+D756 (#1895): its `channelsAdminApi` also calls `/api/admin/channels/telegram/webhook`
+(the interview bot's health, and registering its webhook), for Super Admins.
 
 D678 (#1552): `publicAiModels.js` reads `GET /api/public/ai-models`, the
 router's model table as the public Intelligence page shows it: one row per job,
@@ -167,6 +180,13 @@ corrects and exports, and a Super Admin issues. A draft's figures come only
 from `read` and `exportCsv`, which the Worker records before it answers; the
 list carries none.
 
+D716 (#1860): `fundNotices.js` calls the LP's own `GET /api/fund-notices/mine`
+(the list, with `call_number`, `due_date`, `superseded` and
+`instructions_changed`) and `GET /api/fund-notices/mine/:uid` (one notice's
+frozen, masked figures). `minePdfBlob` reads `GET /api/fund-notices/mine/:uid/pdf`
+as a Blob, outside the typed drift surface, only when the LP taps PDF. Nothing
+here returns a full account number.
+
 D717 (#1782) decision 11, #1855: `fundStructure.js` reads the entity and money
 map, `GET /api/admin/fund-structure`, for the "Structure of the Fund" sheet on
 the Contracts desk. HQ admins only. The Super Admin's answer lists each entity's
@@ -179,6 +199,15 @@ fee state, terms and their confirmation, admissions, net invested, offsets, a
 period's preview, issue and funding call, and one LP's statement. The Worker
 decides each act: confirm and issue are the Super Admin's.
 
+D716 (#1781, #1866): `fundBooklets.js` calls the LP's own Subscription Booklet
+at `/api/fund-booklets/mine`: open (`POST`), read (`GET`), one part's paper
+(`GET /paper?part=n`), ticks (`PUT /answers`) and submit (`POST /submit` with
+the last view's digest). Every field id comes from the Worker's last view; the
+page builds none, and stores nothing in the browser. D759 (#1858) adds `sign`
+(`POST /mine/sign`), which sends the submitted booklet for the applicant's
+signature and answers the signing token; the page opens `/esign/<token>` with it
+at once and keeps it nowhere else.
+
 D722: `googleSignIn.js` calls `GET /api/auth/google/config` (whether this
 deployment opens Google's own window on /login, and the client to open it for;
 `{ canary: true }` adds `?canary=1`, which /login sends from `?google_window=1`)
@@ -186,3 +215,7 @@ and `POST /api/auth/google/popup` (the code that window returned, with the
 attempt's state; the answer is `{ token, user, new_signup }`). The POST carries
 `X-Requested-With: XmlHttpRequest`, which the Worker requires and which no
 other origin can send. The redirect fallback stays `api.googleStartUrl`.
+
+D651 (#1463): `connectors.js` calls `/api/connectors`, the Connectors page's, its panel's and Build's 'Connect a tool' reads and writes. D753 (#1878) adds `page(key)` (`GET /api/connectors/directory/:key`), one connector's page.
+
+D755 (#1919, read by #1915): `publicPricing.js` reads `GET /api/public/plans-and-packs`, which needs no session: every plan with its price from the catalog mirror and its AI allowance, and the token packs on sale. `/plans-and-pricing` renders it through `../plansPricing.js`.

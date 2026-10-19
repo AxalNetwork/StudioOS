@@ -31,7 +31,7 @@ import { AI_SURFACE } from './aiSurfaces';
 import * as aiBudget from './aiBudget';
 import { enqueueJob } from './queue';
 import {
-  AUDIO_CHANNELS, AUDIO_PREFIX, consentBlocks, labelSegments, listChunks, loadSession, recordReceipt, replaceWithFinal,
+  AUDIO_CHANNELS, AUDIO_PREFIX, consentBlocks, labelSegments, sessionHasAudio, listChunks, loadSession, recordReceipt, replaceWithFinal,
   type ChunkRow, type SessionRow, type StoredSegment,
 } from './interviewSessions';
 import { DEFAULT_FINAL_MODEL } from './sttModels';
@@ -348,7 +348,9 @@ export async function runInterviewProcessJob(env: Env, payload: unknown): Promis
   // Only the member who recorded it processes it.
   if (session.created_by_user_id !== userId) return null;
   // #1470: no consent, no AI over the recording.
-  if (consentBlocks(session.channel, session.consent_status)) {
+  if (consentBlocks(session.channel, session.consent_status, {
+    hasAudio: await sessionHasAudio(env, session.id), submittedVia: session.submitted_via ?? null,
+  })) {
     await failProcessing(env, session, NO_CONSENT_SENTENCE);
     return 'failed';
   }

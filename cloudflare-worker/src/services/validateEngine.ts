@@ -40,7 +40,8 @@
  */
 import type { Env } from '../types';
 import { budgetRefusalMessage } from './aiRouter';
-import { consentBlocks, loadSession } from './interviewSessions';
+import { loadSession, sessionConsentBlocks } from './interviewSessions';
+import { presentTables } from './interviewFindings';
 import { IntakeError, writableSession } from './interviewIntake';
 import { summariseSession, type SummaryResult } from './interviewProcessing';
 import { enqueueJob } from './queue';
@@ -78,6 +79,7 @@ export const NOTES = {
   tooLargeToStructure: 'The summary is ready. This conversation is longer than Axal can propose findings from in one run yet, so none were proposed and nothing more was charged.',
   budgetTail: ' The transcript is kept; summarise it when the allowance allows.',
   withdrawn: 'The interviewee withdrew consent, so the summary and its suggestions were removed. Decisions you already made are kept, without the quote.',
+  passB: 'Axal suggested what it heard about the problem, the person and the market, but not yet about demand and evidence:',
 } as const;
 
 /** The sentence a refusal code reads as. Never the code itself. */
@@ -152,7 +154,7 @@ export async function digestSession(env: Env, opts: {
     throw err;
   }
 
-  const blocked = consentBlocks(session.channel, session.consent_status);
+  const blocked = await sessionConsentBlocks(env, session);
   if (blocked) {
     // A withdrawal's own sentence stays: it says more than the consent rule does.
     if (!(session.consent_status === 'declined' && session.digest_status === 'skipped')) {
@@ -221,6 +223,8 @@ export async function digestSession(env: Env, opts: {
         sessionId: session.id, userId: opts.userId, trigger: opts.trigger, model: prefs.models.structure, dedupe: !force,
       });
       if (!structure.ok && refusal === undefined) refusal = structure.reason === 'refused' ? structure.refusal ?? null : null;
+      // D757 (#1923): pass B refused keeps pass A's suggestions; the note says what is missing and why.
+      if (structure.ok && structure.passBRefusal !== undefined) notes.push(`${NOTES.passB} ${refusalNote(structure.passBRefusal)}`);
     }
   } catch (err) {
     // Release the claim so a retry is not told it is busy; the error is the caller's.
@@ -277,7 +281,13 @@ export async function withdrawDigest(env: Env, sessionId: number, actorUserId: n
        FROM validate_proposals WHERE session_id = ?`,
   ).bind(sessionId).first<{ pending: number | null; decided: number | null }>();
   const out = { pending_deleted: Number(counts?.pending || 0), decided_unquoted: Number(counts?.decided || 0) };
+  // D757 §2.13 (#1923) — the findings already accepted from this session stay
+  // the founder's, without the interviewee's words.
+  const findings = (await presentTables(env, ['interview_findings'])).has('interview_findings')
+    ? [env.DB.prepare('UPDATE interview_findings SET quote = NULL, cite_from = NULL, cite_to = NULL WHERE session_id = ?').bind(sessionId)]
+    : [];
   await env.DB.batch([
+    ...findings,
     env.DB.prepare(
       `UPDATE interview_sessions
           SET summary = NULL, summary_model = NULL, summarised_at = NULL, summary_citations_json = NULL,

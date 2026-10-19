@@ -12,7 +12,12 @@
  *
  * Behaviour:
  *   - ROUTE map picks the model per task class.
- *   - Non-2xx or >8 s latency on a Workers AI primary → smaller WAI sibling.
+ *   - Any failure on a Workers AI attempt → the next model in the chain.
+ *     D761: each attempt's timeout is its class's (chat 8 s, reasoning and
+ *     long context 30 s, images 60 s; a stream's first chunk the same); a
+ *     model whose context window the input overflows is skipped uncalled;
+ *     the request and response shapes, and each attempt's units, are
+ *     `./ai/shapes.ts`'s.
  *   - Chain exhausted → refusal (`all_models_failed`).
  *   - Per-user $/day + $/month KV caps; org-wide kill switch on monthly cap.
  *   - embed/explain/sentiment results cached by content-hash (30d / 7d / 30d).
@@ -27,6 +32,7 @@ import type { Env } from '../types';
 import { branchOf } from '../util/branch';
 import * as aiBudget from './aiBudget';
 import { audioInputFor, parseAudioOutput, type SttTranscript } from './sttFormats';
+import * as shapes from './ai/shapes';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -123,6 +129,13 @@ export interface RunOptions {
   // recorded". Re-validated in `recordUsage` against SURFACE_RE, so a caller
   // that forwards a request field cannot put anything else into the column.
   surface?: string;
+  // D762 (#2019): the AI rail's page, option and record the run was asked
+  // from, written to `ai_usage_logs.rail_page`, `rail_option` and `record_ref`
+  // (migration 493). D765's run path passes them; every other caller leaves
+  // them out, and NULL is "not recorded". Re-validated in `recordUsage`.
+  railPage?: string;
+  railOption?: string;
+  recordRef?: string;
 }
 
 /**
@@ -137,6 +150,26 @@ export function normaliseSurface(value: unknown): string | null {
   return SURFACE_RE.test(path) ? path : null;
 }
 
+/** A rail key as `recordUsage` writes it: letters, digits and `/_.:-`, at most 160 characters; anything else is NULL. */
+const RAIL_KEY_RE = /^[A-Za-z0-9/_.:-]{1,160}$/;
+function railKey(value: unknown): string | null {
+  return typeof value === 'string' && RAIL_KEY_RE.test(value.trim()) ? value.trim() : null;
+}
+
+/**
+ * D762 (#2019): what a log row records about the money beside the cost.
+ * `charged` is the micro-USD the run's hold settled at: 0 when nothing was
+ * charged (a refusal, a cached answer, a failed run, a run with no hold), and
+ * null when it is not known yet (a run that cost more than its hold, waiting
+ * for a Super Admin's decision). `units` are what the run was settled on.
+ */
+interface RunCharge {
+  charged: number | null;
+  reservationUid?: string | null;
+  units?: Record<string, number> | null;
+}
+const NOTHING_CHARGED: RunCharge = { charged: 0 };
+
 export interface UsageMeta {
   task: TaskClass;
   model: string;
@@ -149,6 +182,22 @@ export interface UsageMeta {
   safety_score: number | null;
 }
 
+/**
+ * D761: one model the router tried. `called: false` is a model skipped for
+ * its context window, which cost nothing. `units` are what the attempt used,
+ * measured by the Worker (`./ai/shapes.ts`); absent when the provider gave
+ * nothing to count, never zero-filled.
+ */
+export interface AttemptRecord {
+  model: string;
+  ok: boolean;
+  called: boolean;
+  status?: number;
+  code?: number | null;
+  timeout_ms?: number;
+  units?: shapes.Units;
+}
+
 export interface RunResult {
   ok: boolean;
   output?: string;             // assistant text or stringified JSON for tool_call
@@ -159,6 +208,9 @@ export interface RunResult {
   refusal?: RefusalReason;
   error?: string;
   usage: UsageMeta;
+  // D761: the answering attempt's units, and every attempt in order. A3 (D762) settles on them.
+  units?: shapes.Units;
+  attempts?: AttemptRecord[];
 }
 
 // ---------------------------------------------------------------------------
@@ -196,6 +248,9 @@ interface RouteEntry {
   // shape: Workers AI takes `{ audio: number[] }` and answers `{ text }`,
   // which shares nothing with either the chat or the embed path.
   isAudio?: boolean;
+  // D761: the output budget a reasoning model gets on this task when the caller
+  // names a smaller one (`shapes.REASONING_MAX_TOKENS` when absent).
+  reasoningMaxTokens?: number;
 }
 
 /**
@@ -537,8 +592,8 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   brand_taglines: { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA] },
 };
 
-// Latency budget per primary attempt before we fall back.
-const PRIMARY_TIMEOUT_MS = 8_000;
+// D761: the latency budget is per attempt and per class (`shapes.TIMEOUT_MS`),
+// read through `shapes.timeoutMs` in `run`. The old flat 8 s is the chat class.
 
 // ---------------------------------------------------------------------------
 // Budget defaults (overridable via env vars)
@@ -724,40 +779,79 @@ async function cacheKeyFor(opts: RunOptions, model: string): Promise<string | nu
 // import is a property that test depends on, so it keeps its own cast.
 // ---------------------------------------------------------------------------
 let LOG_SCHEMA_READY = new WeakMap<object, boolean>();
+const LOG_PAGE_INDEX_493 = 'CREATE INDEX IF NOT EXISTS idx_ai_usage_user_page_created ON ai_usage_logs(user_id, rail_page, created_at)';
+/** Migration 493's columns (D762), in its order. */
+const LOG_COLUMNS_493: ReadonlyArray<readonly [string, string]> = [
+  ['charged_microusd', 'INTEGER CHECK (charged_microusd IS NULL OR charged_microusd >= 0)'],
+  ['reservation_uid', 'TEXT'], ['rail_page', 'TEXT'], ['rail_option', 'TEXT'], ['record_ref', 'TEXT'],
+  ['guard_for', 'INTEGER'], ['units_json', 'TEXT'],
+];
 async function ensureLogSchema(env: Env): Promise<void> {
   if (LOG_SCHEMA_READY.get(env.DB as unknown as object)) return;
   try {
     await env.DB.exec(
-      "CREATE TABLE IF NOT EXISTS ai_usage_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, task TEXT NOT NULL, model TEXT NOT NULL, latency_ms INTEGER NOT NULL DEFAULT 0, prompt_tokens INTEGER NOT NULL DEFAULT 0, completion_tokens INTEGER NOT NULL DEFAULT 0, est_cost_usd REAL NOT NULL DEFAULT 0, safety_score REAL, fallback_used INTEGER NOT NULL DEFAULT 0, cached INTEGER NOT NULL DEFAULT 0, refusal TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), surface TEXT)",
+      "CREATE TABLE IF NOT EXISTS ai_usage_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, task TEXT NOT NULL, model TEXT NOT NULL, latency_ms INTEGER NOT NULL DEFAULT 0, prompt_tokens INTEGER NOT NULL DEFAULT 0, completion_tokens INTEGER NOT NULL DEFAULT 0, est_cost_usd REAL NOT NULL DEFAULT 0, safety_score REAL, fallback_used INTEGER NOT NULL DEFAULT 0, cached INTEGER NOT NULL DEFAULT 0, refusal TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), surface TEXT, charged_microusd INTEGER CHECK (charged_microusd IS NULL OR charged_microusd >= 0), reservation_uid TEXT, rail_page TEXT, rail_option TEXT, record_ref TEXT, guard_for INTEGER, units_json TEXT)",
     );
     await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_ai_usage_user_created ON ai_usage_logs(user_id, created_at DESC)");
     await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_ai_usage_task_created ON ai_usage_logs(task, created_at DESC)");
+    // A table from before migration 493 has no rail_page yet: its index is made when its columns are (`addLogColumns493`).
+    try { await env.DB.exec(LOG_PAGE_INDEX_493); } catch { /* see addLogColumns493 */ }
     LOG_SCHEMA_READY.set(env.DB as unknown as object, true);
   } catch (e) {
     console.warn('[aiRouter] log schema:', (e as Error).message);
   }
 }
 
-async function recordUsage(env: Env, userId: number | null, usage: UsageMeta, refusal: RefusalReason | null, surface?: string): Promise<void> {
+/**
+ * A table made before migration 493 (a dev or test database) gains its
+ * columns, so a run is still logged there. Called only when an INSERT names a
+ * column the table lacks; production has 493 before this Worker deploys.
+ */
+async function addLogColumns493(env: Env): Promise<void> {
+  const cols = await env.DB.prepare('PRAGMA table_info(ai_usage_logs)').all<{ name: string }>();
+  const have = new Set((cols.results ?? []).map((c) => c.name));
+  for (const [name, type] of LOG_COLUMNS_493) {
+    if (!have.has(name)) await env.DB.exec(`ALTER TABLE ai_usage_logs ADD COLUMN ${name} ${type}`);
+  }
+  await env.DB.exec(LOG_PAGE_INDEX_493);
+}
+
+type UsageWho = Pick<RunOptions, 'userId' | 'surface' | 'railPage' | 'railOption' | 'recordRef'>;
+async function recordUsage(env: Env, who: UsageWho, usage: UsageMeta, refusal: RefusalReason | null, charge: RunCharge = NOTHING_CHARGED): Promise<void> {
   await ensureLogSchema(env);
+  const charged = charge.charged == null ? null : Math.max(0, Math.round(charge.charged));
+  // `surface` stays the last column bound, as it was before migration 493.
+  const insert = () => env.DB.prepare(
+    `INSERT INTO ai_usage_logs (user_id, task, model, latency_ms, prompt_tokens, completion_tokens, est_cost_usd, safety_score, fallback_used, cached, refusal,
+       charged_microusd, reservation_uid, rail_page, rail_option, record_ref, units_json, surface)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(
+    who.userId,
+    usage.task,
+    usage.model,
+    Math.max(0, Math.round(usage.latency_ms)),
+    Math.max(0, Math.round(usage.prompt_tokens)),
+    Math.max(0, Math.round(usage.completion_tokens)),
+    Math.max(0, usage.est_cost_usd),
+    usage.safety_score,
+    usage.fallback_used ? 1 : 0,
+    usage.cached ? 1 : 0,
+    refusal,
+    charged,
+    charge.reservationUid ?? null,
+    railKey(who.railPage),
+    railKey(who.railOption),
+    railKey(who.recordRef),
+    charge.units ? JSON.stringify(charge.units) : null,
+    normaliseSurface(who.surface),
+  ).run();
   try {
-    await env.DB.prepare(
-      `INSERT INTO ai_usage_logs (user_id, task, model, latency_ms, prompt_tokens, completion_tokens, est_cost_usd, safety_score, fallback_used, cached, refusal, surface)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).bind(
-      userId,
-      usage.task,
-      usage.model,
-      Math.max(0, Math.round(usage.latency_ms)),
-      Math.max(0, Math.round(usage.prompt_tokens)),
-      Math.max(0, Math.round(usage.completion_tokens)),
-      Math.max(0, usage.est_cost_usd),
-      usage.safety_score,
-      usage.fallback_used ? 1 : 0,
-      usage.cached ? 1 : 0,
-      refusal,
-      normaliseSurface(surface),
-    ).run();
+    try { await insert(); }
+    catch (e) {
+      if (!/no column named|no such column/i.test((e as Error).message)) throw e;
+      await addLogColumns493(env);
+      await insert();
+    }
   } catch (e) {
     console.warn('[aiRouter] recordUsage:', (e as Error).message);
   }
@@ -776,6 +870,9 @@ interface ProviderResult {
   prompt_tokens?: number;
   completion_tokens?: number;
   error?: string;
+  // D761: Workers AI's numeric error code, when the failure carried one.
+  code?: number | null;
+  units?: shapes.Units;
 }
 
 /** The slice of workers-types' `GatewayOptions` this router sends (D261). */
@@ -785,7 +882,7 @@ interface WorkersAIBinding {
   run(
     model: string,
     payload: unknown,
-    options?: { gateway?: { id: string; skipCache?: boolean; cacheTtl?: number; metadata?: Record<string, string> } },
+    options?: { gateway?: { id: string; skipCache?: boolean; cacheTtl?: number; metadata?: Record<string, string> }; extraHeaders?: Record<string, string> },
   ): Promise<unknown>;
 }
 
@@ -848,12 +945,17 @@ function isGatewayRouted(env: Env, task: TaskClass): boolean {
 // toggled on, a hostile rate-limit/cache rule) can no longer dead-end the
 // onboarding chat — we lose only the separate advisor analytics namespace,
 // not the conversation itself.
-async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed: boolean, bypassGateway = false): Promise<ProviderResult> {
+async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed: boolean, bypassGateway = false, limitMs: number = shapes.TIMEOUT_MS.chat): Promise<ProviderResult> {
   const ai = (env as unknown as { AI?: WorkersAIBinding }).AI;
   if (!ai || typeof ai.run !== 'function') {
     return { ok: false, status: 0, error: 'AI binding not configured' };
   }
   const gatewayOpt = bypassGateway ? undefined : gatewayOptionFor(env, opts.task, opts.userId);
+  // D761: cache affinity, so a member's next turn on the same page earns cached
+  // input. The member's id and the page key only, never an email or a name.
+  const affinity = shapes.sessionAffinity(opts.userId, normaliseSurface(opts.surface) ?? opts.task);
+  const runOpt = affinity ? { ...(gatewayOpt ?? {}), extraHeaders: { 'x-session-affinity': affinity } } : gatewayOpt;
+  const facts = shapes.factsFor(model);
   try {
     if (ROUTE[opts.task]?.isAudio) {
       // `Array.from` on the bytes is what the binding expects, and it is also
@@ -862,20 +964,19 @@ async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed:
       // See `MAX_RECORDING_BYTES` in `routes/founder_validate.ts`.
       const bytes = opts.audio;
       if (!bytes || !bytes.byteLength) return { ok: false, status: 400, error: 'no audio' };
-      const out = await ai.run(model, audioInputFor(model, bytes, opts.audioMime || '', opts.language ?? null), gatewayOpt);
+      const out = await ai.run(model, audioInputFor(model, bytes, opts.audioMime || '', opts.language ?? null), runOpt);
       // Silence and non-speech transcribe to an empty string. That is an
       // answer, not a failure: the clip contained no words, and reporting it
       // as an error would have the caller retry and pay again.
       const transcript = parseAudioOutput(model, out);
-      return { ok: true, output: transcript.text, transcript, prompt_tokens: 0, completion_tokens: 0 };
+      return { ok: true, output: transcript.text, transcript, prompt_tokens: 0, completion_tokens: 0, units: shapes.audioUnits(opts.audioMinutes) };
     }
     if (isEmbed) {
       const text = opts.text ?? defaultContentBlob(opts);
-      const out = await ai.run(model, { text }, gatewayOpt) as { data?: number[][]; shape?: number[] } | unknown;
-      const data = (out as { data?: number[][] })?.data;
-      const vec = Array.isArray(data) && Array.isArray(data[0]) ? data[0] : null;
-      if (!vec) return { ok: false, status: 502, error: 'unexpected embed response' };
-      return { ok: true, output: '', embedding: vec, prompt_tokens: estTokens(text), completion_tokens: 0 };
+      const out = await ai.run(model, shapes.embedRequest(text), runOpt);
+      const { vector, units } = shapes.parseEmbed(out, text);
+      if (!vector) return { ok: false, status: 502, error: 'unexpected embed response' };
+      return { ok: true, output: '', embedding: vector, prompt_tokens: units.tokens_in ?? 0, completion_tokens: 0, units };
     }
     // When the caller supplies `messages`, honor them — but still
     // inject `systemPrompt` as a leading system message unless the
@@ -884,30 +985,25 @@ async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed:
     // would silently drop ADVISOR_SYSTEM_PROMPT + persona context on
     // the Workers AI path while keeping it on the Anthropic path,
     // producing diverging guardrail behavior across providers.
-    const messages = opts.messages?.length
-      ? (
-          opts.systemPrompt && !opts.messages.some((m) => m.role === 'system')
-            ? [{ role: 'system' as const, content: opts.systemPrompt }, ...opts.messages]
-            : opts.messages
-        )
-      : [
-          ...(opts.systemPrompt ? [{ role: 'system' as const, content: opts.systemPrompt }] : []),
-          { role: 'user' as const, content: opts.text || '' },
-        ];
-    const payload: Record<string, unknown> = {
-      messages,
-      max_tokens: opts.maxTokens || 512,
-    };
-    if (opts.temperature != null) payload.temperature = opts.temperature;
-    if (opts.stream) payload.stream = true;
-    const raw = await ai.run(model, payload, gatewayOpt);
+    const messages = chatMessagesFor(opts);
+    // D761: the shape is the model's — a reasoning model gets its task's output
+    // budget and its control as its model page gives it (`./ai/shapes.ts`).
+    const payload = shapes.chatRequest(facts, messages, {
+      maxTokens: shapes.maxTokensFor(facts, opts.maxTokens, ROUTE[opts.task]?.reasoningMaxTokens),
+      temperature: opts.temperature,
+      stream: opts.stream,
+    });
+    const raw = await ai.run(model, payload, runOpt);
     // Streaming pass-through: Workers AI returns a ReadableStream of
     // SSE-formatted chunks when stream:true is set. We forward it
-    // verbatim to the caller; cost accounting falls back to estimated
-    // prompt tokens only since we don't see the completion side.
+    // verbatim to the caller once its first chunk arrives within the class's
+    // limit (D761); cost accounting falls back to estimated prompt tokens only
+    // since we don't see the completion side.
     if (opts.stream && raw && typeof (raw as ReadableStream).getReader === 'function') {
-      const promptTok = estTokens(messages.map(m => m.content).join('\n'));
-      return { ok: true, stream: raw as ReadableStream, prompt_tokens: promptTok, completion_tokens: 0 };
+      const units = shapes.streamOpenUnits(messages);
+      const opened = await shapes.firstChunkWithin(raw as ReadableStream, limitMs);
+      if (!opened) return { ok: false, status: 504, error: `no first chunk within ${limitMs}ms`, units };
+      return { ok: true, stream: opened, prompt_tokens: units.tokens_in ?? 0, completion_tokens: 0, units };
     }
     // Workers AI chat models return { response: string } or
     // { choices: [{ message: { content } }] } depending on model. Some
@@ -916,22 +1012,27 @@ async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed:
     // nested shapes too so a valid reply is never silently dropped as empty,
     // which previously surfaced to the onboarding user as the degraded
     // "had trouble processing that" fallback even though the model answered.
-    type ChatShape = {
-      response?: string;
-      choices?: Array<{ message?: { content?: string } }>;
-      usage?: { prompt_tokens?: number; completion_tokens?: number };
-    };
-    const r = raw as ChatShape & { result?: ChatShape };
-    const pickText = (s?: ChatShape): string | undefined =>
-      s?.response ?? s?.choices?.[0]?.message?.content ?? undefined;
-    const text = pickText(r) ?? pickText(r.result) ?? '';
-    const usageObj = r.usage ?? r.result?.usage;
-    const promptTok = usageObj?.prompt_tokens ?? estTokens(messages.map(m => m.content).join('\n'));
-    const completionTok = usageObj?.completion_tokens ?? estTokens(text);
-    return { ok: true, output: String(text || ''), prompt_tokens: promptTok, completion_tokens: completionTok };
+    // D761: `reasoning_content` is never the answer (`shapes.parseChat`).
+    const { text, units } = shapes.parseChat(raw, facts, messages);
+    return { ok: true, output: text, prompt_tokens: units.tokens_in ?? 0, completion_tokens: units.tokens_out ?? 0, units };
   } catch (e) {
-    return { ok: false, status: 500, error: (e as Error).message };
+    const f = shapes.failureOf(e);
+    return { ok: false, status: f.status, code: f.code, error: (e as Error).message };
   }
+}
+
+/** The chat messages a run sends: the caller's, with `systemPrompt` leading unless they brought their own system message. */
+function chatMessagesFor(opts: RunOptions): shapes.ChatMessage[] {
+  return opts.messages?.length
+    ? (
+        opts.systemPrompt && !opts.messages.some((m) => m.role === 'system')
+          ? [{ role: 'system' as const, content: opts.systemPrompt }, ...opts.messages]
+          : opts.messages
+      )
+    : [
+        ...(opts.systemPrompt ? [{ role: 'system' as const, content: opts.systemPrompt }] : []),
+        { role: 'user' as const, content: opts.text || '' },
+      ];
 }
 
 // Task #31 — non-WAI providers removed from the production worker.
@@ -942,8 +1043,14 @@ async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed:
 // on timeout so the caller can fall back to the smaller sibling.
 function withTimeout(p: Promise<ProviderResult>, ms: number): Promise<ProviderResult> {
   return new Promise((resolve) => {
-    const timer = setTimeout(() => resolve({ ok: false, status: 504, error: `timeout >${ms}ms` }), ms);
-    p.then((r) => { clearTimeout(timer); resolve(r); }, (e) => {
+    let late = false;
+    const timer = setTimeout(() => { late = true; resolve({ ok: false, status: 504, error: `timeout >${ms}ms` }); }, ms);
+    p.then((r) => {
+      clearTimeout(timer);
+      // D761: a stream that opens after its limit was already given up on is cancelled, not leaked.
+      if (late && r.stream) r.stream.cancel().catch(() => {});
+      resolve(r);
+    }, (e) => {
       clearTimeout(timer);
       resolve({ ok: false, status: 500, error: (e as Error).message });
     });
@@ -974,7 +1081,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
       prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0,
       fallback_used: false, cached: false, safety_score: null,
     };
-    await recordUsage(env, opts.userId, usage, 'misconfigured', opts.surface);
+    await recordUsage(env, opts, usage, 'misconfigured');
     return { ok: false, refusal: 'misconfigured', error: `unknown task ${opts.task}`, usage };
   }
 
@@ -998,7 +1105,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
       prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0,
       fallback_used: false, cached: false, safety_score: null,
     };
-    await recordUsage(env, opts.userId, usage, 'model_not_offered', opts.surface);
+    await recordUsage(env, opts, usage, 'model_not_offered');
     return {
       ok: false,
       refusal: 'model_not_offered',
@@ -1025,7 +1132,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
             prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0,
             fallback_used: false, cached: true, safety_score: null,
           };
-          await recordUsage(env, opts.userId, usage, null, opts.surface);
+          await recordUsage(env, opts, usage, null);
           return {
             ok: true,
             output: hit.output ?? '',
@@ -1045,7 +1152,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
         prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0,
         fallback_used: false, cached: false, safety_score: null,
       };
-      await recordUsage(env, opts.userId, usage, 'kill_switch', opts.surface);
+      await recordUsage(env, opts, usage, 'kill_switch');
       return { ok: false, refusal: 'kill_switch', error: 'org-wide AI budget exhausted', usage };
     }
     const dayKey   = `user:${opts.userId}:${todayKey()}`;
@@ -1062,7 +1169,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
         prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0,
         fallback_used: false, cached: false, safety_score: null,
       };
-      await recordUsage(env, opts.userId, usage, 'budget_user_day', opts.surface);
+      await recordUsage(env, opts, usage, 'budget_user_day');
       return { ok: false, refusal: 'budget_user_day', error: `daily cap ${caps.userDay} USD reached`, usage };
     }
     if (opts.userId <= 0 && m >= caps.userMonth) {
@@ -1071,7 +1178,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
         prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0,
         fallback_used: false, cached: false, safety_score: null,
       };
-      await recordUsage(env, opts.userId, usage, 'budget_user_month', opts.surface);
+      await recordUsage(env, opts, usage, 'budget_user_month');
       return { ok: false, refusal: 'budget_user_month', error: `monthly cap ${caps.userMonth} USD reached`, usage };
     }
     if (o >= caps.orgMonth) {
@@ -1081,7 +1188,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
         prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0,
         fallback_used: false, cached: false, safety_score: null,
       };
-      await recordUsage(env, opts.userId, usage, 'budget_org_month', opts.surface);
+      await recordUsage(env, opts, usage, 'budget_org_month');
       return { ok: false, refusal: 'budget_org_month', error: `org cap ${caps.orgMonth} USD reached`, usage };
     }
   }
@@ -1093,33 +1200,37 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
       // Reserve the most expensive offered fallback, refund to the actual logged estimate.
       const inputBytes = new TextEncoder().encode(defaultContentBlob(opts)+(opts.systemPrompt || '')).byteLength;
       const promptBound = inputBytes + 4096 + (opts.messages?.length || 1) * 64;
-      const outputBound = opts.maxTokens || 512;
+      // D761: a reasoning model's output budget is its task's, not 512.
+      const outputBound = Math.max(...[primaryModel, ...(route.fallbackChain || [])]
+        .map((m) => shapes.maxTokensFor(shapes.factsFor(m), opts.maxTokens, route.reasoningMaxTokens)));
       if (!Number.isSafeInteger(outputBound) || outputBound < 1 || !Number.isFinite(opts.audioMinutes || 0) || (opts.audioMinutes || 0)<0) throw new Error('AI estimate unreadable');
       const models = [primaryModel,...(route.fallbackChain || [])];
       const quote = Math.max(...models.map(model=>estimateCostUsd(model,promptBound,outputBound,opts.audioMinutes || 0)));
       const held = await aiBudget.reserveAiBudget(env,opts.userId,aiBudget.usdToMicro(quote));
       if (!held.ok) {
         const usage:UsageMeta={task:opts.task,model:primaryModel,latency_ms:0,prompt_tokens:0,completion_tokens:0,est_cost_usd:0,fallback_used:false,cached:false,safety_score:null};
-        await recordUsage(env,opts.userId,usage,held.refusal,opts.surface);
+        await recordUsage(env, opts, usage, held.refusal);
         return {ok:false,refusal:held.refusal,error:budgetRefusalMessage(held.refusal),usage};
       }
       reservation = held.reservation;
     } catch {
       const usage:UsageMeta={task:opts.task,model:primaryModel,latency_ms:0,prompt_tokens:0,completion_tokens:0,est_cost_usd:0,fallback_used:false,cached:false,safety_score:null};
-      await recordUsage(env,opts.userId,usage,'misconfigured',opts.surface);
+      await recordUsage(env, opts, usage, 'misconfigured');
       return {ok:false,refusal:'misconfigured',error:'Unreadable: your AI allowance and top-up balance could not be checked.',usage};
     }
   }
 
   // ---- Primary call + fallback chain ----------------------------------
-  // Streaming bypasses the latency timeout (the stream opens fast but the
-  // body may legitimately exceed 8 s). Latency budget still applies to
-  // the synchronous Workers AI handshake before the stream opens because
-  // ai.run() resolves only once the upstream accepts the request.
+  // D761: each attempt's limit is its class's (`shapes.timeoutMs`: chat 8 s,
+  // reasoning and long context 30 s, images 60 s). A streamed run gets the
+  // same limit for the handshake and its first chunk; the body after that
+  // may legitimately run longer, so it is not timed.
   const gatewayRouted = isGatewayRouted(env, opts.task);
+  const inputTokens = route.isAudio ? 0 : estTokens(route.isEmbed ? (opts.text ?? defaultContentBlob(opts)) : chatMessagesFor(opts).map((m) => m.content).join('\n'));
+  const limitFor = (model: string): number => shapes.timeoutMs(shapes.factsFor(model), inputTokens);
   const callWaiRaw = (model: string, bypassGateway: boolean): Promise<ProviderResult> => {
-    if (opts.stream) return callWorkersAI(env, model, opts, !!route.isEmbed, bypassGateway);
-    return withTimeout(callWorkersAI(env, model, opts, !!route.isEmbed, bypassGateway), PRIMARY_TIMEOUT_MS);
+    const ms = limitFor(model);
+    return withTimeout(callWorkersAI(env, model, opts, !!route.isEmbed, bypassGateway, ms), ms);
   };
   // Task #50 — gateway-resilient call. For gateway-routed advisor tasks we
   // first hit the gatewayed path (keeps advisor analytics/cache/RL). If that
@@ -1128,7 +1239,26 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
   // before declaring the model dead. So a single shared-gateway outage can no
   // longer take onboarding down. Non-gateway tasks are unaffected (the first
   // call is already un-gatewayed, so no extra call is made).
+  const attempts: AttemptRecord[] = [];
+  const record = (model: string, r: ProviderResult, called = true): ProviderResult => {
+    attempts.push({
+      model, ok: r.ok, called,
+      ...(r.ok ? {} : { status: r.status, code: r.code ?? null }),
+      ...(called ? { timeout_ms: limitFor(model) } : {}),
+      ...(r.units ? { units: r.units } : {}),
+    });
+    return r;
+  };
   const callWai = async (model: string): Promise<ProviderResult> => {
+    // D761: an input the model's context window cannot hold skips the model
+    // without calling it. An unknown window always fits.
+    const facts = shapes.factsFor(model);
+    if (!route.isAudio && !shapes.fitsContext(facts, inputTokens, shapes.maxTokensFor(facts, opts.maxTokens, route.reasoningMaxTokens))) {
+      return record(model, { ok: false, status: 413, error: `input does not fit ${model}'s context window` }, false);
+    }
+    return record(model, await callWaiCalled(model));
+  };
+  const callWaiCalled = async (model: string): Promise<ProviderResult> => {
     const first = await callWaiRaw(model, false);
     if (first.ok || !gatewayRouted) return first;
     const retry = await callWaiRaw(model, true);
@@ -1151,6 +1281,10 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
   // Workers AI multi-hop fallback chain (spec: tool_call → advisor_turn →
   // role_detect, i.e. qwen32b → llama-70b → llama-8b).
   //
+  // D761: every failure moves down the chain, a paid-only model's 429, or 403
+  // with code 5035, included (#1874 §7): the plan the account is on cannot run
+  // it, and a sibling may well answer.
+  //
   // The chain skips the model that just failed. It never contained the route's
   // own primary, so this only bites once a caller can PICK one: a founder who
   // chose the 8b would otherwise have the router answer its failure by calling
@@ -1170,10 +1304,80 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
     }
   }
 
-  const latency = Date.now() - startedAt;
+  const audioMinutes = opts.audioMinutes || 0;
+  const usageFor = (promptTok: number, completionTok: number, safetyScore: number | null): UsageMeta => ({
+    task: opts.task,
+    model: modelUsed,
+    latency_ms: Date.now() - startedAt,
+    prompt_tokens: promptTok,
+    completion_tokens: completionTok,
+    est_cost_usd: estimateCostUsd(modelUsed, promptTok, completionTok, audioMinutes),
+    fallback_used: fallbackUsed,
+    cached: false,
+    safety_score: safetyScore,
+  });
+  // D762: the units a run is settled on, as the log row records them: the
+  // answering attempt's D761 `units` (cached input among them), with the token
+  // counts the run was settled on, which for a stream are the ones read when
+  // it ended. Every figure is the Worker's.
+  const unitsFor = (u: UsageMeta): Record<string, number> => ({
+    ...(attempt.units ?? {}),
+    tokens_in: u.prompt_tokens, tokens_out: u.completion_tokens, ...(audioMinutes > 0 ? { audio_minutes: audioMinutes } : {}),
+  });
+  /**
+   * Settle the hold at the run's cost and bump the KV spend buckets. The hold
+   * and the buckets are both on cost while billing is (D762 §2). Returns what
+   * the log row records, or null when the settlement could not be written.
+   */
+  const settle = async (u: UsageMeta, ok: boolean): Promise<RunCharge | null> => {
+    const charged = ok ? aiBudget.usdToMicro(u.est_cost_usd) : 0;
+    if (reservation) {
+      try { await aiBudget.settleAiReservation(env, reservation, charged, !ok); }
+      catch { return null; }
+    }
+    // ---- Bump KV spend buckets ------------------------------------------
+    // Post-bump: if the org monthly bucket just crossed the hard cap, flip
+    // the kill switch in the same code path so the overshoot window is at
+    // most one in-flight request per concurrent caller. The pre-check at
+    // the top of the next call will then refuse before invoking any model.
+    if (ok && store && u.est_cost_usd > 0) {
+      const dayKey    = `user:${opts.userId}:${todayKey()}`;
+      const monthKey_ = `user:${opts.userId}:${monthKey()}`;
+      const orgKey    = `org:${monthKey()}`;
+      const [, , orgTotal] = await Promise.all([
+        bumpSpend(store, dayKey,    u.est_cost_usd, 2 * 86400),
+        bumpSpend(store, monthKey_, u.est_cost_usd, 35 * 86400),
+        bumpSpend(store, orgKey,    u.est_cost_usd, 35 * 86400),
+      ]);
+      if (orgTotal >= caps.orgMonth) {
+        await setKillSwitch(store, 35 * 86400);
+      }
+    }
+    // A run with no hold (a system run) charged nobody.
+    return { charged: reservation ? charged : 0, reservationUid: reservation?.uid ?? null, units: unitsFor(u) };
+  };
+  // Settlement failed: a run that cost more than its hold now waits for a
+  // Super Admin's decision, so what it charged is not known yet.
+  const unsettled = (u: UsageMeta): RunCharge => ({ charged: null, reservationUid: reservation?.uid ?? null, units: unitsFor(u) });
+
+  // ---- A streamed run settles when its stream ends ----------------------
+  // D762 §3: on the provider's final usage where the last chunk carries it,
+  // and otherwise on the output the Worker counted as it passed through.
+  // Never on 0 output tokens. A reader who stops early is settled on what
+  // they were sent.
+  if (attempt.ok && attempt.stream) {
+    const promptEstimate = attempt.prompt_tokens || 0;
+    const metered = meterStream(attempt.stream, async (counted) => {
+      const u = usageFor(counted.prompt_tokens ?? promptEstimate, counted.completion_tokens, null);
+      const charge = await settle(u, true);
+      if (!charge) await recordUsage(env, opts, u, 'misconfigured', unsettled(u));
+      else await recordUsage(env, opts, u, null, charge);
+    });
+    return { ok: true, stream: metered, usage: usageFor(promptEstimate, 0, null), units: attempt.units, attempts };
+  }
+
   const promptTok = attempt.prompt_tokens || 0;
   const completionTok = attempt.completion_tokens || 0;
-  const cost = estimateCostUsd(modelUsed, promptTok, completionTok, opts.audioMinutes || 0);
 
   // For task='safety' (llama-guard-3-8b) parse the structured response
   // into a 0..1 score so the admin dashboard can chart guardrail
@@ -1188,48 +1392,17 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
     else if (firstLine === 'unsafe') safetyScore = 0;
   }
 
-  const usage: UsageMeta = {
-    task: opts.task,
-    model: modelUsed,
-    latency_ms: latency,
-    prompt_tokens: promptTok,
-    completion_tokens: completionTok,
-    est_cost_usd: cost,
-    fallback_used: fallbackUsed,
-    cached: false,
-    safety_score: safetyScore,
-  };
+  const usage = usageFor(promptTok, completionTok, safetyScore);
 
-  if (reservation) {
-    try { await aiBudget.settleAiReservation(env,reservation,attempt.ok ? aiBudget.usdToMicro(cost) : 0,!attempt.ok); }
-    catch {
-      await recordUsage(env,opts.userId,usage,'misconfigured',opts.surface);
-      return {ok:false,refusal:'misconfigured',error:'Unreadable: the AI allowance and top-up draw could not be recorded.',usage};
-    }
+  const charge = await settle(usage, attempt.ok);
+  if (!charge) {
+    await recordUsage(env, opts, usage, 'misconfigured', unsettled(usage));
+    return {ok:false,refusal:'misconfigured',error:'Unreadable: the AI allowance and top-up draw could not be recorded.',usage};
   }
 
   if (!attempt.ok) {
-    await recordUsage(env, opts.userId, usage, 'all_models_failed', opts.surface);
-    return { ok: false, refusal: 'all_models_failed', error: lastError || 'provider failed', usage };
-  }
-
-  // ---- Bump KV spend buckets ------------------------------------------
-  // Post-bump: if the org monthly bucket just crossed the hard cap, flip
-  // the kill switch in the same code path so the overshoot window is at
-  // most one in-flight request per concurrent caller. The pre-check at
-  // the top of the next call will then refuse before invoking any model.
-  if (store && cost > 0) {
-    const dayKey    = `user:${opts.userId}:${todayKey()}`;
-    const monthKey_ = `user:${opts.userId}:${monthKey()}`;
-    const orgKey    = `org:${monthKey()}`;
-    const [, , orgTotal] = await Promise.all([
-      bumpSpend(store, dayKey,    cost, 2 * 86400),
-      bumpSpend(store, monthKey_, cost, 35 * 86400),
-      bumpSpend(store, orgKey,    cost, 35 * 86400),
-    ]);
-    if (orgTotal >= caps.orgMonth) {
-      await setKillSwitch(store, 35 * 86400);
-    }
+    await recordUsage(env, opts, usage, 'all_models_failed', charge);
+    return { ok: false, refusal: 'all_models_failed', error: lastError || 'provider failed', usage, attempts };
   }
 
   // ---- Cache write -----------------------------------------------------
@@ -1254,7 +1427,7 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
     }
   }
 
-  await recordUsage(env, opts.userId, usage, null, opts.surface);
+  await recordUsage(env, opts, usage, null, charge);
 
   return {
     ok: true,
@@ -1263,7 +1436,84 @@ export async function run(env: Env, opts: RunOptions): Promise<RunResult> {
     stream: attempt.stream,
     transcript: attempt.transcript,
     usage,
+    units: attempt.units,
+    attempts,
   };
+}
+
+/** What a streamed run used, as `meterStream` read it off the stream. */
+export interface MeteredUsage {
+  // The provider's own count where its last chunk carried one; absent otherwise.
+  prompt_tokens?: number;
+  completion_tokens: number;
+  // 'provider': the chunk's usage; 'counted': the Worker's count of the text it passed on.
+  source: 'provider' | 'counted';
+}
+
+/**
+ * D762 §3: pass a Workers AI SSE stream through unchanged, and when it ends,
+ * or the reader stops early, call `onDone` once with what it used. The
+ * provider's `usage` wins where a chunk carries one with completion tokens;
+ * otherwise the output is counted from the `response` deltas the reader was
+ * sent. `onDone` runs before the stream closes, so the Worker is still serving
+ * the response while it settles; a failure in it is logged, never thrown at
+ * the reader.
+ */
+export function meterStream(source: ReadableStream, onDone: (u: MeteredUsage) => Promise<void>): ReadableStream {
+  const reader = source.getReader();
+  const decoder = new TextDecoder();
+  let pending = '';
+  let text = '';
+  let provider: { prompt_tokens?: number; completion_tokens?: number } | null = null;
+  let finished = false;
+  const readLine = (line: string) => {
+    const m = /^data:\s*(.*)$/.exec(line.trim());
+    if (!m || m[1] === '[DONE]') return;
+    try {
+      const chunk = JSON.parse(m[1]) as { response?: unknown; usage?: { prompt_tokens?: unknown; completion_tokens?: unknown } };
+      if (typeof chunk.response === 'string') text += chunk.response;
+      const c = Number(chunk.usage?.completion_tokens);
+      if (Number.isSafeInteger(c) && c > 0) {
+        const p = Number(chunk.usage?.prompt_tokens);
+        provider = { completion_tokens: c, ...(Number.isSafeInteger(p) && p > 0 ? { prompt_tokens: p } : {}) };
+      }
+    } catch { /* a line that is not JSON carries no text */ }
+  };
+  const feed = (bytes: Uint8Array | undefined, last: boolean) => {
+    pending += decoder.decode(bytes, { stream: !last });
+    const lines = pending.split('\n');
+    pending = last ? '' : lines.pop() ?? '';
+    lines.forEach(readLine);
+  };
+  const finish = async () => {
+    if (finished) return;
+    finished = true;
+    const counted: MeteredUsage = provider
+      ? { ...provider, completion_tokens: provider.completion_tokens as number, source: 'provider' }
+      : { completion_tokens: estTokens(text), source: 'counted' };
+    try { await onDone(counted); }
+    catch (e) { console.warn('[aiRouter] stream settlement:', (e as Error).message); }
+  };
+  return new ReadableStream({
+    async pull(controller) {
+      let next: ReadableStreamReadResult<Uint8Array>;
+      try { next = await reader.read(); }
+      catch (e) { await finish(); controller.error(e); return; }
+      if (next.done) {
+        feed(undefined, true);
+        await finish();
+        controller.close();
+        return;
+      }
+      feed(next.value, false);
+      controller.enqueue(next.value);
+    },
+    async cancel(reason) {
+      feed(undefined, true);
+      await finish();
+      await reader.cancel(reason);
+    },
+  });
 }
 
 // ---------------------------------------------------------------------------

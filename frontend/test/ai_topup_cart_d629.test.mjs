@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import React, {act} from 'react';
 import {createRoot} from 'react-dom/client';
 import {useCart} from '../src/components/products/useCart.js';
-import useAiTopupCart from '../src/hooks/useAiTopupCart.js';
 function makeNode(tag) {
   return {
     tagName: tag === '#text' ? '#text' : String(tag).toUpperCase(),
@@ -85,7 +84,7 @@ function installDocument() {
 }
 
 
-test('D629 existing checkout adds one configured top-up after an asynchronous read and preserves the cart',async()=>{
+test('D629 ordinary cart preserves stored items, broadcasts additions and survives remounts',async()=>{
  const restore=installDocument();
  const previous={localStorage:globalThis.localStorage,fetch:globalThis.fetch,sessionStorage:globalThis.sessionStorage,addEventListener:globalThis.addEventListener,removeEventListener:globalThis.removeEventListener,dispatchEvent:globalThis.dispatchEvent};
  const events=new EventTarget(),stored=new Map();
@@ -96,37 +95,20 @@ test('D629 existing checkout adds one configured top-up after an asynchronous re
  stored.set('axal_cart_v1',JSON.stringify([existing]));
  globalThis.fetch=async()=>new Response(JSON.stringify({configured:true,state:'ready',product:{price_id:'price_owner',product_id:'prod_owner',name:'AI top-up',unit_amount:2000,currency:'usd'}}),{status:200,headers:{'Content-Type':'application/json'}});
  const root=createRoot(document.createElement('div'));let current;
- function CheckoutCart(){const cart=useCart();const state=useAiTopupCart(cart,true);current={cart,state};return null;}
+ function CheckoutCart(){const cart=useCart();current={cart};return null;}
  try{
   await act(async()=>{root.render(React.createElement(CheckoutCart,{key:1}));});
-  assert.equal(current.state,'ready');
-  assert.deepEqual(current.cart.items.map(l=>[l.price_id,l.quantity]),[['price_existing',1],['price_owner',1]]);
-  assert.equal(current.cart.subtotal,2500);
+  assert.deepEqual(current.cart.items.map(l=>[l.price_id,l.quantity]),[['price_existing',1]]);
+  assert.equal(current.cart.subtotal,500);
   assert.deepEqual(JSON.parse(stored.get('axal_cart_v1')),current.cart.items);
   await act(async()=>{root.render(React.createElement(CheckoutCart,{key:2}));});
-  assert.deepEqual(current.cart.items.map(l=>[l.price_id,l.quantity]),[['price_existing',1],['price_owner',1]]);
+  assert.deepEqual(current.cart.items.map(l=>[l.price_id,l.quantity]),[['price_existing',1]]);
   await act(async()=>{current.cart.add(existing,1);current.cart.add({...existing,price_id:'price_other'},1);});
-  assert.deepEqual(current.cart.items.map(l=>[l.price_id,l.quantity]),[['price_existing',2],['price_owner',1],['price_other',1]]);
+  assert.deepEqual(current.cart.items.map(l=>[l.price_id,l.quantity]),[['price_existing',2],['price_other',1]]);
  }finally{await act(async()=>root.unmount());for(const [key,value]of Object.entries(previous))globalThis[key]=value;restore();}
 });
 
-// D750 (#1841): a top-up HQ has not finished configuring is "isn't available
-// yet" at checkout, never Unreadable, and adds nothing to the cart.
-test('D750 checkout reads a not_ready or unset top-up as not configured and adds no line',async()=>{
- for(const answer of [{configured:true,state:'not_ready'},{configured:false}]){
-  const restore=installDocument();
-  const previous={localStorage:globalThis.localStorage,fetch:globalThis.fetch,sessionStorage:globalThis.sessionStorage,addEventListener:globalThis.addEventListener,removeEventListener:globalThis.removeEventListener,dispatchEvent:globalThis.dispatchEvent};
-  const events=new EventTarget(),stored=new Map();
-  for(const method of ['addEventListener','removeEventListener','dispatchEvent'])globalThis[method]=events[method].bind(events);
-  globalThis.sessionStorage={getItem:k=>stored.get(k)??null,setItem:(k,v)=>stored.set(k,v),removeItem:k=>stored.delete(k)};
-  globalThis.localStorage=globalThis.sessionStorage;
-  globalThis.fetch=async()=>new Response(JSON.stringify(answer),{status:200,headers:{'Content-Type':'application/json'}});
-  const root=createRoot(document.createElement('div'));let current;
-  function CheckoutCart(){const cart=useCart();const state=useAiTopupCart(cart,true);current={cart,state};return null;}
-  try{
-   await act(async()=>{root.render(React.createElement(CheckoutCart));});
-   assert.equal(current.state,'not-configured',JSON.stringify(answer));
-   assert.deepEqual(current.cart.items,[]);
-  }finally{await act(async()=>root.unmount());for(const [key,value]of Object.entries(previous))globalThis[key]=value;restore();}
- }
-});
+
+// D755 (#1985): the retired top-up cart scenarios now live in
+// checkout_token_pack_d755.test.mjs: isolated orders, unavailable reads and
+// the old URL's redirect. This file retains the ordinary cart regression.
