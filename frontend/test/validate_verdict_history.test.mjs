@@ -23,7 +23,6 @@ import {
   RECENTLY_MOVED_DAYS, daysBefore, historyReaches, laneChangedSince,
   parseObserved, startOfMonth, verdictAsOf, verdictChangedSince,
 } from '../src/lib/verdictHistory.js';
-import { founderZoneFilters } from '../src/workspaces/founderZoneFilters.js';
 import { codeOnlyJsx } from './_codeOnly.mjs';
 
 const src = (p) => codeOnlyJsx(readFileSync(resolve(process.cwd(), p), 'utf8'));
