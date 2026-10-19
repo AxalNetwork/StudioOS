@@ -42,7 +42,8 @@ function richBank() {
 async function setup(opts: { connect?: boolean } = {}) {
   const { db, env } = await personalFixture();
   const baseline = readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8');
-  for (const t of ['deals', 'commitments', 'deal_invitations', 'lp_applications']) db.exec(tableFromBaseline(baseline, t));
+  // #1887's fixture already creates the deal tables; create only what is missing.
+  for (const t of ['deals', 'commitments', 'deal_invitations', 'lp_applications']) if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(t)) db.exec(tableFromBaseline(baseline, t));
   db.exec(mig('491_mercury_capital_attestations.sql'));
   db.exec(`INSERT INTO users (id, role, name, email) VALUES (31, 'investor', 'Second', 'second@example.test');
     INSERT INTO vc_funds (id, name, slug) VALUES (1, 'Axal Spin-Out Fund I', 'spinout-fund-i'), (2, 'Outside Fund', 'outside-fund');

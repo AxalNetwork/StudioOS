@@ -28,7 +28,8 @@ import { currentPerTarget, statementSentence } from '../src/services/capitalAtte
 async function setup() {
   const { db, env } = await personalFixture();
   const baseline = readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8');
-  for (const t of ['lp_applications', 'deals', 'commitments']) db.exec(tableFromBaseline(baseline, t));
+  // #1887's fixture already creates the deal tables; create only what is missing.
+  for (const t of ['lp_applications', 'deals', 'commitments']) if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(t)) db.exec(tableFromBaseline(baseline, t));
   db.exec(mig('491_mercury_capital_attestations.sql'));
   db.exec(`INSERT INTO users (id, role, name, email) VALUES (31, 'investor', 'Second Investor', 'second@example.test');
     INSERT INTO lp_applications (id, user_id, fund_slug, investor_type, target_commitment, status) VALUES
