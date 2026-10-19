@@ -4,8 +4,13 @@
  * move once when D754 f1's and D756's pages take them over.
  *
  * THE COPY IS D757 §2.12's, WORD FOR WORD. `frontend/test/connector_wording_d757.test.mjs`
- * pins every string. The Worker's fields decide what is drawn: `used_by`,
- * `suggests` and `distribution` (#1922), and `configured` (D751).
+ * pins every string. The Worker's fields decide what is drawn: `suggests`
+ * and `distribution` (#1922), and `configured` (D751).
+ *
+ * NO "USED BY" LINKS (the owner, 2026-10-19). Every profile sees Connectors,
+ * and Validate is the founder's alone, so a card or a connector page never
+ * links to Validate › Record a session or Validate › Inbox. The Worker's
+ * `used_by` is not drawn.
  */
 
 /** Validate's module keys (`integrations/moduleLabels.ts`), named as `cycleValidate.ts` MODULES. */
@@ -41,16 +46,6 @@ export function engineSentence(suggests) {
     .filter((k) => k !== 'verdict' && Object.hasOwn(VALIDATE_MODULE_LABELS, k));
   const names = [...new Set(keys.length ? keys : DEFAULT_SUGGESTS)].map((k) => VALIDATE_MODULE_LABELS[k]);
   return `Eadwyn writes a draft summary and suggests findings for ${listSentence(names)}. You accept each one. Accepted evidence is there for your Verdict.`;
-}
-
-export const RECORD_SESSION = Object.freeze({ label: 'Validate › Record a session', href: '/validate/record' });
-export const INBOX = Object.freeze({ label: 'Validate › Inbox', href: '/validate/inbox' });
-
-/** A `used_by` list the page may draw: labelled entries whose href is an app path. */
-export function usedByLinks(usedBy) {
-  return (Array.isArray(usedBy) ? usedBy : [])
-    .filter((u) => u && typeof u.label === 'string' && u.label && typeof u.href === 'string' && /^\/(?!\/)/.test(u.href))
-    .map((u) => ({ label: u.label, href: u.href }));
 }
 
 // ---------- Zoom (`/account/connectors/zoom`) -------------------------------
@@ -105,12 +100,12 @@ export function zoomNotices(p) {
 
 export const CHAT_ENGINE = 'Chats you assign to an interview become its notes. Eadwyn writes a draft summary and suggests findings for your Validate modules; you accept each one.';
 
-/** Each card's Used by and engine sentence. Chats are also used by the Inbox. */
+/** Each card's engine sentence. No Used by links: see the header. */
 export const CHANNEL_WORDING = Object.freeze({
-  telegram: { usedBy: [RECORD_SESSION, INBOX], engine: CHAT_ENGINE },
-  whatsapp: { usedBy: [RECORD_SESSION, INBOX], engine: CHAT_ENGINE },
-  zoom: { usedBy: [RECORD_SESSION], engine: engineSentence(DEFAULT_SUGGESTS) },
-  google_meet: { usedBy: [RECORD_SESSION], engine: engineSentence(DEFAULT_SUGGESTS) },
+  telegram: { engine: CHAT_ENGINE },
+  whatsapp: { engine: CHAT_ENGINE },
+  zoom: { engine: engineSentence(DEFAULT_SUGGESTS) },
+  google_meet: { engine: engineSentence(DEFAULT_SUGGESTS) },
 });
 
 // ---------- Record a session -------------------------------------------------

@@ -40,12 +40,12 @@
  */
 import type { Env } from '../types';
 import { budgetRefusalMessage } from './aiRouter';
-import { loadSession, sessionConsentBlocks } from './interviewSessions';
+import { loadSession, sessionDigestConsentBlocks } from './interviewSessions';
 import { presentTables } from './interviewFindings';
 import { IntakeError, writableSession } from './interviewIntake';
 import { summariseSession, type SummaryResult } from './interviewProcessing';
 import { enqueueJob } from './queue';
-import { structureSession, type StructureOutcome, type StructureTrigger } from './sessionAutoStructure';
+import { MIN_HOURS_BETWEEN, structureSession, type StructureOutcome, type StructureTrigger } from './sessionAutoStructure';
 import type { Segment } from './interviewStructuring';
 import { finalSegments, refusedBody } from '../routes/founder_validate_structure';
 
@@ -54,7 +54,7 @@ export type DigestStage = 'summarise' | 'structure';
 export type DigestOutcome =
   | { ok: true; status: 'done'; summary: SummaryResult | null; structure: StructureOutcome | null; note: string | null }
   | { ok: true; status: 'unchanged' }
-  | { ok: false; status: 'skipped'; reason: 'manual_mode' | 'no_final_transcript'; note: string }
+  | { ok: false; status: 'skipped'; reason: 'manual_mode' | 'no_final_transcript' | 'quiet_window'; note: string }
   | {
     ok: false; status: 'refused'; reason: 'consent_not_recorded' | 'transcript_too_large' | 'refused' | 'busy';
     refusal: string | null; note: string;
@@ -72,6 +72,7 @@ const TOO_LARGE = new Set(['transcript_too_large', 'structure_call_limit']);
 export const NOTES = {
   manual: 'Manual mode is on for Validate, so Axal did not summarise or structure this. Use Summarise and Structure on the session.',
   noTranscript: 'There is no transcript to summarise yet.',
+  chatQuiet: 'This conversation has new text. Axal will digest it after the six-hour quiet window.',
   busy: 'This conversation is already being summarised. It will be ready in a minute.',
   noCitation: 'The summary could not be tied to the transcript, so none is stored.',
   modelDropped: 'Your saved model for this is no longer offered, so the default ran.',
@@ -130,7 +131,7 @@ async function writeOutcome(env: Env, sessionId: number, fields: {
             digest_hash = COALESCE(?, digest_hash), digest_run_id = COALESCE(?, digest_run_id),
             digest_json = CASE WHEN ? IS NOT NULL AND json_valid(digest_json) THEN json_set(digest_json, '$.run_id', ?) ELSE digest_json END,
             digested_at = datetime('now')
-      WHERE id = ?`,
+      WHERE id = ? AND consent_status <> 'declined'`,
   ).bind(fields.status, fields.note, fields.trigger, fields.hash ?? null, fields.runId ?? null,
     fields.runId ?? null, fields.runId ?? null, sessionId).run();
 }
@@ -154,7 +155,7 @@ export async function digestSession(env: Env, opts: {
     throw err;
   }
 
-  const blocked = await sessionConsentBlocks(env, session);
+  const blocked = await sessionDigestConsentBlocks(env, session);
   if (blocked) {
     // A withdrawal's own sentence stays: it says more than the consent rule does.
     if (!(session.consent_status === 'declined' && session.digest_status === 'skipped')) {
@@ -192,18 +193,41 @@ export async function digestSession(env: Env, opts: {
     return { ok: true, status: 'unchanged' };
   }
 
+  // A job queued before an earlier run started may arrive after more text.
+  // Re-check the bound at execution too; the unchanged hash above remains free.
+  if (!force && opts.trigger === 'chat_text_added') {
+    const recent = await env.DB.prepare(
+      `SELECT 1 AS hit FROM interview_sessions WHERE id = ? AND datetime(digested_at) > datetime('now', ?)`,
+    ).bind(session.id, `-${MIN_HOURS_BETWEEN} hours`).first();
+    if (recent) {
+      await env.DB.prepare(
+        "UPDATE interview_sessions SET digest_note = ? WHERE id = ? AND digest_status IS NOT 'running' AND consent_status <> 'declined'",
+      ).bind(NOTES.chatQuiet, session.id).run();
+      return { ok: false, status: 'skipped', reason: 'quiet_window', note: NOTES.chatQuiet };
+    }
+  }
+
+  // The chat quiet bound belongs in this atomic claim too: another job may
+  // finish after the SELECT above and before this UPDATE.
   // Two triggers (an import and a button) never bill the same transcript twice
   // at once. An automatic run also claims only while the stored hash differs
   // from its own: a run that finished between the check above and this claim
   // has already digested this transcript.
   const claim = await env.DB.prepare(
     `UPDATE interview_sessions SET digest_status = 'running', digest_trigger = ?, digested_at = datetime('now')
-      WHERE id = ? AND (digest_status IS NOT 'running' OR datetime(digested_at) < datetime('now', ?))
-        AND (? = 1 OR digest_hash IS NOT ?)`,
-  ).bind(opts.trigger, session.id, `-${CLAIM_STALE_MINUTES} minutes`, force ? 1 : 0, hash).run();
+      WHERE id = ? AND consent_status <> 'declined' AND (digest_status IS NOT 'running' OR datetime(digested_at) < datetime('now', ?))
+        AND (? = 1 OR digest_hash IS NOT ?)
+        AND (? = 1 OR ? <> 'chat_text_added' OR digested_at IS NULL OR datetime(digested_at) <= datetime('now', ?))`,
+  ).bind(opts.trigger, session.id, `-${CLAIM_STALE_MINUTES} minutes`, force ? 1 : 0, hash,
+    force ? 1 : 0, opts.trigger, `-${MIN_HOURS_BETWEEN} hours`).run();
   if (Number(claim.meta?.changes || 0) !== 1) {
     const now = await loadSession(env, session.id);
     if (!force && now?.digest_hash === hash) return { ok: true, status: 'unchanged' };
+    if (!force && opts.trigger === 'chat_text_added' && now?.digest_status !== 'running' && await env.DB.prepare(
+      `SELECT 1 AS hit FROM interview_sessions WHERE id = ? AND datetime(digested_at) > datetime('now', ?)`,
+    ).bind(session.id, `-${MIN_HOURS_BETWEEN} hours`).first()) {
+      return { ok: false, status: 'skipped', reason: 'quiet_window', note: NOTES.chatQuiet };
+    }
     return { ok: false, status: 'refused', reason: 'busy', refusal: null, note: NOTES.busy };
   }
 
@@ -231,6 +255,12 @@ export async function digestSession(env: Env, opts: {
     await writeOutcome(env, session.id, { status: 'refused', note: refusalNote(null), trigger: opts.trigger });
     throw err;
   }
+  // Consent may change while a provider/model call is in flight. Its late
+  // result cannot restore the withdrawn digest, suggestions or engine state.
+  if ((await loadSession(env, session.id))?.consent_status === 'declined') {
+    await withdrawDigest(env, session.id, opts.userId, { onlyDeclined: true });
+    return { ok: false, status: 'refused', reason: 'consent_not_recorded', refusal: null, note: NOTES.withdrawn };
+  }
   if (prefs.dropped) notes.push(NOTES.modelDropped);
   const runId = structure?.ok ? structure.runId : undefined;
 
@@ -257,8 +287,17 @@ export async function digestSession(env: Env, opts: {
 
 /** Queue a digest (`session_structure`). One per session and trigger moment. */
 export async function enqueueDigest(env: Env, sessionId: number, userId: number, trigger: StructureTrigger) {
+  // D757 (#1930): frequent chat messages must not bypass the quiet sweep's
+  // six-hour bound. Do not slide digested_at or overwrite a withdrawal's state.
+  if (trigger === 'chat_text_added') {
+    const session = await env.DB.prepare(
+      `SELECT consent_status, datetime(digested_at) > datetime('now', ?) AS recent
+         FROM interview_sessions WHERE id = ? AND created_by_user_id = ?`,
+    ).bind(`-${MIN_HOURS_BETWEEN} hours`, sessionId, userId).first<{ consent_status: string; recent: number | null }>();
+    if (!session || session.consent_status === 'declined' || session.recent) return null;
+  }
   await env.DB.prepare(
-    "UPDATE interview_sessions SET digest_status = 'queued', digest_trigger = ? WHERE id = ? AND digest_status IS NOT 'running'",
+    "UPDATE interview_sessions SET digest_status = 'queued', digest_trigger = ? WHERE id = ? AND digest_status IS NOT 'running' AND consent_status <> 'declined'",
   ).bind(trigger, sessionId).run();
   return enqueueJob(env, 'session_structure', { session_id: sessionId, user_id: userId, trigger }, {
     idempotency_key: `session_structure:${sessionId}:${trigger}:${Math.floor(Date.now() / 60_000)}`,
@@ -272,34 +311,56 @@ export async function enqueueDigest(env: Env, sessionId: number, userId: number,
  * accepted into a module are the founder's own. The transcript stays until the
  * founder deletes the session. One batch, and one log row of counts only.
  */
-export async function withdrawDigest(env: Env, sessionId: number, actorUserId: number): Promise<{ pending_deleted: number; decided_unquoted: number }> {
-  const session = await loadSession(env, sessionId);
-  if (!session) return { pending_deleted: 0, decided_unquoted: 0 };
-  const counts = await env.DB.prepare(
-    `SELECT SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending,
-            SUM(CASE WHEN status <> 'pending' THEN 1 ELSE 0 END) AS decided
-       FROM validate_proposals WHERE session_id = ?`,
-  ).bind(sessionId).first<{ pending: number | null; decided: number | null }>();
-  const out = { pending_deleted: Number(counts?.pending || 0), decided_unquoted: Number(counts?.decided || 0) };
-  // D757 §2.13 (#1923) — the findings already accepted from this session stay
-  // the founder's, without the interviewee's words.
-  const findings = (await presentTables(env, ['interview_findings'])).has('interview_findings')
-    ? [env.DB.prepare('UPDATE interview_findings SET quote = NULL, cite_from = NULL, cite_to = NULL WHERE session_id = ?').bind(sessionId)]
-    : [];
-  await env.DB.batch([
-    ...findings,
-    env.DB.prepare(
-      `UPDATE interview_sessions
-          SET summary = NULL, summary_model = NULL, summarised_at = NULL, summary_citations_json = NULL,
-              digest_json = NULL, digest_hash = NULL, digest_status = 'skipped', digest_note = ?,
-              digested_at = datetime('now'), updated_at = datetime('now')
-        WHERE id = ?`,
-    ).bind(NOTES.withdrawn, sessionId),
-    env.DB.prepare(`DELETE FROM validate_proposals WHERE session_id = ? AND status = 'pending'`).bind(sessionId),
-    env.DB.prepare('UPDATE validate_proposals SET citation_json = NULL WHERE session_id = ?').bind(sessionId),
-    env.DB.prepare(`INSERT INTO activity_logs (action, details, actor, user_id, project_id) VALUES (?, ?, ?, ?, ?)`)
-      .bind('interview_consent_withdrawn', JSON.stringify({ session_uid: session.uid, ...out }),
-        `user:${actorUserId}`, actorUserId, session.project_id),
-  ]);
-  return out;
+export async function withdrawDigest(env: Env, sessionId: number, actorUserId: number, opts: {
+  /** D757 #1930: consent and its cleanup commit in one D1 batch. */
+  before?: D1PreparedStatement[]; otherSessionIds?: number[]; onlyDeclined?: boolean;
+} = {}): Promise<{ pending_deleted: number; decided_unquoted: number; claim_changed?: number }> {
+  const out = { pending_deleted: 0, decided_unquoted: 0 };
+  const statements: D1PreparedStatement[] = [...(opts.before ?? [])];
+  const hasFindings = (await presentTables(env, ['interview_findings'])).has('interview_findings');
+  const onlyDeclined = opts.onlyDeclined ? 1 : 0;
+  for (const id of new Set([sessionId, ...(opts.otherSessionIds ?? [])])) {
+    const session = await loadSession(env, id);
+    if (!session) continue;
+    const counts = await env.DB.prepare(
+      `SELECT SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending,
+              SUM(CASE WHEN status <> 'pending' THEN 1 ELSE 0 END) AS decided
+         FROM validate_proposals WHERE session_id = ?`,
+    ).bind(id).first<{ pending: number | null; decided: number | null }>();
+    const removed = { pending_deleted: Number(counts?.pending || 0), decided_unquoted: Number(counts?.decided || 0) };
+    out.pending_deleted += removed.pending_deleted; out.decided_unquoted += removed.decided_unquoted;
+    statements.push(env.DB.prepare(
+      `INSERT INTO activity_logs (action, details, actor, user_id, project_id)
+       SELECT ?, ?, ?, ?, ? FROM interview_sessions s
+        WHERE s.id = ? AND (? = 0 OR s.consent_status = 'declined') AND (s.digest_status IS NOT 'skipped' OR s.digest_note IS NOT ?)`,
+    ).bind('interview_consent_withdrawn', JSON.stringify({ session_uid: session.uid, ...removed }),
+      `user:${actorUserId}`, actorUserId, session.project_id, id, onlyDeclined, NOTES.withdrawn));
+    // A consent claim that lost its race cannot wipe an unrevoked session.
+    // This condition is evaluated inside the batch, after the consent update.
+    if (hasFindings) statements.push(env.DB.prepare(
+      `UPDATE interview_findings SET quote = NULL, cite_from = NULL, cite_to = NULL WHERE session_id = ?
+         AND (? = 0 OR EXISTS (SELECT 1 FROM interview_sessions s WHERE s.id = ? AND s.consent_status = 'declined'))`,
+    ).bind(id, onlyDeclined, id));
+    statements.push(
+      env.DB.prepare(
+        `UPDATE interview_sessions
+            SET summary = NULL, summary_model = NULL, summarised_at = NULL, summary_citations_json = NULL,
+                digest_json = NULL, digest_hash = NULL, digest_status = 'skipped', digest_note = ?,
+                digested_at = datetime('now'), updated_at = datetime('now')
+          WHERE id = ? AND (? = 0 OR consent_status = 'declined')
+            AND (digest_status IS NOT 'skipped' OR digest_note IS NOT ? OR summary IS NOT NULL OR digest_json IS NOT NULL OR digest_hash IS NOT NULL)`,
+      ).bind(NOTES.withdrawn, id, onlyDeclined, NOTES.withdrawn),
+      env.DB.prepare(
+        `DELETE FROM validate_proposals WHERE session_id = ? AND status = 'pending'
+           AND (? = 0 OR EXISTS (SELECT 1 FROM interview_sessions s WHERE s.id = ? AND s.consent_status = 'declined'))`,
+      ).bind(id, onlyDeclined, id),
+      env.DB.prepare(
+        `UPDATE validate_proposals SET citation_json = NULL WHERE session_id = ?
+           AND (? = 0 OR EXISTS (SELECT 1 FROM interview_sessions s WHERE s.id = ? AND s.consent_status = 'declined'))`,
+      ).bind(id, onlyDeclined, id),
+    );
+  }
+  if (!statements.length) return out;
+  const result = await env.DB.batch(statements);
+  return { ...out, ...(opts.before?.length ? { claim_changed: Number(result[0]?.meta?.changes ?? 0) } : {}) };
 }

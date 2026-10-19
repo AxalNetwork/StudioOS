@@ -354,7 +354,40 @@ function syncFrequencyLabel(conn) {
   return <Unrecorded reason={conn?.first_party ? 'This connection syncs on its own route\'s schedule, which StudioOS does not record.' : 'The stored setting is not one StudioOS knows.'}>Not recorded</Unrecorded>;
 }
 
-function ActivityGroup({ conn }) {
+/** The open Settings tool's centred dialog, from the flow's `tool` (shared with the connector page). */
+export function ToolModals({ conn, flow, onChanged }) {
+  const { tool, setTool, onCsvImported } = flow;
+  return (
+    <>
+      {tool === 'hubspot' && <HubspotConfigModal integration={conn} onClose={() => setTool(null)} onSaved={() => { setTool(null); onChanged?.(); }} />}
+      {tool === 'salesforce' && <SalesforceConfigModal integration={conn} onClose={() => setTool(null)} onSaved={() => { setTool(null); onChanged?.(); }} />}
+      {tool === 'csv' && <LinkedInCsvImportModal onClose={() => setTool(null)} onImported={onCsvImported} />}
+    </>
+  );
+}
+
+/**
+ * A connection's settings: HubSpot's pipeline, Salesforce's stages, LinkedIn's
+ * CSV import and a stored key's Replace. Each opens a centred `Lightbox`
+ * (`connectorTools.jsx`) through `onTool`; shared with the connector page
+ * (D753 F3). Null when there is nothing to set.
+ */
+export function SettingsGroup({ p, onTool, onReplace }) {
+  const conn = p.connection;
+  const kind = authKind(p);
+  if (!conn || !(p.key === 'hubspot' || p.key === 'salesforce' || p.key === 'linkedin' || (conn.uid && kind !== 'oauth'))) return null;
+  return (
+    <Group label="Settings">
+      {p.key === 'hubspot' && <Row a="Pipeline" b={conn.config?.pipeline_label || 'Default pipeline'} action={<button type="button" className={BTN.link} onClick={() => onTool('hubspot')}>Change</button>} />}
+      {p.key === 'salesforce' && <Row a="Stages and fields" b={conn.config?.is_sandbox ? 'Sandbox' : 'Production'} action={<button type="button" className={BTN.link} onClick={() => onTool('salesforce')}>Change</button>} />}
+      {p.key === 'linkedin' && <Row a="Your connections" b="Import Connections.csv for referrals." action={<button type="button" className={BTN.link} onClick={() => onTool('csv')}>Import</button>} />}
+      {conn.uid && kind !== 'oauth' && <Row a={kind === 'key' ? 'API key' : 'Access token'} b={conn.api_key_preview ? `Ends ${conn.api_key_preview}` : 'Stored encrypted'} action={<button type="button" className={BTN.link} onClick={onReplace}>Replace</button>} />}
+    </Group>
+  );
+}
+
+/** The connection's activity log, newest first; shared with the connector page's "Your connection" (D753 F3). */
+export function ActivityGroup({ conn }) {
   const [state, setState] = useState({ status: 'loading', items: [], message: '', limit: 10 });
   const read = useCallback((limit) => {
     setState((s) => ({ ...s, status: 'loading', limit }));
@@ -425,8 +458,8 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
   // D753 (#1908): the flow's state and actions are `useConnectFlow`'s, shared with the connector's page.
   const flow = useConnectFlow(p, { setView, onChanged, onClose, returnTo, projectId, companyId, blocked });
   const {
-    busy, message, adminHref, go, startOauth, submitKey, syncNow, doDisconnect, onCsvImported,
-    confirming, setConfirming, syncing, syncNote, tool, setTool, sfSandbox, setSfSandbox, dsDemo, setDsDemo,
+    busy, message, adminHref, go, startOauth, submitKey, syncNow, doDisconnect,
+    confirming, setConfirming, syncing, syncNote, setTool, sfSandbox, setSfSandbox, dsDemo, setDsDemo,
   } = flow;
   // A teammate who already connected this provider for the active company
   // (`GET /:key`): read once, when the flow starts on a registry connector.
@@ -510,14 +543,7 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
               action={conn.uid ? <button type="button" className={BTN.link} disabled={syncing} onClick={syncNow} data-testid="button-sync-now">{syncing ? 'Syncing…' : 'Sync now'}</button> : null} />
           </Group>
         )}
-        {(p.key === 'hubspot' || p.key === 'salesforce' || p.key === 'linkedin' || (conn.uid && kind !== 'oauth')) && (
-          <Group label="Settings">
-            {p.key === 'hubspot' && <Row a="Pipeline" b={conn.config?.pipeline_label || 'Default pipeline'} action={<button type="button" className={BTN.link} onClick={() => setTool('hubspot')}>Change</button>} />}
-            {p.key === 'salesforce' && <Row a="Stages and fields" b={conn.config?.is_sandbox ? 'Sandbox' : 'Production'} action={<button type="button" className={BTN.link} onClick={() => setTool('salesforce')}>Change</button>} />}
-            {p.key === 'linkedin' && <Row a="Your connections" b="Import Connections.csv for referrals." action={<button type="button" className={BTN.link} onClick={() => setTool('csv')}>Import</button>} />}
-            {conn.uid && kind !== 'oauth' && <Row a={kind === 'key' ? 'API key' : 'Access token'} b={conn.api_key_preview ? `Ends ${conn.api_key_preview}` : 'Stored encrypted'} action={<button type="button" className={BTN.link} onClick={() => go('key')}>Replace</button>} />}
-          </Group>
-        )}
+        <SettingsGroup p={p} onTool={setTool} onReplace={() => go('key')} />
         {conn.uid
           ? <ActivityGroup conn={conn} />
           : <Group label="Activity"><Row a={<Unrecorded reason={`${name} keeps no activity log in StudioOS.`}>Not recorded</Unrecorded>} /></Group>}
@@ -718,9 +744,7 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
       {note}
       {banner}
       {body}
-      {tool === 'hubspot' && <HubspotConfigModal integration={conn} onClose={() => setTool(null)} onSaved={() => { setTool(null); onChanged?.(); }} />}
-      {tool === 'salesforce' && <SalesforceConfigModal integration={conn} onClose={() => setTool(null)} onSaved={() => { setTool(null); onChanged?.(); }} />}
-      {tool === 'csv' && <LinkedInCsvImportModal onClose={() => setTool(null)} onImported={onCsvImported} />}
+      <ToolModals conn={conn} flow={flow} onChanged={onChanged} />
     </Sheet>
   );
 }
