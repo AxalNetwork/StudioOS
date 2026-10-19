@@ -23,6 +23,10 @@ declare module '*/railMatrix.json' {
   const matrix: {
     _generated: string;
     rows: { pageKey: string; kind: string; routeTask: string; models: { id: string; role: string; line: string }[] }[];
+    options: {
+      pageKey: string; optionKey: string; optionLabel: string; kind: string; handler: string; routeTask: string;
+      models: { id: string; role: string; line: string }[];
+    }[];
   };
   export default matrix;
 }

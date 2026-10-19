@@ -25,7 +25,9 @@
  *
  * WHERE THE DATA LANDS (`connector_fed_items`, migration 445):
  *   - an issue becomes a Product roadmap item (`roadmap_okrs`);
- *   - a pull request becomes a Prototype / MVP must-have (`mvp_features`);
+ *   - a pull request becomes a Prototype / MVP must-have (`mvp_features`), whose
+ *     state follows the pull request, with release checks, in `github/mvp.ts`
+ *     after the loop (D782, #2112);
  *   - a release becomes a Product roadmap release row (`roadmap_releases`),
  *     and an issue's milestone its item's group and target, in
  *     `github/roadmap.ts` after the loop (D782, #2111).
@@ -48,6 +50,7 @@ import {
 import { decryptCredentials, encryptCredentials, type CredentialBlob } from '../secrets';
 export { GITHUB_LANDINGS, GITHUB_READ_BY } from '../githubFeeds';
 import { roadmapRun } from './github/roadmap';
+import { mvpRun } from './github/mvp';
 import { syncSolutionDesign } from './github/solutionDesign';
 import { deleteContributorsOf, syncTeam } from './github/team';
 import { deleteFactsOf, syncCompany } from './github/company';
@@ -418,8 +421,10 @@ function pullStatements(env: Env, row: IntegrationRow, projectId: number, repo: 
     if (!localId) return { stmts: [touch.bind(row.id, projectId, 'prototype_mvp', 'pull_request', externalId, null, null)], created: false };
     return {
       stmts: [
-        env.DB.prepare('UPDATE mvp_features SET title = ?, delivery_status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?')
-          .bind(title, prDeliveryStatus(pr), localId, projectId),
+        // The title is GitHub's. The state follows the pull request in `github/mvp.ts`, written only
+        // when GitHub's state moves, so a founder's own edit stands (D782, #2112).
+        env.DB.prepare('UPDATE mvp_features SET title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?')
+          .bind(title, localId, projectId),
         touch.bind(row.id, projectId, 'prototype_mvp', 'pull_request', externalId, 'mvp_features', localId),
         env.DB.prepare(UNLINK_DELETED_PULL).bind(row.id, externalId, localId, projectId),
       ],
@@ -544,6 +549,7 @@ export async function syncGithub(env: Env, row: IntegrationRow, budget = SYNC_SU
   const token = await accessToken(env, row);
   const counts: Record<string, number | boolean> = { issues: 0, pull_requests: 0, releases: 0, roadmap_items_created: 0, must_haves_created: 0 };
   const roadmap = roadmapRun(env, row.id, projectId);
+  const mvp = mvpRun(env, row.id, projectId);
   const signature = repos.join('\n');
   const resume = await readCursor(env, row.uid, signature);
   const steps = repos.length * STEP_KINDS.length;
@@ -573,6 +579,7 @@ export async function syncGithub(env: Env, row: IntegrationRow, budget = SYNC_SU
         const items: any[] = (await ghJson<any>(token, `${list}${list.includes('?') ? '&' : '?'}per_page=${PER_PAGE}&page=${page}`)) || [];
         used += 1;
         roadmap.saw(repo, kind, items);
+        mvp.saw(repo, kind, items);
         const stmts: D1PreparedStatement[] = [];
         // D782 (#2111): a release lands as a row in `github/roadmap.ts`, after the loop.
         if (kind === 'releases') {
@@ -601,9 +608,10 @@ export async function syncGithub(env: Env, row: IntegrationRow, budget = SYNC_SU
         if (items.length < PER_PAGE) break;
       }
     }
-    // D782 (#2111, #2114, #2115): Founding team's contributors and Company creation's
+    // D782 (#2111, #2112, #2114, #2115): Founding team's contributors and Company creation's
     // facts first, each within its own small share; then Product roadmap's milestones,
-    // release rows and Shipped, then Solution design's files and stack. Each counts its
+    // release rows and Shipped, then Prototype / MVP's states and release checks,
+    // then Solution design's files and stack. Each counts its
     // own subrequests and reports none, so what is left of the budget is shared: no two
     // spend it twice.
     const before = budget - used;
@@ -612,9 +620,11 @@ export async function syncGithub(env: Env, row: IntegrationRow, budget = SYNC_SU
     Object.assign(counts, await syncTeam(env, row.id, projectId, (p) => gh(token, p), repos, teamShare));
     Object.assign(counts, await syncCompany(env, row.id, projectId, (p) => gh(token, p), repos, companyShare));
     const left = before - teamShare - companyShare;
-    const roadmapShare = Math.ceil(left / 2);
+    const roadmapShare = Math.ceil(left / 3);
+    const mvpShare = Math.ceil((left - roadmapShare) / 2);
     Object.assign(counts, await roadmap.finish((p) => gh(token, p), repos, roadmapShare));
-    Object.assign(counts, await syncSolutionDesign(env, row.id, projectId, (p) => gh(token, p), repos, left - roadmapShare));
+    Object.assign(counts, await mvp.finish((p) => gh(token, p), repos, mvpShare));
+    Object.assign(counts, await syncSolutionDesign(env, row.id, projectId, (p) => gh(token, p), repos, left - roadmapShare - mvpShare));
   } catch (e) {
     await writeProgress(env, row.uid, { state: 'failed', pct: pct(), reading: 'Stopped' });
     throw e;

@@ -260,7 +260,60 @@ async function prototype(env: Env, p: Project): Promise<ModuleRead> {
     list: { filters: [{ key: 'state', label: 'State', options: options(Object.entries(MUST_LABEL)) },
       { key: 'hypothesis', label: 'Hypothesis', options: optionsOf(mustRows, 'hypothesis', id => id === 'none' ? 'No hypothesis' : tests.get(id) ?? id) }],
     sort: { key: 'state', label: 'State' }, orders: { state: ['blocked', 'in_progress', 'not_started', 'done'] } },
-    facts: { done: done.length, total: must.length, target_date: p.mvp_target_date } };
+    facts: { done: done.length, total: must.length, target_date: p.mvp_target_date },
+    parts: { github: await prototypeGithub(env, p) } };
+}
+
+/** GitHub's state for a fed must-have, in the module's words (D782, #2112). */
+const PR_STATE_LABEL: Record<string, string> = { planned: 'Planned', in_progress: 'In progress', in_review: 'In review', built: 'Built', dropped: 'Dropped' };
+/** How many releases' checks the module lists, newest first; `releases_total` gives the rest's count. */
+export const RELEASE_CHECKS_SHOWN = 12;
+
+/**
+ * D782 (#2112): Prototype / MVP's "From GitHub" part, from what the GitHub sync
+ * wrote (`integrations/providers/github/mvp.ts`):
+ *   - `must_haves`: each fed must-have with GitHub's state and its pull request
+ *     link, a Dropped one included (it has left the must-haves; marking it a
+ *     must-have again undoes that);
+ *   - `releases`: each release's checks, newest first: the must-haves in it,
+ *     then those not in it.
+ * Its own read: a store this part cannot read makes the part Unreadable and
+ * leaves the must-haves' table as it is.
+ */
+async function prototypeGithub(env: Env, p: Project) {
+  try {
+    const fed = rows(await env.DB.prepare(
+      `SELECT id, title, pr_state, pr_url, is_must_have FROM mvp_features
+        WHERE project_id = ? AND pr_state IS NOT NULL ORDER BY sort_order, id`,
+    ).bind(p.id).all<any>());
+    const checks = rows(await env.DB.prepare(
+      `SELECT r.id AS release_id, r.repository, r.tag, r.name, r.published_at, r.url, k.in_release, f.id AS feature_id, f.title
+         FROM mvp_release_checks k
+         JOIN mvp_features f ON f.id = k.feature_id AND f.project_id = ?
+         JOIN roadmap_releases r ON r.id = k.release_id AND r.project_id = f.project_id
+        WHERE k.in_release IS NOT NULL
+        ORDER BY r.published_at IS NULL, r.published_at DESC, r.id DESC, f.sort_order, f.id`,
+    ).bind(p.id).all<any>());
+    const byRelease = new Map<number, any>();
+    for (const c of checks) {
+      if (!byRelease.has(c.release_id)) {
+        byRelease.set(c.release_id, { id: c.release_id, repository: c.repository, tag: c.tag, name: c.name ?? null, published_at: c.published_at ?? null,
+          url: c.url ?? null, in: [] as Array<{ id: number; title: string }>, not_in: [] as Array<{ id: number; title: string }> });
+      }
+      byRelease.get(c.release_id)[number(c.in_release) === 1 ? 'in' : 'not_in'].push({ id: c.feature_id, title: c.title });
+    }
+    const releases = [...byRelease.values()];
+    const empty = !fed.length && !releases.length;
+    return {
+      state: empty ? 'empty' : 'ok',
+      must_haves: fed.map(f => ({ id: f.id, title: f.title, state: f.pr_state, label: PR_STATE_LABEL[f.pr_state] ?? null, url: f.pr_url ?? null, must_have: number(f.is_must_have) === 1 })),
+      releases: releases.slice(0, RELEASE_CHECKS_SHOWN), releases_total: releases.length,
+      reason: empty ? 'No pull request or release from GitHub yet. Connect GitHub and sync to bring them in.' : null,
+    };
+  } catch (error) {
+    console.error('[cycle_build] mvp pull request state read failed', error);
+    return { state: 'unreadable', must_haves: [], releases: [], releases_total: null, reason: 'GitHub\'s pull requests and release checks could not be read.' };
+  }
 }
 
 async function roadmap(env: Env, p: Project): Promise<ModuleRead> {

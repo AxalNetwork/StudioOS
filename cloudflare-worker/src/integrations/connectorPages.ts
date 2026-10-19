@@ -407,7 +407,7 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
   github: {
     tagline: 'Issues, milestones, pull requests and releases from the repositories you choose. Read-only.',
     long_description: [
-      'Read issues, milestones, pull requests and releases from the repositories you choose. Issues link to Product roadmap items and pull requests to Prototype / MVP must-haves. Read-only.',
+      'Read issues, milestones, pull requests and releases from the repositories you choose. Issues link to Product roadmap items and pull requests to Prototype / MVP must-haves. Read-only. In Prototype / MVP, a must-have follows its pull request: draft is Planned, open is In progress, asked for review or approved is In review, merged is Built, and closed unmerged is Dropped, which you undo by marking it a must-have again. Each release records, on each must-have, whether it is in that release or was still open when it was published.',
       'In Product roadmap, a milestone groups its issues’ items and gives them its due date as their target. Each release is a row there, and marks Shipped the items it closed: an issue its notes name, or one a pull request merged before it closed.',
       'In Build › Operating systems, GitHub is the Code system: its repositories, its last sync and what it fed. Each sync is a line in Tools. In Build › Solution design, each repository\'s languages and topics show as Built with. Its architecture decision records, and the README and docs sections headed Architecture, Design or Decisions, arrive as proposals: nothing is written until you accept one. In Build › Founding team, each repository\'s contributors and their commits in the last 90 days arrive for you to match: you map each GitHub login to a founder once, and Axal VC never guesses it from a name or an email. Only your project\'s members see the logins. In Build › Company creation, a repository a personal account owns brings a proposed step, moving the code into the company\'s GitHub organisation, which you accept or dismiss; one an organisation owns is recorded as evidence on your IP assignment step. A repository with no licence file says so.',
       'Axal VC connects as a GitHub App with read permissions only. If GitHub ever grants more than read, Axal VC revokes the grant and refuses the connection.',
@@ -418,7 +418,9 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
         ['`/user/installations/${id}/repositories`']),
       tool('read_account', 'your account name', 'read', 'Reads your GitHub login, when you connect.', null, ["ghJson<any>(token, '/user')"]),
       tool('read_issues', 'issues', 'read', 'Reads issues in the repositories you chose.', 'product_roadmap', ['`${path}/issues?state=all`']),
-      tool('read_pull_requests', 'pull requests', 'read', 'Reads pull requests in the repositories you chose.', 'prototype_mvp', ['`${path}/pulls?state=all`']),
+      tool('read_pull_requests', 'pull requests', 'read', 'Reads pull requests in the repositories you chose. Each must-have follows its pull request, and records its release checks.', 'prototype_mvp', ['`${path}/pulls?state=all`']),
+      tool('read_pull_request_reviews', 'pull request reviews', 'read', 'Reads the reviews of up to 30 open pull requests a sync, to see which are approved and so In review.', 'prototype_mvp',
+        ['`${path}/pulls/${pr.number}/reviews?per_page=100`']),
       tool('read_milestones', 'milestones', 'read', 'Reads milestones in the repositories you chose. Each groups its issues’ items in Product roadmap, with its due date as their target.', 'product_roadmap',
         ['`${path}/milestones?state=all&per_page=${PER_PAGE}&page=${page}`']),
       tool('read_releases', 'releases', 'read', 'Reads releases in the repositories you chose. Each is a release row in Product roadmap, and marks Shipped the items it closed.', 'product_roadmap',

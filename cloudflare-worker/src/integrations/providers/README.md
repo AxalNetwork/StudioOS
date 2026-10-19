@@ -21,7 +21,9 @@ One file per provider. Each module:
 
 GitHub's per-module feeds (D782, #2110) live in `github/`, one file per
 part, each called by one line from `github.ts`'s sync: `github/roadmap.ts`
-gives Product roadmap its milestones, release rows and Shipped marks (#2111).
+gives Product roadmap its milestones, release rows and Shipped marks (#2111). `github/mvp.ts`
+makes each must-have follow its pull request, and records each release's checks
+on the must-haves (#2112).
 
 The module is then imported once from the worker entry point
 (`cloudflare-worker/src/index.ts`) so its top-level `registerProvider`

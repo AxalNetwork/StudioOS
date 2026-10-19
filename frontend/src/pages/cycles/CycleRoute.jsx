@@ -38,6 +38,7 @@ import SolutionDesignFromCode from './SolutionDesignFromCode';
 import FoundingTeamFromCode from './FoundingTeamFromCode';
 import CompanyFromCode from './CompanyFromCode';
 import RoadmapFromGithub from './RoadmapFromGithub';
+import MvpFromGithub from './MvpFromGithub';
 import UpdatesHistory from './UpdatesHistory';
 import UpdateAskReplies from './UpdateAskReplies';
 import CallsHistory from './CallsHistory';
@@ -288,6 +289,8 @@ const CYCLE_DEFS = {
     // D782 (#2114): Solution design's From GitHub (Built with, proposals, notes), anchored at #from-github.
     parts: toFnMap({
       'solution-design': (data, ctx) => <SolutionDesignFromCode part={data?.parts?.from_code} projectId={ctx.projectId} reload={ctx.reload} />,
+      // D782 (#2112): Prototype / MVP's pull request states and release checks, anchored at #from-github.
+      'prototype-mvp': (data) => <MvpFromGithub github={data?.parts?.github} />,
       // D782 (#2111): Product roadmap's milestones and releases from GitHub, anchored at #from-github.
       'product-roadmap': (data) => <RoadmapFromGithub github={data?.parts?.github} />,
       'operating-systems': (data) => <ToolsHistory tools={data?.parts?.tools} />,

@@ -231,13 +231,16 @@ test('the connector page claims only the feeds the code builds', () => {
   for (const t of page.tools.filter((x: any) => x.lands_in)) assert.ok(githubFedModules().includes(t.lands_in), `${t.name} → ${t.lands_in}`);
   const toolFor = (name: string) => page.tools.find((x: any) => x.name === name)?.lands_in ?? null;
   // #2114: decision records and docs land as Solution design's notes, languages and topics as its stack.
-  assert.deepEqual([toolFor('read_issues'), toolFor('read_pull_requests'), toolFor('read_releases'), toolFor('read_milestones'), toolFor('read_design_docs'), toolFor('read_stack'), toolFor('read_contributors'), toolFor('read_ownership')], GITHUB_LANDINGS.map((l) => l.store === null ? null : l.module));
+  // The tool each landing's rows come from. D782 (#2112): a release check is read from the pull requests it is about.
+  const TOOL_OF: Record<string, string> = { issue: 'read_issues', pull_request: 'read_pull_requests', release: 'read_releases', milestone: 'read_milestones',
+    design_note: 'read_design_docs', stack: 'read_stack', release_check: 'read_pull_requests', contributor: 'read_contributors', ip_step: 'read_ownership' };
+  assert.deepEqual(GITHUB_LANDINGS.map((l) => toolFor(TOOL_OF[l.kind])), GITHUB_LANDINGS.map((l) => l.store === null ? null : l.module));
   // The long description names every built module.
   const words = page.long_description.join(' ');
   for (const m of githubFedModules()) assert.ok(words.includes(MODULE_LABELS[m]), `the page names ${MODULE_LABELS[m]}`);
   // And the sync writes each stored landing into its store, through the ledger.
   // D782 (#2111, #2114): the sync is github.ts and the feed files it calls.
-  const src = ['github.ts', 'github/roadmap.ts', 'github/solutionDesign.ts', 'github/team.ts', 'github/company.ts'].map((f) => readFileSync(`cloudflare-worker/src/integrations/providers/${f}`, 'utf8')).join('\n');
+  const src = ['github.ts', 'github/roadmap.ts', 'github/solutionDesign.ts', 'github/team.ts', 'github/company.ts', 'github/mvp.ts'].map((f) => readFileSync(`cloudflare-worker/src/integrations/providers/${f}`, 'utf8')).join('\n');
   for (const l of GITHUB_LANDINGS) {
     // A kind that writes onto another kind's rows (a milestone) has no ledger rows of its own.
     if ('ledger' in l && l.ledger === false) assert.ok(src.includes(`UPDATE ${l.store} SET milestone_title`), `the sync writes ${l.kind} onto ${l.store}`);

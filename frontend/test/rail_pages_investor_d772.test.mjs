@@ -86,6 +86,29 @@ test('Portfolio: every option of the section names itself on its band', () => {
   assertBandsNamed(rows);
 });
 
+// ------------------------------------------------------------------ Fund (I12–I17)
+
+const FUND = [['/funds', 'Investor · Fund'], ['/funds/lps', 'Investor · Fund · LPs'], ['/funds/calls', 'Investor · Fund · Capital calls'],
+  ['/funds/ledger', 'Investor · Fund · Distributions'], ['/funds/reporting', 'Investor · Fund · Reporting'], ['/lp-reports', 'Investor · Fund · Reporting']];
+
+test('Fund: each board\'s route answers its page key; Overview is Fund\'s alias and Distributions the ledger\'s', () => {
+  for (const [route, key] of FUND) assert.equal(pageKeyFor(route, 'investor'), key, route);
+  for (const o of rowsOf('Fund')) assert.ok(FUND.some(([, k]) => k === o.page), `${o.page} is a Fund board with a route`);
+});
+
+test('Fund: each board draws exactly one rail of its own', () => {
+  for (const f of ['InvestorFundLanding', 'InvestorFundLPs', 'InvestorFundCalls', 'InvestorFundAccounting', 'InvestorFundReporting']) {
+    assert.equal((read(`pages/investor/${f}.jsx`).match(/<WorkerRail\b/g) || []).length, 1, f);
+  }
+  assert.doesNotMatch(read('pages/investor/FundLedgerPanel.jsx'), /<WorkerRail\b|<RailFrame\b/, 'the ledger panel sits inside Accounting\'s rail');
+});
+
+test('Fund: every option of the section names itself on its band', () => {
+  const rows = rowsOf('Fund');
+  assert.deepEqual(rows.map((o) => o.key), ['draft:lp-reminder']);
+  assertBandsNamed(rows);
+});
+
 // ------------------------------------------------------------------ the band names its inventory key while it is open
 
 function Probe({ seen }) {

@@ -23,6 +23,7 @@ import { issuesClosedBy, issuesNamed, packBatches, roadmapRun, shippedBy } from 
 import { fedCounts } from '../src/integrations/fed.ts';
 import { encryptCredentials } from '../src/integrations/secrets.ts';
 import { d1Over } from './_d1_sqlite.mjs';
+import { addMvpStores } from './_github_mvp_stores.mjs';
 
 const JWT_SECRET = 'r'.repeat(64); // synthetic test fixture
 const mig = (n: string) => readFileSync(`cloudflare-worker/sql/migrations/${n}`, 'utf8');
@@ -65,7 +66,7 @@ async function world(opts: { withRoadmap?: boolean } = {}) {
   db.exec(mig('254_roadmap_dependencies.sql'));
   db.exec(/CREATE TABLE IF NOT EXISTS product_feedback \([\s\S]*?\n\);/.exec(mig('443_grow_stores.sql'))![0]);
   db.exec(mig('445_connector_fed_items.sql'));
-  if (opts.withRoadmap !== false) db.exec(M499);
+  if (opts.withRoadmap !== false) { db.exec(M499); addMvpStores(db); }
   const env = { DB: d1Over(db), JWT_SECRET, ENVIRONMENT: 'development', RATE_LIMITS: kv(), KEK_PII: 'fixture-cipher-key-'.repeat(4) } as any;
   const enc = await encryptCredentials(env, 'gh-r', { access_token: 'ghu_fixture' });
   db.prepare(`INSERT INTO integrations(id, uid, user_id, provider_key, auth_type, credentials_enc, config_json) VALUES (31, 'gh-r', 1, 'github', 'oauth2', ?, ?)`)
@@ -89,6 +90,8 @@ function fakeGithub(repo: Repo) {
     // #2115: Founding team reads who commits; this one is not served either.
     if (!m && url.pathname === '/repos/acme/app/contributors') return new Response(JSON.stringify({ message: 'Not Found' }), { status: 404, headers: { 'content-type': 'application/json' } });
     if (!m && url.pathname === '/repos/acme/app') return new Response(JSON.stringify({ message: 'Not Found' }), { status: 404, headers: { 'content-type': 'application/json' } });
+    // #2112: an open pull request's reviews; none here.
+    if (!m && /^\/repos\/acme\/app\/pulls\/\d+\/reviews$/.test(url.pathname)) return new Response('[]', { status: 200, headers: { 'content-type': 'application/json' } });
     if (!m) throw new Error(`unexpected GET ${url.pathname}`);
     const page = Number(url.searchParams.get('page'));
     return new Response(JSON.stringify(repo[m[1] as keyof Repo].slice((page - 1) * 100, page * 100)), { status: 200, headers: { 'content-type': 'application/json' } });

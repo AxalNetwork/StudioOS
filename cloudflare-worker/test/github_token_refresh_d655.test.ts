@@ -25,6 +25,7 @@ const m500 = readFileSync('cloudflare-worker/sql/migrations/500_github_solution_
 // #2115: and Founding team's contributors and Company creation's facts.
 const m501 = readFileSync('cloudflare-worker/sql/migrations/501_github_team_company.sql', 'utf8');
 import { d1Over } from './_d1_sqlite.mjs';
+import { addMvpStores } from './_github_mvp_stores.mjs';
 
 function kv() {
   const m = new Map<string, string>();
@@ -89,7 +90,7 @@ async function fixture(t: any, creds: any = expired()) {
     INSERT INTO company_profiles VALUES (10), (20);
     INSERT INTO user_company_links VALUES (1, 10), (1, 20), (2, 10);
     INSERT INTO projects VALUES (100, 10, NULL), (200, 20, NULL);`);
-  db.exec(m435); db.exec(m445); db.exec(m001); db.exec(m153); db.exec(m500); db.exec(m501);
+  db.exec(m435); db.exec(m445); db.exec(m001); db.exec(m153); db.exec(m500); db.exec(m501); addMvpStores(db);
   const KV = kv();
   const env = { DB: d1Over(db), JWT_SECRET, ENVIRONMENT: 'development', RATE_LIMITS: KV, GITHUB_APP_CLIENT_ID: 'Iv1.t5-client', GITHUB_APP_CLIENT_SECRET: 't5-client-secret-x9' } as any;
   const enc = await encryptCredentials(env, 'gh1', creds);
