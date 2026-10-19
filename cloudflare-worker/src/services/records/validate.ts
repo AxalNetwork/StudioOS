@@ -390,12 +390,16 @@ const problemDiscovery: ModuleSpec = {
 // ── Customer research: one interview ─────────────────────────────────────────
 
 const STATE_WORD: Record<string, [string, string]> = {
-  failed: ['Failed', 'bad'], recording: ['Recording', 'vio'], waiting_messages: ['Waiting for messages', 'amb'],
+  failed: ['Failed', 'bad'], recording: ['Recording', 'vio'],
+  waiting_consent: ['Waiting for consent', 'amb'], consent_declined: ['Declined in WhatsApp', 'bad'],
+  waiting_messages: ['Waiting for messages', 'amb'],
   waiting_transcript: ['Waiting for the call transcript', 'amb'], processing: ['Processing', 'vio'],
   ready: ['Ready to review', 'amb'], reviewed: ['Reviewed', 'ok'], lead: ['Lead', 'grey'], invited: ['Invited', 'grey'],
   booked: ['Booked', 'vio'], logged: ['Logged', 'grey'],
 };
-const CONSENT_WORD: Record<string, string> = { verbal: 'Said yes out loud', written: 'In writing', in_app: 'In the app', pre_agreed: 'Agreed beforehand' };
+const CONSENT_WORD: Record<string, string> = {
+  verbal: 'Said yes out loud', written: 'In writing', in_app: 'In the app', pre_agreed: 'Agreed beforehand', chat_reply: 'Agreed in the chat',
+};
 const IMPORTED: Record<string, string> = { whatsapp: 'WhatsApp', telegram: 'Telegram', zoom: 'Zoom', google_meet: 'Google Meet' };
 
 type InterviewData = {
@@ -473,7 +477,7 @@ const customerResearch: ModuleSpec = {
     const who = role && company ? `${role} at ${company}` : role ?? company;
     const minutes = Number(d.session?.active_ms) > 0 ? Math.max(1, Math.round(Number(d.session?.active_ms) / 60_000))
       : Number(iv.recording_duration_sec) > 0 ? Math.max(1, Math.round(Number(iv.recording_duration_sec) / 60)) : null;
-    const state = interviewState(d.session ? { status: d.session.status, submitted_via: d.session.submitted_via, processing_stage: d.session.processing_stage } : null, iv.stage ?? null);
+    const state = interviewState(d.session ? { status: d.session.status, submitted_via: d.session.submitted_via, processing_stage: d.session.processing_stage, consent_status: d.session.consent_status } : null, iv.stage ?? null);
     const fit = iv.icp_fit ? FIT[String(iv.icp_fit)] : null;
     const method = d.session?.consent_method ? CONSENT_WORD[String(d.session.consent_method)] : null;
     return {
@@ -587,9 +591,9 @@ const customerResearch: ModuleSpec = {
       key: 'session', title: 'Session', side: true, gate: 'write',
       read: async (ctx, id) => {
         const d = await loadInterview(ctx, id);
-        const state = d.session ? interviewState({ status: d.session.status, submitted_via: d.session.submitted_via, processing_stage: d.session.processing_stage }, d.iv.stage ?? null) : null;
-        // A channel session still waiting opens its own page (D694).
-        return state === 'waiting_messages' || state === 'waiting_transcript'
+        const state = d.session ? interviewState({ status: d.session.status, submitted_via: d.session.submitted_via, processing_stage: d.session.processing_stage, consent_status: d.session.consent_status }, d.iv.stage ?? null) : null;
+        // A channel session still waiting opens its own page (D694), a chat waiting for consent too (D754).
+        return state === 'waiting_messages' || state === 'waiting_transcript' || state === 'waiting_consent'
           ? { rows: [{ a: STATE_WORD[state][0], b: 'Open the session →', href: `/validate/session/${d.session?.id}?project=${ctx.projectId}` }] }
           : { rows: [], empty: 'Nothing waiting.' };
       },

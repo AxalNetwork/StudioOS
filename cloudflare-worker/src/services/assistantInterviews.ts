@@ -39,17 +39,14 @@ import {
   normaliseWs,
   PLACEMENT_KINDS,
   isPlacementKind,
-  structureTranscript,
   toSegments,
   type Segment,
   type SegmentRow,
 } from './interviewStructuring';
 import { budgetRefusalMessage } from './aiRouter';
-import {
-  loadStructureContext,
-  recordStructureReceipt,
-  storePlacements,
-} from '../routes/founder_validate_structure';
+import { loadStructureContext } from '../routes/founder_validate_structure';
+import { interviewCapRefusal } from '../middleware/requireTier';
+import { digestSession, enqueueDigest } from './validateEngine';
 
 /** What #1496's server resolves from an access token. */
 export interface AssistantGrant {
@@ -269,6 +266,9 @@ export async function submitInterview(env: Env, grant: AssistantGrant, args: Sub
     if (!summary) throw new ToolError(400, 'summary_invalid', 'The summary is empty or longer than 4,000 characters.');
   }
   const { project } = await resolveCompanyProject(env, grant, args?.company, args?.project);
+  // D757: the free tier's interview cap holds for every creator.
+  const capped = await interviewCapRefusal(env, grant.userId, project.id);
+  if (capped) throw new ToolError(402, 'tier_required', capped.message);
 
   const iv = await env.DB.prepare(
     `INSERT INTO discovery_interviews
@@ -308,6 +308,8 @@ export async function submitInterview(env: Env, grant: AssistantGrant, args: Sub
   await audit(env, grant, project.id, 'interview_session_submitted', {
     session_uid: uid, interview_id: iv.id, channel, segments: segments.length, summary: summary != null,
   });
+  // D757: StudioOS's own summary, not its placements: the assistant proposes those itself.
+  await enqueueDigest(env, sessionId!, grant.userId, 'assistant_submitted');
   const stored = await finalSegments(env, sessionId!);
   return {
     session_id: sessionId!,
@@ -428,38 +430,31 @@ export async function structureWithStudioos(env: Env, grant: AssistantGrant, arg
     }
     model = args.model.trim();
   }
-  const segments = await finalSegments(env, session.id);
-  if (!segments.length) throw new ToolError(409, 'no_transcript', 'This session has no transcript to structure.');
-  const prior = await env.DB.prepare('SELECT COUNT(DISTINCT run_id) AS n FROM validate_proposals WHERE session_id = ?')
-    .bind(session.id).first<{ n: number }>();
-  const step = Number(prior?.n || 0) > 0 ? 're_structured' : 'structured';
-  const runId = newRunId();
-  const out = await structureTranscript(env, {
-    userId: grant.userId, model, segments, context: await loadStructureContext(env, project.id), step,
+  // D757: the engine's run, forced and never deduped, as the Structure button is.
+  const out = await digestSession(env, {
+    sessionId: session.id, userId: grant.userId, trigger: 'manual', stages: ['structure'], force: true, model,
   });
-  for (let i = 0; i < out.receipt.length; i += 1) {
-    const refusedHere = !out.ok && i === out.receipt.length - 1;
-    await recordStructureReceipt(env, session.id, runId, out.receipt[i], refusedHere ? 'refused' : 'ok',
-      refusedHere ? (out as { refusal: string | null }).refusal ?? null : null);
+  if (out.status === 'skipped' || out.status === 'not_writable') {
+    throw new ToolError(409, 'no_transcript', 'This session has no transcript to structure.');
   }
-  if (!out.ok) {
+  if (out.status === 'refused') {
+    if (out.reason === 'busy') throw new ToolError(409, 'digest_running', out.note);
+    if (out.reason === 'consent_not_recorded') throw new ToolError(409, 'consent_not_recorded', out.note);
     const refusal = out.refusal ?? 'unavailable';
+    // The refused run's id, from its receipt line (a run refused before any call has none).
+    const runId = (await env.DB.prepare('SELECT run_id FROM interview_structure_receipts WHERE session_id = ? ORDER BY id DESC LIMIT 1')
+      .bind(session.id).first<{ run_id: string | null }>())?.run_id ?? null;
     await audit(env, grant, project.id, 'assistant_structure_refused', { session_uid: session.uid, run_id: runId, refusal });
     if (BUDGET_REFUSALS.has(refusal)) throw new ToolError(402, refusal, budgetRefusalMessage(refusal));
     if (refusal === 'model_not_offered') throw new ToolError(400, refusal, 'That model is not offered for structuring. Nothing was run.');
     throw new ToolError(503, refusal, 'The model could not be reached. Nothing was stored.');
   }
-  await storePlacements(env, {
-    projectId: project.id, sessionId: session.id, interviewId: session.interview_id, runId,
-    userId: grant.userId, model: out.receipt[out.receipt.length - 1]?.model || '', placements: out.placements,
-  });
-  await env.DB.prepare(
-    "UPDATE interview_sessions SET status = 'structured', updated_at = datetime('now') WHERE id = ? AND status = 'transcribed'",
-  ).bind(session.id).run();
+  const placed = out.status === 'done' && out.structure?.ok ? out.structure : null;
+  if (!placed) throw new ToolError(503, 'unavailable', 'The model could not be reached. Nothing was stored.');
   await audit(env, grant, project.id, 'assistant_structure_run', {
-    session_uid: session.uid, run_id: runId, stored: out.placements.length, dropped: out.dropped,
+    session_uid: session.uid, run_id: placed.runId, stored: placed.stored, dropped: placed.dropped,
   });
-  return { run_id: runId, step, stored: out.placements.length, dropped: out.dropped, parts: out.parts };
+  return { run_id: placed.runId, step: placed.step, stored: placed.stored, dropped: placed.dropped, parts: placed.parts };
 }
 
 // ---------------------------------------------------------------------------
@@ -467,6 +462,8 @@ export async function structureWithStudioos(env: Env, grant: AssistantGrant, arg
 // ---------------------------------------------------------------------------
 
 const MODULES = [...new Set(Object.values(PLACEMENT_KINDS).map((k) => k.module))];
+/** "module: kind, kind; …", from PLACEMENT_KINDS itself, so the tool's text never lists a kind it refuses (D757, #1923). */
+const KINDS_BY_MODULE = MODULES.map((m) => `${m}: ${Object.entries(PLACEMENT_KINDS).filter(([, k]) => k.module === m).map(([kind]) => kind).join(', ')}`).join('; ');
 
 export const TOOLS = {
   submit_interview: {
@@ -516,6 +513,7 @@ export const TOOLS = {
       'Propose what a submitted interview says for each Validate module. Each placement must quote, word for word,',
       'the passage of the stored transcript it comes from; a placement whose quote is not in the transcript is',
       'dropped and reported. Every placement waits for the founder to accept, edit or discard it in StudioOS.',
+      `Each kind belongs to one module, and a placement naming another is dropped (module_mismatch). ${KINDS_BY_MODULE}.`,
     ].join(' '),
     inputSchema: {
       type: 'object',

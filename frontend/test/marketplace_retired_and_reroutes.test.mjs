@@ -31,14 +31,14 @@ test('no client method calls the unmounted /marketplace prefix', () => {
 // The repairs. Each of these was a client pointing at a path the worker never
 // mounted while the worker served the same operation elsewhere — deleting them
 // would have removed a working feature rather than fixing a broken one.
-test('document generation targets the endpoint the worker actually serves', () => {
+test('document generation is gone: the worker never wrote a document from it (D758)', () => {
   const api = read('frontend/src/lib/api.js');
   assert.doesNotMatch(code('frontend/src/lib/api.js'), /\/legal\/documents\/generate/);
-  assert.match(api, /generateDocument: \(\{ doc_type, \.\.\.fields \}\)/,
-    'doc_type must move into the path — it is the template key');
-  assert.match(api, /\/legal\/templates\/\$\{encodeURIComponent\(doc_type\)\}\/generate/);
-  // The worker names documents from the template, so an editable title would lie.
-  assert.doesNotMatch(code('frontend/src/pages/LegalPage.jsx'), /genForm\.title/);
+  // Every key the generate route accepted was a contract type, so it always
+  // answered 409; D758 deletes the route and the client method together.
+  assert.doesNotMatch(api, /generateDocument/);
+  assert.doesNotMatch(api, /\/legal\/templates\/\$\{[^}]*\}\/generate/);
+  assert.doesNotMatch(code('frontend/src/pages/LegalPage.jsx'), /genForm/);
 });
 
 test('Stripe Connect targets needs.ts, where those handlers live', () => {

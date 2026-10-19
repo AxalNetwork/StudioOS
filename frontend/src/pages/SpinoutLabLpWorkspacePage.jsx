@@ -53,7 +53,9 @@ import { onboardingStatus } from '../lib/lpCommitmentModel';
 import { MyCommitment, MessageGp } from './SpinoutLabLpCommitment';
 import { ProofDoor, ProofOfFundsSheet, SharedProofOfFunds, useProofTargets } from './investor/ProofOfFunds';
 import { showsProof } from './investor/proofOfFundsModel';
+import { SubscriptionBooklet } from './SpinoutLabLpBooklet';
 import { FeeStatements } from './SpinoutLabLpFeeStatement';
+import { MyNotices } from './SpinoutLabLpNotices';
 
 /* ---------------------------------------------------------------- primitives */
 
@@ -698,7 +700,7 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
             </div>
             <div className="mt-0.5 text-[12.5px] leading-relaxed text-gray-600 dark:text-gray-400">
               {derived.applicationStatus === 'approved'
-                ? 'The fund team is preparing your subscription documents. Reporting and participation activate once the general partner records your commitment on the fund’s register.'
+                ? 'Your Subscription Booklet is below: read each part, tick what applies, then submit it. Reporting and participation activate once the general partner records your commitment on the fund’s register.'
                 : 'Fund team review typically completes within five business days. On acceptance you proceed to KYC/AML and subscription documents.'}
             </div>
             {application?.review_note && (
@@ -711,6 +713,9 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
         </div>
       )}
 
+      {/* D716 (#1866): the Subscription Booklet, for the viewer's own approved application. */}
+      {derived.applicationStatus === 'approved' && <SubscriptionBooklet />}
+
       {/* I5 · My commitment (D372) — the LP's own position, and where
           /lp-portal lands. Drawn for anyone with a holding, and when the read
           failed, so a failure is never mistaken for "no commitment". */}
@@ -721,6 +726,7 @@ export default function SpinoutLabLpWorkspacePage({ embedded = false }) {
           <FeeStatements portal={portal} failed={!portal && !!err} onReload={load} />
         </>
       )}
+      {(derived.holdings > 0 || (!portal && !!err)) && <MyNotices portal={portal} />}
 
       {/* D752 (#1891) · the proof of funds this investor shared, with views and Revoke. */}
       {proofOn && <SharedProofOfFunds key={proofKey} targetsState={proofTargets} onChanged={proofTargets.reload} />}

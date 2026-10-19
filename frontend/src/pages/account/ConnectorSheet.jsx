@@ -13,12 +13,13 @@ import GithubSyncSheet from './GithubSyncSheet';
 import { MercuryEntityPanel, MercuryLandsGroup, MercuryReadsGroup, MercuryUsesGroups } from './MercurySheet';
 import { MEMBER_REPLACE } from './mercuryModel';
 import { useAuth } from '../../hooks/useAuthSync';
+import { isSuperAdminUser } from '../../lib/shellRole';
 import { successBanner } from './githubSync';
 import {
   TIER_LABEL, agoLabel, authKind, buildCatalogue, companiesLabel, connectFailure, connectionStatus,
   disconnectNote, feedsLabel, flowBanner, lastSyncLabel, moduleLabel,
   keepBuildProject, coreSystemOffer, isEntityRow, isPersonalMercury,
-  FREE_KEEPS_CONNECTORS,
+  FREE_KEEPS_CONNECTORS, INTEGRATION_KEYS_HREF, adminKeysHref, patOnly,
 } from './connectorsModel';
 import { cyclesWrite } from '../../lib/api/cycles';
 
@@ -28,6 +29,12 @@ import { cyclesWrite } from '../../lib/api/cycles';
  * `signin`, `key`, `connected`, `cancelled`, `refused`, `badkey`,
  * `overreach`, `pro`, `request`). The Connectors page and Build's "Connect a
  * tool" open the same panel, so a connector connects one way from either.
+ *
+ * D751 (#1879) adds three views for a failure on Axal's side, never the
+ * provider's, so none of them says "refused": `unconfigured` (Axal holds no
+ * client; a Super Admin also gets the Integration keys link), `company` (no
+ * company to write into) and `setup_unreadable` (Axal could not read its own
+ * setup; Try again can work there, so it is offered).
  *
  * Every registry read and write goes through `/api/connectors`
  * (`lib/api/connectors.js`, D650); the three first-party connectors keep
@@ -50,7 +57,7 @@ export function suggestionsNote(e) {
  * reads as `forbidden` with the Worker's own sentence: retrying cannot help.
  */
 export function useConnectors({ companyId = null } = {}) {
-  const [state, setState] = useState({ status: 'loading', message: '', providers: [], items: null, waitlist: [], firstParty: {}, itemsFailed: false, companies: null, suggestions: null, suggestionsNote: '' });
+  const [state, setState] = useState({ status: 'loading', message: '', providers: [], items: null, waitlist: [], firstParty: {}, itemsFailed: false, companies: null, suggestions: null, suggestionsNote: '', categoryOrder: null });
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let live = true;
@@ -72,6 +79,8 @@ export function useConnectors({ companyId = null } = {}) {
         status: 'ready',
         message: '',
         providers: av?.providers || av?.items || [],
+        // D753 F6: the Worker's category order (#1878), when it serves one.
+        categoryOrder: Array.isArray(av?.category_order) ? av.category_order : null,
         items: mine ? mine.items || [] : null,
         itemsFailed: !mine,
         waitlist: wl?.items || [],
@@ -100,6 +109,10 @@ export function useConnectors({ companyId = null } = {}) {
  * Escape of its own (the lightbox's), and its × is `onDismiss`, which closes
  * the whole lightbox, while the panel's own `onClose` steps back to the list.
  * With no frame, a `Sheet` is the Connectors page's side sheet, as before.
+ *
+ * D753 — `layout: 'page'` is a connector's own page (`ConnectorPage.jsx`): the
+ * sheet sits in the page's flow, with no overlay, no dialog role, no × and no
+ * Escape of its own. Its head stays an `<h2>`, under the page's `<h1>`.
  */
 export const SheetFrame = createContext(null);
 
@@ -117,10 +130,19 @@ export function Sheet({ eyebrow, title, sub, onClose, children, footer, provider
         <h2 className="flex items-center gap-2 text-lg font-extrabold tracking-axal-heading text-axal-ink dark:text-gray-100">{provider && <BrandIcon provider={provider} name={providerName} size={24} />}{title}</h2>
         {sub && <p className="mt-0.5 text-[12.5px] leading-snug text-axal-muted dark:text-gray-400">{sub}</p>}
       </div>
-      <button type="button" onClick={frame ? frame.onDismiss : onClose} aria-label="Close" data-testid="sheet-close" className="rounded p-1 text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100"><X size={18} /></button>
+      {frame?.layout !== 'page' && <button type="button" onClick={frame ? frame.onDismiss : onClose} aria-label="Close" data-testid="sheet-close" className="rounded p-1 text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100"><X size={18} /></button>}
     </div>
   );
   const foot = footer && <div className="flex flex-wrap items-center justify-end gap-2 border-t border-axal-hairline px-5 py-3 dark:border-gray-800">{footer}</div>;
+  if (frame?.layout === 'page') {
+    return (
+      <div className="rounded-axal-sm border border-axal-hairline bg-white pb-4 dark:border-gray-800 dark:bg-gray-900" data-testid={testId} data-layout="page">
+        {head}
+        <div>{children}</div>
+        {foot}
+      </div>
+    );
+  }
   if (frame) {
     return (
       <div className="flex h-full min-h-0 flex-col" data-testid={testId} data-layout="lightbox">
@@ -194,7 +216,7 @@ export function Steps({ names, at }) {
 const NR_REGISTRY = 'This connector is not in the connector registry, which is where what it does is described.';
 
 /** What a connector pulls in and sends out, from the registry's `pulls`/`sends`; its capabilities otherwise. */
-function UsesGroups({ p, read = 'What it pulls in', write = 'What it sends out' }) {
+export function UsesGroups({ p, read = 'What it pulls in', write = 'What it sends out' }) {
   if (Array.isArray(p.pulls) || Array.isArray(p.sends)) {
     return (
       <>
@@ -222,7 +244,7 @@ function UsesGroups({ p, read = 'What it pulls in', write = 'What it sends out' 
   );
 }
 
-function PermissionsGroup({ p }) {
+export function PermissionsGroup({ p }) {
   return (
     <Group label="Permissions">
       {Array.isArray(p.permissions) && p.permissions.length
@@ -416,7 +438,11 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
   const opts = companyId ? { companyId } : undefined;
   const navigate = useNavigate();
   // D715 decision 8: a member's Mercury says where it lands in the viewer's role's words.
-  const viewerRole = useAuth()?.user?.role ?? null;
+  const auth = useAuth();
+  const viewerRole = auth?.user?.role ?? null;
+  // D751 decision 6: only a Super Admin can save a connector's keys, so only one sees the link.
+  const superAdmin = isSuperAdminUser(auth?.user);
+  const [adminHref, setAdminHref] = useState(INTEGRATION_KEYS_HREF);
   const personalMercury = isPersonalMercury(p);
   const conn = p.connection;
   const status = connectionStatus(conn, p);
@@ -475,7 +501,9 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
   };
   const updating = !!conn && view === 'key';
   const name = p.display_name;
-  const keySteps = ['What it uses', kind === 'key' || kind === 'token_first' ? 'Key' : 'Sign in', 'Connected'];
+  // D751 (#1881): with no OAuth client, a token connector's only way in is its key.
+  const tokenOnly = patOnly(p);
+  const keySteps = ['What it uses', kind === 'key' || kind === 'token_first' || tokenOnly ? 'Key' : 'Sign in', 'Connected'];
 
   const go = (v) => { setMessage(''); setView(v); };
   const syncView = view === 'sync' && p.key === 'github' && !!conn?.uid;
@@ -503,6 +531,7 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
     } catch (e) {
       setBusy(false);
       setMessage(e?.message || '');
+      setAdminHref(adminKeysHref(e?.data));
       setView(connectFailure(e, { ...p, auth_type: 'oauth2', supports_pat: false }));
     }
   };
@@ -530,7 +559,8 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
       setMessage(err?.message || '');
       // D715 decision 8: a refused Mercury token prints only the Worker's sentence, on the key form, with the token cleared.
       if (personalMercury && err?.status !== 402) { setApiKey(''); if (!err?.message) setMessage('Mercury could not be connected.'); }
-      else setView(connectFailure(err, p));
+      // The key form's refusal is about the key, so it reads `badkey`, never `refused` (D751 #1881).
+      else setView(connectFailure(err, { ...p, auth_type: 'api_key' }));
     } finally { setBusy(false); }
   };
 
@@ -667,14 +697,19 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
             </div>
           </Group>
         )}
-        {p.supports_pat && kind === 'oauth' && (
+        {p.supports_pat && kind === 'oauth' && !tokenOnly && (
           <p className="mx-5 mt-3 text-[12px] text-axal-muted dark:text-gray-400">
             Your workspace blocks outside apps? <button type="button" className={BTN.link} onClick={() => go('key')}>Use a personal access token instead</button>
           </p>
         )}
+        {tokenOnly && kind === 'oauth' && (
+          <p className="mx-5 mt-3 text-[12px] text-axal-muted dark:text-gray-400" data-testid="connector-pat-only">
+            Sign-in with {name} isn&apos;t set up on Axal yet, so {name} connects with a personal access token.
+          </p>
+        )}
       </>
     );
-    const cont = kind === 'key' || kind === 'token_first'
+    const cont = kind === 'key' || kind === 'token_first' || tokenOnly
       ? <button type="button" className={BTN.primary} onClick={() => go('key')} data-testid="button-connect-continue">Continue</button>
       : <button type="button" className={BTN.primary} disabled={busy} onClick={startOauth} data-testid="button-connect-continue">Continue to {name}</button>;
     footer = <>{backBtn}<button type="button" className={BTN.ghost} onClick={onClose}>Cancel</button>{cont}</>;
@@ -716,7 +751,7 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
             {p.docs_url && <> <a className={BTN.link} href={p.docs_url} target="_blank" rel="noreferrer">Where to find it <ExternalLink size={11} className="inline" /></a></>}
           </p>
         </div>
-        {kind === 'token_first' && !updating && (
+        {kind === 'token_first' && !updating && !p.oauthOff && (
           <p className="mx-5 mt-3 text-[12px] text-axal-muted dark:text-gray-400">
             Your portal is cleared for HubSpot's public app? <button type="button" className={BTN.link} onClick={startOauth}>Connect with OAuth instead</button>
           </p>
@@ -775,6 +810,34 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
       </>
     );
     footer = <button type="button" className={BTN.primary} onClick={() => { onChanged?.(); dismiss?.(); }} data-testid="button-connected-done">Done</button>;
+  } else if (view === 'unconfigured' || view === 'company') {
+    // D751: retrying cannot help, so no Try again; the Worker's sentence is not
+    // appended (it repeats the banner, and Google's names env vars).
+    title = `Connect ${name}`;
+    banner = <Banner tone={view === 'company' ? 'warn' : 'neutral'} data-testid={`connector-${view}`}>{flowBanner(view, name, ret)}</Banner>;
+    body = (
+      <>
+        <Steps names={keySteps} at={1} />
+        {view === 'unconfigured' && superAdmin && (
+          <div className="mx-5 mt-3 text-[12.5px]">
+            <Link to={adminHref} onClick={dismiss} className={BTN.link} data-testid="connector-unconfigured-admin-link">Set up {name} in Integration keys</Link>
+          </div>
+        )}
+      </>
+    );
+    footer = <>{backBtn}<button type="button" className={BTN.ghost} onClick={onClose}>Close</button></>;
+  } else if (view === 'setup_unreadable') {
+    // #1880's 503: the Worker's message is Axal's own sentence; a retry can work.
+    title = `Connect ${name}`;
+    banner = <Banner tone="neutral" data-testid="connector-setup-unreadable">{message || flowBanner(view, name, ret)}</Banner>;
+    body = <Steps names={keySteps} at={1} />;
+    footer = (
+      <>
+        {backBtn}
+        <button type="button" className={BTN.ghost} onClick={onClose}>Close</button>
+        <button type="button" className={BTN.primary} onClick={() => go('pre')}>Try again</button>
+      </>
+    );
   } else if (view === 'cancelled' || view === 'refused' || view === 'overreach') {
     title = `Connect ${name}`;
     banner = <Banner tone={view === 'cancelled' ? 'neutral' : 'danger'} data-testid={`connector-${view}`}>{flowBanner(view, name, ret)}{message && view === 'refused' && !ret.reason ? ` ${message}` : ''}</Banner>;
@@ -821,13 +884,19 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
 }
 
 /** The flow's views that connect something: none of them may act for a company the member cannot connect for. */
-const CONNECT_VIEWS = new Set(['pre', 'signin', 'key', 'badkey', 'cancelled', 'refused', 'overreach']);
+const CONNECT_VIEWS = new Set(['pre', 'signin', 'key', 'badkey', 'cancelled', 'refused', 'overreach', 'unconfigured', 'company', 'setup_unreadable']);
 
-/** The view a click on a connector opens: its sheet when connected, the plan when locked, else the flow's first step. */
+/**
+ * The view a click on a connector opens: its sheet when connected; #1879's
+ * `unconfigured` when Axal holds no OAuth client and there is no token to
+ * take its place (checked before the plan, so nothing sells a plan for what
+ * cannot connect, D751 #1881); the plan when locked; else the flow's first step.
+ */
 export function openingView(p) {
   // The entity row opens the entity sheet, so the `pre` view's teammate read never fires for it (D715).
   if (isEntityRow(p)) return 'entity';
   if (p.connection) return 'detail';
+  if (p.oauthOff && !p.supports_pat) return 'unconfigured';
   if (p.locked) return 'pro';
   return 'pre';
 }

@@ -20,6 +20,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
+import { applyEngineSchema } from './_engine_schema.mjs';
 import { createJWT } from '../src/auth.ts';
 import {
   chunkSegments,
@@ -87,6 +88,8 @@ function world(reply: (model: string, input: any) => any = () => ({ response: '{
     '453_interview_processing.sql']) {
     db.exec(mig(m));
   }
+  // D757: the Validate engine's schema (487, 465, 453 and the re-scope's columns).
+  applyEngineSchema(db);
   db.exec(`
     INSERT INTO hypotheses (id, project_id, code, claim) VALUES (31, ${PROJECT}, 'H1', 'Finance leads reconcile by hand');
     INSERT INTO pain_groups (id, project_id, title) VALUES (41, ${PROJECT}, 'Manual reconciliation'), (42, ${PROJECT}, 'Cost');
@@ -326,16 +329,17 @@ test('a discarded placement writes nothing to any module', async () => {
 
 // ── proposed-only kinds, ownership, the Lab ─────────────────────────────────
 
-test('a market fact has no store: it stays proposed, and the review read says so', async () => {
+test('a market fact has a store since D757: it is accepted into interview_findings, and the review read says so', async () => {
   const w = withSession(world());
+  w.db.exec(readFileSync(new URL('../sql/migrations/489_interview_findings.sql', import.meta.url), 'utf8'));
   await seed(w.env, [{ kind: 'market_fact', payload: { fact: 'Ledgerly costs too much', source: 'the interviewee' }, cite: { from: 12000, to: 20000 }, quote: 'We looked at Ledgerly but it was too expensive.' }]);
   const id = rowsOf(w.db, 'validate_proposals', 'id')[0].id;
-  const r = await call(w.env, structure, 'POST', `/placements/${id}/accept`);
-  assert.equal(r.status, 409);
-  assert.equal(r.json.error, 'writer_not_available');
-  assert.equal(w.db.prepare('SELECT status FROM validate_proposals WHERE id = ?').get(id).status, 'pending');
   const read = await call(w.env, structure, 'GET', '/sessions/5/placements');
-  assert.equal(read.json.runs[0].placements[0].can_accept, false, 'a proposed-only kind is not marked as such for the page');
+  assert.equal(read.json.runs[0].placements[0].can_accept, true, 'every kind has a writer now');
+  const r = await call(w.env, structure, 'POST', `/placements/${id}/accept`);
+  assert.equal(r.status, 200, JSON.stringify(r.json));
+  const f = w.db.prepare('SELECT module, kind, payload_json FROM interview_findings').get();
+  assert.deepEqual([f.module, f.kind, JSON.parse(f.payload_json).topic], ['market-intelligence', 'market_fact', 'other'], 'a fact with no topic is "other"');
 });
 
 test('segment, demand signal and competitor accept through #1472\'s writers', async () => {
@@ -355,20 +359,16 @@ test('segment, demand signal and competitor accept through #1472\'s writers', as
 
   assert.equal((await call(w.env, structure, 'POST', `/placements/${demand}/accept`)).status, 200);
   const sig = w.db.prepare('SELECT kind, status, source_kind, interview_id, session_id, note FROM demand_signals').get();
-  assert.deepEqual({ ...sig }, { kind: 'would_pay', status: 'to_confirm', source_kind: 'session', interview_id: 101, session_id: 5, note: 'Would pay tomorrow' },
-    'a proposed demand signal was counted before the founder confirmed it');
+  // D757 §2.6 (#1923): a would-pay is confirmed by the founder's Accept itself.
+  assert.deepEqual({ ...sig }, { kind: 'would_pay', status: 'confirmed', source_kind: 'session', interview_id: 101, session_id: 5, note: 'Would pay tomorrow' },
+    'an accepted would-pay is the founder\'s confirmation');
 
-  // No competitor list on the project: D659's writer refuses, and the
-  // placement stays proposed rather than being marked accepted.
-  const refused = await call(w.env, structure, 'POST', `/placements/${comp}/accept`);
-  assert.equal(refused.status, 409);
-  assert.equal(refused.json.error, 'writer_refused');
-  assert.equal(w.db.prepare('SELECT status FROM validate_proposals WHERE id = ?').get(comp).status, 'pending');
-
-  w.db.prepare(`INSERT INTO competitor_analyses (id, project_id, user_id, inputs_json, status, created_at, updated_at)
-                VALUES ('an-1', ${PROJECT}, ${ME}, '{}', 'ready', datetime('now'), datetime('now'))`).run();
+  // D757 §2.6 (#1923): with no competitor list on the project, Accept creates
+  // the manual one (no discovery, no crawl) instead of refusing.
+  assert.equal(w.db.prepare('SELECT COUNT(*) n FROM competitor_analyses').get().n, 0);
   const ok = await call(w.env, structure, 'POST', `/placements/${comp}/accept`);
   assert.equal(ok.status, 200, JSON.stringify(ok.json));
+  assert.equal(w.db.prepare('SELECT COUNT(*) n FROM competitor_analyses WHERE project_id = ?').get(PROJECT).n, 1);
   assert.equal(w.db.prepare("SELECT COUNT(*) n FROM competitor_candidates WHERE name = 'Ledgerly'").get().n, 1);
   const cs = w.db.prepare('SELECT project_id, source_kind, signal_type FROM competitor_signals').get();
   assert.deepEqual({ ...cs }, { project_id: PROJECT, source_kind: 'session', signal_type: 'mention' });
@@ -446,7 +446,7 @@ test('segment, demand signal and competitor: an accepted placement writes the ro
   assert.equal(seg.status, 201, JSON.stringify(seg.json));
   assert.equal((await call(b.env, cycleValidate, 'PUT', `/interviews/101/segment${q}`, { segment_id: seg.json.id })).status, 200);
   assert.equal((await call(b.env, cycleValidate, 'POST', `/demand-signals${q}`,
-    { kind: 'would_pay', interview_id: 101, note: 'Would pay tomorrow', status: 'to_confirm' })).status, 201);
+    { kind: 'would_pay', interview_id: 101, note: 'Would pay tomorrow', status: 'confirmed' })).status, 201);
   assert.equal((await call(b.env, cycleValidate, 'POST', `/competitor-mentions${q}`,
     { name: 'Ledgerly', detail: 'Too expensive', signal_type: 'mention' })).status, 201);
 

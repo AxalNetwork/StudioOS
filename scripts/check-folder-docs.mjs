@@ -66,10 +66,12 @@ const DOCUMENTED = new Map([
   ['documentation/architecture',      'the maintained architecture set'],
   ['documentation/architecture/decisions', 'one file per decision from D526 on — how to name and head one'],
   ['documentation/audits',            'dated snapshots — true on their date only'],
+  ['documentation/operations',        'runbooks — the steps to ship, check and recover production'],
   // Nested folders heavy enough to be opaque from their parent alone.
   ['frontend/src/components/brand/templates', 'the landing-page template previews'],
   ['frontend/src/components/cofounder',       'the co-founder agreement builder'],
   ['frontend/src/components/hqReview',        'the HQ review pieces (D634)'],
+  ['frontend/src/components/products',        'the Plans and pricing storefront and its Token packs (D755)'],
   ['frontend/src/components/deals',           'the deal room screens (D630)'],
   ['frontend/src/components/scoring',         'the scoring engine UI'],
   ['frontend/src/components/spinout',         'the Spin-Out Lab shared pieces'],

@@ -40,6 +40,7 @@ import { admittedCounts } from '../src/services/dataRoomAccess.ts';
 import { tierUpsell } from '../src/middleware/requireTier.ts';
 import { tableFromBaseline, stripForeignKeys, addColumnsFrom } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
+import { personalMatchTables } from './_mercury_d713.ts';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const BASELINE = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
@@ -775,6 +776,7 @@ function cycleFixture() {
   db.exec(sqlOf('442_raise_cycle_stores.sql'));
   db.exec(sqlOf('459_cycle_activity_convention.sql'));
   db.exec(sqlOf('463_raise_record_stores.sql'));
+  personalMatchTables(db); // D752: the trigger on raise_prospects
   addColumnsFrom(db, sqlOf('441_build_cycle_stores.sql'), 'cap_table_holders');
   // The fund directory: the CREATE statements only, and 406 whole, with made-up funds.
   db.exec(ddlOnly('365_research_eurotech_fund_directory.sql'));
@@ -1366,4 +1368,16 @@ test('remove: the file, its versions and every object inside the room\'s prefix 
   assert.equal(n(db, "SELECT COUNT(*) AS n FROM data_room_files WHERE uid = 'f-nda'"), 0);
   assert.deepEqual(rows(db, "SELECT entity_id, action FROM activity_logs WHERE action = 'file_removed'").map((r) => r.entity_id), ['31', '32']);
   assert.equal((await roomCall(dataRoom, db, R_FOUNDER, 'DELETE', '/p-room/files/no-such')).status, 404);
+});
+
+test('D752: the D691 writer\'s stage change withdraws a committed prospect\'s raise receipt; a notes edit keeps it', async () => {
+  const db = cycleFixture();
+  db.exec(`INSERT INTO raise_prospects (id, uid, project_id, name, stage, amount) VALUES (77, 'rp-77', ${C_P}, 'Wren Angel', 'committed', 2500)`);
+  db.exec(`INSERT INTO mercury_personal_matches (uid, user_id, integration_id, mercury_transaction_id, account_last_four, amount_cents, posted_on, target_kind, target_id)
+           VALUES ('m-77', ${C_FOUNDER}, 9, 'txn-77', '4242', 250000, '2026-10-02', 'raise_prospect', 77)`);
+  const state = () => (db.prepare("SELECT state, withdraw_reason FROM mercury_personal_matches WHERE uid = 'm-77'").get() as any);
+  assert.equal((await cyc(db, C_FOUNDER, 'PATCH', q('/prospects/77'), { notes: 'Wired on Friday' })).status, 200);
+  assert.equal(state().state, 'confirmed', 'a notes edit leaves it');
+  assert.equal((await cyc(db, C_FOUNDER, 'PATCH', q('/prospects/77'), { stage: 'passed' })).status, 200);
+  assert.deepEqual({ ...state() }, { state: 'withdrawn', withdraw_reason: "The prospect's amount or stage changed after the match (D752)." });
 });

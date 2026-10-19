@@ -215,6 +215,8 @@ export interface ProviderImpl {
    * the user faces a 15-minute "dead period" before bookings show up.
    */
   postConnect?(c: Context<{ Bindings: Env }>, user: User, row: IntegrationRow): Promise<void>;
+  /** D751 — whether Axal holds this provider's OAuth client. Never a value or a name. */
+  ready?(env: Env): Promise<boolean | null>;
 }
 
 const PROVIDER_IMPLS: Map<string, ProviderImpl> = new Map();
@@ -539,6 +541,18 @@ const REGISTRY_BY_KEY: Map<string, ProviderDescriptor> = new Map(
   REGISTRY.map(p => [p.key, p]),
 );
 
+/**
+ * D751 — `configured` for `GET /available`: the impl's `ready` for an
+ * `oauth2` provider, a throw read as `null` (unknown). `undefined` (no field)
+ * for any other row, a provider with no impl, or an impl with no `ready`.
+ */
+export async function readinessOf(env: Env, p: ProviderDescriptor): Promise<boolean | null | undefined> {
+  if (p.auth_type !== 'oauth2') return undefined;
+  const impl = PROVIDER_IMPLS.get(p.key);
+  if (!impl?.ready) return undefined;
+  try { return await impl.ready(env); } catch { return null; }
+}
+
 export function getDescriptor(key: string): ProviderDescriptor | null {
   return REGISTRY_BY_KEY.get(key) ?? null;
 }
@@ -680,4 +694,4 @@ export function publicDescriptor(p: ProviderDescriptor, viewer?: DescriptorViewe
 }
 
 // D753 (#1875): each connector's page data, re-exported by name (a test loads this file with only named re-exports rewritten). Last, apart from D751's and D752's lines.
-export { type ConnectorPage, type PageDescriptor, type PagePrompt, type PageTool, type SignInKind, type ToolAccess, type Trust, type VariantPages, CATEGORY_ORDER, CONNECTOR_PAGES, FIRST_PARTY_PAGES, MONEY_MOVERS, PAGE_ALIAS, connectorPagePath, pageDescriptor, trustFor } from './connectorPages';
+export { type ConnectorPage, type PageDescriptor, type PagePrompt, type PageTool, type SignInKind, type ToolAccess, type Trust, type VariantPages, type FirstPartyCard, CATEGORY_ORDER, CHANNEL_PAGES, CONNECTOR_PAGES, FIRST_PARTY_CARDS, FIRST_PARTY_PAGES, MONEY_MOVERS, PAGE_ALIAS, channelPage, connectorPagePath, directoryKeyFor, pageDescriptor, trustFor } from './connectorPages';

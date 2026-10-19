@@ -19,17 +19,30 @@
 import type { Env } from '../types';
 import { logCycleWrite } from './cycleActivity';
 import { deleteSession, type SessionRow } from './interviewSessions';
+import { presentTables } from './interviewFindings';
 import { WriterError } from './validateWriters';
 
+const detail = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v.trim().slice(0, 200) : null);
+
 /**
- * Edit details: the name (required, trimmed, as the PUT requires it) and the
- * company (an empty one is stored as NULL). No other column is written, and
- * the log row names the interview by id, never the interviewee.
+ * Edit details: the name (required, trimmed, as the PUT requires it), the
+ * company and, since D757 (#1923), the role (an empty one is stored as NULL).
+ * No other column is written, and the log row names the interview by id,
+ * never the interviewee.
+ *
+ * `fillEmpty` is an interview suggestion's Accept (a `firmographic` role or
+ * company): the name is not touched, and the one field given is written only
+ * where it is empty. A field the founder already filled is never overwritten
+ * by a suggestion; that refusal puts the suggestion back to pending.
  */
 export async function updateInterviewDetails(
   env: Env,
-  input: { projectId: number; userId: number | null; interviewId: number; interviewee_name: unknown; interviewee_company?: unknown },
+  input: {
+    projectId: number; userId: number | null; interviewId: number; interviewee_name?: unknown;
+    interviewee_company?: unknown; interviewee_role?: unknown; fillEmpty?: boolean;
+  },
 ): Promise<{ id: number }> {
+  if (input.fillEmpty) return fillInterviewDetail(env, input);
   const name = typeof input.interviewee_name === 'string' ? input.interviewee_name.trim().slice(0, 200) : '';
   if (!name) throw new WriterError(400, 'An interviewee needs a name');
   const company = input.interviewee_company === undefined ? undefined
@@ -42,9 +55,46 @@ export async function updateInterviewDetails(
       "UPDATE discovery_interviews SET interviewee_name = ?, interviewee_company = ?, updated_at = datetime('now') WHERE id = ? AND project_id = ?",
     ).bind(name, company, input.interviewId, input.projectId).run();
   if (!res.meta?.changes) throw new WriterError(404, 'Interview not found on this project');
+  if (input.interviewee_role !== undefined) {
+    await env.DB.prepare(
+      "UPDATE discovery_interviews SET interviewee_role = ?, updated_at = datetime('now') WHERE id = ? AND project_id = ?",
+    ).bind(detail(input.interviewee_role), input.interviewId, input.projectId).run();
+  }
   await logCycleWrite(env, {
     projectId: input.projectId, userId: input.userId, cycle: 'validate', module: 'customer-research',
     entityId: input.interviewId, action: 'interview_details_edited', summary: `Interview ${input.interviewId} details edited`,
+  });
+  return { id: input.interviewId };
+}
+
+async function fillInterviewDetail(
+  env: Env,
+  input: { projectId: number; userId: number | null; interviewId: number; interviewee_company?: unknown; interviewee_role?: unknown },
+): Promise<{ id: number }> {
+  const role = input.interviewee_role !== undefined;
+  const company = input.interviewee_company !== undefined;
+  if (role === company) throw new WriterError(400, 'Fill one field: the role or the company');
+  const value = detail(role ? input.interviewee_role : input.interviewee_company);
+  if (!value) throw new WriterError(400, role ? 'A role needs a value' : 'A company needs a value');
+  // Two literal statements, one per column: an empty field is NULL or blank.
+  const res = await (role
+    ? env.DB.prepare(
+      "UPDATE discovery_interviews SET interviewee_role = ?, updated_at = datetime('now') WHERE id = ? AND project_id = ? AND (interviewee_role IS NULL OR trim(interviewee_role) = '')",
+    )
+    : env.DB.prepare(
+      "UPDATE discovery_interviews SET interviewee_company = ?, updated_at = datetime('now') WHERE id = ? AND project_id = ? AND (interviewee_company IS NULL OR trim(interviewee_company) = '')",
+    )).bind(value, input.interviewId, input.projectId).run();
+  if (!res.meta?.changes) {
+    const iv = await env.DB.prepare('SELECT id FROM discovery_interviews WHERE id = ? AND project_id = ?')
+      .bind(input.interviewId, input.projectId).first();
+    if (!iv) throw new WriterError(404, 'Interview not found on this project');
+    throw new WriterError(409, role
+      ? 'This interview already has a role. Change it in Edit details.'
+      : 'This interview already has a company. Change it in Edit details.');
+  }
+  await logCycleWrite(env, {
+    projectId: input.projectId, userId: input.userId, cycle: 'validate', module: 'customer-research',
+    entityId: input.interviewId, action: 'interview_details_edited', summary: `Interview ${input.interviewId} ${role ? 'role' : 'company'} filled from a suggestion`,
   });
   return { id: input.interviewId };
 }
@@ -67,8 +117,19 @@ export async function deleteInterview(
   const owned = await env.DB.prepare('SELECT * FROM interview_sessions WHERE interview_id = ?')
     .bind(input.interviewId).all<SessionRow>().catch(() => ({ results: [] as SessionRow[] }));
   for (const session of owned.results || []) await deleteSession(env, session, input.userId);
-  await env.DB.prepare('DELETE FROM discovery_interviews WHERE id = ? AND project_id = ?')
-    .bind(input.interviewId, input.projectId).run();
+  // D757 §2.13 (#1923) — the interview's findings and its interview-kind
+  // evidence links go explicitly: D1 may run with foreign keys off, and an
+  // evidence link names the interview by `ref_id`, with no foreign key at all.
+  const tables = await presentTables(env, ['interview_findings', 'hypothesis_evidence_links']);
+  await env.DB.batch([
+    ...(tables.has('interview_findings')
+      ? [env.DB.prepare('DELETE FROM interview_findings WHERE interview_id = ? AND project_id = ?').bind(input.interviewId, input.projectId)]
+      : []),
+    ...(tables.has('hypothesis_evidence_links')
+      ? [env.DB.prepare("DELETE FROM hypothesis_evidence_links WHERE kind = 'interview' AND ref_id = ? AND project_id = ?").bind(String(input.interviewId), input.projectId)]
+      : []),
+    env.DB.prepare('DELETE FROM discovery_interviews WHERE id = ? AND project_id = ?').bind(input.interviewId, input.projectId),
+  ]);
   await logCycleWrite(env, {
     projectId: input.projectId, userId: input.userId, cycle: 'validate', module: 'customer-research',
     entityId: input.interviewId, action: 'interview_deleted', summary: `Interview ${input.interviewId} deleted`,

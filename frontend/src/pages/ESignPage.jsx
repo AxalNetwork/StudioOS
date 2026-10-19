@@ -19,13 +19,19 @@ import {
   utcDate,
   utcClock,
 } from '../lib/esignSteps';
+import { bookletSignCopy } from '../lib/bookletSigning';
 
 /**
  * D711 (#1776) — the signer reads the paper they sign. With no paper (the
  * read failed), the body as text, saying so; while it loads, the text alone.
+ * D759 (#1858): a booklet's body is its frozen JSON, never shown; with no
+ * paper it says to reload (`fallback`), and while it loads, nothing.
  */
-export function SignerPaper({ paper, envelope }) {
+export function SignerPaper({ paper, envelope, fallback = null }) {
   if (paper?.html) return <PaperFrame html={paper.html} title={envelope?.document_title || 'Document'} />;
+  if (envelope?.booklet) {
+    return paper?.loading ? null : <p className="text-[13px] text-amber-700 dark:text-amber-400" role="status">{fallback}</p>;
+  }
   return (
     <>
       {!paper?.loading && <p className="mb-3 text-[11px] text-amber-700 dark:text-amber-400" role="status">The formatted page did not load. This is the same text.</p>}
@@ -87,7 +93,7 @@ export function ReadStep({ copy, envelope, paper, continueDisabled = false, onCo
           <Shield className="w-3 h-3" /> SHA-256 verified
         </div>
       </div>
-      <SignerPaper paper={paper} envelope={envelope} />
+      <SignerPaper paper={paper} envelope={envelope} fallback={copy.paperFallback} />
       <div className="mt-3 pt-3 border-t border-[#ececf1] flex flex-wrap items-center justify-between gap-2 text-[11px] text-gray-500 dark:border-gray-800">
         <div className="flex items-center gap-1.5"><Clock className="w-3 h-3" /> Expires {new Date(envelope.expires_at).toLocaleDateString()}</div>
         <div className="font-mono">{copy.envelopeLine}</div>
@@ -215,9 +221,13 @@ export function DoneScreen({ envelope, done, copy }) {
           <p className="text-[13.5px] text-gray-500">{copy.declinedLine}</p>
         ) : (
           <>
-            <p className="text-[13.5px] text-gray-500">
-              Envelope <span className="font-mono">{head}…</span> · {utcClock(done.signed_at)} UTC · {done.completed ? copy.doneCompleted : copy.donePartial}
-            </p>
+            {copy.doneLine ? (
+              <p className="text-[13.5px] text-gray-500">{copy.doneLine}</p>
+            ) : (
+              <p className="text-[13.5px] text-gray-500">
+                Envelope <span className="font-mono">{head}…</span> · {utcClock(done.signed_at)} UTC · {done.completed ? copy.doneCompleted : copy.donePartial}
+              </p>
+            )}
             <p className="text-xs text-gray-500 mt-4">{copy.doneNext}</p>
           </>
         )}
@@ -302,7 +312,9 @@ export default function ESignPage() {
   if (loadError) return <PageShell><ErrorCard message={loadError} /></PageShell>;
   if (!envelope) return <PageShell><ErrorCard message="Envelope not found." /></PageShell>;
 
-  const copy = signingCopy(envelope);
+  // D759: a booklet envelope says the booklet's words over the generic ones.
+  const booklet = envelope.booklet ? bookletSignCopy({ ...envelope.booklet, signedAt: done?.signed_at }) : null;
+  const copy = booklet ? { ...signingCopy(envelope), ...booklet } : signingCopy(envelope);
 
   if (done) return <PageShell><DoneScreen envelope={envelope} done={done} copy={copy} /></PageShell>;
 
@@ -389,7 +401,7 @@ export default function ESignPage() {
         )}
 
         {signing.step === 'read' && (
-          <ReadStep copy={copy} envelope={envelope} paper={paper} continueDisabled={false} onContinue={() => dispatch({ type: 'continue' })} />
+          <ReadStep copy={copy} envelope={envelope} paper={paper} continueDisabled={!!booklet && !paper?.html} onContinue={() => dispatch({ type: 'continue' })} />
         )}
         {signing.step === 'consent' && (
           <ConsentStep

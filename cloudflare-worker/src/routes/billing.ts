@@ -13,6 +13,7 @@ import {
 } from '../middleware/requireInvestorTier';
 import { upsertPlanFromStripeSubscription } from '../services/subscriptionPlans';
 import { priceForPlanMetadata, getCatalog } from '../services/catalog';
+import { isTokenPackPrice } from '../services/aiCredits';
 import {
   ensureAccountPlanSchema,
   planGroupForRole,
@@ -1139,6 +1140,8 @@ billing.post('/subscription/swap/preview', async (c) => {
   const subId = String(body.subscription_id || '');
   const priceId = String(body.price_id || '');
   if (!customer || !subId || !priceId) return c.json({ error: 'invalid_request' }, 400);
+  // D755 §9: a token pack is bought only through the order intent.
+  if (await isTokenPackPrice(c.env, priceId)) return c.json({ error: 'token_pack_checkout_only' }, 400);
   // Authorize the destination price for THIS scope before touching Stripe.
   if (!(await resolveScopePrice(c.env, scope, priceId))) {
     return c.json({ error: 'invalid_price' }, 400);
@@ -1178,6 +1181,8 @@ billing.post('/subscription/swap/confirm', async (c) => {
   const subId = String(body.subscription_id || '');
   const priceId = String(body.price_id || '');
   if (!customer || !subId || !priceId) return c.json({ error: 'invalid_request' }, 400);
+  // D755 §9: a token pack is bought only through the order intent.
+  if (await isTokenPackPrice(c.env, priceId)) return c.json({ error: 'token_pack_checkout_only' }, 400);
 
   // Authorize the destination price for THIS scope BEFORE any Stripe mutation.
   // A valid result is required: it is both the access-control gate (only active,
@@ -1886,6 +1891,25 @@ async function handleStripeEvent(
     case 'charge.succeeded': {
       const { handleChargeSucceeded } = await import('../services/invoiceEmails');
       await handleChargeSucceeded(env, obj);
+      return;
+    }
+    // D755 §8 (#1920): a refund or a dispute of a token pack takes its tokens
+    // back, up to the balance, and records the rest. Each acts only on a charge
+    // whose PaymentIntent has an ai_topup_purchases row; every other charge is
+    // untouched. A case that cannot act throws, so Stripe retries.
+    case 'charge.refunded': {
+      const { reverseRefund } = await import('../services/aiCreditReversals');
+      await reverseRefund(env, obj);
+      return;
+    }
+    case 'charge.dispute.created': {
+      const { reverseDispute } = await import('../services/aiCreditReversals');
+      await reverseDispute(env, obj);
+      return;
+    }
+    case 'charge.dispute.closed': {
+      const { closeDispute } = await import('../services/aiCreditReversals');
+      await closeDispute(env, obj);
       return;
     }
     default:

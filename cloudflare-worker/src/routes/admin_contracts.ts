@@ -11,10 +11,12 @@ import { hashEmail } from '../util/hashEmail';
 import { mintDownloadToken } from '../services/signedDownload';
 import { sendAgreementAssignedEmail } from '../services/email';
 import { fanOut } from '../services/branches';
-import { usageFromContractRows } from '../services/contractTemplateUsage';
+import { usageFromContractRows, usageRowsFor } from '../services/contractTemplateUsage';
+import { generatedList, generatedSpecimen, isGeneratedKey } from '../services/generatedDocuments';
+import { BUNDLED_SENT_DIRECTLY, librarySlugFor } from '../services/legalDocTypes';
 import { publishedContractTemplates, publicationFields, publishContractTemplates, preparePublishedContract, ContractPreparationError,
   publishOneTemplate, withdrawTemplatePublication, PublicationError } from '../services/contractPublication';
-import { formatView, formatOptions, renderFormat, effectiveFormat } from '../services/templateFormat';
+import { formatView, formatOptions, renderFormat, effectiveFormat, COUNSEL_DRAFT_SLUGS } from '../services/templateFormat';
 import { renderLegalPng } from '../services/browserRun';
 import { structureForPaper } from '../services/fundStructure';
 import { createAndSendEnvelope } from './esign';
@@ -117,7 +119,8 @@ adminContracts.post('/published-templates/push', async (c) => {
   const branches = await fanOut<{ stored: number; withdrawn: number }>(c.env, 'publishTemplate', [payload]);
   return c.json({ ok: true, template_count: templates.length, answered: branches.filter(b => b.status === 'ok').length, total: branches.length,
     branches: branches.map(b => ({ code: b.code, status: b.status, ...(b.data ? { stored: b.data.stored, withdrawn: b.data.withdrawn } : {}),
-      ...(b.reason ? { reason: b.reason } : {}) })),
+      ...(b.reason ? { reason: b.reason } : {}), ...(b.timed_out ? { timed_out: true } : {}) })),
+    pushed_at: payload.pushed_at,
     ...(branches.length ? {} : { branches_reason: 'No branch Worker is bound. No branch received the catalogue.' }) });
 });
 
@@ -425,6 +428,11 @@ interface UnifiedContract {
   valid_until?: string | null;
   /** Partner deals only — null when absent. */
   expires_at?: string | null;
+  /**
+   * D758 — pairwise NDAs and partner deals: the envelope the relationship was
+   * signed in, so usage counts that document once, not once per source.
+   */
+  envelope_uuid?: string | null;
 }
 
 function decorateDocType<T extends UnifiedContract>(row: T): T {
@@ -627,6 +635,7 @@ async function loadPairwiseNdaContracts(sql: ReturnType<typeof getSQL>, strict =
     can_resend: false,
     valid_until: r.valid_until ?? null,
     expires_at: null,
+    envelope_uuid: r.nda_envelope_uuid ?? null,
   }));
 }
 
@@ -642,6 +651,16 @@ function mapPartnerDealStatus(s: string): string {
   return 'sent';
 }
 
+// D758 decision 7: every partner deal is sent from the Partner Services row
+// (partner onboarding's agreement), whatever its deal type, so it is labelled
+// and counted there. Which document a deal type SHOULD send is an owner
+// follow-up, not decided here.
+const PARTNER_DEAL_DOC_TYPE = 'partner_services';
+function partnerDealTitle(r: { deal_type?: string | null; partner_email?: string | null; partner_name?: string | null }): string {
+  const words = String(r.deal_type || 'custom').toLowerCase().replace(/_/g, ' ');
+  return `Partner Services Agreement — ${words} — ${r.partner_email || r.partner_name || 'unknown'}`;
+}
+
 async function loadPartnerDealContracts(sql: ReturnType<typeof getSQL>, strict = false): Promise<UnifiedContract[]> {
   let rows: any[] = [];
   try {
@@ -653,9 +672,11 @@ async function loadPartnerDealContracts(sql: ReturnType<typeof getSQL>, strict =
       SELECT d.id, d.user_id AS partner_user_id, d.deal_type, d.term_months,
              d.granted_tier_founder, d.granted_tier_investor,
              d.status, d.created_at, d.expires_at,
-             u.email AS partner_email, u.name AS partner_name
+             u.email AS partner_email, u.name AS partner_name,
+             e.envelope_uuid AS envelope_uuid
         FROM partner_deals d
         LEFT JOIN users u ON u.id = d.user_id
+        LEFT JOIN esign_envelopes e ON e.id = d.envelope_id
        ORDER BY d.created_at DESC
     `;
   } catch (error) {
@@ -663,13 +684,12 @@ async function loadPartnerDealContracts(sql: ReturnType<typeof getSQL>, strict =
     return [];
   }
   return rows.map((r): UnifiedContract => {
-    const dt = `partner_${String(r.deal_type || 'custom').toLowerCase()}`;
-    const docType = TEMPLATES[dt] ? dt : 'partner_custom';
+    const docType = PARTNER_DEAL_DOC_TYPE;
     const unified = mapPartnerDealStatus(r.status);
     return decorateDocType({
       id: r.id,
       uid: `partner_deal:${r.id}`,
-      title: `${TEMPLATES[docType]?.title || 'Partner Deal'} — ${r.partner_email || r.partner_name || 'unknown'}`,
+      title: partnerDealTitle(r),
       doc_type: docType,
       status: unified,
       template_name: docType,
@@ -693,6 +713,7 @@ async function loadPartnerDealContracts(sql: ReturnType<typeof getSQL>, strict =
       can_resend: false,
       valid_until: null,
       expires_at: r.expires_at ?? null,
+      envelope_uuid: r.envelope_uuid ?? null,
     });
   });
 }
@@ -988,8 +1009,14 @@ adminContracts.get('/stats', async (c) => {
   }
 });
 
-export async function loadTemplateUsage(sql: ReturnType<typeof getSQL>, strict = false) {
-  const catalogKeys = new Set(Object.keys(TEMPLATES));
+/**
+ * D758: `keys` are the slugs counted under. The store route passes its own
+ * rows' slugs, so a row outside the static `TEMPLATES` (the spaced slugs
+ * among them) reads its real count; the legacy `GET /templates` keeps
+ * `TEMPLATES`' keys.
+ */
+export async function loadTemplateUsage(sql: ReturnType<typeof getSQL>, strict = false, keys: ReadonlySet<string> = new Set(Object.keys(TEMPLATES))) {
+  const catalogKeys = keys;
   const rows = await loadAllContracts(sql, strict);
   return usageFromContractRows(rows, catalogKeys);
 }
@@ -1353,13 +1380,12 @@ adminContracts.get('/:uid', async (c) => {
     }
     if (ref.source === 'partner_deal') {
       const r = ref.row;
-      const dt = `partner_${String(r.deal_type || 'custom').toLowerCase()}`;
-      const docType = TEMPLATES[dt] ? dt : 'partner_custom';
+      const docType = PARTNER_DEAL_DOC_TYPE;
       const unified = mapPartnerDealStatus(r.status);
       const detail = decorateDocType({
         id: r.id,
         uid: `partner_deal:${r.id}`,
-        title: `${TEMPLATES[docType]?.title || 'Partner Deal'} — ${r.partner_email || r.partner_name || 'unknown'}`,
+        title: partnerDealTitle(r),
         doc_type: docType,
         status: unified,
         template_name: docType,
@@ -1698,19 +1724,31 @@ const LEGAL_TEMPLATE_CATALOG: ReadonlyArray<{
   { key: 'nda_3way_founder_investor_axal_v1', doc_type: 'nda_3way_founder_investor_axal',   title: '3-Way NDA (Founder ↔ Investor ↔ Axal) v1' },
 ];
 
-// D717 decision 6: the bundled keys whose text is not the store body of the
-// row they count under. Read-only; the thumbnails come with PR 1b.
+// D717 decision 6, narrowed by D758 decision 3: the bundled keys a sender
+// still sends as the bundled file rather than its library row
+// (`BUNDLED_SENT_DIRECTLY`), each with the row it counts under. Read-only.
 adminContracts.get('/templates/outside', async (c) => {
   await requireAdmin(c);
-  const outside = LEGAL_TEMPLATE_CATALOG.filter(e => e.key !== e.doc_type);
   try {
-    const items = await Promise.all(outside.map(async (e) => {
-      const row = await storeGetTemplate(c.env, e.doc_type);
-      return { key: e.key, title: e.title, doc_type: e.doc_type, counted_under: { slug: e.doc_type, title: row?.title ?? null } };
+    const items = await Promise.all(BUNDLED_SENT_DIRECTLY.map(async (e) => {
+      const slug = librarySlugFor(e.key);
+      const row = await storeGetTemplate(c.env, slug);
+      return { key: e.key, title: e.title, doc_type: slug, counted_under: { slug, title: row?.title ?? null } };
     }));
     return c.json({ items });
   } catch {
     return c.json({ error: 'Templates are unreadable. Try again.', code: 'templates_unreadable' }, 503);
+  }
+});
+
+// D758 (#1864): the documents the platform generates in code, each with the
+// library rows it reads and their states, its refusal and its thumbnail's version.
+adminContracts.get('/templates/generated', async (c) => {
+  await requireAdmin(c);
+  try {
+    return c.json({ items: await generatedList(c.env) });
+  } catch (e) {
+    return refuse(c, 503, { code: 'generated_unreadable', message: 'Generated documents are unreadable. Try again.', raw: e });
   }
 });
 
@@ -1739,7 +1777,7 @@ adminContracts.get('/templates/store', async (c) => {
 
   const sql = getSQL(c.env);
   try {
-    const { usage, lastUsed } = await loadTemplateUsage(sql, c.req.query('recorded') === 'true');
+    const { usage, lastUsed } = await loadTemplateUsage(sql, c.req.query('recorded') === 'true', new Set(items.map(t => t.slug)));
     const publications = c.req.query('recorded') === 'true' ? new Map((await publishedContractTemplates(c.env)).map(t => [t.slug, t])) : null;
 
     const out = items.map((t) => ({
@@ -1749,6 +1787,7 @@ adminContracts.get('/templates/store', async (c) => {
       usage_count: usage.get(t.slug) || 0,
       last_used_at: lastUsed.get(t.slug) || null,
       ...formatView(t),
+      counsel_draft: COUNSEL_DRAFT_SLUGS.has(t.slug),
       ...(publications ? { published_version: publications.get(t.slug)?.version ?? null,
         has_unpublished_changes: publications.has(t.slug) ? !!t.is_stub || !t.body_md.trim() || publications.get(t.slug)?.version !== t.version
           : !t.is_stub && !!t.body_md.trim() } : {}),
@@ -2014,13 +2053,17 @@ adminContracts.post('/templates/render.pdf', async (c) => {
   });
 });
 
-// GET /templates/store/:slug/thumbnail.png and /templates/outside/:key/thumbnail.png
+// GET /templates/store/:slug/thumbnail.png, /templates/outside/:key/thumbnail.png
+// and /templates/generated/:key/thumbnail.png
 // — D717 decision 5: page 1 of the paper as an image, drawn once per version
 // by Browser Run's screenshot and kept in FILES. A new version or a new paper
 // style is a new key, so an image never goes stale. A thumbnail is not a legal
 // file, so it gets no legal_document_files row. On a miss that cannot be drawn
 // it answers 503 `thumbnail_unavailable` and writes nothing. Binary endpoints —
 // kept OUT of the typed API drift surface.
+// D758 (#1864): a generated document's image is keyed
+// `legal/thumbnails/generated/<sha256 of key>/<specimen sha256 first 16>-<paper_sha256 first 16>.png`,
+// so a new library body on a row it reads redraws it.
 const THUMB_VIEWPORT = { width: 816, height: 1056, deviceScaleFactor: 0.5 } as const; // Letter page 1, in CSS px
 
 async function thumbnailResponse(c: Context<{ Bindings: Env }>, key: string, html: () => Promise<string>): Promise<Response> {
@@ -2032,15 +2075,19 @@ async function thumbnailResponse(c: Context<{ Bindings: Env }>, key: string, htm
   const shot = await renderLegalPng(c.env, await html(), THUMB_VIEWPORT);
   if (!shot.ok) {
     console.warn(JSON.stringify({ event: 'legal_thumbnail_unavailable', code: shot.code }));
-    return refuse(c, 503, { code: 'thumbnail_unavailable', message: 'Thumbnail not drawn: the page renderer did not answer.' });
+    return thumbnailUnavailable(c);
   }
   // A failed write still serves the image; the next request draws it again.
   await c.env.FILES?.put(key, shot.bytes, { httpMetadata: { contentType: 'image/png' } }).catch(() => {});
   return new Response(shot.bytes, { status: 200, headers });
 }
 
-function thumbnailHtml(model: ReturnType<typeof paperModel>): string {
-  return paperHtml(model, { pageSize: 'letter', cover: 'dark', medium: 'screen', fonts: 'inline' });
+function thumbnailUnavailable(c: Context<{ Bindings: Env }>): Response {
+  return refuse(c, 503, { code: 'thumbnail_unavailable', message: 'Thumbnail not drawn: the page renderer did not answer.' });
+}
+
+function thumbnailHtml(model: ReturnType<typeof paperModel>, only?: 'structure' | 'certificate' | null): string {
+  return paperHtml(model, { pageSize: 'letter', cover: 'dark', medium: 'screen', fonts: 'inline', ...(only ? { only } : {}) });
 }
 
 adminContracts.get('/templates/store/:slug/thumbnail.png', async (c) => {
@@ -2062,8 +2109,9 @@ adminContracts.get('/templates/store/:slug/thumbnail.png', async (c) => {
 
 adminContracts.get('/templates/outside/:key/thumbnail.png', async (c) => {
   await requireAdmin(c);
-  const entry = LEGAL_TEMPLATE_CATALOG.find(e => e.key === c.req.param('key') && e.key !== e.doc_type);
-  if (!entry) return c.json({ error: 'Template not found', code: 'not_found' }, 404);
+  const found = BUNDLED_SENT_DIRECTLY.find(e => e.key === c.req.param('key'));
+  if (!found) return c.json({ error: 'Template not found', code: 'not_found' }, 404);
+  const entry = { key: found.key, title: found.title, doc_type: librarySlugFor(found.key) };
   const { getLegalTemplateBody } = await import('../services/legalTemplates');
   const body = getLegalTemplateBody(entry.key as Parameters<typeof getLegalTemplateBody>[0]);
   const bodySha = await sha256Hex(body);
@@ -2072,6 +2120,26 @@ adminContracts.get('/templates/outside/:key/thumbnail.png', async (c) => {
   return thumbnailResponse(c, key, async () => thumbnailHtml(paperModel({
     title: entry.title, body, slug: entry.doc_type, version: null, bodySha256: bodySha, merge: 'brackets', state: { kind: 'draft' },
   })));
+});
+
+// D758 (#1864) — a generated document's page 1, drawn as a specimen (bracket
+// figures, no record and no account). A specimen that cannot be built answers
+// the same 503 as a renderer that does not answer, and writes nothing.
+adminContracts.get('/templates/generated/:key/thumbnail.png', async (c) => {
+  await requireAdmin(c);
+  const docKey = c.req.param('key');
+  if (!isGeneratedKey(docKey)) return refuse(c, 404, { code: 'not_found', message: 'No generated document has that key.' });
+  let html: string;
+  let key: string;
+  try {
+    const spec = await generatedSpecimen(c.env, docKey);
+    html = thumbnailHtml(paperModel(spec.input), spec.only);
+    key = `legal/thumbnails/generated/${await sha256Hex(docKey)}/${spec.version}-${(await paperSha256()).slice(0, 16)}.png`;
+  } catch {
+    console.warn(JSON.stringify({ event: 'generated_specimen_unbuilt', code: 'specimen_unbuilt' }));
+    return thumbnailUnavailable(c);
+  }
+  return thumbnailResponse(c, key, async () => html);
 });
 
 // GET /templates/paper-fonts — D711: the paper's @font-face rules, fetched
@@ -2165,7 +2233,10 @@ adminContracts.get('/templates/:doc_type/usage', async (c) => {
   const sql = getSQL(c.env);
   try {
     const all = await loadAllContracts(sql);
-    const rows = all.filter(r => r.doc_type === docType);
+    // D758 — the same fold and skip the "[n] uses" chip counts with, so the
+    // list and its counters equal the chip.
+    const keys = new Set([...(await storeListTemplates(c.env)).map(t => t.slug), ...Object.keys(TEMPLATES)]);
+    const rows = usageRowsFor(all, keys, docType);
 
     const byStatus: Record<string, number> = { draft: 0, generated: 0, sent: 0, signed: 0, void: 0 };
     const signDays: number[] = [];

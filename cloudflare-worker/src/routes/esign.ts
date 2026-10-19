@@ -46,16 +46,17 @@ import { templatesFor, mayOriginate, notOfferedFor, originatorName, SEND_ABSENCE
 import { esignEnvelopeScope } from '../services/tenancyScope';
 import { sendAgreementAssignedEmail } from '../services/email';
 import { sha256Hex, sha256HexBytes } from '../services/pdf';
-import { paperModel, paperHtml, paperSha256, type PaperRecipient } from '../services/legalPaper';
+import { paperModel, paperHtml, paperSha256, PART_STUB, STUB_LINE, type PaperRecipient } from '../services/legalPaper';
 import { structureForPaper } from '../services/fundStructure';
 import { renderLegalPdf } from '../services/legalPaperRender';
 import { readPaperChoice, PAPER_CHOICE_MESSAGES } from '../services/legalPaperCss';
 import { fileRowStatement, newFileUid } from '../services/legalDocumentFiles';
-import { templateFormatFor, renderFormat, type TemplateFormat } from '../services/templateFormat';
+import { templateFormatFor, renderFormat, COUNSEL_DRAFT_SLUGS, type TemplateFormat } from '../services/templateFormat';
 import { PDFDocument } from 'pdf-lib';
 import { bindingKey } from '../util/schemaBootstrap';
 import { clientIp } from '../util/clientIp';
 import { refuse } from '../util/refusal';
+import { librarySlugFor, sentAsBundledFile } from '../services/legalDocTypes';
 
 const esign = new Hono<{ Bindings: Env }>();
 
@@ -217,62 +218,39 @@ interface AgreementTemplate {
   body: string;
 }
 
-// Minimal, generic templates keyed by AGREEMENT_OPTIONS values from the
-// frontend. Real legal teams should replace these with vetted documents;
-// these are placeholders that capture the intent and parties so the audit
-// trail is meaningful from day one.
-function buildTemplateBody(agreementType: string, recipientName: string, recipientEmail: string): AgreementTemplate {
-  // Operating contracts (platform terms, partner, vendor, advisor, etc.) are
-  // signed by Axal VC Management LLC. D705: the LP's subscription and its
-  // co-investment side letter are the Fund's, acting by its general partner;
-  // the SPV joinder and the strategic side letter are the GP's, as general
-  // partner of the Fund (legalDocFormat.ts `axalEntityKeyForDoc`).
-  const fundAgreements = new Set(['Subscription Booklet & LPA', 'Co-Investment Side Letter']);
-  const gpAgreements = new Set(['SPV Joinder Agreement', 'Strategic Side Letter / Focused SPV']);
-  const axalSignerName = fundAgreements.has(agreementType)
-    ? 'Axal VC Spin-Out Lab Fund I LP, a Delaware limited partnership acting by its general partner Axal VC GP LLC ("Axal")'
-    : gpAgreements.has(agreementType)
-      ? 'Axal VC GP LLC, as general partner of Axal VC Spin-Out Lab Fund I LP ("Axal")'
-      : 'Axal VC Management LLC ("Axal")';
-  const intro = `This Agreement is entered into between ${axalSignerName} and ${recipientName || recipientEmail} ("Counterparty"), effective on the date of electronic signature appearing below.\n\n`;
-  const closer = `\n\n---\n\nBy signing electronically below, the parties acknowledge that they have read and agree to the terms set forth in this Agreement and that an electronic signature has the same legal effect as a handwritten signature under the U.S. Electronic Signatures in Global and National Commerce Act (E-SIGN, 15 U.S.C. § 7001 et seq.) and the Uniform Electronic Transactions Act (UETA).`;
-  const lib: Record<string, AgreementTemplate> = {
-    'Subscription Booklet & LPA': { title: 'Subscription Booklet & Limited Partnership Agreement', body: intro + 'Counterparty subscribes to limited partnership interests in the Axal venture fund subject to the terms of the Limited Partnership Agreement, including capital commitments, management fees, carried interest, distribution waterfall, and transfer restrictions.\n\nCounterparty represents that they qualify as an Accredited Investor under Regulation D and will provide such verification as Axal may reasonably require.' + closer },
-    'SPV Joinder Agreement':       { title: 'Special Purpose Vehicle Joinder Agreement', body: intro + 'Counterparty hereby joins the SPV formed for the specific investment opportunity described separately, agreeing to its operating agreement, capital call schedule, and pro-rata distribution mechanics.' + closer },
-    'Co-Investment Side Letter':   { title: 'Co-Investment Side Letter', body: intro + 'This Side Letter modifies the standard LPA terms with respect to co-investment rights, fee offsets, and information rights as negotiated separately between the parties.' + closer },
-    'Strategic Side Letter / Focused SPV': { title: 'Strategic Side Letter / Focused SPV Agreement', body: intro + 'Counterparty receives sector-focused investment exposure through a dedicated SPV, with negotiated economics and reporting cadence specific to the strategic mandate.' + closer },
-    'Founder Collaboration Agreement': { title: 'Founder Collaboration Agreement', body: intro + 'Counterparty agrees to collaborate with Axal in the formation and operation of a new venture, including IP contribution, time commitment, equity vesting, and confidentiality obligations.' + closer },
-    'Spin-Out Subsidiary SPA + IP Transfer': { title: 'Spin-Out Subsidiary Stock Purchase + IP Transfer', body: intro + 'Counterparty agrees to the formation of a subsidiary company, the assignment and license of relevant intellectual property to that subsidiary, and the issuance of founder shares pursuant to a vesting schedule.' + closer },
-    'Strategic Scale Partnership Agreement': { title: 'Strategic Scale Partnership Agreement', body: intro + 'Counterparty engages Axal to provide strategic scaling services, including go-to-market acceleration, follow-on financing support, and operational resources, in exchange for the consideration described herein.' + closer },
-    'Technology Integration / JV Agreement': { title: 'Technology Integration / Joint Venture Agreement', body: intro + 'Counterparty and Axal agree to integrate StudioOS AI technology into Counterparty\'s product suite under a joint venture structure, with shared IP rights and revenue allocation as specified.' + closer },
-    'Referral / Agency Agreement': { title: 'Referral & Agency Agreement', body: intro + 'Counterparty agrees to refer qualified opportunities to Axal in exchange for the referral fees and revenue share defined herein, subject to non-circumvention and confidentiality obligations.' + closer },
-    'M&A Advisory Mandate':        { title: 'M&A Advisory Mandate', body: intro + 'Counterparty engages Axal as M&An advisor on an exclusive basis for the engagement period defined herein, with success fees calculated as a percentage of transaction value.' + closer },
-    'Venture Share Agreement (FAST)': { title: 'Venture Share Agreement (FAST)', body: intro + 'Counterparty agrees to advise the Axal portfolio company on a Founder/Advisor Standard Template (FAST) basis, with equity compensation vesting over the engagement period.' + closer },
-    'MSA + Equity-for-Services':   { title: 'Master Services Agreement + Equity-for-Services', body: intro + 'Counterparty agrees to provide operating partner services under a Master Services Agreement, with compensation paid partially in equity of designated portfolio companies.' + closer },
-    'Engagement Letter (Spin-Out Package)': { title: 'Engagement Letter — Spin-Out Legal Package', body: intro + 'Counterparty (legal counsel) is engaged to provide the standard spin-out legal package, including entity formation, IP assignment, founder agreements, and initial financing documents.' + closer },
-    'White-Label Service Agreement': { title: 'White-Label Service Agreement', body: intro + 'Counterparty agrees to provide technical services on a white-label basis to Axal portfolio companies, with deliverables and SLAs defined per work order.' + closer },
-    'Secondary Purchase Agreement': { title: 'Secondary Purchase Agreement', body: intro + 'Counterparty agrees to the purchase or sale of secondary interests in Axal portfolio companies on the terms described, including price, transfer mechanics, and information rights.' + closer },
-  };
-  return lib[agreementType] || {
-    title: agreementType || 'Closing Binder Agreement',
-    body: intro + `This document constitutes the Closing Binder for the agreement type "${agreementType}". Detailed terms are set forth in the attached schedules and exhibits, which are incorporated by reference. Counterparty acknowledges receipt of and agreement with all such terms.` + closer,
-  };
-}
-
 // ---------------------------------------------------------------------------
 // The template body a doc type sends, BEFORE any merge — one resolver for the
 // send and the preview (D411), so what a sender reads on the page is what the
-// envelope hashes. Order: the editable D1 store (active, non-stub) keyed by
-// document_type, then the bundled markdown template. Null means neither knows
-// the doc type, and createAndSendEnvelope falls back to buildTemplateBody.
+// envelope hashes.
+//
+// D758 (#1863): THE LIBRARY ROW IS THE DOCUMENT. A spelling is first resolved
+// to its row's slug (`librarySlugFor`), so `investor_nda_v1` reads the
+// `investor_nda_axal` row, never the bundled file while the row has a body.
+// Order: the editable D1 store (active, non-stub) under that slug, then the
+// bundled markdown file for that slug, which is the row's fallback. A key in
+// `BUNDLED_SENT_DIRECTLY` is still sent as its bundled file, as its sender
+// does today. Null means the document has no body anywhere, and a send of it
+// is refused (D758, #1862): there is no fallback text. A store that cannot be
+// read THROWS, so a caller never takes "unreadable" for "no body". `title` is
+// the store row's; a bundled body has none.
 // ---------------------------------------------------------------------------
-export async function templateBodyFor(env: Env, docType: string): Promise<{ body: string; source: 'store' | 'template' } | null> {
+export async function templateBodyFor(env: Env, docType: string): Promise<{ body: string; source: 'store' | 'template'; title: string | null } | null> {
   const { templateKeyForDocType, getLegalTemplateBody } = await import('../services/legalTemplates');
-  const { getActiveTemplateBody } = await import('../services/legalTemplateStore');
-  const stored = await getActiveTemplateBody(env, docType);
-  if (stored) return { body: stored, source: 'store' };
-  const key = templateKeyForDocType(docType);
-  return key ? { body: getLegalTemplateBody(key), source: 'template' } : null;
+  const { activeTemplate } = await import('../services/legalTemplateStore');
+  if (sentAsBundledFile(docType)) {
+    const key = templateKeyForDocType(docType);
+    return key ? { body: getLegalTemplateBody(key), source: 'template', title: null } : null;
+  }
+  const slug = librarySlugFor(docType);
+  const stored = await activeTemplate(env, slug);
+  if (stored) return { body: stored.body, source: 'store', title: stored.title };
+  const key = templateKeyForDocType(slug);
+  return key ? { body: getLegalTemplateBody(key), source: 'template', title: null } : null;
+}
+
+/** D758: the 3-way NDA under either spelling, the old envelope one and the row's slug. */
+export function isThreeWayNdaType(t: string | null | undefined): boolean {
+  return t === 'nda_3way_v1' || t === 'nda_3way_founder_investor_axal';
 }
 
 /**
@@ -309,6 +287,40 @@ export class RenderedBodyError extends Error {
     super('rendered_body_invalid');
     this.reason = reason;
   }
+}
+
+/**
+ * D758 — thrown by createAndSendEnvelope before anything is written, when the
+ * document has no body in the library (`no_body`) or the store could not be
+ * read (`unreadable`). There is no fallback text: every caller answers it
+ * through `templateBodyRefusal`.
+ */
+export class TemplateBodyError extends Error {
+  reason: 'no_body' | 'unreadable';
+  slug: string;
+  constructor(reason: TemplateBodyError['reason'], slug: string) {
+    super(reason === 'no_body' ? 'template_has_no_body' : 'template_unreadable');
+    this.reason = reason;
+    this.slug = slug;
+  }
+}
+
+/**
+ * The refusal a caller answers for a TemplateBodyError, or null for any other
+ * error. The admin sentences reuse the canvas's stub copy (boards L8 and L9).
+ */
+export function templateBodyRefusal(e: unknown, audience: 'admin' | 'member'):
+  { status: 409 | 503; code: 'template_has_no_body' | 'template_unreadable'; message: string } | null {
+  if (!(e instanceof TemplateBodyError)) return null;
+  if (e.reason === 'unreadable') {
+    return { status: 503, code: 'template_unreadable', message: 'The template could not be read, so nothing was sent. Try again in a moment.' };
+  }
+  const message = audience === 'member'
+    ? 'This document is not ready to send: it has no text in the library yet. Nothing was sent.'
+    : COUNSEL_DRAFT_SLUGS.has(e.slug)
+      ? `${PART_STUB} This document has no text until counsel supplies it, so nothing was sent.`
+      : `${STUB_LINE.replace(/\.$/, '')}, so nothing was sent. Add its body under Contracts › Templates.`;
+  return { status: 409, code: 'template_has_no_body', message };
 }
 
 // ---------------------------------------------------------------------------
@@ -385,19 +397,19 @@ export async function createAndSendEnvelope(
   }
 ): Promise<{ envelope_id: number; envelope_uuid: string; signing_url: string; email_sent: boolean; provider?: string; already_pending?: boolean } | null> {
   await ensureSchema(env);
+  // D758: the envelope records, prints and dedupes under the library row's
+  // slug, so `mentor_disclaimer_v1` is sent as `mentor_engagement_disclaimer`.
+  // A key still sent as its bundled file keeps its own spelling.
+  const documentType = sentAsBundledFile(opts.documentType) ? opts.documentType : librarySlugFor(opts.documentType);
+  const requestedAs = documentType === opts.documentType ? {} : { requested_as: opts.documentType };
 
-  // Task #5 (Z) v3 — Prefer the Y-1 markdown templates when the
-  // `document_type` maps to a known LegalTemplateKey
-  // (templateKeyForDocType). This covers the new W/X/Y doc types
-  // (investor_nda_axal, mentor_nda_axal, partner_services, …) so the
-  // admin wizard sends real legal templates rather than the legacy
-  // `buildTemplateBody` placeholder fallback.
   const { applyMergeFields, mergeTokensIn } = await import('../services/legalTemplates');
-  // Task #8 — prefer the canonical D1 store body (active, non-stub) keyed by
-  // `document_type`, falling back to the Y-1 markdown templates and then the
-  // `buildTemplateBody` placeholder. This makes the editable store the source
-  // of truth for what is actually rendered into the signed envelope. The
-  // lookup is `templateBodyFor`, which the preview route shares (D411).
+  // The body comes from the library only (D758): the canonical D1 store body
+  // (active, non-stub) keyed by `document_type`, then the bundled markdown
+  // template. The lookup is `templateBodyFor`, which the preview route shares
+  // (D411). A document with neither is refused here, before the envelope, its
+  // recipient or any email is written; a store that cannot be read is refused
+  // as unreadable, never as "no body".
   const rendered = opts.renderedBody;
   if (rendered !== undefined) {
     if (!rendered || typeof rendered.title !== 'string' || !rendered.title.trim()) {
@@ -408,12 +420,22 @@ export async function createAndSendEnvelope(
       throw new RenderedBodyError('merge_fields_with_rendered_body');
     }
   }
-  const source = rendered ? null : await templateBodyFor(env, opts.documentType);
+  let source: Awaited<ReturnType<typeof templateBodyFor>> = null;
+  if (!rendered) {
+    try {
+      source = await templateBodyFor(env, documentType);
+    } catch (e) {
+      console.error('[esign] template store unreadable', (e as Error)?.message);
+      throw new TemplateBodyError('unreadable', documentType);
+    }
+    if (!source) throw new TemplateBodyError('no_body', documentType);
+  }
   let tpl: AgreementTemplate;
   const appliedMergeKeys: string[] = [];
   if (rendered) {
     tpl = { title: rendered.title.trim(), body: rendered.body };
-  } else if (source) {
+  } else {
+    const src = source!; // non-null: a missing body was refused above
     // Y-1 markdown — `renderLegalTemplate` already does {{key}}
     // substitution. We always seed a sane set of default merge values
     // (recipient_name/email + effective_date) and let the caller
@@ -487,29 +509,10 @@ export async function createAndSendEnvelope(
     // caller sent, recorded as applied whether or not the body had a slot for
     // it — which put a false statement in an audit row that a signature dispute
     // would later be read against.
-    const tokens = mergeTokensIn(source.body);
-    const body = applyMergeFields(source.body, merge);
-    tpl = { title: originatorName(opts.documentType) ?? opts.documentType, body };
+    const tokens = mergeTokensIn(src.body);
+    const body = applyMergeFields(src.body, merge);
+    tpl = { title: originatorName(documentType) ?? src.title ?? documentType, body };
     if (opts.mergeFields) {
-      appliedMergeKeys.push(...Object.keys(opts.mergeFields).filter((k) => tokens.has(k)));
-    }
-  } else {
-    tpl = buildTemplateBody(opts.documentType, opts.recipientName, opts.recipientEmail);
-    // ONE SHARED RESOLVER, NOT A REGEX PER KEY. This branch used to compile
-    // `new RegExp('\\{\\{\\s*' + escape(key) + '\\s*\\}\\}')` for every
-    // submitted key, and the escape was mis-nested — its character class closed
-    // fifteen characters in, so it matched almost nothing and returned
-    // `company.name` unchanged. Nothing exploited it: the request validator
-    // above restricts keys to `[A-Za-z0-9_\-.]` before they reach here, and
-    // `buildTemplateBody` emits no `{{token}}` at all today, so the loop could
-    // not fire. But an escaper whose only defence is a validator in one caller
-    // is a trap, and this was the repo's last open `detect-non-literal-regexp`
-    // finding. `applyMergeFields` is the same resolver the D1 branch above
-    // uses, over one literal pattern, and it does the right thing the day a
-    // legacy body does gain a token.
-    if (opts.mergeFields) {
-      const tokens = mergeTokensIn(tpl.body);
-      tpl.body = applyMergeFields(tpl.body, opts.mergeFields);
       appliedMergeKeys.push(...Object.keys(opts.mergeFields).filter((k) => tokens.has(k)));
     }
   }
@@ -553,7 +556,7 @@ export async function createAndSendEnvelope(
   const recipientKey = (opts.recipientUserId ?? -1);
   const dealKey = opts.dealId ?? null;
   const SAME_PENDING_SEND = `
-        x.document_type = ?
+        x.document_type IN (?, ?)
     AND x.created_by = ?
     AND COALESCE(x.user_id, -1) = ?
     AND COALESCE(x.deal_id, -2) = COALESCE(?, -2)
@@ -564,8 +567,8 @@ export async function createAndSendEnvelope(
        OR (x.user_id IS NOT NULL
            AND NOT EXISTS (SELECT 1 FROM esign_recipients rr WHERE rr.envelope_id = x.id))
     )`;
-  const sameSendBinds = [opts.documentType, opts.adminUserId, recipientKey, dealKey, opts.recipientEmail];
-  const format = opts.format ?? await templateFormatFor(env, opts.documentType);
+  const sameSendBinds = [documentType, opts.documentType, opts.adminUserId, recipientKey, dealKey, opts.recipientEmail];
+  const format = opts.format ?? await templateFormatFor(env, documentType);
   const insertEnvelope = env.DB.prepare(
     `INSERT INTO esign_envelopes (envelope_uuid, user_id, deal_id, document_type, document_title, document_body, body_sha256, status, created_by, audit_log,
                                   page_size, cover, template_version, doc_kind, axal_party)
@@ -573,7 +576,7 @@ export async function createAndSendEnvelope(
       WHERE NOT EXISTS (SELECT 1 FROM esign_envelopes x WHERE ${SAME_PENDING_SEND})
      RETURNING id`
   ).bind(
-    envelopeUuid, opts.recipientUserId, opts.dealId || null, opts.documentType, tpl.title, tpl.body, bodySha, opts.adminUserId,
+    envelopeUuid, opts.recipientUserId, opts.dealId || null, documentType, tpl.title, tpl.body, bodySha, opts.adminUserId,
     pageSize, cover, templateVersion, format.kind, format.party,
     ...sameSendBinds,
   );
@@ -644,7 +647,7 @@ export async function createAndSendEnvelope(
         const ds = await sendDocusignEnvelope(env, dsRow, {
           documentTitle: tpl.title,
           documentBody: tpl.body,
-          documentType: opts.documentType,
+          documentType,
           ...renderFormat(format),
           templateVersion,
           envelopeUuid,
@@ -667,7 +670,7 @@ export async function createAndSendEnvelope(
             uid: newFileUid(),
             kind: 'docusign_source',
             envelopeId,
-            templateSlug: opts.documentType,
+            templateSlug: documentType,
             templateVersion,
             bodySha256: bodySha,
             fileSha256: ds.source.sha256,
@@ -685,7 +688,7 @@ export async function createAndSendEnvelope(
           signer_email: null,
           action: 'envelope_created',
           ip: opts.actorIp || 'admin',
-          meta: { sender: opts.adminName, document_type: opts.documentType, recipient: opts.recipientEmail, provider: 'docusign', docusign_envelope_id: ds.docusign_envelope_id, body_source: rendered ? 'rendered' : 'template' },
+          meta: { sender: opts.adminName, document_type: documentType, ...requestedAs, recipient: opts.recipientEmail, provider: 'docusign', docusign_envelope_id: ds.docusign_envelope_id, body_source: rendered ? 'rendered' : 'template' },
         });
         return {
           envelope_id: envelopeId,
@@ -731,7 +734,7 @@ export async function createAndSendEnvelope(
     // D416 — which path produced the body, because "rendered by the caller"
     // and "rendered here from the template" are different claims about who
     // decided the document's words.
-    meta: { sender: opts.adminName, document_type: opts.documentType, recipient: opts.recipientEmail, body_source: rendered ? 'rendered' : 'template' },
+    meta: { sender: opts.adminName, document_type: documentType, ...requestedAs, recipient: opts.recipientEmail, body_source: rendered ? 'rendered' : 'template' },
   });
 
   const emailSent = await sendAgreementAssignedEmail(
@@ -902,6 +905,9 @@ esign.post('/send', async (c) => {
         extra: { fields: e.fields },
       });
     }
+    // D758 — no body in the library, or an unreadable store: nothing was written.
+    const bodyRefusal = templateBodyRefusal(e, sender.role === 'admin' ? 'admin' : 'member');
+    if (bodyRefusal) return refuse(c, bodyRefusal.status, { code: bodyRefusal.code, message: bodyRefusal.message, raw: e });
     // No-silent-fallback: surface explicit-DocuSign failures as 412
     // (Precondition Failed) so the UI can prompt the admin to either
     // connect DocuSign or retry with provider='native'.
@@ -969,7 +975,10 @@ esign.get('/templates/:doc_type', async (c) => {
     return refuse(c, 503, { code: 'template_unreadable', message: 'The template could not be read. Try again in a moment.', raw: e });
   }
   if (!resolved) {
-    return refuse(c, 404, { code: 'template_not_offered', message: 'That template is not one you can send.' });
+    // An offered type with no body in the library (D758): there is no
+    // fallback text, so a send of it would be refused too.
+    const r = templateBodyRefusal(new TemplateBodyError('no_body', docType), 'member')!;
+    return refuse(c, r.status, { code: r.code, message: r.message });
   }
   const tokens = [...mergeTokensIn(resolved.body)];
   const fields = tokens.map((key) => ({
@@ -1211,6 +1220,18 @@ function voidedRefusal(c: any) {
   });
 }
 
+// D759 (#1858) — a Subscription Booklet envelope signs the booklet's frozen
+// copy, so its paper comes from services/bookletSigning.ts, never from
+// `document_body` (which is the frozen JSON). Imported on demand, as the
+// completion hooks are, and only for that document type.
+const BOOKLET_DOC_TYPE = 'subscription_booklet';
+
+/** A booklet refusal as a response, or null for any other error. */
+async function bookletRefused(c: any, e: unknown): Promise<Response | null> {
+  const { BookletRefusal } = await import('../services/subscriptionBooklet');
+  return e instanceof BookletRefusal ? refuse(c, e.status, { code: e.code, message: e.publicMessage, extra: e.extra }) : null;
+}
+
 // GET /api/legal/esign/sign/:token — public, fetch envelope for signing UI.
 esign.get('/sign/:token', async (c) => {
   await ensureSchema(c.env);
@@ -1234,7 +1255,14 @@ esign.get('/sign/:token', async (c) => {
     ip: clientIp(c.req.raw),
     ua: c.req.header('user-agent') || undefined,
   });
+  // D759 — a booklet envelope says which stage it is and its edition (v[N]).
+  let booklet: { stage: string; edition: number } | null = null;
+  if (rec.document_type === BOOKLET_DOC_TYPE) {
+    const { bookletSignInfo } = await import('../services/bookletSigning');
+    booklet = await bookletSignInfo(c.env, rec.envelope_uuid);
+  }
   return c.json({
+    ...(rec.document_type === BOOKLET_DOC_TYPE ? { booklet } : {}),
     envelope_uuid: rec.envelope_uuid,
     document_type: rec.document_type,
     document_title: rec.document_title,
@@ -1268,20 +1296,37 @@ esign.get('/sign/:token/paper', async (c) => {
     return c.json({ error: 'This signing link has expired. Please request a new one from the Axal admin who sent it.' }, 410);
   }
   const pageSize = rec.page_size === 'a4' ? 'a4' : 'letter';
-  const model = paperModel({
-    title: rec.document_title,
-    body: rec.document_body,
-    slug: rec.document_type,
-    version: rec.template_version ?? null,
-    // D717: the pair the send recorded, as the signed copy prints it.
-    ...renderFormat({ doc_kind: rec.doc_kind, axal_party: rec.axal_party }),
-    structure: await structureForPaper(c.env, rec.document_type, 'issued'),
-    bodySha256: rec.body_sha256,
-    envelopeUuid: rec.envelope_uuid,
-    state: { kind: 'issued' },
-    recipients: await envelopeRecipients(c.env, rec.envelope_id),
-    counterSignerEmail: c.env.AXAL_COUNTERSIGNER_EMAIL || null,
-  });
+  let bookletInput: Awaited<ReturnType<typeof import('../services/bookletSigning').bookletEnvelopeModel>> | null = null;
+  if (rec.document_type === BOOKLET_DOC_TYPE) {
+    try {
+      const { bookletEnvelopeModel } = await import('../services/bookletSigning');
+      bookletInput = await bookletEnvelopeModel(c.env, rec);
+    } catch (e) {
+      const refused = await bookletRefused(c, e);
+      if (refused) return refused;
+      throw e;
+    }
+  }
+  const model = bookletInput
+    ? paperModel({
+        ...bookletInput,
+        recipients: await envelopeRecipients(c.env, rec.envelope_id),
+        counterSignerEmail: c.env.AXAL_COUNTERSIGNER_EMAIL || null,
+      })
+    : paperModel({
+        title: rec.document_title,
+        body: rec.document_body,
+        slug: rec.document_type,
+        version: rec.template_version ?? null,
+        // D717: the pair the send recorded, as the signed copy prints it.
+        ...renderFormat({ doc_kind: rec.doc_kind, axal_party: rec.axal_party }),
+        structure: await structureForPaper(c.env, rec.document_type, 'issued'),
+        bodySha256: rec.body_sha256,
+        envelopeUuid: rec.envelope_uuid,
+        state: { kind: 'issued' },
+        recipients: await envelopeRecipients(c.env, rec.envelope_id),
+        counterSignerEmail: c.env.AXAL_COUNTERSIGNER_EMAIL || null,
+      });
   const html = paperHtml(model, { pageSize, cover: rec.cover === 'light' ? 'light' : 'dark', medium: 'screen', fonts: 'inline' });
   return c.json({ html, body_sha256: rec.body_sha256, page_size: pageSize }, 200, { 'Cache-Control': 'no-store' });
 });
@@ -1375,6 +1420,20 @@ esign.post('/sign/:token', async (c) => {
   // D711 — the paper names the signer, never their email (decision 13).
   const signerName = typedName || rec.recipient_name || '';
 
+  // D759 — a booklet envelope's paper is built BEFORE the claim, so a
+  // refusal (`booklet_text_changed`) changes nothing.
+  let bookletInput: Awaited<ReturnType<typeof import('../services/bookletSigning').bookletEnvelopeModel>> | null = null;
+  if (rec.document_type === BOOKLET_DOC_TYPE) {
+    try {
+      const { bookletEnvelopeModel } = await import('../services/bookletSigning');
+      bookletInput = await bookletEnvelopeModel(c.env, rec, { signature: { imageDataUrl: sigDataUrl, signedAt } });
+    } catch (e) {
+      const refused = await bookletRefused(c, e);
+      if (refused) return refused;
+      throw e;
+    }
+  }
+
   // Atomic claim: only one concurrent POST can transition pending → signing.
   // If two requests race, exactly one sees `meta.changes === 1`; the other
   // gets 0 and we return 409. This guarantees the PDF generation + R2
@@ -1402,23 +1461,31 @@ esign.post('/sign/:token', async (c) => {
     const idx = recipients.findIndex((r) => r.id === rec.id);
     const signed = { signatureDataUrl: sigDataUrl, signedAt };
     if (idx >= 0) recipients[idx] = { ...recipients[idx], name: signerName || recipients[idx].name, status: 'signed', signedAt };
-    const model = paperModel({
-      title: rec.document_title,
-      body: rec.document_body,
-      slug: rec.document_type,
-      version: rec.template_version ?? null,
-      // D717: the pair the send recorded; NULL columns render as before.
-      ...renderFormat({ doc_kind: rec.doc_kind, axal_party: rec.axal_party }),
-      structure: await structureForPaper(c.env, rec.document_type, 'issued'),
-      bodySha256: rec.body_sha256,
-      envelopeUuid: rec.envelope_uuid,
-      effectiveDate: signedAt.slice(0, 10),
-      state: { kind: 'issued' },
-      recipients: idx >= 0 ? recipients : [{ id: rec.id, name: signerName || null, status: 'signed', signedAt }],
-      counterSignerEmail: c.env.AXAL_COUNTERSIGNER_EMAIL || null,
-      signature: { recipientIndex: idx >= 0 ? idx : 0, imageDataUrl: signed.signatureDataUrl, signedAt: signed.signedAt },
-      certificate: true,
-    });
+    const model = bookletInput
+      // D759 — the frozen parts, with this signer's image on their own lines.
+      ? paperModel({
+          ...bookletInput,
+          recipients: idx >= 0 ? recipients : [{ id: rec.id, name: signerName || null, status: 'signed', signedAt }],
+          counterSignerEmail: c.env.AXAL_COUNTERSIGNER_EMAIL || null,
+          certificate: true,
+        })
+      : paperModel({
+          title: rec.document_title,
+          body: rec.document_body,
+          slug: rec.document_type,
+          version: rec.template_version ?? null,
+          // D717: the pair the send recorded; NULL columns render as before.
+          ...renderFormat({ doc_kind: rec.doc_kind, axal_party: rec.axal_party }),
+          structure: await structureForPaper(c.env, rec.document_type, 'issued'),
+          bodySha256: rec.body_sha256,
+          envelopeUuid: rec.envelope_uuid,
+          effectiveDate: signedAt.slice(0, 10),
+          state: { kind: 'issued' },
+          recipients: idx >= 0 ? recipients : [{ id: rec.id, name: signerName || null, status: 'signed', signedAt }],
+          counterSignerEmail: c.env.AXAL_COUNTERSIGNER_EMAIL || null,
+          signature: { recipientIndex: idx >= 0 ? idx : 0, imageDataUrl: signed.signatureDataUrl, signedAt: signed.signedAt },
+          certificate: true,
+        });
     const pageSize = rec.page_size === 'a4' ? 'a4' : 'letter';
     const rendered = await renderLegalPdf(c.env, model, { pageSize, cover: rec.cover === 'light' ? 'light' : 'dark', createdAt: new Date(signedAt) });
     if (!rendered.ok) throw new Error(rendered.code);
@@ -1494,12 +1561,22 @@ esign.post('/sign/:token', async (c) => {
       const envelopeRow = await c.env.DB.prepare(
         `SELECT user_id, created_by, document_title, envelope_uuid, document_type FROM esign_envelopes WHERE id = ?`
       ).bind(rec.envelope_id).first<{ user_id: number | null; created_by: number | null; document_title: string | null; envelope_uuid: string; document_type: string | null }>();
+      // D759 — a booklet's applicant stage sends the General Partner's. Its own
+      // try, so it never fails the signature; the applicant stage's two
+      // notices are skipped below, since the Fund has not signed yet.
+      let bookletStage: string | null = null;
+      if (envelopeRow?.document_type === BOOKLET_DOC_TYPE && envelopeRow.envelope_uuid) {
+        try {
+          const { onBookletEnvelopeCompleted } = await import('../services/bookletSigning');
+          bookletStage = await onBookletEnvelopeCompleted(c.env, envelopeRow.envelope_uuid, c.env.APP_URL || 'https://axal.vc');
+        } catch (e) { console.warn('[esign] booklet_gp_stage_failed', (e as Error)?.name || 'error'); }
+      }
       // Task #3 (Y-1) — Trust Center hook: when a 3-way Founder ↔ Investor
       // ↔ Axal NDA reaches `completed`, flip the matching `pairwise_ndas`
       // row to `active` and stamp a 12-month `valid_until`. Without this,
       // the maskFounderForInvestor gate would keep returning masked rows
       // forever even though all three parties have signed.
-      if (envelopeRow?.document_type === 'nda_3way_v1' && envelopeRow.envelope_uuid) {
+      if (isThreeWayNdaType(envelopeRow?.document_type) && envelopeRow?.envelope_uuid) {
         try {
           const { activatePairwiseNda } = await import('../services/trust');
           await activatePairwiseNda(c.env, envelopeRow.envelope_uuid);
@@ -1535,7 +1612,7 @@ esign.post('/sign/:token', async (c) => {
       // on /account otherwise. The subject's link was '/legal', which only
       // admins and founders can open.
       const statusView = `/legal/send?envelope=${rec.envelope_id}`;
-      if (envelopeRow?.user_id) {
+      if (envelopeRow?.user_id && bookletStage !== 'applicant') {
         const { notify } = await import('../services/notify');
         const subject: any = await c.env.DB.prepare(`SELECT role FROM users WHERE id = ?`)
           .bind(envelopeRow.user_id).first().catch(() => null);
@@ -1560,7 +1637,7 @@ esign.post('/sign/:token', async (c) => {
       // them they "will be emailed when it is executed". Skipped when the
       // sender is the subject, who was just notified above. It runs after the
       // subject's notice, in its own try, so it can never cost them theirs.
-      if (envelopeRow?.created_by && envelopeRow.created_by !== envelopeRow.user_id) {
+      if (bookletStage !== 'applicant' && envelopeRow?.created_by && envelopeRow.created_by !== envelopeRow.user_id) {
         try {
           const { notify } = await import('../services/notify');
           await notify(c.env, {
