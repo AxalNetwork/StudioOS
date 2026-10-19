@@ -35,6 +35,7 @@ import {
   CATEGORY_ORDER,
   FIRST_PARTY_CARDS,
   directoryKeyFor,
+  channelPage,
   type PageDescriptor,
   type IntegrationRow,
   audienceFor,
@@ -42,7 +43,9 @@ import {
   personalHqOnlySentence,
   ConnectRefusal,
   type ProviderDescriptor,
+  type DescriptorViewer,
 } from '../integrations/registry';
+import { canHoldValidateSource } from './_founder_validate_helpers';
 import { branchOf } from '../util/branch';
 import {
   encryptCredentials,
@@ -83,7 +86,12 @@ export function ensureRole(c: Context<{ Bindings: Env }>, user: User) {
  * `/connect` tells them it is HQ only (403 `purpose_not_allowed`, D752).
  */
 function audienceOf(c: Context<{ Bindings: Env }>, user: User, desc: ProviderDescriptor) {
-  return audienceFor(desc, { role: String(user.role || ''), hq: branchOf(c.env) === null });
+  return audienceFor(desc, viewerOf(c, user));
+}
+
+/** The caller as `audienceFor` reads them; D757 adds whether they can hold a venture. */
+function viewerOf(c: Context<{ Bindings: Env }>, user: User): DescriptorViewer {
+  return { role: String(user.role || ''), hq: branchOf(c.env) === null, venture: canHoldValidateSource(user) };
 }
 
 function safeJson<T>(s: string | null | undefined, def: T): T {
@@ -185,7 +193,7 @@ function pageBody(page: PageDescriptor) {
   };
 }
 
-type Viewer = { role: string; hq: boolean };
+type Viewer = DescriptorViewer;
 
 /**
  * One catalogue entry, for `/available` and for the page read alike (decision
@@ -200,7 +208,7 @@ async function catalogueEntry(c: Context<{ Bindings: Env }>, user: User, p: Prov
   const page = pageDescriptor(p, viewer);
   if (!page) console.warn('[connectors] page_entry_missing', p.key);
   return {
-    ...publicDescriptor(p, viewer),
+    ...publicDescriptor(p, viewer, c.env),
     // Spec-named fields (Task #8 / AN). Existing fields kept as
     // back-compat aliases so the frontend keeps rendering during the
     // FE migration window.
@@ -314,7 +322,7 @@ integrations.get('/available', async (c) => {
   try {
     if (await c.env.DB.prepare('SELECT 1 AS connected FROM microsoft_oauth_tokens WHERE user_id = ?').bind(user.id).first()) connectedSet.add('microsoft_365');
   } catch { unreadableSources.push('microsoft_365'); }
-  const viewer = { role: String(user.role || ''), hq: branchOf(c.env) === null };
+  const viewer = viewerOf(c, user);
   const listed = REGISTRY.filter(p => audienceOf(c, user, p) !== 'none');
   const providers = await Promise.all(listed.map(async (p) => {
     const entityOnly = audienceOf(c, user, p) === 'entity';
@@ -416,13 +424,20 @@ integrations.get('/suggestions', async (c) => {
 integrations.get('/directory/:key', async (c) => {
   const user = await requireAuth(c);
   ensureRole(c, user);
-  const viewer = { role: String(user.role || ''), hq: branchOf(c.env) === null };
+  const viewer = viewerOf(c, user);
   const k = directoryKeyFor(c.req.param('key'));
   if (!k) return c.json({ error: 'unknown_provider' }, 404);
   if (k.key === 'linkedin') {
     const page = pageDescriptor({ key: 'linkedin' }, viewer);
     if (!page) return c.json({ error: 'unknown_provider' }, 404);
     return c.json({ ok: true, connector: { ...linkedinCard(viewer), ...pageBody(page) } });
+  }
+  // D753 C1 (#1974): WhatsApp and Telegram are channel pages, not registry rows.
+  const channel = channelPage(k.key);
+  if (channel) {
+    // D757 §2.11: the channels are Validate sources, shown only to who can hold a venture.
+    if (!viewer.venture) return c.json({ error: 'unknown_provider' }, 404);
+    return c.json({ ok: true, connector: { key: k.key, ...pageFields(channel), ...pageBody(channel) } });
   }
   const p = getDescriptor(k.key);
   if (!p || audienceOf(c, user, p) === 'none') return c.json({ error: 'unknown_provider' }, 404);
@@ -573,7 +588,7 @@ integrations.post('/connect', async (c) => {
 
   const desc = getDescriptor(key);
   // D752: a member who followed a link learns why; every other route stays 404.
-  const viewer = { role: String(user.role || ''), hq: branchOf(c.env) === null };
+  const viewer = viewerOf(c, user);
   if (desc && personalHqOnlyOffHq(desc, viewer)) {
     return refuse(c, 403, { code: 'purpose_not_allowed', message: personalHqOnlySentence(desc.display_name) });
   }
@@ -1384,6 +1399,8 @@ integrations.get('/oauth/:provider/start', async (c) => {
   const provider = c.req.param('provider').toLowerCase();
   const desc = getDescriptor(provider);
   if (!desc || desc.auth_type !== 'oauth2') return c.json({ error: 'oauth_not_supported' }, 404);
+  // D757 §2.11: a provider this caller cannot see is answered as /connect answers it, before any state.
+  if (audienceOf(c, user, desc) === 'none') return c.json({ error: 'unknown_provider' }, 404);
   const selectedCompany = await activeCompanyFor(c, user);
   if (!selectedCompany && writesProjectData(provider)) return c.json({ error: 'active_company_required' }, 400);
   // D751: refused as /connect refuses it, before the plan gate and any state.
@@ -1485,6 +1502,8 @@ integrations.get('/oauth/:provider/callback', async (c) => {
   const code = c.req.query('code') || '';
   const state = c.req.query('state') || '';
   const errorParam = c.req.query('error') || '';
+  // D757 §2.11: refused before the state is consumed, as the start refuses it.
+  if (desc && audienceOf(c, user, desc) === 'none') return c.json({ error: 'unknown_provider' }, 404);
   const consumed = state ? await consumeOauthState(c.env, user.id, provider, state) : null;
   if (errorParam) {
     return c.redirect(returnQuery(consumed?.extra, `oauth=error&provider=${encodeURIComponent(provider)}&reason=${encodeURIComponent(/^[a-z0-9_]{1,64}$/i.test(errorParam) ? errorParam : 'callback_failed')}`));

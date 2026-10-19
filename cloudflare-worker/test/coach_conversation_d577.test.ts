@@ -7,6 +7,8 @@ import advisor from '../src/routes/advisor.ts';
 import { BANKS, bankFor, profilingBankFor } from '../src/services/advisor/questionBank.ts';
 import { computeProfilingCompletion } from '../src/services/advisor/profilingModules.ts';
 
+import { withGuard } from './_guard_stub.mjs';
+import { AI_BUDGET_MIGRATION, AI_LOG_SCHEMA } from './_ai_budget_fixture.mjs';
 const secret = 'test-coach-routing-secret-0123456789';
 function setup(rate: number | null = 50, active = 1, role = 'advisor') {
   const db = new DatabaseSync(':memory:');
@@ -15,21 +17,25 @@ function setup(rate: number | null = 50, active = 1, role = 'advisor') {
     INSERT INTO users VALUES (7, '${role}', 1, 0, 'Test member', 'member@example.test');
     INSERT INTO users VALUES (8, 'advisor', 1, 0, 'Other member', 'other@example.test');`);
   db.prepare('INSERT INTO advisors VALUES (1, 7, ?, ?)').run(active, rate);
+  // D763: `/answer`'s guard is a run of its own, held against the member's AI budget.
+  db.exec(AI_LOG_SCHEMA + AI_BUDGET_MIGRATION);
+  db.exec(`INSERT INTO ai_licence_caps(licence_key,daily_microusd,monthly_microusd,recorded_by) VALUES('${role}',1000000,1000000,7);`);
   const DB: any = {
     prepare(sql: string) {
       let args: any[] = [];
       const st: any = {
         bind(...values: any[]) { args = values; return st; },
         async first() { return db.prepare(sql).get(...args) || null; },
-        async all() { return { results: db.prepare(sql).all(...args) }; },
-        async run() { const r = db.prepare(sql).run(...args); return { meta: { changes: r.changes, last_row_id: Number(r.lastInsertRowid) } }; },
+        async all() { return { success: true, results: db.prepare(sql).all(...args) }; },
+        async run() { const r = db.prepare(sql).run(...args); return { success: true, meta: { changes: r.changes, last_row_id: Number(r.lastInsertRowid) } }; },
       };
       return st;
     },
     async exec(sql: string) { db.exec(sql); return {}; },
     async batch(statements: any[]) { return Promise.all(statements.map(s => s.run())); },
   };
-  const env: any = { DB, JWT_SECRET: secret };
+  // D763: `/answer` checks the typed value with the guard, which fails closed; it answers safe here.
+  const env: any = { DB, JWT_SECRET: secret, AI: withGuard({ run: async () => { throw new Error('no model runs in this test'); } }) };
   async function call(path: string, method = 'GET', userId = 7, body?: any) {
     const token = await new SignJWT({ user_id: userId, role }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(secret));
     const res = await advisor.request(path, { method, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) }, env, { waitUntil() {}, passThroughOnException() {} } as any);

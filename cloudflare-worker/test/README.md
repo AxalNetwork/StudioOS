@@ -22,6 +22,9 @@ had already been caught reading a column name production does not use.
 `_engine_schema.mjs` (D757) gives a world whose sessions reach the Validate engine
 what it reads: migrations 453, 465 and 487, `queue_jobs`, and the member and venture
 columns `writableSession` checks.
+`_guard_stub.mjs` (D763) answers Llama Guard's calls on a stubbed `env.AI` and passes
+every other call through: the guard fails closed inside `run()`, so a stub that does not
+answer it refuses every member run. It answers free, so a test keeps its own run's figures.
 `schema_readiness.test.ts` runs the real bootstraps against two recording D1 stubs
 and asserts each database gets its own DDL — the half `scripts/check-schema-readiness.mjs`
 cannot see, since reading the source tells you a `WeakMap` is there but not that it
@@ -63,4 +66,4 @@ own-number guards, WhatsApp media deadlines/expiry and split calling reasons to
 real SQLite fixtures with every provider stubbed. Its in-process mutation checks
 run the same positive scenarios before restoring ordinary modules.
 
-D755 CR7: `checkout_order_topup_d755.test.ts` reads an owner's pack order in each webhook state, verifies the current account balance and VAT exclusion, rejects other members and failed reads, and leaves ordinary orders unchanged. It covers authentication and embeds nine mutations, with the restored scenario checked before and after each mutant. Providers are forbidden.
+D755 CR7: `checkout_order_topup_d755.test.ts` reads an owner's pack order in each webhook state, verifies the current account balance and VAT exclusion, rejects other members and failed reads, and leaves ordinary orders unchanged. It also preserves historical receipts when HQ adopts their price, bounds ordinary reads to one purchase lookup, handles absent legacy tables without hiding genuine failures, and covers authentication. It embeds thirteen mutations, with the restored scenario checked before and after each mutant. Providers are forbidden.

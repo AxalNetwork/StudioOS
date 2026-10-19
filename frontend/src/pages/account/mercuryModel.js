@@ -19,7 +19,7 @@
  * with `agoLabel`.
  *
  * The member's use words are keyed exactly as `GET /api/mercury/personal/status`
- * names its uses (`routes/mercury_personal.ts`, D713): `venture_revenue` and `raise_receipts` (D752),
+ * names its uses (`routes/mercury_personal.ts`, D713): `venture_revenue`, `raise_receipts` and `venture_spend` (D752),
  * `practice_income` and `partner_deals` (PR 3b), and `capital_attestation`
  * (D752). The member words below are keyed by role (D752): a role without its
  * own entry reads the founder's.
@@ -125,7 +125,7 @@ export function entityRows(read) {
 // ── The entity sheet's fixed sentences (decisions 4 to 7, 12) ─────────────────
 
 export const ENTITY_FEEDS = 'What it feeds: balances and transactions for reconciliation, and the monthly cash and reconciliation drafts. Drafts wait in the review queue. Nothing reaches an LP from here.';
-export const ENTITY_AUDIT_FOOT = 'Opening this sheet is recorded in the admin audit log.';
+export const ENTITY_AUDIT_FOOT = 'Opening this page is recorded in the admin audit log.';
 export const ADMIN_ONLY = 'Only the Super Admin connects, replaces or disconnects an entity\'s Mercury.';
 export const BRANCH_MANAGED = 'Axal\'s entity accounts are managed from HQ.';
 export const TOKEN_HELP = 'How to create a Read Only token';
@@ -165,6 +165,7 @@ export const USE_WORDS = {
   partner_deals: 'Your deals with Axal VC Management LLC. Match a payout or a partner-deal settlement to the bank line that settled it.',
   // D752 (#1887): the Worker serves this key now; task raise-match-screens draws its match panel.
   raise_receipts: 'Your venture\'s raise. Match an investor\'s wire to a committed prospect in your raise pipeline, or to a pending commitment on one of your deals.',
+  venture_spend: 'Your venture\'s spending, burn, cash and runway. When you ask, StudioOS reads your own Mercury and works out each month\'s money in, money out and net burn, with your cash on hand and your runway. Money from an Axal fund counts as financing, not income. Nothing is kept unless you save a month\'s burn, and your cash only if you tick it.',
   capital_attestation: 'Proof of funds for a commitment you made: a deal commitment, your Fund I application or your Fund I commitment. When you ask, StudioOS checks the checking and savings accounts you pick and shares one dated statement with Axal\'s admins, "at least" an amount you choose. You can revoke it. Your balance is never stored or shown.',
 };
 
@@ -198,7 +199,11 @@ const FOUNDER_PARTNER_NEVER = Object.freeze([
 
 /** "What it never does", by role (D752). */
 export const NEVER_ROWS = Object.freeze({
-  founder: FOUNDER_PARTNER_NEVER,
+  founder: Object.freeze([
+    FOUNDER_PARTNER_NEVER[0],
+    FOUNDER_PARTNER_NEVER[1],
+    'It reads your Mercury only when you connect it and while you open an import, a match or your spending. Your spending, cash and runway are shown only to you; saved only when you choose: a month\'s net burn and, if you tick it, your cash on hand. It keeps only those and the lines you import or match, never memos or counterparty names.',
+  ]),
   partner: FOUNDER_PARTNER_NEVER,
   investor: Object.freeze([
     'It never sends, transfers or requests money, and never changes anything in Mercury.',
@@ -213,7 +218,7 @@ export function neverRows(role) {
 }
 
 const LANDS = {
-  founder: 'Only the venture you import into',
+  founder: 'Only the venture you import into. Your spending is shown only to you; saved only when you choose',
   partner: 'Only your own invoices, payouts and settlements',
   investor: 'Only the statements you choose to share with Axal\'s admins',
 };
@@ -229,7 +234,7 @@ const FOUNDER_PARTNER_DISCONNECT = 'Revenue rows you imported and matches you co
 
 /** What disconnecting keeps, by role (D752). */
 export const MEMBER_DISCONNECT_NOTE = Object.freeze({
-  founder: FOUNDER_PARTNER_DISCONNECT,
+  founder: 'Revenue rows you imported, figures you saved and matches you confirmed stay. The stored token is deleted. Delete it in Mercury too.',
   partner: FOUNDER_PARTNER_DISCONNECT,
   investor: 'Statements you shared stay with Axal\'s admins until you revoke them: disconnecting does not revoke them. The stored token is deleted. Delete it in Mercury too.',
 });
@@ -260,12 +265,12 @@ export function personalAttention(lastError) {
 
 /** Build's failing-row banner, the attention words as written (not lower-cased). */
 export function personalToolBanner(lastError) {
-  return `Mercury needs attention: ${personalAttention(lastError)}. Replace its token from its sheet.`;
+  return `Mercury needs attention: ${personalAttention(lastError)}. Replace its token from its page.`;
 }
 
 // ── Not offered (decision 10) ─────────────────────────────────────────────────
 
-export const NOT_OFFERED = 'Mercury is not offered to your profile. Axal\'s admins use it for fund administration, founders for their venture\'s revenue, partners for their invoices and partner deals, and investors on HQ to show Axal\'s admins they can fund a commitment.';
+export const NOT_OFFERED = 'Mercury is not offered to your profile. Axal\'s admins use it for fund administration, founders for their venture\'s revenue and spending, partners for their invoices and partner deals, and investors on HQ to show Axal\'s admins they can fund a commitment.';
 /** D752: an investor on a branch. */
 export const NOT_OFFERED_HQ_ONLY = 'Investors connect Mercury on HQ only, where Axal\'s admins review commitments.';
 

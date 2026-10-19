@@ -12,7 +12,7 @@ console lives here, in its own file, and reads only its own data (D648):
 | `LegalConsole.jsx` | Legal (contracts, envelopes, signed documents) | its own contract reads |
 | `PersonasConsole.jsx` | Personas | the persona list |
 | `DirectoryConsole.jsx` | Directory | the directory partners |
-| `IntegrationKeysConsole.jsx` | Integration keys | the provider keys |
+| `IntegrationKeysConsole.jsx` | Integration keys | the provider keys, each one's callback URL and setup guide, and the OAuth clients set only at deploy |
 | `GithubSyncConsole.jsx` | GitHub Sync | the sync settings |
 | `PromoCodesConsole.jsx` | Promo codes | the codes, the catalog products |
 | `PaymentsConsole.jsx` | Payments (Stripe catalog, prices, webhooks) | the catalog, Stripe config, webhooks |

@@ -34,7 +34,7 @@
  * IMPORTANT: imported once from index.ts so registerProvider() runs at boot.
  */
 import type { Context } from 'hono';
-import { callbackBase } from '../../util/url';
+import { oauthCallbackUrl } from '../../util/url';
 import type { Env, User } from '../../types';
 import { projectEnabled } from '../companyScope';
 import {
@@ -55,8 +55,9 @@ export const MAX_REPOSITORIES = 50;
 export interface GithubRepository { full_name: string; private: boolean; updated_at: string | null; installation_id: number }
 export interface SyncProgress { state: 'running' | 'done' | 'failed'; pct: number; reading: string; updated_at: string }
 
-function redirectUri(env: Env): string {
-  return `${callbackBase(env)}/api/integrations/oauth/${PROVIDER_KEY}/callback`;
+/** The callback URL registered with the provider; Admin → Integration keys shows the same (D751). */
+export function redirectUri(env: Env): string {
+  return oauthCallbackUrl(env, PROVIDER_KEY);
 }
 
 async function ensureCreds(env: Env): Promise<{ id: string; secret: string }> {

@@ -11,7 +11,7 @@ import {
 import Lightbox from '../../ui/Lightbox';
 import { useConnectFlow } from './useConnectFlow';
 import { RequestSheet, useMovedNotice } from './AccountConnectors';
-import { connectionStatus, disconnectNote, isEntityRow, keysHref, lastSyncLabel, moduleLabel, stripReturn } from './connectorsModel';
+import { connectionStatus, disconnectNote, isEntityRow, isPersonalMercury, keysHref, lastSyncLabel, moduleLabel, stripReturn } from './connectorsModel';
 import {
   DETAIL_MISSING, backHrefFor, bodyDetailsRows, detailsRows, headerTagline, interimPanel, keyHelpOf, keyPath, manageItems, modeLabel, pageAction,
   pageChoices, pageEntry, pageNotice, pageReturn, pageTitle, toolGroups,
@@ -19,8 +19,10 @@ import {
 import { isChannelKey } from './channelPageModel';
 import ChannelPage from './ChannelPage';
 import { notOfferedSentence } from './mercuryModel';
+import { MercuryEntityPageBody, MercuryLandsGroup, MercuryReadsGroup, MercuryUsesGroups } from './MercurySheet';
 import { useAuth } from '../../hooks/useAuthSync';
 import { branchOfUser, isSuperAdminUser } from '../../lib/shellRole';
+import { ZOOM_DISCONNECT_NOTE, ZOOM_SECTIONS, usedByLinks, zoomHowItWorks, zoomNotices } from '../../lib/validateSourceWording';
 
 /**
  * D753 (#1876, F1) — a connector's own page, `/account/connectors/<key>`,
@@ -44,7 +46,7 @@ import { branchOfUser, isSuperAdminUser } from '../../lib/shellRole';
  *
  * NOTHING IS LOST WHILE THE WORK MOVES (decision 7). Until F4 and F5 take them
  * over, today's `ConnectorPanel` stays inline only for GitHub's repositories
- * and Mercury (`interimPanel`), through `SheetFrame`'s `page` layout: in the
+ * and a member's own Mercury (`interimPanel`), through `SheetFrame`'s `page` layout: in the
  * page's flow, no overlay, no dialog role, no × and no Escape of its own.
  *
  * A SIGN-IN COMES BACK HERE (decision 6). `connectorsRedirect` sends a return
@@ -60,6 +62,12 @@ import { branchOfUser, isSuperAdminUser } from '../../lib/shellRole';
  * Tools, Prompts, the trust notice and Details from it (`ConnectorBody`), and
  * the header's line becomes its tagline. Without `body` it draws F1's About
  * and Details from the catalogue row.
+ *
+ * MERCURY (#1991, F5). The Axal entities' row (`isEntityRow`, an admin on HQ)
+ * draws `MercuryEntityPageBody` in "Connect and manage": the entity
+ * connections, what they feed, Open Banking and the audit foot, with the one
+ * audited read on mount and no header action. A member's own Mercury stays in
+ * the interim panel until F3 (#1956) draws "Your connection".
  *
  * THE READ (#1955, part 2). Handed `readPage` (`connectorsApi.page`), the view
  * reads `GET /api/connectors/directory/<page_key>` once the connector is known,
@@ -139,6 +147,7 @@ export function ConnectorPageView({ data, connectorKey, phone = false, branchAdm
 
   return (
     <ReadyPage key={p.key} p={p} back={back} phone={phone} ret={returned?.ret || null} moved={moved} onChanged={data.reload} connector={shownBody?.state === 'ready' ? shownBody.connector : null}>
+      {p.key === 'zoom' && <ZoomValidate p={p} />}
       {shownBody
         ? <ConnectorBody state={shownBody.state} connector={shownBody.connector} p={p} onRetry={retryBody} />
         : (
@@ -156,7 +165,8 @@ export function ConnectorPageView({ data, connectorKey, phone = false, branchAdm
  * notice, the inline key form, the connected half, then `children` (the body).
  */
 function ReadyPage({ p, back, phone, ret, moved, onChanged, children, connector = null }) {
-  const superAdmin = isSuperAdminUser(useAuth()?.user);
+  const auth = useAuth();
+  const superAdmin = isSuperAdminUser(auth?.user);
   // A return opens on what happened; GitHub's lands on choosing its repositories (the connected half).
   const [view, setView] = useState(() => (ret ? ret.view : 'idle'));
   const [flowRet, setFlowRet] = useState(ret || {});
@@ -168,9 +178,13 @@ function ReadyPage({ p, back, phone, ret, moved, onChanged, children, connector 
   const notice = pageNotice({ view, ret: flowRet, message: flow.message, name, moved });
   // Connect by key, Reconnect by key, or Manage's Replace key on a connected row.
   const keyOpen = (view === 'key' || view === 'badkey') && ['key', 'oauth', 'reconnect', 'status'].includes(action.kind);
+  // D753 F5 (#1991): the Axal entities' Mercury is drawn on the page itself, never the interim panel.
+  const entity = isEntityRow(p);
   // F1's panel stays only where F4 (GitHub) and F5 (Mercury) take it over; every other connection is "Your connection".
-  const panelShown = interimPanel(p, view);
-  const role = useAuth()?.user?.role ?? null;
+  const panelShown = !entity && interimPanel(p, view);
+  const role = auth?.user?.role ?? null;
+  // A member's own Mercury still says what it is for before the token is asked for, until F5; the band connects.
+  const memberMercury = isPersonalMercury(p) && !p.connection && !panelShown;
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="connector-page" data-state="ready" data-key={p.key}>
       {back}
@@ -189,13 +203,25 @@ function ReadyPage({ p, back, phone, ret, moved, onChanged, children, connector 
         </div>
       )}
 
-      {(keyOpen || panelShown) && (
-        <section aria-label="Connect and manage" data-testid="connector-page-connect" data-mode={keyOpen ? 'key' : 'panel'}>
+      {entity && (
+        <section aria-label="Connect and manage" data-testid="connector-page-connect" data-mode="entity">
+          <MercuryEntityPageBody p={p} />
+        </section>
+      )}
+      {(keyOpen || panelShown || memberMercury) && (
+        <section aria-label="Connect and manage" data-testid="connector-page-connect" data-mode={keyOpen ? 'key' : panelShown ? 'panel' : 'mercury'}>
+          {memberMercury && (
+            <div className="-mx-5">
+              <MercuryUsesGroups role={role} />
+              <MercuryLandsGroup role={role} />
+              <MercuryReadsGroup />
+            </div>
+          )}
           {keyOpen && <InlineKeyForm p={p} flow={flow} view={view} connector={connector} />}
           {!keyOpen && panelShown && <InlinePanel key={`${p.key}:${p.connection ? 'c' : 'n'}`} p={p} ret={view === 'sync' ? { view: 'sync' } : null} onChanged={onChanged} />}
         </section>
       )}
-      {p.connection && !panelShown && <YourConnection p={p} flow={flow} onChanged={onChanged} />}
+      {p.connection && !panelShown && !entity && <YourConnection p={p} flow={flow} onChanged={onChanged} />}
       {flow.confirming && (
         <Lightbox label={`Disconnect ${name}?`} title={`Disconnect ${name}?`} onClose={() => flow.setConfirming(false)} width={440} testId="connector-page-disconnect-dialog"
           footer={(
@@ -255,6 +281,47 @@ function YourConnection({ p, flow, onChanged }) {
           : <Group label="Activity"><Row a={<Unrecorded reason={`${p.display_name} keeps no activity log in StudioOS.`}>Not recorded</Unrecorded>} /></Group>}
       </div>
       <ToolModals conn={conn} flow={flow} onChanged={onChanged} />
+    </section>
+  );
+}
+
+/**
+ * D757 §2.12 (#1929): what Zoom feeds and needs, in D757's words, from the
+ * catalogue row's `used_by`, `suggests`, `distribution` and `configured`
+ * (#1922, D751), so it draws with or without F7's body.
+ */
+export function ZoomValidate({ p }) {
+  const notices = zoomNotices(p);
+  const usedBy = usedByLinks(p?.used_by);
+  return (
+    <section data-testid="connector-page-validate" className="flex min-w-0 flex-col gap-3">
+      {notices.map((n) => (
+        <div key={n.key} role="note" data-testid={`zoom-notice-${n.key}`} className="flex items-start gap-2 rounded-axal-sm border border-axal-hairline bg-axal-ground px-3.5 py-2.5 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-800/60 dark:text-gray-200">
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-axal-muted dark:text-gray-400" aria-hidden="true" />
+          <span className="min-w-0">{n.text}</span>
+        </div>
+      ))}
+      {(p?.connection || p?.already_connected === true) && <p className="text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="zoom-disconnect-note">{ZOOM_DISCONNECT_NOTE}</p>}
+      {usedBy.length > 0 && (
+        <div className="min-w-0" data-testid="zoom-used-by">
+          <h2 className={H2}>Used by</h2>
+          <ul className="mt-1 flex flex-wrap gap-2">
+            {usedBy.map((u) => <li key={u.href}><Link to={u.href} className={`${BTN.link} text-[13px]`}>{u.label}</Link></li>)}
+          </ul>
+        </div>
+      )}
+      <div className="min-w-0" data-testid="zoom-how">
+        <h2 className={H2}>How it works</h2>
+        <ol className="mt-1 list-decimal pl-5 text-[13px] leading-relaxed text-axal-ink dark:text-gray-200">
+          {zoomHowItWorks(p?.suggests).map((t) => <li key={t}>{t}</li>)}
+        </ol>
+      </div>
+      {ZOOM_SECTIONS.map((x) => (
+        <div key={x.key} className="min-w-0" data-testid={`zoom-${x.key}`}>
+          <h2 className={H2}>{x.title}</h2>
+          <p className="mt-1 text-[13px] leading-relaxed text-axal-ink dark:text-gray-200">{x.text}</p>
+        </div>
+      ))}
     </section>
   );
 }
@@ -532,7 +599,7 @@ function InlinePanel({ p, ret, onChanged }) {
         setView={(view) => setState({ view, ret: {} })}
         onChanged={onChanged}
         onClose={reset}
-        eyebrow={isEntityRow(p) ? 'Fund administration' : 'Connect and manage'}
+        eyebrow="Connect and manage"
       />
     </SheetFrame.Provider>
   );

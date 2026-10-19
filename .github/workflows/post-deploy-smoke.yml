@@ -22,6 +22,12 @@ name: post-deploy SPA smoke
 # - schedule: catch a site that goes blank between deploys (cache purge, asset
 #   rot, Worker rollback, etc.).
 #
+# D751 T9 (#1921): each host's /api/health lists every catalogue OAuth
+# connector's readiness. A connector with no client prints one WARN line, and
+# the run summary lists it; the run stays green. The fix is the owner's keys
+# (for GitHub, #1008 item 33). The `connectors_strict` input turns that WARN
+# into a failure; a missing or malformed block always fails.
+#
 # No secrets required — it makes plain public HTTPS requests to the prod hosts.
 
 on:
@@ -43,6 +49,11 @@ on:
         description: 'NON-exempt /api/* path (blank = /api/__smoke/rate-limited)'
         required: false
         default: ''
+      connectors_strict:
+        description: 'Fail when a catalogue OAuth connector has no client (default: WARN only)'
+        required: false
+        type: boolean
+        default: false
   schedule:
     # Every 6 hours. Frequent enough to catch a blank prod fast, cheap enough
     # to stay well inside free CI minutes.
@@ -66,6 +77,7 @@ jobs:
           SMOKE_HOSTS: ${{ github.event.inputs.hosts }}
           SMOKE_API_PROBE: ${{ github.event.inputs.api_probe }}
           SMOKE_API_PROBE_LIMITED: ${{ github.event.inputs.api_probe_limited }}
+          SMOKE_CONNECTORS_STRICT: ${{ github.event.inputs.connectors_strict == 'true' && '1' || '' }}
         run: node scripts/check-spa-live.mjs
       # D755 (#1987): the public plans-and-packs read and /plans-and-pricing,
       # read-only (no sign-in, no purchase, no Stripe). A warning step: a red

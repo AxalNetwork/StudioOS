@@ -108,7 +108,7 @@ test('decision 4 and 6: the Fund\'s note, the org-name sentence, and the fixed s
   assert.equal(orgNameDiffersSentence('Fixture Org', 'Axal VC GP LLC'), 'Mercury names this organization Fixture Org. StudioOS matched it to Axal VC GP LLC by its account endings.');
   assert.equal(entityRow('gp', conn()).orgNameDiffers, null);
   assert.equal(ENTITY_FEEDS, 'What it feeds: balances and transactions for reconciliation, and the monthly cash and reconciliation drafts. Drafts wait in the review queue. Nothing reaches an LP from here.');
-  assert.equal(ENTITY_AUDIT_FOOT, 'Opening this sheet is recorded in the admin audit log.');
+  assert.equal(ENTITY_AUDIT_FOOT, 'Opening this page is recorded in the admin audit log.');
   assert.equal(ADMIN_ONLY, 'Only the Super Admin connects, replaces or disconnects an entity\'s Mercury.');
   assert.equal(BRANCH_MANAGED, 'Axal\'s entity accounts are managed from HQ.');
   assert.equal(TOKEN_HELP, 'How to create a Read Only token');
@@ -133,7 +133,10 @@ test('decision 8: the member\'s groups, the three "never" rows, where it lands, 
     'It reads your Mercury only when you connect it and while you open an import or a match. It keeps only the lines you import or match, never your balance, memos or counterparty names.',
   ];
   assert.deepEqual(Object.keys(NEVER_ROWS).sort(), ['founder', 'investor', 'partner']);
-  assert.deepEqual(NEVER_ROWS.founder, d713Never);
+  // D752 (#1889): the founder's third row names spending and the figures they save.
+  const founderNever = [d713Never[0], d713Never[1],
+    'It reads your Mercury only when you connect it and while you open an import, a match or your spending. Your spending, cash and runway are shown only to you; saved only when you choose: a month\'s net burn and, if you tick it, your cash on hand. It keeps only those and the lines you import or match, never memos or counterparty names.'];
+  assert.deepEqual(NEVER_ROWS.founder, founderNever);
   assert.deepEqual(NEVER_ROWS.partner, d713Never);
   // D752: the investor's three rows.
   assert.deepEqual(NEVER_ROWS.investor, [
@@ -142,19 +145,20 @@ test('decision 8: the member\'s groups, the three "never" rows, where it lands, 
     'It reads your accounts only when you connect it and while you prepare a statement. It keeps only the statements you share: an amount you choose, the date and your organization\'s name. Never a balance, an account number, a transaction or a counterparty.',
   ]);
   assert.deepEqual(neverRows('investor'), NEVER_ROWS.investor);
-  assert.deepEqual(neverRows('advisor'), d713Never, 'a role without its own rows reads the founder\'s');
-  assert.deepEqual(neverRows(null), d713Never);
-  assert.equal(landsWords('founder'), 'Only the venture you import into');
+  assert.deepEqual(neverRows('advisor'), founderNever, 'a role without its own rows reads the founder\'s');
+  assert.deepEqual(neverRows(null), founderNever);
+  assert.equal(landsWords('founder'), 'Only the venture you import into. Your spending is shown only to you; saved only when you choose');
   assert.equal(landsWords('partner'), 'Only your own invoices, payouts and settlements');
   assert.equal(landsWords('investor'), 'Only the statements you choose to share with Axal\'s admins');
   for (const role of ['advisor', 'admin', 'constructor']) assert.equal(landsWords(role), null, role);
   assert.equal(READS_ROW, 'Only when you ask. No scheduled sync.');
   assert.equal(MEMBER_REPLACE, 'Replace the token with a Read Only one from your own Mercury organization.');
   const d713Note = 'Revenue rows you imported and matches you confirmed stay. The stored token is deleted. Delete it in Mercury too.';
-  assert.equal(MEMBER_DISCONNECT_NOTE.founder, d713Note);
+  const founderNote = 'Revenue rows you imported, figures you saved and matches you confirmed stay. The stored token is deleted. Delete it in Mercury too.';
+  assert.equal(MEMBER_DISCONNECT_NOTE.founder, founderNote);
   assert.equal(MEMBER_DISCONNECT_NOTE.partner, d713Note);
-  assert.equal(memberDisconnectNote('founder'), d713Note);
-  assert.equal(memberDisconnectNote(null), d713Note);
+  assert.equal(memberDisconnectNote('founder'), founderNote);
+  assert.equal(memberDisconnectNote(null), founderNote);
   assert.match(memberDisconnectNote('investor'), /does not revoke/);
 });
 
@@ -172,11 +176,11 @@ test('decision 9: the personal row\'s words, and the attention words matched on 
   assert.equal(personalAttention('401 from Mercury'), 'Token refused');
   assert.equal(personalAttention('timeout'), 'Last read failed');
   assert.equal(personalAttention(null), 'Last read failed');
-  assert.equal(personalToolBanner('write_scope_refused'), 'Mercury needs attention: Token can write. Replace its token from its sheet.', 'not lower-cased');
+  assert.equal(personalToolBanner('write_scope_refused'), 'Mercury needs attention: Token can write. Replace its token from its page.', 'not lower-cased');
 });
 
 test('decision 10 (D752): a "mercury" search with no row names each role\'s use, an investor on a branch reads HQ only, and a branch admin the HQ sentence; none is a request', () => {
-  assert.equal(NOT_OFFERED, 'Mercury is not offered to your profile. Axal\'s admins use it for fund administration, founders for their venture\'s revenue, partners for their invoices and partner deals, and investors on HQ to show Axal\'s admins they can fund a commitment.');
+  assert.equal(NOT_OFFERED, 'Mercury is not offered to your profile. Axal\'s admins use it for fund administration, founders for their venture\'s revenue and spending, partners for their invoices and partner deals, and investors on HQ to show Axal\'s admins they can fund a commitment.');
   assert.equal(NOT_OFFERED_HQ_ONLY, 'Investors connect Mercury on HQ only, where Axal\'s admins review commitments.');
   assert.equal(notOfferedSentence(), NOT_OFFERED);
   assert.equal(notOfferedSentence({ role: 'investor' }), NOT_OFFERED);
