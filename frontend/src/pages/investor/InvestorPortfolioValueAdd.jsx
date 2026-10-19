@@ -165,6 +165,7 @@ export default function InvestorPortfolioValueAdd() {
           no LP report reads this store, so the foot now says what happens. */}
       <ZoneDraft
         surface="portfolio/value-add"
+        railOption="draft:support-summary"
         label="Proposal · quarterly support summary"
         accept="Accept summary"
         run="Draft the summary"

@@ -58,6 +58,32 @@ test('Deals: every option of the section names itself on its band', () => {
   assertBandsNamed(rows);
 });
 
+// ------------------------------------------------------------------ Portfolio (I6–I10)
+
+const PORTFOLIO = [['/portfolio', 'Investor · Portfolio'], ['/portfolio/health', 'Investor · Portfolio'], ['/portfolio/positions', 'Investor · Portfolio · Positions'],
+  ['/portfolio/performance', 'Investor · Portfolio · Performance'], ['/portfolio/updates', 'Investor · Portfolio · Updates'],
+  ['/portfolio/value-add', 'Investor · Portfolio · Value-add'], ['/portfolio/growth', 'Investor · Portfolio · Value-add']];
+
+test('Portfolio: each board\'s route answers its page key for an investor, the legacy Growth route Value-add\'s', () => {
+  for (const [route, key] of PORTFOLIO) assert.equal(pageKeyFor(route, 'investor'), key, route);
+  for (const o of rowsOf('Portfolio')) assert.ok(PORTFOLIO.some(([, k]) => k === o.page), `${o.page} is a Portfolio board`);
+});
+
+test('Portfolio: each board draws exactly one rail of its own', () => {
+  for (const f of ['pages/investor/InvestorPortfolioCanvas.jsx', 'pages/investor/InvestorPortfolioPositions.jsx', 'pages/investor/InvestorPortfolioUpdates.jsx',
+    'pages/investor/InvestorPortfolioValueAdd.jsx', 'pages/PortfolioWorkspace.jsx']) {
+    assert.equal((read(f).match(/<WorkerRail\b/g) || []).length, 1, f);
+  }
+  // Performance's one rail is PortfolioWorkspace's frame (PR 1); its page draws none of its own.
+  assert.doesNotMatch(read('pages/PortfolioPerformancePage.jsx'), /<WorkerRail\b|<RailFrame\b/);
+});
+
+test('Portfolio: every option of the section names itself on its band', () => {
+  const rows = rowsOf('Portfolio');
+  assert.deepEqual(rows.map((o) => o.key), ['draft:multiple-narrative', 'draft:updates-read', 'draft:support-summary']);
+  assertBandsNamed(rows);
+});
+
 // ------------------------------------------------------------------ the band names its option only while it is open
 
 function Probe({ seen }) {
