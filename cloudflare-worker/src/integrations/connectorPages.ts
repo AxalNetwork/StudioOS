@@ -405,10 +405,11 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
     verified_on: null,
   },
   github: {
-    tagline: 'Issues, pull requests and releases from the repositories you choose. Read-only.',
+    tagline: 'Issues, milestones, pull requests and releases from the repositories you choose. Read-only.',
     long_description: [
-      'Read issues, pull requests and releases from the repositories you choose. Issues link to Product roadmap items and pull requests to Prototype / MVP must-haves. Read-only.',
-      'In Build › Operating systems, GitHub is the Code system: its repositories, its last sync and what it fed. Each sync is a line in Tools. Releases are read and counted; they make no row yet.',
+      'Read issues, milestones, pull requests and releases from the repositories you choose. Issues link to Product roadmap items and pull requests to Prototype / MVP must-haves. Read-only.',
+      'In Product roadmap, a milestone groups its issues’ items and gives them its due date as their target. Each release is a row there, and marks Shipped the items it closed: an issue its notes name, or one a pull request merged before it closed.',
+      'In Build › Operating systems, GitHub is the Code system: its repositories, its last sync and what it fed. Each sync is a line in Tools.',
       'Axal VC connects as a GitHub App with read permissions only. If GitHub ever grants more than read, Axal VC revokes the grant and refuses the connection.',
     ],
     tools: [
@@ -418,7 +419,9 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
       tool('read_account', 'your account name', 'read', 'Reads your GitHub login, when you connect.', null, ["ghJson<any>(token, '/user')"]),
       tool('read_issues', 'issues', 'read', 'Reads issues in the repositories you chose.', 'product_roadmap', ['`${path}/issues?state=all`']),
       tool('read_pull_requests', 'pull requests', 'read', 'Reads pull requests in the repositories you chose.', 'prototype_mvp', ['`${path}/pulls?state=all`']),
-      tool('read_releases', 'releases', 'read', 'Reads releases in the repositories you chose. They are counted under Product roadmap; no row is made.', null,
+      tool('read_milestones', 'milestones', 'read', 'Reads milestones in the repositories you chose. Each groups its issues’ items in Product roadmap, with its due date as their target.', 'product_roadmap',
+        ['`${path}/milestones?state=all&per_page=${PER_PAGE}&page=${page}`']),
+      tool('read_releases', 'releases', 'read', 'Reads releases in the repositories you chose. Each is a release row in Product roadmap, and marks Shipped the items it closed.', 'product_roadmap',
         ['`${path}/releases`']),
       tool('revoke_grant', 'the grant', 'account', 'Revokes the grant when you disconnect, and when GitHub grants more than read.', null,
         ['`${API}/applications/${encodeURIComponent(id)}/grant`']),
