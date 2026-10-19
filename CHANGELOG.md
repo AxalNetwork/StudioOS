@@ -4,20 +4,6 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
-## GitHub end to end against a stubbed GitHub, and two sync defects fixed (D655 follow-up, #1906)
-
-- `cloudflare-worker/test/github_connector_flow_d751.test.ts` drives sign-in,
-  the callback and its refusals (a denied consent, an overreach revoked, zero
-  installations), the repository choice, the sync and a re-sync, with every
-  GitHub call stubbed.
-- A founder's deleted roadmap item or must-have is no longer counted as
-  linked: the re-sync unlinks its ledger row and never re-creates it.
-- `syncGithub` lands each page with one ledger read and one D1 batch, counts
-  its subrequests against `SYNC_SUBREQUEST_BUDGET` (8,000), and at the budget
-  stops "Partly synced: run Sync again to continue" with `counts.partial`; a KV
-  cursor makes the next run continue where it stopped. `SyncResult.counts`
-  may carry that boolean.
-
 ## One text per document: every sender reads its library row (D758, #1863, PR 1)
 
 - `services/legalDocTypes.ts` gains `LIBRARY_SLUG_FOR` / `librarySlugFor`
