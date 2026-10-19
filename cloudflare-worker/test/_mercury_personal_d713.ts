@@ -25,6 +25,7 @@ import mercuryPersonal from '../src/routes/mercury_personal.ts';
 import mercuryAttestations from '../src/routes/mercury_attestations.ts';
 import adminCapitalAttestations from '../src/routes/admin_capital_attestations.ts';
 import adminLpApplications from '../src/routes/admin_lp_applications.ts';
+import progress from '../src/routes/progress.ts';
 import '../src/integrations/providers/mercury.ts';
 
 export const TOKEN = 'fixture-not-a-token-3';
@@ -119,6 +120,8 @@ app.route('/api/mercury/attestations', mercuryAttestations);
 // D752 (#1890): the admin read and the LP application queue.
 app.route('/api/admin/capital-attestations', adminCapitalAttestations);
 app.route('/api/admin/lp-applications', adminLpApplications);
+// D752 (#1889): the metrics routes, for the source lock.
+app.route('/api/progress', progress);
 app.onError((e: any, c) => c.json({ detail: e.message }, AUTH_ERROR_STATUSES[e.message] || 500));
 
 export async function req(env: any, who: number, method: string, path: string, body?: unknown,

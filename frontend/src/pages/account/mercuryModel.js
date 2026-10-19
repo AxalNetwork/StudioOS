@@ -161,6 +161,7 @@ export const USE_WORDS = {
   venture_revenue: 'Your venture\'s revenue. StudioOS lists the credits in your own Mercury account, and you pick the ones that are customer revenue. Only those become rows on your revenue ledger, marked Supported, with Mercury\'s amount and date.',
   practice_income: 'Your practice income. Match an engagement invoice you issued to the credit that paid it.',
   partner_deals: 'Your deals with Axal VC Management LLC. Match a payout or a partner-deal settlement to the bank line that settled it.',
+  venture_spend: 'Your venture\'s spending, burn, cash and runway. When you ask, StudioOS reads your own Mercury and works out each month\'s money in, money out and net burn, with your cash on hand and your runway. Money from an Axal fund counts as financing, not income. Nothing is kept unless you save a month\'s burn, and your cash only if you tick it.',
   capital_attestation: 'Proof of funds for a commitment you made: a deal commitment, your Fund I application or your Fund I commitment. When you ask, StudioOS checks the checking and savings accounts you pick and shares one dated statement with Axal\'s admins, "at least" an amount you choose. You can revoke it. Your balance is never stored or shown.',
 };
 
@@ -194,7 +195,11 @@ const FOUNDER_PARTNER_NEVER = Object.freeze([
 
 /** "What it never does", by role (D752). */
 export const NEVER_ROWS = Object.freeze({
-  founder: FOUNDER_PARTNER_NEVER,
+  founder: Object.freeze([
+    FOUNDER_PARTNER_NEVER[0],
+    FOUNDER_PARTNER_NEVER[1],
+    'It reads your Mercury only when you connect it and while you open an import, a match or your spending. It keeps only the lines you import or match, and the figures you choose to save: a month\'s net burn and, if you tick it, your cash on hand. Never memos or counterparty names.',
+  ]),
   partner: FOUNDER_PARTNER_NEVER,
   investor: Object.freeze([
     'It never sends, transfers or requests money, and never changes anything in Mercury.',
@@ -209,7 +214,7 @@ export function neverRows(role) {
 }
 
 const LANDS = {
-  founder: 'Only the venture you import into',
+  founder: 'Only the venture you import into or save figures for',
   partner: 'Only your own invoices, payouts and settlements',
   investor: 'Only the statements you choose to share with Axal\'s admins',
 };
@@ -225,7 +230,7 @@ const FOUNDER_PARTNER_DISCONNECT = 'Revenue rows you imported and matches you co
 
 /** What disconnecting keeps, by role (D752). */
 export const MEMBER_DISCONNECT_NOTE = Object.freeze({
-  founder: FOUNDER_PARTNER_DISCONNECT,
+  founder: 'Revenue rows you imported, figures you saved and matches you confirmed stay. The stored token is deleted. Delete it in Mercury too.',
   partner: FOUNDER_PARTNER_DISCONNECT,
   investor: 'Statements you shared stay with Axal\'s admins until you revoke them: disconnecting does not revoke them. The stored token is deleted. Delete it in Mercury too.',
 });
@@ -261,7 +266,7 @@ export function personalToolBanner(lastError) {
 
 // ── Not offered (decision 10) ─────────────────────────────────────────────────
 
-export const NOT_OFFERED = 'Mercury is not offered to your profile. Axal\'s admins use it for fund administration, founders for their venture\'s revenue, partners for their invoices and partner deals, and investors on HQ to show Axal\'s admins they can fund a commitment.';
+export const NOT_OFFERED = 'Mercury is not offered to your profile. Axal\'s admins use it for fund administration, founders for their venture\'s revenue and spending, partners for their invoices and partner deals, and investors on HQ to show Axal\'s admins they can fund a commitment.';
 /** D752: an investor on a branch. */
 export const NOT_OFFERED_HQ_ONLY = 'Investors connect Mercury on HQ only, where Axal\'s admins review commitments.';
 
