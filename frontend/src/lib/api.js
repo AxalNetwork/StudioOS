@@ -28,6 +28,7 @@ export * from './api/eadwyn.js';
 export * from './api/fundAdmin.js';
 export * from './api/fundFees.js';
 export * from './api/fundLedger.js';
+export * from './api/fundNotices.js';
 export * from './api/fundPerformance.js';
 export * from './api/fundReporting.js';
 export * from './api/fundReports.js';
