@@ -15,26 +15,30 @@ This is a **different bot** from the news bot behind `TELEGRAM_BOT_TOKEN`
 (GOTCHAS.md, "Telegram broadcaster"). A bot that receives customer
 conversations must be revocable on its own.
 
-**Not on `main` yet.** This runbook is written ahead of the code it describes.
-Each part says what it waits on:
+**What has shipped.** Every part of D756 this runbook relies on is on `main`
+except #1978, which §3 step 6 waits on:
 
-| Part | Lands with |
+| Part | PR |
 | --- | --- |
-| The bot's health on `/admin/telegram` and **Register webhook** there; the 24-hour window from the contact's last message; the `bizChat` button's answer | #1963 (D756 `S10-ready`, #1895) |
-| `TELEGRAM_CHANNEL` read by the Worker (`off` / `canary` / `on`) | #1950 (D754 `w1_switch_on`, #1892), which gates both providers; **on `main`** since 2026-10-19 |
-| D754's consent store and gate, which hold every voice note until consent | #1954 (D754 `w2_consent`, #1893) |
-| The recording notice page, `/privacy/interviews` | #1894 (D756 `S11-notice`) |
-| Voice notes, audio files and round videos read, with the 5 MB cap | #1896 (D756 `S13-media`) |
-| The interviewee's YES, NO and STOP in the chat | #1977 (D756 `S12-consent`) |
-| Notes stored and transcribed as recorder audio | #1978 (D756 `S13-audio`) |
-| The connector page, `/account/connectors/telegram` | #1979 (D756 `S07-page`) |
-| Consent state and notes in Record a Session and the inbox | #1981 (D756 `S11-validate`) |
-| Yes/No buttons on the notice | D756's buttons task, not filed: it waits on step 7's probe |
+| The bot's health and **Register webhook** on `/admin/telegram`; the 24-hour window from the contact's last message; the `bizChat` button's answer | #1963 (D756 `S10-ready`, #1895) |
+| `TELEGRAM_CHANNEL` read by the Worker (`off` / `canary` / `on`), for both providers | #1950 (D754 `w1_switch_on`, #1892) |
+| D754's consent store and gate | #1954 (D754 `w2_consent`, #1893) |
+| The recording notice page, `/privacy/interviews` | #2023 (D756 `S11-notice`, #1894) |
+| Voice notes, audio files and round videos read, with the 5 MB cap | #2051 (D756 `S13-media`, #1896) |
+| The interviewee's YES, NO and STOP in the chat | #1998 (D756 `S12-consent`, #1977) |
+| The connector page, `/account/connectors/telegram` | #1997 (D756 `S07-page`, #1979) |
+| Consent state and notes in Record a Session and the inbox | #2004 (D756 `S11-validate`, #1981) |
+| Notes stored and transcribed as recorder audio | **#1978 (D756 `S13-audio`), not merged** |
+| Yes/No buttons on the notice | D756's buttons task, not filed: it waits on §3 step 10's probe |
 
-**Do not set the three secrets before #1954 has merged.** #1950 is on `main`,
-so `TELEGRAM_CHANNEL` (shipped `canary`) already keeps Telegram from members;
-but until #1954 is on `main`, an assigned chat's voice notes would be
-transcribed without the interviewee's consent, which is D684's old behaviour.
+**What a Telegram chat holds for consent.** Unlike WhatsApp, an assigned
+Telegram chat's **text** goes into its session at once, under D684's rule; only
+its **notes** wait. A note is fetched only once the interviewee has said YES. A
+NO keeps the notes held; a STOP stops further downloads; neither sets the chat
+aside. Until #1978 merges, a consented note is transcribed as D684 §4 step 4
+describes, and only its text is kept; after #1978 its audio is stored and
+transcribed as recorder audio. Setting the secrets is safe: `TELEGRAM_CHANNEL`
+ships `canary`, so only Super Admins can link.
 
 ## 1. Owner steps, in order
 
@@ -67,23 +71,28 @@ Agents never see any of these values.
    so no var is needed for the webhook address.
 3. **Register the webhook.** Signed in to axal.vc as a Super Admin, open
    `/admin/telegram` and press **Register webhook** in the "Telegram Business
-   bot (interviews)" section (#1963). Before #1963, call
-   `POST /api/admin/channels/telegram/webhook` once instead. It registers
+   bot (interviews)" section. It calls
+   `POST /api/admin/channels/telegram/webhook`, which registers
    `https://axal.vc/api/channels/telegram/webhook` with the secret, the update
    list (`message`, `business_connection`, `business_message`,
    `edited_business_message`, `deleted_business_messages`) and
    `drop_pending_updates: false`, and answers 200 with `ok`, `url` and
    `allowed_updates`. **Never call Telegram's `setWebhook` yourself.**
 4. **Check the health.** The same section reads
-   `GET /api/admin/channels/telegram/webhook` and should say the bot is ready:
-   - Business Mode on;
+   `GET /api/admin/channels/telegram/webhook` (press **Check again** to re-read)
+   and should say the bot is ready. Ready means Telegram answered, and:
+   - Business Mode is on;
    - the username matches `TELEGRAM_CHANNEL_BOT_USERNAME` (a wrong one makes
      every `t.me` link point at someone else's bot);
-   - the webhook is at axal.vc;
+   - it is not the news bot behind `TELEGRAM_BOT_TOKEN`;
+   - the webhook is registered, at axal.vc;
    - the update list is current;
-   - no recent delivery error, and no backlog of waiting updates.
+   - no delivery error in the last 24 hours. An older one is still shown.
 
-   It shows codes and sentences only, never the token or the secret.
+   The number of updates waiting is shown but never blocks ready. With a secret
+   unset the section names the missing secrets and calls nothing. It shows
+   codes and sentences only, never the token or the secret. A Super Admin sees
+   the same section on `/account/connectors/telegram`.
 5. **Premium check.** Open Telegram › Settings › Telegram Business on an
    account **without** Telegram Premium and report on #1008 whether Chatbots
    needs Premium. Sources disagree on whether that changed in 2026; the card's
@@ -112,8 +121,8 @@ Telegram. A hand check from any machine:
 
 Do it in canary, signed in as a Super Admin, from an account **with** Telegram
 Premium (account 1), with a second Telegram account playing the interviewee
-(account 2). Do it after every row of the table at the top has merged, except
-the buttons task.
+(account 2). Everything but step 6's audio can be checked on `main` today; run
+step 6 once #1978 has merged, or run the whole check then.
 
 1. **Link.** Account → Connectors → Telegram: press **Link Telegram**. Open the
    `t.me` link on account 1's phone and press Start; send `/confirm` when the
@@ -126,26 +135,31 @@ the buttons task.
    again**. See: **Connected**, with the bot's @username.
 3. **Send the four kinds.** From account 2, in that chat, send a text, a voice
    note, an audio file (under 5 MB) and a round video. See in Axal: the chat
-   waiting in the inbox, with "Voice note", "Audio file" and "Round video"
-   placeholders, none downloaded.
+   waiting in the inbox, its text, and each of the three as "Voice note,
+   transcribed when you add this chat to an interview". None is downloaded.
 4. **Assign.** Record a Session → Text chat → Telegram (or the inbox): pick the
    chat, name the interviewee, and add it to an interview. See: the text in the
-   session, the notes still waiting.
+   session at once, the notes still waiting, and the consent line "Not asked
+   yet".
 5. **Ask for consent.** Press **Ask for consent in Telegram**. See on account 2:
    the notice, sent in account 1's name, with the link to
-   `/privacy/interviews`. Reply **YES** from account 2. See on account 2: "Thank
-   you. This chat is now recorded for {venture}'s research. Reply STOP at any
-   time." See in Axal: YES with its time.
+   `/privacy/interviews`. See in Axal: "Asked at <time>". Reply **YES** from
+   account 2, as a reply to the notice or as its next message, within 7 days.
+   See on account 2: "Thank you. This chat is now recorded for {venture}'s
+   research. Reply STOP at any time." See in Axal: "YES at <time>", and the
+   notes start to be fetched.
    - Also try the copy path once on another chat: **Copy the notice**, paste it
      yourself from account 1, and reply YES from account 2. It counts the same.
-6. **Audio and speakers.** On the session's review: the voice note and the
-   audio file play; the transcript shows "Me" and the interviewee by side,
-   never "Speaker ?"; the round video shows "Round video messages can't be
-   transcribed yet."
+6. **Audio and speakers** (needs #1978). On the session's review: the voice
+   note and the audio file play; the transcript shows "Me" and the interviewee
+   by side, never "Speaker ?". The round video is never fetched and reads
+   "Round video messages can't be transcribed yet." Before #1978, the voice
+   note and the audio file arrive as transcribed text only.
 7. **STOP.** Reply **STOP** from account 2. See on account 2: "Understood.
    Recording has stopped for this chat. To have what was already recorded
-   deleted, just ask me." Send another voice note from account 2: it is not
-   fetched. What was stored before stays until the member deletes it.
+   deleted, just ask me." See in Axal: "Stopped". Send another voice note from
+   account 2: it is not fetched. What was stored before stays until the member
+   deletes it.
 8. **Disconnect.** Press **Disconnect** in Axal. See: pending chats forgotten;
    the interview keeps what it already holds.
 9. **The `bizChat` button.** In Telegram, press the chat's "manage" button for

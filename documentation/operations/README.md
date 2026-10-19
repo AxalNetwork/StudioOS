@@ -11,6 +11,7 @@ files say how to act on it.
 | `D1_RECOVERY.md` | Recover D1 when the data is wrong and a Worker rollback will not help. |
 | `INCIDENT_RESPONSE.md` | Respond to an incident: severities, response times and who is paged. |
 | `CLAUDE_REVIEW.md` | Run, tune and cost the advisory pull-request review on the Anthropic API. |
+| `GITHUB_CONNECTOR_APP.md` | Register the StudioOS GitHub App for the GitHub connector (D655), put its Client ID and secret in production, check, rotate and remove them, and troubleshoot a failed connect. |
 | `TICKET_GITHUB_SYNC.md` | Recover support tickets that were saved in D1 but never reached GitHub. |
 | `TELEGRAM.md` | Set up the Telegram Business interview bot, check it on a real phone, rotate its secrets and switch it off (D756). |
 | `WHATSAPP.md` | Switch WhatsApp Business on, check it on a real phone and roll it back (D754). |
