@@ -47,7 +47,7 @@ function envThatRecords() {
     calls,
     env: {
       DB: { prepare: () => ({ bind: () => ({ first: async () => null, all: async () => ({ results: [] }), run: async () => ({}) }) }) },
-      AI: { run: async (...a: unknown[]) => { calls.push(a); return { response: 'x' }; } },
+      AI: withGuard({ run: async (...a: unknown[]) => { calls.push(a); return { response: 'x' }; } }),
     } as any,
   };
 }
@@ -92,12 +92,13 @@ test('what reaches the prompt is bounded on every axis', () => {
   assert.match(SRC, /\.slice\(0, 12\)/, 'cap the number of lines');
   assert.match(SRC, /\.slice\(0, 200\)/, 'cap each line');
   assert.match(SRC, /\.slice\(0, 60\)/, 'cap the workspace and zone names');
-  // D552: the page rides along so the safety run is recorded on it.
-  assert.match(SRC, /classifyInput\(c\.env, user\.id, facts, page\)/,
-    'the same input classifier the advisor surface runs');
+  // D763: the lines are checked by the guard inside `run()`, once, before the
+  // model is called (`ai_guard_d763.test.mjs`); the run carries the page
+  // (D552), so the guard's rows are recorded on it.
   const handler = SRC.slice(SRC.indexOf("ai.post('/workspace/explain'"));
-  assert.ok(handler.indexOf('classifyInput') < handler.indexOf('aiRun('),
-    'classify before running, or the classifier is decoration');
+  assert.doesNotMatch(handler, /classifyInput/, 'a second guard call');
+  assert.match(handler, /guardText: facts,/, 'the guard checks the lines the page sent');
+  assert.match(handler, /surface: page,/);
 });
 
 test('the prompt forbids going beyond the lines it was given', () => {
@@ -251,7 +252,7 @@ function envThatRecordsWrites() {
         batch: budget.DB.batch,
         exec: async () => ({ count: 0, duration: 0 }),
       },
-      AI: { run: async () => ({ response: 'x' }) },
+      AI: withGuard({ run: async () => ({ response: 'x' }) }),
     } as any,
   };
 }
@@ -323,6 +324,7 @@ test('rule 4 — the row is written BEFORE the run, so a refused read still leav
 
 import { normaliseSurface } from '../src/services/aiRouter.ts';
 
+import { withGuard } from './_guard_stub.mjs';
 // The read-back's own usage row. The route's guardrail screen runs a
 // `safety` task first, which writes a row of its own with no page — correctly:
 // it is not the run the page asked for — so the row is picked by task.
@@ -359,4 +361,36 @@ test('D404: only a plain app path is recorded', () => {
   for (const bad of ['validate', 'https://evil.example/x', '/a b', "/x'; DROP TABLE", '/x?y=1', '/x#y', '', null, 42, `/${'a'.repeat(200)}`]) {
     assert.equal(normaliseSurface(bad as any), null, `${JSON.stringify(bad)} was recorded as a page`);
   }
+});
+
+test('D763: a blocked page summary answers as before, checked once by the guard inside the run, and the model never runs', async () => {
+  const { env } = envThatRecordsWrites();
+  const guardCalls: string[] = [];
+  const modelCalls: string[] = [];
+  env.AI = {
+    run: async (model: string, input: any) => {
+      if (model === '@cf/meta/llama-guard-3-8b') { guardCalls.push(input.messages.at(-1).content); return { response: 'unsafe\nS1', usage: { prompt_tokens: 0, completion_tokens: 0 } }; }
+      modelCalls.push(model);
+      return { response: 'x' };
+    },
+  };
+  const res = await post({ workspace: 'Build', coverage: ['3 rows', '1 blocked'] }, env, await bearer(env));
+  assert.equal(res.status, 422);
+  assert.deepEqual(await res.json(), { error: 'safety_block', message: 'That page summary could not be sent for review.', category: 's1' });
+  assert.deepEqual(guardCalls, ['- 3 rows\n- 1 blocked'], 'the lines the page sent, checked once');
+  assert.deepEqual(modelCalls, []);
+});
+
+test('D763: an allowed page summary is checked once on its way in, and the answer once on its way out', async () => {
+  const { env } = envThatRecordsWrites();
+  const guardCalls: string[] = [];
+  env.AI = {
+    run: async (model: string, input: any) => {
+      if (model === '@cf/meta/llama-guard-3-8b') { guardCalls.push(input.messages.at(-1).content); return { response: 'safe', usage: { prompt_tokens: 0, completion_tokens: 0 } }; }
+      return { response: 'Three rows, one blocked.' };
+    },
+  };
+  const res = await post({ workspace: 'Build', coverage: ['3 rows', '1 blocked'] }, env, await bearer(env));
+  assert.equal(res.status, 200);
+  assert.deepEqual(guardCalls, ['- 3 rows\n- 1 blocked', 'Three rows, one blocked.']);
 });

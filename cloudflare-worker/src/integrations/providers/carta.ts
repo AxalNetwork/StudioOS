@@ -16,7 +16,7 @@
  * IMPORTANT: imported once from index.ts so registerProvider() runs at boot.
  */
 import type { Context } from 'hono';
-import { callbackBase } from '../../util/url';
+import { oauthCallbackUrl } from '../../util/url';
 import type { Env, User } from '../../types';
 import { scheduledConnectorEnabled } from '../companyScope';
 import {
@@ -36,9 +36,9 @@ const AUTH_HOST = 'https://login.carta.com';
 const API_BASE = 'https://api.carta.com/v1alpha1';
 const SCOPES = ['read:cap_table', 'read:stakeholders', 'read:securities'];
 
-function redirectUri(env: Env): string {
-  const base = callbackBase(env);
-  return `${base}/api/integrations/oauth/${PROVIDER_KEY}/callback`;
+/** The callback URL registered with the provider; Admin → Integration keys shows the same (D751). */
+export function redirectUri(env: Env): string {
+  return oauthCallbackUrl(env, PROVIDER_KEY);
 }
 
 async function ensureCreds(env: Env): Promise<{ id: string; secret: string }> {

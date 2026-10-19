@@ -14,19 +14,22 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
+import { withGuard } from './_guard_stub.mjs';
 import { loadAiBudget, usdToMicro } from '../src/services/aiBudget.ts';
 import { run, __resetForTest, ROUTE, estimateCostUsd, meterStream } from '../src/services/aiRouter.ts';
 
 const MODEL = ROUTE.advisor_turn.model;
 const caps = (db, day = 0, month = 0) => db.prepare("INSERT INTO ai_licence_caps(licence_key,daily_microusd,monthly_microusd,recorded_by) VALUES('founder:free',?,?,1)").run(day, month);
 const fund = (db, user = 2, amount = 5_000_000) => db.prepare('INSERT INTO ai_topup_accounts(user_id,balance_microusd) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET balance_microusd=excluded.balance_microusd').run(user, amount);
-const rows = (db) => db.prepare('SELECT * FROM ai_usage_logs ORDER BY id').all().map((r) => ({ ...r }));
+// D763: the runs' own rows; the guard's (`task = 'safety'`) are D763's to test.
+const rows = (db) => db.prepare("SELECT * FROM ai_usage_logs WHERE task <> 'safety' ORDER BY id").all().map((r) => ({ ...r }));
 const reservations = (db) => db.prepare('SELECT * FROM ai_budget_reservations ORDER BY created_at, uid').all().map((r) => ({ ...r }));
 
 function fixture(extra = {}) {
   __resetForTest();
   const f = aiBudgetFixture();
-  return { ...f, env: { DB: f.DB, ENVIRONMENT: 'development', ...extra } };
+  // D763: the guard answers free, so each figure here is the run's model's alone.
+  return { ...f, env: { DB: f.DB, ENVIRONMENT: 'development', ...extra, ...(extra.AI ? { AI: withGuard(extra.AI) } : {}) } };
 }
 const answer = (usage = { prompt_tokens: 100, completion_tokens: 20 }) => ({ run: async () => ({ response: 'answer', usage }) });
 
@@ -80,7 +83,7 @@ test('nothing charged reads 0, never NULL: a refusal, a failed run, a system run
     caps(f.db); fund(f.db);
     assert.equal((await run(f.env, { task: 'advisor_turn', userId: 2, text: 'x' })).refusal, 'all_models_failed');
     assert.equal((await run(f.env, { task: 'advisor_turn', userId: 2, text: 'x', model: 'not-a-model' })).refusal, 'model_not_offered');
-    f.env.AI = answer();
+    f.env.AI = withGuard(answer());
     assert.equal((await run(f.env, { task: 'advisor_turn', userId: 0, text: 'system' })).ok, true);
     const [failed, refused, system] = rows(f.db);
     assert.equal(failed.charged_microusd, 0);
@@ -159,7 +162,8 @@ test('a streamed run settles on the provider\'s final usage when the stream ends
     assert.equal(r.ok, true);
     assert.equal(reservations(f.db)[0].status, 'pending', 'the hold settled before the stream was read');
     assert.equal(rows(f.db).length, 0, 'the row was written before the run had used anything');
-    assert.equal(await readAll(r.stream), lines.join(''), 'the stream was not passed through unchanged');
+    // D763: the text is released once checked, in Workers AI's own event shape; the usage chunk is the Worker's to read.
+    assert.equal(await readAll(r.stream), 'data: {"response":"Hello world"}\n\ndata: [DONE]\n\n', 'the checked text was not released');
     const [row] = rows(f.db);
     assert.equal(row.completion_tokens, 7);
     assert.equal(row.prompt_tokens, 40);
@@ -182,7 +186,10 @@ test('with no usage chunk, a streamed run settles on the output the Worker count
   } finally { f.db.close(); }
 });
 
-test('a reader who stops early is settled on what they were sent, once', async () => {
+// D763: the Worker reads ahead by up to a slice to check it, so the run is
+// settled on what the model produced and the Worker read, which here is all of
+// it: both chunks are inside the one slice released before the reader stopped.
+test('a reader who stops early is settled on what the Worker read, once', async () => {
   const f = fixture({ AI: streaming(['data: {"response":"Hello there "}\n\n', 'data: {"response":"never sent"}\n\n']) });
   try {
     caps(f.db); fund(f.db);
@@ -192,7 +199,7 @@ test('a reader who stops early is settled on what they were sent, once', async (
     await reader.cancel('gone');
     const [row, extra] = rows(f.db);
     assert.equal(extra, undefined, 'the run was settled twice');
-    assert.equal(row.completion_tokens, Math.ceil('Hello there '.length / 4));
+    assert.equal(row.completion_tokens, Math.ceil('Hello there never sent'.length / 4));
     assert.equal(reservations(f.db)[0].status, 'settled');
   } finally { f.db.close(); }
 });

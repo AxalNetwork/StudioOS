@@ -78,11 +78,42 @@ async function readProjection(service: any) {
     lines[0].kind='alacarte';
     f.db.prepare("UPDATE orders SET items_json=? WHERE order_ref='MRD-PACK'").run(JSON.stringify(lines));
     assert.equal((await service.getOrderForUser(f.env,'MRD-PACK',2)).ai_topup?.state,'overdue');
-    // Missing purchase is unreadable, never an ordinary paid receipt.
+    // A missing purchase cannot reclassify a historical ordinary line.
     f.db.exec("DELETE FROM ai_topup_purchases");
-    await assert.rejects(()=>service.getOrderForUser(f.env,'MRD-PACK',2),/unreadable/);
+    assert.equal((await service.getOrderForUser(f.env,'MRD-PACK',2)).ai_topup,undefined);
+    lines[0].kind='token_pack';
+    f.db.prepare("UPDATE orders SET items_json=? WHERE order_ref='MRD-PACK'").run(JSON.stringify(lines));
+    assert.deepEqual((await service.getOrderForUser(f.env,'MRD-PACK',2)).ai_topup,{state:'unreadable'});
   });
 }
+async function historicalReceipts(service: any) {
+  await withWorld(service,async f=>{
+    f.db.exec("DELETE FROM ai_topup_purchases");
+    const lines=[{price_id:'price_Pack25',kind:'alacarte',name:'Historical top-up',quantity:1,unit_amount:2500,line_total:2500},
+      {price_id:'price_Other',kind:'alacarte',name:'Historical service',quantity:1,unit_amount:500,line_total:500}];
+    f.db.prepare("UPDATE orders SET items_json=? WHERE order_ref='MRD-PACK'").run(JSON.stringify(lines));
+    const changes=Number(f.db.prepare('SELECT total_changes() AS n').get().n);
+    const prepare=f.DB.prepare, queries:string[]=[];
+    f.DB.prepare=(sql:string)=>{queries.push(sql);return prepare.call(f.DB,sql);};
+    try {
+      const result=await service.getOrderForUser(f.env,'MRD-PACK',2).catch((error:Error)=>({error:error.message}));
+      assert.equal(result.status,'paid','an adopted price must not destroy a historical receipt');
+      assert.deepEqual(result.items,lines); assert.equal(result.ai_topup,undefined);
+      assert.equal(queries.filter(sql=>sql.includes('FROM ai_topup_purchases')).length,1,'one purchase lookup, independent of cart size');
+      assert.equal(queries.filter(sql=>sql.includes('ai_token_packs')).length,0,'today’s catalogue cannot classify a historical order');
+      assert.equal(Number(f.db.prepare('SELECT total_changes() AS n').get().n),changes,'receipt reads write nothing');
+    } finally { f.DB.prepare=prepare; }
+    // An ordinary order still reads on a database built before top-up tables.
+    f.db.exec('DROP TABLE ai_topup_purchases');
+    const old=await service.getOrderForUser(f.env,'MRD-PACK',2).catch((error:Error)=>({error:error.message}));
+    assert.equal(old.status,'paid'); assert.equal(old.ai_topup,undefined);
+    // Actual read failures are not mistaken for an absent legacy table.
+    f.DB.prepare=(sql:string)=>sql.includes('FROM ai_topup_purchases') ? {bind(){return this;},async all(){return {success:false,results:[]};}} : prepare.call(f.DB,sql);
+    try { await assert.rejects(()=>service.getOrderForUser(f.env,'MRD-PACK',2),/unreadable/); }
+    finally { f.DB.prepare=prepare; }
+  });
+}
+test('historical mixed orders retain their receipt when a price is adopted as a pack; one read, no writes, pre-top-up schema supported',async()=>historicalReceipts(realOrders));
 test('owner-only receipt: waiting, credited, refunded, disputed, overdue, current balance, VAT excluded; no writes or providers',async()=>readProjection(realOrders));
 test('GET order authenticates, hides another member, and returns the projection only to the owner',async()=>{
   await withWorld(realOrders,async f=>{
@@ -112,19 +143,24 @@ test('a failed purchase or balance read is unreadable, not a credited or zero ba
 });
 const mutations=[
   {name:'owner predicate removed',file:ORDER,before:'!row || row.user_id !== userId',after:'!row'},
-  {name:'projection omitted',file:ORDER,before:'order.ai_topup = await orderTopUp(env, userId, orderRef);',after:'void 0;'},
-  {name:'fallback pack hidden',file:ORDER,before:"line.kind === 'token_pack' || await isTokenPackPrice(env, line.price_id)",after:"line.kind === 'token_pack'"},
+  {name:'projection omitted',file:ORDER,before:'if (topup) order.ai_topup = topup;',after:'if (topup) void 0;'},
+  {name:'fallback pack hidden',file:ORDER,before:"if (topup) order.ai_topup = topup;",after:"if (topup && order.items.some(line => line.kind === 'token_pack')) order.ai_topup = topup;"},
   {name:'paid is mistaken for credited',file:CREDITS,before:"return row.overdue === 1 ? 'overdue' : 'waiting';",after:"return 'credited';"},
   {name:'bonus lost',file:CREDITS,before:'amount_microusd: purchase.amount_microusd',after:'amount_microusd: purchase.credit_microusd'},
   {name:'account balance invented from pack',file:CREDITS,before:'balance_microusd: balance, at: purchase.at',after:'balance_microusd: purchase.amount_microusd, at: purchase.at'},
   {name:'refund lost',file:CREDITS,before:"if (row.reversed_microusd > 0) return 'refunded';",after:''},
   {name:'dispute lost',file:CREDITS,before:"if (row.dispute_state === 'open' || row.dispute_state === 'lost') return 'disputed';",after:''},
-  {name:'missing purchase called ordinary',file:CREDITS,before:"if (!purchase) throw new Error('AI top-up purchase unreadable');",after:'if (!purchase) return undefined;'},
+  {name:'missing new pack purchase called ordinary',file:ORDER,before:"else if (order.items.some(line => line.kind === 'token_pack'))",after:'else if (false)'},
+  {name:'historical receipt lost without purchase',file:CREDITS,before:'if (!found.results?.length) return null;',after:"if (!found.results?.length) throw new Error('AI top-up purchase unreadable');",check:historicalReceipts},
+  {name:'legacy missing table fails ordinary receipts',file:CREDITS,before:'return null;\n    throw error;',after:'throw error;\n    throw error;',check:historicalReceipts},
+  {name:'one catalogue read per receipt is reintroduced',file:ORDER,before:"const { orderTopUp } = await import('./aiCredits');",after:"await env.DB.prepare('SELECT 1 FROM ai_token_packs LIMIT 1').all();\n  const { orderTopUp } = await import('./aiCredits');",check:historicalReceipts},
+  {name:'failed lookup is called empty',file:CREDITS,before:"if (found.success !== true) throw new Error('AI top-up purchase unreadable');",after:'',check:historicalReceipts},
 ];
 for(const m of mutations)test('order receipt mutation: '+m.name,async()=>{
   assert.ok(originals[m.file].includes(m.before),'mutation target exists');
   const changed={...originals,[m.file]:originals[m.file].replace(m.before,()=>m.after)};
-  await readProjection(await services());
-  await assert.rejects(()=>services(changed).then(readProjection),{name:'AssertionError'});
-  await readProjection(await services());
+  const check=m.check ?? readProjection;
+  await check(await services());
+  await assert.rejects(()=>services(changed).then(check),{name:'AssertionError'});
+  await check(await services());
 });

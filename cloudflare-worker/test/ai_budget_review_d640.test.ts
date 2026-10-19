@@ -6,6 +6,7 @@ import { loadAiBudget, reserveAiBudget, settleAiReservation } from '../src/servi
 import { run, __resetForTest } from '../src/services/aiRouter.ts';
 import budgetRoute from '../src/routes/ai_budget.ts';
 
+import { guardSafe } from './_guard_stub.mjs';
 // Midday today: the /me read below uses the real clock, so a fixed date stops
 // matching its day window the day after it was written.
 const now=new Date();now.setUTCHours(12,0,0,0);
@@ -28,7 +29,8 @@ function hold(f:any,userId:number,quote:number) {
 test('D640: a real router overage reaches the hold and the next run never calls the provider',async()=>{
   __resetForTest();const f=fixture();try {
     let calls=0;
-    f.env.AI={run:async()=>{calls++;return {response:'answer',usage:{prompt_tokens:1000000,completion_tokens:1000000}};}};
+    // D763: the guard answers free, so `calls` and the overage are the model's alone.
+    f.env.AI={run:guardSafe(async()=>{calls++;return {response:'answer',usage:{prompt_tokens:1000000,completion_tokens:1000000}};})};
     const first=await run(f.env,{task:'advisor_turn',userId:2,text:'hello'});
     assert.equal(first.refusal,'misconfigured');
     const holdRow=f.db.prepare('SELECT * FROM ai_budget_reservations WHERE user_id=2').get();
@@ -39,7 +41,7 @@ test('D640: a real router overage reaches the hold and the next run never calls 
     assert.equal(next.refusal,'budget_review');
     assert.match(next.error||'',/held for review/);
     assert.equal(calls,1);
-    assert.equal(count(f.db,'ai_usage_logs'),2);
+    assert.equal(f.db.prepare("SELECT COUNT(*) n FROM ai_usage_logs WHERE task<>'safety'").get().n,2);
   }finally{f.db.close();}
 });
 

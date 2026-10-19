@@ -67,9 +67,13 @@
  * chat's notes are queued when the member assigns it. The job below
  * transcribes with the interview sessions' own speech-to-text, under the
  * connection's daily cap (D1, fails closed) and the member's AI budget (D640).
- * Only the text is kept; the audio is never stored (D754: for WhatsApp,
- * until the S13 w3 voice-audio task lands). No note over 5 MB, the recorder's
- * chunk, reaches a model from either provider (D756, #1896).
+ * For Telegram only the text is kept; the audio is never stored (until
+ * D756's audio task, #1978). A consented WhatsApp note is kept and
+ * transcribed as the recorder's audio is (D754 W3, #1935): a chunk under
+ * `validate-audio/`, the recorder's per-chunk stage and receipt, appended to
+ * the chat's session, then the engine (`ingestChannelAudio`). No note over
+ * 5 MB, the recorder's chunk, reaches a model from either provider (D756,
+ * #1896).
  *
  * AXAL'S OWN WHATSAPP NUMBER (way B, whatsappLink.ts) is answered before any
  * member connection is looked for: `LINK <code>` records a claim and gets one
@@ -109,6 +113,8 @@ import { run as aiRun, audioMinutesFromBytes } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { IntakeError, activeMember } from '../services/interviewIntake';
 import { MAX_CHUNK_BYTES } from '../services/interviewSessions';
+import { admitAudio, audioMimeAdmitted, ingestChannelAudio } from '../services/channels/channelAudio';
+import { sniffAudioContainer } from '../services/channels/providerHttp';
 import {
   claimEvent, connectionOverLimit, linkAttemptOverLimit, finishEvent, finishEventStatement, readCappedBody, releaseEvent, reserveTranscription,
   type EventFields, type EventKind, type EventStatus,
@@ -1358,6 +1364,8 @@ export async function runVoiceFollowup(env: Env, p: ChannelJobPayload): Promise<
     return giveBack('failed', 'connection_disabled');
   }
 
+  // D754 W3 (#1935): a declared type the recorder does not take is never downloaded.
+  if (provider === 'whatsapp' && note.mime && !audioMimeAdmitted(note.mime)) return giveBack('failed', 'unsupported_format');
   const audio = provider === 'telegram'
     ? await telegram.fetchTelegramVoice(env, note)
     : await whatsapp.fetchWhatsAppMedia(env, conn, note.file, note.mime);
@@ -1376,7 +1384,38 @@ export async function runVoiceFollowup(env: Env, p: ChannelJobPayload): Promise<
   }
   // D756 (#1896): the recorder's chunk is the memory bound; nothing larger reaches a model, or the day's cap.
   if (audio.bytes.byteLength > MAX_CHUNK_BYTES) return giveBack('failed', 'too_large');
+  // D754 W3 (#1935): a file the recorder would not take spends nothing either.
+  if (provider === 'whatsapp' && !admitAudio(audio.mime || null, sniffAudioContainer(audio.bytes)).ok) {
+    return giveBack('failed', 'unsupported_format');
+  }
   if (!(await reserveTranscription(env, conn.integrationId))) return giveBack('failed', 'transcription_cap');
+
+  if (provider === 'whatsapp') {
+    // D754 W3 (#1935): kept as recorder audio, transcribed by the recorder's
+    // stage, appended, then the engine. The placeholder and the event's record
+    // go in the append's batch, so a retry finds no note and does nothing.
+    const record = event ? [finishEventStatement(env, event, 'done', fields)] : [];
+    let kept: Awaited<ReturnType<typeof ingestChannelAudio>>;
+    try {
+      kept = await ingestChannelAudio(env, {
+        sessionId: Number(note.thread.session_id), userId: conn.userId, seq: note.id, bytes: audio.bytes,
+        declaredMime: audio.mime || null, mediaKind: note.media, side: note.side, provider,
+        speakerLabel: note.side === 'me' ? 'Me' : (await intervieweeLabel(env, note.thread)) || 'Interviewee',
+        alongside: [env.DB.prepare('DELETE FROM channel_thread_messages WHERE id = ? AND uid = ?').bind(note.id, note.uid), ...record],
+      });
+    } catch (err) {
+      // The chat's interview or session went away while the note waited.
+      if (err instanceof IntakeError && err.status === 404) return giveBack('ignored', 'not_assigned');
+      throw err;
+    }
+    if (kept.ok) return;
+    if (kept.reason !== 'transcription') return giveBack('failed', kept.reason);
+    if (!kept.budget && !FINAL_REFUSAL.test(kept.refusal)) {
+      console.error(`[channels] voice transcription failed provider=${provider} refusal=${kept.refusal} try=${Number(p.try) || 1}`);
+      return tryAgain('transcription_unavailable');
+    }
+    return giveBack('failed', kept.refusal);
+  }
 
   const r = await aiRun(env, {
     task: 'transcribe', userId: conn.userId, surface: AI_SURFACE.validateInterviews,

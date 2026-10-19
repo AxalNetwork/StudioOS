@@ -200,6 +200,16 @@ export function microsoftOAuthAvailable(env: Env): boolean {
  * fix the config without reading worker logs. Lives here (not in
  * routes/calendar.ts) so tests can import it without dragging Hono in.
  */
+/**
+ * D751 — the client names an admin sets for each calendar, canonical first,
+ * then the legacy fallback `googleCalClientId` and friends also read. Admin →
+ * Integration keys names them, and `preflightOAuthSecrets` reports the same.
+ */
+export const GOOGLE_CAL_ENV_VARS = ['GOOGLE_CAL_CLIENT_ID', 'GOOGLE_CAL_CLIENT_SECRET'] as const;
+export const GOOGLE_CAL_FALLBACK_ENV_VARS = ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'] as const;
+export const MICROSOFT_CAL_ENV_VARS = ['MICROSOFT_CAL_CLIENT_ID', 'MICROSOFT_CAL_CLIENT_SECRET'] as const;
+export const MICROSOFT_CAL_FALLBACK_ENV_VARS = ['MICROSOFT_CLIENT_ID', 'MICROSOFT_CLIENT_SECRET'] as const;
+
 export function preflightOAuthSecrets(
   env: Env,
   provider: 'google' | 'microsoft',
@@ -212,12 +222,12 @@ export function preflightOAuthSecrets(
     // back-compat fallback (see `googleCalClientId/Secret`), but the
     // preflight payload reports the canonical CAL-prefixed names so
     // admins know which secret to set on a fresh deploy.
-    if (!googleCalClientId(env)) missing.push('GOOGLE_CAL_CLIENT_ID');
-    if (!googleCalClientSecret(env)) missing.push('GOOGLE_CAL_CLIENT_SECRET');
+    if (!googleCalClientId(env)) missing.push(GOOGLE_CAL_ENV_VARS[0]);
+    if (!googleCalClientSecret(env)) missing.push(GOOGLE_CAL_ENV_VARS[1]);
     if (!googleRedirectUri(env)) missing.push('PUBLIC_BASE_URL');
   } else {
-    if (!microsoftCalClientId(env)) missing.push('MICROSOFT_CAL_CLIENT_ID');
-    if (!microsoftCalClientSecret(env)) missing.push('MICROSOFT_CAL_CLIENT_SECRET');
+    if (!microsoftCalClientId(env)) missing.push(MICROSOFT_CAL_ENV_VARS[0]);
+    if (!microsoftCalClientSecret(env)) missing.push(MICROSOFT_CAL_ENV_VARS[1]);
     if (!microsoftRedirectUri(env)) missing.push('PUBLIC_BASE_URL');
   }
   return missing;
