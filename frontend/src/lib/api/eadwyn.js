@@ -3,6 +3,7 @@
 // caller's own; a conversation keeps the company that was active when it
 // started.
 import { request } from '../api.js';
+import { railBody } from '../railPages.js';
 
 const enc = encodeURIComponent;
 const body = (b) => JSON.stringify(b ?? {});
@@ -23,7 +24,8 @@ export const eadwynApi = {
   }),
   // A model call, so the longer timeout `aiWorkspaceExplain` carries too.
   ask: (uid, { question, model, page, file }) => request(`/eadwyn/conversations/${enc(uid)}/ask`, {
-    method: 'POST', timeoutMs: 60_000, body: body({ question, model, page, file }),
+    // D768: the run carries `rail: { page, option, record }` (D765).
+    method: 'POST', timeoutMs: 60_000, body: body({ question, model, page, file, ...railBody() }),
   }),
   // No body, on purpose: confirm sends what the Worker stored and showed.
   confirmAction: (uid) => request(`/eadwyn/actions/${enc(uid)}/confirm`, { method: 'POST' }),

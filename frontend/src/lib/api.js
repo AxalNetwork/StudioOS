@@ -1,6 +1,7 @@
 import { reportError } from './log';
 import { csrfCookieNameFor } from './branchHost';
 import { storeReason } from './impersonationBar';
+import { railBody } from './railPages.js';
 
 // D527 — API domain modules. A new API domain goes in its own file,
 // lib/api/<domain>.js, and is re-exported here with ONE line, kept in
@@ -1621,8 +1622,9 @@ export const api = {
   // `timeoutMs` for the same reason `aiWorkspaceExplain` carries one: a model
   // call is not a read, and the 30s default would abort a run still being
   // paid for.
+  // D768: every run the rail starts carries `rail: { page, option, record }` (D765).
   proposeValidate: (projectId, data) => request(`/founder/validate/propose/${projectId}`, {
-    method: 'POST', timeoutMs: 60_000, body: JSON.stringify(data),
+    method: 'POST', timeoutMs: 60_000, body: JSON.stringify({ ...data, ...railBody() }),
   }),
   // `body` carries `{ value }` for an accept-with-edit and is omitted otherwise.
   // Omitted rather than sent as the unchanged original, because `fill_provenance`
@@ -2965,7 +2967,7 @@ export const api = {
     request('/ai/workspace/explain', {
       method: 'POST',
       timeoutMs: 60_000,
-      body: JSON.stringify({ workspace, zone, coverage, model, branch, page }),
+      body: JSON.stringify({ workspace, zone, coverage, model, branch, page, ...railBody() }),
     }),
 
   // ---------- Monitoring → Analytics (admin, Task #3 / Task #13) ----------
@@ -5139,7 +5141,7 @@ export const api = {
     // runs count towards "This page this month"; it is a path, never content.
     zoneDraftRun: (surface, scopeKey, page) => request('/research/drafts', {
       method: 'POST',
-      body: JSON.stringify({ surface, ...(scopeKey ? { scope_key: scopeKey } : {}), ...(page ? { page } : {}) }),
+      body: JSON.stringify({ surface, ...(scopeKey ? { scope_key: scopeKey } : {}), ...(page ? { page } : {}), ...railBody() }),
     }),
     // Accept, having optionally edited first — one write, because editing then
     // accepting is the same act with a different body.
