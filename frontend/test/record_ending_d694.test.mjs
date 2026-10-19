@@ -30,7 +30,8 @@ test('ready pill and processing copy say where the recording lands', () => {
   assert.match(processing, /Then it lands in Interviews\./);
   assert.doesNotMatch(processing, /review screen/);
   const pill = read('frontend/src/pages/founder/RecordingPill.jsx');
-  assert.match(pill, /to=\{reviewPath\(state\.session\)\}/);
+  // D757 (#1927): Customer research still, unless Axal drafted the summary; then the session.
+  assert.match(pill, /to=\{finish \? finish\.href : reviewPath\(state\.session\)\}/);
   assert.doesNotMatch(pill, /Open the review/);
   assert.doesNotMatch(pill, /state=\{\{ interview \}\}/);
 });

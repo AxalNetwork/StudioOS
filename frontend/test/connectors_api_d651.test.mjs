@@ -393,7 +393,8 @@ for (const reason of ['github_oauth_unconfigured', 'not_configured']) {
     const m = await mount(h(ConnectorPageView, { data: ready({ catalogue: GH_CAT }), connectorKey: 'github' }), `/account/connectors/github?oauth=error&provider=github&reason=${reason}`);
     try {
       await m.flush();
-      assert.ok(m.byTestId('connector-sheet-unconfigured'), 'the unconfigured view');
+      // D753 F2 (#1908): the page says a return in its notice region.
+      assert.equal(m.props(m.byTestId('connector-page-notice'))['data-kind'], 'unconfigured', 'the unconfigured notice');
       assert.match(m.text(), /GitHub isn't set up on Axal yet, so it can't be connected\. Nothing was connected\./);
       assert.doesNotMatch(m.text(), /refused|Try again|Ask your/);
     } finally { await m.unmount(); }
@@ -404,7 +405,7 @@ test('D751: a return with reason=company_not_linked says to choose a company', a
   const m = await mount(h(ConnectorPageView, { data: ready({ catalogue: GH_CAT }), connectorKey: 'stripe' }), '/account/connectors/stripe?oauth=error&provider=stripe&reason=company_not_linked');
   try {
     await m.flush();
-    assert.ok(m.byTestId('connector-sheet-company'));
+    assert.equal(m.props(m.byTestId('connector-page-notice'))['data-kind'], 'company');
     assert.doesNotMatch(m.text(), /refused|Try again/);
   } finally { await m.unmount(); }
 });

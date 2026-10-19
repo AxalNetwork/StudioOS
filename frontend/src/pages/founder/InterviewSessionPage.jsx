@@ -8,7 +8,8 @@ import { ChannelOriginBadge } from './ChannelOriginBadge.jsx';
 import { channelOf, openingStep } from './assistantSession.js';
 import { ModelList, AUDIO } from './RecordSessionSheet';
 import InterviewReview from './InterviewReview';
-import SessionSummary from './SessionSummary';
+import SessionSummary, { DigestView, EngineLine } from './SessionSummary';
+import { engineState, isThread } from './sessionDigestModel.js';
 import { ChannelSessionPanel } from './InterviewChannels';
 import { clock } from './interviewReviewModel.js';
 import { chatConsentOf, consentLine } from './chatConsent.js';
@@ -180,6 +181,17 @@ export function makeReviewActions({ api, sessionId, set, onSpent }) {
       try { await api.accept(id, payload); await reload(); } catch (e) { set((st) => ({ ...st, errors: { ...st.errors, [id]: e } })); }
       set((st) => ({ ...st, busyId: null }));
     },
+    /** D757 (#1927): Accept all for one module, each placement through its own Accept; every outcome is kept. */
+    async acceptAll(slug) {
+      set((st) => ({ ...st, acceptAll: { ...st.acceptAll, [slug]: { busy: true, result: null, error: null } } }));
+      try {
+        const result = await api.acceptAll(sessionId, slug);
+        set((st) => ({ ...st, acceptAll: { ...st.acceptAll, [slug]: { busy: false, result, error: null } } }));
+      } catch (e) {
+        set((st) => ({ ...st, acceptAll: { ...st.acceptAll, [slug]: { busy: false, result: null, error: e } } }));
+      }
+      await reload();
+    },
     async discard(id) {
       set((st) => ({ ...st, busyId: id, errors: { ...st.errors, [id]: null } }));
       try { await api.discard(id); await reload(); } catch (e) { set((st) => ({ ...st, errors: { ...st.errors, [id]: e } })); }
@@ -198,10 +210,10 @@ export function makeReviewActions({ api, sessionId, set, onSpent }) {
   };
 }
 
-export const REVIEW_INITIAL = { read: undefined, running: false, runError: null, errors: {}, busyId: null, ask: {} };
+export const REVIEW_INITIAL = { read: undefined, running: false, runError: null, errors: {}, busyId: null, ask: {}, acceptAll: {} };
 
 /** The review step, mounted: reads the placements and wires each action. */
-export function ReviewStep({ api, sessionId, theme, receiptItems, onSpent }) {
+export function ReviewStep({ api, sessionId, theme, receiptItems, onSpent, grouped = null }) {
   const [st, setSt] = useState(REVIEW_INITIAL);
   const actions = React.useMemo(() => makeReviewActions({ api, sessionId, set: setSt, onSpent }), [api, sessionId, onSpent]);
   useEffect(() => { actions.reload(); }, [actions]);
@@ -212,6 +224,7 @@ export function ReviewStep({ api, sessionId, theme, receiptItems, onSpent }) {
       theme={theme} read={st.read} running={st.running} runError={st.runError} errors={st.errors} busyId={st.busyId}
       onAccept={actions.accept} onDiscard={actions.discard} onStructure={actions.structure}
       ask={st.ask} onAsk={actions.ask} receiptItems={receiptItems}
+      grouped={grouped} onAcceptAll={actions.acceptAll} acceptAll={st.acceptAll}
     />
   );
 }
@@ -278,6 +291,8 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
   const [startLive, setStartLive] = useState(null);
   const [adoptNote, setAdoptNote] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [digestBusy, setDigestBusy] = useState(false);
+  const [digestError, setDigestError] = useState(null);
 
   const load = useCallback(() => api.get(id).then((r) => { setData(r); return r; }).catch((e) => { setError(e?.message || 'Unreadable'); setData(null); }), [api, id]);
   const loadReceipt = useCallback(() => api.receipt(id).then(setReceipt).catch(() => setReceipt(null)), [api, id]);
@@ -300,7 +315,9 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
   }, [handOver, data, recorder, navigate, location.state]);
   // Poll while the Worker transcribes, or processes an imported session here.
   useEffect(() => {
-    if (data?.session?.status !== 'transcribing' && !imported) return undefined;
+    // D757 (#1927): and while the engine summarises, so the draft appears when it is written.
+    const digesting = ['queued', 'running'].includes(data?.session?.digest_status);
+    if (data?.session?.status !== 'transcribing' && !imported && !digesting) return undefined;
     const t = setTimeout(() => { load(); }, POLL_MS);
     return () => clearTimeout(t);
   }, [data, imported, load]);
@@ -374,11 +391,31 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
   const reviewFirst = openingStep(session) === 'review';
   // D684: a channel session still waiting for its messages or its call's transcript.
   const waiting = openingStep(session) === 'channel';
+  // D757 (#1927): the engine's state, the digest (Keep, Edit), and the forced runs when it did not run.
+  const engine = engineState(session);
+  const keep = async () => {
+    setDigestBusy(true); setDigestError(null);
+    try { const r = await api.keepDigest(session.id); setData((d) => ({ ...d, digest: r.digest })); } catch (e) { setDigestError(e?.data?.detail || e?.message || 'The summary could not be kept.'); }
+    setDigestBusy(false);
+  };
+  const editDigest = async (edit) => {
+    setDigestBusy(true); setDigestError(null);
+    try { const r = await api.editDigest(session.id, edit); setData((d) => ({ ...d, digest: r.digest })); setDigestBusy(false); return true; } catch (e) { setDigestError(e?.data?.detail || e?.message || 'The edit could not be saved.'); setDigestBusy(false); return false; }
+  };
+  const summarise = async () => {
+    setDigestBusy(true); setDigestError(null);
+    try { await api.summarise(session.id); await load(); } catch (e) { setDigestError(e?.data?.detail || e?.message || 'The summary could not be written.'); }
+    setDigestBusy(false); loadReceipt();
+  };
   const review = ['transcribed', 'structured', 'reviewed'].includes(session.status) && (
     <section data-testid="session-review" data-first={reviewFirst ? 'true' : 'false'} className="space-y-2">
       <h2 className="text-[16px] font-bold">Review</h2>
-      <SessionSummary summary={data.summary || null} segments={segments} />
-      <ReviewStep api={api} sessionId={session.id} theme={theme} receiptItems={receipt === null ? null : receipt?.items} onSpent={loadReceipt} />
+      <EngineLine session={session} />
+      {data.digest
+        ? <DigestView digest={data.digest} writer segments={segments} session={session} busy={digestBusy} error={digestError} onKeep={keep} onEdit={editDigest} />
+        : <SessionSummary summary={data.summary || null} segments={segments} canSummarise={!engine?.busy} busy={digestBusy} error={digestError} onSummarise={summarise} />}
+      <ReviewStep api={api} sessionId={session.id} theme={theme} receiptItems={receipt === null ? null : receipt?.items} onSpent={loadReceipt}
+        grouped={{ segments, interviewee: intervieweeName, thread: isThread(session) }} />
     </section>
   );
 

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { placementSource, runLabel } from './assistantSession.js';
+import { VERDICT_NOTE, acceptAllOutcome, groupBySlug, heardIn, spansOf } from './sessionDigestModel.js';
 
 /**
  * The review step of an interview session (D660 part 2, #1473), to
@@ -128,7 +129,7 @@ export function BudgetRefusal({ err }) {
   );
 }
 
-export function PlacementCard({ p, error, busy, onAccept, onDiscard }) {
+export function PlacementCard({ p, error, busy, onAccept, onDiscard, heard = null }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(() => JSON.stringify(p.edited_payload || p.payload || {}, null, 2));
   const decided = p.status !== 'pending';
@@ -136,6 +137,10 @@ export function PlacementCard({ p, error, busy, onAccept, onDiscard }) {
     <li className={CARD} data-testid={`placement-${p.id}`} data-status={p.status}>
       <p className="text-[13px] font-semibold text-gray-900 dark:text-gray-100">{placementText(p)}</p>
       <p className="mt-0.5 text-[11px] font-semibold text-axal-faint" data-testid={`placement-source-${p.id}`} data-source={p.source === 'assistant' ? 'assistant' : 'studioos'}>{placementSource(p)}</p>
+      {/* D757 §2.7 (#1927): "Heard in <name> · 00:12:31 · <speaker>", linking the line. */}
+      {heard && (heard.href
+        ? <a href={heard.href} className="mt-0.5 inline-block text-[11.5px] font-semibold text-violet-700 underline dark:text-violet-300" data-testid={`placement-heard-${p.id}`}>{heard.text}</a>
+        : <p className="mt-0.5 text-[11.5px] text-axal-faint" data-testid={`placement-heard-${p.id}`}>{heard.text}</p>)}
       <blockquote className="mt-1 border-l-2 border-violet-300 pl-2 text-[12px] italic text-gray-600 dark:border-violet-700 dark:text-gray-300" data-testid={`placement-cite-${p.id}`}>
         {p.cite?.quote || 'Quote not recorded'} <span className="not-italic text-axal-faint">· {spanLabel(p.cite?.from, p.cite?.to)}</span>
       </blockquote>
@@ -183,6 +188,64 @@ export function PlacementsPanel({ read, running, runError, errors = {}, busyId, 
           <ul className="space-y-2">{g.placements.map((pl) => <PlacementCard key={pl.id} p={pl} error={errors[pl.id]} busy={busyId === pl.id} onAccept={onAccept} onDiscard={onDiscard} />)}</ul>
         </div>
       ))}
+    </section>
+  );
+}
+
+/**
+ * D757 §2.7 (#1927): the suggestions under all seven Validate modules, each
+ * with where it was heard and its line, and "Accept all for <module>", which
+ * runs each one's own Accept (#1925) and reports every outcome. Verdict is
+ * listed and says that nothing is ever suggested there.
+ */
+export function ModuleSuggestions({
+  read, running, runError, errors = {}, busyId, onAccept, onDiscard, onStructure, onAcceptAll, acceptAll = {},
+  segments = [], interviewee = null, thread = false,
+}) {
+  if (running) return <p data-testid="structuring-running" aria-live="polite" className="text-[13px] text-axal-muted">Eadwyn is reading the transcript and placing what it finds…</p>;
+  const groups = groupBySlug(read);
+  const spans = spansOf(segments);
+  const any = groups.some((g) => g.placements.length);
+  return (
+    <section data-testid="module-suggestions" className="space-y-4">
+      {runError && (refusalKind(runError) === 'budget' ? <BudgetRefusal err={runError} /> : <p role="alert" className="text-[13px] font-semibold text-red-700 dark:text-red-400">{runError.message}</p>)}
+      {!any && (
+        <div data-testid="suggestions-none" className="text-[13px] text-axal-faint">
+          <p className="m-0">No suggestions yet. Axal has not read this conversation for findings, or found nothing it could cite.</p>
+          {/* Called with no argument: the click event is not a model (#1589). */}
+          {onStructure && <button type="button" data-testid="button-find-suggestions" onClick={() => onStructure()} className={`${BTN} mt-2 bg-violet-700 text-white`}>Find suggestions</button>}
+        </div>
+      )}
+      {groups.map((g) => {
+        const outcome = acceptAll[g.slug];
+        const said = outcome?.result ? acceptAllOutcome(outcome.result) : null;
+        return (
+          <div key={g.slug} data-testid={`suggestions-${g.slug}`} data-count={g.placements.length}>
+            <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+              <h3 className="m-0 text-[11px] font-bold uppercase tracking-wide text-axal-faint">{g.name}{g.pending ? ` · ${g.pending} to review` : ''}</h3>
+              {g.pending > 1 && onAcceptAll && (
+                <button type="button" data-testid={`button-accept-all-${g.slug}`} disabled={!!outcome?.busy} onClick={() => onAcceptAll(g.slug)}
+                  className={`${BTN} border border-violet-300 text-violet-800 dark:border-violet-700 dark:text-violet-200`}>{outcome?.busy ? 'Accepting…' : `Accept all for ${g.name}`}</button>
+              )}
+            </div>
+            {said && (
+              <div role="status" className="mb-2 text-[12.5px]" data-testid={`accept-all-outcome-${g.slug}`}>
+                <p className="m-0 font-semibold">{said.text}</p>
+                {said.refused.length > 0 && <ul className="m-0 mt-1 list-disc pl-5 text-red-700 dark:text-red-400">{said.refused.map((r) => <li key={r.id} data-testid={`accept-all-refused-${r.id}`}>{r.text}</li>)}</ul>}
+              </div>
+            )}
+            {outcome?.error && <p role="alert" className="mb-2 text-[12.5px] font-semibold text-red-700 dark:text-red-400" data-testid={`accept-all-error-${g.slug}`}>{outcome.error.data?.detail || outcome.error.message}</p>}
+            {g.slug === 'verdict'
+              ? <p className="m-0 text-[12.5px] text-axal-faint" data-testid="suggestions-verdict-note">{VERDICT_NOTE}</p>
+              : g.placements.length === 0
+                ? <p className="m-0 text-[12.5px] text-axal-faint">Nothing suggested here.</p>
+                : <ul className="m-0 list-none space-y-2 p-0">{g.placements.map((pl) => (
+                  <PlacementCard key={pl.id} p={pl} error={errors[pl.id]} busy={busyId === pl.id || !!outcome?.busy} onAccept={onAccept} onDiscard={onDiscard}
+                    heard={heardIn({ cite: pl.cite, spans, name: interviewee, thread })} />
+                ))}</ul>}
+          </div>
+        );
+      })}
     </section>
   );
 }
@@ -270,12 +333,19 @@ export function StructureReceipt({ items }) {
 }
 
 /** The whole review step, light by default, dark on request. */
-export default function InterviewReview({ theme = 'light', read, running, runError, errors, busyId, onAccept, onDiscard, onStructure, ask = {}, onAsk, receiptItems }) {
+export default function InterviewReview({
+  theme = 'light', read, running, runError, errors, busyId, onAccept, onDiscard, onStructure, ask = {}, onAsk, receiptItems,
+  grouped = null, onAcceptAll, acceptAll,
+}) {
   return (
     <div data-testid="interview-review" data-theme={theme} className={theme === 'dark' ? 'dark' : ''}>
       <div className="grid gap-6 bg-white p-4 text-gray-900 dark:bg-gray-950 dark:text-gray-100 md:grid-cols-[1fr_280px]">
         <div className="space-y-6">
-          <PlacementsPanel read={read} running={running} runError={runError} errors={errors} busyId={busyId} onAccept={onAccept} onDiscard={onDiscard} onStructure={onStructure} />
+          {/* D757 (#1927): the session page groups by the seven Validate modules, with each line linked. */}
+          {grouped
+            ? <ModuleSuggestions read={read} running={running} runError={runError} errors={errors} busyId={busyId} onAccept={onAccept} onDiscard={onDiscard} onStructure={onStructure}
+              onAcceptAll={onAcceptAll} acceptAll={acceptAll} segments={grouped.segments} interviewee={grouped.interviewee} thread={grouped.thread} />
+            : <PlacementsPanel read={read} running={running} runError={runError} errors={errors} busyId={busyId} onAccept={onAccept} onDiscard={onDiscard} onStructure={onStructure} />}
           <section><h2 className="mb-2 text-[14px] font-bold">Compare models</h2><ComparePanel read={read} busy={running} onRestructure={onStructure} /></section>
           <section><h2 className="mb-2 text-[14px] font-bold">Ask the transcript</h2><AskPanel result={ask.result} error={ask.error} busy={ask.busy} onAsk={onAsk} /></section>
         </div>
