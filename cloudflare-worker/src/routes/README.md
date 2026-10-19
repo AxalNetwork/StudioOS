@@ -23,7 +23,7 @@ widened guard on this very sentence, which is the rule working.)
 ```
 /api/admin/partner-settlements → partner_settlements.ts (HQ drafts; Super Admin issue/void, D713)
 /api/partner-settlements → partner_settlements.ts (own non-draft settlements, D713)
-/api/mercury/personal → mercury_personal.ts (a member's own Mercury (founders, partners, and investors on HQ): status and payment matches, read-only, D713, D752)
+/api/mercury/personal → mercury_personal.ts (a member's own Mercury (founders, partners, and investors on HQ): status and payment matches, read-only, D713; raise receipts, D752)
 /api/mercury/attestations → mercury_attestations.ts (an investor's proof of capital: dated statements from their own Mercury, consented and revocable; read-only, HQ only, D752)
 /api/admin/capital-attestations → admin_capital_attestations.ts (HQ admins read an investor's shared proof of funds; audited before it answers; reads capital_attestations only, never a connection; D752)
 /api/auth          → auth.ts
