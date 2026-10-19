@@ -21,7 +21,7 @@ import { fileURLToPath } from 'node:url';
 import {
   CATALOGUE, CATALOGUE_READ, isOffered, isPriced, partnerGated, refusalFor, defaultDemoted, modelById,
 } from '../src/services/ai/catalogue.ts';
-import { AI_MARKUP, billingMode, multiplierFor, costMicro, billedMicro, billedUnitPrice } from '../src/services/ai/pricing.ts';
+import { AI_MARKUP, billingMode, multiplierFor, costMicro, billedMicro, billedUnitPrice, unitPrice, USD_PER_NEURON } from '../src/services/ai/pricing.ts';
 import {
   run, ROUTE, __resetForTest, estimateCostUsd, modelRefusal,
   PRICE_USD_PER_1M_TOKENS, PRICE_USD_PER_AUDIO_MINUTE, PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET,
@@ -44,7 +44,7 @@ test('the catalogue matches the fixture: every id, status and raw price string',
   assert.deepEqual(CATALOGUE.map((m) => m.id), FIXTURE.models.map((m) => m.id), 'the same models, in the same order');
   for (const want of FIXTURE.models) {
     const got = modelById(want.id);
-    for (const key of ['name', 'kind', 'capabilities', 'context_window', 'status', 'paid_only', 'partner', 'prices', 'docs_url']) {
+    for (const key of ['name', 'kind', 'capabilities', 'context_window', 'status', 'paid_only', 'partner', 'prices', 'neurons', 'docs_url']) {
       assert.deepEqual(got[key], want[key], `${want.id}: ${key}`);
     }
     // Every price is a decimal string exactly as printed, never a number.
@@ -135,9 +135,50 @@ test('AI_MARKUP is defined in exactly one source file, and no price is multiplie
   assert.equal(multiplierFor('founder:studio'), AI_MARKUP);
 });
 
+// ── neurons are what is billed ───────────────────────────────────────────────
+
+const PRICING_MD = readFileSync(resolve(__dirname, '../../design/incoming/airail-every-page-data/cloudflare-pricing-2026-10-15.md'), 'utf8');
+/** The md's row for a model: the WebSocket row for a websocket unit, else the plain one. */
+function mdRow(id, unit) {
+  const ws = unit === 'audio_minutes_websocket';
+  return PRICING_MD.split('\n').find((l) => l.startsWith(`| \`${id}\``) && /\(WebSocket\)/.test(l.split('|')[1]) === ws);
+}
+
+test('every priced row carries the neuron figure Cloudflare prints, and its price is neurons × $0.000011', () => {
+  assert.equal(USD_PER_NEURON, '0.000011', '$0.011 per 1,000 neurons');
+  let rows = 0;
+  for (const m of CATALOGUE) {
+    const priced = Object.keys(m.prices);
+    if (!priced.length) { assert.equal(m.neurons, undefined, `${m.id} has neurons but no price`); continue; }
+    assert.deepEqual(Object.keys(m.neurons ?? {}).sort(), priced.sort(), `${m.id}: a neuron figure for every priced unit`);
+    for (const [unit, n] of Object.entries(m.neurons)) {
+      assert.match(n, /^\d+(\.\d+)?$/, `${m.id} ${unit}`);
+      const row = mdRow(m.id, unit);
+      assert.ok(row, `${m.id} (${unit}) has no row in S1's pricing copy`);
+      const figures = row.replace(/(\d),(\d)/g, '$1$2').match(/(?<![$\d.])\d+(\.\d+)?(?![\d.])/g) ?? [];
+      assert.ok(figures.includes(n), `${m.id} ${unit}: ${n} neurons is not printed on its row`);
+      // The price served is the exact product, not the page's rounded dollar column.
+      assert.ok(Math.abs(Number(unitPrice(m.id, unit)) - Number(n) * 0.000011) < 1e-15, `${m.id} ${unit}`);
+      // And the dollar column is that product rounded: within half its last printed digit.
+      const printed = m.prices[unit];
+      const half = 0.5 * 10 ** -((printed.split('.')[1] ?? '').length);
+      assert.ok(Math.abs(Number(printed) - Number(n) * 0.000011) <= half + 1e-15 || m.id === '@cf/pipecat-ai/smart-turn-v2',
+        `${m.id} ${unit}: $${printed} is not ${n} neurons rounded`);
+    }
+    rows += 1;
+  }
+  assert.equal(rows, 68);
+  // Smart Turn v2 is the one row whose two columns disagree: 0.51 neurons is
+  // $0.00000561, where the dollar column prints $0.00033795. It is priced from
+  // the neurons, as every row is (D760.md).
+  assert.equal(unitPrice('@cf/pipecat-ai/smart-turn-v2', 'audio_minutes'), '0.00000561');
+  assert.equal(unitPrice('@cf/no/such-model', 'tokens_in'), null);
+  assert.equal(unitPrice('@cf/meta/llama-3.3-70b-instruct-fp8-fast', 'tiles'), null);
+});
+
 // ── exact decimals ───────────────────────────────────────────────────────────
 
-test('exact decimals: a run rounds up once, and 0.293 × 1.25 is served as 0.36625', () => {
+test('exact decimals: a run rounds up once, and 0.293348 × 1.25 is served as 0.366685', () => {
   // FLUX.1 Schnell: 0.0000528 per tile is 52.8 micro-USD. Five tiles are 264.0
   // micro-USD; rounding each tile up first would make it 265.
   assert.equal(costMicro('@cf/black-forest-labs/flux-1-schnell', { tiles: 5 }), 264);
@@ -150,34 +191,41 @@ test('exact decimals: a run rounds up once, and 0.293 × 1.25 is served as 0.366
   assert.equal(billedMicro('@cf/black-forest-labs/flux-1-schnell', { tiles: 1 }, AI_MARKUP), 66);
   assert.equal(billedMicro('@cf/black-forest-labs/flux-1-schnell', { tiles: 1 }, 1), 53);
 
+  // The 70b's input is 26,668 neurons per 1M tokens: 0.293348, billed 0.366685.
+  assert.equal(unitPrice('@cf/meta/llama-3.3-70b-instruct-fp8-fast', 'tokens_in'), '0.293348');
+  assert.equal(billedUnitPrice('0.293348', 1.25), 0.366685);
   assert.equal(billedUnitPrice('0.293', 1.25), 0.36625);
   assert.notEqual(parseFloat('0.293') * 1.25, 0.36625, 'the float product is why this multiplies exactly');
   // The canvas's display formula, `Number(x.toPrecision(4))`, gives 0.3662 on
-  // its own float product. On the exact figure the Worker serves it gives
-  // 0.3663: one digit apart, recorded in D760.md for the price-string check
-  // that comes with the canvas export (D764 or D769).
+  // its own float product of the rounded dollar column. On the exact figure
+  // from the same dollar column it gives 0.3663, and on the neuron figure the
+  // Worker serves, 0.3667 (recorded in D760.md for D769's price strings).
   assert.equal(Number((0.293 * 1.25).toPrecision(4)), 0.3662);
   assert.equal(Number(billedUnitPrice('0.293', 1.25).toPrecision(4)), 0.3663);
   assert.equal(billedUnitPrice('0.0000528', 1.25), 0.000066);
   assert.equal(billedUnitPrice('0.293', 1), 0.293);
+  assert.equal(Number(billedUnitPrice('0.293348', 1.25).toPrecision(4)), 0.3667);
 
   // Tokens per million, characters per thousand, images per million.
   assert.equal(costMicro('@cf/meta/llama-3.3-70b-instruct-fp8-fast', { tokens_in: 1000, tokens_out: 500 }), 1420);
-  assert.equal(costMicro('@cf/deepgram/aura-1', { characters: 2000 }), 30000);
+  // Aura 1 is 1,363.64 neurons per 1k characters: 0.01500004 USD, so 2,000
+  // characters are 30.00008 micro-USD over a thousand, rounded up once: 30001.
+  assert.equal(costMicro('@cf/deepgram/aura-1', { characters: 2000 }), 30001);
   assert.equal(costMicro('@cf/microsoft/resnet-50', { images: 1 }), 3);
   assert.equal(costMicro('@cf/deepgram/nova-3', { audio_minutes_websocket: 2 }), 18400);
 });
 
 test('cached input is billed at its own rate, and only where the model prints one', () => {
-  // GLM-5.3: 600k at 1.400 + 400k cached at 0.260 = 0.944 USD.
-  assert.equal(costMicro('@cf/zai-org/glm-5.3', { tokens_in: 1_000_000, tokens_cached: 400_000 }), 944000);
+  // GLM-5.3: 127,273 neurons in and 23,636 cached per 1M, so 600k at 1.400003
+  // + 400k cached at 0.259996 = 0.9440002 USD, rounded up once: 944001 micro.
+  assert.equal(costMicro('@cf/zai-org/glm-5.3', { tokens_in: 1_000_000, tokens_cached: 400_000 }), 944001);
   // No cached tokens reported: every input token at the input rate.
-  assert.equal(costMicro('@cf/zai-org/glm-5.3', { tokens_in: 1_000_000 }), 1400000);
+  assert.equal(costMicro('@cf/zai-org/glm-5.3', { tokens_in: 1_000_000 }), 1400003);
   // A model with no cached rate bills cached tokens at the input rate.
-  assert.equal(costMicro('@cf/meta/llama-3.3-70b-instruct-fp8-fast', { tokens_in: 1_000_000, tokens_cached: 400_000 }), 293000);
-  // The router's estimate does the same.
+  assert.equal(costMicro('@cf/meta/llama-3.3-70b-instruct-fp8-fast', { tokens_in: 1_000_000, tokens_cached: 400_000 }), 293348);
+  // The router's estimate does the same (V4 Flash: 40,000 in, 1,273 cached).
   const flash = '@cf/deepseek-ai/deepseek-v4-flash-0731';
-  assert.ok(Math.abs(estimateCostUsd(flash, 1_000_000, 0, 0, 500_000) - (0.5 * 0.44 + 0.5 * 0.014)) < 1e-12);
+  assert.ok(Math.abs(estimateCostUsd(flash, 1_000_000, 0, 0, 500_000) - (0.5 * 0.44 + 0.5 * 0.014003)) < 1e-12);
   assert.ok(Math.abs(estimateCostUsd(flash, 1_000_000, 0) - 0.44) < 1e-12);
 });
 
@@ -192,17 +240,16 @@ test('a unit the model is not priced in, or a model with no price, is refused ra
 
 test('the router\'s price tables are views of the catalogue', () => {
   for (const [id, p] of Object.entries(PRICE_USD_PER_1M_TOKENS)) {
-    const prices = modelById(id).prices;
-    assert.deepEqual(p, { in: Number(prices.tokens_in), out: Number(prices.tokens_out ?? '0') }, id);
+    assert.deepEqual(p, { in: Number(unitPrice(id, 'tokens_in')), out: Number(unitPrice(id, 'tokens_out') ?? '0') }, id);
   }
   for (const [id, perMinute] of Object.entries(PRICE_USD_PER_AUDIO_MINUTE)) {
-    assert.equal(perMinute, Number(modelById(id).prices.audio_minutes), id);
+    assert.equal(perMinute, Number(unitPrice(id, 'audio_minutes')), id);
   }
   for (const [id, perMinute] of Object.entries(PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET)) {
-    assert.equal(perMinute, Number(modelById(id).prices.audio_minutes_websocket), id);
+    assert.equal(perMinute, Number(unitPrice(id, 'audio_minutes_websocket')), id);
   }
-  // BGE Base EN v1.5 moved to its published price.
-  assert.equal(PRICE_USD_PER_1M_TOKENS['@cf/baai/bge-base-en-v1.5'].in, 0.067);
+  // BGE Base EN v1.5 moved to its published price: 6,058 neurons per 1M tokens.
+  assert.equal(PRICE_USD_PER_1M_TOKENS['@cf/baai/bge-base-en-v1.5'].in, 0.066638);
 });
 
 test('every model ROUTE can reach is priced and offered with no owner switch set', () => {
@@ -305,12 +352,12 @@ test('/catalogue serves the offered models, cost and billed, ordered by kind wit
   }
   const m = body.models.find((x) => x.id === '@cf/meta/llama-3.3-70b-instruct-fp8-fast');
   assert.deepEqual(Object.keys(m).sort(), ['billed', 'context_window', 'cost', 'id', 'kind', 'name', 'paid_only', 'partner', 'status'].sort());
-  assert.deepEqual(m.cost, { tokens_in: 0.293, tokens_out: 2.253 });
-  assert.deepEqual(m.billed, { tokens_in: 0.36625, tokens_out: billedUnitPrice('2.253', 1.25) });
+  assert.deepEqual(m.cost, { tokens_in: 0.293348, tokens_out: 2.252855 });
+  assert.deepEqual(m.billed, { tokens_in: 0.366685, tokens_out: billedUnitPrice('2.252855', 1.25) });
   assert.equal(m.context_window, 24000);
   const v4 = body.models.find((x) => x.id === '@cf/deepseek-ai/deepseek-v4-flash-0731');
   assert.equal(v4.paid_only, true);
-  assert.equal(v4.cost.tokens_cached, 0.014);
+  assert.equal(v4.cost.tokens_cached, 0.014003);
 
   const on = await get('/catalogue', 41, 'founder', GATE_ON);
   assert.equal(on.body.models.length, 60);
@@ -334,10 +381,10 @@ test('/pricing and /rates answer cost and billed in every unit, websocket rates 
   assert.deepEqual(pricing.body.prices, JSON.parse(JSON.stringify(PRICE_USD_PER_1M_TOKENS)));
   assert.deepEqual(pricing.body.audio_prices, PRICE_USD_PER_AUDIO_MINUTE);
   const nova = pricing.body.rates['@cf/deepgram/nova-3'];
-  assert.deepEqual(nova.cost, { audio_minutes: 0.0052, audio_minutes_websocket: 0.0092 });
-  assert.deepEqual(nova.billed, { audio_minutes: billedUnitPrice('0.0052', 1.25), audio_minutes_websocket: billedUnitPrice('0.0092', 1.25) });
+  assert.deepEqual(nova.cost, { audio_minutes: 0.00520003, audio_minutes_websocket: 0.00919996 });
+  assert.deepEqual(nova.billed, { audio_minutes: billedUnitPrice('0.00520003', 1.25), audio_minutes_websocket: billedUnitPrice('0.00919996', 1.25) });
   assert.deepEqual(pricing.body.rates['@cf/deepgram/flux'].cost, { audio_minutes_websocket: 0.0077 });
-  assert.deepEqual(pricing.body.rates['@cf/meta/llama-3.3-70b-instruct-fp8-fast'].billed, { tokens_in: 0.36625, tokens_out: billedUnitPrice('2.253', 1.25) });
+  assert.deepEqual(pricing.body.rates['@cf/meta/llama-3.3-70b-instruct-fp8-fast'].billed, { tokens_in: 0.366685, tokens_out: billedUnitPrice('2.252855', 1.25) });
 
   const rates = await get('/rates', 41, 'founder');
   assert.equal(rates.status, 200);
@@ -346,7 +393,7 @@ test('/pricing and /rates answer cost and billed in every unit, websocket rates 
   const flux = rates.body.models.find((m) => m.id === '@cf/deepgram/flux');
   assert.equal(flux.per_audio_minute_websocket_usd, 0.0077);
   assert.deepEqual(flux.billed, { audio_minutes_websocket: billedUnitPrice('0.0077', 1.25) });
-  assert.equal(rates.body.models.find((m) => m.id === '@cf/deepgram/nova-3').per_audio_minute_websocket_usd, 0.0092);
+  assert.equal(rates.body.models.find((m) => m.id === '@cf/deepgram/nova-3').per_audio_minute_websocket_usd, 0.00919996);
   for (const m of rates.body.models) {
     assert.ok(Object.keys(m.cost).length > 0 && Object.keys(m.billed).length === Object.keys(m.cost).length, m.id);
   }

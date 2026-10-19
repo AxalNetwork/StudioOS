@@ -26,7 +26,8 @@ import { refuse } from '../util/refusal';
 import { ROUTE, PRICE_USD_PER_1M_TOKENS, PRICE_USD_PER_AUDIO_MINUTE, PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET, run as aiRun, normaliseSurface } from '../services/aiRouter';
 import { MODEL_NAMES, RETIRED_MODELS } from '../services/aiCatalog';
 import { CATALOGUE, isOffered, modelById } from '../services/ai/catalogue';
-import { billingMode, billedUnitPrice, multiplierFor } from '../services/ai/pricing';
+import { billingMode, billedUnitPrice, multiplierFor, unitPrice } from '../services/ai/pricing';
+import type { PriceUnit } from '../services/ai/catalogue';
 import { aiLicenceKey } from '../services/aiBudget';
 import { ensureAdminAuditLogTable } from './admin';
 import { BRANCH_CODE_RE } from '../util/branch';
@@ -139,17 +140,20 @@ ai.get('/pricing', async (c) => {
 });
 
 /**
- * D760 (#2017) — a model's unit prices as the Worker serves them: `cost`, the
- * catalogue's printed figure as a number, and `billed`, that figure times the
- * licence's multiplier, multiplied exactly (`billedUnitPrice`). The frontend
- * never multiplies. An empty object for a model the catalogue cannot price.
+ * D760 (#2017) — a model's unit prices as the Worker serves them: `cost`, its
+ * neuron price (`unitPrice`: neurons × $0.011 / 1000, what Cloudflare bills)
+ * as a number, and `billed`, that figure times the licence's multiplier,
+ * multiplied exactly (`billedUnitPrice`). The frontend never multiplies. An
+ * empty object for a model the catalogue cannot price.
  */
 export function unitPrices(id: string, multiplier: number): { cost: Record<string, number>; billed: Record<string, number> } {
   const cost: Record<string, number> = {};
   const billed: Record<string, number> = {};
-  for (const [unit, raw] of Object.entries(modelById(id)?.prices ?? {})) {
-    cost[unit] = Number(raw);
-    billed[unit] = billedUnitPrice(raw as string, multiplier);
+  for (const unit of Object.keys(modelById(id)?.neurons ?? {}) as PriceUnit[]) {
+    const price = unitPrice(id, unit);
+    if (price == null) continue;
+    cost[unit] = Number(price);
+    billed[unit] = billedUnitPrice(price, multiplier);
   }
   return { cost, billed };
 }

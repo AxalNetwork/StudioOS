@@ -2,19 +2,27 @@
  * D760 (#2017) — what a run costs, and what a member would pay for it.
  *
  * TWO NUMBERS, ONE SOURCE. `costMicro` is Cloudflare's cost for a run, from the
- * catalogue's printed prices. `billedMicro` is that cost times a multiplier: 1
+ * catalogue's neuron prices. `billedMicro` is that cost times a multiplier: 1
  * for the `admin` licence, `AI_MARKUP` for everyone else. `billingMode` says
  * which of the two a run is settled at, and in this task it is always 'cost':
  * D762 makes it read `AI_BILLING` in the same PR that settles at it, so no
  * screen draws a price the Worker is not charging.
  *
- * EXACT DECIMALS. A price is the string the pricing table prints, and every sum
- * here is taken over those strings as integers with a power-of-ten scale, never
- * as floats. The total is rounded UP to a whole micro-USD once per run, not once
- * per unit: FLUX.1 Schnell's tile price, 0.0000528, is 52.8 micro-USD, so
- * rounding each tile up would charge five tiles 265 micro-USD instead of 264.
+ * NEURONS (S1 on #2017). Cloudflare bills in neurons at $0.011 per 1,000, so a
+ * unit's price is its printed neuron count × `USD_PER_NEURON`, exactly: the
+ * 70B's 26668 neurons per 1M input tokens are $0.293348. The dollar column the
+ * catalogue also holds is that figure rounded for display, and is never billed.
+ *
+ * EXACT DECIMALS. Every sum here is taken over the printed neuron strings as integers
+ * with a power-of-ten scale, never as floats. The total is rounded UP to a
+ * whole micro-USD once per run, not once per unit: FLUX.1 Schnell's tile is 4.80
+ * neurons, $0.0000528, 52.8 micro-USD, so rounding each tile up would charge
+ * five tiles 265 micro-USD instead of 264.
  */
 import { modelById, UNIT_SCALE, type PriceUnit } from './catalogue';
+
+/** Cloudflare's rate: $0.011 per 1,000 neurons (the pricing page, 2026-10-15). */
+export const USD_PER_NEURON = '0.000011';
 
 /** owner's canvas AIRail · every page, rail_logic.js:74 usd(); D720 (#1874) §3 */
 export const AI_MARKUP = 1.25;
@@ -82,6 +90,16 @@ function decString(d: Dec): string {
 // ─────────────────────────────────────────────────────────── a run's cost
 
 /**
+ * A model's price for one unit, per `UNIT_SCALE[unit]`, as an exact decimal
+ * string: its neurons × `USD_PER_NEURON`. Null where the model has no neuron
+ * figure for that unit.
+ */
+export function unitPrice(model: string, unit: PriceUnit): string | null {
+  const raw = modelById(model)?.neurons?.[unit];
+  return raw == null ? null : decString(mul(dec(raw), dec(USD_PER_NEURON)));
+}
+
+/**
  * Cloudflare's cost for a run, in USD, exactly. `tokens_in` is the provider's
  * whole input count; when it reports `tokens_cached` and the model prints a
  * cached rate, those tokens are billed at it and the rest at the input rate.
@@ -90,18 +108,19 @@ function decString(d: Dec): string {
  */
 function costUsd(model: string, units: RunUnits): Dec {
   const m = modelById(model);
-  if (!m || Object.keys(m.prices).length === 0) throw new Error(`model_unpriced: ${model}`);
+  const neurons = m?.neurons;
+  if (!neurons || Object.keys(neurons).length === 0) throw new Error(`model_unpriced: ${model}`);
   let total: Dec = { n: 0n, e: 0 };
-  const cachedRate = m.prices.tokens_cached;
+  const cachedRate = neurons.tokens_cached;
   const cached = cachedRate ? Math.min(units.tokens_cached ?? 0, units.tokens_in ?? 0) : 0;
   for (const [unit, count] of Object.entries(units) as Array<[PriceUnit, number]>) {
     if (count == null || count === 0) continue;
     let n = count;
     if (unit === 'tokens_cached') { if (!cachedRate) continue; n = cached; }
     if (unit === 'tokens_in') n = count - cached;
-    const raw = m.prices[unit];
+    const raw = neurons[unit];
     if (raw == null) throw new Error(`model_unpriced: ${model} has no ${unit} price`);
-    total = add(total, div(mul(dec(raw), decOf(n)), UNIT_SCALE[unit]));
+    total = add(total, div(mul(mul(dec(raw), dec(USD_PER_NEURON)), decOf(n)), UNIT_SCALE[unit]));
   }
   return total;
 }
@@ -114,8 +133,9 @@ export const billedMicro = (model: string, units: RunUnits, multiplier: number):
   ceilMicro(mul(costUsd(model, units), decOf(multiplier)));
 
 /**
- * The unit price the Worker serves for a raw printed price: the exact product
- * as a number. `0.293 × 1.25` is served as 0.36625; `parseFloat` times 1.25
- * would give 0.36624999999999996. The frontend never multiplies.
+ * The unit price the Worker serves for an exact decimal price (`unitPrice`):
+ * the exact product as a number. 0.293348 × 1.25 is served as 0.366685, where
+ * float arithmetic can land a digit off (0.293 × 1.25 is 0.36624999999999996).
+ * The frontend never multiplies.
  */
 export const billedUnitPrice = (raw: string, multiplier: number): number => Number(decString(mul(dec(raw), decOf(multiplier))));

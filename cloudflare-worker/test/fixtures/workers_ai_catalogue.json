@@ -5,7 +5,9 @@
     "url": "https://developers.cloudflare.com/workers-ai/platform/pricing/",
     "last_updated": "2026-10-15",
     "billed_in": "neurons",
-    "usd_per_1000_neurons": "0.011"
+    "usd_per_1000_neurons": "0.011",
+    "neurons_source": "design/incoming/airail-every-page-data/cloudflare-pricing-2026-10-15.md (S1, #2085), which agrees with this read row for row",
+    "billing": "Cloudflare bills in neurons; the exact price of a unit is neurons × 0.011 / 1000, and the dollar column is that figure rounded for display"
   },
   "models_page": {
     "url": "https://developers.cloudflare.com/workers-ai/models/",
@@ -58,6 +60,9 @@
       "prices": {
         "characters": "0.015"
       },
+      "neurons": {
+        "characters": "1363.64"
+      },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/aura-1/",
       "sources": [
         "https://developers.cloudflare.com/workers-ai/models/",
@@ -80,6 +85,9 @@
       "prices": {
         "characters": "0.030"
       },
+      "neurons": {
+        "characters": "2727.27"
+      },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/aura-2-en/",
       "sources": [
         "https://developers.cloudflare.com/workers-ai/models/",
@@ -101,6 +109,9 @@
       "partner": true,
       "prices": {
         "characters": "0.030"
+      },
+      "neurons": {
+        "characters": "2727.27"
       },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/aura-2-es/",
       "sources": [
@@ -140,6 +151,9 @@
       "prices": {
         "tokens_in": "0.067"
       },
+      "neurons": {
+        "tokens_in": "6058"
+      },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/bge-base-en-v1.5/",
       "sources": [
         "https://developers.cloudflare.com/workers-ai/models/",
@@ -161,6 +175,9 @@
       "prices": {
         "tokens_in": "0.204"
       },
+      "neurons": {
+        "tokens_in": "18582"
+      },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/bge-large-en-v1.5/",
       "sources": [
         "https://developers.cloudflare.com/workers-ai/models/",
@@ -180,6 +197,9 @@
       "prices": {
         "tokens_in": "0.012"
       },
+      "neurons": {
+        "tokens_in": "1075"
+      },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/bge-m3/",
       "sources": [
         "https://developers.cloudflare.com/workers-ai/models/",
@@ -198,6 +218,9 @@
       "partner": false,
       "prices": {
         "tokens_in": "0.003"
+      },
+      "neurons": {
+        "tokens_in": "283"
       },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/bge-reranker-base/",
       "sources": [
@@ -220,6 +243,9 @@
       "prices": {
         "tokens_in": "0.020"
       },
+      "neurons": {
+        "tokens_in": "1841"
+      },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/bge-small-en-v1.5/",
       "sources": [
         "https://developers.cloudflare.com/workers-ai/models/",
@@ -238,6 +264,9 @@
       "partner": false,
       "prices": {
         "tokens_in": "0.240"
+      },
+      "neurons": {
+        "tokens_in": "21818"
       },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/clef/",
       "sources": [
@@ -258,6 +287,9 @@
       "partner": false,
       "prices": {
         "tokens_in": "0.038"
+      },
+      "neurons": {
+        "tokens_in": "3455"
       },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/clef-flash/",
       "sources": [
@@ -280,6 +312,9 @@
       "partner": false,
       "prices": {
         "tokens_in": "0.150"
+      },
+      "neurons": {
+        "tokens_in": "13636"
       },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/clef-omni/",
       "sources": [
@@ -304,6 +339,10 @@
         "tokens_in": "0.060",
         "tokens_out": "0.240"
       },
+      "neurons": {
+        "tokens_in": "5455",
+        "tokens_out": "21818"
+      },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/phonellm-mini-alpha-2/",
       "sources": [
         "https://developers.cloudflare.com/workers-ai/models/phonellm-mini-alpha-2/",
@@ -325,6 +364,10 @@
       "prices": {
         "tokens_in": "0.497",
         "tokens_out": "4.881"
+      },
+      "neurons": {
+        "tokens_in": "45170",
+        "tokens_out": "443756"
       },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/deepseek-r1-distill-qwen-32b/",
       "sources": [
@@ -351,6 +394,11 @@
         "tokens_cached": "0.014",
         "tokens_out": "1.320"
       },
+      "neurons": {
+        "tokens_in": "40000",
+        "tokens_cached": "1273",
+        "tokens_out": "120000"
+      },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/deepseek-v4-flash-0731/",
       "sources": [
         "https://developers.cloudflare.com/workers-ai/models/deepseek-v4-flash-0731/",
@@ -375,6 +423,11 @@
         "tokens_in": "1.320",
         "tokens_cached": "0.044",
         "tokens_out": "3.960"
+      },
+      "neurons": {
+        "tokens_in": "120000",
+        "tokens_cached": "4000",
+        "tokens_out": "360000"
       },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/deepseek-v4-pro-0813/",
       "sources": [
@@ -411,6 +464,9 @@
       "partner": false,
       "prices": {
         "tokens_in": "0.026"
+      },
+      "neurons": {
+        "tokens_in": "2394"
       },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/distilbert-sst-2-int8/",
       "sources": [
@@ -465,6 +521,9 @@
       "prices": {
         "audio_minutes_websocket": "0.0077"
       },
+      "neurons": {
+        "audio_minutes_websocket": "700.00"
+      },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/flux/",
       "sources": [
         "https://developers.cloudflare.com/workers-ai/models/",
@@ -484,6 +543,10 @@
       "prices": {
         "tiles": "0.0000528",
         "steps": "0.0001056"
+      },
+      "neurons": {
+        "tiles": "4.80",
+        "steps": "9.60"
       },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/flux-1-schnell/",
       "sources": [
@@ -505,6 +568,10 @@
         "input_tile_steps": "0.00021",
         "output_tile_steps": "0.00041"
       },
+      "neurons": {
+        "input_tile_steps": "18.75",
+        "output_tile_steps": "37.50"
+      },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/flux-2-dev/",
       "sources": [
         "https://developers.cloudflare.com/workers-ai/models/",
@@ -524,6 +591,10 @@
       "prices": {
         "input_tiles": "0.000059",
         "output_tiles": "0.000287"
+      },
+      "neurons": {
+        "input_tiles": "5.37",
+        "output_tiles": "26.05"
       },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/flux-2-klein-4b/",
       "sources": [
@@ -545,6 +616,11 @@
         "first_megapixels": "0.015",
         "subsequent_megapixels": "0.002",
         "input_image_megapixels": "0.002"
+      },
+      "neurons": {
+        "first_megapixels": "1363.64",
+        "subsequent_megapixels": "181.82",
+        "input_image_megapixels": "181.82"
       },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/flux-2-klein-9b/",
       "sources": [
@@ -586,6 +662,10 @@
         "tokens_in": "0.345",
         "tokens_out": "0.556"
       },
+      "neurons": {
+        "tokens_in": "31371",
+        "tokens_out": "50560"
+      },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/gemma-3-12b-it/",
       "sources": [
         "https://developers.cloudflare.com/workers-ai/models/",
@@ -611,6 +691,10 @@
       "prices": {
         "tokens_in": "0.100",
         "tokens_out": "0.300"
+      },
+      "neurons": {
+        "tokens_in": "9091",
+        "tokens_out": "27273"
       },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/gemma-4-26b-a4b-it/",
       "sources": [
@@ -669,6 +753,10 @@
         "tokens_in": "0.351",
         "tokens_out": "0.555"
       },
+      "neurons": {
+        "tokens_in": "31876",
+        "tokens_out": "50488"
+      },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/gemma-sea-lion-v4-27b-it/",
       "sources": [
         "https://developers.cloudflare.com/workers-ai/models/",
@@ -691,6 +779,10 @@
       "prices": {
         "tokens_in": "0.060",
         "tokens_out": "0.400"
+      },
+      "neurons": {
+        "tokens_in": "5500",
+        "tokens_out": "36400"
       },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/glm-4.7-flash/",
       "sources": [
@@ -720,6 +812,11 @@
         "tokens_cached": "0.260",
         "tokens_out": "4.400"
       },
+      "neurons": {
+        "tokens_in": "127273",
+        "tokens_cached": "23636",
+        "tokens_out": "400000"
+      },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/glm-5.2/",
       "sources": [
         "https://developers.cloudflare.com/workers-ai/models/",
@@ -744,6 +841,11 @@
         "tokens_in": "1.400",
         "tokens_cached": "0.260",
         "tokens_out": "4.400"
+      },
+      "neurons": {
+        "tokens_in": "127273",
+        "tokens_cached": "23636",
+        "tokens_out": "400000"
       },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/glm-5.3/",
       "sources": [
@@ -770,6 +872,11 @@
         "tokens_cached": "0.030",
         "tokens_out": "0.500"
       },
+      "neurons": {
+        "tokens_in": "13636",
+        "tokens_cached": "2727",
+        "tokens_out": "45455"
+      },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/glm-5.3-flash/",
       "sources": [
         "https://developers.cloudflare.com/workers-ai/models/glm-5.3-flash/",
@@ -793,6 +900,10 @@
       "prices": {
         "tokens_in": "0.350",
         "tokens_out": "0.750"
+      },
+      "neurons": {
+        "tokens_in": "31818",
+        "tokens_out": "68182"
       },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/gpt-oss-120b/",
       "sources": [
@@ -818,6 +929,10 @@
         "tokens_in": "0.200",
         "tokens_out": "0.300"
       },
+      "neurons": {
+        "tokens_in": "18182",
+        "tokens_out": "27273"
+      },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/gpt-oss-20b/",
       "sources": [
         "https://developers.cloudflare.com/workers-ai/models/",
@@ -840,6 +955,10 @@
       "prices": {
         "tokens_in": "0.017",
         "tokens_out": "0.112"
+      },
+      "neurons": {
+        "tokens_in": "1542",
+        "tokens_out": "10158"
       },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/granite-4.0-h-micro/",
       "sources": [
@@ -880,6 +999,10 @@
         "tokens_in": "0.342",
         "tokens_out": "0.342"
       },
+      "neurons": {
+        "tokens_in": "31050",
+        "tokens_out": "31050"
+      },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/indictrans2-en-indic-1B/",
       "sources": [
         "https://developers.cloudflare.com/workers-ai/models/",
@@ -904,6 +1027,11 @@
         "tokens_in": "0.600",
         "tokens_cached": "0.100",
         "tokens_out": "3.000"
+      },
+      "neurons": {
+        "tokens_in": "54545",
+        "tokens_cached": "9091",
+        "tokens_out": "272727"
       },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/kimi-k2.5/",
       "sources": [
@@ -931,6 +1059,11 @@
         "tokens_cached": "0.160",
         "tokens_out": "4.000"
       },
+      "neurons": {
+        "tokens_in": "86364",
+        "tokens_cached": "14545",
+        "tokens_out": "363636"
+      },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/kimi-k2.6/",
       "sources": [
         "https://developers.cloudflare.com/workers-ai/models/",
@@ -956,6 +1089,11 @@
         "tokens_cached": "0.190",
         "tokens_out": "4.000"
       },
+      "neurons": {
+        "tokens_in": "86364",
+        "tokens_cached": "17273",
+        "tokens_out": "363636"
+      },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/kimi-k2.7-code/",
       "sources": [
         "https://developers.cloudflare.com/workers-ai/models/",
@@ -976,6 +1114,10 @@
       "prices": {
         "tokens_in": "0.556",
         "tokens_out": "6.667"
+      },
+      "neurons": {
+        "tokens_in": "50505",
+        "tokens_out": "606061"
       },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/llama-2-7b-chat-fp16/",
       "sources": [
@@ -1033,6 +1175,10 @@
         "tokens_in": "0.282",
         "tokens_out": "0.827"
       },
+      "neurons": {
+        "tokens_in": "25608",
+        "tokens_out": "75147"
+      },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/llama-3-8b-instruct/",
       "sources": [
         "https://developers.cloudflare.com/workers-ai/models/",
@@ -1053,6 +1199,10 @@
       "prices": {
         "tokens_in": "0.123",
         "tokens_out": "0.266"
+      },
+      "neurons": {
+        "tokens_in": "11161",
+        "tokens_out": "24215"
       },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/llama-3-8b-instruct-awq/",
       "sources": [
@@ -1092,6 +1242,10 @@
         "tokens_in": "0.293",
         "tokens_out": "2.253"
       },
+      "neurons": {
+        "tokens_in": "26668",
+        "tokens_out": "204805"
+      },
       "docs_url": null,
       "sources": [
         "https://developers.cloudflare.com/workers-ai/platform/pricing/"
@@ -1110,6 +1264,10 @@
       "prices": {
         "tokens_in": "0.282",
         "tokens_out": "0.827"
+      },
+      "neurons": {
+        "tokens_in": "25608",
+        "tokens_out": "75147"
       },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/llama-3.1-8b-instruct/",
       "sources": [
@@ -1131,6 +1289,10 @@
       "prices": {
         "tokens_in": "0.123",
         "tokens_out": "0.266"
+      },
+      "neurons": {
+        "tokens_in": "11161",
+        "tokens_out": "24215"
       },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/llama-3.1-8b-instruct-awq/",
       "sources": [
@@ -1169,6 +1331,10 @@
         "tokens_in": "0.152",
         "tokens_out": "0.287"
       },
+      "neurons": {
+        "tokens_in": "13778",
+        "tokens_out": "26128"
+      },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/llama-3.1-8b-instruct-fp8/",
       "sources": [
         "https://developers.cloudflare.com/workers-ai/models/",
@@ -1188,6 +1354,10 @@
       "prices": {
         "tokens_in": "0.045",
         "tokens_out": "0.384"
+      },
+      "neurons": {
+        "tokens_in": "4119",
+        "tokens_out": "34868"
       },
       "docs_url": null,
       "sources": [
@@ -1210,6 +1380,10 @@
       "prices": {
         "tokens_in": "0.049",
         "tokens_out": "0.676"
+      },
+      "neurons": {
+        "tokens_in": "4410",
+        "tokens_out": "61493"
       },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/llama-3.2-11b-vision-instruct/",
       "sources": [
@@ -1235,6 +1409,10 @@
         "tokens_in": "0.027",
         "tokens_out": "0.201"
       },
+      "neurons": {
+        "tokens_in": "2457",
+        "tokens_out": "18252"
+      },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/llama-3.2-1b-instruct/",
       "sources": [
         "https://developers.cloudflare.com/workers-ai/models/",
@@ -1256,6 +1434,10 @@
       "prices": {
         "tokens_in": "0.051",
         "tokens_out": "0.335"
+      },
+      "neurons": {
+        "tokens_in": "4625",
+        "tokens_out": "30475"
       },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/llama-3.2-3b-instruct/",
       "sources": [
@@ -1284,6 +1466,10 @@
         "tokens_in": "0.293",
         "tokens_out": "2.253"
       },
+      "neurons": {
+        "tokens_in": "26668",
+        "tokens_out": "204805"
+      },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/llama-3.3-70b-instruct-fp8-fast/",
       "sources": [
         "https://developers.cloudflare.com/workers-ai/models/",
@@ -1308,6 +1494,10 @@
         "tokens_in": "0.270",
         "tokens_out": "0.850"
       },
+      "neurons": {
+        "tokens_in": "24545",
+        "tokens_out": "77273"
+      },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/llama-4-scout-17b-16e-instruct/",
       "sources": [
         "https://developers.cloudflare.com/workers-ai/models/",
@@ -1329,6 +1519,10 @@
       "prices": {
         "tokens_in": "0.484",
         "tokens_out": "0.030"
+      },
+      "neurons": {
+        "tokens_in": "44003",
+        "tokens_out": "2730"
       },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/llama-guard-3-8b/",
       "sources": [
@@ -1366,6 +1560,10 @@
         "tiles": "0.006996",
         "steps": "0.000132"
       },
+      "neurons": {
+        "tiles": "636.00",
+        "steps": "12.00"
+      },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/lucid-origin/",
       "sources": [
         "https://developers.cloudflare.com/workers-ai/models/",
@@ -1388,6 +1586,10 @@
         "tokens_in": "0.342",
         "tokens_out": "0.342"
       },
+      "neurons": {
+        "tokens_in": "31050",
+        "tokens_out": "31050"
+      },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/m2m100-1.2b/",
       "sources": [
         "https://developers.cloudflare.com/workers-ai/models/",
@@ -1406,6 +1608,9 @@
       "partner": false,
       "prices": {
         "audio_minutes": "0.0002"
+      },
+      "neurons": {
+        "audio_minutes": "18.63"
       },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/melotts/",
       "sources": [
@@ -1445,6 +1650,10 @@
       "prices": {
         "tokens_in": "0.110",
         "tokens_out": "0.190"
+      },
+      "neurons": {
+        "tokens_in": "10000",
+        "tokens_out": "17300"
       },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/mistral-7b-instruct-v0.1/",
       "sources": [
@@ -1506,6 +1715,10 @@
         "tokens_in": "0.351",
         "tokens_out": "0.555"
       },
+      "neurons": {
+        "tokens_in": "31876",
+        "tokens_out": "50488"
+      },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/mistral-small-3.1-24b-instruct/",
       "sources": [
         "https://developers.cloudflare.com/workers-ai/models/",
@@ -1527,6 +1740,10 @@
       "prices": {
         "tokens_in": "0.300",
         "tokens_out": "1.000"
+      },
+      "neurons": {
+        "tokens_in": "27273",
+        "tokens_out": "90909"
       },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/moondream3.1-9B-A2B/",
       "sources": [
@@ -1551,6 +1768,10 @@
         "tokens_in": "0.500",
         "tokens_out": "1.500"
       },
+      "neurons": {
+        "tokens_in": "45455",
+        "tokens_out": "136364"
+      },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/nemotron-3-120b-a12b/",
       "sources": [
         "https://developers.cloudflare.com/workers-ai/models/",
@@ -1573,6 +1794,10 @@
       "prices": {
         "audio_minutes": "0.0052",
         "audio_minutes_websocket": "0.0092"
+      },
+      "neurons": {
+        "audio_minutes": "472.73",
+        "audio_minutes_websocket": "836.36"
       },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/nova-3/",
       "sources": [
@@ -1611,6 +1836,10 @@
         "tiles": "0.005830",
         "steps": "0.000110"
       },
+      "neurons": {
+        "tiles": "530.00",
+        "steps": "10.00"
+      },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/phoenix-1.0/",
       "sources": [
         "https://developers.cloudflare.com/workers-ai/models/",
@@ -1629,6 +1858,9 @@
       "partner": false,
       "prices": {
         "tokens_in": "0.019"
+      },
+      "neurons": {
+        "tokens_in": "1689"
       },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/plamo-embedding-1b/",
       "sources": [
@@ -1651,6 +1883,10 @@
       "prices": {
         "tokens_in": "0.660",
         "tokens_out": "1.000"
+      },
+      "neurons": {
+        "tokens_in": "60000",
+        "tokens_out": "90909"
       },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/qwen2.5-coder-32b-instruct/",
       "sources": [
@@ -1676,6 +1912,10 @@
         "tokens_in": "0.051",
         "tokens_out": "0.335"
       },
+      "neurons": {
+        "tokens_in": "4625",
+        "tokens_out": "30475"
+      },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/qwen3-30b-a3b-fp8/",
       "sources": [
         "https://developers.cloudflare.com/workers-ai/models/",
@@ -1695,6 +1935,9 @@
       "partner": false,
       "prices": {
         "tokens_in": "0.012"
+      },
+      "neurons": {
+        "tokens_in": "1075"
       },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/qwen3-embedding-0.6b/",
       "sources": [
@@ -1720,6 +1963,10 @@
         "tokens_in": "0.450",
         "tokens_out": "3.200"
       },
+      "neurons": {
+        "tokens_in": "40909",
+        "tokens_out": "290909"
+      },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/qwen3.8-27b/",
       "sources": [
         "https://developers.cloudflare.com/workers-ai/models/qwen3.8-27b/",
@@ -1744,6 +1991,10 @@
         "tokens_in": "0.660",
         "tokens_out": "1.000"
       },
+      "neurons": {
+        "tokens_in": "60000",
+        "tokens_out": "90909"
+      },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/qwq-32b/",
       "sources": [
         "https://developers.cloudflare.com/workers-ai/models/",
@@ -1762,6 +2013,9 @@
       "partner": false,
       "prices": {
         "images": "2.51"
+      },
+      "neurons": {
+        "images": "228055"
       },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/resnet-50/",
       "sources": [
@@ -1784,6 +2038,9 @@
       "partner": false,
       "prices": {
         "audio_minutes": "0.00033795"
+      },
+      "neurons": {
+        "audio_minutes": "0.51"
       },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/smart-turn-v2/",
       "sources": [
@@ -1902,6 +2159,9 @@
       "prices": {
         "audio_minutes": "0.0005"
       },
+      "neurons": {
+        "audio_minutes": "41.14"
+      },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/whisper/",
       "sources": [
         "https://developers.cloudflare.com/workers-ai/models/",
@@ -1922,6 +2182,9 @@
       "partner": false,
       "prices": {
         "audio_minutes": "0.0005"
+      },
+      "neurons": {
+        "audio_minutes": "46.63"
       },
       "docs_url": "https://developers.cloudflare.com/workers-ai/models/whisper-large-v3-turbo/",
       "sources": [

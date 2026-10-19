@@ -34,6 +34,7 @@ import * as aiBudget from './aiBudget';
 import { audioInputFor, parseAudioOutput, type SttTranscript } from './sttFormats';
 import * as shapes from './ai/shapes';
 import * as catalogue from './ai/catalogue';
+import { unitPrice } from './ai/pricing';
 import * as guard from './ai/guard';
 
 // ---------------------------------------------------------------------------
@@ -366,29 +367,30 @@ export const PRICE_USD_PER_1M_TOKENS: Record<string, { in: number; out: number }
   // when the provider reports cached tokens.
   '@cf/deepseek-ai/deepseek-v4-flash-0731',
   '@cf/qwen/qwen2.5-coder-32b-instruct',
-  // D760: moved from 0.05 to its published 0.067.
+  // D760: moved from 0.05 to its neuron price, 6058 neurons: 0.066638.
   '@cf/baai/bge-base-en-v1.5',
 ]);
 
 /**
  * D760 (#2017) — the three tables above and below are VIEWS of the catalogue
  * (`services/ai/catalogue.ts`): this file names which models it prices, and
- * every figure is the catalogue's printed price, read as a number. One source
- * of prices, so the rate the rail shows, the quote the hold reserves and the
- * receipt all come from the same string. A model the catalogue cannot price
- * fails here, at load, rather than billing as zero.
+ * every figure is the catalogue's neuron price (`pricing.ts` `unitPrice`:
+ * neurons × $0.011 / 1000, what Cloudflare bills), read as a number. One
+ * source of prices, so the rate the rail shows, the quote the hold reserves and
+ * the receipt all come from the same figure. A model the catalogue cannot
+ * price fails here, at load, rather than billing as zero.
  */
 function tokenPriceView(ids: string[]): Record<string, { in: number; out: number }> {
   return Object.fromEntries(ids.map((id) => {
-    const p = catalogue.modelById(id)?.prices;
-    if (!p?.tokens_in) throw new Error(`${id} has no token price in the catalogue`);
-    return [id, { in: Number(p.tokens_in), out: Number(p.tokens_out ?? '0') }];
+    const pin = unitPrice(id, 'tokens_in');
+    if (!pin) throw new Error(`${id} has no token price in the catalogue`);
+    return [id, { in: Number(pin), out: Number(unitPrice(id, 'tokens_out') ?? '0') }];
   }));
 }
 
 function minutePriceView(ids: string[], unit: 'audio_minutes' | 'audio_minutes_websocket'): Record<string, number> {
   return Object.fromEntries(ids.map((id) => {
-    const raw = catalogue.modelById(id)?.prices[unit];
+    const raw = unitPrice(id, unit);
     if (!raw) throw new Error(`${id} has no ${unit} price in the catalogue`);
     return [id, Number(raw)];
   }));
@@ -808,7 +810,7 @@ export function estimateCostUsd(
   // D760: cached input at its own rate, only when the provider reported cached
   // tokens and the model prints a cached rate; otherwise every input token is
   // billed at the input rate. `promptTok` is the provider's whole input count.
-  const cachedRaw = catalogue.modelById(model)?.prices.tokens_cached;
+  const cachedRaw = unitPrice(model, 'tokens_cached');
   const cached = cachedRaw ? Math.min(Math.max(0, cachedTok), promptTok) : 0;
   return ((promptTok - cached) / 1_000_000) * p.in
     + (cached / 1_000_000) * (cachedRaw ? Number(cachedRaw) : 0)

@@ -44,8 +44,11 @@ test('a transcription does not cost zero', async () => {
   // 44-minute interview — and a cap counting zero never trips.
   assert.equal(est(model, 0, 0, 0), 0, 'no audio is no cost');
   assert.ok(est(model, 0, 0, 44) > 0, 'a 44-minute clip must cost something');
-  assert.ok(Math.abs(est(model, 0, 0, 44) - 0.022) < 1e-9,
-    `44 minutes at $0.0005 is $0.022, got ${est(model, 0, 0, 44)}`);
+  // D760: billed in neurons. 46.63 neurons a minute × $0.000011 is
+  // $0.00051293 a minute (the page rounds it to $0.0005), so 44 minutes is
+  // $0.02256892.
+  assert.ok(Math.abs(est(model, 0, 0, 44) - 0.02256892) < 1e-12,
+    `44 minutes at $0.00051293 is $0.02256892, got ${est(model, 0, 0, 44)}`);
 });
 
 test('the audio table does not disturb token pricing', async () => {
@@ -62,8 +65,10 @@ test('both Whisper models are priced, at the rate Cloudflare publishes', async (
   // The base model is priced because `routes/advisor.ts`'s composer mic has
   // been calling it directly since that feature shipped; runs already recorded
   // against it still have to cost what they cost.
-  assert.equal(audio['@cf/openai/whisper'], 0.0005);
-  assert.equal(audio['@cf/openai/whisper-large-v3-turbo'], 0.0005);
+  // D760: from the neuron column (41.14 and 46.63 a minute × $0.000011); the
+  // page's dollar column rounds both to $0.0005.
+  assert.equal(audio['@cf/openai/whisper'], 0.00045254);
+  assert.equal(audio['@cf/openai/whisper-large-v3-turbo'], 0.00051293);
 });
 
 test('minutes come from the bytes, never from the request', async () => {

@@ -308,10 +308,11 @@ test('a model on the task\'s list is the one that runs', async () => {
   assert.equal(r.usage.model, '@cf/meta/llama-3.2-3b-instruct');
   assert.equal(r.usage.fallback_used, false, 'a chosen model is not a fallback');
   // And it is BILLED at its own rate, not the primary's. 9 in + 3 out at
-  // 0.051 / 0.335 per M is a different number from the 70b's 0.293 / 2.253;
+  // 0.050875 / 0.335225 per M (D760: 4,625 / 30,475 neurons × $0.000011) is a
+  // different number from the 70b's 0.293348 / 2.252855;
   // an implementation that ran the 3b and priced it as the primary would pass
   // every assertion above and this one catches it.
-  const expected = (9 / 1e6) * 0.051 + (3 / 1e6) * 0.335;
+  const expected = (9 / 1e6) * 0.050875 + (3 / 1e6) * 0.335225;
   assert.ok(Math.abs(r.usage.est_cost_usd - expected) < 1e-12,
     `cost ${r.usage.est_cost_usd} is not the 3b's rate (${expected})`);
   assert.equal(runRows(db)[0].model, '@cf/meta/llama-3.2-3b-instruct');
