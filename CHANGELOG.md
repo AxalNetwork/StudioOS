@@ -4,6 +4,26 @@
 > contributors and on GitHub — task IDs, file paths, code refs are
 > expected here.
 
+## A guard that keeps members' own Mercury data off Eadwyn, MCP, cron and admin paths, and the live checks (D752, #1990)
+
+- `cloudflare-worker/test/mercury_member_privacy_d752.test.mjs` resolves every
+  relative import in the Worker. It fails the build if an Eadwyn file, an MCP
+  file, a cron path, an admin route or the deals code reaches
+  `services/mercuryPersonal.ts`, `services/capitalAttestations.ts` or
+  `services/mercurySpend.ts`.
+- The same test pins:
+  - the admin attestation route's two tables;
+  - migration 491's columns;
+  - the revoked DTO;
+  - the admin pages that draw an available balance;
+  - D710's money guard over D752's new files.
+- `documentation/operations/MERCURY_MEMBER_CHECKS.md`: four Mercury field
+  names for S02 or S03 to read off Axal's own account, and the owner's
+  walk-through with a test investor and founder.
+  `documentation/operations/README.md` now lists every runbook.
+- The proof-of-funds tests create only the deal tables #1887's shared fixture
+  does not.
+
 ## Admins read an investor's proof of funds, audited (D752, #1890)
 
 - `GET /api/admin/capital-attestations` (`routes/admin_capital_attestations.ts`):
