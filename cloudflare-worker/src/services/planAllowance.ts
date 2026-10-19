@@ -63,7 +63,12 @@ export interface PlanAllowance {
   parts: AllowancePart[];
 }
 
-const missingTable = (e: unknown, table: string) => new RegExp(`no such table: ${table}\\b`).test(String((e as Error)?.message ?? e));
+/** D1's "no such table: <table>" for exactly this table, not one whose name it begins. A string match: the name is never a pattern. */
+const missingTable = (e: unknown, table: string) => {
+  const message = String((e as Error)?.message ?? e), needle = `no such table: ${table}`;
+  const at = message.indexOf(needle);
+  return at >= 0 && !/\w/.test(message.charAt(at + needle.length));
+};
 
 // ---------------------------------------------------------------------------
 // The webhook's write
