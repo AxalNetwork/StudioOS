@@ -22,10 +22,19 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { autofillDeck } from '../src/services/decks/autofill.ts';
 import { getMethod } from '../src/services/decks/methods.ts';
+import { __resetForTest } from '../src/services/aiRouter.ts';
+import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
+import { withGuard } from './_guard_stub.mjs';
 
 /** Fake D1 env where every prepare() returns the project / financials /
- *  cap-table row the autofill resolver expects, regardless of the SQL. */
+ *  cap-table row the autofill resolver expects, regardless of the SQL.
+ *  D767 (#2096): any other statement (the router's hold, guard and usage
+ *  row) goes to a real AI-budget ledger, funded for user 2. */
 function makeEnv(opts: { project: any; financials: any; holders: any[] }) {
+  __resetForTest();
+  const ledger = aiBudgetFixture();
+  ledger.db.prepare("INSERT INTO ai_licence_caps(licence_key,daily_microusd,monthly_microusd,recorded_by) VALUES('founder:free',0,0,1)").run();
+  ledger.db.prepare('INSERT INTO ai_topup_accounts(user_id,balance_microusd) VALUES(2,5000000)').run();
   const { project, financials, holders } = opts;
   const matcher = (sql: string) => {
     const s = sql.toLowerCase();
@@ -33,12 +42,14 @@ function makeEnv(opts: { project: any; financials: any; holders: any[] }) {
     if (s.includes('from financial_models')) return { first: async () => financials, all: async () => ({ results: [financials] }) };
     if (s.includes('from cap_table_holders')) return { first: async () => holders[0] || null, all: async () => ({ results: holders }) };
     if (s.includes('from scoring_snapshots')) return { first: async () => null, all: async () => ({ results: [] }) };
-    return { first: async () => null, all: async () => ({ results: [] }) };
+    return null;
   };
   return {
     DB: {
+      batch: (stmts: any[]) => ledger.DB.batch(stmts),
       prepare(sql: string) {
         const r = matcher(sql);
+        if (!r) return ledger.DB.prepare(sql);
         return {
           bind: (..._args: any[]) => ({
             first: r.first,
@@ -50,39 +61,32 @@ function makeEnv(opts: { project: any; financials: any; holders: any[] }) {
         };
       },
     },
-    // Mirrors prod: OpenAI key present so aiBatchFill is invoked. The
-    // global fetch stub below returns a stub value for every requested
-    // hint, so AI-only fields (gtm.*, competition.*, etc.) resolve too.
-    OPENAI_API_KEY: 'sk-test',
-    AI: { run: async () => ({ response: '' }) },
+    ENVIRONMENT: 'development',
+    // D767: the fill is one router run on Workers AI. This stub answers a
+    // value for every requested hint, so AI-only fields (gtm.*,
+    // competition.*, etc.) resolve too, as they do in production.
+    AI: withGuard({ run: async (_model: string, input: any) => ({ response: JSON.stringify(stubHints(input)), usage: { prompt_tokens: 10, completion_tokens: 10 } }) }),
   } as any;
 }
 
-// Stub global fetch — aiBatchFill calls api.openai.com; we synthesise a
-// non-empty value for every requested hint so AI-only slides aren't
-// entirely '—'. This matches how prod behaves with a live OpenAI key.
-const realFetch = globalThis.fetch;
-globalThis.fetch = (async (url: any, init?: any) => {
-  if (typeof url === 'string' && URL.canParse(url) && new URL(url).hostname === 'api.openai.com') {
-    let prompt = '';
-    try { prompt = JSON.parse(init?.body || '{}').messages?.[1]?.content || ''; } catch {}
-    const m = prompt.match(/Hints:\s*(\[[^\]]+\])/);
-    let hints: string[] = [];
-    if (m) { try { hints = JSON.parse(m[1]); } catch {} }
-    const out: Record<string, any> = {};
-    for (const h of hints) {
-      if (/_bullets|_channels|_motion|_landscape|_quarters|_uses|_milestones|_hiring/.test(h)) {
-        out[h] = ['stubbed bullet one', 'stubbed bullet two', 'stubbed bullet three'];
-      } else {
-        out[h] = `Stubbed AI value for ${h}`;
-      }
-    }
-    return new Response(JSON.stringify({
-      choices: [{ message: { content: JSON.stringify(out) } }],
-    }), { status: 200, headers: { 'content-type': 'application/json' } });
+function stubHints(input: any): Record<string, any> {
+  const prompt = (input?.messages || []).map((m: any) => (typeof m?.content === 'string' ? m.content : '')).join('\n');
+  const m = prompt.match(/Hints:\s*(\[[^\]]+\])/);
+  let hints: string[] = [];
+  if (m) { try { hints = JSON.parse(m[1]); } catch { /* none */ } }
+  const out: Record<string, any> = {};
+  for (const h of hints) {
+    out[h] = /_bullets|_channels|_motion|_landscape|_quarters|_uses|_milestones|_hiring/.test(h)
+      ? ['stubbed bullet one', 'stubbed bullet two', 'stubbed bullet three']
+      : `Stubbed AI value for ${h}`;
   }
-  return realFetch(url, init);
-}) as any;
+  return out;
+}
+
+const WHO = { userId: 2, railOption: 'fill_from_project' as const, projectId: 1 };
+
+// D767: no network. The fill never reaches api.openai.com; a fetch throws.
+globalThis.fetch = (async () => { throw new Error('no network in this test'); }) as any;
 
 const FULL_PROJECT = {
   id: 1,
@@ -161,7 +165,7 @@ for (const methodId of ['yc_seed', 'series_a_growth', 'series_b_diligence']) {
     const method = getMethod(methodId);
     assert.ok(method, `method ${methodId} should exist`);
     const env = makeEnv({ project: FULL_PROJECT, financials: FULL_FINANCIALS, holders: FULL_HOLDERS });
-    const filled = await autofillDeck(env, method!, FULL_PROJECT.id);
+    const filled = await autofillDeck(env, method!, FULL_PROJECT.id, WHO);
     assert.equal(filled.slides.length, method!.slides.length, 'slide count matches template');
 
     // (1) Every slide must contain at least one non-placeholder leaf.

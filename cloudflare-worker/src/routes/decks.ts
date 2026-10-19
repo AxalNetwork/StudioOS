@@ -15,7 +15,9 @@ import { ensureTier, tierCovers } from '../middleware/requireTier';
 import {
   DECK_METHODS, PREMIUM_METHOD_IDS, getMethod,
 } from '../services/decks/methods';
-import { autofillDeck, toEditorSlides } from '../services/decks/autofill';
+import { autofillDeck, toEditorSlides, parseJsonLoose } from '../services/decks/autofill';
+import { run as aiRouterRun } from '../services/aiRouter';
+import { AI_SURFACE } from '../services/aiSurfaces';
 import { formatUseOfFundsText } from '../util/useOfFunds';
 // Task #15 — Axal 28-day Spin-Out Lab demo day deck. Custom autofill
 // path that bypasses the generic field-source vocabulary in autofill.ts
@@ -52,6 +54,18 @@ async function ensureSchema(env: Env): Promise<void> {
      )`,
     `CREATE INDEX IF NOT EXISTS idx_decks_project ON pitch_decks(project_id, version)`,
     `CREATE INDEX IF NOT EXISTS idx_decks_current ON pitch_decks(project_id, is_current)`,
+    // Migration 498 (D767): a "Fill from project" proposal, never a version until kept.
+    `CREATE TABLE IF NOT EXISTS pitch_deck_proposals (
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       project_id INTEGER NOT NULL,
+       base_deck_id INTEGER NOT NULL,
+       slides TEXT NOT NULL,
+       title TEXT,
+       method_id TEXT,
+       created_by INTEGER,
+       created_at TEXT DEFAULT (datetime('now'))
+     )`,
+    `CREATE INDEX IF NOT EXISTS idx_deck_proposals_project ON pitch_deck_proposals(project_id, id)`,
     // One-time share tokens: stores SHA-256(token), atomic-claim on read.
     `CREATE TABLE IF NOT EXISTS pitch_deck_share_tokens (
        id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -310,9 +324,11 @@ function heuristicSlides(p: any, snap: any | null): any[] {
   ];
 }
 
-async function aiSlides(env: Env, p: any, snap: any | null): Promise<any[] | null> {
-  const key = (env as any).OPENAI_API_KEY;
-  if (!key) return null;
+// D767 (#2096): one router run (`dd_synthesis`, Workers AI), held, guarded and
+// charged to the founder who pressed, with the Raise › Pitch deck page and
+// option on its usage row. A refusal or a failed run returns null and the
+// heuristic deck is used, as a missing key used to.
+async function aiSlides(env: Env, p: any, snap: any | null, userId: number): Promise<any[] | null> {
   try {
     const ctx = {
       name: p.name, sector: p.sector, stage: p.stage,
@@ -335,25 +351,19 @@ Use exactly these slide titles in order: ${JSON.stringify(SLIDE_TITLES)}.
 \`body\` is a 1-2 sentence narrative paragraph (markdown allowed). \`bullets\` is 2-4 punchy bullets (≤18 words each).
 Use the scoring numbers in the Traction and Market slides where helpful.
 Startup data: ${JSON.stringify(ctx)}`;
-    // T7 — 45s timeout (longer than brand.ts because pitch decks are bigger
-    // outputs; still well under the 60s subrequest cap).
-    const r = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: 'You are a senior VC associate drafting concise pitch decks. Always return valid JSON.' },
-          { role: 'user', content: prompt },
-        ],
-        temperature: 0.5, max_tokens: 1800,
-        response_format: { type: 'json_object' },
-      }),
-      signal: AbortSignal.timeout(45_000),
+    const res = await aiRouterRun(env, {
+      task: 'dd_synthesis',
+      userId,
+      surface: AI_SURFACE.raisePitch,
+      // D765: the member's rail context; run() records it as D767's page, option and record.
+      rail: { page: AI_SURFACE.raisePitch, option: 'deck_draft', record: `project:${Number(p?.id) || 0}` },
+      systemPrompt: 'You are a senior VC associate drafting concise pitch decks. Always return valid JSON.',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.5,
+      maxTokens: 1800,
     });
-    if (!r.ok) return null;
-    const j: any = await r.json();
-    const parsed = JSON.parse(j?.choices?.[0]?.message?.content || '{}');
+    if (!res.ok || !res.output) return null;
+    const parsed: any = parseJsonLoose<any>(res.output);
     const slides = Array.isArray(parsed?.slides) ? parsed.slides : null;
     return slides && slides.length >= 1 ? slides : null;
   } catch { return null; }
@@ -525,6 +535,16 @@ async function projectOwned(
   throw new Error('Forbidden');
 }
 
+/** D767 — a "Fill from project" proposal as the editor shows it beside the current version. */
+function rowToProposal(row: any): any {
+  let slides: any[] = [];
+  try { slides = JSON.parse(row.slides || '[]'); } catch { slides = []; }
+  return {
+    id: row.id, project_id: row.project_id, base_deck_id: row.base_deck_id,
+    title: row.title, method_id: row.method_id, created_at: row.created_at, slides,
+  };
+}
+
 function rowToDeck(row: any, withSlides = true): any {
   const out: any = {
     id: row.id, project_id: row.project_id, version: row.version,
@@ -574,7 +594,7 @@ decks.post('/generate', async (c) => {
   await ensureSchema(c.env);
   const snap = await latestScore(c.env, pid);
   const fallback = heuristicSlides(p, snap);
-  const raw = (await aiSlides(c.env, p, snap)) || fallback;
+  const raw = (await aiSlides(c.env, p, snap, Number(user.id) || 0)) || fallback;
   const aligned = enforceTen(raw, fallback);
   const slides = sanitizeSlides(aligned);
   while (slides.length < 10) slides.push(fallback[slides.length]);
@@ -757,7 +777,13 @@ decks.get('/by-project/:pid', async (c) => {
     `SELECT id, project_id, version, title, is_current, created_at FROM pitch_decks
      WHERE project_id = ? ORDER BY version DESC`
   ).bind(pid).all<any>();
-  return c.json({ versions: ((rows.results ?? []) as any[]).map((r) => rowToDeck(r, false)) });
+  const proposal = await c.env.DB.prepare(
+    'SELECT * FROM pitch_deck_proposals WHERE project_id = ? ORDER BY id DESC LIMIT 1',
+  ).bind(pid).first<any>();
+  return c.json({
+    versions: ((rows.results ?? []) as any[]).map((r) => rowToDeck(r, false)),
+    proposal: proposal ? rowToProposal(proposal) : null,
+  });
 });
 
 async function getDeckRow(env: Env, id: number): Promise<any> {
@@ -1642,7 +1668,7 @@ decks.post('/apply-method', async (c) => {
   // Run autofill, then convert to the editor slide JSON shape stored in
   // pitch_decks.slides. We also stash the method_id + spec_id on each
   // slide so the editor can re-render the right field controls.
-  const filled = await autofillDeck(c.env, method, pid);
+  const filled = await autofillDeck(c.env, method, pid, { userId: Number(user.id) || 0, railOption: 'deck_draft', projectId: pid });
   const editorSlides = toEditorSlides(method, filled);
   const wrapped = editorSlides.map((s) => ({
     title: s.title,
@@ -1676,10 +1702,68 @@ decks.post('/apply-method', async (c) => {
 });
 
 /**
+ * D767 (#2096) — store a fill as the project's one unkept proposal. An
+ * earlier unkept proposal is replaced (it was never a version); the deck
+ * versions in `pitch_decks` are not read for writing and not touched.
+ */
+async function proposeFill(env: Env, base: any, slides: any[], methodId: string, userId: number): Promise<any> {
+  const projectId = Number(base.project_id);
+  const res = await env.DB.batch([
+    env.DB.prepare('DELETE FROM pitch_deck_proposals WHERE project_id = ?').bind(projectId),
+    env.DB.prepare(
+      `INSERT INTO pitch_deck_proposals (project_id, base_deck_id, slides, title, method_id, created_by)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).bind(projectId, Number(base.id), JSON.stringify(slides), base.title ?? null, methodId, userId || null),
+  ]);
+  const newId = Number((res[1] as any)?.meta?.last_row_id || 0);
+  const row = await env.DB.prepare('SELECT * FROM pitch_deck_proposals WHERE id = ?').bind(newId).first<any>();
+  return rowToProposal(row);
+}
+
+async function ownedProposal(c: any, user: any, id: number): Promise<any | Response> {
+  const env = c.env as Env;
+  const row = id ? await env.DB.prepare('SELECT * FROM pitch_deck_proposals WHERE id = ?').bind(id).first<any>() : null;
+  if (!row) return c.json({ error: 'not found' }, 404);
+  try { await projectOwned(c, user, Number(row.project_id)); } catch { return c.json({ error: 'forbidden' }, 403); }
+  return row;
+}
+
+/**
+ * D767 — Keep: the proposal becomes the project's new current version,
+ * written by the same `insertVersion` every save uses, and the proposal row
+ * goes. Earlier versions stay as they were.
+ */
+decks.post('/proposals/:id/keep', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const row = await ownedProposal(c, user, parseInt(c.req.param('id')));
+  if (row instanceof Response) return row;
+  let slides: any[] = [];
+  try { slides = JSON.parse(row.slides || '[]'); } catch { slides = []; }
+  const deckId = await insertVersion(c.env, Number(row.project_id), slides, row.title || 'Pitch deck', Number(user.id) || null);
+  await c.env.DB.prepare('DELETE FROM pitch_deck_proposals WHERE id = ?').bind(row.id).run();
+  const fresh = await getDeckRow(c.env, deckId);
+  return c.json({ deck: rowToDeck(fresh) });
+});
+
+/** D767 — Discard: deletes the proposal and nothing else. */
+decks.delete('/proposals/:id', async (c) => {
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const row = await ownedProposal(c, user, parseInt(c.req.param('id')));
+  if (row instanceof Response) return row;
+  await c.env.DB.prepare('DELETE FROM pitch_deck_proposals WHERE id = ?').bind(row.id).run();
+  return c.json({ ok: true });
+});
+
+/**
  * Task #14 — POST /api/decks/:id/autofill
  * Re-runs the auto-fill pipeline against the deck's existing method_id
- * and overwrites the current version's `slides` in place (no new
- * version). Used by the editor's "Fill from project" button.
+ * and PROPOSES the result (D767, #2096): one `pitch_deck_proposals` row,
+ * replacing the project's earlier unkept proposal if any. No deck version
+ * is written or changed: the founder keeps it (`POST /proposals/:id/keep`)
+ * or discards it (`DELETE /proposals/:id`). Used by the editor's "Fill from
+ * project" button.
  *
  * The method_id is read from the first slide's `method_id` stamp that
  * `/apply-method` writes on creation. If the deck was created before
@@ -1732,12 +1816,10 @@ decks.post('/:id/autofill', async (c) => {
     const data = await fillAxalSpinoutDemoDay(c.env, Number(user.id), Number(row.project_id));
     const wrapped = buildAxalSpinoutDemoDaySlides(data);
     const safeWrapped = sanitizeSlides(wrapped);
-    await c.env.DB.prepare(`UPDATE pitch_decks SET slides = ? WHERE id = ?`)
-      .bind(JSON.stringify(safeWrapped), id).run();
-    const fresh = await c.env.DB.prepare('SELECT * FROM pitch_decks WHERE id = ?').bind(id).first<any>();
+    const proposal = await proposeFill(c.env, row, safeWrapped, methodId, Number(user.id));
     const coverage = data.meta.project_name !== '—' && data.meta.sector !== '—' ? 1 : 0.5;
     return c.json({
-      deck: rowToDeck(fresh),
+      proposal,
       method_id: methodId,
       coverage_pct: coverage,
       slide_confidence: safeWrapped.map((s: any, i: number) => ({
@@ -1748,7 +1830,7 @@ decks.post('/:id/autofill', async (c) => {
     });
   }
 
-  const filled = await autofillDeck(c.env, method, Number(row.project_id));
+  const filled = await autofillDeck(c.env, method, Number(row.project_id), { userId: Number(user.id) || 0, railOption: 'fill_from_project', projectId: Number(row.project_id) });
   const editorSlides = toEditorSlides(method, filled);
   const wrapped = editorSlides.map((s) => ({
     title: s.title,
@@ -1768,9 +1850,7 @@ decks.post('/:id/autofill', async (c) => {
   );
   const landingPage = await fetchLandingPageForProject(c.env, Number(row.project_id));
   const branded = applyBrandKitToSlides(safeWrapped, landingPage, method.brandTheme, projectName);
-  await c.env.DB.prepare(`UPDATE pitch_decks SET slides = ? WHERE id = ?`)
-    .bind(JSON.stringify(branded), id).run();
-  const fresh = await c.env.DB.prepare('SELECT * FROM pitch_decks WHERE id = ?').bind(id).first<any>();
+  const proposal = await proposeFill(c.env, row, branded, methodId, Number(user.id));
   // Per-slide confidence — surfaced in the editor rail. `filled.slides`
   // and `editorSlides` share the same order/length.
   const slide_confidence = filled.slides.map((s, i) => ({
@@ -1780,7 +1860,7 @@ decks.post('/:id/autofill', async (c) => {
     coverage_pct: s.coverage_pct,
   }));
   return c.json({
-    deck: rowToDeck(fresh),
+    proposal,
     method_id: methodId,
     coverage_pct: filled.total_coverage_pct,
     slide_confidence,

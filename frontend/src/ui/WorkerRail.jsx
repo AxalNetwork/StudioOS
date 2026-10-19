@@ -11,6 +11,8 @@ import { formatSpend, spendMeter } from './assistCost';
 import { useEscapeClose } from '../components/useEscapeClose';
 import { ASSIST_SURFACES } from './eadwynConfig';
 import { DEFAULT_JOBS, jobsFor, railSuggestions } from './railModels';
+import { PRICE_NOTE, SAFETY_SENTENCE, guardSentence, priceSuggestions, railRates } from './railPrices';
+import { aiBudgetApi } from '../lib/api/aiBudget';
 import { readRailModel, syncRailPrefs, writeRailModel } from './railModelChoice';
 import { useRailCrumbs } from './railCrumbs.js';
 import { openEadwynPanel, useEadwynPanel, useEadwynRailServes, eadwynPanelEvent } from './eadwynPanel.js';
@@ -42,21 +44,29 @@ import { clearRailPage, setRailPage } from '../lib/railPage.js';
  *   2. WHO AND WHERE — a pill naming the viewer's licence, in the app's own
  *      colours (`ACCENT`), and the crumbs "section › module › record" from
  *      `RailCrumbsProvider` (`ui/railCrumbs.js`), or the `workspace` alone.
- *   3. MODE — the "Eadwyn | Manual" switch, which is the assist mode
- *      (`useAssistMode(workspace)`), only where the host passes `fills` (D17).
- *      Manual is the default, because a run spends the founder's own budget.
+ *   3. THE SWITCH — "Turn off AI assistance on this page", on every page
+ *      (D769, #2088; D720 §6). It is the assist mode (`useAssistMode`): a page
+ *      with `fills` defaults to off (Manual), because its runs spend; every
+ *      other page defaults to on. With AI off the rail says so and draws no
+ *      suggestions.
  *   4. SUGGESTED FOR THIS PAGE — the canvas's models for the page's kind of
  *      work that the router carries and the page's jobs run
- *      (`railSuggestions`), a radio only where the pick reaches a run, then
- *      "All models", the router's catalogue in the canvas's groups.
- *   5. SAFETY — "Eadwyn drafts; you send." The canvas's first sentence, that
- *      the guard checks every run, is not true and is not drawn (D698.md).
+ *      (`railSuggestions`), a radio only where the pick reaches a run, each
+ *      with its price; then "All models", the router's models in the
+ *      canvas's ten groups, each row with its short price and the New badge.
+ *   5. SAFETY — "Llama Guard 3 8B checks every run (… in · … out per 1M
+ *      tokens). Eadwyn drafts; you send." while the Worker reports the guard
+ *      on (D763 part 2 made it true); else "Eadwyn drafts; you send."
  *   6. USAGE — today, this month, what runs in progress hold, the top-up
- *      balance and Add tokens, from `/api/ai-budget/me` and `/top-up`.
+ *      balance and Add tokens, always drawn, from `/api/ai-budget/me` and
+ *      `/top-up`.
  *
- * No model id, rate, estimate, average or receipt (D698 decision 10): those
- * are `/account/usage`'s. The accent is the `role` prop's, because some hosts
- * are violet for every viewer on purpose; the pill is the viewer's.
+ * PRICES ARE THE WORKER'S (D720 §1, reversing D698 decision 10): read from
+ * `GET /api/ai/rates`, the router's own rate card, printed in the canvas's
+ * units (`ui/railModels.js` `priceText`), never multiplied here. No model id,
+ * estimate, average or receipt: those are `/account/usage`'s. The accent is the
+ * `role` prop's, because some hosts are violet for every viewer on purpose;
+ * the pill is the viewer's.
  *
  * COLLAPSIBLE (D406). Every host's rail track is `var(--fwr-track, <width>)`,
  * each keeping its own width as the fallback, and `workerRail.css` defines
@@ -290,17 +300,38 @@ export const PROFILE_PILL = {
   branch_admin: 'Admin',
 };
 
-/** The Manual sentence (AIR:21). True where the switch is drawn: D698.md. */
-export const MANUAL_LINE = 'Eadwyn stays quiet on this page. Your work saves as usual.';
-/** What a page with no fill band says in place of a switch (D17). */
-export const NO_SWITCH_LINE = 'No switch here. Nothing on this page fills a blank for you.';
+/** The switch's label, on every page (D720 §6). */
+export const AI_SWITCH_LABEL = 'Turn off AI assistance on this page';
 /**
- * The safety line (AIR:28's second sentence). The first, "Llama Guard 3 8B
- * checks every run.", is not true: the guard runs on four routes only and
- * fails open, and none of the runs this rail describes passes through it.
- * D698.md records the call sites and what would let it return.
+ * What the rail says with AI off: the canvas's sentence, its apostrophe
+ * included (D720 §6). It was D698's Manual sentence; the name stays.
  */
-export const SAFETY_LINE = 'Eadwyn drafts; you send.';
+export const MANUAL_LINE = 'Eadwyn won\u2019t suggest or draft on this page. Your work saves as usual.';
+/**
+ * The safety line alone, drawn while the Worker does not report the guard on
+ * every run. While it does (D763 part 2), the rail draws `guardSentence`, which
+ * ends with this.
+ */
+export const SAFETY_LINE = SAFETY_SENTENCE;
+
+/**
+ * The Worker's rates (`GET /api/ai/rates`), read once per mount: the prices on
+ * the cards and rows, and the guard's. `reload` reads again.
+ */
+function useRailRates() {
+  const [reading, setReading] = useState({ loading: true, data: null, error: false });
+  const load = useCallback(() => {
+    let live = true;
+    setReading((r) => ({ ...r, loading: true }));
+    Promise.resolve()
+      .then(() => aiBudgetApi.rates())
+      .then((data) => { if (live) setReading({ loading: false, data, error: false }); },
+        () => { if (live) setReading({ loading: false, data: null, error: true }); });
+    return () => { live = false; };
+  }, []);
+  useEffect(() => load(), [load]);
+  return { ...reading, reload: load };
+}
 
 /** The top-up read as Add tokens draws it: `lib/aiTokens.js`'s one model (D755, #1916). */
 export const topUpState = (product, productError) => aiTokenState({ error: productError, data: product });
@@ -360,8 +391,12 @@ export function RailUsage({ reading }) {
         <span>Top-up balance</span><b>{microMoney(b.balance_microusd)}</b>
       </div>
       <p className="fwr-usage-note">Runs use your plan's allowance first, then your top-up balance.</p>
-      {topUp === 'ready' && (
+      {/* ADD TOKENS IS ALWAYS DRAWN (D769, D720 §11): a link while a pack is
+          on sale, else a disabled button with the reason under it. */}
+      {topUp === 'ready' ? (
         <a href={ADD_TOKENS_PATH} className="fwr-add-tokens" data-testid="link-worker-rail-add-tokens">Add tokens</a>
+      ) : (
+        <button type="button" className="fwr-add-tokens" disabled aria-disabled="true" data-testid="button-worker-rail-add-tokens">Add tokens</button>
       )}
       {topUp === 'not_ready' && <p className="fwr-usage-note" data-testid="text-worker-rail-topup">{TOPUP_UNAVAILABLE}</p>}
       {topUp === 'unreadable' && (
@@ -388,16 +423,15 @@ export default function WorkerRail({
   role = 'founder',
   className = '',
   /**
-   * The desk's own sentence for what the switch turns on here (D424),
-   * printed under the switch while Eadwyn is chosen.
+   * The desk's own sentence for what AI does here (D424), printed under the
+   * switch while AI is on.
    */
   note,
   // Does THIS workspace have fill-the-blanks work? The surface declares the
-  // capability and its copy; the host declares whether this page has any.
-  // Passing it is what draws the "Eadwyn | Manual" switch, so the switch
-  // exists exactly where flipping it changes something — which is DECISIONS
-  // D17's rule, and the reason a globally-rendered toggle would reintroduce
-  // the dead control D17 refused.
+  // capability; the host declares whether this page has any. Since D769 the
+  // switch is drawn on every page (D720 §6), and `fills` decides only its
+  // default: off on a page whose runs spend (Manual, as D698 had it), on
+  // everywhere else, until D769 PR 2 makes it on everywhere.
   fills = false,
   'data-testid': testId = 'worker-rail',
 }) {
@@ -448,7 +482,9 @@ export default function WorkerRail({
   const [, setPicks] = useState(0);
   const picks = {};
   for (const job of [...jobsFor(section, module), ...DEFAULT_JOBS]) picks[job.task] = readRailModel(workspace, job.task);
-  const sug = railSuggestions({ section, module, pricing, picks });
+  // D769: each card's and row's price, from the Worker's rate card.
+  const rates = railRates(useRailRates());
+  const sug = priceSuggestions(railSuggestions({ section, module, pricing, picks }), rates);
   const pick = useCallback((id, tasks) => {
     for (const task of tasks) writeRailModel(workspace, task, id);
     setPicks((n) => n + 1);
@@ -463,19 +499,18 @@ export default function WorkerRail({
   const [allPref, setAllPref] = useState(null);
   const showAll = allPref ?? !!sug.offList;
 
-  // Shared with the page, which decides whether to offer proposals, through a
-  // module store rather than a provider — see hooks/useAssistMode.js.
-  const [fillsOn, setFillsOn] = useAssistMode(workspace);
   // D765: the page every request names as the rail's, until D768's page map.
   useEffect(() => {
     const token = setRailPage(workspace);
     return () => clearRailPage(token);
   }, [workspace]);
+
+  // Shared with the page, which decides whether to offer proposals, through a
+  // module store rather than a provider — see hooks/useAssistMode.js. A page
+  // whose fills spend defaults to off; every other page to on (D769 PR 1).
   const modeChoice = surface.mode?.kind === 'choice' && fills ? surface.mode : null;
-  const aiOn = !!modeChoice && fillsOn;
-  const dim = !!modeChoice && !fillsOn;
-  const live = !dim;
-  const noneLine = surface.desks?.[workspace]?.none || NO_SWITCH_LINE;
+  const [aiOn, setAiOn] = useAssistMode(workspace, { defaultOn: !modeChoice });
+  const live = aiOn;
 
   // The accent is the HOST's `role`, from `ACCENT`, the same table ZoneNav
   // reads. Four variables, not two: an inline `--fwr-accent` would beat
@@ -566,47 +601,27 @@ export default function WorkerRail({
         </div>
       </div>
 
-      {/* THE SWITCH (AIR:20), only where the host passes `fills`: the assist
-          mode, Manual until the founder chooses Eadwyn. Manual says the
-          canvas's sentence and dims the list; Eadwyn says what the switch
-          turns on at this desk (`note`, D424). Without `fills` there is no
-          switch, and one line says why (D17). */}
-      {modeChoice ? (
-        <>
-          <div className="fwr-switch-row" role="radiogroup" aria-label={`Eadwyn on ${workspace}`}>
-            <button
-              type="button"
-              role="radio"
-              aria-checked={fillsOn}
-              className="fwr-switch-opt"
-              data-selected={fillsOn ? 'true' : 'false'}
-              onClick={() => setFillsOn(true)}
-              data-testid="button-worker-rail-mode-eadwyn"
-            >
-              Eadwyn
-            </button>
-            <button
-              type="button"
-              role="radio"
-              aria-checked={!fillsOn}
-              className="fwr-switch-opt"
-              data-selected={!fillsOn ? 'true' : 'false'}
-              onClick={() => setFillsOn(false)}
-              data-testid="button-worker-rail-mode-manual"
-            >
-              Manual
-            </button>
-          </div>
-          <p className="fwr-mode-line" data-testid="text-worker-rail-mode">
-            {fillsOn ? (note || modeChoice.note) : MANUAL_LINE}
-          </p>
-        </>
-      ) : (
-        <p className="fwr-mode-line" data-testid="text-worker-rail-mode">{noneLine}</p>
-      )}
+      {/* THE SWITCH (D720 §6), on every page: on means AI is OFF, as the
+          canvas's label says. With AI off the rail says so, and draws no
+          suggestions and no pick. */}
+      <button
+        type="button"
+        role="switch"
+        aria-checked={!aiOn}
+        className="fwr-ai-switch"
+        onClick={() => setAiOn(!aiOn)}
+        data-testid="switch-worker-rail-ai-off"
+      >
+        <span className="fwr-ai-switch-label">{AI_SWITCH_LABEL}</span>
+        <span className="fwr-ai-switch-track" data-on={aiOn ? 'false' : 'true'} aria-hidden="true"><span className="fwr-ai-switch-knob" /></span>
+      </button>
+      {!aiOn && <p className="fwr-mode-line" data-testid="text-worker-rail-mode">{MANUAL_LINE}</p>}
+      {aiOn && note && <p className="fwr-mode-line" data-testid="text-worker-rail-mode">{note}</p>}
 
       {/* SUGGESTED FOR THIS PAGE (AIR:23-28). */}
-      <section className="fwr-sug" data-dimmed={dim ? 'true' : 'false'} data-testid="worker-rail-suggestions">
+      <section className="fwr-sug" data-ai={aiOn ? 'on' : 'off'} data-testid="worker-rail-suggestions">
+        {aiOn && (
+        <>
         <span className="fwr-eyebrow">Suggested for this page</span>
         {sug.unreadable ? (
           pricingError ? (
@@ -643,6 +658,7 @@ export default function WorkerRail({
                       {card.role && <i className="fwr-role" data-default={card.role === 'Default' ? 'true' : 'false'}>{card.role}</i>}
                     </span>
                     <span className="fwr-card-line">{card.line}</span>
+                    <span className="fwr-card-price" data-testid={`text-worker-rail-price-${card.id.split('/').pop()}`}>{card.price}</span>
                   </span>
                 </Tag>
               );
@@ -673,32 +689,44 @@ export default function WorkerRail({
             </button>
             {showAll && (
               <div className="fwr-groups" data-testid="worker-rail-all-models">
+                <p className="fwr-price-note" data-testid="text-worker-rail-price-note">{PRICE_NOTE}</p>
                 {sug.groups.map((g) => (
                   <div key={g.title} className="fwr-group">
                     <div className="fwr-group-title">{g.title}</div>
-                    <div className="fwr-chips">
-                      {g.chips.map((c) => (c.pickable && live ? (
-                        <button
-                          key={c.id}
-                          type="button"
-                          className="fwr-chip"
-                          aria-pressed={c.selected}
-                          data-selected={c.selected ? 'true' : 'false'}
-                          onClick={() => pick(c.id, c.tasks)}
-                          data-testid={`chip-worker-rail-model-${c.id.split('/').pop()}`}
-                        >
-                          {c.name}
-                        </button>
-                      ) : (
-                        <span
-                          key={c.id}
-                          className="fwr-chip"
-                          data-selected={c.selected ? 'true' : 'false'}
-                          data-testid={`chip-worker-rail-model-${c.id.split('/').pop()}`}
-                        >
-                          {c.name}
-                        </span>
-                      )))}
+                    <div className="fwr-rows">
+                      {g.chips.map((c) => {
+                        const inner = (
+                          <>
+                            <span className="fwr-row-name">
+                              {c.name}
+                              {c.isNew && <i className="fwr-new" data-testid={`badge-worker-rail-new-${c.id.split('/').pop()}`}>New</i>}
+                            </span>
+                            <span className="fwr-row-price" data-testid={`text-worker-rail-row-price-${c.id.split('/').pop()}`}>{c.price}</span>
+                          </>
+                        );
+                        return c.pickable && live ? (
+                          <button
+                            key={c.id}
+                            type="button"
+                            className="fwr-chip"
+                            aria-pressed={c.selected}
+                            data-selected={c.selected ? 'true' : 'false'}
+                            onClick={() => pick(c.id, c.tasks)}
+                            data-testid={`chip-worker-rail-model-${c.id.split('/').pop()}`}
+                          >
+                            {inner}
+                          </button>
+                        ) : (
+                          <span
+                            key={c.id}
+                            className="fwr-chip"
+                            data-selected={c.selected ? 'true' : 'false'}
+                            data-testid={`chip-worker-rail-model-${c.id.split('/').pop()}`}
+                          >
+                            {inner}
+                          </span>
+                        );
+                      })}
                     </div>
                   </div>
                 ))}
@@ -706,7 +734,9 @@ export default function WorkerRail({
             )}
           </>
         )}
-        <p className="fwr-safety" data-testid="text-worker-rail-safety">{SAFETY_LINE}</p>
+        </>
+        )}
+        <p className="fwr-safety" data-testid="text-worker-rail-safety">{rates.guardOn ? guardSentence(rates) : SAFETY_LINE}</p>
       </section>
 
       {/* USAGE (AIR:30-36): the allowance ledger, D629. */}

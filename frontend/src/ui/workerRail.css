@@ -136,26 +136,27 @@ aside.fwr > .fwr-body { padding: 0; border-top: 0; }
 .fwr-crumb[data-last="true"] { font-weight: 700; color: var(--d698-ink); }
 .fwr-crumb-sep { color: var(--d698-sep); }
 
-.fwr-switch-row {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 4px;
-  background: var(--d698-ground); border-radius: 10px; padding: 3px;
+/* D769 (D720 §6): "Turn off AI assistance on this page", a switch on every
+   page. The track fills with the accent when AI is off, as the canvas draws it. */
+.fwr-ai-switch {
+  font: inherit; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  min-height: 32px; width: 100%; padding: 0; border: 0; background: none; cursor: pointer; text-align: left;
 }
-.fwr-switch-opt {
-  font: inherit; font-size: 12px; font-weight: 700; text-align: center;
-  min-height: 30px; display: flex; align-items: center; justify-content: center;
-  border: 0; border-radius: 8px; cursor: pointer;
-  background: transparent; color: var(--d698-muted);
+.fwr-ai-switch:focus-visible { outline: 2px solid var(--fwr-accent); outline-offset: 2px; border-radius: 6px; }
+.fwr-ai-switch-label { font-size: 12.5px; font-weight: 700; color: var(--d698-ink); }
+.fwr-ai-switch-track {
+  width: 34px; height: 20px; border-radius: 99px; position: relative; flex: none;
+  transition: background .15s; background: #dedce4;
 }
-.fwr-switch-opt[data-selected="true"] {
-  background: var(--d698-paper); color: var(--fwr-accent);
-  box-shadow: 0 1px 2px rgba(24, 24, 27, .08);
+.fwr-ai-switch-track[data-on="true"] { background: var(--fwr-accent); }
+.fwr-ai-switch-knob {
+  position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .15); transition: left .15s;
 }
-.fwr-switch-opt:focus-visible { outline: 2px solid var(--fwr-accent); outline-offset: 1px; }
+.fwr-ai-switch-track[data-on="true"] .fwr-ai-switch-knob { left: 16px; }
 p.fwr-mode-line { margin: 0; font-size: 12px; line-height: 1.5; color: var(--d698-muted); }
 
 .fwr-sug { display: flex; flex-direction: column; gap: 6px; }
-/* Manual dims the list and nothing in it can be picked (AIR:102). */
-.fwr-sug[data-dimmed="true"] { opacity: .5; pointer-events: none; }
 .fwr-eyebrow {
   font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .1em;
   color: var(--d698-faint);
@@ -187,6 +188,8 @@ button.fwr-card:focus-visible { outline: 2px solid var(--fwr-accent); outline-of
   color: var(--fwr-accent); background: var(--fwr-accent-soft); border-color: var(--fwr-accent-soft);
 }
 .fwr-card-line { display: block; font-size: 11.5px; line-height: 1.4; margin-top: 2px; color: var(--d698-muted); }
+/* D769: the Worker's price, in the canvas's units. */
+.fwr-card-price { display: block; font-size: 11px; line-height: 1.4; margin-top: 3px; font-weight: 600; color: var(--d698-text); font-variant-numeric: tabular-nums; }
 p.fwr-models-note { margin: 0; font-size: 11px; line-height: 1.45; color: var(--d698-faint); }
 p.fwr-using { margin: 0; font-size: 12px; color: var(--fwr-accent); }
 .fwr-all-toggle {
@@ -197,14 +200,23 @@ p.fwr-using { margin: 0; font-size: 12px; color: var(--fwr-accent); }
 .fwr-all-toggle:focus-visible { outline: 2px solid var(--fwr-accent); outline-offset: 2px; }
 .fwr-groups { display: flex; flex-direction: column; gap: 10px; }
 .fwr-group-title { font-size: 10.5px; font-weight: 700; margin-bottom: 5px; color: var(--d698-faint); }
-.fwr-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+p.fwr-price-note { margin: 0; font-size: 11px; line-height: 1.45; color: var(--d698-faint); }
+.fwr-rows { display: flex; flex-direction: column; gap: 2px; }
+/* An All models row: the name, the New badge, and the short price (D769). */
 .fwr-chip {
-  font: inherit; font-size: 11.5px; font-weight: 600; border-radius: 99px; padding: 4px 9px;
-  border: 1px solid var(--d698-line); background: var(--d698-paper); color: var(--d698-text);
+  font: inherit; font-size: 12px; display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+  padding: 6px 8px; border-radius: 7px; border: 0; width: 100%; text-align: left;
+  background: transparent; color: var(--d698-ink);
+}
+.fwr-row-name { display: inline-flex; align-items: center; gap: 6px; }
+.fwr-row-price { font-size: 11px; white-space: nowrap; color: var(--d698-muted); font-variant-numeric: tabular-nums; }
+.fwr-new {
+  font-style: normal; font-size: 9.5px; font-weight: 800; border-radius: 99px; padding: 0 6px;
+  color: var(--fwr-accent); background: var(--fwr-accent-soft);
 }
 button.fwr-chip { cursor: pointer; }
 button.fwr-chip:focus-visible { outline: 2px solid var(--fwr-accent); outline-offset: 2px; }
-.fwr-chip[data-selected="true"] { border-color: var(--fwr-accent); background: var(--fwr-accent-soft); color: var(--fwr-accent); }
+.fwr-chip[data-selected="true"] { background: var(--fwr-accent-soft); color: var(--fwr-accent); }
 p.fwr-safety { margin: 0; font-size: 11px; line-height: 1.45; color: var(--d698-faint); }
 
 .fwr-usage {
@@ -223,6 +235,9 @@ p.fwr-usage-note { margin: 0; font-size: 11px; line-height: 1.45; color: var(--d
   color: var(--fwr-accent); border: 1px solid var(--fwr-accent-soft); background: var(--fwr-accent-soft);
 }
 .fwr-add-tokens:focus-visible { outline: 2px solid var(--fwr-accent); outline-offset: 2px; }
+/* Drawn even when no pack is on sale (D769): disabled, the reason under it. */
+button.fwr-add-tokens { font: inherit; font-size: 12.5px; font-weight: 700; width: 100%; cursor: pointer; }
+button.fwr-add-tokens:disabled { cursor: not-allowed; opacity: .55; }
 /* Runs paused, as /account/usage draws it (AccountUsage.jsx, `danger`). */
 .fwr-paused {
   display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 9px; font-size: 11.5px;
@@ -286,9 +301,10 @@ p.fwr-usage-note { margin: 0; font-size: 11px; line-height: 1.45; color: var(--d
 .dark .fwr-crumb { color: var(--d698-muted); }
 .dark .fwr-crumb[data-last="true"] { color: var(--d698-ink); }
 .dark .fwr-crumb-sep { color: var(--d698-sep); }
-.dark .fwr-switch-row { background: var(--d698-ground); }
-.dark .fwr-switch-opt { color: var(--d698-muted); }
-.dark .fwr-switch-opt[data-selected="true"] { background: var(--d698-paper); color: var(--fwr-accent); box-shadow: none; }
+.dark .fwr-ai-switch-label { color: var(--d698-ink); }
+.dark .fwr-ai-switch-track { background: #4a4655; }
+.dark .fwr-ai-switch-track[data-on="true"] { background: var(--fwr-accent); }
+.dark .fwr-ai-switch-knob { background: #f4f3f7; box-shadow: none; }
 .dark p.fwr-mode-line { color: var(--d698-muted); }
 .dark .fwr-eyebrow { color: var(--d698-faint); }
 .dark .fwr-card { border-color: var(--d698-line); background: var(--d698-paper); }
@@ -300,12 +316,16 @@ p.fwr-usage-note { margin: 0; font-size: 11px; line-height: 1.45; color: var(--d
 .dark .fwr-role { color: #b8b3c6; background: var(--d698-ground); border-color: var(--d698-line); }
 .dark .fwr-role[data-default="true"] { color: var(--fwr-accent); background: var(--fwr-accent-soft); border-color: var(--fwr-accent-soft); }
 .dark .fwr-card-line { color: var(--d698-muted); }
+.dark .fwr-card-price { color: var(--d698-text); }
 .dark p.fwr-models-note { color: var(--d698-faint); }
 .dark p.fwr-using { color: var(--fwr-accent); }
 .dark .fwr-all-toggle { color: var(--fwr-accent); }
 .dark .fwr-group-title { color: var(--d698-faint); }
-.dark .fwr-chip { border-color: var(--d698-line); background: var(--d698-paper); color: var(--d698-text); }
-.dark .fwr-chip[data-selected="true"] { border-color: var(--fwr-accent); background: var(--fwr-accent-soft); color: var(--fwr-accent); }
+.dark .fwr-chip { background: transparent; color: var(--d698-ink); }
+.dark .fwr-chip[data-selected="true"] { background: var(--fwr-accent-soft); color: var(--fwr-accent); }
+.dark p.fwr-price-note { color: var(--d698-faint); }
+.dark .fwr-row-price { color: var(--d698-muted); }
+.dark .fwr-new { color: var(--fwr-accent); background: var(--fwr-accent-soft); }
 .dark p.fwr-safety { color: var(--d698-faint); }
 .dark .fwr-usage { border-color: var(--d698-line); }
 .dark .fwr-usage-line span { color: var(--d698-text); }
