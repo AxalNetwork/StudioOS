@@ -10,7 +10,9 @@
  *   or on `?for=h-<id>` (`fromQuery`), which an Experiments record links to.
  * - **No evidence is checked** at first, a departure from the canvas's sample
  *   rows (D693.md): the founder states what the decision rests on. The note
- *   counts the checks as they change.
+ *   counts the checks as they change. **Amended by D757 (#1928):** the
+ *   interview evidence the Worker names in `evidence.suggested_evidence`
+ *   starts checked (`withSuggestedEvidence`); every other row starts clear.
  * - **If Pivot** is drawn only while Pivot is chosen.
  *
  * It submits through `verdictApi.record`, handed in as `w.verdict` (the page's
@@ -31,6 +33,18 @@ export const evidenceNote = (values) => {
   const n = Array.isArray(values?.evidence) ? values.evidence.length : 0;
   return `${n} of ${DECISION_EVIDENCE_BAR} needed before a verdict is given. Below that it is withheld.`;
 };
+
+/**
+ * D757 §2.6 (#1928): the interview evidence that arrived since the last
+ * decision (`evidence.suggested_evidence`, #1925) starts checked. The founder
+ * may untick any of it; nothing is decided for them.
+ */
+export function withSuggestedEvidence(read) {
+  const evidence = read?.evidence;
+  const suggested = Array.isArray(evidence?.suggested_evidence) ? new Set(evidence.suggested_evidence.map(String)) : null;
+  if (!suggested || !suggested.size || !Array.isArray(evidence?.options)) return read;
+  return { ...read, evidence: { ...evidence, options: evidence.options.map((o) => (suggested.has(String(o?.value)) ? { ...o, checked: true } : o)) } };
+}
 
 export const verdictForm = {
   key: 'decision',
@@ -54,7 +68,7 @@ export const verdictForm = {
     const value = searchParams?.get?.('for');
     return value && FOR_VALUE.test(value) ? { for: value } : {};
   },
-  loadOptions: (w, projectId) => w.formOptions('validate', projectId, 'verdict'),
+  loadOptions: (w, projectId) => w.formOptions('validate', projectId, 'verdict').then(withSuggestedEvidence),
   toBody: (v) => ({
     decision: v.decision || 'proceed',
     for: FOR_VALUE.test(String(v.for ?? '')) ? v.for : 'venture',

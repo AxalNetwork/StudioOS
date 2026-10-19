@@ -10,7 +10,8 @@
  *      pending placements) and the caller can write: review it. The why line
  *      counts what its placements would move, in pain themes (phrases resolved
  *      through the pain-group model, so two wordings of one theme count once)
- *      and hypotheses, never in placements;
+ *      and hypotheses, never in placements. A pain that names one of the
+ *      founder's themes counts as that theme, as Accept files it (D757);
  *   3. the caller can write: record the next customer conversation, with the
  *      meter's count in the why and the first other card's `next` as Then;
  *   4. anyone else: the first card's own `next`, or no focus. A reader who
@@ -53,7 +54,11 @@ export async function pendingMoves(env: Env, projectId: number, sessionId: numbe
     let p: Record<string, unknown> = {};
     try { p = JSON.parse(r.payload || '{}'); } catch { continue; }
     if (r.kind === 'pain_severity' && typeof p.phrase === 'string' && normPhrase(p.phrase)) {
-      themes.add(resolvePhrase(normPhrase(p.phrase), p.phrase, model).key);
+      // D757 (#1897): a pain naming a theme is filed under it; one whose theme
+      // has gone moves nothing, because Accept refuses it.
+      if (p.pain_group_id != null) {
+        if (Number.isSafeInteger(p.pain_group_id) && model.groups.some((g) => g.id === p.pain_group_id)) themes.add(`g:${p.pain_group_id}`);
+      } else themes.add(resolvePhrase(normPhrase(p.phrase), p.phrase, model).key);
     }
     if (r.kind === 'evidence') {
       if (Number.isSafeInteger(p.hypothesis_id)) hypotheses.add(Number(p.hypothesis_id));

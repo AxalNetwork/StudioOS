@@ -31,13 +31,25 @@
  * a writer: a new hypothesis and an experiment idea through Experiments' own,
  * a firmographic role or company into the interview's empty field, and the
  * findings no module table holds through `writeInterviewFinding`.
+ *
+ * An accepted pain writes its mention (the phrase in the interview's
+ * `pains_json`), its severity and, when it names one of the founder's themes,
+ * its theme, in one batch guarded on the list it read: all three land or none
+ * does, so Problem discovery counts it the moment it is accepted (D757,
+ * #1897). The accept response carries `pain`, and the placements read gives
+ * each pain its `theme` (and `theme_missing` once that theme is deleted).
  */
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { canWrite } from './_founder_validate_helpers';
-import { insertHypothesisLink, setInterviewIcpFit, upsertPainSeverity } from './_founder_validate_writes';
-import { normPhrase } from '../services/painGroups';
+import {
+  insertHypothesisLink,
+  setInterviewIcpFit,
+  upsertPainAliasStatement,
+  upsertPainSeverityStatement,
+} from './_founder_validate_writes';
+import { logCycleWrite } from '../services/cycleActivity';
 import {
   WriterError,
   addEvidence,
@@ -50,7 +62,7 @@ import {
   writeInterviewFinding,
   writeSegment,
 } from '../services/validateWriters';
-import { updateInterviewDetails } from '../services/interviewWriters';
+import { addInterviewPain, updateInterviewDetails } from '../services/interviewWriters';
 import { INTERVIEW_FIELDS, isFindingKind } from '../services/interviewFindings';
 import { budgetRefusalMessage } from '../services/aiRouter';
 import { MODULES } from '../services/cycleValidate';
@@ -186,14 +198,55 @@ async function authorise(c: any, row: PlacementRow): Promise<User | Response> {
   return user;
 }
 
+/** What an accepted pain did (D757, #1897): whether its mention was new, and the theme it was filed under. */
+type PainApplied = { mention: 'added' | 'already_logged'; group_id: number | null };
+
+const PAIN_RACE = 'This interview changed while the pain was saved. Nothing was written. Accept it again.';
+
+/**
+ * D757 (#1897) — an accepted pain: its mention, its severity and its theme in
+ * one batch, each statement guarded on the `pains_json` that
+ * `addInterviewPain` read. When another write changed the list in between,
+ * the batch writes nothing; it is read and tried once more, and a second loss
+ * is a 409 that leaves the placement pending.
+ */
+async function applyPain(
+  env: Env, user: User, row: PlacementRow, interviewId: number, payload: Record<string, unknown>,
+): Promise<PainApplied> {
+  const groupId = payload.pain_group_id == null ? null : Number(payload.pain_group_id);
+  if (groupId != null) {
+    // A theme deleted since the proposal is refused, not dropped: the pain
+    // without its theme is not what the founder accepted (decision 5).
+    const group = await env.DB.prepare('SELECT id FROM pain_groups WHERE id = ? AND project_id = ?')
+      .bind(groupId, row.project_id).first<{ id: number }>();
+    if (!group) throw new Error('not_this_project');
+  }
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const pain = await addInterviewPain(env, { projectId: row.project_id, interviewId, phrase: String(payload.phrase) });
+    const guard = { interviewId, projectId: row.project_id, painsJson: pain.painsJson };
+    const severity = upsertPainSeverityStatement(env, interviewId, pain.norm, String(payload.severity), guard);
+    const alias = groupId != null ? upsertPainAliasStatement(env, row.project_id, groupId, pain.display, guard) : null;
+    const results = await env.DB.batch([...pain.statements, severity, ...(alias ? [alias] : [])]);
+    if (Number(results[pain.statements.length]?.meta?.changes ?? 0) < 1) continue;
+    await logCycleWrite(env, {
+      projectId: row.project_id, userId: user.id, cycle: 'validate', module: 'customer-research', entityId: interviewId,
+      action: pain.added ? 'interview_pain_added' : 'pain_severity_set',
+      summary: pain.added ? `Pain added to interview ${interviewId}` : `Pain severity set on interview ${interviewId}`,
+    });
+    return { mention: pain.added ? 'added' : 'already_logged', group_id: groupId };
+  }
+  throw new WriterError(409, PAIN_RACE);
+}
+
 /**
  * Write one accepted placement through its module's writer. Throws
  * `not_this_project` when the row it names is not the placement's project's,
- * which puts the placement back to pending.
+ * which puts the placement back to pending. An accepted pain returns what it
+ * did; no other kind returns anything.
  */
 async function applyPlacement(
   env: Env, user: User, row: PlacementRow, kind: PlacementKind, payload: Record<string, unknown>,
-): Promise<void> {
+): Promise<{ pain: PainApplied } | void> {
   const interviewId = interviewOf(row.target_ref);
   // Every kind below but evidence is about the placement's own interview, so
   // the interview must be this project's: a placement cannot write into
@@ -208,9 +261,9 @@ async function applyPlacement(
   const sessionId = row.session_id ?? null;
   switch (kind) {
     case 'pain_severity':
-      // The three-level word itself (D659 widened the column's values).
-      await upsertPainSeverity(env, await ownInterview(), normPhrase(String(payload.phrase)), String(payload.severity));
-      return;
+      // The three-level word itself (D659 widened the column's values), with
+      // the mention and the theme in the same batch (D757).
+      return { pain: await applyPain(env, user, row, await ownInterview(), payload) };
     case 'icp_fit':
       await setInterviewIcpFit(env, await ownInterview(), String(payload.fit));
       return;
@@ -341,8 +394,9 @@ async function acceptPlacement(
   ).bind(user.id, edited ? JSON.stringify(edited) : null, row.id).run();
   if (!claim.meta?.changes) return { status: 409, body: { error: 'not_pending', detail: 'This placement was already decided.' } };
 
+  let applied: { pain: PainApplied } | void;
   try {
-    await applyPlacement(env, user, row, kind, payload);
+    applied = await applyPlacement(env, user, row, kind, payload);
   } catch (e) {
     await env.DB.prepare(
       `UPDATE validate_proposals SET status = 'pending', decided_by = NULL, decided_at = NULL, edited_payload_json = NULL WHERE id = ?`,
@@ -355,7 +409,7 @@ async function acceptPlacement(
     console.error('[validate/placements] accept failed', msg);
     return { status: 500, body: { error: 'apply_failed', detail: 'The placement could not be written. It is still proposed.' } };
   }
-  return { status: 200, body: { ok: true, id: row.id, kind, edited: !!edited, payload } };
+  return { status: 200, body: { ok: true, id: row.id, kind, edited: !!edited, payload, ...(applied ?? {}) } };
 }
 
 structure.post('/placements/:id/accept', async (c) => {
@@ -583,6 +637,13 @@ export async function sessionPlacementRows(env: Env, sessionId: number): Promise
   return rows.results ?? [];
 }
 
+/** A pain placement's theme for the review read: the group it names, or null; and whether that group has gone. */
+function painTheme(context: StructureContext, id: unknown): { theme: { id: number; title: string } | null; theme_missing?: true } {
+  if (id == null) return { theme: null };
+  const g = context.painGroups.find((x) => x.id === Number(id));
+  return g ? { theme: { id: g.id, title: g.title } } : { theme: null, theme_missing: true };
+}
+
 structure.get('/sessions/:id/placements', async (c) => {
   const s = await scopeSession(c);
   if (s instanceof Response) return s;
@@ -602,6 +663,9 @@ structure.get('/sessions/:id/placements', async (c) => {
       hypothesis: context.hypotheses.find((h) => h.id === Number((parse(r.edited_payload_json) ?? parse(r.payload_json))?.hypothesis_id)) ?? null,
       pain_group: context.painGroups.find((g) => g.id === Number((parse(r.edited_payload_json) ?? parse(r.payload_json))?.pain_group_id)) ?? null,
     } : null,
+    // D757 (#1897): the founder's theme a pain names, from the edit first.
+    // `theme_missing` says the theme was deleted, so Accept would refuse it.
+    ...(r.kind === 'pain_severity' ? painTheme(context, (parse(r.edited_payload_json) ?? parse(r.payload_json))?.pain_group_id) : {}),
     edited_payload: parse(r.edited_payload_json),
     status: r.status,
     // Proposed-only kinds say so here, so the page can say so too.
