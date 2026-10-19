@@ -60,7 +60,8 @@ import { mapError, newUid, nowIso } from './_t13t14t15_helpers';
 import { hashEmail } from '../util/hashEmail';
 import { ensureLegalTemplatesSchema, getTemplate, listTemplates } from '../services/legalTemplateStore';
 import { mergeValues, renderContract } from '../services/licenceContract';
-import { createAndSendEnvelope } from './esign';
+import { createAndSendEnvelope, templateBodyRefusal, TemplateBodyError } from './esign';
+import { refuse } from '../util/refusal';
 // D137 — every transition below now reaches the branch that runs under the
 // licence. `applyLicence` had no caller at all, so HQ's suspend changed four
 // columns here and nothing on the subsidiary.
@@ -1916,6 +1917,12 @@ r.post('/:uid/contract', async (c) => {
     await ensureLegalTemplatesSchema(c.env);
     const tpl = await getTemplate(c.env, slug);
     if (!tpl) return c.json({ error: 'template_not_found', template_slug: slug }, 404);
+    // D758 — a row with no body is refused before anything is written, so the
+    // current draft is not superseded by an empty one.
+    if (Number(tpl.is_stub) === 1 || !String(tpl.body_md || '').trim()) {
+      const r = templateBodyRefusal(new TemplateBodyError('no_body', tpl.slug), 'admin')!;
+      return refuse(c, r.status, { code: r.code, message: r.message });
+    }
 
     const [terr, seats] = await Promise.all([
       c.env.DB.prepare(
@@ -2031,22 +2038,31 @@ r.post('/:uid/contract/:contractUid/send', async (c) => {
       ).bind(licence.id).all<{ seat_type: string; seats_licensed: number }>(),
     ]);
 
-    const sent = await createAndSendEnvelope(c.env, {
-      adminUserId: admin.id,
-      adminName: admin.name || admin.email,
-      recipientUserId: recipient.id,
-      recipientEmail: recipient.email,
-      recipientName: recipient.name || licence.signatory_name || recipient.email,
-      documentType: row.template_slug,
-      dealId: row.id,
-      appUrl: c.env.APP_URL || 'https://axal.vc',
-      mergeFields: mergeFieldsForEnvelope(
-        licence,
-        (terr.results || []).map((t) => t.country_code),
-        seats.results || [],
-      ),
-      refuseUnfilled: false,
-    });
+    let sent: Awaited<ReturnType<typeof createAndSendEnvelope>>;
+    try {
+      sent = await createAndSendEnvelope(c.env, {
+        adminUserId: admin.id,
+        adminName: admin.name || admin.email,
+        recipientUserId: recipient.id,
+        recipientEmail: recipient.email,
+        recipientName: recipient.name || licence.signatory_name || recipient.email,
+        documentType: row.template_slug,
+        dealId: row.id,
+        appUrl: c.env.APP_URL || 'https://axal.vc',
+        mergeFields: mergeFieldsForEnvelope(
+          licence,
+          (terr.results || []).map((t) => t.country_code),
+          seats.results || [],
+        ),
+        refuseUnfilled: false,
+      });
+    } catch (e) {
+      // D758 — the row lost its body after drafting (or the store could not
+      // be read): nothing was sent, and the contract stays a draft.
+      const r = templateBodyRefusal(e, 'admin');
+      if (r) return refuse(c, r.status, { code: r.code, message: r.message });
+      throw e;
+    }
     if (!sent) {
       return c.json({ error: 'envelope_send_failed', message: 'The envelope could not be created or sent.' }, 502);
     }

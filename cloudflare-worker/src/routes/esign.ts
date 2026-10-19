@@ -46,12 +46,12 @@ import { templatesFor, mayOriginate, notOfferedFor, originatorName, SEND_ABSENCE
 import { esignEnvelopeScope } from '../services/tenancyScope';
 import { sendAgreementAssignedEmail } from '../services/email';
 import { sha256Hex, sha256HexBytes } from '../services/pdf';
-import { paperModel, paperHtml, paperSha256, type PaperRecipient } from '../services/legalPaper';
+import { paperModel, paperHtml, paperSha256, PART_STUB, STUB_LINE, type PaperRecipient } from '../services/legalPaper';
 import { structureForPaper } from '../services/fundStructure';
 import { renderLegalPdf } from '../services/legalPaperRender';
 import { readPaperChoice, PAPER_CHOICE_MESSAGES } from '../services/legalPaperCss';
 import { fileRowStatement, newFileUid } from '../services/legalDocumentFiles';
-import { templateFormatFor, renderFormat, type TemplateFormat } from '../services/templateFormat';
+import { templateFormatFor, renderFormat, COUNSEL_DRAFT_SLUGS, type TemplateFormat } from '../services/templateFormat';
 import { PDFDocument } from 'pdf-lib';
 import { bindingKey } from '../util/schemaBootstrap';
 import { clientIp } from '../util/clientIp';
@@ -218,48 +218,6 @@ interface AgreementTemplate {
   body: string;
 }
 
-// Minimal, generic templates keyed by AGREEMENT_OPTIONS values from the
-// frontend. Real legal teams should replace these with vetted documents;
-// these are placeholders that capture the intent and parties so the audit
-// trail is meaningful from day one.
-function buildTemplateBody(agreementType: string, recipientName: string, recipientEmail: string): AgreementTemplate {
-  // Operating contracts (platform terms, partner, vendor, advisor, etc.) are
-  // signed by Axal VC Management LLC. D705: the LP's subscription and its
-  // co-investment side letter are the Fund's, acting by its general partner;
-  // the SPV joinder and the strategic side letter are the GP's, as general
-  // partner of the Fund (legalDocFormat.ts `axalEntityKeyForDoc`).
-  const fundAgreements = new Set(['Subscription Booklet & LPA', 'Co-Investment Side Letter']);
-  const gpAgreements = new Set(['SPV Joinder Agreement', 'Strategic Side Letter / Focused SPV']);
-  const axalSignerName = fundAgreements.has(agreementType)
-    ? 'Axal VC Spin-Out Lab Fund I LP, a Delaware limited partnership acting by its general partner Axal VC GP LLC ("Axal")'
-    : gpAgreements.has(agreementType)
-      ? 'Axal VC GP LLC, as general partner of Axal VC Spin-Out Lab Fund I LP ("Axal")'
-      : 'Axal VC Management LLC ("Axal")';
-  const intro = `This Agreement is entered into between ${axalSignerName} and ${recipientName || recipientEmail} ("Counterparty"), effective on the date of electronic signature appearing below.\n\n`;
-  const closer = `\n\n---\n\nBy signing electronically below, the parties acknowledge that they have read and agree to the terms set forth in this Agreement and that an electronic signature has the same legal effect as a handwritten signature under the U.S. Electronic Signatures in Global and National Commerce Act (E-SIGN, 15 U.S.C. § 7001 et seq.) and the Uniform Electronic Transactions Act (UETA).`;
-  const lib: Record<string, AgreementTemplate> = {
-    'Subscription Booklet & LPA': { title: 'Subscription Booklet & Limited Partnership Agreement', body: intro + 'Counterparty subscribes to limited partnership interests in the Axal venture fund subject to the terms of the Limited Partnership Agreement, including capital commitments, management fees, carried interest, distribution waterfall, and transfer restrictions.\n\nCounterparty represents that they qualify as an Accredited Investor under Regulation D and will provide such verification as Axal may reasonably require.' + closer },
-    'SPV Joinder Agreement':       { title: 'Special Purpose Vehicle Joinder Agreement', body: intro + 'Counterparty hereby joins the SPV formed for the specific investment opportunity described separately, agreeing to its operating agreement, capital call schedule, and pro-rata distribution mechanics.' + closer },
-    'Co-Investment Side Letter':   { title: 'Co-Investment Side Letter', body: intro + 'This Side Letter modifies the standard LPA terms with respect to co-investment rights, fee offsets, and information rights as negotiated separately between the parties.' + closer },
-    'Strategic Side Letter / Focused SPV': { title: 'Strategic Side Letter / Focused SPV Agreement', body: intro + 'Counterparty receives sector-focused investment exposure through a dedicated SPV, with negotiated economics and reporting cadence specific to the strategic mandate.' + closer },
-    'Founder Collaboration Agreement': { title: 'Founder Collaboration Agreement', body: intro + 'Counterparty agrees to collaborate with Axal in the formation and operation of a new venture, including IP contribution, time commitment, equity vesting, and confidentiality obligations.' + closer },
-    'Spin-Out Subsidiary SPA + IP Transfer': { title: 'Spin-Out Subsidiary Stock Purchase + IP Transfer', body: intro + 'Counterparty agrees to the formation of a subsidiary company, the assignment and license of relevant intellectual property to that subsidiary, and the issuance of founder shares pursuant to a vesting schedule.' + closer },
-    'Strategic Scale Partnership Agreement': { title: 'Strategic Scale Partnership Agreement', body: intro + 'Counterparty engages Axal to provide strategic scaling services, including go-to-market acceleration, follow-on financing support, and operational resources, in exchange for the consideration described herein.' + closer },
-    'Technology Integration / JV Agreement': { title: 'Technology Integration / Joint Venture Agreement', body: intro + 'Counterparty and Axal agree to integrate StudioOS AI technology into Counterparty\'s product suite under a joint venture structure, with shared IP rights and revenue allocation as specified.' + closer },
-    'Referral / Agency Agreement': { title: 'Referral & Agency Agreement', body: intro + 'Counterparty agrees to refer qualified opportunities to Axal in exchange for the referral fees and revenue share defined herein, subject to non-circumvention and confidentiality obligations.' + closer },
-    'M&A Advisory Mandate':        { title: 'M&A Advisory Mandate', body: intro + 'Counterparty engages Axal as M&An advisor on an exclusive basis for the engagement period defined herein, with success fees calculated as a percentage of transaction value.' + closer },
-    'Venture Share Agreement (FAST)': { title: 'Venture Share Agreement (FAST)', body: intro + 'Counterparty agrees to advise the Axal portfolio company on a Founder/Advisor Standard Template (FAST) basis, with equity compensation vesting over the engagement period.' + closer },
-    'MSA + Equity-for-Services':   { title: 'Master Services Agreement + Equity-for-Services', body: intro + 'Counterparty agrees to provide operating partner services under a Master Services Agreement, with compensation paid partially in equity of designated portfolio companies.' + closer },
-    'Engagement Letter (Spin-Out Package)': { title: 'Engagement Letter — Spin-Out Legal Package', body: intro + 'Counterparty (legal counsel) is engaged to provide the standard spin-out legal package, including entity formation, IP assignment, founder agreements, and initial financing documents.' + closer },
-    'White-Label Service Agreement': { title: 'White-Label Service Agreement', body: intro + 'Counterparty agrees to provide technical services on a white-label basis to Axal portfolio companies, with deliverables and SLAs defined per work order.' + closer },
-    'Secondary Purchase Agreement': { title: 'Secondary Purchase Agreement', body: intro + 'Counterparty agrees to the purchase or sale of secondary interests in Axal portfolio companies on the terms described, including price, transfer mechanics, and information rights.' + closer },
-  };
-  return lib[agreementType] || {
-    title: agreementType || 'Closing Binder Agreement',
-    body: intro + `This document constitutes the Closing Binder for the agreement type "${agreementType}". Detailed terms are set forth in the attached schedules and exhibits, which are incorporated by reference. Counterparty acknowledges receipt of and agreement with all such terms.` + closer,
-  };
-}
-
 // ---------------------------------------------------------------------------
 // The template body a doc type sends, BEFORE any merge — one resolver for the
 // send and the preview (D411), so what a sender reads on the page is what the
@@ -271,21 +229,23 @@ function buildTemplateBody(agreementType: string, recipientName: string, recipie
 // Order: the editable D1 store (active, non-stub) under that slug, then the
 // bundled markdown file for that slug, which is the row's fallback. A key in
 // `BUNDLED_SENT_DIRECTLY` is still sent as its bundled file, as its sender
-// does today. Null means neither knows the doc type, and createAndSendEnvelope
-// falls back to buildTemplateBody.
+// does today. Null means the document has no body anywhere, and a send of it
+// is refused (D758, #1862): there is no fallback text. A store that cannot be
+// read THROWS, so a caller never takes "unreadable" for "no body". `title` is
+// the store row's; a bundled body has none.
 // ---------------------------------------------------------------------------
-export async function templateBodyFor(env: Env, docType: string): Promise<{ body: string; source: 'store' | 'template' } | null> {
+export async function templateBodyFor(env: Env, docType: string): Promise<{ body: string; source: 'store' | 'template'; title: string | null } | null> {
   const { templateKeyForDocType, getLegalTemplateBody } = await import('../services/legalTemplates');
-  const { getActiveTemplateBody } = await import('../services/legalTemplateStore');
+  const { activeTemplate } = await import('../services/legalTemplateStore');
   if (sentAsBundledFile(docType)) {
     const key = templateKeyForDocType(docType);
-    return key ? { body: getLegalTemplateBody(key), source: 'template' } : null;
+    return key ? { body: getLegalTemplateBody(key), source: 'template', title: null } : null;
   }
   const slug = librarySlugFor(docType);
-  const stored = await getActiveTemplateBody(env, slug);
-  if (stored) return { body: stored, source: 'store' };
+  const stored = await activeTemplate(env, slug);
+  if (stored) return { body: stored.body, source: 'store', title: stored.title };
   const key = templateKeyForDocType(slug);
-  return key ? { body: getLegalTemplateBody(key), source: 'template' } : null;
+  return key ? { body: getLegalTemplateBody(key), source: 'template', title: null } : null;
 }
 
 /** D758: the 3-way NDA under either spelling, the old envelope one and the row's slug. */
@@ -327,6 +287,40 @@ export class RenderedBodyError extends Error {
     super('rendered_body_invalid');
     this.reason = reason;
   }
+}
+
+/**
+ * D758 — thrown by createAndSendEnvelope before anything is written, when the
+ * document has no body in the library (`no_body`) or the store could not be
+ * read (`unreadable`). There is no fallback text: every caller answers it
+ * through `templateBodyRefusal`.
+ */
+export class TemplateBodyError extends Error {
+  reason: 'no_body' | 'unreadable';
+  slug: string;
+  constructor(reason: TemplateBodyError['reason'], slug: string) {
+    super(reason === 'no_body' ? 'template_has_no_body' : 'template_unreadable');
+    this.reason = reason;
+    this.slug = slug;
+  }
+}
+
+/**
+ * The refusal a caller answers for a TemplateBodyError, or null for any other
+ * error. The admin sentences reuse the canvas's stub copy (boards L8 and L9).
+ */
+export function templateBodyRefusal(e: unknown, audience: 'admin' | 'member'):
+  { status: 409 | 503; code: 'template_has_no_body' | 'template_unreadable'; message: string } | null {
+  if (!(e instanceof TemplateBodyError)) return null;
+  if (e.reason === 'unreadable') {
+    return { status: 503, code: 'template_unreadable', message: 'The template could not be read, so nothing was sent. Try again in a moment.' };
+  }
+  const message = audience === 'member'
+    ? 'This document is not ready to send: it has no text in the library yet. Nothing was sent.'
+    : COUNSEL_DRAFT_SLUGS.has(e.slug)
+      ? `${PART_STUB} This document has no text until counsel supplies it, so nothing was sent.`
+      : `${STUB_LINE.replace(/\.$/, '')}, so nothing was sent. Add its body under Contracts › Templates.`;
+  return { status: 409, code: 'template_has_no_body', message };
 }
 
 // ---------------------------------------------------------------------------
@@ -409,18 +403,13 @@ export async function createAndSendEnvelope(
   const documentType = sentAsBundledFile(opts.documentType) ? opts.documentType : librarySlugFor(opts.documentType);
   const requestedAs = documentType === opts.documentType ? {} : { requested_as: opts.documentType };
 
-  // Task #5 (Z) v3 — Prefer the Y-1 markdown templates when the
-  // `document_type` maps to a known LegalTemplateKey
-  // (templateKeyForDocType). This covers the new W/X/Y doc types
-  // (investor_nda_axal, mentor_nda_axal, partner_services, …) so the
-  // admin wizard sends real legal templates rather than the legacy
-  // `buildTemplateBody` placeholder fallback.
   const { applyMergeFields, mergeTokensIn } = await import('../services/legalTemplates');
-  // Task #8 — prefer the canonical D1 store body (active, non-stub) keyed by
-  // `document_type`, falling back to the Y-1 markdown templates and then the
-  // `buildTemplateBody` placeholder. This makes the editable store the source
-  // of truth for what is actually rendered into the signed envelope. The
-  // lookup is `templateBodyFor`, which the preview route shares (D411).
+  // The body comes from the library only (D758): the canonical D1 store body
+  // (active, non-stub) keyed by `document_type`, then the bundled markdown
+  // template. The lookup is `templateBodyFor`, which the preview route shares
+  // (D411). A document with neither is refused here, before the envelope, its
+  // recipient or any email is written; a store that cannot be read is refused
+  // as unreadable, never as "no body".
   const rendered = opts.renderedBody;
   if (rendered !== undefined) {
     if (!rendered || typeof rendered.title !== 'string' || !rendered.title.trim()) {
@@ -431,12 +420,22 @@ export async function createAndSendEnvelope(
       throw new RenderedBodyError('merge_fields_with_rendered_body');
     }
   }
-  const source = rendered ? null : await templateBodyFor(env, documentType);
+  let source: Awaited<ReturnType<typeof templateBodyFor>> = null;
+  if (!rendered) {
+    try {
+      source = await templateBodyFor(env, documentType);
+    } catch (e) {
+      console.error('[esign] template store unreadable', (e as Error)?.message);
+      throw new TemplateBodyError('unreadable', documentType);
+    }
+    if (!source) throw new TemplateBodyError('no_body', documentType);
+  }
   let tpl: AgreementTemplate;
   const appliedMergeKeys: string[] = [];
   if (rendered) {
     tpl = { title: rendered.title.trim(), body: rendered.body };
-  } else if (source) {
+  } else {
+    const src = source!; // non-null: a missing body was refused above
     // Y-1 markdown — `renderLegalTemplate` already does {{key}}
     // substitution. We always seed a sane set of default merge values
     // (recipient_name/email + effective_date) and let the caller
@@ -510,29 +509,10 @@ export async function createAndSendEnvelope(
     // caller sent, recorded as applied whether or not the body had a slot for
     // it — which put a false statement in an audit row that a signature dispute
     // would later be read against.
-    const tokens = mergeTokensIn(source.body);
-    const body = applyMergeFields(source.body, merge);
-    tpl = { title: originatorName(documentType) ?? documentType, body };
+    const tokens = mergeTokensIn(src.body);
+    const body = applyMergeFields(src.body, merge);
+    tpl = { title: originatorName(documentType) ?? src.title ?? documentType, body };
     if (opts.mergeFields) {
-      appliedMergeKeys.push(...Object.keys(opts.mergeFields).filter((k) => tokens.has(k)));
-    }
-  } else {
-    tpl = buildTemplateBody(documentType, opts.recipientName, opts.recipientEmail);
-    // ONE SHARED RESOLVER, NOT A REGEX PER KEY. This branch used to compile
-    // `new RegExp('\\{\\{\\s*' + escape(key) + '\\s*\\}\\}')` for every
-    // submitted key, and the escape was mis-nested — its character class closed
-    // fifteen characters in, so it matched almost nothing and returned
-    // `company.name` unchanged. Nothing exploited it: the request validator
-    // above restricts keys to `[A-Za-z0-9_\-.]` before they reach here, and
-    // `buildTemplateBody` emits no `{{token}}` at all today, so the loop could
-    // not fire. But an escaper whose only defence is a validator in one caller
-    // is a trap, and this was the repo's last open `detect-non-literal-regexp`
-    // finding. `applyMergeFields` is the same resolver the D1 branch above
-    // uses, over one literal pattern, and it does the right thing the day a
-    // legacy body does gain a token.
-    if (opts.mergeFields) {
-      const tokens = mergeTokensIn(tpl.body);
-      tpl.body = applyMergeFields(tpl.body, opts.mergeFields);
       appliedMergeKeys.push(...Object.keys(opts.mergeFields).filter((k) => tokens.has(k)));
     }
   }
@@ -925,6 +905,9 @@ esign.post('/send', async (c) => {
         extra: { fields: e.fields },
       });
     }
+    // D758 — no body in the library, or an unreadable store: nothing was written.
+    const bodyRefusal = templateBodyRefusal(e, sender.role === 'admin' ? 'admin' : 'member');
+    if (bodyRefusal) return refuse(c, bodyRefusal.status, { code: bodyRefusal.code, message: bodyRefusal.message, raw: e });
     // No-silent-fallback: surface explicit-DocuSign failures as 412
     // (Precondition Failed) so the UI can prompt the admin to either
     // connect DocuSign or retry with provider='native'.
@@ -992,7 +975,10 @@ esign.get('/templates/:doc_type', async (c) => {
     return refuse(c, 503, { code: 'template_unreadable', message: 'The template could not be read. Try again in a moment.', raw: e });
   }
   if (!resolved) {
-    return refuse(c, 404, { code: 'template_not_offered', message: 'That template is not one you can send.' });
+    // An offered type with no body in the library (D758): there is no
+    // fallback text, so a send of it would be refused too.
+    const r = templateBodyRefusal(new TemplateBodyError('no_body', docType), 'member')!;
+    return refuse(c, r.status, { code: r.code, message: r.message });
   }
   const tokens = [...mergeTokensIn(resolved.body)];
   const fields = tokens.map((key) => ({
