@@ -37,7 +37,9 @@ import ToolsHistory from './ToolsHistory';
 import UpdatesHistory from './UpdatesHistory';
 import UpdateAskReplies from './UpdateAskReplies';
 import CallsHistory from './CallsHistory';
-import { InterviewsSection, PainThemesSection, HypothesesSection } from './ValidateSections';
+import { FromYourInterviews, InterviewsSection, PainThemesSection, HypothesesSection } from './ValidateSections';
+import { acceptSuggestions } from './validatePhone';
+import { interviewSessionsApi } from '../../lib/api/interviewSessions';
 import FormLightbox from './FormLightbox';
 import { usePhoneWidth } from '../../ui/phone/usePhoneWidth';
 import { editFor, formFor, formsFor } from './forms';
@@ -953,6 +955,13 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
         {fillsOn && projectId ? drafts.map((draft) => (
           <ZoneDraft key={`${slug}-${draft.surface}`} {...draft} scopeKey={String(projectId)} ai={ai} accent="violet" />
         )) : null}
+        {/* D757 §2.7 (#1928): each Validate module's interview suggestions, writers only. Verdict takes none. */}
+        {moduleStatus === 'ready' && cycle === 'validate' && slug !== 'verdict' && (
+          <FromYourInterviews parts={module?.parts}
+            onAccept={(id, payload) => interviewSessionsApi.accept(id, payload).then(() => setReload((n) => n + 1))}
+            onDiscard={(id) => interviewSessionsApi.discard(id).then(() => setReload((n) => n + 1))}
+            onAcceptAll={(batches) => acceptSuggestions(batches, interviewSessionsApi).finally(() => setReload((n) => n + 1))} />
+        )}
         {moduleStatus === 'ready' && fnOf(def.parts, slug)?.(module, { projectId, reload: () => setReload((n) => n + 1), openAction, query, openDialog })}
       </ModulePage>
     );
