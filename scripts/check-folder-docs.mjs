@@ -74,6 +74,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/components/deals',           'the deal room screens (D630)'],
   ['frontend/src/components/scoring',         'the scoring engine UI'],
   ['frontend/src/components/spinout',         'the Spin-Out Lab shared pieces'],
+  ['frontend/src/components/products',        'the Plans & Pricing storefront pieces (D755)'],
   ['frontend/src/decks/templates',            'the pitch-deck slide templates'],
   ['frontend/src/pages/admin',                'the admin console'],
   ['frontend/src/pages/admin/assessment',     'the assessment game editor'],

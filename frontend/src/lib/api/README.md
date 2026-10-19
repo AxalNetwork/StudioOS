@@ -206,3 +206,5 @@ and `POST /api/auth/google/popup` (the code that window returned, with the
 attempt's state; the answer is `{ token, user, new_signup }`). The POST carries
 `X-Requested-With: XmlHttpRequest`, which the Worker requires and which no
 other origin can send. The redirect fallback stays `api.googleStartUrl`.
+
+D755 (#1919, read by #1915): `publicPricing.js` reads `GET /api/public/plans-and-packs`, which needs no session: every plan with its price from the catalog mirror and its AI allowance, and the token packs on sale. `/plans-and-pricing` renders it through `../plansPricing.js`.
