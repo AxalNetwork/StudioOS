@@ -226,7 +226,7 @@ test('orders: the store\'s three statuses, filters by status and year, newest fi
 
 test('the plan line reads each role\'s own status route and portal', () => {
   assert.deepEqual(billingSourceFor('founder'), { status: 'tierStatus', portal: 'tierPortal', pricing: '/pricing' });
-  assert.deepEqual(billingSourceFor('investor'), { status: 'investorBillingStatus', portal: 'investorPortal', pricing: '/pricing/investor' });
+  assert.deepEqual(billingSourceFor('investor'), { status: 'investorBillingStatus', portal: 'investorPortal', pricing: '/pricing?for=investor' });
   assert.deepEqual(billingSourceFor('partner'), { status: 'planStatus', portal: 'tierPortal', pricing: '/pricing' });
   const f = planSummary('founder', { tier: 'growth', status: 'active', renews_at: '2026-11-01T12:00:00Z', trial_ends_at: null, has_customer: true, spinout_lab: null });
   assert.equal(f.plan, 'Founder workspace'); assert.equal(f.tier, 'Validate + Build'); assert.equal(f.paid, true); assert.equal(f.hasCustomer, true);
@@ -504,7 +504,7 @@ test('the plan line: tier, seats, renewal; Not recorded for a paid plan with no 
   const inst = text(h(PlanHeader, { role: 'investor', billing: ready({ tier: 'institutional', raw_tier: 'institutional', status: 'active', renews_at: null, trial_ends_at: null, has_customer: true, quotas: { seats: 4, seat_count: 2 } }) }));
   assert.match(inst, /Investor Institutional 2 of 4 seats · renewal not recorded/);
   assert.match(html(h(PlanHeader, { role: 'investor', billing: ready({ tier: 'institutional', status: 'active', renews_at: null, has_customer: true, quotas: {} }) })), /title="this plan has no renewal date recorded"/);
-  assert.match(html(h(PlanHeader, { role: 'investor', billing: ready({ tier: 'free', status: 'free', has_customer: false, quotas: {} }) })), /href="\/pricing\/investor"/);
+  assert.match(html(h(PlanHeader, { role: 'investor', billing: ready({ tier: 'free', status: 'free', has_customer: false, quotas: {} }) })), /href="\/pricing\?for=investor"/);
   const lapsed = text(h(PlanHeader, { role: 'investor', billing: ready({ tier: 'free', raw_tier: 'professional', status: 'canceled', renews_at: null, has_customer: true, quotas: { seats: 1, seat_count: 1 } }) }));
   assert.match(lapsed, /Investor Free Cancelled subscribed as Professional, Free applies · 1 of 1 seat · free plan, nothing renews/);
   const trial = text(h(PlanHeader, { role: 'partner', billing: ready({ plan_group: 'partner', plan: 'partner_pro', status: 'trialing', renews_at: '2026-10-20T12:00:00Z', trial_ends_at: '2026-10-20T12:00:00Z', has_customer: true }) }));

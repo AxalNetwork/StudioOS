@@ -8,7 +8,7 @@ import { ADD_TOKENS_PATH, TOKENS_LINE, TOPUP_UNAVAILABLE_RUNS } from '../../lib/
 import { phonePlans, planAi, YOUR_PLAN } from '../../lib/plansPricing';
 
 /**
- * D700 (#1662) — A10m, `/plans-and-pricing` on a phone. It lives apart from
+ * D700 (#1662) — A10m, `/pricing/products` on a phone (D786; `/plans-and-pricing` until then). It lives apart from
  * `ProductsPage.jsx` because that page loads Stripe's key at import, so a
  * test could not render this view from there.
  *

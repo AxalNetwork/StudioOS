@@ -2,7 +2,7 @@
 //   Shows the order number, an itemized summary (from getOrder), a
 //   "Download Invoice PDF" action (authenticated fetch → blob via
 //   orderInvoiceBlob — NOT a plain <a href>), and "Go to Dashboard".
-// If the order param is missing/invalid → redirect to /plans-and-pricing.
+// If the order param is missing/invalid → redirect to /pricing/products.
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CheckCircle2, Download, LayoutDashboard, Loader2, AlertTriangle, Package } from 'lucide-react';
@@ -60,10 +60,10 @@ export default function CheckoutConfirmationPage() {
 
   useEffect(() => {
     setOrder(null); setError(null); setPollingStopped(false);
-    if (!orderRef) { navigate('/plans-and-pricing', { replace: true }); return; }
+    if (!orderRef) { navigate('/pricing/products', { replace: true }); return; }
     return watchOrder(orderRef, {
       tokenPackHint, onOrder: setOrder, onError: setError,
-      onNotFound: () => navigate('/plans-and-pricing', { replace: true }),
+      onNotFound: () => navigate('/pricing/products', { replace: true }),
       onExhausted: () => setPollingStopped(true),
     });
   }, [orderRef, tokenPackHint, navigate]);
@@ -96,7 +96,7 @@ export default function CheckoutConfirmationPage() {
           <AlertTriangle size={26} />
         </span>
         <h1 className="text-lg font-bold text-gray-900 dark:text-gray-100">{error}</h1>
-        <button onClick={() => navigate('/plans-and-pricing')} className="mt-4 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium">
+        <button onClick={() => navigate('/pricing/products')} className="mt-4 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium">
           Back to Plans &amp; Pricing
         </button>
       </div>

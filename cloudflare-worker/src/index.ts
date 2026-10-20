@@ -235,6 +235,8 @@ import adminStudioGlance from './routes/admin_studio_glance';
 // The holder-facing read of one licence — see routes/licence.ts for why it is
 // not a role branch inside the admin ledger.
 import licence from './routes/licence';
+// D799 — the Administrator's requests to HQ, under the same prefix.
+import licenceRequests from './routes/licence_requests';
 import cofounderRoutes from './routes/cofounder';
 import skillsRoutes from './routes/skills';
 import valuesRoutes from './routes/values';
@@ -1062,6 +1064,7 @@ app.route('/api/admin/security', adminSecurity);
 app.route('/api/admin/hq-support', adminHqSupport);
 // Studio glance — both tiers, before the /api/admin catch-all (D443).
 app.route('/api/admin/studio', adminStudioGlance);
+app.route('/api/licence', licenceRequests);
 app.route('/api/licence', licence);
 app.route('/api/best-fit', bestFitSelf);
 app.route('/api/admin', admin);
@@ -1611,6 +1614,8 @@ const ROLE_SCHEMA_SAFE_ANONYMOUS_READS: readonly (string | RegExp)[] = [
   '/api/public/stats',
   // D678: the model registry the Intelligence page reads; no D1 at all.
   '/api/public/ai-models',
+  // D786: the Pricing page's models, priced; no D1 either.
+  '/api/public/ai/models',
   // D722: whether /login may open Google's window — env only, no D1. Held up
   // by a cold isolate's users-table repair, it would only ever mean the
   // redirect instead of the window.

@@ -14,7 +14,7 @@ export const TOPUP_UNAVAILABLE_RUNS = `${TOPUP_UNAVAILABLE} Runs use your includ
 /** AMP's tokens line (account_phone_d700 pins it to the canvas). */
 export const TOKENS_LINE = '$1 of tokens buys $1 of AI use. Tokens never expire.';
 /**
- * D781 (#2106) — how AI is priced, in D762's words, on `/plans-and-pricing`:
+ * D781 (#2106) — how AI is priced, in D762's words, on `/pricing/products` (D786; `/plans-and-pricing` until then):
  * D762 §1's draw order, D629's hold. The owner's price sentence ("Model
  * prices are Cloudflare's published rates plus 25%.", D720's owner step 4)
  * joins it when the Worker charges it: `billingMode` reads `AI_BILLING` only
@@ -22,7 +22,8 @@ export const TOKENS_LINE = '$1 of tokens buys $1 of AI use. Tokens never expire.
  */
 export const AI_DRAW_LINE = 'Each run is paid from your AI allowance first, then from your tokens.';
 /** Every Add tokens link and the retired checkout redirect share this destination. */
-export const TOKEN_PACKS_PATH = '/plans-and-pricing#token-packs';
+// D786 (#2211): the token packs are on the catalogue, at /pricing/products.
+export const TOKEN_PACKS_PATH = '/pricing/products#token-packs';
 export const ADD_TOKENS_PATH = TOKEN_PACKS_PATH;
 
 const integer = (n) => Number.isSafeInteger(n) && n >= 0;

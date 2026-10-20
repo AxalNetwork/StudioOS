@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { interviewSessionsApi } from '../../lib/api/interviewSessions.js';
+import { railPressHeaders } from '../../lib/railPage.js';
 import { useActiveRecording } from '../../contexts/ActiveRecordingContext';
 import { STAGES, STAGE_KEYS, liveRefusal } from '../../lib/activeRecording.js';
 import { AssistantBadge } from './AssistantEntry';
@@ -500,7 +501,7 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
           <section className="space-y-3">
             <h2 className="text-[16px] font-bold">Transcript</h2>
             {session.status === 'stopped' && AUDIO.has(session.channel) && (
-              <button type="button" onClick={async () => { setTranscribing(true); try { await api.transcribe(session.id, session.final_model); } catch (e) { setError(e?.message); } setTranscribing(false); load(); loadReceipt(); }} className="rounded-md bg-violet-700 px-3 py-1.5 text-[12px] font-bold text-white">Transcribe</button>
+              <button type="button" onClick={async () => { setTranscribing(true); try { await api.transcribe(session.id, session.final_model, railPressHeaders('transcribe:recording')); } catch (e) { setError(e?.message); } setTranscribing(false); load(); loadReceipt(); }} className="rounded-md bg-violet-700 px-3 py-1.5 text-[12px] font-bold text-white">Transcribe</button>
             )}
             {/* D668: a session an assistant submitted opens on the review step, above its transcript. */}
             {reviewFirst && review}

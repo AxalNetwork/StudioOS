@@ -39,7 +39,7 @@
  */
 import type { Env } from '../types';
 import type { JobType } from '../models/jobs';
-import { run as aiRun, audioMinutesFromBytes, budgetRefusalMessage } from './aiRouter';
+import { run as aiRun, audioMinutesFromBytes, budgetRefusalMessage, type RailContext } from './aiRouter';
 import { AI_SURFACE } from './aiSurfaces';
 import * as aiBudget from './aiBudget';
 import { enqueueJob } from './queue';
@@ -107,6 +107,15 @@ function expectedChunks(chunks: ChunkRow[], lastSeq: number): ChunkRow[] {
 // Transcribing one chunk (shared with POST /sessions/:id/transcribe)
 // ---------------------------------------------------------------------------
 
+/**
+ * D778 part 6 (#2103): the page D771's inventory gives the founder's
+ * recordings (`railOptions/founder.js`), and the option each run names. A
+ * press's own headers win where the run has a request (`railFor`); the
+ * processing job has none, so it names these.
+ */
+export const CUSTOMER_RESEARCH_PAGE = 'Founder · Validate · Customer research';
+export const TRANSCRIBE_OPTIONS = { recording: 'transcribe:recording', session: 'transcribe:session' } as const;
+
 export type ChunkTranscript =
   | { ok: true; segments: StoredSegment[]; language: string | null; model: string; fallback: boolean; costMicro: number }
   | { ok: false; refusal: string; message: string; budget: boolean };
@@ -117,6 +126,8 @@ export type ChunkTranscript =
  */
 export async function transcribeChunk(env: Env, opts: {
   session: Pick<SessionRow, 'language'>; userId: number; chunk: ChunkRow; model: string; intervieweeName: string | null; offsetMs: number;
+  /** The run's rail context; a chat's voice note (D754) keeps the default. */
+  rail?: RailContext;
 }): Promise<ChunkTranscript> {
   const obj = env.FILES ? await env.FILES.get(opts.chunk.r2_key) : null;
   if (!obj) return { ok: false, refusal: 'chunk_missing', message: `Part ${opts.chunk.seq + 1} of the recording could not be read. Nothing was stored.`, budget: false };
@@ -125,7 +136,7 @@ export async function transcribeChunk(env: Env, opts: {
     userId: opts.userId,
     surface: AI_SURFACE.validateInterviews,
     // D765: saving, which the switch never refuses; recorded with its page.
-    rail: { page: 'validate', option: 'transcribe:interview' },
+    rail: opts.rail ?? { page: 'validate', option: 'transcribe:interview' },
     model: opts.model,
     audio: new Uint8Array(await obj.arrayBuffer()),
     audioMime: opts.chunk.mime,
@@ -404,7 +415,10 @@ async function transcribeBatch(env: Env, session: SessionRow, userId: number, in
   await setStage(env, session.id, 'transcribing', { done: have.size, total: chunks.length });
   let done = have.size;
   for (const ch of todo.slice(0, CHUNKS_PER_MESSAGE)) {
-    const r = await transcribeChunk(env, { session, userId, chunk: ch, model, intervieweeName, offsetMs: 0 });
+    const r = await transcribeChunk(env, {
+      session, userId, chunk: ch, model, intervieweeName, offsetMs: 0,
+      rail: { page: CUSTOMER_RESEARCH_PAGE, option: TRANSCRIBE_OPTIONS.session, record: `session:${session.id}` },
+    });
     if (!r.ok) {
       await recordReceipt(env, session.id, {
         kind: 'final', model, requested_model: model, fallback_used: false,
