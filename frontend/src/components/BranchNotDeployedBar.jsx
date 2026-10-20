@@ -48,7 +48,7 @@ export default function BranchNotDeployedBar({ strip }) {
             data-testid="branch-not-deployed-licence-link"
             className="font-semibold underline underline-offset-2"
           >
-            Licence summary in Settings →
+            Your licence →
           </Link>
         </div>
         <ol className="flex flex-wrap gap-1.5" aria-label="Provisioning steps" data-testid="branch-not-deployed-steps">

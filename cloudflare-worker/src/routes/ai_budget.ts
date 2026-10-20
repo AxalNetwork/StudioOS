@@ -8,12 +8,16 @@ import { PLAN_AI_SHARE } from '../services/planAllowance';
 import { aiTopupStatus, memberTopupReading, readAiTopupProduct } from '../services/aiTopups';
 import { HISTORY_MAX, ledgerBalance, memberAccount, memberHistory, memberTopUp, packLines, packLabel, reconcile, recordAdjustment } from '../services/aiCredits';
 import { logAdminAction } from '../services/adminAudit';
+import { COST_GROUPS, COST_RANGES, costCsv, memberCost, type CostGroup, type CostRange } from '../services/aiCost';
 import { CONSUMPTION_GROUPS, memberConsumption, memberMonth, monthBounds, monthKey, type ConsumptionGroup } from '../services/aiConsumption';
 import { refuse } from '../util/refusal';
 import { AUTH_ERROR_STATUSES, STEP_UP_REQUIRED, stepUpRefusalBody } from '../util/authErrors';
+import { recoveryCoolOffBody } from '../middleware/recoveryCoolOff';
 
 const r=new Hono<{Bindings:Env}>();
 r.onError((error,c)=>{
+  // D794: the step-up refusal keeps its code, so the SPA can ask for a fresh TOTP and retry.
+  if (error.message===STEP_UP_REQUIRED) return c.json(stepUpRefusalBody(error),403);
   const status=AUTH_ERROR_STATUSES[error.message];
   if (status) return refuse(c,status,{code:'ai_budget_access_refused',message:'This account cannot access that AI budget operation.'});
   return refuse(c,503,{code:'ai_budget_unreadable',message:'Unreadable: the AI budget operation could not be completed.',raw:error});
@@ -59,6 +63,38 @@ r.get('/runs',async c=>{
   catch(error) { return refuse(c,503,{code:'ai_runs_unreadable',message:'Unreadable: where your AI spend went could not be read.',raw:error,audience:'member'}); }
 });
 /**
+ * D787 (#2212): the member's own cost per day and per model, tokens in and
+ * out, the other units, cost and charged (`services/aiCost.ts`). `range` is
+ * `mtd` (the default), `30d` or `prev_month`, in UTC; `group` is `model` (the
+ * default), `page` or `option`. Their own rows only: no user or company is
+ * taken from the request. `cost.csv` is the same read, one row per day and model.
+ */
+function costQuery(c:any):{range:CostRange;group:CostGroup}|Response {
+  const range=(c.req.query('range')??'mtd') as CostRange;
+  if (!COST_RANGES.includes(range)) return c.json({error:'invalid_range',message:'Ask for mtd, 30d or prev_month.'},400);
+  const group=(c.req.query('group')??'model') as CostGroup;
+  if (!COST_GROUPS.includes(group)) return c.json({error:'invalid_group',message:'Group by model, page or option.'},400);
+  return {range,group};
+}
+r.get('/cost',async c=>{
+  const user=await requireAuth(c);
+  const q=costQuery(c);
+  if (q instanceof Response) return q;
+  try { return c.json(await memberCost(c.env,Number(user.id),q.range,q.group)); }
+  catch(error) { return refuse(c,503,{code:'ai_cost_unreadable',message:'Unreadable: your AI cost could not be read.',raw:error,audience:'member'}); }
+});
+r.get('/cost.csv',async c=>{
+  const user=await requireAuth(c);
+  const q=costQuery(c);
+  if (q instanceof Response) return q;
+  try {
+    const cost=await memberCost(c.env,Number(user.id),q.range,q.group);
+    return new Response(costCsv(cost),{headers:{'Content-Type':'text/csv; charset=utf-8',
+      'Content-Disposition':`attachment; filename="ai-cost-${cost.range.from}-to-${cost.range.to}.csv"`,'Cache-Control':'no-store'}});
+  }
+  catch(error) { return refuse(c,503,{code:'ai_cost_unreadable',message:'Unreadable: your AI cost could not be read.',raw:error,audience:'member'}); }
+});
+/**
  * D788 (#2213): the member's own monthly AI spend limit (`services/aiSpendLimit.ts`):
  * the limit, this UTC month's charge, the share used, the notices, and the plan's
  * allowance beside it for context.
@@ -95,6 +131,47 @@ r.put('/limit',async c=>{
     return c.json(await readSpendLimit(c.env,user.id));
   }
   catch(error) { return refuse(c,503,{code:'ai_spend_limit_unwritable',message:'Unreadable: your AI spend limit could not be saved.',raw:error,audience:'member'}); }
+});
+// ---------------------------------------------------------------------------
+// D794 (#2219): the member's own opt-in auto-reload. Each route is a money
+// setting: a TOTP session signed in recently (as billing's checkout is), and a
+// write is refused during an account recovery's cool-off (D248).
+// ---------------------------------------------------------------------------
+async function moneySettingsUser(c:any) {
+  await requireFactor(c,'totp');
+  await requireStepUp(c);
+  return requireAuth(c);
+}
+r.get('/auto-reload',async c=>{
+  const user=await moneySettingsUser(c);
+  try {
+    const { readAutoReload } = await import('../services/aiAutoReload');
+    return c.json(await readAutoReload(c.env,user as any));
+  } catch(error) { return refuse(c,503,{code:'ai_auto_reload_unreadable',message:'Unreadable: your auto-reload settings could not be read.',raw:error,audience:'member'}); }
+});
+r.put('/auto-reload',async c=>{
+  const user=await moneySettingsUser(c);
+  const coolOff=recoveryCoolOffBody(user);
+  if (coolOff) return c.json(coolOff,423);
+  const body=await c.req.json().catch(()=>null);
+  try {
+    const { saveAutoReload, readAutoReload } = await import('../services/aiAutoReload');
+    const out=await saveAutoReload(c.env,user as any,body);
+    if (!out.ok) return c.json({error:out.error,field:out.field,message:out.message},400);
+    return c.json(await readAutoReload(c.env,user as any));
+  } catch(error) { return refuse(c,503,{code:'ai_auto_reload_not_saved',message:'Your auto-reload settings were not saved. Nothing changed.',raw:error,audience:'member'}); }
+});
+r.post('/auto-reload/setup',async c=>{
+  const user=await moneySettingsUser(c);
+  const coolOff=recoveryCoolOffBody(user);
+  if (coolOff) return c.json(coolOff,423);
+  if (!c.env.STRIPE_SECRET_KEY) return refuse(c,503,{code:'stripe_not_configured',message:'Cards cannot be saved right now.',audience:'member'});
+  const body=await c.req.json().catch(()=>({})) as any;
+  const nonce=typeof body?.nonce==='string' && /^[A-Za-z0-9_-]{1,64}$/.test(body.nonce) ? body.nonce : crypto.randomUUID();
+  try {
+    const { createReloadSetup } = await import('../services/aiAutoReload');
+    return c.json(await createReloadSetup(c.env,user as any,nonce));
+  } catch(error) { return refuse(c,502,{code:'setup_intent_failed',message:'A card could not be set up. Nothing was charged; try again in a moment.',raw:error,audience:'member'}); }
 });
 // D750, then D755 §14: why each pack is or is not offered, for the Super Admin only. The top-level
 // fields are D750's single-price line, DEPRECATED until CR8 draws `packs`.

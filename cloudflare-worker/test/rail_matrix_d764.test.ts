@@ -75,7 +75,12 @@ test('every canvas page has one row, keyed in the canvas\'s names, and Admin has
   assert.deepEqual(ROWS.find((r) => r.pageKey === 'Admin · Home')!.models, home.models, 'Admin · Home takes a Home row\'s models');
   for (const r of ROWS) {
     const name = r.pageKey.split(' · ').at(-1)!;
-    if (r.pageKey !== 'Admin · Home') assert.equal(r.kind, CANVAS.task_kind[name], `${r.pageKey}: its kind is the canvas's`);
+    // D796 (#2229): a renamed board may keep the kind it had, as its override says and why.
+    const kept = OVERRIDES.pages[r.pageKey];
+    if (kept?.keepKind) {
+      assert.ok(String(kept.why || '').length > 20, `${r.pageKey}: a kept kind says why`);
+      assert.equal(r.kind, kept.kind, `${r.pageKey}: its kind is the one its override keeps`);
+    } else if (r.pageKey !== 'Admin · Home') assert.equal(r.kind, CANVAS.task_kind[name], `${r.pageKey}: its kind is the canvas's`);
     assert.equal(r.routeTask, `rail_${r.kind}`);
   }
 });

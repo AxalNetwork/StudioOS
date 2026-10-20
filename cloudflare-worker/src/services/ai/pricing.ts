@@ -4,9 +4,10 @@
  * TWO NUMBERS, ONE SOURCE. `costMicro` is Cloudflare's cost for a run, from the
  * catalogue's neuron prices. `billedMicro` is that cost times a multiplier: 1
  * for the `admin` licence, `AI_MARKUP` for everyone else. `billingMode` says
- * which of the two a run is settled at, and in this task it is always 'cost':
- * D762 makes it read `AI_BILLING` in the same PR that settles at it, so no
- * screen draws a price the Worker is not charging.
+ * which of the two a run is settled at: 'billed' once the owner sets
+ * `AI_BILLING = "charged"` (D762, #2123), else 'cost'. The quote, the hold, the
+ * settlement and the price reads all follow it, so no screen draws a price the
+ * Worker is not charging.
  *
  * NEURONS (S1 on #2017). Cloudflare bills in neurons at $0.011 per 1,000, so a
  * unit's price is its printed neuron count × `USD_PER_NEURON`, exactly: the
@@ -29,8 +30,19 @@ export const AI_MARKUP = 1.25;
 
 export type BillingMode = 'cost' | 'billed';
 
-/** The price a run is settled at. 'cost' in this task, always; D762 reads `AI_BILLING`. */
-export const billingMode = (_env?: unknown): BillingMode => 'cost';
+/**
+ * The price a run is settled at (D762 §2). Only the exact value `charged` turns
+ * the markup on; unset, empty or any other value is cost, so a typo never bills.
+ */
+export const billingMode = (env?: unknown): BillingMode =>
+  ((env as { AI_BILLING?: unknown } | null | undefined)?.AI_BILLING === 'charged' ? 'billed' : 'cost');
+
+/**
+ * What a run is settled at over its cost, for this licence: 1 while billing is
+ * on cost, else `multiplierFor(licence)` (the `admin` licence still pays cost).
+ */
+export const chargeMultiplier = (env: unknown, licence: string): number =>
+  (billingMode(env) === 'billed' ? multiplierFor(licence) : 1);
 
 /** The multiplier a licence pays over cost. The `admin` licence (`aiLicenceKey`) always pays cost. */
 export const multiplierFor = (licence: string): number => (licence === 'admin' ? 1 : AI_MARKUP);

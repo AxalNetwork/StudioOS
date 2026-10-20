@@ -109,8 +109,10 @@ test('D717 a distribution and a fund expense name who is paid in every audience,
     if (audience === 'admin' || audience === 'preview') {
       assert.equal(calls.length, 0, `${audience} reads no account`);
     } else {
-      // One call per purpose, each with the purpose's own payee: never for a kind no purpose receives.
-      assert.deepEqual(calls.map(([, p]) => p).sort(), Object.keys(PAYMENT_PURPOSES).sort(), audience);
+      // One call per purpose that receives a money kind, each with the purpose's own payee: never for a kind
+      // no purpose receives. D798's territory licence fee receives none, so no flow reads its account.
+      const flowing = Object.entries(PAYMENT_PURPOSES).filter(([, d]) => d.money_kinds.length).map(([p]) => p);
+      assert.deepEqual(calls.map(([, p]) => p).sort(), flowing.sort(), audience);
       for (const [payee, purpose] of calls) assert.equal(payee, (PAYMENT_PURPOSES as any)[purpose].payee);
     }
   }
@@ -355,7 +357,7 @@ test('#1855 who signs: every audience gets each entity\'s signs, signatory, titl
     assert.deepEqual(by('management').receives, []);
     assert.deepEqual(by('fund').receives, ['Capital contributions', 'GP commitment']);
     assert.deepEqual(by('gp').receives, ['Management fee']);
-    assert.deepEqual(by('holdings').receives, ['Platform licence fee']);
+    assert.deepEqual(by('holdings').receives, ['Platform licence fee', 'Territory licence fee']);
     assert.equal(by('holdings').title, AXAL_ENTITIES.holdings.signatoryTitle);
     assert.equal(by('fund').through, 'By: Axal VC GP LLC, its general partner');
     assert.deepEqual(m.signing, {
