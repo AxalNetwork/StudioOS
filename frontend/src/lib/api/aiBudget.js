@@ -27,6 +27,7 @@ export const aiBudgetApi = {
   },
   // D788 — the member's own monthly spend limit: the limit, this UTC month's charge, the share used, the notices, the allowance.
   // D805 — also `pack_orders: { today, per_day, window_hours, resets_at }`, counted as the purchase check counts. Read by #2246's Limits.
+  // D792 part 2 (#2270): `pack_orders` is null, with `pack_orders_reason: 'pack_orders_unreadable'`, when only that count failed; the limit still reads.
   spendLimit: () => request('/ai-budget/limit'),
   // D788 — set the limit in dollars (null removes it) and its 50/80/100% notices. Needs a recent sign-in (403 step_up_required).
   setSpendLimit: (monthlyLimitUsd, notify) => request('/ai-budget/limit', {

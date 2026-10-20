@@ -97,18 +97,25 @@ r.get('/cost.csv',async c=>{
 /**
  * D788 (#2213): the member's own monthly AI spend limit (`services/aiSpendLimit.ts`):
  * the limit, this UTC month's charge, the share used, the notices, and the plan's
- * allowance beside it for context.
+ * allowance beside it for context. D805's `pack_orders` is null, with
+ * `pack_orders_reason`, when only that count cannot be read.
  */
 r.get('/limit',async c=>{
   const user=await requireAuth(c);
+  let read;
   try {
     const caps=await resolveAiCaps(c.env,user.id);
-    return c.json({...await readSpendLimit(c.env,user.id),
-      allowance:{monthly_microusd:caps.monthly_microusd,source:caps.source,plan:planView(caps.plan)},
-      // D805: today's pack orders, counted as the purchase check counts them.
-      pack_orders:await packOrdersToday(c.env,user.id)});
+    read={...await readSpendLimit(c.env,user.id),
+      allowance:{monthly_microusd:caps.monthly_microusd,source:caps.source,plan:planView(caps.plan)}};
   }
   catch(error) { return refuse(c,503,{code:'ai_spend_limit_unreadable',message:'Unreadable: your AI spend limit could not be read.',raw:error,audience:'member'}); }
+  // D805: today's pack orders, counted as the purchase check counts them. D792 part 2 (#2270):
+  // read on its own, so a count that cannot be read leaves the limit and allowance standing.
+  try { return c.json({...read,pack_orders:await packOrdersToday(c.env,user.id)}); }
+  catch(error) {
+    console.error('[ai-budget/limit] pack orders read failed:',(error as Error)?.message);
+    return c.json({...read,pack_orders:null,pack_orders_reason:'pack_orders_unreadable'});
+  }
 });
 /**
  * D788: set (`monthly_limit_usd` in dollars, at most two decimals, $0 to

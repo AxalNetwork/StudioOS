@@ -192,5 +192,5 @@ test('the page lays the cards out in the canvas\'s order, and stacks them on a p
   assert.match(src, /md:grid-cols-\[minmax\(0,1fr\)_minmax\(0,1\.3fr\)\]/);
   const cards = readFileSync(new URL('../src/pages/account/BillingCards.jsx', import.meta.url), 'utf8');
   assert.match(cards, /grid grid-cols-2 gap-2\.5 sm:grid-cols-4/);
-  assert.match(page, /<BillingConsole role=\{role\} billing=\{billing\} \/>\n\s*\{panel\}/, 'the role\'s panel follows');
+  assert.match(page, /<BillingConsole key=\{role\} role=\{role\} billing=\{billing\} \/>\n\s*\{panel\}/, 'the role\'s panel follows');
 });
