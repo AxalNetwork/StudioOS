@@ -107,6 +107,34 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-10-20 — Licences (D795, #2228)
+
+The owner's artifacts `JuwTf19EDxowZR7dm7QbiZ` and `SY4GwA4i3MebF9ratAbrFE`
+came from S1's prompt on #2233. They are two files of one canvas:
+- `Licences · Boards.dc.html` is the board grid. It holds rows L1–L9 and imports
+  the page once per board, with that board's state.
+- `Licences Page.dc.html` is the page itself: the Administrator's
+  `/admin/my-licence` and its five tabs, plus HQ's terms editor (`board: 'hq'`).
+
+S1 read both with `scripts/read-canvas.mjs`. `Licences · Boards.dc.html` is
+that script's output as is. `Licences Page.dc.html` is the copy the first
+bundle carries as the board grid's import. It is the same design, but it names
+the logo by path (`./uploads/axal-logo-no-black.png`, not committed) where the
+reader leaves an asset uuid. No value was edited.
+
+**Grade: UPGRADE.** `/admin/my-licence` is live (`MyLicencePage.jsx`, read-only).
+The canvas adds five tabs, the terms schedule, requests and HQ's editor. The data
+check (step 3) found three things the D795 tasks had not covered:
+- **Two licensors:** platform IP from Axal VC Holdings, trademark and brand from
+  Axal VC Management.
+- **A revenue share per stream,** plus a royalty on platform licences the
+  subsidiary sells, drawn as its own statement stream.
+- **Annual licence-fee invoices,** each with a PDF.
+
+Each is a column or a table that does not exist yet, so each is filed as a task
+(#2228). The `ROUTE_MAP.md` row is written by the page task when it builds, and
+the file moves to `canvases/integrated/` then.
+
 ## Graduated 2026-10-19 — AIRail · every page (D720, D769)
 
 The owner's artifact `UzN4NdcwEHVYuh4ZoPLkTp`, the rail on every page, landed
