@@ -25,11 +25,25 @@
  *     reads `charged_microusd: null`.
  *
  * Days and ranges are UTC, as `created_at` is (`datetime('now')`).
+ *
+ * D805 (#2243) adds, for the Usage console's B2:
+ *   - `totals.by_kind`: cost and charge by the model's catalogue `kind`,
+ *     through `KIND_GROUP` (tokens, audio and speech, image, other). A model
+ *     the catalogue does not know counts in `other` and is named in
+ *     `totals.other_models`, never dropped. A guard row counts under its own
+ *     model's kind.
+ *   - `totals.output_not_recorded`: runs on a model priced per output token
+ *     that recorded no output count. `completion_tokens` is `NOT NULL DEFAULT
+ *     0` (migration 040), so an unrecorded count is a 0: a streamed reply
+ *     from before D762 settled on its input alone. A cached answer, a refusal
+ *     and a model priced by the minute, the character or the image have no
+ *     output tokens to record and are not counted.
  */
 import type { Env } from '../types';
 import { MODEL_NAMES } from './aiCatalog';
 import { modelById } from './ai/catalogue';
 import { resolveRailOption } from './ai/railMatrix';
+import { unitPrice } from './ai/pricing';
 
 export type CostRange = 'mtd' | '30d' | 'prev_month';
 export type CostGroup = 'model' | 'page' | 'option';
@@ -37,6 +51,40 @@ export const COST_RANGES: readonly CostRange[] = ['mtd', '30d', 'prev_month'];
 export const COST_GROUPS: readonly CostGroup[] = ['model', 'page', 'option'];
 /** At most this many runs are read; `truncated` says when there were more. */
 export const MAX_COST_RUNS = 10_000;
+
+export type KindGroup = 'tokens' | 'audio_speech' | 'image' | 'other';
+export const KIND_GROUPS: readonly KindGroup[] = ['tokens', 'audio_speech', 'image', 'other'];
+/**
+ * D805: every catalogue `kind` (`services/ai/catalogue.ts`), and the cost line
+ * it is drawn on. The test fails on a kind the catalogue has and this map does
+ * not place, so a new kind is placed on purpose.
+ */
+export const KIND_GROUP: Readonly<Record<string, KindGroup>> = {
+  'Text Generation': 'tokens',
+  Summarization: 'tokens',
+  Translation: 'tokens',
+  'Text Embeddings': 'tokens',
+  'Automatic Speech Recognition': 'audio_speech',
+  'Text-to-Speech': 'audio_speech',
+  'Text-to-Image': 'image',
+  'Image-to-Text': 'image',
+  'Text Classification': 'other',
+  'Voice Activity Detection': 'other',
+  'Image Classification': 'other',
+  'Object Detection': 'other',
+};
+
+/** The model's cost line: its catalogue kind's group, or `other` for a model the catalogue does not know. */
+export function kindGroupOf(model: string): KindGroup {
+  const kind = modelById(model)?.kind;
+  return (kind && KIND_GROUP[kind]) || 'other';
+}
+
+/** Whether the model is priced per output token, so a run on it has an output count to record. */
+export function pricedPerOutputToken(model: string): boolean {
+  const price = unitPrice(model, 'tokens_out');
+  return price != null && Number(price) > 0;
+}
 
 const DAY_MS = 86_400_000;
 const isoDay = (ms: number) => new Date(ms).toISOString().slice(0, 10);
@@ -83,6 +131,7 @@ interface LogRow {
   rail_page: string | null;
   rail_option: string | null;
   refusal: string | null;
+  cached: number | null;
 }
 
 /** A running sum: cost in whole micro-USD so six decimals never drift. */
@@ -136,7 +185,7 @@ export async function memberCost(env: Env, userId: number, range: CostRange, gro
   const r = costRange(range, now);
   const rows = (await env.DB.prepare(
     `SELECT substr(created_at, 1, 10) AS day, model, prompt_tokens, completion_tokens, est_cost_usd, charged_microusd,
-            units_json, rail_page, rail_option, refusal
+            units_json, rail_page, rail_option, refusal, cached
        FROM ai_usage_logs
       WHERE user_id = ? AND created_at >= ? AND created_at < ?
       ORDER BY created_at DESC, id DESC
@@ -147,6 +196,9 @@ export async function memberCost(env: Env, userId: number, range: CostRange, gro
 
   const total = new Sum();
   let refused = 0;
+  let outputNotRecorded = 0;
+  const kinds = new Map<KindGroup, Sum>(KIND_GROUPS.map((k) => [k, new Sum()]));
+  const otherModels = new Set<string>();
   const models = new Map<string, Sum>();
   const days = new Map<string, Map<string, Sum>>();
   const groups = new Map<string, { key: string | null; page?: string | null; label: string | null; sum: Sum }>();
@@ -155,6 +207,10 @@ export async function memberCost(env: Env, userId: number, range: CostRange, gro
     const units = otherUnits(row.units_json);
     total.add(row, units);
     const model = String(row.model);
+    const kind = kindGroupOf(model);
+    kinds.get(kind)!.add(row, units);
+    if (kind === 'other') otherModels.add(model);
+    if (!row.cached && !num(row.completion_tokens) && pricedPerOutputToken(model)) outputNotRecorded += 1;
     if (!models.has(model)) models.set(model, new Sum());
     models.get(model)!.add(row, units);
     if (!days.has(row.day)) days.set(row.day, new Map());
@@ -193,6 +249,9 @@ export async function memberCost(env: Env, userId: number, range: CostRange, gro
     totals: {
       runs: total.runs, input_tokens: total.input_tokens, output_tokens: total.output_tokens,
       ...total.money(), refused, not_recorded: total.not_recorded,
+      by_kind: Object.fromEntries(KIND_GROUPS.map((k) => [k, kinds.get(k)!.money()])) as Record<KindGroup, { cost_usd: number; charged_microusd: number | null }>,
+      other_models: [...otherModels].sort(),
+      output_not_recorded: outputNotRecorded,
     },
     days: daysOf(r.from, r.to).map((day) => ({
       day,
@@ -208,7 +267,7 @@ export async function memberCost(env: Env, userId: number, range: CostRange, gro
 
 export type MemberCost = Awaited<ReturnType<typeof memberCost>>;
 
-const CSV_COLUMNS = ['day', 'model', 'name', 'runs', 'input_tokens', 'output_tokens', 'cost_usd', 'charged_microusd'] as const;
+const CSV_COLUMNS = ['day', 'model', 'name', 'kind', 'runs', 'input_tokens', 'output_tokens', 'cost_usd', 'charged_microusd'] as const;
 
 function csvCell(v: unknown): string {
   if (v == null) return '';
@@ -221,7 +280,7 @@ export function costCsv(cost: MemberCost): string {
   const lines = [CSV_COLUMNS.join(',')];
   for (const d of cost.days) {
     for (const m of d.by_model) {
-      lines.push([d.day, m.model, modelName(m.model), m.runs, m.input_tokens, m.output_tokens, m.cost_usd.toFixed(6), m.charged_microusd]
+      lines.push([d.day, m.model, modelName(m.model), kindGroupOf(m.model), m.runs, m.input_tokens, m.output_tokens, m.cost_usd.toFixed(6), m.charged_microusd]
         .map(csvCell).join(','));
     }
   }

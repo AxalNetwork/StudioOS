@@ -6,7 +6,7 @@ import { AI_LICENCE_KEYS, AiBudgetReviewConflict, AiBudgetReviewNotFound, listAi
 import { parseSpendLimit, readSpendLimit, writeSpendLimit } from '../services/aiSpendLimit';
 import { PLAN_AI_SHARE } from '../services/planAllowance';
 import { aiTopupStatus, memberTopupReading, readAiTopupProduct } from '../services/aiTopups';
-import { HISTORY_MAX, ledgerBalance, memberAccount, memberHistory, memberTopUp, packLines, packLabel, reconcile, recordAdjustment } from '../services/aiCredits';
+import { HISTORY_MAX, ledgerBalance, packOrdersToday, memberAccount, memberHistory, memberTopUp, packLines, packLabel, reconcile, recordAdjustment } from '../services/aiCredits';
 import { logAdminAction } from '../services/adminAudit';
 import { COST_GROUPS, COST_RANGES, costCsv, memberCost, type CostGroup, type CostRange } from '../services/aiCost';
 import { CONSUMPTION_GROUPS, memberConsumption, memberMonth, monthBounds, monthKey, type ConsumptionGroup } from '../services/aiConsumption';
@@ -104,7 +104,9 @@ r.get('/limit',async c=>{
   try {
     const caps=await resolveAiCaps(c.env,user.id);
     return c.json({...await readSpendLimit(c.env,user.id),
-      allowance:{monthly_microusd:caps.monthly_microusd,source:caps.source,plan:planView(caps.plan)}});
+      allowance:{monthly_microusd:caps.monthly_microusd,source:caps.source,plan:planView(caps.plan)},
+      // D805: today's pack orders, counted as the purchase check counts them.
+      pack_orders:await packOrdersToday(c.env,user.id)});
   }
   catch(error) { return refuse(c,503,{code:'ai_spend_limit_unreadable',message:'Unreadable: your AI spend limit could not be read.',raw:error,audience:'member'}); }
 });

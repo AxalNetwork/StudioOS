@@ -147,6 +147,43 @@ export type TokenPackRefusal = 'token_pack_alone' | 'promo_not_for_token_packs' 
 export type TokenPackQuote = { priceId: string; packUid: string | null; creditMicrousd: number; bonusMicrousd: number };
 
 /**
+ * D805 (#2243): the member's pack orders in the rolling window
+ * (`TOKEN_PACK_LIMITS.orderWindowHours`), counted once, for the purchase check
+ * (`tokenPackQuote`) and for the read that shows the count
+ * (`GET /api/ai-budget/limit`'s `pack_orders`). Every order is an
+ * `ai_topup_purchases` row, an auto-reload (D794) included, since it is bought
+ * through the same check. `excludeOrderRef` leaves out the order being
+ * refreshed, so a refresh is not counted against itself.
+ *   - `n`: orders in the window;
+ *   - `pending`: what those not yet credited will add to the balance;
+ *   - `oldest`: the oldest order's `created_at`, when the count next drops.
+ */
+export async function recentPackOrders(env: Env, userId: number, excludeOrderRef = ''): Promise<{ n: number; pending: number; oldest: string | null }> {
+  const window = `-${TOKEN_PACK_LIMITS.orderWindowHours} hours`;
+  const recent = await env.DB.prepare(`SELECT COUNT(*) AS n,
+      COALESCE(SUM(CASE WHEN credited_at IS NULL THEN credit_microusd+bonus_microusd ELSE 0 END),0) AS pending,
+      MIN(created_at) AS oldest
+    FROM ai_topup_purchases WHERE user_id = ? AND order_ref <> ? AND created_at > datetime('now', ?)`)
+    .bind(userId, excludeOrderRef, window).first<any>();
+  if (!recent || !Number.isSafeInteger(recent.n) || !Number.isSafeInteger(recent.pending)) throw new Error('AI top-up purchases unreadable');
+  return { n: recent.n, pending: recent.pending, oldest: typeof recent.oldest === 'string' ? recent.oldest : null };
+}
+
+/**
+ * D805: the member's pack orders as the limits card reads them: `today` in the
+ * rolling window, out of `per_day`, and `resets_at`, when the oldest of them
+ * leaves the window (null with none). The same count `tokenPackQuote` refuses at.
+ */
+export async function packOrdersToday(env: Env, userId: number): Promise<{ today: number; per_day: number; window_hours: number; resets_at: string | null }> {
+  const { n, oldest } = await recentPackOrders(env, userId);
+  const resets = oldest ? new Date(Date.parse(`${oldest.replace(' ', 'T')}Z`) + TOKEN_PACK_LIMITS.orderWindowHours * 3_600_000) : null;
+  return {
+    today: n, per_day: TOKEN_PACK_LIMITS.ordersPerDay, window_hours: TOKEN_PACK_LIMITS.orderWindowHours,
+    resets_at: resets && Number.isFinite(resets.getTime()) ? resets.toISOString() : null,
+  };
+}
+
+/**
  * D755 §5: the quote for an order with a pack line, a refusal, or null when no
  * line is a pack. Called before the promo is resolved, so a pack never reaches
  * the free path. `excludeOrderRef` is this order's own earlier purchase row,
@@ -164,13 +201,7 @@ export async function tokenPackQuote(env: Env, userId: number, cart: PricedCart,
   if (!pack || face === null || line.unit_amount !== face || cart.currency !== 'usd') return { error: 'token_pack_not_on_sale' };
   const creditMicrousd = face * (AI_USD_SCALE / 100);
   const bonusMicrousd = pack.bonusMicrousd;
-  const exclude = opts.excludeOrderRef ?? '';
-  const window = `-${TOKEN_PACK_LIMITS.orderWindowHours} hours`;
-  const recent = await env.DB.prepare(`SELECT COUNT(*) AS n,
-      COALESCE(SUM(CASE WHEN credited_at IS NULL THEN credit_microusd+bonus_microusd ELSE 0 END),0) AS pending
-    FROM ai_topup_purchases WHERE user_id = ? AND order_ref <> ? AND created_at > datetime('now', ?)`)
-    .bind(userId, exclude, window).first<any>();
-  if (!recent || !Number.isSafeInteger(recent.n) || !Number.isSafeInteger(recent.pending)) throw new Error('AI top-up purchases unreadable');
+  const recent = await recentPackOrders(env, userId, opts.excludeOrderRef ?? '');
   if (recent.n >= TOKEN_PACK_LIMITS.ordersPerDay) return { error: 'token_pack_daily_limit' };
   const account = await env.DB.prepare('SELECT balance_microusd FROM ai_topup_accounts WHERE user_id = ?').bind(userId).first<any>();
   const balance = account ? account.balance_microusd : 0;
