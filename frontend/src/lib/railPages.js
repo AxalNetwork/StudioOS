@@ -456,6 +456,7 @@ function best(pages, path, tab, hash) {
  * app-parity test reads this list; each says why.
  */
 export const NO_RAIL_ROUTES = [
+  { route: '/learning', railCount: 0, roles: ['founder', 'investor', 'advisor', 'partner', 'admin'], why: 'Owner request: Learning home has no AI rail on desktop or phone. Learning subpages retain their rails.' },
   { route: '/studio', roles: ['admin'], why: 'Admin · Studio has no rail (D598).' },
   { route: '/studio/tickets/new', roles: ['admin'], why: 'Studio’s own form; Admin · Studio has no rail (D598).' },
   { route: '/spinout-lab/apply', roles: [], why: 'The Spin-Out Lab application, before a lane is chosen: no profile yet.' },

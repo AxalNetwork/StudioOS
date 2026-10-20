@@ -44,7 +44,7 @@ import { register } from 'node:module';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { RAIL_PAGES, pageKeyFor } from '../src/lib/railPages.js';
+import { NO_RAIL_ROUTES, RAIL_PAGES, pageKeyFor } from '../src/lib/railPages.js';
 
 /** The task that finishes each profile's boards (part 1's `BOARD_TASK`). */
 export const RENDER_TASK = {
@@ -96,6 +96,13 @@ export function renderStatus(drawn) {
   let pass = false;
   for (const d of drawn) {
     const keys = d.keys || [];
+    // Owner-requested rail-free pages are rendered too: assert absence rather
+    // than classifying an intentional removal as unfinished work.
+    if (d.expectedRails === 0) {
+      if (keys.length) why.push(`${d.state}: ${keys.length} rails on a page that should have none`);
+      else pass = true;
+      continue;
+    }
     if (keys.length > 1) why.push(`${d.state}: ${keys.length} rails`);
     const wrong = keys.filter((k) => k !== d.expected);
     if (wrong.length) why.push(`${d.state}: a rail keyed ${wrong.map((k) => JSON.stringify(k)).join(', ')} at ${d.landed}, which is ${JSON.stringify(d.expected)}`);
@@ -405,6 +412,8 @@ export async function railRenderer() {
         keys: rails.map((a) => a.getAttribute('data-page-key')),
         landed,
         expected: pageKeyFor(at?.pathname ?? '', profile, { search: at?.search ?? '', hash: at?.hash ?? '' }),
+        expectedRails: NO_RAIL_ROUTES.find((n) => n.route === (at?.pathname ?? '').replace(/\/$/, '')
+          && n.roles.includes(MEMBERS[profile]?.role))?.railCount ?? 1,
       };
     } finally {
       await act(async () => root.unmount());
@@ -437,7 +446,7 @@ export async function railRenderer() {
  * every finding at once.
  */
 export function renderProfile(profile) {
-  test(`every ${profile} route in the page map draws exactly one rail, with its page key in the DOM`, async () => {
+  test(`every ${profile} route draws its expected rail count and page key`, async () => {
     const cases = renderCases().filter((c) => c.profile === profile);
     assert.ok(cases.length > 0, `the page map has ${profile} routes`);
     const renderer = await railRenderer();

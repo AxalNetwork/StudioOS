@@ -458,7 +458,7 @@ test('10 (part). every phone bar this PR draws passes PhoneBar an eadwynLabel eq
     }
     assert.doesNotMatch(src, /Open Eadwyn for this page/, `${f} draws no Eadwyn button of its own`);
   }
-  // The rail stays mounted on a phone: the phone view is inside the frame, beside it.
+  // Perks keeps its phone rail; Learning home deliberately has none.
   const page = read('frontend/src/pages/SettingsPage.jsx');
   assert.match(page, /<RailFrame\s+rail=\{\(\s*<WorkerRail\s+workspace="Account"/);
 });
@@ -769,11 +769,12 @@ test('10. A4m–A10m share one bar, which names itself to Eadwyn by its title; n
     assert.doesNotMatch(src, /Open Eadwyn for this page/, `${f} draws an Eadwyn button of its own`);
     for (const bar of src.matchAll(/<PhoneBar [^>]*\/>/g)) assert.match(bar[0], /eadwynLabel=\{page\.title\}/, `${f}: ${bar[0]}`);
   }
-  // The rail stays mounted on a phone: the phone view is inside the frame, beside it.
+  // Perks keeps its phone rail; Learning home deliberately has none.
   const perks = read('frontend/src/pages/PerksPage.jsx');
   assert.match(perks, /\{phone \? \(\s*<PerksPhoneView[\s\S]*?\n      <\/div>\n      <WorkerRail\s+workspace="Perks & Products"/);
   const learning = read('frontend/src/pages/learning/LearningHome.jsx');
-  assert.match(learning, /<RailFrame\s+rail=\{\(\s*<WorkerRail\s+workspace="Learning"[\s\S]*?>\s*\{phone \? \(\s*<LearningPhoneView/);
+  assert.match(learning, /<RailFrame data-testid="learning-home">\s*\{phone \? \(\s*<LearningPhoneView/);
+  assert.doesNotMatch(learning, /<WorkerRail\b/);
   // The five pages that mount no rail still mount none (decision 12).
   for (const f of ['TrustCenterPage.jsx', 'CalendarPage.jsx', 'events/MyEventsPage.jsx', 'docs/DocsLayout.jsx', 'ProductsPage.jsx']) {
     assert.doesNotMatch(read(`frontend/src/pages/${f}`), /<WorkerRail\b/, `${f} gained a rail`);
