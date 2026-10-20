@@ -224,6 +224,13 @@ D755 sells the AI top-up balance as token packs (`ai_token_packs`, migration 486
 | `POST /api/admin/catalog/token-packs/:uid/archive` | Super Admin | Off sale for good, and the Stripe price archived. |
 | `GET /api/public/plans-and-packs` | anyone | Every plan with its price and AI allowance, the packs on sale, `covers` and `resets`. D1 only, cached 60 seconds, its own rate-limit bucket, no person named. |
 
+D806 (#2245): Billing's invoices and the card's address (`routes/billing.ts`, `services/billingInvoices.ts`).
+
+| Route | Who | What it answers |
+| --- | --- | --- |
+| `GET /api/billing/invoices?page=1&per=25` | signed in | The member's own invoices in one list, newest first, then paged (`per` 1–100, default 25), with `page`, `per` and `total`. Each row is `{ kind: 'order'\|'stripe', id, date, description, amount_cents, currency, status, pdf_url }`; `status` is `paid`, `refunded`, `partly_refunded`, `open` or `void`. Orders are the paid ones in D1: "AI tokens, $25 pack", "AI tokens, auto-reload $25" (a line marked `origin: 'auto_reload'`), else the items' names; refunds are read for token packs only, from the ledger's refund rows; the PDF is `/api/orders/:ref/invoice`. Plan invoices are each Stripe customer the member has (founder, investor, read once if the same), at most 100 per customer: "[plan] · monthly", their credit notes, and Stripe's `invoice_pdf` passed through as an https URL. When Stripe cannot be read the orders still list, with `degraded: ['stripe']`. |
+| `GET /api/billing/overview?scope=` | signed in | Unchanged but for D806: each of `payment_methods` carries `billing_address` (`line1`, `line2`, `city`, `postal_code`, `country`) from Stripe's `billing_details.address`, or `null` when Stripe holds none. |
+
 A pack is bought only through `POST /api/orders/intent`, alone, at face value, with no promo code. `POST /api/payments/intent`, `/api/payments/alacarte/intent`, `/api/payments/promo/validate` and `/api/billing/subscription/swap/preview|confirm` answer 400 `token_pack_checkout_only` for a pack price, and the generic `/api/admin/catalog` writes answer 409 `token_pack_managed_on_hq`. `/api/admin/catalog` is in the cool-off prefixes.
 
 The Stripe webhook (`POST /api/billing/stripe/webhook`) credits a pack only on `payment_intent.succeeded`, once, with its bonus. Three new events take tokens back (`services/aiCreditReversals.ts`): `charge.refunded`, `charge.dispute.created` and `charge.dispute.closed`. Each acts only on a token pack's charge.
