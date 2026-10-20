@@ -17,6 +17,7 @@
  *                                    public number and a plain wa.me link (#1939)
  *   POST   /whatsapp/link/:uid/confirm  Axal's half: the claimed number becomes the member's link
  *   DELETE /whatsapp/link           unlink
+ *   PUT    /whatsapp/link/venture   #1939 part 3: the venture linked recordings go to, or null
  *   GET    /whatsapp/captures       way B part 2 (#1938): what the member forwarded to Axal's number
  *   POST   /whatsapp/captures/:uid/consent  { method: 'pre_agreed' | 'verbal' | 'written' } for a capture still waiting
  *   DELETE /:provider               disconnect (telegram | whatsapp)
@@ -189,6 +190,9 @@ const SENTENCE: Record<string, string> = {
   axal_number: "This is Axal's own WhatsApp number. Connect your business's own number instead.",
   number_taken: 'This WhatsApp number is already connected to another Axal account.',
   capture_not_waiting: 'That recording is not waiting for an answer: it was answered, removed or has expired.',
+  // #1939 part 3 — where linked recordings go.
+  whatsapp_not_linked: 'Link your WhatsApp to Axal first, then choose where its recordings go.',
+  venture_not_yours: 'Choose one of your own ventures.',
   number_not_in_waba: 'That number is not part of the WhatsApp Business account you connected.',
   choose_number: 'Your WhatsApp Business account has more than one number. Connect again and choose the number your customers write to.',
   code_exchange_failed: 'Meta did not accept the sign-up. Start the WhatsApp connection again.',
@@ -390,6 +394,22 @@ channels.get('/whatsapp/link', venture(async (c, user) => {
   if (!waLink.axalNumberReady(c.env)) return wayBOff(c, user);
   await activeMember(c.env, user.id);
   return c.json({ ...(await waLink.whatsappLinkView(c.env, user.id)), ...waLink.axalContact(c.env) });
+}));
+
+/**
+ * #1939 part 3: the venture a linked member's recordings go to, or null for
+ * their most recently updated one. A venture they cannot write is refused the
+ * same way whether it is missing or another member's.
+ */
+channels.put('/whatsapp/link/venture', venture(async (c, user) => {
+  if (!waLink.axalNumberReady(c.env)) return wayBOff(c, user);
+  await activeMember(c.env, user.id);
+  const body = await c.req.json<Record<string, unknown>>().catch(() => null);
+  const raw = body && Object.hasOwn(body, 'project_id') ? body.project_id : undefined;
+  if (raw !== null && !(typeof raw === 'number' && Number.isSafeInteger(raw) && raw > 0)) return no(c, 400, 'invalid_request');
+  const out = await waLink.setVentureChoice(c.env, user.id, raw);
+  if (!out.ok) return out.reason === 'not_linked' ? no(c, 409, 'whatsapp_not_linked') : no(c, 403, 'venture_not_yours');
+  return c.json({ ok: true, venture: await waLink.ventureChoice(c.env, user.id) });
 }));
 
 channels.post('/whatsapp/link/:uid/confirm', venture(async (c, user) => {

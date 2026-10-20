@@ -369,8 +369,9 @@ export interface RunResult {
   attempts?: AttemptRecord[];
   // D763: what the guard decided. Absent on a run the guard skips.
   guard?: GuardReport;
-  // D780: the `ai_usage_logs` row of a run that answered, so what it leaves in
-  // `ai_rail_proposals` can name the run that wrote it. Null when it could not be written.
+  // D777 (#2102): the ai_usage_logs row this answer was recorded under, so what
+  // it produced can name its run. Set on an answered run; null when the row
+  // could not be written; absent on a refusal and on a stream, which records later.
   usageLogId?: number | null;
 }
 
@@ -1768,13 +1769,14 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
     const hit = await cacheHit();
     if (hit) {
       const usage = cachedUsage();
-      await recordUsage(env, opts, usage, null);
+      const usageLogId = await recordUsage(env, opts, usage, null);
       return {
         ok: true,
         output: hit.output ?? '',
         embedding: hit.embedding,
         ...(hit.ranking ? { ranking: hit.ranking } : {}),
         usage,
+        usageLogId,
       };
     }
   }

@@ -1,12 +1,13 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAuth, requireSuperAdmin } from '../auth';
+import { requireAuth, requireHqAdmin, requireSuperAdmin } from '../auth';
 import { AI_LICENCE_KEYS, AiBudgetReviewConflict, AiBudgetReviewNotFound, listAiBudgetReviews,
-  listAiLicenceCaps, loadAiBudget, settleAiBudgetReview, usdToMicro } from '../services/aiBudget';
+  listAiLicenceCaps, loadAiBudget, settleAiBudgetReview, TYPED_CAP_LICENCES, usdToMicro } from '../services/aiBudget';
+import { PLAN_AI_SHARE } from '../services/planAllowance';
 import { aiTopupStatus, memberTopupReading, readAiTopupProduct } from '../services/aiTopups';
 import { HISTORY_MAX, ledgerBalance, memberAccount, memberHistory, memberTopUp, packLines, packLabel, reconcile, recordAdjustment } from '../services/aiCredits';
 import { logAdminAction } from '../services/adminAudit';
-import { CONSUMPTION_GROUPS, memberConsumption, monthBounds, monthKey, type ConsumptionGroup } from '../services/aiConsumption';
+import { CONSUMPTION_GROUPS, memberConsumption, memberMonth, monthBounds, monthKey, type ConsumptionGroup } from '../services/aiConsumption';
 import { refuse } from '../util/refusal';
 import { AUTH_ERROR_STATUSES } from '../util/authErrors';
 
@@ -71,7 +72,12 @@ r.get('/top-up/status',async c=>{
 });
 r.get('/caps',async c=>{
   await requireSuperAdmin(c);
-  try { return c.json({plans:await listAiLicenceCaps(c.env)}); }
+  // D783: the typed caps (the admin licence only), and each catalogue plan's computed allowance, read-only.
+  try {
+    const {plansAndPacks}=await import('../services/aiCredits');
+    const catalogue=(await plansAndPacks(c.env)).plans;
+    return c.json({plans:await listAiLicenceCaps(c.env),share:PLAN_AI_SHARE,catalogue});
+  }
   catch(error) { return refuse(c,503,{code:'ai_caps_unreadable',message:'Unreadable: the AI plan allowances could not be read.',raw:error}); }
 });
 r.get('/reviews',async c=>{
@@ -96,6 +102,8 @@ r.put('/caps/:licence',async c=>{
   const actor=await requireSuperAdmin(c);
   const key=c.req.param('licence');
   if (!AI_LICENCE_KEYS.includes(key as any)) return c.json({error:'invalid_licence',message:'Choose a recorded licence key.'},400);
+  if (!TYPED_CAP_LICENCES.has(key as any)) return refuse(c,409,{code:'ai_allowance_computed',
+    message:"This plan's AI allowance is 25% of what each member pays for it, so it cannot be typed."});
   const body=await c.req.json().catch(()=>null);
   if (!body || typeof body.daily_usd!=='number' || typeof body.monthly_usd!=='number'
     || !Number.isFinite(body.daily_usd) || !Number.isFinite(body.monthly_usd) || body.daily_usd<0 || body.monthly_usd<0
@@ -156,6 +164,28 @@ r.post('/members/:userId/adjustments',async c=>{
     return c.json({uid:out.uid,already_recorded:out.already,delta_microusd:out.delta_microusd,balance_microusd:out.balance_microusd,
       ledger_balance_microusd:await ledgerBalance(c.env,id)});
   } catch(error) { return refuse(c,503,{code:'ai_adjustment_not_recorded',message:'The adjustment was not recorded. Nothing changed.',raw:error}); }
+});
+// ---------------------------------------------------------------------------
+// D776 PR 2 (#2093): HQ › AI allowances, read-only. HQ's Admin and Super Admin.
+// ---------------------------------------------------------------------------
+/**
+ * One member's month: their runs by option within a page, with the charge and
+ * the allowance and token split (the member's own grouped read, scoped by
+ * user_id), and each run with its cost, charge and model. Each read is
+ * audited, as D755's member account read is; the audit line names the member's
+ * id and the month, never a figure.
+ */
+r.get('/members/:userId/runs',async c=>{
+  const actor=await requireHqAdmin(c);
+  const month=c.req.query('month')??monthKey(new Date());
+  if (!monthBounds(month)) return c.json({error:'invalid_month',message:'Give the month as YYYY-MM.'},400);
+  try {
+    const id=await memberOf(c);
+    if (id===null) return refuse(c,404,{code:'ai_member_not_found',message:'No member has that ID.'});
+    const out=await memberMonth(c.env,id,month);
+    await logAdminAction(c.env,actor.id,(actor as any).email ?? '','ai_member_runs_read',{member_id:id,month});
+    return c.json(out);
+  } catch(error) { return refuse(c,503,{code:'ai_member_runs_unreadable',message:'Unreadable: where this member\'s AI spend went could not be read.',raw:error}); }
 });
 r.get('/reconcile',async c=>{
   await requireSuperAdmin(c);

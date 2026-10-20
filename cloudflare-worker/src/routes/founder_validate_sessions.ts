@@ -961,7 +961,8 @@ sessions.get('/sessions/:id/receipt', async (c) => {
   try {
     const b: any = await aiBudget.loadAiBudget(c.env, s.user.id);
     budget = {
-      day_left_microusd: Math.max(0, b.daily_microusd - b.day_spend_microusd - b.day_reserved_microusd),
+      // D783: a member has no day cap, so nothing is left "today" apart from the month.
+      day_left_microusd: b.daily_capped ? Math.max(0, b.daily_microusd - b.day_spend_microusd - b.day_reserved_microusd) : null,
       month_left_microusd: Math.max(0, b.monthly_microusd - b.month_spend_microusd - b.month_reserved_microusd),
       balance_microusd: b.balance_microusd,
     };

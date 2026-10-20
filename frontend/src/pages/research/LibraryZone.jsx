@@ -9,6 +9,8 @@ import {
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../workspaces/ZoneDraft';
 import { Instrument, PairNote, SourceLegend } from '../../workspaces/canvasKit';
+import { useRailOption, useRailPage } from '../../ui/railCrumbs';
+import { railOptionFor } from '../../lib/railOptions';
 
 /**
  * Research · Library — the documents you hold, and how far Ask can see into them.
@@ -132,6 +134,9 @@ const LIBRARY_STRIP = {
 LIBRARY_STRIP.partner = LIBRARY_STRIP.advisor;
 LIBRARY_STRIP.investor = LIBRARY_STRIP.founder;
 
+/** This zone, as the profiles' option inventories name it (`lib/railOptions`). */
+const ZONE_FILE = 'pages/research/LibraryZone.jsx';
+
 /**
  * `zoneActions` is the same render prop `AskZone` takes, for the same reason:
  * one route, four licences, four different sets of zone actions. Called with
@@ -144,6 +149,14 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
   // predicate below is the same for all four, because it is the same store.
   const [filter, setFilter] = useState('all');
   const [busy, setBusy] = useState(false);
+  // D771 (#2097): `busy` also covers Remove, so an upload or a re-index names itself to the rail on its own.
+  const [running, setRunning] = useState(null);
+  // D772 (#2098): each under the key the member's profile gives it on this page.
+  const railPage = useRailPage()?.page ?? null;
+  const uploadOption = railOptionFor(railPage, { file: ZONE_FILE, control: 'upload' });
+  const reindexOption = railOptionFor(railPage, { file: ZONE_FILE, control: 'reindex' });
+  useRailOption(running === 'upload' ? uploadOption?.key : null, uploadOption?.label);
+  useRailOption(running === 'reindex' ? reindexOption?.key : null, reindexOption?.label);
   const [note, setNote] = useState(null);
   const [kind, setKind] = useState('document');
   const [title, setTitle] = useState('');
@@ -199,7 +212,7 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
     e.preventDefault();
     const file = fileRef.current?.files?.[0];
     if (!file) { setNote({ ok: false, text: 'Choose a file first.' }); return; }
-    setBusy(true); setNote(null);
+    setBusy(true); setNote(null); setRunning('upload');
     try {
       const fd = new FormData();
       fd.append('file', file);
@@ -215,7 +228,7 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
       await load();
     } catch (err) {
       setNote({ ok: false, text: err?.message || 'That could not be uploaded. Nothing was saved.' });
-    } finally { setBusy(false); }
+    } finally { setBusy(false); setRunning(null); }
   };
 
   const remove = async (uid) => {
@@ -277,14 +290,14 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
   };
 
   const reindex = async (uid) => {
-    setBusy(true); setNote(null);
+    setBusy(true); setNote(null); setRunning('reindex');
     try {
       await api.research.reindex(uid);
       setNote({ ok: true, text: 'Reading it again — the state below updates when Ask can use it.' });
       await load();
     } catch (err) {
       setNote({ ok: false, text: err?.message || 'That could not be re-indexed.' });
-    } finally { setBusy(false); }
+    } finally { setBusy(false); setRunning(null); }
   };
 
   // `Re-index` acts on every own document that Ask cannot currently read, which
@@ -491,6 +504,7 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
 
         <ZoneDraft
           surface="research/library"
+          railOption={railOptionFor(railPage, { file: ZONE_FILE, control: 'research/library' })?.key}
           label="Draft · index gaps"
           accept="Accept draft"
           run="Draft the gaps"

@@ -603,6 +603,7 @@ export default function FundDossier({ role = 'founder' }) {
 
             <ZoneDraft
               surface="research/funds"
+              railOption="draft:research/funds"
               scopeKey={fund.uid}
               scoped
               accent="violet"

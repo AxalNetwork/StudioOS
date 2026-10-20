@@ -14,7 +14,7 @@ import FreePlanCard from '../src/components/products/FreePlanCard.jsx';
 import { bundleContentFor, isBundleProduct } from '../src/components/products/productsShared.js';
 import {
   allowanceLine, planAi, planOf, planForProduct, freePlans,
-  phonePlans, planPriceLabel, FAMILY_LABELS, NO_ALLOWANCE, MI_ALLOWANCE, ALLOWANCE_UNREADABLE,
+  phonePlans, planPriceLabel, FAMILY_LABELS, NO_ALLOWANCE, ALLOWANCE_UNREADABLE,
   TOP_UP_WITH_PACKS, YOUR_PLAN, TOKEN_PACKS_ID,
 } from '../src/lib/plansPricing.js';
 
@@ -27,20 +27,22 @@ const LOADING = { status: 'loading', data: null };
 const UNREADABLE = { status: 'unreadable', data: null };
 
 const COVERS = 'Covers Eadwyn and the AI tools on every page, Validate interview sessions and live transcription, at the rates on your Usage page.';
-const RESETS = 'Resets at 00:00 UTC each day and on the 1st each month.';
-const A = (d, m) => ({ daily_microusd: d, monthly_microusd: m, source: 'recorded' });
+const RESETS = 'Resets on the 1st of each month at 00:00 UTC.';
+// D783 (#2124): a plan includes 25% of its price each month, with no day figure; no plan, none.
+const A = (m) => ({ share: 0.25, monthly_microusd: m, source: m ? 'plan' : 'none' });
+const line = (m) => `Includes ${m} of AI each month: 25% of the price. Past it, runs use your tokens.`;
 const month = (cents, id) => [{ price_id: id, unit_amount: cents, currency: 'usd', interval: 'month', interval_count: 1 }];
 // What CR2's read answers (services/aiCredits.ts `plansAndPacks`), one plan per family.
 const READ = {
   plans: [
-    { family: 'founder', licence_key: 'founder:free', product_id: null, plan_name: null, free: true, prices: [], allowance: A(250_000, 1_000_000) },
-    { family: 'investor', licence_key: 'investor:free', product_id: null, plan_name: null, free: true, prices: [], allowance: A(0, 0) },
-    { family: 'other', licence_key: 'other', product_id: null, plan_name: null, free: true, prices: [], allowance: A(0, 0) },
-    { family: 'founder', licence_key: 'founder:growth', product_id: 'prod_growth', plan_name: 'Validate + Build', free: false, prices: month(2000, 'price_g'), allowance: A(1_000_000, 5_000_000) },
-    { family: 'investor', licence_key: 'investor:professional', product_id: 'prod_pro', plan_name: 'Investor — Professional', free: false, prices: month(4900, 'price_ip'), allowance: A(0, 8_000_000) },
-    { family: 'advisor', licence_key: 'advisor', product_id: 'prod_adv', plan_name: 'Advisor', free: false, prices: month(2900, 'price_a'), allowance: A(500_000, 0) },
-    { family: 'partner', licence_key: 'partner', product_id: 'prod_part', plan_name: 'Operating Partner', free: false, prices: month(9900, 'price_p'), allowance: A(2_000_000, 10_000_000) },
-    { family: 'market_intelligence', licence_key: null, product_id: 'prod_mi', plan_name: 'Market Intelligence Pro', free: false, prices: month(1500, 'price_mi'), allowance: null },
+    { family: 'founder', licence_key: 'founder:free', product_id: null, plan_name: null, free: true, prices: [], allowance: A(0) },
+    { family: 'investor', licence_key: 'investor:free', product_id: null, plan_name: null, free: true, prices: [], allowance: A(0) },
+    { family: 'other', licence_key: 'other', product_id: null, plan_name: null, free: true, prices: [], allowance: A(0) },
+    { family: 'founder', licence_key: 'founder:growth', product_id: 'prod_growth', plan_name: 'Validate + Build', free: false, prices: month(2000, 'price_g'), allowance: A(5_000_000) },
+    { family: 'investor', licence_key: 'investor:professional', product_id: 'prod_pro', plan_name: 'Investor — Professional', free: false, prices: month(4900, 'price_ip'), allowance: A(12_250_000) },
+    { family: 'advisor', licence_key: 'advisor', product_id: 'prod_adv', plan_name: 'Advisor', free: false, prices: month(2900, 'price_a'), allowance: A(7_250_000) },
+    { family: 'partner', licence_key: 'partner', product_id: 'prod_part', plan_name: 'Operating Partner', free: false, prices: month(9900, 'price_p'), allowance: A(24_750_000) },
+    { family: 'market_intelligence', licence_key: null, product_id: 'prod_mi', plan_name: 'Market Intelligence Pro', free: false, prices: month(1500, 'price_mi'), allowance: A(3_750_000) },
   ],
   packs: [
     { uid: 'pk_10', label: '$10 of tokens', price_id: 'price_pk10', unit_amount: 1000, currency: 'usd', credit_microusd: 10_000_000, bonus_microusd: 0 },
@@ -61,21 +63,22 @@ const card = (p, reading = ready(READ), licence = null) => {
   return text(html(h(BundleCard, { product: p, globalCycle: 'monthly', onPreview: () => {}, onSubscribe: () => {}, ai: planAi(plan, reading, { licence }), family: plan?.family })));
 };
 
-test('the allowance line shows only the parts above zero, and says so when there is none', () => {
-  assert.equal(allowanceLine(A(1_000_000, 5_000_000)), '$1.00 a day · $5.00 a month');
-  assert.equal(allowanceLine(A(0, 8_000_000)), '$8.00 a month');
-  assert.equal(allowanceLine(A(500_000, 0)), '$0.50 a day');
-  assert.equal(allowanceLine(A(0, 0)), NO_ALLOWANCE);
-  assert.equal(NO_ALLOWANCE, 'No AI allowance on this plan. Runs use your top-up balance.');
-  for (const bad of [null, {}, A(-1, 0), A(1.5, 0), A('1', 0)]) assert.equal(allowanceLine(bad), null);
+test('the allowance line says the month a plan includes and its share, and says so when there is none', () => {
+  assert.equal(allowanceLine(A(5_000_000)), line('$5.00'));
+  assert.equal(allowanceLine(A(12_250_000)), line('$12.25'));
+  assert.equal(allowanceLine(A(0)), NO_ALLOWANCE);
+  assert.equal(NO_ALLOWANCE, 'No plan: every run uses your tokens.');
+  for (const bad of [null, {}, A(-1), A(1.5), A('1'), { ...A(5_000_000), share: null }]) assert.equal(allowanceLine(bad), null);
 });
 
 test('every family\'s card carries its allowance from the read, what it covers, when it resets, and Top up', () => {
   const cases = [
-    [CATALOG.growth, 'Founder', '$1.00 a day · $5.00 a month'],
-    [CATALOG.pro, 'Investor', '$8.00 a month'],
-    [CATALOG.adv, 'Advisor', '$0.50 a day'],
-    [CATALOG.part, 'Operating Partner', '$2.00 a day · $10.00 a month'],
+    [CATALOG.growth, 'Founder', line('$5.00')],
+    [CATALOG.pro, 'Investor', line('$12.25')],
+    [CATALOG.adv, 'Advisor', line('$7.25')],
+    [CATALOG.part, 'Operating Partner', line('$24.75')],
+    // D783: Market Intelligence Pro is a member plan like the others, so it gives its share.
+    [CATALOG.mi, 'Market Intelligence Pro', line('$3.75')],
   ];
   for (const [p, family, line] of cases) {
     const t = card(p);
@@ -87,11 +90,7 @@ test('every family\'s card carries its allowance from the read, what it covers, 
   assert.equal(FAMILY_LABELS.partner, 'Operating Partner');
 });
 
-test('Market Intelligence Pro says it does not change the allowance, and offers no top-up line', () => {
-  const t = card(CATALOG.mi);
-  assert.ok(t.includes(`AI allowance ${MI_ALLOWANCE}`));
-  assert.equal(MI_ALLOWANCE, 'Does not change your AI allowance.');
-  assert.ok(!t.includes(TOP_UP_WITH_PACKS.label) && !t.includes(RESETS));
+test('Market Intelligence Pro is a plan card', () => {
   assert.ok(isBundleProduct(CATALOG.mi), 'Market Intelligence Pro is a plan card');
 });
 
@@ -99,9 +98,9 @@ test('the free plans get cards of their own, Exploring and other accounts includ
   const free = freePlans(ready(READ));
   assert.deepEqual(free.map((p) => p.title), ['Founder Free', 'Investor Free', 'Exploring and other accounts']);
   const t = text(html(h(FreePlanCard, { plan: free[0], ai: planAi(free[0], ready(READ)) })));
-  assert.equal(t, `Founder Founder Free $0 AI allowance $0.25 a day · $1.00 a month ${COVERS} ${RESETS} ${TOP_UP_WITH_PACKS.label}`);
+  assert.equal(t, `Founder Founder Free $0 AI allowance ${NO_ALLOWANCE} ${COVERS} ${RESETS} ${TOP_UP_WITH_PACKS.label}`);
   const other = text(html(h(FreePlanCard, { plan: free[2], ai: planAi(free[2], ready(READ)) })));
-  assert.ok(other.startsWith('Exploring or other Exploring and other accounts $0 AI allowance No AI allowance on this plan.'));
+  assert.ok(other.startsWith('Exploring or other Exploring and other accounts $0 AI allowance No plan: every run uses your tokens.'));
 });
 
 test('"Your plan" marks the card whose licence is the member\'s, and only that one', () => {

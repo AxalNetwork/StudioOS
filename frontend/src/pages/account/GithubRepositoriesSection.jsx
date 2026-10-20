@@ -25,7 +25,8 @@ export default function GithubRepositoriesSection({ p, focus = false, onChanged,
     if (focus && uid) heading.current?.focus?.();
   }, [focus, uid]);
   if (!uid) return null;
-  const panel = { p, conn, onChanged, onClose: () => setRound((n) => n + 1) };
+  // #1884: the page's Repositories carry the App's install link and Refresh.
+  const panel = { p, conn, onChanged, installLinks: true, onClose: () => setRound((n) => n + 1) };
   if (api) panel.api = api;
   if (projectsApi) panel.projectsApi = projectsApi;
   if (wait) panel.wait = wait;

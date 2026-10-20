@@ -107,13 +107,13 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
-## Landed 2026-10-19 — AIRail · every page (D720)
+## Graduated 2026-10-19 — AIRail · every page (D720, D769)
 
-The owner's artifact `UzN4NdcwEHVYuh4ZoPLkTp`, the rail on every page, is
-`AIRail · every page.dc.html`. It is a newer export of
-`canvases/integrated/AIRail.dc.html`, which D698 built and
-`airail_d698.test.mjs` still pins. Per the rule above, it lands here instead of
-overwriting that file. It adds:
+The owner's artifact `UzN4NdcwEHVYuh4ZoPLkTp`, the rail on every page, landed
+here as `AIRail · every page.dc.html`, a newer export of
+`canvases/integrated/AIRail.dc.html`. D769 PR 2 (#2088) built the rail to it
+and moved it to `canvases/integrated/AIRail.dc.html`, replacing D698's export
+in place under the name `Cycle Overview` imports it by. It adds:
 - the per-page switch, "Turn off AI assistance on this page";
 - each suggested model's billed price, in and out;
 - All models in ten groups, with New badges;
@@ -135,8 +135,9 @@ Cloudflare documentation connector, because the host refuses sessions'
 requests to `developers.cloudflare.com`. It covers 69 models, with the neuron
 rate behind each price. D760 (#2017) prices its catalogue from it.
 
-D764 generates the Worker's matrix from `canvas.json`, and D769 builds the rail
-to the canvas. D769 moves both into `canvases/integrated/`, replacing `AIRail.dc.html`.
+D764 generates the Worker's matrix from `canvas.json`. The data folder follows
+the export into `canvases/integrated/` in D769 PR 2 once D771 PR 8 (#2160),
+which edits two of its readers, has merged.
 
 ## In the queue now — the four-profile layout pass (2026-09-03)
 

@@ -7,7 +7,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { makeD1 } from './_d1_sqlite.mjs';
-import { aiBudgetFixture, AI_USERS_SCHEMA, AI_LOG_SCHEMA, AI_BUDGET_REVIEW_MIGRATION, AI_CREDITS_MIGRATION } from './_ai_budget_fixture.mjs';
+import { aiBudgetFixture, AI_USERS_SCHEMA, AI_LOG_SCHEMA, AI_BUDGET_REVIEW_MIGRATION, AI_CREDITS_MIGRATION, setFixtureAllowance } from './_ai_budget_fixture.mjs';
 import { reserveAiBudget, settleAiReservation, settleAiBudgetReview } from '../src/services/aiBudget.ts';
 import { recordAiTopupPurchase, creditAiTopupFromPayment } from '../src/services/aiTopups.ts';
 import { ledgerBalance, TOKEN_PACK_LIMITS } from '../src/services/aiCredits.ts';
@@ -37,7 +37,7 @@ async function buy(f: any, credit: number, id = 'pi_d755', user = 2) {
   assert.equal(await creditAiTopupFromPayment(f.env, { id, status: 'succeeded', currency: 'usd', amount_received: credit / 10000, metadata: { kind: 'cart_order', order_ref: `order_${id}`, user_id: String(user) } }), true);
 }
 /** No included allowance, so every reserved micro-USD is held from the top-up balance. */
-const noAllowance = (db: any) => db.prepare("INSERT INTO ai_licence_caps(licence_key,daily_microusd,monthly_microusd,recorded_by) VALUES('founder:free',0,0,1)").run();
+const noAllowance = (db: any) => setFixtureAllowance(db, 0); // D783: no plan, so runs draw tokens
 
 test('migration 486 backfills 419 rows, keeps their dates, and applying it again adds nothing', async () => {
   const { DB, db } = makeD1('PRAGMA foreign_keys=ON;' + AI_USERS_SCHEMA + AI_LOG_SCHEMA + MIGRATION_419 + AI_BUDGET_REVIEW_MIGRATION);
@@ -201,7 +201,9 @@ test('the reservation triggers write hold, release and spend through the real re
     assert.deepEqual(bySource(four.reservation.uid), [{ kind: 'hold', delta_microusd: -100000 }, { kind: 'release', delta_microusd: 100000 }]);
 
     // A run paid wholly by the allowance writes no ledger row.
-    f.db.prepare("UPDATE ai_licence_caps SET daily_microusd=1000000,monthly_microusd=1000000 WHERE licence_key='founder:free'").run();
+    // D783: the member pays a plan whose share is $1 a month.
+    f.db.exec(`INSERT INTO member_subscription_amounts(subscription_id,user_id,plan_family,amount_cents,currency,interval,interval_count,status)
+      SELECT 'sub_one_'||id,id,'founder',400,'usd','month',1,'active' FROM users`);
     const five = await reserveAiBudget(f.env, 2, 100000, now); if (!five.ok) throw Error('reserve');
     await settleAiReservation(f.env, five.reservation, 50000);
     assert.deepEqual(bySource(five.reservation.uid), []);

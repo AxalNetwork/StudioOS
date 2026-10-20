@@ -344,6 +344,7 @@ export function RelationshipsPanel({ zoneActions, zoneFilters = null, role = 'pa
 
       <ZoneDraft
         surface="network/relationships"
+        railOption="draft:network/relationships"
         label="Draft · orphan reassignment"
         accept="Accept draft"
         run="Draft the reassignment"
