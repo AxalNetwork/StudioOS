@@ -41,6 +41,7 @@ import { DECISION_WINDOW_DAYS, referralAges, type ReferralAges } from '../servic
 import { readBranchAdminTickets, type BranchTicketsRead } from '../services/supportQueues';
 import { activationFunnel, type ActivationRead } from '../services/activationFunnel';
 import { applyGameSet, readGameHoldings, type GameSet, type GameHoldings } from '../services/gameLibrary';
+import { notifyRequestAnswer } from '../services/escalationAnswerNotice';
 
 /** Every branch answer carries the code, because a binding does not (D.7). */
 export type BranchAnswer<T> = T & { branch: string; as_of: string };
@@ -797,6 +798,19 @@ export async function applyEscalationAnswer(
         + 'escalation nobody at this branch raised.',
     };
   }
+
+  // D799 — THE RAISER IS TOLD, HERE. Their account is on this database, which
+  // HQ cannot write, so the branch writes the bell notice when the decision
+  // lands. Best effort: a notice that did not land does not undo the decision.
+  try {
+    const row = await env.DB.prepare(
+      `SELECT hq_uid AS uid, kind, subject, status, answer, raised_by_user_id
+         FROM branch_escalations WHERE hq_uid = ?`,
+    ).bind(uid).first<{
+      uid: string; kind: string; subject: string; status: string; answer: string | null; raised_by_user_id: number | null;
+    }>();
+    if (row) await notifyRequestAnswer(env, { ...row, status: String(a.status ?? '') === 'declined' ? 'declined' : row.status });
+  } catch { /* the decision is stored; the notice is best effort */ }
   return { ok: true };
 }
 

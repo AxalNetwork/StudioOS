@@ -36,9 +36,21 @@ import { bandForRemaining, dueSoonWindowHours, SLA_DUE_SOON_HOURS } from '../ser
 import {
   CONCERN_KIND, parseRelation, BAD_RELATION, RELATION_NEEDS_ITEM, RELATION_NOT_FOR_KIND,
 } from '../services/escalationConcerns';
+import {
+  parseRequest, parseNote, decodeRequestDetail, encodeRequestDetail, withNoticeDate, isRequestKind,
+  type RequestRefusalCode,
+} from '../services/escalationRequests';
 
-/** The four things a branch cannot decide for itself (migration 259). */
-export const ESCALATION_KINDS = ['moderation', 'content', 'seat_increase', 'other'] as const;
+/**
+ * What a branch, or an Administrator on HQ, cannot decide for itself. The
+ * first four are migration 259's. D799 added the Administrator's requests:
+ * a renewal, a term change, a delegate admin and notice of non-renewal, beside
+ * the older `seat_increase` (`services/escalationRequests.ts`).
+ */
+export const ESCALATION_KINDS = [
+  'moderation', 'content', 'seat_increase', 'other',
+  'renewal', 'terms_change', 'delegate', 'non_renewal',
+] as const;
 export type EscalationKind = (typeof ESCALATION_KINDS)[number];
 
 /** Hours a kind gets before it is past SLA, per the subsidiary canvas's bands. */
@@ -47,6 +59,10 @@ export const SLA_HOURS: Record<EscalationKind, number> = {
   content: 72,
   seat_increase: 72,
   other: 72,
+  renewal: 72,
+  terms_change: 120,
+  delegate: 72,
+  non_renewal: 72,
 };
 
 /**
@@ -125,6 +141,16 @@ export type EscalationRefusal = {
  * branch as "HQ did not accept the escalation", which it stores `undelivered`
  * and which reads as retryable, and a retry of a bad value is refused again.
  */
+/**
+ * D799 — HQ refused the REQUEST a kind carries: its fields were missing,
+ * unknown or out of range. Returned, never thrown, for D206's reason.
+ */
+export type EscalationRequestRefusal = {
+  refused: RequestRefusalCode;
+  kind: EscalationKind;
+  reason: string;
+};
+
 export type EscalationRelationRefusal = {
   refused: 'bad_relation' | 'relation_needs_item' | 'relation_not_for_kind';
   kind: EscalationKind;
@@ -249,7 +275,7 @@ function newUid(): string {
  */
 export async function recordEscalation(
   env: Env, callerCode: string, item: EscalationInput,
-): Promise<{ uid: string; due_at: string; status: 'open' } | EscalationRefusal | EscalationRelationRefusal> {
+): Promise<{ uid: string; due_at: string; status: 'open' } | EscalationRefusal | EscalationRelationRefusal | EscalationRequestRefusal> {
   requireHq(env);
 
   const code = String(callerCode ?? '').trim().toLowerCase();
@@ -303,11 +329,28 @@ export async function recordEscalation(
     }
   }
 
+  // D799 — THE REQUEST, CHECKED AGAIN AT THE DOOR THAT RECORDS. A branch
+  // sends a request kind's fields inside `detail` (`encodeRequestDetail`); HQ
+  // reads them back and applies the same rule the branch did, because the
+  // branch's copy of the rule can be older than HQ's. A kind D799 added needs
+  // its request here too; an older `seat_increase` sent as text is accepted
+  // as text. A non-renewal's notice date is set here, on the day HQ records it.
+  let detail = item?.detail ? String(item.detail).slice(0, 4000) : null;
+  const decoded = decodeRequestDetail(detail);
+  if (decoded.request && !isRequestKind(kind)) {
+    const parsed = parseRequest(kind, decoded.request);
+    if (!parsed.ok) return { refused: parsed.error, kind, reason: parsed.message };
+  }
+  if (isRequestKind(kind)) {
+    const parsed = parseRequest(kind, decoded.request ?? undefined);
+    if (!parsed.ok) return { refused: parsed.error, kind, reason: parsed.message };
+    if (parsed.request) detail = encodeRequestDetail(withNoticeDate(kind, parsed.request)!, decoded.request ? decoded.note : detail);
+  }
+
   const uid = newUid();
   // The due date, not a band: a band stored at write time is wrong an hour
   // later, which is the whole reason migration 259 stores this column.
   const dueAt = new Date(Date.now() + SLA_HOURS[kind] * 3600_000).toISOString();
-  const detail = item?.detail ? String(item.detail).slice(0, 4000) : null;
   const raisedBy = item?.raised_by_name ? String(item.raised_by_name).slice(0, 200) : null;
   const raisedById = Number.isFinite(Number(item?.raised_by_branch_user_id))
     ? Number(item.raised_by_branch_user_id) : null;
@@ -767,6 +810,142 @@ export async function listEscalations(
     ).bind(cap + 1).all<EscalationRow>();
   }
 
+  const now = Date.now();
+  const all = (rows.results || []).map((r) => ({ ...r, sla: escalationSlaBand(r, now) }));
+  const complete = all.length <= cap;
+  return { items: complete ? all : all.slice(0, cap), complete };
+}
+
+/* ------------------------------------------------------------------ *
+ * D799 — the Administrator's requests on HQ's own tier                *
+ * ------------------------------------------------------------------ */
+
+/**
+ * The `branch_code` an HQ-tier request is stored under. No branch is deployed
+ * (D286), so an Administrator's licence is on HQ's own database and there is
+ * no branch to raise from; the request is written here directly. `hq` is not
+ * a branch code a deployment can take, so these rows can never be mistaken
+ * for one branch's, and HQ's console tells them apart by it.
+ */
+export const HQ_TIER_CODE = 'hq';
+
+/** How many open requests one licence may hold at once. */
+export const LICENCE_REQUESTS_OPEN_MAX = 20;
+
+export const LICENCE_REQUEST_REFUSALS = {
+  bad_kind: `kind must be one of ${ESCALATION_KINDS.join(', ')}.`,
+  subject_required: 'A request needs a subject. It lands on a queue somebody at HQ reads.',
+  subject_ref_not_accepted:
+    'A request is filed against your licence, so it names nothing else. Put what it concerns in the subject.',
+  concerns_not_for_lane:
+    'Naming an item from a list is the branch lane\'s. Put what this concerns in the subject.',
+  detail_too_long: 'The note is at most 4000 characters.',
+  too_many_open:
+    `This licence already has ${LICENCE_REQUESTS_OPEN_MAX} requests open. HQ answers each within its response time; `
+    + 'add to an open one rather than raising another.',
+} as const;
+
+export type LicenceRequestRow = {
+  uid: string; kind: string; subject: string; subject_ref: string | null; detail: string | null;
+  raised_by_name: string | null; raised_by_branch_user_id: number | null; status: string;
+  due_at: string | null; created_at: string; answer: string | null; answered_by_name: string | null;
+  answered_at: string | null;
+};
+
+/**
+ * Record an Administrator's request on HQ's tier. The caller has settled who
+ * this is and which licence they administer (`licence_admins`); this checks
+ * the request and writes the one row.
+ *
+ * NOT GATED ON THE LICENCE'S STATUS, for the reason the branch lane is not
+ * (D107, D112): a suspended licence's way out is a request to HQ, and gating
+ * this would lock that door. A kind the licence HIDES is refused with its
+ * reason (D206), and nothing is written.
+ *
+ * THE RAISER IS AN HQ USER. On this tier `raised_by_branch_user_id` holds the
+ * HQ user's own id — the column's name is migration 259's, from when only a
+ * branch raised — and it is the id HQ's answer notifies (`notifyRequestAnswer`).
+ */
+export async function recordLicenceRequest(
+  env: Env,
+  licence: { uid: string; kind: string | null },
+  raiser: { id: number; name: string | null },
+  item: { kind?: unknown; subject?: unknown; subject_ref?: unknown; concerns?: unknown; relation?: unknown; detail?: unknown; request?: unknown },
+): Promise<
+  | { ok: true; row: LicenceRequestRow }
+  | { ok: false; status: 400 | 409; error: string; message: string; kind?: string; licence_kind?: string | null }
+> {
+  requireHq(env);
+  const say = (error: keyof typeof LICENCE_REQUEST_REFUSALS, status: 400 | 409 = 400) =>
+    ({ ok: false as const, status, error, message: LICENCE_REQUEST_REFUSALS[error] });
+
+  const kind = String(item?.kind ?? '').trim().toLowerCase() as EscalationKind;
+  if (!(ESCALATION_KINDS as readonly string[]).includes(kind)) return say('bad_kind');
+  const subject = String(item?.subject ?? '').trim().slice(0, 300);
+  if (!subject) return say('subject_required');
+  if (item?.subject_ref !== undefined && item?.subject_ref !== null && String(item.subject_ref).trim()) {
+    return say('subject_ref_not_accepted');
+  }
+  if ((item?.concerns !== undefined && item?.concerns !== null) || (item?.relation !== undefined && item?.relation !== null)) {
+    return say('concerns_not_for_lane');
+  }
+
+  const gate = escalationKindsFor(licence.kind);
+  const hidden = gate.hidden.find((h) => h.kind === kind);
+  if (hidden) {
+    return { ok: false, status: 400, error: 'kind_not_available', message: hidden.reason, kind, licence_kind: gate.licence_kind };
+  }
+
+  // On this lane every request kind needs its fields: there is no older
+  // caller here to stay compatible with.
+  const parsed = parseRequest(kind, item?.request, { required: true });
+  if (!parsed.ok) return { ok: false, status: 400, error: parsed.error, message: parsed.message, kind };
+  let detail: string | null;
+  if (parsed.request) {
+    const note = parseNote(item?.detail);
+    if (!note.ok) return { ok: false, status: 400, error: note.error, message: note.message, kind };
+    detail = encodeRequestDetail(withNoticeDate(kind, parsed.request)!, note.note);
+  } else {
+    const raw = item?.detail === undefined || item?.detail === null ? '' : String(item.detail).trim();
+    if (raw.length > 4000) return say('detail_too_long');
+    detail = raw || null;
+  }
+
+  const open = await env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM hq_escalations WHERE branch_code = ? AND subject_ref = ? AND status = 'open'`,
+  ).bind(HQ_TIER_CODE, licence.uid).first<{ n: number }>();
+  if (Number(open?.n ?? 0) >= LICENCE_REQUESTS_OPEN_MAX) return say('too_many_open', 409);
+
+  const uid = newUid();
+  const dueAt = new Date(Date.now() + SLA_HOURS[kind] * 3600_000).toISOString();
+  const name = raiser.name ? String(raiser.name).trim().slice(0, 200) || null : null;
+  await env.DB.prepare(
+    `INSERT INTO hq_escalations
+       (uid, branch_code, kind, subject, subject_ref, detail,
+        raised_by_name, raised_by_branch_user_id, status, due_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', ?)`,
+  ).bind(uid, HQ_TIER_CODE, kind, subject, licence.uid, detail, name, raiser.id, dueAt).run();
+
+  const row = await env.DB.prepare(
+    `SELECT uid, kind, subject, subject_ref, detail, raised_by_name, raised_by_branch_user_id, status,
+            due_at, created_at, answer, answered_by_name, answered_at
+       FROM hq_escalations WHERE uid = ?`,
+  ).bind(uid).first<LicenceRequestRow>();
+  return { ok: true, row: row! };
+}
+
+/** One licence's requests on HQ's tier, newest first. Only that licence's rows. */
+export async function listLicenceRequests(
+  env: Env, licenceUid: string, limit = 100,
+): Promise<{ items: Array<LicenceRequestRow & { sla: 'ok' | 'due_soon' | 'past' }>; complete: boolean }> {
+  requireHq(env);
+  const cap = Math.max(1, Math.min(200, Number(limit) || 100));
+  const rows = await env.DB.prepare(
+    `SELECT uid, kind, subject, subject_ref, detail, raised_by_name, raised_by_branch_user_id, status,
+            due_at, created_at, answer, answered_by_name, answered_at
+       FROM hq_escalations WHERE branch_code = ? AND subject_ref = ?
+      ORDER BY created_at DESC, id DESC LIMIT ?`,
+  ).bind(HQ_TIER_CODE, licenceUid, cap + 1).all<LicenceRequestRow>();
   const now = Date.now();
   const all = (rows.results || []).map((r) => ({ ...r, sla: escalationSlaBand(r, now) }));
   const complete = all.length <= cap;

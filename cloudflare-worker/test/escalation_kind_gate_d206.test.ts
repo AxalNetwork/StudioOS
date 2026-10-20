@@ -240,11 +240,14 @@ const raise = (kind: string, subject = 'A localised launch post') =>
  * 1 · The rule                                                        *
  * ------------------------------------------------------------------ */
 
-test('a white-label is offered three kinds; content is hidden with canvas H30’s sentence', () => {
+// D799 added the Administrator's four request kinds; a white-label hides none of them.
+const WHITE_LABEL_OFFERED = ['moderation', 'seat_increase', 'other', 'renewal', 'terms_change', 'delegate', 'non_renewal'];
+
+test('a white-label is offered every kind but content; content is hidden with canvas H30’s sentence', () => {
   const g = escalationKindsFor('white_label');
   assert.equal(g.licence_kind, 'white_label');
   assert.equal(g.known, true);
-  assert.deepEqual(g.available, ['moderation', 'seat_increase', 'other']);
+  assert.deepEqual(g.available, WHITE_LABEL_OFFERED);
   assert.deepEqual(g.hidden, [{ kind: 'content', reason: WHITE_LABEL_CONTENT_HIDDEN }]);
   assert.equal(WHITE_LABEL_CONTENT_HIDDEN, 'Hidden for this kind — there is no brand desk to send it to.');
 });
@@ -431,7 +434,7 @@ test('the lane read says which kinds this licence offers, and why', async () => 
   const wl = await branchApp({ ...BRANCH, DB: makeD1(branchDb({ kind: 'white_label' })) })('/escalations');
   assert.equal(wl.status, 200);
   assert.deepEqual(wl.body.kinds, [...ESCALATION_KINDS], 'the validation vocabulary shrank with the offer');
-  assert.deepEqual(wl.body.kinds_available, ['moderation', 'seat_increase', 'other']);
+  assert.deepEqual(wl.body.kinds_available, WHITE_LABEL_OFFERED);
   assert.deepEqual(wl.body.kinds_hidden, [{ kind: 'content', reason: WHITE_LABEL_CONTENT_HIDDEN }]);
   assert.equal(wl.body.licence_kind, 'white_label');
   assert.equal(wl.body.licence_kind_known, true);
