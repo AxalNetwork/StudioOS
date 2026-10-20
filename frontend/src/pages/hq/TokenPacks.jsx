@@ -8,7 +8,7 @@ import { MemberSpend } from './HqAiCards';
 import {
   ADJUST_BOUNDS, ADJUST_NOTICE, BONUS_NOTE, PACK_LIMITS, REASON_MIN, RESEND,
   allowanceView, balanceView, bonusPercentOf, bonusUsd, exactEmailMatch, faceCentsOf, ledgerView, memberQuery,
-  newKey, newPackConfirm, packLabelPreview, packLines, parseAdjustment, parseBonusPercent, parsePackAmount,
+  newKey, newPackConfirm, offerInputOf, offerLine, packLabelPreview, packLines, parseAdjustment, parseBonusPercent, parseOffer, parsePackAmount,
   parsePriceId, purchasesView, reasonOk, reconcileView, shortfallsView,
 } from './tokenPacksModel';
 
@@ -116,11 +116,20 @@ export function AdoptForm({ api: packs = tokenPacksApi, suffix, onDone, onCancel
 
 // ---------- One pack's controls --------------------------------------------
 
-/** On sale, Bonus (0–10%) and Archive (asked first) for one pack row. The fallback has none: it is adopted first. */
+/**
+ * On sale, Bonus (0–10%), Offer (D790: the bonus's window and first purchase
+ * only) and Archive (asked first) for one pack row. The fallback has none: it
+ * is adopted first.
+ */
 export function PackControls({ pack, line, api: packs = tokenPacksApi, onDone }) {
   const face = faceCentsOf(pack.label);
   const [mode, setMode] = useState(null);
   const [bonus, setBonus] = useState(() => String(bonusPercentOf(face, pack.bonus_microusd)));
+  const [starts, setStarts] = useState(() => offerInputOf(pack.offer_starts_at));
+  const [ends, setEnds] = useState(() => offerInputOf(pack.offer_ends_at));
+  const [first, setFirst] = useState(() => pack.first_purchase_only === true);
+  const offer = parseOffer(starts, ends);
+  const offerNow = offerLine(pack);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const pct = parseBonusPercent(bonus);
@@ -136,8 +145,33 @@ export function PackControls({ pack, line, api: packs = tokenPacksApi, onDone })
           onClick={() => run('pack-sale', () => packs.update(line.uid, { on_sale: pack.on_sale !== true }), `${label} is ${pack.on_sale === true ? 'off' : 'on'} sale.`)}
           data-testid={`hq-pack-sale-${line.uid}`}>{pack.on_sale === true ? 'On sale · take off sale' : 'Off sale · put on sale'}</button>
         <button type="button" className={SMALL} disabled={busy || face == null} onClick={() => setMode('bonus')} data-testid={`hq-pack-bonus-open-${line.uid}`}>Bonus…</button>
+        <button type="button" className={SMALL} disabled={busy} onClick={() => setMode('offer')} data-testid={`hq-pack-offer-open-${line.uid}`}>Offer…</button>
         <button type="button" className={SMALL} disabled={busy} onClick={() => setMode('archive')} data-testid={`hq-pack-archive-open-${line.uid}`}>Archive…</button>
       </div>
+      {offerNow && <p className="text-[12px] text-axal-muted dark:text-gray-400" data-testid={`hq-pack-offer-line-${line.uid}`}>{offerNow}</p>}
+      {mode === 'offer' && (
+        <div className="flex flex-col gap-1.5" data-testid={`hq-pack-offer-${line.uid}`}>
+          <label className={LABEL}>
+            Bonus offered from · leave empty for no start
+            <input type="datetime-local" className={FIELD} value={starts} onChange={(e) => setStarts(e.target.value)} data-testid={`hq-pack-offer-starts-${line.uid}`} />
+          </label>
+          <label className={LABEL}>
+            Bonus offered until · leave empty for no end
+            <input type="datetime-local" className={FIELD} value={ends} onChange={(e) => setEnds(e.target.value)} data-testid={`hq-pack-offer-ends-${line.uid}`} aria-invalid={offer.ok ? undefined : 'true'} />
+          </label>
+          <label className="flex items-center gap-2 text-[12.5px] text-axal-ink dark:text-gray-200">
+            <input type="checkbox" checked={first} onChange={(e) => setFirst(e.target.checked)} data-testid={`hq-pack-offer-first-${line.uid}`} />
+            First purchase only: sold only to a member who has never bought tokens
+          </label>
+          {!offer.ok && <p role="alert" className="text-[12px] text-red-700 dark:text-red-300" data-testid={`hq-pack-offer-invalid-${line.uid}`}>{offer.message}</p>}
+          <div className="flex justify-end gap-1.5">
+            <button type="button" className={GHOST} onClick={() => setMode(null)}>Cancel</button>
+            <button type="button" className={ROSE} disabled={busy || !offer.ok}
+              onClick={() => run('pack-offer', () => packs.update(line.uid, { offer_starts_at: offer.starts, offer_ends_at: offer.ends, first_purchase_only: first }), `${label}'s offer is saved.`)}
+              data-testid={`hq-pack-offer-save-${line.uid}`}>Save the offer</button>
+          </div>
+        </div>
+      )}
       {mode === 'bonus' && face != null && (
         <div className="flex flex-col gap-1.5" data-testid={`hq-pack-bonus-${line.uid}`}>
           <label className={LABEL}>
@@ -156,7 +190,7 @@ export function PackControls({ pack, line, api: packs = tokenPacksApi, onDone })
       )}
       {mode === 'archive' && (
         <div className="flex flex-col gap-1.5" data-testid={`hq-pack-archive-${line.uid}`}>
-          <p className={WARN} data-testid={`hq-pack-archive-confirm-${line.uid}`}>Archive {label}? It goes off sale for good and its Stripe price is archived. A pack bought before stays credited.</p>
+          <p className={WARN} data-testid={`hq-pack-archive-confirm-${line.uid}`}>Archive {label}? It goes off sale for good and its Stripe price is archived. Tokens from a pack bought before stay in their buyers' balances.</p>
           <div className="flex justify-end gap-1.5">
             <button type="button" className={GHOST} onClick={() => setMode(null)}>Keep it</button>
             <button type="button" className={ROSE} disabled={busy} onClick={() => run('pack-archive', () => packs.archive(line.uid), `${label} is archived.`)} data-testid={`hq-pack-archive-submit-${line.uid}`}>Archive</button>
@@ -410,8 +444,8 @@ export function ReconcileCard({ reconcile }) {
                   <p key={m.member} className={`${ROW} font-mono`} data-testid="hq-reconcile-mismatch">Member {m.member} · balance {m.balance} · ledger {m.ledger} · {m.difference}</p>
                 ))}
               </Section>
-              <Section title="Paid over an hour ago, not credited" testId="hq-reconcile-overdue">
-                {list(v.overdue, 'The overdue purchases', 'No paid purchase is waiting to be credited.', (p) => (
+              <Section title="Paid over an hour ago, tokens not added" testId="hq-reconcile-overdue">
+                {list(v.overdue, 'The overdue purchases', 'No paid purchase is waiting for its tokens.', (p) => (
                   <div key={p.key || `${p.member}-${p.at}`} className={ROW} data-testid="hq-reconcile-overdue-row">
                     <p className="font-mono">Member {p.member} · {p.pack || 'Token pack'} · {p.amount} · {when(p.at)}</p>
                     <p className="mt-0.5 text-amber-800 dark:text-amber-300">{p.instruction || RESEND}.</p>
@@ -423,7 +457,7 @@ export function ReconcileCard({ reconcile }) {
                   <p key={p.key || `${p.member}-${p.at}`} className={`${ROW} font-mono`} data-testid="hq-reconcile-dispute">Member {p.member} · {p.pack || 'Token pack'} · {p.amount} · {when(p.at)}</p>
                 ))}
               </Section>
-              <p className={`${NOTE} border-t border-axal-hairline px-4 py-2.5 dark:border-gray-800`}>HQ never credits a purchase. Stripe's payment_intent.succeeded credits it; resend that event when one is overdue.</p>
+              <p className={`${NOTE} border-t border-axal-hairline px-4 py-2.5 dark:border-gray-800`}>HQ never adds a purchase's tokens. Stripe's payment_intent.succeeded adds them; resend that event when one is overdue.</p>
             </>
           )}
     </Card>

@@ -41,9 +41,9 @@ async function purchaseFor(env: Env, paymentIntentId: unknown): Promise<Purchase
   const row = await env.DB.prepare('SELECT payment_intent_id, user_id, credited_at FROM ai_topup_purchases WHERE payment_intent_id = ?').bind(pi).first<Purchase>();
   if (!row) return null; // not a token pack: leave it exactly as it is
   // The legacy local/dev webhook may soft-accept without a secret. It cannot move paid AI balance.
-  if (!env.STRIPE_WEBHOOK_SECRET) throw new Error('AI credit reversal webhook is not configured');
+  if (!env.STRIPE_WEBHOOK_SECRET) throw new Error('AI token reversal webhook is not configured');
   // A reversal that arrives before its credit waits for it: Stripe retries.
-  if (!row.credited_at) throw new Error('AI top-up not credited yet; reversal retried');
+  if (!row.credited_at) throw new Error('AI top-up tokens not added yet; reversal retried');
   return row;
 }
 
@@ -87,7 +87,7 @@ async function takeBack(env: Env, input: { kind: 'refund' | 'dispute'; purchase:
       SELECT 'ai_topup_dispute_opened', ?, 'payment_webhook', ? WHERE NOT EXISTS(SELECT 1 FROM activity_logs WHERE action = 'ai_topup_dispute_opened' AND details = ?)`)
     .bind(sourceRef, purchase.user_id, sourceRef));
   const results = await env.DB.batch(statements);
-  if (results.length !== statements.length || results.some((r) => r.success !== true)) throw new Error('AI credit reversal unreadable');
+  if (results.length !== statements.length || results.some((r) => r.success !== true)) throw new Error('AI token reversal unreadable');
   if (Number(results[1].meta.changes) !== 1) return null;
   return env.DB.prepare('SELECT delta_microusd, shortfall_microusd FROM ai_credit_ledger WHERE uid = ?').bind(uid).first<{ delta_microusd: number; shortfall_microusd: number }>();
 }
@@ -173,7 +173,7 @@ export async function closeDispute(env: Env, dispute: any): Promise<boolean> {
     SELECT ?, json_object('payment_intent_id', ?, 'dispute', ?, 'status', ?), 'payment_webhook', ? WHERE changes() > 0`)
     .bind(won ? 'ai_topup_dispute_won' : 'ai_topup_dispute_lost', purchase.payment_intent_id, disputeId, status, purchase.user_id));
   const results = await env.DB.batch(statements);
-  if (results.length !== statements.length || results.some((r) => r.success !== true)) throw new Error('AI credit reversal unreadable');
+  if (results.length !== statements.length || results.some((r) => r.success !== true)) throw new Error('AI token reversal unreadable');
   if (won && Number(results[0].meta.changes) === 1)
     await tell(env, purchase.user_id, 'ai_tokens_dispute_won', 'Dispute closed: tokens returned',
       `Dispute closed: ${money(-(opened.delta_microusd ?? 0))} was returned to your top-up balance.`, { payment_intent_id: purchase.payment_intent_id });

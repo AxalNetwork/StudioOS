@@ -10,7 +10,7 @@
 // summary is a live preview only.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, useNavigate, useLocation } from 'react-router-dom';
-import { TOKEN_PACKS_PATH, TOPUP_UNAVAILABLE, aiTokenState, packLabel, sellableLine } from '../lib/aiTokens';
+import { TOKEN_PACKS_PATH, TOPUP_UNAVAILABLE, aiTokenState, packLabel, packOfferLines, sellableLine } from '../lib/aiTokens';
 import { aiBudgetApi } from '../lib/api/aiBudget';
 import { Elements, PaymentElement, AddressElement, useElements, useStripe } from '@stripe/react-stripe-js';
 import { Loader2, Lock, AlertTriangle, ArrowLeft, ShoppingCart, CheckCircle2 } from 'lucide-react';
@@ -95,6 +95,7 @@ export function OrderSummary({ cart, appliedPromo, onPromoChange, billingCountry
       </div>
 
       {pack && <p className="mt-3 text-sm text-gray-600 dark:text-gray-300">Adds {formatMoney(pack.unit_amount, pack.currency)} to your top-up balance once the payment is confirmed.</p>}
+      {pack && packOfferLines(pack).map(line => <p key={line} className="mt-1 text-sm text-gray-600 dark:text-gray-300" data-testid="checkout-pack-offer">{line}</p>)}
       {!pack && <><div className="mt-4 flex gap-2">
         <input
           value={code}

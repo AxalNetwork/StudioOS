@@ -78,18 +78,19 @@ export async function aiTopupStatus(env:Env) {
   };
 }
 /** D755: a pack's quote, from tokenPackQuote (services/aiCredits.ts). A pack is never discounted. */
-export type AiTopupQuote = {priceId:string;creditMicrousd:number;packUid?:string|null;bonusMicrousd?:number};
+export type AiTopupQuote = {priceId:string;creditMicrousd:number;packUid?:string|null;bonusMicrousd?:number;firstPurchaseOnly?:boolean};
 export async function recordAiTopupPurchase(env:Env,input:{paymentIntentId:string;orderRef:string;userId:number;totalCents:number;currency:string;quote:AiTopupQuote|null}) {
   if (!input.quote) return;
   if (!/^pi_[A-Za-z0-9]+$/.test(input.paymentIntentId) || !Number.isSafeInteger(input.totalCents) || input.totalCents<=0 || input.currency !== 'usd') throw new Error('AI top-up payment unreadable');
-  const packUid=input.quote.packUid ?? null, bonus=input.quote.bonusMicrousd ?? 0;
+  const packUid=input.quote.packUid ?? null, bonus=input.quote.bonusMicrousd ?? 0, first=input.quote.firstPurchaseOnly ? 1 : 0;
   if (!Number.isSafeInteger(bonus) || bonus<0) throw new Error('AI top-up payment unreadable');
-  const result=await env.DB.prepare(`INSERT OR IGNORE INTO ai_topup_purchases(payment_intent_id,order_ref,user_id,price_id,credit_microusd,expected_total_cents,currency,pack_uid,bonus_microusd)
-    VALUES(?,?,?,?,?,?,'usd',?,?)`).bind(input.paymentIntentId,input.orderRef,input.userId,input.quote.priceId,input.quote.creditMicrousd,input.totalCents,packUid,bonus).run();
+  // D790: first_purchase_only is fixed here with the bonus, so the webhook follows the order paid.
+  const result=await env.DB.prepare(`INSERT OR IGNORE INTO ai_topup_purchases(payment_intent_id,order_ref,user_id,price_id,credit_microusd,expected_total_cents,currency,pack_uid,bonus_microusd,first_purchase_only)
+    VALUES(?,?,?,?,?,?,'usd',?,?,?)`).bind(input.paymentIntentId,input.orderRef,input.userId,input.quote.priceId,input.quote.creditMicrousd,input.totalCents,packUid,bonus,first).run();
   if (result.success !== true) throw new Error('AI top-up purchase unreadable');
   const row=await env.DB.prepare('SELECT * FROM ai_topup_purchases WHERE payment_intent_id=?').bind(input.paymentIntentId).first<any>();
   if (!row || row.order_ref!==input.orderRef || row.user_id!==input.userId || row.price_id!==input.quote.priceId || row.credit_microusd!==input.quote.creditMicrousd || row.expected_total_cents!==input.totalCents
-    || row.pack_uid!==packUid || row.bonus_microusd!==bonus) throw new Error('AI top-up quote changed');
+    || row.pack_uid!==packUid || row.bonus_microusd!==bonus || row.first_purchase_only!==first) throw new Error('AI top-up quote changed');
 }
 /** Called only from the verified payment_intent.succeeded webhook, never fulfilOrder or /confirm. */
 export async function creditAiTopupFromPayment(env:Env,pi:any):Promise<boolean> {
@@ -104,7 +105,14 @@ export async function creditAiTopupFromPayment(env:Env,pi:any):Promise<boolean> 
   // D755: the purchase and its bonus go to ai_credit_ledger, written only when the purchase row is new.
   // No ai_topup_ledger row: that would fire migration 486's mirror trigger.
   const uid=crypto.randomUUID();
+  // D790 (#2215): a first-purchase pack paid after the member's first credited pack (two checkouts racing)
+  // is credited at the face value paid, without its bonus. The withheld bonus is moved off bonus_microusd
+  // before anything is credited, so the credit, the balance and any later reversal share read the same row.
+  // It runs first and only while this purchase is uncredited, so any purchase on the ledger is another one.
   const results=await env.DB.batch([
+    env.DB.prepare(`UPDATE ai_topup_purchases SET bonus_withheld_microusd=bonus_microusd,bonus_microusd=0,updated_at=datetime('now')
+      WHERE payment_intent_id=? AND credited_at IS NULL AND first_purchase_only=1 AND bonus_microusd>0
+        AND EXISTS(SELECT 1 FROM ai_credit_ledger l WHERE l.user_id=ai_topup_purchases.user_id AND l.kind='purchase')`).bind(pi.id),
     env.DB.prepare('INSERT OR IGNORE INTO ai_topup_accounts(user_id) VALUES(?)').bind(row.user_id),
     env.DB.prepare(`INSERT OR IGNORE INTO ai_credit_ledger(uid,user_id,kind,delta_microusd,source_ref,payment_intent_id,pack_uid,actor)
       SELECT ?,user_id,'purchase',credit_microusd,'pi:'||payment_intent_id,payment_intent_id,pack_uid,'payment_webhook' FROM ai_topup_purchases
@@ -112,18 +120,24 @@ export async function creditAiTopupFromPayment(env:Env,pi:any):Promise<boolean> 
     env.DB.prepare(`INSERT OR IGNORE INTO ai_credit_ledger(user_id,kind,delta_microusd,source_ref,payment_intent_id,pack_uid,actor)
       SELECT user_id,'bonus',bonus_microusd,'pi:'||payment_intent_id,payment_intent_id,pack_uid,'payment_webhook' FROM ai_topup_purchases
       WHERE payment_intent_id=? AND bonus_microusd>0 AND EXISTS(SELECT 1 FROM ai_credit_ledger WHERE uid=?)`).bind(pi.id,uid),
-    env.DB.prepare(`UPDATE ai_topup_accounts SET balance_microusd=balance_microusd+?,updated_at=datetime('now')
-      WHERE user_id=? AND EXISTS(SELECT 1 FROM ai_credit_ledger WHERE uid=?)`).bind(row.credit_microusd+row.bonus_microusd,row.user_id,uid),
+    env.DB.prepare(`UPDATE ai_topup_accounts SET balance_microusd=balance_microusd+(SELECT credit_microusd+bonus_microusd FROM ai_topup_purchases WHERE payment_intent_id=?),updated_at=datetime('now')
+      WHERE user_id=? AND EXISTS(SELECT 1 FROM ai_credit_ledger WHERE uid=?)`).bind(pi.id,row.user_id,uid),
     env.DB.prepare(`UPDATE ai_topup_purchases SET credited_at=datetime('now'),updated_at=datetime('now')
       WHERE payment_intent_id=? AND credited_at IS NULL AND EXISTS(SELECT 1 FROM ai_credit_ledger WHERE uid=?)`).bind(pi.id,uid),
     env.DB.prepare(`INSERT INTO activity_logs(action,details,actor,user_id)
-      SELECT 'ai_topup_credited',?,'payment_webhook',? WHERE EXISTS(SELECT 1 FROM ai_credit_ledger WHERE uid=?)`)
-      .bind(JSON.stringify({payment_intent_id:pi.id,order_ref:row.order_ref,credit_microusd:row.credit_microusd,
-        bonus_microusd:row.bonus_microusd,pack_uid:row.pack_uid}),row.user_id,uid),
+      SELECT 'ai_topup_credited',json_object('payment_intent_id',payment_intent_id,'order_ref',order_ref,'credit_microusd',credit_microusd,
+        'bonus_microusd',bonus_microusd,'pack_uid',pack_uid),'payment_webhook',user_id FROM ai_topup_purchases
+      WHERE payment_intent_id=? AND EXISTS(SELECT 1 FROM ai_credit_ledger WHERE uid=?)`).bind(pi.id,uid),
+    env.DB.prepare(`INSERT INTO activity_logs(action,details,actor,user_id)
+      SELECT 'ai_topup_bonus_withheld',json_object('payment_intent_id',payment_intent_id,'order_ref',order_ref,'bonus_withheld_microusd',bonus_withheld_microusd,
+        'pack_uid',pack_uid,'reason','first_purchase_only'),'payment_webhook',user_id FROM ai_topup_purchases
+      WHERE payment_intent_id=? AND bonus_withheld_microusd>0 AND EXISTS(SELECT 1 FROM ai_credit_ledger WHERE uid=?)`).bind(pi.id,uid),
   ]);
-  if (results.length!==6 || results.some(r=>r.success!==true)) throw new Error('AI top-up credit unreadable');
-  const credited=Number(results[1].meta.changes)>0;
+  if (results.length!==8 || results.some(r=>r.success!==true)) throw new Error('AI token top-up unreadable');
+  const credited=Number(results[2].meta.changes)>0;
   if (credited) {
+    const paid=await env.DB.prepare('SELECT credit_microusd,bonus_microusd FROM ai_topup_purchases WHERE payment_intent_id=?').bind(pi.id).first<any>();
+    if (paid) { row.credit_microusd=paid.credit_microusd; row.bonus_microusd=paid.bonus_microusd; }
     // Best-effort, once: only the delivery that wrote the purchase row sends it.
     try {
       const {notify}=await import('./notify');

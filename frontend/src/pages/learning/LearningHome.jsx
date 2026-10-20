@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { CalendarPlus, ChevronLeft, ChevronRight, Search, SquarePen } from 'lucide-react';
-import { Card, Pill, RailFrame, Unrecorded, WorkerRail, usePhoneWidth } from '../../ui';
+import { Card, Pill, RailFrame, Unrecorded, usePhoneWidth } from '../../ui';
 import { AccountPhonePage, phonePending } from '../account/AccountPhonePage';
 import { ACCOUNT_PHONE_PAGES } from '../account/accountPhone';
 import { COMING_SOON_LINE } from './learningAccess';
@@ -624,27 +624,11 @@ export default function LearningHome({ gated, links = [] }) {
     catalog: retryCatalog, article: retryArticles, publication: retryPublications, event: retryEvents, me: retryMe,
     upcoming: retryUpcoming, past: retryPast,
   };
-  // D700 — a phone draws A8m inside the frame, so the founder rail stays mounted.
+  // The Learning home has no AI rail; the shared frame keeps its body layout.
   const phone = usePhoneWidth();
 
   return (
-    <RailFrame
-      rail={(
-        <WorkerRail
-          workspace="Learning"
-          // Violet, the founder accent: the canvas draws the learner's
-          // Learning in #7c3aed for every profile it serves.
-          role="founder"
-          stance="Read-only catalogue"
-          note="Eadwyn reads back the lines this page has loaded, on a click. It does not write an article, register you for an event or a webinar, enrol you in a program or mark anything complete."
-          coverage={homeCoverage({ gated, q, catalog, articles, publications, events, me, upcoming, programs })}
-          unavailable={gated
-            ? [['Courses, videos, webinars and more', COMING_SOON_LINE]]
-            : [['Exercises and exams', 'No route lists them on their own, so the home reads neither. Each opens from the course or program that holds it.']]}
-        />
-      )}
-      data-testid="learning-home"
-    >
+    <RailFrame data-testid="learning-home">
       {phone ? (
         <LearningPhoneView gated={gated} me={me} programs={programs} upcoming={upcoming} now={now} onRetry={onRetry}>
           <AdminLinks links={links} />

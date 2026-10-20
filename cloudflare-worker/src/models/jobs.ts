@@ -44,7 +44,10 @@ export type JobType =
   | 'session_structure'
   // D685 §5.9 — a stopped recording's upload → transcribe → summarise → place
   // findings, as one resumable job (services/interviewProcessing.ts).
-  | 'interview_process';
+  | 'interview_process'
+  // D794 — one member's auto-reload of AI tokens, queued when a settled run takes
+  // the top-up balance below their threshold (services/aiAutoReload.ts).
+  | 'ai_auto_reload';
 
 export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
 

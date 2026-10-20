@@ -281,9 +281,9 @@ test('9 · the pill names the viewer\'s licence, in the app\'s colours; explorin
   assert.match(pill('partner').style, new RegExp(`--fwr-pill-bg-light:${ACCENT.partner.tint}`));
 });
 
-test('9 · /account\'s rail keeps the founder accent for an investor viewer, and shows "Investor"', () => {
-  // `/account` (SettingsPage) mounts the rail with role="founder" for every viewer.
-  assert.match(codeOnly(read('frontend/src/pages/SettingsPage.jsx')), /<WorkerRail\s+workspace="Account"[\s\S]*?role="founder"/);
+test('9 · Account has no rail; a rail keeps its host accent and viewer label', () => {
+  // Account is rail-free by the owner request; shared rail styling still works elsewhere.
+  assert.doesNotMatch(codeOnly(read('frontend/src/pages/SettingsPage.jsx')), /<WorkerRail\b/);
   const html = ssr(viewing('investor', h(WorkerRail, { workspace: 'Account', role: 'founder' })));
   assert.match(html, new RegExp(`<aside class="fwr"[^>]*style="--fwr-accent-light:${ACCENT.founder.deep}`));
   assert.match(html, />Investor<\/span>/);

@@ -3,6 +3,9 @@ import { makeD1 } from './_d1_sqlite.mjs';
 export const AI_BUDGET_REVIEW_MIGRATION=readFileSync(new URL('../sql/migrations/430_ai_budget_review_cost.sql',import.meta.url),'utf8');
 export const AI_CREDITS_MIGRATION=readFileSync(new URL('../sql/migrations/486_ai_credits_token_packs.sql',import.meta.url),'utf8');
 export const AI_PLAN_MIGRATION=readFileSync(new URL('../sql/migrations/505_member_subscription_amounts.sql',import.meta.url),'utf8');
+export const AI_PACK_OFFERS_MIGRATION=readFileSync(new URL('../sql/migrations/509_token_pack_offers.sql',import.meta.url),'utf8');
+// D788: a member's own monthly spend limit, read by every hold.
+export const AI_SPEND_LIMIT_MIGRATION=readFileSync(new URL('../sql/migrations/508_member_ai_spend_limits.sql',import.meta.url),'utf8');
 /**
  * D783: a member's allowance is 25% of the plans they pay, and no plan means none.
  * Every fixture user (ids 1 to 1000) pays one $200-a-month plan, so a member's
@@ -13,7 +16,7 @@ export const AI_PLAN_MIGRATION=readFileSync(new URL('../sql/migrations/505_membe
 export const AI_FIXTURE_PLANS=`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<1000)
  INSERT INTO member_subscription_amounts(subscription_id,user_id,plan_family,amount_cents,currency,interval,interval_count,status)
  SELECT 'sub_fixture_'||i,i,'founder',20000,'usd','month',1,'active' FROM n;`;
-export const AI_BUDGET_MIGRATION=readFileSync(new URL('../sql/migrations/419_ai_caps_topups.sql',import.meta.url),'utf8')+AI_BUDGET_REVIEW_MIGRATION+AI_CREDITS_MIGRATION+AI_PLAN_MIGRATION+AI_FIXTURE_PLANS;
+export const AI_BUDGET_MIGRATION=readFileSync(new URL('../sql/migrations/419_ai_caps_topups.sql',import.meta.url),'utf8')+AI_BUDGET_REVIEW_MIGRATION+AI_CREDITS_MIGRATION+AI_PLAN_MIGRATION+AI_SPEND_LIMIT_MIGRATION+AI_PACK_OFFERS_MIGRATION+AI_FIXTURE_PLANS;
 export const AI_USERS_SCHEMA=`CREATE TABLE users(id INTEGER PRIMARY KEY,email TEXT,name TEXT,role TEXT,is_active INTEGER DEFAULT 1,
  subscription_tier TEXT DEFAULT 'free',subscription_status TEXT DEFAULT 'active',subscription_renews_at TEXT,
  investor_tier TEXT DEFAULT 'free',investor_subscription_status TEXT DEFAULT 'free',investor_subscription_renews_at TEXT,is_super_admin INTEGER DEFAULT 0);

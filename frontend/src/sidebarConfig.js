@@ -20,7 +20,7 @@ import {
   UserCircle, Shield, ShieldCheck, Network, Sparkles, Briefcase,
   TrendingUp, MessageSquare, Package, Calendar,
   Inbox, Radar, Wallet, Landmark, Mail,
-  Map, UserCog, Coins, FileStack, SlidersHorizontal, Banknote,
+  Map, UserCog, Coins, FileStack, SlidersHorizontal, Banknote, BadgeCheck,
 } from 'lucide-react';
 
 // `workspaces/shellConfig.js` is a pure leaf module — it imports nothing — so
@@ -178,7 +178,9 @@ export const SIDEBAR_GROUPS = {
       // D210 — S15 (/branch/insights/analytics) lights this row, per its
       // artboard; `match` covers the row's subtree, which `end` alone does not.
       { to: '/branch/insights', icon: TrendingUp, label: 'Insights', match: ['/branch/insights'] },
-      { to: '/branch/settings', icon: UserCog, label: 'Settings' },
+      // D796 (#2229): "Settings" became "Licences", the branch's licence copy on
+      // My Licence; it stays lit on Branch settings, which that page links.
+      { to: '/admin/my-licence', icon: BadgeCheck, label: 'Licences', match: ['/admin/my-licence', '/branch/settings'] },
     ]},
   ],
 
@@ -234,7 +236,8 @@ export const SIDEBAR_GROUPS = {
       // licence (S20's wall rule 4). HQ's ledger of every licence
       // (/admin/licences) is super-admin-only server-side and lives in the HQ
       // group above; a row for it here was a door that opened onto 403s.
-      { to: '/admin/my-licence', icon: UserCog, label: 'Settings' },
+      // D796 (#2229): the row was "Settings" and is "Licences", as the owner named it.
+      { to: '/admin/my-licence', icon: BadgeCheck, label: 'Licences' },
       // X (Twitter) broadcaster temporarily hidden — OAuth not provisioned yet.
       // Re-enable once X_CLIENT_ID/SECRET are bound on the prod worker.
       // { to: '/admin/x', icon: Megaphone, label: 'X (Twitter)' },
@@ -731,9 +734,8 @@ export const ONBOARDING_CANVAS_PATHS = [
 export const SHARED_FULL_BLEED = [
   '/referrals',
   // `/perks` is one page for founder, investor, advisor, admin and exploring
-  // (a partner is sent to /offers/perk-deals). It draws its own canvas, the
-  // same way /raise does: the listings fill the column and the Worker rail is
-  // the canvas's right edge, not a card floating in the shell's padded column.
+  // (a partner is sent to /offers/perk-deals). Its listing body supplies its
+  // own gutters and fills the column, without an AI rail or reserved track.
   '/perks',
   // `/spinout-lab` — the Lab introduction opens with a full-bleed hero that has
   // to run from the sidebar's right border to the viewport edge, which the
@@ -747,6 +749,10 @@ export const SHARED_FULL_BLEED = [
   // `/trust` — the Trust Center fills the main column for every role, with its
   // own `p-6` as the gutter (#2060); its blocks keep their own caps where needed.
   '/trust',
+  // The Help home's search banner owns the whole content column; the guide
+  // grid below supplies its own capped width and gutters.
+  '/help',
+  '/help/',
   ...ONBOARDING_CANVAS_PATHS,
 ];
 

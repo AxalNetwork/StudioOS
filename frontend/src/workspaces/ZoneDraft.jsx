@@ -1,9 +1,10 @@
-import React, { useCallback, useEffect, useId, useState } from 'react';
+import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import { api } from '../lib/api';
 import { formatCost } from '../ui/assistCost';
 import RunEstimate from './RunEstimate';
 import { useRailOption } from '../ui/railCrumbs';
+import { railPressHeaders } from '../lib/railPage.js';
 import { CHECKING, guardRefusal } from './draftCheck';
 
 /**
@@ -133,6 +134,9 @@ export function bandPage() {
   return path.replace(/\/+$/, '') || (path === '/' ? '/' : undefined);
 }
 
+/** D778 part 3 (#2103): the press's own rail context (`railPressHeaders`, lib/railPage.js). */
+export const pressHeaders = railPressHeaders;
+
 export default function ZoneDraft({
   surface,
   scopeKey = '',
@@ -177,6 +181,12 @@ export default function ZoneDraft({
   // under the registry's key (`draft:<surface>`, lib/railOptions), so its run names it.
   // D772: a band whose profile keys it otherwise passes that key as `railOption`.
   useRailOption(busy === 'run' || item ? railOption || `draft:${surface}` : null, typeof label === 'string' ? label : null);
+  // D778 part 3: the same key, for the press's own request (`pressHeaders`).
+  const option = railOption || `draft:${surface}`;
+  // D778 part 3: a run answers only the band it was pressed on. Another surface or
+  // record (a scoped band switching rooms), or leaving the page, makes it stale.
+  const runFor = useRef(0);
+  useEffect(() => () => { runFor.current += 1; }, [surface, scopeKey]);
 
   const load = useCallback(async () => {
     try {
@@ -196,11 +206,15 @@ export default function ZoneDraft({
   const doRun = async () => {
     if (blocked) return;
     setBusy('run'); setNote(''); setGuardLink(null);
+    const mine = runFor.current;
+    const stale = () => mine !== runFor.current;
     try {
-      const r = await api.research.zoneDraftRun(surface, scopeKey, bandPage());
+      const r = await api.research.zoneDraftRun(surface, scopeKey, bandPage(), pressHeaders(option));
+      if (stale()) return;
       setItem(r?.item || null);
       setEditing(null);
     } catch (e) {
+      if (stale()) return;
       // 409 is the honest refusal, not a failure: there was nothing on the page
       // to draft over, and the worker declines rather than letting the model
       // write from its own knowledge in the voice of a grounded draft.

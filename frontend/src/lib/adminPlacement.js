@@ -32,7 +32,7 @@ export const FORMS = ['row', 'sub-nav', 'card link', 'embedded', 'lane', 'top ba
 // H35's note, verbatim: "Rows: exactly eleven, unchanged."
 export const HQ_ROWS = ['Home', 'Licences', 'Funds', 'Contracts', 'Team', 'Revenue', 'Content', 'Platform', 'Support', 'Security', 'Settings'];
 // S20's eight, in order.
-export const ADMIN_ROWS = ['Studio', 'Accounts', 'Approvals', 'Programs', 'Community', 'Contracts', 'Insights', 'Settings'];
+export const ADMIN_ROWS = ['Studio', 'Accounts', 'Approvals', 'Programs', 'Community', 'Contracts', 'Insights', 'Licences'];
 // The one placement that is neither a row nor a tier: the top bar of a shell.
 export const TOP_BAR = 'Top bar';
 
@@ -86,7 +86,7 @@ export const ADMIN_PLACEMENT = [
   row('Partner Invitations', '/admin/partners', admin('Approvals', 'lane'), false, { how: 'A lane.' }),
   row('Referral Review', '/admin/refer-earn', admin('Approvals', 'lane'), false, { how: 'The Referrals core lane.' }),
   row('Public Team Page', '/admin/team', hq('Content', 'sub-nav'), false, { how: 'Sub-navigation item.' }),
-  row('My Licence', '/admin/my-licence', admin('Settings', 'embedded'), false, { how: 'Embedded panel.' }),
+  row('My Licence', '/admin/my-licence', admin('Licences', 'embedded'), false, { how: 'Embedded panel.' }),
   // H35 drew Trash as "HQ · Security · proposal — not yet agreed". The
   // proposal is not adopted: the door is a literal link on the Admin Console
   // (/admin), which Admin · Accounts embeds. Same product as the row it sat

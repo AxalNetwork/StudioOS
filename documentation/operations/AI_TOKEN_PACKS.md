@@ -58,6 +58,24 @@ catalog writes refuse a pack (`token_pack_managed_on_hq`).
 its own `bonus` row. Keep every bonus at $0 while AI is billed at Cloudflare's
 cost: a bonus is then a straight loss.
 
+**An offer (D790).** On HQ, **Offer…** sets when the bonus is offered and
+whether the pack is for a first purchase only (the same PATCH,
+`offer_starts_at`, `offer_ends_at`, `first_purchase_only`; each change is
+audited as `token_pack_update`).
+- The bonus is offered from the start (inclusive) to the end (exclusive),
+  either end left open. Outside the window the pack still sells, at face value
+  with no bonus, and members see no bonus. An end that does not follow its
+  start is refused (`token_pack_offer_window_invalid`).
+- The bonus a member is charged for is the one quoted at checkout, stored on
+  their purchase row: closing the window or cutting the bonus after they paid
+  never changes what they get.
+- A first-purchase pack is sold only to a member with no purchase on the
+  ledger. Anyone else is refused at checkout with a 409 and a sentence
+  (`token_pack_first_purchase_only`). If two of a member's checkouts race, the
+  one paid second is credited at its face value without its bonus; the activity
+  log says so (`ai_topup_bonus_withheld`), and the purchase row keeps the
+  withheld amount (`bonus_withheld_microusd`).
+
 **An amount never changes.** A new amount is a new pack; archive the old one.
 
 ## Adopt an existing price
@@ -87,11 +105,15 @@ every direct payment route.
    - balance + uncredited packs + this pack would pass $1,000
      (`token_balance_ceiling`);
    - a dispute is open, or a shortfall was recorded in the last 90 days
-     (`token_packs_on_hold`).
+     (`token_packs_on_hold`);
+   - the pack is for a first purchase and the member has bought one
+     (`token_pack_first_purchase_only`, a 409 with a sentence).
 2. VAT, where it applies, is added on top and is never part of the tokens.
 3. Stripe's `payment_intent.succeeded` webhook credits it once: a `purchase`
-   row, a `bonus` row when the pack has one, the balance increase and an
-   in-app notice, "Tokens added: $X". A repeated delivery changes nothing.
+   row, a `bonus` row when the purchase carries one (D790: the bonus quoted
+   inside the offer window), the balance increase and an in-app notice,
+   "Tokens added: $X". A repeated delivery changes nothing. A first-purchase
+   pack paid after the member's first purchase is credited without its bonus.
 
 ## An overdue credit
 
@@ -118,6 +140,8 @@ of 2026-10-18 ("take back"):
   `ceil((credit + bonus) × amount refunded / amount paid)`, less what was
   already taken back. VAT is shared pro rata, so a full refund takes exactly
   the tokens.
+- The bonus is the one credited: a bonus withheld from a first-purchase pack
+  (D790) was never credited, so a refund never takes it back.
 - It takes at most the member's current balance. What was already spent is
   recorded on the row as `shortfall_microusd`. A shortfall holds the member's
   pack purchases for 90 days.
@@ -139,6 +163,35 @@ of 2026-10-18 ("take back"):
 
 A dispute event that arrives before its purchase was credited is answered with
 an error, so Stripe retries it.
+
+## Auto-reload (D794)
+
+A member can turn on auto-reload on Billing: a pack, a threshold and a saved
+card. When a settled run takes their token balance below the threshold, the
+`ai_auto_reload` queue job charges the card off-session for that pack.
+
+- **A reload is an ordinary pack order.** Its PaymentIntent carries
+  `metadata[kind] = cart_order` and `metadata[auto_reload] = 1`. It is credited
+  by `payment_intent.succeeded` as above, listed under the member's orders with
+  its invoice, and refunded or disputed exactly as any pack.
+- **The limits count it**: five orders a day, the $1,000 ceiling, the dispute
+  and shortfall holds. A reload refused by one is recorded in the member's
+  `member_ai_auto_reload.last_outcome`, and nothing is charged.
+- **The member's D788 spend limit** stops a reload when this month's charge
+  plus the pack's tokens would pass it (`last_outcome = spend_limit`). Auto-reload
+  stays on and the member is told once; it resumes next month or when they
+  raise the limit. With no limit, reloads continue.
+- **A card that fails turns auto-reload off** (`disabled_reason`:
+  `card_declined`, `authentication_required`, `card_unusable`, or
+  `pack_unavailable` for an archived pack) and tells the member once, in the
+  app and by email. The member turns it back on after updating the card.
+- **One crossing, one charge.** Stripe's idempotency key is
+  `reload:<user>:<crossing>:<settings version>`. A retry of the same attempt
+  returns the same payment.
+- **Archiving a pack** turns off every member's auto-reload set to it, at their
+  next reload, with a notice to choose another pack.
+- **The job is safe to re-run.** Re-delivering `ai_auto_reload` for a member
+  charges nothing while their last reload is pending.
 
 ## Adjust a member's balance
 

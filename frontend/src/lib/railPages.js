@@ -323,8 +323,9 @@ const ADMIN = [
   own('/admin/contracts?tab=forms', key(AD, 'Contracts', 'Forms')),
   own('/admin/held/insights', key(AD, 'Insights')),
   alias('/branch/insights', key(AD, 'Insights'), 'The branch’s Insights page and its analytics.'),
-  own('/admin/my-licence', key(AD, 'Settings')),
-  alias('/branch/settings', key(AD, 'Settings'), 'The branch’s Settings page.'),
+  // D796 (#2229): the Admin's "Settings" board is "Licences"; runs logged before keep `Admin · Settings`.
+  own('/admin/my-licence', key(AD, 'Licences')),
+  alias('/branch/settings', key(AD, 'Licences'), 'The branch’s settings, which the Licences row stays lit on.'),
   off('/admin/accounts/credits', key(AD, 'Member credits')),
   exact(off('/admin', key(AD, 'Admin console'))),
   off('/exploring', key(AD, 'Exploring dashboard')),
@@ -457,6 +458,9 @@ function best(pages, path, tab, hash) {
  * app-parity test reads this list; each says why.
  */
 export const NO_RAIL_ROUTES = [
+  { route: '/account', prefix: true, railCount: 0, pageTestIds: ['settings-page', 'account-phone'], roles: ['founder', 'investor', 'advisor', 'partner', 'admin', 'exploring'], why: 'Owner request: Account and its sections have no AI rail on desktop or phone.' },
+  { route: '/perks', railCount: 0, pageTestIds: ['perks-desk'], roles: ['founder', 'investor', 'advisor', 'admin', 'exploring'], why: 'Owner request: the standalone Perks page has no AI rail on desktop or phone. Partner Perk deals remains in its own workspace.' },
+  { route: '/learning', railCount: 0, pageTestIds: ['learning-home'], roles: ['founder', 'investor', 'advisor', 'partner', 'admin'], why: 'Owner request: Learning home has no AI rail on desktop or phone. Learning subpages retain their rails.' },
   { route: '/studio', roles: ['admin'], why: 'Admin · Studio has no rail (D598).' },
   { route: '/studio/tickets/new', roles: ['admin'], why: 'Studio’s own form; Admin · Studio has no rail (D598).' },
   { route: '/spinout-lab/apply', roles: [], why: 'The Spin-Out Lab application, before a lane is chosen: no profile yet.' },

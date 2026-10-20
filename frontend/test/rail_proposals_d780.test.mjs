@@ -54,3 +54,36 @@ test('legal notes: drawn beside the document from the proposals store, never in 
   const viewer = page.slice(page.indexOf('function DocViewerModal'), page.indexOf('function CreateCallModal'));
   assert.match(viewer, /\{doc\.body\}<\/pre>\s*\{doc\.id \? <LegalNotes docId=\{doc\.id\} \/> : null\}/);
 });
+
+test('part 2, /admin/x alt text: generating proposes, "Use it" is the Save, Discard decides', () => {
+  // Mutations checked: generating saving the caption; "Use it" dropping the proposal's uid;
+  // Discard writing the post; the proposal not drawn beside its image.
+  const page = read('pages/admin/AdminX.jsx');
+  const gen = page.slice(page.indexOf('const genAlt = async'), page.indexOf('const useAlt = async'));
+  assert.match(gen, /await api\.generateAltText\(id, idx\);/);
+  assert.doesNotMatch(gen, /saveAltText|updatePost/, 'generating writes the post');
+  const use = page.slice(page.indexOf('const useAlt = async'), page.indexOf('const discardAlt = async'));
+  assert.match(use, /api\.saveAltText\(id, idx, proposal\.text, proposal\.uid\)/);
+  const discard = page.slice(page.indexOf('const discardAlt = async'), page.indexOf('return (', page.indexOf('const discardAlt = async')));
+  assert.match(discard, /railProposalsApi\.decide\(proposal\.uid, 'discard'\)/);
+  assert.doesNotMatch(discard, /saveAltText|updatePost/, 'Discard writes the post');
+  assert.match(page, /\{!p\.alt_texts\?\.\[i\] && p\.alt_proposals\?\.\[i\] && \(/, 'the proposal is not drawn beside its image');
+  const api = read('lib/api.js');
+  assert.match(api, /saveAltText: \(id, index, alt_text, proposal_uid\) =>\s*request\(`\/admin\/x\/posts\/\$\{id\}\/alt-text`, \{\s*method: 'PUT'/);
+});
+
+test('part 3, Approve sends only the alt-text captions still offered by the composer', () => {
+  const page = read('pages/admin/AdminX.jsx');
+  const composer = page.slice(page.indexOf('function PostsTab'));
+  assert.doesNotMatch(page.slice(0, page.indexOf('function PostsTab')), /const approve = async/, 'Approve is outside the composer');
+  assert.equal(composer.split('const approve = async').length - 1, 1, 'more than one composer Approve handler');
+  const approveAt = composer.indexOf('const approve = async');
+  const approve = composer.slice(approveAt, composer.indexOf('const remove = async', approveAt));
+  assert.match(approve, /const post = posts\.find\(\(p\) => p\.id === id\);/);
+  assert.match(approve, /Object\.entries\(post\?\.alt_proposals \|\| \{\}\)/);
+  assert.match(approve, /\.filter\(\(\[index\]\) => !post\.alt_texts\?\.\[index\]\)/);
+  assert.match(approve, /\.map\(\(\[, proposal\]\) => proposal\.uid\)/);
+  assert.match(approve, /await api\.approvePost\(id, uids\);/);
+  const client = read('lib/api.js');
+  assert.match(client, /JSON\.stringify\(altTextProposalUids\.length \? \{ alt_text_proposal_uids: altTextProposalUids \} : \{\}\)/);
+});

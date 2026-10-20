@@ -13,6 +13,7 @@ import {
   ShieldAlert, Link2, Wifi, Undo2, Clock,
 } from 'lucide-react';
 import { adminX as api } from '../../lib/api';
+import { railProposalsApi } from '../../lib/api/railProposals.js';
 import { toLocalInput, scheduledNote } from '../../lib/scheduledPost';
 import { useToast } from '../../components/useToast';
 import ToastMessage from '../../components/ToastMessage';
@@ -504,8 +505,16 @@ function PostsTab({ posts, accounts, onReload, notify, mode }) {
   };
 
   const approve = async (id) => {
-    try { await api.approvePost(id); notify('Approved', 'success'); onReload(); }
-    catch (e) { notify(`Approve failed: ${e?.message || e}`, 'error'); }
+    // D780 part 3: keep only the captions the composer still offers beside an image.
+    const post = posts.find((p) => p.id === id);
+    const uids = Object.entries(post?.alt_proposals || {})
+      .filter(([index]) => !post.alt_texts?.[index])
+      .map(([, proposal]) => proposal.uid);
+    try {
+      await api.approvePost(id, uids);
+      notify('Approved', 'success');
+      onReload();
+    } catch (e) { notify(`Approve failed: ${e?.message || e}`, 'error'); }
   };
 
   const remove = async (id) => {
@@ -531,12 +540,28 @@ function PostsTab({ posts, accounts, onReload, notify, mode }) {
     } catch (e) { notify(`Edit failed: ${e?.message || e}`, 'error'); }
   };
 
+  // D780 part 2 (D720 §9): Eadwyn's alt text is a proposal, shown beside its
+  // image and not saved. "Use it" is the Super Admin's Save; Discard throws it
+  // away. Neither the press nor the proposal writes the post on its own.
   const genAlt = async (id, idx) => {
     try {
-      const out = await api.generateAltText(id, idx);
-      notify(`Alt-text: ${out.alt_text.slice(0, 60)}…`, 'success');
+      await api.generateAltText(id, idx);
+      notify('Eadwyn drafted alt text. It is not saved until you use it.', 'success');
       onReload();
     } catch (e) { notify(`Alt-text failed: ${e?.message || e}`, 'error'); }
+  };
+  const useAlt = async (id, idx, proposal) => {
+    try {
+      await api.saveAltText(id, idx, proposal.text, proposal.uid);
+      notify('Alt text saved', 'success');
+      onReload();
+    } catch (e) { notify(`Alt-text save failed: ${e?.message || e}`, 'error'); }
+  };
+  const discardAlt = async (proposal) => {
+    try {
+      await railProposalsApi.decide(proposal.uid, 'discard');
+      onReload();
+    } catch (e) { notify(`Discard failed: ${e?.message || e}`, 'error'); }
   };
 
   return (
@@ -638,10 +663,17 @@ function PostsTab({ posts, accounts, onReload, notify, mode }) {
                 <div key={i} className="border border-gray-200 dark:border-gray-700 rounded px-2 py-1 flex items-center gap-2">
                   <ImageIcon size={12} />
                   <span className="font-mono text-gray-500 truncate max-w-[200px]">{k.split('/').pop()}</span>
-                  {!p.alt_texts?.[i] && (
-                    <button onClick={() => genAlt(p.id, i)} className="text-purple-600 dark:text-purple-300 flex items-center gap-1" title="Generate alt-text via Workers AI">
+                  {!p.alt_texts?.[i] && !p.alt_proposals?.[i] && (
+                    <button onClick={() => genAlt(p.id, i)} className="text-purple-600 dark:text-purple-300 flex items-center gap-1" title="Draft alt-text with Eadwyn">
                       <Sparkles size={12} /> Alt
                     </button>
+                  )}
+                  {!p.alt_texts?.[i] && p.alt_proposals?.[i] && (
+                    <span className="flex items-center gap-2" data-testid={`x-alt-proposal-${p.id}-${i}`}>
+                      <span className="text-purple-700 dark:text-purple-300 italic truncate max-w-[280px]">Eadwyn: "{p.alt_proposals[i].text}" · not saved</span>
+                      <button onClick={() => useAlt(p.id, i, p.alt_proposals[i])} className="px-1.5 py-0.5 bg-purple-600 text-white rounded">Use it</button>
+                      <button onClick={() => discardAlt(p.alt_proposals[i])} className="px-1.5 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-gray-700 dark:text-gray-200">Discard</button>
+                    </span>
                   )}
                   {p.alt_texts?.[i] && <span className="text-gray-500 italic truncate max-w-[280px]">"{p.alt_texts[i]}"</span>}
                 </div>
