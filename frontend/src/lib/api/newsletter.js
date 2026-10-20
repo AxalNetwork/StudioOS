@@ -4,7 +4,10 @@
 // Public, no session needed (a signed token in the query is the authority):
 //   POST /api/newsletter/subscribe { email, topics[], turnstileToken, hp } → { ok, message },
 //        the same answer whatever the address's state; 403 turnstile_failed
-//   GET  /api/newsletter/confirm?token=              → { ok, status }; 410 token_invalid | token_expired
+//   GET  /api/newsletter/confirm?token=              → { ok, status: 'pending' }, and changes nothing:
+//        a mail scanner opens every link, so only the POST confirms (S1's review)
+//   POST /api/newsletter/confirm?token=              → { ok, status: 'confirmed' };
+//        either: 410 token_invalid | token_expired
 //   GET  /api/newsletter/preferences?token=          → { email (masked), status, topics: { <key>: bool } }
 //   PUT  /api/newsletter/preferences?token= { topics: { <key>: bool } }
 //   POST /api/newsletter/unsubscribe?token=[&topic=] → { ok, topic, status }
@@ -23,7 +26,8 @@ const q = (token, topic) =>
 export const newsletterApi = {
   subscribe: ({ email, topics = [], turnstileToken = '', hp = '' }) =>
     request('/newsletter/subscribe', { method: 'POST', body: JSON.stringify({ email, topics, turnstileToken, hp }) }),
-  confirm: (token) => request(`/newsletter/confirm${q(token)}`),
+  checkConfirm: (token) => request(`/newsletter/confirm${q(token)}`),
+  confirm: (token) => request(`/newsletter/confirm${q(token)}`, { method: 'POST' }),
   preferences: (token) => request(`/newsletter/preferences${q(token)}`),
   savePreferences: (token, topics) =>
     request(`/newsletter/preferences${q(token)}`, { method: 'PUT', body: JSON.stringify({ topics }) }),

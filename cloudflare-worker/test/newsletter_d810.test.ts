@@ -136,7 +136,7 @@ async function subscribeAndConfirm(h: ReturnType<typeof harness>, email: string,
   const res = await h.json('POST', '/api/newsletter/subscribe', { email, topics });
   assert.equal(res.status, 200);
   const confirm = linkIn(h.mails.at(-1)!.text, '/api/newsletter/confirm');
-  const ok = await h.req(`/api/newsletter/confirm?token=${encodeURIComponent(confirm)}`, { headers: { Accept: 'application/json' } });
+  const ok = await h.req(`/api/newsletter/confirm?token=${encodeURIComponent(confirm)}`, { method: 'POST', headers: { Accept: 'application/json' } });
   assert.equal(ok.status, 200);
   return { confirm, prefs: linkIn(h.mails.at(-1)!.text, '/newsletter/preferences') };
 }
@@ -175,6 +175,30 @@ test('subscribe answers identically for a new, a pending and a confirmed address
   } finally { h.restore(); }
 });
 
+test('opening the confirm link changes nothing; only the POST confirms (a mail scanner opens every link)', async () => {
+  const h = harness();
+  try {
+    await h.json('POST', '/api/newsletter/subscribe', { email: 'scan@example.test', topics: ['brief'] });
+    const token = linkIn(h.mails.at(-1)!.text, '/api/newsletter/confirm');
+    const sent = h.mails.length;
+    const status = () => (h.db.prepare(`SELECT status, confirm_token_hash FROM newsletter_subscribers WHERE email = 'scan@example.test'`).get() as any);
+    const json = await h.req(`/api/newsletter/confirm?token=${encodeURIComponent(token)}`, { headers: { Accept: 'application/json' } });
+    assert.equal(json.status, 200);
+    assert.deepEqual(await json.json(), { ok: true, status: 'pending' });
+    const page = await h.req(`/api/newsletter/confirm?token=${encodeURIComponent(token)}`, { headers: { Accept: 'text/html' } });
+    assert.equal(page.status, 200);
+    const markup = await page.text();
+    assert.match(markup, /<form method="post" action="\/api\/newsletter\/confirm\?token=[^"]+"><button type="submit"[^>]*>Confirm subscription<\/button><\/form>/);
+    assert.equal(status().status, 'pending', 'a GET confirmed the signup');
+    assert.ok(status().confirm_token_hash, 'a GET spent the token');
+    assert.equal(h.mails.length, sent, 'a GET sent mail');
+    const ok = await h.req(`/api/newsletter/confirm?token=${encodeURIComponent(token)}`, { method: 'POST', headers: { Accept: 'text/html' } });
+    assert.equal(ok.status, 200);
+    assert.match(await ok.text(), /Subscription confirmed/);
+    assert.equal(status().status, 'confirmed');
+  } finally { h.restore(); }
+});
+
 test('a confirm token works once and expires', async () => {
   const h = harness();
   try {
@@ -187,14 +211,14 @@ test('a confirm token works once and expires', async () => {
     assert.match(h.mails.at(-1)!.headers, /List-Unsubscribe: <https:\/\/axal\.vc\/api\/newsletter\/unsubscribe\?token=/);
     assert.match(h.mails.at(-1)!.headers, /List-Unsubscribe-Post: List-Unsubscribe=One-Click/);
 
-    const again = await h.req(`/api/newsletter/confirm?token=${encodeURIComponent(confirm)}`, { headers: { Accept: 'application/json' } });
+    const again = await h.req(`/api/newsletter/confirm?token=${encodeURIComponent(confirm)}`, { method: 'POST', headers: { Accept: 'application/json' } });
     assert.equal(again.status, 410);
     assert.equal((await again.json() as any).code, 'token_invalid');
 
     await h.json('POST', '/api/newsletter/subscribe', { email: 'late@example.test', topics: [] });
     const late = linkIn(h.mails.at(-1)!.text, '/api/newsletter/confirm');
     h.db.exec(`UPDATE newsletter_subscribers SET confirm_expires_at = '2000-01-01T00:00:00.000Z' WHERE email = 'late@example.test'`);
-    const expired = await h.req(`/api/newsletter/confirm?token=${encodeURIComponent(late)}`, { headers: { Accept: 'application/json' } });
+    const expired = await h.req(`/api/newsletter/confirm?token=${encodeURIComponent(late)}`, { method: 'POST', headers: { Accept: 'application/json' } });
     assert.equal(expired.status, 410);
     assert.equal((await expired.json() as any).code, 'token_expired');
     const still = h.db.prepare(`SELECT status FROM newsletter_subscribers WHERE email = 'late@example.test'`).get() as any;
@@ -305,7 +329,7 @@ test('the raw IP is never stored', async () => {
     const pending = JSON.stringify(h.db.prepare(`SELECT * FROM newsletter_subscribers WHERE email = 'ip@example.test'`).all());
     assert.equal(pending.includes(IP), false, 'the signup stored the raw IP');
     const confirm = linkIn(h.mails.at(-1)!.text, '/api/newsletter/confirm');
-    assert.equal((await h.req(`/api/newsletter/confirm?token=${encodeURIComponent(confirm)}`, { headers: { Accept: 'application/json' } })).status, 200);
+    assert.equal((await h.req(`/api/newsletter/confirm?token=${encodeURIComponent(confirm)}`, { method: 'POST', headers: { Accept: 'application/json' } })).status, 200);
     for (const table of ['newsletter_subscribers', 'newsletter_subscriber_topics', 'email_suppressions']) {
       const dump = JSON.stringify(h.db.prepare(`SELECT * FROM ${table}`).all());
       assert.equal(dump.includes(IP), false, `${table} holds the raw IP`);
@@ -317,11 +341,13 @@ test('the raw IP is never stored', async () => {
 });
 
 test('the public routes are capped per IP and fail closed', async () => {
-  // The path test executed: the four routes, and nothing that merely shares the word.
-  for (const p of ['/api/newsletter/subscribe', '/api/newsletter/confirm', '/api/newsletter/preferences', '/api/newsletter/unsubscribe']) {
+  // The path test executed: three routes, and nothing that merely shares the
+  // word. Unsubscribe is outside the cap (S1's review): one-click POSTs come
+  // from the mailbox provider's servers, many people's from one address.
+  for (const p of ['/api/newsletter/subscribe', '/api/newsletter/confirm', '/api/newsletter/preferences']) {
     assert.equal(NEWSLETTER_PUBLIC.test(p), true, p);
   }
-  for (const p of ['/api/me/newsletters', '/api/insights/newsletter/subscribe', '/api/newsletter/subscribe/x', '/api/newsletters']) {
+  for (const p of ['/api/newsletter/unsubscribe', '/api/me/newsletters', '/api/insights/newsletter/subscribe', '/api/newsletter/subscribe/x', '/api/newsletters']) {
     assert.equal(NEWSLETTER_PUBLIC.test(p), false, p);
   }
 
@@ -343,7 +369,8 @@ test('the public routes are capped per IP and fail closed', async () => {
     for (let i = 0; i < 11; i++) statuses.push((await hit('/api/newsletter/subscribe')).status);
     assert.deepEqual(statuses, [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 429]);
     assert.equal(handled, 10);
-    assert.equal((await hit('/api/newsletter/confirm', 'GET')).status, 429, 'one cap across the four routes');
+    assert.equal((await hit('/api/newsletter/confirm', 'GET')).status, 429, 'one cap across the three routes');
+    for (let i = 0; i < 25; i++) assert.equal((await hit('/api/newsletter/unsubscribe')).status, 200, 'a one-click unsubscribe is never capped');
     assert.equal((await hit('/api/newsletter/subscribe', 'POST', '203.0.113.9')).status, 200, 'another IP is unaffected');
 
     const down: any = { ...env, RATE_LIMITS: { get: async () => { throw new Error('kv down'); }, put: async () => { throw new Error('kv down'); } } };
