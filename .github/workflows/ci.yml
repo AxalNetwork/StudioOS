@@ -100,28 +100,7 @@ jobs:
       # it first — the same root build the deploy runs.
       - name: Build the SPA
         run: npm run build
-      - name: Focused approval regressions
-        run: |
-          node --import ./frontend/test/_deck-loader.mjs --test frontend/test/rail_proposals_d780.test.mjs
-          node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/rail_x_alt_text_d780.test.ts
-      - name: Run npm run test:drift
-        run: |
-          set +e
-          npm run test:drift > drift.log 2>&1
-          drift_exit=$?
-          set -e
-          python3 - <<'PY'
-          from pathlib import Path
-          lines = Path('drift.log').read_text(errors='replace').splitlines()
-          selected = set(range(max(0, len(lines) - 100), len(lines)))
-          for i, line in enumerate(lines):
-              if 'not ok ' in line or 'error:' in line.lower() or 'ERR_ASSERTION' in line:
-                  selected.update(range(max(0, i - 3), min(len(lines), i + 40)))
-          for i in sorted(selected):
-              print(lines[i])
-          PY
-          echo "test:drift exit=$drift_exit (complete output retained in drift.log)"
-          exit "$drift_exit"
+      - run: npm run test:drift
 
   # -------------------------------------------------------------------------
   # API ↔ Worker drift smoke test (T1). Static analysis: every /api/* path

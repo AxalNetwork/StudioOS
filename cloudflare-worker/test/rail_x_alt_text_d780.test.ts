@@ -12,7 +12,7 @@ import { withGuard } from './_guard_stub.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { ensureXSchema } from '../src/services/xSchema.ts';
 import { __resetForTest } from '../src/services/aiRouter.ts';
-import x, { X_ALT_TEXT_OPTION } from '../src/routes/admin_x.ts';
+import x from '../src/routes/admin_x.ts';
 
 const MIGRATION = readFileSync(new URL('../sql/migrations/506_ai_rail_proposals.sql', import.meta.url), 'utf8');
 const SUPER = 1;
