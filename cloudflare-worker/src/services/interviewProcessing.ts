@@ -136,7 +136,8 @@ export async function transcribeChunk(env: Env, opts: {
     const budget = String(r.refusal || '').startsWith('budget');
     return {
       ok: false, refusal: r.refusal || 'all_models_failed', budget,
-      message: budget ? budgetRefusalMessage(String(r.refusal)) : 'The recording could not be transcribed. Nothing was stored.',
+      // D791: a paused member reads the pause's sentence.
+      message: budget || r.refusal === 'ai_paused' ? budgetRefusalMessage(String(r.refusal)) : 'The recording could not be transcribed. Nothing was stored.',
     };
   }
   return {
@@ -536,6 +537,7 @@ export async function runInterviewProcessJob(env: Env, payload: unknown): Promis
 function placingError(placed: DigestOutcome): string | null {
   if (placed.status !== 'refused' || placed.reason === 'consent_not_recorded') return null;
   if (placed.reason === 'transcript_too_large') return placed.note;
+  if (placed.refusal === 'ai_paused') return budgetRefusalMessage(placed.refusal);
   if (String(placed.refusal || '').startsWith('budget')) {
     return `${budgetRefusalMessage(String(placed.refusal))} The transcript is ready; place the findings when the allowance allows.`;
   }

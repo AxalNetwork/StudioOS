@@ -860,7 +860,8 @@ sessions.post('/sessions/:id/transcribe', async (c) => {
         kind: 'final', model, requested_model: model, fallback_used: false,
         audio_minutes: totalMinutes, cost_microusd: 0, outcome: 'refused', refusal: held.refusal,
       });
-      return json({ ok: false, refusal: held.refusal, message: budgetRefusalMessage(held.refusal) }, 402);
+      // D791: a paused member is refused 403, in the pause's words; a budget stop is 402.
+      return json({ ok: false, refusal: held.refusal, message: budgetRefusalMessage(held.refusal) }, held.refusal === 'ai_paused' ? 403 : 402);
     }
     await aiBudget.settleAiReservation(c.env, held.reservation, 0, true);
   }

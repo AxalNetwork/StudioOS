@@ -287,6 +287,17 @@ Not built from the canvas, by decision (#1850):
 
 D758 (#1861) changes no route. Migration 484 fills every active row that has no text from its file under `templates/legal/`, as a new version with the empty one in history, and the catalog gains "Operating Partner Agreement (Spin-Out Lab)" as a counsel stub. From then on every catalog row is either a coded body or a counsel stub in `COUNSEL_DRAFT_SLUGS`.
 
+### HQ › AI usage Worker contract (D791, #2216)
+
+`routes/admin_ai_usage.ts`, mounted at `/api/admin/ai-usage`, on HQ only. Every route needs a recent step-up (`requireStepUp`) and the Super Admin elevation (`requireSuperAdmin`); anyone else gets 403, nothing changed. Each write is audited in `activity_logs` with its reason, in the same batch as the change (`services/aiUsageAdmin.ts`). No answer carries an email, a prompt or an output. Part 2 (the page, `/admin/platform/ai-usage`) waits on the "Usage & Billing console" canvas.
+
+| Route | Who | What it does |
+| --- | --- | --- |
+| `GET /api/admin/ai-usage?range=7d\|30d\|mtd` | Super Admin, step-up | Runs, refused runs, cost, charged and margin (the charge less the cost of the rows that recorded one), and `not_recorded`, totalled and by day, model, role and plan (the AI licence); the top 20 members by charged and by velocity (today over the 7-day daily average, the average counted as at least $1); the flags (`spike`, `refusals`, `held`, `refund_after_spend`, `new_heavy`), each with why and since; `thresholds` (`AI_USAGE_FLAGS`); and who is paused or capped. A member is `{id, name}`. Another range is 400 `invalid_range`; an unreadable store 503. |
+| `POST /api/admin/ai-usage/members/:id/pause` | Super Admin, step-up | `{reason}` (10–500 characters): pauses the member's AI (migration 510's `member_ai_pauses`) and tells them once, in the app. From then the hold refuses their runs as `ai_paused`, 403, "AI is paused on this account. Contact support.", and nothing is charged. Already paused is 409 `already_paused`; an unknown member 404. |
+| `DELETE /api/admin/ai-usage/members/:id/pause` | Super Admin, step-up | `{reason}`: restores the member's AI; the audit line names the pause it ends. Not paused is 404 `not_paused`. |
+| `PUT /api/admin/ai-usage/members/:id/cap` | Super Admin, step-up | `{monthly_usd, reason}`: a monthly cap for one member, $0 to $100,000, or null to clear it (`member_ai_caps`). `resolveAiCaps` reads it after the licence's cap and the lower one wins, so it only ever narrows an allowance. The audit line has the cap before and after. |
+
 ### Usage page and HQ allowances (D642, #1435)
 
 `GET /api/usage/storage` (`usage.ts`, `services/storageUsage.ts`) reads the caller's own stored files across all their companies, whatever company the sidebar has selected. It returns `{ total_bytes, files, unknown_size_files, areas }`, with one area per store: `data_room`, `diligence_files`, `research_library`, `message_attachments` and `interview_recordings`. A recording counts toward the member who owns its project. A NULL size counts as unknown, never as 0 bytes, and a failed read marks only that area `recorded: false`.

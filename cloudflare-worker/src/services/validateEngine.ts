@@ -86,6 +86,8 @@ export const NOTES = {
 /** The sentence a refusal code reads as. Never the code itself. */
 export function refusalNote(refusal: string | null): string {
   if (refusal && BUDGET.has(refusal)) return `${budgetRefusalMessage(refusal)}${NOTES.budgetTail}`;
+  // D791: a paused member reads the pause's sentence.
+  if (refusal === 'ai_paused') return budgetRefusalMessage(refusal);
   if (refusal && TOO_LARGE.has(refusal)) return NOTES.tooLarge;
   return refusedBody(refusal).message;
 }

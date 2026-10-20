@@ -445,6 +445,8 @@ export async function structureWithStudioos(env: Env, grant: AssistantGrant, arg
       .bind(session.id).first<{ run_id: string | null }>())?.run_id ?? null;
     await audit(env, grant, project.id, 'assistant_structure_refused', { session_uid: session.uid, run_id: runId, refusal });
     if (BUDGET_REFUSALS.has(refusal)) throw new ToolError(402, refusal, budgetRefusalMessage(refusal));
+    // D791: a paused member's run, in the pause's words.
+    if (refusal === 'ai_paused') throw new ToolError(403, refusal, budgetRefusalMessage(refusal));
     if (refusal === 'model_not_offered') throw new ToolError(400, refusal, 'That model is not offered for structuring. Nothing was run.');
     throw new ToolError(503, refusal, 'The model could not be reached. Nothing was stored.');
   }
