@@ -173,14 +173,15 @@ export type SubscriberRow = {
   last_email_at: string | null;
 };
 
-const SUBSCRIBER_COLS = 'id, uid, email, user_id, status, confirm_token_hash, confirm_expires_at, token_version, last_email_at';
+// The columns are written out in each SELECT, not interpolated: the schema
+// guard (test/schema_guards.test.mjs) reads only literal SQL.
 
 export function subscriberByEmail(env: Env, email: string): Promise<SubscriberRow | null> {
-  return env.DB.prepare(`SELECT ${SUBSCRIBER_COLS} FROM newsletter_subscribers WHERE email = ?`).bind(email).first<SubscriberRow>();
+  return env.DB.prepare(`SELECT id, uid, email, user_id, status, confirm_token_hash, confirm_expires_at, token_version, last_email_at FROM newsletter_subscribers WHERE email = ?`).bind(email).first<SubscriberRow>();
 }
 
 export function subscriberByUid(env: Env, uid: string): Promise<SubscriberRow | null> {
-  return env.DB.prepare(`SELECT ${SUBSCRIBER_COLS} FROM newsletter_subscribers WHERE uid = ?`).bind(uid).first<SubscriberRow>();
+  return env.DB.prepare(`SELECT id, uid, email, user_id, status, confirm_token_hash, confirm_expires_at, token_version, last_email_at FROM newsletter_subscribers WHERE uid = ?`).bind(uid).first<SubscriberRow>();
 }
 
 /** The subscriber's topics, as `{ topic: on }` for every known topic it may hold. */
@@ -229,7 +230,7 @@ export function isInvestorMember(user: { role?: string | null }): boolean {
 
 /** A member's subscriber row: theirs by user_id, else the one on their account email. */
 export async function memberSubscriber(env: Env, user: { id: number; email: string }): Promise<SubscriberRow | null> {
-  const byUser = await env.DB.prepare(`SELECT ${SUBSCRIBER_COLS} FROM newsletter_subscribers WHERE user_id = ?`).bind(user.id).first<SubscriberRow>();
+  const byUser = await env.DB.prepare(`SELECT id, uid, email, user_id, status, confirm_token_hash, confirm_expires_at, token_version, last_email_at FROM newsletter_subscribers WHERE user_id = ?`).bind(user.id).first<SubscriberRow>();
   if (byUser) return byUser;
   const email = normalizeEmail(user.email);
   return email ? subscriberByEmail(env, email) : null;
