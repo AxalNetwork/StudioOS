@@ -198,6 +198,7 @@ import advisorGrantRoutes from './routes/advisor_grants';
 import messagesRoutes from './routes/messages';
 import perksRoutes from './routes/perks';
 import adminLicences from './routes/admin_licences';
+import adminLicenceFeeInvoices from './routes/admin_licence_fee_invoices';
 import adminDeployments from './routes/admin_deployments';
 import adminStatements from './routes/admin_statements';
 import adminEscalations from './routes/admin_escalations';
@@ -1034,6 +1035,9 @@ app.route('/api/branch', branchInvitationRoutes);
 // D446 — S13's audit line. The branch reads the support sessions its own
 // database recorded. Same prefix as the other branch reads.
 app.route('/api/branch', branchSupportSessionRoutes);
+// D802 — a licence's annual fee invoices. Before the ledger, so its paths
+// reach their own handlers.
+app.route('/api/admin/licences', adminLicenceFeeInvoices);
 app.route('/api/admin/licences', adminLicences);
 // Migrations 199/207 — who holds the Super Admin elevation. Mount BEFORE the
 // catch-all for the same reason as the licence ledger above.

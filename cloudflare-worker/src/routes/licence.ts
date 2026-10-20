@@ -57,6 +57,7 @@ import {
   BRANCH_UNAVAILABLE, USAGE_REASON, licenseeContractPdf, licenseeContracts, licenseeNeeds, licenseeStatements,
   noticesWaiting, parseDispute, raiseStatementDispute, seatsNearCap, type LicenseeTermsInput,
 } from '../services/licenceAccount';
+import { feeInvoiceOf, feeInvoicePdf, listFeeInvoices, type InvoiceLicence } from '../services/licenceFeeInvoice';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -1206,14 +1207,52 @@ r.get('/mine/statements', async (c) => {
     console.warn('[licence] licence_terms unreadable for statements', (e as Error).message);
     unreadable = true;
   }
-  const body = await licenseeStatements(c.env, own.licence, terms);
+  const body: Record<string, unknown> = await licenseeStatements(c.env, own.licence, terms);
   if (unreadable) {
     body.payment = {
       refusal_code: 'terms_unreadable',
       refusal: `${TERMS_REASON.unreadable} No payment instructions are given until the licensor can be checked.`,
     };
   }
+  // D802 — HQ's annual licence-fee invoices to this licence, newest first, each
+  // with its PDF. Read through the caller's own licence, never one named in the
+  // request. A read that fails says so rather than reading as "none issued".
+  try {
+    body.fee_invoices = await listFeeInvoices(c.env, own.licence as unknown as { uid: string; licence_ref: string }, '/api/licence/mine/fee-invoices');
+    body.fee_invoices_reason = null;
+  } catch (e) {
+    console.warn('[licence] licence_fee_invoices unreadable', (e as Error).message);
+    body.fee_invoices = null;
+    body.fee_invoices_reason = 'HQ\'s fee invoices could not be read just now.';
+  }
   return c.json(body);
+});
+
+// GET /api/licence/mine/fee-invoices/:uid/pdf — one of the invoices above,
+// printed. Another licence's or an unknown uid is 404; a void one is 409.
+r.get('/mine/fee-invoices/:uid/pdf', async (c) => {
+  const own = await ownLicenceForAccount(c);
+  if ('refusal' in own) return own.refusal;
+  if ('branch' in own) return c.json({ error: 'invoice_hq_only', message: BRANCH_UNAVAILABLE.reason }, 501);
+  const inv = await feeInvoiceOf(c.env, String(own.licence.uid), c.req.param('uid'));
+  if (!inv) return c.json({ error: 'not_found', message: 'No such invoice on your licence.' }, 404);
+  let licensor: string | null = null;
+  try {
+    const t = (await readLicenceTerms(c.env, String(own.licence.uid)))?.terms;
+    licensor = typeof t?.licensor_ip_entity === 'string' ? t.licensor_ip_entity : null;
+  } catch {
+    return c.json({ error: 'terms_unreadable', message: `${TERMS_REASON.unreadable} The invoice is not printed until its licensor can be checked.` }, 503);
+  }
+  const pdf = await feeInvoicePdf(c.env, own.licence as unknown as InvoiceLicence, inv, licensor);
+  if (!pdf.ok) return c.json({ error: pdf.code, message: pdf.message }, pdf.status);
+  return new Response(pdf.bytes, {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="${pdf.filename}"`,
+      'Cache-Control': 'no-store',
+    },
+  });
 });
 
 // POST /api/licence/mine/usage/send — "Send now": the branch's own usage push

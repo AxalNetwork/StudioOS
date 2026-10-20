@@ -96,6 +96,11 @@ const MIGRATION_260 = readFileSync(
   resolve(ROOT, 'cloudflare-worker/sql/migrations/260_subsidiary_statements.sql'), 'utf8',
 );
 
+/** D797's terms schedule (the CREATE only; its ALTER needs a branch table): D802 reads the per-stream shares from it. */
+const MIGRATION_512 = readFileSync(
+  resolve(ROOT, 'cloudflare-worker/sql/migrations/512_licence_terms.sql'), 'utf8',
+).split(/^ALTER TABLE/m)[0];
+
 function seededDb() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   db.exec(SCHEMA);
@@ -103,6 +108,7 @@ function seededDb() {
   // drifted from the shipped DDL would let a column rename pass here and fail
   // in production, which is the one thing this fixture must not do.
   db.exec(MIGRATION_260);
+  db.exec(MIGRATION_512);
 
   const u = db.prepare('INSERT INTO users (id, role, name, email) VALUES (?,?,?,?)');
   u.run(HOLDER, 'admin', 'Sue', 'sue@axal.example');
@@ -255,7 +261,7 @@ test('every stream appears on the statement, reported or not', async () => {
   assert.equal(r.status, 201);
   assert.deepEqual(
     r.body.streams.map((s: any) => s.stream),
-    ['subscriptions', 'licence_fees', 'token_margin', 'other'],
+    ['subscriptions', 'licence_fees', 'token_margin', 'other', 'platform_licence_royalties'],
     'a statement listed only the streams that arrived',
   );
   // With nothing reported at all, the owed figure is zero AND says why — which
@@ -747,4 +753,113 @@ test('D514 — every action a PATCH carries writes its own audit row', async () 
     ['subsidiary_statement_dispute', 'subsidiary_statement_dispute_cleared', 'subsidiary_statement_void']);
   assert.equal(audit(app.db)[4].details.note, 'Withdrawn after review');
   assert.equal(audit(app.db)[4].details.from_status, 'issued');
+});
+
+/* ------------------------------------------------------------------ *
+ * D802 — a share per stream, and the platform-licence royalty         *
+ * ------------------------------------------------------------------ */
+
+const terms = (db: any, licenceUid: string, t: Record<string, number | null>) =>
+  db.prepare(
+    `INSERT INTO licence_terms (licence_uid, share_subscriptions_bps, share_licence_fees_bps,
+       share_token_margin_bps, royalty_platform_licence_bps, updated_at)
+     VALUES (?,?,?,?,?,?)`,
+  ).run(licenceUid, t.subs ?? null, t.fees ?? null, t.tokens ?? null, t.royalty ?? null, '2026-10-01T00:00:00Z');
+
+const byName = (streams: any[], name: string) => streams.find((s: any) => s.stream === name);
+
+test('D802 — three streams at three shares owe per stream, and the total is their sum', () => {
+  const d = drawStatement([
+    { stream: 'subscriptions', gross_cents: 1_000_001, currency: 'EUR', available: true },
+    { stream: 'licence_fees', gross_cents: 500_000, currency: 'EUR', available: true },
+    { stream: 'token_margin', gross_cents: 333_333, currency: 'EUR', available: true },
+    { stream: 'other', gross_cents: 0, currency: 'EUR', available: true },
+  ], { fallback_bps: 3500, subscriptions_bps: 2000, licence_fees_bps: 1000, token_margin_bps: 4500 }, 'EUR');
+  assert.equal(byName(d.streams, 'subscriptions').owed_cents, 200_000); // 200000.2
+  assert.equal(byName(d.streams, 'licence_fees').owed_cents, 50_000);
+  assert.equal(byName(d.streams, 'token_margin').owed_cents, 150_000); // 149999.85
+  assert.equal(byName(d.streams, 'subscriptions').share_source, 'stream');
+  assert.equal(d.owed_cents, 400_000);
+  assert.equal(d.gross_cents, 1_833_334, 'the royalty row was counted into gross a second time');
+  assert.equal(d.revenue_share_bps, 3500, 'the ledger share is the one stored as the fallback');
+});
+
+test('D802 — a null stream share falls back to the ledger, and the row says so', () => {
+  const d = drawStatement([
+    { stream: 'subscriptions', gross_cents: 100_000, currency: 'EUR', available: true },
+    { stream: 'token_margin', gross_cents: 100_000, currency: 'EUR', available: true },
+  ], { fallback_bps: 3500, subscriptions_bps: null, token_margin_bps: 1000 }, 'EUR');
+  const subs = byName(d.streams, 'subscriptions');
+  assert.equal(subs.share_bps, 3500);
+  assert.equal(subs.share_source, 'fallback');
+  assert.equal(subs.owed_cents, 35_000);
+  assert.equal(byName(d.streams, 'token_margin').share_source, 'stream');
+  assert.equal(d.owed_cents, 45_000);
+});
+
+test('D802 — the royalty owes gross × bps on licence fees; unrecorded it owes 0 and says "Not recorded"', () => {
+  const figures = [
+    { stream: 'licence_fees', gross_cents: 1_234_567, currency: 'EUR', available: true },
+  ];
+  const withRoyalty = drawStatement(figures, { fallback_bps: 0, royalty_bps: 500 }, 'EUR');
+  const r = byName(withRoyalty.streams, 'platform_licence_royalties');
+  assert.equal(r.gross_cents, 1_234_567);
+  assert.equal(r.owed_cents, 61_728); // 61728.35
+  assert.equal(r.derived, true);
+  assert.equal(withRoyalty.owed_cents, 61_728);
+
+  const none = drawStatement(figures, { fallback_bps: 0, royalty_bps: null }, 'EUR');
+  const n = byName(none.streams, 'platform_licence_royalties');
+  assert.equal(n.owed_cents, 0);
+  assert.equal(n.share_bps, null, 'an unrecorded royalty was shown as a rate');
+  assert.equal(n.share_source, 'not_recorded');
+  assert.match(String(n.reason), /^Not recorded/);
+  assert.equal(none.unreported, 0, 'a term HQ never set was counted as a stream the branch failed to report');
+  assert.equal(none.complete, true);
+});
+
+test('D802 — the draw reads the schedule: per-stream shares, the fallback and the royalty', async () => {
+  const { call, report, rows, db } = statementsApp();
+  terms(db, 'lic_fr', { subs: 2000, fees: null, tokens: 4500, royalty: 500 });
+  report('subscriptions', 100_000);
+  report('licence_fees', 200_000);
+  report('token_margin', 10_000);
+  report('other', 1_000);
+
+  const r = await call(...draw({ licence_uid: 'lic_fr', period: '2026-Q3' }));
+  assert.equal(r.status, 201);
+  assert.equal(byName(r.body.streams, 'subscriptions').owed_cents, 20_000);
+  const fees = byName(r.body.streams, 'licence_fees');
+  assert.equal(fees.share_source, 'fallback');
+  assert.equal(fees.owed_cents, 70_000);
+  assert.equal(byName(r.body.streams, 'token_margin').owed_cents, 4_500);
+  assert.equal(byName(r.body.streams, 'other').owed_cents, 350);
+  assert.equal(byName(r.body.streams, 'platform_licence_royalties').owed_cents, 10_000);
+  assert.equal(r.body.owed_cents, 104_850);
+  const stored = JSON.parse(rows()[0].streams_json);
+  assert.equal(byName(stored, 'licence_fees').share_source, 'fallback', 'the fallback did not travel with the stored claim');
+  assert.equal(rows()[0].owed_cents, 104_850);
+});
+
+test('D802 — a schedule that cannot be read refuses the draw rather than billing at the fallback', async () => {
+  const { call, report, rows, db } = statementsApp();
+  report('other', 1_000);
+  db.exec('DROP TABLE licence_terms');
+  const r = await call(...draw({ licence_uid: 'lic_fr', period: '2026-Q3' }));
+  assert.equal(r.status, 503);
+  assert.equal(r.body.error, 'terms_unreadable');
+  assert.equal(rows().length, 0);
+});
+
+test('D802 — a re-draw at a lower per-stream share below what was recorded is refused', async () => {
+  const app = statementsApp();
+  app.report('subscriptions', 100_000);
+  const first = await app.call(...draw({ licence_uid: 'lic_fr', period: '2026-Q3' }));
+  assert.equal(first.body.owed_cents, 35_000);
+  assert.equal((await patch(app, first.body.uid, { paid_cents: 30_000, paid_note: 'part' })).status, 200);
+  terms(app.db, 'lic_fr', { subs: 1000 });
+  const again = await app.call(...draw({ licence_uid: 'lic_fr', period: '2026-Q3' }));
+  assert.equal(again.status, 409);
+  assert.equal(again.body.error, 'recorded_above_owed');
+  assert.equal(app.rows()[0].owed_cents, 35_000);
 });

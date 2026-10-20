@@ -54,6 +54,7 @@ import { RailFrame, Unreadable, Unrecorded, WorkerRail } from '../../ui';
 import useRecordCrumb from './useRecordCrumb';
 import LicenceTermsSchedule from './LicenceTermsSchedule';
 import LicenceRequestsPanel from './LicenceRequestsPanel';
+import LicenceFeeInvoicesPanel from './LicenceFeeInvoicesPanel';
 
 const UNAVAILABLE = Symbol('unavailable');
 import {
@@ -1909,6 +1910,7 @@ function Detail({ uid, held, onChanged, onOpenLicence }) {
         }}
         onGrantAdmin={(g) => { setGrant(g); setStep(ADMINS_STEP); }}
       />
+      <LicenceFeeInvoicesPanel licence={d} />
       </div>
     </div>
   );
