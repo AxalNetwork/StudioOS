@@ -1552,24 +1552,24 @@ function guardSliceBound(chars: number): number {
 
 /**
  * The guard's share of a run's quote, in micro-USD: every input slice, and
- * every output slice the run's maximum output allows, at the guard's rate
- * (D762's: cost while `AI_BILLING` is unset). One micro-USD per call covers
- * each call's own rounding up.
+ * every output slice the run's maximum output allows, at the guard's rate times
+ * the run's `multiplier` (D762: 1 while billing is on cost). One micro-USD per
+ * call covers each call's own rounding up.
  */
-export function guardQuoteMicro(inputText: string, maxOutputChars: number): number {
+export function guardQuoteMicro(inputText: string, maxOutputChars: number, multiplier = 1): number {
   const inputSlices = guard.sliceForGuard(inputText);
   const outputSlices = guardSliceBound(maxOutputChars);
   const calls = inputSlices.length + outputSlices;
   if (!calls) return 0;
   const tokensIn = inputText.length + maxOutputChars + calls * GUARD_TEMPLATE_TOKENS;
-  return aiBudget.usdToMicro(estimateCostUsd(GUARD_MODEL, tokensIn, calls * GUARD_QUOTE_OUT_TOKENS)) + calls;
+  return aiBudget.billedUsdToMicro(estimateCostUsd(GUARD_MODEL, tokensIn, calls * GUARD_QUOTE_OUT_TOKENS), multiplier) + calls;
 }
 
 /** The guard rows, written after the run's own row so each names it in `guard_for`. */
-async function recordGuardCalls(env: Env, opts: RunOptions, calls: GuardCall[], runRowId: number | null, reservationUid: string | null): Promise<void> {
+async function recordGuardCalls(env: Env, opts: RunOptions, calls: GuardCall[], runRowId: number | null, reservationUid: string | null, charged: (c: GuardCall) => number): Promise<void> {
   for (const call of calls) {
     await recordUsage(env, opts, call.usage, null, {
-      charged: reservationUid ? call.micro : 0, reservationUid, guardFor: runRowId,
+      charged: reservationUid ? charged(call) : 0, reservationUid, guardFor: runRowId,
       units: { tokens_in: call.usage.prompt_tokens, tokens_out: call.usage.completion_tokens },
     });
   }
@@ -1835,8 +1835,12 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
   }
 
   let reservation: {uid:string;userId:number} | undefined;
+  // D762: what this run is settled at over its cost, from the member's licence.
+  // Cost (est_cost_usd, the KV buckets, the organisation cap) stays cost.
+  let multiplier = 1;
   if (opts.userId > 0) {
     try {
+      multiplier = await aiBudget.memberChargeMultiplier(env, opts.userId);
       // UTF-8 bytes bound input tokenization; include chat/system overhead.
       // Reserve the most expensive offered fallback, refund to the actual logged estimate.
       const inputBytes = new TextEncoder().encode(defaultContentBlob(opts)+(opts.systemPrompt || '')).byteLength;
@@ -1861,8 +1865,8 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
       const outputChars = !guardOn || route.isEmbed || opts.speak || opts.draw ? 0
         : route.isAudio ? Math.ceil((opts.audioMinutes || 0) * TRANSCRIPT_CHARS_PER_MINUTE)
           : outputBound * GUARD_CHARS_PER_OUTPUT_TOKEN;
-      const guardQuote = guardOn ? guardQuoteMicro(guardInput, outputChars) : 0;
-      const held = await aiBudget.reserveAiBudget(env,opts.userId,aiBudget.usdToMicro(quote) + guardQuote);
+      const guardQuote = guardOn ? guardQuoteMicro(guardInput, outputChars, multiplier) : 0;
+      const held = await aiBudget.reserveAiBudget(env,opts.userId,aiBudget.billedUsdToMicro(quote, multiplier) + guardQuote);
       if (!held.ok) {
         const usage:UsageMeta={task:opts.task,model:primaryModel,latency_ms:0,prompt_tokens:0,completion_tokens:0,est_cost_usd:0,fallback_used:false,cached:false,safety_score:null};
         await recordUsage(env, opts, usage, held.refusal);
@@ -1882,11 +1886,14 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
   // row, so each names it in `guard_for`.
   const guardCalls: GuardCall[] = [];
   const guardDecisions: guard.GuardDecision[] = [];
-  const guardMicro = () => guardCalls.reduce((s, c) => s + c.micro, 0);
+  // A guard call is charged at the run's multiplier, rounded up once, as its row records.
+  const guardCharge = (c: GuardCall) => (c.micro > 0 ? aiBudget.billedUsdToMicro(c.usage.est_cost_usd, multiplier) : 0);
+  const guardMicro = () => guardCalls.reduce((s, c) => s + guardCharge(c), 0);
   const guardUsd = () => guardCalls.reduce((s, c) => s + c.usage.est_cost_usd, 0);
   /**
    * Settle the hold at `micro` and bump the KV spend buckets by `usd`. The hold
-   * and the buckets are both on cost while billing is (D762 §2). A hold that
+   * is at the billed price (D762 §2: cost × the licence's multiplier once
+   * `AI_BILLING` is `charged`); the buckets stay on cost. A hold that
    * charged nothing for a run that did not answer is released as a refund.
    * False when the settlement could not be written.
    */
@@ -1915,7 +1922,7 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
     }
     return true;
   };
-  const writeGuardRows = (runRowId: number | null) => recordGuardCalls(env, opts, guardCalls, runRowId, reservation?.uid ?? null);
+  const writeGuardRows = (runRowId: number | null) => recordGuardCalls(env, opts, guardCalls, runRowId, reservation?.uid ?? null, guardCharge);
 
   // ---- D763: the input check ------------------------------------------
   // After the hold, so a budget refusal is answered before `guard_unavailable`
@@ -2071,13 +2078,13 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
     tokens_in: u.prompt_tokens, tokens_out: u.completion_tokens, ...(audioMinutes > 0 ? { audio_minutes: audioMinutes } : {}),
   });
   /**
-   * Settle the hold at the run's cost and the guard's (D763), and bump the KV
-   * spend buckets. Returns what the run's own row records (the model's share;
+   * Settle the hold at the run's billed price and the guard's (D762, D763), and
+   * bump the KV spend buckets at cost. Returns what the run's own row records (the model's share;
    * each guard row records its own), or null when the settlement could not be
    * written.
    */
   const settle = async (u: UsageMeta, ok: boolean): Promise<RunCharge | null> => {
-    const charged = ok ? aiBudget.usdToMicro(u.est_cost_usd) : 0;
+    const charged = ok ? aiBudget.billedUsdToMicro(u.est_cost_usd, multiplier) : 0;
     if (!await settleHold(charged + guardMicro(), (ok ? u.est_cost_usd : 0) + guardUsd(), ok)) return null;
     // A run with no hold (a system run) charged nobody.
     return { charged: reservation ? charged : 0, reservationUid: reservation?.uid ?? null, units: unitsFor(u) };
