@@ -5490,7 +5490,10 @@ export const adminX = {
       method: 'PUT', body: JSON.stringify(proposal_uid ? { index, alt_text, proposal_uid } : { index, alt_text }),
     }),
   lintPost: (id) => request(`/admin/x/posts/${id}/lint`, { method: 'POST', body: '{}' }),
-  approvePost: (id) => request(`/admin/x/posts/${id}/approve`, { method: 'POST', body: '{}' }),
+  // D780: Approve keeps the captions Eadwyn proposed that the composer still offers.
+  approvePost: (id, altTextProposalUids = []) => request(`/admin/x/posts/${id}/approve`, {
+    method: 'POST', body: JSON.stringify(altTextProposalUids.length ? { alt_text_proposal_uids: altTextProposalUids } : {}),
+  }),
   sendPost: (id, { override_reason } = {}) =>
     request(`/admin/x/posts/${id}/send`, {
       method: 'POST',
