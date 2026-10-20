@@ -17,7 +17,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { verifyTurnstile } from '../services/turnstile';
 import { ensureJobBoardSchema } from '../services/jobBoardSchema';
-import { shapeJobPosting, safeHttpUrl, buildPublicJobFeedWhere } from '../services/jobBoardCommon';
+import { publicCompensation, shapeJobPosting, safeHttpUrl, buildPublicJobFeedWhere } from '../services/jobBoardCommon';
 import { putResumeFromDataUri } from '../services/r2';
 import { notify } from '../services/notify';
 import { refuse } from '../util/refusal';
@@ -93,7 +93,9 @@ jobsPublic.get('/jobs/:slug', async (c) => {
       WHERE j.slug = ? AND j.status = 'published' AND j.admin_published = 1`,
   ).bind(slug).first();
   if (!job) return c.json({ error: 'not_found' }, 404);
-  return c.json({ job: shapeJobPosting(job) });
+  // #2181: the band only when its founder showed it; otherwise no key at all.
+  const compensation = publicCompensation(job);
+  return c.json({ job: { ...shapeJobPosting(job), ...(compensation ? { compensation } : {}) } });
 });
 
 // ── POST /jobs/:slug/apply — public application (Turnstile) ─────────────────

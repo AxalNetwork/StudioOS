@@ -65,6 +65,7 @@ export type PostingFields = {
   comp_max_cents?: number | null;
   comp_currency?: string | null;
   equity_pct?: number | null;
+  comp_public?: 0 | 1;
 };
 
 /**
@@ -77,12 +78,13 @@ export async function createPosting(env: Env, hostUserId: number, projectId: num
   const ins: any = await env.DB.prepare(
     `INSERT INTO job_postings
        (slug, host_user_id, project_id, title, employment_type, location_text, remote, seniority, summary, description, status,
-        team, target_start, comp_min_cents, comp_max_cents, comp_currency, equity_pct)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?)`,
+        team, target_start, comp_min_cents, comp_max_cents, comp_currency, equity_pct, comp_public)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?)`,
   ).bind(
     slug, hostUserId, projectId, f.title, normalizeEmploymentType(f.employment_type), f.location_text ?? null, f.remote ? 1 : 0,
     normalizeSeniority(f.seniority), f.summary ?? null, f.description ?? null,
     f.team ?? null, f.target_start ?? null, f.comp_min_cents ?? null, f.comp_max_cents ?? null, f.comp_currency ?? null, f.equity_pct ?? null,
+    f.comp_public === 1 ? 1 : 0,
   ).run();
   return env.DB.prepare('SELECT * FROM job_postings WHERE id = ?').bind(Number(ins?.meta?.last_row_id)).first();
 }
@@ -202,6 +204,20 @@ export function shapeJobPosting(row: any, opts: { includePrivate?: boolean } = {
     base.review_notes = row.review_notes ?? null;
   }
   return base;
+}
+
+/**
+ * #2181 — a published posting's compensation band, for the public board, only
+ * when its founder switched it on (`comp_public`, migration 507). Otherwise
+ * null, and the caller sends no `compensation` key: a band saved before the
+ * switch existed was saved for the record only.
+ */
+export function publicCompensation(row: any): { min_cents: number | null; max_cents: number | null; currency: string | null; equity_pct: number | null } | null {
+  if (!row || Number(row.comp_public) !== 1 || row.status !== 'published' || !TRUTHY(row.admin_published)) return null;
+  const min = row.comp_min_cents == null ? null : Number(row.comp_min_cents);
+  const max = row.comp_max_cents == null ? null : Number(row.comp_max_cents);
+  if (min == null && max == null) return null;
+  return { min_cents: min, max_cents: max, currency: row.comp_currency ?? null, equity_pct: row.equity_pct == null ? null : Number(row.equity_pct) };
 }
 
 /**

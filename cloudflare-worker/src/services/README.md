@@ -239,7 +239,8 @@ D691 (#1697): `growWriters.ts` has one writer per Grow store, called by
 `../routes/cycle_grow.ts` and by #1698's actions and feedback-theme fill:
 feedback (with `setFeedbackTheme`), channels and their spend, roles (through
 `jobBoardCommon.ts`'s `createPosting`, `submitForReview` and `closePosting`,
-which keep the board's host-or-admin rule), applications, partners and their
+which keep the board's host-or-admin rule; its `publicCompensation` is the band
+the public board shows only when the founder switched it on, #2181), applications, partners and their
 revenue, markets, obligations and the durability checklist. Each logs one
 `grow.<module>` row through `cycleActivity.ts`. `growKpis.ts` is where a typed
 KPI is kept and how each KPI is read (Stripe from the last 35 days over a hand
