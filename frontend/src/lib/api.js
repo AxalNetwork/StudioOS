@@ -50,6 +50,7 @@ export * from './api/profile.js';
 export * from './api/publicAiModels.js';
 export * from './api/publicPricing.js';
 export * from './api/railPrefs.js';
+export * from './api/railProposals.js';
 export * from './api/researchCompanies.js';
 export * from './api/researchFunds.js';
 export * from './api/researchMarkets.js';

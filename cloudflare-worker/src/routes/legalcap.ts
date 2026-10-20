@@ -11,6 +11,7 @@ import { bindingKey } from '../util/schemaBootstrap';
 import { run as runAI, type TaskClass } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { railFor, refuseRun } from '../util/railContext';
+import { proposeRail } from '../services/railProposals';
 
 const legalcap = new Hono<{ Bindings: Env }>();
 
@@ -187,15 +188,17 @@ const logAi = (env: Env, userId: number, kind: string, meta: any = {}) =>
  * switch, the budget, the guard); `text` is null when the model could not be
  * reached, and the press keeps its non-AI path.
  */
-async function llm(c: any, userId: number, task: TaskClass, option: string, record: string, system: string, prompt: string, maxTokens = 400): Promise<{ text: string | null; model: string | null; refused: Response | null }> {
+async function llm(c: any, userId: number, task: TaskClass, option: string, record: string, system: string, prompt: string, maxTokens = 400): Promise<{ text: string | null; model: string | null; refused: Response | null; page: string; usageLogId: number | null }> {
   const r = await runAI(c.env, {
     task, userId, maxTokens,
     messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }],
     surface: AI_SURFACE.legalCapital,
     rail: railFor(c, { page: 'legal-capital', option }, record),
   });
-  if (r.ok) return { text: (r.output || '').trim() || null, model: r.usage.model, refused: null };
-  return { text: null, model: null, refused: refuseRun(c, r) };
+  // The page the run was recorded under, for what it leaves in `ai_rail_proposals` (D780).
+  const page = railFor(c, { page: 'legal-capital', option }, record).page;
+  if (r.ok) return { text: (r.output || '').trim() || null, model: r.usage.model, refused: null, page, usageLogId: r.usageLogId ?? null };
+  return { text: null, model: null, refused: refuseRun(c, r), page, usageLogId: null };
 }
 
 // ============================================================
@@ -340,6 +343,9 @@ function defaultDocVars(project: any, user: any): Record<string, any> {
 // LEGAL ENGINE
 // ============================================================
 
+/** D780: Eadwyn's notes on a legal draft, the rail option they are stored under. */
+export const LEGAL_NOTES_OPTION = 'draft:legal/notes';
+
 legalcap.post('/legal/generate', async (c) => {
   const user = await requireAuth(c);
   if (!ADVANCE_ROLES.has(user.role)) return c.json({ error: 'Operators/admins only' }, 403);
@@ -362,21 +368,37 @@ legalcap.post('/legal/generate', async (c) => {
   const vars = { ...defaultDocVars(project, user), ...userVars };
   let body = fillTemplate(TEMPLATES[type], vars);
 
-  // AI-assisted recommendations / cleanup pass (optional, cheap)
-  const ai = await llm(c, user.id, 'rail_legal', `draft:legal/${type}`, `deal:${dealId}`,
-    'You are a startup-focused corporate attorney reviewing a draft document. Suggest 2-3 brief improvements as a markdown list. Do NOT rewrite the document.',
+  // Eadwyn's notes on the draft (D780, `draft:legal/notes`): a few points for
+  // the member to weigh, never a rewrite. No persona: Eadwyn is not counsel.
+  const ai = await llm(c, user.id, 'rail_legal', LEGAL_NOTES_OPTION, `deal:${dealId}`,
+    'You are Eadwyn, reading a startup legal draft built from a standard template. List 2-3 brief points the founder may want to check with their own counsel, as a markdown list. Do NOT rewrite the document.',
     `Document type: ${type}\nCompany: ${project.name}\nSector: ${project.sector || 'n/a'}\nDraft preview:\n${body.slice(0, 1500)}`,
     256);
   if (ai.refused) return ai.refused;
   await logAi(c.env, user.id, 'legal_doc_generate', { type, deal_id: dealId });
 
   // Sensitive content stored as JSON (template + filled vars + body) — no raw PII in logs.
-  // D766 (D720 §9): the AI's suggestions are kept beside the document, never
-  // written into its text; the member applies any of them themselves.
-  const contentJson = JSON.stringify({ template: type, vars, body, ...(ai.text ? { suggestions: ai.text } : {}), model: ai.model ?? 'template-only' });
+  // D780 (D720 §9): the stored document is the template the member filled, and
+  // nothing else. Eadwyn's notes are a proposal in `ai_rail_proposals`, below.
+  const contentJson = JSON.stringify({ template: type, vars, body });
 
   const doc: any = await c.env.DB.prepare(`INSERT INTO legal_documents (deal_id, type, status, content, generated_by) VALUES (?, ?, 'generated', ?, ?) RETURNING id, deal_id, type, status, generated_by, created_at`)
     .bind(dealId, type, contentJson, user.id).first();
+
+  // The notes, as the member's own `note` on this document. A note that could
+  // not be stored loses nothing: the document is whole without it.
+  let notes: { uid: string } | null = null;
+  if (ai.text && doc?.id) {
+    try {
+      const p = await proposeRail(c.env, {
+        userId: user.id, page: ai.page, option: LEGAL_NOTES_OPTION, record: `legal_doc:${doc.id}`,
+        kind: 'note', payload: { text: ai.text.slice(0, 4000), type }, model: ai.model, usageLogId: ai.usageLogId,
+      });
+      notes = { uid: p.uid };
+    } catch (e) {
+      console.error('[legalcap] legal notes:', (e as Error).message);
+    }
+  }
 
   try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_entity', { type: 'document', id: doc.id }); } catch {}
   await logActivity(c.env, user.id, 'studio_ops_task', { entityType: 'legal_doc', entityId: doc.id, metadata: { type, deal_id: dealId } });
@@ -386,7 +408,7 @@ legalcap.post('/legal/generate', async (c) => {
   // GET /legal/docs/:dealId, which is also redacted; the body itself
   // lives only in the legal_documents.content JSON column and will be
   // surfaced via a signed download URL once the worker mints them.
-  return c.json({ ...doc, content_url: null, redacted: true }, 201);
+  return c.json({ ...doc, content_url: null, redacted: true, notes }, 201);
 });
 
 legalcap.get('/legal/docs/:dealId', async (c) => {
