@@ -9,7 +9,7 @@ routes live in the D528 module `frontend/src/routes/learning.jsx`, which
 | File | What it is |
 | --- | --- |
 | `LearningPage.jsx` | The routed page: the gate, then the view's container. Every view is wired since stage 3; a profile the gate holds sees the coming-soon card in place. |
-| `LearningHome.jsx` | `/learning`: the tabs, the search, Continue learning, My programs, Upcoming webinars and the live reads, plus `LearningHomeView`, which draws it all from props. |
+| `LearningHome.jsx` | `/learning`: the tabs, the search, Continue learning, My programs, Upcoming webinars and the live reads, plus `LearningHomeView`, which draws it all from props. The owner requested no AI rail on this home page (desktop or phone); other Learning views keep theirs. |
 | `LearningWired.jsx` | The learner pages that read the Learning store: a course, a lesson, a standalone video or reading, and My learning. Each is a pure view plus the container that reads for it. |
 | `LearningStudio.jsx` | `/learning/studio`, the Super Admin's: the content table (exercises and exams included), the webinar list, and the editor the address opens (`?item=`, `?course=`, `?exercise=`, `?exam=`, `?webinar=`, `?new=`). |
 | `StudioItemEditor.jsx` | Creates and edits a video (a link or an uploaded file) or a reading, with publish, unpublish and archive. |

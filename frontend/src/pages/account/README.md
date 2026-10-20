@@ -12,7 +12,9 @@ live here, one file each:
 | `AccountProfile.jsx` | Profile and identity; Company profile reads the sidebar’s selected company and links its Company Settings editor. Signing entity keeps the account’s separate contract details |
 | `AccountDevices.jsx` | The devices registered for push, under Notifications |
 | `AccountBilling.jsx` | Billing and orders: the plan line and the orders list |
-| `AutoReloadCard.jsx` | D794 (#2219): Billing's Auto-reload card beside the orders — the switch, the pack, the threshold and the saved card (`AutoReloadForm`). Stripe's form loads only when a card is added |
+| `BillingCards.jsx` | D792 (#2217): Billing's own cards from the canvas's B3 — Token balance, Included with your plan, Buy tokens (the packs, D790's offer pills, Buy to checkout) and Payment details (Manage in Stripe), and `useBillingReads`. `../SettingsPage.jsx`'s `BillingConsole` lays them out |
+| `billingModel.js` | D792: those cards' rules and sentences, pure — `balanceText`, `allowanceView`, `packCards`, `paymentCard`, `nextReset`, `shortDay` |
+| `AutoReloadCard.jsx` | D794 (#2219): Billing's Auto-reload card beside the plan and Payment details — the switch, the pack, the threshold and the saved card (`AutoReloadForm`). Stripe's form loads only when a card is added |
 | `AutoReloadCardSetup.jsx` | D794: Stripe's `PaymentElement` confirming a SetupIntent for off-session use; hands back only the SetupIntent's id. Loaded lazily, so the Stripe loader is imported only when a card is added |
 | `LimitsPage.jsx` | D807 (#2246): `/account/usage/limits`, Usage's Limits page — D788's monthly spend limit (Save, Remove, the 50/80/100% notices), and the plan allowance, auto-reload and today's token-pack orders read-only. Each card loads on its own; a phone draws its own bar back to Usage |
 | `limitsModel.js` | D807: the Limits page's words and figures, pure — `limitView`, `parseLimitUsd` (D788's rule), `allowanceCard`, `autoReloadCard`, `packOrdersCard`, and `USAGE_PAGES` with `usagePageFor`, the Usage pages the section list draws |
@@ -66,3 +68,5 @@ live here, one file each:
 - **A phone view is handed its reads.** Each section's phone view takes the
   same reads its desktop makes, as props, and adds no company or venture to
   any of them. `frontend/test/account_phone_d700.test.mjs` holds that.
+
+Account (`/account`) and all its sections, including Connectors and individual connector pages, have no AI rail on desktop or phone, by the owner's request. `SettingsPage.jsx` passes no rail to the shared frame, so its content uses the available column.

@@ -106,14 +106,16 @@ test('Save sends the switch, the pack and the typed threshold; a refusal is said
 });
 
 // 4 ───────────────────────────────────────────────────────────────────────────
-test('the three calls go to the Worker\'s routes, and Billing mounts the card beside the orders', () => {
+test('the three calls go to the Worker\'s routes, and Billing mounts the card beside the plan and Payment details (D792)', () => {
   // Mutations checked: the card not mounted; a call pointed elsewhere.
   const src = readFileSync(new URL('../src/lib/api/aiBudget.js', import.meta.url), 'utf8');
   assert.match(src, /autoReload: \(\) => request\('\/ai-budget\/auto-reload'\)/);
   assert.match(src, /saveAutoReload: \(settings\) => request\('\/ai-budget\/auto-reload', \{ method: 'PUT', body: body\(settings\) \}\)/);
   assert.match(src, /autoReloadSetup: \(nonce\) => request\('\/ai-budget\/auto-reload\/setup', \{ method: 'POST', body: body\(\{ nonce \}\) \}\)/);
   const page = readFileSync(new URL('../src/pages/SettingsPage.jsx', import.meta.url), 'utf8');
-  assert.match(page, /<Orders \/>\n[^\n]*\n\s*<AutoReloadCard \/>/);
+  // D792 (#2217) moved it from beside the orders to the Billing console, beside the plan and Payment details.
+  const consoleSrc = page.slice(page.indexOf('function BillingConsole('), page.indexOf('\n}\n', page.indexOf('function BillingConsole(')));
+  assert.match(consoleSrc, /<PaymentDetailsCard [^>]*\/>\n\s*<\/div>\n\s*<AutoReloadCard \/>/);
   const worker = readFileSync(new URL('../../cloudflare-worker/src/routes/ai_budget.ts', import.meta.url), 'utf8');
   for (const route of ["r.get('/auto-reload'", "r.put('/auto-reload'", "r.post('/auto-reload/setup'"]) assert.ok(worker.includes(route), route);
 });

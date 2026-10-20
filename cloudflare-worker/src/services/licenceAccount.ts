@@ -9,7 +9,15 @@
  * THE CONTRACT IS THE STORED BODY, never re-rendered: `licence_contracts.body_md`
  * is the instrument as instantiated (migration 259), and re-rendering it from
  * today's licence would show a contract nobody signed. Its status follows the
- * envelope, as HQ's console reads it (`enrichContractFromEnvelope`, D451).
+ * envelope, as HQ's console reads it (`enrichContractFromEnvelope`, D451). The
+ * PDF prints that same stored body. A contract HQ has drafted and not sent is
+ * HQ's work in progress and is never shown, as a draft statement is not.
+ *
+ * IN FORCE AND PENDING. `in_force` is the latest signed contract and `pending`
+ * the latest sent, unsigned one. HQ's draft supersedes every earlier row the
+ * moment it is drawn (`admin_licences.ts`), so a signed contract stays in force
+ * until a later one is SIGNED, superseded or not: otherwise the canvas's
+ * "Sent v6.1 · waiting / In force: v6.0" could never be drawn.
  *
  * `sign_url` IS THE CALLER'S OWN SIGNING LINK ONLY: the recipient row of the
  * contract's envelope whose `user_id` is the caller, still pending and not
@@ -25,15 +33,18 @@
  * THE PAYMENT INSTRUCTIONS are the licensor's account for the territory licence
  * fee, masked as a fund notice prints them (`paymentBlock`: the last four
  * digits, never the full number), with the warning, or the resolver's refusal
- * sentence in their place.
+ * sentence in their place. The payee is the licence's IP licensor (D797's
+ * `licensor_ip_entity`), Holdings until D797 records one.
  */
 import type { Env } from '../types';
 import { enrichContractFromEnvelope, type LicenceRow } from '../routes/admin_licences';
-import { paymentBlock } from './fundNotices';
-import { PAY_WARNING } from './payInstructions';
+import { paymentBlock, sha256Hex } from './fundNotices';
+import { PAYMENT_PURPOSES, PAY_WARNING } from './payInstructions';
 import { AXAL_ENTITIES, type AxalEntityKey } from './legalDocFormat';
 import { SLA_HOURS } from '../rpc/hqOps';
 import { stripTrailingSlashes } from '../util/url';
+import { paperModel } from './legalPaper';
+import { renderLegalPdf } from './legalPaperRender';
 
 /** The statuses a licensee sees. A `draft` is HQ's work in progress. */
 export const LICENSEE_STATEMENT_STATUSES = ['issued', 'paid', 'void'] as const;
@@ -50,18 +61,19 @@ export function licenceFeeReference(licenceRef: string, period: string): string 
 }
 
 /**
- * The licensor the fee is paid to, when it is not Holdings. The territory
- * licence fee's payee is Holdings (`PAYMENT_PURPOSES.territory_licence_fee`);
- * a licence whose terms name another licensor (D797's `licensor_entity`) is
- * refused rather than shown Holdings' account. Null when the payment may be
- * given.
+ * Why no payment instructions are given for this licensor, or null when they
+ * may be. The territory licence fee's purpose has one payee
+ * (`PAYMENT_PURPOSES.territory_licence_fee`, Holdings); a licence whose terms
+ * name another IP licensor (D797's `licensor_ip_entity`) is refused rather
+ * than shown an account that is not its licensor's.
  */
 export function licensorRefusal(licensor: string | null | undefined): { refusal: string; refusal_code: string } | null {
-  if (licensor == null || licensor === '' || licensor === 'holdings') return null;
+  const payee = PAYMENT_PURPOSES.territory_licence_fee.payee;
+  if (licensor == null || licensor === '' || licensor === payee) return null;
   const name = AXAL_ENTITIES[licensor as AxalEntityKey]?.name ?? 'another entity';
   return {
     refusal_code: 'licensor_not_payee',
-    refusal: `This licence's terms name ${name} as the licensor, but the territory licence fee is paid to ${AXAL_ENTITIES.holdings.name}, so no payment instructions are given. Ask HQ to correct the terms before you pay.`,
+    refusal: `This licence's terms name ${name} as the licensor, but the territory licence fee is paid to ${AXAL_ENTITIES[payee].name}, so no payment instructions are given. Ask HQ to correct the terms before you pay.`,
   };
 }
 
@@ -70,12 +82,11 @@ type ContractView = {
   sent_at: string | null; signed_at: string | null; unfilled_fields: string[]; body_md: string;
 };
 
-async function signing(env: Env, row: { envelope_uid: string | null; status: string }, userId: number):
+/** The caller's own signing link for a contract that is sent, or why there is none. */
+async function signing(env: Env, row: { envelope_uid: string | null }, userId: number):
   Promise<{ sign_url: string | null; sign_reason: string | null }> {
-  if (row.status === 'draft') return { sign_url: null, sign_reason: 'Not sent yet' };
-  if (row.status === 'signed') return { sign_url: null, sign_reason: 'Signed' };
-  if (row.status === 'void') return { sign_url: null, sign_reason: 'Withdrawn by HQ' };
-  if (!row.envelope_uid) return { sign_url: null, sign_reason: 'Not sent yet' };
+  // A contract marked sent before envelopes carried it (D451) has no link to give.
+  if (!row.envelope_uid) return { sign_url: null, sign_reason: 'HQ has sent no signing link for it. Ask HQ.' };
   const recipients = await env.DB.prepare(
     `SELECT r.user_id, r.recipient_name, r.signing_token, r.token_expires_at, r.status
        FROM esign_recipients r JOIN esign_envelopes e ON e.id = r.envelope_id
@@ -94,54 +105,136 @@ async function signing(env: Env, row: { envelope_uid: string | null; status: str
   return { sign_url: `${appUrl}/esign/${mine.signing_token}`, sign_reason: null };
 }
 
-/** GET /api/licence/mine/contract's body: the current contract, the superseded ones, and the caller's own signing link. */
-export async function licenseeContracts(env: Env, licence: LicenceRow, userId: number) {
+/**
+ * The licence's contracts as the licensee may see them: every row HQ has sent,
+ * newest first, with its status following the envelope. A row still `draft`
+ * (never sent) is left out; `draftWaiting` says one exists, for the reason.
+ */
+async function visibleContracts(env: Env, licence: LicenceRow) {
   const q = await env.DB.prepare(
-    `SELECT uid, template_title, template_version, status, envelope_uid, superseded_at,
-            sent_at, signed_at, unfilled_fields, body_md
+    `SELECT uid, template_slug, template_title, template_version, status, envelope_uid, superseded_at,
+            sent_at, signed_at, unfilled_fields, body_md, created_at
        FROM licence_contracts WHERE licence_uid = ?
       ORDER BY created_at DESC, id DESC`,
   ).bind(licence.uid).all<any>();
-  const rows = await Promise.all((q.results || []).map((row) => enrichContractFromEnvelope(env, row)));
-  const view = (row: any): ContractView => {
-    let unfilled: string[] = [];
-    try { const v = JSON.parse(String(row.unfilled_fields || '[]')); if (Array.isArray(v)) unfilled = v.map(String); } catch { /* left empty */ }
-    return {
-      uid: row.uid, template_title: row.template_title, template_version: Number(row.template_version),
-      status: String(row.status), sent_at: row.sent_at ?? null, signed_at: row.signed_at ?? null,
-      unfilled_fields: unfilled, body_md: String(row.body_md ?? ''),
-    };
-  };
-  const current = rows.find((row: any) => !row.superseded_at) as any;
-  const earlier = rows.filter((row: any) => row.superseded_at).map((row: any) => ({ ...view(row), superseded_at: row.superseded_at }));
-  if (!current) {
-    return { available: true as const, contract: null, earlier, sign_url: null, sign_reason: 'HQ has not drawn a contract for this licence yet' };
-  }
-  return { available: true as const, contract: view(current), earlier, ...await signing(env, current, userId) };
+  const rows = await Promise.all((q.results || []).map((row) => enrichContractFromEnvelope(env, row))) as any[];
+  const draftWaiting = rows.some((row) => !row.superseded_at && row.status === 'draft');
+  return { rows: rows.filter((row) => row.status !== 'draft'), draftWaiting };
 }
 
-type Stream = { stream: string; gross_cents: number | null; currency: string | null; available: boolean; is_estimate: boolean; reason: string | null };
-
-function streamsOf(json: unknown): Stream[] {
-  let raw: unknown;
-  try { raw = JSON.parse(String(json ?? '[]')); } catch { return []; }
-  if (!Array.isArray(raw)) return [];
-  return raw.map((s: any) => ({
-    stream: String(s?.stream ?? ''),
-    gross_cents: Number.isSafeInteger(s?.gross_cents) ? s.gross_cents : null,
-    currency: s?.currency ? String(s.currency) : null,
-    available: s?.available !== false,
-    is_estimate: s?.is_estimate === true || s?.is_estimate === 1,
-    reason: s?.reason ? String(s.reason) : null,
-  }));
+function contractView(row: any): ContractView {
+  let unfilled: string[] = [];
+  try { const v = JSON.parse(String(row.unfilled_fields || '[]')); if (Array.isArray(v)) unfilled = v.map(String); } catch { /* left empty */ }
+  return {
+    uid: row.uid, template_title: row.template_title, template_version: Number(row.template_version),
+    status: String(row.status), sent_at: row.sent_at ?? null, signed_at: row.signed_at ?? null,
+    unfilled_fields: unfilled, body_md: String(row.body_md ?? ''),
+  };
 }
 
 /**
- * GET /api/licence/mine/statements's body: the licensee's statements, the usage
- * reports by period, and the payment block for the territory licence fee.
- * `licensor` is the licensor the licence's terms name (D797), when known.
+ * GET /api/licence/mine/contract's body: the contract in force, the one sent
+ * and waiting, the earlier ones, and the caller's own signing link for the one
+ * waiting.
  */
-export async function licenseeStatements(env: Env, licence: LicenceRow, licensor?: string | null) {
+export async function licenseeContracts(env: Env, licence: LicenceRow, userId: number) {
+  const { rows, draftWaiting } = await visibleContracts(env, licence);
+  const inForce = rows.find((row) => row.status === 'signed') ?? null;
+  const pending = rows.find((row) => !row.superseded_at && row.status === 'sent') ?? null;
+  const earlier = rows
+    .filter((row) => row !== inForce && row !== pending)
+    .map((row) => ({ ...contractView(row), superseded_at: row.superseded_at ?? null }));
+  const base = {
+    available: true as const,
+    in_force: inForce ? contractView(inForce) : null,
+    pending: pending ? contractView(pending) : null,
+    earlier,
+  };
+  if (pending) return { ...base, ...await signing(env, pending, userId) };
+  const sign_reason = draftWaiting ? 'Not sent yet'
+    : inForce ? 'Signed'
+      : rows.length ? 'Nothing is waiting for your signature'
+        : 'HQ has not drawn a contract for this licence yet';
+  return { ...base, sign_url: null, sign_reason };
+}
+
+/**
+ * One of the licence's contracts the licensee may see, as a PDF printed from
+ * its stored body, or null for a uid that is not one of them (another
+ * licence's, a draft, or none). Never re-rendered from the template.
+ */
+export async function licenseeContractPdf(env: Env, licence: LicenceRow, uid: string):
+  Promise<{ ok: true; bytes: Uint8Array; renderer: string; filename: string } | { ok: false; status: 404 | 503 }> {
+  const { rows } = await visibleContracts(env, licence);
+  const row = rows.find((r) => r.uid === uid);
+  if (!row) return { ok: false, status: 404 };
+  const current = rows.find((r) => !r.superseded_at);
+  const body = String(row.body_md ?? '');
+  const model = paperModel({
+    title: row.template_title, body, slug: row.template_slug, version: Number(row.template_version),
+    bodySha256: await sha256Hex(body),
+    envelopeUuid: row.envelope_uid ?? null,
+    state: row.superseded_at && current
+      ? { kind: 'superseded', by: Number(current.template_version) }
+      : { kind: 'issued' },
+    preserveBody: true,
+  });
+  const rendered = await renderLegalPdf(env, model, { pageSize: 'a4', cover: 'light' });
+  if (!rendered.ok) return { ok: false, status: 503 };
+  const filename = `${licence.licence_ref}-contract-v${Number(row.template_version)}.pdf`.replace(/[^A-Za-z0-9._-]/g, '_');
+  return { ok: true, bytes: rendered.bytes, renderer: rendered.renderer, filename };
+}
+
+/** A statement's streams, as HQ stored them: `streams_json` passes through, so a stream added later (D802) arrives as drawn. */
+function streamsOf(json: unknown): unknown[] {
+  try {
+    const raw = JSON.parse(String(json ?? '[]'));
+    return Array.isArray(raw) ? raw : [];
+  } catch { return []; }
+}
+
+/** The day after a period ends, at UTC midnight: `2026-Q3` → 1 October, `2026-09` → 1 October. Null for a period it cannot read. */
+export function periodEnds(period: string): Date | null {
+  let m = /^(\d{4})-Q([1-4])$/.exec(period);
+  if (m) return new Date(Date.UTC(Number(m[1]), Number(m[2]) * 3, 1));
+  m = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(period);
+  if (m) return new Date(Date.UTC(Number(m[1]), Number(m[2]), 1));
+  return null;
+}
+
+export const USAGE_REASON = {
+  no_report_day: 'The day a usage report is due is not recorded in this licence\'s terms yet, so a missing report is not called late.',
+  hq_send: 'Usage reports are sent by your branch, which reports to HQ on its own every morning. There is nothing to send from HQ.',
+} as const;
+
+/**
+ * Each period's usage report as the licensee reads it: `sent` with the date
+ * HQ last received it; else `late` once `reportDay` of the month after the
+ * period has passed; else `due`. With no report day recorded, an unsent
+ * period is `not_sent` and `late` is null, never guessed.
+ */
+export function usageReportStatus(period: string, sentAt: string | null, reportDay: number | null, now: Date) {
+  if (sentAt) return { period, status: 'sent' as const, sent_at: sentAt, due_on: null as string | null, late: false as boolean | null };
+  const end = periodEnds(period);
+  if (reportDay == null || !end) return { period, status: 'not_sent' as const, sent_at: null, due_on: null, late: null };
+  const due = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), reportDay));
+  const late = now.getTime() >= due.getTime() + 24 * 3600_000;
+  return { period, status: late ? 'late' as const : 'due' as const, sent_at: null, due_on: due.toISOString().slice(0, 10), late };
+}
+
+export type LicenseeTermsInput = {
+  /** D797's `licensor_ip_entity`, when recorded. */
+  licensorIpEntity?: string | null;
+  /** D797's `usage_report_day`, when recorded. */
+  usageReportDay?: number | null;
+};
+
+/**
+ * GET /api/licence/mine/statements's body: the licensee's statements, the usage
+ * reports by period with whether each was sent, and the payment block for the
+ * territory licence fee. `terms` is what D797's schedule records, when known.
+ */
+export async function licenseeStatements(env: Env, licence: LicenceRow, terms: LicenseeTermsInput = {}, now = new Date()) {
   const s = await env.DB.prepare(
     `SELECT uid, period, gross_cents, revenue_share_bps, owed_cents, paid_cents, paid_at, disputed_cents,
             status, currency, streams_json, estimated_streams, unreported_streams, reports_as_of
@@ -165,25 +258,39 @@ export async function licenseeStatements(env: Env, licence: LicenceRow, licensor
        FROM subsidiary_usage_reports WHERE licence_uid = ?
       ORDER BY period DESC, stream`,
   ).bind(licence.uid).all<any>();
-  const byPeriod = new Map<string, any[]>();
+  const byPeriod = new Map<string, { streams: any[]; sent_at: string | null }>();
   for (const row of u.results || []) {
-    const list = byPeriod.get(row.period) ?? [];
-    list.push({
+    const entry = byPeriod.get(row.period) ?? { streams: [], sent_at: null };
+    entry.streams.push({
       stream: row.stream, gross_cents: row.gross_cents == null ? null : Number(row.gross_cents), currency: row.currency,
       is_estimate: row.is_estimate === 1, estimate_basis: row.estimate_basis ?? null, reported_at: row.reported_at,
     });
-    byPeriod.set(row.period, list);
+    if (row.reported_at && (!entry.sent_at || row.reported_at > entry.sent_at)) entry.sent_at = row.reported_at;
+    byPeriod.set(row.period, entry);
   }
-  const usage_reports = [...byPeriod.entries()].map(([period, streams]) => ({ period, streams }));
+  const usage_reports = [...byPeriod.entries()].map(([period, e]) => ({ period, streams: e.streams }));
 
-  const refused = licensorRefusal(licensor);
+  // Every period a statement covers or a report was sent for, newest first.
+  const periods = [...new Set([...statements.map((st) => String(st.period)), ...byPeriod.keys()])].sort().reverse();
+  const reportDay = terms.usageReportDay ?? null;
+  const usage = {
+    report_day: reportDay,
+    report_day_reason: reportDay == null ? USAGE_REASON.no_report_day : null,
+    periods: periods.map((p) => usageReportStatus(p, byPeriod.get(p)?.sent_at ?? null, reportDay, now)),
+    send_now: false as const,
+    send_now_reason: USAGE_REASON.hq_send,
+  };
+
+  const refused = licensorRefusal(terms.licensorIpEntity);
   let payment: Record<string, unknown>;
   if (refused) payment = refused;
   else {
-    const block = await paymentBlock(env, 'holdings', 'territory_licence_fee', null, false);
-    payment = block.refusal ? block.payment : { ...block.payment, warning: PAY_WARNING };
+    const payee = PAYMENT_PURPOSES.territory_licence_fee.payee;
+    const block = await paymentBlock(env, payee, 'territory_licence_fee', null, false);
+    payment = block.refusal ? block.payment
+      : { method: 'Bank transfer', payee_entity: payee, payee_name: AXAL_ENTITIES[payee].name, ...block.payment, warning: PAY_WARNING };
   }
-  return { available: true as const, statements, usage_reports, payment };
+  return { available: true as const, statements, usage_reports, usage, payment };
 }
 
 /** `{cents, reason}` for a dispute, or the field it refuses with its sentence. */
@@ -234,4 +341,63 @@ export async function raiseStatementDispute(
     }
   } catch (e) { console.warn('[licence] statement dispute notice failed', (e as Error).message); }
   return { uid, due_at: dueAt, status: 'open' as const };
+}
+
+export const NEEDS_REASON = {
+  seats_hq: 'Seats used is not counted on HQ yet, so no seat type is flagged here.',
+  notices_unreadable: 'HQ\'s notices could not be read on this database (migration 264).',
+} as const;
+
+/** A seat type at 90% or more of its seats licensed, from what a branch counts. */
+export function seatsNearCap(licensed: Record<string, number>, used: Record<string, number> | null) {
+  if (!used) return [];
+  return Object.entries(licensed)
+    .filter(([type, n]) => n > 0 && (used[type] ?? 0) * 10 >= n * 9)
+    .map(([type, n]) => ({ seat_type: type, used: used[type] ?? 0, licensed: n }));
+}
+
+type NeedItem = { kind: string; title: string; link: string; ref: string | null; due: string | null };
+
+/** HQ's notices waiting on the caller's answer, oldest deadline first; null when the store cannot be read. */
+export async function noticesWaiting(env: Env, userId: number): Promise<NeedItem[] | null> {
+  try {
+    const q = await env.DB.prepare(
+      `SELECT uid, subject, respond_by FROM admin_notices
+        WHERE user_id = ? AND status IN ('issued', 'overdue')
+        ORDER BY respond_by, id`,
+    ).bind(userId).all<{ uid: string; subject: string; respond_by: string | null }>();
+    return (q.results || []).map((n) => ({
+      kind: 'notice', title: `HQ notice: ${n.subject}`, link: '/admin/my-licence/requests', ref: n.uid, due: n.respond_by ?? null,
+    }));
+  } catch { return null; }
+}
+
+/**
+ * GET /api/licence/mine/needs on HQ: what waits on the caller, in the
+ * Summary's order. A contract waiting for the caller's own signature; HQ's
+ * notices waiting for an answer; issued statements not yet paid. Seats are
+ * counted on a branch only, so HQ names the reason instead.
+ */
+export async function licenseeNeeds(env: Env, licence: LicenceRow, userId: number) {
+  const items: NeedItem[] = [];
+  const reasons: Record<string, string> = { seats: NEEDS_REASON.seats_hq };
+  const { rows } = await visibleContracts(env, licence);
+  const pending = rows.find((row) => !row.superseded_at && row.status === 'sent');
+  if (pending && (await signing(env, pending, userId)).sign_url) {
+    items.push({
+      kind: 'contract', title: `Contract v${pending.template_version} is waiting for your signature`,
+      link: '/admin/my-licence/contract', ref: pending.uid, due: null,
+    });
+  }
+  const notices = await noticesWaiting(env, userId);
+  if (notices) items.push(...notices); else reasons.notices = NEEDS_REASON.notices_unreadable;
+  const unpaid = await env.DB.prepare(
+    `SELECT uid, period FROM subsidiary_statements
+      WHERE licence_uid = ? AND status = 'issued' AND paid_cents < owed_cents
+      ORDER BY period, id`,
+  ).bind(licence.uid).all<{ uid: string; period: string }>();
+  for (const st of unpaid.results || []) {
+    items.push({ kind: 'statement', title: `Statement ${st.period} issued and unpaid`, link: '/admin/my-licence/statements', ref: st.uid, due: null });
+  }
+  return { available: true as const, count: items.length, items, reasons };
 }

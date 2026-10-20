@@ -612,6 +612,20 @@ founderValidate.put('/interviews/:id/pain-severity', async (c) => {
  * that silently returned two of five reads as a model with little to say, when
  * what happened is that three were refused. The count is the difference.
  */
+/**
+ * D778 part 4 (#2103): the founder's fill bands, each on the page D771's
+ * inventory gives it (`frontend/src/lib/railOptions/founder.js`, held to this
+ * table by `founder_fill_bands_d778.test.ts`). A run from a client that sent no
+ * rail page names that page; a mounted rail's page still wins, since it holds
+ * the member's Manual switch. A kind the founder's boards do not list keeps
+ * its surface's workspace.
+ */
+export const FOUNDER_FILL_PAGES: Readonly<Record<string, string>> = {
+  pain_tag: 'Founder · Validate · Problem discovery',
+  hypothesis: 'Founder · Validate · Experiments and evidence',
+  feedback_theme: 'Founder · Grow · Product improvement',
+};
+
 founderValidate.post('/propose/:projectId', async (c) => {
   const s = await scope(c, Number(c.req.param('projectId')), canWrite);
   if (s instanceof Response) return s;
@@ -653,7 +667,7 @@ founderValidate.post('/propose/:projectId', async (c) => {
     model,
     surface: AI_SURFACE.validate,
     // D765: the fill's page (its surface's workspace) and the fill as the option.
-    rail: railFor(c, { page: pageFromPath(spec.surface, 'validate'), option: `fill:${kind}` }, `project:${s.project.id}`),
+    rail: railFor(c, { page: FOUNDER_FILL_PAGES[kind] ?? pageFromPath(spec.surface, 'validate'), option: `fill:${kind}` }, `project:${s.project.id}`),
     systemPrompt: spec.prompt,
     messages: [{ role: 'user', content: gathered.facts }],
     maxTokens: 500,

@@ -54,8 +54,30 @@ export async function ledgerBalance(env: Env, userId: number): Promise<number> {
  * mirrored price). The list is D1's, never Stripe metadata (D755 §3).
  */
 export type TokenPack =
-  | { origin: 'created' | 'adopted'; packUid: string; priceId: string; productId: string; faceCents: number; bonusMicrousd: number; onSale: boolean }
-  | { origin: 'environment'; packUid: null; priceId: string; productId: null; faceCents: null; bonusMicrousd: 0; onSale: true };
+  | { origin: 'created' | 'adopted'; packUid: string; priceId: string; productId: string; faceCents: number; bonusMicrousd: number; onSale: boolean;
+      offerStartsAt: string | null; offerEndsAt: string | null; firstPurchaseOnly: boolean }
+  | { origin: 'environment'; packUid: null; priceId: string; productId: null; faceCents: null; bonusMicrousd: 0; onSale: true;
+      offerStartsAt: null; offerEndsAt: null; firstPurchaseOnly: false };
+
+/**
+ * D790 (#2215): whether a pack's bonus is offered at `now`: from its start
+ * (inclusive) to its end (exclusive), either end open (migration 509). A
+ * window that cannot be read offers no bonus.
+ */
+export function offerOpen(window: { offer_starts_at?: string | null; offer_ends_at?: string | null }, now = Date.now()): boolean {
+  const starts = window.offer_starts_at ?? null, ends = window.offer_ends_at ?? null;
+  const s = starts === null ? -Infinity : Date.parse(starts), e = ends === null ? Infinity : Date.parse(ends);
+  if (Number.isNaN(s) || Number.isNaN(e)) return false;
+  return s <= now && now < e;
+}
+
+/** D790: whether a member has bought a pack before: any purchase on the ledger, refunded or not. */
+export async function hasBoughtPack(env: Env, userId: number): Promise<boolean> {
+  const row = await env.DB.prepare(`SELECT EXISTS(SELECT 1 FROM ai_credit_ledger WHERE user_id = ? AND kind = 'purchase') AS bought`)
+    .bind(userId).first<{ bought: number }>();
+  if (!row) throw new Error('AI top-up purchases unreadable');
+  return row.bought === 1;
+}
 
 function fallbackPriceId(env: Env): string | null {
   const raw = (env as any).STRIPE_PRICE_AI_TOPUP;
@@ -85,10 +107,12 @@ export async function tokenPackForPrice(env: Env, priceId: string): Promise<Toke
   if (row) {
     if (row.archived_at !== null) return null;
     return { origin: row.origin, packUid: row.uid, priceId: row.price_id, productId: row.product_id,
-      faceCents: row.face_cents, bonusMicrousd: row.bonus_microusd, onSale: row.on_sale === 1 };
+      faceCents: row.face_cents, bonusMicrousd: row.bonus_microusd, onSale: row.on_sale === 1,
+      offerStartsAt: row.offer_starts_at ?? null, offerEndsAt: row.offer_ends_at ?? null, firstPurchaseOnly: row.first_purchase_only === 1 };
   }
   if (fallbackPriceId(env) === priceId)
-    return { origin: 'environment', packUid: null, priceId, productId: null, faceCents: null, bonusMicrousd: 0, onSale: true };
+    return { origin: 'environment', packUid: null, priceId, productId: null, faceCents: null, bonusMicrousd: 0, onSale: true,
+      offerStartsAt: null, offerEndsAt: null, firstPurchaseOnly: false };
   return null;
 }
 
@@ -143,8 +167,8 @@ export async function packsOnHold(env: Env, userId: number): Promise<boolean> {
 }
 
 export type TokenPackRefusal = 'token_pack_alone' | 'promo_not_for_token_packs' | 'token_pack_not_on_sale'
-  | 'token_pack_daily_limit' | 'token_balance_ceiling' | 'token_packs_on_hold';
-export type TokenPackQuote = { priceId: string; packUid: string | null; creditMicrousd: number; bonusMicrousd: number };
+  | 'token_pack_daily_limit' | 'token_balance_ceiling' | 'token_packs_on_hold' | 'token_pack_first_purchase_only';
+export type TokenPackQuote = { priceId: string; packUid: string | null; creditMicrousd: number; bonusMicrousd: number; firstPurchaseOnly: boolean };
 
 /**
  * D805 (#2243): the member's pack orders in the rolling window
@@ -199,8 +223,11 @@ export async function tokenPackQuote(env: Env, userId: number, cart: PricedCart,
   const pack = await tokenPackForPrice(env, line.price_id);
   const face = pack ? await saleFaceCents(env, pack) : null;
   if (!pack || face === null || line.unit_amount !== face || cart.currency !== 'usd') return { error: 'token_pack_not_on_sale' };
+  // D790: a first-purchase pack is for a member who has bought none; the webhook checks again.
+  if (pack.firstPurchaseOnly && await hasBoughtPack(env, userId)) return { error: 'token_pack_first_purchase_only' };
   const creditMicrousd = face * (AI_USD_SCALE / 100);
-  const bonusMicrousd = pack.bonusMicrousd;
+  // D790: the bonus only while its offer window is open. The one quoted here is stored on the purchase row.
+  const bonusMicrousd = offerOpen({ offer_starts_at: pack.offerStartsAt, offer_ends_at: pack.offerEndsAt }) ? pack.bonusMicrousd : 0;
   const recent = await recentPackOrders(env, userId, opts.excludeOrderRef ?? '');
   if (recent.n >= TOKEN_PACK_LIMITS.ordersPerDay) return { error: 'token_pack_daily_limit' };
   const account = await env.DB.prepare('SELECT balance_microusd FROM ai_topup_accounts WHERE user_id = ?').bind(userId).first<any>();
@@ -208,7 +235,7 @@ export async function tokenPackQuote(env: Env, userId: number, cart: PricedCart,
   if (!Number.isSafeInteger(balance)) throw new Error('AI top-up balance unreadable');
   if (balance + recent.pending + creditMicrousd + bonusMicrousd > TOKEN_PACK_LIMITS.balanceCeilingMicrousd) return { error: 'token_balance_ceiling' };
   if (await packsOnHold(env, userId)) return { error: 'token_packs_on_hold' };
-  return { priceId: line.price_id, packUid: pack.packUid, creditMicrousd, bonusMicrousd };
+  return { priceId: line.price_id, packUid: pack.packUid, creditMicrousd, bonusMicrousd, firstPurchaseOnly: pack.firstPurchaseOnly };
 }
 
 // ---------------------------------------------------------------------------
@@ -248,7 +275,8 @@ async function mirrorIndex(env: Env): Promise<Map<string, MirroredPrice>> {
 }
 
 export type PackLine = { uid: string | null; origin: 'created' | 'adopted' | 'environment'; price_id: string; face_cents: number | null;
-  on_sale: boolean; bonus_microusd: number; sort: number; state: 'ready' | 'not_ready'; reason: string | null; adoptable: boolean };
+  on_sale: boolean; bonus_microusd: number; sort: number; state: 'ready' | 'not_ready'; reason: string | null; adoptable: boolean;
+  offer_starts_at: string | null; offer_ends_at: string | null; first_purchase_only: boolean };
 /**
  * Every pack HQ manages, not archived, with D750's state and reason per pack
  * (§14), plus the fallback as its own line when it is set and is not a row.
@@ -274,7 +302,8 @@ export async function packLines(env: Env): Promise<PackLine[]> {
     }
     if (!reason && row.on_sale !== 1) reason = 'off_sale';
     return { uid: row.uid, origin: row.origin, price_id: row.price_id, face_cents: row.face_cents, on_sale: row.on_sale === 1,
-      bonus_microusd: row.bonus_microusd, sort: row.sort, state: reason ? 'not_ready' : 'ready', reason, adoptable: false };
+      bonus_microusd: row.bonus_microusd, sort: row.sort, state: reason ? 'not_ready' : 'ready', reason, adoptable: false,
+      offer_starts_at: row.offer_starts_at ?? null, offer_ends_at: row.offer_ends_at ?? null, first_purchase_only: row.first_purchase_only === 1 };
   });
   const raw = (env as any).STRIPE_PRICE_AI_TOPUP;
   if (raw !== undefined && raw !== null && raw !== '') {
@@ -285,19 +314,31 @@ export async function packLines(env: Env): Promise<PackLine[]> {
       const r = id && found ? judge(id, found as any) : null;
       const reason = !id ? 'bad_config' : !found ? 'missing_from_catalog' : r && r.configured && r.state === 'not_ready' ? r.reason : null;
       lines.push({ uid: null, origin: 'environment', price_id: id ?? '', face_cents: r && r.configured && r.state === 'ready' ? r.product.unit_amount : null,
-        on_sale: true, bonus_microusd: 0, sort: Number.MAX_SAFE_INTEGER, state: reason ? 'not_ready' : 'ready', reason, adoptable: Boolean(id) });
+        on_sale: true, bonus_microusd: 0, sort: Number.MAX_SAFE_INTEGER, state: reason ? 'not_ready' : 'ready', reason, adoptable: Boolean(id),
+        offer_starts_at: null, offer_ends_at: null, first_purchase_only: false });
     }
   }
   return lines;
 }
 
-export type PackOffer = { uid: string | null; label: string; price_id: string; unit_amount: number; currency: 'usd'; credit_microusd: number; bonus_microusd: number };
+/**
+ * A pack a member may buy now. D790: `bonus_microusd` (and `bonus_usd`) is the
+ * bonus offered now, 0 outside the offer window; `offer_ends_at` is when a live
+ * bonus ends (null for none, or no end); `first_purchase_only` says the pack is
+ * for a member who has bought none.
+ */
+export type PackOffer = { uid: string | null; label: string; price_id: string; unit_amount: number; currency: 'usd'; credit_microusd: number; bonus_microusd: number;
+  bonus_usd: number; offer_ends_at: string | null; first_purchase_only: boolean };
 /** The packs a member may buy now, as the member and the public reads list them. */
-export async function packsOnSale(env: Env): Promise<{ state: 'unset' | 'not_ready' | 'ready'; packs: PackOffer[] }> {
+export async function packsOnSale(env: Env, now = Date.now()): Promise<{ state: 'unset' | 'not_ready' | 'ready'; packs: PackOffer[] }> {
   const lines = await packLines(env);
-  const packs = lines.filter((l) => l.state === 'ready' && l.face_cents !== null).map((l) => ({
-    uid: l.uid, label: packLabel(l.face_cents as number), price_id: l.price_id, unit_amount: l.face_cents as number,
-    currency: 'usd' as const, credit_microusd: (l.face_cents as number) * (AI_USD_SCALE / 100), bonus_microusd: l.bonus_microusd }));
+  const packs = lines.filter((l) => l.state === 'ready' && l.face_cents !== null).map((l) => {
+    const bonus = offerOpen(l, now) ? l.bonus_microusd : 0;
+    return {
+      uid: l.uid, label: packLabel(l.face_cents as number), price_id: l.price_id, unit_amount: l.face_cents as number,
+      currency: 'usd' as const, credit_microusd: (l.face_cents as number) * (AI_USD_SCALE / 100), bonus_microusd: bonus,
+      bonus_usd: bonus / AI_USD_SCALE, offer_ends_at: bonus > 0 ? l.offer_ends_at : null, first_purchase_only: l.first_purchase_only };
+  });
   return { state: lines.length === 0 ? 'unset' : packs.length ? 'ready' : 'not_ready', packs };
 }
 

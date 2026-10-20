@@ -158,8 +158,8 @@ test('GET /top-up: unset, not_ready, ready with two packs, on hold, and the late
       const ready = await call(f, 'GET', '/api/ai-budget/top-up', 2);
       assert.equal(ready.body.state, 'ready');
       assert.deepEqual(ready.body.packs, [
-        { uid: 'pack10', label: '$10 of tokens', price_id: 'price_pack10', unit_amount: 1000, currency: 'usd', credit_microusd: 10000000, bonus_microusd: 0 },
-        { uid: 'pack25', label: '$25 of tokens', price_id: 'price_pack25', unit_amount: 2500, currency: 'usd', credit_microusd: 25000000, bonus_microusd: 2500000 },
+        { uid: 'pack10', label: '$10 of tokens', price_id: 'price_pack10', unit_amount: 1000, currency: 'usd', credit_microusd: 10000000, bonus_microusd: 0, bonus_usd: 0, offer_ends_at: null, first_purchase_only: false },
+        { uid: 'pack25', label: '$25 of tokens', price_id: 'price_pack25', unit_amount: 2500, currency: 'usd', credit_microusd: 25000000, bonus_microusd: 2500000, bonus_usd: 2.5, offer_ends_at: null, first_purchase_only: false },
       ], 'sorted by sort');
       // A mirrored price that no longer equals face_cents is not offered.
       f.db.prepare(`UPDATE stripe_products SET prices_json=REPLACE(prices_json,'"unit_amount":1000','"unit_amount":1100') WHERE id='prod_pack10'`).run();

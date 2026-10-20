@@ -264,6 +264,7 @@ import needsRoutes, { quotesRouter, engagementsRouter } from './routes/needs';
 // below belongs to deal voting rather than to a partner's deal pipeline.
 import partnerPipeline from './routes/partner_pipeline';
 import partnerOffers from './routes/partner_offers';
+import { testing, partnerTesting, adminTesting } from './routes/testing';
 import partnerDelivery from './routes/partner_delivery';
 import founderValidate from './routes/founder_validate';
 import cycleValidate from './routes/cycle_validate';
@@ -1355,6 +1356,10 @@ app.route('/api/partner/pipeline', partnerPipeline);
 // the proof it can show (gated on a consent only the client can give), and the
 // fit rules a pass quotes instead of going silent.
 app.route('/api/partner/offers', partnerOffers);
+// D812 (#2258): product testing — members, a partner's own programmes, and HQ's review.
+app.route('/api/testing', testing);
+app.route('/api/partner/testing', partnerTesting);
+app.route('/api/admin/testing', adminTesting);
 // #45 — what the firm records about work in flight: milestones, blockers,
 // what was shipped, who holds a seat inside a client's systems, and the
 // recurring update. Health is derived over five of those tables at read time
