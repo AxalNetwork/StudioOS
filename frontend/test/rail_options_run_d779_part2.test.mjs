@@ -41,8 +41,9 @@ const workerFile = (f) => codeOnly(read(`cloudflare-worker/src/${f}`));
 function route(src, router, method, path) {
   const at = src.indexOf(`${router}.${method}('${path}'`);
   assert.ok(at >= 0, `${router}.${method}('${path}') is gone`);
-  const next = src.slice(at + 1).search(new RegExp(`\\n${router}\\.(get|post|patch|put|delete)\\(`));
-  return src.slice(at, next < 0 ? undefined : at + 1 + next);
+  const ends = ['get', 'post', 'patch', 'put', 'delete']
+    .map((m) => src.indexOf(`\n${router}.${m}(`, at + 1)).filter((i) => i >= 0);
+  return src.slice(at, ends.length ? Math.min(...ends) : undefined);
 }
 
 /** Every table a body writes. */
