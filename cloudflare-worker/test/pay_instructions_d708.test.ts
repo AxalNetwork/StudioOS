@@ -232,7 +232,7 @@ test('purposeForMoneyKind gives each listed kind its purpose, and null for any o
     assert.equal(purposeForMoneyKind(k), null, String(k));
   }
   assert.deepEqual(Object.fromEntries(Object.entries(PAYMENT_PURPOSES).map(([k, v]) => [k, v.payee])),
-    { capital_contribution: 'fund', gp_commitment: 'fund', management_fee: 'gp', platform_licence_fee: 'holdings' });
+    { capital_contribution: 'fund', gp_commitment: 'fund', management_fee: 'gp', platform_licence_fee: 'holdings', territory_licence_fee: 'holdings' });
 });
 
 test('every kind a purpose lists is a Mercury kind paid to that purpose\'s payee, and every Mercury kind paid to an Axal entity has exactly one purpose', () => {
