@@ -50,6 +50,16 @@ export function recordKey(ref) {
 }
 
 /**
+ * D778 (#2103): a press's own rail context, taken on the click. The mounted
+ * rail's page stays (it holds the member's Manual switch); the option is the
+ * pressed one, sent with the run itself rather than after the busy render hands
+ * it to the rail (`useRailOption`), which the request would beat.
+ */
+export function railPressHeaders(option) {
+  return { ...railPageHeaders(), 'X-Rail-Option': encodeURIComponent(option) };
+}
+
+/**
  * The headers `request()` merges. Header values are URI-encoded (`·`, `&`).
  * The page only while a rail is mounted; the option the rail's own, else the
  * page map's open option; the record the page map's. Nothing when none is known.

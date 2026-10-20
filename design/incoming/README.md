@@ -135,6 +135,33 @@ Each is a column or a table that does not exist yet, so each is filed as a task
 (#2228). The `ROUTE_MAP.md` row is written by the page task when it builds, and
 the file moves to `canvases/integrated/` then.
 
+## Landed 2026-10-20 — Pricing (D786, #2211)
+
+The owner's artifacts `YQjGvJvAXdoynRZjnFGKyF` and `YQD3Gj2NBhYfwe6sfipr9M`
+came from S1's prompt on #2211, as the same pair:
+- `Pricing · Boards.dc.html` is the grid: rows Founder, Investor, Advisors,
+  Operating Partners, Models and States, each at desktop and phone. It is the
+  output of `scripts/read-canvas.mjs` as is.
+- `StudioOS Pricing.dc.html` is the page, in the copy the grid's bundle carries.
+
+No value was edited.
+
+**Grade: UPGRADE.** `/pricing` is live (D786 part 1).
+
+**The owner's rulings of 2026-10-20 change two things the canvas draws:**
+- Advisor Pro and Operating Partner Pro cost $20 a month. The canvas says
+  "Partner Pro", at [$29] and [$99].
+- Every paid plan has a yearly price at 15% off. The canvas shows 20% on the
+  founder plans, and "monthly only" on the other tabs.
+
+**The data check found:**
+- **Prices live in the Stripe catalogue,** which HQ edits from its catalogue
+  console. The new prices are an owner step, and the page reads them, never a
+  hard-coded figure.
+- **Checkout:** the advisor and partner checkout already takes
+  `interval: 'year'`, but the founder and investor checkouts sell a single
+  recurring price. Both are filed as a task on #2210.
+
 ## Landed 2026-10-20 — Usage & Billing console (D785, #2210)
 
 The owner's artifacts `PySQ4tRfmERwGZReinXTGk` and `8CcbBdGm6XJLuneNXL217f`

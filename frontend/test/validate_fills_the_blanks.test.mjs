@@ -250,7 +250,8 @@ test('the band sends the rail\'s pick for its own task, and nothing when there i
   assert.match(band, /const task = kinds\?\.\[kind\]\?\.task;/, 'the band no longer reads its kind\'s task');
   assert.match(band, /const model = task \? readRailModel\(workspace, task\) : null;/,
     'the band reads a pick that is not its own task\'s');
-  assert.match(band, /api\.proposeValidate\(projectId, model \? \{ kind, model \} : \{ kind \}\)/,
+  // D778 part 4 (#2103): followed by the press's own rail headers.
+  assert.match(band, /api\.proposeValidate\(projectId, model \? \{ kind, model \} : \{ kind \}, railPressHeaders\(railOption \|\| `fill:\$\{kind\}`\)\)/,
     'no pick must send no model, so the router runs its default');
   // A refused pick is cleared, so the next press runs the default instead of
   // failing the same way.
