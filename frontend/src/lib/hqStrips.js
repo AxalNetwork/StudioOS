@@ -28,6 +28,7 @@ export const HQ_STRIPS = {
     ['Switches', '/admin/platform/switches'],
     ['Topology', '/admin/platform/topology'],
     ['AI allowances', '/admin/platform/allowances'],
+    ['AI usage', '/admin/platform/ai-usage'],
     ['Integration keys', '/admin?tab=integration-keys'],
     ['GitHub Sync', '/admin?tab=github'],
     ['Payments', '/admin?tab=payments'],

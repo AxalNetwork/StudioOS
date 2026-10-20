@@ -382,6 +382,7 @@ const SUPER = [
   own('/admin?tab=promos', key(SA, 'Platform', 'Promo codes')),
   own('/admin/credit-rules', key(SA, 'Platform', 'Credit rules')),
   own('/admin/platform/allowances', key(SA, 'Platform', 'AI allowances')),
+  alias('/admin/platform/ai-usage', key(SA, 'Platform', 'AI allowances'), 'HQ › AI usage (D791) is AI allowances’ platform-wide read, and docks the same rail.'),
   own('/monitoring', key(SA, 'Platform', 'Monitoring')),
   own('/admin/telegram', key(SA, 'Platform', 'Telegram channels')),
   own('/admin/hq-support', key(SA, 'Support')),

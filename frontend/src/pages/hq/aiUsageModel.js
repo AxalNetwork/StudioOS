@@ -43,6 +43,17 @@ export const roleLabel = (role) => (role ? ROLE_LABELS[role] || role : null);
 /** A plan key as the page prints it: `founder:growth` → "Founder · Growth"; `system` stays "System". */
 export const planText = (plan) => (plan === 'system' ? 'System' : planLabel(plan));
 
+/**
+ * The role and plan under a member's name. A plan already names its role
+ * ("Founder · Growth"), so the role is not said twice; null when neither is known.
+ */
+export function roleAndPlan(role, plan) {
+  const r = roleLabel(role);
+  const p = plan ? planText(plan) : null;
+  if (!p) return r;
+  return r && !p.startsWith(r) ? `${r} · ${p}` : p;
+}
+
 /** A model id as a short name: the last path segment ("llama-3.3-70b-instruct-fp8-fast"). */
 export function modelName(model) {
   const s = String(model || '');
