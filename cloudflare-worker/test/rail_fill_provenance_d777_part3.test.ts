@@ -65,7 +65,7 @@ function world(opts: { before518?: boolean } = {}) {
   __resetForTest();
   const f = aiBudgetFixture();
   f.db.exec(migration('506_ai_rail_proposals.sql'));
-  // The table `fill_provenance.proposal_id` references, as production has it.
+  // The table `fill_provenance.proposal_id` (migration 246) references, as production has it.
   f.db.exec(tableFromBaseline(BASELINE, 'validate_proposals'));
   f.db.exec(fillProvenanceDDL());
   addColumns(f.db, opts.before518 ? M518 : undefined);
@@ -253,7 +253,9 @@ test('D777 only the member\'s own kept placement is recorded, and never into a l
 test('D777 migration 518 is additive, and a database made before it gains the column at runtime', async () => {
   // Mutations checked: the runtime ADD COLUMN removed from ensureFillProvenanceSchema.
   const sql = migration(M518).replace(/--[^\n]*/g, '');
-  assert.match(sql, /ALTER TABLE fill_provenance ADD COLUMN ai_proposal_id INTEGER REFERENCES ai_rail_proposals\(id\) ON DELETE SET NULL;/);
+  assert.match(sql, /ALTER TABLE fill_provenance ADD COLUMN ai_proposal_id INTEGER;/);
+  // No declared reference: SQLite would refuse every fill on a database without ai_rail_proposals.
+  assert.doesNotMatch(sql, /REFERENCES/);
   assert.match(sql, /CREATE INDEX IF NOT EXISTS idx_fill_provenance_rail_proposal ON fill_provenance \(ai_proposal_id\);/);
   assert.doesNotMatch(sql, /^\s*(DROP|UPDATE|DELETE|INSERT)\b/im, 'not additive');
 

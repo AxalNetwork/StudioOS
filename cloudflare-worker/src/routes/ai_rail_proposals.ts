@@ -17,6 +17,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
+import { neverFillMessage } from '../services/fills/neverFill';
 import { NeverFillRefusal, decideRail, listRail, type RailDecision, type RailProposalStatus } from '../services/railProposals';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -48,7 +49,7 @@ r.post('/:uid/decide', async (c) => {
     decided = await decideRail(c.env, user.id, c.req.param('uid'), decision, payload);
   } catch (e) {
     if (e instanceof NeverFillRefusal) {
-      return c.json({ error: 'never_fill', refusal: 'never_fill', message: e.message, field: e.field, discarded: e.discarded }, 422);
+      return c.json({ error: 'never_fill', refusal: 'never_fill', message: neverFillMessage(e.field), field: e.field, discarded: e.discarded }, 422);
     }
     throw e;
   }

@@ -98,7 +98,7 @@ export async function ensureFillProvenanceSchema(env: Env): Promise<void> {
     if (!have.has('ai_usage_log_id')) await env.DB.exec('ALTER TABLE fill_provenance ADD COLUMN ai_usage_log_id INTEGER');
     await env.DB.exec('CREATE INDEX IF NOT EXISTS idx_fill_provenance_usage ON fill_provenance (ai_usage_log_id)');
     // Migration 518's column (D777 part 3), the same way.
-    if (!have.has('ai_proposal_id')) await env.DB.exec('ALTER TABLE fill_provenance ADD COLUMN ai_proposal_id INTEGER REFERENCES ai_rail_proposals(id) ON DELETE SET NULL');
+    if (!have.has('ai_proposal_id')) await env.DB.exec('ALTER TABLE fill_provenance ADD COLUMN ai_proposal_id INTEGER');
     await env.DB.exec('CREATE INDEX IF NOT EXISTS idx_fill_provenance_rail_proposal ON fill_provenance (ai_proposal_id)');
     READY.set(bindingKey(env), true);
   } catch (e) {
