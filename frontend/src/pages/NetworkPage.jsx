@@ -195,7 +195,7 @@ export default function NetworkPage({ embedded = false, zoneActions = null, zone
   // Query-tab and notification links mount this tool directly. Canonical
   // workspace routes embed it inside a shell that already owns the rail.
   if (role === 'founder' && !embedded) {
-    return <RailFrame rail={<WorkerRail workspace="Network" />}>{content}</RailFrame>;
+    return <RailFrame rail={<WorkerRail workspace="Network" role="founder" />}>{content}</RailFrame>;
   }
   return content;
 }

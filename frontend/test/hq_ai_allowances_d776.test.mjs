@@ -63,7 +63,9 @@ test('the words: the billing mode as the canvas says it, unit prices, New and Pa
   assert.equal(qwen.paidOnly, true);
   assert.equal(qwen.isNew, true, 'a model in the New set');
   for (const id of NEW_MODEL_IDS) assert.ok(Object.entries(ALL_MODEL_IDS).some(([n, x]) => x === id && NEW_MODELS.has(n)), 'New is only a canvas new model the list maps');
-  assert.equal(modelsView(MODELS)[1].isNew, true, 'the mapped new Qwen model keeps its badge after catalogue changes');
+  assert.equal(modelsView(MODELS)[1].isNew, false, 'Qwen has no router mapping yet, so it gets no badge');
+  assert.equal(ALL_MODEL_IDS['GLM-4.7 Flash'], '@cf/zai-org/glm-4.7-flash', 'HQ retains the established catalogue mapping');
+  assert.equal(ALL_MODEL_IDS['Qwen3 30B A3B'], null, 'an unmapped model is explicit, not missing from the lookup');
   assert.equal(modelsView(MODELS)[0].isNew, false, 'an established model gets no New badge');
   assert.equal(glm.isNew, false);
   assert.equal(modelsView({}), null);
