@@ -135,6 +135,38 @@ Each is a column or a table that does not exist yet, so each is filed as a task
 (#2228). The `ROUTE_MAP.md` row is written by the page task when it builds, and
 the file moves to `canvases/integrated/` then.
 
+## Landed 2026-10-20 — Usage & Billing console (D785, #2210)
+
+The owner's artifacts `PySQ4tRfmERwGZReinXTGk` and `8CcbBdGm6XJLuneNXL217f`
+came from S1's prompt on #2214. They are the same pair as Licences:
+- `Usage · Boards.dc.html` is the board grid (B1–B5, each with a phone frame
+  except B5), and the output of `scripts/read-canvas.mjs` as is;
+- `Usage Page.dc.html` is the page the grid imports, in the copy the grid's
+  bundle carries. Its image paths (`axal-logo.png`, `uploads/…`) are not
+  committed. No value was edited.
+
+The boards are `/account/usage` (B1), `/account/usage/cost` (B2),
+`/account/billing` (B3), `/account/usage/limits` (B4) and
+`/admin/platform/ai-usage` (B5).
+
+**Grade: UPGRADE** for B1–B4, whose routes are live; **NEW** for B5. The data
+check found most figures already read by the Worker:
+- `/api/ai-budget/me`, `/limit`, `/cost` and `/cost.csv` (D787, D788);
+- `/api/orders`, with each order's PDF;
+- `/api/billing/overview`: the plan, the cards and Stripe's invoices;
+- the Stripe portals;
+- packs and offers (D755, D790);
+- auto-reload (D794);
+- HQ's read (D791).
+
+**Four figures have no read yet,** and each is filed as a task on #2210:
+- the Cost totals split into token, audio and speech, and image cost, with the
+  count of runs that recorded no output tokens;
+- today's token-pack orders against the daily limit;
+- one invoice list joining token-pack orders and plan invoices, newest first,
+  25 to a page;
+- the card's billing address.
+
 ## Graduated 2026-10-19 — AIRail · every page (D720, D769)
 
 The owner's artifact `UzN4NdcwEHVYuh4ZoPLkTp`, the rail on every page, landed
