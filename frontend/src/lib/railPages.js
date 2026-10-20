@@ -71,7 +71,8 @@ const NETWORK = (P) => [
 const SHARED = (P) => [
   off('/messages', key(P, 'Messages')),
   off('/help', key(P, 'Help')),
-  off('/plans-and-pricing', key(P, 'Plans and pricing')),
+  // D786 (#2211): /pricing, with the catalogue at /pricing/products under it.
+  off('/pricing', key(P, 'Plans and pricing')),
   off('/account', key(P, 'Account')),
   off('/trust', key(P, 'Trust')),
   off('/calendar', key(P, 'Calendar')),

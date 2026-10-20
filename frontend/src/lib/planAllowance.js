@@ -1,5 +1,5 @@
 // D783 (#2124) — the words for a plan's AI allowance, everywhere they are
-// drawn: the plan cards on /plans-and-pricing, the rail's Usage box, the usage
+// drawn: the plan cards on /pricing/products (D786), the rail's Usage box, the usage
 // card and /account/usage. Pure, so `frontend/test/plan_allowance_d783.test.mjs`
 // holds each one.
 //

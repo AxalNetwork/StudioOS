@@ -96,7 +96,7 @@ export default function InvestorStudioHome({
       </div>
 
       <div className="is-top-grid">
-        <article className="is-card" data-testid="card-investor-quota"><CardHead title="Usage & quota" to="/pricing/investor" label="Open account" /><InvestorQuotaBars user={user} compact /></article>
+        <article className="is-card" data-testid="card-investor-quota"><CardHead title="Usage & quota" to="/pricing?for=investor" label="Open account" /><InvestorQuotaBars user={user} compact /></article>
         <article className="is-card is-lifecycle" data-testid="card-investor-lifecycle"><CardHead title="Deal lifecycle" to="/deals" label="Open deals" />
           {previewing ? <Status>Investor-scoped lifecycle is withheld in administrator preview.</Status> : lifecycle === undefined ? <Loading /> : lifecycle === null ? <Unreadable what="The deal lifecycle" claim="This is not a claim that no deal is in flow." onRetry={retryLifecycle} /> : stages.length ? <div className="is-funnel">{stages.slice(0, 5).map((stage) => <Link to={stage.href || '/deals'} key={stage.id || stage.label} data-testid={`link-investor-stage-${stage.id || stage.label}`}><b>{number(stage.count) ?? <Unrecorded />}</b><span>{stage.label || readable(stage.id)}</span></Link>)}</div> : <Status>No lifecycle records yet.</Status>}
           <p className="is-card-note">Read-only here — stages move in Deals, never from this surface.</p>

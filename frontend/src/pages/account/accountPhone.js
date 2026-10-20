@@ -60,7 +60,7 @@ export const ACCOUNT_PHONE_PAGES = {
     sections: ['For you now', 'Guides', 'Contact'],
   },
   pricing: {
-    route: '/plans-and-pricing', title: 'Plans & Pricing', sub: 'Pay for the cycles you are in. Each step keeps everything below it.',
+    route: '/pricing', title: 'Plans & Pricing', sub: 'Pay for the cycles you are in. Each step keeps everything below it.',
     sections: ['Plans', 'Tokens'],
   },
 };

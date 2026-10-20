@@ -581,7 +581,7 @@ test('18 · Usage: today and this month, what runs hold, the balance, the senten
   assert.match(text, /Held by runs in progress\s*\$0\.05/);
   assert.match(text, /Top-up balance\s*\$10\.00/);
   assert.match(text, /Runs use your plan's allowance first, then your top-up balance\./);
-  assert.match(usage(), /<a href="\/plans-and-pricing#token-packs"[^>]*>Add tokens<\/a>/);
+  assert.match(usage(), /<a href="\/pricing\/products#token-packs"[^>]*>Add tokens<\/a>/);
   assert.match(usage(), /<div class="fwr-meter" role="presentation"><i style="width:42%"/);
   // A cap of 0 draws no bar.
   assert.doesNotMatch(usage({ budget: { ...BUDGET, daily_microusd: 0, day_spend_microusd: 0 } }), /width:0%|width:NaN/);
@@ -595,7 +595,7 @@ test('18 · Usage: the top-up\'s three states, and every failed read is Unreadab
   for (const product of [{ configured: false }, { configured: true, state: 'not_ready' }]) {
     assert.match(renderedText(usage({ product })), /Top-up isn't available yet\./);
     assert.match(usage({ product }), /<button type="button" class="fwr-add-tokens" disabled=""[^>]*>Add tokens<\/button>/);
-    assert.doesNotMatch(usage({ product }), /href="\/plans-and-pricing|Retry|could not be read/);
+    assert.doesNotMatch(usage({ product }), /href="\/pricing\/products|Retry|could not be read/);
   }
   assert.match(renderedText(usage({ productError: true })), /The AI top-up could not be read/);
   for (const bad of [{ budgetError: true }, { budget: null }, { budget: { ...BUDGET, held_for_review: undefined } }]) {

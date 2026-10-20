@@ -73,25 +73,25 @@ test('the shared reader: ready only with a sellable price; not_ready and unset a
 // three cases; the rail's are `rail: Add tokens is always drawn` below.
 test('the rail: Add tokens is always drawn: a link when ready, disabled with the reason when not ready or unset, disabled with Retry on a failed read', () => {
   const ready = rail(CASES.ready);
-  assert.match(ready, /<a href="\/plans-and-pricing#token-packs"[^>]*>Add tokens</);
+  assert.match(ready, /<a href="\/pricing\/products#token-packs"[^>]*>Add tokens</);
   assert.doesNotMatch(words(ready), /isn't available|could not be read/);
   for (const c of ['not_ready', 'unset']) {
     const html = rail(CASES[c]);
     assert.match(html, /<button type="button" class="fwr-add-tokens" disabled=""[^>]*>Add tokens<\/button>/, c);
     assert.match(words(html), /Top-up isn't available yet\./, c);
-    assert.doesNotMatch(html, /href="\/plans-and-pricing|href="\/checkout|Retry|could not be read|role="alert"/, c);
+    assert.doesNotMatch(html, /href="\/pricing\/products|href="\/checkout|Retry|could not be read|role="alert"/, c);
   }
   const bad = rail(CASES.unreadable);
   assert.match(bad, /<button type="button" class="fwr-add-tokens" disabled=""[^>]*>Add tokens<\/button>/);
   assert.match(words(bad), /could not be read/);
   assert.match(bad, /Retry<\/button>/);
-  assert.doesNotMatch(bad, /href="\/plans-and-pricing|isn&#x27;t available/);
+  assert.doesNotMatch(bad, /href="\/pricing\/products|isn&#x27;t available/);
 });
 
 for (const [name, draw] of [['the rail', rail], ['the compact card', card]]) {
   if (name === 'the compact card') test(`${name}: Add tokens when ready, "isn't available yet" with no Retry when not ready or unset, Unreadable with Retry on a failed read`, () => {
     const ready = draw(CASES.ready);
-    assert.match(ready, /href="\/plans-and-pricing#token-packs"[^>]*>Add tokens</);
+    assert.match(ready, /href="\/pricing\/products#token-packs"[^>]*>Add tokens</);
     assert.doesNotMatch(words(ready), /isn't available|could not be read/);
     for (const c of ['not_ready', 'unset']) {
       const html = draw(CASES[c]);

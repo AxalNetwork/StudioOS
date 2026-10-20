@@ -61,7 +61,7 @@ export default function QuotaCard({ user, className = '' }) {
           <Gauge size={14} className="text-violet-600 dark:text-violet-300" />
           Your usage · <span className="font-semibold capitalize text-gray-700 dark:text-gray-200">{tier}</span>
         </div>
-        <Link to="/pricing/investor" className="text-xs text-violet-700 dark:text-violet-300 hover:underline">
+        <Link to="/pricing?for=investor" className="text-xs text-violet-700 dark:text-violet-300 hover:underline">
           Compare plans
         </Link>
       </div>

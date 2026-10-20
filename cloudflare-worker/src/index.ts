@@ -1602,6 +1602,8 @@ const ROLE_SCHEMA_SAFE_ANONYMOUS_READS: readonly (string | RegExp)[] = [
   '/api/public/stats',
   // D678: the model registry the Intelligence page reads; no D1 at all.
   '/api/public/ai-models',
+  // D786: the Pricing page's models, priced; no D1 either.
+  '/api/public/ai/models',
   // D722: whether /login may open Google's window — env only, no D1. Held up
   // by a cold isolate's users-table repair, it would only ever mean the
   // redirect instead of the window.

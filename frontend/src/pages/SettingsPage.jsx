@@ -5164,7 +5164,7 @@ function InvestorBillingPanel({ flash, billing }) {
         <Card title="Manage subscription" description="Change plan, cancel, and review invoices without leaving Axal VC.">
           <BillingDashboard scope="investor" flash={flash} onChanged={refresh} />
           <div className="text-xs text-gray-500 dark:text-gray-400 mt-3">
-            See full feature comparison on the <a className="text-violet-700 hover:underline" href="/pricing/investor">investor pricing page</a>.
+            See full feature comparison on the <a className="text-violet-700 hover:underline" href="/pricing?for=investor">investor pricing page</a>.
           </div>
         </Card>
       ) : (
@@ -5208,7 +5208,7 @@ function InvestorBillingPanel({ flash, billing }) {
             })}
           </div>
           <div className="text-xs text-gray-500 dark:text-gray-400 mt-3">
-            See full feature comparison on the <a className="text-violet-700 hover:underline" href="/pricing/investor">investor pricing page</a>.
+            See full feature comparison on the <a className="text-violet-700 hover:underline" href="/pricing?for=investor">investor pricing page</a>.
           </div>
         </Card>
       )}
@@ -5223,7 +5223,7 @@ function InvestorBillingPanel({ flash, billing }) {
 }
 
 // Task #7 (W-2) — ROI comparison table reused by Settings > Billing.
-// Mirrors the matrix on /pricing/investor so investors see the same
+// Mirrors the matrix on /pricing?for=investor so investors see the same
 // feature breakdown without leaving the settings page.
 const INVESTOR_ROI_ROWS = [
   { feature: 'Pipeline browse + AI scoring',     free: '✓', pro: '✓',  inst: '✓' },

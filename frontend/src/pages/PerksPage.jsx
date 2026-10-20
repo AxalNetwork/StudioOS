@@ -492,7 +492,7 @@ function ClaimModal({ perk, userTier, onClose, onClaimed, onGoMine }) {
             {err && <p className="mt-3 text-sm text-red-600" role="alert">{err}</p>}
 
             {tierBlocked ? (
-              <Link to="/plans-and-pricing" className="mt-4 block rounded-[11px] border border-violet-300 py-3 text-center text-[13px] font-bold text-violet-700 dark:text-violet-300">{label}</Link>
+              <Link to="/pricing" className="mt-4 block rounded-[11px] border border-violet-300 py-3 text-center text-[13px] font-bold text-violet-700 dark:text-violet-300">{label}</Link>
             ) : (
               <button
                 type="button" disabled={busy || !d.claimable || !detail} onClick={claim}

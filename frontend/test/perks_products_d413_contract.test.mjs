@@ -126,7 +126,7 @@ test('the claim modal draws the canvas’s review and done steps', () => {
   assert.match(CLAIM, /`Claim · \$\{n0\(cost\)\} credits`/);
   assert.match(CLAIM, /`Upgrade to \$\{tierName\(d\.required_tier\)\}`/);
   // An upgrade goes to plan pricing, which D413 does not retire.
-  assert.match(CLAIM, /<Link to="\/plans-and-pricing"/);
+  assert.match(CLAIM, /<Link to="\/pricing"/);
   // A refusal prints the Worker's sentence and re-reads on the codes that mean the listing moved.
   assert.match(CLAIM, /setErr\(e\?\.message \|\| 'Could not claim this perk\.'\)/);
   assert.match(CLAIM, /\['cap_reached', 'perk_ended', 'insufficient_credits', 'tier_required'\]\.includes\(e\?\.code\)/);

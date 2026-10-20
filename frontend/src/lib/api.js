@@ -227,10 +227,11 @@ export function isPublicPath(pathname) {
     // /articles/edit/:id) are intentionally NOT listed so a genuine
     // session expiry there still bounces to /login.
     || currentPath === '/articles'
-    || currentPath.startsWith('/pricing/')
-    // D755 §13 (#1915) — /plans-and-pricing opens to visitors. Exact: a
-    // product's page (/plans-and-pricing/:id) and /checkout still need sign-in.
-    || currentPath === '/plans-and-pricing'
+    // D786 (#2211): the catalogue at /pricing/products opens to visitors as
+    // /plans-and-pricing did (D755 §13). A product's page (/pricing/products/:id)
+    // and /checkout still need sign-in.
+    || currentPath === '/pricing'
+    || (currentPath.startsWith('/pricing/') && !currentPath.startsWith('/pricing/products/'))
     || currentPath.startsWith('/partner-onboarding/')
     || currentPath.startsWith('/partners/onboard')
     // The attester's side of an advisor proof claim. Reached by a link an
