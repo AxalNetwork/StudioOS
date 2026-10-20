@@ -66,3 +66,5 @@ live here, one file each:
 - **A phone view is handed its reads.** Each section's phone view takes the
   same reads its desktop makes, as props, and adds no company or venture to
   any of them. `frontend/test/account_phone_d700.test.mjs` holds that.
+
+Account (`/account`) and all its sections, including Connectors and individual connector pages, have no AI rail on desktop or phone, by the owner's request. `SettingsPage.jsx` passes no rail to the shared frame, so its content uses the available column.

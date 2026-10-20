@@ -40,7 +40,6 @@ import { PhoneRows } from '../src/ui/phone/PhoneRows.jsx';
 import { existsSync } from 'node:fs';
 import React, { act } from 'react';
 import { mountContracts } from './_contracts_dom.mjs';
-import { escapeRe } from './_escapeRe.mjs';
 import { __resetEadwynPanelForTest, useEadwynPanel, useEadwynRailServes } from '../src/ui/eadwynPanel.js';
 import TrustCenterPage, { TrustPhoneView } from '../src/pages/TrustCenterPage.jsx';
 import PerksPage, { PerksPhoneView } from '../src/pages/PerksPage.jsx';
@@ -49,7 +48,7 @@ import MyEventsPage, { EventsPhoneView } from '../src/pages/events/MyEventsPage.
 import LearningHome, { LearningPhoneView } from '../src/pages/learning/LearningHome.jsx';
 import { COMING_SOON_LINE } from '../src/pages/learning/learningAccess.js';
 import { TAB_NOT_LIVE } from '../src/pages/learning/learningModel.js';
-import { HelpPhoneView, EMAIL_SUPPORT_LINE } from '../src/pages/docs/DocsLayout.jsx';
+import { HelpPhoneView } from '../src/pages/docs/DocsLayout.jsx';
 import { helpAreas } from '../src/pages/docs/guidePlacement.js';
 import { SECTIONS as HELP_SECTIONS, filterSectionsForRole } from '../src/pages/docs/sections/index.js';
 import { PricingPhoneView, TOKENS_LINE } from '../src/pages/account/PricingPhone.jsx';
@@ -458,9 +457,10 @@ test('10 (part). every phone bar this PR draws passes PhoneBar an eadwynLabel eq
     }
     assert.doesNotMatch(src, /Open Eadwyn for this page/, `${f} draws no Eadwyn button of its own`);
   }
-  // The rail stays mounted on a phone: the phone view is inside the frame, beside it.
+  // The owner requested no rail on Perks or Learning home.
   const page = read('frontend/src/pages/SettingsPage.jsx');
-  assert.match(page, /<RailFrame\s+rail=\{\(\s*<WorkerRail\s+workspace="Account"/);
+  assert.match(page, /<RailFrame>/);
+  assert.doesNotMatch(page, /<WorkerRail\b/);
 });
 
 // --- 11. No read gains a scope -----------------------------------------------
@@ -697,12 +697,12 @@ test('8. Trust lists only what /trust/me returns: no 83(b) row, and the pill is 
   assert.match(read('frontend/src/pages/TrustCenterPage.jsx'), /setMatrix\(\{ obligations: \[\], role, failed: true \}\)/);
 });
 
-test('8. Help: Popular this week first, no For you now, and Email support says what the link does', () => {
+test('8. Help: Popular this week first, no For you now, and contact stays in tickets', () => {
   const markup = html(PHONE_VIEWS.help());
   assert.equal(sectionTitles(markup)[0], 'Popular this week');
   assert.doesNotMatch(markup, /For you now/);
-  assert.equal(EMAIL_SUPPORT_LINE, 'Opens your mail app. Write from the address on your account.');
-  assert.match(markup, new RegExp(`<a href="mailto:support@axal\\.vc"[^>]*>[\\s\\S]*?Email support[\\s\\S]*?${escapeRe(EMAIL_SUPPORT_LINE)}`));
+  assert.doesNotMatch(markup, /mailto:support@axal\.vc|Email support/);
+  assert.match(markup, /Open a ticket/);
   assert.doesNotMatch(markup, /From the address on your account/);
   assert.ok(CANVAS_PAGES.help.chunk.includes("'From the address on your account'"));
   // A failed popular read says so; a row opens its area in place.
@@ -769,11 +769,12 @@ test('10. A4m–A10m share one bar, which names itself to Eadwyn by its title; n
     assert.doesNotMatch(src, /Open Eadwyn for this page/, `${f} draws an Eadwyn button of its own`);
     for (const bar of src.matchAll(/<PhoneBar [^>]*\/>/g)) assert.match(bar[0], /eadwynLabel=\{page\.title\}/, `${f}: ${bar[0]}`);
   }
-  // The rail stays mounted on a phone: the phone view is inside the frame, beside it.
+  // The owner requested no rail on Perks or Learning home.
   const perks = read('frontend/src/pages/PerksPage.jsx');
-  assert.match(perks, /\{phone \? \(\s*<PerksPhoneView[\s\S]*?\n      <\/div>\n      <WorkerRail\s+workspace="Perks & Products"/);
+  assert.doesNotMatch(perks, /<WorkerRail\b/);
   const learning = read('frontend/src/pages/learning/LearningHome.jsx');
-  assert.match(learning, /<RailFrame\s+rail=\{\(\s*<WorkerRail\s+workspace="Learning"[\s\S]*?>\s*\{phone \? \(\s*<LearningPhoneView/);
+  assert.match(learning, /<RailFrame data-testid="learning-home">\s*\{phone \? \(\s*<LearningPhoneView/);
+  assert.doesNotMatch(learning, /<WorkerRail\b/);
   // The five pages that mount no rail still mount none (decision 12).
   for (const f of ['TrustCenterPage.jsx', 'CalendarPage.jsx', 'events/MyEventsPage.jsx', 'docs/DocsLayout.jsx', 'ProductsPage.jsx']) {
     assert.doesNotMatch(read(`frontend/src/pages/${f}`), /<WorkerRail\b/, `${f} gained a rail`);

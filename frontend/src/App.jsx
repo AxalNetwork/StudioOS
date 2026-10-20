@@ -826,7 +826,7 @@ function UserDropdown({ user, onLogout }) {
           </Link>
           <Link to="/plans-and-pricing" onClick={() => setOpen(false)}
             className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
-            Plans &amp; Pricing
+            Pricing
           </Link>
           <div className="my-1 border-t border-gray-100 dark:border-gray-800" role="separator" />
           <button type="button" onClick={() => { setOpen(false); onLogout(); }}

@@ -734,9 +734,8 @@ export const ONBOARDING_CANVAS_PATHS = [
 export const SHARED_FULL_BLEED = [
   '/referrals',
   // `/perks` is one page for founder, investor, advisor, admin and exploring
-  // (a partner is sent to /offers/perk-deals). It draws its own canvas, the
-  // same way /raise does: the listings fill the column and the Worker rail is
-  // the canvas's right edge, not a card floating in the shell's padded column.
+  // (a partner is sent to /offers/perk-deals). Its listing body supplies its
+  // own gutters and fills the column, without an AI rail or reserved track.
   '/perks',
   // `/spinout-lab` — the Lab introduction opens with a full-bleed hero that has
   // to run from the sidebar's right border to the viewport edge, which the
@@ -750,6 +749,10 @@ export const SHARED_FULL_BLEED = [
   // `/trust` — the Trust Center fills the main column for every role, with its
   // own `p-6` as the gutter (#2060); its blocks keep their own caps where needed.
   '/trust',
+  // The Help home's search banner owns the whole content column; the guide
+  // grid below supplies its own capped width and gutters.
+  '/help',
+  '/help/',
   ...ONBOARDING_CANVAS_PATHS,
 ];
 

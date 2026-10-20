@@ -56,7 +56,8 @@ test('every board\'s files exist, and its rail file mounts the rail', () => {
       assert.ok(existsSync(src(b.rail)), `${b.id}: ${b.rail} does not exist`);
       assert.ok(railMounts(b.rail).length > 0, `${b.id}: ${b.rail} mounts no <WorkerRail>`);
     } else {
-      assert.ok(typeof b.railPending === 'string' && b.railPending.length > 20, `${b.id} has no rail and says not why`);
+      const reason = b.railAbsent || b.railPending;
+      assert.ok(typeof reason === 'string' && reason.length > 20, `${b.id} has no rail and says not why`);
       for (const f of b.files) assert.equal(railMounts(f).length, 0, `${b.id} is listed as pending but ${f} mounts a rail`);
     }
   }

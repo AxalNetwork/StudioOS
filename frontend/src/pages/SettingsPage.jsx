@@ -14,12 +14,12 @@ import { useAuth } from '../hooks/useAuthSync';
 import { startRegistration, browserSupportsWebAuthn } from '@simplewebauthn/browser';
 import TrustScoreBadge, { computeTrustScore } from '../components/TrustScoreBadge';
 import { verdictFor, outstandingCounts, scoreLine } from '../lib/trustCenter';
-import { RailFrame, SectionLabel, Skeleton, Unreadable, Unrecorded, WorkerRail, usePhoneWidth } from '../ui';
+import { RailFrame, SectionLabel, Skeleton, Unreadable, Unrecorded, usePhoneWidth } from '../ui';
 import { NOTIFICATION_EVENTS, PARTNER_NOTIFICATION_EVENTS } from '../lib/notificationTypes';
 // D568 — the Account center canvas (`ac-*`): its section list, the five
 // profile cards, the push devices and sessions cards, the plan line and
 // orders, and the two sections the page did not have (Following, Developer).
-import { AccountPhoneFrame, AccountPhoneIndex, AccountSectionNav, Outcome, Switch, accountRailCoverage, useAccountRead } from './account/AccountCenter';
+import { AccountPhoneFrame, AccountPhoneIndex, AccountSectionNav, Outcome, Switch, useAccountRead } from './account/AccountCenter';
 // D700 — the phone's `/account`: A1m's bar copy and the address rules.
 import { accountPathFor, accountViewFor, connectorKeyFor } from './account/accountPhone';
 import ProfileIdentityCanvas from './account/AccountProfile';
@@ -395,7 +395,6 @@ export default function SettingsPage() {
   // before role was known. Mirror the nav filter on the content side.
   const allowedIds = new Set(sections.map(s => s.id));
   const safeActive = allowedIds.has(active) ? active : 'account';
-  const activeLabel = active === 'index' ? null : sections.find((s) => s.id === safeActive)?.label;
   const reloadAccount = () => api.getSettings().then(setData);
   const paneProps = { data, setData, flash, patch, reloadAccount, profileRev, setProfileRev, onSelect: setActive, role, allowedIds, connectorKey };
 
@@ -416,27 +415,10 @@ export default function SettingsPage() {
     </>
   );
 
-  // D568 — the page sits beside the Worker AI rail, in the one frame every
-  // rail host uses (D556's `RailFrame`). D700 — on a phone the frame and its
-  // rail stay mounted, and the phone view replaces the heading and the body
-  // inside it.
+  // The owner requested no AI rail on Account or its sections. The shared
+  // frame renders the body alone, without a rail column or phone trigger.
   return (
-    <RailFrame
-      rail={(
-        <WorkerRail
-          workspace="Account"
-          // A literal, as on Send for signature: the Account canvas draws this
-          // page in violet for every role, which is the founder accent.
-          role="founder"
-          stance="Your settings, changed by you"
-          note="Eadwyn reads the account lines below and changes nothing on this page. Every setting here is saved by the button beside it."
-          coverage={accountRailCoverage(data, activeLabel)}
-          unavailable={[
-            ['Bio draft', 'The canvas offers a two-line bio drafted from your role, company and sectors. Nothing drafts one yet, so no proposal is made here.'],
-          ]}
-        />
-      )}
-    >
+    <RailFrame>
     {phone ? (
       <AccountPhoneFrame
         view={active} sections={sections} top={top} toast={toastNote}
