@@ -100,6 +100,10 @@ jobs:
       # it first — the same root build the deploy runs.
       - name: Build the SPA
         run: npm run build
+      - name: Focused approval regressions
+        run: |
+          node --import ./frontend/test/_deck-loader.mjs --test frontend/test/rail_proposals_d780.test.mjs
+          node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/rail_x_alt_text_d780.test.ts
       - name: Run npm run test:drift
         run: |
           set +e
