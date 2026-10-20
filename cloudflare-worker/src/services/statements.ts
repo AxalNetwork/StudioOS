@@ -44,7 +44,32 @@ export type StreamFigure = {
   is_estimate?: boolean;
   /** Required when `available` is false, so the screen never has to guess. */
   reason?: string;
+  /** D802: the share this stream was drawn at, and where it came from. */
+  share_bps?: number;
+  share_source?: 'terms' | 'ledger';
+  share_note?: string;
+  owed_cents?: number | null;
+  /** D802: the royalty row only. */
+  royalty_bps?: number | null;
+  not_recorded?: boolean;
 };
+
+/**
+ * D802 (#2238): the shares a statement is drawn at. `fallback_bps` is the
+ * ledger's `territory_licences.revenue_share_bps`; each named stream takes
+ * D797's share when recorded and the fallback when not. `royalty_bps` is
+ * D797's `royalty_platform_licence_bps`, null when not recorded.
+ */
+export type StreamShares = {
+  fallback_bps: number;
+  subscriptions?: number | null;
+  licence_fees?: number | null;
+  token_margin?: number | null;
+  royalty_bps?: number | null;
+};
+
+/** The royalty stream: HQ's share of each platform licence fee the subsidiary sells (D797 §4.7). */
+export const ROYALTY_STREAM = 'platform_licence_royalties';
 
 export type DrawnStatement = {
   currency: string;
@@ -57,6 +82,8 @@ export type DrawnStatement = {
   /** Streams reported in some OTHER currency, which are not summed in. */
   other_currency: string[];
   complete: boolean;
+  /** D802: drawn per stream (`StreamShares`) rather than at one share. */
+  per_stream?: boolean;
 };
 
 /**
@@ -80,9 +107,11 @@ export function shareOf(cents: number, bps: number): number {
  */
 export function drawStatement(
   streams: StreamFigure[],
-  revenueShareBps: number,
+  shares: number | StreamShares,
   currency: string,
 ): DrawnStatement {
+  if (typeof shares === 'object' && shares !== null) return drawPerStream(streams, shares, currency);
+  const revenueShareBps = shares;
   const cur = String(currency || 'EUR').toUpperCase();
   const rows = (streams || []).map((s) => ({
     ...s,
@@ -114,6 +143,73 @@ export function drawStatement(
     // figure is a floor, not a total.
     complete: unreported === 0 && otherCurrency.length === 0
       && usable.filter((s) => s.is_estimate).length === 0,
+  };
+}
+
+const bpsOrNull = (v: unknown): number | null =>
+  (typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 && v <= 10000 ? v : null);
+
+/**
+ * D802 (#2238): a statement drawn per stream. Each reported stream is owed at
+ * its own share, rounded once per stream, and the total owed is their sum; a
+ * stream with no share on D797's terms falls back to the ledger's and says so
+ * in its row. The royalty row is HQ's share of the licence-fees stream's gross
+ * at D797's royalty; with no royalty recorded it reads "Not recorded" and owes
+ * nothing, never zero by assumption. The royalty row adds nothing to the gross
+ * (its base is the licence fees already counted) and is never "unreported": a
+ * term nobody set is not a report nobody sent.
+ */
+function drawPerStream(streams: StreamFigure[], shares: StreamShares, currency: string): DrawnStatement {
+  const cur = String(currency || 'EUR').toUpperCase();
+  const fallback = Math.trunc(Number(shares.fallback_bps) || 0);
+  const own: Record<string, number | null> = {
+    subscriptions: bpsOrNull(shares.subscriptions),
+    licence_fees: bpsOrNull(shares.licence_fees),
+    token_margin: bpsOrNull(shares.token_margin),
+  };
+  const base = (streams || []).filter((s) => s.stream !== ROYALTY_STREAM).map((s) => {
+    const row: StreamFigure = { ...s, currency: String(s.currency || cur).toUpperCase() };
+    const recorded = own[row.stream] ?? null;
+    row.share_bps = recorded ?? fallback;
+    row.share_source = recorded === null ? 'ledger' : 'terms';
+    if (recorded === null) row.share_note = 'No share for this stream is recorded on the terms, so the licence\'s revenue share is used.';
+    const usable = row.available && row.currency === cur && row.gross_cents !== null;
+    row.owed_cents = usable ? shareOf(Number(row.gross_cents), row.share_bps) : null;
+    return row;
+  });
+  const usable = base.filter((s) => s.available && s.currency === cur && s.gross_cents !== null);
+  const gross = usable.reduce((n, s) => n + Math.trunc(Number(s.gross_cents) || 0), 0);
+  const otherCurrency = [...new Set(base.filter((s) => s.available && s.currency !== cur).map((s) => s.currency))].sort();
+  const unreported = base.filter((s) => !s.available || s.gross_cents === null).length;
+  const estimated = usable.filter((s) => s.is_estimate).length;
+
+  const fees = usable.find((s) => s.stream === 'licence_fees') ?? null;
+  const royaltyBps = bpsOrNull(shares.royalty_bps);
+  const royalty: StreamFigure = {
+    stream: ROYALTY_STREAM,
+    gross_cents: fees ? Number(fees.gross_cents) : null,
+    currency: cur,
+    available: royaltyBps !== null && fees !== null,
+    is_estimate: fees?.is_estimate ?? false,
+    royalty_bps: royaltyBps,
+    owed_cents: royaltyBps !== null && fees ? shareOf(Number(fees.gross_cents), royaltyBps) : 0,
+    not_recorded: royaltyBps === null,
+    ...(royaltyBps === null
+      ? { reason: 'Not recorded: no royalty on platform licences is on this licence\'s terms, so none is owed.' }
+      : fees === null ? { reason: 'The licence fees this royalty is drawn on were not reported.' } : {}),
+  };
+  const owed = usable.reduce((n, s) => n + (s.owed_cents ?? 0), 0) + (royalty.owed_cents ?? 0);
+  return {
+    currency: cur,
+    gross_cents: gross,
+    revenue_share_bps: fallback,
+    owed_cents: owed,
+    streams: [...base, royalty],
+    estimated,
+    unreported,
+    other_currency: otherCurrency,
+    complete: unreported === 0 && otherCurrency.length === 0 && estimated === 0,
+    per_stream: true,
   };
 }
 

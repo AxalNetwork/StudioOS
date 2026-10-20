@@ -53,6 +53,8 @@ const BUDGET_REFUSALS: ReadonlySet<string> = new Set(['budget_user_day', 'budget
 export function refuseRun(c: Context<any>, r: { refusal?: string | null; error?: string }): Response | null {
   const why = r.refusal ?? '';
   if (why === 'assist_off') return refuseAssistOff(c);
+  // D791: a paused member is refused in the pause's words, 403 like the switch.
+  if (why === 'ai_paused') return refuse(c, 403, { code: why, message: budgetRefusalMessage(why) });
   // D788: the spend limit's words name the member's limit and its reset, which only the run's own message carries.
   if (BUDGET_REFUSALS.has(why)) return refuse(c, 402, { code: why, message: why === 'spend_limit' && r.error ? r.error : budgetRefusalMessage(why) });
   if (why === 'guard_blocked' || why === 'guard_blocked_output') return refuse(c, 422, { code: why, message: r.error || 'Eadwyn cannot help with that.' });

@@ -43,7 +43,9 @@ import { RECEIVING_BRACKET } from './fundStructure';
 export type NoticeType =
   | 'capital_call_notice' | 'distribution_notice' | 'default_notice'
   | 'management_fee_statement' | 'management_fee_invoice'
-  | 'platform_licence_fee_invoice' | 'payment_instructions_letter';
+  | 'platform_licence_fee_invoice' | 'payment_instructions_letter'
+  // D802 (#2238): HQ's annual fee invoice to a territory licensee.
+  | 'territory_licence_fee_invoice';
 
 export interface NoticeTypeDef {
   type: NoticeType;
@@ -56,7 +58,7 @@ export interface NoticeTypeDef {
   senderBlock: boolean;
 }
 
-/** Decision 3, the seven types. */
+/** Decision 3, the seven types; D802 adds the eighth, the territory licence fee invoice. */
 export const NOTICE_TYPES: readonly NoticeTypeDef[] = Object.freeze([
   { type: 'capital_call_notice', title: 'Capital Call Notice', sender: 'fund', prose: true, senderBlock: true },
   { type: 'distribution_notice', title: 'Distribution Notice', sender: 'fund', prose: true, senderBlock: true },
@@ -65,6 +67,7 @@ export const NOTICE_TYPES: readonly NoticeTypeDef[] = Object.freeze([
   { type: 'management_fee_invoice', title: 'Management Fee Invoice', sender: 'gp', prose: false, senderBlock: false },
   { type: 'platform_licence_fee_invoice', title: 'Platform Licence Fee Invoice', sender: 'holdings', prose: false, senderBlock: false },
   { type: 'payment_instructions_letter', title: 'Payment Instructions', sender: 'purpose_payee', prose: false, senderBlock: true },
+  { type: 'territory_licence_fee_invoice', title: 'Territory Licence Fee Invoice', sender: 'holdings', prose: false, senderBlock: false },
 ] as NoticeTypeDef[]);
 
 export const isNoticeType = (v: unknown): v is NoticeType => NOTICE_TYPES.some((t) => t.type === v);
@@ -516,6 +519,71 @@ async function licenceInvoice(env: Env, req: NoticeRequest, today: string): Prom
   return { figures, refusal: pay.refusal };
 }
 
+const CURRENCY_SIGN: Readonly<Record<string, string>> = Object.freeze({ USD: '$', EUR: '\u20ac', GBP: '\u00a3' });
+
+/** "€12,000.00" in the row's own currency; a currency with no sign here is written "CHF 12,000.00". */
+export function formatMoney(cents: number, currency: string): string {
+  if (!Number.isSafeInteger(cents)) throw new TypeError('cents must be a whole number');
+  const code = String(currency || '').toUpperCase();
+  const abs = Math.abs(cents);
+  const whole = Math.floor(abs / 100).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  const amount = `${whole}.${String(abs % 100).padStart(2, '0')}`;
+  const sign = CURRENCY_SIGN[code];
+  return `${cents < 0 ? '-' : ''}${sign ?? `${code} `}${amount}`;
+}
+
+/** What a territory licence fee invoice prints (D802). The caller has checked every figure. */
+export interface TerritoryInvoiceInput {
+  licence_uid: string;
+  licence_ref: string;
+  licensee_name: string;
+  period_label: string;
+  period_start: string;
+  period_end: string;
+  amount_cents: number;
+  currency: string;
+  due_date: string;
+  reference: string;
+}
+
+/**
+ * D802 (#2238): HQ's annual fee invoice to a territory licensee, drawn as D716's
+ * licence invoice is. The sender and payee are Holdings, the licensor of the
+ * platform's IP until D797 records another (`licensorRefusal`); the payment block
+ * is D798's `territory_licence_fee` purpose, masked. A payment refusal is
+ * returned beside the figures, and the caller refuses to issue on it.
+ */
+export async function territoryLicenceInvoice(env: Env, i: TerritoryInvoiceInput, today: string): Promise<BuiltNotice> {
+  const pay = await paymentBlock(env, 'holdings', 'territory_licence_fee', i.reference, false);
+  const amount = formatMoney(i.amount_cents, i.currency);
+  const period = `${i.period_start} to ${i.period_end}`;
+  const figures: NoticeFigures = {
+    type: 'territory_licence_fee_invoice', title: 'Territory Licence Fee Invoice', notice_date: today, sender: 'holdings', payee: 'holdings',
+    purpose: 'territory_licence_fee', fund_id: null, limited_partner_id: null,
+    source_ref: `territory_licence:${i.licence_uid}:${i.period_start}`,
+    addressee: buildAddresseeBlock({ to: i.licensee_name, from: 'holdings' }),
+    key_figures: [
+      { label: 'Invoice date', value: today },
+      { label: 'Licence', value: i.licence_ref, mono: true },
+      { label: 'Licence year', value: `${i.period_label} (${period})` },
+      { label: 'Amount due', value: amount, mono: true },
+      { label: 'Due date', value: i.due_date },
+    ],
+    tables: [{
+      columns: [{ label: 'Licence' }, { label: 'Licence year' }, { label: 'Amount', align: 'right' }],
+      rows: [[`Annual licence fee, ${i.licence_ref}`, period, amount], ['Total', '', amount]],
+      total: true,
+    }],
+    warning: PAY_WARNING,
+    payment: pay.payment,
+    reference: i.reference,
+    amount_cents: i.amount_cents,
+    prose: null,
+    closing: [],
+  };
+  return { figures, refusal: pay.refusal };
+}
+
 // ---------------------------------------------------------------- the fee types
 
 /** "2.00% a year" from basis points, never through a float. */
@@ -675,6 +743,9 @@ export async function buildNoticeFigures(env: Env, req: NoticeRequest, today: st
     case 'management_fee_invoice': return feeInvoice(env, req, today);
     case 'platform_licence_fee_invoice': return licenceInvoice(env, req, today);
     case 'payment_instructions_letter': return letter(env, req, today);
+    // D802: drawn only from its licence (`services/licenceFeeInvoices.ts`), which keeps one invoice per licence year.
+    case 'territory_licence_fee_invoice':
+      throw new NoticeRefusal(409, 'issued_from_licence', 'A territory licence fee invoice is issued from its licence, on HQ\'s licence console.');
   }
 }
 
@@ -772,6 +843,13 @@ export async function noticeSpecimen(env: Env, type: unknown): Promise<NoticeFig
         ...base, sender: 'holdings', payee: 'holdings', purpose: 'platform_licence_fee', addressee: buildAddresseeBlock({ to: '[Addressee]', from: 'holdings' }),
         key_figures: figs([['Invoice date'], ['Period'], ['Amount due', true], ['Due date']]),
         tables: [specimenTable({ columns: [{ label: 'Licence' }, { label: 'Period' }, { label: 'Amount', align: 'right' }], total: true })],
+        payment: specimenPayment(false), reference: br('Reference'),
+      };
+    case 'territory_licence_fee_invoice':
+      return {
+        ...base, sender: 'holdings', payee: 'holdings', purpose: 'territory_licence_fee', addressee: buildAddresseeBlock({ to: '[Addressee]', from: 'holdings' }),
+        key_figures: figs([['Invoice date'], ['Licence'], ['Licence year'], ['Amount due', true], ['Due date']]),
+        tables: [specimenTable({ columns: [{ label: 'Licence' }, { label: 'Licence year' }, { label: 'Amount', align: 'right' }], total: true })],
         payment: specimenPayment(false), reference: br('Reference'),
       };
     case 'payment_instructions_letter': {

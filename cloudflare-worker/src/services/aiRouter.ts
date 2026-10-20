@@ -129,7 +129,10 @@ export type RefusalReason =
   | 'invalid_input'
   // D765 (#2090): the member turned AI assistance off on the page the run was
   // asked from. Refused before the hold, with no usage row: nothing ran.
-  | 'assist_off';
+  | 'assist_off'
+  // D791 (#2216): a Super Admin paused the member's AI (HQ › AI usage). Refused
+  // at the hold (`reserveAiBudget`), before anything is held; nothing is charged.
+  | 'ai_paused';
 
 /**
  * D765 (#2090) — where a member's run was asked from: the rail's page (D768's
@@ -1596,6 +1599,7 @@ function guardReport(
  * front all say the same thing (D657).
  */
 export function budgetRefusalMessage(refusal: string, detail?: { limit_microusd?: number; resets_on?: string } | null): string {
+  if (refusal === 'ai_paused') return aiBudget.AI_PAUSED_MESSAGE;
   if (refusal === 'spend_limit') return spendLimitMessage(detail);
   return refusal === 'budget_review'
     ? 'An AI run is held for review. New runs can start after it is settled.'

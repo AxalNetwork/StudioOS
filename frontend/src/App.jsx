@@ -3622,8 +3622,11 @@ function AppInner() {
       <Route path="/privacy" element={<PrivacyPage />} />
       <Route path="/privacy/interviews" element={<InterviewNoticePage />} />
       <Route path="/risk-disclosures" element={<RiskDisclosuresPage />} />
+      {/* D786 part 2 (#2211) — /pricing for everyone: a visitor reads it in the
+          public site's frame, a member inside the app's top bar and left
+          sidebar, with their own plan marked, as /plans-and-pricing was. */}
+      <Route path="/pricing" element={user ? guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <PricingPage user={user} />) : <PricingPage />} />
       {/* Task #4 (ID) — Public marketing surfaces. No auth. */}
-      <Route path="/pricing" element={<PricingPage />} />
       <Route path="/demo" element={<DemoPage />} />
       <Route path="/status" element={<StatusPage />} />
       <Route path="/changelog" element={<ChangelogPage />} />

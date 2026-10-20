@@ -1213,7 +1213,35 @@ r.get('/mine/statements', async (c) => {
       refusal: `${TERMS_REASON.unreadable} No payment instructions are given until the licensor can be checked.`,
     };
   }
-  return c.json(body);
+  // D802 (#2238): the annual fee invoices HQ issued this licence, newest year
+  // first. A failed read costs only the invoices, and says so.
+  let fee_invoices: unknown[] | null = null;
+  let fee_invoices_reason: string | null = null;
+  try {
+    const { listFeeInvoices, licenseeInvoiceView } = await import('../services/licenceFeeInvoices');
+    fee_invoices = (await listFeeInvoices(c.env, own.licence.uid)).map(licenseeInvoiceView);
+  } catch {
+    fee_invoices_reason = 'Your annual fee invoices could not be read. Try again in a moment.';
+  }
+  return c.json({ ...body, fee_invoices, fee_invoices_reason });
+});
+
+// GET /api/licence/mine/fee-invoices/:uid/pdf — one of the invoices above, as
+// issued. Looked up WITHIN the caller's licence, so another licence's uid
+// answers 404 as an unknown one does. A void invoice is not printed.
+r.get('/mine/fee-invoices/:uid/pdf', async (c) => {
+  const own = await ownLicenceForAccount(c);
+  if ('refusal' in own) return own.refusal;
+  if ('branch' in own) return c.json({ error: 'invoice_hq_only', message: BRANCH_UNAVAILABLE.reason }, 501);
+  const { feeInvoiceOf, feeInvoicePdf } = await import('../services/licenceFeeInvoices');
+  const inv = await feeInvoiceOf(c.env, own.licence.uid, c.req.param('uid'));
+  if (!inv) return c.json({ error: 'not_found', message: 'No such invoice on your licence.' }, 404);
+  const pdf = await feeInvoicePdf(c.env, inv);
+  if (!pdf.ok) return c.json({ error: pdf.code, message: pdf.message }, pdf.status);
+  return new Response(pdf.bytes, {
+    status: 200,
+    headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="${pdf.filename}"`, 'Cache-Control': 'no-store' },
+  });
 });
 
 // POST /api/licence/mine/usage/send — "Send now": the branch's own usage push

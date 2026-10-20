@@ -54,6 +54,8 @@ import { RailFrame, Unreadable, Unrecorded, WorkerRail } from '../../ui';
 import useRecordCrumb from './useRecordCrumb';
 import LicenceTermsSchedule from './LicenceTermsSchedule';
 import LicenceRequestsPanel from './LicenceRequestsPanel';
+// D802 (#2238) — the annual fee invoices tab.
+import LicenceFeeInvoices from './LicenceFeeInvoices';
 
 const UNAVAILABLE = Symbol('unavailable');
 import {
@@ -104,6 +106,9 @@ const BRAND_STEP = STEPS.length + 4;
 // D801 — the terms schedule (D797), unnumbered like the tabs above: it is the
 // contract's schedule, edited whenever the terms change, not a step of the issue.
 const SCHEDULE_STEP = STEPS.length + 5;
+// D802 (#2238) — invoicing the annual fee happens every year a licence runs,
+// not once in the issue flow, so it is unnumbered too.
+const FEE_INVOICES_STEP = STEPS.length + 6;
 
 // The ladder's own statuses, which are NOT licence statuses. `STATUS_TONE` above
 // covers `active`/`suspended`/`terminated`/`draft`/`pending_activation` and none
@@ -1827,6 +1832,15 @@ function Detail({ uid, held, onChanged, onOpenLicence }) {
           Notices
         </button>
         <button
+          type="button" onClick={() => setStep(FEE_INVOICES_STEP)}
+          data-testid="licence-fee-invoices-tab"
+          className={`-mb-px border-b-2 px-3 py-2 text-xs ${
+            step === FEE_INVOICES_STEP ? 'border-indigo-600 font-medium text-indigo-700' : 'border-transparent text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          Annual fee invoices
+        </button>
+        <button
           type="button" onClick={() => setStep(HISTORY_STEP)}
           className={`-mb-px border-b-2 px-3 py-2 text-xs ${
             step === HISTORY_STEP ? 'border-indigo-600 font-medium text-indigo-700' : 'border-transparent text-gray-600 hover:text-gray-900'
@@ -1871,6 +1885,7 @@ function Detail({ uid, held, onChanged, onOpenLicence }) {
           onSaved={() => { setGrant(null); refresh(); }} />}
         {step === SCHEDULE_STEP && <LicenceTermsSchedule licence={d} highlight={highlight} onSaved={refresh} />}
         {step === NOTICES_STEP && <NoticesEditor licence={d} onSaved={refresh} />}
+        {step === FEE_INVOICES_STEP && <LicenceFeeInvoices licence={d} />}
         {/* The kind is re-checked here as well as on the tab: the tab is what an
             operator clicks, and this is what decides what renders. A licence
             whose kind changed while the tab was open falls back to nothing
