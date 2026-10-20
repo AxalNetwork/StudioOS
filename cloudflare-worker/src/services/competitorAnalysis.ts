@@ -13,9 +13,29 @@
  * usable result even when the model chain refuses or times out.
  */
 import type { Env } from '../types';
-import { run as aiRun } from './aiRouter';
+import { run as aiRun, type RailContext } from './aiRouter';
 import { AI_SURFACE } from './aiSurfaces';
 import { fetchPage, pagesForDomain, normalizeUrl, type FetchedPage } from './webFetch';
+
+/**
+ * D778 part 9 (#2103): the founder inventory's page and options for these runs
+ * (`frontend/src/lib/railOptions/founder.js`, Founder · Research · Companies).
+ * A press's own headers win (`railFor`); these stand for a client that sent
+ * none. Before part 9 every run logged `research` / `scan:competitors`, a key
+ * no inventory lists. The advisor's Companies board sends its own keys (D773).
+ */
+export const COMPANIES_PAGE = 'Founder · Research · Companies';
+export const COMPANIES_OPTIONS = {
+  analyze: 'analyse:competitors',
+  again: 'analyse:again',
+  sources: 'analyse:sources',
+  candidate: 'extract:candidate',
+  site: 'extract:site',
+} as const;
+/** The record a run on one analysis names: the route has scoped it to the member. */
+export const analysisRecord = (analysisId: string): string => `competitor_analysis:${analysisId}`;
+const fallbackRail = (option: string, analysisId: string): RailContext =>
+  ({ page: COMPANIES_PAGE, option, record: analysisRecord(analysisId) });
 
 export interface AnalysisInputs {
   market: string;
@@ -151,6 +171,7 @@ function parseJsonLoose<T>(raw: string | undefined): T | null {
 async function runJson<T>(
   env: Env,
   userId: number,
+  rail: RailContext,
   systemPrompt: string,
   userPrompt: string,
   maxTokens: number,
@@ -160,8 +181,9 @@ async function runJson<T>(
       task: 'dd_synthesis',
       userId,
       surface: AI_SURFACE.researchCompanies,
-      // D765: the analysis's page; off there, nothing is synthesised.
-      rail: { page: 'research', option: 'scan:competitors' },
+      // D765: the press's page; off there, nothing is synthesised. D778 part 9:
+      // the pressed option and the analysis it runs on (`railFor` in the route).
+      rail,
       systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
       maxTokens,
@@ -229,7 +251,7 @@ interface RawCandidate {
   why?: string;
 }
 
-async function discoverCandidates(env: Env, userId: number, inputs: AnalysisInputs): Promise<RawCandidate[]> {
+async function discoverCandidates(env: Env, userId: number, inputs: AnalysisInputs, rail: RailContext): Promise<RawCandidate[]> {
   const known = splitList(inputs.known_competitors).map((name) => ({ name, category: 'direct', why: 'Named by the founder as a known competitor.' }));
   const system =
     'You are a startup competitive-intelligence analyst. Given a market, ICP, geography and problem, list the most relevant real companies competing in or adjacent to this space. Respond ONLY with a JSON array. Each item: {"name": string, "domain": string (best-guess primary domain, no protocol), "category": "direct" | "adjacent", "why": short reason}. Return at most 10 items. Do not invent obviously fake companies.';
@@ -247,7 +269,7 @@ async function discoverCandidates(env: Env, userId: number, inputs: AnalysisInpu
     .filter(Boolean)
     .join('\n');
 
-  const ai = (await runJson<RawCandidate[]>(env, userId, system, user, 900)) || [];
+  const ai = (await runJson<RawCandidate[]>(env, userId, rail, system, user, 900)) || [];
   const merged: RawCandidate[] = [...known];
   const seen = new Set(known.map((k) => k.name.toLowerCase()));
   for (const c of Array.isArray(ai) ? ai : []) {
@@ -275,6 +297,7 @@ async function enrichWithCrawl(
   depth: 'quick' | 'deep',
   sources: SourceRecord[],
   signals: SignalRecord[],
+  rail: RailContext,
 ): Promise<void> {
   const homepage = cand.url || (cand.domain ? `https://${cand.domain}` : null);
   if (!homepage) return;
@@ -318,7 +341,7 @@ async function enrichWithCrawl(
     cand.details.features = [...features].slice(0, 8);
     cand.details.pricing = [...pricing].slice(0, 6);
     // Ask the model to distill positioning from the crawled text (cheap, optional).
-    const positioning = await distillPositioning(env, userId, cand.name, collectedText.join('\n\n'));
+    const positioning = await distillPositioning(env, userId, rail, cand.name, collectedText.join('\n\n'));
     if (positioning) cand.details.positioning = positioning;
     cand.scores.signal = 78;
     cand.relevance_score = weightedRelevance(cand.scores);
@@ -354,6 +377,7 @@ export async function collectCandidateCrawl(
   analysisId: string,
   cand: Candidate,
   depth: 'quick' | 'deep',
+  rail: RailContext = fallbackRail(COMPANIES_OPTIONS.site, analysisId),
 ): Promise<{ sources: SourceRecord[]; signals: SignalRecord[] }> {
   const saved = {
     details: {
@@ -368,7 +392,7 @@ export async function collectCandidateCrawl(
   const sources: SourceRecord[] = [];
   const signals: SignalRecord[] = [];
   try {
-    await enrichWithCrawl(env, userId, analysisId, cand, depth, sources, signals);
+    await enrichWithCrawl(env, userId, analysisId, cand, depth, sources, signals, rail);
     return { sources, signals };
   } finally {
     cand.details = saved.details;
@@ -378,11 +402,12 @@ export async function collectCandidateCrawl(
   }
 }
 
-async function distillPositioning(env: Env, userId: number, name: string, text: string): Promise<string> {
+async function distillPositioning(env: Env, userId: number, rail: RailContext, name: string, text: string): Promise<string> {
   if (!text.trim()) return '';
   const res = await runJson<{ positioning: string }>(
     env,
     userId,
+    rail,
     'You extract a company\'s positioning/messaging from its website text. Respond ONLY as JSON: {"positioning": string (1-2 sentences, concrete)}.',
     `Company: ${name}\n\nWebsite text:\n${text.slice(0, 6000)}`,
     220,
@@ -390,7 +415,7 @@ async function distillPositioning(env: Env, userId: number, name: string, text: 
   return res?.positioning?.slice(0, 400) || '';
 }
 
-async function synthesize(env: Env, userId: number, inputs: AnalysisInputs, candidates: Candidate[]): Promise<AnalysisOutput> {
+async function synthesize(env: Env, userId: number, inputs: AnalysisInputs, candidates: Candidate[], rail: RailContext): Promise<AnalysisOutput> {
   const compactCands = candidates.map((c) => ({
     name: c.name,
     category: c.category,
@@ -417,7 +442,7 @@ async function synthesize(env: Env, userId: number, inputs: AnalysisInputs, cand
     .filter(Boolean)
     .join('\n');
 
-  const ai = await runJson<Partial<AnalysisOutput>>(env, userId, system, user, 1600);
+  const ai = await runJson<Partial<AnalysisOutput>>(env, userId, rail, system, user, 1600);
   return normalizeOutput(ai, inputs, candidates);
 }
 
@@ -493,11 +518,18 @@ function normalizePairs<K extends string>(
 }
 
 /**
- * Run the full pipeline for a set of inputs.
+ * Run the full pipeline for a set of inputs. Every model call in it (discovery,
+ * each crawl's positioning, the synthesis) logs the one `rail` the press named.
  */
-export async function runCompetitorAnalysis(env: Env, userId: number, analysisId: string, inputs: AnalysisInputs): Promise<AnalysisResult> {
+export async function runCompetitorAnalysis(
+  env: Env,
+  userId: number,
+  analysisId: string,
+  inputs: AnalysisInputs,
+  rail: RailContext = fallbackRail(COMPANIES_OPTIONS.analyze, analysisId),
+): Promise<AnalysisResult> {
   const depth: 'quick' | 'deep' = inputs.depth === 'deep' ? 'deep' : 'quick';
-  const raw = await discoverCandidates(env, userId, inputs);
+  const raw = await discoverCandidates(env, userId, inputs, rail);
 
   const sources: SourceRecord[] = [];
   const signals: SignalRecord[] = [];
@@ -523,7 +555,7 @@ export async function runCompetitorAnalysis(env: Env, userId: number, analysisId
   // Crawl the top candidates (by relevance) that have a domain.
   const crawlTargets = [...candidates].sort((a, b) => b.relevance_score - a.relevance_score).slice(0, MAX_CRAWL_CANDIDATES);
   for (const cand of crawlTargets) {
-    await enrichWithCrawl(env, userId, analysisId, cand, depth, sources, signals);
+    await enrichWithCrawl(env, userId, analysisId, cand, depth, sources, signals, rail);
   }
 
   // Re-sort by (post-crawl) relevance and re-number positions.
@@ -532,7 +564,7 @@ export async function runCompetitorAnalysis(env: Env, userId: number, analysisId
     c.position = i;
   });
 
-  const output = await synthesize(env, userId, inputs, candidates);
+  const output = await synthesize(env, userId, inputs, candidates, rail);
   // Fold discovered activity signals into the output for the UI.
   output.activity_signals = signals
     .filter((s) => s.signal_type === 'hiring' || s.signal_type === 'content')
@@ -545,12 +577,17 @@ export async function runCompetitorAnalysis(env: Env, userId: number, analysisId
   return { candidates, sources, signals, output };
 }
 
-/** Build a manual candidate row (used by the "add competitor" endpoint). */
+/**
+ * Build a manual candidate row (used by the "add competitor" endpoint). Only a
+ * crawl runs a model; `rail` is the press's (`extract:candidate`), and its
+ * record is the analysis the row is added to.
+ */
 export async function buildManualCandidate(
   env: Env,
   userId: number,
   inputs: AnalysisInputs,
   data: { name: string; url?: string; category?: string; summary?: string; crawl?: boolean },
+  rail: RailContext = { page: COMPANIES_PAGE, option: COMPANIES_OPTIONS.candidate },
 ): Promise<{ candidate: Candidate; sources: SourceRecord[]; signals: SignalRecord[] }> {
   const url = data.url ? normalizeUrl(data.url) : null;
   const domain = url ? new URL(url).hostname : guessDomain(data.name);
@@ -572,7 +609,7 @@ export async function buildManualCandidate(
   const sources: SourceRecord[] = [];
   const signals: SignalRecord[] = [];
   if (data.crawl && candidate.url) {
-    await enrichWithCrawl(env, userId, 'manual', candidate, inputs.depth === 'deep' ? 'deep' : 'quick', sources, signals);
+    await enrichWithCrawl(env, userId, 'manual', candidate, inputs.depth === 'deep' ? 'deep' : 'quick', sources, signals, rail);
   }
   return { candidate, sources, signals };
 }

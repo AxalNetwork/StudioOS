@@ -241,8 +241,8 @@ test('the competitor analysis runs on the press and writes only its own analysis
   assert.deepEqual(rows.map((o) => o.key), ['analyze:competitors', 'rerun:analysis', 'refresh:sources']);
   const ui = spa('components/CompetitorAnalysis.jsx');
   for (const o of rows) assert.equal(ui.split(o.source.marker).length - 1, 1, `${o.key}: not one press`);
-  // Re-run keeps the member's hand-added competitors.
-  assert.match(ui, /api\.competitors\.rerun\(analysis\.id, \{ inputs: analysis\.inputs \|\| inputs, keep_manual: true \}\)/);
+  // Re-run keeps the member's hand-added competitors (and, D778 part 9, sends its press's option).
+  assert.match(ui, /api\.competitors\.rerun\(analysis\.id, \{ inputs: analysis\.inputs \|\| inputs, keep_manual: true \}, railPressHeaders\(pressKey\.rerun\)\)/);
   const src = workerFile('routes/competitors.ts');
   const OWN = ['competitor_analyses', 'competitor_analysis_outputs', 'competitor_candidates', 'competitor_signals', 'competitor_sources'];
   for (const [method, path] of [['post', '/analyze'], ['post', '/:id/rerun'], ['post', '/:id/refresh']]) {
@@ -254,8 +254,11 @@ test('the competitor analysis runs on the press and writes only its own analysis
   const persist = src.slice(src.indexOf('export async function persistResult'), src.indexOf('async function loadAnalysis'));
   for (const t of writes(persist)) assert.ok(OWN.includes(t), `persistResult writes ${t}`);
   assert.doesNotMatch(persist, /ai_rail_proposals|validate_proposals|fill_provenance|INSERT INTO projects|UPDATE projects/);
-  // And the synthesis runs on the page's rail (D765).
-  assert.match(workerFile('services/competitorAnalysis.ts'), /rail: \{ page: 'research', option: 'scan:competitors' \}/);
+  // And the synthesis runs on the press's rail (D765): the inventory's page and
+  // option when the press sent none (D778 part 9, `founder_competitors_d778.test.ts`).
+  const svc = workerFile('services/competitorAnalysis.ts');
+  assert.match(svc, /export const COMPANIES_PAGE = 'Founder · Research · Companies';/);
+  assert.match(svc.slice(svc.indexOf('async function runJson'), svc.indexOf('function splitList')), /\n\s+rail,\n/);
 });
 
 // ------------------------------------------------------------------ uploads
