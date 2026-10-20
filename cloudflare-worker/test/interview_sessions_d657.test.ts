@@ -1307,3 +1307,42 @@ test('D685 §5.7: a mark is taken while recording, paused or stopped; a client_k
   assert.equal(markCeiling({ active_ms: 1000, recording_since: null }), 1000);
   assert.equal(markCeiling({ active_ms: 1000, recording_since: '2026-01-01 00:00:00' }, Date.parse('2026-01-01T00:00:05Z')), 6000);
 });
+
+// ===========================================================================
+// D778 part 6 (#2103) — a session's transcription names the page and option
+// D771's inventory gives it: Transcribe on a stopped session is
+// `transcribe:recording`, and the processing job (Stop and process) is
+// `transcribe:session`. The press's headers win where there is a request.
+// ===========================================================================
+
+const CR = 'Founder · Validate · Customer research';
+const transcribeRuns = (f: any) => (f.db.prepare(
+  "SELECT rail_page, rail_option, record_ref FROM ai_usage_logs WHERE task = 'transcribe' AND guard_for IS NULL ORDER BY id",
+).all() as any[]).map((r) => [r.rail_page, r.rail_option, r.record_ref]);
+
+test('D778: Transcribe on a stopped session names the inventoried page and option for each chunk, and the press\'s headers win', async () => {
+  // Mutation checked: drop the route's rail → both rows read 'validate' and 'transcribe:interview'.
+  const f = fixture();
+  const id = await recorded(f);
+  const r = await call(f.env, FOUNDER, 'POST', `/sessions/${id}/transcribe`, {});
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.deepEqual(transcribeRuns(f), [[CR, 'transcribe:recording', `session:${id}`], [CR, 'transcribe:recording', `session:${id}`]]);
+
+  const g = fixture();
+  const id2 = await recorded(g);
+  const r2 = await call(g.env, FOUNDER, 'POST', `/sessions/${id2}/transcribe`, {},
+    { 'X-Rail-Page': 'validate', 'X-Rail-Option': encodeURIComponent('transcribe:recording'), 'X-Rail-Record': 'session:999' });
+  assert.equal(r2.status, 200, JSON.stringify(r2.body));
+  assert.deepEqual(transcribeRuns(g), [['validate', 'transcribe:recording', `session:${id2}`], ['validate', 'transcribe:recording', `session:${id2}`]],
+    'the mounted page holds the Manual switch; the scoped session stays the record');
+});
+
+test('D778: the processing job (Stop and process) names transcribe:session on the inventoried page', async () => {
+  // Mutation checked: let the job keep the default → its rows read 'transcribe:interview'.
+  const f = fixture();
+  llmAi(f);
+  const { sid } = await recordedForProcessing(f, 2);
+  await call(f.env, FOUNDER, 'POST', `/sessions/${sid}/finish`, { last_seq: 1, auto: false });
+  assert.equal(await job(f, sid), 'done');
+  assert.deepEqual(transcribeRuns(f), [[CR, 'transcribe:session', `session:${sid}`], [CR, 'transcribe:session', `session:${sid}`]]);
+});

@@ -3,6 +3,7 @@ import { Mic, FileText } from 'lucide-react';
 import { api } from '../../lib/api';
 import { formatCost } from '../../ui/assistCost';
 import { useRailOption } from '../../ui/railCrumbs';
+import { railPressHeaders } from '../../lib/railPage.js';
 
 /**
  * A recording on one interview, and the text it becomes.
@@ -98,7 +99,8 @@ export default function InterviewRecording({ interview, fillsOn, onChanged }) {
   const transcribe = async () => {
     setBusy('transcribe'); setNote(''); setUsage(null);
     try {
-      const r = await api.transcribeInterview(interview.id);
+      // D778 part 6: the press names its option on the request itself.
+      const r = await api.transcribeInterview(interview.id, railPressHeaders('transcribe:recording'));
       setUsage(r?.usage || null);
       if (r?.transcript === '') setNote('The recording has no speech in it. Nothing was written.');
       onChanged?.();
