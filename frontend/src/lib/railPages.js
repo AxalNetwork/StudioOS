@@ -77,6 +77,8 @@ const SHARED = (P) => [
   off('/trust', key(P, 'Trust')),
   off('/calendar', key(P, 'Calendar')),
   off('/my/events', key(P, 'Events')),
+  // D814 (#2260): the programmes and My applications.
+  off('/product-testing', key(P, 'Product testing')),
   off('/learning', key(P, 'Learning')),
   off('/referrals', key(P, 'Referrals')),
   off('/company-settings', key(P, 'Company settings')),
@@ -251,6 +253,8 @@ const PARTNER = [
   own('/delivery/health', key(O, 'Delivery', 'Health')),
   alias('/portfolio', key(O, 'Delivery'), 'The Delivery row lists portfolio coverage under “Also in” (PAGE_HOMES).'),
   ...BUCKET(O, 'Offers', '/offers', [['catalog', 'Catalog'], ['perk-deals', 'Perk deals'], ['visibility', 'Visibility'], ['proof', 'Proof'], ['audience-fit', 'Audience fit']]),
+  // D815 (#2261): not on the AI-rail canvas, which predates product testing.
+  off('/offers/testing', key(O, 'Offers', 'Product testing')),
   alias('/services', key(O, 'Offers', 'Catalog'), 'Catalog’s legacy route (shellConfig).'),
   alias('/perks', key(O, 'Offers', 'Perk deals'), 'Perk deals’ legacy route (shellConfig).'),
   alias('/partner/office-hours', key(O, 'Offers'), 'The Offers row lists office hours under “Also in”.'),

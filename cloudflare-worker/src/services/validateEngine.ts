@@ -39,7 +39,7 @@
  * Logs carry session ids, triggers and outcome codes only.
  */
 import type { Env } from '../types';
-import { budgetRefusalMessage } from './aiRouter';
+import { budgetRefusalMessage, type RailContext } from './aiRouter';
 import { loadSession, sessionDigestConsentBlocks } from './interviewSessions';
 import { presentTables } from './interviewFindings';
 import { IntakeError, writableSession } from './interviewIntake';
@@ -146,6 +146,8 @@ async function writeOutcome(env: Env, sessionId: number, fields: {
 export async function digestSession(env: Env, opts: {
   sessionId: number; userId: number; trigger: StructureTrigger;
   stages?: DigestStage[]; force?: boolean; model?: string;
+  // D778 part 8: a press's rail per stage (`railFor`); each stage names its own option when absent.
+  rails?: { summarise?: RailContext; structure?: RailContext };
 }): Promise<DigestOutcome> {
   const stages = opts.stages?.length ? opts.stages : (['summarise', 'structure'] as DigestStage[]);
   const force = opts.force === true;
@@ -240,13 +242,14 @@ export async function digestSession(env: Env, opts: {
   try {
     if (stages.includes('summarise')) {
       // A refusal or `no_citation` is recorded; the structure stage still runs, as the recorder always has.
-      summary = await summariseSession(env, (await loadSession(env, session.id))!, opts.userId, prefs.models.summarise);
+      summary = await summariseSession(env, (await loadSession(env, session.id))!, opts.userId, prefs.models.summarise, opts.rails?.summarise);
       if (!summary.ok && summary.reason === 'refused') refusal = summary.refusal;
       if (!summary.ok && summary.reason === 'no_citation') notes.push(NOTES.noCitation);
     }
     if (stages.includes('structure')) {
       structure = await structureSession(env, {
         sessionId: session.id, userId: opts.userId, trigger: opts.trigger, model: prefs.models.structure, dedupe: !force,
+        rail: opts.rails?.structure,
       });
       if (!structure.ok && refusal === undefined) refusal = structure.reason === 'refused' ? structure.refusal ?? null : null;
       // D757 (#1923): pass B refused keeps pass A's suggestions; the note says what is missing and why.

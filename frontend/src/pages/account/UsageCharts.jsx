@@ -25,7 +25,7 @@ export function DailyCostChart({ data, model = '' }) {
             title={`${d.day} · ${usd(d.cost) ?? 'Not recorded'}`} data-day={d.day}>
             {d.segments.map((s) => (
               <span key={s.model} data-model={s.model} data-cost={s.cost} data-testid="daily-cost-segment"
-                className="block w-full shrink-0" style={{ backgroundColor: s.colour, height: `${series.max > 0 && s.cost != null ? s.cost / series.max * 100 : 0}%` }} />
+                className="block w-full shrink-0" style={{ backgroundColor: s.colour, boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.55)', height: `${series.max > 0 && s.cost != null ? s.cost / series.max * 100 : 0}%` }} />
             ))}
           </button>
         ))}

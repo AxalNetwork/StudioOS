@@ -13,7 +13,6 @@ export const COST_GROUPS = Object.freeze([
 ]);
 export const USAGE_SUBTITLE = "How your AI spend is tracking against your limits, and what you're billed.";
 export const COST_SUBTITLE = 'Cost of your AI usage over time. All dates are UTC.';
-export const INVOICES_PENDING = 'The combined invoice list is not available yet. Open Billing for the existing orders.';
 const count = (v) => Number.isSafeInteger(v) && v >= 0;
 const money = (v) => typeof v === 'number' && Number.isFinite(v) && v >= 0;
 
@@ -46,6 +45,18 @@ export function dailySeries(read, model = '') {
     model: m.model, name: m.name || m.model, colour: modelColour(m.model),
   }));
   return { days, legend, max: Math.max(0, ...days.map((d) => d.cost ?? 0)) };
+}
+
+/** A complete current-month slice of the cost read, or null when it cannot prove an empty month. */
+export function monthIsEmpty(read, now = new Date()) {
+  if (!costReadable(read) || read.truncated) return null;
+  const today = now.toISOString().slice(0, 10);
+  const first = today.slice(0, 7) + '-01';
+  if (!read.range || read.range.from > first || read.range.to < today) return null;
+  const days = read.days.filter((d) => d.day >= first && d.day <= today);
+  const needed = now.getUTCDate();
+  if (new Set(days.map((d) => d.day)).size !== needed) return null;
+  return days.every((d) => d.by_model.length === 0);
 }
 
 export function unitText(units) {
@@ -108,7 +119,7 @@ function invoiceTime(value) {
   return Number.isFinite(time) ? time : -Infinity;
 }
 export function recentInvoices(read) {
-  if (!read || !Array.isArray(read.items)) return null;
-  return [...read.items].sort((a, b) => invoiceTime(b.date) - invoiceTime(a.date))
+  if (!read || !Array.isArray(read.invoices)) return null;
+  return [...read.invoices].sort((a, b) => invoiceTime(b.date) - invoiceTime(a.date))
     .slice(0, 3).map((r) => ({ ...r, href: invoiceHref(r.pdf_url) }));
 }

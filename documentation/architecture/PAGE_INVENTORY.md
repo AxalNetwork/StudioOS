@@ -71,7 +71,7 @@ canvas behind it still shows up here.
 | Admin | Contracts | `/admin/contracts` | Contracts · Subsidiary |
 | Admin | Fund admin | `/admin/fund-admin` | — (no canvas; shipped ahead of the design corpus) |
 | Admin | Insights | `/admin/held/insights` | — (no canvas; shipped ahead of the design corpus) |
-| Admin | Licences | `/admin/my-licence` | — (no canvas; shipped ahead of the design corpus) |
+| Admin | Licences | `/admin/my-licence` | Licences |
 
 ## `exploring` — 4 destinations in 2 groups
 
@@ -115,7 +115,7 @@ canvas behind it still shows up here.
 
 ## Destinations with no canvas
 
-33 of the 65 sidebar rows above are not claimed
+32 of the 65 sidebar rows above are not claimed
 by any row in `ROUTE_MAP.md`. That is expected — the platform predates the
 design corpus and not every shipped surface was redesigned — but the list is
 worth keeping visible, because it is also where a canvas would be *missing*
@@ -135,7 +135,6 @@ rather than merely absent.
 - admin · Admin · Community (`/admin/held/community`)
 - admin · Admin · Fund admin (`/admin/fund-admin`)
 - admin · Admin · Insights (`/admin/held/insights`)
-- admin · Admin · Licences (`/admin/my-licence`)
 - exploring · Home · Studio (`/exploring`)
 - exploring · Home · Spin-Out Lab (`/spinout-lab`)
 - exploring · Home · Messages (`/messages`)
@@ -155,4 +154,4 @@ rather than merely absent.
 - branch_admin · Branch · Insights (`/branch/insights`)
 - branch_admin · Branch · Licences (`/admin/my-licence`)
 
-**Canvas corpus:** 145. **Workspace assignments:** 190.
+**Canvas corpus:** 146. **Workspace assignments:** 191.

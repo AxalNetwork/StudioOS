@@ -6,6 +6,8 @@ import { defaultOpenGroups, hasTier, hasInvestorTier } from '../sidebarConfig';
 import { safeReadJSON } from '../lib/storage';
 import { hqRowFor, adminRowFor } from '../lib/hqStrips.js';
 import CompanySwitcher from './CompanySwitcher';
+import useLicenceNeeds from '../hooks/useLicenceNeeds';
+import { needsCount } from '../lib/licencePage';
 
 /**
  * SidebarNav — the left navigation, lifted out of App.jsx unchanged.
@@ -29,6 +31,12 @@ import CompanySwitcher from './CompanySwitcher';
 
 export default function SidebarNav({ groups, role, onNavigate, user, collapsed, onCollapse, onClose }) {
   const navLocation = useLocation();
+  // D800 (#2233): a row may name a count (`count: 'licence_needs'`, the
+  // Licences row), drawn as a pill beside its label. Read only when a row asks
+  // for it; an unread or zero count draws nothing, never "0".
+  const wantsLicenceNeeds = groups.some((g) => (g.items || []).some((i) => i.count === 'licence_needs'));
+  const licenceNeeds = useLicenceNeeds(wantsLicenceNeeds);
+  const rowCounts = { licence_needs: needsCount(licenceNeeds) };
   const advisorAccent = role === 'advisor';
   const partnerAccent = role === 'partner';
   const [query, setQuery] = useState('');
@@ -279,7 +287,14 @@ export default function SidebarNav({ groups, role, onNavigate, user, collapsed, 
                   {collapsed ? (
                     <span className="truncate w-full text-center">{abbr}</span>
                   ) : (
-                    <span className="truncate">{highlightMatch(label, q)}</span>
+                    <>
+                      <span className="truncate">{highlightMatch(label, q)}</span>
+                      {item.count && rowCounts[item.count] > 0 && (
+                        <span className="ml-auto rounded-full bg-slate-700 px-1.5 py-px font-mono text-[10.5px] font-bold text-white" data-testid="nav-row-count">
+                          {rowCounts[item.count]}
+                        </span>
+                      )}
+                    </>
                   )}
                 </NavLink>
               );
