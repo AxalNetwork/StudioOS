@@ -238,19 +238,21 @@ export async function memberSubscriber(env: Env, user: { id: number; email: stri
 /**
  * Turns the subscriber's mail back on with a fresh consent: confirmed, no
  * confirm token, the consent recorded, and any `unsubscribe` suppression
- * lifted. A row that was unsubscribed has its `token_version` raised, so links
- * sent before the unsubscribe stop working.
+ * lifted. A row that was unsubscribed (`unsubscribed_at` set, which a fresh
+ * signup leaves in place while the row is pending again) has its
+ * `token_version` raised, so links sent before the unsubscribe stop working.
  */
 export async function markConfirmed(env: Env, row: SubscriberRow, extra: { userId?: number | null; ipHash?: string | null } = {}): Promise<void> {
   await env.DB.prepare(
     `UPDATE newsletter_subscribers
         SET status = 'confirmed', confirm_token_hash = NULL, confirm_expires_at = NULL,
             consent_text_version = ?, consented_at = datetime('now'),
-            confirmed_at = datetime('now'), unsubscribed_at = NULL,
-            token_version = token_version + ?,
+            confirmed_at = datetime('now'),
+            token_version = token_version + (CASE WHEN unsubscribed_at IS NOT NULL THEN 1 ELSE 0 END),
+            unsubscribed_at = NULL,
             user_id = COALESCE(user_id, ?), ip_hash = COALESCE(?, ip_hash)
       WHERE id = ?`,
-  ).bind(CONSENT_TEXT_VERSION, row.status === 'unsubscribed' ? 1 : 0, extra.userId ?? null, extra.ipHash ?? null, row.id).run();
+  ).bind(CONSENT_TEXT_VERSION, extra.userId ?? null, extra.ipHash ?? null, row.id).run();
   await liftUnsubscribe(env, row.email);
 }
 
