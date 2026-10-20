@@ -28,7 +28,7 @@ import newsletterRoutes from '../src/routes/newsletter.ts';
 import insightsRoutes from '../src/routes/insights.ts';
 import { rateLimitMiddleware, NEWSLETTER_PUBLIC } from '../src/middleware/rateLimit.ts';
 import { csrfMiddleware } from '../src/middleware/csrf.ts';
-import { isSuppressed, preferencesToken, reasonBlocks, tokenKey } from '../src/services/newsletter.ts';
+import { addressOf, isSuppressed, normalizeEmail, preferencesToken, reasonBlocks, tokenKey } from '../src/services/newsletter.ts';
 import { sendNotificationEmail, sendVerificationEmail } from '../src/services/email.ts';
 import { mailClassOf, send } from '../src/services/email/send.ts';
 import { d1Over } from './_d1_sqlite.mjs';
@@ -434,6 +434,16 @@ test('suppression goes by reason: an unsubscribe stops marketing, a bounce stops
     const env = h.env as any;
     assert.equal(await isSuppressed(env, 'Someone <Bounced@Example.test>', 'transactional'), true, 'a display-name address is read');
     assert.equal(await isSuppressed(env, 'left@example.test', 'transactional'), false);
+    assert.equal(addressOf('Bo <bo@example.test>'), 'bo@example.test');
+    assert.equal(addressOf('bo@example.test'), 'bo@example.test');
+    assert.equal(addressOf('<<<<<'), '<<<<<', 'unclosed brackets leave the string as it is');
+    assert.equal(normalizeEmail('  Ada@Example.TEST '), 'ada@example.test');
+    for (const bad of ['ada', 'ada@', '@example.test', 'a@b@example.test', 'ada@example', 'ada@example.', 'a da@example.test', 42]) {
+      assert.equal(normalizeEmail(bad), null, String(bad));
+    }
+    const t0 = Date.now();
+    addressOf(`${'<='.repeat(100_000)}x`);
+    assert.ok(Date.now() - t0 < 200, 'a long run of < must not be slow');
 
     // The legacy senders ask before they send.
     assert.equal(await sendNotificationEmail(env, 'bounced@example.test', 'Hi', 'Body'), false);
