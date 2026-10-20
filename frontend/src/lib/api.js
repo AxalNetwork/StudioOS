@@ -42,6 +42,7 @@ export * from './api/helpCenter.js';
 export * from './api/interviewSessions.js';
 export * from './api/labReportShares.js';
 export * from './api/learning.js';
+export * from './api/licenceAccount.js';
 export * from './api/memberCredits.js';
 export * from './api/mercuryAttestations.js';
 export * from './api/mercuryPersonal.js';
@@ -5150,8 +5151,10 @@ export const api = {
     // `page` is the app path the band sits on (D510). The worker records it as
     // the run's `surface`, as the rail's read-back does (D404), so a band's
     // runs count towards "This page this month"; it is a path, never content.
-    zoneDraftRun: (surface, scopeKey, page) => request('/research/drafts', {
+    // D778 part 3: `headers` are the press's own rail context, taken on the click (ZoneDraft).
+    zoneDraftRun: (surface, scopeKey, page, headers) => request('/research/drafts', {
       method: 'POST',
+      ...(headers ? { headers } : {}),
       body: JSON.stringify({ surface, ...(scopeKey ? { scope_key: scopeKey } : {}), ...(page ? { page } : {}), ...railBody() }),
     }),
     // Accept, having optionally edited first — one write, because editing then
@@ -5476,9 +5479,15 @@ export const adminX = {
       method: 'POST',
       body: JSON.stringify(alt_text ? { data_uri, alt_text } : { data_uri }),
     }),
+  // D780 part 2: generating proposes (`proposal`), and writes nothing to the post.
   generateAltText: (id, index = 0) =>
     request(`/admin/x/posts/${id}/alt-text`, {
       method: 'POST', body: JSON.stringify({ index }),
+    }),
+  // D780 part 2: the Super Admin's Save of one image's alt text; `proposal_uid` names the proposal it began as.
+  saveAltText: (id, index, alt_text, proposal_uid) =>
+    request(`/admin/x/posts/${id}/alt-text`, {
+      method: 'PUT', body: JSON.stringify(proposal_uid ? { index, alt_text, proposal_uid } : { index, alt_text }),
     }),
   lintPost: (id) => request(`/admin/x/posts/${id}/lint`, { method: 'POST', body: '{}' }),
   // D780: Approve keeps the captions Eadwyn proposed that the composer still offers.

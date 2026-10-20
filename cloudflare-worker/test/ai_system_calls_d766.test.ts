@@ -16,6 +16,7 @@ import { join } from 'node:path';
 import { SignJWT } from 'jose';
 import { Hono } from 'hono';
 import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
+const RAIL_PROPOSALS = readFileSync(new URL('../sql/migrations/506_ai_rail_proposals.sql', import.meta.url), 'utf8');
 import { withGuard, GUARD_MODEL } from './_guard_stub.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { ensureXSchema } from '../src/services/xSchema.ts';
@@ -25,8 +26,6 @@ import { SEARCH_INDEX_MODEL } from '../src/services/ai/shapes.ts';
 import monitoring from '../src/routes/monitoring.ts';
 import x from '../src/routes/admin_x.ts';
 
-// D780 part 2 (#2105): the alt-text caption is stored as a rail proposal, so the X route needs the table.
-const PROPOSALS = readFileSync(new URL('../sql/migrations/506_ai_rail_proposals.sql', import.meta.url), 'utf8');
 const SCOUT = '@cf/meta/llama-4-scout-17b-16e-instruct';
 const SUPER = 1;
 // A real 1x1 PNG: the upload route sniffs the magic bytes.
@@ -43,7 +42,7 @@ function makeAI(handler: (model: string, payload: any) => any) {
 
 async function world(ai: any, extra: Record<string, unknown> = {}) {
   const f = aiBudgetFixture();
-  f.db.exec(PROPOSALS);
+  f.db.exec(RAIL_PROPOSALS);
   f.db.exec(`CREATE TABLE system_metrics(id INTEGER PRIMARY KEY, metric_name TEXT, labels TEXT, value REAL, timestamp TEXT);
              CREATE TABLE rate_limit_logs(id INTEGER PRIMARY KEY, blocked INTEGER, created_at TEXT);
              CREATE TABLE error_logs(id INTEGER PRIMARY KEY, user_id INTEGER, created_at TEXT);
@@ -160,12 +159,12 @@ test('X alt text: image_alt_text on Scout, the stored image as a data URI, one r
   w.f.db.prepare("UPDATE x_posts SET media_r2_keys = '[\"x/1/7/a.png\"]' WHERE id = 7").run();
   const r = await call(w, 'POST', '/api/admin/x/posts/7/alt-text', { index: 0 });
   assert.equal(r.status, 200);
-  assert.equal(r.body.alt_text, 'A team at a whiteboard.');
+  // D780 part 2: the caption comes back as a proposal, and the post holds nothing yet.
+  assert.equal(r.body.proposal.text, 'A team at a whiteboard.');
+  assert.equal(w.f.db.prepare('SELECT alt_texts FROM x_posts WHERE id = 7').get().alt_texts, null);
   assert.equal(ai.calls[0].model, SCOUT);
   assert.equal(ai.calls[0].payload.messages.at(-1).content[1].image_url.url, dataUri);
   assert.deepEqual(rows(w).map((x: any) => [x.user_id, x.task, x.surface]), [[0, 'image_alt_text', '/admin/x']]);
-  // D780: the caption is the Super Admin's to keep, not the post's (rail_x_alt_text_d780.test.ts).
-  assert.equal(w.f.db.prepare('SELECT alt_texts FROM x_posts WHERE id = 7').get().alt_texts, null);
   // The stored content type wins over the key's extension.
   const typed = makeAI(() => reply('A logo.'));
   const t = await world(typed);
@@ -180,6 +179,40 @@ test('X alt text: image_alt_text on Scout, the stored image as a data URI, one r
   assert.equal(failed.status, 502);
   assert.equal(failed.body.code ?? failed.body.error, 'ai_failed');
   assert.equal(down.f.db.prepare('SELECT alt_texts FROM x_posts WHERE id = 7').get().alt_texts, null, 'nothing saved');
+});
+
+// 5b ──────────────────────────────────────────────────────────────────────────
+test('D780 part 2: X alt text is the Super Admin\'s draft proposal; only their Save writes it, as accepted or edited', async () => {
+  // Mutations checked: the caption written into x_posts again; the proposal without its usage row;
+  // Save not deciding the proposal; a decided proposal saved again; the list not carrying the proposal;
+  // an earlier open proposal for the same image left open.
+  const w = await world(makeAI(() => reply('A team at a whiteboard.')));
+  w.files.set('x/1/7/a.png', { bytes: PNG, contentType: 'image/png' });
+  w.files.set('x/1/7/b.png', { bytes: PNG, contentType: 'image/png' });
+  w.f.db.prepare("UPDATE x_posts SET media_r2_keys = '[\"x/1/7/a.png\",\"x/1/7/b.png\"]' WHERE id = 7").run();
+  const first = await call(w, 'POST', '/api/admin/x/posts/7/alt-text', { index: 0 });
+  const r = await call(w, 'POST', '/api/admin/x/posts/7/alt-text', { index: 0 });
+  const run = w.f.db.prepare("SELECT id FROM ai_usage_logs WHERE task = 'image_alt_text' AND guard_for IS NULL ORDER BY id DESC").get();
+  const row = w.f.db.prepare('SELECT * FROM ai_rail_proposals WHERE uid = ?').get(r.body.proposal.uid);
+  assert.deepEqual([row.user_id, row.kind, row.rail_page, row.rail_option, row.record_ref, row.status, row.usage_log_id],
+    [SUPER, 'draft', 'x', 'draft:x/alt-text', 'x_post:7:0', 'proposed', run.id]);
+  assert.deepEqual(JSON.parse(row.payload_json), { index: 0, text: 'A team at a whiteboard.' });
+  assert.equal(w.f.db.prepare('SELECT status FROM ai_rail_proposals WHERE uid = ?').get(first.body.proposal.uid).status, 'withdrawn', 'one open proposal per image');
+
+  const list = await call(w, 'GET', '/api/admin/x/posts');
+  assert.deepEqual(list.body.posts[0].alt_proposals, { 0: { uid: r.body.proposal.uid, text: 'A team at a whiteboard.' } });
+
+  const saved = await call(w, 'PUT', '/api/admin/x/posts/7/alt-text', { index: 0, alt_text: 'A team at a whiteboard.', proposal_uid: r.body.proposal.uid });
+  assert.equal(saved.status, 200, JSON.stringify(saved.body));
+  assert.deepEqual(JSON.parse(w.f.db.prepare('SELECT alt_texts FROM x_posts WHERE id = 7').get().alt_texts), ['A team at a whiteboard.', '']);
+  assert.equal(w.f.db.prepare('SELECT status FROM ai_rail_proposals WHERE uid = ?').get(r.body.proposal.uid).status, 'accepted');
+  assert.equal((await call(w, 'PUT', '/api/admin/x/posts/7/alt-text', { index: 0, alt_text: 'x', proposal_uid: r.body.proposal.uid })).status, 409, 'a decided proposal saved again');
+
+  const second = await call(w, 'POST', '/api/admin/x/posts/7/alt-text', { index: 1 });
+  await call(w, 'PUT', '/api/admin/x/posts/7/alt-text', { index: 1, alt_text: 'Two people at a whiteboard.', proposal_uid: second.body.proposal.uid });
+  const edited = w.f.db.prepare('SELECT status, decided_payload_json FROM ai_rail_proposals WHERE uid = ?').get(second.body.proposal.uid);
+  assert.deepEqual([edited.status, JSON.parse(edited.decided_payload_json)], ['edited', { index: 1, text: 'Two people at a whiteboard.' }]);
+  assert.equal((await call(w, 'PUT', '/api/admin/x/posts/7/alt-text', { index: 5, alt_text: 'x' })).status, 400);
 });
 
 // 6 ───────────────────────────────────────────────────────────────────────────

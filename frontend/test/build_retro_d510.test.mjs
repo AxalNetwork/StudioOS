@@ -83,13 +83,14 @@ test('D510: a run sends the page beside the surface, and nothing when there is n
 test('D510: the band hands its page to the run, and only to the run', () => {
   const band = codeOnly(read('frontend/src/workspaces/ZoneDraft.jsx'));
   const run = band.slice(band.indexOf('const doRun = async'), band.indexOf('const doAccept = async'));
-  assert.match(run, /api\.research\.zoneDraftRun\(surface, scopeKey, bandPage\(\)\)/,
+  assert.match(run, /api\.research\.zoneDraftRun\(surface, scopeKey, bandPage\(\), pressHeaders\(option\)\)/,
     'the run does not send the page it was pressed on');
   // Reading the drafts spends nothing and records nothing, so it sends no page.
   const load = band.slice(band.indexOf('const load = useCallback'), band.indexOf('const doRun = async'));
   assert.doesNotMatch(load, /bandPage|zoneDraftRun/, 'loading the band reads the page or runs a draft');
   const api = codeOnly(read('frontend/src/lib/api.js'));
-  assert.match(api, /zoneDraftRun: \(surface, scopeKey, page\) => request\('\/research\/drafts'/);
+  // D778 part 3 (#2103): and the press's own rail headers.
+  assert.match(api, /zoneDraftRun: \(surface, scopeKey, page, headers\) => request\('\/research\/drafts'/);
 });
 
 test('D510: the retro band says what the board cannot tell it', () => {

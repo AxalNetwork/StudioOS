@@ -8,10 +8,6 @@
  *     nothing else.
  *   · `draft:legal/notes`: the notes are read from the proposals store and drawn
  *     beside the document, never in its body. Keep and Dismiss decide the note.
- *   · Part 2, `draft:x/alt-text` (the `/admin/x` composer, kept while the page
- *     is paused): "Alt" offers Eadwyn's caption beside its image and writes
- *     nothing; Save names the proposal, Approve passes the captions still
- *     offered, and Discard decides it.
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/rail_proposals_d780.test.mjs
  */
@@ -19,7 +15,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { codeOnly } from './_codeOnly.mjs';
-import { adminX, railProposalsApi } from '../src/lib/api.js';
+import { railProposalsApi } from '../src/lib/api.js';
 
 const read = (f) => codeOnly(readFileSync(`frontend/src/${f}`, 'utf8'));
 
@@ -59,22 +55,31 @@ test('legal notes: drawn beside the document from the proposals store, never in 
   assert.match(viewer, /\{doc\.body\}<\/pre>\s*\{doc\.id \? <LegalNotes docId=\{doc\.id\} \/> : null\}/);
 });
 
-test('part 2, X alt text: "Alt" offers the caption and writes nothing; Save names it, Approve passes the offered ones', () => {
-  // Mutations checked: "Alt" reloading the post as if it were written; Save dropping the
-  // proposal's uid; Approve passing no captions; Discard writing the post.
+test('part 2, /admin/x alt text: generating proposes, "Use it" is the Save, Discard decides', () => {
+  // Mutations checked: generating saving the caption; "Use it" dropping the proposal's uid;
+  // Discard writing the post; the proposal not drawn beside its image.
   const page = read('pages/admin/AdminX.jsx');
-  assert.match(page, /export const X_ALT_TEXT_OPTION = 'draft:x\/alt-text';/);
-  assert.match(page, /railProposalsApi\.list\(\{ option: X_ALT_TEXT_OPTION, status: 'proposed' \}\)/);
-  const gen = page.slice(page.indexOf('const genAlt = async'), page.indexOf('const saveAlt = async'));
-  assert.match(gen, /offer\(id, idx, \{ uid: p\.uid, text: p\.text, draft: p\.text \}\)/);
-  assert.doesNotMatch(gen, /updatePost|onReload/, '"Alt" writes the post');
-  const save = page.slice(page.indexOf('const saveAlt = async'), page.indexOf('const discardAlt = async'));
-  assert.match(save, /api\.updatePost\(id, \{ alt_text: \{ index: idx, text: p\.draft, proposal_uid: p\.uid \} \}\)/);
+  const gen = page.slice(page.indexOf('const genAlt = async'), page.indexOf('const useAlt = async'));
+  assert.match(gen, /await api\.generateAltText\(id, idx\);/);
+  assert.doesNotMatch(gen, /saveAltText|updatePost/, 'generating writes the post');
+  const use = page.slice(page.indexOf('const useAlt = async'), page.indexOf('const discardAlt = async'));
+  assert.match(use, /api\.saveAltText\(id, idx, proposal\.text, proposal\.uid\)/);
   const discard = page.slice(page.indexOf('const discardAlt = async'), page.indexOf('return (', page.indexOf('const discardAlt = async')));
-  assert.match(discard, /railProposalsApi\.decide\(p\.uid, 'discard'\)/);
-  assert.doesNotMatch(discard, /api\.updatePost/, 'Discard writes the post');
-  assert.match(page, /api\.approvePost\(id, Object\.values\(offered\(id\)\)\.map\(\(p\) => p\.uid\)\)/);
+  assert.match(discard, /railProposalsApi\.decide\(proposal\.uid, 'discard'\)/);
+  assert.doesNotMatch(discard, /saveAltText|updatePost/, 'Discard writes the post');
+  assert.match(page, /\{!p\.alt_texts\?\.\[i\] && p\.alt_proposals\?\.\[i\] && \(/, 'the proposal is not drawn beside its image');
+  const api = read('lib/api.js');
+  assert.match(api, /saveAltText: \(id, index, alt_text, proposal_uid\) =>\s*request\(`\/admin\/x\/posts\/\$\{id\}\/alt-text`, \{\s*method: 'PUT'/);
+});
+
+test('part 3, Approve sends only the alt-text captions still offered by the composer', () => {
+  const page = read('pages/admin/AdminX.jsx');
+  const approve = page.slice(page.indexOf('const approve = async'), page.indexOf('const remove = async'));
+  assert.match(approve, /const post = posts\.find\(\(p\) => p\.id === id\);/);
+  assert.match(approve, /Object\.entries\(post\?\.alt_proposals \|\| \{\}\)/);
+  assert.match(approve, /\.filter\(\(\[index\]\) => !post\.alt_texts\?\.\[index\]\)/);
+  assert.match(approve, /\.map\(\(\[, proposal\]\) => proposal\.uid\)/);
+  assert.match(approve, /await api\.approvePost\(id, uids\);/);
   const client = read('lib/api.js');
   assert.match(client, /JSON\.stringify\(altTextProposalUids\.length \? \{ alt_text_proposal_uids: altTextProposalUids \} : \{\}\)/);
-  assert.equal(typeof adminX.approvePost, 'function');
 });

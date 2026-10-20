@@ -603,6 +603,14 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
       await startIncorporationPacket(env, id);
       return;
     }
+    case 'ai_auto_reload': {
+      // D794 — charge the member's saved card for their pack, off-session. Every
+      // refusal and every card failure is an outcome recorded on the member's
+      // settings, not a retry: a retry could only charge a crossing twice.
+      const { runAutoReload } = await import('./aiAutoReload');
+      await runAutoReload(env, Number(payload.user_id));
+      return;
+    }
     case 'session_structure': {
       // D684 — Structure without the button. A refusal (budget, no consent,
       // no transcript) is an outcome recorded on the session, not a retry.

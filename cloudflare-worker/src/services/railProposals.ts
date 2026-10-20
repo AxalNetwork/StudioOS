@@ -10,9 +10,9 @@
  * this file.
  *
  * WHO CALLS IT. Every rail option outside Validate (`validate_proposals`) and
- * the zone drafts (`research_zone_drafts`): D780's own three (the Super Admin's
- * `draft:publication-summary` and `draft:x/alt-text`, and `draft:legal/notes`),
- * and the other option tasks (D778, D779) as they land.
+ * the zone drafts (`research_zone_drafts`): D780's own two (the Super Admin's
+ * `draft:publication-summary` and `draft:legal/notes`), and the other option
+ * tasks (D778, D779) as they land.
  *
  * WHAT IT REFUSES.
  *   · A proposal for a field Eadwyn never fills (D777's registry): a payload
@@ -160,18 +160,6 @@ export async function decideRail(env: Env, userId: number, uid: string, decision
   ).bind(status, status === 'edited' ? JSON.stringify(edited) : null, uid, userId).run();
   if (!res.meta?.changes) return null;
   return getRail(env, userId, uid);
-}
-
-/**
- * The platform takes back one of the member's open proposals, because a newer
- * run replaced it (the X composer's second caption for one image). True when it did.
- */
-export async function withdrawRailUid(env: Env, userId: number, uid: string): Promise<boolean> {
-  const res = await env.DB.prepare(
-    `UPDATE ai_rail_proposals SET status = 'withdrawn', updated_at = CURRENT_TIMESTAMP
-      WHERE uid = ? AND user_id = ? AND status = 'proposed'`,
-  ).bind(uid, userId).run();
-  return Number(res.meta?.changes || 0) > 0;
 }
 
 /** The platform takes back a member's open proposals on a record that moved on. Returns how many. */

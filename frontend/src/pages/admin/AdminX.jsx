@@ -1,3 +1,16 @@
+  const approve = async (id) => {
+    // D780 part 3: keep only the captions the composer still offers beside an image.
+    const post = posts.find((p) => p.id === id);
+    const uids = Object.entries(post?.alt_proposals || {})
+      .filter(([index]) => !post.alt_texts?.[index])
+      .map(([, proposal]) => proposal.uid);
+    try {
+      await api.approvePost(id, uids);
+      notify('Approved', 'success');
+      onReload();
+    } catch (e) { notify(`Approve failed: ${e?.message || e}`, 'error'); }
+  };
+
 /**
  * Task #4 — Admin X (Twitter) composer + accounts + aggregator.
  *
@@ -29,9 +42,6 @@ const TABS = [
 ];
 
 const MAX_BODY = 280;
-// D780 (#2105): Eadwyn's caption for an image is a proposal under this option,
-// on `x_post:<id>`; Save or Approve keeps it (routes/admin_x.ts).
-export const X_ALT_TEXT_OPTION = 'draft:x/alt-text';
 const MAX_MEDIA = 4;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const IMAGE_MIME = ['image/jpeg', 'image/png', 'image/webp'];
@@ -420,7 +430,7 @@ function ComposeTab({ accounts, onSaved, notify }) {
             </div>
           )}
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            Tip: save the draft first, then press "Alt" in the drafts list. Eadwyn drafts a caption; Save or Approve keeps it.
+            Tip: save the draft first, then use "Auto alt-text" in the drafts list to caption images with Workers AI.
           </p>
         </div>
         <div>
@@ -480,33 +490,6 @@ function PostsTab({ posts, accounts, onReload, notify, mode }) {
   const [overrideFor, setOverrideFor] = useState(null);  // { id, findings }
   const [editId, setEditId] = useState(null);
   const [editBody, setEditBody] = useState('');
-  // D780: the captions Eadwyn proposed that wait for a Save, by post and image:
-  // { 'x_post:<id>': { <index>: { uid, text, draft } } }.
-  const [captions, setCaptions] = useState({});
-  const offered = (postId) => captions[`x_post:${postId}`] || {};
-  const offer = (postId, index, p) => setCaptions((all) => {
-    const rec = `x_post:${postId}`;
-    const mine = { ...(all[rec] || {}) };
-    if (p) mine[index] = p; else delete mine[index];
-    return { ...all, [rec]: mine };
-  });
-  useEffect(() => {
-    if (mode !== 'drafts') return;
-    let live = true;
-    railProposalsApi.list({ option: X_ALT_TEXT_OPTION, status: 'proposed' }).then((out) => {
-      if (!live) return;
-      const next = {};
-      // Newest first: the first caption for an image is the one offered.
-      for (const p of out?.proposals || []) {
-        const index = Number(p.payload?.index);
-        if (!p.record_ref || !Number.isInteger(index)) continue;
-        next[p.record_ref] = next[p.record_ref] || {};
-        if (!next[p.record_ref][index]) next[p.record_ref][index] = { uid: p.uid, text: String(p.payload?.text || ''), draft: String(p.payload?.text || '') };
-      }
-      setCaptions(next);
-    }).catch(() => {});
-    return () => { live = false; };
-  }, [mode, posts]);
 
   const send = async (id, override_reason) => {
     setBusyId(id);
@@ -535,11 +518,7 @@ function PostsTab({ posts, accounts, onReload, notify, mode }) {
   };
 
   const approve = async (id) => {
-    try {
-      await api.approvePost(id, Object.values(offered(id)).map((p) => p.uid));
-      notify('Approved', 'success');
-      onReload();
-    }
+    try { await api.approvePost(id); notify('Approved', 'success'); onReload(); }
     catch (e) { notify(`Approve failed: ${e?.message || e}`, 'error'); }
   };
 
@@ -566,29 +545,28 @@ function PostsTab({ posts, accounts, onReload, notify, mode }) {
     } catch (e) { notify(`Edit failed: ${e?.message || e}`, 'error'); }
   };
 
-  // Eadwyn drafts the caption; nothing is on the post until Save or Approve.
+  // D780 part 2 (D720 §9): Eadwyn's alt text is a proposal, shown beside its
+  // image and not saved. "Use it" is the Super Admin's Save; Discard throws it
+  // away. Neither the press nor the proposal writes the post on its own.
   const genAlt = async (id, idx) => {
     try {
-      const out = await api.generateAltText(id, idx);
-      const p = out?.proposal;
-      if (p) offer(id, idx, { uid: p.uid, text: p.text, draft: p.text });
-      notify('Eadwyn drafted a caption. Save or Approve keeps it.', 'success');
+      await api.generateAltText(id, idx);
+      notify('Eadwyn drafted alt text. It is not saved until you use it.', 'success');
+      onReload();
     } catch (e) { notify(`Alt-text failed: ${e?.message || e}`, 'error'); }
   };
-  const saveAlt = async (id, idx) => {
-    const p = offered(id)[idx];
-    if (!p) return;
+  const useAlt = async (id, idx, proposal) => {
     try {
-      await api.updatePost(id, { alt_text: { index: idx, text: p.draft, proposal_uid: p.uid } });
-      offer(id, idx, null);
+      await api.saveAltText(id, idx, proposal.text, proposal.uid);
+      notify('Alt text saved', 'success');
       onReload();
-    } catch (e) { notify(`Caption not saved: ${e?.message || e}`, 'error'); }
+    } catch (e) { notify(`Alt-text save failed: ${e?.message || e}`, 'error'); }
   };
-  const discardAlt = async (id, idx) => {
-    const p = offered(id)[idx];
-    if (!p) return;
-    try { await railProposalsApi.decide(p.uid, 'discard'); } catch { /* already decided: drop it here too */ }
-    offer(id, idx, null);
+  const discardAlt = async (proposal) => {
+    try {
+      await railProposalsApi.decide(proposal.uid, 'discard');
+      onReload();
+    } catch (e) { notify(`Discard failed: ${e?.message || e}`, 'error'); }
   };
 
   return (
@@ -690,22 +668,19 @@ function PostsTab({ posts, accounts, onReload, notify, mode }) {
                 <div key={i} className="border border-gray-200 dark:border-gray-700 rounded px-2 py-1 flex items-center gap-2">
                   <ImageIcon size={12} />
                   <span className="font-mono text-gray-500 truncate max-w-[200px]">{k.split('/').pop()}</span>
-                  {!p.alt_texts?.[i] && !offered(p.id)[i] && mode === 'drafts' && (
-                    <button onClick={() => genAlt(p.id, i)} className="text-purple-600 dark:text-purple-300 flex items-center gap-1" title="Ask Eadwyn to draft a caption">
+                  {!p.alt_texts?.[i] && !p.alt_proposals?.[i] && (
+                    <button onClick={() => genAlt(p.id, i)} className="text-purple-600 dark:text-purple-300 flex items-center gap-1" title="Draft alt-text with Eadwyn">
                       <Sparkles size={12} /> Alt
                     </button>
                   )}
-                  {p.alt_texts?.[i] && !offered(p.id)[i] && <span className="text-gray-500 italic truncate max-w-[280px]">"{p.alt_texts[i]}"</span>}
-                  {offered(p.id)[i] && (
-                    <span className="flex items-center gap-1" data-testid="x-alt-proposal">
-                      <span className="text-purple-600 dark:text-purple-300">Eadwyn's caption:</span>
-                      <input value={offered(p.id)[i].draft} aria-label={`Caption for image ${i + 1}`}
-                        onChange={(e) => offer(p.id, i, { ...offered(p.id)[i], draft: e.target.value })}
-                        className="px-1 py-0.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white w-64" />
-                      <button onClick={() => saveAlt(p.id, i)} className="px-2 py-0.5 bg-blue-600 text-white rounded">Save</button>
-                      <button onClick={() => discardAlt(p.id, i)} className="px-2 py-0.5 border border-gray-300 dark:border-gray-600 rounded">Discard</button>
+                  {!p.alt_texts?.[i] && p.alt_proposals?.[i] && (
+                    <span className="flex items-center gap-2" data-testid={`x-alt-proposal-${p.id}-${i}`}>
+                      <span className="text-purple-700 dark:text-purple-300 italic truncate max-w-[280px]">Eadwyn: "{p.alt_proposals[i].text}" · not saved</span>
+                      <button onClick={() => useAlt(p.id, i, p.alt_proposals[i])} className="px-1.5 py-0.5 bg-purple-600 text-white rounded">Use it</button>
+                      <button onClick={() => discardAlt(p.alt_proposals[i])} className="px-1.5 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-gray-700 dark:text-gray-200">Discard</button>
                     </span>
                   )}
+                  {p.alt_texts?.[i] && <span className="text-gray-500 italic truncate max-w-[280px]">"{p.alt_texts[i]}"</span>}
                 </div>
               ))}
             </div>

@@ -155,7 +155,7 @@ const SYSTEM: Record<string, string> = {
   // D766 (#2094): calls that reached env.AI.run directly, now through the router
   // as system calls (userId 0), logged at cost and charged to no member.
   'routes/admin_x.ts:image_screen': 'The safety screen on an image an admin uploads for HQ\'s X account: a check, not assistance, run for no member; refusing it would only remove a safety layer.',
-  'routes/admin_x.ts:image_alt_text': 'Alt text for an image HQ posts to its own X account: a system call for no member\'s page, logged at cost and charged to no one. Its caption is a proposal the Super Admin keeps by Save or Approve, never written into the post (D780 part 2).',
+  'routes/admin_x.ts:image_alt_text': 'Alt text for an image HQ posts to its own X account: a system call for no member\'s page, logged at cost and charged to no one.',
   'routes/monitoring.ts:ops_summary': 'The site-metrics summary on HQ\'s monitoring page: about the platform, for no member\'s page, logged at cost and charged to no member.',
   'services/vectorize.ts:embed': 'The search index\'s embeddings: retrieval for a lookup or an indexing job, not assistance, run for no member and charged to no one.',
 };

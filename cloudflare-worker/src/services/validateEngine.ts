@@ -66,7 +66,7 @@ export const VALIDATE_SECTION = 'validate';
 /** A `running` claim older than this is taken over (`STALE_MINUTES`, interviewProcessing.ts). */
 export const CLAIM_STALE_MINUTES = 15;
 const TASKS = { summarise: 'summarise_interview', structure: 'structure_interview' } as const;
-const BUDGET = new Set(['budget_user_day', 'budget_user_month', 'budget_review']);
+const BUDGET = new Set(['budget_user_day', 'budget_user_month', 'budget_review', 'spend_limit']);
 const TOO_LARGE = new Set(['transcript_too_large', 'structure_call_limit']);
 
 export const NOTES = {

@@ -40,6 +40,8 @@ export const PAYMENT_PURPOSES = Object.freeze({
     payee: 'holdings' as AxalEntityKey, label: 'Platform licence fee',
     money_kinds: Object.freeze(['licence_fee_management_admin', 'licence_fee_fund_admin']),
   }),
+  // D798: a territory licensee's fee to Holdings, the licensor. No #1772 money kind yet.
+  territory_licence_fee: Object.freeze({ payee: 'holdings' as AxalEntityKey, label: 'Territory licence fee', money_kinds: Object.freeze([] as string[]) }),
 });
 export type PaymentPurpose = keyof typeof PAYMENT_PURPOSES;
 

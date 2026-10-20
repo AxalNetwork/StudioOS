@@ -156,7 +156,7 @@ export function PackControls({ pack, line, api: packs = tokenPacksApi, onDone })
       )}
       {mode === 'archive' && (
         <div className="flex flex-col gap-1.5" data-testid={`hq-pack-archive-${line.uid}`}>
-          <p className={WARN} data-testid={`hq-pack-archive-confirm-${line.uid}`}>Archive {label}? It goes off sale for good and its Stripe price is archived. A pack bought before stays credited.</p>
+          <p className={WARN} data-testid={`hq-pack-archive-confirm-${line.uid}`}>Archive {label}? It goes off sale for good and its Stripe price is archived. Tokens from a pack bought before stay in their buyers' balances.</p>
           <div className="flex justify-end gap-1.5">
             <button type="button" className={GHOST} onClick={() => setMode(null)}>Keep it</button>
             <button type="button" className={ROSE} disabled={busy} onClick={() => run('pack-archive', () => packs.archive(line.uid), `${label} is archived.`)} data-testid={`hq-pack-archive-submit-${line.uid}`}>Archive</button>
@@ -410,8 +410,8 @@ export function ReconcileCard({ reconcile }) {
                   <p key={m.member} className={`${ROW} font-mono`} data-testid="hq-reconcile-mismatch">Member {m.member} · balance {m.balance} · ledger {m.ledger} · {m.difference}</p>
                 ))}
               </Section>
-              <Section title="Paid over an hour ago, not credited" testId="hq-reconcile-overdue">
-                {list(v.overdue, 'The overdue purchases', 'No paid purchase is waiting to be credited.', (p) => (
+              <Section title="Paid over an hour ago, tokens not added" testId="hq-reconcile-overdue">
+                {list(v.overdue, 'The overdue purchases', 'No paid purchase is waiting for its tokens.', (p) => (
                   <div key={p.key || `${p.member}-${p.at}`} className={ROW} data-testid="hq-reconcile-overdue-row">
                     <p className="font-mono">Member {p.member} · {p.pack || 'Token pack'} · {p.amount} · {when(p.at)}</p>
                     <p className="mt-0.5 text-amber-800 dark:text-amber-300">{p.instruction || RESEND}.</p>
@@ -423,7 +423,7 @@ export function ReconcileCard({ reconcile }) {
                   <p key={p.key || `${p.member}-${p.at}`} className={`${ROW} font-mono`} data-testid="hq-reconcile-dispute">Member {p.member} · {p.pack || 'Token pack'} · {p.amount} · {when(p.at)}</p>
                 ))}
               </Section>
-              <p className={`${NOTE} border-t border-axal-hairline px-4 py-2.5 dark:border-gray-800`}>HQ never credits a purchase. Stripe's payment_intent.succeeded credits it; resend that event when one is overdue.</p>
+              <p className={`${NOTE} border-t border-axal-hairline px-4 py-2.5 dark:border-gray-800`}>HQ never adds a purchase's tokens. Stripe's payment_intent.succeeded adds them; resend that event when one is overdue.</p>
             </>
           )}
     </Card>
