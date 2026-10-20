@@ -8,7 +8,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -72,10 +72,10 @@ test('App mounts the catalogue at /pricing/products and the old addresses as red
 test('no internal link names /plans-and-pricing or /pricing/investor any more', () => {
   const offenders = [];
   const walk = (dir) => {
-    for (const name of readdirSync(dir)) {
-      const p = join(dir, name);
-      if (statSync(p).isDirectory()) walk(p);
-      else if (/\.(jsx?|mjs)$/.test(name)) {
+    for (const ent of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, ent.name);
+      if (ent.isDirectory()) walk(p);
+      else if (/\.(jsx?|mjs)$/.test(ent.name)) {
         const rel = relative(SRC, p);
         if (rel === 'App.jsx' || rel === 'pages/pricingRedirects.jsx' || rel === 'pages/InvestorPricingPage.jsx' || rel === 'lib/ogRegistry.js') continue;
         // Code only: a comment may still say where a thing used to live.
