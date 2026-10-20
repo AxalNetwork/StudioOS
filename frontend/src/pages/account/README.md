@@ -12,7 +12,7 @@ live here, one file each:
 | `AccountProfile.jsx` | Profile and identity; Company profile reads the sidebar’s selected company and links its Company Settings editor. Signing entity keeps the account’s separate contract details |
 | `AccountDevices.jsx` | The devices registered for push, under Notifications |
 | `AccountBilling.jsx` | Billing and orders: the plan line and the orders list |
-| `BillingCards.jsx` | D792 (#2217): Billing's own cards from the canvas's B3 — Token balance, Included with your plan, Buy tokens (the packs, D790's offer pills, Buy to checkout) and Payment details (Manage in Stripe), and `useBillingReads`. `../SettingsPage.jsx`'s `BillingConsole` lays them out |
+| `BillingCards.jsx` | D792 (#2217): Billing's own cards from the canvas's B3 — Token balance, Included with your plan, Buy tokens (the packs, D790's offer pills, Buy to checkout) and Payment details (Manage in Stripe), and `useBillingReads`. D792 part 2 (#2270): `overviewScopeFor(role)` reads the overview on the customer the role's portal opens (`?scope=investor` for an investor) `../SettingsPage.jsx`'s `BillingConsole` lays them out |
 | `billingModel.js` | D792: those cards' rules and sentences, pure — `balanceText`, `allowanceView`, `packCards`, `paymentCard`, `nextReset`, `shortDay` |
 | `AutoReloadCard.jsx` | D794 (#2219): Billing's Auto-reload card beside the plan and Payment details — the switch, the pack, the threshold and the saved card (`AutoReloadForm`). Stripe's form loads only when a card is added |
 | `AutoReloadCardSetup.jsx` | D794: Stripe's `PaymentElement` confirming a SetupIntent for off-session use; hands back only the SetupIntent's id. Loaded lazily, so the Stripe loader is imported only when a card is added |

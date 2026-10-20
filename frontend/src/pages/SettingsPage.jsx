@@ -4587,7 +4587,7 @@ function BillingTab({ data, flash }) {
   }
   return (
     <>
-      <BillingConsole role={role} billing={billing} />
+      <BillingConsole key={role} role={role} billing={billing} />
       {panel}
     </>
   );
@@ -4598,7 +4598,7 @@ function BillingTab({ data, flash }) {
 // Payment details beside Auto-reload (D794); then the orders, each with its
 // invoice. The role's panel follows as before.
 function BillingConsole({ role, billing }) {
-  const reads = useBillingReads();
+  const reads = useBillingReads({ role });
   return (
     <div className="flex flex-col gap-3" data-testid="billing-console">
       <div className="grid gap-3 md:grid-cols-2">
