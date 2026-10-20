@@ -2712,6 +2712,12 @@ function AppInner() {
       <Route path="/admin/fund-admin" element={guard(['admin'], <FundAdminConsole />)} />
       {/* A subsidiary admin reads their OWN licence; /admin/licences is HQ's ledger of every one. */}
       <Route path="/admin/my-licence" element={guard(['admin'], <MyLicencePage />)} />
+      {/* D800 (#2233): the Licences page's tabs, each a sub-path of the page, behind the same guard. */}
+      <Route path="/admin/my-licence/terms" element={guard(['admin'], <MyLicencePage tab="terms" />)} />
+      <Route path="/admin/my-licence/contract" element={guard(['admin'], <MyLicencePage tab="contract" />)} />
+      <Route path="/admin/my-licence/statements" element={guard(['admin'], <MyLicencePage tab="statements" />)} />
+      <Route path="/admin/my-licence/requests" element={guard(['admin'], <MyLicencePage tab="requests" />)} />
+      <Route path="/admin/my-licence/history" element={guard(['admin'], <MyLicencePage tab="history" />)} />
       {/* D286 — S20's five landings. `guard(['admin'])` and never `hqOnly`:
           this is the plain admin's own shell. Each carries its consoles as
           literal links, which is how the reachability walk reaches them. */}

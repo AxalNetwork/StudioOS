@@ -99,9 +99,16 @@ test('what cannot be computed is said, not left as a hole', () => {
   // Same rule the fund analytics follow: an unmeasured number is unknown.
   assert.match(route, /derived_metrics_available: false/);
   assert.match(route, /derived_metrics_reason/);
-  assert.match(page, /Seats used is not shown/);
-  // And the page must not invent one.
-  assert.doesNotMatch(page, /seats_used/, 'the page must not read a field the server refuses to send');
+  // D800 (#2233): the Seats card says it in the canvas's words (board L1's
+  // variant). A branch now counts its own seats per type (D127, D129), so the
+  // page reads `seats_used_by_type` through `lib/licencePage.js`'s `seatRows` —
+  // HQ sends no such map, and the card draws no bar there.
+  assert.match(page, /Seats used is not counted on HQ yet/);
+  // And the page must not invent one: never the summed total, never a sum of its own.
+  const lib = codeOnly(read('frontend/src/lib/licencePage.js'));
+  assert.doesNotMatch(codeOnly(page), /seats_used(?!_by_type)/, 'the page reads a seat total the Seats card does not draw');
+  assert.doesNotMatch(lib, /seats_used(?!_by_type)/, 'the Seats card reads a seat total rather than the per-type count');
+  assert.doesNotMatch(lib, /\.reduce\(/, 'the Seats card sums seats itself');
 });
 
 test('the holder sees the same shape HQ does', () => {
