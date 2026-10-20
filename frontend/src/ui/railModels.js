@@ -91,9 +91,6 @@ export const ALL_MODELS = [
   ['Safety', [R('Llama Guard 3 8B', GUARD_MODEL)]],
 ];
 
-// HQ's model badges use the same name-to-id mapping as All models (D776/D769).
-export const ALL_MODEL_IDS = Object.fromEntries(ALL_MODELS.flatMap(([, rows]) => rows));
-
 /**
  * The New badge: the canvas's `new_models`, less BGE Base EN v1.5 and FLUX.1
  * Schnell, which already run in production (D720 §1).
