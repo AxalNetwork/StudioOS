@@ -853,7 +853,8 @@ sessions.post('/sessions/:id/transcribe', async (c) => {
   const quote = Math.max(estimateCostUsd(model, 0, 0, totalMinutes), estimateCostUsd(WHISPER_TURBO, 0, 0, totalMinutes));
   if (s.user.id > 0) {
     let held: Awaited<ReturnType<typeof aiBudget.reserveAiBudget>>;
-    try { held = await aiBudget.reserveAiBudget(c.env, s.user.id, aiBudget.usdToMicro(quote)); }
+    // D762: held at the billed price, as each chunk is then charged through the router.
+    try { held = await aiBudget.reserveAiBudget(c.env, s.user.id, aiBudget.billedUsdToMicro(quote, await aiBudget.memberChargeMultiplier(c.env, s.user.id))); }
     catch { return json({ ok: false, refusal: 'misconfigured', message: 'Unreadable: your AI allowance and top-up balance could not be checked.' }, 503); }
     if (!held.ok) {
       await recordReceipt(c.env, s.session.id, {
