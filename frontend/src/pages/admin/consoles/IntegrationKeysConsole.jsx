@@ -16,6 +16,8 @@ import { keyActionsFor, keyStateBadge, connectedUsersLine, removeConfirmText, SA
 import {
   envNamesFor, membersSeeLine, wranglerPutLine, safeGuideHref, ENV_ONLY_NOTE, CALLBACK_COPY,
 } from '../../../lib/integrationKeys';
+// #2199 — a refused Save or Rotate is said inside the dialog.
+import { keySaveRefusal, TOKEN_MISSING_LEAD } from '../../../lib/integrationKeys';
 import { ConsoleUnreadable } from './shared';
 
 /**
@@ -292,19 +294,26 @@ export function IntegrationKeysPanel() {
           provider={editing.provider}
           mode={editing.mode}
           callbackUrl={editing.callbackUrl}
+          envNames={envNamesFor(rows.find((r) => r.provider_key === editing.provider) || { provider_key: editing.provider }, PROVIDER_ENV_NAMES)}
           onClose={() => setEditing(null)}
           onSaved={() => { setEditing(null); refresh(); showToast({ kind: 'ok', msg: editing.mode === 'rotate' ? 'Secret rotated.' : 'Keys saved.' }); }}
-          onError={(msg) => showToast({ kind: 'err', msg })}
         />
       )}
     </div>
   );
 }
 
-function IntegrationKeysEditModal({ provider, mode = 'configure', callbackUrl = null, onClose, onSaved, onError }) {
+/**
+ * #2199 — a refused Save or Rotate is said here, under the fields, and the
+ * dialog stays open with both fields as typed. The page's toast sat behind
+ * this overlay, so a refusal looked like nothing had happened. `envNames` are
+ * the two Worker secrets a save writes; a rotate writes only the second.
+ */
+export function IntegrationKeysEditModal({ provider, mode = 'configure', callbackUrl = null, envNames = [], onClose, onSaved }) {
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
   const [saving, setSaving] = useState(false);
+  const [refusal, setRefusal] = useState(null);
   useEscapeClose(onClose);
   const label = PROVIDER_LABELS[provider] || provider;
   // Task #3 — rotate-mode only collects a new client_secret and calls
@@ -316,13 +325,14 @@ function IntegrationKeysEditModal({ provider, mode = 'configure', callbackUrl = 
     e?.preventDefault?.();
     if (isRotate) {
       if (!clientSecret.trim()) {
-        onError('A new Client Secret is required.');
+        setRefusal({ message: 'A new Client Secret is required.', commands: [] });
         return;
       }
     } else if (!clientId.trim() || !clientSecret.trim()) {
-      onError('Both Client ID and Client Secret are required.');
+      setRefusal({ message: 'Both Client ID and Client Secret are required.', commands: [] });
       return;
     }
+    setRefusal(null);
     setSaving(true);
     try {
       if (isRotate) {
@@ -332,7 +342,10 @@ function IntegrationKeysEditModal({ provider, mode = 'configure', callbackUrl = 
       }
       onSaved();
     } catch (e) {
-      onError(e.message || (isRotate ? 'Failed to rotate' : 'Failed to save'));
+      setRefusal(keySaveRefusal(e, {
+        names: isRotate ? envNames.slice(1, 2) : envNames,
+        fallback: isRotate ? 'Failed to rotate' : 'Failed to save',
+      }));
     } finally { setSaving(false); }
   };
 
@@ -381,6 +394,19 @@ function IntegrationKeysEditModal({ provider, mode = 'configure', callbackUrl = 
         <div className="text-[11px] text-gray-500 dark:text-gray-400 mb-4" data-testid="integration-keys-save-effect">
           {isRotate ? SAVE_EFFECT.rotate : SAVE_EFFECT.configure}
         </div>
+        {refusal && (
+          <div role="alert" className="mb-4 px-3 py-2 rounded-lg text-xs bg-red-50 dark:bg-red-900/30 text-red-800 dark:text-red-200 border border-red-200 dark:border-red-800" data-testid="integration-keys-dialog-error">
+            <p className="m-0">{refusal.message}</p>
+            {refusal.commands.length > 0 && (
+              <div className="mt-2" data-testid="integration-keys-dialog-wrangler">
+                <p className="m-0">{TOKEN_MISSING_LEAD}</p>
+                {refusal.commands.map((c) => (
+                  <code key={c} className="mt-1 block break-all rounded bg-white dark:bg-gray-900 px-2 py-1 text-red-900 dark:text-red-100">{c}</code>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         <div className="flex justify-end gap-2">
           <button type="button" onClick={onClose}
                   className="px-4 py-2 text-sm font-medium rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600">
