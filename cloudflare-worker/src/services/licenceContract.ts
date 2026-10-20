@@ -21,6 +21,8 @@
  * that is then stored verbatim.
  */
 import type { LicenceRow } from '../routes/admin_licences';
+import { AXAL_ENTITIES, type AxalEntityKey } from './legalDocFormat';
+import { LICENCE_TERM_FIELDS, type LicenceTerms } from './licenceTerms';
 
 /** `{{field}}`, the spelling `extractMergeFields` already recognises. */
 const PLACEHOLDER = /\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g;
@@ -58,6 +60,82 @@ export function mergeValues(
   licence: LicenceRow,
   territories: string[],
   seats: Array<{ seat_type: string; seats_licensed: number }> = [],
+  terms: LicenceTerms | null = null,
+): Record<string, string | null> {
+  const flat = ledgerValues(licence, territories, seats);
+  // D803 (#2240): the same values under `licence.<name>`, and D797's terms
+  // under `terms.<key>`. The flat names stay for the templates that use them.
+  const named: Record<string, string | null> = {};
+  for (const [k, v] of Object.entries(flat)) named[`licence.${k}`] = v;
+  for (const [k, v] of Object.entries(termValues(terms, licence.currency))) named[`terms.${k}`] = v;
+  return { ...flat, ...named };
+}
+
+/** Basis points as a percentage with at most two decimals: 25 → "0.25%", 2000 → "20%". */
+export function pctExact(bps: number): string {
+  const s = (bps / 100).toFixed(2).replace(/\.?0+$/, '');
+  return `${s}%`;
+}
+
+/** An English ordinal: 1 → "1st", 22 → "22nd", 13 → "13th". */
+function ordinal(n: number): string {
+  const tens = n % 100;
+  if (tens >= 11 && tens <= 13) return `${n}th`;
+  return `${n}${({ 1: 'st', 2: 'nd', 3: 'rd' } as Record<number, string>)[n % 10] ?? 'th'}`;
+}
+
+/** D803: the words an enum or a yes/no term reads as in the contract's sentence. */
+const TERM_WORDS: Record<string, Record<string, string>> = {
+  renewal_mode: { auto: 'automatically', on_request: 'only on the Licensee\'s written request, accepted by the Licensors' },
+  fee_invoiced: { annually: 'annually', quarterly: 'quarterly' },
+  statement_period: { quarter: 'quarterly', month: 'monthly' },
+  data_role: {
+    licensee_controller: 'the Licensee as controller and the Licensors as processor',
+    hq_controller: 'the Licensors as controller and the Licensee as processor',
+  },
+  exclusive: { '1': 'exclusive', '0': 'non-exclusive' },
+  audit_right: { '1': 'have', '0': 'do not have' },
+};
+
+/**
+ * D803 (#2240): each D797 term (`services/licenceTerms.ts`) as the contract
+ * reads it. Money is the licence's currency, basis points a percentage, days
+ * "[n] days". A term HQ has not recorded is null, so it stays unfilled.
+ */
+export function termValues(terms: LicenceTerms | null, currency: string | null): Record<string, string | null> {
+  const out: Record<string, string | null> = {};
+  for (const f of LICENCE_TERM_FIELDS) {
+    const v = terms?.[f.key];
+    if (v === null || v === undefined || v === '') { out[f.key] = null; continue; }
+    const words = TERM_WORDS[f.key];
+    switch (f.type) {
+      case 'enum':
+        out[f.key] = f.key === 'licensor_entity'
+          ? (AXAL_ENTITIES[v as AxalEntityKey]?.name ?? null)
+          : (words?.[String(v)] ?? null);
+        break;
+      case 'bool': out[f.key] = words?.[String(Number(v))] ?? null; break;
+      case 'bps': out[f.key] = pctExact(Number(v)); break;
+      case 'cents': out[f.key] = moneyFromCents(Number(v), currency); break;
+      case 'text': out[f.key] = String(v); break;
+      case 'int': {
+        const n = Number(v);
+        out[f.key] = f.unit === 'days' ? `${n} ${n === 1 ? 'day' : 'days'}`
+          : f.unit === 'business_days' ? `${n} business ${n === 1 ? 'day' : 'days'}`
+          : f.unit === 'months' ? `${n} ${n === 1 ? 'month' : 'months'}`
+          : `the ${ordinal(n)} day`;
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+/** The ledger's values (migration 187), by the flat names the older templates use. */
+function ledgerValues(
+  licence: LicenceRow,
+  territories: string[],
+  seats: Array<{ seat_type: string; seats_licensed: number }>,
 ): Record<string, string | null> {
   const seatsTotal = seats.reduce((n, s) => n + (Number(s.seats_licensed) || 0), 0);
   const bySeat: Record<string, string> = {};

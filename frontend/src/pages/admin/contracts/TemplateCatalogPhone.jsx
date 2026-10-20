@@ -17,6 +17,8 @@ const ALL = { layer: 'all', state: 'all', kind: 'all' };
 export function phoneStateLabel(row) {
   const s = templateState(row);
   if (s.state === 'stub') return row?.counsel_draft ? 'Stub — counsel to draft' : 'Stub · no body in the store';
+  // D803: a body counsel has not reviewed says so first.
+  if (row?.counsel_review) return s.state === 'has_body' ? 'Draft — subject to counsel' : `Published v${s.publishedVersion} · Draft — subject to counsel`;
   if (s.state === 'has_body') return 'Has a body';
   return s.changesNotPublished ? `Published v${s.publishedVersion} · Changes not published` : `Published v${s.publishedVersion}`;
 }
