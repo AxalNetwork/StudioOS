@@ -400,6 +400,8 @@ export const SHELLS = {
           { slug: 'visibility', label: 'Visibility', archetype: A.ANALYTICS },
           { slug: 'proof', label: 'Proof', archetype: A.COLLECTION },
           { slug: 'audience-fit', label: 'Audience fit', archetype: A.MATCH_ENGINE },
+          // D815 (#2261): the firm's product testing programmes (D812).
+          { slug: 'testing', label: 'Product testing', archetype: A.COLLECTION },
         ] },
       { kind: 'bucket', label: 'Network', prefix: '/network', tagline: 'Work our relationships', zones: NETWORK_ZONES },
       { kind: 'bucket', label: 'Research', prefix: '/research', tagline: "Know the client's world", zones: RESEARCH_ZONES.partner },

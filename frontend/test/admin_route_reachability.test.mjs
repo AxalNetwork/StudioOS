@@ -266,6 +266,13 @@ const SECOND_MOUNTS = new Map([
 const COMPOSED = new Map([
   ['frontend/src/pages/AdminPage.jsx', ADMIN_CONSOLE_FILES.filter((f) => f !== 'frontend/src/pages/AdminPage.jsx')],
   ['frontend/src/pages/hq/AccountsPage.jsx', ['frontend/src/pages/admin/consoles/UsersConsole.jsx']],
+  // D800 (#2233): the Licences page draws its tab row and its tabs' links from
+  // the files beside it.
+  ['frontend/src/pages/subsidiary/MyLicencePage.jsx', [
+    'frontend/src/pages/subsidiary/LicenceFrame.jsx',
+    'frontend/src/pages/subsidiary/LicenceSummary.jsx',
+    'frontend/src/pages/subsidiary/LicenceTerms.jsx',
+  ]],
 ]);
 
 /** path → the files whose doors that path can reach. */

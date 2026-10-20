@@ -3,9 +3,13 @@
  * the preferences and unsubscribe links every email carries, and a signed-in
  * member's own choices.
  *
- * PUBLIC (no sign-in). Rate-limited per IP by the `newsletter_public` bucket
- * (middleware/rateLimit.ts, fails closed) and per address by `last_email_at`:
- * one signup-triggered email per address every ten minutes, silently.
+ * PUBLIC (no sign-in). Subscribe, confirm and preferences are rate-limited
+ * per IP by the `newsletter_public` bucket (middleware/rateLimit.ts, fails
+ * closed), and signup mail per address by `last_email_at`: one
+ * signup-triggered email per address every ten minutes, silently. Unsubscribe
+ * is NOT in the bucket: RFC 8058 one-click POSTs come from the mailbox
+ * provider's own servers, many people's from a few addresses, and a capped
+ * unsubscribe is an unsubscribe lost. Its HMAC token cannot be guessed.
  *
  *   POST /api/newsletter/subscribe { email, topics[], turnstileToken, hp }
  *     Turnstile, then a `pending` row with a fresh single-use confirm token and
@@ -14,9 +18,16 @@
  *     same for a new, pending, confirmed, paced or bounced address, so nobody
  *     can learn who is subscribed.
  *   GET  /api/newsletter/confirm?token=
+ *     CHANGES NOTHING (S1's review): mail scanners such as Safe Links open
+ *     every link in a message, so a GET that confirmed would confirm signups
+ *     nobody made, and double opt-in would mean nothing. A browser gets a page
+ *     with one button that POSTs; an API client gets `{ ok, status: 'pending' }`.
+ *   POST /api/newsletter/confirm?token=
  *     Confirms the row, records the consent, lifts an earlier unsubscribe and
- *     sends Welcome. A used or unknown token is 410 `token_invalid`; an expired
- *     one is 410 `token_expired`. A browser gets a short page, an API client JSON.
+ *     sends Welcome. CSRF-exempt like the unsubscribe: the single-use token is
+ *     the authorisation, and the Worker's own page posts it.
+ *   Either: a used or unknown token is 410 `token_invalid`; an expired one is
+ *   410 `token_expired`. A browser gets a short page, an API client JSON.
  *   GET  /api/newsletter/preferences?token=     the topics, by signed token
  *   PUT  /api/newsletter/preferences?token= { topics: { key: bool } }
  *     Saves them and sends Preferences saved (paced).
@@ -232,26 +243,50 @@ newsletter.post('/newsletter/subscribe', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+/**
+ * The row a confirm token names while it is still usable, or the refusal to
+ * send. Shared by the GET, which only reads, and the POST, which confirms.
+ */
+async function confirmRow(c: Context<{ Bindings: Env }>, token: string): Promise<SubscriberRow | Response> {
+  const html = wantsHtml(c);
+  const row = token.length >= 20 && token.length <= 200
+    ? await c.env.DB.prepare(
+      `SELECT id, uid, email, user_id, status, confirm_token_hash, confirm_expires_at, token_version, last_email_at
+         FROM newsletter_subscribers WHERE confirm_token_hash = ?`,
+    ).bind(await confirmTokenHash(token)).first<SubscriberRow>()
+    : null;
+  if (!row) {
+    const message = 'This confirmation link has already been used or is not valid.';
+    return html ? page(c, 410, 'Link not valid', `<p>${message}</p>`) : c.json({ error: 'token_invalid', code: 'token_invalid', message }, 410);
+  }
+  if (!row.confirm_expires_at || Date.parse(row.confirm_expires_at) < Date.now()) {
+    const message = 'This confirmation link has expired. Sign up again to get a new one.';
+    return html ? page(c, 410, 'Link expired', `<p>${message}</p>`) : c.json({ error: 'token_expired', code: 'token_expired', message }, 410);
+  }
+  return row;
+}
+
 newsletter.get('/newsletter/confirm', async (c) => {
   try {
     const key = tokenKey(c.env);
     if (!key) return unconfigured(c);
-    const html = wantsHtml(c);
     const token = c.req.query('token') || '';
-    const row = token.length >= 20 && token.length <= 200
-      ? await c.env.DB.prepare(
-        `SELECT id, uid, email, user_id, status, confirm_token_hash, confirm_expires_at, token_version, last_email_at
-           FROM newsletter_subscribers WHERE confirm_token_hash = ?`,
-      ).bind(await confirmTokenHash(token)).first<SubscriberRow>()
-      : null;
-    if (!row) {
-      const message = 'This confirmation link has already been used or is not valid.';
-      return html ? page(c, 410, 'Link not valid', `<p>${message}</p>`) : c.json({ error: 'token_invalid', code: 'token_invalid', message }, 410);
-    }
-    if (!row.confirm_expires_at || Date.parse(row.confirm_expires_at) < Date.now()) {
-      const message = 'This confirmation link has expired. Sign up again to get a new one.';
-      return html ? page(c, 410, 'Link expired', `<p>${message}</p>`) : c.json({ error: 'token_expired', code: 'token_expired', message }, 410);
-    }
+    const row = await confirmRow(c, token);
+    if (row instanceof Response) return row;
+    if (!wantsHtml(c)) return c.json({ ok: true, status: 'pending' });
+    const action = `/api/newsletter/confirm?token=${encodeURIComponent(token)}`;
+    return page(c, 200, 'Confirm your subscription', '<p>Press the button to confirm your subscription to Axal VC.</p>'
+      + `<form method="post" action="${escapeHtml(action)}"><button type="submit" style="font:inherit;padding:10px 18px;border-radius:8px;border:1px solid #111827;background:#111827;color:#fff;cursor:pointer">Confirm subscription</button></form>`);
+  } catch (e) { return mapError(c, e); }
+});
+
+newsletter.post('/newsletter/confirm', async (c) => {
+  try {
+    const key = tokenKey(c.env);
+    if (!key) return unconfigured(c);
+    const html = wantsHtml(c);
+    const row = await confirmRow(c, c.req.query('token') || '');
+    if (row instanceof Response) return row;
     // Single use: only the request that clears the hash goes on.
     const claimed = await c.env.DB.prepare(
       'UPDATE newsletter_subscribers SET confirm_token_hash = NULL WHERE id = ? AND confirm_token_hash = ?',
