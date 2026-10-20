@@ -140,6 +140,35 @@ of 2026-10-18 ("take back"):
 A dispute event that arrives before its purchase was credited is answered with
 an error, so Stripe retries it.
 
+## Auto-reload (D794)
+
+A member can turn on auto-reload on Billing: a pack, a threshold and a saved
+card. When a settled run takes their token balance below the threshold, the
+`ai_auto_reload` queue job charges the card off-session for that pack.
+
+- **A reload is an ordinary pack order.** Its PaymentIntent carries
+  `metadata[kind] = cart_order` and `metadata[auto_reload] = 1`. It is credited
+  by `payment_intent.succeeded` as above, listed under the member's orders with
+  its invoice, and refunded or disputed exactly as any pack.
+- **The limits count it**: five orders a day, the $1,000 ceiling, the dispute
+  and shortfall holds. A reload refused by one is recorded in the member's
+  `member_ai_auto_reload.last_outcome`, and nothing is charged.
+- **The member's D788 spend limit** stops a reload when this month's charge
+  plus the pack's tokens would pass it (`last_outcome = spend_limit`). Auto-reload
+  stays on and the member is told once; it resumes next month or when they
+  raise the limit. With no limit, reloads continue.
+- **A card that fails turns auto-reload off** (`disabled_reason`:
+  `card_declined`, `authentication_required`, `card_unusable`, or
+  `pack_unavailable` for an archived pack) and tells the member once, in the
+  app and by email. The member turns it back on after updating the card.
+- **One crossing, one charge.** Stripe's idempotency key is
+  `reload:<user>:<crossing>:<settings version>`. A retry of the same attempt
+  returns the same payment.
+- **Archiving a pack** turns off every member's auto-reload set to it, at their
+  next reload, with a notice to choose another pack.
+- **The job is safe to re-run.** Re-delivering `ai_auto_reload` for a member
+  charges nothing while their last reload is pending.
+
 ## Adjust a member's balance
 
 HQ › AI allowances › one member's AI account › **Adjust balance**

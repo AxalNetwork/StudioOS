@@ -30,7 +30,8 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { SignJWT } from 'jose';
 
-import research from '../src/routes/research.ts';
+import research, { FOUNDER_DRAFT_PAGES } from '../src/routes/research.ts';
+import { FOUNDER_OPTIONS } from '../../frontend/src/lib/railOptions/founder.js';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 
@@ -265,6 +266,7 @@ async function token(userId: number, role: string): Promise<string> {
  */
 async function draft(
   db: any, who: { user: number }, surface: string, scopeKey?: string, page?: unknown, verdict?: (input: any) => string,
+  headers: Record<string, string> = {},
 ): Promise<{ status: number; prompt: string | null; body: any }> {
   let prompt: string | null = null;
   // D763: the guard answers free, so `prompt` is the drafting model's. `verdict` is the guard's answer (safe by default).
@@ -281,6 +283,7 @@ async function draft(
       headers: {
         Authorization: `Bearer ${await token(who.user, 'founder')}`,
         'content-type': 'application/json',
+        ...headers,
       },
       body: JSON.stringify({
         surface,
@@ -649,4 +652,63 @@ test('D770 (#2095): a draft the guard withholds, or cannot check, is never store
     assert.ok(!JSON.stringify(body).includes('a drafted paragraph'), 'the withheld text is never sent');
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM research_zone_drafts').get().n, 0, 'and never stored');
   }
+});
+
+// ---------------------------------------------------------------------------
+// D778 part 3 (#2103): the founder's draft bands run through the run path on
+// their inventoried page and option, and write nothing but the draft.
+// ---------------------------------------------------------------------------
+
+test('D778: each founder-only band\'s fallback page is the one D771\'s inventory gives it', () => {
+  const byKey = new Map(FOUNDER_OPTIONS.map((o: any) => [o.key, o]));
+  for (const [surface, page] of Object.entries(FOUNDER_DRAFT_PAGES)) {
+    const option = byKey.get(`draft:${surface}`) as any;
+    assert.ok(option, `draft:${surface} is not a founder option`);
+    assert.equal(page, option.page, `draft:${surface}`);
+  }
+  // Every other founder draft band is one another profile shares, so it keeps the page from its path.
+  const others = FOUNDER_OPTIONS.filter((o: any) => /^draft:[a-z-]+\/[a-z-]+$/.test(o.key) && !(o.key.slice(6) in FOUNDER_DRAFT_PAGES));
+  assert.deepEqual(others.map((o: any) => o.key).sort(),
+    ['draft:network/introductions', 'draft:network/relationships', 'draft:research/ask', 'draft:research/library']);
+});
+
+const railRuns = (db: any) => db.prepare(
+  `SELECT user_id, rail_page, rail_option FROM ai_usage_logs WHERE task = 'workspace_explain' ORDER BY id`,
+).all() as Array<{ user_id: number; rail_page: string | null; rail_option: string | null }>;
+
+/** Every table's row count, but the draft store and the run's own bookkeeping. */
+const BOOKKEEPING = /^(research_zone_drafts|ai_.*|sqlite_.*)$/;
+function businessCounts(db: any): Record<string, number> {
+  const tables = (db.prepare(`SELECT name FROM sqlite_master WHERE type = 'table'`).all() as Array<{ name: string }>)
+    .map((t) => t.name).filter((n) => !BOOKKEEPING.test(n)).sort();
+  return Object.fromEntries(tables.map((n) => [n, Number((db.prepare(`SELECT COUNT(*) AS n FROM "${n}"`).get() as any).n)]));
+}
+
+test('D778: a press with no rail context runs on the band\'s inventoried page and option, and writes only the draft', async () => {
+  // Mutation checked: fall back to the path's workspace → the page reads 'build', not the inventory's.
+  for (const surface of SURFACES) {
+    const db = freshDb();
+    const before = businessCounts(db);
+    const { status } = await draft(db, MINE, surface, String(MY_PROJECT), '/build');
+    assert.equal(status, 201, `${surface} did not draft`);
+    const runs = railRuns(db);
+    assert.equal(runs.length, 1, surface);
+    assert.deepEqual({ ...runs[0] }, { user_id: MINE.user, rail_page: FOUNDER_DRAFT_PAGES[surface], rail_option: `draft:${surface}` }, surface);
+    assert.deepEqual(businessCounts(db), before, `${surface} wrote a record before Accept`);
+    assert.equal((db.prepare('SELECT COUNT(*) AS n FROM research_zone_drafts WHERE accepted_at IS NULL').get() as any).n, 1, 'one draft, waiting');
+  }
+});
+
+test('D778: a mounted rail\'s page and the press\'s option win over the fallback', async () => {
+  const db = freshDb();
+  const { status } = await draft(db, MINE, 'build/retro', String(MY_PROJECT), '/build', undefined,
+    { 'X-Rail-Page': 'build', 'X-Rail-Option': encodeURIComponent('draft:build/retro') });
+  assert.equal(status, 201);
+  assert.deepEqual({ ...railRuns(db)[0] }, { user_id: MINE.user, rail_page: 'build', rail_option: 'draft:build/retro' },
+    'the mounted page holds the member\'s Manual switch, so it is the one checked');
+});
+
+test('D778: a shared band keeps the page from its path', async () => {
+  assert.equal(FOUNDER_DRAFT_PAGES['research/ask'], undefined);
+  assert.equal(FOUNDER_DRAFT_PAGES['network/relationships'], undefined);
 });
