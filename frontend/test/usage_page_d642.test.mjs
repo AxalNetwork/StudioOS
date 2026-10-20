@@ -466,7 +466,8 @@ test('the doors: the Account section, the user menu, the rail card, the HQ route
   assert.match(settings, /\{ id: 'billing', label: 'Billing and orders' \},\n[^\n]*\n  \{ id: 'usage', label: 'Usage' \},/, 'Usage, after Billing and orders');
   // D700 — the deep-link map moved to account/accountPhone.js, unchanged.
   assert.match(read('frontend/src/pages/account/accountPhone.js'), /\n  usage: 'usage',/, '/account/usage opens the section');
-  assert.match(settings, /\{safeActive === 'usage' && <UsageSection role=\{role\} \/>\}/);
+  // D807 — /account/usage/limits is Usage's Limits page; every other Usage address is this section.
+  assert.match(settings, /\{safeActive === 'usage' && \(usagePage === 'limits' \? <LimitsPage \/> : <UsageSection role=\{role\} \/>\)\}/);
   const app = read('frontend/src/App.jsx');
   const menu = app.slice(app.indexOf('function UserDropdown('), app.indexOf('Log Out', app.indexOf('function UserDropdown(')));
   assert.match(menu, /<Link to="\/account" [\s\S]*?Account\s*<\/Link>\s*\{\/\*[^*]*\*\/\}\s*<Link to="\/account\/usage"[\s\S]*?Usage\s*<\/Link>/, 'Usage, right under Account');

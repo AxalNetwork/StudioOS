@@ -184,29 +184,62 @@ export function Chips({ items, label }) {
  * A1m index (`AccountPhoneIndex`, below), whose rows open each section as its
  * own page, so D607's "Section ▾" select, which stood in for this column on a
  * phone, is gone.
+ *
+ * D807 (#2246) — a section may have pages of its own (`subpages`, by section
+ * id: Usage's Overview and Limits). They are drawn indented under it, always,
+ * as the "Usage & Billing console" canvas's `acNav` draws them. On one of them
+ * both the section and the page are lit: the section in bold, the page with
+ * the background and `aria-current`.
  */
-export function AccountSectionNav({ sections, active, onSelect }) {
+export function AccountSectionNav({ sections, active, onSelect, subpages = {}, activeSubpage = null }) {
   const main = sections.filter((s) => s.group !== 'more');
   const more = sections.filter((s) => s.group === 'more');
 
-  const item = (s) => {
-    const on = s.id === active;
+  const sub = (s, p) => {
+    const on = s.id === active && p.id === activeSubpage;
     return (
       <button
-        key={s.id}
+        key={`${s.id}/${p.id}`}
         type="button"
-        onClick={() => onSelect(s.id)}
+        onClick={() => onSelect(s.id, p.id)}
         aria-current={on ? 'page' : undefined}
-        data-testid={`account-nav-${s.id}`}
-        className={`rounded-axal-sm px-3 py-2 text-left text-[13px] transition-colors ${
+        data-testid={`account-nav-${s.id}-${p.id}`}
+        className={`rounded-axal-sm py-1.5 pl-6 pr-3 text-left text-[12.5px] transition-colors ${
           on
             ? 'bg-axal-lavender font-semibold text-axal-violet-deep dark:bg-violet-900/30 dark:text-violet-300'
             : 'font-medium text-axal-muted hover:bg-axal-ground hover:text-axal-ink dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100'
         }`}
       >
-        {s.label}
+        {p.label}
       </button>
     );
+  };
+
+  const item = (s) => {
+    const on = s.id === active;
+    const pages = subpages[s.id] || [];
+    // With pages of its own the section is lit in bold, and the page carries the background.
+    const parent = on && pages.length > 0;
+    return [
+      <button
+        key={s.id}
+        type="button"
+        onClick={() => onSelect(s.id)}
+        aria-current={on && !parent ? 'page' : undefined}
+        data-active={on ? 'true' : undefined}
+        data-testid={`account-nav-${s.id}`}
+        className={`rounded-axal-sm px-3 py-2 text-left text-[13px] transition-colors ${
+          parent
+            ? 'font-bold text-axal-violet-deep dark:text-violet-300'
+            : on
+            ? 'bg-axal-lavender font-semibold text-axal-violet-deep dark:bg-violet-900/30 dark:text-violet-300'
+            : 'font-medium text-axal-muted hover:bg-axal-ground hover:text-axal-ink dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100'
+        }`}
+      >
+        {s.label}
+      </button>,
+      ...pages.map((p) => sub(s, p)),
+    ];
   };
 
   return (
