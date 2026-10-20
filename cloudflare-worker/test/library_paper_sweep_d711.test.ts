@@ -385,7 +385,7 @@ test('#1865 L6: every notice type prints its addressee, figures, warning above p
       assert.ok(h.includes('<section class="payment"><div class="eyebrow">Payment instructions</div>'), `${def.type} payment head`);
       if (refused) assert.ok(h.includes('<p class="payment-refusal">'), `${def.type} refusal`);
       if (def.type === 'distribution_notice') assert.ok(h.includes('<th>Tax character</th>'));
-      if (def.type === 'management_fee_invoice' || def.type === 'platform_licence_fee_invoice') {
+      if (def.type === 'management_fee_invoice' || def.type === 'platform_licence_fee_invoice' || def.type === 'territory_licence_fee_invoice') {
         assert.ok(!h.includes('<section class="execution'), `${def.type} has no block`);
       } else {
         assert.ok(h.includes('<section class="execution inline">') && !h.includes('[Signature page follows]'), `${def.type} inline block`);
@@ -395,7 +395,7 @@ test('#1865 L6: every notice type prints its addressee, figures, warning above p
       for (const s of printed(m)) assert.equal(winAnsiSafe(s), s, `${def.type}: ${s.slice(0, 40)}`);
     }
   }
-  assert.equal(NOTICE_TYPES.length, 7);
+  assert.equal(NOTICE_TYPES.length, 8, 'D716\'s seven and D802\'s territory licence fee invoice');
 });
 
 // ---------------------------------------------------------------- the booklet
