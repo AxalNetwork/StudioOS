@@ -136,7 +136,7 @@ test('the read\'s failures: no connection Not recorded with Connectors, a refusa
   const v = (outcome) => ssr(h(MercurySpendView, { state: { read: { status: 'failed', outcome }, months: 6, form: SAVE_START }, on: noop }));
   const none = v({ kind: 'not_recorded', reason: 'Connect your own Mercury account first, with a Read Only token.' });
   assert.match(none, /Not recorded/);
-  assert.match(none, /href="\/account\/connectors"/);
+  assert.match(none, /href="\/account\/connectors\/mercury"/, 'D753 F8 (#1992): Mercury\'s own page');
   assert.match(v({ kind: 'refused', reason: 'Only the startup\'s founder can read its spending.' }), /data-testid="spend-refused">Only the startup&#x27;s founder/);
   const bad = text(v({ kind: 'unreadable' }));
   assert.ok(bad.includes('This is not a claim that you spent nothing.'));
