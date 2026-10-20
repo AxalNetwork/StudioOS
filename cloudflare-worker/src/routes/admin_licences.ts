@@ -1890,7 +1890,7 @@ function mergeFieldsForEnvelope(
 }
 
 /** D451 — status on read follows the envelope row when one exists (D110 deferred leg). */
-async function enrichContractFromEnvelope(env: Env, row: Record<string, unknown>) {
+export async function enrichContractFromEnvelope(env: Env, row: Record<string, unknown>) {
   const countersignature = { recorded: false as const, reason: COUNTERSIGN_NOT_RECORDED };
   const envelopeUid = row.envelope_uid ? String(row.envelope_uid) : null;
   if (!envelopeUid) {

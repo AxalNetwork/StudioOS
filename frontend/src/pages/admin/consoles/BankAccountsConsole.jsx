@@ -47,6 +47,7 @@ export const PAYMENT_PURPOSE_OPTIONS = [
   { value: 'gp_commitment', label: 'GP commitment', payee: 'fund' },
   { value: 'management_fee', label: 'Management fee', payee: 'gp' },
   { value: 'platform_licence_fee', label: 'Platform licence fee', payee: 'holdings' },
+  { value: 'territory_licence_fee', label: 'Territory licence fee', payee: 'holdings' },
 ];
 
 const ENTITY_ORDER = ['holdings', 'management', 'gp', 'fund'];
