@@ -10,7 +10,7 @@ import { reportError } from '../../lib/log';
 import { FREEZING_STATUSES, noticeKindLabel } from '../../lib/notices';
 import { branchOfUser } from '../../lib/shellRole';
 import {
-  kindLabel, longDate, pageState, seatRows, stateBanner, tabFor, tabPath,
+  changeHref, kindLabel, longDate, pageState, scheduleSections, seatRows, stateBanner, tabFor,
 } from '../../lib/licencePage';
 import { useAuth } from '../../hooks/useAuthSync';
 import { refreshLicenceNeeds } from '../../hooks/useLicenceNeeds';
@@ -18,10 +18,13 @@ import { Unrecorded } from '../../ui';
 import DomainWizard from '../../components/licence/DomainWizard';
 import AdminBoardFrame from '../admin/AdminBoardFrame';
 import {
-  CopyStamp, LicenceHeader, LicenceStateBanner, LicenceTabs, PartTwoPlaceholder,
+  CopyStamp, LicenceHeader, LicenceStateBanner, LicenceTabs,
 } from './LicenceFrame';
 import LicenceSummary from './LicenceSummary';
 import LicenceTerms from './LicenceTerms';
+import ContractTab from './licence/ContractTab';
+import RequestsTab from './licence/RequestsTab';
+import StatementsTab from './licence/StatementsTab';
 
 /**
  * Licences — /admin/my-licence and its five tabs (D800, #2233: Summary, Terms,
@@ -566,7 +569,7 @@ function MyLicencePageBody() {
     <section className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900" data-testid="licence-seats">
       <div className="flex items-center justify-between gap-2.5 px-4 py-3 text-sm font-extrabold tracking-tight text-gray-900 dark:text-gray-100">
         <span>Seats</span>
-        <Link to={`${tabPath('requests')}?kind=seat_increase`} className="text-[11.5px] font-bold text-slate-700 dark:text-slate-300">Request seats</Link>
+        <Link to={changeHref('seats')} className="text-[11.5px] font-bold text-slate-700 dark:text-slate-300">Request seats</Link>
       </div>
       <div className="space-y-2.5 border-t border-gray-100 px-4 pb-3.5 pt-2.5 dark:border-gray-800">
         {/* D127 / D129 — A BRANCH COUNTS ITS OWN SEATS; HQ COUNTS NONE. The
@@ -717,10 +720,13 @@ function MyLicencePageBody() {
       {/* A frozen licence keeps its request lane open (D142 locks the queues, not
           the way to HQ); a terminated one has nothing left to change. */}
       {tab === 'terms' && (
-        <LicenceTerms sections={ledgerSections(l)} reason={data.terms_reason} canRequest={l.status !== 'terminated'} />
+        <LicenceTerms sections={scheduleSections(ledgerSections(l), { terms, sections: data.sections, currency: l.currency })} reason={data.terms_reason} canRequest={l.status !== 'terminated'} />
       )}
 
-      <PartTwoPlaceholder tab={tab} />
+      {/* D804 (#2241): its three tabs, each its own reads; none draws a rail of its own. */}
+      {tab === 'contract' && <ContractTab />}
+      {tab === 'statements' && <StatementsTab />}
+      {tab === 'requests' && <RequestsTab />}
 
       {tab === 'history' && (
         <div className="space-y-4" data-testid="licence-history">

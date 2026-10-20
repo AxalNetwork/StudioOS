@@ -11,6 +11,7 @@
 // guessed, and seats used on HQ, which nothing counts, is not drawn as zero.
 import { NOT_RECORDED } from './absence';
 import { bpsPercent } from './bps';
+import { LICENCE_TERM_FIELDS, TERM_GROUP_TITLES, displayValue } from './licenceTermsForm';
 
 export { NOT_RECORDED };
 
@@ -28,9 +29,6 @@ export const LICENCE_TABS = [
   { key: 'requests', label: 'Requests', path: `${LICENCE_PATH}/requests` },
   { key: 'history', label: 'History', path: `${LICENCE_PATH}/history` },
 ];
-
-/** The tabs D804 (#2241) builds; until it lands each draws a placeholder. */
-export const PART_TWO_TABS = new Set(['contract', 'statements', 'requests']);
 
 export const tabPath = (key) => LICENCE_TABS.find((t) => t.key === key)?.path ?? LICENCE_PATH;
 
@@ -347,4 +345,31 @@ export function territoryLine(licence, terms = null) {
   const list = Array.isArray(licence?.territories) ? licence.territories : [];
   const lead = terms?.exclusive === 1 ? 'Exclusive in' : terms?.exclusive === 0 ? 'Non-exclusive in' : 'Territory';
   return { lead, codes: list };
+}
+
+/**
+ * Board L2's sections: the ledger's rows, then D797's schedule (#2242) under
+ * the section its group names (D801's `TERM_GROUP_TITLES`), each chipped with
+ * the contract section `/mine` gives it, else "Schedule". The field list is
+ * D797's own (`LICENCE_TERM_FIELDS`), so a key it adds appears here unaided.
+ *
+ * With no schedule (`terms` null: not recorded, not pushed, unreadable) no
+ * row is drawn as a value: the sections that hold D797's terms keep
+ * `schedule`, and the tab says why in the read's own sentence. With one,
+ * every D797 row is drawn, a null term reading "Not recorded", and no section
+ * repeats the reason. No D797 row offers "Request a change": D799 takes only
+ * the four ledger terms (`REQUESTABLE_TERMS`).
+ */
+export function scheduleSections(ledger, { terms = null, sections = {}, currency = null, fields = LICENCE_TERM_FIELDS } = {}) {
+  const out = ledger.map((s) => ({ ...s, rows: [...s.rows] }));
+  if (!terms || typeof terms !== 'object') return out;
+  for (const f of fields) {
+    const title = TERM_GROUP_TITLES[f.group] || f.group;
+    let s = out.find((x) => x.title === title);
+    if (!s) { s = { title, rows: [] }; out.push(s); }
+    const sec = sections && typeof sections[f.key] === 'string' && sections[f.key].trim() ? sections[f.key].trim() : null;
+    s.rows.push({ label: f.label, value: displayValue(f, terms[f.key] ?? null, currency), source: sec || 'Schedule', key: f.key });
+  }
+  for (const s of out) delete s.schedule;
+  return out;
 }

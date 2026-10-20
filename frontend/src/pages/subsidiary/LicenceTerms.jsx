@@ -7,12 +7,13 @@ import { NOT_RECORDED, changeHref } from '../../lib/licencePage';
  * schedule in eight sections, each row a label, a value, its source chip and
  * at most one action.
  *
- * WHAT IS HERE TODAY IS THE LEDGER. `MyLicencePage.jsx` builds the rows the
- * licence row itself carries (`/api/licence/mine`: territory, term, fee,
- * share, seats, brand, parties), each chipped "Ledger". The rest of the
- * schedule is D797's (#2242, `services/licenceTerms.ts`); until HQ records it
- * on this licence each section it owns says so in the read's own sentence,
- * and no row is drawn as a guessed value.
+ * TWO SOURCES. `MyLicencePage.jsx` builds the rows the licence row itself
+ * carries (`/api/licence/mine`: territory, term, fee, share, seats, brand,
+ * parties), each chipped "Ledger". The rest is D797's schedule (#2242,
+ * `scheduleSections` in `lib/licencePage.js`), each row chipped with its
+ * contract section. Until HQ records the schedule on this licence each
+ * section it owns says so in the read's own sentence, and no row is drawn
+ * as a guessed value.
  *
  * "REQUEST A CHANGE" IS OFFERED ONLY ON A TERM HQ OWNS AND D799 TAKES
  * (`REQUESTABLE_TERMS`: territory, seats, fee, term). It opens the Requests
@@ -27,7 +28,10 @@ const LADDER = [
 ];
 
 function SourceChip({ source }) {
-  const text = source === 'Ledger' ? 'Ledger' : `Contract ${source}`;
+  // "Ledger" and "Schedule" read as themselves; a contract section HQ recorded,
+  // with or without its "§", reads "Contract §7.3(b)".
+  const s = String(source || '');
+  const text = s === 'Ledger' || s === 'Schedule' ? s : `Contract ${s.startsWith('§') ? s : `§${s}`}`;
   return (
     <span className="whitespace-nowrap rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-[10px] font-bold text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300" data-testid="licence-term-source">
       {text}
@@ -71,7 +75,7 @@ export default function LicenceTerms({ sections, reason, canRequest = true }) {
             <span className="text-gray-500 group-open:hidden">+</span>
             <span className="hidden text-gray-500 group-open:inline">−</span>
           </summary>
-          {s.rows.map((r) => <TermRow key={r.label} row={r} canRequest={canRequest} />)}
+          {s.rows.map((r) => <TermRow key={r.key || r.label} row={r} canRequest={canRequest} />)}
           {s.schedule && (
             <p className="border-t border-gray-100 px-4 py-2.5 text-[11.5px] text-gray-500 dark:border-gray-800 dark:text-gray-400" data-testid="licence-terms-schedule-reason">
               {reason || 'HQ has not recorded this licence’s terms yet.'}

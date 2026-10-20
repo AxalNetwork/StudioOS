@@ -14,14 +14,14 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { codeOnly } from './_codeOnly.mjs';
 import {
-  LICENCE_TABS, PART_TWO_TABS, NOT_RECORDED, allowanceCard, changeHref, contractCard, feeCard, longDate,
-  needRow, needsCount, oweCard, pageState, renewalCard, seatRows, shareCard, stateBanner, tabFor, tabPath, termCard,
+  LICENCE_TABS, NOT_RECORDED, allowanceCard, changeHref, contractCard, feeCard, longDate,
+  needRow, needsCount, oweCard, pageState, renewalCard, scheduleSections, seatRows, shareCard, stateBanner, tabFor, tabPath, termCard,
 } from '../src/lib/licencePage.js';
 import {
   Administrators, DealGlance, NeedsYou, OweHq, SummaryCards, YourContract,
 } from '../src/pages/subsidiary/LicenceSummary.jsx';
 import LicenceTerms from '../src/pages/subsidiary/LicenceTerms.jsx';
-import { LicenceHeader, LicenceStateBanner, PartTwoPlaceholder } from '../src/pages/subsidiary/LicenceFrame.jsx';
+import { LicenceHeader, LicenceStateBanner } from '../src/pages/subsidiary/LicenceFrame.jsx';
 import { eventLabel, ledgerSections } from '../src/pages/subsidiary/MyLicencePage.jsx';
 import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
 import { pageKeyFor } from '../src/lib/railPages.js';
@@ -56,10 +56,16 @@ test('the six tabs are sub-paths of /admin/my-licence, routed behind the admin g
   const frame = codeOnly(read('frontend/src/pages/subsidiary/LicenceFrame.jsx'));
   const doors = [...frame.matchAll(/<Tab to="([^"]+)" tab="([a-z]+)">/g)].map((m) => [m[2], m[1]]);
   assert.deepEqual(doors, LICENCE_TABS.map((t) => [t.key, t.path]));
-  // Contract, Statements and Requests draw D804's placeholder until #2241.
-  assert.deepEqual([...PART_TWO_TABS].sort(), ['contract', 'requests', 'statements']);
-  assert.match(text(h(PartTwoPlaceholder, { tab: 'statements' })), /Built by D804/);
-  assert.equal(html(h(PartTwoPlaceholder, { tab: 'terms' })), '');
+  // Contract, Statements and Requests are D804's tabs (#2241), mounted in this frame on their own paths.
+  const page = codeOnly(read('frontend/src/pages/subsidiary/MyLicencePage.jsx'));
+  for (const [key, C] of [['contract', 'ContractTab'], ['statements', 'StatementsTab'], ['requests', 'RequestsTab']]) {
+    assert.ok(page.includes(`{tab === '${key}' && <${C} />}`), `${C} is not mounted on ${key}`);
+    assert.ok(page.includes(`import ${C} from './licence/${C}';`), C);
+  }
+  // D804's stand-ins are gone: one page, one frame, one tab row.
+  assert.ok(!app.includes('LicenceTabRoute'), 'D804\'s stand-in route is still mounted');
+  assert.ok(!page.includes('LicenceTabsNav'), 'D804\'s stand-in tab row is still drawn');
+  assert.ok(!frame.includes('Built by D804'), 'the placeholder is still drawn');
 });
 
 test('the Licences row stays lit on every tab, on both Admin shells, and carries the count', () => {
@@ -197,6 +203,45 @@ test('a null term reads "Not recorded": Deal terms at a glance, the Terms tab, t
   assert.equal(allowanceCard({ daily_microusd: null }).daily, NOT_RECORDED);
 });
 
+test('Terms carries D797\'s schedule (#2242) under its sections, chipped with the contract section, a null term "Not recorded"', () => {
+  const ledger = ledgerSections(LICENCE);
+  // No schedule: no D797 row, and the sections that hold it say why.
+  const none = scheduleSections(ledger, { terms: null });
+  assert.deepEqual(none.flatMap((s) => s.rows), ledger.flatMap((s) => s.rows));
+  assert.ok(none.filter((s) => s.schedule).length >= 5);
+  const noneHtml = text(h(LicenceTerms, { sections: none, reason: 'HQ has not pushed this licence\'s terms yet.' }));
+  assert.ok(noneHtml.includes('HQ has not pushed this licence\'s terms yet.'));
+
+  const terms = {
+    renewal_mode: 'on_request', non_renewal_notice_days: 90, royalty_platform_licence_bps: 1250,
+    first_look_business_days: 10, hq_approval_above_cents: 200_000_000, exclusive: 1, carry_share_bps: null,
+    usage_report_day: 5,
+  };
+  const out = scheduleSections(ledger, { terms, sections: { renewal_mode: '§4.2', first_look_business_days: '9.1' }, currency: 'EUR' });
+  assert.deepEqual(out.map((s) => s.title), ledger.map((s) => s.title), 'D797\'s groups land in the eight sections');
+  assert.ok(out.every((s) => !s.schedule), 'a recorded schedule repeats no reason');
+  const row = (label) => out.flatMap((s) => s.rows).find((r) => r.label === label);
+  assert.equal(row('Renewal').value, 'On request');
+  assert.equal(row('Renewal').source, '§4.2');
+  assert.equal(row('Non-renewal notice').value, '90 days');
+  assert.equal(row('Non-renewal notice').source, 'Schedule');
+  assert.equal(row('Royalty on platform licences sold').value, '12.5%');
+  assert.equal(row('Exclusive territory').value, 'Yes');
+  assert.equal(row('Carry share on sourced deals').value, NOT_RECORDED, 'a null term is not zero');
+  assert.equal(row('Minimum guarantee').value, NOT_RECORDED, 'an absent term is not zero');
+  assert.equal(row('Usage report due, day of month').value, 'Day 5');
+  assert.ok(out.find((s) => s.title === 'Deal terms').rows.some((r) => r.label === 'First look'));
+  // No D797 row offers a change: D799 takes the four ledger terms only.
+  assert.ok(out.flatMap((s) => s.rows).filter((r) => r.source !== 'Ledger').every((r) => !r.term));
+  const drawn = html(h(LicenceTerms, { sections: out, canRequest: true }));
+  assert.match(drawn, /Contract §4\.2/);
+  assert.match(drawn, /Contract §9\.1/);
+  assert.equal((drawn.match(/licence-terms-schedule-reason/g) || []).length, 0);
+  // The page draws the tab from `/mine`'s own terms and sections.
+  const page = codeOnly(read('frontend/src/pages/subsidiary/MyLicencePage.jsx'));
+  assert.ok(page.includes('scheduleSections(ledgerSections(l), { terms, sections: data.sections, currency: l.currency })'));
+});
+
 test('"Request a change" opens the Requests tab on the term, only on the four D799 takes, and never once terminated', () => {
   assert.equal(changeHref('fee'), '/admin/my-licence/requests?change=fee');
   const sections = ledgerSections(LICENCE);
@@ -271,7 +316,10 @@ test('Administrators names the caller and says the others are HQ\'s to read; His
   const out = text(h(Administrators, { user: { name: 'A. Signer' }, adminRole: 'delegate' }));
   assert.match(out, /A\. Signer Delegate · you/);
   assert.match(out, /other administrators are on HQ.s record/);
-  assert.match(html(h(Administrators, { user: {}, adminRole: 'principal' })), /href="\/admin\/my-licence\/requests\?kind=delegate"/);
+  // D804's Requests tab draws the delegate form; it reads no `?kind=`, so the link is the tab itself.
+  assert.match(html(h(Administrators, { user: {}, adminRole: 'principal' })), /href="\/admin\/my-licence\/requests"/);
+  // "Request seats" opens D804's sheet on its Seats chip (`chipForTerm('seats')`).
+  assert.ok(codeOnly(read('frontend/src/pages/subsidiary/MyLicencePage.jsx')).includes("<Link to={changeHref('seats')}"));
   assert.equal(eventLabel('terms_changed'), 'Terms changed');
   assert.equal(eventLabel(''), 'Not recorded');
   assert.equal(longDate('2026-07-18 10:00:00'), '18 Jul 2026');

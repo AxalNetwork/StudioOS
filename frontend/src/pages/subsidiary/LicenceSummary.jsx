@@ -218,7 +218,7 @@ export function Administrators({ user, adminRole }) {
   const role = adminRole ? `${String(adminRole).charAt(0).toUpperCase()}${String(adminRole).slice(1)}` : NOT_RECORDED;
   return (
     <section className={`${card} overflow-hidden`} data-testid="licence-admins">
-      <CardHead title="Administrators" right={<Link to={`${tabPath('requests')}?kind=delegate`} className="text-[11.5px] font-bold text-slate-700 dark:text-slate-300">Request a delegate</Link>} />
+      <CardHead title="Administrators" right={<Link to={tabPath('requests')} className="text-[11.5px] font-bold text-slate-700 dark:text-slate-300">Request a delegate</Link>} />
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 px-4 py-2.5 text-xs dark:border-gray-800">
         <span className="flex items-center gap-2"><span className="font-semibold text-gray-900 dark:text-gray-100">{name}</span><span className="text-gray-500">{role} · you</span></span>
       </div>
