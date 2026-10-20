@@ -362,6 +362,8 @@ const ICDecisionsPage = lazy(() => import('./pages/ICDecisionsPage'));
 const ICDecisionPage = lazy(() => import('./pages/ICDecisionPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const HelpCenterPage = lazy(() => import('./pages/HelpCenterPage'));
+// D814 (#2260) — "Apply for Product Testing": the programmes, the application sheet and My applications.
+const ProductTestingPage = lazy(() => import('./pages/productTesting/ProductTestingPage'));
 // D144 — `/inbox`, the address `services/notify.ts` has been putting in mail
 // since before any route answered it.
 const InboxPage = lazy(() => import('./pages/InboxPage'));
@@ -812,6 +814,11 @@ function UserDropdown({ user, onLogout }) {
           <Link to="/my/events" onClick={() => setOpen(false)}
             className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
             Events
+          </Link>
+          {/* D814 (#2260) — the programmes and My applications, beside the Studio card's link. */}
+          <Link to="/product-testing" onClick={() => setOpen(false)}
+            className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
+            Product testing
           </Link>
           {/* D562 — "Learning" replaces "Articles" (the owner, epic #1157).
               Articles live inside Learning now: its Articles tab lists them,
@@ -3020,6 +3027,9 @@ function AppInner() {
       {/* Every role, `exploring` included: an application decision is a
           notification, and the person waiting on one holds no other role. */}
       <Route path="/inbox" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <InboxPage />)} />
+      {/* D814 (#2260): every signed-in role. D812's programmes name the roles
+          that may apply; the page holds Apply, with the reason, for the rest. */}
+      <Route path="/product-testing" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <ProductTestingPage user={user} />)} />
       {/* D336 — `/notifications` has never been this page's address (D144
           put the panel at `/inbox`), but the bell's own settings link reads
           `/account/notifications` and the Settings tab is `#notifications`;

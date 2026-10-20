@@ -8,6 +8,7 @@ import { api } from '../../lib/api';
 import { RailFrame, WorkerRail } from '../../ui';
 import StudioInterview from '../../components/advisor/StudioInterview';
 import ProfileFitSection from '../../components/profile/ProfileFitSection';
+import ProductTestingCard from '../productTesting/ProductTestingCard';
 import { AWAITING_DECISION, isBookableSlot, slotMinutes, slotView } from './advisory/kit';
 import './advisorStudioHome.css';
 import { earningsFigures } from './advisorEarnings';
@@ -257,6 +258,8 @@ export default function AdvisorStudioHome({
           {payouts.state === 'loading' || commissions.state === 'loading' ? <Pending /> : payouts.state === 'unavailable' || commissions.state === 'unavailable' || isDevPayoutShim ? <StateNote text={isDevPayoutShim ? 'Advisor earnings are not recorded in the local development service.' : (payouts.state === 'unavailable' ? payouts.message : commissions.message)} icon={CircleDollarSign} /> : <div className="advisor-keyvalues"><div><span>Available balance</span><b>{earnings.balance}</b></div><div><span>Lifetime paid</span><b>{earnings.paid}</b></div><div><span>Payout account</span><b>{profile?.stripe_account_status || profile?.stripe?.account_status || 'Not recorded'}</b></div></div>}
         </Module>
       </div>
+      {/* D814 (#2260): "Apply for Product Testing". */}
+      <ProductTestingCard previewing={previewing} className="mt-4" />
     </main>
     </RailFrame>
   );

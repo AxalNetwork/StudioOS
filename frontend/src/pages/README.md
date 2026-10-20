@@ -28,6 +28,7 @@ Naming follows the surface, not the persona: `PortfolioHealthPage`,
 | `referrals/` | The Refer & Earn canvas stylesheet for `ReferralsPage.jsx`. |
 | `pipeline/` | Pipeline helpers shared by the pipeline screens. |
 | `events/` | Public and host-side event screens. |
+| `productTesting/` | D814: "Apply for Product Testing": the Studio card on the four member Studio pages, and `/product-testing` (Open programmes, the application sheet, My applications) on D812's routes. |
 | `jobs/` | Public and host-side job screens. |
 | `legal/` | Non-admin document origination (Send for signature). |
 | `wellbeing/` | Wellbeing's booking flow, the expert's practice zones and the admin resource library, with the pure model they share (D570). The member home is `WellbeingPage.jsx` and the practice page is `ExpertEditorPage.jsx`, both here. |
