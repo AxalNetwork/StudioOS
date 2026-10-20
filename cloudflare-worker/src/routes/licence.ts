@@ -52,6 +52,9 @@ import {
 // a pushed one are one row written one way.
 import { SEAT_ROLES, applyLicenceCopy } from '../rpc/branchOps';
 import { withDeadline, DeadlineExceeded } from '../util/deadline';
+import {
+  BRANCH_UNAVAILABLE, licenseeContracts, licenseeStatements, parseDispute, raiseStatementDispute,
+} from '../services/licenceAccount';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -1067,6 +1070,81 @@ r.delete('/mine/domain', async (c) => {
   }
   await c.env.DB.prepare('DELETE FROM licence_domains WHERE id = ?').bind(row.id).run();
   return c.json({ ok: true, removed: row.hostname });
+});
+
+// ── D798 (#2231): the Administrator's contract, statements and payment ───────
+//
+// Each route resolves the caller's OWN licence through `licence_admins` (a
+// principal or a delegate) and reads nothing else: no route takes a licence
+// from the request. On a branch the contract and the statements live on HQ and
+// no RPC reads them yet, so a branch admin reads the reason and no figure; a
+// branch member who is not an admin is refused first, as `/mine` refuses.
+async function ownLicenceForAccount(c: Context<{ Bindings: Env }>) {
+  const user = await requireAuth(c);
+  if (branchOf(c.env)) {
+    if (user.role !== 'admin') throw new Error('Admin required');
+    return { branch: true as const, user };
+  }
+  const row = await licenceForUser(c.env, user.id);
+  if (!row) {
+    return {
+      refusal: c.json({
+        error: 'no_licence',
+        message: 'You do not administer a territory licence.',
+      }, 404),
+    } as const;
+  }
+  return { user, licence: row } as const;
+}
+
+// GET /api/licence/mine/contract — the stored contract, the superseded ones,
+// and the caller's own signing link while it is sent to them.
+r.get('/mine/contract', async (c) => {
+  const own = await ownLicenceForAccount(c);
+  if ('refusal' in own) return own.refusal;
+  if ('branch' in own) return c.json(BRANCH_UNAVAILABLE);
+  return c.json(await licenseeContracts(c.env, own.licence, own.user.id));
+});
+
+// GET /api/licence/mine/statements — issued, paid and void statements, the
+// usage reports by period, and the masked payment instructions. D797's
+// `licence_terms.licensor_entity` is not on main yet; once it is, it is read
+// here and passed as the third argument (`licensorRefusal`).
+r.get('/mine/statements', async (c) => {
+  const own = await ownLicenceForAccount(c);
+  if ('refusal' in own) return own.refusal;
+  if ('branch' in own) return c.json(BRANCH_UNAVAILABLE);
+  return c.json(await licenseeStatements(c.env, own.licence));
+});
+
+// POST /api/licence/mine/statements/:uid/dispute { cents, reason } — a request
+// to HQ, never a write to the statement. The statement is looked up WITHIN the
+// caller's licence, so another licence's uid answers 404 as an unknown one does.
+r.post('/mine/statements/:uid/dispute', async (c) => {
+  const own = await ownLicenceForAccount(c);
+  if ('refusal' in own) return own.refusal;
+  if ('branch' in own) {
+    return c.json({ error: 'statement_hq_only', message: BRANCH_UNAVAILABLE.reason }, 501);
+  }
+  const statement = await c.env.DB.prepare(
+    `SELECT uid, period, owed_cents, currency, status
+       FROM subsidiary_statements WHERE uid = ? AND licence_uid = ?`,
+  ).bind(c.req.param('uid'), own.licence.uid)
+    .first<{ uid: string; period: string; owed_cents: number; currency: string; status: string }>();
+  if (!statement || statement.status === 'draft') {
+    return c.json({ error: 'not_found', message: 'No such statement on your licence.' }, 404);
+  }
+  if (statement.status !== 'issued' && statement.status !== 'paid') {
+    return c.json({ error: 'not_disputable', message: `This statement is ${statement.status}; there is nothing to dispute.` }, 409);
+  }
+  const body = await c.req.json().catch(() => ({}));
+  const parsed = parseDispute(body, Number(statement.owed_cents));
+  if (!parsed.ok) return c.json({ error: 'invalid_dispute', field: parsed.field, message: parsed.message }, 400);
+  const escalation = await raiseStatementDispute(
+    c.env, own.licence, own.user,
+    { ...statement, owed_cents: Number(statement.owed_cents) }, parsed.cents, parsed.reason,
+  );
+  return c.json({ ok: true, escalation }, 201);
 });
 
 export default r;

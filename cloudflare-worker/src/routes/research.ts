@@ -3651,6 +3651,31 @@ research.get('/drafts', async (c) => {
 });
 
 /**
+ * D778 part 3 (#2103): the founder's own bands, each on the page D771's
+ * inventory gives it (`frontend/src/lib/railOptions/founder.js`, which
+ * `founder_draft_surfaces.test.ts` holds this table to). A run from a client
+ * that sent no rail page names that page; a mounted rail's page still wins,
+ * since it holds the member's Manual switch. A surface other profiles share
+ * (`research/ask`, `network/relationships`) keeps the page from its path.
+ */
+export const FOUNDER_DRAFT_PAGES: Readonly<Record<string, string>> = {
+  'build/roadmap': 'Founder · Build · Product roadmap',
+  'build/this-week': 'Founder · Build · Operating systems',
+  'build/retro': 'Founder · Build · Operating systems',
+  'build/kpi': 'Founder · Build · Operating systems',
+  'raise/data-room': 'Founder · Raise · Fundraising readiness',
+  'raise/legal': 'Founder · Raise · Fundraising readiness',
+  'raise/narrative-fix': 'Founder · Raise · Investor narrative',
+  'raise/capital': 'Founder · Raise · Cap table',
+  'raise/liquidity': 'Founder · Raise · Cap table',
+  'grow/customers': 'Founder · Grow · Distribution',
+  'grow/talent': 'Founder · Grow · Team expansion',
+  'network/re-engagement': 'Founder · Network',
+  'network/intro-email': 'Founder · Network',
+  'research/funds': 'Founder · Research · Funds',
+};
+
+/**
  * Draft one. NOTHING RUNS ON MOUNT — this is a POST behind a button, for the
  * reason `ValidateProposals` states in its own docblock: a component that
  * proposed on render would spend a reader's budget for visiting a page.
@@ -3687,7 +3712,7 @@ research.post('/drafts', async (c) => {
       maxTokens: 500,
       surface: page,
       // D765: the band's page and the draft as the option.
-      rail: railFor(c, { page: pageFromPath(page, pageFromPath(surface, 'research')), option: `draft:${surface}` }),
+      rail: railFor(c, { page: FOUNDER_DRAFT_PAGES[surface] ?? pageFromPath(page, pageFromPath(surface, 'research')), option: `draft:${surface}` }),
     });
   } catch (e) {
     console.error('[research] draft failed:', (e as Error).message);

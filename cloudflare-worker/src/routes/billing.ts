@@ -1749,6 +1749,13 @@ async function handleStripeEvent(
       }
       return;
     }
+    // D794 (#2219): an auto-reload's charge that failed after it was confirmed
+    // turns auto-reload off and tells the member. Every other payment is untouched.
+    case 'payment_intent.payment_failed': {
+      const { onReloadPaymentFailed } = await import('../services/aiAutoReload');
+      await onReloadPaymentFailed(env, obj);
+      return;
+    }
     case 'payment_intent.succeeded': {
       // Task #9 — record a promo redemption for ANY PI that carries a
       // promo_code_id (à la carte or generic one-time; subscriptions redeem
