@@ -237,3 +237,11 @@ D755 (#1919, read by #1915): `publicPricing.js` reads `GET /api/public/plans-and
 D780 (#2105): `railProposals.js` lists the caller's own drafts, proposals and
 notes from a rail option's run (`ai_rail_proposals`, migration 506) and decides
 one: accept, edit or discard. Deciding writes no record; the page's own Save does.
+
+D798 (#2231): `licenceAccount.js` is the territory licence Administrator's own
+`/api/licence/mine/*`. It covers the contract (in force, pending, earlier, and
+the caller's own signing link), the statements (with each period's usage
+report and the masked payment instructions), the "Needs you" list, a branch's
+"Send now" usage push, and a statement dispute. `contractPdfBlob` reads
+`GET /api/licence/mine/contract/:uid/pdf` as a Blob, outside the typed drift
+surface. Nothing here returns a full account number.
