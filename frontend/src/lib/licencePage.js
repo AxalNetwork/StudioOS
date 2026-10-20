@@ -277,7 +277,8 @@ export function seatRows(licence) {
     ? licence.seats_used_by_type : null;
   const rows = SEAT_TYPES.map(([key, label]) => {
     const n = Number.isFinite(Number(licensed[key])) && licensed[key] !== null && licensed[key] !== undefined ? Number(licensed[key]) : null;
-    const used = usedByType && Number.isFinite(Number(usedByType[key])) ? Number(usedByType[key]) : null;
+    const u = usedByType ? usedByType[key] : null;
+    const used = u !== null && u !== undefined && Number.isFinite(Number(u)) ? Number(u) : null;
     const pct = used !== null && n ? Math.min(100, Math.round((100 * used) / n)) : 0;
     return { key, label, licensed: n, used, pct, near: used !== null && n ? used * 10 >= n * 9 : false };
   });
@@ -287,7 +288,9 @@ export function seatRows(licence) {
 /** The AI allowance card: the caller's daily and monthly allowance and this month's use, in dollars. */
 export function allowanceCard(budget) {
   if (!budget) return null;
-  const usd = (micro) => (Number.isFinite(Number(micro)) ? `$${(Number(micro) / 1e6).toLocaleString('en-GB', { maximumFractionDigits: 2 })}` : NOT_RECORDED);
+  // `Number(null)` is 0, and an allowance nobody recorded is not $0.
+  const usd = (micro) => (micro !== null && micro !== undefined && Number.isFinite(Number(micro))
+    ? `$${(Number(micro) / 1e6).toLocaleString('en-GB', { maximumFractionDigits: 2 })}` : NOT_RECORDED);
   const month = Number(budget.monthly_microusd);
   const spent = Number(budget.month_spend_microusd);
   const pct = month > 0 && Number.isFinite(spent) ? Math.min(100, Math.round((100 * spent) / month)) : 0;
