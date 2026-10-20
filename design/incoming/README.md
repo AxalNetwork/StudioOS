@@ -10,11 +10,11 @@ material. The app never reads it at runtime.
 ## Where the existing canvases live
 
 The triaged canvases live in `design/canvases/`, sorted by whether a live route
-exists for each — not by how far each has been built. Counts as of 2026-10-19:
+exists for each — not by how far each has been built. Counts as of 2026-10-20:
 
 | Folder | Meaning |
 | --- | --- |
-| `canvases/integrated/` | 98 — a live route exists for this canvas. **Not "it is finished"** — most are `UPGRADE`, meaning the route runs and the canvas asks for more than it does. `design/canvases/README.md` has a section on exactly this misreading; the gloss here read "the canvas is built" until 2026-09-07, which is what caused it. |
+| `canvases/integrated/` | 100 — a live route exists for this canvas. **Not "it is finished"** — most are `UPGRADE`, meaning the route runs and the canvas asks for more than it does. `design/canvases/README.md` has a section on exactly this misreading; the gloss here read "the canvas is built" until 2026-09-07, which is what caused it. |
 | `canvases/backlog/` | 28 — graded `NEW` or `DEFERRED`: no route yet. |
 | `canvases/out-of-scope/` | 26 — deliberately not being built. |
 
@@ -108,6 +108,10 @@ strength of a live route would empty the queue of the work it exists to track.
    that have no route, and away from the v1 of its own page.
 
 ## Landed 2026-10-20 — Licences (D795, #2228)
+
+**Graduated 2026-10-20 (D800, #2233):** both files below now live in
+`design/canvases/integrated/`, unedited. The rest of this section is as written
+on arrival.
 
 The owner's artifacts `JuwTf19EDxowZR7dm7QbiZ` and `SY4GwA4i3MebF9ratAbrFE`
 came from S1's prompt on #2233. They are two files of one canvas:

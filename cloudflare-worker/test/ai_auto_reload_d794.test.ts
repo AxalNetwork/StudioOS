@@ -22,6 +22,7 @@ import billingRoute from '../src/routes/billing.ts';
 
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const M511 = readFileSync(new URL('../sql/migrations/511_ai_auto_reload.sql', import.meta.url), 'utf8');
+const M510 = readFileSync(new URL('../sql/migrations/510_member_ai_pauses.sql', import.meta.url), 'utf8');
 const PACK = 'price_pack25';
 const M = 1_000_000;
 
@@ -291,6 +292,26 @@ test('D788: the spend limit stops a reload that would pass it, tells the member 
     assert.equal(await runAutoReload(f.env, 2), 'charged', 'a reload that keeps the month within the limit is made');
     assert.equal(s.creates().length, 1);
     assert.equal(notices(f).length, 0, 'the limit never turns auto-reload off');
+  } finally { s.restore(); f.db.close(); }
+});
+
+// 6b ──────────────────────────────────────────────────────────────────────────
+test('D791: a member HQ paused is never reloaded: no Stripe call, the crossing unclaimed, auto-reload left on; unpaused, it charges', async () => {
+  // Mutations checked: reloadBlocked always null; the block placed after the crossing claim.
+  const f = await world(); const s = stripeStub();
+  try {
+    f.db.exec(M510);
+    enable(f, 20);
+    await spend(f, 10 * M); // 17.50: below $20, so a reload is due
+    f.db.prepare("INSERT INTO member_ai_pauses(user_id,reason,paused_by) VALUES(2,'Spending far past the plan.',1)").run();
+    assert.equal(await runAutoReload(f.env, 2), 'paused');
+    assert.equal(s.calls.length, 0, 'nothing sent to Stripe');
+    assert.deepEqual(settings(f), { enabled: 1, disabled_reason: null, last_outcome: 'paused', last_crossing: null }, 'on, and the crossing unclaimed');
+    assert.equal(balance(f), 17.5 * M);
+    assert.equal(notices(f).length, 0, 'a pause never turns auto-reload off');
+    f.db.prepare('DELETE FROM member_ai_pauses WHERE user_id=2').run();
+    assert.equal(await runAutoReload(f.env, 2), 'charged', 'unpaused, the same crossing reloads');
+    assert.equal(s.creates().length, 1);
   } finally { s.restore(); f.db.close(); }
 });
 

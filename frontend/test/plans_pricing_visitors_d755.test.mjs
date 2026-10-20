@@ -134,10 +134,12 @@ test('the public /pricing page takes its prices from the read, never the typed f
   assert.equal(studio.priceMonthly, null);
   assert.equal(pricedTier(INVESTOR_TIERS.find((t) => t.id === 'professional'), 'investor', { status: 'unreadable' }).priceMonthly, null);
   assert.equal(pricedTier(INVESTOR_TIERS.find((t) => t.id === 'professional'), 'investor', ready(READ)).priceMonthly, 149);
+  // D786 part 2: /pricing draws its cards from the same read through `planCards`
+  // (pricing_page_d786_part2.test.mjs), never from the typed tiers.
   const src = read('frontend/src/pages/PricingPage.jsx');
-  assert.match(src, /const shown = price == null \? '—' : `\$\$\{price\}`;/);
-  assert.match(src, /founders\.filter\(\(t\) => t\.priceMonthly != null\)\.map\(\(t\) => tierSchemaOffer\(t, 'Founder'\)\)/, 'no Schema.org price without a read price');
-  assert.doesNotMatch(src, /FOUNDER_TIERS\.map\(\(t\) => <TierCard/, 'the cards render the priced tiers');
+  assert.match(src, /planCards\(plans\.body, specs,/);
+  assert.match(src, /useRead\(publicPricingApi\.plansAndPacks\)/);
+  assert.doesNotMatch(src, /FOUNDER_TIERS|INVESTOR_TIERS|data\/pricing/, 'the page reads no typed tier');
 });
 
 test('the door pages\' tokens block links to the Token packs', () => {

@@ -52,6 +52,10 @@ import { DEPLOY_TIMELINE, deployProgress } from '../../lib/deployTimeline';
 import { reportError } from '../../lib/log';
 import { RailFrame, Unreadable, Unrecorded, WorkerRail } from '../../ui';
 import useRecordCrumb from './useRecordCrumb';
+import LicenceTermsSchedule from './LicenceTermsSchedule';
+import LicenceRequestsPanel from './LicenceRequestsPanel';
+// D802 (#2238) — the annual fee invoices tab.
+import LicenceFeeInvoices from './LicenceFeeInvoices';
 
 const UNAVAILABLE = Symbol('unavailable');
 import {
@@ -99,6 +103,12 @@ const NOTICES_STEP = STEPS.length + 3;
 // H26's "Step 6" is its own seven-step strip — which begins with Kind, and
 // Kind is not one of this page's STEPS either.
 const BRAND_STEP = STEPS.length + 4;
+// D801 — the terms schedule (D797), unnumbered like the tabs above: it is the
+// contract's schedule, edited whenever the terms change, not a step of the issue.
+const SCHEDULE_STEP = STEPS.length + 5;
+// D802 (#2238) — invoicing the annual fee happens every year a licence runs,
+// not once in the issue flow, so it is unnumbered too.
+const FEE_INVOICES_STEP = STEPS.length + 6;
 
 // The ladder's own statuses, which are NOT licence statuses. `STATUS_TONE` above
 // covers `active`/`suspended`/`terminated`/`draft`/`pending_activation` and none
@@ -1052,10 +1062,14 @@ function BrandKitEditor({ licence, onSaved }) {
   );
 }
 
-function AdminsEditor({ licence, onSaved }) {
+function AdminsEditor({ licence, onSaved, prefill = null }) {
   const [items, setItems] = useState(undefined);
   const [loadErr, setLoadErr] = useState(null);
-  const [form, setForm] = useState({ email: '', admin_role: 'principal', reason: '' });
+  // D801 — "Grant admin" from a delegate request arrives with the email and the
+  // role filled; HQ still reads the form and appoints, through the same POST.
+  const [form, setForm] = useState(() => (prefill
+    ? { email: prefill.email, admin_role: 'delegate', reason: `Delegate requested by the Administrator (${prefill.uid}).` }
+    : { email: '', admin_role: 'principal', reason: '' }));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
 
@@ -1534,6 +1548,9 @@ function Detail({ uid, held, onChanged, onOpenLicence }) {
   // was not. The server's sentence is shown instead.
   const [detachReason, setDetachReason] = useState('');
   const [detachErr, setDetachErr] = useState('');
+  // D801 — the term "Open terms" points at, and the delegate "Grant admin" prefills.
+  const [highlight, setHighlight] = useState(null);
+  const [grant, setGrant] = useState(null);
 
   const load = useCallback(() => {
     api.licence(uid)
@@ -1773,6 +1790,15 @@ function Detail({ uid, held, onChanged, onOpenLicence }) {
             {i + 1}. {label}
           </button>
         ))}
+        <button
+          type="button" onClick={() => setStep(SCHEDULE_STEP)}
+          data-testid="licence-schedule-tab"
+          className={`-mb-px border-b-2 px-3 py-2 text-xs ${
+            step === SCHEDULE_STEP ? 'border-indigo-600 font-medium text-indigo-700' : 'border-transparent text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          Terms schedule
+        </button>
         {/* Unnumbered, because none is a step of the issue flow — one is the
             append-only record of what the flow did, one is who runs the
             subsidiary afterwards, and one is a compliance notice served months
@@ -1806,6 +1832,15 @@ function Detail({ uid, held, onChanged, onOpenLicence }) {
           Notices
         </button>
         <button
+          type="button" onClick={() => setStep(FEE_INVOICES_STEP)}
+          data-testid="licence-fee-invoices-tab"
+          className={`-mb-px border-b-2 px-3 py-2 text-xs ${
+            step === FEE_INVOICES_STEP ? 'border-indigo-600 font-medium text-indigo-700' : 'border-transparent text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          Annual fee invoices
+        </button>
+        <button
           type="button" onClick={() => setStep(HISTORY_STEP)}
           className={`-mb-px border-b-2 px-3 py-2 text-xs ${
             step === HISTORY_STEP ? 'border-indigo-600 font-medium text-indigo-700' : 'border-transparent text-gray-600 hover:text-gray-900'
@@ -1814,7 +1849,8 @@ function Detail({ uid, held, onChanged, onOpenLicence }) {
           History
         </button>
       </div>
-      <div className="mt-4">
+      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
+      <div className="min-w-0">
         {step === 1 && (
           <div>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -1845,8 +1881,11 @@ function Detail({ uid, held, onChanged, onOpenLicence }) {
         {step === 4 && <TermsEditor licence={d} onSaved={refresh} />}
         {step === 5 && <ContractStep licence={d} onSaved={refresh} />}
         {step === 6 && <DeployStep licence={d} />}
-        {step === ADMINS_STEP && <AdminsEditor licence={d} onSaved={refresh} />}
+        {step === ADMINS_STEP && <AdminsEditor key={grant?.uid || 'admins'} licence={d} prefill={grant}
+          onSaved={() => { setGrant(null); refresh(); }} />}
+        {step === SCHEDULE_STEP && <LicenceTermsSchedule licence={d} highlight={highlight} onSaved={refresh} />}
         {step === NOTICES_STEP && <NoticesEditor licence={d} onSaved={refresh} />}
+        {step === FEE_INVOICES_STEP && <LicenceFeeInvoices licence={d} />}
         {/* The kind is re-checked here as well as on the tab: the tab is what an
             operator clicks, and this is what decides what renders. A licence
             whose kind changed while the tab was open falls back to nothing
@@ -1875,6 +1914,16 @@ function Detail({ uid, held, onChanged, onOpenLicence }) {
             </p>
           </div>
         )}
+      </div>
+      <LicenceRequestsPanel
+        licence={d}
+        onOpenTerm={(target) => {
+          const tab = { schedule: SCHEDULE_STEP, terms: 4, seats: 3, territory: 2 }[target.tab] ?? SCHEDULE_STEP;
+          setHighlight(target.key);
+          setStep(tab);
+        }}
+        onGrantAdmin={(g) => { setGrant(g); setStep(ADMINS_STEP); }}
+      />
       </div>
     </div>
   );
