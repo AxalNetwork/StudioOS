@@ -21,6 +21,8 @@ const SKIPPED_WORDS = Object.freeze({
   token_balance_ceiling: 'The last reload was not made: it would take your token balance above $1,000.',
   token_packs_on_hold: 'The last reload was not made: token packs are on hold for this account.',
   pack_not_on_sale: 'The last reload was not made: the pack is not on sale right now.',
+  // D790: a first-purchase pack is sold once; a reload is never a first purchase.
+  token_pack_first_purchase_only: 'The last reload was not made: that pack is for a first token purchase only. Choose another pack on Billing.',
   error: 'The last reload was not made: the payment service did not answer. It is tried again after your next run.',
   spend_limit: 'The last reload was not made: it would pass your monthly AI spend limit. Raise it on Usage › Limits, or it resumes next month.',
 });
@@ -34,10 +36,10 @@ export function cardText(card) {
   return `${brand} ending ${card.last4}`;
 }
 
-/** The packs auto-reload can charge: on sale and HQ's own (a pack row with an id). */
+/** The packs auto-reload can charge: on sale, HQ's own (a pack row with an id), and not for a first purchase only (D790). */
 export function packOptions(topUp) {
   const packs = Array.isArray(topUp?.packs) ? topUp.packs : [];
-  return packs.filter((p) => p && typeof p.uid === 'string' && p.uid && typeof p.label === 'string')
+  return packs.filter((p) => p && typeof p.uid === 'string' && p.uid && typeof p.label === 'string' && p.first_purchase_only !== true)
     .map((p) => ({ uid: p.uid, label: p.label }));
 }
 
@@ -62,4 +64,25 @@ export function stateLine(read, packs = []) {
 /** Why the last attempt did not charge, when it was skipped; null otherwise. */
 export function lastSkipped(read) {
   return read?.enabled && SKIPPED_WORDS[read.last_outcome] ? SKIPPED_WORDS[read.last_outcome] : null;
+}
+
+const LIMIT_DAY = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+const limitDay = (iso) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? null : LIMIT_DAY.format(d); };
+
+/**
+ * D792 (#2217): the card's spend-limit line, from D788's `GET /api/ai-budget/limit`:
+ * the member's own monthly limit stops reloads too. Null when the read carries none we understand.
+ */
+export function limitLine(limit) {
+  if (!limit || typeof limit !== 'object' || !('limit_microusd' in limit)) return null;
+  if (limit.limit_microusd === null) return { text: 'No spend limit: reloads continue each time your balance runs low.', link: false };
+  if (!Number.isSafeInteger(limit.limit_microusd) || limit.limit_microusd < 0) return null;
+  return { text: `Stops at your monthly spend limit of ${usd(limit.limit_microusd / 1_000_000)}.`, link: true };
+}
+
+/** D792: auto-reload is on but paused, because this month's spend limit is reached. Null otherwise. */
+export function pausedLine(read, limit) {
+  if (!read?.enabled || read.last_outcome !== 'spend_limit') return null;
+  const day = limit?.resets_on ? limitDay(limit.resets_on) : null;
+  return `Paused: this month's spend limit is reached.${day ? ` Resumes ${day}.` : ''}`;
 }

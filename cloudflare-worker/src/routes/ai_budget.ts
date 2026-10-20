@@ -6,7 +6,7 @@ import { AI_LICENCE_KEYS, AiBudgetReviewConflict, AiBudgetReviewNotFound, listAi
 import { parseSpendLimit, readSpendLimit, writeSpendLimit } from '../services/aiSpendLimit';
 import { PLAN_AI_SHARE } from '../services/planAllowance';
 import { aiTopupStatus, memberTopupReading, readAiTopupProduct } from '../services/aiTopups';
-import { HISTORY_MAX, ledgerBalance, memberAccount, memberHistory, memberTopUp, packLines, packLabel, reconcile, recordAdjustment } from '../services/aiCredits';
+import { HISTORY_MAX, ledgerBalance, packOrdersToday, memberAccount, memberHistory, memberTopUp, packLines, packLabel, reconcile, recordAdjustment } from '../services/aiCredits';
 import { logAdminAction } from '../services/adminAudit';
 import { COST_GROUPS, COST_RANGES, costCsv, memberCost, type CostGroup, type CostRange } from '../services/aiCost';
 import { CONSUMPTION_GROUPS, memberConsumption, memberMonth, monthBounds, monthKey, type ConsumptionGroup } from '../services/aiConsumption';
@@ -104,7 +104,9 @@ r.get('/limit',async c=>{
   try {
     const caps=await resolveAiCaps(c.env,user.id);
     return c.json({...await readSpendLimit(c.env,user.id),
-      allowance:{monthly_microusd:caps.monthly_microusd,source:caps.source,plan:planView(caps.plan)}});
+      allowance:{monthly_microusd:caps.monthly_microusd,source:caps.source,plan:planView(caps.plan)},
+      // D805: today's pack orders, counted as the purchase check counts them.
+      pack_orders:await packOrdersToday(c.env,user.id)});
   }
   catch(error) { return refuse(c,503,{code:'ai_spend_limit_unreadable',message:'Unreadable: your AI spend limit could not be read.',raw:error,audience:'member'}); }
 });
@@ -182,7 +184,8 @@ r.get('/top-up/status',async c=>{
     const lines=await packLines(c.env);
     return c.json({...await aiTopupStatus(c.env),mode:stripeMode(c.env),packs:lines.map(l=>({uid:l.uid,origin:l.origin,
       label:l.face_cents===null?null:packLabel(l.face_cents),state:l.state,reason:l.reason,price_id_suffix:l.price_id?l.price_id.slice(-6):null,
-      on_sale:l.on_sale,bonus_microusd:l.bonus_microusd,sort:l.origin==='environment'?null:l.sort,adoptable:l.adoptable}))});
+      on_sale:l.on_sale,bonus_microusd:l.bonus_microusd,sort:l.origin==='environment'?null:l.sort,adoptable:l.adoptable,
+      offer_starts_at:l.offer_starts_at,offer_ends_at:l.offer_ends_at,first_purchase_only:l.first_purchase_only}))});
   }
   catch(error) { return refuse(c,503,{code:'ai_topup_unreadable',message:'Unreadable: the AI top-up could not be read.',raw:error}); }
 });

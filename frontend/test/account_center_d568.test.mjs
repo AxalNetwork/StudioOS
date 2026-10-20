@@ -649,17 +649,11 @@ test('the notification matrix reads its own route, says when it cannot, and puts
   assert.match(notify, /export type NotifyChannel = 'in_app' \| 'email' \| 'slack';/);
 });
 
-test('the Worker AI rail sits beside the page, in the shared frame (D556), with a literal accent', () => {
+test('Account keeps its shared body frame without an AI rail, as requested by the owner', () => {
   const page = read('frontend/src/pages/SettingsPage.jsx');
-  const rail = page.slice(page.indexOf('<WorkerRail'), page.indexOf('/>', page.indexOf('<WorkerRail')));
-  assert.match(rail, /workspace="Account"/);
-  assert.match(rail, /role="founder"/);
-  assert.match(rail, /coverage=\{accountRailCoverage\(data, activeLabel\)\}/);
-  // RailFrame docks it to the edge and collapses it through --fwr-track.
-  assert.match(page, /<RailFrame\s+rail=\{\(\s*<WorkerRail\s+workspace="Account"/);
-  assert.doesNotMatch(page, /grid-cols-\[minmax\(0,1fr\)_var\(--fwr-track/, 'no bare rail column beside the frame');
-  // The voice rule, on the copy this page hands the rail.
-  assert.doesNotMatch(rail, /advis|recommend|fiduciary/i);
+  assert.match(page, /<RailFrame>/);
+  assert.doesNotMatch(page, /<WorkerRail\b/);
+  assert.doesNotMatch(page, /grid-cols-\[minmax\(0,1fr\)_var\(--fwr-track/, 'no reserved rail column');
 });
 
 test('the sign-in pane uses the signed-in enrolment routes, never the login-flow ones', () => {
