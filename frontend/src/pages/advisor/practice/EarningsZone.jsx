@@ -125,6 +125,19 @@ function Figure({ label, cents, hint, strong = false }) {
   );
 }
 
+/**
+ * Who wrote the period note being filed (migration 242's `source`): 'ai' when it
+ * is the model's last text unchanged, 'edited' when a model draft was changed
+ * (now, or in the note being re-filed), 'advisor' when no model text was
+ * involved. `modelText` is the model's last draft, or the stored body of a note
+ * already filed as 'ai'; null when the model wrote nothing here (D779, #2104).
+ */
+export function periodNoteSource(text, modelText, priorSource) {
+  if (modelText != null && text === modelText) return 'ai';
+  if (modelText != null || priorSource === 'ai' || priorSource === 'edited') return 'edited';
+  return 'advisor';
+}
+
 export default function EarningsZone() {
   const [view, setView] = useState('this_quarter');
   const [state, setState] = useState({ loading: true, error: '', data: null });
@@ -134,6 +147,8 @@ export default function EarningsZone() {
   const [note, setNote] = useState(null);
   const [draft, setDraft] = useState('');
   const [drafting, setDrafting] = useState(false);
+  // The model's last text for this window, so Accept can say who wrote what is filed.
+  const [modelText, setModelText] = useState(null);
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [saveNote, setSaveNote] = useState(null);
@@ -211,6 +226,7 @@ export default function EarningsZone() {
     setPayouts(Array.isArray(hist?.items) ? hist.items : []);
     setNote(n?.note || null);
     setDraft(n?.note?.body || '');
+    setModelText(n?.note?.source === 'ai' ? n.note.body : null);
     setEditing(false);
   }, []);
 
@@ -328,7 +344,7 @@ export default function EarningsZone() {
       const res = await api.aiWorkspaceExplain({ workspace: 'Practice', zone: 'Earnings', coverage });
       const text = String(res?.text || res?.answer || '').trim();
       if (!text) throw new Error('The model returned nothing to read.');
-      setDraft(text); setEditing(true);
+      setDraft(text); setModelText(text); setEditing(true);
     } catch (e) {
       setSaveNote({ ok: false, text: e?.message || 'Nothing was drafted.' });
     } finally { setDrafting(false); }
@@ -340,9 +356,10 @@ export default function EarningsZone() {
       const res = await api.saveMyAdvisorPeriodNote(window_.key, {
         body: draft,
         // 'edited' when the advisor changed a draft, 'ai' when they accepted
-        // it as written. Over-crediting the model and hiding it are both
-        // wrong, so the distinction is stored (migration 242).
-        source: note?.source === 'ai' || drafting ? 'ai' : 'edited',
+        // it as written, 'advisor' when no draft was involved. Over-crediting
+        // the model and hiding it are both wrong, so the distinction is stored
+        // (migration 242).
+        source: periodNoteSource(draft, modelText, note?.source),
         figures: totals ? {
           gross_cents: totals.gross_cents, cut_cents: totals.cut_cents, net_cents: totals.net_cents,
         } : null,
@@ -352,13 +369,13 @@ export default function EarningsZone() {
     } catch (e) {
       setSaveNote({ ok: false, text: e?.message || 'That note was not filed.' });
     } finally { setBusy(false); }
-  }, [draft, note, drafting, totals, window_]);
+  }, [draft, modelText, note, totals, window_]);
 
   const discard = useCallback(async () => {
     setBusy(true); setSaveNote(null);
     try {
       await api.deleteMyAdvisorPeriodNote(window_.key);
-      setNote(null); setDraft(''); setEditing(false);
+      setNote(null); setDraft(''); setModelText(null); setEditing(false);
       setSaveNote({ ok: true, text: 'Discarded.' });
     } catch (e) {
       setSaveNote({ ok: false, text: e?.message || 'Nothing was discarded.' });
