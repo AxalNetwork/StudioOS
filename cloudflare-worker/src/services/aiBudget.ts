@@ -174,6 +174,12 @@ export async function settleAiReservation(env:Env, reservation:AiReservation, co
   }
   const changed=await commitSettlement(env,row,costMicrousd,refund,'pending');
   if (changed && costMicrousd>0) await noteThresholds(env,row.user_id,row.month_key);
+  // D794: a run that drew on the top-up balance may have taken it below the
+  // member's auto-reload threshold. This only queues the reload; it never waits on Stripe.
+  if (!refund && costMicrousd > amount(row.included_microusd)) {
+    const { queueAutoReloadIfDue } = await import('./aiAutoReloadDue');
+    await queueAutoReloadIfDue(env, reservation.userId);
+  }
 }
 /** D788: a settled charge may pass a threshold of the member's spend limit. A notice never fails a settlement. */
 async function noteThresholds(env:Env,userId:number,month:string) {
