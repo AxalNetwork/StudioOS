@@ -20,6 +20,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { AXAL_PNID, ME, OTHER, PROJECT, SENDER, call, link, mig, mockGraph, now, waHook, waText, world } from './_whatsapp_axal_fixture.ts';
 import { purgeExpired } from '../src/services/channels/threads.ts';
+import { ventureChoice } from '../src/services/channels/whatsappLink.ts';
 
 /** ME's older second venture, and OTHER's own. */
 const SECOND = 501, THEIRS = 502, OTHER_FOUNDER = 71;
@@ -141,5 +142,9 @@ test('DELETE, STOP and the purge\'s lapse each clear the choice, so a relink sta
     const purged = await purgeExpired(env);
     assert.equal(purged.lapsed, 1);
     assert.deepEqual(settings(db), [], 'the lapse');
+    // Mutation checked: read the choice for any link, not only an active one → a choice left on a lapsed link reads as set.
+    db.exec(`INSERT INTO whatsapp_link_settings (integration_id, project_id)
+      SELECT id, ${SECOND} FROM integrations WHERE provider_key = 'whatsapp_link'`);
+    assert.equal(await ventureChoice(env, ME), null, 'a choice left on a link that is no longer active reads as none');
   } finally { g.restore(); }
 });
