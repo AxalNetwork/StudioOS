@@ -118,9 +118,13 @@ async function bearer(userId: number, role: string) {
 }
 
 function linkIn(text: string, path: string): string {
-  const m = new RegExp(`${BASE.replace(/\./g, '\\.')}${path.replace(/\//g, '\\/')}\\?token=([^\\s&]+)`).exec(text);
-  assert.ok(m, `no ${path} link in:\n${text}`);
-  return decodeURIComponent(m[1]);
+  // A plain search, not a RegExp built from `path`.
+  const prefix = `${BASE}${path}?token=`;
+  const at = text.indexOf(prefix);
+  assert.ok(at >= 0, `no ${path} link in:\n${text}`);
+  const rest = text.slice(at + prefix.length);
+  const end = rest.search(/[\s&]/);
+  return decodeURIComponent(end < 0 ? rest : rest.slice(0, end));
 }
 
 /** Lets the next signup email go: the per-address pacing reads `last_email_at`. */
