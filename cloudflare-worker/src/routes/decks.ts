@@ -33,6 +33,7 @@ import { renderDeckPPTX, renderDeckPPTXWithImages } from '../services/decks/pptx
 import { stripTrailingSlashes } from '../util/url';
 import { bindingKey } from '../util/schemaBootstrap';
 import { refuse } from '../util/refusal';
+import { railFor, refuseRun } from '../util/railContext';
 import { slideTotals, recordSlideSeconds } from '../services/deckSlideDwell';
 import { logCycleWrite } from '../services/cycleActivity';
 
@@ -613,7 +614,7 @@ decks.post('/generate', async (c) => {
 // columns + financial model + latest score) and recent UPDATES (submitted
 // portfolio updates), then asks the AI for a punchy one-liner, a short
 // elevator pitch and 3-5 alternate positioning lines. Growth-tier, owner-
-// scoped. Fails LOUDLY when the AI provider isn't configured — no silent
+// scoped. Uses the held, guarded run path; a refused run has no silent
 // fallback and no fabricated lines (security-first / explicit-error prefs).
 decks.post('/positioning', async (c) => {
   ensureTier(await requireAuth(c), 'studio'); // D683: Raise + Grow
@@ -631,16 +632,6 @@ decks.post('/positioning', async (c) => {
     return c.json({ error: 'forbidden' }, 403);
   }
   if (!p) return c.json({ error: 'not found' }, 404);
-
-  // AI provider is hard-required. Fail loud — never fabricate positioning.
-  const key = (c.env as any).OPENAI_API_KEY;
-  if (!key) {
-    return c.json({
-      error: 'ai_unavailable',
-      code: 'ai_unavailable',
-      message: 'Positioning generation requires an AI provider that is not configured in this environment.',
-    }, 503);
-  }
 
   // --- Gather grounding data (each source degrades to empty on failure). ---
   // Team = cap-table founders (fall back to all holders if none tagged).
@@ -723,31 +714,20 @@ Rules:
 - Concrete and specific to THIS startup — never generic filler.
 - Never invent metrics, customers, or funding not present in the data.`;
 
-  let parsed: any;
-  try {
-    const r = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: 'You are a senior startup positioning strategist. Always return valid JSON.' },
-          { role: 'user', content: prompt },
-        ],
-        temperature: 0.6,
-        max_tokens: 700,
-        response_format: { type: 'json_object' },
-      }),
-      signal: AbortSignal.timeout(45_000),
-    });
-    if (!r.ok) {
-      return c.json({ error: 'ai_failed', code: 'ai_failed', message: `The AI provider returned ${r.status}.` }, 502);
-    }
-    const j: any = await r.json();
-    parsed = JSON.parse(j?.choices?.[0]?.message?.content || '{}');
-  } catch {
-    return c.json({ error: 'ai_failed', code: 'ai_failed', message: 'The positioning generator could not complete. Please try again.' }, 502);
+  const result = await aiRouterRun(c.env, {
+    task: 'rail_write',
+    userId: Number(user.id),
+    surface: AI_SURFACE.raisePitch,
+    rail: railFor(c, { page: 'Founder · Raise · Pitch deck', option: 'draft:positioning' }, `project:${pid}`),
+    systemPrompt: 'You are a senior startup positioning strategist. Always return valid JSON.',
+    messages: [{ role: 'user', content: prompt }],
+    temperature: 0.6,
+    maxTokens: 700,
+  });
+  if (!result.ok || !result.output) {
+    return refuseRun(c, result) || c.json({ error: 'ai_unavailable', code: 'ai_unavailable', message: 'The positioning generator could not complete. Please try again.' }, 503);
   }
+  const parsed = parseJsonLoose<any>(result.output);
 
   const one_liner = typeof parsed?.one_liner === 'string' ? parsed.one_liner.trim() : '';
   const elevator_pitch = typeof parsed?.elevator_pitch === 'string' ? parsed.elevator_pitch.trim() : '';

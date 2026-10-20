@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Megaphone, Sparkles, Loader2, Copy, Check, Users, TrendingUp,
   FileText, Calculator, AlertTriangle,
@@ -7,6 +7,7 @@ import { api } from '../lib/api';
 import { reportError } from '../lib/log';
 import PageExplainer from '../components/PageExplainer';
 import { useRailOption } from '../ui/railCrumbs';
+import { railPageHeaders } from '../lib/railPage.js';
 
 /**
  * Task #10 — Pitch Positioning Generator.
@@ -35,6 +36,8 @@ export default function PitchPositioningPage({ embedded = false }) {
   const [error, setError] = useState('');
   const [aiUnavailable, setAiUnavailable] = useState(false);
   const [copiedKey, setCopiedKey] = useState('');
+  const requestVersion = useRef(0);
+  useEffect(() => () => { requestVersion.current++; }, []);
 
   useEffect(() => {
     let alive = true;
@@ -79,14 +82,19 @@ export default function PitchPositioningPage({ embedded = false }) {
 
   async function generate() {
     if (!projectId) return;
+    const version = ++requestVersion.current;
+    const current = railPageHeaders();
+    const headers = { ...current, 'X-Rail-Page': current['X-Rail-Page'] || encodeURIComponent('Founder · Raise · Pitch deck'), 'X-Rail-Option': 'draft:positioning' };
     setGenerating(true);
     setError('');
     setAiUnavailable(false);
     setResult(null);
     try {
-      const r = await api.deckPositioning(projectId);
+      const r = await api.deckPositioning(projectId, headers);
+      if (requestVersion.current !== version) return;
       setResult(r);
     } catch (e) {
+      if (requestVersion.current !== version) return;
       const code = e?.data?.code || e?.data?.error;
       if (e?.status === 503 || code === 'ai_unavailable') {
         setAiUnavailable(true);
@@ -104,7 +112,7 @@ export default function PitchPositioningPage({ embedded = false }) {
         setError(e?.message || 'The positioning generator failed. Please try again.');
       }
     } finally {
-      setGenerating(false);
+      if (requestVersion.current === version) setGenerating(false);
     }
   }
 
@@ -135,7 +143,7 @@ export default function PitchPositioningPage({ embedded = false }) {
             id="positioning-project"
             data-testid="positioning-project"
             value={projectId}
-            onChange={(e) => { setProjectId(e.target.value); setResult(null); setError(''); setAiUnavailable(false); }}
+            onChange={(e) => { requestVersion.current++; setGenerating(false); setProjectId(e.target.value); setResult(null); setError(''); setAiUnavailable(false); }}
             disabled={loadingProjects || generating}
             className="flex-1 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 disabled:opacity-60"
           >
