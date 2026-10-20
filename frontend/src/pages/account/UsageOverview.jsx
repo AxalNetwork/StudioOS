@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { toUtcInstant } from '../../lib/notices';
 import { aiBudgetApi } from '../../lib/api/aiBudget';
-import { EmptyState, Pill, Unrecorded, Unreadable } from '../../ui';
+import { EmptyState, PhoneBar, Pill, Unrecorded, Unreadable } from '../../ui';
 import { BTN, LoadingRows, PanelCard, useAccountRead } from './AccountCenter';
 import { overviewScopeFor } from './BillingCards';
 import { allowanceView, balanceText } from './billingModel';
@@ -79,7 +79,7 @@ export function LimitsOverview({ me, limit }) {
     <UsageCardState read={limit} what="Billing limits">
       {v?.set ? <><p className="mt-3 text-xs">Spend limit used · {v.pct}%</p><UsageBar pct={v.pct} label="Spend limit used" /></>
         : <p className="mt-3 text-xs">{v ? 'No limit set' : 'Not recorded: the spend limit was not returned.'}</p>}
-      {packs ? <><p className="mt-3 text-xs">Token-pack orders today · {packs.today} of {packs.perDay}</p><UsageBar pct={packs.pct} label="Token-pack orders in the last 24 hours" /><p className="text-xs text-axal-muted dark:text-gray-400">Rolling {limit.data.pack_orders.window_hours} hours. Auto-reloads count.</p></>
+      {packs ? <><p className="mt-3 text-xs">Token-pack orders today · {packs.today} of {packs.perDay}</p><UsageBar pct={packs.pct} label="Token-pack orders in the last 24 hours" /><p className="text-xs text-axal-muted dark:text-gray-400">Rolling window: {Number.isSafeInteger(limit.data.pack_orders.window_hours) && limit.data.pack_orders.window_hours > 0 ? `${limit.data.pack_orders.window_hours} hours` : <Unrecorded reason="The order window's duration was not returned.">Not recorded</Unrecorded>}. Auto-reloads count.</p></>
         : limit.data?.pack_orders_reason ? <Unreadable what="Token-pack orders" claim="The spend limit above is unaffected." onRetry={limit.reload} />
           : <Unrecorded reason="Today's token-pack order count was not returned.">Not recorded</Unrecorded>}
     </UsageCardState>
@@ -121,16 +121,17 @@ export function RecentInvoices({ invoices }) {
       </UsageCardState>}
   </PanelCard>;
 }
-export function UsageOverviewView({ me, limit, overview, autoReload, cost, invoices }) {
+export function UsageOverviewView({ me, limit, overview, autoReload, cost, invoices, month }) {
   return <div className="flex min-w-0 flex-col gap-4" data-testid="usage-overview">
-    <header><h2 className="text-xl font-extrabold tracking-axal-heading">Usage</h2><p className="mt-1 text-[13px] text-axal-muted dark:text-gray-400">{USAGE_SUBTITLE}</p></header>
+    <div className="-mx-[22px] lg:hidden"><PhoneBar back={{ label: 'Account', to: '/account' }} title="Usage" sub={USAGE_SUBTITLE} /></div>
+    <header className="hidden lg:block"><h2 className="text-xl font-extrabold tracking-axal-heading">Usage</h2><p className="mt-1 text-[13px] text-axal-muted dark:text-gray-400">{USAGE_SUBTITLE}</p></header>
     <div className="grid min-w-0 gap-3 md:grid-cols-2"><SpendOverview limit={limit} /><BalanceOverview me={me} overview={overview} autoReload={autoReload} /></div>
     <h3 className="text-xs font-semibold uppercase tracking-wide text-axal-muted dark:text-gray-400">Spend breakdown</h3>
     <div className="grid min-w-0 gap-3 md:grid-cols-2">
       <PanelCard title="Daily cost, last 30 days" action={<Open card="daily">Open cost</Open>} data-testid="overview-daily"><UsageCardState read={cost} what="Daily cost">{costReadable(cost.data) ? <DailyCostChart data={cost.data} /> : <Unrecorded reason="The daily cost breakdown was not returned.">Not recorded</Unrecorded>}</UsageCardState></PanelCard>
       <PanelCard title="Token usage, input vs output" action={<Open card="tokens">Open cost</Open>} data-testid="overview-tokens"><UsageCardState read={cost} what="Token usage">{costReadable(cost.data) ? <TokenUsageChart data={cost.data} /> : <Unrecorded reason="The daily token counts were not returned.">Not recorded</Unrecorded>}</UsageCardState></PanelCard>
     </div>
-    {cost.status === 'ready' && costReadable(cost.data) && cost.data.totals.runs === 0 && <><EmptyState size="sm" title="No AI runs yet this month." /><Link to="/studio" className={BTN.ghost}>Open Studio</Link></>}
+    {month?.status === 'ready' && costReadable(month.data) && month.data.totals.runs === 0 && !month.data.truncated && <><EmptyState size="sm" title="No AI runs yet this month." /><Link to="/studio" className={BTN.ghost}>Open Studio</Link></>}
     <div className="grid min-w-0 gap-3 md:grid-cols-2"><LimitsOverview me={me} limit={limit} /><RecentInvoices invoices={invoices} /></div>
   </div>;
 }
@@ -140,10 +141,11 @@ export default function UsageOverview({ role }) {
   const overview = useAccountRead(() => api.billingOverview(overviewScopeFor(role)));
   const autoReload = useAccountRead(() => aiBudgetApi.autoReload());
   const cost = useAccountRead(() => aiBudgetApi.cost({ range: '30d', group: 'model' }));
+  const month = useAccountRead(() => aiBudgetApi.cost({ range: 'mtd', group: 'model' }));
   const { hash } = useLocation();
   const navigate = useNavigate();
   useEffect(() => {
     if (/^#(?:days|where|models|last-run|storage)$/.test(hash)) navigate(`/account/usage/cost${hash}`, { replace: true });
   }, [hash, navigate]);
-  return <UsageOverviewView me={me} limit={limit} overview={overview} autoReload={autoReload} cost={cost} invoices={{ status: 'not_recorded' }} />;
+  return <UsageOverviewView me={me} limit={limit} overview={overview} autoReload={autoReload} cost={cost} month={month} invoices={{ status: 'not_recorded' }} />;
 }

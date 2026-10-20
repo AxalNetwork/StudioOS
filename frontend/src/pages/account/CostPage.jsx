@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { aiBudgetApi } from '../../lib/api/aiBudget';
-import { EmptyState, Unrecorded, Unreadable } from '../../ui';
+import { EmptyState, PhoneBar, Unrecorded, Unreadable } from '../../ui';
 import { BTN, INPUT, PanelCard, useAccountRead } from './AccountCenter';
 import { COST_GROUPS, COST_RANGES, COST_SUBTITLE, costReadable, costTableRows, costTotals, totalUnits } from './costModel';
 import { DailyCostChart } from './UsageCharts';
@@ -93,8 +93,9 @@ export default function CostPage({ role }) {
     finally { setExporting(false); }
   };
   return <div className="flex min-w-0 flex-col gap-4" data-testid="usage-cost-page">
-    <Link to="/account/usage" className="text-xs font-semibold text-axal-violet dark:text-violet-300">← Usage overview</Link>
-    <header><h2 className="text-xl font-extrabold tracking-axal-heading">Cost</h2><p className="mt-1 text-[13px] text-axal-muted dark:text-gray-400">{COST_SUBTITLE}</p></header>
+    <div className="-mx-[22px] lg:hidden"><PhoneBar back={{ label: 'Usage', to: '/account/usage' }} title="Cost" sub={COST_SUBTITLE} /></div>
+    <Link to="/account/usage" className="hidden lg:block text-xs font-semibold text-axal-violet dark:text-violet-300">← Usage overview</Link>
+    <header className="hidden lg:block"><h2 className="text-xl font-extrabold tracking-axal-heading">Cost</h2><p className="mt-1 text-[13px] text-axal-muted dark:text-gray-400">{COST_SUBTITLE}</p></header>
     <PanelCard><div className="flex flex-wrap items-center gap-3">
       <label className="text-xs">Range<select className={INPUT} aria-label="Range" value={range} onChange={(e) => changeRange(e.target.value)}>{COST_RANGES.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}</select></label>
       <label className="text-xs">Group by<select className={INPUT} aria-label="Group by" value={group} onChange={(e) => { setGroup(e.target.value); setModel(''); }}>{COST_GROUPS.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}</select></label>

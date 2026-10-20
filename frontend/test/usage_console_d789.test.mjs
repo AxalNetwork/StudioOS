@@ -41,7 +41,7 @@ const sample = () => ({
 });
 const me = { balance_microusd: 2500000, plan: { monthly_microusd: 20000000 }, month_spend_microusd: 5000000 };
 const limit = { charged_microusd: 5000000, limit_microusd: 20000000, resets_on: '2026-11-01', pack_orders: { today: 1, per_day: 5, window_hours: 24 } };
-const props = () => ({ me: ready(me), limit: ready(limit), overview: ready({ payment_methods: [] }), autoReload: ready({ enabled: true }), cost: ready(sample()), invoices: { status: 'not_recorded' } });
+const props = () => ({ me: ready(me), limit: ready(limit), overview: ready({ payment_methods: [] }), autoReload: ready({ enabled: true }), cost: ready(sample()), month: ready(sample()), invoices: { status: 'not_recorded' } });
 const html = (element) => renderToStaticMarkup(h(MemoryRouter, {}, element));
 const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
 
@@ -219,7 +219,7 @@ test('empty, loading, unreadable and truncated cost remain distinct', async () =
   await killed('../src/pages/account/CostPage.jsx', 'read.truncated &&', 'false &&', check);
   assert.match(html(h(overview.UsageCardState, { read: { status: 'loading' }, what: 'Cost' })), /account-loading/);
   const empty = { ...sample(), totals: { ...sample().totals, runs: 0 }, days: [], models: [] };
-  assert.match(html(h(overview.UsageOverviewView, { ...props(), cost: ready(empty) })), /Open Studio/);
+  assert.match(html(h(overview.UsageOverviewView, { ...props(), cost: ready(empty), month: ready(empty) })), /Open Studio/);
 });
 
 test('CSV uses the authenticated client with range and group; Cost retains all detailed cards', async () => {

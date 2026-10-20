@@ -15,7 +15,7 @@ try {
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   let csvRead = '';
-  await page.route('**/api/**', async (route) => {
+  await page.route('http://127.0.0.1:4173/api/**', async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname.endsWith('/cost.csv')) {
       csvRead = url.search;
@@ -40,6 +40,7 @@ try {
       await page.addScriptTag({ type: 'module', content: "import RefreshRuntime from 'http://127.0.0.1:4173/@react-refresh'; RefreshRuntime.injectIntoGlobalHook(window); window.$RefreshReg$ = () => {}; window.$RefreshSig$ = () => (type) => type; window.__vite_plugin_react_preamble_installed__ = true;" });
       await page.addScriptTag({ type: 'module', url: 'http://127.0.0.1:4173/test/_usage_preview_d789.jsx' });
       await page.getByTestId('daily-cost-chart').waitFor();
+      if (width === 390) await page.getByRole('link', { name: screen === 'cost' ? '‹ Usage' : '‹ Account', exact: true }).waitFor({ state: 'visible' });
       await page.getByRole('button', { name: /^2026-10-01:/ }).focus();
       await page.getByTestId('daily-cost-tooltip').waitFor();
       assert.match(await page.getByTestId('daily-cost-tooltip').innerText(), /Llama/);
