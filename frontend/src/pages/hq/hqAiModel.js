@@ -3,8 +3,11 @@
  * cards: how members are charged, the models offered, and one member's month.
  * Pure, so `frontend/test/hq_ai_allowances_d776.test.mjs` holds each rule.
  */
-import { ALL_MODEL_IDS, NEW_MODELS } from '../../ui/railModels';
+import { ALL_MODELS, NEW_MODELS } from '../../ui/railModels';
 import { chargedPages, microUsd, whenLabel } from '../account/usageModel';
+
+// D769 PR 2 (#2192) retired `ALL_MODEL_IDS`; `ALL_MODELS` carries the same name → router id pairs, grouped.
+const ALL_MODEL_IDS = Object.fromEntries(ALL_MODELS.flatMap(([, rows]) => rows));
 
 /** How a run is settled, in the canvas's words; null for a mode the Worker did not send. */
 export function billingText(read) {
