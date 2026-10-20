@@ -121,7 +121,7 @@ export async function creditAiTopupFromPayment(env:Env,pi:any):Promise<boolean> 
       .bind(JSON.stringify({payment_intent_id:pi.id,order_ref:row.order_ref,credit_microusd:row.credit_microusd,
         bonus_microusd:row.bonus_microusd,pack_uid:row.pack_uid}),row.user_id,uid),
   ]);
-  if (results.length!==6 || results.some(r=>r.success!==true)) throw new Error('AI top-up credit unreadable');
+  if (results.length!==6 || results.some(r=>r.success!==true)) throw new Error('AI token top-up unreadable');
   const credited=Number(results[1].meta.changes)>0;
   if (credited) {
     // Best-effort, once: only the delivery that wrote the purchase row sends it.
