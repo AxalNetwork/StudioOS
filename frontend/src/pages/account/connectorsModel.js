@@ -16,6 +16,7 @@
  * A field none of them carries still says "Not recorded".
  */
 
+import { TIER_PLANS } from '../../components/PaywallModal';
 import {
   memberDisconnectNote, PERSONAL_DOES, personalFeedsFallback, PERSONAL_LAST_SYNC, personalAttention, personalToolBanner,
 } from './mercuryModel.js';
@@ -60,7 +61,10 @@ const ALIAS_FIELDS = [
 const TYPE_CATEGORY = { crm: 'CRM', scheduling: 'Calendar', cap_table: 'Cap table', messaging: 'Messaging', e_sign: 'Signing', data_feed: 'Data' };
 const KEY_CATEGORY = { stripe: 'Payments' };
 
-export const TIER_LABEL = { growth: 'Growth', studio: 'Studio', pro: 'Pro' };
+// D700 follow-up (#2182): a founder tier's name is its plan's (D683), "Validate +
+// Build" and "Raise + Grow". The ids stay `growth` and `studio`, and the Worker
+// sends ids; no tool on `main` is locked to a `pro` tier, so that key is gone.
+export const TIER_LABEL = Object.freeze({ growth: TIER_PLANS.growth.label, studio: TIER_PLANS.studio.label });
 
 export function categoryOf(p) {
   return p?.category || KEY_CATEGORY[p?.key] || TYPE_CATEGORY[p?.integration_type] || null;
@@ -808,8 +812,8 @@ export function companiesWith(conn, companyId) {
   return [...new Set([...ids, Number(companyId)])];
 }
 
-/** The plan a locked tool needs, in the Worker's tier words; never the canvas's placeholder "Pro". */
-export const UPGRADE_TIER = Object.freeze({ growth: 'Growth', studio: 'Studio' });
+/** The plan a locked tool needs, by its plan's name (#2182); never the canvas's placeholder "Pro". */
+export const UPGRADE_TIER = TIER_LABEL;
 
 /**
  * One row of Build's list (D686 §3.1 items 2 and 5): its line under the name,
@@ -817,7 +821,7 @@ export const UPGRADE_TIER = Object.freeze({ growth: 'Growth', studio: 'Studio' }
  *   failing   "Sign-in expired" → reconnect; "Last sync failed" → retry
  *             (a sync); "Daily limit reached" → none: waiting is the fix.
  *   connected → disconnect (with an inline confirm); the name opens its detail.
- *   locked    → the real tier's pill and "Upgrade to Growth" / "to Studio".
+ *   locked    → the real tier's pill and "Upgrade to Validate + Build" / "to Raise + Grow".
  *   soon      → "Will feed …", no action.
  */
 export function toolRow(p) {

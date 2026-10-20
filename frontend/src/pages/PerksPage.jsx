@@ -9,6 +9,7 @@ import { reportError } from '../lib/log';
 import { Card, Pill, SectionLabel, Unrecorded, Unreadable, WorkerRail, usePhoneWidth } from '../ui';
 import { AccountPhonePage, phonePending } from './account/AccountPhonePage';
 import { ACCOUNT_PHONE_PAGES } from './account/accountPhone';
+import { TIER_PLANS } from '../components/PaywallModal';
 import './perksDesk.css';
 import ZoneToolbar from '../workspaces/ZoneToolbar';
 import ZoneDraft from '../workspaces/ZoneDraft';
@@ -82,12 +83,14 @@ const money = (cents) => (cents === null || cents === undefined
 /** Whole dollars for a stated value — "$2,400 value" — never a float round-trip. */
 const dollars = (cents) => `$${Math.round(Number(cents) / 100).toLocaleString()}`;
 const day = (iso) => String(iso || '').slice(0, 10);
-const tierName = (t) => (t ? String(t).charAt(0).toUpperCase() + String(t).slice(1) : '');
+// D700 follow-up (#2182): a tier is named by its plan ("Validate + Build", "Raise + Grow"),
+// never by its capitalised id; `free` is the free plan, and an unknown id has no name.
+const tierName = (t) => TIER_PLANS[t]?.label || (t === 'free' ? 'Free' : '');
 const initials = (name) => String(name || '').split(/\s+/).filter(Boolean).slice(0, 2)
   .map((w) => w[0].toUpperCase()).join('');
 
 function priceLabel(p) {
-  if (p.kind === 'tier') return p.required_tier ? `Included in ${tierName(p.required_tier)}` : 'Included in your plan';
+  if (p.kind === 'tier') return tierName(p.required_tier) ? `Included in ${tierName(p.required_tier)}` : 'Included in your plan';
   if (p.kind === 'money') return money(p.price_cents) || 'Quoted';
   return `${n0(p.credits)} credits`;
 }
@@ -95,7 +98,7 @@ function priceLabel(p) {
 /** The canvas's line under the price: short by, needs a tier, or what kind of thing it is. */
 function costNote(p) {
   if (p.kind === 'credits') return p.reason === 'insufficient_credits' ? `${n0(p.short_by)} short` : '';
-  if (p.kind === 'tier') return p.reason === 'tier_required' ? `needs ${tierName(p.required_tier)}` : 'your plan';
+  if (p.kind === 'tier') return p.reason === 'tier_required' ? `needs ${tierName(p.required_tier) || 'a paid plan'}` : 'your plan';
   return 'paid engagement';
 }
 
@@ -199,7 +202,7 @@ export function PerkCard({ p, onOpen, preview = false }) {
       </div>
       {p.reason === 'tier_required' && (
         <div className="mt-2.5 rounded-[9px] bg-violet-50 px-2.5 py-2 text-[10.5px] text-violet-800 dark:bg-violet-900/20 dark:text-violet-200">
-          Available on {tierName(p.required_tier)} and above
+          {tierName(p.required_tier) ? `Available on ${tierName(p.required_tier)} and above` : 'Available on a paid plan'}
         </div>
       )}
       {p.cap_reached && (
@@ -377,9 +380,9 @@ function ClaimModal({ perk, userTier, onClose, onClaimed, onGoMine }) {
   const tierBlocked = !d.claimable && d.reason === 'tier_required';
   const label = d.claimable
     ? (d.kind === 'money' ? `Request · ${money(d.price_cents) || 'quoted'}`
-      : d.kind === 'tier' ? `Claim · included in ${tierName(d.required_tier)}`
+      : d.kind === 'tier' ? `Claim · included in ${tierName(d.required_tier) || 'your plan'}`
         : `Claim · ${n0(cost)} credits`)
-    : (d.reason === 'tier_required' ? `Upgrade to ${tierName(d.required_tier)}` : (UNCLAIMABLE_LABEL[d.reason] || 'Not claimable'));
+    : (d.reason === 'tier_required' ? (tierName(d.required_tier) ? `Upgrade to ${tierName(d.required_tier)}` : 'Upgrade your plan') : (UNCLAIMABLE_LABEL[d.reason] || 'Not claimable'));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={onClose}>
@@ -452,10 +455,10 @@ function ClaimModal({ perk, userTier, onClose, onClaimed, onGoMine }) {
               )}
               {d.kind === 'tier' && (
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px] text-gray-700 dark:text-gray-300">
-                  {userTier && <Pill tone="info">{tierName(userTier)} plan</Pill>}
+                  {tierName(userTier) && <Pill tone="info">{tierName(userTier)} plan</Pill>}
                   {tierBlocked
-                    ? `Needs ${tierName(d.required_tier)}.${userTier ? ` You are on ${tierName(userTier)}.` : ''}`
-                    : `Included in ${tierName(d.required_tier)}.`}
+                    ? `Needs ${tierName(d.required_tier) || 'a paid plan'}.${tierName(userTier) ? ` You are on ${tierName(userTier)}.` : ''}`
+                    : `Included in ${tierName(d.required_tier) || 'your plan'}.`}
                 </div>
               )}
               {d.kind === 'money' && (
@@ -1769,7 +1772,7 @@ function PerksMarket({ user }) {
               </div>
               <div className="flex items-center gap-2">
                 <CreditBalance catalog={catalog} failed={!!catalogErr} onRetry={loadCatalog} />
-                {userTier && <Pill tone="info">{tierName(userTier)} plan</Pill>}
+                {tierName(userTier) && <Pill tone="info">{tierName(userTier)} plan</Pill>}
               </div>
             </div>
             {catalog && (

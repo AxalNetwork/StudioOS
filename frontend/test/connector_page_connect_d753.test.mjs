@@ -14,6 +14,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
+import { escapeRe } from './_escapeRe.mjs';
 
 import { TIER_LABEL, buildCatalogue } from '../src/pages/account/connectorsModel.js';
 import { keyHelpOf, keyPath, pageAction, pageChoices, pageNotice } from '../src/pages/account/connectorPageModel.js';
@@ -297,7 +298,7 @@ test('coming soon, locked, not set up and the entity Mercury each read as decisi
     try { assert.match(m.text(), /We’ll tell you/); } finally { await m.unmount(); }
     m = await mount(page('carta'), '/account/connectors/carta');
     try {
-      assert.match(m.text(), new RegExp(`${TIER_LABEL.studio} See plans`));
+      assert.match(m.text(), new RegExp(`${escapeRe(TIER_LABEL.studio)} See plans`));
       assert.equal(m.props(m.by('connector-page-plans')).href, '/account/billing');
       assert.equal(m.by('connector-page-connect-button'), undefined);
     } finally { await m.unmount(); }
