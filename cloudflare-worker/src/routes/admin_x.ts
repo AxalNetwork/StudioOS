@@ -842,11 +842,13 @@ r.post('/posts/:id/approve', async (c) => {
   const keys = safeJson<string[]>(post.media_r2_keys, []);
   let alts: string[] | null = null;
   const kept: string[] = [];
+  const keptCaptions: { index: number; proposal_uid: string }[] = [];
   for (const uid of uids) {
     const p = await openAltProposal(c.env, admin.id, id, uid, keys.length);
     if (!p || safeJson<string[]>(post.alt_texts, [])[p.index]) return c.json({ error: 'proposal_not_open' }, 409);
     alts = withAlt(alts ?? safeJson<string[]>(post.alt_texts, []), keys.length, p.index, String(p.payload.text || '').trim().slice(0, 1000));
     kept.push(p.uid);
+    keptCaptions.push({ index: p.index, proposal_uid: p.uid });
   }
   // D1 batches are transactional. Recheck every proposal's open status in the
   // post write, then accept the same set only if that write changed one row.
@@ -873,7 +875,8 @@ r.post('/posts/:id/approve', async (c) => {
   ]);
   if (!result[0].meta?.changes) return c.json({ error: 'proposal_not_open' }, 409);
   const approvedHash = await sha256Hex(String(post.body || ''));
-  await writeAudit(c.env, { adminId: admin.id, adminEmail: admin.email, action: 'x_post_approved', postId: id, accountId: post.account_id, bodyHash: approvedHash });
+  await writeAudit(c.env, { adminId: admin.id, adminEmail: admin.email, action: 'x_post_approved', postId: id, accountId: post.account_id, bodyHash: approvedHash,
+    extra: kept.length ? { alt_text_proposals: keptCaptions } : undefined });
   return c.json({ ok: true });
 });
 

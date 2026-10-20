@@ -27,7 +27,7 @@ async function world(texts = ['A team at a whiteboard.']) {
   __resetForTest();
   const f = aiBudgetFixture();
   f.db.exec(MIGRATION);
-  f.db.exec("CREATE TABLE admin_audit_log(id INTEGER PRIMARY KEY, admin_id INTEGER, admin_email TEXT, action TEXT, filters TEXT, created_at TEXT DEFAULT (datetime('now')));");
+  f.db.exec("CREATE TABLE admin_audit_log(id INTEGER PRIMARY KEY, admin_user_id INTEGER, action TEXT, report_type TEXT, filters_json TEXT, created_at TEXT DEFAULT (datetime('now')));");
   const files = new Map<string, Uint8Array>();
   const FILES = { async get(k: string) { const b = files.get(k); return b ? { httpMetadata: { contentType: 'image/png' }, async arrayBuffer() { return b.buffer; } } : null; } };
   const env: any = { DB: f.DB, AI: withGuard(makeAI(texts)), FILES, JWT_SECRET: 'd780-x-fixture-only-secret', ENVIRONMENT: 'development' };
@@ -75,6 +75,9 @@ test('Approve keeps the captions it names; one that is not open refuses the Appr
   assert.equal(w.f.db.prepare('SELECT status FROM x_posts WHERE id = 7').get().status, 'approved');
   assert.deepEqual(JSON.parse(alts(w)), ['Caption A.', '']);
   assert.equal(proposal(w, a).status, 'accepted');
+  const audit = w.f.db.prepare("SELECT admin_user_id, filters_json FROM admin_audit_log WHERE action = 'x_post_approved' ORDER BY id DESC LIMIT 1").get();
+  assert.equal(audit.admin_user_id, SUPER);
+  assert.deepEqual(JSON.parse(audit.filters_json).alt_text_proposals, [{ index: 0, proposal_uid: a }]);
 });
 
 // 2 ───────────────────────────────────────────────────────────────────────────
