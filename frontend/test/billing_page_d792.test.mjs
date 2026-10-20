@@ -133,7 +133,7 @@ test('Buy tokens: the pack cards, the offer and first-purchase pills only where 
     assert.equal(m.textOf('pack-first-pack10'), 'First purchase only');
     assert.equal(m.byTestId('pack-first-pack25'), undefined);
     assert.equal(m.props(m.byTestId('pack-buy-pack25')).href, '/checkout?token_pack=pack25');
-    assert.match(m.text(), new RegExp(TOKENS_FOOTNOTE.replace(/[.$]/g, '\\$&')));
+    assert.ok(m.text().includes(TOKENS_FOOTNOTE), 'the footnote under the packs');
   } finally { await m.unmount(); }
   m = await mount(h(BuyTokensCard, { topUp: ready({ packs: [] }) }));
   try { assert.equal(m.textOf('buy-tokens-none'), 'Top-up isn\'t available yet.'); } finally { await m.unmount(); }
