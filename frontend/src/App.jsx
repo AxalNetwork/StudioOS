@@ -237,6 +237,8 @@ const SendForSignaturePage = lazy(() => import('./pages/legal/SendForSignaturePa
 // The subsidiary administrator's read of their own territory licence.
 // Migration 190 made "which licence is this admin's?" answerable at all.
 const MyLicencePage = lazy(() => import('./pages/subsidiary/MyLicencePage'));
+// D804 (#2241): the Licences page's Contract, Statements and Requests tabs, until D800 (#2233) builds their frame.
+const LicenceTabRoute = lazy(() => import('./pages/subsidiary/licence/LicenceTabRoute'));
 const BranchSettings = lazy(() => import('./pages/branch/BranchSettings'));
 const BranchApprovals = lazy(() => import('./pages/branch/BranchApprovals'));
 // The frame every /branch/* route below renders in, and the branch tier's one
@@ -2712,6 +2714,9 @@ function AppInner() {
       <Route path="/admin/fund-admin" element={guard(['admin'], <FundAdminConsole />)} />
       {/* A subsidiary admin reads their OWN licence; /admin/licences is HQ's ledger of every one. */}
       <Route path="/admin/my-licence" element={guard(['admin'], <MyLicencePage />)} />
+      <Route path="/admin/my-licence/contract" element={guard(['admin'], <LicenceTabRoute tab="contract" />)} />
+      <Route path="/admin/my-licence/statements" element={guard(['admin'], <LicenceTabRoute tab="statements" />)} />
+      <Route path="/admin/my-licence/requests" element={guard(['admin'], <LicenceTabRoute tab="requests" />)} />
       {/* D286 — S20's five landings. `guard(['admin'])` and never `hqOnly`:
           this is the plain admin's own shell. Each carries its consoles as
           literal links, which is how the reachability walk reaches them. */}

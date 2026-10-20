@@ -200,6 +200,7 @@ test('in force is the latest signed contract, pending the one sent and waiting, 
   const r = await call(env, PRINCIPAL, 'GET', '/mine/contract');
   assert.equal(r.body.in_force.uid, 'ctr_a_v3', 'v3 stays in force while v4 waits, though drawing v4 superseded it');
   assert.equal(r.body.in_force.signed_at, '2026-08-03 00:00:00');
+  assert.equal(r.body.in_force.drafted_at, '2026-08-01 00:00:00', 'the Drafted step has its date');
   assert.equal(r.body.pending.uid, 'ctr_a');
   assert.ok(!JSON.stringify(r.body).includes('BODY-A-REDRAFT'), 'a contract HQ never sent was shown');
 
