@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import { markSubscriptionAmountCanceled, recordSubscriptionAmount } from '../services/planAllowance';
+import { heldInterval, markSubscriptionAmountCanceled, recordSubscriptionAmount } from '../services/planAllowance';
 import type { Env, User } from '../types';
 import { requireAuth, requireFactor, requireStepUp } from '../auth';
 import { ensureMiPaywallSchema, MI_PRO_PRODUCTS, userHasMiPro } from '../middleware/miAccess';
@@ -279,18 +279,31 @@ function isValidTier(t: unknown): t is 'growth' | 'studio' {
   return t === 'growth' || t === 'studio';
 }
 
+/**
+ * D816 (#2262): the billing interval a checkout asked for. Absent is monthly,
+ * so a caller that sends none buys what it always bought; anything other than
+ * `month` or `year` is refused (null), never read as monthly.
+ */
+export function checkoutInterval(v: unknown): 'month' | 'year' | null {
+  if (v === undefined || v === null) return 'month';
+  return v === 'month' || v === 'year' ? v : null;
+}
+
 billing.post('/tier/checkout', async (c) => {
   const user = (await requireAuth(c)) as TierUser;
   await ensureTierSchema(c.env);
-  const body = await c.req.json().catch(() => ({} as { tier?: string }));
+  const body = await c.req.json().catch(() => ({} as { tier?: string; interval?: string }));
   const tier = body.tier;
   if (!isValidTier(tier)) return c.json({ error: 'invalid_tier' }, 400);
+  // D816 (#2262): every paid plan sells monthly or yearly; monthly when the caller names none.
+  const interval = checkoutInterval(body.interval);
+  if (!interval) return c.json({ error: 'invalid_interval', allowed: ['month', 'year'] }, 400);
 
   const stripeKey = c.env.STRIPE_SECRET_KEY;
   // Resolve the SKU from the catalog instead of STRIPE_PRICE_GROWTH/STUDIO.
-  // Each founder-tier product carries `metadata.tier === 'growth' | 'studio'`
-  // and a single recurring price (interval not encoded in the tier string).
-  const price = stripeKey ? await priceForPlanMetadata(c.env, 'tier', tier) : null;
+  // Each founder-tier product carries `metadata.tier === 'growth' | 'studio'`;
+  // the interval selects its monthly or yearly recurring price.
+  const price = stripeKey ? await priceForPlanMetadata(c.env, 'tier', tier, interval) : null;
   const priceId = price?.id;
   const appUrl = c.env.APP_URL || 'http://localhost:5000';
 
@@ -304,7 +317,7 @@ billing.post('/tier/checkout', async (c) => {
     }
     if (!stripeKey) return c.json({ error: 'stripe_not_configured' }, 503);
     return c.json(
-      { error: 'catalog_price_missing', detail: `No active Stripe price for tier=${tier}` },
+      { error: 'catalog_price_missing', interval, detail: `No active Stripe price for tier=${tier} interval=${interval}` },
       502,
     );
   }
@@ -317,6 +330,7 @@ billing.post('/tier/checkout', async (c) => {
     cancel_url: `${appUrl}/settings?tab=billing&upgrade_cancelled=1`,
     'metadata[user_id]': String(user.id),
     'metadata[tier]': tier,
+    'metadata[interval]': interval,
     'metadata[kind]': 'tier',                     // disambiguates from MI Pro in webhook
     // Checkout session metadata does NOT cascade to the underlying Stripe
     // Subscription. Propagate via subscription_data[metadata] so the
@@ -407,6 +421,8 @@ billing.get('/tier/status', async (c) => {
   return c.json({
     tier: user.subscription_tier || 'free',
     status,
+    // D816: how often the held plan is charged (`month` | `year`), from the recorded charge; null when none is recorded.
+    interval: await heldInterval(c.env, Number(user.id), 'founder'),
     renews_at: renews,
     // When Stripe reports the sub as `trialing`, the current-period end IS the
     // trial end — the moment the first real charge is attempted. Surfacing it
@@ -461,6 +477,12 @@ function isValidInvestorPlan(p: unknown): p is keyof typeof INVESTOR_PLAN_TO_PRI
   return typeof p === 'string' && Object.prototype.hasOwnProperty.call(INVESTOR_PLAN_TO_PRICE, p);
 }
 
+/** D816: the plan key for a tier at an interval, so the plan Stripe records names what was bought. */
+function investorPlanFor(tier: InvestorTier, interval: 'month' | 'year'): keyof typeof INVESTOR_PLAN_TO_PRICE {
+  const key = Object.entries(INVESTOR_PLAN_TO_PRICE).find(([, v]) => v.tier === tier && v.interval === interval)?.[0];
+  return key as keyof typeof INVESTOR_PLAN_TO_PRICE;
+}
+
 billing.post('/investor/checkout', async (c) => {
   // Step-up to TOTP, mirrors mi-pro/checkout — billing surfaces never run on
   // SMS-only sessions.
@@ -471,10 +493,13 @@ billing.post('/investor/checkout', async (c) => {
   if (user.role !== 'investor' && user.role !== 'admin') {
     return c.json({ error: 'investor_only' }, 403);
   }
-  const body = await c.req.json().catch(() => ({} as { plan?: string }));
-  const plan = body.plan;
-  if (!isValidInvestorPlan(plan)) return c.json({ error: 'invalid_plan' }, 400);
-
+  const body = await c.req.json().catch(() => ({} as { plan?: string; interval?: string }));
+  if (!isValidInvestorPlan(body.plan)) return c.json({ error: 'invalid_plan' }, 400);
+  // D816 (#2262): an explicit interval chooses the price, as on the founder and
+  // persona checkouts; with none, the plan key's own interval stands.
+  const interval = body.interval === undefined ? INVESTOR_PLAN_TO_PRICE[body.plan].interval : checkoutInterval(body.interval);
+  if (!interval) return c.json({ error: 'invalid_interval', allowed: ['month', 'year'] }, 400);
+  const plan = investorPlanFor(INVESTOR_PLAN_TO_PRICE[body.plan].tier, interval);
   const cfg = INVESTOR_PLAN_TO_PRICE[plan];
   const stripeKey = c.env.STRIPE_SECRET_KEY;
   // Resolve the SKU from the catalog instead of STRIPE_PRICE_INVESTOR_*.
@@ -496,7 +521,7 @@ billing.post('/investor/checkout', async (c) => {
     }
     if (!stripeKey) return c.json({ error: 'stripe_not_configured' }, 503);
     return c.json(
-      { error: 'catalog_price_missing', detail: `No active Stripe price for investor_tier=${cfg.tier} interval=${cfg.interval}` },
+      { error: 'catalog_price_missing', interval: cfg.interval, detail: `No active Stripe price for investor_tier=${cfg.tier} interval=${cfg.interval}` },
       502,
     );
   }
@@ -580,6 +605,8 @@ billing.get('/investor/status', async (c) => {
     tier,
     raw_tier: user.investor_tier ?? 'free',
     status: user.investor_subscription_status ?? 'free',
+    // D816: how often the held plan is charged, from the recorded charge; null when none is recorded.
+    interval: await heldInterval(c.env, Number(user.id), 'investor'),
     trial_ends_at: user.investor_trial_ends_at ?? null,
     renews_at: user.investor_subscription_renews_at ?? null,
     has_customer: !!user.investor_stripe_customer_id,
@@ -670,6 +697,8 @@ billing.get('/plan/status', async (c) => {
     plan_group: group,
     plan: row?.plan ?? null,
     status,
+    // D816: how often the held plan is charged, from the recorded charge; null when none is recorded.
+    interval: await heldInterval(c.env, Number(user.id), group),
     renews_at: row?.period_end ?? null,
     trial_ends_at: status === 'trialing' ? (row?.trial_end ?? row?.period_end ?? null) : null,
     has_customer: !!user.stripe_customer_id,
@@ -697,7 +726,7 @@ billing.post('/plan/checkout', async (c) => {
     }
     if (!stripeKey) return c.json({ error: 'stripe_not_configured' }, 503);
     return c.json(
-      { error: 'catalog_price_missing', detail: `No active Stripe price for plan_group=${group} interval=${interval}` },
+      { error: 'catalog_price_missing', interval, detail: `No active Stripe price for plan_group=${group} interval=${interval}` },
       502,
     );
   }
