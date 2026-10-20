@@ -31,8 +31,9 @@ import type { Env } from '../types';
 import { requireSuperAdmin } from '../auth';
 import { mapError, newUid, nowIso } from './_t13t14t15_helpers';
 import {
-  drawStatement, quarterKey, PERIOD_RE, STATEMENT_STREAMS, type StreamFigure,
+  drawStatement, quarterKey, PERIOD_RE, STATEMENT_STREAMS, type ShareTerms, type StreamFigure,
 } from '../services/statements';
+import { readLicenceTerms, TERMS_REASON } from '../services/licenceTerms';
 import { branchByCode } from '../services/branches';
 import { mirrorBranchAction } from '../services/auditMirror';
 import { logAdminAction } from '../services/adminAudit';
@@ -234,7 +235,29 @@ r.post('/statements/draw', async (c) => {
       };
     });
 
-    const drawn = drawStatement(figures, licence.revenue_share_bps, licence.currency || 'EUR');
+    // D802 — THE SHARE PER STREAM, AND THE ROYALTY, come from D797's terms
+    // schedule. A licence with no schedule draws every stream at the ledger's
+    // share and records no royalty; a schedule that cannot be READ refuses,
+    // because drawing at the fallback then would bill a rate the terms may
+    // have replaced, and say nothing about it.
+    let rec;
+    try {
+      rec = await readLicenceTerms(c.env, licenceUid);
+    } catch {
+      return c.json({
+        error: 'terms_unreadable',
+        message: `${TERMS_REASON.unreadable} No statement is drawn until the per-stream shares can be read.`,
+      }, 503);
+    }
+    const t = rec?.terms ?? {};
+    const shares: ShareTerms = {
+      fallback_bps: licence.revenue_share_bps,
+      subscriptions_bps: t.share_subscriptions_bps as number | null ?? null,
+      licence_fees_bps: t.share_licence_fees_bps as number | null ?? null,
+      token_margin_bps: t.share_token_margin_bps as number | null ?? null,
+      royalty_bps: t.royalty_platform_licence_bps as number | null ?? null,
+    };
+    const drawn = drawStatement(figures, shares, licence.currency || 'EUR');
 
     // D514 — A RE-DRAW KEEPS WHAT WAS PAID AND DISPUTED (the upsert below leaves
     // both alone), so a re-draw to a smaller owed figure would leave more paid

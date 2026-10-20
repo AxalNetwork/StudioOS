@@ -253,3 +253,8 @@ report and the masked payment instructions), the "Needs you" list, a branch's
 "Send now" usage push, and a statement dispute. `contractPdfBlob` reads
 `GET /api/licence/mine/contract/:uid/pdf` as a Blob, outside the typed drift
 surface. Nothing here returns a full account number.
+D802 (#2238): `licenceFeeInvoices.js` is HQ's annual licence-fee invoices to a
+licensee (`/api/admin/licences/:uid/fee-invoices`, Super Admin; issuing and
+recording take a recent step-up): list, issue, record a payment, void. `pdfBlob`
+reads the invoice's PDF as a Blob, outside the typed drift surface. The
+Administrator reads their own invoices on `/api/licence/mine/statements`.
