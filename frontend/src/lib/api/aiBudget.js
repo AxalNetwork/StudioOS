@@ -1,7 +1,7 @@
 // D629 / D640 / D641 / D642 (#1435) — the AI allowance, as the member reads it
 // and as HQ sets it. Worker: routes/ai_budget.ts (/api/ai-budget) and the rate
 // card in routes/ai.ts (/api/ai/rates).
-import { request } from '../api.js';
+import { api, request } from '../api.js';
 
 const enc = encodeURIComponent;
 const body = (b) => JSON.stringify(b ?? {});
@@ -35,6 +35,10 @@ export const aiBudgetApi = {
   memberRuns: (userId, { month } = {}) => request(`/ai-budget/members/${enc(userId)}/runs${month ? `?month=${enc(month)}` : ''}`),
   // D776 PR 2 — HQ: how members are charged, and the models offered with the pages that name them.
   models: () => request('/ai/catalogue/hq'),
+  // D787 — the member's own cost per day and per model (`range`: mtd, 30d or prev_month; `group`: model, page or option).
+  cost: ({ range = 'mtd', group = 'model' } = {}) => request(`/ai-budget/cost?${new URLSearchParams({ range, group })}`),
+  // D787 — the same read as a CSV download, one row per day and model.
+  costCsv: ({ range = 'mtd', group = 'model' } = {}) => api._downloadCsv(`/ai-budget/cost.csv?${new URLSearchParams({ range, group })}`, `ai-cost-${range}.csv`),
   // D750 — Super Admin: why the top-up is or is not offered.
   topUpStatus: () => request('/ai-budget/top-up/status'),
   // D641 — every model the router can price, read from its own tables.
