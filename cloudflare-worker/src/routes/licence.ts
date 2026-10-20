@@ -51,10 +51,11 @@ import {
 // D244 — and the push's own writer, which the pull reuses so a pulled copy and
 // a pushed one are one row written one way.
 import { SEAT_ROLES, applyLicenceCopy } from '../rpc/branchOps';
+import { TERMS_REASON, readLicenceTerms, termsFromRow, type LicenceTerms } from '../services/licenceTerms';
 import { withDeadline, DeadlineExceeded } from '../util/deadline';
 import {
   BRANCH_UNAVAILABLE, USAGE_REASON, licenseeContractPdf, licenseeContracts, licenseeNeeds, licenseeStatements,
-  noticesWaiting, parseDispute, raiseStatementDispute, seatsNearCap,
+  noticesWaiting, parseDispute, raiseStatementDispute, seatsNearCap, type LicenseeTermsInput,
 } from '../services/licenceAccount';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -514,6 +515,8 @@ export async function branchLicencePayload(env: Env, code: string) {
     events_reason:
       'The licence event trail is held at HQ and is not copied to a branch. Ask HQ for the '
       + 'history of a licence change.',
+    // D797 — the terms schedule, from the copy's own column, read on its own.
+    ...(await branchTermsField(env)),
     source: 'hq_copy' as const,
     as_of: row.pushed_at,
     branch: code,
@@ -605,6 +608,51 @@ async function licenceForUser(env: Env, userId: number) {
   ).bind(userId).first<LicenceRow & { admin_role: string }>();
 }
 
+/**
+ * D797 — `/mine`'s terms: the schedule, or null with the sentence that says why.
+ * A failed read is its own answer, never "not recorded" (AGENTS.md: Unreadable,
+ * never zero), and it costs the page its terms and nothing else.
+ */
+export type TermsField = { terms: LicenceTerms | null; terms_reason: string | null; sections: Record<string, string> };
+
+async function hqTermsField(env: Env, licenceUid: string): Promise<TermsField> {
+  try {
+    const rec = await readLicenceTerms(env, licenceUid);
+    return rec
+      ? { terms: rec.terms, terms_reason: null, sections: rec.sections }
+      : { terms: null, terms_reason: TERMS_REASON.not_recorded, sections: {} };
+  } catch (e) {
+    console.warn('[licence] licence_terms unreadable', (e as Error).message);
+    return { terms: null, terms_reason: TERMS_REASON.unreadable, sections: {} };
+  }
+}
+
+/**
+ * On a branch, the terms ride the copy (`branch_licence.terms_json`, migration
+ * 512), read apart from the copy's other columns so a branch without 512 still
+ * reads its licence. SQL NULL is a copy HQ pushed before this column existed;
+ * the JSON `null` is a push that says HQ has recorded no terms.
+ */
+async function branchTermsField(env: Env): Promise<TermsField> {
+  let raw: string | null;
+  try {
+    const row = await env.DB.prepare('SELECT terms_json FROM branch_licence WHERE id = 1').first<{ terms_json: string | null }>();
+    raw = row?.terms_json ?? null;
+  } catch (e) {
+    console.warn('[licence] branch_licence.terms_json unreadable', (e as Error).message);
+    return { terms: null, terms_reason: TERMS_REASON.not_pushed, sections: {} };
+  }
+  if (raw === null) return { terms: null, terms_reason: TERMS_REASON.not_pushed, sections: {} };
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed === null) return { terms: null, terms_reason: TERMS_REASON.not_recorded, sections: {} };
+    const rec = termsFromRow(parsed);
+    return rec ? { terms: rec.terms, terms_reason: null, sections: rec.sections } : { terms: null, terms_reason: TERMS_REASON.not_recorded, sections: {} };
+  } catch {
+    return { terms: null, terms_reason: TERMS_REASON.unreadable, sections: {} };
+  }
+}
+
 // GET /api/licence/mine — the subsidiary dashboard's only source.
 //
 // 404 rather than 403 when the caller administers nothing: they are not
@@ -664,6 +712,9 @@ r.get('/mine', async (c) => {
     events: events.results || [],
     deployment,
     ...DERIVED_UNAVAILABLE,
+    // D797 — the licence's terms schedule, the same for a principal and a
+    // delegate: `licenceForUser` already scoped this to the caller's licence.
+    ...(await hqTermsField(c.env, row.uid)),
   });
 });
 
@@ -1132,13 +1183,37 @@ r.get('/mine/contract/:uid/pdf', async (c) => {
 
 // GET /api/licence/mine/statements — issued, paid and void statements, each
 // period's usage report, and the masked payment instructions. D797's
-// `licence_terms` (`licensor_ip_entity`, `usage_report_day`) is not on main
-// yet; once it is, it is read here and passed as the third argument.
+// `licence_terms` gives the IP licensor (the payee check) and the usage report
+// day; an unrecorded day stays null, with no default (S1's ruling on #2250).
+// A terms read that fails gives no payment instructions at all: an account
+// shown without knowing who the licensor is could be the wrong entity's.
 r.get('/mine/statements', async (c) => {
   const own = await ownLicenceForAccount(c);
   if ('refusal' in own) return own.refusal;
   if ('branch' in own) return c.json({ ...BRANCH_UNAVAILABLE, usage: { send_now: true, send_now_reason: null } });
-  return c.json(await licenseeStatements(c.env, own.licence));
+  let terms: LicenseeTermsInput = {};
+  let unreadable = false;
+  try {
+    const rec = await readLicenceTerms(c.env, String(own.licence.uid));
+    if (rec) {
+      const day = rec.terms.usage_report_day;
+      terms = {
+        licensorIpEntity: typeof rec.terms.licensor_ip_entity === 'string' ? rec.terms.licensor_ip_entity : null,
+        usageReportDay: typeof day === 'number' ? day : null,
+      };
+    }
+  } catch (e) {
+    console.warn('[licence] licence_terms unreadable for statements', (e as Error).message);
+    unreadable = true;
+  }
+  const body = await licenseeStatements(c.env, own.licence, terms);
+  if (unreadable) {
+    body.payment = {
+      refusal_code: 'terms_unreadable',
+      refusal: `${TERMS_REASON.unreadable} No payment instructions are given until the licensor can be checked.`,
+    };
+  }
+  return c.json(body);
 });
 
 // POST /api/licence/mine/usage/send — "Send now": the branch's own usage push

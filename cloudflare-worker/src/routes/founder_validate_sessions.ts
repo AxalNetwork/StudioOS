@@ -44,13 +44,14 @@ import {
 import { DEFAULT_FINAL_MODEL, DEFAULT_LIVE_MODEL, isChoosable, listSttModels } from '../services/sttModels';
 import { WHISPER_TURBO } from '../services/sttFormats';
 import { holdBlock, openLiveRelay } from '../services/liveTranscription';
+import { railFor } from '../util/railContext';
 import {
   SETUP_CHANNELS, activeSessionOf, callRefusal, interviewCard, languageFor, listPoints, markInterviewHeld,
   pointStatements, sessionExtras,
 } from '../services/sessionSetup';
 import { setInterviewStage } from '../services/validateWriters';
 import {
-  afterChunkStored, finishSession, isStale, processingOf, recoverSession, summaryOf, transcribeChunk,
+  CUSTOMER_RESEARCH_PAGE, TRANSCRIBE_OPTIONS, afterChunkStored, finishSession, isStale, processingOf, recoverSession, summaryOf, transcribeChunk,
 } from '../services/interviewProcessing';
 import { consentRefusal, digestConsentRefusal, modelFrom, processingBusy, refusedBody, refusedStatus } from './founder_validate_structure';
 import { digestSession, withdrawDigest } from '../services/validateEngine';
@@ -892,6 +893,8 @@ sessions.post('/sessions/:id/transcribe', async (c) => {
     // The same per-chunk call the processing job makes (D685 §5.9).
     const r = await transcribeChunk(c.env, {
       session: s.session, userId: s.user.id, chunk: ch, model, intervieweeName: s.interview.interviewee_name, offsetMs: offset,
+      // D778 part 6: the press's page and option win; the inventory's stand for a client that sent none.
+      rail: railFor(c, { page: CUSTOMER_RESEARCH_PAGE, option: TRANSCRIBE_OPTIONS.recording }, `session:${s.session.id}`),
     });
     if (!r.ok) return fail(r.refusal, r.message, r.refusal === 'chunk_missing' ? 502 : r.budget ? 402 : 503);
     costMicro += r.costMicro;

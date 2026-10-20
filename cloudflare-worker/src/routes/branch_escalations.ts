@@ -72,6 +72,7 @@ import { requireBranchTier } from '../util/branch';
 import { mapError, nowIso } from './_t13t14t15_helpers';
 import { branchEscalations, branchLicenceKind } from '../rpc/branchOps';
 import { ESCALATION_KINDS, escalationKindsFor } from '../rpc/hqOps';
+import { parseRequest, parseNote, encodeRequestDetail, isRequestKind, withRequestView } from '../services/escalationRequests';
 import {
   CONCERN_KIND, BAD_CONCERN, listConcerns, parseConcern, resolveConcern,
   parseRelation, RELATION_REQUIRED, BAD_RELATION, RELATION_NEEDS_ITEM, RELATION_NOT_FOR_KIND,
@@ -131,7 +132,9 @@ r.get('/escalations', async (c) => {
     let payload: unknown = null;
     let available = true;
     try {
-      payload = await branchEscalations(c.env, 100);
+      const lane = await branchEscalations(c.env, 100);
+      // D799 — each row's request read out of `detail`, beside it.
+      payload = { ...lane, items: lane.items.map(withRequestView) };
     } catch { available = false; }
 
     // D206 — which kinds this licence offers. `kinds` stays the whole
@@ -190,8 +193,8 @@ r.post('/escalations', async (c) => {
     if (!(ESCALATION_KINDS as readonly string[]).includes(kind)) {
       return c.json({
         error: 'bad_kind',
-        message: `kind must be one of ${ESCALATION_KINDS.join(', ')}. These are the four things a `
-          + 'branch cannot decide for itself; a fifth is a product decision, not a new value.',
+        message: `kind must be one of ${ESCALATION_KINDS.join(', ')}. These are the things a `
+          + 'branch cannot decide for itself; another is a product decision, not a new value.',
       }, 400);
     }
     const subject = str(b?.subject, 300);
@@ -282,7 +285,18 @@ r.post('/escalations', async (c) => {
     }
     const relation = relationIn ?? null;
 
-    const detail = str(b?.detail, 4000) || null;
+    // D799 — A REQUEST'S FIELDS, settled before HQ is called and stored in
+    // `detail` beside the note, so the retry below sends them again. The rule
+    // is `services/escalationRequests.ts`'s, the one HQ applies again. A kind
+    // D799 added needs its fields; an older `seat_increase` may still be text.
+    let detail = str(b?.detail, 4000) || null;
+    const requested = parseRequest(kind, b?.request);
+    if (!requested.ok) return c.json({ error: requested.error, message: requested.message, kind }, 400);
+    if (requested.request && isRequestKind(kind)) {
+      const note = parseNote(b?.detail);
+      if (!note.ok) return c.json({ error: note.error, message: note.message, kind }, 400);
+      detail = encodeRequestDetail(requested.request, note.note);
+    }
     const raisedBy = str((admin as { name?: string }).name, 200) || null;
     const now = nowIso();
     // D243 — BEFORE THE CALL, so a lost response retries as the same raise.

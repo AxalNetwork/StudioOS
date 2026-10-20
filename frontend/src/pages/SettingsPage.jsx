@@ -28,7 +28,8 @@ import { Orders, PlanHeader, useBillingStatus } from './account/AccountBilling';
 import AutoReloadCard from './account/AutoReloadCard';
 import { BuyTokensCard, PaymentDetailsCard, PlanAllowanceCard, TokenBalanceCard, useBillingReads } from './account/BillingCards';
 import FollowingSection from './account/AccountFollowing';
-import UsageSection from './account/AccountUsage';
+import UsageSection from './account/UsageOverview';
+import CostPage from './account/CostPage';
 // D807 (#2246) — `/account/usage/limits`, Usage's Limits page.
 import LimitsPage from './account/LimitsPage';
 import { USAGE_PAGES, usagePageFor } from './account/limitsModel';
@@ -497,7 +498,7 @@ function AccountPanes({ safeActive, data, setData, flash, patch, reloadAccount, 
         </>
       )}
       {safeActive === 'following' && <FollowingSection />}
-      {safeActive === 'usage' && (usagePage === 'limits' ? <LimitsPage /> : <UsageSection role={role} />)}
+      {safeActive === 'usage' && (usagePage === 'limits' ? <LimitsPage /> : usagePage === 'cost' ? <CostPage role={role} /> : <UsageSection role={role} />)}
       {safeActive === 'developer' && allowedIds.has('developer') && <DeveloperSection role={data.role} />}
       {safeActive === 'onboarding' && <OnboardingSettingsTab />}
       {safeActive === 'connectors' && <ConnectorsTab connectorKey={connectorKey} />}
@@ -4587,7 +4588,7 @@ function BillingTab({ data, flash }) {
   }
   return (
     <>
-      <BillingConsole role={role} billing={billing} />
+      <BillingConsole key={role} role={role} billing={billing} />
       {panel}
     </>
   );
@@ -4598,7 +4599,7 @@ function BillingTab({ data, flash }) {
 // Payment details beside Auto-reload (D794); then the orders, each with its
 // invoice. The role's panel follows as before.
 function BillingConsole({ role, billing }) {
-  const reads = useBillingReads();
+  const reads = useBillingReads({ role });
   return (
     <div className="flex flex-col gap-3" data-testid="billing-console">
       <div className="grid gap-3 md:grid-cols-2">

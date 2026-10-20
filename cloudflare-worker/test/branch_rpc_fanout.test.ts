@@ -25,6 +25,7 @@ import {
 } from '../src/services/branches.ts';
 import { branchHealth, branchOverview, branchSearchAccounts, applyLicenceCopy } from '../src/rpc/branchOps.ts';
 import { recordEscalation, openEscalations, slaBand, ESCALATION_KINDS } from '../src/rpc/hqOps.ts';
+import { encodeRequestDetail } from '../src/services/escalationRequests.ts';
 
 const read = (rel: string) => readFileSync(new URL(`../../${rel}`, import.meta.url), 'utf8');
 
@@ -517,9 +518,15 @@ test('escalate validates kind and subject against the migration\'s vocabulary', 
   );
   // And every declared kind is actually accepted — a validator that refused
   // everything would pass the two rejections above.
+  // D799 — a term change and a delegate request carry their fields in `detail`.
+  const REQUEST: Record<string, unknown> = {
+    terms_change: { term: 'seats', current: '20 founder seats', asked: '30 founder seats' },
+    delegate: { email: 'delegate@example.com' },
+  };
   for (const kind of ESCALATION_KINDS) {
-    const ok = await recordEscalation(env, 'fr', { kind, subject: `a ${kind} item` });
-    assert.equal(ok.status, 'open', `${kind} must be accepted`);
+    const detail = REQUEST[kind] ? encodeRequestDetail(REQUEST[kind] as Record<string, unknown>, null) : undefined;
+    const ok = await recordEscalation(env, 'fr', { kind, subject: `a ${kind} item`, detail });
+    assert.equal((ok as { status?: string }).status, 'open', `${kind} must be accepted`);
   }
 });
 

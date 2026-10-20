@@ -16,7 +16,7 @@ import { generatedList, generatedSpecimen, isGeneratedKey } from '../services/ge
 import { BUNDLED_SENT_DIRECTLY, librarySlugFor } from '../services/legalDocTypes';
 import { publishedContractTemplates, publicationFields, publishContractTemplates, preparePublishedContract, ContractPreparationError,
   publishOneTemplate, withdrawTemplatePublication, PublicationError } from '../services/contractPublication';
-import { formatView, formatOptions, renderFormat, effectiveFormat, COUNSEL_DRAFT_SLUGS } from '../services/templateFormat';
+import { formatView, formatOptions, renderFormat, effectiveFormat, COUNSEL_DRAFT_SLUGS, COUNSEL_REVIEW_SLUGS } from '../services/templateFormat';
 import { renderLegalPng } from '../services/browserRun';
 import { structureForPaper } from '../services/fundStructure';
 import { createAndSendEnvelope } from './esign';
@@ -1788,6 +1788,7 @@ adminContracts.get('/templates/store', async (c) => {
       last_used_at: lastUsed.get(t.slug) || null,
       ...formatView(t),
       counsel_draft: COUNSEL_DRAFT_SLUGS.has(t.slug),
+      counsel_review: COUNSEL_REVIEW_SLUGS.has(t.slug),
       ...(publications ? { published_version: publications.get(t.slug)?.version ?? null,
         has_unpublished_changes: publications.has(t.slug) ? !!t.is_stub || !t.body_md.trim() || publications.get(t.slug)?.version !== t.version
           : !t.is_stub && !!t.body_md.trim() } : {}),

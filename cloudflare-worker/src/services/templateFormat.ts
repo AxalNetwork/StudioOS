@@ -40,6 +40,14 @@ export const COUNSEL_DRAFT_SLUGS: ReadonlySet<string> = new Set([
   'securities_legend',
   'operating_partner_agreement_spin_out_lab',
 ]);
+/**
+ * D803 (#2240): templates with a body that counsel has not reviewed. HQ's
+ * library marks each "Draft — subject to counsel"; `LEGAL_REVIEW.md` lists
+ * what counsel must confirm. Leaves the set once counsel signs it off.
+ */
+export const COUNSEL_REVIEW_SLUGS: ReadonlySet<string> = new Set([
+  'subsidiary_licence_agreement',
+]);
 /** The documents that carry the Structure of the Fund page (decision 11; PR 1c places it). */
 export const STRUCTURE_MAP_SLUGS: ReadonlySet<string> = new Set(['ppm', 'subscription_booklet', 'compliance_manual_code_of_ethics']);
 

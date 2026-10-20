@@ -41,6 +41,7 @@ import { DECISION_WINDOW_DAYS, referralAges, type ReferralAges } from '../servic
 import { readBranchAdminTickets, type BranchTicketsRead } from '../services/supportQueues';
 import { activationFunnel, type ActivationRead } from '../services/activationFunnel';
 import { applyGameSet, readGameHoldings, type GameSet, type GameHoldings } from '../services/gameLibrary';
+import { notifyRequestAnswer } from '../services/escalationAnswerNotice';
 
 /** Every branch answer carries the code, because a binding does not (D.7). */
 export type BranchAnswer<T> = T & { branch: string; as_of: string };
@@ -397,6 +398,18 @@ export async function applyLicenceCopy(
     s('registered_address'), s('signatory_name'), s('signatory_title'),
     n('term_years'), s('terminated_at'), s('kind'), pushedAt,
   ).run();
+  // D797 — the terms schedule (migration 512) rides in its own write, so a
+  // branch that has not applied 512 still takes the rest of its copy. Written
+  // only when HQ sent the key, and only onto the copy this push wrote (its
+  // `pushed_at`), so an older push arriving late never overwrites newer terms.
+  if (Object.prototype.hasOwnProperty.call(record, 'terms_json')) {
+    try {
+      await env.DB.prepare('UPDATE branch_licence SET terms_json = ? WHERE id = 1 AND pushed_at = ?')
+        .bind(s('terms_json'), pushedAt).run();
+    } catch (e) {
+      console.warn('[branchOps] branch_licence.terms_json not written', (e as Error).message);
+    }
+  }
   return { applied: true, branch, as_of: pushedAt };
 }
 
@@ -797,6 +810,19 @@ export async function applyEscalationAnswer(
         + 'escalation nobody at this branch raised.',
     };
   }
+
+  // D799 — THE RAISER IS TOLD, HERE. Their account is on this database, which
+  // HQ cannot write, so the branch writes the bell notice when the decision
+  // lands. Best effort: a notice that did not land does not undo the decision.
+  try {
+    const row = await env.DB.prepare(
+      `SELECT hq_uid AS uid, kind, subject, status, answer, raised_by_user_id
+         FROM branch_escalations WHERE hq_uid = ?`,
+    ).bind(uid).first<{
+      uid: string; kind: string; subject: string; status: string; answer: string | null; raised_by_user_id: number | null;
+    }>();
+    if (row) await notifyRequestAnswer(env, { ...row, status: String(a.status ?? '') === 'declined' ? 'declined' : row.status });
+  } catch { /* the decision is stored; the notice is best effort */ }
   return { ok: true };
 }
 
