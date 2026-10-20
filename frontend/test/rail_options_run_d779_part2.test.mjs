@@ -218,10 +218,10 @@ test('the interview’s Explain streams into the tutor panel and writes only the
 test('the voice answer fills the composer; the member sends it, and transcribing writes nothing', () => {
   const pa = spa('components/advisor/PersonalAdvisor.jsx');
   for (const o of ROWS.filter((r) => r.key === 'transcribe:voice-answer')) assert.equal(o.source.marker, 'api.advisor.transcribe(');
-  assert.match(pa, /const res = await api\.advisor\.transcribe\(b64, mime\);\s*const text = String\(res\?\.text \|\| ''\)\.trim\(\);\s*if \(text\) onTextRef\.current\?\.\(text\);/);
+  assert.match(pa, /const res = await api\.advisor\.transcribe\(b64, mime, railPressHeaders\('transcribe:voice-answer'\)\);\s*const text = String\(res\?\.text \|\| ''\)\.trim\(\);\s*if \(text\) onTextRef\.current\?\.\(text\);/);
   const body = route(advisor, 'advisor', 'post', '/transcribe');
   assert.deepEqual(handlerWrites(body), []);
-  assert.match(body, /option: 'transcribe:voice'/);
+  assert.match(body, /option: 'transcribe:voice-answer'/);
 });
 
 // ------------------------------------------------------------------ Research's forms

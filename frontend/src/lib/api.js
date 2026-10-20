@@ -1342,8 +1342,10 @@ export const api = {
     // Voice-to-text for the composer mic. Posts a base64-encoded audio clip
     // + its mime type to the Workers AI Whisper endpoint; returns { text }.
     // The UI mic button that calls this is a separate task.
-    transcribe: (audio, mime) =>
+    // D778 part 6: `headers` is the press's own rail context (`railPressHeaders`).
+    transcribe: (audio, mime, headers) =>
       request('/advisor/transcribe', {
+        ...(headers ? { headers } : {}),
         method: 'POST',
         body: JSON.stringify({ audio, mime }),
       }),
@@ -1656,8 +1658,9 @@ export const api = {
     // it by hand produces a body the worker's formData() cannot parse.
     return request(`/founder/validate/interviews/${id}/recording`, { method: 'POST', body, timeoutMs: 120_000 });
   },
-  transcribeInterview: (id) => request(`/founder/validate/interviews/${id}/transcribe`, {
+  transcribeInterview: (id, headers) => request(`/founder/validate/interviews/${id}/transcribe`, {
     // A model call is not a read, and an hour of audio is not a fast one.
+    ...(headers ? { headers } : {}),
     method: 'POST', timeoutMs: 180_000,
   }),
   // Task #5 — customer-audience waitlist signups + lightweight CRM layer inside

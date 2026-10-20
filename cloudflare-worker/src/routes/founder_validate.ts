@@ -68,6 +68,7 @@ import { run as aiRun, audioMinutesFromBytes } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { currentDecision } from '../services/verdict';
 import { pageFromPath, railFor, refuseAssistOff } from '../util/railContext';
+import { CUSTOMER_RESEARCH_PAGE, TRANSCRIBE_OPTIONS } from '../services/interviewProcessing';
 
 const founderValidate = new Hono<{ Bindings: Env }>();
 
@@ -1132,7 +1133,8 @@ founderValidate.post('/interviews/:id/transcribe', async (c) => {
     userId: s.user.id,
     surface: AI_SURFACE.validateInterviews,
     // D765: saving, which the switch never refuses; recorded with its page and interview.
-    rail: railFor(c, { page: 'validate', option: 'transcribe:interview' }, `interview:${id}`),
+    // D778 part 6: the inventory's page and option (D771) stand for a client that sent none.
+    rail: railFor(c, { page: CUSTOMER_RESEARCH_PAGE, option: TRANSCRIBE_OPTIONS.recording }, `interview:${id}`),
     audio: bytes,
     // From the BYTES, not from the duration the client reported.
     audioMinutes: audioMinutesFromBytes(Number(row.recording_size_bytes || bytes.byteLength)),
