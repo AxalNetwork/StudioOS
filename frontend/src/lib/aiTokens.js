@@ -109,3 +109,26 @@ export function pastAllowanceLine(nothingOnSale, { untilThen = false } = {}) {
   return nothingOnSale ? 'Runs wait until your allowance resets.'
     : `Runs use your top-up balance${untilThen ? ' until then' : ''}.`;
 }
+
+/** "27 Oct, 10:00": an offer's end, in the reader's own zone. */
+function offerEnd(iso) {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : d.toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
+/**
+ * D790 (#2215): what a pack on sale offers, as the pack list and the checkout
+ * say it, from the pack read (`packsOnSale`): its bonus (the Worker sends 0
+ * outside the offer window), when that bonus ends, and whether it is for a
+ * first purchase only. Nothing here decides a price.
+ */
+export function packOfferLines(pack, when = offerEnd) {
+  const lines = [];
+  if (integer(pack?.bonus_microusd) && pack.bonus_microusd > 0) {
+    lines.push(`Includes ${microMoney(pack.bonus_microusd)} of bonus tokens.`);
+    const end = pack.offer_ends_at ? when(pack.offer_ends_at) : null;
+    if (end) lines.push(`Bonus offered until ${end}.`);
+  }
+  if (pack?.first_purchase_only === true) lines.push('For your first token purchase only.');
+  return lines;
+}
